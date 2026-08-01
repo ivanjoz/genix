@@ -35,6 +35,11 @@ type ModelConfig struct {
 	Notes string
 	// Hash is the short base36 ID the frontend sends instead of the full model slug.
 	Hash string
+	// IsDefault marks the model the backend falls back to when a request
+	// carries no model hash. Derived in ListModels from DefaultModelID() —
+	// don't set it in the registry literal. The frontend uses it to preselect
+	// an entry in the model dropdown.
+	IsDefault bool
 }
 
 // pinnedProvider builds a Provider config that pins routing to exactly one
@@ -58,6 +63,16 @@ var Models = map[string]ModelConfig{
 		// FP8 variant on atlas-cloud — picked for consistent low latency.
 		Provider: pinnedProvider("deepseek"),
 		Notes:    "Reasoning model; effort=low keeps the loop snappy. Pinned to atlas-cloud/fp8.",
+	},
+	"openai/gpt-5.6-luna": {
+		ID: "openai/gpt-5.6-luna",
+		// Default model for the agent loop (see defaultModel in openrouter.go).
+		// Reasoning-capable and honors the effort knob — "medium" is the balance
+		// point: enough deliberation for multi-step tool sequences without the
+		// latency of "high". Exclude=true keeps the trace out of the response so
+		// it doesn't bloat the next iteration's prompt.
+		Reasoning: &ReasoningOptions{Effort: "medium", Exclude: true},
+		Notes:     "Default agent model. Reasoning effort=medium, trace excluded. No provider pin — let OpenRouter route.",
 	},
 	"stepfun/step-3.5-flash": {
 		ID: "stepfun/step-3.5-flash",
@@ -98,10 +113,12 @@ func ListModels() []ModelConfig {
 	}
 	sort.Strings(ids)
 
+	activeDefault := DefaultModelID()
 	models := make([]ModelConfig, 0, len(ids))
 	for _, id := range ids {
 		cfg := Models[id]
 		cfg.Hash = ModelIDHash(cfg.ID)
+		cfg.IsDefault = cfg.ID == activeDefault
 		models = append(models, cfg)
 	}
 	return models

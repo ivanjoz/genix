@@ -48,21 +48,17 @@ const maxAestheticRevisions = 1
 // requirement, not a quality nudge — give the model more chances to comply.
 const maxContentRevisions = 2
 
-// builderModel pins the model the page-builder loop uses, independent of the
-// shared chat model picker. The builder is tuned for tencent/hy3-preview: it
-// honors disabled/low/high reasoning (unlike DeepSeek V4 Flash, which ignored
-// effort:low and reasoned to a huge default budget — a single generate_svg was
-// seen at ~68s). Its only caveat — provider routing rejects tool_choice=required
-// — doesn't bite us, the loop uses tool_choice:"auto".
-const builderModel = "tencent/hy3-preview"
-
-// Reasoning budgets. hy3-preview honors effort levels, so we use them directly:
-// the main loop and critic plan at low effort; the mechanical subagents disable
-// reasoning entirely. Exclude keeps the trace out of the response/later prompts.
+// Reasoning budgets. The main loop leaves reasoning unset so each model's
+// registry entry decides its own effort (llm.Models — hy3-preview stays at
+// low+exclude, gpt-5.6-luna reasons at medium). The subagents and the critic
+// pin their budget instead: their work is mechanical or latency-sensitive, so
+// they must stay cheap regardless of which model the user picked.
+//
+// Model requirements for the builder: it must honor a reasoning budget (an
+// early test with DeepSeek V4 Flash ignored effort:low and reasoned to a huge
+// default — a single generate_svg took ~68s) and work with tool_choice:"auto"
+// (hy3-preview's provider routing rejects "required"; the loop never uses it).
 var (
-	// builderReasoning: the main loop plans (which asset, if any; what to edit)
-	// but doesn't need a deep trace — low effort keeps each iteration snappy.
-	builderReasoning = &llm.ReasoningOptions{Effort: "low", Exclude: true}
 	// subagentNoReasoning: generate_svg and image-select are mechanical (emit
 	// markup / pick an index) — no chain-of-thought. Disabled outright.
 	subagentNoReasoning = &llm.ReasoningOptions{Enabled: boolPtr(false)}
@@ -146,13 +142,24 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 	if err != nil {
 		return fmt.Errorf("llm client unavailable: %w", err)
 	}
-	// The builder pins its own model (see builderModel) rather than following
-	// the shared chat model picker — the reasoning controls below are tuned for
-	// it. modelHash from the wire is ignored here on purpose.
-	modelID := builderModel
+	// The builder follows the shared chat model picker. An empty hash means the
+	// user never chose one — fall back to the client's default model, same as
+	// the chat loop does.
+	modelID := ""
+	modelHash = strings.TrimSpace(modelHash)
+	if modelHash != "" {
+		modelConfig, ok := llm.LookupModelHash(modelHash)
+		if !ok {
+			return fmt.Errorf("modelo de agente no válido: %s", modelHash)
+		}
+		modelID = modelConfig.ID
+	}
 	activeModel := modelID
+	if activeModel == "" {
+		activeModel = client.Model
+	}
 	core.Log("agent.webpage RunTurn mode::", modeID, " model::", activeModel,
-		" picker_hash::", strings.TrimSpace(modelHash),
+		" picker_hash::", modelHash,
 		" prompt_bytes::", len(userText), " context_bytes::", len(pageContext))
 
 	tlog := newTurnLog(modeID, activeModel)
@@ -187,12 +194,14 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 	contentRevisionsDone := 0
 
 	for iter := 0; iter < maxBuilderIterations; iter++ {
+		// Reasoning is left unset on purpose: llm.Chat fills it from the active
+		// model's registry entry, so each model plans at the effort it was
+		// tuned for instead of a single hardcoded budget.
 		req := llm.ChatRequest{
 			Model:      modelID,
 			Messages:   messages,
 			Tools:      builderTools,
 			ToolChoice: "auto",
-			Reasoning:  builderReasoning,
 		}
 		resp, err := client.Chat(ctx, req)
 		tlog.exchange(fmt.Sprintf("main_iter%d", iter+1), req, resp, err)

@@ -14,6 +14,10 @@
 - Each is **self-fetching** — it pulls live catalog/category data on its own. In
   isolated previews they may render empty/loading; that is expected. Verify
   *structure*, not data.
+- **Product content is always a component.** `ProductGrid` (many) or `ProductCard`
+  (one) — never hand-written cards with invented names and prices. Emit them with
+  NO ids; they render finished-looking placeholders and the user binds the real
+  product/category from the editor.
 - A `class="..."` attribute styles the component's outer wrapper (margins,
   padding, radius); internal styling is owned by the component.
 - Attribute value coercion: `number` (`rows="3"`), `boolean` (presence = true,
@@ -24,12 +28,13 @@
 
 ## ProductGrid
 
-Self-fetching product grid. With `categoryID` it shows one category; without it,
-the full catalog. Card count = columns × rows.
+Self-fetching product grid — use this for any multi-product listing instead of
+hand-writing cards, and OMIT `categoryID` unless the user named a category: without
+it the grid shows the full catalog. Card count = columns × rows.
 
 | Attribute | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `categoryID` | number | — | Limit to one category; omit for all products |
+| `categoryID` | number | — | **Optional.** Limit to one category; omit for all products. Never invent an id — the user picks the category in the editor |
 | `rows` | number | 3 | Number of rows |
 | `rowsMobile` | number | — | Rows on mobile |
 | `maxWidth` | number | — | Max grid width |
@@ -48,12 +53,13 @@ the full catalog. Card count = columns × rows.
 
 ## ProductsByCategory
 
-Grid of products belonging to a single category. Same layout knobs as
-`ProductGrid` (forwarded to an inner grid).
+Grid of products belonging to a single category — it NEEDS a real `categoryID`, so
+prefer `ProductGrid` (no id required) unless the section already carries one. Same
+layout knobs as `ProductGrid` (forwarded to an inner grid).
 
 | Attribute | Type | Default | Notes |
 |-----------|------|---------|-------|
-| `categoryID` | number | — | The category to show |
+| `categoryID` | number | — | The category to show. Reuse an id already present in the section; never invent one |
 | `rows` | number | 3 | Number of rows |
 | `rowsMobile` | number | — | Rows on mobile |
 | `maxWidth` | number | — | Max grid width |
@@ -67,17 +73,26 @@ Grid of products belonging to a single category. Same layout knobs as
 
 ## ProductCard
 
-A single product card.
+A single product card — use this for any one-product slot instead of hand-writing
+a card, and OMIT `productoID`: the card renders a finished-looking placeholder and
+the user binds it to a real product from the editor. Never invent an id.
 
 | Attribute | Type | Notes |
 |-----------|------|-------|
-| `productoID` | number | The product to render |
+| `productoID` | number | **Optional.** Omit it (the normal case) — the card renders unassigned and the user picks the product in the editor. Only set it if a real id is already in the section |
 | `mode` | string | `vertical` \| `horizontal` |
 | `useQuantityControls` | boolean | Show quantity stepper |
 | `hideCloseButton` | boolean | Hide the card's close button |
 
+Four product slots in a custom layout — no ids anywhere:
+
 ```html
-<ProductCard productoID="104" mode="vertical" useQuantityControls />
+<div class="grid grid-cols-2 gap-24">
+  <ProductCard />
+  <ProductCard />
+  <ProductCard />
+  <ProductCard />
+</div>
 ```
 
 ---

@@ -96,8 +96,11 @@ export const componentSchemas: Record<string, ComponentSchema> = {
 
 	ProductCard: {
 		tagName: 'ProductCard',
-		description: 'A single product card.',
+		description:
+			'A single product card. productoID is optional: without it the card renders an unassigned placeholder, so the page-builder agent can lay out product slots and the user binds the real product afterwards.',
 		props: {
+			// Optional on purpose — see the description. An absent id is a valid steady state,
+			// not a missing prop.
 			productoID: { type: 'number' },
 			mode: { type: 'string', enum: ['vertical', 'horizontal'] },
 			useQuantityControls: { type: 'boolean' },

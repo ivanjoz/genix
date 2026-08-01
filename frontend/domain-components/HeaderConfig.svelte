@@ -69,7 +69,7 @@ import { useUI } from '@genix/ui';
   $effect(() => {
     if (agentModelsService.records.length === 0) { return }
     if (agentModelForm.ModelHash && agentModelsService.modelHashMap.has(agentModelForm.ModelHash)) { return }
-    agentModelForm.ModelHash = agentModelsService.records[0].Hash
+    agentModelForm.ModelHash = agentModelsService.defaultHash
     setSelectedAgentModelHash(agentModelForm.ModelHash)
   })
 

@@ -69,7 +69,7 @@ require (
 	github.com/aws/smithy-go v1.20.1
 	github.com/bytedance/sonic v1.15.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
-	github.com/ivanjoz/colbin v0.0.0-20260720041505-3f9040cb9613
+	github.com/ivanjoz/colbin v0.0.0-20260801035440-7af4690efc94
 	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
 	github.com/kr/pretty v0.3.1

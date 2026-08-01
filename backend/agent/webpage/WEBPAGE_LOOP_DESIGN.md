@@ -46,18 +46,22 @@ loop needs (push status / reply / sections) is declared as the `Sink` interface 
 
 ## 2. Model & reasoning budgets (rationale)
 
-The builder **pins its own model** (`builderModel = "tencent/hy3-preview"`) rather
-than following the shared chat model picker — the `modelHash` from the wire is
-ignored on purpose. hy3-preview honors disabled/low/high reasoning effort (unlike
-DeepSeek V4 Flash, which ignored `effort:low` and reasoned to a huge default budget
-— a single `generate_svg` was once seen at ~68s). Its one caveat — provider routing
-rejects `tool_choice=required` — doesn't bite us; the loop uses `tool_choice:"auto"`
-and the system prompt disciplines the model into ending via `apply_sections`.
+The builder **follows the shared chat model picker**: it resolves the wire's
+`modelHash` through `llm.LookupModelHash` and falls back to the client's default
+model when the user never picked one (same rule as the chat loop). An unknown hash
+is rejected rather than silently downgraded.
+
+A model is usable by the builder if it (a) honors a reasoning budget — DeepSeek V4
+Flash ignored `effort:low` and reasoned to a huge default, a single `generate_svg`
+was once seen at ~68s — and (b) works with `tool_choice:"auto"`, which is all the
+loop ever sends (hy3-preview's provider routing rejects `required`); the system
+prompt disciplines the model into ending via `apply_sections`.
 
 Reasoning budgets (`loop.go`):
-- `builderReasoning` — `effort:low, exclude:true`. The main loop plans (which asset,
-  what to edit) but doesn't need a deep trace; low keeps each iteration snappy and
-  `exclude` keeps the trace out of later prompts.
+- **Main loop** — left unset, so `llm.Chat` applies the active model's registry
+  entry (`llm.Models`): `low+exclude` for hy3-preview, `medium+exclude` for
+  gpt-5.6-luna. Each model plans at the effort it was tuned for, and `exclude`
+  keeps the trace out of later prompts.
 - `subagentNoReasoning` — disabled outright. `generate_svg`, `find_image`-select and
   the **intent classifier** are mechanical (emit markup / pick an index / emit a tiny
   JSON verdict) — no chain-of-thought.

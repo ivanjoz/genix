@@ -30,7 +30,7 @@ import (
 
 const (
 	openrouterEndpoint = "https://openrouter.ai/api/v1/chat/completions"
-	defaultModel       = "deepseek/deepseek-v4-flash"
+	defaultModel       = "openai/gpt-5.6-luna"
 	requestTimeout     = 90 * time.Second
 )
 
@@ -80,7 +80,7 @@ type ChatRequest struct {
 	Tools    []Tool    `json:"tools,omitempty"`
 	// ToolChoice accepts OpenAI's "auto" | "none". Earlier tests with
 	// tencent/hy3-preview's provider routing returned HTTP 404 for "required";
-	// the current default (deepseek/deepseek-v4-flash) hasn't been validated
+	// the current default (openai/gpt-5.6-luna) hasn't been validated
 	// for "required" either — keep using "auto" and let the system prompt
 	// discipline the model into ending the turn via the `finish` tool.
 	ToolChoice  string   `json:"tool_choice,omitempty"`
@@ -150,8 +150,19 @@ type Client struct {
 	HTTP   *http.Client
 }
 
+// DefaultModelID is the model used when a request carries no explicit model:
+// OPENROUTER_MODEL from credentials.json when set, otherwise the compile-time
+// `defaultModel`. Single source of truth — ListModels flags the matching
+// registry entry with IsDefault so the UI preselects the same model.
+func DefaultModelID() string {
+	if core.Env != nil && core.Env.OPENROUTER_MODEL != "" {
+		return core.Env.OPENROUTER_MODEL
+	}
+	return defaultModel
+}
+
 // NewClient resolves OPENROUTER_KEY (required) and OPENROUTER_MODEL
-// (optional, defaults to tencent/hy3-preview) from core.Env — same path
+// (optional, defaults to `defaultModel`) from core.Env — same path
 // the rest of the backend uses for credentials.json. Failing here at
 // startup is much friendlier than a 401 on the first user message.
 func NewClient() (*Client, error) {
@@ -162,13 +173,9 @@ func NewClient() (*Client, error) {
 	if key == "" {
 		return nil, errors.New("OPENROUTER_KEY not set in credentials.json")
 	}
-	model := core.Env.OPENROUTER_MODEL
-	if model == "" {
-		model = defaultModel
-	}
 	return &Client{
 		APIKey: key,
-		Model:  model,
+		Model:  DefaultModelID(),
 		HTTP:   &http.Client{Timeout: requestTimeout},
 	}, nil
 }

@@ -1,9 +1,12 @@
-name: Deploy Frontend to GitHub Pages
+name: Deploy frontend to GitHub Pages
+
+# Build the combined Svelte frontend and publish it at genix-dev.un.pe.
 on:
   push:
+    branches: [main]
     paths:
-      - 'docs/frontend.zip'
-      - 'frontend/static/**'
+      - 'frontend/**'
+      - '.gitmodules'
       - '.github/workflows/ci-deploy.yml'
   workflow_dispatch:
 
@@ -12,43 +15,72 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Fetch frontend LFS assets
+        # Avoid downloading the obsolete prebuilt frontend ZIP.
+        run: |
+          git lfs install --local
+          git lfs pull --include='frontend/static/**' --exclude=''
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Cache Bun packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: bun install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          PUBLIC_ENDPOINTS: ${{ vars.PUBLIC_ENDPOINTS || '[]' }}
+          PUBLIC_FRONTEND_CDN: ${{ vars.PUBLIC_FRONTEND_CDN }}
+          PUBLIC_LAMBDA_URL: ${{ vars.PUBLIC_LAMBDA_URL }}
+          PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
+        run: bun run build
+
+      - name: Verify Pages metadata
+        # Keep GitHub Pages at the custom domain and bypass Jekyll processing.
+        run: |
+          test "$(cat frontend/build/CNAME)" = 'genix-dev.un.pe'
+          touch frontend/build/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: frontend/build
+
   deploy:
+    needs: build
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      - name: Checkout LFS objects
-        run: git lfs pull
-
-      - name: Prepare deployment folder
-        run: |
-          mkdir public_folder
-          # Unzip the bundled assets
-          unzip -o docs/frontend.zip -d public_folder
-          # Copy all static assets including the CNAME
-          # We use dot to include hidden files and avoid folder nesting issues
-          cp -r frontend/static/. public_folder/
-          # Ensure .nojekyll exists
-          touch public_folder/.nojekyll
-          
-      - name: Debug Deployment Folder
-        run: ls -R public_folder
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './public_folder'
-
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

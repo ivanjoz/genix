@@ -88,13 +88,17 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
   });
 
   $effect(() => {
-	  if(cajas.isReady && cajas.Cajas.length > 0){
-	  	ventasState.form.LastPaymentCajaID = cajas.Cajas[0].ID
-	  } else if(cajas.isReady){
+	  if(!cajas.isReady){ return }
+	  const firstCajaID = cajas.Cajas[0]?.ID || 0
+
+	  // Untracked: the form fields written here are also read here, so tracking them would re-trigger this effect forever.
+	  untrack(() => {
+	  	ventasState.form.LastPaymentCajaID = firstCajaID
 	  	// No caja exists: drop the payment action so the order is generated as unpaid.
-	  	ventasState.form.LastPaymentCajaID = 0
-	  	ventasState.form.ActionsIncluded = ventasState.form.ActionsIncluded.filter((actionID) => actionID !== SALE_ACTION_PAYMENT)
-	  }
+	  	if(!firstCajaID && ventasState.form.ActionsIncluded.includes(SALE_ACTION_PAYMENT)){
+	  		ventasState.form.ActionsIncluded = ventasState.form.ActionsIncluded.filter((actionID) => actionID !== SALE_ACTION_PAYMENT)
+	  	}
+	  })
   });
   
   $effect(() => {

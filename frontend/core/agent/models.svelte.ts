@@ -6,6 +6,8 @@ export interface IAgentModelOption {
 	ID: string;
 	Hash: string;
 	Notes: string;
+	/** Backend-side default — the model used when no hash is sent. */
+	IsDefault?: boolean;
 }
 
 const storageKey = () => `${Env.appId}AgentModelHash:${Env.enviroment || 'main'}`;
@@ -27,10 +29,17 @@ export const setSelectedAgentModelHash = (modelHash: string) => {
 
 export class AgentModelsService extends GetHandler {
 	route = 'agent-models';
-	useCache = { min: 10, ver: 1 };
+	useCache = { min: 10, ver: 2 };
 
 	records = $state<IAgentModelOption[]>([]);
 	modelHashMap = $state(new Map<string, IAgentModelOption>());
+
+	/** Hash to preselect when the user hasn't picked one: the backend default,
+	 *  falling back to the first entry if the backend flags none. */
+	get defaultHash(): string {
+		const defaultModel = this.records.find((modelOption) => modelOption.IsDefault);
+		return (defaultModel || this.records[0])?.Hash || '';
+	}
 
 	handler(result: IAgentModelOption[]): void {
 		const models = Array.isArray(result) ? result : [];
