@@ -86,11 +86,18 @@
 		PLACEHOLDER_GRADIENTS[((resolvedProduct?.ID || 0) * 7) % PLACEHOLDER_GRADIENTS.length],
 	);
 	const isLoadingProductRecord = $derived(productRecordReference?.loading || false);
-	// Show the shimmer skeleton while a placeholder card has nothing to render yet: either no
-	// product at all (ID 0) or an ID whose record is still being fetched.
+	// No product bound at all. The page-builder agent emits <ProductCard/> with no productoID so
+	// the user can assign the product from the editor afterwards, so this is a normal steady
+	// state — not a transient one. Render the placeholder card (never "???" with a zero price).
+	const hasNoProductAssigned = $derived(resolvedProductID === 0);
+	// Show the placeholder card either because nothing is assigned yet, or because a grid slot's
+	// record is still in flight. Only the latter is actually "loading" — see `isAwaitingRecord`.
 	const showLoadingSkeleton = $derived(
-		usePlaceHolder && (resolvedProductID === 0 || isLoadingProductRecord),
+		hasNoProductAssigned || (usePlaceHolder && isLoadingProductRecord),
 	);
+	// Drives the shimmer/spinner: an unassigned card is idle, so it stays still instead of
+	// animating forever as if data were on its way.
+	const isAwaitingRecord = $derived(showLoadingSkeleton && !hasNoProductAssigned);
 
 	$effect(() => {
 		// When the caller already supplies the full product (in-memory search path), skip the by-id
@@ -161,7 +168,11 @@
 </script>
 
 {#if mode === "horizontal"}
-	<div class="horizontal-card {css}" aria-busy={isLoadingProductRecord || showLoadingSkeleton}>
+	<div
+		class="horizontal-card {css}"
+		class:idle-placeholder={hasNoProductAssigned}
+		aria-busy={isAwaitingRecord}
+	>
 		<div class="horizontal-image-wrapper">
 			{#if showLoadingSkeleton}
 				<div class="horizontal-image-placeholder skeleton-line"></div>
@@ -219,8 +230,12 @@
 			{/if}
 		</div>
 {:else}
-	<div class="vertical-card-shell" class:loading={showLoadingSkeleton}>
-		<div class="vertical-card {css}" aria-busy={isLoadingProductRecord || showLoadingSkeleton}>
+	<div
+		class="vertical-card-shell"
+		class:loading={showLoadingSkeleton}
+		class:idle-placeholder={hasNoProductAssigned}
+	>
+		<div class="vertical-card {css}" aria-busy={isAwaitingRecord}>
 			{#if resolvedProductImageName}
 				<ImageHash
 					css="w-full h-[36vw] md:h-200"
@@ -235,7 +250,7 @@
 					style:background={productPlaceholderGradient}
 					style:border-radius="7px"
 				>
-					{#if showLoadingSkeleton}
+					{#if isAwaitingRecord}
 						<span class="loader"></span>
 					{/if}
 				</div>
@@ -292,6 +307,13 @@
 	/* Darker base for the price strip, since the real price is bold. */
 	.skeleton-strong {
 		background-color: #c6c9d2;
+	}
+
+	/* An unassigned card (no productoID yet — the user picks the product in the editor) reuses the
+	   skeleton's shapes but holds still: the sweep would promise data that is not coming. */
+	.idle-placeholder .skeleton-line {
+		animation: none;
+		background-image: none;
 	}
 
 	/* Centered orbiting spinner shown over the cover while a card loads.
@@ -360,26 +382,45 @@
 		}
 	}
 
+	/* The shell owns ALL the space under the card and splits it in two:
+	   `--card-growth` is lent to the card while it is hovered, and the remainder is the gap to
+	   the next row. Both halves always add up to `--card-bottom-space`, so the shell — and with it
+	   the grid row / flex line — keeps exactly the same height hovered or not, while the card
+	   itself gets taller and needs to slide its content over the image less.
+	   Raise `--card-growth` to cover more of the button strip with real card (less image masked);
+	   lower it for a wider gap under a hovered card. */
+	.vertical-card-shell {
+		--card-bottom-space: 24px;
+		--card-growth: 12px;
+		--card-padding: 6px;
+		--add-button-height: 36px;
+		padding-bottom: var(--card-bottom-space);
+		transition: padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
 	.vertical-card {
 		position: relative;
 		background-color: white;
 		box-shadow: rgba(54, 56, 67, 0.2) 0px 2px 8px 0px;
 		min-height: 180px;
-		padding: 6px;
+		padding: var(--card-padding);
 		border-radius: 10px;
-		margin-bottom: 24px;
 		/* Clip the add button while it is tucked below the card so it can slide up into view. */
 		overflow: hidden;
 		/* Outline never participates in layout, so the hover highlight cannot cause reflow. */
 		outline: 2px solid transparent;
-		transition: outline-color 0.2s ease;
+		/* padding-bottom uses the same curve and duration as the shell's, so the two stay exactly
+		   complementary on every frame and the row height never wobbles mid-animation. */
+		transition:
+			outline-color 0.2s ease,
+			padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 	}
 
 	.vertical-add-button {
 		color: rgb(100, 67, 160);
 		position: absolute;
 		border-radius: 0 0 10px 10px;
-		height: 36px;
+		height: var(--add-button-height);
 		align-items: center;
 		justify-content: center;
 		display: flex;
@@ -405,8 +446,8 @@
 		position: relative;
 		z-index: 10;
 		width: 100%;
-		/* Opaque so that when it slides up on hover it masks the bottom of the image,
-		   freeing the bottom strip for the add button without growing the card. */
+		/* Opaque so that when it slides up on hover it masks the bottom of the image; together with
+		   the card's growth this frees the bottom strip for the add button. */
 		background-color: white;
 		transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 	}
@@ -562,16 +603,25 @@
 	}
 
 	@media (min-width: 739px) {
-		.vertical-card-shell:hover .vertical-card {
-			outline-color: rgb(202, 173, 255);
-			margin-bottom: 12px;
+		/* Hand the reserved strip over to the card: the shell gives up exactly what the card takes. */
+		.vertical-card-shell:hover {
+			padding-bottom: calc(var(--card-bottom-space) - var(--card-growth));
 		}
 
-		/* Slide the name/price block up (over the image) to free the bottom strip.
-		   Using transform keeps the card height unchanged, so no neighbour reflow. */
+		.vertical-card-shell:hover .vertical-card {
+			outline-color: rgb(202, 173, 255);
+			/* Grows downward only — padding-bottom does not move the content above it, so the
+			   name/price block has no layout jump to fight with its transform. */
+			padding-bottom: calc(var(--card-padding) + var(--card-growth));
+		}
+
+		/* Slide the name/price block up so the button strip clears the price: the button needs
+		   `--add-button-height`, and the card's bottom padding plus the growth already provide
+		   part of it — 36 − 6 − 12 = 18px of travel. */
 		.vertical-card-shell:hover .vertical-content {
-			transform: translateY(-30px);
-			margin-top: 12px;
+			transform: translateY(
+				calc(var(--card-padding) + var(--card-growth) - var(--add-button-height))
+			);
 		}
 
 		.vertical-card-shell:hover .vertical-add-button {
@@ -592,6 +642,11 @@
 	}
 
 	@media (max-width: 740px) {
+		/* Nothing is ever lent to the card here, so the shell only carries the row gap. */
+		.vertical-card-shell {
+			--card-bottom-space: 12px;
+		}
+
 		.vertical-card-shell .vertical-add-button {
 			transform: translateY(0);
 			background-color: rgb(228, 221, 248);
@@ -603,7 +658,6 @@
 		.vertical-card-shell .vertical-card {
 			padding-bottom: 38px;
 			border-bottom: 2px solid rgb(172, 153, 226);
-			margin-bottom: 12px;
 		}
 
 		.vertical-icon {
