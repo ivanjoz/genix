@@ -65,10 +65,11 @@ type ProductStockTable struct {
 
 func (e ProductStockTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:                 "warehouse_product_stock",
-		Partition:            e.CompanyID,
-		Keys:                 db.Cols(e.ID),
-		DisableUpdateCounter: true,
+		ID:                    37,
+		Name:                  "warehouse_product_stock",
+		Partition:             e.CompanyID,
+		Keys:                  db.Cols(e.ID),
+		DisableUpdatedVersion: true,
 		// ID packs (WarehouseID, ProductID, PresentationID) into the single int64 key.
 		KeyIntPacking: db.Cols(
 			e.WarehouseID.DecimalSize(5),
@@ -130,9 +131,10 @@ type ProductStockDetailTable struct {
 
 func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:                 "warehouse_product_stock_detail",
-		Partition:            e.CompanyID,
-		DisableUpdateCounter: true,
+		ID:                    38,
+		Name:                  "warehouse_product_stock_detail",
+		Partition:             e.CompanyID,
+		DisableUpdatedVersion: true,
 		// One detail row per stock-record + lot + serial.
 		Keys: db.Cols(e.ProductStockID, e.LotID, e.SerialNumber),
 		Indexes: []db.Index{
@@ -183,6 +185,7 @@ type ProductStockLotTable struct {
 
 func (e ProductStockLotTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        20,
 		Name:      "product_stock_lot",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
@@ -230,6 +233,7 @@ type DeliveryOrderNoteTable struct {
 
 func (e DeliveryOrderNoteTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        11,
 		Name:      "delivery_order_note",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),

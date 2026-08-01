@@ -48,6 +48,7 @@ type CompanyTable struct {
 
 func (e CompanyTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           9,
 		Name:         "companies",
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),

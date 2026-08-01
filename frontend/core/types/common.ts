@@ -16,7 +16,7 @@ export interface IUser {
   Password2: string;
   CreatedBy: number;
   UpdatedBy: number;
-  CacheVersion: number;
+  UpdatedVersion: number;
   PasswordHash: string;
 }
 

@@ -69,7 +69,7 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	cachedIDs := req.ExtractCacheVersionValues()
+	cachedIDs := req.ExtractUpdatedVersionValues()
 
 	if len(cachedIDs) == 0 {
 		return req.MakeErr("No se enviaron ids a buscar.")

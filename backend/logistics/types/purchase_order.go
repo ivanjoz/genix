@@ -77,6 +77,7 @@ type PurchaseOrderTable struct {
 
 func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:               24,
 		Name:             "purchase_order",
 		Partition:        e.CompanyID,
 		UseListAsDefault: true,

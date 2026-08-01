@@ -99,6 +99,7 @@ type SaleOrderTable struct {
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        25,
 		Name:      "sale_order",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(2)),
@@ -165,6 +166,7 @@ type SaleSummaryTable struct {
 
 func (e SaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        26,
 		Name:      "sale_summary",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.Date),
@@ -199,10 +201,11 @@ type ProductSaleSummaryTable struct {
 
 func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:                 "product_sale_summary",
-		Partition:            e.CompanyID,
-		Keys:                 db.Cols(e.Date, e.ProductID),
-		DisableUpdateCounter: true,
+		ID:                    19,
+		Name:                  "product_sale_summary",
+		Partition:             e.CompanyID,
+		Keys:                  db.Cols(e.Date, e.ProductID),
+		DisableUpdatedVersion: true,
 	}
 }
 

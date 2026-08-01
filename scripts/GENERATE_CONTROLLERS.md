@@ -29,7 +29,7 @@ The script runs automatically as part of `deploy.sh` option **[5] Recrear Tablas
 
 ## Skipped Paths
 
-- `backend/genix-orm/scylla/` — ORM-internal tables (`Increment`, `CacheVersion`) are bootstrapped by `scylla.Init()` and must NOT be registered again here.
+- `backend/genix-orm/scylla/` — ORM-internal tables (`Increment`, and the raw `cache_updated_version` table) are bootstrapped by `scylla.Init()` and must NOT be registered again here.
 - `vendor/`, `node_modules/`, `.git/`, `*_test.go`, and the output file itself.
 
 ## After Adding or Removing a Table

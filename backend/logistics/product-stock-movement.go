@@ -72,13 +72,13 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 // Static-lookup endpoint: no cache-version protocol, just `ids`. The frontend treats the response
 // as immutable-per-ID so cached rows are never revalidated (see getStaticRecordsByID on the client).
 func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	lotIDRecords := req.ExtractCacheVersionValues()
+	lotIDRecords := req.ExtractUpdatedVersionValues()
 	if len(lotIDRecords) == 0 {
 		return req.MakeErr("No se enviaron ids de lotes.")
 	}
 
 	// ProductStockLot.ID is int32; cache-version values come in as int64.
-	lotIDs := core.Map(lotIDRecords, func(e db.IDCacheVersion) int32 { return int32(e.ID) })
+	lotIDs := core.Map(lotIDRecords, func(e db.IDUpdatedVersion) int32 { return int32(e.ID) })
 
 	lots := []logisticsTypes.ProductStockLot{}
 	query := db.Query(&lots)

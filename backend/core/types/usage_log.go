@@ -34,10 +34,11 @@ type UsageLogTable struct {
 
 func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:                 "usage_log",
-		Partition:            usageLogTable.CompanyID,
-		Keys:                 db.Cols(usageLogTable.ID),
-		DisableUpdateCounter: true,
+		ID:                    34,
+		Name:                  "usage_log",
+		Partition:             usageLogTable.CompanyID,
+		Keys:                  db.Cols(usageLogTable.ID),
+		DisableUpdatedVersion: true,
 		Indexes: []db.Index{
 			// Partitioned by ID so a single log row is readable without knowing the company.
 			{Type: db.TypeView, Keys: db.Cols(usageLogTable.ID), Partition: usageLogTable.ID},

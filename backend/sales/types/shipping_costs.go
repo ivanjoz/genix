@@ -30,6 +30,7 @@ type ShippingCostTable struct {
 
 func (e ShippingCostTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        30,
 		Name:      "shipping_costs",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.CityID),

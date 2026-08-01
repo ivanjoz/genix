@@ -105,7 +105,7 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 		if entry.IsDir() {
 			name := entry.Name()
 			// Skip vendor / VCS / dependency trees plus the genix-orm submodule — it is a
-			// separate Go module, and its ORM-internal tables (Increment, CacheVersion) are
+			// separate Go module, and its ORM-internal tables (Increment) are
 			// bootstrapped by the driver's Init() and must not appear in MakeScyllaControllers().
 			if name == "vendor" || name == "node_modules" || name == ".git" {
 				return filepath.SkipDir

@@ -50,6 +50,7 @@ type DemoStructTable struct {
 
 func (e DemoStructTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        41,
 		Name:      "zz_demo_struct",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),

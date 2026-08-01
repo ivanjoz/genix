@@ -21,12 +21,13 @@ type (
 	TableInfo           = orm.TableInfo
 	GenericRecordSchema = orm.GenericRecordSchema
 	GenericRecord       = orm.GenericRecord
-	IDCacheVersion      = orm.IDCacheVersion
+	IDUpdatedVersion    = orm.IDUpdatedVersion
 	ColumnInfo          = orm.ColumnInfo
 	IColInfo            = orm.IColInfo
 	IDWeight            = orm.IDWeight
 	GroupIndexCache     = orm.GroupIndexCache
 	KeyParser           = orm.KeyParser
+	FixedValues         = orm.FixedValues
 )
 
 type (
@@ -42,6 +43,7 @@ const (
 	TypeInheritFromKey = orm.TypeInheritFromKey
 	TypeView           = orm.TypeView
 	TypeViewTable      = orm.TypeViewTable
+	TypeDelta          = orm.TypeDelta
 )
 
 // Cols returns columns as the slice required by schema declarations.
@@ -86,10 +88,10 @@ func TableOf[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Execut
 	return orm.TableOf[RecordT, TableT, D]()
 }
 
-// QueryCachedIDs resolves records by ID, skipping any whose client cache version
+// QueryCachedIDs resolves records by ID, skipping any whose client slot version
 // still matches the server.
 func QueryCachedIDs[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
-	refSlice *[]RecordT, cachedIDs []IDCacheVersion,
+	refSlice *[]RecordT, cachedIDs []IDUpdatedVersion,
 ) error {
 	return orm.QueryCachedIDs[RecordT, TableT, D](refSlice, cachedIDs)
 }

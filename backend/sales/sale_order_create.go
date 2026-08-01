@@ -409,9 +409,9 @@ func packProductStockIDForSale(warehouseID int32, productID int32, presentationI
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	saleOrderIDRecords := req.ExtractCacheVersionValues()
+	saleOrderIDRecords := req.ExtractUpdatedVersionValues()
 
-	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDCacheVersion) int64 { return e.ID })
+	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDUpdatedVersion) int64 { return e.ID })
 
 	saleOrders := []types.SaleOrder{}
 	query := db.Query(&saleOrders).CompanyID.Equals(req.User.CompanyID)

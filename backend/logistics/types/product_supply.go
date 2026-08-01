@@ -35,6 +35,7 @@ type ProductSupplyTable struct {
 
 func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        21,
 		Name:      "product_supply",
 		Partition: productSupplyTable.CompanyID,
 		Keys:      db.Cols(productSupplyTable.ProductID),

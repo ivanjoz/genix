@@ -30,6 +30,7 @@ type CacheTable struct {
 
 func (e CacheTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        3,
 		Name:      "cache",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
@@ -98,39 +99,63 @@ func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db
 	return records
 }
 
-func (req *HandlerArgs) ExtractCacheVersionValues() []db.IDCacheVersion {
+// ExtractUpdatedVersionValues reads a by-IDs request: "ids" are records the client does not hold
+// at all, while "cc-ids"/"cc-ver" carry the ones it does, each with the slot version it was last
+// validated against. A version of 0 means "unknown", which never matches and always forces a read.
+func (req *HandlerArgs) ExtractUpdatedVersionValues() []db.IDUpdatedVersion {
 	idsStr := req.GetQuery("ids")
-	// New cache delta protocol keys: cc-ids for cached IDs and cc-ver for aligned cache versions.
 	cachedIDsStr := req.GetQuery("cc-ids")
-	cacheVersionsFromIDsStr := req.GetQuery("cc-ver")
+	slotVersionsStr := req.GetQuery("cc-ver")
 	companyID := Coalesce(req.GetQueryInt("cmp"), req.User.CompanyID)
 
 	if companyID == 0 {
 		// Invalid company scope means the cache query cannot be resolved safely.
 		Log("error al extraer versiones de cache: no se envio Company-ID")
-		return []db.IDCacheVersion{}
+		return []db.IDUpdatedVersion{}
 	}
 
 	ids := parseConcatenatedInts(idsStr)
 	cachedIDs := parseConcatenatedInts(cachedIDsStr)
-	cacheVersionsFromIDs := parseConcatenatedInts(cacheVersionsFromIDsStr)
+	// Slot versions are a fixed-width u16 array so they stay aligned with cc-ids: the compact
+	// encoder buckets by magnitude, which would reorder a mixed-width version list.
+	slotVersions := parseConcatenatedUint16s(slotVersionsStr)
 
-	records := []db.IDCacheVersion{}
+	records := []db.IDUpdatedVersion{}
 
 	for _, id := range ids {
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: 0, PartitionID: companyID})
+		records = append(records, db.IDUpdatedVersion{ID: id, UpdatedVersion: 0, PartitionID: companyID})
 	}
 
 	for i, id := range cachedIDs {
-		version := uint8(0)
-		if i < len(cacheVersionsFromIDs) {
-			version = uint8(cacheVersionsFromIDs[i])
+		version := uint16(0)
+		if i < len(slotVersions) {
+			version = slotVersions[i]
 		}
-		records = append(records, db.IDCacheVersion{ID: id, CacheVersion: version, PartitionID: companyID})
+		records = append(records, db.IDUpdatedVersion{ID: id, UpdatedVersion: version, PartitionID: companyID})
 	}
 
 	Log("records extracted:", len(records))
 	return records
+}
+
+// parseConcatenatedUint16s decodes one base64url-encoded little-endian u16 array. Unlike
+// parseConcatenatedInts it has no magnitude buckets, so element order is exactly what the client
+// sent — which is what keeps cc-ver aligned with cc-ids.
+func parseConcatenatedUint16s(encodedValues string) []uint16 {
+	if encodedValues == "" {
+		return nil
+	}
+	data, err := base64.RawURLEncoding.DecodeString(encodedValues)
+	if err != nil {
+		Log("error al decodificar cc-ver:", err)
+		return nil
+	}
+
+	values := make([]uint16, 0, len(data)/2)
+	for i := 0; i+1 < len(data); i += 2 {
+		values = append(values, binary.LittleEndian.Uint16(data[i:]))
+	}
+	return values
 }
 
 func parseConcatenatedInts(s string) []int64 {
@@ -190,6 +215,7 @@ type GlobalCacheTable struct {
 
 func (e GlobalCacheTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        4,
 		Name:      "cache_global",
 		Partition: e.GroupID,
 		Keys:      db.Cols(e.ID),

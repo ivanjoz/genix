@@ -36,6 +36,7 @@ type WebpageTable struct {
 
 func (e WebpageTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        40,
 		Name:      "webpages",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),

@@ -76,7 +76,7 @@ export interface IProduct {
   Created: number
   CreatedBy: number
   CategoriesWithStock: number[]
-  ccv: number
+  upv: number
   /* extra fields */
   Image?: IProductoImage
   AtributosIDs?: number[]

@@ -13,28 +13,26 @@ import (
 var companyRegistryNumberPattern = regexp.MustCompile(`^\d{7,12}$`)
 
 func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
-	updatedSince := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 	requestedClientProviderType := req.GetQueryInt("type")
 
-	// Type is required so the query hits the type+updated composite view.
+	// Type is required so the query hits the packed delta view.
 	if requestedClientProviderType != int32(s.ClientProviderTypeClient) && requestedClientProviderType != int32(s.ClientProviderTypeProvider) {
 		return req.MakeErr("Debe enviar type=1 (cliente) o type=2 (proveedor).")
 	}
 
-	core.Log("GetClientProviders params:", "empresa_id=", req.User.CompanyID, "type=", requestedClientProviderType, "updated_since=", updatedSince)
+	core.Log("GetClientProviders params:", "empresa_id=", req.User.CompanyID, "type=", requestedClientProviderType, "upv_since=", updatedSince)
 
 	clientProviders := []s.ClientProvider{}
 	clientProvidersQuery := db.Query(&clientProviders)
+	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend can
+	// evict deleted ones from its cache.
 	clientProvidersQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
-		Type.Equals(int8(requestedClientProviderType))
-
-	// Delta sync includes deleted rows so the frontend can evict them from cache.
-	if updatedSince > 0 {
-		clientProvidersQuery.Updated.GreaterThan(updatedSince)
-	} else {
-		clientProvidersQuery.Status.Equals(1)
-	}
+		Type.Equals(int8(requestedClientProviderType)).
+		Delta(updatedSince, 1)
 
 	if queryExecutionError := clientProvidersQuery.Exec(); queryExecutionError != nil {
 		core.Log("GetClientProviders query error:", queryExecutionError)
@@ -46,7 +44,7 @@ func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	clientProviderCachedIDs := req.ExtractCacheVersionValues()
+	clientProviderCachedIDs := req.ExtractUpdatedVersionValues()
 	if len(clientProviderCachedIDs) == 0 {
 		return req.MakeErr("No se enviaron ids a buscar.")
 	}
@@ -54,7 +52,7 @@ func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("GetClientProvidersByIDs cached_ids_count:", len(clientProviderCachedIDs))
 
 	clientProviders := []s.ClientProvider{}
-	// Query only stale or missing cached rows using the cache-version payload provided by the frontend.
+	// Query only stale or missing cached rows, using the slot versions the frontend sent back.
 	if queryError := db.QueryCachedIDs(&clientProviders, clientProviderCachedIDs); queryError != nil {
 		core.Log("GetClientProvidersByIDs query error:", queryError)
 		return req.MakeErr("Error al obtener clientes/proveedores.", queryError)

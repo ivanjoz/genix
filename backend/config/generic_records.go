@@ -10,14 +10,14 @@ import (
 // caller only needs a display label, and it returns far less than the full record.
 //
 // The company scope is NOT read here: mainHandler already strips a client-sent "cmp" from private
-// routes, so ExtractCacheVersionValues resolves the partition from the user token.
+// routes, so ExtractUpdatedVersionValues resolves the partition from the user token.
 func GetTableRecordsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	tableName := req.GetQuery("table")
 	if len(tableName) == 0 {
 		return req.MakeErr("No se envió la tabla a consultar.")
 	}
 
-	cachedIDs := req.ExtractCacheVersionValues()
+	cachedIDs := req.ExtractUpdatedVersionValues()
 	if len(cachedIDs) == 0 {
 		return req.MakeErr("No se enviaron ids a buscar.")
 	}

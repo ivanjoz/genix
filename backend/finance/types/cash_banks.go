@@ -43,6 +43,7 @@ type CashBankTable struct {
 
 func (e CashBankTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           6,
 		Name:         "cash_banks",
 		Partition:    e.CompanyID,
 		UseSequences: true,
@@ -88,6 +89,7 @@ type CashBankMovementTable struct {
 
 func (e CashBankMovementTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        5,
 		Name:      "cash_bank_movements",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
@@ -134,6 +136,7 @@ type CashReconciliationTable struct {
 
 func (e CashReconciliationTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        7,
 		Name:      "cash_reconciliations",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),

@@ -28,8 +28,9 @@ type User struct { // DynamoDB + ScyllaDB
 	Status             int8     `json:"ss,omitempty" col:"status"`
 	CompanyUserIndex   string   `json:"-" col:"company_usuario,index"`
 	CompanyStatusIndex string   `json:"-" col:"company_status_updated,index"`
-	// CacheVersion is returned in delta-by-IDs endpoints to let clients track per-record cache freshness.
-	CacheVersion uint8 `json:"ccv,omitempty" col:"-"`
+	// UpdatedVersion is the write sequence number. By-IDs endpoints overwrite it with the record's
+	// slot version, which is what the client sends back to prove its copy is still current.
+	UpdatedVersion int32 `json:"upv,omitempty" col:"updated_version"`
 }
 
 func (user *User) PrepareCloudSync() {
@@ -56,14 +57,16 @@ type UserTable struct {
 	Updated         db.Col[UserTable, int32]
 	UpdatedBy       db.Col[UserTable, int32]
 	Status          db.Col[UserTable, int8]
+	UpdatedVersion  db.Col[UserTable, int32]
 }
 
 func (usuarioTable UserTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:             "users",
-		Partition:        usuarioTable.CompanyID,
-		UseSequences:     true,
-		SaveCacheVersion: true,
+		ID:                 35,
+		Name:               "users",
+		Partition:          usuarioTable.CompanyID,
+		UseSequences:       true,
+		SaveUpdatedVersion: true,
 		// Users have no single display column, so the login handle is the label and the client
 		// composes the full name from S1/S2. Email and DocumentNumber stay out: a label doesn't need them.
 		GenericRecord: db.GenericRecordSchema{

@@ -35,8 +35,8 @@ type ClientProvider struct {
 	CreatedBy        int32  `json:",omitempty"`
 	Status           int8   `json:"ss,omitempty"`
 	Updated          int32  `json:"upd,omitempty"`
+	UpdatedVersion   int32  `json:"upv,omitempty"`
 	UpdatedBy        int32  `json:",omitempty"`
-	CacheVersion     uint8  `json:"ccv,omitempty"`
 }
 
 type ClientProviderTable struct {
@@ -56,6 +56,7 @@ type ClientProviderTable struct {
 	Status           db.Col[ClientProviderTable, int8]
 	Updated          db.Col[ClientProviderTable, int32]
 	UpdatedBy        db.Col[ClientProviderTable, int32]
+	UpdatedVersion   db.Col[ClientProviderTable, int32]
 }
 
 func (e *ClientProvider) SelfParse() {
@@ -64,21 +65,28 @@ func (e *ClientProvider) SelfParse() {
 
 func (t ClientProviderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:             "client_provider",
-		Partition:        t.CompanyID,
-		SaveCacheVersion: true,
+		ID:                 1,
+		Name:               "client_provider",
+		Partition:          t.CompanyID,
+		SaveUpdatedVersion: true,
 		// RegistryNumber (RUC/DNI) disambiguates homonyms; Type separates clients from providers.
 		GenericRecord: db.GenericRecordSchema{
 			Name: t.Name, S1: t.RegistryNumber, N1: t.Type,
 		},
 		Keys: db.Cols(t.ID.Autoincrement(0)),
+		// Declared ranges let the delta index size its packed key: Status and Type need one digit
+		// each, which leaves the implicit Updated slot inside a 4-byte column.
+		FixedValues: []db.FixedValues{
+			{Col: t.Status, Values: []int64{0, 1}},
+			{Col: t.Type, Min: 1, Max: 2},
+		},
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.RegistryNumber)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.NameRegistryHash)},
-			// Keep GET client-provider efficient for delta sync filtered by type.
-			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Updated.DecimalSize(8))},
-			// Keep initial sync efficient by filtering active rows for each type.
-			{Type: db.TypeView, Keys: db.Cols(t.Type.Int32(), t.Status.DecimalSize(1))},
+			// One packed view serves both halves of the sync. Keys[0] is the column Delta() infers as
+			// its filter: a first sync pins Status to the active value, a delta sync fans out over both
+			// so the client can evict rows that were deleted.
+			{Type: db.TypeDelta, Keys: db.Cols(t.Status, t.Type)},
 		},
 	}
 }

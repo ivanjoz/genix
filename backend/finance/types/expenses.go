@@ -46,6 +46,7 @@ type ExpenseScheduledTable struct {
 
 func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           14,
 		Name:         "expenses_scheduled",
 		Partition:    e.CompanyID,
 		UseSequences: true,
@@ -106,6 +107,7 @@ type ExpenseTable struct {
 
 func (e ExpenseTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           13,
 		Name:         "expenses",
 		Partition:    e.CompanyID,
 		UseSequences: true,

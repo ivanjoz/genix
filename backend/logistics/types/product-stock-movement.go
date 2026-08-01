@@ -56,6 +56,7 @@ type WarehouseProductMovementTable struct {
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        36,
 		Name:      "warehouse_product_movement",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),

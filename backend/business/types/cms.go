@@ -24,6 +24,7 @@ type GalleryImageTable struct {
 
 func (e GalleryImageTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        15,
 		Name:      "gallery_images",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.Image),

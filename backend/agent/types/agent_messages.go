@@ -55,6 +55,7 @@ type AgentMessageTable struct {
 
 func (e AgentMessageTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        2,
 		Name:      "agent_messages",
 		Partition: e.CompanyUserID,
 		Keys:      db.Cols(e.SessionID, e.Timestamp),

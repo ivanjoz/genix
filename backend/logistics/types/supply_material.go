@@ -45,6 +45,7 @@ type SupplyMaterialTable struct {
 
 func (e SupplyMaterialTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        32,
 		Name:      "supply_material",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),

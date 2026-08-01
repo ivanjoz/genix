@@ -30,6 +30,7 @@ type CityLocationTable struct {
 
 func (e CityLocationTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        8,
 		Name:      "city_locations",
 		Partition: e.CountryID,
 		Keys:      db.Cols(e.ID),
@@ -70,6 +71,7 @@ type SharedListRecordTable struct {
 
 func (e SharedListRecordTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           29,
 		Name:         "shared_list_records",
 		Partition:    e.CompanyID,
 		UseSequences: true,

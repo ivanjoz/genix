@@ -16,7 +16,7 @@ func PostEntity(req *core.HandlerArgs) core.HandlerResponse { ... }
 
 ### Request Context (`core.HandlerArgs`)
 The `req` object is the primary source of information for the handler:
-- **`req.Usuario`**: The authenticated user object, containing `EmpresaID` and `ID`. Access validation is resolved from the packed `AccesosComputed` slice loaded during auth. This is the single source of truth for multi-tenancy.
+- **`req.User`**: The authenticated user object, containing `CompanyID` and `ID`. Access validation is resolved from the packed `AccesosComputed` slice loaded during auth. This is the single source of truth for multi-tenancy.
 - **`req.Body`**: A pointer to the raw request body string. The system handles decompression (e.g., Zstd) before it reaches the handler.
 - **`req.Route`**: The specific request path (e.g., `/productos`).
 - **`req.GetQueryInt(name)`**: Extracts a query parameter as an `int32`.
@@ -50,7 +50,7 @@ var ModuleHandlers = core.AppRouterType{
 Understanding how a request flows through the system is vital for debugging and implementing complex logic:
 
 1.  **Transport Layer**: The request arrives via HTTP. If the `Accept` header is `application/cbor`, the system prepares for binary communication.
-2.  **Authentication Middleware**: The system first validates the session token. If valid, it populates `req.Usuario` with the user's details and permissions.
+2.  **Authentication Middleware**: The system first validates the session token. If valid, it populates `req.User` with the user's details and permissions.
 3.  **Decompression**: If the payload is compressed (e.g., using Zstd), the system decompresses it before passing it to the handler.
 4.  **Handler Execution**: The specific handler function is called with the populated `HandlerArgs`.
 5.  **Business Logic & DB**: The handler performs validation, interacts with the database (ScyllaDB), and processes assets (S3).
@@ -62,20 +62,25 @@ Understanding how a request flows through the system is vital for debugging and 
 
 ## 3. Synchronization & Cache Protocol
 
-The backend is architected to support high-performance mobile and web applications that maintain a local database (cache). Synchronization is managed through an `updated` (or `upd`) timestamp.
+The backend is architected to support high-performance mobile and web applications that maintain a local database (cache). Synchronization is watermarked on `upv` (`updated_version`), the record's write sequence number — **not** on a timestamp. Two writes can share a second; sequence values cannot, so the watermark is exact and boundary rows are not re-sent on every poll.
 
 ### The Protocol Logic
 The frontend tracks its last successful sync time and sends it as a query parameter. The backend then filters records based on this timestamp:
 
-1.  **Initial Load (`updated == 0`)**:
+1.  **Initial Load (`upv == 0`)**:
     - The client has no local data.
     - Return only "active" records (`Status >= 1`).
     - This reduces the initial sync payload by excluding historical or deleted data.
 
-2.  **Incremental Sync (`updated > 0`)**:
+2.  **Incremental Sync (`upv > 0`)**:
     - The client is asking for changes since the last sync.
-    - Return ALL records where `Updated > updated`.
+    - Return ALL records written after that version.
     - **Crucial**: You must include records with `Status = 0` (deleted). This allows the frontend to remove these records from its local cache.
+
+Do not write this branch by hand. Declare a `db.TypeDelta` index on the table and call
+`query.Delta(updatedVersion, 1)`: it emits both shapes, routes them to one packed view, and fans the
+incremental case out over every declared status so deletions reach the client. See
+`ORM_DATABASE_QUERY.md` §6.1 and §7.5b, or the `delta-cache-api` skill.
 
 ### Sunix Timestamps
 The system uses a custom compact timestamp format called `Sunix`.
@@ -89,17 +94,17 @@ The system uses a custom compact timestamp format called `Sunix`.
 Multi-tenancy is strictly enforced at the handler level to prevent cross-company data access.
 
 ### Filtering in Queries
-Every `SELECT` operation must include the `EmpresaID` filter. This ensures the database only returns records belonging to the authenticated user's company.
+Every `SELECT` operation must include the `CompanyID` filter. This ensures the database only returns records belonging to the authenticated user's company.
 
 ```go
-query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
+query.Select().CompanyID.Equals(req.User.CompanyID)
 ```
 
 ### Assignments in Modifications
-Before any `INSERT` or `UPDATE`, the `EmpresaID` must be assigned from the authenticated user context. Never trust an `EmpresaID` provided in the request body.
+Before any `INSERT` or `UPDATE`, the `CompanyID` must be assigned from the authenticated user context. Never trust an `CompanyID` provided in the request body.
 
 ```go
-body.EmpresaID = req.Usuario.EmpresaID
+body.CompanyID = req.User.CompanyID
 ```
 
 ---
@@ -136,22 +141,20 @@ To improve performance when a handler needs to return multiple independent datas
 
 ```go
 func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
-    updated := req.GetQueryInt64("upd")
+    updatedVersion := req.GetQueryInt("upv")
     almacenes := []s.Almacen{}
     sedes := []s.Sede{}
     eg := errgroup.Group{}
 
     eg.Go(func() error {
         q := db.Query(&almacenes)
-        q.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
-        if updated > 0 { q.Updated.GreaterThan(updated) } else { q.Status.Equals(1) }
+        q.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
         return q.Exec()
     })
 
     eg.Go(func() error {
         q := db.Query(&sedes)
-        q.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
-        if updated > 0 { q.Updated.GreaterThan(updated) } else { q.Status.Equals(1) }
+        q.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
         return q.Exec()
     })
 
@@ -176,7 +179,7 @@ func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 
     movimientos := []s.CajaMovimiento{}
     query := db.Query(&movimientos)
-    query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
+    query.Select().CompanyID.Equals(req.User.CompanyID)
     
     // Range query using SUnixTimeUUID pattern
     query.ID.Between(
@@ -209,7 +212,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
     json.Unmarshal([]byte(*req.Body), &record)
 
     // 1. Fetch current state to verify balance
-    caja, err := shared.GetCaja(req.Usuario.EmpresaID, record.CajaID)
+    caja, err := shared.GetCaja(req.User.CompanyID, record.CajaID)
     if err != nil { return req.MakeErr("Caja no encontrada.", err) }
 
     // 2. Validate balance consistency
@@ -218,7 +221,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
     }
 
     // 3. Prepare records
-    record.EmpresaID = req.Usuario.EmpresaID
+    record.CompanyID = req.User.CompanyID
     record.Created = nowTime
     record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
     
@@ -253,7 +256,7 @@ func PostBatch(req *core.HandlerArgs) core.HandlerResponse {
     newIDs := make([]s.NewIDToID, len(records))
     for i := range records {
         newIDs[i].TempID = records[i].ID
-        records[i].EmpresaID = req.Usuario.EmpresaID
+        records[i].CompanyID = req.User.CompanyID
     }
 
     // 2. ORM autoincrements every record with ID <= 0 in-place.
@@ -277,8 +280,8 @@ func PostBatch(req *core.HandlerArgs) core.HandlerResponse {
 ### Example: GetProductos (Standard GET with Sync)
 ```go
 func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
-	// 1. Get updated param (handle multiple names for compatibility)
-	updated := core.Coalesce(req.GetQueryInt64("upd"), req.GetQueryInt64("updated"))
+	// 1. The client sends the highest updated_version it already holds
+	updatedVersion := req.GetQueryInt("upv")
 
 	// 2. Initialize slice
 	productos := []s.Producto{}
@@ -288,13 +291,9 @@ func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
 	
 	// Exclude large or calculated fields to keep payload small
 	query.Exclude(query.Stock, query.StockStatus)
-	query.Select().EmpresaID.Equals(req.Usuario.EmpresaID)
-	
-	if updated > 0 {
-		query.Updated.GreaterThan(updated)
-	} else {
-		query.Status.GreaterEqual(1)
-	}
+	// Delta() keeps only active rows on a first sync and every status afterwards, so the
+	// frontend can evict deleted ones from its cache.
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
 	
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los productos:", err)
@@ -324,20 +323,20 @@ func PostCajas(req *core.HandlerArgs) core.HandlerResponse {
 	// 3. Prepare common fields
 	nowTime := core.SUnixTime()
 	body.Updated = nowTime
-	body.EmpresaID = req.Usuario.EmpresaID
+	body.CompanyID = req.User.CompanyID
 
 	// 4. Handle Create vs Update
 	var err error
 	cajaBatch := []s.Caja{body}
 	if body.ID <= 0 {
 		// New record — ORM auto-assigns the ID via the schema's Autoincrement(N).
-		cajaBatch[0].CreatedBy = req.Usuario.ID
+		cajaBatch[0].CreatedBy = req.User.ID
 		cajaBatch[0].Created = nowTime
 		cajaBatch[0].Status = 1
 		err = db.Insert(&cajaBatch)
 	} else {
 		// Existing record - update tracking
-		cajaBatch[0].UpdatedBy = req.Usuario.ID
+		cajaBatch[0].UpdatedBy = req.User.ID
 
 		// Protect specific fields from being overwritten during standard update
 		q1 := db.Table[s.Caja]()
@@ -388,7 +387,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 ## 10. Troubleshooting & FAQ
 
 ### Q: Why isn't my query returning anything?
-**A**: Ensure you are filtering by `EmpresaID`. If you are filtering by a non-primary key column, check if you need to call `.AllowFilter()`. Also, verify if the `Status` field matches your sync logic.
+**A**: Ensure you are filtering by `CompanyID`. If you are filtering by a non-primary key column, check if you need to call `.AllowFilter()`. Also, verify if the `Status` field matches your sync logic.
 
 ### Q: Why do we use Sunix timestamps instead of standard Unix timestamps?
 **A**: Sunix timestamps are optimized for synchronization and primary key generation patterns, providing higher precision and better compatibility with our `SUnixTimeUUID` format.
@@ -401,7 +400,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 ## 11. Developer's Handbook: Best Practices
 
 1.  **Always use Spanish** for user-facing error messages to maintain consistency across the platform.
-2.  **Never trust client input** for fields like `EmpresaID`, `CreatedBy`, or `Updated`. Always assign these from the trusted `req.Usuario` context.
+2.  **Never trust client input** for fields like `CompanyID`, `CreatedBy`, or `Updated`. Always assign these from the trusted `req.User` context.
 3.  **Optimize payloads** by using `query.Exclude` for large fields like images or long descriptions in list views.
 4.  **Use `errgroup`** for parallelizing independent queries to significantly reduce API latency.
 5.  **Follow naming conventions**: `GetEntity` for data retrieval and `PostEntity` for modifications.
@@ -420,6 +419,8 @@ Structs in `app/types` must be tagged for both formats to ensure consistency.
 - **EXCEPTIONS**:
     - `Updated` MUST use `json:"upd,omitempty"`.
     - `Status` MUST use `json:"ss,omitempty"`.
+    - `UpdatedVersion` MUST use `json:"upv,omitempty"`, and is required on every table with a
+      `db.TypeDelta` index or `SaveUpdatedVersion: true`.
 
 ### CBOR Tagging Rules
 - **CBOR**: Used for high-performance internal and mobile traffic. Use integer keys.
@@ -438,9 +439,9 @@ type Entity struct {
 
 ## 13. Summary Checklist for Developers
 
-- [ ] Every GET query includes the `EmpresaID` filter.
-- [ ] Every POST operation assigns `EmpresaID` from `req.Usuario`.
-- [ ] `updated > 0` logic correctly includes records with `Status = 0`.
+- [ ] Every GET query includes the `CompanyID` filter.
+- [ ] Every POST operation assigns `CompanyID` from `req.User`.
+- [ ] Delta reads go through `.Delta(req.GetQueryInt("upv"), 1)` against a `db.TypeDelta` index, not a hand-written `updated > 0` branch.
 - [ ] New records (`ID <= 0`) rely on the ORM to auto-assign the ID during `db.Insert` via the schema's `Autoincrement(N)`. Read back `records[i].ID` after insert when you need the assigned values.
 - [ ] Sensitive fields are protected using `db.UpdateExclude`.
 - [ ] Structs are properly tagged with both JSON and CBOR integer keys.

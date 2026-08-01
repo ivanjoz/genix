@@ -132,6 +132,7 @@ type EcommercePageContentTable struct {
 
 func (e EcommercePageContentTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        12,
 		Name:      "ecommerce_page_content",
 		Partition: e.CompanyID,
 		// (CompanyID, PageID, SectionID) is the PK. SectionID is the section's

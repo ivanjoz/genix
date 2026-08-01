@@ -120,8 +120,8 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if len(body.Name) < 4 || len(body.Description) < 4 {
-		return req.MakeErr("Faltan propiedades de la site")
+	if len(body.Name) < 4 {
+		return req.MakeErr("El nombre debe poseer al menos 3 caracteres.")
 	}
 	if body.CityID <= 0 {
 		return req.MakeErr("Debe seleccionar una ciudad válida para la sede.")

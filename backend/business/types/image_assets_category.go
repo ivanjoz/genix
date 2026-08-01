@@ -22,6 +22,7 @@ type ImageAssetCategoryTable struct {
 
 func (e ImageAssetCategoryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           17,
 		Name:         "image_assets_category",
 		Partition:    e.GroupID,
 		UseSequences: true,

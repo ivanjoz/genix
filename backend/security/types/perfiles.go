@@ -39,6 +39,7 @@ type ProfileTable struct {
 
 func (e ProfileTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           23,
 		Name:         "profiles",
 		Partition:    e.CompanyID,
 		UseSequences: true,

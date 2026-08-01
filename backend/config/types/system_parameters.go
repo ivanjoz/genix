@@ -26,6 +26,7 @@ type SystemParametersTable struct {
 
 func (e SystemParametersTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        33,
 		Name:      "system_parameters",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),

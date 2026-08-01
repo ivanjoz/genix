@@ -32,6 +32,7 @@ type ImageAssetTable struct {
 
 func (e ImageAssetTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        16,
 		Name:      "image_assets",
 		Partition: e.GroupID,
 		// Keywords holds the deduplicated English text indexed by the Sonic AI search.

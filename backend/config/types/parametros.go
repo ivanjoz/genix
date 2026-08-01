@@ -30,6 +30,7 @@ type ParametersTable struct {
 
 func (e ParametersTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           18,
 		Name:         "parameters",
 		Partition:    e.CompanyID,
 		UseSequences: true,

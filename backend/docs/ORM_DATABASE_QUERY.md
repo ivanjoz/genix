@@ -34,7 +34,8 @@ type Product struct {
     Status    int8     `db:"status"`
     Updated   int64    `db:"updated"`
     Tags      []string `db:"tags"`
-    CacheV    uint8    `db:"-" json:"ccv,omitempty"`
+    // Required on any table that is synced incrementally. See §3.1.
+    UpdatedVersion int32 `json:"upv,omitempty"`
 }
 
 // Purpose: Table struct exposes typed fluent query fields.
@@ -47,6 +48,7 @@ type ProductTable struct {
     Status    db.Col[ProductTable, int8]
     Updated   db.Col[ProductTable, int64]
     Tags      db.ColSlice[ProductTable, string]
+    UpdatedVersion db.Col[ProductTable, int32]
 }
 ```
 
@@ -55,7 +57,7 @@ type ProductTable struct {
 - Field names must match between record and table structs.
 - Column name is inferred from `db` tag or snake_case field name.
 - Partition/key columns are defined in `GetSchema()` (not by tag alone).
-- For cached delta APIs, record should expose `ID`, partition field, and cache-version response field (`uint8`).
+- For cached delta APIs, record must expose `ID`, the partition field, and `UpdatedVersion int32` with the json tag `upv`.
 
 ---
 
@@ -66,15 +68,43 @@ type ProductTable struct {
 // Rationale: Query routing and write behavior are derived from this contract.
 func (e ProductTable) GetSchema() db.TableSchema {
     return db.TableSchema{
+        // Required, unique across the whole project, never derived from the name. See §3.1.
+        ID:        22,
         Name:      "product",
         Partition: e.EmpresaID,
         Keys:      db.Cols(e.ID),
 
-        // Optional: enable per-record cache-version support.
-        SaveCacheVersion: true,
+        // Optional: enable the by-IDs slot-version cache.
+        SaveUpdatedVersion: true,
     }
 }
 ```
+
+### 3.1 `TableSchema.ID` and `updated_version`
+
+Every table declares an `ID` in `1..16383`, unique across the project. It is packed into the
+partition key of `cache_updated_version` alongside the tenant, so reusing or changing one silently
+repoints a table's cached slot versions. `scripts` `check_tables` enforces presence, range and
+uniqueness statically; the ORM panics at table-compile time as a backstop. ORM-internal tables claim
+IDs from the top of the range (`sequences` holds `16383`).
+
+`updated_version` is a managed column, like `created` and `updated`: the ORM assigns it on every
+write from a per-partition sequence — the same counter call that hands out autoincrement IDs. Unlike
+a timestamp it is strictly increasing and never collides, which is what makes both caches exact.
+
+A table must expose it to the client when it declares `SaveUpdatedVersion: true` **or** a
+`db.TypeDelta` index; the ORM panics otherwise. Exposing it means both structs:
+
+```go
+// record struct — the json tag is the frontend contract
+UpdatedVersion int32 `json:"upv,omitempty"`
+// table struct — without this the column is DB-only and never selected
+UpdatedVersion db.Col[ProductTable, int32]
+```
+
+The field name snake-cases to `updated_version`, so no `db` tag is needed. `DisableUpdatedVersion:
+true` opts a table out entirely, saving one counter read per write; it cannot be combined with
+either feature above.
 
 ---
 
@@ -285,6 +315,43 @@ q.Updated.Between(tsFrom, tsTo)
 q.Tags.Contains("featured")
 ```
 
+### 6.1 Delta reads (`Delta`)
+
+`Delta` replaces the hand-written watermark branch a delta-cache handler used to carry. It requires
+a `db.TypeDelta` index (§7.5b).
+
+```go
+// Purpose: Read everything the client has not seen since its watermark.
+// Rationale: One call covers both halves of the sync and routes to the packed delta view.
+query.Select().
+    CompanyID.Equals(req.User.CompanyID).
+    Type.Equals(int8(requestedType)).
+    Delta(updatedSince, 1)
+```
+
+- `updatedSince` is an `updated_version`, not a timestamp — the client's highest received value.
+- `updatedSince > 0` → `updated_version >= updatedSince+1`, fanned out over **every** declared value
+  of the filter column, so rows that flipped to an inactive value still reach the client for eviction.
+- `updatedSince == 0` → a first sync: the filter column is pinned to the arguments and the whole
+  version slot is scanned (versions start at 1, so nothing is excluded).
+- **The filter column is inferred, never named**: it is `Keys[0]` of the first `db.TypeDelta` index —
+  usually `Status`, but any low-cardinality column works.
+- Pass no value to constrain nothing but the watermark.
+- The variadic is `...int64`. Untyped literals (`Delta(w, 1)`) are fine; a *typed* `int8` constant
+  needs `int64(…)`.
+- Position in the chain does not matter.
+- It panics on a declaration bug — no `TypeDelta` index, no `FixedValues` for the filter column, or
+  several `TypeDelta` indexes disagreeing on `Keys[0]`. The message names the fix.
+
+The bound is exact: because `updated_version` is a sequence rather than a timestamp, two writes in
+the same second are distinguishable and the boundary rows are not re-sent on every poll.
+
+**Known limitation.** Versions are reserved before the write commits, so two overlapping writers can
+commit out of order: writer A reserves 100, writer B reserves 101 and commits first, a client polls
+and stores watermark 101, then A commits. A's rows are never delivered until they are written again.
+The window is the few milliseconds between two concurrent writes on the same tenant and table. This
+is accepted, not fixed.
+
 ---
 
 ## 7. Advanced Schema Strategies
@@ -409,6 +476,65 @@ Indexes: []db.Index{
 }
 ```
 
+### 7.5b Delta Views (`db.TypeDelta`)
+
+Use for any table the frontend syncs incrementally. One declaration replaces the
+`[Filter, Updated]` + `[Filter, Status]` view pair the delta pattern used to need, and pairs with
+`query.Delta()` (§4.7).
+
+```go
+// Purpose: Serve both halves of a delta-cache sync from one packed view.
+// Rationale: The declared value ranges size each digit slot, so the engine — not the developer —
+// decides whether the packed column fits an int.
+func (t ClientProviderTable) GetSchema() db.TableSchema {
+    return db.TableSchema{
+        ID:        1,
+        Name:      "client_provider",
+        Partition: t.CompanyID,
+        Keys:      db.Cols(t.ID.Autoincrement(0)),
+        FixedValues: []db.FixedValues{
+            {Col: t.Status, Values: []int64{0, 1}},
+            {Col: t.Type, Min: 1, Max: 2},
+        },
+        Indexes: []db.Index{
+            // updated_version is appended implicitly. Keys[0] is the column Delta() filters on.
+            {Type: db.TypeDelta, Keys: db.Cols(t.Status, t.Type)},
+        },
+    }
+}
+```
+
+Rules:
+- Every declared key needs a `FixedValues` entry (`Values` list, or `Min`/`Max`). That range sizes
+  its digit slot; the schema panics without one.
+- Do **not** list `UpdatedVersion` — it is implicit and takes the trailing slot.
+- No `.DecimalSize()` or `.Int32()` needed. Both remain as escape hatches; a forced `.Int32()` that
+  cannot hold the declared ranges panics with the computed maximum.
+- The packed column is `int` when the maximum packed value fits `2,147,483,647`, else `bigint`.
+  `updated_version` gets 8 digits in the `int` case and 10 in the `bigint` case, since the digits are
+  already paid for. 8 digits caps the table at 10^8 write calls per partition; a write past that
+  fails loudly rather than silently truncating the packed key.
+- **`Keys[0]` decides the fit** — it is the most significant slot. `[Status{0,1}, Type{1,2}]` reaches
+  `1_2_99999999` → `int`; reversed it reaches `2_1_99999999` → `bigint`. Declare the most tightly
+  bounded column first. When `bigint` is chosen the compiler logs which order would have fit.
+- `Keys[0]` is also `Delta()`'s filter column, so the two roles are coupled. If they conflict, put
+  the filter column first and accept `bigint`.
+- Writing a row outside its declared range panics rather than corrupting the packed key.
+- `Partition` may relocate the view partition, same as `TypeView`.
+
+A delta view doubles as an ordinary index, because a packed base-10 key is prefix-searchable:
+
+| Query | Plan |
+|---|---|
+| `Status = 1` | range over the whole `Status = 1` block |
+| `Status = 1 AND Type = 2` | narrower range inside it |
+| `Status IN (0,1)` | one range per value |
+| `Status = 1 AND Type = 2 AND Updated > W` | the full delta shape |
+
+A gap is refused rather than silently dropped: `Type = 2` without `Status` cannot be one range, so
+the view declines and the planner looks elsewhere. Partial prefixes rank below a local index, so
+`Status = 1 AND RegistryNumber = 'X'` uses the `registry_number` index instead.
+
 ### 7.6 Composite-Bucket Indexes
 
 Use for range + multi-field membership scenarios over numeric dimensions.
@@ -437,21 +563,21 @@ Rules:
 
 ## 8. Cache-Version Delta Queries
 
-If `SaveCacheVersion` is enabled in schema, you can fetch only changed records.
+If `SaveUpdatedVersion` is enabled in schema, you can fetch only changed records.
 
 ```go
 // Purpose: Return only rows whose server cache-version changed.
 // Rationale: Reduces payload for sync endpoints with client-side caches.
 changed := []Product{}
-cached := []db.IDCacheVersion{
-    {PartitionID: 1, ID: 101, CacheVersion: 5},
-    {PartitionID: 1, ID: 102, CacheVersion: 2},
+cached := []db.IDUpdatedVersion{
+    {PartitionID: 1, ID: 101, UpdatedVersion: 5},
+    {PartitionID: 1, ID: 102, UpdatedVersion: 2},
 }
 err := db.QueryCachedIDs(&changed, cached)
 ```
 
 Requirements:
-- `SaveCacheVersion: true` in `GetSchema()`
+- `SaveUpdatedVersion: true` in `GetSchema()`
 - one partition field and one key field resolvable by ORM
 - response model includes cache-version output field (`uint8`) if you expose it to client
 
@@ -475,17 +601,17 @@ GenericRecord: db.GenericRecordSchema{
   optional integers of any width.
 - `ID` and `Status` are **not** declared — they are always the table's single key column and its
   `status` column, resolved automatically.
-- `GenericRecord` **requires** `SaveCacheVersion: true` (panics at table build otherwise), which is
+- `GenericRecord` **requires** `SaveUpdatedVersion: true` (panics at table build otherwise), which is
   also what guarantees the key is a single integer column.
 
 Query it by name:
 
 ```go
 records, err := db.QueryCachedGenericByIDs("products", cachedIDs)
-// -> []db.GenericRecord{{ID, Name, S1, S2, N1, N2, Status, CacheVersion}}
+// -> []db.GenericRecord{{ID, Name, S1, S2, N1, N2, Status, UpdatedVersion}}
 ```
 
-Cache-version filtering is identical to `QueryCachedIDs`: IDs whose client `ccv` still matches the
+Slot-version filtering is identical to `QueryCachedIDs`: IDs whose client `upv` still matches the
 server are never read from the table.
 
 Notes:
@@ -571,3 +697,37 @@ err := db.Merge(
 
 - **Composite bucketing config panic**:
   - Fix: ensure exactly one `CompositeBucketing(...)` column in each composite-bucket `Indexes` entry.
+
+---
+
+## 13. Assigned Table IDs
+
+Every `GetSchema()` declares a unique `TableSchema.ID` (§3.1). New tables take the next free number;
+IDs are never reused or renumbered, because they are packed into `cache_updated_version`'s key.
+`check_tables` fails the build on a duplicate or a missing one.
+
+| ID | Table | ID | Table |
+|---:|---|---:|---|
+| 1 | client_provider | 22 | products |
+| 2 | agent_messages | 23 | profiles |
+| 3 | cache | 24 | purchase_order |
+| 4 | cache_global | 25 | sale_order |
+| 5 | cash_bank_movements | 26 | sale_summary |
+| 6 | cash_banks | 27 | sales_planning |
+| 7 | cash_reconciliations | 28 | seasonality_curve |
+| 8 | city_locations | 29 | shared_list_records |
+| 9 | companies | 30 | shipping_costs |
+| 10 | cron_actions | 31 | sites |
+| 11 | delivery_order_note | 32 | supply_material |
+| 12 | ecommerce_page_content | 33 | system_parameters |
+| 13 | expenses | 34 | usage_log |
+| 14 | expenses_scheduled | 35 | users |
+| 15 | gallery_images | 36 | warehouse_product_movement |
+| 16 | image_assets | 37 | warehouse_product_stock |
+| 17 | image_assets_category | 38 | warehouse_product_stock_detail |
+| 18 | parameters | 39 | warehouses |
+| 19 | product_sale_summary | 40 | webpages |
+| 20 | product_stock_lot | 41 | zz_demo_struct |
+| 21 | product_supply | 16383 | sequences (ORM-internal) |
+
+**Next free ID: 42.**

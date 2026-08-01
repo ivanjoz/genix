@@ -44,6 +44,7 @@ type SalesPlanningTable struct {
 
 func (e SalesPlanningTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        27,
 		Name:      "sales_planning",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
@@ -92,6 +93,7 @@ type SeasonalityCurveTable struct {
 
 func (e SeasonalityCurveTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:        28,
 		Name:      "seasonality_curve",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),

@@ -67,7 +67,7 @@ type Product struct {
 	CreatedBy int32 `json:",omitempty"`
 	/* concatenated with CompanyID to be indexed */
 	CategoriesWithStock []int32 `json:",omitempty"`
-	CacheVersion        uint8   `json:"ccv,omitempty"`
+	UpdatedVersion      int32   `json:"upv,omitempty"`
 	/* extra */
 	BrandName_ string `json:",omitempty"`
 }
@@ -119,6 +119,7 @@ type ProductTable struct {
 	Created             db.Col[ProductTable, int32]
 	CreatedBy           db.Col[ProductTable, int32]
 	CategoriesWithStock db.ColSlice[ProductTable, int32]
+	UpdatedVersion      db.Col[ProductTable, int32]
 }
 
 func (e *Product) FillCategoriesWithStock() {
@@ -136,10 +137,11 @@ func (e *Product) SelfParse() {
 
 func (e ProductTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		Name:             "products",
-		Partition:        e.CompanyID,
-		TextSearchColumn: e.Name,
-		SaveCacheVersion: true,
+		ID:                 22,
+		Name:               "products",
+		Partition:          e.CompanyID,
+		TextSearchColumn:   e.Name,
+		SaveUpdatedVersion: true,
 		// Label lookups resolve name + SKU + price/brand without shipping the whole product row.
 		GenericRecord: db.GenericRecordSchema{
 			Name: e.Name, S1: e.SKU, N1: e.FinalPrice, N2: e.BrandID,
@@ -204,6 +206,7 @@ type WarehouseTable struct {
 
 func (e WarehouseTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           39,
 		Name:         "warehouses",
 		Partition:    e.CompanyID,
 		UseSequences: true,
@@ -262,6 +265,7 @@ type SiteTable struct {
 
 func (e SiteTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
+		ID:           31,
 		Name:         "sites",
 		Partition:    e.CompanyID,
 		UseSequences: true,

@@ -118,7 +118,7 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	// Parse IDs + cache versions sent by the client to resolve only changed records.
-	cachedIDs := req.ExtractCacheVersionValues()
+	cachedIDs := req.ExtractUpdatedVersionValues()
 
 	if len(cachedIDs) == 0 {
 		return req.MakeErr("No se enviaron ids a buscar.")
