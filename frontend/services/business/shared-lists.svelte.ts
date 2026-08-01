@@ -24,7 +24,7 @@ export const sharedLists = [
 
 export class SharedListsService extends GetHandler<ISharedListRecord> {
   route = 'shared-lists';
-  useCache = { min: 5, ver: 6 };
+  useCache = { min: 5, ver: 7 };
   inferRemoveFromStatus = true
 
   ListaRecordsMap: Map<number, ISharedListRecord[]> = $state(new Map());

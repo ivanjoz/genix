@@ -27,11 +27,12 @@ type ProductStock struct {
 	LastPricesQuantity        []int32 `json:",omitempty"`
 	StockStatus               int8    `json:",omitempty"`
 
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Status    int8  `json:"ss,omitempty"`
+	Created        int32 `json:",omitempty"`
+	CreatedBy      int32 `json:",omitempty"`
+	Updated        int32 `json:"upd,omitempty"`
+	UpdatedVersion int32 `json:"upv,omitempty"`
+	UpdatedBy      int32 `json:",omitempty"`
+	Status         int8  `json:"ss,omitempty"`
 }
 
 // Derive Status from the two live buckets (Quantity + DetailQuantity).
@@ -59,32 +60,33 @@ type ProductStockTable struct {
 	Created                   db.Col[ProductStockTable, int32]
 	CreatedBy                 db.Col[ProductStockTable, int32]
 	Updated                   db.Col[ProductStockTable, int32]
+	UpdatedVersion            db.Col[ProductStockTable, int32]
 	UpdatedBy                 db.Col[ProductStockTable, int32]
 	Status                    db.Col[ProductStockTable, int8]
 }
 
 func (e ProductStockTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                    37,
-		Name:                  "warehouse_product_stock",
-		Partition:             e.CompanyID,
-		Keys:                  db.Cols(e.ID),
-		DisableUpdatedVersion: true,
+		ID:        37,
+		Name:      "warehouse_product_stock",
+		Partition: e.CompanyID,
+		Keys:      db.Cols(e.ID),
 		// ID packs (WarehouseID, ProductID, PresentationID) into the single int64 key.
 		KeyIntPacking: db.Cols(
 			e.WarehouseID.DecimalSize(5),
 			e.ProductID.DecimalSize(9),
 			e.PresentationID.DecimalSize(4),
 		),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
+		// Two delta indexes for the two read shapes. Delta() picks by what the query already pinned:
+		// one warehouse's stock routes to the first, a whole-company sweep to the second. WarehouseID
+		// reuses the 5-digit width the packed ID key gives it.
 		Indexes: []db.Index{
-			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
-			},
-			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.Status, e.Updated.DecimalSize(8)),
-			},
+			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.DecimalSize(5), e.Status)},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }
@@ -104,11 +106,12 @@ type ProductStockDetail struct {
 	SubQuantity    int32  `json:",omitempty"`
 	ExpirationDate int16  `json:",omitempty"`
 
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Status    int8  `json:"ss,omitempty"`
+	Updated        int32 `json:"upd,omitempty"`
+	UpdatedVersion int32 `json:"upv,omitempty"`
+	UpdatedBy      int32 `json:",omitempty"`
+	Created        int32 `json:",omitempty"`
+	CreatedBy      int32 `json:",omitempty"`
+	Status         int8  `json:"ss,omitempty"`
 }
 
 type ProductStockDetailTable struct {
@@ -123,6 +126,7 @@ type ProductStockDetailTable struct {
 	SubQuantity    db.Col[ProductStockDetailTable, int32]
 	ExpirationDate db.Col[ProductStockDetailTable, int16]
 	Updated        db.Col[ProductStockDetailTable, int32]
+	UpdatedVersion db.Col[ProductStockDetailTable, int32]
 	UpdatedBy      db.Col[ProductStockDetailTable, int32]
 	Created        db.Col[ProductStockDetailTable, int32]
 	CreatedBy      db.Col[ProductStockDetailTable, int32]
@@ -131,18 +135,17 @@ type ProductStockDetailTable struct {
 
 func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                    38,
-		Name:                  "warehouse_product_stock_detail",
-		Partition:             e.CompanyID,
-		DisableUpdatedVersion: true,
+		ID:        38,
+		Name:      "warehouse_product_stock_detail",
+		Partition: e.CompanyID,
 		// One detail row per stock-record + lot + serial.
 		Keys: db.Cols(e.ProductStockID, e.LotID, e.SerialNumber),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
-			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
-			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)),
-			},
+			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.DecimalSize(5), e.Status)},
 		},
 	}
 }

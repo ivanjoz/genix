@@ -159,7 +159,7 @@ type DateProductMovements struct {
 
 func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
-	movimientosFecha := int16(req.GetQueryInt("movimientos"))
+	movimientosFecha := req.GetQueryInt16("movimientos")
 	productosStockUpdated := req.GetQueryInt("productosStock")
 
 	movimientos := []logisticsTypes.WarehouseProductMovement{}
@@ -219,14 +219,11 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 	// so consumers stay compatible with the old shape without needing detail rows here.
 	productosStockV2 := []logisticsTypes.ProductStock{}
 
-	psQuery := db.Query(&productosStockV2).AllowFilter()
-	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Quantity, psQuery.DetailQuantity)
-
-	if productosStockUpdated == 0 {
-		psQuery.Status.Equals(1)
-	} else {
-		psQuery.Updated.GreaterEqual(productosStockUpdated)
-	}
+	psQuery := db.Query(&productosStockV2)
+	// No WarehouseID pinned, so Delta() routes to the [Status] delta index.
+	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.UpdatedVersion, psQuery.Quantity, psQuery.DetailQuantity).
+		CompanyID.Equals(req.User.CompanyID).
+		Delta(productosStockUpdated, 1)
 
 	if err := psQuery.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los productos stock:", err)

@@ -14,7 +14,9 @@ import (
 )
 
 func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt("updated")
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	productos := []businessTypes.Product{}
 	errGroup := errgroup.Group{}
@@ -24,11 +26,9 @@ func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 
 		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
 
-		if updated > 0 {
-			query.Updated.GreaterThan(updated)
-		} else {
-			query.Status.GreaterEqual(1)
-		}
+		// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
+		// can evict deleted ones from its cache.
+		query.Delta(updatedSince, 1)
 
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los productos: %v", err)

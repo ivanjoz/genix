@@ -24,18 +24,18 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	eg := errgroup.Group{}
 
 	for _, listaID := range listasIDs {
-		updated := req.GetQueryInt(fmt.Sprintf("id_%v", listaID))
+		// Each list is its own response key and carries its own "upv" watermark, the write sequence
+		// number: two writes in the same second are distinguishable, so nothing is re-sent or skipped.
+		updatedSince := req.GetQueryInt(fmt.Sprintf("id_%v", listaID))
 
 		eg.Go(func() error {
 			query := db.Query(listaRegistrosMap[listaID])
+			// Delta() keeps only active rows on a first sync and both statuses afterwards, so the
+			// frontend can evict deleted ones from its cache.
 			query.Select().
 				CompanyID.Equals(req.User.CompanyID).
-				ListID.Equals(listaID)
-			if updated > 0 {
-				query.Updated.GreaterThan(updated)
-			} else {
-				query.Status.Equals(1)
-			}
+				ListID.Equals(listaID).
+				Delta(updatedSince, 1)
 			return query.Exec()
 		})
 	}

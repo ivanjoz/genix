@@ -103,7 +103,7 @@ export interface IProductResult {
 export class ProductsService extends GetHandler<IProduct> {
   route = "products"
   routeByID = "p-products-ids"
-  useCache = { min: 1, ver: 10 }
+  useCache = { min: 1, ver: 11 }
 	inferRemoveFromStatus = true
   prependOnSave = true
 	

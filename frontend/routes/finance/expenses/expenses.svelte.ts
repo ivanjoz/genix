@@ -117,7 +117,7 @@ export class ExpensesService extends GetHandler<IExpense> {
   keyID = "ID"
   // 30s TTL: re-clicking a tab within the window reads cache instead of hitting the server.
   // Route depends on the status tab; bump ver so old (status-less) caches are dropped.
-  useCache = { min: 0.5, ver: 2 }
+  useCache = { min: 0.5, ver: 3 }
   prependOnSave = true
 
   records: IExpense[] = $state([])
@@ -138,7 +138,7 @@ export class ExpensesService extends GetHandler<IExpense> {
 export class ExpensesScheduledService extends GetHandler<IExpenseScheduled> {
   route = "expenses-scheduled"
   keyID = "ID"
-  useCache = { min: 5, ver: 1 }
+  useCache = { min: 5, ver: 2 }
   inferRemoveFromStatus = true
   prependOnSave = true
 

@@ -41,7 +41,7 @@ export interface ISeasonalityCurve {
 
 export class SalesPlanningService extends GetHandler<ISalesPlanning> {
 	route = 'sales-planning'
-	useCache = { min: 5, ver: 1 }
+	useCache = { min: 5, ver: 2 }
 	inferRemoveFromStatus = true
 	prependOnSave = true
 
@@ -59,7 +59,7 @@ export class SalesPlanningService extends GetHandler<ISalesPlanning> {
 
 export class SeasonalityCurveService extends GetHandler<ISeasonalityCurve> {
 	route = 'seasonality-curve'
-	useCache = { min: 5, ver: 1 }
+	useCache = { min: 5, ver: 2 }
 	inferRemoveFromStatus = true
 	prependOnSave = true
 

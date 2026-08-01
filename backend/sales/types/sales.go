@@ -26,14 +26,15 @@ type SaleOrder struct {
 	DetailProductLotIDs        []int32  `json:",omitempty" db:",list"`
 	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
 
-	TotalAmount   int32 `json:",omitempty"`
-	TaxAmount     int32 `json:",omitempty"`
-	DebtAmount    int32 `json:",omitempty"`
-	ClientID      int32 `json:",omitempty"`
-	Created       int32 `json:",omitempty"`
-	Updated       int32 `json:"upd,omitempty"`
-	UpdateCounter int32 `json:"upc,omitempty"`
-	UpdatedBy     int32 `json:",omitempty"`
+	TotalAmount    int32 `json:",omitempty"`
+	TaxAmount      int32 `json:",omitempty"`
+	DebtAmount     int32 `json:",omitempty"`
+	ClientID       int32 `json:",omitempty"`
+	Created        int32 `json:",omitempty"`
+	Updated        int32 `json:"upd,omitempty"`
+	UpdateCounter  int32 `json:"upc,omitempty"`
+	UpdatedVersion int32 `json:"upv,omitempty"`
+	UpdatedBy      int32 `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status            int8  `json:"ss,omitempty"`
 	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
@@ -88,6 +89,7 @@ type SaleOrderTable struct {
 	ClientID                   db.Col[SaleOrderTable, int32]
 	Updated                    db.Col[SaleOrderTable, int32]
 	UpdateCounter              db.Col[SaleOrderTable, int32]
+	UpdatedVersion             db.Col[SaleOrderTable, int32]
 	UpdatedBy                  db.Col[SaleOrderTable, int32]
 	Status                     db.Col[SaleOrderTable, int8]
 	LastPaymentTime            db.Col[SaleOrderTable, int32]
@@ -103,6 +105,10 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		Name:      "sale_order",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(2)),
+		// Sizes the Status slot of the delta index.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Min: 0, Max: 4},
+		},
 		Indexes: []db.Index{
 			{
 				Type: db.TypeLocalIndex,
@@ -128,10 +134,9 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				Keys:          db.Cols(e.Date.StoreAsWeek(), e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
-			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.Status.Int32(), e.UpdateCounter.DecimalSize(8)),
-			},
+			// The status tabs pin Status themselves and take only the watermark from Delta(upv), so
+			// this replaces the [Status, UpdateCounter] view the delta read used to use.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }
@@ -201,11 +206,10 @@ type ProductSaleSummaryTable struct {
 
 func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                    19,
-		Name:                  "product_sale_summary",
-		Partition:             e.CompanyID,
-		Keys:                  db.Cols(e.Date, e.ProductID),
-		DisableUpdatedVersion: true,
+		ID:        19,
+		Name:      "product_sale_summary",
+		Partition: e.CompanyID,
+		Keys:      db.Cols(e.Date, e.ProductID),
 	}
 }
 

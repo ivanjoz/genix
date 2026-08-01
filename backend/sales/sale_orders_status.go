@@ -13,9 +13,11 @@ var pendingStatusToStatus = map[int8][]int8{
 	types.OrderStatusDelivered: {types.OrderStatusPending, types.OrderStatusPaid},
 }
 
-// It supports delta sync via the "upc" query parameter.
+// It supports delta sync via the "records" query parameter, the response key's own watermark.
 func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
-	updateCounter := req.GetQueryInt("records")
+	// Watermarked by "upv", the write sequence number, not by a timestamp or the index-group counter:
+	// two writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("records")
 	orderPendingStatus := int8(req.GetQueryInt("pending-status"))
 	orderStatus := int8(req.GetQueryInt("order-status"))
 	queryGroup := errgroup.Group{}
@@ -44,9 +46,11 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 			query := db.Query(&saleOrdersByStatus[resultIndex]).Limit(5000).OrderDesc()
 			query.Exclude(query.CompanyID)
 
+			// Delta() with no filter values adds the exact watermark bound and nothing else, leaving
+			// this query pinned to the one status the tab asked for.
 			query.CompanyID.Equals(req.User.CompanyID).
 				Status.Equals(currentOrderStatus).
-				UpdateCounter.GreaterEqual(updateCounter)
+				Delta(updatedSince)
 
 			return query.Exec()
 		})
@@ -55,7 +59,7 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	saleOrdersToRemoveIDsGroups := make([][]int64, len(orderStatusToRemove))
 	core.Log("orderStatusToRemove:", orderStatusToRemove)
 
-	if updateCounter > 0 {
+	if updatedSince > 0 {
 		for resultIndex, currentOrderStatus := range orderStatusToRemove {
 
 			queryGroup.Go(func() error {
@@ -66,7 +70,7 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 
 				query.CompanyID.Equals(req.User.CompanyID).
 					Status.Equals(currentOrderStatus).
-					UpdateCounter.GreaterEqual(updateCounter)
+					Delta(updatedSince)
 
 				if err := query.ExecScan(func(record *types.SaleOrder) bool {
 					(*idsToSave) = append((*idsToSave), record.ID)

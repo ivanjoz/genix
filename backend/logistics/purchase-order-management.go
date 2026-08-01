@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"slices"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -178,51 +176,23 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt("updated")
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 	statusParam := int8(req.GetQueryInt("status"))
 
 	if statusParam == 0 {
 		statusParam = logisticsTypes.PurchaseOrderStatusPending
 	}
 
-	status := []int8{statusParam}
-	if updated > 0 {
-		status = []int8{0, 1, 2, 4}
-	}
+	// Delta() reproduces exactly what this handler used to fan out by hand: the requested status only
+	// on a first sync, every declared status afterwards so the client can evict rows that moved.
+	records := []logisticsTypes.PurchaseOrder{}
+	query := db.Query(&records)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, int64(statusParam))
 
-	statusRecords := make([][]logisticsTypes.PurchaseOrder, len(status))
-	group := errgroup.Group{}
-
-	for index, currentStatus := range status {
-
-		group.Go(func() error {
-			recordsForStatus := []logisticsTypes.PurchaseOrder{}
-			query := db.Query(&recordsForStatus)
-			query.CompanyID.Equals(req.User.CompanyID).
-				Status.Equals(currentStatus).
-				Updated.GreaterThan(updated)
-			if err := query.Exec(); err != nil {
-				return err
-			}
-
-			// Preserve grouped query results and merge them after all workers finish.
-			statusRecords[index] = recordsForStatus
-			return nil
-		})
-	}
-
-	if err := group.Wait(); err != nil {
+	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener órdenes de compra:", err)
-	}
-
-	totalRecords := 0
-	for _, recordsForStatus := range statusRecords {
-		totalRecords += len(recordsForStatus)
-	}
-
-	records := make([]logisticsTypes.PurchaseOrder, 0, totalRecords)
-	for _, recordsForStatus := range statusRecords {
-		records = append(records, recordsForStatus...)
 	}
 
 	return req.MakeResponse(records)

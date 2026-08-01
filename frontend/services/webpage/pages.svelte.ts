@@ -34,7 +34,7 @@ export const SYSTEM_PAGES: IWebpage[] = [
 export class WebpagesService extends GetHandler<IWebpage> {
   route = 'webpage-pages';
   routePost = 'webpage-page';
-  useCache = { min: 5, ver: 3 };
+  useCache = { min: 5, ver: 4 };
   inferRemoveFromStatus = true;
   prependOnSave = true;
 

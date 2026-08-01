@@ -28,9 +28,8 @@ type CronActionTable struct {
 
 func (cronActionTable CronActionTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                    10,
-		Name:                  "cron_actions",
-		Keys:                  db.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
-		DisableUpdatedVersion: true,
+		ID:   10,
+		Name: "cron_actions",
+		Keys: db.Cols(cronActionTable.UnixMinutesFrame, cronActionTable.ID),
 	}
 }

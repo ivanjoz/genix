@@ -19,6 +19,7 @@ type SupplyMaterial struct {
 	ProviderSupply []ProductSupplyProviderRow `json:",omitempty"`
 	Status         int8                       `json:"ss,omitempty"`
 	Updated        int32                      `json:"upd,omitempty"`
+	UpdatedVersion int32                      `json:"upv,omitempty"`
 	UpdatedBy      int32                      `json:",omitempty"`
 	Created        int32                      `json:",omitempty"`
 	CreatedBy      int32                      `json:",omitempty"`
@@ -38,6 +39,7 @@ type SupplyMaterialTable struct {
 	ProviderSupply db.Col[SupplyMaterialTable, []ProductSupplyProviderRow]
 	Status         db.Col[SupplyMaterialTable, int8]
 	Updated        db.Col[SupplyMaterialTable, int32]
+	UpdatedVersion db.Col[SupplyMaterialTable, int32]
 	UpdatedBy      db.Col[SupplyMaterialTable, int32]
 	Created        db.Col[SupplyMaterialTable, int32]
 	CreatedBy      db.Col[SupplyMaterialTable, int32]
@@ -49,13 +51,14 @@ func (e SupplyMaterialTable) GetSchema() db.TableSchema {
 		Name:      "supply_material",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
-			// Status view → list active supplies cheaply.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.DecimalSize(1))},
-			// Updated view → delta-cache watermark sync from the frontend.
-			{Type: db.TypeView, Keys: db.Cols(e.Updated.DecimalSize(10))},
 			// SKU lookup within a company (e.g. dedup during create).
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SKU)},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

@@ -24,6 +24,7 @@ type SalesPlanning struct {
 	WeeklyQuantity     []SalesPlanningWeek `json:",omitempty"`
 	Status             int8                `json:"ss,omitempty"`
 	Updated            int32               `json:"upd,omitempty"`
+	UpdatedVersion     int32               `json:"upv,omitempty"`
 	UpdatedBy          int32               `json:",omitempty"`
 	Created            int32               `json:",omitempty"`
 }
@@ -38,6 +39,7 @@ type SalesPlanningTable struct {
 	WeeklyQuantity     db.Col[SalesPlanningTable, []SalesPlanningWeek]
 	Status             db.Col[SalesPlanningTable, int8]
 	Updated            db.Col[SalesPlanningTable, int32]
+	UpdatedVersion     db.Col[SalesPlanningTable, int32]
 	UpdatedBy          db.Col[SalesPlanningTable, int32]
 	Created            db.Col[SalesPlanningTable, int32]
 }
@@ -48,10 +50,13 @@ func (e SalesPlanningTable) GetSchema() db.TableSchema {
 		Name:      "sales_planning",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ProductID)},
-			// Delta-cache view: queried with Status equality + Updated range.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }
@@ -68,27 +73,29 @@ type SeasonalityCurveWeek struct {
 // assigned to many products.
 type SeasonalityCurve struct {
 	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
-	CompanyID int32                  `json:",omitempty"`
-	ID        int32                  `json:",omitempty"`
-	TempID    int32                  `json:",omitempty"`
-	Name      string                 `json:",omitempty"`
-	Curve     []SeasonalityCurveWeek `json:",omitempty"`
-	Status    int8                   `json:"ss,omitempty"`
-	Updated   int32                  `json:"upd,omitempty"`
-	UpdatedBy int32                  `json:",omitempty"`
-	Created   int32                  `json:",omitempty"`
+	CompanyID      int32                  `json:",omitempty"`
+	ID             int32                  `json:",omitempty"`
+	TempID         int32                  `json:",omitempty"`
+	Name           string                 `json:",omitempty"`
+	Curve          []SeasonalityCurveWeek `json:",omitempty"`
+	Status         int8                   `json:"ss,omitempty"`
+	Updated        int32                  `json:"upd,omitempty"`
+	UpdatedVersion int32                  `json:"upv,omitempty"`
+	UpdatedBy      int32                  `json:",omitempty"`
+	Created        int32                  `json:",omitempty"`
 }
 
 type SeasonalityCurveTable struct {
 	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
-	CompanyID db.Col[SeasonalityCurveTable, int32]
-	ID        db.Col[SeasonalityCurveTable, int32]
-	Name      db.Col[SeasonalityCurveTable, string]
-	Curve     db.Col[SeasonalityCurveTable, []SeasonalityCurveWeek]
-	Status    db.Col[SeasonalityCurveTable, int8]
-	Updated   db.Col[SeasonalityCurveTable, int32]
-	UpdatedBy db.Col[SeasonalityCurveTable, int32]
-	Created   db.Col[SeasonalityCurveTable, int32]
+	CompanyID      db.Col[SeasonalityCurveTable, int32]
+	ID             db.Col[SeasonalityCurveTable, int32]
+	Name           db.Col[SeasonalityCurveTable, string]
+	Curve          db.Col[SeasonalityCurveTable, []SeasonalityCurveWeek]
+	Status         db.Col[SeasonalityCurveTable, int8]
+	Updated        db.Col[SeasonalityCurveTable, int32]
+	UpdatedVersion db.Col[SeasonalityCurveTable, int32]
+	UpdatedBy      db.Col[SeasonalityCurveTable, int32]
+	Created        db.Col[SeasonalityCurveTable, int32]
 }
 
 func (e SeasonalityCurveTable) GetSchema() db.TableSchema {
@@ -97,9 +104,12 @@ func (e SeasonalityCurveTable) GetSchema() db.TableSchema {
 		Name:      "seasonality_curve",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
-			// Delta-cache view: queried with Status equality + Updated range.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

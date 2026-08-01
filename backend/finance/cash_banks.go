@@ -8,27 +8,18 @@ import (
 )
 
 func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.UnixToSunix(req.GetQueryInt64("upd"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	cajas := []financeTypes.CashBank{}
 	query := db.Query(&cajas)
-	query.Select().CompanyID.Equals(req.User.CompanyID)
-	if updated > 0 {
-		query.Updated.GreaterEqual(updated)
-	} else {
-		query.Status.Equals(1)
-	}
+	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
+	// can evict deleted ones from its cache.
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las cajas:", err)
-	}
-
-	//TODO: Eliminar luego
-	for i := range cajas {
-		e := &cajas[i]
-		if e.Updated == 0 {
-			e.Updated = 1
-		}
 	}
 
 	response := map[string]any{

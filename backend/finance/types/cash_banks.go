@@ -15,11 +15,12 @@ type CashBank struct {
 	ReconciliationAmount int32
 	CurrentAmount        int32
 	// General properties
-	Status    int8  `json:"ss,omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
+	Status         int8  `json:"ss,omitempty"`
+	Updated        int32 `json:"upd,omitempty"`
+	UpdatedVersion int32 `json:"upv,omitempty"`
+	UpdatedBy      int32 `json:",omitempty"`
+	Created        int32 `json:",omitempty"`
+	CreatedBy      int32 `json:",omitempty"`
 }
 
 type CashBankTable struct {
@@ -36,6 +37,7 @@ type CashBankTable struct {
 	CurrentAmount        db.Col[CashBankTable, int32]
 	Status               db.Col[CashBankTable, int8]
 	Updated              db.Col[CashBankTable, int32]
+	UpdatedVersion       db.Col[CashBankTable, int32]
 	UpdatedBy            db.Col[CashBankTable, int32]
 	Created              db.Col[CashBankTable, int32]
 	CreatedBy            db.Col[CashBankTable, int32]
@@ -48,9 +50,12 @@ func (e CashBankTable) GetSchema() db.TableSchema {
 		Partition:    e.CompanyID,
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Status)},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

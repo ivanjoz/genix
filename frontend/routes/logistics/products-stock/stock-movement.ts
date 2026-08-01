@@ -83,7 +83,7 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
     const response = await GET({ 
       route: `warehouse-product-stock?warehouse-id=${almacenID}`,
       errorMessage: 'Hubo un error al obtener el stock.',
-			useCache: { min: 0.2, ver: 8 },
+			useCache: { min: 0.2, ver: 9 },
 			keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }
     })
 		const normalizedResponse = response as IGetProductosStockResponse | null | undefined
@@ -128,7 +128,7 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
 
 export class ProductStockSimpleService extends GetHandler<IProductStock> {
   route = "products-stock"
-  useCache = { min: 0.2, ver: 8 }
+  useCache = { min: 0.2, ver: 9 }
   inferRemoveFromStatus = true
 
   constructor(init: boolean = false) {

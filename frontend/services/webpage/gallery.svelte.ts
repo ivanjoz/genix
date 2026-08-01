@@ -12,7 +12,7 @@ export interface IGalleryImage {
 
 export class GalleryImagesService extends GetHandler<IGalleryImage> {
   route = 'gallery-images';
-  useCache = { min: 5, ver: 1 };
+  useCache = { min: 5, ver: 2 };
   keyID = 'ImageID';
   inferRemoveFromStatus = true;
   prependOnSave = true;

@@ -204,59 +204,35 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 	// Returns V2 stock rows + their detail rows + the lot catalog.
 	// `updated` enables delta-cache fetches via the `upd` field on stocks/details.
 	warehouseID := int32(req.GetQueryInt("warehouse-id"))
-	productStockUpdated := int32(req.GetQueryInt("ProductStock"))
-	productStockDetailUpdated := int32(req.GetQueryInt("ProductStockDetail"))
-
-	statuses := []int8{1}
-	if productStockUpdated > 0 || productStockDetailUpdated > 0 {
-		// Delta fetches must include deactivated rows so clients can evict them from cache.
-		statuses = []int8{0, 1}
-	}
+	// Each table advances its own "updated_version" sequence, so the two response keys carry
+	// independent watermarks; the frontend sends one query param per key, named after it.
+	productStockUpdatedSince := int32(req.GetQueryInt("ProductStock"))
+	productStockDetailUpdatedSince := int32(req.GetQueryInt("ProductStockDetail"))
 
 	result := GetProductsStockResult{}
 
 	eg := errgroup.Group{}
 
 	eg.Go(func() error {
-		// Query each status bucket explicitly to stay on the WarehouseID+Status+Updated view.
-		records := make([]logisticsTypes.ProductStock, 0)
-		for _, status := range statuses {
-			statusRecords := []logisticsTypes.ProductStock{}
-			query := db.Query(&statusRecords)
-			query.Select().
-				CompanyID.Equals(req.User.CompanyID).
-				WarehouseID.Equals(warehouseID).
-				Status.Equals(status).
-				Updated.GreaterEqual(productStockDetailUpdated)
+		// Pinning WarehouseID routes Delta() to the [WarehouseID, Status] delta index and leaves
+		// Status as the sync filter: active only on a first sync, both values afterwards.
+		query := db.Query(&result.ProductStock)
+		query.Select().
+			CompanyID.Equals(req.User.CompanyID).
+			WarehouseID.Equals(warehouseID).
+			Delta(productStockUpdatedSince, 1)
 
-			if err := query.Exec(); err != nil {
-				return err
-			}
-			records = append(records, statusRecords...)
-		}
-		result.ProductStock = records
-		return nil
+		return query.Exec()
 	})
 
 	eg.Go(func() error {
-		// Detail rows use the same WarehouseID+Status+Updated view, so query each status directly.
-		records := make([]logisticsTypes.ProductStockDetail, 0)
-		for _, status := range statuses {
-			statusRecords := []logisticsTypes.ProductStockDetail{}
-			query := db.Query(&statusRecords)
-			query.Select().
-				CompanyID.Equals(req.User.CompanyID).
-				WarehouseID.Equals(warehouseID).
-				Status.Equals(status).
-				Updated.GreaterEqual(productStockDetailUpdated)
+		query := db.Query(&result.ProductStockDetail)
+		query.Select().
+			CompanyID.Equals(req.User.CompanyID).
+			WarehouseID.Equals(warehouseID).
+			Delta(productStockDetailUpdatedSince, 1)
 
-			if err := query.Exec(); err != nil {
-				return err
-			}
-			records = append(records, statusRecords...)
-		}
-		result.ProductStockDetail = records
-		return nil
+		return query.Exec()
 	})
 
 	if err := eg.Wait(); err != nil {
@@ -267,26 +243,17 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt("updated")
-
-	statuses := []int8{1}
-	if updated > 0 {
-		// Delta fetches must include deactivated rows so clients can evict them from cache.
-		statuses = []int8{0, 1}
-	}
+	updatedSince := req.GetQueryInt("upv")
 
 	productsStock := []logisticsTypes.ProductStock{}
+	// No WarehouseID pinned here, so Delta() routes to the [Status] delta index instead.
+	query := db.Query(&productsStock)
+	query.Select().
+		CompanyID.Equals(req.User.CompanyID).
+		Delta(updatedSince, 1)
 
-	for _, status := range statuses {
-		query := db.Query(&productsStock)
-		query.Select().
-			CompanyID.Equals(req.User.CompanyID).
-			Status.Equals(status).
-			Updated.GreaterEqual(updated)
-
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Arror al obtener los productos stock::", err)
-		}
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Arror al obtener los productos stock::", err)
 	}
 
 	return req.MakeResponse(productsStock)

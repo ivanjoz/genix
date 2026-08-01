@@ -20,7 +20,7 @@ export interface IImageAssetsResult {
 
 export class ImageAssetsService extends GetHandler<IImageAssetSearchRecord> {
 	route = 'image-assets';
-	useCache = { min: 60, ver: 3 };
+	useCache = { min: 60, ver: 4 };
 	categories: IImageAssetCategory[] = $state([]);
 	categoriesMap: Map<number, IImageAssetCategory> = $state(new Map());
 	conversion = { Bigrams: 'uint8_packed' } as const;

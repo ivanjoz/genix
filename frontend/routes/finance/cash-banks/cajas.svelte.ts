@@ -51,7 +51,7 @@ export interface ICashReconciliation {
 
 export class CajasService extends GetHandler {
   route = "cash-banks"
-  useCache = { min: 1, ver: 1 }
+  useCache = { min: 1, ver: 2 }
 
   Cajas: ICashBank[] = $state([])
   CajasMap: Map<number, ICashBank> = $state(new Map())

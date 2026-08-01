@@ -94,24 +94,23 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 }
 
 func GetGalleryImages(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 	images := []businessTypes.GalleryImage{}
 	query := db.Query(&images)
 	table := db.TableOf[businessTypes.GalleryImage]()
 
+	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
+	// can evict deleted ones from its cache.
 	query.Exclude(table.CompanyID).
-		CompanyID.Equals(req.User.CompanyID)
-
-	if updated > 0 {
-		query.Updated.GreaterThan(updated)
-	} else {
-		query.Status.GreaterEqual(1)
-	}
+		CompanyID.Equals(req.User.CompanyID).
+		Delta(updatedSince, 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las imágenes:", err)
 	}
 
-	core.Log("GetGalleryImages:", "company_id=", req.User.CompanyID, "updated=", updated, "count=", len(images))
+	core.Log("GetGalleryImages:", "company_id=", req.User.CompanyID, "upv_since=", updatedSince, "count=", len(images))
 	return req.MakeResponse(images)
 }

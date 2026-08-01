@@ -8,26 +8,19 @@ import (
 )
 
 func GetSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	records := []s.SalesPlanning{}
 
-	// Initial load: active only. Delta: also fetch Status=0 so the client can evict.
-	// The [Status, Updated] view requires Status equality, so we query each status.
-	statuses := []int8{1}
-	if updated > 0 {
-		statuses = append(statuses, 0)
-	}
+	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
+	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
+	query := db.Query(&records)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
 
-	for _, status := range statuses {
-		query := db.Query(&records)
-		query.CompanyID.Equals(req.User.CompanyID).
-			Status.Equals(status).
-			Updated.GreaterThan(updated) // updated=0 on initial → matches all rows
-
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener la planificación de ventas:", err)
-		}
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener la planificación de ventas:", err)
 	}
 
 	return req.MakeResponse(records)
@@ -78,26 +71,17 @@ func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	updatedSince := req.GetQueryInt("upv")
 
 	records := []s.SeasonalityCurve{}
 
-	// Initial load: active only. Delta: also fetch Status=0 so the client can evict.
-	// The [Status, Updated] view requires Status equality, so we query each status.
-	statuses := []int8{1}
-	if updated > 0 {
-		statuses = append(statuses, 0)
-	}
+	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
+	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
+	query := db.Query(&records)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
 
-	for _, status := range statuses {
-		query := db.Query(&records)
-		query.CompanyID.Equals(req.User.CompanyID).
-			Status.Equals(status).
-			Updated.GreaterThan(updated) // updated=0 on initial → matches all rows
-
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener las curvas de estacionalidad:", err)
-		}
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener las curvas de estacionalidad:", err)
 	}
 
 	return req.MakeResponse(records)

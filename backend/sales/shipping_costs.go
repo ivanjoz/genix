@@ -9,16 +9,16 @@ import (
 )
 
 func GetShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	shippingCosts := []s.ShippingCost{}
 	query := db.Query(&shippingCosts)
-	query.CompanyID.Equals(req.User.CompanyID)
-	if updated > 0 {
-		query.Updated.GreaterThan(updated)
-	}
+	// No status to filter here, so Delta() constrains nothing but the watermark.
+	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince)
 
-	core.Log("GetShippingCosts:", "companyID=", req.User.CompanyID, "updated=", updated)
+	core.Log("GetShippingCosts:", "companyID=", req.User.CompanyID, "upv_since=", updatedSince)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener costos de envío:", err)
 	}

@@ -29,7 +29,7 @@
   class ShippingCostsService extends GetHandler<any> {
     route = 'shipping-costs'
     keyID = 'CityID'
-    useCache = { min: 5, ver: 1 }
+    useCache = { min: 5, ver: 2 }
 
     records: DeliveryCost[] = $state([])
     recordsMap: Map<number, DeliveryCost> = $state(new Map())

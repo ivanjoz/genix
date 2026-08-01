@@ -11,20 +11,19 @@ import (
 )
 
 func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt("upd")
+	// Each table advances its own "updated_version" sequence, so the two response keys carry
+	// independent watermarks; the frontend sends one query param per key, named after it.
+	warehousesUpdatedSince := req.GetQueryInt("Almacenes")
+	sitesUpdatedSince := req.GetQueryInt("Sedes")
 
 	almacenes := []businessTypes.Warehouse{}
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
 		query := db.Query(&almacenes)
-		query.Select().CompanyID.Equals(req.User.CompanyID)
-
-		if updated > 0 {
-			query.Updated.GreaterThan(updated)
-		} else {
-			query.Status.Equals(1)
-		}
+		// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
+		// can evict deleted ones from its cache.
+		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(warehousesUpdatedSince, 1)
 
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los almacenes: %v", err)
@@ -35,13 +34,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 	sedes := []businessTypes.Site{}
 	errGroup.Go(func() error {
 		query := db.Query(&sedes)
-		query.Select().CompanyID.Equals(req.User.CompanyID)
-
-		if updated > 0 {
-			query.Updated.GreaterThan(updated)
-		} else {
-			query.Status.Equals(1)
-		}
+		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(sitesUpdatedSince, 1)
 
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los sedes: %v", err)
@@ -143,16 +136,16 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 	paisID := req.GetQueryInt("pais-id")
-	updated := req.GetQueryInt("upd")
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	paisCiudades := []businessTypes.CityLocation{}
 	query := db.Query(&paisCiudades)
+	// Cities have no status, so Delta() constrains nothing but the watermark.
 	query.Select().
-		CountryID.Equals(int32(paisID))
-
-	if updated > 0 {
-		query.Updated.GreaterEqual(updated)
-	}
+		CountryID.Equals(int32(paisID)).
+		Delta(updatedSince)
 
 	query.AllowFilter()
 	err := query.Exec()

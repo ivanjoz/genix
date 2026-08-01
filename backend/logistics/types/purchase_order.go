@@ -37,11 +37,12 @@ type PurchaseOrder struct {
 	InvoiceNumber        string  `json:",omitempty"`
 	Notes                string  `json:",omitempty"`
 
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Status    int8  `json:"ss,omitempty"`
+	Created        int32 `json:",omitempty"`
+	CreatedBy      int32 `json:",omitempty"`
+	Updated        int32 `json:"upd,omitempty"`
+	UpdatedVersion int32 `json:"upv,omitempty"`
+	UpdatedBy      int32 `json:",omitempty"`
+	Status         int8  `json:"ss,omitempty"`
 }
 
 type PurchaseOrderTable struct {
@@ -71,6 +72,7 @@ type PurchaseOrderTable struct {
 	Created                      db.Col[PurchaseOrderTable, int32]
 	CreatedBy                    db.Col[PurchaseOrderTable, int32]
 	Updated                      db.Col[PurchaseOrderTable, int32]
+	UpdatedVersion               db.Col[PurchaseOrderTable, int32]
 	UpdatedBy                    db.Col[PurchaseOrderTable, int32]
 	Status                       db.Col[PurchaseOrderTable, int8]
 }
@@ -82,11 +84,16 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 		Partition:        e.CompanyID,
 		UseListAsDefault: true,
 		Keys:             db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so every Status value must be declared. Listing them
+		// rather than a 0..4 range keeps the delta fan-out at four values instead of five.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{
+				int64(PurchaseOrderStatusCanceled), int64(PurchaseOrderStatusPending),
+				int64(PurchaseOrderStatusConfirmed), int64(PurchaseOrderStatusFulfilled),
+			}},
+		},
 		Indexes: []db.Index{
-			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
-			},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 			{
 				Keys:          db.Cols(e.Week),
 				UseIndexGroup: true,

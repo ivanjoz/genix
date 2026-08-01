@@ -6,42 +6,44 @@ import "app/db"
 // default amount; per-period payment state lives in the generated Expense rows.
 type ExpenseScheduled struct {
 	db.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
-	CompanyID    int32  `json:",omitempty"`
-	ID           int32  `json:",omitempty"`
-	Name         string `json:",omitempty"`
-	Description  string `json:",omitempty"`
-	CategoryID   int8   `json:",omitempty"` // Static expense category (code-defined list).
-	SupplierID   int32  `json:",omitempty"` // Optional — who is paid.
-	CurrencyType int8   `json:",omitempty"` // 1 = PEN, 2 = USD.
-	Amount       int32  `json:",omitempty"` // Default expected amount per period, in cents.
-	Frequency    int16  `json:",omitempty"` // Packed cadence code CDD: cadence*100 + day.
-	StartDate    int16  `json:",omitempty"` // UnixDay the schedule begins; anchors the month for N-monthly/yearly.
-	EndDate      int16  `json:",omitempty"` // UnixDay the schedule stops (0 = open-ended).
-	Status       int8   `json:"ss,omitempty"`
-	Updated      int32  `json:"upd,omitempty"`
-	UpdatedBy    int32  `json:",omitempty"`
-	Created      int32  `json:",omitempty"`
-	CreatedBy    int32  `json:",omitempty"`
+	CompanyID      int32  `json:",omitempty"`
+	ID             int32  `json:",omitempty"`
+	Name           string `json:",omitempty"`
+	Description    string `json:",omitempty"`
+	CategoryID     int8   `json:",omitempty"` // Static expense category (code-defined list).
+	SupplierID     int32  `json:",omitempty"` // Optional — who is paid.
+	CurrencyType   int8   `json:",omitempty"` // 1 = PEN, 2 = USD.
+	Amount         int32  `json:",omitempty"` // Default expected amount per period, in cents.
+	Frequency      int16  `json:",omitempty"` // Packed cadence code CDD: cadence*100 + day.
+	StartDate      int16  `json:",omitempty"` // UnixDay the schedule begins; anchors the month for N-monthly/yearly.
+	EndDate        int16  `json:",omitempty"` // UnixDay the schedule stops (0 = open-ended).
+	Status         int8   `json:"ss,omitempty"`
+	Updated        int32  `json:"upd,omitempty"`
+	UpdatedVersion int32  `json:"upv,omitempty"`
+	UpdatedBy      int32  `json:",omitempty"`
+	Created        int32  `json:",omitempty"`
+	CreatedBy      int32  `json:",omitempty"`
 }
 
 type ExpenseScheduledTable struct {
 	db.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
-	CompanyID    db.Col[ExpenseScheduledTable, int32]
-	ID           db.Col[ExpenseScheduledTable, int32]
-	Name         db.Col[ExpenseScheduledTable, string]
-	Description  db.Col[ExpenseScheduledTable, string]
-	CategoryID   db.Col[ExpenseScheduledTable, int8]
-	SupplierID   db.Col[ExpenseScheduledTable, int32]
-	CurrencyType db.Col[ExpenseScheduledTable, int8]
-	Amount       db.Col[ExpenseScheduledTable, int32]
-	Frequency    db.Col[ExpenseScheduledTable, int16]
-	StartDate    db.Col[ExpenseScheduledTable, int16]
-	EndDate      db.Col[ExpenseScheduledTable, int16]
-	Status       db.Col[ExpenseScheduledTable, int8]
-	Updated      db.Col[ExpenseScheduledTable, int32]
-	UpdatedBy    db.Col[ExpenseScheduledTable, int32]
-	Created      db.Col[ExpenseScheduledTable, int32]
-	CreatedBy    db.Col[ExpenseScheduledTable, int32]
+	CompanyID      db.Col[ExpenseScheduledTable, int32]
+	ID             db.Col[ExpenseScheduledTable, int32]
+	Name           db.Col[ExpenseScheduledTable, string]
+	Description    db.Col[ExpenseScheduledTable, string]
+	CategoryID     db.Col[ExpenseScheduledTable, int8]
+	SupplierID     db.Col[ExpenseScheduledTable, int32]
+	CurrencyType   db.Col[ExpenseScheduledTable, int8]
+	Amount         db.Col[ExpenseScheduledTable, int32]
+	Frequency      db.Col[ExpenseScheduledTable, int16]
+	StartDate      db.Col[ExpenseScheduledTable, int16]
+	EndDate        db.Col[ExpenseScheduledTable, int16]
+	Status         db.Col[ExpenseScheduledTable, int8]
+	Updated        db.Col[ExpenseScheduledTable, int32]
+	UpdatedVersion db.Col[ExpenseScheduledTable, int32]
+	UpdatedBy      db.Col[ExpenseScheduledTable, int32]
+	Created        db.Col[ExpenseScheduledTable, int32]
+	CreatedBy      db.Col[ExpenseScheduledTable, int32]
 }
 
 func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
@@ -51,9 +53,12 @@ func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
 		Partition:    e.CompanyID,
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
-			// Delta-cache view: frontend syncs active schedules by watermark.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }
@@ -78,6 +83,7 @@ type Expense struct {
 	PaidAmount         int32  `json:",omitempty"`   // Positive running sum of payments applied (server-maintained).
 	Status             int8   `json:"ss,omitempty"` // Payment lifecycle: 0 removed · 1 created/pending · 2 fully paid.
 	Updated            int32  `json:"upd,omitempty"`
+	UpdatedVersion     int32  `json:"upv,omitempty"`
 	UpdatedBy          int32  `json:",omitempty"`
 	Created            int32  `json:",omitempty"`
 	CreatedBy          int32  `json:",omitempty"`
@@ -100,6 +106,7 @@ type ExpenseTable struct {
 	PaidAmount         db.Col[ExpenseTable, int32]
 	Status             db.Col[ExpenseTable, int8]
 	Updated            db.Col[ExpenseTable, int32]
+	UpdatedVersion     db.Col[ExpenseTable, int32]
 	UpdatedBy          db.Col[ExpenseTable, int32]
 	Created            db.Col[ExpenseTable, int32]
 	CreatedBy          db.Col[ExpenseTable, int32]
@@ -112,11 +119,16 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 		Partition:    e.CompanyID,
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		// Sizes the Status slot of the delta index.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Min: 0, Max: 2},
+		},
 		Indexes: []db.Index{
-			// Delta-cache view for the Register list.
-			{Type: db.TypeView, Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8))},
 			// Fetch all periods belonging to a schedule (lazy generation + period listing).
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ExpenseScheduledID)},
+			// The Register list reads one status bucket at a time, so its handler pins Status itself
+			// and calls Delta(upv) for the watermark alone rather than the status fan-out.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

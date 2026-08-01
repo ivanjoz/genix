@@ -17,21 +17,23 @@ type Webpage struct {
 	// is handled separately; this column only stores the reference.
 	Image int32 `json:",omitempty"`
 	// Status: 0 removed, 1 active, 2 published.
-	Status    int8  `json:"ss,omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
+	Status         int8  `json:"ss,omitempty"`
+	Updated        int32 `json:"upd,omitempty"`
+	UpdatedVersion int32 `json:"upv,omitempty"`
+	UpdatedBy      int32 `json:",omitempty"`
 }
 
 type WebpageTable struct {
 	db.TableStruct[WebpageTable, Webpage]
-	CompanyID db.Col[WebpageTable, int32]
-	ID        db.Col[WebpageTable, int16]
-	Name      db.Col[WebpageTable, string]
-	Route     db.Col[WebpageTable, string]
-	Image     db.Col[WebpageTable, int32]
-	Status    db.Col[WebpageTable, int8]
-	Updated   db.Col[WebpageTable, int32]
-	UpdatedBy db.Col[WebpageTable, int32]
+	CompanyID      db.Col[WebpageTable, int32]
+	ID             db.Col[WebpageTable, int16]
+	Name           db.Col[WebpageTable, string]
+	Route          db.Col[WebpageTable, string]
+	Image          db.Col[WebpageTable, int32]
+	Status         db.Col[WebpageTable, int8]
+	Updated        db.Col[WebpageTable, int32]
+	UpdatedVersion db.Col[WebpageTable, int32]
+	UpdatedBy      db.Col[WebpageTable, int32]
 }
 
 func (e WebpageTable) GetSchema() db.TableSchema {
@@ -40,11 +42,12 @@ func (e WebpageTable) GetSchema() db.TableSchema {
 		Name:      "webpages",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates its filter column, so all three Status values must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: e.Status, Min: 0, Max: 2},
+		},
 		Indexes: []db.Index{
-			// Two narrow views: the initial fetch filters by Status only, the delta
-			// fetch by Updated only — never ANDed — so each gets its own view.
-			{Type: db.TypeView, Keys: db.Cols(e.Status)},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

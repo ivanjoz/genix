@@ -24,7 +24,7 @@ export interface ISupplyMaterial {
 export class SupplyMaterialService extends GetHandler<ISupplyMaterial> {
   route = "supply-material"
   // Bump `ver` whenever the ISupplyMaterial shape changes so clients drop their stale snapshot.
-  useCache = { min: 5, ver: 2 }
+  useCache = { min: 5, ver: 3 }
   inferRemoveFromStatus = true
   prependOnSave = true
 

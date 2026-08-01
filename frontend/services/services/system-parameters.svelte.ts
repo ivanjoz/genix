@@ -19,7 +19,7 @@ export const saveSystemParameters = (records: ISystemParameter[]) => {
 
 export class SystemParametersService extends GetHandler {
 	route = "system-parameters"
-	useCache = { min: 2, ver: 1 }
+	useCache = { min: 2, ver: 2 }
 
 	records = $state([] as ISystemParameter[])
 	recordsMap = $state(new Map<number, ISystemParameter>())

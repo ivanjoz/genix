@@ -8,21 +8,17 @@ import (
 )
 
 // GetSupplyMaterials returns the supply-material catalog using the delta-cache
-// protocol: with `upd=0` only active rows are returned; with `upd>0` every row
-// updated after that watermark (including soft-deleted Status=0) is returned so
+// protocol: with `upv=0` only active rows are returned; with `upv>0` every row
+// written after that watermark (including soft-deleted Status=0) is returned so
 // the client can evict stale local entries.
 func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
-	updatedWatermark := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	supplyMaterialRecords := []logisticsTypes.SupplyMaterial{}
 	supplyMaterialQuery := db.Query(&supplyMaterialRecords)
-	supplyMaterialQuery.Select().CompanyID.Equals(req.User.CompanyID)
-
-	if updatedWatermark > 0 {
-		supplyMaterialQuery.Updated.GreaterThan(updatedWatermark)
-	} else {
-		supplyMaterialQuery.Status.Equals(1)
-	}
+	supplyMaterialQuery.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
 
 	if queryError := supplyMaterialQuery.Exec(); queryError != nil {
 		core.Log("GetSupplyMaterials query error:", queryError)

@@ -46,7 +46,7 @@ export interface IWarehouses {
 
 export class WarehousesService extends GetHandler {
   route = "locations-warehouses"
-  useCache = { min: 5, ver: 3 }
+  useCache = { min: 5, ver: 4 }
 
   Almacenes: IWarehouse[] = $state([])
   AlmacenesMap: Map<number,IWarehouse> = $state(new Map())
@@ -103,7 +103,7 @@ export interface CountryCityResult {
 
 export class CountryCitiesService extends GetHandler {
   route = "country-cities?pais-id=604"
-  useCache = { min: 600, ver: 1 }
+  useCache = { min: 600, ver: 2 }
 
 	ciudades: ICityLocation[] = $state([]) // Departamentos + Provincias + Distritos
 	ciudadesMap: Map<number, ICityLocation> = $state(new Map())

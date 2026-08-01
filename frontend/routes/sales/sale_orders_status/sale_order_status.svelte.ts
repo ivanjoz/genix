@@ -60,7 +60,7 @@ export interface ISaleOrdersResult {
 export class SaleOrdersService extends GetHandler {
   route = "sale-orders"
   // Route now depends on group; bump version to avoid mixing old cached queries.
-  useCache = { min: 0.1, ver: 8 }
+  useCache = { min: 0.1, ver: 9 }
 
 	records: ISaleOrder[] = $state([])
 

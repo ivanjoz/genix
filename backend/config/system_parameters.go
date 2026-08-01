@@ -9,15 +9,14 @@ import (
 
 func GetSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	companyID := req.User.CompanyID
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
+	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
+	updatedSince := req.GetQueryInt("upv")
 
 	records := []configTypes.SystemParameters{}
 	q := db.Query(&records)
-	q.CompanyID.Equals(companyID)
-
-	if updated > 0 {
-		q.Updated.GreaterThan(updated)
-	}
+	// No status to filter here, so Delta() constrains nothing but the watermark.
+	q.CompanyID.Equals(companyID).Delta(updatedSince)
 
 	if err := q.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los parámetros del sistema.", err)
