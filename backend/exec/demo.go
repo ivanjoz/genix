@@ -779,13 +779,7 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
-	scylla.MakeScyllaConnection(scylla.ConnParams{
-		Host:     core.Env.DB_HOST,
-		Port:     int(core.Env.DB_PORT),
-		User:     core.Env.DB_USER,
-		Password: core.Env.DB_PASSWORD,
-		Keyspace: core.Env.DB_NAME,
-	})
+	scylla.MakeScyllaConnection(makeConnParams())
 	registros := []businessTypes.SharedListRecord{}
 
 	recordToInsert := businessTypes.SharedListRecord{

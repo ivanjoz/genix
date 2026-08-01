@@ -253,13 +253,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 		panic("No se ha especificado el DB_NAME en credentials.json")
 	}
 
-	scylla.MakeScyllaConnection(scylla.ConnParams{
-		Host:     core.Env.DB_HOST,
-		Port:     int(core.Env.DB_PORT),
-		User:     core.Env.DB_USER,
-		Password: core.Env.DB_PASSWORD,
-		Keyspace: core.Env.DB_NAME,
-	})
+	scylla.MakeScyllaConnection(makeConnParams())
 
 	if err := scylla.CreateKeyspaceIfNotExists(); err != nil {
 		panic(fmt.Sprintf("Error al crear el keyspace '%v': %v", core.Env.DB_NAME, err))
@@ -273,13 +267,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 // fn-recalc
 func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 
-	scylla.MakeScyllaConnection(scylla.ConnParams{
-		Host:     core.Env.DB_HOST,
-		Port:     int(core.Env.DB_PORT),
-		User:     core.Env.DB_USER,
-		Password: core.Env.DB_PASSWORD,
-		Keyspace: core.Env.DB_NAME,
-	})
+	scylla.MakeScyllaConnection(makeConnParams())
 
 	scylla.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
 	scylla.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")

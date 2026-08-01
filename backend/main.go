@@ -188,11 +188,12 @@ func main() {
 	fmt.Println("Starting DB connection...")
 
 	scylla.SetScyllaConnection(scylla.ConnParams{
-		Host:     core.Env.DB_HOST,
-		Port:     int(core.Env.DB_PORT),
-		User:     core.Env.DB_USER,
-		Password: core.Env.DB_PASSWORD,
-		Keyspace: core.Env.DB_NAME,
+		Host:             core.Env.DB_HOST,
+		Port:             int(core.Env.DB_PORT),
+		User:             core.Env.DB_USER,
+		Password:         core.Env.DB_PASSWORD,
+		Keyspace:         core.Env.DB_NAME,
+		MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
 	})
 
 	fmt.Println("DB connection started!")

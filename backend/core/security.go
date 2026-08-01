@@ -82,6 +82,7 @@ type EnvStruct struct {
 	LOGS_ONLY_SAVE         bool
 	DB_DISABLE_SSL         bool
 	DB_PORT                int32
+	MAX_CLUSTERING_KEY     int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
 	USUARIO_ID             int32
 	ADMIN_PASSWORD         string
 	SECRET_PHRASE          string
