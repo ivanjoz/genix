@@ -2,27 +2,21 @@ package core
 
 import (
 	"app/serialize"
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
-	"encoding/json"
+	// "encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/DmitriyVTitov/size"
-	"github.com/andybalholm/brotli"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/bytedance/sonic"
-	"github.com/klauspost/compress/zstd"
 )
 
 type HandlerArgs struct {
@@ -35,9 +29,6 @@ type HandlerArgs struct {
 	Method         string
 	Route          string
 	Authorization  string
-	MergedID       int32
-	ResponseBody   *[]byte
-	ResponseError  string
 	ReqParams      string
 	Encoding       string
 	User           *UsuarioToken
@@ -73,137 +64,6 @@ func hasPackedAccesoInRange(accesosNivel []uint16, rangeStart uint16, rangeEnd u
 	} else {
 		return searchStartIndex < len(accesosNivel) && accesosNivel[searchStartIndex] <= rangeEnd
 	}
-}
-
-func PrintMemUsage() {
-	/*
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
-		// memory := m.TotalAlloc / 1024 / 1024
-		// Log("Memory TotalAlloc = %v MiB\n", memory)
-		msg := fmt.Sprintf("nAlloc = %v MiB | TotalAlloc = %v | Sys = %v | NumGC = %v\n", m.Alloc/1024/1024, m.TotalAlloc/1024/1024, m.Sys/1024/1024, m.NumGC)
-		Log(msg)
-	*/
-}
-
-func CompressBrotliOnFile(filePath string) []byte {
-
-	fileInput, err := os.Open(filePath)
-	if err != nil {
-		panic("Error al abrir output file json. " + err.Error())
-	}
-	defer fileInput.Close()
-
-	fileOutputPath := Env.TMP_DIR + "output.brotli"
-	fmt.Println("output path:: ", fileOutputPath)
-
-	fileOutput, err := os.Create(fileOutputPath)
-	if err != nil {
-		panic("Error al abrir output file brotli. " + err.Error())
-	}
-	defer fileOutput.Close()
-
-	writer := brotli.NewWriterV2(fileOutput, 4)
-
-	_, err = io.Copy(writer, fileInput)
-	if err != nil {
-		panic("Error al comprimir output file brotli. " + err.Error())
-	}
-
-	err = writer.Close()
-	if err != nil {
-		panic(err)
-	}
-
-	fileBytes, _ := os.ReadFile(fileOutputPath)
-	if err := writer.Close(); err != nil {
-		panic("Error al momento de comprimir la respuesta: al cerrar Buffer")
-	}
-
-	return fileBytes
-}
-
-func CompressGzipOnFile(filePath string) []byte {
-
-	fileInput, err := os.Open(filePath)
-	if err != nil {
-		panic("Error al abrir output file gzip. " + err.Error())
-	}
-	defer fileInput.Close()
-
-	fileOutputPath := Env.TMP_DIR + "output.gzip"
-	fileOutput, err := os.Create(fileOutputPath)
-	if err != nil {
-		panic("Error al abrir output file json. " + err.Error())
-	}
-	defer fileOutput.Close()
-
-	gzipWriter := gzip.NewWriter(fileOutput)
-	defer gzipWriter.Close()
-
-	// Copy the contents from the input file to the gzip writer
-	_, err = io.Copy(gzipWriter, fileInput)
-	if err != nil {
-		panic("Error al comprimir output file gzip. " + err.Error())
-	}
-
-	err = gzipWriter.Flush()
-	if err != nil {
-		panic(err)
-	}
-
-	fileBytes, _ := os.ReadFile(fileOutputPath)
-
-	return fileBytes
-}
-
-func DecompressBase64Gzip[T any](base64String *string, output *T) error {
-	// Decode the base64 string
-	decodedBytes, err := base64.StdEncoding.DecodeString(*base64String)
-	if err != nil {
-		return errors.New("Error al decodificar: " + err.Error())
-	}
-
-	// Create a reader from the decoded bytes
-	reader := strings.NewReader(string(decodedBytes))
-
-	// Create a GZIP reader
-	gzipReader, err := gzip.NewReader(reader)
-	if err != nil {
-		return errors.New("Error al crear reader: " + err.Error())
-	}
-	defer gzipReader.Close()
-
-	// Specify the output file path
-	outputFilePath := Env.TMP_DIR + "request.json"
-
-	// Create the output file
-	uncompressedFile, err := os.Create(outputFilePath)
-	if err != nil {
-		return errors.New("Error al crear output file: " + err.Error())
-	}
-	defer uncompressedFile.Close()
-
-	// Copy the contents of the gzip reader to the new file
-	_, err = io.Copy(uncompressedFile, gzipReader)
-	if err != nil {
-		return errors.New("Error al descomprimir: " + err.Error())
-	}
-
-	// Open the JSON file
-	file, err := os.Open(outputFilePath)
-	if err != nil {
-		return errors.New("Error abrir el descomprimido: " + err.Error())
-	}
-	defer file.Close()
-
-	// Decode the JSON into the struct
-	decoder := sonic.ConfigDefault.NewDecoder(file)
-	err = decoder.Decode(&output)
-	if err != nil {
-		return errors.New("Error deserializar JSON: " + err.Error())
-	}
-	return nil
 }
 
 func DecompressBase64GzipM(base64String *string, isUrl ...bool) (string, error) {
@@ -246,76 +106,117 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 		response.Headers["Content-Type"] = "application/json; charset=utf-8"
 	}
 
-	PrintMemUsage()
-	// Si es una respuesta que viene desde disco
-	if len(handlerResponse.BodyOnDisk) > 0 {
-		if strings.Contains(handlerResponse.Encoding, "br") {
-			bodyBytes := CompressBrotliOnFile(handlerResponse.BodyOnDisk)
-			response.Body = base64.StdEncoding.EncodeToString(bodyBytes)
-			response.Headers["Content-Encoding"] = "br"
-		} else {
-			bodyBytes := CompressGzipOnFile(handlerResponse.BodyOnDisk)
-			response.Body = base64.StdEncoding.EncodeToString(bodyBytes)
-			response.Headers["Content-Encoding"] = "gzip"
-		}
-		response.IsBase64Encoded = true
-		setMetadataHeader(response.Headers, handlerResponse.PreSerializeMs, time.Now().UnixMilli()-handlerResponse.RequestStart)
-		return response
-	}
-
 	body := *handlerResponse.Body
 	handlerResponse.Body = nil
 
 	isMaxLen := len(body) > 5*1000*1000
 	Log("Len del body:: ", len(body))
 
-	// revisa si la respuesta puede ser comprimida con brotli
+	// API Gateway carries the body inline as a string, so a compressed payload has to be
+	// base64'd. EncodeToString is the one copy that has to escape — it produces the string the
+	// Lambda runtime serializes — which is why the compressor's buffer can go back to the pool
+	// immediately after.
+	encodeCompressedBody := func(compressed []byte) {
+		response.Body = base64.StdEncoding.EncodeToString(compressed)
+		response.IsBase64Encoded = true
+	}
+
+	// zstd first, gzip as the compatibility fallback. isMaxLen forces compression even when the
+	// client advertised nothing, because a payload that large cannot go out uncompressed.
 	if handlerResponse.DisableCompression {
 		// Preserve raw payloads for endpoints that require an unencoded response.
 		response.Body = string(body)
-	} else if strings.Contains(handlerResponse.Encoding, "br") {
-		Log("Enviando respuesta comprimida con brotli")
-		// Log(body)
-		bodyBytes := body
-		bodyCompressed := bytes.Buffer{}
-		writer := brotli.NewWriterV2(&bodyCompressed, 4)
-		in := bytes.NewReader(bodyBytes)
-		n, err := io.Copy(writer, in)
-		if err != nil {
-			panic(err)
-		}
-		if int(n) != len(bodyBytes) {
-			panic("Error al momento de comprimir la respuesta: size mismatch")
-		}
-		if err := writer.Close(); err != nil {
-			panic("Error al momento de comprimir la respuesta: al cerrar Buffer")
-		}
-		response.Body = base64.StdEncoding.EncodeToString(bodyCompressed.Bytes())
-		// Log(response.Body)
-		response.Headers["Content-Encoding"] = "br"
-		response.IsBase64Encoded = true
+	} else if strings.Contains(handlerResponse.Encoding, "zstd") {
+		Log("Enviando respuesta comprimida con zstd")
+		CompressZstdPooled(body, encodeCompressedBody)
+		response.Headers["Content-Encoding"] = "zstd"
 	} else if isMaxLen || strings.Contains(handlerResponse.Encoding, "gzip") {
 		Log("Enviando respuesta comprimida con gzip")
-
-		var bodyCompressed bytes.Buffer
-		gz := gzip.NewWriter(&bodyCompressed)
-		if _, err := gz.Write(body); err != nil {
-			log.Fatal(err)
+		if err := CompressGzipPooled(body, encodeCompressedBody); err != nil {
+			panic("Error al momento de comprimir la respuesta con gzip: " + err.Error())
 		}
-		if err := gz.Close(); err != nil {
-			log.Fatal(err)
-		}
-		response.Body = base64.StdEncoding.EncodeToString(bodyCompressed.Bytes())
-		fmt.Println("Len del body comprimido:: ", len(body))
-
-		// Log(response.Body)
 		response.Headers["Content-Encoding"] = "gzip"
-		response.IsBase64Encoded = true
 	} else {
 		response.Body = string(body)
 	}
 	setMetadataHeader(response.Headers, handlerResponse.PreSerializeMs, time.Now().UnixMilli()-handlerResponse.RequestStart)
 	return response
+}
+
+// MakeStreamingResponseFinal is the RESPONSE_STREAM counterpart of MakeResponseFinal, used when
+// the Function URL is deployed with InvokeMode RESPONSE_STREAM.
+//
+// The runtime writes a JSON prelude of status and headers, then the body bytes verbatim. That
+// removes the two copies the buffered path cannot avoid: the base64 expansion (+33%) and the
+// runtime re-marshalling that base64 string into the response envelope. It also lifts the
+// response ceiling from 6 MB to 20 MB.
+//
+// Note this does not make the body incremental — see MakeResponse; the keys header of the
+// compact format is derived from the content, so nothing can be emitted until the whole payload
+// has been walked. What streams here is an already-complete buffer.
+func MakeStreamingResponseFinal(handlerResponse *HandlerResponse) *events.LambdaFunctionURLStreamingResponse {
+	headers := ensureResponseHeaders(handlerResponse.Headers)
+	if _, ok := headers["Content-Type"]; !ok {
+		headers["Content-Type"] = "application/json; charset=utf-8"
+	}
+
+	response := &events.LambdaFunctionURLStreamingResponse{
+		StatusCode: http.StatusOK,
+		Headers:    headers,
+	}
+
+	if handlerResponse.Body == nil {
+		setMetadataHeader(headers, handlerResponse.PreSerializeMs, time.Now().UnixMilli()-handlerResponse.RequestStart)
+		return response
+	}
+
+	body := *handlerResponse.Body
+	handlerResponse.Body = nil
+
+	// Same negotiation as the buffered path: zstd first, gzip as the fallback, and compression
+	// forced past 5 MB even when the client advertised nothing.
+	isMaxLen := len(body) > 5*1000*1000
+
+	switch {
+	case handlerResponse.DisableCompression:
+		response.Body = bytes.NewReader(body)
+	case strings.Contains(handlerResponse.Encoding, "zstd"):
+		response.Body = CompressZstdReader(body)
+		headers["Content-Encoding"] = "zstd"
+	case isMaxLen || strings.Contains(handlerResponse.Encoding, "gzip"):
+		compressedReader, err := CompressGzipReader(body)
+		if err != nil {
+			panic("Error al momento de comprimir la respuesta con gzip: " + err.Error())
+		}
+		response.Body = compressedReader
+		headers["Content-Encoding"] = "gzip"
+	default:
+		response.Body = bytes.NewReader(body)
+	}
+
+	setMetadataHeader(headers, handlerResponse.PreSerializeMs, time.Now().UnixMilli()-handlerResponse.RequestStart)
+	return response
+}
+
+// MakeErrStreamingFinal renders an error under RESPONSE_STREAM. Errors are small and never
+// compressed, so the body is a plain reader over the JSON.
+func MakeErrStreamingFinal(statusCode int32, message string) *events.LambdaFunctionURLStreamingResponse {
+	headers := ensureResponseHeaders(nil)
+	headers["Content-Type"] = "application/json; charset=utf-8"
+
+	responseStatus := http.StatusBadRequest
+	if statusCode == 500 {
+		responseStatus = http.StatusInternalServerError
+	} else if statusCode == 401 {
+		responseStatus = http.StatusUnauthorized
+	}
+
+	responseJSON, _ := sonic.Marshal(ErrorMsg{Error: message})
+	return &events.LambdaFunctionURLStreamingResponse{
+		StatusCode: responseStatus,
+		Headers:    headers,
+		Body:       bytes.NewReader(responseJSON),
+	}
 }
 
 type ErrorMsg struct {
@@ -563,7 +464,6 @@ func (e HandlerArgs) GetQuerySlice(key string) []string {
 
 type HandlerResponse struct {
 	Body               *[]byte
-	BodyOnDisk         string
 	StatusCode         int
 	Error              string
 	Encoding           string
@@ -571,26 +471,24 @@ type HandlerResponse struct {
 	RequestStart       int64
 	PreSerializeMs     int64
 	Route              string
-	MergeID            int32
 	StreamHandled      bool
 	DisableCompression bool
 }
 
 type MainResponse struct {
 	LambdaResponse *events.APIGatewayV2HTTPResponse
-	Error          error
+	// LambdaStreamingResponse is set instead of LambdaResponse when the Function URL is deployed
+	// with InvokeMode RESPONSE_STREAM (Env.LAMBDA_RESPONSE_STREAMING). The two response shapes
+	// are mutually exclusive: returning the wrong one for the deployed mode breaks every request.
+	LambdaStreamingResponse *events.LambdaFunctionURLStreamingResponse
+	Error                   error
 }
 
 func (req *HandlerArgs) MakeErrCode(message string, code int32) HandlerResponse {
 	response := HandlerResponse{Headers: makeHeaders()}
 
-	if req.MergedID > 0 {
-		req.ResponseError = message
-	}
-
 	response.Error = message
 	response.Route = req.Route
-	response.MergeID = req.MergedID
 	Log("Req Error:: ", message)
 
 	if code == 400 {
@@ -652,212 +550,25 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 		StatusCode: http.StatusOK,
 		Headers:    makeHeaders(),
 		Route:      req.Route,
-		MergeID:    req.MergedID,
 	}
 
-	structLen := size.Of(*respStruct)
-	// Si es menor a 100kb entonces lo serializa aquí
+	// A string response is already the payload. Everything else goes through the compact
+	// [keys, content] encoder that the frontend's unmarshall() expects — one path for every
+	// size, so a large response can never silently fall back to a different wire format.
 	if fmt.Sprintf("%T", *new(T)) == "string" {
 		body := []byte(fmt.Sprintf("%v", *respStruct))
 		response.Body = &body
-	} else if structLen < 102400 || !Env.IS_SERVERLESS {
-		/*
-			marshall1, _ := serialize.Marshal(respStruct)
-			fmt.Println(string(marshall1))
-		*/
-		var bodyBytes []byte
-		var err error
-
-		if Env.IS_LOCAL {
-			bodyBytes, err = json.Marshal(respStruct)
-		} else {
-			bodyBytes, err = serialize.Marshal(respStruct)
-		}
-
-		// fmt.Println("Json Size:", len(bodyBytes), "| vs:", len(marshall1))
-
-		if err != nil {
-			return req.MakeErr("No se pudo serializar respuesta:", err)
-		}
-		if bytes.Equal(bodyBytes, []byte("null")) {
-			bodyBytes = []byte("[]")
-		}
-		response.Body = &bodyBytes
-	} else {
-		fileName := fmt.Sprintf("output-%v", req.MergedID)
-		response.BodyOnDisk = EncodeJsonToFileX(respStruct, fileName)
+		return response
 	}
 
-	return response
-}
-
-func CombineResponses(responses []*HandlerResponse) HandlerResponse {
-	// Crea un archivo
-	flags := os.O_RDWR | os.O_CREATE | os.O_TRUNC
-	outputJsonPath := Env.TMP_DIR + "output.json"
-	outputJson, err := os.OpenFile(outputJsonPath, flags, os.ModePerm)
+	bodyBytes, err := serialize.Marshal(respStruct)
 	if err != nil {
-		panic("Error opening output.json: " + err.Error())
+		return req.MakeErr("No se pudo serializar respuesta:", err)
 	}
-	defer outputJson.Close()
-
-	_, err = outputJson.WriteString("[")
-	if err != nil {
-		panic("Error appending line to output.json: " + err.Error())
+	if bytes.Equal(bodyBytes, []byte("null")) {
+		bodyBytes = []byte("[]")
 	}
-
-	for i, res := range responses {
-		outputJson.WriteString("\n")
-		header := `{"id":%v, "route": "%v", "statusCode": %v, "message": "%v", "body": `
-		header = fmt.Sprintf(header, res.MergeID, res.Route, res.StatusCode, res.Error)
-
-		if len(res.BodyOnDisk) > 0 {
-			outputJson.WriteString(header)
-			file, err := os.Open(res.BodyOnDisk)
-			if err != nil {
-				panic("Error opening body (response.json) " + err.Error())
-			}
-			defer file.Close()
-
-			scanner := bufio.NewScanner(file)
-			buf := make([]byte, 0, 64*1024)
-			scanner.Buffer(buf, 5*1024*1024)
-
-			size := 0
-			linesCount := 0
-			for scanner.Scan() {
-				line := scanner.Text()
-				linesCount++
-				size += len(line)
-				_, err := outputJson.WriteString(line)
-				if err != nil {
-					panic("Error writing to output.json: " + err.Error())
-				}
-			}
-			fileName := strings.ReplaceAll(res.BodyOnDisk, Env.TMP_DIR, "")
-			Log("Agregando a Body:: ", fileName, " | Lines:", linesCount, " | Size:", size)
-			outputJson.WriteString("}\n")
-		} else if res.Body != nil {
-			outputJson.WriteString(header)
-			outputJson.Write(*res.Body)
-			outputJson.WriteString("}\n")
-		} else if len(res.Error) > 0 {
-			header += "null }\n"
-			outputJson.WriteString(header)
-		} else {
-			Print(*res)
-			panic("response invalid")
-		}
-		if i < (len(responses) - 1) {
-			outputJson.WriteString(",")
-		}
-	}
-
-	outputJson.WriteString("]")
-
-	response := HandlerResponse{
-		BodyOnDisk: outputJsonPath,
-		Headers: map[string]string{
-			"Content-Type": "application/json; charset=utf-8",
-		},
-		StatusCode: http.StatusOK,
-	}
-	return response
-}
-
-func EncodeJsonToFileX[T any](respStruct *T, name ...string) string {
-
-	fileName := "output"
-	if len(name) == 1 && len(name[0]) > 0 {
-		fileName = name[0]
-	}
-
-	outputPath := Env.TMP_DIR + fileName + ".json"
-	file, err := os.Create(outputPath)
-	if err != nil {
-		panic("Error al crear el output.json" + err.Error())
-	}
-	defer file.Close()
-
-	encoder := sonic.ConfigDefault.NewEncoder(file)
-	encoder.SetEscapeHTML(false)
-	PrintMemUsage()
-
-	err = encoder.Encode(respStruct)
-	if err != nil {
-		panic("Error al generar el JSON en el output.json" + err.Error())
-	}
-
-	PrintMemUsage()
-	return outputPath
-}
-
-func (req *HandlerArgs) MakeResponseDisk(respStruct any) HandlerResponse {
-
-	if req.MergedID > 0 {
-		panic("No se puede pre-almacenar la respuesta en una merged-API")
-	}
-
-	outputPath := Env.TMP_DIR + "output.json"
-	file, err := os.Create(outputPath)
-	if err != nil {
-		panic("Error al crear el output.json" + err.Error())
-	}
-	defer file.Close()
-	// TODO: aqui hay un salto de memoria, revisar
-	encoder := sonic.ConfigDefault.NewEncoder(file)
-	encoder.SetEscapeHTML(false)
-	PrintMemUsage()
-
-	err = encoder.Encode(respStruct)
-	if err != nil {
-		panic("Error al generar el JSON en el output.json" + err.Error())
-	}
-
-	PrintMemUsage()
-
-	fi, err := os.Stat(outputPath)
-	if err == nil {
-		size := fi.Size()
-		fmt.Println("Respuesta en:: ", outputPath, " | Size (kb): ", float64(size)/1000)
-		fmt.Println("File exists")
-	} else if os.IsNotExist(err) {
-		panic("File does not exist")
-	} else {
-		panic("Error occurred while checking file:" + err.Error())
-	}
-
-	response := HandlerResponse{
-		BodyOnDisk: outputPath,
-		StatusCode: http.StatusOK,
-		Headers:    makeHeaders(),
-	}
-
-	return response
-}
-
-func (req *HandlerArgs) MakeResponseDiskT(outputPath string) HandlerResponse {
-
-	if req.MergedID > 0 {
-		panic("No se puede pre-almacenar la respuesta en una merged-API")
-	}
-
-	PrintMemUsage()
-
-	_, err := os.Stat(outputPath)
-	if err == nil {
-		fmt.Println("File exists")
-	} else if os.IsNotExist(err) {
-		panic("File does not exist")
-	} else {
-		panic("Error occurred while checking file:" + err.Error())
-	}
-
-	response := HandlerResponse{
-		BodyOnDisk: outputPath,
-		StatusCode: http.StatusOK,
-		Headers:    makeHeaders(),
-	}
+	response.Body = &bodyBytes
 
 	return response
 }
@@ -871,10 +582,6 @@ func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {
 		},
 	}
 
-	if req.MergedID > 0 {
-		req.ResponseBody = body
-	}
-
 	return response
 }
 
@@ -883,7 +590,6 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	respWriter.Header().Set("Access-Control-Allow-Origin", "*")
 	respWriter.Header().Set("Access-Control-Expose-Headers", "X-Metadata")
 
-	PrintMemUsage()
 	// Setea los headers de la respuesta
 	if response.Headers != nil {
 		for key, value := range response.Headers {
@@ -893,8 +599,6 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	if len(respWriter.Header().Get("Content-Type")) == 0 {
 		respWriter.Header().Set("Content-Type", "application/json; charset=utf-8")
 	}
-
-	var bodyBytes []byte
 
 	// Revisa si hay que enviar error
 	if len(response.Error) > 0 {
@@ -918,47 +622,44 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		return
 	}
 
-	// Envía respuesta ok
-	if response.Body == nil {
-		Log("El body es nil!")
-	} else if response.DisableCompression {
-		// Write raw bytes without adding a Content-Encoding header.
-		bodyBytes = *response.Body
-	} else if strings.Contains(args.Encoding, "zstd") {
-		Log("Comprimiendo body con: zstd")
-		encoder, _ := zstd.NewWriter(nil)
-		bb := *response.Body
-		bodyBytes = encoder.EncodeAll(bb, make([]byte, 0, len(bb)))
-		respWriter.Header().Set("Content-Encoding", "zstd")
-	} else {
-		Log("Comprimiendo body con: gzip")
-		var bodyCompressed bytes.Buffer
-		gz := gzip.NewWriter(&bodyCompressed)
-		if _, err := gz.Write(*response.Body); err != nil {
-			log.Fatal(err)
-		}
-		if err := gz.Close(); err != nil {
-			log.Fatal(err)
+	// On this path the bytes go straight to the socket, so unlike the Lambda path there is no
+	// base64 step and nothing needs to escape. sendBody is invoked while the compressor's
+	// pooled buffer is still borrowed, and sets every header just before the first Write —
+	// which also keeps the elapsed timing inclusive of compression, as it was before pooling.
+	sendBody := func(bodyToSend []byte, contentEncoding string) {
+		if len(contentEncoding) > 0 {
+			respWriter.Header().Set("Content-Encoding", contentEncoding)
 		}
 
-		bodyBytes = bodyCompressed.Bytes()
-		respWriter.Header().Set("Content-Encoding", "gzip")
+		elapsed := time.Now().UnixMilli() - args.StartTime
+		respWriter.Header().Set("Server", fmt.Sprintf("Genix-v1.0:%v", elapsed))
+		respWriter.Header().Set("X-Metadata", fmt.Sprintf("%d,%d", response.PreSerializeMs, elapsed))
+
+		if _, err := respWriter.Write(bodyToSend); err != nil {
+			Log("Hubo un error al enviar la respuesta::", err)
+		}
 	}
 
-	elapsed := time.Now().UnixMilli() - args.StartTime
-	serverInfo := fmt.Sprintf("Genix-v1.0:%v", elapsed)
-	respWriter.Header().Set("Server", serverInfo)
-	respWriter.Header().Set("X-Metadata", fmt.Sprintf("%d,%d", response.PreSerializeMs, elapsed))
-
-	/*
-		bodyLen := 240
-		if len(bodyBytes) < bodyLen {
-			bodyLen = len(bodyBytes) - 1
+	// Envía respuesta ok: zstd first, gzip as the compatibility fallback.
+	if response.Body == nil {
+		Log("El body es nil!")
+		sendBody(nil, "")
+	} else if response.DisableCompression {
+		// Write raw bytes without adding a Content-Encoding header.
+		sendBody(*response.Body, "")
+	} else if strings.Contains(args.Encoding, "zstd") {
+		Log("Comprimiendo body con: zstd")
+		CompressZstdPooled(*response.Body, func(compressed []byte) {
+			sendBody(compressed, "zstd")
+		})
+	} else {
+		Log("Comprimiendo body con: gzip")
+		if err := CompressGzipPooled(*response.Body, func(compressed []byte) {
+			sendBody(compressed, "gzip")
+		}); err != nil {
+			Log("Error al comprimir la respuesta con gzip::", err)
 		}
-		Log("Body:", response.Route)
-		Log(string(bodyBytes[0:bodyLen]))
-	*/
-	respWriter.Write(bodyBytes)
+	}
 }
 
 // SendServerEvent writes one SSE event to the current HTTP response stream.

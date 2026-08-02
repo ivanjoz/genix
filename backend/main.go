@@ -24,16 +24,11 @@ import (
 	"github.com/rs/cors"
 )
 
-func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (resp *events.APIGatewayV2HTTPResponse, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			errStr := fmt.Sprintf("Internal Server Error (Panic in LambdaHandler): %v", r)
-			core.Logx(5, errStr)
-			core.Log(string(debug.Stack()))
-			resp = core.MakeErrRespFinal(500, errStr)
-			err = nil // return nil error to Lambda runtime so it sends our response
-		}
-	}()
+// runLambdaRequest is the request path shared by both invoke modes. It stops at
+// core.MainResponse, which carries whichever of the two AWS response shapes prepareResponse
+// built, so the only difference between the buffered and streaming entrypoints is which field
+// they unwrap.
+func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) core.MainResponse {
 	clearEnvVariables()
 
 	core.Env.REQ_IP = request.RequestContext.HTTP.SourceIP
@@ -46,8 +41,12 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 		funcResponse := ExecFuncHandler(request.Body)
 		bodyBytes := []byte(core.ToJsonNoErr(funcResponse))
 		core.Log("*Body response::" + core.StrCut(string(bodyBytes), 400))
-		response := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
-		return core.MakeResponseFinal(&response), nil
+		handlerResponse := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
+
+		if core.Env.LAMBDA_RESPONSE_STREAMING {
+			return core.MainResponse{LambdaStreamingResponse: core.MakeStreamingResponseFinal(&handlerResponse)}
+		}
+		return core.MainResponse{LambdaResponse: core.MakeResponseFinal(&handlerResponse)}
 	}
 
 	route := request.RequestContext.HTTP.Path
@@ -66,8 +65,39 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 		Route:   route,
 		Method:  request.RequestContext.HTTP.Method,
 	}
-	response := mainHandler(&args)
-	return response.LambdaResponse, nil
+	return mainHandler(&args)
+}
+
+// LambdaHandler serves a Function URL deployed with the default BUFFERED invoke mode.
+func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (resp *events.APIGatewayV2HTTPResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("Internal Server Error (Panic in LambdaHandler): %v", r)
+			core.Logx(5, errStr)
+			core.Log(string(debug.Stack()))
+			resp = core.MakeErrRespFinal(500, errStr)
+			err = nil // return nil error to Lambda runtime so it sends our response
+		}
+	}()
+
+	return runLambdaRequest(request).LambdaResponse, nil
+}
+
+// LambdaStreamingHandler serves a Function URL deployed with InvokeMode RESPONSE_STREAM. The
+// body goes out as raw bytes after a JSON prelude, so there is no base64 expansion and the
+// response ceiling is 20 MB instead of 6 MB.
+func LambdaStreamingHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (resp *events.LambdaFunctionURLStreamingResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("Internal Server Error (Panic in LambdaStreamingHandler): %v", r)
+			core.Logx(5, errStr)
+			core.Log(string(debug.Stack()))
+			resp = core.MakeErrStreamingFinal(500, errStr)
+			err = nil // return nil error to Lambda runtime so it sends our response
+		}
+	}()
+
+	return runLambdaRequest(request).LambdaStreamingResponse, nil
 }
 
 func LocalHandler(w http.ResponseWriter, request *http.Request) {
@@ -328,6 +358,14 @@ func main() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		lambda.StartWithOptions(LambdaHandler, lambda.WithContext(ctx))
+		// The handler shape has to match the deployed Function URL InvokeMode; returning the
+		// wrong one breaks every request, so it is driven by explicit config rather than guessed.
+		if core.Env.LAMBDA_RESPONSE_STREAMING {
+			logger.Println("Invoke mode: RESPONSE_STREAM")
+			lambda.StartWithOptions(LambdaStreamingHandler, lambda.WithContext(ctx))
+		} else {
+			logger.Println("Invoke mode: BUFFERED")
+			lambda.StartWithOptions(LambdaHandler, lambda.WithContext(ctx))
+		}
 	}
 }

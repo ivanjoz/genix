@@ -12,24 +12,39 @@ import (
 
 // FieldInfo stores metadata for a struct field
 type FieldInfo struct {
-	Index      int    // Original field index in the struct
-	Name       string // JSON tag name or field name
-	Used       bool   // Whether this field was used in any marshaled record
-	RawName    string // Original field name (without JSON tag)
-	UsageCount int    // How many times this field was used (for optimization)
-	Ignored    bool   // Whether the field is omitted (json:"-")
+	Index   int    // Original field index in the struct
+	Name    string // JSON tag name or field name
+	RawName string // Original field name (without JSON tag)
+	Ignored bool   // Whether the field is omitted (json:"-")
 }
 
-// TypeInfo stores metadata for a registered type
+// TypeInfo stores metadata for a registered type.
+//
+// Everything here is derived from the Go type and is therefore immutable once built — it is
+// shared across every concurrent Marshal. Per-response state (which fields a given payload
+// actually used) lives on the Encoder instead; see encoderTypeUsage.
+//
+// OptimizedOrder is the one field that is learned rather than derived. It is frozen from the
+// first payload that carries the type and reused verbatim afterwards, which is what lets
+// Marshal run a single pass. Freezing is safe because the order is transmitted in the payload's
+// keys header on every response, so the decoder never depends on the encoder's history.
 type TypeInfo struct {
-	ID             int
-	Type           reflect.Type
-	XStruct        *xunsafe.Struct
-	Fields         []FieldInfo
-	UsedMask       []bool // Tracks which fields have been used
-	OptimizedOrder []int  // Field indices ordered by usage (most used first)
-	IsOptimized    bool   // Whether the optimized order has been computed
+	ID      int
+	Type    reflect.Type
+	XStruct *xunsafe.Struct
+	Fields  []FieldInfo
+	// DefaultOrder lists the non-ignored field indices in declaration order. Precomputed so a
+	// type that has not been optimized yet does not rebuild this slice for every record.
+	DefaultOrder []int
+	// OptimizedOrder / IsOptimized are written once under the registry lock and read-only after.
+	OptimizedOrder []int
+	IsOptimized    bool
 }
+
+// NOTE: read OptimizedOrder/IsOptimized only through FieldRegistry.orderFor. freezeOrder writes
+// them under the registry's write lock, and one goroutine can be freezing a type while another
+// is starting to encode it, so an unsynchronised read here is a genuine race. The slice contents
+// are safe to read afterwards: the slice header is assigned once and never mutated.
 
 // FieldRegistry manages the mapping between types and their IDs
 type FieldRegistry struct {
@@ -80,7 +95,7 @@ func (r *FieldRegistry) GetID(t reflect.Type) int {
 
 	xStruct := xunsafe.NewStruct(t)
 	fields := make([]FieldInfo, t.NumField())
-	usedMask := make([]bool, t.NumField())
+	defaultOrder := make([]int, 0, t.NumField())
 
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
@@ -93,19 +108,46 @@ func (r *FieldRegistry) GetID(t reflect.Type) int {
 			Index:   i,
 			Name:    name,
 			RawName: sf.Name,
-			Used:    false,
 			Ignored: ignored,
+		}
+		if !ignored {
+			defaultOrder = append(defaultOrder, i)
 		}
 	}
 
 	r.idToInfo[id] = &TypeInfo{
-		ID:       id,
-		Type:     t,
-		XStruct:  xStruct,
-		Fields:   fields,
-		UsedMask: usedMask,
+		ID:           id,
+		Type:         t,
+		XStruct:      xStruct,
+		Fields:       fields,
+		DefaultOrder: defaultOrder,
 	}
 	return id
+}
+
+// freezeOrder records the field order learned from the first payload that carried this type.
+// Later payloads reuse it, which is what removes the per-response analysis pass. Once set it is
+// never rewritten: a stable order keeps the wire format predictable, and the keys header makes
+// any order self-describing to the decoder anyway.
+func (r *FieldRegistry) freezeOrder(id int, usageCounts []int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	info, found := r.idToInfo[id]
+	if !found || info.IsOptimized {
+		return
+	}
+
+	// Sort non-ignored fields by how often they carried a non-zero value. Most-used first makes
+	// the always-zero fields cluster at the tail, where marshalStruct truncates them outright
+	// instead of spending a skip index on each one.
+	order := append([]int(nil), info.DefaultOrder...)
+	sort.SliceStable(order, func(i, j int) bool {
+		return usageCounts[order[i]] > usageCounts[order[j]]
+	})
+
+	info.OptimizedOrder = order
+	info.IsOptimized = true
 }
 
 func (r *FieldRegistry) GetStruct(id int) *xunsafe.Struct {
@@ -132,142 +174,84 @@ func (r *FieldRegistry) GetTypeInfo(id int) *TypeInfo {
 	return r.idToInfo[id]
 }
 
-// MarkFieldUsed marks a field as used for a given type ID and increments usage count
-func (r *FieldRegistry) MarkFieldUsed(id int, fieldIndex int) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if info, ok := r.idToInfo[id]; ok {
-		if fieldIndex < len(info.UsedMask) {
-			info.UsedMask[fieldIndex] = true
-			info.Fields[fieldIndex].Used = true
-			info.Fields[fieldIndex].UsageCount++
-		}
-	}
+// encoderTypeUsage is the per-Marshal record of what one type's fields actually carried in
+// this payload. It lives on the Encoder rather than the registry so concurrent Marshal calls
+// never touch shared mutable state — that was the data race behind the corrupted-payload risk
+// documented in backend/docs/LAMBDA.md.
+type encoderTypeUsage struct {
+	// order is the field order this payload was emitted with. Captured here so the keys header
+	// is built against the exact order the values were written in.
+	order []int
+	// mask is indexed by struct field index: true when some record carried a non-zero value.
+	mask []bool
+	// counts feeds freezeOrder the first time a type is seen. Nil once the order is frozen,
+	// since there is nothing left to learn.
+	counts []int
 }
 
-// ComputeOptimizedOrder sorts fields by usage count (most used first)
-// This should be called after the first pass (analysis) and before the second pass (marshal)
-func (r *FieldRegistry) ComputeOptimizedOrder() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, info := range r.idToInfo {
-		// Create a slice of field indices for non-ignored fields
-		var order []int
-		for i, field := range info.Fields {
-			if !field.Ignored {
-				order = append(order, i)
-			}
-		}
-
-		// Sort by usage count (descending) - most used first
-		sort.Slice(order, func(i, j int) bool {
-			return info.Fields[order[i]].UsageCount > info.Fields[order[j]].UsageCount
-		})
-
-		info.OptimizedOrder = order
-		info.IsOptimized = true
-	}
-}
-
-// GetOptimizedOrder returns the optimized field order for a type
-func (r *FieldRegistry) GetOptimizedOrder(id int) []int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if info, ok := r.idToInfo[id]; ok {
-		return info.OptimizedOrder
-	}
-	return nil
-}
-
-// IsOptimized returns whether the optimized order has been computed for a type
-func (r *FieldRegistry) IsOptimized(id int) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if info, ok := r.idToInfo[id]; ok {
-		return info.IsOptimized
-	}
-	return false
-}
-
-// GetKeysList returns the list of keys for all registered types
-// Format: [[id, idx1, "name1", idx2, "name2", ...], ...]
-// Only includes fields that were actually used during marshaling
-// Fields are ordered by usage (most used first) if optimization was computed
-func (r *FieldRegistry) GetKeysList() [][]any {
+// orderFor returns the field iteration order to encode a type with, and whether that order has
+// already been frozen. Taken under the read lock because freezeOrder can be running on another
+// goroutine; see the note on TypeInfo.
+func (r *FieldRegistry) orderFor(id int) ([]int, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := [][]any{}
-	for id, info := range r.idToInfo {
-		keyEntry := []any{id}
-
-		if info.IsOptimized {
-			// Use optimized order (most used fields first)
-			for orderIdx, fieldIdx := range info.OptimizedOrder {
-				if info.UsedMask[fieldIdx] {
-					keyEntry = append(keyEntry, orderIdx, info.Fields[fieldIdx].Name) // 0-based optimized index
-				}
-			}
-		} else {
-			// Use original order
-			orderIdx := 0
-			for i, field := range info.Fields {
-				if field.Ignored {
-					continue
-				}
-				if info.UsedMask[i] {
-					keyEntry = append(keyEntry, orderIdx, field.Name) // 0-based index
-				}
-				orderIdx++
-			}
-		}
-		// Only add if there are used fields
-		if len(keyEntry) > 1 {
-			result = append(result, keyEntry)
-		}
+	info, found := r.idToInfo[id]
+	if !found {
+		return nil, false
 	}
-	return result
+	if info.IsOptimized {
+		return info.OptimizedOrder, true
+	}
+	return info.DefaultOrder, false
 }
 
-// GetKeysListAll returns the list of keys for all registered types
-// Includes all fields, not just used ones
-func (r *FieldRegistry) GetKeysListAll() [][]any {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	result := [][]any{}
-	for id, info := range r.idToInfo {
-		keyEntry := []any{id}
-		orderIdx := 0
-		for _, field := range info.Fields {
-			if field.Ignored {
-				continue
-			}
-			keyEntry = append(keyEntry, orderIdx, field.Name) // 0-based index
-			orderIdx++
-		}
-		result = append(result, keyEntry)
+// usageFor returns this Encoder's usage record for a type, creating it on first contact. The
+// order is captured once per payload here, so a type that gets frozen mid-encode still uses one
+// consistent order for every record it writes — which is what keeps the keys header aligned.
+func (e *Encoder) usageFor(id int, info *TypeInfo) *encoderTypeUsage {
+	if usage, found := e.typeUsage[id]; found {
+		return usage
 	}
-	return result
+
+	order, isOptimized := e.registry.orderFor(id)
+	usage := &encoderTypeUsage{
+		order: order,
+		mask:  make([]bool, len(info.Fields)),
+	}
+	// Only bother counting while the order is still unknown.
+	if !isOptimized {
+		usage.counts = make([]int, len(info.Fields))
+	}
+	e.typeUsage[id] = usage
+	return usage
 }
 
-// Reset clears the used flags and optimization for all fields
-func (r *FieldRegistry) ResetUsedFlags() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, info := range r.idToInfo {
-		for i := range info.UsedMask {
-			info.UsedMask[i] = false
-			info.Fields[i].Used = false
-			info.Fields[i].UsageCount = 0
+// learnFieldOrders freezes the emit order for every type this payload saw for the first time.
+// Called after the content is encoded, so the counts reflect the whole payload.
+func (e *Encoder) learnFieldOrders() {
+	for id, usage := range e.typeUsage {
+		if usage.counts != nil {
+			e.registry.freezeOrder(id, usage.counts)
 		}
-		info.OptimizedOrder = nil
-		info.IsOptimized = false
 	}
 }
 
 var globalRegistry = NewFieldRegistry()
+
+// isEncodedArray reports whether a marshaled value serializes to a JSON array.
+// Structs, slices and maps all come back from marshalValue as []any; anything
+// else is a scalar (or null) and can never be mistaken for a skip block.
+func isEncodedArray(v any) bool {
+	if v == nil {
+		return false
+	}
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.Slice, reflect.Array:
+		return true
+	}
+	return false
+}
 
 func isZero(v any) bool {
 	if v == nil {

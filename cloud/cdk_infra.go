@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awscloudfront"
@@ -62,10 +63,10 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 	})
 
 	distribution := awscloudfront.NewDistribution(stack, jsii.String("CloudfrontFrontend"), &awscloudfront.DistributionProps{
-		Comment:            jsii.String("Frontend Genix"),
-		DefaultRootObject:  jsii.String("index.html"),
-		HttpVersion:        awscloudfront.HttpVersion_HTTP2_AND_3,
-		EnableIpv6:         jsii.Bool(true),
+		Comment:           jsii.String("Frontend Genix"),
+		DefaultRootObject: jsii.String("index.html"),
+		HttpVersion:       awscloudfront.HttpVersion_HTTP2_AND_3,
+		EnableIpv6:        jsii.Bool(true),
 		DefaultBehavior: &awscloudfront.BehaviorOptions{
 			Origin:               s3Origin,
 			ViewerProtocolPolicy: awscloudfront.ViewerProtocolPolicy_REDIRECT_TO_HTTPS,
@@ -74,13 +75,13 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 		},
 		ErrorResponses: &[]*awscloudfront.ErrorResponse{
 			{
-				HttpStatus:          jsii.Number(403),
+				HttpStatus:         jsii.Number(403),
 				ResponsePagePath:   jsii.String("/index.html"),
 				ResponseHttpStatus: jsii.Number(200),
 				Ttl:                awscdk.Duration_Seconds(jsii.Number(10)),
 			},
 			{
-				HttpStatus:          jsii.Number(404),
+				HttpStatus:         jsii.Number(404),
 				ResponsePagePath:   jsii.String("/index.html"),
 				ResponseHttpStatus: jsii.Number(200),
 				Ttl:                awscdk.Duration_Seconds(jsii.Number(10)),
@@ -117,6 +118,19 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 	lambdaName := props.Params.STACK_NAME + "-backend"
 	s3CompiledPath := props.Params.S3_COMPILED_PATH
 
+	// Response streaming is one switch, deliberately. The Function URL's InvokeMode and the Go
+	// handler shape must agree — a mismatch makes every request fail — so both the CfnUrl
+	// property and the environment variable the binary reads are derived from this single
+	// value. Export LAMBDA_RESPONSE_STREAMING=1 before `cdk deploy` to turn it on.
+	responseStreamingEnabled := os.Getenv("LAMBDA_RESPONSE_STREAMING") == "1"
+	responseStreamingFlag := "0"
+	functionUrlInvokeMode := awslambda.InvokeMode_BUFFERED
+	if responseStreamingEnabled {
+		responseStreamingFlag = "1"
+		functionUrlInvokeMode = awslambda.InvokeMode_RESPONSE_STREAM
+	}
+	fmt.Println("LAMBDA_RESPONSE_STREAMING=", responseStreamingFlag)
+
 	// Lambda Function 1
 	lambdaGO := awslambda.NewFunction(stack, jsii.String("LambdaGO"), &awslambda.FunctionProps{
 		FunctionName: jsii.String(lambdaName),
@@ -128,7 +142,8 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 		Architecture: awslambda.Architecture_ARM_64(),
 		Role:         lambdaRole,
 		Environment: &map[string]*string{
-			"APP_CODE": jsii.String("gerp-prd"),
+			"APP_CODE":                  jsii.String("gerp-prd"),
+			"LAMBDA_RESPONSE_STREAMING": jsii.String(responseStreamingFlag),
 		},
 	})
 
@@ -139,8 +154,17 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 	})
 
 	// Function URL 1
+	//
+	// InvokeMode RESPONSE_STREAM makes the runtime write the body as raw bytes behind a JSON
+	// prelude instead of a base64 string inside a JSON envelope: it drops the +33% base64
+	// expansion and raises the response ceiling from 6 MB to 20 MB.
+	//
+	// The Go handler shape has to match the invoke mode — a mismatch breaks every request — so
+	// both are driven by the single LAMBDA_RESPONSE_STREAMING switch resolved above, which is
+	// also injected into the function environment for the binary to read. Never set one alone.
 	lambdaGO.AddFunctionUrl(&awslambda.FunctionUrlOptions{
-		AuthType: awslambda.FunctionUrlAuthType_NONE,
+		AuthType:   awslambda.FunctionUrlAuthType_NONE,
+		InvokeMode: functionUrlInvokeMode,
 		Cors: &awslambda.FunctionUrlCorsOptions{
 			AllowedOrigins: jsii.Strings("*"),
 			AllowedHeaders: jsii.Strings("*"),
@@ -206,7 +230,8 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 		Architecture: awslambda.Architecture_ARM_64(),
 		Role:         lambdaRole,
 		Environment: &map[string]*string{
-			"APP_CODE": jsii.String("gerp-prd"),
+			"APP_CODE":                  jsii.String("gerp-prd"),
+			"LAMBDA_RESPONSE_STREAMING": jsii.String(responseStreamingFlag),
 		},
 	})
 
@@ -215,8 +240,10 @@ func NewGenixStack(scope constructs.Construct, id string, props *GenixStackProps
 		Retention:    awslogs.RetentionDays_ONE_MONTH,
 	})
 
+	// Same invoke mode as Function URL 1: both URLs front the same binary, so they have to agree.
 	lambdaGOn2.AddFunctionUrl(&awslambda.FunctionUrlOptions{
-		AuthType: awslambda.FunctionUrlAuthType_NONE,
+		AuthType:   awslambda.FunctionUrlAuthType_NONE,
+		InvokeMode: functionUrlInvokeMode,
 		Cors: &awslambda.FunctionUrlCorsOptions{
 			AllowedOrigins: jsii.Strings("*"),
 			AllowedHeaders: jsii.Strings("*"),

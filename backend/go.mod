@@ -5,8 +5,7 @@ go 1.26
 toolchain go1.26.0
 
 require (
-	github.com/andybalholm/brotli v1.1.0
-	github.com/aws/aws-lambda-go v1.32.0
+	github.com/aws/aws-lambda-go v1.52.0
 	github.com/aws/aws-sdk-go-v2 v1.25.2
 	github.com/aws/aws-sdk-go-v2/config v1.27.4
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.16.6
@@ -63,7 +62,6 @@ require (
 )
 
 require (
-	github.com/DmitriyVTitov/size v1.5.0
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
 	github.com/aws/smithy-go v1.20.1

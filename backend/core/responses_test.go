@@ -35,7 +35,7 @@ func TestMakeResponseFinalWithoutCompression(t *testing.T) {
 	// Verify the Lambda response also preserves the unencoded text.
 	response := MakeResponseFinal(&HandlerResponse{
 		Body:               &body,
-		Encoding:           "br, gzip",
+		Encoding:           "zstd, gzip",
 		Headers:            map[string]string{"Content-Type": "text/plain; charset=utf-8"},
 		DisableCompression: true,
 	})

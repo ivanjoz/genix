@@ -358,25 +358,41 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 		// In local/VPS HTTP mode we skip request-log persistence to avoid global
 		// per-request state and Dynamo I/O on the hot path.
 		return response
-	} else {
-		if len(handlerResponse.Error) > 0 {
-			error := handlerResponse.Error
-			statusCode := int32(400)
-			if handlerResponse.StatusCode != 0 {
-				statusCode = int32(handlerResponse.StatusCode)
-			}
-			response.LambdaResponse = core.MakeErrRespFinal(statusCode, error)
-			if response.LambdaResponse.Headers == nil {
-				response.LambdaResponse.Headers = map[string]string{}
-			}
-			response.LambdaResponse.Headers["Access-Control-Expose-Headers"] = "X-Metadata"
-			response.LambdaResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
+	}
+
+	hasError := len(handlerResponse.Error) > 0
+	statusCode := int32(400)
+	if handlerResponse.StatusCode != 0 {
+		statusCode = int32(handlerResponse.StatusCode)
+	}
+
+	// Under RESPONSE_STREAM the body leaves as raw bytes behind a JSON prelude, so it is a
+	// different response type entirely rather than a variation of the buffered one.
+	if core.Env.LAMBDA_RESPONSE_STREAMING {
+		if hasError {
+			response.LambdaStreamingResponse = core.MakeErrStreamingFinal(statusCode, handlerResponse.Error)
+			response.LambdaStreamingResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
 				handlerResponse.PreSerializeMs,
 				time.Now().UnixMilli()-handlerResponse.RequestStart,
 			)
 		} else {
-			response.LambdaResponse = core.MakeResponseFinal(handlerResponse)
+			response.LambdaStreamingResponse = core.MakeStreamingResponseFinal(handlerResponse)
 		}
+		return response
+	}
+
+	if hasError {
+		response.LambdaResponse = core.MakeErrRespFinal(statusCode, handlerResponse.Error)
+		if response.LambdaResponse.Headers == nil {
+			response.LambdaResponse.Headers = map[string]string{}
+		}
+		response.LambdaResponse.Headers["Access-Control-Expose-Headers"] = "X-Metadata"
+		response.LambdaResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
+			handlerResponse.PreSerializeMs,
+			time.Now().UnixMilli()-handlerResponse.RequestStart,
+		)
+	} else {
+		response.LambdaResponse = core.MakeResponseFinal(handlerResponse)
 	}
 	return response
 }

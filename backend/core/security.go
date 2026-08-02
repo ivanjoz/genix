@@ -53,10 +53,15 @@ func ParseGenixSearchURL(raw string) (string, int) {
 }
 
 type EnvStruct struct {
-	IS_PROD        bool
-	IS_LOCAL       bool
-	IS_SERVERLESS  bool
-	STACK_NAME     string
+	IS_PROD       bool
+	IS_LOCAL      bool
+	IS_SERVERLESS bool
+	// LAMBDA_RESPONSE_STREAMING must mirror the deployed Function URL's InvokeMode. When true the
+	// handler returns a RESPONSE_STREAM body (raw bytes, no base64, 20 MB ceiling); when false it
+	// returns the BUFFERED shape. A mismatch with the deployed InvokeMode breaks every request,
+	// so this stays false until the CDK sets InvokeMode_RESPONSE_STREAM (cloud/cdk_infra.go).
+	LAMBDA_RESPONSE_STREAMING bool
+	STACK_NAME                string
 	APP_CODE       string
 	ENVIROMENT     string
 	DB_NAME        string
@@ -191,6 +196,12 @@ func PopulateVariables() {
 	Env.APP_CODE = APP_CODE
 	Env.IS_SERVERLESS = isServerlessRuntime
 	Env.TMP_DIR = If(Env.IS_SERVERLESS, "/tmp/", wd+"/tmp/")
+
+	// Response streaming is owned by the deployment, not by credentials.json: the Function URL's
+	// InvokeMode and this flag are both set from LAMBDA_RESPONSE_STREAMING at deploy time (see
+	// cloud/cdk_infra.go), because a handler that disagrees with the deployed invoke mode fails
+	// every request. Reading the same variable here is what keeps the two ends in step.
+	Env.LAMBDA_RESPONSE_STREAMING = strings.TrimSpace(os.Getenv("LAMBDA_RESPONSE_STREAMING")) == "1"
 
 	Env.IS_PROD = strings.Contains(APP_CODE, "_prd")
 	for _, value := range os.Args {

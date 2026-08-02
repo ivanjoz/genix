@@ -28,7 +28,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/andybalholm/brotli"
 	"github.com/fatih/color"
 	"github.com/klauspost/compress/zstd"
 	"github.com/kr/pretty"
@@ -698,48 +697,6 @@ func DecompressZstd(content *[]byte) string {
 	return string(decompressed)
 }
 
-// Compresión con Brotli
-func CompressBrotli(content *string, quality int) ([]byte, error) {
-	contentBytes := []byte(*content)
-	contentCompressed := bytes.Buffer{}
-
-	writer := brotli.NewWriterV2(&contentCompressed, quality)
-
-	reader := bytes.NewReader(contentBytes)
-	bodySize, err := io.Copy(writer, reader)
-	if err != nil {
-		return nil, errors.New("Error al descomprimir: " + err.Error())
-	}
-
-	if int(bodySize) != len(contentBytes) {
-		return nil, errors.New("error al descomprimir: size mismatch")
-	}
-	if err := writer.Close(); err != nil {
-		return nil, errors.New("error al descomprimir: no se pudo cerrar el writer")
-	}
-
-	return contentCompressed.Bytes(), nil
-}
-
-func CompressBrotli64(content *string, quality int) (string, error) {
-	compressedBytes, err := CompressBrotli(content, quality)
-	if err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(compressedBytes), nil
-}
-
-func DecompressBrotli(content *[]byte) string {
-	brotliReader := brotli.NewReader(bytes.NewBuffer(*content))
-	contentUncompressed, err := io.ReadAll(brotliReader)
-
-	if err != nil {
-		Log("Error al descomprimir: " + err.Error())
-		return ""
-	}
-	return string(contentUncompressed)
-}
-
 func DecompressGzip(content *[]byte) string {
 	// Create a reader from the compressed data
 	reader := bytes.NewReader(*content)
@@ -760,14 +717,6 @@ func DecompressGzip(content *[]byte) string {
 	}
 
 	return string(decompressedData)
-}
-
-func DecompressBrotli64(content *string) string {
-	compressedBytes, err := base64.StdEncoding.DecodeString(*content)
-	if err != nil {
-		panic("Error convertir []bytes a base64: " + err.Error())
-	}
-	return DecompressBrotli(&compressedBytes)
 }
 
 func DecompressGzip64(content *string) string {

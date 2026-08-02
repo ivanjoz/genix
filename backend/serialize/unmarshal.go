@@ -12,6 +12,11 @@ type Decoder struct {
 	lastType   reflect.Type
 	lastTypeID int
 	registry   *FieldRegistry
+	// fieldOrderByType maps a type ID to the field indices the payload emitted, positioned by
+	// emit order. Decoded from the payload's own keys header, so a payload is self-describing
+	// and decoding never depends on the encoder's registry state. Nil when Unmarshal is called
+	// on bare content with no header.
+	fieldOrderByType map[int][]int
 }
 
 func NewDecoder() *Decoder {
@@ -32,12 +37,80 @@ func Unmarshal(data []byte, v any) error {
 		return fmt.Errorf("invalid format: expected [keys, content], got array of length %d", len(arr))
 	}
 
-	// arr[0] contains the keys (type definitions) - can be used for self-describing data
-	// arr[1] contains the actual content
-	content := arr[1]
-
 	d := NewDecoder()
-	return d.Unmarshal(content, v)
+
+	// arr[0] is the keys header; it carries the emit order this payload was written with.
+	fieldOrder, err := d.parseKeysHeader(arr[0])
+	if err != nil {
+		return err
+	}
+	d.fieldOrderByType = fieldOrder
+
+	return d.Unmarshal(arr[1], v)
+}
+
+// parseKeysHeader turns [[id, orderIdx, "name", ...], ...] into typeID -> emit-ordered field
+// indices, resolving each name against the registered struct.
+//
+// The header only names positions that carried a value somewhere in the payload. Positions it
+// omits were zero in every record, so they are either listed in a record's skip block or fall
+// past the last value and get truncated — either way the decoder never needs a field for them,
+// and -1 is stored as a placeholder to keep positions aligned.
+func (d *Decoder) parseKeysHeader(rawKeys any) (map[int][]int, error) {
+	keyEntries, isArray := rawKeys.([]any)
+	if !isArray {
+		return nil, nil
+	}
+
+	fieldOrderByType := make(map[int][]int, len(keyEntries))
+
+	for _, rawEntry := range keyEntries {
+		entry, isEntryArray := rawEntry.([]any)
+		if !isEntryArray || len(entry) < 3 {
+			continue
+		}
+
+		typeIDFloat, isNumber := entry[0].(float64)
+		if !isNumber {
+			continue
+		}
+		typeID := int(typeIDFloat)
+
+		typeInfo := d.registry.GetTypeInfo(typeID)
+		if typeInfo == nil {
+			return nil, fmt.Errorf("keys header references unknown type ID: %d", typeID)
+		}
+
+		// Resolve names against this type once per header entry rather than per record.
+		fieldIndexByName := make(map[string]int, len(typeInfo.Fields))
+		for i, field := range typeInfo.Fields {
+			if !field.Ignored {
+				fieldIndexByName[field.Name] = i
+			}
+		}
+
+		fieldOrder := []int{}
+		for i := 1; i+1 < len(entry); i += 2 {
+			orderIdxFloat, isOrderNumber := entry[i].(float64)
+			fieldName, isName := entry[i+1].(string)
+			if !isOrderNumber || !isName {
+				continue
+			}
+			orderIdx := int(orderIdxFloat)
+
+			// Grow to the position this name occupies, padding gaps with -1.
+			for len(fieldOrder) <= orderIdx {
+				fieldOrder = append(fieldOrder, -1)
+			}
+			if fieldIndex, found := fieldIndexByName[fieldName]; found {
+				fieldOrder[orderIdx] = fieldIndex
+			}
+		}
+
+		fieldOrderByType[typeID] = fieldOrder
+	}
+
+	return fieldOrderByType, nil
 }
 
 func (d *Decoder) Unmarshal(data any, v any) error {
@@ -151,41 +224,17 @@ func (d *Decoder) unmarshalStruct(arr []any, val reflect.Value) error {
 		typeID = d.lastTypeID
 		xStruct = xunsafe.NewStruct(d.lastType)
 
-		// Check for optional skip block
+		// The encoder guarantees that position 1 of a header-0 record is the skip
+		// block whenever it is an array (emitting an empty one when the first value
+		// would itself be an array), so no type-based guessing is needed here.
+		valueStartIdx = 1
 		if len(arr) > 1 {
 			if subArr, ok := arr[1].([]any); ok {
-				isSkipBlock := false
-				firstField := &xStruct.Fields[0]
-				firstFieldKind := firstField.Type.Kind()
-				if firstFieldKind == reflect.Ptr {
-					firstFieldKind = firstField.Type.Elem().Kind()
+				for _, s := range subArr {
+					skipIndices = append(skipIndices, int(s.(float64)))
 				}
-
-				if firstFieldKind != reflect.Slice && firstFieldKind != reflect.Array && firstFieldKind != reflect.Struct {
-					isSkipBlock = true
-				} else if len(subArr) > 0 {
-					if h, ok := subArr[0].(float64); ok {
-						if h != 0 && h != 1 && h != 2 {
-							isSkipBlock = true
-						}
-					} else {
-						isSkipBlock = true
-					}
-				}
-
-				if isSkipBlock {
-					for _, s := range subArr {
-						skipIndices = append(skipIndices, int(s.(float64)))
-					}
-					valueStartIdx = 2
-				} else {
-					valueStartIdx = 1
-				}
-			} else {
-				valueStartIdx = 1
+				valueStartIdx = 2
 			}
-		} else {
-			valueStartIdx = 1
 		}
 	}
 
@@ -218,19 +267,13 @@ func (d *Decoder) populateStruct(xStruct *xunsafe.Struct, typeID int, values []a
 		skipMap[idx] = true
 	}
 
-	// Get the optimized order if available
-	typeInfo := d.registry.GetTypeInfo(typeID)
-	var fieldOrder []int
-	if typeInfo != nil && typeInfo.IsOptimized {
-		fieldOrder = typeInfo.OptimizedOrder
-	} else {
-		// Default order
-		if typeInfo != nil {
-			for i, field := range typeInfo.Fields {
-				if !field.Ignored {
-					fieldOrder = append(fieldOrder, i)
-				}
-			}
+	// Prefer the order carried by the payload's keys header. Fall back to the registry only
+	// when decoding bare content with no header (Decoder.Unmarshal called directly).
+	fieldOrder, fromHeader := d.fieldOrderByType[typeID]
+	if !fromHeader {
+		registryOrder, _ := d.registry.orderFor(typeID)
+		if registryOrder != nil {
+			fieldOrder = registryOrder
 		} else {
 			for i := range xStruct.Fields {
 				fieldOrder = append(fieldOrder, i)
@@ -245,6 +288,11 @@ func (d *Decoder) populateStruct(xStruct *xunsafe.Struct, typeID int, values []a
 		}
 		if valueIdx >= len(values) {
 			break
+		}
+		// A header position with no resolvable field still consumes its value slot.
+		if fieldIdx < 0 {
+			valueIdx++
+			continue
 		}
 
 		field := &xStruct.Fields[fieldIdx]

@@ -95,7 +95,13 @@ After the header (1 or 0), there's a reference block array:
 
 **For header `0`:** `[skipIndex1, skipIndex2, ...]`
 - Only contains skip indices (type is inherited from previous object)
-- Can be omitted entirely if no fields are skipped
+- Can be omitted if no fields are skipped **and** the first value is a scalar
+- If nothing is skipped but the first value is itself an array (nested struct,
+  slice or map), an empty block `[]` is emitted anyway. Otherwise `[2]` would
+  mean both "skip field 2" and "empty slice", and a decoder without Go type
+  information could not tell them apart. So: **position 1 of a header-`0`
+  record is the skip block whenever it is an array**, and decoders rely on
+  exactly that — no type-based guessing.
 
 ### Example Breakdown
 
