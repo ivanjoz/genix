@@ -119,19 +119,19 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          db.Cols(e.Date.StoreAsWeek(), e.Status),
+				Keys:          db.Cols(e.Date, e.Status),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          db.Cols(e.Date.StoreAsWeek(), e.ClientID),
+				Keys:          db.Cols(e.Date, e.ClientID),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          db.Cols(e.Date.StoreAsWeek(), e.ClientID, e.DetailProductsIDs),
+				Keys:          db.Cols(e.Date, e.ClientID, e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          db.Cols(e.Date.StoreAsWeek(), e.DetailProductsIDs),
+				Keys:          db.Cols(e.Date, e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
 			// The status tabs pin Status themselves and take only the watermark from Delta(upv), so

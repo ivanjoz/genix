@@ -32,6 +32,19 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 		fmt.Println(e.GroupHash, "|", e.IndexGroupValues, "| Records:", len(e.Records))
 	}
 
+	// Using Fixed values to create parallel queries for a View
+	fmt.Println("\n--- Test 9: Using Fixed values to create parallel queries for a View ---")
+	
+	clientProvider := []businessTypes.ClientProvider{}
+	err = db.Query(&clientProvider).
+		CompanyID.Equals(1).Type.Equals(1).Limit(10).Exec()
+
+	if err != nil {
+		fmt.Println("Error in Test 6:", err)
+	} else {
+		fmt.Printf("Found %d records in range\n", len(clientProvider))
+	}
+
 	// 6. Test bucket query CONTAINS + "RANGE" with hash index
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
 	recordSalesOrders := []sales.SaleOrder{}
@@ -94,17 +107,19 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// New test
-	fmt.Println("\n--- Test 21: AlmacenProducto. Using view: db.Cols(e.WarehouseID, e.Status, e.Updated) ---")
+	fmt.Println("\n--- Test 21: AlmacenProducto. Using delta index: db.Cols(e.WarehouseID, e.Status) ---")
 	productos21 := []logisticsTypes.ProductStock{}
 	q21 := db.Query(&productos21)
+	// Pinning WarehouseID + Status leaves the packed view's trailing updated_version slot as the range,
+	// which is the only shape that reaches [warehouse_id, status, updated_version].
 	err = q21.CompanyID.Equals(1).
-		WarehouseID.Equals(1).Status.Equals(1).Updated.GreaterEqual(1000).
+		WarehouseID.Equals(1).Status.Equals(1).UpdatedVersion.GreaterEqual(1000).
 		Limit(5).Exec()
 
 	if err != nil {
 		fmt.Println("Error in Test 21:", err)
 	} else {
-		fmt.Printf("Found %d products\n", len(productos2))
+		fmt.Printf("Found %d products\n", len(productos21))
 	}
 
 	// 3. Test SharedListRecord with complex view concatenation
