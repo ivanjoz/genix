@@ -23,6 +23,7 @@ echo "[10] Deploy Cloudflare Worker"
 echo "[11] Deploy Company Webpage"
 echo "[12] Sincronizar Catálogo de Imágenes"
 echo "[13] Deploy Template Base (CDN /websites/base)"
+echo "[14] Configurar Variables Frontend en GitHub"
 echo "Infraestructura ----------------"
 echo "[9] Desplegar Infraestructura"
 echo "Local Development --------------"
@@ -71,6 +72,12 @@ deploy_tables() {
     (cd scripts && "$GO_PATH" run . generate_controllers) || return 1
     (cd backend && "$GO_PATH" run . fn-homologate) || return 1
 }
+
+# CONFIGURAR VARIABLES PÚBLICAS DEL FRONTEND EN GITHUB ACTIONS
+if has_action "14"; then
+    echo "=== CONFIGURANDO VARIABLES FRONTEND EN GITHUB ==="
+    bun run ./scripts/set-github-frontend-vars.ts || exit 1
+fi
 
 # PUBLICAR FRONTEND
 if has_action "1"; then
