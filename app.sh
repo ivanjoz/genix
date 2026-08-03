@@ -20,7 +20,8 @@ case "$1" in
     (cd scripts && go run table/create_edit_table.go edit "${@:2}")
     ;;
   "configure_server")
-    # For "configure_server", install the Genix systemd services and writable binary directory.
+    # For "configure_server", install the systemd services and/or the Nginx reverse proxy.
+    # Optional mode argument: 1 = full, 2 = only systemd service, 3 = only Nginx proxy.
     echo "Executing configure_server script..."
     python3 scripts/configure_server.py "${@:2}"
     ;;

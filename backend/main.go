@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -244,9 +245,41 @@ func configureTextSearchGenixSearch() {
 	text_search.Configure(host, port, password)
 }
 
+// resolveServerPort picks the listen address for the standalone HTTP server. The SERVER_PORT
+// environment variable wins (systemd sets it from credentials.json via
+// scripts/configure_server.py), then the SERVER_PORT credential itself, then the 3589 default.
+// Nginx proxies to the port half of NGINX_PROCESS, so the two must agree.
+func resolveServerPort() string {
+	if envPort := strings.TrimSpace(os.Getenv("SERVER_PORT")); envPort != "" {
+		if parsedPort, err := strconv.Atoi(envPort); err == nil && parsedPort > 0 && parsedPort < 65536 {
+			return fmt.Sprintf(":%d", parsedPort)
+		}
+		core.Log("SERVER_PORT env var is not a valid port, ignoring it:", envPort)
+	}
+	if core.Env != nil && core.Env.SERVER_PORT > 0 {
+		return fmt.Sprintf(":%d", core.Env.SERVER_PORT)
+	}
+	return ":3589"
+}
+
+// bootstrapCronSchedulers starts the VPS cron watcher and seeds the recurring products rebuild.
+// It recovers on its own because a panic in a goroutine takes the whole process down, and a cron
+// seed that cannot reach the database is not a reason to kill a working HTTP server.
+func bootstrapCronSchedulers() {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			core.Log("cron bootstrap error:", recovered)
+		}
+	}()
+
+	core.StartCronWatcher()
+	// Seed the recurring 30-min products .db rebuild tick (self-reschedules thereafter).
+	business.ScheduleProductsDbRebuildCron()
+}
+
 func main() {
-	serverPort := ":3589"
 	core.PopulateVariables()
+	serverPort := resolveServerPort()
 	// Wire the GenixSearch endpoint before any DB write that might
 	// touch a TextSearchColumn-backed table. The text_search package
 	// can't import core (cycle: core -> core/types -> db ->
@@ -267,7 +300,7 @@ func main() {
 		}()
 	}
 
-	fmt.Println("Starting DB connection...")
+	fmt.Printf("Starting DB connection. HOST %v:%v ..."+"\n", core.Env.DB_HOST, core.Env.DB_PORT)
 
 	scylla.SetScyllaConnection(scylla.ConnParams{
 		Host:             core.Env.DB_HOST,
@@ -347,9 +380,11 @@ func main() {
 	if !core.Env.IS_SERVERLESS {
 		exec.StartUsageLogFlushWorker()
 		if !core.Env.IS_LOCAL {
-			core.StartCronWatcher()
-			// Seed the recurring 30-min products .db rebuild tick (self-reschedules thereafter).
-			business.ScheduleProductsDbRebuildCron()
+			// Off the main goroutine on purpose: ScheduleCronAction panics when its query fails,
+			// and on a VPS (IS_SERVERLESS=false) no recover is installed, so a database that is
+			// briefly unreachable at boot would otherwise stop the HTTP listener from ever
+			// starting. The listener must come up whether or not the cron seed succeeds.
+			go bootstrapCronSchedulers()
 		}
 
 		core.Log("Ejecutando en local. http://localhost" + serverPort)

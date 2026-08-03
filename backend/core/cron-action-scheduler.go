@@ -110,9 +110,11 @@ func ScheduleCronAction(action CronAction, frameLengthInMinutes int8) {
 var lastUnixMinutesFrame = int32(0)
 
 func StartCronWatcher() {
-	time.Sleep(10 * time.Second)
-
 	go func() {
+		// Inside the goroutine, not before it: the caller is main, and blocking it here delayed
+		// the HTTP listener by ten seconds on every boot.
+		time.Sleep(10 * time.Second)
+
 		cronTick := time.NewTicker(time.Minute)
 
 		// Run once on startup so already-due rows do not wait for the first ticker tick.

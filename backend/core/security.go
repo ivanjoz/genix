@@ -89,6 +89,7 @@ type EnvStruct struct {
 	DB_DISABLE_SSL         bool
 	DB_PORT                int32
 	MAX_CLUSTERING_KEY     int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
+	SERVER_PORT            int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
 	USUARIO_ID             int32
 	ADMIN_PASSWORD         string
 	SECRET_PHRASE          string
