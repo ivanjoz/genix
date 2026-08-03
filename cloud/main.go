@@ -14,21 +14,34 @@ import (
 )
 
 type DeployParams struct {
-	APP_NAME            string `json:"APP_NAME"`
-	AWS_PROFILE         string `json:"AWS_PROFILE"`
-	AWS_REGION          string `json:"AWS_REGION"`
-	STACK_NAME          string `json:"STACK_NAME"`
-	DEPLOYMENT_BUCKET   string
-	FRONTEND_BUCKET     string
-	LAMBDA_IAM_ROLE     string
-	S3_COMPILED_PATH    string
-	CLOUD_PROVIDER      string `json:"CLOUD_PROVIDER"`
-	CLOUDFLARE_ACCOUNT  string `json:"CLOUDFLARE_ACCOUNT"`
-	CLOUDFLARE_TOKEN    string `json:"CLOUDFLARE_TOKEN"`
+	// APP_NAME prefija todo nombre físico: stack, Lambdas, tabla DynamoDB, buckets.
+	APP_NAME           string `json:"APP_NAME"`
+	AWS_PROFILE        string `json:"AWS_PROFILE"`
+	AWS_REGION         string `json:"AWS_REGION"`
+	DEPLOYMENT_BUCKET  string
+	FRONTEND_BUCKET    string
+	LAMBDA_IAM_ROLE    string
+	S3_COMPILED_PATH   string
+	CLOUD_PROVIDER     string `json:"CLOUD_PROVIDER"`
+	CLOUDFLARE_ACCOUNT string `json:"CLOUDFLARE_ACCOUNT"`
+	CLOUDFLARE_TOKEN   string `json:"CLOUDFLARE_TOKEN"`
+	// CLOUDFLARE_BUCKET fija el bucket R2 cuando su nombre no sigue el patrón "<APP_NAME>-files":
+	// renombrar la app no debe apuntar el deploy a un bucket vacío. Vacío = nombre autogenerado.
+	CLOUDFLARE_BUCKET string `json:"CLOUDFLARE_BUCKET"`
 }
 
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
 const compilePath = "/cloud/main-compiled"
+
+// El backend deduce IS_PROD con strings.Contains(APP_CODE, "_prd"), con guion bajo
+// (backend/core/security.go). Un guion normal apagaría el modo producción en silencio, así
+// que el valor vive aquí una sola vez y lo usan tanto la plantilla como la acción 2.
+const appCodeEnvValue = "gerp_prd"
+
+// Debe coincidir con el InvokeMode de las Function URL en template.yml (RESPONSE_STREAM).
+// El handler de Go elige la forma de su respuesta con esta variable y un desajuste rompe
+// todas las peticiones, así que las dos se cambian juntas.
+const lambdaResponseStreamingFlag = "1"
 
 func GetBaseWD() string {
 	wd, _ := os.Getwd()
@@ -41,10 +54,9 @@ func main() {
 
 	// First check for standalone valid arguments
 	validArgs := map[string]bool{
-		"cdk": true,
-		"1":   true,
-		"2":   true,
-		"3":   true,
+		"1": true,
+		"2": true,
+		"3": true,
 	}
 	for _, arg := range os.Args {
 		if validArgs[arg] {
@@ -86,24 +98,24 @@ func main() {
 		panic("Error parsing credentials.json:" + err.Error())
 	}
 
-	if w1 == "cdk" {
-		StartCDK(params)
-		return
-	}
-
 	if params.CLOUD_PROVIDER != "cloudflare" {
-		missingParams := []string{params.STACK_NAME, params.DEPLOYMENT_BUCKET,
+		missingParams := []string{params.APP_NAME, params.DEPLOYMENT_BUCKET,
 			params.AWS_PROFILE, params.AWS_REGION, params.LAMBDA_IAM_ROLE}
 
 		for _, e := range missingParams {
 			if len(e) == 0 {
-				panic("Los parámetros STACK_NAME, DEPLOYMENT_BUCKET, AWS_REGION, AWS_PROFILE y LAMBDA_IAM_ROLE son requeridos.")
+				panic("Los parámetros APP_NAME, DEPLOYMENT_BUCKET, AWS_REGION, AWS_PROFILE y LAMBDA_IAM_ROLE son requeridos.")
 			}
 		}
 	}
 
 	if len(params.FRONTEND_BUCKET) == 0 {
-		params.FRONTEND_BUCKET = params.STACK_NAME + "-frontend"
+		params.FRONTEND_BUCKET = params.APP_NAME + "-frontend"
+	}
+
+	params.CLOUDFLARE_BUCKET = strings.TrimSpace(params.CLOUDFLARE_BUCKET)
+	if len(params.CLOUDFLARE_BUCKET) == 0 {
+		params.CLOUDFLARE_BUCKET = params.APP_NAME + "-files"
 	}
 
 	if w1 == "1" {
@@ -165,7 +177,7 @@ func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 // Despliega el código compilado de la Lambda
 func DeployLambda(params DeployParams, lambdaNro uint8) {
 
-	lambdaName := params.STACK_NAME + "-backend"
+	lambdaName := params.APP_NAME + "-backend"
 	if lambdaNro == 2 {
 		lambdaName += "_2"
 	}
@@ -199,7 +211,7 @@ func DeployLambda(params DeployParams, lambdaNro uint8) {
 // Actualiza las variables de entorno de la Lambda
 func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 
-	lambdaName := params.STACK_NAME + "-backend"
+	lambdaName := params.APP_NAME + "-backend"
 	if lambdaNro == 2 {
 		lambdaName += "_2"
 	}
@@ -222,8 +234,12 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 	jsonString := string(jsonFileBytes)
 	jsonBase64 := BytesToBase64(CompressZstd(&jsonString), true)
 
+	// UpdateFunctionConfiguration reemplaza el entorno completo, no lo fusiona: toda variable
+	// que define la plantilla debe repetirse aquí o se borra de la Lambda desplegada.
 	variables := map[string]string{
-		"APP_CODE": "gerp_prd", "CONFIG": jsonBase64,
+		"APP_CODE":                  appCodeEnvValue,
+		"CONFIG":                    jsonBase64,
+		"LAMBDA_RESPONSE_STREAMING": lambdaResponseStreamingFlag,
 	}
 
 	configInput := lambda.UpdateFunctionConfigurationInput{
@@ -256,18 +272,6 @@ func DeployIfraestructure(params DeployParams) {
 
 	CompileBackendToS3(params, true)
 
-	fmt.Println("Desplegando infraestructura con CDK...")
-
-	command := fmt.Sprintf("npx --yes aws-cdk@latest deploy %v-stack --require-approval never --profile %v", params.STACK_NAME, params.AWS_PROFILE)
-
-	fmt.Println("Comando:: ", command)
-	cmd := exec.Command("bash", "-c", command)
-	cmd.Dir = GetBaseWD() + "/cloud/"
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-	if err != nil {
-		panic("Error al ejecutar CDK deploy: " + err.Error())
-	}
+	fmt.Println("Desplegando infraestructura con CloudFormation...")
+	DeployCloudFormation(params)
 }

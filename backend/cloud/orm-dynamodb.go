@@ -36,75 +36,22 @@ func NewDynamoORM[T any]() (*DynamoORM[T], error) {
 	}, nil
 }
 
-// Init creates the DynamoDB single table if it does not already exist.
+// Init verifica que exista la tabla única de DynamoDB. Deliberadamente NO la crea: la tabla
+// la declara cloud/template.yml y la gobierna CloudFormation (acción 9 de deploy.sh).
+//
+// Antes había dos creadores. Ejecutar la acción 6 junto con la 9 hacía que fn-init ganase la
+// carrera por segundos y CloudFormation abortase el stack entero con AlreadyExists, así que
+// la creación vive en un solo sitio y aquí solo se comprueba.
 func (o *DynamoORM[T]) Init() error {
 	client := dynamodb.NewFromConfig(core.GetAwsConfig())
-	tableName := core.PtrString(core.Env.DYNAMO_TABLE)
 
 	_, err := client.DescribeTable(context.TODO(), &dynamodb.DescribeTableInput{
-		TableName: tableName,
+		TableName: core.PtrString(core.Env.DYNAMO_TABLE),
 	})
-
-	if err == nil {
-		// Table already exists
-		return nil
-	}
-
-	// Assuming the error is because the table doesn't exist, try to create it.
-	// We create pk, sk, and ix1 through ix4 as strings.
-	_, err = client.CreateTable(context.TODO(), &dynamodb.CreateTableInput{
-		TableName: tableName,
-		AttributeDefinitions: []types.AttributeDefinition{
-			{AttributeName: core.PtrString("pk"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: core.PtrString("sk"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: core.PtrString("ix1"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: core.PtrString("ix2"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: core.PtrString("ix3"), AttributeType: types.ScalarAttributeTypeS},
-			{AttributeName: core.PtrString("ix4"), AttributeType: types.ScalarAttributeTypeS},
-		},
-		KeySchema: []types.KeySchemaElement{
-			{AttributeName: core.PtrString("pk"), KeyType: types.KeyTypeHash},
-			{AttributeName: core.PtrString("sk"), KeyType: types.KeyTypeRange},
-		},
-		GlobalSecondaryIndexes: []types.GlobalSecondaryIndex{
-			{
-				IndexName: core.PtrString("ix1"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: core.PtrString("pk"), KeyType: types.KeyTypeHash},
-					{AttributeName: core.PtrString("ix1"), KeyType: types.KeyTypeRange},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-			{
-				IndexName: core.PtrString("ix2"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: core.PtrString("pk"), KeyType: types.KeyTypeHash},
-					{AttributeName: core.PtrString("ix2"), KeyType: types.KeyTypeRange},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-			{
-				IndexName: core.PtrString("ix3"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: core.PtrString("pk"), KeyType: types.KeyTypeHash},
-					{AttributeName: core.PtrString("ix3"), KeyType: types.KeyTypeRange},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-			{
-				IndexName: core.PtrString("ix4"),
-				KeySchema: []types.KeySchemaElement{
-					{AttributeName: core.PtrString("pk"), KeyType: types.KeyTypeHash},
-					{AttributeName: core.PtrString("ix4"), KeyType: types.KeyTypeRange},
-				},
-				Projection: &types.Projection{ProjectionType: types.ProjectionTypeAll},
-			},
-		},
-		BillingMode: types.BillingModePayPerRequest,
-	})
-
 	if err != nil {
-		return fmt.Errorf("failed to create table: %w", err)
+		return fmt.Errorf(
+			"la tabla DynamoDB %q no existe o no es accesible. Despliega la infraestructura primero (./deploy.sh 9): %w",
+			core.Env.DYNAMO_TABLE, err)
 	}
 
 	return nil

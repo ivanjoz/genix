@@ -220,14 +220,14 @@ sizes ever justify it; neither is worth doing alone.
 
 ### Enabling it
 
-One switch, deliberately: the Function URL's `InvokeMode` and the Go handler shape must agree or
-every request fails, so `cloud/cdk_infra.go` derives both from `LAMBDA_RESPONSE_STREAMING` and
-injects the same value into the function environment, where `core.PopulateVariables` reads it.
+Streaming is now the deployed default, and it is no longer an environment switch. The Function
+URL's `InvokeMode` and the Go handler shape must agree or every request fails, so both are
+pinned in `cloud/template.yml`: the URLs declare `InvokeMode: RESPONSE_STREAM` and the function
+environments declare `LAMBDA_RESPONSE_STREAMING=1`, which `core.PopulateVariables` reads.
 
-    LAMBDA_RESPONSE_STREAMING=1 ./deploy.sh 9    # infrastructure
-    LAMBDA_RESPONSE_STREAMING=1 ./deploy.sh 2    # backend
-
-Unset or `0` keeps both ends on the buffered path, which is the current production behaviour.
+Deploy action `2` rewrites the whole function environment, so it re-sends the same flag from
+`lambdaResponseStreamingFlag` in `cloud/main.go`. To go back to buffered, change the template
+and that constant together — never one alone.
 
 **Not yet validated against a real deployment.** The tests read the response exactly as the
 runtime does — JSON prelude, eight NUL bytes, then raw body — but that is a model of the runtime,

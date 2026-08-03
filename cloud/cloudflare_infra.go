@@ -31,13 +31,19 @@ type cfManagedDomainResponse struct {
 }
 
 func DeployCloudflareInfra(params DeployParams) {
-	bucketName := params.APP_NAME + "-files"
+	// main() ya resolvió el nombre: CLOUDFLARE_BUCKET de credentials.json si está seteado,
+	// "<APP_NAME>-files" en caso contrario.
+	bucketName := params.CLOUDFLARE_BUCKET
+	bucketSource := "credentials.json (CLOUDFLARE_BUCKET)"
+	if bucketName == params.APP_NAME+"-files" {
+		bucketSource = "autogenerado desde APP_NAME"
+	}
 	ctx := context.Background()
 
 	fmt.Println("=== DESPLEGANDO INFRAESTRUCTURA ===")
 	fmt.Println("Cloud Provider: Cloudflare")
 	fmt.Printf("Account ID:     %s\n", params.CLOUDFLARE_ACCOUNT)
-	fmt.Printf("Bucket R2:      %s\n\n", bucketName)
+	fmt.Printf("Bucket R2:      %s (%s)\n\n", bucketName, bucketSource)
 
 	fmt.Println("Conectando con la API de Cloudflare...")
 	client := cloudflare.NewClient(

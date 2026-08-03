@@ -361,9 +361,9 @@ func putStorefrontWorker(assetsToken string, workerSource []byte) error {
 // replacing `wrangler r2 bucket cors set`. Browser ES modules need CORS because
 // the HTML and JS are served from different hostnames.
 func ensureCompanyWebpageAssetCORS(projectRoot string) error {
-	bucketName := strings.TrimSpace(core.Env.STACK_NAME) + "-files"
-	if bucketName == "-files" {
-		return fmt.Errorf("STACK_NAME es requerido para configurar CORS de R2")
+	bucketName := core.Env.CLOUDFLARE_BUCKET
+	if bucketName == "" || bucketName == "-files" {
+		return fmt.Errorf("CLOUDFLARE_BUCKET o APP_NAME es requerido para configurar CORS de R2")
 	}
 
 	corsFile := filepath.Join(projectRoot, "frontend", "webpage", "cloudflare", "r2-cors.json")
@@ -382,10 +382,27 @@ func ensureCompanyWebpageAssetCORS(projectRoot string) error {
 		json.RawMessage(corsBytes),
 		&corsResponse,
 	); requestError != nil {
-		return fmt.Errorf("error configurando CORS de R2: %w", requestError)
+		// A 404 here is almost always a missing bucket rather than a bad endpoint: when
+		// CLOUDFLARE_BUCKET is blank the name comes from APP_NAME, so renaming the app points the
+		// deploy at a bucket nobody created.
+		var apiError *cloudflareAPIError
+		if errors.As(requestError, &apiError) && apiError.StatusCode == http.StatusNotFound {
+			nameSource := fmt.Sprintf("CLOUDFLARE_BUCKET=%q en credentials.json", bucketName)
+			if strings.TrimSpace(core.Env.CLOUDFLARE_BUCKET) == strings.TrimSpace(core.Env.APP_NAME)+"-files" {
+				nameSource = fmt.Sprintf("derivado de APP_NAME=%q; fíjelo con CLOUDFLARE_BUCKET en credentials.json", strings.TrimSpace(core.Env.APP_NAME))
+			}
+			return fmt.Errorf(
+				"el bucket R2 %q no existe (%s).\n"+
+					"  Créelo antes de desplegar:  wrangler r2 bucket create %s\n"+
+					"  o en el dashboard: Cloudflare > R2 > Create bucket.\n"+
+					"  Si el bucket sí existe, revise que CLOUDFLARE_ACCOUNT sea la cuenta correcta y que CLOUDFLARE_TOKEN tenga permiso de edición sobre R2.\n"+
+					"  Detalle: %w",
+				bucketName, nameSource, bucketName, requestError)
+		}
+		return fmt.Errorf("error configurando CORS de R2 (bucket %s): %w", bucketName, requestError)
 	}
 	if !corsResponse.Success {
-		return errors.New("Cloudflare rechazó la configuración de CORS de R2")
+		return fmt.Errorf("Cloudflare rechazó la configuración de CORS de R2 en el bucket %s", bucketName)
 	}
 	return nil
 }
@@ -417,7 +434,12 @@ func cloudflareAssetRequest(method, requestPath, bearer, contentType string, bod
 		return readError
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("Cloudflare API HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(responseBytes)))
+		return &cloudflareAPIError{
+			StatusCode: response.StatusCode,
+			Method:     method,
+			Path:       maskCloudflareAccount(requestPath),
+			Detail:     cloudflareErrorDetail(responseBytes),
+		}
 	}
 	if target != nil {
 		if unmarshalError := json.Unmarshal(responseBytes, target); unmarshalError != nil {

@@ -37,12 +37,12 @@ type SaveFileArgs struct {
 }
 
 // SaveFile uploads to the configured cloud provider, mirroring SaveImage's dispatch:
-// CLOUD_PROVIDER == "cloudflare" routes to R2 (bucket = "<STACK_NAME>-files" when unset
+// CLOUD_PROVIDER == "cloudflare" routes to R2 (bucket = CLOUDFLARE_BUCKET when unset
 // or set to S3_BUCKET); otherwise routes to S3 (bucket defaults to S3_BUCKET).
 func SaveFile(args SaveFileArgs) error {
 	if core.Env.CLOUD_PROVIDER == "cloudflare" {
 		if args.Bucket == "" || args.Bucket == core.Env.S3_BUCKET {
-			args.Bucket = core.Env.STACK_NAME + "-files"
+			args.Bucket = core.Env.CLOUDFLARE_BUCKET
 		}
 		return SaveFileToR2(args)
 	}
@@ -390,7 +390,7 @@ func SaveFileToR2(args SaveFileArgs) error {
 func FileExists(args SaveFileArgs) (bool, error) {
 	if core.Env.CLOUD_PROVIDER == "cloudflare" {
 		if args.Bucket == "" || args.Bucket == core.Env.S3_BUCKET {
-			args.Bucket = core.Env.STACK_NAME + "-files"
+			args.Bucket = core.Env.CLOUDFLARE_BUCKET
 		}
 		return fileExistsR2(args)
 	}
@@ -477,7 +477,7 @@ func SaveImage(image ImageArgs) (string, error) {
 
 	var err error
 	if core.Env.CLOUD_PROVIDER == "cloudflare" {
-		args.Bucket = core.Env.STACK_NAME + "-files"
+		args.Bucket = core.Env.CLOUDFLARE_BUCKET
 		err = SaveFileToR2(args)
 	} else {
 		args.Bucket = core.Env.S3_BUCKET

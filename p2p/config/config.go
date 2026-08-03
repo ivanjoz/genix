@@ -132,7 +132,7 @@ func Load() (*Config, error) {
 	}
 
 	// Try to get SIGNALING_STACK_NAME from credentials.json
-	// Do NOT use the generic STACK_NAME field (that's for the backend stack)
+	// Do NOT fall back to APP_NAME: that names the backend stack, not the signaling one
 	if val, found := getValueFromRaw(raw, []string{"SIGNALING_STACK_NAME"}); found {
 		cfg.StackName = val
 	}

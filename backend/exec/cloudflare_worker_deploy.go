@@ -31,6 +31,59 @@ type cloudflareResponse[T any] struct {
 	Messages []any `json:"messages"`
 }
 
+// cloudflareAPIError carries the HTTP status plus Cloudflare's own error payload so a
+// caller can branch on the specific failure instead of matching an error string: a 404
+// on an R2 path means that bucket does not exist, not that the endpoint is wrong.
+type cloudflareAPIError struct {
+	StatusCode int
+	Method     string
+	Path       string
+	Detail     string
+}
+
+func (apiError *cloudflareAPIError) Error() string {
+	message := fmt.Sprintf("Cloudflare API HTTP %d en %s %s", apiError.StatusCode, apiError.Method, apiError.Path)
+	if apiError.Detail != "" {
+		message += ": " + apiError.Detail
+	}
+	return message
+}
+
+// cloudflareErrorDetail flattens the `errors: [{code, message}]` array Cloudflare returns
+// on failure into "[code] message" pairs, falling back to the raw body when the payload
+// is not the documented shape (HTML from an edge error, for example).
+func cloudflareErrorDetail(responseBytes []byte) string {
+	var payload struct {
+		Errors []struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if json.Unmarshal(responseBytes, &payload) == nil && len(payload.Errors) > 0 {
+		details := make([]string, 0, len(payload.Errors))
+		for _, apiError := range payload.Errors {
+			details = append(details, fmt.Sprintf("[%d] %s", apiError.Code, apiError.Message))
+		}
+		return strings.Join(details, "; ")
+	}
+
+	rawBody := strings.TrimSpace(string(responseBytes))
+	if len(rawBody) > 500 {
+		rawBody = rawBody[:500] + "..."
+	}
+	return rawBody
+}
+
+// maskCloudflareAccount keeps the account ID out of error text and logs; the path is only
+// useful to identify which endpoint failed.
+func maskCloudflareAccount(requestPath string) string {
+	account := strings.TrimSpace(core.Env.CLOUDFLARE_ACCOUNT)
+	if account == "" {
+		return requestPath
+	}
+	return strings.ReplaceAll(requestPath, url.PathEscape(account), "<account>")
+}
+
 type cloudflareZone struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
@@ -336,7 +389,12 @@ func cloudflareRequest(
 		return readError
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("Cloudflare API HTTP %d", response.StatusCode)
+		return &cloudflareAPIError{
+			StatusCode: response.StatusCode,
+			Method:     method,
+			Path:       maskCloudflareAccount(path),
+			Detail:     cloudflareErrorDetail(responseBytes),
+		}
 	}
 	if unmarshalError := json.Unmarshal(responseBytes, target); unmarshalError != nil {
 		return unmarshalError

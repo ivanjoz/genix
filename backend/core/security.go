@@ -59,9 +59,10 @@ type EnvStruct struct {
 	// LAMBDA_RESPONSE_STREAMING must mirror the deployed Function URL's InvokeMode. When true the
 	// handler returns a RESPONSE_STREAM body (raw bytes, no base64, 20 MB ceiling); when false it
 	// returns the BUFFERED shape. A mismatch with the deployed InvokeMode breaks every request,
-	// so this stays false until the CDK sets InvokeMode_RESPONSE_STREAM (cloud/cdk_infra.go).
+	// so both ends are pinned together in cloud/template.yml.
 	LAMBDA_RESPONSE_STREAMING bool
-	STACK_NAME                string
+	// APP_NAME prefixes every deployed resource name: DynamoDB table, Lambdas, R2 bucket.
+	APP_NAME       string
 	APP_CODE       string
 	ENVIROMENT     string
 	DB_NAME        string
@@ -99,6 +100,7 @@ type EnvStruct struct {
 	CLOUD_PROVIDER         string
 	CLOUDFLARE_ACCOUNT     string
 	CLOUDFLARE_TOKEN       string
+	CLOUDFLARE_BUCKET      string // R2 bucket for files and images; defaults to "<APP_NAME>-files", set it to pin an existing bucket
 	CLOUDFLARE_DATABASE_ID string
 	FRONTEND_CDN           string
 	ZONE_NAME              string
@@ -186,21 +188,27 @@ func PopulateVariables() {
 	fmt.Println("Credenciales .json Parseadas:: ", "| Is Local:", Env.IS_LOCAL)
 
 	if len(Env.DYNAMO_TABLE) == 0 {
-		Env.DYNAMO_TABLE = Env.STACK_NAME + "-db"
+		Env.DYNAMO_TABLE = Env.APP_NAME + "-db"
 	}
 	if len(Env.API_ROUTE) == 0 {
 		Env.API_ROUTE = "http://localhost:3589"
 	}
+	// Same rule as cloud/main.go: an explicit CLOUDFLARE_BUCKET wins, so the runtime writes to the
+	// bucket the infra deploy actually created instead of one derived from the current APP_NAME.
+	Env.CLOUDFLARE_BUCKET = strings.TrimSpace(Env.CLOUDFLARE_BUCKET)
+	if len(Env.CLOUDFLARE_BUCKET) == 0 {
+		Env.CLOUDFLARE_BUCKET = Env.APP_NAME + "-files"
+	}
 
-	Env.LAMBDA_NAME = Env.STACK_NAME + "-backend"
+	Env.LAMBDA_NAME = Env.APP_NAME + "-backend"
 	Env.APP_CODE = APP_CODE
 	Env.IS_SERVERLESS = isServerlessRuntime
 	Env.TMP_DIR = If(Env.IS_SERVERLESS, "/tmp/", wd+"/tmp/")
 
 	// Response streaming is owned by the deployment, not by credentials.json: the Function URL's
-	// InvokeMode and this flag are both set from LAMBDA_RESPONSE_STREAMING at deploy time (see
-	// cloud/cdk_infra.go), because a handler that disagrees with the deployed invoke mode fails
-	// every request. Reading the same variable here is what keeps the two ends in step.
+	// InvokeMode and this flag are both declared in cloud/template.yml, because a handler that
+	// disagrees with the deployed invoke mode fails every request. Reading the same variable
+	// here is what keeps the two ends in step.
 	Env.LAMBDA_RESPONSE_STREAMING = strings.TrimSpace(os.Getenv("LAMBDA_RESPONSE_STREAMING")) == "1"
 
 	Env.IS_PROD = strings.Contains(APP_CODE, "_prd")

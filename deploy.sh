@@ -108,18 +108,14 @@ fi
 # PUBLICAR BACKEND
 if has_action "2"; then
     echo "=== PUBLICANDO BACKEND ==="
-    cd ./cloud
-    $GO_PATH run . accion=1
-    cd ..
+    (cd ./cloud && "$GO_PATH" run . accion=1) || exit 1
     echo "✅ El deploy backend finalizado!"
 fi
 
 # PUBLICAR BACKEND (VPS)
 if has_action "3"; then
     echo "=== PUBLICANDO BACKEND (VPS) ==="
-    cd ./scripts
-    $GO_PATH run . deploy_vps
-    cd ..
+    (cd ./scripts && "$GO_PATH" run . deploy_vps) || exit 1
     echo "✅ El deploy VPS finalizado!"
 fi
 
@@ -131,6 +127,15 @@ if has_action "4"; then
     aws --profile $AWS_PROFILE s3 cp ./db-backup s3://$AWS_S3/_bin/db-backup.bin
     cd ..
     echo "✅ El deploy del ejecutable finalizó."
+fi
+
+# DESPLEGAR INFRAESTRUCTURA
+# Va antes que las tablas a propósito: CloudFormation es el dueño de la tabla DynamoDB, y
+# fn-init (acción 6) ahora falla si no existe. Así "6 9" en una sola invocación funciona.
+if has_action "9"; then
+    echo "=== DESPLEGANDO INFRAESTRUCTURA ==="
+    (cd ./cloud && "$GO_PATH" run . accion=3) || exit 1
+    echo "✅ El deploy de infraestructura finalizó!"
 fi
 
 # RECREAR TABLAS
@@ -151,15 +156,6 @@ fi
 if has_action "10"; then
     echo "=== DESPLEGANDO CLOUDFLARE WORKER ==="
     (cd backend && "$GO_PATH" run . fn-deploy-cloudflare-worker) || exit 1
-fi
-
-# DESPLEGAR INFRAESTRUCTURA
-if has_action "9"; then
-    echo "=== DESPLEGANDO INFRAESTRUCTURA ==="
-    cd ./cloud
-    $GO_PATH run . accion=3
-    cd ..
-    echo "✅ El deploy de infraestructura finalizó!"
 fi
 
 # INSPECCIONAR BACKEND

@@ -1,0 +1,330 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Genix - frontend CDN, Go backend on Lambda, cron and DynamoDB
+
+# Deployed by cloud/cloudformation.go (action 3). Every value that varies per environment
+# arrives as a parameter read from credentials.json, so this file stays static and committed.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: APP_NAME from credentials.json. Prefixes every physical resource name.
+  FrontendBucketName:
+    Type: String
+    Description: Bucket holding the built frontend, served through CloudFront.
+  DeploymentBucket:
+    Type: String
+    Description: Existing bucket where the compiled backend .zip is uploaded before deploy.
+  CompiledS3Key:
+    Type: String
+    Description: Key of the compiled backend .zip inside DeploymentBucket.
+  LambdaIamRole:
+    Type: String
+    Description: ARN of a pre-existing execution role. The stack creates no IAM resources.
+  AppCode:
+    Type: String
+    Description: APP_CODE environment variable for the backend.
+
+Resources:
+  # ---------------------------------------------------------------- frontend
+
+  # Retained so a stack teardown never destroys the published frontend. A later stack
+  # cannot recreate this bucket name while the orphan survives - delete it by hand first.
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref FrontendBucketName
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedHeaders: ["*"]
+            AllowedMethods: [GET, PUT, POST, DELETE, HEAD]
+            MaxAge: 3000
+
+  FrontendOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: Genix Identity
+
+  # Read-only, and only for CloudFront: the bucket itself stays private.
+  # Deliberately no s3:ListBucket - without it a missing key answers 403 instead of 404,
+  # and CustomErrorResponses below rewrites both to the SPA entry point anyway.
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              CanonicalUser: !GetAtt FrontendOriginAccessIdentity.S3CanonicalUserId
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: Frontend Genix
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Origins:
+          - Id: frontend-s3-origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${FrontendOriginAccessIdentity}"
+        DefaultCacheBehavior:
+          TargetOriginId: frontend-s3-origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS managed: CachingOptimized
+        # Everything below is served uncached: these files carry the app version, so a stale
+        # copy at the edge would pin clients to an old build after a deploy.
+        CacheBehaviors:
+          - PathPattern: "*.html"
+            TargetOriginId: frontend-s3-origin
+            AllowedMethods: [GET, HEAD]
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad # AWS managed: CachingDisabled
+          - PathPattern: "*.webmanifest"
+            TargetOriginId: frontend-s3-origin
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            ViewerProtocolPolicy: https-only
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          - PathPattern: "sw.js"
+            TargetOriginId: frontend-s3-origin
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            ViewerProtocolPolicy: https-only
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          - PathPattern: "registerSW.js"
+            TargetOriginId: frontend-s3-origin
+            AllowedMethods: [GET, HEAD, OPTIONS]
+            ViewerProtocolPolicy: https-only
+            Compress: false
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+        # Client-side routing: any unresolved path returns the SPA shell, not an S3 error.
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 10
+
+  # ----------------------------------------------------------------- backend
+
+  # Two functions run the same binary from the same .zip; they differ only in memory size.
+  # The 192 MB one takes normal traffic, the 2048 MB one takes heavy requests.
+  #
+  # LAMBDA_RESPONSE_STREAMING must always mirror the Function URL InvokeMode below. The Go
+  # handler picks its response shape from this variable (backend/core/security.go), and a
+  # mismatch fails every request - so both live in this file and are changed together.
+  BackendFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-backend"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 192
+      Timeout: 300
+      Role: !Ref LambdaIamRole
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Ref CompiledS3Key
+      Environment:
+        Variables:
+          APP_CODE: !Ref AppCode
+          LAMBDA_RESPONSE_STREAMING: "1"
+
+  # RESPONSE_STREAM writes the body as raw bytes behind a JSON prelude instead of a base64
+  # string inside a JSON envelope: it drops the +33% base64 expansion and raises the
+  # response ceiling from 6 MB to 20 MB.
+  BackendFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt BackendFunction.Arn
+      AuthType: NONE
+      InvokeMode: RESPONSE_STREAM
+      Cors:
+        AllowOrigins: ["*"]
+        AllowHeaders: ["*"]
+        AllowMethods: [GET, POST, HEAD, PUT]
+
+  # A public Function URL needs lambda:InvokeFunctionUrl. The second, narrower grant is what
+  # CDK also emitted for the live stack; keeping it avoids a deploy-day 403 on the URL path.
+  BackendFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !GetAtt BackendFunction.Arn
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  BackendFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt BackendFunction.Arn
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  # Declared explicitly only to cap retention; Lambda would otherwise create it unbounded.
+  # Deleted with the stack, unlike the bucket and table - logs are disposable, and an
+  # orphaned log group would block a future stack from recreating the same name.
+  BackendLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NamePrefix}-backend"
+      RetentionInDays: 30
+
+  BackendHeavyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-backend_2"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 2048
+      Timeout: 300
+      Role: !Ref LambdaIamRole
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Ref CompiledS3Key
+      Environment:
+        Variables:
+          APP_CODE: !Ref AppCode
+          LAMBDA_RESPONSE_STREAMING: "1"
+
+  BackendHeavyFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt BackendHeavyFunction.Arn
+      AuthType: NONE
+      InvokeMode: RESPONSE_STREAM
+      Cors:
+        AllowOrigins: ["*"]
+        AllowHeaders: ["*"]
+        AllowMethods: [GET, POST, HEAD, PUT]
+
+  BackendHeavyFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !GetAtt BackendHeavyFunction.Arn
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  BackendHeavyFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt BackendHeavyFunction.Arn
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  BackendHeavyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NamePrefix}-backend_2"
+      RetentionInDays: 30
+
+  # -------------------------------------------------------------------- cron
+
+  # The backend recognises this exact body as its scheduled-work entry point.
+  CronRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "${NamePrefix}-backend_cron_lambda_every_10_min_go"
+      Description: Genix GO | Cron Job Event 10 min
+      ScheduleExpression: cron(*/10 * * * ? *)
+      State: ENABLED
+      Targets:
+        - Id: Target0
+          Arn: !GetAtt BackendFunction.Arn
+          Input: '{"body":"exec:cron"}'
+
+  CronRuleInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt BackendFunction.Arn
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CronRule.Arn
+
+  # ---------------------------------------------------------------- database
+
+  # Single-table design: one pk/sk pair plus five GSIs that all reuse pk as their partition
+  # key, so any index can be queried within the same partition. Retained on delete.
+  MainTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Sub "${NamePrefix}-db"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+        - { AttributeName: ix1, AttributeType: S }
+        - { AttributeName: ix2, AttributeType: S }
+        - { AttributeName: ix3, AttributeType: S }
+        - { AttributeName: ix4, AttributeType: S }
+        - { AttributeName: in5, AttributeType: N }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      GlobalSecondaryIndexes:
+        - IndexName: ix1
+          KeySchema:
+            - { AttributeName: pk, KeyType: HASH }
+            - { AttributeName: ix1, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+        - IndexName: ix2
+          KeySchema:
+            - { AttributeName: pk, KeyType: HASH }
+            - { AttributeName: ix2, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+        - IndexName: ix3
+          KeySchema:
+            - { AttributeName: pk, KeyType: HASH }
+            - { AttributeName: ix3, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+        - IndexName: ix4
+          KeySchema:
+            - { AttributeName: pk, KeyType: HASH }
+            - { AttributeName: ix4, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+        - IndexName: in5
+          KeySchema:
+            - { AttributeName: pk, KeyType: HASH }
+            - { AttributeName: in5, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+
+Outputs:
+  # BackendUrl is written back into credentials.json as LAMBDA_URL after a successful deploy.
+  BackendUrl:
+    Description: Public Function URL of the backend Lambda
+    Value: !GetAtt BackendFunctionUrl.FunctionUrl
+  BackendHeavyUrl:
+    Description: Public Function URL of the high-memory backend Lambda
+    Value: !GetAtt BackendHeavyFunctionUrl.FunctionUrl
+  FrontendDistributionDomain:
+    Description: CloudFront domain serving the frontend
+    Value: !Sub "https://${FrontendDistribution.DomainName}"
+  FrontendBucket:
+    Description: Bucket the built frontend must be uploaded to
+    Value: !Ref FrontendBucket
