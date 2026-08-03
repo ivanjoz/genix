@@ -129,6 +129,10 @@ Resources:
   # LAMBDA_RESPONSE_STREAMING must always mirror the Function URL InvokeMode below. The Go
   # handler picks its response shape from this variable (backend/core/security.go), and a
   # mismatch fails every request - so both live in this file and are changed together.
+  #
+  # CONFIG (credentials.json, zstd+base64) is deliberately absent: putting it here would expose
+  # every secret in the CloudFormation console. Because this block replaces the whole Environment
+  # on each deploy, DeployIfraestructure re-injects CONFIG right after the stack update.
   BackendFunction:
     Type: AWS::Lambda::Function
     Properties:

@@ -274,4 +274,12 @@ func DeployIfraestructure(params DeployParams) {
 
 	fmt.Println("Desplegando infraestructura con CloudFormation...")
 	DeployCloudFormation(params)
+
+	// La plantilla declara el bloque Environment completo y CloudFormation lo reemplaza en vez
+	// de fusionarlo, así que cada despliegue de infraestructura borra CONFIG y la Lambda entra
+	// en panic al arrancar (PopulateVariables lo exige cuando APP_CODE está seteado).
+	// Reinyectarlo aquí deja los secretos fuera de la plantilla, donde serían visibles en la
+	// consola de CloudFormation.
+	UpdateEnviromentVariables(params, 0)
+	UpdateEnviromentVariables(params, 2)
 }
