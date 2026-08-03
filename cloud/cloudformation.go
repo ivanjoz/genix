@@ -41,6 +41,8 @@ func DeployCloudFormation(params DeployParams) {
 		makeStackParameter("CompiledS3Key", params.S3_COMPILED_PATH),
 		makeStackParameter("LambdaIamRole", params.LAMBDA_IAM_ROLE),
 		makeStackParameter("AppCode", appCodeEnvValue),
+		makeStackParameter("RendererS3Key", rendererS3Path),
+		makeStackParameter("RendererZipUrl", rendererZipUrl(params)),
 	}
 
 	currentStatus, stackExists := DescribeStackStatus(ctx, client, stackName)

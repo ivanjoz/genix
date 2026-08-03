@@ -29,8 +29,6 @@ var ExecHandlers = ExecRouterType{
 	"compress-image":              CompressImage,
 }
 
-var ExecHandlersCron = ExecRouterType{}
-
 var ExecHandlersTesting = ExecRouterType{
 	// "fn10":  TestScyllaDBConnection,
 	"fn11": TestScyllaDBInsert,

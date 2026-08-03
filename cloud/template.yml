@@ -23,6 +23,15 @@ Parameters:
   AppCode:
     Type: String
     Description: APP_CODE environment variable for the backend.
+  RendererS3Key:
+    Type: String
+    Description: Key of the webpage-renderer Lambda .zip inside DeploymentBucket.
+  RendererZipUrl:
+    Type: String
+    Description: >-
+      Fixed URL of the CI-built webpage-renderer.zip (SSR bundle + storefront assets).
+      The renderer Lambda downloads it at runtime, so publishing a new storefront build
+      needs no infrastructure deploy.
 
 Resources:
   # ---------------------------------------------------------------- frontend
@@ -140,7 +149,7 @@ Resources:
       Runtime: provided.al2023
       Handler: bootstrap
       Architectures: [arm64]
-      MemorySize: 192
+      MemorySize: 256
       Timeout: 300
       Role: !Ref LambdaIamRole
       Code:
@@ -243,9 +252,58 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${NamePrefix}-backend_2"
       RetentionInDays: 30
 
+  # ------------------------------------------------------- webpage renderer
+
+  # SSR de las webpages de company. Es Node y no Go porque el servidor de SvelteKit es
+  # JavaScript; la Lambda de Go la invoca de forma síncrona (backend/cloud/webpage_renderer.go).
+  #
+  # El código de esta función es solo el handler: el bundle SSR y los assets de la tienda
+  # los descarga en caliente desde RendererZipUrl, así que publicar un frontend nuevo no
+  # exige redesplegar infraestructura.
+  #
+  # Igual que en el backend, este bloque Environment se reemplaza entero en cada deploy, y
+  # las credenciales de Cloudflare se reinyectan después (DeployIfraestructure) para no
+  # dejarlas visibles en la consola de CloudFormation.
+  WebpageRendererFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-webpage-renderer"
+      Runtime: nodejs22.x
+      Handler: handler.render
+      Architectures: [arm64]
+      MemorySize: 1024
+      Timeout: 120
+      Role: !Ref LambdaIamRole
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Ref RendererS3Key
+      Environment:
+        Variables:
+          RENDERER_ZIP_URL: !Ref RendererZipUrl
+
+  # El stack no crea recursos IAM, así que el permiso de invocación se concede como
+  # política de recurso sobre la propia función, con el rol del backend como principal.
+  # Dentro de la misma cuenta eso basta para que la Lambda de Go pueda invocarla.
+  WebpageRendererInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt WebpageRendererFunction.Arn
+      Principal: !Ref LambdaIamRole
+
+  WebpageRendererLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NamePrefix}-webpage-renderer"
+      RetentionInDays: 30
+
   # -------------------------------------------------------------------- cron
 
-  # The backend recognises this exact body as its scheduled-work entry point.
+  # runLambdaRequest detects the `{"exec":` prefix on the body and runs whatever rows are still
+  # pending in the cron_actions table (backend/main.go, runScheduledCronTick). The number is the
+  # declared cadence, logged for tracing only - changing it here does not change the schedule.
+  # The body has to be nested inside `body` because the event is decoded as an
+  # APIGatewayV2HTTPRequest; a top-level field would be dropped.
   CronRule:
     Type: AWS::Events::Rule
     Properties:
@@ -256,7 +314,7 @@ Resources:
       Targets:
         - Id: Target0
           Arn: !GetAtt BackendFunction.Arn
-          Input: '{"body":"exec:cron"}'
+          Input: '{"body":"{\"exec\":10}"}'
 
   CronRuleInvokePermission:
     Type: AWS::Lambda::Permission

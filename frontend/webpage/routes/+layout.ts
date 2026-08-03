@@ -1,7 +1,9 @@
 export const csr = true;
-// SSR is enabled only for the per-company prerender build (VITE_COMPANY_ID set).
-// In dev / the admin-embedded view it stays a pure CSR SPA, as before.
-export const ssr = !!import.meta.env.VITE_COMPANY_ID;
+// SSR en los dos builds de tienda: el antiguo prerender por company (VITE_COMPANY_ID) y
+// el bundle del renderer (VITE_RENDERER_BUILD), que el Lambda ejecuta bajo demanda.
+// En dev / la vista embebida del builder sigue siendo un SPA puro en CSR.
+export const ssr = !!import.meta.env.VITE_COMPANY_ID || !!import.meta.env.VITE_RENDERER_BUILD;
+// El renderer NO prerenderiza: no hay company ni contenido en tiempo de build.
 export const prerender = !!import.meta.env.VITE_COMPANY_ID;
 // This prevents automatic data serialization
 export const trailingSlash = 'ignore';

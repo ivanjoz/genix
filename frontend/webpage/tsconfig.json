@@ -3,5 +3,7 @@
   "compilerOptions": {
     "types": ["vite/client"]
   },
-  "include": ["**/*.d.ts", "**/*.ts", "**/*.js", "**/*.svelte", "../globals.d.ts"]
+  "include": ["**/*.d.ts", "**/*.ts", "**/*.js", "**/*.svelte", "../globals.d.ts"],
+  // Salidas de build: typecheckear los bundles minificados agota la memoria de svelte-check.
+  "exclude": ["node_modules", "build", "dist-prerender", "static/sw.js", "cloudflare"]
 }

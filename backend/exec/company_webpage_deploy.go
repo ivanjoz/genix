@@ -5,20 +5,23 @@ import (
 	configTypes "app/config/types"
 	"app/core"
 	"app/db"
+	webpageTypes "app/webpage/types"
 	"fmt"
-	"mime"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"golang.org/x/sync/errgroup"
 )
 
 const (
 	webpageConfigGroup            = int32(10)
 	webpageAssetUploadConcurrency = 4
+	// Páginas de sistema con contenido editable en el builder. Mantener en sync con
+	// SYSTEM_PAGES (frontend/services/webpage/pages.svelte.ts) y con defaultPageID.
+	webpageHomePageID  = int16(10)
+	webpageAboutPageID = int16(11)
+	// Los IDs <= 14 están reservados al sistema; las páginas de usuario empiezan en 15.
+	lastSystemWebpageID = int16(14)
 )
 
 func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
@@ -32,71 +35,73 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(domainError)
 	}
 
+	pages, pagesError := getCompanyWebpagePages(companyID)
+	if pagesError != nil {
+		return args.MakeErr(pagesError)
+	}
+
 	projectRoot, rootError := findGenixProjectRoot()
 	if rootError != nil {
 		return args.MakeErr(rootError)
 	}
-
-	webpageDirectory := filepath.Join(projectRoot, "frontend", "webpage")
-	webpagesDirectory := filepath.Join(webpageDirectory, "cloudflare", "webpages")
-	targetDirectory := filepath.Join(webpagesDirectory, hostname)
-	temporaryDirectory := filepath.Join(webpagesDirectory, ".build-"+hostname)
-	assetBase, assetBaseError := companyWebpageAssetBase(companyID)
-	if assetBaseError != nil {
-		return args.MakeErr(assetBaseError)
-	}
+	// Los js/css se sirven desde el CDN a un dominio distinto al del sitio.
 	if corsError := ensureCompanyWebpageAssetCORS(projectRoot); corsError != nil {
 		return args.MakeErr(corsError)
 	}
 
-	fmt.Printf("[company-webpage] company=%d hostname=%s\n", companyID, hostname)
-	fmt.Printf("[company-webpage] build=%s\n", temporaryDirectory)
-	fmt.Printf("[company-webpage] assets=%s\n", assetBase)
+	fmt.Printf("[company-webpage] company=%d hostname=%s páginas=%d\n", companyID, hostname, len(pages))
 
-	if removeError := os.RemoveAll(temporaryDirectory); removeError != nil {
-		return args.MakeErr("error limpiando build temporal:", removeError)
-	}
-
-	// The script derives the asset base from credentials.json (FRONTEND_CDN +
-	// /websites/<company>, same as companyWebpageAssetBase), so no --asset-base is passed.
-	prerenderCommand := exec.Command(
-		"bun",
-		"scripts/prerender.mjs",
-		"--company",
-		strconv.FormatInt(int64(companyID), 10),
-		"--out",
-		temporaryDirectory,
-	)
-	prerenderCommand.Dir = projectRoot
-	prerenderCommand.Stdout = os.Stdout
-	prerenderCommand.Stderr = os.Stderr
-	if prerenderError := prerenderCommand.Run(); prerenderError != nil {
-		return args.MakeErr("error generando storefront:", prerenderError)
+	// El render vive en una Lambda de Node: el servidor SSR de SvelteKit es JavaScript, y
+	// así publicar no depende de tener el monorepo y bun en la máquina que ejecuta esto.
+	result, renderError := cloud.InvokeWebpageRenderer(cloud.WebpageRenderRequest{
+		CompanyID: companyID,
+		Hostname:  hostname,
+		Pages:     pages,
+	})
+	if renderError != nil {
+		return args.MakeErr(renderError)
 	}
 
-	if verificationError := verifyGeneratedWebpage(temporaryDirectory); verificationError != nil {
-		return args.MakeErr(verificationError)
-	}
-	if uploadError := uploadCompanyWebpageAssets(companyID, temporaryDirectory); uploadError != nil {
-		return args.MakeErr(uploadError)
-	}
-	if splitError := removeUploadedWebpageAssets(temporaryDirectory); splitError != nil {
-		return args.MakeErr(splitError)
-	}
-	if swapError := replaceWebpageDirectory(targetDirectory, temporaryDirectory); swapError != nil {
-		return args.MakeErr("error publicando build local:", swapError)
-	}
-
-	if _, deployError := DeployCloudflareWorker(); deployError != nil {
-		return args.MakeErr(deployError)
-	}
 	if provisionError := provisionStorefrontDomain(hostname); provisionError != nil {
 		return args.MakeErr(provisionError)
 	}
 
 	return core.FuncResponse{
-		Message: fmt.Sprintf("Webpage de CompanyID %d desplegada en https://%s", companyID, hostname),
+		Message: fmt.Sprintf("Webpage de CompanyID %d desplegada en https://%s (%d página(s), build %s)",
+			companyID, hostname, result.Pages, result.BuildID),
 	}
+}
+
+// getCompanyWebpagePages arma la lista de páginas a renderizar: la raíz y /about —las dos
+// páginas de sistema con contenido editable en el builder— más las páginas creadas por el
+// usuario que estén activas. Las demás páginas de sistema (/store, /product, /cart) son
+// dinámicas y las resuelve el cliente, así que no se prerenderizan.
+func getCompanyWebpagePages(companyID int32) ([]cloud.WebpageRenderPage, error) {
+	pages := []cloud.WebpageRenderPage{
+		{ID: webpageHomePageID, Path: "/"},
+		{ID: webpageAboutPageID, Path: "/about"},
+	}
+
+	storedPages := []webpageTypes.Webpage{}
+	query := db.Query(&storedPages).CompanyID.Equals(companyID)
+	if queryError := query.Exec(); queryError != nil {
+		return nil, fmt.Errorf("error consultando las páginas de CompanyID %d: %w", companyID, queryError)
+	}
+
+	for _, storedPage := range storedPages {
+		// Los IDs <= 14 están reservados a las páginas de sistema; una fila en ese rango
+		// solo guarda su miniatura, no es una página propia.
+		if storedPage.ID <= lastSystemWebpageID || storedPage.Status <= 0 {
+			continue
+		}
+		route := strings.TrimSpace(storedPage.Route)
+		if !strings.HasPrefix(route, "/") || route == "/" {
+			return nil, fmt.Errorf("la página %d tiene una ruta inválida: %q", storedPage.ID, storedPage.Route)
+		}
+		pages = append(pages, cloud.WebpageRenderPage{ID: storedPage.ID, Path: route})
+	}
+
+	return pages, nil
 }
 
 func companyWebpageAssetBase(companyID int32) (string, error) {
@@ -107,60 +112,6 @@ func companyWebpageAssetBase(companyID int32) (string, error) {
 	return fmt.Sprintf("%s/websites/%d", frontendCDN, companyID), nil
 }
 
-func uploadCompanyWebpageAssets(companyID int32, webpageDirectory string) error {
-	// Upload assets before HTML so a published page never references missing modules.
-	entries, readError := os.ReadDir(webpageDirectory)
-	if readError != nil {
-		return fmt.Errorf("error leyendo assets del storefront: %w", readError)
-	}
-
-	assetPath := fmt.Sprintf("websites/%d", companyID)
-	assetEntries := make([]os.DirEntry, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() || strings.EqualFold(filepath.Ext(entry.Name()), ".html") || entry.Name() == "sw.js" {
-			continue
-		}
-		assetEntries = append(assetEntries, entry)
-	}
-	if len(assetEntries) == 0 {
-		return fmt.Errorf("el prerender no generó assets para R2")
-	}
-
-	uploadGroup := errgroup.Group{}
-	uploadGroup.SetLimit(webpageAssetUploadConcurrency)
-	for _, entry := range assetEntries {
-		entry := entry
-		uploadGroup.Go(func() error {
-			contentType := mime.TypeByExtension(strings.ToLower(filepath.Ext(entry.Name())))
-			if contentType == "" {
-				contentType = "application/octet-stream"
-			}
-			cacheControl := "public, max-age=300"
-			if isFingerprintedWebpageAsset(entry.Name()) {
-				cacheControl = "public, max-age=31536000, immutable"
-			}
-
-			fmt.Printf("[company-webpage] uploading asset=%s/%s\n", assetPath, entry.Name())
-			if uploadError := cloud.SaveFile(cloud.SaveFileArgs{
-				Path:          assetPath,
-				Name:          entry.Name(),
-				LocalFilePath: filepath.Join(webpageDirectory, entry.Name()),
-				ContentType:   contentType,
-				CacheControl:  cacheControl,
-			}); uploadError != nil {
-				return fmt.Errorf("error subiendo asset %s: %w", entry.Name(), uploadError)
-			}
-			return nil
-		})
-	}
-	if uploadError := uploadGroup.Wait(); uploadError != nil {
-		return uploadError
-	}
-
-	fmt.Printf("[company-webpage] uploaded-assets=%d path=%s\n", len(assetEntries), assetPath)
-	return nil
-}
-
 func isFingerprintedWebpageAsset(fileName string) bool {
 	if fileName == "env.js" || fileName == "blurhash.js" {
 		return false
@@ -168,23 +119,6 @@ func isFingerprintedWebpageAsset(fileName string) bool {
 	nameWithoutExtension := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 	nameParts := strings.Split(nameWithoutExtension, ".")
 	return len(nameParts[len(nameParts)-1]) >= 8
-}
-
-func removeUploadedWebpageAssets(webpageDirectory string) error {
-	// Keep only HTML and the same-origin service worker in Workers Static Assets.
-	entries, readError := os.ReadDir(webpageDirectory)
-	if readError != nil {
-		return readError
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || strings.EqualFold(filepath.Ext(entry.Name()), ".html") || entry.Name() == "sw.js" {
-			continue
-		}
-		if removeError := os.Remove(filepath.Join(webpageDirectory, entry.Name())); removeError != nil {
-			return fmt.Errorf("error removiendo asset local %s: %w", entry.Name(), removeError)
-		}
-	}
-	return nil
 }
 
 func parseCompanyIDArgument(rawArgument string) (int32, error) {

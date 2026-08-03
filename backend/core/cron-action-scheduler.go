@@ -124,12 +124,29 @@ func StartCronWatcher() {
 	}()
 }
 
+// runCronWatcherTick is the VPS ticker entry point. The ticker fires every minute while frames
+// last five, so the watermark is what keeps the same frame from being processed five times.
 func runCronWatcherTick() {
 	currentUnixMinutesFrame := int32(time.Now().Unix() / fiveMinuteFrameLength)
 	if currentUnixMinutesFrame == lastUnixMinutesFrame {
 		return
 	}
 
+	RunPendingCronActions()
+
+	// Advance the watermark only after the current frame window was processed.
+	lastUnixMinutesFrame = currentUnixMinutesFrame
+}
+
+// RunPendingCronActions executes every pending row inside the lookback window and returns how
+// many ran successfully. It carries no watermark of its own: the caller owns the cadence, which
+// is what lets the Lambda EventBridge tick reuse it across cold containers.
+func RunPendingCronActions() int {
+	currentUnixMinutesFrame := int32(time.Now().Unix() / fiveMinuteFrameLength)
+	executedActionsCount := 0
+
+	// A 60-minute lookback, independent of the caller's cadence: it exists so actions that failed
+	// and stayed at Status 0 get retried on the following ticks.
 	firstFrameToProcess := currentUnixMinutesFrame - 12
 	pendingActionsByID := map[int64][]CronAction{}
 
@@ -140,8 +157,8 @@ func runCronWatcherTick() {
 		Status.Equals(0)
 
 	if err := pendingActionsQuery.AllowFilter().Exec(); err != nil {
-		Log("StartCronWatcher query error:", "from_frame", firstFrameToProcess, "error", err)
-		return
+		Log("RunPendingCronActions query error:", "from_frame", firstFrameToProcess, "error", err)
+		return executedActionsCount
 	}
 
 	for _, e := range pendingActionsGetted {
@@ -154,7 +171,7 @@ func runCronWatcherTick() {
 
 		actionHandler, exists := actionHandlerMap[pendingAction.ActionID]
 		if !exists {
-			Log("StartCronWatcher missing handler:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID)
+			Log("RunPendingCronActions missing handler:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID)
 			continue
 		}
 		// Reuse the rows already loaded for this cron ID instead of querying them again.
@@ -172,7 +189,7 @@ func runCronWatcherTick() {
 				cronActionTable.InvocationCount,
 				cronActionTable.Updated,
 			); err != nil {
-				Log("StartCronWatcher update rows error:", "cron_id", pendingAction.ID, "status", status, "error", err)
+				Log("RunPendingCronActions update rows error:", "cron_id", pendingAction.ID, "status", status, "error", err)
 			}
 		}
 
@@ -180,23 +197,23 @@ func runCronWatcherTick() {
 		func() {
 			defer func() {
 				if recoveredValue := recover(); recoveredValue != nil {
-					Log("StartCronWatcher panic executing action:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "panic", recoveredValue)
+					Log("RunPendingCronActions panic executing action:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "panic", recoveredValue)
 					markCronActionRowsAttempted_(0)
 				}
 			}()
 
 			handlerResponse := actionHandler.Fn(&pendingAction.Params)
 			if handlerResponse.Error != "" {
-				Log("StartCronWatcher handler error:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "error", handlerResponse.Error)
+				Log("RunPendingCronActions handler error:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "error", handlerResponse.Error)
 				markCronActionRowsAttempted_(0)
 				return
 			}
 
-			Log("StartCronWatcher action executed:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "handler", actionHandler.Name)
+			Log("RunPendingCronActions action executed:", "cron_id", pendingAction.ID, "action_id", pendingAction.ActionID, "handler", actionHandler.Name)
 			markCronActionRowsAttempted_(1)
+			executedActionsCount++
 		}()
 	}
 
-	// Advance the watermark only after the current frame window was processed.
-	lastUnixMinutesFrame = currentUnixMinutesFrame
+	return executedActionsCount
 }

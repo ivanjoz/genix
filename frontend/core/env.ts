@@ -15,11 +15,13 @@ const version = 1.11
 console.log(version)
 const selectedApiEndpointStorageKey = "genixSelectedApiEndpointRoute";
 
-// Per-company storefront builds (prerender) pin the tenant via VITE_COMPANY_ID. These
-// deploys have no login/endpoint selector: the API must always be PUBLIC_LAMBDA_URL,
-// never the localStorage selection or the "Local" (localhost) option that gets added
-// when the static build is previewed on localhost.
-const isPrerenderStorefront = !!Number(import.meta.env.VITE_COMPANY_ID || 0)
+// Builds de tienda publicada: el prerender por company (VITE_COMPANY_ID) y el bundle del
+// renderer que ejecuta el Lambda (VITE_RENDERER_BUILD). Estos despliegues no tienen
+// selector de login/endpoint: la API debe ser siempre PUBLIC_LAMBDA_URL, nunca la
+// selección de localStorage ni la opción "Local" que se añade al previsualizar en
+// localhost.
+const isStorefrontBuild =
+  !!Number(import.meta.env.VITE_COMPANY_ID || 0) || !!import.meta.env.VITE_RENDERER_BUILD
 
 if(browser){
   const host = window.location.host
@@ -52,7 +54,7 @@ const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOptio
 
     // Never offer the localhost endpoint in a pinned storefront build, even when the
     // static output is previewed on localhost.
-    if (globalThis._isLocal && !isPrerenderStorefront) {
+    if (globalThis._isLocal && !isStorefrontBuild) {
       parsedEndpoints.unshift({ name: "Local", route: "http://localhost:3589/", hash: "" })
     }
 
@@ -94,7 +96,7 @@ const ENPOINTS = parsePublicApiEndpoints(PUBLIC_ENDPOINTS || "")
 
 const getSelectedApiEndpointRoute = (): string => {
   // Storefront build: always PUBLIC_LAMBDA_URL — ignore localStorage and any "Local" option.
-  if (isPrerenderStorefront) { return PUBLIC_LAMBDA_URL || (ENPOINTS[0]?.route || "") }
+  if (isStorefrontBuild) { return PUBLIC_LAMBDA_URL || (ENPOINTS[0]?.route || "") }
   const endpointRoute = browser ? localStorage.getItem(selectedApiEndpointStorageKey) || "" : ""
   const persistedEndpointExists = ENPOINTS.some((endpointOption) => endpointOption.route === endpointRoute)
   return persistedEndpointExists ? endpointRoute : (ENPOINTS[0]?.route || "")
@@ -105,7 +107,7 @@ const getSelectedApiEndpoint = (selectedRoute: string): IApiEndpointOption => {
   if (matchedEndpoint) { return matchedEndpoint }
   // Storefront build pins PUBLIC_LAMBDA_URL even if it isn't one of PUBLIC_ENDPOINTS,
   // so synthesize an option for it rather than falling back to ENPOINTS[0].
-  if (isPrerenderStorefront && selectedRoute) {
+  if (isStorefrontBuild && selectedRoute) {
     return { name: "Lambda", route: selectedRoute, hash: "000000" }
   }
   return ENPOINTS[0] || {
@@ -113,6 +115,13 @@ const getSelectedApiEndpoint = (selectedRoute: string): IApiEndpointOption => {
     route: "",
     hash: "000000"
   }
+}
+
+// Lee una meta del <head>. Solo resuelve en el cliente: durante el SSR el valor lo fija
+// el hook del servidor (frontend/webpage/hooks.server.ts) directamente sobre Env.
+const readHeadMeta = (name: string): string => {
+  if(!browser){ return "" }
+  return document.head.querySelector(`meta[name="${name}"]`)?.getAttribute("content") || ""
 }
 
 export const getWindow = () => {
@@ -158,6 +167,9 @@ export const Env = {
   hostname: "",
   pathname: "",
   companyID: 0,
+  // PageID de la página que este documento representa. En el SSR lo fija el hook del
+  // servidor por request; en el cliente se lee de la meta que ese mismo render dejó.
+  pageID: 0,
   empresa: {} as ICompanyParams,
   imageCounter: 10000,
   // Product-search debug and telemetry logs are centralized here.
@@ -188,8 +200,19 @@ export const Env = {
     if(browser){ return window.location.pathname }
     return Env.pathname || ""
   },
+  // PageID del documento actual. 0 = la página raíz (el backend la resuelve al ID 10).
+  getPageID: (): number => {
+    if(!Env.pageID){ Env.pageID = Number(readHeadMeta("page-id")) || 0 }
+    return Env.pageID
+  },
   getCompanyID: (): number => {
     if(!Env.companyID){
+      // Página publicada: el render del Lambda deja el tenant en una meta del <head>.
+      // Un solo bundle SSR/cliente sirve a todas las companies, así que esta meta —y no
+      // una constante de build— es la fuente autoritativa del tenant.
+      const metaCompanyID = Number(readHeadMeta("company-id"))
+      if(metaCompanyID){ return Env.companyID = metaCompanyID }
+
       // Prerender/static build pins the tenant at build time (one build per company).
       // Vite inlines VITE_COMPANY_ID, so it resolves both in Node (build/SSR) and in
       // the deployed client bundle. Undefined in the admin app → falls through.

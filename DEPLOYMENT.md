@@ -30,7 +30,9 @@ Todo se nombra a partir de `APP_NAME` de `credentials.json` (el stack es `<APP_N
   404 se reescriben a `/index.html` para el enrutado del SPA.
 - Dos Lambdas ARM64 sobre `provided.al2023` que corren el mismo binario: `<APP_NAME>-backend`
   (192 MB) y `<APP_NAME>-backend_2` (2048 MB), cada una con su Function URL pública.
-- Regla de EventBridge que invoca la Lambda pequeña cada 10 minutos con `{"body":"exec:cron"}`.
+- Regla de EventBridge que invoca la Lambda pequeña cada 10 minutos con `{"body":"{\"exec\":10}"}`.
+  El backend detecta ese prefijo y ejecuta las filas pendientes de `cron_actions` (el equivalente
+  en Lambda del `StartCronWatcher` que solo corre en el VPS).
 - Tabla DynamoDB `<APP_NAME>-db` con 5 GSIs y TTL.
 
 El bucket y la tabla son `Retain`: sobreviven al borrado del stack. Un stack posterior no

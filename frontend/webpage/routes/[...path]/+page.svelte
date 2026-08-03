@@ -3,6 +3,7 @@ import { onMount, untrack } from 'svelte';
 import MobileMenu from '$domain/MobileMenu.svelte';
 import Header from '$ecommerce/components/Header.svelte';
 import EcommerceRenderer from '$ecommerce/renderer/EcommerceRenderer.svelte';
+import { Env } from '$core/env';
 import { getStoreWebpage } from '$services/ecommerce/page-content.svelte';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
@@ -59,7 +60,9 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
     //   - different content  → one reassignment → EcommerceRenderer re-renders
     //                          (the accepted, content-changed layout shift)
     try {
-      const stored = await getStoreWebpage();
+      // El refresco va contra la API (no contra el snapshot del CDN, que es lo que ya
+      // se horneó en el SSR): es la copia más fresca posible tras la publicación.
+      const stored = await getStoreWebpage(Env.getPageID());
       if (stored.sections.length === 0) return; // keep prerendered content on empty/failed refresh
       if (contentKey(stored.sections, stored.css) !== contentKey(sections, runtimeCss)) {
         sections = stored.sections;

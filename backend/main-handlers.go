@@ -2,20 +2,18 @@ package main
 
 import (
 	"app/agent"
-	"app/sales"
+	"app/business"
 	"app/config"
 	"app/core"
-	"app/webpage"
 	"app/exec"
 	"app/finance"
 	"app/logistics"
-	"app/business"
+	"app/sales"
 	"app/security"
+	"app/webpage"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"reflect"
-	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -246,10 +244,6 @@ func clearEnvVariables() {
 	core.Env.LOGS_FULL = false
 }
 
-func GetFunctionName(i interface{}) string {
-	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
-}
-
 type ExecLambdaInput struct {
 	ExecArgs core.ExecArgs `json:"fn_exec"`
 }
@@ -276,65 +270,8 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 	args := input.ExecArgs
 	core.Log("func to exec:: ", core.StrCut(lambdaInput, 200))
 
-	type FuncToInvoke struct {
-		HourMin  string
-		Name     string
-		Priority int32
-		Exec     func(args *core.ExecArgs) core.FuncResponse
-	}
-
-	// Revisa si hay una función asignada a esta hora
-	if args.FuncToExec == "cron" {
-		if len(args.Param6) == 0 {
-			args.Param6 = core.GetHoursMinutes()
-		}
-
-		core.Log("*Search Time Function:: ", args.Param6)
-		funcsToInvokeMap := map[string]FuncToInvoke{}
-
-		for hourMin := range exec.ExecHandlersCron {
-			addFuncToInvoke := func() {
-				funcName := GetFunctionName(exec.ExecHandlers[hourMin])
-				funcName = core.ToSnakeCase(strings.ReplaceAll(funcName, "app/", ""))
-				funcsToInvokeMap[funcName] = FuncToInvoke{
-					Name:    funcName,
-					HourMin: hourMin,
-					Exec:    (exec.ExecHandlersCron)[hourMin],
-				}
-			}
-			if len(hourMin) < 5 {
-				continue
-			}
-			if args.Param6 == hourMin[0:5] {
-				addFuncToInvoke()
-			} else if strings.Contains(hourMin, "|") {
-				for _, h := range strings.Split(hourMin, "|") {
-					if h[:2] != args.Param6[:2] || !strings.Contains(h, ":") {
-						continue
-					}
-					minutes := strings.Split(h, ":")[1]
-					isIncluded := strings.Contains(minutes, ",") && core.Contains(strings.Split(minutes, ","), args.Param6[3:])
-
-					if minutes == "*" || args.Param6 == h || isIncluded {
-						addFuncToInvoke()
-						break
-					}
-				}
-			} else if strings.Contains(hourMin, "-") {
-				values := strings.Split(hourMin, "-")
-				hourStart := values[0]
-				hourEnd := values[1]
-				if args.Param6 >= hourStart && args.Param6 <= hourEnd {
-					addFuncToInvoke()
-				}
-			}
-		}
-
-		if len(funcsToInvokeMap) == 0 {
-			return core.FuncResponse{}
-		}
-		// Función a ejecutarse con nombre específico
-	} else if len(args.FuncToExec) > 0 {
+	// Función a ejecutarse con nombre específico
+	if len(args.FuncToExec) > 0 {
 		for key := range exec.ExecHandlers {
 			if args.FuncToExec == key {
 				core.Log("invocando funcion:: ", args.FuncToExec)

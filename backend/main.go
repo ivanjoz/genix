@@ -24,6 +24,39 @@ import (
 	"github.com/rs/cors"
 )
 
+// La regla de EventBridge de cloud/template.yml manda {"exec":<minutos>} como body cada 10
+// minutos. El número es solo la cadencia declarada, para el log; lo que dispara el trabajo es
+// el prefijo.
+const scheduledCronTickPrefix = `{"exec":`
+
+// runScheduledCronTick ejecuta las acciones pendientes de cron_actions y devuelve cuántas
+// corrieron. Es el equivalente en Lambda del StartCronWatcher que solo vive en el VPS.
+func runScheduledCronTick(tickBody string) int {
+	// clearEnvVariables acaba de apagar este flag, y en serverless core.Log descarta toda línea
+	// que no empiece con "*" ni contenga "error"/"warn": sin esto el tick no deja rastro en
+	// CloudWatch, que es el único sitio donde se puede observar.
+	core.Env.LOGS_FULL = true
+	core.Log("*Cron tick programado:: ", core.StrCut(tickBody, 60))
+
+	// Resiembra la cadena de 30 min del rebuild de productos. RebuildProductsDbHandler se
+	// reprograma solo al terminar, pero la semilla inicial vive en el arranque del VPS, así que en
+	// Lambda la cadena nunca empezó. Es idempotente: ScheduleCronAction deduplica contra la fila
+	// pendiente del mismo frame. Va con recover porque hace panic ante un error de DB, y ese fallo
+	// no debe impedir que se ejecute el resto de la cola.
+	func() {
+		defer func() {
+			if recoveredValue := recover(); recoveredValue != nil {
+				core.Log("*Cron tick error resembrando el rebuild de productos:: ", recoveredValue)
+			}
+		}()
+		business.ScheduleProductsDbRebuildCron()
+	}()
+
+	executedActionsCount := core.RunPendingCronActions()
+	core.Log("*Cron tick finalizado:: acciones ejecutadas:", executedActionsCount)
+	return executedActionsCount
+}
+
 // runLambdaRequest is the request path shared by both invoke modes. It stops at
 // core.MainResponse, which carries whichever of the two AWS response shapes prepareResponse
 // built, so the only difference between the buffered and streaming entrypoints is which field
@@ -41,6 +74,18 @@ func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) core.MainResponse
 		funcResponse := ExecFuncHandler(request.Body)
 		bodyBytes := []byte(core.ToJsonNoErr(funcResponse))
 		core.Log("*Body response::" + core.StrCut(string(bodyBytes), 400))
+		handlerResponse := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
+
+		if core.Env.LAMBDA_RESPONSE_STREAMING {
+			return core.MainResponse{LambdaStreamingResponse: core.MakeStreamingResponseFinal(&handlerResponse)}
+		}
+		return core.MainResponse{LambdaResponse: core.MakeResponseFinal(&handlerResponse)}
+	}
+
+	// Tick programado de EventBridge. No hay ruta HTTP detrás, así que no puede seguir al
+	// mainHandler: sin Authorization moriría en CheckUser.
+	if strings.HasPrefix(request.Body, scheduledCronTickPrefix) {
+		bodyBytes := []byte(core.ToJsonNoErr(map[string]int{"executed": runScheduledCronTick(request.Body)}))
 		handlerResponse := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
 
 		if core.Env.LAMBDA_RESPONSE_STREAMING {
@@ -150,6 +195,13 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		bodyBytes := []byte(body)
 		response := core.HandlerResponse{Body: &bodyBytes}
 		core.SendLocalResponse(args, response)
+		return
+	}
+
+	// Mismo tick programado que en Lambda, para poder dispararlo en local con un POST plano.
+	if strings.HasPrefix(body, scheduledCronTickPrefix) {
+		bodyBytes := []byte(core.ToJsonNoErr(map[string]int{"executed": runScheduledCronTick(body)}))
+		core.SendLocalResponse(args, core.HandlerResponse{Body: &bodyBytes})
 		return
 	}
 

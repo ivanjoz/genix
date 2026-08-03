@@ -28,6 +28,12 @@ type DeployParams struct {
 	// CLOUDFLARE_BUCKET fija el bucket R2 cuando su nombre no sigue el patrón "<APP_NAME>-files":
 	// renombrar la app no debe apuntar el deploy a un bucket vacío. Vacío = nombre autogenerado.
 	CLOUDFLARE_BUCKET string `json:"CLOUDFLARE_BUCKET"`
+	// Origen público del CDN. La Lambda de render lo necesita para construir la base de
+	// assets de cada company (<FRONTEND_CDN>/websites/<companyID>).
+	FRONTEND_CDN string `json:"FRONTEND_CDN"`
+	// URL del artefacto webpage-renderer.zip que publica CI. Vacío = el valor por defecto
+	// de cloud/webpage-renderer.go.
+	WEBPAGE_RENDERER_URL string `json:"WEBPAGE_RENDERER_URL"`
 }
 
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
@@ -271,6 +277,7 @@ func DeployIfraestructure(params DeployParams) {
 	}
 
 	CompileBackendToS3(params, true)
+	CompileRendererToS3(params)
 
 	fmt.Println("Desplegando infraestructura con CloudFormation...")
 	DeployCloudFormation(params)
@@ -282,4 +289,5 @@ func DeployIfraestructure(params DeployParams) {
 	// consola de CloudFormation.
 	UpdateEnviromentVariables(params, 0)
 	UpdateEnviromentVariables(params, 2)
+	UpdateRendererEnviromentVariables(params)
 }

@@ -4,6 +4,11 @@
 		<meta charset="utf-8" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.ico" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<!-- Rellenadas por hooks.server.ts en cada render. Identifican de qué empresa y de
+		     qué página es este documento: el bundle es compartido por todos los tenants, así
+		     que estas metas son la única fuente del companyID/pageID en el cliente. -->
+		<meta name="company-id" content="%genix.companyId%" />
+		<meta name="page-id" content="%genix.pageId%" />
 		<script>
 			window._IS_STORE_APP = true;
 			console.log('[Store App] Path:', window.location.pathname, 'Search:', window.location.search);
@@ -50,7 +55,11 @@
 		</script>
 		%sveltekit.head%
 	</head>
-	<body data-sveltekit-preload-data="hover">
+	<!-- Cada página del builder es un documento propio ya renderizado, y su pageID vive en
+	     la meta page-id de ese documento. Si el router de SvelteKit interceptara un enlace
+	     interno, [...path] recargaría con el pageID del documento ANTERIOR y mostraría el
+	     contenido equivocado: por eso toda navegación interna es una carga completa. -->
+	<body data-sveltekit-reload>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

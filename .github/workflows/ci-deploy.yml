@@ -63,6 +63,20 @@ jobs:
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
         run: bun run build
 
+      - name: Build webpage renderer
+        # Artefacto que el Lambda de render descarga: el servidor SSR de la tienda + sus
+        # assets. Se publica en Pages con URL fija (siempre la última versión) para que el
+        # Lambda no dependa de un despliegue de infraestructura para actualizarse.
+        working-directory: .
+        env:
+          PUBLIC_ENDPOINTS: ${{ vars.PUBLIC_ENDPOINTS || '[]' }}
+          PUBLIC_FRONTEND_CDN: ${{ vars.PUBLIC_FRONTEND_CDN }}
+          PUBLIC_LAMBDA_URL: ${{ vars.PUBLIC_LAMBDA_URL }}
+          PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
+        run: |
+          bun scripts/build-renderer.mjs
+          cp frontend/webpage/build-renderer/webpage-renderer.zip frontend/build/webpage-renderer.zip
+
       - name: Verify Pages metadata
         # Keep GitHub Pages at the custom domain and bypass Jekyll processing.
         run: |
