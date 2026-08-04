@@ -26,7 +26,8 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { createRequire } from 'node:module';
+import { builtinModules, createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { dirname, extname, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -48,6 +49,11 @@ const fail = (message) => {
   console.error(`[build-renderer] ${message}`);
   process.exit(1);
 };
+
+// Los builtins llegan con y sin el prefijo 'node:', y builtinModules solo lista la forma sin él.
+const nodeBuiltins = new Set(builtinModules);
+const isNodeBuiltin = (specifier) =>
+  nodeBuiltins.has(specifier.startsWith('node:') ? specifier.slice(5) : specifier);
 
 // --- 1. Build de SvelteKit en modo renderer ------------------------------------
 if (!process.argv.includes('--skip-build')) {
@@ -72,7 +78,7 @@ mkdirSync(stageDir, { recursive: true });
 // node_modules. esbuild los colapsa en un archivo para que el zip no lleve dependencias.
 const esbuild = createRequire(resolve(appDir, 'package.json'))('esbuild');
 const renderPath = resolve(stageDir, 'render.mjs');
-await esbuild.build({
+const bundle = await esbuild.build({
   entryPoints: [resolve(appDir, 'renderer-entry.js')],
   outfile: renderPath,
   bundle: true,
@@ -80,12 +86,37 @@ await esbuild.build({
   platform: 'node',
   target: 'node22',
   minify: true,
+  metafile: true,
+  // Último recurso de resolución, equivalente a NODE_PATH. Las dependencias anidadas
+  // (axios trae form-data, que requiere su propio mime-types) se instalan enlazadas desde
+  // la caché del gestor de paquetes, y esbuild resuelve por la ruta real: desde ahí el
+  // node_modules del proyecto no está en la cadena de directorios padre y el paquete no
+  // aparece. Sin esto la resolución depende del layout que haya dejado el instalador.
+  nodePaths: [resolve(repoRoot, 'frontend/node_modules')],
   // Parte del runtime de SvelteKit sigue siendo CJS; en un bundle ESM `require` no existe,
   // así que se reconstruye desde node:module.
   banner: {
     js: "import{createRequire as __genixCreateRequire}from'node:module';const require=__genixCreateRequire(import.meta.url);",
   },
 });
+
+// El bundle solo puede depender de módulos nativos de node: se descomprime en /tmp (VPS) o
+// /var/task (Lambda), donde no hay ningún node_modules en la cadena de directorios, así que
+// cualquier otro paquete que quede fuera revienta en el primer render.
+//
+// Esto NO lo cubre el manejo de errores de esbuild: un `require()` que no resuelve dentro de
+// un try/catch — como los que emite el interop CJS de las dependencias — no es error ni
+// warning, se marca external en silencio y el build termina en verde. El metafile es donde
+// sí aparece, y de paso cubre cualquier otra vía por la que algo acabe siendo external.
+const externalImports = Object.values(bundle.metafile.outputs)
+  .flatMap((output) => output.imports)
+  .filter((imported) => imported.external && !isNodeBuiltin(imported.path));
+if (externalImports.length > 0) {
+  for (const imported of externalImports) {
+    console.error(`[build-renderer] quedó fuera del bundle: ${imported.path} (${imported.kind})`);
+  }
+  fail(`${externalImports.length} paquete(s) fuera del bundle: no existen donde corre el artefacto`);
+}
 console.log(`[build-renderer] render.mjs ${formatKB(statSync(renderPath).size)}`);
 
 // --- 3. Assets cliente ---------------------------------------------------------
@@ -136,13 +167,28 @@ const stylesheets = existsSync(cssDir)
 const shouldMergeStylesheets = stylesheets.length > 1;
 
 // --- 5. Render de prueba: valida el bundle y fija el orden de la cascada --------
-const { renderPage } = await import(pathToFileURL(renderPath).href);
+//
+// Se importa desde una copia en el directorio temporal, NO desde stageDir: ahí arriba está
+// el node_modules del proyecto, así que lo que el bundle buscara en tiempo de ejecución se
+// resolvería igual y el render pasaría en falso. Donde el artefacto corre de verdad (/tmp en
+// el VPS, /var/task en el Lambda) no hay ningún node_modules, y es eso lo que se reproduce.
+//
+// Cubre lo que este render evalúa, que no es todo el grafo: los módulos CJS del bundle se
+// inicializan en la primera llamada, así que una dependencia que solo se toca en otra ruta no
+// se ejercita aquí. La garantía dura es la del paso 2, sobre el metafile.
+const smokeDir = resolve(tmpdir(), `genix-renderer-smoke-${process.pid}`);
+rmSync(smokeDir, { recursive: true, force: true });
+mkdirSync(smokeDir, { recursive: true });
+const smokeRenderPath = resolve(smokeDir, 'render.mjs');
+cpSync(renderPath, smokeRenderPath);
+const { renderPage } = await import(pathToFileURL(smokeRenderPath).href);
 const smoke = await renderPage({
   origin: 'https://renderer.invalid',
   path: '/',
   companyID: 0,
   pageID: 0,
 });
+rmSync(smokeDir, { recursive: true, force: true });
 if (smoke.status !== 200) fail(`el render de prueba devolvió HTTP ${smoke.status}`);
 if (!smoke.html.includes('<meta name="company-id"')) {
   fail('el render de prueba no emitió la meta company-id (¿hooks.server.ts no corrió?)');
