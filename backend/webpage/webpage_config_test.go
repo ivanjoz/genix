@@ -45,3 +45,26 @@ func TestNormalizeStorefrontDomain(t *testing.T) {
 		})
 	}
 }
+
+func TestCanBypassDomainCooldown(t *testing.T) {
+	cases := []struct {
+		name     string
+		user     *core.UsuarioToken
+		expected bool
+	}{
+		{"cuenta de desarrollo", &core.UsuarioToken{CompanyID: 1, ID: 1}, true},
+		{"otro usuario de la misma company", &core.UsuarioToken{CompanyID: 1, ID: 2}, false},
+		{"mismo id en otra company", &core.UsuarioToken{CompanyID: 2, ID: 1}, false},
+		{"otra company y otro usuario", &core.UsuarioToken{CompanyID: 7, ID: 3}, false},
+		// El token es lo único que decide, así que uno ausente no puede colarse por aquí.
+		{"sin token", nil, false},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := canBypassDomainCooldown(testCase.user); got != testCase.expected {
+				t.Errorf("canBypassDomainCooldown() = %v, se esperaba %v", got, testCase.expected)
+			}
+		})
+	}
+}

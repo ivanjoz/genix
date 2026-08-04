@@ -12,8 +12,13 @@ import (
 const (
 	// webpageConfigGroup stores all storefront configuration for a company.
 	webpageConfigGroup = int32(10)
-	// domainChangeCooldownTicks is 60 minutes in the project's 2-second SUnixTime units.
-	domainChangeCooldownTicks = int32(60 * 60 / 2)
+	// domainChangeCooldownTicks is 20 minutes in the project's 2-second SUnixTime units.
+	domainChangeCooldownTicks = int32(20 * 60 / 2)
+	// La cuenta de desarrollo del proyecto, exenta del cooldown. El cooldown protege de gastar
+	// las cuotas de Cloudflare a base de registrar y soltar hostnames, pero probar ese mismo
+	// camino es lo que se hace desde esta cuenta, y esperar 20 minutos por intento lo impide.
+	domainCooldownBypassCompanyID = int32(1)
+	domainCooldownBypassUserID    = int32(1)
 	// domainParameterKey holds the company's active storefront hostname.
 	domainParameterKey = "domain"
 	// previousDomainParameterKey marks a hostname that is pending release in Cloudflare. It is
@@ -114,6 +119,18 @@ func PostWebsiteSeo(req *core.HandlerArgs) core.HandlerResponse {
 // El orden importa y es el que hace segura la falla: se guarda, se renderiza, y solo si el render
 // funcionó se libera el dominio anterior. Si el render falla, el hostname viejo sigue vivo en
 // Cloudflare sirviendo su HTML, así que la tienda sigue en pie mientras se reintenta.
+// canBypassDomainCooldown identifica a la cuenta de desarrollo del proyecto, la única que puede
+// cambiar de dominio sin esperar. Se compara contra el token ya verificado, no contra nada que
+// venga en el body, así que no es algo que un cliente pueda afirmar de sí mismo.
+//
+// Lo único que se salta es la espera: el hostname sigue pasando por la validación de formato y
+// por la reserva en Cloudflare, que es donde se rechaza un nombre ocupado.
+func canBypassDomainCooldown(user *core.UsuarioToken) bool {
+	return user != nil &&
+		user.CompanyID == domainCooldownBypassCompanyID &&
+		user.ID == domainCooldownBypassUserID
+}
+
 func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 	body := struct {
 		Domain string `json:"Domain"`
@@ -134,7 +151,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 
 	nowTime := core.SUnixTime()
 	isDomainChange := currentDomain == nil || currentDomain.Value != domain
-	if currentDomain != nil && isDomainChange {
+	if currentDomain != nil && isDomainChange && !canBypassDomainCooldown(req.User) {
 		elapsedTicks := nowTime - currentDomain.Updated
 		if elapsedTicks < domainChangeCooldownTicks {
 			remainingMinutes := (domainChangeCooldownTicks - elapsedTicks + 29) / 30

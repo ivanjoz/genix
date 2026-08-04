@@ -36,6 +36,12 @@ de build de SvelteKit (`../.svelte-kit/output/server/…`), así que pertenece a
 
 El handler es el mismo en los dos. Los llamadores no distinguen el caso.
 
+En el VPS el backend corre como servicio de systemd, que arranca con un `PATH` mínimo
+(`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin`). Un node instalado con nvm vive bajo `~` y
+**no está en esa lista**: el render falla con `exec: "node": executable file not found in $PATH`.
+Conviene instalarlo del sistema (`dnf install nodejs`) y no enlazar el de nvm, que desaparece al
+actualizar de versión.
+
 ## Contrato
 
 Evento de entrada:
@@ -103,3 +109,50 @@ Dos cosas que hay que tener en cuenta al añadir casos:
    (`loadHandler()` en el test lo hace).
 2. `loadedRenderer` es estado de módulo y sobrevive entre tests del mismo archivo — a propósito,
    es lo que reproduce una Lambda caliente.
+
+## Pendientes conocidos
+
+Ninguno rompe el camino feliz. Están aquí porque los cuatro fallan **en silencio**: el backend
+responde que publicó, y el problema aparece más tarde y en otro sitio.
+
+### El Worker no se despliega solo
+
+`serve-worker.js` se sube únicamente con `fn-deploy-cloudflare-worker` (`./deploy.sh 10`, o el
+`6`, que además hace tablas y datos iniciales). Guardar un dominio **no** lo despliega: registra el
+hostname, sube el HTML y nada más.
+
+Así que al cambiar `serve-worker.js` hay que desplegarlo a mano. Si se olvida, las tiendas
+devuelven 404 mientras el backend informa de una publicación correcta —el render y la subida sí
+funcionaron—, y el 404 parece del renderer cuando en realidad el Worker está sirviendo una versión
+vieja que busca otras claves.
+
+Agregar o cambiar un dominio **no** requiere desplegar nada: el Worker es uno solo, común a todas
+las tiendas, y resuelve el hostname en cada request. El alta y la baja del Custom Domain las hace
+el propio handler (`provisionStorefrontDomain` / `removeStorefrontDomain`).
+
+Un GET al hostname después de publicar convertiría esto en un error explícito.
+
+### El nombre del Worker está declarado dos veces
+
+`genix-storefront` aparece en `backend/exec/cloudflare_worker_deploy.go` y en
+`backend/webpage/cloudflare_domain.go`. Hoy coinciden. Si divergen, los dominios se adjuntan a un
+Worker distinto del que se despliega, con el mismo 404 del punto anterior y ninguna pista de por
+qué. Es una constante compartida y debería estar definida una sola vez.
+
+### Una página sin snapshot se publica vacía
+
+El SSR pide el contenido a `live/pages/<companyID>-<pageID>.json` en el CDN. Si no existe, el
+`load()` de la tienda captura el 404, devuelve secciones vacías y el render **sigue adelante**: se
+publica un HTML válido pero sin contenido, y el resultado dice `pages: 2` como si nada. En el log
+solo queda un `[StorePage] webpage load failed`, que no llega a la respuesta.
+
+Se reconoce por el tamaño: una página vacía pesa ~10 KB contra los ~27 KB de una con contenido.
+
+### El artefacto se vuelve a descargar en cada publicación (VPS)
+
+`loadRenderer()` compara el ETag y reutiliza lo extraído, pero `loadedRenderer` es una variable de
+módulo: solo sirve mientras el proceso siga vivo. En Lambda caliente ahorra el trabajo; en el VPS
+cada publicación arranca un `node` nuevo, así que el 304 nunca llega a usarse y se bajan y
+descomprimen los ~460 KB otra vez. Es lo que mide el `en NNNms` del log `artefacto cargado`: entre
+decenas de ms y algo más de un segundo según la red. No es un problema — pero una caché en disco
+bajo `/tmp` con el ETag en la clave lo dejaría en cero.
