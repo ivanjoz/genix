@@ -1,5 +1,5 @@
-// Storefront-only stub for DOMPurify (~50 KB), aliased in only for the per-company
-// prerender build (VITE_COMPANY_ID set) — see webpage/vite.config.ts.
+// Storefront-only stub for DOMPurify (~50 KB), aliased in only for the renderer build
+// (VITE_RENDERER_BUILD set), which is what gets published — see webpage/vite.config.ts.
 //
 // DOMPurify is reached exclusively from `getPageContent()` in
 // packages/genix-ui/agent/registry.ts, which runs only when the UI automation

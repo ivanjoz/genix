@@ -43,17 +43,17 @@ const config = {
 		adapter: adapter({
 			pages: 'build',
 			assets: 'build',
-			// In the prerender build the root is written to index.html (with content), so
-			// the SPA fallback must NOT be index.html or it would overwrite that. 404.html
-			// is what Cloudflare Pages serves for unmatched paths and still boots the SPA.
-			fallback: process.env.VITE_COMPANY_ID ? '404.html' : 'index.html',
+			// Ningún build prerenderiza páginas: el renderer las emite bajo demanda en el
+			// Lambda y la vista embebida del builder es un SPA puro. Así que la salida es
+			// siempre el shell SPA en index.html.
+			fallback: 'index.html',
 			precompress: false,
 			strict: true
 		}),
 		paths: {
-			// The per-company prerender build (VITE_COMPANY_ID set) deploys at the
-			// subdomain root; dev/admin keep the /webpage-app base for the :3572 proxy.
-			base: process.env.VITE_COMPANY_ID || isRendererBuild ? '' : '/webpage-app',
+			// El renderer sirve la tienda en la raíz del dominio de la company; dev/admin
+			// conservan la base /webpage-app del proxy en :3572.
+			base: isRendererBuild ? '' : '/webpage-app',
 			// Con rutas relativas SvelteKit emite './_app/…' en la raíz y '../_app/…' en
 			// una página anidada, así que el prefijo dependería de la profundidad de cada
 			// página. El Lambda reescribe ese prefijo al CDN de la company con UNA regla,
@@ -78,20 +78,6 @@ const config = {
 			$services: '../services',
 			$libs: '../libs',
 			$lib: './lib'
-		},
-		prerender: {
-			handleHttpError: 'warn',
-			// Sin crawl: [...path] hace match con CUALQUIER enlace interno, así que el
-			// crawler prerenderizaría rutas como /shop con el contenido de la raíz. Cada
-			// página se renderiza explícitamente (aquí por 'entries', y en producción una
-			// invocación por página al Lambda).
-			crawl: false,
-			// '*' solo cubre rutas NO dinámicas, y la página de la tienda vive en el
-			// catch-all [...path] (una ruta por página del builder), así que la raíz hay
-			// que declararla a mano o no se prerenderiza nada.
-			// El build --page-base (VITE_PRERENDER_BASE) renderiza SOLO el shell /base.
-			// El build del renderer no prerenderiza nada: el Lambda renderiza bajo demanda.
-			entries: isRendererBuild ? [] : process.env.VITE_PRERENDER_BASE ? ['/base'] : ['*', '/']
 		},
 		output: {
 			// 'split' enables code-splitting so vendor (node_modules) and app code land

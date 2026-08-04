@@ -1,13 +1,20 @@
-// Pre-built deploy artifact: the hand-stripped JS of src/serve-worker.ts (no
-// imports, only TypeScript type annotations were removed, so behavior is
-// identical). Shipped as-is to Cloudflare by scripts/cloudflare_deploy.go — the
-// Go deployer reads this file verbatim, so no esbuild/wrangler/node step is
-// needed. Keep this in sync with src/serve-worker.ts (used for `wrangler dev`).
-const navigationAssetPath = '/index.html';
+// Worker de las tiendas: resuelve hostname + ruta a un objeto de R2 y lo sirve.
+//
+// El HTML lo publica la Lambda de render (frontend/webpage/lambda/handler.mjs), un PUT por
+// página, así que publicar una company NO toca a las demás. Antes esto eran Workers Static
+// Assets, cuyo manifest reemplaza el namespace completo: republicar una sola tienda exigía
+// tener en disco el HTML de todas.
+//
+// Archivo único a propósito: es el artefacto que scripts/cloudflare_deploy.go sube
+// verbatim (sin esbuild ni wrangler) y a la vez el `main` de wrangler.jsonc para
+// `wrangler dev`. Env: { SITE_HTML: R2Bucket } — el binding lo inyecta el deploy Go.
+
+// Prefijo en R2 del HTML de las tiendas. Debe coincidir con HTML_KEY_ROOT del handler.
+const HTML_KEY_ROOT = 'websites-html';
 
 export default {
-  async fetch(request, env) {
-    // Storefront artifacts are read-only.
+  async fetch(request, env, ctx) {
+    // Los artefactos de la tienda son de solo lectura.
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('Method Not Allowed', {
         status: 405,
@@ -15,22 +22,43 @@ export default {
       });
     }
 
-    const requestUrl = new URL(request.url);
-    const hostname = requestUrl.hostname.toLowerCase();
-    const requestedFileName = requestUrl.pathname.split('/').at(-1) ?? '';
-    const requestedPath =
-      requestUrl.pathname === '/' || !requestedFileName.includes('.')
-        ? navigationAssetPath
-        : requestUrl.pathname;
-
-    // The hostname is the tenant key, so no runtime company lookup is needed.
-    const assetUrl = new URL(`/${hostname}${requestedPath}`, requestUrl.origin);
-    const response = await env.ASSETS.fetch(new Request(assetUrl, request));
-
-    if (response.status === 404) {
-      console.warn('[serve-worker] asset not found', { hostname, requestedPath });
+    // La Cache API del POP absorbe las visitas siguientes: solo la primera de cada POP
+    // llega a R2. La URL de la request ya incluye el hostname, así que la clave de caché
+    // separa tenants sin trabajo extra. Solo GET: cache.put rechaza cualquier otro método.
+    const isCacheable = request.method === 'GET';
+    const cache = caches.default;
+    if (isCacheable) {
+      const cachedResponse = await cache.match(request);
+      if (cachedResponse) return cachedResponse;
     }
 
+    const objectKey = buildObjectKey(new URL(request.url));
+    const storedObject = await env.SITE_HTML.get(objectKey);
+    if (!storedObject) {
+      console.warn('[serve-worker] objeto no encontrado', objectKey);
+      return new Response('Not Found', { status: 404 });
+    }
+
+    // El content-type y el cache-control los fijó el PUT del renderer (HTML corto,
+    // assets inmutables, sw.js sin caché), así que se reenvían tal cual.
+    const headers = new Headers();
+    storedObject.writeHttpMetadata(headers);
+    headers.set('etag', storedObject.httpEtag);
+
+    const response = new Response(isCacheable ? storedObject.body : null, { headers });
+    if (isCacheable) ctx.waitUntil(cache.put(request, response.clone()));
     return response;
   },
 };
+
+// Una navegación se sirve como <ruta>/index.html —así lo escribe el renderer, un documento
+// por página del builder—. Los archivos del origen (sw.js, favicon.ico) se piden por su
+// nombre exacto, y lo que los distingue es que el último segmento lleva extensión.
+// Cualquier ruta sin HTML publicado es un 404: el storefront no tiene fallback de SPA,
+// cada página navegable se prerenderiza (ver getCompanyWebpagePages en el backend).
+function buildObjectKey(requestUrl) {
+  const hostname = requestUrl.hostname.toLowerCase();
+  const requestedPath = requestUrl.pathname.replace(/\/+$/, '');
+  const isFileRequest = (requestedPath.split('/').at(-1) || '').includes('.');
+  return `${HTML_KEY_ROOT}/${hostname}${isFileRequest ? requestedPath : `${requestedPath}/index.html`}`;
+}

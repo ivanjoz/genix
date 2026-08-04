@@ -15,13 +15,11 @@ const version = 1.11
 console.log(version)
 const selectedApiEndpointStorageKey = "genixSelectedApiEndpointRoute";
 
-// Builds de tienda publicada: el prerender por company (VITE_COMPANY_ID) y el bundle del
-// renderer que ejecuta el Lambda (VITE_RENDERER_BUILD). Estos despliegues no tienen
-// selector de login/endpoint: la API debe ser siempre PUBLIC_LAMBDA_URL, nunca la
-// selección de localStorage ni la opción "Local" que se añade al previsualizar en
-// localhost.
-const isStorefrontBuild =
-  !!Number(import.meta.env.VITE_COMPANY_ID || 0) || !!import.meta.env.VITE_RENDERER_BUILD
+// Build de la tienda publicada: el bundle del renderer que ejecuta el Lambda
+// (VITE_RENDERER_BUILD). Este despliegue no tiene selector de login/endpoint: la API debe
+// ser siempre PUBLIC_LAMBDA_URL, nunca la selección de localStorage ni la opción "Local"
+// que se añade al previsualizar en localhost.
+const isStorefrontBuild = !!import.meta.env.VITE_RENDERER_BUILD
 
 if(browser){
   const host = window.location.host
@@ -212,12 +210,6 @@ export const Env = {
       // una constante de build— es la fuente autoritativa del tenant.
       const metaCompanyID = Number(readHeadMeta("company-id"))
       if(metaCompanyID){ return Env.companyID = metaCompanyID }
-
-      // Prerender/static build pins the tenant at build time (one build per company).
-      // Vite inlines VITE_COMPANY_ID, so it resolves both in Node (build/SSR) and in
-      // the deployed client bundle. Undefined in the admin app → falls through.
-      const buildCompanyID = Number(import.meta.env.VITE_COMPANY_ID || 0)
-      if(buildCompanyID){ return Env.companyID = buildCompanyID }
 
       const localCompanyID = browser ? localStorage.getItem(Env.appId + "CompanyID") : null
       if(localCompanyID){

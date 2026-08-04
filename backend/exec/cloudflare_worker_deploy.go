@@ -99,88 +99,40 @@ type cloudflareWorkerDomain struct {
 }
 
 func DeployCloudflareWorkerHandler(_ *core.ExecArgs) core.FuncResponse {
-	tenantCount, deployError := DeployCloudflareWorker()
-	if deployError != nil {
+	if deployError := DeployCloudflareWorker(); deployError != nil {
 		return core.FuncResponse{Error: deployError.Error()}
 	}
 
-	return core.FuncResponse{
-		Message: fmt.Sprintf("Cloudflare Worker desplegado con %d sitio(s)", tenantCount),
-	}
+	return core.FuncResponse{Message: "Cloudflare Worker de tiendas desplegado"}
 }
 
-func DeployCloudflareWorker() (int, error) {
+// DeployCloudflareWorker publica el Worker que sirve las tiendas. Es independiente del
+// contenido: no sube HTML de ningún tenant (eso lo hace la Lambda de render, por company),
+// así que basta con desplegarlo una vez y cada vez que cambie serve-worker.js.
+func DeployCloudflareWorker() error {
 	projectRoot, rootError := findGenixProjectRoot()
 	if rootError != nil {
-		return 0, rootError
-	}
-
-	workerDirectory := filepath.Join(projectRoot, "frontend", "webpage", "cloudflare")
-	webpagesDirectory := filepath.Join(workerDirectory, "webpages")
-	tenantCount, validationError := validateWebpageArtifacts(webpagesDirectory)
-	if validationError != nil {
-		return 0, validationError
+		return rootError
 	}
 
 	if strings.TrimSpace(core.Env.CLOUDFLARE_ACCOUNT) == "" ||
 		strings.TrimSpace(core.Env.CLOUDFLARE_TOKEN) == "" {
-		return 0, errors.New("CLOUDFLARE_ACCOUNT y CLOUDFLARE_TOKEN son requeridos")
+		return errors.New("CLOUDFLARE_ACCOUNT y CLOUDFLARE_TOKEN son requeridos")
+	}
+	// Sin bucket el Worker se desplegaría con un binding vacío y devolvería 404 a todo.
+	if strings.TrimSpace(core.Env.CLOUDFLARE_BUCKET) == "" {
+		return errors.New("CLOUDFLARE_BUCKET es requerido para bindear el Worker al HTML en R2")
 	}
 
-	fmt.Printf("[cloudflare-worker] dir=%s tenants=%d\n", workerDirectory, tenantCount)
-	fmt.Println("[cloudflare-worker] deploying Worker and Static Assets")
+	workerDirectory := filepath.Join(projectRoot, "frontend", "webpage", "cloudflare")
+	fmt.Printf("[cloudflare-worker] dir=%s\n", workerDirectory)
 
 	if deployError := deployStorefrontWorker(workerDirectory); deployError != nil {
-		return 0, fmt.Errorf("error desplegando Cloudflare Worker: %w", deployError)
+		return fmt.Errorf("error desplegando Cloudflare Worker: %w", deployError)
 	}
 
 	fmt.Println("[cloudflare-worker] deployment completed")
-	return tenantCount, nil
-}
-
-func validateWebpageArtifacts(webpagesDirectory string) (int, error) {
-	if createError := os.MkdirAll(webpagesDirectory, 0o755); createError != nil {
-		return 0, fmt.Errorf("error creando directorio webpages: %w", createError)
-	}
-
-	entries, readError := os.ReadDir(webpagesDirectory)
-	if readError != nil {
-		return 0, fmt.Errorf("error leyendo directorio webpages: %w", readError)
-	}
-
-	normalizedHostnames := map[string]bool{}
-	tenantCount := 0
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-
-		entryInfo, infoError := entry.Info()
-		if infoError != nil {
-			return 0, fmt.Errorf("error leyendo %s: %w", entry.Name(), infoError)
-		}
-		if entryInfo.Mode()&os.ModeSymlink != 0 || !entry.IsDir() {
-			return 0, fmt.Errorf("webpages solo admite directorios de dominio: %s", entry.Name())
-		}
-
-		hostname, hostnameError := normalizeAndValidateHostname(entry.Name())
-		if hostnameError != nil || hostname != entry.Name() {
-			return 0, fmt.Errorf("directorio de dominio inválido %q", entry.Name())
-		}
-		if normalizedHostnames[hostname] {
-			return 0, fmt.Errorf("dominio duplicado en webpages: %s", hostname)
-		}
-		normalizedHostnames[hostname] = true
-
-		indexPath := filepath.Join(webpagesDirectory, hostname, "index.html")
-		indexInfo, indexError := os.Stat(indexPath)
-		if indexError != nil || indexInfo.IsDir() {
-			return 0, fmt.Errorf("falta index.html para %s", hostname)
-		}
-		tenantCount++
-	}
-
-	return tenantCount, nil
+	return nil
 }
 
 func normalizeAndValidateHostname(rawHostname string) (string, error) {
@@ -209,9 +161,10 @@ func findGenixProjectRoot() (string, error) {
 	}
 
 	for {
-		deployScript := filepath.Join(currentDirectory, "deploy.sh")
-		prerenderScript := filepath.Join(currentDirectory, "scripts", "prerender.mjs")
-		if fileExists(deployScript) && fileExists(prerenderScript) {
+		// Dos marcadores del monorepo, no uno: `backend` se ejecuta desde su propio
+		// subdirectorio y cualquiera de los dos por separado es demasiado común.
+		if fileExists(filepath.Join(currentDirectory, "deploy.sh")) &&
+			fileExists(filepath.Join(currentDirectory, "AGENTS.md")) {
 			return currentDirectory, nil
 		}
 

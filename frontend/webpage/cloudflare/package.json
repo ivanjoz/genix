@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "wrangler types --check",
+    "check": "wrangler deploy --dry-run",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },

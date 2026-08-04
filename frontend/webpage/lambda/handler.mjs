@@ -27,7 +27,7 @@ const CLOUDFLARE_BUCKET = process.env.CLOUDFLARE_BUCKET || '';
 const CLOUDFLARE_API_BASE = process.env.CLOUDFLARE_API_BASE || 'https://api.cloudflare.com/client/v4';
 
 // Prefijo en R2 del HTML servido por el Worker de la tienda. Debe coincidir con el que
-// lee frontend/webpage/cloudflare/src/serve-worker.ts.
+// lee frontend/webpage/cloudflare/serve-worker.js.
 const HTML_KEY_ROOT = 'websites-html';
 const UPLOAD_CONCURRENCY = 4;
 

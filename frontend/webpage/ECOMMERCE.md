@@ -3,6 +3,35 @@
 ## Overview
 This document contains notes about the Genix e-commerce store integration into the main frontend application.
 
+## How a storefront gets published
+
+There is no per-company build. CI builds ONE company-agnostic artifact and a Lambda renders
+each company's pages from it on demand:
+
+1. **CI** (`scripts/build-renderer.mjs`, on push to main) runs the SvelteKit build with
+   `VITE_RENDERER_BUILD=1`, bundles the SSR server into a single `render.mjs` with esbuild,
+   merges the stylesheets, renders a smoke page to validate its own rewrite rules, and ships
+   `webpage-renderer.zip` (~466 KB) to `https://genix-dev.un.pe/webpage-renderer.zip`.
+2. **`deploy.sh 11 <companyID>`** → `backend/exec/company_webpage_deploy.go`: resolves the
+   hostname (`Parameters` group 10, key `domain`), builds the page list (IDs 10 and 11 plus
+   active user pages with ID >= 15) and invokes the render Lambda synchronously.
+3. **The Lambda** (`lambda/handler.mjs`) downloads the zip (conditional GET by ETag, cached
+   in `/tmp`), uploads the js/css to R2 under `websites/<companyID>/_app/**` — skipped when
+   the `buildId` marker already matches — and PUTs one `index.html` per page to
+   `websites-html/<hostname>/<path>/index.html`.
+4. **The Worker** (`cloudflare/serve-worker.js`, deployed by `deploy.sh 10`) maps
+   hostname + path to that R2 key through `caches.default`. It is content-independent: it
+   ships no tenant HTML, so publishing one company never touches another.
+
+Two consequences worth knowing:
+
+- **The tenant is resolved per request, not per build.** `hooks.server.ts` reads `?cid=&pid=`
+  and writes the `company-id` / `page-id` metas; the client reads them back after hydration
+  (`frontend/core/env.ts`). One SSR bundle serves every company.
+- **Every navigable path must be prerendered.** `<body data-sveltekit-reload>` makes internal
+  navigation a full page load, and the Worker has no SPA fallback — a path with no published
+  HTML is a plain 404.
+
 ## Thumbhash Implementation (TODO)
 
 ### Status

@@ -1,10 +1,20 @@
 # PLAN — Prerender de Webpages de Company en Lambda
 
-**Estado: Fases 1, 2 y 3 hechas y verificadas. Faltan la 4, la 5 (resto) y la 6.**
+**Estado: TODAS las fases hechas y verificadas en local. Nada desplegado todavía.**
 
-Hasta que no esté la Fase 4, el sitio en vivo **no refleja** lo que publica la nueva tubería:
-el HTML se escribe en R2 bajo `websites-html/<hostname>/` y el Worker sigue sirviendo desde
-Workers Static Assets. Nada está desplegado todavía (sin commit, sin `deploy.sh 9`).
+El código ya no contiene el flujo anterior. Para que el sitio en vivo pase a la nueva
+tubería hay que desplegar, en este orden:
+
+1. `deploy.sh 9` — la Lambda de render (CloudFormation).
+2. Push a main — CI publica `webpage-renderer.zip` en GitHub Pages.
+3. `deploy.sh 10` — el Worker con el binding R2. **Ojo:** esta es la primera vez que el
+   Worker `genix-storefront` se despliega SIN el bloque `assets`; convierte un Worker con
+   Static Assets en uno con binding R2. Si Cloudflare rechazara el reemplazo, el error de la
+   API sale con detalle (`cloudflareAPIError`).
+4. `deploy.sh 11 <companyID>` por cada company a republicar.
+
+Hasta el paso 3, el HTML que escribe la Lambda en `websites-html/<hostname>/` no lo sirve
+nadie.
 
 ## 1. De dónde se parte (acción `[11]` original)
 
@@ -108,7 +118,7 @@ Lambda <APP_NAME>-webpage-renderer (nodejs22.x, arm64, 1024 MB, 120 s)
 
 Go: provisionStorefrontDomain(hostname)   (solo la primera vez)
 
-Cloudflare Worker genix-storefront:   ← PENDIENTE (Fase 4)
+Cloudflare Worker genix-storefront (deploy.sh 10, un PUT del script):
   hostname + path → caches.default → R2 websites-html/… → 404
 ```
 
@@ -259,27 +269,52 @@ Payload real:
 ```
 Respuesta: `{ "buildId": "…", "pages": 3, "assets": 20, "bytes": 29714 }`.
 
-### Fase 4 — Worker sirviendo HTML desde R2 — ⏳ PENDIENTE
-- `frontend/webpage/cloudflare/src/serve-worker.ts` **y** el `serve-worker.js` desplegado
-  (hoy es una copia despojada a mano; hay que mantenerlos en sync): binding R2 en vez de
-  `ASSETS`, clave `websites-html/<hostname><ruta>/index.html`, con `caches.default`.
+### Fase 4 — Worker sirviendo HTML desde R2 — ✅ HECHA
+- `frontend/webpage/cloudflare/serve-worker.js`: binding R2 `SITE_HTML` en vez de `ASSETS`,
+  clave `websites-html/<hostname><ruta>/index.html`, con `caches.default` y `writeHttpMetadata`
+  (el content-type y el cache-control los fijó el PUT del renderer). 404 limpio si la ruta no
+  tiene HTML publicado: no hay fallback de SPA.
 - `wrangler.jsonc`: `r2_buckets` en vez del bloque `assets`.
-- `backend/exec/cloudflare_assets.go` y `cloudflare_worker_deploy.go`: el deploy del Worker
-  deja de construir el manifest de tenants y `validateWebpageArtifacts` desaparece (exige un
-  directorio `webpages/` que ya no existirá).
+- `backend/exec/cloudflare_assets.go`: el deploy pasa de ~300 líneas (manifest content-hashed,
+  upload-session, buckets multipart) a **un solo PUT** del script con el binding R2. El nombre
+  del bucket lo inyecta el Go desde `CLOUDFLARE_BUCKET`; el de `wrangler.jsonc` es solo para
+  `wrangler dev`.
+- `cloudflare_worker_deploy.go`: fuera `validateWebpageArtifacts`; `DeployCloudflareWorker`
+  ya no devuelve un conteo de tenants (el deploy es independiente del contenido) y ahora
+  exige `CLOUDFLARE_BUCKET`, sin el cual el Worker respondería 404 a todo.
 
-### Fase 6 — Limpieza — ⏳ PENDIENTE
-- Borrar `scripts/prerender.mjs`, `frontend/webpage/dist-prerender/`,
+Desviaciones respecto de lo planeado:
+- **Un solo archivo de Worker.** El plan pedía mantener `src/serve-worker.ts` y el
+  `serve-worker.js` desplegado en sync a mano. Se eliminó el `.ts` y `wrangler.jsonc` apunta
+  su `main` al `.js`: el mismo archivo sirve para el deploy Go y para `wrangler dev`, así que
+  el riesgo de divergencia desaparece. `package.json`: `check` pasa a `wrangler deploy --dry-run`
+  (ya no hay TypeScript que comprobar).
+- `findGenixProjectRoot` marcaba la raíz con `deploy.sh` + `scripts/prerender.mjs`, que la
+  Fase 6 borra; ahora usa `deploy.sh` + `AGENTS.md`.
+
+### Fase 6 — Limpieza — ✅ HECHA
+- Borrados `scripts/prerender.mjs`, `frontend/webpage/dist-prerender/`,
   `frontend/webpage/cloudflare/webpages/`, `frontend/webpage/routes/base/`,
-  `backend/exec/base_template_deploy.go` y la acción `[13]` de `deploy.sh`.
-- Retirar el modo `VITE_COMPANY_ID` de `svelte.config.js`, `routes/+layout.ts`,
-  `routes/[...path]/+page.ts`, `hooks.server.ts` y `frontend/core/env.ts`: al desaparecer
-  el prerender antiguo, `isStorefrontBuild` se reduce a `VITE_RENDERER_BUILD`.
-- Retirar de `backend/exec/company_webpage_deploy.go` lo que quede muerto tras la Fase 4:
-  `companyWebpageAssetBase`, `isFingerprintedWebpageAsset`, `verifyGeneratedWebpage`,
-  `replaceWebpageDirectory`, `webpageAssetUploadConcurrency` y sus casos en
-  `cloudflare_worker_deploy_test.go`.
-- Actualizar `frontend/webpage/ECOMMERCE.md`.
+  `backend/exec/base_template_deploy.go`, su registro `fn-deploy-base-template` y la acción
+  `[13]` de `deploy.sh` (menú incluido).
+- Retirado el modo `VITE_COMPANY_ID` de `svelte.config.js`, `routes/+layout.ts`,
+  `routes/[...path]/+page.ts`, `hooks.server.ts`, `vite.config.ts` y `frontend/core/env.ts`:
+  `isStorefrontBuild` se reduce a `VITE_RENDERER_BUILD`.
+- Retirados de `backend/exec/company_webpage_deploy.go`: `companyWebpageAssetBase`,
+  `isFingerprintedWebpageAsset`, `verifyGeneratedWebpage`, `replaceWebpageDirectory`,
+  `webpageAssetUploadConcurrency` y sus casos de test.
+- `frontend/webpage/ECOMMERCE.md`: nueva sección con la tubería de publicación real.
+
+Desviaciones respecto de lo planeado:
+- **Ya no queda prerender de build en ningún modo**, así que se fue el bloque `kit.prerender`
+  completo de `svelte.config.js` (`entries`/`crawl`/`handleHttpError`), el `fallback: '404.html'`
+  (siempre `index.html`) y `routes/components/+page.ts`, que existía solo para excluirse del
+  crawl.
+- **El stub de DOMPurify se reapuntó a `VITE_RENDERER_BUILD`.** Colgaba de `VITE_COMPANY_ID`,
+  así que retirarlo sin más habría metido los ~50 KB de la librería real en el bundle
+  publicado, que antes no los llevaba.
+- `dist-prerender` se sustituye por `build-renderer` en los `@source not` de los dos
+  `tailwind.css`, en el `exclude` del `tsconfig.json` y en `.gitignore`.
 
 ## 7. Riesgos
 

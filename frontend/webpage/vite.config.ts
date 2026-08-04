@@ -116,17 +116,17 @@ const makeDevCssModuleClass = (name: string, filename: string) => {
   return `m-${name}_${stableHash}`;
 };
 
-// The per-company storefront prerender (scripts/prerender.mjs) sets VITE_COMPANY_ID.
-// In that build only, swap DOMPurify (~50 KB) for a tiny stub: it's reached solely from
-// the UI agent's getPageContent() (genix-ui/agent/registry.ts), a code path the
-// public storefront never runs. Admin/dev builds keep the real library.
-const isStorefrontPrerender = !!process.env.VITE_COMPANY_ID;
+// El build del renderer (scripts/build-renderer.mjs) es el que se publica como tienda.
+// Solo en él se cambia DOMPurify (~50 KB) por un stub mínimo: se alcanza únicamente desde
+// getPageContent() del agente de UI (genix-ui/agent/registry.ts), un camino que la tienda
+// pública nunca ejecuta. Los builds admin/dev conservan la librería real.
+const isRendererBuild = !!process.env.VITE_RENDERER_BUILD;
 
 export default defineConfig({
   root: path.resolve(__dirname),
   publicDir: './static',
   resolve: {
-    alias: isStorefrontPrerender
+    alias: isRendererBuild
       ? { dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js') }
       : {} as AliasOptions
   },

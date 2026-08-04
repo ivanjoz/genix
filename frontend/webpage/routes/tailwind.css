@@ -17,8 +17,8 @@
 }
 @source not "../../.svelte-kit";
 @source not "../.svelte-kit";
-@source not "../dist-prerender";
 @source not "../build";
+@source not "../build-renderer";
 @source not "../../**/*.md";
 
 @source "../../domain-components/MobileMenu.svelte";

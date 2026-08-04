@@ -16,8 +16,8 @@
 @source not "../.svelte-kit";
 @source not "../build";
 @source not "../webpage/.svelte-kit";
-@source not "../webpage/dist-prerender";
 @source not "../webpage/build";
+@source not "../webpage/build-renderer";
 @source not "../**/*.md";
 
 /* Custom Tailwind Configuration */

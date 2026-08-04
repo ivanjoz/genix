@@ -7,15 +7,12 @@ import (
 	"app/db"
 	webpageTypes "app/webpage/types"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 const (
-	webpageConfigGroup            = int32(10)
-	webpageAssetUploadConcurrency = 4
+	webpageConfigGroup = int32(10)
 	// Páginas de sistema con contenido editable en el builder. Mantener en sync con
 	// SYSTEM_PAGES (frontend/services/webpage/pages.svelte.ts) y con defaultPageID.
 	webpageHomePageID  = int16(10)
@@ -104,23 +101,6 @@ func getCompanyWebpagePages(companyID int32) ([]cloud.WebpageRenderPage, error) 
 	return pages, nil
 }
 
-func companyWebpageAssetBase(companyID int32) (string, error) {
-	frontendCDN := strings.TrimRight(strings.TrimSpace(core.Env.FRONTEND_CDN), "/")
-	if !strings.HasPrefix(frontendCDN, "https://") {
-		return "", fmt.Errorf("FRONTEND_CDN debe ser una URL https válida")
-	}
-	return fmt.Sprintf("%s/websites/%d", frontendCDN, companyID), nil
-}
-
-func isFingerprintedWebpageAsset(fileName string) bool {
-	if fileName == "env.js" || fileName == "blurhash.js" {
-		return false
-	}
-	nameWithoutExtension := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-	nameParts := strings.Split(nameWithoutExtension, ".")
-	return len(nameParts[len(nameParts)-1]) >= 8
-}
-
 func parseCompanyIDArgument(rawArgument string) (int32, error) {
 	arguments := strings.Fields(rawArgument)
 	if len(arguments) != 1 {
@@ -163,49 +143,4 @@ func getCompanyWebpageDomain(companyID int32) (string, error) {
 		return "", hostnameError
 	}
 	return hostname, nil
-}
-
-func verifyGeneratedWebpage(webpageDirectory string) error {
-	if !fileExists(filepath.Join(webpageDirectory, "index.html")) {
-		return fmt.Errorf("el prerender no generó index.html")
-	}
-
-	entries, readError := os.ReadDir(webpageDirectory)
-	if readError != nil {
-		return readError
-	}
-	for _, entry := range entries {
-		extension := strings.ToLower(filepath.Ext(entry.Name()))
-		if !entry.IsDir() && (extension == ".js" || extension == ".css") {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("el prerender no generó assets JS/CSS")
-}
-
-func replaceWebpageDirectory(targetDirectory string, temporaryDirectory string) error {
-	backupDirectory := targetDirectory + ".previous"
-	if removeBackupError := os.RemoveAll(backupDirectory); removeBackupError != nil {
-		return removeBackupError
-	}
-
-	targetExists := false
-	if _, targetError := os.Stat(targetDirectory); targetError == nil {
-		targetExists = true
-		if backupError := os.Rename(targetDirectory, backupDirectory); backupError != nil {
-			return backupError
-		}
-	} else if !os.IsNotExist(targetError) {
-		return targetError
-	}
-
-	if publishError := os.Rename(temporaryDirectory, targetDirectory); publishError != nil {
-		if targetExists {
-			_ = os.Rename(backupDirectory, targetDirectory)
-		}
-		return publishError
-	}
-
-	return os.RemoveAll(backupDirectory)
 }

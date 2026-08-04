@@ -1,15 +1,11 @@
 {
-  // One Worker serves every company folder selected by request hostname.
+  // Un solo Worker sirve todas las tiendas, seleccionando el tenant por hostname.
   "name": "genix-storefront",
-  "main": "src/serve-worker.ts",
+  "main": "serve-worker.js",
   "compatibility_date": "2026-06-10",
-  "assets": {
-    "directory": "./webpages",
-    "binding": "ASSETS",
-    "run_worker_first": true,
-    "html_handling": "none",
-    "not_found_handling": "none"
-  },
+  // El HTML publicado vive en R2 bajo websites-html/<hostname>/. En el deploy real el
+  // bucket lo inyecta el Go (CLOUDFLARE_BUCKET); este nombre solo aplica a `wrangler dev`.
+  "r2_buckets": [{ "binding": "SITE_HTML", "bucket_name": "genix-files" }],
   "observability": {
     "enabled": true
   }

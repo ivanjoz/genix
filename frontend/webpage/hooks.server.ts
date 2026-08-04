@@ -13,12 +13,10 @@ import type { Handle } from '@sveltejs/kit';
 // IMPORTANTE: Env es un singleton de módulo, así que un proceso solo puede renderizar UNA
 // página a la vez. El handler del Lambda renderiza en secuencia por ese motivo.
 export const handle: Handle = async ({ event, resolve }) => {
-	// Durante un build (prerender del flujo antiguo y generación del fallback SPA)
-	// SvelteKit prohíbe leer searchParams: el HTML emitido no puede depender del query.
-	// Ahí el tenant lo fija VITE_COMPANY_ID en tiempo de build, como antes.
-	const companyID = building
-		? Number(import.meta.env.VITE_COMPANY_ID) || 0
-		: Number(event.url.searchParams.get('cid')) || 0;
+	// Al generar el shell SPA del build, SvelteKit prohíbe leer searchParams: el HTML
+	// emitido no puede depender del query. Ese shell no pertenece a ninguna company, así
+	// que las metas quedan en 0 y el cliente resuelve el tenant por su cuenta.
+	const companyID = building ? 0 : Number(event.url.searchParams.get('cid')) || 0;
 	const pageID = building ? 0 : Number(event.url.searchParams.get('pid')) || 0;
 
 	Env.companyID = companyID;

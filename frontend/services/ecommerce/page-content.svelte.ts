@@ -97,9 +97,9 @@ export interface IWebpageContent {
 }
 
 // Storefront loader: ONE public call (GET.p-webpage) returns a page's SEO config +
-// content. No auth — makeRoute appends company-id from Env.getCompanyID()
-// (VITE_COMPANY_ID at build, window/path at runtime). pageID defaults to the root
-// page (resolved server-side). Used by the prerender build and live storefronts.
+// content. No auth — makeRoute appends company-id from Env.getCompanyID() (the
+// company-id meta the render left in the <head>). pageID defaults to the root page
+// (resolved server-side). Used by the live storefront's onMount refresh.
 export const getStoreWebpage = async (pageID = 0): Promise<IWebpageContent> => {
   const route = pageID > 0 ? `p-webpage?id=${pageID}` : 'p-webpage';
 	const result: IWebpagePublicResult = await GET({ route });
