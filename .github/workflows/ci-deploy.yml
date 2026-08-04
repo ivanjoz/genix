@@ -8,6 +8,9 @@ on:
       - 'frontend/**'
       - '.gitmodules'
       - '.github/workflows/ci-deploy.yml'
+      # Construye webpage-renderer.zip, que se publica junto al frontend: sin esta ruta un
+      # cambio en el empaquetado del renderer no republica el artefacto.
+      - 'scripts/build-renderer.mjs'
   workflow_dispatch:
 
 permissions:
