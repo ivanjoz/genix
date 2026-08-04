@@ -15,7 +15,7 @@ each company's pages from it on demand:
 2. **`deploy.sh 11 <companyID>`** → `backend/exec/company_webpage_deploy.go`: resolves the
    hostname (`Parameters` group 10, key `domain`), builds the page list (IDs 10 and 11 plus
    active user pages with ID >= 15) and invokes the render Lambda synchronously.
-3. **The Lambda** (`lambda/handler.mjs`) downloads the zip (conditional GET by ETag, cached
+3. **The Lambda** (`webpage-renderer/handler.mjs`, at the repo root) downloads the zip (conditional GET by ETag, cached
    in `/tmp`), uploads the js/css to R2 under `websites/<companyID>/_app/**` — skipped when
    the `buildId` marker already matches — and PUTs one `index.html` per page to
    `websites-html/<hostname>/<path>/index.html`.

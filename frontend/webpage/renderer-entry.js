@@ -4,8 +4,11 @@
 // sin node_modules: SvelteKit deja su servidor en .svelte-kit/output/server (es lo mismo
 // que consume cualquier adapter), pero repartido en decenas de chunks que importan al
 // paquete @sveltejs/kit. Bundlearlo aquí es lo que permite meterlo en un zip de pocos MB.
-import { Server } from '../.svelte-kit/output/server/index.js';
-import { manifest } from '../.svelte-kit/output/server/manifest.js';
+// Rutas relativas a frontend/webpage/: tienen que apuntar al build de LA TIENDA. Con './' y no
+// con '../' porque un nivel más arriba está el build de la app principal, que bundlearía la app
+// equivocada sin que nada falle hasta el render de prueba.
+import { Server } from './.svelte-kit/output/server/index.js';
+import { manifest } from './.svelte-kit/output/server/manifest.js';
 
 const server = new Server(manifest);
 let serverInitialized = false;

@@ -16,14 +16,21 @@ import (
 // el .zip que sube a S3 lleva solo eso: el bundle SSR y los assets de la tienda los
 // descarga la función en caliente desde RENDERER_ZIP_URL.
 //
+// La carpeta webpage-renderer/ del repo tiene además cli.mjs (la entrada que usa el backend
+// fuera de Lambda) y sus tests, que NO viajan en el zip: aquí se empaqueta un solo archivo.
+//
 // Ojo con los nombres: este es el CÓDIGO de la función; webpage-renderer.zip (sin el
 // sufijo -lambda) es el ARTEFACTO que publica CI con el servidor SSR y los assets.
-const rendererHandlerPath = "/frontend/webpage/lambda/handler.mjs"
+const rendererHandlerPath = "/webpage-renderer/handler.mjs"
 const rendererS3Path = "gerp-artifacts/webpage-renderer-lambda.zip"
 const rendererLocalZipPath = "/cloud/webpage-renderer-lambda.zip"
 
 // URL por defecto del artefacto de CI (GitHub Pages, siempre la última versión). Se puede
 // sobrescribir con WEBPAGE_RENDERER_URL en credentials.json.
+//
+// Duplicada en backend/core/security.go (DefaultWebpageRendererURL) porque el backend también
+// necesita el artefacto cuando ejecuta el renderer en local, y este directorio es otro módulo
+// Go: el compilador no puede vigilar que las dos sigan iguales.
 const defaultRendererZipUrl = "https://genix-dev.un.pe/webpage-renderer.zip"
 
 func rendererZipUrl(params DeployParams) string {

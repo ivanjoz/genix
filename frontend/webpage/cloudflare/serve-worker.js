@@ -1,6 +1,6 @@
 // Worker de las tiendas: resuelve hostname + ruta a un objeto de R2 y lo sirve.
 //
-// El HTML lo publica la Lambda de render (frontend/webpage/lambda/handler.mjs), un PUT por
+// El HTML lo publica la Lambda de render (webpage-renderer/handler.mjs), un PUT por
 // página, así que publicar una company NO toca a las demás. Antes esto eran Workers Static
 // Assets, cuyo manifest reemplaza el namespace completo: republicar una sola tienda exigía
 // tener en disco el HTML de todas.

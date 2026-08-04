@@ -175,7 +175,7 @@ Verificado: build admin/CSR OK (metas a `0`), `scripts/prerender.mjs --company 1
   `frontend/core/env.ts`: `isPrerenderStorefront` → `isStorefrontBuild`, que ahora cubre
   los dos builds de tienda (si no, el bundle publicado podría elegir el endpoint de API
   desde localStorage en vez de `PUBLIC_LAMBDA_URL`).
-- `frontend/webpage/lambda/renderer-entry.js` (nuevo): expone `renderPage()` sobre el
+- `frontend/webpage/renderer-entry.js` (nuevo): expone `renderPage()` sobre el
   `Server` de SvelteKit.
 - `scripts/build-renderer.mjs` (nuevo): build → bundle esbuild → assets → unión de css →
   render de prueba → validación → `manifest.json` → zip.
@@ -208,7 +208,7 @@ Verificado: los tres modos de build conviven — admin/CSR (`/webpage-app/_app/�
 
 ### Fase 3 — Lambda de Node en CloudFormation — ✅ HECHA
 
-- `frontend/webpage/lambda/handler.mjs` (nuevo, sin dependencias npm): GET condicional del
+- `webpage-renderer/handler.mjs` (nuevo, sin dependencias npm): GET condicional del
   zip por ETag → unzip a `/tmp` → `import('render.mjs')` → render de N páginas → aplica
   `htmlRewrites` → sube assets y HTML a R2 con `fetch` (misma API REST que
   `cloud.SaveFileToR2`, `backend/cloud/s3.go:340`). Devuelve un resumen JSON.

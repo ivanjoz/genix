@@ -105,6 +105,11 @@ type EnvStruct struct {
 	CLOUDFLARE_DATABASE_ID string
 	FRONTEND_CDN           string
 	ZONE_NAME              string
+	// WEBPAGE_RENDERER_URL is the storefront renderer artifact (webpage-renderer.zip: SSR
+	// bundle + assets). Outside Lambda the backend runs the renderer locally and has to hand
+	// this to the Node process, so the value has to reach the backend and not only the deploy
+	// CLI. Optional: defaults to the CI-published URL, same as cloud/webpage-renderer.go.
+	WEBPAGE_RENDERER_URL string
 	// OpenRouter — used by the in-app agent (backend/agent/llm). Model is
 	// optional; the llm package defaults to tencent/hy3-preview when blank.
 	OPENROUTER_KEY   string
@@ -118,6 +123,11 @@ type EnvStruct struct {
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
 }
+
+// DefaultWebpageRendererURL is the CI-published storefront renderer artifact. It is duplicated in
+// cloud/webpage-renderer.go (defaultRendererZipUrl) and the two must stay equal — `cloud` is a
+// separate Go module and cannot import this package, so the compiler cannot enforce it.
+const DefaultWebpageRendererURL = "https://genix-dev.un.pe/webpage-renderer.zip"
 
 var Env *EnvStruct
 var BuildDate string
@@ -199,6 +209,12 @@ func PopulateVariables() {
 	Env.CLOUDFLARE_BUCKET = strings.TrimSpace(Env.CLOUDFLARE_BUCKET)
 	if len(Env.CLOUDFLARE_BUCKET) == 0 {
 		Env.CLOUDFLARE_BUCKET = Env.APP_NAME + "-files"
+	}
+	// Keep this default identical to defaultRendererZipUrl in cloud/webpage-renderer.go: the same
+	// artifact has to be used whether the renderer runs in Lambda or locally.
+	Env.WEBPAGE_RENDERER_URL = strings.TrimSpace(Env.WEBPAGE_RENDERER_URL)
+	if len(Env.WEBPAGE_RENDERER_URL) == 0 {
+		Env.WEBPAGE_RENDERER_URL = DefaultWebpageRendererURL
 	}
 
 	Env.LAMBDA_NAME = Env.APP_NAME + "-backend"

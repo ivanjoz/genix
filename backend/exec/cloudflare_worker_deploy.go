@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -154,31 +153,10 @@ func normalizeAndValidateHostname(rawHostname string) (string, error) {
 	return hostname, nil
 }
 
+// findGenixProjectRoot forwards to core.FindProjectRoot, which owns the lookup so `cloud` can use it
+// too without importing this package (that import would be a cycle).
 func findGenixProjectRoot() (string, error) {
-	currentDirectory, workingDirectoryError := os.Getwd()
-	if workingDirectoryError != nil {
-		return "", workingDirectoryError
-	}
-
-	for {
-		// Dos marcadores del monorepo, no uno: `backend` se ejecuta desde su propio
-		// subdirectorio y cualquiera de los dos por separado es demasiado común.
-		if fileExists(filepath.Join(currentDirectory, "deploy.sh")) &&
-			fileExists(filepath.Join(currentDirectory, "AGENTS.md")) {
-			return currentDirectory, nil
-		}
-
-		parentDirectory := filepath.Dir(currentDirectory)
-		if parentDirectory == currentDirectory {
-			return "", errors.New("no se encontró la raíz del proyecto Genix")
-		}
-		currentDirectory = parentDirectory
-	}
-}
-
-func fileExists(filePath string) bool {
-	fileInfo, fileError := os.Stat(filePath)
-	return fileError == nil && !fileInfo.IsDir()
+	return core.FindProjectRoot()
 }
 
 func provisionStorefrontDomain(hostname string) error {

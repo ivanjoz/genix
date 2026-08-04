@@ -11,7 +11,12 @@
 // Respuesta: { buildId, pages, assets, bytes }
 //
 // Sin dependencias npm: el runtime de Lambda solo trae Node, y añadir una librería
-// obligaría a empaquetar node_modules en el zip de la función.
+// obligaría a empaquetar node_modules en el zip de la función. Por lo mismo el zip de la
+// función lleva SOLO este archivo (cloud/webpage-renderer.go): cli.mjs y los tests que lo
+// acompañan nunca viajan a AWS.
+//
+// Fuera de Lambda el backend lo ejecuta con `node cli.mjs` (backend/cloud/webpage_renderer.go),
+// así que este módulo no puede asumir el entorno de AWS en ningún punto.
 
 import { inflateRawSync } from 'node:zlib';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -82,7 +87,7 @@ export async function render(event) {
 
 // El Worker sirve una navegación como <host>/<ruta>/index.html, así que la ruta se
 // normaliza a la misma forma con la que se construye la clave.
-function normalizePagePath(rawPath) {
+export function normalizePagePath(rawPath) {
 	const path = String(rawPath || '/').trim();
 	if (path === '' || path === '/') return '/';
 	const normalized = `/${path.replace(/^\/+|\/+$/g, '')}`;
@@ -93,7 +98,7 @@ function normalizePagePath(rawPath) {
 // El HTML del SSR apunta a '/_app/…' (raíz del sitio). Las reglas del manifest son las
 // transformaciones deterministas que CI ya calculó (unir las hojas de estilo); lo único
 // que depende del tenant es anteponer la base del CDN de la company.
-function applyHtmlRewrites(html, manifest, assetBase) {
+export function applyHtmlRewrites(html, manifest, assetBase) {
 	let output = html;
 	for (const rule of manifest.htmlRewrites || []) {
 		if (rule.required && !output.includes(rule.find)) {
@@ -153,7 +158,7 @@ async function loadRenderer() {
 // Lector mínimo de ZIP: se recorre el directorio central (la fuente autoritativa de los
 // tamaños) y se infla cada entrada. Ver el comentario de cabecera sobre por qué no hay
 // una librería aquí.
-function readZipEntries(buffer) {
+export function readZipEntries(buffer) {
 	let endOfCentralDirectory = -1;
 	for (let offset = buffer.length - 22; offset >= 0; offset--) {
 		if (buffer.readUInt32LE(offset) === 0x06054b50) {
@@ -232,7 +237,7 @@ async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, force) {
 	return uploads.length;
 }
 
-function contentTypeFor(key) {
+export function contentTypeFor(key) {
 	if (key.endsWith('.js')) return 'text/javascript; charset=utf-8';
 	if (key.endsWith('.css')) return 'text/css; charset=utf-8';
 	if (key.endsWith('.ico')) return 'image/x-icon';

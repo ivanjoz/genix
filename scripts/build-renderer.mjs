@@ -73,7 +73,7 @@ mkdirSync(stageDir, { recursive: true });
 const esbuild = createRequire(resolve(appDir, 'package.json'))('esbuild');
 const renderPath = resolve(stageDir, 'render.mjs');
 await esbuild.build({
-  entryPoints: [resolve(appDir, 'lambda/renderer-entry.js')],
+  entryPoints: [resolve(appDir, 'renderer-entry.js')],
   outfile: renderPath,
   bundle: true,
   format: 'esm',
