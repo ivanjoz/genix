@@ -130,6 +130,16 @@ export default defineConfig({
       ? { dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js') }
       : {} as AliasOptions
   },
+  ssr: {
+    // El build del renderer se empaqueta en un zip que corre sin node_modules (/tmp en el
+    // VPS, /var/task en el Lambda), así que nada puede quedar como dependencia externa.
+    //
+    // Por defecto Vite externaliza las dependencias en SSR, y las CJS las deja como llamadas
+    // a un createRequire propio. esbuild no puede seguir esas llamadas — para él son un
+    // require() de usuario, no un import — así que sobreviven al bundle y el paquete se busca
+    // en tiempo de ejecución, donde no existe. Así se coló mime-types (axios -> form-data).
+    noExternal: isRendererBuild ? true : undefined
+  },
   server: {
     port: 3571,
     fs: {

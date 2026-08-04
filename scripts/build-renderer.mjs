@@ -110,12 +110,29 @@ const bundle = await esbuild.build({
 // sí aparece, y de paso cubre cualquier otra vía por la que algo acabe siendo external.
 const externalImports = Object.values(bundle.metafile.outputs)
   .flatMap((output) => output.imports)
-  .filter((imported) => imported.external && !isNodeBuiltin(imported.path));
-if (externalImports.length > 0) {
-  for (const imported of externalImports) {
-    console.error(`[build-renderer] quedó fuera del bundle: ${imported.path} (${imported.kind})`);
-  }
-  fail(`${externalImports.length} paquete(s) fuera del bundle: no existen donde corre el artefacto`);
+  .filter((imported) => imported.external && !isNodeBuiltin(imported.path))
+  .map((imported) => `${imported.path} (${imported.kind})`);
+
+// El metafile solo ve lo que esbuild resolvió, y hay una vía que se le escapa: Vite
+// externaliza las dependencias CJS del build SSR como llamadas a un createRequire suyo, que
+// para esbuild son llamadas a una función cualquiera, no imports. No aparecen en el metafile
+// ni dan warning, y el paquete queda buscándose en tiempo de ejecución. Se detectan sobre el
+// texto emitido: qué identificadores salen de un createRequire, y con qué se los llama.
+const emitted = readFileSync(renderPath, 'utf8');
+const requireAliases = [...emitted.matchAll(/([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\(import\.meta\.url\)/g)]
+  .filter(([, , factory]) => new RegExp(`createRequire\\s+as\\s+${factory}\\b`).test(emitted))
+  .map(([, alias]) => alias);
+const runtimeRequires = requireAliases.flatMap((alias) =>
+  [...emitted.matchAll(new RegExp(`\\b${alias}\\(["']([^"']+)["']\\)`, 'g'))]
+    .map((match) => match[1])
+    .filter((specifier) => !isNodeBuiltin(specifier))
+    .map((specifier) => `${specifier} (createRequire ${alias})`),
+);
+
+const escaped = [...new Set([...externalImports, ...runtimeRequires])];
+if (escaped.length > 0) {
+  for (const specifier of escaped) console.error(`[build-renderer] quedó fuera del bundle: ${specifier}`);
+  fail(`${escaped.length} paquete(s) fuera del bundle: no existen donde corre el artefacto`);
 }
 console.log(`[build-renderer] render.mjs ${formatKB(statSync(renderPath).size)}`);
 
