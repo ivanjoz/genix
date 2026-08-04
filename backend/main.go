@@ -397,19 +397,24 @@ func main() {
 			AllowCredentials: false,
 		})
 
-		// Local-only SSE+POST bridge so the backend can drive the browser as an
-		// agent. The stream carries every server→browser message (page commands
-		// and chat events); /agent/in carries every browser→backend message
-		// (command replies, unsolicited events, chat user messages).
+		// SSE+POST bridge so the backend can drive the browser as an agent.
+		// /agent/turn is the normal path: one chat turn, one streamed response
+		// carrying both chat events and page commands, closed when the turn
+		// ends. /agent/stream is the same protocol without a turn attached —
+		// an idle page-bridge the external HTTP driver below needs, opened only
+		// on explicit opt-in. /agent/in carries every browser→backend message
+		// (command replies and unsolicited events).
 		mux := http.NewServeMux()
 		// The browser connects to these cross-origin (app served from the dev
 		// proxy, backend on another port), so unlike the old WS upgrade they need
 		// CORS headers. No method prefix on the patterns: that lets the CORS
 		// middleware answer the JSON POST's preflight OPTIONS on /agent/in too.
+		mux.Handle("/agent/turn", corsMiddleware.Handler(http.HandlerFunc(agent.HandleTurn)))
 		mux.Handle("/agent/stream", corsMiddleware.Handler(http.HandlerFunc(agent.HandleStream)))
 		mux.Handle("/agent/in", corsMiddleware.Handler(http.HandlerFunc(agent.HandleIn)))
 		// HTTP entrypoint for external LLM agents (Claude Code / Gemini): batch
-		// actions in, post-action page snapshot out. Local-only.
+		// actions in, post-action page snapshot out. Requires an idle
+		// /agent/stream to be open on the target tab.
 		mux.HandleFunc("POST /agent", agent.HandleAgentHTTP)
 		// GET /agent serves read-only side-channel queries (currently `?get=menu`).
 		mux.HandleFunc("GET /agent", agent.HandleAgentGet)

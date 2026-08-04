@@ -175,9 +175,11 @@ def ensure_database_keyspace_exists(database_name, database_port, active_databas
         print(f"[*] Keyspace '{database_name}' already exists.")
         return
 
+    # NetworkTopologyStrategy es obligatorio desde Scylla 2026.x: los keyspaces nuevos
+    # usan tablets por defecto y tablets no soporta SimpleStrategy.
     create_keyspace_query = (
         f"CREATE KEYSPACE IF NOT EXISTS {database_name} "
-        "WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
+        "WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1};"
     )
     run_cqlsh_query(create_keyspace_query, database_port, active_database_password)
     print(f"[*] Keyspace '{database_name}' is ready.")

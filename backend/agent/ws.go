@@ -193,29 +193,20 @@ func HandleIn(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("{}"))
 }
 
-// handleInbound dispatches one decoded inbound envelope: chat messages start a
-// turn, unsolicited events are logged, and command replies are routed to the
-// matching pending waiter on the tab's connection.
-func handleInbound(ctx context.Context, tab string, id uint64, typ string, payload json.RawMessage) {
+// handleInbound dispatches one decoded inbound envelope: unsolicited events are
+// logged and command replies are routed to the matching pending waiter on the
+// tab's connection. Chat messages do NOT arrive here — a turn is its own
+// streaming request (`POST /agent/turn`, turn.go).
+func handleInbound(_ context.Context, tab string, id uint64, typ string, payload json.RawMessage) {
 	switch typ {
 	case TypeReady:
-		// Ready is the browser's first proof that it opened the stream and
-		// registered its page diagnostics.
+		// Only the dev page-bridge stream sends this; a turn stream needs no
+		// connect proof because the POST that opened it is the proof.
 		core.Log("agent.sse client signaled ready tab::", shortTabID(tab), " payload::", core.StrCut(string(payload), 500))
 		return
 
 	case EventPageContent:
 		logPageContent(tab, payload)
-		return
-
-	case ChatTypeUserMessage:
-		var msg ChatUserMessage
-		s := ensureChatSession(tab)
-		if err := json.Unmarshal(payload, &msg); err != nil {
-			s.sendError("invalid userMessage payload: " + err.Error())
-			return
-		}
-		s.onUserMessage(ctx, msg)
 		return
 	}
 

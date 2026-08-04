@@ -886,15 +886,11 @@ def extract_existing_certbot_tls_lines(existing_nginx_configuration_contents):
 
         directive_name = directive_match.group(1)
         directive_value = directive_match.group(2)
-        is_certbot_include = (
-            directive_name == "include"
-            and (
-                "letsencrypt" in directive_value
-                or "certbot" in directive_value.lower()
-            )
-        )
-        should_preserve_directive = directive_name in CERTBOT_TLS_DIRECTIVES or is_certbot_include
-        if not should_preserve_directive:
+        # Only the certificate material is carried over. Certbot's
+        # options-ssl-nginx.conf include is deliberately dropped: it sets
+        # ssl_protocols / ssl_session_* itself and would collide with the TLS
+        # policy written below ("duplicate directive" on `nginx -t`).
+        if directive_name not in CERTBOT_TLS_DIRECTIVES:
             continue
 
         # Keep the first value per directive so repeated stale lines do not multiply.

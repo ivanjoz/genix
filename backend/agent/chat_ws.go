@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,11 +13,12 @@ import (
 	"app/core"
 )
 
-// Chat is the user↔agent channel for the in-app widget. It shares the per-tab
-// SSE+POST bridge (ws.go): user messages arrive on `POST /agent/in` with
-// `Type: userMessage`, and agent replies/status/errors are pushed back down
-// the same tab's SSE stream the page-driving commands use. There is no
-// separate chat connection — the shared TabID unifies both.
+// Chat is the user↔agent channel for the in-app widget. One turn is one
+// `POST /agent/turn` (turn.go): the request carries the user message and the
+// streamed response carries everything the turn produces — chat
+// replies/status/errors AND the page-driving commands the loop's tools issue.
+// The browser POSTs command replies back to `/agent/in`, correlated by the
+// shared TabID. The stream lives exactly as long as the turn.
 
 // Wire envelope. Mirrors protocol.go style — capitalized field names, no json
 // tags. `Type` discriminates the union; `Payload` is decoded per-type.
@@ -25,13 +27,17 @@ type chatEnvelope struct {
 	Payload json.RawMessage `json:"Payload,omitempty"`
 }
 
-// Chat message Types.
+// Chat message Types. All are server→browser: the user's message rides the
+// `POST /agent/turn` body, not a typed envelope.
 const (
-	ChatTypeUserMessage   = "userMessage"
 	ChatTypeAgentReply    = "agentReply"
 	ChatTypeAgentStatus   = "agentStatus"
 	ChatTypeAgentError    = "agentError"
 	ChatTypeAgentSections = "agentSections" // page-builder edits to apply back into the builder
+	// ChatTypeTurnEnd is the last frame of a turn stream. The body closing is
+	// already the real signal; this lets the browser tell a finished turn apart
+	// from a dropped connection.
+	ChatTypeTurnEnd = "turnEnd"
 )
 
 type ChatUserMessage struct {
@@ -76,8 +82,10 @@ type ChatAgentSections struct {
 }
 
 // AgentSession is one chat conversation. There is at most one per browser tab —
-// the same TabID identifies both the page-bridge stream (so the loop can issue
-// tool calls through it) and the chat session.
+// the same TabID identifies both the turn stream (so the loop can issue tool
+// calls through it) and the chat session. The session outlives any single turn:
+// it holds the route the agent last knew about and guards against overlapping
+// turns on the same tab.
 type AgentSession struct {
 	CompanyID int32
 	UserID    int32
@@ -86,12 +94,41 @@ type AgentSession struct {
 
 	inFlight atomic.Bool
 
+	// sink is the turn stream chat events are written to, installed by
+	// HandleTurn for the turn's duration. Deliberately not resolved through the
+	// `clients` map: with a dev page-bridge stream open, commands ride that
+	// stream while events must still go down this turn's response body.
+	sinkMu sync.Mutex
+	sink   *clientConn
+
 	// currentRoute is the SPA path the user is on, used to enrich progress
-	// labels (e.g. "Leyendo /negocio/productos…"). Seeded from the tab's
-	// stream path and updated whenever a navigate tool dispatch succeeds.
-	// Manual user navigation between turns is NOT tracked — best-effort.
+	// labels (e.g. "Leyendo /negocio/productos…"). Re-seeded from each turn
+	// request and updated whenever a navigate tool dispatch succeeds.
 	routeMu      sync.RWMutex
 	currentRoute string
+}
+
+// setSink installs cc as the destination for this turn's chat events.
+func (s *AgentSession) setSink(cc *clientConn) {
+	s.sinkMu.Lock()
+	s.sink = cc
+	s.sinkMu.Unlock()
+}
+
+// clearSink removes cc, but only if it is still the installed sink — a turn
+// that unwinds late must not detach its successor's stream.
+func (s *AgentSession) clearSink(cc *clientConn) {
+	s.sinkMu.Lock()
+	if s.sink == cc {
+		s.sink = nil
+	}
+	s.sinkMu.Unlock()
+}
+
+func (s *AgentSession) eventSink() *clientConn {
+	s.sinkMu.Lock()
+	defer s.sinkMu.Unlock()
+	return s.sink
 }
 
 // CurrentRoute returns the last route the session knows about. Empty means
@@ -113,78 +150,58 @@ var (
 	chatSessions   = map[string]*AgentSession{} // keyed by TabID
 )
 
-// ensureChatSession returns the tab's session, creating it on first use. The
-// session is seeded with company/user/path from the tab's live stream (opened
-// at page load) so the first status label can name the current route. Sessions
-// persist across stream reconnects; history lives in ScyllaDB regardless.
-func ensureChatSession(tab string) *AgentSession {
+// ensureChatSession returns the tab's session, creating it on first use, and
+// re-seeds the mutable context every turn carries. Re-seeding matters: the user
+// can switch company or navigate by hand between turns, and unlike the old
+// page-load stream a turn request always reports the live values. Sessions
+// persist across turns; history lives in ScyllaDB regardless.
+func ensureChatSession(tab string, companyID, userID int32, path string) *AgentSession {
 	chatSessionsMu.Lock()
-	defer chatSessionsMu.Unlock()
-	if s := chatSessions[tab]; s != nil {
-		return s
+	s := chatSessions[tab]
+	if s == nil {
+		s = &AgentSession{
+			TabID:     tab,
+			SessionID: time.Now().Unix(),
+		}
+		chatSessions[tab] = s
+		core.Log("agent.chat session created tab::", shortTabID(tab), " company::", companyID, " user::", userID, " path::", path)
 	}
-	var companyID, userID int32
-	var path string
-	if cc := lookupClient(tab); cc != nil {
-		companyID, userID, path = cc.companyID, cc.userID, cc.path
+	chatSessionsMu.Unlock()
+
+	s.CompanyID = companyID
+	s.UserID = userID
+	if strings.TrimSpace(path) != "" {
+		s.setCurrentRoute(path)
 	}
-	s := &AgentSession{
-		CompanyID:    companyID,
-		UserID:       userID,
-		TabID:        tab,
-		SessionID:    time.Now().Unix(),
-		currentRoute: path,
-	}
-	chatSessions[tab] = s
-	core.Log("agent.chat session created tab::", shortTabID(tab), " company::", companyID, " user::", userID, " path::", path)
 	return s
 }
 
-// onUserMessage runs the agentic loop for one user turn. Decoupled from the
-// inbound POST via a goroutine so the POST returns immediately and a slow
-// OpenRouter call doesn't hold the request open. Concurrency is bounded per
-// session by inFlight (second user message while still working → agentError).
-func (s *AgentSession) onUserMessage(_ context.Context, msg ChatUserMessage) {
+// RunUserMessage runs the agentic loop for one user turn, blocking until the
+// turn finishes. HandleTurn calls it on a goroutine and holds the response body
+// open for its duration, so unlike the old fire-and-forget POST the caller owns
+// both the lifetime and the inFlight guard.
+func (s *AgentSession) RunUserMessage(ctx context.Context, msg ChatUserMessage) error {
 	text := strings.TrimSpace(msg.Message)
 	if text == "" {
-		s.sendError("empty message")
-		return
-	}
-	if !s.inFlight.CompareAndSwap(false, true) {
-		core.Log("agent.chat busy tab::", shortTabID(s.TabID), " incoming_bytes::", len(text))
-		s.sendError("a previous turn is still running")
-		return
+		return errors.New("empty message")
 	}
 	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " mode::", msg.ModeID, " context_bytes::", len(msg.Context), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 
-	go func() {
-		defer s.inFlight.Store(false)
-		// Independent context: the inbound POST returns immediately, so its
-		// request context is already gone. We let the turn finish and persist;
-		// the user just won't see the reply if they walked away. 5 min hard cap.
-		runCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		// Route by mode: the builder's "build page" / "edit section" modes run
-		// the page-builder loop (which needs msg.Context — the sections as HTML);
-		// everything else (mode 1 "ask", and any unknown mode) runs the default
-		// chat loop.
-		var err error
-		switch msg.ModeID {
-		case webpage.ModeBuildPage, webpage.ModeEditSection:
-			err = webpage.RunTurn(runCtx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
-		default:
-			err = s.RunTurn(runCtx, text, msg.ModelHash)
-		}
-		if err != nil {
-			core.Log("agent.chat RunTurn error tab::", shortTabID(s.TabID), " err::", err)
-			s.sendError(err.Error())
-		}
-	}()
+	// Route by mode: the builder's "build page" / "edit section" modes run the
+	// page-builder loop (which needs msg.Context — the sections as HTML);
+	// everything else (mode 1 "ask", and any unknown mode) runs the default
+	// chat loop.
+	switch msg.ModeID {
+	case webpage.ModeBuildPage, webpage.ModeEditSection:
+		return webpage.RunTurn(ctx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
+	default:
+		return s.RunTurn(ctx, text, msg.ModelHash)
+	}
 }
 
-// sendJSON pushes a chat event down the tab's shared SSE stream. A missing
-// stream (browser closed/reloaded mid-turn) just drops the event — the turn
-// still finishes and persists.
+// sendJSON pushes a chat event down the turn's response stream. A missing sink
+// (no turn in flight, or the browser vanished mid-turn) just drops the event —
+// the turn still finishes and persists.
 func (s *AgentSession) sendJSON(kind string, payload any) {
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -196,7 +213,7 @@ func (s *AgentSession) sendJSON(kind string, payload any) {
 		core.Log("agent.chat marshal envelope tab::", shortTabID(s.TabID), " err::", err)
 		return
 	}
-	cc := lookupClient(s.TabID)
+	cc := s.eventSink()
 	if cc == nil {
 		core.Log("agent.chat no stream tab::", shortTabID(s.TabID), " type::", kind)
 		return

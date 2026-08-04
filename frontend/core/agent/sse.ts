@@ -114,8 +114,9 @@ const bridgeState: BridgeState = {
   connected: false,
 };
 
-// isStreamConnected reports whether the shared SSE stream is open, so the chat
-// widget can warn the user before a POST that would have no return path.
+// isStreamConnected reports whether the idle page-bridge stream is open. Not
+// meaningful for chat — a turn brings its own stream — but the external HTTP
+// driver's opt-in bridge is worth being able to check from devtools.
 export const isStreamConnected = (): boolean => bridgeState.connected;
 
 // postIn sends one browser→backend message. Fire-and-forget for the caller's
@@ -134,34 +135,11 @@ const postIn = async (body: object): Promise<void> => {
   }
 };
 
-// postChatMessage is the chat widget's send path: POST a userMessage; the
-// reply/status/error events come back via subscribeAgentChat. `context` carries
-// mode-specific context (e.g. the builder's sections serialized to HTML); empty
-// when the active mode needs none.
-export const postChatMessage = (message: string, modelHash: string, timestamp: number, modeID: number, context: string): Promise<void> =>
-  postIn({ Type: "userMessage", Payload: { Message: message, ModelHash: modelHash, Timestamp: timestamp, ModeID: modeID, Context: context } });
-
-const handleStreamMessage = async (raw: unknown) => {
-  let message: WsMessage & ChatStreamEvent;
-  try {
-    message = JSON.parse(typeof raw === "string" ? raw : "");
-  } catch (parseError) {
-    agentLog("warn", "bad stream json", { error: String(parseError), rawType: typeof raw });
-    return;
-  }
-
-  // "replaced": another browsing context took our tab id. Rotate to a fresh id
-  // and reconnect so both tabs stay alive instead of ping-ponging the shared id.
-  if (message.Type === "replaced") {
-    const next = rotateAgentTabID();
-    agentLog("warn", "stream replaced by another context; rotated", { next });
-    teardownStream();
-    scheduleReconnect();
-    return;
-  }
-
-  // A non-zero ID means it's a backend-issued page command awaiting a reply.
-  // Anything else is a chat event for the widget.
+// dispatchMessage routes one decoded frame. Shared by both streams — the
+// turn stream and the idle page-bridge speak the identical protocol, so
+// `ID > 0` is always a command awaiting a reply and anything else is a chat
+// event for the widget.
+const dispatchMessage = async (message: WsMessage & ChatStreamEvent) => {
   if (typeof message.ID === "number" && message.ID > 0) {
     agentLog("info", "command received", { id: message.ID, type: message.Type, payloadBytes: JSON.stringify(message.Payload ?? null).length });
     try {
@@ -177,6 +155,122 @@ const handleStreamMessage = async (raw: unknown) => {
 
   agentLog("info", "chat event received", { type: message.Type });
   chatListeners.forEach((fn) => { try { fn(message); } catch { /* listener must not break the stream */ } });
+};
+
+const parseFrame = (raw: string): (WsMessage & ChatStreamEvent) | null => {
+  try {
+    return JSON.parse(raw);
+  } catch (parseError) {
+    agentLog("warn", "bad stream json", { error: String(parseError), bytes: raw.length });
+    return null;
+  }
+};
+
+const handleStreamMessage = async (raw: unknown) => {
+  const message = parseFrame(typeof raw === "string" ? raw : "");
+  if (!message) { return; }
+
+  // "replaced": another browsing context took our tab id. Rotate to a fresh id
+  // and reconnect so both tabs stay alive instead of ping-ponging the shared id.
+  // Only the idle page-bridge can hit this; a turn stream is never replaced.
+  if (message.Type === "replaced") {
+    const next = rotateAgentTabID();
+    agentLog("warn", "stream replaced by another context; rotated", { next });
+    teardownStream();
+    scheduleReconnect();
+    return;
+  }
+
+  await dispatchMessage(message);
+};
+
+// --- Turn stream --------------------------------------------------------------
+// One chat turn is one POST whose response body streams until the turn ends.
+// It carries both chat events and the page commands the agent's tools issue;
+// command replies go back over the separate short POST to /agent/in, because
+// the response body is one-way. Nothing stays connected between turns.
+
+const TURN_END = "turnEnd";
+
+// readTurnStream pulls `data: <json>\n\n` frames out of the response body.
+// Comment lines (`: ping` keepalives) carry no data field and are skipped.
+// Resolves when the body ends or the backend marks the turn finished.
+const readTurnStream = async (body: ReadableStream<Uint8Array>) => {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) { return; }
+      buffer += decoder.decode(value, { stream: true });
+      for (let cut = buffer.indexOf("\n\n"); cut >= 0; cut = buffer.indexOf("\n\n")) {
+        const frame = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        if (!frame.startsWith("data:")) { continue; }
+        const message = parseFrame(frame.slice(5).trim());
+        if (!message) { continue; }
+        if (message.Type === TURN_END) {
+          agentLog("info", "turn finished");
+          return;
+        }
+        // Deliberately not awaited: a command handler that navigates and
+        // re-snapshots the page can take seconds, and blocking the read loop
+        // would stall the status events queued behind it.
+        void dispatchMessage(message);
+      }
+    }
+  } finally {
+    try { await reader.cancel(); } catch { /* body already closed */ }
+  }
+};
+
+// runAgentTurn is the chat widget's send path. Resolves when the turn is over;
+// rejects only if the turn could not be started or the stream broke. Replies,
+// status and errors arrive via subscribeAgentChat as they happen. `context`
+// carries mode-specific payload (e.g. the builder's sections serialized to
+// HTML); empty when the active mode needs none.
+export const runAgentTurn = async (
+  message: string,
+  modelHash: string,
+  timestamp: number,
+  modeID: number,
+  context: string,
+): Promise<void> => {
+  const tab = getAgentTabID();
+  const body = {
+    Message: message,
+    ModelHash: modelHash,
+    Timestamp: timestamp,
+    ModeID: modeID,
+    Context: context,
+    // Sent per-turn rather than once at connect, so switching company or
+    // navigating by hand between turns is reflected without a reconnect.
+    CompanyID: Env.getCompanyID() || 0,
+    UserID: getAgentUserID(),
+    Path: window.location.pathname || "",
+  };
+  agentLog("info", "turn start", { tab, modeID, modelHash, bytes: message.length, contextBytes: context.length });
+
+  const response = await fetch(`${agentHttpBase()}/agent/turn?tab=${encodeURIComponent(tab)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    agentLog("warn", "turn rejected", { status: response.status, detail });
+    throw new Error(`agent turn failed (${response.status})`);
+  }
+  if (!response.body) { throw new Error("agent turn returned no stream"); }
+
+  try {
+    await readTurnStream(response.body);
+  } finally {
+    // A turn may have started a getDisplayMedia capture for screenshotReal;
+    // drop it so the browser's "sharing your screen" banner doesn't outlive it.
+    releaseScreenStream();
+  }
 };
 
 const teardownStream = () => {
@@ -255,6 +349,15 @@ const connectAgentStream = () => {
   });
 };
 
+// startAgentBridge opens the idle page-bridge stream. The in-app chat does NOT
+// need this — a turn carries its own stream (runAgentTurn). It exists only for
+// the external HTTP driver (`POST /agent`, `GET /agent?get=…`, used by Claude
+// Code / Gemini), whose ResolveTab needs a tab already connected and which
+// can't open one itself.
+//
+// Opt-in only, never on app boot: the stream is long-lived and re-dials on
+// every drop, so starting it unconditionally turns every idle tab into a
+// permanent /agent/stream + /agent/in loop.
 export const startAgentBridge = () => {
   if (bridgeState.started) {
     agentLog("info", "start skipped: already started");
@@ -262,13 +365,30 @@ export const startAgentBridge = () => {
   }
   if (typeof window === "undefined") { return; }
   if (!isAgentEnabled()) {
-    // Production needs the page-driving bridge for the in-app chat agent; log
-    // the disabled condition but still connect so backend diagnostics can tell
-    // whether the route/proxy/stream path is alive.
-    agentLog("warn", "agent registry disabled; starting bridge for diagnostics", { local: globalThis._isLocal, enableFlag: window.ENABLE_UI_AGENT });
+    agentLog("warn", "start skipped: agent registry disabled", { local: globalThis._isLocal, enableFlag: window.ENABLE_UI_AGENT });
+    return;
   }
   bridgeState.started = true;
   connectAgentStream();
+};
+
+const BRIDGE_OPT_IN_KEY = "__agent_bridge";
+
+// maybeStartAgentBridge honours the two opt-ins for the idle bridge: `?agent=1`
+// on the URL for a one-off, or the localStorage flag it sets for a sticky one
+// that survives reloads (the external driver's usual mode). `?agent=0` clears it.
+const maybeStartAgentBridge = () => {
+  if (typeof window === "undefined") { return; }
+  let enabled = false;
+  try {
+    const flag = new URLSearchParams(window.location.search).get("agent");
+    if (flag === "1") { localStorage.setItem(BRIDGE_OPT_IN_KEY, "1"); }
+    if (flag === "0") { localStorage.removeItem(BRIDGE_OPT_IN_KEY); }
+    enabled = localStorage.getItem(BRIDGE_OPT_IN_KEY) === "1";
+  } catch {
+    // Storage blocked (private mode / embedded) — treat as opted out.
+  }
+  if (enabled) { startAgentBridge(); }
 };
 
 // Test helper: push the current page content to the backend, which just logs
@@ -284,9 +404,11 @@ export const sendPageContent = async () => {
 };
 
 if (typeof window !== "undefined") {
-  // Expose on the existing devtools handle so you can call __agent.sendPageContent().
+  // Expose on the existing devtools handle so you can call __agent.connect().
   (window as any).__agent = Object.assign((window as any).__agent || {}, {
+    connect: startAgentBridge,
     sendPageContent,
     debugLog: () => JSON.parse(localStorage.getItem(AGENT_LOG_KEY) || "[]"),
   });
+  maybeStartAgentBridge();
 }

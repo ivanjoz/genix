@@ -4,10 +4,11 @@
   // message history. The textarea stays in the header at the top of the
   // visual chat layout; the floating panel only renders the history list.
   //
-  // The widget has no connection of its own: it POSTs user messages to
-  // `/agent/in` and subscribes (via sse.ts `subscribeAgentChat`) to the shared
-  // per-tab SSE stream the page-driving bridge already owns. That shared TabID
-  // is how the backend routes both tool calls and chat replies to this tab.
+  // Nothing is connected until you send: `runAgentTurn` POSTs the message to
+  // `/agent/turn` and reads the streamed response for the turn's lifetime,
+  // then the connection closes. Events arrive through `subscribeAgentChat`
+  // (sse.ts), which the same stream feeds; the TabID is how the backend routes
+  // both tool calls and chat replies to this tab.
   //
   // History persistence is local-only via Dexie (chat_history.idb.ts). The
   // backend persists its own copy in ScyllaDB; this cache exists so the
@@ -16,10 +17,8 @@
   import { tick } from 'svelte';
   import {
     getAgentTabID,
-    postChatMessage,
+    runAgentTurn,
     subscribeAgentChat,
-    isStreamConnected,
-    startAgentBridge,
     type ChatStreamEvent,
   } from './sse';
   import { getSelectedAgentModelHash } from './models.svelte';
@@ -234,9 +233,6 @@
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || isBusy) { return; }
-    // The shared page bridge owns the stream; make sure it's started so the
-    // turn's reply has a return path back to this tab.
-    startAgentBridge();
     const tab = getAgentTabID();
     const optimistic: AgentChatRow = {
       tabID: tab,
@@ -253,32 +249,34 @@
     pushHeaderStatus('Pensando...');
     await scrollToBottom();
 
-    // The stream may still be connecting when the user hits send; wait briefly
-    // so the backend can stamp company/user/path from our live connection.
-    const start = Date.now();
-    while (!isStreamConnected() && Date.now() - start < 5_000) {
-      await new Promise((r) => setTimeout(r, 50));
-    }
-    if (!isStreamConnected()) {
-      chatLog('warn', 'send failed: agent stream not connected');
-      isBusy = false;
-      headerStatusItems = [];
-      if (optimistic.id) { await updateAgentChatMessage(optimistic.id, { pending: false }); }
-      optimistic.pending = false;
+    // Resolve any page-supplied context for the active mode (e.g. the builder
+    // serializes its sections to HTML); empty when the mode needs none.
+    const context = agentModes.getActiveContext();
+    chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash(), modeID: agentModes.active.ID, contextBytes: context.length });
+    try {
+      // Resolves when the turn's stream closes. The reply itself already
+      // arrived through handleChatEvent — this is just the lifetime.
+      await runAgentTurn(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, context);
+    } catch (turnError) {
+      chatLog('warn', 'turn failed', { error: String(turnError) });
       messages = [...messages, {
         tabID: tab,
         role: AGENT_ROLE_AGENT,
         message: '⚠ No se pudo conectar con el agente.',
         timestamp: Date.now(),
       }];
-      return;
+    } finally {
+      // Backstop: agentReply/agentError normally clear these. A stream that
+      // dies mid-turn produces neither, and the widget must not stay wedged.
+      isBusy = false;
+      statusLabel = '';
+      headerStatusItems = [];
+      if (optimistic.pending) {
+        if (optimistic.id) { await updateAgentChatMessage(optimistic.id, { pending: false }); }
+        optimistic.pending = false;
+      }
+      await scrollToBottom();
     }
-    // Resolve any page-supplied context for the active mode (e.g. the builder
-    // serializes its sections to HTML); empty when the mode needs none.
-    const context = agentModes.getActiveContext();
-    chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash(), modeID: agentModes.active.ID, contextBytes: context.length });
-    // Send the active mode ID so the backend can answer in the right context.
-    await postChatMessage(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, context);
   };
 
   // --- Open / close lifecycle -------------------------------------------------
@@ -287,7 +285,6 @@
     if (isOpen) { return; }
     isOpen = true;
     void ensureHistoryLoaded();
-    startAgentBridge();
     void scrollToBottom();
   };
 

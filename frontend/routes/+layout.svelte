@@ -15,7 +15,6 @@
 	import { Notify } from '$libs/helpers';
 	import { doInitServiceWorker } from '@genix/ui/service-worker';
 	import { onMount } from 'svelte';
-	import { startAgentBridge } from '$core/agent/sse';
 	import { provideUi } from '@genix/ui';
 	import { genixUiRuntime } from '$libs/ui-runtime.svelte';
 	import './app.css';
@@ -32,11 +31,6 @@
 	let { children } = $props();
 	const ui = provideUi(genixUiRuntime);
 	ui.state.deviceType = getDeviceType();
-
-	if(browser){
-		// Local-only: open a websocket so the Go backend can drive the page as an agent.
-		startAgentBridge()
-	}
 
 	const redirectsToLogin = $derived.by(() => {
 		// Skip auth check for store routes (public-facing)

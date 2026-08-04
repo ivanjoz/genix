@@ -22,16 +22,19 @@ differs from the chat loop: a pinned model, a custom toolset, a terminator tool
 
 ## 1. Routing — `agent` → `webpage`, one-directional
 
-`onUserMessage` (`chat_ws.go:173`) branches on mode:
+`RunUserMessage` (`chat_ws.go:183`) branches on mode:
 
 ```go
 switch msg.ModeID {
 case webpage.ModeBuildPage, webpage.ModeEditSection: // 2, 3
-    err = webpage.RunTurn(runCtx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
+    return webpage.RunTurn(ctx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
 default: // 1 (ask) and anything unknown
-    err = s.RunTurn(runCtx, text, msg.ModelHash) // existing chat loop, unchanged
+    return s.RunTurn(ctx, text, msg.ModelHash) // existing chat loop, unchanged
 }
 ```
+
+`HandleTurn` (`turn.go`) is the caller: it owns the turn's lifetime, its
+`inFlight` guard, and the streamed response both loops push events into.
 
 The mode constants live in `webpage` (`loop.go`) as the single source of truth,
 shared with package `agent` (which imports `webpage` to route) and mirrored by the
