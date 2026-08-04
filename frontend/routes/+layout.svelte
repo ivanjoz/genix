@@ -1,16 +1,15 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import TopLayerDatePicker from '$components/layers/TopLayerDatePicker.svelte';
 	import TopLayerSelector from '$components/layers/TopLayerSelector.svelte';
 	import { Env } from '$core/env';
 	import Modules from '$core/modules';
 	import { security } from '$libs/ui-runtime.svelte';
 	import { Core, getDeviceType, tr } from '$core/store.svelte';
-	import T from '$components/misc/T.svelte';
 	import AppHeader from '$domain/AppHeader.svelte';
 	import favicon from '$libs/assets/favicon.svg?raw';
-	import Page from '$domain/Page.svelte';
+	import PageLoading from '$domain/PageLoading.svelte';
 	import SideMenu from '$domain/SideMenu.svelte';
 	import { Notify } from '$libs/helpers';
 	import { doInitServiceWorker } from '@genix/ui/service-worker';
@@ -129,10 +128,10 @@
 	<AppHeader showMenuButton={true}/>
 	<!-- Side Menu -->
 	<SideMenu />
-	{#if Core.isLoading > 0}
-		<Page title="...">
-			<div class="p-12"><h2><T text="Loading...|Cargando..." /></h2></div>
-		</Page>
+	<!-- Boot (service worker init) and route transitions share one loader: in both cases the
+	     content region has nothing to show yet. `navigating.to` is set the instant goto() runs. -->
+	{#if Core.isLoading > 0 || navigating.to}
+		<PageLoading path={navigating.to?.url.pathname ?? ''} />
 	{/if}
 {/if}
 

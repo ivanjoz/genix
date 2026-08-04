@@ -283,6 +283,44 @@ function maskHtmlComments(code) {
     return code.replace(/<!--[\s\S]*?-->/g, (m) => ' '.repeat(m.length));
 }
 
+/** Strip CSS comment bodies. A commented-out selector (`/* .relative {} *\/`) is not a
+ *  real rule, and treating it as one would rename the matching global utility. */
+const stripCssComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+/**
+ * findGlobalClassNames - Class names that appear inside a `:global(...)` argument.
+ *
+ * Such names are NOT hashable in that file: `:global()` exists precisely to reference DOM
+ * this component doesn't own and can't rewrite (a third-party widget's markup, a child
+ * component, an element another module tags by literal class name). Renaming rewrites the
+ * stylesheet while the real element keeps its original class, silently killing the rule.
+ *
+ * A name found here is dropped from the file's local set entirely — markup and scoped
+ * selectors included — because one spelling has to hold everywhere: if the global rule
+ * needs the literal name, the scoped rules in the same file must use it too.
+ */
+function findGlobalClassNames(css) {
+    const names = new Set();
+    // Walk each `:global(` and collect the classes in its balanced-paren argument, so
+    // nested forms such as `:global(.a:not(.b))` are covered.
+    const globalOpenRegex = /:global\s*\(/g;
+    let match;
+    while ((match = globalOpenRegex.exec(css)) !== null) {
+        let depth = 1;
+        let i = match.index + match[0].length;
+        const argStart = i;
+        while (i < css.length && depth > 0) {
+            if (css[i] === '(') depth++;
+            else if (css[i] === ')') depth--;
+            i++;
+        }
+        const arg = css.slice(argStart, depth === 0 ? i - 1 : i);
+        for (const m of arg.matchAll(/\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g)) names.add(m[1]);
+        globalOpenRegex.lastIndex = i;
+    }
+    return names;
+}
+
 export const svelteClassHasher = () => {
     const classMap = new Map();
     const srcDir = process.cwd();
@@ -313,15 +351,13 @@ export const svelteClassHasher = () => {
                         const content = maskHtmlComments(fs.readFileSync(fullPath, 'utf8'));
                         const styleMatch = content.match(/<style[^>]*>([\s\S]*?)<\/style>/);
                         if (styleMatch) {
-                            // Strip CSS comments first: a commented-out selector like
-                            // `/* .relative {} */` must NOT be treated as a real local
-                            // class, or the hasher would rename the global utility.
-                            const styleContent = styleMatch[1].replace(/\/\*[\s\S]*?\*\//g, '');
+                            const styleContent = stripCssComments(styleMatch[1]);
+                            const globalClasses = findGlobalClassNames(styleContent);
                             const classSelectorRegex = /\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g;
                             let m;
                             while ((m = classSelectorRegex.exec(styleContent)) !== null) {
                                 const className = m[1];
-                                if (className.length >= 4) {
+                                if (className.length >= 4 && !globalClasses.has(className)) {
                                     classMap.set(className, replaceClassName(className));
                                 }
                             }
@@ -363,16 +399,19 @@ export const svelteClassHasher = () => {
             if (styleMatch.length === 0) return null;
 
             const localClasses = new Set();
+            const globalClasses = new Set();
             for (const m of styleMatch) {
-                // Strip CSS comments so a commented-out selector (e.g. `/* .relative {} */`)
-                // is never picked up as a local class and used to rename a global utility.
-                const content = m[1].replace(/\/\*[\s\S]*?\*\//g, '');
+                const content = stripCssComments(m[1]);
+                for (const name of findGlobalClassNames(content)) globalClasses.add(name);
                 const classSelectorRegex = /\.([a-zA-Z_-][a-zA-Z0-9_-]*)/g;
                 let sm;
                 while ((sm = classSelectorRegex.exec(content)) !== null) {
                     if (sm[1].length >= 4) localClasses.add(sm[1]);
                 }
             }
+            // Anything named inside a `:global(...)` keeps its literal spelling everywhere
+            // in this file (see findGlobalClassNames).
+            for (const name of globalClasses) localClasses.delete(name);
 
             if (localClasses.size === 0) return null;
 
@@ -529,7 +568,8 @@ export const svelteClassHasher = () => {
             // STEP 6: Apply all safe replacements.
             const replacements = [];
 
-            // Update style block selectors
+            // Update style block selectors. `allowedClasses` already excludes every name
+            // used inside `:global(...)`, so those selectors can't be touched here.
             for (const m of styleMatch) {
                 const content = m[1];
                 const contentStart = m.index + m[0].indexOf(content);
