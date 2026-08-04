@@ -36,6 +36,7 @@ type cloudflareDNSRecord struct {
 }
 
 type cloudflareWorkerDomain struct {
+	ID       string `json:"id"`
 	Hostname string `json:"hostname"`
 	Service  string `json:"service"`
 }
@@ -94,6 +95,56 @@ func provisionStorefrontDomain(hostname string, allowExistingStorefrontDomain bo
 	}
 
 	core.Log("Dominio Cloudflare registrado::", hostname)
+	return nil
+}
+
+// removeStorefrontDomain releases a hostname the company no longer uses: it drops the Worker Custom
+// Domain and then sweeps any A/CNAME record left on the zone. Deleting the Worker domain normally
+// takes the DNS record it created with it, so the sweep is for records that outlive it or were
+// created some other way. Both steps are skipped silently when there is nothing to delete, which is
+// what makes the whole function safe to retry.
+func removeStorefrontDomain(hostname string) error {
+	if strings.TrimSpace(core.Env.CLOUDFLARE_ACCOUNT) == "" ||
+		strings.TrimSpace(core.Env.CLOUDFLARE_TOKEN) == "" {
+		return errors.New("CLOUDFLARE_ACCOUNT y CLOUDFLARE_TOKEN son requeridos")
+	}
+
+	zoneName := strings.TrimSpace(core.Env.ZONE_NAME)
+	if zoneName == "" {
+		return errors.New("ZONE_NAME es requerido")
+	}
+
+	zone, zoneError := findCloudflareZone(zoneName)
+	if zoneError != nil {
+		return zoneError
+	}
+
+	workerDomain, workerDomainError := findCloudflareWorkerDomain(hostname)
+	if workerDomainError != nil {
+		return workerDomainError
+	}
+	// A hostname attached to some other service is not this storefront's to release.
+	if workerDomain != nil && workerDomain.Service == storefrontWorkerName {
+		requestPath := "/accounts/" + url.PathEscape(core.Env.CLOUDFLARE_ACCOUNT) +
+			"/workers/domains/" + url.PathEscape(workerDomain.ID)
+		if requestError := cloudflareRequest(http.MethodDelete, requestPath, nil, nil, nil); requestError != nil {
+			return fmt.Errorf("error borrando Worker Custom Domain: %w", requestError)
+		}
+		core.Log("Worker Custom Domain borrado::", hostname)
+	}
+
+	dnsRecords, dnsError := findConflictingDNSRecords(zone.ID, hostname)
+	if dnsError != nil {
+		return dnsError
+	}
+	for _, dnsRecord := range dnsRecords {
+		requestPath := "/zones/" + url.PathEscape(zone.ID) + "/dns_records/" + url.PathEscape(dnsRecord.ID)
+		if requestError := cloudflareRequest(http.MethodDelete, requestPath, nil, nil, nil); requestError != nil {
+			return fmt.Errorf("error borrando el registro DNS %s: %w", dnsRecord.Type, requestError)
+		}
+		core.Log("Registro DNS borrado::", hostname, dnsRecord.Type)
+	}
+
 	return nil
 }
 
@@ -185,6 +236,11 @@ func cloudflareRequest(method string, path string, query url.Values, body any, t
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("Cloudflare API HTTP %d: %s", response.StatusCode, strings.TrimSpace(string(responseBytes)))
+	}
+	// A DELETE answers 204 with no body, so a caller that wants no result passes a nil target and
+	// an empty body is not an error: unmarshalling either would fail an otherwise successful call.
+	if target == nil || len(bytes.TrimSpace(responseBytes)) == 0 {
+		return nil
 	}
 	if unmarshalError := json.Unmarshal(responseBytes, target); unmarshalError != nil {
 		return unmarshalError

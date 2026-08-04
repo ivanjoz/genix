@@ -152,6 +152,14 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Log("Dominio del sitio guardado::", domain)
+
+	// Only once the new domain is persisted: scheduling the cleanup any earlier could release the
+	// old hostname while the company still resolves through it. currentDomain is non-nil only on a
+	// real change, because an idempotent save already returned above.
+	if currentDomain != nil {
+		schedulePreviousDomainCleanup(req.User.CompanyID, currentDomain.Value)
+	}
+
 	return req.MakeResponse(map[string]string{"domain": domain})
 }
 

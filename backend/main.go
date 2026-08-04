@@ -39,11 +39,12 @@ func runScheduledCronTick(tickBody string) int {
 	core.Env.LOGS_FULL = true
 	core.Log("*Cron tick programado:: ", core.StrCut(tickBody, 60))
 
-	// Resiembra la cadena de 30 min del rebuild de productos. RebuildProductsDbHandler se
-	// reprograma solo al terminar, pero la semilla inicial vive en el arranque del VPS, así que en
-	// Lambda la cadena nunca empezó. Es idempotente: ScheduleCronAction deduplica contra la fila
-	// pendiente del mismo frame. Va con recover porque hace panic ante un error de DB, y ese fallo
-	// no debe impedir que se ejecute el resto de la cola.
+	// Siembra la cadena de 30 min del rebuild de productos. La continuidad ya no depende de esto:
+	// la fila guarda su propia cadencia y el executor encola el frame siguiente pase lo que pase.
+	// Sigue haciendo falta como semilla inicial, porque en Lambda no hay arranque de VPS que la
+	// cree. Es idempotente: ScheduleCronAction deduplica contra la fila pendiente del mismo frame.
+	// Va con recover porque hace panic ante un error de DB, y ese fallo no debe impedir que se
+	// ejecute el resto de la cola.
 	func() {
 		defer func() {
 			if recoveredValue := recover(); recoveredValue != nil {

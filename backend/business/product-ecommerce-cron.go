@@ -17,29 +17,33 @@ func init() {
 	core.RegisterActionHandler(productsDbRebuildActionID, "Reconstruir .db de productos", RebuildProductsDbHandler)
 }
 
-// ScheduleProductsDbRebuildCron enqueues the next global rebuild tick. Safe to call repeatedly
-// (ScheduleCronAction dedupes the same logical action within a frame) — call it once at startup.
+// ScheduleProductsDbRebuildCron seeds the recurring rebuild tick. Only the initial seed needs it:
+// the row stores its own cadence, so the cron executor enqueues every following frame. Safe to
+// call repeatedly (ScheduleCronAction dedupes the same logical action within a frame).
 func ScheduleProductsDbRebuildCron() {
-	core.ScheduleCronAction(core.CronAction{
+	core.ScheduleRecurringCronAction(core.CronAction{
 		ActionID:  productsDbRebuildActionID,
 		CompanyID: productsDbRebuildSystemCompanyID,
 	}, productsDbRebuildFrameMinutes)
 }
 
-// RebuildProductsDbHandler rebuilds the snapshot for every dirty company, then reschedules itself
-// for the next 30-minute frame to keep the cadence going.
+// RebuildProductsDbHandler rebuilds the snapshot for every dirty company. It does not reschedule
+// itself: the executor re-enqueues the next 30-minute frame whatever the outcome here, so a panic
+// halfway through no longer breaks the cadence.
 func RebuildProductsDbHandler(args *core.ExecArgs) core.FuncResponse {
 	dirtyCompanyIDs := collectDirtyCompanyIDs()
 	core.Log("RebuildProductsDbHandler:: dirty companies", len(dirtyCompanyIDs))
+	// AddMessage lands on the cron row when the executor writes the final status, so a per-company
+	// failure is readable from the cron actions page instead of only from the process log.
+	args.AddMessage(core.Concat(" ", "Empresas con cambios:", len(dirtyCompanyIDs)))
 
 	for _, companyID := range dirtyCompanyIDs {
 		if rebuildErr := maybeRebuildProductsDbFile(companyID, false); rebuildErr != nil {
 			core.Log("RebuildProductsDbHandler:: rebuild error", "| companyID:", companyID, "| err:", rebuildErr)
+			args.AddMessage(core.Concat(" ", "Error reconstruyendo empresa", companyID, ":", rebuildErr))
 		}
 	}
 
-	// Keep the recurring cadence alive by enqueuing the next frame.
-	ScheduleProductsDbRebuildCron()
 	return core.FuncResponse{}
 }
 

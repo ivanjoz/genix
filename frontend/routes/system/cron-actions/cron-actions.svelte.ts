@@ -23,6 +23,7 @@ export interface ICronActionScheduled {
 	Params?: ICronActionParams
 	upd: number
   ss: number
+  messages?: string[]
 }
 
 export interface ICronActionsScheduledResponse {
@@ -37,7 +38,7 @@ export interface ICronActionTableRow extends ICronActionScheduled {
 export class CronActionsService extends GetHandler {
   // The backend currently uses `actionsScheduled` as the delta query key.
   route = 'cron-actions-scheduled?actionsScheduled=0'
-	useCache = { min: 0.25, ver: 4 }
+	useCache = { min: 0.25, ver: 5 }
 	keysIDs = { "actionsScheduled": ["UnixMinutesFrame", "ID"] }
 
   response: ICronActionsScheduledResponse = $state({

@@ -24,8 +24,9 @@ const formatUpdatedSunix = (updatedSunix: number) => {
 }
 
 const getStatusLabel = (status: number) => {
-  // Status 0 is known as pending from the scheduler flow; other values stay explicit.
   if (status === 0) return tr('Pending (0)|Pendiente (0)')
+  if (status === 1) return tr('Done (1)|Ejecutada (1)')
+  if (status === 2) return tr('Abandoned (2)|Abandonada (2)')
   return String(status)
 }
 
@@ -46,6 +47,8 @@ const formatParams = (row: ICronActionTableRow) => {
     .map(([index, value]) => `[${index}]=${value}`)
     .join(', ')
 }
+
+const formatMessages = (row: ICronActionTableRow) => (row.messages || []).join(' · ')
 
 const columns: ITableColumn<ICronActionTableRow>[] = [
   {
@@ -102,6 +105,13 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
     css: "px-6 nowrap",
     getValue: (row) => formatUpdatedSunix(row.upd),
   },
+  {
+    // getValue and not render: messages carry handler errors and panic text, and render output
+    // goes through {@html}.
+    header: "Messages|Mensajes",
+    css: "px-6",
+    getValue: (row) => formatMessages(row),
+  },
 ]
 </script>
 
@@ -127,6 +137,7 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
         row.ID,
         row.InvocationCount,
         row.ss,
+        formatMessages(row),
       ].join(" ").toLowerCase()}
     />
   </div>
