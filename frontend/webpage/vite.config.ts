@@ -127,7 +127,10 @@ export default defineConfig({
   publicDir: './static',
   resolve: {
     alias: isRendererBuild
-      ? { dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js') }
+      ? {
+          dompurify: path.resolve(__dirname, 'lib/dompurify-stub.js'),
+          'supports-color': path.resolve(__dirname, 'lib/supports-color-stub.js')
+        }
       : {} as AliasOptions
   },
   ssr: {
