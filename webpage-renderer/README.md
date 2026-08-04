@@ -152,7 +152,17 @@ Se reconoce por el tamaño: una página vacía pesa ~10 KB contra los ~27 KB de 
 
 `loadRenderer()` compara el ETag y reutiliza lo extraído, pero `loadedRenderer` es una variable de
 módulo: solo sirve mientras el proceso siga vivo. En Lambda caliente ahorra el trabajo; en el VPS
-cada publicación arranca un `node` nuevo, así que el 304 nunca llega a usarse y se bajan y
-descomprimen los ~460 KB otra vez. Es lo que mide el `en NNNms` del log `artefacto cargado`: entre
-decenas de ms y algo más de un segundo según la red. No es un problema — pero una caché en disco
-bajo `/tmp` con el ETag en la clave lo dejaría en cero.
+cada publicación arranca un `node` nuevo, así que arranca sin `if-none-match`, el 304 nunca llega a
+usarse y se bajan y descomprimen los ~460 KB otra vez. El `en NNNms` del log `artefacto cargado` es
+una cota inferior de lo que cuesta: el cronómetro arranca después de las cabeceras, así que cuenta
+el cuerpo, la descompresión y el `import`, pero no la latencia hasta la primera respuesta.
+
+La caché en disco está a medias, y por eso el arreglo es corto: el directorio ya es
+`/tmp/renderer-<etag>`, con el ETag en la clave. Lo que falta es mirar si existe antes de
+descargar, en vez de extraer siempre encima.
+
+De la misma variable de módulo cuelga un segundo efecto: la limpieza del artefacto anterior
+(`if (loadedRenderer) rmSync(...)`) tampoco se ejecuta nunca en el VPS, porque `loadedRenderer`
+siempre llega vacío. Queda un directorio por versión del renderer publicada —no por publicación,
+que reutiliza el path del mismo ETag—. Se limpia solo al reiniciar el servicio, porque la unidad
+usa `PrivateTmp=yes` y su `/tmp` muere con el proceso.
