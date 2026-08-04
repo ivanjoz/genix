@@ -71,7 +71,15 @@ stdout tal cual, sin filtrar líneas.
 | marcador | `websites/<companyID>/.renderer-build` | `no-store` |
 
 `sw.js` va bajo el hostname y no bajo el CDN porque un service worker **tiene que ser
-same-origin**. Y no puede cachearse: es lo que gobierna las actualizaciones del sitio.
+same-origin**. Y no puede cachearse: es lo que gobierna las actualizaciones del sitio. Por colgar
+del hostname y no de la company, los dos archivos de `site/` se suben en cada render, sin mirar el
+marcador: si no, un dominio nuevo nacería sin ellos cuando la company ya tuviera sus assets
+publicados.
+
+El prefijo del CDN no se antepone solo en el HTML. Los `.js` llevan dentro sus propias rutas
+—el manifest de rutas del cliente, y los `new URL('/_app/…', import.meta.url)`— y se reescriben al
+subirlos (`applyAssetRewrites`). Sin eso la primera carga funciona y todo lo que pida el runtime
+después se va al hostname de la tienda, donde no hay ningún `/_app/`.
 
 El marcador guarda el `buildId` publicado: si coincide, los assets no se resuben y editar una
 página cuesta solo los PUT del HTML. `forceAssets: true` lo ignora.

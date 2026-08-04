@@ -57,7 +57,13 @@ export async function render(event) {
 	const assetBase = `${FRONTEND_CDN}/${assetKeyPrefix}`;
 	const htmlKeyPrefix = `${HTML_KEY_ROOT}/${hostname}`;
 
-	const uploadedAssets = await publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, !!event?.forceAssets);
+	const uploadedAssets = await publishAssets(
+		renderer,
+		assetKeyPrefix,
+		htmlKeyPrefix,
+		assetBase,
+		!!event?.forceAssets
+	);
 
 	// SECUENCIAL a propósito: hooks.server.ts fija el tenant sobre el singleton Env del
 	// bundle SSR, así que dos renders simultáneos en el mismo proceso se pisarían.
@@ -107,6 +113,39 @@ export function applyHtmlRewrites(html, manifest, assetBase) {
 		output = output.split(rule.find).join(rule.replace);
 	}
 	return output.split(manifest.assetPathPrefix).join(`${assetBase}${manifest.assetPathPrefix}`);
+}
+
+// Los .js llevan dentro sus propias rutas de assets, y hay que prefijarlas igual que las del
+// HTML: el bundle es uno solo para todas las companies, pero cada una lo sirve desde
+// websites/<companyID>/ y ese prefijo no existe en tiempo de build.
+//
+// Sin esto la primera carga funciona —el HTML sí está reescrito— y todo lo que pida el runtime
+// después falla: hidratar y navegar resuelven contra el origen del documento, o sea el hostname
+// de la tienda, donde no hay ningún /_app/.
+//
+// Son dos formas y se rompen distinto:
+//
+//   "_app/immutable/nodes/1.abc.js"     el manifest de rutas del cliente. Relativa: el runtime
+//                                       la concatena con su base, que aquí es vacía, y acaba
+//                                       pidiéndola al hostname.
+//   new URL(`/_app/immutable/…`, …)     absoluta: se resuelve contra el origen del propio chunk,
+//                                       o sea la raíz del CDN, sin el websites/<companyID>.
+//
+// Se reescribe primero la absoluta: al quedar con el origen delante ya no la vuelve a tocar la
+// pasada de la relativa, que exige la comilla pegada a `_app/`.
+export function applyAssetRewrites(data, key, manifest, assetBase) {
+	if (!key.endsWith('.js')) return data;
+
+	const absolutePrefix = manifest.assetPathPrefix;
+	const relativePrefix = absolutePrefix.replace(/^\//, '');
+	let text = data.toString('utf8');
+	if (!text.includes(relativePrefix)) return data;
+
+	text = text.split(absolutePrefix).join(`${assetBase}${absolutePrefix}`);
+	for (const quote of ['"', "'", '`']) {
+		text = text.split(`${quote}${relativePrefix}`).join(`${quote}${assetBase}${absolutePrefix}`);
+	}
+	return Buffer.from(text, 'utf8');
 }
 
 // --- Artefacto del renderer -----------------------------------------------------
@@ -202,26 +241,33 @@ export function readZipEntries(buffer) {
 // Los assets son idénticos para toda company que use el mismo artefacto, así que se
 // marca la versión publicada y se salta la subida cuando no cambió: editar el contenido
 // de una página pasa a costar solo los PUT del HTML.
-async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, force) {
+async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, assetBase, force) {
 	const markerKey = `${assetKeyPrefix}/.renderer-build`;
-	if (!force && (await getObjectText(markerKey)) === renderer.manifest.buildId) {
+	const assetsUpToDate = !force && (await getObjectText(markerKey)) === renderer.manifest.buildId;
+	if (assetsUpToDate) {
 		console.log(`[renderer] assets al día (buildId=${renderer.manifest.buildId}), no se resuben`);
-		return 0;
 	}
 
 	const uploads = [
-		...renderer.assets.map((asset) => ({
-			key: `${assetKeyPrefix}/${asset.name}`,
-			data: asset.data,
-			// Los nombres llevan hash de contenido: nunca cambian bajo la misma URL.
-			cacheControl: 'public, max-age=31536000, immutable'
-		})),
+		// Los site files cuelgan del hostname, no de la company, así que el marcador no dice nada
+		// sobre ellos: un dominio nuevo nace sin sw.js ni favicon aunque la company ya tenga sus
+		// assets publicados. Se suben siempre, que son dos archivos.
 		...renderer.siteFiles.map((file) => ({
 			key: `${htmlKeyPrefix}/${file.name}`,
 			data: file.data,
 			// El service worker NO puede cachearse: es lo que gobierna las actualizaciones.
 			cacheControl: file.name === 'sw.js' ? 'public, max-age=0, must-revalidate' : 'public, max-age=86400'
-		}))
+		})),
+		...(assetsUpToDate
+			? []
+			: renderer.assets.map((asset) => ({
+					key: `${assetKeyPrefix}/${asset.name}`,
+					// Buffer nuevo, nunca in situ: renderer.assets es la caché del artefacto y la
+					// comparten todas las companies que se rendericen en este proceso.
+					data: applyAssetRewrites(asset.data, asset.name, renderer.manifest, assetBase),
+					// Los nombres llevan hash de contenido: nunca cambian bajo la misma URL.
+					cacheControl: 'public, max-age=31536000, immutable'
+				})))
 	];
 
 	for (let index = 0; index < uploads.length; index += UPLOAD_CONCURRENCY) {
@@ -232,7 +278,11 @@ async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, force) {
 		);
 	}
 
-	await putObject(markerKey, Buffer.from(renderer.manifest.buildId, 'utf8'), 'text/plain', 'no-store');
+	// El marcador solo habla de los assets de la company: escribirlo cuando ya estaba al día no
+	// aportaría nada, y los site files que sí se subieron no dependen de él.
+	if (!assetsUpToDate) {
+		await putObject(markerKey, Buffer.from(renderer.manifest.buildId, 'utf8'), 'text/plain', 'no-store');
+	}
 	console.log(`[renderer] subidos ${uploads.length} archivo(s) para buildId=${renderer.manifest.buildId}`);
 	return uploads.length;
 }

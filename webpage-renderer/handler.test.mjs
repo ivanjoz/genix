@@ -87,6 +87,12 @@ function buildArtifact({ buildId = 'build-1', renderModule = RENDER_MODULE_OK } 
 		{ name: 'manifest.json', data: JSON.stringify({ buildId, assetPathPrefix: '/_app/', htmlRewrites: [] }) },
 		{ name: 'render.mjs', data: renderModule },
 		{ name: 'assets/_app/immutable/entry.js', data: 'console.log(1)' },
+		// Las dos formas en que un .js lleva dentro sus propias rutas de assets, que hay que
+		// prefijar igual que las del HTML. Ver applyAssetRewrites.
+		{
+			name: 'assets/_app/immutable/entry/app.js',
+			data: 'const n=["_app/immutable/nodes/1.abc.js"];const w=new URL(`/_app/immutable/workers/w.js`,``+import.meta.url);'
+		},
 		{ name: 'assets/_app/immutable/style.css', data: 'body{color:red}' },
 		{ name: 'site/sw.js', data: '// service worker' },
 		{ name: 'site/favicon.ico', data: Buffer.from([0, 0, 1, 0]) }
@@ -276,7 +282,8 @@ test('no resube los assets cuando el marcador ya tiene ese buildId', async () =>
 	cloudflare.objects.delete('websites/7/_app/immutable/entry.js');
 	const second = await handler.render(BASE_EVENT);
 
-	expect(second.assets).toBe(0);
+	// Los site files se suben siempre, así que la cuenta no baja a cero: son ellos y nada más.
+	expect(second.assets).toBe(2);
 	// Sigue borrado: la segunda pasada no tocó los assets.
 	expect(cloudflare.objects.has('websites/7/_app/immutable/entry.js')).toBe(false);
 	// El HTML sí se reescribe siempre.
@@ -473,4 +480,59 @@ test('contentTypeFor cubre los tipos que se publican', async () => {
 	expect(handler.contentTypeFor('favicon.ico')).toBe('image/x-icon');
 	expect(handler.contentTypeFor('x.json')).toBe('application/json');
 	expect(handler.contentTypeFor('x.bin')).toBe('application/octet-stream');
+});
+
+// --- Rutas de assets dentro de los .js --------------------------------------------
+
+test('prefija las rutas que los .js llevan dentro, en sus dos formas', async () => {
+	const { cloudflare, handler } = await setup();
+	await handler.render(BASE_EVENT);
+
+	const bundle = cloudflare.objects.get('websites/7/_app/immutable/entry/app.js').body.toString('utf8');
+
+	// Relativa: el runtime la concatenaba con una base vacía y acababa pidiéndola al hostname.
+	expect(bundle).toContain('"https://cdn.example.com/websites/7/_app/immutable/nodes/1.abc.js"');
+	// Absoluta: se resolvía contra la raíz del CDN, sin el websites/<companyID>.
+	expect(bundle).toContain('`https://cdn.example.com/websites/7/_app/immutable/workers/w.js`');
+	// Y no queda ninguna sin prefijar.
+	expect(bundle).not.toContain('"_app/');
+	expect(bundle).not.toContain('`/_app/');
+});
+
+test('no reescribe los assets que no son .js', async () => {
+	const { cloudflare, handler } = await setup();
+	await handler.render(BASE_EVENT);
+
+	expect(cloudflare.objects.get('websites/7/_app/immutable/style.css').body.toString('utf8')).toBe(
+		'body{color:red}'
+	);
+});
+
+test('applyAssetRewrites no toca el buffer original', async () => {
+	const handler = await loadHandler(await startFakeCloudflare().then((c) => (openServers.push(c), c)));
+	const manifest = { assetPathPrefix: '/_app/' };
+	const original = Buffer.from('const n=["_app/immutable/nodes/1.abc.js"];', 'utf8');
+	const copy = Buffer.from(original);
+
+	const rewritten = handler.applyAssetRewrites(original, 'entry/app.js', manifest, 'https://cdn/websites/7');
+
+	// El artefacto se cachea en memoria y lo comparten todas las companies del proceso: mutarlo
+	// haría que la segunda se publicara con la base de la primera.
+	expect(original.equals(copy)).toBe(true);
+	expect(rewritten.toString('utf8')).toContain('"https://cdn/websites/7/_app/immutable/nodes/1.abc.js"');
+});
+
+// --- Site files por hostname ------------------------------------------------------
+
+test('un dominio nuevo recibe sw.js y favicon aunque la company ya tenga los assets al día', async () => {
+	const { cloudflare, handler } = await setup();
+
+	await handler.render(BASE_EVENT);
+	// Mismo company, otro hostname: el marcador sigue al día, pero los site files cuelgan del
+	// hostname y ahí no hay nada todavía.
+	const second = await handler.render({ ...BASE_EVENT, hostname: 'otra.un.pe' });
+
+	expect(second.assets).toBe(2);
+	expect(cloudflare.objects.has('websites-html/otra.un.pe/sw.js')).toBe(true);
+	expect(cloudflare.objects.has('websites-html/otra.un.pe/favicon.ico')).toBe(true);
 });
