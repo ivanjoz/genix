@@ -83,8 +83,20 @@ export const getWebsiteConfig = (): Promise<IWebsiteConfig> =>
 export const postWebsiteSeo = (metatags: Partial<Record<SeoMetatagKey, string>>) =>
   POST({ data: metatags, route: 'website-seo', successMessage: 'SEO guardado' });
 
-export const postWebsiteDomain = (Domain: string) =>
-  POST({ data: { Domain }, route: 'website-domain', successMessage: 'Dominio guardado' });
+// Saving a domain also renders and publishes the store onto it, so this call blocks for as long
+// as the render takes. The response carries what got published.
+export const postWebsiteDomain = (Domain: string): Promise<IWebsiteDomainSaved> =>
+  POST({
+    data: { Domain },
+    route: 'website-domain',
+    successMessage: 'Dominio guardado y tienda publicada',
+  }) as Promise<IWebsiteDomainSaved>;
+
+export interface IWebsiteDomainSaved {
+  domain?: string;
+  pages?: number;
+  build?: string;
+}
 
 // CDN folder for page showcase thumbnails (mirrors the backend showcaseImageFolder).
 const SHOWCASE_FOLDER = 'img-webpage';

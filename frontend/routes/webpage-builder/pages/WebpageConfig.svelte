@@ -33,7 +33,7 @@ import { onMount } from 'svelte';
       Notify.failure(tr('Enter a domain.|Ingrese un dominio.'));
       return;
     }
-    Loading.standard(tr('Saving domain...|Guardando dominio...'));
+    Loading.standard(tr('Saving domain and publishing the store...|Guardando dominio y publicando la tienda...'));
     try {
       const result = await postWebsiteDomain(`${subdomain}${domainSuffix}`);
       // Keep the editable value limited to the tenant label.

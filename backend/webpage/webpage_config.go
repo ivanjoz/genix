@@ -14,6 +14,12 @@ const (
 	webpageConfigGroup = int32(10)
 	// domainChangeCooldownTicks is 60 minutes in the project's 2-second SUnixTime units.
 	domainChangeCooldownTicks = int32(60 * 60 / 2)
+	// domainParameterKey holds the company's active storefront hostname.
+	domainParameterKey = "domain"
+	// previousDomainParameterKey marks a hostname that is pending release in Cloudflare. It is
+	// written when the domain changes and cleared once the release is queued, so the cleanup
+	// survives a failed render and the retry that follows it.
+	previousDomainParameterKey = "domain_previous"
 )
 
 // seoMetatagKeys are the SEO parameter keys persisted under the config group. The
@@ -96,7 +102,18 @@ func PostWebsiteSeo(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(map[string]bool{"saved": true})
 }
 
-// PostWebsiteDomain reserves the hostname in Cloudflare before storing it for the company.
+// PostWebsiteDomain reserva el hostname en Cloudflare, lo guarda, y publica la tienda sobre él
+// antes de responder.
+//
+// El render es SÍNCRONO y bloquea la respuesta a propósito. El HTML en R2 está indexado por
+// hostname y el Worker no tiene fallback de SPA, así que un dominio recién registrado resuelve y
+// devuelve 404 en todas sus rutas hasta que alguien lo renderiza: dejarlo para después significaba
+// tener la tienda caída —no degradada— durante esa ventana. El usuario espera unos segundos con el
+// spinner que ya muestra WebpageConfig.svelte y no hay ningún estado intermedio roto.
+//
+// El orden importa y es el que hace segura la falla: se guarda, se renderiza, y solo si el render
+// funcionó se libera el dominio anterior. Si el render falla, el hostname viejo sigue vivo en
+// Cloudflare sirviendo su HTML, así que la tienda sigue en pie mientras se reintenta.
 func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 	body := struct {
 		Domain string `json:"Domain"`
@@ -133,49 +150,122 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se pudo registrar el dominio:", provisionError)
 	}
 
-	// Keep an idempotent save from extending the cooldown window.
-	if !isDomainChange {
-		return req.MakeResponse(map[string]string{"domain": domain})
+	// Solo se escribe en un cambio real, para que un guardado idempotente no alargue la ventana de
+	// cooldown. Renderizar, en cambio, se hace en los dos casos: es lo único que hace que el
+	// hostname sirva algo, y volver a guardar el mismo dominio es el único camino que tiene el
+	// usuario para reintentar una publicación que falló.
+	if isDomainChange {
+		parametersToSave := []configTypes.Parameters{{
+			CompanyID: req.User.CompanyID,
+			Group:     webpageConfigGroup,
+			Key:       domainParameterKey,
+			Value:     domain,
+			Status:    1,
+			Updated:   nowTime,
+			UpdatedBy: req.User.ID,
+		}}
+		if currentDomain != nil {
+			// El dominio saliente se guarda en su propia fila para que la limpieza sobreviva a un
+			// render fallido: en el reintento el guardado ya no es un cambio y currentDomain apunta
+			// al nuevo, así que sin esto el anterior se perdería y quedaría huérfano en Cloudflare.
+			parametersToSave = append(parametersToSave, configTypes.Parameters{
+				CompanyID: req.User.CompanyID,
+				Group:     webpageConfigGroup,
+				Key:       previousDomainParameterKey,
+				Value:     currentDomain.Value,
+				Status:    1,
+				Updated:   nowTime,
+				UpdatedBy: req.User.ID,
+			})
+		}
+		if err := db.Insert(&parametersToSave); err != nil {
+			return req.MakeErr("Error al guardar el dominio:", err)
+		}
+		core.Log("Dominio del sitio guardado::", domain)
 	}
 
-	domainParameter := []configTypes.Parameters{{
-		CompanyID: req.User.CompanyID,
-		Group:     webpageConfigGroup,
-		Key:       "domain",
-		Value:     domain,
-		Status:    1,
-		Updated:   nowTime,
-		UpdatedBy: req.User.ID,
-	}}
-	if err := db.Insert(&domainParameter); err != nil {
-		return req.MakeErr("Error al guardar el dominio:", err)
+	renderResult, renderError := RenderCompanyWebpage(req.User.CompanyID, domain)
+	if renderError != nil {
+		// El dominio queda guardado y el anterior sin liberar: la tienda sigue sirviéndose por el
+		// hostname viejo y volver a guardar reintenta solo el render.
+		core.Log("Error publicando la tienda::", domain, renderError)
+		return req.MakeErr("El dominio se guardó, pero no se pudo publicar la tienda:", renderError)
 	}
 
-	core.Log("Dominio del sitio guardado::", domain)
+	// Recién ahora que el hostname nuevo sirve contenido se libera el anterior. Se lee de su fila y
+	// no de currentDomain para cubrir el reintento tras un render fallido, donde este guardado ya
+	// no es un cambio.
+	releasePreviousDomain(req.User.CompanyID, domain, req.User.ID)
 
-	// Only once the new domain is persisted: scheduling the cleanup any earlier could release the
-	// old hostname while the company still resolves through it. currentDomain is non-nil only on a
-	// real change, because an idempotent save already returned above.
-	if currentDomain != nil {
-		schedulePreviousDomainCleanup(req.User.CompanyID, currentDomain.Value)
-	}
-
-	return req.MakeResponse(map[string]string{"domain": domain})
+	return req.MakeResponse(map[string]any{
+		"domain": domain,
+		"pages":  renderResult.Pages,
+		"build":  renderResult.BuildID,
+	})
 }
 
 // getCompanyDomain returns the single upserted domain row and its last-change timestamp.
 func getCompanyDomain(companyID int32) (*configTypes.Parameters, error) {
+	return getCompanyWebpageParameter(companyID, domainParameterKey)
+}
+
+// getCompanyWebpageParameter reads one upserted row of the storefront config group, or nil when it
+// was never written or was cleared.
+func getCompanyWebpageParameter(companyID int32, key string) (*configTypes.Parameters, error) {
 	parameters := []configTypes.Parameters{}
 	query := db.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
-	query.Key.Equals("domain")
+	query.Key.Equals(key)
 	if queryError := query.Exec(); queryError != nil {
 		return nil, queryError
 	}
-	if len(parameters) == 0 || parameters[0].Status <= 0 {
+	if len(parameters) == 0 || parameters[0].Status <= 0 || strings.TrimSpace(parameters[0].Value) == "" {
 		return nil, nil
 	}
 	return &parameters[0], nil
+}
+
+// releasePreviousDomain programa la limpieza en Cloudflare del dominio que la company dejó de usar y
+// borra la marca, de modo que se ejecute exactamente una vez.
+//
+// Solo se llama después de un render correcto: mientras el hostname nuevo no sirva contenido, el
+// viejo es lo único que mantiene la tienda en pie. No devuelve error a propósito —el dominio ya está
+// guardado y publicado, y un fallo aquí solo deja un registro huérfano en Cloudflare, que no es
+// motivo para que el usuario vea fallar la operación.
+func releasePreviousDomain(companyID int32, currentDomain string, userID int32) {
+	previousDomain, readError := getCompanyWebpageParameter(companyID, previousDomainParameterKey)
+	if readError != nil {
+		core.Log("Error leyendo el dominio anterior::", companyID, readError)
+		return
+	}
+	if previousDomain == nil {
+		return
+	}
+	// Una vuelta al mismo dominio no libera nada: es el que la tienda está usando ahora.
+	if previousDomain.Value == currentDomain {
+		clearPreviousDomainMark(companyID, userID)
+		return
+	}
+
+	schedulePreviousDomainCleanup(companyID, previousDomain.Value)
+	// Se borra la marca al programar y no al ejecutar: la acción de cron ya reintenta por su cuenta,
+	// y dejarla puesta haría que el próximo guardado volviera a encolar el mismo borrado.
+	clearPreviousDomainMark(companyID, userID)
+}
+
+func clearPreviousDomainMark(companyID int32, userID int32) {
+	clearedParameter := []configTypes.Parameters{{
+		CompanyID: companyID,
+		Group:     webpageConfigGroup,
+		Key:       previousDomainParameterKey,
+		Value:     "",
+		Status:    0,
+		Updated:   core.SUnixTime(),
+		UpdatedBy: userID,
+	}}
+	if err := db.Insert(&clearedParameter); err != nil {
+		core.Log("Error borrando la marca del dominio anterior::", companyID, err)
+	}
 }
 
 // normalizeStorefrontDomain accepts only direct subdomains of the configured Cloudflare zone.

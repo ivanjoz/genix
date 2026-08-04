@@ -1,25 +1,17 @@
 package exec
 
 import (
-	"app/cloud"
 	configTypes "app/config/types"
 	"app/core"
 	"app/db"
-	webpageTypes "app/webpage/types"
+	"app/webpage"
 	"fmt"
 	"strconv"
 	"strings"
 )
 
-const (
-	webpageConfigGroup = int32(10)
-	// Páginas de sistema con contenido editable en el builder. Mantener en sync con
-	// SYSTEM_PAGES (frontend/services/webpage/pages.svelte.ts) y con defaultPageID.
-	webpageHomePageID  = int16(10)
-	webpageAboutPageID = int16(11)
-	// Los IDs <= 14 están reservados al sistema; las páginas de usuario empiezan en 15.
-	lastSystemWebpageID = int16(14)
-)
+// La lista de páginas del sistema vive en el paquete webpage, junto al render que la usa.
+const webpageConfigGroup = int32(10)
 
 func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 	companyID, argumentError := parseCompanyIDArgument(args.Message)
@@ -32,29 +24,21 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(domainError)
 	}
 
-	pages, pagesError := getCompanyWebpagePages(companyID)
-	if pagesError != nil {
-		return args.MakeErr(pagesError)
-	}
-
 	projectRoot, rootError := findGenixProjectRoot()
 	if rootError != nil {
 		return args.MakeErr(rootError)
 	}
-	// Los js/css se sirven desde el CDN a un dominio distinto al del sitio.
+	// Los js/css se sirven desde el CDN a un dominio distinto al del sitio. Solo el CLI lo hace:
+	// es una regla a nivel de bucket y necesita leer r2-cors.json del repo.
 	if corsError := ensureCompanyWebpageAssetCORS(projectRoot); corsError != nil {
 		return args.MakeErr(corsError)
 	}
 
-	fmt.Printf("[company-webpage] company=%d hostname=%s páginas=%d\n", companyID, hostname, len(pages))
+	fmt.Printf("[company-webpage] company=%d hostname=%s\n", companyID, hostname)
 
-	// El render vive en una Lambda de Node: el servidor SSR de SvelteKit es JavaScript, y
-	// así publicar no depende de tener el monorepo y bun en la máquina que ejecuta esto.
-	result, renderError := cloud.InvokeWebpageRenderer(cloud.WebpageRenderRequest{
-		CompanyID: companyID,
-		Hostname:  hostname,
-		Pages:     pages,
-	})
+	// Misma publicación que hace el guardado de dominio: la lista de páginas y la llamada al
+	// renderer viven en el paquete webpage para que los dos caminos no puedan divergir.
+	result, renderError := webpage.RenderCompanyWebpage(companyID, hostname)
 	if renderError != nil {
 		return args.MakeErr(renderError)
 	}
@@ -67,38 +51,6 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 		Message: fmt.Sprintf("Webpage de CompanyID %d desplegada en https://%s (%d página(s), build %s)",
 			companyID, hostname, result.Pages, result.BuildID),
 	}
-}
-
-// getCompanyWebpagePages arma la lista de páginas a renderizar: la raíz y /about —las dos
-// páginas de sistema con contenido editable en el builder— más las páginas creadas por el
-// usuario que estén activas. Las demás páginas de sistema (/store, /product, /cart) son
-// dinámicas y las resuelve el cliente, así que no se prerenderizan.
-func getCompanyWebpagePages(companyID int32) ([]cloud.WebpageRenderPage, error) {
-	pages := []cloud.WebpageRenderPage{
-		{ID: webpageHomePageID, Path: "/"},
-		{ID: webpageAboutPageID, Path: "/about"},
-	}
-
-	storedPages := []webpageTypes.Webpage{}
-	query := db.Query(&storedPages).CompanyID.Equals(companyID)
-	if queryError := query.Exec(); queryError != nil {
-		return nil, fmt.Errorf("error consultando las páginas de CompanyID %d: %w", companyID, queryError)
-	}
-
-	for _, storedPage := range storedPages {
-		// Los IDs <= 14 están reservados a las páginas de sistema; una fila en ese rango
-		// solo guarda su miniatura, no es una página propia.
-		if storedPage.ID <= lastSystemWebpageID || storedPage.Status <= 0 {
-			continue
-		}
-		route := strings.TrimSpace(storedPage.Route)
-		if !strings.HasPrefix(route, "/") || route == "/" {
-			return nil, fmt.Errorf("la página %d tiene una ruta inválida: %q", storedPage.ID, storedPage.Route)
-		}
-		pages = append(pages, cloud.WebpageRenderPage{ID: storedPage.ID, Path: route})
-	}
-
-	return pages, nil
 }
 
 func parseCompanyIDArgument(rawArgument string) (int32, error) {
