@@ -55,9 +55,15 @@ import { editorStore } from '../stores/editor.svelte';
     // DOM must be in its current, unmodified state). Conversion + upload run in the
     // background afterwards so saving isn't blocked.
     Loading.standard(tr('Generating preview...|Generando vista previa...', Core.languaje));
+    // The thumbnail is best-effort: its own try/catch keeps a capture failure from
+    // aborting the save below (which is what the user actually asked for).
     let thumbnail: Blob | null = null;
     try {
       thumbnail = await captureShowcaseBlob();
+    } catch (error) {
+      console.error('[showcase] capture threw::', error);
+    }
+    try {
       // Persist every section of the page. The backend assigns each section's
       // position-based id, hashes its content, and writes only what changed.
       await savePageContent(editorStore.sections, editorStore.palette.colors);
@@ -71,6 +77,7 @@ import { editorStore } from '../stores/editor.svelte';
     // Fire-and-forget: convert to AVIF and upload as the page thumbnail. Skipped for
     // the bare /webpage-builder route (pageID 0), which has no concrete page to attach to.
     const pageID = getCurrentPageID();
+    console.debug('[showcase] upload decision::', { pageID, thumbnailBytes: thumbnail?.size ?? 0 });
     if (thumbnail && pageID > 0) uploadShowcaseImage(pageID, thumbnail);
   }
 

@@ -8,11 +8,19 @@ import { domToCanvas } from 'modern-screenshot';
 // Returns null when there is nothing to capture.
 export const captureShowcaseBlob = async (): Promise<Blob | null> => {
   const canvas = document.querySelector<HTMLElement>('.builder-canvas');
-  if (!canvas) return null;
+  // No .builder-canvas in the document means mobile preview mode (the canvas is
+  // mounted inside MobilePreviewFrame's iframe) — nothing to screenshot here.
+  if (!canvas) {
+    console.warn('[showcase] no .builder-canvas in the document (mobile preview mode?) — capture skipped');
+    return null;
+  }
 
   const width = canvas.clientWidth;
   const sections = Array.from(canvas.querySelectorAll<HTMLElement>('.section-wrapper'));
-  if (width === 0 || sections.length === 0) return null;
+  if (width === 0 || sections.length === 0) {
+    console.warn('[showcase] nothing to capture::', { width, sections: sections.length });
+    return null;
+  }
 
   // Include whole sections from the top until we reach >= 1x the width (square min).
   let cropHeightCss = 0;
@@ -20,6 +28,7 @@ export const captureShowcaseBlob = async (): Promise<Blob | null> => {
     cropHeightCss += section.offsetHeight;
     if (cropHeightCss >= width) break;
   }
+  console.debug('[showcase] capturing::', { width, sections: sections.length, cropHeightCss, scrollHeight: canvas.scrollHeight });
 
   canvas.classList.add('capturing');
   try {
@@ -27,6 +36,7 @@ export const captureShowcaseBlob = async (): Promise<Blob | null> => {
     // domToCanvas may scale the output (devicePixelRatio); map CSS px -> canvas px.
     const scale = fullCanvas.width / width;
     const cropHeightPx = Math.min(Math.round(cropHeightCss * scale), fullCanvas.height);
+    console.debug('[showcase] domToCanvas done::', { canvasWidth: fullCanvas.width, canvasHeight: fullCanvas.height, scale, cropHeightPx });
 
     const cropped = document.createElement('canvas');
     cropped.width = fullCanvas.width;
@@ -34,7 +44,17 @@ export const captureShowcaseBlob = async (): Promise<Blob | null> => {
     const ctx = cropped.getContext('2d')!;
     ctx.drawImage(fullCanvas, 0, 0, fullCanvas.width, cropHeightPx, 0, 0, fullCanvas.width, cropHeightPx);
 
-    return await new Promise<Blob | null>((resolve) => cropped.toBlob(resolve, 'image/png'));
+    const blob = await new Promise<Blob | null>((resolve) => cropped.toBlob(resolve, 'image/png'));
+    console.debug('[showcase] png blob::', blob ? `${blob.size} bytes` : 'null (toBlob failed)');
+    // Expose the raw capture as a clickable URL so what the screenshot actually
+    // contains can be compared against the live canvas (before any conversion).
+    if (blob) { console.debug('[showcase] captured png preview::', URL.createObjectURL(blob)); }
+    return blob;
+  } catch (error) {
+    // domToCanvas can reject (huge foreignObject SVG, unfetchable asset). Log it and
+    // let the caller continue — the page save must not depend on the thumbnail.
+    console.error('[showcase] domToCanvas failed::', error);
+    return null;
   } finally {
     canvas.classList.remove('capturing');
   }

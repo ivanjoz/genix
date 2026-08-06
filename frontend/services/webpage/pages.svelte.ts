@@ -114,7 +114,12 @@ export const showcaseImageSrc = (page: IWebpage): string =>
 export const uploadShowcaseImage = async (pageID: number, blob: Blob): Promise<void> => {
   const processID = addProcess(tr('Page preview|Vista previa'), tr('Converting image|Convirtiendo imagen') + '...', 1);
   try {
+    console.debug('[showcase] converting to avif::', { pageID, pngBytes: blob.size });
     const avif = await fileToImage(blob, 632, 'avif');
+    console.debug('[showcase] avif ready::', { dataUrlLength: avif?.length ?? 0 });
+    // An empty conversion result would upload nothing and the backend would reject it;
+    // fail loudly here so the cause is visible in the process instead of a 400.
+    if (!avif) { throw new Error('la conversión a AVIF devolvió vacío'); }
     updateProcess(processID, '', tr('Saving preview...|Guardando vista previa...'), 1);
 		await POST({
 			data: { Content: avif },
