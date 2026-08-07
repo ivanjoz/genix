@@ -21,7 +21,7 @@ correr como `root` y lee `credentials.json` de la raíz del repositorio.
 | ---- | ------- |
 | `SCYLLA_ARGS` | Reescribe el env-file (`/etc/sysconfig/scylla-server` o `/etc/default/scylla-server`) con `--smp` acotado a los CPU disponibles, `-m 4G` y `--overprovisioned`. Limpia los flags que gestionó una corrida anterior. |
 | `scylla.yaml` | `listen_address=127.0.0.1`, `rpc_address=0.0.0.0`, `broadcast_rpc_address=<IP alcanzable>`, `native_transport_port=DB_PORT` y `authenticator=PasswordAuthenticator`. |
-| Firewall | Abre `DB_PORT/tcp` con firewalld o ufw, el que esté activo. |
+| Firewall | Abre `DB_PORT/tcp` (ver [Firewall](#firewall) abajo). |
 | Superusuario | Prueba la password de `credentials.json` y la default `cassandra`. Si ninguna entra, recupera el rol por el **maintenance socket** de Scylla (ver abajo) y luego la cambia a `DB_PASSWORD`. |
 | Keyspace | Crea `DB_NAME` con `NetworkTopologyStrategy` y `replication_factor: 1` si no existe. |
 
@@ -82,6 +82,46 @@ usuario que invocó `sudo`.
   `.cfg` de referencia del repo hermano `../genix-search/genixsearch.cfg`.
 
 ---
+
+## Firewall
+
+Ambos modos abren su puerto con el gestor que **realmente** esté administrando netfilter
+en el host, en este orden:
+
+1. **firewalld** — si está corriendo: `--permanent --add-port <puerto>/tcp` + `--reload`.
+2. **ufw** — si está instalado y activo: `ufw allow <puerto>/tcp`.
+3. **iptables plano** — solo si ninguno de los dos está gestionando. firewalld y ufw
+   escriben en las mismas cadenas de netfilter, así que un `-I INPUT` a mano quedaría
+   pisado en su próximo reload.
+
+El caso 3 es el de las imágenes de **Oracle Cloud**, que traen una cadena `INPUT`
+terminada en `-j REJECT --reject-with icmp-host-prohibited` y ni firewalld ni ufw. Ese
+REJECT es lo que el cliente ve como `no route to host` (un DROP, en cambio, se manifiesta
+como timeout).
+
+Con iptables el script **solo actúa si el puerto está efectivamente cerrado**:
+
+- Si ya hay un `ACCEPT` que cubre el puerto **antes** del REJECT/DROP → no hace nada.
+  Reconoce `--dport`, `--dports` de multiport y rangos `low:high`.
+- Si no hay ninguna regla que lo bloquee y la policy de `INPUT` es `ACCEPT` → no hace nada.
+- Si está bloqueado, inserta el `ACCEPT` **justo antes** de la regla que lo tapaba
+  (o al final de la cadena cuando lo que bloquea es la policy):
+
+  ```bash
+  iptables -I INPUT <n> -p tcp --dport <puerto> -m state --state NEW -j ACCEPT
+  ```
+
+  Después relee la cadena para confirmar que la regla quedó por delante del bloqueo, y
+  la persiste con `netfilter-persistent save`, o escribiendo `/etc/iptables/rules.v4`
+  (Debian/Ubuntu) o `/etc/sysconfig/iptables` (RHEL/Oracle Linux).
+
+Una regla de bloqueo acotada a otros puertos no cuenta como bloqueo. Si ningún gestor
+puede confirmar el puerto abierto, el script lo avisa fuerte en vez de seguir en silencio:
+un servicio instalado pero inalcanzable es el síntoma más caro de diagnosticar.
+
+> Esto cubre el firewall **del host**. Si el proveedor tiene además un filtro de red
+> (Security List / NSG en OCI, Security Group en AWS), hay que abrir el puerto ahí
+> también; ese descarte es silencioso y se ve como timeout, no como `no route to host`.
 
 ## IP de broadcast
 

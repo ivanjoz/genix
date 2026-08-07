@@ -171,6 +171,153 @@ def ensure_ufw_port_open(database_port):
     verification_result = run_capture_command(["ufw", "status"])
     return re.search(port_rule_pattern, verification_result.stdout, flags=re.IGNORECASE | re.MULTILINE) is not None
 
+def is_firewall_frontend_active():
+    """Whether firewalld or ufw is the one managing netfilter on this host.
+
+    Los dos son frontends de las mismas cadenas de netfilter: si alguno esta activo,
+    una regla insertada a mano con iptables queda pisada en el proximo reload del
+    frontend. Solo cuando ninguno gestiona tiene sentido tocar iptables directamente.
+    """
+    if which("firewall-cmd") is not None:
+        firewalld_state_result = run_capture_command(["firewall-cmd", "--state"], quiet=True)
+        if firewalld_state_result.returncode == 0 and "running" in firewalld_state_result.stdout:
+            print("[*] firewalld is managing netfilter; not touching iptables directly.")
+            return True
+
+    if which("ufw") is not None:
+        ufw_status_result = run_capture_command(["ufw", "status"], quiet=True)
+        if ufw_status_result.returncode == 0 and "status: inactive" not in ufw_status_result.stdout.lower():
+            print("[*] ufw is managing netfilter; not touching iptables directly.")
+            return True
+
+    return False
+
+# Targets que descartan el paquete. Un REJECT devuelve icmp-host-prohibited, que es el
+# 'no route to host' que ve el cliente; un DROP se manifiesta como timeout.
+IPTABLES_BLOCKING_TARGETS = {"REJECT", "DROP"}
+
+def iptables_ports_cover(port_specification, database_port):
+    """Whether an iptables --dport/--dports value matches this port."""
+    for port_token in port_specification.split(","):
+        with contextlib.suppress(ValueError):
+            if ":" in port_token:
+                # Rango 'low:high', con cualquiera de los dos extremos opcional.
+                range_low, _, range_high = port_token.partition(":")
+                if int(range_low or 1) <= database_port <= int(range_high or 65535):
+                    return True
+            elif int(port_token) == database_port:
+                return True
+    return False
+
+def read_iptables_input_chain():
+    """Returns (policy, [(index, rule)]) for the INPUT chain, or None if unreadable.
+
+    Los indices son 1-based porque es lo que esperan 'iptables -I/-D'.
+    """
+    chain_listing_result = run_capture_command(["iptables", "-S", "INPUT"], quiet=True)
+    if chain_listing_result.returncode != 0:
+        print_debug_block("iptables -S INPUT failed", chain_listing_result.stderr or chain_listing_result.stdout)
+        return None
+
+    chain_policy = "ACCEPT"
+    chain_rules = []
+    for listing_line in chain_listing_result.stdout.splitlines():
+        if listing_line.startswith("-P INPUT "):
+            chain_policy = listing_line.split()[2]
+        elif listing_line.startswith("-A INPUT"):
+            chain_rules.append(listing_line)
+
+    return chain_policy, list(enumerate(chain_rules, start=1))
+
+def find_iptables_accept_index(chain_rules, database_port):
+    """Index of the first rule that already accepts TCP traffic for this port."""
+    for rule_index, rule_text in chain_rules:
+        if "-j ACCEPT" not in rule_text or "-p tcp" not in rule_text:
+            continue
+        ports_match = re.search(r"--dports?\s+(\S+)", rule_text)
+        if ports_match and iptables_ports_cover(ports_match.group(1), database_port):
+            return rule_index
+    return None
+
+def find_iptables_blocking_index(chain_rules, database_port):
+    """Index of the first REJECT/DROP that would swallow traffic to this port."""
+    for rule_index, rule_text in chain_rules:
+        target_match = re.search(r"-j\s+(\S+)", rule_text)
+        if not target_match or target_match.group(1) not in IPTABLES_BLOCKING_TARGETS:
+            continue
+
+        # Una regla de bloqueo acotada a otros puertos no nos afecta; la catch-all si.
+        ports_match = re.search(r"--dports?\s+(\S+)", rule_text)
+        if ports_match and not iptables_ports_cover(ports_match.group(1), database_port):
+            continue
+        return rule_index
+    return None
+
+def persist_iptables_rules():
+    """Makes the new rule survive a reboot, with whatever mechanism the distro ships."""
+    if which("netfilter-persistent") is not None:
+        run_command("netfilter-persistent save", ignore_errors=True)
+        return
+
+    # Debian/Ubuntu con iptables-persistent, y RHEL/Oracle Linux con iptables-services.
+    for persistence_path in ("/etc/iptables/rules.v4", "/etc/sysconfig/iptables"):
+        if os.path.isdir(os.path.dirname(persistence_path)):
+            run_command(f"iptables-save > {persistence_path}", ignore_errors=True)
+            return
+
+    print("[!] No iptables persistence mechanism found: the rule will be lost on reboot.")
+    print("    Install iptables-persistent (Debian/Ubuntu) or iptables-services (RHEL).")
+
+def ensure_iptables_port_open(database_port):
+    """Opens the port in a plain iptables setup, but only when it is really blocked."""
+    input_chain = read_iptables_input_chain()
+    if input_chain is None:
+        return False
+
+    chain_policy, chain_rules = input_chain
+    accept_index = find_iptables_accept_index(chain_rules, database_port)
+    blocking_index = find_iptables_blocking_index(chain_rules, database_port)
+
+    # La primera regla que matchea gana, asi que un ACCEPT antes del bloqueo ya alcanza.
+    if accept_index is not None and (blocking_index is None or accept_index < blocking_index):
+        print(f"[*] iptables already accepts TCP port {database_port} (rule {accept_index}).")
+        return True
+
+    if blocking_index is None and chain_policy == "ACCEPT":
+        print(f"[*] iptables has no rule blocking TCP port {database_port} and the INPUT policy is ACCEPT.")
+        return True
+
+    # Se inserta justo antes del REJECT/DROP que lo estaba tapando; si lo que bloquea es
+    # la policy de la cadena, va al final, que igual queda antes de la policy.
+    insert_index = blocking_index if blocking_index is not None else len(chain_rules) + 1
+    blocking_reason = f"rule {blocking_index}" if blocking_index is not None else f"INPUT policy {chain_policy}"
+    print(f"[*] TCP port {database_port} is blocked by {blocking_reason}. Inserting an ACCEPT at position {insert_index}.")
+
+    insert_rule_result = run_capture_command([
+        "iptables", "-I", "INPUT", str(insert_index),
+        "-p", "tcp", "--dport", str(database_port),
+        "-m", "state", "--state", "NEW", "-j", "ACCEPT",
+    ])
+    if insert_rule_result.returncode != 0:
+        print(f"[!] Failed to insert the iptables rule for TCP port {database_port}.")
+        return False
+
+    # Se relee la cadena en vez de confiar en el exit code: confirma que la regla quedo
+    # efectivamente por delante de lo que bloqueaba.
+    verification_chain = read_iptables_input_chain()
+    if verification_chain is None:
+        return False
+
+    verified_policy, verified_rules = verification_chain
+    verified_accept_index = find_iptables_accept_index(verified_rules, database_port)
+    verified_blocking_index = find_iptables_blocking_index(verified_rules, database_port)
+    if verified_accept_index is None or (verified_blocking_index is not None and verified_accept_index > verified_blocking_index):
+        print(f"[!] The iptables rule for TCP port {database_port} did not take effect.")
+        return False
+
+    persist_iptables_rules()
+    return True
+
 def ensure_tcp_port_open(database_port):
     print(f"[*] Ensuring TCP port {database_port} is open in the host firewall...")
     if which("firewall-cmd") is not None and ensure_firewalld_port_open(database_port):
@@ -181,7 +328,16 @@ def ensure_tcp_port_open(database_port):
         print(f"[*] Firewall confirmed open for TCP port {database_port} via ufw.")
         return
 
-    print("[*] No supported active firewall manager detected. Skipping automatic firewall changes.")
+    # Ultimo recurso: iptables plano, que es lo que traen las imagenes de Oracle Cloud
+    # (cadena INPUT terminada en REJECT icmp-host-prohibited, sin firewalld ni ufw).
+    if which("iptables") is not None and not is_firewall_frontend_active() and ensure_iptables_port_open(database_port):
+        print(f"[*] Firewall confirmed open for TCP port {database_port} via iptables.")
+        return
+
+    # Saltarse esto en silencio deja el servicio instalado pero inalcanzable, que es
+    # justo el sintoma mas caro de diagnosticar.
+    print(f"[!] Could not confirm that TCP port {database_port} is open in the host firewall.")
+    print("    If this host filters inbound traffic, open the port manually before using the service.")
 
 def run_cqlsh_query(cql_query, database_port, database_password, ignore_errors=False, quiet=False):
     cqlsh_command_arguments = [
