@@ -1182,6 +1182,34 @@ def resolve_genixsearch_port(credentials_data):
         sys.exit(1)
     return parsed_port
 
+def resolve_genixsearch_endpoint(credentials_data, broadcast_ip_address):
+    """Returns (url, port, was_url_generated) for the search endpoint.
+
+    Un GENIXSEARCH_URL ya configurado gana siempre y no se toca: es la direccion por
+    la que el backend entra de verdad (IP publica, dominio o tunel) y el script no
+    puede deducirla. La IP que detecta este host suele ser la privada de la VPC, que
+    desde Lambda no resuelve a nada.
+    """
+    genixsearch_port = resolve_genixsearch_port(credentials_data)
+    configured_search_url = str(credentials_data.get("GENIXSEARCH_URL") or "").strip()
+
+    if configured_search_url:
+        print(f"[*] Reusing GENIXSEARCH_URL from credentials.json: {configured_search_url}")
+        return configured_search_url, genixsearch_port, False
+
+    generated_search_url = f"{broadcast_ip_address}:{genixsearch_port}"
+    print(f"[*] No GENIXSEARCH_URL in credentials.json. Using the detected address: {generated_search_url}")
+
+    # Una IP privada solo sirve si el backend vive en la misma red; conviene avisarlo
+    # aqui y no cuando el handshake falle en produccion.
+    with contextlib.suppress(ValueError):
+        if ipaddress.ip_address(broadcast_ip_address).is_private and not is_tailnet_ip(broadcast_ip_address):
+            print(f"[!] {broadcast_ip_address} is a private address. A backend outside this network")
+            print("    will not reach it: set GENIXSEARCH_URL in credentials.json to the public")
+            print("    host or domain and re-run.")
+
+    return generated_search_url, genixsearch_port, True
+
 def resolve_genixsearch_password(credentials_data):
     """Reuses GENIXSEARCH_PASSWORD from credentials.json, or generates one."""
     existing_password = credentials_data.get("GENIXSEARCH_PASSWORD")
@@ -1196,7 +1224,9 @@ def resolve_genixsearch_password(credentials_data):
     return generated_password, True
 
 def configure_genixsearch(credentials_data, broadcast_ip_address, release_version, local_binary_path):
-    genixsearch_port = resolve_genixsearch_port(credentials_data)
+    genixsearch_url, genixsearch_port, was_url_generated = resolve_genixsearch_endpoint(
+        credentials_data, broadcast_ip_address
+    )
     genixsearch_password, was_password_generated = resolve_genixsearch_password(credentials_data)
 
     with tempfile.TemporaryDirectory(prefix="genixsearch-release-") as download_directory_name:
@@ -1232,12 +1262,18 @@ def configure_genixsearch(credentials_data, broadcast_ip_address, release_versio
         print_service_failure_debug(GENIXSEARCH_SERVICE_NAME)
         sys.exit(1)
 
-    # El backend en Lambda alcanza este host por su IP de broadcast, no por loopback.
-    genixsearch_url = f"{broadcast_ip_address}:{genixsearch_port}"
-    credentials_updates = {"GENIXSEARCH_URL": genixsearch_url}
+    # Solo se escriben los valores que el script genero: los que ya estaban en
+    # credentials.json son una decision del operador y sobrescribirlos rompe el backend.
+    credentials_updates = {}
+    if was_url_generated:
+        credentials_updates["GENIXSEARCH_URL"] = genixsearch_url
     if was_password_generated:
         credentials_updates["GENIXSEARCH_PASSWORD"] = genixsearch_password
-    save_project_credentials(credentials_updates)
+
+    if credentials_updates:
+        save_project_credentials(credentials_updates)
+    else:
+        print("[*] credentials.json already had GENIXSEARCH_URL and GENIXSEARCH_PASSWORD. Left untouched.")
 
     print("\n[+] GenixSearch Installation Complete!")
     print(f"    - binary:  {GENIXSEARCH_BINARY_PATH}")

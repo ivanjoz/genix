@@ -57,15 +57,20 @@ musl, así que el host no necesita toolchain ni una glibc concreta.
 
 ### Credenciales que escribe
 
-Al terminar, el script **actualiza `credentials.json`**:
+El script **solo escribe en `credentials.json` los valores que faltaban**. Un valor ya
+presente es una decisión del operador y no se toca:
 
-- `GENIXSEARCH_URL` = `<IP alcanzable>:<puerto>`.
+- `GENIXSEARCH_URL` — si ya tiene valor, se reutiliza tal cual. El script **no puede
+  deducir** la dirección por la que el backend entra de verdad (IP pública, dominio o
+  túnel): la IP que detecta el host suele ser la privada de la VPC, que desde Lambda no
+  resuelve a nada. Solo cuando está vacía escribe la IP detectada, y avisa si es privada.
 - `GENIXSEARCH_PASSWORD` — se reutiliza la existente; si no hay, genera una de 64
   caracteres (minúsculas + dígitos) y la escribe.
 
 El backend Go las lee como `core.Env.GENIXSEARCH_URL` / `core.Env.GENIXSEARCH_PASSWORD`
 (`backend/core/security.go`). El puerto sale de `GENIXSEARCH_URL` si ya trae uno; si no,
-usa `14446`, el mismo default de `core.ParseGenixSearchURL`.
+usa `14446`, el mismo default de `core.ParseGenixSearchURL`. Es decir: el puerto en el
+que escucha el servicio se controla poniendo el puerto en `GENIXSEARCH_URL`.
 
 El archivo se reescribe con indentación de 4 espacios y se le devuelve la propiedad al
 usuario que invocó `sudo`.
