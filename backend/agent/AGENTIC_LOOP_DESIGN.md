@@ -1,4 +1,4 @@
-# Genix Agent — Design (Backend-Hosted, OpenRouter-Powered)
+# Genix Agent — Design (Backend-Hosted, LLM-Powered)
 
 Status: **draft for review** — open questions at the bottom. Do not implement
 until the user signs off on each section.
@@ -272,19 +272,36 @@ Key points:
 `chat.completions` normally and emits one `agentReply` event when the
 loop finishes. Streaming can be added later if latency feels bad.
 
-## 6. OpenRouter integration
+## 6. LLM provider integration
 
 New package `backend/agent/llm/` (so the loop logic stays in
 `backend/agent/`):
 
-- `openrouter.go` — thin HTTP client around
-  `https://openrouter.ai/api/v1/chat/completions`. Supports tool calling
-  (`tools`/`tool_choice`) in the OpenAI-compatible shape OpenRouter
-  uses.
-- API key from env: `OPENROUTER_API_KEY`.
-- **Decided** (Q5): Default model `tencent/hy3-preview`. Resolved from
-  `core.Env.OPENROUTER_KEY` + `OPENROUTER_MODEL` (loaded from
-  `credentials.json` — same path as the rest of the project).
+- `client.go` — thin HTTP client around the provider's OpenAI-compatible
+  `/chat/completions`, supporting tool calling (`tools`/`tool_choice`).
+  Two providers are supported and `MODEL_PROVIDER` in `credentials.json`
+  picks one (blank = `openrouter`):
+
+  | `MODEL_PROVIDER` | endpoint | key | compile-time default model |
+  |---|---|---|---|
+  | `meta` | `https://api.meta.ai/v1/chat/completions` | `META_KEY` | `muse-spark-1.2-contributor` |
+  | `openrouter` | `https://openrouter.ai/api/v1/chat/completions` | `OPENROUTER_KEY` | `openai/gpt-5.6-luna` |
+
+  Both speak the same wire format for messages/tools, so `Message`, `Tool`,
+  `ToolCall`, `Choice` and `Usage` are shared. Only the thinking budget
+  differs: Meta takes a flat `reasoning_effort` string, OpenRouter a nested
+  `reasoning` object plus its own `provider` routing block. Callers always
+  set `llm.ReasoningOptions` and `Chat()` translates — including the case
+  Meta rejects, `reasoning_effort: "none"` (HTTP 400 on Muse Spark), which
+  becomes `"minimal"`.
+
+- `DEFAULT_MODEL` in `credentials.json` overrides the model for either
+  provider; it must name a model the active provider serves. `llm.ListModels`
+  (the `agent-models` route feeding the UI dropdown) only returns registry
+  entries whose `Provider` matches the active one, so the picker can't offer
+  an unroutable id.
+- **Decided** (Q5): model is env-configurable; the original default was
+  `tencent/hy3-preview`.
 
   **Constraint discovered in step 2 validation**: this model's provider
   routing **does not support `tool_choice: "required"`** (returns
@@ -310,7 +327,8 @@ backend/agent/
 ├── chat_loop.go        NEW — RunTurn, tool dispatch
 ├── chat_store.go       NEW — saveMessage, loadLastN
 ├── llm/
-│   ├── openrouter.go   NEW — HTTP client, tool-call schema
+│   ├── client.go       NEW — HTTP client, tool-call schema
+│   ├── models.go       NEW — per-model/provider registry
 │   └── prompts.go      NEW — system prompt, tool definitions
 └── AGENTIC_LOOP_DESIGN.md (this file)
 
@@ -353,7 +371,7 @@ Build in small, reviewable slices:
 1. **Table only** — generate `agent_messages` via `scripts/create_edit_table`,
    add `chat_store.go` with `saveMessage` + `loadLastN`. No WS, no LLM.
    Validates the schema.
-2. **OpenRouter client** — `llm/openrouter.go` + a small CLI/test that
+2. **LLM client** — `llm/client.go` + a small CLI/test that
    calls it with a hard-coded prompt and no tools. Validates the API
    integration.
 3. **WS channel** — `/ws/agent-chat` handler, in-memory `AgentSession`,

@@ -10,7 +10,7 @@ Frontend using Svelte 5, SvelteKit, and Tailwind CSS.
 
 ### Page
 
-Container for authenticated pages. All non-public pages must be wrapped in this component. Redirects to `/login` if not authenticated.
+Container for authenticated pages. All non-public pages must be wrapped in this component. Redirects to `/welcome` if not authenticated.
 
 If the page is subdivided into sections, use the `options` prop. These options are rendered in the top main menu, so a maximum of 3 options is recommended because they are stacked horizontally.
 

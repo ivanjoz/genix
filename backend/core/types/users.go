@@ -2,41 +2,34 @@ package types
 
 import (
 	"app/db"
-	"fmt"
 )
 
-type User struct { // DynamoDB + ScyllaDB
+type User struct {
 	db.TableStruct[UserTable, User]
-	CompanyID  int32   `json:",omitempty" col:"empresa_id,pk"`
-	ID         int32   `json:",omitempty" col:"id,pk,sk"`
-	User       string  `json:",omitempty" col:"user,index"`
-	LastName   string  `json:",omitempty" col:"last_name"`
-	FirstName  string  `json:",omitempty" col:"first_name"`
-	ProfileIDs []int32 `json:",omitempty" col:"profile_ids"`
+	CompanyID  int32   `json:",omitempty"`
+	ID         int32   `json:",omitempty"`
+	User       string  `json:",omitempty"`
+	LastName   string  `json:",omitempty"`
+	FirstName  string  `json:",omitempty"`
+	ProfileIDs []int32 `json:",omitempty"`
 	// AccesoID * 10 + Nivel
-	AccessLevelIDs     []int32  `json:",omitempty" col:"access_level_ids"`
-	AccesosComputed    []uint16 `json:",omitempty" col:"accesos_computed"`
-	Email              string   `json:",omitempty" col:"email,index"`
-	JobTitle           string   `json:",omitempty" col:"job_title"`
-	DocumentNumber     string   `json:",omitempty" col:"document_number"`
-	PasswordHash       string   `json:",omitempty" col:"password_hash"`
-	Password           string   `json:",omitempty" col:"-"`
-	Created            int32    `json:",omitempty" col:"created"`
-	CreatedBy          int32    `json:",omitempty"  col:"created_by"`
-	Updated            int32    `json:"upd,omitempty" col:"updated"`
-	UpdatedBy          int32    `json:",omitempty" col:"updated_by"`
-	Status             int8     `json:"ss,omitempty" col:"status"`
-	CompanyUserIndex   string   `json:"-" col:"company_usuario,index"`
-	CompanyStatusIndex string   `json:"-" col:"company_status_updated,index"`
+	AccessLevelIDs  []int32  `json:",omitempty"`
+	AccesosComputed []uint16 `json:",omitempty"`
+	Email           string   `json:",omitempty"`
+	JobTitle        string   `json:",omitempty"`
+	DocumentNumber  string   `json:",omitempty"`
+	PasswordHash    string   `json:",omitempty"`
+	// Password is write-only input from the client. It is absent from UserTable, which is
+	// what keeps it out of every database: the column set comes from the table struct.
+	Password  string `json:",omitempty"`
+	Created   int32  `json:",omitempty"`
+	CreatedBy int32  `json:",omitempty"`
+	Updated   int32  `json:"upd,omitempty"`
+	UpdatedBy int32  `json:",omitempty"`
+	Status    int8   `json:"ss,omitempty"`
 	// UpdatedVersion is the write sequence number. By-IDs endpoints overwrite it with the record's
 	// slot version, which is what the client sends back to prove its copy is still current.
-	UpdatedVersion int32 `json:"upv,omitempty" col:"updated_version"`
-}
-
-func (user *User) PrepareCloudSync() {
-	// Company + status + padded updated keeps delta queries lexicographically sortable across providers.
-	user.CompanyUserIndex = fmt.Sprintf("%d_%s", user.CompanyID, user.User)
-	user.CompanyStatusIndex = fmt.Sprintf("%d_%d_%020d", user.CompanyID, user.Status, user.Updated)
+	UpdatedVersion int32 `json:"upv,omitempty"`
 }
 
 type UserTable struct {
@@ -52,6 +45,7 @@ type UserTable struct {
 	Email           db.Col[UserTable, string]
 	JobTitle        db.Col[UserTable, string]
 	DocumentNumber  db.Col[UserTable, string]
+	PasswordHash    db.Col[UserTable, string]
 	Created         db.Col[UserTable, int32]
 	CreatedBy       db.Col[UserTable, int32]
 	Updated         db.Col[UserTable, int32]
@@ -73,5 +67,14 @@ func (usuarioTable UserTable) GetSchema() db.TableSchema {
 			Name: usuarioTable.User, S1: usuarioTable.FirstName, S2: usuarioTable.LastName,
 		},
 		Keys: db.Cols(usuarioTable.ID.Autoincrement(0)),
+		// Declaration order is also the cloud mirror's index-slot order (ix1, ix2, ix3).
+		// The login handle and the email are looked up directly; status+updated is the
+		// delta read, padded so the range compares in numeric order.
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: db.Cols(usuarioTable.User)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(usuarioTable.Email)},
+			{Type: db.TypeView, Keys: db.Cols(
+				usuarioTable.Status, usuarioTable.Updated.DecimalSize(10))},
+		},
 	}
 }

@@ -15,8 +15,9 @@ package llm
 //  4. how to end the turn (finish, exactly once)
 //
 // We rely on the prompt — not `tool_choice: "required"` — to discipline the
-// model into calling `finish`, because the tencent/hy3-preview provider
-// routing rejects "required" (see openrouter.go).
+// model into calling `finish`, because tencent/hy3-preview's OpenRouter
+// routing rejects "required" and neither provider default has been validated
+// for it (see client.go).
 const SystemPromptChat = `You are Genix, an in-app assistant for the Genix ERP/e-commerce platform.
 The user is chatting with you through a widget in the app while looking at a real page.
 

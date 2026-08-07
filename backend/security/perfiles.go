@@ -7,7 +7,6 @@ import (
 	"app/db"
 	securityTypes "app/security/types"
 	"encoding/json"
-	"fmt"
 )
 
 func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
@@ -26,11 +25,11 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		err = profileQuery.AllowFilter().Exec()
 	} else if updated > 0 {
-		companyUpdated := fmt.Sprintf("%d_%020d", req.User.CompanyID, updated)
-		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).Where("company_updated").GreaterEqual(companyUpdated).Exec()
+		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).
+			Where("updated").GreaterEqual(updated).Exec()
 	} else {
-		activeProfiles := fmt.Sprintf("%d_%d_%020d", req.User.CompanyID, 1, updated)
-		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).Where("company_status_updated").GreaterEqual(activeProfiles).Exec()
+		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).
+			Where("status").Equals(1).Where("updated").GreaterEqual(updated).Exec()
 	}
 	if err != nil {
 		return req.MakeErr("Error al obtener perfiles.", err)
@@ -54,14 +53,12 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	core.Print(body)
 
 	body.Updated = core.SUnixTime()
-	body.PrepareCloudSync()
 	perfilesToSave := []securityTypes.Profile{body}
 	if err = db.Insert(&perfilesToSave); err != nil {
 		return req.MakeErr("Error al actualizar el profile en ScyllaDB: " + err.Error())
 	}
 
 	body = perfilesToSave[0]
-	body.PrepareCloudSync()
 	if err = cloud.Insert([]securityTypes.Profile{body}); err != nil {
 		return req.MakeErr("Error al actualizar el profile en cloud: " + err.Error())
 	}

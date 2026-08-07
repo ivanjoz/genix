@@ -40,7 +40,7 @@
 		if(page.url.pathname.startsWith('/webpage-builder/template-preview')){
 			return false
 		}
-		if(["/login"].includes(page.url.pathname)){
+		if(["/welcome"].includes(page.url.pathname)){
 			return false
 		}
 		return security.checkIsLogin() !== 2
@@ -67,11 +67,11 @@
 	}
 
 	onMount(() => {
-		if(redirectsToLogin){ Env.navigate("/login") }
+		if(redirectsToLogin){ Env.navigate("/welcome") }
 	})
 
 	$effect(() => {
-		if (browser && !redirectsToLogin && page.url.pathname !== '/login' && !accessCatalogReady && !accessCatalogFailed) {
+		if (browser && !redirectsToLogin && page.url.pathname !== '/welcome' && !accessCatalogReady && !accessCatalogFailed) {
 			void loadAccessCatalog()
 		}
 	})
@@ -109,7 +109,7 @@
 		Env.navigate('/')
 	})
 
-	const routesWithoutLayout: string[] = ["/login","/initial-data","/store","/webpage-builder/template-preview"]
+	const routesWithoutLayout: string[] = ["/welcome","/initial-data","/store","/webpage-builder/template-preview"]
 	// Check if current route should show Header and SideMenu
 	let showLayout = $derived(
 		!routesWithoutLayout.some(x => page.url.pathname.startsWith(x))

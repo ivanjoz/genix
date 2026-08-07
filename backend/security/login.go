@@ -91,15 +91,13 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	usuarios := []coretypes.User{}
 	if cloud.IsDataMirrorEnabled() {
-		// The cloud mirror uses its synthetic company/user index for a provider-neutral lookup.
-		companyUserIndex := coretypes.User{CompanyID: body.CompanyID, User: body.User}
-		companyUserIndex.PrepareCloudSync()
-		err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.CompanyID).Where("company_usuario").Equals(companyUserIndex.CompanyUserIndex).Exec()
+		// The mirror resolves the same lookup through the index declared on the "user" column.
+		err = cloud.Select(&usuarios).Where("company_id").Equals(body.CompanyID).Where("user").Equals(body.User).Exec()
 	} else {
-		// Self-hosted mode authenticates directly against the primary Scylla table.
+		// Self-hosted mode authenticates directly against the primary database.
 		userQuery := db.Query(&usuarios)
 		userQuery.CompanyID.Equals(body.CompanyID).User.Equals(body.User).Limit(1)
-		err = userQuery.AllowFilter().Exec()
+		err = userQuery.Exec()
 	}
 	if err != nil {
 		return req.MakeErr("Error al consultar el user.", err.Error())
@@ -172,6 +170,11 @@ func MakeUsuarioResponse(user coretypes.User, cipherKey string) (map[string]any,
 
 	// Crea la informacion del user encriptada
 	userInfo := map[string]any{
+		// El ID va dentro del UserInfo cifrado —y no solo como campo suelto de la respuesta—
+		// porque es lo único que el frontend persiste del usuario de sesión: parseLogin guarda
+		// el UserInfo descifrado y descarta el resto. Sin él, todo lo que necesite identificar
+		// al usuario en el cliente (p.ej. el token de canal del agente) queda con userID = 0.
+		"ID":             user.ID,
 		"User":           user.User,
 		"ProfileIDs":     user.ProfileIDs,
 		"FirstName":      user.FirstName,

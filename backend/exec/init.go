@@ -115,10 +115,6 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 	core.Log("Se crearon/actualizaron las empresas iniciales en ScyllaDB y cloud.")
 
-	for userIndex := range usuarios {
-		usuarios[userIndex].PrepareCloudSync()
-	}
-
 	// Seed admin/system users in ScyllaDB so delta-cache and ID-based reads stay consistent.
 	if err := db.Insert(&usuarios); err != nil {
 		panic("Error al crear los usuarios iniciales en ScyllaDB. " + err.Error())

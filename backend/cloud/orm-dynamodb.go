@@ -13,27 +13,17 @@ import (
 )
 
 // DynamoORM provides basic operations for DynamoDB (Single Table Design).
-type DynamoORM[T any] struct {
-	hashPrefix string
-	columns    []ColumnMeta
+type DynamoORM[RecordT any] struct {
+	meta *TableMeta
 }
 
 // Ensure DynamoORM implements ORM.
 var _ ORM[any] = (*DynamoORM[any])(nil)
 
-// NewDynamoORM creates a new ORM instance for the given generic type T.
-func NewDynamoORM[T any]() (*DynamoORM[T], error) {
-	var model T
-
-	cols, _, hashPrefix := parseColumns(model)
-	if len(cols) == 0 {
-		return nil, errors.New("no columns found in struct")
-	}
-
-	return &DynamoORM[T]{
-		hashPrefix: hashPrefix,
-		columns:    cols,
-	}, nil
+// NewDynamoORM creates a new ORM instance for a record type whose mirror metadata has
+// already been resolved from its table schema.
+func NewDynamoORM[RecordT any](meta *TableMeta) *DynamoORM[RecordT] {
+	return &DynamoORM[RecordT]{meta: meta}
 }
 
 // Init verifica que exista la tabla única de DynamoDB. Deliberadamente NO la crea: la tabla
@@ -58,7 +48,7 @@ func (o *DynamoORM[T]) Init() error {
 }
 
 // Insert inserts multiple records into DynamoDB single table.
-func (o *DynamoORM[T]) Insert(records []T) error {
+func (o *DynamoORM[RecordT]) Insert(records []RecordT) error {
 	for i := range records {
 		if err := o.insertOne(&records[i]); err != nil {
 			return err
@@ -67,43 +57,47 @@ func (o *DynamoORM[T]) Insert(records []T) error {
 	return nil
 }
 
-func (o *DynamoORM[T]) insertOne(record *T) error {
+// itemKey renders the pk/sk pair for one record. Both are derived from the table's
+// partition and key columns, so an item lands on the same coordinates the primary
+// database uses.
+func (o *DynamoORM[RecordT]) itemKey(record reflect.Value) (string, string, error) {
+	dynamoPK := o.meta.HashPrefix
+	if partitionField, hasPartition := o.meta.PartitionField(); hasPartition {
+		dynamoPK += stringify(record.FieldByName(partitionField))
+	}
+
+	keyField, err := o.meta.KeyField()
+	if err != nil {
+		return "", "", err
+	}
+
+	skValue := stringify(record.FieldByName(keyField))
+	if skValue == "" {
+		return "", "", errors.New("missing sort key (sk) in record")
+	}
+
+	return dynamoPK, skValue, nil
+}
+
+func (o *DynamoORM[RecordT]) insertOne(record *RecordT) error {
 	v := reflect.ValueOf(record)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 
-	item := map[string]types.AttributeValue{}
-	var dynamoPartitionValue string
-	var skValue string
-
-	for _, col := range o.columns {
-		fieldVal := v.FieldByName(col.FieldName)
-		strVal := stringify(fieldVal)
-
-		if col.IsPK && dynamoPartitionValue == "" {
-			dynamoPartitionValue = strVal
-		}
-
-		if col.IsSK {
-			skValue = strVal
-		}
-
-		if col.IsIndex && strVal != "" {
-			item[col.DynamoIndex] = &types.AttributeValueMemberS{Value: strVal}
-		}
+	dynamoPK, skValue, err := o.itemKey(v)
+	if err != nil {
+		return err
 	}
 
-	dynamoPK := o.hashPrefix
-	if dynamoPartitionValue != "" {
-		dynamoPK += dynamoPartitionValue
+	item := map[string]types.AttributeValue{}
+	for _, index := range o.meta.Indexes {
+		if indexValue := index.buildIndexValue(v); indexValue != "" {
+			item[index.DynamoIndex] = &types.AttributeValueMemberS{Value: indexValue}
+		}
 	}
 
 	item["pk"] = &types.AttributeValueMemberS{Value: dynamoPK}
-
-	if skValue == "" {
-		return errors.New("missing sort key (sk) in record")
-	}
 	item["sk"] = &types.AttributeValueMemberS{Value: skValue}
 
 	recordBytes, err := sonic.Marshal(record)
@@ -122,33 +116,15 @@ func (o *DynamoORM[T]) insertOne(record *T) error {
 }
 
 // GetByID retrieves a record from DynamoDB single table by passing a record populated with PK and SK.
-func (o *DynamoORM[T]) GetByID(record T) (*T, error) {
+func (o *DynamoORM[RecordT]) GetByID(record RecordT) (*RecordT, error) {
 	v := reflect.ValueOf(record)
 	if v.Kind() == reflect.Ptr {
 		v = v.Elem()
 	}
 
-	var dynamoPartitionValue, skValue string
-
-	for _, col := range o.columns {
-		fieldVal := v.FieldByName(col.FieldName)
-		strVal := stringify(fieldVal)
-
-		if col.IsPK && dynamoPartitionValue == "" {
-			dynamoPartitionValue = strVal
-		}
-		if col.IsSK {
-			skValue = strVal
-		}
-	}
-
-	if skValue == "" {
-		return nil, errors.New("record must have sk populated for GetByID")
-	}
-
-	dynamoPK := o.hashPrefix
-	if dynamoPartitionValue != "" {
-		dynamoPK += dynamoPartitionValue
+	dynamoPK, skValue, err := o.itemKey(v)
+	if err != nil {
+		return nil, err
 	}
 
 	key := map[string]types.AttributeValue{
@@ -175,7 +151,7 @@ func (o *DynamoORM[T]) GetByID(record T) (*T, error) {
 	}
 
 	jsonStr := jsonAttr.(*types.AttributeValueMemberS).Value
-	var result T
+	var result RecordT
 	err = sonic.Unmarshal([]byte(jsonStr), &result)
 	if err != nil {
 		return nil, err
@@ -249,32 +225,28 @@ func (b *dynamoQueryBuilder[T]) Exec() error {
 		return errors.New("must specify at least one condition using Where() before Exec()")
 	}
 
-	partitionColumn, hasLogicalPartition := findLogicalPartitionColumn(b.orm.columns)
+	partitionColumn, hasLogicalPartition := findLogicalPartitionColumn(b.orm.meta.Columns)
 	partitionCondition, indexedConditions, validationError := splitQueryConditions(b.conditions, partitionColumn, hasLogicalPartition)
 	if validationError != nil {
 		return validationError
 	}
-	if len(indexedConditions) != 1 {
-		return errors.New("dynamo queries require exactly one indexed Where() in addition to the partition Where()")
+
+	index, matchError := matchIndex(b.orm.meta.Indexes, indexedConditions)
+	if matchError != nil {
+		return matchError
 	}
 
-	indexedCondition := indexedConditions[0]
-	var dynIndex string
-	for _, col := range b.orm.columns {
-		if col.ColumnName == indexedCondition.ColumnName && col.IsIndex {
-			dynIndex = col.DynamoIndex
-			break
-		}
-	}
-
-	if dynIndex == "" {
-		return fmt.Errorf("column %s is not marked as an index", indexedCondition.ColumnName)
-	}
-
-	client := dynamodb.NewFromConfig(core.GetAwsConfig())
-	dynamoPartitionKey := b.orm.hashPrefix
+	partitionValue := ""
 	if partitionCondition != nil {
-		dynamoPartitionKey += fmt.Sprintf("%v", partitionCondition.Value)
+		partitionValue = fmt.Sprintf("%v", partitionCondition.Value)
+	}
+	dynamoPartitionKey := b.orm.meta.HashPrefix + partitionValue
+
+	// The GSI holds one composite string per index, so every query — equality or range —
+	// becomes a comparison against the bounds that composite can take.
+	indexRange, rangeError := buildCompositeRange(index, partitionValue, indexedConditions)
+	if rangeError != nil {
+		return rangeError
 	}
 
 	var expr string
@@ -282,18 +254,19 @@ func (b *dynamoQueryBuilder[T]) Exec() error {
 		":pk": &types.AttributeValueMemberS{Value: dynamoPartitionKey},
 	}
 
-	if indexedCondition.Operator == "BETWEEN" {
-		expr = fmt.Sprintf("pk = :pk AND %s BETWEEN :val1 AND :val2", dynIndex)
-		attrValues[":val1"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", indexedCondition.Value)}
-		attrValues[":val2"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", indexedCondition.ValueEnd)}
+	if indexRange.IsExact {
+		expr = fmt.Sprintf("pk = :pk AND %s = :val", index.DynamoIndex)
+		attrValues[":val"] = &types.AttributeValueMemberS{Value: indexRange.Lower}
 	} else {
-		expr = fmt.Sprintf("pk = :pk AND %s %s :val", dynIndex, indexedCondition.Operator)
-		attrValues[":val"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("%v", indexedCondition.Value)}
+		expr = fmt.Sprintf("pk = :pk AND %s BETWEEN :val1 AND :val2", index.DynamoIndex)
+		attrValues[":val1"] = &types.AttributeValueMemberS{Value: indexRange.Lower}
+		attrValues[":val2"] = &types.AttributeValueMemberS{Value: indexRange.Upper}
 	}
 
+	client := dynamodb.NewFromConfig(core.GetAwsConfig())
 	queryInput := &dynamodb.QueryInput{
 		TableName:                 core.PtrString(core.Env.DYNAMO_TABLE),
-		IndexName:                 core.PtrString(dynIndex),
+		IndexName:                 core.PtrString(index.DynamoIndex),
 		KeyConditionExpression:    core.PtrString(expr),
 		ExpressionAttributeValues: attrValues,
 	}

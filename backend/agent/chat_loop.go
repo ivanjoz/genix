@@ -44,7 +44,7 @@ const (
 )
 
 // Package-level LLM client. NewClient is cheap but we cache it so a missing
-// OPENROUTER_KEY surfaces once instead of on every turn.
+// provider key (META_KEY / OPENROUTER_KEY) surfaces once instead of on every turn.
 var (
 	llmClientOnce sync.Once
 	llmClient     *llm.Client
@@ -119,8 +119,8 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 		LogPrompt(s.UserID, llmMessages)
 		// Reasoning defaults (effort/exclude) come from the per-model registry
 		// in llm/models.go — Client.Chat fills them in if we leave them nil.
-		// That way switching models via OPENROUTER_MODEL just works without
-		// touching the loop body.
+		// That way switching models via DEFAULT_MODEL — or the whole provider via
+		// MODEL_PROVIDER — just works without touching the loop body.
 		resp, err := client.Chat(ctx, llm.ChatRequest{
 			Model:      modelID,
 			Messages:   llmMessages,
@@ -128,7 +128,7 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 			ToolChoice: "auto",
 		})
 		if err != nil {
-			return fmt.Errorf("openrouter chat: %w", err)
+			return fmt.Errorf("llm chat: %w", err)
 		}
 		totalTokens += resp.Usage.TotalTokens
 
@@ -175,7 +175,7 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 		// user-friendly recovery — better than telling them "agent broke."
 		text := strings.TrimSpace(choice.Message.Content)
 		if text == "" {
-			return errors.New("openrouter returned empty assistant message and no tool call")
+			return errors.New("llm returned empty assistant message and no tool call")
 		}
 		core.Log("agent.chat-ws plain-text reply (no finish call) tab::", shortTabID(s.TabID))
 		return s.completeTurn(text, "", totalTokens)

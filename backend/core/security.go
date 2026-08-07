@@ -120,10 +120,19 @@ type EnvStruct struct {
 	// browser RPC goes through it. Empty (or outside Lambda) = the backend serves
 	// its own /agent/stream and the bridge is not used.
 	SSE_BRIDGE_URL string
-	// OpenRouter — used by the in-app agent (backend/agent/llm). Model is
-	// optional; the llm package defaults to tencent/hy3-preview when blank.
-	OPENROUTER_KEY   string
-	OPENROUTER_MODEL string
+	// LLM provider for the in-app agent (backend/agent/llm). MODEL_PROVIDER
+	// selects which upstream is called: "meta" (Meta Model API, key in
+	// META_KEY) or "openrouter" (key in OPENROUTER_KEY). Blank = "openrouter",
+	// so an existing deployment keeps working without touching credentials.
+	// Only the active provider's key is required at startup.
+	MODEL_PROVIDER string
+	META_KEY       string
+	OPENROUTER_KEY string
+	// DEFAULT_MODEL overrides the model used when a request carries no explicit
+	// one. Provider-agnostic — it must name a model the active provider serves
+	// (e.g. "muse-spark-1.2-contributor" for meta). Blank = the llm package's
+	// compile-time default for the active provider.
+	DEFAULT_MODEL string
 	// GenixSearch — lexical search backend reached over TCP. The
 	// daemon is installed by scripts/configure_db.py, which writes both
 	// GENIXSEARCH_URL and GENIXSEARCH_PASSWORD into credentials.json. GENIXSEARCH_URL

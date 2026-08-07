@@ -53,7 +53,7 @@ export const isPublicFrontendRoute = (routeValue?: string | null): boolean => {
   const normalizedRoute = String(routeValue || "").trim()
   // Use the exact-or-trailing-slash form so the public storefront (/webpage-app, /webpage-app/*)
   // is public WITHOUT also matching the authed admin builder route (/webpage-builder).
-  return normalizedRoute === '/' || normalizedRoute === '/login'
+  return normalizedRoute === '/' || normalizedRoute === '/welcome'
     || normalizedRoute === '/webpage-app' || normalizedRoute.startsWith('/webpage-app/')
 }
 
@@ -73,9 +73,9 @@ export const genixUiRuntime = createUiRuntime<IUser>({
   notify: Notify,
   security: {
     storageNamespace: Env.appId,
-    // The public storefront has no /login route, so a logout there returns to its home.
+    // Public storefront routes return home; authenticated admin routes return to the welcome page.
     onLogout: () => {
-      Env.navigate(isPublicFrontendRoute(Env.getPathname()) ? "/" : "/login")
+      Env.navigate(isPublicFrontendRoute(Env.getPathname()) ? "/" : "/welcome")
     },
     messages: {
       sessionExpired: 'La sesión ha expirado, vuelva a iniciar sesión.',

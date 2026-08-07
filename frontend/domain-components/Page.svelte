@@ -87,7 +87,7 @@ import { useUI } from '@genix/ui';
 
   onMount(() => {
     if(!isLogged){
-      Env.navigate("/login")
+      Env.navigate("/welcome")
     }
   })
 

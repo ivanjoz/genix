@@ -7,7 +7,6 @@ import (
 	"app/db"
 	"app/security/types"
 	"encoding/json"
-	"fmt"
 	"sort"
 )
 
@@ -104,12 +103,12 @@ func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, prof
 
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("updated")
-	companyStatusUpdated := fmt.Sprintf("%d_%d_%020d", req.User.CompanyID, 1, updated)
 
 	records := []coretypes.User{}
 	var err error
 	if cloud.IsDataMirrorEnabled() {
-		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec()
+		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
+			Where("status").Equals(1).Where("updated").GreaterEqual(updated).Exec()
 	} else {
 		// Scylla stores the source fields directly; filtering stays scoped to the company partition.
 		userQuery := db.Query(&records)
@@ -223,7 +222,6 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	body.Updated = now
 	body.UpdatedBy = req.User.ID
 	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs, "accesosComputed", len(body.AccesosComputed))
-	body.PrepareCloudSync()
 	core.Print(body)
 
 	usuariosToSave := []coretypes.User{body}
@@ -232,7 +230,6 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	body = usuariosToSave[0]
-	body.PrepareCloudSync()
 	if err = cloud.Insert([]coretypes.User{body}); err != nil {
 		return req.MakeErr("Error al actualizar el user (Cloud ORM): " + err.Error())
 	}

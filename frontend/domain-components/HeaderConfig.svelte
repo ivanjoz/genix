@@ -58,7 +58,7 @@ import { useUI } from '@genix/ui';
 		// Clear session/tokens
 		localStorage.clear();
 		sessionStorage.clear();
-		window.location.href = '/login';
+		window.location.href = '/welcome';
 	}
 
   let userInfo = $state(security.getUserInfo())

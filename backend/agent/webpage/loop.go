@@ -49,18 +49,22 @@ const maxAestheticRevisions = 1
 const maxContentRevisions = 2
 
 // Reasoning budgets. The main loop leaves reasoning unset so each model's
-// registry entry decides its own effort (llm.Models — hy3-preview stays at
-// low+exclude, gpt-5.6-luna reasons at medium). The subagents and the critic
-// pin their budget instead: their work is mechanical or latency-sensitive, so
-// they must stay cheap regardless of which model the user picked.
+// registry entry decides its own effort (llm.Models — muse-spark reasons at
+// medium, hy3-preview stays at low+exclude). The subagents and the critic pin
+// their budget instead: their work is mechanical or latency-sensitive, so they
+// must stay cheap regardless of which model the user picked. llm.Chat maps
+// these onto whatever shape the active provider expects (Meta's flat
+// `reasoning_effort`, OpenRouter's nested `reasoning`).
 //
 // Model requirements for the builder: it must honor a reasoning budget (an
 // early test with DeepSeek V4 Flash ignored effort:low and reasoned to a huge
 // default — a single generate_svg took ~68s) and work with tool_choice:"auto"
-// (hy3-preview's provider routing rejects "required"; the loop never uses it).
+// (hy3-preview's OpenRouter routing rejects "required"; the loop never uses it).
 var (
 	// subagentNoReasoning: generate_svg and image-select are mechanical (emit
-	// markup / pick an index) — no chain-of-thought. Disabled outright.
+	// markup / pick an index) — no chain-of-thought. Disabled outright. On Meta
+	// this lands on the cheapest accepted budget instead, since Muse Spark
+	// rejects a fully disabled one (see llm.metaReasoningEffort).
 	subagentNoReasoning = &llm.ReasoningOptions{Enabled: boolPtr(false)}
 	// criticReasoning: the aesthetic critic weighs the layout but must stay fast.
 	criticReasoning = &llm.ReasoningOptions{Effort: "low", Exclude: true}
@@ -121,7 +125,7 @@ type builderTurn struct {
 	sourceSections map[int]SectionContent // build-page: id → original content
 }
 
-// Package-level LLM client, cached so a missing OPENROUTER_KEY surfaces once.
+// Package-level LLM client, cached so a missing provider key surfaces once.
 var (
 	llmClientOnce sync.Once
 	llmClient     *llm.Client
@@ -206,7 +210,7 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 		resp, err := client.Chat(ctx, req)
 		tlog.exchange(fmt.Sprintf("main_iter%d", iter+1), req, resp, err)
 		if err != nil {
-			return fmt.Errorf("openrouter chat: %w", err)
+			return fmt.Errorf("llm chat: %w", err)
 		}
 		choice := resp.Choices[0]
 		core.Log("agent.webpage iteration iter::", iter+1, " finish::", choice.FinishReason,

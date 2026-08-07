@@ -6,23 +6,23 @@ type TAGS struct{}
 
 type Company struct {
 	db.TableStruct[CompanyTable, Company]
-	ID                int32       `db:"id,pk" col:",sk"`
-	Name              string      `json:",omitempty" col:""`
-	LegalName         string      `json:",omitempty" col:""`
-	RUC               string      `json:",omitempty" db:"ruc" col:",index"`
-	Email             string      `json:",omitempty" db:"email" col:",index"`
-	NotificationEmail string      `json:",omitempty" col:""`
-	Phone             string      `json:",omitempty" col:""`
-	Representative    string      `json:",omitempty" col:""`
-	Address           string      `json:",omitempty" col:""`
-	City              string      `json:",omitempty" col:""`
-	FormApiKey        string      `json:",omitempty" db:"form_api_key" col:""`
-	EmailVerified     int8        `json:",omitempty" col:""`
-	PhoneVerified     int8        `json:",omitempty" col:""`
-	SmtpConfig        SmtpConfig  `json:",omitempty" db:"smtp_config" col:""`
-	CulqiConfig       CulqiConfig `json:",omitempty" db:"culqui_config" col:""`
-	Updated           int32       `json:"upd" db:"updated" col:",index"`
-	Status            int8        `json:"ss" db:"status" col:""`
+	ID                int32       `db:"id,pk"`
+	Name              string      `json:",omitempty"`
+	LegalName         string      `json:",omitempty"`
+	RUC               string      `json:",omitempty" db:"ruc"`
+	Email             string      `json:",omitempty" db:"email"`
+	NotificationEmail string      `json:",omitempty"`
+	Phone             string      `json:",omitempty"`
+	Representative    string      `json:",omitempty"`
+	Address           string      `json:",omitempty"`
+	City              string      `json:",omitempty"`
+	FormApiKey        string      `json:",omitempty" db:"form_api_key"`
+	EmailVerified     int8        `json:",omitempty"`
+	PhoneVerified     int8        `json:",omitempty"`
+	SmtpConfig        SmtpConfig  `json:",omitempty" db:"smtp_config"`
+	CulqiConfig       CulqiConfig `json:",omitempty" db:"culqui_config"`
+	Updated           int32       `json:"upd" db:"updated"`
+	Status            int8        `json:"ss" db:"status"`
 }
 
 type CompanyTable struct {
@@ -52,6 +52,11 @@ func (e CompanyTable) GetSchema() db.TableSchema {
 		Name:         "companies",
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		// Companies are global, so this index carries no tenant prefix. The delta read is
+		// the only lookup any caller makes; RUC and Email are resolved by ID, never scanned.
+		Indexes: []db.Index{
+			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+		},
 	}
 }
 

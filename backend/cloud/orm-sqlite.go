@@ -159,31 +159,25 @@ func mapD1RowToStruct[T any](row map[string]interface{}, cols []ColumnMeta) (*T,
 }
 
 // SqliteORM provides basic operations for Cloudflare D1 / SQLite.
-type SqliteORM[T any] struct {
-	tableName string
-	columns   []ColumnMeta
+//
+// Unlike DynamoDB, D1 indexes real columns, so an index declaration becomes one plain
+// index per key column and a query is a plain WHERE over those columns — no composite
+// string is needed.
+type SqliteORM[RecordT any] struct {
+	meta *TableMeta
 }
 
 // Ensure SqliteORM implements ORM.
 var _ ORM[any] = (*SqliteORM[any])(nil)
 
-// NewSqliteORM creates a new ORM instance for the given generic type T.
-func NewSqliteORM[T any]() (*SqliteORM[T], error) {
-	var model T
-
-	cols, tableName, _ := parseColumns(model)
-	if len(cols) == 0 {
-		return nil, errors.New("no columns found in struct")
-	}
-
-	return &SqliteORM[T]{
-		tableName: tableName,
-		columns:   cols,
-	}, nil
+// NewSqliteORM creates a new ORM instance for a record type whose mirror metadata has
+// already been resolved from its table schema.
+func NewSqliteORM[RecordT any](meta *TableMeta) *SqliteORM[RecordT] {
+	return &SqliteORM[RecordT]{meta: meta}
 }
 
 // Init constructs and executes the D1 CREATE TABLE statements via HTTP.
-func (o *SqliteORM[T]) Init() error {
+func (o *SqliteORM[RecordT]) Init() error {
 	queries := o.BuildInitQueries()
 
 	var reqs []d1Request
@@ -196,13 +190,13 @@ func (o *SqliteORM[T]) Init() error {
 }
 
 // BuildInitQueries constructs the CREATE TABLE and CREATE INDEX statements for D1.
-func (o *SqliteORM[T]) BuildInitQueries() []string {
+func (o *SqliteORM[RecordT]) BuildInitQueries() []string {
 	var queries []string
 	var colDefs []string
 	primaryKeyColumns := []string{}
 	sortKeyColumn := ""
 
-	for _, col := range o.columns {
+	for _, col := range o.meta.Columns {
 		var sqlType string
 
 		// Determine SQLite type from Go type
@@ -255,15 +249,29 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 	}
 
 	createTableQuery := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n\t%s\n);",
-		o.tableName, strings.Join(colDefs, ",\n\t"))
+		o.meta.TableName, strings.Join(colDefs, ",\n\t"))
 	queries = append(queries, createTableQuery)
 
-	// Create indexes
-	for _, col := range o.columns {
-		if col.IsIndex || (col.IsSK && !slicesContains(primaryKeyColumns, col.ColumnName)) {
-			// Keep Dynamo sort keys searchable in D1 when they are not part of the logical primary key.
+	// One composite index per declared index reproduces in D1 what the composite GSI
+	// string does in DynamoDB, without needing the string.
+	for _, index := range o.meta.Indexes {
+		indexColumns := []string{}
+		if o.meta.PartitionColumn != "" {
+			indexColumns = append(indexColumns, o.meta.PartitionColumn)
+		}
+		for _, key := range index.Keys {
+			indexColumns = append(indexColumns, key.ColumnName)
+		}
+		idxQuery := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s_%s_idx ON %s(%s);",
+			o.meta.TableName, strings.Join(indexColumns, "_"), o.meta.TableName, strings.Join(indexColumns, ", "))
+		queries = append(queries, idxQuery)
+	}
+
+	// Keep the key column searchable when it is not already part of the primary key.
+	for _, col := range o.meta.Columns {
+		if col.IsSK && !slicesContains(primaryKeyColumns, col.ColumnName) {
 			idxQuery := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s_%s_idx ON %s(%s);",
-				o.tableName, col.ColumnName, o.tableName, col.ColumnName)
+				o.meta.TableName, col.ColumnName, o.meta.TableName, col.ColumnName)
 			queries = append(queries, idxQuery)
 		}
 	}
@@ -272,7 +280,7 @@ func (o *SqliteORM[T]) BuildInitQueries() []string {
 }
 
 // Insert constructs and executes an SQL INSERT statement for SQLite / D1.
-func (o *SqliteORM[T]) Insert(records []T) error {
+func (o *SqliteORM[RecordT]) Insert(records []RecordT) error {
 	var reqs []d1Request
 	for i := range records {
 		query, args := o.buildInsertQuery(&records[i])
@@ -296,7 +304,7 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 		v = v.Elem()
 	}
 
-	for _, col := range o.columns {
+	for _, col := range o.meta.Columns {
 		cols = append(cols, col.ColumnName)
 		placeholders = append(placeholders, "?")
 		if col.IsPK {
@@ -328,7 +336,7 @@ func (o *SqliteORM[T]) buildInsertQuery(record *T) (string, []interface{}) {
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		o.tableName, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+		o.meta.TableName, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
 
 	if len(primaryKeyColumns) > 0 {
 		if len(updateAssignments) > 0 {
@@ -358,7 +366,7 @@ func (o *SqliteORM[T]) GetByID(record T) (*T, error) {
 	sortKeyColumn := ""
 	var sortKeyValue interface{}
 
-	for _, col := range o.columns {
+	for _, col := range o.meta.Columns {
 		if col.IsPK {
 			primaryKeyColumns = append(primaryKeyColumns, col.ColumnName)
 			primaryKeyValues = append(primaryKeyValues, v.FieldByName(col.FieldName).Interface())
@@ -384,7 +392,7 @@ func (o *SqliteORM[T]) GetByID(record T) (*T, error) {
 	}
 
 	// Query by all key parts so D1 matches the same identity rules used by DynamoDB.
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1;", o.tableName, strings.Join(whereClauses, " AND "))
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s LIMIT 1;", o.meta.TableName, strings.Join(whereClauses, " AND "))
 
 	reqs := []d1Request{{SQL: query, Params: primaryKeyValues}}
 	results, err := executeD1Queries(reqs)
@@ -396,7 +404,7 @@ func (o *SqliteORM[T]) GetByID(record T) (*T, error) {
 		return nil, nil // Not found
 	}
 
-	return mapD1RowToStruct[T](results[0].Results[0], o.columns)
+	return mapD1RowToStruct[T](results[0].Results[0], o.meta.Columns)
 }
 
 // Select returns a QueryBuilder to construct an SQL query.
@@ -464,7 +472,7 @@ func (b *sqliteQueryBuilder[T]) Exec() error {
 		return errors.New("must specify at least one condition using Where() before Exec()")
 	}
 
-	partitionColumn, hasLogicalPartition := findLogicalPartitionColumn(b.orm.columns)
+	partitionColumn, hasLogicalPartition := findLogicalPartitionColumn(b.orm.meta.Columns)
 	_, _, validationError := splitQueryConditions(b.conditions, partitionColumn, hasLogicalPartition)
 	if validationError != nil {
 		return validationError
@@ -482,7 +490,7 @@ func (b *sqliteQueryBuilder[T]) Exec() error {
 		whereClauses = append(whereClauses, fmt.Sprintf("%s %s ?", condition.ColumnName, condition.Operator))
 		args = append(args, condition.Value)
 	}
-	query = fmt.Sprintf("SELECT * FROM %s WHERE %s;", b.orm.tableName, strings.Join(whereClauses, " AND "))
+	query = fmt.Sprintf("SELECT * FROM %s WHERE %s;", b.orm.meta.TableName, strings.Join(whereClauses, " AND "))
 
 	reqs := []d1Request{{SQL: query, Params: args}}
 	results, err := executeD1Queries(reqs)
@@ -493,7 +501,7 @@ func (b *sqliteQueryBuilder[T]) Exec() error {
 	var records []T
 	if len(results) > 0 {
 		for _, row := range results[0].Results {
-			record, err := mapD1RowToStruct[T](row, b.orm.columns)
+			record, err := mapD1RowToStruct[T](row, b.orm.meta.Columns)
 			if err != nil {
 				return err
 			}

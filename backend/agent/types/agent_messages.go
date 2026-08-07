@@ -16,18 +16,18 @@ import (
 // screenshot ref) and is written empty for now.
 type AgentMessage struct {
 	db.TableStruct[AgentMessageTable, AgentMessage]
-	CompanyUserID   int64  `db:"company_user_id,pk" col:"company_user_id,pk"`
-	SessionID       int64  `db:"session_id,pk" col:"session_id,pk"`
-	Timestamp       int64  `db:"timestamp,pk" col:"timestamp,pk,sk"`
-	CompanyID       int32  `json:",omitempty" db:"company_id" col:"company_id"`
-	UserID          int32  `json:",omitempty" db:"user_id" col:"user_id"`
-	Role            int8   `json:",omitempty" db:"role" col:"role"`
-	Message         string `json:",omitempty" db:"message" col:"message"`
-	AttachedContent string `json:",omitempty" db:"attached_content" col:"attached_content"`
-	Summary         string `json:",omitempty" db:"summary" col:"summary"`
-	TokensUsed      int32  `json:",omitempty" db:"tokens_used" col:"tokens_used"`
-	Status          int8   `json:"ss" db:"status" col:"status"`
-	Updated         int32  `json:"upd" db:"updated" col:"updated"`
+	CompanyUserID   int64  `db:"company_user_id,pk"`
+	SessionID       int64  `db:"session_id,pk"`
+	Timestamp       int64  `db:"timestamp,pk"`
+	CompanyID       int32  `json:",omitempty" db:"company_id"`
+	UserID          int32  `json:",omitempty" db:"user_id"`
+	Role            int8   `json:",omitempty" db:"role"`
+	Message         string `json:",omitempty" db:"message"`
+	AttachedContent string `json:",omitempty" db:"attached_content"`
+	Summary         string `json:",omitempty" db:"summary"`
+	TokensUsed      int32  `json:",omitempty" db:"tokens_used"`
+	Status          int8   `json:"ss" db:"status"`
+	Updated         int32  `json:"upd" db:"updated"`
 }
 
 // PrepareCloudSync derives the synthetic partition key so callers fill only
