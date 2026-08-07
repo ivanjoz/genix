@@ -35,11 +35,12 @@ The frontend is a monorepo with a strict dependency hierarchy (`libs` → `ui-co
 
 ### Configurable providers
 
-A single `CLOUD_PROVIDER` key in `credentials.json` selects the backing services — `aws | cloudflare | local | none`:
+`credentials.json` separates backend data from file delivery. Both providers currently accept `aws | cloudflare`:
 
-- **`aws`** — data mirror on DynamoDB, object storage on S3.
-- **`cloudflare`** — data mirror on Cloudflare D1, object storage on R2.
-- **`local` / `none`** — *goal:* run on **ScyllaDB only** with no external data mirror, and with self-hosted/local object storage. This keeps a single-company self-host fully independent of any cloud vendor. Currently `aws` and `cloudflare` are implemented; the vendor-free path is in progress.
+- **`BACKEND_PROVIDER`** — `aws` uses DynamoDB; `cloudflare` uses D1 / SQLite.
+- **`CDN_PROVIDER`** — `aws` uses S3 + CloudFront; `cloudflare` uses R2 as the public asset origin.
+
+For example, `BACKEND_PROVIDER=aws` and `CDN_PROVIDER=cloudflare` runs the backend on AWS Lambda + DynamoDB while files are stored and served by Cloudflare R2.
 
 The data mirror only holds auth & tenant master tables (users, companies, profiles) so they are reachable outside Scylla; all business data lives in ScyllaDB regardless of provider.
 
@@ -139,7 +140,7 @@ Legend: ✅ done · 🟡 partial / in progress · ⬜ not started
 - ✅ colbin columnar serializer (replaced CBOR project-wide)
 - ✅ Hybrid runtime: AWS Lambda / single binary / exec+cron modes
 - ✅ Multi-tenancy by `empresa_id` partitioning + tenant-scoped auth
-- ✅ Configurable providers via `CLOUD_PROVIDER` — `aws` (DynamoDB + S3) and `cloudflare` (D1 + R2)
+- ✅ Independent providers via `BACKEND_PROVIDER` (DynamoDB / D1) and `CDN_PROVIDER` (S3 / R2)
 - 🟡 Vendor-free provider (`local` / `none`): ScyllaDB-only, no data mirror, self-hosted object storage
 - ✅ Text search (GenixSearch bigram encoder + ORM integration)
 - ✅ Full per-tenant data backup, download & restore

@@ -125,28 +125,51 @@ export function applyHtmlRewrites(html, manifest, assetBase) {
 //
 // Son dos formas y se rompen distinto:
 //
-//   "_app/immutable/nodes/1.abc.js"     el manifest de rutas del cliente. Relativa: el runtime
-//                                       la concatena con su base, que aquí es vacía, y acaba
-//                                       pidiéndola al hostname.
+//   "_app/immutable/nodes/1.abc.js"     los arrays de `__vite__mapDeps`: qué precargar antes de
+//                                       un import() dinámico. Relativa a la base del build.
 //   new URL(`/_app/immutable/…`, …)     absoluta: se resuelve contra el origen del propio chunk,
 //                                       o sea la raíz del CDN, sin el websites/<companyID>.
 //
 // Se reescribe primero la absoluta: al quedar con el origen delante ya no la vuelve a tocar la
 // pasada de la relativa, que exige la comilla pegada a `_app/`.
+//
+// Y hay un tercer punto, que no es una ruta sino quien las compone. Los deps de mapDeps no se usan
+// crudos: `__vitePreload` los pasa por un helper (`assetsURL`) que les antepone la base del build,
+// y con base '/' Vite lo emite como `function(dep){return"/"+dep}`. Sobre unos deps ya absolutos
+// ese "/" los rompe —el href sale '/https://cdn…/_app/…', que el navegador resuelve contra el
+// origen del documento, o sea el hostname de la tienda—, así que se deja en identidad.
+//
+// El síntoma engaña: los .js siguen cargando, porque el import() de verdad es una ruta relativa al
+// propio chunk y ese sí cae en el CDN; los <link rel=modulepreload> fallidos solo pierden el
+// adelanto. Lo que revienta es el dep .css, que __vitePreload espera antes de resolver: su error
+// ("Unable to preload CSS for …") deja la página sin hidratar.
 export function applyAssetRewrites(data, key, manifest, assetBase) {
-	if (!key.endsWith('.js')) return data;
+	if (!key.endsWith('.js')) return { data, hasRelativeAssetRefs: false, neutralizedAssetsUrl: false };
 
 	const absolutePrefix = manifest.assetPathPrefix;
 	const relativePrefix = absolutePrefix.replace(/^\//, '');
 	let text = data.toString('utf8');
-	if (!text.includes(relativePrefix)) return data;
+	// Los deps relativos son los que el helper compone, así que se buscan con la comilla pegada:
+	// la misma forma que reescribe la pasada de abajo.
+	const hasRelativeAssetRefs = ['"', "'", '`'].some((quote) => text.includes(`${quote}${relativePrefix}`));
+	const neutralizedAssetsUrl = VITE_ASSETS_URL_HELPER.test(text);
+	if (!neutralizedAssetsUrl && !text.includes(relativePrefix)) {
+		return { data, hasRelativeAssetRefs, neutralizedAssetsUrl };
+	}
 
+	text = text.replace(VITE_ASSETS_URL_HELPER, 'function($1){return $1}');
 	text = text.split(absolutePrefix).join(`${assetBase}${absolutePrefix}`);
 	for (const quote of ['"', "'", '`']) {
 		text = text.split(`${quote}${relativePrefix}`).join(`${quote}${assetBase}${absolutePrefix}`);
 	}
-	return Buffer.from(text, 'utf8');
+	return { data: Buffer.from(text, 'utf8'), hasRelativeAssetRefs, neutralizedAssetsUrl };
 }
+
+// `assetsURL` de Vite, tal como lo emite con una base no relativa: el literal de la base sale de un
+// JSON.stringify, así que el minificador puede dejar la comilla en cualquiera de las tres formas.
+// Sin la bandera /g a propósito: se espera una sola aparición y `.test()` sobre una regex global
+// arrastra lastIndex entre llamadas.
+const VITE_ASSETS_URL_HELPER = /function\(([A-Za-z_$][\w$]*)\)\s*\{\s*return\s*(["'`])\/\2\s*\+\s*\1\s*\}/;
 
 // --- Artefacto del renderer -----------------------------------------------------
 
@@ -258,16 +281,7 @@ async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, assetBase,
 			// El service worker NO puede cachearse: es lo que gobierna las actualizaciones.
 			cacheControl: file.name === 'sw.js' ? 'public, max-age=0, must-revalidate' : 'public, max-age=86400'
 		})),
-		...(assetsUpToDate
-			? []
-			: renderer.assets.map((asset) => ({
-					key: `${assetKeyPrefix}/${asset.name}`,
-					// Buffer nuevo, nunca in situ: renderer.assets es la caché del artefacto y la
-					// comparten todas las companies que se rendericen en este proceso.
-					data: applyAssetRewrites(asset.data, asset.name, renderer.manifest, assetBase),
-					// Los nombres llevan hash de contenido: nunca cambian bajo la misma URL.
-					cacheControl: 'public, max-age=31536000, immutable'
-				})))
+		...(assetsUpToDate ? [] : rewriteAssets(renderer, assetKeyPrefix, assetBase))
 	];
 
 	for (let index = 0; index < uploads.length; index += UPLOAD_CONCURRENCY) {
@@ -285,6 +299,43 @@ async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, assetBase,
 	}
 	console.log(`[renderer] subidos ${uploads.length} archivo(s) para buildId=${renderer.manifest.buildId}`);
 	return uploads.length;
+}
+
+// El helper `assetsURL` vive en un chunk y los deps que compone en otros, así que la coherencia
+// entre los dos solo se puede comprobar con el paquete entero delante: si hay deps relativos, el
+// helper tiene que estar y haber quedado en identidad.
+//
+// La comprobación existe porque el modo de fallo es de los peores: si Vite cambiara la forma del
+// helper, la regex dejaría de casar, la publicación terminaría en verde y el sitio pediría
+// '/https://cdn…/_app/…' al hostname de la tienda. Los .js seguirían cargando —sus import() son
+// relativos al propio chunk— y solo se caería la hoja de estilo, que __vitePreload sí espera:
+// páginas sin css y sin hidratar, con el backend informando de una publicación correcta.
+function rewriteAssets(renderer, assetKeyPrefix, assetBase) {
+	let chunksWithRelativeRefs = 0;
+	let neutralizedHelpers = 0;
+
+	const uploads = renderer.assets.map((asset) => {
+		// Buffer nuevo, nunca in situ: renderer.assets es la caché del artefacto y la comparten
+		// todas las companies que se rendericen en este proceso.
+		const rewritten = applyAssetRewrites(asset.data, asset.name, renderer.manifest, assetBase);
+		if (rewritten.hasRelativeAssetRefs) chunksWithRelativeRefs++;
+		if (rewritten.neutralizedAssetsUrl) neutralizedHelpers++;
+		return {
+			key: `${assetKeyPrefix}/${asset.name}`,
+			data: rewritten.data,
+			// Los nombres llevan hash de contenido: nunca cambian bajo la misma URL.
+			cacheControl: 'public, max-age=31536000, immutable'
+		};
+	});
+
+	if (chunksWithRelativeRefs > 0 && neutralizedHelpers !== 1) {
+		throw new Error(
+			`${chunksWithRelativeRefs} chunk(s) traen rutas de assets relativas y se encontraron ` +
+				`${neutralizedHelpers} helpers assetsURL de Vite (se esperaba 1): las rutas quedarían ` +
+				`resolviéndose contra el origen del sitio`
+		);
+	}
+	return uploads;
 }
 
 export function contentTypeFor(key) {

@@ -12,8 +12,13 @@ export const setupEnv = () => {
       const serializedPublicEndpoints = JSON.stringify(
         Array.isArray(credentials.ENPOINTS) ? credentials.ENPOINTS : []
       );
+      // SSE_BRIDGE_URL is where the agent's event stream lives. It defaults to
+      // LAMBDA_URL so an install without a bridge keeps talking to the backend
+      // directly; point it at the sse_bridge process to make the Lambda
+      // deployment able to stream (see PLAN_SSE_BRIDGE.md).
       const envContent = [
         `PUBLIC_LAMBDA_URL=${credentials.LAMBDA_URL || ''}`,
+        `PUBLIC_SSE_BRIDGE_URL=${credentials.SSE_BRIDGE_URL || credentials.LAMBDA_URL || ''}`,
         `PUBLIC_FRONTEND_CDN=${credentials.FRONTEND_CDN || ''}`,
         `PUBLIC_ZONE_NAME=${credentials.ZONE_NAME || ''}`,
         `PUBLIC_ENDPOINTS=${serializedPublicEndpoints}`

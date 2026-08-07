@@ -6,6 +6,7 @@ for the repository resolved by `gh`:
 
 - `GITHUB_ACCOUNT` selects the stored `gh` account used for the operation
 - `LAMBDA_URL` → `PUBLIC_LAMBDA_URL`
+- `SSE_BRIDGE_URL` → `PUBLIC_SSE_BRIDGE_URL` (opcional; sin bridge cae a `LAMBDA_URL`)
 - `FRONTEND_CDN` → `PUBLIC_FRONTEND_CDN`
 - `ZONE_NAME` → `PUBLIC_ZONE_NAME`
 - `ENPOINTS` → `PUBLIC_ENDPOINTS` as compact JSON
@@ -19,7 +20,7 @@ child-process environment, so the globally active `gh` account is not changed.
 Run it from the deployment menu with option **14**:
 
 ```bash
-# Configure all four variables in one action.
+# Configure every public variable in one action.
 ./deploy.sh 14
 ```
 

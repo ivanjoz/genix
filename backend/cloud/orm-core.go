@@ -25,27 +25,27 @@ type QueryBuilder[T any] interface {
 	Exec() error
 }
 
-// getProviderORM initializes the correct ORM based on the CLOUD_PROVIDER environment variable.
+// getProviderORM initializes the cloud data mirror selected by BACKEND_PROVIDER.
 func getProviderORM[T any]() (ORM[T], error) {
 	if core.Env == nil {
 		core.PopulateVariables()
 	}
 
-	provider := core.Env.CLOUD_PROVIDER
+	provider := core.Env.BACKEND_PROVIDER
 	switch provider {
 	case "aws":
 		return NewDynamoORM[T]()
 	case "cloudflare":
 		if core.Env.CLOUDFLARE_ACCOUNT == "" || core.Env.CLOUDFLARE_TOKEN == "" || core.Env.CLOUDFLARE_DATABASE_ID == "" {
-			panic("CLOUDFLARE_ACCOUNT, CLOUDFLARE_TOKEN, and CLOUDFLARE_DATABASE_ID must be set in credentials.json when CLOUD_PROVIDER is 'cloudflare'")
+			panic("CLOUDFLARE_ACCOUNT, CLOUDFLARE_TOKEN, and CLOUDFLARE_DATABASE_ID must be set in credentials.json when BACKEND_PROVIDER is 'cloudflare'")
 		}
 		return NewSqliteORM[T]()
 	default:
-		return nil, errors.New("CLOUD_PROVIDER in credentials.json is not set or invalid (must be 'aws' or 'cloudflare')")
+		return nil, errors.New("BACKEND_PROVIDER in credentials.json is not set or invalid (must be 'aws' or 'cloudflare')")
 	}
 }
 
-// Init creates tables or checks if they exist based on the CLOUD_PROVIDER.
+// Init creates tables or checks if they exist through the selected backend provider.
 func Init[T any]() error {
 	orm, err := getProviderORM[T]()
 	if err != nil {
@@ -54,7 +54,7 @@ func Init[T any]() error {
 	return orm.Init()
 }
 
-// Insert inserts multiple records using the configured CLOUD_PROVIDER.
+// Insert inserts multiple records using the configured backend provider.
 func Insert[T any](records []T) error {
 	orm, err := getProviderORM[T]()
 	if err != nil {
@@ -63,7 +63,7 @@ func Insert[T any](records []T) error {
 	return orm.Insert(records)
 }
 
-// GetByID retrieves a record using the configured CLOUD_PROVIDER.
+// GetByID retrieves a record using the configured backend provider.
 func GetByID[T any](record T) (*T, error) {
 	orm, err := getProviderORM[T]()
 	if err != nil {
@@ -72,7 +72,7 @@ func GetByID[T any](record T) (*T, error) {
 	return orm.GetByID(record)
 }
 
-// Select returns a QueryBuilder using the configured CLOUD_PROVIDER.
+// Select returns a QueryBuilder using the configured backend provider.
 func Select[T any](dest *[]T) QueryBuilder[T] {
 	orm, err := getProviderORM[T]()
 	if err != nil {

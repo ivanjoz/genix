@@ -75,30 +75,33 @@ type EnvStruct struct {
 	REQ_PARAMS     string
 	REQ_USER_AGENT string
 	// HANDLER_PARH   string
-	REQ_PATH               string
-	AWS_PROFILE            string
-	AWS_REGION             string
-	S3_BUCKET              string
-	DYNAMO_TABLE           string
-	REQ_LAMBDA_ID          string
-	API_ROUTE              string
-	LAMBDA_NAME            string
-	LOGS_FULL              bool
-	LOGS_DEBUG             bool
-	LOGS_ONLY_SAVE         bool
-	DB_DISABLE_SSL         bool
-	DB_PORT                int32
-	MAX_CLUSTERING_KEY     int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
-	SERVER_PORT            int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
-	USUARIO_ID             int32
-	ADMIN_PASSWORD         string
-	SECRET_PHRASE          string
-	SMTP_HOST              string
-	SMTP_EMAIL             string
-	SMTP_USER              string
-	SMTP_PASSWORD          string
-	SMTP_PORT              int32
-	CLOUD_PROVIDER         string
+	REQ_PATH           string
+	AWS_PROFILE        string
+	AWS_REGION         string
+	S3_BUCKET          string
+	DYNAMO_TABLE       string
+	REQ_LAMBDA_ID      string
+	API_ROUTE          string
+	LAMBDA_NAME        string
+	LOGS_FULL          bool
+	LOGS_DEBUG         bool
+	LOGS_ONLY_SAVE     bool
+	DB_DISABLE_SSL     bool
+	DB_PORT            int32
+	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
+	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
+	USUARIO_ID         int32
+	ADMIN_PASSWORD     string
+	SECRET_PHRASE      string
+	SMTP_HOST          string
+	SMTP_EMAIL         string
+	SMTP_USER          string
+	SMTP_PASSWORD      string
+	SMTP_PORT          int32
+	// BACKEND_PROVIDER selects the cloud data mirror: DynamoDB (aws) or D1 (cloudflare).
+	BACKEND_PROVIDER string
+	// CDN_PROVIDER selects the object storage and public asset origin: S3 (aws) or R2 (cloudflare).
+	CDN_PROVIDER           string
 	CLOUDFLARE_ACCOUNT     string
 	CLOUDFLARE_TOKEN       string
 	CLOUDFLARE_BUCKET      string // R2 bucket for files and images; defaults to "<APP_NAME>-files", set it to pin an existing bucket
@@ -110,6 +113,13 @@ type EnvStruct struct {
 	// this to the Node process, so the value has to reach the backend and not only the deploy
 	// CLI. Optional: defaults to the CI-published URL, same as cloud/webpage-renderer.go.
 	WEBPAGE_RENDERER_URL string
+	// SSE_BRIDGE_URL is the SSE relay (sse_bridge/) that keeps the browser's
+	// stream open on behalf of this backend. Lambda cannot hold a stream for a
+	// whole agent turn nor receive the browser's reply inside the same
+	// invocation, so in serverless mode every server→browser message and every
+	// browser RPC goes through it. Empty (or outside Lambda) = the backend serves
+	// its own /agent/stream and the bridge is not used.
+	SSE_BRIDGE_URL string
 	// OpenRouter — used by the in-app agent (backend/agent/llm). Model is
 	// optional; the llm package defaults to tencent/hy3-preview when blank.
 	OPENROUTER_KEY   string

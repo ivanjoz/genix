@@ -45,6 +45,12 @@ const (
 	TypeReady  = "ready" // sent by client right after connect
 )
 
+// TypeBridgeReady is the first frame the server sends on a freshly opened
+// stream, once the tab is routable. Both transports emit it — this backend in
+// HandleStream and the SSE bridge in its own /sse handler — so the client can
+// wait for it before starting a turn regardless of which one it connected to.
+const TypeBridgeReady = "bridgeReady"
+
 // Unsolicited event types pushed by the frontend (no matching request).
 const (
 	EventPageContent = "pageContent"

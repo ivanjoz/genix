@@ -54,6 +54,9 @@ export interface IProduct {
   SbuFinalPrice?: number
   Images?: IProductoImage[]
 	Image?: IProductoImage
+	// El delta de la API devuelve el imageID plano (columna ImageMain); el snapshot .db
+	// lo trae ya como texto en la columna Image.
+	ImageMain?: number
   BrandID?: number
   CategoryIDs?: number[]
   Stock?: { a /* almacen */: number, c /* cantidad */: number }[]
@@ -76,7 +79,9 @@ const PRODUCT_ECOMMERCE_FILE_SCHEMA = {
 	categorias: ["ID:N", "Name:T", "upd:N", "ss:N"]
 };
 
-const CATALOG_ROUTE = "p-productos-ecommerce";
+// Debe coincidir EXACTO con el handler público del backend ("GET.p-products-ecommerce",
+// backend/business/main.go); cualquier otro nombre devuelve 400 en el router.
+const CATALOG_ROUTE = "p-products-ecommerce";
 const CATALOG_MODULE = "a";
 const CATALOG_CACHE = { min: 30, ver: 1 };
 // Window during which a localStorage watermark means "the product table is fresh enough in
@@ -116,13 +121,16 @@ export class ProductCatalog {
 }
 
 // Keep only active products and normalize the image into the {n,d} shape ProductCard expects.
-// The .db snapshot carries a flat image-name string (Image); the server delta carries the full
-// Images array — handle both.
+// The .db snapshot carries a flat image-name string (Image); the server delta carries either the
+// Images array or el imageID plano en ImageMain — handle all three.
 const normalizeProductos = (rows: IProduct[]): IProduct[] => {
 	const active = (rows ?? []).filter((record) => (record.ss ?? 0) > 0);
 	for (const product of active) {
 		const rawImage = product.Image as unknown;
-		const imageName = (typeof rawImage === "string" ? rawImage : product.Image?.n) || product.Images?.[0]?.n || "";
+		const imageName = (typeof rawImage === "string" ? rawImage : product.Image?.n)
+			|| product.Images?.[0]?.n
+			|| (product.ImageMain ? String(product.ImageMain) : "")
+			|| "";
 		product.Image = { n: imageName, d: "" };
 	}
 	return active;

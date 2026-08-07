@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_ENDPOINTS, PUBLIC_FRONTEND_CDN, PUBLIC_LAMBDA_URL } from '$env/static/public';
+import { PUBLIC_ENDPOINTS, PUBLIC_FRONTEND_CDN, PUBLIC_LAMBDA_URL, PUBLIC_SSE_BRIDGE_URL } from '$env/static/public';
 export { browser };
 
 export const IsClient = () => {
@@ -140,9 +140,28 @@ export interface ICompanyParams {
   id: number
 }
 
+// getAgentStreamBase decide de dónde cuelga el stream de eventos del agente.
+// El Lambda no puede sostener un stream, así que cuando el endpoint elegido es
+// el Lambda y hay un bridge desplegado (sse_bridge/), el stream va al bridge.
+// Contra un backend local o el VPS no hace falta el salto: ese proceso sirve su
+// propio /agent/stream. Devuelve la base sin barra final ni sufijo /api.
+const getAgentStreamBase = (selectedApiRoute: string): string => {
+  const normalizedSelectedRoute = String(selectedApiRoute || "").trim().replace(/\/+$/, "")
+  const normalizedLambdaRoute = String(PUBLIC_LAMBDA_URL || "").trim().replace(/\/+$/, "")
+  const normalizedBridgeRoute = String(PUBLIC_SSE_BRIDGE_URL || "").trim().replace(/\/+$/, "")
+
+  const selectedEndpointIsLambda = !!normalizedLambdaRoute && normalizedSelectedRoute === normalizedLambdaRoute
+  const bridgeIsDeployed = !!normalizedBridgeRoute && normalizedBridgeRoute !== normalizedLambdaRoute
+
+  return selectedEndpointIsLambda && bridgeIsDeployed ? normalizedBridgeRoute : normalizedSelectedRoute
+}
+
 export const Env = {
   appId: "genix",
   CDN_URL: PUBLIC_FRONTEND_CDN,
+  // Base del stream SSE del agente para el endpoint seleccionado. La recalcula
+  // setSelectedApiEndpoint junto con API_ROUTES.MAIN.
+  AGENT_STREAM_BASE: getAgentStreamBase(getSelectedApiEndpointRoute()),
   serviceWorker: "/sw.js",
   enviroment: getSelectedApiEndpoint(getSelectedApiEndpointRoute()).hash,
   counterID: 1,
@@ -182,6 +201,7 @@ export const Env = {
     const selectedEndpointOption = getSelectedApiEndpoint(selectedRoute)
     Env.selectedApiEndpointRoute = selectedEndpointOption?.route || ""
     Env.API_ROUTES.MAIN = buildMainApiRoute(Env.selectedApiEndpointRoute)
+    Env.AGENT_STREAM_BASE = getAgentStreamBase(Env.selectedApiEndpointRoute)
     Env.enviroment = selectedEndpointOption?.hash || "000000"
 
     if (browser && Env.selectedApiEndpointRoute) {

@@ -8,15 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"net/http"
 
-	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	aws "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	smithy "github.com/aws/smithy-go"
 	"github.com/ivanjoz/avif-webp-encoder/imageconv"
 	"golang.org/x/sync/errgroup"
@@ -36,18 +36,49 @@ type SaveFileArgs struct {
 	MaxKeys       int32
 }
 
-// SaveFile uploads to the configured cloud provider, mirroring SaveImage's dispatch:
-// CLOUD_PROVIDER == "cloudflare" routes to R2 (bucket = CLOUDFLARE_BUCKET when unset
-// or set to S3_BUCKET); otherwise routes to S3 (bucket defaults to S3_BUCKET).
-func SaveFile(args SaveFileArgs) error {
-	if core.Env.CLOUD_PROVIDER == "cloudflare" {
+// FileInfo keeps object metadata independent from the storage provider.
+type FileInfo struct {
+	Key          string
+	Size         int64
+	LastModified time.Time
+}
+
+// useR2 selects the object store independently from the cloud data mirror.
+func useR2() bool {
+	switch core.Env.CDN_PROVIDER {
+	case "aws":
+		return false
+	case "cloudflare":
+		return true
+	default:
+		panic("CDN_PROVIDER in credentials.json is not set or invalid (must be 'aws' or 'cloudflare')")
+	}
+}
+
+// resolveStorageBucket applies the provider's configured default bucket consistently.
+func resolveStorageBucket(args SaveFileArgs) SaveFileArgs {
+	if useR2() {
 		if args.Bucket == "" || args.Bucket == core.Env.S3_BUCKET {
 			args.Bucket = core.Env.CLOUDFLARE_BUCKET
 		}
-		return SaveFileToR2(args)
-	}
-	if args.Bucket == "" {
+	} else if args.Bucket == "" {
 		args.Bucket = core.Env.S3_BUCKET
+	}
+	return args
+}
+
+// r2ObjectURL preserves slash-separated object paths while escaping special key characters.
+func r2ObjectURL(bucket, key string) string {
+	escapedKey := strings.ReplaceAll(url.PathEscape(key), "%2F", "/")
+	return fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects/%s",
+		core.Env.CLOUDFLARE_ACCOUNT, bucket, escapedKey)
+}
+
+// SaveFile uploads to the object store selected by CDN_PROVIDER.
+func SaveFile(args SaveFileArgs) error {
+	args = resolveStorageBucket(args)
+	if useR2() {
+		return SaveFileToR2(args)
 	}
 	return saveFileToS3(args)
 }
@@ -95,79 +126,56 @@ func saveFileToS3(args SaveFileArgs) error {
 	return nil
 }
 
-func GetFileFromS3(args SaveFileArgs) ([]byte, error) {
-	core.Log("Obteniendo archvivo a s3 | Path: ", args.Path, " | ", args.Name)
-	/*
-		// Create a file to download to
-		file, err := os.Create(args.Name)
-		if err != nil {
-			return nil, err
-		}
-		defer file.Close()
-	*/
+// GetFile downloads an object from the store selected by CDN_PROVIDER.
+func GetFile(args SaveFileArgs) ([]byte, error) {
+	args = resolveStorageBucket(args)
+	if useR2() {
+		return getFileFromR2(args)
+	}
+	return getFileFromS3(args)
+}
 
-	buf := manager.NewWriteAtBuffer([]byte{})
+func getFileFromS3(args SaveFileArgs) ([]byte, error) {
 	client := s3.NewFromConfig(core.GetAwsConfig())
-
-	downloader := manager.NewDownloader(client)
-
-	_, err := downloader.Download(context.TODO(), buf, &s3.GetObjectInput{
+	result, err := client.GetObject(context.TODO(), &s3.GetObjectInput{
 		Bucket: core.PtrString(args.Bucket),
 		Key:    core.PtrString(args.Path + "/" + args.Name),
 	})
-
 	if err != nil {
-		core.Log("error:: ", err)
 		return nil, err
 	}
-
-	return buf.Bytes(), nil
-}
-
-func GetObjectFromFileS3[T any](args SaveFileArgs, obj *T) (*T, error) {
-	core.Log("Obteniendo archivo de s3::")
-	core.Print(args)
-
-	client := s3.NewFromConfig(core.GetAwsConfig())
-
-	requestInput := &s3.GetObjectInput{
-		Bucket: core.PtrString(args.Bucket),
-		Key:    core.PtrString(args.Path + "/" + args.Name),
-	}
-
-	result, err := client.GetObject(context.TODO(), requestInput)
-	if err != nil {
-		core.Log(err)
-	}
-
 	defer result.Body.Close()
-
-	/*body, err := ioutil.ReadAll(result.Body)
-	if err != nil {
-		core.Log(err)
-	}
-
-	bodyString := string(body)
-	decoder := json.NewDecoder(strings.NewReader(bodyString))
-	err = decoder.Decode(obj)
-	if err != nil {
-		core.Log("twas an error")
-	}*/
-
-	byteValue, _ := io.ReadAll(result.Body)
-	err = json.Unmarshal([]byte(byteValue), obj)
-
-	if err != nil {
-		core.Log("Error:: ", err.Error())
-		return nil, err
-	}
-
-	return obj, nil
+	return io.ReadAll(result.Body)
 }
 
-func S3ListFiles(args SaveFileArgs) ([]types.Object, error) {
-	core.Log("Envío de archivo a s3::")
+func getFileFromR2(args SaveFileArgs) ([]byte, error) {
+	req, err := http.NewRequest("GET", r2ObjectURL(args.Bucket, args.Path+"/"+args.Name), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+core.Env.CLOUDFLARE_TOKEN)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("R2 download failed (HTTP %d): %s", resp.StatusCode, string(responseBody))
+	}
+	return io.ReadAll(resp.Body)
+}
 
+// ListFiles lists provider-neutral object metadata from the configured object store.
+func ListFiles(args SaveFileArgs) ([]FileInfo, error) {
+	args = resolveStorageBucket(args)
+	if useR2() {
+		return listFilesFromR2(args)
+	}
+	return listFilesFromS3(args)
+}
+
+func listFilesFromS3(args SaveFileArgs) ([]FileInfo, error) {
 	client := s3.NewFromConfig(core.GetAwsConfig())
 	input := &s3.ListObjectsV2Input{
 		Bucket: core.PtrString(args.Bucket),
@@ -183,15 +191,65 @@ func S3ListFiles(args SaveFileArgs) ([]types.Object, error) {
 	}
 
 	result, err := client.ListObjectsV2(context.TODO(), input)
-	var contents []types.Object
-
 	if err != nil {
-		log.Printf("Couldn't list objects in bucket %v. Here's why: %v\n", args.Bucket, err)
-	} else {
-		contents = result.Contents
+		return nil, err
 	}
+	files := make([]FileInfo, 0, len(result.Contents))
+	for _, object := range result.Contents {
+		files = append(files, FileInfo{
+			Key:          aws.ToString(object.Key),
+			Size:         aws.ToInt64(object.Size),
+			LastModified: aws.ToTime(object.LastModified),
+		})
+	}
+	return files, nil
+}
 
-	return contents, nil
+func listFilesFromR2(args SaveFileArgs) ([]FileInfo, error) {
+	requestURL, err := url.Parse(fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects", core.Env.CLOUDFLARE_ACCOUNT, args.Bucket))
+	if err != nil {
+		return nil, err
+	}
+	query := requestURL.Query()
+	if args.Prefix != "" {
+		query.Set("prefix", args.Prefix)
+	}
+	if args.StartAfter != "" {
+		query.Set("start_after", args.StartAfter)
+	}
+	if args.MaxKeys > 0 {
+		query.Set("per_page", fmt.Sprint(args.MaxKeys))
+	}
+	requestURL.RawQuery = query.Encode()
+	req, err := http.NewRequest("GET", requestURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+core.Env.CLOUDFLARE_TOKEN)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusMultipleChoices {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("R2 list failed (HTTP %d): %s", resp.StatusCode, string(responseBody))
+	}
+	var response struct {
+		Result []struct {
+			Key          string    `json:"key"`
+			Size         int64     `json:"size"`
+			LastModified time.Time `json:"last_modified"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, err
+	}
+	files := make([]FileInfo, 0, len(response.Result))
+	for _, object := range response.Result {
+		files = append(files, FileInfo{Key: object.Key, Size: object.Size, LastModified: object.LastModified})
+	}
+	return files, nil
 }
 
 type ImageArgs struct {
@@ -339,8 +397,7 @@ func SaveConvertImage(args ImageArgs) ([]imageconv.Image, error) {
 
 func SaveFileToR2(args SaveFileArgs) error {
 	key := args.Path + "/" + args.Name
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects/%s",
-		core.Env.CLOUDFLARE_ACCOUNT, args.Bucket, key)
+	url := r2ObjectURL(args.Bucket, key)
 
 	core.Log("Enviando a R2:", args.Bucket, "| Folder:", args.Path, "|", args.Name)
 
@@ -384,18 +441,12 @@ func SaveFileToR2(args SaveFileArgs) error {
 	return nil
 }
 
-// FileExists checks whether an object exists in the configured cloud provider.
-// Routes to R2 HEAD when CLOUD_PROVIDER == "cloudflare", else to S3 HeadObject.
+// FileExists checks whether an object exists in the object store selected by CDN_PROVIDER.
 // Returns (false, nil) for a confirmed not-found; (false, err) for transport errors.
 func FileExists(args SaveFileArgs) (bool, error) {
-	if core.Env.CLOUD_PROVIDER == "cloudflare" {
-		if args.Bucket == "" || args.Bucket == core.Env.S3_BUCKET {
-			args.Bucket = core.Env.CLOUDFLARE_BUCKET
-		}
+	args = resolveStorageBucket(args)
+	if useR2() {
 		return fileExistsR2(args)
-	}
-	if args.Bucket == "" {
-		args.Bucket = core.Env.S3_BUCKET
 	}
 	return fileExistsS3(args)
 }
@@ -422,8 +473,7 @@ func fileExistsS3(args SaveFileArgs) (bool, error) {
 
 func fileExistsR2(args SaveFileArgs) (bool, error) {
 	key := args.Path + "/" + args.Name
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/r2/buckets/%s/objects/%s",
-		core.Env.CLOUDFLARE_ACCOUNT, args.Bucket, key)
+	url := r2ObjectURL(args.Bucket, key)
 
 	// The R2 management API only exposes GET/PUT/DELETE for objects (HEAD returns 405).
 	// Use GET with a 1-byte Range so we confirm the object without paying the full download.
@@ -476,7 +526,7 @@ func SaveImage(image ImageArgs) (string, error) {
 	}
 
 	var err error
-	if core.Env.CLOUD_PROVIDER == "cloudflare" {
+	if useR2() {
 		args.Bucket = core.Env.CLOUDFLARE_BUCKET
 		err = SaveFileToR2(args)
 	} else {

@@ -36,6 +36,7 @@ func DeployCloudFormation(params DeployParams) {
 
 	templateParameters := []cfnTypes.Parameter{
 		makeStackParameter("NamePrefix", params.APP_NAME),
+		makeStackParameter("CdnProvider", params.CDN_PROVIDER),
 		makeStackParameter("FrontendBucketName", params.FRONTEND_BUCKET),
 		makeStackParameter("DeploymentBucket", params.DEPLOYMENT_BUCKET),
 		makeStackParameter("CompiledS3Key", params.S3_COMPILED_PATH),

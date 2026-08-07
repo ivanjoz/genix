@@ -8,6 +8,7 @@ interface FrontendEndpoint {
 interface ProjectCredentials {
 	GITHUB_ACCOUNT?: unknown
 	LAMBDA_URL?: unknown
+	SSE_BRIDGE_URL?: unknown
 	FRONTEND_CDN?: unknown
 	ZONE_NAME?: unknown
 	ENPOINTS?: unknown
@@ -93,6 +94,11 @@ const main = async (): Promise<void> => {
 	const githubAccount = requireNonEmptyString(credentials.GITHUB_ACCOUNT, 'GITHUB_ACCOUNT')
 	const githubVariables = new Map<string, string>([
 		['PUBLIC_LAMBDA_URL', requireHttpUrl(credentials.LAMBDA_URL, 'LAMBDA_URL')],
+		// Optional: without a deployed SSE bridge the frontend streams from the
+		// backend itself, so this falls back to LAMBDA_URL.
+		['PUBLIC_SSE_BRIDGE_URL', credentials.SSE_BRIDGE_URL
+			? requireHttpUrl(credentials.SSE_BRIDGE_URL, 'SSE_BRIDGE_URL')
+			: requireHttpUrl(credentials.LAMBDA_URL, 'LAMBDA_URL')],
 		['PUBLIC_FRONTEND_CDN', requireHttpUrl(credentials.FRONTEND_CDN, 'FRONTEND_CDN')],
 		['PUBLIC_ZONE_NAME', requireNonEmptyString(credentials.ZONE_NAME, 'ZONE_NAME')],
 		['PUBLIC_ENDPOINTS', JSON.stringify(frontendEndpoints)],

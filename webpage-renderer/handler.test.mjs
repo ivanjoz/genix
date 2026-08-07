@@ -88,10 +88,13 @@ function buildArtifact({ buildId = 'build-1', renderModule = RENDER_MODULE_OK } 
 		{ name: 'render.mjs', data: renderModule },
 		{ name: 'assets/_app/immutable/entry.js', data: 'console.log(1)' },
 		// Las dos formas en que un .js lleva dentro sus propias rutas de assets, que hay que
-		// prefijar igual que las del HTML. Ver applyAssetRewrites.
+		// prefijar igual que las del HTML, y el helper de Vite que compone las relativas en runtime.
+		// Ver applyAssetRewrites.
 		{
 			name: 'assets/_app/immutable/entry/app.js',
-			data: 'const n=["_app/immutable/nodes/1.abc.js"];const w=new URL(`/_app/immutable/workers/w.js`,``+import.meta.url);'
+			data:
+				'const P=function(e){return`/`+e};' +
+				'const n=["_app/immutable/nodes/1.abc.js"];const w=new URL(`/_app/immutable/workers/w.js`,``+import.meta.url);'
 		},
 		{ name: 'assets/_app/immutable/style.css', data: 'body{color:red}' },
 		{ name: 'site/sw.js', data: '// service worker' },
@@ -499,6 +502,36 @@ test('prefija las rutas que los .js llevan dentro, en sus dos formas', async () 
 	expect(bundle).not.toContain('`/_app/');
 });
 
+test('deja el helper assetsURL de Vite en identidad', async () => {
+	const { cloudflare, handler } = await setup();
+	await handler.render(BASE_EVENT);
+
+	const bundle = cloudflare.objects.get('websites/7/_app/immutable/entry/app.js').body.toString('utf8');
+
+	// Con los deps ya absolutos, anteponer la base del build los mandaría al hostname de la tienda
+	// como '/https://cdn…'.
+	expect(bundle).toContain('const P=function(e){return e};');
+	expect(bundle).not.toContain('return`/`+e');
+});
+
+test('aborta si hay deps relativos pero no aparece el helper assetsURL', async () => {
+	const cloudflare = await startFakeCloudflare();
+	openServers.push(cloudflare);
+	// Es lo que pasaría si Vite cambiara la forma del helper: la regex dejaría de casar y el sitio
+	// se publicaría pidiendo las rutas al origen equivocado.
+	cloudflare.setArtifact(
+		buildZip([
+			{ name: 'manifest.json', data: JSON.stringify({ buildId: 'sin-helper', assetPathPrefix: '/_app/', htmlRewrites: [] }) },
+			{ name: 'render.mjs', data: RENDER_MODULE_OK },
+			{ name: 'assets/_app/immutable/entry/app.js', data: 'const n=["_app/immutable/nodes/1.abc.js"];' }
+		]),
+		'"etag-sin-helper"'
+	);
+	const handler = await loadHandler(cloudflare);
+
+	await expect(handler.render(BASE_EVENT)).rejects.toThrow(/assetsURL/);
+});
+
 test('no reescribe los assets que no son .js', async () => {
 	const { cloudflare, handler } = await setup();
 	await handler.render(BASE_EVENT);
@@ -519,7 +552,7 @@ test('applyAssetRewrites no toca el buffer original', async () => {
 	// El artefacto se cachea en memoria y lo comparten todas las companies del proceso: mutarlo
 	// haría que la segunda se publicara con la base de la primera.
 	expect(original.equals(copy)).toBe(true);
-	expect(rewritten.toString('utf8')).toContain('"https://cdn/websites/7/_app/immutable/nodes/1.abc.js"');
+	expect(rewritten.data.toString('utf8')).toContain('"https://cdn/websites/7/_app/immutable/nodes/1.abc.js"');
 });
 
 // --- Site files por hostname ------------------------------------------------------

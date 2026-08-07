@@ -1,22 +1,19 @@
 <script lang="ts">
-import { onMount, untrack } from 'svelte';
 import MobileMenu from '$domain/MobileMenu.svelte';
 import Header from '$ecommerce/components/Header.svelte';
 import EcommerceRenderer from '$ecommerce/renderer/EcommerceRenderer.svelte';
-import { Env } from '$core/env';
-import { getStoreWebpage } from '$services/ecommerce/page-content.svelte';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
 
   let { data } = $props();
 
-  // The storefront renders the root/Inicio page content. It comes from +page.ts
-  // load() so it's baked into the prerendered HTML (SEO); the onMount refresh below
-  // then pulls the latest content for real users. EcommerceRenderer maps each
-  // section to its registered component.
-  let sections = $state<SectionData[]>(untrack(() => data?.sections ?? []));
+  // The storefront renders the root/Inicio page content. Su ÚNICA fuente es el
+  // snapshot del CDN que carga +page.ts (live/pages/<companyID>-<pageID>.json):
+  // el storefront nunca llama a la API (p-webpage queda solo para el builder).
+  // EcommerceRenderer maps each section to its registered component.
+  const sections = $derived<SectionData[]>(data?.sections ?? []);
 
-  // SEO metatags for this page (from the same p-webpage call). Baked into the
+  // SEO metatags for this page (from the same snapshot). Baked into the
   // prerendered <head> for crawlers; in dev (CSR) the load runs client-side.
   const seo = $derived<Record<string, string>>(data?.seo ?? {});
 
@@ -24,7 +21,7 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   // section AST, text lines). These classes don't exist in source, so build-time
   // Tailwind can't cover them. The builder pre-generates this on save and stores
   // it per section, so the storefront injects it as-is — no UnoCSS at view time.
-  let runtimeCss = $state(untrack(() => data?.css ?? ''));
+  const runtimeCss = $derived<string>(data?.css ?? '');
 
   // Matches the builder's default palette so `--color-N` vars resolve identically when
   // a page has no saved palette of its own.
@@ -38,41 +35,10 @@ import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
   };
 
   // The page's saved palette (the agent grows it in the builder); falls back to the
-  // default so var(--color-N) always resolves. Refreshed alongside content on mount.
-  const toPalette = (colors?: string[]): ColorPalette =>
-    colors?.length ? { ...defaultPalette, colors } : defaultPalette;
-  let palette = $state<ColorPalette>(untrack(() => toPalette(data?.palette)));
-
-  // Content fingerprint used to decide whether the live refresh actually differs from
-  // the prerendered content. The runtime `id` is a fresh uuid on every load (see
-  // parsePageContentRows), so it MUST be excluded or every refresh would look changed.
-  // Everything else (Type/Ast/Content/Css/Attributes) is the real persisted content.
-  const contentKey = (secs: SectionData[], css: string) =>
-    JSON.stringify(secs.map(({ id, ...rest }) => rest)) + ' ' + css;
-
-  onMount(async () => {
-    // Refresh to the latest content after the prerendered paint (and recover if the
-    // build-time fetch was empty). The initial render used `data` (exactly what SSR
-    // rendered), so hydration already matched; this runs strictly afterwards.
-    //
-    // We reassign ONLY when the live content differs from what was prerendered:
-    //   - identical content  → no reassignment → no re-render → no layout shift
-    //   - different content  → one reassignment → EcommerceRenderer re-renders
-    //                          (the accepted, content-changed layout shift)
-    try {
-      // El refresco va contra la API (no contra el snapshot del CDN, que es lo que ya
-      // se horneó en el SSR): es la copia más fresca posible tras la publicación.
-      const stored = await getStoreWebpage(Env.getPageID());
-      if (stored.sections.length === 0) return; // keep prerendered content on empty/failed refresh
-      if (contentKey(stored.sections, stored.css) !== contentKey(sections, runtimeCss)) {
-        sections = stored.sections;
-        runtimeCss = stored.css;
-        palette = toPalette(stored.palette);
-      }
-    } catch (contentRefreshError) {
-      console.error('[StorePage] content refresh failed', contentRefreshError);
-    }
-  });
+  // default so var(--color-N) always resolves.
+  const palette = $derived<ColorPalette>(
+    data?.palette?.length ? { ...defaultPalette, colors: data.palette } : defaultPalette
+  );
 </script>
 
 <svelte:head>

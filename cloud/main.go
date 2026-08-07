@@ -15,14 +15,17 @@ import (
 
 type DeployParams struct {
 	// APP_NAME prefija todo nombre físico: stack, Lambdas, tabla DynamoDB, buckets.
-	APP_NAME           string `json:"APP_NAME"`
-	AWS_PROFILE        string `json:"AWS_PROFILE"`
-	AWS_REGION         string `json:"AWS_REGION"`
-	DEPLOYMENT_BUCKET  string
-	FRONTEND_BUCKET    string
-	LAMBDA_IAM_ROLE    string
-	S3_COMPILED_PATH   string
-	CLOUD_PROVIDER     string `json:"CLOUD_PROVIDER"`
+	APP_NAME          string `json:"APP_NAME"`
+	AWS_PROFILE       string `json:"AWS_PROFILE"`
+	AWS_REGION        string `json:"AWS_REGION"`
+	DEPLOYMENT_BUCKET string
+	FRONTEND_BUCKET   string
+	LAMBDA_IAM_ROLE   string
+	S3_COMPILED_PATH  string
+	// BACKEND_PROVIDER selects the cloud data mirror and AWS backend infrastructure.
+	BACKEND_PROVIDER string `json:"BACKEND_PROVIDER"`
+	// CDN_PROVIDER selects the object storage and public frontend origin.
+	CDN_PROVIDER       string `json:"CDN_PROVIDER"`
 	CLOUDFLARE_ACCOUNT string `json:"CLOUDFLARE_ACCOUNT"`
 	CLOUDFLARE_TOKEN   string `json:"CLOUDFLARE_TOKEN"`
 	// CLOUDFLARE_BUCKET fija el bucket R2 cuando su nombre no sigue el patrón "<APP_NAME>-files":
@@ -104,7 +107,13 @@ func main() {
 		panic("Error parsing credentials.json:" + err.Error())
 	}
 
-	if params.CLOUD_PROVIDER != "cloudflare" {
+	if params.BACKEND_PROVIDER != "aws" && params.BACKEND_PROVIDER != "cloudflare" {
+		panic("BACKEND_PROVIDER debe ser 'aws' o 'cloudflare'.")
+	}
+	if params.CDN_PROVIDER != "aws" && params.CDN_PROVIDER != "cloudflare" {
+		panic("CDN_PROVIDER debe ser 'aws' o 'cloudflare'.")
+	}
+	if w1 != "3" || params.BACKEND_PROVIDER == "aws" {
 		missingParams := []string{params.APP_NAME, params.DEPLOYMENT_BUCKET,
 			params.AWS_PROFILE, params.AWS_REGION, params.LAMBDA_IAM_ROLE}
 
@@ -113,6 +122,9 @@ func main() {
 				panic("Los parámetros APP_NAME, DEPLOYMENT_BUCKET, AWS_REGION, AWS_PROFILE y LAMBDA_IAM_ROLE son requeridos.")
 			}
 		}
+	}
+	if params.CDN_PROVIDER == "cloudflare" && (strings.TrimSpace(params.CLOUDFLARE_ACCOUNT) == "" || strings.TrimSpace(params.CLOUDFLARE_TOKEN) == "") {
+		panic("CLOUDFLARE_ACCOUNT y CLOUDFLARE_TOKEN son requeridos cuando CDN_PROVIDER es 'cloudflare'.")
 	}
 
 	if len(params.FRONTEND_BUCKET) == 0 {
@@ -271,8 +283,12 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 
 // Despliega la infraestructura
 func DeployIfraestructure(params DeployParams) {
-	if params.CLOUD_PROVIDER == "cloudflare" {
-		DeployCloudflareInfra(params)
+	if params.CDN_PROVIDER == "cloudflare" {
+		// R2 must be ready before the renderer receives its public asset URL.
+		params.FRONTEND_CDN = DeployCloudflareInfra(params)
+	}
+
+	if params.BACKEND_PROVIDER != "aws" {
 		return
 	}
 

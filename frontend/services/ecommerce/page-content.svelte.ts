@@ -85,8 +85,9 @@ const parsePageContentRows = (rows: IPageContentRow[] | null): { sections: Secti
   return { sections, css, palette };
 };
 
-// The combined public payload from GET.p-webpage: a page's SEO metatags (Config)
-// plus its content rows (Sections).
+// The combined public payload que produce GET.p-webpage y que se publica tal cual
+// como snapshot en el CDN: SEO metatags (Config) + filas de contenido (Sections).
+// El storefront SOLO lee el snapshot; la API p-webpage queda para el builder.
 interface IWebpagePublicResult {
   Config: Record<string, string>;
   Sections: IPageContentRow[];
@@ -95,18 +96,6 @@ interface IWebpagePublicResult {
 export interface IWebpageContent {
 	sections: SectionData[]; css: string; seo: Record<string, string>; palette?: string[]
 }
-
-// Storefront loader: ONE public call (GET.p-webpage) returns a page's SEO config +
-// content. No auth — makeRoute appends company-id from Env.getCompanyID() (the
-// company-id meta the render left in the <head>). pageID defaults to the root page
-// (resolved server-side). Used by the live storefront's onMount refresh.
-export const getStoreWebpage = async (pageID = 0): Promise<IWebpageContent> => {
-  const route = pageID > 0 ? `p-webpage?id=${pageID}` : 'p-webpage';
-	const result: IWebpagePublicResult = await GET({ route });
-
-  const { sections, css, palette } = parsePageContentRows(result?.Sections || []);
-  return { sections, css, palette, seo: result?.Config || {} };
-};
 
 // Resolve a CDN snapshot file name (<companyID>-<pageID>.json) for a page. pageID 0
 // → the root page id (10); companyID 0 → the build/runtime-resolved tenant. Exposed

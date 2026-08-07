@@ -95,9 +95,9 @@ func (cc *clientConn) push(data []byte) error {
 // or the stream is replaced by a fresh connect on the same tab.
 func HandleStream(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	tab := strings.TrimSpace(q.Get("tab"))
-	if tab == "" {
-		http.Error(w, "missing ?tab=", http.StatusBadRequest)
+	companyID, userID, tab, err := DecodeChannelToken(strings.TrimSpace(q.Get("ch")))
+	if err != nil {
+		http.Error(w, "invalid ?ch=: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -108,8 +108,8 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 
 	cc := &clientConn{
 		tab:       tab,
-		companyID: atoi32(q.Get("company")),
-		userID:    atoi32(q.Get("user")),
+		companyID: companyID,
+		userID:    userID,
 		path:      strings.TrimSpace(q.Get("path")),
 		send:      make(chan []byte, 64),
 		closed:    make(chan struct{}),
@@ -126,6 +126,12 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	registerClient(cc)
+	// Handshake, queued only after the tab is registered: a client that has seen
+	// this frame knows the backend can reach it, which is what lets the frontend
+	// hold its first turn until the channel exists. The SSE bridge emits the
+	// identical frame (sse_bridge/handlers.go), so the client code is the same
+	// against either transport.
+	_ = cc.push([]byte(`{"Type":"` + TypeBridgeReady + `"}`))
 	core.Log("agent.sse client connected tab::", shortTabID(tab), " company::", cc.companyID, " user::", cc.userID, " path::", cc.path, " from", r.RemoteAddr)
 
 	defer func() {
@@ -174,9 +180,9 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 // user messages — all discriminated by `Type`. Returns `{}` immediately; chat
 // turns run asynchronously.
 func HandleIn(w http.ResponseWriter, r *http.Request) {
-	tab := strings.TrimSpace(r.URL.Query().Get("tab"))
-	if tab == "" {
-		writeJSONError(w, http.StatusBadRequest, "missing ?tab=")
+	_, _, tab, err := DecodeChannelToken(strings.TrimSpace(r.URL.Query().Get("ch")))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid ?ch=: "+err.Error())
 		return
 	}
 	var env struct {
@@ -377,9 +383,20 @@ func WaitForClient(ctx context.Context, tab string) error {
 	}
 }
 
-// request is the low-level RPC: push a command to tab's stream, wait for the
-// browser's POSTed reply. The reply's payload is decoded into `out` on success.
+// request is the low-level RPC: push a command to the tab and wait for the
+// browser's reply, decoded into `out` on success. Where the tab's stream lives
+// is the only difference between the two deployments — this process owns it on
+// a VPS, the SSE bridge owns it under Lambda.
 func request(ctx context.Context, tab, cmdType string, payload any, out any) error {
+	if BridgeEnabled() {
+		return bridgeCommand(ctx, tab, cmdType, payload, out)
+	}
+	return localRequest(ctx, tab, cmdType, payload, out)
+}
+
+// localRequest pushes the command down the stream this process holds for tab
+// and waits for the matching POST /agent/in.
+func localRequest(ctx context.Context, tab, cmdType string, payload any, out any) error {
 	cc := lookupClient(tab)
 	if cc == nil {
 		core.Log("agent.sse request no-client tab::", shortTabID(tab), " cmd::", cmdType, " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
@@ -446,23 +463,4 @@ func shortConnectedTabs() []string {
 		out = append(out, shortTabID(tab))
 	}
 	return out
-}
-
-// atoi32 parses a base-10 int32 from s, returning 0 on any error. Used for
-// the optional company/user query params on the stream URL — invalid values
-// are tolerated (they become 0) since the chat session validates ownership
-// separately.
-func atoi32(s string) int32 {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0
-	}
-	var n int32
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int32(c-'0')
-	}
-	return n
 }

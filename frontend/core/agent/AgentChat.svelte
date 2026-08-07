@@ -4,10 +4,10 @@
   // message history. The textarea stays in the header at the top of the
   // visual chat layout; the floating panel only renders the history list.
   //
-  // Nothing is connected until you send: `runAgentTurn` POSTs the message to
-  // `/agent/turn` and reads the streamed response for the turn's lifetime,
-  // then the connection closes. Events arrive through `subscribeAgentChat`
-  // (sse.ts), which the same stream feeds; the TabID is how the backend routes
+  // Opening the panel opens the tab's event stream (sse.ts), which then stays
+  // up. `runAgentTurn` POSTs one turn and resolves when the backend finishes;
+  // the reply, the status rows and any page command arrive meanwhile on that
+  // stream through `subscribeAgentChat`. The TabID is how the backend routes
   // both tool calls and chat replies to this tab.
   //
   // History persistence is local-only via Dexie (chat_history.idb.ts). The
@@ -16,6 +16,7 @@
 
   import { tick } from 'svelte';
   import {
+    ensureAgentStream,
     getAgentTabID,
     runAgentTurn,
     subscribeAgentChat,
@@ -254,7 +255,7 @@
     const context = agentModes.getActiveContext();
     chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash(), modeID: agentModes.active.ID, contextBytes: context.length });
     try {
-      // Resolves when the turn's stream closes. The reply itself already
+      // Resolves when the backend finishes the turn. The reply itself already
       // arrived through handleChatEvent — this is just the lifetime.
       await runAgentTurn(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, context);
     } catch (turnError) {
@@ -284,6 +285,11 @@
   const openPanel = () => {
     if (isOpen) { return; }
     isOpen = true;
+    // Warm up the stream while the user types: the first turn would open it
+    // anyway, and doing it here hides the connect latency.
+    void ensureAgentStream().catch((streamError) => {
+      chatLog('warn', 'stream warmup failed', { error: String(streamError) });
+    });
     void ensureHistoryLoaded();
     void scrollToBottom();
   };

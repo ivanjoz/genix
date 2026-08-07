@@ -95,7 +95,7 @@ func GetBackups(args *core.HandlerArgs) core.HandlerResponse {
 
 	prefix := fmt.Sprintf("backups/%v/", args.User.CompanyID)
 
-	s3Files, err := cloud.S3ListFiles(cloud.SaveFileArgs{
+	filesInStorage, err := cloud.ListFiles(cloud.SaveFileArgs{
 		Bucket:  core.Env.S3_BUCKET,
 		Prefix:  prefix,
 		MaxKeys: 30,
@@ -106,11 +106,11 @@ func GetBackups(args *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	files := []BackupFile{}
-	for _, e := range s3Files {
+	for _, file := range filesInStorage {
 		files = append(files, BackupFile{
-			Name:    strings.ReplaceAll(*e.Key, prefix, ""),
-			Size:    int32(*e.Size),
-			Created: e.LastModified.Unix(),
+			Name:    strings.ReplaceAll(file.Key, prefix, ""),
+			Size:    int32(file.Size),
+			Created: file.LastModified.Unix(),
 		})
 	}
 

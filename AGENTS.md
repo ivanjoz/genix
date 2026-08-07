@@ -51,6 +51,9 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **backend/docs/CREATE_API_HANDLERS.md** - API handler development guide, MUST read before creating APIs. Key concepts: "updated" parameter for delta responses, query examples, conventions.
 - **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ORM documentation covering model definitions, CRUD operations, query building
 
+### SSE Bridge
+- **sse_bridge/README.md** - Relay SSE que sostiene el stream del navegador cuando el backend corre en Lambda (que no puede mantener conexiones abiertas). Endpoints, auth, systemd/nginx. Diseño en **PLAN_SSE_BRIDGE.md**.
+
 ### Frontend Documentation
 - **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow
 - **frontend/docs/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services

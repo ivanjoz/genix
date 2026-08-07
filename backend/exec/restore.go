@@ -31,7 +31,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió el nombre del archivo a buscar.")
 	}
 
-	fileBytes, err := cloud.GetFileFromS3(cloud.SaveFileArgs{
+	fileBytes, err := cloud.GetFile(cloud.SaveFileArgs{
 		Bucket: core.Env.S3_BUCKET,
 		Path:   fmt.Sprintf("backups/%v", req.User.CompanyID),
 		Name:   body.Name,

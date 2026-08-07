@@ -82,7 +82,7 @@ type ChatAgentSections struct {
 }
 
 // AgentSession is one chat conversation. There is at most one per browser tab —
-// the same TabID identifies both the turn stream (so the loop can issue tool
+// the same TabID identifies both the tab's stream (so the loop can issue tool
 // calls through it) and the chat session. The session outlives any single turn:
 // it holds the route the agent last knew about and guards against overlapping
 // turns on the same tab.
@@ -90,16 +90,16 @@ type AgentSession struct {
 	CompanyID int32
 	UserID    int32
 	TabID     string
-	SessionID int64 // unix seconds when the chat session was created
+	// ChannelToken is the wire name of this tab's stream (channel.go). Only the
+	// bridge transport needs it; the local one addresses the tab directly.
+	ChannelToken string
+	// SessionID scopes the persisted history (chat_store.go). It comes from the
+	// client, not from this process's clock: under Lambda two turns of the same
+	// conversation can land on different execution environments, and a
+	// locally-minted id would start the LLM's history from scratch each time.
+	SessionID int64
 
 	inFlight atomic.Bool
-
-	// sink is the turn stream chat events are written to, installed by
-	// HandleTurn for the turn's duration. Deliberately not resolved through the
-	// `clients` map: with a dev page-bridge stream open, commands ride that
-	// stream while events must still go down this turn's response body.
-	sinkMu sync.Mutex
-	sink   *clientConn
 
 	// currentRoute is the SPA path the user is on, used to enrich progress
 	// labels (e.g. "Leyendo /negocio/productos…"). Re-seeded from each turn
@@ -108,27 +108,19 @@ type AgentSession struct {
 	currentRoute string
 }
 
-// setSink installs cc as the destination for this turn's chat events.
-func (s *AgentSession) setSink(cc *clientConn) {
-	s.sinkMu.Lock()
-	s.sink = cc
-	s.sinkMu.Unlock()
-}
-
-// clearSink removes cc, but only if it is still the installed sink — a turn
-// that unwinds late must not detach its successor's stream.
-func (s *AgentSession) clearSink(cc *clientConn) {
-	s.sinkMu.Lock()
-	if s.sink == cc {
-		s.sink = nil
+// pushEvent delivers one already-framed chat event to the tab's stream. Under
+// Lambda the stream belongs to the SSE bridge; otherwise it is the connection
+// this process registered in ws.go. Either way a tab with no stream just drops
+// the event — the turn still finishes and persists.
+func (s *AgentSession) pushEvent(envelopeJSON []byte) error {
+	if BridgeEnabled() {
+		return bridgePublish(s.ChannelToken, envelopeJSON)
 	}
-	s.sinkMu.Unlock()
-}
-
-func (s *AgentSession) eventSink() *clientConn {
-	s.sinkMu.Lock()
-	defer s.sinkMu.Unlock()
-	return s.sink
+	clientConnection := lookupClient(s.TabID)
+	if clientConnection == nil {
+		return errors.New("no hay stream conectado para el tab")
+	}
+	return clientConnection.push(envelopeJSON)
 }
 
 // CurrentRoute returns the last route the session knows about. Empty means
@@ -152,28 +144,44 @@ var (
 
 // ensureChatSession returns the tab's session, creating it on first use, and
 // re-seeds the mutable context every turn carries. Re-seeding matters: the user
-// can switch company or navigate by hand between turns, and unlike the old
-// page-load stream a turn request always reports the live values. Sessions
-// persist across turns; history lives in ScyllaDB regardless.
-func ensureChatSession(tab string, companyID, userID int32, path string) *AgentSession {
+// can switch company or navigate by hand between turns, and a turn request
+// always reports the live values. Sessions persist across turns; history lives
+// in ScyllaDB regardless.
+func ensureChatSession(tab, channelToken string, companyID, userID int32, sessionID int64, path string) *AgentSession {
 	chatSessionsMu.Lock()
 	s := chatSessions[tab]
 	if s == nil {
-		s = &AgentSession{
-			TabID:     tab,
-			SessionID: time.Now().Unix(),
-		}
+		s = &AgentSession{TabID: tab}
 		chatSessions[tab] = s
-		core.Log("agent.chat session created tab::", shortTabID(tab), " company::", companyID, " user::", userID, " path::", path)
+		core.Log("agent.chat session created tab::", shortTabID(tab), " company::", companyID, " user::", userID, " session::", sessionID, " path::", path)
 	}
 	chatSessionsMu.Unlock()
 
 	s.CompanyID = companyID
 	s.UserID = userID
+	// Re-seeded per turn: switching company changes the channel even though the
+	// tab, and therefore this session, stays the same.
+	s.ChannelToken = channelToken
+	if sessionID > 0 {
+		s.SessionID = sessionID
+	} else if s.SessionID == 0 {
+		// Legacy/malformed client: fall back to a local id so the turn still runs,
+		// at the cost of the LLM starting this conversation without history.
+		s.SessionID = time.Now().Unix()
+		core.Log("agent.chat sin SessionID del cliente, usando local tab::", shortTabID(tab), " session::", s.SessionID)
+	}
 	if strings.TrimSpace(path) != "" {
 		s.setCurrentRoute(path)
 	}
 	return s
+}
+
+// lookupChatSession returns the tab's session without creating one. The bridge
+// transport uses it to resolve the channel's company/user identity.
+func lookupChatSession(tab string) *AgentSession {
+	chatSessionsMu.RLock()
+	defer chatSessionsMu.RUnlock()
+	return chatSessions[tab]
 }
 
 // RunUserMessage runs the agentic loop for one user turn, blocking until the
@@ -213,12 +221,7 @@ func (s *AgentSession) sendJSON(kind string, payload any) {
 		core.Log("agent.chat marshal envelope tab::", shortTabID(s.TabID), " err::", err)
 		return
 	}
-	cc := s.eventSink()
-	if cc == nil {
-		core.Log("agent.chat no stream tab::", shortTabID(s.TabID), " type::", kind)
-		return
-	}
-	if err := cc.push(env); err != nil {
+	if err := s.pushEvent(env); err != nil {
 		core.Log("agent.chat push error tab::", shortTabID(s.TabID), " type::", kind, " err::", err)
 		return
 	}

@@ -63,6 +63,9 @@ jobs:
           PUBLIC_ENDPOINTS: ${{ vars.PUBLIC_ENDPOINTS || '[]' }}
           PUBLIC_FRONTEND_CDN: ${{ vars.PUBLIC_FRONTEND_CDN }}
           PUBLIC_LAMBDA_URL: ${{ vars.PUBLIC_LAMBDA_URL }}
+          # Relay SSE del agente. Sin bridge desplegado apunta al propio Lambda,
+          # que es como el frontend representa "no hay bridge".
+          PUBLIC_SSE_BRIDGE_URL: ${{ vars.PUBLIC_SSE_BRIDGE_URL || vars.PUBLIC_LAMBDA_URL }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
         run: bun run build
 
@@ -75,6 +78,9 @@ jobs:
           PUBLIC_ENDPOINTS: ${{ vars.PUBLIC_ENDPOINTS || '[]' }}
           PUBLIC_FRONTEND_CDN: ${{ vars.PUBLIC_FRONTEND_CDN }}
           PUBLIC_LAMBDA_URL: ${{ vars.PUBLIC_LAMBDA_URL }}
+          # Relay SSE del agente. Sin bridge desplegado apunta al propio Lambda,
+          # que es como el frontend representa "no hay bridge".
+          PUBLIC_SSE_BRIDGE_URL: ${{ vars.PUBLIC_SSE_BRIDGE_URL || vars.PUBLIC_LAMBDA_URL }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
         run: |
           bun scripts/build-renderer.mjs

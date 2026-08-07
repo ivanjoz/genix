@@ -8,7 +8,10 @@ Este proyecto se puede desplegar en AWS Lambda + una base de datos ScyllaDB en u
 ## Parámetros de configuración
 
 
-## Lambda Deployment + DynamoDB + S3
+## Lambda Deployment + DynamoDB + CDN
+
+Set `BACKEND_PROVIDER` to `aws` to deploy Lambda + DynamoDB. Set `CDN_PROVIDER` independently:
+`aws` provisions the S3 + CloudFront frontend, while `cloudflare` provisions an R2 public origin.
 
 La infraestructura AWS es una plantilla de CloudFormation, `cloud/template.yml`, desplegada
 por la herramienta Go en `cloud/`. No hay CDK: ni Node, ni `npx`, ni bootstrap stack.
@@ -71,6 +74,17 @@ dominio a la nueva URL o restaurar el valor anterior a mano.
 
 `FRONTEND_CDN` no se actualiza solo. Cópialo del output `FrontendDistributionDomain` cuando el
 dominio de CloudFront cambie, y vuelve a subir el frontend al bucket nuevo.
+
+### El agente necesita el SSE Bridge
+
+Lambda no puede sostener un stream abierto ni recibir la respuesta del navegador dentro de la
+misma invocación, y el agente necesita las dos cosas. Con el backend en Lambda hay que desplegar
+además `sse_bridge/` en un servidor normal y poner su URL pública en `SSE_BRIDGE_URL` de
+`credentials.json` (instalación y nginx en `sse_bridge/README.md`).
+
+Si `SSE_BRIDGE_URL` falta o es igual a `LAMBDA_URL`, el chat del agente queda inoperativo en el
+endpoint Lambda; todo lo demás de la app funciona igual. En self-host no hace falta: ese proceso
+sirve su propio `/agent/stream`.
 
 ## Self-host Deployment + DynamoDB + S3
 

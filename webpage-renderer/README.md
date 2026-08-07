@@ -77,9 +77,21 @@ marcador: si no, un dominio nuevo nacería sin ellos cuando la company ya tuvier
 publicados.
 
 El prefijo del CDN no se antepone solo en el HTML. Los `.js` llevan dentro sus propias rutas
-—el manifest de rutas del cliente, y los `new URL('/_app/…', import.meta.url)`— y se reescriben al
+—los arrays de `__vite__mapDeps`, y los `new URL('/_app/…', import.meta.url)`— y se reescriben al
 subirlos (`applyAssetRewrites`). Sin eso la primera carga funciona y todo lo que pida el runtime
 después se va al hostname de la tienda, donde no hay ningún `/_app/`.
+
+Y con los deps de `mapDeps` ya absolutos hay que desactivar quien los componía: `__vitePreload`
+los pasa por un helper `assetsURL` que antepone la base del build (`function(dep){return"/"+dep}`
+con base `/`), y ese `/` sobrante produce `'/https://cdn…/_app/…'`, que el navegador resuelve
+contra el hostname de la tienda. `applyAssetRewrites` lo deja en identidad.
+
+El fallo es asimétrico y por eso cuesta leerlo: los `.js` cargan igual —el `import()` de verdad es
+relativo al propio chunk y cae en el CDN—, así que solo se ven `<link rel=modulepreload>` en 404.
+El que rompe es el dep `.css`, que `__vitePreload` **espera**: su `Unable to preload CSS for …`
+deja la página sin hidratar. `rewriteAssets` comprueba el invariante entre chunks (si hay deps
+relativos, tiene que haber exactamente un helper) y aborta la publicación si no cuadra, porque el
+modo de fallo natural es terminar en verde.
 
 El marcador guarda el `buildId` publicado: si coincide, los assets no se resuben y editar una
 página cuesta solo los PUT del HTML. `forceAssets: true` lo ignora.

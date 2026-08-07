@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Genix - frontend CDN, Go backend on Lambda, cron and DynamoDB
+Description: Genix - Go backend on Lambda, cron and DynamoDB
 
 # Deployed by cloud/cloudformation.go (action 3). Every value that varies per environment
 # arrives as a parameter read from credentials.json, so this file stays static and committed.
@@ -8,6 +8,10 @@ Parameters:
   NamePrefix:
     Type: String
     Description: APP_NAME from credentials.json. Prefixes every physical resource name.
+  CdnProvider:
+    Type: String
+    AllowedValues: [aws, cloudflare]
+    Description: CDN_PROVIDER from credentials.json; aws creates the CloudFront frontend.
   FrontendBucketName:
     Type: String
     Description: Bucket holding the built frontend, served through CloudFront.
@@ -33,6 +37,10 @@ Parameters:
       The renderer Lambda downloads it at runtime, so publishing a new storefront build
       needs no infrastructure deploy.
 
+Conditions:
+  # Cloudflare owns the public origin when CDN_PROVIDER is cloudflare.
+  UseCloudFront: !Equals [!Ref CdnProvider, aws]
+
 Resources:
   # ---------------------------------------------------------------- frontend
 
@@ -40,6 +48,7 @@ Resources:
   # cannot recreate this bucket name while the orphan survives - delete it by hand first.
   FrontendBucket:
     Type: AWS::S3::Bucket
+    Condition: UseCloudFront
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
@@ -53,6 +62,7 @@ Resources:
 
   FrontendOriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Condition: UseCloudFront
     Properties:
       CloudFrontOriginAccessIdentityConfig:
         Comment: Genix Identity
@@ -62,6 +72,7 @@ Resources:
   # and CustomErrorResponses below rewrites both to the SPA entry point anyway.
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    Condition: UseCloudFront
     Properties:
       Bucket: !Ref FrontendBucket
       PolicyDocument:
@@ -75,6 +86,7 @@ Resources:
 
   FrontendDistribution:
     Type: AWS::CloudFront::Distribution
+    Condition: UseCloudFront
     Properties:
       DistributionConfig:
         Comment: Frontend Genix
@@ -385,8 +397,10 @@ Outputs:
     Description: Public Function URL of the high-memory backend Lambda
     Value: !GetAtt BackendHeavyFunctionUrl.FunctionUrl
   FrontendDistributionDomain:
+    Condition: UseCloudFront
     Description: CloudFront domain serving the frontend
     Value: !Sub "https://${FrontendDistribution.DomainName}"
   FrontendBucket:
+    Condition: UseCloudFront
     Description: Bucket the built frontend must be uploaded to
     Value: !Ref FrontendBucket

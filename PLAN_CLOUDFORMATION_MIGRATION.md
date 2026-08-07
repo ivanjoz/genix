@@ -23,7 +23,7 @@ None of that buys anything for a static resource list. `aws-sdk-go-v2/service/cl
 ## Out of scope
 
 - `p2p/` has its own separate CDK project (`p2p/deploy.sh`). Untouched.
-- `cloud/cloudflare_infra.go` (the `CLOUD_PROVIDER=cloudflare` path). Untouched.
+- `cloud/cloudflare_infra.go` (the `CDN_PROVIDER=cloudflare` path). Untouched.
 - Backend response code. Streaming stays.
 
 ---

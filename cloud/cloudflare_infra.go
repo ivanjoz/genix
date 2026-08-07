@@ -30,7 +30,8 @@ type cfManagedDomainResponse struct {
 	} `json:"errors"`
 }
 
-func DeployCloudflareInfra(params DeployParams) {
+// DeployCloudflareInfra provisions R2 and returns its public URL for the Lambda renderer.
+func DeployCloudflareInfra(params DeployParams) string {
 	// main() ya resolvió el nombre: CLOUDFLARE_BUCKET de credentials.json si está seteado,
 	// "<APP_NAME>-files" en caso contrario.
 	bucketName := params.CLOUDFLARE_BUCKET
@@ -74,6 +75,7 @@ func DeployCloudflareInfra(params DeployParams) {
 	fmt.Println("Actualizando FRONTEND_CDN en credentials.json...")
 	updateCredentialsCDN(GetBaseWD(), publicURL)
 	fmt.Println("credentials.json actualizado!")
+	return publicURL
 }
 
 func enableR2PublicAccess(accountID, token, bucketName string) string {
