@@ -125,8 +125,8 @@ type EnvStruct struct {
 	OPENROUTER_KEY   string
 	OPENROUTER_MODEL string
 	// GenixSearch — lexical search backend reached over TCP. The
-	// daemon is installed by cloud/text-searh/install_search.py, which
-	// writes GENIXSEARCH_PASSWORD into credentials.json. GENIXSEARCH_URL
+	// daemon is installed by scripts/configure_db.py, which writes both
+	// GENIXSEARCH_URL and GENIXSEARCH_PASSWORD into credentials.json. GENIXSEARCH_URL
 	// is the full endpoint (e.g. "https://host:14446" or "host:14446")
 	// — only the host and port are used; the scheme is ignored. Falls
 	// back to 127.0.0.1:14446 when empty.

@@ -25,6 +25,12 @@ case "$1" in
     echo "Executing configure_server script..."
     python3 scripts/configure_server.py "${@:2}"
     ;;
+  "configure_db")
+    # For "configure_db", configure ScyllaDB and/or install the GenixSearch service on this host.
+    # Optional mode argument: all (default) = both, scylla = only ScyllaDB, search = only GenixSearch.
+    echo "Executing configure_db script..."
+    python3 scripts/configure_db.py "${@:2}"
+    ;;
   "configure_sse_bridge")
     # For "configure_sse_bridge", install the SSE bridge systemd service plus its Nginx vhost on
     # this host. No arguments: everything comes from credentials.json.
@@ -55,7 +61,7 @@ case "$1" in
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_sse_bridge|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_menu_descriptions}"
+    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_db|configure_sse_bridge|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_menu_descriptions}"
     exit 1
     ;;
 esac

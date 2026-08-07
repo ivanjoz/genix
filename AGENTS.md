@@ -66,6 +66,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
 - **scripts/CONFIGURE_SERVER.md** - Despliegue del backend en un VPS: units de systemd, auto-reload del binario y proxy inverso de Nginx
+- **scripts/CONFIGURE_DB.md** - Despliegue del host de datos: `configure_db.py` configura ScyllaDB (sysconfig, yaml, superusuario, keyspace) e instala GenixSearch desde los releases musl estáticos, escribiendo `GENIXSEARCH_URL`/`GENIXSEARCH_PASSWORD` en credentials.json
 
 ### General Rules
 - ALWAYS save dates in UnixDay int16 format: The number of days since unix-epoch
