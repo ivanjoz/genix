@@ -32,10 +32,10 @@ type cfManagedDomainResponse struct {
 
 // DeployCloudflareInfra provisions R2 and returns its public URL for the Lambda renderer.
 func DeployCloudflareInfra(params DeployParams) string {
-	// main() ya resolvió el nombre: CLOUDFLARE_BUCKET de credentials.json si está seteado,
+	// main() ya resolvió el nombre: CLOUDFLARE_BUCKET del environment seleccionado si está seteado,
 	// "<APP_NAME>-files" en caso contrario.
 	bucketName := params.CLOUDFLARE_BUCKET
-	bucketSource := "credentials.json (CLOUDFLARE_BUCKET)"
+	bucketSource := "environment seleccionado (CLOUDFLARE_BUCKET)"
 	if bucketName == params.APP_NAME+"-files" {
 		bucketSource = "autogenerado desde APP_NAME"
 	}
@@ -72,9 +72,9 @@ func DeployCloudflareInfra(params DeployParams) string {
 	fmt.Printf("Acceso público habilitado!\n")
 	fmt.Printf("URL pública: %s\n\n", publicURL)
 
-	fmt.Println("Actualizando FRONTEND_CDN en credentials.json...")
-	updateCredentialsCDN(GetBaseWD(), publicURL)
-	fmt.Println("credentials.json actualizado!")
+	fmt.Println("Actualizando FRONTEND_CDN en el environment seleccionado...")
+	updateCredentialsCDN(publicURL)
+	fmt.Println("Archivo de credenciales actualizado!")
 	return publicURL
 }
 
@@ -111,12 +111,12 @@ func enableR2PublicAccess(accountID, token, bucketName string) string {
 	return "https://" + result.Result.Domain
 }
 
-func updateCredentialsCDN(baseWD, publicURL string) {
-	filePath := baseWD + "/credentials.json"
+func updateCredentialsCDN(publicURL string) {
+	filePath := GetCredentialsPath()
 	fmt.Printf("  -> Leyendo %s\n", filePath)
 	content, err := ReadFile(filePath)
 	if err != nil {
-		panic("Error leyendo credentials.json: " + err.Error())
+		panic("Error leyendo " + filePath + ": " + err.Error())
 	}
 
 	updated, err := sjson.Set(string(content), "FRONTEND_CDN", publicURL)
@@ -125,7 +125,7 @@ func updateCredentialsCDN(baseWD, publicURL string) {
 	}
 
 	if err := os.WriteFile(filePath, []byte(updated), 0644); err != nil {
-		panic("Error guardando credentials.json: " + err.Error())
+		panic("Error guardando " + filePath + ": " + err.Error())
 	}
 
 	fmt.Printf("  -> FRONTEND_CDN = %s\n", publicURL)

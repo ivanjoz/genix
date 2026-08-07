@@ -40,13 +40,28 @@ func getProviderORM[T any]() (ORM[T], error) {
 			panic("CLOUDFLARE_ACCOUNT, CLOUDFLARE_TOKEN, and CLOUDFLARE_DATABASE_ID must be set in credentials.json when BACKEND_PROVIDER is 'cloudflare'")
 		}
 		return NewSqliteORM[T]()
+	case "none":
+		return nil, errors.New("cloud data mirror is disabled because BACKEND_PROVIDER is 'none'")
 	default:
-		return nil, errors.New("BACKEND_PROVIDER in credentials.json is not set or invalid (must be 'aws' or 'cloudflare')")
+		return nil, errors.New("BACKEND_PROVIDER in credentials.json is not set or invalid (must be 'aws', 'cloudflare', or 'none')")
 	}
+}
+
+// IsDataMirrorEnabled reports whether auth and tenant data must also use a cloud database.
+func IsDataMirrorEnabled() bool {
+	if core.Env == nil {
+		core.PopulateVariables()
+	}
+	return core.Env.BACKEND_PROVIDER != "none"
 }
 
 // Init creates tables or checks if they exist through the selected backend provider.
 func Init[T any]() error {
+	// A self-hosted backend keeps these tables only in the primary Scylla database.
+	if !IsDataMirrorEnabled() {
+		core.Log("Cloud data mirror disabled; skipping table initialization")
+		return nil
+	}
 	orm, err := getProviderORM[T]()
 	if err != nil {
 		return err
@@ -56,6 +71,11 @@ func Init[T any]() error {
 
 // Insert inserts multiple records using the configured backend provider.
 func Insert[T any](records []T) error {
+	// Callers already persist to Scylla first, so no second write is needed in self-hosted mode.
+	if !IsDataMirrorEnabled() {
+		core.Log("Cloud data mirror disabled; skipping mirror write", len(records))
+		return nil
+	}
 	orm, err := getProviderORM[T]()
 	if err != nil {
 		return err

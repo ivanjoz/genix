@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 interface FrontendEndpoint {
 	name: string
@@ -15,12 +15,16 @@ interface ProjectCredentials {
 }
 
 const repositoryRoot = join(import.meta.dir, '..')
-const credentialsPath = join(repositoryRoot, 'credentials.json')
+// Follow the environment selected by deploy.sh while preserving standalone behavior.
+const configuredCredentialsPath = process.env.GENIX_CREDENTIALS_FILE?.trim()
+const credentialsPath = configuredCredentialsPath
+	? resolve(configuredCredentialsPath)
+	: join(repositoryRoot, 'credentials.json')
 const isDryRun = process.argv.includes('--dry-run')
 
 const requireNonEmptyString = (credentialsValue: unknown, fieldName: string): string => {
 	if (typeof credentialsValue !== 'string' || !credentialsValue.trim()) {
-		throw new Error(`credentials.json field ${fieldName} must be a non-empty string`)
+		throw new Error(`Credentials field ${fieldName} must be a non-empty string`)
 	}
 	return credentialsValue.trim()
 }
@@ -29,19 +33,19 @@ const requireHttpUrl = (credentialsValue: unknown, fieldName: string): string =>
 	const configuredUrl = requireNonEmptyString(credentialsValue, fieldName)
 	const parsedUrl = new URL(configuredUrl)
 	if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-		throw new Error(`credentials.json field ${fieldName} must use HTTP or HTTPS`)
+		throw new Error(`Credentials field ${fieldName} must use HTTP or HTTPS`)
 	}
 	return configuredUrl
 }
 
 const requireFrontendEndpoints = (credentialsValue: unknown): FrontendEndpoint[] => {
 	if (!Array.isArray(credentialsValue) || credentialsValue.length === 0) {
-		throw new Error('credentials.json field ENPOINTS must be a non-empty array')
+		throw new Error('Credentials field ENPOINTS must be a non-empty array')
 	}
 
 	return credentialsValue.map((endpointValue, endpointIndex) => {
 		if (!endpointValue || typeof endpointValue !== 'object') {
-			throw new Error(`credentials.json ENPOINTS[${endpointIndex}] must be an object`)
+			throw new Error(`Credentials ENPOINTS[${endpointIndex}] must be an object`)
 		}
 		const endpointRecord = endpointValue as Record<string, unknown>
 		return {
@@ -80,14 +84,14 @@ const runGitHubCommand = (
 const main = async (): Promise<void> => {
 	console.info(`[GitHub Vars] Reading public frontend configuration from ${credentialsPath}`)
 	if (!(await Bun.file(credentialsPath).exists())) {
-		throw new Error(`credentials.json was not found at ${credentialsPath}`)
+		throw new Error(`Credentials file was not found at ${credentialsPath}`)
 	}
 
 	let credentials: ProjectCredentials
 	try {
 		credentials = JSON.parse(await Bun.file(credentialsPath).text()) as ProjectCredentials
 	} catch (parseError) {
-		throw new Error(`credentials.json contains invalid JSON: ${String(parseError)}`)
+		throw new Error(`Credentials file contains invalid JSON: ${String(parseError)}`)
 	}
 
 	const frontendEndpoints = requireFrontendEndpoints(credentials.ENPOINTS)

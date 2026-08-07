@@ -14,7 +14,7 @@ import (
 	"github.com/ivanjoz/colbin"
 )
 
-const testSecretPhrase = "K1OzWIN0yarCc9ge"
+const testApiKey = "K1OzWIN0yarCc9ge"
 
 // makeTestSessionToken builds a token exactly as security.MakeUsuarioResponse
 // does (colbin payload whose Hash is an HMAC over the other fields), so the
@@ -23,7 +23,7 @@ func makeTestSessionToken(t *testing.T, companyID, userID int32) string {
 	t.Helper()
 
 	sessionToken := UserToken{CompanyID: companyID, ID: userID, Created: 1234, User: "tester"}
-	sessionToken.Hash = computeUserTokenHash(sessionToken, testSecretPhrase)
+	sessionToken.Hash = computeUserTokenHash(sessionToken, testApiKey)
 
 	encodedToken, marshalError := colbin.Marshal(sessionToken)
 	if marshalError != nil {
@@ -49,7 +49,7 @@ func TestUserTokenAuthentication(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/sse?tab=abc", nil)
 	request.Header.Set("Authorization", "Bearer "+validToken)
 
-	authenticatedToken, authError := authenticateUserRequest(request, testSecretPhrase)
+	authenticatedToken, authError := authenticateUserRequest(request, testApiKey)
 	if authError != nil {
 		t.Fatalf("un token válido fue rechazado: %v", authError)
 	}
@@ -64,7 +64,7 @@ func TestUserTokenAuthentication(t *testing.T) {
 	}
 
 	requestWithoutHeader := httptest.NewRequest(http.MethodGet, "/sse?tab=abc", nil)
-	if _, missingHeaderError := authenticateUserRequest(requestWithoutHeader, testSecretPhrase); missingHeaderError == nil {
+	if _, missingHeaderError := authenticateUserRequest(requestWithoutHeader, testApiKey); missingHeaderError == nil {
 		t.Fatal("una petición sin Authorization fue aceptada")
 	}
 }
@@ -73,21 +73,21 @@ func TestServiceAuthentication(t *testing.T) {
 	nowUnix := time.Now().Unix()
 
 	freshRequest := httptest.NewRequest(http.MethodPost, "/publish", nil)
-	freshRequest.Header.Set(serviceAuthHeaderName, MakeServiceAuthHeader(testSecretPhrase, nowUnix))
-	if authError := verifyServiceAuthRequest(freshRequest, testSecretPhrase); authError != nil {
+	freshRequest.Header.Set(serviceAuthHeaderName, MakeServiceAuthHeader(testApiKey, nowUnix))
+	if authError := verifyServiceAuthRequest(freshRequest, testApiKey); authError != nil {
 		t.Fatalf("una firma de servicio válida fue rechazada: %v", authError)
 	}
 
 	expiredRequest := httptest.NewRequest(http.MethodPost, "/publish", nil)
-	expiredRequest.Header.Set(serviceAuthHeaderName, MakeServiceAuthHeader(testSecretPhrase, nowUnix-serviceAuthMaxSkewSeconds-60))
-	if authError := verifyServiceAuthRequest(expiredRequest, testSecretPhrase); authError == nil {
+	expiredRequest.Header.Set(serviceAuthHeaderName, MakeServiceAuthHeader(testApiKey, nowUnix-serviceAuthMaxSkewSeconds-60))
+	if authError := verifyServiceAuthRequest(expiredRequest, testApiKey); authError == nil {
 		t.Fatal("una firma de servicio expirada fue aceptada")
 	}
 
 	tamperedRequest := httptest.NewRequest(http.MethodPost, "/publish", nil)
-	tamperedHeader := MakeServiceAuthHeader(testSecretPhrase, nowUnix)
+	tamperedHeader := MakeServiceAuthHeader(testApiKey, nowUnix)
 	tamperedRequest.Header.Set(serviceAuthHeaderName, tamperedHeader[:len(tamperedHeader)-2]+"ff")
-	if authError := verifyServiceAuthRequest(tamperedRequest, testSecretPhrase); authError == nil {
+	if authError := verifyServiceAuthRequest(tamperedRequest, testApiKey); authError == nil {
 		t.Fatal("una firma de servicio alterada fue aceptada")
 	}
 }
@@ -159,7 +159,7 @@ func postService(t *testing.T, baseURL, path string, body any) (int, map[string]
 
 	encodedBody, _ := json.Marshal(body)
 	serviceRequest, _ := http.NewRequest(http.MethodPost, baseURL+path, bytes.NewReader(encodedBody))
-	serviceRequest.Header.Set(serviceAuthHeaderName, MakeServiceAuthHeader(testSecretPhrase, time.Now().Unix()))
+	serviceRequest.Header.Set(serviceAuthHeaderName, MakeServiceAuthHeader(testApiKey, time.Now().Unix()))
 
 	serviceResponse, requestError := http.DefaultClient.Do(serviceRequest)
 	if requestError != nil {
@@ -174,7 +174,7 @@ func postService(t *testing.T, baseURL, path string, body any) (int, map[string]
 
 func startTestBridge(t *testing.T) string {
 	t.Helper()
-	testServer := httptest.NewServer(newBridgeServer(BridgeConfig{SecretPhrase: testSecretPhrase}).Routes())
+	testServer := httptest.NewServer(newBridgeServer(BridgeConfig{ApiKey: testApiKey}).Routes())
 	t.Cleanup(testServer.Close)
 	return testServer.URL
 }

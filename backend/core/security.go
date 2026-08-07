@@ -162,8 +162,8 @@ func PopulateVariables() {
 
 		credentialsSearchPaths := []string{parentPath + "/credentials.json", wd + "/credentials.json"}
 		if len(configuredCredentialsPath) > 0 {
-			// Allow systemd and other runtimes to point the backend to a fixed credentials location.
-			credentialsSearchPaths = append(credentialsSearchPaths, configuredCredentialsPath)
+			// An explicit path selects the environment even when the default file also exists.
+			credentialsSearchPaths = append([]string{configuredCredentialsPath}, credentialsSearchPaths...)
 		}
 
 		for _, candidateCredentialsPath := range credentialsSearchPaths {

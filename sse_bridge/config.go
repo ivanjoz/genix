@@ -12,19 +12,24 @@ import (
 // the same hosts (14008 ScyllaDB, 14010 backend, 14446 GenixSearch).
 const defaultListenPort = 14012
 
-// BridgeConfig is everything this process needs. SecretPhrase is the only value
-// that MUST match the backend: both the browser's session token and the
-// service-auth header are HMACs keyed with it.
+// BridgeConfig is everything this process needs. ApiKey is the only value that
+// MUST match the backend: both the browser's session token and the service-auth
+// header are HMACs keyed with it. It is the backend's SECRET_PHRASE under the
+// name this process is deployed with.
 type BridgeConfig struct {
-	ListenPort   int
-	SecretPhrase string
-	VerboseLogs  bool
+	ListenPort  int
+	ApiKey      string
+	VerboseLogs bool
 }
 
-// credentialsSubset is the slice of credentials.json the bridge cares about. The
-// file is shared verbatim with the Go backend and carries dozens of other keys;
-// everything not declared here is ignored on purpose.
+// credentialsSubset is the slice of credentials.json the bridge cares about.
+//
+// Two names for one value: a bridge host holds a minimal credentials.json with
+// only the keys this process needs, where the secret is SSE_BRIDGE_APIKEY. A
+// developer machine has the backend's full file instead, where the same value is
+// SECRET_PHRASE. They must be identical or every token is rejected.
 type credentialsSubset struct {
+	ApiKey       string `json:"SSE_BRIDGE_APIKEY"`
 	SecretPhrase string `json:"SECRET_PHRASE"`
 }
 
@@ -42,10 +47,13 @@ func LoadBridgeConfig() (BridgeConfig, error) {
 	if len(credentialsPath) > 0 {
 		logInfo("credentials loaded from", credentialsPath)
 	}
-	config.SecretPhrase = credentials.SecretPhrase
+	config.ApiKey = credentials.ApiKey
+	if len(config.ApiKey) == 0 {
+		config.ApiKey = credentials.SecretPhrase
+	}
 
-	if secretFromEnvironment := strings.TrimSpace(os.Getenv("SECRET_PHRASE")); len(secretFromEnvironment) > 0 {
-		config.SecretPhrase = secretFromEnvironment
+	if apiKeyFromEnvironment := strings.TrimSpace(os.Getenv("SSE_BRIDGE_APIKEY")); len(apiKeyFromEnvironment) > 0 {
+		config.ApiKey = apiKeyFromEnvironment
 	}
 	if portFromEnvironment := strings.TrimSpace(os.Getenv("SSE_BRIDGE_PORT")); len(portFromEnvironment) > 0 {
 		parsedPort, parseError := strconv.Atoi(portFromEnvironment)
@@ -55,8 +63,8 @@ func LoadBridgeConfig() (BridgeConfig, error) {
 		config.ListenPort = parsedPort
 	}
 
-	if len(config.SecretPhrase) == 0 {
-		return config, errors.New("no se encontró SECRET_PHRASE: configure credentials.json (GENIX_CREDENTIALS_FILE) o la variable de entorno")
+	if len(config.ApiKey) == 0 {
+		return config, errors.New("no se encontró SSE_BRIDGE_APIKEY: agréguelo a credentials.json (GENIX_CREDENTIALS_FILE) o expórtelo como variable de entorno")
 	}
 	return config, nil
 }

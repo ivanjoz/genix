@@ -107,7 +107,16 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	companyStatusUpdated := fmt.Sprintf("%d_%d_%020d", req.User.CompanyID, 1, updated)
 
 	records := []coretypes.User{}
-	if err := cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec(); err != nil {
+	var err error
+	if cloud.IsDataMirrorEnabled() {
+		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).Where("company_status_updated").GreaterEqual(companyStatusUpdated).Exec()
+	} else {
+		// Scylla stores the source fields directly; filtering stays scoped to the company partition.
+		userQuery := db.Query(&records)
+		userQuery.CompanyID.Equals(req.User.CompanyID).Status.Equals(1).Updated.GreaterEqual(int32(updated))
+		err = userQuery.AllowFilter().Exec()
+	}
+	if err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 

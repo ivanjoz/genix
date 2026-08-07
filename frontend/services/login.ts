@@ -41,7 +41,7 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 		if (!hasValidToken) {
       security.clearSession()
     } else {
-      Env.navigate("/")
+      Env.navigate(loginInfo.InitialDataPending ? "/initial-data" : "/")
     }
   } catch (error) {
     console.log("error encriptando::")

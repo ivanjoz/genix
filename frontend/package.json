@@ -9,7 +9,8 @@
 	],
 	"scripts": {
 		"dev": "bun scripts/dev-all.js",
-		"dev:main": "vite dev --force --port 3570",
+		"dev:main": "vite dev --port 3570",
+		"dev:main:force": "vite dev --force --port 3570",
 		"dev:store": "cd ecommerce && bun run dev",
 		"serve": "bun run serve:build",
 		"serve:build": "bun x serve ./build -l 3000",

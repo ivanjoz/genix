@@ -41,7 +41,16 @@ func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	records := []types.Company{}
-	if err := cloud.Select(&records).Where("updated").GreaterEqual(updated).Exec(); err != nil {
+	var err error
+	if cloud.IsDataMirrorEnabled() {
+		err = cloud.Select(&records).Where("updated").GreaterEqual(updated).Exec()
+	} else {
+		// Companies live in Scylla only when the optional cloud mirror is disabled.
+		companyQuery := db.Query(&records)
+		companyQuery.Updated.GreaterEqual(int32(updated))
+		err = companyQuery.AllowFilter().Exec()
+	}
+	if err != nil {
 		return req.MakeErr("Error al obtener las empresas.", err)
 	}
 
@@ -55,7 +64,20 @@ func GetEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No está autorizado para realizar esta solicitud.")
 	}
 
-	record, err := cloud.GetByID(types.Company{ID: req.User.CompanyID})
+	var record *types.Company
+	var err error
+	if cloud.IsDataMirrorEnabled() {
+		record, err = cloud.GetByID(types.Company{ID: req.User.CompanyID})
+	} else {
+		// Resolve the company by its Scylla primary key in self-hosted mode.
+		records := []types.Company{}
+		companyQuery := db.Query(&records)
+		companyQuery.ID.Equals(req.User.CompanyID).Limit(1)
+		err = companyQuery.Exec()
+		if err == nil && len(records) > 0 {
+			record = &records[0]
+		}
+	}
 	if err != nil {
 		return req.MakeErr("Error al obtener la company.", err)
 	}

@@ -111,6 +111,9 @@ const serviceWorkerConfig: BuildOptions = {
 const serviceWorkerPlugin = () => ({
   name: 'build-service-worker',
   async buildStart() {
+    // En dev lo construye configureServer (que además lo deja en watch), así que
+    // hacerlo aquí también compilaba el SW dos veces por arranque.
+    if (!isBuild) { return }
     console.log("build start: service worker::")
     // Ensure the output directory exists
 

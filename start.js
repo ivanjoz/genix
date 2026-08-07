@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 //********************************************************* */
-const FILENAME = "start.js"
+// Reopen the launcher variant that the user actually selected.
+const FILENAME = require("path").basename(process.argv[1] || "start.js")
 const FRONTEND_SCRIPT = "npm run dev"
-const BACKEND_GO_SCRIPT = "go run -v . dev"
+// Sin -v: el listado de paquetes no aporta y ensucia el log en cada reinicio.
+const BACKEND_GO_SCRIPT = "go run . dev"
 const ENVIROMENT_VARIABLES = "dev1"
+const FRONTEND_PROXY_PORT = Number.parseInt(process.env.GENIX_PROXY_PORT || "3572", 10)
 //********************************************************* */
 
 const { spawn, execSync } = require("child_process")
@@ -57,7 +60,13 @@ const nodemon = require("nodemon")
 // Frontend 1
 const frontendPath = path.join(__dirname, 'frontend')
 const frontendNodeModules = path.join(frontendPath, "node_modules")
-if (!fs.existsSync(frontendNodeModules) || !fs.existsSync(path.join(frontendNodeModules, "rolldown-vite"))){
+// OJO: revisar un paquete que realmente se instala. Antes se buscaba "rolldown-vite"
+// (vite 8 ya trae rolldown adentro, ese paquete no existe aquí) por lo que la
+// condición era siempre verdadera y bun install corría en cada arranque.
+// package.json en vez de .bin/vite: el nombre del shim cambia según plataforma.
+const viteInstalled = fs.existsSync(path.join(frontendNodeModules, "vite", "package.json"))
+const storeNodeModules = fs.existsSync(path.join(frontendPath, "webpage", "node_modules"))
+if (!fs.existsSync(frontendNodeModules) || !viteInstalled || !storeNodeModules){
   console.log("No se encontraron los node_modules o faltan dependencias en el frontend. Instalando...")
   if(isWindows){
     execSync(`cd ${frontendPath} & bun install`, { stdio: "inherit", shell: true })
@@ -73,11 +82,41 @@ if (isWindows) {
 
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
-console.log("Instalando los paquetes de Go (si no lo están)...")
-if(isWindows){
-  execSync(`cd ${backendGoPath} & go mod tidy`, { stdio: "inherit", shell: true })
+
+// go mod tidy reescribe go.mod/go.sum, y eso invalida el build cache de Go: la
+// compilación en frío toma ~36s vs ~5s en caliente. Por eso solo corre cuando
+// go.mod/go.sum cambiaron de verdad (se compara contra un stamp en tmp/).
+const goModStampPath = path.join(__dirname, 'tmp', '.go-mod-stamp')
+const goModFiles = ['go.mod', 'go.sum'].map(name => path.join(backendGoPath, name))
+const goModStamp = goModFiles.map(file => {
+  const stat = fs.existsSync(file) ? fs.statSync(file) : null
+  return stat ? `${path.basename(file)}:${stat.size}:${stat.mtimeMs}` : `${path.basename(file)}:missing`
+}).join('|')
+
+const runGoModTidy = () => {
+  console.log("Instalando los paquetes de Go (si no lo están)...")
+  if(isWindows){
+    execSync(`cd ${backendGoPath} & go mod tidy`, { stdio: "inherit", shell: true })
+  } else {
+    execSync('cd backend && go mod tidy', { encoding: 'utf-8' })
+  }
+  // Se releen los stats: go mod tidy pudo haber reescrito los archivos.
+  const nextStamp = goModFiles.map(file => {
+    const stat = fs.existsSync(file) ? fs.statSync(file) : null
+    return stat ? `${path.basename(file)}:${stat.size}:${stat.mtimeMs}` : `${path.basename(file)}:missing`
+  }).join('|')
+  fs.mkdirSync(path.dirname(goModStampPath), { recursive: true })
+  fs.writeFileSync(goModStampPath, nextStamp)
+}
+
+const previousGoModStamp = fs.existsSync(goModStampPath)
+  ? fs.readFileSync(goModStampPath, 'utf-8').trim()
+  : null
+
+if (previousGoModStamp === goModStamp) {
+  console.log("Paquetes de Go sin cambios, se omite go mod tidy.")
 } else {
-  execSync('cd backend && go mod tidy', { encoding: 'utf-8' })
+  runGoModTidy()
 }
 
 // Remove enviroment variables
@@ -227,7 +266,8 @@ const killPortIfInUse = (port) => {
   }
 }
 
-// Kill necessary ports before starting
-[3588, 3589].forEach(killPortIfInUse)
+// Kill necessary ports before starting.
+// Clear the selected proxy port so launcher variants do not retain stale processes.
+[3570, 3571, FRONTEND_PROXY_PORT, 3588, 3589].forEach(killPortIfInUse)
 // Run scripts
 runScripts()

@@ -29,7 +29,6 @@ func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
-	core.Env.LOGS_DEBUG = true
 
 	body := financeTypes.CashBank{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
@@ -42,24 +41,30 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan parámetros a enviar: (ID, Name, Type o SiteID)")
 	}
 
-	nowTime := core.SUnixTime()
-	body.Updated = nowTime
-	body.CompanyID = req.User.CompanyID
+	// A new cash bank arrives with a negative ID; the ORM replaces it with the autoincremented one
+	// during handlePreInsert. Discriminating by ID is the only reliable signal, since the client
+	// does not send the audit columns.
+	isNewCashBank := body.ID < 0
 
-	// Autoincrement is handled automatically by the ORM via handlePreInsert
-	body.CreatedBy = req.User.ID
-	body.Created = nowTime
+	nowTime := core.SUnixTime()
+	body.CompanyID = req.User.CompanyID
+	body.Updated = nowTime
 	body.UpdatedBy = req.User.ID
+	if isNewCashBank {
+		body.Created = nowTime
+		body.CreatedBy = req.User.ID
+	}
+
 	cajas := &[]financeTypes.CashBank{body}
 
-	// Insert or Update using db2
-	if body.Created == nowTime {
-		// New record - insert
+	if isNewCashBank {
 		err = db.Insert(cajas)
 	} else {
-		// Existing record - update excluding reconciliation fields
+		// The balance and audit columns are never sent by the client, so they are excluded from the
+		// update: writing the zero values would wipe the reconciled amounts and the creation stamp.
 		q1 := db.TableOf[financeTypes.CashBank]()
-		err = db.UpdateExclude(cajas, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount)
+		err = db.UpdateExclude(cajas, q1.ReconciliationDate, q1.ReconciliationAmount,
+			q1.CurrentAmount, q1.Created, q1.CreatedBy)
 	}
 
 	if err != nil {

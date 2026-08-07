@@ -3,7 +3,8 @@ import httpProxy from 'http-proxy';
 
 const MAIN_PORT = 3570;
 const STORE_PORT = 3571;
-const PROXY_PORT = 3572;
+// Launcher variants can select a separate public entry point.
+const PROXY_PORT = Number.parseInt(process.env.GENIX_PROXY_PORT || '3572', 10);
 
 // Parse only the pathname so query strings like /webpage-app?p=... still route to Store.
 const getRequestPathname = (requestUrl = '/') => {

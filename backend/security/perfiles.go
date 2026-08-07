@@ -15,7 +15,17 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	records := []securityTypes.Profile{}
 
 	var err error
-	if updated > 0 {
+	if !cloud.IsDataMirrorEnabled() {
+		// Self-hosted reads use the primary table and the same active/updated semantics as the mirror.
+		profileQuery := db.Query(&records)
+		profileQuery.CompanyID.Equals(req.User.CompanyID)
+		if updated > 0 {
+			profileQuery.Updated.GreaterEqual(int32(updated))
+		} else {
+			profileQuery.Status.Equals(1)
+		}
+		err = profileQuery.AllowFilter().Exec()
+	} else if updated > 0 {
 		companyUpdated := fmt.Sprintf("%d_%020d", req.User.CompanyID, updated)
 		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).Where("company_updated").GreaterEqual(companyUpdated).Exec()
 	} else {

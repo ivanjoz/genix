@@ -14,6 +14,8 @@
 			(function() {
 				var currentLocation = window.location;
 				var path = currentLocation.pathname;
+				// Vite replaces this with the launcher-selected public proxy port.
+				var proxyPort = '%VITE_PROXY_PORT%';
 				if (path.startsWith('/store') && !window._IS_STORE_APP) {
 					console.log('[Main App] Redirecting to store...');
 					// Check if it's a file request (has a dot in the last segment)
@@ -27,14 +29,14 @@
 					var isLocalDevHost = currentLocation.hostname === 'localhost' || currentLocation.hostname === '127.0.0.1';
 					var isMainDevPort = currentLocation.port === '3570';
 					if (isLocalDevHost && isMainDevPort) {
-						var proxyTarget = currentLocation.protocol + '//' + currentLocation.hostname + ':3572' + path + currentLocation.search + currentLocation.hash;
+						var proxyTarget = currentLocation.protocol + '//' + currentLocation.hostname + ':' + proxyPort + path + currentLocation.search + currentLocation.hash;
 						console.log('[Main App] Dev mode redirect to proxy:', proxyTarget);
 						window.location.replace(proxyTarget);
 						return;
 					}
 
 					// On the proxy host, avoid fallback rewriting that can create dev-only loops.
-					if (isLocalDevHost && currentLocation.port === '3572') {
+					if (isLocalDevHost && currentLocation.port === proxyPort) {
 						console.log('[Main App] Proxy host detected, skipping p-parameter fallback');
 						return;
 					}

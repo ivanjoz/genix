@@ -7,6 +7,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.country-cities":         GetCountryCities,
 	"POST.sites":                 PostSite,
 	"POST.warehouses":            PostWarehouse,
+	"POST.initial-data":          PostInitialData,
 	"GET.products":               GetProducts,
 	"GET.p-products-ids":         GetProductsByIDs,
 	"GET.p-product-text-search":  GetProductTextSearch,

@@ -3,11 +3,11 @@ import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 export interface ISite {
   ID: number,
   Name: string
-  Direccion: string
+  Address: string
   Telefono: string
   Description: string
   CityID: number
-  Ciudad: string
+  City: string
   ss: number
   upd: number
 }

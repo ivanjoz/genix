@@ -279,19 +279,43 @@ def resolve_credential_value(project_credentials, variable_name, prompt_text, va
         print(f"[!] {validation_error}", file=sys.stderr)
 
 
-def extract_nginx_settings(project_credentials):
+def extract_nginx_settings(project_credentials, local_server_port=None):
+    """Resolve the Nginx side of the install.
+
+    local_server_port is set when this same host also runs the systemd service (full mode). In
+    that case the upstream is the local backend, so NGINX_PROCESS is derived instead of asked for;
+    an explicit value in credentials.json still wins, for the rare split-host full install.
+    """
     nginx_domain, domain_was_prompted = resolve_credential_value(
         project_credentials,
         "NGINX_DOMAIN",
         "Enter NGINX_DOMAIN, the public domain Nginx serves (e.g. genix-api-4.un.pe)",
         validate_nginx_domain,
     )
-    nginx_process, process_was_prompted = resolve_credential_value(
-        project_credentials,
-        "NGINX_PROCESS",
-        "Enter NGINX_PROCESS, the backend host:port Nginx forwards to (e.g. 100.64.0.2:14010)",
-        validate_nginx_process,
-    )
+
+    process_was_prompted = False
+    nginx_process = None
+
+    if local_server_port is not None:
+        configured_process = project_credentials.get("NGINX_PROCESS")
+        if configured_process is not None:
+            nginx_process, validation_error = validate_nginx_process(str(configured_process))
+            if nginx_process is None:
+                print_debug(f"NGINX_PROCESS in credentials.json is unusable: {validation_error}")
+
+        if nginx_process is None:
+            nginx_process = f"127.0.0.1:{local_server_port}"
+            print_debug(
+                f"NGINX_PROCESS not needed in full mode: forwarding to the local systemd "
+                f"service at {nginx_process}."
+            )
+    else:
+        nginx_process, process_was_prompted = resolve_credential_value(
+            project_credentials,
+            "NGINX_PROCESS",
+            "Enter NGINX_PROCESS, the backend host:port Nginx forwards to (e.g. 100.64.0.2:14010)",
+            validate_nginx_process,
+        )
 
     backend_proxy_url = nginx_process if "://" in nginx_process else f"http://{nginx_process}"
 
@@ -1299,7 +1323,7 @@ def main():
         prompted_values.update(prompted_server_port)
 
     if configure_nginx:
-        nginx_settings = extract_nginx_settings(project_credentials)
+        nginx_settings = extract_nginx_settings(project_credentials, local_server_port=server_port)
         prompted_values.update(nginx_settings["prompted_values"])
 
     warn_on_port_mismatch(server_port, nginx_settings)

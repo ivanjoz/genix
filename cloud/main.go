@@ -58,6 +58,15 @@ func GetBaseWD() string {
 	return strings.Join(dirname[:(len(dirname)-1)], "/")
 }
 
+// GetCredentialsPath keeps every cloud read and write on the environment selected by deploy.sh.
+func GetCredentialsPath() string {
+	configuredCredentialsPath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))
+	if configuredCredentialsPath != "" {
+		return configuredCredentialsPath
+	}
+	return GetBaseWD() + "/credentials.json"
+}
+
 func main() {
 	w1 := ""
 
@@ -94,8 +103,9 @@ func main() {
 		}
 	}
 
-	baseWD := GetBaseWD()
-	credentialsJson, err := ReadFile(baseWD + "/credentials.json")
+	credentialsPath := GetCredentialsPath()
+	fmt.Println("Leyendo credenciales desde:", credentialsPath)
+	credentialsJson, err := ReadFile(credentialsPath)
 	if err != nil {
 		panic(err)
 	}
@@ -104,11 +114,11 @@ func main() {
 	err = json.Unmarshal(credentialsJson, &params)
 
 	if err != nil {
-		panic("Error parsing credentials.json:" + err.Error())
+		panic(fmt.Sprintf("Error parsing credentials file %s: %v", credentialsPath, err))
 	}
 
-	if params.BACKEND_PROVIDER != "aws" && params.BACKEND_PROVIDER != "cloudflare" {
-		panic("BACKEND_PROVIDER debe ser 'aws' o 'cloudflare'.")
+	if params.BACKEND_PROVIDER != "aws" && params.BACKEND_PROVIDER != "cloudflare" && params.BACKEND_PROVIDER != "none" {
+		panic("BACKEND_PROVIDER debe ser 'aws', 'cloudflare' o 'none'.")
 	}
 	if params.CDN_PROVIDER != "aws" && params.CDN_PROVIDER != "cloudflare" {
 		panic("CDN_PROVIDER debe ser 'aws' o 'cloudflare'.")
@@ -237,17 +247,19 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 	fmt.Println("Actulizando variables de entorno...")
 	enviromentVars := map[string]any{}
 
-	jsonFileBytes, err := ReadFile(GetBaseWD() + "/credentials.json")
+	credentialsPath := GetCredentialsPath()
+	fmt.Println("Leyendo variables de Lambda desde:", credentialsPath)
+	jsonFileBytes, err := ReadFile(credentialsPath)
 	if err != nil {
-		panic("No se pudo leer el archivo credentials.json: " + err.Error())
+		panic("No se pudo leer el archivo de credenciales " + credentialsPath + ": " + err.Error())
 	}
 
 	err = json.Unmarshal(jsonFileBytes, &enviromentVars)
 	if err != nil {
-		panic("EL archivo credentials.json posee un formato erróneo: " + err.Error())
+		panic("El archivo de credenciales " + credentialsPath + " posee un formato erróneo: " + err.Error())
 	}
 
-	fmt.Println("Leyendo y comprimiendo credentials.json...")
+	fmt.Println("Leyendo y comprimiendo el archivo de credenciales seleccionado...")
 
 	jsonString := string(jsonFileBytes)
 	jsonBase64 := BytesToBase64(CompressZstd(&jsonString), true)

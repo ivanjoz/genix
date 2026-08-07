@@ -3,9 +3,13 @@ import fs from 'fs';
 import path from 'path';
 
 export const setupEnv = () => {
-  console.log('📝 Generating .env files from credentials.json...');
+  // Keep frontend and backend on the same explicitly selected environment.
+  const configuredCredentialsPath = process.env.GENIX_CREDENTIALS_FILE;
+  const credentialsPath = configuredCredentialsPath
+    ? path.resolve(configuredCredentialsPath)
+    : path.resolve(process.cwd(), '..', 'credentials.json');
+  console.log('📝 Generating .env files from ' + credentialsPath + '...');
   try {
-    const credentialsPath = path.resolve(process.cwd(), '..', 'credentials.json');
     if (fs.existsSync(credentialsPath)) {
       const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
       // Keep the endpoint selector config available at build time for SvelteKit.
@@ -17,6 +21,7 @@ export const setupEnv = () => {
       // directly; point it at the sse_bridge process to make the Lambda
       // deployment able to stream (see PLAN_SSE_BRIDGE.md).
       const envContent = [
+        `VITE_PROXY_PORT=${process.env.GENIX_PROXY_PORT || '3572'}`,
         `PUBLIC_LAMBDA_URL=${credentials.LAMBDA_URL || ''}`,
         `PUBLIC_SSE_BRIDGE_URL=${credentials.SSE_BRIDGE_URL || credentials.LAMBDA_URL || ''}`,
         `PUBLIC_FRONTEND_CDN=${credentials.FRONTEND_CDN || ''}`,
@@ -32,7 +37,7 @@ export const setupEnv = () => {
       console.log('✅ .env files created successfully');
       return true;
     } else {
-      console.warn('⚠️  credentials.json not found at ' + credentialsPath + ', skipping .env generation');
+      console.warn('⚠️  Credentials file not found at ' + credentialsPath + ', skipping .env generation');
       return false;
     }
   } catch (error) {

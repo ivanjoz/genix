@@ -35,9 +35,9 @@ The frontend is a monorepo with a strict dependency hierarchy (`libs` → `ui-co
 
 ### Configurable providers
 
-`credentials.json` separates backend data from file delivery. Both providers currently accept `aws | cloudflare`:
+`credentials.json` separates backend data from file delivery:
 
-- **`BACKEND_PROVIDER`** — `aws` uses DynamoDB; `cloudflare` uses D1 / SQLite.
+- **`BACKEND_PROVIDER`** — `aws` uses DynamoDB; `cloudflare` uses D1 / SQLite; `none` disables the optional mirror and reads auth/tenant data directly from ScyllaDB on a self-hosted backend.
 - **`CDN_PROVIDER`** — `aws` uses S3 + CloudFront; `cloudflare` uses R2 as the public asset origin.
 
 For example, `BACKEND_PROVIDER=aws` and `CDN_PROVIDER=cloudflare` runs the backend on AWS Lambda + DynamoDB while files are stored and served by Cloudflare R2.

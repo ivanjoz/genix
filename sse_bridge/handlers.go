@@ -76,7 +76,7 @@ func (server *bridgeServer) resolveClientChannel(request *http.Request) (string,
 		return "", decodeError
 	}
 
-	userToken, authError := authenticateUserRequest(request, server.config.SecretPhrase)
+	userToken, authError := authenticateUserRequest(request, server.config.ApiKey)
 	if authError != nil {
 		return "", authError
 	}
@@ -244,7 +244,7 @@ func (server *bridgeServer) handleServicePublish(responseWriter http.ResponseWri
 		writeJSONError(responseWriter, http.StatusMethodNotAllowed, "se esperaba POST")
 		return
 	}
-	if authError := verifyServiceAuthRequest(request, server.config.SecretPhrase); authError != nil {
+	if authError := verifyServiceAuthRequest(request, server.config.ApiKey); authError != nil {
 		logWarn("publish rechazado ::", authError)
 		writeJSONError(responseWriter, http.StatusUnauthorized, authError.Error())
 		return
@@ -286,7 +286,7 @@ func (server *bridgeServer) handleServiceRPC(responseWriter http.ResponseWriter,
 		writeJSONError(responseWriter, http.StatusMethodNotAllowed, "se esperaba POST")
 		return
 	}
-	if authError := verifyServiceAuthRequest(request, server.config.SecretPhrase); authError != nil {
+	if authError := verifyServiceAuthRequest(request, server.config.ApiKey); authError != nil {
 		logWarn("rpc rechazado ::", authError)
 		writeJSONError(responseWriter, http.StatusUnauthorized, authError.Error())
 		return

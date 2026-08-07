@@ -66,22 +66,26 @@ fijan que las tres implementaciones coincidan byte a byte.
 
 ## Autenticación
 
-Ambos lados usan `SECRET_PHRASE` de `credentials.json` — no hay ningún secreto
-nuevo que aprovisionar.
+Los dos lados se autentican con **un solo secreto compartido**, que aquí se llama
+`SSE_BRIDGE_APIKEY` y en el backend `SECRET_PHRASE`: es el mismo valor con dos
+nombres de despliegue. Un host de bridge lleva un `credentials.json` mínimo (solo
+`SSE_BRIDGE_URL` + `SSE_BRIDGE_APIKEY`) en vez del archivo completo del backend,
+que además tiene claves de base de datos, AWS y SMTP que este proceso no necesita
+ver. Si los valores no coinciden byte a byte, el bridge rechaza a todo el mundo.
 
 - **Navegador**: `Authorization: Bearer <token>`, el mismo token de sesión que ya
   emite el backend. Es autocontenido (payload colbin + HMAC), así que el bridge
   verifica la identidad sin tocar ScyllaDB. El bridge **no** evalúa accesos: eso
   ya lo hizo el backend al aceptar el turno.
-- **Backend**: `X-Bridge-Auth: <unix_ts>.<hex(hmac_sha256(SECRET_PHRASE, "sse-bridge:v1|"+unix_ts))>`,
+- **Backend**: `X-Bridge-Auth: <unix_ts>.<hex(hmac_sha256(apikey, "sse-bridge:v1|"+unix_ts))>`,
   con ventana de ±300s.
 
 ## Configuración
 
 | Variable | Default | Descripción |
 |---|---|---|
-| `GENIX_CREDENTIALS_FILE` | `../credentials.json`, `./credentials.json` | De dónde leer `SECRET_PHRASE`. |
-| `SECRET_PHRASE` | — | Sobrescribe el valor del archivo (para desplegar sin `credentials.json`). |
+| `GENIX_CREDENTIALS_FILE` | `../credentials.json`, `./credentials.json` | De dónde leer el secreto: la clave `SSE_BRIDGE_APIKEY` o, si no está, `SECRET_PHRASE` (el archivo completo del backend, útil en local). |
+| `SSE_BRIDGE_APIKEY` | — | Sobrescribe el valor del archivo (para desplegar sin `credentials.json`). |
 | `SSE_BRIDGE_PORT` | `14012` | Puerto de escucha. |
 | `SSE_BRIDGE_VERBOSE` | — | `1` para loguear cada mensaje entregado. |
 
@@ -106,6 +110,14 @@ Compilación cruzada para un servidor arm64 (mismo patrón que el backend):
 ```bash
 GOOS=linux GOARCH=arm64 go build -o sse_bridge_arm64 .
 ```
+
+## Desplegar en un servidor
+
+`sudo ./app.sh configure_sse_bridge` compila el binario, instala las units de systemd y escribe
+el vhost de Nginx (HTTP/3 si hay certificado) en el mismo host. No pregunta nada salvo
+`SSE_BRIDGE_APIKEY` cuando falta; el resto sale de `credentials.json`. Detalles en
+`../scripts/CONFIGURE_SSE_BRIDGE.md`. Lo que sigue es lo que ese script genera, por si hay que
+hacerlo a mano.
 
 ### systemd
 
@@ -139,6 +151,8 @@ location / {
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_buffering off;          # imprescindible: si no, los eventos se acumulan
+    proxy_cache off;
+    gzip off;                     # comprimir también implica bufferizar
     proxy_read_timeout 3600s;     # imprescindible: un stream ocioso no debe morir
     proxy_send_timeout 3600s;
 }
@@ -156,7 +170,7 @@ curl -N -H "Authorization: Bearer $TOKEN" "$BASE/sse?ch=$CH"
 
 # 2. Firmar una llamada de servicio y publicar un evento
 TS=$(date +%s)
-SECRET=$(grep -oP '"SECRET_PHRASE"\s*:\s*"\K[^"]+' ../credentials.json)
+SECRET=$(grep -oP '"(SSE_BRIDGE_APIKEY|SECRET_PHRASE)"\s*:\s*"\K[^"]+' ../credentials.json | head -1)
 SIG="$TS.$(printf 'sse-bridge:v1|%s' "$TS" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')"
 
 curl -s -X POST "$BASE/publish" -H "X-Bridge-Auth: $SIG" \

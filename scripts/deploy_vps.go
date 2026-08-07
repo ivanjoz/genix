@@ -28,22 +28,26 @@ type Credentials struct {
 func DeployVPS() {
 	fmt.Println("Starting VPS deployment...")
 
-	// Read the deploy targets from the shared credentials file so all server rules stay in one place.
-	credentialsFilePath := "../credentials.json"
+	// Use the environment selected by deploy.sh, with the original path as a standalone fallback.
+	credentialsFilePath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))
+	if credentialsFilePath == "" {
+		credentialsFilePath = "../credentials.json"
+	}
+	fmt.Printf("Reading VPS deployment targets from: %s\n", credentialsFilePath)
 	credentialsContent, readCredentialsError := os.ReadFile(credentialsFilePath)
 	if readCredentialsError != nil {
-		fmt.Printf("Error reading credentials.json: %v\n", readCredentialsError)
+		fmt.Printf("Error reading credentials file %s: %v\n", credentialsFilePath, readCredentialsError)
 		return
 	}
 
 	var credentials Credentials
 	if parseCredentialsError := json.Unmarshal(credentialsContent, &credentials); parseCredentialsError != nil {
-		fmt.Printf("Error parsing credentials.json: %v\n", parseCredentialsError)
+		fmt.Printf("Error parsing credentials file %s: %v\n", credentialsFilePath, parseCredentialsError)
 		return
 	}
 
 	if len(credentials.Servers) == 0 {
-		fmt.Println("Error: SERVERS is empty in credentials.json")
+		fmt.Printf("Error: SERVERS is empty in %s\n", credentialsFilePath)
 		return
 	}
 

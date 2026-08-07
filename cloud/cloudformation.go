@@ -246,18 +246,18 @@ var lambdaUrlInJsonPattern = regexp.MustCompile(`("LAMBDA_URL"\s*:\s*")([^"]*)("
 // texto y no re-serializando el JSON para no perder el orden de las claves ni el formato
 // del archivo, que se mantiene a mano.
 func SyncLambdaUrlInCredentials(deployedLambdaUrl string) {
-	credentialsPath := GetBaseWD() + "/credentials.json"
+	credentialsPath := GetCredentialsPath()
 
 	credentialsBytes, err := ReadFile(credentialsPath)
 	if err != nil {
-		fmt.Println("\nNo se pudo leer credentials.json para actualizar LAMBDA_URL: ", err)
+		fmt.Println("\nNo se pudo leer "+credentialsPath+" para actualizar LAMBDA_URL: ", err)
 		return
 	}
 
 	credentialsText := string(credentialsBytes)
 	currentMatch := lambdaUrlInJsonPattern.FindStringSubmatch(credentialsText)
 	if currentMatch == nil {
-		fmt.Println("\nNo se encontró la clave LAMBDA_URL en credentials.json; no se modificó nada.")
+		fmt.Println("\nNo se encontró la clave LAMBDA_URL en " + credentialsPath + "; no se modificó nada.")
 		fmt.Println("URL del backend desplegado: " + deployedLambdaUrl)
 		return
 	}
@@ -272,11 +272,11 @@ func SyncLambdaUrlInCredentials(deployedLambdaUrl string) {
 		credentialsText, "${1}"+deployedLambdaUrl+"${3}")
 
 	if err := os.WriteFile(credentialsPath, []byte(updatedText), 0644); err != nil {
-		fmt.Println("\nNo se pudo escribir credentials.json: ", err)
+		fmt.Println("\nNo se pudo escribir "+credentialsPath+": ", err)
 		return
 	}
 
-	fmt.Println("\nLAMBDA_URL actualizado en credentials.json:")
+	fmt.Println("\nLAMBDA_URL actualizado en " + credentialsPath + ":")
 	fmt.Println("  anterior: " + previousLambdaUrl)
 	fmt.Println("  nuevo:    " + deployedLambdaUrl)
 

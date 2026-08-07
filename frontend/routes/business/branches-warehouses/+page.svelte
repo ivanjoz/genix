@@ -36,7 +36,7 @@ import {
 
   const saveSede = async (isDelete?: boolean) => {
     const form = sedeForm
-    if((form.Name?.length||0) < 4 || (form.Direccion?.length||0) < 4){
+    if((form.Name?.length||0) < 4 || (form.Address?.length||0) < 4){
       Notify.failure(tr("Name and address must be at least 4 characters.|El nombre y la dirección deben tener al menos 4 caracteres."))
       return
     }
@@ -136,13 +136,13 @@ import {
     {
       header: "Address|Dirección",
       css: "px-6",
-      getValue: e => e.Direccion
+      getValue: e => e.Address
     },
     {
       header: "City|Ciudad",
       getValue: e => {
-        if(!e.Ciudad){ return "" }
-        const arr = e.Ciudad.split("|")
+        if(!e.City){ return "" }
+        const arr = e.City.split("|")
         return arr[1] + " > " + arr[0]
       }
     },
@@ -215,8 +215,8 @@ import {
     const text = filterText.toLowerCase()
     return almacenesService.Sedes.filter(e => {
       return e.Name?.toLowerCase().includes(text) ||
-             e.Direccion?.toLowerCase().includes(text) ||
-             e.Ciudad?.toLowerCase().includes(text)
+             e.Address?.toLowerCase().includes(text) ||
+             e.City?.toLowerCase().includes(text)
     })
   })
 
@@ -328,7 +328,7 @@ import {
         css="col-span-24 md:col-span-10" label="Phone|Teléfono"
         disabled={sedeForm?.ID > 0}
       />
-      <Input bind:saveOn={sedeForm} save="Direccion"
+      <Input bind:saveOn={sedeForm} save="Address"
         css="col-span-24 md:col-span-14" label="Address|Dirección" required={true}
       />
       <SearchSelect bind:saveOn={sedeForm} save="CityID"

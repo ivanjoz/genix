@@ -105,7 +105,10 @@ eventos, que es lo que era antes de `PLAN_AGENT_TURN_STREAM.md`.
 
 Header `X-Bridge-Auth: <unix_ts>.<hex(hmac_sha256(SECRET_PHRASE, "sse-bridge:v1|"+unix_ts))>`,
 con ventana de ±300s. Comparación en tiempo constante. Sin secreto nuevo que
-distribuir: el Lambda y el bridge ya comparten `credentials.json`.
+distribuir: es el mismo valor a los dos lados, aunque en el host del bridge se
+llama `SSE_BRIDGE_APIKEY` — así ese host lleva un `credentials.json` mínimo
+(`SSE_BRIDGE_URL` + `SSE_BRIDGE_APIKEY`) en vez del archivo completo del backend,
+con sus claves de base de datos, AWS y SMTP.
 
 ### Auth de cliente (navegador → bridge)
 

@@ -1,14 +1,19 @@
 package security
 
 import (
-	"github.com/ivanjoz/colbin"
 	"app/cloud"
 	"app/core"
 	coretypes "app/core/types"
+	"app/db"
 	"encoding/binary"
 	"encoding/json"
 	"slices"
 	"time"
+
+	businessTypes "app/business/types"
+	financeTypes "app/finance/types"
+
+	"github.com/ivanjoz/colbin"
 )
 
 func encodeAccesosComputedBase64(accesosComputed []uint16) string {
@@ -25,11 +30,47 @@ func encodeAccesosComputedBase64(accesosComputed []uint16) string {
 	return core.BytesToBase64(packedAccessBytes, true)
 }
 
+// hasPendingInitialData reports whether the company still lacks the minimum records it needs to
+// operate. Warehouse and CashBank both require a SiteID, so an existing warehouse already implies
+// an existing site: checking those two tables is enough to know the bootstrap is still pending.
+//
+// The queries run sequentially and inside a recover: users live in the cloud store, so the login is
+// the one handler that does not otherwise depend on ScyllaDB, and the ORM panics when it cannot
+// dial it. Degrading to "nothing pending" keeps a valid login from turning into a 500.
+func hasPendingInitialData(companyID int32) (pending bool, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			pending = false
+			err = core.Err("panic al verificar los datos iniciales:", recovered)
+		}
+	}()
+
+	warehouses := []businessTypes.Warehouse{}
+	warehousesQuery := db.Query(&warehouses)
+	// Delta(0, 1) is the first-sync form: it pins Status to 1, so soft-deleted rows don't count.
+	warehousesQuery.Select().CompanyID.Equals(companyID).Delta(0, 1)
+	if err := warehousesQuery.Exec(); err != nil {
+		return false, err
+	}
+	if len(warehouses) == 0 {
+		return true, nil
+	}
+
+	cashBanks := []financeTypes.CashBank{}
+	cashBanksQuery := db.Query(&cashBanks)
+	cashBanksQuery.Select().CompanyID.Equals(companyID).Delta(0, 1)
+	if err := cashBanksQuery.Exec(); err != nil {
+		return false, err
+	}
+
+	return len(cashBanks) == 0, nil
+}
+
 func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	type Login struct {
 		CompanyID int32
-		User   string
+		User      string
 		Password  string
 		CipherKey string
 	}
@@ -49,9 +90,17 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	usuarios := []coretypes.User{}
-	companyUserIndex := coretypes.User{CompanyID: body.CompanyID, User: body.User}
-	companyUserIndex.PrepareCloudSync()
-	err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.CompanyID).Where("company_usuario").Equals(companyUserIndex.CompanyUserIndex).Exec()
+	if cloud.IsDataMirrorEnabled() {
+		// The cloud mirror uses its synthetic company/user index for a provider-neutral lookup.
+		companyUserIndex := coretypes.User{CompanyID: body.CompanyID, User: body.User}
+		companyUserIndex.PrepareCloudSync()
+		err = cloud.Select(&usuarios).Where("empresa_id").Equals(body.CompanyID).Where("company_usuario").Equals(companyUserIndex.CompanyUserIndex).Exec()
+	} else {
+		// Self-hosted mode authenticates directly against the primary Scylla table.
+		userQuery := db.Query(&usuarios)
+		userQuery.CompanyID.Equals(body.CompanyID).User.Equals(body.User).Limit(1)
+		err = userQuery.AllowFilter().Exec()
+	}
 	if err != nil {
 		return req.MakeErr("Error al consultar el user.", err.Error())
 	}
@@ -88,7 +137,7 @@ func MakeUsuarioResponse(user coretypes.User, cipherKey string) (map[string]any,
 		CompanyID: user.CompanyID,
 		ID:        user.ID,
 		Created:   core.SUnixTime(),
-		User:   user.User,
+		User:      user.User,
 	}
 
 	sortedAccesosComputed := append([]uint16{}, user.AccesosComputed...)
@@ -139,13 +188,21 @@ func MakeUsuarioResponse(user coretypes.User, cipherKey string) (map[string]any,
 		return nil, core.Err("Error al encriptar la información del user.", err)
 	}
 
+	// Signals the frontend to route to the "Datos Iniciales" page instead of home. A failed check
+	// must never block the login, so the error is logged and the flag stays false.
+	initialDataPending, initialDataErr := hasPendingInitialData(user.CompanyID)
+	if initialDataErr != nil {
+		core.Log("MakeUsuarioResponse:: error al verificar los datos iniciales:", initialDataErr)
+	}
+
 	response := map[string]any{
-		"UserID":          user.ID,
-		"UserToken":       core.BytesToBase64(usuarioTokenCBOR, true),
-		"TokenExpTime":    time.Now().Unix() + (4 * 60 * 40),
-		"UserInfo":        core.BytesToBase64(userInfoJsonEncrypted),
-		"AccesosComputed": accesosComputedBase64,
-		"CompanyID":       user.CompanyID,
+		"UserID":             user.ID,
+		"UserToken":          core.BytesToBase64(usuarioTokenCBOR, true),
+		"TokenExpTime":       time.Now().Unix() + (4 * 60 * 40),
+		"UserInfo":           core.BytesToBase64(userInfoJsonEncrypted),
+		"AccesosComputed":    accesosComputedBase64,
+		"CompanyID":          user.CompanyID,
+		"InitialDataPending": initialDataPending,
 	}
 
 	return response, nil
@@ -155,10 +212,23 @@ func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	cipherKey := req.GetQuery("cipher-key")
 
-	user, err := cloud.GetByID(coretypes.User{
-		CompanyID: req.User.CompanyID,
-		ID:        req.User.ID,
-	})
+	var user *coretypes.User
+	var err error
+	if cloud.IsDataMirrorEnabled() {
+		user, err = cloud.GetByID(coretypes.User{
+			CompanyID: req.User.CompanyID,
+			ID:        req.User.ID,
+		})
+	} else {
+		// Reload the current login from Scylla when no cloud mirror is configured.
+		users := []coretypes.User{}
+		userQuery := db.Query(&users)
+		userQuery.CompanyID.Equals(req.User.CompanyID).ID.Equals(req.User.ID).Limit(1)
+		err = userQuery.Exec()
+		if err == nil && len(users) > 0 {
+			user = &users[0]
+		}
+	}
 	if err != nil {
 		return req.MakeErr("Error al obtener el user.", err)
 	}

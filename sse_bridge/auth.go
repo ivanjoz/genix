@@ -16,7 +16,8 @@ import (
 )
 
 // The bridge authenticates two very different callers with the same shared
-// secret (SECRET_PHRASE from credentials.json):
+// secret (SSE_BRIDGE_APIKEY in this process, SECRET_PHRASE in the backend that
+// issues the tokens — one value, two deployment names):
 //
 //   - the browser, with the session token the backend already issues. The token
 //     is self-contained (colbin payload + HMAC), so identity is verified without

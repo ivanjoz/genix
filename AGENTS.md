@@ -53,6 +53,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 
 ### SSE Bridge
 - **sse_bridge/README.md** - Relay SSE que sostiene el stream del navegador cuando el backend corre en Lambda (que no puede mantener conexiones abiertas). Endpoints, auth, systemd/nginx. Diseño en **PLAN_SSE_BRIDGE.md**.
+- **scripts/CONFIGURE_SSE_BRIDGE.md** - Despliegue del bridge en un servidor: `configure_sse_bridge.py` instala las units de systemd y el vhost de Nginx (HTTP/3 cuando hay certificado, sin buffering para SSE).
 
 ### Frontend Documentation
 - **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow
@@ -64,6 +65,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. USE ALWAYS.
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
+- **scripts/CONFIGURE_SERVER.md** - Despliegue del backend en un VPS: units de systemd, auto-reload del binario y proxy inverso de Nginx
 
 ### General Rules
 - ALWAYS save dates in UnixDay int16 format: The number of days since unix-epoch

@@ -7,6 +7,14 @@ Este proyecto se puede desplegar en AWS Lambda + una base de datos ScyllaDB en u
 
 ## Parámetros de configuración
 
+`deploy.sh` usa `credentials.json` por defecto. Cuando existe `credentials.1.json`, primero pide
+elegir el environment `0 | 1` y exporta su ruta como `GENIX_CREDENTIALS_FILE`. Las acciones de
+frontend, backend, VPS, infraestructura y variables de GitHub leen esa misma selección; las
+actualizaciones de `LAMBDA_URL` y `FRONTEND_CDN` también se escriben en el archivo elegido.
+
+`BACKEND_PROVIDER` accepts `aws`, `cloudflare`, or `none`. Use `none` for a self-hosted VPS
+that keeps auth and tenant master data only in the primary ScyllaDB database.
+
 
 ## Lambda Deployment + DynamoDB + CDN
 
@@ -21,8 +29,14 @@ Se ejecuta desde `cloud/` con `go run . <accion>`:
 | Acción | Qué hace |
 |---|---|
 | `1` | Compila el backend y actualiza el código de las dos Lambdas. |
-| `2` | Comprime `credentials.json` y lo publica como variables de entorno de las Lambdas. |
+| `2` | Comprime el archivo de credenciales seleccionado y lo publica como variables de entorno de las Lambdas. |
 | `3` | Compila, sube el `.zip` a S3 y crea o actualiza el stack de CloudFormation. |
+
+La acción `13` de `deploy.sh` hace lo mismo que la `2` pero con AWS CLI (`jq` + `zstd` + `aws`),
+sin compilar nada ni esperar una tecla: reinyecta `CONFIG` (credenciales zstd + base64 url-safe),
+`APP_CODE` y `LAMBDA_RESPONSE_STREAMING` en `<APP_NAME>-backend` y `<APP_NAME>-backend_2`, y las
+variables sueltas de Cloudflare en `<APP_NAME>-webpage-renderer`. Las Lambdas que no existan en el
+stack se omiten con un aviso.
 
 ### Qué crea la plantilla
 
@@ -67,8 +81,8 @@ la acción `2` los reescribe desde la constante `lambdaResponseStreamingFlag` de
 
 ### Después de un despliegue
 
-La acción `3` imprime los outputs del stack y escribe `BackendUrl` en el `LAMBDA_URL` de
-`credentials.json`, avisando del valor anterior si cambió. Si `LAMBDA_URL` apuntaba a un
+La acción `3` imprime los outputs del stack y escribe `BackendUrl` en el `LAMBDA_URL` del
+archivo de credenciales seleccionado, avisando del valor anterior si cambió. Si `LAMBDA_URL` apuntaba a un
 dominio propio en vez de a una Function URL, la herramienta lo advierte: hay que reapuntar ese
 dominio a la nueva URL o restaurar el valor anterior a mano.
 
