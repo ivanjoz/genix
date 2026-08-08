@@ -71,6 +71,7 @@ require (
 	github.com/ivanjoz/genix-orm/db v0.0.0
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/viant/xunsafe v0.11.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/x448/float16 v0.8.4

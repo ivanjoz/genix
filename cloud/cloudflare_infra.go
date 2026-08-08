@@ -8,12 +8,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	cloudflare "github.com/cloudflare/cloudflare-go/v2"
 	"github.com/cloudflare/cloudflare-go/v2/option"
 	"github.com/cloudflare/cloudflare-go/v2/r2"
-	"github.com/tidwall/sjson"
 )
 
 type cfManagedDomainResult struct {
@@ -32,28 +32,28 @@ type cfManagedDomainResponse struct {
 
 // DeployCloudflareInfra provisions R2 and returns its public URL for the Lambda renderer.
 func DeployCloudflareInfra(params DeployParams) string {
-	// main() ya resolvió el nombre: CLOUDFLARE_BUCKET del environment seleccionado si está seteado,
-	// "<APP_NAME>-files" en caso contrario.
-	bucketName := params.CLOUDFLARE_BUCKET
-	bucketSource := "environment seleccionado (CLOUDFLARE_BUCKET)"
-	if bucketName == params.APP_NAME+"-files" {
-		bucketSource = "autogenerado desde APP_NAME"
+	// main() ya resolvió el nombre: cloudflare.bucket del environment seleccionado si está seteado,
+	// "<app_name>-files" en caso contrario.
+	bucketName := params.Cloudflare.Bucket
+	bucketSource := "environment seleccionado (cloudflare.bucket)"
+	if bucketName == params.AppName+"-files" {
+		bucketSource = "autogenerado desde app_name"
 	}
 	ctx := context.Background()
 
 	fmt.Println("=== DESPLEGANDO INFRAESTRUCTURA ===")
 	fmt.Println("Cloud Provider: Cloudflare")
-	fmt.Printf("Account ID:     %s\n", params.CLOUDFLARE_ACCOUNT)
+	fmt.Printf("Account ID:     %s\n", params.Cloudflare.Account)
 	fmt.Printf("Bucket R2:      %s (%s)\n\n", bucketName, bucketSource)
 
 	fmt.Println("Conectando con la API de Cloudflare...")
 	client := cloudflare.NewClient(
-		option.WithAPIToken(params.CLOUDFLARE_TOKEN),
+		option.WithAPIToken(params.Cloudflare.Token),
 	)
 
 	fmt.Printf("Revisando si el bucket '%s' existe en R2...\n", bucketName)
 	_, err := client.R2.Buckets.New(ctx, r2.BucketNewParams{
-		AccountID: cloudflare.F(params.CLOUDFLARE_ACCOUNT),
+		AccountID: cloudflare.F(params.Cloudflare.Account),
 		Name:      cloudflare.F(bucketName),
 	})
 
@@ -68,13 +68,13 @@ func DeployCloudflareInfra(params DeployParams) string {
 	}
 
 	fmt.Printf("\nHabilitando acceso público (r2.dev) para '%s'...\n", bucketName)
-	publicURL := enableR2PublicAccess(params.CLOUDFLARE_ACCOUNT, params.CLOUDFLARE_TOKEN, bucketName)
+	publicURL := enableR2PublicAccess(params.Cloudflare.Account, params.Cloudflare.Token, bucketName)
 	fmt.Printf("Acceso público habilitado!\n")
 	fmt.Printf("URL pública: %s\n\n", publicURL)
 
-	fmt.Println("Actualizando FRONTEND_CDN en el environment seleccionado...")
-	updateCredentialsCDN(publicURL)
-	fmt.Println("Archivo de credenciales actualizado!")
+	fmt.Println("Actualizando frontend.cdn_url en el environment seleccionado...")
+	updateConfigCDN(publicURL)
+	fmt.Println("Archivo de configuración actualizado!")
 	return publicURL
 }
 
@@ -111,22 +111,28 @@ func enableR2PublicAccess(accountID, token, bucketName string) string {
 	return "https://" + result.Result.Domain
 }
 
-func updateCredentialsCDN(publicURL string) {
-	filePath := GetCredentialsPath()
+// cdnUrlInTomlPattern ancla en la clave de la sección [frontend]; en el archivo sólo
+// existe un cdn_url. Reemplazo de texto y no re-serialización por la misma razón que
+// lambdaUrlInTomlPattern: el archivo se mantiene a mano y sus comentarios son la razón
+// de ser del formato TOML.
+var cdnUrlInTomlPattern = regexp.MustCompile(`(?m)^(\s*cdn_url\s*=\s*")([^"]*)(")`)
+
+func updateConfigCDN(publicURL string) {
+	filePath := GetConfigPath()
 	fmt.Printf("  -> Leyendo %s\n", filePath)
 	content, err := ReadFile(filePath)
 	if err != nil {
 		panic("Error leyendo " + filePath + ": " + err.Error())
 	}
 
-	updated, err := sjson.Set(string(content), "FRONTEND_CDN", publicURL)
-	if err != nil {
-		panic("Error actualizando FRONTEND_CDN: " + err.Error())
+	if !cdnUrlInTomlPattern.Match(content) {
+		panic("No se encontró la clave cdn_url en " + filePath)
 	}
+	updated := cdnUrlInTomlPattern.ReplaceAllString(string(content), "${1}"+publicURL+"${3}")
 
 	if err := os.WriteFile(filePath, []byte(updated), 0644); err != nil {
 		panic("Error guardando " + filePath + ": " + err.Error())
 	}
 
-	fmt.Printf("  -> FRONTEND_CDN = %s\n", publicURL)
+	fmt.Printf("  -> frontend.cdn_url = %s\n", publicURL)
 }

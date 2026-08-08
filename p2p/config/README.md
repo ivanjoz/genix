@@ -1,32 +1,34 @@
 # Config Package
 
-This package provides centralized configuration management for the P2P Bridge application. It reads configuration from a `credentials.json` file and supports environment variable overrides.
+This package provides centralized configuration management for the P2P Bridge application. It reads configuration from a `config.toml` file and supports environment variable overrides.
 
 ## Configuration File
 
-Place a `credentials.json` file in your project root:
+Set these values in the project root `config.toml`:
 
-```json
-{
-  "aws_profile": "default",
-  "app_name": "p2p-bridge",
-  "signaling_app_name": "",
-  "stack_name": "",
-  "aws_region": "us-east-1",
-  "aws_account": ""
-}
+```toml
+app_name = "p2p-bridge"
+
+[aws]
+profile = "default"
+region  = "us-east-1"
+
+[signaling]
+app_name    = ""
+stack_name  = ""
+aws_account = ""
 ```
 
 ### Fields
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `aws_profile` | string | No | AWS profile name from `~/.aws/credentials`. Case-insensitive. Uses default AWS profile if not set. |
+| `aws.profile` | string | No | AWS profile name from `~/.aws/credentials`. Case-insensitive. Uses default AWS profile if not set. |
 | `app_name` | string | **Yes** | Base application identifier used to generate other names. |
-| `signaling_app_name` | string | No | Specific name for the signaling app. Defaults to `app_name + "-signaling"` if empty. |
-| `stack_name` | string | No | CDK stack name for CloudFormation. Defaults to `app_name + "-signaling"` if empty. |
-| `aws_region` | string | No | AWS region to deploy to. Empty uses default from AWS profile. |
-| `aws_account` | string | No | AWS account ID. Empty uses default from AWS profile. Not required if `aws_profile` is set. |
+| `signaling.app_name` | string | No | Specific name for the signaling app. Defaults to `app_name + "-signaling"` if empty. |
+| `signaling.stack_name` | string | No | CDK stack name for CloudFormation. Defaults to `app_name + "-signaling"` if empty. |
+| `aws.region` | string | No | AWS region to deploy to. Empty uses default from AWS profile. |
+| `signaling.aws_account` | string | No | AWS account ID. Empty uses default from AWS profile. Not required if `aws.profile` is set. |
 
 ### Derived Values
 
@@ -38,9 +40,9 @@ The following values are automatically computed and not stored in the config fil
 
 You can override configuration values using environment variables (all case-insensitive):
 
-- `AWS_PROFILE` → overrides `aws_profile`
-- `AWS_REGION` → overrides `aws_region`
-- `AWS_ACCOUNT` → overrides `aws_account`
+- `AWS_PROFILE` → overrides `aws.profile`
+- `AWS_REGION` → overrides `aws.region`
+- `AWS_ACCOUNT` → overrides `signaling.aws_account`
 
 ## Usage
 
@@ -156,11 +158,11 @@ func updateLambdaConfig(cfg *config.Config, connectionID string) {
 
 ## Security
 
-**Important:** Never commit `credentials.json` to version control. Use `credentials.example.json` as a template and add `credentials.json` to your `.gitignore` file.
+**Important:** Never commit `config.toml` to version control. Use `config.example.toml` as a template and add `config.toml` to your `.gitignore` file.
 
 ## Auto-Discovery
 
-The config loader automatically searches for `credentials.json` in:
+The config loader automatically searches for `config.toml` in:
 
 1. Current working directory
 2. Parent directories (up to the root)
@@ -177,17 +179,17 @@ If validation fails, an error is returned describing which field is missing or i
 
 ## Case Sensitivity
 
-- `aws_profile`: Case-insensitive (normalized to lowercase)
+- `aws.profile`: Case-insensitive (normalized to lowercase)
 - Other string fields: Case-sensitive as written
 
 ## AWS Profile Behavior
 
-When `aws_profile` is set:
+When `aws.profile` is set:
 - The package sets the `AWS_PROFILE` environment variable
 - AWS SDK and CDK automatically use this profile
-- `aws_account` is optional (derived from profile)
-- `aws_region` is optional (uses profile default if not set)
+- `signaling.aws_account` is optional (derived from profile)
+- `aws.region` is optional (uses profile default if not set)
 
-When `aws_profile` is not set:
+When `aws.profile` is not set:
 - Uses default AWS profile from `~/.aws/config`
-- You may need to specify `aws_account` and `aws_region` explicitly
+- You may need to specify `signaling.aws_account` and `aws.region` explicitly

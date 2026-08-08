@@ -2,7 +2,7 @@ import sagemaker
 from sagemaker.huggingface import HuggingFace
 import boto3
 import os
-import json
+import tomllib
 import argparse
 from datetime import datetime
 
@@ -19,17 +19,18 @@ def main():
 
     # 1. Load configuration
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    creds_path = os.path.join(script_dir, "credentials.json")
-    if not os.path.exists(creds_path):
+    config_path = os.path.join(script_dir, "config.toml")
+    if not os.path.exists(config_path):
         # Try parent directory if not in current
-        creds_path = os.path.join(os.path.dirname(script_dir), "credentials.json")
-    
-    with open(creds_path, "r") as f:
-        config = json.load(f)
+        config_path = os.path.join(os.path.dirname(script_dir), "config.toml")
 
-    aws_profile = config.get("AWS_PROFILE", "default")
-    region = config.get("AWS_REGION", "us-east-1")
-    role = config.get("SAGEMAKER_ROLE", config.get("SAGEMAKER_IAM_ROLE"))
+    with open(config_path, "rb") as f:
+        config = tomllib.load(f)
+    aws_config = config.get("aws", {})
+
+    aws_profile = aws_config.get("profile", "default")
+    region = aws_config.get("region", "us-east-1")
+    role = aws_config.get("sagemaker_iam_role")
 
     # 2. Initialize Session
     if args.local:
@@ -45,7 +46,7 @@ def main():
         print(f"🚀 Running on SageMaker ({instance_type}) [SPOT INSTANCES ENABLED]")
 
     # 3. Configure Output Path
-    s3_output_base = config.get("SAGEMAKER_S3_OUTPUT")
+    s3_output_base = aws_config.get("sagemaker_s3_output")
     if s3_output_base:
         if not s3_output_base.endswith("/"):
             s3_output_base += "/"
@@ -85,7 +86,7 @@ def main():
         max_run=1800 if not args.local else None,
 
         environment={
-            "HUGGING_FACE_HUB_TOKEN": config.get("HUGGING_FACE_TOKEN", ""),
+            "HUGGING_FACE_HUB_TOKEN": aws_config.get("hugging_face_token", ""),
             "TOKENIZERS_PARALLELISM": "false",
         }
     )

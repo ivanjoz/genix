@@ -26,7 +26,7 @@ const rendererS3Path = "gerp-artifacts/webpage-renderer-lambda.zip"
 const rendererLocalZipPath = "/cloud/webpage-renderer-lambda.zip"
 
 // URL por defecto del artefacto de CI (GitHub Pages, siempre la última versión). Se puede
-// sobrescribir con WEBPAGE_RENDERER_URL en credentials.json.
+// sobrescribir con frontend.webpage_renderer_url en config.toml.
 //
 // Duplicada en backend/core/security.go (DefaultWebpageRendererURL) porque el backend también
 // necesita el artefacto cuando ejecuta el renderer en local, y este directorio es otro módulo
@@ -34,7 +34,7 @@ const rendererLocalZipPath = "/cloud/webpage-renderer-lambda.zip"
 const defaultRendererZipUrl = "https://genix-dev.un.pe/webpage-renderer.zip"
 
 func rendererZipUrl(params DeployParams) string {
-	if url := strings.TrimSpace(params.WEBPAGE_RENDERER_URL); url != "" {
+	if url := strings.TrimSpace(params.Frontend.WebpageRendererURL); url != "" {
 		return url
 	}
 	return defaultRendererZipUrl
@@ -70,10 +70,10 @@ func CompileRendererToS3(params DeployParams) {
 		panic("Error al cerrar el archivo zip del renderer: " + err.Error())
 	}
 
-	awsConfig, _ := MakeAwsConfig(params.AWS_PROFILE, params.AWS_REGION)
-	fmt.Println("Enviando handler del renderer a S3: ", params.DEPLOYMENT_BUCKET+" | "+rendererS3Path)
+	awsConfig, _ := MakeAwsConfig(params.AWS.Profile, params.AWS.Region)
+	fmt.Println("Enviando handler del renderer a S3: ", params.AWS.DeploymentBucket+" | "+rendererS3Path)
 	SendFileToS3Client(FileToS3Args{
-		Bucket:        params.DEPLOYMENT_BUCKET,
+		Bucket:        params.AWS.DeploymentBucket,
 		LocalFilePath: zipPath,
 		FilePath:      rendererS3Path,
 	}, s3.NewFromConfig(awsConfig))
@@ -87,21 +87,21 @@ func CompileRendererToS3(params DeployParams) {
 // Se pasan sueltas (no el CONFIG zstd+base64 del backend) para no obligar al handler de
 // Node a descomprimir zstd.
 func UpdateRendererEnviromentVariables(params DeployParams) {
-	lambdaName := params.APP_NAME + "-webpage-renderer"
+	lambdaName := params.AppName + "-webpage-renderer"
 
-	if strings.TrimSpace(params.FRONTEND_CDN) == "" {
-		panic("FRONTEND_CDN es requerido en credentials.json para la Lambda de render")
+	if strings.TrimSpace(params.Frontend.CDNURL) == "" {
+		panic("frontend.cdn_url es requerido en config.toml para la Lambda de render")
 	}
 
 	variables := map[string]string{
 		"RENDERER_ZIP_URL":   rendererZipUrl(params),
-		"FRONTEND_CDN":       params.FRONTEND_CDN,
-		"CLOUDFLARE_ACCOUNT": params.CLOUDFLARE_ACCOUNT,
-		"CLOUDFLARE_TOKEN":   params.CLOUDFLARE_TOKEN,
-		"CLOUDFLARE_BUCKET":  params.CLOUDFLARE_BUCKET,
+		"FRONTEND_CDN":       params.Frontend.CDNURL,
+		"CLOUDFLARE_ACCOUNT": params.Cloudflare.Account,
+		"CLOUDFLARE_TOKEN":   params.Cloudflare.Token,
+		"CLOUDFLARE_BUCKET":  params.Cloudflare.Bucket,
 	}
 
-	awsConfig, _ := MakeAwsConfig(params.AWS_PROFILE, params.AWS_REGION)
+	awsConfig, _ := MakeAwsConfig(params.AWS.Profile, params.AWS.Region)
 	client := lambda.NewFromConfig(awsConfig)
 
 	fmt.Println("Actualizando variables de la Lambda de render...")

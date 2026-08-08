@@ -25,9 +25,9 @@ const stackEventsPollInterval = 4 * time.Second
 
 // Despliega la infraestructura completa: crea el stack si no existe, o lo actualiza.
 func DeployCloudFormation(params DeployParams) {
-	stackName := params.APP_NAME + "-stack"
+	stackName := params.AppName + "-stack"
 
-	awsConfig, err := MakeAwsConfig(params.AWS_PROFILE, params.AWS_REGION)
+	awsConfig, err := MakeAwsConfig(params.AWS.Profile, params.AWS.Region)
 	if err != nil {
 		panic("Error al cargar la configuración de AWS: " + err.Error())
 	}
@@ -35,12 +35,12 @@ func DeployCloudFormation(params DeployParams) {
 	ctx := context.TODO()
 
 	templateParameters := []cfnTypes.Parameter{
-		makeStackParameter("NamePrefix", params.APP_NAME),
-		makeStackParameter("CdnProvider", params.CDN_PROVIDER),
-		makeStackParameter("FrontendBucketName", params.FRONTEND_BUCKET),
-		makeStackParameter("DeploymentBucket", params.DEPLOYMENT_BUCKET),
-		makeStackParameter("CompiledS3Key", params.S3_COMPILED_PATH),
-		makeStackParameter("LambdaIamRole", params.LAMBDA_IAM_ROLE),
+		makeStackParameter("NamePrefix", params.AppName),
+		makeStackParameter("CdnProvider", params.Providers.CDN),
+		makeStackParameter("FrontendBucketName", params.FrontendBucket),
+		makeStackParameter("DeploymentBucket", params.AWS.DeploymentBucket),
+		makeStackParameter("CompiledS3Key", params.S3CompiledPath),
+		makeStackParameter("LambdaIamRole", params.AWS.LambdaIAMRole),
 		makeStackParameter("AppCode", appCodeEnvValue),
 		makeStackParameter("RendererS3Key", rendererS3Path),
 		makeStackParameter("RendererZipUrl", rendererZipUrl(params)),
@@ -69,7 +69,7 @@ func DeployCloudFormation(params DeployParams) {
 		// CloudFormation responde con un error cuando la plantilla no cambió nada. No es un fallo.
 		if err != nil && strings.Contains(err.Error(), "No updates are to be performed") {
 			fmt.Println("Sin cambios en la infraestructura.")
-			PrintStackOutputsAndSyncCredentials(ctx, client, stackName)
+			PrintStackOutputsAndSyncConfig(ctx, client, stackName)
 			return
 		}
 	} else {
@@ -100,7 +100,7 @@ func DeployCloudFormation(params DeployParams) {
 	}
 
 	fmt.Printf("\nStack %v desplegado (%v)\n", stackName, finalStatus)
-	PrintStackOutputsAndSyncCredentials(ctx, client, stackName)
+	PrintStackOutputsAndSyncConfig(ctx, client, stackName)
 }
 
 // Termina con un mensaje legible en vez de un panic: un stack trace de Go no aporta nada
@@ -216,8 +216,8 @@ func isSuccessfulStackStatus(status cfnTypes.StackStatus) bool {
 	return status == cfnTypes.StackStatusCreateComplete || status == cfnTypes.StackStatusUpdateComplete
 }
 
-// Muestra los outputs del stack y sincroniza LAMBDA_URL en credentials.json.
-func PrintStackOutputsAndSyncCredentials(ctx context.Context, client *cloudformation.Client, stackName string) {
+// Muestra los outputs del stack y sincroniza aws.lambda_url en config.toml.
+func PrintStackOutputsAndSyncConfig(ctx context.Context, client *cloudformation.Client, stackName string) {
 	result, err := client.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: &stackName})
 	if err != nil || len(result.Stacks) == 0 {
 		fmt.Println("No se pudieron leer los outputs del stack: ", err)
@@ -234,49 +234,52 @@ func PrintStackOutputsAndSyncCredentials(ctx context.Context, client *cloudforma
 
 	backendUrl := outputs["BackendUrl"]
 	if len(backendUrl) == 0 {
-		fmt.Println("\nEl stack no devolvió BackendUrl; LAMBDA_URL no se modificó.")
+		fmt.Println("\nEl stack no devolvió BackendUrl; aws.lambda_url no se modificó.")
 		return
 	}
-	SyncLambdaUrlInCredentials(backendUrl)
+	SyncLambdaUrlInConfig(backendUrl)
 }
 
-var lambdaUrlInJsonPattern = regexp.MustCompile(`("LAMBDA_URL"\s*:\s*")([^"]*)(")`)
+// Reemplazo de texto y no re-serialización: el archivo se mantiene a mano y sus comentarios
+// son la razón de ser del formato TOML. Ancla en la clave de la sección [aws]; en el
+// archivo sólo existe una lambda_url.
+var lambdaUrlInTomlPattern = regexp.MustCompile(`(?m)^(\s*lambda_url\s*=\s*")([^"]*)(")`)
 
-// Escribe la Function URL recién desplegada en credentials.json. Se hace por reemplazo de
-// texto y no re-serializando el JSON para no perder el orden de las claves ni el formato
+// Escribe la Function URL recién desplegada en config.toml. Se hace por reemplazo de
+// texto y no re-serializando el TOML para no perder los comentarios ni el formato
 // del archivo, que se mantiene a mano.
-func SyncLambdaUrlInCredentials(deployedLambdaUrl string) {
-	credentialsPath := GetCredentialsPath()
+func SyncLambdaUrlInConfig(deployedLambdaUrl string) {
+	configPath := GetConfigPath()
 
-	credentialsBytes, err := ReadFile(credentialsPath)
+	configBytes, err := ReadFile(configPath)
 	if err != nil {
-		fmt.Println("\nNo se pudo leer "+credentialsPath+" para actualizar LAMBDA_URL: ", err)
+		fmt.Println("\nNo se pudo leer "+configPath+" para actualizar aws.lambda_url: ", err)
 		return
 	}
 
-	credentialsText := string(credentialsBytes)
-	currentMatch := lambdaUrlInJsonPattern.FindStringSubmatch(credentialsText)
+	configText := string(configBytes)
+	currentMatch := lambdaUrlInTomlPattern.FindStringSubmatch(configText)
 	if currentMatch == nil {
-		fmt.Println("\nNo se encontró la clave LAMBDA_URL en " + credentialsPath + "; no se modificó nada.")
+		fmt.Println("\nNo se encontró la clave lambda_url en " + configPath + "; no se modificó nada.")
 		fmt.Println("URL del backend desplegado: " + deployedLambdaUrl)
 		return
 	}
 
 	previousLambdaUrl := currentMatch[2]
 	if previousLambdaUrl == deployedLambdaUrl {
-		fmt.Println("\nLAMBDA_URL ya apuntaba al backend desplegado: " + deployedLambdaUrl)
+		fmt.Println("\naws.lambda_url ya apuntaba al backend desplegado: " + deployedLambdaUrl)
 		return
 	}
 
-	updatedText := lambdaUrlInJsonPattern.ReplaceAllString(
-		credentialsText, "${1}"+deployedLambdaUrl+"${3}")
+	updatedText := lambdaUrlInTomlPattern.ReplaceAllString(
+		configText, "${1}"+deployedLambdaUrl+"${3}")
 
-	if err := os.WriteFile(credentialsPath, []byte(updatedText), 0644); err != nil {
-		fmt.Println("\nNo se pudo escribir "+credentialsPath+": ", err)
+	if err := os.WriteFile(configPath, []byte(updatedText), 0644); err != nil {
+		fmt.Println("\nNo se pudo escribir "+configPath+": ", err)
 		return
 	}
 
-	fmt.Println("\nLAMBDA_URL actualizado en " + credentialsPath + ":")
+	fmt.Println("\naws.lambda_url actualizado en " + configPath + ":")
 	fmt.Println("  anterior: " + previousLambdaUrl)
 	fmt.Println("  nuevo:    " + deployedLambdaUrl)
 

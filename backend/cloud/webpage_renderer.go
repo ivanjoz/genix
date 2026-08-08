@@ -122,7 +122,7 @@ func runWebpageRendererLocally(request WebpageRenderRequest) (WebpageRenderResul
 		"CLOUDFLARE_BUCKET":  core.Env.CLOUDFLARE_BUCKET,
 	} {
 		// El handler valida lo mismo y aborta, pero desde aquí el mensaje dice qué falta en
-		// credentials.json en vez de aparecer como un fallo del proceso de Node.
+		// config.toml en vez de aparecer como un fallo del proceso de Node.
 		if strings.TrimSpace(variableValue) == "" {
 			return result, fmt.Errorf("%s es requerido para ejecutar el renderer en local", variableName)
 		}

@@ -1,4 +1,4 @@
-import os, subprocess, json, csv, sys, logging, shutil, traceback, re
+import os, subprocess, json, csv, sys, logging, shutil, traceback, re, tomllib
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
 
@@ -42,40 +42,41 @@ def should_trace(table, column=None):
 
 
 def load_db_credentials():
-    """Carga credenciales DB obligatoriamente desde credentials.json."""
+    """Carga credenciales DB obligatoriamente desde config.toml."""
     script_directory = os.path.dirname(os.path.abspath(__file__))
     project_root_directory = os.path.dirname(script_directory)
     candidate_paths = [
-        os.path.join(os.getcwd(), "credentials.json"),
-        os.path.join(project_root_directory, "credentials.json"),
-        os.path.join(script_directory, "credentials.json"),
+        os.path.join(os.getcwd(), "config.toml"),
+        os.path.join(project_root_directory, "config.toml"),
+        os.path.join(script_directory, "config.toml"),
     ]
 
-    credentials_file_path = next((path for path in candidate_paths if os.path.isfile(path)), None)
-    if not credentials_file_path:
-        raise RuntimeError("[config] credentials.json no encontrado. Debe incluir DB_USER, DB_PASSWORD y DB_PORT.")
+    config_file_path = next((path for path in candidate_paths if os.path.isfile(path)), None)
+    if not config_file_path:
+        raise RuntimeError("[config] config.toml no encontrado. Debe incluir db.user, db.password y db.port.")
 
     try:
-        with open(credentials_file_path, "r") as credentials_file:
-            credentials_payload = json.load(credentials_file)
-    except Exception as credentials_error:
-        raise RuntimeError(f"[config] error leyendo {credentials_file_path}: {credentials_error}")
+        with open(config_file_path, "rb") as config_file:
+            config_payload = tomllib.load(config_file)
+    except Exception as config_error:
+        raise RuntimeError(f"[config] error leyendo {config_file_path}: {config_error}")
 
-    username = credentials_payload.get("DB_USER")
-    password = credentials_payload.get("DB_PASSWORD")
-    port_value = credentials_payload.get("DB_PORT")
+    database_section = config_payload.get("db", {})
+    username = database_section.get("user")
+    password = database_section.get("password")
+    port_value = database_section.get("port")
     if username in [None, ""] or password in [None, ""] or port_value in [None, ""]:
         raise RuntimeError(
-            f"[config] faltan campos obligatorios en {credentials_file_path}. "
-            "Requeridos: DB_USER, DB_PASSWORD, DB_PORT."
+            f"[config] faltan campos obligatorios en {config_file_path}. "
+            "Requeridos: db.user, db.password, db.port."
         )
 
     try:
         port = int(port_value)
     except (TypeError, ValueError):
-        raise RuntimeError(f"[config] DB_PORT inválido en {credentials_file_path}: {port_value!r}. Debe ser entero.")
+        raise RuntimeError(f"[config] db.port inválido en {config_file_path}: {port_value!r}. Debe ser entero.")
 
-    log.info(f"[config] credenciales cargadas desde {credentials_file_path}. user={username} port={port}")
+    log.info(f"[config] credenciales cargadas desde {config_file_path}. user={username} port={port}")
     return username, password, port
 
 

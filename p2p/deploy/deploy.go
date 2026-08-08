@@ -60,7 +60,7 @@ func NewDeployStack(scope constructs.Construct, id string, props *DeployStackPro
 func main() {
 	defer jsii.Close()
 
-	// Load configuration from credentials.json
+	// Load configuration from config.toml
 	cfg := config.GetDefaultConfig()
 
 	// Set AWS_PROFILE environment variable for AWS SDK and CDK

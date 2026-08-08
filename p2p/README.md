@@ -6,7 +6,7 @@ This project implements a serverless signaling bridge for WebRTC connections bet
 
 - `homelab_server/`: Go source for the local server that establishes the P2P link.
 - `signal/`: Shared Go types for signaling messages.
-- `config/`: Configuration package for reading credentials.json.
+- `config/`: Configuration package for reading config.toml.
 - `deploy/`: AWS CDK project for infrastructure deployment.
 - `homelab_server/install/`: Systemd service installation package.
 
@@ -18,28 +18,31 @@ This project implements a serverless signaling bridge for WebRTC connections bet
 
 ## Configuration
 
-All configuration is centralized in `credentials.json` in the project root. Create this file with your settings:
+All configuration is centralized in `config.toml` in the project root. Set these values:
 
-```json
-{
-  "aws_profile": "default",
-  "app_name": "p2p-bridge",
-  "signaling_app_name": "",
-  "stack_name": "",
-  "signaling_endpoint": "",
-  "api_key": "",
-  "aws_region": "us-east-1",
-  "aws_account": ""
-}
+```toml
+app_name = "p2p-bridge"
+
+[aws]
+profile = "default"
+region  = "us-east-1"
+
+[signaling]
+socket       = ""
+endpoint     = ""
+api_key      = ""
+app_name     = ""
+stack_name   = ""
+aws_account  = ""
 ```
 
 **Configuration Fields:**
-- `aws_profile`: AWS profile name.
+- `aws.profile`: AWS profile name.
 - `app_name`: **Required.** Base application name.
-- `signaling_endpoint`: **Optional.** AppSync GraphQL URL. Set after deployment.
-- `api_key`: **Optional.** AppSync API Key. Set after deployment.
-- `aws_region`: AWS region.
-- `aws_account`: AWS account ID.
+- `signaling.endpoint`: **Optional.** AppSync GraphQL URL. Set after deployment.
+- `signaling.api_key`: **Optional.** AppSync API Key. Set after deployment.
+- `aws.region`: AWS region.
+- `signaling.aws_account`: AWS account ID.
 
 ## 🪜 Step 1: Deploy the Infrastructure
 
@@ -54,7 +57,7 @@ This script deploys infrastructure to AWS using CDK.
 **Note the Outputs:**
 - `GraphQLUrl`: The AppSync endpoint.
 - `ApiKey`: The API key for authentication.
-- Copy these to your `credentials.json`.
+- Copy these to your `config.toml` under `[signaling]`.
 
 ## 💻 Step 2: Run the Home Lab Server
 
@@ -69,7 +72,7 @@ The Home Lab server connects to AppSync and listens for incoming WebRTC signals.
 ### Option A: Run Manually
 
 The server will:
-- Load configuration from `credentials.json` (WebSocket URL, Lambda name, AWS profile)
+- Load configuration from `config.toml` (WebSocket URL, Lambda name, AWS profile)
 - Connect to the WebSocket.
 - Receive its `connectionID`.
 - Update the Lambda's `LAPTOP_ID` environment variable using the configured Lambda function name.
@@ -131,8 +134,8 @@ The `--uninstall` command will:
 ## 🔧 Troubleshooting
 
 **Service fails to start:**
-- Check that `credentials.json` exists in the parent directory
-- Verify `SIGNALING_ENDPOINT` is set correctly
+- Check that `config.toml` exists in the parent directory
+- Verify `signaling.endpoint` is set correctly
 - Ensure AWS profile has permissions to update Lambda environment variables
 - Check systemd logs: `sudo journalctl -u homelab-p2p-bridge -n 50`
 
@@ -161,7 +164,7 @@ Run the test script to verify configuration and server setup:
 
 This script will:
 - Verify Go installation
-- Check `credentials.json` exists
+- Check `config.toml` exists
 - Validate configuration loading
 - Test server compilation
 - Verify install/uninstall flags

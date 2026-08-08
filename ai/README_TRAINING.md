@@ -3,19 +3,17 @@
 ## 🚀 Quick Start
 
 ### 1. Configure AWS Credentials
-The system reads configuration from a `credentials.json` file located in the parent directory (`../credentials.json`).
+The system reads configuration from a `config.toml` file located in the parent directory (`../config.toml`).
 
-Ensure your `credentials.json` includes:
-```json
-{
-    "AWS_PROFILE": "your-profile-name",
-    "AWS_REGION": "us-east-1",
-    "SAGEMAKER_ROLE": "arn:aws:iam::123456789012:role/service-role/AmazonSageMaker-ExecutionRole-...",
-    "SAGEMAKER_S3_OUTPUT": "s3://your-bucket/optional-prefix"
-}
+Ensure your `config.toml` includes:
+```toml
+[aws]
+profile             = "your-profile-name"
+region              = "us-east-1"
+sagemaker_iam_role  = "arn:aws:iam::123456789012:role/service-role/AmazonSageMaker-ExecutionRole-..."
+sagemaker_s3_output = "s3://your-bucket/optional-prefix"
 ```
-*Note: If `SAGEMAKER_S3_OUTPUT` is not provided, it will use the SageMaker default session bucket.*
-*Note: If `SAGEMAKER_ROLE` is not present, it will fallback to `LAMBDA_IAM_ROLE` if available.*
+*Note: If `aws.sagemaker_s3_output` is not provided, it will use the SageMaker default session bucket.*
 
 ### 2. Install Dependencies
 You can install the necessary local dependencies (SageMaker SDK and Boto3) using the provided script:

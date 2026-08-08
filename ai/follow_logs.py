@@ -2,20 +2,21 @@
 """Quick script to follow logs of the most recent training job"""
 import sagemaker
 import boto3
-import json
+import tomllib
 import os
 
 # Load config
 script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(script_dir)
-creds_path = os.path.join(parent_dir, "credentials.json")
-with open(creds_path, "r") as f:
-    config = json.load(f)
+config_path = os.path.join(parent_dir, "config.toml")
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+aws_config = config.get("aws", {})
 
 # AWS setup
 boto_sess = boto3.Session(
-    profile_name=config.get("AWS_PROFILE", "default"),
-    region_name=config.get("AWS_REGION", "us-east-1")
+    profile_name=aws_config.get("profile", "default"),
+    region_name=aws_config.get("region", "us-east-1")
 )
 sess = sagemaker.Session(boto_session=boto_sess)
 sm_client = boto_sess.client('sagemaker')

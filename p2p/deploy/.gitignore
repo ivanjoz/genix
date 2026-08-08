@@ -1,5 +1,5 @@
 # Credentials and configuration
-credentials.json
+config.toml
 
 # Binaries for programs and plugins
 *.exe

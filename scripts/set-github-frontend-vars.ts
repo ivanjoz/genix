@@ -5,52 +5,51 @@ interface FrontendEndpoint {
 	route: string
 }
 
-interface ProjectCredentials {
-	GITHUB_ACCOUNT?: unknown
-	LAMBDA_URL?: unknown
-	SSE_BRIDGE_URL?: unknown
-	FRONTEND_CDN?: unknown
-	ZONE_NAME?: unknown
-	ENPOINTS?: unknown
+interface ProjectConfig {
+	github_account?: unknown
+	aws?: { lambda_url?: unknown }
+	sse_bridge?: { url?: unknown }
+	frontend?: { cdn_url?: unknown; zone_name?: unknown }
+	endpoints?: unknown
 }
 
 const repositoryRoot = join(import.meta.dir, '..')
 // Follow the environment selected by deploy.sh while preserving standalone behavior.
-const configuredCredentialsPath = process.env.GENIX_CREDENTIALS_FILE?.trim()
-const credentialsPath = configuredCredentialsPath
-	? resolve(configuredCredentialsPath)
-	: join(repositoryRoot, 'credentials.json')
+const configuredConfigPath = process.env.GENIX_CONFIG_FILE?.trim()
+const configPath = configuredConfigPath
+	? resolve(configuredConfigPath)
+	: join(repositoryRoot, 'config.toml')
 const isDryRun = process.argv.includes('--dry-run')
 
-const requireNonEmptyString = (credentialsValue: unknown, fieldName: string): string => {
-	if (typeof credentialsValue !== 'string' || !credentialsValue.trim()) {
-		throw new Error(`Credentials field ${fieldName} must be a non-empty string`)
+const requireNonEmptyString = (configValue: unknown, fieldName: string): string => {
+	if (typeof configValue !== 'string' || !configValue.trim()) {
+		throw new Error(`Config field ${fieldName} must be a non-empty string`)
 	}
-	return credentialsValue.trim()
+	return configValue.trim()
 }
 
-const requireHttpUrl = (credentialsValue: unknown, fieldName: string): string => {
-	const configuredUrl = requireNonEmptyString(credentialsValue, fieldName)
+const requireHttpUrl = (configValue: unknown, fieldName: string): string => {
+	const configuredUrl = requireNonEmptyString(configValue, fieldName)
 	const parsedUrl = new URL(configuredUrl)
 	if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
-		throw new Error(`Credentials field ${fieldName} must use HTTP or HTTPS`)
+		throw new Error(`Config field ${fieldName} must use HTTP or HTTPS`)
 	}
 	return configuredUrl
 }
 
-const requireFrontendEndpoints = (credentialsValue: unknown): FrontendEndpoint[] => {
-	if (!Array.isArray(credentialsValue) || credentialsValue.length === 0) {
-		throw new Error('Credentials field ENPOINTS must be a non-empty array')
+const requireFrontendEndpoints = (configValue: unknown): FrontendEndpoint[] => {
+	if (!Array.isArray(configValue) || configValue.length === 0) {
+		throw new Error('Config field endpoints must be a non-empty array')
 	}
 
-	return credentialsValue.map((endpointValue, endpointIndex) => {
+	return configValue.map((endpointValue, endpointIndex) => {
 		if (!endpointValue || typeof endpointValue !== 'object') {
-			throw new Error(`Credentials ENPOINTS[${endpointIndex}] must be an object`)
+			throw new Error(`Config endpoints[${endpointIndex}] must be an object`)
 		}
 		const endpointRecord = endpointValue as Record<string, unknown>
 		return {
-			name: requireNonEmptyString(endpointRecord.name, `ENPOINTS[${endpointIndex}].name`),
-			route: requireHttpUrl(endpointRecord.route, `ENPOINTS[${endpointIndex}].route`),
+			name: requireNonEmptyString(endpointRecord.name, `endpoints[${endpointIndex}].name`),
+			route: requireHttpUrl(endpointRecord.route, `endpoints[${endpointIndex}].route`),
 		}
 	})
 }
@@ -82,29 +81,29 @@ const runGitHubCommand = (
 }
 
 const main = async (): Promise<void> => {
-	console.info(`[GitHub Vars] Reading public frontend configuration from ${credentialsPath}`)
-	if (!(await Bun.file(credentialsPath).exists())) {
-		throw new Error(`Credentials file was not found at ${credentialsPath}`)
+	console.info(`[GitHub Vars] Reading public frontend configuration from ${configPath}`)
+	if (!(await Bun.file(configPath).exists())) {
+		throw new Error(`Config file was not found at ${configPath}`)
 	}
 
-	let credentials: ProjectCredentials
+	let config: ProjectConfig
 	try {
-		credentials = JSON.parse(await Bun.file(credentialsPath).text()) as ProjectCredentials
+		config = Bun.TOML.parse(await Bun.file(configPath).text()) as ProjectConfig
 	} catch (parseError) {
-		throw new Error(`Credentials file contains invalid JSON: ${String(parseError)}`)
+		throw new Error(`Config file contains invalid TOML: ${String(parseError)}`)
 	}
 
-	const frontendEndpoints = requireFrontendEndpoints(credentials.ENPOINTS)
-	const githubAccount = requireNonEmptyString(credentials.GITHUB_ACCOUNT, 'GITHUB_ACCOUNT')
+	const frontendEndpoints = requireFrontendEndpoints(config.endpoints)
+	const githubAccount = requireNonEmptyString(config.github_account, 'github_account')
 	const githubVariables = new Map<string, string>([
-		['PUBLIC_LAMBDA_URL', requireHttpUrl(credentials.LAMBDA_URL, 'LAMBDA_URL')],
+		['PUBLIC_LAMBDA_URL', requireHttpUrl(config.aws?.lambda_url, 'aws.lambda_url')],
 		// Optional: without a deployed SSE bridge the frontend streams from the
-		// backend itself, so this falls back to LAMBDA_URL.
-		['PUBLIC_SSE_BRIDGE_URL', credentials.SSE_BRIDGE_URL
-			? requireHttpUrl(credentials.SSE_BRIDGE_URL, 'SSE_BRIDGE_URL')
-			: requireHttpUrl(credentials.LAMBDA_URL, 'LAMBDA_URL')],
-		['PUBLIC_FRONTEND_CDN', requireHttpUrl(credentials.FRONTEND_CDN, 'FRONTEND_CDN')],
-		['PUBLIC_ZONE_NAME', requireNonEmptyString(credentials.ZONE_NAME, 'ZONE_NAME')],
+		// backend itself, so this falls back to aws.lambda_url.
+		['PUBLIC_SSE_BRIDGE_URL', config.sse_bridge?.url
+			? requireHttpUrl(config.sse_bridge.url, 'sse_bridge.url')
+			: requireHttpUrl(config.aws?.lambda_url, 'aws.lambda_url')],
+		['PUBLIC_FRONTEND_CDN', requireHttpUrl(config.frontend?.cdn_url, 'frontend.cdn_url')],
+		['PUBLIC_ZONE_NAME', requireNonEmptyString(config.frontend?.zone_name, 'frontend.zone_name')],
 		['PUBLIC_ENDPOINTS', JSON.stringify(frontendEndpoints)],
 	])
 
@@ -119,7 +118,7 @@ const main = async (): Promise<void> => {
 	)
 	if (authenticatedAccount.toLowerCase() !== githubAccount.toLowerCase()) {
 		throw new Error(
-			`GITHUB_ACCOUNT requested ${githubAccount}, but its stored token belongs to ${authenticatedAccount}`,
+			`github_account requested ${githubAccount}, but its stored token belongs to ${authenticatedAccount}`,
 		)
 	}
 

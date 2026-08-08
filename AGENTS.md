@@ -65,8 +65,9 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. USE ALWAYS.
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
+- **scripts/DEPLOYER.md** - `deploy.sh` es un wrapper del TUI en `scripts/deployer/` (Go + Bubble Tea v2): navegación Environment / Actions / Scripts con teclado y mouse, y el orden fijo de ejecución. Reemplaza a `app.sh`, que queda deprecado
 - **scripts/CONFIGURE_SERVER.md** - Despliegue del backend en un VPS: units de systemd, auto-reload del binario y proxy inverso de Nginx
-- **scripts/CONFIGURE_DB.md** - Despliegue del host de datos: `configure_db.py` configura ScyllaDB (sysconfig, yaml, superusuario, keyspace) e instala GenixSearch desde los releases musl estáticos, escribiendo `GENIXSEARCH_URL`/`GENIXSEARCH_PASSWORD` en credentials.json
+- **scripts/CONFIGURE_DB.md** - Despliegue del host de datos: `configure_db.py` configura ScyllaDB (sysconfig, yaml, superusuario, keyspace) e instala GenixSearch desde los releases musl estáticos, escribiendo `search.url`/`search.password` en config.toml
 
 ### General Rules
 - ALWAYS save dates in UnixDay int16 format: The number of days since unix-epoch

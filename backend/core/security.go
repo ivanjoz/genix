@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +11,7 @@ import (
 
 	aws_sdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // ParseGenixSearchURL accepts the GENIXSEARCH_URL credential in any of:
@@ -135,12 +135,155 @@ type EnvStruct struct {
 	DEFAULT_MODEL string
 	// GenixSearch — lexical search backend reached over TCP. The
 	// daemon is installed by scripts/configure_db.py, which writes both
-	// GENIXSEARCH_URL and GENIXSEARCH_PASSWORD into credentials.json. GENIXSEARCH_URL
+	// search.url and search.password into config.toml. GENIXSEARCH_URL
 	// is the full endpoint (e.g. "https://host:14446" or "host:14446")
 	// — only the host and port are used; the scheme is ignored. Falls
 	// back to 127.0.0.1:14446 when empty.
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
+	// RATE_LIMIT_ADDRESS is the Rust raw-TCP credit limiter endpoint.
+	RATE_LIMIT_ADDRESS string
+}
+
+// fileConfig refleja la forma por secciones de config.toml. Sólo existe para el parseo:
+// el resto del backend sigue leyendo core.Env, que es plano, y así los 213 puntos de uso
+// de core.Env.X no cambian. Todo campo nuevo del archivo se añade aquí Y en el bloque de
+// asignación de PopulateVariables, o queda silenciosamente en su cero-valor.
+type fileConfig struct {
+	AppName       string `toml:"app_name"`
+	IsLocal       bool   `toml:"is_local"`
+	Environment   string `toml:"environment"`
+	AdminPassword string `toml:"admin_password"`
+	SecretPhrase  string `toml:"secret_phrase"`
+
+	Providers struct {
+		Backend string `toml:"backend"`
+		CDN     string `toml:"cdn"`
+		Model   string `toml:"model"`
+	} `toml:"providers"`
+
+	DB struct {
+		Host             string `toml:"host"`
+		Port             int32  `toml:"port"`
+		Name             string `toml:"name"`
+		User             string `toml:"user"`
+		Password         string `toml:"password"`
+		DisableSSL       bool   `toml:"disable_ssl"`
+		MaxClusteringKey int32  `toml:"max_clustering_key"`
+	} `toml:"db"`
+
+	Server struct {
+		Port int32 `toml:"port"`
+	} `toml:"server"`
+
+	AWS struct {
+		Region   string `toml:"region"`
+		Profile  string `toml:"profile"`
+		S3Bucket string `toml:"s3_bucket"`
+	} `toml:"aws"`
+
+	Cloudflare struct {
+		Account    string `toml:"account"`
+		Token      string `toml:"token"`
+		Bucket     string `toml:"bucket"`
+		DatabaseID string `toml:"database_id"`
+	} `toml:"cloudflare"`
+
+	Frontend struct {
+		CDNURL             string `toml:"cdn_url"`
+		ZoneName           string `toml:"zone_name"`
+		WebpageRendererURL string `toml:"webpage_renderer_url"`
+	} `toml:"frontend"`
+
+	SMTP struct {
+		Host     string `toml:"host"`
+		Port     int32  `toml:"port"`
+		Email    string `toml:"email"`
+		User     string `toml:"user"`
+		Password string `toml:"password"`
+	} `toml:"smtp"`
+
+	Agent struct {
+		DefaultModel  string `toml:"default_model"`
+		MetaKey       string `toml:"meta_key"`
+		OpenRouterKey string `toml:"openrouter_key"`
+	} `toml:"agent"`
+
+	RateLimit struct {
+		Address string `toml:"address"`
+	} `toml:"rate_limit"`
+
+	Search struct {
+		URL      string `toml:"url"`
+		Password string `toml:"password"`
+	} `toml:"search"`
+
+	SSEBridge struct {
+		URL string `toml:"url"`
+	} `toml:"sse_bridge"`
+
+	Logs struct {
+		Full     bool `toml:"full"`
+		Debug    bool `toml:"debug"`
+		OnlySave bool `toml:"only_save"`
+	} `toml:"logs"`
+}
+
+// applyToEnv vuelca el archivo por secciones sobre la Env plana. Es el único punto donde
+// las dos formas se tocan.
+func (file *fileConfig) applyToEnv(env *EnvStruct) {
+	env.APP_NAME = file.AppName
+	env.IS_LOCAL = file.IsLocal
+	env.ENVIROMENT = file.Environment
+	env.ADMIN_PASSWORD = file.AdminPassword
+	env.SECRET_PHRASE = file.SecretPhrase
+
+	env.BACKEND_PROVIDER = file.Providers.Backend
+	env.CDN_PROVIDER = file.Providers.CDN
+	env.MODEL_PROVIDER = file.Providers.Model
+
+	env.DB_HOST = file.DB.Host
+	env.DB_PORT = file.DB.Port
+	env.DB_NAME = file.DB.Name
+	env.DB_USER = file.DB.User
+	env.DB_PASSWORD = file.DB.Password
+	env.DB_DISABLE_SSL = file.DB.DisableSSL
+	env.MAX_CLUSTERING_KEY = file.DB.MaxClusteringKey
+
+	env.SERVER_PORT = file.Server.Port
+
+	env.AWS_REGION = file.AWS.Region
+	env.AWS_PROFILE = file.AWS.Profile
+	env.S3_BUCKET = file.AWS.S3Bucket
+
+	env.CLOUDFLARE_ACCOUNT = file.Cloudflare.Account
+	env.CLOUDFLARE_TOKEN = file.Cloudflare.Token
+	env.CLOUDFLARE_BUCKET = file.Cloudflare.Bucket
+	env.CLOUDFLARE_DATABASE_ID = file.Cloudflare.DatabaseID
+
+	env.FRONTEND_CDN = file.Frontend.CDNURL
+	env.ZONE_NAME = file.Frontend.ZoneName
+	env.WEBPAGE_RENDERER_URL = file.Frontend.WebpageRendererURL
+
+	env.SMTP_HOST = file.SMTP.Host
+	env.SMTP_PORT = file.SMTP.Port
+	env.SMTP_EMAIL = file.SMTP.Email
+	env.SMTP_USER = file.SMTP.User
+	env.SMTP_PASSWORD = file.SMTP.Password
+
+	env.DEFAULT_MODEL = file.Agent.DefaultModel
+	env.META_KEY = file.Agent.MetaKey
+	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
+	env.RATE_LIMIT_ADDRESS = file.RateLimit.Address
+
+	env.GENIXSEARCH_URL = file.Search.URL
+	env.GENIXSEARCH_PASSWORD = file.Search.Password
+
+	env.SSE_BRIDGE_URL = file.SSEBridge.URL
+
+	env.LOGS_FULL = file.Logs.Full
+	env.LOGS_DEBUG = file.Logs.Debug
+	env.LOGS_ONLY_SAVE = file.Logs.OnlySave
 }
 
 // DefaultWebpageRendererURL is the CI-published storefront renderer artifact. It is duplicated in
@@ -157,7 +300,7 @@ func PopulateVariables() {
 	APP_CODE := os.Getenv("APP_CODE")
 	isServerlessRuntime := IsRunningInLambda()
 	useCredentialsFile := len(APP_CODE) == 0
-	configuredCredentialsPath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))
+	configuredConfigPath := strings.TrimSpace(os.Getenv("GENIX_CONFIG_FILE"))
 
 	wd, _ := os.Getwd()
 
@@ -169,14 +312,14 @@ func PopulateVariables() {
 		parentPath := strings.Join(dirname[0:len(dirname)-1], "/")
 		var fileError error
 
-		credentialsSearchPaths := []string{parentPath + "/credentials.json", wd + "/credentials.json"}
-		if len(configuredCredentialsPath) > 0 {
+		configSearchPaths := []string{parentPath + "/config.toml", wd + "/config.toml"}
+		if len(configuredConfigPath) > 0 {
 			// An explicit path selects the environment even when the default file also exists.
-			credentialsSearchPaths = append([]string{configuredCredentialsPath}, credentialsSearchPaths...)
+			configSearchPaths = append([]string{configuredConfigPath}, configSearchPaths...)
 		}
 
-		for _, candidateCredentialsPath := range credentialsSearchPaths {
-			file, err := os.Open(candidateCredentialsPath)
+		for _, candidateConfigPath := range configSearchPaths {
+			file, err := os.Open(candidateConfigPath)
 			if err != nil {
 				fileError = err
 				continue
@@ -189,14 +332,14 @@ func PopulateVariables() {
 				fileError = err
 				continue
 			} else {
-				fmt.Println("Seteando credentials.json desde:", candidateCredentialsPath)
+				fmt.Println("Seteando config.toml desde:", candidateConfigPath)
 				break
 			}
 		}
 
 		if len(variablesBytes) == 0 {
 			fmt.Println(fileError)
-			panic("Archivo credentials.json no encontrado. Configure GENIX_CREDENTIALS_FILE o suba el archivo al directorio esperado.")
+			panic("Archivo config.toml no encontrado. Configure GENIX_CONFIG_FILE o suba el archivo al directorio esperado.")
 		}
 
 	} else {
@@ -209,13 +352,16 @@ func PopulateVariables() {
 		variablesBytes = []byte(DecompressZstd(&baseBytes))
 	}
 
-	err := json.Unmarshal(variablesBytes, &Env)
-	if err != nil {
-		fmt.Println("Error parsing credentials.json:", err)
+	// Env se aloja aquí porque hasta ahora la creaba el propio json.Unmarshal sobre el puntero.
+	Env = &EnvStruct{}
+	parsedFile := fileConfig{}
+	if err := toml.Unmarshal(variablesBytes, &parsedFile); err != nil {
+		fmt.Println("Error parsing config.toml:", err)
 		return
 	}
+	parsedFile.applyToEnv(Env)
 
-	fmt.Println("Credenciales .json Parseadas:: ", "| Is Local:", Env.IS_LOCAL)
+	fmt.Println("config.toml parseado:: ", "| Is Local:", Env.IS_LOCAL)
 
 	if len(Env.DYNAMO_TABLE) == 0 {
 		Env.DYNAMO_TABLE = Env.APP_NAME + "-db"
@@ -235,13 +381,21 @@ func PopulateVariables() {
 	if len(Env.WEBPAGE_RENDERER_URL) == 0 {
 		Env.WEBPAGE_RENDERER_URL = DefaultWebpageRendererURL
 	}
+	// The environment override lets systemd/Lambda point at a private limiter without rewriting TOML.
+	if rateLimitAddress := strings.TrimSpace(os.Getenv("RATE_LIMIT_ADDRESS")); rateLimitAddress != "" {
+		Env.RATE_LIMIT_ADDRESS = rateLimitAddress
+	}
+	Env.RATE_LIMIT_ADDRESS = strings.TrimSpace(Env.RATE_LIMIT_ADDRESS)
+	if Env.RATE_LIMIT_ADDRESS == "" {
+		Env.RATE_LIMIT_ADDRESS = "127.0.0.1:14013"
+	}
 
 	Env.LAMBDA_NAME = Env.APP_NAME + "-backend"
 	Env.APP_CODE = APP_CODE
 	Env.IS_SERVERLESS = isServerlessRuntime
 	Env.TMP_DIR = If(Env.IS_SERVERLESS, "/tmp/", wd+"/tmp/")
 
-	// Response streaming is owned by the deployment, not by credentials.json: the Function URL's
+	// Response streaming is owned by the deployment, not by config.toml: the Function URL's
 	// InvokeMode and this flag are both declared in cloud/template.yml, because a handler that
 	// disagrees with the deployed invoke mode fails every request. Reading the same variable
 	// here is what keeps the two ends in step.

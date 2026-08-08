@@ -11,7 +11,7 @@ superusuario si hace falta y crea el keyspace de DB_NAME.
 GenixSearch: descarga el binario musl estatico publicado en los releases de
 GitHub (sin toolchain ni glibc en el host), lo verifica contra el SHA256SUMS
 del release, escribe /etc/genixsearch/genixsearch.cfg y la unit de systemd, y
-guarda GENIXSEARCH_URL / GENIXSEARCH_PASSWORD en credentials.json para que el
+guarda search.url / search.password en config.toml para que el
 backend Go los lea desde core.Env.
 """
 
@@ -29,6 +29,7 @@ import secrets
 import string
 import sys
 import json
+import tomllib
 import threading
 import contextlib
 import urllib.error
@@ -38,8 +39,10 @@ from shutil import which
 import ipaddress
 import shlex
 
+from toml_config import get_config_value, read_config, set_config_values
+
 PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parents[1]
-PROJECT_CREDENTIALS_FILE = PROJECT_ROOT_DIRECTORY / "credentials.json"
+PROJECT_CONFIG_FILE = PROJECT_ROOT_DIRECTORY / "config.toml"
 DEFAULT_SCYLLA_PORT = 9042
 DEFAULT_CASSANDRA_USERNAME = "cassandra"
 DEFAULT_CASSANDRA_PASSWORD = "cassandra"
@@ -553,67 +556,59 @@ def get_preferred_broadcast_ip():
     return "local", fallback_internal_ip
 
 def load_project_credentials():
-    """Reads credentials.json once; both configuration modes take their values from it."""
-    print(f"[*] Loading credentials from: {PROJECT_CREDENTIALS_FILE}")
+    """Reads config.toml once; both configuration modes take their values from it."""
+    print(f"[*] Loading config from: {PROJECT_CONFIG_FILE}")
 
-    if not PROJECT_CREDENTIALS_FILE.exists():
-        print("[!] credentials.json not found in project root.")
-        print("    Create it from credentials.example.json and set DB_PASSWORD/DB_PORT.")
+    if not PROJECT_CONFIG_FILE.exists():
+        print("[!] config.toml not found in project root.")
+        print("    Create it from config.example.toml and set db.password/db.port.")
         sys.exit(1)
 
     try:
-        with open(PROJECT_CREDENTIALS_FILE, 'r') as credentials_file:
-            credentials_data = json.load(credentials_file)
-    except json.JSONDecodeError as json_parse_error:
-        print(f"[!] Invalid JSON in credentials.json: {json_parse_error}")
-        sys.exit(1)
-
-    if not isinstance(credentials_data, dict):
-        print("[!] credentials.json must contain a JSON object at the top level.")
+        credentials_data = read_config(PROJECT_CONFIG_FILE)
+    except tomllib.TOMLDecodeError as toml_parse_error:
+        print(f"[!] Invalid TOML in config.toml: {toml_parse_error}")
         sys.exit(1)
 
     return credentials_data
 
 def save_project_credentials(credentials_updates):
-    """Merges keys back into credentials.json keeping the file owned by the invoking user."""
-    credentials_data = load_project_credentials()
-    credentials_data.update(credentials_updates)
-
-    PROJECT_CREDENTIALS_FILE.write_text(json.dumps(credentials_data, indent=4) + "\n", encoding="utf-8")
+    """Merges dotted keys back into config.toml keeping the file owned by the invoking user."""
+    set_config_values(PROJECT_CONFIG_FILE, credentials_updates)
 
     # El script corre bajo sudo: sin este chown el archivo del repo queda de root.
     sudo_user_id = os.environ.get("SUDO_UID")
     sudo_group_id = os.environ.get("SUDO_GID")
     if sudo_user_id and sudo_group_id:
         with contextlib.suppress(OSError, ValueError):
-            os.chown(PROJECT_CREDENTIALS_FILE, int(sudo_user_id), int(sudo_group_id))
+            os.chown(PROJECT_CONFIG_FILE, int(sudo_user_id), int(sudo_group_id))
 
-    print(f"[*] Saved {', '.join(credentials_updates)} into {PROJECT_CREDENTIALS_FILE}")
+    print(f"[*] Saved {', '.join(credentials_updates)} into {PROJECT_CONFIG_FILE}")
 
 def resolve_scylla_credentials(credentials_data):
-    """Validates the Scylla password, keyspace name and port coming from credentials.json."""
-    configured_database_password = credentials_data.get("DB_PASSWORD")
-    configured_database_name = credentials_data.get("DB_NAME")
-    configured_database_port = credentials_data.get("DB_PORT", DEFAULT_SCYLLA_PORT)
+    """Validates the Scylla password, keyspace name and port coming from config.toml."""
+    configured_database_password = get_config_value(credentials_data, "db.password")
+    configured_database_name = get_config_value(credentials_data, "db.name")
+    configured_database_port = get_config_value(credentials_data, "db.port", DEFAULT_SCYLLA_PORT)
 
     # Keep validation explicit because the script directly changes live DB auth.
     if not isinstance(configured_database_password, str) or not configured_database_password.strip():
-        print("[!] DB_PASSWORD must exist in credentials.json and be a non-empty string.")
+        print("[!] db.password must exist in config.toml and be a non-empty string.")
         sys.exit(1)
 
     # Keep validation explicit because this value is interpolated into a CQL identifier.
     if not isinstance(configured_database_name, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', configured_database_name):
-        print("[!] DB_NAME must exist in credentials.json and contain a valid keyspace identifier.")
+        print("[!] db.name must exist in config.toml and contain a valid keyspace identifier.")
         sys.exit(1)
 
     try:
         normalized_database_port = int(configured_database_port)
     except (TypeError, ValueError):
-        print("[!] DB_PORT in credentials.json must be a valid integer.")
+        print("[!] db.port in config.toml must be a valid integer.")
         sys.exit(1)
 
     if not (1 <= normalized_database_port <= 65535):
-        print("[!] DB_PORT must be between 1 and 65535.")
+        print("[!] db.port must be between 1 and 65535.")
         sys.exit(1)
 
     return configured_database_password, configured_database_name, normalized_database_port
@@ -1322,7 +1317,7 @@ def resolve_genixsearch_port(credentials_data):
     'scheme://host:port' y con path/query al final. Un host sin puerto (incluido
     un IPv6 sin corchetes) cae al default.
     """
-    configured_search_url = str(credentials_data.get("GENIXSEARCH_URL") or "").strip()
+    configured_search_url = str(get_config_value(credentials_data, "search.url") or "").strip()
     if "://" in configured_search_url:
         configured_search_url = configured_search_url.split("://", 1)[1]
     configured_search_url = re.split(r"[/?]", configured_search_url, maxsplit=1)[0]
@@ -1334,46 +1329,46 @@ def resolve_genixsearch_port(credentials_data):
 
     parsed_port = int(port_part)
     if not (1 <= parsed_port <= 65535):
-        print(f"[!] GENIXSEARCH_URL has an invalid port: {configured_search_url}")
+        print(f"[!] search.url has an invalid port: {configured_search_url}")
         sys.exit(1)
     return parsed_port
 
 def resolve_genixsearch_endpoint(credentials_data, broadcast_ip_address):
     """Returns (url, port, was_url_generated) for the search endpoint.
 
-    Un GENIXSEARCH_URL ya configurado gana siempre y no se toca: es la direccion por
+    Un search.url ya configurado gana siempre y no se toca: es la direccion por
     la que el backend entra de verdad (IP publica, dominio o tunel) y el script no
     puede deducirla. La IP que detecta este host suele ser la privada de la VPC, que
     desde Lambda no resuelve a nada.
     """
     genixsearch_port = resolve_genixsearch_port(credentials_data)
-    configured_search_url = str(credentials_data.get("GENIXSEARCH_URL") or "").strip()
+    configured_search_url = str(get_config_value(credentials_data, "search.url") or "").strip()
 
     if configured_search_url:
-        print(f"[*] Reusing GENIXSEARCH_URL from credentials.json: {configured_search_url}")
+        print(f"[*] Reusing search.url from config.toml: {configured_search_url}")
         return configured_search_url, genixsearch_port, False
 
     generated_search_url = f"{broadcast_ip_address}:{genixsearch_port}"
-    print(f"[*] No GENIXSEARCH_URL in credentials.json. Using the detected address: {generated_search_url}")
+    print(f"[*] No search.url in config.toml. Using the detected address: {generated_search_url}")
 
     # Una IP privada solo sirve si el backend vive en la misma red; conviene avisarlo
     # aqui y no cuando el handshake falle en produccion.
     with contextlib.suppress(ValueError):
         if ipaddress.ip_address(broadcast_ip_address).is_private and not is_tailnet_ip(broadcast_ip_address):
             print(f"[!] {broadcast_ip_address} is a private address. A backend outside this network")
-            print("    will not reach it: set GENIXSEARCH_URL in credentials.json to the public")
+            print("    will not reach it: set search.url in config.toml to the public")
             print("    host or domain and re-run.")
 
     return generated_search_url, genixsearch_port, True
 
 def resolve_genixsearch_password(credentials_data):
-    """Reuses GENIXSEARCH_PASSWORD from credentials.json, or generates one."""
-    existing_password = credentials_data.get("GENIXSEARCH_PASSWORD")
+    """Reuses search.password from config.toml, or generates one."""
+    existing_password = get_config_value(credentials_data, "search.password")
     if isinstance(existing_password, str) and existing_password.strip():
-        print("[*] Reusing GENIXSEARCH_PASSWORD from credentials.json.")
+        print("[*] Reusing search.password from config.toml.")
         return existing_password.strip(), False
 
-    print("[*] No GENIXSEARCH_PASSWORD in credentials.json. Generating one.")
+    print("[*] No search.password in config.toml. Generating one.")
     generated_password = "".join(
         secrets.choice(GENIXSEARCH_PASSWORD_ALPHABET) for _ in range(GENIXSEARCH_PASSWORD_LENGTH)
     )
@@ -1419,17 +1414,17 @@ def configure_genixsearch(credentials_data, broadcast_ip_address, release_versio
         sys.exit(1)
 
     # Solo se escriben los valores que el script genero: los que ya estaban en
-    # credentials.json son una decision del operador y sobrescribirlos rompe el backend.
+    # config.toml son una decision del operador y sobrescribirlos rompe el backend.
     credentials_updates = {}
     if was_url_generated:
-        credentials_updates["GENIXSEARCH_URL"] = genixsearch_url
+        credentials_updates["search.url"] = genixsearch_url
     if was_password_generated:
-        credentials_updates["GENIXSEARCH_PASSWORD"] = genixsearch_password
+        credentials_updates["search.password"] = genixsearch_password
 
     if credentials_updates:
         save_project_credentials(credentials_updates)
     else:
-        print("[*] credentials.json already had GENIXSEARCH_URL and GENIXSEARCH_PASSWORD. Left untouched.")
+        print("[*] config.toml already had search.url and search.password. Left untouched.")
 
     print("\n[+] GenixSearch Installation Complete!")
     print(f"    - binary:  {GENIXSEARCH_BINARY_PATH}")

@@ -125,7 +125,7 @@ scylla.MakeScyllaConnection(scylla.ConnParams{
 
 `MaxClusteringKey` mirrors the node's `max_clustering_key_restrictions_per_query`
 (a server-wide setting in `scylla.yaml`, not per keyspace). The backend passes
-`MAX_CLUSTERING_KEY` from `credentials.json` here; raise both together if you raise
+`db.max_clustering_key` from `config.toml` here; raise both together if you raise
 the server's. The ORM splits any wider `In()` fanout into several queries, so a
 larger list is never an error — only more round trips. 0 falls back to the
 `MAX_CLUSTERING_KEY` env var, then to 100.

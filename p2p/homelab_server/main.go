@@ -123,7 +123,7 @@ func main() {
 
 	cfg := config.GetDefaultConfig()
 	if cfg.SignalingSocket == "" || cfg.ApiKey == "" {
-		log.Fatal("ERROR: SIGNALING_SOCKET and API_KEY are required in credentials.json")
+		log.Fatal("ERROR: signaling.socket and signaling.api_key are required in config.toml")
 	}
 
 	interrupt := make(chan os.Signal, 1)

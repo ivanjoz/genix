@@ -10,7 +10,7 @@
    `GetSchema()` — the same declaration the Scylla driver already uses.
 2. Fix the live self-hosted bug: `UserTable` has no `PasswordHash` column, so `db.Insert` never
    persists it and `PostLogin` (`backend/security/login.go:122`) can never match a password when
-   `BACKEND_PROVIDER=none`.
+   `providers.backend=none`.
 3. Add real Scylla indexes on `User` / `Email` so the self-hosted login stops doing an
    `AllowFilter()` partition scan.
 
@@ -152,7 +152,7 @@ With `TypeLocalIndex` on `User`, drop `AllowFilter()` from the Scylla branch at 
 
 ## Migration impact (mirror deployments only)
 
-Self-hosted (`BACKEND_PROVIDER=none`, the current `credentials.json`) is unaffected apart from the
+Self-hosted (`providers.backend=none`, the current `config.toml`) is unaffected apart from the
 `PasswordHash` column addition and the new indexes.
 
 For `aws` / `cloudflare` deployments these are **data-shape changes and need a mirror rebuild**:

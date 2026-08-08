@@ -3,7 +3,7 @@
 ## 🚀 Launch Training with Spot Instances
 
 ### 1. Configure Credentials
-Ensure `../credentials.json` has your `AWS_PROFILE`, `AWS_REGION`, `SAGEMAKER_ROLE`, and optionally `SAGEMAKER_S3_OUTPUT`.
+Ensure `../config.toml` has `aws.profile`, `aws.region`, `aws.sagemaker_iam_role`, and optionally `aws.sagemaker_s3_output`.
 
 ### 2. Install Dependencies
 ```bash

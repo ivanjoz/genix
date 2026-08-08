@@ -8,9 +8,9 @@ terminate TLS on the very machine the bridge runs on, because what it proxies is
 stream and there is nothing to gain from a second hop. So there are no install modes and no
 upstream to configure — the vhost always forwards to 127.0.0.1.
 
-It also asks for exactly one thing, and only when it is missing: SSE_BRIDGE_APIKEY, the shared
+It also asks for exactly one thing, and only when it is missing: sse_bridge.apikey, the shared
 secret the bridge needs to authenticate anyone (the browser's session token and the backend's
-X-Bridge-Auth header are both HMACs keyed with it). Everything else is read from credentials.json
+X-Bridge-Auth header are both HMACs keyed with it). Everything else is read from config.toml
 or defaulted, and a missing value fails with the key name instead of opening a prompt.
 
 Nginx specifics: the vhost never buffers (a buffered text/event-stream is a stalled request), it
@@ -20,7 +20,6 @@ certificate for the hostname exists.
 """
 
 import getpass
-import json
 import os
 import re
 import shutil
@@ -37,7 +36,7 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     SYSTEMD_DIRECTORY,
     build_unprivileged_command,
     detect_go_binary,
-    detect_repository_credentials_path,
+    detect_repository_config_path,
     detect_runtime_username,
     detect_unprivileged_username,
     ensure_binary_directory,
@@ -55,6 +54,7 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     validate_server_port,
     write_unit_file,
 )
+from toml_config import get_config_value, set_config_values  # noqa: E402
 
 BRIDGE_SOURCE_DIRECTORY_NAME = "sse_bridge"
 BRIDGE_BINARY_NAME = "sse_bridge"
@@ -66,13 +66,13 @@ BRIDGE_RESTART_PATH_NAME = "genix-sse-bridge-restart.path"
 # Must match defaultListenPort in sse_bridge/config.go.
 DEFAULT_BRIDGE_PORT = 14012
 
-# The bridge reads SSE_BRIDGE_APIKEY; a developer machine has the backend's full credentials.json
-# instead, where the same value is SECRET_PHRASE. config.go accepts both, and so does this script.
-BRIDGE_API_KEY_NAME = "SSE_BRIDGE_APIKEY"
-BACKEND_SECRET_NAME = "SECRET_PHRASE"
+# The bridge reads sse_bridge.apikey; a developer machine has the backend's full config.toml
+# instead, where the same value is secret_phrase. config.go accepts both, and so does this script.
+BRIDGE_API_KEY_NAME = "sse_bridge.apikey"
+BACKEND_SECRET_NAME = "secret_phrase"
 MINIMUM_API_KEY_LENGTH = 8
 
-# An AWS function URL in SSE_BRIDGE_URL means "no bridge" (the backend serves its own
+# An AWS function URL in sse_bridge.url means "no bridge" (the backend serves its own
 # /agent/stream), so it cannot be the hostname this vhost is built for.
 LAMBDA_URL_HOST_SUFFIXES = (".on.aws", ".amazonaws.com")
 
@@ -82,101 +82,99 @@ LAMBDA_URL_HOST_SUFFIXES = (".on.aws", ".amazonaws.com")
 NGINX_LISTEN_REUSEPORT_PATTERN = re.compile(r"^\s*listen\s+[^;]*\breuseport\b", re.MULTILINE)
 
 
-def resolve_bridge_domain(project_credentials, repository_credentials_path):
-    """Take the vhost hostname from SSE_BRIDGE_URL. Never prompts: this key is not a secret.
+def resolve_bridge_domain(project_credentials, repository_config_path):
+    """Take the vhost hostname from sse_bridge.url. Never prompts: this key is not a secret.
 
     It is also the key the backend and the frontend read to decide whether to use the bridge at
     all, so getting it wrong here would install a host nobody talks to.
     """
-    configured_url = str(project_credentials.get("SSE_BRIDGE_URL", "")).strip()
+    configured_url = str(get_config_value(project_credentials, "sse_bridge.url", "")).strip()
     if not configured_url:
         fail_with_error(
-            f"SSE_BRIDGE_URL is not set in {repository_credentials_path}. Add the public URL of "
-            'this bridge (e.g. "SSE_BRIDGE_URL": "https://genix-sse.un.pe/") and run again.'
+            f"sse_bridge.url is not set in {repository_config_path}. Add the public URL of "
+            'this bridge (e.g. url = "https://genix-sse.un.pe/" under [sse_bridge]) and run again.'
         )
 
     candidate_value = configured_url
     if "://" in candidate_value:
         url_scheme, _, candidate_value = candidate_value.partition("://")
         if url_scheme not in {"http", "https"}:
-            fail_with_error(f"SSE_BRIDGE_URL has an unsupported scheme '{url_scheme}://': {configured_url}")
+            fail_with_error(f"sse_bridge.url has an unsupported scheme '{url_scheme}://': {configured_url}")
 
     candidate_host = candidate_value.split("/", 1)[0].partition(":")[0]
     bridge_domain, domain_error = validate_nginx_domain(candidate_host)
     if bridge_domain is None:
-        fail_with_error(f"SSE_BRIDGE_URL is unusable ({domain_error}): {configured_url}")
+        fail_with_error(f"sse_bridge.url is unusable ({domain_error}): {configured_url}")
 
     if bridge_domain.endswith(LAMBDA_URL_HOST_SUFFIXES):
         fail_with_error(
-            f"SSE_BRIDGE_URL points at the AWS function URL ({bridge_domain}), which is how the "
+            f"sse_bridge.url points at the AWS function URL ({bridge_domain}), which is how the "
             "project says 'no bridge'. Set it to the public domain of this host and run again."
         )
 
-    print_debug(f"Bridge domain from SSE_BRIDGE_URL: {bridge_domain}")
+    print_debug(f"Bridge domain from sse_bridge.url: {bridge_domain}")
     return bridge_domain
 
 
 def resolve_bridge_port(project_credentials):
     """Resolve the port the bridge binds to. Absent is normal — the Go default covers it."""
-    configured_port = project_credentials.get("SSE_BRIDGE_PORT")
+    configured_port = get_config_value(project_credentials, "sse_bridge.port")
     if configured_port is None:
-        print_debug(f"SSE_BRIDGE_PORT is not set in credentials.json. Using {DEFAULT_BRIDGE_PORT}.")
+        print_debug(f"sse_bridge.port is not set in config.toml. Using {DEFAULT_BRIDGE_PORT}.")
         return DEFAULT_BRIDGE_PORT
 
     bridge_port, validation_error = validate_server_port(str(configured_port))
     if bridge_port is None:
         # Never fall back silently: the Nginx upstream is built from this number, so a typo would
         # produce a vhost proxying to a port nothing listens on.
-        fail_with_error(f"SSE_BRIDGE_PORT in credentials.json is unusable: {validation_error}")
+        fail_with_error(f"sse_bridge.port in config.toml is unusable: {validation_error}")
 
     print_debug(f"Bridge listen port: {bridge_port}")
     return bridge_port
 
 
-def store_bridge_api_key(repository_credentials_path, bridge_api_key):
-    """Merge the typed-in key into credentials.json, which is where the bridge reads it from.
+def store_bridge_api_key(repository_config_path, bridge_api_key):
+    """Merge the typed-in key into config.toml, which is where the bridge reads it from.
 
     Not offered as a choice: the service cannot start without it, so declining would only install
     a unit that fails on boot.
     """
-    stored_credentials = load_project_credentials(repository_credentials_path)
-    stored_credentials[BRIDGE_API_KEY_NAME] = bridge_api_key
+    config_file_already_existed = repository_config_path.exists()
+    if not config_file_already_existed:
+        repository_config_path.parent.mkdir(parents=True, exist_ok=True)
+        repository_config_path.touch()
 
-    credentials_file_already_existed = repository_credentials_path.exists()
     try:
-        repository_credentials_path.parent.mkdir(parents=True, exist_ok=True)
-        repository_credentials_path.write_text(
-            json.dumps(stored_credentials, indent=4, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        set_config_values(repository_config_path, {BRIDGE_API_KEY_NAME: bridge_api_key})
     except OSError as write_error:
-        fail_with_error(f"Could not write credentials.json: {write_error}")
+        fail_with_error(f"Could not write config.toml: {write_error}")
 
-    if not credentials_file_already_existed:
+    if not config_file_already_existed:
         # A root-owned file would be unreadable to the non-root service, so hand it to whoever
         # owns the directory holding it.
-        parent_directory_stat = repository_credentials_path.parent.stat()
-        os.chown(repository_credentials_path, parent_directory_stat.st_uid, parent_directory_stat.st_gid)
+        parent_directory_stat = repository_config_path.parent.stat()
+        os.chown(repository_config_path, parent_directory_stat.st_uid, parent_directory_stat.st_gid)
 
-    os.chmod(repository_credentials_path, 0o600)
-    print_debug(f"Stored {BRIDGE_API_KEY_NAME} in {repository_credentials_path} (mode 0600).")
+    os.chmod(repository_config_path, 0o600)
+    print_debug(f"Stored {BRIDGE_API_KEY_NAME} in {repository_config_path} (mode 0600).")
 
 
-def resolve_bridge_api_key(project_credentials, repository_credentials_path):
+def resolve_bridge_api_key(project_credentials, repository_config_path):
     """The only value this script ever asks for, and only when the file does not already have it.
 
-    It must be byte-identical to the backend's SECRET_PHRASE: it is the HMAC key of the session
+    It must be byte-identical to the backend's secret_phrase: it is the HMAC key of the session
     tokens the backend issues and of the X-Bridge-Auth header it signs. A mismatch is not a
     startup error, it is every request being rejected at runtime.
     """
     for credential_name in (BRIDGE_API_KEY_NAME, BACKEND_SECRET_NAME):
-        stored_api_key = str(project_credentials.get(credential_name, "")).strip()
+        stored_api_key = str(get_config_value(project_credentials, credential_name, "")).strip()
         if stored_api_key:
             print_debug(f"Using the shared secret already stored as {credential_name}.")
             return stored_api_key, False
 
     if not sys.stdin.isatty():
         fail_with_error(
-            f"{BRIDGE_API_KEY_NAME} is missing from {repository_credentials_path} and there is no "
+            f"{BRIDGE_API_KEY_NAME} is missing from {repository_config_path} and there is no "
             f"interactive terminal to ask for it. Add it (the backend's {BACKEND_SECRET_NAME} "
             "value) and run the script again."
         )
@@ -486,7 +484,7 @@ def provide_bridge_binary(repository_root_path, runtime_user_entry):
     install_bridge_binary(prebuilt_binary_path, runtime_user_entry)
 
 
-def build_bridge_service_contents(runtime_username, repository_credentials_path, bridge_port):
+def build_bridge_service_contents(runtime_username, repository_config_path, bridge_port):
     return f"""[Unit]
 Description=Genix SSE Bridge
 After=network.target
@@ -496,9 +494,9 @@ Type=simple
 User={runtime_username}
 Group={runtime_username}
 WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
-# SSE_BRIDGE_APIKEY is read from this file rather than exported here: a unit under
-# /etc/systemd/system is world-readable, and credentials.json is not.
-Environment=GENIX_CREDENTIALS_FILE={repository_credentials_path}
+# sse_bridge.apikey is read from this file rather than exported here: a unit under
+# /etc/systemd/system is world-readable, and config.toml is not.
+Environment=GENIX_CONFIG_FILE={repository_config_path}
 Environment=SSE_BRIDGE_PORT={bridge_port}
 ExecStart={BRIDGE_BINARY_PATH}
 Restart=always
@@ -543,11 +541,11 @@ ExecStart=/usr/bin/systemctl restart {BRIDGE_SERVICE_NAME}
 """
 
 
-def configure_bridge_systemd_units(runtime_username, repository_credentials_path, bridge_port):
+def configure_bridge_systemd_units(runtime_username, repository_config_path, bridge_port):
     unit_files_changed = [
         write_unit_file(
             SYSTEMD_DIRECTORY / BRIDGE_SERVICE_NAME,
-            build_bridge_service_contents(runtime_username, repository_credentials_path, bridge_port),
+            build_bridge_service_contents(runtime_username, repository_config_path, bridge_port),
         ),
         write_unit_file(
             SYSTEMD_DIRECTORY / BRIDGE_RESTART_SERVICE_NAME,
@@ -584,42 +582,42 @@ def start_bridge_service(systemd_configuration_changed):
     print_debug(f"{BRIDGE_SERVICE_NAME} is running.")
 
 
-def warn_if_credentials_are_unreadable(runtime_username, repository_credentials_path):
+def warn_if_credentials_are_unreadable(runtime_username, repository_config_path):
     """The unit points at this file and the service reads it as a non-root user.
 
-    A credentials.json copied onto the host as root with mode 0600 is invisible to that account,
+    A config.toml copied onto the host as root with mode 0600 is invisible to that account,
     and the only symptom would be the bridge exiting at boot with "no se encontró
-    SSE_BRIDGE_APIKEY". Say it here instead, where the fix is one command away.
+    apikey". Say it here instead, where the fix is one command away.
     """
     readability_result = run_command(
-        ["sudo", "-u", runtime_username, "test", "-r", str(repository_credentials_path)],
+        ["sudo", "-u", runtime_username, "test", "-r", str(repository_config_path)],
         allow_failure=True,
     )
     if readability_result.returncode == 0:
         return
 
     print_debug(
-        f"WARNING: '{runtime_username}' cannot read {repository_credentials_path}, so the bridge "
-        f"will not find its API key. Fix it with: chown {runtime_username} {repository_credentials_path}"
+        f"WARNING: '{runtime_username}' cannot read {repository_config_path}, so the bridge "
+        f"will not find its API key. Fix it with: chown {runtime_username} {repository_config_path}"
     )
 
 
-def install_bridge_systemd_service(repository_credentials_path, bridge_port):
+def install_bridge_systemd_service(repository_config_path, bridge_port):
     runtime_username = detect_runtime_username()
     runtime_user_entry = resolve_runtime_user(runtime_username)
-    warn_if_credentials_are_unreadable(runtime_username, repository_credentials_path)
+    warn_if_credentials_are_unreadable(runtime_username, repository_config_path)
     ensure_binary_directory(runtime_user_entry)
-    provide_bridge_binary(repository_credentials_path.parent, runtime_user_entry)
+    provide_bridge_binary(repository_config_path.parent, runtime_user_entry)
     systemd_configuration_changed = configure_bridge_systemd_units(
-        runtime_username, repository_credentials_path, bridge_port
+        runtime_username, repository_config_path, bridge_port
     )
     start_bridge_service(systemd_configuration_changed)
     return runtime_username
 
 
-def print_summary(repository_credentials_path, runtime_username, bridge_domain, bridge_port):
+def print_summary(repository_config_path, runtime_username, bridge_domain, bridge_port):
     print_debug("SSE bridge configuration completed.")
-    print_debug(f"Credentials file: {repository_credentials_path}")
+    print_debug(f"Config file: {repository_config_path}")
     print_debug(f"Runtime user: {runtime_username}")
 
     binary_size_in_bytes = BRIDGE_BINARY_PATH.stat().st_size if BRIDGE_BINARY_PATH.is_file() else 0
@@ -632,8 +630,8 @@ def print_summary(repository_credentials_path, runtime_username, bridge_domain, 
     print_debug(f"Health check: curl -s http://127.0.0.1:{bridge_port}/health")
     print_debug(f"Through Nginx: curl -s https://{bridge_domain}/health")
     print_debug(
-        f"Reminder: the same SSE_BRIDGE_URL (https://{bridge_domain}/) must be in the "
-        "credentials.json used to build the backend and the frontend, or neither uses the bridge."
+        f"Reminder: the same sse_bridge.url (https://{bridge_domain}/) must be in the "
+        "config.toml used to build the backend and the frontend, or neither uses the bridge."
     )
 
 
@@ -643,22 +641,22 @@ def main():
         # configure_server.py takes an install mode here; this script has only one.
         print_debug(f"Ignoring extra argument(s): {' '.join(sys.argv[1:])}. This script has no modes.")
 
-    repository_credentials_path = detect_repository_credentials_path()
-    project_credentials = load_project_credentials(repository_credentials_path)
+    repository_config_path = detect_repository_config_path()
+    project_credentials = load_project_credentials(repository_config_path)
 
     # Resolve everything before touching the system, so a missing value stops the run instead of
     # leaving the host half configured.
-    bridge_domain = resolve_bridge_domain(project_credentials, repository_credentials_path)
+    bridge_domain = resolve_bridge_domain(project_credentials, repository_config_path)
     bridge_port = resolve_bridge_port(project_credentials)
     bridge_api_key, api_key_was_prompted = resolve_bridge_api_key(
-        project_credentials, repository_credentials_path
+        project_credentials, repository_config_path
     )
     if api_key_was_prompted:
-        store_bridge_api_key(repository_credentials_path, bridge_api_key)
+        store_bridge_api_key(repository_config_path, bridge_api_key)
 
-    runtime_username = install_bridge_systemd_service(repository_credentials_path, bridge_port)
+    runtime_username = install_bridge_systemd_service(repository_config_path, bridge_port)
     configure_bridge_nginx_vhost(bridge_domain, bridge_port)
-    print_summary(repository_credentials_path, runtime_username, bridge_domain, bridge_port)
+    print_summary(repository_config_path, runtime_username, bridge_domain, bridge_port)
 
 
 if __name__ == "__main__":

@@ -1,31 +1,50 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
-// Config holds all configuration parameters for the P2P Bridge application
-// It supports both uppercase and lowercase field names for backward compatibility
+// Config holds all configuration parameters for the P2P Bridge application, in the flat
+// shape p2p/deploy/ and p2p/homelab_server/ consume. Load() populates it by parsing
+// config.toml through fileConfig below.
 type Config struct {
-	AWSProfile       string `json:"AWS_PROFILE,omitempty"`
-	AppName          string `json:"APP_NAME,omitempty"`
-	SignalingAppName string `json:"SIGNALING_APP_NAME,omitempty"`
-	StackName        string `json:"SIGNALING_STACK_NAME,omitempty"`
-	SignalingEndpoint string `json:"SIGNALING_ENDPOINT,omitempty"`
-	SignalingSocket     string `json:"SIGNALING_SOCKET,omitempty"`
-	ApiKey           string `json:"SIGNALING_API_KEY,omitempty"`
-	LambdaFunctionName string `json:"-"` // Not in JSON, derived from app_name
-	LambdaFunctionNameActual string `json:"LAMBDA_FUNCTION_NAME,omitempty"` // Actual Lambda function name from CDK output
-	AWSRegion        string `json:"AWS_REGION,omitempty"`
-	AWSAccount       string `json:"AWS_ACCOUNT,omitempty"`
+	AWSProfile               string
+	AppName                  string
+	SignalingAppName         string
+	StackName                string
+	SignalingEndpoint        string
+	SignalingSocket          string
+	ApiKey                   string
+	LambdaFunctionName       string // Not in the file, derived from app_name
+	LambdaFunctionNameActual string // Actual Lambda function name from CDK output
+	AWSRegion                string
+	AWSAccount               string
 }
 
-// rawConfig is used for unmarshaling to support both uppercase and lowercase field names
-type rawConfig map[string]interface{}
+// fileConfig reflects config.toml's section layout (PLAN_CONFIG_TOML.md §2.7). It exists
+// only for parsing: Load() copies its fields onto the flat Config above so TOML fixes the
+// keys and the per-field lookup-by-multiple-names it replaced is no longer needed.
+type fileConfig struct {
+	AppName string `toml:"app_name"`
+	AWS     struct {
+		Profile string `toml:"profile"`
+		Region  string `toml:"region"`
+	} `toml:"aws"`
+	Signaling struct {
+		Socket             string `toml:"socket"`
+		Endpoint           string `toml:"endpoint"`
+		ApiKey             string `toml:"api_key"`
+		AppName            string `toml:"app_name"`
+		StackName          string `toml:"stack_name"`
+		LambdaFunctionName string `toml:"lambda_function_name"`
+		AWSAccount         string `toml:"aws_account"`
+	} `toml:"signaling"`
+}
 
 // GetSignalingAppName returns the signaling app name, defaulting to app_name + "-signaling"
 func (c *Config) GetSignalingAppName() string {
@@ -52,27 +71,7 @@ func (c *Config) GetLambdaFunctionName() string {
 	return c.AppName + "-signaling"
 }
 
-// normalizeKey converts field names to a consistent format for lookup
-func normalizeKey(key string) string {
-	return strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
-}
-
-// getValueFromRaw extracts a value from rawConfig trying multiple key formats
-func getValueFromRaw(raw rawConfig, keys []string) (string, bool) {
-	for _, key := range keys {
-		normalizedKey := normalizeKey(key)
-		for k, v := range raw {
-			if normalizeKey(k) == normalizedKey {
-				if str, ok := v.(string); ok {
-					return strings.TrimSpace(str), true
-				}
-			}
-		}
-	}
-	return "", false
-}
-
-// configPath returns the path to credentials.json relative to the project root
+// configPath returns the path to config.toml relative to the project root
 func configPath() (string, error) {
 	// Get the current working directory
 	cwd, err := os.Getwd()
@@ -80,23 +79,23 @@ func configPath() (string, error) {
 		return "", fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	// Look for credentials.json in current directory or parent directories
+	// Look for config.toml in current directory or parent directories
 	for {
-		configFile := filepath.Join(cwd, "credentials.json")
+		configFile := filepath.Join(cwd, "config.toml")
 		if _, err := os.Stat(configFile); err == nil {
 			return configFile, nil
 		}
 
 		parent := filepath.Dir(cwd)
 		if parent == cwd {
-			// Reached the root directory without finding credentials.json
-			return "", fmt.Errorf("credentials.json not found in current directory or parent directories")
+			// Reached the root directory without finding config.toml
+			return "", fmt.Errorf("config.toml not found in current directory or parent directories")
 		}
 		cwd = parent
 	}
 }
 
-// Load reads and parses the credentials.json file
+// Load reads and parses the config.toml file
 func Load() (*Config, error) {
 	configFile, err := configPath()
 	if err != nil {
@@ -105,71 +104,30 @@ func Load() (*Config, error) {
 
 	data, err := os.ReadFile(configFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read credentials.json: %w", err)
+		return nil, fmt.Errorf("failed to read config.toml: %w", err)
 	}
 
-	// First try to unmarshal as a generic map to handle both uppercase and lowercase keys
-	var raw rawConfig
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("failed to parse credentials.json: %w", err)
+	var parsed fileConfig
+	if err := toml.Unmarshal(data, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse config.toml: %w", err)
 	}
 
-	cfg := &Config{}
-
-	// Try to get AWS_PROFILE from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"AWS_PROFILE", "aws_profile", "profile"}); found {
-		cfg.AWSProfile = strings.ToLower(val)
-	}
-
-	// Try to get APP_NAME from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"APP_NAME", "app_name"}); found {
-		cfg.AppName = val
-	}
-
-	// Try to get SIGNALING_APP_NAME from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_APP_NAME", "signaling_app_name"}); found {
-		cfg.SignalingAppName = val
-	}
-
-	// Try to get SIGNALING_STACK_NAME from credentials.json
-	// Do NOT fall back to APP_NAME: that names the backend stack, not the signaling one
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_STACK_NAME"}); found {
-		cfg.StackName = val
-	}
-
-	// Try to get AWS_REGION from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"AWS_REGION", "aws_region", "region"}); found {
-		cfg.AWSRegion = val
-	}
-
-	// Try to get AWS_ACCOUNT from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"AWS_ACCOUNT", "aws_account", "account"}); found {
-		cfg.AWSAccount = val
-	}
-
-	// Try to get SIGNALING_ENDPOINT from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_ENDPOINT", "signaling_endpoint"}); found {
-		cfg.SignalingEndpoint = val
-	}
-
-	// Try to get SIGNALING_SOCKET from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_SOCKET", "signaling_socket"}); found {
-		cfg.SignalingSocket = val
-	}
-
-	// Try to get API_KEY from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"SIGNALING_API_KEY", "api_key"}); found {
-		cfg.ApiKey = val
-	}
-
-	// Try to get LAMBDA_FUNCTION_NAME from multiple possible key names
-	if val, found := getValueFromRaw(raw, []string{"LAMBDA_FUNCTION_NAME", "lambda_function_name", "lambda_name"}); found {
-		cfg.LambdaFunctionNameActual = val
+	cfg := &Config{
+		AppName:                  parsed.AppName,
+		AWSProfile:               strings.ToLower(strings.TrimSpace(parsed.AWS.Profile)),
+		AWSRegion:                parsed.AWS.Region,
+		AWSAccount:               parsed.Signaling.AWSAccount,
+		SignalingAppName:         parsed.Signaling.AppName,
+		StackName:                parsed.Signaling.StackName,
+		SignalingEndpoint:        parsed.Signaling.Endpoint,
+		SignalingSocket:          parsed.Signaling.Socket,
+		ApiKey:                   parsed.Signaling.ApiKey,
+		LambdaFunctionNameActual: parsed.Signaling.LambdaFunctionName,
 	}
 
 	// Validate required fields
 	if cfg.AppName == "" {
-		return nil, fmt.Errorf("APP_NAME is required in credentials.json")
+		return nil, fmt.Errorf("app_name is required in config.toml")
 	}
 
 	// Set derived fields
@@ -178,13 +136,14 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// LoadWithEnv reads and parses the credentials.json file and overrides with environment variables
+// LoadWithEnv reads and parses the config.toml file and overrides with environment variables
 // Environment variable overrides:
-//   AWS_PROFILE -> aws_profile
-//   AWS_REGION -> aws_region
-//   AWS_ACCOUNT -> aws_account
-//   SIGNALING_ENDPOINT -> signaling_endpoint
-//   LAMBDA_FUNCTION_NAME -> lambda_function_name
+//
+//	AWS_PROFILE -> aws_profile
+//	AWS_REGION -> aws_region
+//	AWS_ACCOUNT -> aws_account
+//	SIGNALING_ENDPOINT -> signaling_endpoint
+//	LAMBDA_FUNCTION_NAME -> lambda_function_name
 func LoadWithEnv() (*Config, error) {
 	cfg, err := Load()
 	if err != nil {

@@ -2,16 +2,16 @@ AWSTemplateFormatVersion: "2010-09-09"
 Description: Genix - Go backend on Lambda, cron and DynamoDB
 
 # Deployed by cloud/cloudformation.go (action 3). Every value that varies per environment
-# arrives as a parameter read from credentials.json, so this file stays static and committed.
+# arrives as a parameter read from config.toml, so this file stays static and committed.
 
 Parameters:
   NamePrefix:
     Type: String
-    Description: APP_NAME from credentials.json. Prefixes every physical resource name.
+    Description: app_name from config.toml. Prefixes every physical resource name.
   CdnProvider:
     Type: String
     AllowedValues: [aws, cloudflare]
-    Description: CDN_PROVIDER from credentials.json; aws creates the CloudFront frontend.
+    Description: providers.cdn from config.toml; aws creates the CloudFront frontend.
   FrontendBucketName:
     Type: String
     Description: Bucket holding the built frontend, served through CloudFront.
@@ -151,7 +151,7 @@ Resources:
   # handler picks its response shape from this variable (backend/core/security.go), and a
   # mismatch fails every request - so both live in this file and are changed together.
   #
-  # CONFIG (credentials.json, zstd+base64) is deliberately absent: putting it here would expose
+  # CONFIG (config.toml, zstd+base64) is deliberately absent: putting it here would expose
   # every secret in the CloudFormation console. Because this block replaces the whole Environment
   # on each deploy, DeployIfraestructure re-injects CONFIG right after the stack update.
   BackendFunction:
@@ -389,7 +389,7 @@ Resources:
           Projection: { ProjectionType: ALL }
 
 Outputs:
-  # BackendUrl is written back into credentials.json as LAMBDA_URL after a successful deploy.
+  # BackendUrl is written back into config.toml as aws.lambda_url after a successful deploy.
   BackendUrl:
     Description: Public Function URL of the backend Lambda
     Value: !GetAtt BackendFunctionUrl.FunctionUrl

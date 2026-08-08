@@ -1,10 +1,10 @@
 import importlib.util
 import io
-import json
 import os
 import pwd
 import sys
 import tempfile
+import tomllib
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -111,58 +111,64 @@ class BridgeNginxTemplateTest(unittest.TestCase):
 class BridgeCredentialsTest(unittest.TestCase):
     def test_domain_is_taken_from_the_url_in_any_accepted_shape(self):
         configure_sse_bridge = load_configure_sse_bridge_module()
-        credentials_path = Path("/repo/credentials.json")
+        config_path = Path("/repo/config.toml")
 
         with redirect_stdout(io.StringIO()):
             for configured_url in ("https://genix-sse.un.pe/", "http://Genix-SSE.un.pe", "genix-sse.un.pe"):
                 self.assertEqual(
                     configure_sse_bridge.resolve_bridge_domain(
-                        {"SSE_BRIDGE_URL": configured_url}, credentials_path
+                        {"sse_bridge": {"url": configured_url}}, config_path
                     ),
                     "genix-sse.un.pe",
                 )
 
     def test_an_unusable_url_stops_the_run_instead_of_prompting(self):
         configure_sse_bridge = load_configure_sse_bridge_module()
-        credentials_path = Path("/repo/credentials.json")
+        config_path = Path("/repo/config.toml")
 
         unusable_credentials = [
             {},
-            {"SSE_BRIDGE_URL": "   "},
-            {"SSE_BRIDGE_URL": "localhost"},
-            {"SSE_BRIDGE_URL": "ftp://genix-sse.un.pe"},
+            {"sse_bridge": {"url": "   "}},
+            {"sse_bridge": {"url": "localhost"}},
+            {"sse_bridge": {"url": "ftp://genix-sse.un.pe"}},
             # A function URL is how the project says "no bridge", so it can never be the vhost.
-            {"SSE_BRIDGE_URL": "https://abc.lambda-url.us-east-1.on.aws/"},
+            {"sse_bridge": {"url": "https://abc.lambda-url.us-east-1.on.aws/"}},
         ]
 
         for project_credentials in unusable_credentials:
             with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
-                configure_sse_bridge.resolve_bridge_domain(project_credentials, credentials_path)
+                configure_sse_bridge.resolve_bridge_domain(project_credentials, config_path)
 
     def test_port_defaults_to_the_value_compiled_into_the_bridge(self):
         configure_sse_bridge = load_configure_sse_bridge_module()
 
         with redirect_stdout(io.StringIO()):
             self.assertEqual(configure_sse_bridge.resolve_bridge_port({}), 14012)
-            self.assertEqual(configure_sse_bridge.resolve_bridge_port({"SSE_BRIDGE_PORT": "15000"}), 15000)
+            self.assertEqual(
+                configure_sse_bridge.resolve_bridge_port({"sse_bridge": {"port": "15000"}}), 15000
+            )
 
             # A typo must stop the run: the Nginx upstream is built from this number.
             with self.assertRaises(SystemExit):
-                configure_sse_bridge.resolve_bridge_port({"SSE_BRIDGE_PORT": "0"})
+                configure_sse_bridge.resolve_bridge_port({"sse_bridge": {"port": "0"}})
 
     def test_a_stored_key_under_either_name_is_used_without_asking(self):
         configure_sse_bridge = load_configure_sse_bridge_module()
-        credentials_path = Path("/repo/credentials.json")
+        config_path = Path("/repo/config.toml")
 
         with mock.patch.object(configure_sse_bridge.getpass, "getpass") as getpass_mock, \
                 redirect_stdout(io.StringIO()):
             self.assertEqual(
-                configure_sse_bridge.resolve_bridge_api_key({"SSE_BRIDGE_APIKEY": "abcd1234efgh"}, credentials_path),
+                configure_sse_bridge.resolve_bridge_api_key(
+                    {"sse_bridge": {"apikey": "abcd1234efgh"}}, config_path
+                ),
                 ("abcd1234efgh", False),
             )
             # A developer machine has the backend's full file: same value, original name.
             self.assertEqual(
-                configure_sse_bridge.resolve_bridge_api_key({"SECRET_PHRASE": "abcd1234efgh"}, credentials_path),
+                configure_sse_bridge.resolve_bridge_api_key(
+                    {"secret_phrase": "abcd1234efgh"}, config_path
+                ),
                 ("abcd1234efgh", False),
             )
 
@@ -172,9 +178,9 @@ class BridgeCredentialsTest(unittest.TestCase):
         configure_sse_bridge = load_configure_sse_bridge_module()
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            credentials_path = Path(temporary_directory) / "credentials.json"
-            credentials_path.write_text(
-                json.dumps({"SSE_BRIDGE_URL": "https://genix-sse.un.pe/"}), encoding="utf-8"
+            config_path = Path(temporary_directory) / "config.toml"
+            config_path.write_text(
+                '[sse_bridge]\nurl = "https://genix-sse.un.pe/"\n', encoding="utf-8"
             )
 
             # The first answer is too short to be a shared secret, so the prompt repeats.
@@ -184,16 +190,17 @@ class BridgeCredentialsTest(unittest.TestCase):
                     ), \
                     redirect_stdout(io.StringIO()) as captured_output:
                 bridge_api_key, api_key_was_prompted = configure_sse_bridge.resolve_bridge_api_key(
-                    {"SSE_BRIDGE_URL": "https://genix-sse.un.pe/"}, credentials_path
+                    {"sse_bridge": {"url": "https://genix-sse.un.pe/"}}, config_path
                 )
-                configure_sse_bridge.store_bridge_api_key(credentials_path, bridge_api_key)
+                configure_sse_bridge.store_bridge_api_key(config_path, bridge_api_key)
 
-            stored_credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
+            with open(config_path, "rb") as config_file:
+                stored_config = tomllib.load(config_file)
 
         self.assertEqual((bridge_api_key, api_key_was_prompted), ("abcd1234efgh", True))
-        self.assertEqual(stored_credentials["SSE_BRIDGE_APIKEY"], "abcd1234efgh")
+        self.assertEqual(stored_config["sse_bridge"]["apikey"], "abcd1234efgh")
         # Unrelated keys survive, and the secret is never printed to the terminal.
-        self.assertEqual(stored_credentials["SSE_BRIDGE_URL"], "https://genix-sse.un.pe/")
+        self.assertEqual(stored_config["sse_bridge"]["url"], "https://genix-sse.un.pe/")
         self.assertNotIn("abcd1234efgh", captured_output.getvalue())
 
     def test_a_missing_key_without_a_terminal_fails(self):
@@ -201,7 +208,7 @@ class BridgeCredentialsTest(unittest.TestCase):
 
         with mock.patch.object(configure_sse_bridge.sys.stdin, "isatty", return_value=False), \
                 redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
-            configure_sse_bridge.resolve_bridge_api_key({}, Path("/repo/credentials.json"))
+            configure_sse_bridge.resolve_bridge_api_key({}, Path("/repo/config.toml"))
 
 
 class BridgeUnitAndBinaryTest(unittest.TestCase):
@@ -209,12 +216,12 @@ class BridgeUnitAndBinaryTest(unittest.TestCase):
         configure_sse_bridge = load_configure_sse_bridge_module()
 
         unit_contents = configure_sse_bridge.build_bridge_service_contents(
-            "ubuntu", Path("/home/ubuntu/genix/credentials.json"), 14012
+            "ubuntu", Path("/home/ubuntu/genix/config.toml"), 14012
         )
 
         self.assertIn("Description=Genix SSE Bridge", unit_contents)
         self.assertIn("Environment=SSE_BRIDGE_PORT=14012", unit_contents)
-        self.assertIn("Environment=GENIX_CREDENTIALS_FILE=/home/ubuntu/genix/credentials.json", unit_contents)
+        self.assertIn("Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml", unit_contents)
         self.assertIn("ExecStart=/usr/local/bin/genix/sse_bridge", unit_contents)
         self.assertIn("User=ubuntu", unit_contents)
         # The unit is world-readable, so the secret itself must never be exported here.

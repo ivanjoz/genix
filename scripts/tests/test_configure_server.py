@@ -1,9 +1,9 @@
 import importlib.util
 import io
-import json
 import os
 import pwd
 import tempfile
+import tomllib
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -46,7 +46,7 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
         configure_server = load_configure_server_module()
 
         nginx_settings = configure_server.extract_nginx_settings(
-            {"NGINX_DOMAIN": "genix-api-4.un.pe", "NGINX_PROCESS": "100.64.0.2:14010"}
+            {"server": {"nginx_domain": "genix-api-4.un.pe", "nginx_process": "100.64.0.2:14010"}}
         )
 
         self.assertEqual(nginx_settings["domain"], "genix-api-4.un.pe")
@@ -56,7 +56,7 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
         configure_server = load_configure_server_module()
 
         nginx_settings = configure_server.extract_nginx_settings(
-            {"NGINX_DOMAIN": "genix-api-4.un.pe", "NGINX_PROCESS": "https://10.0.0.7:8443"}
+            {"server": {"nginx_domain": "genix-api-4.un.pe", "nginx_process": "https://10.0.0.7:8443"}}
         )
 
         self.assertEqual(nginx_settings["backend_proxy_url"], "https://10.0.0.7:8443")
@@ -64,8 +64,8 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
     def test_server_port_is_read_from_credentials(self):
         configure_server = load_configure_server_module()
 
-        self.assertEqual(configure_server.extract_server_port({"SERVER_PORT": 14010}), (14010, {}))
-        self.assertEqual(configure_server.extract_server_port({"SERVER_PORT": "14010"}), (14010, {}))
+        self.assertEqual(configure_server.extract_server_port({"server": {"port": 14010}}), (14010, {}))
+        self.assertEqual(configure_server.extract_server_port({"server": {"port": "14010"}}), (14010, {}))
 
     def test_validators_reject_unusable_values(self):
         configure_server = load_configure_server_module()
@@ -95,7 +95,7 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
             server_port, prompted_values = configure_server.extract_server_port({})
 
         self.assertEqual(server_port, 14010)
-        self.assertEqual(prompted_values, {"SERVER_PORT": 14010})
+        self.assertEqual(prompted_values, {"server.port": 14010})
 
     def test_invalid_stored_value_is_replaced_by_the_prompted_one(self):
         configure_server = load_configure_server_module()
@@ -104,11 +104,11 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
                 mock.patch.object(configure_server, "input", create=True, side_effect=["100.64.0.2:14010"]), \
                 redirect_stdout(io.StringIO()):
             nginx_settings = configure_server.extract_nginx_settings(
-                {"NGINX_DOMAIN": "genix-api-4.un.pe", "NGINX_PROCESS": "100.64.0.2"}
+                {"server": {"nginx_domain": "genix-api-4.un.pe", "nginx_process": "100.64.0.2"}}
             )
 
         self.assertEqual(nginx_settings["backend_proxy_url"], "http://100.64.0.2:14010")
-        self.assertEqual(nginx_settings["prompted_values"], {"NGINX_PROCESS": "100.64.0.2:14010"})
+        self.assertEqual(nginx_settings["prompted_values"], {"server.nginx_process": "100.64.0.2:14010"})
 
     def test_missing_value_without_a_terminal_fails(self):
         configure_server = load_configure_server_module()
@@ -121,44 +121,46 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
         configure_server = load_configure_server_module()
 
         with tempfile.TemporaryDirectory() as temporary_directory, redirect_stdout(io.StringIO()):
-            missing_path = Path(temporary_directory) / "credentials.json"
+            missing_path = Path(temporary_directory) / "config.toml"
             self.assertEqual(configure_server.load_project_credentials(missing_path), {})
 
     def test_prompted_values_are_merged_into_credentials_file(self):
         configure_server = load_configure_server_module()
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            credentials_path = Path(temporary_directory) / "credentials.json"
-            credentials_path.write_text(json.dumps({"APP_NAME": "genix-3"}), encoding="utf-8")
+            config_path = Path(temporary_directory) / "config.toml"
+            config_path.write_text('app_name = "genix-3"\n', encoding="utf-8")
 
             with mock.patch.object(configure_server.sys.stdin, "isatty", return_value=True), \
                     mock.patch.object(configure_server, "input", create=True, return_value="y"), \
                     redirect_stdout(io.StringIO()):
                 configure_server.persist_prompted_credentials(
-                    credentials_path, {"NGINX_DOMAIN": "genix-api-4.un.pe", "SERVER_PORT": 14010}
+                    config_path, {"server.nginx_domain": "genix-api-4.un.pe", "server.port": 14010}
                 )
 
-            stored_credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
+            with open(config_path, "rb") as config_file:
+                stored_config = tomllib.load(config_file)
 
-        self.assertEqual(stored_credentials["APP_NAME"], "genix-3")
-        self.assertEqual(stored_credentials["NGINX_DOMAIN"], "genix-api-4.un.pe")
-        self.assertEqual(stored_credentials["SERVER_PORT"], 14010)
+        self.assertEqual(stored_config["app_name"], "genix-3")
+        self.assertEqual(stored_config["server"]["nginx_domain"], "genix-api-4.un.pe")
+        self.assertEqual(stored_config["server"]["port"], 14010)
 
     def test_declining_the_save_leaves_the_credentials_file_untouched(self):
         configure_server = load_configure_server_module()
 
         with tempfile.TemporaryDirectory() as temporary_directory:
-            credentials_path = Path(temporary_directory) / "credentials.json"
-            credentials_path.write_text(json.dumps({"APP_NAME": "genix-3"}), encoding="utf-8")
+            config_path = Path(temporary_directory) / "config.toml"
+            config_path.write_text('app_name = "genix-3"\n', encoding="utf-8")
 
             with mock.patch.object(configure_server.sys.stdin, "isatty", return_value=True), \
                     mock.patch.object(configure_server, "input", create=True, return_value="n"), \
                     redirect_stdout(io.StringIO()):
-                configure_server.persist_prompted_credentials(credentials_path, {"SERVER_PORT": 14010})
+                configure_server.persist_prompted_credentials(config_path, {"server.port": 14010})
 
-            stored_credentials = json.loads(credentials_path.read_text(encoding="utf-8"))
+            with open(config_path, "rb") as config_file:
+                stored_config = tomllib.load(config_file)
 
-        self.assertEqual(stored_credentials, {"APP_NAME": "genix-3"})
+        self.assertEqual(stored_config, {"app_name": "genix-3"})
 
     def test_empty_placeholder_binary_is_removed_and_none_is_created(self):
         configure_server = load_configure_server_module()
@@ -505,12 +507,12 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
 
         unit_contents = configure_server.build_main_service_contents(
             "ubuntu",
-            Path("/home/ubuntu/genix/credentials.json"),
+            Path("/home/ubuntu/genix/config.toml"),
             14010,
         )
 
         self.assertIn("Environment=SERVER_PORT=14010", unit_contents)
-        self.assertIn("Environment=GENIX_CREDENTIALS_FILE=/home/ubuntu/genix/credentials.json", unit_contents)
+        self.assertIn("Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml", unit_contents)
 
 
 if __name__ == "__main__":

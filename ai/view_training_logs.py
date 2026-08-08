@@ -7,20 +7,21 @@ If no job_name is provided, it will show the most recent job.
 
 import sagemaker
 import boto3
-import json
+import tomllib
 import os
 import sys
 
 # Load configuration
 script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(script_dir)
-creds_path = os.path.join(parent_dir, "credentials.json")
-with open(creds_path, "r") as f:
-    config = json.load(f)
+config_path = os.path.join(parent_dir, "config.toml")
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+aws_config = config.get("aws", {})
 
 # AWS configuration
-aws_profile = config.get("AWS_PROFILE", "default")
-region = config.get("AWS_REGION", "us-east-1")
+aws_profile = aws_config.get("profile", "default")
+region = aws_config.get("region", "us-east-1")
 
 # Initialize session
 boto_sess = boto3.Session(profile_name=aws_profile, region_name=region)

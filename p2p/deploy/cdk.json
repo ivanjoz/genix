@@ -10,7 +10,7 @@
       "go.mod",
       "go.sum",
       "**/*test.go",
-      "credentials.json"
+      "config.toml"
     ]
   },
 

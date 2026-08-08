@@ -1,5 +1,5 @@
 # Credentials and configuration
-credentials.json
+config.toml
 
 # Lambda bootstrap binary
 signaling_lambda/bootstrap

@@ -51,7 +51,7 @@ func useR2() bool {
 	case "cloudflare":
 		return true
 	default:
-		panic("CDN_PROVIDER in credentials.json is not set or invalid (must be 'aws' or 'cloudflare')")
+		panic("providers.cdn in config.toml is not set or invalid (must be 'aws' or 'cloudflare')")
 	}
 }
 

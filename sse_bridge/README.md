@@ -67,9 +67,9 @@ fijan que las tres implementaciones coincidan byte a byte.
 ## Autenticación
 
 Los dos lados se autentican con **un solo secreto compartido**, que aquí se llama
-`SSE_BRIDGE_APIKEY` y en el backend `SECRET_PHRASE`: es el mismo valor con dos
-nombres de despliegue. Un host de bridge lleva un `credentials.json` mínimo (solo
-`SSE_BRIDGE_URL` + `SSE_BRIDGE_APIKEY`) en vez del archivo completo del backend,
+`sse_bridge.apikey` y en el backend `secret_phrase`: es el mismo valor con dos
+nombres de despliegue. Un host de bridge lleva un `config.toml` mínimo (solo
+`sse_bridge.url` + `sse_bridge.apikey`) en vez del archivo completo del backend,
 que además tiene claves de base de datos, AWS y SMTP que este proceso no necesita
 ver. Si los valores no coinciden byte a byte, el bridge rechaza a todo el mundo.
 
@@ -84,15 +84,15 @@ ver. Si los valores no coinciden byte a byte, el bridge rechaza a todo el mundo.
 
 | Variable | Default | Descripción |
 |---|---|---|
-| `GENIX_CREDENTIALS_FILE` | `../credentials.json`, `./credentials.json` | De dónde leer el secreto: la clave `SSE_BRIDGE_APIKEY` o, si no está, `SECRET_PHRASE` (el archivo completo del backend, útil en local). |
-| `SSE_BRIDGE_APIKEY` | — | Sobrescribe el valor del archivo (para desplegar sin `credentials.json`). |
+| `GENIX_CONFIG_FILE` | `../config.toml`, `./config.toml` | De dónde leer el secreto: la clave `sse_bridge.apikey` o, si no está, `secret_phrase` (el archivo completo del backend, útil en local). |
+| `SSE_BRIDGE_APIKEY` | — | Sobrescribe el valor del archivo (para desplegar sin `config.toml`). |
 | `SSE_BRIDGE_PORT` | `14012` | Puerto de escucha. |
 | `SSE_BRIDGE_VERBOSE` | — | `1` para loguear cada mensaje entregado. |
 
-Del lado de quienes lo usan, `credentials.json` lleva `SSE_BRIDGE_URL` con la URL
+Del lado de quienes lo usan, `config.toml` lleva `sse_bridge.url` con la URL
 pública de este proceso. El backend solo lo usa cuando corre en Lambda; el
-frontend solo cuando el endpoint seleccionado es el Lambda. Si `SSE_BRIDGE_URL`
-falta o es igual a `LAMBDA_URL`, no hay bridge y el backend sirve su propio
+frontend solo cuando el endpoint seleccionado es el Lambda. Si `sse_bridge.url`
+falta o es igual a `aws.lambda_url`, no hay bridge y el backend sirve su propio
 `/agent/stream`.
 
 ## Compilar y correr
@@ -100,7 +100,7 @@ falta o es igual a `LAMBDA_URL`, no hay bridge y el backend sirve su propio
 ```bash
 cd sse_bridge
 go build -o sse_bridge .
-GENIX_CREDENTIALS_FILE=/etc/genix/credentials.json ./sse_bridge
+GENIX_CONFIG_FILE=/etc/genix/config.toml ./sse_bridge
 
 go test ./...     # auth, fan-out, correlación de rpc, timeouts, reconexión
 ```
@@ -115,7 +115,7 @@ GOOS=linux GOARCH=arm64 go build -o sse_bridge_arm64 .
 
 `sudo ./app.sh configure_sse_bridge` compila el binario, instala las units de systemd y escribe
 el vhost de Nginx (HTTP/3 si hay certificado) en el mismo host. No pregunta nada salvo
-`SSE_BRIDGE_APIKEY` cuando falta; el resto sale de `credentials.json`. Detalles en
+`sse_bridge.apikey` cuando falta; el resto sale de `config.toml`. Detalles en
 `../scripts/CONFIGURE_SSE_BRIDGE.md`. Lo que sigue es lo que ese script genera, por si hay que
 hacerlo a mano.
 
@@ -130,7 +130,7 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-Environment=GENIX_CREDENTIALS_FILE=/etc/genix/credentials.json
+Environment=GENIX_CONFIG_FILE=/etc/genix/config.toml
 ExecStart=/usr/local/bin/genix/sse_bridge
 Restart=always
 RestartSec=3
@@ -170,7 +170,7 @@ curl -N -H "Authorization: Bearer $TOKEN" "$BASE/sse?ch=$CH"
 
 # 2. Firmar una llamada de servicio y publicar un evento
 TS=$(date +%s)
-SECRET=$(grep -oP '"(SSE_BRIDGE_APIKEY|SECRET_PHRASE)"\s*:\s*"\K[^"]+' ../credentials.json | head -1)
+SECRET=$(python3 -c "import tomllib; c=tomllib.load(open('../config.toml','rb')); print(c.get('sse_bridge',{}).get('apikey') or c['secret_phrase'])")
 SIG="$TS.$(printf 'sse-bridge:v1|%s' "$TS" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')"
 
 curl -s -X POST "$BASE/publish" -H "X-Bridge-Auth: $SIG" \

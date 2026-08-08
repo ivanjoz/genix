@@ -11,7 +11,7 @@ sudo ./app.sh configure_db search     # solo GenixSearch
 ```
 
 Los alias numéricos `1`/`2`/`3` equivalen a `all`/`scylla`/`search`. El script debe
-correr como `root` y lee `credentials.json` de la raíz del repositorio.
+correr como `root` y lee `config.toml` de la raíz del repositorio.
 
 ---
 
@@ -20,12 +20,12 @@ correr como `root` y lee `credentials.json` de la raíz del repositorio.
 | Paso | Detalle |
 | ---- | ------- |
 | `SCYLLA_ARGS` | Reescribe el env-file (`/etc/sysconfig/scylla-server` o `/etc/default/scylla-server`) con `--smp` acotado a los CPU disponibles, `-m 4G` y `--overprovisioned`. Limpia los flags que gestionó una corrida anterior. |
-| `scylla.yaml` | `listen_address=127.0.0.1`, `rpc_address=0.0.0.0`, `broadcast_rpc_address=<IP alcanzable>`, `native_transport_port=DB_PORT` y `authenticator=PasswordAuthenticator`. |
-| Firewall | Abre `DB_PORT/tcp` (ver [Firewall](#firewall) abajo). |
-| Superusuario | Prueba la password de `credentials.json` y la default `cassandra`. Si ninguna entra, recupera el rol por el **maintenance socket** de Scylla (ver abajo) y luego la cambia a `DB_PASSWORD`. |
-| Keyspace | Crea `DB_NAME` con `NetworkTopologyStrategy` y `replication_factor: 1` si no existe. |
+| `scylla.yaml` | `listen_address=127.0.0.1`, `rpc_address=0.0.0.0`, `broadcast_rpc_address=<IP alcanzable>`, `native_transport_port=db.port` y `authenticator=PasswordAuthenticator`. |
+| Firewall | Abre `db.port/tcp` (ver [Firewall](#firewall) abajo). |
+| Superusuario | Prueba la password de `config.toml` y la default `cassandra`. Si ninguna entra, recupera el rol por el **maintenance socket** de Scylla (ver abajo) y luego la cambia a `db.password`. |
+| Keyspace | Crea `db.name` con `NetworkTopologyStrategy` y `replication_factor: 1` si no existe. |
 
-Claves usadas: `DB_PASSWORD`, `DB_NAME`, `DB_PORT`.
+Claves usadas: `db.password`, `db.name`, `db.port`.
 
 ### Recuperación del superusuario
 
@@ -57,20 +57,21 @@ musl, así que el host no necesita toolchain ni una glibc concreta.
 
 ### Credenciales que escribe
 
-El script **solo escribe en `credentials.json` los valores que faltaban**. Un valor ya
+El script **solo escribe en `config.toml` los valores que faltaban**. Un valor ya
 presente es una decisión del operador y no se toca:
 
-- `GENIXSEARCH_URL` — si ya tiene valor, se reutiliza tal cual. El script **no puede
+- `search.url` — si ya tiene valor, se reutiliza tal cual. El script **no puede
   deducir** la dirección por la que el backend entra de verdad (IP pública, dominio o
   túnel): la IP que detecta el host suele ser la privada de la VPC, que desde Lambda no
   resuelve a nada. Solo cuando está vacía escribe la IP detectada, y avisa si es privada.
-- `GENIXSEARCH_PASSWORD` — se reutiliza la existente; si no hay, genera una de 64
+- `search.password` — se reutiliza la existente; si no hay, genera una de 64
   caracteres (minúsculas + dígitos) y la escribe.
 
 El backend Go las lee como `core.Env.GENIXSEARCH_URL` / `core.Env.GENIXSEARCH_PASSWORD`
-(`backend/core/security.go`). El puerto sale de `GENIXSEARCH_URL` si ya trae uno; si no,
+(`backend/core/security.go`), pobladas desde `search.url` / `search.password` de
+`config.toml`. El puerto sale de `search.url` si ya trae uno; si no,
 usa `14446`, el mismo default de `core.ParseGenixSearchURL`. Es decir: el puerto en el
-que escucha el servicio se controla poniendo el puerto en `GENIXSEARCH_URL`.
+que escucha el servicio se controla poniendo el puerto en `search.url`.
 
 El archivo se reescribe con indentación de 4 espacios y se le devuelve la propiedad al
 usuario que invocó `sudo`.
@@ -128,4 +129,4 @@ un servicio instalado pero inalcanzable es el síntoma más caro de diagnosticar
 Ambos modos publican la misma dirección: el script prefiere la IP de la tailnet
 (Tailscale o Headscale, detectada por la CLI o por los rangos `100.64.0.0/10` y
 `fd7a:115c:a1e0::/48` en las interfaces) y cae a la IP interna de la VPC si no hay
-túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla y a `GENIXSEARCH_URL`.
+túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla y a `search.url`.

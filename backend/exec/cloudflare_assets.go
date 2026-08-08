@@ -139,9 +139,9 @@ func ensureCompanyWebpageAssetCORS(projectRoot string) error {
 		// deploy at a bucket nobody created.
 		var apiError *cloudflareAPIError
 		if errors.As(requestError, &apiError) && apiError.StatusCode == http.StatusNotFound {
-			nameSource := fmt.Sprintf("CLOUDFLARE_BUCKET=%q en credentials.json", bucketName)
+			nameSource := fmt.Sprintf("cloudflare.bucket=%q en config.toml", bucketName)
 			if strings.TrimSpace(core.Env.CLOUDFLARE_BUCKET) == strings.TrimSpace(core.Env.APP_NAME)+"-files" {
-				nameSource = fmt.Sprintf("derivado de APP_NAME=%q; fíjelo con CLOUDFLARE_BUCKET en credentials.json", strings.TrimSpace(core.Env.APP_NAME))
+				nameSource = fmt.Sprintf("derivado de app_name=%q; fíjelo con cloudflare.bucket en config.toml", strings.TrimSpace(core.Env.APP_NAME))
 			}
 			return fmt.Errorf(
 				"el bucket R2 %q no existe (%s).\n"+

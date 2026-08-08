@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import json
 import os
 import platform
 import pwd
@@ -9,8 +8,13 @@ import shutil
 import stat
 import subprocess
 import sys
+import tomllib
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from toml_config import get_config_value, set_config_values  # noqa: E402
 
 SYSTEMD_DIRECTORY = Path("/etc/systemd/system")
 SERVICE_INSTALL_DIRECTORY = Path("/usr/local/bin/genix")
@@ -33,8 +37,9 @@ GO_BINARY_SEARCH_PATHS = [
 ELF_MAGIC_BYTES = b"\x7fELF"
 
 # The Nginx edge host and the backend host are usually two different machines: Nginx terminates
-# TLS for NGINX_DOMAIN and forwards to NGINX_PROCESS, while the backend host only runs the
-# systemd units and listens on SERVER_PORT. Each install mode configures one side of that pair.
+# TLS for server.nginx_domain and forwards to server.nginx_process, while the backend host only
+# runs the systemd units and listens on server.port. Each install mode configures one side of
+# that pair.
 EXECUTION_MODE_FULL = "full"
 EXECUTION_MODE_SYSTEMD = "systemd"
 EXECUTION_MODE_NGINX = "nginx"
@@ -114,45 +119,45 @@ def require_root_execution():
         fail_with_error("This script must be executed as root.")
 
 
-def detect_repository_credentials_path():
+def detect_repository_config_path():
     # Prefer a repository root literally named "genix"; otherwise fall back to the directory that
     # holds this script's parent ("<root>/scripts/configure_server.py"), so a clone with a
     # different directory name still resolves. The file itself may not exist yet.
     script_path = Path(__file__).resolve()
     for parent_path in script_path.parents:
         if parent_path.name == "genix":
-            repository_credentials_path = parent_path / "credentials.json"
-            print_debug(f"Using repository credentials path: {repository_credentials_path}")
-            return repository_credentials_path
+            repository_config_path = parent_path / "config.toml"
+            print_debug(f"Using repository config path: {repository_config_path}")
+            return repository_config_path
 
-    fallback_credentials_path = script_path.parents[1] / "credentials.json"
+    fallback_config_path = script_path.parents[1] / "config.toml"
     print_debug(
-        f"No repository root named 'genix' found. Using {fallback_credentials_path} instead."
+        f"No repository root named 'genix' found. Using {fallback_config_path} instead."
     )
-    return fallback_credentials_path
+    return fallback_config_path
 
 
-def load_project_credentials(repository_credentials_path):
+def load_project_credentials(repository_config_path):
     # A missing file is not fatal: every value this script needs can be typed in instead, which is
     # what an Nginx-only host without a full clone of the repository normally does.
-    if not repository_credentials_path.exists():
-        print_debug(f"No credentials.json at {repository_credentials_path}. Values will be requested.")
+    if not repository_config_path.exists():
+        print_debug(f"No config.toml at {repository_config_path}. Values will be requested.")
         return {}
 
-    print_debug(f"Loading project credentials from {repository_credentials_path}")
+    print_debug(f"Loading project config from {repository_config_path}")
     try:
-        credentials_content = repository_credentials_path.read_text(encoding="utf-8")
+        config_content = repository_config_path.read_bytes()
     except OSError as read_error:
-        fail_with_error(f"Could not read credentials.json: {read_error}")
+        fail_with_error(f"Could not read config.toml: {read_error}")
 
     try:
-        parsed_credentials = json.loads(credentials_content)
-    except json.JSONDecodeError as parse_error:
+        parsed_credentials = tomllib.loads(config_content.decode("utf-8"))
+    except tomllib.TOMLDecodeError as parse_error:
         # Refuse to guess here: prompting would later overwrite a real but broken file.
-        fail_with_error(f"Could not parse credentials.json: {parse_error}")
+        fail_with_error(f"Could not parse config.toml: {parse_error}")
 
     if not isinstance(parsed_credentials, dict):
-        fail_with_error("credentials.json must contain a JSON object.")
+        fail_with_error("config.toml must contain a table at the top level.")
 
     return parsed_credentials
 
@@ -211,7 +216,7 @@ def validate_nginx_domain(raw_value):
 
 
 def validate_nginx_process(raw_value):
-    # NGINX_PROCESS is normally a bare "host:port" pointing at the backend host, but a full
+    # server.nginx_process is normally a bare "host:port" pointing at the backend host, but a full
     # http:// or https:// upstream is accepted so an already-TLS backend can be reused as-is.
     process_value = raw_value.strip()
     if not process_value:
@@ -250,30 +255,30 @@ def validate_server_port(raw_value):
     return int(port_value), None
 
 
-def resolve_credential_value(project_credentials, variable_name, prompt_text, validate_value):
+def resolve_credential_value(project_credentials, dotted_key, prompt_text, validate_value):
     """Read one credential, asking for it on the terminal when it is absent or invalid.
 
     Returns (value, was_prompted) so main() can offer to persist whatever had to be typed in.
     """
-    raw_value = project_credentials.get(variable_name)
+    raw_value = get_config_value(project_credentials, dotted_key)
     if raw_value is not None:
         validated_value, validation_error = validate_value(str(raw_value))
         if validated_value is not None:
             return validated_value, False
-        print_debug(f"{variable_name} in credentials.json is unusable: {validation_error}")
+        print_debug(f"{dotted_key} in config.toml is unusable: {validation_error}")
     else:
-        print_debug(f"{variable_name} is not set in credentials.json.")
+        print_debug(f"{dotted_key} is not set in config.toml.")
 
     if not sys.stdin.isatty():
         fail_with_error(
-            f"{variable_name} is missing or invalid and there is no interactive terminal to ask for it. "
-            f"Add {variable_name} to credentials.json and run the script again."
+            f"{dotted_key} is missing or invalid and there is no interactive terminal to ask for it. "
+            f"Add {dotted_key} to config.toml and run the script again."
         )
 
     while True:
         validated_value, validation_error = validate_value(input(f"{prompt_text}: "))
         if validated_value is not None:
-            print_debug(f"Using {variable_name}={validated_value}")
+            print_debug(f"Using {dotted_key}={validated_value}")
             return validated_value, True
 
         print(f"[!] {validation_error}", file=sys.stderr)
@@ -283,13 +288,13 @@ def extract_nginx_settings(project_credentials, local_server_port=None):
     """Resolve the Nginx side of the install.
 
     local_server_port is set when this same host also runs the systemd service (full mode). In
-    that case the upstream is the local backend, so NGINX_PROCESS is derived instead of asked for;
-    an explicit value in credentials.json still wins, for the rare split-host full install.
+    that case the upstream is the local backend, so server.nginx_process is derived instead of
+    asked for; an explicit value in config.toml still wins, for the rare split-host full install.
     """
     nginx_domain, domain_was_prompted = resolve_credential_value(
         project_credentials,
-        "NGINX_DOMAIN",
-        "Enter NGINX_DOMAIN, the public domain Nginx serves (e.g. genix-api-4.un.pe)",
+        "server.nginx_domain",
+        "Enter server.nginx_domain, the public domain Nginx serves (e.g. genix-api-4.un.pe)",
         validate_nginx_domain,
     )
 
@@ -297,23 +302,23 @@ def extract_nginx_settings(project_credentials, local_server_port=None):
     nginx_process = None
 
     if local_server_port is not None:
-        configured_process = project_credentials.get("NGINX_PROCESS")
+        configured_process = get_config_value(project_credentials, "server.nginx_process")
         if configured_process is not None:
             nginx_process, validation_error = validate_nginx_process(str(configured_process))
             if nginx_process is None:
-                print_debug(f"NGINX_PROCESS in credentials.json is unusable: {validation_error}")
+                print_debug(f"server.nginx_process in config.toml is unusable: {validation_error}")
 
         if nginx_process is None:
             nginx_process = f"127.0.0.1:{local_server_port}"
             print_debug(
-                f"NGINX_PROCESS not needed in full mode: forwarding to the local systemd "
+                f"server.nginx_process not needed in full mode: forwarding to the local systemd "
                 f"service at {nginx_process}."
             )
     else:
         nginx_process, process_was_prompted = resolve_credential_value(
             project_credentials,
-            "NGINX_PROCESS",
-            "Enter NGINX_PROCESS, the backend host:port Nginx forwards to (e.g. 100.64.0.2:14010)",
+            "server.nginx_process",
+            "Enter server.nginx_process, the backend host:port Nginx forwards to (e.g. 100.64.0.2:14010)",
             validate_nginx_process,
         )
 
@@ -326,8 +331,8 @@ def extract_nginx_settings(project_credentials, local_server_port=None):
         "process": nginx_process,
         "backend_proxy_url": backend_proxy_url,
         "prompted_values": {
-            **({"NGINX_DOMAIN": nginx_domain} if domain_was_prompted else {}),
-            **({"NGINX_PROCESS": nginx_process} if process_was_prompted else {}),
+            **({"server.nginx_domain": nginx_domain} if domain_was_prompted else {}),
+            **({"server.nginx_process": nginx_process} if process_was_prompted else {}),
         },
     }
 
@@ -335,13 +340,13 @@ def extract_nginx_settings(project_credentials, local_server_port=None):
 def extract_server_port(project_credentials):
     server_port, port_was_prompted = resolve_credential_value(
         project_credentials,
-        "SERVER_PORT",
-        "Enter SERVER_PORT, the port the backend listens on (e.g. 14010)",
+        "server.port",
+        "Enter server.port, the port the backend listens on (e.g. 14010)",
         validate_server_port,
     )
 
     print_debug(f"Backend listen port: {server_port}")
-    return server_port, {"SERVER_PORT": server_port} if port_was_prompted else {}
+    return server_port, {"server.port": server_port} if port_was_prompted else {}
 
 
 def warn_on_port_mismatch(server_port, nginx_settings):
@@ -351,12 +356,12 @@ def warn_on_port_mismatch(server_port, nginx_settings):
     upstream_port = nginx_settings["process"].rstrip("/").rpartition(":")[2]
     if upstream_port.isdigit() and int(upstream_port) != server_port:
         print_debug(
-            f"WARNING: SERVER_PORT ({server_port}) does not match the port in NGINX_PROCESS "
+            f"WARNING: server.port ({server_port}) does not match the port in server.nginx_process "
             f"({upstream_port}). Nginx will proxy to a port the backend is not listening on."
         )
 
 
-def persist_prompted_credentials(repository_credentials_path, prompted_values):
+def persist_prompted_credentials(repository_config_path, prompted_values):
     if not prompted_values:
         return
 
@@ -364,41 +369,36 @@ def persist_prompted_credentials(repository_credentials_path, prompted_values):
     print_debug(f"These values were typed in and are not stored yet: {described_values}")
 
     if not sys.stdin.isatty():
-        print_debug("No interactive terminal available. Skipping credentials.json update.")
+        print_debug("No interactive terminal available. Skipping config.toml update.")
         return
 
-    answer = input(f"Save them to {repository_credentials_path}? [Y/n]: ").strip().lower()
+    answer = input(f"Save them to {repository_config_path}? [Y/n]: ").strip().lower()
     if answer not in {"", "y", "yes"}:
-        print_debug("Leaving credentials.json untouched.")
+        print_debug("Leaving config.toml untouched.")
         return
 
-    # Re-read instead of reusing the parsed dict so unrelated keys written by another process
-    # between the load and this point survive the rewrite.
-    credentials_file_already_existed = repository_credentials_path.exists()
-    stored_credentials = load_project_credentials(repository_credentials_path)
-    stored_credentials.update(prompted_values)
+    config_file_already_existed = repository_config_path.exists()
+    if not config_file_already_existed:
+        repository_config_path.parent.mkdir(parents=True, exist_ok=True)
+        repository_config_path.touch()
 
     try:
-        repository_credentials_path.parent.mkdir(parents=True, exist_ok=True)
-        repository_credentials_path.write_text(
-            json.dumps(stored_credentials, indent=4, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
+        set_config_values(repository_config_path, prompted_values)
     except OSError as write_error:
-        fail_with_error(f"Could not write credentials.json: {write_error}")
+        fail_with_error(f"Could not write config.toml: {write_error}")
 
-    if not credentials_file_already_existed:
+    if not config_file_already_existed:
         # A file created by root would be unreadable to the non-root service, so hand it to
         # whoever owns the repository directory — the account that cloned it.
-        repository_directory_stat = repository_credentials_path.parent.stat()
+        repository_directory_stat = repository_config_path.parent.stat()
         os.chown(
-            repository_credentials_path,
+            repository_config_path,
             repository_directory_stat.st_uid,
             repository_directory_stat.st_gid,
         )
-        os.chmod(repository_credentials_path, 0o600)
+        os.chmod(repository_config_path, 0o600)
 
-    print_debug(f"Saved {len(prompted_values)} value(s) to {repository_credentials_path}")
+    print_debug(f"Saved {len(prompted_values)} value(s) to {repository_config_path}")
 
 
 def detect_runtime_username():
@@ -1123,8 +1123,8 @@ def configure_nginx_reverse_proxy(nginx_settings):
     return True
 
 
-def build_main_service_contents(runtime_username, repository_credentials_path, server_port):
-    repository_root_path = repository_credentials_path.parent
+def build_main_service_contents(runtime_username, repository_config_path, server_port):
+    repository_root_path = repository_config_path.parent
     return f"""[Unit]
 Description=Genix Backend Service
 After=network.target
@@ -1134,10 +1134,10 @@ Type=simple
 User={runtime_username}
 Group={runtime_username}
 WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
-Environment=GENIX_CREDENTIALS_FILE={repository_credentials_path}
+Environment=GENIX_CONFIG_FILE={repository_config_path}
 Environment=GENIX_REPOSITORY_ROOT={repository_root_path}
-# SERVER_PORT comes from credentials.json and must match the port half of NGINX_PROCESS,
-# otherwise the Nginx host proxies to a port nothing is listening on.
+# SERVER_PORT comes from server.port in config.toml and must match the port half of
+# server.nginx_process, otherwise the Nginx host proxies to a port nothing is listening on.
 Environment=SERVER_PORT={server_port}
 ExecStart={SERVICE_BINARY_PATH}
 Restart=always
@@ -1197,10 +1197,10 @@ def write_unit_file(unit_file_path, unit_contents):
     return True
 
 
-def configure_systemd_units(runtime_username, repository_credentials_path, server_port):
+def configure_systemd_units(runtime_username, repository_config_path, server_port):
     main_service_configuration_changed = write_unit_file(
         SYSTEMD_DIRECTORY / SERVICE_NAME,
-        build_main_service_contents(runtime_username, repository_credentials_path, server_port),
+        build_main_service_contents(runtime_username, repository_config_path, server_port),
     )
     restart_service_configuration_changed = write_unit_file(
         SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME,
@@ -1247,13 +1247,13 @@ def start_service():
     print_debug(f"{SERVICE_NAME} is running.")
 
 
-def install_systemd_service(repository_credentials_path, server_port):
+def install_systemd_service(repository_config_path, server_port):
     runtime_username = detect_runtime_username()
     runtime_user_entry = resolve_runtime_user(runtime_username)
     ensure_binary_directory(runtime_user_entry)
-    provide_service_binary(repository_credentials_path.parent, runtime_user_entry)
+    provide_service_binary(repository_config_path.parent, runtime_user_entry)
     systemd_configuration_changed = configure_systemd_units(
-        runtime_username, repository_credentials_path, server_port
+        runtime_username, repository_config_path, server_port
     )
     enable_units()
     reload_systemd_if_configuration_changed(systemd_configuration_changed)
@@ -1263,19 +1263,19 @@ def install_systemd_service(repository_credentials_path, server_port):
 
 def print_summary(
     execution_mode,
-    repository_credentials_path,
+    repository_config_path,
     runtime_username,
     server_port,
     nginx_settings,
 ):
     print_debug("Configuration completed.")
     print_debug(f"Install mode: {execution_mode}")
-    print_debug(f"Repository credentials path: {repository_credentials_path}")
+    print_debug(f"Repository config path: {repository_config_path}")
 
-    if runtime_username and not repository_credentials_path.exists():
-        # The backend reads credentials.json through GENIX_CREDENTIALS_FILE and panics without it.
+    if runtime_username and not repository_config_path.exists():
+        # The backend reads config.toml through GENIX_CONFIG_FILE and panics without it.
         print_debug(
-            f"WARNING: {repository_credentials_path} does not exist. The service is installed but "
+            f"WARNING: {repository_config_path} does not exist. The service is installed but "
             "will fail to start until that file is in place."
         )
 
@@ -1283,7 +1283,7 @@ def print_summary(
         print_debug(f"Runtime user: {runtime_username}")
         binary_size_in_bytes = SERVICE_BINARY_PATH.stat().st_size if SERVICE_BINARY_PATH.is_file() else 0
         print_debug(f"Binary path: {SERVICE_BINARY_PATH} ({binary_size_in_bytes / 1_048_576:.1f} MiB)")
-        print_debug(f"Backend listen port (SERVER_PORT): {server_port}")
+        print_debug(f"Backend listen port (server.port): {server_port}")
         print_debug(f"Main service unit: {SYSTEMD_DIRECTORY / SERVICE_NAME}")
         print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / RESTART_PATH_NAME}")
         print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME}")
@@ -1291,23 +1291,23 @@ def print_summary(
         print_debug("The service will also keep checking the install directory via its working directory.")
 
     if nginx_settings:
-        print_debug(f"Nginx domain (NGINX_DOMAIN): {nginx_settings['domain']}")
-        print_debug(f"Nginx upstream (NGINX_PROCESS): {nginx_settings['backend_proxy_url']}")
+        print_debug(f"Nginx domain (server.nginx_domain): {nginx_settings['domain']}")
+        print_debug(f"Nginx upstream (server.nginx_process): {nginx_settings['backend_proxy_url']}")
         print_debug(
             f"Nginx config file: {NGINX_CONFIGURATION_DIRECTORY / (nginx_settings['domain'] + '.conf')}"
         )
 
     if execution_mode == EXECUTION_MODE_NGINX:
-        print_debug("Run this script with mode 2 on the backend host so it listens on SERVER_PORT.")
+        print_debug("Run this script with mode 2 on the backend host so it listens on server.port.")
     if execution_mode == EXECUTION_MODE_SYSTEMD:
-        print_debug("Run this script with mode 3 on the Nginx host so NGINX_DOMAIN forwards here.")
+        print_debug("Run this script with mode 3 on the Nginx host so server.nginx_domain forwards here.")
 
 
 def main():
     require_root_execution()
     execution_mode = resolve_execution_mode()
-    repository_credentials_path = detect_repository_credentials_path()
-    project_credentials = load_project_credentials(repository_credentials_path)
+    repository_config_path = detect_repository_config_path()
+    project_credentials = load_project_credentials(repository_config_path)
 
     configure_systemd = execution_mode in {EXECUTION_MODE_FULL, EXECUTION_MODE_SYSTEMD}
     configure_nginx = execution_mode in {EXECUTION_MODE_FULL, EXECUTION_MODE_NGINX}
@@ -1327,18 +1327,18 @@ def main():
         prompted_values.update(nginx_settings["prompted_values"])
 
     warn_on_port_mismatch(server_port, nginx_settings)
-    persist_prompted_credentials(repository_credentials_path, prompted_values)
+    persist_prompted_credentials(repository_config_path, prompted_values)
 
     runtime_username = None
     if configure_systemd:
-        runtime_username = install_systemd_service(repository_credentials_path, server_port)
+        runtime_username = install_systemd_service(repository_config_path, server_port)
 
     if configure_nginx:
         configure_nginx_reverse_proxy(nginx_settings)
 
     print_summary(
         execution_mode,
-        repository_credentials_path,
+        repository_config_path,
         runtime_username,
         server_port,
         nginx_settings,

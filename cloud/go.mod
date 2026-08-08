@@ -11,7 +11,7 @@ require (
 	github.com/cloudflare/cloudflare-go/v2 v2.4.0
 	github.com/klauspost/compress v1.17.2
 	github.com/kr/pretty v0.3.1
-	github.com/tidwall/sjson v1.2.5
+	github.com/pelletier/go-toml/v2 v2.4.3
 )
 
 require (
@@ -38,4 +38,5 @@ require (
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 )

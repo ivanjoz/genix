@@ -19,13 +19,13 @@ fi
 echo "✅ Go found: $(go version)"
 echo ""
 
-# Check if credentials.json exists
-if [ ! -f "../credentials.json" ]; then
-    echo "❌ Error: credentials.json not found in parent directory"
+# Check if config.toml exists
+if [ ! -f "../config.toml" ]; then
+    echo "❌ Error: config.toml not found in parent directory"
     exit 1
 fi
 
-echo "✅ Found credentials.json"
+echo "✅ Found config.toml"
 echo ""
 
 # Check if go.mod exists
@@ -62,7 +62,7 @@ func main() {
     fmt.Println()
 
     if cfg.SignalingEndpoint == "" {
-        fmt.Println("⚠️  WARNING: SIGNALING_ENDPOINT is not set in credentials.json")
+        fmt.Println("⚠️  WARNING: signaling.endpoint is not set in config.toml")
         fmt.Println("   Please add it after deploying: wss://xxx.execute-api.region.amazonaws.com/prod")
         os.Exit(0)
     }
@@ -92,12 +92,12 @@ echo "✅ Configuration Test Passed!"
 echo "========================================="
 echo ""
 
-# Check if SIGNALING_ENDPOINT is set
-if ! grep -q "SIGNALING_ENDPOINT" ../credentials.json 2>/dev/null; then
-    echo "⚠️  SIGNALING_ENDPOINT not found in credentials.json"
+# Check if signaling.endpoint is set
+if ! grep -q '^\s*endpoint\s*=\s*"[^"]\+"' ../config.toml 2>/dev/null; then
+    echo "⚠️  signaling.endpoint not found in config.toml"
     echo ""
-    echo "Please add it after running ./deploy.sh:"
-    echo '  "SIGNALING_ENDPOINT": "wss://your-api-id.execute-api.region.amazonaws.com/prod",'
+    echo "Please add it after running ./deploy.sh, under [signaling]:"
+    echo '  endpoint = "wss://your-api-id.execute-api.region.amazonaws.com/prod"'
     echo ""
     echo "Skipping server test..."
     exit 0
@@ -174,5 +174,5 @@ echo ""
 echo "🚀 You can now run:"
 echo "   go run homelab_server/main.go"
 echo ""
-echo "💡 Make sure your Signaling Endpoint is correct in credentials.json"
-echo "   The server will connect to: $(grep -o '"SIGNALING_ENDPOINT"[^,}]*' ../credentials.json | head -1 || echo 'Not set')"
+echo "💡 Make sure your Signaling Endpoint is correct in config.toml"
+echo "   The server will connect to: $(grep -o '^\s*endpoint\s*=.*' ../config.toml | head -1 || echo 'Not set')"

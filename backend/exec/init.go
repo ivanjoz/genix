@@ -36,7 +36,7 @@ func configureTextSearchGenixSearch() {
 func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 
 	if len(core.Env.ADMIN_PASSWORD) == 0 || len(core.Env.SECRET_PHRASE) == 0 {
-		panic("No se especificado el ADMIN_PASSWORD y el SECRET_PHRASE en credentials.json")
+		panic("No se especificado el admin_password y el secret_phrase en config.toml")
 	}
 
 	// Wire the GenixSearch endpoint before any seed write hits a
@@ -246,7 +246,7 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 
 	if len(core.Env.DB_NAME) == 0 {
-		panic("No se ha especificado el DB_NAME en credentials.json")
+		panic("No se ha especificado el db.name en config.toml")
 	}
 
 	scylla.MakeScyllaConnection(makeConnParams())

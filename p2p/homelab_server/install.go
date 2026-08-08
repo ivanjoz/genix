@@ -25,7 +25,7 @@ const (
 // InstallOptions contains installation configuration options
 type InstallOptions struct {
 	// WorkingDirectory is the directory where the service will run
-	// (should be the project root where credentials.json is located)
+	// (should be the project root where config.toml is located)
 	WorkingDirectory string
 }
 

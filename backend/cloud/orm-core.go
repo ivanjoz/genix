@@ -41,9 +41,9 @@ func getProviderORM[RecordT db.Record[TableT, RecordT, D], TableT db.Schema[Tabl
 	provider := core.Env.BACKEND_PROVIDER
 	if provider != "aws" && provider != "cloudflare" {
 		if provider == "none" {
-			return nil, errors.New("cloud data mirror is disabled because BACKEND_PROVIDER is 'none'")
+			return nil, errors.New("cloud data mirror is disabled because providers.backend is 'none'")
 		}
-		return nil, errors.New("BACKEND_PROVIDER in credentials.json is not set or invalid (must be 'aws', 'cloudflare', or 'none')")
+		return nil, errors.New("providers.backend en config.toml no está definido o es inválido (debe ser 'aws', 'cloudflare' o 'none')")
 	}
 
 	tableMeta, err := buildTableMeta[RecordT, TableT, D]()
@@ -56,7 +56,7 @@ func getProviderORM[RecordT db.Record[TableT, RecordT, D], TableT db.Schema[Tabl
 	}
 
 	if core.Env.CLOUDFLARE_ACCOUNT == "" || core.Env.CLOUDFLARE_TOKEN == "" || core.Env.CLOUDFLARE_DATABASE_ID == "" {
-		panic("CLOUDFLARE_ACCOUNT, CLOUDFLARE_TOKEN, and CLOUDFLARE_DATABASE_ID must be set in credentials.json when BACKEND_PROVIDER is 'cloudflare'")
+		panic("cloudflare.account, cloudflare.token, and cloudflare.database_id must be set in config.toml when providers.backend is 'cloudflare'")
 	}
 	return NewSqliteORM[RecordT](tableMeta), nil
 }

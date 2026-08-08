@@ -7,18 +7,18 @@ Este proyecto se puede desplegar en AWS Lambda + una base de datos ScyllaDB en u
 
 ## Parámetros de configuración
 
-`deploy.sh` usa `credentials.json` por defecto. Cuando existe `credentials.1.json`, primero pide
-elegir el environment `0 | 1` y exporta su ruta como `GENIX_CREDENTIALS_FILE`. Las acciones de
+`deploy.sh` usa `config.toml` por defecto. Cuando existe `config.1.toml`, primero pide
+elegir el environment con botones y exporta su ruta como `GENIX_CONFIG_FILE`. Las acciones de
 frontend, backend, VPS, infraestructura y variables de GitHub leen esa misma selección; las
-actualizaciones de `LAMBDA_URL` y `FRONTEND_CDN` también se escriben en el archivo elegido.
+actualizaciones de `aws.lambda_url` y `frontend.cdn_url` también se escriben en el archivo elegido.
 
-`BACKEND_PROVIDER` accepts `aws`, `cloudflare`, or `none`. Use `none` for a self-hosted VPS
+`providers.backend` accepts `aws`, `cloudflare`, or `none`. Use `none` for a self-hosted VPS
 that keeps auth and tenant master data only in the primary ScyllaDB database.
 
 
 ## Lambda Deployment + DynamoDB + CDN
 
-Set `BACKEND_PROVIDER` to `aws` to deploy Lambda + DynamoDB. Set `CDN_PROVIDER` independently:
+Set `providers.backend` to `aws` to deploy Lambda + DynamoDB. Set `providers.cdn` independently:
 `aws` provisions the S3 + CloudFront frontend, while `cloudflare` provisions an R2 public origin.
 
 La infraestructura AWS es una plantilla de CloudFormation, `cloud/template.yml`, desplegada
@@ -32,15 +32,15 @@ Se ejecuta desde `cloud/` con `go run . <accion>`:
 | `2` | Comprime el archivo de credenciales seleccionado y lo publica como variables de entorno de las Lambdas. |
 | `3` | Compila, sube el `.zip` a S3 y crea o actualiza el stack de CloudFormation. |
 
-La acción `13` de `deploy.sh` hace lo mismo que la `2` pero con AWS CLI (`jq` + `zstd` + `aws`),
-sin compilar nada ni esperar una tecla: reinyecta `CONFIG` (credenciales zstd + base64 url-safe),
+La acción `13` de `deploy.sh` hace lo mismo que la `2` pero con AWS CLI, sin compilar nada ni
+esperar una tecla: reinyecta `CONFIG` (credenciales zstd + base64 url-safe),
 `APP_CODE` y `LAMBDA_RESPONSE_STREAMING` en `<APP_NAME>-backend` y `<APP_NAME>-backend_2`, y las
 variables sueltas de Cloudflare en `<APP_NAME>-webpage-renderer`. Las Lambdas que no existan en el
 stack se omiten con un aviso.
 
 ### Qué crea la plantilla
 
-Todo se nombra a partir de `APP_NAME` de `credentials.json` (el stack es `<APP_NAME>-stack`):
+Todo se nombra a partir de `app_name` de `config.toml` (el stack es `<APP_NAME>-stack`):
 
 - Bucket S3 del frontend + CloudFront con OAI. HTML, `sw.js`, `registerSW.js` y
   `*.webmanifest` se sirven sin caché; el resto con la política `CachingOptimized`. Los 403 y
@@ -56,7 +56,7 @@ El bucket y la tabla son `Retain`: sobreviven al borrado del stack. Un stack pos
 podrá recrear esos nombres mientras los huérfanos existan, así que hay que borrarlos a mano
 o usar un `APP_NAME` nuevo.
 
-La plantilla no crea recursos IAM; consume el rol existente de `LAMBDA_IAM_ROLE`.
+La plantilla no crea recursos IAM; consume el rol existente de `aws.lambda_iam_role`.
 
 ### La tabla DynamoDB la gobierna CloudFormation
 
@@ -81,28 +81,28 @@ la acción `2` los reescribe desde la constante `lambdaResponseStreamingFlag` de
 
 ### Después de un despliegue
 
-La acción `3` imprime los outputs del stack y escribe `BackendUrl` en el `LAMBDA_URL` del
-archivo de credenciales seleccionado, avisando del valor anterior si cambió. Si `LAMBDA_URL` apuntaba a un
+La acción `3` imprime los outputs del stack y escribe `BackendUrl` en el `aws.lambda_url` del
+archivo de configuración seleccionado, avisando del valor anterior si cambió. Si `aws.lambda_url` apuntaba a un
 dominio propio en vez de a una Function URL, la herramienta lo advierte: hay que reapuntar ese
 dominio a la nueva URL o restaurar el valor anterior a mano.
 
-`FRONTEND_CDN` no se actualiza solo. Cópialo del output `FrontendDistributionDomain` cuando el
+`frontend.cdn_url` no se actualiza solo. Cópialo del output `FrontendDistributionDomain` cuando el
 dominio de CloudFront cambie, y vuelve a subir el frontend al bucket nuevo.
 
 ### El agente necesita el SSE Bridge
 
 Lambda no puede sostener un stream abierto ni recibir la respuesta del navegador dentro de la
 misma invocación, y el agente necesita las dos cosas. Con el backend en Lambda hay que desplegar
-además `sse_bridge/` en un servidor normal y poner su URL pública en `SSE_BRIDGE_URL` de
-`credentials.json` (instalación y nginx en `sse_bridge/README.md`).
+además `sse_bridge/` en un servidor normal y poner su URL pública en `sse_bridge.url` de
+`config.toml` (instalación y nginx en `sse_bridge/README.md`).
 
-Si `SSE_BRIDGE_URL` falta o es igual a `LAMBDA_URL`, el chat del agente queda inoperativo en el
+Si `sse_bridge.url` falta o es igual a `aws.lambda_url`, el chat del agente queda inoperativo en el
 endpoint Lambda; todo lo demás de la app funciona igual. En self-host no hace falta: ese proceso
 sirve su propio `/agent/stream`.
 
 ## Self-host Deployment + DynamoDB + S3
 
-El proyecto debe ser compilado y el archivo "app" y el "credentials.json" debe ser subido en el mismo folder.
+El proyecto debe ser compilado y el archivo "app" y el "config.toml" debe ser subido en el mismo folder.
 
 Creación de servicio en systemd
 

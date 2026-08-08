@@ -1,29 +1,25 @@
 #!/bin/bash
 
-# --- File Names ---
-CONFIG_FILE="credentials.json"
+CONFIG_FILE="config.toml"
 
 echo "--- ScyllaDB Connectivity Tool for Fedora ---"
 
-# 1. Check for jq (needed to read JSON)
-if ! command -v jq &> /dev/null; then
-    echo "jq not found. Installing..."
-    sudo dnf install -y jq
-fi
-
-# 2. Check if config file exists
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: $CONFIG_FILE not found in the current folder."
     exit 1
 fi
 
-# 3. Extract credentials using jq
-SCYLLA_HOST=$(jq -r '.DB_HOST' "$CONFIG_FILE")
-SCYLLA_PORT=$(jq -r '.DB_PORT' "$CONFIG_FILE")
-SCYLLA_USER=$(jq -r '.DB_USER' "$CONFIG_FILE")
-SCYLLA_PASS=$(jq -r '.DB_PASSWORD' "$CONFIG_FILE")
+# tomllib es stdlib desde Python 3.11 y ya es requisito de scripts/.
+read_config_value() {
+    python3 -c "import tomllib,sys; print(tomllib.load(open('$CONFIG_FILE','rb'))['db']['$1'])"
+}
 
-# 4. Check if cqlsh is installed
+SCYLLA_HOST=$(read_config_value host)
+SCYLLA_PORT=$(read_config_value port)
+SCYLLA_USER=$(read_config_value user)
+SCYLLA_PASS=$(read_config_value password)
+
+# Check if cqlsh is installed
 if ! command -v cqlsh &> /dev/null; then
     echo "cqlsh not found. Installing via pip..."
     pip install --user cqlsh
@@ -32,7 +28,6 @@ fi
 
 echo "Connecting to $SCYLLA_HOST on port $SCYLLA_PORT as $SCYLLA_USER..."
 
-# 5. Launch cqlsh
 cqlsh "$SCYLLA_HOST" "$SCYLLA_PORT" \
     -u "$SCYLLA_USER" \
     -p "$SCYLLA_PASS"

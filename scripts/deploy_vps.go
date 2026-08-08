@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,43 +10,48 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/pelletier/go-toml/v2"
 )
 
+// Same path that scripts/configure_server.py hardcodes in SERVICE_BINARY_PATH and writes into
+// ExecStart= and PathChanged=, so "bin" only needs to be set for servers configured by hand.
+const defaultRemoteBinaryPath = "/usr/local/bin/genix/genix_app"
+
 type ServerCredentials struct {
-	Host             string `json:"host"`
-	User             string `json:"user"`
-	Key              string `json:"key"`
-	Arch             string `json:"arch"`
-	RemoteBinaryPath string `json:"bin"`
+	Host             string `toml:"host"`
+	User             string `toml:"user"`
+	Key              string `toml:"key"`
+	Arch             string `toml:"arch"`
+	RemoteBinaryPath string `toml:"bin"`
 }
 
 type Credentials struct {
-	Servers []ServerCredentials `json:"SERVERS"`
+	Servers []ServerCredentials `toml:"servers"`
 }
 
 func DeployVPS() {
 	fmt.Println("Starting VPS deployment...")
 
 	// Use the environment selected by deploy.sh, with the original path as a standalone fallback.
-	credentialsFilePath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))
-	if credentialsFilePath == "" {
-		credentialsFilePath = "../credentials.json"
+	configFilePath := strings.TrimSpace(os.Getenv("GENIX_CONFIG_FILE"))
+	if configFilePath == "" {
+		configFilePath = "../config.toml"
 	}
-	fmt.Printf("Reading VPS deployment targets from: %s\n", credentialsFilePath)
-	credentialsContent, readCredentialsError := os.ReadFile(credentialsFilePath)
-	if readCredentialsError != nil {
-		fmt.Printf("Error reading credentials file %s: %v\n", credentialsFilePath, readCredentialsError)
+	fmt.Printf("Reading VPS deployment targets from: %s\n", configFilePath)
+	configContent, readConfigError := os.ReadFile(configFilePath)
+	if readConfigError != nil {
+		fmt.Printf("Error reading config file %s: %v\n", configFilePath, readConfigError)
 		return
 	}
 
 	var credentials Credentials
-	if parseCredentialsError := json.Unmarshal(credentialsContent, &credentials); parseCredentialsError != nil {
-		fmt.Printf("Error parsing credentials file %s: %v\n", credentialsFilePath, parseCredentialsError)
+	if parseConfigError := toml.Unmarshal(configContent, &credentials); parseConfigError != nil {
+		fmt.Printf("Error parsing config file %s: %v\n", configFilePath, parseConfigError)
 		return
 	}
 
 	if len(credentials.Servers) == 0 {
-		fmt.Printf("Error: SERVERS is empty in %s\n", credentialsFilePath)
+		fmt.Printf("Error: servers is empty in %s\n", configFilePath)
 		return
 	}
 
@@ -67,9 +71,9 @@ func DeployVPS() {
 			loginUser = "root"
 		}
 
-		if server.RemoteBinaryPath == "" {
-			fmt.Printf("Error: bin path is empty for host %s\n", server.Host)
-			return
+		remoteBinaryPath := strings.TrimSpace(server.RemoteBinaryPath)
+		if remoteBinaryPath == "" {
+			remoteBinaryPath = defaultRemoteBinaryPath
 		}
 
 		serverTarget := fmt.Sprintf("%s@%s", loginUser, server.Host)
@@ -80,10 +84,10 @@ func DeployVPS() {
 			return
 		}
 
-		remoteCompressedBinaryPath := server.RemoteBinaryPath + ".zst"
+		remoteCompressedBinaryPath := remoteBinaryPath + ".zst"
 
 		fmt.Printf("Deploying to %s\n", serverTarget)
-		fmt.Printf("Debug: host=%s user=%s arch=%s key=%q bin=%s\n", server.Host, loginUser, targetArchitecture, resolvedKeyPath, server.RemoteBinaryPath)
+		fmt.Printf("Debug: host=%s user=%s arch=%s key=%q bin=%s\n", server.Host, loginUser, targetArchitecture, resolvedKeyPath, remoteBinaryPath)
 
 		hasAutoReloadStrategy, strategyDetectionError := detectAutoReloadStrategy(resolvedKeyPath, serverTarget)
 		if strategyDetectionError != nil {
@@ -130,9 +134,9 @@ func DeployVPS() {
 			fmt.Sprintf(
 				"zstd -d --force %s -o %s && rm %s && chmod +x %s",
 				remoteCompressedBinaryPath,
-				server.RemoteBinaryPath,
+				remoteBinaryPath,
 				remoteCompressedBinaryPath,
-				server.RemoteBinaryPath,
+				remoteBinaryPath,
 			),
 		)
 		decompressRemoteBinaryCommand.Stdout = os.Stdout

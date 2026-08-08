@@ -1,0 +1,154 @@
+# Configuración de Genix. Copie este archivo a config.toml y complete los valores.
+# config.toml está en .gitignore: nunca se versiona.
+
+app_name       = "genix"
+is_local       = true
+environment    = ""
+admin_email    = "admin@example.com"
+admin_password = "admin_password"
+secret_phrase  = "cambie_esta_frase"
+github_account = "mi-cuenta"
+
+# ─── Proveedores ────────────────────────────────────────────────────────────
+[providers]
+backend = "none"        # aws | cloudflare | none  — espejo de datos: DynamoDB, D1 o ninguno
+cdn     = "aws"         # aws | cloudflare         — object storage y origen público de assets
+model   = "openrouter"  # meta | openrouter        — LLM del agente; sólo se exige su key
+
+# ─── Base de datos (ScyllaDB / Cassandra) ───────────────────────────────────
+[db]
+host        = "111.111.111.111"
+port        = 9042
+name        = "genix"
+user        = "cassandra"
+password    = "my_strong_password"
+disable_ssl = false
+# max_clustering_key_restrictions_per_query del nodo. 0 usa el default del ORM (100).
+max_clustering_key = 100
+
+# ─── Servidor propio (systemd + Nginx) ──────────────────────────────────────
+[server]
+# port debe coincidir con la mitad de puerto de nginx_process. 0 usa 3589.
+port          = 14010
+nginx_domain  = "api.example.com"
+nginx_process = "127.0.0.1:14010"
+
+# ─── Credit rate limiter (server_utils/) ───────────────────────────────────
+[rate_limit]
+address               = "127.0.0.1:14013"
+flush_seconds         = 15
+frame_timeout_seconds = 30
+max_connections       = 1024
+shards                = 0      # 0 = logical CPU count
+
+# Whole-company limits. CPU and inference credits are independent.
+company_cpu_10s        = 2000
+company_inference_10s  = 1000
+company_cpu_1h         = 40000
+company_inference_1h   = 10000
+company_cpu_24h        = 200000
+company_inference_24h  = 20000
+
+# Per-user limits inside each company.
+user_cpu_10s           = 1000
+user_inference_10s     = 500
+user_cpu_1h            = 20000
+user_inference_1h      = 5000
+user_cpu_24h           = 100000
+user_inference_24h     = 10000
+
+# ─── AWS ────────────────────────────────────────────────────────────────────
+[aws]
+region            = "us-east-1"
+profile           = "default"
+deployment_bucket = "deploys-bucket"
+lambda_iam_role   = "arn:aws:iam::000000000000:role/lambda-role"
+lambda_url        = ""
+s3_bucket         = ""
+frontend_bucket   = ""   # vacío = "<app_name>-frontend"
+# SageMaker — sólo los usan los scripts de ai/
+sagemaker_iam_role  = ""
+sagemaker_s3_output = ""
+hugging_face_token  = ""
+
+# ─── Cloudflare ─────────────────────────────────────────────────────────────
+[cloudflare]
+account     = ""
+token       = ""
+bucket      = ""   # vacío = "<app_name>-files"
+database_id = ""
+
+# ─── Frontend / CDN público ─────────────────────────────────────────────────
+[frontend]
+cdn_url   = ""
+zone_name = ""
+# Artefacto webpage-renderer.zip publicado por CI. Vacío = el default de
+# core.DefaultWebpageRendererURL, que debe seguir igual al de cloud/webpage-renderer.go.
+webpage_renderer_url = ""
+
+# ─── SMTP ───────────────────────────────────────────────────────────────────
+[smtp]
+host     = "email-smtp.us-east-1.amazonaws.com"
+port     = 587
+email    = ""
+user     = ""
+password = ""
+
+# ─── Agente / LLM ───────────────────────────────────────────────────────────
+[agent]
+# default_model debe existir en el proveedor elegido en providers.model.
+# Vacío = el default de compilación de backend/agent/llm.
+default_model  = ""
+meta_key       = ""
+openrouter_key = ""
+
+# ─── GenixSearch ────────────────────────────────────────────────────────────
+# Los escribe 'configure_db.py search' con la IP alcanzable del host.
+# url admite "host:puerto" o "esquema://host:puerto" (el esquema se ignora).
+# Vacío = 127.0.0.1:14446.
+[search]
+url      = ""
+password = ""
+
+# ─── SSE Bridge ─────────────────────────────────────────────────────────────
+# Relay que sostiene el stream del agente cuando el backend corre en Lambda, que no
+# puede mantener una conexión abierta. url igual a aws.lambda_url (o vacía) = sin
+# bridge: el backend sirve su propio /agent/stream.
+[sse_bridge]
+url    = ""
+apikey = ""
+port   = 14012
+
+# ─── Signaling (p2p/) ───────────────────────────────────────────────────────
+[signaling]
+socket               = ""
+endpoint             = ""
+api_key              = ""
+app_name             = ""   # vacío = "<app_name>-signaling"
+stack_name           = ""   # vacío = "<app_name>-signaling"
+lambda_function_name = ""
+aws_account          = ""
+
+# ─── Logs ───────────────────────────────────────────────────────────────────
+[logs]
+full      = false
+debug     = false
+only_save = false
+
+# ════════════════════════════════════════════════════════════════════════════
+# TABLAS DE ARRAY — SIEMPRE AL FINAL DEL ARCHIVO.
+# En TOML, tras un [[header]] toda clave suelta pertenece a esa tabla: añadir
+# cualquier clave simple debajo de este punto la asigna al último [[...]].
+# ════════════════════════════════════════════════════════════════════════════
+
+# Endpoints ofrecidos en el selector de servidor del login.
+[[endpoints]]
+name  = "Principal"
+route = "https://mi-backend.example.com/"
+
+# Destinos del deploy a VPS (scripts/deploy_vps.go).
+[[servers]]
+host = "127.0.0.1"
+user = "ubuntu"
+bin  = "/usr/local/bin/genix/genix_app"
+arch = "arm64"

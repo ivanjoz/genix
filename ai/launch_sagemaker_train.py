@@ -2,7 +2,7 @@ import sagemaker
 from sagemaker.huggingface import HuggingFace
 import boto3
 import os
-import json
+import tomllib
 import argparse
 from datetime import datetime
 from huggingface_hub import snapshot_download
@@ -19,18 +19,19 @@ args, _ = parser.parse_known_args()
 if args.no_cache:
     args.cache_model = False
 
-# 0.1 Cargar configuración desde credentials.json (en la carpeta padre)
+# 0.1 Cargar configuración desde config.toml (en la carpeta padre)
 script_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(script_dir)
-creds_path = os.path.join(parent_dir, "credentials.json")
-with open(creds_path, "r") as f:
-    config = json.load(f)
+config_path = os.path.join(parent_dir, "config.toml")
+with open(config_path, "rb") as f:
+    config = tomllib.load(f)
+aws_config = config.get("aws", {})
 
 # Configuración de AWS
-aws_profile = config.get("AWS_PROFILE", "default")
-region = config.get("AWS_REGION", "us-east-1")
+aws_profile = aws_config.get("profile", "default")
+region = aws_config.get("region", "us-east-1")
 # El rol de ejecución de SageMaker debe tener permisos de SageMaker y S3
-role = config.get("SAGEMAKER_ROLE", config.get("SAGEMAKER_IAM_ROLE"))
+role = aws_config.get("sagemaker_iam_role")
 
 # Inicializar sesión
 if args.local:
@@ -46,8 +47,8 @@ else:
     instance_type = 'ml.g4dn.xlarge'
     print(f"🚀 Ejecutando en SageMaker ({instance_type})")
 
-# Configuración de S3 (usar SAGEMAKER_S3_OUTPUT si existe, si no usar bucket default)
-s3_output_base = config.get("SAGEMAKER_S3_OUTPUT")
+# Configuración de S3 (usar aws.sagemaker_s3_output si existe, si no usar bucket default)
+s3_output_base = aws_config.get("sagemaker_s3_output")
 if s3_output_base:
     # Asegurar que termina en / para concatenar subcarpetas
     if not s3_output_base.endswith("/"):
@@ -95,7 +96,7 @@ if args.cache_model and not s3_exists:
         snapshot_download(
             repo_id=model_id,
             local_dir=local_cache_dir,
-            token=config.get("HUGGING_FACE_TOKEN", "")
+            token=aws_config.get("hugging_face_token", "")
         )
     
     # Subir a S3 si no es modo local
@@ -184,7 +185,7 @@ huggingface_estimator = HuggingFace(
     
     # Configuración adicional
     environment={
-        "HUGGING_FACE_HUB_TOKEN": config.get("HUGGING_FACE_TOKEN", ""),
+        "HUGGING_FACE_HUB_TOKEN": aws_config.get("hugging_face_token", ""),
         "TOKENIZERS_PARALLELISM": "false",  # Evitar warnings
         "S3_MODEL_CACHE": s3_model_uri if not s3_exists else "", # Pasar URI para cachear si no existe
     },

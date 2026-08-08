@@ -1,7 +1,8 @@
-credentials.json*
-credentials.*.json*
+config.toml*
+config.*.toml*
 # La plantilla no lleva secretos y sí se versiona, pero cae en el patrón de arriba.
-!credentials.example.json
+!config.example.toml
+server_utils/target/
 frontend/public/images/background-1.kra
 frontend/public/images/background-1.webp~
 cloud/main-compiled

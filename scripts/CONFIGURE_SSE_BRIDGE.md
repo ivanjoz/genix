@@ -8,8 +8,8 @@ sudo ./app.sh configure_sse_bridge
 ```
 
 No arguments, no install modes, and exactly one possible question —
-`SSE_BRIDGE_APIKEY`, and only when `credentials.json` does not already have it. Everything else
-is read from `credentials.json` or defaulted; a missing value fails with the key name instead of
+`sse_bridge.apikey`, and only when `config.toml` does not already have it. Everything else
+is read from `config.toml` or defaulted; a missing value fails with the key name instead of
 opening a prompt.
 
 Why it is simpler than [`configure_server.py`](CONFIGURE_SERVER.md): that script covers a backend
@@ -23,38 +23,39 @@ Must be run as `root`; the bridge itself runs as a non-root user. Background:
 
 ---
 
-## 🔑 credentials.json
+## 🔑 config.toml
 
-The bridge host holds a **minimal** `credentials.json` — not the backend's, which also carries
+The bridge host holds a **minimal** `config.toml` — not the backend's, which also carries
 database, AWS and SMTP secrets this process has no business seeing:
 
-```json
-{
-    "SSE_BRIDGE_URL": "https://genix-sse.un.pe/",
-    "SSE_BRIDGE_APIKEY": "<the backend's SECRET_PHRASE>"
-}
+```toml
+secret_phrase = ""
+
+[sse_bridge]
+url    = "https://genix-sse.un.pe/"
+apikey = "<the backend's secret_phrase>"
 ```
 
 | Key | Required | Used for |
 | --- | -------- | -------- |
-| `SSE_BRIDGE_URL` | yes | Its hostname becomes `server_name`, the config file name, and the `/etc/letsencrypt/live/` directory that is looked up. |
-| `SSE_BRIDGE_APIKEY` | yes | The shared secret. Asked for once and stored if absent. |
-| `SSE_BRIDGE_PORT` | no | Defaults to **14012** (`defaultListenPort` in `sse_bridge/config.go`). |
+| `sse_bridge.url` | yes | Its hostname becomes `server_name`, the config file name, and the `/etc/letsencrypt/live/` directory that is looked up. |
+| `sse_bridge.apikey` | yes | The shared secret. Asked for once and stored if absent. |
+| `sse_bridge.port` | no | Defaults to **14012** (`defaultListenPort` in `sse_bridge/config.go`). |
 
-- **`SSE_BRIDGE_URL`** is never prompted for: it is not a secret, and it is the same key the
+- **`sse_bridge.url`** is never prompted for: it is not a secret, and it is the same key the
   backend and the frontend read to decide whether to use the bridge at all. Missing, malformed,
   or still pointing at the Lambda function URL (which is how the project says *no bridge*) stops
   the run with a message naming the key.
-- **`SSE_BRIDGE_APIKEY`** must be **byte-identical to the backend's `SECRET_PHRASE`**: it is the
+- **`sse_bridge.apikey`** must be **byte-identical to the backend's `secret_phrase`**: it is the
   HMAC key of the session tokens the backend issues and of the `X-Bridge-Auth` header it signs.
   A mismatch is not a startup error — it is every request being rejected at runtime.
-  On a developer machine, where the backend's full `credentials.json` is present, the
-  `SECRET_PHRASE` key is used directly and nothing is asked.
-- **`SSE_BRIDGE_PORT`** with a bad value stops the run rather than falling back, because the
+  On a developer machine, where the backend's full `config.toml` is present, the
+  `secret_phrase` key is used directly and nothing is asked.
+- **`sse_bridge.port`** with a bad value stops the run rather than falling back, because the
   Nginx upstream is built from it.
 
 When the key has to be typed, it is read with `getpass` (not echoed, never printed back in the
-summary) and written into `credentials.json` as `SSE_BRIDGE_APIKEY`, `chmod 0600`. That is not
+summary) and written into `config.toml` as `sse_bridge.apikey`, `chmod 0600`. That is not
 offered as a choice: the service cannot start without it, so declining would only install a unit
 that fails on boot. With no TTY attached (cron, CI, `ssh` without `-t`) the run fails instead.
 
@@ -73,7 +74,7 @@ that fails on boot. With no TTY attached (cron, CI, `ssh` without `-t`) the run 
 Type=simple
 User=ubuntu
 WorkingDirectory=/usr/local/bin/genix
-Environment=GENIX_CREDENTIALS_FILE=/home/ubuntu/genix/credentials.json
+Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml
 Environment=SSE_BRIDGE_PORT=14012
 ExecStart=/usr/local/bin/genix/sse_bridge
 Restart=always
@@ -81,7 +82,7 @@ RestartSec=3
 ```
 
 The key is **not** exported in the unit: files under `/etc/systemd/system` are world-readable,
-`credentials.json` is `0600`. Plus the same hardening as `genix.service` (`NoNewPrivileges`,
+`config.toml` is `0600`. Plus the same hardening as `genix.service` (`NoNewPrivileges`,
 `ProtectSystem=strict`, `CapabilityBoundingSet=`, `ReadWritePaths=/usr/local/bin/genix`).
 
 ### Where the binary comes from
@@ -153,8 +154,8 @@ curl -s http://127.0.0.1:14012/health          # {"Ok":true,"Channels":0,...}
 curl -s https://genix-sse.un.pe/health         # through Nginx
 ```
 
-Then set the same `SSE_BRIDGE_URL` in the `credentials.json` used to **build the backend and the
-frontend** — that is what switches both sides onto the bridge. Leaving it equal to `LAMBDA_URL`
+Then set the same `sse_bridge.url` in the `config.toml` used to **build the backend and the
+frontend** — that is what switches both sides onto the bridge. Leaving it equal to `aws.lambda_url`
 keeps the old native-SSE behaviour no matter what is installed here.
 
 Tests: `python3 -m unittest discover -s scripts/tests -p "test_configure_*.py"`.

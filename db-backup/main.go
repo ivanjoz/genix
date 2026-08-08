@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/pelletier/go-toml/v2"
 )
 
 const SCYLLA_DATA = "/var/lib/scylla/data"
@@ -26,6 +26,17 @@ type EnvStruct struct {
 }
 
 var Env EnvStruct
+
+// fileConfig reflects the slice of config.toml this module reads: only aws.profile,
+// aws.region and aws.s3_bucket come from the file, the rest of EnvStruct is derived in
+// populateVariables (same pattern as backend/core/security.go, with 3 fields).
+type fileConfig struct {
+	AWS struct {
+		Profile  string `toml:"profile"`
+		Region   string `toml:"region"`
+		S3Bucket string `toml:"s3_bucket"`
+	} `toml:"aws"`
+}
 
 func main() {
 	populateVariables()
@@ -67,13 +78,13 @@ func populateVariables() {
 	wd, _ := os.Getwd()
 	dirname := strings.Split(wd, "/")
 	if IS_PRODUCTION {
-		dirname = append(dirname, "credentials.json")
+		dirname = append(dirname, "config.toml")
 	} else {
-		dirname[len(dirname)-1] = "credentials.json"
+		dirname[len(dirname)-1] = "config.toml"
 	}
 
-	credentialsJson := strings.Join(dirname, "/")
-	file, err := os.Open(credentialsJson)
+	configPath := strings.Join(dirname, "/")
+	file, err := os.Open(configPath)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
 		return
@@ -83,15 +94,18 @@ func populateVariables() {
 	// Read the content of the file
 	variablesBytes, err := io.ReadAll(file)
 	if err != nil {
-		fmt.Println("Error reading credentials.json:", err)
+		fmt.Println("Error reading config.toml:", err)
 		return
 	}
 
-	err = json.Unmarshal(variablesBytes, &Env)
-	if err != nil {
-		fmt.Println("Error parsing credentials.json:", err)
+	var parsedFile fileConfig
+	if err := toml.Unmarshal(variablesBytes, &parsedFile); err != nil {
+		fmt.Println("Error parsing config.toml:", err)
 		return
 	}
+	Env.AWS_PROFILE = parsedFile.AWS.Profile
+	Env.AWS_REGION = parsedFile.AWS.Region
+	Env.S3_BUCKET = parsedFile.AWS.S3Bucket
 
 	Env.KEYSPACE = "genix"
 	Env.IS_PRODUCTION = IS_PRODUCTION

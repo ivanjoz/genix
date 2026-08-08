@@ -8,11 +8,11 @@ This document explains the systemd-based strategy for automatically reloading th
 
 The backend host and the Nginx edge host are usually two different machines, so the script asks which side to configure:
 
-| Mode | Name | What it configures | credentials.json keys used |
+| Mode | Name | What it configures | config.toml keys used |
 | ---- | ---- | ------------------ | -------------------------- |
-| `1` | Full | systemd units + Nginx reverse proxy | `SERVER_PORT`, `NGINX_DOMAIN`, `NGINX_PROCESS` |
-| `2` | Only Systemd Service | systemd units, binary directory, runtime user | `SERVER_PORT` |
-| `3` | Only Nginx Proxy | `/etc/nginx/conf.d/<NGINX_DOMAIN>.conf` | `NGINX_DOMAIN`, `NGINX_PROCESS` |
+| `1` | Full | systemd units + Nginx reverse proxy | `server.port`, `server.nginx_domain`, `server.nginx_process` |
+| `2` | Only Systemd Service | systemd units, binary directory, runtime user | `server.port` |
+| `3` | Only Nginx Proxy | `/etc/nginx/conf.d/<server.nginx_domain>.conf` | `server.nginx_domain`, `server.nginx_process` |
 
 Pass the mode as an argument (`1`/`full`, `2`/`systemd`, `3`/`nginx`) or answer the interactive prompt.
 
@@ -21,49 +21,49 @@ sudo ./app.sh configure_server 3    # Nginx VPS
 sudo ./app.sh configure_server 2    # backend host
 ```
 
-Only the credentials the selected mode needs are validated, so the Nginx host does not need `SERVER_PORT` and the backend host does not need `NGINX_DOMAIN`.
+Only the credentials the selected mode needs are validated, so the Nginx host does not need `server.port` and the backend host does not need `server.nginx_domain`.
 
 ### Missing credentials are requested on the terminal
 
-`credentials.json` is optional. When the file is absent — the usual case on an Nginx-only VPS that has no full clone — or when a key the selected mode needs is missing or malformed, the script asks for that value and re-asks until it validates:
+`config.toml` is optional. When the file is absent — the usual case on an Nginx-only VPS that has no full clone — or when a key the selected mode needs is missing or malformed, the script asks for that value and re-asks until it validates:
 
 ```
-[*] No credentials.json at /home/ubuntu/genix/credentials.json. Values will be requested.
-[*] NGINX_DOMAIN is not set in credentials.json.
-Enter NGINX_DOMAIN, the public domain Nginx serves (e.g. genix-api-4.un.pe): bad domain
+[*] No config.toml at /home/ubuntu/genix/config.toml. Values will be requested.
+[*] server.nginx_domain is not set in config.toml.
+Enter server.nginx_domain, the public domain Nginx serves (e.g. genix-api-4.un.pe): bad domain
 [!] 'bad domain' is not a valid domain name (expected e.g. genix-api-4.un.pe).
-Enter NGINX_DOMAIN, the public domain Nginx serves (e.g. genix-api-4.un.pe): genix-api-4.un.pe
+Enter server.nginx_domain, the public domain Nginx serves (e.g. genix-api-4.un.pe): genix-api-4.un.pe
 ```
 
 Validation rules:
 
-- `NGINX_DOMAIN` — a dotted hostname; lower-cased and stripped of a trailing dot.
-- `NGINX_PROCESS` — `host:port`, optionally prefixed with `http://` or `https://`. The port is mandatory.
-- `SERVER_PORT` — an integer in `1-65535`.
+- `server.nginx_domain` — a dotted hostname; lower-cased and stripped of a trailing dot.
+- `server.nginx_process` — `host:port`, optionally prefixed with `http://` or `https://`. The port is mandatory.
+- `server.port` — an integer in `1-65535`.
 
 After everything resolves, the script offers to write the typed-in values back so the next run is non-interactive:
 
 ```
-[*] These values were typed in and are not stored yet: NGINX_DOMAIN=genix-api-4.un.pe, NGINX_PROCESS=100.64.0.2:14010
-Save them to /home/ubuntu/genix/credentials.json? [Y/n]:
+[*] These values were typed in and are not stored yet: server.nginx_domain=genix-api-4.un.pe, server.nginx_process=100.64.0.2:14010
+Save them to /home/ubuntu/genix/config.toml? [Y/n]:
 ```
 
 Answering yes merges the keys into the existing file, leaving all other keys intact. A newly created file is chowned to the owner of the repository directory and set to `0600`, since it holds secrets and the service reads it as a non-root user.
 
 Two things still fail the run instead of prompting:
 
-- A `credentials.json` that exists but is not valid JSON — prompting would later overwrite a real but broken file.
+- A `config.toml` that exists but is not valid TOML — prompting would later overwrite a real but broken file.
 - A missing value with no TTY attached (cron, CI, `ssh` without `-t`). The error names the exact key to add.
 
-In **mode 2**, note that `genix.service` points `GENIX_CREDENTIALS_FILE` at this path and the backend panics without it, so installing the units with no `credentials.json` present prints a warning: the service is installed but will not start until the file is there.
+In **mode 2**, note that `genix.service` points `GENIX_CONFIG_FILE` at this path and the backend panics without it, so installing the units with no `config.toml` present prints a warning: the service is installed but will not start until the file is there.
 
 ### Split-host wiring
 
-- `NGINX_DOMAIN` (e.g. `genix-api-4.un.pe`) becomes `server_name`, the config file name, and the Let's Encrypt certificate directory that is looked up under `/etc/letsencrypt/live/`.
-- `NGINX_PROCESS` (e.g. `100.64.0.2:14010`) becomes the `proxy_pass` upstream. A bare `host:port` is prefixed with `http://`; a value that already carries a scheme is used verbatim.
-- `SERVER_PORT` (e.g. `14010`) is exported as `Environment=SERVER_PORT=` in `genix.service` and is the port the backend binds to. It must equal the port half of `NGINX_PROCESS`.
+- `server.nginx_domain` (e.g. `genix-api-4.un.pe`) becomes `server_name`, the config file name, and the Let's Encrypt certificate directory that is looked up under `/etc/letsencrypt/live/`.
+- `server.nginx_process` (e.g. `100.64.0.2:14010`) becomes the `proxy_pass` upstream. A bare `host:port` is prefixed with `http://`; a value that already carries a scheme is used verbatim.
+- `server.port` (e.g. `14010`) is exported as `Environment=SERVER_PORT=` in `genix.service` and is the port the backend binds to. It must equal the port half of `server.nginx_process`.
 
-The backend resolves its listen port as: `SERVER_PORT` env var → `SERVER_PORT` in `credentials.json` → `3589`.
+The backend resolves its listen port as: `SERVER_PORT` env var → `server.port` in `config.toml` → `3589`.
 
 ---
 
@@ -100,7 +100,7 @@ Type=simple
 User=ivanjoz
 Group=ivanjoz
 WorkingDirectory=/usr/local/bin/genix
-Environment=GENIX_CREDENTIALS_FILE=/home/ubuntu/genix/credentials.json
+Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml
 Environment=GENIX_REPOSITORY_ROOT=/home/ubuntu/genix
 Environment=SERVER_PORT=14010
 ExecStart=/usr/local/bin/genix/genix_app
@@ -270,7 +270,7 @@ Or directly:
 sudo python3 scripts/configure_server.py 3
 ```
 
-Non-interactive runs (cron, CI, `ssh` without a TTY) must pass the mode and have every needed key already present in `credentials.json`, since there is no terminal to prompt on.
+Non-interactive runs (cron, CI, `ssh` without a TTY) must pass the mode and have every needed key already present in `config.toml`, since there is no terminal to prompt on.
 
 ---
 

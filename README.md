@@ -35,12 +35,12 @@ The frontend is a monorepo with a strict dependency hierarchy (`libs` → `ui-co
 
 ### Configurable providers
 
-`credentials.json` separates backend data from file delivery:
+`config.toml` separates backend data from file delivery:
 
-- **`BACKEND_PROVIDER`** — `aws` uses DynamoDB; `cloudflare` uses D1 / SQLite; `none` disables the optional mirror and reads auth/tenant data directly from ScyllaDB on a self-hosted backend.
-- **`CDN_PROVIDER`** — `aws` uses S3 + CloudFront; `cloudflare` uses R2 as the public asset origin.
+- **`providers.backend`** — `aws` uses DynamoDB; `cloudflare` uses D1 / SQLite; `none` disables the optional mirror and reads auth/tenant data directly from ScyllaDB on a self-hosted backend.
+- **`providers.cdn`** — `aws` uses S3 + CloudFront; `cloudflare` uses R2 as the public asset origin.
 
-For example, `BACKEND_PROVIDER=aws` and `CDN_PROVIDER=cloudflare` runs the backend on AWS Lambda + DynamoDB while files are stored and served by Cloudflare R2.
+For example, `providers.backend=aws` and `providers.cdn=cloudflare` runs the backend on AWS Lambda + DynamoDB while files are stored and served by Cloudflare R2.
 
 The data mirror only holds auth & tenant master tables (users, companies, profiles) so they are reachable outside Scylla; all business data lives in ScyllaDB regardless of provider.
 
@@ -103,7 +103,7 @@ A WebRTC signaling bridge over AWS AppSync (`p2p/`) that connects a browser dire
 The **same Go binary** runs three ways, selected at runtime — no separate builds:
 
 1. **AWS Lambda** — detected via `AWS_LAMBDA_FUNCTION_NAME` / `AWS_EXECUTION_ENV`; served through API Gateway v2. Config from a compressed `CONFIG` env var. Data on ScyllaDB (VPS/EC2) + DynamoDB + S3.
-2. **Standalone binary / self-host** — an `http.Server` on `:3589` (CORS, SSE, slowloris timeouts). Config from `credentials.json`. Deployed as a `systemd` service behind Nginx (HTTP/3, TLS 1.3 0-RTT). See [`DEPLOYMENT.md`](DEPLOYMENT.md).
+2. **Standalone binary / self-host** — an `http.Server` on `:3589` (CORS, SSE, slowloris timeouts). Config from `config.toml`. Deployed as a `systemd` service behind Nginx (HTTP/3, TLS 1.3 0-RTT). See [`DEPLOYMENT.md`](DEPLOYMENT.md).
 3. **Exec / function mode** — a `{"fn_exec": …}` body or `fn…` CLI arg runs a registered function (incl. a cron scheduler) instead of HTTP routing; cross-invocation calls transparently become `lambda.Invoke` in the cloud or a local HTTP POST when self-hosted.
 
 Both HTTP transports converge on a single `core.HandlerArgs` → `mainHandler` path, with module handler maps registered per domain (`sales`, `finance`, `logistics`, `business`, `security`, `webpage`, `agent`, …), token auth, and YAML-driven access control.
@@ -140,7 +140,7 @@ Legend: ✅ done · 🟡 partial / in progress · ⬜ not started
 - ✅ colbin columnar serializer (replaced CBOR project-wide)
 - ✅ Hybrid runtime: AWS Lambda / single binary / exec+cron modes
 - ✅ Multi-tenancy by `empresa_id` partitioning + tenant-scoped auth
-- ✅ Independent providers via `BACKEND_PROVIDER` (DynamoDB / D1) and `CDN_PROVIDER` (S3 / R2)
+- ✅ Independent providers via `providers.backend` (DynamoDB / D1) and `providers.cdn` (S3 / R2)
 - 🟡 Vendor-free provider (`local` / `none`): ScyllaDB-only, no data mirror, self-hosted object storage
 - ✅ Text search (GenixSearch bigram encoder + ORM integration)
 - ✅ Full per-tenant data backup, download & restore

@@ -28,7 +28,7 @@ const (
 
 ```go
 type InstallOptions struct {
-    WorkingDirectory string  // Directory where service runs (should contain credentials.json)
+    WorkingDirectory string  // Directory where service runs (should contain config.toml)
 }
 ```
 
@@ -126,7 +126,7 @@ func main() {
 - Root/sudo privileges required for installation and uninstallation
 - systemd must be available on the system
 - Go must be installed for building the binary
-- `credentials.json` must exist in the working directory
+- `config.toml` must exist in the working directory
 
 ## Service Configuration
 
@@ -175,7 +175,7 @@ The package provides descriptive error messages for common issues:
 ## Security Considerations
 
 - The service runs as `root` by default
-- Ensure `credentials.json` has appropriate file permissions (0600)
+- Ensure `config.toml` has appropriate file permissions (0600)
 - The binary is installed in `/usr/local/bin/` which is in the system PATH
 - All service actions are logged to the systemd journal
 
@@ -189,7 +189,7 @@ The package provides descriptive error messages for common issues:
 
 ### Service Won't Start
 - Check logs: `sudo journalctl -u homelab-p2p-bridge -n 50`
-- Verify `credentials.json` exists in the working directory
+- Verify `config.toml` exists in the working directory
 - Ensure network is available (service runs `After=network.target`)
 - Check WebSocket URL in configuration
 

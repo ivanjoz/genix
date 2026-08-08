@@ -1,11 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/pelletier/go-toml/v2"
 )
 
 // defaultListenPort keeps the bridge next to the other Genix services running on
@@ -22,34 +23,36 @@ type BridgeConfig struct {
 	VerboseLogs bool
 }
 
-// credentialsSubset is the slice of credentials.json the bridge cares about.
+// configSubset is the slice of config.toml the bridge cares about.
 //
-// Two names for one value: a bridge host holds a minimal credentials.json with
-// only the keys this process needs, where the secret is SSE_BRIDGE_APIKEY. A
+// Two names for one value: a bridge host holds a minimal config.toml with
+// only the keys this process needs, where the secret is sse_bridge.apikey. A
 // developer machine has the backend's full file instead, where the same value is
-// SECRET_PHRASE. They must be identical or every token is rejected.
-type credentialsSubset struct {
-	ApiKey       string `json:"SSE_BRIDGE_APIKEY"`
-	SecretPhrase string `json:"SECRET_PHRASE"`
+// secret_phrase. They must be identical or every token is rejected.
+type configSubset struct {
+	SecretPhrase string `toml:"secret_phrase"`
+	SSEBridge    struct {
+		ApiKey string `toml:"apikey"`
+	} `toml:"sse_bridge"`
 }
 
-// LoadBridgeConfig resolves the runtime configuration. credentials.json is the
+// LoadBridgeConfig resolves the runtime configuration. config.toml is the
 // primary source (same file and same lookup order as the backend's
 // PopulateVariables), and environment variables override it so a systemd unit or
-// a container can run without shipping the credentials file.
+// a container can run without shipping the config file.
 func LoadBridgeConfig() (BridgeConfig, error) {
 	config := BridgeConfig{
 		ListenPort:  defaultListenPort,
 		VerboseLogs: strings.TrimSpace(os.Getenv("SSE_BRIDGE_VERBOSE")) == "1",
 	}
 
-	credentialsPath, credentials := readCredentialsFile()
-	if len(credentialsPath) > 0 {
-		logInfo("credentials loaded from", credentialsPath)
+	configPath, fileConfig := readConfigFile()
+	if len(configPath) > 0 {
+		logInfo("config loaded from", configPath)
 	}
-	config.ApiKey = credentials.ApiKey
+	config.ApiKey = fileConfig.SSEBridge.ApiKey
 	if len(config.ApiKey) == 0 {
-		config.ApiKey = credentials.SecretPhrase
+		config.ApiKey = fileConfig.SecretPhrase
 	}
 
 	if apiKeyFromEnvironment := strings.TrimSpace(os.Getenv("SSE_BRIDGE_APIKEY")); len(apiKeyFromEnvironment) > 0 {
@@ -64,32 +67,32 @@ func LoadBridgeConfig() (BridgeConfig, error) {
 	}
 
 	if len(config.ApiKey) == 0 {
-		return config, errors.New("no se encontró SSE_BRIDGE_APIKEY: agréguelo a credentials.json (GENIX_CREDENTIALS_FILE) o expórtelo como variable de entorno")
+		return config, errors.New("no se encontró apikey: agréguelo como apikey en la sección [sse_bridge] de config.toml (GENIX_CONFIG_FILE) o expórtelo como variable de entorno")
 	}
 	return config, nil
 }
 
-// readCredentialsFile walks the same candidate paths the backend uses, returning
-// the first readable credentials.json. A missing file is not an error here — the
+// readConfigFile walks the same candidate paths the backend uses, returning
+// the first readable config.toml. A missing file is not an error here — the
 // environment variables may carry everything the bridge needs.
-func readCredentialsFile() (string, credentialsSubset) {
+func readConfigFile() (string, configSubset) {
 	candidatePaths := []string{}
-	if configuredPath := strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE")); len(configuredPath) > 0 {
+	if configuredPath := strings.TrimSpace(os.Getenv("GENIX_CONFIG_FILE")); len(configuredPath) > 0 {
 		candidatePaths = append(candidatePaths, configuredPath)
 	}
-	candidatePaths = append(candidatePaths, "../credentials.json", "credentials.json")
+	candidatePaths = append(candidatePaths, "../config.toml", "config.toml")
 
 	for _, candidatePath := range candidatePaths {
 		fileContent, readError := os.ReadFile(candidatePath)
 		if readError != nil {
 			continue
 		}
-		credentials := credentialsSubset{}
-		if parseError := json.Unmarshal(fileContent, &credentials); parseError != nil {
-			logWarn("credentials.json ilegible en", candidatePath, "::", parseError)
+		parsedConfig := configSubset{}
+		if parseError := toml.Unmarshal(fileContent, &parsedConfig); parseError != nil {
+			logWarn("config.toml ilegible en", candidatePath, "::", parseError)
 			continue
 		}
-		return candidatePath, credentials
+		return candidatePath, parsedConfig
 	}
-	return "", credentialsSubset{}
+	return "", configSubset{}
 }
