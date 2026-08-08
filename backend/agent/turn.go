@@ -107,6 +107,20 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	runContext, cancelRun := context.WithTimeout(parentContext, turnTimeout)
 	defer cancelRun()
+	turnAPIGroup, groupError := core.APIGroup("POST", len(*req.Body))
+	if groupError != nil {
+		return req.MakeErr500("No se pudo calcular el grupo de créditos:", groupError)
+	}
+	if rateLimitError := core.ChargeAPIUsage(
+		runContext, req.User.CompanyID, req.User.ID, "POST", len(*req.Body),
+	); rateLimitError != nil {
+		core.Log("agent.turn base credit rejected tab::", shortTabID(tab), " err::", rateLimitError)
+		return req.MakeCreditRateLimitResponse(rateLimitError)
+	}
+	// Every nested LLM request inherits the authenticated identity and original POST size group.
+	runContext = core.WithCreditRateLimitIdentity(
+		runContext, req.User.CompanyID, req.User.ID, turnAPIGroup,
+	)
 
 	core.Log("agent.turn start tab::", shortTabID(tab), " company::", session.CompanyID, " user::", session.UserID,
 		" session::", session.SessionID, " mode::", turnRequest.ModeID, " path::", turnRequest.Path, " bridged::", BridgeEnabled())
@@ -122,6 +136,9 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 		// Reported down the stream, not as an HTTP error: the widget renders agent
 		// failures inline with the conversation like any other event.
 		session.sendError(err.Error())
+		if core.IsCreditRateLimitError(err) {
+			return req.MakeCreditRateLimitResponse(err)
+		}
 	}
 
 	// turnEnd closes the widget's busy state. The stream itself stays open for

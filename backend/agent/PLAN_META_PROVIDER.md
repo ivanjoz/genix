@@ -1,15 +1,15 @@
 # PLAN — Meta AI como proveedor de modelos del agente
 
 Objetivo: que `backend/agent` hable con **Meta Model API** en lugar de OpenRouter,
-eligiendo el proveedor con el flag `MODEL_PROVIDER` de credentials.json y tomando
-`DEFAULT_MODEL` como modelo por defecto.
+eligiendo el proveedor con el flag `providers.model` de config.toml y tomando
+`agent.default_model` como modelo por defecto.
 
 ## Hechos del proveedor Meta (verificados en ai.developer.meta.com/docs)
 
 | | Meta Model API | OpenRouter |
 |---|---|---|
 | Endpoint | `https://api.meta.ai/v1/chat/completions` | `https://openrouter.ai/api/v1/chat/completions` |
-| Auth | `Authorization: Bearer <META_KEY>` | `Authorization: Bearer <OPENROUTER_KEY>` |
+| Auth | `Authorization: Bearer <agent.meta_key>` | `Authorization: Bearer <agent.openrouter_key>` |
 | Razonamiento | `reasoning_effort: "minimal"\|"low"\|"medium"\|"high"\|"xhigh"` (string plano; `"none"` devuelve **400** en Muse Spark) | objeto `reasoning: {effort, max_tokens, exclude, enabled}` |
 | Ruteo de proveedor | no existe | objeto `provider: {order, allow_fallbacks}` |
 | Headers extra | ninguno | `HTTP-Referer`, `X-Title` (analítica) |
@@ -23,12 +23,12 @@ forma en que se serializa el presupuesto de razonamiento.
 ## Cambios
 
 ### 1. `backend/core/security.go` — `EnvStruct`
-- **Añadir** `MODEL_PROVIDER` (`"meta"|"openrouter"`, vacío ⇒ `meta`).
-- **Añadir** `META_KEY`.
-- **Añadir** `DEFAULT_MODEL` (modelo por defecto, agnóstico del proveedor).
+- **Añadir** `providers.model` (`"meta"|"openrouter"`, vacío ⇒ `meta`).
+- **Añadir** `agent.meta_key`.
+- **Añadir** `agent.default_model` (modelo por defecto, agnóstico del proveedor).
 - **Eliminar** `OPENROUTER_MODEL` — lo reemplaza `DEFAULT_MODEL` (sin retrocompatibilidad,
   regla del proyecto).
-- **Conservar** `OPENROUTER_KEY` para cuando `MODEL_PROVIDER=openrouter`.
+- **Conservar** `agent.openrouter_key` para cuando `providers.model=openrouter`.
 
 ### 2. `backend/agent/llm/openrouter.go` → renombrar a `client.go`
 El paquete deja de ser "cliente de OpenRouter" y pasa a ser "cliente de chat
@@ -37,7 +37,7 @@ completions multi-proveedor".
 - `ProviderMeta` / `ProviderOpenRouter` como constantes; `ActiveProvider()` lee
   `core.Env.MODEL_PROVIDER` (vacío ⇒ `ProviderOpenRouter`).
 - `Client` gana el campo `Provider`; `NewClient()` resuelve **la clave del
-  proveedor activo** (`META_KEY` u `OPENROUTER_KEY`) y falla en el arranque con un
+  proveedor activo** (`agent.meta_key` u `agent.openrouter_key`) y falla en el arranque con un
   mensaje que nombra la variable que falta.
 - `DefaultModelID()` = `core.Env.DEFAULT_MODEL` si está seteado, si no el default
   compilado del proveedor activo (`muse-spark-1.2-contributor` / `openai/gpt-5.6-luna`).
@@ -52,7 +52,7 @@ completions multi-proveedor".
 - Endpoint y headers salen de una tablita por proveedor; los headers de analítica
   de OpenRouter sólo se envían a OpenRouter.
 - `ProviderOptions` → renombrar a `OpenRouterRouting` (con tag json `provider`)
-  para que no se confunda con `MODEL_PROVIDER`; `pinnedProvider` →
+  para que no se confunda con `providers.model`; `pinnedProvider` →
   `pinnedOpenRouterProvider`.
 - Logs y errores dejan de decir "openrouter" y usan el proveedor activo.
 
@@ -81,12 +81,12 @@ completions multi-proveedor".
   del proveedor activo.
 
 ### 5. Config y documentación
-- `credentials.example.json`: añadir `MODEL_PROVIDER`, `META_KEY`, `DEFAULT_MODEL`,
-  `OPENROUTER_KEY` con entradas `:DOC` al estilo del archivo.
-- `credentials.1.json` / `credentials.json` (ignorados por git): quitar
+- `config.example.toml`: añadir `providers.model`, `agent.meta_key`, `agent.default_model`,
+  `agent.openrouter_key` con comentarios al estilo del archivo.
+- `config.1.toml` / `config.toml` (ignorados por git): quitar
   `OPENROUTER_MODEL`, que ya no se lee.
 - `backend/agent/AGENTIC_LOOP_DESIGN.md`: la sección de credenciales pasa a
-  `MODEL_PROVIDER` + `META_KEY`/`OPENROUTER_KEY` + `DEFAULT_MODEL`.
+  `providers.model` + `agent.meta_key`/`agent.openrouter_key` + `agent.default_model`.
 
 ## Verificación
 - `go build ./...` y `go vet ./agent/...` en `backend/`.
@@ -95,8 +95,8 @@ completions multi-proveedor".
   `reasoning_effort` es aceptado.
 
 ## Decisiones confirmadas
-1. `MODEL_PROVIDER` vacío ⇒ **`openrouter`**: ningún despliegue existente se rompe
-   por omisión, y Meta se activa explícitamente con `MODEL_PROVIDER=meta`.
+1. `providers.model` vacío ⇒ **`openrouter`**: ningún despliegue existente se rompe
+   por omisión, y Meta se activa explícitamente con `providers.model=meta`.
 2. `ListModels()` **filtra por proveedor activo**.
 3. `OPENROUTER_MODEL` se **elimina**; `DEFAULT_MODEL` es el único override.
 4. `Enabled:false` (subagentes del page builder) ⇒ `reasoning_effort:"minimal"`

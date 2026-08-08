@@ -279,13 +279,13 @@ New package `backend/agent/llm/` (so the loop logic stays in
 
 - `client.go` — thin HTTP client around the provider's OpenAI-compatible
   `/chat/completions`, supporting tool calling (`tools`/`tool_choice`).
-  Two providers are supported and `MODEL_PROVIDER` in `credentials.json`
+  Two providers are supported and `providers.model` in `config.toml`
   picks one (blank = `openrouter`):
 
-  | `MODEL_PROVIDER` | endpoint | key | compile-time default model |
+  | `providers.model` | endpoint | key | compile-time default model |
   |---|---|---|---|
-  | `meta` | `https://api.meta.ai/v1/chat/completions` | `META_KEY` | `muse-spark-1.2-contributor` |
-  | `openrouter` | `https://openrouter.ai/api/v1/chat/completions` | `OPENROUTER_KEY` | `openai/gpt-5.6-luna` |
+  | `meta` | `https://api.meta.ai/v1/chat/completions` | `agent.meta_key` | `muse-spark-1.2-contributor` |
+  | `openrouter` | `https://openrouter.ai/api/v1/chat/completions` | `agent.openrouter_key` | `openai/gpt-5.6-luna` |
 
   Both speak the same wire format for messages/tools, so `Message`, `Tool`,
   `ToolCall`, `Choice` and `Usage` are shared. Only the thinking budget
@@ -295,7 +295,7 @@ New package `backend/agent/llm/` (so the loop logic stays in
   Meta rejects, `reasoning_effort: "none"` (HTTP 400 on Muse Spark), which
   becomes `"minimal"`.
 
-- `DEFAULT_MODEL` in `credentials.json` overrides the model for either
+- `agent.default_model` in `config.toml` overrides the model for either
   provider; it must name a model the active provider serves. `llm.ListModels`
   (the `agent-models` route feeding the UI dropdown) only returns registry
   entries whose `Provider` matches the active one, so the picker can't offer

@@ -70,30 +70,30 @@ func TestAdaptRequestToProvider(t *testing.T) {
 	}
 }
 
-// loadEnvForTest populates core.Env from credentials.json so NewClient can
+// loadEnvForTest populates core.Env from config.toml so NewClient can
 // resolve the active provider's key. core.PopulateVariables panics when the
 // file isn't found — we recover and skip so `go test ./...` from a
 // directory without access stays green. To run the live test, invoke
-// from a path where credentials.json is discoverable (project root /
-// backend dir), or set GENIX_CREDENTIALS_FILE.
+// from a path where config.toml is discoverable (project root /
+// backend dir), or set GENIX_CONFIG_FILE.
 func loadEnvForTest(t *testing.T) {
 	t.Helper()
 	if core.Env == nil {
 		defer func() {
 			if r := recover(); r != nil {
-				t.Skipf("credentials.json not available: %v", r)
+				t.Skipf("config.toml not available: %v", r)
 			}
 		}()
 		core.PopulateVariables()
 	}
 	if core.Env == nil || apiKeyForProvider(ActiveProvider()) == "" {
-		t.Skipf("no API key for MODEL_PROVIDER=%s in credentials.json, skipping live test", ActiveProvider())
+		t.Skipf("no API key for providers.model=%s in config.toml, skipping live test", ActiveProvider())
 	}
 	t.Logf("provider=%s model=%s", ActiveProvider(), DefaultModelID())
 }
 
-// TestChatLive hits the real provider endpoint selected by MODEL_PROVIDER.
-// Skipped unless that provider's key is present in credentials.json so this can
+// TestChatLive hits the real provider endpoint selected by providers.model.
+// Skipped unless that provider's key is present in config.toml so this can
 // stay in the standard test suite. Run locally with:
 //
 //	go test -v -run TestChatLive ./agent/llm/...

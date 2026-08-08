@@ -34,6 +34,7 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[core.Cache](),
 		makeDBController[core.CronAction](),
 		makeDBController[core.GlobalCache](),
+		makeDBController[coreTypes.CreditUsage](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
 		makeDBController[financeTypes.CashBank](),
@@ -80,6 +81,7 @@ func init() {
 	db.RegisterTableFactory("cache", func() db.Table { return db.MakeTable[core.Cache]() })
 	db.RegisterTableFactory("cron_actions", func() db.Table { return db.MakeTable[core.CronAction]() })
 	db.RegisterTableFactory("cache_global", func() db.Table { return db.MakeTable[core.GlobalCache]() })
+	db.RegisterTableFactory("credit_usage", func() db.Table { return db.MakeTable[coreTypes.CreditUsage]() })
 	db.RegisterTableFactory("usage_log", func() db.Table { return db.MakeTable[coreTypes.UsageLog]() })
 	db.RegisterTableFactory("users", func() db.Table { return db.MakeTable[coreTypes.User]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
