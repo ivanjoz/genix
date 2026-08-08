@@ -247,9 +247,9 @@ func configureTextSearchGenixSearch() {
 }
 
 // resolveServerPort picks the listen address for the standalone HTTP server. The SERVER_PORT
-// environment variable wins (systemd sets it from credentials.json via
-// scripts/configure_server.py), then the SERVER_PORT credential itself, then the 3589 default.
-// Nginx proxies to the port half of NGINX_PROCESS, so the two must agree.
+// environment variable wins (systemd sets it from config.toml via
+// scripts/configure_server.py), then the server.port config value itself, then the 3589 default.
+// Nginx proxies to the port half of server.nginx_process, so the two must agree.
 func resolveServerPort() string {
 	if envPort := strings.TrimSpace(os.Getenv("SERVER_PORT")); envPort != "" {
 		if parsedPort, err := strconv.Atoi(envPort); err == nil && parsedPort > 0 && parsedPort < 65536 {
@@ -280,6 +280,9 @@ func bootstrapCronSchedulers() {
 
 func main() {
 	core.PopulateVariables()
+	if err := core.ConfigureCreditRateLimiter(core.Env.RATE_LIMIT_ADDRESS, core.Env.SECRET_PHRASE); err != nil {
+		panic("invalid credit rate limiter configuration: " + err.Error())
+	}
 	serverPort := resolveServerPort()
 	// Wire the GenixSearch endpoint before any DB write that might
 	// touch a TextSearchColumn-backed table. The text_search package
@@ -394,7 +397,7 @@ func main() {
 			AllowedOrigins:   []string{"*"},
 			AllowedMethods:   []string{http.MethodPost, http.MethodPut, http.MethodGet},
 			AllowedHeaders:   []string{"*"},
-			ExposedHeaders:   []string{"X-Metadata"},
+			ExposedHeaders:   []string{"X-Metadata", "X-Rate-Limit-Code"},
 			AllowCredentials: false,
 		})
 

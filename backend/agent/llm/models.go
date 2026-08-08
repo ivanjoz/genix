@@ -12,9 +12,9 @@ import (
 // nothing to OpenRouter and `openai/gpt-5.6-luna` means nothing to Meta.
 // Switching the active model is one of:
 //
-//  1. Change MODEL_PROVIDER in credentials.json (picks the upstream, and with
+//  1. Change providers.model in config.toml (picks the upstream, and with
 //     it the compile-time default in providerConfigs), or
-//  2. Set DEFAULT_MODEL in credentials.json to one of the IDs below that
+//  2. Set agent.default_model in config.toml to one of the IDs below that
 //     belongs to the active provider (runtime override).
 //
 // Any string is accepted by both upstreams — the registry just ensures we apply

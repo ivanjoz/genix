@@ -5,6 +5,7 @@ const FILENAME = require("path").basename(process.argv[1] || "start.js")
 const FRONTEND_SCRIPT = "npm run dev"
 // Sin -v: el listado de paquetes no aporta y ensucia el log en cada reinicio.
 const BACKEND_GO_SCRIPT = "go run . dev"
+const RATE_LIMITER_SCRIPT = "cargo run"
 const ENVIROMENT_VARIABLES = "dev1"
 const FRONTEND_PROXY_PORT = Number.parseInt(process.env.GENIX_PROXY_PORT || "3572", 10)
 //********************************************************* */
@@ -80,6 +81,13 @@ if (isWindows) {
   frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
 }
 
+// Rate limiter
+const rateLimiterPath = path.join(__dirname, 'server_utils')
+let rateLimiterScript = `cd ./server_utils && ${RATE_LIMITER_SCRIPT}`
+if (isWindows) {
+  rateLimiterScript = `cd ${rateLimiterPath} & ${RATE_LIMITER_SCRIPT}`
+}
+
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
 
@@ -136,7 +144,7 @@ if(ENVIROMENT_VARIABLES){
 const BLUE_BAR = "\x1b[44m \x1b[0m"
 const CYAN_BAR = "\x1b[46m \x1b[0m"
 const YELLOW_BAR = "\x1b[43m \x1b[0m"
-// const MAGENTA_BAR = "\x1b[45m \x1b[0m"
+const MAGENTA_BAR = "\x1b[45m \x1b[0m"
 
 const backendLog = (data) => {
   for(const line of (data||"").split("\n").filter(x => x.trim().length > 0)){
@@ -176,24 +184,29 @@ const runScripts = () => {
   }
   */
   console.log("Executing processes...")
-  console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)`)
+  console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${MAGENTA_BAR}${MAGENTA_BAR} Rate limiter (Rust)`)
 
   // Run all scripts in parallel
   runScript(frontendScript, YELLOW_BAR)
   startBackendGo()
+  runScript(rateLimiterScript, MAGENTA_BAR, {
+    RUST_LOG: process.env.RUST_LOG || "genix_server_utils=debug"
+  })
 }
 
 // Function to run a script and capture output
-const runScript = (script, name) => {
+const runScript = (script, name, environment = {}) => {
   console.log("Ejecutando script:", script)
 
   const scriptProcess = isWindows ?
     spawn(script, [], {
-      stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true })
+      stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true,
+      env: { ...process.env, ...environment } })
     :
     spawn("bash", ["-c", script], {
       stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr
       detached: false, // Ensures process terminates when Node.js exits
+      env: { ...process.env, ...environment }
     });
 
   const logdata = (prefix, data) => {
@@ -268,6 +281,6 @@ const killPortIfInUse = (port) => {
 
 // Kill necessary ports before starting.
 // Clear the selected proxy port so launcher variants do not retain stale processes.
-[3570, 3571, FRONTEND_PROXY_PORT, 3588, 3589].forEach(killPortIfInUse)
+[3570, 3571, FRONTEND_PROXY_PORT, 3588, 3589, 14013].forEach(killPortIfInUse)
 // Run scripts
 runScripts()

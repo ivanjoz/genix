@@ -63,7 +63,7 @@ func bridgeBaseURL() string {
 }
 
 // makeBridgeServiceAuthHeader signs the current timestamp with SECRET_PHRASE.
-// Both processes read the same credentials.json, so no extra secret has to be
+// Both processes read the same config.toml, so no extra secret has to be
 // provisioned for the bridge.
 func makeBridgeServiceAuthHeader() string {
 	timestampText := strconv.FormatInt(time.Now().Unix(), 10)

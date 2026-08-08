@@ -1,7 +1,7 @@
 // Package llm is a thin HTTP client for the OpenAI-compatible
 // /chat/completions endpoint of the two upstreams the in-app agent can talk
 // to: Meta's Model API (api.meta.ai) and OpenRouter. Which one is called is
-// decided by MODEL_PROVIDER in credentials.json. The agent loop in
+// decided by providers.model in config.toml. The agent loop in
 // backend/agent uses this to drive the LLM that decides which page actions to
 // invoke.
 //
@@ -60,7 +60,7 @@ type providerConfig struct {
 	Endpoint string
 	// DefaultModel is the compile-time default used when DEFAULT_MODEL is blank.
 	DefaultModel string
-	// KeyName is the credentials.json field carrying the bearer token. Only used
+	// KeyName is the config.toml field carrying the bearer token. Only used
 	// to name the missing variable in NewClient's error.
 	KeyName string
 	// AnalyticsHeaders are provider-specific headers that don't affect routing
@@ -72,21 +72,21 @@ var providerConfigs = map[string]providerConfig{
 	ProviderMeta: {
 		Endpoint:     "https://api.meta.ai/v1/chat/completions",
 		DefaultModel: "muse-spark-1.2-contributor",
-		KeyName:      "META_KEY",
+		KeyName:      "agent.meta_key",
 	},
 	ProviderOpenRouter: {
 		Endpoint:         "https://openrouter.ai/api/v1/chat/completions",
 		DefaultModel:     "openai/gpt-5.6-luna",
-		KeyName:          "OPENROUTER_KEY",
+		KeyName:          "agent.openrouter_key",
 		AnalyticsHeaders: map[string]string{"HTTP-Referer": "https://genix.app", "X-Title": "Genix"},
 	},
 }
 
-// ActiveProvider resolves MODEL_PROVIDER from credentials.json. Blank means
+// ActiveProvider resolves providers.model from config.toml. Blank means
 // OpenRouter — the historical default, so a deployment that never set the flag
 // keeps working untouched. An unrecognized value is logged instead of silently
 // accepted, because otherwise the only symptom would be a confusing
-// "OPENROUTER_KEY not set".
+// "agent.openrouter_key not set".
 func ActiveProvider() string {
 	if core.Env == nil {
 		return ProviderOpenRouter
@@ -241,7 +241,7 @@ type Client struct {
 }
 
 // DefaultModelID is the model used when a request carries no explicit model:
-// DEFAULT_MODEL from credentials.json when set, otherwise the active
+// agent.default_model from config.toml when set, otherwise the active
 // provider's compile-time default. Single source of truth — ListModels flags
 // the matching registry entry with IsDefault so the UI preselects the same
 // model.
@@ -252,9 +252,9 @@ func DefaultModelID() string {
 	return providerConfigs[ActiveProvider()].DefaultModel
 }
 
-// NewClient resolves the active provider (MODEL_PROVIDER), its API key
-// (required) and DEFAULT_MODEL (optional) from core.Env — same path the rest of
-// the backend uses for credentials.json. Failing here at startup is much
+// NewClient resolves the active provider (providers.model), its API key
+// (required) and agent.default_model (optional) from core.Env — same path the rest of
+// the backend uses for config.toml. Failing here at startup is much
 // friendlier than a 401 on the first user message.
 func NewClient() (*Client, error) {
 	if core.Env == nil {
@@ -263,7 +263,7 @@ func NewClient() (*Client, error) {
 	provider := ActiveProvider()
 	apiKey := apiKeyForProvider(provider)
 	if apiKey == "" {
-		return nil, fmt.Errorf("%s not set in credentials.json (MODEL_PROVIDER=%s)", providerConfigs[provider].KeyName, provider)
+		return nil, fmt.Errorf("%s not set in config.toml (providers.model=%s)", providerConfigs[provider].KeyName, provider)
 	}
 	return &Client{
 		Provider: provider,
@@ -355,6 +355,10 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("%s %d: %s", c.Provider, resp.StatusCode, truncate(string(respBody), 1000))
+	}
+	// Charge actual wire bytes only after a successful inference response exists.
+	if err := core.ChargeInferenceUsage(ctx, len(body), len(respBody)); err != nil {
+		return nil, fmt.Errorf("charge inference usage: %w", err)
 	}
 
 	var out ChatResponse

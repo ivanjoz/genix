@@ -204,12 +204,7 @@ func MakeErrStreamingFinal(statusCode int32, message string) *events.LambdaFunct
 	headers := ensureResponseHeaders(nil)
 	headers["Content-Type"] = "application/json; charset=utf-8"
 
-	responseStatus := http.StatusBadRequest
-	if statusCode == 500 {
-		responseStatus = http.StatusInternalServerError
-	} else if statusCode == 401 {
-		responseStatus = http.StatusUnauthorized
-	}
+	responseStatus := normalizedErrorStatus(statusCode)
 
 	responseJSON, _ := sonic.Marshal(ErrorMsg{Error: message})
 	return &events.LambdaFunctionURLStreamingResponse{
@@ -225,12 +220,7 @@ type ErrorMsg struct {
 
 func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPResponse {
 	response := &events.APIGatewayV2HTTPResponse{}
-
-	if statusCode == 500 {
-		response.StatusCode = http.StatusInternalServerError
-	} else {
-		response.StatusCode = http.StatusBadRequest
-	}
+	response.StatusCode = normalizedErrorStatus(statusCode)
 	response.Headers = ensureResponseHeaders(nil)
 	// responseErr.Headers["Content-Type"] = "plain/text"
 	response.Headers["Content-Type"] = "application/json; charset=utf-8"
@@ -239,6 +229,14 @@ func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPRes
 	response.Body = string(responseJSON)
 	// Log("Error a enviar::", body)
 	return response
+}
+
+func normalizedErrorStatus(statusCode int32) int {
+	// Preserve deliberate 4xx/5xx responses such as rate-limit 429 and dependency 503.
+	if statusCode >= 400 && statusCode <= 599 {
+		return int(statusCode)
+	}
+	return http.StatusBadRequest
 }
 
 func (e HandlerArgs) HasAcceso(accesosIDs ...int32) bool {
@@ -491,13 +489,7 @@ func (req *HandlerArgs) MakeErrCode(message string, code int32) HandlerResponse 
 	response.Route = req.Route
 	Log("Req Error:: ", message)
 
-	if code == 400 {
-		response.StatusCode = http.StatusBadRequest
-	} else if code == 401 {
-		response.StatusCode = http.StatusUnauthorized
-	} else if code == 500 {
-		response.StatusCode = http.StatusInternalServerError
-	}
+	response.StatusCode = normalizedErrorStatus(code)
 	return response
 }
 
@@ -526,7 +518,7 @@ func ensureResponseHeaders(headers map[string]string) map[string]string {
 	}
 
 	// Browsers only expose custom headers cross-origin when the server whitelists them.
-	headers["Access-Control-Expose-Headers"] = "X-Metadata"
+	headers["Access-Control-Expose-Headers"] = "X-Metadata, X-Rate-Limit-Code"
 	return headers
 }
 
@@ -588,7 +580,7 @@ func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {
 func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 	respWriter := *args.ResponseWriter
 	respWriter.Header().Set("Access-Control-Allow-Origin", "*")
-	respWriter.Header().Set("Access-Control-Expose-Headers", "X-Metadata")
+	respWriter.Header().Set("Access-Control-Expose-Headers", "X-Metadata, X-Rate-Limit-Code")
 
 	// Setea los headers de la respuesta
 	if response.Headers != nil {

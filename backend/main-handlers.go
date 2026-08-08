@@ -11,6 +11,7 @@ import (
 	"app/sales"
 	"app/security"
 	"app/webpage"
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -190,6 +191,18 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		core.Log("no hay una lambda para el path solicitado::", funcPath)
 		handlerResponse.Error = "no hay una lambda para el path solicitado: " + funcPath
 	} else {
+		if !isPublicPath && args.Method == "POST" {
+			requestBodyBytes := 0
+			if args.Body != nil {
+				requestBodyBytes = len(*args.Body)
+			}
+			if rateLimitResponse := enforceAPICreditLimit(args, requestBodyBytes); rateLimitResponse != nil {
+				handlerResponse = *rateLimitResponse
+				setResponseMetadata(&handlerResponse)
+				return prepareResponse(args, &handlerResponse)
+			}
+		}
+
 		core.Log("Ejecutando Handler::", funcPath)
 		handlerResponse = handlerFunc(args)
 		respLen := 0
@@ -197,6 +210,11 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			respLen = len(*handlerResponse.Body)
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
+		if !isPublicPath && args.Method == "GET" && handlerResponse.Error == "" && !handlerResponse.StreamHandled {
+			if rateLimitResponse := enforceAPICreditLimit(args, respLen); rateLimitResponse != nil {
+				handlerResponse = *rateLimitResponse
+			}
+		}
 
 		if !core.Env.IS_SERVERLESS && !core.Env.IS_LOCAL {
 			registerLocalRequestUsage(args, &handlerResponse, requestStartedAt)
@@ -205,6 +223,27 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 
 	setResponseMetadata(&handlerResponse)
 	return prepareResponse(args, &handlerResponse)
+}
+
+func enforceAPICreditLimit(args *core.HandlerArgs, payloadBytes int) *core.HandlerResponse {
+	requestContext := context.Background()
+	if args.ReqContext != nil {
+		requestContext = args.ReqContext.Context()
+	}
+	err := core.ChargeAPIUsage(
+		requestContext, args.User.CompanyID, args.User.ID, args.Method, payloadBytes,
+	)
+	if err != nil {
+		core.Log("credit rate limiter rejected::", " method::", args.Method, " company::", args.User.CompanyID,
+			" user::", args.User.ID, " bytes::", payloadBytes, " err::", err)
+		response := args.MakeCreditRateLimitResponse(err)
+		return &response
+	}
+	apiGroup, _ := core.APIGroup(args.Method, payloadBytes)
+	cpuCredits, _ := core.APICPUCredits(args.Method, payloadBytes)
+	core.Log("credit rate limiter accepted::", " method::", args.Method, " company::", args.User.CompanyID,
+		" user::", args.User.ID, " bytes::", payloadBytes, " api_group::", apiGroup, " cpu_credits::", cpuCredits)
+	return nil
 }
 
 func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.HandlerResponse, requestStartedAt int64) {
@@ -308,6 +347,9 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 	if core.Env.LAMBDA_RESPONSE_STREAMING {
 		if hasError {
 			response.LambdaStreamingResponse = core.MakeErrStreamingFinal(statusCode, handlerResponse.Error)
+			for headerName, headerValue := range handlerResponse.Headers {
+				response.LambdaStreamingResponse.Headers[headerName] = headerValue
+			}
 			response.LambdaStreamingResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
 				handlerResponse.PreSerializeMs,
 				time.Now().UnixMilli()-handlerResponse.RequestStart,
@@ -323,7 +365,10 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 		if response.LambdaResponse.Headers == nil {
 			response.LambdaResponse.Headers = map[string]string{}
 		}
-		response.LambdaResponse.Headers["Access-Control-Expose-Headers"] = "X-Metadata"
+		for headerName, headerValue := range handlerResponse.Headers {
+			response.LambdaResponse.Headers[headerName] = headerValue
+		}
+		response.LambdaResponse.Headers["Access-Control-Expose-Headers"] = "X-Metadata, X-Rate-Limit-Code"
 		response.LambdaResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
 			handlerResponse.PreSerializeMs,
 			time.Now().UnixMilli()-handlerResponse.RequestStart,

@@ -165,7 +165,7 @@ func generateMenuDescriptionFile(workingDir string) (string, error) {
 func findMenuDescriptionRepoRoot(workingDir string) (string, error) {
 	candidates := []string{
 		strings.TrimSpace(os.Getenv("GENIX_REPOSITORY_ROOT")),
-		filepath.Dir(strings.TrimSpace(os.Getenv("GENIX_CREDENTIALS_FILE"))),
+		filepath.Dir(strings.TrimSpace(os.Getenv("GENIX_CONFIG_FILE"))),
 		workingDir,
 	}
 	for _, candidate := range candidates {
