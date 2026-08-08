@@ -30,14 +30,19 @@ func main() {
 	case "deploy_vps":
 		DeployVPS()
 
+	case "deploy":
+		runSubpackage("./deployer", os.Args[2:]...)
+
 	default:
 		fmt.Printf("Unknown script: %s\n", script)
 		os.Exit(1)
 	}
 }
 
-func runSubpackage(pkg string) {
-	cmd := exec.Command("go", "run", pkg)
+// Stdin va conectado porque algunos subpaquetes son interactivos (el TUI de ./deployer).
+func runSubpackage(pkg string, args ...string) {
+	cmd := exec.Command("go", append([]string{"run", pkg}, args...)...)
+	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
