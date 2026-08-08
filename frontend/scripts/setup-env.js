@@ -18,7 +18,7 @@ export const setupEnv = () => {
       );
       // sse_bridge.url is where the agent's event stream lives. It defaults to
       // aws.lambda_url so an install without a bridge keeps talking to the backend
-      // directly; point it at the sse_bridge process to make the Lambda
+      // directly; point it at the server_utils bridge to make the Lambda
       // deployment able to stream (see PLAN_SSE_BRIDGE.md).
       const envContent = [
         `VITE_PROXY_PORT=${process.env.GENIX_PROXY_PORT || '3572'}`,
@@ -26,6 +26,8 @@ export const setupEnv = () => {
         `PUBLIC_SSE_BRIDGE_URL=${config.sse_bridge?.url || config.aws?.lambda_url || ''}`,
         `PUBLIC_FRONTEND_CDN=${config.frontend?.cdn_url || ''}`,
         `PUBLIC_ZONE_NAME=${config.frontend?.zone_name || ''}`,
+        // Mirror the backend's configured standalone port for the local endpoint selector.
+        `PUBLIC_LOCAL_API_PORT=${config.server?.port || 3589}`,
         `PUBLIC_ENDPOINTS=${serializedPublicEndpoints}`
       ].join('\n') + '\n';
 

@@ -6,7 +6,12 @@ is_local       = true
 environment    = ""
 admin_email    = "admin@example.com"
 admin_password = "admin_password"
+# secret_phrase firma lo que sostiene el usuario: tokens de sesión y hashes de contraseña.
 secret_phrase  = "cambie_esta_frase"
+# internal_apikey autentica proceso-a-proceso: las tramas TCP del rate limiter y la cabecera
+# X-Bridge-Auth del SSE bridge (ambos en server_utils/). Separado de secret_phrase para poder
+# rotarlo sin invalidar todas las sesiones activas.
+internal_apikey = "cambie_esta_clave"
 github_account = "mi-cuenta"
 
 # ─── Proveedores ────────────────────────────────────────────────────────────
@@ -34,6 +39,8 @@ nginx_domain  = "api.example.com"
 nginx_process = "127.0.0.1:14010"
 
 # ─── Credit rate limiter (server_utils/) ───────────────────────────────────
+# Una de las dos mitades del proceso genix-server-utils; la otra es [sse_bridge].
+# Se autentica con internal_apikey (raíz), no con secret_phrase.
 [rate_limit]
 address               = "127.0.0.1:14013"
 flush_seconds         = 15
@@ -110,14 +117,18 @@ openrouter_key = ""
 url      = ""
 password = ""
 
-# ─── SSE Bridge ─────────────────────────────────────────────────────────────
+# ─── SSE Bridge (server_utils/) ─────────────────────────────────────────────
 # Relay que sostiene el stream del agente cuando el backend corre en Lambda, que no
 # puede mantener una conexión abierta. url igual a aws.lambda_url (o vacía) = sin
 # bridge: el backend sirve su propio /agent/stream.
+#
+# Corre dentro del mismo proceso que [rate_limit]. No lleva apikey propia: usa
+# internal_apikey (raíz) para las llamadas del backend y secret_phrase para verificar
+# el token de sesión del navegador.
 [sse_bridge]
-url    = ""
-apikey = ""
-port   = 14012
+url     = ""
+port    = 14012
+verbose = false   # true = loguea cada mensaje entregado
 
 # ─── Signaling (p2p/) ───────────────────────────────────────────────────────
 [signaling]

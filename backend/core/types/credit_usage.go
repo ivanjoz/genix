@@ -21,9 +21,10 @@ type CreditUsageTable struct {
 func (e CreditUsageTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		// This table stores externally aggregated absolute snapshots and needs no ORM-managed fields.
-		ID:        42,
-		Name:      "credit_usage",
-		Partition: e.CompanyID,
-		Keys:      db.Cols(e.UserID, e.TimeFrame),
+		ID:                    42,
+		Name:                  "credit_usage",
+		Partition:             e.CompanyID,
+		Keys:                  db.Cols(e.UserID, e.TimeFrame),
+		DisableDefaultColumns: true,
 	}
 }

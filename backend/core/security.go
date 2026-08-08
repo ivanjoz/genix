@@ -92,12 +92,19 @@ type EnvStruct struct {
 	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
 	USUARIO_ID         int32
 	ADMIN_PASSWORD     string
-	SECRET_PHRASE      string
-	SMTP_HOST          string
-	SMTP_EMAIL         string
-	SMTP_USER          string
-	SMTP_PASSWORD      string
-	SMTP_PORT          int32
+	// SECRET_PHRASE signs what users hold: session tokens (usuario-accesos.go) and password
+	// hashes. It never authenticates one Genix process to another — that is INTERNAL_APIKEY.
+	SECRET_PHRASE string
+	// INTERNAL_APIKEY authenticates service-to-service calls: the credit rate limiter's TCP
+	// frames and the SSE bridge's X-Bridge-Auth header, both handled by server_utils/. Split
+	// from SECRET_PHRASE so the inter-service key can be rotated without invalidating every
+	// live session token.
+	INTERNAL_APIKEY string
+	SMTP_HOST       string
+	SMTP_EMAIL      string
+	SMTP_USER       string
+	SMTP_PASSWORD   string
+	SMTP_PORT       int32
 	// BACKEND_PROVIDER selects the cloud data mirror: DynamoDB (aws) or D1 (cloudflare).
 	BACKEND_PROVIDER string
 	// CDN_PROVIDER selects the object storage and public asset origin: S3 (aws) or R2 (cloudflare).
@@ -113,7 +120,7 @@ type EnvStruct struct {
 	// this to the Node process, so the value has to reach the backend and not only the deploy
 	// CLI. Optional: defaults to the CI-published URL, same as cloud/webpage-renderer.go.
 	WEBPAGE_RENDERER_URL string
-	// SSE_BRIDGE_URL is the SSE relay (sse_bridge/) that keeps the browser's
+	// SSE_BRIDGE_URL is the SSE relay (server_utils/, bridge half) that keeps the browser's
 	// stream open on behalf of this backend. Lambda cannot hold a stream for a
 	// whole agent turn nor receive the browser's reply inside the same
 	// invocation, so in serverless mode every server→browser message and every
@@ -150,11 +157,12 @@ type EnvStruct struct {
 // de core.Env.X no cambian. Todo campo nuevo del archivo se añade aquí Y en el bloque de
 // asignación de PopulateVariables, o queda silenciosamente en su cero-valor.
 type fileConfig struct {
-	AppName       string `toml:"app_name"`
-	IsLocal       bool   `toml:"is_local"`
-	Environment   string `toml:"environment"`
-	AdminPassword string `toml:"admin_password"`
-	SecretPhrase  string `toml:"secret_phrase"`
+	AppName        string `toml:"app_name"`
+	IsLocal        bool   `toml:"is_local"`
+	Environment    string `toml:"environment"`
+	AdminPassword  string `toml:"admin_password"`
+	SecretPhrase   string `toml:"secret_phrase"`
+	InternalApikey string `toml:"internal_apikey"`
 
 	Providers struct {
 		Backend string `toml:"backend"`
@@ -237,6 +245,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.ENVIROMENT = file.Environment
 	env.ADMIN_PASSWORD = file.AdminPassword
 	env.SECRET_PHRASE = file.SecretPhrase
+	env.INTERNAL_APIKEY = file.InternalApikey
 
 	env.BACKEND_PROVIDER = file.Providers.Backend
 	env.CDN_PROVIDER = file.Providers.CDN

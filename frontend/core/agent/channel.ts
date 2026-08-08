@@ -12,7 +12,7 @@
 // with its session token, and both the backend and the bridge reject a channel
 // whose identity doesn't match the authenticated one.
 //
-// Mirrored in backend/agent/channel.go and sse_bridge/channel.go. The three
+// Mirrored in backend/agent/channel.go and server_utils/src/bridge/token.rs. The three
 // copies must agree byte for byte.
 
 // TAB_RANDOM_BYTES is the tab's entropy: 6 bytes = 48 bits, and exactly 8

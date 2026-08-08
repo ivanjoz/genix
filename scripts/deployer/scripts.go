@@ -55,8 +55,8 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, ".", "python3", "scripts/configure_db.py")
 	}},
 
-	{key: "configure_sse_bridge", group: scriptGroupServers, label: "Configurar SSE Bridge", run: func(context deployContext, _ []string) error {
-		return runCommand(context, ".", "python3", "scripts/configure_sse_bridge.py")
+	{key: "configure_server_utils", group: scriptGroupServers, label: "Configurar Server Utils (rate limiter + SSE bridge)", run: func(context deployContext, _ []string) error {
+		return runCommand(context, ".", "python3", "scripts/configure_server_utils.py")
 	}},
 
 	{key: "generate_controllers", group: scriptGroupGenerators, label: "Regenerar Controllers", run: func(context deployContext, _ []string) error {

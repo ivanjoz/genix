@@ -129,7 +129,7 @@ func HandleStream(w http.ResponseWriter, r *http.Request) {
 	// Handshake, queued only after the tab is registered: a client that has seen
 	// this frame knows the backend can reach it, which is what lets the frontend
 	// hold its first turn until the channel exists. The SSE bridge emits the
-	// identical frame (sse_bridge/handlers.go), so the client code is the same
+	// identical frame (server_utils/src/bridge/http.rs), so the client code is the same
 	// against either transport.
 	_ = cc.push([]byte(`{"Type":"` + TypeBridgeReady + `"}`))
 	core.Log("agent.sse client connected tab::", shortTabID(tab), " company::", cc.companyID, " user::", cc.userID, " path::", cc.path, " from", r.RemoteAddr)

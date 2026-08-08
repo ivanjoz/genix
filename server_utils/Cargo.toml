@@ -23,6 +23,10 @@ toml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
+[dev-dependencies]
+# ServiceExt::oneshot drives the axum router in tests without binding a real socket.
+tower = { version = "0.5", features = ["util"] }
+
 [profile.release]
 lto = "thin"
 strip = true

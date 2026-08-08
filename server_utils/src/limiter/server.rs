@@ -12,10 +12,10 @@ use tokio::{
 };
 use tracing::{debug, info, warn};
 
-use crate::{
+use crate::limiter::{
     auth,
-    limiter::RateLimiter,
     protocol::{AUTHENTICATED_PAYLOAD_SIZE, REQUEST_SIZE, parse_frame},
+    quota::RateLimiter,
 };
 
 pub async fn run(

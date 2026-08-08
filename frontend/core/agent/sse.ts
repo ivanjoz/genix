@@ -8,7 +8,7 @@
 //
 // The stream has two possible hosts, and the client code is identical against
 // either: the backend itself (`/agent/stream` + `/agent/in`) when it runs
-// locally or on the VPS, or the SSE bridge (`/sse` + `/in`, see sse_bridge/)
+// locally or on the VPS, or the SSE bridge (`/sse` + `/in`, see server_utils/)
 // when the backend runs in Lambda and cannot hold a connection open. Env
 // resolves which one applies (AGENT_STREAM_BASE).
 //

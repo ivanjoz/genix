@@ -50,10 +50,12 @@ for (const entry of fs.readdirSync(agentsSkillsPath, { withFileTypes: true })) {
 }
 console.log(`Skills copiados: .agents/skills -> .claude/skills`)
 
-// Revisa si todo está instalado
-if (!fs.existsSync("node_modules")){
+// Revisa si todo está instalado. Todas las rutas salen de __dirname, nunca del CWD: el
+// launcher se puede invocar desde cualquier carpeta (o con doble click, que abre konsole
+// en el home) y tiene que encontrar el repo igual.
+if (!fs.existsSync(path.join(__dirname, "node_modules"))){
   console.log("Instalando dependiencias de Node.js...")
-  execSync('npm install', { encoding: 'utf-8' })
+  execSync('npm install', { encoding: 'utf-8', cwd: __dirname })
 }
 
 const nodemon = require("nodemon")
@@ -69,24 +71,11 @@ const viteInstalled = fs.existsSync(path.join(frontendNodeModules, "vite", "pack
 const storeNodeModules = fs.existsSync(path.join(frontendPath, "webpage", "node_modules"))
 if (!fs.existsSync(frontendNodeModules) || !viteInstalled || !storeNodeModules){
   console.log("No se encontraron los node_modules o faltan dependencias en el frontend. Instalando...")
-  if(isWindows){
-    execSync(`cd ${frontendPath} & bun install`, { stdio: "inherit", shell: true })
-  } else {
-    execSync('cd frontend && bun install', { encoding: 'utf-8' })
-  }
+  execSync('bun install', { stdio: "inherit", shell: true, cwd: frontendPath })
 }
 
-let frontendScript = `cd ./frontend && ${FRONTEND_SCRIPT}`
-if (isWindows) {
-  frontendScript = `cd ${frontendPath} & ${FRONTEND_SCRIPT}`
-}
-
-// Rate limiter
+// Rate limiter + SSE bridge (server_utils/, un solo binario Rust con los dos servicios)
 const rateLimiterPath = path.join(__dirname, 'server_utils')
-let rateLimiterScript = `cd ./server_utils && ${RATE_LIMITER_SCRIPT}`
-if (isWindows) {
-  rateLimiterScript = `cd ${rateLimiterPath} & ${RATE_LIMITER_SCRIPT}`
-}
 
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
@@ -103,11 +92,7 @@ const goModStamp = goModFiles.map(file => {
 
 const runGoModTidy = () => {
   console.log("Instalando los paquetes de Go (si no lo están)...")
-  if(isWindows){
-    execSync(`cd ${backendGoPath} & go mod tidy`, { stdio: "inherit", shell: true })
-  } else {
-    execSync('cd backend && go mod tidy', { encoding: 'utf-8' })
-  }
+  execSync('go mod tidy', { stdio: "inherit", shell: true, cwd: backendGoPath })
   // Se releen los stats: go mod tidy pudo haber reescrito los archivos.
   const nextStamp = goModFiles.map(file => {
     const stat = fs.existsSync(file) ? fs.statSync(file) : null
@@ -157,7 +142,7 @@ const startBackendGo = () => {
     exec: BACKEND_GO_SCRIPT,  // Runs the Go application
     watch: ["."],             // Only watches the backend-golang folder
     ext: "go",                // Only watches Go files
-    cwd: "backend",    // Sets the working directory to backend-golang
+    cwd: backendGoPath,       // Absoluto: el launcher no depende del CWD
     delay: "200ms",
     spawn: true,
     signal: "SIGTERM",
@@ -187,25 +172,28 @@ const runScripts = () => {
   console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${MAGENTA_BAR}${MAGENTA_BAR} Rate limiter (Rust)`)
 
   // Run all scripts in parallel
-  runScript(frontendScript, YELLOW_BAR)
+  runScript(FRONTEND_SCRIPT, YELLOW_BAR, frontendPath)
   startBackendGo()
-  runScript(rateLimiterScript, MAGENTA_BAR, {
+  runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, rateLimiterPath, {
     RUST_LOG: process.env.RUST_LOG || "genix_server_utils=debug"
   })
 }
 
-// Function to run a script and capture output
-const runScript = (script, name, environment = {}) => {
-  console.log("Ejecutando script:", script)
+// Function to run a script and capture output.
+// workingDirectory se pasa por la opción cwd de spawn en vez de anteponer un `cd`: así no hay
+// que citar rutas con espacios ni duplicar el comando por plataforma.
+const runScript = (script, name, workingDirectory, environment = {}) => {
+  console.log("Ejecutando script:", script, "::", workingDirectory)
 
   const scriptProcess = isWindows ?
     spawn(script, [], {
       stdio: ["ignore", "pipe", "pipe"], detached: false, shell: true,
-      env: { ...process.env, ...environment } })
+      cwd: workingDirectory, env: { ...process.env, ...environment } })
     :
     spawn("bash", ["-c", script], {
       stdio: ["ignore", "pipe", "pipe"], // Capture stdout and stderr
       detached: false, // Ensures process terminates when Node.js exits
+      cwd: workingDirectory,
       env: { ...process.env, ...environment }
     });
 

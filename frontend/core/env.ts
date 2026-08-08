@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_ENDPOINTS, PUBLIC_FRONTEND_CDN, PUBLIC_LAMBDA_URL, PUBLIC_SSE_BRIDGE_URL } from '$env/static/public';
+import { PUBLIC_ENDPOINTS, PUBLIC_FRONTEND_CDN, PUBLIC_LAMBDA_URL, PUBLIC_LOCAL_API_PORT, PUBLIC_SSE_BRIDGE_URL } from '$env/static/public';
 export { browser };
 
 export const IsClient = () => {
@@ -14,6 +14,11 @@ export const IsClient = () => {
 const version = 1.11
 console.log(version)
 const selectedApiEndpointStorageKey = "genixSelectedApiEndpointRoute";
+// Keep the browser's local endpoint aligned with [server].port in config.toml.
+const parsedLocalApiPort = Number(PUBLIC_LOCAL_API_PORT)
+const localApiPort = Number.isInteger(parsedLocalApiPort) && parsedLocalApiPort > 0 && parsedLocalApiPort < 65536
+  ? parsedLocalApiPort
+  : 3589
 
 // Build de la tienda publicada: el bundle del renderer que ejecuta el Lambda
 // (VITE_RENDERER_BUILD). Este despliegue no tiene selector de login/endpoint: la API debe
@@ -53,7 +58,7 @@ const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOptio
     // Never offer the localhost endpoint in a pinned storefront build, even when the
     // static output is previewed on localhost.
     if (globalThis._isLocal && !isStorefrontBuild) {
-      parsedEndpoints.unshift({ name: "Local", route: "http://localhost:3589/", hash: "" })
+      parsedEndpoints.unshift({ name: "Local", route: `http://localhost:${localApiPort}/`, hash: "" })
     }
 
     const usedHashes = new Set<string>()
@@ -142,7 +147,7 @@ export interface ICompanyParams {
 
 // getAgentStreamBase decide de dónde cuelga el stream de eventos del agente.
 // El Lambda no puede sostener un stream, así que cuando el endpoint elegido es
-// el Lambda y hay un bridge desplegado (sse_bridge/), el stream va al bridge.
+// el Lambda y hay un bridge desplegado (server_utils/), el stream va al bridge.
 // Contra un backend local o el VPS no hace falta el salto: ese proceso sirve su
 // propio /agent/stream. Devuelve la base sin barra final ni sufijo /api.
 const getAgentStreamBase = (selectedApiRoute: string): string => {

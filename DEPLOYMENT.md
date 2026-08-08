@@ -93,8 +93,14 @@ dominio de CloudFront cambie, y vuelve a subir el frontend al bucket nuevo.
 
 Lambda no puede sostener un stream abierto ni recibir la respuesta del navegador dentro de la
 misma invocación, y el agente necesita las dos cosas. Con el backend en Lambda hay que desplegar
-además `sse_bridge/` en un servidor normal y poner su URL pública en `sse_bridge.url` de
-`config.toml` (instalación y nginx en `sse_bridge/README.md`).
+además `server_utils/` en un servidor normal — el bridge es una de sus dos mitades, junto al
+credit rate limiter — y poner su URL pública en `sse_bridge.url` de `config.toml`
+(`sudo python3 scripts/configure_server_utils.py`; detalles en
+`scripts/CONFIGURE_SERVER_UTILS.md`).
+
+Ese host necesita `internal_apikey` y `secret_phrase` idénticos a los del backend, y las tablas
+ya desplegadas: el rate limiter sale con error si no puede leer `credit_usage`, y al ser un solo
+proceso eso también deja el bridge sin arrancar.
 
 Si `sse_bridge.url` falta o es igual a `aws.lambda_url`, el chat del agente queda inoperativo en el
 endpoint Lambda; todo lo demás de la app funciona igual. En self-host no hace falta: ese proceso

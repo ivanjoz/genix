@@ -1,8 +1,18 @@
+//! Genix server utilities: one process hosting two independent services.
+//!
+//!   - The raw-TCP credit rate limiter (`server`, `limiter`, `storage`).
+//!   - The HTTP SSE bridge that relays agent events to browser tabs (`bridge`).
+//!
+//! They share only this process: the config load, the shutdown signal, and the tokio runtime.
+//! Neither calls into the other.
+
 use std::{sync::Arc, time::Instant};
 
 use anyhow::{Context, Result};
 use genix_server_utils::{
-    config::AppConfig, limiter::RateLimiter, server, storage::ScyllaUsageStore,
+    bridge::{self, channel::ChannelRegistry, http::BridgeState},
+    config::AppConfig,
+    limiter::{quota::RateLimiter, server, storage::ScyllaUsageStore},
 };
 use tokio::{net::TcpListener, sync::watch, time::MissedTickBehavior};
 use tracing::{error, info};
@@ -16,7 +26,7 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    let config = AppConfig::load().context("rate-limiter configuration is invalid")?;
+    let config = AppConfig::load().context("server-utils configuration is invalid")?;
     let store = Arc::new(
         ScyllaUsageStore::connect(&config.database)
             .await
@@ -26,7 +36,12 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(config.listen_address)
         .await
         .with_context(|| format!("failed to bind {}", config.listen_address))?;
-    let secret = Arc::new(config.secret_phrase);
+    let bridge_listener = TcpListener::bind(config.bridge.listen_address)
+        .await
+        .with_context(|| format!("failed to bind {}", config.bridge.listen_address))?;
+    // The rate limiter authenticates its frames with the service secret, not with the
+    // token-signing one.
+    let internal_apikey = Arc::new(config.internal_apikey.clone());
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
 
     let flush_limiter = limiter.clone();
@@ -52,25 +67,51 @@ async fn main() -> Result<()> {
         }
     });
 
-    let server_limiter = limiter.clone();
-    let server_secret = secret.clone();
     let server_task = tokio::spawn(server::run(
         listener,
-        server_limiter,
-        server_secret,
+        limiter.clone(),
+        internal_apikey.clone(),
         config.frame_timeout,
         config.max_connections,
-        shutdown_receiver,
+        shutdown_receiver.clone(),
     ));
 
-    tokio::signal::ctrl_c()
-        .await
-        .context("failed to listen for shutdown signal")?;
+    let bridge_state = Arc::new(BridgeState {
+        registry: ChannelRegistry::new(),
+        secret_phrase: config.secret_phrase,
+        internal_apikey: config.internal_apikey,
+        verbose_logs: config.bridge.verbose_logs,
+        started_at: Instant::now(),
+    });
+    let mut bridge_shutdown = shutdown_receiver;
+    let bridge_task = tokio::spawn(async move {
+        info!(
+            address = %config.bridge.listen_address,
+            verbose = config.bridge.verbose_logs,
+            "sse bridge listening"
+        );
+        // No request timeouts on this listener: every deadline here would kill a healthy
+        // long-lived SSE stream. Dead connections surface as the keepalive write failing.
+        axum::serve(bridge_listener, bridge::http::routes(bridge_state))
+            .with_graceful_shutdown(async move {
+                while !*bridge_shutdown.borrow_and_update() {
+                    if bridge_shutdown.changed().await.is_err() {
+                        break;
+                    }
+                }
+            })
+            .await
+    });
+
+    tokio::signal::ctrl_c().await.context("failed to listen for shutdown signal")?;
     info!("shutdown signal received");
     let _ = shutdown_sender.send(true);
 
     if let Err(join_error) = flush_task.await {
         error!(error = %join_error, "flush task failed");
+    }
+    if let Err(bridge_error) = bridge_task.await.context("bridge task failed")? {
+        error!(error = %bridge_error, "sse bridge stopped with an error");
     }
     server_task.await.context("server task failed")??;
     let written = limiter.flush_dirty().await;

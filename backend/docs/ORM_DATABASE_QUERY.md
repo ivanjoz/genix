@@ -102,9 +102,10 @@ UpdatedVersion int32 `json:"upv,omitempty"`
 UpdatedVersion db.Col[ProductTable, int32]
 ```
 
-The field name snake-cases to `updated_version`, so no `db` tag is needed. `DisableUpdatedVersion:
-true` opts a table out entirely, saving one counter read per write; it cannot be combined with
-either feature above.
+The field name snake-cases to `updated_version`, so no `db` tag is needed. Tables without a
+`SaveUpdatedVersion`, `db.TypeDelta`, or declared `UpdatedVersion` field omit it automatically,
+saving the counter read. To also omit the default DB-only `created` and `updated` timestamp
+columns, set `DisableDefaultColumns: true` in `GetSchema()`.
 
 ---
 

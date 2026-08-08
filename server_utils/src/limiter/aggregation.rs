@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
 
-use crate::credits_blob::{Credits, GroupedCredits};
+use crate::limiter::credits_blob::{Credits, GroupedCredits};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct UsageKey {

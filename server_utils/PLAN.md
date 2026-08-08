@@ -424,23 +424,37 @@ secrets, nonces, expected hashes, and database passwords must never be logged.
 
 ## 14. Project layout
 
+Every module of this service lives under `src/limiter/`, so the crate root shows the two
+services and the config they share and nothing else.
+
 ```text
 # Purpose: Keep protocol, business rules, persistence, and process wiring independently testable.
 server_utils/
 ├── Cargo.toml
 ├── README.md
 ├── PLAN.md
+├── PLAN_SSE_BRIDGE.md
 ├── src/
-│   ├── main.rs
-│   ├── config.rs
-│   ├── protocol.rs
-│   ├── auth.rs
-│   ├── limiter.rs
-│   ├── aggregation.rs
-│   ├── credits_blob.rs
-│   ├── time_frame.rs
-│   └── storage.rs
+│   ├── main.rs             # spawns both services, shared shutdown
+│   ├── lib.rs
+│   ├── config.rs           # shared by both services
+│   ├── limiter/            # this plan
+│   │   ├── mod.rs
+│   │   ├── protocol.rs     # 19-byte frame codec + response bits
+│   │   ├── auth.rs         # sequence-bound frame HMAC
+│   │   ├── quota.rs        # RateLimiter + the policy types (see note)
+│   │   ├── aggregation.rs
+│   │   ├── credits_blob.rs
+│   │   ├── time_frame.rs
+│   │   ├── storage.rs
+│   │   └── server.rs       # TCP listener + connection loop
+│   └── bridge/             # PLAN_SSE_BRIDGE.md
+└── tests/
+    └── bridge_http.rs
 ```
+
+`quota.rs`, not `limiter.rs`: inside `limiter/` the latter would read
+`limiter::limiter::RateLimiter` and trip clippy's `module_inception`.
 
 The Go backend still needs a matching client package with the same frame, HMAC, sequence,
 response-bit, and test-vector definitions.

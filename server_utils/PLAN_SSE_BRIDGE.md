@@ -1,9 +1,14 @@
 # Plan: Rewrite `sse_bridge/` (Go) into `server_utils/` (Rust)
 
-Status: draft, awaiting approval before any code changes.
+Status: **implemented**. `server_utils/` hosts the bridge in `src/bridge/`; the `sse_bridge/` Go
+module, `scripts/configure_sse_bridge.py`, and `scripts/CONFIGURE_SSE_BRIDGE.md` are deleted.
+References to `sse_bridge/*.go` below are historical — they describe the source that was ported.
 
-Target: `server_utils/` absorbs the SSE bridge. `sse_bridge/` (Go module) is deleted once the
-Rust version passes its test vectors and a manual smoke test.
+Still outstanding: a manual smoke test against a real browser tab (see §3). Everything else is
+covered by the 50 automated tests in `cargo test` plus 14 in
+`scripts/tests/test_configure_server_utils.py`.
+
+Target: `server_utils/` absorbs the SSE bridge.
 
 ## 1. Decisions already made
 
@@ -28,26 +33,30 @@ Rust version passes its test vectors and a manual smoke test.
 ### 2.1 Cargo layout
 
 Stay a single `[package]` (not a workspace) — the two concerns already share config-loading and
-the process lifetime. New modules, namespaced under `bridge::` to avoid colliding with the
-existing rate-limiter modules of the same short names (`auth.rs`, `config.rs`, `server.rs`):
+the process lifetime. Each service owns a module tree, so the two can both have an `auth` and a
+`server` module without colliding, and the crate root shows only the services plus their shared
+config:
 
 ```text
 server_utils/src/
 ├── main.rs              # spawns the TCP rate limiter AND the HTTP bridge, shared shutdown
-├── config.rs            # extended: also loads [sse_bridge] settings (see 2.2)
-├── aggregation.rs        \
-├── auth.rs                | unchanged — rate limiter
-├── credits_blob.rs         | (existing modules keep their current names/paths)
-├── limiter.rs              |
-├── protocol.rs              |
-├── server.rs               /
-├── storage.rs           /
-├── time_frame.rs        /
+├── lib.rs               # pub mod bridge; pub mod config; pub mod limiter;
+├── config.rs            # shared: rate_limit policy, db, both secrets, sse_bridge port
+├── limiter/             # unchanged behavior, moved wholesale under this module (see PLAN.md §14)
+│   ├── mod.rs
+│   ├── quota.rs         # was limiter.rs — RateLimiter + policy types
+│   ├── auth.rs          # sequence-bound frame HMAC
+│   ├── protocol.rs
+│   ├── aggregation.rs
+│   ├── credits_blob.rs
+│   ├── time_frame.rs
+│   ├── storage.rs
+│   └── server.rs        # raw TCP listener
 └── bridge/
-    ├── mod.rs           # pub mod token; pub mod auth; pub mod channel; pub mod http;
+    ├── mod.rs           # pub mod auth; pub mod channel; pub mod http; pub mod token;
     ├── token.rs         # colbin decode subset (see 2.3) + channel-token codec (see 2.4)
     ├── auth.rs          # session-token verification + X-Bridge-Auth verification
-    ├── channel.rs        # ChannelRegistry / ClientChannel (async mirror of channel.go)
+    ├── channel.rs       # ChannelRegistry / ClientChannel (async mirror of channel.go)
     └── http.rs          # axum router + the 5 handlers (mirror of handlers.go)
 ```
 
@@ -92,9 +101,10 @@ port = 14012
 additive config:
 
 - `server_utils/src/config.rs`: `AppConfig` currently loads one `secret_phrase: Vec<u8>` and
-  `main.rs` hands it to `server::run` as the TCP frame HMAC key. Add `internal_apikey: Vec<u8>`
-  as a second required root string and switch `main.rs` to pass *that* to `server::run`; keep
-  `secret_phrase` on `AppConfig` (now used only inside `bridge::auth`).
+  `main.rs` hands it to `limiter::server::run` as the TCP frame HMAC key. Add
+  `internal_apikey: Vec<u8>` as a second required root string and switch `main.rs` to pass
+  *that* to `limiter::server::run`; keep `secret_phrase` on `AppConfig` (now used only inside
+  `bridge::auth`).
 - `backend/core/security.go`: add `INTERNAL_APIKEY string` to `EnvStruct`, `InternalApikey
   string \`toml:"internal_apikey"\`` to `fileConfig`, and `env.INTERNAL_APIKEY =
   file.InternalApikey` in `applyToEnv` (mirrors how `SECRET_PHRASE` is already plumbed, lines

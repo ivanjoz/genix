@@ -27,7 +27,7 @@ import (
 // already live on the AgentSession. The channel token is a wire format, decoded
 // at the HTTP boundary and re-used verbatim when talking to the bridge.
 //
-// Mirrored in sse_bridge/channel.go and frontend/core/agent/channel.ts. The
+// Mirrored in server_utils/src/bridge/token.rs and frontend/core/agent/channel.ts. The
 // three copies must agree byte for byte; there is no shared module to enforce
 // it (the bridge and the backend are separate Go modules).
 

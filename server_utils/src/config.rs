@@ -5,12 +5,15 @@ use std::{env, fs, net::SocketAddr, path::PathBuf, time::Duration};
 use anyhow::{Context, Result, bail};
 use toml::{Table, Value};
 
-use crate::limiter::{CreditLimits, LimitPolicy, ScopeLimits};
+use crate::limiter::quota::{CreditLimits, LimitPolicy, ScopeLimits};
 
 const DEFAULT_LISTEN_ADDRESS: &str = "127.0.0.1:14013";
 const DEFAULT_FLUSH_SECONDS: u64 = 15;
 const DEFAULT_FRAME_TIMEOUT_SECONDS: u64 = 30;
 const DEFAULT_MAX_CONNECTIONS: usize = 1_024;
+/// Keeps the bridge next to the other Genix services on the same hosts (14008 ScyllaDB,
+/// 14010 backend, 14013 this process's rate limiter, 14446 GenixSearch).
+const DEFAULT_BRIDGE_PORT: u16 = 14012;
 
 #[derive(Clone, Debug)]
 pub struct DatabaseConfig {
@@ -28,9 +31,23 @@ pub struct AppConfig {
     pub frame_timeout: Duration,
     pub max_connections: usize,
     pub shard_count: usize,
+    /// Signs the browser session tokens the SSE bridge verifies. Nothing else reads it.
     pub secret_phrase: Vec<u8>,
+    /// Service-to-service secret: the rate limiter's TCP frame HMAC and the bridge's
+    /// `X-Bridge-Auth` header. Distinct from `secret_phrase` so token signing and
+    /// inter-service authentication can be rotated independently.
+    pub internal_apikey: Vec<u8>,
     pub database: DatabaseConfig,
     pub policy: LimitPolicy,
+    pub bridge: BridgeConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct BridgeConfig {
+    /// The SSE bridge's HTTP listener. Bound on all interfaces because nginx terminates TLS
+    /// in front of it, matching the Go bridge this replaced.
+    pub listen_address: SocketAddr,
+    pub verbose_logs: bool,
 }
 
 impl AppConfig {
@@ -79,6 +96,16 @@ impl AppConfig {
         };
         validate_policy(policy)?;
 
+        let bridge_port = optional_u64(&config, "SSE_BRIDGE_PORT", "sse_bridge.port")?
+            .map(|port| {
+                u16::try_from(port).context("sse_bridge.port must be a valid TCP port")
+            })
+            .transpose()?
+            .unwrap_or(DEFAULT_BRIDGE_PORT);
+        if bridge_port == 0 {
+            bail!("sse_bridge.port must be greater than zero");
+        }
+
         Ok(Self {
             listen_address,
             flush_interval: Duration::from_secs(flush_seconds),
@@ -86,6 +113,13 @@ impl AppConfig {
             max_connections,
             shard_count,
             secret_phrase: required_string(&config, "SECRET_PHRASE", "secret_phrase")?.into_bytes(),
+            internal_apikey: required_string(&config, "INTERNAL_APIKEY", "internal_apikey")?
+                .into_bytes(),
+            bridge: BridgeConfig {
+                listen_address: SocketAddr::from(([0, 0, 0, 0], bridge_port)),
+                verbose_logs: optional_string(&config, "SSE_BRIDGE_VERBOSE", "sse_bridge.verbose")
+                    .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true")),
+            },
             database: DatabaseConfig {
                 host: required_string(&config, "DB_HOST", "db.host")?,
                 port: required_u16(&config, "DB_PORT", "db.port")?,

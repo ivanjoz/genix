@@ -1,6 +1,6 @@
 package agent
 
-// Client of the SSE bridge (see sse_bridge/ and PLAN_SSE_BRIDGE.md).
+// Client of the SSE bridge (see server_utils/ and its PLAN_SSE_BRIDGE.md).
 //
 // In Lambda the backend cannot hold the browser's stream open: an invocation
 // ends when the handler returns, and the browser's answer to a command would
@@ -34,7 +34,7 @@ import (
 
 const (
 	// bridgeServiceAuthHeaderName and bridgeServiceAuthMessagePrefix mirror
-	// sse_bridge/auth.go. The bridge is a separate Go module, so the compiler
+	// server_utils/src/bridge/auth.rs. The bridge is a Rust process, so the compiler
 	// cannot enforce this — changing one side requires changing the other.
 	bridgeServiceAuthHeaderName    = "X-Bridge-Auth"
 	bridgeServiceAuthMessagePrefix = "sse-bridge:v1|"
@@ -62,12 +62,13 @@ func bridgeBaseURL() string {
 	return strings.TrimRight(strings.TrimSpace(core.Env.SSE_BRIDGE_URL), "/")
 }
 
-// makeBridgeServiceAuthHeader signs the current timestamp with SECRET_PHRASE.
-// Both processes read the same config.toml, so no extra secret has to be
-// provisioned for the bridge.
+// makeBridgeServiceAuthHeader signs the current timestamp with INTERNAL_APIKEY, the
+// project's service-to-service secret (the same key the credit rate limiter's TCP
+// frames use, under a different domain string). Both processes read the same
+// config.toml, so no extra secret has to be provisioned for the bridge.
 func makeBridgeServiceAuthHeader() string {
 	timestampText := strconv.FormatInt(time.Now().Unix(), 10)
-	hashMac := hmac.New(sha256.New, []byte(core.Env.SECRET_PHRASE))
+	hashMac := hmac.New(sha256.New, []byte(core.Env.INTERNAL_APIKEY))
 	hashMac.Write([]byte(bridgeServiceAuthMessagePrefix + timestampText))
 	return timestampText + "." + hex.EncodeToString(hashMac.Sum(nil))
 }

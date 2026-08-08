@@ -7,7 +7,7 @@ use scylla::{
     statement::prepared::PreparedStatement,
 };
 
-use crate::{aggregation::UsageKey, config::DatabaseConfig};
+use crate::{config::DatabaseConfig, limiter::aggregation::UsageKey};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StoredUsage {

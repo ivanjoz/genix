@@ -280,7 +280,7 @@ func bootstrapCronSchedulers() {
 
 func main() {
 	core.PopulateVariables()
-	if err := core.ConfigureCreditRateLimiter(core.Env.RATE_LIMIT_ADDRESS, core.Env.SECRET_PHRASE); err != nil {
+	if err := core.ConfigureCreditRateLimiter(core.Env.RATE_LIMIT_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
 		panic("invalid credit rate limiter configuration: " + err.Error())
 	}
 	serverPort := resolveServerPort()
@@ -407,7 +407,7 @@ func main() {
 		// replies and unsolicited events). The turn itself is not here: it is a
 		// plain API route (POST p-agent-turn, agent/turn.go) so that the exact
 		// same client code works against Lambda, where the stream lives on the
-		// SSE bridge (sse_bridge/) instead of this process.
+		// SSE bridge (server_utils/) instead of this process.
 		mux := http.NewServeMux()
 		// The browser connects to these cross-origin (app served from the dev
 		// proxy, backend on another port), so unlike the old WS upgrade they need

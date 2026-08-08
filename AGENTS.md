@@ -51,9 +51,9 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 - **backend/docs/CREATE_API_HANDLERS.md** - API handler development guide, MUST read before creating APIs. Key concepts: "updated" parameter for delta responses, query examples, conventions.
 - **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ORM documentation covering model definitions, CRUD operations, query building
 
-### SSE Bridge
-- **sse_bridge/README.md** - Relay SSE que sostiene el stream del navegador cuando el backend corre en Lambda (que no puede mantener conexiones abiertas). Endpoints, auth, systemd/nginx. Diseño en **PLAN_SSE_BRIDGE.md**.
-- **scripts/CONFIGURE_SSE_BRIDGE.md** - Despliegue del bridge en un servidor: `configure_sse_bridge.py` instala las units de systemd y el vhost de Nginx (HTTP/3 cuando hay certificado, sin buffering para SSE).
+### Server Utils (Rust)
+- **server_utils/README.md** - Un solo binario Rust (`genix-server-utils`) con dos servicios independientes: el **credit rate limiter** (TCP crudo, loopback) y el **SSE bridge** (HTTP) que sostiene el stream del navegador cuando el backend corre en Lambda (que no puede mantener conexiones abiertas). Contratos de ambos, tokens y los dos secretos (`internal_apikey` proceso-a-proceso, `secret_phrase` sólo para el token de sesión). Diseños en **server_utils/PLAN.md** y **server_utils/PLAN_SSE_BRIDGE.md**.
+- **scripts/CONFIGURE_SERVER_UTILS.md** - Despliegue en un servidor: `configure_server_utils.py` compila con cargo, instala las units de systemd y el vhost de Nginx del bridge (HTTP/3 cuando hay certificado, sin buffering para SSE). El puerto del rate limiter no se expone.
 
 ### Frontend Documentation
 - **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow

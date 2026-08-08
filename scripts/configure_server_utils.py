@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
 
-"""Install the SSE bridge (sse_bridge/) on this host: systemd units plus its Nginx vhost.
+"""Install server_utils/ on this host: systemd units plus the Nginx vhost for its SSE bridge.
 
-Deliberately simpler than configure_server.py, which has to cover a backend host and an Nginx
-edge host that are usually two different machines. The bridge is the opposite case: Nginx must
-terminate TLS on the very machine the bridge runs on, because what it proxies is a permanent
-stream and there is nothing to gain from a second hop. So there are no install modes and no
-upstream to configure — the vhost always forwards to 127.0.0.1.
+One Rust binary, genix-server-utils, hosts two independent services:
 
-It also asks for exactly one thing, and only when it is missing: sse_bridge.apikey, the shared
-secret the bridge needs to authenticate anyone (the browser's session token and the backend's
-X-Bridge-Auth header are both HMACs keyed with it). Everything else is read from config.toml
-or defaulted, and a missing value fails with the key name instead of opening a prompt.
+  - The credit rate limiter, on a raw TCP port that stays on loopback. It is authenticated by
+    HMAC but not encrypted, so it never gets an Nginx vhost.
+  - The SSE bridge, on an HTTP port that must be reachable by browsers. Nginx terminates TLS
+    for it on this very machine: what it proxies is a permanent stream, and a second hop buys
+    nothing.
 
-Nginx specifics: the vhost never buffers (a buffered text/event-stream is a stalled request), it
-adds no CORS headers (the bridge answers preflights itself in handlers.go — a duplicated
-Access-Control-Allow-Origin makes browsers reject the response), and it serves HTTP/3 whenever a
-certificate for the hostname exists.
+Deliberately simpler than configure_server.py, which covers a backend host and an Nginx edge
+host that are usually two different machines. Here there is no upstream to configure — the
+vhost always forwards to 127.0.0.1.
+
+It asks for nothing. Every value comes from config.toml, and a missing one fails with the key
+name instead of opening a prompt: both secrets it needs (secret_phrase, internal_apikey) are
+root-level keys that initial project setup already writes, exactly like admin_password.
+
+Nginx specifics: the vhost never buffers (a buffered text/event-stream is a stalled request),
+it adds no CORS headers (the bridge answers preflights itself — a duplicated
+Access-Control-Allow-Origin makes browsers reject the response), and it serves HTTP/3 whenever
+a certificate for the hostname exists.
 """
 
-import getpass
 import os
 import re
 import shutil
@@ -35,7 +39,6 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     SERVICE_INSTALL_DIRECTORY,
     SYSTEMD_DIRECTORY,
     build_unprivileged_command,
-    detect_go_binary,
     detect_repository_config_path,
     detect_runtime_username,
     detect_unprivileged_username,
@@ -54,31 +57,30 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     validate_server_port,
     write_unit_file,
 )
-from toml_config import get_config_value, set_config_values  # noqa: E402
+from toml_config import get_config_value  # noqa: E402
 
-BRIDGE_SOURCE_DIRECTORY_NAME = "sse_bridge"
-BRIDGE_BINARY_NAME = "sse_bridge"
-BRIDGE_BINARY_PATH = SERVICE_INSTALL_DIRECTORY / BRIDGE_BINARY_NAME
-BRIDGE_SERVICE_NAME = "genix-sse-bridge.service"
-BRIDGE_RESTART_SERVICE_NAME = "genix-sse-bridge-restart.service"
-BRIDGE_RESTART_PATH_NAME = "genix-sse-bridge-restart.path"
+SOURCE_DIRECTORY_NAME = "server_utils"
+# Cargo's package name, which is also the file name it produces.
+BINARY_NAME = "genix-server-utils"
+BINARY_PATH = SERVICE_INSTALL_DIRECTORY / BINARY_NAME
+SERVICE_NAME = "genix-server-utils.service"
+RESTART_SERVICE_NAME = "genix-server-utils-restart.service"
+RESTART_PATH_NAME = "genix-server-utils-restart.path"
 
-# Must match defaultListenPort in sse_bridge/config.go.
+# Must match DEFAULT_BRIDGE_PORT in server_utils/src/config.rs.
 DEFAULT_BRIDGE_PORT = 14012
 
-# The bridge reads sse_bridge.apikey; a developer machine has the backend's full config.toml
-# instead, where the same value is secret_phrase. config.go accepts both, and so does this script.
-BRIDGE_API_KEY_NAME = "sse_bridge.apikey"
-BACKEND_SECRET_NAME = "secret_phrase"
-MINIMUM_API_KEY_LENGTH = 8
+# Both are root-level keys in config.toml. secret_phrase verifies the browser's session token;
+# internal_apikey authenticates the backend's calls (and the rate limiter's TCP frames).
+REQUIRED_SECRET_NAMES = ("secret_phrase", "internal_apikey")
 
 # An AWS function URL in sse_bridge.url means "no bridge" (the backend serves its own
 # /agent/stream), so it cannot be the hostname this vhost is built for.
 LAMBDA_URL_HOST_SUFFIXES = (".on.aws", ".amazonaws.com")
 
-# reuseport may be set by exactly one server block per address:port. A second one anywhere in the
-# Nginx configuration fails `nginx -t` with "duplicate listen options", which is what would happen
-# when the bridge shares its host with the backend vhost written by configure_server.py.
+# reuseport may be set by exactly one server block per address:port. A second one anywhere in
+# the Nginx configuration fails `nginx -t` with "duplicate listen options", which is what would
+# happen when this host also serves the backend vhost written by configure_server.py.
 NGINX_LISTEN_REUSEPORT_PATTERN = re.compile(r"^\s*listen\s+[^;]*\breuseport\b", re.MULTILINE)
 
 
@@ -117,7 +119,7 @@ def resolve_bridge_domain(project_credentials, repository_config_path):
 
 
 def resolve_bridge_port(project_credentials):
-    """Resolve the port the bridge binds to. Absent is normal — the Go default covers it."""
+    """Resolve the port the SSE bridge binds to. Absent is normal — the Rust default covers it."""
     configured_port = get_config_value(project_credentials, "sse_bridge.port")
     if configured_port is None:
         print_debug(f"sse_bridge.port is not set in config.toml. Using {DEFAULT_BRIDGE_PORT}.")
@@ -125,72 +127,29 @@ def resolve_bridge_port(project_credentials):
 
     bridge_port, validation_error = validate_server_port(str(configured_port))
     if bridge_port is None:
-        # Never fall back silently: the Nginx upstream is built from this number, so a typo would
-        # produce a vhost proxying to a port nothing listens on.
+        # Never fall back silently: the Nginx upstream is built from this number, so a typo
+        # would produce a vhost proxying to a port nothing listens on.
         fail_with_error(f"sse_bridge.port in config.toml is unusable: {validation_error}")
 
-    print_debug(f"Bridge listen port: {bridge_port}")
+    print_debug(f"SSE bridge listen port: {bridge_port}")
     return bridge_port
 
 
-def store_bridge_api_key(repository_config_path, bridge_api_key):
-    """Merge the typed-in key into config.toml, which is where the bridge reads it from.
+def verify_required_secrets(project_credentials, repository_config_path):
+    """Fail early when a secret the process needs at startup is missing.
 
-    Not offered as a choice: the service cannot start without it, so declining would only install
-    a unit that fails on boot.
+    Not prompted for: these are root-level keys written during initial project setup, and the
+    values must match the backend byte for byte. Guessing one here would install a service that
+    rejects every request at runtime instead of failing visibly now.
     """
-    config_file_already_existed = repository_config_path.exists()
-    if not config_file_already_existed:
-        repository_config_path.parent.mkdir(parents=True, exist_ok=True)
-        repository_config_path.touch()
+    for secret_name in REQUIRED_SECRET_NAMES:
+        if not str(get_config_value(project_credentials, secret_name, "")).strip():
+            fail_with_error(
+                f"{secret_name} is not set in {repository_config_path}. It must hold the same "
+                "value the backend uses, otherwise every request is rejected at runtime."
+            )
 
-    try:
-        set_config_values(repository_config_path, {BRIDGE_API_KEY_NAME: bridge_api_key})
-    except OSError as write_error:
-        fail_with_error(f"Could not write config.toml: {write_error}")
-
-    if not config_file_already_existed:
-        # A root-owned file would be unreadable to the non-root service, so hand it to whoever
-        # owns the directory holding it.
-        parent_directory_stat = repository_config_path.parent.stat()
-        os.chown(repository_config_path, parent_directory_stat.st_uid, parent_directory_stat.st_gid)
-
-    os.chmod(repository_config_path, 0o600)
-    print_debug(f"Stored {BRIDGE_API_KEY_NAME} in {repository_config_path} (mode 0600).")
-
-
-def resolve_bridge_api_key(project_credentials, repository_config_path):
-    """The only value this script ever asks for, and only when the file does not already have it.
-
-    It must be byte-identical to the backend's secret_phrase: it is the HMAC key of the session
-    tokens the backend issues and of the X-Bridge-Auth header it signs. A mismatch is not a
-    startup error, it is every request being rejected at runtime.
-    """
-    for credential_name in (BRIDGE_API_KEY_NAME, BACKEND_SECRET_NAME):
-        stored_api_key = str(get_config_value(project_credentials, credential_name, "")).strip()
-        if stored_api_key:
-            print_debug(f"Using the shared secret already stored as {credential_name}.")
-            return stored_api_key, False
-
-    if not sys.stdin.isatty():
-        fail_with_error(
-            f"{BRIDGE_API_KEY_NAME} is missing from {repository_config_path} and there is no "
-            f"interactive terminal to ask for it. Add it (the backend's {BACKEND_SECRET_NAME} "
-            "value) and run the script again."
-        )
-
-    print_debug(
-        f"{BRIDGE_API_KEY_NAME} is not stored yet. It must be the same value as the backend's "
-        f"{BACKEND_SECRET_NAME}, otherwise the bridge rejects every browser and every backend call."
-    )
-    while True:
-        # getpass: this is the key that authenticates the whole bridge, so it is not echoed and
-        # never printed back in the summary.
-        typed_api_key = getpass.getpass(f"Enter {BRIDGE_API_KEY_NAME} (input hidden): ").strip()
-        if len(typed_api_key) >= MINIMUM_API_KEY_LENGTH:
-            return typed_api_key, True
-
-        print(f"[!] The key must have at least {MINIMUM_API_KEY_LENGTH} characters.", file=sys.stderr)
+    print_debug(f"Found both required secrets: {', '.join(REQUIRED_SECRET_NAMES)}.")
 
 
 def build_tls_directive_lines(bridge_domain, existing_nginx_configuration_contents):
@@ -283,8 +242,8 @@ def build_bridge_nginx_configuration(
         proxy_pass_header Server;
         server_tokens off;
 
-        # No CORS headers here on purpose: the bridge sets them and answers preflights itself
-        # (withClientCORS), and a duplicated Access-Control-Allow-Origin is rejected by browsers."""
+        # No CORS headers here on purpose: the bridge sets them and answers preflights itself,
+        # and a duplicated Access-Control-Allow-Origin is rejected by browsers."""
 
     if tls_directive_lines:
         tls_directives = "\n".join(tls_directive_lines)
@@ -370,71 +329,83 @@ def configure_bridge_nginx_vhost(bridge_domain, bridge_port):
     run_command(["systemctl", "restart", "nginx"])
 
 
-def detect_bridge_source_directory(repository_root_path):
-    bridge_source_directory = repository_root_path / BRIDGE_SOURCE_DIRECTORY_NAME
-    has_go_module = (bridge_source_directory / "go.mod").is_file()
-    has_main_package = (bridge_source_directory / "main.go").is_file()
+def detect_source_directory(repository_root_path):
+    source_directory = repository_root_path / SOURCE_DIRECTORY_NAME
+    has_cargo_manifest = (source_directory / "Cargo.toml").is_file()
+    has_main_source = (source_directory / "src" / "main.rs").is_file()
 
-    if has_go_module and has_main_package:
-        print_debug(f"Bridge source found at {bridge_source_directory}")
-        return bridge_source_directory
+    if has_cargo_manifest and has_main_source:
+        print_debug(f"Rust source found at {source_directory}")
+        return source_directory
 
-    print_debug(f"No compilable bridge source at {bridge_source_directory}")
+    print_debug(f"No compilable Rust source at {source_directory}")
     return None
 
 
-def compile_bridge_binary(bridge_source_directory, repository_root_path):
-    """Build sse_bridge/ into tmp/. Simpler than the backend: no submodules, no local replaces."""
-    go_binary_path = detect_go_binary()
-    if not go_binary_path:
+def detect_cargo_binary(unprivileged_username):
+    """Locate cargo. sudo strips ~/.cargo/bin from PATH, so the owner's rustup install is
+    checked explicitly before giving up."""
+    configured_cargo_binary = os.environ.get("CARGO_BINARY", "").strip()
+    if configured_cargo_binary:
+        configured_cargo_path = Path(configured_cargo_binary)
+        if not os.access(configured_cargo_path, os.X_OK):
+            fail_with_error(f"CARGO_BINARY is set to '{configured_cargo_binary}' but it is not executable.")
+        return configured_cargo_path
+
+    cargo_binary_in_path = shutil.which("cargo")
+    if cargo_binary_in_path:
+        return Path(cargo_binary_in_path)
+
+    candidate_cargo_paths = [Path("/usr/local/cargo/bin/cargo")]
+    if unprivileged_username:
+        candidate_cargo_paths.insert(0, Path(f"~{unprivileged_username}/.cargo/bin/cargo").expanduser())
+    for candidate_cargo_path in candidate_cargo_paths:
+        if os.access(candidate_cargo_path, os.X_OK):
+            return candidate_cargo_path
+
+    return None
+
+
+def compile_binary(source_directory, repository_root_path):
+    """Build server_utils/ in release mode, as the repository owner so the Cargo registry and
+    target/ cache are reused instead of being recreated root-owned inside the clone."""
+    unprivileged_username = detect_unprivileged_username(repository_root_path)
+    cargo_binary_path = detect_cargo_binary(unprivileged_username)
+    if not cargo_binary_path:
         fail_with_error(
-            "Bridge source is present but the Go toolchain was not found. Install Go or run the "
-            "script with GO_BINARY=/path/to/go (sudo strips /usr/local/go/bin from PATH)."
+            "Rust source is present but cargo was not found. Install Rust (https://rustup.rs) or "
+            "run the script with CARGO_BINARY=/path/to/cargo (sudo strips ~/.cargo/bin from PATH)."
         )
 
-    print_debug(f"Using Go toolchain at {go_binary_path}")
-    unprivileged_username = detect_unprivileged_username(repository_root_path)
-
-    build_output_directory = repository_root_path / "tmp"
-    build_output_directory.mkdir(parents=True, exist_ok=True)
-
-    # The compile runs as a non-root account, so tmp/ must belong to the repository owner rather
-    # than to root — which is what it would be after mkdir here, or after an older root-run build.
-    repository_directory_stat = repository_root_path.stat()
-    if os.geteuid() == 0 and build_output_directory.stat().st_uid != repository_directory_stat.st_uid:
-        print_debug(f"Handing {build_output_directory} to uid {repository_directory_stat.st_uid}")
-        os.chown(build_output_directory, repository_directory_stat.st_uid, repository_directory_stat.st_gid)
-
-    build_output_path = build_output_directory / f"{BRIDGE_BINARY_NAME}_linux_{resolve_go_architecture()}"
-    build_command = build_unprivileged_command(
-        [str(go_binary_path), "build", "-ldflags", "-s -w", "-o", str(build_output_path), "."],
-        unprivileged_username,
-    )
+    print_debug(f"Using cargo at {cargo_binary_path}")
     if os.geteuid() == 0 and unprivileged_username:
-        print_debug(f"Compiling as '{unprivileged_username}' to reuse that account's Go module cache.")
+        print_debug(f"Compiling as '{unprivileged_username}' to reuse that account's Cargo cache.")
 
+    build_command = build_unprivileged_command(
+        [str(cargo_binary_path), "build", "--release"], unprivileged_username
+    )
     build_started_at = datetime.now().strftime("%H:%M:%S")
-    print_debug(f"Compiling the bridge from {bridge_source_directory} (started {build_started_at})...")
-    run_command(build_command, working_directory=bridge_source_directory, stream_output=True)
+    print_debug(f"Compiling {source_directory} in release mode (started {build_started_at})...")
+    run_command(build_command, working_directory=source_directory, stream_output=True)
 
+    build_output_path = source_directory / "target" / "release" / BINARY_NAME
     if not is_usable_executable(build_output_path):
-        fail_with_error(f"The compiler reported success but {build_output_path} is not a valid executable.")
+        fail_with_error(f"cargo reported success but {build_output_path} is not a valid executable.")
 
     print_debug(f"Compilation successful: {build_output_path}")
     return build_output_path
 
 
-def find_prebuilt_bridge_binary(repository_root_path):
-    go_architecture = resolve_go_architecture()
+def find_prebuilt_binary(repository_root_path):
     candidate_binary_paths = [
-        BRIDGE_BINARY_PATH,
-        repository_root_path / "tmp" / f"{BRIDGE_BINARY_NAME}_linux_{go_architecture}",
-        repository_root_path / BRIDGE_SOURCE_DIRECTORY_NAME / BRIDGE_BINARY_NAME,
+        BINARY_PATH,
+        repository_root_path / "tmp" / f"{BINARY_NAME}_linux_{resolve_go_architecture()}",
+        repository_root_path / SOURCE_DIRECTORY_NAME / "target" / "release" / BINARY_NAME,
     ]
 
     for candidate_binary_path in candidate_binary_paths:
         if is_usable_executable(candidate_binary_path):
-            print_debug(f"Found a prebuilt bridge binary at {candidate_binary_path}")
+            print_debug(f"Found a prebuilt binary at {candidate_binary_path}")
             return candidate_binary_path
 
         print_debug(f"No usable binary at {candidate_binary_path}")
@@ -442,63 +413,65 @@ def find_prebuilt_bridge_binary(repository_root_path):
     return None
 
 
-def install_bridge_binary(source_binary_path, runtime_user_entry):
-    if source_binary_path == BRIDGE_BINARY_PATH:
-        print_debug(f"Binary already in place at {BRIDGE_BINARY_PATH}. Fixing ownership only.")
-        os.chown(BRIDGE_BINARY_PATH, runtime_user_entry.pw_uid, runtime_user_entry.pw_gid)
-        os.chmod(BRIDGE_BINARY_PATH, 0o750)
+def install_binary(source_binary_path, runtime_user_entry):
+    if source_binary_path == BINARY_PATH:
+        print_debug(f"Binary already in place at {BINARY_PATH}. Fixing ownership only.")
+        os.chown(BINARY_PATH, runtime_user_entry.pw_uid, runtime_user_entry.pw_gid)
+        os.chmod(BINARY_PATH, 0o750)
         return
 
-    # Write next to the destination and rename, so the running service never sees a half-copied
+    # Write next to the destination and rename, so the running service never reads a half-copied
     # file. PathChanged= watches IN_MOVED_TO as well, so the restart watcher still fires.
-    staged_binary_path = SERVICE_INSTALL_DIRECTORY / f".{BRIDGE_BINARY_NAME}.staged"
-    print_debug(f"Installing {source_binary_path} to {BRIDGE_BINARY_PATH}")
+    staged_binary_path = SERVICE_INSTALL_DIRECTORY / f".{BINARY_NAME}.staged"
+    print_debug(f"Installing {source_binary_path} to {BINARY_PATH}")
     try:
         shutil.copyfile(source_binary_path, staged_binary_path)
         os.chown(staged_binary_path, runtime_user_entry.pw_uid, runtime_user_entry.pw_gid)
         os.chmod(staged_binary_path, 0o750)
-        os.replace(staged_binary_path, BRIDGE_BINARY_PATH)
+        os.replace(staged_binary_path, BINARY_PATH)
     except OSError as install_error:
         staged_binary_path.unlink(missing_ok=True)
-        fail_with_error(f"Could not install the bridge binary: {install_error}")
+        fail_with_error(f"Could not install the binary: {install_error}")
 
 
-def provide_bridge_binary(repository_root_path, runtime_user_entry):
-    """Put a runnable bridge at BRIDGE_BINARY_PATH: compile it, or find one, or fail."""
-    bridge_source_directory = detect_bridge_source_directory(repository_root_path)
-    if bridge_source_directory:
-        install_bridge_binary(
-            compile_bridge_binary(bridge_source_directory, repository_root_path), runtime_user_entry
-        )
+def provide_binary(repository_root_path, runtime_user_entry):
+    """Put a runnable binary at BINARY_PATH: compile it, or find one, or fail."""
+    source_directory = detect_source_directory(repository_root_path)
+    if source_directory:
+        install_binary(compile_binary(source_directory, repository_root_path), runtime_user_entry)
         return
 
-    print_debug("Falling back to a prebuilt binary because there is no bridge source to compile.")
-    prebuilt_binary_path = find_prebuilt_bridge_binary(repository_root_path)
+    print_debug("Falling back to a prebuilt binary because there is no Rust source to compile.")
+    prebuilt_binary_path = find_prebuilt_binary(repository_root_path)
     if not prebuilt_binary_path:
         fail_with_error(
-            f"No bridge source under {repository_root_path / BRIDGE_SOURCE_DIRECTORY_NAME} and no "
-            f"prebuilt binary found. Clone the repository with its sse_bridge folder, or place a "
-            f"compiled binary at {BRIDGE_BINARY_PATH}, and run the script again."
+            f"No source under {repository_root_path / SOURCE_DIRECTORY_NAME} and no prebuilt "
+            f"binary found. Clone the repository with its {SOURCE_DIRECTORY_NAME} folder, or "
+            f"place a compiled binary at {BINARY_PATH}, and run the script again."
         )
 
-    install_bridge_binary(prebuilt_binary_path, runtime_user_entry)
+    install_binary(prebuilt_binary_path, runtime_user_entry)
 
 
-def build_bridge_service_contents(runtime_username, repository_config_path, bridge_port):
+def build_service_contents(runtime_username, repository_config_path, bridge_port):
     return f"""[Unit]
-Description=Genix SSE Bridge
-After=network.target
+Description=Genix Server Utilities (credit rate limiter + SSE bridge)
+# The rate limiter loads existing usage from ScyllaDB before admitting anything and exits when
+# it cannot, which also stops the bridge: one process, shared fate. Deploy the backend tables
+# (so credit_usage exists) before enabling this unit.
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User={runtime_username}
 Group={runtime_username}
 WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
-# sse_bridge.apikey is read from this file rather than exported here: a unit under
-# /etc/systemd/system is world-readable, and config.toml is not.
+# secret_phrase and internal_apikey are read from this file rather than exported here: a unit
+# under /etc/systemd/system is world-readable, and config.toml is not.
 Environment=GENIX_CONFIG_FILE={repository_config_path}
 Environment=SSE_BRIDGE_PORT={bridge_port}
-ExecStart={BRIDGE_BINARY_PATH}
+ExecStart={BINARY_PATH}
 Restart=always
 RestartSec=3
 
@@ -519,75 +492,69 @@ WantedBy=multi-user.target
 """
 
 
-def build_bridge_restart_path_contents():
+def build_restart_path_contents():
     return f"""[Unit]
-Description=Watch for changes to the genix SSE bridge binary
+Description=Watch for changes to the genix server-utils binary
 
 [Path]
-PathChanged={BRIDGE_BINARY_PATH}
+PathChanged={BINARY_PATH}
 
 [Install]
 WantedBy=multi-user.target
 """
 
 
-def build_bridge_restart_service_contents():
+def build_restart_service_contents():
     return f"""[Unit]
-Description=Restart the Genix SSE Bridge
+Description=Restart Genix Server Utilities
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/systemctl restart {BRIDGE_SERVICE_NAME}
+ExecStart=/usr/bin/systemctl restart {SERVICE_NAME}
 """
 
 
-def configure_bridge_systemd_units(runtime_username, repository_config_path, bridge_port):
+def configure_systemd_units(runtime_username, repository_config_path, bridge_port):
     unit_files_changed = [
         write_unit_file(
-            SYSTEMD_DIRECTORY / BRIDGE_SERVICE_NAME,
-            build_bridge_service_contents(runtime_username, repository_config_path, bridge_port),
+            SYSTEMD_DIRECTORY / SERVICE_NAME,
+            build_service_contents(runtime_username, repository_config_path, bridge_port),
         ),
-        write_unit_file(
-            SYSTEMD_DIRECTORY / BRIDGE_RESTART_SERVICE_NAME,
-            build_bridge_restart_service_contents(),
-        ),
-        write_unit_file(
-            SYSTEMD_DIRECTORY / BRIDGE_RESTART_PATH_NAME,
-            build_bridge_restart_path_contents(),
-        ),
+        write_unit_file(SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME, build_restart_service_contents()),
+        write_unit_file(SYSTEMD_DIRECTORY / RESTART_PATH_NAME, build_restart_path_contents()),
     ]
     return any(unit_files_changed)
 
 
-def start_bridge_service(systemd_configuration_changed):
+def start_service(systemd_configuration_changed):
     if systemd_configuration_changed:
         run_command(["systemctl", "daemon-reload"])
 
-    run_command(["systemctl", "enable", BRIDGE_SERVICE_NAME])
-    run_command(["systemctl", "enable", BRIDGE_RESTART_PATH_NAME])
+    run_command(["systemctl", "enable", SERVICE_NAME])
+    run_command(["systemctl", "enable", RESTART_PATH_NAME])
     if systemd_configuration_changed:
-        run_command(["systemctl", "restart", BRIDGE_RESTART_PATH_NAME])
+        run_command(["systemctl", "restart", RESTART_PATH_NAME])
 
     # The binary is installed before the watcher is (re)started, so that first change is never
-    # seen by it. A bridge that cannot start must not fail the whole run: the units are already in
-    # place and journalctl has the reason.
-    service_start_result = run_command(["systemctl", "restart", BRIDGE_SERVICE_NAME], allow_failure=True)
+    # seen by it. A service that cannot start must not fail the whole run: the units are already
+    # in place and journalctl has the reason (most often: credit_usage is not deployed yet).
+    service_start_result = run_command(["systemctl", "restart", SERVICE_NAME], allow_failure=True)
     if service_start_result.returncode != 0:
         print_debug(
-            f"WARNING: {BRIDGE_SERVICE_NAME} did not start. The units are installed; "
-            f"check 'journalctl -u {BRIDGE_SERVICE_NAME} -n 50' for the reason."
+            f"WARNING: {SERVICE_NAME} did not start. The units are installed; "
+            f"check 'journalctl -u {SERVICE_NAME} -n 50' for the reason."
         )
         return
 
-    print_debug(f"{BRIDGE_SERVICE_NAME} is running.")
+    print_debug(f"{SERVICE_NAME} is running.")
 
 
 def warn_if_credentials_are_unreadable(runtime_username, repository_config_path):
     """The unit points at this file and the service reads it as a non-root user.
 
-    A config.toml copied onto the host as root with mode 0600 is invisible to that account,
-    and the only symptom would be the bridge exiting at boot with "no se encontró
-    apikey". Say it here instead, where the fix is one command away.
+    A config.toml copied onto the host as root with mode 0600 is invisible to that account, and
+    the only symptom would be the service exiting at boot over a missing setting. Say it here
+    instead, where the fix is one command away.
     """
     readability_result = run_command(
         ["sudo", "-u", runtime_username, "test", "-r", str(repository_config_path)],
@@ -597,35 +564,38 @@ def warn_if_credentials_are_unreadable(runtime_username, repository_config_path)
         return
 
     print_debug(
-        f"WARNING: '{runtime_username}' cannot read {repository_config_path}, so the bridge "
-        f"will not find its API key. Fix it with: chown {runtime_username} {repository_config_path}"
+        f"WARNING: '{runtime_username}' cannot read {repository_config_path}, so the service "
+        f"will not find its secrets. Fix it with: chown {runtime_username} {repository_config_path}"
     )
 
 
-def install_bridge_systemd_service(repository_config_path, bridge_port):
+def install_systemd_service(repository_config_path, bridge_port):
     runtime_username = detect_runtime_username()
     runtime_user_entry = resolve_runtime_user(runtime_username)
     warn_if_credentials_are_unreadable(runtime_username, repository_config_path)
     ensure_binary_directory(runtime_user_entry)
-    provide_bridge_binary(repository_config_path.parent, runtime_user_entry)
-    systemd_configuration_changed = configure_bridge_systemd_units(
+    provide_binary(repository_config_path.parent, runtime_user_entry)
+    systemd_configuration_changed = configure_systemd_units(
         runtime_username, repository_config_path, bridge_port
     )
-    start_bridge_service(systemd_configuration_changed)
+    start_service(systemd_configuration_changed)
     return runtime_username
 
 
-def print_summary(repository_config_path, runtime_username, bridge_domain, bridge_port):
-    print_debug("SSE bridge configuration completed.")
+def print_summary(
+    repository_config_path, runtime_username, bridge_domain, bridge_port, rate_limit_address
+):
+    print_debug("Server utilities configuration completed.")
     print_debug(f"Config file: {repository_config_path}")
     print_debug(f"Runtime user: {runtime_username}")
 
-    binary_size_in_bytes = BRIDGE_BINARY_PATH.stat().st_size if BRIDGE_BINARY_PATH.is_file() else 0
-    print_debug(f"Binary path: {BRIDGE_BINARY_PATH} ({binary_size_in_bytes / 1_048_576:.1f} MiB)")
-    print_debug(f"Listen port (SSE_BRIDGE_PORT): {bridge_port}")
-    print_debug(f"Service unit: {SYSTEMD_DIRECTORY / BRIDGE_SERVICE_NAME}")
-    print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / BRIDGE_RESTART_PATH_NAME}")
-    print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / BRIDGE_RESTART_SERVICE_NAME}")
+    binary_size_in_bytes = BINARY_PATH.stat().st_size if BINARY_PATH.is_file() else 0
+    print_debug(f"Binary path: {BINARY_PATH} ({binary_size_in_bytes / 1_048_576:.1f} MiB)")
+    print_debug(f"SSE bridge port (SSE_BRIDGE_PORT): {bridge_port}")
+    print_debug(f"Rate limiter address (loopback, no vhost): {rate_limit_address}")
+    print_debug(f"Service unit: {SYSTEMD_DIRECTORY / SERVICE_NAME}")
+    print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / RESTART_PATH_NAME}")
+    print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME}")
     print_debug(f"Nginx vhost: {NGINX_CONFIGURATION_DIRECTORY / (bridge_domain + '.conf')}")
     print_debug(f"Health check: curl -s http://127.0.0.1:{bridge_port}/health")
     print_debug(f"Through Nginx: curl -s https://{bridge_domain}/health")
@@ -646,17 +616,18 @@ def main():
 
     # Resolve everything before touching the system, so a missing value stops the run instead of
     # leaving the host half configured.
+    verify_required_secrets(project_credentials, repository_config_path)
     bridge_domain = resolve_bridge_domain(project_credentials, repository_config_path)
     bridge_port = resolve_bridge_port(project_credentials)
-    bridge_api_key, api_key_was_prompted = resolve_bridge_api_key(
-        project_credentials, repository_config_path
-    )
-    if api_key_was_prompted:
-        store_bridge_api_key(repository_config_path, bridge_api_key)
+    rate_limit_address = str(
+        get_config_value(project_credentials, "rate_limit.address", "127.0.0.1:14013")
+    ).strip()
 
-    runtime_username = install_bridge_systemd_service(repository_config_path, bridge_port)
+    runtime_username = install_systemd_service(repository_config_path, bridge_port)
     configure_bridge_nginx_vhost(bridge_domain, bridge_port)
-    print_summary(repository_config_path, runtime_username, bridge_domain, bridge_port)
+    print_summary(
+        repository_config_path, runtime_username, bridge_domain, bridge_port, rate_limit_address
+    )
 
 
 if __name__ == "__main__":

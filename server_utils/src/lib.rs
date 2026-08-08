@@ -1,11 +1,8 @@
 //! Shared implementation for the Genix server-utilities process.
+//!
+//! Two independent services live here, one module tree each. `config` is the only thing they
+//! share besides the process itself and the tokio runtime.
 
-pub mod aggregation;
-pub mod auth;
+pub mod bridge;
 pub mod config;
-pub mod credits_blob;
 pub mod limiter;
-pub mod protocol;
-pub mod server;
-pub mod storage;
-pub mod time_frame;

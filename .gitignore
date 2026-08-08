@@ -58,6 +58,7 @@ scripts/scripts_bin
 backend/.gocache/*
 .gocache/*
 scripts/__pycache__/*
+scripts/tests/__pycache__/*
 frontend/.bun-install/install/*
 backend/libs/productos.txt
 backend/libs/products_search.idx
@@ -85,5 +86,3 @@ frontend/webpage/static/sw.js
 frontend/webpage/static/sw.js.map
 
 # Binarios compilados del relay SSE
-sse_bridge/sse_bridge
-sse_bridge/sse_bridge_*

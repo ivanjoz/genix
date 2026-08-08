@@ -10,7 +10,7 @@ use anyhow::{Context, Result, anyhow};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
-use crate::{
+use crate::limiter::{
     aggregation::{UsageKey, UsageRecord, UsageSnapshot, merge_loaded},
     credits_blob::{Credits, GroupedCredits, decode, encode, sum},
     protocol::{LimitViolation, Request, Scope, Window},
@@ -471,7 +471,7 @@ mod tests {
     use async_trait::async_trait;
 
     use super::*;
-    use crate::storage::StoredUsage;
+    use crate::limiter::storage::StoredUsage;
 
     #[derive(Default)]
     struct MemoryStore {

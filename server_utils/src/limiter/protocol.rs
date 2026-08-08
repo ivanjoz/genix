@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::credits_blob::Credits;
+use crate::limiter::credits_blob::Credits;
 
 pub const REQUEST_SIZE: usize = 19;
 pub const AUTHENTICATED_PAYLOAD_SIZE: usize = 11;
