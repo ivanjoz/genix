@@ -77,6 +77,13 @@ if (!fs.existsSync(frontendNodeModules) || !viteInstalled || !storeNodeModules){
 // Rate limiter + SSE bridge (server_utils/, un solo binario Rust con los dos servicios)
 const rateLimiterPath = path.join(__dirname, 'server_utils')
 
+// Rate limiter
+const rateLimiterPath = path.join(__dirname, 'server_utils')
+let rateLimiterScript = `cd ./server_utils && ${RATE_LIMITER_SCRIPT}`
+if (isWindows) {
+  rateLimiterScript = `cd ${rateLimiterPath} & ${RATE_LIMITER_SCRIPT}`
+}
+
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
 
