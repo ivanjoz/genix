@@ -155,5 +155,17 @@ export const AdminModule: IModule = {
   ]
 }
 
+// El módulo SYSTEM administra la plataforma entera (empresas, servidor, crons), no un tenant:
+// sólo la company dueña del SaaS lo ve. El backend repite la restricción por endpoint.
+export const SAAS_COMPANY_ID = 1
+
+const saasOnlyRoutes = new Set(
+  AdminModule.menus.flatMap(menu =>
+    (menu.options || []).filter(option => option.onlySaaS && option.route).map(option => option.route!)
+  )
+)
+
+export const isSaaSOnlyRoute = (route: string) => saasOnlyRoutes.has(route)
+
 const Modules: IModule[] = [AdminModule]
 export default Modules

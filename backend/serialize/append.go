@@ -259,18 +259,10 @@ func (e *Encoder) appendKeysList(dst []byte) []byte {
 			continue
 		}
 
-		// A type with no used fields contributes nothing the decoder can act on.
-		hasUsedField := false
-		for _, fieldIdx := range usage.order {
-			if usage.mask[fieldIdx] {
-				hasUsedField = true
-				break
-			}
-		}
-		if !hasUsedField {
-			continue
-		}
-
+		// Even when every field was zero, the type entry still has to be written: a struct whose
+		// content carries no field values (e.g. an all-zero-value response struct) is otherwise
+		// indistinguishable on the wire from a bare empty array, and the decoder falls back to
+		// treating it as one instead of the empty object it actually is.
 		if wroteEntry {
 			dst = append(dst, ',')
 		}

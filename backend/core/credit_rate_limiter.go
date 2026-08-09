@@ -221,6 +221,10 @@ func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
 	return req.MakeErrCode("El servicio de límites de crédito no está disponible.", 503)
 }
 
+// chargeConfiguredCredits fails open: only an authenticated CreditLimitExceeded
+// violation blocks the caller. Any unavailability (unconfigured client, dial
+// timeout, connection reset, etc.) is logged and treated as an allowed charge,
+// since credit accounting must never take the API down with it.
 func chargeConfiguredCredits(
 	ctx context.Context,
 	companyID, userID int32,
@@ -231,9 +235,19 @@ func chargeConfiguredCredits(
 	client := configuredCreditLimiter
 	configuredCreditLimiterMu.RUnlock()
 	if client == nil {
-		return ErrCreditLimiterMissing
+		Log("credit rate limiter not configured, allowing request::", ErrCreditLimiterMissing)
+		return nil
 	}
-	return client.Charge(ctx, companyID, userID, apiGroup, cpuCredits, inferenceCredits)
+	err := client.Charge(ctx, companyID, userID, apiGroup, cpuCredits, inferenceCredits)
+	if err == nil {
+		return nil
+	}
+	var exceeded *CreditLimitExceeded
+	if errors.As(err, &exceeded) {
+		return err
+	}
+	Log("credit rate limiter unavailable, allowing request::", err)
+	return nil
 }
 
 // Charge sends one authenticated frame and returns nil only for response byte zero.

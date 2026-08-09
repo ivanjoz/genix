@@ -138,6 +138,11 @@ func (req *HandlerArgs) ExtractUpdatedVersionValues() []db.IDUpdatedVersion {
 	return records
 }
 
+// ExtractIDs decodes global/public by-ID requests that do not require a tenant partition.
+func (req *HandlerArgs) ExtractIDs() []int64 {
+	return parseConcatenatedInts(req.GetQuery("ids"))
+}
+
 // parseConcatenatedUint16s decodes one base64url-encoded little-endian u16 array. Unlike
 // parseConcatenatedInts it has no magnitude buckets, so element order is exactly what the client
 // sent — which is what keeps cc-ver aligned with cc-ids.

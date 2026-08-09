@@ -214,6 +214,15 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		saleActions = append(saleActions, 3)
 	}
 
+	// Scheduled last so the closure reads the final saleActions built by the blocks above.
+	eg.Go(func() error {
+		if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
+			core.Log("Error actualizando resumen de ventas:", err)
+			return core.Err("Error al actualizar el resumen de ventas:", err)
+		}
+		return nil
+	})
+
 	if err := eg.Wait(); err != nil {
 		return req.MakeErr(err)
 	}
@@ -247,10 +256,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			// Keep the cron payload compact: company and date are the only inputs the reprocess action needs.
 			Params: core.ExecArgs{Param1: int64(req.User.CompanyID), Param2: int64(sale.Date)},
 		}, 10)
-
-		if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
-			core.Log("Error actualizando resumen de ventas:", err)
-		}
 	}()
 
 	return req.MakeResponse(sale)

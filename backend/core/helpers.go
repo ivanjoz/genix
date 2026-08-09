@@ -222,8 +222,12 @@ func SUnixTimeMilli() int64 {
 func UnixToSunix(unixTime int64) int32 {
 	return int32((unixTime - 1e9) / 2)
 }
+
+// Inverse of UnixToSunix / SUnixTime, which compute (unix - 1e9) / 2. Undoing that is
+// sunix*2 + 1e9, not (sunix + 1e9)*2 — the latter overshot by ~1e9 seconds and dated every
+// timestamp about 32 years into the future.
 func SunixToUnix(sunixTime int32) int64 {
-	return (int64(sunixTime) + 1e9) * 2
+	return int64(sunixTime)*2 + 1e9
 }
 func SUnix5Min() int32 {
 	return int32((time.Now().Unix() - 1e9) / (60 * 5))

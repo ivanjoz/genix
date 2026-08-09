@@ -1,12 +1,28 @@
 import { GET, POST, security } from '$libs/ui-runtime.svelte';
 import type { IUser, ILoginResult } from '$core/types/common';
 import { Env } from '$core/env';
+import { getStaticRecordsByID } from '@genix/ui/cache';
 
 export interface ILogin {
   CompanyID: number
   User: string
   Password: string
   CipherKey: string
+}
+
+export interface IPublicCompanyName {
+  ID: number
+  Name: string
+}
+
+// Company names are immutable for this login cache: memory → IndexedDB → selected server.
+export const getPublicCompanyName = async (companyID: number): Promise<IPublicCompanyName | undefined> => {
+  const apiRoute = 'p-company-names-by-ids'
+  const companiesByID = await getStaticRecordsByID<IPublicCompanyName>(apiRoute, [companyID], {
+    cacheNamespace: `${apiRoute}:${Env.enviroment || '000000'}`,
+    databaseCompanyID: 0,
+  })
+  return companiesByID.get(companyID)
 }
 
 const makeRamdomString = (len?: number) => {

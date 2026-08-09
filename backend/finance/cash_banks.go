@@ -234,7 +234,8 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	q1 := db.TableOf[financeTypes.CashBank]()
-	if err := db.Update(&[]financeTypes.CashBank{cashBank}, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
+	// Status is part of the delta-view key and must be written with the managed UpdatedVersion.
+	if err := db.Update(&[]financeTypes.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating cashBank: ", err)
 		return req.MakeErr("Error al actualizar la cashBank:", err)
 	}

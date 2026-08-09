@@ -141,41 +141,18 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 	}
 }
 
-// Table to save the summary per day
+// SaleSummary is the day-level response shape of GET.sale-summary. It is not persisted:
+// buildSaleSummariesFromProductRows assembles it at read time from ProductSaleSummary rows.
 type SaleSummary struct {
-	db.TableStruct[SaleSummaryTable, SaleSummary]
 	CompanyID int32 `json:",omitempty"`
 	Date      int16 `json:",omitempty"`
-	// Single int32 representation keeps the summary format simple and stable.
-	ProductIDs              []int32 `json:",omitempty" db:",list"`
-	Quantity                []int32 `json:",omitempty" db:",list"`
-	QuantityPendingDelivery []int32 `json:",omitempty" db:",list"`
-	TotalAmount             []int32 `json:",omitempty" db:",list"`
-	TotalDebtAmount         []int32 `json:",omitempty" db:",list"`
+	// Products are sent columnar: every slice is aligned by index with ProductIDs.
+	ProductIDs              []int32 `json:",omitempty"`
+	Quantity                []int32 `json:",omitempty"`
+	QuantityPendingDelivery []int32 `json:",omitempty"`
+	TotalAmount             []int32 `json:",omitempty"`
+	TotalDebtAmount         []int32 `json:",omitempty"`
 	Updated                 int32   `json:"upd,omitempty"`
-	ReprocessUpdated        int32   `json:"-,omitempty"`
-}
-
-type SaleSummaryTable struct {
-	db.TableStruct[SaleSummaryTable, SaleSummary]
-	CompanyID               db.Col[SaleSummaryTable, int32]
-	Date                    db.Col[SaleSummaryTable, int16]
-	ProductIDs              db.Col[SaleSummaryTable, []int32]
-	Quantity                db.Col[SaleSummaryTable, []int32]
-	QuantityPendingDelivery db.Col[SaleSummaryTable, []int32]
-	TotalAmount             db.Col[SaleSummaryTable, []int32]
-	TotalDebtAmount         db.Col[SaleSummaryTable, []int32]
-	Updated                 db.Col[SaleSummaryTable, int32]
-	ReprocessUpdated        db.Col[SaleSummaryTable, int32]
-}
-
-func (e SaleSummaryTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		ID:        26,
-		Name:      "sale_summary",
-		Partition: e.CompanyID,
-		Keys:      db.Cols(e.Date),
-	}
 }
 
 /* Sale summary 2 */
@@ -210,6 +187,8 @@ func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
 		Name:      "product_sale_summary",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.Date, e.ProductID),
+
+		DisableDefaultColumns: true,
 	}
 }
 

@@ -59,25 +59,66 @@ func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &records)
 }
 
-func GetEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
-	if req.User.ID != 1 {
-		return req.MakeErr("No está autorizado para realizar esta solicitud.")
-	}
-
+// getCompanyByID keeps cloud-mirrored and self-hosted company lookups consistent.
+func getCompanyByID(companyID int32) (*types.Company, error) {
 	var record *types.Company
 	var err error
 	if cloud.IsDataMirrorEnabled() {
-		record, err = cloud.GetByID(types.Company{ID: req.User.CompanyID})
+		record, err = cloud.GetByID(types.Company{ID: companyID})
 	} else {
 		// Resolve the company by its Scylla primary key in self-hosted mode.
 		records := []types.Company{}
 		companyQuery := db.Query(&records)
-		companyQuery.ID.Equals(req.User.CompanyID).Limit(1)
+		companyQuery.ID.Equals(companyID).Limit(1)
 		err = companyQuery.Exec()
 		if err == nil && len(records) > 0 {
 			record = &records[0]
 		}
 	}
+	return record, err
+}
+
+type publicCompanyName struct {
+	ID   int32
+	Name string
+}
+
+// GetPublicCompanyNamesByIDs serves immutable cache rows for the pre-login company selector.
+func GetPublicCompanyNamesByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	companyIDs := req.ExtractIDs()
+	if len(companyIDs) == 0 {
+		return req.MakeErr("No se enviaron ids de empresas.")
+	}
+
+	companyNames := make([]publicCompanyName, 0, len(companyIDs))
+	for _, rawCompanyID := range companyIDs {
+		companyID := int32(rawCompanyID)
+		if companyID <= 0 {
+			continue
+		}
+
+		core.Log("Consultando nombre público de empresa::", companyID)
+		record, err := getCompanyByID(companyID)
+		if err != nil {
+			return req.MakeErr("Error al obtener la empresa.", err)
+		}
+		if record == nil {
+			continue
+		}
+
+		companyNames = append(companyNames, publicCompanyName{ID: record.ID, Name: record.Name})
+	}
+
+	core.Log("Nombres públicos de empresas obtenidos::", len(companyNames))
+	return req.MakeResponse(companyNames)
+}
+
+func GetEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
+	if req.User.ID != 1 {
+		return req.MakeErr("No está autorizado para realizar esta solicitud.")
+	}
+
+	record, err := getCompanyByID(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr("Error al obtener la company.", err)
 	}

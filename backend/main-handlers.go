@@ -61,6 +61,21 @@ var accessHelper = func() *core.AccessHelper {
 	return core.LoadEmbeddedAccessList(accessListYamlContent)
 }()
 
+// saasCompanyID identifica a la company dueña de la plataforma: la única que opera el módulo SYSTEM.
+const saasCompanyID = 1
+
+// Rutas del módulo SYSTEM (Empresas, Server Panel, Acciones Cron). Administran la plataforma
+// entera —no un tenant— así que se restringen a la company dueña del SaaS. Quedan fuera a
+// propósito: "company-parametros" (es "Mi Empresa", la usa cada tenant), "p-company-names-by-ids"
+// (pública, previa al login) y "system-parameters" (particionada por company, la usa el POS).
+var saasOnlyRoutes = map[string]bool{
+	"GET.empresas":               true,
+	"POST.company":               true,
+	"GET.system-metrics-stream":  true,
+	"GET.system-memory-packages": true,
+	"GET.cron-actions-scheduled": true,
+}
+
 func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	requestStartedAt := time.Now().UnixMilli()
 	setResponseMetadata := func(handlerResponse *core.HandlerResponse) {
@@ -129,6 +144,15 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		if len(args.User.Error) > 0 {
 			core.Log("User Error::", args.User.Error)
 			handlerResponse.Error = args.User.Error
+			setResponseMetadata(&handlerResponse)
+			return prepareResponse(args, &handlerResponse)
+		}
+
+		// Se valida antes del catálogo de accesos porque un perfil no puede otorgar esto: el
+		// usuario 1 de cualquier company salta la comprobación de accesos, pero no esta.
+		if saasOnlyRoutes[funcPath] && args.User.CompanyID != saasCompanyID {
+			core.Log("Ruta SaaS rechazada::", funcPath, "company::", args.User.CompanyID)
+			handlerResponse.Error = "Esta operación sólo está disponible para la company administradora de la plataforma."
 			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
 		}

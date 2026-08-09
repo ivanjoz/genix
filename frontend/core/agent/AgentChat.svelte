@@ -15,6 +15,8 @@
   // widget can re-render past messages instantly on open.
 
   import { tick } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { highlString } from '@genix/ui/utilities';
   import {
     ensureAgentStream,
     getAgentTabID,
@@ -33,6 +35,7 @@
     type AgentChatRow,
   } from './chat_history.idb';
   import { agentModes, type AgentSectionsPayload } from './agent.svelte';
+  import { highlightWords, searchMenuOptions, type MenuSearchOption } from './menu_search';
   import { Core, tr } from '$core/store.svelte';
 
   // --- Wire types (mirror backend/agent/chat_ws.go) ---------------------------
@@ -74,6 +77,10 @@
   let scrollElement: HTMLDivElement | undefined = $state();
   let historyLoaded = false;
   let nextHeaderStatusID = 1;
+
+  // Menu shortcuts shown above the history while the input holds a short query.
+  const menuMatches = $derived(searchMenuOptions(inputText));
+  const menuHighlights = $derived(highlightWords(inputText));
 
   // --- Helpers ----------------------------------------------------------------
 
@@ -298,6 +305,13 @@
     isOpen = false;
   };
 
+  const openMenuOption = (option: MenuSearchOption) => {
+    inputText = '';
+    closePanel();
+    textareaElement?.blur();
+    void goto(option.route);
+  };
+
   const handleDocumentClick = (event: MouseEvent) => {
     if (!isOpen || !hostElement) { return; }
     if (!(event.target instanceof Node)) { return; }
@@ -408,6 +422,24 @@
             >
               <span class="{mode.Icon} text-[13px]"></span>
               {tr(mode.Name, Core.languaje)}
+            </button>
+          {/each}
+        </div>
+      {/if}
+      {#if menuMatches.length > 0}
+        <div class="_menuGrid grid grid-cols-3 gap-8 px-12 py-10">
+          {#each menuMatches as option (option.route)}
+            <button type="button" class="_menuCard flex items-center gap-6 px-6 py-6 text-left"
+              onclick={() => openMenuOption(option)}
+            >
+              <span class="_menuIcon shrink-0 flex ml-2 text-[16px] items-center justify-center text-indigo-500">
+                <span class={option.icon}></span>
+              </span>
+              <span class="_menuName text-xs leading-tight text-gray-700">
+                {#each highlString(tr(option.name, Core.languaje), menuHighlights) as w}
+                  <span class={w.highl ? '_highl' : ''}>{w.text}</span>
+                {/each}
+              </span>
             </button>
           {/each}
         </div>
@@ -523,6 +555,38 @@
     border-top-color: rgb(255 255 255 / 90%);
     border-radius: 999px;
     animation: spin 700ms linear infinite;
+  }
+  ._menuGrid {
+    border-bottom: 1px solid #e5e7eb;
+  }
+  ._menuCard {
+    border: 1px solid #d9d8f5;
+    border-radius: 8px;
+    background: #f7f7fd;
+    min-height: 42px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  ._menuCard:hover {
+    background: #ecebfa;
+    border-color: #938ff8;
+  }
+  /* Fixed box so every card's text starts at the same offset — the icon glyphs
+     have different intrinsic widths. The mask lives on the inner span so it
+     keeps its own aspect ratio instead of stretching to the box. */
+  ._menuIcon {
+    width: 16px;
+  }
+  ._menuName {
+    /* Long names wrap to a second line, then clip. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  ._highl {
+    color: rgb(196, 71, 71);
+    text-decoration: underline;
   }
   ._panel {
   	border: 1px solid #6868ea;

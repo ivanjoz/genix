@@ -91,7 +91,8 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 	}
 
 	q := db.TableOf[financeTypes.CashBank]()
-	if err := db.Update(&cashBanksToUpdate, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
+	// Status is part of the delta-view key and must be written with the managed UpdatedVersion.
+	if err := db.Update(&cashBanksToUpdate, q.Status, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar saldo de las cajas:", err)
 	}
 

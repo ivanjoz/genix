@@ -4,7 +4,7 @@
 	import TopLayerDatePicker from '$components/layers/TopLayerDatePicker.svelte';
 	import TopLayerSelector from '$components/layers/TopLayerSelector.svelte';
 	import { Env } from '$core/env';
-	import Modules from '$core/modules';
+	import Modules, { SAAS_COMPANY_ID, isSaaSOnlyRoute } from '$core/modules';
 	import { security } from '$libs/ui-runtime.svelte';
 	import { Core, getDeviceType, tr } from '$core/store.svelte';
 	import AppHeader from '$domain/AppHeader.svelte';
@@ -94,7 +94,10 @@
 		if (!browser || redirectsToLogin || !accessCatalogReady) { return }
 
 		const currentPath = page.url.pathname
-		if (security.canAccessRoute(currentPath)) {
+		// Las rutas del módulo SYSTEM no están en el catálogo de accesos: su permiso es el tenant
+		// mismo, así que se bloquean aunque el usuario escriba la URL a mano.
+		const deniedBySaaSPolicy = isSaaSOnlyRoute(currentPath) && Env.getCompanyID() !== SAAS_COMPANY_ID
+		if (!deniedBySaaSPolicy && security.canAccessRoute(currentPath)) {
 			lastDeniedRoute = ''
 			return
 		}
@@ -102,10 +105,14 @@
 		if (lastDeniedRoute === currentPath) { return }
 		lastDeniedRoute = currentPath
 
-		const accessNames = getAccessEntriesForRoute(currentPath)
-			.map((accessEntry) => accessEntry.name)
-			.join(', ')
-		Notify.failure(tr(`You don't have access "${accessNames}" to visit ${currentPath}|No posee el acceso "${accessNames}" para acceder a ${currentPath}`))
+		if (deniedBySaaSPolicy) {
+			Notify.failure(tr(`${currentPath} is only available to the platform administrator.|${currentPath} sólo está disponible para la company administradora de la plataforma.`))
+		} else {
+			const accessNames = getAccessEntriesForRoute(currentPath)
+				.map((accessEntry) => accessEntry.name)
+				.join(', ')
+			Notify.failure(tr(`You don't have access "${accessNames}" to visit ${currentPath}|No posee el acceso "${accessNames}" para acceder a ${currentPath}`))
+		}
 		Env.navigate('/')
 	})
 
