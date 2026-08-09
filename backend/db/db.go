@@ -63,6 +63,25 @@ var (
 	RegisteredTableNames = orm.RegisteredTableNames
 )
 
+// ─── Name-addressed access ─────────────────────────────────────────────────────
+//
+// The surface for code that identifies a table by a runtime string instead of by
+// its Go type: admin tooling, scripts and the fn-db console. Reads and writes
+// still go through the ORM, so nothing here bypasses a managed column.
+
+type (
+	FilterSpec        = orm.FilterSpec
+	QuerySpec         = orm.QuerySpec
+	TableDescription  = orm.TableDescription
+	ColumnDescription = orm.ColumnDescription
+)
+
+var (
+	RegisterControllerFactory = orm.RegisterControllerFactory
+	ResolveControllerByName   = orm.ResolveControllerByName
+	RegisteredControllerNames = orm.RegisteredControllerNames
+)
+
 // ─── Reads ─────────────────────────────────────────────────────────────────────
 //
 // Every wrapper forwards its driver type parameter, so the driver is still

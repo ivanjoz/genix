@@ -25,6 +25,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-deploy-cloudflare-worker": DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":   DeployCompanyWebpage,
 	"fn-sync-image-assets":        SyncImageAssetsHandler,
+	"fn-db":                       DbConsole,
 	"compress-image":              CompressImage,
 }
 

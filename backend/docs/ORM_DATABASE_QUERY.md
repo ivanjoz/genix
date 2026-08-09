@@ -709,6 +709,49 @@ err := db.Merge(
 
 ---
 
+## 12b. Name-Addressed Access (tables resolved at runtime)
+
+Everything above needs the record type at compile time. Tooling that only holds a table *name* — an
+admin script, a backup job, the `fn-db` console — reaches the same data through `db.Controller`,
+which gained four methods for it:
+
+```go
+controller, err := db.ResolveControllerByName("products")
+
+schema := controller.DescribeTable()                          // columns, keys, query shapes
+payload, count, err := controller.QueryRecordsJSON(db.QuerySpec{
+    Filters: []db.FilterSpec{{Column: "company_id", Operator: "=", Value: 1}},
+    Columns: []string{"id", "nombre"},
+    Limit:   50,
+})
+written, err := controller.InsertRecordsJSON(payload, nil)
+written, err := controller.UpdateRecordsJSON(payload, []string{"nombre"})
+```
+
+- Records cross the boundary as the **record struct's own JSON**, so a row that was read can be
+  edited and written straight back. Filters instead name **columns** (`company_id`, `nombre`);
+  `ResolveColumn` also accepts the Go field name, so either spelling works.
+- Writes run through the ordinary `Insert` / `Update`, so autoincrement keys, `created`/`updated`,
+  `updated_version`, virtual columns, views and the text index all still apply.
+- `FilterSpec.Value` is coerced to the column's Go type (`db.CoerceToColumn`). This is mandatory,
+  not cosmetic: `encoding/json` decodes every number as `float64`, and the accessor engine's
+  `ToInt64` returns 0 for a `float64` — an uncoerced `id` filter would silently become `id = 0`.
+- `TableDescription.QueryShapes` lists the predicate combinations the compiled table can serve
+  through a key, index or view (`column|op` pairs; `=` equality, `~` range, `@` CONTAINS). Anything
+  outside it needs `AllowFilter`.
+- The controller registry is populated by whoever owns the table list — in this project
+  `app/exec`, lazily, from `MakeScyllaControllers()`. It is deliberately not built at startup:
+  compiling 40-odd schemas is wasted work on a Lambda cold start.
+
+There is no generic delete, and no generic `GroupBy` / `Delta` / text search: those stay on the
+typed API.
+
+Implementation: `genix-orm/db/generic_access.go`, `genix-orm/scylla/controller_generic.go`.
+CLI: `cd backend && go run . fn-db '{"op":"describe","table":"products"}'` — see the
+`database-records` skill.
+
+---
+
 ## 13. Assigned Table IDs
 
 Every `GetSchema()` declares a unique `TableSchema.ID` (§3.1). New tables take the next free number;
