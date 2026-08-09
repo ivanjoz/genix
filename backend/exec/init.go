@@ -24,6 +24,25 @@ import (
 // into the text_search package. GENIXSEARCH_PASSWORD must be set in
 // prod or writes will fail at handshake; we log a warning when it's
 // missing.
+// reserveSeededAutoincrementIDs moves an autoincrement counter past the IDs written by hand below.
+//
+// The ORM only reserves counter values for records whose key is still 0 (insert-update.go:278),
+// so seeding a row with a literal ID leaves the counter untouched. With the counter at zero, the
+// next record created through the normal path draws ID 1 and — because a Scylla INSERT is an
+// upsert — silently overwrites the seed. That is exactly how public sign-up replaced companies 1
+// and 2 instead of creating new ones.
+//
+// The reservation is unconditional: re-running fn-init skips a few IDs, which is harmless, and the
+// counter can only be read through the ORM by also incrementing it.
+func reserveSeededAutoincrementIDs(partitionValue any, tableName string, seededCount int) {
+	// Same key the ORM builds for the counter: x{partition}_{table}_{autoincrementPartition}.
+	counterName := fmt.Sprintf("x%v_%v_0", partitionValue, tableName)
+	if _, err := db.GetAutoincrementID(counterName, seededCount); err != nil {
+		panic("No se pudo reservar el rango de IDs sembrados de " + counterName + ". " + err.Error())
+	}
+	core.Log("Se reservó el rango de IDs sembrados:", counterName, "x", seededCount)
+}
+
 func configureTextSearchGenixSearch() {
 	host, port := core.ParseGenixSearchURL(core.Env.GENIXSEARCH_URL)
 	password := strings.TrimSpace(core.Env.GENIXSEARCH_PASSWORD)
@@ -113,6 +132,8 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	if err := cloud.Insert(empresas); err != nil {
 		panic("Error al crear las empresas iniciales en cloud. " + err.Error())
 	}
+	// Companies have no partition, so the counter key is x0_companies_0.
+	reserveSeededAutoincrementIDs(0, "companies", len(empresas))
 	core.Log("Se crearon/actualizaron las empresas iniciales en ScyllaDB y cloud.")
 
 	// Seed admin/system users in ScyllaDB so delta-cache and ID-based reads stay consistent.
@@ -121,6 +142,11 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 	if err := cloud.Insert(usuarios); err != nil {
 		panic("Error al crear los usuarios iniciales en cloud. " + err.Error())
+	}
+	// Users are partitioned by CompanyID, so each seeded company has its own counter. Without this
+	// the first user created from the users page would draw ID 1 and overwrite the admin account.
+	for _, seededUser := range usuarios {
+		reserveSeededAutoincrementIDs(seededUser.CompanyID, "users", 1)
 	}
 	core.Log("Se crearon/actualizaron los usuarios iniciales en ScyllaDB y cloud.")
 

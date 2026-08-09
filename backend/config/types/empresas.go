@@ -52,10 +52,14 @@ func (e CompanyTable) GetSchema() db.TableSchema {
 		Name:         "companies",
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
-		// Companies are global, so this index carries no tenant prefix. The delta read is
-		// the only lookup any caller makes; RUC and Email are resolved by ID, never scanned.
+		// Companies are global, so these indexes carry no tenant prefix. Email must be a
+		// global index and not a local one: a local index is scoped to the table's partition
+		// column, and this table has none. Order is the cloud mirror's slot order (ix1, ix2),
+		// so new entries go at the end.
 		Indexes: []db.Index{
 			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+			// Public sign-up enforces one company per email address, which needs this lookup.
+			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Email)},
 		},
 	}
 }

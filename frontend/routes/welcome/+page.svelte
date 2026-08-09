@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
   import { useUI } from '@genix/ui';
   import Input from '$components/form/Input.svelte';
-  import SearchSelect from '$components/form/SearchSelect.svelte';
   import T from '$components/misc/T.svelte';
   import { Core, setLanguaje, tr } from '$core/store.svelte';
   import { Env, type IApiEndpointOption } from '$core/env';
   import { Notify } from '$libs/helpers';
   import { security } from '$libs/ui-runtime.svelte';
-  import { sendUserLogin, type ILogin } from '$services/login';
+  import { getPublicCompanyName, sendUserLogin, type ILogin } from '$services/login';
   import RegistrationModal from './RegistrationModal.svelte';
 
   const REGISTRATION_MODAL_ID = 71;
@@ -90,29 +90,89 @@
     },
   ];
 
-  let loginForm = $state<ILogin>({ User: '', Password: '', CompanyID: 1, CipherKey: '' });
-  let selectorForm = $state({ selectedApiEndpointRoute: '' });
+  // Own key instead of the session's `genixCompanyID`: that one is wiped on logout, and the
+  // login form should still remember which tenant this browser last signed into.
+  const LAST_COMPANY_ID_STORAGE_KEY = 'genixLastLoginCompanyID';
+  const DEFAULT_COMPANY_ID = 1;
+
+  const readStoredCompanyID = () => {
+    if (!browser) return DEFAULT_COMPANY_ID;
+    const storedCompanyID = Number(localStorage.getItem(LAST_COMPANY_ID_STORAGE_KEY));
+    return Number.isInteger(storedCompanyID) && storedCompanyID > 0 ? storedCompanyID : DEFAULT_COMPANY_ID;
+  };
+
+  // Resolved synchronously so the Input reads the stored tenant on its first render.
+  let loginForm = $state<ILogin>({ User: '', Password: '', CompanyID: readStoredCompanyID(), CipherKey: '' });
+  let selectedApiEndpointRoute = $state('');
   let apiEndpointOptions = $state<IApiEndpointOption[]>([]);
   let isLoginLoading = $state(false);
+  let isCompanyLookupLoading = $state(false);
+  let companyName = $state('');
+  let companyLookupError = $state('');
+  let companyLookupSequence = 0;
   let mobileMenuOpen = $state(false);
   let contactForm = $state({ Name: '', Email: '', Company: '', Message: '' });
+  // Filled from /welcome?req=…&code=…, the link the registration email carries.
+  let signUpRequestID = $state(0);
+  let signUpCode = $state('');
 
   // Keep endpoint selection identical to the former login page so authentication behavior does not change.
   const syncApiEndpointSelector = () => {
     apiEndpointOptions = [...Env.availableApiEndpoints];
-    selectorForm.selectedApiEndpointRoute = Env.selectedApiEndpointRoute || apiEndpointOptions[0]?.route || '';
+    selectedApiEndpointRoute = Env.selectedApiEndpointRoute || apiEndpointOptions[0]?.route || '';
   };
 
   const onApiEndpointChange = (selectedEndpoint?: IApiEndpointOption) => {
     if (!selectedEndpoint?.route) return;
     Env.setSelectedApiEndpoint(selectedEndpoint.route);
-    selectorForm.selectedApiEndpointRoute = selectedEndpoint.route;
+    selectedApiEndpointRoute = selectedEndpoint.route;
+    // A name resolved on another server is no longer authoritative, so resolve it again there.
+    companyLookupSequence += 1;
+    isCompanyLookupLoading = false;
+    companyName = '';
+    companyLookupError = '';
     console.info('[WelcomeLogin] API endpoint selected:', selectedEndpoint.route);
+    void lookupCompanyName();
+  };
+
+  // Company IDs are positive database identifiers; reject values that cannot identify a tenant.
+  const isValidCompanyID = (companyID: string | number) => Number.isInteger(Number(companyID)) && Number(companyID) > 0;
+
+  const lookupCompanyName = async () => {
+    const companyID = Number(loginForm.CompanyID);
+    const lookupSequence = ++companyLookupSequence;
+    companyName = '';
+    companyLookupError = '';
+
+    if (!isValidCompanyID(companyID)) {
+      console.warn('[WelcomeLogin] Company lookup skipped for invalid ID:', companyID);
+      return;
+    }
+
+    if (browser) localStorage.setItem(LAST_COMPANY_ID_STORAGE_KEY, String(companyID));
+
+    isCompanyLookupLoading = true;
+    console.info('[WelcomeLogin] Looking up company:', companyID);
+    try {
+      const publicCompany = await getPublicCompanyName(companyID);
+      if (lookupSequence !== companyLookupSequence) return;
+
+      companyName = publicCompany?.Name?.trim() || '';
+      if (!companyName) companyLookupError = tr('Company not found|Empresa no encontrada');
+      console.info('[WelcomeLogin] Company lookup completed:', { companyID, companyName });
+    } catch (lookupError) {
+      if (lookupSequence !== companyLookupSequence) return;
+
+      companyLookupError = tr('Company not found|Empresa no encontrada');
+      console.error('[WelcomeLogin] Company lookup failed:', { companyID, lookupError });
+    } finally {
+      if (lookupSequence === companyLookupSequence) isCompanyLookupLoading = false;
+    }
   };
 
   const submitLogin = async () => {
-    if (loginForm.User.trim().length < 4 || loginForm.Password.length < 4) {
-      Notify.failure(tr('Please provide a valid username and password.|Debe proporcionar un usuario y una contraseña válidos.'));
+    if (loginForm.User.trim().length < 4 || loginForm.Password.length < 4 || !isValidCompanyID(loginForm.CompanyID)) {
+      Notify.failure(tr('Please provide a valid username, password, and company ID.|Debe proporcionar un usuario, una contraseña y un ID de empresa válidos.'));
       return;
     }
 
@@ -150,7 +210,30 @@
 
   onMount(() => {
     syncApiEndpointSelector();
-    if (security.checkIsLogin() === 2) Env.navigate('/');
+    if (security.checkIsLogin() === 2) {
+      Env.navigate('/');
+      return;
+    }
+    // The ID survives a reload in localStorage but the name does not, so resolve it again
+    // (memory → IndexedDB → server) instead of leaving the field blank.
+    void lookupCompanyName();
+
+    // Landing from the registration email opens the wizard straight on the code check.
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestIDParam = Number(urlParams.get('req'));
+    if (Number.isSafeInteger(requestIDParam) && requestIDParam > 0) {
+      signUpRequestID = requestIDParam;
+      signUpCode = urlParams.get('code') || '';
+      console.info('[WelcomeRegistration] Opening registration from email link:', signUpRequestID);
+      ui.openModal(REGISTRATION_MODAL_ID);
+      // Drop the credentials from the address bar as soon as they are captured: a reload would
+      // otherwise re-open the wizard on a code that has already been consumed, and the code would
+      // stay in the browser history and in any copied link.
+      // The native call and not replaceState() from $app/navigation: on the first load the router
+      // is not started yet (it flips the flag after onMount), so that one throws. Passing the
+      // current history.state through keeps SvelteKit's own back/forward bookkeeping intact.
+      history.replaceState(history.state, '', '/welcome');
+    }
   });
 </script>
 
@@ -165,12 +248,12 @@
 <svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-200 selection:text-indigo-950">
-  <header class="sticky top-0 z-50 px-10 pt-10 md:px-24 md:pt-16">
+  <header class="fixed inset-x-0 top-0 z-50">
     <nav
-      class="mx-auto max-w-1240 rounded-[18px] border border-white/70 bg-white/75 px-14 py-10 shadow-xl shadow-indigo-950/8 backdrop-blur-xl md:px-20"
+      class="border-b border-white/15 bg-slate-950/60 px-14 py-10 shadow-[0_8px_32px_rgba(15,23,42,0.18)] backdrop-blur-2xl md:px-24"
       aria-label={tr('Primary navigation|Navegación principal')}
     >
-      <div class="flex items-center justify-between gap-12">
+      <div class="mx-auto flex max-w-1240 items-center justify-between gap-12">
         <button
           class="flex shrink-0 items-center focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
           aria-label={tr('Go to the welcome section|Ir a la sección de bienvenida')}
@@ -182,7 +265,7 @@
         <div class="hidden items-center gap-8 lg:flex">
           {#each navigationItems as navigationItem}
             <button
-              class="rounded-[9px] px-12 py-8 text-sm text-slate-600 transition hover:bg-indigo-50 hover:text-indigo-700 focus-visible:outline-3 focus-visible:outline-indigo-600"
+              class="rounded-[9px] px-12 py-8 text-sm text-white/75 transition hover:bg-white/10 hover:text-white focus-visible:outline-3 focus-visible:outline-white"
               onclick={() => navigateToSection(navigationItem.id)}
             >
               <T text={navigationItem.label} />
@@ -191,21 +274,21 @@
         </div>
 
         <div class="flex items-center gap-6">
-          <div class="flex rounded-[10px] border border-slate-200 bg-white/80 p-3" aria-label={tr('Language|Idioma')}>
+          <div class="flex rounded-[10px] border border-white/20 bg-white/10 p-3" aria-label={tr('Language|Idioma')}>
             <button
-              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 1 ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-indigo-700'}"
+              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 1 ? 'bg-indigo-600 text-white' : 'text-white/65 hover:text-white'}"
               aria-pressed={Core.languaje === 1}
               onclick={() => setLanguaje(1)}
             >ES</button>
             <button
-              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 2 ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-indigo-700'}"
+              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 2 ? 'bg-indigo-600 text-white' : 'text-white/65 hover:text-white'}"
               aria-pressed={Core.languaje === 2}
               onclick={() => setLanguaje(2)}
             >EN</button>
           </div>
 
           <button
-            class="hidden h-38 items-center rounded-[10px] px-12 text-sm text-indigo-700 transition hover:bg-indigo-50 focus-visible:outline-3 focus-visible:outline-indigo-600 md:flex"
+            class="hidden h-38 items-center rounded-[10px] px-12 text-sm text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-3 focus-visible:outline-white md:flex"
             onclick={focusLogin}
           >
             <T text="Sign in|Ingresar" />
@@ -217,7 +300,7 @@
             <T text="Register|Regístrese" />
           </button>
           <button
-            class="flex size-38 items-center justify-center rounded-[10px] border border-slate-200 bg-white text-slate-700 lg:hidden"
+            class="flex size-38 items-center justify-center rounded-[10px] border border-white/20 bg-white/10 text-white lg:hidden"
             aria-label={tr('Toggle navigation menu|Alternar menú de navegación')}
             aria-expanded={mobileMenuOpen}
             aria-controls="welcome-mobile-menu"
@@ -229,17 +312,17 @@
       </div>
 
       {#if mobileMenuOpen}
-        <div id="welcome-mobile-menu" class="mt-10 grid gap-4 border-t border-slate-200/80 pt-10 lg:hidden">
+        <div id="welcome-mobile-menu" class="mx-auto mt-10 grid max-w-1240 gap-4 border-t border-white/15 pt-10 lg:hidden">
           {#each navigationItems as navigationItem}
             <button
-              class="rounded-[9px] px-12 py-10 text-left text-slate-700 hover:bg-indigo-50"
+              class="rounded-[9px] px-12 py-10 text-left text-white/80 hover:bg-white/10 hover:text-white"
               onclick={() => navigateToSection(navigationItem.id)}
             >
               <T text={navigationItem.label} />
             </button>
           {/each}
           <div class="mt-4 grid grid-cols-2 gap-8">
-            <button class="rounded-[10px] border border-indigo-200 px-12 py-10 text-indigo-700" onclick={focusLogin}>
+            <button class="rounded-[10px] border border-white/25 px-12 py-10 text-white" onclick={focusLogin}>
               <T text="Sign in|Ingresar" />
             </button>
             <button class="rounded-[10px] bg-indigo-600 px-12 py-10 text-white" onclick={openRegistration}>
@@ -252,24 +335,24 @@
   </header>
 
   <main>
-    <section id="home" class="scroll-mt-110 px-16 pb-72 pt-38 md:px-28 md:pb-96 md:pt-54">
-      <div class="relative mx-auto max-w-1240 overflow-hidden rounded-[30px] bg-indigo-950 shadow-2xl shadow-indigo-950/20">
-        <img
-          class="absolute inset-0 h-full w-full object-cover opacity-35"
-          src="/images/background-1.webp"
-          alt={tr('Small business owner managing orders|Propietaria de una pequeña empresa gestionando pedidos')}
-        />
-        <div class="absolute inset-0 bg-linear-to-r from-indigo-950 via-indigo-950/90 to-indigo-900/55"></div>
-        <div class="absolute -left-80 -top-100 size-320 rounded-full bg-violet-500/25 blur-3xl"></div>
+    <section id="home" class="relative isolate min-h-screen scroll-mt-64 overflow-hidden bg-slate-950">
+      <img
+        class="absolute inset-0 -z-30 h-full w-full object-cover object-[60%_center]"
+        src="/images/welcome-hero-v3.webp"
+        alt={tr('Small business owner managing orders|Propietaria de una pequeña empresa gestionando pedidos')}
+      />
+      <div class="absolute inset-0 -z-20 bg-linear-to-r from-slate-950/95 via-slate-950/68 to-slate-950/45"></div>
+      <div class="absolute inset-0 -z-20 bg-linear-to-b from-slate-950/35 via-transparent to-slate-950/60"></div>
+      <div class="absolute -left-80 top-80 -z-10 size-320 rounded-full bg-violet-500/20 blur-3xl"></div>
 
-        <div class="relative grid items-center gap-38 px-20 py-40 md:px-42 md:py-58 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] lg:gap-54">
-          <div class="max-w-650 text-white">
+      <div class="mx-auto grid min-h-screen max-w-1440 items-center gap-38 px-20 pb-58 pt-106 md:px-42 md:pb-72 md:pt-118 lg:grid-cols-[minmax(0,650px)_minmax(360px,420px)] lg:justify-between lg:gap-40">
+        <div class="max-w-650 text-white">
             <div class="mb-18 inline-flex items-center gap-8 rounded-full border border-white/20 bg-white/10 px-14 py-7 text-sm backdrop-blur">
               <i class="icon-[fa--code-fork] text-violet-200" aria-hidden="true"></i>
-              <T text="Open-source ERP + e-commerce|ERP + comercio electrónico de código abierto" />
+              <T text="ERP + e-commerce|ERP + comercio electrónico" />
             </div>
             <h1 class="max-w-620 text-4xl font-bold leading-tight md:text-5xl lg:text-[56px]">
-              <T text="Run your business from one clear, connected system.|Dirija su empresa desde un sistema claro y conectado." />
+              <T text="Run your business from one clear, connected system.|Gestione cada proceso de su empresa" />
             </h1>
             <p class="mt-20 max-w-600 text-lg leading-[1.6] text-indigo-100 md:text-xl">
               <T text="Genix brings sales, inventory, purchasing, finance, and online commerce together for small businesses that want control without complexity.|Genix reúne ventas, inventario, compras, finanzas y comercio electrónico para pequeñas empresas que buscan control sin complejidad." />
@@ -296,13 +379,12 @@
             </div>
           </div>
 
-          <div id="login" class="scroll-mt-120 rounded-[22px] border border-white/35 bg-white/92 p-20 shadow-2xl shadow-black/25 backdrop-blur-xl md:p-28">
-            <div class="mb-20">
-              <div class="mb-14 flex size-44 items-center justify-center rounded-[12px] bg-indigo-50 text-indigo-700">
+        <div id="login" class="welcome-glass-panel scroll-mt-80 rounded-[22px] p-20 text-white md:p-28">
+            <div class="mb-20 flex items-center gap-12">
+              <div class="flex size-44 items-center justify-center rounded-[12px] border border-white/15 bg-white/10 text-violet-200">
                 <i class="icon-[fa--sign-in] text-xl" aria-hidden="true"></i>
               </div>
-              <h2 class="text-2xl font-bold text-slate-900"><T text="Sign in to your workspace|Ingrese a su espacio de trabajo" /></h2>
-              <p class="mt-6 text-sm leading-[1.45] text-slate-500"><T text="Use your Genix credentials and select your server.|Use sus credenciales de Genix y seleccione su servidor." /></p>
+              <h2 class="text-xl font-semibold text-white"><T text="Sign in|Ingresar" /></h2>
             </div>
 
             <form
@@ -311,21 +393,51 @@
               aria-label={tr('Login form with username and password|Formulario de acceso con usuario y contraseña')}
               onsubmit={(event) => { event.preventDefault(); void submitLogin(); }}
             >
-              <Input required={true} label="Username|Usuario" saveOn={loginForm} save="User" type="text" inputCss="text-base" />
-              <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" inputCss="text-base" />
               {#if apiEndpointOptions.length > 0}
-                <SearchSelect
-                  css="w-full"
-                  inputCss="text-base"
-                  label="Server|Servidor"
-                  saveOn={selectorForm}
-                  save="selectedApiEndpointRoute"
-                  options={apiEndpointOptions}
-                  keyId="route"
-                  keyName="name"
-                  onChange={onApiEndpointChange}
-                />
+                <fieldset>
+                  <legend class="mb-9 text-sm text-violet-100"><T text="Server|Servidor" /></legend>
+                  <div class="grid grid-cols-3 gap-10">
+                    {#each apiEndpointOptions as apiEndpointOption}
+                      <button
+                        type="button"
+                        class="flex min-h-56 w-full items-center justify-start gap-8 rounded-[12px] border px-10 text-left text-sm transition focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet-300 {selectedApiEndpointRoute === apiEndpointOption.route
+                          ? 'border-violet-300 bg-violet-500/35 text-white shadow-lg shadow-violet-950/20'
+                          : 'border-white/20 bg-white/8 text-white/75 hover:border-white/40 hover:bg-white/15 hover:text-white'}"
+                        aria-pressed={selectedApiEndpointRoute === apiEndpointOption.route}
+                        onclick={() => onApiEndpointChange(apiEndpointOption)}
+                      >
+                        <i class="icon-[fa--server] shrink-0 -ml-1 -mr-1" aria-hidden="true"></i>
+                        <span class="min-w-0 leading-tight">{apiEndpointOption.name}</span>
+                      </button>
+                    {/each}
+                  </div>
+                </fieldset>
               {/if}
+              <div class="relative mt-8">
+                <Input
+                  label="Company ID|ID Empresa"
+                  saveOn={loginForm}
+                  save="CompanyID"
+                  type="number"
+                  css="welcome-login-field welcome-company-id-field"
+                  inputCss="text-base"
+                  onChange={() => { void lookupCompanyName(); }}
+                />
+                <div
+                  class="pointer-events-none absolute bottom-0 right-0 flex h-38 w-[65%] items-center justify-end overflow-hidden px-10 text-right text-sm"
+                  aria-live="polite"
+                >
+                  {#if isCompanyLookupLoading}
+                    <i class="icon-[fa--refresh] animate-spin text-violet-200" aria-label={tr('Loading company|Buscando empresa')}></i>
+                  {:else if companyName}
+                    <span class="truncate text-white/80" title={companyName}>{companyName}</span>
+                  {:else if companyLookupError}
+                    <span class="truncate text-rose-300" title={companyLookupError}>{companyLookupError}</span>
+                  {/if}
+                </div>
+              </div>
+              <Input required={true} label="Username|Usuario" saveOn={loginForm} save="User" type="text" css="welcome-login-field" inputCss="text-base" />
+              <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" css="welcome-login-field" inputCss="text-base" />
               <button
                 type="submit"
                 class="mt-4 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
@@ -336,7 +448,6 @@
                 <span class="font-semibold"><T text={isLoginLoading ? 'Signing in...|Ingresando...' : 'Sign in|Ingresar'} /></span>
               </button>
             </form>
-          </div>
         </div>
       </div>
     </section>
@@ -478,10 +589,76 @@
     </div>
   </footer>
 
-  <RegistrationModal id={REGISTRATION_MODAL_ID} />
+  <RegistrationModal
+    id={REGISTRATION_MODAL_ID}
+    presetRequestID={signUpRequestID}
+    presetCode={signUpCode}
+    {apiEndpointOptions}
+    {selectedApiEndpointRoute}
+    {onApiEndpointChange}
+  />
 </div>
 
 <style>
+  /* Keep the login readable while allowing the photographic backdrop to show through. */
+  .welcome-glass-panel {
+    position: relative;
+    overflow: hidden;
+    background: rgb(15 23 42 / 34%);
+    border: 1px solid rgb(255 255 255 / 24%);
+    box-shadow: 0 16px 60px rgb(0 0 0 / 40%), inset 0 0 4px 2px rgb(255 255 255 / 10%);
+    backdrop-filter: blur(25px) saturate(100%);
+    -webkit-backdrop-filter: blur(25px) saturate(100%);
+  }
+
+  /* Two quiet highlights create the reflected-edge effect of physical glass. */
+  .welcome-glass-panel::before,
+  .welcome-glass-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  .welcome-glass-panel::before {
+    background: linear-gradient(to left top, rgb(255 255 255 / 7%), transparent 50%);
+  }
+
+  .welcome-glass-panel::after {
+    background: linear-gradient(to bottom, rgb(255 255 255 / 5%), transparent 100%);
+  }
+
+  .welcome-glass-panel > :global(*) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Keep shared inputs legible on this glass panel without changing forms elsewhere. */
+  :global(.welcome-login-field) {
+    --input-bg: linear-gradient(145deg, rgb(15 23 42 / 72%), rgb(30 41 59 / 58%));
+    --input-border-color: rgb(255 255 255 / 20%);
+    --input-border-color-hover: rgb(255 255 255 / 38%);
+    --input-border-color-focus: rgb(196 181 253 / 85%);
+    --input-border-color-invalid: rgb(248 113 113 / 75%);
+    --input-border-color-invalid-focus: rgb(252 165 165 / 95%);
+    --input-ring-color: rgb(167 139 250 / 32%);
+    --input-ring-color-invalid: rgb(248 113 113 / 28%);
+    --input-shadow-color: rgb(0 0 0 / 28%);
+    --input-label-color: rgb(226 232 240 / 78%);
+    --input-label-color-focus: white;
+    --input-text-color: white;
+    --input-placeholder-color: rgb(226 232 240 / 42%);
+    --input-suffix-color: rgb(221 214 254 / 78%);
+  }
+
+  /* Reserve the right 65% for the resolved company name and center the ID on the left. */
+  :global(.welcome-company-id-field input) {
+    padding-right: 65%;
+    text-align: center;
+  }
+
   :global(html) {
     scroll-behavior: smooth;
   }

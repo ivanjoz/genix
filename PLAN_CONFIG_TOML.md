@@ -122,6 +122,7 @@ Fuente de verdad de toda la migración. `—` = no existe en ese lado.
 | `CLOUDFLARE_BUCKET` | `cloudflare.bucket` | `CLOUDFLARE_BUCKET` | cloud, deployer |
 | `CLOUDFLARE_DATABASE_ID` | `cloudflare.database_id` | `CLOUDFLARE_DATABASE_ID` | — |
 | `FRONTEND_CDN` | `frontend.cdn_url` | `FRONTEND_CDN` | cloud, deployer, setup-env |
+| `APP_URL` | `frontend.app_url` | — | backend (enlace del correo de registro) |
 | `ZONE_NAME` | `frontend.zone_name` | `ZONE_NAME` | setup-env, set-github-* |
 | `WEBPAGE_RENDERER_URL` | `frontend.webpage_renderer_url` | `WEBPAGE_RENDERER_URL` | cloud, deployer |
 
@@ -249,6 +250,8 @@ database_id = ""
 # ─── Frontend / CDN público ─────────────────────────────────────────────────
 [frontend]
 cdn_url   = ""
+# Origen público de la app web, sin barra final. Lo usa el correo de registro.
+app_url   = ""
 zone_name = ""
 # Artefacto webpage-renderer.zip publicado por CI. Vacío = el default de
 # core.DefaultWebpageRendererURL, que debe seguir igual al de cloud/webpage-renderer.go.
@@ -394,6 +397,7 @@ type fileConfig struct {
 
 	Frontend struct {
 		CDNURL             string `toml:"cdn_url"`
+		AppURL             string `toml:"app_url"`
 		ZoneName           string `toml:"zone_name"`
 		WebpageRendererURL string `toml:"webpage_renderer_url"`
 	} `toml:"frontend"`

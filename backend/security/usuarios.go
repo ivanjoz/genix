@@ -167,6 +167,8 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	if body.ID == 0 && len(body.Password) < 6 {
 		return req.MakeErr("El password debe tener al menos de 6 caracteres")
 	}
+	// User 1 is the company administrator and its login is fixed: never editable, never chosen at
+	// sign-up. Forcing it here keeps the invariant even if the client sends something else.
 	if body.ID == 1 {
 		body.User = "admin"
 	}

@@ -52,11 +52,11 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[logisticsTypes.WarehouseProductMovement](),
 		makeDBController[salesTypes.ProductSaleSummary](),
 		makeDBController[salesTypes.SaleOrder](),
-		makeDBController[salesTypes.SaleSummary](),
 		makeDBController[salesTypes.SalesPlanning](),
 		makeDBController[salesTypes.SeasonalityCurve](),
 		makeDBController[salesTypes.ShippingCost](),
 		makeDBController[securityTypes.Profile](),
+		makeDBController[securityTypes.SignUpRequest](),
 		makeDBController[webpageTypes.EcommercePageContent](),
 		makeDBController[webpageTypes.Webpage](),
 	}
@@ -99,11 +99,11 @@ func init() {
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("product_sale_summary", func() db.Table { return db.MakeTable[salesTypes.ProductSaleSummary]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })
-	db.RegisterTableFactory("sale_summary", func() db.Table { return db.MakeTable[salesTypes.SaleSummary]() })
 	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
 	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })
 	db.RegisterTableFactory("shipping_costs", func() db.Table { return db.MakeTable[salesTypes.ShippingCost]() })
 	db.RegisterTableFactory("profiles", func() db.Table { return db.MakeTable[securityTypes.Profile]() })
+	db.RegisterTableFactory("sign_up_requests", func() db.Table { return db.MakeTable[securityTypes.SignUpRequest]() })
 	db.RegisterTableFactory("ecommerce_page_content", func() db.Table { return db.MakeTable[webpageTypes.EcommercePageContent]() })
 	db.RegisterTableFactory("webpages", func() db.Table { return db.MakeTable[webpageTypes.Webpage]() })
 }
