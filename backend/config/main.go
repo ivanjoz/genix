@@ -4,6 +4,7 @@ import "app/core"
 
 var ModuleHandlers = core.AppRouterType{
 	"GET.p-hello":                HelloWorld,
+	"GET.p-company-names-by-ids": GetPublicCompanyNamesByIDs,
 	"GET.cron-actions-scheduled": GetCronActionsScheduled,
 	"GET.empresas":               GetEmpresas,
 	"GET.company-parametros":     GetEmpresaParametros,
@@ -15,5 +16,6 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.system-parameters":     PostSystemParameters,
 	"GET.system-metrics-stream":  GetSystemMetricsStream,
 	"GET.system-memory-packages": GetSystemMemoryPackages,
-	"GET.records-by-ids":    GetTableRecordsByIDs,
+	"GET.credit-usage":           GetCreditUsage,
+	"GET.records-by-ids":         GetTableRecordsByIDs,
 }

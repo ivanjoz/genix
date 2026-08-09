@@ -122,6 +122,7 @@ Use `Core.openSideLayer(id)` to open and `Core.hideSideLayer()` to close.
 | `css` | `string` | No | CSS for modal container |
 | `headCss` | `string` | No | CSS for header |
 | `bodyCss` | `string` | No | CSS for body |
+| `hideTitle` | `boolean` | No | Drops the title bar so the body draws its own header edge to edge. The save/delete/close buttons stay in the same spot, the body reclaims the bar's 50px, and the container gets `overflow-hidden` so a full-bleed background respects the rounded corners. `title` is still required — it becomes the dialog's accessible name. |
 | `isEdit` | `boolean` | No | Changes save button to "Actualizar" |
 | `onSave` | `() => void` | No | Shows save button, called on click |
 | `onDelete` | `() => void` | No | Shows delete button, called on click |

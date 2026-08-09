@@ -121,6 +121,9 @@ export const {
   POST_XMLHR,
 } = genixUiRuntime.http
 
+// Pairs with the silentError option: turns a rejected raw response into the readable message.
+export { extractError } from '@genix/ui/http'
+
 export const {
   fileToImage,
   bitmapToImage,

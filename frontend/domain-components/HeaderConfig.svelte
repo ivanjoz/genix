@@ -1,6 +1,6 @@
 <script lang="ts">
 import { browser } from '$app/environment';
-import { onMount } from 'svelte';
+import { onMount, untrack } from 'svelte';
 import Input from '$components/form/Input.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
@@ -24,6 +24,13 @@ import { postOwnUser } from '$services/services/users.svelte';
 import type { IUser } from '$core/types/common';
 import { HEADER_REQUEST_LOGS_MODAL_ID } from '$domain/HeaderRequestLogsModal.svelte';
 import { formatN } from '$libs/helpers';
+import { formatTime } from '$libs/helpers';
+import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
+import {
+  getCreditUsage,
+  type ICreditUsageResponse,
+  type ICreditUsageScope,
+} from '$services/services/credit-usage';
 import {
   AgentModelsService,
   getSelectedAgentModelHash,
@@ -41,6 +48,7 @@ import { useUI } from '@genix/ui';
   let selected = $state(1)
   const ui = useUI()
   const agentModelsService = new AgentModelsService()
+  const canSelectAgentModel = Env.getCompanyID() === 1
   let agentModelForm = $state({ ModelHash: getSelectedAgentModelHash() })
   let cacheRows: ICacheDebugRow[] = $state([])
   type IGroupedCacheRow = {
@@ -53,6 +61,72 @@ import { useUI } from '@genix/ui';
   let cacheDataLoading = $state(false)
   let cacheDataClearing = $state(false)
   let viewportWidth = $state(browser ? window.innerWidth : 1280)
+  type CreditUsageScopeName = 'User' | 'Company'
+  const creditUsageScopeOptions = [
+    { ID: 'User' as CreditUsageScopeName, Name: 'Usuario' },
+    { ID: 'Company' as CreditUsageScopeName, Name: 'Empresa' },
+  ]
+  let creditUsageScopeForm = $state<{ Scope: CreditUsageScopeName }>({ Scope: 'User' })
+  let creditUsage = $state<ICreditUsageResponse | undefined>(undefined)
+  let creditUsageLoading = $state(false)
+  let creditUsageLoaded = $state(false)
+  let creditUsageError = $state('')
+
+	const loadCreditUsage = async (forceReload = false) => {
+		if (!browser || creditUsageLoading || (creditUsageLoaded && !forceReload)) { return }
+		creditUsageLoading = true
+		creditUsageError = ''
+		console.debug('[HeaderConfig] Loading 15-day credit usage.', { forceReload })
+		try {
+			creditUsage = await getCreditUsage()
+			creditUsageLoaded = true
+			console.debug('[HeaderConfig] Credit usage loaded.', {
+				userDays: creditUsage?.User?.Days?.length || 0,
+				companyDays: creditUsage?.Company?.Days?.length || 0,
+			})
+		} catch (error) {
+			creditUsageError = 'No se pudo cargar el uso de créditos.'
+			console.warn('[HeaderConfig] Failed to load credit usage.', error)
+		} finally {
+			creditUsageLoading = false
+		}
+	}
+
+	$effect(() => {
+		if (selected !== 2) { return }
+		// Avoid subscribing the effect to loader state changed by the async request.
+		untrack(() => { loadCreditUsage() })
+	})
+
+	const selectedCreditUsage = $derived<ICreditUsageScope | undefined>(
+		creditUsage?.[creditUsageScopeForm.Scope]
+	)
+	const todayCreditUsage = $derived(
+		selectedCreditUsage?.Days?.[selectedCreditUsage.Days.length - 1]
+	)
+	const cpuCreditHistory = $derived.by<ChartCanvasSeries[]>(() => [{
+		type: 'bar',
+		name: 'CPU',
+		values: (selectedCreditUsage?.Days || []).map((usageDay) => usageDay.CPU),
+		color: '#4874f5',
+	}])
+	const inferenceCreditHistory = $derived.by<ChartCanvasSeries[]>(() => [{
+		type: 'bar',
+		name: 'Inferencia',
+		values: (selectedCreditUsage?.Days || []).map((usageDay) => usageDay.Inference),
+		color: '#8b5cf6',
+	}])
+	const creditUsageDateLabels = $derived(
+		(selectedCreditUsage?.Days || []).map((usageDay) => usageDay.Day)
+	)
+	const formatCreditUsageDay = (unixDay: string | number) => {
+		// formatTime preserves the project's UnixDay convention while presenting the UTC bucket date.
+		return String(formatTime(Number(unixDay), 'd-M') || '')
+	}
+	const creditUsagePercent = (usedCredits: number, limitCredits: number) => {
+		if (limitCredits <= 0) { return 0 }
+		return Math.min(100, Math.max(0, (usedCredits / limitCredits) * 100))
+	}
 
 	function handleLogout() {
 		// Clear session/tokens
@@ -324,32 +398,89 @@ import { useUI } from '@genix/ui';
   </div>
 {/if}
 {#if selected === 2}
-  <div class="w-full flex mb-12 mt-[-2px]">
-    <SearchSelect
-      label="Modelo"
-      css="w-full max-w-[460px]"
-      inputCss="h-32 text-[15px]"
-      options={agentModelsService.records}
-      keyId="Hash"
-      keyName="ID"
-      bind:saveOn={agentModelForm}
-      save="ModelHash"
-      notEmpty={true}
-      showLoading={agentModelsService.isReady === 0}
-      onChange={(modelOption) => setSelectedAgentModelHash(modelOption.Hash)}
-    />
-    <div class="mr-auto"></div>
-    <button class="bx-blue min-w-120 px-12" aria-label="Ver logs de requests"
-      onclick={() => { 
-	      // Close the global header dropdown first so the modal is the only visible overlay.
-	      ui.state.headerSettingsOpen = false
-	      // Opening a globally mounted modal avoids losing it when the settings dropdown auto-closes.
-	      ui.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
-      }}
-    >
-      <i class="icon-[fa--list]"></i>
-      <span>Reqs. Logs</span>
-    </button>
+  <div class="mb-10 rounded-[8px] border border-slate-200 bg-slate-50/70 p-8">
+    <div class="mb-6 flex items-center gap-8">
+      <div class="ff-semibold text-[14px] text-slate-700">Créditos · 15 días</div>
+      <div class="ml-auto">
+        <CheckboxOptions
+          options={creditUsageScopeOptions}
+          keyId="ID"
+          keyName="Name"
+          type="single"
+          useButtonsSlim={true}
+          saveOn={creditUsageScopeForm}
+          save="Scope"
+        />
+      </div>
+      <button
+        class="flex h-32 w-32 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[14px] text-slate-500 shadow-sm hover:bg-slate-200 disabled:opacity-50"
+        aria-label="Actualizar uso de créditos"
+        disabled={creditUsageLoading}
+        onclick={() => { loadCreditUsage(true) }}
+      >
+        <i class={`icon-[fa--refresh] ${creditUsageLoading ? 'animate-spin' : ''}`}></i>
+      </button>
+    </div>
+
+    {#if creditUsageError}
+      <div class="flex h-116 items-center justify-center text-[14px] text-red-500">{creditUsageError}</div>
+    {:else if !selectedCreditUsage || !todayCreditUsage}
+      <div class="flex h-116 items-center justify-center text-[14px] text-slate-500">
+        {creditUsageLoading ? 'Cargando uso de créditos…' : 'Sin datos de créditos.'}
+      </div>
+    {:else}
+      <div class="mb-6 grid grid-cols-2 gap-10">
+        <div>
+          <div class="mb-3 flex items-center text-[12px] text-slate-600">
+            <span class="ff-bold text-[14px] text-[#4874f5]">CPU hoy</span>
+            <span class="ml-auto ff-mono">{formatN(todayCreditUsage.CPU)} / {formatN(selectedCreditUsage.CPU24hLimit)}</span>
+          </div>
+          <div class="h-5 overflow-hidden rounded-full bg-slate-200">
+            <div class="h-full rounded-full bg-[#4874f5]"
+              style={`width:${creditUsagePercent(todayCreditUsage.CPU, selectedCreditUsage.CPU24hLimit)}%`}
+            ></div>
+          </div>
+        </div>
+        <div>
+          <div class="mb-3 flex items-center text-[12px] text-slate-600">
+            <span class="ff-bold text-[14px] text-[#8b5cf6]">Inferencia hoy</span>
+            <span class="ml-auto ff-mono">{formatN(todayCreditUsage.Inference)} / {formatN(selectedCreditUsage.Inference24hLimit)}</span>
+          </div>
+          <div class="h-5 overflow-hidden rounded-full bg-slate-200">
+            <div class="h-full rounded-full bg-[#8b5cf6]"
+              style={`width:${creditUsagePercent(todayCreditUsage.Inference, selectedCreditUsage.Inference24hLimit)}%`}
+            ></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-10">
+        <div class="min-w-0">
+          <ChartCanvas
+            id={`credit-usage-cpu-${creditUsageScopeForm.Scope}`}
+            data={cpuCreditHistory}
+            dateLabels={creditUsageDateLabels}
+            dateLabelFormatter={formatCreditUsageDay}
+            dateLabelEvery={5}
+            useHtmlRendered={true}
+            showBottomBaseline={true}
+            height={58}
+          />
+        </div>
+        <div class="min-w-0">
+          <ChartCanvas
+            id={`credit-usage-inference-${creditUsageScopeForm.Scope}`}
+            data={inferenceCreditHistory}
+            dateLabels={creditUsageDateLabels}
+            dateLabelFormatter={formatCreditUsageDay}
+            dateLabelEvery={5}
+            useHtmlRendered={true}
+            showBottomBaseline={true}
+            height={58}
+          />
+        </div>
+      </div>
+    {/if}
   </div>
   <div class="w-full mt-2">
     <div class="ff-semibold text-[15px] text-slate-600 mb-6">Idioma / Language</div>
@@ -363,6 +494,35 @@ import { useUI } from '@genix/ui';
       save="languaje"
       onChange={(ids) => setLanguaje((Number(ids[0]) === 2 ? 2 : 1) as ILanguaje)}
     />
+  </div>
+  <div class="mt-14 flex w-full">
+    {#if canSelectAgentModel}
+      <SearchSelect
+        label="Modelo"
+        css="w-full max-w-[460px]"
+        inputCss="h-32 text-[15px]"
+        options={agentModelsService.records}
+        keyId="Hash"
+        keyName="ID"
+        bind:saveOn={agentModelForm}
+        save="ModelHash"
+        notEmpty={true}
+        showLoading={agentModelsService.isReady === 0}
+        onChange={(modelOption) => setSelectedAgentModelHash(modelOption.Hash)}
+      />
+    {/if}
+    <div class="mr-auto"></div>
+    <button class="bx-blue min-w-120 px-12" aria-label="Ver logs de requests"
+      onclick={() => {
+        // Close the global header dropdown first so the modal is the only visible overlay.
+        ui.state.headerSettingsOpen = false
+        // Opening a globally mounted modal avoids losing it when the settings dropdown auto-closes.
+        ui.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
+      }}
+    >
+      <i class="icon-[fa--list]"></i>
+      <span>Reqs. Logs</span>
+    </button>
   </div>
 {/if}
 {#if selected === 3}

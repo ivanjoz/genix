@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -115,6 +116,11 @@ type EnvStruct struct {
 	CLOUDFLARE_DATABASE_ID string
 	FRONTEND_CDN           string
 	ZONE_NAME              string
+	// APP_URL is the public origin of the Genix web app ("https://app.example.com", no trailing
+	// slash). Only the sign-up email needs it, to build the verification link. It is read from
+	// config and never from the request, so a caller cannot make our SMTP mail out a link that
+	// points at their own domain.
+	APP_URL string
 	// WEBPAGE_RENDERER_URL is the storefront renderer artifact (webpage-renderer.zip: SSR
 	// bundle + assets). Outside Lambda the backend runs the renderer locally and has to hand
 	// this to the Node process, so the value has to reach the backend and not only the deploy
@@ -149,7 +155,11 @@ type EnvStruct struct {
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
 	// RATE_LIMIT_ADDRESS is the Rust raw-TCP credit limiter endpoint.
-	RATE_LIMIT_ADDRESS string
+	RATE_LIMIT_ADDRESS               string
+	RATE_LIMIT_COMPANY_CPU_24H       uint64
+	RATE_LIMIT_COMPANY_INFERENCE_24H uint64
+	RATE_LIMIT_USER_CPU_24H          uint64
+	RATE_LIMIT_USER_INFERENCE_24H    uint64
 }
 
 // fileConfig refleja la forma por secciones de config.toml. Sólo existe para el parseo:
@@ -199,6 +209,7 @@ type fileConfig struct {
 
 	Frontend struct {
 		CDNURL             string `toml:"cdn_url"`
+		AppURL             string `toml:"app_url"`
 		ZoneName           string `toml:"zone_name"`
 		WebpageRendererURL string `toml:"webpage_renderer_url"`
 	} `toml:"frontend"`
@@ -218,7 +229,11 @@ type fileConfig struct {
 	} `toml:"agent"`
 
 	RateLimit struct {
-		Address string `toml:"address"`
+		Address             string `toml:"address"`
+		CompanyCPU24h       uint64 `toml:"company_cpu_24h"`
+		CompanyInference24h uint64 `toml:"company_inference_24h"`
+		UserCPU24h          uint64 `toml:"user_cpu_24h"`
+		UserInference24h    uint64 `toml:"user_inference_24h"`
 	} `toml:"rate_limit"`
 
 	Search struct {
@@ -271,6 +286,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.CLOUDFLARE_DATABASE_ID = file.Cloudflare.DatabaseID
 
 	env.FRONTEND_CDN = file.Frontend.CDNURL
+	env.APP_URL = strings.TrimRight(file.Frontend.AppURL, "/")
 	env.ZONE_NAME = file.Frontend.ZoneName
 	env.WEBPAGE_RENDERER_URL = file.Frontend.WebpageRendererURL
 
@@ -284,6 +300,10 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
 	env.RATE_LIMIT_ADDRESS = file.RateLimit.Address
+	env.RATE_LIMIT_COMPANY_CPU_24H = file.RateLimit.CompanyCPU24h
+	env.RATE_LIMIT_COMPANY_INFERENCE_24H = file.RateLimit.CompanyInference24h
+	env.RATE_LIMIT_USER_CPU_24H = file.RateLimit.UserCPU24h
+	env.RATE_LIMIT_USER_INFERENCE_24H = file.RateLimit.UserInference24h
 
 	env.GENIXSEARCH_URL = file.Search.URL
 	env.GENIXSEARCH_PASSWORD = file.Search.Password
@@ -398,6 +418,15 @@ func PopulateVariables() {
 	if Env.RATE_LIMIT_ADDRESS == "" {
 		Env.RATE_LIMIT_ADDRESS = "127.0.0.1:14013"
 	}
+	// Mirror the limiter's environment precedence so displayed quotas cannot drift from enforcement.
+	applyRateLimitUint32Override("RATE_LIMIT_COMPANY_CPU_24H", &Env.RATE_LIMIT_COMPANY_CPU_24H)
+	applyRateLimitUint32Override("RATE_LIMIT_COMPANY_INFERENCE_24H", &Env.RATE_LIMIT_COMPANY_INFERENCE_24H)
+	applyRateLimitUint32Override("RATE_LIMIT_USER_CPU_24H", &Env.RATE_LIMIT_USER_CPU_24H)
+	applyRateLimitUint32Override("RATE_LIMIT_USER_INFERENCE_24H", &Env.RATE_LIMIT_USER_INFERENCE_24H)
+	validateRateLimitDailyMaximum("rate_limit.company_cpu_24h", Env.RATE_LIMIT_COMPANY_CPU_24H)
+	validateRateLimitDailyMaximum("rate_limit.company_inference_24h", Env.RATE_LIMIT_COMPANY_INFERENCE_24H)
+	validateRateLimitDailyMaximum("rate_limit.user_cpu_24h", Env.RATE_LIMIT_USER_CPU_24H)
+	validateRateLimitDailyMaximum("rate_limit.user_inference_24h", Env.RATE_LIMIT_USER_INFERENCE_24H)
 
 	Env.LAMBDA_NAME = Env.APP_NAME + "-backend"
 	Env.APP_CODE = APP_CODE
@@ -416,6 +445,25 @@ func PopulateVariables() {
 			Env.IS_PROD = true
 			break
 		}
+	}
+}
+
+func applyRateLimitUint32Override(environmentName string, destination *uint64) {
+	rawValue := strings.TrimSpace(os.Getenv(environmentName))
+	if rawValue == "" {
+		return
+	}
+	parsedValue, err := strconv.ParseUint(rawValue, 10, 32)
+	if err != nil || parsedValue == 0 {
+		panic(fmt.Sprintf("%s must be a positive uint32", environmentName))
+	}
+	*destination = parsedValue
+}
+
+func validateRateLimitDailyMaximum(configName string, configuredValue uint64) {
+	// Persisted usage is uint32-wide, matching the Rust limiter's startup validation.
+	if configuredValue == 0 || configuredValue > math.MaxUint32 {
+		panic(fmt.Sprintf("%s must be a positive uint32", configName))
 	}
 }
 
