@@ -300,7 +300,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
     >
       {#snippet cellRenderer(record: ICashBankMovement, col: ITableColumn<ICashBankMovement>)}
         {#if col.id === "paymentUsuario"}
-          <RecordByIDText apiRoute="usuarios-ids" recordID={record.CreatedBy} placeholder="-" />
+          <RecordByIDText apiRoute="users-ids" recordID={record.CreatedBy} placeholder="-" />
         {/if}
       {/snippet}
     </VTable>

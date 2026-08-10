@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/binary"
 	// "encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"slices"
 	"strconv"
@@ -28,14 +30,57 @@ type HandlerArgs struct {
 	QueryString    string
 	Method         string
 	Route          string
-	Authorization  string
-	ReqParams      string
-	Encoding       string
-	User           *UsuarioToken
+	// ClientIP is the caller's address. Per request and never a global: in server mode one
+	// process serves many requests at once, so a package-level field would be a data race and
+	// would attribute one caller's address to another.
+	ClientIP      string
+	Authorization string
+	ReqParams     string
+	Encoding      string
+	User          *UsuarioToken
 	// HistoricalUnix overrides the effective write timestamp for sample/seed flows.
 	HistoricalUnix int64
 	StartTime      int64
 	accesosNivel   []uint16
+}
+
+// ClientIPFromRequest resolves the caller's address behind the project's own Nginx.
+//
+// X-Forwarded-For is deliberately ignored: configure_server.py sets it with
+// $proxy_add_x_forwarded_for, which *appends*, so a client that sends its own header lands first
+// in the list. Anything rate-limited by that value would be bypassable with one curl flag.
+// X-Real-IP is written from $remote_addr and cannot be forged through the proxy.
+func ClientIPFromRequest(request *http.Request) string {
+	if realIP := strings.TrimSpace(request.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err != nil {
+		return strings.TrimSpace(request.RemoteAddr)
+	}
+	return host
+}
+
+// ClientIPKey packs the caller's address into the int64 a lock or a counter is keyed by.
+//
+// IPv6 is keyed by prefix rather than by address: a single residential customer is handed a
+// whole /64, often a /56, so limiting per address would be free to bypass. The prefix is shifted
+// one bit to stay in positive int64 range, which keys the /63 — still far narrower than any
+// block a customer receives. Real IPv6 prefixes start at 2000::/3, so the result cannot collide
+// with the IPv4 range that sits below 2^32.
+func (req *HandlerArgs) ClientIPKey() (int64, bool) {
+	parsed := net.ParseIP(strings.TrimSpace(req.ClientIP))
+	if parsed == nil {
+		return 0, false
+	}
+	if asIPv4 := parsed.To4(); asIPv4 != nil {
+		return int64(binary.BigEndian.Uint32(asIPv4)), true
+	}
+	asIPv6 := parsed.To16()
+	if asIPv6 == nil {
+		return 0, false
+	}
+	return int64(binary.BigEndian.Uint64(asIPv6[:8]) >> 1), true
 }
 
 func makeAccesoNivelUint16(accesoID int32, nivel uint8) uint16 {

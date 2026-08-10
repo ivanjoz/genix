@@ -5,7 +5,7 @@
   import Input from '$components/form/Input.svelte';
   import T from '$components/misc/T.svelte';
   import { Core, setLanguaje, tr } from '$core/store.svelte';
-  import { Env, type IApiEndpointOption } from '$core/env';
+  import { Env, lastLoginCompanyIDStorageKey, type IApiEndpointOption } from '$core/env';
   import { Notify } from '$libs/helpers';
   import { security } from '$libs/ui-runtime.svelte';
   import { getPublicCompanyName, sendUserLogin, type ILogin } from '$services/login';
@@ -90,14 +90,11 @@
     },
   ];
 
-  // Own key instead of the session's `genixCompanyID`: that one is wiped on logout, and the
-  // login form should still remember which tenant this browser last signed into.
-  const LAST_COMPANY_ID_STORAGE_KEY = 'genixLastLoginCompanyID';
   const DEFAULT_COMPANY_ID = 1;
 
   const readStoredCompanyID = () => {
     if (!browser) return DEFAULT_COMPANY_ID;
-    const storedCompanyID = Number(localStorage.getItem(LAST_COMPANY_ID_STORAGE_KEY));
+    const storedCompanyID = Number(localStorage.getItem(lastLoginCompanyIDStorageKey));
     return Number.isInteger(storedCompanyID) && storedCompanyID > 0 ? storedCompanyID : DEFAULT_COMPANY_ID;
   };
 
@@ -149,7 +146,7 @@
       return;
     }
 
-    if (browser) localStorage.setItem(LAST_COMPANY_ID_STORAGE_KEY, String(companyID));
+    if (browser) localStorage.setItem(lastLoginCompanyIDStorageKey, String(companyID));
 
     isCompanyLookupLoading = true;
     console.info('[WelcomeLogin] Looking up company:', companyID);
@@ -171,21 +168,23 @@
   };
 
   const submitLogin = async () => {
+    // The form is disabled while the request is in flight, but a queued Enter keypress could
+    // still reach this handler, so the guard is what actually prevents a duplicate POST.
+    if (isLoginLoading) return;
+
     if (loginForm.User.trim().length < 4 || loginForm.Password.length < 4 || !isValidCompanyID(loginForm.CompanyID)) {
       Notify.failure(tr('Please provide a valid username, password, and company ID.|Debe proporcionar un usuario, una contraseña y un ID de empresa válidos.'));
       return;
     }
 
     isLoginLoading = true;
-    Notify.info(tr('Sending credentials...|Enviando credenciales...'));
     console.info('[WelcomeLogin] Sending credentials to selected endpoint.');
+    // Only logged here: the HTTP client already shows the server's own message ("wrong user or
+    // password", …), so a second generic notification would just duplicate it.
     const result = await sendUserLogin(loginForm);
     isLoginLoading = false;
 
-    if (result.error) {
-      console.error('[WelcomeLogin] Login request failed:', result.error);
-      Notify.failure(tr('Login error|Error al iniciar sesión'));
-    }
+    if (result.error) console.error('[WelcomeLogin] Login request failed:', result.error);
   };
 
   const navigateToSection = (sectionID: string) => {
@@ -400,10 +399,11 @@
                     {#each apiEndpointOptions as apiEndpointOption}
                       <button
                         type="button"
-                        class="flex min-h-56 w-full items-center justify-start gap-8 rounded-[12px] border px-10 text-left text-sm transition focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet-300 {selectedApiEndpointRoute === apiEndpointOption.route
+                        class="flex min-h-56 w-full items-center justify-start gap-8 rounded-[12px] border px-10 text-left text-sm transition focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet-300 disabled:cursor-not-allowed disabled:opacity-60 {selectedApiEndpointRoute === apiEndpointOption.route
                           ? 'border-violet-300 bg-violet-500/35 text-white shadow-lg shadow-violet-950/20'
                           : 'border-white/20 bg-white/8 text-white/75 hover:border-white/40 hover:bg-white/15 hover:text-white'}"
                         aria-pressed={selectedApiEndpointRoute === apiEndpointOption.route}
+                        disabled={isLoginLoading}
                         onclick={() => onApiEndpointChange(apiEndpointOption)}
                       >
                         <i class="icon-[fa--server] shrink-0 -ml-1 -mr-1" aria-hidden="true"></i>
@@ -421,6 +421,7 @@
                   type="number"
                   css="welcome-login-field welcome-company-id-field"
                   inputCss="text-base"
+                  disabled={isLoginLoading}
                   onChange={() => { void lookupCompanyName(); }}
                 />
                 <div
@@ -436,8 +437,21 @@
                   {/if}
                 </div>
               </div>
-              <Input required={true} label="Username|Usuario" saveOn={loginForm} save="User" type="text" css="welcome-login-field" inputCss="text-base" />
-              <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" css="welcome-login-field" inputCss="text-base" />
+              <Input required={true} label="Username|Usuario" saveOn={loginForm} save="User" type="text" css="welcome-login-field" inputCss="text-base" disabled={isLoginLoading} />
+              {#if isLoginLoading}
+                <!-- Takes the password field's slot at its exact height so nothing shifts. -->
+                <div
+                  class="flex items-center justify-center gap-10 rounded-[12px] border border-white/20 bg-white/8 text-violet-100"
+                  style="height: var(--input-height)"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <i class="icon-[fa--refresh] animate-spin text-lg" aria-hidden="true"></i>
+                  <span class="text-sm"><T text="Signing in...|Ingresando..." /></span>
+                </div>
+              {:else}
+                <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" css="welcome-login-field" inputCss="text-base" />
+              {/if}
               <button
                 type="submit"
                 class="mt-4 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"

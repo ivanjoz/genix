@@ -120,6 +120,16 @@ export function getAccessEntriesByRouteMap(): Map<string, IAccessListCatalogEntr
 }
 
 export function getAccessEntriesForRoute(routeValue: string | undefined | null): IAccessListCatalogEntry[] {
-  const normalizedRoute = String(routeValue || "").trim().replace(/^\//, "")
-  return accessEntriesByRoute.get(normalizedRoute) || []
+  const routeSegments = String(routeValue || "").trim().replace(/^\//, "").split("/").filter(Boolean)
+
+  // Match by whole segments, longest first: "webpage-builder/gallery" beats "webpage-builder" for
+  // the gallery, and the page editor "/webpage-builder/<pageID>" still inherits "webpage-builder".
+  // Comparing segment by segment (and not by string prefix) keeps "finance/cash-banks" from
+  // swallowing "finance/cash-banks-movements".
+  for (let segmentCount = routeSegments.length; segmentCount > 0; segmentCount--) {
+    const matchedAccessEntries = accessEntriesByRoute.get(routeSegments.slice(0, segmentCount).join("/"))
+    if (matchedAccessEntries) { return matchedAccessEntries }
+  }
+
+  return []
 }

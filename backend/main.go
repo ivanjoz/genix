@@ -4,6 +4,7 @@ import (
 	"app/agent"
 	"app/business"
 	"app/core"
+	server_utils "app/core/server_utils"
 	"app/db"
 	"app/exec"
 	"context"
@@ -106,11 +107,12 @@ func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) core.MainResponse
 	}
 
 	args := core.HandlerArgs{
-		Body:    &request.Body,
-		Query:   request.QueryStringParameters,
-		Headers: request.Headers,
-		Route:   route,
-		Method:  request.RequestContext.HTTP.Method,
+		Body:     &request.Body,
+		Query:    request.QueryStringParameters,
+		Headers:  request.Headers,
+		Route:    route,
+		Method:   request.RequestContext.HTTP.Method,
+		ClientIP: request.RequestContext.HTTP.SourceIP,
 	}
 	return mainHandler(&args)
 }
@@ -173,10 +175,15 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 	}
 	body := string(bodyBytes)
 
+	clientIP := core.ClientIPFromRequest(request)
+	// Also fed to the log record, which reads it from the package global.
+	core.Env.REQ_IP = clientIP
+
 	args := core.HandlerArgs{
 		Body:           &body,
 		Method:         strings.ToUpper(request.Method),
 		Route:          request.URL.Path,
+		ClientIP:       clientIP,
 		ResponseWriter: &w,
 		ReqContext:     request,
 		StartTime:      time.Now().UnixMilli(),
@@ -280,8 +287,12 @@ func bootstrapCronSchedulers() {
 
 func main() {
 	core.PopulateVariables()
-	if err := core.ConfigureCreditRateLimiter(core.Env.RATE_LIMIT_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
-		panic("invalid credit rate limiter configuration: " + err.Error())
+	// One address, one secret, one connection: the credit limiter and the lock service share it
+	// and are told apart by the frame's opcode. The logger is pushed in because that package
+	// cannot import core (cycle), the same as text_search.
+	server_utils.SetLogger(core.Log)
+	if err := core.ConfigureServerUtils(core.Env.RATE_LIMIT_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
+		panic("invalid server-utils configuration: " + err.Error())
 	}
 	serverPort := resolveServerPort()
 	// Wire the GenixSearch endpoint before any DB write that might

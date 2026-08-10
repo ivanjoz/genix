@@ -364,7 +364,7 @@
 							{#snippet cellRenderer(record, column)}
 								{#if column.id === "movimientoUsuario"}
 									<RecordByIDText
-										apiRoute="usuarios-ids"
+										apiRoute="users-ids"
 										recordID={record.CreatedBy}
 										placeholder=""
 									/>
@@ -437,7 +437,7 @@
 							{#snippet cellRenderer(record, column)}
 								{#if column.id === "cuadreUsuario"}
 									<RecordByIDText
-										apiRoute="usuarios-ids"
+										apiRoute="users-ids"
 										recordID={record.CreatedBy}
 										placeholder=""
 									/>

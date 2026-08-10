@@ -5,7 +5,7 @@ export { postUser, postOwnUser } from '$services/services/users.svelte';
 export type { IUser, IProfile };
 
 export class UsuariosService extends GetHandler {
-  route = "usuarios"
+  route = "users"
   useCache = { min: 0.1, ver: 1 }
 
   usuarios: IUser[] = $state([])

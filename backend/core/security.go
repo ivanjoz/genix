@@ -154,12 +154,17 @@ type EnvStruct struct {
 	// back to 127.0.0.1:14446 when empty.
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
-	// RATE_LIMIT_ADDRESS is the Rust raw-TCP credit limiter endpoint.
+	// RATE_LIMIT_ADDRESS is the Rust raw-TCP server-utils endpoint: the credit limiter and the
+	// lock service share it, routed by opcode.
 	RATE_LIMIT_ADDRESS               string
 	RATE_LIMIT_COMPANY_CPU_24H       uint64
 	RATE_LIMIT_COMPANY_INFERENCE_24H uint64
 	RATE_LIMIT_USER_CPU_24H          uint64
 	RATE_LIMIT_USER_INFERENCE_24H    uint64
+	// Public registration is unauthenticated and skips the credit limiter, so the only platform
+	// brake is how many distinct emails one client IP may register within a window.
+	SIGNUP_MAX_EMAILS_PER_IP int32
+	SIGNUP_WINDOW_MINUTES    int32
 }
 
 // fileConfig refleja la forma por secciones de config.toml. Sólo existe para el parseo:
@@ -236,6 +241,11 @@ type fileConfig struct {
 		UserInference24h    uint64 `toml:"user_inference_24h"`
 	} `toml:"rate_limit"`
 
+	SignUp struct {
+		MaxEmailsPerIP int32 `toml:"max_emails_per_ip"`
+		WindowMinutes  int32 `toml:"window_minutes"`
+	} `toml:"sign_up"`
+
 	Search struct {
 		URL      string `toml:"url"`
 		Password string `toml:"password"`
@@ -304,6 +314,8 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.RATE_LIMIT_COMPANY_INFERENCE_24H = file.RateLimit.CompanyInference24h
 	env.RATE_LIMIT_USER_CPU_24H = file.RateLimit.UserCPU24h
 	env.RATE_LIMIT_USER_INFERENCE_24H = file.RateLimit.UserInference24h
+	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
+	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 
 	env.GENIXSEARCH_URL = file.Search.URL
 	env.GENIXSEARCH_PASSWORD = file.Search.Password
@@ -417,6 +429,24 @@ func PopulateVariables() {
 	Env.RATE_LIMIT_ADDRESS = strings.TrimSpace(Env.RATE_LIMIT_ADDRESS)
 	if Env.RATE_LIMIT_ADDRESS == "" {
 		Env.RATE_LIMIT_ADDRESS = "127.0.0.1:14013"
+	}
+	// Public registration must never be unlimited by omission, so an absent or nonsensical
+	// setting falls back to the documented defaults instead of to zero.
+	if signUpMax := strings.TrimSpace(os.Getenv("SIGNUP_MAX_EMAILS_PER_IP")); signUpMax != "" {
+		if parsed, err := strconv.Atoi(signUpMax); err == nil {
+			Env.SIGNUP_MAX_EMAILS_PER_IP = int32(parsed)
+		}
+	}
+	if signUpWindow := strings.TrimSpace(os.Getenv("SIGNUP_WINDOW_MINUTES")); signUpWindow != "" {
+		if parsed, err := strconv.Atoi(signUpWindow); err == nil {
+			Env.SIGNUP_WINDOW_MINUTES = int32(parsed)
+		}
+	}
+	if Env.SIGNUP_MAX_EMAILS_PER_IP <= 0 {
+		Env.SIGNUP_MAX_EMAILS_PER_IP = 5
+	}
+	if Env.SIGNUP_WINDOW_MINUTES <= 0 {
+		Env.SIGNUP_WINDOW_MINUTES = 20
 	}
 	// Mirror the limiter's environment precedence so displayed quotas cannot drift from enforcement.
 	applyRateLimitUint32Override("RATE_LIMIT_COMPANY_CPU_24H", &Env.RATE_LIMIT_COMPANY_CPU_24H)

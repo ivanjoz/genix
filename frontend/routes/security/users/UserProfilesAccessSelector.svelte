@@ -151,7 +151,7 @@
           {/if}
           {#if selectedProfileAccessSummary.editableAccessNames.length > 0}
             <div class="_selected-profile-row">
-              <i class="icon-[fa--pencil] _selected-profile-icon pt-2 text-red-600"></i>
+              <i class="icon-[fa--pencil] _selected-profile-icon _selected-profile-icon-edit pt-2 text-red-600"></i>
               <span class="text-sm">{selectedProfileAccessSummary.editableAccessNames.join(', ')}</span>
             </div>
           {/if}
@@ -215,9 +215,19 @@
   }
 
   ._selected-profile-icon {
+    flex: 0 0 auto;
+    height: 16px;
     margin-top: 1px;
     margin-right: -2px;
     margin-left: -2px;
+    width: 16px;
+  }
+
+  ._selected-profile-icon-edit {
+    height: 15px;
+    margin-left: 0;
+    margin-right: 0;
+    width: 15px;
   }
 
   ._selected-chip-access {

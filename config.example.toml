@@ -47,6 +47,11 @@ flush_seconds         = 15
 frame_timeout_seconds = 30
 max_connections       = 1024
 shards                = 0      # 0 = logical CPU count
+# Peticiones simultáneas que una sola conexión puede tener en vuelo. Con una petición
+# por socket el propio socket era el techo; al multiplexar ese freno desaparece, así que
+# hay que declararlo: sin él un cliente autenticado podría lanzar tareas y encolar
+# respuestas sin límite. Al superarlo se responde "no disponible", no se encola.
+max_inflight_per_connection = 64
 
 # Whole-company limits. CPU and inference credits are independent.
 company_cpu_10s        = 2000
@@ -63,6 +68,25 @@ user_cpu_1h            = 20000
 user_inference_1h      = 5000
 user_cpu_24h           = 100000
 user_inference_24h     = 10000
+
+# ─── Lock service (server_utils/) ──────────────────────────────────────────
+# Mismo proceso y mismo puerto que [rate_limit]; el opcode del frame decide el
+# servicio. Aquí sólo hay techos de proceso: qué acción bloquea qué, y con qué
+# cola y arrendamiento, lo deciden los call sites de Go. Eso es lo que mantiene
+# el servicio genérico — la clave es (action:u16, identifier:i64) y el demonio
+# no interpreta ninguno de los dos.
+[lock]
+max_keys          = 100000   # claves vivas antes de responder "capacidad"
+max_total_waiters = 4096     # esperas encoladas en total
+max_lease_ms      = 60000    # techo aplicado al arrendamiento que pide el cliente
+
+# ─── Registro público de empresas ──────────────────────────────────────────
+# Estos endpoints no llevan token, así que nunca pasan por el credit limiter:
+# este es su único freno de plataforma. Se cuentan direcciones DISTINTAS, de
+# modo que reintentar el mismo correo no consume presupuesto.
+[sign_up]
+max_emails_per_ip = 5    # por IPv4, o por prefijo /63 en IPv6
+window_minutes    = 20
 
 # ─── AWS ────────────────────────────────────────────────────────────────────
 [aws]

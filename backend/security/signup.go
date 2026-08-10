@@ -7,8 +7,10 @@ import (
 	coretypes "app/core/types"
 	"app/db"
 	"app/security/types"
+	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -153,6 +155,39 @@ func findLatestSignUpRequestByEmail(email string) (*types.SignUpRequest, error) 
 	return latestRequest, nil
 }
 
+// countRecentEmailsFromIP returns how many distinct addresses this client has already asked to
+// register inside the window, and whether the address at hand is one of them. Retrying the same
+// email must not consume budget — the resend cooldown already governs that — so only a genuinely
+// new address is measured against the ceiling.
+//
+// Correct only while the caller holds the per-IP lock: without it, parallel Lambdas all read the
+// same count, all conclude they are under the limit, and all insert.
+func countRecentEmailsFromIP(ipKey int64, email string) (int32, bool, error) {
+	windowStart := core.SUnixTime() - (core.Env.SIGNUP_WINDOW_MINUTES * 30) // 1 SUnixTime unit = 2s
+	distinctEmails := map[string]bool{}
+	emailAlreadyUsed := false
+
+	for _, weekCode := range signUpSearchWeekCodes() {
+		requests := []types.SignUpRequest{}
+		query := db.Query(&requests)
+		query.WeekCode.Equals(weekCode).IP.Equals(ipKey)
+		if err := query.Exec(); err != nil {
+			return 0, false, err
+		}
+		for index := range requests {
+			if requests[index].Created < windowStart {
+				continue
+			}
+			distinctEmails[requests[index].Email] = true
+			if requests[index].Email == email {
+				emailAlreadyUsed = true
+			}
+		}
+	}
+
+	return int32(len(distinctEmails)), emailAlreadyUsed, nil
+}
+
 // companyExistsWithEmail enforces "one company per email". The lookup rides on the global index
 // declared on Company.Email; companies have no tenant partition, so it cannot be a local one.
 func companyExistsWithEmail(email string) (bool, error) {
@@ -248,6 +283,46 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El registro público no está configurado: falta app_url en config.toml.")
 	}
 
+	ipKey, hasClientIP := req.ClientIPKey()
+	if !hasClientIP {
+		return req.MakeErr("No se pudo determinar el origen de la solicitud.")
+	}
+
+	// Everything below reads the state of this IP and then writes to it, so it has to run one
+	// caller at a time. The queue is deliberately shallow: parallel requests from one IP are the
+	// abuse pattern, so refusing the extras fast is the wanted behavior, not a degradation.
+	//
+	// Lease must outlast the whole critical section, SMTP included, or the daemon hands the key
+	// to the next caller while this one is still working — the exact race the lock exists to
+	// prevent. Worst case here is core.SendEmail's 4s connect + 6s send plus the queries, so 30s
+	// is roughly triple the bound. Raising the mailer timeouts means raising this.
+	signUpLock, err := core.AcquireLock(context.Background(), core.ActionSignUpByIP, ipKey, core.LockOptions{
+		MaxWaiters: 2,
+		Wait:       5 * time.Second,
+		Lease:      30 * time.Second,
+	})
+	if err != nil {
+		if errors.Is(err, core.ErrLockBusy) {
+			return req.MakeErrCode("Demasiadas solicitudes simultáneas. Intente nuevamente.", 429)
+		}
+		// Fails closed, unlike the credit limiter: with the daemon down this endpoint would be an
+		// open relay for verification emails, and registration is on nobody's critical path.
+		core.Log("lock service unavailable, refusing sign-up::", err)
+		return req.MakeErrCode("El servicio de registro no está disponible.", 503)
+	}
+	defer signUpLock.Release()
+
+	recentEmails, emailAlreadyUsed, err := countRecentEmailsFromIP(ipKey, email)
+	if err != nil {
+		return req.MakeErr("Error al verificar el origen de la solicitud.", err)
+	}
+	if !emailAlreadyUsed && recentEmails >= core.Env.SIGNUP_MAX_EMAILS_PER_IP {
+		core.Log("PostSignUpRequest:: límite por IP alcanzado", ipKey, recentEmails)
+		return req.MakeErrCode(fmt.Sprintf(
+			"Se alcanzó el máximo de %d registros por %d minutos desde esta conexión.",
+			core.Env.SIGNUP_MAX_EMAILS_PER_IP, core.Env.SIGNUP_WINDOW_MINUTES), 429)
+	}
+
 	companyExists, err := companyExistsWithEmail(email)
 	if err != nil {
 		return req.MakeErr("Error al verificar el correo electrónico.", err)
@@ -325,6 +400,7 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 		ID:       requestID,
 		Email:    email,
 		Code:     code,
+		IP:       ipKey,
 		Created:  nowTime,
 		LastSent: nowTime,
 		Updated:  nowTime,

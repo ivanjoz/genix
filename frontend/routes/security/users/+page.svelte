@@ -185,7 +185,7 @@ const { Loading } = pkg
   async function saveUsuario(isDelete?: boolean) {
     const form = usuarioForm
 
-    if ((form.Usuario?.length || 0) < 4 || (form.FirstName?.length || 0) < 4) {
+    if ((form.User?.length || 0) < 4 || (form.FirstName?.length || 0) < 4) {
       Notify.failure(tr("Username and first name must be at least 4 characters.|El usuario y el nombre deben tener al menos 4 caracteres."))
       return
     }
@@ -242,7 +242,7 @@ const { Loading } = pkg
       id: "usuario_info",
       header: "Username|Usuario", highlight: true,
       css: "px-8 py-6 align-top",
-      getValue: e => e.Usuario
+      getValue: e => e.User
     },
     {
       id: "usuario_accesos", headerCss: "w-[47%]",
@@ -295,7 +295,7 @@ const { Loading } = pkg
         maxHeight="calc(80vh - 13rem)"
         estimateSize={72}
         filterText={filterText}
-        getFilterContent={e => [e.Usuario, e.FirstName, e.LastName, e.Email].filter(x => x).join(" ").toLowerCase()}
+        getFilterContent={e => [e.User, e.FirstName, e.LastName, e.Email].filter(x => x).join(" ").toLowerCase()}
         selected={usuarioForm?.ID}
         isSelected={(usuarioRecord, selectedUsuarioID) => usuarioRecord.ID === selectedUsuarioID}
         onRowClick={(selectedUsuario) => {
@@ -306,7 +306,7 @@ const { Loading } = pkg
           {#if columnDefinition.id === "usuario_info"}
             <div class="_usuario-info-cell">
               <div class="_usuario-info-name ff-semibold">{usuarioRecord.FirstName} {usuarioRecord.LastName || ""}</div>
-              <div class="_usuario-info-login">{usuarioRecord.Usuario}</div>
+              <div class="_usuario-info-login">{usuarioRecord.User}</div>
             </div>
           {:else if columnDefinition.id === "usuario_accesos"}
             {@const usuarioAccessSummary = summarizeUsuarioAccesses(usuarioRecord)}
@@ -341,7 +341,7 @@ const { Loading } = pkg
     <div class="grid grid-cols-24 gap-10 mt-8" aria-label="User form with username, names, email, profiles, and password">
       <Input
         bind:saveOn={usuarioForm}
-        save="Usuario"
+        save="User"
         css="col-span-24 md:col-span-12"
         label="Username|Usuario"
         required={true}

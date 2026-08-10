@@ -157,16 +157,23 @@ El correo lleva el código de 8 dígitos **y** el link
 ## 5. Nota de seguridad (importante)
 
 `backend/main-handlers.go:194` y `:213` saltan el rate limiter cuando la ruta es pública, y
-`:126` salta la validación de usuario. Es decir: **estos tres endpoints no tienen throttle de
-plataforma**. Los frenos quedan dentro de los handlers:
+`:126` salta la validación de usuario. Es decir: **estos tres endpoints no pasan por el limiter
+de créditos**. Los frenos quedan dentro de los handlers:
 
+- un máximo de direcciones distintas por IP en una ventana (`[sign_up]` en `config.toml`,
+  5 por 20 minutos por defecto), contado bajo el lock por IP del server-utils. El lock es lo que
+  hace correcto ese conteo: sin él, N Lambdas paralelas leen la misma cuenta, todas concluyen que
+  están bajo el límite y todas insertan. Ver `server_utils/PLAN_LOCK_SERVICE.md`;
 - una sola solicitud viva por email (bloquea el spam de correos);
 - máximo 5 intentos de código por solicitud;
 - crear empresa exige un código verificado, así que no se puede crear empresas en masa sin
   controlar un buzón.
 
-Es suficiente para pre-alpha. Si más adelante quieres un límite por IP, el sitio natural es
-`main-handlers.go` con una excepción para rutas `p-signup-*`.
+La IP se resuelve desde `X-Real-IP` (que pone el propio Nginx desde `$remote_addr`), **nunca**
+desde `X-Forwarded-For`: `configure_server.py` la arma con `$proxy_add_x_forwarded_for`, que
+*añade*, así que un valor enviado por el cliente quedaría primero y el límite sería evitable con
+una cabecera. En IPv6 la clave es el prefijo, no la dirección: un cliente doméstico recibe un /64
+entero.
 
 ---
 

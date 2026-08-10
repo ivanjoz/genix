@@ -82,6 +82,27 @@ class BridgeNginxTemplateTest(unittest.TestCase):
         # Streaming still has to work over plain HTTP.
         self.assertIn("proxy_buffering off;", rendered_config)
 
+    def test_quic_is_omitted_when_nginx_cannot_speak_it(self):
+        """An Nginx without http_v3_module cannot parse `listen ... quic`, and nginx -t covers
+        the whole host, so emitting it would break every other site rather than this one."""
+        configure_server_utils = load_configure_server_utils_module()
+
+        with redirect_stdout(io.StringIO()):
+            rendered_config = configure_server_utils.build_bridge_nginx_configuration(
+                "genix-sse.un.pe",
+                14012,
+                "ssl_certificate /c/fullchain.pem;\nssl_certificate_key /c/privkey.pem;\n",
+                http3_is_supported=False,
+            )
+
+        self.assertNotIn("quic", rendered_config)
+        # Advertising h3 without a QUIC listener points browsers at a port nothing answers on.
+        self.assertNotIn("Alt-Svc", rendered_config)
+        # TLS itself must still be configured.
+        self.assertIn("listen 443 ssl;", rendered_config)
+        self.assertIn("ssl_certificate /c/fullchain.pem;", rendered_config)
+        self.assertIn("proxy_pass http://127.0.0.1:14012;", rendered_config)
+
     def test_reuseport_owner_is_found_in_any_nginx_configuration_file(self):
         configure_server_utils = load_configure_server_utils_module()
 
@@ -196,6 +217,18 @@ class UnitAndBinaryTest(unittest.TestCase):
         # The unit is world-readable, so neither secret may be exported here.
         self.assertNotIn("Environment=SECRET_PHRASE=", unit_contents)
         self.assertNotIn("Environment=INTERNAL_APIKEY=", unit_contents)
+
+    def test_service_unit_raises_the_file_descriptor_limit(self):
+        """systemd defaults the soft limit to 1024, which is below the daemon's own
+        max_connections of 1024 once the ScyllaDB session, both listeners and every open SSE
+        stream are counted: it would hit EMFILE before its configured ceiling."""
+        configure_server_utils = load_configure_server_utils_module()
+
+        service_contents = configure_server_utils.build_service_contents(
+            "genix", Path("/repo/config.toml"), 14012
+        )
+
+        self.assertIn("LimitNOFILE=65536", service_contents)
 
     def test_restart_watcher_units_target_the_merged_service(self):
         configure_server_utils = load_configure_server_utils_module()

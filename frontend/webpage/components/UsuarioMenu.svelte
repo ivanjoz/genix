@@ -68,7 +68,7 @@
         <div class="flex flex-col gap-6">
           <div class="flex flex-col">
             <span class="text-gray-500 text-sm">Nombre Completo</span>
-            <span class="ff-semibold">{(userInfo?.FirstName ? (userInfo.FirstName + " " + (userInfo.LastName || "")) : userInfo?.Usuario) || "Usuario Invitado"}</span>
+            <span class="ff-semibold">{(userInfo?.FirstName ? (userInfo.FirstName + " " + (userInfo.LastName || "")) : userInfo?.User) || "Usuario Invitado"}</span>
           </div>
           <div class="flex flex-col">
             <span class="text-gray-500 text-sm">Correo Electrónico</span>

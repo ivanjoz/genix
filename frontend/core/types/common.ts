@@ -4,7 +4,7 @@ export interface IUser {
   FirstName: string;
   LastName: string;
   Email: string;
-  Usuario: string;
+  User: string;
   DocumentNumber: string;
   JobTitle: string;
   ProfileIDs: number[];

@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"time"
 
 	mail "github.com/xhit/go-simple-mail/v2"
 )
@@ -26,6 +27,11 @@ func SendEmail(toAddress string, subject string, htmlBody string) error {
 	server.Username = Env.SMTP_USER
 	server.Password = Env.SMTP_PASSWORD
 	server.Encryption = mail.EncryptionSTARTTLS
+	// The library defaults to 10s + 10s, which lets one hung mail server stall a caller for ~20s.
+	// Sign-up sends this while holding the per-IP lock, so the bound here is what keeps the
+	// critical section under the lock's lease; raising these means raising that lease too.
+	server.ConnectTimeout = 4 * time.Second
+	server.SendTimeout = 6 * time.Second
 
 	smtpClient, err := server.Connect()
 	if err != nil {

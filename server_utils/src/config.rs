@@ -5,12 +5,23 @@ use std::{env, fs, net::SocketAddr, path::PathBuf, time::Duration};
 use anyhow::{Context, Result, bail};
 use toml::{Table, Value};
 
-use crate::limiter::quota::{CreditLimits, LimitPolicy, ScopeLimits};
+use crate::{
+    limiter::quota::{CreditLimits, LimitPolicy, ScopeLimits},
+    lock::registry::LockLimits,
+};
 
 const DEFAULT_LISTEN_ADDRESS: &str = "127.0.0.1:14013";
 const DEFAULT_FLUSH_SECONDS: u64 = 15;
 const DEFAULT_FRAME_TIMEOUT_SECONDS: u64 = 30;
 const DEFAULT_MAX_CONNECTIONS: usize = 1_024;
+/// Requests one connection may have in flight at once. With one request per socket the socket
+/// itself was the ceiling; multiplexing removes that, so it has to be stated.
+const DEFAULT_MAX_INFLIGHT_PER_CONNECTION: usize = 64;
+const DEFAULT_LOCK_MAX_KEYS: usize = 100_000;
+const DEFAULT_LOCK_MAX_TOTAL_WAITERS: u64 = 4_096;
+/// The wire carries the lease as a `u16` of milliseconds, so no ceiling above 65_535 is
+/// reachable in the first place.
+const DEFAULT_LOCK_MAX_LEASE_MS: u64 = 60_000;
 /// Keeps the bridge next to the other Genix services on the same hosts (14008 ScyllaDB,
 /// 14010 backend, 14013 this process's rate limiter, 14446 GenixSearch).
 const DEFAULT_BRIDGE_PORT: u16 = 14012;
@@ -30,6 +41,7 @@ pub struct AppConfig {
     pub flush_interval: Duration,
     pub frame_timeout: Duration,
     pub max_connections: usize,
+    pub max_inflight_per_connection: usize,
     pub shard_count: usize,
     /// Signs the browser session tokens the SSE bridge verifies. Nothing else reads it.
     pub secret_phrase: Vec<u8>,
@@ -39,6 +51,9 @@ pub struct AppConfig {
     pub internal_apikey: Vec<u8>,
     pub database: DatabaseConfig,
     pub policy: LimitPolicy,
+    /// Process-wide ceilings for the lock service. Per-action policy is deliberately absent:
+    /// that belongs to the Go call sites, which is what keeps this service generic.
+    pub locks: LockLimits,
     pub bridge: BridgeConfig,
 }
 
@@ -86,8 +101,19 @@ impl AppConfig {
             configured_shards
         };
 
-        if flush_seconds == 0 || frame_timeout_seconds == 0 || max_connections == 0 {
-            bail!("rate-limiter durations and connection limit must be positive");
+        let max_inflight_per_connection = optional_usize(
+            &config,
+            "RATE_LIMIT_MAX_INFLIGHT_PER_CONNECTION",
+            "rate_limit.max_inflight_per_connection",
+        )?
+        .unwrap_or(DEFAULT_MAX_INFLIGHT_PER_CONNECTION);
+
+        if flush_seconds == 0
+            || frame_timeout_seconds == 0
+            || max_connections == 0
+            || max_inflight_per_connection == 0
+        {
+            bail!("rate-limiter durations and connection limits must be positive");
         }
 
         let policy = LimitPolicy {
@@ -95,6 +121,26 @@ impl AppConfig {
             user: load_scope_limits(&config, "USER", "user")?,
         };
         validate_policy(policy)?;
+
+        let lock_max_keys = optional_usize(&config, "LOCK_MAX_KEYS", "lock.max_keys")?
+            .unwrap_or(DEFAULT_LOCK_MAX_KEYS);
+        let lock_max_total_waiters = optional_u64(
+            &config,
+            "LOCK_MAX_TOTAL_WAITERS",
+            "lock.max_total_waiters",
+        )?
+        .unwrap_or(DEFAULT_LOCK_MAX_TOTAL_WAITERS);
+        let lock_max_lease_ms = optional_u64(&config, "LOCK_MAX_LEASE_MS", "lock.max_lease_ms")?
+            .unwrap_or(DEFAULT_LOCK_MAX_LEASE_MS);
+        if lock_max_keys == 0 || lock_max_total_waiters == 0 || lock_max_lease_ms == 0 {
+            bail!("lock ceilings must be positive");
+        }
+        let locks = LockLimits {
+            max_keys: lock_max_keys,
+            max_total_waiters: u32::try_from(lock_max_total_waiters)
+                .context("lock.max_total_waiters must fit in uint32")?,
+            max_lease: Duration::from_millis(lock_max_lease_ms),
+        };
 
         let bridge_port = optional_u64(&config, "SSE_BRIDGE_PORT", "sse_bridge.port")?
             .map(|port| {
@@ -111,6 +157,7 @@ impl AppConfig {
             flush_interval: Duration::from_secs(flush_seconds),
             frame_timeout: Duration::from_secs(frame_timeout_seconds),
             max_connections,
+            max_inflight_per_connection,
             shard_count,
             secret_phrase: required_string(&config, "SECRET_PHRASE", "secret_phrase")?.into_bytes(),
             internal_apikey: required_string(&config, "INTERNAL_APIKEY", "internal_apikey")?
@@ -128,6 +175,7 @@ impl AppConfig {
                 password: required_string(&config, "DB_PASSWORD", "db.password")?,
             },
             policy,
+            locks,
         })
     }
 }

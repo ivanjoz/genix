@@ -12,7 +12,9 @@ use anyhow::{Context, Result};
 use genix_server_utils::{
     bridge::{self, channel::ChannelRegistry, http::BridgeState},
     config::AppConfig,
-    limiter::{quota::RateLimiter, server, storage::ScyllaUsageStore},
+    limiter::{quota::RateLimiter, storage::ScyllaUsageStore},
+    lock::registry::LockRegistry,
+    service::server,
 };
 use tokio::{net::TcpListener, sync::watch, time::MissedTickBehavior};
 use tracing::{error, info};
@@ -33,6 +35,9 @@ async fn main() -> Result<()> {
             .context("rate-limiter storage initialization failed")?,
     );
     let limiter = Arc::new(RateLimiter::new(config.shard_count, config.policy, store));
+    // Purely in-memory, unlike the limiter: locks are not loaded from anywhere and do not
+    // survive a restart.
+    let locks = Arc::new(LockRegistry::new(config.shard_count, config.locks));
     let listener = TcpListener::bind(config.listen_address)
         .await
         .with_context(|| format!("failed to bind {}", config.listen_address))?;
@@ -70,9 +75,11 @@ async fn main() -> Result<()> {
     let server_task = tokio::spawn(server::run(
         listener,
         limiter.clone(),
+        locks,
         internal_apikey.clone(),
         config.frame_timeout,
         config.max_connections,
+        config.max_inflight_per_connection,
         shutdown_receiver.clone(),
     ));
 

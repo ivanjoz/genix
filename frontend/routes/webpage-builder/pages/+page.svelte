@@ -47,7 +47,7 @@ import { useUI } from '@genix/ui';
   const updatedByName = (page: IWebpage) => {
     if (!page.UpdatedBy) return '';
     const user = usuarios.usuariosMap.get(page.UpdatedBy);
-    return user ? `${user.FirstName} ${user.LastName}`.trim() || user.Usuario : `User-${page.UpdatedBy}`;
+    return user ? `${user.FirstName} ${user.LastName}`.trim() || user.User : `User-${page.UpdatedBy}`;
   };
 
   const statusLabel = (status: number) =>

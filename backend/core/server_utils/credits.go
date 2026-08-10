@@ -1,33 +1,24 @@
-package core
+package server_utils
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"strings"
-	"sync"
 	"time"
 )
 
 const (
-	creditRateLimitFrameSize   = 19
-	creditRateLimitPayloadSize = 11
-	creditRateLimitNonceSize   = 8
-	creditRateLimitDomain      = "genix-rate-limiter:v1"
-	creditBlockBytes           = 8 * 1024
-	apiGroupSmallBytes         = 32 * 1024
-	apiGroupMediumBytes        = 256 * 1024
+	// Opcode 0x01: [opcode][company:u24][user:u24][group:u8][cpu:u16][inference:u16][hmac:8].
+	creditChargePayloadSize = 11
+
+	creditBlockBytes    = 8 * 1024
+	apiGroupSmallBytes  = 32 * 1024
+	apiGroupMediumBytes = 256 * 1024
 )
 
-var (
-	configuredCreditLimiterMu sync.RWMutex
-	configuredCreditLimiter   *CreditRateLimiterClient
-	ErrCreditLimiterMissing   = errors.New("credit rate limiter is not configured")
-)
+var ErrCreditLimiterMissing = errors.New("credit rate limiter is not configured")
 
 // CreditLimitExceeded is the authenticated one-byte rejection returned by the Rust service.
 type CreditLimitExceeded struct {
@@ -44,51 +35,6 @@ func (limit *CreditLimitExceeded) Error() string {
 		scope = "company"
 	}
 	return fmt.Sprintf("%s %s credit limit exhausted (code=%d)", scope, limit.Window, limit.Code)
-}
-
-// CreditRateLimiterClient serializes frames on one persistent sequence-bound TCP connection.
-type CreditRateLimiterClient struct {
-	address  string
-	secret   []byte
-	mu       sync.Mutex
-	conn     net.Conn
-	nonce    [creditRateLimitNonceSize]byte
-	sequence uint64
-}
-
-// NewCreditRateLimiterClient validates immutable connection settings without dialing eagerly.
-func NewCreditRateLimiterClient(address, secret string) (*CreditRateLimiterClient, error) {
-	address = strings.TrimSpace(address)
-	if address == "" {
-		return nil, errors.New("rate_limit.address is required")
-	}
-	if strings.TrimSpace(secret) == "" {
-		return nil, errors.New("secret_phrase is required by the credit rate limiter")
-	}
-	return &CreditRateLimiterClient{address: address, secret: []byte(secret)}, nil
-}
-
-// ConfigureCreditRateLimiter installs the process-wide client used by API and inference calls.
-func ConfigureCreditRateLimiter(address, secret string) error {
-	client, err := NewCreditRateLimiterClient(address, secret)
-	if err != nil {
-		return err
-	}
-	configuredCreditLimiterMu.Lock()
-	previousClient := configuredCreditLimiter
-	configuredCreditLimiter = client
-	configuredCreditLimiterMu.Unlock()
-	if previousClient != nil {
-		previousClient.Close()
-	}
-	return nil
-}
-
-// Close drops the current connection; the next charge reconnects with a fresh nonce and sequence.
-func (client *CreditRateLimiterClient) Close() {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	client.closeConnection()
 }
 
 // APIGroup assigns GET groups 0..2 and POST groups 3..5 from uncompressed payload bytes.
@@ -209,18 +155,6 @@ func IsCreditRateLimitError(err error) bool {
 		strings.Contains(err.Error(), "credit rate limiter")
 }
 
-// MakeCreditRateLimitResponse maps the TCP decision to a stable HTTP error and diagnostic header.
-func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
-	var exceeded *CreditLimitExceeded
-	if errors.As(err, &exceeded) {
-		response := req.MakeErrCode("Límite de créditos agotado.", 429)
-		response.Headers["X-Rate-Limit-Code"] = fmt.Sprint(exceeded.Code)
-		return response
-	}
-	Log("credit rate limiter unavailable::", err)
-	return req.MakeErrCode("El servicio de límites de crédito no está disponible.", 503)
-}
-
 // chargeConfiguredCredits fails open: only an authenticated CreditLimitExceeded
 // violation blocks the caller. Any unavailability (unconfigured client, dial
 // timeout, connection reset, etc.) is logged and treated as an allowed charge,
@@ -231,11 +165,9 @@ func chargeConfiguredCredits(
 	apiGroup uint8,
 	cpuCredits, inferenceCredits uint16,
 ) error {
-	configuredCreditLimiterMu.RLock()
-	client := configuredCreditLimiter
-	configuredCreditLimiterMu.RUnlock()
+	client := serverUtils()
 	if client == nil {
-		Log("credit rate limiter not configured, allowing request::", ErrCreditLimiterMissing)
+		logLine("credit rate limiter not configured, allowing request::", ErrCreditLimiterMissing)
 		return nil
 	}
 	err := client.Charge(ctx, companyID, userID, apiGroup, cpuCredits, inferenceCredits)
@@ -246,12 +178,12 @@ func chargeConfiguredCredits(
 	if errors.As(err, &exceeded) {
 		return err
 	}
-	Log("credit rate limiter unavailable, allowing request::", err)
+	logLine("credit rate limiter unavailable, allowing request::", err)
 	return nil
 }
 
-// Charge sends one authenticated frame and returns nil only for response byte zero.
-func (client *CreditRateLimiterClient) Charge(
+// Charge sends one authenticated frame and returns nil only for status zero.
+func (client *ServerUtilsClient) Charge(
 	ctx context.Context,
 	companyID, userID int32,
 	apiGroup uint8,
@@ -266,116 +198,42 @@ func (client *CreditRateLimiterClient) Charge(
 	if cpuCredits == 0 && inferenceCredits == 0 {
 		return errors.New("at least one credit amount must be positive")
 	}
-	client.mu.Lock()
-	defer client.mu.Unlock()
 
-	if err := client.ensureConnected(ctx); err != nil {
-		return fmt.Errorf("credit rate limiter connect: %w", err)
-	}
-	frame := client.makeFrame(companyID, userID, apiGroup, cpuCredits, inferenceCredits)
-	if err := client.conn.SetDeadline(connectionDeadline(ctx)); err != nil {
-		client.closeConnection()
-		return fmt.Errorf("credit rate limiter deadline: %w", err)
-	}
-	// Never retry after writing: the server may have charged a frame whose response was lost.
-	if err := writeCompleteFrame(client.conn, frame[:]); err != nil {
-		client.closeConnection()
-		return fmt.Errorf("credit rate limiter write: %w", err)
-	}
-	response := []byte{0}
-	if _, err := io.ReadFull(client.conn, response); err != nil {
-		client.closeConnection()
-		return fmt.Errorf("credit rate limiter response: %w", err)
-	}
-	if client.sequence == ^uint64(0) {
-		// The server cannot advance past this response either, so force a fresh nonce next time.
-		client.closeConnection()
-	} else {
-		client.sequence++
-	}
-	if response[0] == 0 {
-		return nil
-	}
-	violation, err := decodeCreditLimitResponse(response[0])
-	if err != nil {
-		client.closeConnection()
-		return err
-	}
-	return violation
-}
+	payload := make([]byte, creditChargePayloadSize)
+	writeUint24(payload[0:3], uint32(companyID))
+	writeUint24(payload[3:6], uint32(userID))
+	payload[6] = apiGroup
+	binary.BigEndian.PutUint16(payload[7:9], cpuCredits)
+	binary.BigEndian.PutUint16(payload[9:11], inferenceCredits)
 
-func (client *CreditRateLimiterClient) ensureConnected(ctx context.Context) error {
-	if client.conn != nil {
-		return nil
-	}
-	dialer := net.Dialer{Timeout: 2 * time.Second, KeepAlive: 30 * time.Second}
-	connection, err := dialer.DialContext(ctx, "tcp", client.address)
+	// A charge is answered without queueing, so it needs no patience beyond the round trip.
+	reply, _, err := client.request(ctx, opcodeChargeCredits, payload, chargeWait(ctx), 0, 0)
 	if err != nil {
 		return err
 	}
-	if err := connection.SetDeadline(connectionDeadline(ctx)); err != nil {
-		connection.Close()
-		return err
+	if reply.status == 0 {
+		return nil
 	}
-	if _, err := io.ReadFull(connection, client.nonce[:]); err != nil {
-		connection.Close()
-		return fmt.Errorf("read server nonce: %w", err)
-	}
-	client.conn = connection
-	client.sequence = 0
-	return nil
+	return decodeCreditLimitResponse(reply.status)
 }
 
-func (client *CreditRateLimiterClient) makeFrame(
-	companyID, userID int32,
-	apiGroup uint8,
-	cpuCredits, inferenceCredits uint16,
-) [creditRateLimitFrameSize]byte {
-	frame := [creditRateLimitFrameSize]byte{}
-	writeUint24(frame[0:3], uint32(companyID))
-	writeUint24(frame[3:6], uint32(userID))
-	frame[6] = apiGroup
-	frame[7], frame[8] = byte(cpuCredits>>8), byte(cpuCredits)
-	frame[9], frame[10] = byte(inferenceCredits>>8), byte(inferenceCredits)
-	mac := hmac.New(sha256.New, client.secret)
-	mac.Write([]byte(creditRateLimitDomain))
-	mac.Write(client.nonce[:])
-	sequenceBytes := [8]byte{
-		byte(client.sequence >> 56), byte(client.sequence >> 48), byte(client.sequence >> 40),
-		byte(client.sequence >> 32), byte(client.sequence >> 24), byte(client.sequence >> 16),
-		byte(client.sequence >> 8), byte(client.sequence),
-	}
-	mac.Write(sequenceBytes[:])
-	mac.Write(frame[:creditRateLimitPayloadSize])
-	copy(frame[creditRateLimitPayloadSize:], mac.Sum(nil)[:8])
-	return frame
-}
-
-func (client *CreditRateLimiterClient) closeConnection() {
-	if client.conn != nil {
-		client.conn.Close()
-		client.conn = nil
-	}
-}
-
-func writeCompleteFrame(connection net.Conn, frame []byte) error {
-	for len(frame) > 0 {
-		written, err := connection.Write(frame)
-		if err != nil {
-			return err
+// chargeWait keeps a charge inside the caller's own deadline when it has one.
+func chargeWait(ctx context.Context) time.Duration {
+	wait := 3 * time.Second
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining > 0 && remaining < wait {
+			return remaining
 		}
-		if written == 0 {
-			return io.ErrUnexpectedEOF
-		}
-		frame = frame[written:]
 	}
-	return nil
+	return wait
 }
 
-func decodeCreditLimitResponse(code uint8) (*CreditLimitExceeded, error) {
+func decodeCreditLimitResponse(code uint8) error {
 	windowCode := (code >> 1) & 0b11
+	// 0xFF is the daemon saying it could not answer; anything else malformed is treated the same
+	// way, as unavailability rather than as a verdict.
 	if code&0b1110_0000 != 0 || windowCode == 3 || code&0b0001_1000 == 0 {
-		return nil, fmt.Errorf("credit rate limiter returned invalid response byte %d", code)
+		return fmt.Errorf("%w: credit limiter returned status %d", ErrServerUtilsUnavailable, code)
 	}
 	windows := [...]string{"10 seconds", "1 hour", "24 hours"}
 	return &CreditLimitExceeded{
@@ -384,7 +242,7 @@ func decodeCreditLimitResponse(code uint8) (*CreditLimitExceeded, error) {
 		Window:    windows[windowCode],
 		Inference: code&(1<<3) != 0,
 		CPU:       code&(1<<4) != 0,
-	}, nil
+	}
 }
 
 func writeUint24(target []byte, value uint32) {

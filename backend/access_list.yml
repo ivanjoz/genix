@@ -1,3 +1,20 @@
+# Catálogo de accesos del sistema. Es la única fuente de verdad: el backend lo embebe
+# (main-handlers.go) para autorizar cada ruta POST/PUT y el frontend lo importa como texto
+# (access-list-catalog.ts) para decidir qué páginas y qué opciones de menú se muestran.
+#
+# REGLAS
+#   - Los `id` son permanentes: quedan persistidos en `profiles.accesos` como (id*10 + nivel).
+#     Nunca se renumeran ni se reutilizan; los accesos que se retiran se eliminan y su id se jubila.
+#   - `frontend_routes`: la ruta de la página SIN "/" inicial. El match es por prefijo de segmentos
+#     y gana el más largo, así que "webpage-builder" cubre también "/webpage-builder/<pageID>".
+#   - `backend_apis`: lista separada por comas de "<MÉTODO>.<ruta>". TODA ruta POST/PUT no pública
+#     debe aparecer aquí, porque el backend niega por defecto lo que no está mapeado. Los GET son
+#     al revés: sin mapear quedan libres para cualquier sesión, y mapearlos es lo que los cierra
+#     —así se restringe lectura por lectura—. Una misma ruta puede figurar en varios accesos:
+#     basta con tener uno de ellos.
+#     Excepciones deliberadas: las rutas "p-" (públicas) y las de `selfServiceRoutes` en
+#     main-handlers.go (el usuario opera sobre sí mismo).
+#   - `levels`: dígitos concatenados de los niveles ofrecidos. 14 = 1 (VER) + 4 (TODO).
 access_groups:
   - id: 1
     name: "Configuración"
@@ -13,91 +30,129 @@ access_groups:
     name: "Tienda"
   - id: 7
     name: "Contabilidad"
+  - id: 8
+    name: "System"
 access_list:
   - id: 1
     name: "Mi Empresa"
     group: 1
     levels: 14
     frontend_routes: "configuration/parameters"
-    backend_apis: ""
+    backend_apis: "GET.company-parametros,POST.company-parametros,POST.parametros,POST.system-parameters,POST.initial-data"
   - id: 2
     name: "Usuarios"
     group: 1
     levels: 14
     frontend_routes: "security/users"
-    backend_apis: ""
+    backend_apis: "POST.users"
   - id: 3
     name: "Perfiles & Accesos"
     group: 1
     levels: 14
     frontend_routes: "security/access-profiles"
-    backend_apis: ""
+    backend_apis: "POST.perfiles"
   - id: 4
     name: "Backups"
     group: 1
     levels: 14
     frontend_routes: "configuration/backups"
-    backend_apis: ""
+    backend_apis: "POST.backup-create,POST.backup-restore"
   - id: 5
     name: "Empresas"
-    group: 1
+    group: 8
     levels: 14
-    frontend_routes: "system/empresas"
-    backend_apis: ""
+    frontend_routes: "system/companies"
+    backend_apis: "POST.company"
   - id: 6
     name: "Server Panel"
-    group: 1
+    group: 8
     levels: 14
     frontend_routes: "system/server-panel"
     backend_apis: ""
+  - id: 33
+    name: "Acciones Cron"
+    group: 8
+    levels: 14
+    frontend_routes: "system/cron-actions"
+    backend_apis: ""
+  - id: 34
+    name: "Testing"
+    group: 8
+    levels: 14
+    frontend_routes: "system/testing"
+    backend_apis: ""
   - id: 7
-    name: "Almacenes"
+    name: "Sedes & Almacenes"
     group: 2
     levels: 14
     frontend_routes: "business/branches-warehouses"
-    backend_apis: "POST.almacenes"
+    backend_apis: "POST.sites,POST.warehouses"
   - id: 8
     name: "Productos"
     group: 2
     levels: 14
     frontend_routes: "business/products"
-    backend_apis: "POST.productos"
+    backend_apis: "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists"
   - id: 9
-    name: "Clientes & Proveedores"
+    name: "Clientes"
     group: 2
     levels: 14
     frontend_routes: "business/customers"
+    backend_apis: "POST.client-provider"
+  - id: 26
+    name: "Proveedores"
+    group: 2
+    levels: 14
+    frontend_routes: "business/suppliers"
     backend_apis: "POST.client-provider"
   - id: 10
     name: "Punto de Venta"
     group: 3
     levels: 14
     frontend_routes: "sales/sale_order_create"
-    backend_apis: ""
+    backend_apis: "GET.company-parametros,POST.sale-order,POST.system-parameters"
   - id: 11
     name: "Gestión Ventas"
     group: 3
     levels: 14
     frontend_routes: "sales/sale_orders_status"
-    backend_apis: ""
+    backend_apis: "POST.sale-order"
   - id: 12
     name: "Gráficos Ventas"
     group: 3
     levels: 14
     frontend_routes: "sales/sale_orders_charts"
     backend_apis: ""
+  - id: 27
+    name: "Reporte Ventas"
+    group: 3
+    levels: 14
+    frontend_routes: "sales/sales-report"
+    backend_apis: ""
   - id: 13
     name: "Costos de Envio"
     group: 3
     levels: 14
     frontend_routes: "sales/shipping-costs"
-    backend_apis: ""
+    backend_apis: "POST.shipping-costs"
+  - id: 28
+    name: "Proyección Ventas"
+    group: 3
+    levels: 14
+    frontend_routes: "sales/sale_planning"
+    backend_apis: "POST.sales-planning,POST.seasonality-curve"
   - id: 14
     name: "Gestión de Stock"
     group: 4
     levels: 14
     frontend_routes: "logistics/products-stock"
-    backend_apis: "POST.productos-stock,POST.product-supply"
+    backend_apis: "POST.productos-stock"
+  - id: 29
+    name: "Gestión de Compras"
+    group: 4
+    levels: 14
+    frontend_routes: "logistics/purchase-management"
+    backend_apis: "POST.product-supply"
   - id: 15
     name: "Rep. Movimientos"
     group: 4
@@ -109,13 +164,19 @@ access_list:
     group: 4
     levels: 14
     frontend_routes: "logistics/purchase-orders"
-    backend_apis: ""
+    backend_apis: "POST.purchase-orders,PUT.purchase-orders,POST.purchase-order-entry"
+  - id: 30
+    name: "Suministros"
+    group: 4
+    levels: 14
+    frontend_routes: "logistics/supplies-materials"
+    backend_apis: "POST.supply-material,POST.shared-lists"
   - id: 17
     name: "Cajas & Bancos"
     group: 5
     levels: 14
     frontend_routes: "finance/cash-banks"
-    backend_apis: ""
+    backend_apis: "POST.cash-banks,POST.cash-banks-movement,POST.cash-banks-reconciliation"
   - id: 18
     name: "Cajas Movimientos"
     group: 5
@@ -126,20 +187,32 @@ access_list:
     name: "Gastos"
     group: 5
     levels: 14
-    frontend_routes: "finanzas/gastos"
-    backend_apis: ""
+    frontend_routes: "finance/expenses"
+    backend_apis: "POST.expenses,POST.expenses-scheduled,POST.expense-payment"
   - id: 20
     name: "Gestión de Cuentas"
     group: 5
     levels: 14
-    frontend_routes: "finanzas/gestion-cuentas"
+    frontend_routes: "finance/gestion-cuentas"
     backend_apis: ""
   - id: 21
     name: "Flujo de Caja"
     group: 5
     levels: 14
-    frontend_routes: "finanzas/flujo-de-caja"
+    frontend_routes: "finance/flujo-de-caja"
     backend_apis: ""
+  - id: 31
+    name: "Páginas Web"
+    group: 6
+    levels: 14
+    frontend_routes: "webpage-builder"
+    backend_apis: "POST.webpage-page,POST.webpage-showcase-image,POST.ecommerce-page-content,POST.website-seo,POST.website-domain"
+  - id: 32
+    name: "Galería"
+    group: 6
+    levels: 14
+    frontend_routes: "webpage-builder/gallery"
+    backend_apis: "POST.gallery-image"
   - id: 22
     name: "Facturación"
     group: 7

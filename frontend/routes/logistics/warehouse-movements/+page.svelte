@@ -178,7 +178,7 @@ import { SvelteMap } from 'svelte/reactivity';
       headerCss: "w-120",
       css: "text-center px-6",
       render: e => {
-        const usuario = usuariosService.usuariosMap.get(e.CreatedBy || 1)?.Usuario || `Usuario-${e.CreatedBy}`
+        const usuario = usuariosService.usuariosMap.get(e.CreatedBy || 1)?.User || `Usuario-${e.CreatedBy}`
         const words = filterText.toLowerCase().trim().split(" ").filter(x => x)
         const segments = highlString(usuario, words)
 
@@ -319,7 +319,7 @@ import { SvelteMap } from 'svelte/reactivity';
     filterText={filterText}
     getFilterContent={e => {
       const producto = productos.recordsMap.get(e.ProductID || 0)?.Name || ""
-      const usuario = usuariosService.usuariosMap.get(e.CreatedBy || 1)?.Usuario || ""
+      const usuario = usuariosService.usuariosMap.get(e.CreatedBy || 1)?.User || ""
       return [producto, usuario].join(" ").toLowerCase()
     }}
     useFilterCache={true}

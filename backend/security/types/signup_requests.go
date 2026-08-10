@@ -34,6 +34,10 @@ type SignUpRequest struct {
 	Updated  int32 `json:"upd,omitempty"`
 	// 1 = email sent · 2 = email verified · 3 = company created · 0 = cancelled or attempts spent
 	Status int8 `json:"ss,omitempty"`
+	// IP is core.ClientIPKey of the caller: the IPv4 value, or the IPv6 /63 prefix for addresses
+	// where a single customer owns a whole block. It is the subject of the "N distinct emails per
+	// window" limit, which is the only brake that survives an attacker owning many mailboxes.
+	IP int64 `json:",omitempty"`
 }
 
 type SignUpRequestTable struct {
@@ -49,6 +53,7 @@ type SignUpRequestTable struct {
 	LastSent  db.Col[SignUpRequestTable, int32]
 	Updated   db.Col[SignUpRequestTable, int32]
 	Status    db.Col[SignUpRequestTable, int8]
+	IP        db.Col[SignUpRequestTable, int64]
 }
 
 func (e SignUpRequestTable) GetSchema() db.TableSchema {
@@ -57,10 +62,12 @@ func (e SignUpRequestTable) GetSchema() db.TableSchema {
 		Name:      "sign_up_requests",
 		Partition: e.WeekCode,
 		Keys:      db.Cols(e.ID),
-		// The only lookup besides "by ID" is "the latest request from this email", which the
-		// handler runs against the current week and the previous one.
+		// Two lookups besides "by ID", both run against the current week and the previous one:
+		// the latest request from an email, and every request from an IP so the per-IP window
+		// can be counted. Local rather than global: both are scoped to a week partition.
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Email)},
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.IP)},
 		},
 	}
 }

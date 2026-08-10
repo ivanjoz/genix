@@ -27,7 +27,11 @@ a certificate for the hostname exists.
 import os
 import re
 import shutil
+import socket
 import sys
+import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -69,6 +73,10 @@ RESTART_PATH_NAME = "genix-server-utils-restart.path"
 
 # Must match DEFAULT_BRIDGE_PORT in server_utils/src/config.rs.
 DEFAULT_BRIDGE_PORT = 14012
+# The daemon loads existing usage from ScyllaDB before it serves anything, so give it a moment
+# before deciding whether it stayed up.
+SERVICE_SETTLE_SECONDS = 3
+HEALTH_PROBE_TIMEOUT_SECONDS = 5
 
 # Both are root-level keys in config.toml. secret_phrase verifies the browser's session token;
 # internal_apikey authenticates the backend's calls (and the rate limiter's TCP frames).
@@ -204,11 +212,71 @@ def detect_reuseport_listener_owner(own_configuration_path):
     return None
 
 
+def nginx_supports_http3():
+    """Report whether this Nginx was built with QUIC.
+
+    `listen 443 quic` is a syntax error to a binary without http_v3_module, and because
+    `nginx -t` checks the whole configuration that one line would break every other site on the
+    host. HTTP/3 arrived in mainline 1.25, so distributions still shipping 1.24 or an older
+    stable build do not have it.
+    """
+    version_result = run_command(["nginx", "-V"], allow_failure=True)
+    if version_result.returncode != 0:
+        print_debug("Could not read 'nginx -V'; assuming no HTTP/3 support.")
+        return False
+
+    # -V writes its build flags to stderr.
+    build_flags = f"{version_result.stdout} {version_result.stderr}"
+    if "http_v3_module" in build_flags:
+        return True
+
+    print_debug(
+        "This Nginx was built without http_v3_module, so the vhost gets TLS over TCP only. "
+        "Install Nginx 1.25+ with HTTP/3 and rerun to enable QUIC."
+    )
+    return False
+
+
+def warn_if_http3_is_unreachable(nginx_configuration_contents):
+    """HTTP/3 fails silently when UDP is closed, so say so instead of letting it look fine.
+
+    Browsers reach the site over TCP and never report that the QUIC handshake was dropped, so a
+    firewall that only ever opened 443/tcp leaves HTTP/3 permanently unused with no symptom.
+    """
+    if "quic" not in nginx_configuration_contents:
+        return
+
+    firewall_state = run_command(["firewall-cmd", "--state"], allow_failure=True)
+    if firewall_state.returncode == 0 and firewall_state.stdout.strip() == "running":
+        open_ports = run_command(["firewall-cmd", "--list-ports"], allow_failure=True)
+        if "443/udp" not in open_ports.stdout:
+            print_debug(
+                "WARNING: HTTP/3 is configured but firewalld does not list 443/udp. Open it with: "
+                "firewall-cmd --permanent --add-port=443/udp && firewall-cmd --reload"
+            )
+        return
+
+    ufw_status = run_command(["ufw", "status"], allow_failure=True)
+    if ufw_status.returncode == 0 and "Status: active" in ufw_status.stdout:
+        if "443" not in ufw_status.stdout:
+            print_debug(
+                "WARNING: HTTP/3 is configured but ufw does not allow 443. Open it with: "
+                "ufw allow 443"
+            )
+        return
+
+    print_debug(
+        "HTTP/3 is configured. No local firewall is managing this host, so make sure UDP 443 is "
+        "open upstream too — a cloud security group that only allows TCP silently disables it."
+    )
+
+
 def build_bridge_nginx_configuration(
     bridge_domain,
     bridge_port,
     existing_nginx_configuration_contents="",
     reuseport_is_available=True,
+    http3_is_supported=True,
 ):
     """Render the vhost: HTTP/3 over TLS when a certificate exists, plain HTTP otherwise."""
     tls_directive_lines = build_tls_directive_lines(bridge_domain, existing_nginx_configuration_contents)
@@ -251,12 +319,28 @@ def build_bridge_nginx_configuration(
         if not reuseport_is_available:
             print_debug("Another Nginx vhost already owns reuseport on :443. Listening without it.")
 
+        # Emitting quic on an Nginx without http_v3_module is not a degraded vhost, it is a
+        # configuration the binary cannot parse — and `nginx -t` covers every site on the host.
+        if http3_is_supported:
+            listen_directives = (
+                f"    # HTTP/3 (QUIC) plus the TCP listener browsers use before they see Alt-Svc.\n"
+                f"    listen 443 quic{quic_listen_options};\n"
+                f"    listen 443 ssl;\n"
+                f"    listen [::]:443 quic{quic_listen_options};\n"
+                f"    listen [::]:443 ssl;"
+            )
+            alt_svc_directive = "\n    add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n"
+        else:
+            listen_directives = (
+                "    # TLS over TCP only: this Nginx was built without http_v3_module.\n"
+                "    listen 443 ssl;\n"
+                "    listen [::]:443 ssl;"
+            )
+            # Advertising h3 without a QUIC listener sends browsers to a port nothing answers on.
+            alt_svc_directive = ""
+
         return f"""server {{
-    # HTTP/3 (QUIC) plus the TCP listener browsers use before they see Alt-Svc.
-    listen 443 quic{quic_listen_options};
-    listen 443 ssl;
-    listen [::]:443 quic{quic_listen_options};
-    listen [::]:443 ssl;
+{listen_directives}
     http2 on;
 
     server_name {bridge_domain};
@@ -269,9 +353,7 @@ def build_bridge_nginx_configuration(
     ssl_session_tickets on;
     # ssl_early_data stays off: POST /in is not replay-safe and 0-RTT buys nothing for a
     # connection that stays open for the whole session.
-
-    add_header Alt-Svc 'h3=":443"; ma=86400' always;
-
+{alt_svc_directive}
     location / {{
 {streaming_location_body}
     }}
@@ -314,6 +396,7 @@ def configure_bridge_nginx_vhost(bridge_domain, bridge_port):
         bridge_port,
         existing_nginx_configuration_contents or "",
         reuseport_is_available=reuseport_owner_path is None,
+        http3_is_supported=nginx_supports_http3(),
     )
 
     if existing_nginx_configuration_contents == nginx_configuration_contents:
@@ -324,9 +407,27 @@ def configure_bridge_nginx_vhost(bridge_domain, bridge_port):
     nginx_configuration_path.write_text(nginx_configuration_contents, encoding="utf-8")
     os.chmod(nginx_configuration_path, 0o644)
 
-    run_command(["nginx", "-t"])
+    # `nginx -t` validates the whole configuration, not just this file, so a vhost it rejects
+    # would keep every other site on the host from reloading too. Put back what was there before
+    # failing, rather than leaving a landmine for the next unrelated reload.
+    validation_result = run_command(["nginx", "-t"], allow_failure=True)
+    if validation_result.returncode != 0:
+        if existing_nginx_configuration_contents is None:
+            nginx_configuration_path.unlink(missing_ok=True)
+            print_debug(f"Removed the rejected vhost: {nginx_configuration_path}")
+        else:
+            nginx_configuration_path.write_text(
+                existing_nginx_configuration_contents, encoding="utf-8"
+            )
+            print_debug(f"Restored the previous vhost: {nginx_configuration_path}")
+        fail_with_error(
+            "Nginx rejected the generated vhost (see the output above). The previous "
+            "configuration was put back, so the other sites on this host keep working."
+        )
+
     run_command(["systemctl", "enable", "nginx"])
     run_command(["systemctl", "restart", "nginx"])
+    warn_if_http3_is_unreachable(nginx_configuration_contents)
 
 
 def detect_source_directory(repository_root_path):
@@ -475,6 +576,12 @@ ExecStart={BINARY_PATH}
 Restart=always
 RestartSec=3
 
+# Without this the unit inherits systemd's default soft limit of 1024 open files, which is below
+# the daemon's own rate_limit.max_connections of 1024 — every SSE stream, the ScyllaDB session
+# and both listeners come out of the same budget, so it would hit EMFILE before reaching its
+# configured ceiling and start refusing connections it was told to accept.
+LimitNOFILE=65536
+
 # Security hardening keeps the process non-root and limits write access to the binary directory only.
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -526,7 +633,7 @@ def configure_systemd_units(runtime_username, repository_config_path, bridge_por
     return any(unit_files_changed)
 
 
-def start_service(systemd_configuration_changed):
+def start_service(systemd_configuration_changed, bridge_port):
     if systemd_configuration_changed:
         run_command(["systemctl", "daemon-reload"])
 
@@ -540,13 +647,54 @@ def start_service(systemd_configuration_changed):
     # in place and journalctl has the reason (most often: credit_usage is not deployed yet).
     service_start_result = run_command(["systemctl", "restart", SERVICE_NAME], allow_failure=True)
     if service_start_result.returncode != 0:
-        print_debug(
-            f"WARNING: {SERVICE_NAME} did not start. The units are installed; "
-            f"check 'journalctl -u {SERVICE_NAME} -n 50' for the reason."
-        )
+        report_service_failure("systemctl restart returned an error")
         return
 
-    print_debug(f"{SERVICE_NAME} is running.")
+    verify_service_is_serving(bridge_port)
+
+
+def report_service_failure(failure_summary):
+    """Print why the daemon is not up, instead of a line telling the reader to go find out."""
+    print_debug(f"WARNING: {SERVICE_NAME} is not running ({failure_summary}).")
+    print_debug("The units are installed. Last log lines:")
+    run_command(
+        ["journalctl", "-u", SERVICE_NAME, "-n", "20", "--no-pager"], allow_failure=True
+    )
+    print_debug(
+        "The usual cause is that the backend tables are not deployed yet, so credit_usage does "
+        "not exist and the rate limiter exits rather than admit traffic it cannot account for. "
+        "Deploy the tables (cd scripts && go run . check_tables) and rerun this script."
+    )
+
+
+def verify_service_is_serving(bridge_port):
+    """Confirm the daemon is actually up, not merely exec'd.
+
+    `systemctl restart` succeeds as soon as the process starts, and this unit is Type=simple with
+    Restart=always: a daemon that exits immediately — which is exactly what it does when ScyllaDB
+    is unreachable — looks identical to a healthy one at that point. So wait for it to settle,
+    then ask it something only a working process can answer.
+    """
+    time.sleep(SERVICE_SETTLE_SECONDS)
+
+    active_state_result = run_command(
+        ["systemctl", "is-active", SERVICE_NAME], allow_failure=True
+    )
+    if active_state_result.stdout.strip() != "active":
+        report_service_failure(f"systemctl reports '{active_state_result.stdout.strip()}'")
+        return
+
+    # is-active only proves the process exists. /health proves the bridge half is listening and
+    # answering, which also means the rate limiter got past its ScyllaDB load.
+    health_url = f"http://127.0.0.1:{bridge_port}/health"
+    try:
+        with urllib.request.urlopen(health_url, timeout=HEALTH_PROBE_TIMEOUT_SECONDS) as response:
+            health_payload = response.read().decode("utf-8", errors="replace").strip()
+    except (urllib.error.URLError, OSError, ValueError) as health_error:
+        report_service_failure(f"{health_url} did not answer: {health_error}")
+        return
+
+    print_debug(f"{SERVICE_NAME} is running and answering {health_url}: {health_payload}")
 
 
 def warn_if_credentials_are_unreadable(runtime_username, repository_config_path):
@@ -578,7 +726,7 @@ def install_systemd_service(repository_config_path, bridge_port):
     systemd_configuration_changed = configure_systemd_units(
         runtime_username, repository_config_path, bridge_port
     )
-    start_service(systemd_configuration_changed)
+    start_service(systemd_configuration_changed, bridge_port)
     return runtime_username
 
 

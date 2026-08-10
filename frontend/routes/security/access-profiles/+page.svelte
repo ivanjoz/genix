@@ -114,7 +114,7 @@ import {
       const routeMeta = routeCatalogIndex.get((accessRecord.descripcion || "").replace(/^\//, ""))
       const moduleIDs = accessRecord.modulosIDs.length > 0
         ? accessRecord.modulosIDs
-        : routeMeta ? [routeMeta.moduleID] : [0]
+        : routeMeta ? [routeMeta.moduleID] : [Modules[0].id]
       const groupID = accessRecord.grupo || routeMeta?.groupID || 0
 
       for (const moduleID of moduleIDs) {

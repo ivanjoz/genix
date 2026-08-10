@@ -14,6 +14,17 @@ export const IsClient = () => {
 const version = 1.11
 console.log(version)
 const selectedApiEndpointStorageKey = "genixSelectedApiEndpointRoute";
+// Own key instead of the session's `genixCompanyID`: that one belongs to the session and is
+// wiped on logout, while the login form should still remember the last tenant of this browser.
+export const lastLoginCompanyIDStorageKey = "genixLastLoginCompanyID";
+
+// Preferences of the browser, not of the session: which server and which tenant the login form
+// starts on. A logout that wipes localStorage wholesale must put these back, otherwise every
+// sign-out sends the user back to endpoint #1 / company #1.
+export const BROWSER_PREFERENCE_STORAGE_KEYS = [
+  selectedApiEndpointStorageKey,
+  lastLoginCompanyIDStorageKey,
+];
 // Keep the browser's local endpoint aligned with [server].port in config.toml.
 const parsedLocalApiPort = Number(PUBLIC_LOCAL_API_PORT)
 const localApiPort = Number.isInteger(parsedLocalApiPort) && parsedLocalApiPort > 0 && parsedLocalApiPort < 65536

@@ -173,7 +173,7 @@ import { tr } from '$core/store.svelte';
   >
     {#snippet cellRenderer(record, column)}
       {#if column.id === 'movimientoUsuario'}
-        <RecordByIDText apiRoute="usuarios-ids" recordID={record.CreatedBy} placeholder="" />
+        <RecordByIDText apiRoute="users-ids" recordID={record.CreatedBy} placeholder="" />
       {/if}
     {/snippet}
   </VTable>

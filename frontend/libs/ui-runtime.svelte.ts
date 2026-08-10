@@ -53,7 +53,11 @@ export const isPublicFrontendRoute = (routeValue?: string | null): boolean => {
   const normalizedRoute = String(routeValue || "").trim()
   // Use the exact-or-trailing-slash form so the public storefront (/webpage-app, /webpage-app/*)
   // is public WITHOUT also matching the authed admin builder route (/webpage-builder).
+  // template-preview es el render sin chrome que consume el agente headless: ya está exento del
+  // login en +layout.svelte, así que también queda fuera del acceso "Páginas Web" que cubre
+  // el resto de /webpage-builder.
   return normalizedRoute === '/' || normalizedRoute === '/welcome'
+    || normalizedRoute === '/webpage-builder/template-preview'
     || normalizedRoute === '/webpage-app' || normalizedRoute.startsWith('/webpage-app/')
 }
 

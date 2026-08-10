@@ -661,7 +661,7 @@
                   <span class="ff-bold text-xs color-label mr-2"><T text="Paid on:|Pagado el:" /></span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
                   <span class="ff-bold text-xs color-label mr-2"><T text="At:|En:" /></span> {getCajaName(selectedSaleOrder.LastPaymentCajaID)}.<br>
                   <span class="ff-bold text-xs color-label mr-2"><T text="User:|Usuario:" /></span>
-                  <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.LastPaymentUser} placeholder="-" />.
+                  <RecordByIDText apiRoute="users-ids" recordID={selectedSaleOrder.LastPaymentUser} placeholder="-" />.
                 </div>
               {/if}
             </div>
@@ -694,7 +694,7 @@
                 <div class="text-13 leading-20 text-gray-700">
                   <span class="ff-bold text-xs color-label"><T text="Delivered on|Entregado el" /></span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
                   <span class="ff-bold text-xs color-label"><T text="At|En" /></span> {getAlmacenName(selectedSaleOrder.WarehouseID)}.<br>
-                  <RecordByIDText apiRoute="usuarios-ids" recordID={selectedSaleOrder.DeliveryUser} placeholder="-" />.
+                  <RecordByIDText apiRoute="users-ids" recordID={selectedSaleOrder.DeliveryUser} placeholder="-" />.
                 </div>
               {/if}
             </div>

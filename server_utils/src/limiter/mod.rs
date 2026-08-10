@@ -1,8 +1,9 @@
-//! Credit rate limiter: atomic CPU/inference quota enforcement over raw TCP.
+//! Credit rate limiter: atomic CPU/inference quota enforcement, reached through opcode `0x01`.
 //!
-//! The Go backend opens one persistent connection and sends a fixed 19-byte frame per charge,
-//! authenticated by a sequence-bound HMAC. Each frame is admitted or rejected against company
-//! and user quotas for three windows (ten seconds, UTC hour, UTC day), atomically, in memory.
+//! The Go backend opens one persistent connection and sends a 20-byte frame per charge, which
+//! `service` authenticates and routes here as an 11-byte payload. Each charge is admitted or
+//! rejected against company and user quotas for three windows (ten seconds, UTC hour, UTC day),
+//! atomically, in memory.
 //!
 //! Accepted charges are aggregated per API group into five-minute and daily records and
 //! flushed to ScyllaDB's `credit_usage` as absolute snapshots every 15 seconds — only the rows
@@ -12,10 +13,8 @@
 //! quota state and would overwrite each other's absolute rows.
 
 pub mod aggregation;
-pub mod auth;
 pub mod credits_blob;
 pub mod protocol;
 pub mod quota;
-pub mod server;
 pub mod storage;
 pub mod time_frame;

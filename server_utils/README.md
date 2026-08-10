@@ -5,7 +5,11 @@ One Rust process hosting two independent server-side services:
 | Service | Transport | Port | Purpose |
 |---|---|---|---|
 | Credit rate limiter | Raw TCP, loopback | `rate_limit.address` (default `127.0.0.1:14013`) | Atomic CPU/inference quota checks for the Go backend. |
+| Lock service | Raw TCP, same port | `rate_limit.address` | Serializes an action across concurrent Lambdas. |
 | SSE bridge | HTTP (TLS via Nginx) | `sse_bridge.port` (default `14012`) | Relays agent events between the backend and browser tabs. |
+
+The limiter and the lock share the port, the connection, and the handshake — nothing else. Each
+opcode has its own frame width, its own codec, and its own module.
 
 They share only this process: the config load, the shutdown signal, and the tokio runtime.
 Neither calls into the other.
@@ -24,10 +28,13 @@ One module tree per service, so each owns its own `auth` and `server` module wit
 
 ```text
 src/
-├── main.rs      # spawns both services, one shared shutdown signal
-├── config.rs    # the only thing the two services share
-├── limiter/     # quota.rs (RateLimiter + policy), protocol, auth, aggregation,
-│                # credits_blob, time_frame, storage, server (raw TCP)
+├── main.rs      # spawns both transports, one shared shutdown signal
+├── config.rs    # the only thing they share
+├── service/     # the raw-TCP port: server (listener, handshake, opcode dispatch),
+│                # protocol (opcode table), auth (frame HMAC)
+├── limiter/     # opcode 0x01: quota.rs (RateLimiter + policy), protocol, aggregation,
+│                # credits_blob, time_frame, storage
+├── lock/        # opcodes 0x02/0x03: registry.rs (sharded key mutexes), protocol
 └── bridge/      # token.rs (colbin + channel token), auth, channel, http (axum)
 ```
 
@@ -37,7 +44,7 @@ Both are root-level keys in `config.toml` and must match the backend byte for by
 
 | Key | Used for |
 |---|---|
-| `internal_apikey` | Service-to-service authentication: the rate limiter's TCP frame HMAC (`genix-rate-limiter:v1`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
+| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v2`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
 | `secret_phrase` | Verifying the browser's session token only (`usrToken:v1`). Nothing else in this crate reads it. |
 
 Each use is domain-separated, so one key serving two protocols cannot produce interchangeable
@@ -84,6 +91,16 @@ user_cpu_1h           = 20000
 user_inference_1h     = 5000
 user_cpu_24h          = 100000
 user_inference_24h    = 10000
+```
+
+The lock service adds process-wide ceilings only — per-action policy stays in the Go call sites:
+
+```toml
+# Purpose: Bound the daemon's memory; who locks what is decided by the backend.
+[lock]
+max_keys          = 100000
+max_total_waiters = 4096
+max_lease_ms      = 60000
 ```
 
 The SSE bridge adds one small section:
@@ -180,24 +197,49 @@ another tenant's stream.
 The format is mirrored in `src/bridge/token.rs`, `backend/agent/channel.go`, and
 `frontend/core/agent/channel.ts`; the vectors in `token.rs` pin all three byte for byte.
 
-## Rate limiter TCP contract
+## TCP contract
 
 After accepting a connection, the server writes an eight-byte random nonce. Every subsequent
-request is a 19-byte big-endian frame:
+request is `[opcode:1][payload][hmac:8]`, big-endian. The opcode routes the payload; it is not a
+shared frame shape, and the three operations have no field in common.
 
-| Bytes | Field |
-|---:|---|
-| 3 | Company ID (`uint24`, positive) |
-| 3 | User ID (`uint24`, positive) |
-| 1 | API group (`0..5`) |
-| 2 | CPU credits (`uint16`) |
-| 2 | Inference credits (`uint16`) |
-| 8 | Truncated authentication HMAC |
+| Op | Name | Payload | Frame |
+|---|---|---|---|
+| `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · API group `u8` · CPU `u16` · inference `u16` | 20 |
+| `0x02` | `LOCK_ACQUIRE` | action `u16` · identifier `i64` · max_waiters `u8` · wait_ms `u16` · lease_ms `u16` | 24 |
+| `0x03` | `LOCK_RELEASE` | — | 9 |
 
-The HMAC covers the first 11 bytes plus the connection nonce and implicit frame sequence. A valid
-frame receives exactly one byte: zero means accepted; a nonzero low-five-bit value identifies the
-scope, time window, and exhausted credit types. Authentication, malformed-frame, initialization,
-and transport failures close the connection.
+`0x00` stays unassigned so an all-zero frame cannot route. 252 opcodes remain free; new *use
+cases* for the lock cost none of them, since they are namespaced by the `u16` action instead.
+
+The HMAC covers the opcode and payload plus the connection nonce and the implicit frame sequence,
+so a frame can be replayed neither as itself nor as a different operation. Every frame gets
+exactly one reply byte, and zero always means success. Authentication, malformed-frame,
+unknown-opcode, initialization, and transport failures close the connection.
+
+`CHARGE_CREDITS` rejections use the low five bits to identify the scope, time window, and
+exhausted credit types. Lock replies are `1` queue full, `2` wait timed out, `3` daemon at
+capacity, `4` protocol misuse (acquiring while already holding, or releasing while holding
+nothing).
+
+## Lock behavior
+
+One holder per `(action, identifier)` — every lock is mutual exclusion. The daemon interprets
+neither field: the Go call sites decide what is being serialized (a client IP, a company, a
+packed pair), which is what makes one service cover every case in the project.
+
+**Ownership is bound to the connection, not to a lease token.** The permit lives in the
+connection task, so a disconnect, a crash, a killed Lambda, and a client that simply goes silent
+all release through one code path — no sweeper, no token to validate. The client's `lease_ms`
+becomes the connection's read deadline while holding, which is the backstop for a process frozen
+without closing its socket. One lock per connection, so the Go client pools connections rather
+than sharing the limiter's.
+
+`max_waiters` is checked before queueing: past the ceiling a caller is refused immediately rather
+than parked, because with an unbounded queue the wait itself becomes the denial of service.
+
+Locks are in-memory: a restart drops all of them, and two daemon instances would hand the same
+key to two holders. Single active process, same as the limiter.
 
 ## Deploying
 

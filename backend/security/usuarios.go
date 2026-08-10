@@ -151,7 +151,8 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	isUsuarioPropio := req.Route == "/user-propio"
+	// mainHandler ya removió el "/" inicial y el prefijo de api, así que Route llega sin barra.
+	isUsuarioPropio := req.Route == "user-self"
 	core.Log("route::", req.Route)
 
 	if isUsuarioPropio {
@@ -161,8 +162,8 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	if body.ID != 1 && len(body.ProfileIDs) == 0 && !isUsuarioPropio {
 		return req.MakeErr("El user debe tener al menos 1 permiso")
 	}
-	if (len(body.User) < 5 && !isUsuarioPropio) || len(body.FirstName) < 5 {
-		return req.MakeErr("El user nombre debe tener al menos 5 caracteres")
+	if (len(body.User) < 4 && !isUsuarioPropio) || len(body.FirstName) < 4 {
+		return req.MakeErr("El usuario y el nombre deben tener al menos 4 caracteres")
 	}
 	if body.ID == 0 && len(body.Password) < 6 {
 		return req.MakeErr("El password debe tener al menos de 6 caracteres")
@@ -194,9 +195,14 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.PasswordHash = usuarioActual.PasswordHash
 		body.Created = usuarioActual.Created
 		body.CreatedBy = usuarioActual.CreatedBy
+		// "user-self" no exige acceso del catálogo (selfServiceRoutes en main-handlers.go), así que
+		// todo lo que determina permisos se restaura desde el registro guardado: de lo contrario
+		// cualquier usuario se auto-otorgaría accesos mandando ProfileIDs o AccessLevelIDs en el body.
 		if isUsuarioPropio {
 			body.ProfileIDs = usuarioActual.ProfileIDs
+			body.AccessLevelIDs = usuarioActual.AccessLevelIDs
 			body.User = usuarioActual.User
+			body.Status = usuarioActual.Status
 		}
 	}
 

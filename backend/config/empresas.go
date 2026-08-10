@@ -113,11 +113,9 @@ func GetPublicCompanyNamesByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(companyNames)
 }
 
+// La autorización la resuelve mainHandler con el catálogo: "GET.company-parametros" está mapeado a
+// "Mi Empresa" y a "Punto de Venta" (el POS necesita RUC y razón social para el comprobante).
 func GetEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
-	if req.User.ID != 1 {
-		return req.MakeErr("No está autorizado para realizar esta solicitud.")
-	}
-
 	record, err := getCompanyByID(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr("Error al obtener la company.", err)
@@ -142,10 +140,7 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC, Email.")
 	}
 
-	if req.User.ID != 1 {
-		return req.MakeErr("No está autorizado para realizar esta solicitud.")
-	}
-
+	// Escribir exige "Mi Empresa" en nivel de escritura; mainHandler ya lo validó por el catálogo.
 	record.ID = req.User.CompanyID
 	if len(record.FormApiKey) == 0 {
 		record.FormApiKey = core.MakeRandomBase36String(18)

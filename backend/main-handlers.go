@@ -76,6 +76,14 @@ var saasOnlyRoutes = map[string]bool{
 	"GET.cron-actions-scheduled": true,
 }
 
+// Rutas POST que exigen sesión pero ningún acceso del catálogo: el usuario opera sobre sí mismo,
+// así que un perfil restringido igual debe poder usarlas (editar su perfil, cambiar su password).
+// El handler es el responsable de forzar el ámbito propio —PostUsuarios ignora el ID del body
+// cuando la ruta es "user-self"—; esta lista sólo salta la comprobación de accesos.
+var selfServiceRoutes = map[string]bool{
+	"POST.user-self": true,
+}
+
 func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	requestStartedAt := time.Now().UnixMilli()
 	setResponseMetadata := func(handlerResponse *core.HandlerResponse) {
@@ -164,13 +172,15 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		delete(args.Query, "cmp")
 
 		accessInfos, _ := accessHelper.GetAccesosByRoute(funcPath)
-		//GET routes are allow by default, POST / PUT routes require setted access
-		hasAllowedAccess := core.If(args.Method == "GET", true, false)
+		// Un GET sin acceso mapeado es libre para cualquier sesión; POST/PUT siempre exigen uno. Pero
+		// un GET que SÍ figura en el catálogo se comporta como el resto: hay que tener el acceso. Así
+		// se cierra lectura por lectura, sin bloquear de golpe los GET que todavía no están mapeados.
+		hasAllowedAccess := (args.Method == "GET" && len(accessInfos) == 0) || selfServiceRoutes[funcPath]
 
 		nivel := uint8(1)
 		if args.Method == "POST" || args.Method == "PUT" {
 			nivel = 2
-			if len(accessInfos) == 0 {
+			if len(accessInfos) == 0 && !selfServiceRoutes[funcPath] {
 				core.Log(fmt.Sprintf("Warning: La ruta \"%v\" está desprotegida.", funcPath))
 			}
 		}

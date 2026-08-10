@@ -109,7 +109,7 @@ func GetCashBankMovements(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("Movimientos obtenidos::", len(movimientos))
 
-	// Usuarios resolved client-side via cache-by-ids (apiRoute "usuarios-ids") to keep payload small.
+	// Usuarios resolved client-side via cache-by-ids (apiRoute "users-ids") to keep payload small.
 	response := map[string]any{
 		"movimientos": movimientos,
 	}
@@ -170,7 +170,7 @@ func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
 	}
 
-	// Usuarios resolved client-side via cache-by-ids (apiRoute "usuarios-ids") to keep payload small.
+	// Usuarios resolved client-side via cache-by-ids (apiRoute "users-ids") to keep payload small.
 	response := map[string]any{
 		"cuadres": cuadres,
 	}
