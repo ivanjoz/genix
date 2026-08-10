@@ -109,10 +109,9 @@ additive config:
   string \`toml:"internal_apikey"\`` to `fileConfig`, and `env.INTERNAL_APIKEY =
   file.InternalApikey` in `applyToEnv` (mirrors how `SECRET_PHRASE` is already plumbed, lines
   95/157/239).
-- `backend/main.go:283`: `core.ConfigureCreditRateLimiter(core.Env.RATE_LIMIT_ADDRESS,
-  core.Env.SECRET_PHRASE)` → `core.Env.INTERNAL_APIKEY`. `backend/core/credit_rate_limiter.go`
-  itself is untouched (it takes `secret string` as a parameter, agnostic to which config field
-  fills it).
+- `backend/main.go`: the server-utils client is configured with `core.Env.INTERNAL_APIKEY`
+  instead of `core.Env.SECRET_PHRASE`. The client package itself is untouched (it takes
+  `secret string` as a parameter, agnostic to which config field fills it).
 - `backend/agent/bridge.go`'s `makeBridgeServiceAuthHeader`: sign with `core.Env.INTERNAL_APIKEY`
   instead of `core.Env.SECRET_PHRASE`.
 - Domain separation (`"genix-rate-limiter:v1"`, `"sse-bridge:v1|"`) already keeps these two uses

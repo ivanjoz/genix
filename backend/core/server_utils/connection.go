@@ -109,7 +109,7 @@ var (
 func ConfigureServerUtils(address, secret string) error {
 	address = strings.TrimSpace(address)
 	if address == "" {
-		return errors.New("rate_limit.address is required by the server-utils client")
+		return errors.New("server_utils is required by the server-utils client")
 	}
 	if strings.TrimSpace(secret) == "" {
 		return errors.New("internal_apikey is required by the server-utils client")

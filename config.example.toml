@@ -12,6 +12,10 @@ secret_phrase  = "cambie_esta_frase"
 # X-Bridge-Auth del SSE bridge (ambos en server_utils/). Separado de secret_phrase para poder
 # rotarlo sin invalidar todas las sesiones activas.
 internal_apikey = "cambie_esta_clave"
+# Puerto TCP crudo del proceso genix-server-utils. Va en la raíz y no dentro de [rate_limit]
+# porque no es de un servicio: el opcode de la trama decide si atiende el credit limiter o el
+# lock service, y los dos escuchan aquí. Sólo loopback: va autenticado con HMAC, no cifrado.
+server_utils = "127.0.0.1:14013"
 github_account = "mi-cuenta"
 
 # ─── Proveedores ────────────────────────────────────────────────────────────
@@ -42,7 +46,6 @@ nginx_process = "127.0.0.1:14010"
 # Una de las dos mitades del proceso genix-server-utils; la otra es [sse_bridge].
 # Se autentica con internal_apikey (raíz), no con secret_phrase.
 [rate_limit]
-address               = "127.0.0.1:14013"
 flush_seconds         = 15
 frame_timeout_seconds = 30
 max_connections       = 1024

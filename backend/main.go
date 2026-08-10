@@ -291,7 +291,7 @@ func main() {
 	// and are told apart by the frame's opcode. The logger is pushed in because that package
 	// cannot import core (cycle), the same as text_search.
 	server_utils.SetLogger(core.Log)
-	if err := core.ConfigureServerUtils(core.Env.RATE_LIMIT_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
+	if err := core.ConfigureServerUtils(core.Env.SERVER_UTILS_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
 		panic("invalid server-utils configuration: " + err.Error())
 	}
 	serverPort := resolveServerPort()

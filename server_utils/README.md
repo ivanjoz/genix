@@ -1,20 +1,25 @@
 # Genix Server Utilities
 
-One Rust process hosting two independent server-side services:
+One Rust process hosting three server-side services over two transports:
 
 | Service | Transport | Port | Purpose |
 |---|---|---|---|
-| Credit rate limiter | Raw TCP, loopback | `rate_limit.address` (default `127.0.0.1:14013`) | Atomic CPU/inference quota checks for the Go backend. |
-| Lock service | Raw TCP, same port | `rate_limit.address` | Serializes an action across concurrent Lambdas. |
+| Credit rate limiter | Raw TCP, loopback | `server_utils` (default `127.0.0.1:14013`) | Atomic CPU/inference quota checks for the Go backend. |
+| Lock service | Raw TCP, same port | `server_utils` | Serializes an action across concurrent Lambdas. |
 | SSE bridge | HTTP (TLS via Nginx) | `sse_bridge.port` (default `14012`) | Relays agent events between the backend and browser tabs. |
 
 The limiter and the lock share the port, the connection, and the handshake — nothing else. Each
-opcode has its own frame width, its own codec, and its own module.
+opcode has its own frame width, its own codec, and its own module. That shared port is why its
+address is the root-level `server_utils` key rather than something under `[rate_limit]`: it
+belongs to the process, not to any one service inside it.
 
-They share only this process: the config load, the shutdown signal, and the tokio runtime.
-Neither calls into the other.
+The bridge shares nothing with either but the process: the config load, the shutdown signal, and
+the tokio runtime. No service calls into another.
 
-Designs: [PLAN.md](PLAN.md) (rate limiter, including all binary formats) and
+Start with [LOCK_SERVICE_WALKTHROUGH.md](LOCK_SERVICE_WALKTHROUGH.md) — one sign-up request end
+to end, with the exact bytes. Designs: [PLAN.md](PLAN.md) (rate limiter, including all binary
+formats), [PLAN_LOCK_SERVICE.md](PLAN_LOCK_SERVICE.md) and
+[PLAN_MULTIPLEXING.md](PLAN_MULTIPLEXING.md) (lock service),
 [PLAN_SSE_BRIDGE.md](PLAN_SSE_BRIDGE.md) (bridge). Deployment:
 [`../scripts/CONFIGURE_SERVER_UTILS.md`](../scripts/CONFIGURE_SERVER_UTILS.md).
 
@@ -24,7 +29,9 @@ Designs: [PLAN.md](PLAN.md) (rate limiter, including all binary formats) and
 
 ## Layout
 
-One module tree per service, so each owns its own `auth` and `server` module without collisions:
+`service/` owns everything the raw-TCP operations share — the listener, the handshake, the frame
+HMAC and the opcode table. Each operation's own codec and logic live in its own tree, so adding
+one touches the opcode table and nothing else:
 
 ```text
 src/
@@ -44,7 +51,7 @@ Both are root-level keys in `config.toml` and must match the backend byte for by
 
 | Key | Used for |
 |---|---|
-| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v2`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
+| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v3`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
 | `secret_phrase` | Verifying the browser's session token only (`usrToken:v1`). Nothing else in this crate reads it. |
 
 Each use is domain-separated, so one key serving two protocols cannot produce interchangeable
@@ -66,17 +73,23 @@ quota state and must not write the same absolute rows.
 
 ## Configuration
 
-Add `[rate_limit]` to the project `config.toml`; the complete commented example is in
-[`../config.example.toml`](../config.example.toml).
+Add `server_utils` and `[rate_limit]` to the project `config.toml`; the complete commented
+example is in [`../config.example.toml`](../config.example.toml).
 
 ```toml
+# The raw-TCP endpoint of the whole process, root level: the opcode decides which service
+# answers, so the address is not the rate limiter's to own.
+server_utils = "127.0.0.1:14013"
+
 # Purpose: Configure process limits and the two global quota profiles.
 [rate_limit]
-address               = "127.0.0.1:14013"
 flush_seconds         = 15
 frame_timeout_seconds = 30
 max_connections       = 1024
 shards                = 0 # 0 uses the logical CPU count
+# Requests one connection may have in flight at once. Multiplexing removed the backpressure that
+# one-request-per-socket used to give for free, so it has to be stated.
+max_inflight_per_connection = 64
 
 company_cpu_10s       = 2000
 company_inference_10s = 1000
@@ -92,6 +105,11 @@ user_inference_1h     = 5000
 user_cpu_24h          = 100000
 user_inference_24h    = 10000
 ```
+
+The twelve credit ceilings are the only settings here with no built-in default: a guessed quota
+is worse than none, so the process refuses to start without them. Since that refusal is a
+three-second crash loop under `Restart=always`, `scripts/configure_server_utils.py` writes these
+defaults into `config.toml` when they are absent, rather than leaving the daemon to discover it.
 
 The lock service adds process-wide ceilings only — per-action policy stays in the Go call sites:
 
@@ -128,10 +146,29 @@ own `/agent/stream`). The deployment script uses it for the Nginx `server_name`.
 ## Build and test
 
 ```bash
-# Purpose: Compile and verify all protocol, codec, limiter, and flush unit tests.
+# Purpose: Compile and verify all protocol, codec, limiter, lock, and flush tests.
 cd server_utils
 cargo test
 cargo build --release
+```
+
+`cargo test` also runs `tests/lock_tcp.rs`, which drives a real socket: that is where the claims
+this design rests on are checked — that a queued acquire does not delay a charge sent after it,
+that a lease expires while the connection stays busy, and that a dropped connection frees
+everything it held.
+
+Building needs a C compiler even though no crate here contains C: rustc shells out to `cc` to
+link, and a `build.rs` is itself an executable that has to be linked before cargo can run it.
+`../scripts/configure_server_utils.py` installs one when the host has none.
+
+For a host that should compile nothing, build a static binary and ship it instead. `.cargo/
+config.toml` pins `rust-lld` for the musl targets, which is also what makes cross-building arm64
+work — the host `cc` can only link for the host:
+
+```bash
+# Purpose: Produce a dependency-free binary; runs on any Linux of that architecture.
+cargo build --release --target x86_64-unknown-linux-musl
+cargo build --release --target aarch64-unknown-linux-musl
 ```
 
 Before starting the daemon, deploy the backend tables so the generated Genix controller creates
@@ -207,20 +244,42 @@ shared frame shape, and the three operations have no field in common.
 |---|---|---|---|
 | `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · API group `u8` · CPU `u16` · inference `u16` | 20 |
 | `0x02` | `LOCK_ACQUIRE` | action `u16` · identifier `i64` · max_waiters `u8` · wait_ms `u16` · lease_ms `u16` | 24 |
-| `0x03` | `LOCK_RELEASE` | — | 9 |
+| `0x03` | `LOCK_RELEASE` | action `u16` · identifier `i64` · generation `u16` | 21 |
 
 `0x00` stays unassigned so an all-zero frame cannot route. 252 opcodes remain free; new *use
 cases* for the lock cost none of them, since they are namespaced by the `u16` action instead.
 
 The HMAC covers the opcode and payload plus the connection nonce and the implicit frame sequence,
-so a frame can be replayed neither as itself nor as a different operation. Every frame gets
-exactly one reply byte, and zero always means success. Authentication, malformed-frame,
-unknown-opcode, initialization, and transport failures close the connection.
+so a frame can be replayed neither as itself nor as a different operation. Authentication,
+malformed-frame, unknown-opcode, initialization, and transport failures close the connection.
 
-`CHARGE_CREDITS` rejections use the low five bits to identify the scope, time window, and
-exhausted credit types. Lock replies are `1` queue full, `2` wait timed out, `3` daemon at
-capacity, `4` protocol misuse (acquiring while already holding, or releasing while holding
-nothing).
+The domain string is bumped on every wire change — `genix-server-utils:v3` today. Replies are not
+themselves authenticated, so a version skew cannot be caught by the signature: without the bump
+an old client would keep authenticating fine and then misread a reply that grew under it.
+
+### Replies are multiplexed
+
+Requests travel in order; replies do not. An acquire can sit in a lock queue for seconds while
+charges sent after it are answered immediately. Every reply is therefore five bytes:
+
+```
+[correlation:u16][status:u8][detail:u16]
+```
+
+`correlation` is the low 16 bits of the request's frame sequence, echoed back. Nothing extra
+travels on the wire to carry it — the sequence already exists for the HMAC — and it is what lets
+one connection serve many callers at once. `detail` carries the lock generation on a granted
+acquire and is zero everywhere else.
+
+Zero is success for every opcode. `CHARGE_CREDITS` rejections use the low five bits to identify
+the scope, time window, and exhausted credit types. Lock replies are `1` queue full, `2` wait
+timed out, `3` daemon at capacity, `4` protocol misuse (releasing a lock this connection does not
+hold, or presenting a superseded generation). `0xFF` means the daemon could not answer at all; it
+is deliberately not a valid verdict for any opcode, so a client applies its own policy — charges
+fail open, sign-up locks fail closed.
+
+The client must assign a sequence and write its frame atomically. Two callers taking 5 and 6 but
+writing 6, 5 would desynchronize the HMAC and every later frame would fail.
 
 ## Lock behavior
 
@@ -228,25 +287,45 @@ One holder per `(action, identifier)` — every lock is mutual exclusion. The da
 neither field: the Go call sites decide what is being serialized (a client IP, a company, a
 packed pair), which is what makes one service cover every case in the project.
 
-**Ownership is bound to the connection, not to a lease token.** The permit lives in the
-connection task, so a disconnect, a crash, a killed Lambda, and a client that simply goes silent
-all release through one code path — no sweeper, no token to validate. The client's `lease_ms`
-becomes the connection's read deadline while holding, which is the backstop for a process frozen
-without closing its socket. One lock per connection, so the Go client pools connections rather
-than sharing the limiter's.
+**Ownership is bound to the connection.** The permit lives in the connection task, so a
+disconnect, a crash and a killed Lambda all free the lock at once — no sweeper, and no waiting
+out a lease. One connection may hold several keys, and losing it frees all of them.
+
+**The lease is an absolute deadline**, stamped when the lock is granted and checked by the
+reader. It is the backstop for a holder that stays connected but wedged. It is not the socket's
+read timeout: with charges and locks sharing one connection, arriving traffic would push that
+forward forever and a wedged holder would keep its key. Expiry drops that one lock and leaves the
+connection running, because killing it would take every other lock and every pending request with
+it. While a connection holds anything, the idle timeout does not apply — a caller legitimately
+holding a 30s lease is quiet, not dead.
+
+**Each grant carries a generation**, returned in the reply's `detail` and required by the
+release. Without it, a release from a caller that already gave up would end whichever hold
+replaced it on that key — a real risk now that several callers share one connection. The counter
+is registry-wide rather than per-key: an idle key's entry is pruned, so a per-key counter would
+restart at zero and the stale release would match exactly.
 
 `max_waiters` is checked before queueing: past the ceiling a caller is refused immediately rather
 than parked, because with an unbounded queue the wait itself becomes the denial of service.
+`rate_limit.max_inflight_per_connection` bounds the other direction — multiplexing removed the
+backpressure that one-request-per-socket used to provide for free.
 
 Locks are in-memory: a restart drops all of them, and two daemon instances would hand the same
 key to two holders. Single active process, same as the limiter.
 
+A lock orders callers; it does not make them safe. A partition can free a key while its holder is
+still working, which is true of every liveness-based lock, so work inside one must remain safe to
+run twice.
+
 ## Deploying
 
 `sudo python3 scripts/configure_server_utils.py` compiles the binary, installs the systemd units,
-and writes the bridge's Nginx vhost (HTTP/3 when a certificate exists) on this host. It asks
-nothing — everything comes from `config.toml`. Full details, including the generated unit and the
-three non-negotiable Nginx streaming settings, are in
+and writes the bridge's Nginx vhost (HTTP/3 when a certificate exists and Nginx was built with
+it) on this host. It asks nothing — everything comes from `config.toml`. It installs a C compiler
+if the host has none, and after starting the service it probes `/health` rather than trusting
+`systemctl restart`: this daemon exits when ScyllaDB is unreachable, and with `Restart=always`
+that would otherwise look identical to a healthy start. Full details, including the generated
+unit and the three non-negotiable Nginx streaming settings, are in
 [`../scripts/CONFIGURE_SERVER_UTILS.md`](../scripts/CONFIGURE_SERVER_UTILS.md).
 
 The raw TCP listener should remain on loopback or a private network. HMAC authenticates messages,

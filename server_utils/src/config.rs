@@ -68,10 +68,13 @@ pub struct BridgeConfig {
 impl AppConfig {
     pub fn load() -> Result<Self> {
         let config = load_config()?;
-        let listen_address = optional_string(&config, "RATE_LIMIT_ADDRESS", "rate_limit.address")
+        // Root level, not under [rate_limit]: this one port serves every raw-TCP operation and the
+        // frame's opcode picks the service, so the address belongs to the process, not to one of
+        // the services running inside it.
+        let listen_address = optional_string(&config, "SERVER_UTILS_ADDRESS", "server_utils")
             .unwrap_or_else(|| DEFAULT_LISTEN_ADDRESS.to_owned())
             .parse()
-            .context("rate_limit.address must be a socket address such as 127.0.0.1:14013")?;
+            .context("server_utils must be a socket address such as 127.0.0.1:14013")?;
         let flush_seconds = optional_u64(
             &config,
             "RATE_LIMIT_FLUSH_SECONDS",

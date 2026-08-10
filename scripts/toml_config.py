@@ -37,12 +37,33 @@ def format_toml_value(value):
     return f'"{escaped_value}"'
 
 
+def find_new_section_index(file_lines):
+    """Dónde insertar una sección nueva: antes de las tablas de array, no al final del archivo.
+
+    Las tablas [[...]] van al final por convención de este config y llevan encima el bloque de
+    comentarios que explica por qué; colocar una sección después de ellas deja ese bloque
+    separado de lo que documenta. Se retrocede sobre los comentarios y líneas en blanco que
+    preceden a la primera [[...]] para insertar antes del bloque entero.
+    """
+    for line_index, line_text in enumerate(file_lines):
+        if not line_text.strip().startswith("[["):
+            continue
+        block_start_index = line_index
+        while block_start_index > 0:
+            preceding_line = file_lines[block_start_index - 1].strip()
+            if preceding_line and not preceding_line.startswith("#"):
+                break
+            block_start_index -= 1
+        return block_start_index
+    return len(file_lines)
+
+
 def set_config_values(config_path, value_updates):
     """Escribe {'seccion.clave': valor} en config.toml conservando el resto del archivo.
 
     Reemplaza la clave dentro de su sección si ya está; si la sección existe pero la clave
     no, la inserta al final de esa sección; si la sección no existe, añade un bloque
-    [seccion] al final del archivo.
+    [seccion] antes de las tablas de array.
 
     Nunca añade claves sueltas al final: en TOML quedarían dentro del último [[endpoints]]
     o [[servers]], que por diseño van al final del archivo.
@@ -60,30 +81,40 @@ def set_config_values(config_path, value_updates):
 
         current_section = ""
         key_line_index = None
-        section_last_line_index = None
+        section_header_index = None
+        section_last_key_index = None
 
         for line_index, line_text in enumerate(file_lines):
             header_match = section_header_pattern.match(line_text)
             if header_match:
                 current_section = header_match.group(1).strip()
+                if current_section == section_name:
+                    section_header_index = line_index
                 continue
             if line_text.strip().startswith("[["):
                 current_section = "\x00"  # tabla de array: nunca es destino de escritura
                 continue
             if current_section != section_name:
                 continue
-            # Última línea con contenido de la sección: ahí se inserta si falta la clave.
-            if line_text.strip():
-                section_last_line_index = line_index
+            # Sólo cuentan las líneas con clave: los comentarios que preceden a la siguiente
+            # sección todavía caen dentro de ésta al recorrer el archivo, y insertar después de
+            # ellos separaría el comentario de lo que documenta.
+            if not line_text.strip() or line_text.lstrip().startswith("#"):
+                continue
+            section_last_key_index = line_index
             if key_pattern.match(line_text):
                 key_line_index = line_index
 
         if key_line_index is not None:
             file_lines[key_line_index] = new_line
-        elif section_last_line_index is not None:
-            file_lines.insert(section_last_line_index + 1, new_line)
+        elif section_last_key_index is not None:
+            file_lines.insert(section_last_key_index + 1, new_line)
+        elif section_header_index is not None:
+            # Sección declarada pero vacía: la clave va inmediatamente bajo su cabecera.
+            file_lines.insert(section_header_index + 1, new_line)
         elif section_name:
-            file_lines.extend(["", f"[{section_name}]", new_line])
+            new_section_index = find_new_section_index(file_lines)
+            file_lines[new_section_index:new_section_index] = ["", f"[{section_name}]", new_line]
         else:
             raise ValueError(f"No se puede añadir la clave raíz {key_name} al final del archivo")
 

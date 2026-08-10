@@ -2,10 +2,11 @@
 
 """Install server_utils/ on this host: systemd units plus the Nginx vhost for its SSE bridge.
 
-One Rust binary, genix-server-utils, hosts two independent services:
+One Rust binary, genix-server-utils, over two transports:
 
-  - The credit rate limiter, on a raw TCP port that stays on loopback. It is authenticated by
-    HMAC but not encrypted, so it never gets an Nginx vhost.
+  - A raw TCP port that stays on loopback, where the frame's opcode routes to the credit rate
+    limiter or the lock service. It is authenticated by HMAC but not encrypted, so it never gets
+    an Nginx vhost.
   - The SSE bridge, on an HTTP port that must be reachable by browsers. Nginx terminates TLS
     for it on this very machine: what it proxies is a permanent stream, and a second hop buys
     nothing.
@@ -14,9 +15,10 @@ Deliberately simpler than configure_server.py, which covers a backend host and a
 host that are usually two different machines. Here there is no upstream to configure — the
 vhost always forwards to 127.0.0.1.
 
-It asks for nothing. Every value comes from config.toml, and a missing one fails with the key
-name instead of opening a prompt: both secrets it needs (secret_phrase, internal_apikey) are
-root-level keys that initial project setup already writes, exactly like admin_password.
+It asks for nothing. Values come from config.toml, and a missing one either fails with the key
+name or gets a documented default written into the file — never a prompt. Secrets and database
+settings fail (they must match what the backend uses); the credit ceilings are filled in, since
+those are policy and a default beats a daemon that exits at startup on every restart.
 
 Nginx specifics: the vhost never buffers (a buffered text/event-stream is a stalled request),
 it adds no CORS headers (the bridge answers preflights itself — a duplicated
@@ -60,7 +62,7 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     validate_server_port,
     write_unit_file,
 )
-from toml_config import get_config_value  # noqa: E402
+from toml_config import get_config_value, set_config_values  # noqa: E402
 
 SOURCE_DIRECTORY_NAME = "server_utils"
 # Cargo's package name, which is also the file name it produces.
@@ -80,6 +82,22 @@ HEALTH_PROBE_TIMEOUT_SECONDS = 5
 # Both are root-level keys in config.toml. secret_phrase verifies the browser's session token;
 # internal_apikey authenticates the backend's calls (and the rate limiter's TCP frames).
 REQUIRED_SECRET_NAMES = ("secret_phrase", "internal_apikey")
+
+# The daemon opens a ScyllaDB session before it serves anything, so these have no default either
+# and cannot be invented here.
+REQUIRED_DATABASE_SETTINGS = ("db.host", "db.port", "db.name", "db.user", "db.password")
+
+# The twelve credit ceilings the daemon requires. Unlike every other [rate_limit] key they have
+# no fallback in server_utils/src/config.rs — a guessed quota is worse than none — so an absent
+# one makes the process exit at startup and systemd restart it every RestartSec forever. The
+# numbers mirror config.example.toml: (10s, 1h, 24h) per scope and credit kind.
+RATE_LIMIT_CREDIT_DEFAULTS = {
+    "company_cpu": (2000, 40000, 200000),
+    "company_inference": (1000, 10000, 20000),
+    "user_cpu": (1000, 20000, 100000),
+    "user_inference": (500, 5000, 10000),
+}
+RATE_LIMIT_WINDOW_SUFFIXES = ("10s", "1h", "24h")
 
 # An AWS function URL in sse_bridge.url means "no bridge" (the backend serves its own
 # /agent/stream), so it cannot be the hostname this vhost is built for.
@@ -142,12 +160,14 @@ def resolve_bridge_port(project_credentials):
     return bridge_port
 
 
-def verify_required_secrets(project_credentials, repository_config_path):
-    """Fail early when a secret the process needs at startup is missing.
+def verify_required_settings(project_credentials, repository_config_path):
+    """Fail early when a setting the process needs at startup is missing and cannot be defaulted.
 
-    Not prompted for: these are root-level keys written during initial project setup, and the
-    values must match the backend byte for byte. Guessing one here would install a service that
-    rejects every request at runtime instead of failing visibly now.
+    Not prompted for: the secrets are root-level keys written during initial project setup and
+    their values must match the backend byte for byte, and the database is already configured by
+    the time this host runs anything. Guessing either would install a service that fails at
+    runtime instead of failing visibly now — and because the unit is Restart=always, "fails at
+    runtime" means a three-second crash loop nobody is watching.
     """
     for secret_name in REQUIRED_SECRET_NAMES:
         if not str(get_config_value(project_credentials, secret_name, "")).strip():
@@ -156,7 +176,68 @@ def verify_required_secrets(project_credentials, repository_config_path):
                 "value the backend uses, otherwise every request is rejected at runtime."
             )
 
+    for database_setting_name in REQUIRED_DATABASE_SETTINGS:
+        if not str(get_config_value(project_credentials, database_setting_name, "")).strip():
+            fail_with_error(
+                f"{database_setting_name} is not set in {repository_config_path}. The daemon "
+                "loads existing credit usage from ScyllaDB before it serves anything and exits "
+                "when it cannot connect."
+            )
+
     print_debug(f"Found both required secrets: {', '.join(REQUIRED_SECRET_NAMES)}.")
+
+
+def read_positive_integer_setting(project_credentials, setting_name):
+    """Return the setting as a positive int, or None when absent or unusable.
+
+    Quoted numbers count: the daemon accepts them too, so a value written as a string by some
+    templating step must not be treated as missing and silently rewritten.
+    """
+    configured_value = get_config_value(project_credentials, setting_name)
+    if isinstance(configured_value, bool) or not isinstance(configured_value, (int, str)):
+        return None
+    try:
+        parsed_value = int(str(configured_value).strip())
+    except ValueError:
+        return None
+    return parsed_value if parsed_value > 0 else None
+
+
+def ensure_rate_limit_credit_limits(project_credentials, repository_config_path):
+    """Write the credit ceilings that have no default in the daemon, when config.toml lacks them.
+
+    This is the one class of missing setting worth fixing instead of reporting: the values are
+    policy, not secrets, so a sane starting point exists — and the alternative is the daemon
+    exiting with `missing required setting rate_limit.company_cpu_10s` on every restart. They go
+    into the file rather than the unit's Environment= so the operator can see and tune them.
+
+    Values already present are never touched. A missing window is filled with the example default
+    raised to the previous window's value, so completing a hand-tuned set cannot produce the
+    decreasing sequence the daemon rejects (10s <= 1h <= 24h).
+    """
+    missing_credit_limits = {}
+    for credit_scope_name, window_defaults in RATE_LIMIT_CREDIT_DEFAULTS.items():
+        previous_window_value = 0
+        for window_suffix, default_value in zip(RATE_LIMIT_WINDOW_SUFFIXES, window_defaults):
+            setting_name = f"rate_limit.{credit_scope_name}_{window_suffix}"
+            configured_value = read_positive_integer_setting(project_credentials, setting_name)
+            if configured_value is not None:
+                previous_window_value = configured_value
+                continue
+            previous_window_value = max(default_value, previous_window_value)
+            missing_credit_limits[setting_name] = previous_window_value
+
+    if not missing_credit_limits:
+        print_debug("Every rate-limit credit ceiling is already set in config.toml.")
+        return
+
+    print_debug(
+        f"Writing {len(missing_credit_limits)} default credit ceiling(s) to "
+        f"{repository_config_path}, which would otherwise stop the daemon at startup:"
+    )
+    for setting_name, default_value in missing_credit_limits.items():
+        print_debug(f"  {setting_name} = {default_value}")
+    set_config_values(repository_config_path, missing_credit_limits)
 
 
 def build_tls_directive_lines(bridge_domain, existing_nginx_configuration_contents):
@@ -791,7 +872,7 @@ def install_systemd_service(repository_config_path, bridge_port):
 
 
 def print_summary(
-    repository_config_path, runtime_username, bridge_domain, bridge_port, rate_limit_address
+    repository_config_path, runtime_username, bridge_domain, bridge_port, server_utils_address
 ):
     print_debug("Server utilities configuration completed.")
     print_debug(f"Config file: {repository_config_path}")
@@ -800,7 +881,7 @@ def print_summary(
     binary_size_in_bytes = BINARY_PATH.stat().st_size if BINARY_PATH.is_file() else 0
     print_debug(f"Binary path: {BINARY_PATH} ({binary_size_in_bytes / 1_048_576:.1f} MiB)")
     print_debug(f"SSE bridge port (SSE_BRIDGE_PORT): {bridge_port}")
-    print_debug(f"Rate limiter address (loopback, no vhost): {rate_limit_address}")
+    print_debug(f"Raw TCP address, opcode-routed (loopback, no vhost): {server_utils_address}")
     print_debug(f"Service unit: {SYSTEMD_DIRECTORY / SERVICE_NAME}")
     print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / RESTART_PATH_NAME}")
     print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME}")
@@ -824,17 +905,18 @@ def main():
 
     # Resolve everything before touching the system, so a missing value stops the run instead of
     # leaving the host half configured.
-    verify_required_secrets(project_credentials, repository_config_path)
+    verify_required_settings(project_credentials, repository_config_path)
+    ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
     bridge_domain = resolve_bridge_domain(project_credentials, repository_config_path)
     bridge_port = resolve_bridge_port(project_credentials)
-    rate_limit_address = str(
-        get_config_value(project_credentials, "rate_limit.address", "127.0.0.1:14013")
+    server_utils_address = str(
+        get_config_value(project_credentials, "server_utils", "127.0.0.1:14013")
     ).strip()
 
     runtime_username = install_systemd_service(repository_config_path, bridge_port)
     configure_bridge_nginx_vhost(bridge_domain, bridge_port)
     print_summary(
-        repository_config_path, runtime_username, bridge_domain, bridge_port, rate_limit_address
+        repository_config_path, runtime_username, bridge_domain, bridge_port, server_utils_address
     )
 
 

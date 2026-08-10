@@ -8,7 +8,8 @@ sudo python3 scripts/configure_server_utils.py
 ```
 
 No arguments, no install modes, and **no questions at all**. Everything is read from
-`config.toml`; a missing value fails with the key name instead of opening a prompt.
+`config.toml`; a missing value either fails with the key name or is written into the file with a
+documented default — never a prompt.
 
 Must be run as `root`; the service itself runs as a non-root user. Endpoints and protocol:
 [`../server_utils/README.md`](../server_utils/README.md). Design of the two halves:
@@ -17,14 +18,17 @@ Must be run as `root`; the service itself runs as a non-root user. Endpoints and
 
 ---
 
-## 🧩 One binary, two services
+## 🧩 One binary, two transports
 
-`genix-server-utils` hosts both halves in one process:
+`genix-server-utils` hosts everything in one process:
 
-| Service | Port | Exposure | Nginx vhost |
-| ------- | ---- | -------- | ----------- |
-| Credit rate limiter | `rate_limit.address` (default `127.0.0.1:14013`) | Raw TCP, loopback only. HMAC-authenticated but **not encrypted**. | No — never proxied. |
+| Transport | Port | Exposure | Nginx vhost |
+| --------- | ---- | -------- | ----------- |
+| Raw TCP — credit rate limiter and lock service, told apart by the frame's opcode | `server_utils` (default `127.0.0.1:14013`) | Loopback only. HMAC-authenticated but **not encrypted**. | No — never proxied. |
 | SSE bridge | `sse_bridge.port` (default `14012`) | HTTP, must be reachable by browsers. | Yes — TLS + HTTP/3, no buffering. |
+
+`server_utils` is a root-level key, not `rate_limit.address`: one port serves every raw-TCP
+operation, so the address belongs to the process rather than to one service inside it.
 
 They share only the process: the config load, the shutdown signal, and the tokio runtime.
 
@@ -48,7 +52,8 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 | `sse_bridge.url` | yes | Its hostname becomes `server_name`, the config file name, and the `/etc/letsencrypt/live/` directory that is looked up. |
 | `sse_bridge.port` | no | Defaults to **14012** (`DEFAULT_BRIDGE_PORT` in `server_utils/src/config.rs`). |
 | `sse_bridge.verbose` | no | `true` logs every delivered message. |
-| `rate_limit.*` | yes | Quota policy; see `server_utils/README.md`. |
+| `server_utils` | no | Raw-TCP listen address. Defaults to **127.0.0.1:14013**; only reported in the summary. |
+| `rate_limit.*` | filled in | Quota policy; see `server_utils/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
 | `db.*` | yes | Where usage snapshots are persisted. |
 
 - **The two secrets are never prompted for.** They are root-level keys that initial project
@@ -64,6 +69,13 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
   the run with a message naming the key.
 - **`sse_bridge.port`** with a bad value stops the run rather than falling back, because the
   Nginx upstream is built from it.
+- **The credit ceilings are written, not demanded.** They are the one class of missing setting
+  the script can fix: quotas are policy, not secrets, so a sane starting point exists — and the
+  alternative is `missing required setting rate_limit.company_cpu_10s` on every restart, three
+  seconds apart, forever. Values already present are left alone; a missing window is filled with
+  the example default raised to the previous window's value, so completing a hand-tuned set
+  cannot produce the decreasing sequence the daemon rejects (`10s <= 1h <= 24h`). They go into
+  `config.toml` rather than the unit's `Environment=` so they stay visible and tunable.
 
 ---
 

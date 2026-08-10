@@ -154,9 +154,9 @@ type EnvStruct struct {
 	// back to 127.0.0.1:14446 when empty.
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
-	// RATE_LIMIT_ADDRESS is the Rust raw-TCP server-utils endpoint: the credit limiter and the
-	// lock service share it, routed by opcode.
-	RATE_LIMIT_ADDRESS               string
+	// SERVER_UTILS_ADDRESS is the Rust raw-TCP endpoint: the credit limiter and the lock service
+	// share it, routed by the frame's opcode. One address for every operation the daemon serves.
+	SERVER_UTILS_ADDRESS             string
 	RATE_LIMIT_COMPANY_CPU_24H       uint64
 	RATE_LIMIT_COMPANY_INFERENCE_24H uint64
 	RATE_LIMIT_USER_CPU_24H          uint64
@@ -178,6 +178,10 @@ type fileConfig struct {
 	AdminPassword  string `toml:"admin_password"`
 	SecretPhrase   string `toml:"secret_phrase"`
 	InternalApikey string `toml:"internal_apikey"`
+	// Root level, not under [rate_limit]: one raw-TCP endpoint serves every server-utils
+	// operation, and the opcode picks which. Nesting it under one of its consumers would read
+	// as if the lock service had an address of its own.
+	ServerUtils string `toml:"server_utils"`
 
 	Providers struct {
 		Backend string `toml:"backend"`
@@ -234,7 +238,6 @@ type fileConfig struct {
 	} `toml:"agent"`
 
 	RateLimit struct {
-		Address             string `toml:"address"`
 		CompanyCPU24h       uint64 `toml:"company_cpu_24h"`
 		CompanyInference24h uint64 `toml:"company_inference_24h"`
 		UserCPU24h          uint64 `toml:"user_cpu_24h"`
@@ -309,7 +312,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.DEFAULT_MODEL = file.Agent.DefaultModel
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
-	env.RATE_LIMIT_ADDRESS = file.RateLimit.Address
+	env.SERVER_UTILS_ADDRESS = file.ServerUtils
 	env.RATE_LIMIT_COMPANY_CPU_24H = file.RateLimit.CompanyCPU24h
 	env.RATE_LIMIT_COMPANY_INFERENCE_24H = file.RateLimit.CompanyInference24h
 	env.RATE_LIMIT_USER_CPU_24H = file.RateLimit.UserCPU24h
@@ -422,13 +425,13 @@ func PopulateVariables() {
 	if len(Env.WEBPAGE_RENDERER_URL) == 0 {
 		Env.WEBPAGE_RENDERER_URL = DefaultWebpageRendererURL
 	}
-	// The environment override lets systemd/Lambda point at a private limiter without rewriting TOML.
-	if rateLimitAddress := strings.TrimSpace(os.Getenv("RATE_LIMIT_ADDRESS")); rateLimitAddress != "" {
-		Env.RATE_LIMIT_ADDRESS = rateLimitAddress
+	// The environment override lets systemd/Lambda point at a private daemon without rewriting TOML.
+	if serverUtilsAddress := strings.TrimSpace(os.Getenv("SERVER_UTILS_ADDRESS")); serverUtilsAddress != "" {
+		Env.SERVER_UTILS_ADDRESS = serverUtilsAddress
 	}
-	Env.RATE_LIMIT_ADDRESS = strings.TrimSpace(Env.RATE_LIMIT_ADDRESS)
-	if Env.RATE_LIMIT_ADDRESS == "" {
-		Env.RATE_LIMIT_ADDRESS = "127.0.0.1:14013"
+	Env.SERVER_UTILS_ADDRESS = strings.TrimSpace(Env.SERVER_UTILS_ADDRESS)
+	if Env.SERVER_UTILS_ADDRESS == "" {
+		Env.SERVER_UTILS_ADDRESS = "127.0.0.1:14013"
 	}
 	// Public registration must never be unlimited by omission, so an absent or nonsensical
 	// setting falls back to the documented defaults instead of to zero.
