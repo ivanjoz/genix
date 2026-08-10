@@ -58,8 +58,21 @@ func BridgeEnabled() bool {
 	return core.Env.IS_SERVERLESS && len(bridgeBaseURL()) > 0
 }
 
+// bridgeBaseURL supplies the scheme when sse_bridge.url is a bare host. The
+// deploy script only wants the hostname (it becomes Nginx's server_name), so a
+// scheme-less value passes configuration unnoticed and then fails on every call
+// with "unsupported protocol scheme" — at request time, in Lambda, far from the
+// edit that caused it. Loopback means a bridge started by hand for a local test,
+// where there is no Nginx terminating TLS.
 func bridgeBaseURL() string {
-	return strings.TrimRight(strings.TrimSpace(core.Env.SSE_BRIDGE_URL), "/")
+	configuredURL := strings.TrimRight(strings.TrimSpace(core.Env.SSE_BRIDGE_URL), "/")
+	if len(configuredURL) == 0 || strings.Contains(configuredURL, "://") {
+		return configuredURL
+	}
+	if strings.HasPrefix(configuredURL, "127.0.0.1") || strings.HasPrefix(configuredURL, "localhost") {
+		return "http://" + configuredURL
+	}
+	return "https://" + configuredURL
 }
 
 // makeBridgeServiceAuthHeader signs the current timestamp with INTERNAL_APIKEY, the

@@ -145,19 +145,18 @@ Client IP `203.0.113.45`, first frame on a fresh connection (sequence 0).
 **Step 2 — the handler asks for the lock.** `backend/security/signup.go`
 
 ```go
-core.AcquireLock(ctx, core.ActionSignUpByIP /* =1 */, 3405803821, core.LockOptions{
-    MaxWaiters: 2,               // a 3rd waiter is refused instantly, not parked
-    Wait:       5 * time.Second, // how long we will queue
-    Lease:      30 * time.Second,// daemon's deadline on us while we hold
-})
+core.AcquireLock(ctx, core.ActionSignUpByIP /* =1 */, 3405803821, 2 /* max waiters */)
+
+// wait (5s, how long we will queue) and lease (15s, the daemon's deadline on us while we
+// hold) are constants in backend/core/server_utils/locks.go, not per-call-site knobs.
 ```
 
 **Step 3 — the frame on the wire.** 24 bytes:
 
 ```
- 02 │ 00 01 │ 00 00 00 00 CB 00 71 2D │ 02 │ 13 88 │ 75 30 │ <8-byte HMAC>
+ 02 │ 00 01 │ 00 00 00 00 CB 00 71 2D │ 02 │ 13 88 │ 3A 98 │ <8-byte HMAC>
  ▲    ▲       ▲                         ▲    ▲       ▲
- │    │       │                         │    │       └─ lease_ms  = 30000
+ │    │       │                         │    │       └─ lease_ms  = 15000
  │    │       │                         │    └───────── wait_ms   = 5000
  │    │       │                         └────────────── max_waiters = 2
  │    │       └──────────────────────────────────────── identifier = the IP

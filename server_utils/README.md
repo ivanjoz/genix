@@ -73,13 +73,24 @@ quota state and must not write the same absolute rows.
 
 ## Configuration
 
-Add `server_utils` and `[rate_limit]` to the project `config.toml`; the complete commented
+Add `[server_utils]` and `[rate_limit]` to the project `config.toml`; the complete commented
 example is in [`../config.example.toml`](../config.example.toml).
 
 ```toml
-# The raw-TCP endpoint of the whole process, root level: the opcode decides which service
+# The raw-TCP endpoint of the whole process, its own section: the opcode decides which service
 # answers, so the address is not the rate limiter's to own.
-server_utils = "127.0.0.1:14013"
+#
+# `host` is what the CLIENT dials; `public` is what the DAEMON binds — true is 0.0.0.0, false is
+# 127.0.0.1. They are separate because behind NAT they cannot be one value: a cloud VM's public
+# IP is never on its own interface, so binding it fails with EADDRNOTAVAIL. With public = false
+# the client ignores `host` and dials loopback.
+#
+# public = true puts the port on the open internet. Frames are HMAC-authenticated but NOT
+# encrypted, so it is only worth it when the backend runs off-box (Lambda, for instance).
+[server_utils]
+host   = "127.0.0.1"
+port   = 14013
+public = false
 
 # Purpose: Configure process limits and the two global quota profiles.
 [rate_limit]
@@ -139,9 +150,10 @@ setting can be overridden by its uppercase environment equivalent, such as
 All quota values must be positive and nondecreasing from 10 seconds to one hour to 24 hours. The
 24-hour values cannot exceed `uint32`, which is the largest persisted blob width.
 
-`sse_bridge.url` is *not* parsed by this process — the backend and the frontend read it to decide
-whether to use a bridge at all (empty, or equal to `aws.lambda_url`, means the backend serves its
-own `/agent/stream`). The deployment script uses it for the Nginx `server_name`.
+`sse_bridge.url` is *not* parsed by this process — the backend reads it for service-to-service
+publishing and the deployment script uses it for the Nginx `server_name`. The frontend gets the
+matching public URL from the selected `[[endpoints]].bridge`; omitting that field means the
+selected backend serves its own `/agent/stream`.
 
 ## Build and test
 

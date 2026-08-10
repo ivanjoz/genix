@@ -26,13 +26,9 @@ const (
 	lockReleasePayloadSize = 12
 )
 
-// Lock actions. One constant per feature that needs serialization: two features can never
-// collide on a key even when their identifiers coincide.
-const (
-	// ActionSignUpByIP serializes public registration per client IP, so the "N emails per
-	// window" count cannot be read by two Lambdas at once.
-	ActionSignUpByIP uint16 = 1
-)
+// The action namespace itself lives in core (enums.go), not here: which features need
+// serialization is a property of the application, and this package only carries the number to the
+// daemon. Everything below treats an action as an opaque uint16.
 
 var (
 	// ErrLockBusy is a real answer from the daemon: the key is taken and the queue is full, or
@@ -53,6 +49,8 @@ const (
 	lockReplyMisuse      = 4
 )
 
+// LockOptions is the full acquire surface, reached through client.Acquire. Handlers do not build
+// one: they call AcquireLock, which fills Wait and Lease with the values below.
 type LockOptions struct {
 	// MaxWaiters is the queue ceiling. Zero makes the call a try-lock. Callers past the ceiling
 	// are refused immediately rather than parked, which is what keeps a flood from becoming a
@@ -114,15 +112,39 @@ func (lock *Lock) Release() {
 	})
 }
 
-// AcquireLock blocks until the key is free, the queue refuses us, or Wait elapses.
+// The timings every call site gets. They are not parameters because there is nothing a handler
+// knows that would make it pick different ones: both are properties of this daemon and of how long
+// a critical section behind it is allowed to run, not of the feature taking the lock.
+//
+// lockLease has to outlast the longest critical section any caller puts under a lock, or the daemon
+// hands the key to the next caller while the first is still working — the exact race the lock
+// exists to prevent. Sign-up is the current bound: core.SendEmail's 4s connect + 6s send plus its
+// queries. Anything slower than that under a lock needs this raised, or its own lease.
+//
+// lockWait is deliberately shorter than that hold. Contention here is the abuse pattern, so
+// refusing the extras fast is the wanted behavior; a queue that patiently absorbs a flood is doing
+// the attacker's work. LockOptions remains for tests, which need to drive the edges.
+const (
+	lockWait  = 5 * time.Second
+	lockLease = 15 * time.Second
+)
+
+// AcquireLock blocks until the key is free, the queue refuses us, or lockWait elapses.
+//
+// maxWaiters is the queue ceiling for this key, and the only knob a call site gets. Zero makes it a
+// try-lock; callers arriving past the ceiling are refused immediately instead of parked.
 func AcquireLock(
-	ctx context.Context, action uint16, identifier int64, options LockOptions,
+	ctx context.Context, action uint16, identifier int64, maxWaiters uint8,
 ) (*Lock, error) {
 	client := serverUtils()
 	if client == nil {
 		return nil, fmt.Errorf("%w: not configured", ErrLockUnavailable)
 	}
-	return client.Acquire(ctx, action, identifier, options)
+	return client.Acquire(ctx, action, identifier, LockOptions{
+		MaxWaiters: maxWaiters,
+		Wait:       lockWait,
+		Lease:      lockLease,
+	})
 }
 
 func (client *ServerUtilsClient) Acquire(

@@ -438,27 +438,21 @@
                 </div>
               </div>
               <Input required={true} label="Username|Usuario" saveOn={loginForm} save="User" type="text" css="welcome-login-field" inputCss="text-base" disabled={isLoginLoading} />
-              {#if isLoginLoading}
-                <!-- Takes the password field's slot at its exact height so nothing shifts. -->
-                <div
-                  class="flex items-center justify-center gap-10 rounded-[12px] border border-white/20 bg-white/8 text-violet-100"
-                  style="height: var(--input-height)"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <i class="icon-[fa--refresh] animate-spin text-lg" aria-hidden="true"></i>
-                  <span class="text-sm"><T text="Signing in...|Ingresando..." /></span>
-                </div>
-              {:else}
-                <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" css="welcome-login-field" inputCss="text-base" />
-              {/if}
+              <!-- Keep the field mounted so loading never replaces the form with a mismatched block. -->
+              <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" css="welcome-login-field" inputCss="text-base" disabled={isLoginLoading} />
               <button
                 type="submit"
                 class="mt-4 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label={tr('Submit login credentials|Enviar credenciales de acceso')}
+                aria-busy={isLoginLoading}
                 disabled={isLoginLoading}
               >
-                <i class={isLoginLoading ? 'icon-[fa--refresh] animate-spin' : 'icon-[fa--sign-in]'} aria-hidden="true"></i>
+                {#if isLoginLoading}
+                  <!-- A restrained ring reads clearly at button scale and matches the glass palette. -->
+                  <span class="welcome-login-spinner" aria-hidden="true"></span>
+                {:else}
+                  <i class="icon-[fa--sign-in]" aria-hidden="true"></i>
+                {/if}
                 <span class="font-semibold"><T text={isLoginLoading ? 'Signing in...|Ingresando...' : 'Sign in|Ingresar'} /></span>
               </button>
             </form>
@@ -660,11 +654,36 @@
     --input-ring-color: rgb(167 139 250 / 32%);
     --input-ring-color-invalid: rgb(248 113 113 / 28%);
     --input-shadow-color: rgb(0 0 0 / 28%);
+    --input-bg-disabled: linear-gradient(145deg, rgb(15 23 42 / 78%), rgb(30 41 59 / 66%));
+    --input-border-color-disabled: rgb(255 255 255 / 14%);
     --input-label-color: rgb(226 232 240 / 78%);
     --input-label-color-focus: white;
+    --input-label-color-disabled: rgb(226 232 240 / 58%);
     --input-text-color: white;
+    --input-text-color-disabled: rgb(226 232 240 / 62%);
     --input-placeholder-color: rgb(226 232 240 / 42%);
     --input-suffix-color: rgb(221 214 254 / 78%);
+  }
+
+  /* app.css paints disabled native inputs white; the shell owns the visible glass fill. */
+  :global(.welcome-login-field input:disabled) {
+    background: transparent;
+    color: var(--input-text-color-disabled);
+    -webkit-text-fill-color: var(--input-text-color-disabled);
+  }
+
+  /* One quiet loading cue is enough; keeping it local avoids changing shared buttons. */
+  .welcome-login-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgb(255 255 255 / 38%);
+    border-top-color: white;
+    border-radius: 999px;
+    animation: welcome-login-spin 0.75s linear infinite;
+  }
+
+  @keyframes welcome-login-spin {
+    to { transform: rotate(360deg); }
   }
 
   /* Reserve the right 65% for the resolved company name and center the ID on the left. */

@@ -59,6 +59,10 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, ".", "python3", "scripts/configure_server_utils.py")
 	}},
 
+	{key: "follow_cloudwatch_logs", group: scriptGroupServers, label: "Follow Cloudwatch Logs", run: func(context deployContext, _ []string) error {
+		return runCommand(context, "scripts", context.goBinary, "run", ".", "follow_cloudwatch_logs")
+	}},
+
 	{key: "generate_controllers", group: scriptGroupGenerators, label: "Regenerar Controllers", run: func(context deployContext, _ []string) error {
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "generate_controllers")
 	}},

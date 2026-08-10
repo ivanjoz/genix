@@ -12,11 +12,23 @@ secret_phrase  = "cambie_esta_frase"
 # X-Bridge-Auth del SSE bridge (ambos en server_utils/). Separado de secret_phrase para poder
 # rotarlo sin invalidar todas las sesiones activas.
 internal_apikey = "cambie_esta_clave"
-# Puerto TCP crudo del proceso genix-server-utils. Va en la raíz y no dentro de [rate_limit]
-# porque no es de un servicio: el opcode de la trama decide si atiende el credit limiter o el
-# lock service, y los dos escuchan aquí. Sólo loopback: va autenticado con HMAC, no cifrado.
-server_utils = "127.0.0.1:14013"
 github_account = "mi-cuenta"
+
+# Puerto TCP crudo del proceso genix-server-utils. Sección propia y no una clave de [rate_limit]
+# porque no es de un servicio: el opcode de la trama decide si atiende el credit limiter o el
+# lock service, y los dos escuchan aquí.
+#
+# host es la dirección que MARCA el cliente (el backend); public es lo que BINDEA el daemon:
+# true = 0.0.0.0, false = 127.0.0.1. Son campos distintos porque detrás de un NAT no pueden ser
+# el mismo valor: la IP pública de una VM en la nube nunca está en su interfaz, y bindearla falla
+# con EADDRNOTAVAIL. Con public = false el cliente ignora host y usa loopback.
+#
+# public = true expone el puerto a Internet: las tramas van autenticadas con HMAC pero SIN cifrar,
+# así que sólo tiene sentido cuando el backend corre fuera del servidor (p. ej. en Lambda).
+[server_utils]
+host = "127.0.0.1"
+port = 14013
+public = false
 
 # ─── Proveedores ────────────────────────────────────────────────────────────
 [providers]
@@ -167,8 +179,11 @@ only_save = false
 
 # Endpoints ofrecidos en el selector de servidor del login.
 [[endpoints]]
-name  = "Principal"
-route = "https://mi-backend.example.com/"
+name    = "Principal"
+route   = "https://mi-backend.example.com/"
+# Vacío/omitido = este backend sirve /agent/stream; otro dominio = server_utils bridge.
+bridge  = "https://mi-bridge.example.com/"
+cdn_url = "https://mi-cdn.example.com/"
 
 # Destinos del deploy a VPS (scripts/deploy_vps.go).
 [[servers]]

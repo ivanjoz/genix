@@ -80,7 +80,7 @@ mismas, así que también funcionan por línea de comandos:
 | Grupo | Scripts |
 |---|---|
 | Base de Datos | `check_tables`, `create`, `edit` |
-| Servidores | `configure_server`, `configure_db`, `configure_server_utils` |
+| Servidores | `configure_server`, `configure_db`, `configure_server_utils`, `follow_cloudwatch_logs` |
 | Generadores | `generate_controllers`, `sync_struct_interfaces`, `generate_menu_descriptions`, `generate_sale_orders` |
 
 `create` y `edit` necesitan argumentos: si no vinieron por línea de comandos se piden por stdin

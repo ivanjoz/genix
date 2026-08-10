@@ -10,7 +10,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
@@ -267,12 +266,34 @@ func makeSignUpEmailBody(requestID int64, code string) string {
 </html>`, code, verificationLink, verificationLink)
 }
 
+// sendSignUpEmail is the single delivery point of this handler, so the dry-run switch cannot be
+// honoured on one path and forgotten on the other.
+func sendSignUpEmail(email string, requestID int64, code string, dryRun bool) error {
+	if dryRun {
+		// The 4s stand in for the SMTP round trip: without them the critical section is just two
+		// queries, too short for concurrent callers to ever meet inside the lock.
+		core.Log("PostSignUpRequest:: dryRun, no se envía el correo de la solicitud", requestID)
+		time.Sleep(4 * time.Second)
+		return nil
+	}
+	return core.SendEmail(email, signUpEmailSubject, makeSignUpEmailBody(requestID, code))
+}
+
 // PostSignUpRequest is step 1: it mails a verification code to an address that does not yet own
 // a company.
 func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
-	body := struct{ Email string }{}
+	// DryRun runs the whole handler except the SMTP delivery, so the lock below can be exercised
+	// with concurrent callers without mailing anybody. It is a testing affordance only: in
+	// production it would let an anonymous caller take sign-up locks for free, so it is refused.
+	body := struct {
+		Email  string
+		DryRun bool
+	}{}
 	if err := json.Unmarshal([]byte(*req.Body), &body); err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
+	}
+	if body.DryRun && strings.HasPrefix(strings.ToLower(core.Env.ENVIROMENT), "prod") {
+		return req.MakeErr("dryRun no está permitido en este entorno.")
 	}
 
 	email := normalizeSignUpEmail(body.Email)
@@ -292,23 +313,12 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 	// caller at a time. The queue is deliberately shallow: parallel requests from one IP are the
 	// abuse pattern, so refusing the extras fast is the wanted behavior, not a degradation.
 	//
-	// Lease must outlast the whole critical section, SMTP included, or the daemon hands the key
-	// to the next caller while this one is still working — the exact race the lock exists to
-	// prevent. Worst case here is core.SendEmail's 4s connect + 6s send plus the queries, so 30s
-	// is roughly triple the bound. Raising the mailer timeouts means raising this.
-	signUpLock, err := core.AcquireLock(context.Background(), core.ActionSignUpByIP, ipKey, core.LockOptions{
-		MaxWaiters: 2,
-		Wait:       5 * time.Second,
-		Lease:      30 * time.Second,
-	})
-	if err != nil {
-		if errors.Is(err, core.ErrLockBusy) {
-			return req.MakeErrCode("Demasiadas solicitudes simultáneas. Intente nuevamente.", 429)
-		}
-		// Fails closed, unlike the credit limiter: with the daemon down this endpoint would be an
-		// open relay for verification emails, and registration is on nobody's critical path.
-		core.Log("lock service unavailable, refusing sign-up::", err)
-		return req.MakeErrCode("El servicio de registro no está disponible.", 503)
+	// Failing closed on an unreachable daemon, unlike the credit limiter, is the point: with no
+	// lock this endpoint is an open relay for verification emails, and registration is on nobody's
+	// critical path.
+	signUpLock, lockErr := core.AcquireLock(context.Background(), core.ActionSignUpByIP, ipKey, 2)
+	if lockErr != nil {
+		return lockErr.Response(req)
 	}
 	defer signUpLock.Release()
 
@@ -355,8 +365,7 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 			})
 		}
 
-		if err := core.SendEmail(email, signUpEmailSubject,
-			makeSignUpEmailBody(latestRequest.ID, latestRequest.Code)); err != nil {
+		if err := sendSignUpEmail(email, latestRequest.ID, latestRequest.Code, body.DryRun); err != nil {
 			return req.MakeErr("No se pudo enviar el correo de verificación.", err)
 		}
 
@@ -391,7 +400,7 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Deliver first, persist second. A row written before a failed send would be a request whose
 	// code nobody ever received, and it would then block every retry until it expired.
-	if err := core.SendEmail(email, signUpEmailSubject, makeSignUpEmailBody(requestID, code)); err != nil {
+	if err := sendSignUpEmail(email, requestID, code, body.DryRun); err != nil {
 		return req.MakeErr("No se pudo enviar el correo de verificación.", err)
 	}
 

@@ -178,14 +178,18 @@ class ConfigurationResolutionTest(unittest.TestCase):
     def test_both_secrets_must_be_present_and_are_never_prompted_for(self):
         configure_server_utils = load_configure_server_utils_module()
         config_path = Path("/repo/config.toml")
+        database_settings = {
+            "db": {"host": "10.0.1.65", "port": 14008, "name": "genix", "user": "u", "password": "p"}
+        }
 
         with redirect_stdout(io.StringIO()):
-            # Both present: passes without asking anything.
-            configure_server_utils.verify_required_secrets(
-                {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678"}, config_path
+            # Everything present: passes without asking anything.
+            configure_server_utils.verify_required_settings(
+                {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678", **database_settings},
+                config_path,
             )
 
-            # Either one missing or blank stops the run, naming the key.
+            # Any secret missing or blank stops the run, naming the key.
             for incomplete_credentials in (
                 {},
                 {"secret_phrase": "abcd1234"},
@@ -193,7 +197,54 @@ class ConfigurationResolutionTest(unittest.TestCase):
                 {"secret_phrase": "abcd1234", "internal_apikey": "   "},
             ):
                 with self.assertRaises(SystemExit):
-                    configure_server_utils.verify_required_secrets(incomplete_credentials, config_path)
+                    configure_server_utils.verify_required_settings(
+                        {**incomplete_credentials, **database_settings}, config_path
+                    )
+
+            # And so does a missing database setting: the daemon exits when it cannot reach Scylla.
+            with self.assertRaises(SystemExit):
+                configure_server_utils.verify_required_settings(
+                    {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678"}, config_path
+                )
+
+    def test_the_failure_report_reads_the_real_cause_from_the_journal(self):
+        configure_server_utils = load_configure_server_utils_module()
+
+        bind_failure_journal = (
+            "genix-server-utils[58290]: INFO scylla::cluster::worker: Node added to cluster\n"
+            "genix-server-utils[58290]: Error: failed to bind 150.136.42.240:14013\n"
+            "genix-server-utils[58290]:     Cannot assign requested address (os error 99)\n"
+            "systemd[1]: genix-server-utils.service: Failed with result 'exit-code'.\n"
+        )
+        self.assertIn(
+            "[server_utils] public",
+            configure_server_utils.diagnose_service_failure(bind_failure_journal),
+        )
+
+        # The undeployed-tables hypothesis is still reported — when the journal actually says so.
+        self.assertIn(
+            "check_tables",
+            configure_server_utils.diagnose_service_failure(
+                "genix-server-utils[1]: Error: unconfigured table credit_usage\n"
+            ),
+        )
+
+        # An unrecognized failure returns nothing, so the caller can say so instead of guessing.
+        self.assertIsNone(configure_server_utils.diagnose_service_failure("nothing familiar here"))
+
+    def test_a_missing_optional_binary_does_not_crash_the_run(self):
+        # firewall-cmd is absent on Ubuntu, and probing for it used to raise FileNotFoundError
+        # through run_command and abort the script after all the real work had been done.
+        configure_server_utils = load_configure_server_utils_module()
+
+        with redirect_stdout(io.StringIO()):
+            result = configure_server_utils.run_command(
+                ["genix-binary-that-does-not-exist"], allow_failure=True
+            )
+        self.assertEqual(result.returncode, 127)
+
+        with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            configure_server_utils.run_command(["genix-binary-that-does-not-exist"])
 
     def test_the_script_never_imports_an_interactive_prompt(self):
         # The old bridge script asked for sse_bridge.apikey. Both secrets are now root-level keys

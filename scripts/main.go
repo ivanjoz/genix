@@ -27,6 +27,9 @@ func main() {
 	case "generate_menu_descriptions":
 		GenerateMenuDescriptions()
 
+	case "follow_cloudwatch_logs":
+		FollowCloudWatchLogs()
+
 	case "deploy_vps":
 		DeployVPS()
 

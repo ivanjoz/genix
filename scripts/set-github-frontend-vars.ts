@@ -3,13 +3,13 @@ import { join, resolve } from 'node:path'
 interface FrontendEndpoint {
 	name: string
 	route: string
+	bridge: string
+	cdn_url: string
 }
 
 interface ProjectConfig {
 	github_account?: unknown
-	aws?: { lambda_url?: unknown }
-	sse_bridge?: { url?: unknown }
-	frontend?: { cdn_url?: unknown; zone_name?: unknown }
+	frontend?: { zone_name?: unknown }
 	endpoints?: unknown
 }
 
@@ -47,9 +47,15 @@ const requireFrontendEndpoints = (configValue: unknown): FrontendEndpoint[] => {
 			throw new Error(`Config endpoints[${endpointIndex}] must be an object`)
 		}
 		const endpointRecord = endpointValue as Record<string, unknown>
+		const endpointRoute = requireHttpUrl(endpointRecord.route, `endpoints[${endpointIndex}].route`)
 		return {
 			name: requireNonEmptyString(endpointRecord.name, `endpoints[${endpointIndex}].name`),
-			route: requireHttpUrl(endpointRecord.route, `endpoints[${endpointIndex}].route`),
+			route: endpointRoute,
+			// A backend without an external bridge serves the agent stream itself.
+			bridge: endpointRecord.bridge
+				? requireHttpUrl(endpointRecord.bridge, `endpoints[${endpointIndex}].bridge`)
+				: endpointRoute,
+			cdn_url: requireHttpUrl(endpointRecord.cdn_url, `endpoints[${endpointIndex}].cdn_url`),
 		}
 	})
 }
@@ -96,13 +102,6 @@ const main = async (): Promise<void> => {
 	const frontendEndpoints = requireFrontendEndpoints(config.endpoints)
 	const githubAccount = requireNonEmptyString(config.github_account, 'github_account')
 	const githubVariables = new Map<string, string>([
-		['PUBLIC_LAMBDA_URL', requireHttpUrl(config.aws?.lambda_url, 'aws.lambda_url')],
-		// Optional: without a deployed SSE bridge the frontend streams from the
-		// backend itself, so this falls back to aws.lambda_url.
-		['PUBLIC_SSE_BRIDGE_URL', config.sse_bridge?.url
-			? requireHttpUrl(config.sse_bridge.url, 'sse_bridge.url')
-			: requireHttpUrl(config.aws?.lambda_url, 'aws.lambda_url')],
-		['PUBLIC_FRONTEND_CDN', requireHttpUrl(config.frontend?.cdn_url, 'frontend.cdn_url')],
 		['PUBLIC_ZONE_NAME', requireNonEmptyString(config.frontend?.zone_name, 'frontend.zone_name')],
 		['PUBLIC_ENDPOINTS', JSON.stringify(frontendEndpoints)],
 	])

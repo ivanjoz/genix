@@ -12,19 +12,12 @@ export const setupEnv = () => {
   try {
     if (fs.existsSync(configPath)) {
       const config = Bun.TOML.parse(fs.readFileSync(configPath, 'utf-8'));
-      // Keep the endpoint selector config available at build time for SvelteKit.
+      // Each selector option owns its API, bridge, and CDN configuration.
       const serializedPublicEndpoints = JSON.stringify(
         Array.isArray(config.endpoints) ? config.endpoints : []
       );
-      // sse_bridge.url is where the agent's event stream lives. It defaults to
-      // aws.lambda_url so an install without a bridge keeps talking to the backend
-      // directly; point it at the server_utils bridge to make the Lambda
-      // deployment able to stream (see PLAN_SSE_BRIDGE.md).
       const envContent = [
         `VITE_PROXY_PORT=${process.env.GENIX_PROXY_PORT || '3572'}`,
-        `PUBLIC_LAMBDA_URL=${config.aws?.lambda_url || ''}`,
-        `PUBLIC_SSE_BRIDGE_URL=${config.sse_bridge?.url || config.aws?.lambda_url || ''}`,
-        `PUBLIC_FRONTEND_CDN=${config.frontend?.cdn_url || ''}`,
         `PUBLIC_ZONE_NAME=${config.frontend?.zone_name || ''}`,
         // Mirror the backend's configured standalone port for the local endpoint selector.
         `PUBLIC_LOCAL_API_PORT=${config.server?.port || 3589}`,

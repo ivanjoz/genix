@@ -87,6 +87,35 @@ REQUIRED_SECRET_NAMES = ("secret_phrase", "internal_apikey")
 # and cannot be invented here.
 REQUIRED_DATABASE_SETTINGS = ("db.host", "db.port", "db.name", "db.user", "db.password")
 
+# Every way this daemon is known to refuse to start, matched against its journal. Ordered from the
+# most specific fragment to the most generic, because a line can contain more than one.
+KNOWN_SERVICE_FAILURE_CAUSES = (
+    (
+        "Cannot assign requested address",
+        "the listen address is not on any interface of this host. The bind is derived from "
+        "[server_utils] public (true = 0.0.0.0, false = 127.0.0.1) precisely so a NAT'd public IP "
+        "is never bound: on a cloud VM that address lives in the provider's NAT, not on the NIC.",
+    ),
+    (
+        "Address already in use",
+        "another process already holds that port. Find it with 'ss -lntp | grep <port>' — most "
+        "often a copy of this daemon started outside systemd.",
+    ),
+    (
+        "credit_usage",
+        "the backend tables are not deployed, so the rate limiter exits rather than admit traffic "
+        "it cannot account for. Run 'cd scripts && go run . check_tables' and rerun this script.",
+    ),
+    (
+        "missing required setting",
+        "config.toml lacks a key the daemon has no default for. The log line names it.",
+    ),
+    (
+        "Connection refused",
+        "ScyllaDB did not answer at db.host/db.port. Check that it is up and reachable from here.",
+    ),
+)
+
 # The twelve credit ceilings the daemon requires. Unlike every other [rate_limit] key they have
 # no fallback in server_utils/src/config.rs — a guessed quota is worse than none — so an absent
 # one makes the process exit at startup and systemd restart it every RestartSec forever. The
@@ -112,8 +141,8 @@ NGINX_LISTEN_REUSEPORT_PATTERN = re.compile(r"^\s*listen\s+[^;]*\breuseport\b", 
 def resolve_bridge_domain(project_credentials, repository_config_path):
     """Take the vhost hostname from sse_bridge.url. Never prompts: this key is not a secret.
 
-    It is also the key the backend and the frontend read to decide whether to use the bridge at
-    all, so getting it wrong here would install a host nobody talks to.
+    The backend also reads this key for publishing. The frontend receives the same public URL
+    from the selected [[endpoints]].bridge entry.
     """
     configured_url = str(get_config_value(project_credentials, "sse_bridge.url", "")).strip()
     if not configured_url:
@@ -794,17 +823,34 @@ def start_service(systemd_configuration_changed, bridge_port):
     verify_service_is_serving(bridge_port)
 
 
+def diagnose_service_failure(journal_text):
+    """Match the journal against the failures this daemon actually has, newest line first.
+
+    A fixed hypothesis is worse than none: it used to blame the undeployed tables for every
+    failure, so a bind error two lines above in the very same output was read past.
+    """
+    for journal_line in reversed(journal_text.splitlines()):
+        for log_fragment, explanation in KNOWN_SERVICE_FAILURE_CAUSES:
+            if log_fragment in journal_line:
+                return explanation
+    return None
+
+
 def report_service_failure(failure_summary):
     """Print why the daemon is not up, instead of a line telling the reader to go find out."""
     print_debug(f"WARNING: {SERVICE_NAME} is not running ({failure_summary}).")
     print_debug("The units are installed. Last log lines:")
-    run_command(
+    journal_result = run_command(
         ["journalctl", "-u", SERVICE_NAME, "-n", "20", "--no-pager"], allow_failure=True
     )
+
+    explanation = diagnose_service_failure(journal_result.stdout or "")
+    if explanation:
+        print_debug(f"Cause: {explanation}")
+        return
     print_debug(
-        "The usual cause is that the backend tables are not deployed yet, so credit_usage does "
-        "not exist and the rate limiter exits rather than admit traffic it cannot account for. "
-        "Deploy the tables (cd scripts && go run . check_tables) and rerun this script."
+        "No known failure matched the log above. Read it top to bottom: the daemon prints its "
+        "reason and exits, so the last 'Error:' line is the cause."
     )
 
 
@@ -889,8 +935,8 @@ def print_summary(
     print_debug(f"Health check: curl -s http://127.0.0.1:{bridge_port}/health")
     print_debug(f"Through Nginx: curl -s https://{bridge_domain}/health")
     print_debug(
-        f"Reminder: the same sse_bridge.url (https://{bridge_domain}/) must be in the "
-        "config.toml used to build the backend and the frontend, or neither uses the bridge."
+        f"Reminder: sse_bridge.url (https://{bridge_domain}/) configures the backend, and the "
+        "matching [[endpoints]].bridge configures the frontend selector."
     )
 
 

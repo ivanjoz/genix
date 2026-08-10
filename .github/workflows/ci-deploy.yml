@@ -60,12 +60,11 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         env:
+          # Cada opción contiene route, bridge y cdn_url.
           PUBLIC_ENDPOINTS: ${{ vars.PUBLIC_ENDPOINTS || '[]' }}
-          PUBLIC_FRONTEND_CDN: ${{ vars.PUBLIC_FRONTEND_CDN }}
-          PUBLIC_LAMBDA_URL: ${{ vars.PUBLIC_LAMBDA_URL }}
-          # Relay SSE del agente. Sin bridge desplegado apunta al propio Lambda,
-          # que es como el frontend representa "no hay bridge".
-          PUBLIC_SSE_BRIDGE_URL: ${{ vars.PUBLIC_SSE_BRIDGE_URL || vars.PUBLIC_LAMBDA_URL }}
+          # Puerto del backend standalone para la opción "Local" del selector de endpoint.
+          # En CI no hay config.toml del que leer [server].port, así que se declara aquí.
+          PUBLIC_LOCAL_API_PORT: ${{ vars.PUBLIC_LOCAL_API_PORT || '3589' }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
         run: bun run build
 
@@ -75,12 +74,11 @@ jobs:
         # Lambda no dependa de un despliegue de infraestructura para actualizarse.
         working-directory: .
         env:
+          # El renderer usa el primer endpoint, incluido su CDN.
           PUBLIC_ENDPOINTS: ${{ vars.PUBLIC_ENDPOINTS || '[]' }}
-          PUBLIC_FRONTEND_CDN: ${{ vars.PUBLIC_FRONTEND_CDN }}
-          PUBLIC_LAMBDA_URL: ${{ vars.PUBLIC_LAMBDA_URL }}
-          # Relay SSE del agente. Sin bridge desplegado apunta al propio Lambda,
-          # que es como el frontend representa "no hay bridge".
-          PUBLIC_SSE_BRIDGE_URL: ${{ vars.PUBLIC_SSE_BRIDGE_URL || vars.PUBLIC_LAMBDA_URL }}
+          # Puerto del backend standalone para la opción "Local" del selector de endpoint.
+          # En CI no hay config.toml del que leer [server].port, así que se declara aquí.
+          PUBLIC_LOCAL_API_PORT: ${{ vars.PUBLIC_LOCAL_API_PORT || '3589' }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
         run: |
           bun scripts/build-renderer.mjs

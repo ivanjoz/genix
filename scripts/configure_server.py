@@ -85,17 +85,28 @@ def fail_with_error(error_message):
 def run_command(command_arguments, working_directory=None, stream_output=False, allow_failure=False):
     print_debug(f"Running command: {' '.join(command_arguments)}")
 
+    # An absent binary raises FileNotFoundError instead of returning an exit code, so allow_failure
+    # alone did not cover it: probing for an optional tool (firewall-cmd on a host without
+    # firewalld) crashed the whole script with a traceback after all the real work was done. It is
+    # reported as 127, the same code a shell uses for "command not found".
+    def run_or_report_missing_binary(**subprocess_options):
+        try:
+            return subprocess.run(command_arguments, cwd=working_directory, **subprocess_options)
+        except FileNotFoundError:
+            if not allow_failure:
+                fail_with_error(f"Command not found: {command_arguments[0]}")
+            print_debug(f"Command not found, skipping: {command_arguments[0]}")
+            return subprocess.CompletedProcess(command_arguments, 127, stdout="", stderr="")
+
     if stream_output:
         # A compile can take minutes; let its progress and errors reach the terminal live.
-        command_result = subprocess.run(command_arguments, text=True, cwd=working_directory)
+        command_result = run_or_report_missing_binary(text=True)
         print_debug(f"Exit code: {command_result.returncode}")
         if command_result.returncode != 0 and not allow_failure:
             fail_with_error(f"Command failed: {' '.join(command_arguments)}")
         return command_result
 
-    command_result = subprocess.run(
-        command_arguments, text=True, capture_output=True, cwd=working_directory
-    )
+    command_result = run_or_report_missing_binary(text=True, capture_output=True)
     print_debug(f"Exit code: {command_result.returncode}")
 
     if command_result.stdout.strip():

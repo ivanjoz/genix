@@ -178,10 +178,18 @@ type fileConfig struct {
 	AdminPassword  string `toml:"admin_password"`
 	SecretPhrase   string `toml:"secret_phrase"`
 	InternalApikey string `toml:"internal_apikey"`
-	// Root level, not under [rate_limit]: one raw-TCP endpoint serves every server-utils
-	// operation, and the opcode picks which. Nesting it under one of its consumers would read
-	// as if the lock service had an address of its own.
-	ServerUtils string `toml:"server_utils"`
+	// Its own section, not a key under [rate_limit]: one raw-TCP endpoint serves every
+	// server-utils operation, and the opcode picks which. Nesting it under one of its consumers
+	// would read as if the lock service had an address of its own.
+	//
+	// Host is where a client dials; Public is what the daemon binds (0.0.0.0 vs loopback). They
+	// are separate fields because behind NAT they cannot be the same value: the public IP a
+	// Lambda dials is never an address the VM's own interface holds.
+	ServerUtils struct {
+		Host   string `toml:"host"`
+		Port   int    `toml:"port"`
+		Public bool   `toml:"public"`
+	} `toml:"server_utils"`
 
 	Providers struct {
 		Backend string `toml:"backend"`
@@ -267,6 +275,31 @@ type fileConfig struct {
 
 // applyToEnv vuelca el archivo por secciones sobre la Env plana. Es el único punto donde
 // las dos formas se tocan.
+// Same default the daemon falls back to (server_utils/src/config.rs), so an omitted port keeps
+// both halves pointing at the same socket.
+const defaultServerUtilsPort = 14013
+
+// makeServerUtilsAddress turns the [server_utils] section into the one address this process dials.
+//
+// A private daemon is only reachable on loopback no matter what host is written, so the host is
+// ignored rather than trusted: a value left over from a public deployment would otherwise turn
+// every lock call into a connection to a machine that cannot answer. A public daemon with no host
+// is left empty on purpose, so ConfigureServerUtils refuses it at startup instead of the first
+// lock failing at request time.
+func makeServerUtilsAddress(host string, port int, public bool) string {
+	if port <= 0 {
+		port = defaultServerUtilsPort
+	}
+	if !public {
+		return fmt.Sprintf("127.0.0.1:%d", port)
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+	return fmt.Sprintf("%v:%d", host, port)
+}
+
 func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.APP_NAME = file.AppName
 	env.IS_LOCAL = file.IsLocal
@@ -312,7 +345,8 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.DEFAULT_MODEL = file.Agent.DefaultModel
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
-	env.SERVER_UTILS_ADDRESS = file.ServerUtils
+	env.SERVER_UTILS_ADDRESS = makeServerUtilsAddress(
+		file.ServerUtils.Host, file.ServerUtils.Port, file.ServerUtils.Public)
 	env.RATE_LIMIT_COMPANY_CPU_24H = file.RateLimit.CompanyCPU24h
 	env.RATE_LIMIT_COMPANY_INFERENCE_24H = file.RateLimit.CompanyInference24h
 	env.RATE_LIMIT_USER_CPU_24H = file.RateLimit.UserCPU24h
@@ -400,8 +434,15 @@ func PopulateVariables() {
 	Env = &EnvStruct{}
 	parsedFile := fileConfig{}
 	if err := toml.Unmarshal(variablesBytes, &parsedFile); err != nil {
-		fmt.Println("Error parsing config.toml:", err)
-		return
+		// Volver con Env vacío hacía que el fallo apareciera mucho después, como un panic por
+		// campo faltante (p. ej. server_utils) que no menciona la configuración. Un CONFIG que
+		// aún trae el JSON anterior a la migración a TOML es exactamente ese caso: el error real
+		// es este, así que se aborta aquí y con el origen del contenido a la vista.
+		source := "config.toml"
+		if !useCredentialsFile {
+			source = "la variable de entorno CONFIG"
+		}
+		panic(fmt.Sprintf("no se pudo parsear %s como TOML: %v", source, err))
 	}
 	parsedFile.applyToEnv(Env)
 

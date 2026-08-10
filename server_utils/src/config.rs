@@ -10,7 +10,7 @@ use crate::{
     lock::registry::LockLimits,
 };
 
-const DEFAULT_LISTEN_ADDRESS: &str = "127.0.0.1:14013";
+const DEFAULT_LISTEN_PORT: u16 = 14013;
 const DEFAULT_FLUSH_SECONDS: u64 = 15;
 const DEFAULT_FRAME_TIMEOUT_SECONDS: u64 = 30;
 const DEFAULT_MAX_CONNECTIONS: usize = 1_024;
@@ -68,13 +68,26 @@ pub struct BridgeConfig {
 impl AppConfig {
     pub fn load() -> Result<Self> {
         let config = load_config()?;
-        // Root level, not under [rate_limit]: this one port serves every raw-TCP operation and the
-        // frame's opcode picks the service, so the address belongs to the process, not to one of
-        // the services running inside it.
-        let listen_address = optional_string(&config, "SERVER_UTILS_ADDRESS", "server_utils")
-            .unwrap_or_else(|| DEFAULT_LISTEN_ADDRESS.to_owned())
-            .parse()
-            .context("server_utils must be a socket address such as 127.0.0.1:14013")?;
+        // [server_utils] is its own section, not a key under [rate_limit]: this one port serves
+        // every raw-TCP operation and the frame's opcode picks the service, so it belongs to the
+        // process, not to one of the services running inside it.
+        //
+        // The bind address is DERIVED from `public` and never read from `host`, which is the
+        // client's half of this section. Binding a literal host cannot work behind NAT — a cloud
+        // VM's public IP is never on its NIC, so bind returns EADDRNOTAVAIL and the daemon dies at
+        // startup. A boolean has no such unrepresentable state.
+        let listen_port = optional_u64(&config, "SERVER_UTILS_PORT", "server_utils.port")?
+            .unwrap_or(u64::from(DEFAULT_LISTEN_PORT));
+        let listen_port = u16::try_from(listen_port)
+            .ok()
+            .filter(|port| *port > 0)
+            .context("server_utils.port must be a port number between 1 and 65535")?;
+        let listen_octets = if optional_bool(&config, "SERVER_UTILS_PUBLIC", "server_utils.public") {
+            [0, 0, 0, 0]
+        } else {
+            [127, 0, 0, 1]
+        };
+        let listen_address = SocketAddr::from((listen_octets, listen_port));
         let flush_seconds = optional_u64(
             &config,
             "RATE_LIMIT_FLUSH_SECONDS",
@@ -302,6 +315,7 @@ fn value_text(config: &Table, env_key: &str, toml_path: &str) -> Option<String> 
         Some(Value::String(value)) if !value.trim().is_empty() => Some(value.trim().to_owned()),
         Some(Value::Integer(value)) => Some(value.to_string()),
         Some(Value::Float(value)) => Some(value.to_string()),
+        Some(Value::Boolean(value)) => Some(value.to_string()),
         _ => None,
     }
 }
@@ -317,6 +331,13 @@ fn value_at_path<'a>(config: &'a Table, path: &str) -> Option<&'a Value> {
 
 fn optional_string(config: &Table, env_key: &str, toml_path: &str) -> Option<String> {
     value_text(config, env_key, toml_path)
+}
+
+/// Absent reads as false, and "1" is accepted next to "true" so an environment override can be
+/// written either way.
+fn optional_bool(config: &Table, env_key: &str, toml_path: &str) -> bool {
+    value_text(config, env_key, toml_path)
+        .is_some_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
 fn required_string(config: &Table, env_key: &str, toml_path: &str) -> Result<String> {
@@ -373,6 +394,17 @@ mod tests {
             optional_u64(&config, "IGNORED_B", "test.b").unwrap(),
             Some(43)
         );
+    }
+
+    #[test]
+    fn a_toml_boolean_is_read_as_a_flag() {
+        // `public = true` is a real TOML boolean, not a quoted one: value_text has to decode that
+        // arm or the daemon silently keeps binding loopback and the off-box backend never connects.
+        let config: Table = toml::from_str("[server_utils]\npublic = true").unwrap();
+        assert!(optional_bool(&config, "IGNORED", "server_utils.public"));
+
+        let private: Table = toml::from_str("[server_utils]\nport = 14013").unwrap();
+        assert!(!optional_bool(&private, "IGNORED", "server_utils.public"));
     }
 
     #[test]

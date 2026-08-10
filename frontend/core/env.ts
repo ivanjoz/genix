@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_ENDPOINTS, PUBLIC_FRONTEND_CDN, PUBLIC_LAMBDA_URL, PUBLIC_LOCAL_API_PORT, PUBLIC_SSE_BRIDGE_URL } from '$env/static/public';
+import { PUBLIC_ENDPOINTS, PUBLIC_LOCAL_API_PORT } from '$env/static/public';
 export { browser };
 
 export const IsClient = () => {
@@ -32,9 +32,8 @@ const localApiPort = Number.isInteger(parsedLocalApiPort) && parsedLocalApiPort 
   : 3589
 
 // Build de la tienda publicada: el bundle del renderer que ejecuta el Lambda
-// (VITE_RENDERER_BUILD). Este despliegue no tiene selector de login/endpoint: la API debe
-// ser siempre PUBLIC_LAMBDA_URL, nunca la selección de localStorage ni la opción "Local"
-// que se añade al previsualizar en localhost.
+// (VITE_RENDERER_BUILD). Este despliegue no tiene selector de login/endpoint: usa siempre
+// el primer PUBLIC_ENDPOINTS, nunca localStorage ni la opción "Local" de desarrollo.
 const isStorefrontBuild = !!import.meta.env.VITE_RENDERER_BUILD
 
 if(browser){
@@ -44,7 +43,13 @@ if(browser){
   }
 }
 
-export interface IApiEndpointOption { name: string, route: string, hash: string }
+export interface IApiEndpointOption {
+  name: string
+  route: string
+  bridge: string
+  cdn_url: string
+  hash: string
+}
 
 const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOption[] => {
   try {
@@ -52,24 +57,36 @@ const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOptio
 		if (!Array.isArray(rawEndpoints)) { return [] }
 
     const parsedEndpoints = rawEndpoints
-      .filter(endpointOption => endpointOption.name && endpointOption.route)
+      .filter(endpointOption => endpointOption.name && endpointOption.route && endpointOption.cdn_url)
       // Only explicit credentials endpoints should be visible in the login selector.
       .map((endpointOption) => ({
         name: String(endpointOption.name || "").trim(),
         route: String(endpointOption.route || "").trim(),
+        // An omitted bridge means this backend owns /agent/stream itself.
+        bridge: String(endpointOption.bridge || endpointOption.route || "").trim(),
+        cdn_url: String(endpointOption.cdn_url || "").trim(),
         hash: ""
       }))
 
     console.info("[Env] Parsed API endpoints from PUBLIC_ENDPOINTS:", {
       configuredRoutes: parsedEndpoints.map((endpointOption) => endpointOption.route),
       configuredNames: parsedEndpoints.map((endpointOption) => endpointOption.name),
-      lambdaUrl: PUBLIC_LAMBDA_URL || ""
+      configuredBridges: parsedEndpoints.map((endpointOption) => endpointOption.bridge),
+      configuredCdns: parsedEndpoints.map((endpointOption) => endpointOption.cdn_url)
     })
 
     // Never offer the localhost endpoint in a pinned storefront build, even when the
     // static output is previewed on localhost.
     if (globalThis._isLocal && !isStorefrontBuild) {
-      parsedEndpoints.unshift({ name: "Local", route: `http://localhost:${localApiPort}/`, hash: "" })
+      const localRoute = `http://localhost:${localApiPort}/`
+      parsedEndpoints.unshift({
+        name: "Local",
+        route: localRoute,
+        bridge: localRoute,
+        // Local has no config entry; reuse the primary endpoint's asset store.
+        cdn_url: parsedEndpoints[0]?.cdn_url || localRoute,
+        hash: ""
+      })
     }
 
     const usedHashes = new Set<string>()
@@ -106,27 +123,24 @@ const buildMainApiRoute = (baseRoute: string): string => {
   return `${normalizedBaseRoute}/api/`
 }
 
-const ENPOINTS = parsePublicApiEndpoints(PUBLIC_ENDPOINTS || "")
+const ENDPOINTS = parsePublicApiEndpoints(PUBLIC_ENDPOINTS || "")
 
 const getSelectedApiEndpointRoute = (): string => {
-  // Storefront build: always PUBLIC_LAMBDA_URL — ignore localStorage and any "Local" option.
-  if (isStorefrontBuild) { return PUBLIC_LAMBDA_URL || (ENPOINTS[0]?.route || "") }
+  // Storefront build: pin the first configured endpoint and ignore browser preferences.
+  if (isStorefrontBuild) { return ENDPOINTS[0]?.route || "" }
   const endpointRoute = browser ? localStorage.getItem(selectedApiEndpointStorageKey) || "" : ""
-  const persistedEndpointExists = ENPOINTS.some((endpointOption) => endpointOption.route === endpointRoute)
-  return persistedEndpointExists ? endpointRoute : (ENPOINTS[0]?.route || "")
+  const persistedEndpointExists = ENDPOINTS.some((endpointOption) => endpointOption.route === endpointRoute)
+  return persistedEndpointExists ? endpointRoute : (ENDPOINTS[0]?.route || "")
 }
 
 const getSelectedApiEndpoint = (selectedRoute: string): IApiEndpointOption => {
-  const matchedEndpoint = ENPOINTS.find((endpointOption) => endpointOption.route === selectedRoute)
+  const matchedEndpoint = ENDPOINTS.find((endpointOption) => endpointOption.route === selectedRoute)
   if (matchedEndpoint) { return matchedEndpoint }
-  // Storefront build pins PUBLIC_LAMBDA_URL even if it isn't one of PUBLIC_ENDPOINTS,
-  // so synthesize an option for it rather than falling back to ENPOINTS[0].
-  if (isStorefrontBuild && selectedRoute) {
-    return { name: "Lambda", route: selectedRoute, hash: "000000" }
-  }
-  return ENPOINTS[0] || {
+  return ENDPOINTS[0] || {
     name: "",
     route: "",
+    bridge: "",
+    cdn_url: "",
     hash: "000000"
   }
 }
@@ -156,30 +170,21 @@ export interface ICompanyParams {
   id: number
 }
 
-// getAgentStreamBase decide de dónde cuelga el stream de eventos del agente.
-// El Lambda no puede sostener un stream, así que cuando el endpoint elegido es
-// el Lambda y hay un bridge desplegado (server_utils/), el stream va al bridge.
-// Contra un backend local o el VPS no hace falta el salto: ese proceso sirve su
-// propio /agent/stream. Devuelve la base sin barra final ni sufijo /api.
-const getAgentStreamBase = (selectedApiRoute: string): string => {
-  const normalizedSelectedRoute = String(selectedApiRoute || "").trim().replace(/\/+$/, "")
-  const normalizedLambdaRoute = String(PUBLIC_LAMBDA_URL || "").trim().replace(/\/+$/, "")
-  const normalizedBridgeRoute = String(PUBLIC_SSE_BRIDGE_URL || "").trim().replace(/\/+$/, "")
+// Every endpoint resolves its own stream host. `bridge === route` means the backend serves
+// /agent/stream directly; a different value selects server_utils' /sse endpoint.
+const getAgentStreamBase = (selectedEndpoint: IApiEndpointOption): string =>
+  String(selectedEndpoint.bridge || selectedEndpoint.route || "").trim().replace(/\/+$/, "")
 
-  const selectedEndpointIsLambda = !!normalizedLambdaRoute && normalizedSelectedRoute === normalizedLambdaRoute
-  const bridgeIsDeployed = !!normalizedBridgeRoute && normalizedBridgeRoute !== normalizedLambdaRoute
-
-  return selectedEndpointIsLambda && bridgeIsDeployed ? normalizedBridgeRoute : normalizedSelectedRoute
-}
+const initialSelectedApiEndpoint = getSelectedApiEndpoint(getSelectedApiEndpointRoute())
 
 export const Env = {
   appId: "genix",
-  CDN_URL: PUBLIC_FRONTEND_CDN,
+  CDN_URL: initialSelectedApiEndpoint.cdn_url,
   // Base del stream SSE del agente para el endpoint seleccionado. La recalcula
   // setSelectedApiEndpoint junto con API_ROUTES.MAIN.
-  AGENT_STREAM_BASE: getAgentStreamBase(getSelectedApiEndpointRoute()),
+  AGENT_STREAM_BASE: getAgentStreamBase(initialSelectedApiEndpoint),
   serviceWorker: "/sw.js",
-  enviroment: getSelectedApiEndpoint(getSelectedApiEndpointRoute()).hash,
+  enviroment: initialSelectedApiEndpoint.hash,
   counterID: 1,
   useTopMinimalMenu: false,
   fetchID: 1000,
@@ -188,10 +193,10 @@ export const Env = {
   cache: {} as {[e: string]: any},
   params: { fetchID: 1001, fetchProcesses: new Map() },
   pendingRequests: [] as any[],
-  availableApiEndpoints: ENPOINTS,
-  selectedApiEndpointRoute: getSelectedApiEndpointRoute(),
+  availableApiEndpoints: ENDPOINTS,
+  selectedApiEndpointRoute: initialSelectedApiEndpoint.route,
 	API_ROUTES: {
-		MAIN: buildMainApiRoute(getSelectedApiEndpointRoute())
+		MAIN: buildMainApiRoute(initialSelectedApiEndpoint.route)
 	} as { [e: string]: string },
   screen: browser ? window.screen : { height: -1, width: -1 },
   language: browser ? window.navigator?.language || "" : "-",
@@ -217,7 +222,8 @@ export const Env = {
     const selectedEndpointOption = getSelectedApiEndpoint(selectedRoute)
     Env.selectedApiEndpointRoute = selectedEndpointOption?.route || ""
     Env.API_ROUTES.MAIN = buildMainApiRoute(Env.selectedApiEndpointRoute)
-    Env.AGENT_STREAM_BASE = getAgentStreamBase(Env.selectedApiEndpointRoute)
+    Env.AGENT_STREAM_BASE = getAgentStreamBase(selectedEndpointOption)
+    Env.CDN_URL = selectedEndpointOption.cdn_url
     Env.enviroment = selectedEndpointOption?.hash || "000000"
 
     if (browser && Env.selectedApiEndpointRoute) {
@@ -226,6 +232,8 @@ export const Env = {
 
     console.info("[Env] API endpoint selected:", {
       route: Env.selectedApiEndpointRoute,
+      bridge: Env.AGENT_STREAM_BASE,
+      cdn: Env.CDN_URL,
       enviroment: Env.enviroment
     })
     return Env.API_ROUTES.MAIN
