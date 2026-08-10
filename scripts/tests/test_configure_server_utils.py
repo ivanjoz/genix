@@ -5,6 +5,8 @@ import pwd
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -217,6 +219,39 @@ class UnitAndBinaryTest(unittest.TestCase):
         # The unit is world-readable, so neither secret may be exported here.
         self.assertNotIn("Environment=SECRET_PHRASE=", unit_contents)
         self.assertNotIn("Environment=INTERNAL_APIKEY=", unit_contents)
+
+    def test_the_c_linker_is_installed_only_when_it_is_missing(self):
+        """rustc shells out to `cc` to link, so a host without one cannot build at all — not even
+        the build scripts of pure-Rust crates, which are compiled into real executables."""
+        configure_server_utils = load_configure_server_utils_module()
+        installed_commands = []
+
+        def fake_run_command(command_arguments, **_keyword_arguments):
+            installed_commands.append(command_arguments)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        # A host that already has a compiler must not have packages installed behind its back.
+        with mock.patch.object(configure_server_utils.shutil, "which", lambda name: "/usr/bin/cc"):
+            with mock.patch.object(configure_server_utils, "run_command", fake_run_command):
+                with redirect_stdout(io.StringIO()):
+                    configure_server_utils.ensure_c_linker()
+        self.assertEqual(installed_commands, [])
+
+        # A host without one gets the compiler and the libc headers, and nothing more: this
+        # project has no C++ and no make-driven build scripts.
+        available_tools = {"apt-get": "/usr/bin/apt-get"}
+        with mock.patch.object(
+            configure_server_utils.shutil, "which", lambda name: available_tools.get(name)
+        ):
+            with mock.patch.object(configure_server_utils, "run_command", fake_run_command):
+                with redirect_stdout(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        configure_server_utils.ensure_c_linker()
+
+        flattened = [" ".join(command) for command in installed_commands]
+        self.assertTrue(any("apt-get update" in command for command in flattened))
+        self.assertTrue(any("install -y gcc libc6-dev" in command for command in flattened))
+        self.assertFalse(any("build-essential" in command for command in flattened))
 
     def test_service_unit_raises_the_file_descriptor_limit(self):
         """systemd defaults the soft limit to 1024, which is below the daemon's own

@@ -1,0 +1,24 @@
+# Static musl builds, so a deploy host needs no toolchain at all — not cargo, not a C compiler.
+#
+# The binary these produce is statically linked against musl and depends on nothing at runtime:
+# no glibc version to match, no shared libraries to install. That is what lets
+# configure_server_utils.py install a prebuilt binary instead of compiling in place.
+#
+# rust-lld rather than the default `cc`: the C compiler on the build machine only knows how to
+# link for the machine it runs on, so cross-building aarch64 from x86_64 fails with "file in
+# wrong format". rust-lld is a cross-linker, and the musl targets ship their own crt objects
+# (link-self-contained), so nothing is taken from the system.
+#
+#   cargo build --release --target x86_64-unknown-linux-musl
+#   cargo build --release --target aarch64-unknown-linux-musl
+#
+# Note this does NOT remove the need for a C compiler when compiling *on* the target host: build
+# scripts and proc-macros are built for the host, not for --target, so they still link against
+# the host's libc. Compiling in place needs build-essential; shipping a prebuilt binary needs
+# nothing.
+
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+
+[target.aarch64-unknown-linux-musl]
+linker = "rust-lld"

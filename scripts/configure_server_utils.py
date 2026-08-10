@@ -27,7 +27,6 @@ a certificate for the hostname exists.
 import os
 import re
 import shutil
-import socket
 import sys
 import time
 import urllib.error
@@ -467,6 +466,66 @@ def detect_cargo_binary(unprivileged_username):
     return None
 
 
+def ensure_c_linker():
+    """Install a C compiler when the host has none, because rustc cannot link without one.
+
+    rustc emits object files and then shells out to `cc` to turn them into an executable: `cc` is
+    what knows where this distribution keeps the C runtime startup files and libc. So a linker is
+    needed even though nothing in this tree is written in C — the only crate that would compile
+    any, iana-time-zone-haiku, never builds on Linux.
+
+    It is also why the failure lands on crates like proc-macro2, quote or getrandom before any of
+    our own code: a build.rs is compiled into a real executable that cargo then runs, so those
+    reach the link step first. That is the same reason `--target ...-musl` does not avoid this —
+    build scripts are always built for the host, whatever --target says.
+
+    Only the compiler and the libc headers are installed, not a full build-essential: this
+    project has no C++ and no make-driven build scripts, and the crt objects that linking really
+    needs come from the libc development package.
+    """
+    if shutil.which("cc"):
+        print_debug(f"C linker found at {shutil.which('cc')}")
+        return
+
+    package_manager_commands = [
+        # apt needs its lists refreshed first: a fresh cloud image usually has none.
+        ("apt-get", [["apt-get", "update"], ["apt-get", "install", "-y", "gcc", "libc6-dev"]]),
+        ("dnf", [["dnf", "install", "-y", "gcc", "glibc-devel"]]),
+        ("yum", [["yum", "install", "-y", "gcc", "glibc-devel"]]),
+        ("zypper", [["zypper", "--non-interactive", "install", "gcc", "glibc-devel"]]),
+        ("pacman", [["pacman", "-Sy", "--noconfirm", "gcc"]]),
+        ("apk", [["apk", "add", "--no-cache", "gcc", "musl-dev"]]),
+    ]
+
+    for package_manager_name, install_command_list in package_manager_commands:
+        if not shutil.which(package_manager_name):
+            continue
+
+        print_debug(f"No C linker on this host. Installing one with {package_manager_name}...")
+        for install_command in install_command_list:
+            # Noninteractive, so a package manager prompt cannot hang an unattended install.
+            run_command(
+                ["env", "DEBIAN_FRONTEND=noninteractive", *install_command],
+                stream_output=True,
+                allow_failure=True,
+            )
+
+        if shutil.which("cc"):
+            print_debug(f"C linker installed at {shutil.which('cc')}")
+            return
+
+        fail_with_error(
+            f"{package_manager_name} ran but 'cc' is still not on PATH. Install a C compiler by "
+            "hand (Debian/Ubuntu: gcc libc6-dev, RHEL/Fedora: gcc glibc-devel) and run again."
+        )
+
+    fail_with_error(
+        "Rust needs a C compiler to link and no supported package manager was found here. "
+        "Install one (Debian/Ubuntu: gcc libc6-dev, RHEL/Fedora: gcc glibc-devel, Alpine: gcc "
+        "musl-dev) and run this script again."
+    )
+
+
 def compile_binary(source_directory, repository_root_path):
     """Build server_utils/ in release mode, as the repository owner so the Cargo registry and
     target/ cache are reused instead of being recreated root-owned inside the clone."""
@@ -478,6 +537,7 @@ def compile_binary(source_directory, repository_root_path):
             "run the script with CARGO_BINARY=/path/to/cargo (sudo strips ~/.cargo/bin from PATH)."
         )
 
+    ensure_c_linker()
     print_debug(f"Using cargo at {cargo_binary_path}")
     if os.geteuid() == 0 and unprivileged_username:
         print_debug(f"Compiling as '{unprivileged_username}' to reuse that account's Cargo cache.")

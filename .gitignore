@@ -2,6 +2,10 @@ config.toml*
 config.*.toml*
 # La plantilla no lleva secretos y sí se versiona, pero cae en el patrón de arriba.
 !config.example.toml
+# Configuración de cargo, no del proyecto: fija rust-lld para los targets musl y es lo que
+# permite compilar binarios estáticos (y cruzados a arm64). Cae en el patrón de arriba porque
+# éste no está anclado a la raíz.
+!server_utils/.cargo/config.toml
 server_utils/target/
 frontend/public/images/background-1.kra
 frontend/public/images/background-1.webp~
