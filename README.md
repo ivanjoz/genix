@@ -93,9 +93,6 @@ See [below](#hybrid-architecture-lambda-or-single-binary).
 ### Text search
 A Spanish bigram word encoder ported to Go (`backend/libs/text-search/`) that produces byte-identical index keys to the external GenixSearch daemon, plus a TCP driver and ORM integration (`backend/genix-orm/scylla/text_search/`): a table with a `TextSearchColumn` gets relevance-ranked search that returns IDs without a Scylla read.
 
-### P2P homelab bridge
-A WebRTC signaling bridge over AWS AppSync (`p2p/`) that connects a browser directly to a self-hosted "homelab" Genix server, supporting the self-host deployment model.
-
 ---
 
 ## Hybrid architecture (Lambda or single binary)
@@ -146,7 +143,6 @@ Legend: ✅ done · 🟡 partial / in progress · ⬜ not started
 - ✅ Full per-tenant data backup, download & restore
 - ✅ Security: users, access profiles, YAML access-control
 - ✅ Bilingual UI (EN | ES) i18n across production routes
-- 🟡 P2P homelab bridge (WebRTC/AppSync signaling)
 
 ### Agentic platform
 - ✅ Agent-navigable UI component registry (DOM contract + method vocabulary)
@@ -220,7 +216,6 @@ frontend/         SvelteKit 2 / Svelte 5 monorepo
   webpage/        Independent customer-facing storefront app
   ui-components/  UI atoms + agent registry
   core/ services/ domain-components/ libs/
-p2p/              WebRTC homelab signaling bridge (AppSync)
 scripts/          Table-creation, validation & build utilities
 ```
 

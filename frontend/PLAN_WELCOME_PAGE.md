@@ -82,7 +82,7 @@ Each card should have a semantic heading and readable copy rather than relying o
 Show a distilled, customer-readable roadmap rather than copying the entire technical README.
 
 - **Available now:** core ERP workflows, product/customer management, warehouse and purchasing, POS/sales, cash management, website builder, access control, and backups.
-- **In progress:** vendor-free/self-hosted provider completion, P2P homelab bridge, weekly sales summary, projected cash-flow report, and shipping-price checkout integration.
+- **In progress:** vendor-free/self-hosted provider completion, weekly sales summary, projected cash-flow report, and shipping-price checkout integration.
 - **Next:** e-commerce order persistence, storefront customer accounts/order history, streaming AI responses, and token quota enforcement.
 
 Use explicit status labels (`Disponible`, `En progreso`, `Próximo`) plus text/icons; do not encode status by color alone. Add a visible pre-alpha note explaining that priorities and interfaces can change. Keep `README.md` as the source of truth and review the landing-page summary whenever its roadmap changes.

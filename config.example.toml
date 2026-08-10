@@ -97,10 +97,6 @@ lambda_iam_role   = "arn:aws:iam::000000000000:role/lambda-role"
 lambda_url        = ""
 s3_bucket         = ""
 frontend_bucket   = ""   # vacío = "<app_name>-frontend"
-# SageMaker — sólo los usan los scripts de ai/
-sagemaker_iam_role  = ""
-sagemaker_s3_output = ""
-hugging_face_token  = ""
 
 # ─── Cloudflare ─────────────────────────────────────────────────────────────
 [cloudflare]
@@ -153,16 +149,6 @@ password = ""
 url     = ""
 port    = 14012
 verbose = false   # true = loguea cada mensaje entregado
-
-# ─── Signaling (p2p/) ───────────────────────────────────────────────────────
-[signaling]
-socket               = ""
-endpoint             = ""
-api_key              = ""
-app_name             = ""   # vacío = "<app_name>-signaling"
-stack_name           = ""   # vacío = "<app_name>-signaling"
-lambda_function_name = ""
-aws_account          = ""
 
 # ─── Logs ───────────────────────────────────────────────────────────────────
 [logs]

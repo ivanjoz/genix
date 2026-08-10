@@ -7,7 +7,6 @@
 		"**/build/**",
 		"**/target/**",
 		"**/.git/**",
-		"**/ai/**",
 		"**/.vscode/**",
 		"./docs/**",
 		"**/store_deprecated/**",
