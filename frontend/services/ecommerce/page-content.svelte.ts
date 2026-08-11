@@ -1,6 +1,6 @@
 import { GET, POST } from '$libs/ui-runtime.svelte';
 import { Env } from '$core/env';
-import { unmarshall } from '@genix/ui/utilities';
+import { unmarshal } from '@genix/ui/utilities';
 import { collectTokens, generateCss, normalizeRuntimeCss } from '$ecommerce/stores/uno-generator';
 import type { SectionData } from '$ecommerce/renderer/section-types';
 
@@ -111,7 +111,7 @@ export const getStoreSnapshotName = (pageID = 0, companyID = 0): string => {
 // renders. Used by both getStoreWebpageFromCDN (which fetches) and the live route
 // (which fetches early via an inline <head> script and passes the parsed JSON here).
 export const parseStoreWebpageSnapshot = (raw: unknown): IWebpageContent => {
-	const result: IWebpagePublicResult = unmarshall(raw);
+	const result: IWebpagePublicResult = unmarshal(raw);
 	const { sections, css, palette } = parsePageContentRows(result?.Sections || []);
 	return { sections, css, palette, seo: result?.Config || {} };
 };
@@ -120,7 +120,7 @@ export const parseStoreWebpageSnapshot = (raw: unknown): IWebpageContent => {
 // (live/pages/<companyID>-<pageID>.json) the backend writes on every save in
 // PostPageContent. The file is the exact WebpagePublicResult (SEO Config + active
 // Sections) GET.p-webpage returns, serialized with the compact-array format —
-// so it is JSON-parsed, then unmarshall'd back into {Config, Sections} before the
+// so it is JSON-parsed, then decoded back into {Config, Sections} before the
 // shared parse. pageID 0 → the resolved root page id, matching the snapshot name.
 export const getStoreWebpageFromCDN = async (pageID = 0, companyID = 0): Promise<IWebpageContent> => {
 	const url = Env.makeCDNRoute('live', 'pages', getStoreSnapshotName(pageID, companyID));

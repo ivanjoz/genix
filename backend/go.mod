@@ -73,6 +73,7 @@ require (
 	github.com/ivanjoz/colbin v0.0.0-20260801035440-7af4690efc94
 	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
+	github.com/ivanjoz/minijson v0.1.0
 	github.com/kr/pretty v0.3.1
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/pelletier/go-toml/v2 v2.4.3

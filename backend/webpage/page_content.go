@@ -4,10 +4,10 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/db"
-	"app/serialize"
 	s "app/webpage/types"
 	"encoding/json"
 	"fmt"
+	"github.com/ivanjoz/minijson"
 	"hash/fnv"
 )
 
@@ -18,7 +18,7 @@ const livePageFolder = "live/pages"
 
 // publishPagePublicSnapshot uploads the live CDN snapshot for a page: the exact
 // WebpagePublicResult payload (SEO Config + active Sections) that GetWebpagePublic
-// returns, serialized with serialize.Marshal (compact array format) so the file is
+// returns, serialized with minijson.Marshal (compact array format) so the file is
 // smaller. activeSections must already be the post-save active set, in position order.
 func publishPagePublicSnapshot(companyID int32, pageID int16, activeSections []s.EcommercePageContent) error {
 	seoConfig, err := publicSeoMetatags(companyID)
@@ -31,7 +31,7 @@ func publishPagePublicSnapshot(companyID int32, pageID int16, activeSections []s
 		Sections: activeSections,
 	}
 
-	content, err := serialize.Marshal(result)
+	content, err := minijson.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("error al serializar el snapshot de la página: %w", err)
 	}

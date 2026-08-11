@@ -86,8 +86,8 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
 			// ver bumped: routes that got their very first sync from a warehouse with zero stock
 			// rows had their compact-format response ([ProductStock, ProductStockDetail], both
 			// empty) misread as a bare empty array, which permanently locked the cache row as
-			// "single/array-shaped" instead of "multi-table" (see backend/serialize/append.go's
-			// appendKeysList fix). Bumping ver forces those clients to redo the initial sync now
+			// "single/array-shaped" instead of "multi-table" (see minijson's type-metadata
+			// handling). Bumping ver forces those clients to redo the initial sync now
 			// that the encoder always emits a type entry even when every field is zero.
 			useCache: { min: 0.2, ver: 10 },
 			keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }

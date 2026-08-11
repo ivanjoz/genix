@@ -65,6 +65,13 @@ The `scylla` package (`backend/genix-orm/scylla/`) provides:
 - **Delta cache versioning** — per-group cache-version counters power incremental client sync (`QueryCachedIDs`): the frontend only fetches records changed since its last sync.
 - **Schema homologation & deploy** — `DeployScylla` diffs declared vs. live schema and applies missing columns/indexes/views automatically.
 
+### minijson — compact JSON responses
+
+API responses use [`minijson`](https://github.com/ivanjoz/minijson), a standalone Go module
+that writes struct field metadata once and encodes records as compact positional JSON arrays.
+The matching `@ivanjoz/minijson` TypeScript decoder is consumed by `genix-ui`, so backend and
+frontend share one versioned wire-format implementation.
+
 ### Three-layer frontend cache
 The frontend (`frontend/libs/cache/`) minimizes network traffic and moves relational "joins" to the client via three complementary caches, each memory → IndexedDB → server:
 

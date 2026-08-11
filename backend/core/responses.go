@@ -1,11 +1,11 @@
 package core
 
 import (
-	"app/serialize"
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/binary"
+	"github.com/ivanjoz/minijson"
 	// "encoding/json"
 	"errors"
 	"fmt"
@@ -590,7 +590,7 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	}
 
 	// A string response is already the payload. Everything else goes through the compact
-	// [keys, content] encoder that the frontend's unmarshall() expects — one path for every
+	// [keys, content] encoder that the frontend's unmarshal() expects — one path for every
 	// size, so a large response can never silently fall back to a different wire format.
 	if fmt.Sprintf("%T", *new(T)) == "string" {
 		body := []byte(fmt.Sprintf("%v", *respStruct))
@@ -598,7 +598,7 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 		return response
 	}
 
-	bodyBytes, err := serialize.Marshal(respStruct)
+	bodyBytes, err := minijson.Marshal(respStruct)
 	if err != nil {
 		return req.MakeErr("No se pudo serializar respuesta:", err)
 	}

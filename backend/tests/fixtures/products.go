@@ -9,9 +9,8 @@ package fixtures
 // drift from production: 35+ fields, almost all `omitempty`, three nested slice types, and an
 // embedded db.TableStruct whose only exported field is tagged `json:"-"`.
 //
-// This lives in its own package rather than in a _test.go file so both the serialize-level and
-// the core-level benchmarks can share one definition. Importers must be external test packages
-// (serialize_test, core_test) because business/types depends on app/core → app/serialize.
+// This lives in its own package rather than in a _test.go file so the external core_test
+// benchmarks can use the production Product type without creating an import cycle.
 
 import (
 	businessTypes "app/business/types"

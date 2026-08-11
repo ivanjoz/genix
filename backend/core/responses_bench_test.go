@@ -1,7 +1,7 @@
 package core_test
 
-// Stage 0 baseline for the full response tail: MakeResponse (serialize) → MakeResponseFinal
-// (compress + base64 + Lambda envelope). BenchmarkMarshalProducts in app/serialize covers the
+// Stage 0 baseline for the full response tail: MakeResponse (minijson) → MakeResponseFinal
+// (compress + base64 + Lambda envelope). minijson's benchmarks cover the
 // encode step alone; the gap between the two is what stages 3+ of
 // PLAN_RESPONSE_SERIALIZATION_MEMORY.md have to work with.
 //

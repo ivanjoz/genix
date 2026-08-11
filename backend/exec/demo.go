@@ -8,7 +8,6 @@ import (
 	coreTypes "app/core/types"
 	"app/db"
 	logisticsTypes "app/logistics/types"
-	"app/serialize"
 	"bufio"
 	"bytes"
 	"encoding/gob"
@@ -804,9 +803,6 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test37(args *core.ExecArgs) core.FuncResponse {
-
-	serialize.Test3()
-	serialize.Test4()
 
 	return core.FuncResponse{}
 }
