@@ -1,0 +1,4 @@
+interface:
+  display_name: "Document User Routes"
+  short_description: "Create bilingual Genix route documentation"
+  default_prompt: "Use $document-user-routes to document a Genix frontend route for the user-facing RAG index."
