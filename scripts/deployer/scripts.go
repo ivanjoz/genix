@@ -75,6 +75,18 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "generate_menu_descriptions")
 	}},
 
+	{key: "index_documentation", group: scriptGroupGenerators, label: "Validar / Indexar Documentación RAG",
+		argumentsHint: "-mode validate|index [-dry-run] [-qdrant-host HOST] [-document PATH]",
+		run: func(context deployContext, arguments []string) error {
+			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/documentation-index"}, arguments...)...)
+		}},
+
+	{key: "search_documentation", group: scriptGroupGenerators, label: "Buscar Documentación RAG",
+		argumentsHint: "-question TEXTO|-examples [-limit N] [-qdrant-host HOST]",
+		run: func(context deployContext, arguments []string) error {
+			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/documentation-search"}, arguments...)...)
+		}},
+
 	{key: "generate_sale_orders", group: scriptGroupGenerators, label: "Generar Órdenes de Venta (demo)", run: func(context deployContext, _ []string) error {
 		return runCommand(context, "backend", context.goBinary, "run", ".", "fn-generate-sale-orders")
 	}},

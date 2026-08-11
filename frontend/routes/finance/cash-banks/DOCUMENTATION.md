@@ -202,21 +202,10 @@ document rather than only its cash effect.
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
-- All records are isolated to the current company (`empresa` or tenant).
-- Monetary amounts are stored with cent precision and displayed as normal currency
-  values; `100` internal cents displays as `1.00`.
 - Each movement carries a resulting balance, allowing users to understand the account
   sequence rather than only a collection of unrelated amounts.
 - Manual movement and reconciliation saves reject a stale starting balance instead of
   silently overwriting a concurrent change.
-
-<!-- DOC-ID: permissions -->
-## Permissions and visibility (Permisos y visibilidad)
-
-The menu entry and write operations are controlled by the user's access profile. If
-**Cajas & Bancos** is absent or an action is rejected, an administrator must review the
-user's Finance permissions. Access to this route does not bypass server-side company
-isolation or write authorization.
 
 <!-- DOC-ID: troubleshooting -->
 ## Common problems (Problemas comunes)
@@ -244,12 +233,12 @@ isolation or write authorization.
 ### FILES
 
 ```yaml
-# Hashes remain pending until this example has passed claim-by-claim review.
+# Exact source hashes captured after claim-by-claim review.
 schema: 1
 hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
-    role: permissions
+    role: user-interface
     hash: sha256:14cca3289f3e701648257a2a2aff673cfda8477399b05cf3125588b6f631a59d
     supports: [page-purpose, capability.configure-account, related-pages]
   - path: frontend/routes/finance/cash-banks/+page.svelte
@@ -276,12 +265,4 @@ files:
     role: data-model
     hash: sha256:82ac985de5ca9fe560af0386a7bb6c35c8b65352c3a0b006cce8620fc5b84957
     supports: [concepts, capability.configure-account, capability.manual-movement, capability.reconcile, rules]
-  - path: backend/finance/main.go
-    role: backend-handler
-    hash: sha256:05eb289448331ff317af9eb1cf1ec36df79cc725a4d6b5406171793312e17617
-    supports: [page-purpose, permissions]
-  - path: backend/access_list.yml
-    role: permissions
-    hash: sha256:59db74800b74d6904d10581fa81699c8f2740535807991af09d79c107b7b1d04
-    supports: [permissions]
 ```

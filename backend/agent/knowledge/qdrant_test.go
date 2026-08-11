@@ -9,10 +9,15 @@ import (
 )
 
 type fakeCollectionClient struct {
-	exists         bool
-	created        *qdrant.CreateCollection
-	createdIndexes []*qdrant.CreateFieldIndexCollection
-	collectionInfo *qdrant.CollectionInfo
+	exists          bool
+	created         *qdrant.CreateCollection
+	createdIndexes  []*qdrant.CreateFieldIndexCollection
+	collectionInfo  *qdrant.CollectionInfo
+	upsertRequest   *qdrant.UpsertPoints
+	payloadRequests []*qdrant.SetPayloadPoints
+	deleteRequest   *qdrant.DeletePoints
+	queryRequest    *qdrant.QueryPoints
+	queryResults    []*qdrant.ScoredPoint
 }
 
 func (client *fakeCollectionClient) CollectionExists(context.Context, string) (bool, error) {
@@ -30,6 +35,30 @@ func (client *fakeCollectionClient) GetCollectionInfo(context.Context, string) (
 
 func (client *fakeCollectionClient) CreateFieldIndex(_ context.Context, request *qdrant.CreateFieldIndexCollection) (*qdrant.UpdateResult, error) {
 	client.createdIndexes = append(client.createdIndexes, request)
+	return &qdrant.UpdateResult{}, nil
+}
+
+func (client *fakeCollectionClient) Query(_ context.Context, request *qdrant.QueryPoints) ([]*qdrant.ScoredPoint, error) {
+	client.queryRequest = request
+	return client.queryResults, nil
+}
+
+func (client *fakeCollectionClient) ScrollAndOffset(context.Context, *qdrant.ScrollPoints) ([]*qdrant.RetrievedPoint, *qdrant.PointId, error) {
+	return nil, nil, nil
+}
+
+func (client *fakeCollectionClient) Upsert(_ context.Context, request *qdrant.UpsertPoints) (*qdrant.UpdateResult, error) {
+	client.upsertRequest = request
+	return &qdrant.UpdateResult{}, nil
+}
+
+func (client *fakeCollectionClient) OverwritePayload(_ context.Context, request *qdrant.SetPayloadPoints) (*qdrant.UpdateResult, error) {
+	client.payloadRequests = append(client.payloadRequests, request)
+	return &qdrant.UpdateResult{}, nil
+}
+
+func (client *fakeCollectionClient) Delete(_ context.Context, request *qdrant.DeletePoints) (*qdrant.UpdateResult, error) {
+	client.deleteRequest = request
 	return &qdrant.UpdateResult{}, nil
 }
 
@@ -54,8 +83,8 @@ func TestEnsureCollectionCreatesDenseAndBM25Schema(t *testing.T) {
 	if lexicalConfig.GetModifier() != qdrant.Modifier_Idf {
 		t.Fatalf("lexical modifier = %s, want IDF", lexicalConfig.GetModifier())
 	}
-	if len(fakeClient.createdIndexes) != len(keywordPayloadFields)+1 {
-		t.Fatalf("created %d payload indexes, want %d", len(fakeClient.createdIndexes), len(keywordPayloadFields)+1)
+	if len(fakeClient.createdIndexes) != len(keywordPayloadFields)+len(booleanPayloadFields)+1 {
+		t.Fatalf("created %d payload indexes, want %d", len(fakeClient.createdIndexes), len(keywordPayloadFields)+len(booleanPayloadFields)+1)
 	}
 	contentIndex := fakeClient.createdIndexes[len(fakeClient.createdIndexes)-1]
 	textParams := contentIndex.GetFieldIndexParams().GetTextIndexParams()

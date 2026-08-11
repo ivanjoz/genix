@@ -70,10 +70,20 @@ case "$1" in
     echo "Executing generate_menu_descriptions command..."
     (cd scripts && go run . generate_menu_descriptions)
     ;;
+  "index_documentation")
+    # Validate by default; pass -mode index to update Qdrant incrementally.
+    echo "Executing documentation indexer..."
+    (cd backend && go run ./agent/cmd/documentation-index "${@:2}")
+    ;;
+  "search_documentation")
+    # Run one read-only hybrid documentation query or the Spanish examples.
+    echo "Executing documentation search..."
+    (cd backend && go run ./agent/cmd/documentation-search "${@:2}")
+    ;;
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_db|configure_server_utils|follow_cloudwatch_logs|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_menu_descriptions|deploy}"
+    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_db|configure_server_utils|follow_cloudwatch_logs|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
     exit 1
     ;;
 esac

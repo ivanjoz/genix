@@ -47,10 +47,10 @@ for business rules.
 3. Locate and read the backend handlers reached by those services.
 4. Follow business functions that validate data, calculate values, change statuses,
    update balances or stock, or create related records.
-5. Read the database record/table definitions needed to interpret persisted statuses,
-   relationships, money, dates, and lifecycle behavior.
-6. Read menu and access-catalog definitions to document navigation, visibility, and
-   permissions.
+5. Read the database record/table definitions needed to interpret page-specific statuses,
+   relationships, calculations, dates, and lifecycle behavior.
+6. Read menu definitions to document navigation. Read access catalogs only when a page or
+   capability has an exceptional restriction that differs from normal application access.
 7. Read relevant existing product documentation and comments, but verify them against
    current code before treating them as implemented truth.
 
@@ -77,6 +77,25 @@ movement or only records the observed difference. This comment is excluded from 
 
 - Never convert a guess into polished prose. A missing explanation is safer than an
   authoritative-sounding invention.
+
+## User-relevance boundary
+
+Document behavior, procedures, and business rules that are specific to the page and help
+an end user decide what to do. Do not fill documents with infrastructure abstractions or
+guarantees that apply uniformly across Genix.
+
+Exclude generic facts such as:
+
+- tenant/company isolation;
+- ordinary access-profile enforcement;
+- the internal integer/cents representation of money;
+- generic audit fields, IDs, timestamps, storage types, and API authorization; and
+- generic statements that the server validates requests.
+
+Include one only when the page has a non-standard rule with a concrete user consequence,
+such as a capability restricted to SaaS administrators, a role-specific approval action,
+or a rounding rule that changes the value the user sees. Store universal visibility and
+access information as non-embedded retrieval metadata instead of explanatory prose.
 
 ## Required document structure
 
@@ -120,7 +139,7 @@ State the menu path, route, view/tab, and exact visible action label.
 
 ### Required information and prerequisites (Requisitos previos)
 
-Describe records, permissions, statuses, and fields that must already exist.
+Describe records, page-specific statuses, and fields that must already exist.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
@@ -143,12 +162,9 @@ regional synonyms that users may search.
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
-Document rules shared by several capabilities without duplicating them in every section.
-
-<!-- DOC-ID: permissions -->
-## Permissions and visibility (Permisos y visibilidad)
-
-Explain which capabilities may be hidden or rejected for the current access profile.
+Document only page-specific rules shared by several capabilities without duplicating
+them. Omit universal platform behavior such as tenant isolation, generic permissions,
+internal money representation, and audit storage.
 
 <!-- DOC-ID: troubleshooting -->
 ## Common problems (Problemas comunes)
@@ -225,7 +241,7 @@ For every user action, answer all applicable questions:
 - Which state transition occurs?
 - Which records, balances, stock quantities, debts, or reports change?
 - Can it be edited, canceled, reversed, deleted, or repeated afterward?
-- Which access restriction controls it?
+- Does a page-specific restriction control it, beyond ordinary application access?
 - What deliberately does not happen?
 - What related page should the user use for an adjacent task?
 - Which Spanish questions, synonyms, and common misspellings might refer to it?
@@ -243,7 +259,7 @@ Allowed roles:
 - `backend-handler`: server validation and endpoint behavior.
 - `business-logic`: calculations, transitions, and side effects.
 - `data-model`: persisted statuses, relationships, and value meaning.
-- `permissions`: access and visibility rules.
+- `permissions`: exceptional page-specific access or visibility rules only.
 - `shared-domain`: shared business constants or domain components.
 - `reference-document`: verified existing documentation.
 
@@ -278,7 +294,8 @@ The maintenance tool requires three separate operations:
 - Start at `+page.svelte`.
 - Follow route-local components and business-aware shared components.
 - Follow services to backend handlers.
-- Follow handlers to validation, business functions, record types, and permissions.
+- Follow handlers to validation, business functions, and record types. Follow permissions
+  only for exceptional page-specific restrictions.
 - Log each file examined and why it matters.
 
 ### 3. Build a behavior map before prose
@@ -361,9 +378,11 @@ Validation must fail on:
 ## Acceptance criteria
 
 - Every eligible route has exactly one `DOCUMENTATION.md`.
-- Every document explains capabilities, prerequisites, business rules, rationale when
-  known, side effects, limitations, navigation, permissions, troubleshooting, and related
-  workflows.
+- Every document explains user-relevant capabilities, prerequisites, page-specific
+  business rules, rationale when known, side effects, limitations, navigation,
+  troubleshooting, and related workflows.
+- Documents omit universal implementation abstractions that do not help the end user act,
+  including tenant isolation, generic permissions, and internal cents storage.
 - Mixed English–Spanish terminology reads naturally and includes the words real users
   search.
 - Every retrievable section has a stable unique `DOC-ID`.

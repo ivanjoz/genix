@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"time"
@@ -20,25 +21,31 @@ const (
 	openRouterEmbeddingsEndpoint = "https://openrouter.ai/api/v1/embeddings"
 	requestTimeout               = 60 * time.Second
 	maxErrorBodyBytes            = 8 << 10
+	defaultMaxAttempts           = 3
+	defaultRetryBaseDelay        = 250 * time.Millisecond
 	queryInstruction             = "Instruct: Given a mostly Spanish question from a small-business ERP user, retrieve Genix documentation passages that answer what the software can do, required conditions, business rules, limitations, side effects, or where the user should navigate.\nQuery: "
 )
 
 // ClientConfig keeps the embeddings wire contract independent from chat completions.
 type ClientConfig struct {
-	APIKey     string
-	Model      string
-	Dimensions int
-	Endpoint   string
-	HTTPClient *http.Client
+	APIKey         string
+	Model          string
+	Dimensions     int
+	Endpoint       string
+	HTTPClient     *http.Client
+	MaxAttempts    int
+	RetryBaseDelay time.Duration
 }
 
 // Client sends dense embedding requests to OpenRouter's OpenAI-compatible endpoint.
 type Client struct {
-	apiKey     string
-	model      string
-	dimensions int
-	endpoint   string
-	httpClient *http.Client
+	apiKey         string
+	model          string
+	dimensions     int
+	endpoint       string
+	httpClient     *http.Client
+	maxAttempts    int
+	retryBaseDelay time.Duration
 }
 
 type embeddingRequest struct {
@@ -77,12 +84,20 @@ func NewClient(config ClientConfig) (*Client, error) {
 	if config.HTTPClient == nil {
 		config.HTTPClient = &http.Client{Timeout: requestTimeout}
 	}
+	if config.MaxAttempts <= 0 {
+		config.MaxAttempts = defaultMaxAttempts
+	}
+	if config.RetryBaseDelay <= 0 {
+		config.RetryBaseDelay = defaultRetryBaseDelay
+	}
 	return &Client{
-		apiKey:     config.APIKey,
-		model:      config.Model,
-		dimensions: config.Dimensions,
-		endpoint:   config.Endpoint,
-		httpClient: config.HTTPClient,
+		apiKey:         config.APIKey,
+		model:          config.Model,
+		dimensions:     config.Dimensions,
+		endpoint:       config.Endpoint,
+		httpClient:     config.HTTPClient,
+		maxAttempts:    config.MaxAttempts,
+		retryBaseDelay: config.RetryBaseDelay,
 	}, nil
 }
 
@@ -138,19 +153,39 @@ func (client *Client) embed(ctx context.Context, inputs []string) ([][]float32, 
 		return nil, fmt.Errorf("encode embedding request: %w", err)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, client.endpoint, bytes.NewReader(requestBody))
-	if err != nil {
-		return nil, fmt.Errorf("create embedding request: %w", err)
-	}
-	request.Header.Set("Authorization", "Bearer "+client.apiKey)
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("HTTP-Referer", "https://genix.app")
-	request.Header.Set("X-Title", "Genix")
-
 	startedAt := time.Now()
-	response, err := client.httpClient.Do(request)
+	var response *http.Response
+	retries := 0
+	for attempt := 1; attempt <= client.maxAttempts; attempt++ {
+		request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, client.endpoint, bytes.NewReader(requestBody))
+		if requestErr != nil {
+			return nil, fmt.Errorf("create embedding request: %w", requestErr)
+		}
+		request.Header.Set("Authorization", "Bearer "+client.apiKey)
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("HTTP-Referer", "https://genix.app")
+		request.Header.Set("X-Title", "Genix")
+
+		response, err = client.httpClient.Do(request)
+		shouldRetry := err != nil || (response != nil && (response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError))
+		if !shouldRetry || attempt == client.maxAttempts {
+			break
+		}
+		if response != nil {
+			_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, maxErrorBodyBytes))
+			response.Body.Close()
+		}
+		retries++
+		delay := client.retryBaseDelay*time.Duration(1<<(attempt-1)) + time.Duration(rand.IntN(max(1, int(client.retryBaseDelay/2))))
+		log.Printf("[agent.embedding] retry model=%s attempt=%d delay=%s", client.model, attempt, delay.Round(time.Millisecond))
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+	}
 	if err != nil {
-		return nil, fmt.Errorf("request embeddings: %w", err)
+		return nil, fmt.Errorf("request embeddings after %d attempts: %w", client.maxAttempts, err)
 	}
 	defer response.Body.Close()
 
@@ -186,7 +221,7 @@ func (client *Client) embed(ctx context.Context, inputs []string) ([][]float32, 
 		vectors[embeddingData.Index] = embeddingData.Embedding
 	}
 
-	log.Printf("[agent.embedding] model=%s inputs=%d dimensions=%d prompt_tokens=%d duration=%s",
-		client.model, len(inputs), client.dimensions, decodedResponse.Usage.PromptTokens, time.Since(startedAt).Round(time.Millisecond))
+	log.Printf("[agent.embedding] model=%s inputs=%d dimensions=%d prompt_tokens=%d retries=%d duration=%s",
+		client.model, len(inputs), client.dimensions, decodedResponse.Usage.PromptTokens, retries, time.Since(startedAt).Round(time.Millisecond))
 	return vectors, nil
 }

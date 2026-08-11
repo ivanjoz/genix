@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestDocumentAndQueryEmbeddingContracts(t *testing.T) {
@@ -57,6 +59,34 @@ func TestDocumentAndQueryEmbeddingContracts(t *testing.T) {
 	expectedQuery := queryInstruction + "¿Dónde hago un cuadre?"
 	if receivedInputs[1][0] != expectedQuery {
 		t.Fatalf("query input = %q, want %q", receivedInputs[1][0], expectedQuery)
+	}
+}
+
+func TestEmbeddingRetriesTransientResponse(t *testing.T) {
+	var requestCount atomic.Int32
+	testServer := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		if requestCount.Add(1) == 1 {
+			http.Error(responseWriter, "temporary", http.StatusTooManyRequests)
+			return
+		}
+		responseWriter.Header().Set("Content-Type", "application/json")
+		responseWriter.Write([]byte(`{"data":[{"index":0,"embedding":[0.1,0.2,0.3]}]}`))
+	}))
+	defer testServer.Close()
+
+	client, err := NewClient(ClientConfig{
+		APIKey: "test-key", Model: "test-model", Dimensions: 3,
+		Endpoint: testServer.URL, HTTPClient: testServer.Client(),
+		MaxAttempts: 3, RetryBaseDelay: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.EmbedDocuments(context.Background(), []string{"document"}); err != nil {
+		t.Fatal(err)
+	}
+	if requestCount.Load() != 2 {
+		t.Fatalf("request count = %d, want 2", requestCount.Load())
 	}
 }
 

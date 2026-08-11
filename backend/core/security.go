@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net"
 	"os"
@@ -480,7 +481,7 @@ var Env *EnvStruct
 var BuildDate string
 
 func PopulateVariables() {
-	fmt.Println("Populando Variables:: ")
+	log.Printf("[core.config] populate_variables")
 
 	APP_CODE := os.Getenv("APP_CODE")
 	isServerlessRuntime := IsRunningInLambda()
@@ -517,13 +518,13 @@ func PopulateVariables() {
 				fileError = err
 				continue
 			} else {
-				fmt.Println("Seteando config.toml desde:", candidateConfigPath)
+				log.Printf("[core.config] config_file_selected path=%s", candidateConfigPath)
 				break
 			}
 		}
 
 		if len(variablesBytes) == 0 {
-			fmt.Println(fileError)
+			log.Printf("[core.config] config_file_missing error=%v", fileError)
 			panic("Archivo config.toml no encontrado. Configure GENIX_CONFIG_FILE o suba el archivo al directorio esperado.")
 		}
 
@@ -553,7 +554,7 @@ func PopulateVariables() {
 	}
 	parsedFile.applyToEnv(Env)
 
-	fmt.Println("config.toml parseado:: ", "| Is Local:", Env.IS_LOCAL)
+	log.Printf("[core.config] config_parsed is_local=%t", Env.IS_LOCAL)
 
 	if len(Env.DYNAMO_TABLE) == 0 {
 		Env.DYNAMO_TABLE = Env.APP_NAME + "-db"

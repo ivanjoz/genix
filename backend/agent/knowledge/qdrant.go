@@ -19,6 +19,7 @@ const (
 )
 
 var keywordPayloadFields = []string{
+	"point_type",
 	"document_id",
 	"route",
 	"module",
@@ -29,6 +30,8 @@ var keywordPayloadFields = []string{
 	"documentation_path",
 	"content_hash",
 }
+
+var booleanPayloadFields = []string{"documentation_current"}
 
 // QdrantConfig is explicit so tests and administrative commands do not depend on globals.
 type QdrantConfig struct {
@@ -46,6 +49,11 @@ type collectionClient interface {
 	CreateCollection(context.Context, *qdrant.CreateCollection) error
 	GetCollectionInfo(context.Context, string) (*qdrant.CollectionInfo, error)
 	CreateFieldIndex(context.Context, *qdrant.CreateFieldIndexCollection) (*qdrant.UpdateResult, error)
+	Query(context.Context, *qdrant.QueryPoints) ([]*qdrant.ScoredPoint, error)
+	ScrollAndOffset(context.Context, *qdrant.ScrollPoints) ([]*qdrant.RetrievedPoint, *qdrant.PointId, error)
+	Upsert(context.Context, *qdrant.UpsertPoints) (*qdrant.UpdateResult, error)
+	OverwritePayload(context.Context, *qdrant.SetPayloadPoints) (*qdrant.UpdateResult, error)
+	Delete(context.Context, *qdrant.DeletePoints) (*qdrant.UpdateResult, error)
 	Close() error
 }
 
@@ -124,6 +132,26 @@ func (store *Store) Close() error {
 	return store.client.Close()
 }
 
+func (store *Store) CollectionExists(ctx context.Context) (bool, error) {
+	exists, err := store.client.CollectionExists(ctx, store.config.Collection)
+	if err != nil {
+		return false, fmt.Errorf("check Qdrant collection %q: %w", store.config.Collection, err)
+	}
+	return exists, nil
+}
+
+// ValidateExistingCollection is read-only and is used by dry-run before any proposed writes.
+func (store *Store) ValidateExistingCollection(ctx context.Context) error {
+	collectionInfo, err := store.client.GetCollectionInfo(ctx, store.config.Collection)
+	if err != nil {
+		return fmt.Errorf("inspect Qdrant collection %q: %w", store.config.Collection, err)
+	}
+	if err := validateCollectionSchema(collectionInfo, store.config.Dimensions); err != nil {
+		return fmt.Errorf("Qdrant collection %q is incompatible: %w", store.config.Collection, err)
+	}
+	return nil
+}
+
 // EnsureCollection creates the versioned schema once and rejects incompatible reuse.
 func (store *Store) EnsureCollection(ctx context.Context) error {
 	exists, err := store.client.CollectionExists(ctx, store.config.Collection)
@@ -165,6 +193,19 @@ func (store *Store) ensurePayloadIndexes(ctx context.Context, existingSchema map
 		log.Printf("[agent.knowledge] payload_index_created collection=%s field=%s type=keyword",
 			store.config.Collection, fieldName)
 	}
+	for _, fieldName := range booleanPayloadFields {
+		if existing, exists := existingSchema[fieldName]; exists {
+			if existing.GetDataType() != qdrant.PayloadSchemaType_Bool {
+				return fmt.Errorf("payload field %q is %s, want bool", fieldName, existing.GetDataType())
+			}
+			continue
+		}
+		if _, err := store.client.CreateFieldIndex(ctx, booleanIndexRequest(store.config.Collection, fieldName)); err != nil {
+			return fmt.Errorf("create bool payload index %q: %w", fieldName, err)
+		}
+		log.Printf("[agent.knowledge] payload_index_created collection=%s field=%s type=bool",
+			store.config.Collection, fieldName)
+	}
 
 	if existing, exists := existingSchema["content"]; exists {
 		if existing.GetDataType() != qdrant.PayloadSchemaType_Text {
@@ -184,6 +225,15 @@ func keywordIndexRequest(collectionName, fieldName string) *qdrant.CreateFieldIn
 		CollectionName: collectionName,
 		FieldName:      fieldName,
 		FieldType:      qdrant.FieldType_FieldTypeKeyword.Enum(),
+		Wait:           qdrant.PtrOf(true),
+	}
+}
+
+func booleanIndexRequest(collectionName, fieldName string) *qdrant.CreateFieldIndexCollection {
+	return &qdrant.CreateFieldIndexCollection{
+		CollectionName: collectionName,
+		FieldName:      fieldName,
+		FieldType:      qdrant.FieldType_FieldTypeBool.Enum(),
 		Wait:           qdrant.PtrOf(true),
 	}
 }

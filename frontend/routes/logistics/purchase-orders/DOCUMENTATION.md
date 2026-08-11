@@ -64,11 +64,10 @@ provides a product-entry interface only; it does not expose an insumos/materiale
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
-For the current product interface, total is the sum of `quantity × unit price`. Amounts
-use cent precision. The form derives an 18% included tax breakdown: subtotal is the
-integer part of `total / 1.18`, and IGV is `total - subtotal`. The new order is assigned
-the current generation date, enters **Pending (Pendiente)** status, and begins with debt
-equal to its total.
+For the current product interface, total is the sum of `quantity × unit price`. The form
+derives an 18% included tax breakdown: subtotal is the integer part of `total / 1.18`, and
+IGV is `total - subtotal`. The new order is assigned the current generation date, enters
+**Pending (Pendiente)** status, and begins with debt equal to its total.
 
 Product IDs, quantities, prices, and presentations are kept as aligned detail rows. The
 server rejects missing products, zero product IDs, zero quantities, or inconsistent line
@@ -235,22 +234,11 @@ receiving interface or documented navigation path is implemented.
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
-- Records and lookups are isolated to the current company (`empresa` or tenant).
 - State order is operational: create Pending, confirm to Confirmed, receive to Fulfilled;
   cancellation is available only before fulfillment.
-- Monetary amounts use cent precision throughout creation, reporting, debt, and cash
-  movements.
 - Creation does not affect stock or cash. Payment affects cash and debt. Reception affects
   stock and fulfillment status. Keeping these events separate makes each business event
   auditable.
-
-<!-- DOC-ID: permissions -->
-## Permissions and visibility (Permisos y visibilidad)
-
-The **Órdenes Compra** menu entry and its write operations depend on the user's Logistics
-access profile. If the page or an action is unavailable, an administrator must review
-the user permission. Server-side checks still restrict every order, supplier payment,
-and stock operation to the current company.
 
 <!-- DOC-ID: troubleshooting -->
 ## Common problems (Problemas comunes)
@@ -280,12 +268,12 @@ and stock operation to the current company.
 ### FILES
 
 ```yaml
-# Hashes remain pending until this example has passed claim-by-claim review.
+# Exact source hashes captured after claim-by-claim review.
 schema: 1
 hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
-    role: permissions
+    role: user-interface
     hash: sha256:14cca3289f3e701648257a2a2aff673cfda8477399b05cf3125588b6f631a59d
     supports: [page-purpose, capability.create, related-pages]
   - path: frontend/routes/logistics/purchase-orders/+page.svelte
@@ -332,12 +320,4 @@ files:
     role: business-logic
     hash: sha256:9a7c5fdcd87319cc596f82f6a298b661ce90e16c2b290421c3ab9007a9cf386e
     supports: [capability.pay, rules]
-  - path: backend/logistics/main.go
-    role: backend-handler
-    hash: sha256:57e0fcb80a298d5bac03b38c401d6680e65aa82ac9ab5efa4d5e967e83f11621
-    supports: [page-purpose, permissions]
-  - path: backend/access_list.yml
-    role: permissions
-    hash: sha256:59db74800b74d6904d10581fa81699c8f2740535807991af09d79c107b7b1d04
-    supports: [permissions]
 ```

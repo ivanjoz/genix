@@ -71,7 +71,7 @@ Sources:
 `config.toml` declares:
 
 ```toml
-# Qdrant is already installed separately; the backend still needs to parse these values.
+# Qdrant is installed separately; the backend parses these runtime values.
 [qdrant]
 http_port = 14014
 grpc_port = 14015
@@ -82,14 +82,11 @@ public = true
 id = "qwen/qwen3-embedding-8b"
 ```
 
-The deployment script also supports `qdrant.host` and configures Qdrant to require the
-root `internal_apikey`. However:
-
-- `backend/core/security.go` does not yet represent or copy `[qdrant]` and
-  `[embedding_model]` into `core.Env`.
-- The backend Go module does not yet depend on the official Qdrant Go client.
-- The existing `backend/agent/llm` client handles chat completions, not `/embeddings`.
-- No collection schema, document parser, chunker, indexer, or retrieval tool exists yet.
+The deployment script supports `qdrant.host` and configures Qdrant to require the root
+`internal_apikey`. The backend now parses both configuration sections, uses the official
+Qdrant Go client over gRPC, has a separate OpenRouter embeddings client, and implements
+documentation parsing, chunking, validation, incremental indexing, and native dense/BM25
+RRF retrieval. Agent-tool integration and bounded context assembly remain separate phases.
 
 Do not reuse the chat-completion request types for embeddings. Share HTTP construction,
 authentication, provider routing, error handling, and observability where useful, but keep
@@ -160,7 +157,7 @@ Required payload:
   System.
 - `title`: mixed-language page title.
 - `section_title`: mixed-language section title.
-- `section_type`: purpose, concept, capability, rule, permission, limitation,
+- `section_type`: purpose, concept, capability, rule, exceptional-permission, limitation,
   troubleshooting, or related-page.
 - `content`: exact normalized chunk text returned to the LLM.
 - `context_header`: short repeated page context prepended for embedding.
@@ -169,11 +166,23 @@ Required payload:
 - `visibility`: tenant, SaaS-only, public, or other explicit scope.
 - `access_resources`: access identifiers required to expose or navigate to the section.
 - `documentation_path`: repository-relative `DOCUMENTATION.md` path.
+- `documentation_file_hash`: SHA-256 of the exact `DOCUMENTATION.md` bytes; this is the
+  fast whole-file skip key.
 - `documentation_hash`: SHA-256 of normalized indexable Markdown.
 - `content_hash`: SHA-256 of the exact dense input.
+- `document_chunk_count`: expected total points for this document.
+- `source_hash_digest`: deterministic digest of the reviewed source-file manifest.
+- `index_contract_hash`: digest of model, dimensions, parser/chunker, and lexical settings.
+- `index_state`: `chunk` normally and `complete` only on the final completion marker.
+- `documentation_current`: whether the point belongs to reviewed current documentation.
 - `source_files`: provenance paths supporting this section.
 - `source_hashes`: hashes captured when the document was reviewed.
 - `indexed_at`: operational timestamp.
+
+`visibility` and `access_resources` are operational filter metadata derived from trusted
+route/access catalogs. Do not repeat or embed generic permission enforcement, tenant
+isolation, or other system-wide guarantees. Only page-specific exceptional restrictions
+belong in `content`.
 
 Create payload indexes for fields used in filters: `document_id`, `route`, `module`,
 `section_type`, `status`, `visibility`, `access_resources`, `documentation_path`, and
@@ -191,6 +200,13 @@ Generate a deterministic UUID from:
 
 Content changes update the same point instead of creating duplicates. Store the content
 hash separately to decide whether a new embedding is required.
+
+Store the indexing hashes and completion state in Qdrant payloads, not ScyllaDB. They
+describe rebuildable vector-index state and must remain transactionally adjacent to the
+points they validate. The `page-purpose` part-zero point is the document completion marker:
+write or refresh it only after all other upserts, payload refreshes, and deletions succeed.
+An exact-file skip is allowed only when its raw file hash, source digest, index contract,
+expected chunk count, and actual returned point count all match.
 
 When the dense model, output dimension, chunk construction, or sparse tokenization changes,
 create a new versioned collection, populate it completely, run evaluation, then switch a
@@ -232,7 +248,7 @@ should express one complete concept:
 - Page purpose and scope.
 - One capability with its prerequisites, rules, effects, and limitations.
 - A coherent group of cross-capability rules.
-- Permissions and visibility.
+- An exceptional page-specific restriction, when one exists.
 - One troubleshooting group.
 - Related navigation and workflows.
 
@@ -398,14 +414,16 @@ cost, is difficult to reproduce, and may silently omit the future query term.
 7. Normalize only line endings and redundant whitespace; preserve punctuation, accents,
    case in stored content, and business connectors.
 8. Calculate deterministic point ID, documentation hash, and content hash.
-9. Compare with the collection manifest:
+9. Compare with the existing Qdrant points for `documentation_path`:
+   - Exact raw file hash, source digest, contract, and complete point count: skip the file
+     without calling OpenRouter.
    - Unchanged content hash: keep dense/sparse vectors and update payload if needed.
    - Changed/new content hash: regenerate dense and lexical representations.
    - Removed point key: delete the obsolete point.
 10. Batch OpenRouter dense requests and validate response count, ordering, dimension, and
     finite numeric values.
 11. Generate or request the BM25 representation using the verified lexical path.
-12. Upsert with `wait=true` for administrative indexing commands.
+12. Upsert with `wait=true`; commit the `page-purpose` completion marker last.
 13. Record an ingestion summary without logging document contents or vectors.
 
 The index operation must be idempotent. An interrupted run can restart without duplicates.
