@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { agentModes } from '$core/agent/agent.svelte';
 import Button from '$components/buttons/Button.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Input from '$components/form/Input.svelte';
@@ -93,6 +94,16 @@ import { useUI } from '@genix/ui';
     form = {} as IWebpage;
     ui.closeModal(PAGE_FORM_MODAL_ID);
   };
+
+  $effect(() => {
+    agentModes.setSurfaceProvider(() => ({
+      kind: 'webpage_builder_pages',
+      route: '/webpage-builder/pages',
+      has_selected_section: false,
+      available_contexts: [],
+    }));
+    return () => agentModes.clear();
+  });
 </script>
 
 <Page title="Pages|Páginas" options={pageOptions}>

@@ -106,6 +106,26 @@ func parseArguments(arguments []string) commandLineSelection {
 	})
 
 	var selection commandLineSelection
+	// A single argument-taking script owns every other token. Numeric flag values
+	// such as `-limit 3` must never be reinterpreted as deployment action IDs.
+	for _, token := range tokens {
+		if script := findScript(token); script != nil && script.argumentsHint != "" {
+			if len(selection.scriptKeys) > 0 {
+				selection.scriptKeys = nil
+				break
+			}
+			selection.scriptKeys = []string{token}
+		}
+	}
+	if len(selection.scriptKeys) == 1 {
+		for _, token := range tokens {
+			if token != selection.scriptKeys[0] {
+				selection.scriptArguments = append(selection.scriptArguments, token)
+			}
+		}
+		return selection
+	}
+	selection.scriptKeys = nil
 	var unrecognized []string
 
 	for _, token := range tokens {
@@ -120,9 +140,7 @@ func parseArguments(arguments []string) commandLineSelection {
 		unrecognized = append(unrecognized, token)
 	}
 
-	if len(selection.scriptKeys) == 1 && findScript(selection.scriptKeys[0]).argumentsHint != "" {
-		selection.scriptArguments = unrecognized
-	} else if len(unrecognized) > 0 {
+	if len(unrecognized) > 0 {
 		selection.companyID = unrecognized[0]
 	}
 

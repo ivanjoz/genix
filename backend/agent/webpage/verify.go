@@ -34,6 +34,7 @@ func (t *builderTurn) classifyTurn(ctx context.Context, userText, pageContext st
 		if !verdict.Relevant {
 			return "", true
 		}
+		verdict = constrainPageClassification(verdict, t.routedOperation)
 		t.pageOp = verdict
 		t.sourceSections = splitSourceSections(sourceHTML)
 		return pageConstraintBlock(verdict), false
@@ -48,6 +49,45 @@ func (t *builderTurn) classifyTurn(ctx context.Context, userText, pageContext st
 		t.sourceContent = ExtractSectionContent(nodes)
 	}
 	return editConstraintBlock(policy), false
+}
+
+func constrainPageClassification(verdict pageClassification, routedOperation RoutedOperation) pageClassification {
+	switch routedOperation {
+	case RoutedOperationEdit:
+		// In full-page mode the internal classifier resolves the referenced
+		// section IDs. It may not widen an edit into a page rewrite or add/remove.
+		verdict.Operation = "partial"
+		verdict.RemoveSectionIDs = nil
+		verdict.AddSections = false
+		verdict.AddSectionCount = 0
+		verdict.ReorderSections = false
+		verdict.ExpectedOrder = nil
+	case RoutedOperationAdd:
+		verdict.Operation = "partial"
+		verdict.ModifySectionIDs = nil
+		verdict.RemoveSectionIDs = nil
+		verdict.AddSections = true
+		if verdict.AddSectionCount <= 0 {
+			verdict.AddSectionCount = 1
+		}
+		verdict.ReorderSections = false
+		verdict.ExpectedOrder = nil
+	case RoutedOperationRemove:
+		verdict.Operation = "partial"
+		verdict.ModifySectionIDs = nil
+		verdict.AddSections = false
+		verdict.AddSectionCount = 0
+		verdict.ReorderSections = false
+		verdict.ExpectedOrder = nil
+	case RoutedOperationReorder:
+		verdict.Operation = "partial"
+		verdict.ModifySectionIDs = nil
+		verdict.RemoveSectionIDs = nil
+		verdict.AddSections = false
+		verdict.AddSectionCount = 0
+		verdict.ReorderSections = true
+	}
+	return verdict
 }
 
 // verifyContent parses the apply_sections payload and checks it against the
@@ -84,8 +124,11 @@ func (t *builderTurn) verifyPageContent(sections []SectionEdit) []string {
 
 	var violations []string
 	returned := map[int]bool{}
+	returnedExistingOrder := []int{}
+	newSectionCount := 0
 	for _, s := range sections {
 		if s.SourceID == 0 { // a brand-new section
+			newSectionCount++
 			if !t.pageOp.AddSections {
 				violations = append(violations, "you returned a new section but the request did not ask to add sections — remove it.")
 			}
@@ -101,6 +144,7 @@ func (t *builderTurn) verifyPageContent(sections []SectionEdit) []string {
 			continue
 		}
 		returned[s.SourceID] = true
+		returnedExistingOrder = append(returnedExistingOrder, s.SourceID)
 		if remove[s.SourceID] {
 			violations = append(violations, fmt.Sprintf("section %d should be removed — omit it from your output, do not return it.", s.SourceID))
 			continue
@@ -117,6 +161,9 @@ func (t *builderTurn) verifyPageContent(sections []SectionEdit) []string {
 			violations = append(violations, fmt.Sprintf("section %d: %s", s.SourceID, v))
 		}
 	}
+	if t.pageOp.AddSections && newSectionCount > t.pageOp.AddSectionCount {
+		violations = append(violations, fmt.Sprintf("you returned %d new sections but the request allows at most %d.", newSectionCount, t.pageOp.AddSectionCount))
+	}
 	// Every "keep" section must still be present (dropping it loses content).
 	for id := range t.sourceSections {
 		if modify[id] || remove[id] || returned[id] {
@@ -124,7 +171,45 @@ func (t *builderTurn) verifyPageContent(sections []SectionEdit) []string {
 		}
 		violations = append(violations, fmt.Sprintf("section %d is missing from your output — return it unchanged.", id))
 	}
+	expectedOrder := existingSectionOrder(t.sourceSections, remove)
+	if t.pageOp.ReorderSections && len(t.pageOp.ExpectedOrder) > 0 {
+		expectedOrder = append([]int(nil), t.pageOp.ExpectedOrder...)
+	}
+	if !equalIntOrder(returnedExistingOrder, expectedOrder) {
+		if t.pageOp.ReorderSections {
+			if len(t.pageOp.ExpectedOrder) > 0 {
+				violations = append(violations, fmt.Sprintf("existing sections are in order %v, but the requested order is %v.", returnedExistingOrder, expectedOrder))
+			} else {
+				violations = append(violations, "the exact requested section order was not resolved; preserve the existing order instead of choosing an arbitrary order.")
+			}
+		} else {
+			violations = append(violations, "the relative order of existing sections changed even though the request did not ask to reorder them.")
+		}
+	}
 	return violations
+}
+
+func existingSectionOrder(sourceSections map[int]SectionContent, removed map[int]bool) []int {
+	order := make([]int, 0, len(sourceSections))
+	for sectionID := range sourceSections {
+		if !removed[sectionID] {
+			order = append(order, sectionID)
+		}
+	}
+	sort.Ints(order)
+	return order
+}
+
+func equalIntOrder(left, right []int) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // contentViolationFeedback frames the violations as a tool result the model can
@@ -247,9 +332,17 @@ func pageConstraintBlock(v pageClassification) string {
 	b.WriteString("  - You may MODIFY sections: " + idListOrNone(v.ModifySectionIDs) + "\n")
 	b.WriteString("  - REMOVE (omit from output) sections: " + idListOrNone(v.RemoveSectionIDs) + "\n")
 	if v.AddSections {
-		b.WriteString("  - You MAY add one or more new sections (set their sourceId to 0).\n")
+		fmt.Fprintf(&b, "  - You MAY add at most %d new section(s) (set their sourceId to 0).\n", v.AddSectionCount)
 	} else {
 		b.WriteString("  - Do NOT add any new section this turn.\n")
+	}
+	if v.ReorderSections {
+		b.WriteString("  - You MAY reorder existing sections, but their content must remain unchanged unless separately listed for modification.\n")
+		if len(v.ExpectedOrder) > 0 {
+			b.WriteString("  - Required existing-section order: " + idListOrNone(v.ExpectedOrder) + "\n")
+		}
+	} else {
+		b.WriteString("  - Preserve the relative order of every existing section.\n")
 	}
 	b.WriteString("  - On EVERY returned section set sourceId to its \"=== SECTION N ===\" number (0 for a new section).")
 	return b.String()

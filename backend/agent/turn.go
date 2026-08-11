@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"app/agent/routing"
 	"app/core"
 )
 
@@ -31,21 +32,22 @@ import (
 // wedging the widget's busy state.
 const turnTimeout = 4 * time.Minute
 
-// TurnRequest is the `POST p-agent-turn` body. Message/ModelHash/Timestamp/
-// ModeID/Context mirror ChatUserMessage. Channel is the channel token naming the
+// TurnRequest is the `POST p-agent-turn` body. Message/ModelHash/Timestamp/ModeID,
+// compact Surface, and AppLanguage mirror ChatUserMessage. Channel names the
 // stream this turn must talk to (channel.go); SessionID scopes the persisted
 // history and is minted by the client so it survives a Lambda instance change
 // mid-conversation. Path is the SPA route the user is on, which enriches
 // progress labels.
 type TurnRequest struct {
-	Channel   string
-	SessionID int64
-	Message   string
-	ModelHash string
-	Timestamp int64
-	ModeID    int
-	Context   string
-	Path      string
+	Channel     string
+	SessionID   int64
+	Message     string
+	ModelHash   string
+	Timestamp   int64
+	ModeID      int
+	Path        string
+	Surface     routing.SurfaceContext
+	AppLanguage routing.Language
 }
 
 type TurnResponse struct {
@@ -126,19 +128,21 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 		" session::", session.SessionID, " mode::", turnRequest.ModeID, " path::", turnRequest.Path, " bridged::", BridgeEnabled())
 
 	if err := session.RunUserMessage(runContext, ChatUserMessage{
-		Message:   turnRequest.Message,
-		ModelHash: turnRequest.ModelHash,
-		Timestamp: turnRequest.Timestamp,
-		ModeID:    turnRequest.ModeID,
-		Context:   turnRequest.Context,
+		Message:     turnRequest.Message,
+		ModelHash:   turnRequest.ModelHash,
+		Timestamp:   turnRequest.Timestamp,
+		ModeID:      turnRequest.ModeID,
+		Surface:     turnRequest.Surface,
+		AppLanguage: turnRequest.AppLanguage,
 	}); err != nil {
 		core.Log("agent.turn RunUserMessage error tab::", shortTabID(tab), " err::", err)
-		// Reported down the stream, not as an HTTP error: the widget renders agent
-		// failures inline with the conversation like any other event.
-		session.sendError(err.Error())
 		if core.IsCreditRateLimitError(err) {
 			return req.MakeCreditRateLimitResponse(err)
 		}
+		// Reported down the stream, not as an HTTP error: the widget renders agent
+		// failures inline. Errors reaching this point happened before a safe
+		// final reply could be persisted, so avoid leaking provider internals.
+		session.sendError("No se pudo iniciar el turno del asistente.")
 	}
 
 	// turnEnd closes the widget's busy state. The stream itself stays open for

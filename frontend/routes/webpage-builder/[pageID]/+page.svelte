@@ -10,7 +10,7 @@
   import Header from '$ecommerce/components/Header.svelte';
   import Page from '$domain/Page.svelte';
   import T from '$components/misc/T.svelte';
-  import { agentModes, type IAgentMode, type AgentSectionsPayload } from '$core/agent/agent.svelte';
+  import { agentModes, type IAgentMode, type AgentSectionsPayload, type AgentContextScope, type AgentLiveContext } from '$core/agent/agent.svelte';
   import { serializeAst } from '$ecommerce/html-ast/serialize-html';
   import { parseHTML } from '$ecommerce/html-ast/parse-html';
   import { absorbColors } from '../html-ast/absorb-colors';
@@ -71,6 +71,21 @@
     }
     const paletteLine = editorStore.palette.colors.map((c, i) => `${i + 1}=${c}`).join(' ');
     return `CURRENT COLOR PALETTE (reuse a color by its index, e.g. color="3"):\n${paletteLine}\n\n${extractAssets(html)}--- HTML of ${label} ---\n${html}`;
+  };
+
+  const getLiveAgentContext = (scope: AgentContextScope): AgentLiveContext => {
+    const selectedSection = editorStore.selectedSection;
+    if (scope === 'selected_section' && !selectedSection) {
+      throw new Error('no builder section is selected');
+    }
+    return {
+      SurfaceKind: 'webpage_builder_editor',
+      PageID: String(pageID),
+      Route: `/webpage-builder/${pageID}`,
+      Scope: scope,
+      SelectedSectionID: scope === 'selected_section' ? selectedSection?.id : undefined,
+      Content: buildAgentContext(scope === 'selected_section' ? MODE_EDIT_SECTION : MODE_BUILD_PAGE),
+    };
   };
 
   // Apply the page-builder agent's edited sections back into the editor. The
@@ -144,8 +159,17 @@
   $effect(() => {
     const hasSelection = !!editorStore.selectedId;
     agentModes.set(hasSelection ? BUILDER_MODES : [BUILDER_MODES[0]], hasSelection ? MODE_EDIT_SECTION : MODE_BUILD_PAGE);
-    // Provide the sections-as-HTML context the chat widget sends with each message.
-    agentModes.setContextProvider(buildAgentContext);
+    agentModes.setSurfaceProvider(() => ({
+      kind: 'webpage_builder_editor',
+      route: `/webpage-builder/${pageID}`,
+      page_id: String(pageID),
+      active_agent_mode: agentModes.activeID === MODE_EDIT_SECTION ? 'edit_section' : 'build_page',
+      has_selected_section: hasSelection,
+      selected_section_id: editorStore.selectedSection?.id,
+      selected_section_type: editorStore.selectedSection?.Type,
+      available_contexts: hasSelection ? ['full_page', 'selected_section'] : ['full_page'],
+    }));
+    agentModes.setLiveContextProvider(getLiveAgentContext);
     // Apply the agent's edited sections back into the editor when they arrive.
     agentModes.setSectionsApplier(applyAgentSections);
     return () => agentModes.clear();

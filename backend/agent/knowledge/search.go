@@ -17,6 +17,7 @@ const (
 	defaultResultLimit    = 8
 	maximumCandidateLimit = 100
 	maximumResultLimit    = 20
+	maximumAllowedRoutes  = 500
 )
 
 var searchPayloadFields = []string{
@@ -50,6 +51,7 @@ type SearchOptions struct {
 	Route          string
 	Module         string
 	Visibility     string
+	AllowedRoutes  []string
 }
 
 // DocumentationResult gives the answering agent evidence and an exact navigation target.
@@ -175,9 +177,9 @@ func (store *Store) HybridSearch(ctx context.Context, userQuestion string, dense
 		pointIDs = append(pointIDs, result.PointID)
 	}
 	questionDigest := sha256.Sum256([]byte(normalizedQuestion))
-	log.Printf("[agent.knowledge] hybrid_search collection=%s query_hash=%x candidates=%d limit=%d results=%d route=%q module=%q visibility=%q point_ids=%s duration=%s",
+	log.Printf("[agent.knowledge] hybrid_search collection=%s query_hash=%x candidates=%d limit=%d results=%d route=%q allowed_routes=%d module=%q visibility=%q point_ids=%s duration=%s",
 		store.config.Collection, questionDigest[:6], options.CandidateLimit, options.ResultLimit, len(results),
-		options.Route, options.Module, options.Visibility, strings.Join(pointIDs, ","), time.Since(startedAt).Round(time.Millisecond))
+		options.Route, len(options.AllowedRoutes), options.Module, options.Visibility, strings.Join(pointIDs, ","), time.Since(startedAt).Round(time.Millisecond))
 	return results, nil
 }
 
@@ -200,6 +202,19 @@ func normalizeSearchOptions(options *SearchOptions) error {
 	options.Route = strings.TrimSpace(options.Route)
 	options.Module = strings.TrimSpace(options.Module)
 	options.Visibility = strings.TrimSpace(options.Visibility)
+	uniqueRoutes := make([]string, 0, len(options.AllowedRoutes))
+	seenRoutes := map[string]bool{}
+	for _, route := range options.AllowedRoutes {
+		route = strings.TrimSpace(route)
+		if route != "" && !seenRoutes[route] {
+			seenRoutes[route] = true
+			uniqueRoutes = append(uniqueRoutes, route)
+		}
+	}
+	if len(uniqueRoutes) > maximumAllowedRoutes {
+		return fmt.Errorf("allowed route count %d exceeds maximum %d", len(uniqueRoutes), maximumAllowedRoutes)
+	}
+	options.AllowedRoutes = uniqueRoutes
 	return nil
 }
 
@@ -210,6 +225,9 @@ func documentationSearchFilter(options SearchOptions) *qdrant.Filter {
 	}
 	if options.Route != "" {
 		conditions = append(conditions, qdrant.NewMatchKeyword("route", options.Route))
+	}
+	if len(options.AllowedRoutes) > 0 {
+		conditions = append(conditions, qdrant.NewMatchKeywords("route", options.AllowedRoutes...))
 	}
 	if options.Module != "" {
 		conditions = append(conditions, qdrant.NewMatchKeyword("module", options.Module))

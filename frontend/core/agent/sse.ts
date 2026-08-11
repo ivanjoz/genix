@@ -382,15 +382,15 @@ export const stopAgentStream = () => {
 
 // runAgentTurn is the chat widget's send path. The turn is a plain POST that
 // resolves when the backend finishes; replies, status and errors arrive
-// meanwhile through subscribeAgentChat. `context` carries mode-specific payload
-// (e.g. the builder's sections serialized to HTML); empty when the mode needs
-// none.
+// meanwhile through subscribeAgentChat. Builder content is fetched later through
+// getAgentContext, after the backend classifier validates its scope.
 export const runAgentTurn = async (
   message: string,
   modelHash: string,
   timestamp: number,
   modeID: number,
-  context: string,
+  surface: import('./agent.svelte').AgentSurfaceContext,
+  appLanguage: 'es' | 'en',
 ): Promise<void> => {
   // Lazy start: the stream opens here on the first turn if the chat panel
   // didn't already open it, and the handshake guarantees the backend can push
@@ -404,12 +404,13 @@ export const runAgentTurn = async (
     ModelHash: modelHash,
     Timestamp: timestamp,
     ModeID: modeID,
-    Context: context,
+	Surface: surface,
+	AppLanguage: appLanguage,
     // Sent per-turn rather than once at connect, so navigating by hand between
     // turns is reflected without a reconnect.
     Path: window.location.pathname || "",
   };
-  agentLog("info", "turn start", { channel: body.Channel, modeID, modelHash, bytes: message.length, contextBytes: context.length });
+  agentLog("info", "turn start", { channel: body.Channel, modeID, modelHash, bytes: message.length, surface: surface.kind });
 
   const response = await fetch(Env.makeRoute("p-agent-turn"), {
     method: "POST",

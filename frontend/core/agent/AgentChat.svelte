@@ -257,14 +257,14 @@
     pushHeaderStatus('Pensando...');
     await scrollToBottom();
 
-    // Resolve any page-supplied context for the active mode (e.g. the builder
-    // serializes its sections to HTML); empty when the mode needs none.
-    const context = agentModes.getActiveContext();
-    chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash(), modeID: agentModes.active.ID, contextBytes: context.length });
+    // Send only compact surface metadata. Full builder HTML is requested by
+    // getAgentContext after the backend classifier validates the required scope.
+	const surface = agentModes.getSurface();
+	chatLog('info', 'sending user message', { tab, bytes: text.length, modelHash: getSelectedAgentModelHash(), modeID: agentModes.active.ID, surface: surface.kind });
     try {
       // Resolves when the backend finishes the turn. The reply itself already
       // arrived through handleChatEvent — this is just the lifetime.
-      await runAgentTurn(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, context);
+	  await runAgentTurn(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, surface, Core.languaje === 2 ? 'en' : 'es');
     } catch (turnError) {
       chatLog('warn', 'turn failed', { error: String(turnError) });
       messages = [...messages, {

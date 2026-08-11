@@ -1,0 +1,19 @@
+[
+  {"name":"spanish greeting","surface":"unknown","request":"Hola","expected_intent":"social","response_language":"es","expected_capability":"","expected_builder_scope":"none"},
+  {"name":"english greeting","surface":"erp_page","request":"Thanks for your help","expected_intent":"social","response_language":"en","expected_capability":"","expected_builder_scope":"none"},
+  {"name":"out of scope sports","surface":"unknown","request":"¿Quién ganó el partido?","expected_intent":"out_of_scope","response_language":"es","expected_capability":"","expected_builder_scope":"none"},
+  {"name":"cash reconciliation rule","surface":"erp_page","request":"¿Qué pasa si el arqueo tiene diferencia?","expected_intent":"product_knowledge","response_language":"es","expected_capability":"documentation_search","expected_builder_scope":"none"},
+  {"name":"purchase order follow up","surface":"erp_page","request":"¿Y después puedo anularla?","expected_intent":"product_knowledge","response_language":"es","expected_capability":"documentation_search","expected_builder_scope":"none","expected_offsets":[-1]},
+  {"name":"latest sale","surface":"erp_page","request":"Dame la última venta de Coca Cola","expected_intent":"operational_data","response_language":"es","expected_capability":"sales_search","expected_builder_scope":"none"},
+  {"name":"visible field","surface":"erp_page","request":"¿Qué valor tiene este campo?","expected_intent":"current_page","response_language":"es","expected_capability":"current_page","expected_builder_scope":"none"},
+  {"name":"fill supplier","surface":"erp_page","request":"Llena el proveedor ACME","expected_intent":"page_action","response_language":"es","expected_capability":"browser_action","expected_builder_scope":"none"},
+  {"name":"save confirmation","surface":"erp_page","request":"Sí, guárdalo","expected_intent":"confirmation","response_language":"es","expected_capability":"browser_action","expected_builder_scope":"none","expected_offsets":[-1]},
+  {"name":"independent cash topic","surface":"erp_page","request":"Ahora explícame el arqueo","expected_intent":"product_knowledge","response_language":"es","expected_capability":"documentation_search","expected_builder_scope":"none","expected_offsets":[]},
+  {"name":"add product website section","surface":"webpage_builder_editor","request":"Add a product section","expected_intent":"webpage_add_section","response_language":"en","expected_capability":"webpage_builder","expected_builder_scope":"full_page"},
+  {"name":"edit selected hero","surface":"webpage_builder_editor","request":"Make this title larger","expected_intent":"webpage_edit_section","response_language":"en","expected_capability":"webpage_builder","expected_builder_scope":"selected_section"},
+  {"name":"add inventory product","surface":"erp_page","request":"Add a product","expected_intent":"page_action","response_language":"en","expected_capability":"browser_action","expected_builder_scope":"none"},
+  {"name":"inventory question from builder","surface":"webpage_builder_editor","request":"How do I create an inventory product?","expected_intent":"product_knowledge","response_language":"en","expected_capability":"documentation_search","expected_builder_scope":"none"},
+  {"name":"build landing from page list","surface":"webpage_builder_pages","request":"Create a shoe landing page","expected_intent":"webpage_build","response_language":"en","expected_capability":"webpage_builder","expected_builder_scope":"none"},
+  {"name":"ambiguous product section","surface":"unknown","request":"Add a product section","expected_intent":"ambiguous","response_language":"en","expected_capability":"","expected_builder_scope":"none"},
+  {"name":"english cancellation follow up","surface":"erp_page","request":"Can I cancel it afterwards?","expected_intent":"product_knowledge","response_language":"en","expected_capability":"documentation_search","expected_builder_scope":"none","expected_offsets":[-1]}
+]

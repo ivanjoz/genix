@@ -116,6 +116,16 @@ func GetMenu(ctx context.Context, tab string) ([]AgentMenuGroup, error) {
 	return out, nil
 }
 
+// GetAgentContext asks the active page provider for the freshest validated
+// builder scope. It is never called before the global classifier routes the turn.
+func GetAgentContext(ctx context.Context, tab, scope string) (AgentContextResult, error) {
+	ctx, cancel := ctxWithDefault(ctx)
+	defer cancel()
+	var result AgentContextResult
+	err := request(ctx, tab, CmdGetAgentContext, AgentContextPayload{Scope: scope}, &result)
+	return result, err
+}
+
 // Navigate asks the browser to change the SPA route. Used by the `navigate`
 // action so agents can move between pages by passing a route from GetMenu.
 func Navigate(ctx context.Context, tab, route string) error {

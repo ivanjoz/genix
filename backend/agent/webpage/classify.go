@@ -42,6 +42,9 @@ type pageClassification struct {
 	ModifySectionIDs []int  `json:"modifySectionIds"`
 	RemoveSectionIDs []int  `json:"removeSectionIds"`
 	AddSections      bool   `json:"addSections"`
+	AddSectionCount  int    `json:"addSectionCount"`
+	ReorderSections  bool   `json:"reorderSections"`
+	ExpectedOrder    []int  `json:"expectedSectionOrder"`
 }
 
 // notInterpretableReply is pushed to the user (in Spanish) and the turn aborts
@@ -64,13 +67,15 @@ Rules:
 const pageClassifierSystemPrompt = `You classify a user's request for a multi-section web page before an HTML editor agent acts on it. The current sections are given, each prefixed with a line "=== SECTION N ===". Decide which sections the request targets so the editor preserves every other section unchanged.
 
 Reply with ONLY a JSON object — no prose, no markdown fences:
-{"relevant":true,"operation":"partial","modifySectionIds":[..],"removeSectionIds":[..],"addSections":false}
+{"relevant":true,"operation":"partial","modifySectionIds":[..],"removeSectionIds":[..],"addSections":false,"addSectionCount":0,"reorderSections":false,"expectedSectionOrder":[]}
 On an uninterpretable request reply instead: {"relevant":false,"reason":"<short>"}
 
 Rules:
 - relevant=false ONLY when the request is nonsense or unrelated to building this page.
 - operation="rewrite" ONLY when the user wants the WHOLE page redone; then the id lists are ignored.
 - operation="partial" otherwise: put in modifySectionIds / removeSectionIds ONLY the section numbers the request actually targets. Every section you do NOT list MUST be preserved unchanged. addSections=true when the user wants one or more brand-new sections.
+- addSectionCount is the maximum number of new sections explicitly requested. Use 1 for a singular or unspecified add request, and 0 when addSections=false.
+- reorderSections=true only when the user explicitly asks to change section order. When the requested final order is unambiguous, put every existing section number in expectedSectionOrder in that final order; otherwise leave it empty.
 - When unsure, list FEWER sections — preserving a section is safer than letting it be rewritten.`
 
 // classifyEdit runs the ModeEditSection classifier. It returns the verdict and
@@ -95,6 +100,13 @@ func (t *builderTurn) classifyPage(ctx context.Context, userText, pageHTML strin
 	if err := t.classifyInto(ctx, "classify_page", pageClassifierSystemPrompt, prompt, &verdict); err != nil {
 		core.Log("agent.webpage classify_page fallback (lock all) err::", err)
 		return pageClassification{Relevant: true, Operation: "partial"}
+	}
+	if verdict.AddSections && verdict.AddSectionCount <= 0 {
+		// A missing count defaults to one, the smallest safe interpretation.
+		verdict.AddSectionCount = 1
+	}
+	if !verdict.AddSections {
+		verdict.AddSectionCount = 0
 	}
 	return verdict
 }

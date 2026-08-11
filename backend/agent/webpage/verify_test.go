@@ -85,8 +85,69 @@ func TestVerifyPageContentRejectsUnwantedNewSection(t *testing.T) {
 	}
 
 	turn.pageOp.AddSections = true
+	turn.pageOp.AddSectionCount = 1
 	if v := turn.verifyContent(applyCall(withNew)); len(v) != 0 {
 		t.Fatalf("addSections=true should permit a new section, got %v", v)
+	}
+	tooMany := append(withNew, SectionEdit{SourceID: 0, HTML: "<section><p>Second surprise</p></section>"})
+	if v := turn.verifyContent(applyCall(tooMany)); len(v) == 0 {
+		t.Fatal("new sections above the requested count must be rejected")
+	}
+}
+
+func TestVerifyPageContentPreservesOrValidatesSectionOrder(t *testing.T) {
+	source := splitSourceSections(
+		"=== SECTION 1 ===\n<section><h1>Hero</h1></section>\n" +
+			"=== SECTION 2 ===\n<section><p>Products</p></section>")
+	reordered := []SectionEdit{
+		{SourceID: 2, HTML: "<section><p>Products</p></section>"},
+		{SourceID: 1, HTML: "<section><h1>Hero</h1></section>"},
+	}
+	turn := &builderTurn{modeID: ModeBuildPage, sourceSections: source, pageOp: pageClassification{Operation: "partial"}}
+	if violations := turn.verifyContent(applyCall(reordered)); len(violations) == 0 {
+		t.Fatal("an unrequested reorder must be rejected")
+	}
+
+	turn.pageOp.ReorderSections = true
+	turn.pageOp.ExpectedOrder = []int{2, 1}
+	if violations := turn.verifyContent(applyCall(reordered)); len(violations) != 0 {
+		t.Fatalf("the exact requested order should pass: %v", violations)
+	}
+	turn.pageOp.ExpectedOrder = []int{1, 2}
+	if violations := turn.verifyContent(applyCall(reordered)); len(violations) == 0 {
+		t.Fatal("a reorder that differs from the requested order must be rejected")
+	}
+	turn.pageOp.ExpectedOrder = nil
+	if violations := turn.verifyContent(applyCall(reordered)); len(violations) == 0 {
+		t.Fatal("an unresolved reorder must not permit an arbitrary order")
+	}
+}
+
+func TestGlobalAddConstraintCannotBecomeRewrite(t *testing.T) {
+	classified := pageClassification{
+		Operation: "rewrite", ModifySectionIDs: []int{1}, RemoveSectionIDs: []int{2},
+		ReorderSections: true, ExpectedOrder: []int{2, 1},
+	}
+	constrained := constrainPageClassification(classified, RoutedOperationAdd)
+	if constrained.Operation != "partial" || !constrained.AddSections || constrained.AddSectionCount != 1 {
+		t.Fatalf("global add was not enforced: %+v", constrained)
+	}
+	if len(constrained.ModifySectionIDs) != 0 || len(constrained.RemoveSectionIDs) != 0 || constrained.ReorderSections {
+		t.Fatalf("global add retained widening permissions: %+v", constrained)
+	}
+}
+
+func TestGlobalFullPageEditCannotBecomeRewriteOrStructuralChange(t *testing.T) {
+	classified := pageClassification{
+		Operation: "rewrite", ModifySectionIDs: []int{2}, RemoveSectionIDs: []int{1},
+		AddSections: true, AddSectionCount: 3, ReorderSections: true, ExpectedOrder: []int{2, 1},
+	}
+	constrained := constrainPageClassification(classified, RoutedOperationEdit)
+	if constrained.Operation != "partial" || len(constrained.ModifySectionIDs) != 1 || constrained.ModifySectionIDs[0] != 2 {
+		t.Fatalf("global edit did not preserve only the resolved edit target: %+v", constrained)
+	}
+	if len(constrained.RemoveSectionIDs) != 0 || constrained.AddSections || constrained.AddSectionCount != 0 || constrained.ReorderSections {
+		t.Fatalf("global edit retained structural permissions: %+v", constrained)
 	}
 }
 

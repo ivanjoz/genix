@@ -9,21 +9,16 @@ import (
 	"sync"
 
 	"app/agent/llm"
-	"app/core"
+	"app/agent/routing"
 	"app/agent/types"
+	"app/core"
 )
 
-// RunTurn is the per-user-message entry point of the agentic loop. The model
-// is offered the page-driving tools (`get_page`, `get_menu`, `navigate`,
-// `invoke_batch`) plus the terminator `finish`. Each iteration is one
-// OpenRouter call; tool calls dispatch through the SSE+POST page bridge
-// and feed their result back as a `tool` message on the next iteration. The
-// loop terminates when the model calls `finish` or hits the iteration cap.
+// RunTurn is the per-user-message entry point of the agentic loop. The router
+// supplies only the tools authorized for the classified intent. Each iteration
+// is one provider call; browser tool results return through the SSE+POST bridge.
 
 const (
-	// historyTurnTail caps how many persisted messages we attach to each LLM
-	// call. Keeps prompt tokens bounded as conversations grow.
-	historyTurnTail = 5
 	// maxLoopIterations is the safety cap on tool-call/result round-trips per
 	// user turn. Tuned for the typical "get_page → navigate → invoke_batch →
 	// finish" arc with a few retries; bump if real usage shows it bites.
@@ -58,10 +53,9 @@ func getLLMClient() (*llm.Client, error) {
 	return llmClient, llmClientErr
 }
 
-// RunTurn persists the user's message, drives the LLM loop until `finish` is
-// called (or the cap is hit), persists the agent's reply, and pushes the
-// reply over the chat WS. Caller is responsible for the InFlight guard.
-func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash string) error {
+// RunTurn drives the main loop with only classifier-selected completed turns.
+// The caller has already persisted the current user message exactly once.
+func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash string, completedTurns []routing.CompletedTurn, routingContext string, availableTools []llm.Tool) error {
 	client, err := getLLMClient()
 	if err != nil {
 		return fmt.Errorf("llm client unavailable: %w", err)
@@ -79,19 +73,10 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 	if activeModelID == "" {
 		activeModelID = client.Model
 	}
-	core.Log("Starting agentic loop with model", activeModelID, " tab::", shortTabID(s.TabID), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
+	core.Log("Starting agentic loop with model", activeModelID, " tab::", shortTabID(s.TabID), " tools::", len(availableTools), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 	core.Log("Promp:", userText)
 
-	if _, err := saveMessage(s, RoleUser, userText, "", 0); err != nil {
-		return fmt.Errorf("persist user message: %w", err)
-	}
-
-	history, err := loadLastN(s, historyTurnTail)
-	if err != nil {
-		return fmt.Errorf("load history: %w", err)
-	}
-
-	messages := buildChatMessages(history)
+	messages := buildRoutedChatMessages(completedTurns, userText, routingContext)
 	// baseLen is the size of the prompt before any tool round is appended —
 	// system + replayed history + (the user message of this turn is in the
 	// replayed history, since we saved it just above). Tool round pruning
@@ -124,7 +109,7 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 		resp, err := client.Chat(ctx, llm.ChatRequest{
 			Model:      modelID,
 			Messages:   llmMessages,
-			Tools:      llm.ChatTools,
+			Tools:      availableTools,
 			ToolChoice: "auto",
 		})
 		if err != nil {
@@ -182,6 +167,58 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 	}
 
 	return fmt.Errorf("agent exceeded %d iterations without calling finish", maxLoopIterations)
+}
+
+// RunReadOnlyTurn answers from supplied live context without exposing browser
+// mutation tools. It is used for builder inspection, never for builder edits.
+func (s *AgentSession) RunReadOnlyTurn(ctx context.Context, userText, modelHash string, completedTurns []routing.CompletedTurn, routingContext string) error {
+	client, err := getLLMClient()
+	if err != nil {
+		return fmt.Errorf("llm client unavailable: %w", err)
+	}
+	modelID := ""
+	if modelHash = strings.TrimSpace(modelHash); modelHash != "" {
+		modelConfig, found := llm.LookupModelHash(modelHash)
+		if !found {
+			return fmt.Errorf("modelo de agente no válido: %s", modelHash)
+		}
+		modelID = modelConfig.ID
+	}
+	routingContext += "\nThis is read-only. No tools are available. Return the final answer as plain text and do not claim that an action was executed."
+	response, err := client.Chat(ctx, llm.ChatRequest{
+		Model: modelID, Messages: buildRoutedChatMessages(completedTurns, userText, routingContext),
+	})
+	if err != nil {
+		return fmt.Errorf("read-only llm chat: %w", err)
+	}
+	answer := strings.TrimSpace(response.Choices[0].Message.Content)
+	if answer == "" {
+		return errors.New("read-only agent returned an empty answer")
+	}
+	return s.completeTurn(answer, "", response.Usage.TotalTokens)
+}
+
+// buildRoutedChatMessages keeps retrieved evidence in the system message so it
+// survives the main loop's tool-round pruning.
+func buildRoutedChatMessages(completedTurns []routing.CompletedTurn, currentMessage, routingContext string) []llm.Message {
+	systemPrompt := llm.SystemPromptChat
+	if routingContext = strings.TrimSpace(routingContext); routingContext != "" {
+		systemPrompt += "\n\n" + routingContext
+	}
+	messages := []llm.Message{{Role: "system", Content: systemPrompt}}
+	for _, completedTurn := range completedTurns {
+		if userMessage := strings.TrimSpace(completedTurn.UserMessage); userMessage != "" {
+			messages = append(messages, llm.Message{Role: "user", Content: userMessage})
+		}
+		if assistantMessage := strings.TrimSpace(completedTurn.AssistantMessage); assistantMessage != "" {
+			messages = append(messages, llm.Message{Role: "assistant", Content: assistantMessage})
+			if actionNote := actionLogNote(completedTurn.ActionSummary); actionNote != "" {
+				messages = append(messages, llm.Message{Role: "system", Content: actionNote})
+			}
+		}
+	}
+	messages = append(messages, llm.Message{Role: "user", Content: strings.TrimSpace(currentMessage)})
+	return messages
 }
 
 // dispatchTool runs one tool call against the connected browser tab and
@@ -296,7 +333,7 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 // event. Pulled out so both the `finish` branch and the plain-text fallback
 // share the same exit path.
 func (s *AgentSession) completeTurn(message, summary string, tokens int32) error {
-	ts, err := saveMessage(s, RoleAgent, message, summary, tokens)
+	ts, err := saveAgentMessage(s, message, summary, tokens)
 	if err != nil {
 		return fmt.Errorf("persist agent message: %w", err)
 	}

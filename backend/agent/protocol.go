@@ -36,6 +36,9 @@ const (
 	// the `navigate` action so the agent can move between pages without
 	// addressing a specific menu handle.
 	CmdNavigate = "navigate"
+	// CmdGetAgentContext retrieves builder state only after the global classifier
+	// has selected and validated a live context scope.
+	CmdGetAgentContext = "getAgentContext"
 )
 
 // Reply types sent by the frontend.
@@ -144,4 +147,17 @@ type NavigatePayload struct {
 type NavigateResult struct {
 	Route string
 	Page  *PageContent `json:",omitempty"`
+}
+
+type AgentContextPayload struct {
+	Scope string
+}
+
+type AgentContextResult struct {
+	SurfaceKind       string
+	PageID            string
+	Route             string
+	Scope             string
+	SelectedSectionID string `json:",omitempty"`
+	Content           string
 }

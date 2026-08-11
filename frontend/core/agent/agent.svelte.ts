@@ -20,10 +20,31 @@ export const DEFAULT_AGENT_MODE: IAgentMode = {
 	Icon: 'icon-[fa--commenting-o]',
 }
 
-// A page-supplied function that returns extra context (e.g. the builder's
-// sections serialized to HTML) for the active mode. Returns '' when the active
-// mode needs no context. Called by the chat widget at send time.
-export type AgentContextProvider = (modeID: number) => string
+export type AgentSurfaceKind = 'erp_page' | 'webpage_builder_pages' | 'webpage_builder_editor' | 'ecommerce_storefront_preview' | 'unknown'
+export type AgentContextScope = 'full_page' | 'selected_section'
+
+export interface AgentSurfaceContext {
+	kind: AgentSurfaceKind
+	route?: string
+	page_id?: string
+	active_agent_mode?: string
+	has_selected_section: boolean
+	selected_section_id?: string
+	selected_section_type?: string
+	available_contexts?: AgentContextScope[]
+}
+
+export interface AgentLiveContext {
+	SurfaceKind: AgentSurfaceKind
+	PageID: string
+	Route: string
+	Scope: AgentContextScope
+	SelectedSectionID?: string
+	Content: string
+}
+
+export type AgentSurfaceProvider = () => AgentSurfaceContext
+export type AgentLiveContextProvider = (scope: AgentContextScope) => AgentLiveContext
 
 // Payload the backend's page-builder loop sends down the stream (agentSections,
 // mirrors backend/agent/chat_ws.go ChatAgentSections). The page applies it back
@@ -48,9 +69,8 @@ class AgentModesState {
 	registered = $state<IAgentMode[]>([])
 	// ID of the mode the user is currently in.
 	activeID = $state<number>(DEFAULT_AGENT_MODE.ID)
-	// Optional context provider registered by the current page (plain ref, not
-	// reactive — only read imperatively when a message is sent).
-	contextProvider: AgentContextProvider | null = null
+	surfaceProvider: AgentSurfaceProvider | null = null
+	liveContextProvider: AgentLiveContextProvider | null = null
 	// Optional applier for agent-returned sections (plain ref, not reactive —
 	// only invoked imperatively when an agentSections event arrives).
 	sectionsApplier: AgentSectionsApplier | null = null
@@ -72,14 +92,28 @@ class AgentModesState {
 		this.activeID = id
 	}
 
-	// A page registers a provider that supplies context HTML for the active mode.
-	setContextProvider(provider: AgentContextProvider) {
-		this.contextProvider = provider
+	setSurfaceProvider(provider: AgentSurfaceProvider) {
+		this.surfaceProvider = provider
 	}
 
-	// Resolve the context for the active mode, '' when none is available.
-	getActiveContext(): string {
-		return this.contextProvider?.(this.activeID) ?? ''
+	getSurface(): AgentSurfaceContext {
+		if (this.surfaceProvider) { return this.surfaceProvider() }
+		// The shared widget lives in the authenticated ERP shell. Specialized
+		// surfaces (builder/storefront) register a provider and override this.
+		return {
+			kind: 'erp_page',
+			route: typeof window === 'undefined' ? undefined : window.location.pathname,
+			has_selected_section: false,
+		}
+	}
+
+	setLiveContextProvider(provider: AgentLiveContextProvider) {
+		this.liveContextProvider = provider
+	}
+
+	getLiveContext(scope: AgentContextScope): AgentLiveContext {
+		if (!this.liveContextProvider) { throw new Error('current page has no agent context provider') }
+		return this.liveContextProvider(scope)
 	}
 
 	// A page registers how to apply agent-returned sections back into its model.
@@ -96,7 +130,8 @@ class AgentModesState {
 	clear() {
 		this.registered = []
 		this.activeID = DEFAULT_AGENT_MODE.ID
-		this.contextProvider = null
+		this.surfaceProvider = null
+		this.liveContextProvider = null
 		this.sectionsApplier = null
 	}
 }

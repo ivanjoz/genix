@@ -147,6 +147,11 @@ type EnvStruct struct {
 	// (e.g. "muse-spark-1.2-contributor" for meta). Blank = the first MODELS
 	// entry the active provider serves.
 	DEFAULT_MODEL string
+	// CLASSIFIER_MODEL_ID is independent from the model selected in the chat UI.
+	// Blank reuses DEFAULT_MODEL, which keeps existing deployments valid.
+	CLASSIFIER_MODEL_ID string
+	// CLASSIFIER_PROVIDER stays fixed even if the user-facing agent provider changes.
+	CLASSIFIER_PROVIDER string
 	// MODELS is the agent's model registry, straight from the [[models]] array table.
 	// File order is meaningful: it is the order of the model picker and its first entry
 	// servable by MODEL_PROVIDER is the default when DEFAULT_MODEL is blank. Consumed by
@@ -292,9 +297,11 @@ type fileConfig struct {
 	} `toml:"smtp"`
 
 	Agent struct {
-		DefaultModel  string `toml:"default_model"`
-		MetaKey       string `toml:"meta_key"`
-		OpenRouterKey string `toml:"openrouter_key"`
+		DefaultModel       string `toml:"default_model"`
+		ClassifierModel    string `toml:"classifier_model"`
+		ClassifierProvider string `toml:"classifier_provider"`
+		MetaKey            string `toml:"meta_key"`
+		OpenRouterKey      string `toml:"openrouter_key"`
 	} `toml:"agent"`
 
 	RateLimit struct {
@@ -421,6 +428,14 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.SMTP_PASSWORD = file.SMTP.Password
 
 	env.DEFAULT_MODEL = file.Agent.DefaultModel
+	env.CLASSIFIER_MODEL_ID = strings.TrimSpace(file.Agent.ClassifierModel)
+	if env.CLASSIFIER_MODEL_ID == "" {
+		env.CLASSIFIER_MODEL_ID = env.DEFAULT_MODEL
+	}
+	env.CLASSIFIER_PROVIDER = strings.ToLower(strings.TrimSpace(file.Agent.ClassifierProvider))
+	if env.CLASSIFIER_PROVIDER == "" {
+		env.CLASSIFIER_PROVIDER = env.MODEL_PROVIDER
+	}
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
 	env.MODELS = file.Models

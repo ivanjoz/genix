@@ -31,6 +31,18 @@ const (
 	ModeEditSection = 3 // editar sección — only the selected section in the context
 )
 
+// RoutedOperation is the validated global router constraint. The builder's
+// content classifier may narrow it further but can never widen it to a rewrite.
+type RoutedOperation string
+
+const (
+	RoutedOperationBuild   RoutedOperation = "build"
+	RoutedOperationAdd     RoutedOperation = "add"
+	RoutedOperationEdit    RoutedOperation = "edit"
+	RoutedOperationRemove  RoutedOperation = "remove"
+	RoutedOperationReorder RoutedOperation = "reorder"
+)
+
 // maxBuilderIterations caps the tool-call round-trips per turn. Builder turns
 // are typically a few generate_svg / find_image calls then apply_sections, so
 // the cap is generous headroom, not an expected limit.
@@ -96,11 +108,11 @@ type Sink interface {
 	PushStatus(state, label string, step, maxSteps int)
 	// PushReply delivers final assistant text to the chat widget. A zero
 	// timestamp lets the frontend stamp it on arrival.
-	PushReply(message, summary string, timestamp int64)
+	PushReply(message, summary string, timestamp int64) error
 	// PushSections delivers the edited sections (+ any generated SVG bodies) so
 	// the builder can parse them back into its AST. modeID tells the builder how
 	// to apply them (replace selected section vs. replace whole page).
-	PushSections(modeID int, sections []SectionEdit, svgs map[string]string, message, summary string, timestamp int64)
+	PushSections(modeID int, sections []SectionEdit, svgs map[string]string, message, summary string, timestamp int64) error
 }
 
 // builderTurn carries the per-turn state shared across the loop and its tool
@@ -108,13 +120,14 @@ type Sink interface {
 // SVG bodies generated this turn (keyed by sprite id) that ship with the final
 // apply_sections payload.
 type builderTurn struct {
-	sink    Sink
-	modeID  int
-	client  *llm.Client
-	modelID string
-	svgs    map[string]string
-	svgSeq  int
-	log     *turnLog
+	sink            Sink
+	modeID          int
+	client          *llm.Client
+	modelID         string
+	svgs            map[string]string
+	svgSeq          int
+	log             *turnLog
+	routedOperation RoutedOperation
 
 	// Content-preservation state, set by the classifier in RunTurn before the
 	// loop and read by the content gate (verifyContent) on apply_sections.
@@ -140,7 +153,7 @@ func getLLMClient() (*llm.Client, error) {
 // builder's current section(s) serialized to HTML — the whole page for
 // ModeBuildPage, the selected section for ModeEditSection. The loop ends when
 // the model calls apply_sections (which pushes the edits back to the builder).
-func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pageContext string) error {
+func RunTurn(ctx context.Context, sink Sink, modeID int, routedOperation RoutedOperation, userText, modelHash, pageContext string) error {
 	client, err := getLLMClient()
 	if err != nil {
 		return fmt.Errorf("llm client unavailable: %w", err)
@@ -168,7 +181,7 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 	tlog := newTurnLog(modeID, activeModel)
 	tlog.meta(modeID, userText, pageContext)
 
-	turn := &builderTurn{sink: sink, modeID: modeID, client: client, modelID: modelID, svgs: map[string]string{}, log: tlog}
+	turn := &builderTurn{sink: sink, modeID: modeID, routedOperation: routedOperation, client: client, modelID: modelID, svgs: map[string]string{}, log: tlog}
 
 	// Intent classification (runs before the loop): decide what the user wants
 	// changed so we can both instruct the model and deterministically verify it
@@ -176,8 +189,7 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 	sink.PushStatus("thinking", "Interpretando…", 1, maxBuilderIterations)
 	constraints, abort := turn.classifyTurn(ctx, userText, pageContext)
 	if abort {
-		sink.PushReply(notInterpretableReply, "", 0)
-		return nil
+		return sink.PushReply(notInterpretableReply, "", 0)
 	}
 
 	messages := []llm.Message{
@@ -222,8 +234,7 @@ func RunTurn(ctx context.Context, sink Sink, modeID int, userText, modelHash, pa
 			if text == "" {
 				return errors.New("el modelo devolvió un mensaje vacío sin llamar apply_sections")
 			}
-			sink.PushReply(text, "", 0)
-			return nil
+			return sink.PushReply(text, "", 0)
 		}
 
 		messages = append(messages, choice.Message)
@@ -326,7 +337,9 @@ func (t *builderTurn) applySections(ctx context.Context, call llm.ToolCall, runC
 		}
 		t.log.note("apply_sections", b.String())
 	}
-	t.sink.PushSections(t.modeID, args.Sections, t.svgs, args.Message, args.Summary, 0)
+	if err := t.sink.PushSections(t.modeID, args.Sections, t.svgs, args.Message, args.Summary, 0); err != nil {
+		return false, "", fmt.Errorf("persist builder result: %w", err)
+	}
 	return true, "", nil
 }
 

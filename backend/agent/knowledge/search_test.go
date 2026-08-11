@@ -138,3 +138,21 @@ func TestHybridSearchRejectsWrongEmbeddingDimension(t *testing.T) {
 		t.Fatal("wrong query embedding dimensions must fail before Qdrant")
 	}
 }
+
+func TestDocumentationSearchFilterUsesAllowedRouteMatchAny(t *testing.T) {
+	options := SearchOptions{AllowedRoutes: []string{" /finance/cash-banks ", "/logistics/purchase-orders", "/finance/cash-banks"}}
+	if err := normalizeSearchOptions(&options); err != nil {
+		t.Fatal(err)
+	}
+	if len(options.AllowedRoutes) != 2 {
+		t.Fatalf("allowed routes were not normalized: %+v", options.AllowedRoutes)
+	}
+	filter := documentationSearchFilter(options)
+	if len(filter.GetMust()) != 3 {
+		t.Fatalf("expected status, current, and route filters: %+v", filter)
+	}
+	keywords := filter.GetMust()[2].GetField().GetMatch().GetKeywords().GetStrings()
+	if !reflect.DeepEqual(keywords, options.AllowedRoutes) {
+		t.Fatalf("unexpected route match-any values: %+v", keywords)
+	}
+}

@@ -2,8 +2,10 @@
 
 ## Status
 
-Proposed implementation contract. Do not begin implementation until the human has reviewed
-the classifier schema, intent taxonomy, routing table, and frontend surface contract.
+Implementation in progress. Phases 1–6 are implemented and covered by backend tests. Phase 7
+has live Meta Muse classifier and Spanish Qdrant retrieval checks; authenticated browser tests
+and production metrics remain. The v1 schema, intent taxonomy, routing table, frontend surface
+contract, and the defaults recorded under “Resolved implementation decisions” are authoritative.
 
 ## Goal
 
@@ -58,9 +60,9 @@ This plan connects four existing systems without replacing them:
 - Do not make route documentation describe generic permission or tenant abstractions.
 - Do not introduce another socket or event-stream transport.
 
-## Current behavior to replace
+## Historical behavior replaced
 
-`AgentSession.RunUserMessage` currently routes directly from `ModeID`:
+Before this implementation, `AgentSession.RunUserMessage` routed directly from `ModeID`:
 
 - Mode 1 runs the general chat/page-agent loop.
 - Modes 2 and 3 run the webpage builder loop.
@@ -780,10 +782,12 @@ with unknown enum values.
 
 ## Decisions required before implementation
 
-1. Select the exact fast classifier model and provider configuration.
-2. Approve the classifier enums and version-1 output fields.
-3. Approve localized direct-response wording.
-4. Decide whether `webpage_inspect` should use the specialized builder agent or a cheaper
-   deterministic summary of live builder state.
-5. Decide the initial behavior for a webpage-build request from the builder page-list view:
-   automatically open/create an editor document or ask the user to choose the target page.
+Resolved implementation decisions:
+
+1. Reuse Meta `muse-spark-1.2-contributor`; Meta receives `reasoning_effort=minimal` because it
+   rejects a fully disabled value.
+2. Use the documented version-1 enums and output fields.
+3. Keep localized direct responses as concise backend-owned Spanish/English templates.
+4. Make `webpage_inspect` a read-only builder-aware path.
+5. From the builder page list, ask the user to choose a target rather than creating one
+   automatically.

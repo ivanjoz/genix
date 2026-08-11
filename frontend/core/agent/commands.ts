@@ -10,6 +10,7 @@ import { security } from "$libs/ui-runtime.svelte";
 import { tick } from "svelte";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "$components/agent/registry";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
+import { agentModes, type AgentContextScope } from "./agent.svelte";
 
 export { releaseScreenStream };
 
@@ -46,6 +47,10 @@ interface InvokeBatchPayload {
 interface NavigatePayload {
   Route: string;
   ReturnPageContent?: boolean;
+}
+
+interface AgentContextPayload {
+  Scope: AgentContextScope;
 }
 
 // Mirrors the Go agent.InvocationResult: one entry per executed invocation in
@@ -225,6 +230,13 @@ const navigate = (payload: NavigatePayload | undefined): Promise<{ Route: string
     };
   });
 
+const getAgentContext = (payload: AgentContextPayload | undefined) => {
+  if (payload?.Scope !== 'full_page' && payload?.Scope !== 'selected_section') {
+    throw new Error('getAgentContext: invalid scope');
+  }
+  return agentModes.getLiveContext(payload.Scope);
+};
+
 const commandHandlers: Record<string, CommandHandler> = {
   getPageContent: () => Agent.getPageContent(),
   agentList: (payload: AgentListFilter | undefined) => Agent.list(payload),
@@ -234,6 +246,7 @@ const commandHandlers: Record<string, CommandHandler> = {
   "agent.invoke": invokeBatch,
   getMenu,
   navigate,
+  getAgentContext,
 };
 
 // --- Public dispatcher --------------------------------------------------------

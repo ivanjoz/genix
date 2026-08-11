@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"app/agent/routing"
 	"app/agent/webpage"
 	"app/core"
 )
@@ -44,11 +45,10 @@ type ChatUserMessage struct {
 	Message   string
 	ModelHash string
 	Timestamp int64
-	// ModeID is the agent mode the user is in (1 ask, 2 build page, 3 edit
-	// section); Context carries mode-specific payload such as the builder's
-	// sections serialized to HTML (whole page for mode 2, selected section for 3).
-	ModeID  int
-	Context string
+	// ModeID is only a compact routing hint; live builder state is fetched after classification.
+	ModeID      int
+	Surface     routing.SurfaceContext
+	AppLanguage routing.Language
 }
 
 type ChatAgentReply struct {
@@ -100,6 +100,9 @@ type AgentSession struct {
 	SessionID int64
 
 	inFlight atomic.Bool
+	// lastMessageTimestamp prevents instant fixed responses from reusing the
+	// current user row's millisecond clustering key.
+	lastMessageTimestamp atomic.Int64
 
 	// currentRoute is the SPA path the user is on, used to enrich progress
 	// labels (e.g. "Leyendo /negocio/productos…"). Re-seeded from each turn
@@ -193,18 +196,8 @@ func (s *AgentSession) RunUserMessage(ctx context.Context, msg ChatUserMessage) 
 	if text == "" {
 		return errors.New("empty message")
 	}
-	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " mode::", msg.ModeID, " context_bytes::", len(msg.Context), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
-
-	// Route by mode: the builder's "build page" / "edit section" modes run the
-	// page-builder loop (which needs msg.Context — the sections as HTML);
-	// everything else (mode 1 "ask", and any unknown mode) runs the default
-	// chat loop.
-	switch msg.ModeID {
-	case webpage.ModeBuildPage, webpage.ModeEditSection:
-		return webpage.RunTurn(ctx, s, msg.ModeID, text, msg.ModelHash, msg.Context)
-	default:
-		return s.RunTurn(ctx, text, msg.ModelHash)
-	}
+	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " mode::", msg.ModeID, " surface::", msg.Surface.Kind, " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
+	return s.runClassifiedTurn(ctx, msg, text)
 }
 
 // sendJSON pushes a chat event down the turn's response stream. A missing sink
@@ -239,14 +232,19 @@ func (s *AgentSession) PushStatus(state, label string, step, maxSteps int) {
 	s.pushStatus(state, label, step, maxSteps)
 }
 
-func (s *AgentSession) PushReply(message, summary string, timestamp int64) {
-	s.sendJSON(ChatTypeAgentReply, ChatAgentReply{Message: message, Summary: summary, Timestamp: timestamp})
+func (s *AgentSession) PushReply(message, summary string, _ int64) error {
+	return s.completeTurn(message, summary, 0)
 }
 
-func (s *AgentSession) PushSections(modeID int, sections []webpage.SectionEdit, svgs map[string]string, message, summary string, timestamp int64) {
+func (s *AgentSession) PushSections(modeID int, sections []webpage.SectionEdit, svgs map[string]string, message, summary string, _ int64) error {
+	timestamp, err := saveAgentMessage(s, message, summary, 0)
+	if err != nil {
+		return err
+	}
 	s.sendJSON(ChatTypeAgentSections, ChatAgentSections{
 		ModeID: modeID, Sections: sections, Svgs: svgs, Message: message, Summary: summary, Timestamp: timestamp,
 	})
+	return nil
 }
 
 func shortTabID(tabID string) string {

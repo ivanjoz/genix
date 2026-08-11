@@ -12,8 +12,8 @@ import (
 // every user's chat history lives in its own partition — "load last N
 // messages for this user in this session" is a single intra-partition slice.
 // Clustering on (SessionID, Timestamp) orders messages naturally inside the
-// partition. AttachedContent is reserved for future use (page snapshot or
-// screenshot ref) and is written empty for now.
+// partition. AttachedContent stores the compact route on user rows; it never
+// stores page HTML, builder state, retrieved documentation, or screenshots.
 type AgentMessage struct {
 	db.TableStruct[AgentMessageTable, AgentMessage]
 	CompanyUserID   int64  `db:"company_user_id,pk"`

@@ -85,6 +85,7 @@ func TestParseArguments(t *testing.T) {
 		{[]string{"1", "check_tables"}, "[1]", "[check_tables]", "[]", ""},
 		// Los scripts que piden argumentos se invocan igual que en app.sh.
 		{[]string{"edit", "product_inventory", "category:string"}, "[]", "[edit]", "[product_inventory category:string]", ""},
+		{[]string{"search_documentation", "-question", "arqueo", "-limit", "3"}, "[]", "[search_documentation]", "[-question arqueo -limit 3]", ""},
 	}
 
 	for _, testCase := range cases {

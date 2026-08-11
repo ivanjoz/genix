@@ -160,9 +160,12 @@ password = ""
 [agent]
 # default_model debe existir en el proveedor elegido en providers.model.
 # Vacío = el primer [[models]] (al final del archivo) que sirva ese proveedor.
-default_model  = ""
-meta_key       = ""
-openrouter_key = ""
+default_model    = ""
+# Proveedor/modelo fijo del clasificador global; vacíos reutilizan el proveedor/modelo principal.
+classifier_provider = ""
+classifier_model = ""
+meta_key         = ""
+openrouter_key   = ""
 
 # ─── GenixSearch ────────────────────────────────────────────────────────────
 # Los escribe 'configure_db.py search' con la IP alcanzable del host.

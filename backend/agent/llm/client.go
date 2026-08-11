@@ -162,6 +162,9 @@ type ChatRequest struct {
 	// prompt discipline the model into ending the turn via the `finish` tool.
 	ToolChoice  string   `json:"tool_choice,omitempty"`
 	Temperature *float32 `json:"temperature,omitempty"`
+	// MaxTokens bounds mechanical subagents such as the global classifier.
+	// Zero leaves the provider default unchanged for existing agent loops.
+	MaxTokens int `json:"max_tokens,omitempty"`
 	// Reasoning is the provider-agnostic thinking budget callers set. Chat()
 	// translates it: sent as-is to OpenRouter, collapsed into ReasoningEffort
 	// for Meta. Nil = don't constrain the budget.
@@ -262,6 +265,19 @@ func NewClient() (*Client, error) {
 		return nil, errors.New("core.Env not populated; call core.PopulateVariables before llm.NewClient")
 	}
 	provider := ActiveProvider()
+	return NewClientForProvider(provider, DefaultModelID())
+}
+
+// NewClientForProvider creates a fixed-provider client for system subagents such
+// as the global classifier. It does not follow the chat UI's selected model.
+func NewClientForProvider(provider, modelID string) (*Client, error) {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	if provider == "" {
+		provider = ActiveProvider()
+	}
+	if _, known := providerConfigs[provider]; !known {
+		return nil, fmt.Errorf("unsupported model provider %q", provider)
+	}
 	apiKey := apiKeyForProvider(provider)
 	if apiKey == "" {
 		return nil, fmt.Errorf("%s not set in config.toml (providers.model=%s)", providerConfigs[provider].KeyName, provider)
@@ -269,9 +285,9 @@ func NewClient() (*Client, error) {
 	// A registry with no entry for the active provider leaves every request without
 	// a model id, which the upstream answers with an opaque 400 — say so at startup,
 	// where the fix (a [[models]] entry) is obvious.
-	defaultModel := DefaultModelID()
+	defaultModel := strings.TrimSpace(modelID)
 	if defaultModel == "" {
-		return nil, fmt.Errorf("no [[models]] entry in config.toml for providers.model=%s", provider)
+		return nil, fmt.Errorf("no model configured for provider=%s", provider)
 	}
 	return &Client{
 		Provider: provider,
