@@ -58,8 +58,6 @@ const (
 // Everything else about the request is identical OpenAI-compatible JSON.
 type providerConfig struct {
 	Endpoint string
-	// DefaultModel is the compile-time default used when DEFAULT_MODEL is blank.
-	DefaultModel string
 	// KeyName is the config.toml field carrying the bearer token. Only used
 	// to name the missing variable in NewClient's error.
 	KeyName string
@@ -70,13 +68,11 @@ type providerConfig struct {
 
 var providerConfigs = map[string]providerConfig{
 	ProviderMeta: {
-		Endpoint:     "https://api.meta.ai/v1/chat/completions",
-		DefaultModel: "muse-spark-1.2-contributor",
-		KeyName:      "agent.meta_key",
+		Endpoint: "https://api.meta.ai/v1/chat/completions",
+		KeyName:  "agent.meta_key",
 	},
 	ProviderOpenRouter: {
 		Endpoint:         "https://openrouter.ai/api/v1/chat/completions",
-		DefaultModel:     "openai/gpt-5.6-luna",
 		KeyName:          "agent.openrouter_key",
 		AnalyticsHeaders: map[string]string{"HTTP-Referer": "https://genix.app", "X-Title": "Genix"},
 	},
@@ -160,11 +156,10 @@ type ChatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
 	Tools    []Tool    `json:"tools,omitempty"`
-	// ToolChoice accepts OpenAI's "auto" | "none". Earlier tests with
-	// tencent/hy3-preview's OpenRouter routing returned HTTP 404 for "required",
-	// and neither current default (muse-spark-1.2-contributor, openai/gpt-5.6-luna)
-	// has been validated for it — keep using "auto" and let the system prompt
-	// discipline the model into ending the turn via the `finish` tool.
+	// ToolChoice accepts OpenAI's "auto" | "none". Earlier tests found at least
+	// one OpenRouter upstream answering HTTP 404 to "required", and no configured
+	// model has been validated for it — keep using "auto" and let the system
+	// prompt discipline the model into ending the turn via the `finish` tool.
 	ToolChoice  string   `json:"tool_choice,omitempty"`
 	Temperature *float32 `json:"temperature,omitempty"`
 	// Reasoning is the provider-agnostic thinking budget callers set. Chat()
@@ -185,12 +180,15 @@ type ChatRequest struct {
 
 // OpenRouterRouting mirrors the subset of OpenRouter's `provider` parameter we
 // actually use — named for the vendor so it isn't confused with MODEL_PROVIDER,
-// which picks the API we call. Order ranks acceptable upstreams (first
-// preferred); AllowFallbacks=false combined with a single-entry Order pins
-// routing to exactly that upstream — useful for reproducible benchmarks. Nil →
-// leave the field out and let OpenRouter pick.
+// which picks the API we call. Sort ranks the model's upstreams by one criterion
+// ("throughput" for the fastest-decoding endpoint, "price", "latency") and is
+// the knob to reach for when any upstream will do but speed matters. Order
+// instead names acceptable upstreams explicitly (first preferred), and with
+// AllowFallbacks=false pins routing to exactly one — for when a specific
+// quantization or region is required. Nil → let OpenRouter pick.
 type OpenRouterRouting struct {
 	Order          []string `json:"order,omitempty"`
+	Sort           string   `json:"sort,omitempty"`
 	AllowFallbacks *bool    `json:"allow_fallbacks,omitempty"`
 }
 
@@ -241,15 +239,18 @@ type Client struct {
 }
 
 // DefaultModelID is the model used when a request carries no explicit model:
-// agent.default_model from config.toml when set, otherwise the active
-// provider's compile-time default. Single source of truth — ListModels flags
-// the matching registry entry with IsDefault so the UI preselects the same
-// model.
+// agent.default_model from config.toml when set, otherwise the first [[models]]
+// entry the active provider serves — so reordering the file changes the default
+// and no model id is hardcoded in Go. Single source of truth: ListModels flags
+// the matching entry with IsDefault so the UI preselects the same model.
 func DefaultModelID() string {
 	if core.Env != nil && core.Env.DEFAULT_MODEL != "" {
 		return core.Env.DEFAULT_MODEL
 	}
-	return providerConfigs[ActiveProvider()].DefaultModel
+	if models := configuredModels(); len(models) > 0 {
+		return models[0].ID
+	}
+	return ""
 }
 
 // NewClient resolves the active provider (providers.model), its API key
@@ -265,10 +266,17 @@ func NewClient() (*Client, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("%s not set in config.toml (providers.model=%s)", providerConfigs[provider].KeyName, provider)
 	}
+	// A registry with no entry for the active provider leaves every request without
+	// a model id, which the upstream answers with an opaque 400 — say so at startup,
+	// where the fix (a [[models]] entry) is obvious.
+	defaultModel := DefaultModelID()
+	if defaultModel == "" {
+		return nil, fmt.Errorf("no [[models]] entry in config.toml for providers.model=%s", provider)
+	}
 	return &Client{
 		Provider: provider,
 		APIKey:   apiKey,
-		Model:    DefaultModelID(),
+		Model:    defaultModel,
 		HTTP:     &http.Client{Timeout: requestTimeout},
 	}, nil
 }

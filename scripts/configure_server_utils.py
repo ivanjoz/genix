@@ -4,9 +4,12 @@
 
 One Rust binary, genix-server-utils, over two transports:
 
-  - A raw TCP port that stays on loopback, where the frame's opcode routes to the credit rate
-    limiter or the lock service. It is authenticated by HMAC but not encrypted, so it never gets
-    an Nginx vhost.
+  - A raw TCP port where the frame's opcode routes to the credit rate limiter or the lock
+    service. It is authenticated by HMAC but not encrypted, so it never gets an Nginx vhost.
+    [server_utils] public decides whether the daemon binds loopback or every interface: false
+    when the backend runs on this same host, true when it runs elsewhere (Lambda, another VPS).
+    When it is true this script also opens the port in the host firewall — a daemon bound to
+    0.0.0.0 behind a REJECT rule looks healthy from here and times out from everywhere else.
   - The SSE bridge, on an HTTP port that must be reachable by browsers. Nginx terminates TLS
     for it on this very machine: what it proxies is a permanent stream, and a second hop buys
     nothing.
@@ -63,6 +66,7 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     write_unit_file,
 )
 from toml_config import get_config_value, set_config_values  # noqa: E402
+from firewall_ports import ensure_tcp_port_open  # noqa: E402
 
 SOURCE_DIRECTORY_NAME = "server_utils"
 # Cargo's package name, which is also the file name it produces.
@@ -72,8 +76,11 @@ SERVICE_NAME = "genix-server-utils.service"
 RESTART_SERVICE_NAME = "genix-server-utils-restart.service"
 RESTART_PATH_NAME = "genix-server-utils-restart.path"
 
-# Must match DEFAULT_BRIDGE_PORT in server_utils/src/config.rs.
+# Must match DEFAULT_BRIDGE_PORT and DEFAULT_LISTEN_PORT in server_utils/src/config.rs, and
+# defaultServerUtilsPort in backend/core/security.go, which is the client's half of the same
+# default. The three drifting apart puts the daemon on one port and every caller on another.
 DEFAULT_BRIDGE_PORT = 14012
+DEFAULT_LISTEN_PORT = 14013
 # The daemon loads existing usage from ScyllaDB before it serves anything, so give it a moment
 # before deciding whether it stayed up.
 SERVICE_SETTLE_SECONDS = 3
@@ -187,6 +194,97 @@ def resolve_bridge_port(project_credentials):
 
     print_debug(f"SSE bridge listen port: {bridge_port}")
     return bridge_port
+
+
+def resolve_listen_port(project_credentials):
+    """Resolve the raw-TCP port. Absent is normal — the Rust default covers it."""
+    configured_port = get_config_value(project_credentials, "server_utils.port")
+    if configured_port is None:
+        print_debug(f"server_utils.port is not set in config.toml. Using {DEFAULT_LISTEN_PORT}.")
+        return DEFAULT_LISTEN_PORT
+
+    listen_port, validation_error = validate_server_port(str(configured_port))
+    if listen_port is None:
+        # Same reason resolve_bridge_port refuses to guess: this number decides which port gets
+        # a firewall rule, and opening the wrong one is worse than not opening any.
+        fail_with_error(f"server_utils.port in config.toml is unusable: {validation_error}")
+
+    print_debug(f"Raw TCP listen port: {listen_port}")
+    return listen_port
+
+
+def resolve_listen_is_public(project_credentials):
+    """Read [server_utils] public, the flag the daemon turns into 0.0.0.0 vs 127.0.0.1.
+
+    Only a real TOML boolean counts, and absent means false. The daemon reads this same key with
+    the same rule (optional_bool in server_utils/src/config.rs), so a value this script would
+    interpret differently is a value that opens a firewall port for a listener that never binds
+    to it — or worse, leaves one closed for a listener that does.
+    """
+    configured_flag = get_config_value(project_credentials, "server_utils.public")
+    if isinstance(configured_flag, bool):
+        return configured_flag
+    if configured_flag is None:
+        return False
+
+    # The daemon accepts a quoted boolean too; anything else is a typo worth naming.
+    normalized_flag = str(configured_flag).strip().lower()
+    if normalized_flag in {"true", "false"}:
+        return normalized_flag == "true"
+    fail_with_error(
+        f"server_utils.public in config.toml is not a boolean: {configured_flag!r}. Use "
+        "true (bind 0.0.0.0, backend runs off this host) or false (bind 127.0.0.1)."
+    )
+
+
+def resolve_client_address(project_credentials, listen_port, listen_is_public):
+    """The address a backend dials, mirroring makeServerUtilsAddress in backend/core/security.go.
+
+    Only for the summary, but it is the number the reader has to put in their own config.toml,
+    so it is derived the same way the backend derives it rather than echoed back from a key.
+    """
+    if not listen_is_public:
+        return f"127.0.0.1:{listen_port}"
+
+    configured_host = str(get_config_value(project_credentials, "server_utils.host", "")).strip()
+    return f"{configured_host}:{listen_port}" if configured_host else ""
+
+
+def open_listen_port_in_firewall(listen_port, listen_is_public):
+    """Open the raw-TCP port, but only when the daemon is actually binding every interface.
+
+    A private daemon must stay unreachable, so a stale `public = true` left in config.toml is the
+    only thing that opens this port — the flag governs the bind and the firewall together and
+    they cannot disagree. When it is false there is nothing to do: loopback never crosses INPUT.
+
+    Not fatal when it fails. The units are installed and the daemon serves this host either way,
+    and the operator can add the rule by hand; what must not happen is failing silently, because
+    the symptom on the far side is a two-second timeout that names neither this port nor this
+    host.
+    """
+    if not listen_is_public:
+        print_debug(
+            f"[server_utils] public is false: the daemon binds 127.0.0.1:{listen_port} and needs "
+            "no firewall rule. Set it to true only if the backend runs on another host."
+        )
+        return
+
+    if ensure_tcp_port_open(listen_port, "server_utils raw TCP"):
+        # The host firewall is one of two, and the other one is not on this machine.
+        print_debug(
+            f"TCP port {listen_port} is open on this host. On a cloud VM the provider's own "
+            "ingress rules are separate and are not visible from here: Oracle Cloud security "
+            "lists / NSGs, AWS security groups. Confirm from outside with "
+            f"'nc -vz <public-ip> {listen_port}'."
+        )
+        return
+
+    print_debug(
+        f"WARNING: TCP port {listen_port} could not be opened, but [server_utils] public is "
+        "true, so the daemon is listening on every interface for callers that cannot reach it. "
+        "An off-host backend will fail every lock and credit call with a timeout, which it "
+        "reports as 'El servicio no está disponible.' (HTTP 503)."
+    )
 
 
 def verify_required_settings(project_credentials, repository_config_path):
@@ -918,7 +1016,8 @@ def install_systemd_service(repository_config_path, bridge_port):
 
 
 def print_summary(
-    repository_config_path, runtime_username, bridge_domain, bridge_port, server_utils_address
+    repository_config_path, runtime_username, bridge_domain, bridge_port,
+    listen_port, listen_is_public, client_address,
 ):
     print_debug("Server utilities configuration completed.")
     print_debug(f"Config file: {repository_config_path}")
@@ -927,7 +1026,19 @@ def print_summary(
     binary_size_in_bytes = BINARY_PATH.stat().st_size if BINARY_PATH.is_file() else 0
     print_debug(f"Binary path: {BINARY_PATH} ({binary_size_in_bytes / 1_048_576:.1f} MiB)")
     print_debug(f"SSE bridge port (SSE_BRIDGE_PORT): {bridge_port}")
-    print_debug(f"Raw TCP address, opcode-routed (loopback, no vhost): {server_utils_address}")
+
+    bind_address = f"0.0.0.0:{listen_port}" if listen_is_public else f"127.0.0.1:{listen_port}"
+    print_debug(f"Raw TCP bind, opcode-routed (no vhost): {bind_address}")
+    if client_address:
+        print_debug(f"Raw TCP address the backend must dial: {client_address}")
+    else:
+        # public = true with no host is the one combination that installs cleanly and then
+        # refuses to start on the backend side, where the message names neither key.
+        print_debug(
+            "WARNING: [server_utils] public is true but host is empty. The backend builds its "
+            "dial address from that key and refuses an empty one at startup. Set host to this "
+            "machine's public address in every config.toml that talks to this daemon."
+        )
     print_debug(f"Service unit: {SYSTEMD_DIRECTORY / SERVICE_NAME}")
     print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / RESTART_PATH_NAME}")
     print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME}")
@@ -955,14 +1066,17 @@ def main():
     ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
     bridge_domain = resolve_bridge_domain(project_credentials, repository_config_path)
     bridge_port = resolve_bridge_port(project_credentials)
-    server_utils_address = str(
-        get_config_value(project_credentials, "server_utils", "127.0.0.1:14013")
-    ).strip()
+    listen_port = resolve_listen_port(project_credentials)
+    listen_is_public = resolve_listen_is_public(project_credentials)
+    client_address = resolve_client_address(project_credentials, listen_port, listen_is_public)
 
     runtime_username = install_systemd_service(repository_config_path, bridge_port)
     configure_bridge_nginx_vhost(bridge_domain, bridge_port)
+    # After the service, so the rule is added for a port something is actually listening on.
+    open_listen_port_in_firewall(listen_port, listen_is_public)
     print_summary(
-        repository_config_path, runtime_username, bridge_domain, bridge_port, server_utils_address
+        repository_config_path, runtime_username, bridge_domain, bridge_port,
+        listen_port, listen_is_public, client_address,
     )
 
 

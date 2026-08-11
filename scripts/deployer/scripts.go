@@ -51,7 +51,7 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, ".", "python3", "scripts/configure_server.py")
 	}},
 
-	{key: "configure_db", group: scriptGroupServers, label: "Configurar Base de Datos (ScyllaDB + GenixSearch)", run: func(context deployContext, _ []string) error {
+	{key: "configure_db", group: scriptGroupServers, label: "Configurar Base de Datos (ScyllaDB + GenixSearch + Qdrant)", run: func(context deployContext, _ []string) error {
 		return runCommand(context, ".", "python3", "scripts/configure_db.py")
 	}},
 

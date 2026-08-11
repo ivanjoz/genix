@@ -143,9 +143,14 @@ type EnvStruct struct {
 	OPENROUTER_KEY string
 	// DEFAULT_MODEL overrides the model used when a request carries no explicit
 	// one. Provider-agnostic — it must name a model the active provider serves
-	// (e.g. "muse-spark-1.2-contributor" for meta). Blank = the llm package's
-	// compile-time default for the active provider.
+	// (e.g. "muse-spark-1.2-contributor" for meta). Blank = the first MODELS
+	// entry the active provider serves.
 	DEFAULT_MODEL string
+	// MODELS is the agent's model registry, straight from the [[models]] array table.
+	// File order is meaningful: it is the order of the model picker and its first entry
+	// servable by MODEL_PROVIDER is the default when DEFAULT_MODEL is blank. Consumed by
+	// backend/agent/llm, which turns each entry into its own request knobs.
+	MODELS []ModelEntry
 	// GenixSearch — lexical search backend reached over TCP. The
 	// daemon is installed by scripts/configure_db.py, which writes both
 	// search.url and search.password into config.toml. GENIXSEARCH_URL
@@ -154,6 +159,19 @@ type EnvStruct struct {
 	// back to 127.0.0.1:14446 when empty.
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
+	// Qdrant stores user-documentation dense and lexical vectors. The same
+	// INTERNAL_APIKEY used by deployment protects its gRPC endpoint.
+	QDRANT_HOST       string
+	QDRANT_HTTP_PORT  int
+	QDRANT_GRPC_PORT  int
+	QDRANT_PUBLIC     bool
+	QDRANT_USE_TLS    bool
+	QDRANT_COLLECTION string
+	// Embeddings are independent from the chat model provider. The first RAG
+	// collection uses Qwen through OpenRouter at its full 4096 dimensions.
+	EMBEDDING_PROVIDER   string
+	EMBEDDING_MODEL_ID   string
+	EMBEDDING_DIMENSIONS int
 	// SERVER_UTILS_ADDRESS is the Rust raw-TCP endpoint: the credit limiter and the lock service
 	// share it, routed by the frame's opcode. One address for every operation the daemon serves.
 	SERVER_UTILS_ADDRESS             string
@@ -165,6 +183,39 @@ type EnvStruct struct {
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
 	SIGNUP_WINDOW_MINUTES    int32
+}
+
+// ModelEntry es una entrada de la tabla de array [[models]]: un modelo que el agente puede
+// usar y los parámetros con los que se le llama. Vive aquí, y no en agent/llm, porque el
+// parseo del archivo es de este paquete y llm importa a core (nunca al revés). Los nombres
+// son los del contrato del upstream para que la traducción en llm sea campo a campo.
+type ModelEntry struct {
+	ID       string `toml:"id"`
+	Provider string `toml:"provider"` // "meta" | "openrouter"; vacío = openrouter
+	// Reasoning nulo = el modelo no razona: llm omite el parámetro en la petición, porque
+	// enviarlo a un modelo sin razonamiento es un campo desconocido para el upstream.
+	Reasoning *ModelReasoning `toml:"reasoning"`
+	// Routing nulo = OpenRouter elige el upstream. Sin efecto en Meta, que sirve sus propios
+	// modelos y no tiene el concepto.
+	Routing *ModelRouting `toml:"routing"`
+}
+
+// ModelReasoning es el presupuesto de razonamiento por modelo. En Meta sólo sobreviven
+// Effort y Enabled (ver llm.metaReasoningEffort); en OpenRouter se envía tal cual.
+type ModelReasoning struct {
+	Effort    string `toml:"effort"`     // "minimal"|"low"|"medium"|"high"|"xhigh"
+	MaxTokens int    `toml:"max_tokens"` // tope duro alternativo a Effort
+	Exclude   bool   `toml:"exclude"`    // oculta la traza para que no infle el prompt siguiente
+	Enabled   *bool  `toml:"enabled"`    // false = no razonar
+}
+
+// ModelRouting elige el upstream de OpenRouter que sirve el modelo. Sort es la vía
+// declarativa ("throughput" pide el endpoint más rápido de la lista del modelo); Order con
+// AllowFallbacks=false lo fija a uno concreto, para cuando importa una cuantización o región.
+type ModelRouting struct {
+	Order          []string `toml:"order"`
+	Sort           string   `toml:"sort"` // "throughput" | "price" | "latency"
+	AllowFallbacks *bool    `toml:"allow_fallbacks"`
 }
 
 // fileConfig refleja la forma por secciones de config.toml. Sólo existe para el parseo:
@@ -262,6 +313,21 @@ type fileConfig struct {
 		Password string `toml:"password"`
 	} `toml:"search"`
 
+	Qdrant struct {
+		Host       string `toml:"host"`
+		HTTPPort   int    `toml:"http_port"`
+		GRPCPort   int    `toml:"grpc_port"`
+		Public     bool   `toml:"public"`
+		UseTLS     bool   `toml:"use_tls"`
+		Collection string `toml:"collection"`
+	} `toml:"qdrant"`
+
+	EmbeddingModel struct {
+		Provider   string `toml:"provider"`
+		ID         string `toml:"id"`
+		Dimensions int    `toml:"dimensions"`
+	} `toml:"embedding_model"`
+
 	SSEBridge struct {
 		URL string `toml:"url"`
 	} `toml:"sse_bridge"`
@@ -271,6 +337,9 @@ type fileConfig struct {
 		Debug    bool `toml:"debug"`
 		OnlySave bool `toml:"only_save"`
 	} `toml:"logs"`
+
+	// Tabla de array: en el archivo va al final, con los demás [[...]].
+	Models []ModelEntry `toml:"models"`
 }
 
 // applyToEnv vuelca el archivo por secciones sobre la Env plana. Es el único punto donde
@@ -278,6 +347,14 @@ type fileConfig struct {
 // Same default the daemon falls back to (server_utils/src/config.rs), so an omitted port keeps
 // both halves pointing at the same socket.
 const defaultServerUtilsPort = 14013
+
+const (
+	defaultQdrantHTTPPort      = 14014
+	defaultQdrantGRPCPort      = 14015
+	defaultQdrantCollection    = "genix_user_documentation_v1"
+	defaultEmbeddingProvider   = "openrouter"
+	defaultEmbeddingDimensions = 4096
+)
 
 // makeServerUtilsAddress turns the [server_utils] section into the one address this process dials.
 //
@@ -345,6 +422,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.DEFAULT_MODEL = file.Agent.DefaultModel
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
+	env.MODELS = file.Models
 	env.SERVER_UTILS_ADDRESS = makeServerUtilsAddress(
 		file.ServerUtils.Host, file.ServerUtils.Port, file.ServerUtils.Public)
 	env.RATE_LIMIT_COMPANY_CPU_24H = file.RateLimit.CompanyCPU24h
@@ -356,6 +434,35 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 
 	env.GENIXSEARCH_URL = file.Search.URL
 	env.GENIXSEARCH_PASSWORD = file.Search.Password
+
+	env.QDRANT_HOST = strings.TrimSpace(file.Qdrant.Host)
+	if env.QDRANT_HOST == "" && !file.Qdrant.Public {
+		env.QDRANT_HOST = "127.0.0.1"
+	}
+	env.QDRANT_HTTP_PORT = file.Qdrant.HTTPPort
+	if env.QDRANT_HTTP_PORT <= 0 {
+		env.QDRANT_HTTP_PORT = defaultQdrantHTTPPort
+	}
+	env.QDRANT_GRPC_PORT = file.Qdrant.GRPCPort
+	if env.QDRANT_GRPC_PORT <= 0 {
+		env.QDRANT_GRPC_PORT = defaultQdrantGRPCPort
+	}
+	env.QDRANT_PUBLIC = file.Qdrant.Public
+	env.QDRANT_USE_TLS = file.Qdrant.UseTLS
+	env.QDRANT_COLLECTION = strings.TrimSpace(file.Qdrant.Collection)
+	if env.QDRANT_COLLECTION == "" {
+		env.QDRANT_COLLECTION = defaultQdrantCollection
+	}
+
+	env.EMBEDDING_PROVIDER = strings.ToLower(strings.TrimSpace(file.EmbeddingModel.Provider))
+	if env.EMBEDDING_PROVIDER == "" {
+		env.EMBEDDING_PROVIDER = defaultEmbeddingProvider
+	}
+	env.EMBEDDING_MODEL_ID = strings.TrimSpace(file.EmbeddingModel.ID)
+	env.EMBEDDING_DIMENSIONS = file.EmbeddingModel.Dimensions
+	if env.EMBEDDING_DIMENSIONS <= 0 {
+		env.EMBEDDING_DIMENSIONS = defaultEmbeddingDimensions
+	}
 
 	env.SSE_BRIDGE_URL = file.SSEBridge.URL
 

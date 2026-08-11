@@ -14,7 +14,7 @@ import (
 // disabled budget to "none" makes Muse Spark answer HTTP 400.
 func TestAdaptRequestToProvider(t *testing.T) {
 	disabled := false
-	routing := pinnedOpenRouterUpstream("deepseek")
+	routing := &OpenRouterRouting{Sort: "throughput"}
 
 	cases := []struct {
 		name            string

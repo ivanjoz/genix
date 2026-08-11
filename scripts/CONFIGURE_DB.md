@@ -1,17 +1,18 @@
 # Configuración de los motores de datos (`configure_db.py`)
 
-Un solo script deja listo el host de datos: **ScyllaDB** (base de datos principal) y
-**GenixSearch** (búsqueda léxica). Ambos suelen vivir en la misma VPS, separados del
-backend, que corre en Lambda o en otro servidor.
+Un solo script deja listo el host de datos: **ScyllaDB** (base de datos principal),
+**GenixSearch** (búsqueda léxica) y **Qdrant** (base vectorial). Los tres suelen vivir en
+la misma VPS, separados del backend, que corre en Lambda o en otro servidor.
 
 ```bash
-sudo ./app.sh configure_db            # ambos (default)
+sudo ./app.sh configure_db            # los tres (default)
 sudo ./app.sh configure_db scylla     # solo ScyllaDB
 sudo ./app.sh configure_db search     # solo GenixSearch
+sudo ./app.sh configure_db qdrant     # solo Qdrant
 ```
 
-Los alias numéricos `1`/`2`/`3` equivalen a `all`/`scylla`/`search`. El script debe
-correr como `root` y lee `config.toml` de la raíz del repositorio.
+Los alias numéricos `1`/`2`/`3`/`4` equivalen a `all`/`scylla`/`search`/`qdrant`. El
+script debe correr como `root` y lee `config.toml` de la raíz del repositorio.
 
 ---
 
@@ -84,10 +85,58 @@ usuario que invocó `sudo`.
 
 ---
 
+## Qdrant (`qdrant`)
+
+Instala la base vectorial desde los **releases musl** de
+[`qdrant/qdrant`](https://github.com/qdrant/qdrant/releases), igual de estáticos que los
+de GenixSearch.
+
+| Paso | Detalle |
+| ---- | ------- |
+| Arquitectura | `x86_64-unknown-linux-musl` o `aarch64-unknown-linux-musl` según `uname -m`. Cualquier otra aborta: no hay build publicado. |
+| Descarga | El `.tar.gz` del release (`--qdrant-version`, default el último resuelto por la API de GitHub). **Sin checksum**: a diferencia de genix-search, los releases de Qdrant no publican `SHA256SUMS`; la única garantía es el TLS de github.com. |
+| Binario | `/usr/local/bin/qdrant`, instalado con `install(1)`. El tarball contiene sólo el binario. |
+| Usuario | Usuario y grupo de sistema `qdrant`, sin login. |
+| Estado | `/var/lib/qdrant/storage` y `/var/lib/qdrant/snapshots` (0750), del usuario del servicio. |
+| Config | `/etc/qdrant/qdrant.env` (0640 `root:qdrant`), leído por `EnvironmentFile=`. **No hay `config.yaml`**: el release no trae ninguno, Qdrant arranca con sus defaults compilados (lo avisa por log) y las `QDRANT__*` del env file pisan lo que importa. Va en un archivo aparte y no en `Environment=` dentro de la unit porque la unit es 0644 y la api key no puede ser legible por todos. |
+| Bind | `0.0.0.0` cuando `qdrant.public = true` (y abre los dos puertos en el firewall); `127.0.0.1` y sin tocar el firewall cuando es `false`. |
+| systemd | `qdrant.service`, con el mismo bloque de endurecimiento que GenixSearch, habilitada al boot. |
+| Verificación | Espera a que la unit quede `active` y además sondea `GET /readyz`, que Qdrant deja fuera del api key justo para esto. `is-active` sólo dice que el proceso vive; el sondeo confirma que sirve en el puerto configurado. |
+
+### Claves de `[qdrant]`
+
+```toml
+[qdrant]
+host      = ""       # lo escribe el script si está vacío
+http_port = 14014
+grpc_port = 14015
+public    = true
+```
+
+- `http_port` / `grpc_port` — Qdrant expone REST y gRPC en **dos puertos distintos**
+  (defaults propios: 6333 y 6334). El SDK Go oficial habla gRPC. Si son iguales, aborta.
+- `public` — decide el bind y si se abren los puertos, igual que en `[server_utils]`.
+- `host` — misma regla que `search.url`: si ya tiene valor no se toca, porque la
+  dirección por la que el backend entra de verdad (IP pública, dominio o túnel) no se
+  deduce desde el host. Sólo cuando está vacío escribe la IP detectada, y avisa si es
+  privada. **No lleva puerto** — los puertos ya están arriba, como en `[db]`.
+
+### Api key
+
+Qdrant sin api key no autentica nada: cualquiera que alcance el puerto lee y escribe
+todas las colecciones. El script usa **`internal_apikey`** de la raíz de `config.toml`,
+el mismo secreto proceso-a-proceso que ya usa el backend, en vez de generar una
+credencial más. Está vacío → el script aborta. Los clientes la mandan en la cabecera
+`api-key`.
+
+Los endpoints `/healthz`, `/livez` y `/readyz` quedan fuera de la autenticación.
+
+---
+
 ## Firewall
 
-Ambos modos abren su puerto con el gestor que **realmente** esté administrando netfilter
-en el host, en este orden:
+Cada modo abre su puerto (Qdrant, los dos suyos, y sólo si `public = true`) con el gestor
+que **realmente** esté administrando netfilter en el host, en este orden:
 
 1. **firewalld** — si está corriendo: `--permanent --add-port <puerto>/tcp` + `--reload`.
 2. **ufw** — si está instalado y activo: `ufw allow <puerto>/tcp`.
@@ -126,7 +175,8 @@ un servicio instalado pero inalcanzable es el síntoma más caro de diagnosticar
 
 ## IP de broadcast
 
-Ambos modos publican la misma dirección: el script prefiere la IP de la tailnet
+Todos los modos publican la misma dirección: el script prefiere la IP de la tailnet
 (Tailscale o Headscale, detectada por la CLI o por los rangos `100.64.0.0/10` y
 `fd7a:115c:a1e0::/48` en las interfaces) y cae a la IP interna de la VPC si no hay
-túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla y a `search.url`.
+túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla, a `search.url` y a
+`qdrant.host`.

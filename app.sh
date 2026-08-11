@@ -28,8 +28,8 @@ case "$1" in
     python3 scripts/configure_server.py "${@:2}"
     ;;
   "configure_db")
-    # For "configure_db", configure ScyllaDB and/or install the GenixSearch service on this host.
-    # Optional mode argument: all (default) = both, scylla = only ScyllaDB, search = only GenixSearch.
+    # For "configure_db", configure ScyllaDB and/or install the GenixSearch and Qdrant services.
+    # Optional mode argument: all (default) = every engine, scylla, search or qdrant = only that one.
     echo "Executing configure_db script..."
     python3 scripts/configure_db.py "${@:2}"
     ;;

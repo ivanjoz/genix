@@ -403,5 +403,87 @@ class UnitAndBinaryTest(unittest.TestCase):
             del os.environ["CARGO_BINARY"]
 
 
+class ListenPortFirewallTest(unittest.TestCase):
+    """The raw-TCP port half: resolving it, and opening it only when the daemon binds publicly."""
+
+    def test_the_listen_port_falls_back_to_the_rust_default_and_rejects_a_typo(self):
+        configure_server_utils = load_configure_server_utils_module()
+
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(configure_server_utils.resolve_listen_port({}), 14013)
+            self.assertEqual(
+                configure_server_utils.resolve_listen_port({"server_utils": {"port": 14099}}),
+                14099,
+            )
+
+        # Never guess: this number decides which port gets a firewall rule.
+        with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            configure_server_utils.resolve_listen_port({"server_utils": {"port": "catorce mil"}})
+
+    def test_public_is_read_the_same_way_the_daemon_reads_it(self):
+        configure_server_utils = load_configure_server_utils_module()
+        resolve = configure_server_utils.resolve_listen_is_public
+
+        # Absent means loopback, matching optional_bool in server_utils/src/config.rs.
+        self.assertFalse(resolve({}))
+        self.assertFalse(resolve({"server_utils": {"public": False}}))
+        self.assertTrue(resolve({"server_utils": {"public": True}}))
+        # The daemon accepts a quoted boolean, so this script must not call it a typo.
+        self.assertTrue(resolve({"server_utils": {"public": "true"}}))
+
+        with redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+            resolve({"server_utils": {"public": "yes please"}})
+
+    def test_a_private_daemon_never_touches_the_firewall(self):
+        # Opening this port for a loopback listener would expose nothing but would also make the
+        # rule outlive the reason for it, so `public` has to govern bind and firewall together.
+        configure_server_utils = load_configure_server_utils_module()
+
+        with mock.patch.object(configure_server_utils, "ensure_tcp_port_open") as open_port:
+            with redirect_stdout(io.StringIO()) as captured_output:
+                configure_server_utils.open_listen_port_in_firewall(14013, False)
+
+        open_port.assert_not_called()
+        self.assertIn("binds 127.0.0.1:14013", captured_output.getvalue())
+
+    def test_a_public_daemon_opens_the_port_and_still_points_at_the_cloud_ingress_rules(self):
+        configure_server_utils = load_configure_server_utils_module()
+
+        with mock.patch.object(
+            configure_server_utils, "ensure_tcp_port_open", return_value=True
+        ) as open_port:
+            with redirect_stdout(io.StringIO()) as captured_output:
+                configure_server_utils.open_listen_port_in_firewall(14013, True)
+
+        open_port.assert_called_once_with(14013, "server_utils raw TCP")
+        # The host firewall is only half of it on a cloud VM, and the other half is invisible here.
+        self.assertIn("security", captured_output.getvalue())
+        self.assertIn("nc -vz", captured_output.getvalue())
+
+    def test_a_firewall_that_could_not_be_opened_warns_instead_of_aborting(self):
+        # The units are installed and the daemon serves this host either way. What must not happen
+        # is silence: the symptom off-host is a timeout that names neither this port nor this host.
+        configure_server_utils = load_configure_server_utils_module()
+
+        with mock.patch.object(configure_server_utils, "ensure_tcp_port_open", return_value=False):
+            with redirect_stdout(io.StringIO()) as captured_output:
+                configure_server_utils.open_listen_port_in_firewall(14013, True)
+
+        self.assertIn("WARNING", captured_output.getvalue())
+        self.assertIn("503", captured_output.getvalue())
+
+    def test_the_client_address_is_derived_the_way_the_backend_derives_it(self):
+        configure_server_utils = load_configure_server_utils_module()
+        resolve = configure_server_utils.resolve_client_address
+
+        # A private daemon is loopback-only whatever host is written, exactly like
+        # makeServerUtilsAddress in backend/core/security.go.
+        credentials = {"server_utils": {"host": "150.136.42.240"}}
+        self.assertEqual(resolve(credentials, 14013, False), "127.0.0.1:14013")
+        self.assertEqual(resolve(credentials, 14013, True), "150.136.42.240:14013")
+        # public with no host is the combination the backend refuses at startup; empty says so.
+        self.assertEqual(resolve({}, 14013, True), "")
+
+
 if __name__ == "__main__":
     unittest.main()

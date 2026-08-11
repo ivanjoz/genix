@@ -30,6 +30,26 @@ host = "127.0.0.1"
 port = 14013
 public = false
 
+# ─── Qdrant (base de datos vectorial) ───────────────────────────────────────
+# Lo instala 'configure_db.py qdrant'. host vacío = lo escribe el script con la IP
+# alcanzable del host. public decide el bind: 0.0.0.0 y puertos abiertos en el firewall,
+# o sólo loopback. La api key que exige Qdrant en la cabecera 'api-key' es
+# internal_apikey: no hay una credencial aparte.
+[qdrant]
+host      = ""
+http_port = 14014
+grpc_port = 14015
+public    = true
+use_tls   = false
+collection = "genix_user_documentation_v1"
+
+# Dense retrieval is independent from providers.model (the chat provider).
+# Keep the model ID explicit: silently changing it would mix incompatible vectors.
+[embedding_model]
+provider   = "openrouter"
+id         = "qwen/qwen3-embedding-8b"
+dimensions = 4096
+
 # ─── Proveedores ────────────────────────────────────────────────────────────
 [providers]
 backend = "none"        # aws | cloudflare | none  — espejo de datos: DynamoDB, D1 o ninguno
@@ -139,7 +159,7 @@ password = ""
 # ─── Agente / LLM ───────────────────────────────────────────────────────────
 [agent]
 # default_model debe existir en el proveedor elegido en providers.model.
-# Vacío = el default de compilación de backend/agent/llm.
+# Vacío = el primer [[models]] (al final del archivo) que sirva ese proveedor.
 default_model  = ""
 meta_key       = ""
 openrouter_key = ""
@@ -191,3 +211,28 @@ host = "127.0.0.1"
 user = "ubuntu"
 bin  = "/usr/local/bin/genix/genix_app"
 arch = "arm64"
+
+# Modelos que puede usar el agente. El backend sólo ofrece los del proveedor activo
+# (providers.model), así que el selector nunca muestra un id que la key rechazaría.
+# El orden es el del selector y decide el default cuando agent.default_model está vacío.
+#   provider  — "meta" | "openrouter"; vacío = openrouter.
+#   reasoning — omitir el bloque en un modelo que no razona: enviarlo es un parámetro
+#               desconocido para el upstream. En Meta sólo sobrevive effort.
+#   routing   — sólo OpenRouter. sort = "throughput" elige el endpoint más rápido de la
+#               lista del modelo; order + allow_fallbacks = false lo fijan a uno concreto.
+[[models]]
+id        = "muse-spark-1.2-contributor"
+provider  = "meta"
+reasoning = { effort = "medium" }
+
+[[models]]
+id        = "poolside/laguna-s-2.1"
+provider  = "openrouter"
+reasoning = { effort = "medium", exclude = true }
+routing   = { sort = "throughput" }
+
+[[models]]
+id        = "deepseek/deepseek-v4-flash-0731"
+provider  = "openrouter"
+reasoning = { effort = "low", exclude = true }
+routing   = { sort = "throughput" }

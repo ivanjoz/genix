@@ -5,7 +5,6 @@ import { GetHandler } from '$libs/ui-runtime.svelte';
 export interface IAgentModelOption {
 	ID: string;
 	Hash: string;
-	Notes: string;
 	/** Backend-side default — the model used when no hash is sent. */
 	IsDefault?: boolean;
 }

@@ -2,30 +2,33 @@ package llm
 
 import (
 	"hash/fnv"
-	"sort"
 	"strconv"
+	"strings"
+
+	"app/core"
 )
 
-// Registry of models we've validated for the in-app agent loop, with their
-// per-model defaults. Each entry declares which provider serves it, because a
-// model id is only routable through its own upstream — `muse-spark-1.2` means
-// nothing to OpenRouter and `openai/gpt-5.6-luna` means nothing to Meta.
-// Switching the active model is one of:
+// The registry of models the in-app agent may use lives in config.toml, in the
+// [[models]] array table — nothing here is hardcoded, so adding a model is a
+// config edit and a restart. Each entry names the provider that serves it,
+// because a model id is only routable through its own upstream:
+// `muse-spark-1.2-contributor` means nothing to OpenRouter and
+// `deepseek/deepseek-v4-flash-0731` means nothing to Meta.
 //
-//  1. Change providers.model in config.toml (picks the upstream, and with
-//     it the compile-time default in providerConfigs), or
-//  2. Set agent.default_model in config.toml to one of the IDs below that
-//     belongs to the active provider (runtime override).
+// Which model a turn uses is, in order:
 //
-// Any string is accepted by both upstreams — the registry just ensures we apply
-// the right reasoning/routing knobs for known models. Unknown ids pass through
-// with no per-model defaults applied.
+//  1. the model hash the frontend sends (the picker, resolved by LookupModelHash),
+//  2. agent.default_model in config.toml, or
+//  3. the first [[models]] entry the active provider serves — file order decides.
+//
+// Any string is accepted by both upstreams, so an id outside the registry still
+// goes through; it just gets no per-model reasoning/routing defaults applied.
 
 // ModelConfig holds the request-level knobs we want to set differently per
 // model. Add fields here as new per-model behaviour emerges.
 type ModelConfig struct {
-	// ID is the model id as the provider names it, e.g. "muse-spark-1.2" or
-	// "deepseek/deepseek-v4-flash".
+	// ID is the model id as the provider names it, e.g.
+	// "muse-spark-1.2-contributor" or "deepseek/deepseek-v4-flash-0731".
 	ID string
 	// Provider is the upstream that serves this model (ProviderMeta or
 	// ProviderOpenRouter). ListModels only exposes entries matching the active
@@ -35,101 +38,80 @@ type ModelConfig struct {
 	// caller already set it. Nil means "model doesn't support reasoning
 	// params" — don't send the field.
 	Reasoning *ReasoningOptions
-	// Routing pins request routing to a specific OpenRouter upstream for this
-	// model. Nil means "no pin — let OpenRouter pick the cheapest / fastest
-	// available". Use this when a specific upstream variant (quantization,
-	// region, latency profile) is required. Meaningless for Meta models.
+	// Routing biases (sort) or pins (order) which OpenRouter upstream serves this
+	// model. Nil = let OpenRouter choose. Meaningless for Meta models, which the
+	// provider serves itself.
 	Routing *OpenRouterRouting
-	// Notes is free-form documentation for humans reading the registry.
-	Notes string
 	// Hash is the short base36 ID the frontend sends instead of the full model id.
 	Hash string
 	// IsDefault marks the model the backend falls back to when a request
-	// carries no model hash. Derived in ListModels from DefaultModelID() —
-	// don't set it in the registry literal. The frontend uses it to preselect
-	// an entry in the model dropdown.
+	// carries no model hash. Derived in ListModels from DefaultModelID(), never
+	// read from config. The frontend uses it to preselect an entry in the model
+	// dropdown.
 	IsDefault bool
 }
 
-// pinnedOpenRouterUpstream builds a Routing config that pins to exactly one
-// OpenRouter upstream (no fallbacks). Use when a specific variant matters
-// (e.g. an FP8 quantization or a regional endpoint).
-func pinnedOpenRouterUpstream(name string) *OpenRouterRouting {
-	allowFallbacks := false
-	return &OpenRouterRouting{Order: []string{name}, AllowFallbacks: &allowFallbacks}
+// configuredModels reads the [[models]] entries of config.toml and returns the
+// ones the active provider can actually serve, in file order. Filtering here
+// (rather than in the UI) means a user can never pick a model id the configured
+// key would reject — and the frontend already falls back to the default hash
+// when a previously stored selection is no longer in the list.
+//
+// Rebuilt on each call instead of cached: the list has a handful of entries, and
+// a package-level cache would freeze whatever core.Env held the first time it
+// was read — which in tests is before PopulateVariables has run.
+func configuredModels() []ModelConfig {
+	if core.Env == nil {
+		return nil
+	}
+	activeProvider := ActiveProvider()
+	models := make([]ModelConfig, 0, len(core.Env.MODELS))
+	for _, entry := range core.Env.MODELS {
+		// An entry with no provider is an OpenRouter model — same rule as a blank
+		// providers.model, so the common case needs one key less per entry.
+		provider := strings.ToLower(strings.TrimSpace(entry.Provider))
+		if provider == "" {
+			provider = ProviderOpenRouter
+		}
+		if provider != activeProvider {
+			continue
+		}
+		models = append(models, ModelConfig{
+			ID:        strings.TrimSpace(entry.ID),
+			Provider:  provider,
+			Reasoning: reasoningFromConfig(entry.Reasoning),
+			Routing:   routingFromConfig(entry.Routing),
+			Hash:      ModelIDHash(strings.TrimSpace(entry.ID)),
+		})
+	}
+	return models
 }
 
-// Models is the curated registry. Order is not significant; entries are
-// alphabetical by ID for easy diff reading.
-var Models = map[string]ModelConfig{
-	// ── Meta Model API (MODEL_PROVIDER=meta) ────────────────────────────────
-	// Muse Spark is a reasoning family with a 1M-token context window. Effort
-	// is set but Exclude/MaxTokens are deliberately omitted: Meta's flat
-	// `reasoning_effort` has no equivalent for either, and it doesn't fold the
-	// trace into `content`, so excluding it is already the default behaviour.
-	"muse-spark-1.1": {
-		ID:        "muse-spark-1.1",
-		Provider:  ProviderMeta,
-		Reasoning: &ReasoningOptions{Effort: "medium"},
-		Notes:     "Muse Spark 1.1 — first Muse release, 1M context. Reasoning effort=medium. Cheaper/older than 1.2.",
-	},
-	"muse-spark-1.2": {
-		ID:        "muse-spark-1.2",
-		Provider:  ProviderMeta,
-		Reasoning: &ReasoningOptions{Effort: "medium"},
-		Notes:     "Muse Spark 1.2 standard tier, 1M context. Reasoning effort=medium — enough for multi-step tool sequences without the latency of high.",
-	},
-	"muse-spark-1.2-contributor": {
-		ID:       "muse-spark-1.2-contributor",
-		Provider: ProviderMeta,
-		// Default agent model when MODEL_PROVIDER=meta (see providerConfigs in
-		// client.go). Same weights as 1.2 on the contributor tier.
-		Reasoning: &ReasoningOptions{Effort: "medium"},
-		Notes:     "Default agent model on Meta. Muse Spark 1.2 contributor tier, 1M context. Reasoning effort=medium.",
-	},
+// reasoningFromConfig / routingFromConfig translate the config shapes into the
+// wire shapes. They are separate types on purpose: core owns the file's schema
+// and llm owns the provider contract, so neither package's tags leak into the
+// other. Nil in, nil out — an omitted block means "don't send the parameter".
+func reasoningFromConfig(configured *core.ModelReasoning) *ReasoningOptions {
+	if configured == nil {
+		return nil
+	}
+	return &ReasoningOptions{
+		Effort:    configured.Effort,
+		MaxTokens: configured.MaxTokens,
+		Exclude:   configured.Exclude,
+		Enabled:   configured.Enabled,
+	}
+}
 
-	// ── OpenRouter (MODEL_PROVIDER=openrouter) ──────────────────────────────
-	"deepseek/deepseek-v4-flash": {
-		ID:       "deepseek/deepseek-v4-flash",
-		Provider: ProviderOpenRouter,
-		// Reasoning model. Cap the thinking budget to "low" — most agent
-		// turns are simple navigation/inspection and don't need a long
-		// chain-of-thought. Exclude=true hides the trace from the response
-		// so it doesn't bloat subsequent iterations' prompts.
-		Reasoning: &ReasoningOptions{Effort: "low", Exclude: true},
-		Routing:   pinnedOpenRouterUpstream("deepseek"),
-		Notes:     "Reasoning model; effort=low keeps the loop snappy. Pinned to the first-party DeepSeek upstream.",
-	},
-	"openai/gpt-5.6-luna": {
-		ID:       "openai/gpt-5.6-luna",
-		Provider: ProviderOpenRouter,
-		// Default agent model when MODEL_PROVIDER=openrouter. Reasoning-capable
-		// and honors the effort knob — "medium" is the balance point: enough
-		// deliberation for multi-step tool sequences without the latency of
-		// "high". Exclude=true keeps the trace out of the response so it doesn't
-		// bloat the next iteration's prompt.
-		Reasoning: &ReasoningOptions{Effort: "medium", Exclude: true},
-		Notes:     "Default agent model on OpenRouter. Reasoning effort=medium, trace excluded. No upstream pin — let OpenRouter route.",
-	},
-	"stepfun/step-3.5-flash": {
-		ID:       "stepfun/step-3.5-flash",
-		Provider: ProviderOpenRouter,
-		// Non-reasoning model — sending `reasoning` would be a no-op at best
-		// and an error at worst. Leave nil so the field is omitted.
-		Reasoning: nil,
-		Routing:   pinnedOpenRouterUpstream("deepinfra/fp8"),
-		Notes:     "Non-reasoning, fast model. Pinned to the DeepInfra FP8 upstream.",
-	},
-	"tencent/hy3-preview": {
-		ID:       "tencent/hy3-preview",
-		Provider: ProviderOpenRouter,
-		// Reasoning is configurable (disabled/low/high) and ACTUALLY honored —
-		// unlike DeepSeek V4, which ignores effort:low. Default to low+exclude so
-		// callers that don't override (e.g. the chat loop) stay snappy; the page
-		// builder sets effort per call.
-		Reasoning: &ReasoningOptions{Effort: "low", Exclude: true},
-		Notes:     "Cheap ($0.063/$0.21), honors disabled/low/high reasoning. Upstream routing rejects tool_choice=\"required\"; stick to \"auto\".",
-	},
+func routingFromConfig(configured *core.ModelRouting) *OpenRouterRouting {
+	if configured == nil {
+		return nil
+	}
+	return &OpenRouterRouting{
+		Order:          configured.Order,
+		Sort:           configured.Sort,
+		AllowFallbacks: configured.AllowFallbacks,
+	}
 }
 
 // ModelIDHash keeps the UI payload compact while preserving a deterministic
@@ -144,28 +126,14 @@ func ModelIDHash(id string) string {
 	return strconv.FormatInt(int64(hashValue), 36)
 }
 
-// ListModels returns a stable, hash-hydrated view for API responses, limited to
-// the models the active provider can actually serve. Filtering here (rather
-// than in the UI) means a user can never pick a model id the configured key
-// would reject — and the frontend already falls back to the default hash when a
-// previously stored selection is no longer in the list.
+// ListModels is the view the models API returns: the active provider's entries
+// in config.toml order, hash-hydrated and with the default flagged so the UI
+// preselects the same model the backend would have used anyway.
 func ListModels() []ModelConfig {
-	activeProvider := ActiveProvider()
-	ids := make([]string, 0, len(Models))
-	for id, cfg := range Models {
-		if cfg.Provider == activeProvider {
-			ids = append(ids, id)
-		}
-	}
-	sort.Strings(ids)
-
+	models := configuredModels()
 	activeDefault := DefaultModelID()
-	models := make([]ModelConfig, 0, len(ids))
-	for _, id := range ids {
-		cfg := Models[id]
-		cfg.Hash = ModelIDHash(cfg.ID)
-		cfg.IsDefault = cfg.ID == activeDefault
-		models = append(models, cfg)
+	for index := range models {
+		models[index].IsDefault = models[index].ID == activeDefault
 	}
 	return models
 }
@@ -182,13 +150,14 @@ func LookupModelHash(hash string) (ModelConfig, bool) {
 	return ModelConfig{}, false
 }
 
-// LookupModel returns the registry entry for id, or a zero-value config if
-// the id isn't known. Zero-value means "no per-model defaults applied" —
-// the request goes upstream exactly as the caller built it.
+// LookupModel returns the [[models]] entry for id, or a zero-value config when
+// the active provider has no entry for it. Zero-value means "no per-model
+// defaults applied" — the request goes upstream exactly as the caller built it.
 func LookupModel(id string) ModelConfig {
-	if cfg, ok := Models[id]; ok {
-		cfg.Hash = ModelIDHash(cfg.ID)
-		return cfg
+	for _, cfg := range configuredModels() {
+		if cfg.ID == id {
+			return cfg
+		}
 	}
 	return ModelConfig{ID: id}
 }

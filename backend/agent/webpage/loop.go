@@ -49,17 +49,16 @@ const maxAestheticRevisions = 1
 const maxContentRevisions = 2
 
 // Reasoning budgets. The main loop leaves reasoning unset so each model's
-// registry entry decides its own effort (llm.Models — muse-spark reasons at
-// medium, hy3-preview stays at low+exclude). The subagents and the critic pin
-// their budget instead: their work is mechanical or latency-sensitive, so they
-// must stay cheap regardless of which model the user picked. llm.Chat maps
+// [[models]] entry in config.toml decides its own effort. The subagents and the
+// critic pin their budget instead: their work is mechanical or latency-sensitive,
+// so they must stay cheap regardless of which model the user picked. llm.Chat maps
 // these onto whatever shape the active provider expects (Meta's flat
 // `reasoning_effort`, OpenRouter's nested `reasoning`).
 //
 // Model requirements for the builder: it must honor a reasoning budget (an
 // early test with DeepSeek V4 Flash ignored effort:low and reasoned to a huge
 // default — a single generate_svg took ~68s) and work with tool_choice:"auto"
-// (hy3-preview's OpenRouter routing rejects "required"; the loop never uses it).
+// (one OpenRouter upstream rejected "required"; the loop never uses it).
 var (
 	// subagentNoReasoning: generate_svg and image-select are mechanical (emit
 	// markup / pick an index) — no chain-of-thought. Disabled outright. On Meta

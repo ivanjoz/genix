@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Configura los dos motores de datos que necesita el backend en un mismo host.
+"""Configura los motores de datos que necesita el backend en un mismo host.
 
-    sudo ./app.sh configure_db            # ambos (equivale a 'all')
+    sudo ./app.sh configure_db            # todos (equivale a 'all')
     sudo ./app.sh configure_db scylla     # solo ScyllaDB
     sudo ./app.sh configure_db search     # solo GenixSearch
+    sudo ./app.sh configure_db qdrant     # solo Qdrant
 
 ScyllaDB: ajusta sysconfig/scylla.yaml, abre el puerto CQL, recupera el
 superusuario si hace falta y crea el keyspace de DB_NAME.
@@ -13,6 +14,10 @@ GitHub (sin toolchain ni glibc en el host), lo verifica contra el SHA256SUMS
 del release, escribe /etc/genixsearch/genixsearch.cfg y la unit de systemd, y
 guarda search.url / search.password en config.toml para que el
 backend Go los lea desde core.Env.
+
+Qdrant: misma idea con el release musl de qdrant/qdrant, configurado por
+variables QDRANT__* en un EnvironmentFile. Los puertos salen de [qdrant] y la
+api key es internal_apikey, la misma que ya usa el backend proceso-a-proceso.
 """
 
 import argparse
@@ -40,6 +45,9 @@ import ipaddress
 import shlex
 
 from toml_config import get_config_value, read_config, set_config_values
+# Vive en su propio modulo porque configure_server_utils.py abre su puerto TCP con lo mismo, y
+# ese script no tiene por que importar el instalador de ScyllaDB para pedir un socket.
+from firewall_ports import ensure_tcp_port_open
 
 PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parents[1]
 PROJECT_CONFIG_FILE = PROJECT_ROOT_DIRECTORY / "config.toml"
@@ -59,6 +67,7 @@ AUTH_RECOVERY_VERIFY_TIMEOUT_SECONDS = 60
 EXECUTION_MODE_ALL = "all"
 EXECUTION_MODE_SCYLLA = "scylla"
 EXECUTION_MODE_SEARCH = "search"
+EXECUTION_MODE_QDRANT = "qdrant"
 
 # Los alias numericos replican la convencion de configure_server.py.
 EXECUTION_MODE_BY_ARGUMENT = {
@@ -70,7 +79,12 @@ EXECUTION_MODE_BY_ARGUMENT = {
     "3": EXECUTION_MODE_SEARCH,
     "search": EXECUTION_MODE_SEARCH,
     "genixsearch": EXECUTION_MODE_SEARCH,
+    "4": EXECUTION_MODE_QDRANT,
+    "qdrant": EXECUTION_MODE_QDRANT,
+    "vector": EXECUTION_MODE_QDRANT,
 }
+
+SYSTEMD_UNIT_DIRECTORY = Path("/etc/systemd/system")
 
 def print_debug_block(block_title, block_content):
     print(f"[*] {block_title}")
@@ -122,225 +136,6 @@ def run_capture_command(command_arguments, quiet=False):
     if command_result.stderr.strip():
         print_debug_block("stderr", command_result.stderr)
     return command_result
-
-def ensure_firewalld_port_open(database_port):
-    firewalld_state_result = run_capture_command(["firewall-cmd", "--state"])
-    if firewalld_state_result.returncode != 0 or "running" not in firewalld_state_result.stdout:
-        print("[*] firewalld is not running.")
-        return False
-
-    port_specification = f"{database_port}/tcp"
-    query_port_result = run_capture_command(["firewall-cmd", "--query-port", port_specification])
-    if query_port_result.returncode == 0 and "yes" in query_port_result.stdout.lower():
-        print(f"[*] firewalld already allows {port_specification}.")
-        return True
-
-    print(f"[*] Opening {port_specification} with firewalld.")
-    add_port_result = run_capture_command(["firewall-cmd", "--permanent", "--add-port", port_specification])
-    if add_port_result.returncode != 0:
-        print(f"[!] Failed to add {port_specification} with firewalld.")
-        return False
-
-    reload_firewalld_result = run_capture_command(["firewall-cmd", "--reload"])
-    if reload_firewalld_result.returncode != 0:
-        print("[!] Failed to reload firewalld after opening port.")
-        return False
-
-    verification_result = run_capture_command(["firewall-cmd", "--query-port", port_specification])
-    return verification_result.returncode == 0 and "yes" in verification_result.stdout.lower()
-
-def ensure_ufw_port_open(database_port):
-    ufw_status_result = run_capture_command(["ufw", "status"])
-    if ufw_status_result.returncode != 0:
-        print("[*] ufw is not available or not active.")
-        return False
-
-    normalized_status_output = ufw_status_result.stdout.lower()
-    if "status: inactive" in normalized_status_output:
-        print("[*] ufw is installed but inactive.")
-        return False
-
-    port_rule_pattern = rf'^{re.escape(str(database_port))}/tcp\s+allow\b'
-    if re.search(port_rule_pattern, ufw_status_result.stdout, flags=re.IGNORECASE | re.MULTILINE):
-        print(f"[*] ufw already allows {database_port}/tcp.")
-        return True
-
-    print(f"[*] Opening {database_port}/tcp with ufw.")
-    allow_port_result = run_capture_command(["ufw", "allow", f"{database_port}/tcp"])
-    if allow_port_result.returncode != 0:
-        print(f"[!] Failed to add ufw rule for {database_port}/tcp.")
-        return False
-
-    verification_result = run_capture_command(["ufw", "status"])
-    return re.search(port_rule_pattern, verification_result.stdout, flags=re.IGNORECASE | re.MULTILINE) is not None
-
-def is_firewall_frontend_active():
-    """Whether firewalld or ufw is the one managing netfilter on this host.
-
-    Los dos son frontends de las mismas cadenas de netfilter: si alguno esta activo,
-    una regla insertada a mano con iptables queda pisada en el proximo reload del
-    frontend. Solo cuando ninguno gestiona tiene sentido tocar iptables directamente.
-    """
-    if which("firewall-cmd") is not None:
-        firewalld_state_result = run_capture_command(["firewall-cmd", "--state"], quiet=True)
-        if firewalld_state_result.returncode == 0 and "running" in firewalld_state_result.stdout:
-            print("[*] firewalld is managing netfilter; not touching iptables directly.")
-            return True
-
-    if which("ufw") is not None:
-        ufw_status_result = run_capture_command(["ufw", "status"], quiet=True)
-        if ufw_status_result.returncode == 0 and "status: inactive" not in ufw_status_result.stdout.lower():
-            print("[*] ufw is managing netfilter; not touching iptables directly.")
-            return True
-
-    return False
-
-# Targets que descartan el paquete. Un REJECT devuelve icmp-host-prohibited, que es el
-# 'no route to host' que ve el cliente; un DROP se manifiesta como timeout.
-IPTABLES_BLOCKING_TARGETS = {"REJECT", "DROP"}
-
-def iptables_ports_cover(port_specification, database_port):
-    """Whether an iptables --dport/--dports value matches this port."""
-    for port_token in port_specification.split(","):
-        with contextlib.suppress(ValueError):
-            if ":" in port_token:
-                # Rango 'low:high', con cualquiera de los dos extremos opcional.
-                range_low, _, range_high = port_token.partition(":")
-                if int(range_low or 1) <= database_port <= int(range_high or 65535):
-                    return True
-            elif int(port_token) == database_port:
-                return True
-    return False
-
-def read_iptables_input_chain():
-    """Returns (policy, [(index, rule)]) for the INPUT chain, or None if unreadable.
-
-    Los indices son 1-based porque es lo que esperan 'iptables -I/-D'.
-    """
-    chain_listing_result = run_capture_command(["iptables", "-S", "INPUT"], quiet=True)
-    if chain_listing_result.returncode != 0:
-        print_debug_block("iptables -S INPUT failed", chain_listing_result.stderr or chain_listing_result.stdout)
-        return None
-
-    chain_policy = "ACCEPT"
-    chain_rules = []
-    for listing_line in chain_listing_result.stdout.splitlines():
-        if listing_line.startswith("-P INPUT "):
-            chain_policy = listing_line.split()[2]
-        elif listing_line.startswith("-A INPUT"):
-            chain_rules.append(listing_line)
-
-    return chain_policy, list(enumerate(chain_rules, start=1))
-
-def find_iptables_accept_index(chain_rules, database_port):
-    """Index of the first rule that already accepts TCP traffic for this port."""
-    for rule_index, rule_text in chain_rules:
-        if "-j ACCEPT" not in rule_text or "-p tcp" not in rule_text:
-            continue
-        ports_match = re.search(r"--dports?\s+(\S+)", rule_text)
-        if ports_match and iptables_ports_cover(ports_match.group(1), database_port):
-            return rule_index
-    return None
-
-def find_iptables_blocking_index(chain_rules, database_port):
-    """Index of the first REJECT/DROP that would swallow traffic to this port."""
-    for rule_index, rule_text in chain_rules:
-        target_match = re.search(r"-j\s+(\S+)", rule_text)
-        if not target_match or target_match.group(1) not in IPTABLES_BLOCKING_TARGETS:
-            continue
-
-        # Una regla de bloqueo acotada a otros puertos no nos afecta; la catch-all si.
-        ports_match = re.search(r"--dports?\s+(\S+)", rule_text)
-        if ports_match and not iptables_ports_cover(ports_match.group(1), database_port):
-            continue
-        return rule_index
-    return None
-
-def persist_iptables_rules():
-    """Makes the new rule survive a reboot, with whatever mechanism the distro ships."""
-    if which("netfilter-persistent") is not None:
-        run_command("netfilter-persistent save", ignore_errors=True)
-        return
-
-    # Debian/Ubuntu con iptables-persistent, y RHEL/Oracle Linux con iptables-services.
-    for persistence_path in ("/etc/iptables/rules.v4", "/etc/sysconfig/iptables"):
-        if os.path.isdir(os.path.dirname(persistence_path)):
-            run_command(f"iptables-save > {persistence_path}", ignore_errors=True)
-            return
-
-    print("[!] No iptables persistence mechanism found: the rule will be lost on reboot.")
-    print("    Install iptables-persistent (Debian/Ubuntu) or iptables-services (RHEL).")
-
-def ensure_iptables_port_open(database_port):
-    """Opens the port in a plain iptables setup, but only when it is really blocked."""
-    input_chain = read_iptables_input_chain()
-    if input_chain is None:
-        return False
-
-    chain_policy, chain_rules = input_chain
-    accept_index = find_iptables_accept_index(chain_rules, database_port)
-    blocking_index = find_iptables_blocking_index(chain_rules, database_port)
-
-    # La primera regla que matchea gana, asi que un ACCEPT antes del bloqueo ya alcanza.
-    if accept_index is not None and (blocking_index is None or accept_index < blocking_index):
-        print(f"[*] iptables already accepts TCP port {database_port} (rule {accept_index}).")
-        return True
-
-    if blocking_index is None and chain_policy == "ACCEPT":
-        print(f"[*] iptables has no rule blocking TCP port {database_port} and the INPUT policy is ACCEPT.")
-        return True
-
-    # Se inserta justo antes del REJECT/DROP que lo estaba tapando; si lo que bloquea es
-    # la policy de la cadena, va al final, que igual queda antes de la policy.
-    insert_index = blocking_index if blocking_index is not None else len(chain_rules) + 1
-    blocking_reason = f"rule {blocking_index}" if blocking_index is not None else f"INPUT policy {chain_policy}"
-    print(f"[*] TCP port {database_port} is blocked by {blocking_reason}. Inserting an ACCEPT at position {insert_index}.")
-
-    insert_rule_result = run_capture_command([
-        "iptables", "-I", "INPUT", str(insert_index),
-        "-p", "tcp", "--dport", str(database_port),
-        "-m", "state", "--state", "NEW", "-j", "ACCEPT",
-    ])
-    if insert_rule_result.returncode != 0:
-        print(f"[!] Failed to insert the iptables rule for TCP port {database_port}.")
-        return False
-
-    # Se relee la cadena en vez de confiar en el exit code: confirma que la regla quedo
-    # efectivamente por delante de lo que bloqueaba.
-    verification_chain = read_iptables_input_chain()
-    if verification_chain is None:
-        return False
-
-    verified_policy, verified_rules = verification_chain
-    verified_accept_index = find_iptables_accept_index(verified_rules, database_port)
-    verified_blocking_index = find_iptables_blocking_index(verified_rules, database_port)
-    if verified_accept_index is None or (verified_blocking_index is not None and verified_accept_index > verified_blocking_index):
-        print(f"[!] The iptables rule for TCP port {database_port} did not take effect.")
-        return False
-
-    persist_iptables_rules()
-    return True
-
-def ensure_tcp_port_open(database_port):
-    print(f"[*] Ensuring TCP port {database_port} is open in the host firewall...")
-    if which("firewall-cmd") is not None and ensure_firewalld_port_open(database_port):
-        print(f"[*] Firewall confirmed open for TCP port {database_port} via firewalld.")
-        return
-
-    if which("ufw") is not None and ensure_ufw_port_open(database_port):
-        print(f"[*] Firewall confirmed open for TCP port {database_port} via ufw.")
-        return
-
-    # Ultimo recurso: iptables plano, que es lo que traen las imagenes de Oracle Cloud
-    # (cadena INPUT terminada en REJECT icmp-host-prohibited, sin firewalld ni ufw).
-    if which("iptables") is not None and not is_firewall_frontend_active() and ensure_iptables_port_open(database_port):
-        print(f"[*] Firewall confirmed open for TCP port {database_port} via iptables.")
-        return
-
-    # Saltarse esto en silencio deja el servicio instalado pero inalcanzable, que es
-    # justo el sintoma mas caro de diagnosticar.
-    print(f"[!] Could not confirm that TCP port {database_port} is open in the host firewall.")
-    print("    If this host filters inbound traffic, open the port manually before using the service.")
 
 def run_cqlsh_query(cql_query, database_port, database_password, ignore_errors=False, quiet=False):
     cqlsh_command_arguments = [
@@ -977,7 +772,7 @@ def configure_scylladb(credentials_data, broadcast_ip_address, detected_network_
     configure_sysconfig()
     run_command("scylla_dev_mode_setup --developer-mode 1")
     configure_yaml(broadcast_ip_address, configured_database_port)
-    ensure_tcp_port_open(configured_database_port)
+    ensure_tcp_port_open(configured_database_port, "ScyllaDB CQL")
 
     print("[*] Restarting Scylla Server daemon...")
     run_command("systemctl daemon-reload")
@@ -1005,7 +800,6 @@ GENIXSEARCH_CONFIG_DIRECTORY = Path("/etc") / GENIXSEARCH_SERVICE_NAME
 GENIXSEARCH_CONFIG_FILE = GENIXSEARCH_CONFIG_DIRECTORY / f"{GENIXSEARCH_SERVICE_NAME}.cfg"
 GENIXSEARCH_DATA_DIRECTORY = Path("/var/lib") / GENIXSEARCH_SERVICE_NAME
 GENIXSEARCH_KV_DIRECTORY = GENIXSEARCH_DATA_DIRECTORY / "store" / "kv"
-GENIXSEARCH_UNIT_FILE = Path("/etc/systemd/system") / f"{GENIXSEARCH_SERVICE_NAME}.service"
 GENIXSEARCH_RELEASE_REPOSITORY = "ivanjoz/genix-search"
 
 # Debe coincidir con el default de core.ParseGenixSearchURL en backend/core/security.go.
@@ -1069,13 +863,13 @@ def http_get_bytes(request_url, timeout_seconds=60.0):
         print(f"[!] Could not fetch {request_url}: {url_error.reason}")
         sys.exit(1)
 
-def resolve_latest_genixsearch_release_tag():
-    print(f"[*] Resolving the latest release of {GENIXSEARCH_RELEASE_REPOSITORY}...")
-    release_payload = http_get_bytes(f"https://api.github.com/repos/{GENIXSEARCH_RELEASE_REPOSITORY}/releases/latest")
+def resolve_latest_release_tag(release_repository):
+    print(f"[*] Resolving the latest release of {release_repository}...")
+    release_payload = http_get_bytes(f"https://api.github.com/repos/{release_repository}/releases/latest")
     try:
         release_tag = json.loads(release_payload)["tag_name"]
     except (ValueError, KeyError):
-        print(f"[!] Could not read the latest release tag for {GENIXSEARCH_RELEASE_REPOSITORY}.")
+        print(f"[!] Could not read the latest release tag for {release_repository}.")
         sys.exit(1)
 
     print(f"[*] Latest published release: {release_tag}")
@@ -1109,7 +903,7 @@ def download_genixsearch_release(release_version, download_directory):
     """Downloads and unpacks the static musl release. Returns (binary, reference config)."""
     asset_suffix = detect_genixsearch_asset_suffix()
     if release_version in (None, "", "latest"):
-        release_version = resolve_latest_genixsearch_release_tag()
+        release_version = resolve_latest_release_tag(GENIXSEARCH_RELEASE_REPOSITORY)
     if not release_version.startswith("v"):
         release_version = f"v{release_version}"
 
@@ -1140,31 +934,102 @@ def download_genixsearch_release(release_version, download_directory):
 
     return downloaded_binary_path, download_directory / archive_stem / f"{GENIXSEARCH_SERVICE_NAME}.cfg"
 
-def ensure_genixsearch_system_user():
-    if subprocess.run(["id", GENIXSEARCH_SERVICE_NAME], capture_output=True).returncode == 0:
-        print(f"[*] System user '{GENIXSEARCH_SERVICE_NAME}' already exists.")
+def ensure_service_system_user(service_name, service_home_directory):
+    """Crea el usuario/grupo de sistema sin login bajo el que corre el daemon."""
+    if subprocess.run(["id", service_name], capture_output=True).returncode == 0:
+        print(f"[*] System user '{service_name}' already exists.")
         return
 
     nologin_shell = next((shell_path for shell_path in NOLOGIN_SHELL_CANDIDATES if Path(shell_path).exists()), "/bin/false")
-    print(f"[*] Creating system user '{GENIXSEARCH_SERVICE_NAME}'...")
+    print(f"[*] Creating system user '{service_name}'...")
     run_command(
-        f"useradd --system --user-group --home-dir {GENIXSEARCH_DATA_DIRECTORY} "
-        f"--no-create-home --shell {nologin_shell} {GENIXSEARCH_SERVICE_NAME}"
+        f"useradd --system --user-group --home-dir {service_home_directory} "
+        f"--no-create-home --shell {nologin_shell} {service_name}"
     )
 
-def ensure_genixsearch_data_directories():
-    print(f"[*] Preparing state directory {GENIXSEARCH_DATA_DIRECTORY} (0750)")
-    GENIXSEARCH_KV_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    for directory_path in (GENIXSEARCH_DATA_DIRECTORY, GENIXSEARCH_DATA_DIRECTORY / "store", GENIXSEARCH_KV_DIRECTORY):
-        directory_path.chmod(0o750)
-        shutil.chown(directory_path, user=GENIXSEARCH_SERVICE_NAME, group=GENIXSEARCH_SERVICE_NAME)
+def prepare_service_directories(service_name, directory_paths):
+    """Crea cada directorio 0750 y se lo entrega al usuario del servicio.
 
-def install_genixsearch_binary(source_binary_path):
-    print(f"[*] Installing {source_binary_path} -> {GENIXSEARCH_BINARY_PATH}")
-    GENIXSEARCH_BINARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    El orden de la lista importa: los padres van primero para que el chmod del padre no
+    pise el del hijo creado con parents=True.
+    """
+    for directory_path in directory_paths:
+        print(f"[*] Preparing state directory {directory_path} (0750 {service_name}:{service_name})")
+        directory_path.mkdir(parents=True, exist_ok=True)
+        directory_path.chmod(0o750)
+        shutil.chown(directory_path, user=service_name, group=service_name)
+
+def install_service_binary(source_binary_path, target_binary_path):
+    print(f"[*] Installing {source_binary_path} -> {target_binary_path}")
+    target_binary_path.parent.mkdir(parents=True, exist_ok=True)
     # install(1) en vez de cp: reemplaza el inodo, asi un servicio en ejecucion sigue
     # usando su binario actual hasta que se reinicia.
-    run_command(f"install -m 0755 -o root -g root {shlex.quote(str(source_binary_path))} {GENIXSEARCH_BINARY_PATH}")
+    run_command(f"install -m 0755 -o root -g root {shlex.quote(str(source_binary_path))} {target_binary_path}")
+
+def write_hardened_service_unit(
+    service_name,
+    unit_description,
+    working_directory,
+    exec_start_command,
+    state_directory,
+    needs_privileged_port=False,
+    extra_service_lines=(),
+):
+    """Escribe la unit de systemd de un daemon que solo escucha un socket y escribe su estado.
+
+    El bloque de hardening es identico para todos los servicios que instala este script,
+    asi que vive en un solo sitio: lo que cambia entre uno y otro entra por parametro.
+    """
+    # Un puerto privilegiado necesita la capability; con los puertos altos no hace falta.
+    service_capabilities = "CAP_NET_BIND_SERVICE" if needs_privileged_port else ""
+    extra_service_block = "".join(f"{extra_service_line}\n" for extra_service_line in extra_service_lines)
+    unit_file_path = SYSTEMD_UNIT_DIRECTORY / f"{service_name}.service"
+
+    unit_content = f"""\
+# {service_name} systemd unit — escrita por scripts/configure_db.py.
+[Unit]
+Description={unit_description}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={service_name}
+Group={service_name}
+WorkingDirectory={working_directory}
+ExecStart={exec_start_command}
+Restart=on-failure
+RestartSec=2s
+LimitNOFILE=65536
+SyslogIdentifier={service_name}
+{extra_service_block}
+# Hardening: el proceso solo escucha en un socket y escribe en su directorio de estado.
+AmbientCapabilities={service_capabilities}
+CapabilityBoundingSet={service_capabilities}
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ReadWritePaths={state_directory}
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+[Install]
+WantedBy=multi-user.target
+"""
+    print(f"[*] Writing {unit_file_path}")
+    unit_file_path.write_text(unit_content, encoding="utf-8")
+    unit_file_path.chmod(0o644)
 
 CONFIG_SECTION_PATTERN = re.compile(r"^\s*\[([^\]]+)\]")
 CONFIG_KEY_PATTERN = re.compile(r"^(\s*)([A-Za-z0-9_.\-]+)(\s*=\s*)(.*)$")
@@ -1231,56 +1096,19 @@ def write_genixsearch_config(reference_config_path, genixsearch_password, genixs
     shutil.chown(GENIXSEARCH_CONFIG_FILE, user="root", group=GENIXSEARCH_SERVICE_NAME)
 
 def write_genixsearch_unit(genixsearch_port):
-    # Un puerto privilegiado necesita la capability; con el default (14446) no hace falta.
-    service_capabilities = "CAP_NET_BIND_SERVICE" if genixsearch_port < 1024 else ""
-    unit_content = f"""\
-# GenixSearch systemd unit — escrita por scripts/configure_db.py.
-[Unit]
-Description=GenixSearch — compact, lossy, ranked search backend
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User={GENIXSEARCH_SERVICE_NAME}
-Group={GENIXSEARCH_SERVICE_NAME}
-WorkingDirectory={GENIXSEARCH_DATA_DIRECTORY}
-ExecStart={GENIXSEARCH_BINARY_PATH} --config {GENIXSEARCH_CONFIG_FILE}
-Restart=on-failure
-RestartSec=2s
-# El KV store se vacia de forma sincrona con SIGTERM; hay que darle margen.
-KillSignal=SIGTERM
-TimeoutStopSec=120s
-LimitNOFILE=65536
-SyslogIdentifier={GENIXSEARCH_SERVICE_NAME}
-
-# Hardening: el proceso solo escucha en un socket y escribe en su directorio de estado.
-AmbientCapabilities={service_capabilities}
-CapabilityBoundingSet={service_capabilities}
-NoNewPrivileges=true
-PrivateTmp=true
-PrivateDevices=true
-ProtectSystem=strict
-ProtectHome=true
-ProtectKernelModules=true
-ProtectKernelTunables=true
-ProtectControlGroups=true
-ReadWritePaths={GENIXSEARCH_DATA_DIRECTORY}
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-RestrictNamespaces=true
-RestrictRealtime=true
-RestrictSUIDSGID=true
-LockPersonality=true
-MemoryDenyWriteExecute=true
-SystemCallArchitectures=native
-SystemCallFilter=@system-service
-
-[Install]
-WantedBy=multi-user.target
-"""
-    print(f"[*] Writing {GENIXSEARCH_UNIT_FILE}")
-    GENIXSEARCH_UNIT_FILE.write_text(unit_content, encoding="utf-8")
-    GENIXSEARCH_UNIT_FILE.chmod(0o644)
+    write_hardened_service_unit(
+        GENIXSEARCH_SERVICE_NAME,
+        "GenixSearch — compact, lossy, ranked search backend",
+        GENIXSEARCH_DATA_DIRECTORY,
+        f"{GENIXSEARCH_BINARY_PATH} --config {GENIXSEARCH_CONFIG_FILE}",
+        GENIXSEARCH_DATA_DIRECTORY,
+        needs_privileged_port=genixsearch_port < 1024,
+        extra_service_lines=(
+            "# El KV store se vacia de forma sincrona con SIGTERM; hay que darle margen.",
+            "KillSignal=SIGTERM",
+            "TimeoutStopSec=120s",
+        ),
+    )
 
 def restore_selinux_context(target_paths):
     """Relabels the installed files when SELinux is enforcing (Fedora, RHEL, ...)."""
@@ -1392,14 +1220,17 @@ def configure_genixsearch(credentials_data, broadcast_ip_address, release_versio
         else:
             source_binary_path, reference_config_path = download_genixsearch_release(release_version, download_directory)
 
-        ensure_genixsearch_system_user()
-        ensure_genixsearch_data_directories()
-        install_genixsearch_binary(source_binary_path)
+        ensure_service_system_user(GENIXSEARCH_SERVICE_NAME, GENIXSEARCH_DATA_DIRECTORY)
+        prepare_service_directories(
+            GENIXSEARCH_SERVICE_NAME,
+            [GENIXSEARCH_DATA_DIRECTORY, GENIXSEARCH_DATA_DIRECTORY / "store", GENIXSEARCH_KV_DIRECTORY],
+        )
+        install_service_binary(source_binary_path, GENIXSEARCH_BINARY_PATH)
         write_genixsearch_config(reference_config_path, genixsearch_password, genixsearch_port)
 
     write_genixsearch_unit(genixsearch_port)
     restore_selinux_context([GENIXSEARCH_BINARY_PATH, GENIXSEARCH_CONFIG_DIRECTORY, GENIXSEARCH_DATA_DIRECTORY])
-    ensure_tcp_port_open(genixsearch_port)
+    ensure_tcp_port_open(genixsearch_port, "GenixSearch")
 
     installed_version_result = run_capture_command([str(GENIXSEARCH_BINARY_PATH), "--version"], quiet=True)
     print(f"[*] Installed binary reports: {(installed_version_result.stdout or installed_version_result.stderr).strip()}")
@@ -1435,21 +1266,278 @@ def configure_genixsearch(credentials_data, broadcast_ip_address, release_versio
     print(f"    - GENIXSEARCH_PASSWORD: {genixsearch_password}")
     print(f"    - systemctl status {GENIXSEARCH_SERVICE_NAME}")
 
+# ---------------------------------------------------------------------------
+# Qdrant
+# ---------------------------------------------------------------------------
+
+QDRANT_SERVICE_NAME = "qdrant"
+QDRANT_BINARY_PATH = Path("/usr/local/bin") / QDRANT_SERVICE_NAME
+QDRANT_CONFIG_DIRECTORY = Path("/etc") / QDRANT_SERVICE_NAME
+QDRANT_ENVIRONMENT_FILE = QDRANT_CONFIG_DIRECTORY / f"{QDRANT_SERVICE_NAME}.env"
+QDRANT_DATA_DIRECTORY = Path("/var/lib") / QDRANT_SERVICE_NAME
+QDRANT_STORAGE_DIRECTORY = QDRANT_DATA_DIRECTORY / "storage"
+QDRANT_SNAPSHOTS_DIRECTORY = QDRANT_DATA_DIRECTORY / "snapshots"
+QDRANT_RELEASE_REPOSITORY = "qdrant/qdrant"
+
+# Defaults del propio Qdrant, usados cuando [qdrant] no declara los puertos.
+DEFAULT_QDRANT_HTTP_PORT = 6333
+DEFAULT_QDRANT_GRPC_PORT = 6334
+
+# Solo hay builds Linux musl para estas dos arquitecturas en los releases de Qdrant.
+QDRANT_ASSET_SUFFIX_BY_MACHINE = {
+    "x86_64": "x86_64-unknown-linux-musl",
+    "amd64": "x86_64-unknown-linux-musl",
+    "aarch64": "aarch64-unknown-linux-musl",
+    "arm64": "aarch64-unknown-linux-musl",
+}
+
+def detect_qdrant_asset_suffix():
+    machine_architecture = os.uname().machine
+    asset_suffix = QDRANT_ASSET_SUFFIX_BY_MACHINE.get(machine_architecture)
+    if asset_suffix is None:
+        print(f"[!] Architecture '{machine_architecture}' has no published Qdrant musl build.")
+        print(f"    Published static builds: {', '.join(sorted(set(QDRANT_ASSET_SUFFIX_BY_MACHINE.values())))}")
+        sys.exit(1)
+
+    print(f"[*] Detected architecture '{machine_architecture}' -> asset {asset_suffix}")
+    return asset_suffix
+
+def download_qdrant_release(release_version, download_directory):
+    """Descarga y desempaqueta el release musl. Devuelve la ruta del binario extraido."""
+    asset_suffix = detect_qdrant_asset_suffix()
+    if release_version in (None, "", "latest"):
+        release_version = resolve_latest_release_tag(QDRANT_RELEASE_REPOSITORY)
+    if not release_version.startswith("v"):
+        release_version = f"v{release_version}"
+
+    archive_name = f"{QDRANT_SERVICE_NAME}-{asset_suffix}.tar.gz"
+    archive_url = (
+        f"https://github.com/{QDRANT_RELEASE_REPOSITORY}/releases/download/{release_version}/{archive_name}"
+    )
+
+    print(f"[*] Downloading {archive_url}")
+    # A diferencia de genix-search, los releases de Qdrant no publican un SHA256SUMS, asi
+    # que aqui no hay checksum contra el que validar: la unica garantia es el TLS de GitHub.
+    archive_path = download_directory / archive_name
+    archive_path.write_bytes(http_get_bytes(archive_url, timeout_seconds=300.0))
+
+    with tarfile.open(archive_path, "r:gz") as release_archive:
+        try:
+            # Python 3.12+ rechaza miembros inseguros; las versiones anteriores no
+            # conocen el parametro, de ahi el fallback.
+            release_archive.extractall(download_directory, filter="data")
+        except TypeError:
+            release_archive.extractall(download_directory)
+
+    # El tarball trae solo el binario en la raiz, pero el layout ha cambiado entre
+    # versiones, asi que se busca en vez de asumir la ruta.
+    downloaded_binary_path = next(
+        (
+            candidate_path
+            for candidate_path in sorted(download_directory.rglob(QDRANT_SERVICE_NAME))
+            if candidate_path.is_file()
+        ),
+        None,
+    )
+    if downloaded_binary_path is None:
+        print(f"[!] {archive_name} did not contain a '{QDRANT_SERVICE_NAME}' binary.")
+        sys.exit(1)
+
+    downloaded_binary_path.chmod(0o755)
+    return downloaded_binary_path
+
+def read_port_setting(credentials_data, setting_path, default_port):
+    configured_port = get_config_value(credentials_data, setting_path, default_port)
+    try:
+        normalized_port = int(configured_port)
+    except (TypeError, ValueError):
+        print(f"[!] {setting_path} in config.toml must be a valid integer.")
+        sys.exit(1)
+
+    if not (1 <= normalized_port <= 65535):
+        print(f"[!] {setting_path} must be between 1 and 65535.")
+        sys.exit(1)
+    return normalized_port
+
+def resolve_qdrant_settings(credentials_data):
+    """Valida los dos puertos, el bind y la api key de Qdrant antes de tocar el host."""
+    http_port = read_port_setting(credentials_data, "qdrant.http_port", DEFAULT_QDRANT_HTTP_PORT)
+    grpc_port = read_port_setting(credentials_data, "qdrant.grpc_port", DEFAULT_QDRANT_GRPC_PORT)
+    if http_port == grpc_port:
+        print("[!] qdrant.http_port and qdrant.grpc_port must be different ports.")
+        sys.exit(1)
+
+    is_public = bool(get_config_value(credentials_data, "qdrant.public", False))
+
+    # Qdrant sin api key no autentica nada: cualquiera que alcance el puerto lee y escribe
+    # todas las colecciones. Se reutiliza internal_apikey, el secreto proceso-a-proceso que
+    # el backend ya tiene cargado, en vez de inventar una credencial mas.
+    qdrant_api_key = str(get_config_value(credentials_data, "internal_apikey") or "").strip()
+    if not qdrant_api_key:
+        print("[!] internal_apikey must be set in config.toml: it is the API key Qdrant will require.")
+        sys.exit(1)
+
+    # El valor viaja en un EnvironmentFile de systemd, que parte por lineas y quita comillas.
+    if any(forbidden_character in qdrant_api_key for forbidden_character in ('"', "'", "\\", "\n")):
+        print("[!] internal_apikey cannot contain quotes, backslashes or newlines.")
+        sys.exit(1)
+
+    return http_port, grpc_port, is_public, qdrant_api_key
+
+def resolve_qdrant_host(credentials_data, broadcast_ip_address):
+    """Devuelve (host, se_genero) para la direccion por la que se alcanza Qdrant.
+
+    Igual que search.url: un valor ya presente es una decision del operador y no se toca,
+    porque la direccion real (IP publica, dominio o tunel) no se deduce desde el host. A
+    diferencia de search no lleva puerto: los puertos ya estan en [qdrant], como en [db].
+    """
+    configured_host = str(get_config_value(credentials_data, "qdrant.host") or "").strip()
+    if configured_host:
+        print(f"[*] Reusing qdrant.host from config.toml: {configured_host}")
+        return configured_host, False
+
+    print(f"[*] No qdrant.host in config.toml. Using the detected address: {broadcast_ip_address}")
+    with contextlib.suppress(ValueError):
+        if ipaddress.ip_address(broadcast_ip_address).is_private and not is_tailnet_ip(broadcast_ip_address):
+            print(f"[!] {broadcast_ip_address} is a private address. A backend outside this network")
+            print("    will not reach it: set qdrant.host in config.toml to the public host and re-run.")
+
+    return broadcast_ip_address, True
+
+def write_qdrant_environment_file(bind_address, http_port, grpc_port, qdrant_api_key):
+    """Escribe las QDRANT__*, que es toda la configuracion del servicio.
+
+    El tarball del release trae unicamente el binario: no hay config.yaml que editar. Qdrant
+    avisa por log de que no lo encuentra, arranca con sus defaults compilados y estas
+    variables pisan las que nos importan.
+
+    Van en un EnvironmentFile 0640 y no en 'Environment=' dentro de la unit porque la unit
+    es legible por todo el mundo (0644) y la api key no puede estarlo.
+    """
+    environment_lines = [
+        f"QDRANT__SERVICE__HOST={bind_address}",
+        f"QDRANT__SERVICE__HTTP_PORT={http_port}",
+        f"QDRANT__SERVICE__GRPC_PORT={grpc_port}",
+        f"QDRANT__SERVICE__API_KEY={qdrant_api_key}",
+        f"QDRANT__STORAGE__STORAGE_PATH={QDRANT_STORAGE_DIRECTORY}",
+        f"QDRANT__STORAGE__SNAPSHOTS_PATH={QDRANT_SNAPSHOTS_DIRECTORY}",
+        "QDRANT__TELEMETRY_DISABLED=true",
+    ]
+
+    print(f"[*] Writing {QDRANT_ENVIRONMENT_FILE} (0640 root:{QDRANT_SERVICE_NAME})")
+    QDRANT_ENVIRONMENT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    QDRANT_ENVIRONMENT_FILE.write_text(
+        "# Escrito por scripts/configure_db.py. Se sobrescribe en cada ejecucion.\n"
+        + "\n".join(environment_lines)
+        + "\n",
+        encoding="utf-8",
+    )
+    QDRANT_ENVIRONMENT_FILE.chmod(0o640)
+    shutil.chown(QDRANT_ENVIRONMENT_FILE, user="root", group=QDRANT_SERVICE_NAME)
+
+def wait_for_qdrant_readiness(http_port, timeout_seconds=60):
+    """Sondea /readyz, que Qdrant deja fuera del api key justo para esto.
+
+    'systemctl is-active' solo dice que el proceso vive; esto confirma que ademas esta
+    sirviendo en el puerto configurado, que es lo que el backend necesita.
+    """
+    readiness_url = f"http://127.0.0.1:{http_port}/readyz"
+    print(f"[*] Waiting for {readiness_url} ...")
+    deadline_timestamp = time.monotonic() + timeout_seconds
+    last_probe_error = "(no attempt completed)"
+
+    while time.monotonic() < deadline_timestamp:
+        try:
+            with urllib.request.urlopen(readiness_url, timeout=5) as probe_response:
+                if probe_response.status == 200:
+                    print("[*] Qdrant reports ready.")
+                    return True
+                last_probe_error = f"HTTP {probe_response.status}"
+        except (urllib.error.URLError, OSError) as probe_error:
+            last_probe_error = str(probe_error)
+        time.sleep(2)
+
+    print(f"[!] {readiness_url} never answered 200: {last_probe_error}")
+    return False
+
+def configure_qdrant(credentials_data, broadcast_ip_address, release_version):
+    http_port, grpc_port, is_public, qdrant_api_key = resolve_qdrant_settings(credentials_data)
+    qdrant_host, was_host_generated = resolve_qdrant_host(credentials_data, broadcast_ip_address)
+    # public decide el bind, igual que en [server_utils]: expuesto o solo loopback.
+    bind_address = "0.0.0.0" if is_public else "127.0.0.1"
+
+    with tempfile.TemporaryDirectory(prefix="qdrant-release-") as download_directory_name:
+        source_binary_path = download_qdrant_release(release_version, Path(download_directory_name))
+        ensure_service_system_user(QDRANT_SERVICE_NAME, QDRANT_DATA_DIRECTORY)
+        prepare_service_directories(
+            QDRANT_SERVICE_NAME,
+            [QDRANT_DATA_DIRECTORY, QDRANT_STORAGE_DIRECTORY, QDRANT_SNAPSHOTS_DIRECTORY],
+        )
+        install_service_binary(source_binary_path, QDRANT_BINARY_PATH)
+
+    write_qdrant_environment_file(bind_address, http_port, grpc_port, qdrant_api_key)
+    write_hardened_service_unit(
+        QDRANT_SERVICE_NAME,
+        "Qdrant — vector database",
+        QDRANT_DATA_DIRECTORY,
+        str(QDRANT_BINARY_PATH),
+        QDRANT_DATA_DIRECTORY,
+        needs_privileged_port=min(http_port, grpc_port) < 1024,
+        extra_service_lines=(f"EnvironmentFile={QDRANT_ENVIRONMENT_FILE}",),
+    )
+    restore_selinux_context([QDRANT_BINARY_PATH, QDRANT_CONFIG_DIRECTORY, QDRANT_DATA_DIRECTORY])
+
+    if is_public:
+        ensure_tcp_port_open(http_port, "Qdrant HTTP")
+        ensure_tcp_port_open(grpc_port, "Qdrant gRPC")
+    else:
+        print("[*] qdrant.public = false: bound to 127.0.0.1, so no firewall port is opened.")
+
+    installed_version_result = run_capture_command([str(QDRANT_BINARY_PATH), "--version"], quiet=True)
+    print(f"[*] Installed binary reports: {(installed_version_result.stdout or installed_version_result.stderr).strip()}")
+
+    run_command("systemctl daemon-reload")
+    run_command(f"systemctl enable {QDRANT_SERVICE_NAME}.service")
+    run_command(f"systemctl restart {QDRANT_SERVICE_NAME}.service")
+
+    if not wait_for_service_active(QDRANT_SERVICE_NAME) or not wait_for_qdrant_readiness(http_port):
+        print(f"[!] {QDRANT_SERVICE_NAME}.service did not come up.")
+        print_service_failure_debug(QDRANT_SERVICE_NAME)
+        sys.exit(1)
+
+    # Solo se escribe lo que el script dedujo; un qdrant.host puesto a mano no se pisa.
+    if was_host_generated:
+        save_project_credentials({"qdrant.host": qdrant_host})
+
+    print("\n[+] Qdrant Installation Complete!")
+    print(f"    - binary:  {QDRANT_BINARY_PATH}")
+    print(f"    - env:     {QDRANT_ENVIRONMENT_FILE}")
+    print(f"    - state:   {QDRANT_DATA_DIRECTORY}")
+    print(f"    - listen:  {bind_address} (HTTP {http_port}, gRPC {grpc_port})")
+    print(f"    - reach:   {qdrant_host}:{http_port}")
+    print("    - api key: internal_apikey from config.toml (header 'api-key')")
+    print(f"    - systemctl status {QDRANT_SERVICE_NAME}")
+
 def parse_command_arguments():
     argument_parser = argparse.ArgumentParser(
         prog="configure_db.py",
-        description="Configures ScyllaDB and installs GenixSearch on this host.",
+        description="Configures ScyllaDB and installs GenixSearch and Qdrant on this host.",
     )
     argument_parser.add_argument(
         "mode",
         nargs="?",
         default=EXECUTION_MODE_ALL,
-        help="all|1 (default), scylla|2, search|3",
+        help="all|1 (default), scylla|2, search|3, qdrant|4",
     )
     argument_parser.add_argument(
         "--release-version",
         default="latest",
         help="GenixSearch release tag to install, e.g. v0.1.0 (default: latest)",
+    )
+    argument_parser.add_argument(
+        "--qdrant-version",
+        default="latest",
+        help="Qdrant release tag to install, e.g. v1.19.0 (default: latest)",
     )
     argument_parser.add_argument(
         "--binary",
@@ -1460,7 +1548,7 @@ def parse_command_arguments():
 
     execution_mode = EXECUTION_MODE_BY_ARGUMENT.get(parsed_arguments.mode.strip().lower())
     if execution_mode is None:
-        argument_parser.error(f"Unknown mode: {parsed_arguments.mode}. Use all, scylla or search.")
+        argument_parser.error(f"Unknown mode: {parsed_arguments.mode}. Use all, scylla, search or qdrant.")
 
     parsed_arguments.mode = execution_mode
     return parsed_arguments
@@ -1488,6 +1576,9 @@ def main():
             command_arguments.release_version,
             command_arguments.binary,
         )
+
+    if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_QDRANT):
+        configure_qdrant(credentials_data, broadcast_ip_address, command_arguments.qdrant_version)
 
 if __name__ == "__main__":
     main()
