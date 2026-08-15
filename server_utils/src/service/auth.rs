@@ -13,11 +13,12 @@ use thiserror::Error;
 ///
 /// Bumped on every wire change so a mismatched peer fails loudly at the first frame instead of
 /// misreading bytes. `genix-rate-limiter:v1` was the opcode-less 19-byte frame; `:v1` here added
-/// the opcode byte; `:v2` widened the reply to 5 bytes; `:v3` gave `LOCK_RELEASE` a payload.
+/// the opcode byte; `:v2` widened the reply to 5 bytes; `:v3` gave `LOCK_RELEASE` a payload; `:v4`
+/// added `LOG_REQUEST`, the first length-prefixed frame and the first that is never answered.
 /// Replies are not themselves authenticated, so without the bump an old client would keep
 /// authenticating fine, read 1 byte of a 5-byte reply, and silently misinterpret everything
 /// after that.
-const DOMAIN: &[u8] = b"genix-server-utils:v3";
+const DOMAIN: &[u8] = b"genix-server-utils:v4";
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -104,11 +105,11 @@ mod tests {
         ];
         assert_eq!(
             compute_hash(secret, &nonce, 0, &payload).unwrap(),
-            [0x62, 0x8C, 0xB7, 0x8A, 0x58, 0xDD, 0xE2, 0x6D]
+            [0x6A, 0x9B, 0x6D, 0x45, 0x58, 0x7E, 0x52, 0x11]
         );
         assert_eq!(
             compute_hash(secret, &nonce, 1, &payload).unwrap(),
-            [0x84, 0x25, 0x06, 0xDC, 0x3B, 0xB8, 0xDF, 0x6F]
+            [0xAF, 0x3C, 0x01, 0xFC, 0x6E, 0xDB, 0x15, 0xE5]
         );
 
         // Opcode 0x02 with action 7, identifier -42, 3 waiters, 5000 ms wait, 15000 ms lease.
@@ -118,7 +119,7 @@ mod tests {
         ];
         assert_eq!(
             compute_hash(secret, &nonce, 0, &acquire).unwrap(),
-            [0x89, 0x9E, 0x18, 0x73, 0xDC, 0xDF, 0x40, 0x29]
+            [0xE6, 0x9D, 0xBD, 0xBA, 0x88, 0x42, 0xDF, 0xD6]
         );
     }
 }

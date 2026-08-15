@@ -15,6 +15,7 @@ use genix_server_utils::{
         storage::{StoredUsage, UsageStore},
     },
     lock::registry::{LockLimits, LockRegistry},
+    reqlog::writer::RequestLogSink,
     service::server,
 };
 use hmac::{Hmac, Mac};
@@ -85,6 +86,9 @@ async fn start_server(frame_timeout: Duration) -> TestServer {
         listener,
         limiter,
         locks,
+        // These tests drive locks and charges; request logs would be written to a database this
+        // harness does not have, so the sink accepts and discards.
+        RequestLogSink::disabled(),
         Arc::new(SECRET.to_vec()),
         frame_timeout,
         64,
@@ -121,7 +125,7 @@ impl Client {
         let mut frame = vec![opcode];
         frame.extend_from_slice(payload);
         let mut mac = Hmac::<Sha256>::new_from_slice(SECRET).unwrap();
-        mac.update(b"genix-server-utils:v3");
+        mac.update(b"genix-server-utils:v4");
         mac.update(&self.nonce);
         mac.update(&self.sequence.to_be_bytes());
         mac.update(&frame);

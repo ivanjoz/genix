@@ -1,11 +1,10 @@
 //! ScyllaDB adapter for loading and replacing absolute compact usage rows.
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use scylla::{
-    client::{session::Session, session_builder::SessionBuilder},
-    statement::prepared::PreparedStatement,
-};
+use scylla::{client::session::Session, statement::prepared::PreparedStatement};
 
 use crate::{config::DatabaseConfig, limiter::aggregation::UsageKey};
 
@@ -29,25 +28,19 @@ pub trait UsageStore: Send + Sync {
 }
 
 pub struct ScyllaUsageStore {
-    session: Session,
+    session: Arc<Session>,
     select_range: PreparedStatement,
     upsert_usage: PreparedStatement,
 }
 
 impl ScyllaUsageStore {
+    /// Opens its own session. Kept for callers that have no session to hand over — the daemon uses
+    /// `with_session`, so both services share one pool.
     pub async fn connect(config: &DatabaseConfig) -> Result<Self> {
-        let endpoint = format!("{}:{}", config.host, config.port);
-        let session = SessionBuilder::new()
-            .known_node(endpoint)
-            .user(&config.user, &config.password)
-            .build()
-            .await
-            .context("failed to connect to ScyllaDB")?;
-        session
-            .use_keyspace(&config.keyspace, false)
-            .await
-            .with_context(|| format!("failed to use ScyllaDB keyspace {}", config.keyspace))?;
+        Self::with_session(crate::reqlog::writer::connect_session(config).await?).await
+    }
 
+    pub async fn with_session(session: Arc<Session>) -> Result<Self> {
         let mut select_range = session
             .prepare(
                 "SELECT time_frame, used_credits FROM credit_usage \

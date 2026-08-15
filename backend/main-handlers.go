@@ -118,6 +118,12 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	args.Authorization = core.MapGetKeys(args.Headers, "Authorization", "authorization")
 	args.Encoding = core.MapGetKeys(args.Headers, "Accept-Encoding", "accept-encoding")
 
+	// Minted before anything else can fail, so even a request rejected at the token check carries
+	// an identity into its user_logs row. Lives on args, which is exact in both runtimes; the Env
+	// mirror that core.Log prints from is set further down, once the identity is known.
+	args.RequestID = core.MakeRequestID()
+	core.ResetRequestErrors()
+
 	// NOTE: The Lambda runtime processes one invocation at a time per execution environment,
 	// but local/VPS HTTP mode is concurrent. Avoid mutating global per-request state when local.
 	if core.Env.IS_SERVERLESS {
@@ -144,9 +150,12 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	// Los es públicos comienzan con "p-" y no necesitan validacion del user Tocken
 	isPublicPath := len(args.Route) > 2 && args.Route[0:2] == "p-"
 	funcPath := args.Method + "." + args.Route
+	args.RouteID = core.APIRouteID(funcPath)
+	core.SetLogRequest(args.RequestID, args.RouteID)
 
 	if !isPublicPath {
 		args.User = core.CheckUser(args, 0)
+		core.SetLogUser(args.User.CompanyID, args.User.ID)
 
 		// Si no es público, valida el user
 		if len(args.User.Error) > 0 {
@@ -208,15 +217,17 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	}
 
 	// Request header log is only meaningful in Lambda mode (it uses REQ_ID / REQ_LAMBDA_ID).
+	//
+	// It carries the same three index tokens every following line of this request carries, so a
+	// filter on c7 or r118 returns the header alongside the body of the request rather than
+	// stranding one without the other. The route names replace the FnvHashString64 list that used
+	// to live here: with a number on every line, the header is where the number is spelled out.
 	if core.Env.IS_SERVERLESS {
-		reqPathsParsed := []string{}
-		for _, name := range core.REQ_PATHS {
-			hash := core.FnvHashString64(name, 64, 5)
-			reqPathsParsed = append(reqPathsParsed, name+"="+hash)
-		}
-
-		logHeader := core.Concat("|", "$Req", core.Env.REQ_ID, core.Env.REQ_LAMBDA_ID,
-			args.User.ID, args.User.User, strings.Join(reqPathsParsed, "&"))
+		logHeader := core.Concat("|", "$Req", core.Env.REQ_ID, args.RequestID, core.Env.REQ_LAMBDA_ID,
+			"c"+core.Concats(args.User.CompanyID),
+			"u"+core.Concats(args.User.CompanyID)+"_"+core.Concats(args.User.ID),
+			"r"+core.Concats(args.RouteID),
+			args.User.User, strings.Join(core.REQ_PATHS, "&"))
 		fmt.Println(logHeader)
 	}
 
@@ -358,6 +369,18 @@ func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
 
 func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
 	response := core.MainResponse{}
+
+	// Emitted here and nowhere else: this is the one funnel every response passes through, panics
+	// and token rejections included, and it runs in both runtimes. It is deliberately ahead of the
+	// branches below, two of which return early — a streamed response is still a request that
+	// happened, and a request that failed at the token check is one of the more interesting rows
+	// in the table.
+	elapsedMs := int64(0)
+	if handlerResponse.RequestStart > 0 {
+		elapsedMs = time.Now().UnixMilli() - handlerResponse.RequestStart
+	}
+	core.EmitRequestLog(args, elapsedMs)
+
 	if !core.Env.IS_SERVERLESS {
 		// Stream handlers (SSE) write directly to ResponseWriter and must bypass normal compression flow.
 		if handlerResponse.StreamHandled {
@@ -365,8 +388,6 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 		}
 		// core.Print(handlerResponse)
 		core.SendLocalResponse(*args, *handlerResponse)
-		// In local/VPS HTTP mode we skip request-log persistence to avoid global
-		// per-request state and Dynamo I/O on the hot path.
 		return response
 	}
 

@@ -35,8 +35,10 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[core.CronAction](),
 		makeDBController[core.GlobalCache](),
 		makeDBController[coreTypes.CreditUsage](),
+		makeDBController[coreTypes.RequestError](),
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
+		makeDBController[coreTypes.UserLog](),
 		makeDBController[financeTypes.CashBank](),
 		makeDBController[financeTypes.CashBankMovement](),
 		makeDBController[financeTypes.CashReconciliation](),
@@ -55,6 +57,7 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[salesTypes.SalesPlanning](),
 		makeDBController[salesTypes.SeasonalityCurve](),
 		makeDBController[salesTypes.ShippingCost](),
+		makeDBController[securityTypes.ContactMessage](),
 		makeDBController[securityTypes.Profile](),
 		makeDBController[securityTypes.SignUpRequest](),
 		makeDBController[webpageTypes.EcommercePageContent](),
@@ -82,8 +85,10 @@ func init() {
 	db.RegisterTableFactory("cron_actions", func() db.Table { return db.MakeTable[core.CronAction]() })
 	db.RegisterTableFactory("cache_global", func() db.Table { return db.MakeTable[core.GlobalCache]() })
 	db.RegisterTableFactory("credit_usage", func() db.Table { return db.MakeTable[coreTypes.CreditUsage]() })
+	db.RegisterTableFactory("request_errors", func() db.Table { return db.MakeTable[coreTypes.RequestError]() })
 	db.RegisterTableFactory("usage_log", func() db.Table { return db.MakeTable[coreTypes.UsageLog]() })
 	db.RegisterTableFactory("users", func() db.Table { return db.MakeTable[coreTypes.User]() })
+	db.RegisterTableFactory("user_logs", func() db.Table { return db.MakeTable[coreTypes.UserLog]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
 	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })
@@ -102,6 +107,7 @@ func init() {
 	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
 	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })
 	db.RegisterTableFactory("shipping_costs", func() db.Table { return db.MakeTable[salesTypes.ShippingCost]() })
+	db.RegisterTableFactory("contact_messages", func() db.Table { return db.MakeTable[securityTypes.ContactMessage]() })
 	db.RegisterTableFactory("profiles", func() db.Table { return db.MakeTable[securityTypes.Profile]() })
 	db.RegisterTableFactory("sign_up_requests", func() db.Table { return db.MakeTable[securityTypes.SignUpRequest]() })
 	db.RegisterTableFactory("ecommerce_page_content", func() db.Table { return db.MakeTable[webpageTypes.EcommercePageContent]() })

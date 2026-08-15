@@ -1,15 +1,16 @@
 # Genix Server Utilities
 
-One Rust process hosting three server-side services over two transports:
+One Rust process hosting four server-side services over two transports:
 
 | Service | Transport | Port | Purpose |
 |---|---|---|---|
 | Credit rate limiter | Raw TCP, loopback | `server_utils` (default `127.0.0.1:14013`) | Atomic CPU/inference quota checks for the Go backend. |
 | Lock service | Raw TCP, same port | `server_utils` | Serializes an action across concurrent Lambdas. |
+| Request log | Raw TCP, same port | `server_utils` | One row per finished request, plus the code lines that failed. |
 | SSE bridge | HTTP (TLS via Nginx) | `sse_bridge.port` (default `14012`) | Relays agent events between the backend and browser tabs. |
 
-The limiter and the lock share the port, the connection, and the handshake — nothing else. Each
-opcode has its own frame width, its own codec, and its own module. That shared port is why its
+The limiter, the lock and the request log share the port, the connection, and the handshake —
+nothing else. Each opcode has its own frame width, its own codec, and its own module. That shared port is why its
 address is the root-level `server_utils` key rather than something under `[rate_limit]`: it
 belongs to the process, not to any one service inside it.
 
@@ -25,7 +26,9 @@ formats), [PLAN_LOCK_SERVICE.md](PLAN_LOCK_SERVICE.md) and
 
 > **One process, shared fate.** The rate limiter loads existing usage from ScyllaDB before
 > admitting anything and exits when it cannot — which also stops the bridge. Deploy the backend
-> tables (so `credit_usage` exists) before starting the daemon.
+> tables (so `credit_usage`, `user_logs` and `request_errors` exist) before starting the daemon.
+> The request log is the one half that does *not* share that fate: it drops rows rather than
+> propagate a failure, because taking the process down would stop the other three.
 
 ## Layout
 
@@ -42,6 +45,8 @@ src/
 ├── limiter/     # opcode 0x01: quota.rs (RateLimiter + policy), protocol, aggregation,
 │                # credits_blob, time_frame, storage
 ├── lock/        # opcodes 0x02/0x03: registry.rs (sharded key mutexes), protocol
+├── reqlog/      # opcode 0x04: protocol (the one variable-length payload), errors
+│                # (ten-minute write suppression), writer (batching, fails open)
 └── bridge/      # token.rs (colbin + channel token), auth, channel, http (axum)
 ```
 
@@ -51,7 +56,7 @@ Both are root-level keys in `config.toml` and must match the backend byte for by
 
 | Key | Used for |
 |---|---|
-| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v3`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
+| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v4`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
 | `secret_phrase` | Verifying the browser's session token only (`usrToken:v1`). Nothing else in this crate reads it. |
 
 Each use is domain-separated, so one key serving two protocols cannot produce interchangeable
@@ -130,6 +135,21 @@ The lock service adds process-wide ceilings only — per-action policy stays in 
 max_keys          = 100000
 max_total_waiters = 4096
 max_lease_ms      = 60000
+```
+
+The request log adds a section where every key has a default, so omitting it entirely means "on,
+with these" rather than a refusal to start:
+
+```toml
+# Purpose: One row per finished request; a month of history, then the partition expires.
+[request_log]
+enabled             = true
+ttl_days            = 30
+flush_ms            = 1000
+max_batch           = 128
+error_cache_seconds = 600
+error_cache_entries = 20000
+queue_capacity      = 8192
 ```
 
 The SSE bridge adds one small section:
@@ -257,15 +277,29 @@ shared frame shape, and the three operations have no field in common.
 | `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · API group `u8` · CPU `u16` · inference `u16` | 20 |
 | `0x02` | `LOCK_ACQUIRE` | action `u16` · identifier `i64` · max_waiters `u8` · wait_ms `u16` · lease_ms `u16` | 24 |
 | `0x03` | `LOCK_RELEASE` | action `u16` · identifier `i64` · generation `u16` | 21 |
+| `0x04` | `LOG_REQUEST` | `[length:u16]` then date `i16` · request `i64` · route `i16` · frame `u8` · company `u24` · user `i32` · elapsed `u16` · errors `u8`, then per error: id `i32` · line `u8`+bytes · text `u16`+bytes | ≤ 1 110 |
 
-`0x00` stays unassigned so an all-zero frame cannot route. 252 opcodes remain free; new *use
+`0x00` stays unassigned so an all-zero frame cannot route. 251 opcodes remain free; new *use
 cases* for the lock cost none of them, since they are namespaced by the `u16` action instead.
+
+`LOG_REQUEST` is the exception to both rules the other three share. It is **length-prefixed**,
+because it carries strings, and it is **never answered**, because making a response wait for an
+acknowledgement that a log row was stored would put this daemon's latency on the critical path of
+every request in the system. The client writes the frame and returns; the sequence still advances,
+since that is what the HMAC is bound to. The length header is inside the signed bytes, and anything
+declaring more than the ceiling closes the connection — a length is an instruction from an
+unauthenticated peer until the tag at the end says otherwise.
+
+A malformed `0x04` payload is discarded with a warning rather than closing the connection, unlike
+every other opcode. The others decide whether a request is admitted, so a frame the two sides
+disagree about is a reason to stop talking; a log row is not worth taking down the charges and
+locks sharing that socket.
 
 The HMAC covers the opcode and payload plus the connection nonce and the implicit frame sequence,
 so a frame can be replayed neither as itself nor as a different operation. Authentication,
 malformed-frame, unknown-opcode, initialization, and transport failures close the connection.
 
-The domain string is bumped on every wire change — `genix-server-utils:v3` today. Replies are not
+The domain string is bumped on every wire change — `genix-server-utils:v4` today. Replies are not
 themselves authenticated, so a version skew cannot be caught by the signature: without the bump
 an old client would keep authenticating fine and then misread a reply that grew under it.
 
@@ -328,6 +362,38 @@ key to two holders. Single active process, same as the limiter.
 A lock orders callers; it does not make them safe. A partition can free a key while its holder is
 still working, which is true of every liveness-based lock, so work inside one must remain safe to
 run twice.
+
+## Request log behavior
+
+- One row per finished request in `user_logs`, batched into unlogged batches every `flush_ms` or
+  at `max_batch`, whichever comes first.
+- One row per distinct failing code line in `request_errors`. The code line is the identity, not
+  the message: two failures at `responses.go:539` are the same error however differently they
+  phrase themselves, which is what keeps that table bounded by the codebase instead of by traffic.
+- A code line written under `error_cache_seconds` ago is not written again. Ten minutes of
+  staleness on the preview costs nothing, because the current message is already in CloudWatch
+  under the request id that referenced it.
+- `user_logs` rows are written `USING TTL ttl_days`. The partition is the date, so a whole day
+  expires together and Scylla drops it wholesale. `request_errors` has no TTL — a code line that
+  failed once is worth keeping until it is rewritten.
+- **Fails open, everywhere.** A full queue drops the record and counts it; a failed write logs a
+  warning and drops the batch; statements that cannot be prepared at startup disable the writer and
+  leave the process running. None of it propagates, because a log row is never worth stopping the
+  limiter and the bridge for.
+
+The dashboard reads through one index: `frame_route_company_agg`, packed frame-major so a
+fifteen-minute slice of a day is a single contiguous clustering range and a poll reads forward
+instead of rereading the day.
+
+```
+bits 47..40  frame      0..95, four per hour
+bits 39..24  route_id   the generated number, backend/core/api_routes.generated.go
+bits 23..0   company_id
+```
+
+The packing is written twice — `src/reqlog/protocol.rs` writes the column and
+`backend/core/types/user_logs.go` ranges over it — and the vectors in both test files pin them
+together. A drift there produces rows that look right and a chart that is quietly wrong.
 
 ## Deploying
 

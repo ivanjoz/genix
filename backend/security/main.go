@@ -8,7 +8,9 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.p-signup-request": PostSignUpRequest,
 	"POST.p-signup-verify":  PostSignUpVerify,
 	"POST.p-signup-company": PostSignUpCompany,
-	"GET.reload-login":      ReloadLogin,
+	// Formulario de contacto de /welcome: se guarda el mensaje y se notifica a contact.email.
+	"POST.p-contact-message": PostContactMessage,
+	"GET.reload-login":       ReloadLogin,
 	// Sesión sin password para el navegador headless de desarrollo. Sólo responde con
 	// is_local y desde loopback; ver dev_login.go.
 	"GET.p-dev-login": DevLogin,

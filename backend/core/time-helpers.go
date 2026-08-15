@@ -41,7 +41,7 @@ func LogHistoricalClockIfActive() {
 	if overriddenUnixSeconds == 0 {
 		return
 	}
-	Log("*RELOJ HISTÓRICO ACTIVO:: todas las escrituras se fecharán como",
+	Log("*RELOJ HISTÓRICO ACTIVO:: Todas las escrituras se fecharán como",
 		time.Unix(overriddenUnixSeconds, 0).Format("2006-01-02 15:04:05"),
 		"| desactívalo quitando", db.HistoricalUnixEnvVar)
 }

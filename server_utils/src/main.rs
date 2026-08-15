@@ -14,6 +14,7 @@ use genix_server_utils::{
     config::AppConfig,
     limiter::{quota::RateLimiter, storage::ScyllaUsageStore},
     lock::registry::LockRegistry,
+    reqlog::writer::{RequestLogSink, RequestLogWriter, connect_session},
     service::server,
 };
 use tokio::{net::TcpListener, sync::watch, time::MissedTickBehavior};
@@ -29,11 +30,12 @@ async fn main() -> Result<()> {
         .init();
 
     let config = AppConfig::load().context("server-utils configuration is invalid")?;
-    let store = Arc::new(
-        ScyllaUsageStore::connect(&config.database)
-            .await
-            .context("rate-limiter storage initialization failed")?,
-    );
+    // One pool to the cluster, shared by the limiter and the request-log writer. Two would double
+    // the connections to the same nodes for nothing.
+    let session = connect_session(&config.database)
+        .await
+        .context("ScyllaDB connection failed")?;
+    let store = Arc::new(ScyllaUsageStore::with_session(session.clone()).await?);
     let limiter = Arc::new(RateLimiter::new(config.shard_count, config.policy, store));
     // Purely in-memory, unlike the limiter: locks are not loaded from anywhere and do not
     // survive a restart.
@@ -48,6 +50,22 @@ async fn main() -> Result<()> {
     // token-signing one.
     let internal_apikey = Arc::new(config.internal_apikey.clone());
     let (shutdown_sender, shutdown_receiver) = watch::channel(false);
+
+    // Fails open, unlike everything else started here: if the statements cannot be prepared the
+    // daemon runs on with logging disabled rather than refusing to serve. A missing log row is not
+    // worth stopping the limiter and the bridge for.
+    let request_logs = if config.request_log.enabled {
+        match RequestLogWriter::prepare(session.clone(), config.request_log.clone()).await {
+            Ok(writer) => writer.spawn(shutdown_receiver.clone()),
+            Err(prepare_error) => {
+                error!(error = %prepare_error, "request log writer disabled: preparation failed");
+                RequestLogSink::disabled()
+            }
+        }
+    } else {
+        info!("request log writer disabled by configuration");
+        RequestLogSink::disabled()
+    };
 
     let flush_limiter = limiter.clone();
     let flush_interval = config.flush_interval;
@@ -76,6 +94,7 @@ async fn main() -> Result<()> {
         listener,
         limiter.clone(),
         locks,
+        request_logs,
         internal_apikey.clone(),
         config.frame_timeout,
         config.max_connections,

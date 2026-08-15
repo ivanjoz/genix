@@ -67,6 +67,15 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "generate_controllers")
 	}},
 
+	// Sin argumentos regenera y escribe; con --check sólo falla si el archivo quedó desactualizado,
+	// que es lo que hay que correr antes de un build para no desplegar rutas sin número.
+	{key: "generate_route_ids", group: scriptGroupGenerators, label: "Regenerar IDs de Rutas",
+		argumentsHint: "[--check]",
+		run: func(context deployContext, arguments []string) error {
+			return runCommand(context, "scripts", context.goBinary,
+				append([]string{"run", ".", "generate_route_ids"}, arguments...)...)
+		}},
+
 	{key: "sync_struct_interfaces", group: scriptGroupGenerators, label: "Sincronizar Interfaces del Frontend", run: func(context deployContext, _ []string) error {
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "sync_struct_interfaces")
 	}},

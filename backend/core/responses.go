@@ -39,7 +39,14 @@ type HandlerArgs struct {
 	Encoding      string
 	User          *UsuarioToken
 	StartTime     int64
-	accesosNivel  []uint16
+	// RequestID identifies this request in user_logs and in the log line, so a row read out of
+	// ScyllaDB leads straight back to the entry that carries the full message. Per request and
+	// never read from a global: in server mode one process serves many at once, and the Env mirror
+	// that core.Log prints from is only accurate under Lambda, where invocations are serialized.
+	RequestID int64
+	// RouteID is the generated number of Method+"."+Route; zero means the path matched no handler.
+	RouteID      int16
+	accesosNivel []uint16
 }
 
 // ClientIPFromRequest resolves the caller's address behind the project's own Nginx.
@@ -525,27 +532,40 @@ type MainResponse struct {
 	Error                   error
 }
 
+// Every handler failure in this backend funnels through these four, which is what makes them the
+// place to record one. Each resolves the code line itself and passes it down, rather than letting
+// makeErrorResponse count frames: the depth differs depending on which wrapper was used, and a
+// frame count that is right for one and wrong for the other blames this file instead of the
+// handler.
+
 func (req *HandlerArgs) MakeErrCode(message string, code int32) HandlerResponse {
+	return req.makeErrorResponse(message, code, CallerCodeLine(1))
+}
+
+func (req *HandlerArgs) MakeErr(message ...any) HandlerResponse {
+	return req.makeErrorResponse(Concat(" ", message...), 400, CallerCodeLine(1))
+}
+
+func (req *HandlerArgs) MakeErr401(message ...any) HandlerResponse {
+	return req.makeErrorResponse(Concat(" ", message...), 401, CallerCodeLine(1))
+}
+
+func (req *HandlerArgs) MakeErr500(message ...any) HandlerResponse {
+	return req.makeErrorResponse(Concat(" ", message...), 500, CallerCodeLine(1))
+}
+
+func (req *HandlerArgs) makeErrorResponse(message string, code int32, codeLine string) HandlerResponse {
 	response := HandlerResponse{Headers: makeHeaders()}
 
 	response.Error = message
 	response.Route = req.Route
-	Log("Req Error:: ", message)
+	RegisterRequestErrorAt(codeLine, message)
+	// Deliberately not Log: the line above already recorded this failure against the handler, and
+	// the heuristic would record it a second time against this file.
+	logNoCapture("Req Error:: ", message)
 
 	response.StatusCode = normalizedErrorStatus(code)
 	return response
-}
-
-func (req *HandlerArgs) MakeErr(message ...any) HandlerResponse {
-	return req.MakeErrCode(Concat(" ", message...), 400)
-}
-
-func (req *HandlerArgs) MakeErr401(message ...any) HandlerResponse {
-	return req.MakeErrCode(Concat(" ", message...), 401)
-}
-
-func (req *HandlerArgs) MakeErr500(message ...any) HandlerResponse {
-	return req.MakeErrCode(Concat(" ", message...), 500)
 }
 
 func makeHeaders() map[string]string {

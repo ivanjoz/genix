@@ -115,6 +115,27 @@ max_keys          = 100000   # claves vivas antes de responder "capacidad"
 max_total_waiters = 4096     # esperas encoladas en total
 max_lease_ms      = 60000    # techo aplicado al arrendamiento que pide el cliente
 
+# ─── Registro de peticiones (server_utils/) ────────────────────────────────
+# Mismo proceso y mismo puerto: el opcode 0x04 escribe una fila por petición
+# terminada en user_logs, y una por línea de código distinta que falló en
+# request_errors. El mensaje completo y el stack siguen estando en CloudWatch —
+# de ellos aquí sólo queda qué línea falló y un adelanto de lo que dijo.
+#
+# A diferencia del limiter, esta mitad falla abierta: si ScyllaDB no responde,
+# las filas se descartan con un warning. Tumbar el proceso se llevaría también
+# al limiter y al bridge, y una fila de log no vale eso.
+#
+# Toda clave tiene default, así que omitir la sección entera significa "activo
+# con estos valores" y no un arranque fallido.
+[request_log]
+enabled                = true
+ttl_days               = 30    # la partición es la fecha: el día entero expira junto
+flush_ms               = 1000  # o antes, si se llega a max_batch
+max_batch              = 128   # filas por batch unlogged
+error_cache_seconds    = 600   # si esa línea ya se escribió hace menos, no se reescribe
+error_cache_entries    = 20000 # techo del mapa de supresión
+queue_capacity         = 8192  # pasado esto se descartan: loguear nunca frena una petición
+
 # ─── Registro público de empresas ──────────────────────────────────────────
 # Estos endpoints no llevan token, así que nunca pasan por el credit limiter:
 # este es su único freno de plataforma. Se cuentan direcciones DISTINTAS, de
@@ -122,6 +143,17 @@ max_lease_ms      = 60000    # techo aplicado al arrendamiento que pide el clien
 [sign_up]
 max_emails_per_ip = 5    # por IPv4, o por prefijo /63 en IPv6
 window_minutes    = 20
+
+# ─── Formulario de contacto ────────────────────────────────────────────────
+# Mismo caso que [sign_up]: endpoint público, sin token y por tanto sin credit
+# limiter. Aquí se cuentan MENSAJES, no direcciones distintas — el remitente
+# elige el correo en cada envío, así que lo único que se puede limitar es el
+# volumen. Con email vacío el endpoint responde "no configurado" y no guarda
+# nada, que es lo que el formulario de /welcome ya anuncia.
+[contact]
+email                = "anguloivan3@gmail.com"   # buzón que recibe los mensajes
+max_messages_per_ip  = 3    # por IPv4, o por prefijo /63 en IPv6
+window_minutes       = 2
 
 # ─── AWS ────────────────────────────────────────────────────────────────────
 [aws]

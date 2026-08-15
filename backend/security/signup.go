@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -48,14 +47,6 @@ const (
 
 const signUpEmailSubject = "Genix — código de verificación"
 
-var signUpEmailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]{2,}$`)
-
-// normalizeSignUpEmail is what gets stored and compared, so "A@B.com" and "a@b.com " are the
-// same account for the "one company per email" rule.
-func normalizeSignUpEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
 // randomDigits returns a uniformly random integer with exactly `digits` decimal places of range
 // (0 .. 10^digits-1). crypto/rand and not math/rand: this backs a verification code.
 func randomDigits(digits int) (int64, error) {
@@ -68,26 +59,6 @@ func randomDigits(digits int) (int64, error) {
 		return 0, core.Err("Error al generar un valor aleatorio:", err)
 	}
 	return value.Int64(), nil
-}
-
-// signUpWeekCodeAt is the [year][week] partition code for a moment in time: year*100 + isoWeek
-// - 200000, so 2026-W32 is 2632. The helper is called with an explicit day (never 0) because
-// MakeSemanaFromFechaUnix memoizes by its argument, and 0 would pin "the current week" forever
-// in a long-running server process.
-func signUpWeekCodeAt(moment time.Time) int32 {
-	return int32(core.MakeSemanaFromFechaUnix(core.TimeToFechaUnix(moment), true).Code)
-}
-
-// signUpSearchWeekCodes are the partitions a lookup has to touch. A request created late on a
-// Sunday is still live on Monday, when the current week code has already moved on.
-func signUpSearchWeekCodes() []int32 {
-	now := core.Now()
-	currentWeekCode := signUpWeekCodeAt(now)
-	previousWeekCode := signUpWeekCodeAt(now.AddDate(0, 0, -7))
-	if previousWeekCode == currentWeekCode {
-		return []int32{currentWeekCode}
-	}
-	return []int32{currentWeekCode, previousWeekCode}
 }
 
 // makeSignUpRequestID composes sequence | random. The sequence comes from the ORM's counter under
@@ -117,7 +88,7 @@ func findSignUpRequestByID(requestID int64) (*types.SignUpRequest, error) {
 		return nil, nil
 	}
 
-	for _, weekCode := range signUpSearchWeekCodes() {
+	for _, weekCode := range recentWeekCodes() {
 		requests := []types.SignUpRequest{}
 		query := db.Query(&requests)
 		query.WeekCode.Equals(weekCode).ID.Equals(requestID).Limit(1)
@@ -137,7 +108,7 @@ func findSignUpRequestByID(requestID int64) (*types.SignUpRequest, error) {
 func findLatestSignUpRequestByEmail(email string) (*types.SignUpRequest, error) {
 	var latestRequest *types.SignUpRequest
 
-	for _, weekCode := range signUpSearchWeekCodes() {
+	for _, weekCode := range recentWeekCodes() {
 		requests := []types.SignUpRequest{}
 		query := db.Query(&requests)
 		query.WeekCode.Equals(weekCode).Email.Equals(email)
@@ -166,7 +137,7 @@ func countRecentEmailsFromIP(ipKey int64, email string) (int32, bool, error) {
 	distinctEmails := map[string]bool{}
 	emailAlreadyUsed := false
 
-	for _, weekCode := range signUpSearchWeekCodes() {
+	for _, weekCode := range recentWeekCodes() {
 		requests := []types.SignUpRequest{}
 		query := db.Query(&requests)
 		query.WeekCode.Equals(weekCode).IP.Equals(ipKey)
@@ -296,8 +267,8 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("dryRun no está permitido en este entorno.")
 	}
 
-	email := normalizeSignUpEmail(body.Email)
-	if !signUpEmailPattern.MatchString(email) {
+	email := normalizeEmail(body.Email)
+	if !emailPattern.MatchString(email) {
 		return req.MakeErr("El correo electrónico no posee un formato válido.")
 	}
 	if len(core.Env.APP_URL) == 0 {
@@ -387,7 +358,7 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 		})
 	}
 
-	weekCode := signUpWeekCodeAt(core.Now())
+	weekCode := weekCodeAt(core.Now())
 	requestID, err := makeSignUpRequestID()
 	if err != nil {
 		return req.MakeErr(err)

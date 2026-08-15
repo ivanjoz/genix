@@ -54,10 +54,16 @@ var deployActions = []deployAction{
 	}},
 
 	{id: 2, group: groupPublish, label: "Backend (AWS Cloud)", run: func(context deployContext) error {
+		if err := generateRouteIDs(context); err != nil {
+			return err
+		}
 		return runCommand(context, "cloud", context.goBinary, "run", ".", "accion=1")
 	}},
 
 	{id: 3, group: groupPublish, label: "Backend (VPS)", run: func(context deployContext) error {
+		if err := generateRouteIDs(context); err != nil {
+			return err
+		}
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "deploy_vps")
 	}},
 
@@ -128,6 +134,20 @@ var deployActions = []deployAction{
 // porque CloudFormation es dueño de la tabla DynamoDB que fn-init necesita. Es exactamente
 // el orden en el que deploy.sh evaluaba sus bloques.
 var executionOrder = []int{14, 1, 8, 2, 3, 4, 9, 5, 6, 10, 7, 11, 13, 12}
+
+// generateRouteIDs corre antes de compilar el backend para que ninguna ruta llegue a producción
+// sin número: sin él, una ruta nueva escribiría user_logs con route_id 0 hasta que alguien se
+// acordara de regenerar. Escribe en vez de sólo verificar —fallar el deploy por un archivo
+// generado no aporta nada cuando regenerarlo es determinista— pero avisa si cambió algo, porque
+// el archivo hay que commitearlo.
+func generateRouteIDs(context deployContext) error {
+	fmt.Println("--- Regenerando IDs de rutas ---")
+	if err := runCommand(context, "scripts", context.goBinary, "run", ".", "generate_route_ids"); err != nil {
+		return err
+	}
+	fmt.Println("💡 Si api_routes.generated.go cambió, recuerde commitearlo.")
+	return nil
+}
 
 // deployTables regenera controllers.generated.go antes de homologar para que fn-homologate
 // vea todos los structs de tabla actuales.

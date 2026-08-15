@@ -26,6 +26,22 @@ const DEFAULT_LOCK_MAX_LEASE_MS: u64 = 60_000;
 /// 14010 backend, 14013 this process's rate limiter, 14446 GenixSearch).
 const DEFAULT_BRIDGE_PORT: u16 = 14012;
 
+/// A month of request history is what a "what broke last week" question needs; the partition is
+/// the date, so a whole day expires together and Scylla drops it wholesale.
+const DEFAULT_REQUEST_LOG_TTL_DAYS: u64 = 30;
+/// Long enough to batch a busy second, short enough that a row is queryable while the person who
+/// caused it is still looking at the screen.
+const DEFAULT_REQUEST_LOG_FLUSH_MS: u64 = 1_000;
+const DEFAULT_REQUEST_LOG_MAX_BATCH: usize = 128;
+/// How long a written `request_errors` row is considered fresh enough to leave alone.
+const DEFAULT_REQUEST_LOG_ERROR_CACHE_SECONDS: u64 = 600;
+/// Bounds the suppression map. Distinct failing code lines are bounded by the codebase, so this is
+/// a backstop against pathology rather than a working limit.
+const DEFAULT_REQUEST_LOG_ERROR_CACHE_ENTRIES: usize = 20_000;
+/// Records waiting to be written. Past this the writer drops them: a log row must never be the
+/// reason a request, or this daemon, slows down.
+const DEFAULT_REQUEST_LOG_QUEUE_CAPACITY: usize = 8_192;
+
 #[derive(Clone, Debug)]
 pub struct DatabaseConfig {
     pub host: String,
@@ -55,6 +71,21 @@ pub struct AppConfig {
     /// that belongs to the Go call sites, which is what keeps this service generic.
     pub locks: LockLimits,
     pub bridge: BridgeConfig,
+    pub request_log: RequestLogConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct RequestLogConfig {
+    /// Off means opcode 0x04 is accepted and discarded rather than refused. Refusing would close
+    /// the connection of a backend that is only trying to log, taking its charges and locks with
+    /// it — the switch is for not writing rows, not for breaking clients.
+    pub enabled: bool,
+    pub row_ttl: Duration,
+    pub flush_interval: Duration,
+    pub max_batch: usize,
+    pub error_freshness: Duration,
+    pub error_cache_entries: usize,
+    pub queue_capacity: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -158,6 +189,61 @@ impl AppConfig {
             max_lease: Duration::from_millis(lock_max_lease_ms),
         };
 
+        // Every value here has a default, unlike the twelve credit ceilings: a guessed quota is
+        // worse than none, but a guessed flush interval for a log table is simply a flush interval.
+        // An absent [request_log] section therefore means "on, with these", not a refusal to start.
+        let request_log_ttl_days =
+            optional_u64(&config, "REQUEST_LOG_TTL_DAYS", "request_log.ttl_days")?
+                .unwrap_or(DEFAULT_REQUEST_LOG_TTL_DAYS);
+        let request_log_flush_ms =
+            optional_u64(&config, "REQUEST_LOG_FLUSH_MS", "request_log.flush_ms")?
+                .unwrap_or(DEFAULT_REQUEST_LOG_FLUSH_MS);
+        let request_log_max_batch =
+            optional_usize(&config, "REQUEST_LOG_MAX_BATCH", "request_log.max_batch")?
+                .unwrap_or(DEFAULT_REQUEST_LOG_MAX_BATCH);
+        let request_log_error_cache_seconds = optional_u64(
+            &config,
+            "REQUEST_LOG_ERROR_CACHE_SECONDS",
+            "request_log.error_cache_seconds",
+        )?
+        .unwrap_or(DEFAULT_REQUEST_LOG_ERROR_CACHE_SECONDS);
+        let request_log_error_cache_entries = optional_usize(
+            &config,
+            "REQUEST_LOG_ERROR_CACHE_ENTRIES",
+            "request_log.error_cache_entries",
+        )?
+        .unwrap_or(DEFAULT_REQUEST_LOG_ERROR_CACHE_ENTRIES);
+        let request_log_queue_capacity = optional_usize(
+            &config,
+            "REQUEST_LOG_QUEUE_CAPACITY",
+            "request_log.queue_capacity",
+        )?
+        .unwrap_or(DEFAULT_REQUEST_LOG_QUEUE_CAPACITY);
+        if request_log_ttl_days == 0
+            || request_log_flush_ms == 0
+            || request_log_max_batch == 0
+            || request_log_error_cache_entries == 0
+            || request_log_queue_capacity == 0
+        {
+            bail!("request_log intervals, batch sizes and capacities must be positive");
+        }
+        // Scylla's TTL is seconds in an i32, so a ttl_days that overflows it would be silently
+        // truncated into a retention nobody asked for.
+        let request_log_ttl_seconds = request_log_ttl_days
+            .checked_mul(86_400)
+            .filter(|seconds| *seconds <= i32::MAX as u64)
+            .context("request_log.ttl_days is too large for a ScyllaDB TTL")?;
+        let request_log = RequestLogConfig {
+            enabled: optional_string(&config, "REQUEST_LOG_ENABLED", "request_log.enabled")
+                .is_none_or(|value| value == "1" || value.eq_ignore_ascii_case("true")),
+            row_ttl: Duration::from_secs(request_log_ttl_seconds),
+            flush_interval: Duration::from_millis(request_log_flush_ms),
+            max_batch: request_log_max_batch,
+            error_freshness: Duration::from_secs(request_log_error_cache_seconds),
+            error_cache_entries: request_log_error_cache_entries,
+            queue_capacity: request_log_queue_capacity,
+        };
+
         let bridge_port = optional_u64(&config, "SSE_BRIDGE_PORT", "sse_bridge.port")?
             .map(|port| {
                 u16::try_from(port).context("sse_bridge.port must be a valid TCP port")
@@ -192,6 +278,7 @@ impl AppConfig {
             },
             policy,
             locks,
+            request_log,
         })
     }
 }

@@ -31,11 +31,12 @@ use crate::{
         },
         registry::{LockGuard, LockOutcome, LockRegistry},
     },
+    reqlog::{protocol::parse_request_log, writer::RequestLogSink},
     service::{
         auth,
         protocol::{
-            AUTH_TAG_SIZE, MAX_FRAME_SIZE, OPCODE_SIZE, Opcode, REPLY_SIZE, UNAVAILABLE_STATUS,
-            encode_reply,
+            AUTH_TAG_SIZE, LENGTH_PREFIX_SIZE, MAX_FRAME_SIZE, OPCODE_SIZE, Opcode, PayloadWidth,
+            REPLY_SIZE, UNAVAILABLE_STATUS, encode_reply,
         },
     },
 };
@@ -65,6 +66,7 @@ pub async fn run(
     listener: TcpListener,
     limiter: Arc<RateLimiter>,
     locks: Arc<LockRegistry>,
+    request_logs: RequestLogSink,
     secret: Arc<Vec<u8>>,
     frame_timeout: Duration,
     max_connections: usize,
@@ -102,6 +104,7 @@ pub async fn run(
                 socket.set_nodelay(true).context("failed to set TCP_NODELAY")?;
                 let limiter = limiter.clone();
                 let locks = locks.clone();
+                let request_logs = request_logs.clone();
                 let secret = secret.clone();
                 let connection_shutdown = shutdown.clone();
                 connections.spawn(async move {
@@ -111,6 +114,7 @@ pub async fn run(
                         peer,
                         limiter,
                         locks,
+                        request_logs,
                         &secret,
                         frame_timeout,
                         max_inflight,
@@ -142,6 +146,7 @@ async fn handle_connection(
     peer: SocketAddr,
     limiter: Arc<RateLimiter>,
     locks: Arc<LockRegistry>,
+    request_logs: RequestLogSink,
     secret: &[u8],
     frame_timeout: Duration,
     max_inflight: usize,
@@ -229,12 +234,41 @@ async fn handle_connection(
         let Some(opcode) = Opcode::from_byte(frame[0]) else {
             break Err(anyhow!("unknown opcode {}", frame[0]));
         };
-        let frame_size = opcode.frame_size();
+
+        // Where the payload starts and how long it is. Fixed-width opcodes answer both from the
+        // opcode alone; the request log states its own length, which is read first and checked
+        // against the ceiling before a single byte of it is buffered — a length header is an
+        // instruction from an unauthenticated peer until the tag at the end says otherwise.
+        let (payload_offset, payload_size) = match opcode.payload_width() {
+            PayloadWidth::Fixed(size) => (OPCODE_SIZE, size),
+            PayloadWidth::LengthPrefixed { maximum } => {
+                if let Err(error) = timeout(
+                    frame_timeout,
+                    reader.read_exact(&mut frame[OPCODE_SIZE..OPCODE_SIZE + LENGTH_PREFIX_SIZE]),
+                )
+                .await
+                .map_err(|_| anyhow!("frame length read timed out"))
+                .and_then(|read| read.context("frame length read failed"))
+                {
+                    break Err(error);
+                }
+                let declared =
+                    u16::from_be_bytes([frame[OPCODE_SIZE], frame[OPCODE_SIZE + 1]]) as usize;
+                if declared > maximum {
+                    break Err(anyhow!(
+                        "frame declares a {declared}-byte payload, over the {maximum}-byte ceiling"
+                    ));
+                }
+                (OPCODE_SIZE + LENGTH_PREFIX_SIZE, declared)
+            }
+        };
+        let frame_size = payload_offset + payload_size + AUTH_TAG_SIZE;
+
         // The rest of the frame is already in flight, so an EOF here is a truncated frame and
         // not a clean disconnect.
         if let Err(error) = timeout(
             frame_timeout,
-            reader.read_exact(&mut frame[OPCODE_SIZE..frame_size]),
+            reader.read_exact(&mut frame[payload_offset..frame_size]),
         )
         .await
         .map_err(|_| anyhow!("frame body read timed out"))
@@ -369,6 +403,24 @@ async fn handle_connection(
                     }
                 };
                 send_reply(&reply_sender, frame_sequence, status, 0).await;
+            }
+            Opcode::LogRequest => {
+                // The only opcode that answers nothing, so it also takes no in-flight permit: the
+                // work is a channel send that cannot block, and parking a slot for it would let a
+                // burst of log frames starve the charges and locks sharing this connection.
+                drop(permit);
+                match parse_request_log(&frame[payload_offset..tag_offset]) {
+                    // Submit never blocks: a full queue drops the record and counts it.
+                    Ok(record) => request_logs.submit(record),
+                    // A malformed payload is a client bug worth seeing, but not worth closing a
+                    // connection over — that would take this backend's charges and locks with it,
+                    // for the sake of a log row. The other opcodes break the loop here because
+                    // their frames decide whether a request is admitted at all.
+                    Err(parse_error) => {
+                        warn!(%peer, sequence = frame_sequence, error = %parse_error,
+                              "discarding a malformed request log frame");
+                    }
+                }
             }
         }
     };

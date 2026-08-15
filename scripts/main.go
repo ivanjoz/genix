@@ -24,6 +24,9 @@ func main() {
 	case "generate_controllers":
 		runSubpackage("./controllers")
 
+	case "generate_route_ids":
+		runSubpackage("./routes", os.Args[2:]...)
+
 	case "generate_menu_descriptions":
 		GenerateMenuDescriptions()
 

@@ -34,11 +34,15 @@ const (
 	serverUtilsReplySize = 5
 	// Names the framing of the whole port, request and reply, and is bumped on every wire change
 	// so a mismatched peer fails at the first frame instead of misreading bytes.
-	serverUtilsAuthDomain = "genix-server-utils:v3"
+	serverUtilsAuthDomain = "genix-server-utils:v4"
 
 	opcodeChargeCredits = byte(0x01)
 	opcodeLockAcquire   = byte(0x02)
 	opcodeLockRelease   = byte(0x03)
+	// opcodeLogRequest is the only length-prefixed opcode and the only one the daemon does not
+	// answer. Both are consequences of what it carries: a variable-length log record that must
+	// never make a response wait.
+	opcodeLogRequest = byte(0x04)
 
 	// Frames are tiny and the daemon is on loopback or a private network, so a write that cannot
 	// complete in this long means the connection is gone.
@@ -170,6 +174,62 @@ func (client *ServerUtilsClient) request(
 		break
 	}
 	return muxReply{}, nil, fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, lastError)
+}
+
+// send writes one frame the daemon will not answer, and returns as soon as the bytes are in the
+// socket.
+//
+// No pending entry is registered, which is the point: the reader would otherwise log every
+// unmatched reply, and a caller would be parked waiting for one that never comes. The frame
+// sequence still advances under writeMu in lockstep with the daemon's, because that is what the
+// HMAC is bound to — a fire-and-forget frame that skipped the sequence would invalidate every
+// frame after it on this connection.
+//
+// One retry, for the same reason a request gets one: a pooled connection the daemon closed while
+// idle is indistinguishable from a live one until the write fails.
+func (client *ServerUtilsClient) send(ctx context.Context, opcode byte, payload []byte) error {
+	var lastError error
+	for attempt := range 2 {
+		connection, reused, err := client.connection(ctx)
+		if err != nil {
+			return fmt.Errorf("%w: connect: %v", ErrServerUtilsUnavailable, err)
+		}
+		if err := connection.write(client.secret, opcode, payload); err == nil {
+			return nil
+		} else {
+			lastError = err
+		}
+		if reused && attempt == 0 {
+			continue
+		}
+		break
+	}
+	return fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, lastError)
+}
+
+// write builds and writes one length-prefixed frame under the sequence lock.
+func (connection *muxConnection) write(secret []byte, opcode byte, payload []byte) error {
+	connection.writeMu.Lock()
+	if connection.sequence == ^uint64(0) {
+		connection.writeMu.Unlock()
+		connection.fail(errors.New("frame sequence exhausted"))
+		return errors.New("frame sequence exhausted")
+	}
+	sequence := connection.sequence
+	connection.sequence++
+
+	frame := buildServerUtilsLengthPrefixedFrame(
+		secret, &connection.nonce, sequence, opcode, payload)
+	writeErr := connection.conn.SetWriteDeadline(time.Now().Add(serverUtilsWriteTimeout))
+	if writeErr == nil {
+		writeErr = writeCompleteFrame(connection.conn, frame)
+	}
+	connection.writeMu.Unlock()
+
+	if writeErr != nil {
+		connection.fail(writeErr)
+	}
+	return writeErr
 }
 
 // connection returns the shared connection, dialing one if none is healthy, and reports whether
@@ -372,6 +432,19 @@ func buildServerUtilsFrame(
 ) []byte {
 	frame := make([]byte, 0, 1+len(payload)+serverUtilsAuthTagSize)
 	frame = append(frame, opcode)
+	frame = append(frame, payload...)
+	return append(frame, serverUtilsAuthTag(secret, nonce, sequence, frame)...)
+}
+
+// buildServerUtilsLengthPrefixedFrame is the variable-width form: the payload's length travels
+// between the opcode and the payload. The tag covers the length header too, so a peer cannot make
+// the daemon buffer a different amount than the one that was signed.
+func buildServerUtilsLengthPrefixedFrame(
+	secret []byte, nonce *[serverUtilsNonceSize]byte, sequence uint64, opcode byte, payload []byte,
+) []byte {
+	frame := make([]byte, 0, 1+2+len(payload)+serverUtilsAuthTagSize)
+	frame = append(frame, opcode)
+	frame = binary.BigEndian.AppendUint16(frame, uint16(len(payload)))
 	frame = append(frame, payload...)
 	return append(frame, serverUtilsAuthTag(secret, nonce, sequence, frame)...)
 }

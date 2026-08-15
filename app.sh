@@ -66,6 +66,12 @@ case "$1" in
     echo "Executing generate_controllers command..."
     (cd scripts && go run . generate_controllers)
     ;;
+  "generate_route_ids")
+    # For "generate_route_ids", assign a stable int16 to every ModuleHandlers route and rewrite
+    # backend/core/api_routes.generated.go. Pass --check to fail instead of writing.
+    echo "Executing generate_route_ids command..."
+    (cd scripts && go run . generate_route_ids "${@:2}")
+    ;;
   "deploy")
     # For "deploy", open the deployment TUI (or run the given action IDs directly).
     (cd scripts && go run ./deployer "${@:2}")
@@ -88,7 +94,7 @@ case "$1" in
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_db|configure_server_utils|follow_cloudwatch_logs|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
+    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_db|configure_server_utils|follow_cloudwatch_logs|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_route_ids|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
     exit 1
     ;;
 esac

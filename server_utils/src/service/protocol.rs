@@ -8,11 +8,16 @@
 use crate::{
     limiter::protocol::CHARGE_PAYLOAD_SIZE,
     lock::protocol::{ACQUIRE_PAYLOAD_SIZE, RELEASE_PAYLOAD_SIZE},
+    reqlog::protocol::REQUEST_LOG_MAX_PAYLOAD_SIZE,
 };
 
 pub const OPCODE_SIZE: usize = 1;
 pub const AUTH_TAG_SIZE: usize = 8;
 pub const REPLY_SIZE: usize = 5;
+/// Width of the length header a variable-payload opcode carries between the opcode and its
+/// payload. Only `LOG_REQUEST` uses one — every other operation describes a fixed record whose
+/// width the opcode already implies.
+pub const LENGTH_PREFIX_SIZE: usize = 2;
 
 /// "I could not answer." Deliberately not a valid decision for any opcode: the charge decoder
 /// rejects it because its top bits are set, and the lock decoder treats an unknown status as
@@ -38,12 +43,19 @@ pub fn encode_reply(sequence: u64, status: u8, detail: u16) -> [u8; REPLY_SIZE] 
     reply
 }
 
-/// Widest payload across every opcode, so one stack buffer serves them all.
-const LARGEST_PAYLOAD_SIZE: usize = if CHARGE_PAYLOAD_SIZE > ACQUIRE_PAYLOAD_SIZE {
+/// Widest payload across every opcode, so one stack buffer serves them all. The request log is the
+/// widest by far — it carries strings — but still small enough to keep the buffer on the stack.
+const LARGEST_FIXED_PAYLOAD_SIZE: usize = if CHARGE_PAYLOAD_SIZE > ACQUIRE_PAYLOAD_SIZE {
     CHARGE_PAYLOAD_SIZE
 } else {
     ACQUIRE_PAYLOAD_SIZE
 };
+const LARGEST_PAYLOAD_SIZE: usize =
+    if LARGEST_FIXED_PAYLOAD_SIZE > LENGTH_PREFIX_SIZE + REQUEST_LOG_MAX_PAYLOAD_SIZE {
+        LARGEST_FIXED_PAYLOAD_SIZE
+    } else {
+        LENGTH_PREFIX_SIZE + REQUEST_LOG_MAX_PAYLOAD_SIZE
+    };
 pub const MAX_FRAME_SIZE: usize = OPCODE_SIZE + LARGEST_PAYLOAD_SIZE + AUTH_TAG_SIZE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +64,20 @@ pub enum Opcode {
     ChargeCredits = 0x01,
     LockAcquire = 0x02,
     LockRelease = 0x03,
+    LogRequest = 0x04,
+}
+
+/// How the reader learns where a frame's payload ends.
+///
+/// Every operation before the request log described a fixed record, so the opcode alone gave the
+/// width. A request log carries a variable number of variable-length error strings, so it states
+/// its own length — and is the only opcode that may, since a length header is what lets a client
+/// ask the daemon to buffer an arbitrary amount before the tag is checked. The ceiling below is
+/// what bounds that.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PayloadWidth {
+    Fixed(usize),
+    LengthPrefixed { maximum: usize },
 }
 
 impl Opcode {
@@ -62,22 +88,37 @@ impl Opcode {
             0x01 => Some(Self::ChargeCredits),
             0x02 => Some(Self::LockAcquire),
             0x03 => Some(Self::LockRelease),
+            0x04 => Some(Self::LogRequest),
             _ => None,
         }
     }
 
-    /// Bytes between the opcode and the authentication tag.
-    pub fn payload_size(self) -> usize {
+    pub fn payload_width(self) -> PayloadWidth {
         match self {
-            Self::ChargeCredits => CHARGE_PAYLOAD_SIZE,
-            Self::LockAcquire => ACQUIRE_PAYLOAD_SIZE,
-            Self::LockRelease => RELEASE_PAYLOAD_SIZE,
+            Self::ChargeCredits => PayloadWidth::Fixed(CHARGE_PAYLOAD_SIZE),
+            Self::LockAcquire => PayloadWidth::Fixed(ACQUIRE_PAYLOAD_SIZE),
+            Self::LockRelease => PayloadWidth::Fixed(RELEASE_PAYLOAD_SIZE),
+            Self::LogRequest => PayloadWidth::LengthPrefixed {
+                maximum: REQUEST_LOG_MAX_PAYLOAD_SIZE,
+            },
         }
     }
 
-    /// Whole frame width: opcode, payload, and tag.
-    pub fn frame_size(self) -> usize {
-        OPCODE_SIZE + self.payload_size() + AUTH_TAG_SIZE
+    /// Whether the daemon answers this opcode at all.
+    ///
+    /// The request log is the one operation with nothing to say back: it is best effort, and
+    /// making the caller wait for an acknowledgement would put the daemon's latency on the
+    /// response path of every request in the system. The client writes the frame and moves on.
+    pub fn expects_reply(self) -> bool {
+        !matches!(self, Self::LogRequest)
+    }
+
+    /// Whole frame width for the fixed-width opcodes: opcode, payload, and tag.
+    pub fn fixed_frame_size(self) -> Option<usize> {
+        match self.payload_width() {
+            PayloadWidth::Fixed(payload) => Some(OPCODE_SIZE + payload + AUTH_TAG_SIZE),
+            PayloadWidth::LengthPrefixed { .. } => None,
+        }
     }
 }
 
@@ -91,8 +132,35 @@ mod tests {
             Opcode::ChargeCredits,
             Opcode::LockAcquire,
             Opcode::LockRelease,
+            Opcode::LogRequest,
         ] {
-            assert!(opcode.frame_size() <= MAX_FRAME_SIZE);
+            let widest = match opcode.payload_width() {
+                PayloadWidth::Fixed(payload) => OPCODE_SIZE + payload + AUTH_TAG_SIZE,
+                PayloadWidth::LengthPrefixed { maximum } => {
+                    OPCODE_SIZE + LENGTH_PREFIX_SIZE + maximum + AUTH_TAG_SIZE
+                }
+            };
+            assert!(widest <= MAX_FRAME_SIZE);
+        }
+    }
+
+    #[test]
+    fn only_the_request_log_is_length_prefixed_and_unanswered() {
+        assert_eq!(Opcode::from_byte(0x04), Some(Opcode::LogRequest));
+        assert!(matches!(
+            Opcode::LogRequest.payload_width(),
+            PayloadWidth::LengthPrefixed { .. }
+        ));
+        assert_eq!(Opcode::LogRequest.fixed_frame_size(), None);
+        // Nothing is sent back for a request log, so a client must not park a caller waiting.
+        assert!(!Opcode::LogRequest.expects_reply());
+        for opcode in [
+            Opcode::ChargeCredits,
+            Opcode::LockAcquire,
+            Opcode::LockRelease,
+        ] {
+            assert!(opcode.expects_reply());
+            assert!(matches!(opcode.payload_width(), PayloadWidth::Fixed(_)));
         }
     }
 
@@ -110,10 +178,10 @@ mod tests {
         assert_eq!(Opcode::from_byte(0x01), Some(Opcode::ChargeCredits));
         assert_eq!(Opcode::from_byte(0x02), Some(Opcode::LockAcquire));
         assert_eq!(Opcode::from_byte(0x03), Some(Opcode::LockRelease));
-        assert_eq!(Opcode::ChargeCredits.frame_size(), 20);
-        assert_eq!(Opcode::LockAcquire.frame_size(), 24);
+        assert_eq!(Opcode::ChargeCredits.fixed_frame_size(), Some(20));
+        assert_eq!(Opcode::LockAcquire.fixed_frame_size(), Some(24));
         // Release names the lock it ends: action, identifier, generation.
-        assert_eq!(Opcode::LockRelease.frame_size(), 21);
+        assert_eq!(Opcode::LockRelease.fixed_frame_size(), Some(21));
         // Unassigned bytes must not resolve, or a garbage frame would be dispatched.
         assert_eq!(Opcode::from_byte(0x00), None);
         assert_eq!(Opcode::from_byte(0xFF), None);

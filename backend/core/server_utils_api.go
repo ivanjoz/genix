@@ -25,6 +25,8 @@ type (
 	LockOptions         = server_utils.LockOptions
 	CreditLimitExceeded = server_utils.CreditLimitExceeded
 	ServerUtilsClient   = server_utils.ServerUtilsClient
+	RequestLogRecord    = server_utils.RequestLogRecord
+	RequestLogEntry     = server_utils.RequestLogError
 )
 
 var (
@@ -37,6 +39,7 @@ var (
 
 	ConfigureServerUtils = server_utils.ConfigureServerUtils
 
+	SendRequestLog              = server_utils.SendRequestLog
 	ChargeAPIUsage              = server_utils.ChargeAPIUsage
 	ChargeInferenceUsage        = server_utils.ChargeInferenceUsage
 	WithCreditRateLimitIdentity = server_utils.WithCreditRateLimitIdentity

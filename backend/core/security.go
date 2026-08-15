@@ -64,16 +64,22 @@ type EnvStruct struct {
 	// so both ends are pinned together in cloud/template.yml.
 	LAMBDA_RESPONSE_STREAMING bool
 	// APP_NAME prefixes every deployed resource name: DynamoDB table, Lambdas, R2 bucket.
-	APP_NAME       string
-	APP_CODE       string
-	ENVIROMENT     string
-	DB_NAME        string
-	DB_USER        string
-	DB_HOST        string
-	DB_PASSWORD    string
-	TMP_DIR        string
-	REQ_IP         string
-	REQ_ID         string
+	APP_NAME    string
+	APP_CODE    string
+	ENVIROMENT  string
+	DB_NAME     string
+	DB_USER     string
+	DB_HOST     string
+	DB_PASSWORD string
+	TMP_DIR     string
+	REQ_IP      string
+	REQ_ID      string
+	// REQUEST_ID is the numeric identity of the request being served, the one user_logs stores.
+	// It is a mirror of HandlerArgs.RequestID and is only set under IS_SERVERLESS, where the
+	// runtime serves one invocation at a time and a package global is therefore safe; the free
+	// core.Log function reads it to build its prefix. In server mode it stays zero and the prefix
+	// is not printed at all.
+	REQUEST_ID     int64
 	REQ_PARAMS     string
 	REQ_USER_AGENT string
 	// HANDLER_PARH   string
@@ -184,6 +190,16 @@ type EnvStruct struct {
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
 	SIGNUP_WINDOW_MINUTES    int32
+	// CONTACT_EMAIL is the inbox the public contact form delivers to. Empty disables the endpoint
+	// outright: with nowhere to send a message, accepting one would only be a way to fill a table.
+	// It is read from config and never from the request, for the same reason APP_URL is — a caller
+	// must not be able to choose who our SMTP credentials mail.
+	CONTACT_EMAIL string
+	// The contact form is unauthenticated too and skips the credit limiter as well, so it carries
+	// its own per-IP window. Messages are counted whole here, not distinct addresses like sign-up:
+	// the abuse is the volume of mail, and the sender picks the address on every submission.
+	CONTACT_MAX_MESSAGES_PER_IP int32
+	CONTACT_WINDOW_MINUTES      int32
 }
 
 // ModelEntry es una entrada de la tabla de array [[models]]: un modelo que el agente puede
@@ -310,6 +326,12 @@ type fileConfig struct {
 		MaxEmailsPerIP int32 `toml:"max_emails_per_ip"`
 		WindowMinutes  int32 `toml:"window_minutes"`
 	} `toml:"sign_up"`
+
+	Contact struct {
+		Email            string `toml:"email"`
+		MaxMessagesPerIP int32  `toml:"max_messages_per_ip"`
+		WindowMinutes    int32  `toml:"window_minutes"`
+	} `toml:"contact"`
 
 	Search struct {
 		URL      string `toml:"url"`
@@ -442,6 +464,9 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.RATE_LIMIT_USER_INFERENCE_24H = file.RateLimit.UserInference24h
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
+	env.CONTACT_EMAIL = strings.ToLower(strings.TrimSpace(file.Contact.Email))
+	env.CONTACT_MAX_MESSAGES_PER_IP = file.Contact.MaxMessagesPerIP
+	env.CONTACT_WINDOW_MINUTES = file.Contact.WindowMinutes
 
 	env.GENIXSEARCH_URL = file.Search.URL
 	env.GENIXSEARCH_PASSWORD = file.Search.Password
@@ -609,6 +634,28 @@ func PopulateVariables() {
 	}
 	if Env.SIGNUP_WINDOW_MINUTES <= 0 {
 		Env.SIGNUP_WINDOW_MINUTES = 20
+	}
+	// Same rule for the contact form, and the same reason: an omitted setting must land on the
+	// documented limit rather than on zero, which the handler would read as "no messages allowed"
+	// or, worse for a maximum, as no limit at all.
+	if contactEmail := strings.TrimSpace(os.Getenv("CONTACT_EMAIL")); contactEmail != "" {
+		Env.CONTACT_EMAIL = strings.ToLower(contactEmail)
+	}
+	if contactMax := strings.TrimSpace(os.Getenv("CONTACT_MAX_MESSAGES_PER_IP")); contactMax != "" {
+		if parsed, err := strconv.Atoi(contactMax); err == nil {
+			Env.CONTACT_MAX_MESSAGES_PER_IP = int32(parsed)
+		}
+	}
+	if contactWindow := strings.TrimSpace(os.Getenv("CONTACT_WINDOW_MINUTES")); contactWindow != "" {
+		if parsed, err := strconv.Atoi(contactWindow); err == nil {
+			Env.CONTACT_WINDOW_MINUTES = int32(parsed)
+		}
+	}
+	if Env.CONTACT_MAX_MESSAGES_PER_IP <= 0 {
+		Env.CONTACT_MAX_MESSAGES_PER_IP = 3
+	}
+	if Env.CONTACT_WINDOW_MINUTES <= 0 {
+		Env.CONTACT_WINDOW_MINUTES = 2
 	}
 	// Mirror the limiter's environment precedence so displayed quotas cannot drift from enforcement.
 	applyRateLimitUint32Override("RATE_LIMIT_COMPANY_CPU_24H", &Env.RATE_LIMIT_COMPANY_CPU_24H)
