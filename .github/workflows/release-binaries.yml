@@ -348,6 +348,7 @@ jobs:
         run: |
           # gh creates a draft, uploads the validated bundle, then publishes it as one release.
           gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --generate-notes \
             --title "Genix ${GITHUB_REF_NAME}"
