@@ -1,7 +1,7 @@
 # Server Utils Deployment (`configure_server_utils.py`)
 
-Installs `server_utils/` on **one** host: the systemd units that keep it running, and the Nginx
-vhost that terminates TLS in front of its SSE bridge.
+Installs `server_utils/` on **one** host. The systemd service always provides the raw-TCP rate
+limiter and lock service. Its public SSE Nginx vhost is installed only for a Lambda deployment.
 
 The public entrypoint selects whether to compile (`37`) or use the latest verified release (`38`):
 
@@ -9,9 +9,14 @@ The public entrypoint selects whether to compile (`37`) or use the latest verifi
 sudo python3 scripts/configure.py 38
 ```
 
-No arguments, no install modes, and **no questions at all**. Everything is read from
-`config.toml`; a missing value either fails with the key name or is written into the file with a
-documented default — never a prompt.
+The nested installer asks **no questions**. Everything is read from `config.toml`; a missing value
+either fails with the key name or is written into the file with a documented default. The unified
+dispatcher supplies its binary policy and, for a self-hosted backend, `--service-only`.
+
+With the unified selection `238`, choosing Backend mode `1` or `2` means self-hosted/VPS mode.
+The dispatcher passes `--service-only`: `sse_bridge.url` is not required and Nginx is not touched,
+because that backend serves `/agent/stream` itself. Selecting Server Utils without a local backend
+(`38`) is the Lambda companion mode and still requires the bridge URL and Nginx.
 
 Must be run as `root`; the service itself runs as a non-root user. Endpoints and protocol:
 [`../../server_utils/README.md`](../../server_utils/README.md). Design of the two halves:
@@ -59,7 +64,7 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 | --- | -------- | -------- |
 | `secret_phrase` | yes | Verifying the browser's session token. Must equal the backend's value. |
 | `internal_apikey` | yes | Authenticating the backend's calls: the bridge's `X-Bridge-Auth` header and the rate limiter's TCP frames. Must equal the backend's value. |
-| `sse_bridge.url` | yes | Its hostname becomes `server_name`, the config file name, and the `/etc/letsencrypt/live/` directory that is looked up. |
+| `sse_bridge.url` | Lambda only | Its hostname becomes `server_name`, the config file name, and the `/etc/letsencrypt/live/` directory that is looked up. Not read in VPS service-only mode. |
 | `sse_bridge.port` | no | Defaults to **14012** (`DEFAULT_BRIDGE_PORT` in `server_utils/src/config.rs`). |
 | `sse_bridge.verbose` | no | `true` logs every delivered message. |
 | `server_utils.port` | no | Raw-TCP listen port. Defaults to **14013** (`DEFAULT_LISTEN_PORT` in `server_utils/src/config.rs`). |
@@ -75,7 +80,7 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 - **`secret_phrase` vs `internal_apikey`**: the first signs what a *user* holds (session tokens,
   password hashes); the second authenticates one *Genix process* to another. Splitting them
   means the inter-service key can be rotated without invalidating every live session.
-- **`sse_bridge.url`** is never prompted for: it is not a secret, and the backend uses it to
+- **`sse_bridge.url`** is never prompted for in Lambda mode: it is not a secret, and the backend uses it to
   publish through this bridge. The matching login option exposes this URL separately as
   `[[endpoints]].bridge`. Missing, malformed, or still pointing at the Lambda function URL
   (which is how the backend says *no bridge*) stops the run with a message naming the key.

@@ -104,7 +104,8 @@ proceso eso también deja el bridge sin arrancar.
 
 Si `sse_bridge.url` falta o es igual a `aws.lambda_url`, el chat del agente queda inoperativo en el
 endpoint Lambda; todo lo demás de la app funciona igual. En self-host no hace falta: ese proceso
-sirve su propio `/agent/stream`.
+sirve su propio `/agent/stream`, y `scripts/configure.py 238` instala Server Utils sin validar esa
+URL ni configurar su vhost de Nginx cuando se elige Backend mode `1` o `2`.
 
 ## Self-host Deployment + DynamoDB + S3
 

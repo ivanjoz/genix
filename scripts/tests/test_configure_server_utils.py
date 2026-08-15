@@ -176,6 +176,45 @@ class ConfigurationResolutionTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 configure_server_utils.resolve_bridge_port({"sse_bridge": {"port": "0"}})
 
+    def test_service_only_mode_does_not_require_a_bridge_domain_or_nginx(self):
+        configure_server_utils = load_configure_server_utils_module()
+        command_arguments = SimpleNamespace(binary_source="precompiled", service_only=True)
+
+        with mock.patch.object(
+            configure_server_utils, "parse_command_arguments", return_value=command_arguments
+        ), mock.patch.object(configure_server_utils, "require_root_execution"), mock.patch.object(
+            configure_server_utils,
+            "detect_repository_config_path",
+            return_value=Path("/repo/config.toml"),
+        ), mock.patch.object(
+            configure_server_utils, "load_project_credentials", return_value={}
+        ), mock.patch.object(configure_server_utils, "verify_required_settings"), mock.patch.object(
+            configure_server_utils, "ensure_rate_limit_credit_limits"
+        ), mock.patch.object(
+            configure_server_utils, "resolve_bridge_domain"
+        ) as resolve_domain_mock, mock.patch.object(
+            configure_server_utils, "resolve_bridge_port", return_value=14012
+        ), mock.patch.object(
+            configure_server_utils, "resolve_listen_port", return_value=14013
+        ), mock.patch.object(
+            configure_server_utils, "resolve_listen_is_public", return_value=False
+        ), mock.patch.object(
+            configure_server_utils, "resolve_client_address", return_value="127.0.0.1:14013"
+        ), mock.patch.object(
+            configure_server_utils, "install_systemd_service", return_value="homelab"
+        ), mock.patch.object(
+            configure_server_utils, "configure_bridge_nginx_vhost"
+        ) as configure_nginx_mock, mock.patch.object(
+            configure_server_utils, "open_listen_port_in_firewall"
+        ), mock.patch.object(
+            configure_server_utils, "print_summary"
+        ) as print_summary_mock:
+            configure_server_utils.main()
+
+        resolve_domain_mock.assert_not_called()
+        configure_nginx_mock.assert_not_called()
+        self.assertIsNone(print_summary_mock.call_args.args[2])
+
     def test_both_secrets_must_be_present_and_are_never_prompted_for(self):
         configure_server_utils = load_configure_server_utils_module()
         config_path = Path("/repo/config.toml")

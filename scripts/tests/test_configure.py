@@ -56,6 +56,32 @@ class ReleaseVerificationTest(unittest.TestCase):
                 )
             self.assertFalse(asset_path.exists())
 
+    def test_matching_latest_release_asset_is_reused_without_downloading(self):
+        configure = load_configure_module()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            download_directory = Path(temporary_directory)
+            asset_name = "genix_app_linux_amd64"
+            asset_path = download_directory / asset_name
+            asset_path.write_bytes(b"cached latest release")
+            expected_checksum = configure.hashlib.sha256(asset_path.read_bytes()).hexdigest()
+            manifest_path = download_directory / "SHA256SUMS"
+            manifest_path.write_text(f"{expected_checksum}  {asset_name}\n", encoding="utf-8")
+
+            def download_manifest_only(requested_name):
+                if requested_name == "SHA256SUMS":
+                    return manifest_path
+                self.fail(f"Unexpected binary download: {requested_name}")
+
+            with mock.patch.object(configure, "DOWNLOAD_DIRECTORY", download_directory), \
+                    mock.patch.object(configure, "resolve_release_architecture", return_value="amd64"), \
+                    mock.patch.object(
+                        configure,
+                        "download_latest_release_file",
+                        side_effect=download_manifest_only,
+                    ), redirect_stdout(io.StringIO()):
+                configure.download_selected_binaries({"2"}, "2")
+
 
 class DispatchTest(unittest.TestCase):
     def test_238_downloads_then_runs_backend_before_server_utils(self):
@@ -80,9 +106,22 @@ class DispatchTest(unittest.TestCase):
             executed_configurers,
             [
                 ("configure_server.py", ("2", "--binary-source", "precompiled")),
-                ("configure_server_utils.py", ("--binary-source", "precompiled")),
+                (
+                    "configure_server_utils.py",
+                    ("--binary-source", "precompiled", "--service-only"),
+                ),
             ],
         )
+
+    def test_configurer_failure_has_no_python_traceback(self):
+        configure = load_configure_module()
+        command_error = configure.subprocess.CalledProcessError(1, ["python3", "child.py"])
+
+        with mock.patch.object(configure.subprocess, "run", side_effect=command_error), \
+                redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as exit_context:
+            configure.run_configurer("child.py")
+
+        self.assertEqual(str(exit_context.exception), "[!] child.py stopped with exit code 1.")
 
 
 if __name__ == "__main__":

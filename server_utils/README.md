@@ -463,6 +463,10 @@ that would otherwise look identical to a healthy start. Full details, including 
 unit and the three non-negotiable Nginx streaming settings, are in
 [`../scripts/configure/CONFIGURE_SERVER_UTILS.md`](../scripts/configure/CONFIGURE_SERVER_UTILS.md).
 
+For a self-hosted backend, select both components (`237` or `238`) and choose Backend mode `1` or
+`2`. The dispatcher installs this daemon without its public SSE Nginx vhost and does not require
+`sse_bridge.url`; the backend process already serves `/agent/stream`.
+
 The raw TCP listener should remain on loopback or a private network. HMAC authenticates messages,
 but the protocol does not encrypt traffic. The bridge's HTTP port speaks plain HTTP; Nginx
 terminates TLS in front of it.

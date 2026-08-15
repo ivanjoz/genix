@@ -142,6 +142,15 @@ def download_selected_binaries(selected_components, backend_mode):
     checksum_manifest_path = download_latest_release_file("SHA256SUMS")
     release_checksums = parse_release_checksums(checksum_manifest_path)
     for selected_asset in selected_assets:
+        cached_asset_path = DOWNLOAD_DIRECTORY / selected_asset
+        if cached_asset_path.is_file():
+            try:
+                verify_release_asset(cached_asset_path, release_checksums)
+                print(f"[*] Reusing verified latest-release asset: {cached_asset_path}")
+                continue
+            except RuntimeError as cache_error:
+                print(f"[*] Cached asset cannot be reused: {cache_error}")
+
         verify_release_asset(download_latest_release_file(selected_asset), release_checksums)
 
 
@@ -161,7 +170,12 @@ def run_configurer(script_name, *arguments):
     """Run one installer and stop immediately when it cannot complete."""
     command_arguments = [sys.executable, str(CONFIGURE_DIRECTORY / script_name), *arguments]
     print(f"[*] Running: {' '.join(command_arguments)}")
-    subprocess.run(command_arguments, check=True)
+    try:
+        subprocess.run(command_arguments, check=True)
+    except subprocess.CalledProcessError as command_error:
+        raise SystemExit(
+            f"[!] {script_name} stopped with exit code {command_error.returncode}."
+        ) from None
 
 
 def parse_command_arguments():
@@ -204,8 +218,17 @@ def main():
     if COMPONENT_BACKEND in selected_components:
         run_configurer("configure_server.py", backend_mode, "--binary-source", binary_source)
     if COMPONENT_SERVER_UTILS in selected_components:
-        run_configurer("configure_server_utils.py", "--binary-source", binary_source)
+        server_utils_arguments = ["--binary-source", binary_source]
+        if backend_mode in {"1", "2"}:
+            # A self-hosted backend serves /agent/stream itself, so it needs the daemon's raw TCP
+            # services but no public SSE vhost or sse_bridge.url.
+            server_utils_arguments.append("--service-only")
+            print("[*] Backend runs on this host; skipping the public Server Utils SSE bridge.")
+        run_configurer("configure_server_utils.py", *server_utils_arguments)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        raise SystemExit("\n[!] Configuration cancelled.") from None

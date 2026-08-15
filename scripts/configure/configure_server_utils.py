@@ -1067,8 +1067,14 @@ def print_summary(
     print_debug(f"Service unit: {SYSTEMD_DIRECTORY / SERVICE_NAME}")
     print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / RESTART_PATH_NAME}")
     print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME}")
-    print_debug(f"Nginx vhost: {NGINX_CONFIGURATION_DIRECTORY / (bridge_domain + '.conf')}")
     print_debug(f"Health check: curl -s http://127.0.0.1:{bridge_port}/health")
+    if bridge_domain is None:
+        print_debug(
+            "Public SSE bridge: skipped because the self-hosted backend serves /agent/stream."
+        )
+        return
+
+    print_debug(f"Nginx vhost: {NGINX_CONFIGURATION_DIRECTORY / (bridge_domain + '.conf')}")
     print_debug(f"Through Nginx: curl -s https://{bridge_domain}/health")
     print_debug(
         f"Reminder: sse_bridge.url (https://{bridge_domain}/) configures the backend, and the "
@@ -1086,6 +1092,11 @@ def parse_command_arguments():
         default=BINARY_SOURCE_AUTO,
         help="compile source, require a precompiled artifact, or retain automatic selection",
     )
+    argument_parser.add_argument(
+        "--service-only",
+        action="store_true",
+        help="install the daemon without requiring sse_bridge.url or configuring its Nginx vhost",
+    )
     return argument_parser.parse_args()
 
 
@@ -1100,7 +1111,9 @@ def main():
     # leaving the host half configured.
     verify_required_settings(project_credentials, repository_config_path)
     ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
-    bridge_domain = resolve_bridge_domain(project_credentials, repository_config_path)
+    bridge_domain = None
+    if not command_arguments.service_only:
+        bridge_domain = resolve_bridge_domain(project_credentials, repository_config_path)
     bridge_port = resolve_bridge_port(project_credentials)
     listen_port = resolve_listen_port(project_credentials)
     listen_is_public = resolve_listen_is_public(project_credentials)
@@ -1109,7 +1122,8 @@ def main():
     runtime_username = install_systemd_service(
         repository_config_path, bridge_port, command_arguments.binary_source
     )
-    configure_bridge_nginx_vhost(bridge_domain, bridge_port)
+    if bridge_domain is not None:
+        configure_bridge_nginx_vhost(bridge_domain, bridge_port)
     # After the service, so the rule is added for a port something is actually listening on.
     open_listen_port_in_firewall(listen_port, listen_is_public)
     print_summary(
