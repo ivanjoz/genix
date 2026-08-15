@@ -120,11 +120,20 @@ All from cgroup v2 and `/proc`, no new process spawned and nothing shelled out. 
 virtual files per sub-sample — three host files plus two per service — so eleven reads a second,
 which costs on the order of a millisecond and never touches a disk.
 
-**Per service**, from `/sys/fs/cgroup/system.slice/<unit>/`:
+**Per service**, from the unit's cgroup directory — *searched for* under `/sys/fs/cgroup`, not
+assumed. The first implementation hardcoded `system.slice/<unit>` and that was wrong on a stock
+install: Scylla's packaging puts its unit at
+`/sys/fs/cgroup/scylla.slice/scylla-server.slice/scylla-server.service`, so the one service most
+worth watching was the only one that always reported absent. The path is resolved once and cached;
+a failed search is retried on a 30-second interval, because an absent unit is the *normal* state for
+the backend on Lambda and re-walking the tree every second costs 12 ms a pass for nothing.
 
-- Memory: `memory.stat` → the `anon` line. Anonymous pages, which is the service's own memory with
-  the page cache excluded — `memory.current` would count Scylla's file cache as Scylla's usage and
-  read wildly higher than the `32.5 MB` the panel shows for the backend today.
+- Memory: `memory.stat` → `anon + file_mapped`. Anonymous pages plus the file pages the service has
+  actually mapped, which reconstructs `VmRSS` — measured against `/proc` on a real host it matched
+  to the byte (40948 kB). `anon` alone was the first attempt and under-reports badly: it equals
+  `RssAnon` but misses `RssFile`, 29 MB of the 41 MB a Go backend really holds. `anon + file` errs
+  the other way, dragging in 88 MB of cold page cache for a quiet Scylla. `VmRSS` is also what the
+  live SSE panel reports, so both views of the same second now agree.
 - CPU: `cpu.stat` → `usage_usec`, a monotonic counter. The delta since the previous sub-sample
   divided by `elapsedMicros × cpuCount` gives the machine-percent for that second.
 
@@ -166,8 +175,15 @@ Two more consequences of sub-sampling worth pinning down in code:
 
 **Failure policy: fails open, like `reqlog` and unlike the limiter.** A dropped metrics row costs a
 gap in a chart; taking the process down would stop the rate limiter, the lock service and the SSE
-bridge. Every error is a warning and a counter. If the `INSERT` cannot even be prepared at startup,
-the collector logs and does not spawn.
+bridge. Every error is a warning and a counter.
+
+The `INSERT` is prepared **lazily and retried every 60 s** while it fails. The first version prepared
+once at startup and disabled the collector when that failed, which is precisely how it broke on the
+first real deployment: the daemon came up before `fn-homologate` had created the table, and the
+collector stayed off for the life of the process while everything else ran normally. A table
+arriving minutes after the daemon is ordinary deploy ordering, not an exceptional condition.
+
+The collector therefore always spawns when enabled; there is no fallible startup step left.
 
 ## Wiring
 

@@ -9,10 +9,9 @@
 
 use std::{
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, Result};
 use scylla::{client::session::Session, statement::prepared::PreparedStatement};
 use tokio::{
     sync::watch,
@@ -31,43 +30,86 @@ use crate::{
 
 const SECONDS_PER_DAY: i64 = 86_400;
 
+/// How long to wait before trying the prepare again after it failed.
+///
+/// The statement is prepared lazily and retried rather than once at startup, because the original
+/// arrangement lost a real deployment: the daemon came up before `fn-homologate` had created the
+/// table, the prepare failed, and the collector stayed off for the life of the process while every
+/// other part of it ran normally. A table arriving minutes after the daemon is the ordinary shape
+/// of a deploy, not an exceptional one, so it heals itself now.
+const PREPARE_RETRY_INTERVAL: Duration = Duration::from_secs(60);
+
 pub struct ServerMetricsWriter {
     session: Arc<Session>,
-    insert_row: PreparedStatement,
+    insert_row: Option<PreparedStatement>,
+    last_prepare_attempt: Option<Instant>,
+    insert_statement: String,
 }
 
 impl ServerMetricsWriter {
-    pub async fn prepare(session: Arc<Session>, config: &ServerMetricsConfig) -> Result<Self> {
+    pub fn new(session: Arc<Session>, config: &ServerMetricsConfig) -> Self {
         let ttl_seconds = config.row_ttl.as_secs() as i32;
 
         // The TTL is interpolated because Scylla takes no bind marker in a USING TTL clause. It is
         // an i32 derived from config and validated at load, never from a request, so nothing
         // untrusted reaches this string.
         //
-        // Every column is named: the Go side owns these names, and a rename there fails this
-        // prepare at startup instead of writing values into the wrong columns.
-        let mut insert_row = session
-            .prepare(format!(
-                "INSERT INTO server_metrics (date, slot, cpu_percent, mem_percent, disk_percent, \
-                 net_rx_rate, net_tx_rate, backend_mem_mb, backend_cpu_percent, \
-                 server_utils_mem_mb, server_utils_cpu_percent, search_mem_mb, search_cpu_percent, \
-                 scylla_mem_mb, scylla_cpu_percent) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TTL {ttl_seconds}"
-            ))
-            .await
-            .context("failed to prepare the server_metrics insert")?;
-        // A whole-row write with no counters: a driver retry rewrites the same row.
-        insert_row.set_is_idempotent(true);
+        // Every column is named: the Go side owns these names, and a rename there fails the
+        // prepare instead of writing values into the wrong columns.
+        let insert_statement = format!(
+            "INSERT INTO server_metrics (date, slot, cpu_percent, mem_percent, disk_percent, \
+             net_rx_rate, net_tx_rate, backend_mem_mb, backend_cpu_percent, \
+             server_utils_mem_mb, server_utils_cpu_percent, search_mem_mb, search_cpu_percent, \
+             scylla_mem_mb, scylla_cpu_percent) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) USING TTL {ttl_seconds}"
+        );
 
-        Ok(Self {
+        Self {
             session,
-            insert_row,
-        })
+            insert_row: None,
+            last_prepare_attempt: None,
+            insert_statement,
+        }
+    }
+
+    /// The prepared insert, preparing it on first use and re-attempting on a slow interval while it
+    /// keeps failing. Returns `false` when there is still no statement, so the caller drops the row.
+    async fn ensure_prepared(&mut self) -> bool {
+        if self.insert_row.is_some() {
+            return true;
+        }
+        // Rate-limited so an absent table costs one query a minute rather than one every five
+        // seconds, while still recovering on its own once the table appears.
+        if self
+            .last_prepare_attempt
+            .is_some_and(|attempted| attempted.elapsed() < PREPARE_RETRY_INTERVAL)
+        {
+            return false;
+        }
+        self.last_prepare_attempt = Some(Instant::now());
+
+        match self.session.prepare(self.insert_statement.clone()).await {
+            Ok(mut statement) => {
+                // A whole-row write with no counters: a driver retry rewrites the same row.
+                statement.set_is_idempotent(true);
+                self.insert_row = Some(statement);
+                info!("server_metrics insert prepared, writing rows");
+                true
+            }
+            Err(prepare_error) => {
+                warn!(
+                    error = %prepare_error,
+                    retry_seconds = PREPARE_RETRY_INTERVAL.as_secs(),
+                    "server_metrics insert could not be prepared; does the table exist?"
+                );
+                false
+            }
+        }
     }
 
     /// Runs the sampling loop until shutdown.
     pub fn spawn(
-        self,
+        mut self,
         config: ServerMetricsConfig,
         mut shutdown: watch::Receiver<bool>,
     ) -> JoinHandle<()> {
@@ -156,7 +198,7 @@ impl ServerMetricsWriter {
     /// Writes one window's peaks and clears the accumulator. A window that absorbed nothing writes
     /// nothing: a row of sentinels would claim the machine was observed and found absent.
     async fn write_window(
-        &self,
+        &mut self,
         row_index: i64,
         row_seconds: i64,
         peaks: &mut WindowPeaks,
@@ -167,16 +209,21 @@ impl ServerMetricsWriter {
             return;
         }
         let sample = peaks.take();
+        // Taken before the prepare check on purpose: an unwritable window still has to clear the
+        // accumulator, or its peak would leak into every later row until the table appears.
+        if !self.ensure_prepared().await {
+            *write_failures += 1;
+            return;
+        }
         let window_start = row_index * row_seconds;
         let date = (window_start / SECONDS_PER_DAY) as i16;
         let slot = ((window_start % SECONDS_PER_DAY) / row_seconds) as i16;
 
         let values = row_values(date, slot, &sample);
-        match self
-            .session
-            .execute_unpaged(&self.insert_row, &values[..])
-            .await
-        {
+        let Some(insert_row) = &self.insert_row else {
+            return;
+        };
+        match self.session.execute_unpaged(insert_row, &values[..]).await {
             Ok(_) => *rows_written += 1,
             Err(write_error) => {
                 *write_failures += 1;

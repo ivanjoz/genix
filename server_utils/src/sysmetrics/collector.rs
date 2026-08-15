@@ -9,16 +9,34 @@
 //! Every read is fallible and no failure is fatal: a metric that could not be read comes back as
 //! [`NOT_MEASURED`] and the rest of the sub-sample is still produced.
 
-use std::{ffi::CString, fs, path::PathBuf, time::Instant};
+use std::{
+    ffi::CString,
+    fs,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use crate::sysmetrics::{
     MetricsSample, NOT_MEASURED, ServiceSample, megabytes, network_rate, percent_hundredths,
 };
 
-/// Where systemd puts the units this daemon watches. Not configurable: a unit outside
-/// `system.slice` is a different deployment shape than the one this collector describes, and
-/// silently reading the wrong cgroup would be worse than reporting the service absent.
-const SYSTEMD_CGROUP_ROOT: &str = "/sys/fs/cgroup/system.slice";
+/// The cgroup v2 mount, searched for each unit rather than assumed to be its parent.
+///
+/// The first version of this hardcoded `system.slice`, which was wrong on a stock install: Scylla's
+/// packaging puts its unit in its own slice, at
+/// `/sys/fs/cgroup/scylla.slice/scylla-server.slice/scylla-server.service`, so the one service most
+/// worth watching was the one that always reported absent. A unit's slice is a packaging decision
+/// that no reader of this code can predict, so it gets looked up instead of guessed.
+const CGROUP_ROOT: &str = "/sys/fs/cgroup";
+
+/// How deep the search for a unit's directory goes. Scylla's is three levels down; the limit keeps
+/// a pathological tree (thousands of user scopes) from turning discovery into a full walk.
+const CGROUP_SEARCH_DEPTH: usize = 5;
+
+/// How long to wait before searching again for a unit that was not found. Long enough that a
+/// permanently absent unit — the backend on Lambda — costs nothing, short enough that a service
+/// started after the daemon appears within half a minute.
+const CGROUP_SEARCH_RETRY: Duration = Duration::from_secs(30);
 
 /// The four units a row reports on, in the order the writer binds them.
 #[derive(Clone, Debug)]
@@ -53,12 +71,18 @@ pub struct SystemMetricsCollector {
     /// machine instead of a top-style 800% that would not fit an i16 at two decimals.
     cpu_count: f64,
     previous: Option<PreviousCounters>,
+    /// Each unit's cgroup directory once found, in the order of `unit_names`. Searching the tree on
+    /// every sub-sample would be a directory walk a second for a path that almost never moves.
+    resolved_directories: [Option<PathBuf>; 4],
+    /// When each unit was last searched for, so a unit that is not on this box does not re-walk the
+    /// tree every second forever.
+    last_search_attempt: [Option<Instant>; 4],
 }
 
 impl SystemMetricsCollector {
     pub fn new(units: ServiceUnits, disk_mount: String, network_interface: String) -> Self {
         Self::with_cgroup_root(
-            PathBuf::from(SYSTEMD_CGROUP_ROOT),
+            PathBuf::from(CGROUP_ROOT),
             units,
             disk_mount,
             network_interface,
@@ -81,6 +105,8 @@ impl SystemMetricsCollector {
             network_interface,
             cpu_count,
             previous: None,
+            resolved_directories: [None, None, None, None],
+            last_search_attempt: [None; 4],
         }
     }
 
@@ -90,7 +116,7 @@ impl SystemMetricsCollector {
         let taken_at = Instant::now();
         let host_cpu = read_proc_stat_ticks();
         let network = read_network_counters(&self.network_interface);
-        let service_cpu_usec = self.read_service_cpu_usec();
+        let (service_memory, service_cpu_usec) = self.read_service_counters();
 
         let previous = self.previous.replace(PreviousCounters {
             taken_at,
@@ -103,7 +129,6 @@ impl SystemMetricsCollector {
         // otherwise inflate every rate in the sub-sample.
         let elapsed_micros = taken_at.duration_since(previous.taken_at).as_micros() as f64;
 
-        let service_memory = self.read_service_memory_bytes();
         let make_service = |index: usize| ServiceSample {
             memory_mb: service_memory[index].map(megabytes).unwrap_or(NOT_MEASURED),
             cpu_percent: service_cpu_percent(
@@ -142,28 +167,95 @@ impl SystemMetricsCollector {
         ]
     }
 
-    fn read_service_cpu_usec(&self) -> [Option<u64>; 4] {
-        self.unit_names()
-            .map(|unit| self.read_cgroup_field(unit, "cpu.stat", "usage_usec"))
+    /// Memory bytes and CPU microseconds for all four units, resolving each unit's directory once
+    /// per sub-sample rather than once per file.
+    fn read_service_counters(&mut self) -> ([Option<u64>; 4], [Option<u64>; 4]) {
+        let mut memory_bytes = [None; 4];
+        let mut cpu_microseconds = [None; 4];
+        for index in 0..4 {
+            let Some(directory) = self.unit_directory(index) else {
+                continue;
+            };
+            memory_bytes[index] = fs::read_to_string(directory.join("memory.stat"))
+                .ok()
+                .map(|contents| resident_memory_bytes(&contents));
+            cpu_microseconds[index] = fs::read_to_string(directory.join("cpu.stat"))
+                .ok()
+                .and_then(|contents| parse_keyed_field(&contents, "usage_usec"));
+        }
+        (memory_bytes, cpu_microseconds)
     }
 
-    fn read_service_memory_bytes(&self) -> [Option<u64>; 4] {
-        // `anon` and not `memory.current`: the latter counts the page cache, which would report
-        // Scylla's file cache as Scylla's own memory and read wildly higher than what the live
-        // panel shows for a process.
-        self.unit_names()
-            .map(|unit| self.read_cgroup_field(unit, "memory.stat", "anon"))
-    }
-
-    /// A `<field> <value>` line from one of the unit's cgroup files. An absent directory, an
-    /// unreadable file and a missing field are all the same answer: nothing to report.
-    fn read_cgroup_field(&self, unit: &str, file_name: &str, field: &str) -> Option<u64> {
-        if unit.trim().is_empty() {
+    /// The unit's cgroup directory, discovered once and remembered. A cached path that has stopped
+    /// existing is dropped and searched for again, so a service restarted into a different slice —
+    /// or one that was simply not running when the daemon started — is picked up rather than
+    /// reported absent forever.
+    ///
+    /// A search that finds nothing is what needs the rate limit, not the successful one. An absent
+    /// unit is the *normal* state for the backend on Lambda, and re-walking the cgroup tree every
+    /// second in that case was measured at 12 ms a pass on a quiet laptop — a cost that scales with
+    /// somebody else's container count and buys nothing, since a unit that is not there now is
+    /// unlikely to appear in the next second.
+    fn unit_directory(&mut self, index: usize) -> Option<PathBuf> {
+        if let Some(cached) = &self.resolved_directories[index] {
+            if cached.is_dir() {
+                return Some(cached.clone());
+            }
+            self.resolved_directories[index] = None;
+        }
+        if self.last_search_attempt[index]
+            .is_some_and(|attempted| attempted.elapsed() < CGROUP_SEARCH_RETRY)
+        {
             return None;
         }
-        let contents = fs::read_to_string(self.cgroup_root.join(unit).join(file_name)).ok()?;
-        parse_keyed_field(&contents, field)
+        self.last_search_attempt[index] = Some(Instant::now());
+
+        let unit = self.unit_names()[index].trim().to_owned();
+        if unit.is_empty() {
+            return None;
+        }
+        let found = find_cgroup_directory(&self.cgroup_root, &unit, CGROUP_SEARCH_DEPTH)?;
+        self.resolved_directories[index] = Some(found.clone());
+        Some(found)
     }
+}
+
+/// What the service actually holds in RAM: anonymous pages plus the file pages it has mapped.
+///
+/// `anon` alone was the first attempt and it under-reports badly — measured against `/proc`, it
+/// matches `RssAnon` exactly but misses `RssFile`, which for a Go binary is 29 MB of the 41 MB the
+/// process really occupies. `anon + file` would be worse in the other direction: it drags in the
+/// cold page cache charged to the cgroup, 88 MB of it for a quiet Scylla. `file_mapped` is the part
+/// of that cache the service has actually mapped, so the sum reconstructs `VmRSS` — which is what
+/// the live panel shows, so both views of the same second now agree.
+///
+/// Falls back to `anon` where `file_mapped` is absent: under-reporting is better than reporting
+/// nothing, and the field is only missing on kernels this daemon is unlikely to meet.
+fn resident_memory_bytes(memory_stat: &str) -> u64 {
+    let anonymous = parse_keyed_field(memory_stat, "anon").unwrap_or(0);
+    anonymous + parse_keyed_field(memory_stat, "file_mapped").unwrap_or(0)
+}
+
+/// Depth-first search for the directory a unit's cgroup lives in, by exact directory name.
+fn find_cgroup_directory(root: &Path, unit: &str, remaining_depth: usize) -> Option<PathBuf> {
+    if remaining_depth == 0 {
+        return None;
+    }
+    let entries = fs::read_dir(root).ok()?;
+    let mut subdirectories = Vec::new();
+    for entry in entries.flatten() {
+        if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            continue;
+        }
+        // A match at this level wins immediately: slices nest, but a unit name appears once.
+        if entry.file_name() == unit {
+            return Some(entry.path());
+        }
+        subdirectories.push(entry.path());
+    }
+    subdirectories
+        .into_iter()
+        .find_map(|directory| find_cgroup_directory(&directory, unit, remaining_depth - 1))
 }
 
 /// Busy share of the host over the window. Absent on either side of the subtraction means absent
@@ -361,6 +453,102 @@ mod tests {
 
     const CPU_STAT: &str = "usage_usec 1234567\nuser_usec 900000\nsystem_usec 334567\n";
     const MEMORY_STAT: &str = "anon 268435456\nfile 1073741824\nkernel_stack 65536\n";
+
+    /// The bug this replaced: Scylla's unit is not under `system.slice`, it is three levels down
+    /// its own slice, so the hardcoded parent path reported the most important service on the box
+    /// as absent on a stock install. The search has to find a nested unit and still refuse one that
+    /// is not there.
+    #[test]
+    fn a_unit_is_found_wherever_its_slice_puts_it() {
+        // The real layout from a Fedora host: /sys/fs/cgroup is the root, and Scylla nests.
+        let root = std::env::temp_dir().join("genix-cgroup-search-test");
+        let scylla = root
+            .join("scylla.slice")
+            .join("scylla-server.slice")
+            .join("scylla-server.service");
+        let backend = root.join("system.slice").join("genix.service");
+        fs::create_dir_all(&scylla).unwrap();
+        fs::create_dir_all(&backend).unwrap();
+
+        assert_eq!(
+            find_cgroup_directory(&root, "scylla-server.service", CGROUP_SEARCH_DEPTH),
+            Some(scylla)
+        );
+        assert_eq!(
+            find_cgroup_directory(&root, "genix.service", CGROUP_SEARCH_DEPTH),
+            Some(backend)
+        );
+        assert_eq!(
+            find_cgroup_directory(&root, "genixsearch.service", CGROUP_SEARCH_DEPTH),
+            None
+        );
+        // The depth limit is a real bound, not decoration: Scylla sits below two slices.
+        assert_eq!(
+            find_cgroup_directory(&root, "scylla-server.service", 2),
+            None
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// The absent unit is the *normal* case — the backend on Lambda has no cgroup at all — so it
+    /// must not re-walk the tree on every sub-sample. Observable as the directory appearing without
+    /// the collector noticing until the retry window elapses; the same rate limit is what keeps a
+    /// permanently missing unit from costing a walk a second forever.
+    #[test]
+    fn an_absent_unit_is_not_searched_for_again_on_the_next_sample() {
+        let root = std::env::temp_dir().join("genix-cgroup-retry-test");
+        fs::create_dir_all(&root).unwrap();
+        let mut collector = SystemMetricsCollector::with_cgroup_root(
+            root.clone(),
+            ServiceUnits {
+                backend: "late.service".into(),
+                server_utils: String::new(),
+                search: String::new(),
+                scylla: String::new(),
+            },
+            "/".into(),
+            String::new(),
+        );
+
+        assert!(collector.unit_directory(0).is_none(), "nothing to find yet");
+
+        fs::create_dir_all(root.join("system.slice").join("late.service")).unwrap();
+        assert!(
+            collector.unit_directory(0).is_none(),
+            "the retry window has not elapsed, so no second walk happened"
+        );
+
+        // Clearing the attempt is what the elapsed window does, and then it is found.
+        collector.last_search_attempt[0] = None;
+        assert!(collector.unit_directory(0).is_some());
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    /// Measured against `/proc` on a real host: `anon` alone matched `RssAnon` but missed `RssFile`,
+    /// which for a Go backend was 29 MB of the 41 MB it actually held, while `anon + file` would
+    /// have added 88 MB of cold cache to a quiet Scylla. These are that host's real numbers.
+    #[test]
+    fn resident_memory_is_anonymous_plus_mapped_file() {
+        let backend =
+            "anon 12308480\nfile 56344576\nfile_mapped 29622272\ninactive_file 55332864\n";
+        // The kernel reported VmRSS 40948 kB for that same process. The sum reproduces it to the
+        // byte, which is the whole claim of this formula.
+        assert_eq!(resident_memory_bytes(backend), 40_948 * 1024);
+        // Stored megabytes floor, so 39.99 MB is reported as 39 and never rounded up past reality.
+        assert_eq!(megabytes(resident_memory_bytes(backend)), 39);
+
+        // Cold page cache stays out: `file` is 56 MB but only the mapped part counts.
+        assert!(resident_memory_bytes(backend) < 56_344_576);
+
+        // A kernel without file_mapped falls back to anon rather than reporting nothing.
+        assert_eq!(
+            resident_memory_bytes("anon 12308480\nfile 56344576\n"),
+            12_308_480
+        );
+        assert_eq!(resident_memory_bytes("nothing_useful 1\n"), 0);
+    }
 
     #[test]
     fn cgroup_files_are_read_by_field_name() {

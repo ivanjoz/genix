@@ -73,15 +73,14 @@ async fn main() -> Result<()> {
     // only task here that keeps running when the backend is a Lambda, which is the whole point of
     // sampling the machine from this process rather than from the backend.
     let metrics_task = if config.server_metrics.enabled {
-        match ServerMetricsWriter::prepare(session.clone(), &config.server_metrics).await {
-            Ok(writer) => {
-                Some(writer.spawn(config.server_metrics.clone(), shutdown_receiver.clone()))
-            }
-            Err(prepare_error) => {
-                error!(error = %prepare_error, "server metrics collector disabled: preparation failed");
-                None
-            }
-        }
+        // No fallible startup step any more. The insert is prepared on first write and retried
+        // while it keeps failing, because a daemon that starts before `fn-homologate` has created
+        // its table is ordinary deploy ordering — and it used to leave the collector off until
+        // somebody restarted the process by hand.
+        Some(
+            ServerMetricsWriter::new(session.clone(), &config.server_metrics)
+                .spawn(config.server_metrics.clone(), shutdown_receiver.clone()),
+        )
     } else {
         info!("server metrics collector disabled by configuration");
         None

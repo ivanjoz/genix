@@ -435,10 +435,14 @@ The one part of this daemon nothing calls into: it just ticks. Design in
   the highest of the five sub-samples, so a one-second spike survives into a five-second row. The
   price is that these rows cannot be summed: adding `net_rx_rate` across a day overstates the bytes
   actually transferred, because each value is a peak standing in for five seconds.
-- Per-service memory and CPU come from the unit's cgroup — `memory.stat`'s `anon` (page cache
-  excluded, or Scylla's file cache would read as Scylla's memory) and `cpu.stat`'s `usage_usec`.
-  One file read covers a multi-process service correctly, and a missing directory is exactly the
-  "not on this box" signal.
+- Per-service memory and CPU come from the unit's cgroup — `memory.stat`'s `anon + file_mapped`
+  (which reconstructs `VmRSS`: anonymous pages plus mapped file pages, with cold page cache left
+  out) and `cpu.stat`'s `usage_usec`. One read covers a multi-process service correctly, and a
+  missing directory is exactly the "not on this box" signal.
+- The unit's cgroup directory is **searched for** under `/sys/fs/cgroup`, never assumed to be under
+  `system.slice` — Scylla's packaging puts it at
+  `scylla.slice/scylla-server.slice/scylla-server.service`. Resolved once and cached; a failed
+  search retries every 30 s, so an absent unit costs nothing and one that starts later is picked up.
 - **`-1` means not measured**, and it is the whole answer to the Lambda case: with no
   `genix.service` on the machine, the backend's two columns carry the sentinel rather than a `0`
   that would read as an idle backend. It survives to the row only when no sub-sample of the window
@@ -449,8 +453,9 @@ The one part of this daemon nothing calls into: it just ticks. Design in
   still resolving the single-digit KB/s an idle box shows.
 - Rows land on a wall-clock grid, not on a tick counter, so a restart resumes the same slots and a
   skipped tick leaves an honest hole instead of shifting every later row.
-- **Fails open**, like the request log: a failed write is a warning, and an insert that cannot be
-  prepared at startup disables the collector and leaves the process serving.
+- **Fails open**, like the request log: a failed write is a warning. The insert is prepared lazily
+  and retried every 60 s while it fails, so a daemon that starts before `fn-homologate` created the
+  table heals itself instead of needing a restart.
 
 ## Deploying
 

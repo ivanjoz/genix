@@ -172,9 +172,12 @@ row_seconds       = 5     # cada cuántos segundos se escribe el máximo de las 
 ttl_days          = 30    # la partición es el día: expira entero
 disk_mount        = "/"
 network_interface = ""    # vacío = la primera interfaz que no sea lo
-# Units de systemd bajo system.slice, de donde salen memoria (memory.stat → anon,
-# sin caché de páginas) y CPU (cpu.stat → usage_usec) de cada servicio. Una unit
-# ausente no es un error: son sus dos columnas en -1.
+# Units de systemd, de donde salen memoria (memory.stat → anon + file_mapped, que
+# reconstruye el VmRSS: páginas anónimas más las de archivo mapeadas, sin la caché
+# fría) y CPU (cpu.stat → usage_usec) de cada servicio. El cgroup se BUSCA bajo
+# /sys/fs/cgroup: no se asume system.slice, porque ScyllaDB se instala en su propio
+# slice (scylla.slice/scylla-server.slice/). Una unit ausente no es un error: son
+# sus dos columnas en -1.
 backend_unit      = "genix.service"
 server_utils_unit = "genix-server-utils.service"
 search_unit       = "genixsearch.service"
