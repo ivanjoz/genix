@@ -56,6 +56,7 @@ type stockLedgerRecord struct {
 
 type saleOrderGenerator struct {
 	random               *mrand.Rand
+	realNow              time.Time
 	timeHelper           core.TimeHelper
 	userToken            core.UsuarioToken
 	selectedCajaID       int32
@@ -76,7 +77,8 @@ type saleOrderClientSeed struct {
 // GenerateSaleOrders creates stock and historical sale orders for local sample data generation.
 func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 	generator := saleOrderGenerator{
-		random: mrand.New(mrand.NewSource(time.Now().UnixNano())),
+		random:  mrand.New(mrand.NewSource(time.Now().UnixNano())),
+		realNow: time.Now(),
 		userToken: core.UsuarioToken{
 			CompanyID: sampleCompanyID,
 			ID:        sampleUserID,
@@ -191,6 +193,12 @@ func GenerateSaleOrders(args *core.ExecArgs) core.FuncResponse {
 	}
 }
 
+// realUnixDay is today on the real calendar. It must not go through core.FechaUnix(), which
+// follows the historical override this generator installs between writes.
+func (generator *saleOrderGenerator) realUnixDay() int16 {
+	return core.TimeToFechaUnix(generator.realNow)
+}
+
 // validateContext ensures the fixed sample references already exist in DB before generating data.
 func (generator *saleOrderGenerator) validateContext() error {
 	users := []coreTypes.User{}
@@ -288,7 +296,7 @@ func (generator *saleOrderGenerator) seedClientsFromJSON() error {
 		return err
 	}
 
-	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes), 0)
+	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes))
 	response := business.PostClientProviders(&request)
 	if response.StatusCode != 200 {
 		return core.Err(response.Error)
@@ -304,14 +312,9 @@ func (generator *saleOrderGenerator) loadAvailableClients() error {
 		"type":    strconv.Itoa(int(businessTypes.ClientProviderTypeClient)),
 		"updated": "0",
 	}
-	request := generator.makeRequest("GET.client-provider", query, "", 0)
-	response := business.GetClientProviders(&request)
-	if response.StatusCode != 200 {
-		return core.Err(response.Error)
-	}
-
+	request := generator.makeRequest("GET.client-provider", query, "")
 	clientProviders := []businessTypes.ClientProvider{}
-	if err := json.Unmarshal(*response.Body, &clientProviders); err != nil {
+	if err := decodeResponse(business.GetClientProviders(&request), &clientProviders); err != nil {
 		return err
 	}
 
@@ -339,13 +342,9 @@ func (generator *saleOrderGenerator) loadWarehouseStock() ([]logisticsTypes.Prod
 		"warehouse-id": strconv.Itoa(int(sampleWarehouseID)),
 		"updated":      "0",
 	}
-	request := generator.makeRequest("GET.productos-stock", query, "", 0)
-	response := logistics.GetWarehouseProductStock(&request)
-	if response.StatusCode != 200 {
-		return nil, core.Err(response.Error)
-	}
+	request := generator.makeRequest("GET.productos-stock", query, "")
 	result := logistics.GetProductsStockResult{}
-	if err := json.Unmarshal(*response.Body, &result); err != nil {
+	if err := decodeResponse(logistics.GetWarehouseProductStock(&request), &result); err != nil {
 		return nil, err
 	}
 	return result.ProductStock, nil
@@ -450,7 +449,7 @@ func (generator *saleOrderGenerator) seedBaseStock(_ []logisticsTypes.ProductSto
 		if err != nil {
 			return err
 		}
-		request := generator.makeRequest("POST.productos-stock", nil, string(bodyBytes), 0)
+		request := generator.makeRequest("POST.productos-stock", nil, string(bodyBytes))
 		response := logistics.PostAlmacenStock(&request)
 		if response.StatusCode != 200 {
 			return core.Err(response.Error)
@@ -504,7 +503,7 @@ func (generator *saleOrderGenerator) reloadStockLedger() error {
 
 // makeHistoricalDates returns the last 30 local unixday dates including today.
 func (generator *saleOrderGenerator) makeHistoricalDates() []int16 {
-	currentUnixDay := generator.timeHelper.GetFechaUnix()
+	currentUnixDay := generator.realUnixDay()
 	historicalDates := make([]int16, 0, historicalDaysCount)
 	for dayOffset := historicalDaysCount - 1; dayOffset >= 0; dayOffset-- {
 		historicalDates = append(historicalDates, currentUnixDay-int16(dayOffset))
@@ -619,9 +618,9 @@ func (generator *saleOrderGenerator) makeGenerationPlan(daysCount int) ([]int, [
 
 // makeHistoricalUnix assigns each order a unique local second inside the target day to keep IDs spread out.
 func (generator *saleOrderGenerator) makeHistoricalUnix(targetDate int16, orderIndex int) int64 {
-	currentUnixDay := generator.timeHelper.GetFechaUnix()
+	currentUnixDay := generator.realUnixDay()
 	dayOffset := int(targetDate - currentUnixDay)
-	localBaseTime := time.Now().AddDate(0, 0, dayOffset)
+	localBaseTime := generator.realNow.AddDate(0, 0, dayOffset)
 	historicalTime := time.Date(localBaseTime.Year(), localBaseTime.Month(), localBaseTime.Day(), 12, 0, 0, 0, localBaseTime.Location())
 	return historicalTime.Add(time.Duration(orderIndex) * time.Second).Unix()
 }
@@ -727,14 +726,14 @@ func (generator *saleOrderGenerator) createSaleOrder(historicalUnix int64, paylo
 	if err != nil {
 		return nil, err
 	}
-	request := generator.makeRequest("POST.sale-order", nil, string(bodyBytes), historicalUnix)
-	response := sales.PostSaleOrder(&request)
-	if response.StatusCode != 200 {
-		return nil, core.Err(response.Error)
-	}
+	// Freeze the process clock on the simulated instant: every date this write produces —
+	// sale, cash movement, stock ledger and the ORM's own audit columns — derives from it.
+	core.SetHistoricalUnix(historicalUnix)
+	defer core.SetHistoricalUnix(0)
 
+	request := generator.makeRequest("POST.sale-order", nil, string(bodyBytes))
 	saleOrder := salesTypes.SaleOrder{}
-	if err := json.Unmarshal(*response.Body, &saleOrder); err != nil {
+	if err := decodeResponse(sales.PostSaleOrder(&request), &saleOrder); err != nil {
 		return nil, err
 	}
 	return &saleOrder, nil
@@ -768,18 +767,17 @@ func (generator *saleOrderGenerator) createOrderWithRetry(status saleOrderStatus
 }
 
 // makeRequest centralizes the synthetic handler request so sample flows stay consistent.
-func (generator *saleOrderGenerator) makeRequest(route string, query map[string]string, body string, historicalUnix int64) core.HandlerArgs {
+func (generator *saleOrderGenerator) makeRequest(route string, query map[string]string, body string) core.HandlerArgs {
 	method := route
 	if separatorIndex := strings.IndexByte(route, '.'); separatorIndex > 0 {
 		method = route[:separatorIndex]
 	}
 	return core.HandlerArgs{
-		Body:           &body,
-		Query:          query,
-		Route:          route,
-		Method:         method,
-		User:           &generator.userToken,
-		HistoricalUnix: historicalUnix,
+		Body:   &body,
+		Query:  query,
+		Route:  route,
+		Method: method,
+		User:   &generator.userToken,
 	}
 }
 

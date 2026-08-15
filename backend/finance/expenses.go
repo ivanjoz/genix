@@ -374,7 +374,7 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 3. Materialize any missing period up to today (deduped by PeriodDate).
 	nowTime := core.SUnixTime()
-	today := req.EffectiveFechaUnix()
+	today := core.FechaUnix()
 	newPeriods := []financeTypes.Expense{}
 	for _, periodDate := range schedulePeriodDates(&schedule, today) {
 		if existing.Include(periodDate) {

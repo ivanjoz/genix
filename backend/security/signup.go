@@ -81,7 +81,7 @@ func signUpWeekCodeAt(moment time.Time) int32 {
 // signUpSearchWeekCodes are the partitions a lookup has to touch. A request created late on a
 // Sunday is still live on Monday, when the current week code has already moved on.
 func signUpSearchWeekCodes() []int32 {
-	now := time.Now()
+	now := core.Now()
 	currentWeekCode := signUpWeekCodeAt(now)
 	previousWeekCode := signUpWeekCodeAt(now.AddDate(0, 0, -7))
 	if previousWeekCode == currentWeekCode {
@@ -387,7 +387,7 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 		})
 	}
 
-	weekCode := signUpWeekCodeAt(time.Now())
+	weekCode := signUpWeekCodeAt(core.Now())
 	requestID, err := makeSignUpRequestID()
 	if err != nil {
 		return req.MakeErr(err)

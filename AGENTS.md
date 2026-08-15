@@ -66,7 +66,9 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 ### Scripts
 - **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. USE ALWAYS.
 - **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
+- **scripts/GENERATE_ERP_HISTORY.md** - `generate_erp_history` genera historial ERP con fechas pasadas (compras → recepción con lotes/series → ventas). Documenta el **reloj efectivo global**: `GENIX_HISTORICAL_UNIX` / `core.SetHistoricalUnix()` congelan el proceso entero, y de ahí derivan todas las fechas persistidas, incluidas las columnas `created`/`updated` que escribe el propio ORM
 - **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
+- **scripts/AGENT_BROWSER.md** - `agent_browser`: navegador headless de desarrollo que se autentica solo (empresa 1 / usuario 1 por defecto) y sostiene la pestaña que necesita la API agéntica. Permite navegar la app real, leer el HTML agéntico de una página, ejecutar acciones de componentes y capturar lo que el navegador realmente pinta, para contrastar lo que el agente lee contra lo que el usuario ve. El recorrido operativo está en la skill `agent-browser`
 - **scripts/DEPLOYER.md** - `deploy.sh` es un wrapper del TUI en `scripts/deployer/` (Go + Bubble Tea v2): navegación Environment / Actions / Scripts con teclado y mouse, y el orden fijo de ejecución. Reemplaza a `app.sh`, que queda deprecado
 - **scripts/CONFIGURE_SERVER.md** - Despliegue del backend en un VPS: units de systemd, auto-reload del binario y proxy inverso de Nginx
 - **scripts/CONFIGURE_DB.md** - Despliegue del host de datos: `configure_db.py` configura ScyllaDB (sysconfig, yaml, superusuario, keyspace) e instala GenixSearch y Qdrant desde sus releases musl estáticos, escribiendo `search.url`/`search.password` y `qdrant.host` en config.toml. Qdrant se configura por variables `QDRANT__*` en un EnvironmentFile y su api key es `internal_apikey`
@@ -74,6 +76,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 ### General Rules
 - ALWAYS save dates in UnixDay int16 format: The number of days since unix-epoch
 - ALWAYS save datetime as int32 SUnixTime(). SUnixTime = int32((time.Now().Unix() - 1e9) / 2)
+- NEVER use `time.Now()` for a date that gets persisted. Use `core.Now()`, `core.SUnixTime()` or `core.FechaUnix()`: they read the **effective clock**, which `GENIX_HISTORICAL_UNIX` or `core.SetHistoricalUnix()` can freeze so seed/sample generators write records dated in the past. The ORM's own `created`/`updated` columns follow the same clock. `time.Now()` stays correct only for elapsed time, network deadlines and token expiry, which need the monotonic clock.
 
 ### Frontend Rules
 - Use untrack inside $effect to avoid render loops

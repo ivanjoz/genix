@@ -38,10 +38,8 @@ type HandlerArgs struct {
 	ReqParams     string
 	Encoding      string
 	User          *UsuarioToken
-	// HistoricalUnix overrides the effective write timestamp for sample/seed flows.
-	HistoricalUnix int64
-	StartTime      int64
-	accesosNivel   []uint16
+	StartTime     int64
+	accesosNivel  []uint16
 }
 
 // ClientIPFromRequest resolves the caller's address behind the project's own Nginx.

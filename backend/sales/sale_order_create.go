@@ -19,7 +19,7 @@ import (
 )
 
 func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
-	nowTime := req.EffectiveSUnixTime()
+	nowTime := core.SUnixTime()
 	saleRequest := types.SaleOrder{}
 	err := json.Unmarshal([]byte(*req.Body), &saleRequest)
 	if err != nil {
@@ -78,7 +78,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 
-		sale.Date = req.EffectiveFechaUnix()
+		sale.Date = core.FechaUnix()
 		sale.Created = nowTime
 		sale.Status = 1
 	}

@@ -1,12 +1,50 @@
 package core
 
 import (
+	"app/db"
 	"fmt"
 	"math"
 	"sort"
 	"strconv"
 	"time"
 )
+
+// The effective clock lives in the ORM layer because the ORM writes created/updated on its own
+// and must agree with the application about which day it is. These wrappers are what backend
+// code uses: no handler should import db just to ask the time.
+//
+// Freeze it with the GENIX_HISTORICAL_UNIX environment variable (unix seconds) or, for a
+// generator that walks through several simulated days in one process, with SetHistoricalUnix.
+// Every persisted date derives from Now(), so the whole write path — business handlers, stock
+// ledger, cash movements and the ORM's own audit columns — moves together.
+//
+// Elapsed-time and deadline code must keep calling time.Now() directly: it needs the monotonic
+// clock, and a frozen wall clock would report a zero or negative duration.
+var (
+	// Now is the effective wall clock.
+	Now = db.Now
+	// SetHistoricalUnix freezes the process clock at a unix second; 0 restores the real clock.
+	SetHistoricalUnix = db.SetHistoricalUnix
+	// HistoricalUnix reports the active override, or 0 when the real clock is in use.
+	HistoricalUnix = db.HistoricalUnix
+)
+
+// FechaUnix is today in the project's UnixDay convention, read from the effective clock.
+func FechaUnix() int16 {
+	return TimeToFechaUnix(Now())
+}
+
+// LogHistoricalClockIfActive announces a frozen clock at startup. An override changes the date
+// of every record the process writes, so it must never be silent.
+func LogHistoricalClockIfActive() {
+	overriddenUnixSeconds := db.HistoricalUnix()
+	if overriddenUnixSeconds == 0 {
+		return
+	}
+	Log("*RELOJ HISTÓRICO ACTIVO:: todas las escrituras se fecharán como",
+		time.Unix(overriddenUnixSeconds, 0).Format("2006-01-02 15:04:05"),
+		"| desactívalo quitando", db.HistoricalUnixEnvVar)
+}
 
 type FecSemana struct {
 	Id          int
@@ -34,7 +72,7 @@ func MakeSemanaFromFechaUnix(dateUnix int16, isMonday bool) *FecSemana {
 		return fecSemana
 	}
 	if dateUnix == 0 {
-		dateUnix = TimeToFechaUnix(time.Now())
+		dateUnix = TimeToFechaUnix(Now())
 	}
 
 	// convierte la dateUnix en TimeStamp
@@ -72,7 +110,7 @@ func MakeSemanaFromFechaUnix(dateUnix int16, isMonday bool) *FecSemana {
 func GetSemanasFromFecha(dateUnix int16, incremento uint8, decremento uint8) []*FecSemana {
 
 	if dateUnix == 0 {
-		dateUnix = int16(time.Now().Unix() / 60 / 60 / 24)
+		dateUnix = int16(Now().Unix() / 60 / 60 / 24)
 	}
 
 	// convierte la dateUnix en TimeStamp
@@ -152,7 +190,7 @@ func (e *TimeHelper) Print() {
 }
 
 func (e *TimeHelper) GetFechaUnix() int16 {
-	nowTime := time.Now()
+	nowTime := Now()
 	_, offset := nowTime.Zone()
 	// core.Log("offset zone:", offset, " |  now Time", nowTime.Unix())
 	dateUnix := int16((nowTime.Unix() + int64(offset)) / 60 / 60 / 24)
@@ -273,7 +311,7 @@ func (e *TimeHelper) SemanaDiference(semanaInicioCode, semanaFinCode int16) int3
 }
 
 func (e *TimeHelper) GetFechaUnixP() int16 {
-	nowTime := time.Now()
+	nowTime := Now()
 	zone, offset := nowTime.Zone()
 	nowUnix := nowTime.Unix()
 	if zone == "UTC" {
@@ -284,7 +322,7 @@ func (e *TimeHelper) GetFechaUnixP() int16 {
 }
 
 func (e *TimeHelper) GetFechaUnixI() int16 {
-	nowTime := time.Now()
+	nowTime := Now()
 	zone, offset := nowTime.Zone()
 	nowUnix := nowTime.Unix()
 	if zone == "UTC" {

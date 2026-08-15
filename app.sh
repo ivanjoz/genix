@@ -50,6 +50,11 @@ case "$1" in
     echo "Executing generate_sale_orders command..."
     (cd backend && go run . fn-generate-sale-orders)
     ;;
+  "generate_erp_history")
+    # For "generate_erp_history", replay past days of purchases, receptions and sales.
+    echo "Executing generate_erp_history command..."
+    (cd scripts && go run . generate_erp_history "${@:2}")
+    ;;
   "sync_struct_interfaces")
     # For "sync_struct_interfaces", align marked frontend interfaces with backend structs.
     echo "Executing sync_struct_interfaces command..."

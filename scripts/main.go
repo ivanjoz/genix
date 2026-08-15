@@ -36,6 +36,12 @@ func main() {
 	case "plan_agent_discovery":
 		runBackendSubpackage("./agent/cmd/discovery-eval", os.Args[2:]...)
 
+	case "agent_browser":
+		runSubpackage("./agent_browser", os.Args[2:]...)
+
+	case "generate_erp_history":
+		runBackendExec("fn-generate-erp-history", os.Args[2:]...)
+
 	case "follow_cloudwatch_logs":
 		FollowCloudWatchLogs()
 
@@ -61,6 +67,20 @@ func runBackendSubpackage(pkg string, args ...string) {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running backend command %s: %v\n", pkg, err)
+		os.Exit(1)
+	}
+}
+
+// Los generadores de datos viven detrás de las funciones "fn-…" del backend porque necesitan sus
+// handlers y su conexión a la base; el binario del backend las resuelve por el prefijo del argumento.
+func runBackendExec(execFunction string, args ...string) {
+	cmd := exec.Command("go", append([]string{"run", ".", execFunction}, args...)...)
+	cmd.Dir = "../backend"
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running backend exec %s: %v\n", execFunction, err)
 		os.Exit(1)
 	}
 }

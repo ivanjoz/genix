@@ -227,3 +227,21 @@ var (
 	// SetDebugLogging raises the ORM's log verbosity: 0 off, 1 statements, 2 full.
 	SetDebugLogging = orm.SetDebugLogging
 )
+
+// ─── Effective clock ───────────────────────────────────────────────────────────
+
+// The ORM stamps created/updated itself, so the clock has to live below both the ORM and the
+// application for a backdated write to come out consistent. core wraps these as core.Now() and
+// friends; application code should use those instead of reaching in here.
+var (
+	// Now is the effective wall clock: the real one, or the frozen instant set by
+	// GENIX_HISTORICAL_UNIX / SetHistoricalUnix.
+	Now = orm.Now
+	// SetHistoricalUnix freezes the process clock at a unix second; 0 restores the real clock.
+	SetHistoricalUnix = orm.SetHistoricalUnix
+	// HistoricalUnix reports the active override, or 0 when the real clock is in use.
+	HistoricalUnix = orm.HistoricalUnix
+)
+
+// HistoricalUnixEnvVar names the environment variable that freezes the clock at boot.
+const HistoricalUnixEnvVar = orm.HistoricalUnixEnvVar

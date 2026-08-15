@@ -21,6 +21,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-recalc":                   RecalcVirtualColumnsValues,
 	"fn-recalc-stock":             RecalcStock,
 	"fn-generate-sale-orders":     GenerateSampleSaleOrders,
+	"fn-generate-erp-history":     GenerateErpHistory,
 	"fn-reset-counters":           ResetCounterPart,
 	"fn-deploy-cloudflare-worker": DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":   DeployCompanyWebpage,

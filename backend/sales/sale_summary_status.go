@@ -5,7 +5,6 @@ import (
 	"app/db"
 	"app/sales/types"
 	"slices"
-	"time"
 )
 
 // GetSaleSummary returns day-level summaries reconstructed from per-product rows.
@@ -13,12 +12,12 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
 	dateInicio := req.GetQueryInt16("date-inicio")
 	if dateInicio == 0 {
-		dateInicio = core.TimeToFechaUnix(time.Now()) - (8 * 7)
+		dateInicio = core.FechaUnix() - (8 * 7)
 	}
 
 	dateFin := req.GetQueryInt16("date-fin")
 	if dateFin == 0 {
-		dateFin = core.TimeToFechaUnix(time.Now())
+		dateFin = core.FechaUnix()
 	}
 
 	// Debug trace to diagnose sync ranges and filters from clients.

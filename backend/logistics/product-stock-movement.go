@@ -340,7 +340,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	}
 
 	// Resolve missing LotIDs for inbound lot-by-name movements.
-	if err := resolveLotIDsForMovements(req, activeMovements, req.EffectiveFechaUnix()); err != nil {
+	if err := resolveLotIDsForMovements(req, activeMovements, core.FechaUnix()); err != nil {
 		return err
 	}
 
@@ -404,8 +404,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 		return err
 	}
 
-	updatedTime := req.EffectiveSUnixTime()
-	dateUnix := req.EffectiveFechaUnix()
+	updatedTime := core.SUnixTime()
+	dateUnix := core.FechaUnix()
 
 	// Build ledger rows and mutate V2/Detail in place.
 	warehouseMovements := make([]logisticsTypes.WarehouseProductMovement, 0, len(activeMovements))
@@ -633,19 +633,33 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 		hashes = append(hashes, hash)
 	}
 
-	// Look up existing lots by the dedup hash index.
-	existingLots := []logisticsTypes.ProductStockLot{}
-	q := db.Query(&existingLots)
-	q.Select().
-		CompanyID.Equals(req.User.CompanyID).
-		Hash.In(hashes...)
-	if err := q.Exec(); err != nil {
+	// Look up existing lots by the dedup hash index, one hash per query and in parallel.
+	// Hash is a global index, so its capability signature carries no partition prefix and a
+	// CompanyID + Hash query cannot route through it: Scylla then sees a plain restriction on a
+	// non-key column, which it only accepts for a single value. Batching the hashes into one IN
+	// would need ALLOW FILTERING — a full partition scan of every lot the tenant ever created.
+	lotsByHashIndex := make([][]logisticsTypes.ProductStockLot, len(hashes))
+	lotLookupGroup := errgroup.Group{}
+	lotLookupGroup.SetLimit(8)
+
+	for hashIndex, hash := range hashes {
+		lotLookupGroup.Go(func() error {
+			query := db.Query(&lotsByHashIndex[hashIndex])
+			query.Select().
+				CompanyID.Equals(req.User.CompanyID).
+				Hash.Equals(hash)
+			return query.Exec()
+		})
+	}
+	if err := lotLookupGroup.Wait(); err != nil {
 		return core.Err("Error al buscar lotes existentes:", err)
 	}
 
 	lotIDByHash := map[string]int32{}
-	for _, lot := range existingLots {
-		lotIDByHash[lot.Hash] = lot.ID
+	for _, lotsForHash := range lotsByHashIndex {
+		for _, lot := range lotsForHash {
+			lotIDByHash[lot.Hash] = lot.ID
+		}
 	}
 
 	// Insert any missing lots in one batch. The ORM assigns autoincrement IDs in-place.
@@ -660,7 +674,7 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 			Date:       lotDate,
 			Name:       key.name,
 			SupplierID: key.supplierID,
-			Created:    req.EffectiveSUnixTime(),
+			Created:    core.SUnixTime(),
 			CreatedBy:  req.User.ID,
 		})
 		insertedHashOrder = append(insertedHashOrder, hash)

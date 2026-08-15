@@ -11,8 +11,8 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		return nil
 	}
 
-	nowTime := req.EffectiveSUnixTime()
-	dateUnix := req.EffectiveFechaUnix()
+	nowTime := core.SUnixTime()
+	dateUnix := core.FechaUnix()
 
 	// Group movements by CashBankID to track running balances.
 	cashBankIDs := core.SliceSet[int32]{}
@@ -59,7 +59,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		}
 
 		record := financeTypes.CashBankMovement{
-			ID:            core.SUnixTimeUUIDConcatID(m.CashBankID, req.EffectiveSUnixTimeUUID()),
+			ID:            core.SUnixTimeUUIDConcatID(m.CashBankID, core.SUnixTimeUUID()),
 			CompanyID:     req.User.CompanyID,
 			CashBankID:    m.CashBankID,
 			CashBankRefID: m.CashBankRefID,

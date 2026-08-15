@@ -193,7 +193,7 @@ func MakeUniqueInts[T any, N Number1](slice []T, f func(T) N) []N {
 }
 
 func SUnixTime() int32 {
-	return int32((time.Now().Unix() - 1e9) / 2)
+	return int32((Now().Unix() - 1e9) / 2)
 }
 
 // ClampInt32ToZero prevents persisted counters from going negative after decrements.
@@ -217,7 +217,7 @@ func MultiplyInt32Saturated(valueA int32, valueB int32) int32 {
 }
 
 func SUnixTimeMilli() int64 {
-	return int64((time.Now().UnixMilli() - 1e12) / 2)
+	return int64((Now().UnixMilli() - 1e12) / 2)
 }
 func UnixToSunix(unixTime int64) int32 {
 	return int32((unixTime - 1e9) / 2)
@@ -230,7 +230,7 @@ func SunixToUnix(sunixTime int32) int64 {
 	return int64(sunixTime)*2 + 1e9
 }
 func SUnix5Min() int32 {
-	return int32((time.Now().Unix() - 1e9) / (60 * 5))
+	return int32((Now().Unix() - 1e9) / (60 * 5))
 }
 
 // Makes an UUID based on SUnixTime in milliseconds and random 3 last digits

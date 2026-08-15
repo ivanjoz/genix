@@ -8,7 +8,6 @@ import (
 	logisticsTypes "app/logistics/types"
 	"encoding/json"
 	"slices"
-	"time"
 )
 
 const (
@@ -246,7 +245,7 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	now := core.SUnixTime()
-	todayFecha := core.TimeToFechaUnix(time.Now())
+	todayFecha := core.FechaUnix()
 	currentSemana := core.MakeSemanaFromFechaUnix(todayFecha, false)
 
 	record.CompanyID = req.User.CompanyID

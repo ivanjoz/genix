@@ -287,6 +287,8 @@ func bootstrapCronSchedulers() {
 
 func main() {
 	core.PopulateVariables()
+	// A frozen clock backdates every record the process writes, so it can never be silent.
+	core.LogHistoricalClockIfActive()
 	// One address, one secret, one connection: the credit limiter and the lock service share it
 	// and are told apart by the frame's opcode. The logger is pushed in because that package
 	// cannot import core (cycle), the same as text_search.

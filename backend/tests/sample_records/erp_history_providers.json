@@ -1,0 +1,37 @@
+[
+  {
+    "name": "Distribuidora Andina S.A.C.",
+    "personType": 2,
+    "registryNumber": "20501234561",
+    "countryId": 604,
+    "cityId": "150101"
+  },
+  {
+    "name": "Comercial Los Portales E.I.R.L.",
+    "personType": 2,
+    "registryNumber": "20512345672",
+    "countryId": 604,
+    "cityId": "150101"
+  },
+  {
+    "name": "Importaciones del Pacífico S.A.",
+    "personType": 2,
+    "registryNumber": "20523456783",
+    "countryId": 604,
+    "cityId": "150101"
+  },
+  {
+    "name": "Almacenes Trujillo S.A.C.",
+    "personType": 2,
+    "registryNumber": "20534567894",
+    "countryId": 604,
+    "cityId": "150101"
+  },
+  {
+    "name": "Proveedora Sur Andina S.R.L.",
+    "personType": 2,
+    "registryNumber": "20545678905",
+    "countryId": 604,
+    "cityId": "150101"
+  }
+]
