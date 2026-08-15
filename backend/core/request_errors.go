@@ -107,6 +107,12 @@ func TakeRequestErrors() []RequestError {
 // it. Everything it needs is already resolved: the identity from HandlerArgs, the failures from
 // the accumulator, the elapsed time from the response.
 //
+// A request that failed nothing leaves no row unless LOG_ALL_REQUESTS says otherwise. user_logs
+// answers "what broke, on what route, for which company", and a row per successful request buys
+// nothing for that question while costing one write per request forever. Credit-limit rejections
+// are not a special case here: MakeCreditRateLimitResponse builds its 429 through MakeErrCode,
+// which captures, so a refused request arrives with an entry and passes the gate on its own.
+//
 // Nothing here can fail in a way the caller should care about. The daemon does not answer, an
 // unreachable one is logged once and forgotten, and a request that has already produced its
 // response must never be affected by what happened to its log row.
@@ -119,6 +125,13 @@ func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 			Line: requestError.Line,
 			Text: requestError.Text,
 		})
+	}
+
+	// After the drain and never before it: TakeRequestErrors is what clears the accumulator, so
+	// returning any earlier would leave this request's errors to be reported against whichever
+	// request drains next.
+	if len(entries) == 0 && (Env == nil || !Env.LOG_ALL_REQUESTS) {
+		return
 	}
 
 	companyID, userID := int32(0), int32(0)

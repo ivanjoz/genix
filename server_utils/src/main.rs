@@ -16,6 +16,7 @@ use genix_server_utils::{
     lock::registry::LockRegistry,
     reqlog::writer::{RequestLogSink, RequestLogWriter, connect_session},
     service::server,
+    sysmetrics::writer::ServerMetricsWriter,
 };
 use tokio::{net::TcpListener, sync::watch, time::MissedTickBehavior};
 use tracing::{error, info};
@@ -65,6 +66,25 @@ async fn main() -> Result<()> {
     } else {
         info!("request log writer disabled by configuration");
         RequestLogSink::disabled()
+    };
+
+    // Fails open like the request log, and for a stronger reason: nothing calls into this task, so
+    // a metrics row that is never written costs a gap in a chart and nothing else. It is also the
+    // only task here that keeps running when the backend is a Lambda, which is the whole point of
+    // sampling the machine from this process rather than from the backend.
+    let metrics_task = if config.server_metrics.enabled {
+        match ServerMetricsWriter::prepare(session.clone(), &config.server_metrics).await {
+            Ok(writer) => {
+                Some(writer.spawn(config.server_metrics.clone(), shutdown_receiver.clone()))
+            }
+            Err(prepare_error) => {
+                error!(error = %prepare_error, "server metrics collector disabled: preparation failed");
+                None
+            }
+        }
+    } else {
+        info!("server metrics collector disabled by configuration");
+        None
     };
 
     let flush_limiter = limiter.clone();
@@ -129,12 +149,20 @@ async fn main() -> Result<()> {
             .await
     });
 
-    tokio::signal::ctrl_c().await.context("failed to listen for shutdown signal")?;
+    tokio::signal::ctrl_c()
+        .await
+        .context("failed to listen for shutdown signal")?;
     info!("shutdown signal received");
     let _ = shutdown_sender.send(true);
 
     if let Err(join_error) = flush_task.await {
         error!(error = %join_error, "flush task failed");
+    }
+    // Awaited before the process exits so the window in progress gets its row written.
+    if let Some(metrics_task) = metrics_task
+        && let Err(join_error) = metrics_task.await
+    {
+        error!(error = %join_error, "server metrics task failed");
     }
     if let Err(bridge_error) = bridge_task.await.context("bridge task failed")? {
         error!(error = %bridge_error, "sse bridge stopped with an error");

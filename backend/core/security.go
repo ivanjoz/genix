@@ -94,6 +94,11 @@ type EnvStruct struct {
 	LOGS_FULL          bool
 	LOGS_DEBUG         bool
 	LOGS_ONLY_SAVE     bool
+	// LOG_ALL_REQUESTS widens user_logs from the failures it keeps by default to every finished
+	// request. Off, a request that produced no error leaves no row — which is what keeps the
+	// table small enough to scan a fifteen-minute window. Turn it on to measure traffic, and
+	// expect a row per request for as long as it stays on.
+	LOG_ALL_REQUESTS bool
 	DB_DISABLE_SSL     bool
 	DB_PORT            int32
 	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
@@ -363,6 +368,13 @@ type fileConfig struct {
 		OnlySave bool `toml:"only_save"`
 	} `toml:"logs"`
 
+	// Shares the [request_log] section with the daemon, which reads every other key in it
+	// (server_utils/src/config.rs). This one is the backend's alone: the daemon's `enabled`
+	// decides whether a record that arrives is written, this decides whether one is sent at all.
+	RequestLog struct {
+		LogAllRequests bool `toml:"log_all_requests"`
+	} `toml:"request_log"`
+
 	// Tabla de array: en el archivo va al final, con los demás [[...]].
 	Models []ModelEntry `toml:"models"`
 }
@@ -505,6 +517,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.LOGS_FULL = file.Logs.Full
 	env.LOGS_DEBUG = file.Logs.Debug
 	env.LOGS_ONLY_SAVE = file.Logs.OnlySave
+	env.LOG_ALL_REQUESTS = file.RequestLog.LogAllRequests
 }
 
 // DefaultWebpageRendererURL is the CI-published storefront renderer artifact. It is duplicated in

@@ -10,12 +10,16 @@ import (
 )
 
 const (
-	// Opcode 0x01: [opcode][company:u24][user:u24][group:u8][cpu:u16][inference:u16][hmac:8].
-	creditChargePayloadSize = 11
+	// Opcode 0x01: [opcode][company:u24][user:u24][route:u16][cpu:u16][inference:u16][hmac:8].
+	creditChargePayloadSize = 12
 
-	creditBlockBytes    = 8 * 1024
-	apiGroupSmallBytes  = 32 * 1024
-	apiGroupMediumBytes = 256 * 1024
+	creditBlockBytes = 8 * 1024
+
+	// Fourteen bits of the persisted blob's two-byte header, mirrored from
+	// server_utils/src/limiter/credits_blob.rs. Refused here rather than at the daemon so an
+	// unencodable route is a caller's error and not a rejected frame — a rejection would be
+	// indistinguishable from the limiter being down, which fails open and stops counting.
+	maxChargeRouteID = 16_383
 )
 
 var ErrCreditLimiterMissing = errors.New("credit rate limiter is not configured")
@@ -35,28 +39,6 @@ func (limit *CreditLimitExceeded) Error() string {
 		scope = "company"
 	}
 	return fmt.Sprintf("%s %s credit limit exhausted (code=%d)", scope, limit.Window, limit.Code)
-}
-
-// APIGroup assigns GET groups 0..2 and POST groups 3..5 from uncompressed payload bytes.
-func APIGroup(method string, payloadBytes int) (uint8, error) {
-	if payloadBytes < 0 {
-		return 0, errors.New("payload size cannot be negative")
-	}
-	groupOffset := uint8(0)
-	switch strings.ToUpper(method) {
-	case "GET":
-	case "POST":
-		groupOffset = 3
-	default:
-		return 0, fmt.Errorf("credit rate limiting does not support method %q", method)
-	}
-	if payloadBytes < apiGroupSmallBytes {
-		return groupOffset, nil
-	}
-	if payloadBytes <= apiGroupMediumBytes {
-		return groupOffset + 1, nil
-	}
-	return groupOffset + 2, nil
 }
 
 // APICPUCredits applies the GET/POST base charge and rounds each partial extra block up.
@@ -97,33 +79,34 @@ func InferenceCredits(inputBytes, outputBytes int) (uint16, error) {
 	return uint16(credits), nil
 }
 
-// ChargeAPIUsage calculates and submits one HTTP request/response CPU charge.
-func ChargeAPIUsage(ctx context.Context, companyID, userID int32, method string, payloadBytes int) error {
-	apiGroup, err := APIGroup(method, payloadBytes)
-	if err != nil {
-		return err
-	}
+// ChargeAPIUsage calculates and submits one HTTP request/response CPU charge, attributed to the
+// route being served.
+func ChargeAPIUsage(
+	ctx context.Context, companyID, userID int32, routeID int16, method string, payloadBytes int,
+) error {
 	cpuCredits, err := APICPUCredits(method, payloadBytes)
 	if err != nil {
 		return err
 	}
-	return chargeConfiguredCredits(ctx, companyID, userID, apiGroup, cpuCredits, 0)
+	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0)
 }
 
 type creditRateLimitIdentity struct {
 	companyID int32
 	userID    int32
-	apiGroup  uint8
+	routeID   int16
 }
 
 type creditRateLimitIdentityKey struct{}
 
-// WithCreditRateLimitIdentity attributes nested inference calls to the authenticated API request.
-func WithCreditRateLimitIdentity(ctx context.Context, companyID, userID int32, apiGroup uint8) context.Context {
+// WithCreditRateLimitIdentity attributes nested inference calls to the authenticated API request,
+// route included: what a turn spent on inference belongs to the endpoint that started it, not to a
+// bucket of its own.
+func WithCreditRateLimitIdentity(ctx context.Context, companyID, userID int32, routeID int16) context.Context {
 	return context.WithValue(ctx, creditRateLimitIdentityKey{}, creditRateLimitIdentity{
 		companyID: companyID,
 		userID:    userID,
-		apiGroup:  apiGroup,
+		routeID:   routeID,
 	})
 }
 
@@ -141,7 +124,7 @@ func ChargeInferenceUsage(ctx context.Context, inputBytes, outputBytes int) erro
 		return nil
 	}
 	return chargeConfiguredCredits(
-		ctx, identity.companyID, identity.userID, identity.apiGroup, 0, inferenceCredits,
+		ctx, identity.companyID, identity.userID, identity.routeID, 0, inferenceCredits,
 	)
 }
 
@@ -162,7 +145,7 @@ func IsCreditRateLimitError(err error) bool {
 func chargeConfiguredCredits(
 	ctx context.Context,
 	companyID, userID int32,
-	apiGroup uint8,
+	routeID int16,
 	cpuCredits, inferenceCredits uint16,
 ) error {
 	client := serverUtils()
@@ -170,7 +153,7 @@ func chargeConfiguredCredits(
 		logLine("credit rate limiter not configured, allowing request::", ErrCreditLimiterMissing)
 		return nil
 	}
-	err := client.Charge(ctx, companyID, userID, apiGroup, cpuCredits, inferenceCredits)
+	err := client.Charge(ctx, companyID, userID, routeID, cpuCredits, inferenceCredits)
 	if err == nil {
 		return nil
 	}
@@ -182,35 +165,55 @@ func chargeConfiguredCredits(
 	return nil
 }
 
-// Charge sends one authenticated frame and returns nil only for status zero.
-func (client *ServerUtilsClient) Charge(
-	ctx context.Context,
-	companyID, userID int32,
-	apiGroup uint8,
-	cpuCredits, inferenceCredits uint16,
-) error {
+// encodeCharge validates one charge and lays it out for the wire. Separate from Charge so the
+// layout can be asserted without a daemon: these twelve bytes are read by offset on the Rust side
+// (server_utils/src/limiter/protocol.rs), and a field that shifts here charges the wrong number to
+// the wrong route with nothing in either process to say so.
+//
+// Route zero is accepted, and means the request matched no generated route. Those credits are as
+// real as any other and belong in the total; refusing them would make an unnumbered handler free.
+// The ceiling it is checked against is the persisted blob's, not the route table's — see
+// maxChargeRouteID.
+func encodeCharge(
+	companyID, userID int32, routeID int16, cpuCredits, inferenceCredits uint16,
+) ([]byte, error) {
 	if companyID <= 0 || companyID > 0xFF_FFFF || userID <= 0 || userID > 0xFF_FFFF {
-		return errors.New("company and user IDs must fit positive uint24")
+		return nil, errors.New("company and user IDs must fit positive uint24")
 	}
-	if apiGroup > 5 {
-		return fmt.Errorf("API group %d is outside 0..5", apiGroup)
+	if routeID < 0 || routeID > maxChargeRouteID {
+		return nil, fmt.Errorf("route %d is outside 0..%d", routeID, maxChargeRouteID)
 	}
 	if cpuCredits == 0 && inferenceCredits == 0 {
-		return errors.New("at least one credit amount must be positive")
+		return nil, errors.New("at least one credit amount must be positive")
 	}
 
 	payload := make([]byte, creditChargePayloadSize)
 	writeUint24(payload[0:3], uint32(companyID))
 	writeUint24(payload[3:6], uint32(userID))
-	payload[6] = apiGroup
-	binary.BigEndian.PutUint16(payload[7:9], cpuCredits)
-	binary.BigEndian.PutUint16(payload[9:11], inferenceCredits)
+	binary.BigEndian.PutUint16(payload[6:8], uint16(routeID))
+	binary.BigEndian.PutUint16(payload[8:10], cpuCredits)
+	binary.BigEndian.PutUint16(payload[10:12], inferenceCredits)
+	return payload, nil
+}
+
+// Charge sends one authenticated frame and returns nil only for status zero.
+func (client *ServerUtilsClient) Charge(
+	ctx context.Context,
+	companyID, userID int32,
+	routeID int16,
+	cpuCredits, inferenceCredits uint16,
+) error {
+	payload, err := encodeCharge(companyID, userID, routeID, cpuCredits, inferenceCredits)
+	if err != nil {
+		return err
+	}
 
 	// A charge is answered without queueing, so it needs no patience beyond the round trip.
 	reply, _, err := client.request(ctx, opcodeChargeCredits, payload, chargeWait(ctx), 0, 0)
 	if err != nil {
 		return err
 	}
+
 	if reply.status == 0 {
 		return nil
 	}

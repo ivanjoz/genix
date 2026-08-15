@@ -1,24 +1,42 @@
 package server_utils
 
 import (
+	"bytes"
 	"testing"
 )
 
-func TestAPIGroupsUseDocumentedBoundaries(t *testing.T) {
-	tests := []struct {
-		method string
-		bytes  int
-		want   uint8
-	}{
-		{"GET", 32*1024 - 1, 0}, {"GET", 32 * 1024, 1}, {"GET", 256 * 1024, 1},
-		{"GET", 256*1024 + 1, 2}, {"POST", 0, 3}, {"POST", 32 * 1024, 4},
-		{"POST", 256*1024 + 1, 5},
+// These twelve bytes are the contract with the Rust decoder, which reads them by offset. The
+// vectors here and the ones in parses_the_exact_wire_offsets (limiter/protocol.rs) are the same
+// charge written from both ends.
+func TestChargePayloadMatchesTheWireOffsets(t *testing.T) {
+	payload, err := encodeCharge(0x123456, 42, 103, 300, 25)
+	if err != nil {
+		t.Fatalf("encodeCharge refused a valid charge: %v", err)
 	}
-	for _, test := range tests {
-		got, err := APIGroup(test.method, test.bytes)
-		if err != nil || got != test.want {
-			t.Fatalf("APIGroup(%q, %d) = %d, %v; want %d", test.method, test.bytes, got, err, test.want)
+
+	want := []byte{
+		0x12, 0x34, 0x56, // company
+		0x00, 0x00, 0x2A, // user
+		0x00, 0x67, // route 103
+		0x01, 0x2C, // cpu 300
+		0x00, 0x19, // inference 25
+	}
+	if !bytes.Equal(payload, want) {
+		t.Fatalf("charge payload = % X; want % X", payload, want)
+	}
+}
+
+// Route zero is a request that matched no generated route. Its credits are real, so refusing it
+// would make an unnumbered handler free; the ceiling it is checked against is the blob's, not the
+// route table's, because this side must not go stale when a handler is added.
+func TestChargeAcceptsUnknownRoutesAndRefusesUnencodableOnes(t *testing.T) {
+	for _, routeID := range []int16{0, 1, maxChargeRouteID} {
+		if _, err := encodeCharge(1, 1, routeID, 1, 0); err != nil {
+			t.Fatalf("route %d was refused: %v", routeID, err)
 		}
+	}
+	if _, err := encodeCharge(1, 1, maxChargeRouteID+1, 1, 0); err == nil {
+		t.Fatal("a route past the encoding ceiling was accepted")
 	}
 }
 

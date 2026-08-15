@@ -164,10 +164,10 @@ impl Client {
     }
 
     fn charge_payload() -> Vec<u8> {
-        let mut payload = Vec::with_capacity(11);
+        let mut payload = Vec::with_capacity(12);
         payload.extend_from_slice(&[0, 0, 1]);
         payload.extend_from_slice(&[0, 0, 1]);
-        payload.push(0);
+        payload.extend_from_slice(&1_u16.to_be_bytes());
         payload.extend_from_slice(&1_u16.to_be_bytes());
         payload.extend_from_slice(&0_u16.to_be_bytes());
         payload
@@ -207,7 +207,9 @@ async fn a_request_log_is_not_answered_and_does_not_desynchronize_the_stream() {
     let mut client = Client::connect(&server).await;
 
     client.write_request_log(&request_log_payload(2)).await;
-    client.write_frame(OPCODE_CHARGE, &Client::charge_payload()).await;
+    client
+        .write_frame(OPCODE_CHARGE, &Client::charge_payload())
+        .await;
 
     let (correlation, status, _) = timeout(Duration::from_secs(2), client.read_reply())
         .await
@@ -223,7 +225,9 @@ async fn a_request_log_with_no_errors_is_accepted() {
     let mut client = Client::connect(&server).await;
 
     client.write_request_log(&request_log_payload(0)).await;
-    client.write_frame(OPCODE_CHARGE, &Client::charge_payload()).await;
+    client
+        .write_frame(OPCODE_CHARGE, &Client::charge_payload())
+        .await;
 
     let (correlation, status, _) = timeout(Duration::from_secs(2), client.read_reply())
         .await
@@ -241,7 +245,9 @@ async fn a_malformed_request_log_does_not_close_the_connection() {
 
     // Declares its true length, but the payload is far shorter than the header requires.
     client.write_request_log(&[0_u8; 4]).await;
-    client.write_frame(OPCODE_CHARGE, &Client::charge_payload()).await;
+    client
+        .write_frame(OPCODE_CHARGE, &Client::charge_payload())
+        .await;
 
     let (correlation, status, _) = timeout(Duration::from_secs(2), client.read_reply())
         .await
@@ -280,7 +286,9 @@ async fn consecutive_request_logs_stay_in_frame() {
     for errors in [0_u8, 1, 4, 2] {
         client.write_request_log(&request_log_payload(errors)).await;
     }
-    client.write_frame(OPCODE_CHARGE, &Client::charge_payload()).await;
+    client
+        .write_frame(OPCODE_CHARGE, &Client::charge_payload())
+        .await;
 
     let (correlation, status, _) = timeout(Duration::from_secs(2), client.read_reply())
         .await

@@ -116,10 +116,15 @@ max_total_waiters = 4096     # esperas encoladas en total
 max_lease_ms      = 60000    # techo aplicado al arrendamiento que pide el cliente
 
 # ─── Registro de peticiones (server_utils/) ────────────────────────────────
-# Mismo proceso y mismo puerto: el opcode 0x04 escribe una fila por petición
-# terminada en user_logs, y una por línea de código distinta que falló en
+# Mismo proceso y mismo puerto: el opcode 0x04 escribe en user_logs una fila por
+# petición FALLIDA, y una por línea de código distinta que falló en
 # request_errors. El mensaje completo y el stack siguen estando en CloudWatch —
 # de ellos aquí sólo queda qué línea falló y un adelanto de lo que dijo.
+#
+# Una petición que no registró ningún error no deja fila: user_logs responde
+# "qué se rompió, en qué ruta, de qué empresa", y para esa pregunta una fila por
+# petición correcta no aporta nada y se paga en cada petición. El gasto por ruta
+# —que sí interesa de todas— se agrega aparte en credit_usage.
 #
 # A diferencia del limiter, esta mitad falla abierta: si ScyllaDB no responde,
 # las filas se descartan con un warning. Tumbar el proceso se llevaría también
@@ -135,6 +140,45 @@ max_batch              = 128   # filas por batch unlogged
 error_cache_seconds    = 600   # si esa línea ya se escribió hace menos, no se reescribe
 error_cache_entries    = 20000 # techo del mapa de supresión
 queue_capacity         = 8192  # pasado esto se descartan: loguear nunca frena una petición
+# La única clave de esta sección que lee el backend Go y no el daemon: true guarda
+# TODA petición terminada, no sólo las fallidas. El filtro está en Go a propósito —
+# así una petición correcta no gasta ni trama, ni HMAC, ni sitio en la cola. Es para
+# medir tráfico un rato; mientras esté activo es una fila por petición.
+log_all_requests       = false
+
+# ─── Métricas del servidor (server_utils/) ─────────────────────────────────
+# Una fila cada 5 segundos en server_metrics con lo que estaba haciendo la máquina:
+# CPU, memoria y disco del host, red, y memoria + CPU de cada servicio. Lo muestrea
+# este daemon y no el backend porque el backend puede ser un Lambda: server_utils es
+# el único proceso que siempre está en la caja, y por tanto el único que puede
+# prometer una serie continua.
+#
+# CADA VALOR ES UN PICO, no un promedio: se muestrea 1 vez por segundo y la fila
+# guarda el máximo de los 5. Así un pico de un segundo sobrevive en una fila de
+# cinco — y por eso mismo estas filas NO SE PUEDEN SUMAR: sumar net_rx_rate de un
+# día exagera los bytes reales, porque cada valor es un pico que representa 5s.
+#
+# -1 en una columna significa "no medido": el servicio no tiene cgroup en esta
+# máquina (el caso del backend en Lambda) o fallaron las 5 lecturas de esa ventana.
+# Es un centinela y no un null porque las columnas son int16 donde 0 es un valor real.
+#
+# Falla abierta como [request_log]: una fila perdida es un hueco en un gráfico.
+[server_metrics]
+enabled           = true
+sample_seconds    = 1     # cada cuánto se muestrea
+row_seconds       = 5     # cada cuántos segundos se escribe el máximo de las muestras;
+                          # es lo que SIGNIFICA la clave de clustering, así que debe
+                          # coincidir con ServerMetricSlotSeconds en el Go que la lee
+ttl_days          = 30    # la partición es el día: expira entero
+disk_mount        = "/"
+network_interface = ""    # vacío = la primera interfaz que no sea lo
+# Units de systemd bajo system.slice, de donde salen memoria (memory.stat → anon,
+# sin caché de páginas) y CPU (cpu.stat → usage_usec) de cada servicio. Una unit
+# ausente no es un error: son sus dos columnas en -1.
+backend_unit      = "genix.service"
+server_utils_unit = "genix-server-utils.service"
+search_unit       = "genixsearch.service"
+scylla_unit       = "scylla-server.service"
 
 # ─── Registro público de empresas ──────────────────────────────────────────
 # Estos endpoints no llevan token, así que nunca pasan por el credit limiter:
@@ -271,3 +315,19 @@ id        = "deepseek/deepseek-v4-flash-0731"
 provider  = "openrouter"
 reasoning = { effort = "low", exclude = true }
 routing   = { sort = "throughput" }
+
+# Modelos que generan imágenes vectoriales (SVG) para los assets del sitio. Tabla aparte de
+# [[models]] a propósito: aquello es el registro de modelos de chat del agente — su orden decide
+# el default del selector — y estos no son modelos de chat (no aceptan parámetros de chat y
+# devuelven un archivo, no un mensaje). Los consume el script generate_vector_image, que llama
+# a https://openrouter.ai/api/v1/images; el backend no los lee.
+# El orden decide el default: la primera entrada es la que se usa sin -model.
+#   provider — sólo "openrouter" tiene este endpoint; vacío = openrouter.
+[[image_models]]
+id       = "recraft/recraft-v4.1-vector"
+provider = "openrouter"
+
+# Misma familia, mayor resolución y ~3,7× el precio por imagen.
+[[image_models]]
+id       = "recraft/recraft-v4.1-pro-vector"
+provider = "openrouter"

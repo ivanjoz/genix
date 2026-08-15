@@ -42,6 +42,22 @@ const DEFAULT_REQUEST_LOG_ERROR_CACHE_ENTRIES: usize = 20_000;
 /// reason a request, or this daemon, slows down.
 const DEFAULT_REQUEST_LOG_QUEUE_CAPACITY: usize = 8_192;
 
+/// One sub-sample a second, and the peak of five of them per row. Both mirror the Go side:
+/// `ServerMetricSlotSeconds` in backend/core/types/server_metrics.go is 5, and the clustering key
+/// of every stored row already means that. Changing `row_seconds` alone would leave the two sides
+/// disagreeing about what slot 4 covers.
+const DEFAULT_SERVER_METRICS_SAMPLE_SECONDS: u64 = 1;
+const DEFAULT_SERVER_METRICS_ROW_SECONDS: u64 = 5;
+/// A month of history, matching the request log. The partition is the day, so it expires whole.
+const DEFAULT_SERVER_METRICS_TTL_DAYS: u64 = 30;
+/// A row is 17280 slots a day of int16s, so the useful floor is set by the int16 key rather than by
+/// storage: fewer than three seconds a slot overflows it.
+const MINIMUM_SERVER_METRICS_ROW_SECONDS: u64 = 3;
+const DEFAULT_SERVER_METRICS_BACKEND_UNIT: &str = "genix.service";
+const DEFAULT_SERVER_METRICS_SERVER_UTILS_UNIT: &str = "genix-server-utils.service";
+const DEFAULT_SERVER_METRICS_SEARCH_UNIT: &str = "genixsearch.service";
+const DEFAULT_SERVER_METRICS_SCYLLA_UNIT: &str = "scylla-server.service";
+
 #[derive(Clone, Debug)]
 pub struct DatabaseConfig {
     pub host: String,
@@ -72,6 +88,28 @@ pub struct AppConfig {
     pub locks: LockLimits,
     pub bridge: BridgeConfig,
     pub request_log: RequestLogConfig,
+    pub server_metrics: ServerMetricsConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct ServerMetricsConfig {
+    /// Off means no sampling loop at all. Unlike the request log there is no client to keep from
+    /// breaking here — nothing calls into this, it only ticks.
+    pub enabled: bool,
+    pub sample_interval: Duration,
+    /// Seconds per stored row, which is also what the clustering key counts. Kept as a number
+    /// rather than a Duration because it is arithmetic on the key, not a delay.
+    pub row_seconds: i64,
+    pub row_ttl: Duration,
+    pub disk_mount: String,
+    /// Empty means the first interface that is not `lo`.
+    pub network_interface: String,
+    /// systemd units under `system.slice`. An absent one is not an error: the backend has no unit
+    /// at all when it runs on Lambda, which is the case the `-1` sentinel exists for.
+    pub backend_unit: String,
+    pub server_utils_unit: String,
+    pub search_unit: String,
+    pub scylla_unit: String,
 }
 
 #[derive(Clone, Debug)]
@@ -113,7 +151,8 @@ impl AppConfig {
             .ok()
             .filter(|port| *port > 0)
             .context("server_utils.port must be a port number between 1 and 65535")?;
-        let listen_octets = if optional_bool(&config, "SERVER_UTILS_PUBLIC", "server_utils.public") {
+        let listen_octets = if optional_bool(&config, "SERVER_UTILS_PUBLIC", "server_utils.public")
+        {
             [0, 0, 0, 0]
         } else {
             [127, 0, 0, 1]
@@ -171,12 +210,9 @@ impl AppConfig {
 
         let lock_max_keys = optional_usize(&config, "LOCK_MAX_KEYS", "lock.max_keys")?
             .unwrap_or(DEFAULT_LOCK_MAX_KEYS);
-        let lock_max_total_waiters = optional_u64(
-            &config,
-            "LOCK_MAX_TOTAL_WAITERS",
-            "lock.max_total_waiters",
-        )?
-        .unwrap_or(DEFAULT_LOCK_MAX_TOTAL_WAITERS);
+        let lock_max_total_waiters =
+            optional_u64(&config, "LOCK_MAX_TOTAL_WAITERS", "lock.max_total_waiters")?
+                .unwrap_or(DEFAULT_LOCK_MAX_TOTAL_WAITERS);
         let lock_max_lease_ms = optional_u64(&config, "LOCK_MAX_LEASE_MS", "lock.max_lease_ms")?
             .unwrap_or(DEFAULT_LOCK_MAX_LEASE_MS);
         if lock_max_keys == 0 || lock_max_total_waiters == 0 || lock_max_lease_ms == 0 {
@@ -244,10 +280,10 @@ impl AppConfig {
             queue_capacity: request_log_queue_capacity,
         };
 
+        let server_metrics = load_server_metrics(&config)?;
+
         let bridge_port = optional_u64(&config, "SSE_BRIDGE_PORT", "sse_bridge.port")?
-            .map(|port| {
-                u16::try_from(port).context("sse_bridge.port must be a valid TCP port")
-            })
+            .map(|port| u16::try_from(port).context("sse_bridge.port must be a valid TCP port"))
             .transpose()?
             .unwrap_or(DEFAULT_BRIDGE_PORT);
         if bridge_port == 0 {
@@ -279,8 +315,93 @@ impl AppConfig {
             policy,
             locks,
             request_log,
+            server_metrics,
         })
     }
+}
+
+/// Every value defaults, like the request log's: a guessed sampling interval is a sampling
+/// interval, not a guessed quota. An absent `[server_metrics]` section means "on, with these".
+fn load_server_metrics(config: &Table) -> Result<ServerMetricsConfig> {
+    let sample_seconds = optional_u64(
+        config,
+        "SERVER_METRICS_SAMPLE_SECONDS",
+        "server_metrics.sample_seconds",
+    )?
+    .unwrap_or(DEFAULT_SERVER_METRICS_SAMPLE_SECONDS);
+    let row_seconds = optional_u64(
+        config,
+        "SERVER_METRICS_ROW_SECONDS",
+        "server_metrics.row_seconds",
+    )?
+    .unwrap_or(DEFAULT_SERVER_METRICS_ROW_SECONDS);
+    let ttl_days = optional_u64(config, "SERVER_METRICS_TTL_DAYS", "server_metrics.ttl_days")?
+        .unwrap_or(DEFAULT_SERVER_METRICS_TTL_DAYS);
+
+    // row_seconds decides what the clustering key MEANS, so it is validated rather than trusted.
+    // A value that does not divide the day leaves a short last slot whose peak covers a different
+    // span than every other row; below three seconds the slot count overflows the int16 key.
+    if sample_seconds == 0 || ttl_days == 0 {
+        bail!("server_metrics.sample_seconds and ttl_days must be positive");
+    }
+    if row_seconds < MINIMUM_SERVER_METRICS_ROW_SECONDS || 86_400 % row_seconds != 0 {
+        bail!(
+            "server_metrics.row_seconds must divide 86400 evenly and be at least {MINIMUM_SERVER_METRICS_ROW_SECONDS}"
+        );
+    }
+    if row_seconds % sample_seconds != 0 || sample_seconds > row_seconds {
+        bail!("server_metrics.sample_seconds must divide server_metrics.row_seconds evenly");
+    }
+    // Scylla's TTL is seconds in an i32, so a ttl_days that overflows it would be silently
+    // truncated into a retention nobody asked for.
+    let ttl_seconds = ttl_days
+        .checked_mul(86_400)
+        .filter(|seconds| *seconds <= i32::MAX as u64)
+        .context("server_metrics.ttl_days is too large for a ScyllaDB TTL")?;
+
+    let unit_name = |env_key: &str, toml_path: &str, default: &str| {
+        optional_string(config, env_key, toml_path).unwrap_or_else(|| default.to_owned())
+    };
+
+    Ok(ServerMetricsConfig {
+        enabled: optional_string(config, "SERVER_METRICS_ENABLED", "server_metrics.enabled")
+            .is_none_or(|value| value == "1" || value.eq_ignore_ascii_case("true")),
+        sample_interval: Duration::from_secs(sample_seconds),
+        row_seconds: row_seconds as i64,
+        row_ttl: Duration::from_secs(ttl_seconds),
+        disk_mount: optional_string(
+            config,
+            "SERVER_METRICS_DISK_MOUNT",
+            "server_metrics.disk_mount",
+        )
+        .unwrap_or_else(|| "/".to_owned()),
+        network_interface: optional_string(
+            config,
+            "SERVER_METRICS_NETWORK_INTERFACE",
+            "server_metrics.network_interface",
+        )
+        .unwrap_or_default(),
+        backend_unit: unit_name(
+            "SERVER_METRICS_BACKEND_UNIT",
+            "server_metrics.backend_unit",
+            DEFAULT_SERVER_METRICS_BACKEND_UNIT,
+        ),
+        server_utils_unit: unit_name(
+            "SERVER_METRICS_SERVER_UTILS_UNIT",
+            "server_metrics.server_utils_unit",
+            DEFAULT_SERVER_METRICS_SERVER_UTILS_UNIT,
+        ),
+        search_unit: unit_name(
+            "SERVER_METRICS_SEARCH_UNIT",
+            "server_metrics.search_unit",
+            DEFAULT_SERVER_METRICS_SEARCH_UNIT,
+        ),
+        scylla_unit: unit_name(
+            "SERVER_METRICS_SCYLLA_UNIT",
+            "server_metrics.scylla_unit",
+            DEFAULT_SERVER_METRICS_SCYLLA_UNIT,
+        ),
+    })
 }
 
 fn load_scope_limits(config: &Table, env_scope: &str, toml_scope: &str) -> Result<ScopeLimits> {
@@ -492,6 +613,40 @@ mod tests {
 
         let private: Table = toml::from_str("[server_utils]\nport = 14013").unwrap();
         assert!(!optional_bool(&private, "IGNORED", "server_utils.public"));
+    }
+
+    /// The section is optional, and its defaults are the deployment `configure_db.py` and
+    /// `configure_server*.py` actually produce.
+    #[test]
+    fn server_metrics_defaults_to_the_installed_unit_names() {
+        let metrics = load_server_metrics(&Table::new()).unwrap();
+        assert!(metrics.enabled);
+        assert_eq!(metrics.row_seconds, 5);
+        assert_eq!(metrics.sample_interval, Duration::from_secs(1));
+        assert_eq!(metrics.backend_unit, "genix.service");
+        assert_eq!(metrics.scylla_unit, "scylla-server.service");
+        assert!(metrics.network_interface.is_empty());
+    }
+
+    /// row_seconds is the meaning of the clustering key, so the values that would corrupt it are
+    /// refused at startup rather than discovered as a day with a strange last row.
+    #[test]
+    fn a_row_width_that_does_not_divide_the_day_is_rejected() {
+        let uneven: Table = toml::from_str("[server_metrics]\nrow_seconds = 7").unwrap();
+        assert!(load_server_metrics(&uneven).is_err());
+
+        // Under three seconds the 17280-slot key stops fitting an int16.
+        let too_fine: Table = toml::from_str("[server_metrics]\nrow_seconds = 2").unwrap();
+        assert!(load_server_metrics(&too_fine).is_err());
+
+        // A sub-sample longer than the window it feeds would leave rows with no samples at all.
+        let mismatched: Table =
+            toml::from_str("[server_metrics]\nrow_seconds = 5\nsample_seconds = 2").unwrap();
+        assert!(load_server_metrics(&mismatched).is_err());
+
+        let valid: Table =
+            toml::from_str("[server_metrics]\nrow_seconds = 10\nsample_seconds = 5").unwrap();
+        assert_eq!(load_server_metrics(&valid).unwrap().row_seconds, 10);
     }
 
     #[test]

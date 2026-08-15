@@ -44,7 +44,6 @@ var (
 	ChargeInferenceUsage        = server_utils.ChargeInferenceUsage
 	WithCreditRateLimitIdentity = server_utils.WithCreditRateLimitIdentity
 	IsCreditRateLimitError      = server_utils.IsCreditRateLimitError
-	APIGroup                    = server_utils.APIGroup
 	APICPUCredits               = server_utils.APICPUCredits
 	InferenceCredits            = server_utils.InferenceCredits
 )

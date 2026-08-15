@@ -10,6 +10,7 @@
   import { security } from '$libs/ui-runtime.svelte';
   import { getPublicCompanyName, sendUserLogin, type ILogin } from '$services/login';
   import RegistrationModal from './RegistrationModal.svelte';
+  import { featureSections } from './features';
 
   const REGISTRATION_MODAL_ID = 71;
   const ui = useUI();
@@ -21,36 +22,30 @@
     { id: 'contact', label: 'Contact|Contacto' },
   ];
 
-  const featureCards = [
+  // The pitch above the feature lists. `pending` marks a claim the product does not deliver yet, so
+  // this section keeps the same promise as the one below it: nothing planned is sold as finished.
+  const platformHighlights = [
     {
-      icon: 'icon-[fa--cubes]',
-      title: 'Products and customers|Productos y clientes',
-      description: 'Manage catalogs, categories, brands, images, customers, suppliers, and Excel imports from one place.|Gestione catálogos, categorías, marcas, imágenes, clientes, proveedores e importaciones de Excel desde un solo lugar.',
+      icon: 'icon-[fa--sitemap]',
+      title: 'Connected operations|Operaciones conectadas',
+      description: 'Sales, stock, purchasing, cash, customers, and the online store share the same data. Register one sale and the stock, the cash register, and the report move on their own.|Ventas, stock, compras, caja, clientes y tienda en línea comparten los mismos datos. Registre una venta y el stock, la caja y el reporte se mueven solos.',
+      points: [] as { text: string; pending?: boolean }[],
     },
     {
-      icon: 'icon-[fa--truck]',
-      title: 'Inventory and purchasing|Inventario y compras',
-      description: 'Control stock by warehouse, lots, serial numbers, movements, purchase orders, receipts, and replenishment planning.|Controle stock por almacén, lotes, series, movimientos, órdenes de compra, recepciones y planificación de reposición.',
+      icon: 'icon-[fa--bar-chart]',
+      title: 'Detailed reporting and tracking|Reportería y seguimiento detallado',
+      description: '',
+      points: [
+        { text: 'Dashboards that start from the whole picture and drill into the detail with one click.|Dashboards que parten de lo general y bajan al detalle con un click.' },
+        { text: 'Projected cash flow and stock alerts: the system gets ahead of the problem.|Flujos de caja proyectados y alertas de stock: el sistema se adelanta al problema.', pending: true },
+        { text: 'Permission and access management, with a complete log per user.|Gestión de permisos y accesos, con registro completo por usuario.' },
+      ],
     },
     {
-      icon: 'icon-[fa--shopping-cart]',
-      title: 'Sales and point of sale|Ventas y punto de venta',
-      description: 'Create orders, register payments and deliveries, and follow performance through reports, charts, and sales planning.|Cree pedidos, registre pagos y entregas, y siga el rendimiento con reportes, gráficos y planificación de ventas.',
-    },
-    {
-      icon: 'icon-[fa--line-chart]',
-      title: 'Cash and finance|Caja y finanzas',
-      description: 'Operate cash and bank registers, income, expenses, transfers, reconciliations, schedules, and partial payments.|Opere cajas y bancos, ingresos, gastos, transferencias, conciliaciones, programaciones y pagos parciales.',
-    },
-    {
-      icon: 'icon-[fa--globe]',
-      title: 'E-commerce|Comercio electrónico',
-      description: 'Design and deploy a storefront with product search, catalog, cart, payment UI, shipping configuration, and custom domains.|Diseñe y publique una tienda con búsqueda de productos, catálogo, carrito, interfaz de pagos, configuración de envíos y dominios propios.',
-    },
-    {
-      icon: 'icon-[fa--magic]',
-      title: 'AI, security, and operations|IA, seguridad y operaciones',
-      description: 'Use AI-assisted page building and ERP navigation with access profiles, automated jobs, and tenant backups.|Use creación de páginas y navegación ERP asistidas por IA, con perfiles de acceso, tareas automatizadas y copias de seguridad por empresa.',
+      icon: 'icon-[fa--life-ring]',
+      title: 'AI assistance and support|Asistencia por IA y soporte',
+      description: 'The AI assistant operates the ERP for you without leaving the page. Found a bug? Leave your request and an agent takes care of it in less than 24 hours.|El asistente de IA opera el ERP por usted sin salir de la página. ¿Algún error? Deje su solicitud y un agente la atiende en menos de 24 horas.',
+      points: [] as { text: string; pending?: boolean }[],
     },
   ];
 
@@ -252,7 +247,7 @@
       class="border-b border-white/15 bg-slate-950/60 px-14 py-10 shadow-[0_8px_32px_rgba(15,23,42,0.18)] backdrop-blur-2xl md:px-24"
       aria-label={tr('Primary navigation|Navegación principal')}
     >
-      <div class="mx-auto flex max-w-1240 items-center justify-between gap-12">
+      <div class="mx-auto flex max-w-1320 items-center justify-between gap-12">
         <button
           class="flex shrink-0 items-center focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
           aria-label={tr('Go to the welcome section|Ir a la sección de bienvenida')}
@@ -311,7 +306,7 @@
       </div>
 
       {#if mobileMenuOpen}
-        <div id="welcome-mobile-menu" class="mx-auto mt-10 grid max-w-1240 gap-4 border-t border-white/15 pt-10 lg:hidden">
+        <div id="welcome-mobile-menu" class="mx-auto mt-10 grid max-w-1320 gap-4 border-t border-white/15 pt-10 lg:hidden">
           {#each navigationItems as navigationItem}
             <button
               class="rounded-[9px] px-12 py-10 text-left text-white/80 hover:bg-white/10 hover:text-white"
@@ -461,59 +456,116 @@
     </section>
 
     <section class="px-16 py-72 md:px-28 md:py-96" aria-labelledby="what-is-genix">
-      <div class="mx-auto max-w-1120 text-center">
-        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Built for practical growth|Creado para crecer de forma práctica" /></p>
+      <div class="mx-auto max-w-1320 text-center">
+        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Your business, under control|Su negocio bajo control" /></p>
         <h2 id="what-is-genix" class="mx-auto mt-12 max-w-760 text-3xl font-bold leading-tight text-slate-950 md:text-4xl">
-          <T text="One platform, from the counter to the online store.|Una plataforma, desde el mostrador hasta la tienda en línea." />
+          <T text="Your business under control, a few clicks away.|El control de su empresa a pocos clicks." />
         </h2>
         <p class="mx-auto mt-16 max-w-760 text-lg leading-[1.6] text-slate-600">
-          <T text="Genix is an ERP and e-commerce platform for small businesses. It can run in the cloud or on your own infrastructure, while keeping business data portable and under your control.|Genix es una plataforma ERP y de comercio electrónico para pequeñas empresas. Puede funcionar en la nube o en su propia infraestructura, manteniendo los datos del negocio portables y bajo su control." />
+          <T text="Stop chasing your own information across notebooks, spreadsheets, and chats. What happened at the counter, in the warehouse, and in the cash register is one click away, up to date and in one place.|Deje de perseguir su propia información entre cuadernos, hojas de cálculo y conversaciones. Lo que pasó en el mostrador, el almacén y la caja está a un click, al día y en un solo lugar." />
         </p>
 
         <div class="mt-42 grid gap-14 md:grid-cols-3">
-          <article class="rounded-[18px] border border-slate-200 bg-white p-24 text-left shadow-sm">
-            <i class="icon-[fa--sitemap] text-2xl text-indigo-600" aria-hidden="true"></i>
-            <h3 class="mt-16 text-xl font-semibold"><T text="Connected operations|Operaciones conectadas" /></h3>
-            <p class="mt-8 leading-[1.55] text-slate-600"><T text="Sales, stock, purchasing, cash, customers, and online commerce share one operational view.|Ventas, stock, compras, caja, clientes y comercio electrónico comparten una sola visión operativa." /></p>
-          </article>
-          <article class="rounded-[18px] border border-slate-200 bg-white p-24 text-left shadow-sm">
-            <i class="icon-[fa--server] text-2xl text-indigo-600" aria-hidden="true"></i>
-            <h3 class="mt-16 text-xl font-semibold"><T text="Flexible deployment|Implementación flexible" /></h3>
-            <p class="mt-8 leading-[1.55] text-slate-600"><T text="Choose cloud, self-hosted, or a compact single-binary installation as your business requires.|Elija nube, autohospedaje o una instalación compacta en un solo binario, según las necesidades de su empresa." /></p>
-          </article>
-          <article class="rounded-[18px] border border-slate-200 bg-white p-24 text-left shadow-sm">
-            <i class="icon-[fa--shield] text-2xl text-indigo-600" aria-hidden="true"></i>
-            <h3 class="mt-16 text-xl font-semibold"><T text="Your data stays yours|Sus datos siguen siendo suyos" /></h3>
-            <p class="mt-8 leading-[1.55] text-slate-600"><T text="Tenant isolation, access profiles, and complete backup exports make ownership a product requirement.|El aislamiento por empresa, los perfiles de acceso y las copias de seguridad completas convierten la propiedad de datos en un requisito del producto." /></p>
-          </article>
-        </div>
-      </div>
-    </section>
-
-    <section id="features" class="scroll-mt-110 bg-white px-16 py-72 md:px-28 md:py-96" aria-labelledby="features-title">
-      <div class="mx-auto max-w-1120">
-        <div class="max-w-720">
-          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Capabilities|Funcionalidades" /></p>
-          <h2 id="features-title" class="mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="The essential workflows in one system.|Los flujos esenciales en un solo sistema." /></h2>
-          <p class="mt-14 text-lg leading-[1.6] text-slate-600"><T text="Start with daily operations and expand into planning, automation, and digital commerce as your business grows.|Comience con las operaciones diarias y avance hacia la planificación, automatización y comercio digital a medida que su empresa crece." /></p>
-        </div>
-
-        <div class="mt-40 grid gap-14 md:grid-cols-2 lg:grid-cols-3">
-          {#each featureCards as featureCard}
-            <article class="group rounded-[18px] border border-slate-200 bg-slate-50 p-22 transition hover:-translate-y-2 hover:border-indigo-200 hover:bg-white hover:shadow-xl hover:shadow-indigo-950/8">
-              <div class="flex size-44 items-center justify-center rounded-[12px] bg-indigo-100 text-indigo-700 transition group-hover:bg-indigo-600 group-hover:text-white">
-                <i class="{featureCard.icon} text-xl" aria-hidden="true"></i>
-              </div>
-              <h3 class="mt-18 text-xl font-semibold text-slate-950"><T text={featureCard.title} /></h3>
-              <p class="mt-9 leading-[1.55] text-slate-600"><T text={featureCard.description} /></p>
+          {#each platformHighlights as platformHighlight}
+            <article class="rounded-[18px] border border-slate-200 bg-white p-24 text-left shadow-sm">
+              <i class="{platformHighlight.icon} text-2xl text-indigo-600" aria-hidden="true"></i>
+              <h3 class="mt-16 text-xl font-semibold"><T text={platformHighlight.title} /></h3>
+              {#if platformHighlight.description}
+                <p class="mt-8 leading-[1.55] text-slate-600"><T text={platformHighlight.description} /></p>
+              {:else}
+                <ul class="mt-12 grid gap-9">
+                  {#each platformHighlight.points as highlightPoint}
+                    <li class="flex gap-9 leading-[1.5] {highlightPoint.pending ? 'text-slate-500' : 'text-slate-600'}">
+                      <i
+                        class="{highlightPoint.pending ? 'icon-[fa--clock-o] text-amber-500' : 'icon-[fa--check] text-indigo-600'} mt-5 shrink-0"
+                        aria-hidden="true"
+                      ></i>
+                      <span>
+                        <span class="sr-only">{highlightPoint.pending ? tr('Coming soon|Próximamente') : tr('Available today|Disponible hoy')}: </span>
+                        <T text={highlightPoint.text} />
+                      </span>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
             </article>
           {/each}
         </div>
       </div>
     </section>
 
+    <section id="features" class="scroll-mt-110 bg-white" aria-labelledby="features-title">
+      <div class="mx-auto max-w-1320 px-16 pb-40 pt-72 md:px-28 md:pb-48 md:pt-96">
+        <div class="max-w-760">
+          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Capabilities|Funcionalidades" /></p>
+          <h2 id="features-title" class="mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Everything your business needs, in one system.|Todo lo que su negocio necesita, en un solo sistema." /></h2>
+          <p class="mt-14 text-lg leading-[1.6] text-slate-600"><T text="Genix covers the daily life of a small business — selling, buying, producing, and controlling stock and cash — and grows with you into planning, accounting, and online sales.|Genix cubre el día a día de una micro o pequeña empresa: vender, comprar, producir, controlar el stock y la caja, y crece con usted hacia la planificación, la contabilidad y la venta en línea." /></p>
+          <!-- The product is unfinished on purpose and says so: the legend explains both marks before
+               the first list, so a planned item is never read as something that already works. -->
+          <p class="mt-12 leading-[1.55] text-slate-600"><T text="We are building it in the open. Each capability below carries its own mark.|Estamos construyendo el producto a la vista. Cada funcionalidad de abajo lleva su propia marca." /></p>
+          <div class="mt-16 flex flex-wrap gap-x-20 gap-y-10 text-sm">
+            <span class="flex items-center gap-8 rounded-full border border-slate-200 bg-slate-50 px-12 py-6 text-slate-700">
+              <i class="icon-[fa--check] text-indigo-600" aria-hidden="true"></i><T text="Available today|Disponible hoy" />
+            </span>
+            <span class="flex items-center gap-8 rounded-full border border-slate-200 bg-slate-50 px-12 py-6 text-slate-700">
+              <i class="icon-[fa--clock-o] text-amber-500" aria-hidden="true"></i><T text="Coming soon|Próximamente" />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {#each featureSections as featureSection, sectionIndex}
+        <article
+          id={featureSection.id}
+          class="scroll-mt-110 border-t border-slate-200 px-16 py-44 md:px-28 md:py-60 {sectionIndex % 2 === 0 ? 'bg-slate-50' : 'bg-white'}"
+          aria-labelledby="{featureSection.id}-title"
+        >
+          <!-- The illustration alternates sides, so the column template flips with it: moving the
+               image with `order` alone would leave the text in the narrow 360px track. -->
+          <div
+            class="mx-auto grid max-w-1320 items-center gap-28 lg:gap-40 {sectionIndex % 2 === 1
+              ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)]'
+              : 'lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)]'}"
+          >
+            <!-- Decorative: every claim the illustration makes is already written in the list beside it.
+                 The square box is reserved by CSS so the lazy load shifts nothing, and `object-contain`
+                 letterboxes the one illustration that is 3:2 instead of stretching it. -->
+            <img
+              class="mx-auto aspect-square w-full max-w-320 object-contain lg:max-w-400 {sectionIndex % 2 === 1 ? 'lg:order-2' : ''}"
+              src={featureSection.illustration}
+              alt=""
+              loading="lazy"
+            />
+            <div>
+              <div class="flex items-center gap-12">
+                <div class="flex size-44 shrink-0 items-center justify-center rounded-[12px] bg-indigo-100 text-indigo-700">
+                  <i class="{featureSection.icon} text-xl" aria-hidden="true"></i>
+                </div>
+                <h3 id="{featureSection.id}-title" class="text-2xl font-semibold text-slate-950"><T text={featureSection.title} /></h3>
+              </div>
+              <p class="mt-14 leading-[1.6] text-slate-600"><T text={featureSection.lead} /></p>
+              <ul class="mt-20 grid gap-11 sm:grid-cols-2 sm:gap-x-20">
+                {#each featureSection.available as availableFeature}
+                  <li class="flex gap-9 leading-[1.5] text-slate-700">
+                    <i class="icon-[fa--check] mt-5 shrink-0 text-indigo-600" aria-hidden="true"></i>
+                    <span><span class="sr-only">{tr('Available today|Disponible hoy')}: </span><T text={availableFeature} /></span>
+                  </li>
+                {/each}
+                {#each featureSection.pending as pendingFeature}
+                  <li class="flex gap-9 leading-[1.5] text-slate-500">
+                    <i class="icon-[fa--clock-o] mt-5 shrink-0 text-amber-500" aria-hidden="true"></i>
+                    <span><span class="sr-only">{tr('Coming soon|Próximamente')}: </span><T text={pendingFeature} /></span>
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          </div>
+        </article>
+      {/each}
+    </section>
+
     <section id="roadmap" class="scroll-mt-110 px-16 py-72 md:px-28 md:py-96" aria-labelledby="roadmap-title">
-      <div class="mx-auto max-w-1120">
+      <div class="mx-auto max-w-1320">
         <div class="text-center">
           <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Transparent roadmap|Roadmap transparente" /></p>
           <h2 id="roadmap-title" class="mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="What works today, and what comes next.|Lo que funciona hoy y lo que viene después." /></h2>
@@ -542,7 +594,7 @@
     </section>
 
     <section id="contact" class="scroll-mt-110 px-16 pb-80 pt-24 md:px-28 md:pb-100 md:pt-40" aria-labelledby="contact-title">
-      <div class="mx-auto grid max-w-1120 overflow-hidden rounded-[26px] bg-indigo-950 shadow-2xl shadow-indigo-950/15 lg:grid-cols-[0.85fr_1.15fr]">
+      <div class="mx-auto grid max-w-1320 overflow-hidden rounded-[26px] bg-indigo-950 shadow-2xl shadow-indigo-950/15 lg:grid-cols-[0.85fr_1.15fr]">
         <div class="relative overflow-hidden px-24 py-40 text-white md:px-40 md:py-54">
           <div class="absolute -bottom-120 -left-80 size-300 rounded-full bg-violet-500/25 blur-3xl"></div>
           <div class="relative">
@@ -584,7 +636,7 @@
   </main>
 
   <footer class="border-t border-slate-200 bg-white px-16 py-28 md:px-28">
-    <div class="mx-auto flex max-w-1120 flex-col items-center justify-between gap-18 text-center text-sm text-slate-500 md:flex-row md:text-left">
+    <div class="mx-auto flex max-w-1320 flex-col items-center justify-between gap-18 text-center text-sm text-slate-500 md:flex-row md:text-left">
       <div class="flex items-center gap-12">
         <img class="h-32 w-100 object-contain" src="/images/genix_logo.svg" alt="Genix" />
         <span><T text="Open-source ERP + e-commerce for small businesses.|ERP + comercio electrónico de código abierto para pequeñas empresas." /></span>
@@ -592,6 +644,8 @@
       <div class="flex flex-wrap items-center justify-center gap-16">
         <button class="hover:text-indigo-700" onclick={() => navigateToSection('features')}><T text="Features|Funcionalidades" /></button>
         <button class="hover:text-indigo-700" onclick={() => navigateToSection('roadmap')}><T text="Roadmap|Roadmap" /></button>
+        <!-- Storyset's free license requires this credit; dropping it needs their paid license. -->
+        <a class="hover:text-indigo-700" href="https://storyset.com/" target="_blank" rel="noopener noreferrer">Illustrations by Storyset</a>
         <span>GPL v3</span>
       </div>
     </div>

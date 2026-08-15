@@ -48,8 +48,10 @@ fn test_router() -> Router {
 }
 
 fn session_token() -> String {
-    let compact: String =
-        GO_SESSION_TOKEN_HEX.chars().filter(|character| !character.is_whitespace()).collect();
+    let compact: String = GO_SESSION_TOKEN_HEX
+        .chars()
+        .filter(|character| !character.is_whitespace())
+        .collect();
     let bytes: Vec<u8> = (0..compact.len())
         .step_by(2)
         .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).unwrap())
@@ -69,7 +71,11 @@ async fn open_stream(router: &Router, channel_token: &str) -> BodyDataStream {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK, "stream should have opened");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "stream should have opened"
+    );
 
     let mut frames = response.into_body().into_data_stream();
     // The handshake proves the channel is registered; the real client waits for it before
@@ -101,7 +107,10 @@ async fn next_frame(frames: &mut BodyDataStream) -> Value {
 /// Issues one authenticated backend→bridge call.
 async fn post_service(router: &Router, path: &str, body: Value) -> (StatusCode, Value) {
     let request = Request::post(path)
-        .header(SERVICE_AUTH_HEADER, make_service_auth_header(TEST_SECRET, current_unix_seconds()))
+        .header(
+            SERVICE_AUTH_HEADER,
+            make_service_auth_header(TEST_SECRET, current_unix_seconds()),
+        )
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .unwrap();
@@ -110,7 +119,9 @@ async fn post_service(router: &Router, path: &str, body: Value) -> (StatusCode, 
 
 async fn read_json(response: Response) -> (StatusCode, Value) {
     let status = response.status();
-    let body = axum::body::to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), 64 * 1024)
+        .await
+        .unwrap();
     (status, serde_json::from_slice(&body).unwrap_or(Value::Null))
 }
 
@@ -200,7 +211,11 @@ async fn an_unauthenticated_client_is_rejected() {
     let router = test_router();
 
     let response = router
-        .oneshot(Request::get(format!("/sse?ch={TEST_CHANNEL}")).body(Body::empty()).unwrap())
+        .oneshot(
+            Request::get(format!("/sse?ch={TEST_CHANNEL}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
 
@@ -381,7 +396,9 @@ async fn an_unsolicited_client_event_is_dropped() {
         .oneshot(
             Request::post(format!("/in?ch={TEST_CHANNEL}"))
                 .header(header::AUTHORIZATION, format!("Bearer {}", session_token()))
-                .body(Body::from(json!({ "ID": 0, "Type": "somethingElse" }).to_string()))
+                .body(Body::from(
+                    json!({ "ID": 0, "Type": "somethingElse" }).to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -396,17 +413,26 @@ async fn an_unsolicited_client_event_is_dropped() {
 async fn health_reports_the_connected_channel_count() {
     let router = test_router();
 
-    let (status, body) =
-        read_json(router.clone().oneshot(Request::get("/health").body(Body::empty()).unwrap()).await.unwrap())
-            .await;
+    let (status, body) = read_json(
+        router
+            .clone()
+            .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["Ok"], true);
     assert_eq!(body["Channels"], 0);
 
     let _frames = open_stream(&router, TEST_CHANNEL).await;
-    let (_, body) =
-        read_json(router.oneshot(Request::get("/health").body(Body::empty()).unwrap()).await.unwrap())
-            .await;
+    let (_, body) = read_json(
+        router
+            .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+            .await
+            .unwrap(),
+    )
+    .await;
     assert_eq!(body["Channels"], 1);
 }
 
@@ -425,7 +451,9 @@ async fn events_are_flushed_incrementally_over_a_real_socket() {
     let router = test_router();
     tokio::spawn(axum::serve(listener, router.clone()).into_future());
 
-    let mut stream_socket = tokio::net::TcpStream::connect(server_address).await.unwrap();
+    let mut stream_socket = tokio::net::TcpStream::connect(server_address)
+        .await
+        .unwrap();
     stream_socket
         .write_all(
             format!(
@@ -444,19 +472,32 @@ async fn events_are_flushed_incrementally_over_a_real_socket() {
     let mut read_buffer = [0_u8; 2048];
     let handshake_deadline = std::time::Duration::from_secs(3);
     while !String::from_utf8_lossy(&received).contains("bridgeReady") {
-        let read_count = tokio::time::timeout(handshake_deadline, stream_socket.read(&mut read_buffer))
-            .await
-            .expect("timed out: the SSE response was buffered instead of flushed")
-            .unwrap();
-        assert_ne!(read_count, 0, "server closed the stream before the handshake");
+        let read_count =
+            tokio::time::timeout(handshake_deadline, stream_socket.read(&mut read_buffer))
+                .await
+                .expect("timed out: the SSE response was buffered instead of flushed")
+                .unwrap();
+        assert_ne!(
+            read_count, 0,
+            "server closed the stream before the handshake"
+        );
         received.extend_from_slice(&read_buffer[..read_count]);
     }
 
     let handshake_text = String::from_utf8_lossy(&received).to_string();
-    assert!(handshake_text.starts_with("HTTP/1.1 200 OK"), "got {handshake_text}");
-    assert!(handshake_text.contains("text/event-stream"), "got {handshake_text}");
+    assert!(
+        handshake_text.starts_with("HTTP/1.1 200 OK"),
+        "got {handshake_text}"
+    );
+    assert!(
+        handshake_text.contains("text/event-stream"),
+        "got {handshake_text}"
+    );
     // The header nginx needs in order not to buffer the stream on its own.
-    assert!(handshake_text.contains("x-accel-buffering: no"), "got {handshake_text}");
+    assert!(
+        handshake_text.contains("x-accel-buffering: no"),
+        "got {handshake_text}"
+    );
 
     // Now push an event and confirm it arrives on the already-open connection.
     let (_, body) = post_service(
@@ -469,14 +510,21 @@ async fn events_are_flushed_incrementally_over_a_real_socket() {
 
     let mut delivered = String::new();
     while !delivered.contains("agentStatus") {
-        let read_count = tokio::time::timeout(handshake_deadline, stream_socket.read(&mut read_buffer))
-            .await
-            .expect("timed out waiting for the published event")
-            .unwrap();
-        assert_ne!(read_count, 0, "server closed the stream before delivering the event");
+        let read_count =
+            tokio::time::timeout(handshake_deadline, stream_socket.read(&mut read_buffer))
+                .await
+                .expect("timed out waiting for the published event")
+                .unwrap();
+        assert_ne!(
+            read_count, 0,
+            "server closed the stream before delivering the event"
+        );
         delivered.push_str(&String::from_utf8_lossy(&read_buffer[..read_count]));
     }
-    assert!(delivered.contains("data: {\"Type\":\"agentStatus\"}"), "got {delivered}");
+    assert!(
+        delivered.contains("data: {\"Type\":\"agentStatus\"}"),
+        "got {delivered}"
+    );
 }
 
 /// Dropping the browser's socket must deregister the channel, or the registry leaks entries and
@@ -490,7 +538,9 @@ async fn a_disconnected_socket_deregisters_the_channel() {
 
     {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let mut stream_socket = tokio::net::TcpStream::connect(server_address).await.unwrap();
+        let mut stream_socket = tokio::net::TcpStream::connect(server_address)
+            .await
+            .unwrap();
         stream_socket
             .write_all(
                 format!(
@@ -506,27 +556,42 @@ async fn a_disconnected_socket_deregisters_the_channel() {
         let mut read_buffer = [0_u8; 2048];
         let mut received = Vec::new();
         while !String::from_utf8_lossy(&received).contains("bridgeReady") {
-            let read_count =
-                tokio::time::timeout(std::time::Duration::from_secs(3), stream_socket.read(&mut read_buffer))
-                    .await
-                    .expect("timed out waiting for the handshake")
-                    .unwrap();
+            let read_count = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                stream_socket.read(&mut read_buffer),
+            )
+            .await
+            .expect("timed out waiting for the handshake")
+            .unwrap();
             received.extend_from_slice(&read_buffer[..read_count]);
         }
 
-        let (_, body) =
-            read_json(router.clone().oneshot(Request::get("/health").body(Body::empty()).unwrap()).await.unwrap())
-                .await;
-        assert_eq!(body["Channels"], 1, "the channel should be registered while connected");
+        let (_, body) = read_json(
+            router
+                .clone()
+                .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            body["Channels"], 1,
+            "the channel should be registered while connected"
+        );
     } // the socket is dropped here
 
     // Deregistration is spawned from a Drop impl, so poll briefly instead of assuming it
     // has already run.
     for _ in 0..60 {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let (_, body) =
-            read_json(router.clone().oneshot(Request::get("/health").body(Body::empty()).unwrap()).await.unwrap())
-                .await;
+        let (_, body) = read_json(
+            router
+                .clone()
+                .oneshot(Request::get("/health").body(Body::empty()).unwrap())
+                .await
+                .unwrap(),
+        )
+        .await;
         if body["Channels"] == 0 {
             return;
         }
@@ -546,6 +611,11 @@ async fn a_client_preflight_allows_the_authorization_header() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    let allowed_headers = response.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS].to_str().unwrap();
-    assert!(allowed_headers.contains("Authorization"), "got {allowed_headers}");
+    let allowed_headers = response.headers()[header::ACCESS_CONTROL_ALLOW_HEADERS]
+        .to_str()
+        .unwrap();
+    assert!(
+        allowed_headers.contains("Authorization"),
+        "got {allowed_headers}"
+    );
 }

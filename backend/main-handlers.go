@@ -276,18 +276,17 @@ func enforceAPICreditLimit(args *core.HandlerArgs, payloadBytes int) *core.Handl
 		requestContext = args.ReqContext.Context()
 	}
 	err := core.ChargeAPIUsage(
-		requestContext, args.User.CompanyID, args.User.ID, args.Method, payloadBytes,
+		requestContext, args.User.CompanyID, args.User.ID, args.RouteID, args.Method, payloadBytes,
 	)
 	if err != nil {
 		core.Log("credit rate limiter rejected::", " method::", args.Method, " company::", args.User.CompanyID,
-			" user::", args.User.ID, " bytes::", payloadBytes, " err::", err)
+			" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes, " err::", err)
 		response := args.MakeCreditRateLimitResponse(err)
 		return &response
 	}
-	apiGroup, _ := core.APIGroup(args.Method, payloadBytes)
 	cpuCredits, _ := core.APICPUCredits(args.Method, payloadBytes)
 	core.Log("credit rate limiter accepted::", " method::", args.Method, " company::", args.User.CompanyID,
-		" user::", args.User.ID, " bytes::", payloadBytes, " api_group::", apiGroup, " cpu_credits::", cpuCredits)
+		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes, " cpu_credits::", cpuCredits)
 	return nil
 }
 

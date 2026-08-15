@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};
 
-use crate::limiter::credits_blob::{Credits, GroupedCredits};
+use crate::limiter::credits_blob::{Credits, RoutedCredits};
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct UsageKey {
@@ -16,33 +16,33 @@ pub struct UsageKey {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UsageSnapshot {
     pub key: UsageKey,
-    pub groups: GroupedCredits,
+    pub routes: RoutedCredits,
     pub version: u64,
 }
 
 #[derive(Clone, Debug)]
 pub struct UsageRecord {
-    groups: GroupedCredits,
+    routes: RoutedCredits,
     version: u64,
     flushed_version: u64,
 }
 
 impl UsageRecord {
-    pub fn loaded(groups: GroupedCredits) -> Self {
+    pub fn loaded(routes: RoutedCredits) -> Self {
         // Loaded rows are already durable and must not be rewritten until they change.
         Self {
-            groups,
+            routes,
             version: 0,
             flushed_version: 0,
         }
     }
 
-    pub fn increment(&mut self, api_group: u8, credits: Credits) -> Result<()> {
-        let current = self.groups.get(&api_group).copied().unwrap_or_default();
+    pub fn increment(&mut self, route_id: u16, credits: Credits) -> Result<()> {
+        let current = self.routes.get(&route_id).copied().unwrap_or_default();
         let updated = current
             .checked_add(credits)
             .ok_or_else(|| anyhow!("in-memory usage credits overflowed uint64"))?;
-        self.groups.insert(api_group, updated);
+        self.routes.insert(route_id, updated);
         self.version = self
             .version
             .checked_add(1)
@@ -53,7 +53,7 @@ impl UsageRecord {
     pub fn snapshot(&self, key: UsageKey) -> Option<UsageSnapshot> {
         (self.version != self.flushed_version).then(|| UsageSnapshot {
             key,
-            groups: self.groups.clone(),
+            routes: self.routes.clone(),
             version: self.version,
         })
     }
@@ -73,12 +73,12 @@ impl UsageRecord {
 pub fn merge_loaded(
     records: &mut HashMap<UsageKey, UsageRecord>,
     key: UsageKey,
-    groups: GroupedCredits,
+    routes: RoutedCredits,
 ) {
     // Never replace an in-memory row that may already contain newer accepted usage.
     records
         .entry(key)
-        .or_insert_with(|| UsageRecord::loaded(groups));
+        .or_insert_with(|| UsageRecord::loaded(routes));
 }
 
 #[cfg(test)]
@@ -92,7 +92,7 @@ mod tests {
             user_id: 42,
             time_frame: 105_954_061,
         };
-        let mut record = UsageRecord::loaded(GroupedCredits::new());
+        let mut record = UsageRecord::loaded(RoutedCredits::new());
         record
             .increment(
                 0,

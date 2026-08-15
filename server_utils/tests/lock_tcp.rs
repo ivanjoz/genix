@@ -150,16 +150,19 @@ impl Client {
     async fn send(&mut self, opcode: u8, payload: &[u8]) -> u8 {
         let expected = self.write_frame(opcode, payload).await;
         let (correlation, status, _) = self.read_reply().await;
-        assert_eq!(correlation, expected, "reply correlated to the wrong request");
+        assert_eq!(
+            correlation, expected,
+            "reply correlated to the wrong request"
+        );
         status
     }
 
-    /// A minimal, always-admissible charge: opcode 0x01 for company 1 / user 1.
+    /// A minimal, always-admissible charge: opcode 0x01 for company 1 / user 1 on route 1.
     fn charge_payload() -> Vec<u8> {
-        let mut payload = Vec::with_capacity(11);
+        let mut payload = Vec::with_capacity(12);
         payload.extend_from_slice(&[0, 0, 1]);
         payload.extend_from_slice(&[0, 0, 1]);
-        payload.push(0);
+        payload.extend_from_slice(&1_u16.to_be_bytes());
         payload.extend_from_slice(&1_u16.to_be_bytes());
         payload.extend_from_slice(&0_u16.to_be_bytes());
         payload
@@ -184,7 +187,13 @@ impl Client {
     }
 
     /// Returns the status only; use `acquire_granting` when the generation is needed.
-    async fn acquire(&mut self, identifier: i64, max_waiters: u8, wait_ms: u16, lease_ms: u16) -> u8 {
+    async fn acquire(
+        &mut self,
+        identifier: i64,
+        max_waiters: u8,
+        wait_ms: u16,
+        lease_ms: u16,
+    ) -> u8 {
         self.acquire_granting(identifier, max_waiters, wait_ms, lease_ms)
             .await
             .0
@@ -201,7 +210,10 @@ impl Client {
         let payload = Self::acquire_payload(identifier, max_waiters, wait_ms, lease_ms);
         let expected = self.write_frame(0x02, &payload).await;
         let (correlation, status, generation) = self.read_reply().await;
-        assert_eq!(correlation, expected, "reply correlated to the wrong request");
+        assert_eq!(
+            correlation, expected,
+            "reply correlated to the wrong request"
+        );
         (status, generation)
     }
 
@@ -232,7 +244,10 @@ async fn the_second_client_waits_for_an_explicit_release() {
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
-    assert!(!waiter.is_finished(), "the second client must still be queued");
+    assert!(
+        !waiter.is_finished(),
+        "the second client must still be queued"
+    );
     assert_eq!(holder.release(1, generation).await, 0);
     assert_eq!(waiter.await.unwrap(), 0, "release must hand the lock over");
 }
@@ -300,9 +315,12 @@ async fn a_queue_that_is_full_is_refused_immediately() {
     let mut refused = Client::connect(&server).await;
     // One waiter is already parked, so this one is answered rather than queued — and answered
     // fast, which is the whole point of the ceiling.
-    let reply = timeout(Duration::from_millis(500), refused.acquire(4, 1, 5000, 15000))
-        .await
-        .expect("a refused acquire must not block");
+    let reply = timeout(
+        Duration::from_millis(500),
+        refused.acquire(4, 1, 5000, 15000),
+    )
+    .await
+    .expect("a refused acquire must not block");
     assert_eq!(reply, 1);
     queued.abort();
 }
@@ -326,7 +344,10 @@ async fn one_connection_can_hold_several_locks() {
     let (first_status, first_generation) = client.acquire_granting(6, 4, 1000, 15000).await;
     let (second_status, second_generation) = client.acquire_granting(7, 4, 1000, 15000).await;
     assert_eq!(first_status, 0);
-    assert_eq!(second_status, 0, "a second key on one connection must be allowed");
+    assert_eq!(
+        second_status, 0,
+        "a second key on one connection must be allowed"
+    );
 
     // Both are really held: a rival cannot take either.
     let mut rival = Client::connect(&server).await;
@@ -336,7 +357,11 @@ async fn one_connection_can_hold_several_locks() {
     // Releasing one must not disturb the other.
     assert_eq!(client.release(6, first_generation).await, 0);
     assert_eq!(rival.acquire(6, 0, 0, 15000).await, 0);
-    assert_eq!(rival.acquire(7, 0, 0, 15000).await, 1, "the other key is still held");
+    assert_eq!(
+        rival.acquire(7, 0, 0, 15000).await,
+        1,
+        "the other key is still held"
+    );
     assert_eq!(client.release(7, second_generation).await, 0);
 }
 
@@ -417,7 +442,10 @@ async fn a_queued_acquire_does_not_delay_a_later_charge() {
     let (first, status, _) = timeout(Duration::from_millis(500), client.read_reply())
         .await
         .expect("the charge must be answered without waiting for the queued acquire");
-    assert_eq!(first, charge_id, "replies did not overtake the parked acquire");
+    assert_eq!(
+        first, charge_id,
+        "replies did not overtake the parked acquire"
+    );
     assert_eq!(status, 0, "the charge should have been admitted");
 
     // And the acquire still gets its own answer once the holder releases.
@@ -438,7 +466,11 @@ async fn a_lease_expires_even_while_the_connection_stays_busy() {
     assert_eq!(holder.acquire(60, 0, 0, 200).await, 0);
 
     let mut rival = Client::connect(&server).await;
-    assert_eq!(rival.acquire(60, 0, 0, 15000).await, 1, "the key must be held");
+    assert_eq!(
+        rival.acquire(60, 0, 0, 15000).await,
+        1,
+        "the key must be held"
+    );
 
     // Keep the holder's connection busy across its own lease.
     for _ in 0..6 {

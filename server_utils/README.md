@@ -26,9 +26,10 @@ formats), [PLAN_LOCK_SERVICE.md](PLAN_LOCK_SERVICE.md) and
 
 > **One process, shared fate.** The rate limiter loads existing usage from ScyllaDB before
 > admitting anything and exits when it cannot — which also stops the bridge. Deploy the backend
-> tables (so `credit_usage`, `user_logs` and `request_errors` exist) before starting the daemon.
-> The request log is the one half that does *not* share that fate: it drops rows rather than
-> propagate a failure, because taking the process down would stop the other three.
+> tables (so `credit_usage`, `user_logs`, `request_errors` and `server_metrics` exist) before
+> starting the daemon. The request log and the metrics collector are the two halves that do *not*
+> share that fate: they drop rows rather than propagate a failure, because taking the process down
+> would stop everything else.
 
 ## Layout
 
@@ -47,6 +48,9 @@ src/
 ├── lock/        # opcodes 0x02/0x03: registry.rs (sharded key mutexes), protocol
 ├── reqlog/      # opcode 0x04: protocol (the one variable-length payload), errors
 │                # (ten-minute write suppression), writer (batching, fails open)
+├── sysmetrics/  # no opcode: samples the machine once a second and writes the peak
+│                # of each five-second window to server_metrics. collector (/proc +
+│                # cgroup v2), writer (the tick loop and the insert)
 └── bridge/      # token.rs (colbin + channel token), auth, channel, http (axum)
 ```
 
@@ -394,6 +398,35 @@ bits 23..0   company_id
 The packing is written twice — `src/reqlog/protocol.rs` writes the column and
 `backend/core/types/user_logs.go` ranges over it — and the vectors in both test files pin them
 together. A drift there produces rows that look right and a chart that is quietly wrong.
+
+## Server metrics behavior
+
+The one part of this daemon nothing calls into: it just ticks. Design in
+[PLAN_SERVER_METRICS.md](PLAN_SERVER_METRICS.md), schema in
+`backend/core/types/server_metrics.go`.
+
+- One row every `row_seconds` in `server_metrics`, partitioned by unix day and clustered by the
+  slot within it (`secondsIntoDay / 5`, so 0..17279 and comfortably inside the int16 key).
+- **Every value is a peak, not an average.** Sampling runs at `sample_seconds` and the row carries
+  the highest of the five sub-samples, so a one-second spike survives into a five-second row. The
+  price is that these rows cannot be summed: adding `net_rx_rate` across a day overstates the bytes
+  actually transferred, because each value is a peak standing in for five seconds.
+- Per-service memory and CPU come from the unit's cgroup — `memory.stat`'s `anon` (page cache
+  excluded, or Scylla's file cache would read as Scylla's memory) and `cpu.stat`'s `usage_usec`.
+  One file read covers a multi-process service correctly, and a missing directory is exactly the
+  "not on this box" signal.
+- **`-1` means not measured**, and it is the whole answer to the Lambda case: with no
+  `genix.service` on the machine, the backend's two columns carry the sentinel rather than a `0`
+  that would read as an idle backend. It survives to the row only when no sub-sample of the window
+  produced a value.
+- CPU is a percentage of the **whole machine**, so Scylla pinning eight of eight cores reads
+  100.00% and not the top-style 800% that would not fit the column. Percentages are hundredths;
+  memory is megabytes saturating at 32 GB; network is 5 KB/s units, which reaches 163 MB/s while
+  still resolving the single-digit KB/s an idle box shows.
+- Rows land on a wall-clock grid, not on a tick counter, so a restart resumes the same slots and a
+  skipped tick leaves an honest hole instead of shifting every later row.
+- **Fails open**, like the request log: a failed write is a warning, and an insert that cannot be
+  prepared at startup disables the collector and leaves the process serving.
 
 ## Deploying
 

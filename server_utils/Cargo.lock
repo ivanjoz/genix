@@ -430,6 +430,7 @@ dependencies = [
  "base64",
  "getrandom 0.4.3",
  "hmac",
+ "libc",
  "scylla",
  "serde",
  "serde_json",

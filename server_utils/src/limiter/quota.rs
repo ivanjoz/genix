@@ -12,7 +12,7 @@ use tracing::{debug, error, info};
 
 use crate::limiter::{
     aggregation::{UsageKey, UsageRecord, UsageSnapshot, merge_loaded},
-    credits_blob::{Credits, GroupedCredits, decode, encode, sum},
+    credits_blob::{Credits, RoutedCredits, decode, encode, sum},
     protocol::{LimitViolation, Request, Scope, Window},
     storage::UsageStore,
     time_frame,
@@ -309,9 +309,9 @@ impl RateLimiter {
             .load_exact(daily_key)
             .await
             .context("failed to initialize daily usage")?;
-        let daily_groups =
+        let daily_routes =
             decode_optional(daily_row.as_ref().map(|row| row.used_credits.as_slice()))?;
-        merge_loaded(&mut shard.usage, daily_key, daily_groups.clone());
+        merge_loaded(&mut shard.usage, daily_key, daily_routes.clone());
 
         let (hour_start, hour_end) = time_frame::hour_five_minute_range(unix_seconds)?;
         let hour_rows = self
@@ -321,10 +321,10 @@ impl RateLimiter {
             .context("failed to initialize hourly usage")?;
         let mut hour_used = Credits::default();
         for row in hour_rows {
-            let groups = decode(&row.used_credits)
+            let routes = decode(&row.used_credits)
                 .with_context(|| format!("corrupt usage blob in time frame {}", row.time_frame))?;
             hour_used = hour_used
-                .checked_add(sum(&groups)?)
+                .checked_add(sum(&routes)?)
                 .ok_or_else(|| anyhow!("recovered hour usage overflowed uint64"))?;
             merge_loaded(
                 &mut shard.usage,
@@ -333,11 +333,11 @@ impl RateLimiter {
                     user_id,
                     time_frame: row.time_frame,
                 },
-                groups,
+                routes,
             );
         }
 
-        let day_used = sum(&daily_groups)?;
+        let day_used = sum(&daily_routes)?;
         shard.subjects.insert(
             (company_id, user_id),
             SubjectState::recovered(limits, unix_seconds, now, hour_used, day_used),
@@ -397,7 +397,7 @@ impl RateLimiter {
     }
 
     async fn flush_snapshot(&self, snapshot: &UsageSnapshot) -> Result<()> {
-        let encoded = encode(&snapshot.groups).context("failed to encode usage snapshot")?;
+        let encoded = encode(&snapshot.routes).context("failed to encode usage snapshot")?;
         self.store.upsert(snapshot.key, encoded).await
     }
 
@@ -425,7 +425,7 @@ impl RateLimiter {
     }
 }
 
-fn decode_optional(encoded: Option<&[u8]>) -> Result<GroupedCredits> {
+fn decode_optional(encoded: Option<&[u8]>) -> Result<RoutedCredits> {
     encoded
         .map(decode)
         .transpose()
@@ -449,8 +449,8 @@ fn increment_usage(
             };
             records
                 .entry(key)
-                .or_insert_with(|| UsageRecord::loaded(GroupedCredits::new()))
-                .increment(request.api_group, request.credits)?;
+                .or_insert_with(|| UsageRecord::loaded(RoutedCredits::new()))
+                .increment(request.route_id, request.credits)?;
         }
     }
     Ok(())
@@ -549,7 +549,7 @@ mod tests {
         let request = Request {
             company_id: 7,
             user_id: 42,
-            api_group: 3,
+            route_id: 34,
             credits: Credits {
                 cpu: 4,
                 inference: 5,
@@ -575,7 +575,7 @@ mod tests {
         let request = Request {
             company_id: 7,
             user_id: 42,
-            api_group: 0,
+            route_id: 0,
             credits: Credits {
                 cpu: 10,
                 inference: 0,

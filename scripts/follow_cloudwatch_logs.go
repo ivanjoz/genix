@@ -20,7 +20,7 @@ type cloudWatchLogsConfig struct {
 
 // FollowCloudWatchLogs sigue el grupo que BackendLogGroup declara en cloud/template.yml.
 func FollowCloudWatchLogs() {
-	configPath := resolveCloudWatchConfigPath()
+	configPath := resolveConfigPath()
 	config, err := loadCloudWatchLogsConfig(configPath)
 	if err != nil {
 		exitWithCloudWatchLogsError(err)
@@ -42,7 +42,7 @@ func FollowCloudWatchLogs() {
 }
 
 // GENIX_CONFIG_FILE lo define deploy.sh; el fallback conserva el uso directo desde scripts/.
-func resolveCloudWatchConfigPath() string {
+func resolveConfigPath() string {
 	configuredPath := strings.TrimSpace(os.Getenv("GENIX_CONFIG_FILE"))
 	if configuredPath != "" {
 		if filepath.IsAbs(configuredPath) || pathExists(configuredPath) {

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -117,6 +118,93 @@ func TestTakeDrains(t *testing.T) {
 	}
 	if leftover := TakeRequestErrors(); len(leftover) != 0 {
 		t.Fatalf("the second take returned %d entries; the accumulator did not drain", len(leftover))
+	}
+}
+
+// captureEmittedLogs swaps the send seam so a test can see what EmitRequestLog decided, and pins
+// LOG_ALL_REQUESTS to a known value — the whole point of these tests is which requests reach the
+// daemon, and a nil Env or a leftover flag would make that answer meaningless.
+func captureEmittedLogs(t *testing.T, logAllRequests bool) *[]RequestLogRecord {
+	t.Helper()
+	previousEnv, previousSend := Env, SendRequestLog
+	Env = &EnvStruct{LOG_ALL_REQUESTS: logAllRequests}
+	emitted := []RequestLogRecord{}
+	SendRequestLog = func(ctx context.Context, record RequestLogRecord) error {
+		emitted = append(emitted, record)
+		return nil
+	}
+	ResetRequestErrors()
+	t.Cleanup(func() {
+		ResetRequestErrors()
+		Env, SendRequestLog = previousEnv, previousSend
+	})
+	return &emitted
+}
+
+// The default rule: user_logs keeps failures. A row per successful request is a write per request
+// forever, and it answers nothing the table exists to answer.
+func TestErrorFreeRequestLeavesNoRow(t *testing.T) {
+	emitted := captureEmittedLogs(t, false)
+
+	EmitRequestLog(&HandlerArgs{RouteID: 34}, 12)
+
+	if len(*emitted) != 0 {
+		t.Fatalf("a request that failed nothing still wrote a row: %+v", *emitted)
+	}
+}
+
+// The gate must not swallow the rows the table is for. This is the case that would break silently:
+// nothing else in the pipeline notices when failures stop being recorded.
+func TestFailedRequestStillWritesItsRow(t *testing.T) {
+	emitted := captureEmittedLogs(t, false)
+
+	RegisterRequestErrorAt("stock.go:120", "error al leer el lote")
+	EmitRequestLog(&HandlerArgs{RouteID: 34}, 12)
+
+	if len(*emitted) != 1 {
+		t.Fatalf("expected one row, got %d", len(*emitted))
+	}
+	if len((*emitted)[0].Errors) != 1 {
+		t.Fatalf("the row carried %d errors, not the one captured", len((*emitted)[0].Errors))
+	}
+	if leftover := TakeRequestErrors(); len(leftover) != 0 {
+		t.Fatalf("%d errors survived the emit and would be blamed on the next request", len(leftover))
+	}
+}
+
+// The switch is what makes the table usable for measuring traffic rather than only failures.
+func TestLogAllRequestsWidensToEveryRequest(t *testing.T) {
+	emitted := captureEmittedLogs(t, true)
+
+	EmitRequestLog(&HandlerArgs{RouteID: 34}, 12)
+
+	if len(*emitted) != 1 {
+		t.Fatalf("expected one row with the switch on, got %d", len(*emitted))
+	}
+	if len((*emitted)[0].Errors) != 0 {
+		t.Fatalf("a successful request carried %d errors", len((*emitted)[0].Errors))
+	}
+}
+
+// A refused request has to reach user_logs, and it does so without a special case in EmitRequestLog:
+// MakeCreditRateLimitResponse answers through MakeErrCode, which captures. That is load-bearing now
+// — if it ever stopped capturing, exhausted-quota events would vanish from the table and the only
+// symptom would be their absence.
+func TestCreditRateLimitRejectionWritesItsRow(t *testing.T) {
+	emitted := captureEmittedLogs(t, false)
+
+	args := &HandlerArgs{RouteID: 34}
+	response := args.MakeCreditRateLimitResponse(&CreditLimitExceeded{Code: 3, Window: "1h", CPU: true})
+	if response.StatusCode != 429 {
+		t.Fatalf("a credit rejection answered %d, not 429", response.StatusCode)
+	}
+	EmitRequestLog(args, 12)
+
+	if len(*emitted) != 1 {
+		t.Fatalf("the rejection left no row in user_logs")
+	}
+	if len((*emitted)[0].Errors) == 0 {
+		t.Fatal("the rejection's row carried no error entry")
 	}
 }
 

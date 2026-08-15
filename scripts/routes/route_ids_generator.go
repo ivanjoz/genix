@@ -69,7 +69,10 @@ func main() {
 		exitWith(err)
 	}
 
-	assignments, newlyAssigned := mergeAssignments(existing, declaredRoutes)
+	assignments, newlyAssigned, err := mergeAssignments(existing, declaredRoutes)
+	if err != nil {
+		exitWith(err)
+	}
 	source, err := renderRoutesFile(assignments)
 	if err != nil {
 		exitWith(err)
@@ -93,10 +96,16 @@ func main() {
 		routesOutputPath, len(assignments), newlyAssigned)
 }
 
+// maxEncodableRouteID is the ceiling of the fourteen-bit route field in the credit_usage blob
+// header, mirrored from server_utils/src/limiter/credits_blob.rs and
+// backend/core/server_utils/credits.go. Numbers are never reused, so the count only ever climbs;
+// failing here is the one place that can say so before a route exists that cannot be charged.
+const maxEncodableRouteID = int16(16_383)
+
 // mergeAssignments keeps every ID already handed out and numbers the rest from the current
 // maximum. New routes are sorted before being numbered so two branches adding routes in the same
 // week produce the same file, in the same order, whatever order the filesystem walk returned.
-func mergeAssignments(existing map[string]int16, declared map[string]bool) ([]routeAssignment, int) {
+func mergeAssignments(existing map[string]int16, declared map[string]bool) ([]routeAssignment, int, error) {
 	assignments := make([]routeAssignment, 0, len(existing)+len(declared))
 	highestID := int16(0)
 	for route, id := range existing {
@@ -115,6 +124,12 @@ func mergeAssignments(existing map[string]int16, declared map[string]bool) ([]ro
 	sort.Strings(unassigned)
 
 	for _, route := range unassigned {
+		if highestID >= maxEncodableRouteID {
+			return nil, 0, fmt.Errorf(
+				"route %q would be numbered past %d, the widest ID the credit_usage blob header can "+
+					"hold; widen the header in server_utils/src/limiter/credits_blob.rs and both "+
+					"decoders before adding it", route, maxEncodableRouteID)
+		}
 		highestID++
 		assignments = append(assignments, routeAssignment{Route: route, ID: highestID})
 	}
@@ -124,7 +139,7 @@ func mergeAssignments(existing map[string]int16, declared map[string]bool) ([]ro
 	sort.Slice(assignments, func(first, second int) bool {
 		return assignments[first].Route < assignments[second].Route
 	})
-	return assignments, len(unassigned)
+	return assignments, len(unassigned), nil
 }
 
 // scanModuleHandlerRoutes walks backend/ and collects the keys of every

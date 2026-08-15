@@ -178,7 +178,8 @@ mod tests {
         assert_eq!(Opcode::from_byte(0x01), Some(Opcode::ChargeCredits));
         assert_eq!(Opcode::from_byte(0x02), Some(Opcode::LockAcquire));
         assert_eq!(Opcode::from_byte(0x03), Some(Opcode::LockRelease));
-        assert_eq!(Opcode::ChargeCredits.fixed_frame_size(), Some(20));
+        // Opcode, then company, user, route, cpu and inference, then the tag.
+        assert_eq!(Opcode::ChargeCredits.fixed_frame_size(), Some(21));
         assert_eq!(Opcode::LockAcquire.fixed_frame_size(), Some(24));
         // Release names the lock it ends: action, identifier, generation.
         assert_eq!(Opcode::LockRelease.fixed_frame_size(), Some(21));

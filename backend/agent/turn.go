@@ -109,19 +109,17 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	runContext, cancelRun := context.WithTimeout(parentContext, turnTimeout)
 	defer cancelRun()
-	turnAPIGroup, groupError := core.APIGroup("POST", len(*req.Body))
-	if groupError != nil {
-		return req.MakeErr500("No se pudo calcular el grupo de créditos:", groupError)
-	}
 	if rateLimitError := core.ChargeAPIUsage(
-		runContext, req.User.CompanyID, req.User.ID, "POST", len(*req.Body),
+		runContext, req.User.CompanyID, req.User.ID, req.RouteID, "POST", len(*req.Body),
 	); rateLimitError != nil {
 		core.Log("agent.turn base credit rejected tab::", shortTabID(tab), " err::", rateLimitError)
 		return req.MakeCreditRateLimitResponse(rateLimitError)
 	}
-	// Every nested LLM request inherits the authenticated identity and original POST size group.
+	// Every nested LLM request inherits the authenticated identity and the route that opened the
+	// turn, so what a turn spends on inference lands on POST.p-agent-turn rather than in a bucket
+	// of its own.
 	runContext = core.WithCreditRateLimitIdentity(
-		runContext, req.User.CompanyID, req.User.ID, turnAPIGroup,
+		runContext, req.User.CompanyID, req.User.ID, req.RouteID,
 	)
 
 	core.Log("agent.turn start tab::", shortTabID(tab), " company::", session.CompanyID, " user::", session.UserID,

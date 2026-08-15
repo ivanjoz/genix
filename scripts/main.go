@@ -30,6 +30,9 @@ func main() {
 	case "generate_menu_descriptions":
 		GenerateMenuDescriptions()
 
+	case "generate_vector_image":
+		GenerateVectorImage(os.Args[2:])
+
 	case "index_documentation":
 		runBackendSubpackage("./agent/cmd/documentation-index", os.Args[2:]...)
 
