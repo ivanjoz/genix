@@ -3,6 +3,11 @@
 Status: **draft for review** — open questions at the bottom. Do not implement
 until the user signs off on each section.
 
+> **Routing note (superseded):** request routing now uses the two-call discovery and execution
+> flow in [`PLAN_DISCOVERY_EXECUTION_ROUTER.md`](./PLAN_DISCOVERY_EXECUTION_ROUTER.md). This
+> document remains useful for the original page-tool loop and persistence rationale, but its
+> single-call prompt assembly is not the current request-routing contract.
+
 > **Transport note (superseded):** this doc describes the original WebSocket
 > design (`/ws/agent`, `/ws/agent-chat`). The transport has since been replaced
 > by SSE + POST — a single per-tab SSE stream (`GET /agent/stream`) carries all
@@ -279,8 +284,9 @@ New package `backend/agent/llm/` (so the loop logic stays in
 
 - `client.go` — thin HTTP client around the provider's OpenAI-compatible
   `/chat/completions`, supporting tool calling (`tools`/`tool_choice`).
-  Two providers are supported and `providers.model` in `config.toml`
-  picks one (blank = `openrouter`):
+  Two providers are supported. Each `[[models]]` entry selects its provider;
+  `providers.model` is only the fallback for an unregistered model (blank =
+  `openrouter`):
 
   | `providers.model` | endpoint | key | compile-time default model |
   |---|---|---|---|
@@ -295,11 +301,9 @@ New package `backend/agent/llm/` (so the loop logic stays in
   Meta rejects, `reasoning_effort: "none"` (HTTP 400 on Muse Spark), which
   becomes `"minimal"`.
 
-- `agent.default_model` in `config.toml` overrides the model for either
-  provider; it must name a model the active provider serves. `llm.ListModels`
-  (the `agent-models` route feeding the UI dropdown) only returns registry
-  entries whose `Provider` matches the active one, so the picker can't offer
-  an unroutable id.
+- `agent.default_model` in `config.toml` must name a `[[models]]` entry. The
+  `agent-models` route returns every registry entry, and `Client.Chat` routes a
+  picker selection through that entry's provider and API key.
 - **Decided** (Q5): model is env-configurable; the original default was
   `tencent/hy3-preview`.
 

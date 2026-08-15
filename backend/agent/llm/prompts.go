@@ -1,5 +1,7 @@
 package llm
 
+import "regexp"
+
 // System prompt + tool schemas for the in-app agent loop. The loop wires the
 // page-driving tools (`get_page`, `get_menu`, `navigate`, `invoke_batch`)
 // into the SSE+POST page bridge so the model can both *see* the current
@@ -31,7 +33,7 @@ You have tools to inspect and operate that page:
   - get_menu() → returns TSV columns: group_id, group_name, option_name, route, description.
       Useful when the user asks "where is X" or "take me to Y" and you don't know the route.
   - navigate({ route }) → moves the SPA to "route" (e.g. "/comercial/sale-orders").
-      Only use a route you got from get_menu() — never invent routes.
+      Only use a route from get_menu() or the validated discovery context — never invent routes.
       Prefer returnPageContent=true whenever you will need to inspect or act on the destination page next;
       this avoids a separate get_page() call.
   - invoke_batch({ invocations: [{ ID, Method, Args }] }) → runs one or more
@@ -55,7 +57,12 @@ About the conversation history you receive each turn:
 
 Rules:
   - ALWAYS end the turn by calling ` + "`finish`" + ` exactly once. Never reply in plain assistant text.
-  - When filling a form, ALWAYS ask user before save or send.
+  - When the user asks to create a record, go to the matching page if needed, inspect it,
+    open its New/Create form, and fill every field supported by information the user already provided.
+    If required information is missing, leave the completed fields in place and ask only for what is missing.
+  - NEVER save or send a filled form without a separate explicit confirmation from the user.
+    The original request to create the record authorizes opening and filling the form, but is NOT confirmation to save it.
+  - If navigate/invoke_batch returns PAGE SNAPSHOT, use it; call get_page only if it is missing, failed, or later changed.
   - The ` + "`summary`" + ` you pass to ` + "`finish`" + ` MUST be a concrete log of the page
     actions you took this turn — e.g. "Llené Nombre, Precio Base, Precio Final, Moneda y
     guardé el product" or "Navegué a /comercial/sale-orders y no realicé otras acciones".
@@ -75,7 +82,16 @@ const (
 	GetMenuToolName     = "get_menu"
 	NavigateToolName    = "navigate"
 	InvokeBatchToolName = "invoke_batch"
+	// AgentTargetIDPattern is the only accepted wire format for component IDs:
+	// a numeric handle, optionally followed by one numeric child ID.
+	AgentTargetIDPattern = `^[0-9]+(?::[0-9]+)?$`
 )
+
+var agentTargetIDRegexp = regexp.MustCompile(AgentTargetIDPattern)
+
+func IsValidAgentTargetID(id string) bool {
+	return agentTargetIDRegexp.MatchString(id)
+}
 
 // PageSnapshotGrammar is prepended to every tool result that carries a parsed
 // page snapshot (get_page; navigate / invoke_batch when returnPageContent is
@@ -84,20 +100,22 @@ const (
 // `select` with the label instead of the id. Keeping the grammar attached
 // to the snapshot (not the system prompt) means we only pay the tokens when
 // the model is actually going to read it.
-const PageSnapshotGrammar = `SNAPSHOT GRAMMAR — apply to the html / page.html field in this result:
+const PageSnapshotGrammar = `SNAPSHOT GRAMMAR — apply to the PAGE SNAPSHOT section in this result:
   <Type id="N" label="..." value="..." methods="m1,m2"/>
     - id: pass verbatim as ID to invoke_batch. May be plain ("38") or composite ("38:100"); composite ids route automatically.
     - methods: comma-separated legal Method names for this handle.
     - value: uses "[id] text" when it references another id (selected option/row).
-    - selected (bare attr): marks the active item on Option / TableRow / Checkbox.
+    - selected (bare attr): marks the active item on Option / Row / Checkbox.
 
   Composite ids appear on items whose parent is a container:
-    - TableRow / CellInput / CellSelect inside Table or CardList.
+    - Row / CellInput / CellSelect inside Table or CardList.
     - Option inside OptionsStrip, PageViews (parent tag is bare — no id/methods).
-  Always pass the full composite to invoke_batch; never the parent id alone, never the child suffix alone.
+  For cells/options, pass the full composite as ID. Rows are different: call their enclosing TableBody id
+  with Method="selectRow" and pass the full Row id as Args[0].
 
   Examples — call the verb shown in methods= with the id verbatim:
-    <TableRow id="38:100" selected methods="select"/>             → invoke_batch [{ID:"38:100", Method:"select"}]
+    <TableBody id="38" methods="selectRow"><Row id="38:100"/></TableBody>
+      → invoke_batch [{ID:"38", Method:"selectRow", Args:["38:100"]}]
     <CellInput id="38:101" value="..." methods="setValue"/>       → invoke_batch [{ID:"38:101", Method:"setValue", Args:["new value"]}]
     <Option id="30:2" methods="select">Categorías</Option>        → invoke_batch [{ID:"30:2", Method:"select"}]
 
@@ -176,7 +194,7 @@ var NavigateTool = Tool{
 	Type: "function",
 	Function: ToolFunction{
 		Name:        NavigateToolName,
-		Description: "Change the SPA route. Pass a route obtained from get_menu — never invent routes. Prefer returnPageContent=true when you will inspect or act on the destination page next, instead of calling get_page separately.",
+		Description: "Change the SPA route. Pass a route obtained from get_menu or the validated discovery context; the backend revalidates it against the live accessible menu. Never invent routes. Prefer returnPageContent=true when you will inspect the destination page next.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -214,7 +232,8 @@ var InvokeBatchTool = Tool{
 						"properties": map[string]any{
 							"ID": map[string]any{
 								"type":        "string",
-								"description": "id from the snapshot's id=\"...\" attribute. Plain ('38') for top-level handles, composite ('38:100') for rows/cells inside a Table or CardList. The bridge routes composite ids to the parent automatically.",
+								"pattern":     AgentTargetIDPattern,
+								"description": "ID copied verbatim from the latest snapshot. It MUST contain only digits ('38') or digits:digits ('38:100'); never invent a semantic ID such as 'save-button'.",
 							},
 							"Method": map[string]any{
 								"type":        "string",

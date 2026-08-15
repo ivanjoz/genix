@@ -134,18 +134,13 @@ type EnvStruct struct {
 	// browser RPC goes through it. Empty (or outside Lambda) = the backend serves
 	// its own /agent/stream and the bridge is not used.
 	SSE_BRIDGE_URL string
-	// LLM provider for the in-app agent (backend/agent/llm). MODEL_PROVIDER
-	// selects which upstream is called: "meta" (Meta Model API, key in
-	// META_KEY) or "openrouter" (key in OPENROUTER_KEY). Blank = "openrouter",
-	// so an existing deployment keeps working without touching credentials.
-	// Only the active provider's key is required at startup.
+	// LLM fallback provider for an unregistered/default model. Registered picker
+	// entries use their own ModelEntry.Provider and corresponding API key.
 	MODEL_PROVIDER string
 	META_KEY       string
 	OPENROUTER_KEY string
 	// DEFAULT_MODEL overrides the model used when a request carries no explicit
-	// one. Provider-agnostic — it must name a model the active provider serves
-	// (e.g. "muse-spark-1.2-contributor" for meta). Blank = the first MODELS
-	// entry the active provider serves.
+	// one. It must name a registered model. Blank = the first MODELS entry.
 	DEFAULT_MODEL string
 	// CLASSIFIER_MODEL_ID is independent from the model selected in the chat UI.
 	// Blank reuses DEFAULT_MODEL, which keeps existing deployments valid.
@@ -154,7 +149,7 @@ type EnvStruct struct {
 	CLASSIFIER_PROVIDER string
 	// MODELS is the agent's model registry, straight from the [[models]] array table.
 	// File order is meaningful: it is the order of the model picker and its first entry
-	// servable by MODEL_PROVIDER is the default when DEFAULT_MODEL is blank. Consumed by
+	// is the default when DEFAULT_MODEL is blank. Consumed by
 	// backend/agent/llm, which turns each entry into its own request knobs.
 	MODELS []ModelEntry
 	// GenixSearch — lexical search backend reached over TCP. The

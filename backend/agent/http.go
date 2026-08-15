@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"app/agent/llm"
 )
 
 type AgentAction struct {
@@ -218,7 +220,8 @@ func navigateRouteArg(args []any) (string, error) {
 // `setValue("38:101", v)` becomes `setValueChild(101, v)` on Table 38, with
 // the parent prefix stripped from the id arg. Methods not listed here keep
 // their original name and receive the full composite id (e.g.
-// SearchCard.remove("58:235"), Table.select("38:100")).
+// SearchCard.remove("58:235")). Row selection targets TableBody.selectRow
+// directly with the Row id in Args.
 var childAliasMethods = map[string]string{
 	"setValue":   "setValueChild",
 	"search":     "searchChild",
@@ -237,16 +240,19 @@ func resolveTarget(id, method string, args []any) (int, string, []any, error) {
 	if id == "" {
 		return 0, "", nil, errors.New("missing id")
 	}
+	if !llm.IsValidAgentTargetID(id) {
+		return 0, "", nil, fmt.Errorf("invalid id %q; use digits or digits:digits copied from the latest page snapshot", id)
+	}
 	if colon := strings.IndexByte(id, ':'); colon >= 0 {
 		handleID, err := strconv.Atoi(id[:colon])
 		if err != nil {
-			return 0, "", nil, fmt.Errorf("invalid handle id %q: %w", id[:colon], err)
+			return 0, "", nil, fmt.Errorf("invalid handle id %q; use the numeric id from the latest page snapshot", id[:colon])
 		}
 		childPart := id[colon+1:]
 		if alias, ok := childAliasMethods[method]; ok {
 			childID, err := strconv.Atoi(childPart)
 			if err != nil {
-				return 0, "", nil, fmt.Errorf("invalid child id %q: %w", childPart, err)
+				return 0, "", nil, fmt.Errorf("invalid child id %q; use the numeric id from the latest page snapshot", childPart)
 			}
 			merged := make([]any, 0, len(args)+1)
 			merged = append(merged, childID)
@@ -260,7 +266,7 @@ func resolveTarget(id, method string, args []any) (int, string, []any, error) {
 	}
 	handleID, err := strconv.Atoi(id)
 	if err != nil {
-		return 0, "", nil, fmt.Errorf("invalid id %q: %w", id, err)
+		return 0, "", nil, fmt.Errorf("invalid id %q; use the numeric id from the latest page snapshot", id)
 	}
 	return handleID, method, args, nil
 }

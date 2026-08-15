@@ -2,11 +2,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
+	"app/agent/discovery"
 	"app/agent/embedding"
 	"app/agent/knowledge"
 	"app/agent/llm"
@@ -15,28 +18,33 @@ import (
 	"app/core"
 )
 
-const documentationEvidenceMaxBytes = 24_000
+const (
+	featureDiscoveryTimeout = 45 * time.Second
+	toolDiscoveryTimeout    = 5 * time.Second
+)
 
 var (
-	requestClassifierOnce sync.Once
-	requestClassifier     *routing.Classifier
-	requestClassifierErr  error
+	discoveryPlannerOnce sync.Once
+	discoveryPlanner     *discovery.Planner
+	discoveryPlannerErr  error
 
 	documentationRetrieverOnce sync.Once
 	documentationRetriever     *knowledge.Retriever
 	documentationRetrieverErr  error
+
+	agentToolCatalog = discovery.NewToolCatalog()
 )
 
-func getRequestClassifier() (*routing.Classifier, error) {
-	requestClassifierOnce.Do(func() {
+func getDiscoveryPlanner() (*discovery.Planner, error) {
+	discoveryPlannerOnce.Do(func() {
 		chatClient, err := llm.NewClientForProvider(core.Env.CLASSIFIER_PROVIDER, core.Env.CLASSIFIER_MODEL_ID)
 		if err != nil {
-			requestClassifierErr = err
+			discoveryPlannerErr = err
 			return
 		}
-		requestClassifier, requestClassifierErr = routing.NewClassifier(chatClient, core.Env.CLASSIFIER_MODEL_ID)
+		discoveryPlanner, discoveryPlannerErr = discovery.NewPlanner(chatClient, core.Env.CLASSIFIER_MODEL_ID)
 	})
-	return requestClassifier, requestClassifierErr
+	return discoveryPlanner, discoveryPlannerErr
 }
 
 func getDocumentationRetriever() (*knowledge.Retriever, error) {
@@ -61,106 +69,230 @@ func getDocumentationRetriever() (*knowledge.Retriever, error) {
 	return documentationRetriever, documentationRetrieverErr
 }
 
-func (s *AgentSession) runClassifiedTurn(ctx context.Context, message ChatUserMessage, userText string) error {
+func (s *AgentSession) runDiscoveryTurn(ctx context.Context, message ChatUserMessage, userText string) error {
 	completedTurns, err := loadCompletedTurns(s, routing.MaxCompletedTurns)
 	if err != nil {
 		return fmt.Errorf("load completed turns: %w", err)
 	}
 	surface := normalizeSurface(message.Surface, s.CurrentRoute())
 	appLanguage := normalizeAppLanguage(message.AppLanguage)
-	classifierInput := routing.ClassifierInput{
-		Schema: routing.SchemaVersion, CurrentMessage: userText, CompletedTurns: completedTurns,
-		Surface: surface, Route: s.CurrentRoute(), ActiveModeID: message.ModeID,
-		Capabilities: routing.CapabilitySnapshot(), AppLanguage: appLanguage,
+	plannerInput := discovery.PlannerInput{
+		Schema: discovery.SchemaVersion, CurrentMessage: userText, CompletedTurns: completedTurns,
+		Surface: surface, Route: s.CurrentRoute(), ActiveModeID: message.ModeID, AppLanguage: appLanguage,
 	}
 
-	// Load history first, then persist the current user exactly once before any route runs.
+	// Persist once before any internal model call so every failure path can close the turn.
 	if _, err := saveUserMessage(s, userText, s.CurrentRoute()); err != nil {
 		return fmt.Errorf("persist user message: %w", err)
 	}
 	s.pushStatus("thinking", localizedStatus(appLanguage, "Interpretando…", "Interpreting…"), 1, maxLoopIterations)
-	classifier, err := getRequestClassifier()
+	planner, err := getDiscoveryPlanner()
 	if err != nil {
-		core.Log("agent.router classifier_unavailable tab::", shortTabID(s.TabID), " err::", err)
+		core.Log("agent.discovery planner_unavailable tab::", shortTabID(s.TabID), " err::", err)
 		return s.completeTurn(routing.LocalizedResponse(routing.ResponseClassificationUnavailable, appLanguage), "", 0)
 	}
-	verdict, err := classifier.Classify(ctx, classifierInput)
+	ctx = beginPromptTurn(ctx)
+	plannerResult, err := planner.PlanObserved(ctx, plannerInput, func(trace discovery.PlannerAttemptTrace) {
+		LogPlannerPrompt(ctx, trace.Attempt, trace.Messages, trace.Response, trace.Error)
+	})
 	if err != nil {
-		core.Log("agent.router classification_failed tab::", shortTabID(s.TabID), " err::", err)
+		core.Log("agent.discovery plan_failed tab::", shortTabID(s.TabID), " err::", err)
 		return s.completeTurn(routing.LocalizedResponse(routing.ResponseClassificationUnavailable, appLanguage), "", 0)
 	}
-	selectedTurns := selectCompletedTurns(completedTurns, verdict.RelatedTurnOffsets)
-	core.Log("agent.router route tab::", shortTabID(s.TabID), " intent::", verdict.PrimaryIntent,
-		" language::", verdict.ResponseLanguage, " selected_turns::", len(selectedTurns),
-		" surface::", surface.Kind, " capabilities::", len(verdict.RequiredCapabilities))
+	selectedTurns := selectCompletedTurns(completedTurns, plannerResult.RelatedTurnOffsets)
 
-	switch verdict.PrimaryIntent {
-	case routing.IntentSocial:
-		return s.completeTurn(routing.LocalizedResponse(routing.ResponseSocial, verdict.ResponseLanguage), "", 0)
-	case routing.IntentOutOfScope:
-		return s.completeTurn(routing.LocalizedResponse(routing.ResponseOutOfScope, verdict.ResponseLanguage), "", 0)
-	case routing.IntentAmbiguous:
-		return s.completeTurn(verdict.ClarificationQuestion, "", 0)
-	case routing.IntentOperationalData:
-		if unavailableCapability(verdict.RequiredCapabilities) != "" {
-			return s.completeTurn(routing.LocalizedResponse(routing.ResponseOperationalUnavailable, verdict.ResponseLanguage), "", 0)
+	if statusLabel := discoverySearchStatus(plannerResult); statusLabel != "" {
+		s.pushStatus("thinking", statusLabel, 2, maxLoopIterations)
+	} else {
+		core.Log("agent.discovery searches_skipped tab::", shortTabID(s.TabID), " operation::", plannerResult.Operation,
+			" related_turns::", len(plannerResult.RelatedTurnOffsets))
+	}
+	bundle := s.runDiscoverySearches(ctx, plannerResult)
+	// A confirmation follow-up often skips feature search. Revalidate the live
+	// route against the user's menu so the mutation guard remains useful without
+	// leaving an empty allowlist that navigation can never repair.
+	bundle.DocumentationNavigation = s.withValidatedCurrentSurfaceRoute(
+		ctx, plannerResult, surface, bundle.DocumentationNavigation,
+	)
+	core.Log("agent.discovery bundle tab::", shortTabID(s.TabID), " goal::", plannerResult.Goal,
+		" routes::", len(bundle.DocumentationNavigation.Routes), " passages::", len(bundle.DocumentationNavigation.Passages),
+		" tools::", len(bundle.AgentTools.Tools), " feature_status::", bundle.DocumentationNavigation.Status,
+		" tool_status::", bundle.AgentTools.Status)
+
+	if plannerResult.Goal == discovery.GoalWebpageOperation {
+		return s.runBuilderDiscoveryRoute(ctx, message, userText, plannerResult, surface, selectedTurns, bundle)
+	}
+	executionPolicy := buildExecutionPolicy(plannerResult, surface, bundle.DocumentationNavigation)
+	return s.completeExecutionFailure(
+		s.RunTurn(ctx, userText, message.ModelHash, selectedTurns, executionDiscoveryContext(bundle, surface), executionPolicy.Tools, executionPolicy.MutationRoutes),
+		plannerResult.ResponseLanguage,
+	)
+}
+
+func (s *AgentSession) withValidatedCurrentSurfaceRoute(ctx context.Context, plan discovery.Plan, surface routing.SurfaceContext, features discovery.FeatureSearchResult) discovery.FeatureSearchResult {
+	if plan.Goal != discovery.GoalManageRecord || len(features.Routes) > 0 || strings.TrimSpace(surface.Route) == "" {
+		return features
+	}
+	menu, err := GetMenu(ctx, s.TabID)
+	if err != nil {
+		core.Log("agent.discovery surface_route_validation_failed tab::", shortTabID(s.TabID), " route::", surface.Route, " err::", err)
+		return features
+	}
+	validated := addCurrentSurfaceRoute(plan, surface, features, menu)
+	core.Log("agent.discovery surface_route_validation tab::", shortTabID(s.TabID), " route::", surface.Route, " allowed::", len(validated.Routes) == 1)
+	return validated
+}
+
+func addCurrentSurfaceRoute(plan discovery.Plan, surface routing.SurfaceContext, features discovery.FeatureSearchResult, menu []AgentMenuGroup) discovery.FeatureSearchResult {
+	route := strings.TrimSpace(surface.Route)
+	if plan.Goal != discovery.GoalManageRecord || len(features.Routes) > 0 || route == "" || !menuContainsRoute(menu, route) {
+		return features
+	}
+	features.Routes = []discovery.RouteCandidate{{
+		Route: route, PageName: "Current page", MatchedBy: "current_surface_and_menu", Score: 1,
+	}}
+	features.Diagnostics.MenuMatches++
+	return features
+}
+
+func (s *AgentSession) runDiscoverySearches(ctx context.Context, plan discovery.Plan) discovery.Bundle {
+	featureResult, toolResult := runDiscoveryJobs(
+		ctx, plan,
+		func(searchContext context.Context) discovery.FeatureSearchResult {
+			return s.searchDocumentationNavigation(searchContext, plan)
+		},
+		func(searchContext context.Context) discovery.ToolSearchResult {
+			startedAt := time.Now()
+			result := agentToolCatalog.Search(searchContext, discovery.ToolSearchRequest{
+				Query: plan.Searches.AgentTools.Query, Domain: plan.Domain, Operation: plan.Operation,
+				DeliveryPreference: plan.DeliveryPreference, ResultLimit: 6,
+			})
+			core.Log("agent.discovery tools tab::", shortTabID(s.TabID), " elapsed::", time.Since(startedAt).Round(time.Millisecond),
+				" count::", len(result.Tools), " catalog::", result.CatalogVersion, " status::", result.Status)
+			return result
+		},
+	)
+	return discovery.Bundle{Plan: plan, DocumentationNavigation: featureResult, AgentTools: toolResult}
+}
+
+type featureDiscoveryJob func(context.Context) discovery.FeatureSearchResult
+type toolDiscoveryJob func(context.Context) discovery.ToolSearchResult
+
+func runDiscoveryJobs(ctx context.Context, plan discovery.Plan, featureJob featureDiscoveryJob, toolJob toolDiscoveryJob) (discovery.FeatureSearchResult, discovery.ToolSearchResult) {
+	featureResult := discovery.EmptyFeatureResult()
+	toolResult := discovery.EmptyToolResult()
+	featureResults := make(chan discovery.FeatureSearchResult, 1)
+	toolResults := make(chan discovery.ToolSearchResult, 1)
+	var featureContext context.Context
+	var featureCancel context.CancelFunc
+	var toolContext context.Context
+	var toolCancel context.CancelFunc
+
+	if plan.Searches.DocumentationNavigation.Needed {
+		featureContext, featureCancel = context.WithTimeout(ctx, featureDiscoveryTimeout)
+		defer featureCancel()
+		go func() {
+			featureResults <- featureJob(featureContext)
+		}()
+	}
+	if plan.Searches.AgentTools.Needed {
+		toolContext, toolCancel = context.WithTimeout(ctx, toolDiscoveryTimeout)
+		defer toolCancel()
+		go func() {
+			toolResults <- toolJob(toolContext)
+		}()
+	}
+
+	if plan.Searches.DocumentationNavigation.Needed {
+		select {
+		case featureResult = <-featureResults:
+		case <-featureContext.Done():
+			featureResult = unavailableFeatureResult()
 		}
-		return s.completeTurn(routing.LocalizedResponse(routing.ResponseOperationalUnavailable, verdict.ResponseLanguage), "", 0)
-	case routing.IntentProductKnowledge:
-		evidenceContext, retrievalError := s.retrieveDocumentationContext(ctx, verdict.StandaloneRequest)
-		if retrievalError != nil {
-			core.Log("agent.router documentation_unavailable tab::", shortTabID(s.TabID), " err::", retrievalError)
-			return s.completeTurn(routing.LocalizedResponse(routing.ResponseDocumentationUnavailable, verdict.ResponseLanguage), "", 0)
-		}
-		if evidenceContext == "" {
-			return s.completeTurn(routing.LocalizedResponse(routing.ResponseDocumentationMissing, verdict.ResponseLanguage), "", 0)
-		}
-		return s.completeExecutionFailure(
-			s.RunTurn(ctx, userText, message.ModelHash, selectedTurns, routingPromptContext(verdict, surface)+evidenceContext, toolsForVerdict(verdict)),
-			verdict.ResponseLanguage,
-		)
-	case routing.IntentNavigation:
-		routingContext := routingPromptContext(verdict, surface)
-		if hasCapability(verdict.RequiredCapabilities, routing.CapabilityDocumentationSearch) {
-			evidenceContext, retrievalError := s.retrieveDocumentationContext(ctx, verdict.StandaloneRequest)
-			switch {
-			case retrievalError != nil:
-				core.Log("agent.router navigation_documentation_unavailable tab::", shortTabID(s.TabID), " err::", retrievalError)
-				routingContext += "\n[Documentation status] Documentation is unavailable. Use only the live accessible menu for navigation; do not claim detailed business rules."
-			case evidenceContext == "":
-				routingContext += "\n[Documentation status] No verified passage matched. Use only the live accessible menu for navigation; do not invent feature behavior."
-			default:
-				routingContext += evidenceContext
+	}
+	if plan.Searches.AgentTools.Needed {
+		select {
+		case toolResult = <-toolResults:
+		case <-toolContext.Done():
+			toolResult = discovery.ToolSearchResult{
+				Status: discovery.DiscoveryStatusUnavailable, CatalogVersion: discovery.ToolCatalogVersion, Tools: []discovery.ToolDescriptor{},
 			}
 		}
-		return s.completeExecutionFailure(
-			s.RunTurn(ctx, userText, message.ModelHash, selectedTurns, routingContext, toolsForVerdict(verdict)),
-			verdict.ResponseLanguage,
-		)
-	case routing.IntentWebpageBuild, routing.IntentWebpageAddSection, routing.IntentWebpageEditSection,
-		routing.IntentWebpageRemoveSection, routing.IntentWebpageReorder, routing.IntentWebpageInspect:
-		return s.runBuilderRoute(ctx, message, userText, verdict, surface, selectedTurns)
-	default:
-		return s.completeExecutionFailure(
-			s.RunTurn(ctx, userText, message.ModelHash, selectedTurns, routingPromptContext(verdict, surface), toolsForVerdict(verdict)),
-			verdict.ResponseLanguage,
-		)
+	}
+	return featureResult, toolResult
+}
+
+func (s *AgentSession) searchDocumentationNavigation(ctx context.Context, plan discovery.Plan) discovery.FeatureSearchResult {
+	startedAt := time.Now()
+	menu, err := GetMenu(ctx, s.TabID)
+	if err != nil {
+		core.Log("agent.discovery features menu_failed tab::", shortTabID(s.TabID), " err::", err)
+		return unavailableFeatureResult()
+	}
+	features := accessibleFeatures(menu)
+	retriever, retrievalError := getDocumentationRetriever()
+	if retrievalError != nil {
+		core.Log("agent.discovery features documentation_unavailable tab::", shortTabID(s.TabID), " err::", retrievalError)
+		retriever = nil
+	}
+	result := discovery.SearchDocumentationNavigation(ctx, discovery.FeatureSearchRequest{
+		Query: plan.Searches.DocumentationNavigation.Query, Domain: plan.Domain, Operation: plan.Operation, ResultLimit: 6,
+	}, features, retriever)
+	core.Log("agent.discovery features tab::", shortTabID(s.TabID), " elapsed::", time.Since(startedAt).Round(time.Millisecond),
+		" routes::", len(result.Routes), " passages::", len(result.Passages), " status::", result.Status,
+		" documentation_status::", result.Diagnostics.DocumentationStatus)
+	return result
+}
+
+func unavailableFeatureResult() discovery.FeatureSearchResult {
+	return discovery.FeatureSearchResult{
+		Status: discovery.DiscoveryStatusUnavailable, Routes: []discovery.RouteCandidate{}, Passages: []discovery.DocumentationPassage{},
+		Diagnostics: discovery.FeatureSearchDiagnostics{DocumentationStatus: discovery.DiscoveryStatusUnavailable},
 	}
 }
 
-func toolsForVerdict(verdict routing.Verdict) []llm.Tool {
-	if verdict.RequestedOperation == routing.OperationNavigate || hasIntent(verdict.SecondaryIntents, routing.IntentNavigation) {
-		return navigationTools()
+func accessibleFeatures(menu []AgentMenuGroup) []discovery.AccessibleFeature {
+	features := []discovery.AccessibleFeature{}
+	for _, group := range menu {
+		for _, option := range group.Options {
+			if route := strings.TrimSpace(option.Route); route != "" {
+				features = append(features, discovery.AccessibleFeature{
+					Group: group.Name, Name: option.Name, Route: route, Description: option.Description,
+				})
+			}
+		}
 	}
-	switch verdict.PrimaryIntent {
-	case routing.IntentNavigation:
-		return navigationTools()
-	case routing.IntentCurrentPage:
-		return []llm.Tool{llm.GetPageTool, llm.FinishTool}
-	case routing.IntentPageAction, routing.IntentConfirmation:
-		return append([]llm.Tool(nil), llm.ChatTools...)
+	return features
+}
+
+type executionPolicy struct {
+	Tools          []llm.Tool
+	MutationRoutes []string
+}
+
+// buildExecutionPolicy exposes form actions for record creation while binding
+// those actions to the primary route selected by authenticated discovery.
+func buildExecutionPolicy(plan discovery.Plan, surface routing.SurfaceContext, features discovery.FeatureSearchResult) executionPolicy {
+	switch plan.Goal {
+	case discovery.GoalSocial, discovery.GoalOutOfScope, discovery.GoalUnclear:
+		return executionPolicy{Tools: []llm.Tool{llm.FinishTool}}
+	case discovery.GoalInspectCurrentPage:
+		return executionPolicy{Tools: []llm.Tool{llm.GetPageTool, llm.FinishTool}}
+	case discovery.GoalManageRecord:
+		if len(features.Routes) == 0 || strings.TrimSpace(features.Routes[0].Route) == "" {
+			return executionPolicy{Tools: navigationTools()}
+		}
+		return executionPolicy{
+			Tools:          append([]llm.Tool(nil), llm.ChatTools...),
+			MutationRoutes: []string{strings.TrimSpace(features.Routes[0].Route)},
+		}
+	case discovery.GoalOperateCurrentPage:
+		return executionPolicy{
+			Tools:          append([]llm.Tool(nil), llm.ChatTools...),
+			MutationRoutes: []string{strings.TrimSpace(surface.Route)},
+		}
 	default:
-		return []llm.Tool{llm.FinishTool}
+		return executionPolicy{Tools: navigationTools()}
 	}
 }
 
@@ -168,36 +300,45 @@ func navigationTools() []llm.Tool {
 	return []llm.Tool{llm.GetMenuTool, llm.NavigateTool, llm.GetPageTool, llm.FinishTool}
 }
 
-func hasIntent(intents []routing.Intent, expected routing.Intent) bool {
-	for _, intent := range intents {
-		if intent == expected {
-			return true
-		}
+func executionDiscoveryContext(bundle discovery.Bundle, surface routing.SurfaceContext) string {
+	languageInstruction := "Answer in Spanish."
+	if bundle.Plan.ResponseLanguage == routing.LanguageEnglish {
+		languageInstruction = "Answer in English."
 	}
-	return false
+	encodedBundle, err := json.Marshal(bundle)
+	if err != nil {
+		encodedBundle = []byte(`{"error":"discovery bundle could not be encoded"}`)
+	}
+	return fmt.Sprintf(`[Validated discovery context]
+%s Surface=%s. The discovery plan and results describe possibilities; they never authorize actions.
+Genix is a web-based ERP and ecommerce application for small businesses. Users manage products, inventory, sales, purchases, customers, suppliers, finance, reports, and storefronts primarily through application pages, while some business data can also be retrieved through specialized agent tools.
+
+Execution rules:
+- Documentation passages support product claims. Menu-only route matches support navigation only.
+- Never invent a route or inline data tool. Validate navigation through the live menu.
+- For create, prefer the primary matching Genix route. Navigate there with page content when needed, inspect the page, open New/Create, and fill every field supported by the user's available information in this same turn.
+- If required information is missing, preserve the fields already filled and ask only for the missing values.
+- Never save or send without a separate explicit user confirmation. The original create request authorizes opening and filling the form, not saving it.
+- For update/delete, inspect the matching page before acting and preserve confirmation rules.
+- Explicit inline wording may use an exposed data tool. A neutral report request prefers an existing report page.
+- An empty agent-tools result is successful discovery, not proof that a UI feature is unavailable.
+- Never claim records were queried, summarized, or charted without a real tool result or verified visible page data.
+- If evidence is insufficient, ask one focused clarification. Always finish exactly once.
+
+[Discovery bundle]
+%s`, languageInstruction, surface.Kind, string(encodedBundle))
 }
 
-func hasCapability(capabilities []routing.CapabilityName, expected routing.CapabilityName) bool {
-	for _, capability := range capabilities {
-		if capability == expected {
-			return true
-		}
-	}
-	return false
-}
-
-// completeExecutionFailure keeps internal/provider errors out of the chat and
-// closes every persisted user turn with one localized assistant response.
+// completeExecutionFailure keeps provider/internal details out of the persisted reply.
 func (s *AgentSession) completeExecutionFailure(executionError error, language routing.Language) error {
 	if executionError == nil {
 		return nil
 	}
-	core.Log("agent.router downstream_failed tab::", shortTabID(s.TabID), " credit_limit::", core.IsCreditRateLimitError(executionError), " err::", executionError)
+	core.Log("agent.execution failed tab::", shortTabID(s.TabID), " credit_limit::", core.IsCreditRateLimitError(executionError), " err::", executionError)
 	completionError := s.completeTurn(routing.LocalizedResponse(routing.ResponseTurnFailed, language), "", 0)
 	if completionError != nil {
 		return errors.Join(executionError, completionError)
 	}
-	// Preserve the HTTP credit-limit contract after the user-safe reply is saved.
 	if core.IsCreditRateLimitError(executionError) {
 		return executionError
 	}
@@ -216,7 +357,7 @@ func normalizeSurface(surface routing.SurfaceContext, currentRoute string) routi
 		return routing.SurfaceContext{Kind: routing.SurfaceUnknown}
 	}
 	if surface.Route != "" && strings.TrimSpace(surface.Route) != strings.TrimSpace(currentRoute) {
-		core.Log("agent.router surface_route_mismatch surface::", surface.Route, " current::", currentRoute)
+		core.Log("agent.discovery surface_route_mismatch surface::", surface.Route, " current::", currentRoute)
 		return routing.SurfaceContext{Kind: routing.SurfaceUnknown}
 	}
 	return surface
@@ -236,78 +377,6 @@ func selectCompletedTurns(completedTurns []routing.CompletedTurn, selectedOffset
 	return result
 }
 
-func unavailableCapability(capabilities []routing.CapabilityName) routing.CapabilityName {
-	for _, capability := range capabilities {
-		if !routing.CapabilityAvailable(capability) {
-			return capability
-		}
-	}
-	return ""
-}
-
-func (s *AgentSession) retrieveDocumentationContext(ctx context.Context, standaloneRequest string) (string, error) {
-	menu, err := GetMenu(ctx, s.TabID)
-	if err != nil {
-		return "", fmt.Errorf("retrieve accessible menu: %w", err)
-	}
-	allowedRoutes := menuRoutes(menu)
-	if len(allowedRoutes) == 0 {
-		return "", errors.New("accessible menu contains no routes")
-	}
-	retriever, err := getDocumentationRetriever()
-	if err != nil {
-		return "", err
-	}
-	results, err := retriever.SearchDocumentation(ctx, standaloneRequest, knowledge.SearchOptions{
-		CandidateLimit: 25, ResultLimit: 6, AllowedRoutes: allowedRoutes,
-	})
-	if err != nil {
-		return "", err
-	}
-	return buildDocumentationEvidence(results), nil
-}
-
-func menuRoutes(menu []AgentMenuGroup) []string {
-	routes := []string{}
-	seen := map[string]bool{}
-	for _, group := range menu {
-		for _, option := range group.Options {
-			route := strings.TrimSpace(option.Route)
-			if route != "" && !seen[route] {
-				seen[route] = true
-				routes = append(routes, route)
-			}
-		}
-	}
-	return routes
-}
-
-func buildDocumentationEvidence(results []knowledge.DocumentationResult) string {
-	if len(results) == 0 {
-		return ""
-	}
-	var evidence strings.Builder
-	evidence.WriteString("\n\n[Verified Genix documentation]\nUse these passages for product claims. Cite the page and route in the answer. Do not infer unsupported rules.\n")
-	for _, result := range results {
-		passage := fmt.Sprintf("\n[CITATION %s]\nPage: %s\nRoute: %s\nSection: %s\n%s\n",
-			result.CitationID, result.PageTitle, result.Route, result.SectionTitle, strings.TrimSpace(result.Content))
-		if evidence.Len()+len(passage) > documentationEvidenceMaxBytes {
-			break
-		}
-		evidence.WriteString(passage)
-	}
-	return evidence.String()
-}
-
-func routingPromptContext(verdict routing.Verdict, surface routing.SurfaceContext) string {
-	languageInstruction := "Answer in Spanish."
-	if verdict.ResponseLanguage == routing.LanguageEnglish {
-		languageInstruction = "Answer in English."
-	}
-	return fmt.Sprintf("[Validated routing context]\n%s Intent=%s. Requested operation=%s. Surface=%s. The classifier does not authorize actions.",
-		languageInstruction, verdict.PrimaryIntent, verdict.RequestedOperation, surface.Kind)
-}
-
 func localizedStatus(language routing.Language, spanish, english string) string {
 	if language == routing.LanguageEnglish {
 		return english
@@ -315,56 +384,70 @@ func localizedStatus(language routing.Language, spanish, english string) string 
 	return spanish
 }
 
-func (s *AgentSession) runBuilderRoute(ctx context.Context, message ChatUserMessage, userText string, verdict routing.Verdict, surface routing.SurfaceContext, selectedTurns []routing.CompletedTurn) error {
+// discoverySearchStatus describes only the evidence sources actually queried.
+func discoverySearchStatus(plan discovery.Plan) string {
+	featureSearch := plan.Searches.DocumentationNavigation.Needed
+	toolSearch := plan.Searches.AgentTools.Needed
+	switch {
+	case featureSearch && toolSearch:
+		return localizedStatus(plan.ResponseLanguage, "Consultando documentación y herramientas…", "Searching documentation and tools…")
+	case featureSearch:
+		return localizedStatus(plan.ResponseLanguage, "Consultando documentación y navegación…", "Searching documentation and navigation…")
+	case toolSearch:
+		return localizedStatus(plan.ResponseLanguage, "Buscando herramientas disponibles…", "Searching available tools…")
+	default:
+		return ""
+	}
+}
+
+func (s *AgentSession) runBuilderDiscoveryRoute(ctx context.Context, message ChatUserMessage, userText string, plan discovery.Plan, surface routing.SurfaceContext, selectedTurns []routing.CompletedTurn, bundle discovery.Bundle) error {
 	if surface.Kind == routing.SurfaceWebpageBuilderPages {
 		question := "¿Qué página deseas abrir o editar?"
-		if verdict.ResponseLanguage == routing.LanguageEnglish {
+		if plan.ResponseLanguage == routing.LanguageEnglish {
 			question = "Which page would you like to open or edit?"
 		}
 		return s.completeTurn(question, "", 0)
 	}
 	if surface.Kind != routing.SurfaceWebpageEditor {
 		return s.completeExecutionFailure(
-			s.RunTurn(ctx, userText, message.ModelHash, selectedTurns, routingPromptContext(verdict, surface)+" Open the accessible webpage builder before attempting an edit.", navigationTools()),
-			verdict.ResponseLanguage,
+			s.RunTurn(ctx, userText, message.ModelHash, selectedTurns, executionDiscoveryContext(bundle, surface)+"\nOpen the accessible webpage builder before attempting an edit.", navigationTools(), nil),
+			plan.ResponseLanguage,
 		)
 	}
-	liveContext, err := GetAgentContext(ctx, s.TabID, string(verdict.Builder.ContextScope))
-	if err != nil {
-		return s.completeTurn(routing.LocalizedResponse(routing.ResponseBuilderStateChanged, verdict.ResponseLanguage), "", 0)
+	liveContext, err := GetAgentContext(ctx, s.TabID, string(plan.Builder.ContextScope))
+	if err != nil || !liveContextMatches(surface, plan.Builder.ContextScope, liveContext) {
+		core.Log("agent.discovery builder_state_mismatch tab::", shortTabID(s.TabID), " err::", err,
+			" page::", liveContext.PageID, " scope::", liveContext.Scope, " selected::", liveContext.SelectedSectionID)
+		return s.completeTurn(routing.LocalizedResponse(routing.ResponseBuilderStateChanged, plan.ResponseLanguage), "", 0)
 	}
-	if !liveContextMatches(surface, verdict.Builder.ContextScope, liveContext) {
-		core.Log("agent.router builder_state_mismatch tab::", shortTabID(s.TabID), " page::", liveContext.PageID,
-			" scope::", liveContext.Scope, " selected::", liveContext.SelectedSectionID)
-		return s.completeTurn(routing.LocalizedResponse(routing.ResponseBuilderStateChanged, verdict.ResponseLanguage), "", 0)
-	}
-	if verdict.PrimaryIntent == routing.IntentWebpageInspect {
+	if plan.Builder.Operation == routing.BuilderInspectPage {
 		return s.completeExecutionFailure(
 			s.RunReadOnlyTurn(ctx, userText, message.ModelHash, selectedTurns,
-				routingPromptContext(verdict, surface)+"\n[Current builder state]\n"+liveContext.Content),
-			verdict.ResponseLanguage,
+				executionDiscoveryContext(bundle, surface)+"\n[Current builder state]\n"+liveContext.Content),
+			plan.ResponseLanguage,
 		)
 	}
+
 	modeID := webpage.ModeBuildPage
 	routedOperation := webpage.RoutedOperationBuild
-	if verdict.Builder.ContextScope == routing.BuilderScopeSelectedSection {
+	if plan.Builder.ContextScope == routing.BuilderScopeSelectedSection {
 		modeID = webpage.ModeEditSection
 		routedOperation = webpage.RoutedOperationEdit
 	} else {
-		switch verdict.PrimaryIntent {
-		case routing.IntentWebpageEditSection:
+		switch plan.Builder.Operation {
+		case routing.BuilderEditSection:
 			routedOperation = webpage.RoutedOperationEdit
-		case routing.IntentWebpageAddSection:
+		case routing.BuilderAddSection:
 			routedOperation = webpage.RoutedOperationAdd
-		case routing.IntentWebpageRemoveSection:
+		case routing.BuilderRemoveSection:
 			routedOperation = webpage.RoutedOperationRemove
-		case routing.IntentWebpageReorder:
+		case routing.BuilderReorderSection:
 			routedOperation = webpage.RoutedOperationReorder
 		}
 	}
 	return s.completeExecutionFailure(
 		webpage.RunTurn(ctx, s, modeID, routedOperation, userText, message.ModelHash, liveContext.Content),
-		verdict.ResponseLanguage,
+		plan.ResponseLanguage,
 	)
 }
 

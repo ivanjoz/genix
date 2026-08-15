@@ -1,0 +1,82 @@
+[
+  {
+    "name": "spanish product creation",
+    "surface": "erp_page",
+    "request": "Hola, ayúdame a crear un producto que se llame Aceite Tondero a 12 soles",
+    "goal": "manage_record",
+    "operation": "create",
+    "feature_search": true,
+    "tool_search": false,
+    "delivery": "unspecified"
+  },
+  {
+    "name": "neutral sales report",
+    "surface": "erp_page",
+    "request": "Quiero el reporte de ventas",
+    "goal": "view_report",
+    "operation": "read",
+    "feature_search": true,
+    "tool_search": true,
+    "delivery": "unspecified"
+  },
+  {
+    "name": "inline product sales",
+    "surface": "erp_page",
+    "request": "Resume aquí las ventas por producto del mes pasado",
+    "goal": "query_company_data",
+    "operation": "read",
+    "feature_search": true,
+    "tool_search": true,
+    "delivery": "inline"
+  },
+  {
+    "name": "english product explanation",
+    "surface": "unknown",
+    "request": "How do I create a product?",
+    "goal": "explain_product",
+    "operation": "read",
+    "feature_search": true,
+    "tool_search": false,
+    "delivery": "explanation"
+  },
+  {
+    "name": "visible field",
+    "surface": "erp_page",
+    "request": "¿Qué valor tiene este campo?",
+    "goal": "inspect_current_page",
+    "operation": "read",
+    "feature_search": false,
+    "tool_search": false,
+    "delivery": "unspecified"
+  },
+  {
+    "name": "confirmation follow-up",
+    "surface": "erp_page",
+    "request": "si guarda",
+    "goal": "manage_record",
+    "operation": "confirm",
+    "feature_search": false,
+    "tool_search": false,
+    "delivery": "unspecified"
+  },
+  {
+    "name": "builder product section",
+    "surface": "webpage_builder_editor",
+    "request": "Agrega una sección de productos",
+    "goal": "webpage_operation",
+    "operation": "none",
+    "feature_search": false,
+    "tool_search": false,
+    "delivery": "unspecified"
+  },
+  {
+    "name": "social greeting",
+    "surface": "unknown",
+    "request": "Hola",
+    "goal": "social",
+    "operation": "none",
+    "feature_search": false,
+    "tool_search": false,
+    "delivery": "unspecified"
+  }
+]

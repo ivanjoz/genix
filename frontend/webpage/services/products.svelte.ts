@@ -210,7 +210,7 @@ const makeDeltaArgs = (opts: { fileContent?: string; fileMissing?: boolean } = {
 	__client__: 0,
 	useCache: CATALOG_CACHE,
 	keysIDs: { productos: "ID", marcas: "ID", categorias: "ID" },
-	headers: buildHeaders('json'),
+	headers: buildHeaders('json', CATALOG_ROUTE),
 	fileRoute: opts.fileMissing ? undefined : snapshotFileRoute(),
 	fileSchema: PRODUCT_ECOMMERCE_FILE_SCHEMA,
 	fileContent: opts.fileContent,

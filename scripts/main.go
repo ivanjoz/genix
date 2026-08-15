@@ -33,8 +33,8 @@ func main() {
 	case "search_documentation":
 		runBackendSubpackage("./agent/cmd/documentation-search", os.Args[2:]...)
 
-	case "classify_agent_request":
-		runBackendSubpackage("./agent/cmd/classifier-eval", os.Args[2:]...)
+	case "plan_agent_discovery":
+		runBackendSubpackage("./agent/cmd/discovery-eval", os.Args[2:]...)
 
 	case "follow_cloudwatch_logs":
 		FollowCloudWatchLogs()

@@ -56,7 +56,9 @@ The HTML snapshot tags every component with an `id` attribute:
 </SearchCard>
 <Input id="60" label="Nombre" methods="setValue"/>
 <Table id="38">
-  <TableRow id="38:100" methods="select"> … </TableRow>
+  <TableBody id="38" methods="selectRow">
+    <Row id="38:100"> … </Row>
+  </TableBody>
   <CellInput id="38:101" value="3" type="number" methods="setValue"/>
 </Table>
 ```

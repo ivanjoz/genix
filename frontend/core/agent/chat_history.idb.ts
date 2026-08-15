@@ -34,6 +34,8 @@ export interface AgentChatRow {
   role: AgentRole
   message: string
   summary?: string
+  // StatusKind distinguishes visible action traces from recoverable tool errors.
+  statusKind?: 'action' | 'error'
   timestamp: number
   // Pending = waiting for the backend's agentReply (used to render a spinner
   // next to the optimistic user row). Cleared once the row is finalized.

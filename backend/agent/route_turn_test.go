@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
-	"app/agent/knowledge"
+	"app/agent/discovery"
 	"app/agent/llm"
 	"app/agent/routing"
 )
@@ -17,32 +19,136 @@ func TestSelectCompletedTurnsPreservesChronologicalNonContiguousOrder(t *testing
 	}
 }
 
-func TestHasCapabilityRequiresExactCapability(t *testing.T) {
-	capabilities := []routing.CapabilityName{routing.CapabilityMenu, routing.CapabilityDocumentationSearch}
-	if !hasCapability(capabilities, routing.CapabilityDocumentationSearch) {
-		t.Fatal("documentation capability was not detected")
-	}
-	if hasCapability(capabilities, routing.CapabilitySalesSearch) {
-		t.Fatal("unavailable sales capability was incorrectly detected")
+func TestExecutionToolsKeepNavigationForReadGoals(t *testing.T) {
+	for _, goal := range []discovery.Goal{discovery.GoalExplainProduct, discovery.GoalViewReport, discovery.GoalQueryCompanyData} {
+		names := toolNames(buildExecutionPolicy(discovery.Plan{Goal: goal}, routing.SurfaceContext{}, discovery.EmptyFeatureResult()).Tools)
+		if strings.Join(names, ",") != "get_menu,navigate,get_page,finish" {
+			t.Fatalf("goal %s lost safe navigation tools: %v", goal, names)
+		}
 	}
 }
 
-func TestToolsForVerdictRestrictsReadAndActionRoutes(t *testing.T) {
-	productTools := toolsForVerdict(routing.Verdict{PrimaryIntent: routing.IntentProductKnowledge, RequestedOperation: routing.OperationRead})
-	if got := toolNames(productTools); len(got) != 1 || got[0] != "finish" {
-		t.Fatalf("product knowledge received extra tools: %v", got)
+func TestExecutionPolicyAllowsRecordFormActionsOnlyOnPrimaryDiscoveredRoute(t *testing.T) {
+	matchingFeatures := discovery.FeatureSearchResult{Routes: []discovery.RouteCandidate{{Route: "/business/products"}}}
+	policy := buildExecutionPolicy(
+		discovery.Plan{Goal: discovery.GoalManageRecord},
+		routing.SurfaceContext{Route: "/finance/cash-banks"}, matchingFeatures,
+	)
+	if !containsString(toolNames(policy.Tools), llm.InvokeBatchToolName) {
+		t.Fatalf("record creation cannot fill the destination form: %v", toolNames(policy.Tools))
+	}
+	if len(policy.MutationRoutes) != 1 || policy.MutationRoutes[0] != "/business/products" {
+		t.Fatalf("record actions were not bound to the primary route: %+v", policy)
+	}
+	if routeAllowed("/finance/cash-banks", policy.MutationRoutes) || !routeAllowed("/business/products", policy.MutationRoutes) {
+		t.Fatalf("record action route guard is incorrect: %+v", policy.MutationRoutes)
+	}
+	inspectNames := toolNames(buildExecutionPolicy(discovery.Plan{Goal: discovery.GoalInspectCurrentPage}, routing.SurfaceContext{}, discovery.EmptyFeatureResult()).Tools)
+	if containsString(inspectNames, llm.InvokeBatchToolName) || strings.Join(inspectNames, ",") != "get_page,finish" {
+		t.Fatalf("page inspection received mutation tools: %v", inspectNames)
+	}
+}
+
+func TestExecutionPolicyRevalidatesCurrentSurfaceRouteForFollowUp(t *testing.T) {
+	plan := discovery.Plan{Goal: discovery.GoalManageRecord, Operation: discovery.OperationUpdate}
+	surface := routing.SurfaceContext{Kind: routing.SurfaceERPPage, Route: "/logistics/products-stock"}
+	menu := []AgentMenuGroup{{Options: []AgentMenuOption{{Route: "/logistics/products-stock"}}}}
+
+	validated := addCurrentSurfaceRoute(plan, surface, discovery.EmptyFeatureResult(), menu)
+	policy := buildExecutionPolicy(plan, surface, validated)
+	if !routeAllowed(surface.Route, policy.MutationRoutes) || !containsString(toolNames(policy.Tools), llm.InvokeBatchToolName) {
+		t.Fatalf("validated follow-up route cannot mutate current page: routes=%v tools=%v", policy.MutationRoutes, toolNames(policy.Tools))
 	}
 
-	navigationVerdict := routing.Verdict{
-		PrimaryIntent: routing.IntentProductKnowledge, RequestedOperation: routing.OperationNavigate,
+	rejected := addCurrentSurfaceRoute(plan, surface, discovery.EmptyFeatureResult(), []AgentMenuGroup{})
+	if policy := buildExecutionPolicy(plan, surface, rejected); len(policy.MutationRoutes) != 0 || containsString(toolNames(policy.Tools), llm.InvokeBatchToolName) {
+		t.Fatalf("route absent from accessible menu received mutation access: %+v", policy)
 	}
-	if got := toolNames(toolsForVerdict(navigationVerdict)); strings.Join(got, ",") != "get_menu,navigate,get_page,finish" {
-		t.Fatalf("unexpected navigation tools: %v", got)
-	}
+}
 
-	actionTools := toolNames(toolsForVerdict(routing.Verdict{PrimaryIntent: routing.IntentPageAction}))
-	if !containsString(actionTools, "invoke_batch") {
-		t.Fatalf("page action lacks mutation tool: %v", actionTools)
+func TestExecutionContextRequiresCreateFormFillBeforeConfirmation(t *testing.T) {
+	bundle := discovery.Bundle{
+		Plan: discovery.Plan{ResponseLanguage: routing.LanguageSpanish, Goal: discovery.GoalManageRecord},
+	}
+	context := executionDiscoveryContext(bundle, routing.SurfaceContext{Kind: routing.SurfaceERPPage})
+	for _, instruction := range []string{"open New/Create", "fill every field", "separate explicit user confirmation"} {
+		if !strings.Contains(context, instruction) {
+			t.Fatalf("create-form instruction %q missing from execution context: %s", instruction, context)
+		}
+	}
+}
+
+func TestExecutionContextTreatsEmptyCatalogAsSuccessful(t *testing.T) {
+	bundle := discovery.Bundle{
+		Plan:                    discovery.Plan{ResponseLanguage: routing.LanguageSpanish, Goal: discovery.GoalViewReport},
+		DocumentationNavigation: discovery.EmptyFeatureResult(), AgentTools: discovery.EmptyToolResult(),
+	}
+	context := executionDiscoveryContext(bundle, routing.SurfaceContext{Kind: routing.SurfaceERPPage})
+	if !strings.Contains(context, `"status":"ok"`) || !strings.Contains(context, `"tools":[]`) {
+		t.Fatalf("empty catalog was not preserved as a successful result: %s", context)
+	}
+	if !strings.Contains(context, "empty agent-tools result is successful") {
+		t.Fatalf("UI fallback policy missing from execution context: %s", context)
+	}
+}
+
+func TestDiscoveryJobsStartInParallel(t *testing.T) {
+	featureStarted := make(chan struct{})
+	toolStarted := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	plan := discovery.Plan{Searches: discovery.SearchPlan{
+		DocumentationNavigation: discovery.SearchDecision{Needed: true, Query: "products"},
+		AgentTools:              discovery.SearchDecision{Needed: true, Query: "products"},
+	}}
+	go func() {
+		defer close(finished)
+		runDiscoveryJobs(context.Background(), plan,
+			func(context.Context) discovery.FeatureSearchResult {
+				close(featureStarted)
+				<-release
+				return discovery.EmptyFeatureResult()
+			},
+			func(context.Context) discovery.ToolSearchResult {
+				close(toolStarted)
+				<-release
+				return discovery.EmptyToolResult()
+			},
+		)
+	}()
+	for _, started := range []<-chan struct{}{featureStarted, toolStarted} {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("selected discovery jobs did not start concurrently")
+		}
+	}
+	close(release)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("parallel discovery did not finish")
+	}
+}
+
+func TestDiscoverySearchStatusMatchesSelectedSources(t *testing.T) {
+	tests := []struct {
+		name     string
+		searches discovery.SearchPlan
+		expected string
+	}{
+		{name: "none", expected: ""},
+		{name: "documentation", searches: discovery.SearchPlan{DocumentationNavigation: discovery.SearchDecision{Needed: true}}, expected: "Consultando documentación y navegación…"},
+		{name: "tools", searches: discovery.SearchPlan{AgentTools: discovery.SearchDecision{Needed: true}}, expected: "Buscando herramientas disponibles…"},
+		{name: "both", searches: discovery.SearchPlan{DocumentationNavigation: discovery.SearchDecision{Needed: true}, AgentTools: discovery.SearchDecision{Needed: true}}, expected: "Consultando documentación y herramientas…"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			plan := discovery.Plan{ResponseLanguage: routing.LanguageSpanish, Searches: test.searches}
+			if status := discoverySearchStatus(plan); status != test.expected {
+				t.Fatalf("unexpected status %q, expected %q", status, test.expected)
+			}
+		})
 	}
 }
 
@@ -63,25 +169,21 @@ func containsString(values []string, expected string) bool {
 	return false
 }
 
-func TestMenuRoutesDeduplicatesAccessibleNavigationTargets(t *testing.T) {
-	menu := []AgentMenuGroup{{Options: []AgentMenuOption{{Route: "/finance/cash-banks"}, {Route: " /finance/cash-banks "}, {Route: "/sales/orders"}}}}
-	routes := menuRoutes(menu)
-	if len(routes) != 2 || routes[0] != "/finance/cash-banks" || routes[1] != "/sales/orders" {
-		t.Fatalf("unexpected menu routes: %+v", routes)
+func TestAccessibleFeaturesPreserveMenuRoutes(t *testing.T) {
+	menu := []AgentMenuGroup{{Name: "Business", Options: []AgentMenuOption{{Name: "Products", Route: " /business/products ", Description: "Create products"}}}}
+	features := accessibleFeatures(menu)
+	if len(features) != 1 || features[0].Route != "/business/products" || features[0].Name != "Products" {
+		t.Fatalf("unexpected accessible features: %+v", features)
 	}
 }
 
-func TestDocumentationEvidenceExposesNavigationButNotDiagnostics(t *testing.T) {
-	evidence := buildDocumentationEvidence([]knowledge.DocumentationResult{{
-		CitationID: "finance.cash-banks#capability.reconcile", PageTitle: "Cash & Banks",
-		Route: "/finance/cash-banks", SectionTitle: "Reconcile cash", Content: "Compare observed cash.",
-		PointID: "private-point", DocumentationHash: "private-hash",
-	}})
-	if !strings.Contains(evidence, "/finance/cash-banks") || !strings.Contains(evidence, "finance.cash-banks#capability.reconcile") {
-		t.Fatalf("navigation evidence missing: %s", evidence)
+func TestMenuContainsOnlyExactAccessibleRoute(t *testing.T) {
+	menu := []AgentMenuGroup{{Options: []AgentMenuOption{{Route: "/business/products"}}}}
+	if !menuContainsRoute(menu, " /business/products ") {
+		t.Fatal("accessible route was rejected")
 	}
-	if strings.Contains(evidence, "private-point") || strings.Contains(evidence, "private-hash") {
-		t.Fatalf("diagnostic identifiers leaked into prompt: %s", evidence)
+	if menuContainsRoute(menu, "/business/products/new") {
+		t.Fatal("invented child route was accepted")
 	}
 }
 

@@ -170,7 +170,7 @@ func (l *turnLog) writeFixed(name, content string) {
 
 // formatMessages renders an LLM messages slice as a readable transcript: one
 // section per message, with tool-call expansion, so the file can be skimmed
-// without a JSON viewer. Mirrors the chat loop's formatPromptMessages.
+// without a JSON viewer. Mirrors the main agent's readable prompt log.
 func formatMessages(messages []llm.Message) string {
 	var b strings.Builder
 	for i, m := range messages {

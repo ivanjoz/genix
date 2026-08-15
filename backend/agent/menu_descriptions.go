@@ -94,7 +94,9 @@ func loadMenuDescriptions(descriptionPath string) (map[string]string, error) {
 		if route == "" || entry.Description == "" {
 			continue
 		}
-		descriptionsByRoute[route] = entry.Description
+		// Keep both languages searchable so Spanish requests can resolve an English menu label.
+		descriptionParts := []string{strings.TrimSpace(entry.Description), strings.TrimSpace(entry.DescriptionSpanish)}
+		descriptionsByRoute[route] = strings.Join(descriptionParts, " | ")
 	}
 
 	if len(descriptionsByRoute) == 0 {

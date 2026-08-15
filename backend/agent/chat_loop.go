@@ -14,9 +14,8 @@ import (
 	"app/core"
 )
 
-// RunTurn is the per-user-message entry point of the agentic loop. The router
-// supplies only the tools authorized for the classified intent. Each iteration
-// is one provider call; browser tool results return through the SSE+POST bridge.
+// RunTurn is the execution stage of one discovered user request. The caller
+// supplies the validated discovery bundle and backend-approved tools.
 
 const (
 	// maxLoopIterations is the safety cap on tool-call/result round-trips per
@@ -24,10 +23,9 @@ const (
 	// finish" arc with a few retries; bump if real usage shows it bites.
 	maxLoopIterations = 12
 	// toolResultMaxBytes truncates a tool result before it goes back into the
-	// conversation. Page HTML can be tens of KB and we don't want one call to
-	// blow the model's context window. The truncation marker tells the model
-	// the result was clipped so it can ask the user or retry differently.
-	toolResultMaxBytes = 24_000
+	// conversation. Page snapshots are already reduced to 30 KB; this wider
+	// final guard leaves room for their grammar and result metadata.
+	toolResultMaxBytes = 40_000
 	// keepRecentToolRounds caps how many (assistant tool_calls + tool result)
 	// pairs survive between iterations of the same turn. A get_page snapshot
 	// can be ~10K tokens; replaying every prior snapshot on every iteration
@@ -53,9 +51,9 @@ func getLLMClient() (*llm.Client, error) {
 	return llmClient, llmClientErr
 }
 
-// RunTurn drives the main loop with only classifier-selected completed turns.
+// RunTurn drives the main loop with only planner-selected completed turns.
 // The caller has already persisted the current user message exactly once.
-func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash string, completedTurns []routing.CompletedTurn, routingContext string, availableTools []llm.Tool) error {
+func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash string, completedTurns []routing.CompletedTurn, routingContext string, availableTools []llm.Tool, mutationRoutes []string) error {
 	client, err := getLLMClient()
 	if err != nil {
 		return fmt.Errorf("llm client unavailable: %w", err)
@@ -73,7 +71,8 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 	if activeModelID == "" {
 		activeModelID = client.Model
 	}
-	core.Log("Starting agentic loop with model", activeModelID, " tab::", shortTabID(s.TabID), " tools::", len(availableTools), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
+	core.Log("Starting agentic loop with model", activeModelID, " tab::", shortTabID(s.TabID), " tools::", len(availableTools),
+		" mutation_routes::", strings.Join(mutationRoutes, ","), " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
 	core.Log("Promp:", userText)
 
 	messages := buildRoutedChatMessages(completedTurns, userText, routingContext)
@@ -101,7 +100,7 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 		llmMessages := withLatestFullToolResult(messages, baseLen, latestFullToolResult)
 		// Local-dev: persist the exact messages array we're about to send for
 		// post-hoc inspection. No-op in any other environment.
-		LogPrompt(s.UserID, llmMessages)
+		LogExecutorPrompt(ctx, llmMessages, availableTools)
 		// Reasoning defaults (effort/exclude) come from the per-model registry
 		// in llm/models.go — Client.Chat fills them in if we leave them nil.
 		// That way switching models via DEFAULT_MODEL — or the whole provider via
@@ -136,8 +135,14 @@ func (s *AgentSession) RunTurn(ctx context.Context, userText string, modelHash s
 				// in one assistant message, so dispatch them sequentially and
 				// append every result before the next model request.
 				s.pushStatus("acting", s.statusLabelFor(call), iter+1, maxLoopIterations)
-				toolResult := s.dispatchTool(ctx, call)
-				core.Log("agent.chat-loop tool result tab::", shortTabID(s.TabID), " iter::", iter+1, " call::", callIndex+1, "/", len(choice.Message.ToolCalls), " id::", call.ID, " name::", call.Function.Name, " bytes::", len(toolResult), " has_error::", toolResultHasError(toolResult), " preview::", core.StrCut(toolResult, 500))
+				toolResult := s.dispatchTool(ctx, call, mutationRoutes)
+				toolErrorSummary, toolFailed := toolResultErrorSummary(toolResult)
+				core.Log("agent.chat-loop tool result tab::", shortTabID(s.TabID), " iter::", iter+1, " call::", callIndex+1, "/", len(choice.Message.ToolCalls), " id::", call.ID, " name::", call.Function.Name, " bytes::", len(toolResult), " has_error::", toolFailed, " preview::", core.StrCut(toolResult, 500))
+				if toolFailed {
+					// Persist recoverable failures in the visible action trail while
+					// still giving the model the result so it can retry safely.
+					s.pushStatus("error", "Error: "+toolErrorSummary, iter+1, maxLoopIterations)
+				}
 				fullClipped := clipForLLM(toolResult)
 				strippedClipped := clipForLLM(stripPageSnapshotFromToolResult(toolResult))
 				toolMessages = append(toolMessages, llm.Message{
@@ -221,11 +226,10 @@ func buildRoutedChatMessages(completedTurns []routing.CompletedTurn, currentMess
 	return messages
 }
 
-// dispatchTool runs one tool call against the connected browser tab and
-// returns the result as a JSON string for the LLM. Failures are returned as
-// JSON `{"error":"..."}` so the model can recover rather than seeing a raw
-// Go error string — same shape as the success case, just an extra key.
-func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) string {
+// dispatchTool runs one tool call against the connected browser tab. Page
+// results keep JSON metadata and raw snapshot text in separate sections;
+// failures stay JSON so the model can recover from them.
+func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall, mutationRoutes []string) string {
 	core.Log("agent.chat-ws dispatchTool tab::", shortTabID(s.TabID), " name::", call.Function.Name, " args::", core.StrCut(call.Function.Arguments, 200), " page_connected::", IsConnected(s.TabID))
 	switch call.Function.Name {
 	case llm.GetPageToolName:
@@ -241,7 +245,7 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		// already encoded in the rewritten tags.
 		compactPage(&page)
 		core.Log("agent.chat-ws get_page ok tab::", shortTabID(s.TabID), " html_bytes::", len(page.HTML))
-		return withSnapshotGrammar(toolJSON(map[string]any{"html": page.HTML}))
+		return pageToolResult(map[string]any{"ok": true}, page.HTML)
 
 	case llm.GetMenuToolName:
 		menu, err := GetMenu(ctx, s.TabID)
@@ -263,6 +267,14 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		if args.Route == "" {
 			return toolErrorJSON(errors.New("route is required"))
 		}
+		menu, err := GetMenu(ctx, s.TabID)
+		if err != nil {
+			return toolErrorJSON(fmt.Errorf("validate accessible route: %w", err))
+		}
+		if !menuContainsRoute(menu, args.Route) {
+			core.Log("agent.chat-ws navigate rejected tab::", shortTabID(s.TabID), " route::", args.Route)
+			return toolErrorJSON(fmt.Errorf("route %q is not in the current accessible menu", args.Route))
+		}
 		navigateResult, err := NavigateWithPage(ctx, s.TabID, args.Route, args.ReturnPageContent)
 		if err != nil {
 			core.Log("agent.chat-ws navigate error tab::", shortTabID(s.TabID), " route::", args.Route, " err::", err)
@@ -271,14 +283,18 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		// Track the route so later get_page status labels can name it.
 		s.setCurrentRoute(args.Route)
 		compactPage(navigateResult.Page)
-		body := toolJSON(map[string]any{"ok": true, "route": args.Route, "page": navigateResult.Page})
+		body := toolJSON(map[string]any{"ok": true, "route": args.Route})
 		if args.ReturnPageContent {
-			body = withSnapshotGrammar(body)
+			body = pageToolResult(map[string]any{"ok": true, "route": args.Route}, pageHTML(navigateResult.Page))
 		}
 		core.Log("agent.chat-ws navigate ok tab::", shortTabID(s.TabID), " route::", args.Route, " return_page::", args.ReturnPageContent)
 		return body
 
 	case llm.InvokeBatchToolName:
+		if !routeAllowed(s.CurrentRoute(), mutationRoutes) {
+			core.Log("agent.chat-ws invoke_batch rejected tab::", shortTabID(s.TabID), " current_route::", s.CurrentRoute(), " allowed_routes::", strings.Join(mutationRoutes, ","))
+			return toolErrorJSON(fmt.Errorf("page actions are not allowed on route %q; navigate to the discovered target first", s.CurrentRoute()))
+		}
 		// The LLM-facing shape uses a string `ID` so the model can pass the id
 		// straight from the snapshot — plain ("38") or composite ("38:100").
 		// resolveTarget mirrors what the HTTP /agent endpoint does: split the
@@ -316,9 +332,9 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		}
 		compactPage(result.Page)
 		tsvifyOptionValues(&result)
-		body := toolJSON(result)
+		body := toolJSON(struct{ Results []InvocationResult }{Results: result.Results})
 		if args.ReturnPageContent {
-			body = withSnapshotGrammar(body)
+			body = pageToolResult(struct{ Results []InvocationResult }{Results: result.Results}, pageHTML(result.Page))
 		}
 		core.Log("agent.chat-ws invoke_batch ok tab::", shortTabID(s.TabID), " invocations::", len(resolved), " results::", len(result.Results), " return_page::", args.ReturnPageContent)
 		return body
@@ -327,6 +343,31 @@ func (s *AgentSession) dispatchTool(ctx context.Context, call llm.ToolCall) stri
 		core.Log("agent.chat-ws unknown tool tab::", shortTabID(s.TabID), " name::", call.Function.Name)
 		return toolErrorJSON(fmt.Errorf("unknown tool %q — only get_page/get_menu/navigate/invoke_batch/finish are available", call.Function.Name))
 	}
+}
+
+func routeAllowed(currentRoute string, allowedRoutes []string) bool {
+	currentRoute = strings.TrimSpace(currentRoute)
+	if currentRoute == "" {
+		return false
+	}
+	for _, allowedRoute := range allowedRoutes {
+		if currentRoute == strings.TrimSpace(allowedRoute) {
+			return true
+		}
+	}
+	return false
+}
+
+func menuContainsRoute(menu []AgentMenuGroup, expectedRoute string) bool {
+	expectedRoute = strings.TrimSpace(expectedRoute)
+	for _, group := range menu {
+		for _, option := range group.Options {
+			if strings.TrimSpace(option.Route) == expectedRoute {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // completeTurn persists the agent's reply and emits the `agentReply` wire
@@ -550,27 +591,16 @@ func withLatestFullToolResult(messages []llm.Message, baseLen int, fullLatest st
 }
 
 // stripPageSnapshotFromToolResult rewrites a tool result so it loses its
-// page snapshot — both the SNAPSHOT GRAMMAR prefix and the heavy HTML /
-// Components payload — while keeping the lightweight Results array intact.
+// grammar and PAGE SNAPSHOT section while keeping the metadata intact.
 // This is the form we persist in the messages slice for past tool calls;
 // the current iteration's call uses the full form via withLatestFullToolResult.
 // Tool results without a snapshot are returned unchanged.
 func stripPageSnapshotFromToolResult(content string) string {
-	if !strings.HasPrefix(content, llm.PageSnapshotGrammar) {
+	metadata, _, found := splitPageToolResult(content)
+	if !found {
 		return content
 	}
-	body := content[len(llm.PageSnapshotGrammar):]
-	var decoded map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
-		return body
-	}
-	delete(decoded, "Page")
-	delete(decoded, "html")
-	encoded, err := json.Marshal(decoded)
-	if err != nil {
-		return body
-	}
-	return string(encoded)
+	return metadata
 }
 
 // toolJSON marshals a tool result for the LLM. Falls back to a stable error
@@ -588,13 +618,43 @@ func toolErrorJSON(err error) string {
 	return string(body)
 }
 
-func toolResultHasError(content string) bool {
-	var decoded map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(strings.TrimPrefix(content, llm.PageSnapshotGrammar)), &decoded); err != nil {
-		return false
+func toolResultErrorSummary(content string) (string, bool) {
+	if metadata, _, found := splitPageToolResult(content); found {
+		content = metadata
 	}
-	_, ok := decoded["error"]
-	return ok
+	var decoded struct {
+		Error   string `json:"error"`
+		Results []struct {
+			OK    bool
+			Error string
+		}
+	}
+	if err := json.Unmarshal([]byte(content), &decoded); err != nil {
+		return "", false
+	}
+	if summary := compactToolError(decoded.Error); summary != "" {
+		return summary, true
+	}
+	for _, result := range decoded.Results {
+		if result.OK {
+			continue
+		}
+		if summary := compactToolError(result.Error); summary != "" {
+			return summary, true
+		}
+		return "La acción no se completó.", true
+	}
+	return "", false
+}
+
+func compactToolError(message string) string {
+	message = strings.Join(strings.Fields(message), " ")
+	const maximumRunes = 240
+	characters := []rune(message)
+	if len(characters) > maximumRunes {
+		message = string(characters[:maximumRunes]) + "…"
+	}
+	return message
 }
 
 // tsvifyOptionValues rewrites InvocationResult values that decode as
@@ -658,23 +718,19 @@ func compactPage(page *PageContent) {
 		return
 	}
 	page.HTML = parsed
+	limitedHTML, limitedRows := limitTableRows(page.HTML, pageSnapshotMaxTableRows)
+	page.HTML = limitedHTML
+	trimmedHTML, trimmedRows := trimTableRowsToBytes(page.HTML, pageSnapshotMaxBytes)
+	page.HTML = trimmedHTML
+	if limitedRows+trimmedRows > 0 {
+		core.Log("agent.page-snapshot rows limited::", limitedRows, " rows byte-trimmed::", trimmedRows,
+			" html_bytes::", len(page.HTML), " rows_per_table::", pageSnapshotMaxTableRows, " byte_limit::", pageSnapshotMaxBytes)
+	}
 	// Components is redundant once parsed: id / type / label / methods / inline
 	// options all live on the rewritten HTML tags. Drop it from the LLM-facing
 	// envelope to save tokens. HTTP / external callers skip compactPage and
 	// still receive the full Components array.
 	page.Components = nil
-}
-
-// withSnapshotGrammar prepends the snapshot grammar block to a tool result
-// that carries parsed page HTML. Called from the three result-bearing
-// branches (get_page; navigate / invoke_batch when returnPageContent is set);
-// skipped on errors and on tool results that don't include a snapshot. The
-// grammar is duplicated when multiple page-bearing tools run in the same
-// turn — that's intentional. The pruneToolRounds cap of 2 bounds the worst-
-// case duplication, and treating the grammar as part of the snapshot keeps
-// the model from losing it after a round drops out of the prompt.
-func withSnapshotGrammar(body string) string {
-	return llm.PageSnapshotGrammar + body
 }
 
 // clipForLLM truncates oversized tool results so a giant page snapshot can't

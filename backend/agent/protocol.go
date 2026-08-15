@@ -36,8 +36,8 @@ const (
 	// the `navigate` action so the agent can move between pages without
 	// addressing a specific menu handle.
 	CmdNavigate = "navigate"
-	// CmdGetAgentContext retrieves builder state only after the global classifier
-	// has selected and validated a live context scope.
+	// CmdGetAgentContext retrieves builder state only after discovery has selected
+	// and validated a live context scope.
 	CmdGetAgentContext = "getAgentContext"
 )
 

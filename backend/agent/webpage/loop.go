@@ -31,7 +31,7 @@ const (
 	ModeEditSection = 3 // editar sección — only the selected section in the context
 )
 
-// RoutedOperation is the validated global router constraint. The builder's
+// RoutedOperation is the validated discovery-plan constraint. The builder's
 // content classifier may narrow it further but can never widen it to a rewrite.
 type RoutedOperation string
 

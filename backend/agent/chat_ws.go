@@ -45,7 +45,7 @@ type ChatUserMessage struct {
 	Message   string
 	ModelHash string
 	Timestamp int64
-	// ModeID is only a compact routing hint; live builder state is fetched after classification.
+	// ModeID is only a compact discovery hint; live builder state is fetched after planning.
 	ModeID      int
 	Surface     routing.SurfaceContext
 	AppLanguage routing.Language
@@ -58,7 +58,7 @@ type ChatAgentReply struct {
 }
 
 type ChatAgentStatus struct {
-	State    string // "thinking" | "acting" | "idle"
+	State    string // "thinking" | "acting" | "error" | "idle"
 	Label    string // human-readable progress text, e.g. "Consultando el menú…"
 	Step     int
 	MaxSteps int
@@ -197,7 +197,7 @@ func (s *AgentSession) RunUserMessage(ctx context.Context, msg ChatUserMessage) 
 		return errors.New("empty message")
 	}
 	core.Log("agent.chat userMessage tab::", shortTabID(s.TabID), " bytes::", len(text), " model_hash::", msg.ModelHash, " mode::", msg.ModeID, " surface::", msg.Surface.Kind, " page_connected::", IsConnected(s.TabID), " connected_tabs::", strings.Join(shortConnectedTabs(), ","))
-	return s.runClassifiedTurn(ctx, msg, text)
+	return s.runDiscoveryTurn(ctx, msg, text)
 }
 
 // sendJSON pushes a chat event down the turn's response stream. A missing sink

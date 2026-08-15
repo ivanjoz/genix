@@ -117,7 +117,7 @@ const PULSE_SKIP_METHODS = new Set<AgentMethodName>([
 
 // findActionElement picks the most specific DOM target for the invocation:
 // cell methods (`*Child`) point at the cell, `remove` on a SearchCard points
-// at the option chip, `select` with a composite arg points at the table row.
+// at the option chip, and `selectRow` points at the selected Row.
 // Anything else falls back to the handle's own root element.
 const findActionElement = (
   handle: AgentHandle,
@@ -128,7 +128,7 @@ const findActionElement = (
   if (method.endsWith("Child") && args.length > 0) {
     const childID = args[0];
     const cell = document.querySelector<HTMLElement>(`[data-id="${handle.id}:${childID}"]`)
-      || document.querySelector<HTMLElement>(`[data-id="TableRow:${handle.id}:${childID}"]`);
+      || document.querySelector<HTMLElement>(`[data-id="Row:${handle.id}:${childID}"]`);
     if (cell) { return cell; }
   }
   if (method === "remove" && root && typeof args[0] === "string") {
@@ -138,8 +138,8 @@ const findActionElement = (
       if (option) { return option; }
     }
   }
-  if (method === "select" && typeof args[0] === "string" && args[0].includes(":")) {
-    const row = document.querySelector<HTMLElement>(`[data-id="TableRow:${args[0]}"]`);
+  if (method === "selectRow" && typeof args[0] === "string") {
+    const row = document.querySelector<HTMLElement>(`[data-id="Row:${args[0]}"]`);
     if (row) { return row; }
   }
   return root;

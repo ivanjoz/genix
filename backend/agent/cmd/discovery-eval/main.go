@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"app/agent/discovery"
 	"app/agent/llm"
 	"app/agent/routing"
 	"app/core"
@@ -16,13 +17,13 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "classifier evaluation failed:", err)
+		fmt.Fprintln(os.Stderr, "discovery evaluation failed:", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	question := flag.String("question", "", "user question to classify")
+	question := flag.String("question", "", "user question to plan")
 	surfaceKind := flag.String("surface", string(routing.SurfaceUnknown), "frontend surface kind")
 	route := flag.String("route", "", "current SPA route")
 	appLanguage := flag.String("language", string(routing.LanguageSpanish), "app language: es or en")
@@ -40,7 +41,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	classifier, err := routing.NewClassifier(chatClient, core.Env.CLASSIFIER_MODEL_ID)
+	planner, err := discovery.NewPlanner(chatClient, core.Env.CLASSIFIER_MODEL_ID)
 	if err != nil {
 		return err
 	}
@@ -56,9 +57,9 @@ func run() error {
 			surface.AvailableContexts = append(surface.AvailableContexts, routing.BuilderScopeSelectedSection)
 		}
 	}
-	input := routing.ClassifierInput{
-		Schema: routing.SchemaVersion, CurrentMessage: strings.TrimSpace(*question), Surface: surface,
-		Route: strings.TrimSpace(*route), Capabilities: routing.CapabilitySnapshot(), AppLanguage: routing.Language(*appLanguage),
+	input := discovery.PlannerInput{
+		Schema: discovery.SchemaVersion, CurrentMessage: strings.TrimSpace(*question), Surface: surface,
+		Route: strings.TrimSpace(*route), AppLanguage: routing.Language(*appLanguage),
 	}
 	if strings.TrimSpace(*previousUserMessage) != "" || strings.TrimSpace(*previousAssistantMessage) != "" {
 		if strings.TrimSpace(*previousUserMessage) == "" || strings.TrimSpace(*previousAssistantMessage) == "" {
@@ -69,11 +70,11 @@ func run() error {
 			AssistantMessage: strings.TrimSpace(*previousAssistantMessage), Route: strings.TrimSpace(*previousRoute),
 		}}
 	}
-	verdict, err := classifier.Classify(context.Background(), input)
+	plannerResult, err := planner.Plan(context.Background(), input)
 	if err != nil {
 		return err
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(verdict)
+	return encoder.Encode(plannerResult)
 }

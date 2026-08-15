@@ -158,8 +158,8 @@ password = ""
 
 # ─── Agente / LLM ───────────────────────────────────────────────────────────
 [agent]
-# default_model debe existir en el proveedor elegido en providers.model.
-# Vacío = el primer [[models]] (al final del archivo) que sirva ese proveedor.
+# default_model debe existir en [[models]]; su entrada decide el proveedor.
+# Vacío = el primer [[models]] al final del archivo.
 default_model    = ""
 # Proveedor/modelo fijo del clasificador global; vacíos reutilizan el proveedor/modelo principal.
 classifier_provider = ""
@@ -215,8 +215,8 @@ user = "ubuntu"
 bin  = "/usr/local/bin/genix/genix_app"
 arch = "arm64"
 
-# Modelos que puede usar el agente. El backend sólo ofrece los del proveedor activo
-# (providers.model), así que el selector nunca muestra un id que la key rechazaría.
+# Modelos que puede usar el agente. El selector ofrece todos y el backend enruta cada
+# modelo al proveedor declarado en su entrada (cuya key debe estar configurada).
 # El orden es el del selector y decide el default cuando agent.default_model está vacío.
 #   provider  — "meta" | "openrouter"; vacío = openrouter.
 #   reasoning — omitir el bloque en un modelo que no razona: enviarlo es un parámetro

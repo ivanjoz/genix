@@ -117,7 +117,7 @@ func GetMenu(ctx context.Context, tab string) ([]AgentMenuGroup, error) {
 }
 
 // GetAgentContext asks the active page provider for the freshest validated
-// builder scope. It is never called before the global classifier routes the turn.
+// builder scope. It is never called before discovery selects a builder operation.
 func GetAgentContext(ctx context.Context, tab, scope string) (AgentContextResult, error) {
 	ctx, cancel := ctxWithDefault(ctx)
 	defer cancel()

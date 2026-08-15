@@ -19,7 +19,7 @@ import (
 //
 //  1. the model hash the frontend sends (the picker, resolved by LookupModelHash),
 //  2. agent.default_model in config.toml, or
-//  3. the first [[models]] entry the active provider serves — file order decides.
+//  3. the first [[models]] entry — file order decides.
 //
 // Any string is accepted by both upstreams, so an id outside the registry still
 // goes through; it just gets no per-model reasoning/routing defaults applied.
@@ -31,8 +31,7 @@ type ModelConfig struct {
 	// "muse-spark-1.2-contributor" or "deepseek/deepseek-v4-flash-0731".
 	ID string
 	// Provider is the upstream that serves this model (ProviderMeta or
-	// ProviderOpenRouter). ListModels only exposes entries matching the active
-	// MODEL_PROVIDER, so the UI can't offer an unroutable model.
+	// ProviderOpenRouter). The selected entry decides where Client.Chat sends it.
 	Provider string
 	// Reasoning is applied to every Chat() request for this model unless the
 	// caller already set it. Nil means "model doesn't support reasoning
@@ -51,11 +50,10 @@ type ModelConfig struct {
 	IsDefault bool
 }
 
-// configuredModels reads the [[models]] entries of config.toml and returns the
-// ones the active provider can actually serve, in file order. Filtering here
-// (rather than in the UI) means a user can never pick a model id the configured
-// key would reject — and the frontend already falls back to the default hash
-// when a previously stored selection is no longer in the list.
+// configuredModels reads every [[models]] entry from config.toml in file order.
+// Each entry carries its provider because the picker can switch upstreams per
+// model; the frontend falls back to the default hash when a stored selection is
+// no longer in this registry.
 //
 // Rebuilt on each call instead of cached: the list has a handful of entries, and
 // a package-level cache would freeze whatever core.Env held the first time it
@@ -64,17 +62,12 @@ func configuredModels() []ModelConfig {
 	if core.Env == nil {
 		return nil
 	}
-	activeProvider := ActiveProvider()
 	models := make([]ModelConfig, 0, len(core.Env.MODELS))
 	for _, entry := range core.Env.MODELS {
-		// An entry with no provider is an OpenRouter model — same rule as a blank
-		// providers.model, so the common case needs one key less per entry.
+		// A blank entry provider means OpenRouter, matching the file contract.
 		provider := strings.ToLower(strings.TrimSpace(entry.Provider))
 		if provider == "" {
 			provider = ProviderOpenRouter
-		}
-		if provider != activeProvider {
-			continue
 		}
 		models = append(models, ModelConfig{
 			ID:        strings.TrimSpace(entry.ID),
@@ -126,9 +119,8 @@ func ModelIDHash(id string) string {
 	return strconv.FormatInt(int64(hashValue), 36)
 }
 
-// ListModels is the view the models API returns: the active provider's entries
-// in config.toml order, hash-hydrated and with the default flagged so the UI
-// preselects the same model the backend would have used anyway.
+// ListModels is the view the models API returns: every config.toml entry in
+// file order, hash-hydrated and with the backend default flagged.
 func ListModels() []ModelConfig {
 	models := configuredModels()
 	activeDefault := DefaultModelID()
@@ -138,9 +130,8 @@ func ListModels() []ModelConfig {
 	return models
 }
 
-// LookupModelHash resolves the frontend's short model key back to an ID. Only
-// the active provider's models resolve — a stale hash from another provider is
-// reported as invalid, which is what we want: it can't be routed.
+// LookupModelHash resolves the frontend's short model key back to a configured
+// model and its provider. Unknown or stale hashes remain invalid.
 func LookupModelHash(hash string) (ModelConfig, bool) {
 	for _, cfg := range ListModels() {
 		if cfg.Hash == hash {
@@ -151,8 +142,7 @@ func LookupModelHash(hash string) (ModelConfig, bool) {
 }
 
 // LookupModel returns the [[models]] entry for id, or a zero-value config when
-// the active provider has no entry for it. Zero-value means "no per-model
-// defaults applied" — the request goes upstream exactly as the caller built it.
+// it is not registered. Zero-value means "no per-model defaults applied".
 func LookupModel(id string) ModelConfig {
 	for _, cfg := range configuredModels() {
 		if cfg.ID == id {

@@ -87,10 +87,10 @@ var deployScripts = []scriptEntry{
 			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/documentation-search"}, arguments...)...)
 		}},
 
-	{key: "classify_agent_request", group: scriptGroupGenerators, label: "Evaluar Clasificador del Agente",
+	{key: "plan_agent_discovery", group: scriptGroupGenerators, label: "Evaluar Descubrimiento del Agente",
 		argumentsHint: "-question TEXTO [-surface KIND] [-route PATH] [-language es|en] [-selected-section ID]",
 		run: func(context deployContext, arguments []string) error {
-			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/classifier-eval"}, arguments...)...)
+			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/discovery-eval"}, arguments...)...)
 		}},
 
 	{key: "generate_sale_orders", group: scriptGroupGenerators, label: "Generar Órdenes de Venta (demo)", run: func(context deployContext, _ []string) error {

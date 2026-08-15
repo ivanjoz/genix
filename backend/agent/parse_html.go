@@ -32,6 +32,17 @@ func ParsePageHTML(input string, components []AgentComponentInfo) (string, error
 	cm := make(map[string]AgentComponentInfo, len(components))
 	for _, c := range components {
 		cm[fmt.Sprintf("%s:%d", c.Type, c.ID)] = c
+		if c.Type == "Table" || c.Type == "CardList" {
+			for _, method := range c.Methods {
+				if method == "selectRow" {
+					body := c
+					body.Type = "TableBody"
+					body.Methods = []string{"selectRow"}
+					cm[fmt.Sprintf("TableBody:%d", c.ID)] = body
+					break
+				}
+			}
+		}
 	}
 
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(input))
@@ -168,29 +179,23 @@ func componentDataID(n *html.Node, cm map[string]AgentComponentInfo) string {
 }
 
 // markerComponentTypes lists data-id prefixes that don't have a registry
-// handle of their own but should still be rendered as compact tags inside
-// their parent (e.g. options inside a SearchCard, rows inside a Table).
+// handle of their own but should still be rendered as compact tags.
 var markerComponentTypes = map[string]bool{
-	"Option":   true,
-	"TableRow": true,
-	"Button":   true,
+	"Option": true,
+	"Row":    true,
+	"Button": true,
 }
 
 // markerMethods lists the comma-separated method names available on each
 // marker type, so the agent knows how to interact with them.
-//
-// TableRow's "select" surfaces the parent Table's row-click handler — the
-// table is the only registered handle, but the agent addresses individual
-// rows by their composite "<tableID>:<rowID>" id.
 //
 // Option's default is "remove" (SearchCard chips, CheckboxOptions); when the
 // nearest agent ancestor exposes a "select" verb (PageViews, OptionsStrip,
 // ArrowSteps) the marker is upgraded to "select" instead — see
 // markerMethodsFor.
 var markerMethods = map[string]string{
-	"Option":   "remove",
-	"Button":   "click",
-	"TableRow": "select",
+	"Option": "remove",
+	"Button": "click",
 }
 
 // markerMethodsFor returns the method hint for a marker, taking the nearest
@@ -251,6 +256,7 @@ var cellMethods = map[string]string{
 // the agent into calling them with a child-relative id and no parent prefix.
 var suppressedTableMethods = map[string]bool{
 	"select":          true,
+	"selectRow":       true,
 	"setValueChild":   true,
 	"searchChild":     true,
 	"getOptionsChild": true,
@@ -278,7 +284,7 @@ var structuralComponentTypes = map[string]bool{
 	"OptionsStrip": true,
 }
 
-// markerComponentType returns the marker type ("Option", "TableRow", "Button")
+// markerComponentType returns the marker type ("Option", "Row", "Button")
 // for an element whose data-id uses a marker prefix, or "" otherwise.
 func markerComponentType(n *html.Node) string {
 	dataID := nodeDataID(n)
@@ -482,7 +488,7 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 		// Replace known component elements with a compact tag. Container components
 		// (those that hold further registered components inside) are rendered with
 		// their children so the agent still sees the nested handles. Markers
-		// (Option/TableRow/Button) follow the same shape but use the marker type
+		// (Option/Row/Button) follow the same shape but use the marker type
 		// from the data-id directly since they have no registry entry.
 		if dataID := nodeDataID(n); dataID != "" {
 			if c, ok := cm[dataID]; ok {
@@ -580,6 +586,20 @@ func renderIndented(buf *bytes.Buffer, n *html.Node, depth int, cm map[string]Ag
 				return
 			}
 		}
+		if n.Data == "tr" {
+			buf.WriteByte('\n')
+			if renderInlineTableCells(buf, n, depth, cm) {
+				buf.WriteString(indent)
+				buf.WriteString("</tr>\n")
+				return
+			}
+			for child := n.FirstChild; child != nil; child = child.NextSibling {
+				renderIndented(buf, child, depth+1, cm)
+			}
+			buf.WriteString(indent)
+			buf.WriteString("</tr>\n")
+			return
+		}
 		buf.WriteByte('\n')
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			renderIndented(buf, c, depth+1, cm)
@@ -617,7 +637,7 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 		}
 		methods := c.Methods
 		if typ == "Table" || typ == "CardList" {
-			// Table/CardList row/cell-routing methods belong on the inner TableRow /
+			// Table/CardList actions belong on the inner TableBody / cell tags,
 			// cell tags, not on the container itself. Drop them here.
 			filtered := methods[:0:0]
 			for _, m := range methods {
@@ -650,7 +670,7 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 	}
 
 	// Recurse when there are registered components or markers nested inside —
-	// Layer/Modal/ButtonLayer hold further handles, Table holds TableRow markers,
+	// Layer/Modal/ButtonLayer hold further handles, TableBody holds Row markers,
 	// SearchCard holds Option markers, etc. Leaf components self-close, except
 	// for recurseContentTypes (e.g. Card) whose HTML body is preserved verbatim.
 	if !hasAgentDescendant(n, cm) && !recurseContentTypes[typ] {
@@ -667,7 +687,7 @@ func renderComponent(buf *bytes.Buffer, indent, dataID string, c AgentComponentI
 	buf.WriteString(">\n")
 }
 
-// renderMarker emits a compact tag for an Option / TableRow / Button element.
+// renderMarker emits a compact tag for an Option / Row / Button element.
 // Markers don't have a registry handle, but they carry id, optional value and
 // optional selected state on the DOM node, plus the inner text/children that
 // the agent uses to identify the row or option.
@@ -734,9 +754,9 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 
 	// Chrome around plain text — fold children into a single inline text run
 	// (e.g. <Option><span>foo</span></Option> -> <Option>foo</Option>). Skip
-	// TableRow: rows preserve their cell structure so the agent can read each
+	// Row: rows preserve their cell structure so the agent can read each
 	// column.
-	if typ != "TableRow" {
+	if typ != "Row" {
 		if text, ok := inlineText(n, cm); ok {
 			if text == "" {
 				buf.WriteString("/>\n")
@@ -752,6 +772,11 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 	}
 
 	buf.WriteString(">\n")
+	if typ == "Row" && renderInlineTableCells(buf, n, depth, cm) {
+		buf.WriteString(indent)
+		buf.WriteString("</Row>\n")
+		return
+	}
 	for child := n.FirstChild; child != nil; child = child.NextSibling {
 		renderIndented(buf, child, depth+1, cm)
 	}
@@ -759,6 +784,34 @@ func renderMarker(buf *bytes.Buffer, indent string, n *html.Node, depth int, cm 
 	buf.WriteString("</")
 	buf.WriteString(html.EscapeString(typ))
 	buf.WriteString(">\n")
+}
+
+// renderInlineTableCells joins simple cells on one line while preserving
+// every column slot. Complex multiline cells fall back to normal rendering.
+func renderInlineTableCells(buf *bytes.Buffer, row *html.Node, depth int, cm map[string]AgentComponentInfo) bool {
+	var cells strings.Builder
+	for child := row.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.TextNode && strings.TrimSpace(child.Data) == "" {
+			continue
+		}
+		if child.Type != html.ElementNode || !isCellElement(child) {
+			return false
+		}
+		var renderedCell bytes.Buffer
+		renderIndented(&renderedCell, child, 0, cm)
+		cell := strings.TrimSuffix(renderedCell.String(), "\n")
+		if cell == "" || strings.Contains(cell, "\n") {
+			return false
+		}
+		cells.WriteString(cell)
+	}
+	if cells.Len() == 0 {
+		return false
+	}
+	buf.WriteString(strings.Repeat("  ", depth+1))
+	buf.WriteString(cells.String())
+	buf.WriteByte('\n')
+	return true
 }
 
 // agentCellAttrsForElement returns the id/methods attrs to print for a

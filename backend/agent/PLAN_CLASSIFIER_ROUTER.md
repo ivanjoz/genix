@@ -2,10 +2,10 @@
 
 ## Status
 
-Implementation in progress. Phases 1–6 are implemented and covered by backend tests. Phase 7
-has live Meta Muse classifier and Spanish Qdrant retrieval checks; authenticated browser tests
-and production metrics remain. The v1 schema, intent taxonomy, routing table, frontend surface
-contract, and the defaults recorded under “Resolved implementation decisions” are authoritative.
+Superseded on 2026-08-12 by `PLAN_DISCOVERY_EXECUTION_ROUTER.md`. This file is retained only
+as the design history of the removed classifier-first implementation. Its intent taxonomy,
+capability registry, hard routing table, and unavailable operational-data response are no
+longer runtime contracts.
 
 ## Goal
 

@@ -1,7 +1,7 @@
 // Package llm is a thin HTTP client for the OpenAI-compatible
 // /chat/completions endpoint of the two upstreams the in-app agent can talk
-// to: Meta's Model API (api.meta.ai) and OpenRouter. Which one is called is
-// decided by providers.model in config.toml. The agent loop in
+// to: Meta's Model API (api.meta.ai) and OpenRouter. The selected [[models]]
+// entry decides which one is called; providers.model is the fallback. The agent loop in
 // backend/agent uses this to drive the LLM that decides which page actions to
 // invoke.
 //
@@ -16,7 +16,7 @@
 //     plus its own `provider` routing block.
 //
 // Chat() translates the internal ReasoningOptions into whichever shape the
-// active provider expects, so callers never branch on the provider.
+// selected model's provider expects, so callers never branch on the provider.
 //
 // Design rationale (see backend/agent/AGENTIC_LOOP_DESIGN.md):
 //   - One Client per process. Construct at startup via NewClient so a missing
@@ -162,7 +162,7 @@ type ChatRequest struct {
 	// prompt discipline the model into ending the turn via the `finish` tool.
 	ToolChoice  string   `json:"tool_choice,omitempty"`
 	Temperature *float32 `json:"temperature,omitempty"`
-	// MaxTokens bounds mechanical subagents such as the global classifier.
+	// MaxTokens bounds mechanical subagents such as the discovery planner.
 	// Zero leaves the provider default unchanged for existing agent loops.
 	MaxTokens int `json:"max_tokens,omitempty"`
 	// Reasoning is the provider-agnostic thinking budget callers set. Chat()
@@ -172,7 +172,7 @@ type ChatRequest struct {
 	// ReasoningEffort is Meta's flat thinking-budget field
 	// ("minimal"|"low"|"medium"|"high"|"xhigh"). Derived from Reasoning by
 	// Chat(); a caller that sets it directly wins, but then it only has an
-	// effect when MODEL_PROVIDER=meta.
+	// effect when the selected model uses Meta.
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 	// Routing pins or biases OpenRouter's upstream selection for the chosen
 	// model (e.g. `deepinfra/fp8`) when latency or quantization matters. See
@@ -239,11 +239,15 @@ type Client struct {
 	APIKey   string
 	Model    string
 	HTTP     *http.Client
+	// RouteByModel lets the user-facing client switch upstreams using the
+	// provider declared by the selected [[models]] entry. Fixed system clients
+	// leave it false so their explicitly configured provider always wins.
+	RouteByModel bool
 }
 
 // DefaultModelID is the model used when a request carries no explicit model:
 // agent.default_model from config.toml when set, otherwise the first [[models]]
-// entry the active provider serves — so reordering the file changes the default
+// entry — so reordering the file changes the default
 // and no model id is hardcoded in Go. Single source of truth: ListModels flags
 // the matching entry with IsDefault so the UI preselects the same model.
 func DefaultModelID() string {
@@ -256,20 +260,28 @@ func DefaultModelID() string {
 	return ""
 }
 
-// NewClient resolves the active provider (providers.model), its API key
-// (required) and agent.default_model (optional) from core.Env — same path the rest of
-// the backend uses for config.toml. Failing here at startup is much
-// friendlier than a 401 on the first user message.
+// NewClient creates the user-facing client. Its default model selects the first
+// provider, while each explicit picker selection may route subsequent requests
+// through another configured provider.
 func NewClient() (*Client, error) {
 	if core.Env == nil {
 		return nil, errors.New("core.Env not populated; call core.PopulateVariables before llm.NewClient")
 	}
 	provider := ActiveProvider()
-	return NewClientForProvider(provider, DefaultModelID())
+	defaultModel := DefaultModelID()
+	if configuredDefault := LookupModel(defaultModel); configuredDefault.Provider != "" {
+		provider = configuredDefault.Provider
+	}
+	client, err := NewClientForProvider(provider, defaultModel)
+	if err != nil {
+		return nil, err
+	}
+	client.RouteByModel = true
+	return client, nil
 }
 
 // NewClientForProvider creates a fixed-provider client for system subagents such
-// as the global classifier. It does not follow the chat UI's selected model.
+// as the discovery planner. It does not follow the chat UI's selected model.
 func NewClientForProvider(provider, modelID string) (*Client, error) {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	if provider == "" {
@@ -330,7 +342,7 @@ func metaReasoningEffort(options ReasoningOptions) string {
 	return options.Effort
 }
 
-// Chat performs one POST to the active provider's /chat/completions. If
+// Chat performs one POST to the selected model provider's /chat/completions. If
 // req.Model is empty we fill it from c.Model so callers don't repeat the model
 // on every turn. Non-2xx responses surface the raw body in the error so
 // tool-schema or rate-limit problems are immediately readable.
@@ -341,9 +353,24 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 	// Fill in any per-model defaults the caller didn't set. Caller values
 	// always win; unknown model IDs get no defaults (registry lookup is a
 	// no-op for them).
-	LookupModel(req.Model).applyDefaults(&req)
-	config := providerConfigs[c.Provider]
-	adaptRequestToProvider(c.Provider, &req)
+	modelConfig := LookupModel(req.Model)
+	modelConfig.applyDefaults(&req)
+	requestProvider := c.Provider
+	requestAPIKey := c.APIKey
+	if c.RouteByModel && modelConfig.Provider != "" {
+		requestProvider = modelConfig.Provider
+	}
+	config, knownProvider := providerConfigs[requestProvider]
+	if !knownProvider {
+		return nil, fmt.Errorf("unsupported model provider %q for model %q", requestProvider, req.Model)
+	}
+	if c.RouteByModel && modelConfig.Provider != "" {
+		requestAPIKey = apiKeyForProvider(requestProvider)
+		if requestAPIKey == "" {
+			return nil, fmt.Errorf("%s not set in config.toml for model %q", config.KeyName, req.Model)
+		}
+	}
+	adaptRequestToProvider(requestProvider, &req)
 
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -355,12 +382,12 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+	httpReq.Header.Set("Authorization", "Bearer "+requestAPIKey)
 	for name, value := range config.AnalyticsHeaders {
 		httpReq.Header.Set(name, value)
 	}
 
-	core.Log("llm.Chat provider::", c.Provider, " model::", req.Model, " messages::", len(req.Messages), " tools::", len(req.Tools), " reasoning_effort::", req.ReasoningEffort)
+	core.Log("llm.Chat provider::", requestProvider, " model::", req.Model, " messages::", len(req.Messages), " tools::", len(req.Tools), " reasoning_effort::", req.ReasoningEffort)
 
 	// Measure wall-clock from request send to body fully read so the TPS we
 	// log later reflects what the user actually waits for, including TTFT.
@@ -368,7 +395,7 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 
 	resp, err := c.HTTP.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("%s http: %w", c.Provider, err)
+		return nil, fmt.Errorf("%s http: %w", requestProvider, err)
 	}
 	defer resp.Body.Close()
 
@@ -378,7 +405,7 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("%s %d: %s", c.Provider, resp.StatusCode, truncate(string(respBody), 1000))
+		return nil, fmt.Errorf("%s %d: %s", requestProvider, resp.StatusCode, truncate(string(respBody), 1000))
 	}
 	// Charge actual wire bytes only after a successful inference response exists.
 	if err := core.ChargeInferenceUsage(ctx, len(body), len(respBody)); err != nil {
@@ -390,7 +417,7 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 		return nil, fmt.Errorf("decode response: %w (body=%s)", err, truncate(string(respBody), 500))
 	}
 	if len(out.Choices) == 0 {
-		return nil, fmt.Errorf("%s: no choices in response (body=%s)", c.Provider, truncate(string(respBody), 500))
+		return nil, fmt.Errorf("%s: no choices in response (body=%s)", requestProvider, truncate(string(respBody), 500))
 	}
 	// Log in/out separately so it's obvious when the bloat is the prompt
 	// (long get_page snapshots replayed every iteration) vs the completion
@@ -402,7 +429,7 @@ func (c *Client) Chat(ctx context.Context, req ChatRequest) (*ChatResponse, erro
 	if seconds := elapsed.Seconds(); seconds > 0 {
 		tps = float64(out.Usage.CompletionTokens) / seconds
 	}
-	core.Log("llm.Chat ok provider::", c.Provider, " finish::", out.Choices[0].FinishReason,
+	core.Log("llm.Chat ok provider::", requestProvider, " finish::", out.Choices[0].FinishReason,
 		" in::", out.Usage.PromptTokens,
 		" out::", out.Usage.CompletionTokens,
 		" total::", out.Usage.TotalTokens,

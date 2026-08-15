@@ -95,15 +95,15 @@ func TestParsePageHTML_TableSuppressesRoutingMethods(t *testing.T) {
 	in := `
 <div data-id="Table:38">
   <table>
-    <tbody>
-      <tr data-id="TableRow:38:100"><td>Sara Quintana</td></tr>
+    <tbody data-id="TableBody:38">
+      <tr data-id="Row:38:100"><td>Sara Quintana</td></tr>
     </tbody>
   </table>
 </div>`
 	components := []AgentComponentInfo{{
 		ID:      38,
 		Type:    "Table",
-		Methods: []string{"select", "setValueChild", "searchChild", "getOptionsChild"},
+		Methods: []string{"select", "selectRow", "setValueChild", "searchChild", "getOptionsChild"},
 	}}
 	out, err := ParsePageHTML(in, components)
 	if err != nil {
@@ -116,11 +116,43 @@ func TestParsePageHTML_TableSuppressesRoutingMethods(t *testing.T) {
 	if strings.Contains(out, `<Table id="38" methods=`) {
 		t.Fatalf("expected no methods= on Table, got:\n%s", out)
 	}
-	if !strings.Contains(out, `<TableRow id="38:100"`) {
-		t.Fatalf("expected composite TableRow id, got:\n%s", out)
+	if !strings.Contains(out, `<TableBody id="38" methods="selectRow">`) {
+		t.Fatalf("expected TableBody selectRow method, got:\n%s", out)
 	}
-	if !strings.Contains(out, `methods="select"`) {
-		t.Fatalf("expected TableRow methods=\"select\", got:\n%s", out)
+	if !strings.Contains(out, `<Row id="38:100">`) || strings.Contains(out, `<Row id="38:100" methods=`) {
+		t.Fatalf("expected Row without methods, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_RendersAllTableRowCellsOnOneLine(t *testing.T) {
+	in := `
+<div data-id="Table:33">
+  <table><tbody>
+    <tr data-id="Row:33:100">
+      <td>10014</td><td>producto de prueba 2</td><td></td><td>33.00</td>
+    </tr>
+  </tbody></table>
+</div>`
+	components := []AgentComponentInfo{{ID: 33, Type: "Table", Methods: []string{"select"}}}
+	out, err := ParsePageHTML(in, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := `<td>10014</td><td>producto de prueba 2</td><td></td><td>33.00</td>`
+	if !strings.Contains(out, expected) {
+		t.Fatalf("expected consecutive table cells, got:\n%s", out)
+	}
+}
+
+func TestParsePageHTML_RendersHeaderCellsOnOneLine(t *testing.T) {
+	in := `<table><thead><tr><th>ID</th><th>Producto</th><th>Categorías</th><th>Precio</th></tr></thead></table>`
+	out, err := ParsePageHTML(in, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := `<th>ID</th><th>Producto</th><th>Categorías</th><th>Precio</th>`
+	if !strings.Contains(out, expected) {
+		t.Fatalf("expected consecutive header cells, got:\n%s", out)
 	}
 }
 
@@ -181,7 +213,7 @@ func TestParsePageHTML_CellClickStaysOnTd(t *testing.T) {
 <div data-id="Table:11">
   <table>
     <tbody>
-      <tr data-id="TableRow:11:100">
+      <tr data-id="Row:11:100">
         <td>Producto</td>
         <td data-id="11:201" data-cell-type="CellClick">5</td>
         <td>6</td>
@@ -354,7 +386,7 @@ func TestParsePageHTML_CellMethodsOnCellTags(t *testing.T) {
 <div data-id="Table:38">
   <table>
     <tbody>
-      <tr data-id="TableRow:38:100">
+      <tr data-id="Row:38:100">
         <td>
           <div data-id="38:101" data-cell-type="CellInput" data-value="Sara" data-type="text"></div>
         </td>

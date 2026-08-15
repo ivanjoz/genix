@@ -17,6 +17,8 @@
   import { tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { highlString } from '@genix/ui/utilities';
+  import DOMPurify from 'dompurify';
+  import { Marked } from 'marked';
   import {
     ensureAgentStream,
     getAgentTabID,
@@ -61,8 +63,42 @@
   const CHAT_TYPE_AGENT_ERROR = 'agentError';
   const CHAT_TYPE_AGENT_STATUS = 'agentStatus';
   const CHAT_TYPE_AGENT_SECTIONS = 'agentSections';
+  const CHAT_TYPE_TURN_END = 'turnEnd';
   const CHAT_LOG_KEY = '__agent_chat_debug_log';
   const CHAT_LOG_LIMIT = 120;
+  const POST_ACTION_RESTORE_DELAY_MS = 500;
+  const INTERNAL_ROUTE_PATTERN = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\/?$/;
+  const INTERNAL_ROUTE_START_PATTERN = /(?<![:/A-Za-z0-9_-])\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*\/?/;
+  const escapeHTML = (value: string): string => value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character] || character);
+  const renderInternalRoute = (route: string, asCode = false): string => {
+    const safeRoute = escapeHTML(route);
+    return `<a href="${safeRoute}">${asCode ? `<code>${safeRoute}</code>` : safeRoute}</a>`;
+  };
+  const markdownRenderer = new Marked({
+    renderer: {
+      // Routes commonly arrive wrapped in backticks; preserve the code style
+      // while turning only strict application paths into links.
+      codespan(token) {
+        const route = token.text.trim();
+        return INTERNAL_ROUTE_PATTERN.test(route) ? renderInternalRoute(route, true) : false;
+      },
+    },
+    extensions: [{
+      name: 'internalRoute',
+      level: 'inline',
+      start(source) { return source.search(INTERNAL_ROUTE_START_PATTERN); },
+      tokenizer(source) {
+        const match = INTERNAL_ROUTE_START_PATTERN.exec(source);
+        if (!match || match.index !== 0) { return; }
+        return { type: 'internalRoute', raw: match[0], route: match[0] };
+      },
+      renderer(token) { return renderInternalRoute(String(token.route || '')); },
+    }],
+  });
+  const AGENT_MARKDOWN_TAGS = ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'a'];
+  const AGENT_MARKDOWN_ATTRIBUTES = ['href', 'target', 'rel'];
 
   // --- State ------------------------------------------------------------------
 
@@ -70,6 +106,8 @@
   let inputText = $state('');
   let messages = $state<AgentChatRow[]>([]);
   let isBusy = $state(false);
+  let isInteractingWithPage = $state(false);
+  let userExpandedDuringInteraction = $state(false);
   let statusLabel = $state(''); // transient progress text shown while a turn is in flight
   let headerStatusItems = $state<{ id: number; label: string }[]>([]);
   let hostElement: HTMLElement | undefined = $state();
@@ -77,10 +115,14 @@
   let scrollElement: HTMLDivElement | undefined = $state();
   let historyLoaded = false;
   let nextHeaderStatusID = 1;
+  let interactionRestoreTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Menu shortcuts shown above the history while the input holds a short query.
   const menuMatches = $derived(searchMenuOptions(inputText));
   const menuHighlights = $derived(highlightWords(inputText));
+  const isInteractionPanelCollapsed = $derived(
+    isOpen && isInteractingWithPage && !userExpandedDuringInteraction,
+  );
 
   // --- Helpers ----------------------------------------------------------------
 
@@ -115,6 +157,67 @@
 
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  const renderAgentMarkdown = (markdown: string): string => {
+    if (typeof window === 'undefined') { return ''; }
+    // Marked accepts raw HTML, so sanitize its final output immediately before
+    // Svelte inserts it with {@html}; the allowlist keeps chat markup minimal.
+    const renderedHTML = markdownRenderer.parse(markdown, { async: false, breaks: true });
+    return DOMPurify.sanitize(renderedHTML, {
+      ALLOWED_TAGS: AGENT_MARKDOWN_TAGS,
+      ALLOWED_ATTR: AGENT_MARKDOWN_ATTRIBUTES,
+    });
+  };
+
+  const finishPageInteraction = () => {
+    if (interactionRestoreTimer) { clearTimeout(interactionRestoreTimer); }
+    interactionRestoreTimer = undefined;
+    isInteractingWithPage = false;
+    userExpandedDuringInteraction = false;
+  };
+
+  const beginPageInteraction = (label: string) => {
+    if (interactionRestoreTimer) { clearTimeout(interactionRestoreTimer); }
+    interactionRestoreTimer = undefined;
+    isOpen = true;
+    isInteractingWithPage = true;
+    userExpandedDuringInteraction = false;
+    chatLog('info', 'interaction panel collapsed', { label });
+  };
+
+  const restoreExpandedPanel = (reason: string) => {
+    // Navigation can close or remount the widget while a tool is running. A
+    // completed action/final turn must always make the conversation visible.
+    isOpen = true;
+    if (interactionRestoreTimer) {
+      chatLog('info', 'interaction panel restore already scheduled', { reason });
+      return;
+    }
+    const completeRestore = () => {
+      interactionRestoreTimer = undefined;
+      isInteractingWithPage = false;
+      userExpandedDuringInteraction = false;
+      void ensureHistoryLoaded();
+      void scrollToBottom();
+      chatLog('info', 'interaction panel restored', { reason, delayMs: POST_ACTION_RESTORE_DELAY_MS });
+    };
+    if (!isInteractingWithPage) {
+      completeRestore();
+      return;
+    }
+    // Keep the driven page visible briefly after the action completes; later
+    // reply/turnEnd events reuse this timer instead of extending the delay.
+    interactionRestoreTimer = setTimeout(completeRestore, POST_ACTION_RESTORE_DELAY_MS);
+    chatLog('info', 'interaction panel restore scheduled', { reason, delayMs: POST_ACTION_RESTORE_DELAY_MS });
+  };
+
+  const expandPanelForUserInteraction = () => {
+    if (!isInteractingWithPage || userExpandedDuringInteraction) { return; }
+    // A deliberate input interaction temporarily takes priority over the
+    // compact strip so the user can inspect or continue the conversation.
+    userExpandedDuringInteraction = true;
+    chatLog('info', 'interaction panel expanded by user');
+  };
+
   const ensureHistoryLoaded = async () => {
     if (historyLoaded) { return; }
     historyLoaded = true;
@@ -132,6 +235,7 @@
     chatLog('info', 'chat message received', { type: env.Type });
     switch (env.Type) {
       case CHAT_TYPE_AGENT_REPLY: {
+        restoreExpandedPanel('agent reply');
         pushHeaderStatus('Respondiendo...');
         await wait(350);
         const payload = env.Payload as AgentReplyPayload;
@@ -158,6 +262,7 @@
         break;
       }
       case CHAT_TYPE_AGENT_SECTIONS: {
+        restoreExpandedPanel('agent sections');
         // Page-builder loop returned edited sections. Hand them to the page's
         // applier (parses HTML back into the builder AST); the rest mirrors a
         // normal agentReply so the chat shows the agent's message + clears busy.
@@ -189,6 +294,7 @@
         break;
       }
       case CHAT_TYPE_AGENT_ERROR: {
+        restoreExpandedPanel('agent error');
         const payload = env.Payload as AgentErrorPayload;
         chatLog('warn', 'agent error received', { message: payload?.Message });
         const row: AgentChatRow = {
@@ -207,32 +313,58 @@
         break;
       }
       case CHAT_TYPE_AGENT_STATUS: {
-        // Two flavors of status:
+        // Three flavors of status:
         //   - "acting" → a concrete action (Haciendo click…, Navegando…).
         //     Persisted as an inline gray trace row so the user can later
         //     review every step the agent took for a turn.
         //   - "thinking" → transient "Pensando…" between iterations.
         //     Rendered only as the bottom bubble while busy; not persisted
         //     (would just clutter history with duplicates).
+        //   - "error" → a recoverable tool failure. Persisted in red so a
+        //     later retry or reply cannot hide what went wrong.
         const payload = env.Payload as AgentStatusPayload;
         const label = payload?.Label || '';
         chatLog('info', 'agent status received', { state: payload?.State, label, step: payload?.Step, maxSteps: payload?.MaxSteps });
         if (payload?.State === 'acting' && label) {
+          beginPageInteraction(label);
           pushHeaderStatus(label);
           const row: AgentChatRow = {
             tabID: getAgentTabID(),
             role: AGENT_ROLE_STATUS,
             message: label,
+            statusKind: 'action',
             timestamp: Date.now(),
           };
           const id = await appendAgentChatMessage(row);
           if (id) { row.id = id; }
           messages = [...messages, row];
           statusLabel = ''; // action is shown in-line; transient bubble idle
+        } else if (payload?.State === 'error' && label) {
+          restoreExpandedPanel('agent tool error');
+          chatLog('warn', 'agent tool failed', { label, step: payload?.Step });
+          const row: AgentChatRow = {
+            tabID: getAgentTabID(),
+            role: AGENT_ROLE_STATUS,
+            message: label,
+            statusKind: 'error',
+            timestamp: Date.now(),
+          };
+          const id = await appendAgentChatMessage(row);
+          if (id) { row.id = id; }
+          messages = [...messages, row];
+          statusLabel = '';
         } else {
+          restoreExpandedPanel(`agent status: ${payload?.State || 'unknown'}`);
           statusLabel = label;
         }
         await scrollToBottom();
+        break;
+      }
+      case CHAT_TYPE_TURN_END: {
+        restoreExpandedPanel('turn end');
+        isBusy = false;
+        statusLabel = '';
+        headerStatusItems = [];
         break;
       }
     }
@@ -254,6 +386,7 @@
     messages = [...messages, optimistic];
     inputText = '';
     isBusy = true;
+    finishPageInteraction();
     pushHeaderStatus('Pensando...');
     await scrollToBottom();
 
@@ -277,6 +410,7 @@
       // Backstop: agentReply/agentError normally clear these. A stream that
       // dies mid-turn produces neither, and the widget must not stay wedged.
       isBusy = false;
+      restoreExpandedPanel('turn request finished');
       statusLabel = '';
       headerStatusItems = [];
       if (optimistic.pending) {
@@ -301,6 +435,11 @@
     void scrollToBottom();
   };
 
+  const handleTextareaFocus = () => {
+    openPanel();
+    expandPanelForUserInteraction();
+  };
+
   const closePanel = () => {
     isOpen = false;
   };
@@ -318,6 +457,18 @@
     if (!hostElement.contains(event.target)) { closePanel(); }
   };
 
+  const handleRouteLinkClick = (event: MouseEvent) => {
+    if (!isOpen || !hostElement || !(event.target instanceof Element)) { return; }
+    const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+    const route = anchor?.getAttribute('href') || '';
+    if (!anchor || !hostElement.contains(anchor) || !INTERNAL_ROUTE_PATTERN.test(route)) { return; }
+    // Let the anchor/SvelteKit perform navigation, then remove the chat overlay
+    // so the selected destination is immediately visible.
+    closePanel();
+    textareaElement?.blur();
+    chatLog('info', 'agent route link closed panel', { route });
+  };
+
   const handleKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && isOpen) {
       closePanel();
@@ -328,9 +479,11 @@
   $effect(() => {
     if (typeof window === 'undefined') { return; }
     document.addEventListener('mousedown', handleDocumentClick);
+    document.addEventListener('click', handleRouteLinkClick);
     document.addEventListener('keydown', handleKeydown);
     return () => {
       document.removeEventListener('mousedown', handleDocumentClick);
+      document.removeEventListener('click', handleRouteLinkClick);
       document.removeEventListener('keydown', handleKeydown);
     };
   });
@@ -354,7 +507,10 @@
 
 <div bind:this={hostElement} data-agent-hidden="true" class="_host relative w-full max-w-[36rem]">
   <div class="_pill absolute top-0 h-full w-full flex items-start gap-6 px-10 py-6 bg-white/15 hover:bg-white/20 focus-within:bg-white/25 border border-white/20 rounded-2xl transition-colors cursor-text"
-    onclick={() => textareaElement?.focus()}
+    onclick={() => {
+      expandPanelForUserInteraction();
+      textareaElement?.focus();
+    }}
     class:h-full={!isOpen}
     class:rounded-b-none={isOpen}
     class:h-44={isOpen}
@@ -374,7 +530,8 @@
       aria-label="Pregúntale a Genix"
       class="_input p-4 pl-12 flex-1 bg-transparent text-white outline-none resize-none text-sm leading-tight"
       class:_inputStatus={isBusy && headerStatusItems.length > 0}
-      onfocus={openPanel}
+      onfocus={handleTextareaFocus}
+      oninput={expandPanelForUserInteraction}
       onkeydown={onTextareaKey}
     ></textarea>
     {#if isBusy && headerStatusItems.length > 0}
@@ -406,7 +563,14 @@
   {#if isOpen}
     <div class="_panel absolute left-0 right-0 top-[calc(100%+4px)] z-300
       bg-white rounded-b-2xl rounded-t-none shadow-2xl border border-gray-200 overflow-hidden"
+      class:_panelCollapsed={isInteractionPanelCollapsed}
     >
+      {#if isInteractionPanelCollapsed}
+        <!-- Keep the driven page visible while retaining a clear activity cue. -->
+        <div class="min-h-30 flex items-center px-12 text-xs text-red-600" role="status" aria-live="polite">
+          Interactuando con la pantalla...
+        </div>
+      {:else}
       {#if agentModes.all.length > 1}
         <!-- Mode bar — only when the page registered extra modes. Uses the same
              indigo as the header/textarea so it reads as a strip between the
@@ -454,18 +618,24 @@
         {:else}
           {#each messages as msg (msg.id ?? msg.timestamp)}
             {#if msg.role === AGENT_ROLE_STATUS}
-              <div class="_status px-4 text-xs text-gray-400 italic leading-snug">
-                · {msg.message}
+              <div class="_status px-4 text-xs leading-snug
+                {msg.statusKind === 'error' ? 'text-red-600 not-italic' : 'text-gray-400 italic'}">
+                {msg.statusKind === 'error' ? '⚠' : '·'} {msg.message}
               </div>
             {:else}
               {@const isUser = msg.role === AGENT_ROLE_USER}
               <div class="_row flex {isUser ? 'justify-end' : 'justify-start'}">
-                <div class="_bubble max-w-[80%] px-10 py-8 rounded-2xl text-sm leading-snug whitespace-pre-wrap
+                <div class="_bubble max-w-[80%] px-10 py-8 rounded-2xl text-sm leading-snug
                   {isUser
                     ? 'bg-indigo-600 text-white rounded-br-md'
-                    : 'bg-gray-100 text-gray-800 rounded-bl-md'}"
+                    : '_markdown bg-gray-100 text-gray-800 rounded-bl-md'}"
                 >
-                  {msg.message}{#if msg.pending}<span class="opacity-60 ml-4">…</span>{/if}
+                  {#if isUser}
+                    <span class="whitespace-pre-wrap">{msg.message}</span>
+                  {:else}
+                    {@html renderAgentMarkdown(msg.message)}
+                  {/if}
+                  {#if msg.pending}<span class="opacity-60 ml-4">…</span>{/if}
                 </div>
               </div>
             {/if}
@@ -480,6 +650,7 @@
           </div>
         {/if}
       </div>
+      {/if}
     </div>
   {/if}
 </div>
@@ -593,6 +764,58 @@
   	/* No top border so the mode bar sits flush against the search pill, with no
   	   light line between them. */
   	border-top: 0;
+  }
+  ._panelCollapsed {
+    background: rgb(255 255 255 / 82%);
+    border-color: rgb(239 68 68 / 45%);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px rgb(15 23 42 / 12%);
+  }
+  ._markdown :global(p) {
+    margin: 0;
+  }
+  ._markdown :global(p + p),
+  ._markdown :global(p + ul),
+  ._markdown :global(p + ol),
+  ._markdown :global(ul + p),
+  ._markdown :global(ol + p),
+  ._markdown :global(pre + p) {
+    margin-top: 8px;
+  }
+  ._markdown :global(ul),
+  ._markdown :global(ol) {
+    margin: 8px 0;
+    padding-left: 18px;
+  }
+  ._markdown :global(ul) {
+    list-style: disc;
+  }
+  ._markdown :global(ol) {
+    list-style: decimal;
+  }
+  ._markdown :global(li + li) {
+    margin-top: 2px;
+  }
+  ._markdown :global(code) {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgb(15 23 42 / 8%);
+  }
+  ._markdown :global(pre) {
+    margin: 8px 0;
+    padding: 8px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    border-radius: 6px;
+    background: rgb(15 23 42 / 8%);
+  }
+  ._markdown :global(pre code) {
+    padding: 0;
+    background: transparent;
+  }
+  ._markdown :global(a) {
+    color: #4f46e5;
+    text-decoration: underline;
   }
   /* Mode bar: a light lavender strip between the search pill and the white chat. */
   ._modeBar {
