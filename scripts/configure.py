@@ -170,7 +170,7 @@ def resolve_backend_mode():
     return selected_mode
 
 
-def resolve_backend_is_on_this_host():
+def resolve_bridge_is_needed():
     """Decide whether Server Utils, selected on its own, still needs the public SSE bridge.
 
     The bridge exists for one reason: a Lambda backend cannot hold an open connection, so something
@@ -179,30 +179,34 @@ def resolve_backend_is_on_this_host():
     on a VPS *specifically* to bridge for a Lambda is exactly as ordinary as installing it next to a
     self-hosted backend.
 
-    So it is detected and then confirmed: the installed backend unit is strong evidence, but a host
-    being staged before the backend is installed would look identical to a Lambda deployment, and
-    guessing wrong either fails the install or silently ships no bridge.
+    The detection is only conclusive in one direction, so only one direction asks. Finding the
+    backend unit here settles it — a local backend serves its own stream, and no deployment wants a
+    bridge in front of that — so the question would have one possible answer and is not worth
+    asking. Finding nothing does not settle it: the backend could be on Lambda, which is what the
+    bridge exists for, or on another VPS serving its own stream, which needs no bridge either.
     """
-    backend_unit_is_installed = BACKEND_SERVICE_UNIT_PATH.is_file()
-    if backend_unit_is_installed:
-        print(f"[*] Detected {BACKEND_SERVICE_UNIT_PATH.name} on this host.")
-    else:
-        print(f"[*] No {BACKEND_SERVICE_UNIT_PATH.name} found on this host.")
+    if BACKEND_SERVICE_UNIT_PATH.is_file():
+        print(
+            f"[*] Detected {BACKEND_SERVICE_UNIT_PATH.name} on this host: the backend serves "
+            "/agent/stream itself, so no SSE bridge is needed."
+        )
+        return False
 
-    default_answer = "Y/n" if backend_unit_is_installed else "y/N"
+    # Defaults to yes, which is the behaviour before this prompt existed: requiring sse_bridge.url
+    # stops the install with the key name, while quietly skipping the bridge would install a Lambda
+    # companion that cannot do the one job it was installed for, and only show it at runtime.
+    print(f"[*] No {BACKEND_SERVICE_UNIT_PATH.name} found on this host.")
     given_answer = input(
-        f"Does the Genix backend run on THIS host? [{default_answer}] "
-        "(no = it is on Lambda or another server, and the SSE bridge is needed): "
+        "Is the backend on Lambda, so this host must serve the SSE bridge? [Y/n] "
+        "(no = it runs on another server that serves its own /agent/stream): "
     ).strip().lower()
-    if not given_answer:
-        return backend_unit_is_installed
-    if given_answer in {"y", "yes"}:
+    if not given_answer or given_answer in {"y", "yes"}:
         return True
     if given_answer in {"n", "no"}:
         return False
     # SystemExit and not ValueError: this prompt runs past the block that converts selection
     # errors, and a traceback is not an install error message.
-    raise SystemExit("[!] Answer the backend host question with y or n.")
+    raise SystemExit("[!] Answer the SSE bridge question with y or n.")
 
 
 def run_configurer(script_name, *arguments):
@@ -262,14 +266,14 @@ def main():
         # services but no public SSE vhost or sse_bridge.url. When the Backend component was
         # selected in this same run its mode already answers that; when Server Utils is installed
         # alone — which used to demand a bridge URL on every self-hosted box — it has to be asked.
-        backend_is_on_this_host = (
-            backend_mode in {"1", "2"}
+        bridge_is_needed = (
+            backend_mode not in {"1", "2"}
             if backend_mode is not None
-            else resolve_backend_is_on_this_host()
+            else resolve_bridge_is_needed()
         )
-        if backend_is_on_this_host:
+        if not bridge_is_needed:
             server_utils_arguments.append("--service-only")
-            print("[*] Backend runs on this host; skipping the public Server Utils SSE bridge.")
+            print("[*] The backend serves its own /agent/stream; skipping the public SSE bridge.")
         run_configurer("configure_server_utils.py", *server_utils_arguments)
 
 

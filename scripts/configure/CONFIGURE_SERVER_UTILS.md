@@ -17,12 +17,18 @@ With the unified selection `238`, choosing Backend mode `1` or `2` means self-ho
 The dispatcher passes `--service-only`: `sse_bridge.url` is not required and Nginx is not touched,
 because that backend serves `/agent/stream` itself.
 
-Selecting Server Utils **on its own** (`37`, `38`) is the one case the dispatcher cannot infer, and
-it is ambiguous in both directions: the host may already run the backend, or it may be the Lambda
-companion whose whole purpose is the bridge. So it detects `/etc/systemd/system/genix.service` and
-asks, using what it found as the default — answering the question is what decides whether
-`--service-only` is passed. It used to skip the question and demand `sse_bridge.url` on every such
-run, which failed the install on hosts that already served `/agent/stream` themselves.
+Selecting Server Utils **on its own** (`37`, `38`) is the case the dispatcher has to work out, and
+it does so by looking for `/etc/systemd/system/genix.service`.
+
+Finding it settles the question outright and **nothing is asked**: a local backend serves
+`/agent/stream` itself, so no deployment wants a bridge in front of it. Finding nothing settles
+nothing — the backend could be on Lambda, which is the whole reason the bridge exists, or on another
+VPS serving its own stream — so that is the one case that prompts, defaulting to the bridge. That
+default keeps a missing `sse_bridge.url` an install-time error with the key name, rather than
+quietly producing a Lambda companion that cannot do the one job it was installed for.
+
+This used to demand `sse_bridge.url` on *every* Server-Utils-only run, which failed the install on
+hosts that already served `/agent/stream` themselves.
 
 Must be run as `root`; the service itself runs as a non-root user. Endpoints and protocol:
 [`../../server_utils/README.md`](../../server_utils/README.md). Design of the two halves:

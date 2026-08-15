@@ -114,14 +114,23 @@ class DispatchTest(unittest.TestCase):
         )
 
     def run_server_utils_only(self, backend_unit_exists, typed_answer):
-        """Selection '37': Server Utils alone, built from source. Returns the arguments it passed."""
+        """Selection '37': Server Utils alone, built from source. Returns the arguments it passed.
+
+        A `typed_answer` of None makes the prompt itself a failure, which is how the "does not ask"
+        case is asserted rather than merely assumed.
+        """
         configure = load_configure_module()
         executed_configurers = []
+
+        def answer_prompt(_prompt):
+            if typed_answer is None:
+                raise AssertionError("the installer asked a question it had already answered")
+            return typed_answer
 
         with mock.patch.object(
             configure, "parse_command_arguments", return_value=SimpleNamespace(selection="37")
         ), mock.patch.object(configure.os, "geteuid", return_value=0), mock.patch.object(
-            configure, "input", create=True, return_value=typed_answer
+            configure, "input", create=True, side_effect=answer_prompt
         ), mock.patch.object(
             configure,
             "BACKEND_SERVICE_UNIT_PATH",
@@ -141,34 +150,33 @@ class DispatchTest(unittest.TestCase):
     # Installing Server Utils on its own used to demand sse_bridge.url on every host, because
     # --service-only was only passed when the Backend component happened to be selected in the same
     # run. On a box that already runs the backend that is a bridge nobody wants.
-    def test_server_utils_alone_skips_the_bridge_when_the_backend_is_installed_here(self):
-        arguments = self.run_server_utils_only(backend_unit_exists=True, typed_answer="")
+    #
+    # And finding the unit settles it outright: a local backend serves /agent/stream itself, so
+    # there is no deployment that wants a bridge in front of it. Asking would be a question with one
+    # possible answer, so typed_answer=None makes any prompt fail this test.
+    def test_a_detected_backend_skips_the_bridge_without_asking(self):
+        arguments = self.run_server_utils_only(backend_unit_exists=True, typed_answer=None)
         self.assertIn("--service-only", arguments)
 
-    # The case the bridge exists for: a Lambda backend cannot hold the connection, so this host has
-    # to, and the vhost plus sse_bridge.url are required.
-    def test_server_utils_alone_keeps_the_bridge_when_no_backend_is_installed_here(self):
+    # Finding nothing settles nothing, so this is the one case that asks. Default is the bridge,
+    # because a missing sse_bridge.url then stops the install by name instead of shipping a Lambda
+    # companion that cannot bridge.
+    def test_no_backend_here_defaults_to_requiring_the_bridge(self):
         arguments = self.run_server_utils_only(backend_unit_exists=False, typed_answer="")
         self.assertNotIn("--service-only", arguments)
 
-    # Detection is a default, not a verdict: a host staged before the backend is installed looks
-    # exactly like a Lambda deployment, so the typed answer has to win.
-    def test_a_typed_answer_overrides_what_was_detected(self):
-        self.assertIn(
-            "--service-only",
-            self.run_server_utils_only(backend_unit_exists=False, typed_answer="y"),
-        )
-        self.assertNotIn(
-            "--service-only",
-            self.run_server_utils_only(backend_unit_exists=True, typed_answer="n"),
-        )
+    # The other half of the ambiguity: another VPS whose backend serves its own stream needs the
+    # daemon's TCP services but no bridge.
+    def test_a_remote_self_hosted_backend_skips_the_bridge(self):
+        arguments = self.run_server_utils_only(backend_unit_exists=False, typed_answer="n")
+        self.assertIn("--service-only", arguments)
 
     def test_an_unreadable_answer_stops_without_a_traceback(self):
         with self.assertRaises(SystemExit) as exit_context:
-            self.run_server_utils_only(backend_unit_exists=True, typed_answer="maybe")
+            self.run_server_utils_only(backend_unit_exists=False, typed_answer="maybe")
         self.assertEqual(
             str(exit_context.exception),
-            "[!] Answer the backend host question with y or n.",
+            "[!] Answer the SSE bridge question with y or n.",
         )
 
     def test_configurer_failure_has_no_python_traceback(self):
