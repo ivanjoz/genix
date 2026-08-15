@@ -113,6 +113,64 @@ class DispatchTest(unittest.TestCase):
             ],
         )
 
+    def run_server_utils_only(self, backend_unit_exists, typed_answer):
+        """Selection '37': Server Utils alone, built from source. Returns the arguments it passed."""
+        configure = load_configure_module()
+        executed_configurers = []
+
+        with mock.patch.object(
+            configure, "parse_command_arguments", return_value=SimpleNamespace(selection="37")
+        ), mock.patch.object(configure.os, "geteuid", return_value=0), mock.patch.object(
+            configure, "input", create=True, return_value=typed_answer
+        ), mock.patch.object(
+            configure,
+            "BACKEND_SERVICE_UNIT_PATH",
+            SimpleNamespace(is_file=lambda: backend_unit_exists, name="genix.service"),
+        ), mock.patch.object(
+            configure,
+            "run_configurer",
+            side_effect=lambda script_name, *arguments: executed_configurers.append(
+                (script_name, arguments)
+            ),
+        ), redirect_stdout(io.StringIO()):
+            configure.main()
+
+        self.assertEqual(len(executed_configurers), 1)
+        return executed_configurers[0][1]
+
+    # Installing Server Utils on its own used to demand sse_bridge.url on every host, because
+    # --service-only was only passed when the Backend component happened to be selected in the same
+    # run. On a box that already runs the backend that is a bridge nobody wants.
+    def test_server_utils_alone_skips_the_bridge_when_the_backend_is_installed_here(self):
+        arguments = self.run_server_utils_only(backend_unit_exists=True, typed_answer="")
+        self.assertIn("--service-only", arguments)
+
+    # The case the bridge exists for: a Lambda backend cannot hold the connection, so this host has
+    # to, and the vhost plus sse_bridge.url are required.
+    def test_server_utils_alone_keeps_the_bridge_when_no_backend_is_installed_here(self):
+        arguments = self.run_server_utils_only(backend_unit_exists=False, typed_answer="")
+        self.assertNotIn("--service-only", arguments)
+
+    # Detection is a default, not a verdict: a host staged before the backend is installed looks
+    # exactly like a Lambda deployment, so the typed answer has to win.
+    def test_a_typed_answer_overrides_what_was_detected(self):
+        self.assertIn(
+            "--service-only",
+            self.run_server_utils_only(backend_unit_exists=False, typed_answer="y"),
+        )
+        self.assertNotIn(
+            "--service-only",
+            self.run_server_utils_only(backend_unit_exists=True, typed_answer="n"),
+        )
+
+    def test_an_unreadable_answer_stops_without_a_traceback(self):
+        with self.assertRaises(SystemExit) as exit_context:
+            self.run_server_utils_only(backend_unit_exists=True, typed_answer="maybe")
+        self.assertEqual(
+            str(exit_context.exception),
+            "[!] Answer the backend host question with y or n.",
+        )
+
     def test_configurer_failure_has_no_python_traceback(self):
         configure = load_configure_module()
         command_error = configure.subprocess.CalledProcessError(1, ["python3", "child.py"])

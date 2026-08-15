@@ -26,6 +26,10 @@ BINARY_PRECOMPILED = "8"
 COMPONENT_DIGITS = {COMPONENT_DATABASE, COMPONENT_BACKEND, COMPONENT_SERVER_UTILS}
 BINARY_MODE_DIGITS = {BINARY_SOURCE, BINARY_PRECOMPILED}
 
+# The unit configure_server.py installs. Its presence is what tells Server Utils, installed on its
+# own, that the backend is on this same host. Kept in sync with SERVICE_NAME there by this name.
+BACKEND_SERVICE_UNIT_PATH = Path("/etc/systemd/system/genix.service")
+
 
 def print_menu():
     """Show the digits that may be combined in one selection."""
@@ -166,6 +170,41 @@ def resolve_backend_mode():
     return selected_mode
 
 
+def resolve_backend_is_on_this_host():
+    """Decide whether Server Utils, selected on its own, still needs the public SSE bridge.
+
+    The bridge exists for one reason: a Lambda backend cannot hold an open connection, so something
+    else has to. A backend on this same host serves /agent/stream itself and needs no vhost and no
+    sse_bridge.url — which is why the answer cannot be assumed either way. Installing Server Utils
+    on a VPS *specifically* to bridge for a Lambda is exactly as ordinary as installing it next to a
+    self-hosted backend.
+
+    So it is detected and then confirmed: the installed backend unit is strong evidence, but a host
+    being staged before the backend is installed would look identical to a Lambda deployment, and
+    guessing wrong either fails the install or silently ships no bridge.
+    """
+    backend_unit_is_installed = BACKEND_SERVICE_UNIT_PATH.is_file()
+    if backend_unit_is_installed:
+        print(f"[*] Detected {BACKEND_SERVICE_UNIT_PATH.name} on this host.")
+    else:
+        print(f"[*] No {BACKEND_SERVICE_UNIT_PATH.name} found on this host.")
+
+    default_answer = "Y/n" if backend_unit_is_installed else "y/N"
+    given_answer = input(
+        f"Does the Genix backend run on THIS host? [{default_answer}] "
+        "(no = it is on Lambda or another server, and the SSE bridge is needed): "
+    ).strip().lower()
+    if not given_answer:
+        return backend_unit_is_installed
+    if given_answer in {"y", "yes"}:
+        return True
+    if given_answer in {"n", "no"}:
+        return False
+    # SystemExit and not ValueError: this prompt runs past the block that converts selection
+    # errors, and a traceback is not an install error message.
+    raise SystemExit("[!] Answer the backend host question with y or n.")
+
+
 def run_configurer(script_name, *arguments):
     """Run one installer and stop immediately when it cannot complete."""
     command_arguments = [sys.executable, str(CONFIGURE_DIRECTORY / script_name), *arguments]
@@ -219,9 +258,16 @@ def main():
         run_configurer("configure_server.py", backend_mode, "--binary-source", binary_source)
     if COMPONENT_SERVER_UTILS in selected_components:
         server_utils_arguments = ["--binary-source", binary_source]
-        if backend_mode in {"1", "2"}:
-            # A self-hosted backend serves /agent/stream itself, so it needs the daemon's raw TCP
-            # services but no public SSE vhost or sse_bridge.url.
+        # A self-hosted backend serves /agent/stream itself, so it needs the daemon's raw TCP
+        # services but no public SSE vhost or sse_bridge.url. When the Backend component was
+        # selected in this same run its mode already answers that; when Server Utils is installed
+        # alone — which used to demand a bridge URL on every self-hosted box — it has to be asked.
+        backend_is_on_this_host = (
+            backend_mode in {"1", "2"}
+            if backend_mode is not None
+            else resolve_backend_is_on_this_host()
+        )
+        if backend_is_on_this_host:
             server_utils_arguments.append("--service-only")
             print("[*] Backend runs on this host; skipping the public Server Utils SSE bridge.")
         run_configurer("configure_server_utils.py", *server_utils_arguments)
