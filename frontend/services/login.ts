@@ -94,6 +94,34 @@ export const reloadLogin = async (): Promise<any> => {
   return { result: loginInfo }
 }
 
+// applyDevLogin mints a password-less session for a "<companyID>:<userID>" pair through the
+// p-dev-login route, which the backend only answers with is_local and from loopback. It exists so
+// the headless dev browser (scripts/agent_browser) can attach to the app as any user: no test
+// user's password is stored anywhere, so no automated tool could otherwise reach a logged-in page.
+//
+// Hydration goes through the same parseLogin as the real login on purpose — the session lives in
+// six localStorage keys, one of them checksum-wrapped, and a second path to write them would
+// eventually drift from the first.
+export const applyDevLogin = async (companyAndUser: string): Promise<void> => {
+  const [companyID, userID] = companyAndUser.split(':')
+  const CipherKey = makeRamdomString(32)
+
+  try {
+    const loginInfo: ILoginResult = await GET({
+      route: `p-dev-login?company=${companyID || 1}&user=${userID || 1}&cipher-key=${CipherKey}`,
+      headers: { "Content-Type": "application/json" }
+    })
+    await security.parseLogin(loginInfo, CipherKey)
+    if (!security.isTokenValid()) {
+      security.clearSession()
+      throw new Error("el token emitido por p-dev-login no es válido")
+    }
+    console.log("[dev-login] sesión iniciada", { companyID, userID })
+  } catch (error) {
+    console.error("[dev-login] no se pudo iniciar la sesión de desarrollo", error)
+  }
+}
+
 // Register the reload function with core to avoid circular dependency
 security.setSessionRefresher(reloadLogin);
 

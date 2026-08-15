@@ -21,6 +21,12 @@ Content-Type: application/json
 Local-only — bound to localhost, no auth, no CORS. Requires one connected
 browser tab (the dev page that opens an SSE stream to `/agent/stream`).
 
+> **No browser open?** `scripts/agent_browser` launches a headless Chrome that logs itself in
+> (company 1 / user 1 by default) and holds that tab, so none of this needs a human:
+> `cd scripts && go run . agent_browser start`. It also wraps the endpoints below and adds a real
+> browser screenshot to contrast against the agentic HTML. See
+> [`scripts/AGENT_BROWSER.md`](../../scripts/AGENT_BROWSER.md).
+
 ## Request
 
 ```json

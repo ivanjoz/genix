@@ -5,7 +5,9 @@ go 1.25.5
 require (
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.5
+	github.com/coder/websocket v1.8.15
 	github.com/klauspost/compress v1.18.3
+	github.com/pelletier/go-toml/v2 v2.4.3
 	golang.org/x/tools v0.41.0
 )
 
@@ -21,7 +23,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/mod v0.32.0 // indirect
