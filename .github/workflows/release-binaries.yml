@@ -77,7 +77,7 @@ jobs:
       - name: Initialize backend ORM submodule
         # The backend only needs genix-orm; skipping the frontend submodule keeps checkout small.
         run: |
-          git config --local url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
             # Releases must build the exact submodule commit recorded by the immutable tag.
             git submodule update --init --depth 1 backend/genix-orm

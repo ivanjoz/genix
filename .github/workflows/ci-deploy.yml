@@ -36,7 +36,7 @@ jobs:
       - name: Checkout submodules at branch tip
         # --remote ignora el gitlink y toma la punta de submodule.<name>.branch (main).
         run: |
-          git config --local url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           git submodule sync --recursive
           git submodule update --init --remote --depth 1 --recursive
 
