@@ -1,0 +1,4 @@
+[toolchain]
+# Release builds use one exact compiler while each CI matrix job installs only its own target.
+channel = "1.95.0"
+profile = "minimal"

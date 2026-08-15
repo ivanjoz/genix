@@ -11,17 +11,17 @@ import (
 func lp(a, b byte) uint8 { return letterPairCode(a, b) }
 
 func TestLetterPairCodesAreStable(t *testing.T) {
-	// Anchored to row 'a' having 15 groups (after the phonetic-class merge, the
+	// Anchored to row 'a' having 16 groups (after the phonetic-class merge, the
 	// vowel split, and the frequency-based merges that fit the 254 budget): 'r'
-	// is the first group, '$' rides the last group ("w$"), and row 'b' starts
+	// is the first group, '$' rides the last group ("hw$"), and row 'b' starts
 	// immediately after.
 	cases := []struct {
 		a, b byte
 		want uint8
 	}{
 		{'a', 'r', 1},
-		{'a', '$', 15},
-		{'b', 'o', 16},
+		{'a', '$', 16},
+		{'b', 'o', 17},
 	}
 	for _, c := range cases {
 		if got := lp(c.a, c.b); got != c.want {

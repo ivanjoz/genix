@@ -207,6 +207,30 @@ cargo build --release --target x86_64-unknown-linux-musl
 cargo build --release --target aarch64-unknown-linux-musl
 ```
 
+Every versioned [Genix GitHub Release](https://github.com/ivanjoz/genix/releases) also publishes
+these static outputs as `genix-server-utils_linux_amd64` and
+`genix-server-utils_linux_arm64`. Downloading `latest` is convenient for a manual install; replace
+`latest/download` with `download/vX.Y.Z` to pin production automation to an immutable release.
+
+```bash
+# Map the Linux machine name to the release asset suffix.
+case "$(uname -m)" in
+  x86_64) release_architecture=amd64 ;;
+  aarch64|arm64) release_architecture=arm64 ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+# Download the public binary and the manifest without requiring a GitHub token.
+release_base_url=https://github.com/ivanjoz/genix/releases/latest/download
+release_asset="genix-server-utils_linux_${release_architecture}"
+curl --fail --location --output "$release_asset" "${release_base_url}/${release_asset}"
+curl --fail --location --output SHA256SUMS "${release_base_url}/SHA256SUMS"
+
+# Verify exact release bytes before making the daemon executable.
+grep " ${release_asset}$" SHA256SUMS | sha256sum --check --strict
+chmod 0755 "$release_asset"
+```
+
 Before starting the daemon, deploy the backend tables so the generated Genix controller creates
 `credit_usage`:
 

@@ -177,6 +177,35 @@ In modes `1` and `2` the script guarantees a runnable binary at `/usr/local/bin/
    A candidate counts only if it is non-empty and starts with the ELF magic, so an old empty placeholder or a stray shell script is skipped.
 3. **Crash** — neither source nor binary is a hard error naming both places it looked.
 
+### Downloading a public prebuilt backend
+
+When deploying from a minimal tree without `backend/main.go`, place the verified release asset at
+`tmp/genix_app_linux_<arch>` and the normal search order above installs it. The script intentionally
+does not fetch the network by itself: the operator chooses an immutable version or the moving
+`latest` release explicitly.
+
+```bash
+# Resolve the filename that configure_server.py already searches for on this host.
+case "$(uname -m)" in
+  x86_64) release_architecture=amd64 ;;
+  aarch64|arm64) release_architecture=arm64 ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+# For production, replace latest/download with download/vX.Y.Z before downloading.
+release_base_url=https://github.com/ivanjoz/genix/releases/latest/download
+release_asset="genix_app_linux_${release_architecture}"
+mkdir -p tmp
+curl --fail --location --output "tmp/${release_asset}" "${release_base_url}/${release_asset}"
+curl --fail --location --output tmp/SHA256SUMS "${release_base_url}/SHA256SUMS"
+
+# Verify from tmp/ so the manifest's bare filename resolves to the downloaded binary.
+(
+  cd tmp
+  grep " ${release_asset}$" SHA256SUMS | sha256sum --check --strict
+)
+```
+
 ### Populating go.mod replace targets
 
 `backend/go.mod` redirects two modules into the working tree:

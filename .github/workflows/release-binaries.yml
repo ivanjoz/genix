@@ -1,0 +1,353 @@
+name: Build and release Linux binaries
+
+# Version tags publish; manual main runs validate both components and warm reusable caches.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A release tag must have only one publisher, and a running release must finish atomically.
+concurrency:
+  group: binaries-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan-server-utils:
+    name: Plan server-utils release input
+    runs-on: ubuntu-24.04
+    outputs:
+      build_required: ${{ steps.plan.outputs.build_required }}
+      previous_tag: ${{ steps.plan.outputs.previous_tag }}
+    steps:
+      - name: Checkout tag history
+        uses: actions/checkout@v7
+        with:
+          # The nearest reachable version tag is the only safe release reuse candidate.
+          fetch-depth: 0
+
+      - name: Decide whether server utils must be rebuilt
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Manual runs always compile; tag runs may reuse unchanged, already-published assets.
+          build_required=true
+          previous_tag=''
+
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF_TYPE" == tag ]]; then
+            current_commit="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+            previous_tag="$(
+              git describe --tags --match 'v*' --abbrev=0 "${current_commit}^" 2>/dev/null || true
+            )"
+
+            if [[ -n "$previous_tag" ]] &&
+              git diff --quiet "${previous_tag}^{commit}" "$current_commit" -- \
+                server_utils .github/workflows/release-binaries.yml; then
+              release_asset_names="$(
+                gh release view "$previous_tag" --json assets --jq '.assets[].name' 2>/dev/null || true
+              )"
+
+              if grep -Fxq 'genix-server-utils_linux_amd64' <<<"$release_asset_names" &&
+                grep -Fxq 'genix-server-utils_linux_arm64' <<<"$release_asset_names"; then
+                build_required=false
+                echo "Reusing unchanged server-utils binaries from ${previous_tag}"
+              else
+                echo "${previous_tag} lacks reusable server-utils assets; rebuilding"
+              fi
+            else
+              echo 'server_utils or its release build definition changed; rebuilding'
+            fi
+          else
+            echo 'Manual validation run; rebuilding server utils and warming caches'
+          fi
+
+          echo "build_required=${build_required}" >> "$GITHUB_OUTPUT"
+          echo "previous_tag=${previous_tag}" >> "$GITHUB_OUTPUT"
+
+  build-backend:
+    name: Backend (linux/amd64 + linux/arm64)
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Initialize backend ORM submodule
+        # The backend only needs genix-orm; skipping the frontend submodule keeps checkout small.
+        run: |
+          git config --local url."https://github.com/".insteadOf "git@github.com:"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            # Releases must build the exact submodule commit recorded by the immutable tag.
+            git submodule update --init --depth 1 backend/genix-orm
+          else
+            # Main validation follows the configured branch tip, matching the frontend workflow.
+            git submodule update --init --remote --depth 1 backend/genix-orm
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          # setup-go reads the exact toolchain directive instead of following a moving version.
+          go-version-file: backend/go.mod
+          check-latest: false
+          cache: true
+          cache-dependency-path: |
+            backend/go.sum
+            backend/genix-orm/go.sum
+            backend/genix-orm/db/go.sum
+
+      - name: Test backend
+        working-directory: backend
+        env:
+          # A disabled Cgo toolchain is also the contract used by both static release builds.
+          CGO_ENABLED: '0'
+        run: go test ./...
+
+      - name: Build static backend binaries
+        working-directory: backend
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          # Tag and commit identify a release reproducibly without embedding the runner clock.
+          release_identity="${GITHUB_REF_NAME}-${GITHUB_SHA:0:12}"
+          mkdir -p ../dist
+
+          for target_architecture in amd64 arm64; do
+            echo "Building backend for linux/${target_architecture} (${release_identity})"
+            GOOS=linux GOARCH="$target_architecture" \
+              go build -trimpath \
+              -ldflags="-s -w -X app/core.BuildDate=${release_identity}" \
+              -o "../dist/genix_app_linux_${target_architecture}" .
+          done
+
+      - name: Verify backend ELF files
+        run: |
+          # Reject architecture mixups and any accidental dependency on a dynamic loader.
+          for target_architecture in amd64 arm64; do
+            binary_path="dist/genix_app_linux_${target_architecture}"
+            case "$target_architecture" in
+              amd64) expected_machine='x86-64' ;;
+              arm64) expected_machine='ARM aarch64' ;;
+            esac
+
+            binary_description="$(file -b "$binary_path")"
+            echo "${binary_path}: ${binary_description}"
+            if [[ "$binary_description" != *"$expected_machine"* ]]; then
+              echo "Expected machine ${expected_machine}" >&2
+              exit 1
+            fi
+            if readelf -l "$binary_path" | grep -q 'Requesting program interpreter'; then
+              echo "${binary_path} unexpectedly requires a dynamic loader" >&2
+              exit 1
+            fi
+          done
+
+      - name: Stage backend binaries for the publisher
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-binaries
+          path: dist/genix_app_linux_*
+          if-no-files-found: error
+          retention-days: 1
+
+  build-server-utils:
+    name: Server utils (${{ matrix.asset_architecture }})
+    needs: plan-server-utils
+    if: ${{ needs.plan-server-utils.outputs.build_required == 'true' }}
+    env:
+      # Apply the pin even to cache metadata commands that execute from the repository root.
+      RUSTUP_TOOLCHAIN: 1.95.0
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-musl
+            asset_architecture: amd64
+            expected_machine: x86-64
+          - runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-musl
+            asset_architecture: arm64
+            expected_machine: ARM aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust target
+        env:
+          RUST_TARGET: ${{ matrix.rust_target }}
+        run: |
+          # Install only this native matrix target; the other architecture has its own runner.
+          rustup toolchain install 1.95.0 \
+            --profile minimal \
+            --target "$RUST_TARGET" \
+            --no-self-update
+
+      - name: Restore Rust dependency cache
+        # Swatinem/rust-cache v2 is pinned to its immutable commit, not a moving tag.
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: server_utils -> target
+          key: ${{ matrix.rust_target }}
+          cache-bin: false
+          # Tags restore the default-branch cache but do not save isolated tag caches.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Test server utils natively
+        working-directory: server_utils
+        env:
+          RUST_TARGET: ${{ matrix.rust_target }}
+        run: cargo test --locked --release --target "$RUST_TARGET"
+
+      - name: Build static server-utils binary
+        working-directory: server_utils
+        env:
+          RUST_TARGET: ${{ matrix.rust_target }}
+          ASSET_ARCHITECTURE: ${{ matrix.asset_architecture }}
+        run: |
+          # The checked-in Cargo linker configuration makes each musl output self-contained.
+          cargo build --locked --release --target "$RUST_TARGET"
+          mkdir -p ../dist
+          install -m 0755 \
+            "target/${RUST_TARGET}/release/genix-server-utils" \
+            "../dist/genix-server-utils_linux_${ASSET_ARCHITECTURE}"
+
+      - name: Verify server-utils ELF file
+        env:
+          ASSET_ARCHITECTURE: ${{ matrix.asset_architecture }}
+          EXPECTED_MACHINE: ${{ matrix.expected_machine }}
+        run: |
+          # Validate the renamed release file, not only Cargo's target-directory output.
+          binary_path="dist/genix-server-utils_linux_${ASSET_ARCHITECTURE}"
+          binary_description="$(file -b "$binary_path")"
+          echo "${binary_path}: ${binary_description}"
+          if [[ "$binary_description" != *"$EXPECTED_MACHINE"* ]]; then
+            echo "Expected machine ${EXPECTED_MACHINE}" >&2
+            exit 1
+          fi
+          if readelf -l "$binary_path" | grep -q 'Requesting program interpreter'; then
+            echo "${binary_path} unexpectedly requires a dynamic loader" >&2
+            exit 1
+          fi
+
+      - name: Stage server-utils binary for the publisher
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-utils-${{ matrix.asset_architecture }}
+          path: dist/genix-server-utils_linux_${{ matrix.asset_architecture }}
+          if-no-files-found: error
+          retention-days: 1
+
+  reuse-server-utils:
+    name: Reuse unchanged server-utils binaries
+    needs: plan-server-utils
+    if: ${{ needs.plan-server-utils.outputs.build_required == 'false' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download binaries from the previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REUSE_TAG: ${{ needs.plan-server-utils.outputs.previous_tag }}
+        run: |
+          # Reusing immutable release assets avoids starting either Rust runner.
+          mkdir -p dist
+          gh release download "$REUSE_TAG" --dir dist \
+            --pattern 'genix-server-utils_linux_amd64' \
+            --pattern 'genix-server-utils_linux_arm64'
+
+      - name: Verify reused ELF files
+        run: |
+          # Apply the same architecture and static-link checks used for freshly built files.
+          for target_architecture in amd64 arm64; do
+            binary_path="dist/genix-server-utils_linux_${target_architecture}"
+            case "$target_architecture" in
+              amd64) expected_machine='x86-64' ;;
+              arm64) expected_machine='ARM aarch64' ;;
+            esac
+
+            binary_description="$(file -b "$binary_path")"
+            echo "${binary_path}: ${binary_description}"
+            if [[ "$binary_description" != *"$expected_machine"* ]]; then
+              echo "Expected machine ${expected_machine}" >&2
+              exit 1
+            fi
+            if readelf -l "$binary_path" | grep -q 'Requesting program interpreter'; then
+              echo "${binary_path} unexpectedly requires a dynamic loader" >&2
+              exit 1
+            fi
+          done
+
+      - name: Stage reused binaries for the publisher
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-utils-reused
+          path: dist/genix-server-utils_linux_*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-release:
+    name: Publish GitHub Release
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.plan-server-utils.result == 'success' && needs.build-backend.result == 'success' && (needs.build-server-utils.result == 'success' || needs.reuse-server-utils.result == 'success') }}
+    needs: [plan-server-utils, build-backend, build-server-utils, reuse-server-utils]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download staged binaries
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Verify release bundle and create checksums
+        run: |
+          # Require the complete bundle before generating a manifest or contacting Releases.
+          expected_asset_names=(
+            genix_app_linux_amd64
+            genix_app_linux_arm64
+            genix-server-utils_linux_amd64
+            genix-server-utils_linux_arm64
+          )
+
+          found_asset_count="$(find dist -maxdepth 1 -type f | wc -l)"
+          if [[ "$found_asset_count" -ne "${#expected_asset_names[@]}" ]]; then
+            echo "Expected ${#expected_asset_names[@]} binaries, found ${found_asset_count}" >&2
+            find dist -maxdepth 1 -type f -print
+            exit 1
+          fi
+
+          for asset_name in "${expected_asset_names[@]}"; do
+            asset_path="dist/${asset_name}"
+            if [[ ! -s "$asset_path" ]]; then
+              echo "Missing or empty release asset: ${asset_path}" >&2
+              exit 1
+            fi
+            chmod 0755 "$asset_path"
+            file "$asset_path"
+            if readelf -l "$asset_path" | grep -q 'Requesting program interpreter'; then
+              echo "${asset_path} unexpectedly requires a dynamic loader" >&2
+              exit 1
+            fi
+          done
+
+          # Bare filenames let sha256sum verify files downloaded into any directory.
+          (
+            cd dist
+            sha256sum "${expected_asset_names[@]}" > SHA256SUMS
+            sha256sum --check --strict SHA256SUMS
+          )
+
+      - name: Publish immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gh creates a draft, uploads the validated bundle, then publishes it as one release.
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --generate-notes \
+            --title "Genix ${GITHUB_REF_NAME}"

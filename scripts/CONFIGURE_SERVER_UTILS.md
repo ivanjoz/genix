@@ -125,6 +125,33 @@ Neither secret is exported in the unit: files under `/etc/systemd/system` are wo
    `tmp/genix-server-utils_linux_<arch>`, `server_utils/target/release/genix-server-utils`.
 3. Otherwise the run fails.
 
+For a deployment tree without `server_utils/` source, download the public static asset into the
+`tmp/genix-server-utils_linux_<arch>` location already searched above. The configure script does
+not fetch it automatically, so deployment automation can choose between an immutable version and
+the moving `latest` release.
+
+```bash
+# Resolve the prebuilt filename expected by configure_server_utils.py.
+case "$(uname -m)" in
+  x86_64) release_architecture=amd64 ;;
+  aarch64|arm64) release_architecture=arm64 ;;
+  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+# For production, replace latest/download with download/vX.Y.Z before downloading.
+release_base_url=https://github.com/ivanjoz/genix/releases/latest/download
+release_asset="genix-server-utils_linux_${release_architecture}"
+mkdir -p tmp
+curl --fail --location --output "tmp/${release_asset}" "${release_base_url}/${release_asset}"
+curl --fail --location --output tmp/SHA256SUMS "${release_base_url}/SHA256SUMS"
+
+# Verify from tmp/ so the manifest's bare filename resolves to the downloaded binary.
+(
+  cd tmp
+  grep " ${release_asset}$" SHA256SUMS | sha256sum --check --strict
+)
+```
+
 It is copied to `.genix-server-utils.staged` and renamed into place, so the running service
 never reads a half-written file, and later deploys that overwrite it restart the service by
 themselves through the path watcher.

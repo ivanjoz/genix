@@ -259,7 +259,7 @@ files:
     supports: [capability.configure-account, capability.manual-movement, capability.reconcile, capability.inspect-history, rules, troubleshooting]
   - path: backend/finance/cash_bank_movement.go
     role: business-logic
-    hash: sha256:9a7c5fdcd87319cc596f82f6a298b661ce90e16c2b290421c3ab9007a9cf386e
+    hash: sha256:dced7592fe610decf9352eb1705b09a46b75a2be73c438cff81d4be7f03a4775
     supports: [concepts, capability.manual-movement, capability.reconcile, rules]
   - path: backend/finance/types/cash_banks.go
     role: data-model
