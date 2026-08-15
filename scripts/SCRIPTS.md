@@ -36,3 +36,10 @@ When you create a new script, you **must** integrate it by following these steps
     -   Add a corresponding `MY_NEW_SCRIPT.md` file in the `scripts/` directory to document its purpose and usage.
 
 By following these steps, you ensure that your script is available through the standard `./app.sh <script_name>` interface, making it discoverable and usable by other developers and agents.
+
+## Server configuration exception
+
+Server provisioning has one public Python entrypoint: `scripts/configure.py`. Its internal
+installers, shared helpers, and component manuals live together in `scripts/configure/`; see
+[`configure/README.md`](configure/README.md). Add new server configuration behavior there instead
+of adding another top-level `configure_*.py` command.

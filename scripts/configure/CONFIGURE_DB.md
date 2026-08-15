@@ -4,11 +4,19 @@ Un solo script deja listo el host de datos: **ScyllaDB** (base de datos principa
 **GenixSearch** (búsqueda léxica) y **Qdrant** (base vectorial). Los tres suelen vivir en
 la misma VPS, separados del backend, que corre en Lambda o en otro servidor.
 
+El entrypoint público configura los tres motores. El dígito `7` o `8` es obligatorio por la
+gramática unificada, pero no cambia cómo este instalador obtiene los paquetes de datos:
+
 ```bash
-sudo ./app.sh configure_db            # los tres (default)
-sudo ./app.sh configure_db scylla     # solo ScyllaDB
-sudo ./app.sh configure_db search     # solo GenixSearch
-sudo ./app.sh configure_db qdrant     # solo Qdrant
+sudo python3 scripts/configure.py 18
+```
+
+Para diagnosticar un solo motor se puede invocar directamente el instalador interno:
+
+```bash
+sudo python3 scripts/configure/configure_db.py scylla
+sudo python3 scripts/configure/configure_db.py search
+sudo python3 scripts/configure/configure_db.py qdrant
 ```
 
 Los alias numéricos `1`/`2`/`3`/`4` equivalen a `all`/`scylla`/`search`/`qdrant`. El

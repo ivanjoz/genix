@@ -234,7 +234,7 @@ a day is a short one. `sample_seconds` must divide `row_seconds`.
 
 1. `deploy.sh` → **[5] Recrear Tablas** — regenerates `controllers.generated.go` (which is what
    registers the new table) and runs `fn-homologate` to create it in Scylla.
-2. `scripts/configure_server_utils.py` — rebuilds and restarts the daemon.
+2. `scripts/configure.py 37` — rebuilds and restarts the daemon.
 
 ## Not in this plan
 

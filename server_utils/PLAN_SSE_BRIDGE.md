@@ -271,7 +271,7 @@ vhost. With the merge, `server_utils` needs deployment automation for the first 
 `PLAN.md` §15 Phase 6 flags this as not-yet-done) — this plan folds that gap in rather than leaving
 two half-finished deploy stories.
 
-Replace it with **`scripts/configure_server_utils.py`**:
+Replace it with **`scripts/configure/configure_server_utils.py`**:
 
 - Compiles `server_utils` with `cargo build --release` (mirrors the Go `go build` step; reuses
   `detect_unprivileged_username`/`build_unprivileged_command` so Cargo's target dir is owned by the
@@ -298,10 +298,10 @@ Other references to update in the same change:
 - `app.sh` — same rename (even though `app.sh` is deprecated per `scripts/DEPLOYER.md`, it still
   dispatches this today).
 - `AGENTS.md` — replace the `sse_bridge/README.md` / `scripts/CONFIGURE_SSE_BRIDGE.md` bullets
-  with `server_utils/README.md` / a new `scripts/CONFIGURE_SERVER_UTILS.md`.
+  with `server_utils/README.md` / `scripts/configure/CONFIGURE_SERVER_UTILS.md`.
 - `DEPLOYMENT.md:96-99` — update the Lambda-mode paragraph to point at `server_utils/` instead of
   `sse_bridge/`.
-- `scripts/CONFIGURE_SSE_BRIDGE.md` — replaced by a new `scripts/CONFIGURE_SERVER_UTILS.md`
+- `scripts/CONFIGURE_SSE_BRIDGE.md` — replaced by `scripts/configure/CONFIGURE_SERVER_UTILS.md`
   documenting the merged deployment (same structure, updated for one binary/unit).
 
 ## 5. Cleanup (after verification)

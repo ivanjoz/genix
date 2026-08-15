@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def load_toml_config_module():
-    script_path = Path(__file__).resolve().parents[1] / "toml_config.py"
+    script_path = Path(__file__).resolve().parents[1] / "configure" / "toml_config.py"
     module_spec = importlib.util.spec_from_file_location("toml_config", script_path)
     toml_config = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(toml_config)

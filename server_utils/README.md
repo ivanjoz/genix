@@ -22,7 +22,7 @@ to end, with the exact bytes. Designs: [PLAN.md](PLAN.md) (rate limiter, includi
 formats), [PLAN_LOCK_SERVICE.md](PLAN_LOCK_SERVICE.md) and
 [PLAN_MULTIPLEXING.md](PLAN_MULTIPLEXING.md) (lock service),
 [PLAN_SSE_BRIDGE.md](PLAN_SSE_BRIDGE.md) (bridge). Deployment:
-[`../scripts/CONFIGURE_SERVER_UTILS.md`](../scripts/CONFIGURE_SERVER_UTILS.md).
+[`../scripts/configure/CONFIGURE_SERVER_UTILS.md`](../scripts/configure/CONFIGURE_SERVER_UTILS.md).
 
 > **One process, shared fate.** The rate limiter loads existing usage from ScyllaDB before
 > admitting anything and exits when it cannot — which also stops the bridge. Deploy the backend
@@ -128,7 +128,7 @@ user_inference_24h    = 10000
 
 The twelve credit ceilings are the only settings here with no built-in default: a guessed quota
 is worse than none, so the process refuses to start without them. Since that refusal is a
-three-second crash loop under `Restart=always`, `scripts/configure_server_utils.py` writes these
+three-second crash loop under `Restart=always`, the nested Server Utils installer writes these
 defaults into `config.toml` when they are absent, rather than leaving the daemon to discover it.
 
 The lock service adds process-wide ceilings only — per-action policy stays in the Go call sites:
@@ -195,7 +195,7 @@ everything it held.
 
 Building needs a C compiler even though no crate here contains C: rustc shells out to `cc` to
 link, and a `build.rs` is itself an executable that has to be linked before cargo can run it.
-`../scripts/configure_server_utils.py` installs one when the host has none.
+`../scripts/configure/configure_server_utils.py` installs one when the host has none.
 
 For a host that should compile nothing, build a static binary and ship it instead. `.cargo/
 config.toml` pins `rust-lld` for the musl targets, which is also what makes cross-building arm64
@@ -454,14 +454,14 @@ The one part of this daemon nothing calls into: it just ticks. Design in
 
 ## Deploying
 
-`sudo python3 scripts/configure_server_utils.py` compiles the binary, installs the systemd units,
+`sudo python3 scripts/configure.py 37` compiles the binary, installs the systemd units,
 and writes the bridge's Nginx vhost (HTTP/3 when a certificate exists and Nginx was built with
 it) on this host. It asks nothing — everything comes from `config.toml`. It installs a C compiler
 if the host has none, and after starting the service it probes `/health` rather than trusting
 `systemctl restart`: this daemon exits when ScyllaDB is unreachable, and with `Restart=always`
 that would otherwise look identical to a healthy start. Full details, including the generated
 unit and the three non-negotiable Nginx streaming settings, are in
-[`../scripts/CONFIGURE_SERVER_UTILS.md`](../scripts/CONFIGURE_SERVER_UTILS.md).
+[`../scripts/configure/CONFIGURE_SERVER_UTILS.md`](../scripts/configure/CONFIGURE_SERVER_UTILS.md).
 
 The raw TCP listener should remain on loopback or a private network. HMAC authenticates messages,
 but the protocol does not encrypt traffic. The bridge's HTTP port speaks plain HTTP; Nginx

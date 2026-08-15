@@ -95,8 +95,8 @@ Lambda no puede sostener un stream abierto ni recibir la respuesta del navegador
 misma invocación, y el agente necesita las dos cosas. Con el backend en Lambda hay que desplegar
 además `server_utils/` en un servidor normal — el bridge es una de sus dos mitades, junto al
 credit rate limiter — y poner su URL pública en `sse_bridge.url` de `config.toml`
-(`sudo python3 scripts/configure_server_utils.py`; detalles en
-`scripts/CONFIGURE_SERVER_UTILS.md`).
+(`sudo python3 scripts/configure.py 38`; detalles en
+`scripts/configure/CONFIGURE_SERVER_UTILS.md`).
 
 Ese host necesita `internal_apikey` y `secret_phrase` idénticos a los del backend, y las tablas
 ya desplegadas: el rate limiter sale con error si no puede leer `credit_usage`, y al ser un solo

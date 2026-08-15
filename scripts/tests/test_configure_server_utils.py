@@ -11,15 +11,16 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 SCRIPTS_DIRECTORY = Path(__file__).resolve().parents[1]
+CONFIGURE_DIRECTORY = SCRIPTS_DIRECTORY / "configure"
 
 
 def load_configure_server_utils_module():
     # Load the script directly so the test covers the deployed entrypoint code. Its own
-    # `import configure_server` needs scripts/ importable, which is what this path insert does.
-    if str(SCRIPTS_DIRECTORY) not in sys.path:
-        sys.path.insert(0, str(SCRIPTS_DIRECTORY))
+    # The installers share modules inside scripts/configure/.
+    if str(CONFIGURE_DIRECTORY) not in sys.path:
+        sys.path.insert(0, str(CONFIGURE_DIRECTORY))
 
-    script_path = SCRIPTS_DIRECTORY / "configure_server_utils.py"
+    script_path = CONFIGURE_DIRECTORY / "configure_server_utils.py"
     module_spec = importlib.util.spec_from_file_location("configure_server_utils", script_path)
     configure_server_utils = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(configure_server_utils)
@@ -249,7 +250,7 @@ class ConfigurationResolutionTest(unittest.TestCase):
     def test_the_script_never_imports_an_interactive_prompt(self):
         # The old bridge script asked for sse_bridge.apikey. Both secrets are now root-level keys
         # written by initial setup, so there is nothing left to ask and no getpass to import.
-        script_source = (SCRIPTS_DIRECTORY / "configure_server_utils.py").read_text(encoding="utf-8")
+        script_source = (CONFIGURE_DIRECTORY / "configure_server_utils.py").read_text(encoding="utf-8")
         self.assertNotIn("getpass", script_source)
         self.assertNotIn("input(", script_source)
 
@@ -378,6 +379,37 @@ class UnitAndBinaryTest(unittest.TestCase):
             self.assertFalse(
                 (configure_server_utils.SERVICE_INSTALL_DIRECTORY / ".genix-server-utils.staged").exists()
             )
+
+    def test_precompiled_mode_ignores_present_rust_source(self):
+        configure_server_utils = load_configure_server_utils_module()
+        runtime_user_entry = pwd.getpwuid(os.getuid())
+
+        with tempfile.TemporaryDirectory() as temporary_directory, redirect_stdout(io.StringIO()):
+            repository_root = Path(temporary_directory)
+            source_directory = repository_root / "server_utils"
+            (source_directory / "src").mkdir(parents=True)
+            (source_directory / "Cargo.toml").write_text("[package]\nname='test'\n", encoding="utf-8")
+            (source_directory / "src" / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+            artifact_path = repository_root / "tmp" / (
+                f"genix-server-utils_linux_{configure_server_utils.resolve_go_architecture()}"
+            )
+            artifact_path.parent.mkdir()
+            artifact_path.write_bytes(b"\x7fELF" + b"\x00" * 8)
+            configure_server_utils.SERVICE_INSTALL_DIRECTORY = repository_root / "installed"
+            configure_server_utils.BINARY_PATH = (
+                configure_server_utils.SERVICE_INSTALL_DIRECTORY / "genix-server-utils"
+            )
+            configure_server_utils.SERVICE_INSTALL_DIRECTORY.mkdir()
+
+            with mock.patch.object(configure_server_utils, "compile_binary") as compile_mock:
+                configure_server_utils.provide_binary(
+                    repository_root,
+                    runtime_user_entry,
+                    configure_server_utils.BINARY_SOURCE_PRECOMPILED,
+                )
+
+            compile_mock.assert_not_called()
+            self.assertEqual(configure_server_utils.BINARY_PATH.read_bytes(), artifact_path.read_bytes())
 
     def test_cargo_is_looked_up_where_sudo_cannot_see_it(self):
         configure_server_utils = load_configure_server_utils_module()

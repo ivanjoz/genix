@@ -31,7 +31,7 @@ port = 14013
 public = false
 
 # ─── Qdrant (base de datos vectorial) ───────────────────────────────────────
-# Lo instala 'configure_db.py qdrant'. host vacío = lo escribe el script con la IP
+# Lo instala 'scripts/configure/configure_db.py qdrant'. host vacío = lo escribe el script con la IP
 # alcanzable del host. public decide el bind: 0.0.0.0 y puertos abiertos en el firewall,
 # o sólo loopback. La api key que exige Qdrant en la cabecera 'api-key' es
 # internal_apikey: no hay una credencial aparte.
@@ -244,7 +244,7 @@ meta_key         = ""
 openrouter_key   = ""
 
 # ─── GenixSearch ────────────────────────────────────────────────────────────
-# Los escribe 'configure_db.py search' con la IP alcanzable del host.
+# Los escribe 'scripts/configure/configure_db.py search' con la IP alcanzable del host.
 # url admite "host:puerto" o "esquema://host:puerto" (el esquema se ignora).
 # Vacío = 127.0.0.1:14446.
 [search]

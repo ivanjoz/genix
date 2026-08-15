@@ -23,7 +23,7 @@ def load_firewall_ports_module():
     if str(SCRIPTS_DIRECTORY) not in sys.path:
         sys.path.insert(0, str(SCRIPTS_DIRECTORY))
 
-    script_path = SCRIPTS_DIRECTORY / "firewall_ports.py"
+    script_path = SCRIPTS_DIRECTORY / "configure" / "firewall_ports.py"
     module_spec = importlib.util.spec_from_file_location("firewall_ports", script_path)
     firewall_ports = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(firewall_ports)

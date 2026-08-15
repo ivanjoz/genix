@@ -21,24 +21,10 @@ case "$1" in
     echo "Executing edit command..."
     (cd scripts && go run table/create_edit_table.go edit "${@:2}")
     ;;
-  "configure_server")
-    # For "configure_server", install the systemd services and/or the Nginx reverse proxy.
-    # Optional mode argument: 1 = full, 2 = only systemd service, 3 = only Nginx proxy.
-    echo "Executing configure_server script..."
-    python3 scripts/configure_server.py "${@:2}"
-    ;;
-  "configure_db")
-    # For "configure_db", configure ScyllaDB and/or install the GenixSearch and Qdrant services.
-    # Optional mode argument: all (default) = every engine, scylla, search or qdrant = only that one.
-    echo "Executing configure_db script..."
-    python3 scripts/configure_db.py "${@:2}"
-    ;;
-  "configure_server_utils")
-    # For "configure_server_utils", install the server_utils systemd service (credit rate limiter
-    # + SSE bridge) plus the bridge's Nginx vhost on this host. No arguments: everything comes
-    # from config.toml.
-    echo "Executing configure_server_utils script..."
-    python3 scripts/configure_server_utils.py "${@:2}"
+  "configure")
+    # Configure any server group from source or latest precompiled release binaries.
+    echo "Executing unified configure script..."
+    python3 scripts/configure.py "${@:2}"
     ;;
   "follow_cloudwatch_logs")
     # Follow the main backend Lambda log group from the selected config file.
@@ -94,7 +80,7 @@ case "$1" in
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure_server|configure_db|configure_server_utils|follow_cloudwatch_logs|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_route_ids|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
+    echo "Usage: $0 {check_tables|create|edit|configure|follow_cloudwatch_logs|generate_sale_orders|sync_struct_interfaces|generate_controllers|generate_route_ids|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
     exit 1
     ;;
 esac

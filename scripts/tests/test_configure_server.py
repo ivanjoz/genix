@@ -12,7 +12,7 @@ from unittest import mock
 
 def load_configure_server_module():
     # Load the script directly so the test covers the deployed entrypoint code.
-    script_path = Path(__file__).resolve().parents[1] / "configure_server.py"
+    script_path = Path(__file__).resolve().parents[1] / "configure" / "configure_server.py"
     module_spec = importlib.util.spec_from_file_location("configure_server", script_path)
     configure_server = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(configure_server)
@@ -243,6 +243,11 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
             self.assertEqual(
                 configure_server.find_prebuilt_binary(repository_root),
                 configure_server.SERVICE_BINARY_PATH,
+            )
+            # Explicit precompiled mode must deploy the freshly downloaded latest asset.
+            self.assertEqual(
+                configure_server.find_prebuilt_binary(repository_root, prefer_downloaded=True),
+                artifact_path,
             )
 
     def test_no_source_and_no_binary_crashes(self):

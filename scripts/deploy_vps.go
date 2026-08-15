@@ -13,7 +13,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Same path that scripts/configure_server.py hardcodes in SERVICE_BINARY_PATH and writes into
+// Same path that scripts/configure/configure_server.py hardcodes in SERVICE_BINARY_PATH and writes into
 // ExecStart= and PathChanged=, so "bin" only needs to be set for servers configured by hand.
 const defaultRemoteBinaryPath = "/usr/local/bin/genix/genix_app"
 

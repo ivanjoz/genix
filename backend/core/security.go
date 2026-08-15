@@ -164,7 +164,7 @@ type EnvStruct struct {
 	// backend/agent/llm, which turns each entry into its own request knobs.
 	MODELS []ModelEntry
 	// GenixSearch — lexical search backend reached over TCP. The
-	// daemon is installed by scripts/configure_db.py, which writes both
+	// daemon is installed by scripts/configure/configure_db.py, which writes both
 	// search.url and search.password into config.toml. GENIXSEARCH_URL
 	// is the full endpoint (e.g. "https://host:14446" or "host:14446")
 	// — only the host and port are used; the scheme is ignored. Falls

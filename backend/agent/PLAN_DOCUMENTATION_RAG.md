@@ -97,7 +97,7 @@ the wire contracts separate.
 Add explicit parsed runtime values for:
 
 ```toml
-# host is written by configure_db.py when deployment can determine it.
+# host is written by scripts/configure/configure_db.py when deployment can determine it.
 [qdrant]
 host = ""
 http_port = 14014

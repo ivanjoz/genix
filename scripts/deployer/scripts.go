@@ -45,18 +45,9 @@ var deployScripts = []scriptEntry{
 			return runTableScript(context, "edit", arguments)
 		}},
 
-	// Los tres configuradores preguntan su propio modo de instalación, así que no se les
-	// piden argumentos acá.
-	{key: "configure_server", group: scriptGroupServers, label: "Configurar Servidor (systemd + Nginx)", run: func(context deployContext, _ []string) error {
-		return runCommand(context, ".", "python3", "scripts/configure_server.py")
-	}},
-
-	{key: "configure_db", group: scriptGroupServers, label: "Configurar Base de Datos (ScyllaDB + GenixSearch + Qdrant)", run: func(context deployContext, _ []string) error {
-		return runCommand(context, ".", "python3", "scripts/configure_db.py")
-	}},
-
-	{key: "configure_server_utils", group: scriptGroupServers, label: "Configurar Server Utils (rate limiter + SSE bridge)", run: func(context deployContext, _ []string) error {
-		return runCommand(context, ".", "python3", "scripts/configure_server_utils.py")
+	// Un solo selector configura cualquier combinación de hosts y el origen de sus binarios.
+	{key: "configure", group: scriptGroupServers, label: "Configurar Servicios", run: func(context deployContext, _ []string) error {
+		return runCommand(context, ".", "python3", "scripts/configure.py")
 	}},
 
 	{key: "follow_cloudwatch_logs", group: scriptGroupServers, label: "Follow Cloudwatch Logs", run: func(context deployContext, _ []string) error {

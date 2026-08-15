@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Configura los motores de datos que necesita el backend en un mismo host.
 
-    sudo ./app.sh configure_db            # todos (equivale a 'all')
-    sudo ./app.sh configure_db scylla     # solo ScyllaDB
-    sudo ./app.sh configure_db search     # solo GenixSearch
-    sudo ./app.sh configure_db qdrant     # solo Qdrant
+    sudo python3 scripts/configure.py 18                    # todos
+    sudo python3 scripts/configure/configure_db.py scylla   # diagnóstico de un motor
 
 ScyllaDB: ajusta sysconfig/scylla.yaml, abre el puerto CQL, recupera el
 superusuario si hace falta y crea el keyspace de DB_NAME.
@@ -49,7 +47,7 @@ from toml_config import get_config_value, read_config, set_config_values
 # ese script no tiene por que importar el instalador de ScyllaDB para pedir un socket.
 from firewall_ports import ensure_tcp_port_open
 
-PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parents[1]
+PROJECT_ROOT_DIRECTORY = Path(__file__).resolve().parents[2]
 PROJECT_CONFIG_FILE = PROJECT_ROOT_DIRECTORY / "config.toml"
 DEFAULT_SCYLLA_PORT = 9042
 DEFAULT_CASSANDRA_USERNAME = "cassandra"
@@ -986,7 +984,7 @@ def write_hardened_service_unit(
     unit_file_path = SYSTEMD_UNIT_DIRECTORY / f"{service_name}.service"
 
     unit_content = f"""\
-# {service_name} systemd unit — escrita por scripts/configure_db.py.
+# {service_name} systemd unit — written by scripts/configure/configure_db.py.
 [Unit]
 Description={unit_description}
 After=network-online.target
@@ -1089,7 +1087,7 @@ def write_genixsearch_config(reference_config_path, genixsearch_password, genixs
     print(f"[*] Writing {GENIXSEARCH_CONFIG_FILE} (0640 root:{GENIXSEARCH_SERVICE_NAME})")
     GENIXSEARCH_CONFIG_DIRECTORY.mkdir(parents=True, exist_ok=True)
     GENIXSEARCH_CONFIG_FILE.write_text(
-        "# Escrito por scripts/configure_db.py. Se sobrescribe en cada ejecucion.\n" + config_content,
+        "# Written by scripts/configure/configure_db.py. Replaced on every run.\n" + config_content,
         encoding="utf-8",
     )
     GENIXSEARCH_CONFIG_FILE.chmod(0o640)
@@ -1427,7 +1425,7 @@ def write_qdrant_environment_file(bind_address, http_port, grpc_port, qdrant_api
     print(f"[*] Writing {QDRANT_ENVIRONMENT_FILE} (0640 root:{QDRANT_SERVICE_NAME})")
     QDRANT_ENVIRONMENT_FILE.parent.mkdir(parents=True, exist_ok=True)
     QDRANT_ENVIRONMENT_FILE.write_text(
-        "# Escrito por scripts/configure_db.py. Se sobrescribe en cada ejecucion.\n"
+        "# Written by scripts/configure/configure_db.py. Replaced on every run.\n"
         + "\n".join(environment_lines)
         + "\n",
         encoding="utf-8",

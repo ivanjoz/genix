@@ -11,7 +11,7 @@ Status: **implemented**. Three deviations from the plan as written, all decided 
    and unrelated refactor. `HandlerArgs.ClientIP` is now the authoritative per-request value and
    the only one the lock uses; `Env.REQ_IP` is also set in server mode now, which it was not
    before. The pre-existing limitation of the log record is unchanged, not worsened.
-3. **The client IP comes from `X-Real-IP`, not `X-Forwarded-For`.** `configure_server.py:1020`
+3. **The client IP comes from `X-Real-IP`, not `X-Forwarded-For`.** `scripts/configure/configure_server.py`
    builds XFF with `$proxy_add_x_forwarded_for`, which *appends* — so a client that sends its own
    header lands first in the list and the plan's "first hop of X-Forwarded-For" would have been
    bypassable with one curl flag. `X-Real-IP` is written from `$remote_addr` (`:1019`) and cannot

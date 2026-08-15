@@ -615,8 +615,8 @@ mod tests {
         assert!(!optional_bool(&private, "IGNORED", "server_utils.public"));
     }
 
-    /// The section is optional, and its defaults are the deployment `configure_db.py` and
-    /// `configure_server*.py` actually produce.
+    /// The section is optional, and its defaults are what the nested deployment scripts under
+    /// `scripts/configure/` actually produce.
     #[test]
     fn server_metrics_defaults_to_the_installed_unit_names() {
         let metrics = load_server_metrics(&Table::new()).unwrap();

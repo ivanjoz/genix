@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
 import platform
 import pwd
@@ -43,6 +44,9 @@ ELF_MAGIC_BYTES = b"\x7fELF"
 EXECUTION_MODE_FULL = "full"
 EXECUTION_MODE_SYSTEMD = "systemd"
 EXECUTION_MODE_NGINX = "nginx"
+BINARY_SOURCE_AUTO = "auto"
+BINARY_SOURCE_SOURCE = "source"
+BINARY_SOURCE_PRECOMPILED = "precompiled"
 
 EXECUTION_MODE_OPTIONS = [
     {
@@ -132,7 +136,7 @@ def require_root_execution():
 
 def detect_repository_config_path():
     # Prefer a repository root literally named "genix"; otherwise fall back to the directory that
-    # holds this script's parent ("<root>/scripts/configure_server.py"), so a clone with a
+    # contains this script ("<root>/scripts/configure/configure_server.py"), so a clone with a
     # different directory name still resolves. The file itself may not exist yet.
     script_path = Path(__file__).resolve()
     for parent_path in script_path.parents:
@@ -141,7 +145,7 @@ def detect_repository_config_path():
             print_debug(f"Using repository config path: {repository_config_path}")
             return repository_config_path
 
-    fallback_config_path = script_path.parents[1] / "config.toml"
+    fallback_config_path = script_path.parents[2] / "config.toml"
     print_debug(
         f"No repository root named 'genix' found. Using {fallback_config_path} instead."
     )
@@ -188,9 +192,9 @@ def print_execution_mode_options():
         print(f"    [{mode_option['index']}] {mode_option['label']}")
 
 
-def resolve_execution_mode():
-    if len(sys.argv) >= 2:
-        selected_value = sys.argv[1].strip()
+def resolve_execution_mode(selected_value=None):
+    if selected_value is not None:
+        selected_value = selected_value.strip()
         print_debug(f"Selecting install mode from CLI argument: {selected_value}")
 
         mode_option = match_execution_mode(selected_value)
@@ -214,6 +218,21 @@ def resolve_execution_mode():
 
     print_debug(f"Selected install mode: {mode_option['label']}")
     return mode_option["mode"]
+
+
+def parse_command_arguments():
+    """Keep the host mode separate from the requested binary provenance."""
+    argument_parser = argparse.ArgumentParser(
+        description="Install the Genix backend systemd service and/or Nginx proxy."
+    )
+    argument_parser.add_argument("mode", nargs="?", help="1/full, 2/systemd or 3/nginx")
+    argument_parser.add_argument(
+        "--binary-source",
+        choices=(BINARY_SOURCE_AUTO, BINARY_SOURCE_SOURCE, BINARY_SOURCE_PRECOMPILED),
+        default=BINARY_SOURCE_AUTO,
+        help="compile source, require a precompiled artifact, or retain automatic selection",
+    )
+    return argument_parser.parse_args()
 
 
 def validate_nginx_domain(raw_value):
@@ -828,14 +847,19 @@ def compile_backend_binary(backend_source_directory, repository_root_path):
     return build_output_path
 
 
-def find_prebuilt_binary(repository_root_path):
+def find_prebuilt_binary(repository_root_path, prefer_downloaded=False):
     go_architecture = resolve_go_architecture()
+    downloaded_binary_path = repository_root_path / "tmp" / f"genix_app_linux_{go_architecture}"
     candidate_binary_paths = [
+        downloaded_binary_path,
         SERVICE_BINARY_PATH,
-        repository_root_path / "tmp" / f"genix_app_linux_{go_architecture}",
         repository_root_path / "backend" / "genix_app",
         repository_root_path / "genix_app",
     ]
+    if not prefer_downloaded:
+        candidate_binary_paths[0], candidate_binary_paths[1] = (
+            candidate_binary_paths[1], candidate_binary_paths[0]
+        )
 
     for candidate_binary_path in candidate_binary_paths:
         if is_usable_executable(candidate_binary_path):
@@ -870,18 +894,33 @@ def install_service_binary(source_binary_path, runtime_user_entry):
     print_debug(f"Binary permissions set to {oct(executable_mode)}.")
 
 
-def provide_service_binary(repository_root_path, runtime_user_entry):
+def provide_service_binary(
+    repository_root_path, runtime_user_entry, binary_source=BINARY_SOURCE_AUTO
+):
     """Put a runnable binary at SERVICE_BINARY_PATH: compile it, or find one, or fail."""
     remove_empty_placeholder_binary()
 
     backend_source_directory = detect_backend_source_directory(repository_root_path)
-    if backend_source_directory:
+    if binary_source == BINARY_SOURCE_SOURCE:
+        if not backend_source_directory:
+            fail_with_error(
+                f"Building from source was selected, but no compilable backend exists under "
+                f"{repository_root_path / 'backend'}."
+            )
         built_binary_path = compile_backend_binary(backend_source_directory, repository_root_path)
         install_service_binary(built_binary_path, runtime_user_entry)
         return
 
-    print_debug("Falling back to a prebuilt binary because there is no backend source to compile.")
-    prebuilt_binary_path = find_prebuilt_binary(repository_root_path)
+    if binary_source == BINARY_SOURCE_AUTO and backend_source_directory:
+        built_binary_path = compile_backend_binary(backend_source_directory, repository_root_path)
+        install_service_binary(built_binary_path, runtime_user_entry)
+        return
+
+    print_debug(f"Selecting a prebuilt backend binary (binary source: {binary_source}).")
+    prebuilt_binary_path = find_prebuilt_binary(
+        repository_root_path,
+        prefer_downloaded=binary_source == BINARY_SOURCE_PRECOMPILED,
+    )
     if not prebuilt_binary_path:
         fail_with_error(
             f"No backend source under {repository_root_path / 'backend'} and no prebuilt binary "
@@ -1258,11 +1297,13 @@ def start_service():
     print_debug(f"{SERVICE_NAME} is running.")
 
 
-def install_systemd_service(repository_config_path, server_port):
+def install_systemd_service(
+    repository_config_path, server_port, binary_source=BINARY_SOURCE_AUTO
+):
     runtime_username = detect_runtime_username()
     runtime_user_entry = resolve_runtime_user(runtime_username)
     ensure_binary_directory(runtime_user_entry)
-    provide_service_binary(repository_config_path.parent, runtime_user_entry)
+    provide_service_binary(repository_config_path.parent, runtime_user_entry, binary_source)
     systemd_configuration_changed = configure_systemd_units(
         runtime_username, repository_config_path, server_port
     )
@@ -1315,8 +1356,9 @@ def print_summary(
 
 
 def main():
+    command_arguments = parse_command_arguments()
     require_root_execution()
-    execution_mode = resolve_execution_mode()
+    execution_mode = resolve_execution_mode(command_arguments.mode)
     repository_config_path = detect_repository_config_path()
     project_credentials = load_project_credentials(repository_config_path)
 
@@ -1342,7 +1384,9 @@ def main():
 
     runtime_username = None
     if configure_systemd:
-        runtime_username = install_systemd_service(repository_config_path, server_port)
+        runtime_username = install_systemd_service(
+            repository_config_path, server_port, command_arguments.binary_source
+        )
 
     if configure_nginx:
         configure_nginx_reverse_proxy(nginx_settings)

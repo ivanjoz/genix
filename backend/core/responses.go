@@ -51,7 +51,7 @@ type HandlerArgs struct {
 
 // ClientIPFromRequest resolves the caller's address behind the project's own Nginx.
 //
-// X-Forwarded-For is deliberately ignored: configure_server.py sets it with
+// X-Forwarded-For is deliberately ignored: scripts/configure/configure_server.py sets it with
 // $proxy_add_x_forwarded_for, which *appends*, so a client that sends its own header lands first
 // in the list. Anything rate-limited by that value would be bypassable with one curl flag.
 // X-Real-IP is written from $remote_addr and cannot be forged through the proxy.

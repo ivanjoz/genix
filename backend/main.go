@@ -255,7 +255,7 @@ func configureTextSearchGenixSearch() {
 
 // resolveServerPort picks the listen address for the standalone HTTP server. The SERVER_PORT
 // environment variable wins (systemd sets it from config.toml via
-// scripts/configure_server.py), then the server.port config value itself, then the 3589 default.
+// scripts/configure/configure_server.py), then the server.port config value itself, then the 3589 default.
 // Nginx proxies to the port half of server.nginx_process, so the two must agree.
 func resolveServerPort() string {
 	if envPort := strings.TrimSpace(os.Getenv("SERVER_PORT")); envPort != "" {

@@ -29,6 +29,7 @@ Access-Control-Allow-Origin makes browsers reject the response), and it serves H
 a certificate for the hostname exists.
 """
 
+import argparse
 import os
 import re
 import shutil
@@ -72,6 +73,9 @@ SOURCE_DIRECTORY_NAME = "server_utils"
 # Cargo's package name, which is also the file name it produces.
 BINARY_NAME = "genix-server-utils"
 BINARY_PATH = SERVICE_INSTALL_DIRECTORY / BINARY_NAME
+BINARY_SOURCE_AUTO = "auto"
+BINARY_SOURCE_SOURCE = "source"
+BINARY_SOURCE_PRECOMPILED = "precompiled"
 SERVICE_NAME = "genix-server-utils.service"
 RESTART_SERVICE_NAME = "genix-server-utils-restart.service"
 RESTART_PATH_NAME = "genix-server-utils-restart.path"
@@ -765,12 +769,19 @@ def compile_binary(source_directory, repository_root_path):
     return build_output_path
 
 
-def find_prebuilt_binary(repository_root_path):
+def find_prebuilt_binary(repository_root_path, prefer_downloaded=False):
+    downloaded_binary_path = (
+        repository_root_path / "tmp" / f"{BINARY_NAME}_linux_{resolve_go_architecture()}"
+    )
     candidate_binary_paths = [
+        downloaded_binary_path,
         BINARY_PATH,
-        repository_root_path / "tmp" / f"{BINARY_NAME}_linux_{resolve_go_architecture()}",
         repository_root_path / SOURCE_DIRECTORY_NAME / "target" / "release" / BINARY_NAME,
     ]
+    if not prefer_downloaded:
+        candidate_binary_paths[0], candidate_binary_paths[1] = (
+            candidate_binary_paths[1], candidate_binary_paths[0]
+        )
 
     for candidate_binary_path in candidate_binary_paths:
         if is_usable_executable(candidate_binary_path):
@@ -803,15 +814,27 @@ def install_binary(source_binary_path, runtime_user_entry):
         fail_with_error(f"Could not install the binary: {install_error}")
 
 
-def provide_binary(repository_root_path, runtime_user_entry):
+def provide_binary(repository_root_path, runtime_user_entry, binary_source=BINARY_SOURCE_AUTO):
     """Put a runnable binary at BINARY_PATH: compile it, or find one, or fail."""
     source_directory = detect_source_directory(repository_root_path)
-    if source_directory:
+    if binary_source == BINARY_SOURCE_SOURCE:
+        if not source_directory:
+            fail_with_error(
+                f"Building from source was selected, but no compilable Rust source exists under "
+                f"{repository_root_path / SOURCE_DIRECTORY_NAME}."
+            )
         install_binary(compile_binary(source_directory, repository_root_path), runtime_user_entry)
         return
 
-    print_debug("Falling back to a prebuilt binary because there is no Rust source to compile.")
-    prebuilt_binary_path = find_prebuilt_binary(repository_root_path)
+    if binary_source == BINARY_SOURCE_AUTO and source_directory:
+        install_binary(compile_binary(source_directory, repository_root_path), runtime_user_entry)
+        return
+
+    print_debug(f"Selecting a prebuilt Server Utils binary (binary source: {binary_source}).")
+    prebuilt_binary_path = find_prebuilt_binary(
+        repository_root_path,
+        prefer_downloaded=binary_source == BINARY_SOURCE_PRECOMPILED,
+    )
     if not prebuilt_binary_path:
         fail_with_error(
             f"No source under {repository_root_path / SOURCE_DIRECTORY_NAME} and no prebuilt "
@@ -1002,12 +1025,14 @@ def warn_if_credentials_are_unreadable(runtime_username, repository_config_path)
     )
 
 
-def install_systemd_service(repository_config_path, bridge_port):
+def install_systemd_service(
+    repository_config_path, bridge_port, binary_source=BINARY_SOURCE_AUTO
+):
     runtime_username = detect_runtime_username()
     runtime_user_entry = resolve_runtime_user(runtime_username)
     warn_if_credentials_are_unreadable(runtime_username, repository_config_path)
     ensure_binary_directory(runtime_user_entry)
-    provide_binary(repository_config_path.parent, runtime_user_entry)
+    provide_binary(repository_config_path.parent, runtime_user_entry, binary_source)
     systemd_configuration_changed = configure_systemd_units(
         runtime_username, repository_config_path, bridge_port
     )
@@ -1051,11 +1076,22 @@ def print_summary(
     )
 
 
+def parse_command_arguments():
+    argument_parser = argparse.ArgumentParser(
+        description="Install the Genix Server Utils service and SSE bridge proxy."
+    )
+    argument_parser.add_argument(
+        "--binary-source",
+        choices=(BINARY_SOURCE_AUTO, BINARY_SOURCE_SOURCE, BINARY_SOURCE_PRECOMPILED),
+        default=BINARY_SOURCE_AUTO,
+        help="compile source, require a precompiled artifact, or retain automatic selection",
+    )
+    return argument_parser.parse_args()
+
+
 def main():
+    command_arguments = parse_command_arguments()
     require_root_execution()
-    if len(sys.argv) > 1:
-        # configure_server.py takes an install mode here; this script has only one.
-        print_debug(f"Ignoring extra argument(s): {' '.join(sys.argv[1:])}. This script has no modes.")
 
     repository_config_path = detect_repository_config_path()
     project_credentials = load_project_credentials(repository_config_path)
@@ -1070,7 +1106,9 @@ def main():
     listen_is_public = resolve_listen_is_public(project_credentials)
     client_address = resolve_client_address(project_credentials, listen_port, listen_is_public)
 
-    runtime_username = install_systemd_service(repository_config_path, bridge_port)
+    runtime_username = install_systemd_service(
+        repository_config_path, bridge_port, command_arguments.binary_source
+    )
     configure_bridge_nginx_vhost(bridge_domain, bridge_port)
     # After the service, so the rule is added for a port something is actually listening on.
     open_listen_port_in_firewall(listen_port, listen_is_public)

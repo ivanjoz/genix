@@ -14,11 +14,11 @@ The backend host and the Nginx edge host are usually two different machines, so 
 | `2` | Only Systemd Service | systemd units, binary directory, runtime user | `server.port` |
 | `3` | Only Nginx Proxy | `/etc/nginx/conf.d/<server.nginx_domain>.conf` | `server.nginx_domain`, `server.nginx_process` |
 
-Pass the mode as an argument (`1`/`full`, `2`/`systemd`, `3`/`nginx`) or answer the interactive prompt.
+After selecting Backend with the unified entrypoint, answer this second prompt for the host role:
 
 ```bash
-sudo ./app.sh configure_server 3    # Nginx VPS
-sudo ./app.sh configure_server 2    # backend host
+sudo python3 scripts/configure.py 28  # latest precompiled backend; then choose 1, 2 or 3
+sudo python3 scripts/configure.py 27  # compile backend source; then choose 1, 2 or 3
 ```
 
 Only the credentials the selected mode needs are validated, so the Nginx host does not need `server.port` and the backend host does not need `server.nginx_domain`.
@@ -75,7 +75,7 @@ The setup consists of three systemd units working together:
 3.  **`genix-restart.service`**: A root-owned helper triggered by the path watcher to restart the main service.
 
 ### How it works:
-1.  **Install**: Run `sudo python3 scripts/configure_server.py 2` or `sudo ./app.sh configure_server 2`.
+1.  **Install**: Run `sudo python3 scripts/configure.py 28`, then choose mode `2` on the backend host.
 2.  **Prepare**: The script creates `/usr/local/bin/genix/`, assigns ownership to `ubuntu` when present, or falls back to the non-root `SUDO_USER`.
 3.  **Build**: It compiles `backend/` into `/usr/local/bin/genix/genix_app`, or installs a prebuilt binary, or fails — see [Where the binary comes from](#-where-the-binary-comes-from).
 4.  **Update**: Later, a deploy copies a new executable over `/usr/local/bin/genix/genix_app`.
@@ -167,43 +167,23 @@ When `/usr/local/bin/genix/genix_app` is already deployed, it is left in place w
 
 ## 🔨 Where the binary comes from
 
-In modes `1` and `2` the script guarantees a runnable binary at `/usr/local/bin/genix/genix_app` before it writes the units, in this order:
+In modes `1` and `2` the selected binary source is mandatory:
 
-1. **Compile from source** — if `<repo>/backend/go.mod` and `<repo>/backend/main.go` both exist, it runs
+1. **Option `7`: compile from source** — requires `<repo>/backend/go.mod` and `<repo>/backend/main.go`, then runs
    `go build -ldflags "-s -w -X 'app/core.BuildDate=<now>'" -o <repo>/tmp/genix_app_linux_<arch> .`
    in `backend/`, matching `scripts/deploy_vps.go` so both paths embed the same build metadata.
-2. **Reuse a prebuilt binary** — with no source present, it searches in order:
-   `/usr/local/bin/genix/genix_app` → `<repo>/tmp/genix_app_linux_<arch>` → `<repo>/backend/genix_app` → `<repo>/genix_app`.
-   A candidate counts only if it is non-empty and starts with the ELF magic, so an old empty placeholder or a stray shell script is skipped.
-3. **Crash** — neither source nor binary is a hard error naming both places it looked.
+2. **Option `8`: latest precompiled binary** — `scripts/configure.py` downloads
+   `genix_app_linux_<arch>` and `SHA256SUMS`, verifies the asset, and places it in `<repo>/tmp/`.
+   That verified artifact wins over an older installed binary. A candidate counts only if it is
+   non-empty and starts with the ELF magic.
+3. **Crash** — missing source under option `7`, or a missing/invalid release under option `8`, is a hard error.
 
 ### Downloading a public prebuilt backend
 
-When deploying from a minimal tree without `backend/main.go`, place the verified release asset at
-`tmp/genix_app_linux_<arch>` and the normal search order above installs it. The script intentionally
-does not fetch the network by itself: the operator chooses an immutable version or the moving
-`latest` release explicitly.
+The unified entrypoint performs this automatically and always uses the latest public release:
 
 ```bash
-# Resolve the filename that configure_server.py already searches for on this host.
-case "$(uname -m)" in
-  x86_64) release_architecture=amd64 ;;
-  aarch64|arm64) release_architecture=arm64 ;;
-  *) echo "Unsupported architecture: $(uname -m)" >&2; exit 1 ;;
-esac
-
-# For production, replace latest/download with download/vX.Y.Z before downloading.
-release_base_url=https://github.com/ivanjoz/genix/releases/latest/download
-release_asset="genix_app_linux_${release_architecture}"
-mkdir -p tmp
-curl --fail --location --output "tmp/${release_asset}" "${release_base_url}/${release_asset}"
-curl --fail --location --output tmp/SHA256SUMS "${release_base_url}/SHA256SUMS"
-
-# Verify from tmp/ so the manifest's bare filename resolves to the downloaded binary.
-(
-  cd tmp
-  grep " ${release_asset}$" SHA256SUMS | sha256sum --check --strict
-)
+sudo python3 scripts/configure.py 28
 ```
 
 ### Populating go.mod replace targets
@@ -253,10 +233,10 @@ If the directory is still empty after both attempts, the script fails and prints
 `sudo` resets `PATH` to `secure_path`, which on Fedora and Debian excludes `/usr/local/go/bin`, so `go` is looked for in `PATH`, then `/usr/local/go/bin`, `/usr/lib/golang/bin`, `/usr/lib/go/bin`, `/opt/go/bin`, `/snap/bin`. Override it explicitly when the toolchain lives elsewhere:
 
 ```bash
-sudo GO_BINARY=/home/homelab/sdk/go1.24/bin/go python3 scripts/configure_server.py 2
+sudo GO_BINARY=/home/homelab/sdk/go1.24/bin/go python3 scripts/configure.py 27
 ```
 
-With source present and no toolchain found, the script fails rather than silently falling back to a stale binary.
+With option `7` and no toolchain found, the script fails rather than silently falling back to a stale binary.
 
 ### Compiling as the invoking user
 
@@ -284,22 +264,19 @@ A zero-byte `genix_app` left behind by an older run is deleted on the next execu
 
 ## Usage
 
-Run the installer as root, optionally passing the install mode:
+Run the unified installer as root and select precompiled (`28`) or source (`27`):
 
 ```bash
-sudo ./app.sh configure_server        # prompts for the mode
-sudo ./app.sh configure_server 1      # full
-sudo ./app.sh configure_server 2      # only systemd service
-sudo ./app.sh configure_server 3      # only Nginx proxy
+sudo python3 scripts/configure.py 28
 ```
 
-Or directly:
+For non-interactive diagnostics, the nested installer accepts its host mode and binary policy:
 
 ```bash
-sudo python3 scripts/configure_server.py 3
+sudo python3 scripts/configure/configure_server.py 3 --binary-source precompiled
 ```
 
-Non-interactive runs (cron, CI, `ssh` without a TTY) must pass the mode and have every needed key already present in `config.toml`, since there is no terminal to prompt on.
+Non-interactive runs must use the nested command above and have every needed key already present in `config.toml`, since there is no terminal to prompt on.
 
 ---
 
