@@ -48,12 +48,12 @@ func (e UserLogTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			// The grouped index behind the errors dashboard. The frame leads the packed key, so
 			// one fifteen-minute slice of a day is a single contiguous clustering range and the
-			// dashboard polls forward instead of rereading the day. It carries only the error
-			// count and the company, so a chart never reads a payload column it will not show.
+			// dashboard polls forward instead of rereading the day. The projected route and error
+			// IDs let observability aggregate failures without reading unrelated log payloads.
 			{
 				Type: db.TypeView,
 				Keys: db.Cols(e.FrameRouteCompanyAgg),
-				Cols: db.Cols(e.ErrorCount, e.CompanyID),
+				Cols: db.Cols(e.ErrorCount, e.CompanyID, e.RouteID, e.ErrorIDs),
 			},
 		},
 	}

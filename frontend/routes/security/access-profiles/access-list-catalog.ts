@@ -74,12 +74,13 @@ function parseAccessListCatalog(yamlContent: string): IAccessListCatalogPayload 
   return parsedCatalog
 }
 
-// Normalize catalog routes once so every consumer uses the same matching rule.
+// Split the catalog's compact comma list once so every consumer uses the same routes.
 export function normalizeAccessFrontendRoutes(frontendRoutes: string | string[] | undefined | null): string[] {
   const rawRoutes = Array.isArray(frontendRoutes) ? frontendRoutes : [frontendRoutes || ""]
 
   return rawRoutes
-    .map((routeValue) => String(routeValue || "").trim().replace(/^\//, ""))
+    .flatMap((routeValue) => String(routeValue || "").split(','))
+    .map((routeValue) => routeValue.trim().replace(/^\//, ""))
     .filter((routeValue) => routeValue.length > 0)
 }
 

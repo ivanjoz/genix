@@ -48,6 +48,11 @@ func main() {
 	case "generate_erp_history":
 		runBackendExec("fn-generate-erp-history", os.Args[2:]...)
 
+	case "backfill_observability_credits":
+		runBackendExec("fn-backfill-observability-credits", os.Args[2:]...)
+	case "rebuild_observability_log_view":
+		runBackendExec("fn-rebuild-observability-log-view", os.Args[2:]...)
+
 	case "follow_cloudwatch_logs":
 		FollowCloudWatchLogs()
 

@@ -239,7 +239,7 @@ hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
     role: user-interface
-    hash: sha256:14cca3289f3e701648257a2a2aff673cfda8477399b05cf3125588b6f631a59d
+    hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
     supports: [page-purpose, capability.configure-account, related-pages]
   - path: frontend/routes/finance/cash-banks/+page.svelte
     role: page

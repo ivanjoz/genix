@@ -19,6 +19,7 @@ use crate::limiter::{
 };
 
 const COMPANY_AGGREGATE_USER_ID: i32 = -1;
+const PLATFORM_AGGREGATE_COMPANY_ID: i32 = 0;
 const TOKEN_PERIOD: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug)]
@@ -187,6 +188,9 @@ struct ShardState {
 
 pub struct RateLimiter {
     shards: Vec<Mutex<ShardState>>,
+    // Platform usage has one reserved key shared by every company. Keeping it outside the
+    // company-sharded maps prevents competing absolute snapshots from overwriting one another.
+    platform_usage: Mutex<HashMap<UsageKey, UsageRecord>>,
     policy: LimitPolicy,
     store: Arc<dyn UsageStore>,
 }
@@ -198,6 +202,7 @@ impl RateLimiter {
             .collect();
         Self {
             shards,
+            platform_usage: Mutex::new(HashMap::new()),
             policy,
             store,
         }
@@ -271,6 +276,12 @@ impl RateLimiter {
             }
         }
 
+        // Load the reserved absolute row before mutating accepted usage. A storage failure then
+        // fails admission cleanly instead of charging company/user state without the platform row.
+        let mut platform_usage = self.platform_usage.lock().await;
+        self.ensure_platform_usage(&mut platform_usage, unix_seconds)
+            .await?;
+
         shard
             .subjects
             .get_mut(&company_key)
@@ -282,7 +293,33 @@ impl RateLimiter {
             .expect("user state initialized")
             .charge(request.credits)?;
         increment_usage(&mut shard.usage, request, unix_seconds)?;
+        increment_platform_usage(&mut platform_usage, request, unix_seconds)?;
         Ok(None)
+    }
+
+    async fn ensure_platform_usage(
+        &self,
+        platform_usage: &mut HashMap<UsageKey, UsageRecord>,
+        unix_seconds: i64,
+    ) -> Result<()> {
+        let key = platform_usage_key(unix_seconds)?;
+        if platform_usage.contains_key(&key) {
+            return Ok(());
+        }
+
+        let stored_row = self
+            .store
+            .load_exact(key)
+            .await
+            .context("failed to initialize platform usage")?;
+        let routes = decode_optional(
+            stored_row
+                .as_ref()
+                .map(|stored_usage| stored_usage.used_credits.as_slice()),
+        )?;
+        merge_loaded(platform_usage, key, routes);
+        debug!(time_frame = key.time_frame, "initialized platform usage");
+        Ok(())
     }
 
     async fn ensure_subject(
@@ -365,6 +402,14 @@ impl RateLimiter {
                     .filter_map(|(&key, record)| record.snapshot(key)),
             );
         }
+        {
+            let platform_usage = self.platform_usage.lock().await;
+            snapshots.extend(
+                platform_usage
+                    .iter()
+                    .filter_map(|(&key, record)| record.snapshot(key)),
+            );
+        }
         if snapshots.is_empty() {
             debug!("usage flush skipped because no records are dirty");
             return 0;
@@ -402,6 +447,14 @@ impl RateLimiter {
     }
 
     async fn mark_flushed(&self, snapshot: &UsageSnapshot) {
+        if snapshot.key.company_id == PLATFORM_AGGREGATE_COMPANY_ID {
+            let mut platform_usage = self.platform_usage.lock().await;
+            if let Some(record) = platform_usage.get_mut(&snapshot.key) {
+                record.mark_flushed(snapshot.version);
+            }
+            return;
+        }
+
         let shard_index = snapshot.key.company_id as usize % self.shards.len();
         let mut shard = self.shards[shard_index].lock().await;
         if let Some(record) = shard.usage.get_mut(&snapshot.key) {
@@ -421,6 +474,9 @@ impl RateLimiter {
                     || key.time_frame == current_day
             });
         }
+        let mut platform_usage = self.platform_usage.lock().await;
+        platform_usage
+            .retain(|key, record| !record.is_clean() || key.time_frame == current_five_minute);
         Ok(())
     }
 }
@@ -454,6 +510,26 @@ fn increment_usage(
         }
     }
     Ok(())
+}
+
+fn platform_usage_key(unix_seconds: i64) -> Result<UsageKey> {
+    Ok(UsageKey {
+        company_id: PLATFORM_AGGREGATE_COMPANY_ID,
+        user_id: COMPANY_AGGREGATE_USER_ID,
+        time_frame: time_frame::five_minute(unix_seconds)?,
+    })
+}
+
+fn increment_platform_usage(
+    records: &mut HashMap<UsageKey, UsageRecord>,
+    request: Request,
+    unix_seconds: i64,
+) -> Result<()> {
+    let key = platform_usage_key(unix_seconds)?;
+    records
+        .get_mut(&key)
+        .expect("platform usage initialized")
+        .increment(request.route_id, request.credits)
 }
 
 fn current_unix_seconds() -> Result<i64> {
@@ -543,7 +619,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn accepted_request_dirties_four_rows_and_flushes_absolute_totals() {
+    async fn accepted_request_dirties_company_user_and_platform_rows() {
         let store = Arc::new(MemoryStore::default());
         let limiter = RateLimiter::new(1, test_policy(100), store.clone());
         let request = Request {
@@ -562,9 +638,120 @@ mod tests {
                 .unwrap(),
             None
         );
-        assert_eq!(limiter.flush_dirty().await, 4);
-        assert_eq!(store.rows.lock().unwrap().len(), 4);
+        assert_eq!(limiter.flush_dirty().await, 5);
+        assert_eq!(store.rows.lock().unwrap().len(), 5);
+        let platform_key = platform_usage_key(1_800_000_000).unwrap();
+        let platform_routes = decode(
+            store
+                .rows
+                .lock()
+                .unwrap()
+                .get(&platform_key)
+                .expect("platform row persisted"),
+        )
+        .unwrap();
+        assert_eq!(platform_routes.get(&34), Some(&request.credits));
         assert_eq!(limiter.flush_dirty().await, 0);
+    }
+
+    #[tokio::test]
+    async fn platform_aggregate_is_shared_across_company_shards() {
+        let store = Arc::new(MemoryStore::default());
+        let limiter = RateLimiter::new(4, test_policy(100), store.clone());
+        let unix_seconds = 1_800_000_000;
+
+        for company_id in [1, 2] {
+            let result = limiter
+                .admit_at(
+                    Request {
+                        company_id,
+                        user_id: company_id * 10,
+                        route_id: 34,
+                        credits: Credits {
+                            cpu: 4,
+                            inference: 5,
+                        },
+                    },
+                    unix_seconds,
+                    Instant::now(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(result, None);
+        }
+
+        limiter.flush_dirty().await;
+        let platform_key = platform_usage_key(unix_seconds).unwrap();
+        let platform_routes = decode(
+            store
+                .rows
+                .lock()
+                .unwrap()
+                .get(&platform_key)
+                .expect("one shared platform row persisted"),
+        )
+        .unwrap();
+        assert_eq!(
+            platform_routes.get(&34),
+            Some(&Credits {
+                cpu: 8,
+                inference: 10
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn platform_aggregate_extends_the_absolute_row_after_restart() {
+        let store = Arc::new(MemoryStore::default());
+        let unix_seconds = 1_800_000_000;
+        let platform_key = platform_usage_key(unix_seconds).unwrap();
+        store.rows.lock().unwrap().insert(
+            platform_key,
+            encode(&RoutedCredits::from([(
+                34,
+                Credits {
+                    cpu: 7,
+                    inference: 8,
+                },
+            )]))
+            .unwrap(),
+        );
+        let limiter = RateLimiter::new(1, test_policy(100), store.clone());
+
+        limiter
+            .admit_at(
+                Request {
+                    company_id: 7,
+                    user_id: 42,
+                    route_id: 34,
+                    credits: Credits {
+                        cpu: 4,
+                        inference: 5,
+                    },
+                },
+                unix_seconds,
+                Instant::now(),
+            )
+            .await
+            .unwrap();
+        limiter.flush_dirty().await;
+
+        let platform_routes = decode(
+            store
+                .rows
+                .lock()
+                .unwrap()
+                .get(&platform_key)
+                .expect("platform row persisted"),
+        )
+        .unwrap();
+        assert_eq!(
+            platform_routes.get(&34),
+            Some(&Credits {
+                cpu: 11,
+                inference: 13
+            })
+        );
     }
 
     #[tokio::test]
@@ -603,5 +790,8 @@ mod tests {
         assert_eq!(violation.scope, Scope::Company);
         assert_eq!(violation.window, Window::TenSeconds);
         assert!(violation.cpu);
+        // The rejected second request must not create another dirty platform mutation.
+        assert_eq!(limiter.flush_dirty().await, 5);
+        assert_eq!(limiter.flush_dirty().await, 0);
     }
 }

@@ -44,6 +44,10 @@ export const AdminModule: IModule = {
 					onlySaaS: true,
 				},
 				{
+					name: "Observability|Observabilidad", route: "/system/observability", icon: "icon-[fa--bar-chart]",
+					onlySaaS: true,
+				},
+				{
 					name: "Cron Actions|Acciones Cron", route: "/system/cron-actions", icon: "icon-[fa--clock-o]",
 					onlySaaS: true,
 				},

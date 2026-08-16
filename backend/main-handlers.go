@@ -72,6 +72,9 @@ var saasOnlyRoutes = map[string]bool{
 	"GET.empresas":               true,
 	"POST.company":               true,
 	"GET.system-metrics-stream":  true,
+	"GET.server-metrics":         true,
+	"GET.observability":          true,
+	"GET.request-errors-by-ids":  true,
 	"GET.system-memory-packages": true,
 	"GET.cron-actions-scheduled": true,
 }

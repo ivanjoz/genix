@@ -1,295 +1,271 @@
 <script lang="ts">
   import { browser } from '$app/environment';
-  import TableStream from '$components/vTable/TableStream.svelte';
-  import type { ITableColumn } from '$components/vTable/types';
-  import { Env } from '$core/env';
-  import { security } from '$libs/ui-runtime.svelte';
-  import { SSEClient, type SSEClientEvent } from '$libs/sse-client';
+  import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
+  import T from '$components/misc/T.svelte';
+  import { tr } from '$core/store.svelte';
   import { onDestroy, onMount } from 'svelte';
+  import {
+    buildServerMetricsSeries,
+    WINDOW_HOURS,
+    type IServerMetricsSeries,
+    type ServerMetricField
+  } from './server-metrics.model';
+  import { ServerMetricsService } from './server-metrics.svelte';
 
-  type ConsoleLineLevel = 'info' | 'warning' | 'error' | 'success';
-
-  interface ConsoleLine {
-    id: number;
-    level: ConsoleLineLevel;
-    text: string;
-    at: Date;
+  interface ChartDefinition {
+    id: string;
+    title: string;
+    // CPU is pinned to 0-100 so an idle service reads as idle instead of being auto-scaled to
+    // fill the plot. Memory and network have no known ceiling, so they auto-scale.
+    sharedAxisMaxValue?: number;
+    series: Array<{
+      field: ServerMetricField;
+      name: string;
+      color: string;
+      unit: string;
+      decimals: number;
+      // Memory shares a chart with CPU but not a scale, so it gets its own axis. Its values are
+      // therefore not readable off the y-axis labels, which is why the legend prints them.
+      useOwnAxis?: boolean;
+    }>;
   }
 
-  interface MetricsTableRow {
-    id: number;
-    at: Date;
-    cpuPercent: string;
-    backendMemoryUsed: string;
-    memoryPercent: string;
-    diskPercent: string;
-    connections: number;
-    rxPerSecond: string;
-    txPerSecond: string;
-  }
+  const REFRESH_INTERVAL_MS = 15_000;
+  const CPU_AXIS_MAX = 100;
+  // 360 points into 8 spans, so a label lands every half hour of the four-hour window.
+  const LABEL_EVERY_POINTS = 45;
 
-  let dashboardTableRef = $state<any>(null);
-  let consoleLogs = $state<ConsoleLine[]>([]);
-  let streamConnected = $state(false);
-  let streamError = $state('');
-  let reconnectAttempts = $state(0);
-  let lastEventTimestamp = $state<Date | null>(null);
-  let staticMemoryTotal = $state('-');
-  let staticDiskTotal = $state('-');
+  const CPU_COLOR = '#4874f5';
+  const MEMORY_COLOR = '#e67676';
 
-  let reconnectTimer: NodeJS.Timeout | null = null;
-  let metricsSSEClient: SSEClient<any> | null = null;
-  let shouldReconnect = true;
-  let lineSequence = 0;
-  let metricsSequence = 0;
-
-  const maxConsoleLines = 500;
-  const maxMetricsRows = 600;
-
-  const connectionStatusText = $derived.by(() => {
-    if (streamConnected) return 'Connected';
-    if (streamError) return 'Disconnected';
-    return 'Connecting...';
-  });
-
-  const dashboardMetricsColumns: ITableColumn<MetricsTableRow>[] = [
-    { id: 'time', header: 'Time', getValue: (rowRecord) => rowRecord.at.toLocaleTimeString() },
-    { id: 'cpu', header: 'CPU', getValue: (rowRecord) => rowRecord.cpuPercent },
-    { id: 'backend_memory_used', header: 'Backend MEM Used', getValue: (rowRecord) => rowRecord.backendMemoryUsed },
-    { id: 'memory_percent', header: 'MEM %', getValue: (rowRecord) => rowRecord.memoryPercent },
-    { id: 'disk_percent', header: 'DISK %', getValue: (rowRecord) => rowRecord.diskPercent },
-    { id: 'connections', header: 'CONN', getValue: (rowRecord) => rowRecord.connections },
-    { id: 'rx_per_second', header: 'RX/s', getValue: (rowRecord) => rowRecord.rxPerSecond },
-    { id: 'tx_per_second', header: 'TX/s', getValue: (rowRecord) => rowRecord.txPerSecond }
+  // One chart per service, CPU and memory together, which is the comparison that answers "is this
+  // one busy or is it just big". Disk is deliberately absent: it moves by fractions of a percent
+  // over four hours, so a line of it is a flat line, and it shows as a headline instead.
+  const chartDefinitions: ChartDefinition[] = [
+    {
+      id: 'host', title: 'Host: CPU & Memory|Host: CPU y Memoria', sharedAxisMaxValue: CPU_AXIS_MAX,
+      series: [
+        { field: 'CpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
+        { field: 'MemPercent', name: 'MEM', color: MEMORY_COLOR, unit: '%', decimals: 1 }
+      ]
+    },
+    {
+      id: 'backend', title: 'Backend Service', sharedAxisMaxValue: CPU_AXIS_MAX,
+      series: [
+        { field: 'BackendCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
+        { field: 'BackendMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
+      ]
+    },
+    {
+      id: 'scylla', title: 'ScyllaDB', sharedAxisMaxValue: CPU_AXIS_MAX,
+      series: [
+        { field: 'ScyllaCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
+        { field: 'ScyllaMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
+      ]
+    },
+    {
+      id: 'search', title: 'GenixSearch', sharedAxisMaxValue: CPU_AXIS_MAX,
+      series: [
+        { field: 'SearchCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
+        { field: 'SearchMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
+      ]
+    },
+    {
+      id: 'server_utils', title: 'Server Utils', sharedAxisMaxValue: CPU_AXIS_MAX,
+      series: [
+        { field: 'ServerUtilsCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
+        { field: 'ServerUtilsMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
+      ]
+    },
+    {
+      id: 'network', title: 'Network|Red',
+      series: [
+        { field: 'NetRxRate', name: 'RX', color: '#22c55e', unit: 'KB/s', decimals: 1 },
+        { field: 'NetTxRate', name: 'TX', color: '#a855f7', unit: 'KB/s', decimals: 1 }
+      ]
+    }
   ];
 
-  // Converts raw bytes to compact units for table readability.
-  const formatBytes = (valueInBytes: number) => {
-    if (!Number.isFinite(valueInBytes) || valueInBytes < 0) return '0 B';
-    if (valueInBytes < 1024) return `${valueInBytes} B`;
-    if (valueInBytes < 1024 * 1024) return `${(valueInBytes / 1024).toFixed(1)} KB`;
-    if (valueInBytes < 1024 * 1024 * 1024) return `${(valueInBytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(valueInBytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  const metricsService = new ServerMetricsService();
+
+  let nowUnixSeconds = $state(Math.floor(Date.now() / 1000));
+  let isRefreshing = $state(false);
+  let lastRefreshAt = $state<Date | null>(null);
+  let refreshError = $state('');
+  let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+  // isReady increments on every merge, so reading it keeps the series in step with the cache.
+  const metricsSeries = $derived.by<IServerMetricsSeries>(() => {
+    metricsService.isReady;
+    return buildServerMetricsSeries(metricsService.hourBuckets, nowUnixSeconds);
+  });
+
+  const hasSamples = $derived(metricsSeries.sampledSlots > 0);
+
+  const diskPercent = $derived(metricsSeries.latest.DiskPercent);
+
+  // The right edge of every plot: the window ends now, not at the newest stored sample.
+  const windowEndUnixSeconds = $derived(nowUnixSeconds);
+
+  const formatMetricValue = (value: number | null, unit: string, decimals: number) => {
+    if (value === null) return '--';
+    return `${value.toFixed(decimals)} ${unit}`.trim();
   };
 
-  // Adds one message line and caps history to keep the console memory-bounded.
-  const appendConsoleLine = (text: string, level: ConsoleLineLevel = 'info') => {
-    lineSequence++;
-    const nextLine: ConsoleLine = { id: lineSequence, level, text, at: new Date() };
-    consoleLogs = [...consoleLogs, nextLine].slice(-maxConsoleLines);
+  const formatClock = (unixSeconds: number) => {
+    return new Date(unixSeconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Maps one metrics event to a row and appends it at the top.
-  const prependMetricsRow = (payload: any, level: ConsoleLineLevel) => {
-    const metrics = payload?.metrics || {};
-
-    metricsSequence++;
-
-    const cpuPercentValue = Number(metrics?.cpu?.percent_used || 0);
-    const backendMemoryUsedBytes = Number(metrics?.backend_process?.rss_bytes || 0);
-    const memoryTotalBytes = Number(metrics?.memory?.total_bytes || 0);
-    const memoryPercentValue = Number(metrics?.memory?.percent_used || 0);
-    const diskTotalBytes = Number(metrics?.disk?.total_bytes || 0);
-    const diskPercentValue = Number(metrics?.disk?.percent_used || 0);
-
-    if (memoryTotalBytes > 0) {
-      staticMemoryTotal = formatBytes(memoryTotalBytes);
-    }
-    if (diskTotalBytes > 0) {
-      staticDiskTotal = formatBytes(diskTotalBytes);
-    }
-
-    const nextRow: MetricsTableRow = {
-      id: metricsSequence,
-      at: new Date(),
-      cpuPercent: `${cpuPercentValue.toFixed(1)}%`,
-      backendMemoryUsed: formatBytes(backendMemoryUsedBytes),
-      memoryPercent: `${memoryPercentValue.toFixed(1)}%`,
-      diskPercent: `${diskPercentValue.toFixed(1)}%`,
-      connections: Number(metrics?.connections?.http_active || 0),
-      rxPerSecond: `${formatBytes(Number(metrics?.bandwidth?.rx_bytes_per_sec || 0))}/s`,
-      txPerSecond: `${formatBytes(Number(metrics?.bandwidth?.tx_bytes_per_sec || 0))}/s`
-    };
-
-    dashboardTableRef?.appendTop(nextRow);
-
-    if (level === 'warning') {
-      const warnings = Array.isArray(payload?.warnings) ? payload.warnings : [];
-      for (const warningMessage of warnings) {
-        appendConsoleLine(`warning: ${warningMessage}`, 'warning');
-      }
-    }
+  // Each label names the start of the span it covers, except the last one: it is drawn hard against
+  // the right edge of the plot, so printing its span's start would say the chart ends 45 points
+  // before it actually does. The right edge is the window's end, and that is what it must read.
+  const formatClockLabel = (unixSeconds: string | number, labelIndex: number) => {
+    const isFinalLabel = labelIndex + LABEL_EVERY_POINTS >= metricsSeries.timestamps.length;
+    if (isFinalLabel) return formatClock(windowEndUnixSeconds);
+    return formatClock(Number(unixSeconds));
   };
 
-  // Routes normalized SSE events to dashboard reducers.
-  const handleMetricsStreamEvent = (sseEvent: SSEClientEvent<any>) => {
-    const eventName = sseEvent.eventName;
-    const parsedData = sseEvent.payload;
-    lastEventTimestamp = sseEvent.receivedAt;
+  // An own-axis series scaled to exactly its own peak always touches the top of the plot, whatever
+  // its value, which makes a flat 545 MB look like a service at its limit. A quarter of headroom
+  // puts the peak at 80% of the height, the way a chart normally reads.
+  const OWN_AXIS_HEADROOM = 1.25;
 
-    if (eventName === 'connected') {
-      appendConsoleLine(
-        `stream connected | interval_ms=${parsedData?.interval_ms || 1000} | mount=${parsedData?.mount_path || '/'} | iface=${parsedData?.interface_name || 'auto'}`,
-        'success'
-      );
-      return;
-    }
-
-    if (eventName === 'warning') {
-      prependMetricsRow(parsedData, 'warning');
-      return;
-    }
-
-    if (eventName === 'metrics') {
-      prependMetricsRow(parsedData, 'info');
-      return;
-    }
-
-    appendConsoleLine(`[${eventName}] ${typeof parsedData === 'string' ? parsedData : JSON.stringify(parsedData)}`, 'info');
+  const getOwnAxisMax = (values: Array<number | null>) => {
+    const peakValue = values.reduce<number>((maxValue, pointValue) => {
+      return pointValue === null ? maxValue : Math.max(maxValue, pointValue);
+    }, 0);
+    return peakValue > 0 ? peakValue * OWN_AXIS_HEADROOM : undefined;
   };
 
-  const stopStream = (allowFutureReconnect = false) => {
-    shouldReconnect = allowFutureReconnect;
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer);
-      reconnectTimer = null;
-    }
-    if (metricsSSEClient) {
-      metricsSSEClient.disconnect();
-      metricsSSEClient = null;
-      appendConsoleLine('stream stopped', 'info');
-    }
-    streamConnected = false;
-  };
-
-  const scheduleReconnect = () => {
-    if (reconnectTimer) return;
-    reconnectAttempts++;
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null;
-      void startStream();
-    }, 1500);
-  };
-
-  const startStream = async () => {
-    if (!browser) return;
-
-    stopStream(false);
-    shouldReconnect = true;
-    streamError = '';
-    streamConnected = false;
-
-    const userToken = security.getToken(true);
-    if (!userToken) {
-      streamError = 'No se encontró un token válido de sesión.';
-      appendConsoleLine(streamError, 'error');
-      return;
-    }
-
-    const route = Env.makeRoute('system-metrics-stream?interval_ms=1000');
-    metricsSSEClient = new SSEClient({
-      endpointUrl: route,
-      requestHeaders: {
-        Authorization: `Bearer ${userToken}`
-      },
-      onOpen: () => {
-        streamConnected = true;
-        streamError = '';
-        reconnectAttempts = 0;
-      },
-      onComment: (sseComment) => {
-        appendConsoleLine(`[keepalive] ${sseComment.commentText}`, 'info');
-      },
-      onMessage: handleMetricsStreamEvent,
-      onError: (sseError) => {
-        streamConnected = false;
-        streamError = String(sseError?.message || sseError || 'error al consumir stream');
-        appendConsoleLine(streamError, 'error');
-      }
+  const buildChartSeries = (chartDefinition: ChartDefinition): ChartCanvasSeries[] => {
+    return chartDefinition.series.map((seriesDefinition) => {
+      const seriesValues = metricsSeries.values[seriesDefinition.field];
+      return {
+        type: 'line',
+        name: tr(seriesDefinition.name),
+        values: seriesValues,
+        color: seriesDefinition.color,
+        lineWidth: 2,
+        pointSize: 0,
+        useOwnAxis: seriesDefinition.useOwnAxis,
+        // Memory starts at zero: half a gigabyte is only meaningful against nothing, not against
+        // the lowest half-gigabyte the window happened to contain.
+        yAxisMin: seriesDefinition.useOwnAxis ? 0 : undefined,
+        yAxisMax: seriesDefinition.useOwnAxis ? getOwnAxisMax(seriesValues) : undefined
+      };
     });
+  };
 
+  const refreshMetrics = async () => {
+    if (isRefreshing) return;
+    isRefreshing = true;
     try {
-      appendConsoleLine(`connecting to ${route}`, 'info');
-      await metricsSSEClient.connect();
-      streamConnected = false;
-      if (shouldReconnect) {
-        if (!streamError) {
-          appendConsoleLine('stream closed by server', 'warning');
-        }
-        scheduleReconnect();
-      }
-    } catch (streamErrorValue: any) {
-      if (!shouldReconnect) return;
-      streamConnected = false;
-      streamError = String(streamErrorValue?.message || streamErrorValue || 'error al consumir stream');
-      appendConsoleLine(streamError, 'error');
-      scheduleReconnect();
+      nowUnixSeconds = Math.floor(Date.now() / 1000);
+      await metricsService.fetch();
+      lastRefreshAt = new Date();
+      refreshError = '';
+    } catch (fetchError: any) {
+      refreshError = String(fetchError?.message || fetchError || 'error');
+    } finally {
+      isRefreshing = false;
     }
   };
 
-  const clearDashboardPanels = () => {
-    consoleLogs = [];
-    dashboardTableRef?.clearRecords();
+  // A background tab polling a server panel is traffic nobody asked for, so the interval only runs
+  // while the document is visible and catches up on the way back.
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      void refreshMetrics();
+      return;
+    }
+    stopRefreshTimer();
+  };
+
+  const startRefreshTimer = () => {
+    if (refreshTimer) return;
+    refreshTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshMetrics();
+    }, REFRESH_INTERVAL_MS);
+  };
+
+  const stopRefreshTimer = () => {
+    if (!refreshTimer) return;
+    clearInterval(refreshTimer);
+    refreshTimer = null;
   };
 
   onMount(() => {
-    appendConsoleLine('Server dashboard initialized', 'success');
-    void startStream();
+    if (!browser) return;
+    void refreshMetrics();
+    startRefreshTimer();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
   });
 
   onDestroy(() => {
-    stopStream(false);
+    stopRefreshTimer();
+    if (browser) document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 </script>
 
 <div class="flex flex-col gap-12">
   <div class="flex flex-wrap items-center justify-between gap-12">
     <div class="flex flex-wrap items-center gap-10 text-[13px] text-slate-700">
-      <span class={["inline-block h-10 w-10 rounded-full", streamConnected ? "bg-green-600" : "bg-red-600"].join(' ')}></span>
-      <span class="font-bold text-slate-900">{connectionStatusText}</span>
-      <span class="text-slate-600">reconnects: {reconnectAttempts}</span>
-      <span class="text-slate-600">last event: {lastEventTimestamp ? lastEventTimestamp.toLocaleTimeString() : '-'}</span>
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">MEM total: {staticMemoryTotal}</span>
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">DISK total: {staticDiskTotal}</span>
+      <span class="font-bold text-slate-900"><T text={`Last ${WINDOW_HOURS} hours|Últimas ${WINDOW_HOURS} horas`} /></span>
+      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">
+        DISK: {formatMetricValue(diskPercent, '%', 1)}
+      </span>
+      <span class="text-slate-600">
+        <T text="updated|actualizado" />: {lastRefreshAt ? lastRefreshAt.toLocaleTimeString() : '--'}
+      </span>
     </div>
 
-    <div class="flex gap-8">
-      <button class="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-10 py-6 text-[12px] text-slate-900 hover:bg-slate-200" onclick={clearDashboardPanels}>Clear</button>
-      <button class="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-10 py-6 text-[12px] text-slate-900 hover:bg-slate-200" onclick={() => startStream()}>Reconnect</button>
-    </div>
+    <button
+      class="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-10 py-6 text-[12px] text-slate-900 hover:bg-slate-200 disabled:opacity-50"
+      disabled={isRefreshing}
+      onclick={() => refreshMetrics()}
+    >
+      <T text="Refresh|Actualizar" />
+    </button>
   </div>
 
-  {#if streamError}
-    <div class="rounded-lg border border-red-200 bg-red-100 px-10 py-8 text-[12px] text-red-900">{streamError}</div>
+  {#if refreshError}
+    <div class="rounded-lg border border-red-200 bg-red-100 px-10 py-8 text-[12px] text-red-900">{refreshError}</div>
   {/if}
 
-  <TableStream
-    bind:this={dashboardTableRef}
-    columns={dashboardMetricsColumns}
-    tableCss="text-sm text-slate-900"
-    maxRecords={maxMetricsRows}
-    maxHeight="430px"
-    emptyMessage="Waiting for metrics..."
-  />
-
-  <div class="overflow-hidden rounded-[10px] border border-slate-900">
-    <div class="border-b border-slate-900 bg-slate-900 px-12 py-9 text-[12px] font-bold uppercase tracking-[0.08em] text-slate-300">System Messages</div>
-    <div class="h-220 overflow-y-auto bg-slate-950 px-10 py-10 font-mono text-[12px] leading-[1.45] text-slate-300">
-      {#if consoleLogs.length === 0}
-        <div class="text-slate-500">No messages yet...</div>
-      {:else}
-        {#each consoleLogs as logLine (logLine.id)}
-          <div class="mb-2 flex gap-8 whitespace-pre-wrap break-words">
-            <span class="shrink-0 text-slate-500">[{logLine.at.toLocaleTimeString()}]</span>
-            <span class={[
-              logLine.level === 'success' ? 'text-green-300' : '',
-              logLine.level === 'warning' ? 'text-amber-200' : '',
-              logLine.level === 'error' ? 'text-red-300' : '',
-              !['success', 'warning', 'error'].includes(logLine.level) ? 'text-slate-300' : ''
-            ].join(' ')}>{logLine.text}</span>
-          </div>
-        {/each}
-      {/if}
+  {#if !hasSamples}
+    <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-[13px] text-slate-600">
+      <T text="No samples in this window. Check that genix-server-utils is running on this host.|Sin muestras en esta ventana. Verifica que genix-server-utils esté corriendo en este host." />
     </div>
+  {/if}
+
+  <div class="grid grid-cols-1 gap-14 xl:grid-cols-2">
+    {#each chartDefinitions as chartDefinition (chartDefinition.id)}
+      <div class="rounded-[10px] border border-slate-200 bg-white p-12">
+        <div class="mb-8 flex flex-wrap items-baseline justify-between gap-10">
+          <div class="text-[14px] font-bold text-slate-900"><T text={chartDefinition.title} /></div>
+          <div class="flex flex-wrap items-center gap-12">
+            {#each chartDefinition.series as seriesDefinition (seriesDefinition.field)}
+              <div class="flex items-center gap-6 text-[12px] text-slate-700">
+                <span class="inline-block h-8 w-8 rounded-full" style={`background:${seriesDefinition.color}`}></span>
+                <span>{tr(seriesDefinition.name)}</span>
+                <span class="ff-mono text-slate-900">
+                  {formatMetricValue(metricsSeries.latest[seriesDefinition.field], seriesDefinition.unit, seriesDefinition.decimals)}
+                </span>
+              </div>
+            {/each}
+          </div>
+        </div>
+
+        <ChartCanvas
+          id={chartDefinition.id}
+          data={buildChartSeries(chartDefinition)}
+          dateLabels={metricsSeries.timestamps}
+          dateLabelFormatter={formatClockLabel}
+          dateLabelEvery={LABEL_EVERY_POINTS}
+          sharedAxisMaxValue={chartDefinition.sharedAxisMaxValue}
+          height={150}
+        />
+      </div>
+    {/each}
   </div>
 </div>

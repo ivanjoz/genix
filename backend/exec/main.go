@@ -13,21 +13,23 @@ var ModuleHandlers = core.AppRouterType{
 }
 
 var ExecHandlers = ExecRouterType{
-	"fn-init":                     ConfigInit,
-	"fn-importar-ciudades":        ImportCiudades,
-	"fn-exportar-ciudades":        ExportCiudades,
-	"fn-backup":                   DoSaveBackup,
-	"fn-homologate":               DeployDatabaseSchemas,
-	"fn-recalc":                   RecalcVirtualColumnsValues,
-	"fn-recalc-stock":             RecalcStock,
-	"fn-generate-sale-orders":     GenerateSampleSaleOrders,
-	"fn-generate-erp-history":     GenerateErpHistory,
-	"fn-reset-counters":           ResetCounterPart,
-	"fn-deploy-cloudflare-worker": DeployCloudflareWorkerHandler,
-	"fn-deploy-company-webpage":   DeployCompanyWebpage,
-	"fn-sync-image-assets":        SyncImageAssetsHandler,
-	"fn-db":                       DbConsole,
-	"compress-image":              CompressImage,
+	"fn-init":                           ConfigInit,
+	"fn-importar-ciudades":              ImportCiudades,
+	"fn-exportar-ciudades":              ExportCiudades,
+	"fn-backup":                         DoSaveBackup,
+	"fn-homologate":                     DeployDatabaseSchemas,
+	"fn-rebuild-observability-log-view": RebuildObservabilityLogView,
+	"fn-recalc":                         RecalcVirtualColumnsValues,
+	"fn-recalc-stock":                   RecalcStock,
+	"fn-generate-sale-orders":           GenerateSampleSaleOrders,
+	"fn-generate-erp-history":           GenerateErpHistory,
+	"fn-backfill-observability-credits": BackfillObservabilityCredits,
+	"fn-reset-counters":                 ResetCounterPart,
+	"fn-deploy-cloudflare-worker":       DeployCloudflareWorkerHandler,
+	"fn-deploy-company-webpage":         DeployCompanyWebpage,
+	"fn-sync-image-assets":              SyncImageAssetsHandler,
+	"fn-db":                             DbConsole,
+	"compress-image":                    CompressImage,
 }
 
 var ExecHandlersTesting = ExecRouterType{

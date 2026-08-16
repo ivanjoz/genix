@@ -5,8 +5,9 @@
 # REGLAS
 #   - Los `id` son permanentes: quedan persistidos en `profiles.accesos` como (id*10 + nivel).
 #     Nunca se renumeran ni se reutilizan; los accesos que se retiran se eliminan y su id se jubila.
-#   - `frontend_routes`: la ruta de la página SIN "/" inicial. El match es por prefijo de segmentos
-#     y gana el más largo, así que "webpage-builder" cubre también "/webpage-builder/<pageID>".
+#   - `frontend_routes`: rutas separadas por comas y SIN "/" inicial. El match es por prefijo de
+#     segmentos y gana el más largo, así que "webpage-builder" cubre también
+#     "/webpage-builder/<pageID>".
 #   - `backend_apis`: lista separada por comas de "<MÉTODO>.<ruta>". TODA ruta POST/PUT no pública
 #     debe aparecer aquí, porque el backend niega por defecto lo que no está mapeado. Los GET son
 #     al revés: sin mapear quedan libres para cualquier sesión, y mapearlos es lo que los cierra
@@ -64,11 +65,11 @@ access_list:
     frontend_routes: "system/companies"
     backend_apis: "POST.company"
   - id: 6
-    name: "Server Panel"
+    name: "Server Panel y Observabilidad"
     group: 8
     levels: 14
-    frontend_routes: "system/server-panel"
-    backend_apis: ""
+    frontend_routes: "system/server-panel,system/observability"
+    backend_apis: "GET.server-metrics,GET.observability,GET.request-errors-by-ids"
   - id: 33
     name: "Acciones Cron"
     group: 8
