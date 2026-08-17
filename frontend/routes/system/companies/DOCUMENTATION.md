@@ -5,6 +5,12 @@ route: /system/companies
 title: Companies (Empresas)
 status: implemented
 visibility: saas
+description_en: >-
+  Tenant company management, SaaS only. Create and edit companies registered on the platform with
+  name, tax ID, legal name, email, phone, representative, and address.
+description_es: >-
+  Gestión de empresas (tenants), exclusivo SaaS. Crear y editar empresas registradas en la
+  plataforma con nombre, RUC, razón social, email, teléfono, representante y dirección.
 ---
 
 # Companies (Empresas)

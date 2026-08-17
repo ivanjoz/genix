@@ -5,6 +5,14 @@ route: /system/observability
 title: Observability (Observabilidad)
 status: implemented
 visibility: saas
+description_en: >-
+  Backend API monitoring, SaaS only. Review recent activity and failures per route with CPU and
+  inference credits, estimated requests, failed requests, and error counts over a four-hour window.
+  Filter by method, route path, error text, or source line to find the most repeated errors.
+description_es: >-
+  Monitoreo de APIs del backend, exclusivo SaaS. Revisar actividad y fallas recientes por ruta con
+  créditos CPU e IA, solicitudes estimadas, solicitudes fallidas y errores en una ventana de cuatro
+  horas. Filtrar por método, ruta, texto de error o línea de código para hallar errores repetidos.
 ---
 
 # Observability (Observabilidad)
@@ -140,7 +148,7 @@ files:
     supports: [concepts, capability.find-errors]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:10902f1366f66c8c79660f36bda5ce164cdbcafa520d6610d20622fe5021f394
+    hash: sha256:2474ede3472c063c1e28ea584cd6265dc4b7b8437231cfa94aa5671e66b62330
     supports: [page-purpose]
   - path: server_utils/src/limiter/quota.rs
     role: business-logic

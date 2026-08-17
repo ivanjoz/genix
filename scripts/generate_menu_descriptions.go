@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type menuDescription struct {
@@ -49,13 +51,14 @@ func GenerateMenuDescriptions() {
 
 func collectMenuDescriptions(routesDir string) ([]menuDescription, error) {
 	var menuDescriptions []menuDescription
+	sourceByRoute := map[string]string{}
 
 	err := filepath.WalkDir(routesDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 
-		// Only route markdown files with DESCRIPTION blocks are part of the menu description index.
+		// Only route markdown files carrying a description are part of the menu description index.
 		if entry.IsDir() || filepath.Ext(path) != ".md" {
 			return nil
 		}
@@ -64,10 +67,19 @@ func collectMenuDescriptions(routesDir string) ([]menuDescription, error) {
 		if err != nil {
 			return err
 		}
-		if found {
-			menuDescriptions = append(menuDescriptions, menuEntry)
-			fmt.Printf("Added %s from %s\n", menuEntry.Route, path)
+		if !found {
+			return nil
 		}
+
+		// AttachMenuDescriptions keys descriptions by route, so a second file for the same route
+		// would silently overwrite the first. Fail loudly instead of shipping an arbitrary winner.
+		if previousPath, duplicated := sourceByRoute[menuEntry.Route]; duplicated {
+			return fmt.Errorf("route %s is described twice: %s and %s", menuEntry.Route, previousPath, path)
+		}
+		sourceByRoute[menuEntry.Route] = path
+
+		menuDescriptions = append(menuDescriptions, menuEntry)
+		fmt.Printf("Added %s from %s\n", menuEntry.Route, path)
 
 		return nil
 	})
@@ -88,14 +100,27 @@ func parseMenuDescriptionFile(routesDir string, markdownPath string) (menuDescri
 		return menuDescription{}, false, fmt.Errorf("read %s: %w", markdownPath, err)
 	}
 
-	descriptions := parseDescriptionBlocks(string(contentBytes))
-	spanishDescription := descriptions["ES"]
-	englishDescription := descriptions["EN"]
+	markdownContent := string(contentBytes)
+
+	// DOCUMENTATION.md carries its description in YAML frontmatter next to route and title. Routes
+	// without a DOCUMENTATION.md still use the legacy "## DESCRIPTION::" stub file.
+	spanishDescription, englishDescription, err := parseFrontmatterDescriptions(markdownContent)
+	if err != nil {
+		return menuDescription{}, false, fmt.Errorf("%s: %w", markdownPath, err)
+	}
+	requiredFields := "description_en and description_es"
+	if spanishDescription == "" && englishDescription == "" {
+		descriptions := parseDescriptionBlocks(markdownContent)
+		spanishDescription = descriptions["ES"]
+		englishDescription = descriptions["EN"]
+		requiredFields = "DESCRIPTION::ES and DESCRIPTION::EN"
+	}
+
 	if spanishDescription == "" && englishDescription == "" {
 		return menuDescription{}, false, nil
 	}
 	if spanishDescription == "" || englishDescription == "" {
-		return menuDescription{}, false, fmt.Errorf("%s must include DESCRIPTION::ES and DESCRIPTION::EN", markdownPath)
+		return menuDescription{}, false, fmt.Errorf("%s must include %s", markdownPath, requiredFields)
 	}
 
 	route, err := routeFromMarkdownPath(routesDir, markdownPath)
@@ -108,6 +133,32 @@ func parseMenuDescriptionFile(routesDir string, markdownPath string) (menuDescri
 		Description:        englishDescription,
 		DescriptionSpanish: spanishDescription,
 	}, true, nil
+}
+
+// parseFrontmatterDescriptions reads the optional description fields from a leading YAML
+// frontmatter block. Files without frontmatter, or whose frontmatter omits both fields, return
+// empty strings so the caller can fall back to the legacy description blocks.
+func parseFrontmatterDescriptions(markdownContent string) (string, string, error) {
+	normalizedContent := strings.ReplaceAll(markdownContent, "\r\n", "\n")
+	if !strings.HasPrefix(normalizedContent, "---\n") {
+		return "", "", nil
+	}
+	frontmatterEnd := strings.Index(normalizedContent[len("---\n"):], "\n---\n")
+	if frontmatterEnd < 0 {
+		return "", "", nil
+	}
+	frontmatter := normalizedContent[len("---\n") : len("---\n")+frontmatterEnd]
+
+	var descriptionFields struct {
+		DescriptionEnglish string `yaml:"description_en"`
+		DescriptionSpanish string `yaml:"description_es"`
+	}
+	if err := yaml.Unmarshal([]byte(frontmatter), &descriptionFields); err != nil {
+		return "", "", fmt.Errorf("parse frontmatter: %w", err)
+	}
+
+	return strings.TrimSpace(descriptionFields.DescriptionSpanish),
+		strings.TrimSpace(descriptionFields.DescriptionEnglish), nil
 }
 
 func parseDescriptionBlocks(markdownContent string) map[string]string {
