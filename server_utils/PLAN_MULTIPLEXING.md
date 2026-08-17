@@ -258,7 +258,7 @@ strictly increasing sequences.
 ## 6. Ordering and risk
 
 Breaking wire change again — daemon and backend deploy together, and an old backend against a new
-daemon fails authentication silently (charges fail open, so the symptom is unmetered traffic).
+daemon fails authentication silently (charges fail closed, so the symptom is HTTP 503 responses).
 
 1. ~~Reply widening to 5 bytes with correlation, both sides, still single-request-in-flight.~~
    **Done**, with the domain bumped to `genix-server-utils:v2`.

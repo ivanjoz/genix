@@ -225,7 +225,7 @@ impl AppConfig {
             max_lease: Duration::from_millis(lock_max_lease_ms),
         };
 
-        // Every value here has a default, unlike the twelve credit ceilings: a guessed quota is
+        // Every value here has a default, unlike the eight credit ceilings: a guessed quota is
         // worse than none, but a guessed flush interval for a log table is simply a flush interval.
         // An absent [request_log] section therefore means "on, with these", not a refusal to start.
         let request_log_ttl_days =
@@ -412,7 +412,6 @@ fn load_scope_limits(config: &Table, env_scope: &str, toml_scope: &str) -> Resul
                 config, env_scope, toml_scope, "CPU", "cpu", "10S", "10s",
             )?,
             hour: rate_limit_value(config, env_scope, toml_scope, "CPU", "cpu", "1H", "1h")?,
-            day: rate_limit_value(config, env_scope, toml_scope, "CPU", "cpu", "24H", "24h")?,
         },
         inference: CreditLimits {
             ten_seconds: rate_limit_value(
@@ -432,15 +431,6 @@ fn load_scope_limits(config: &Table, env_scope: &str, toml_scope: &str) -> Resul
                 "inference",
                 "1H",
                 "1h",
-            )?,
-            day: rate_limit_value(
-                config,
-                env_scope,
-                toml_scope,
-                "INFERENCE",
-                "inference",
-                "24H",
-                "24h",
             )?,
         },
     })
@@ -468,14 +458,9 @@ fn validate_policy(policy: LimitPolicy) -> Result<()> {
             if limits.ten_seconds == 0 {
                 bail!("rate_limit.{scope_name}_{credit_name} limits must be positive");
             }
-            if limits.ten_seconds > limits.hour || limits.hour > limits.day {
+            if limits.ten_seconds > limits.hour {
                 bail!(
-                    "rate_limit.{scope_name}_{credit_name} limits must be nondecreasing from 10s to 1h to 24h"
-                );
-            }
-            if limits.day > u64::from(u32::MAX) {
-                bail!(
-                    "rate_limit.{scope_name}_{credit_name}_24h exceeds the persisted uint32 format"
+                    "rate_limit.{scope_name}_{credit_name} limits must be nondecreasing from 10s to 1h"
                 );
             }
         }
@@ -654,7 +639,6 @@ mod tests {
         let positive = CreditLimits {
             ten_seconds: 1,
             hour: 1,
-            day: 1,
         };
         let policy = LimitPolicy {
             company: ScopeLimits {

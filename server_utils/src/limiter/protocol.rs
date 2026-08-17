@@ -32,6 +32,7 @@ pub enum Window {
     TenSeconds = 0,
     Hour = 1,
     Day = 2,
+    Month = 3,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,8 +71,8 @@ pub enum ProtocolError {
 /// The tempting check is "does this route exist", but this daemon must not know the route table.
 /// Routes are numbered by a Go generator and a new one appears whenever a handler is added; a
 /// daemon that refused every number above the highest it was built with would reject exactly the
-/// newest routes. Charging fails open on the Go side, so the refusal would not surface as an error
-/// — those routes would simply stop being counted, quietly and for as long as the daemon ran.
+/// newest routes. Refusing them would turn every newly numbered API into a 503 until the daemon
+/// was upgraded, even though its credit encoding can already represent the route.
 pub fn parse_charge(payload: &[u8; CHARGE_PAYLOAD_SIZE]) -> Result<Request, ProtocolError> {
     let company_id = read_u24(&payload[0..3]) as i32;
     let user_id = read_u24(&payload[3..6]) as i32;

@@ -48,6 +48,7 @@ const columns: ITableColumn<ITextSearchHit>[] = [
     headerCss: "w-140",
     css: "text-center ff-mono",
     getValue: (row) => row.id,
+    mobile: { order: 1, css: "col-span-8 ff-bold", icon: "[fa--tag]" },
   },
   {
     // The cellRenderer snippet fires only for columns with an `id`.
@@ -56,12 +57,14 @@ const columns: ITableColumn<ITextSearchHit>[] = [
     highlight: true,
     css: "px-6",
     getValue: (row) => String(row.id),
+    mobile: { order: 2, css: "col-span-24" },
   },
   {
     header: "Weight",
     headerCss: "w-140",
     css: "text-center ff-mono",
     getValue: (row) => row.w,
+    mobile: { order: 3, css: "col-span-16", labelLeft: "Weight:", contentCss: "ff-mono" },
   },
 ]
 </script>

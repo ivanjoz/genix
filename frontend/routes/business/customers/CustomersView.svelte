@@ -173,10 +173,16 @@
       headerCss: 'w-64',
       css: 'text-center text-purple-600',
       getValue: (clientProviderRecord) => clientProviderRecord.ID,
+      mobile: { order: 1, css: 'col-span-6 ff-bold', icon: '[fa--tag]' },
     },
     {
       header: 'Name|Nombre',
       getValue: (clientProviderRecord) => clientProviderRecord.Name,
+      mobile: {
+        order: 2,
+        css: 'col-span-18',
+        render: (clientProviderRecord) => `<strong>${clientProviderRecord.Name || ''}</strong>`,
+      },
     },
     {
       header: 'Person Type|Tipo Persona',
@@ -188,14 +194,22 @@
         }
         return tr('Person|Persona')
       },
+      mobile: { order: 3, css: 'col-span-12', labelTop: 'Person Type|Tipo Persona' },
     },
     {
       header: 'Registry / RUC|RUC / Registro',
       getValue: (clientProviderRecord) => clientProviderRecord.RegistryNumber || '-',
+      mobile: { order: 4, css: 'col-span-12', labelTop: 'RUC / Registro' },
     },
     {
       header: 'Email',
       getValue: (clientProviderRecord) => clientProviderRecord.Email || '-',
+      mobile: {
+        order: 5,
+        css: 'col-span-24',
+        labelLeft: 'Email:',
+        if: (clientProviderRecord) => !!clientProviderRecord.Email,
+      },
     },
     {
       header: 'Location|Ubicación',
@@ -210,12 +224,14 @@
         const provinceName = selectedCity.Provincia?.Name || '-'
         return `${provinceName} | ${selectedCity.Name}`
       },
+      mobile: { order: 6, css: 'col-span-24', labelLeft: 'Ubicación:' },
     },
     {
       header: 'Updated|Actualizado',
       headerCss: 'w-160',
       css: 'whitespace-nowrap',
       getValue: (clientProviderRecord) => formatTime(clientProviderRecord.upd, 'Y-m-d h:n') as string,
+      mobile: { order: 7, css: 'col-span-24', labelLeft: 'Actualizado:' },
     },
   ]
 </script>

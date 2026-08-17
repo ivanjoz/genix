@@ -443,22 +443,22 @@ import { useUI } from '@genix/ui';
         <div>
           <div class="mb-3 flex items-center text-[12px] text-slate-600">
             <span class="ff-bold text-[14px] text-[#4874f5]">CPU hoy</span>
-            <span class="ml-auto ff-mono">{formatN(todayCreditUsage.CPU)} / {formatN(selectedCreditUsage.CPU24hLimit)}</span>
+            <span class="ml-auto ff-mono">{formatN(todayCreditUsage.CPU)} / {formatN(selectedCreditUsage.CPUDailyLimit)}</span>
           </div>
           <div class="h-5 overflow-hidden rounded-full bg-slate-200">
             <div class="h-full rounded-full bg-[#4874f5]"
-              style={`width:${creditUsagePercent(todayCreditUsage.CPU, selectedCreditUsage.CPU24hLimit)}%`}
+              style={`width:${creditUsagePercent(todayCreditUsage.CPU, selectedCreditUsage.CPUDailyLimit)}%`}
             ></div>
           </div>
         </div>
         <div>
           <div class="mb-3 flex items-center text-[12px] text-slate-600">
             <span class="ff-bold text-[14px] text-[#8b5cf6]">Inferencia hoy</span>
-            <span class="ml-auto ff-mono">{formatN(todayCreditUsage.Inference)} / {formatN(selectedCreditUsage.Inference24hLimit)}</span>
+            <span class="ml-auto ff-mono">{formatN(todayCreditUsage.Inference)} / {formatN(selectedCreditUsage.InferenceDailyLimit)}</span>
           </div>
           <div class="h-5 overflow-hidden rounded-full bg-slate-200">
             <div class="h-full rounded-full bg-[#8b5cf6]"
-              style={`width:${creditUsagePercent(todayCreditUsage.Inference, selectedCreditUsage.Inference24hLimit)}%`}
+              style={`width:${creditUsagePercent(todayCreditUsage.Inference, selectedCreditUsage.InferenceDailyLimit)}%`}
             ></div>
           </div>
         </div>

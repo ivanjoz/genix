@@ -64,13 +64,15 @@ import { tr } from '$core/store.svelte';
       header: "Date & Time|Fecha Hora",
       headerCss: "w-140",
       css: "ff-mono px-6",
-      getValue: e => formatTime(e.Created, "d-M h:n") as string
+      getValue: e => formatTime(e.Created, "d-M h:n") as string,
+      mobile: { order: 1, css: "col-span-12 ff-mono", icon: "[fa--clock-o]" }
     },
     {
       header: "Movement Type|Tipo Mov.",
       headerCss: "w-160",
       css: "px-6",
-      getValue: e => cajaMovimientoTiposMap.get(e.Type)?.name || ""
+      getValue: e => cajaMovimientoTiposMap.get(e.Type)?.name || "",
+      mobile: { order: 2, css: "col-span-12", contentCss: "text-right" }
     },
     {
       header: "Amount|Monto",
@@ -79,19 +81,22 @@ import { tr } from '$core/store.svelte';
       render: e => {
         const cssClass = e.Amount < 0 ? "text-red-500" : ""
         return `<span class="${cssClass}">${formatN(e.Amount / 100, 2)}</span>`
-      }
+      },
+      mobile: { order: 3, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" }
     },
     {
       header: "Final Balance|Saldo Final",
       headerCss: "w-120",
       css: "ff-mono text-right px-6",
-      getValue: e => formatN(e.FinalAmount / 100, 2) as string
+      getValue: e => formatN(e.FinalAmount / 100, 2) as string,
+      mobile: { order: 4, css: "col-span-12", labelLeft: "Saldo:", contentCss: "ff-mono" }
     },
     {
       header: "Document #|Nº Documento",
       headerCss: "w-140",
       css: "text-center px-6",
-      getValue: e => e.DocumentID ? String(e.DocumentID) : ""
+      getValue: e => e.DocumentID ? String(e.DocumentID) : "",
+      mobile: { order: 5, css: "col-span-12", labelLeft: "Doc:", if: (e) => !!e.DocumentID }
     },
     {
       // id triggers cellRenderer snippet so we can mount RecordByIDText per row.
@@ -99,18 +104,20 @@ import { tr } from '$core/store.svelte';
       header: "User|Usuario",
       headerCss: "w-120",
       css: "text-center px-6",
-      getValue: e => e.CreatedBy
+      getValue: e => e.CreatedBy,
+      mobile: { order: 6, css: "col-span-12", labelLeft: "Usuario:" }
     }
   ]
 </script>
 
 <Page title="Cash Movements|Cajas Movimientos">
-  <div class="flex items-center justify-between mb-12" aria-label="Cash movements search filter with cash register, date range, and search">
-    <div class="flex items-center w-full" style="max-width: 64rem;">
+  <div class="flex flex-col gap-8 mb-12 md:flex-row md:items-center md:justify-between" aria-label="Cash movements search filter with cash register, date range, and search">
+    <!-- The four filters exceed a phone's width in one row, so they wrap into a grid below md. -->
+    <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-x-8 w-full md:flex md:items-center" style="max-width: 64rem;">
       <SearchSelect
         bind:saveOn={form}
         save="CajaID"
-        css="w-240 mr-12"
+        css="col-span-3 w-full md:w-240 md:mr-12"
         label="Cash & Banks|Cajas & Bancos"
         keyId="ID"
         keyName="Name"
@@ -120,13 +127,13 @@ import { tr } from '$core/store.svelte';
       />
       <DateInput
         label="Start Date|Fecha Inicio"
-        css="w-140 mr-12"
+        css="w-full md:w-140 md:mr-12"
         save="dateInicio"
         bind:saveOn={form}
       />
       <DateInput
         label="End Date|Fecha Fin"
-        css="w-140 mr-12"
+        css="w-full md:w-140 md:mr-12"
         save="dateFin"
         bind:saveOn={form}
       />
@@ -140,7 +147,7 @@ import { tr } from '$core/store.svelte';
         <i class="icon-[fa--search]"></i>
       </button>
     </div>
-    <div class="flex items-center mr-16 w-224 ml-auto relative">
+    <div class="flex items-center w-full relative md:mr-16 md:w-224 md:ml-auto">
       <div class="absolute left-12 text-gray-400">
         <i class="icon-[fa--search]"></i>
       </div>

@@ -5,8 +5,7 @@ import (
 )
 
 // AgentMessage stores chat history for the in-app agent (the widget that lets
-// users say "navigate to products" etc.). Schema details and rationale live
-// in backend/agent/AGENTIC_LOOP_DESIGN.md.
+// users say "navigate to products" etc.).
 //
 // Partition is the synthetic CompanyUserID = CompanyID*1_000_000 + UserID, so
 // every user's chat history lives in its own partition — "load last N

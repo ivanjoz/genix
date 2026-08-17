@@ -127,7 +127,7 @@ import {
       render: e => e.ID ? String(e.ID) : `<i class="icon-[fa--refresh]"></i>`,
       setCellCss: (record) => getUpdatedFieldCellCss(record, "ID"),
       excel: { type: "number"  },
-      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" },
     },
     {
       header: "Product|Producto", useLineClamp: true,
@@ -192,7 +192,7 @@ import {
       },
       mobile: {
         order: 4,
-        css: "col-span-8",
+        css: "col-span-12",
         labelLeft: "Precio:",
         render: (e) => formatN(e.Price / 100, 2),
       },
@@ -206,7 +206,7 @@ import {
       excel: { type: "number" },
       mobile: {
         order: 5,
-        css: "col-span-8",
+        css: "col-span-12",
         labelLeft: "Desc:",
         render: (e) => (e.Discount ? `${e.Discount}%` : "-"),
       },
@@ -229,9 +229,9 @@ import {
       },
       mobile: {
         order: 6,
-        css: "col-span-8",
+        css: "col-span-24",
         labelLeft: "Final:",
-        icon: "ok",
+        icon: "[fa--check]",
         render: (e) => `<strong>${formatN(e.FinalPrice / 100, 2)}</strong>`,
       },
     },

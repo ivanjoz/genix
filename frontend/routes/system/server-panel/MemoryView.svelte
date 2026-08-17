@@ -30,11 +30,16 @@
   const memoryRefreshIntervalMilliseconds = 2000;
 
   const memoryPackagesColumns: ITableColumn<MemoryPackagesTableRow>[] = [
-    { id: 'rank', header: '#', getValue: (rowRecord) => rowRecord.id },
-    { id: 'package_name', header: 'Package', getValue: (rowRecord) => rowRecord.packageName },
-    { id: 'inuse_bytes', header: 'In-Use (bytes)', getValue: (rowRecord) => rowRecord.inuseBytesText },
-    { id: 'inuse_mib', header: 'In-Use (MiB)', getValue: (rowRecord) => rowRecord.inuseMiBText },
-    { id: 'inuse_percent', header: 'Heap %', getValue: (rowRecord) => rowRecord.inusePercentText }
+    { id: 'rank', header: '#', getValue: (rowRecord) => rowRecord.id,
+      mobile: { order: 1, css: 'col-span-4 ff-bold' } },
+    { id: 'package_name', header: 'Package', getValue: (rowRecord) => rowRecord.packageName,
+      mobile: { order: 2, css: 'col-span-20', contentCss: 'ff-mono break-all' } },
+    { id: 'inuse_bytes', header: 'In-Use (bytes)', getValue: (rowRecord) => rowRecord.inuseBytesText,
+      mobile: { order: 5, css: 'col-span-24', labelLeft: 'Bytes:', contentCss: 'ff-mono' } },
+    { id: 'inuse_mib', header: 'In-Use (MiB)', getValue: (rowRecord) => rowRecord.inuseMiBText,
+      mobile: { order: 3, css: 'col-span-12', labelLeft: 'MiB:', contentCss: 'ff-mono' } },
+    { id: 'inuse_percent', header: 'Heap %', getValue: (rowRecord) => rowRecord.inusePercentText,
+      mobile: { order: 4, css: 'col-span-12', labelLeft: 'Heap:', contentCss: 'ff-mono' } }
   ];
 
   // Converts raw bytes to compact units for table readability.

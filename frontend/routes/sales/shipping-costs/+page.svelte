@@ -92,6 +92,7 @@
       width: 'minmax(180px, 1fr)',
       css: 'text-[14px] leading-[1.1] pl-10 pr-24',
       getValue: (ciudad) => ciudad.Name,
+      mobile: { order: 1, css: 'col-span-24', render: (ciudad) => `<strong>${ciudad.Name || ''}</strong>` },
     },
     {
       id: 'fixed-cost',
@@ -106,6 +107,7 @@
         // Fixed costs are kept locally for now; backend persistence can consume this map later.
         updateCiudadCost(ciudad, 'Fijo', value)
       },
+      mobile: { order: 2, css: 'col-span-12', labelTop: 'Fixed|Fijo' },
     },
     {
       id: 'weight-cost',
@@ -120,6 +122,7 @@
         // Weight costs share the same city record so fixed and per-kg prices save together.
         updateCiudadCost(ciudad, 'PorKg', value)
       },
+      mobile: { order: 3, css: 'col-span-12', labelTop: 'Per Kg|Por Kg' },
     },
   ]
 

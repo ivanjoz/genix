@@ -236,36 +236,42 @@ const { Loading } = pkg
       header: "ID",
       headerCss: "w-54",
       css: "text-center ff-bold",
-      getValue: e => e.ID
+      getValue: e => e.ID,
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" }
     },
     {
       id: "usuario_info",
       header: "Username|Usuario", highlight: true,
       css: "px-8 py-6 align-top",
-      getValue: e => e.User
+      getValue: e => e.User,
+      mobile: { order: 2, css: "col-span-18" }
     },
     {
       id: "usuario_accesos", headerCss: "w-[47%]",
       header: "Access|Accesos", highlight: true,
       css: "px-8 py-6 align-top _usuario-access-td",
-      getValue: e => `${e.FirstName} ${e.LastName || ""}`
+      getValue: e => `${e.FirstName} ${e.LastName || ""}`,
+      mobile: { order: 5, css: "col-span-24", labelTop: "Access|Accesos" }
     },
     {
       header: "Email",
       css: "px-6",
-      getValue: e => e.Email
+      getValue: e => e.Email,
+      mobile: { order: 3, css: "col-span-24", labelLeft: "Email:", if: e => !!e.Email }
     },
     {
       header: "Status|Estado",
       headerCss: "w-80",
       css: "text-center",
-      getValue: e => e.Status
+      getValue: e => e.Status,
+      mobile: { order: 4, css: "col-span-12", labelLeft: "Estado:" }
     },
     {
       header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "px-6 nowrap",
-      getValue: e => formatTime(e.Updated, "Y-m-d h:n") as string
+      getValue: e => formatTime(e.Updated, "Y-m-d h:n") as string,
+      mobile: { order: 6, css: "col-span-24", labelLeft: "Actualizado:" }
     }
   ]
 </script>

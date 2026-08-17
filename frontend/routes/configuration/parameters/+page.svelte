@@ -67,7 +67,7 @@ const { Loading } = pkg;
         <Input css="col-span-12" label="Culqui RSA Key"
           save="RsaKey" bind:saveOn={service.empresa.CulquiConfig} />
       </div>
-      <div class="" style="margin-left: 16px">
+      <div class="lg:ml-16">
         <div class="w-full py-10 px-12 bg-white rounded shadow-sm" aria-label="SMTP configuration form for email notifications">
           <div class="w-full mb-8"><T text="SMTP parameters for notifications|Parámetros SMTP para notificaciones" /></div>
           <div class="grid grid-cols-24 gap-4">

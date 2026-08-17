@@ -295,6 +295,7 @@ const entryColumns: ITableColumn<Row>[] = [
       if (row.kind !== 'entry') return ''
       return productos.recordsMap.get(row.productID)?.Name || `Producto-${row.productID}`
     },
+    mobile: { order: 1, css: 'col-span-20' },
   },
   {
     id: 'vencimiento',
@@ -303,6 +304,7 @@ const entryColumns: ITableColumn<Row>[] = [
     css: "px-0",
     useCellRenderer: true,
     showHoverEffect: true,
+    mobile: { order: 3, css: 'col-span-12', labelTop: 'Expiry|Vencimiento' },
   },
   {
     id: 'cantidad',
@@ -310,13 +312,14 @@ const entryColumns: ITableColumn<Row>[] = [
     width: '90px',
     align: 'right',
     cellInputType: 'number',
-    inputCss: 'text-right pr-6',    
+    inputCss: 'text-right pr-6',
     getValue: (row) => row.kind === 'entry' ? row.quantity : '',
     onCellEdit: (row, value) => {
       if (row.kind !== 'entry') return
       row.quantity = parseInt(String(value || '0')) || 0
       entriesVersion++
     },
+    mobile: { order: 4, css: 'col-span-12', labelTop: 'Qty.|Cant.' },
   },
   {
     id: 'serial',
@@ -324,6 +327,7 @@ const entryColumns: ITableColumn<Row>[] = [
     width: '110px',
     align: 'right',
     useCellRenderer: true,
+    mobile: { order: 5, css: 'col-span-24', labelTop: 'Serial #|S/N' },
   },
   {
     header: '...',
@@ -335,6 +339,7 @@ const entryColumns: ITableColumn<Row>[] = [
       if (row.kind !== 'entry') return
       removeEntry(row)
     },
+    mobile: { order: 2, css: 'col-span-4 justify-end' },
   },
 ]
 
@@ -368,6 +373,7 @@ const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
         serialDraft = [...serialDraft]
       }
     },
+    mobile: { order: 1, css: 'col-span-14', labelTop: 'Serial' },
   },
   {
     id: 'quantity',
@@ -381,6 +387,7 @@ const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
       row.quantity = parseInt(String(value || '0')) || 0
       serialDraft = [...serialDraft]
     },
+    mobile: { order: 2, css: 'col-span-10', labelTop: 'Qty.|Cant.' },
   },
 ]
 

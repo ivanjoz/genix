@@ -6,6 +6,7 @@
 //! handshake nonce, and the frame sequence that binds each HMAC to that connection.
 
 use crate::{
+    limiter::budget::MUTATE_BUDGET_PAYLOAD_SIZE,
     limiter::protocol::CHARGE_PAYLOAD_SIZE,
     lock::protocol::{ACQUIRE_PAYLOAD_SIZE, RELEASE_PAYLOAD_SIZE},
     reqlog::protocol::REQUEST_LOG_MAX_PAYLOAD_SIZE,
@@ -21,8 +22,8 @@ pub const LENGTH_PREFIX_SIZE: usize = 2;
 
 /// "I could not answer." Deliberately not a valid decision for any opcode: the charge decoder
 /// rejects it because its top bits are set, and the lock decoder treats an unknown status as
-/// unavailable. Both leave the client to apply its own policy — charges fail open, sign-up locks
-/// fail closed — instead of mistaking it for a real verdict.
+/// unavailable. The client applies operation policy—credits fail closed, while lock call sites
+/// decide individually—instead of mistaking it for a real verdict.
 pub const UNAVAILABLE_STATUS: u8 = 0xFF;
 
 /// Builds the reply frame: `[correlation:u16][status:u8][detail:u16]`.
@@ -45,11 +46,17 @@ pub fn encode_reply(sequence: u64, status: u8, detail: u16) -> [u8; REPLY_SIZE] 
 
 /// Widest payload across every opcode, so one stack buffer serves them all. The request log is the
 /// widest by far — it carries strings — but still small enough to keep the buffer on the stack.
-const LARGEST_FIXED_PAYLOAD_SIZE: usize = if CHARGE_PAYLOAD_SIZE > ACQUIRE_PAYLOAD_SIZE {
+const PREVIOUS_LARGEST_FIXED_PAYLOAD_SIZE: usize = if CHARGE_PAYLOAD_SIZE > ACQUIRE_PAYLOAD_SIZE {
     CHARGE_PAYLOAD_SIZE
 } else {
     ACQUIRE_PAYLOAD_SIZE
 };
+const LARGEST_FIXED_PAYLOAD_SIZE: usize =
+    if MUTATE_BUDGET_PAYLOAD_SIZE > PREVIOUS_LARGEST_FIXED_PAYLOAD_SIZE {
+        MUTATE_BUDGET_PAYLOAD_SIZE
+    } else {
+        PREVIOUS_LARGEST_FIXED_PAYLOAD_SIZE
+    };
 const LARGEST_PAYLOAD_SIZE: usize =
     if LARGEST_FIXED_PAYLOAD_SIZE > LENGTH_PREFIX_SIZE + REQUEST_LOG_MAX_PAYLOAD_SIZE {
         LARGEST_FIXED_PAYLOAD_SIZE
@@ -65,6 +72,7 @@ pub enum Opcode {
     LockAcquire = 0x02,
     LockRelease = 0x03,
     LogRequest = 0x04,
+    MutateCompanyBudget = 0x05,
 }
 
 /// How the reader learns where a frame's payload ends.
@@ -89,6 +97,7 @@ impl Opcode {
             0x02 => Some(Self::LockAcquire),
             0x03 => Some(Self::LockRelease),
             0x04 => Some(Self::LogRequest),
+            0x05 => Some(Self::MutateCompanyBudget),
             _ => None,
         }
     }
@@ -101,6 +110,7 @@ impl Opcode {
             Self::LogRequest => PayloadWidth::LengthPrefixed {
                 maximum: REQUEST_LOG_MAX_PAYLOAD_SIZE,
             },
+            Self::MutateCompanyBudget => PayloadWidth::Fixed(MUTATE_BUDGET_PAYLOAD_SIZE),
         }
     }
 
@@ -133,6 +143,7 @@ mod tests {
             Opcode::LockAcquire,
             Opcode::LockRelease,
             Opcode::LogRequest,
+            Opcode::MutateCompanyBudget,
         ] {
             let widest = match opcode.payload_width() {
                 PayloadWidth::Fixed(payload) => OPCODE_SIZE + payload + AUTH_TAG_SIZE,
@@ -158,6 +169,7 @@ mod tests {
             Opcode::ChargeCredits,
             Opcode::LockAcquire,
             Opcode::LockRelease,
+            Opcode::MutateCompanyBudget,
         ] {
             assert!(opcode.expects_reply());
             assert!(matches!(opcode.payload_width(), PayloadWidth::Fixed(_)));

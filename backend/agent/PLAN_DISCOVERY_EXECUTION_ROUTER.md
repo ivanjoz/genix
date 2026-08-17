@@ -2,8 +2,9 @@
 
 ## Status
 
-Implemented on 2026-08-12. This design replaces the removed global hard-routing contract in
-`PLAN_CLASSIFIER_ROUTER.md`. The discovery planner, parallel documentation/navigation and
+Implemented on 2026-08-12. This design replaces the previous classifier-first, global
+hard-routing contract (its design doc has since been removed as superseded). The discovery
+planner, parallel documentation/navigation and
 tool-catalog searches, empty phase-one tool catalog, execution bundle, UI-first policy,
 backend route validation, builder handoff, evaluation command, and regression fixtures are
 now the runtime architecture.
@@ -778,8 +779,7 @@ final outcome, but never record company data returned by future tools.
    unavailable branch.
 3. Remove obsolete classifier fixtures and command names, replacing them with discovery-plan
    evaluation tooling.
-4. Update `AGENTIC_LOOP_DESIGN.md` after implementation so it describes runtime rather than
-   the superseded router.
+4. (Skipped — `AGENTIC_LOOP_DESIGN.md` was superseded and removed instead of being updated.)
 
 ### Phase 8 — Live validation and rollout
 

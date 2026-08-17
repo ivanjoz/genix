@@ -7,6 +7,7 @@
   import { tr } from '$core/store.svelte';
   import pkg from 'notiflix';
   import CompanyCards from './CompanyCards.svelte';
+  import CompanyCreditBudget from './CompanyCreditBudget.svelte';
   import { EmpresasService, postEmpresa, type ICompany } from './empresas.svelte';
 
   const { Loading } = pkg;
@@ -129,6 +130,9 @@
         useTextArea={true}
         rows={2}
       />
+      {#if empresaForm?.id > 0}
+        <CompanyCreditBudget companyID={empresaForm.id} />
+      {/if}
     </div>
   </Modal>
 </Page>

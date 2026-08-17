@@ -18,7 +18,7 @@ const (
 	// Fourteen bits of the persisted blob's two-byte header, mirrored from
 	// server_utils/src/limiter/credits_blob.rs. Refused here rather than at the daemon so an
 	// unencodable route is a caller's error and not a rejected frame — a rejection would be
-	// indistinguishable from the limiter being down, which fails open and stops counting.
+	// indistinguishable from the limiter being down and would produce the wrong 503 response.
 	maxChargeRouteID = 16_383
 )
 
@@ -138,10 +138,7 @@ func IsCreditRateLimitError(err error) bool {
 		strings.Contains(err.Error(), "credit rate limiter")
 }
 
-// chargeConfiguredCredits fails open: only an authenticated CreditLimitExceeded
-// violation blocks the caller. Any unavailability (unconfigured client, dial
-// timeout, connection reset, etc.) is logged and treated as an allowed charge,
-// since credit accounting must never take the API down with it.
+// chargeConfiguredCredits fails closed: no authenticated decision means no API work is allowed.
 func chargeConfiguredCredits(
 	ctx context.Context,
 	companyID, userID int32,
@@ -150,19 +147,14 @@ func chargeConfiguredCredits(
 ) error {
 	client := serverUtils()
 	if client == nil {
-		logLine("credit rate limiter not configured, allowing request::", ErrCreditLimiterMissing)
-		return nil
+		logLine("credit rate limiter not configured, refusing request::", ErrCreditLimiterMissing)
+		return ErrCreditLimiterMissing
 	}
 	err := client.Charge(ctx, companyID, userID, routeID, cpuCredits, inferenceCredits)
-	if err == nil {
-		return nil
+	if err != nil {
+		logLine("credit rate limiter refused request::", err)
 	}
-	var exceeded *CreditLimitExceeded
-	if errors.As(err, &exceeded) {
-		return err
-	}
-	logLine("credit rate limiter unavailable, allowing request::", err)
-	return nil
+	return err
 }
 
 // encodeCharge validates one charge and lays it out for the wire. Separate from Charge so the
@@ -235,10 +227,10 @@ func decodeCreditLimitResponse(code uint8) error {
 	windowCode := (code >> 1) & 0b11
 	// 0xFF is the daemon saying it could not answer; anything else malformed is treated the same
 	// way, as unavailability rather than as a verdict.
-	if code&0b1110_0000 != 0 || windowCode == 3 || code&0b0001_1000 == 0 {
+	if code&0b1110_0000 != 0 || code&0b0001_1000 == 0 {
 		return fmt.Errorf("%w: credit limiter returned status %d", ErrServerUtilsUnavailable, code)
 	}
-	windows := [...]string{"10 seconds", "1 hour", "24 hours"}
+	windows := [...]string{"10 seconds", "1 hour", "24 hours", "month"}
 	return &CreditLimitExceeded{
 		Code:      code,
 		Company:   code&1 == 0,

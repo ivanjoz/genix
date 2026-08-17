@@ -34,7 +34,7 @@ const (
 	serverUtilsReplySize = 5
 	// Names the framing of the whole port, request and reply, and is bumped on every wire change
 	// so a mismatched peer fails at the first frame instead of misreading bytes.
-	serverUtilsAuthDomain = "genix-server-utils:v4"
+	serverUtilsAuthDomain = "genix-server-utils:v5"
 
 	opcodeChargeCredits = byte(0x01)
 	opcodeLockAcquire   = byte(0x02)
@@ -42,7 +42,8 @@ const (
 	// opcodeLogRequest is the only length-prefixed opcode and the only one the daemon does not
 	// answer. Both are consequences of what it carries: a variable-length log record that must
 	// never make a response wait.
-	opcodeLogRequest = byte(0x04)
+	opcodeLogRequest          = byte(0x04)
+	opcodeMutateCompanyBudget = byte(0x05)
 
 	// Frames are tiny and the daemon is on loopback or a private network, so a write that cannot
 	// complete in this long means the connection is gone.
@@ -174,6 +175,22 @@ func (client *ServerUtilsClient) request(
 		break
 	}
 	return muxReply{}, nil, fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, lastError)
+}
+
+// requestOnce avoids replaying non-idempotent operations such as increasing a credit balance.
+// An ambiguous disconnect is returned to the caller, which must re-read durable state.
+func (client *ServerUtilsClient) requestOnce(
+	ctx context.Context, opcode byte, payload []byte, wait time.Duration,
+) (muxReply, error) {
+	connection, _, err := client.connection(ctx)
+	if err != nil {
+		return muxReply{}, fmt.Errorf("%w: connect: %v", ErrServerUtilsUnavailable, err)
+	}
+	reply, err := connection.exchange(ctx, client.secret, opcode, payload, wait, 0, 0)
+	if err != nil {
+		return muxReply{}, fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, err)
+	}
+	return reply, nil
 }
 
 // send writes one frame the daemon will not answer, and returns as soon as the bytes are in the

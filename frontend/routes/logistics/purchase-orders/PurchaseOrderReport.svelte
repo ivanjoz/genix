@@ -392,11 +392,13 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     align: 'right',
     css: 'ff-mono text-right',
     getValue: (r) => r.ID,
+    mobile: { order: 1, css: 'col-span-6 ff-bold', icon: '[fa--tag]' },
   },
   {
     header: 'Generation Date|Fecha Generación',
     width: '130px',
     getValue: (r) => (r.Date ? (formatTime(r.Date, 'd-m-Y') as string) : ''),
+    mobile: { order: 4, css: 'col-span-12', labelLeft: 'Generada:' },
   },
   {
     header: 'Status|Estado',
@@ -413,27 +415,32 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
         'bg-red-50 text-red-600 border-red-200'
       return `<span class="inline-block px-8 py-2 rounded-md border ${palette} text-xs font-medium">${name}</span>`
     },
+    mobile: { order: 2, css: 'col-span-18', contentCss: 'flex justify-end' },
   },
   {
     header: 'Delivery Date|Fecha Entrega',
     width: '130px',
     getValue: (r) => (r.DeliveryDate ? (formatTime(r.DeliveryDate, 'd-m-Y') as string) : ''),
+    mobile: { order: 5, css: 'col-span-12', labelLeft: 'Entrega:', if: (r) => !!r.DeliveryDate },
   },
   {
     header: 'Payment Date|Fecha Pago',
     width: '130px',
     getValue: (r) => (r.PaymentDate ? (formatTime(r.PaymentDate, 'd-m-Y') as string) : ''),
+    mobile: { order: 6, css: 'col-span-12', labelLeft: 'Pago:', if: (r) => !!r.PaymentDate },
   },
   {
     header: 'Supplier|Proveedor',
     width: 'minmax(160px, 1.5fr)',
     highlight: true,
     getValue: (r) => providerNameOf(r.ProviderID),
+    mobile: { order: 3, css: 'col-span-24', render: (r) => `<strong>${providerNameOf(r.ProviderID)}</strong>` },
   },
   {
     header: 'Invoice|Factura',
     width: 'minmax(110px, 0.8fr)',
     getValue: (r) => r.InvoiceNumber || '',
+    mobile: { order: 8, css: 'col-span-12', labelLeft: 'Factura:', if: (r) => !!r.InvoiceNumber },
   },
   {
     header: 'Total Amount|Monto Total',
@@ -441,11 +448,13 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     align: 'right',
     css: 'ff-mono text-right',
     getValue: (r) => formatN((r.TotalAmount || 0) / 100, 2),
+    mobile: { order: 7, css: 'col-span-12', labelLeft: 'Total:', contentCss: 'ff-mono ff-bold' },
   },
   {
     header: 'Notes|Nota',
     width: 'minmax(180px, 2fr)',
     getValue: (r) => r.Notes || '',
+    mobile: { order: 9, css: 'col-span-24', labelTop: 'Notes|Nota', if: (r) => !!r.Notes },
   },
 ]
 
@@ -454,29 +463,34 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     header: '#',
     align: 'right',
     getValue: (row) => row.detailPosition + 1,
+    mobile: { order: 1, css: 'col-span-4 ff-bold' },
   },
   {
     id: 'product',
     header: 'Product|Producto', css: "py-4 leading-[1]",
     // The actual cell uses cellRenderer to stack productName + presentation/SKU on a second line.
     getValue: (row) => row.productName,
+    mobile: { order: 2, css: 'col-span-20' },
   },
   {
     header: 'Qty.|Cant.',
     align: 'right',
     getValue: (row) => row.quantity,
+    mobile: { order: 3, css: 'col-span-12', labelLeft: 'Cant:' },
   },
   {
     header: 'Price|Precio',
     align: 'right',
     headerCss: "w-80",
     getValue: (row) => formatN((row.unitPrice || 0) / 100, 2),
+    mobile: { order: 4, css: 'col-span-12', labelLeft: 'Precio:', contentCss: 'ff-mono' },
   },
   {
     header: 'Subtotal',  // same in both languages
     align: 'right',
     headerCss: "w-80",
     getValue: (row) => formatN((row.subtotalAmount || 0) / 100, 2),
+    mobile: { order: 5, css: 'col-span-12', labelLeft: 'Sub:', contentCss: 'ff-mono ff-bold' },
   },
 ]
 </script>

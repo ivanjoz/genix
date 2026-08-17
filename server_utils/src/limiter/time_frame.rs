@@ -23,6 +23,23 @@ pub fn daily(unix_seconds: i64) -> Result<i32, TimeFrameError> {
     encode(DAILY_PREFIX, unix_seconds, DAY_SECONDS)
 }
 
+pub fn month_start_day(unix_seconds: i64) -> Result<i16, TimeFrameError> {
+    if unix_seconds < 0 {
+        return Err(TimeFrameError::NegativeUnixTime);
+    }
+    let unix_day = unix_seconds / DAY_SECONDS;
+    // Civil-date conversion identifies the day of month without adding a date dependency.
+    let shifted_day = unix_day + 719_468;
+    let era = shifted_day.div_euclid(146_097);
+    let day_of_era = shifted_day - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_part = (5 * day_of_year + 2) / 153;
+    let day_of_month = day_of_year - (153 * month_part + 2) / 5 + 1;
+    i16::try_from(unix_day - day_of_month + 1).map_err(|_| TimeFrameError::OutOfRange(unix_day))
+}
+
 pub fn hour_five_minute_range(unix_seconds: i64) -> Result<(i32, i32), TimeFrameError> {
     if unix_seconds < 0 {
         return Err(TimeFrameError::NegativeUnixTime);
@@ -67,5 +84,12 @@ mod tests {
         let unix_seconds = 1_800_123_456;
         let (start, end) = hour_five_minute_range(unix_seconds).unwrap();
         assert_eq!(end - start, 11);
+    }
+
+    #[test]
+    fn month_start_uses_utc_unix_days() {
+        // 2026-08-16 and 2024-03-15 (leap year) map to their first calendar days.
+        assert_eq!(month_start_day(1_786_838_400).unwrap(), 20_666);
+        assert_eq!(month_start_day(1_710_460_800).unwrap(), 19_783);
     }
 }

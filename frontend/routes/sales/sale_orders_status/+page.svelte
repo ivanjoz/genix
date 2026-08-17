@@ -357,6 +357,7 @@
 
         return `${detailLineRecord.productBaseName}<span class="text-blue-600 text-sm ff-bold"> (${detailLineRecord.presentationName})</span>`;
       },
+      mobile: { order: 1, css: 'col-span-24' },
     },
     {
       id: 'sku',
@@ -364,6 +365,7 @@
       width: 'minmax(120px, 0.7fr)',
       align: 'center',
       getValue: (detailLineRecord) => detailLineRecord.sku || '-',
+      mobile: { order: 2, css: 'col-span-24', labelLeft: 'SKU:', if: (detailLineRecord) => !!detailLineRecord.sku },
     },
     {
       id: 'quantity',
@@ -371,6 +373,7 @@
       width: '90px',
       align: 'right',
       getValue: (detailLineRecord) => detailLineRecord.quantity,
+      mobile: { order: 3, css: 'col-span-12', labelLeft: 'Cant:' },
     },
     {
       id: 'unitPrice',
@@ -378,6 +381,7 @@
       width: '120px',
       align: 'right',
       getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.unitPrice / 100, 2)}`,
+      mobile: { order: 4, css: 'col-span-12', labelLeft: 'Precio:', contentCss: 'ff-mono' },
     },
     {
       id: 'subtotalAmount',
@@ -385,6 +389,7 @@
       width: '130px',
       align: 'right',
       getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.subtotalAmount / 100, 2)}`,
+      mobile: { order: 5, css: 'col-span-12', labelLeft: 'Sub:', contentCss: 'ff-mono ff-bold' },
     },
   ];
 

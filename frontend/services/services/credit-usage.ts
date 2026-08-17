@@ -7,8 +7,8 @@ export interface ICreditUsageDay {
 }
 
 export interface ICreditUsageScope {
-	CPU24hLimit: number;
-	Inference24hLimit: number;
+	CPUDailyLimit: number;
+	InferenceDailyLimit: number;
 	Days: ICreditUsageDay[];
 }
 

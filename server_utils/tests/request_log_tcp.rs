@@ -6,15 +6,20 @@
 //! immediately, and a malformed or oversized one must not take down a connection that is also
 //! carrying charges and locks.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::Result;
 use async_trait::async_trait;
 use genix_server_utils::{
     limiter::{
         aggregation::UsageKey,
+        credits_blob::Credits,
         quota::{CreditLimits, LimitPolicy, RateLimiter, ScopeLimits},
-        storage::{StoredUsage, UsageStore},
+        storage::{StoredBudget, StoredUsage, UsageStore},
+        time_frame,
     },
     lock::registry::{LockLimits, LockRegistry},
     reqlog::{protocol::REQUEST_LOG_MAX_PAYLOAD_SIZE, writer::RequestLogSink},
@@ -52,6 +57,23 @@ impl UsageStore for EmptyStore {
     async fn upsert(&self, _key: UsageKey, _used_credits: Vec<u8>) -> Result<()> {
         Ok(())
     }
+    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudget>> {
+        let unix_seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let unlimited = Credits {
+            cpu: i64::MAX as u64,
+            inference: i64::MAX as u64,
+        };
+        Ok(Some(StoredBudget {
+            company_id,
+            daily: unlimited,
+            budget_month_start_day: time_frame::month_start_day(unix_seconds)?,
+            monthly_ceiling: unlimited,
+            updated: 0,
+        }))
+    }
+    async fn upsert_budget(&self, _budget: StoredBudget) -> Result<()> {
+        Ok(())
+    }
 }
 
 struct TestServer {
@@ -65,7 +87,6 @@ async fn start_server() -> TestServer {
     let limits = CreditLimits {
         ten_seconds: 1_000,
         hour: 10_000,
-        day: 100_000,
     };
     let generous = ScopeLimits {
         cpu: limits,
@@ -130,7 +151,7 @@ impl Client {
         let mut frame = vec![opcode];
         frame.extend_from_slice(body);
         let mut mac = Hmac::<Sha256>::new_from_slice(SECRET).unwrap();
-        mac.update(b"genix-server-utils:v4");
+        mac.update(b"genix-server-utils:v5");
         mac.update(&self.nonce);
         mac.update(&self.sequence.to_be_bytes());
         mac.update(&frame);

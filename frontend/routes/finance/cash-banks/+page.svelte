@@ -55,11 +55,13 @@
 			headerCss: "w-32",
 			css: "text-center text-purple-600 px-6",
 			getValue: (e) => e.ID,
+			mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" },
 		},
 		{
 			header: "Name|Nombre",
 			css: "px-6 py-2",
 			getValue: (e) => e.Name,
+			mobile: { order: 2, css: "col-span-18" },
 			render: (e) => {
 				const tipoName = cajaTipos.find((x) => x.id === e.Type)?.name || "-";
 				return `<div class="leading-tight">
@@ -70,6 +72,12 @@
 		},
 		{
 			header: "Reconciliation|Cuadre",
+			mobile: {
+				order: 4,
+				css: "col-span-12",
+				labelTop: "Reconciliation|Cuadre",
+				if: (e) => !!e.ReconciliationDate,
+			},
 			getValue: (e) =>
 				e.ReconciliationDate ? String(e.ReconciliationDate) : "",
 			render: (e) => {
@@ -88,6 +96,7 @@
 			header: "Balance|Saldo",
 			css: "text-right ff-mono px-6",
 			getValue: (e) => formatN(e.CurrentAmount / 100, 2),
+			mobile: { order: 3, css: "col-span-12", labelTop: "Balance|Saldo", contentCss: "ff-mono ff-bold" },
 		},
 	];
 
@@ -327,11 +336,13 @@
 								{
 									header: "Date & Time|Fecha Hora",
 									getValue: (e) => formatTime(e.Created, "d-M h:n") as string,
+									mobile: { order: 1, css: "col-span-12 ff-mono", icon: "[fa--clock-o]" },
 								},
 								{
 									header: "Movement Type|Tipo Mov.",
 									getValue: (e) =>
 										cajaMovimientoTiposMap.get(e.Type)?.name || "",
+									mobile: { order: 2, css: "col-span-12", contentCss: "text-right" },
 								},
 								{
 									header: "Amount|Monto",
@@ -341,16 +352,19 @@
 										const color = e.Amount < 0 ? "text-red-600" : "";
 										return `<span class="${color}">${monto}</span>`;
 									},
+									mobile: { order: 3, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" },
 								},
 								{
 									header: "Final Balance|Saldo Final",
 									css: "ff-mono text-right px-6",
 									getValue: (e) => formatN(e.FinalAmount / 100, 2),
+									mobile: { order: 4, css: "col-span-12", labelLeft: "Saldo:", contentCss: "ff-mono" },
 								},
 								{
 									header: "Document #|Nº Documento",
 									css: "text-right px-6",
 									getValue: (e) => (e.DocumentID ? String(e.DocumentID) : ""),
+									mobile: { order: 5, css: "col-span-12", labelLeft: "Doc:", if: (e) => !!e.DocumentID },
 								},
 								{
 									// id triggers cellRenderer snippet so we can mount RecordByIDText per row.
@@ -358,6 +372,7 @@
 									header: "User|Usuario",
 									css: "text-center px-6",
 									getValue: (e) => e.CreatedBy,
+									mobile: { order: 6, css: "col-span-12", labelLeft: "Usuario:" },
 								},
 							]}
 						>
@@ -409,21 +424,25 @@
 								{
 									header: "Date & Time|Fecha Hora",
 									getValue: (e) => formatTime(e.Created, "d-M h:n") as string,
+									mobile: { order: 1, css: "col-span-24 ff-mono", icon: "[fa--clock-o]" },
 								},
 								{
 									header: "Saldo Sistema",
 									css: "ff-mono text-right px-6",
 									getValue: (e) => formatN((e.SaldoSistema || 0) / 100, 2),
+									mobile: { order: 2, css: "col-span-12", labelLeft: "Sistema:", contentCss: "ff-mono" },
 								},
 								{
 									header: "Diferencia",
 									css: "ff-mono text-right px-6",
 									getValue: (e) => formatN((e.DifferenceAmount || 0) / 100, 2),
+									mobile: { order: 3, css: "col-span-12", labelLeft: "Difer.:", contentCss: "ff-mono ff-bold" },
 								},
 								{
 									header: "Saldo Real",
 									css: "ff-mono text-right px-6",
 									getValue: (e) => formatN((e.ActualAmount || 0) / 100, 2),
+									mobile: { order: 4, css: "col-span-12", labelLeft: "Real:", contentCss: "ff-mono" },
 								},
 								{
 									// id triggers cellRenderer snippet so we can mount RecordByIDText per row.
@@ -431,6 +450,7 @@
 									header: "User|Usuario",
 									css: "text-center px-6",
 									getValue: (e) => e.CreatedBy,
+									mobile: { order: 5, css: "col-span-12", labelLeft: "Usuario:" },
 								},
 							]}
 						>

@@ -7,10 +7,10 @@ status: implemented
 visibility: saas
 description_en: >-
   Tenant company management, SaaS only. Create and edit companies registered on the platform with
-  name, tax ID, legal name, email, phone, representative, and address.
+  company details, API credit usage, and separate CPU and AI credit budgets.
 description_es: >-
   Gestión de empresas (tenants), exclusivo SaaS. Crear y editar empresas registradas en la
-  plataforma con nombre, RUC, razón social, email, teléfono, representante y dirección.
+  plataforma, revisar su consumo y administrar presupuestos separados de créditos CPU e IA.
 ---
 
 # Companies (Empresas)
@@ -34,6 +34,11 @@ Empresa)** configuration page.
   its first and last name when available, without repeating the normally identical `admin` login.
 - CPU credits (`créditos CPU`) and inference or AI credits (`créditos IA`) are independent usage
   pools. The page ranks by one selected pool and never adds both into a synthetic total.
+- The daily allowance caps the whole company. Each individual user receives half of that company
+  allowance, calculated independently for CPU and AI credits.
+- The current monthly budget is a remaining balance, while storage keeps an absolute ceiling equal
+  to accepted month usage plus that balance. This lets accepted usage remain the only consumption
+  source of truth.
 - Each card chart covers today and the previous 29 days. Missing daily records display as zero.
 
 <!-- DOC-ID: capability.review-companies -->
@@ -90,6 +95,41 @@ disponible**.
 Common questions and vocabulary: `¿cómo creo una empresa?`, `editar tenant`, `cambiar razón social`,
 `desactivar compañía`, `RUC`, `representante`, `administrador no disponible`.
 
+<!-- DOC-ID: capability.manage-credit-budget -->
+## Manage a company credit budget (Administrar el presupuesto de créditos)
+
+Open an existing company's edit modal to find **Credit budget (Presupuesto de créditos)** below the
+company fields. CPU and AI are always configured separately. The summary shows the persisted usage
+for the current UTC month and the remaining balance derived from that usage.
+
+Use the three controls according to the intended change:
+
+- **Set daily (Establecer diario)** replaces the company's daily CPU and AI allowances. Each user
+  can consume up to 50% of the corresponding company allowance per UTC day.
+- **Set current (Establecer actual)** activates the current UTC month and replaces its remaining
+  CPU and AI balances with the entered values. Already accepted usage is not erased.
+- **Add credits (Agregar créditos)** adds the entered CPU and AI amounts to the active month's
+  current balances. This action is disabled until the current month has been activated.
+
+Values must be non-negative whole numbers within JavaScript's safe-integer range. Setting one pool
+to zero blocks charges that consume that pool. A newly created company has zero daily allowance and
+no active month, so both the daily allowance and current balance must be configured before its
+credit-consuming APIs can run.
+
+Month activation is manual for now: when UTC enters a new month, the previous monthly ceiling no
+longer authorizes requests. Use **Set current** to activate and assign the new month's balance. If
+the credit-limit service cannot be reached, mutations and credit-consuming backend requests fail
+closed instead of bypassing the budget.
+
+The screen reads accepted usage from persisted `credit_usage` rows. Recent accepted requests can
+take roughly one flush interval to appear after a change; enforcement in the running limiter is
+immediate. If a mutation reply is lost, the screen reloads the durable record before another action,
+but an **Add credits** request is deliberately not retried automatically because repeating it could
+double the increase.
+
+Common questions and vocabulary: `presupuesto mensual`, `saldo actual`, `aumentar créditos`,
+`límite diario`, `50% por usuario`, `activar el mes`, `CPU budget`, `AI budget`.
+
 <!-- DOC-ID: capability.review-credit-detail -->
 ## Review daily, per-API, and per-user credits (Revisar créditos diarios, por API y por usuario)
 
@@ -133,6 +173,11 @@ Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`
   administrator's personal usage.
 - User cards come from each user's own absolute daily snapshots; their totals are not estimated
   from the company aggregate or apportioned from API totals.
+- Daily and monthly enforcement uses UTC boundaries. CPU and AI balances are checked independently,
+  and one exhausted pool rejects only requests that charge that pool.
+- Budget administration endpoints and the SaaS-only company catalog/summary reads are not
+  themselves charged credits, so the SaaS administrator can reach the editor and restore an
+  exhausted company's allowance. Detail reports and company writes remain charged.
 
 <!-- DOC-ID: troubleshooting -->
 ## Common problems (Problemas comunes)
@@ -149,6 +194,14 @@ Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`
 - **The Users tab is empty:** confirm that the company has user records. Users with zero credits
   still appear, so an empty list means the company user catalog itself returned no identities.
 - **Cards do not update automatically:** this historical report does not poll. Select **Actualizar**.
+- **APIs remain blocked after setting the current balance:** also configure a positive daily
+  allowance for every credit pool the company needs.
+- **No budget is active for the current month:** use **Set current**; adding credits cannot activate
+  a month.
+- **The displayed balance is briefly higher than the value just set:** recently accepted usage has
+  not reached its persisted daily row yet. It converges after the limiter flushes usage.
+- **The credit service is unavailable:** budget changes return an error and ordinary charged APIs
+  remain blocked until `server_utils` is reachable; the backend does not fail open.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
@@ -172,8 +225,16 @@ files:
     supports: [page-purpose, related-pages]
   - path: frontend/routes/system/companies/+page.svelte
     role: page
-    hash: sha256:fe1d2925d1f24e8de2f270fcc0cd95a28ade1223209c6c5a5fa93a2a76bbe63b
-    supports: [page-purpose, capability.configure-company]
+    hash: sha256:a0bdb9bf2c5439353729698c660b85cd6f025aa6be603658636da83b273481ed
+    supports: [page-purpose, capability.configure-company, capability.manage-credit-budget]
+  - path: frontend/routes/system/companies/CompanyCreditBudget.svelte
+    role: user-interface
+    hash: sha256:f770a2194ca0195d772b581605d7bafdb7e821205588f0b8c36b20405ffeeede
+    supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
+  - path: frontend/routes/system/companies/company-credit-budget.ts
+    role: frontend-service
+    hash: sha256:2be08b12d617c17b67650738c680e6eebbb79741f3e3c6786870c36c21ff2b85
+    supports: [capability.manage-credit-budget]
   - path: frontend/routes/system/companies/CompanyCards.svelte
     role: user-interface
     hash: sha256:21fafc1b759178232a33233ba18285d06c711e012f72a81ee927e561a6a6545c
@@ -232,8 +293,24 @@ files:
     supports: [concepts, capability.review-companies, capability.review-credit-detail, rules, troubleshooting]
   - path: backend/config/credit_usage.go
     role: business-logic
-    hash: sha256:68d46b30cb8e4bc857c39dc86281308101d2c67e9f6891c00a1fa1c7e05363a8
-    supports: [concepts, capability.review-companies, capability.review-credit-detail, rules]
+    hash: sha256:e86a27c207c3c5427342c9d0bffa65a0f4e3863bf824f2315e59ebaf7991591a
+    supports: [concepts, capability.review-companies, capability.review-credit-detail, capability.manage-credit-budget, rules]
+  - path: backend/config/company_credit_budget.go
+    role: backend-handler
+    hash: sha256:524f707561acad52ca9ea6424dd66e0f598a41e312be44b5190d79fca8670a65
+    supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
+  - path: backend/core/server_utils/budgets.go
+    role: business-logic
+    hash: sha256:4f300cce6d5a808b480f4e9f291ef4c4463943f22dbc1d789e9a928542efb1a5
+    supports: [capability.manage-credit-budget, troubleshooting]
+  - path: backend/core/types/company_credit_budget.go
+    role: data-model
+    hash: sha256:13c64687b60ea611a617e640ea2d2d2f932728cba9710ff260b2a18f4f73ed76
+    supports: [concepts, capability.manage-credit-budget]
+  - path: server_utils/src/limiter/quota.rs
+    role: business-logic
+    hash: sha256:6559be790ee3c9708b700f772bfc8beb31e0121ee2518b35b3020862f5174caf
+    supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
   - path: backend/config/types/empresas.go
     role: data-model
     hash: sha256:c751f3a161094d85cb735e64eadeb9f4f2f243b8391449675c1bb1dfeaf2de25
@@ -244,10 +321,10 @@ files:
     supports: [concepts, capability.review-companies, rules, troubleshooting]
   - path: backend/access_list.yml
     role: permissions
-    hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
-    supports: [page-purpose]
+    hash: sha256:4b3ea5059b84d77af3f79f2ee87ac00389e99947f81f46786b66bb3070b55799
+    supports: [page-purpose, capability.manage-credit-budget]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:2474ede3472c063c1e28ea584cd6265dc4b7b8437231cfa94aa5671e66b62330
-    supports: [page-purpose]
+    hash: sha256:65fc3572f3db3be8763b14088f9783dea817e279695f044e449eea22c6d7c2e1
+    supports: [page-purpose, capability.manage-credit-budget, rules]
 ```

@@ -230,6 +230,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
       if (!item.presentation) { return `${item.product.Name}${skuHtml}` }
       return `${item.product.Name} <span class="text-blue-600 font-bold">(${item.presentation.nm})</span>${skuHtml}`
     },
+    mobile: { order: 1, css: 'col-span-20' },
   },
   {
     id: 'quantity',
@@ -242,6 +243,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
       const next = parseInt(String(value || '0'))
       orderState.updateQuantity(item.key, isNaN(next) ? 0 : next)
     },
+    mobile: { order: 3, css: 'col-span-8', labelTop: 'Qty.|Cant.' },
   },
   {
     id: 'price',
@@ -255,6 +257,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
       const parsed = parseFloat(String(value || '0'))
       orderState.updatePrice(item.key, Math.round((isNaN(parsed) ? 0 : parsed) * 100))
     },
+    mobile: { order: 4, css: 'col-span-8', labelTop: 'Price|Precio' },
   },
   {
     id: 'subtotal',
@@ -263,6 +266,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     align: 'right',
     css: 'font-mono',
     getValue: (item) => formatN(((item.price || 0) * (item.quantity || 0)) / 100, 2),
+    mobile: { order: 5, css: 'col-span-8', labelTop: 'Subtotal', contentCss: 'ff-mono ff-bold' },
   },
   {
     id: 'actions',
@@ -270,6 +274,7 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     width: '36px',
     css: 'text-center px-4',
     buttonDeleteHandler: (item) => orderState.removeItem(item.key),
+    mobile: { order: 2, css: 'col-span-4 justify-end' },
   },
 ]
 

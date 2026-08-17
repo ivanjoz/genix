@@ -271,12 +271,15 @@
   /* ---------- Columns ---------- */
 
   const productColumns: ITableColumn<IProduct>[] = [
-    { header: 'ID', field: 'ID', width: '60px', getValue: (e) => e.ID || '' },
-    { header: 'Product|Producto', field: 'Name', useLineClamp: true, getValue: (e) => e.Name },
+    { header: 'ID', field: 'ID', width: '60px', getValue: (e) => e.ID || '',
+      mobile: { order: 1, css: 'col-span-6 ff-bold', icon: '[fa--tag]' } },
+    { header: 'Product|Producto', field: 'Name', useLineClamp: true, getValue: (e) => e.Name,
+      mobile: { order: 2, css: 'col-span-18', render: (e) => `<strong>${e.Name || ''}</strong>` } },
     {
       header: 'Base Qty|Cant. Base',
       width: '110px',
       getValue: (e) => planByProduct.get(e.ID)?.BaseQuantity || '',
+      mobile: { order: 3, css: 'col-span-12', labelLeft: 'Cant. Base:' },
     },
     {
       header: 'Seasonality|Estacionalidad',
@@ -285,23 +288,28 @@
         const curveID = planByProduct.get(e.ID)?.SeasonalityCurveID
         return curveID ? curveNameByID.get(curveID) || '' : ''
       },
+      mobile: { order: 4, css: 'col-span-12', labelLeft: 'Estac.:' },
     },
     {
       // id triggers the cellRenderer snippet so we can draw the weekly quantity as bars.
       id: 'productChart',
       header: 'Weekly quantity|Cantidad semanal',
       useCellRenderer: true,
+      mobile: { order: 5, css: 'col-span-24', labelTop: 'Weekly quantity|Cantidad semanal' },
     },
   ]
 
   const curveColumns: ITableColumn<ISeasonalityCurve>[] = [
-    { header: 'ID', field: 'ID', width: '60px', getValue: (e) => e.ID || '' },
-    { header: 'Name|Nombre', field: 'Name', getValue: (e) => e.Name, headerCss: "w-[40%]" },
+    { header: 'ID', field: 'ID', width: '60px', getValue: (e) => e.ID || '',
+      mobile: { order: 1, css: 'col-span-6 ff-bold', icon: '[fa--tag]' } },
+    { header: 'Name|Nombre', field: 'Name', getValue: (e) => e.Name, headerCss: "w-[40%]",
+      mobile: { order: 2, css: 'col-span-18', render: (e) => `<strong>${e.Name || ''}</strong>` } },
     {
       // id triggers the cellRenderer snippet so we can draw the resolved curve as bars.
       id: 'curveChart',
       header: 'Filled weeks|Semanas',
       useCellRenderer: true,
+      mobile: { order: 3, css: 'col-span-24', labelTop: 'Filled weeks|Semanas' },
     },
   ]
 

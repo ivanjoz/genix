@@ -46,10 +46,10 @@ type creditUsageRoute struct {
 }
 
 type creditUsageScope struct {
-	CPU24hLimit       uint64
-	Inference24hLimit uint64
-	Days              []creditUsageDay
-	Routes            []creditUsageRoute
+	CPUDailyLimit       uint64
+	InferenceDailyLimit uint64
+	Days                []creditUsageDay
+	Routes              []creditUsageRoute
 }
 
 type creditUsageResponse struct {
@@ -63,6 +63,7 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 	firstTimeFrame := dailyTimeFramePrefix + firstUnixDay
 	lastTimeFrame := dailyTimeFramePrefix + currentUnixDay
 	userRows, companyRows := []coreTypes.CreditUsage{}, []coreTypes.CreditUsage{}
+	budget := coreTypes.CompanyCreditBudget{CompanyID: req.User.CompanyID}
 
 	core.Log("credit usage query started::", " company::", req.User.CompanyID,
 		" user::", req.User.ID, " first_day::", firstUnixDay, " last_day::", currentUnixDay)
@@ -71,6 +72,11 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		query := db.Query(&userRows)
 		query.CompanyID.Equals(req.User.CompanyID).UserID.Equals(req.User.ID).TimeFrame.Between(firstTimeFrame, lastTimeFrame)
 		return query.Exec()
+	})
+	queries.Go(func() error {
+		var budgetError error
+		budget, budgetError = getCompanyCreditBudgetRecord(req.User.CompanyID)
+		return budgetError
 	})
 	queries.Go(func() error {
 		query := db.Query(&companyRows)
@@ -82,14 +88,16 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se pudo obtener el uso de créditos.", err)
 	}
 
+	companyCPUDailyLimit := nonNegativeBudget(budget.DailyCPU)
+	companyInferenceDailyLimit := nonNegativeBudget(budget.DailyInference)
 	userUsage, err := makeCreditUsageScope(userRows, firstUnixDay,
-		core.Env.RATE_LIMIT_USER_CPU_24H, core.Env.RATE_LIMIT_USER_INFERENCE_24H)
+		companyCPUDailyLimit/2, companyInferenceDailyLimit/2)
 	if err != nil {
 		core.Log("credit usage user blob invalid::", " company::", req.User.CompanyID, " user::", req.User.ID, " err::", err)
 		return req.MakeErr("No se pudo interpretar el uso de créditos del usuario.", err)
 	}
 	companyUsage, err := makeCreditUsageScope(companyRows, firstUnixDay,
-		core.Env.RATE_LIMIT_COMPANY_CPU_24H, core.Env.RATE_LIMIT_COMPANY_INFERENCE_24H)
+		companyCPUDailyLimit, companyInferenceDailyLimit)
 	if err != nil {
 		core.Log("credit usage company blob invalid::", " company::", req.User.CompanyID, " err::", err)
 		return req.MakeErr("No se pudo interpretar el uso de créditos de la empresa.", err)
@@ -122,11 +130,18 @@ func makeCreditUsageScope(rows []coreTypes.CreditUsage, firstUnixDay int32, cpuL
 		days[dayOffset].Inference = totals.Inference
 	}
 	return creditUsageScope{
-		CPU24hLimit:       cpuLimit,
-		Inference24hLimit: inferenceLimit,
-		Days:              days,
-		Routes:            makeCreditUsageRoutes(routeTotals),
+		CPUDailyLimit:       cpuLimit,
+		InferenceDailyLimit: inferenceLimit,
+		Days:                days,
+		Routes:              makeCreditUsageRoutes(routeTotals),
 	}, nil
+}
+
+func nonNegativeBudget(value int64) uint64 {
+	if value <= 0 {
+		return 0
+	}
+	return uint64(value)
 }
 
 // makeCreditUsageRoutes orders the breakdown by what it costs, most expensive first, so a client

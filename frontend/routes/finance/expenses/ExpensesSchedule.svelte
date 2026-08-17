@@ -108,20 +108,26 @@ const filteredSchedules = $derived.by(() => {
 })
 
 const columns: ITableColumn<IExpenseScheduled>[] = [
-  { header: "ID", headerCss: "w-32", css: "text-center text-purple-600 px-6", getValue: e => e.ID },
-  { header: "Name|Nombre", css: "px-6", getValue: e => e.Name },
+  { header: "ID", headerCss: "w-32", css: "text-center text-purple-600 px-6", getValue: e => e.ID,
+    mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" } },
+  { header: "Name|Nombre", css: "px-6", getValue: e => e.Name,
+    mobile: { order: 2, css: "col-span-18", render: e => `<strong>${e.Name || ''}</strong>` } },
   {
     header: "Category|Categoría", css: "px-6",
     getValue: e => tr(categoriesMap.get(e.CategoryID)?.label || ""),
+    mobile: { order: 3, css: "col-span-24", labelLeft: "Categoría:" },
   },
-  { header: "Cadence|Cadencia", css: "px-6", getValue: e => frequencySummary(e.Frequency) },
+  { header: "Cadence|Cadencia", css: "px-6", getValue: e => frequencySummary(e.Frequency),
+    mobile: { order: 4, css: "col-span-24", labelLeft: "Cadencia:" } },
   {
     header: "Amount|Monto", headerCss: "w-120", css: "text-right ff-mono px-6",
     getValue: e => `${formatN((e.Amount || 0) / 100, 2)} ${e.CurrencyType === 2 ? "USD" : "PEN"}`,
+    mobile: { order: 5, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" },
   },
   {
     header: "Start|Inicio", headerCss: "w-120", css: "whitespace-nowrap px-6",
     getValue: e => (e.StartDate ? formatTime(e.StartDate, "Y-m-d") : "") as string,
+    mobile: { order: 6, css: "col-span-12", labelLeft: "Inicio:", if: e => !!e.StartDate },
   },
 ]
 
@@ -129,19 +135,23 @@ const periodColumns: ITableColumn<IExpense>[] = [
   {
     header: "Period|Periodo", css: "px-6 whitespace-nowrap",
     getValue: e => (e.PeriodDate ? formatTime(e.PeriodDate, "Y-m-d") : "") as string,
+    mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--calendar]" },
   },
   {
     header: "Amount|Monto", headerCss: "w-110", css: "text-right ff-mono px-6",
     getValue: e => formatN((e.Amount || 0) / 100, 2) as string,
+    mobile: { order: 3, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" },
   },
   {
     header: "Paid|Pagado", headerCss: "w-110", css: "text-right ff-mono px-6",
     getValue: e => formatN((e.PaidAmount || 0) / 100, 2) as string,
+    mobile: { order: 4, css: "col-span-12", labelLeft: "Pagado:", contentCss: "ff-mono" },
   },
   {
     header: "Status|Estado", headerCss: "w-110", css: "px-6",
     // Derived from the lifecycle (ss) + paid amount, since PaymentStatus was removed.
     getValue: e => tr(e.ss === 2 ? "Paid|Pagado" : (e.PaidAmount || 0) > 0 ? "Partial|Parcial" : "Unpaid|Sin pagar"),
+    mobile: { order: 2, css: "col-span-12", contentCss: "text-right" },
   },
 ]
 </script>

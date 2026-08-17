@@ -2,7 +2,7 @@
 //!
 //! The Go backend opens one persistent connection and sends a 20-byte frame per charge, which
 //! `service` authenticates and routes here as an 11-byte payload. Each charge is admitted or
-//! rejected against company and user quotas for three windows (ten seconds, UTC hour, UTC day),
+//! rejected against burst/hour policy plus per-company UTC day/month entitlement,
 //! atomically, in memory.
 //!
 //! Accepted charges are aggregated per API group into five-minute and daily records and
@@ -13,6 +13,7 @@
 //! quota state and would overwrite each other's absolute rows.
 
 pub mod aggregation;
+pub mod budget;
 pub mod credits_blob;
 pub mod protocol;
 pub mod quota;

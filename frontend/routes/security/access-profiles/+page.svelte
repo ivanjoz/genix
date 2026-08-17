@@ -218,11 +218,13 @@ import {
       header: "ID",
       headerCss: "w-54",
       css: "text-center c-purple",
-      getValue: e => e.ID
+      getValue: e => e.ID,
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" }
     },
     {
       header: "Profile|Perfil", highlight: true,
-      getValue: e => e.Name
+      getValue: e => e.Name,
+      mobile: { order: 2, css: "col-span-14", render: e => `<strong>${e.Name || ''}</strong>` }
     },
     {
       header: "...",
@@ -232,7 +234,8 @@ import {
       buttonEditHandler: (rec) => {
         perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap) }
         ui.openModal(2)
-      }
+      },
+      mobile: { order: 3, css: "col-span-4 justify-end" }
     }
   ]
 </script>
@@ -302,7 +305,7 @@ import {
 	        <div class="ff-bold h3 mb-3 _access-group-title">
 	          {ag.groupName}
 	        </div>
-	        <div class="grid grid-cols-3 gap-x-12 gap-y-8 mb-16">
+	        <div class="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-8 mb-16">
 	          {#each ag.accesos as acceso}
 	            <AccesoCard
 	              {acceso}

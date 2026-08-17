@@ -50,10 +50,10 @@ import T from '$components/misc/T.svelte';
       {@const rows = Array.from({ length: layout.RowCant || 1 }, (_, i) => String(i + 1))}
 
       <div class="_1 bg-white rounded-lg shadow-sm p-8 mb-12" aria-label="Storage area layout: {layout.Name || `Section ${idx + 1}`}">
-        <div class="w-full flex items-center justify-between px-8 py-8">
-          <div class="flex items-center">
+        <div class="w-full flex items-start justify-between gap-8 px-8 py-8">
+          <div class="flex flex-wrap items-center gap-y-4">
             <Input bind:saveOn={layouts[idx]} save="Name"
-              css="w-220 mr-12" inputCss="text-sm" required={true}
+              css="w-full md:w-220 mr-12" inputCss="text-sm" required={true}
             />
             <span class="ff-bold text-slate-600"><T text="Rows|Filas" /></span>
             <Input bind:saveOn={layouts[idx]} save="RowCant"
@@ -74,12 +74,15 @@ import T from '$components/misc/T.svelte';
           </button>
         </div>
 
-        <table class="w-full">
+        <!-- A rack grid cannot collapse into cards, so on narrow screens it scrolls sideways
+             with a floor width per level instead of squeezing cells past usability. -->
+        <div class="overflow-x-auto">
+        <table class="w-full" style="min-width: {3 + heads.length * 4}rem">
           <thead>
             <tr>
               <th style="width: 3rem">-</th>
               {#each heads as head}
-                <th style="width: calc(92% / {heads.length})">{head}</th>
+                <th style="width: calc(92% / {heads.length}); min-width: 4rem">{head}</th>
               {/each}
             </tr>
           </thead>
@@ -98,6 +101,7 @@ import T from '$components/misc/T.svelte';
             {/each}
           </tbody>
         </table>
+        </div>
       </div>
     {/each}
   </div>

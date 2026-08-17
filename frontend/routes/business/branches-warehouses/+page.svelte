@@ -126,17 +126,20 @@ import {
       header: "ID",
       headerCss: "w-32",
       css: "text-center text-purple-600 px-6",
-      getValue: e => e.ID
+      getValue: e => e.ID,
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" }
     },
     {
       header: "Name|Nombre",
       css: "px-6",
-      getValue: e => e.Name
+      getValue: e => e.Name,
+      mobile: { order: 2, css: "col-span-14", render: (e) => `<strong>${e.Name || ''}</strong>` }
     },
     {
       header: "Address|Dirección",
       css: "px-6",
-      getValue: e => e.Address
+      getValue: e => e.Address,
+      mobile: { order: 4, css: "col-span-24", labelTop: "Address|Dirección", if: (e) => !!e.Address }
     },
     {
       header: "City|Ciudad",
@@ -144,13 +147,15 @@ import {
         if(!e.City){ return "" }
         const arr = e.City.split("|")
         return arr[1] + " > " + arr[0]
-      }
+      },
+      mobile: { order: 5, css: "col-span-24", labelTop: "City|Ciudad", if: (e) => !!e.City }
     },
     {
       header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "whitespace-nowrap px-6",
-      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
+      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string,
+      mobile: { order: 6, css: "col-span-24", labelLeft: "Actualizado:" }
     },
     {
       header: "...",
@@ -159,7 +164,8 @@ import {
       buttonEditHandler: (e) => {
         sedeForm = {...e}
         ui.openModal(1)
-      }
+      },
+      mobile: { order: 3, css: "col-span-4 justify-end" }
     }
   ]
 
@@ -168,7 +174,8 @@ import {
       header: "ID",
       headerCss: "w-32",
       css: "text-center text-purple-600 px-6",
-      getValue: e => e.ID
+      getValue: e => e.ID,
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" }
     },
     {
       header: "Branch|Sede",
@@ -176,28 +183,34 @@ import {
       getValue: e => {
         const sede = almacenesService.SedesMap.get(e.SiteID)
         return sede?.Name || `Sede-${e.SiteID}`
-      }
+      },
+      mobile: { order: 4, css: "col-span-24", labelLeft: "Sede:" }
     },
     {
       header: "Name|Nombre",
       css: "px-6",
-      getValue: e => e.Name
+      getValue: e => e.Name,
+      mobile: { order: 2, css: "col-span-14", render: (e) => `<strong>${e.Name || ''}</strong>` }
     },
     {
       header: "Layout",
       id: "layout",
       css: "px-6",
-      getValue: e => ""
+      getValue: e => "",
+      // Layout is drawn by the page's cellRenderer snippet, which the card list also honors.
+      mobile: { order: 5, css: "col-span-12", labelTop: "Layout" }
     },
     {
       header: "Status|Estado",
-      getValue: e => e.ss
+      getValue: e => e.ss,
+      mobile: { order: 6, css: "col-span-12", labelTop: "Status|Estado" }
     },
     {
       header: "Updated|Actualizado",
       headerCss: "w-144",
       css: "whitespace-nowrap px-6",
-      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
+      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string,
+      mobile: { order: 7, css: "col-span-24", labelLeft: "Actualizado:" }
     },
     {
       header: "...",
@@ -206,7 +219,8 @@ import {
       buttonEditHandler: (e) => {
         almacenForm = JSON.parse(JSON.stringify(e))
         ui.openModal(2)
-      }
+      },
+      mobile: { order: 3, css: "col-span-4 justify-end" }
     }
   ]
 

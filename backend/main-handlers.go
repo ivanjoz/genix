@@ -77,9 +77,20 @@ var saasOnlyRoutes = map[string]bool{
 	"GET.company-credit-usage-report": true,
 	"GET.company-credit-usage-detail": true,
 	"GET.company-credit-usage-users":  true,
+	"GET.company-credit-budget":       true,
+	"POST.company-credit-budget":      true,
 	"GET.request-errors-by-ids":       true,
 	"GET.system-memory-packages":      true,
 	"GET.cron-actions-scheduled":      true,
+}
+
+// Budget control and the two SaaS-only reads needed to reach it remain available after the
+// platform company exhausts its own credits. Detail reports and company writes stay charged.
+var creditControlRoutes = map[string]bool{
+	"GET.empresas":                    true,
+	"GET.company-credit-usage-report": true,
+	"GET.company-credit-budget":       true,
+	"POST.company-credit-budget":      true,
 }
 
 // Rutas POST que exigen sesión pero ningún acceso del catálogo: el usuario opera sobre sí mismo,
@@ -242,7 +253,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		core.Log("no hay una lambda para el path solicitado::", funcPath)
 		handlerResponse.Error = "no hay una lambda para el path solicitado: " + funcPath
 	} else {
-		if !isPublicPath && args.Method == "POST" {
+		if !isPublicPath && !creditControlRoutes[funcPath] && args.Method == "POST" {
 			requestBodyBytes := 0
 			if args.Body != nil {
 				requestBodyBytes = len(*args.Body)
@@ -261,7 +272,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			respLen = len(*handlerResponse.Body)
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
-		if !isPublicPath && args.Method == "GET" && handlerResponse.Error == "" && !handlerResponse.StreamHandled {
+		if !isPublicPath && !creditControlRoutes[funcPath] && args.Method == "GET" && handlerResponse.Error == "" && !handlerResponse.StreamHandled {
 			if rateLimitResponse := enforceAPICreditLimit(args, respLen); rateLimitResponse != nil {
 				handlerResponse = *rateLimitResponse
 			}

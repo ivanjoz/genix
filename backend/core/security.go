@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net"
 	"os"
 	"strconv"
@@ -83,22 +82,22 @@ type EnvStruct struct {
 	REQ_PARAMS     string
 	REQ_USER_AGENT string
 	// HANDLER_PARH   string
-	REQ_PATH           string
-	AWS_PROFILE        string
-	AWS_REGION         string
-	S3_BUCKET          string
-	DYNAMO_TABLE       string
-	REQ_LAMBDA_ID      string
-	API_ROUTE          string
-	LAMBDA_NAME        string
-	LOGS_FULL          bool
-	LOGS_DEBUG         bool
-	LOGS_ONLY_SAVE     bool
+	REQ_PATH       string
+	AWS_PROFILE    string
+	AWS_REGION     string
+	S3_BUCKET      string
+	DYNAMO_TABLE   string
+	REQ_LAMBDA_ID  string
+	API_ROUTE      string
+	LAMBDA_NAME    string
+	LOGS_FULL      bool
+	LOGS_DEBUG     bool
+	LOGS_ONLY_SAVE bool
 	// LOG_ALL_REQUESTS widens user_logs from the failures it keeps by default to every finished
 	// request. Off, a request that produced no error leaves no row — which is what keeps the
 	// table small enough to scan a fifteen-minute window. Turn it on to measure traffic, and
 	// expect a row per request for as long as it stays on.
-	LOG_ALL_REQUESTS bool
+	LOG_ALL_REQUESTS   bool
 	DB_DISABLE_SSL     bool
 	DB_PORT            int32
 	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
@@ -186,11 +185,7 @@ type EnvStruct struct {
 	EMBEDDING_DIMENSIONS int
 	// SERVER_UTILS_ADDRESS is the Rust raw-TCP endpoint: the credit limiter and the lock service
 	// share it, routed by the frame's opcode. One address for every operation the daemon serves.
-	SERVER_UTILS_ADDRESS             string
-	RATE_LIMIT_COMPANY_CPU_24H       uint64
-	RATE_LIMIT_COMPANY_INFERENCE_24H uint64
-	RATE_LIMIT_USER_CPU_24H          uint64
-	RATE_LIMIT_USER_INFERENCE_24H    uint64
+	SERVER_UTILS_ADDRESS string
 	// Public registration is unauthenticated and skips the credit limiter, so the only platform
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
@@ -321,10 +316,6 @@ type fileConfig struct {
 	} `toml:"agent"`
 
 	RateLimit struct {
-		CompanyCPU24h       uint64 `toml:"company_cpu_24h"`
-		CompanyInference24h uint64 `toml:"company_inference_24h"`
-		UserCPU24h          uint64 `toml:"user_cpu_24h"`
-		UserInference24h    uint64 `toml:"user_inference_24h"`
 	} `toml:"rate_limit"`
 
 	SignUp struct {
@@ -470,10 +461,6 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.MODELS = file.Models
 	env.SERVER_UTILS_ADDRESS = makeServerUtilsAddress(
 		file.ServerUtils.Host, file.ServerUtils.Port, file.ServerUtils.Public)
-	env.RATE_LIMIT_COMPANY_CPU_24H = file.RateLimit.CompanyCPU24h
-	env.RATE_LIMIT_COMPANY_INFERENCE_24H = file.RateLimit.CompanyInference24h
-	env.RATE_LIMIT_USER_CPU_24H = file.RateLimit.UserCPU24h
-	env.RATE_LIMIT_USER_INFERENCE_24H = file.RateLimit.UserInference24h
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.CONTACT_EMAIL = strings.ToLower(strings.TrimSpace(file.Contact.Email))
@@ -671,14 +658,6 @@ func PopulateVariables() {
 		Env.CONTACT_WINDOW_MINUTES = 2
 	}
 	// Mirror the limiter's environment precedence so displayed quotas cannot drift from enforcement.
-	applyRateLimitUint32Override("RATE_LIMIT_COMPANY_CPU_24H", &Env.RATE_LIMIT_COMPANY_CPU_24H)
-	applyRateLimitUint32Override("RATE_LIMIT_COMPANY_INFERENCE_24H", &Env.RATE_LIMIT_COMPANY_INFERENCE_24H)
-	applyRateLimitUint32Override("RATE_LIMIT_USER_CPU_24H", &Env.RATE_LIMIT_USER_CPU_24H)
-	applyRateLimitUint32Override("RATE_LIMIT_USER_INFERENCE_24H", &Env.RATE_LIMIT_USER_INFERENCE_24H)
-	validateRateLimitDailyMaximum("rate_limit.company_cpu_24h", Env.RATE_LIMIT_COMPANY_CPU_24H)
-	validateRateLimitDailyMaximum("rate_limit.company_inference_24h", Env.RATE_LIMIT_COMPANY_INFERENCE_24H)
-	validateRateLimitDailyMaximum("rate_limit.user_cpu_24h", Env.RATE_LIMIT_USER_CPU_24H)
-	validateRateLimitDailyMaximum("rate_limit.user_inference_24h", Env.RATE_LIMIT_USER_INFERENCE_24H)
 
 	Env.LAMBDA_NAME = Env.APP_NAME + "-backend"
 	Env.APP_CODE = APP_CODE
@@ -697,25 +676,6 @@ func PopulateVariables() {
 			Env.IS_PROD = true
 			break
 		}
-	}
-}
-
-func applyRateLimitUint32Override(environmentName string, destination *uint64) {
-	rawValue := strings.TrimSpace(os.Getenv(environmentName))
-	if rawValue == "" {
-		return
-	}
-	parsedValue, err := strconv.ParseUint(rawValue, 10, 32)
-	if err != nil || parsedValue == 0 {
-		panic(fmt.Sprintf("%s must be a positive uint32", environmentName))
-	}
-	*destination = parsedValue
-}
-
-func validateRateLimitDailyMaximum(configName string, configuredValue uint64) {
-	// Persisted usage is uint32-wide, matching the Rust limiter's startup validation.
-	if configuredValue == 0 || configuredValue > math.MaxUint32 {
-		panic(fmt.Sprintf("%s must be a positive uint32", configName))
 	}
 }
 

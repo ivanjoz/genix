@@ -60,7 +60,7 @@ The backend is written in Go and uses ScyllaDB/Cassandra as its database. The ba
 ### Frontend Documentation
 - **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow
 - **frontend/docs/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
-- **frontend/ecommerce/ECOMMERCE.md** - Ecommerce integration notes: thumbhash implementation, routes, CSS hashing
+- **frontend/webpage/ECOMMERCE.md** - Ecommerce integration notes: thumbhash implementation, routes, CSS hashing
 - **frontend/docs/SERVICES_GUIDE.md** - Guide for creating frontend services (connectors), explaining Cached Services (Delta Cache) vs. Report Services. ALWAYS read before creating one.
 
 ### Scripts

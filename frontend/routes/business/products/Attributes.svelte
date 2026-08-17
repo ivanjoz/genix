@@ -23,28 +23,35 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "./p
 
   const columns: ITableColumn<IProductPresentation>[] = [
     { header: "Attribute|Atributo",
-      getValue: e => produtcoAtributosMap.get(e.at)?.name || ""
+      getValue: e => produtcoAtributosMap.get(e.at)?.name || "",
+      mobile: { order: 1, css: "col-span-14", labelTop: "Attribute|Atributo" }
     },
     { header: "Name|Nombre",
-      getValue: e => e.nm
+      getValue: e => e.nm,
+      mobile: { order: 3, css: "col-span-24", render: (e) => `<strong>${e.nm || ''}</strong>` }
     },
     { header: "Price|Precio",
-      getValue: e => e.pc ? formatN(e.pc / 100,2) : ""
+      getValue: e => e.pc ? formatN(e.pc / 100,2) : "",
+      mobile: { order: 4, css: "col-span-12", labelLeft: "Precio:" }
     },
     { header: "Price Diff.|Diff. Precio",
-      getValue: e => e.pd ? formatN(e.pd / 100,2) : ""
+      getValue: e => e.pd ? formatN(e.pd / 100,2) : "",
+      mobile: { order: 5, css: "col-span-12", labelLeft: "Diff:", if: (e) => !!e.pd }
     },
     { header: "SKU",
-      getValue: e => e.sk || ""
+      getValue: e => e.sk || "",
+      mobile: { order: 6, css: "col-span-12", labelLeft: "SKU:", if: (e) => !!e.sk }
     },
     { header: "Color", id: "color",
-      getValue: e => e.cl
+      getValue: e => e.cl,
+      mobile: { order: 7, css: "col-span-24", labelTop: "Color", if: (e) => !!e.cl }
     },
     { header: "...", css: "px-6 py-1", headerCss: "w-42",
       buttonEditHandler(e) {
         presentacionForm = {...e}
         ui.openModal(3)
       },
+      mobile: { order: 2, css: "col-span-10 justify-end" }
     }
   ]
 

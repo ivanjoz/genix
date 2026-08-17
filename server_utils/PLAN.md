@@ -7,8 +7,8 @@ Target: `server_utils/`
 ## 1. Goal
 
 Build a standalone Rust service that accepts authenticated fixed-size messages over raw TCP,
-enforces CPU and inference-credit limits in memory, and periodically persists usage summaries to
-one ScyllaDB table.
+enforces CPU and inference-credit limits in memory, persists usage summaries, and stores explicit
+per-company budget entitlement in ScyllaDB.
 
 The service must enforce separate limits for:
 
@@ -16,7 +16,8 @@ The service must enforce separate limits for:
 - The individual user.
 - Ten seconds.
 - One hour.
-- Twenty-four hours.
+- A per-company UTC day, with each user receiving 50% of the company allowance.
+- A manually activated UTC calendar month for the whole company.
 - CPU credits.
 - Inference credits.
 
@@ -36,8 +37,8 @@ persistence destination; CQL counter columns are not used.
 - Usage counting happens in memory.
 - Dirty usage records are flushed every 15 seconds.
 - Usage is grouped into five-minute records and daily records.
-- There is one ScyllaDB table. Limit policies are loaded from environment variables or
-  `config.toml`.
+- `credit_usage` is the sole source of accepted consumption; `company_credit_budget` stores only
+  entitlement. Burst/hour policy comes from environment variables or `config.toml`.
 - Persisted usage is written as absolute totals, not database-side increments.
 - Time-frame type and period are packed into one positive decimal `int32`.
 
@@ -50,8 +51,10 @@ Genix Go backend
     ▼
 Rust rate limiter
     ├── in-memory company/user quota state
+    ├── in-memory company entitlement and current-month usage
     ├── in-memory five-minute/daily usage aggregation
-    └── dirty absolute snapshots every 15 seconds
+    ├── dirty absolute snapshots every 15 seconds → credit_usage
+    └── serialized budget mutations → company_credit_budget
             │
             ▼
        ScyllaDB credit_usage
@@ -153,7 +156,7 @@ Quota rejection uses this bit layout:
 | Bits | Meaning |
 |---|---|
 | 0 | Scope: `0` company, `1` user |
-| 1-2 | Window: `00` ten seconds, `01` one hour, `10` twenty-four hours |
+| 1-2 | Window: `00` ten seconds, `01` one hour, `10` day, `11` month |
 | 3 | Inference credits exhausted |
 | 4 | CPU credits exhausted |
 | 5-7 | Reserved and zero in version one |
@@ -162,20 +165,19 @@ At least one of bits 3 or 4 is set in every quota rejection. If both credit type
 selected constraint, both bits are set.
 
 Malformed input, failed authentication, a read timeout, or an internal error closes the connection.
-The Go client maps a disconnect/timeout to an unavailable rate-limiter error rather than confusing
-it with a quota response.
+The Go client maps a disconnect/timeout to an unavailable error and blocks the API with HTTP 503.
 
 One byte can report only one scope/window. Version one uses this deterministic priority:
 
-1. Ten seconds, then one hour, then twenty-four hours.
+1. Ten seconds, then one hour, day, and month.
 2. Company before user within the same window.
 
 ## 5. Limit policy configuration
 
-There is no policy table. Version one has a company policy applied to every company aggregate and a
-user policy applied to every individual user.
+Static policy covers burst and hourly safeguards. `company_credit_budget` owns daily and monthly
+entitlement for each company.
 
-Each policy has independent CPU and inference limits for the three windows, for 12 required values:
+Each policy has independent CPU and inference limits for two windows, for eight required values:
 
 | TOML key under `[rate_limit]` | Environment override | Meaning |
 |---|---|---|
@@ -183,14 +185,10 @@ Each policy has independent CPU and inference limits for the three windows, for 
 | `company_inference_10s` | `RATE_LIMIT_COMPANY_INFERENCE_10S` | Company inference capacity per ten seconds |
 | `company_cpu_1h` | `RATE_LIMIT_COMPANY_CPU_1H` | Company CPU capacity per hour |
 | `company_inference_1h` | `RATE_LIMIT_COMPANY_INFERENCE_1H` | Company inference capacity per hour |
-| `company_cpu_24h` | `RATE_LIMIT_COMPANY_CPU_24H` | Company CPU capacity per 24 hours |
-| `company_inference_24h` | `RATE_LIMIT_COMPANY_INFERENCE_24H` | Company inference capacity per 24 hours |
 | `user_cpu_10s` | `RATE_LIMIT_USER_CPU_10S` | User CPU capacity per ten seconds |
 | `user_inference_10s` | `RATE_LIMIT_USER_INFERENCE_10S` | User inference capacity per ten seconds |
 | `user_cpu_1h` | `RATE_LIMIT_USER_CPU_1H` | User CPU capacity per hour |
 | `user_inference_1h` | `RATE_LIMIT_USER_INFERENCE_1H` | User inference capacity per hour |
-| `user_cpu_24h` | `RATE_LIMIT_USER_CPU_24H` | User CPU capacity per 24 hours |
-| `user_inference_24h` | `RATE_LIMIT_USER_INFERENCE_24H` | User inference capacity per 24 hours |
 
 Configuration precedence is:
 
@@ -201,8 +199,8 @@ Configuration precedence is:
 The service also reads the existing `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and
 `SECRET_PHRASE` settings. It must never log their values.
 
-If per-company or per-user-ID overrides are later required, they must be represented explicitly in
-configuration. They must not introduce a second ScyllaDB table.
+Daily CPU/inference values are per company. The individual user allowance is integer division by
+two, while all users together remain bounded by the company allowance.
 
 ## 6. In-memory rate limiting
 
@@ -225,7 +223,9 @@ Version one uses these semantics:
 - Ten seconds: token bucket with capacity equal to the configured limit and continuous refill at
   `limit / 10 seconds`.
 - One hour: fixed UTC hour identified by `unix_seconds / 3_600`.
-- Twenty-four hours: fixed UTC Unix day identified by `unix_seconds / 86_400`.
+- Day: fixed UTC Unix day identified by `unix_seconds / 86_400`, using the stored company budget.
+- Month: current UTC calendar month; `SET_CURRENT` activates it manually and anchors each ceiling
+  to accepted month usage plus the requested remaining amount.
 
 CPU and inference maintain independent token/counter values. Company and user maintain independent
 state but are evaluated in the same admission operation.
@@ -324,9 +324,9 @@ Example for API group 3, CPU 300, inference 25:
 0D 01 2C 00 19
 ```
 
-## 10. ScyllaDB table
+## 10. ScyllaDB tables
 
-The only table is `credit_usage`:
+Accepted consumption lives only in `credit_usage`:
 
 ```sql
 -- Purpose: Store one absolute compact usage snapshot per company, subject, and period.
@@ -353,6 +353,25 @@ It uses stable `TableSchema.ID` 42. It does not enable delta
 views, indexes, autoincrement, or updated-version tracking.
 
 The generated registry and static schema checks include this table.
+
+Entitlement lives in one absolute row per company:
+
+```sql
+CREATE TABLE company_credit_budget (
+    company_id int PRIMARY KEY,
+    daily_cpu bigint,
+    daily_inference bigint,
+    budget_month_start_day smallint,
+    monthly_cpu_ceiling bigint,
+    monthly_inference_ceiling bigint,
+    updated int
+);
+```
+
+`SET_DAILY` replaces both daily allowances. `SET_CURRENT` sets the current-month ceiling to
+accepted month usage plus the requested remaining credits. `INCREASE_CURRENT` adds to an active
+month's ceiling. The daemon persists a mutation before updating its in-memory copy and never
+automatically retries the non-idempotent increase operation.
 
 ### Partition growth
 
@@ -481,7 +500,7 @@ response-bit, and test-vector definitions.
 
 - [x] Implement company-owned mutex shards.
 - [x] Implement CPU/inference and company/user checks.
-- [x] Implement the three windows with test-injectable clocks.
+- [x] Implement burst/hour policy and per-company day/month entitlement with test-injectable clocks.
 - [x] Make admission and accounting one atomic shard operation.
 
 ### Phase 4: Aggregation and persistence

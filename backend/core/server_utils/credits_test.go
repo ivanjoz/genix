@@ -62,3 +62,14 @@ func TestCreditFormulasRoundPartialBlocksUp(t *testing.T) {
 		t.Fatalf("InferenceCredits() = %d, %v; want 6", inference, err)
 	}
 }
+
+func TestMonthlyCreditLimitResponseUsesTheReservedWindow(t *testing.T) {
+	err := decodeCreditLimitResponse(0b1_1110)
+	limit, ok := err.(*CreditLimitExceeded)
+	if !ok {
+		t.Fatalf("monthly response decoded as %T: %v", err, err)
+	}
+	if !limit.Company || limit.Window != "month" || !limit.CPU || !limit.Inference {
+		t.Fatalf("monthly response decoded incorrectly: %+v", limit)
+	}
+}

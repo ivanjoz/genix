@@ -48,7 +48,7 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       headerCss: "w-40", headerInnerCss: "min-w-36",
       getValue: (record) => record.ID || "",
       render: (record) => record.ID ? String(record.ID) : `<i class="icon-[fa--refresh]"></i>`,
-      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "tag" },
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" },
     },
     {
       header: "Supply|Insumo",

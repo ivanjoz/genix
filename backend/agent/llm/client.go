@@ -18,7 +18,7 @@
 // Chat() translates the internal ReasoningOptions into whichever shape the
 // selected model's provider expects, so callers never branch on the provider.
 //
-// Design rationale (see backend/agent/AGENTIC_LOOP_DESIGN.md):
+// Design rationale:
 //   - One Client per process. Construct at startup via NewClient so a missing
 //     API key fails fast instead of mid-loop.
 //   - Errors include the raw response body on non-2xx so we can debug

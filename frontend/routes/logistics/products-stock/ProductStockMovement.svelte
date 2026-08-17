@@ -453,6 +453,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
       if (stockDetail._isNew) { return { css: 'text-blue-800', text: stockDetail.SerialNumber } }
       return stockDetail.SerialNumber
     },
+    mobile: { order: 1, css: 'col-span-24', labelTop: 'Serial' },
   },
   {
     header: 'Batch|Lote',
@@ -475,6 +476,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
       if (stockDetail._isNew && lotDisplay) { return { css: 'text-blue-800', text: lotDisplay } }
       return lotDisplay
     },
+    mobile: { order: 2, css: 'col-span-12', labelTop: 'Batch|Lote' },
   },
   {
     header: 'Qty.|Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
@@ -499,6 +501,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
       }
       return { css: `text-right ${stockDetail._isNew ? 'text-blue-800' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
+    mobile: { order: 3, css: 'col-span-12', labelTop: 'Qty.|Cant.' },
   },
 ]
 
@@ -524,6 +527,7 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
       if (stockDetail._isNew) { return { css: 'text-blue-800', text: lotDisplay } }
       return lotDisplay
     },
+    mobile: { order: 1, css: 'col-span-12', labelTop: 'Batch|Lote' },
   },
   {
     header: 'Qty.|Cant.', css: 'justify-end', inputCss: 'text-right pr-6',
@@ -548,6 +552,7 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
       }
       return { css: `text-right ${stockDetail._isNew ? 'text-blue-800' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
+    mobile: { order: 2, css: 'col-span-12', labelTop: 'Qty.|Cant.' },
   },
 ]
 

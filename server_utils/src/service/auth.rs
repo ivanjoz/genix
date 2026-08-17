@@ -18,7 +18,7 @@ use thiserror::Error;
 /// Replies are not themselves authenticated, so without the bump an old client would keep
 /// authenticating fine, read 1 byte of a 5-byte reply, and silently misinterpret everything
 /// after that.
-const DOMAIN: &[u8] = b"genix-server-utils:v4";
+const DOMAIN: &[u8] = b"genix-server-utils:v5";
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -84,7 +84,9 @@ mod tests {
         // Same charge bytes under two opcodes must not share a tag, or a frame could be replayed
         // into a different operation.
         let secret = b"test-secret";
-        let charge = [0x12, 0x34, 0x56, 0x00, 0x00, 0x2A, 0x04, 0x00, 0x07, 0x00, 0x09];
+        let charge = [
+            0x12, 0x34, 0x56, 0x00, 0x00, 0x2A, 0x04, 0x00, 0x07, 0x00, 0x09,
+        ];
         let mut as_charge = vec![0x01_u8];
         as_charge.extend_from_slice(&charge);
         let mut as_other = vec![0x02_u8];
@@ -105,11 +107,11 @@ mod tests {
         ];
         assert_eq!(
             compute_hash(secret, &nonce, 0, &payload).unwrap(),
-            [0x6A, 0x9B, 0x6D, 0x45, 0x58, 0x7E, 0x52, 0x11]
+            [0xDE, 0x05, 0x11, 0x1B, 0x8A, 0x5E, 0xE4, 0xB3]
         );
         assert_eq!(
             compute_hash(secret, &nonce, 1, &payload).unwrap(),
-            [0xAF, 0x3C, 0x01, 0xFC, 0x6E, 0xDB, 0x15, 0xE5]
+            [0xE0, 0x16, 0xDA, 0x16, 0xEA, 0x21, 0xB9, 0x0A]
         );
 
         // Opcode 0x02 with action 7, identifier -42, 3 waiters, 5000 ms wait, 15000 ms lease.
@@ -119,7 +121,7 @@ mod tests {
         ];
         assert_eq!(
             compute_hash(secret, &nonce, 0, &acquire).unwrap(),
-            [0xE6, 0x9D, 0xBD, 0xBA, 0x88, 0x42, 0xDF, 0xD6]
+            [0x78, 0xC0, 0xDA, 0x15, 0xCF, 0xC2, 0x9C, 0xCC]
         );
     }
 }

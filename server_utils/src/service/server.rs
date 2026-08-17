@@ -22,6 +22,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     limiter::{
+        budget::{MUTATE_BUDGET_PAYLOAD_SIZE, parse_budget_mutation},
         protocol::{CHARGE_PAYLOAD_SIZE, parse_charge},
         quota::RateLimiter,
     },
@@ -282,7 +283,13 @@ async fn handle_connection(
         received_tag.copy_from_slice(&frame[tag_offset..frame_size]);
         // The opcode is inside the signed bytes, so a frame cannot be replayed as another
         // operation, and the sequence keeps it from being replayed as itself.
-        if !auth::verify_hash(secret, &nonce, sequence, &frame[..tag_offset], &received_tag)? {
+        if !auth::verify_hash(
+            secret,
+            &nonce,
+            sequence,
+            &frame[..tag_offset],
+            &received_tag,
+        )? {
             warn!(%peer, sequence, opcode = frame[0], "frame authentication failed");
             break Ok(());
         }
@@ -320,6 +327,33 @@ async fn handle_connection(
                         Ok(decision) => decision.map_or(0, |violation| violation.response_byte()),
                         Err(admit_error) => {
                             warn!(error = %admit_error, "charge admission failed");
+                            UNAVAILABLE_STATUS
+                        }
+                    };
+                    send_reply(&reply_sender, frame_sequence, status, 0).await;
+                });
+            }
+            Opcode::MutateCompanyBudget => {
+                let payload: &[u8; MUTATE_BUDGET_PAYLOAD_SIZE] = frame[OPCODE_SIZE..tag_offset]
+                    .try_into()
+                    .expect("the opcode fixes the payload width");
+                let mutation = match parse_budget_mutation(payload) {
+                    Ok(mutation) => mutation,
+                    Err(error) => break Err(error).context("authenticated frame is invalid"),
+                };
+                let Some(permit) = permit else {
+                    warn!(%peer, "in-flight ceiling reached, refusing a budget mutation");
+                    send_reply(&reply_sender, frame_sequence, UNAVAILABLE_STATUS, 0).await;
+                    continue;
+                };
+                let limiter = limiter.clone();
+                let reply_sender = reply_sender.clone();
+                handlers.spawn(async move {
+                    let _permit = permit;
+                    let status = match limiter.mutate_budget(mutation).await {
+                        Ok(outcome) => outcome as u8,
+                        Err(mutation_error) => {
+                            warn!(error = %mutation_error, "budget mutation failed");
                             UNAVAILABLE_STATUS
                         }
                     };

@@ -93,16 +93,12 @@ company_cpu_10s        = 2000
 company_inference_10s  = 1000
 company_cpu_1h         = 40000
 company_inference_1h   = 10000
-company_cpu_24h        = 200000
-company_inference_24h  = 20000
 
 # Per-user limits inside each company.
 user_cpu_10s           = 1000
 user_inference_10s     = 500
 user_cpu_1h            = 20000
 user_inference_1h      = 5000
-user_cpu_24h           = 100000
-user_inference_24h     = 10000
 
 # ─── Lock service (server_utils/) ──────────────────────────────────────────
 # Mismo proceso y mismo puerto que [rate_limit]; el opcode del frame decide el

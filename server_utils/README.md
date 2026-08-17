@@ -26,7 +26,7 @@ formats), [PLAN_LOCK_SERVICE.md](PLAN_LOCK_SERVICE.md) and
 
 > **One process, shared fate.** The rate limiter loads existing usage from ScyllaDB before
 > admitting anything and exits when it cannot — which also stops the bridge. Deploy the backend
-> tables (so `credit_usage`, `user_logs`, `request_errors` and `server_metrics` exist) before
+> tables (including `credit_usage`, `company_credit_budget`, `user_logs`, `request_errors` and `server_metrics`) before
 > starting the daemon. The request log and the metrics collector are the two halves that do *not*
 > share that fate: they drop rows rather than propagate a failure, because taking the process down
 > would stop everything else.
@@ -43,8 +43,8 @@ src/
 ├── config.rs    # the only thing they share
 ├── service/     # the raw-TCP port: server (listener, handshake, opcode dispatch),
 │                # protocol (opcode table), auth (frame HMAC)
-├── limiter/     # opcode 0x01: quota.rs (RateLimiter + policy), protocol, aggregation,
-│                # credits_blob, time_frame, storage
+├── limiter/     # opcodes 0x01/0x05: charging and company-budget mutation,
+│                # quota, protocol, aggregation, credits_blob, time_frame, storage
 ├── lock/        # opcodes 0x02/0x03: registry.rs (sharded key mutexes), protocol
 ├── reqlog/      # opcode 0x04: protocol (the one variable-length payload), errors
 │                # (ten-minute write suppression), writer (batching, fails open)
@@ -60,7 +60,7 @@ Both are root-level keys in `config.toml` and must match the backend byte for by
 
 | Key | Used for |
 |---|---|
-| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v4`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
+| `internal_apikey` | Service-to-service authentication: the TCP frame HMAC (`genix-server-utils:v5`) and the bridge's `X-Bridge-Auth` header (`sse-bridge:v1\|`). |
 | `secret_phrase` | Verifying the browser's session token only (`usrToken:v1`). Nothing else in this crate reads it. |
 
 Each use is domain-separated, so one key serving two protocols cannot produce interchangeable
@@ -71,11 +71,12 @@ live session token.
 
 - Authenticates persistent TCP connections with an eight-byte server nonce and sequence-bound
   HMAC-SHA256 frames.
-- Atomically checks company and user limits for CPU and inference credits.
-- Uses a token bucket for ten-second limits and fixed UTC hour/day counters.
+- Atomically checks company/user burst and hourly limits plus company-configured daily/monthly budgets.
+- Derives each user's daily allowance as 50% of its company's CPU and inference allowances.
+- Requires an explicitly activated current UTC month; a new month stays blocked until `SET_CURRENT`.
 - Aggregates every accepted charge into user/company and five-minute/daily in-memory records.
 - Flushes only changed absolute records to `credit_usage` every 15 seconds.
-- Fails closed when existing usage cannot be loaded from ScyllaDB.
+- Fails closed in the Go backend for quota exhaustion and daemon/storage unavailability.
 
 Version one must run as a single active process. Two instances would have independent in-memory
 quota state and must not write the same absolute rows.
@@ -115,18 +116,14 @@ company_cpu_10s       = 2000
 company_inference_10s = 1000
 company_cpu_1h        = 40000
 company_inference_1h  = 10000
-company_cpu_24h       = 200000
-company_inference_24h = 20000
 
 user_cpu_10s          = 1000
 user_inference_10s    = 500
 user_cpu_1h           = 20000
 user_inference_1h     = 5000
-user_cpu_24h          = 100000
-user_inference_24h    = 10000
 ```
 
-The twelve credit ceilings are the only settings here with no built-in default: a guessed quota
+The eight burst/hour ceilings are the only settings here with no built-in default: a guessed quota
 is worse than none, so the process refuses to start without them. Since that refusal is a
 three-second crash loop under `Restart=always`, the nested Server Utils installer writes these
 defaults into `config.toml` when they are absent, rather than leaving the daemon to discover it.
@@ -171,8 +168,8 @@ The process also reads root `secret_phrase`, root `internal_apikey`, and `[db].h
 setting can be overridden by its uppercase environment equivalent, such as
 `RATE_LIMIT_USER_CPU_10S`, `SSE_BRIDGE_PORT`, or `DB_HOST`.
 
-All quota values must be positive and nondecreasing from 10 seconds to one hour to 24 hours. The
-24-hour values cannot exceed `uint32`, which is the largest persisted blob width.
+All quota values must be positive and nondecreasing from ten seconds to one hour. Daily and monthly
+entitlements are stored per company in `company_credit_budget`, not in this file.
 
 `sse_bridge.url` is *not* parsed by this process — the backend reads it for service-to-service
 publishing and the deployment script uses it for the Nginx `server_name`. The frontend gets the
@@ -327,7 +324,7 @@ The HMAC covers the opcode and payload plus the connection nonce and the implici
 so a frame can be replayed neither as itself nor as a different operation. Authentication,
 malformed-frame, unknown-opcode, initialization, and transport failures close the connection.
 
-The domain string is bumped on every wire change — `genix-server-utils:v4` today. Replies are not
+The domain string is bumped on every wire change — `genix-server-utils:v5` today. Replies are not
 themselves authenticated, so a version skew cannot be caught by the signature: without the bump
 an old client would keep authenticating fine and then misread a reply that grew under it.
 
@@ -349,8 +346,8 @@ Zero is success for every opcode. `CHARGE_CREDITS` rejections use the low five b
 the scope, time window, and exhausted credit types. Lock replies are `1` queue full, `2` wait
 timed out, `3` daemon at capacity, `4` protocol misuse (releasing a lock this connection does not
 hold, or presenting a superseded generation). `0xFF` means the daemon could not answer at all; it
-is deliberately not a valid verdict for any opcode, so a client applies its own policy — charges
-fail open, sign-up locks fail closed.
+is deliberately not a valid verdict for any opcode. Credit charges and budget mutations fail
+closed; call sites for locks retain their operation-specific policy.
 
 The client must assign a sequence and write its frame atomically. Two callers taking 5 and 6 but
 writing 6, 5 would desynchronize the HMAC and every later frame would fail.

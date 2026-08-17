@@ -24,18 +24,27 @@ type (
 	Lock                = server_utils.Lock
 	LockOptions         = server_utils.LockOptions
 	CreditLimitExceeded = server_utils.CreditLimitExceeded
+	BudgetOperation     = server_utils.BudgetOperation
 	ServerUtilsClient   = server_utils.ServerUtilsClient
 	RequestLogRecord    = server_utils.RequestLogRecord
 	RequestLogEntry     = server_utils.RequestLogError
+)
+
+const (
+	BudgetSetDaily        = server_utils.BudgetSetDaily
+	BudgetSetCurrent      = server_utils.BudgetSetCurrent
+	BudgetIncreaseCurrent = server_utils.BudgetIncreaseCurrent
 )
 
 var (
 	// ErrLockBusy is a real answer: the key is taken and the queue is full, or our patience ran
 	// out. ErrLockUnavailable is the absence of an answer, which each call site judges for
 	// itself — sign-up refuses, most others carry on unlocked.
-	ErrLockBusy             = server_utils.ErrLockBusy
-	ErrLockUnavailable      = server_utils.ErrLockUnavailable
-	ErrCreditLimiterMissing = server_utils.ErrCreditLimiterMissing
+	ErrLockBusy                 = server_utils.ErrLockBusy
+	ErrLockUnavailable          = server_utils.ErrLockUnavailable
+	ErrCreditLimiterMissing     = server_utils.ErrCreditLimiterMissing
+	ErrBudgetMonthNotConfigured = server_utils.ErrBudgetMonthNotConfigured
+	ErrBudgetMutationOverflow   = server_utils.ErrBudgetMutationOverflow
 
 	ConfigureServerUtils = server_utils.ConfigureServerUtils
 
@@ -46,6 +55,7 @@ var (
 	IsCreditRateLimitError      = server_utils.IsCreditRateLimitError
 	APICPUCredits               = server_utils.APICPUCredits
 	InferenceCredits            = server_utils.InferenceCredits
+	MutateCompanyCreditBudget   = server_utils.MutateCompanyCreditBudget
 )
 
 // LockError is every way AcquireLock can fail to hand back a lock. It exists so a handler can turn
@@ -99,7 +109,11 @@ func AcquireLock(
 func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
 	var exceeded *server_utils.CreditLimitExceeded
 	if errors.As(err, &exceeded) {
-		response := req.MakeErrCode("Límite de créditos agotado.", 429)
+		message := "Límite de créditos agotado."
+		if exceeded.Window == "month" {
+			message = "Presupuesto mensual de créditos agotado."
+		}
+		response := req.MakeErrCode(message, 429)
 		response.Headers["X-Rate-Limit-Code"] = fmt.Sprint(exceeded.Code)
 		return response
 	}

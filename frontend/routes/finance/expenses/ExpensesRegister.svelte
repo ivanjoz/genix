@@ -240,28 +240,36 @@ const filteredExpenses = $derived.by(() => {
 })
 
 const columns: ITableColumn<IExpense>[] = [
-  { header: "ID", headerCss: "w-32", css: "text-center text-purple-600 px-6", getValue: e => e.ID },
+  { header: "ID", headerCss: "w-32", css: "text-center text-purple-600 px-6", getValue: e => e.ID,
+    mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" } },
   {
     header: "Registered|Registro", headerCss: "w-106", css: "whitespace-nowrap px-6 ff-mono text-sm",
     getValue: e => (e.Created ? formatTime(e.Created, "Y-m-d") : "") as string,
+    mobile: { order: 5, css: "col-span-12", labelLeft: "Registro:", contentCss: "ff-mono" },
   },
-  { header: "Status|Estado", id: "status", headerCss: "w-110", css: "px-6", getValue: e => e.ss },
-  { header: "Name|Nombre", css: "px-6", getValue: e => e.Name },
+  { header: "Status|Estado", id: "status", headerCss: "w-110", css: "px-6", getValue: e => e.ss,
+    mobile: { order: 2, css: "col-span-18", contentCss: "flex justify-end" } },
+  { header: "Name|Nombre", css: "px-6", getValue: e => e.Name,
+    mobile: { order: 3, css: "col-span-24", render: e => `<strong>${e.Name || ''}</strong>` } },
   {
     header: "Category|Categoría", css: "px-6",
     getValue: e => tr(categoriesMap.get(e.CategoryID)?.label || ""),
+    mobile: { order: 4, css: "col-span-24", labelLeft: "Categoría:" },
   },
   {
     header: "Due Date|Vencimiento", headerCss: "w-120", css: "whitespace-nowrap px-6",
     getValue: e => (e.DueDate ? formatTime(e.DueDate, "Y-m-d") : "") as string,
+    mobile: { order: 6, css: "col-span-12", labelLeft: "Vence:", if: e => !!e.DueDate },
   },
   {
     header: "Amount|Monto", headerCss: "w-120", css: "text-right ff-mono px-6",
     getValue: e => `${formatN((e.Amount || 0) / 100, 2)} ${e.CurrencyType === 2 ? "USD" : "PEN"}`,
+    mobile: { order: 7, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" },
   },
   {
     header: "Paid|Pagado", headerCss: "w-110", css: "text-right ff-mono px-6",
     getValue: e => formatN((e.PaidAmount || 0) / 100, 2) as string,
+    mobile: { order: 8, css: "col-span-12", labelLeft: "Pagado:", contentCss: "ff-mono" },
   },
 ]
 
@@ -270,20 +278,24 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
   {
     header: "Date|Fecha", headerCss: "w-110", css: "ff-mono px-6",
     getValue: e => formatTime(e.Date, "d-m-Y") as string,
+    mobile: { order: 1, css: "col-span-12 ff-mono", icon: "[fa--calendar]" },
   },
   {
     header: "Source Register|Caja de Origen", css: "px-6",
     getValue: e => cajas.CajasMap.get(e.CashBankID)?.Name || "-",
+    mobile: { order: 3, css: "col-span-24", labelLeft: "Caja:" },
   },
   {
     // id triggers the cellRenderer snippet so we can mount RecordByIDText per row.
     id: "paymentUsuario", header: "User|Usuario", headerCss: "w-120", css: "px-6",
     getValue: e => e.CreatedBy,
+    mobile: { order: 4, css: "col-span-24", labelLeft: "Usuario:" },
   },
   {
     // Outflow amounts are stored negative; show the positive paid value.
     header: "Amount|Monto", headerCss: "w-110", css: "text-right ff-mono px-6",
     getValue: e => formatN(Math.abs(e.Amount || 0) / 100, 2) as string,
+    mobile: { order: 2, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" },
   },
 ]
 </script>
@@ -307,9 +319,10 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
   {/if}
 {/snippet}
 
-<div class="flex items-center justify-between mb-6">
-  <div class="flex items-center gap-12">
-    <FilterInput bind:value={filterText} css="w-256" />
+<!-- Filter + status tabs + New exceed a phone row, so the tabs drop to their own line below md. -->
+<div class="flex flex-col gap-8 mb-6 md:flex-row md:items-center md:justify-between">
+  <div class="flex flex-col gap-8 order-2 md:flex-row md:items-center md:gap-12 md:order-1">
+    <FilterInput bind:value={filterText} css="w-full md:w-256" />
     <OptionsStrip selected={statusFilter}
       options={expenseStatusTabs.map(o => ({ id: o.id, name: tr(o.label) }))}
       keyId="id" keyName="name"
@@ -321,7 +334,9 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
       }}
     />
   </div>
-  <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" onClick={newExpense} />
+  <div class="flex justify-end order-1 md:order-2">
+    <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" onClick={newExpense} />
+  </div>
 </div>
 
 <Layer type="content">

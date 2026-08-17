@@ -109,7 +109,8 @@ import { SvelteMap } from 'svelte/reactivity';
       header: "Date & Time|Fecha Hora",
       headerCss: "w-120",
       css: "ff-mono px-6",
-      getValue: e => formatTime(e.Created || 0, "d-M h:n") as string
+      getValue: e => formatTime(e.Created || 0, "d-M h:n") as string,
+      mobile: { order: 1, css: "col-span-12 ff-mono", icon: "[fa--clock-o]" }
     },
     {
       header: "Product|Producto",
@@ -128,19 +129,22 @@ import { SvelteMap } from 'svelte/reactivity';
           }
         }
         return html
-      }
+      },
+      mobile: { order: 3, css: "col-span-24" }
     },
     {
       header: "Batch|Lote",
       headerCss: "w-100",
       css: "text-purple-600 text-center px-6",
-      getValue: e => getLotName(e.LotID)
+      getValue: e => getLotName(e.LotID),
+      mobile: { order: 4, css: "col-span-12", labelLeft: "Lote:", if: e => !!e.LotID }
     },
     {
       header: "SKU",
       headerCss: "w-100",
       css: "text-purple-600 text-center px-6",
-      getValue: e => e.SerialNumber || "-"
+      getValue: e => e.SerialNumber || "-",
+      mobile: { order: 5, css: "col-span-12", labelLeft: "SKU:", if: e => !!e.SerialNumber }
     },
     {
       header: "Movement|Movimiento",
@@ -149,7 +153,8 @@ import { SvelteMap } from 'svelte/reactivity';
       render: e => {
         const mov = movimientoTiposMap.get(e.Type || 0)
         return mov?.name || "-"
-      }
+      },
+      mobile: { order: 2, css: "col-span-12", contentCss: "text-right" }
     },
     {
       header: "Quantity|Cantidad",
@@ -159,19 +164,23 @@ import { SvelteMap } from 'svelte/reactivity';
         return `<div class="flex justify-end ${(e.Quantity || 0) < 0 ? 'text-red-500' : 'text-blue-600'}">
           ${e.Quantity || 0}
         </div>`
-      }
+      },
+      mobile: { order: 6, css: "col-span-12", labelLeft: "Cant:" }
     },
     {
       header: "Source Warehouse|Almacén Origen",
-      render: e => almacenRender(e.WarehouseRefID || 0, e.WarehouseRefQuantity || 0)
+      render: e => almacenRender(e.WarehouseRefID || 0, e.WarehouseRefQuantity || 0),
+      mobile: { order: 7, css: "col-span-24", labelTop: "Almacén Origen", if: e => !!e.WarehouseRefID }
     },
     {
       header: "Destination Warehouse|Almacén Destino",
-      render: e => almacenRender(e.WarehouseID || 0, e.WarehouseQuantity || 0)
+      render: e => almacenRender(e.WarehouseID || 0, e.WarehouseQuantity || 0),
+      mobile: { order: 8, css: "col-span-24", labelTop: "Almacén Destino" }
     },
     {
       header: "Document|Documento",
-      render: e => String(e.DocumentID || "")
+      render: e => String(e.DocumentID || ""),
+      mobile: { order: 9, css: "col-span-12", labelLeft: "Doc:", if: e => !!e.DocumentID }
     },
     {
       header: "User|Usuario",
@@ -191,7 +200,8 @@ import { SvelteMap } from 'svelte/reactivity';
           }
         }
         return html
-      }
+      },
+      mobile: { order: 10, css: "col-span-12", labelLeft: "Usuario:" }
     },
   ]
 </script>

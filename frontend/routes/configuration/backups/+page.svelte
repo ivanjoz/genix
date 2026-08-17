@@ -54,25 +54,28 @@ import { Env } from '$core/env';
       header: "Created",
       headerCss: "w-176",
       css: "px-6 nowrap",
-      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
+      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string,
+      mobile: { order: 2, css: "col-span-14", labelLeft: "Creado:" }
     },
     {
       header: "Name|Nombre",
       highlight: true,
       css: "px-6",
-      getValue: e => e.Name
+      getValue: e => e.Name,
+      mobile: { order: 1, css: "col-span-24", render: (e) => `<strong>${e.Name || ''}</strong>` }
     },
     {
       header: "Size|Tamaño",
       headerCss: "w-120",
       css: "text-center",
-      getValue: e => `${formatN(e.Size / 1000 / 1000, 2)} mb`
+      getValue: e => `${formatN(e.Size / 1000 / 1000, 2)} mb`,
+      mobile: { order: 3, css: "col-span-10", labelLeft: "Tamaño:" }
     }
   ]
 </script>
 
 <Page title="Backups & Restore">
-  <div class="w-full grid gap-20" style="grid-template-columns: 4fr 3fr;">
+  <div class="w-full grid gap-20 grid-cols-1 lg:grid-cols-[4fr_3fr]">
     <div>
       <div class="flex items-center justify-between mb-6" aria-label="Backups toolbar with generate and upload buttons">
         <div class="h2 ff-bold">Backups</div>

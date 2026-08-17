@@ -56,30 +56,35 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
     headerCss: "w-140",
     css: "px-6 nowrap",
     getValue: (row) => formatUnixMinutesFrame(row.UnixMinutesFrame),
+    mobile: { order: 2, css: "col-span-14", labelLeft: "Franja:" },
   },
   {
     header: "A-ID",
     headerCss: "w-60",
     css: "text-center ff-mono",
     getValue: (row) => row.ActionID,
+    mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" },
   },
   {
     header: "Action|Acción",
     highlight: true,
     css: "px-6",
     getValue: (row) => row.ActionName,
+    mobile: { order: 3, css: "col-span-24", render: (row) => `<strong>${row.ActionName || ""}</strong>` },
   },
   {
     header: "Company|Empresa",
     headerCss: "w-96",
     css: "text-center ff-mono",
     getValue: (row) => row.CompanyID,
+    mobile: { order: 5, css: "col-span-12", labelLeft: "Empresa:" },
   },
   {
     header: "Parameters|Parámetros",
     headerCss: "w-320",
     css: "px-6 nowrap",
     getValue: (row) => formatParams(row),
+    mobile: { order: 7, css: "col-span-24", labelTop: "Parameters|Parámetros" },
   },
   {
     header: "Invocations|Invocaciones",
@@ -92,18 +97,21 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
         <div class="ff-mono fs14 text-slate-500">${row.ID}</div>
       </div>
     `,
+    mobile: { order: 6, css: "col-span-12", labelLeft: "Invoc.:" },
   },
   {
     header: "Status",
     headerCss: "w-120",
     css: "text-center",
     getValue: (row) => getStatusLabel(row.ss||0),
+    mobile: { order: 4, css: "col-span-12", labelLeft: "Estado:" },
   },
   {
     header: "Updated",
     headerCss: "w-160",
     css: "px-6 nowrap",
     getValue: (row) => formatUpdatedSunix(row.upd),
+    mobile: { order: 8, css: "col-span-24", labelLeft: "Actualizado:" },
   },
   {
     // getValue and not render: messages carry handler errors and panic text, and render output
@@ -111,6 +119,7 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
     header: "Messages|Mensajes",
     css: "px-6",
     getValue: (row) => formatMessages(row),
+    mobile: { order: 9, css: "col-span-24", labelTop: "Messages|Mensajes", if: (row) => (row.messages || []).length > 0 },
   },
 ]
 </script>

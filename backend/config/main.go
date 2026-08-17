@@ -20,6 +20,8 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.company-credit-usage-report": GetCompanyCreditUsageReport,
 	"GET.company-credit-usage-detail": GetCompanyCreditUsageDetail,
 	"GET.company-credit-usage-users":  GetCompanyCreditUsageUsers,
+	"GET.company-credit-budget":       GetCompanyCreditBudget,
+	"POST.company-credit-budget":      PostCompanyCreditBudget,
 	"GET.request-errors-by-ids":       GetRequestErrorsByIDs,
 	"GET.system-memory-packages":      GetSystemMemoryPackages,
 	"GET.credit-usage":                GetCreditUsage,

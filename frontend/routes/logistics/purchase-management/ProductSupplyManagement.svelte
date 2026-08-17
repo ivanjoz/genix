@@ -206,6 +206,7 @@ import {
         css: 'leading-[1.1] whitespace-normal',
         splitString: 64,
         getValue: (productSupplyRecord) => productos.recordsMap.get(productSupplyRecord.ProductID)?.Name || `Producto-${productSupplyRecord.ProductID}`,
+        mobile: { order: 1, css: 'col-span-24' },
       },
       {
         id: 'stock-min-actual',
@@ -215,6 +216,7 @@ import {
         css: 'text-right',
         useCellRenderer: true,
         getValue: (productSupplyRecord) => productSupplyRecord.MinimunStock || 0,
+        mobile: { order: 2, css: 'col-span-12', labelTop: 'Stock Actual /Min' },
       },
       {
         id: 'sales-last-30-days',
@@ -222,6 +224,7 @@ import {
         width: `${ventasPixelMetrics.ventasColumnWidthPx}px`,
         useCellRenderer: true,
         headerCss: 'px-0',
+        mobile: { order: 4, css: 'col-span-24', labelTop: 'Movimientos Stock' },
       },
       {
         id: 'sales-per-day',
@@ -230,6 +233,7 @@ import {
         align: 'right',
         css: 'text-right',
         getValue: (productSupplyRecord) => productSupplyRecord.SalesPerDayEstimated || 0,
+        mobile: { order: 3, css: 'col-span-12', labelTop: 'Ventas / Día' },
       },
       {
         id: 'providers',
@@ -237,6 +241,7 @@ import {
         width: 'auto',
         css: 'whitespace-normal',
         useCellRenderer: true,
+        mobile: { order: 5, css: 'col-span-24', labelTop: 'Suppliers|Proveedores' },
         getValue: (productSupplyRecord) => {
           return (productSupplyRecord.ProviderSupply || []).map((providerSupplyRow) => {
             return providers.recordsMap.get(providerSupplyRow.ProviderID)?.Name || `Proveedor-${providerSupplyRow.ProviderID}`
