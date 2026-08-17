@@ -40,23 +40,26 @@ func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
 		updated = 0
 	}
 
-	records := []types.Company{}
-	var err error
-	if cloud.IsDataMirrorEnabled() {
-		err = cloud.Select(&records).Where("updated").GreaterEqual(updated).Exec()
-	} else {
-		// Companies live in Scylla only when the optional cloud mirror is disabled.
-		companyQuery := db.Query(&records)
-		companyQuery.Updated.GreaterEqual(int32(updated))
-		err = companyQuery.AllowFilter().Exec()
-	}
+	records, err := getCompaniesUpdatedSince(updated)
 	if err != nil {
 		return req.MakeErr("Error al obtener las empresas.", err)
 	}
 
 	core.Log("Empresas obtenidas:: ", len(records))
-
 	return core.MakeResponse(req, &records)
+}
+
+// getCompaniesUpdatedSince keeps global company reads consistent across administrative reports.
+func getCompaniesUpdatedSince(updated int64) ([]types.Company, error) {
+	records := []types.Company{}
+	if cloud.IsDataMirrorEnabled() {
+		return records, cloud.Select(&records).Where("updated").GreaterEqual(updated).Exec()
+	} else {
+		// Companies live in Scylla only when the optional cloud mirror is disabled.
+		companyQuery := db.Query(&records)
+		companyQuery.Updated.GreaterEqual(int32(updated))
+		return records, companyQuery.AllowFilter().Exec()
+	}
 }
 
 // getCompanyByID keeps cloud-mirrored and self-hosted company lookups consistent.

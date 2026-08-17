@@ -63,7 +63,7 @@ access_list:
     group: 8
     levels: 14
     frontend_routes: "system/companies"
-    backend_apis: "POST.company"
+    backend_apis: "POST.company,GET.company-credit-usage-report,GET.company-credit-usage-detail,GET.company-credit-usage-users"
   - id: 6
     name: "Server Panel y Observabilidad"
     group: 8

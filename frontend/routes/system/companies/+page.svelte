@@ -1,138 +1,76 @@
 <script lang="ts">
   import { useUI } from '@genix/ui';
+  import Input from '$components/form/Input.svelte';
+  import Modal from '$components/layers/Modal.svelte';
+  import Page from '$domain/Page.svelte';
+  import { Notify } from '$libs/helpers';
+  import { tr } from '$core/store.svelte';
+  import pkg from 'notiflix';
+  import CompanyCards from './CompanyCards.svelte';
+  import { EmpresasService, postEmpresa, type ICompany } from './empresas.svelte';
+
+  const { Loading } = pkg;
   const ui = useUI();
-import Input from '$components/form/Input.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import Page from '$domain/Page.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { Notify } from '$libs/helpers';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
-import { Core, tr } from '$core/store.svelte';
-import { formatTime } from '$libs/helpers';
-  import pkg from 'notiflix'
-const { Loading } = pkg
-  import { EmpresasService, postEmpresa, type ICompany } from "./empresas.svelte"
+  const empresasService = new EmpresasService();
 
-  const empresasService = new EmpresasService()
+  let empresaForm = $state({} as ICompany);
+  let companyRefreshVersion = $state(0);
 
-  let filterText = $state("")
-  let empresaForm = $state({} as ICompany)
+  const openCreateCompany = () => {
+    empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as ICompany;
+    ui.openModal(1);
+  };
+
+  const openEditCompany = (company: ICompany) => {
+    empresaForm = { ...company };
+    ui.openModal(1);
+  };
 
   async function saveEmpresa(isDelete?: boolean) {
-    const form = empresaForm
+    const form = empresaForm;
 
     if ((form.Name?.length || 0) < 3) {
-      Notify.failure(tr("Company name must be at least 3 characters.|El nombre de la empresa debe tener al menos 3 caracteres."))
-      return
+      Notify.failure(tr('Company name must be at least 3 characters.|El nombre de la empresa debe tener al menos 3 caracteres.'));
+      return;
     }
-
     if ((form.RUC?.length || 0) < 8) {
-      Notify.failure(tr("RUC must be at least 8 characters.|El RUC debe tener al menos 8 caracteres."))
-      return
+      Notify.failure(tr('RUC must be at least 8 characters.|El RUC debe tener al menos 8 caracteres.'));
+      return;
     }
+    if (isDelete) form.ss = 0;
 
-    if (isDelete) {
-      form.ss = 0
-    }
-
-    Loading.standard(tr("Saving Company...|Guardando Empresa..."))
+    Loading.standard(tr('Saving Company...|Guardando Empresa...'));
     try {
-      const result = await postEmpresa(form)
-
+      const result = await postEmpresa(form);
       if (isDelete) {
-        empresasService.removeEmpresa(form.id)
+        empresasService.removeEmpresa(form.id);
       } else {
-        if (!form.id) {
-          form.id = result.id
-        }
-        empresasService.updateEmpresa(form)
+        if (!form.id) form.id = Number(result.id || result.ID || 0);
+        empresasService.updateEmpresa(form);
       }
-
-      ui.closeModal(1)
-      Notify.success(tr("Company saved successfully|Empresa guardada correctamente"))
+      companyRefreshVersion += 1;
+      ui.closeModal(1);
+      Notify.success(tr('Company saved successfully|Empresa guardada correctamente'));
     } catch (error) {
-      Notify.failure(error as string)
+      Notify.failure(error as string);
+    } finally {
+      Loading.remove();
     }
-    Loading.remove()
   }
-
-  const columns: ITableColumn<ICompany>[] = [
-    {
-      header: "ID",
-      headerCss: "w-54",
-      css: "text-center ff-bold",
-      getValue: e => e.id
-    },
-    {
-      header: "Name|Nombre",
-      highlight: true,
-      css: "px-6 c-blue",
-      getValue: e => e.Name
-    },
-    {
-      header: "Legal Name|Razón Social",
-      getValue: e => e.LegalName
-    },
-    {
-      header: "RUC",
-      headerCss: "w-120",
-      css: "px-6",
-      getValue: e => e.RUC
-    },
-    {
-      header: "Status|Estado",
-      headerCss: "w-80",
-      css: "text-center",
-      getValue: e => e.ss
-    },
-    {
-      header: "Updated|Actualizado",
-      headerCss: "w-144",
-      css: "px-6 nowrap",
-      getValue: e => formatTime(e.upd, "Y-m-d h:n") as string
-    },
-    {
-      header: "...",
-      headerCss: "w-42",
-      css: "t-c",
-      id: "actions",
-      buttonEditHandler: (rec) => {
-        empresaForm = { ...rec }
-        ui.openModal(1)
-      }
-    }
-  ]
 </script>
 
 <Page title="Companies|Empresas">
-  <div class="h-full">
-    <div class="flex items-center justify-between mb-6" aria-label="Companies toolbar with filter and create button">
-      <FilterInput bind:value={filterText} css="mr-16 w-256" />
-      <div class="flex items-center">
-        <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new company." onClick={() => {
-          empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as ICompany
-          ui.openModal(1)
-        }} />
-      </div>
-    </div>
-
-    <VTable
-      columns={columns}
-      data={empresasService.empresas}
-      css="w-full"
-      maxHeight="calc(80vh - 13rem)"
-      filterText={filterText}
-      getFilterContent={e => [e.Name, e.LegalName, e.RUC, e.Email].filter(x => x).join(" ").toLowerCase()}
-    >
-    </VTable>
-  </div>
+  <CompanyCards
+    companies={empresasService.empresas}
+    refreshVersion={companyRefreshVersion}
+    onCreate={openCreateCompany}
+    onEdit={openEditCompany}
+  />
 
   <Modal
     id={1}
     size={6}
-    title={(empresaForm?.id > 0 ? tr("Update|Actualizar") : tr("Save|Guardar")) + " " + tr("Company|Empresa")}
+    title={(empresaForm?.id > 0 ? tr('Update|Actualizar') : tr('Save|Guardar')) + ' ' + tr('Company|Empresa')}
     isEdit={empresaForm?.id > 0}
     onSave={() => saveEmpresa()}
     onDelete={empresaForm?.id > 0 ? () => saveEmpresa(true) : undefined}

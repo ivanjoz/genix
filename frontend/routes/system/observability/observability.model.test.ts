@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import {
 	buildObservabilityCards,
 	buildObservabilityErrorPreviews,
+	mergeObservabilityRoutes,
 	observabilityCardMatches,
 	type IObservabilityFrame,
 	type IRequestErrorByID,
@@ -66,5 +67,36 @@ describe('observability model', () => {
 		expect(buildObservabilityErrorPreviews(card, errorRecords)[0].ID).toBe(8)
 		expect(observabilityCardMatches(card, 'timeout', errorRecords)).toBe(true)
 		expect(observabilityCardMatches(card, 'unrelated', errorRecords)).toBe(false)
+	})
+
+	it('preserves route names when a frame-only delta omits cold metadata', () => {
+		expect(mergeObservabilityRoutes(routes, undefined)).toBe(routes)
+		expect(mergeObservabilityRoutes(routes, [])).toBe(routes)
+	})
+
+	it('normalizes sparse cached metrics before computing chart values', () => {
+		const [card] = buildObservabilityCards([{
+			ID: 400, TimeFrame: 106_000_000, upd: 400, ss: 1,
+			Details: [{ RouteID: 34, CPU: 2, EstimatedRequests: 1 }],
+		}], routes)
+
+		expect(card.Route).toBe('GET.products')
+		expect(card.FailedRequests).toBe(0)
+		expect(card.ErrorOccurrences).toBe(0)
+		expect(card.EstimatedSuccessValues).toEqual([1])
+		expect(card.EstimatedRequests).toBe(1)
+		expect(card.IsMetered).toBe(true)
+	})
+
+	it('labels a log without a route ID instead of rendering undefined', () => {
+		const [card] = buildObservabilityCards([{
+			ID: 400, TimeFrame: 106_000_000, upd: 400, ss: 1,
+			Details: [{ FailedRequests: 1, ErrorOccurrences: 1 }],
+		}], routes)
+
+		expect(card.RouteID).toBe(0)
+		expect(card.Method).toBe('API')
+		expect(card.Path).toBe('UNKNOWN')
+		expect(card.FailedRequestValues).toEqual([1])
 	})
 })

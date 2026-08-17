@@ -69,14 +69,17 @@ const saasCompanyID = 1
 // propósito: "company-parametros" (es "Mi Empresa", la usa cada tenant), "p-company-names-by-ids"
 // (pública, previa al login) y "system-parameters" (particionada por company, la usa el POS).
 var saasOnlyRoutes = map[string]bool{
-	"GET.empresas":               true,
-	"POST.company":               true,
-	"GET.system-metrics-stream":  true,
-	"GET.server-metrics":         true,
-	"GET.observability":          true,
-	"GET.request-errors-by-ids":  true,
-	"GET.system-memory-packages": true,
-	"GET.cron-actions-scheduled": true,
+	"GET.empresas":                    true,
+	"POST.company":                    true,
+	"GET.system-metrics-stream":       true,
+	"GET.server-metrics":              true,
+	"GET.observability":               true,
+	"GET.company-credit-usage-report": true,
+	"GET.company-credit-usage-detail": true,
+	"GET.company-credit-usage-users":  true,
+	"GET.request-errors-by-ids":       true,
+	"GET.system-memory-packages":      true,
+	"GET.cron-actions-scheduled":      true,
 }
 
 // Rutas POST que exigen sesión pero ningún acceso del catálogo: el usuario opera sobre sí mismo,

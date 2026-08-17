@@ -116,6 +116,21 @@
     return new Date(unixSeconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // A point covers 40 seconds, so several consecutive points share a minute. The axis prints one
+  // label per half hour and never has to tell them apart; the tooltip names a single point and does.
+  const formatTooltipClock = (unixSeconds: string | number) => {
+    return new Date(Number(unixSeconds) * 1000)
+      .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  // The tooltip receives the series as ChartCanvas knows it — a name and a raw number — so the unit
+  // and decimals come back from the definition the series was built from.
+  const formatTooltipValue = (chartDefinition: ChartDefinition, seriesName: string, value: number) => {
+    const seriesDefinition = chartDefinition.series.find((candidate) => tr(candidate.name) === seriesName);
+    if (!seriesDefinition) return String(value);
+    return formatMetricValue(value, seriesDefinition.unit, seriesDefinition.decimals);
+  };
+
   // Each label names the start of the span it covers, except the last one: it is drawn hard against
   // the right edge of the plot, so printing its span's start would say the chart ends 45 points
   // before it actually does. The right edge is the window's end, and that is what it must read.
@@ -264,6 +279,9 @@
           dateLabelEvery={LABEL_EVERY_POINTS}
           sharedAxisMaxValue={chartDefinition.sharedAxisMaxValue}
           height={150}
+          showTooltip={true}
+          tooltipLabelFormatter={formatTooltipClock}
+          tooltipValueFormatter={(value, series) => formatTooltipValue(chartDefinition, series.name, value)}
         />
       </div>
     {/each}

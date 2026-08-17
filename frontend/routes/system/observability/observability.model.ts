@@ -2,12 +2,12 @@ export const OBSERVABILITY_WINDOW_HOURS = 4
 export const OBSERVABILITY_FRAME_COUNT = OBSERVABILITY_WINDOW_HOURS * 12
 
 export interface IObservabilityRouteDetail {
-	RouteID: number
-	CPU: number
-	Inference: number
-	EstimatedRequests: number
-	FailedRequests: number
-	ErrorOccurrences: number
+	RouteID?: number
+	CPU?: number
+	Inference?: number
+	EstimatedRequests?: number
+	FailedRequests?: number
+	ErrorOccurrences?: number
 	ErrorIDs?: number[]
 	ErrorIDCounts?: number[]
 }
@@ -23,6 +23,8 @@ export interface IObservabilityFrame {
 export interface IObservabilityRoute {
 	ID: number
 	Route: string
+	upd?: number
+	ss?: number
 }
 
 export interface IRequestErrorEntry {
@@ -73,6 +75,20 @@ const splitRoute = (route: string) => {
 	}
 }
 
+const nonNegativeMetric = (value: number | undefined): number => {
+	const numericValue = Number(value)
+	return Number.isFinite(numericValue) ? Math.max(numericValue, 0) : 0
+}
+
+/** Route metadata is cold-load data; an ordinary frame delta must not erase it. */
+export const mergeObservabilityRoutes = (
+	currentRoutes: IObservabilityRoute[],
+	incomingRoutes: IObservabilityRoute[] | undefined,
+): IObservabilityRoute[] => {
+	if (!incomingRoutes?.length) return currentRoutes
+	return [...incomingRoutes].sort((left, right) => left.ID - right.ID)
+}
+
 /** Transposes absolute frame records into dense route-first chart cards. */
 export const buildObservabilityCards = (
 	frames: IObservabilityFrame[],
@@ -85,35 +101,45 @@ export const buildObservabilityCards = (
 	for (let frameIndex = 0; frameIndex < sortedFrames.length; frameIndex++) {
 		const frame = sortedFrames[frameIndex]
 		for (const detail of frame.Details || []) {
-			let card = cardsByRouteID.get(detail.RouteID)
+			const parsedRouteID = Number(detail.RouteID)
+			const routeID = Number.isInteger(parsedRouteID) && parsedRouteID > 0 ? parsedRouteID : 0
+			const cpuCredits = nonNegativeMetric(detail.CPU)
+			const inferenceCredits = nonNegativeMetric(detail.Inference)
+			const estimatedRequests = nonNegativeMetric(detail.EstimatedRequests)
+			const failedRequests = nonNegativeMetric(detail.FailedRequests)
+			const errorOccurrences = nonNegativeMetric(detail.ErrorOccurrences)
+			let card = cardsByRouteID.get(routeID)
 			if (!card) {
-				const route = routeNameByID.get(detail.RouteID) || `ROUTE.${detail.RouteID}`
+				const route = routeNameByID.get(routeID) || (routeID > 0 ? `ROUTE.${routeID}` : 'API.UNKNOWN')
 				const { method, path } = splitRoute(route)
 				card = {
-					RouteID: detail.RouteID, Route: route, Method: method, Path: path,
+					RouteID: routeID, Route: route, Method: method, Path: path,
 					FrameIDs: sortedFrames.map(currentFrame => currentFrame.ID),
 					EstimatedSuccessValues: new Array(sortedFrames.length).fill(0),
 					FailedRequestValues: new Array(sortedFrames.length).fill(0),
 					CPU: 0, Inference: 0, EstimatedRequests: 0, FailedRequests: 0,
 					ErrorOccurrences: 0, ErrorCounts: new Map(), IsMetered: false,
 				}
-				cardsByRouteID.set(detail.RouteID, card)
+				cardsByRouteID.set(routeID, card)
 			}
 
-			const estimatedSuccesses = Math.max(detail.EstimatedRequests - detail.FailedRequests, 0)
+			const estimatedSuccesses = Math.max(estimatedRequests - failedRequests, 0)
 			card.EstimatedSuccessValues[frameIndex] = estimatedSuccesses
-			card.FailedRequestValues[frameIndex] = detail.FailedRequests
-			card.CPU += detail.CPU
-			card.Inference += detail.Inference
-			card.EstimatedRequests += detail.EstimatedRequests
-			card.FailedRequests += detail.FailedRequests
-			card.ErrorOccurrences += detail.ErrorOccurrences
-			card.IsMetered ||= detail.CPU > 0 && (card.Method === 'GET' || card.Method === 'POST')
+			card.FailedRequestValues[frameIndex] = failedRequests
+			card.CPU += cpuCredits
+			card.Inference += inferenceCredits
+			card.EstimatedRequests += estimatedRequests
+			card.FailedRequests += failedRequests
+			card.ErrorOccurrences += errorOccurrences
+			card.IsMetered ||= cpuCredits > 0 && (card.Method === 'GET' || card.Method === 'POST')
 
 			for (let errorIndex = 0; errorIndex < (detail.ErrorIDs?.length || 0); errorIndex++) {
 				const errorID = detail.ErrorIDs?.[errorIndex] || 0
 				if (errorID <= 0) continue
-				card.ErrorCounts.set(errorID, (card.ErrorCounts.get(errorID) || 0) + (detail.ErrorIDCounts?.[errorIndex] || 0))
+				card.ErrorCounts.set(
+					errorID,
+					(card.ErrorCounts.get(errorID) || 0) + nonNegativeMetric(detail.ErrorIDCounts?.[errorIndex]),
+				)
 			}
 		}
 	}

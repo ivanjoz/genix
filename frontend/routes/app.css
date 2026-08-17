@@ -429,8 +429,8 @@ input[type='number'] {
 	box-shadow: #5a5e6330 0 1px 6px, #738dff 0 0 1px 1px;
 }
 
-.w-page>div {
-	min-width: calc(var(--page-width) - 2px);
+.w-page > div {
+	min-width: calc(var(--page-width));
 }
 
 /* botones redondos */

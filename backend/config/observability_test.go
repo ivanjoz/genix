@@ -125,6 +125,18 @@ func TestObservabilityOverlapIDsForceAbsoluteReplacement(t *testing.T) {
 	}
 }
 
+func TestObservabilityRoutesHaveValidCacheIDs(t *testing.T) {
+	routes := makeObservabilityRoutes()
+	if len(routes) != len(core.APIRouteNames) {
+		t.Fatalf("route metadata count = %d, expected %d", len(routes), len(core.APIRouteNames))
+	}
+	for _, route := range routes {
+		if route.ID <= 0 || route.Route == "" || route.Updated != observabilityRoutesVersion || route.Status != 1 {
+			t.Fatalf("invalid cached route metadata: %#v", route)
+		}
+	}
+}
+
 func TestMakeRequestErrorsByIDPreservesHashCollisions(t *testing.T) {
 	requestedIDs := []int32{7, 9}
 	rows := []coreTypes.RequestError{

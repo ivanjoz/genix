@@ -12,14 +12,10 @@ visibility: saas
 <!-- DOC-ID: page-purpose -->
 ## Page purpose
 
-Observability (`Observabilidad`) gives SaaS administrators a platform-wide view of API activity
-across all companies. One card represents one backend route and compares estimated successful
-requests (`solicitudes exitosas estimadas`) with actual failed requests (`solicitudes fallidas`)
-in five-minute intervals over the latest four hours.
-
-Open **System → Observability (Sistema → Observabilidad)** at `/system/observability`. This page is
-visible only to the company that administers the SaaS platform; it is not a tenant-level company
-report.
+Observability (`Observabilidad`) monitors recent backend API activity and failures across the SaaS
+platform. Open **System → Observability (Sistema → Observabilidad)** at `/system/observability`.
+This page is visible only to the company that administers the SaaS platform; it is not a tenant-level
+request log or the historical company credit report.
 
 <!-- DOC-ID: concepts -->
 ## Business concepts (Conceptos del negocio)
@@ -39,10 +35,10 @@ report.
 <!-- DOC-ID: capability.monitor-routes -->
 ## Monitor API routes (Monitorear rutas de API)
 
-Each route card shows its method and path, route number, CPU and inference credits, estimated
-request total when available, actual failures, and error occurrences. The stacked chart uses green
-for estimated successes and red for actual failed requests. Missing activity in a five-minute slot
-is shown as zero, keeping every card aligned to the same four-hour time window.
+Each route card shows its method and path, route number, CPU and inference credits, estimated request
+total when available, actual failures, and error occurrences. The chart uses green for estimated
+successes and red for actual failed requests. Missing activity in a five-minute slot is shown as
+zero, keeping every card aligned to the same four-hour time window.
 
 Cards with more recent CPU usage appear first; failures break ties. Error-only routes remain visible
 even when no request estimate can be calculated. The page refreshes every 15 seconds while its
@@ -92,15 +88,17 @@ message is required.
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
+- **System → Companies (Empresas)** ranks companies by their latest 30 days of CPU or AI credits and
+  provides company/day/API detail. Use it for historical tenant comparison.
 - **System → Server Panel** monitors host and service CPU, memory, disk, and network behavior. Use it
-  for machine health; use **Observability** for API-route credit usage and failures.
-- The user/company credit indicator answers how much a specific tenant or user consumed. This page
-  instead aggregates the entire SaaS platform by backend route.
+  for machine health; use **Observability** for API-route credit activity and failures.
+- The header credit indicator answers how much the signed-in tenant or user consumed; this page
+  aggregates recent backend-route activity for the whole platform.
 
 ### FILES
 
 ```yaml
-# Exact source hashes captured after claim-by-claim review.
+# Exact source hashes are filled after claim-by-claim review.
 schema: 1
 hash_algorithm: sha256
 files:
@@ -110,19 +108,23 @@ files:
     supports: [page-purpose, related-pages]
   - path: frontend/routes/system/observability/+page.svelte
     role: page
-    hash: sha256:8426607cafa8210dc6c21822fd1eba4136169a5af22b398f5ef6f3e3a1caa5aa
-    supports: [page-purpose, capability.monitor-routes, capability.find-errors, troubleshooting]
+    hash: sha256:bc92b2f2c6085d29daee0007cf2c5a5669fe1e319c81115f4084087480fa40b4
+    supports: [page-purpose, capability.monitor-routes]
+  - path: frontend/routes/system/observability/BackendServices.svelte
+    role: user-interface
+    hash: sha256:f475a92907203da17c5abdc38969c2936d65e084040d3c663420c00470205349
+    supports: [capability.monitor-routes, capability.find-errors, troubleshooting]
   - path: frontend/routes/system/observability/observability.model.ts
     role: business-logic
-    hash: sha256:532e12337baa365d1d767ffd9020121371b11f9cea2ef29827c7b12b9cfb2655
+    hash: sha256:6d372e29220e3146cf9164e332d13e3578a3e7fccd04e9506ec232fc4bcc9760
     supports: [concepts, capability.monitor-routes, capability.find-errors, rules]
   - path: frontend/routes/system/observability/observability.svelte.ts
     role: frontend-service
-    hash: sha256:2fc93997783362a72f97218b9f9493cc0f7f14f61d7086a57ff97fba39b8008f
+    hash: sha256:9f63d3b6ec71291a0c401973a6ed9da0b5bf04253bf222f00c0d98adfc328c1e
     supports: [capability.monitor-routes, capability.find-errors, troubleshooting]
   - path: backend/config/observability.go
     role: backend-handler
-    hash: sha256:ae0604fd73a171be53f86a358266e7ce1aa69a534032f30cb5a208e1e7f824af
+    hash: sha256:3979ac4c811d4ce95b6ec47bc8cbf97b4c7fcbcc7a41f994147920cab1ec2dba
     supports: [concepts, capability.monitor-routes, rules, troubleshooting]
   - path: backend/config/request_errors.go
     role: backend-handler
@@ -138,7 +140,7 @@ files:
     supports: [concepts, capability.find-errors]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:41bb9df79cded4bc0b52b15e521f29c9251b06655c78d3fe46a881ead9bfa652
+    hash: sha256:10902f1366f66c8c79660f36bda5ce164cdbcafa520d6610d20622fe5021f394
     supports: [page-purpose]
   - path: server_utils/src/limiter/quota.rs
     role: business-logic

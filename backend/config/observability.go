@@ -21,6 +21,7 @@ const (
 	observabilityPlatformCompanyID = int32(0)
 	observabilityCompanyUserID     = int32(-1)
 	observabilityMaxEvictedFrames  = int32(600)
+	observabilityRoutesVersion     = int32(1)
 )
 
 type ObservabilityRouteDetail struct {
@@ -43,8 +44,10 @@ type ObservabilityFrame struct {
 }
 
 type ObservabilityRoute struct {
-	ID    int16 `json:"ID"`
-	Route string
+	ID      int16 `json:"ID"`
+	Route   string
+	Updated int32 `json:"upd"`
+	Status  int8  `json:"ss"`
 }
 
 type ObservabilityResponse struct {
@@ -109,7 +112,9 @@ func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 		Frames:            frames,
 		FramesIDsToRemove: makeObservabilityFrameIDsToRemove(watermark, firstWindowFrame, frames),
 	}
-	if watermark == 0 {
+	// Routes is an independent cold collection. A partial cache write may already have a Frames
+	// watermark while lacking route metadata, so never infer one collection's state from the other.
+	if req.GetQueryInt("Routes") < observabilityRoutesVersion {
 		response.Routes = makeObservabilityRoutes()
 	}
 
@@ -336,10 +341,13 @@ func makeObservabilityFrameIDsToRemove(
 }
 
 func makeObservabilityRoutes() []ObservabilityRoute {
-	routes := make([]ObservabilityRoute, 0, len(core.APIRouteNames)+1)
-	routes = append(routes, ObservabilityRoute{ID: 0, Route: "UNKNOWN"})
+	// Route zero means an unmatched API. It has no valid delta-cache identity, so cards use their
+	// ROUTE.0 fallback instead of sending an ID=0 metadata record that IndexedDB rejects.
+	routes := make([]ObservabilityRoute, 0, len(core.APIRouteNames))
 	for routeID, route := range core.APIRouteNames {
-		routes = append(routes, ObservabilityRoute{ID: routeID, Route: route})
+		routes = append(routes, ObservabilityRoute{
+			ID: routeID, Route: route, Updated: observabilityRoutesVersion, Status: 1,
+		})
 	}
 	slices.SortFunc(routes, func(left, right ObservabilityRoute) int {
 		return cmp.Compare(left.ID, right.ID)

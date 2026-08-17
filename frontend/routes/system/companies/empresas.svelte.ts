@@ -19,6 +19,7 @@ export interface ICompanyCulqui {
 
 export interface ICompany {
   id: number
+  ID?: number
   Email: string
   Name: string
   LegalName: string
@@ -44,11 +45,13 @@ export class EmpresasService extends GetHandler {
     // Following the original structure: response.Records contains the array
     const empresas = (response?.Records || response || []) as ICompany[]
     
-    this.empresas = empresas.map(empresa => {
-      empresa.SmtpConfig = empresa.SmtpConfig || {} as ICompanySmtp
-      empresa.CulquiConfig = empresa.CulquiConfig || {} as ICompanyCulqui
-      return empresa
-    })
+    this.empresas = empresas.map(empresa => ({
+      ...empresa,
+      // Normalize the Go `ID` field once so CRUD and card joins share the established lowercase key.
+      id: Number(empresa.id || empresa.ID || 0),
+      SmtpConfig: empresa.SmtpConfig || {} as ICompanySmtp,
+      CulquiConfig: empresa.CulquiConfig || {} as ICompanyCulqui,
+    }))
     
     this.empresasMap = new Map(this.empresas.map(x => [x.id, x]))
   }

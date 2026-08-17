@@ -3,6 +3,7 @@ import { GetHandler } from '$libs/ui-runtime.svelte'
 import {
 	buildObservabilityCards,
 	collectObservabilityErrorIDs,
+	mergeObservabilityRoutes,
 	OBSERVABILITY_WINDOW_HOURS,
 	type IObservabilityFrame,
 	type IObservabilityResponse,
@@ -12,7 +13,7 @@ import {
 
 export class ObservabilityService extends GetHandler {
 	route = `observability?hours=${OBSERVABILITY_WINDOW_HOURS}`
-	useCache = { min: 0.2, ver: 1 }
+	useCache = { min: 0.2, ver: 2 }
 	keyID = 'ID'
 
 	frames: IObservabilityFrame[] = $state([])
@@ -22,7 +23,7 @@ export class ObservabilityService extends GetHandler {
 
 	handler(response: IObservabilityResponse): void {
 		this.frames = [...(response?.Frames || [])].sort((left, right) => left.ID - right.ID)
-		this.routes = [...(response?.Routes || [])]
+		this.routes = mergeObservabilityRoutes(this.routes, response?.Routes)
 		void this.resolveErrorRecords()
 		console.debug('[ObservabilityService] merged:', {
 			frames: this.frames.length,
