@@ -11,6 +11,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Route documentation lives in exactly one file per route.
+const documentationFileName = "DOCUMENTATION.md"
+
 type menuDescription struct {
 	Route              string `json:"route"`
 	Description        string `json:"description"`
@@ -50,16 +53,18 @@ func GenerateMenuDescriptions() {
 }
 
 func collectMenuDescriptions(routesDir string) ([]menuDescription, error) {
+	// One DOCUMENTATION.md per directory and a route taken from that directory means a route can
+	// never be described twice, so no de-duplication is needed here.
 	var menuDescriptions []menuDescription
-	sourceByRoute := map[string]string{}
 
 	err := filepath.WalkDir(routesDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 
-		// Only route markdown files carrying a description are part of the menu description index.
-		if entry.IsDir() || filepath.Ext(path) != ".md" {
+		// DOCUMENTATION.md is the single source of route documentation, so no other markdown file
+		// can contribute a menu description.
+		if entry.IsDir() || entry.Name() != documentationFileName {
 			return nil
 		}
 
@@ -70,13 +75,6 @@ func collectMenuDescriptions(routesDir string) ([]menuDescription, error) {
 		if !found {
 			return nil
 		}
-
-		// AttachMenuDescriptions keys descriptions by route, so a second file for the same route
-		// would silently overwrite the first. Fail loudly instead of shipping an arbitrary winner.
-		if previousPath, duplicated := sourceByRoute[menuEntry.Route]; duplicated {
-			return fmt.Errorf("route %s is described twice: %s and %s", menuEntry.Route, previousPath, path)
-		}
-		sourceByRoute[menuEntry.Route] = path
 
 		menuDescriptions = append(menuDescriptions, menuEntry)
 		fmt.Printf("Added %s from %s\n", menuEntry.Route, path)
@@ -100,27 +98,16 @@ func parseMenuDescriptionFile(routesDir string, markdownPath string) (menuDescri
 		return menuDescription{}, false, fmt.Errorf("read %s: %w", markdownPath, err)
 	}
 
-	markdownContent := string(contentBytes)
-
-	// DOCUMENTATION.md carries its description in YAML frontmatter next to route and title. Routes
-	// without a DOCUMENTATION.md still use the legacy "## DESCRIPTION::" stub file.
-	spanishDescription, englishDescription, err := parseFrontmatterDescriptions(markdownContent)
+	// The description lives in the YAML frontmatter, next to route and title.
+	spanishDescription, englishDescription, err := parseFrontmatterDescriptions(string(contentBytes))
 	if err != nil {
 		return menuDescription{}, false, fmt.Errorf("%s: %w", markdownPath, err)
 	}
-	requiredFields := "description_en and description_es"
-	if spanishDescription == "" && englishDescription == "" {
-		descriptions := parseDescriptionBlocks(markdownContent)
-		spanishDescription = descriptions["ES"]
-		englishDescription = descriptions["EN"]
-		requiredFields = "DESCRIPTION::ES and DESCRIPTION::EN"
-	}
-
 	if spanishDescription == "" && englishDescription == "" {
 		return menuDescription{}, false, nil
 	}
 	if spanishDescription == "" || englishDescription == "" {
-		return menuDescription{}, false, fmt.Errorf("%s must include %s", markdownPath, requiredFields)
+		return menuDescription{}, false, fmt.Errorf("%s must include description_en and description_es", markdownPath)
 	}
 
 	route, err := routeFromMarkdownPath(routesDir, markdownPath)
@@ -135,9 +122,9 @@ func parseMenuDescriptionFile(routesDir string, markdownPath string) (menuDescri
 	}, true, nil
 }
 
-// parseFrontmatterDescriptions reads the optional description fields from a leading YAML
-// frontmatter block. Files without frontmatter, or whose frontmatter omits both fields, return
-// empty strings so the caller can fall back to the legacy description blocks.
+// parseFrontmatterDescriptions reads the description fields from a leading YAML frontmatter block.
+// A document that omits both fields returns empty strings and is skipped rather than failing, so a
+// route may be documented for retrieval before it earns a menu entry.
 func parseFrontmatterDescriptions(markdownContent string) (string, string, error) {
 	normalizedContent := strings.ReplaceAll(markdownContent, "\r\n", "\n")
 	if !strings.HasPrefix(normalizedContent, "---\n") {
@@ -161,54 +148,16 @@ func parseFrontmatterDescriptions(markdownContent string) (string, string, error
 		strings.TrimSpace(descriptionFields.DescriptionEnglish), nil
 }
 
-func parseDescriptionBlocks(markdownContent string) map[string]string {
-	descriptions := map[string]string{}
-	var activeLanguage string
-	var activeLines []string
-
-	flushActiveBlock := func() {
-		if activeLanguage == "" {
-			return
-		}
-
-		// Preserve paragraph content while trimming markdown spacing around the block.
-		descriptions[activeLanguage] = strings.TrimSpace(strings.Join(activeLines, "\n"))
-		activeLanguage = ""
-		activeLines = nil
-	}
-
-	for _, line := range strings.Split(markdownContent, "\n") {
-		trimmedLine := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmedLine, "## DESCRIPTION::") {
-			flushActiveBlock()
-			activeLanguage = strings.TrimPrefix(trimmedLine, "## DESCRIPTION::")
-			activeLines = nil
-			continue
-		}
-
-		if strings.HasPrefix(trimmedLine, "## ") {
-			flushActiveBlock()
-			continue
-		}
-
-		if activeLanguage != "" {
-			activeLines = append(activeLines, line)
-		}
-	}
-
-	flushActiveBlock()
-
-	return descriptions
-}
-
 func routeFromMarkdownPath(routesDir string, markdownPath string) (string, error) {
-	routePath := strings.TrimSuffix(markdownPath, ".md")
-	if isFile(filepath.Join(filepath.Dir(markdownPath), "+page.svelte")) {
-		// Route descriptions live next to +page.svelte, so the URL is the folder path.
-		routePath = filepath.Dir(markdownPath)
+	routeDir := filepath.Dir(markdownPath)
+
+	// A menu description only makes sense for a real page. Without this the generator would publish
+	// a route that no menu option can ever match.
+	if !isFile(filepath.Join(routeDir, "+page.svelte")) {
+		return "", fmt.Errorf("%s describes a menu route but has no +page.svelte beside it", markdownPath)
 	}
 
-	relativePath, err := filepath.Rel(routesDir, routePath)
+	relativePath, err := filepath.Rel(routesDir, routeDir)
 	if err != nil {
 		return "", fmt.Errorf("build route for %s: %w", markdownPath, err)
 	}

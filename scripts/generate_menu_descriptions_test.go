@@ -47,48 +47,65 @@ func TestFrontmatterDescriptionsStopAtTheFrontmatter(t *testing.T) {
 	}
 }
 
-// Los archivos sin frontmatter siguen usando los bloques "## DESCRIPTION::".
-func TestLegacyStubStillParses(t *testing.T) {
-	spanish, english, err := parseFrontmatterDescriptions("## DESCRIPTION::ES\nTexto.\n")
-	if err != nil {
-		t.Fatalf("stub sin frontmatter rechazado: %v", err)
-	}
-	if spanish != "" || english != "" {
-		t.Fatalf("un stub sin frontmatter no debe producir descripciones: %q / %q", spanish, english)
-	}
+// DOCUMENTATION.md es la única fuente: los stubs heredados ya no aportan descripciones.
+func TestLegacyStubIsIgnored(t *testing.T) {
+	routesDir := newTestRoute(t, map[string]string{
+		"+page.svelte": "<div></div>",
+		"usuarios.md":  "## DESCRIPTION::ES\nTexto.\n\n## DESCRIPTION::EN\nText.\n",
+	})
 
-	descriptions := parseDescriptionBlocks("## DESCRIPTION::ES\nTexto.\n\n## DESCRIPTION::EN\nText.\n")
-	if descriptions["ES"] != "Texto." || descriptions["EN"] != "Text." {
-		t.Fatalf("bloques heredados incorrectos: %#v", descriptions)
+	menuDescriptions, err := collectMenuDescriptions(routesDir)
+	if err != nil {
+		t.Fatalf("un stub heredado debe ignorarse, no fallar: %v", err)
+	}
+	if len(menuDescriptions) != 0 {
+		t.Fatalf("el stub heredado no debe producir entradas: %#v", menuDescriptions)
 	}
 }
 
-// Un stub olvidado tras migrar al frontmatter debe fallar en lugar de sobrescribir la descripción.
-func TestDuplicateRouteFails(t *testing.T) {
+// Solo se indexan rutas reales: un DOCUMENTATION.md sin +page.svelte publicaría una ruta inexistente.
+func TestDocumentationWithoutPageFails(t *testing.T) {
+	routesDir := newTestRoute(t, map[string]string{
+		documentationFileName: documentationFrontmatter,
+	})
+
+	_, err := collectMenuDescriptions(routesDir)
+	if err == nil {
+		t.Fatal("un documento sin +page.svelte debe fallar")
+	}
+	if !strings.Contains(err.Error(), "+page.svelte") {
+		t.Fatalf("el error debe nombrar el archivo faltante: %v", err)
+	}
+}
+
+// La ruta sale del directorio del documento, no del nombre del archivo.
+func TestRouteComesFromTheDirectory(t *testing.T) {
+	routesDir := newTestRoute(t, map[string]string{
+		"+page.svelte":        "<div></div>",
+		documentationFileName: documentationFrontmatter,
+	})
+
+	menuDescriptions, err := collectMenuDescriptions(routesDir)
+	if err != nil {
+		t.Fatalf("documento válido rechazado: %v", err)
+	}
+	if len(menuDescriptions) != 1 || menuDescriptions[0].Route != "/system/companies" {
+		t.Fatalf("ruta incorrecta: %#v", menuDescriptions)
+	}
+}
+
+// newTestRoute crea frontend/routes/system/companies con los archivos indicados.
+func newTestRoute(t *testing.T, files map[string]string) string {
+	t.Helper()
 	routesDir := filepath.Join(t.TempDir(), "routes")
 	routeDir := filepath.Join(routesDir, "system", "companies")
 	if err := os.MkdirAll(routeDir, 0755); err != nil {
 		t.Fatalf("crear ruta de prueba: %v", err)
 	}
-	writeFile := func(name, content string) {
+	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(routeDir, name), []byte(content), 0644); err != nil {
 			t.Fatalf("escribir %s: %v", name, err)
 		}
 	}
-	writeFile("+page.svelte", "<div></div>")
-	writeFile("DOCUMENTATION.md", documentationFrontmatter)
-
-	if _, err := collectMenuDescriptions(routesDir); err != nil {
-		t.Fatalf("una sola descripción por ruta debe pasar: %v", err)
-	}
-
-	writeFile("empresas.md", "## DESCRIPTION::ES\nTexto.\n\n## DESCRIPTION::EN\nText.\n")
-
-	_, err := collectMenuDescriptions(routesDir)
-	if err == nil {
-		t.Fatal("dos archivos para la misma ruta deben fallar")
-	}
-	if !strings.Contains(err.Error(), "/system/companies") {
-		t.Fatalf("el error debe nombrar la ruta duplicada: %v", err)
-	}
+	return routesDir
 }

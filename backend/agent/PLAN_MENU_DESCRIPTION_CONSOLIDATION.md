@@ -1,6 +1,23 @@
 # Plan — Consolidate route menu descriptions into `DOCUMENTATION.md`
 
-Status: **awaiting approval** · Created 2026-08-16
+Status: **executed, then extended** · Created 2026-08-16
+
+## Revision — `DOCUMENTATION.md` is the only source
+
+The first pass (commit `287d1005`) kept the legacy `## DESCRIPTION::` stub as a fallback for routes
+without a `DOCUMENTATION.md`. That fallback is now removed: the generator reads `DOCUMENTATION.md`
+and nothing else, and every stub file is deleted.
+
+This makes a `DOCUMENTATION.md` mandatory for any route that wants a menu description, so the 20
+stub-only routes each need a real, source-verified document written with the `document-user-routes`
+skill. Two consequences worth keeping in mind:
+
+- The route now always comes from the document's directory; the file-name fallback is gone, and a
+  `DOCUMENTATION.md` without a sibling `+page.svelte` is a hard error.
+- Duplicate-route detection was removed as dead code. One `DOCUMENTATION.md` per directory plus a
+  directory-derived route makes a collision structurally impossible.
+
+Steps 1–7 below describe the first pass and remain accurate for what it did.
 
 ## Goal
 
