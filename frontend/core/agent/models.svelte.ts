@@ -28,7 +28,7 @@ export const setSelectedAgentModelHash = (modelHash: string) => {
 
 export class AgentModelsService extends GetHandler {
 	route = 'agent-models';
-	useCache = { min: 10, ver: 3 };
+	useCache = { min: 0.1, ver: 3 };
 
 	records = $state<IAgentModelOption[]>([]);
 	modelHashMap = $state(new Map<string, IAgentModelOption>());

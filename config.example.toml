@@ -99,6 +99,14 @@ company_inference_10s  = 1000
 company_cpu_1h         = 40000
 company_inference_1h   = 10000
 
+# Porcentaje del techo diario de la company que puede gastar UN solo usuario. El techo diario no está
+# en este archivo —sale de company_credit_budget, que administra el panel SaaS—, así que esto es una
+# fracción y no un número de créditos: un número fijo aquí significaría algo distinto para cada
+# tenant. Ausente = 100, y por debajo de 100 una company de un solo usuario (que son la mayoría) no
+# puede alcanzar el resto de su asignación diaria. Las ventanas de 10s y 1h de abajo siguen frenando
+# la ráfaga de un usuario suelto.
+user_daily_share_pct   = 80
+
 # Per-user limits inside each company.
 user_cpu_10s           = 1000
 user_inference_10s     = 500

@@ -4,7 +4,6 @@
   import Button from '$components/buttons/Button.svelte';
   import FilterInput from '$components/form/FilterInput.svelte';
   import Layer from '$components/layers/Layer.svelte';
-  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
   import T from '$components/misc/T.svelte';
   import { formatN, formatTime } from '$libs/helpers';
   import { onDestroy, onMount, untrack } from 'svelte';
@@ -23,7 +22,6 @@
     buildCompanyUserSummaries,
     companyUserDisplayName,
     rankCompanyCreditUsage,
-    type CompanyCreditMetric,
     type ICompanyCreditSummaryRanked,
     type ICompanyUserLabel,
     type ICreditUsageDay,
@@ -44,13 +42,8 @@
   const ui = useUI();
   const COMPANY_USAGE_LAYER_ID = 1;
   const COMPANY_USER_LABELS_ROUTE = 'company-users-by-ids';
-  const metricOptions = [
-    { id: 'CPU', name: 'CPU Credits|Créditos CPU' },
-    { id: 'Inference', name: 'AI Credits|Créditos IA' },
-  ];
 
   const report = new CompanyCreditReportService(true);
-  let selectedMetric = $state<CompanyCreditMetric>('CPU');
   let filterText = $state('');
   let isLoading = $state(false);
   let reportError = $state('');
@@ -78,13 +71,22 @@
       + summaries.map((c) => `#${c.CompanyID}:cpu=${c.CPU},today=${c.TodayCPU},days=${c.Days.length}`).join(' '));
   });
   const rankedCompanies = $derived(rankCompanyCreditUsage(
-    summaries, selectedMetric, filterText, masterSearchTextByCompanyID, administratorTextByCompanyID,
+    // Sin selector de métrica el orden es por CPU, que es la que gasta toda empresa: la de IA
+    // sólo se mueve si el tenant usa inferencia, así que ordenar por ella dejaba la lista quieta.
+    summaries, 'CPU', filterText, masterSearchTextByCompanyID, administratorTextByCompanyID,
   ));
 
   const selectedUsage = $derived(selectedCompany ? usageServices.get(selectedCompany.CompanyID) : undefined);
   const selectedCompanyDays = $derived(buildCompanyDays(selectedUsage?.companyDays));
+  // El día que detalla la pestaña de APIs: el elegido en el calendario, y sin elegir, el último del
+  // rango —hoy—. Antes abría vacía pidiendo volver al calendario para señalar el día que casi
+  // siempre se quiere. La serie va rellena de ceros hasta hoy, así que el último elemento existe
+  // aunque la empresa no haya gastado nada.
+  const detailDay = $derived(selectedDay ?? (
+    selectedCompanyDays.length ? selectedCompanyDays : selectedCompany?.Days || []
+  ).at(-1) ?? null);
   const selectedDetail = $derived(
-    selectedDay ? buildCompanyDayDetail(selectedUsage?.companyDays, selectedDay.Day) : null,
+    detailDay ? buildCompanyDayDetail(selectedUsage?.companyDays, detailDay.Day) : null,
   );
   const selectedUsers = $derived(buildCompanyUserSummaries(selectedUsage?.userDays));
 
@@ -175,19 +177,7 @@
       placeholder="Company, administrator or RUC|Empresa, administrador o RUC"
       bind:value={filterText}
     />
-    <OptionsStrip
-      options={metricOptions}
-      selected={selectedMetric}
-      keyId="id"
-      keyName="name"
-      css="w-full md:w-auto"
-      useMobileGrid={true}
-      onSelect={(metric) => { selectedMetric = metric.id as CompanyCreditMetric; }}
-    />
     <div class="flex min-w-0 flex-wrap items-center gap-8 md:contents">
-      <span class="shrink-0 rounded-full border border-slate-300 bg-slate-50 px-9 py-4 text-slate-800">
-        <T text="Last 30 days|Últimos 30 días" />
-      </span>
       <div class="ml-auto flex shrink-0 items-center gap-8 md:contents">
         <Button
           name="Refresh|Actualizar"
@@ -221,7 +211,7 @@
     </div>
   {:else}
     <Layer type="content">
-      <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 2xl:grid-cols-3">
+      <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {#each rankedCompanies as company (company.CompanyID)}
           {@const masterCompany = companiesByID.get(company.CompanyID)}
           {@const adminLabel = userLabels.get(packCompanyUserLabelID(company.CompanyID, COMPANY_ADMINISTRATOR_USER_ID))}
@@ -240,7 +230,7 @@
   <Layer
     type="side"
     id={COMPANY_USAGE_LAYER_ID}
-    sideLayerSize={760} css="p-8"
+    sideLayerSize={760} css="p-12"
     title={selectedCompany ? `${selectedCompany.Company} (#${selectedCompany.CompanyID})` : 'Company credits|Créditos de empresa'}
     titleCss="text-[18px] ff-bold"
     options={[[1, 'By day|Por día'], [2, 'APIs for day|APIs del día'], [3, 'Users|Usuarios']]}
@@ -250,6 +240,7 @@
       selectedDay = null;
     }}
   >
+  	<div class="mt-4"></div>
     {#if selectedCompany && layerView === 1}
       <div class="flex flex-col gap-14 text-[14px]">
         <div class="grid grid-cols-2 gap-10">
@@ -265,19 +256,19 @@
 
         <CompanyCreditCalendar
           days={selectedCompanyDays.length ? selectedCompanyDays : selectedCompany.Days}
-          selectedDay={selectedDay?.Day}
+          selectedDay={detailDay?.Day}
           onSelect={(day) => { selectedDay = day; layerView = 2; }}
         />
       </div>
     {:else if selectedCompany && layerView === 2}
       <div class="flex flex-col gap-12 text-[14px]">
-        {#if !selectedDay || !selectedDetail}
+        {#if !detailDay || !selectedDetail}
           <div class="rounded-[8px] border border-slate-200 bg-slate-50 p-14 text-center text-slate-600">
-            <T text="Select a day in the By day tab.|Seleccione un día en la pestaña Por día." />
+            <T text="This company has no usage days yet.|Esta empresa aún no tiene días de uso." />
           </div>
         {:else}
           <div class="flex flex-wrap items-center gap-12 rounded-[8px] bg-slate-50 p-10">
-            <span class="ff-bold">{formatTime(selectedDay.Day, 'd-M-Y')}</span>
+            <span class="ff-bold">{formatTime(detailDay.Day, 'd-M-Y')}</span>
             <span>{formatN(selectedDetail.CPU)} CPU cr.</span>
             <span>{formatN(selectedDetail.Inference)} <T text="AI cr.|cr. IA" /></span>
           </div>

@@ -80,7 +80,9 @@ the reference material it ties together.
   whether the tenant can afford the request. Authorization is resolved first and a refusal charges
   nothing.
 - Atomically checks company/user burst and hourly limits plus company-configured daily/monthly budgets.
-- Derives each user's daily allowance as 50% of its company's CPU and inference allowances.
+- Derives each user's daily allowance as `rate_limit.user_daily_share_pct` of its company's CPU and
+  inference allowances. Below 100 a single-user company cannot reach the rest of what it bought,
+  which is the trade the key exists to let you make.
 - Requires an explicitly activated current month; a new one stays blocked until `SET_CURRENT`. The
   month is the **local business month** (UTC-5), the same boundary the daily frames use — not the UTC
   month.

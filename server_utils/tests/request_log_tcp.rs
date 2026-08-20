@@ -113,6 +113,9 @@ async fn start_server() -> TestServer {
             company: generous,
             user: generous,
             company_extra_daily_cpu: 0,
+            // Neither test goes near a daily gate; the whole company allowance keeps this
+            // fixture out of the way.
+            user_daily_share_pct: 100,
         },
         Arc::new(EmptyStore),
         600,

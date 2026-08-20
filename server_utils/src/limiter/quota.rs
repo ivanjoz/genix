@@ -59,6 +59,32 @@ pub struct LimitPolicy {
     /// `ChargeInferenceUsage`, which never carries the mark, so an inference dimension here could
     /// only ever be dead weight.
     pub company_extra_daily_cpu: u64,
+    /// Percentage of the company's daily entitlement one user may spend, from
+    /// `rate_limit.user_daily_share_pct`. At 100 a single user can spend the whole company
+    /// allowance and the burst gates above are the only per-user brake left.
+    ///
+    /// A share and not a fixed number of credits because the daily figure is per-tenant
+    /// (`company_credit_budget`, administered by the SaaS panel) while this is platform policy: a
+    /// fixed ceiling here would mean something different for every tenant. Anything below 100 makes
+    /// part of the purchased allowance unreachable for a single-user company, which is most of them.
+    pub user_daily_share_pct: u64,
+}
+
+impl LimitPolicy {
+    /// The daily entitlement one user is judged against: the company's, cut to the configured share.
+    fn user_daily(&self, company_daily: Credits) -> Credits {
+        Credits {
+            cpu: daily_share(company_daily.cpu, self.user_daily_share_pct),
+            inference: daily_share(company_daily.inference, self.user_daily_share_pct),
+        }
+    }
+}
+
+/// Multiplies before dividing, in u128: a purchased daily figure near the int64 column ceiling would
+/// overflow u64 halfway through, and rounding the division first would lose credits on small
+/// allowances.
+fn daily_share(company_daily: u64, percent: u64) -> u64 {
+    u64::try_from(u128::from(company_daily) * u128::from(percent) / 100).unwrap_or(u64::MAX)
 }
 
 #[derive(Debug)]
@@ -456,6 +482,16 @@ impl RateLimiter {
             }
         }
 
+        // The budget is loaded before the subjects, and not after the company one as it used to be,
+        // because seeding a subject needs its extra-pool counter: the usage rows a cold subject is
+        // recovered from include what the pool paid for.
+        self.ensure_budget(&mut shard, request.company_id, unix_seconds)
+            .await?;
+        let day_extra_used = shard
+            .budgets
+            .get(&request.company_id)
+            .expect("company budget initialized")
+            .day_extra_used;
         self.ensure_subject(
             &mut shard,
             request.company_id,
@@ -463,10 +499,9 @@ impl RateLimiter {
             self.policy.company,
             unix_seconds,
             now,
+            day_extra_used,
         )
         .await?;
-        self.ensure_budget(&mut shard, request.company_id, unix_seconds)
-            .await?;
         self.ensure_subject(
             &mut shard,
             request.company_id,
@@ -474,6 +509,7 @@ impl RateLimiter {
             self.policy.user,
             unix_seconds,
             now,
+            day_extra_used,
         )
         .await?;
 
@@ -532,10 +568,7 @@ impl RateLimiter {
             .budgets
             .get(&request.company_id)
             .expect("company budget initialized");
-        let user_daily = Credits {
-            cpu: budget.stored.daily.cpu / 2,
-            inference: budget.stored.daily.inference / 2,
-        };
+        let user_daily = self.policy.user_daily(budget.stored.daily);
         // The three entitlement gates, evaluated together instead of returning one by one, because
         // any of them refusing leads to the same second question: can the extra pool pay for this?
         let quota_violation = fixed_limit_violation(
@@ -558,9 +591,9 @@ impl RateLimiter {
 
         // The pool is consulted only after normal quota has refused, never before: a read that fits
         // in the entitlement the tenant paid for is charged against it, as it should be. There is no
-        // per-user share of the pool — it is a company allowance, and halving it the way the daily
-        // gate is halved would leave a single-user company, which is most of them, unable to reach
-        // it at all. The burst gates above already bound the rate.
+        // per-user share of the pool — it is a company allowance, and cutting it the way the daily
+        // gate is cut would leave a single-user company, which is most of them, unable to reach it
+        // at all. The burst gates above already bound the rate.
         let mut extra_cpu = 0;
         if let Some(violation) = quota_violation {
             let grant = request
@@ -880,6 +913,7 @@ impl RateLimiter {
         limits: ScopeLimits,
         unix_seconds: i64,
         now: Instant,
+        day_extra_cpu_from_pool: u64,
     ) -> Result<()> {
         if shard.subjects.contains_key(&(company_id, user_id)) {
             return Ok(());
@@ -924,7 +958,18 @@ impl RateLimiter {
             );
         }
 
-        let day_used = sum(&daily_routes)?;
+        let mut day_used = sum(&daily_routes)?;
+        // The daily row counts every request the platform served, including the ones the extra pool
+        // paid for, while the live counter excludes them on purpose — a pool-paid charge is granted
+        // outside the entitlement. Without this correction the company loses that much of its daily
+        // allowance on every restart. It is the same subtraction `ensure_budget` applies to the
+        // monthly figure, and saturating for the same reason: the two numbers come from different
+        // writes, and a lost flush must not turn into a hard error on the next charge.
+        //
+        // The pool is a company allowance with no per-user split, so a multi-user company credits
+        // the whole correction to each of its users. That errs toward the tenant, which is the right
+        // side to err on for credit the platform gave away for free.
+        day_used.cpu = day_used.cpu.saturating_sub(day_extra_cpu_from_pool);
         shard.subjects.insert(
             (company_id, user_id),
             SubjectState::recovered(
@@ -1365,6 +1410,10 @@ mod tests {
             company: limits,
             user: limits,
             company_extra_daily_cpu: 0,
+            // Half, stated here rather than inherited from config: the fixtures below are built on a
+            // user reaching its daily gate before the company reaches its own, and that only happens
+            // below 100.
+            user_daily_share_pct: 50,
         }
     }
 
@@ -1682,7 +1731,25 @@ mod tests {
         );
 
         let limiter = RateLimiter::new(1, test_policy_with_extra(1_000, 50), store.clone(), 600);
-        // Ten of the fifty-credit pool are left, so this fits and a second one does not.
+        // Forty credits of the hundred-credit day are still unspent — the row says a hundred, but
+        // forty of those were the pool's. This has to be served from the entitlement, so the pool
+        // must not move.
+        assert_eq!(
+            limiter
+                .admit_at(read_request(40, true), EXTRA_CLOCK, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        limiter.flush_dirty().await;
+        let (usage, _) = store.budget_usage(7).unwrap();
+        assert_eq!(
+            usage.day_extra_cpu, 40,
+            "the recovered day charged the pool for credit the company had bought"
+        );
+
+        // Only now is the day spent, and ten of the fifty-credit pool are left: this fits and a
+        // second one does not.
         assert_eq!(
             limiter
                 .admit_at(read_request(10, true), EXTRA_CLOCK, Instant::now())
@@ -1701,9 +1768,10 @@ mod tests {
 
         limiter.flush_dirty().await;
         let (usage, _) = store.budget_usage(7).unwrap();
-        // 100 summed from the rows minus the 40 the pool paid for. Without the correction the
-        // company would have lost 40 credits of what it bought to a free allowance.
-        assert_eq!(usage.month_used.cpu, 60);
+        // 100 summed from the rows minus the 40 the pool paid for, plus the 40 charged above. Without
+        // the correction the company would have lost 40 credits of what it bought to a free
+        // allowance, in the month and in the day alike.
+        assert_eq!(usage.month_used.cpu, 100);
         assert_eq!(usage.day_extra_cpu, 50);
     }
 
@@ -2022,6 +2090,41 @@ mod tests {
                 .unwrap(),
             Decision::Allowed
         );
+    }
+
+    /// The configured share, and not the historical hard-coded half: at 80% of a ten-credit day a
+    /// user reaches eight, so a fifth charge of two is refused by `Scope::User` while the company
+    /// still has two credits of its own left.
+    #[tokio::test]
+    async fn the_user_daily_gate_follows_the_configured_share() {
+        let store = Arc::new(MemoryStore::default());
+        let unix_seconds = 1_800_000_000;
+        store
+            .budgets
+            .lock()
+            .unwrap()
+            .insert(7, stored_budget(7, unix_seconds, 10, 100));
+        let policy = LimitPolicy {
+            user_daily_share_pct: 80,
+            ..test_policy(1_000)
+        };
+        let limiter = RateLimiter::new(1, policy, store, 600);
+        for _ in 0..4 {
+            assert_eq!(
+                limiter
+                    .admit_at(read_request(2, false), unix_seconds, Instant::now())
+                    .await
+                    .unwrap(),
+                Decision::Allowed
+            );
+        }
+        let violation = limiter
+            .admit_at(read_request(2, false), unix_seconds, Instant::now())
+            .await
+            .unwrap()
+            .violation();
+        assert_eq!(violation.scope, Scope::User);
+        assert_eq!(violation.window, Window::Day);
     }
 
     #[tokio::test]

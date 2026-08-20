@@ -6,6 +6,16 @@
 
   let { budget }: { budget?: ICompanyCreditBudgetMeter } = $props();
 
+  const hasBudget = $derived(!!budget?.IsCurrentMonth);
+  // El pool diario de lecturas viaja pegado al medidor diario y no como una barra propia: es una
+  // sola cifra de CPU, así que sólo se puede leer como "y además le quedan tantas lecturas". Sin
+  // techo configurado no hay pool que anunciar, que es lo que pasa en Lambda.
+  const extraTotal = $derived(budget?.ExtraCPU || 0);
+  const extraRemaining = $derived(budget?.ExtraRemainingCPU || 0);
+  // Que se esté gastando es la señal, no que exista: significa que la cuota ya rechazó algo y la
+  // company está sirviendo sólo lecturas.
+  const inExtraMode = $derived((budget?.DayExtraCPUUsed || 0) > 0);
+
   // The two windows a charge is refused on, each with the CPU and AI credits still available. A
   // company the report has no budget row for is read as unbudgeted, which is what the limiter does
   // with it too: no budget for the month means every charge is rejected.
@@ -15,24 +25,17 @@
       label: 'Daily|Diario',
       cpu: { remaining: budget?.DailyRemainingCPU || 0, total: budget?.DailyCPU || 0 },
       inference: { remaining: budget?.DailyRemainingInference || 0, total: budget?.DailyInference || 0 },
+      // null y no cero: un pool agotado sigue siendo un dato que hay que mostrar.
+      extra: extraTotal > 0 ? extraRemaining : null,
     },
     {
       id: 'credits',
       label: 'Credits|Créditos',
       cpu: { remaining: budget?.RemainingCPU || 0, total: budget?.MonthlyCPUCeiling || 0 },
       inference: { remaining: budget?.RemainingInference || 0, total: budget?.MonthlyInferenceCeiling || 0 },
+      extra: null as number | null,
     },
   ]);
-  const hasBudget = $derived(!!budget?.IsCurrentMonth);
-  // El pool diario de lecturas. Se lee aparte de los dos medidores de arriba porque no es una
-  // pareja CPU/IA: es una sola cifra de CPU, y meterla en esa rejilla insinuaría una mitad de IA
-  // que no existe. Sin techo configurado no se dibuja nada, que es lo que pasa en Lambda.
-  const extraTotal = $derived(budget?.ExtraCPU || 0);
-  const extraUsed = $derived(budget?.DayExtraCPUUsed || 0);
-  const extraRemaining = $derived(budget?.ExtraRemainingCPU || 0);
-  // Que se esté gastando es la señal, no que exista: significa que la cuota ya rechazó algo y la
-  // company está sirviendo sólo lecturas.
-  const inExtraMode = $derived(extraUsed > 0);
   const cellTitle = (metric: string, remaining: number, total: number) => (
     hasBudget
       ? `${metric}: ${formatN(remaining) || '0'} ${tr('of|de')} ${formatN(total) || '0'} ${tr('credits left|créditos restantes')}`
@@ -47,6 +50,16 @@
         <T text={meter.label} />
         {#if !hasBudget}
           <span class="icon-[fa--exclamation-triangle] text-amber-500"></span>
+        {/if}
+        {#if meter.extra !== null}
+          <!-- Ámbar cuando el pool ya está pagando: es el único aviso de que la cuota rechazó algo
+               y la company está sirviendo sólo lecturas. -->
+          <span
+            class="ff-mono"
+            class:text-amber-700={inExtraMode}
+            class:text-slate-500={!inExtraMode}
+            title={`${tr('Extra read-only credits|Créditos extra de sólo lectura')}: ${formatN(meter.extra) || '0'} ${tr('of|de')} ${formatN(extraTotal) || '0'}`}
+          >(+{formatN(meter.extra) || '0'})</span>
         {/if}
       </div>
       <div
@@ -75,31 +88,3 @@
     </div>
   {/each}
 </div>
-{#if extraTotal > 0}
-  <div
-    class="mt-6"
-    title={`${tr('Extra read-only credits|Créditos extra de sólo lectura')}: ${formatN(extraRemaining) || '0'} ${tr('of|de')} ${formatN(extraTotal) || '0'}`}
-  >
-    <div class="flex items-center gap-4 text-[12px] text-slate-600">
-      <T text="Extra (reads)|Extra (lecturas)" />
-      {#if inExtraMode}
-        <span class="icon-[fa--exclamation-triangle] text-amber-500"></span>
-        <span class="text-amber-700"><T text="quota exhausted|cuota agotada" /></span>
-      {/if}
-    </div>
-    <div
-      class="relative mt-2 h-9 overflow-hidden rounded-[4px] border leading-[18px]"
-      class:border-slate-300={!inExtraMode}
-      class:border-amber-300={inExtraMode}
-      class:bg-amber-50={inExtraMode}
-    >
-      {#if extraRemaining > 0}
-        <div
-          class={`absolute inset-y-0 left-0 ${inExtraMode ? 'bg-amber-200' : 'bg-emerald-200'}`}
-          style={`width:${creditMeterFillPercent(extraRemaining, extraTotal)}%`}
-        ></div>
-      {/if}
-      <span class="absolute inset-y-0 right-4 ff-mono">{numberToK(extraRemaining) || '0'}</span>
-    </div>
-  </div>
-{/if}

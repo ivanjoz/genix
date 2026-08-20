@@ -35,13 +35,6 @@
 >
   <div class="min-w-0 pr-96 md:pr-42">
     <div class="truncate text-[18px] ff-bold text-slate-900">{company.Company}</div>
-    <div class="text-blue-700">
-      {#if administratorName}
-        <div class="truncate ff-bold">{administratorName}</div>
-      {:else}
-        <div class="text-slate-500"><T text="Administrator unavailable|Administrador no disponible" /></div>
-      {/if}
-    </div>
   </div>
 
   <div class="absolute right-12 top-12 z-10 flex h-32 items-center justify-end gap-8">
@@ -62,10 +55,19 @@
   </div>
 
   <!-- No inner container: the chart spans the whole card width, headed by the 30-day totals. -->
-  <div class="mt-8">
-    <div class="mb-4 flex min-w-0 items-center justify-end gap-8 ff-mono">
-      <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-emerald-500"></i>{numberToK(company.CPU)} CPU</span>
-      <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-500"></i>{numberToK(company.Inference)} <T text="AI|IA" /></span>
+  <div class="">
+    <!-- El administrador comparte línea con los totales: la fila que ocupaba antes sólo tenía el
+         nombre y el resto vacío, y la leyenda ya vivía pegada a la derecha de esta. -->
+    <div class="mb-12 flex min-w-0 items-center justify-between gap-8">
+      {#if administratorName}
+        <span class="truncate ff-bold text-blue-700">{administratorName}</span>
+      {:else}
+        <span class="truncate text-slate-500"><T text="Administrator unavailable|Administrador no disponible" /></span>
+      {/if}
+      <div class="flex shrink-0 items-center gap-8 ff-mono -mb-8">
+        <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-emerald-500"></i>{numberToK(company.CPU)} CPU</span>
+        <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-500"></i>{numberToK(company.Inference)} <T text="AI|IA" /></span>
+      </div>
     </div>
     <ChartCanvas
       id={`company-credit-card-${company.CompanyID}`}

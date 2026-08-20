@@ -226,6 +226,15 @@ impl AppConfig {
                 "rate_limit.company_extra_credits_24h",
             )?
             .unwrap_or(0),
+            // Absent means the whole company allowance: a missing share is not a share of nothing,
+            // and defaulting to anything below 100 would silently make part of every tenant's
+            // purchased daily credit unreachable.
+            user_daily_share_pct: optional_u64(
+                &config,
+                "RATE_LIMIT_USER_DAILY_SHARE_PCT",
+                "rate_limit.user_daily_share_pct",
+            )?
+            .unwrap_or(100),
         };
         validate_policy(policy)?;
 
@@ -492,6 +501,11 @@ fn validate_policy(policy: LimitPolicy) -> Result<()> {
     if policy.company_extra_daily_cpu > i64::MAX as u64 {
         bail!("rate_limit.company_extra_credits_24h must fit a signed 64-bit database column");
     }
+    // Zero would refuse every charge for every user while the company still had credit, and past 100
+    // the per-user gate would sit above the company's own and could never be the one to refuse.
+    if policy.user_daily_share_pct == 0 || policy.user_daily_share_pct > 100 {
+        bail!("rate_limit.user_daily_share_pct must be between 1 and 100");
+    }
     Ok(())
 }
 
@@ -680,6 +694,7 @@ mod tests {
                 inference: positive,
             },
             company_extra_daily_cpu: 0,
+            user_daily_share_pct: 100,
         };
 
         assert!(validate_policy(policy).is_err());
@@ -701,6 +716,7 @@ mod tests {
             company: scope,
             user: scope,
             company_extra_daily_cpu: i64::MAX as u64 + 1,
+            user_daily_share_pct: 100,
         };
         assert!(validate_policy(policy).is_err());
 
@@ -709,5 +725,35 @@ mod tests {
             ..policy
         };
         assert!(validate_policy(usable).is_ok());
+    }
+
+    #[test]
+    fn the_user_daily_share_must_stay_inside_one_to_a_hundred() {
+        let positive = CreditLimits {
+            ten_seconds: 1,
+            hour: 1,
+        };
+        let scope = ScopeLimits {
+            cpu: positive,
+            inference: positive,
+        };
+        let policy = LimitPolicy {
+            company: scope,
+            user: scope,
+            company_extra_daily_cpu: 0,
+            user_daily_share_pct: 80,
+        };
+        assert!(validate_policy(policy).is_ok());
+        // Zero refuses every user of a company that still has credit; past 100 the gate can never be
+        // the one that refuses.
+        for invalid_share in [0, 101] {
+            assert!(
+                validate_policy(LimitPolicy {
+                    user_daily_share_pct: invalid_share,
+                    ..policy
+                })
+                .is_err()
+            );
+        }
     }
 }

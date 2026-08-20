@@ -238,7 +238,7 @@ state — so a request that both authorizes and charges takes **one** lock.
                                   │
   ┌─ 3. ENTITLEMENT GATES ───────────────────────────────────────────────┐
   │  company daily (company_credit_budget.daily_cpu)                     │
-  │  user daily  (= company daily / 2)                                   │
+  │  user daily  (= company daily × user_daily_share_pct)                │
   │  monthly ceiling (inactive month = everything refused)               │
   └──────────────────────────────────────────────────────────────────────┘
                     │ all pass                     │ any refuses
@@ -299,13 +299,13 @@ unlimited burst. What the pool bypasses is the *entitlement*, not the rate.
 once one of the three entitlement gates refuses is the pool asked. If it cannot cover the charge the
 original violation is returned unchanged, so the client sees exactly the 429 it would have seen.
 
-**No per-user share.** The pool belongs to the company and one user can drain it. Halving it the way
-the daily user gate is halved would leave a single-user company — most of them — unable to reach it
-at all.
+**No per-user share.** The pool belongs to the company and one user can drain it. Cutting it the way
+the daily user gate is cut by `user_daily_share_pct` would leave a single-user company — most of them
+— unable to reach it at all.
 
-> That is not a hypothetical. With `daily_cpu = 4`, the **user** gate is 2, so a single user is
-> refused at half the company's allowance and never reaches a company-level pool. Three of the
-> tests in `quota.rs` are built on exactly that fixture.
+> That is not a hypothetical. With `daily_cpu = 4` and a 50% share, the **user** gate is 2, so a
+> single user is refused at half the company's allowance and never reaches a company-level pool.
+> Three of the tests in `quota.rs` are built on exactly that fixture.
 
 **Counted apart.** Extra spending never touches `day_used` or `month_used`, so `daily - day_used`
 keeps meaning what a *write* is judged against, and the monthly ceiling that was paid for never
@@ -325,6 +325,12 @@ correction term, and the reason it has to exist is subtle:
                                        └─ without this, every restart quietly
                                           shrinks the entitlement
 ```
+
+`day_extra_cpu_used` is the same correction over the daily window, and it is subtracted in the same
+place a cold subject is seeded (`ensure_subject`, which is why the budget row is loaded *before* the
+two subjects). Omitting it had the same effect one window down: a tenant that had used the pool lost
+that much of its daily allowance on the next restart, and — because the per-user gate is a share of
+that same daily figure — its users were refused while the company card still showed credit left.
 
 Nothing about the reply changes: a request served from the pool is answered exactly like one served
 from quota, and the client cannot tell. The daemon logs it at `info` — that line is the only outward
