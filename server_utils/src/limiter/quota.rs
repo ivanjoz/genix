@@ -51,6 +51,14 @@ pub struct ScopeLimits {
 pub struct LimitPolicy {
     pub company: ScopeLimits,
     pub user: ScopeLimits,
+    /// CPU credits a company may spend per local business day *after* its normal quota has refused,
+    /// and only on a frame the router marked as a read. Zero disables the pool entirely, which is
+    /// the default: a guessed free allowance is credit given away.
+    ///
+    /// CPU only, and one number rather than a `Credits`: inference is charged by
+    /// `ChargeInferenceUsage`, which never carries the mark, so an inference dimension here could
+    /// only ever be dead weight.
+    pub company_extra_daily_cpu: u64,
 }
 
 #[derive(Debug)]
@@ -108,6 +116,19 @@ struct CompanyBudgetState {
     stored: StoredBudget,
     usage_month_start_day: i16,
     month_used: Credits,
+    // The extra daily pool's two counters, kept here rather than on the subject because the pool is
+    // an entitlement of the company and this is where entitlement lives.
+    //
+    // `day_extra_used` IS the pool: it is what every eligible frame is measured against. The local
+    // business day it belongs to is tracked alongside it, for the same reason SubjectState tracks
+    // its own — on the raw UTC division the pool would reset at 19:00 local time.
+    //
+    // `month_extra_used` is not a second pool; there is no monthly extra ceiling. It exists so
+    // `ensure_budget` can rebuild `month_used` correctly after a restart: that counter is recovered
+    // by summing the usage rows, and those rows include everything the pool paid for.
+    extra_day_period: i64,
+    day_extra_used: u64,
+    month_extra_used: u64,
     // Mutation versions, exactly as UsageRecord carries them: the flush publishes the counters this
     // company enforces on, and a write that completes after a concurrent charge must not mark the
     // newer figure as durable.
@@ -120,7 +141,46 @@ impl CompanyBudgetState {
         if self.usage_month_start_day != current_month_start_day {
             self.usage_month_start_day = current_month_start_day;
             self.month_used = Credits::default();
+            self.month_extra_used = 0;
         }
+    }
+
+    /// Rolls the extra pool over. Driven by the same local business day the company's SubjectState
+    /// is refreshed with in the same pass, so the two counters the flushed row carries can never be
+    /// labelled with different days.
+    fn refresh_day(&mut self, current_day_period: i64) {
+        if self.extra_day_period != current_day_period {
+            self.extra_day_period = current_day_period;
+            self.day_extra_used = 0;
+        }
+    }
+
+    /// What this frame may still take from the pool, or `None` when the pool cannot pay for it.
+    ///
+    /// Inference is refused outright rather than partially relaxed: the pool is a single CPU figure,
+    /// so there is nothing here that could authorize an inference credit.
+    fn extra_grant(&self, requested: Credits, pool: u64) -> Option<u64> {
+        if pool == 0 || requested.inference > 0 || requested.cpu == 0 {
+            return None;
+        }
+        let total = self.day_extra_used.checked_add(requested.cpu)?;
+        (total <= pool).then_some(requested.cpu)
+    }
+
+    fn add_extra_used(&mut self, cpu: u64) -> Result<()> {
+        self.day_extra_used = self
+            .day_extra_used
+            .checked_add(cpu)
+            .ok_or_else(|| anyhow!("daily extra usage overflowed uint64"))?;
+        self.month_extra_used = self
+            .month_extra_used
+            .checked_add(cpu)
+            .ok_or_else(|| anyhow!("monthly extra usage overflowed uint64"))?;
+        self.version = self
+            .version
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("budget usage mutation version overflowed uint64"))?;
+        Ok(())
     }
 
     fn add_month_used(&mut self, credits: Credits) -> Result<()> {
@@ -156,6 +216,8 @@ impl CompanyBudgetState {
             day_used,
             month_start_day: self.usage_month_start_day,
             month_used: self.month_used,
+            day_extra_cpu: self.day_extra_used,
+            month_extra_cpu: self.month_extra_used,
             updated: sunix_time(unix_seconds)?,
         };
         Ok(Some((snapshot, self.version)))
@@ -263,17 +325,26 @@ impl SubjectState {
         })
     }
 
-    fn charge(&mut self, requested: Credits) -> Result<()> {
+    /// `count_daily` is false only for a charge paid out of the extra daily pool.
+    ///
+    /// The buckets and the hourly counter are charged either way, and that is not an oversight: they
+    /// are rate limits protecting the machine, so a tenant spending its extra allowance must still
+    /// queue behind them. Skipping them would give a company in read-only mode unlimited burst.
+    /// `day_used` is different — it is the meter the entitlement gates judge, and extra spending is
+    /// counted apart from it precisely so `daily - day_used` keeps meaning what it means for a write.
+    fn charge(&mut self, requested: Credits, count_daily: bool) -> Result<()> {
         self.cpu_bucket.charge(requested.cpu);
         self.inference_bucket.charge(requested.inference);
         self.hour_used = self
             .hour_used
             .checked_add(requested)
             .ok_or_else(|| anyhow!("hour usage overflowed uint64"))?;
-        self.day_used = self
-            .day_used
-            .checked_add(requested)
-            .ok_or_else(|| anyhow!("daily usage overflowed uint64"))?;
+        if count_daily {
+            self.day_used = self
+                .day_used
+                .checked_add(requested)
+                .ok_or_else(|| anyhow!("daily usage overflowed uint64"))?;
+        }
         Ok(())
     }
 }
@@ -420,11 +491,12 @@ impl RateLimiter {
             .expect("user state initialized")
             .refresh_periods(self.policy.user, unix_seconds, current_day_period, now);
         let current_month_start_day = time_frame::month_start_day(unix_seconds)?;
-        shard
+        let budget = shard
             .budgets
             .get_mut(&request.company_id)
-            .expect("company budget initialized")
-            .refresh_month(current_month_start_day);
+            .expect("company budget initialized");
+        budget.refresh_month(current_month_start_day);
+        budget.refresh_day(current_day_period);
 
         // Shortest window and company scope win, matching the documented response priority.
         for window in [Window::TenSeconds, Window::Hour] {
@@ -460,31 +532,47 @@ impl RateLimiter {
             .budgets
             .get(&request.company_id)
             .expect("company budget initialized");
-        if let Some(violation) = fixed_limit_violation(
+        let user_daily = Credits {
+            cpu: budget.stored.daily.cpu / 2,
+            inference: budget.stored.daily.inference / 2,
+        };
+        // The three entitlement gates, evaluated together instead of returning one by one, because
+        // any of them refusing leads to the same second question: can the extra pool pay for this?
+        let quota_violation = fixed_limit_violation(
             Scope::Company,
             Window::Day,
             company.day_used,
             request.credits,
             budget.stored.daily,
-        ) {
-            return Ok(Decision::CreditViolation(violation));
+        )
+        .or_else(|| {
+            fixed_limit_violation(
+                Scope::User,
+                Window::Day,
+                user.day_used,
+                request.credits,
+                user_daily,
+            )
+        })
+        .or_else(|| budget.monthly_violation(request.credits));
+
+        // The pool is consulted only after normal quota has refused, never before: a read that fits
+        // in the entitlement the tenant paid for is charged against it, as it should be. There is no
+        // per-user share of the pool — it is a company allowance, and halving it the way the daily
+        // gate is halved would leave a single-user company, which is most of them, unable to reach
+        // it at all. The burst gates above already bound the rate.
+        let mut extra_cpu = 0;
+        if let Some(violation) = quota_violation {
+            let grant = request
+                .extra_credits_allowed
+                .then(|| budget.extra_grant(request.credits, self.policy.company_extra_daily_cpu))
+                .flatten();
+            let Some(grant) = grant else {
+                return Ok(Decision::CreditViolation(violation));
+            };
+            extra_cpu = grant;
         }
-        let user_daily = Credits {
-            cpu: budget.stored.daily.cpu / 2,
-            inference: budget.stored.daily.inference / 2,
-        };
-        if let Some(violation) = fixed_limit_violation(
-            Scope::User,
-            Window::Day,
-            user.day_used,
-            request.credits,
-            user_daily,
-        ) {
-            return Ok(Decision::CreditViolation(violation));
-        }
-        if let Some(violation) = budget.monthly_violation(request.credits) {
-            return Ok(Decision::CreditViolation(violation));
-        }
+        let paid_from_extra = extra_cpu > 0;
 
         // Load the reserved absolute row before mutating accepted usage. A storage failure then
         // fails admission cleanly instead of charging company/user state without the platform row.
@@ -496,17 +584,37 @@ impl RateLimiter {
             .subjects
             .get_mut(&company_key)
             .expect("company state initialized")
-            .charge(request.credits)?;
+            .charge(request.credits, !paid_from_extra)?;
         shard
             .subjects
             .get_mut(&user_key)
             .expect("user state initialized")
-            .charge(request.credits)?;
-        shard
+            .charge(request.credits, !paid_from_extra)?;
+        let budget = shard
             .budgets
             .get_mut(&request.company_id)
-            .expect("company budget initialized")
-            .add_month_used(request.credits)?;
+            .expect("company budget initialized");
+        if paid_from_extra {
+            // Deliberately not `add_month_used`: this credit was granted outside the entitlement, so
+            // charging it against the monthly ceiling would spend money the tenant did not agree to.
+            budget.add_extra_used(extra_cpu)?;
+            // Logged at info because it is the only outward sign that a tenant is in read-only mode:
+            // the reply frame does not change shape and the client cannot tell.
+            info!(
+                company_id = request.company_id,
+                user_id = request.user_id,
+                route_id = request.route_id,
+                cpu = extra_cpu,
+                day_extra_used = budget.day_extra_used,
+                pool = self.policy.company_extra_daily_cpu,
+                "request served from the extra daily pool"
+            );
+        } else {
+            budget.add_month_used(request.credits)?;
+        }
+        // The usage rows are written either way. They are the record of what the platform actually
+        // served — the per-route cards and the platform aggregate both read them — and a request
+        // paid for out of the pool was served like any other.
         increment_usage(&mut shard.usage, request, unix_seconds)?;
         increment_platform_usage(&mut platform_usage, request, unix_seconds)?;
         Ok(Decision::Allowed)
@@ -615,15 +723,26 @@ impl RateLimiter {
             return Ok(());
         }
         let current_month_start_day = time_frame::month_start_day(unix_seconds)?;
-        let stored = self
+        let current_day_period = time_frame::local_unix_day(unix_seconds)?;
+        let row = self
             .store
             .load_budget(company_id)
             .await
             .context("failed to initialize company credit budget")?
-            .unwrap_or(StoredBudget {
-                company_id,
-                ..StoredBudget::default()
-            });
+            .unwrap_or_default();
+        let stored = StoredBudget {
+            company_id,
+            ..row.budget
+        };
+        // A counter whose stored period is not the current one describes a window this process has
+        // not touched, which is the same as unused — the row is only rewritten when something is
+        // charged, so a quiet day or month leaves yesterday's figure sitting there.
+        let day_extra_used = (i64::from(row.extra.day_period) == current_day_period)
+            .then_some(row.extra.day_cpu)
+            .unwrap_or(0);
+        let month_extra_used = (row.extra.month_start_day == current_month_start_day)
+            .then_some(row.extra.month_cpu)
+            .unwrap_or(0);
         let first_daily_time_frame =
             i32::try_from(time_frame::DAILY_PREFIX + i64::from(current_month_start_day))
                 .context("monthly daily time frame does not fit int32")?;
@@ -646,12 +765,21 @@ impl RateLimiter {
                 .checked_add(sum(&routes)?)
                 .ok_or_else(|| anyhow!("recovered monthly usage overflowed uint64"))?;
         }
+        // The usage rows just summed include whatever the extra pool paid for, because a request
+        // served from the pool is still a request the platform served and still lands in them. The
+        // live counter excludes it, so without this the entitlement would shrink by that much on
+        // every restart. Saturating rather than checked: the two figures come from different writes
+        // and a lost usage-row flush must not turn into a hard error on the next charge.
+        month_used.cpu = month_used.cpu.saturating_sub(month_extra_used);
         shard.budgets.insert(
             company_id,
             CompanyBudgetState {
                 stored,
                 usage_month_start_day: current_month_start_day,
                 month_used,
+                extra_day_period: current_day_period,
+                day_extra_used,
+                month_extra_used,
                 // Recovered counters are already durable: they were summed from flushed usage rows,
                 // so they must not be rewritten until something is charged against them.
                 version: 0,
@@ -663,6 +791,8 @@ impl RateLimiter {
             month_start_day = current_month_start_day,
             month_cpu = month_used.cpu,
             month_inference = month_used.inference,
+            day_extra_used,
+            month_extra_used,
             "initialized company credit budget"
         );
         Ok(())
@@ -1057,7 +1187,10 @@ mod tests {
 
     use super::*;
     use crate::limiter::access::MAX_REQUIRED_ACCESS;
-    use crate::limiter::storage::{StoredBudget, StoredBudgetUsage, StoredUsage, StoredUserAccess};
+    use crate::limiter::storage::{
+        StoredBudget, StoredBudgetRow, StoredBudgetUsage, StoredExtraUsage, StoredUsage,
+        StoredUserAccess,
+    };
 
     impl Decision {
         /// The credit violation this decision carries, or a panic naming what it carried instead.
@@ -1073,6 +1206,9 @@ mod tests {
     struct MemoryStore {
         rows: StdMutex<HashMap<UsageKey, Vec<u8>>>,
         budgets: StdMutex<HashMap<i32, StoredBudget>>,
+        /// Extra-pool counters as if a previous process had already flushed them, so a test can
+        /// exercise the cold-start path without going through a charge first.
+        stored_extra: StdMutex<HashMap<i32, StoredExtraUsage>>,
         /// What the flush published per company, plus how many times it published it: a flush that
         /// writes an unchanged row is as wrong as one that skips a changed one.
         budget_usages: StdMutex<HashMap<i32, (StoredBudgetUsage, u32)>>,
@@ -1082,6 +1218,17 @@ mod tests {
     }
 
     impl MemoryStore {
+        fn put_budget(&self, budget: StoredBudget) {
+            self.budgets
+                .lock()
+                .unwrap()
+                .insert(budget.company_id, budget);
+        }
+
+        fn put_stored_extra(&self, company_id: i32, extra: StoredExtraUsage) {
+            self.stored_extra.lock().unwrap().insert(company_id, extra);
+        }
+
         fn budget_usage(&self, company_id: i32) -> Option<(StoredBudgetUsage, u32)> {
             self.budget_usages.lock().unwrap().get(&company_id).copied()
         }
@@ -1141,12 +1288,19 @@ mod tests {
             Ok(())
         }
 
-        async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudget>> {
+        async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudgetRow>> {
+            let extra = self
+                .stored_extra
+                .lock()
+                .unwrap()
+                .get(&company_id)
+                .copied()
+                .unwrap_or_default();
             if let Some(budget) = self.budgets.lock().unwrap().get(&company_id).copied() {
-                return Ok(Some(budget));
+                return Ok(Some(StoredBudgetRow { budget, extra }));
             }
             // Legacy limiter tests all use this fixed instant and need a non-binding entitlement.
-            Ok(Some(StoredBudget {
+            let budget = StoredBudget {
                 company_id,
                 daily: Credits {
                     cpu: i64::MAX as u64,
@@ -1162,7 +1316,8 @@ mod tests {
                     inference: i64::MAX as u64,
                 },
                 updated: 0,
-            }))
+            };
+            Ok(Some(StoredBudgetRow { budget, extra }))
         }
 
         async fn upsert_budget(&self, budget: StoredBudget) -> Result<()> {
@@ -1209,6 +1364,16 @@ mod tests {
         LimitPolicy {
             company: limits,
             user: limits,
+            company_extra_daily_cpu: 0,
+        }
+    }
+
+    /// The same policy with the extra daily pool switched on. Separate helper rather than a
+    /// parameter on `test_policy` so every existing test keeps stating "no pool" by construction.
+    fn test_policy_with_extra(limit: u64, extra: u64) -> LimitPolicy {
+        LimitPolicy {
+            company_extra_daily_cpu: extra,
+            ..test_policy(limit)
         }
     }
 
@@ -1233,6 +1398,315 @@ mod tests {
         }
     }
 
+    const EXTRA_CLOCK: i64 = 1_800_000_000;
+
+    /// An entitlement of four credits a day, which is what makes a single two-credit read fit
+    /// exactly once: the user daily gate is half the company's, so the second read is refused by
+    /// `Scope::User` before the company has spent its own allowance.
+    ///
+    /// That is the case worth building the fixtures on rather than an artefact of them — it is the
+    /// single-user company, which is most of them, and the reason the pool has no per-user share.
+    const EXTRA_DAILY: u64 = 4;
+
+    fn read_request(cpu: u64, extra_credits_allowed: bool) -> Request {
+        Request {
+            company_id: 7,
+            user_id: 42,
+            route_id: 34,
+            credits: Credits { cpu, inference: 0 },
+            required_access: [0; MAX_REQUIRED_ACCESS],
+            extra_credits_allowed,
+        }
+    }
+
+    async fn limiter_with_extra_pool(pool: u64, daily: u64) -> (Arc<MemoryStore>, RateLimiter) {
+        let store = Arc::new(MemoryStore::default());
+        store.put_budget(stored_budget(7, EXTRA_CLOCK, daily, 1_000_000));
+        let limiter = RateLimiter::new(1, test_policy_with_extra(1_000, pool), store.clone(), 600);
+        (store, limiter)
+    }
+
+    /// The whole feature in one assertion: the entitlement refuses, the mark is present, the read is
+    /// served anyway. And the same frame without the mark is refused, which is what makes this a
+    /// property of the request rather than of the company.
+    #[tokio::test]
+    async fn a_marked_read_is_served_from_the_extra_pool_once_the_daily_gate_refuses() {
+        let (_store, limiter) = limiter_with_extra_pool(50, EXTRA_DAILY).await;
+        // Spends what the user gate allows, exactly.
+        assert_eq!(
+            limiter
+                .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+
+        let refused = limiter
+            .admit_at(read_request(2, false), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        assert!(
+            matches!(refused, Decision::CreditViolation(_)),
+            "an unmarked frame reached the pool: {refused:?}"
+        );
+        assert_eq!(
+            limiter
+                .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+    }
+
+    /// The pool is a ceiling, not a bypass. Once it is gone the original refusal comes back
+    /// unchanged, so the client sees the same 429 it would have seen without the feature.
+    #[tokio::test]
+    async fn an_exhausted_pool_refuses_again() {
+        let (_store, limiter) = limiter_with_extra_pool(4, EXTRA_DAILY).await;
+        for _ in 0..3 {
+            assert_eq!(
+                limiter
+                    .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+                    .await
+                    .unwrap(),
+                Decision::Allowed
+            );
+        }
+        // Two of entitlement plus four of pool are spent; the pool cannot cover a fourth read.
+        let refused = limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        assert!(
+            matches!(refused, Decision::CreditViolation(_)),
+            "the pool paid past its ceiling: {refused:?}"
+        );
+    }
+
+    /// A pool of zero — the default — has to leave the daemon behaving exactly as it did before the
+    /// feature existed, mark or no mark.
+    #[tokio::test]
+    async fn a_pool_of_zero_disables_the_feature() {
+        let (_store, limiter) = limiter_with_extra_pool(0, EXTRA_DAILY).await;
+        limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        let refused = limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        assert!(matches!(refused, Decision::CreditViolation(_)));
+    }
+
+    /// The burst gates protect the machine, and a flood of reads is exactly what they protect it
+    /// from. A tenant in read-only mode still queues behind them.
+    #[tokio::test]
+    async fn the_extra_pool_never_relaxes_a_burst_gate() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_budget(stored_budget(7, EXTRA_CLOCK, 1_000_000, 1_000_000));
+        // Ten credits per ten seconds, and a pool far larger than that.
+        let limiter = RateLimiter::new(1, test_policy_with_extra(10, 10_000), store.clone(), 600);
+        let now = Instant::now();
+        assert_eq!(
+            limiter
+                .admit_at(read_request(10, true), EXTRA_CLOCK, now)
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        let refused = limiter
+            .admit_at(read_request(10, true), EXTRA_CLOCK, now)
+            .await
+            .unwrap();
+        match refused {
+            Decision::CreditViolation(violation) => {
+                assert_eq!(violation.window, Window::TenSeconds);
+            }
+            other => panic!("a burst gate was relaxed by the extra pool: {other:?}"),
+        }
+    }
+
+    /// Extra spending must also consume burst tokens, or a company in read-only mode would have
+    /// unlimited burst — the counters it stops touching are the entitlement ones, not the rate ones.
+    #[tokio::test]
+    async fn extra_spending_still_consumes_burst_and_hourly_credits() {
+        let (_store, limiter) = limiter_with_extra_pool(1_000, EXTRA_DAILY).await;
+        let now = Instant::now();
+        limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, now)
+            .await
+            .unwrap();
+        limiter
+            .admit_at(read_request(900, true), EXTRA_CLOCK, now)
+            .await
+            .unwrap();
+        // 902 of the 1000 hourly credits are gone, 2 from entitlement and 900 from the pool.
+        let refused = limiter
+            .admit_at(read_request(200, true), EXTRA_CLOCK, now)
+            .await
+            .unwrap();
+        assert!(
+            matches!(refused, Decision::CreditViolation(_)),
+            "the hourly ceiling did not count extra spending: {refused:?}"
+        );
+    }
+
+    /// The accounting rule, asserted on the flushed row: extra spending is counted apart, so the
+    /// daily and monthly figures a write is judged against do not move.
+    #[tokio::test]
+    async fn extra_spending_is_counted_apart_from_the_quota_it_bypassed() {
+        let (store, limiter) = limiter_with_extra_pool(50, EXTRA_DAILY).await;
+        limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        limiter
+            .admit_at(read_request(30, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        limiter.flush_dirty().await;
+
+        let (usage, _) = store.budget_usage(7).expect("budget usage was flushed");
+        assert_eq!(usage.day_used.cpu, 2, "the pool moved the daily meter");
+        assert_eq!(
+            usage.month_used.cpu, 2,
+            "the pool spent the monthly ceiling"
+        );
+        assert_eq!(usage.day_extra_cpu, 30);
+        assert_eq!(usage.month_extra_cpu, 30);
+    }
+
+    /// The pool is CPU. An inference credit has nothing here that could authorize it, so a marked
+    /// frame asking for one is refused rather than partially relaxed.
+    #[tokio::test]
+    async fn a_marked_frame_asking_for_inference_is_not_relaxed() {
+        let (_store, limiter) = limiter_with_extra_pool(1_000, 2).await;
+        let mut request = read_request(1, true);
+        request.credits.inference = 1;
+        limiter
+            .admit_at(request, EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        let refused = limiter
+            .admit_at(request, EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        assert!(
+            matches!(refused, Decision::CreditViolation(_)),
+            "an inference credit was paid from the CPU pool: {refused:?}"
+        );
+    }
+
+    /// A read that fits inside the entitlement must be charged against it. If the pool were
+    /// consulted first it would be spent on tenants who never needed it.
+    #[tokio::test]
+    async fn a_read_that_fits_the_entitlement_does_not_touch_the_pool() {
+        let (store, limiter) = limiter_with_extra_pool(50, 1_000).await;
+        limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        limiter.flush_dirty().await;
+        let (usage, _) = store.budget_usage(7).unwrap();
+        assert_eq!(usage.day_extra_cpu, 0);
+        assert_eq!(usage.day_used.cpu, 2);
+    }
+
+    /// The pool is bounded by the local business day, like every other daily figure here. On the
+    /// raw UTC division it would reset at 19:00 local time.
+    #[tokio::test]
+    async fn the_pool_resets_on_the_local_business_day() {
+        let (_store, limiter) = limiter_with_extra_pool(2, 0).await;
+        assert_eq!(
+            limiter
+                .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        let refused = limiter
+            .admit_at(read_request(2, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        assert!(matches!(refused, Decision::CreditViolation(_)));
+
+        let next_day = EXTRA_CLOCK + 86_400;
+        assert_ne!(
+            time_frame::local_unix_day(EXTRA_CLOCK).unwrap(),
+            time_frame::local_unix_day(next_day).unwrap()
+        );
+        assert_eq!(
+            limiter
+                .admit_at(read_request(2, true), next_day, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+    }
+
+    /// Cold start. The pool must survive a restart inside the same day, or a restart would hand out
+    /// a fresh allowance; and `month_used`, which is rebuilt by summing usage rows that include what
+    /// the pool paid for, must come back without that spending folded into the entitlement.
+    #[tokio::test]
+    async fn a_restart_recovers_the_pool_and_does_not_lose_entitlement_to_it() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_budget(stored_budget(7, EXTRA_CLOCK, 100, 1_000));
+        let day_period = time_frame::local_unix_day(EXTRA_CLOCK).unwrap();
+        store.put_stored_extra(
+            7,
+            StoredExtraUsage {
+                day_period: i16::try_from(day_period).unwrap(),
+                day_cpu: 40,
+                month_start_day: time_frame::month_start_day(EXTRA_CLOCK).unwrap(),
+                month_cpu: 40,
+            },
+        );
+        // The usage rows a previous process flushed: 60 of ordinary usage plus the 40 the pool paid
+        // for, because the pool's requests were served and land in these rows like any other.
+        let mut routes = RoutedCredits::new();
+        routes.insert(
+            34,
+            Credits {
+                cpu: 100,
+                inference: 0,
+            },
+        );
+        store.rows.lock().unwrap().insert(
+            UsageKey {
+                company_id: 7,
+                user_id: COMPANY_AGGREGATE_USER_ID,
+                time_frame: time_frame::daily(EXTRA_CLOCK).unwrap(),
+            },
+            encode(&routes).unwrap(),
+        );
+
+        let limiter = RateLimiter::new(1, test_policy_with_extra(1_000, 50), store.clone(), 600);
+        // Ten of the fifty-credit pool are left, so this fits and a second one does not.
+        assert_eq!(
+            limiter
+                .admit_at(read_request(10, true), EXTRA_CLOCK, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        let refused = limiter
+            .admit_at(read_request(1, true), EXTRA_CLOCK, Instant::now())
+            .await
+            .unwrap();
+        assert!(
+            matches!(refused, Decision::CreditViolation(_)),
+            "the restart handed out a fresh pool: {refused:?}"
+        );
+
+        limiter.flush_dirty().await;
+        let (usage, _) = store.budget_usage(7).unwrap();
+        // 100 summed from the rows minus the 40 the pool paid for. Without the correction the
+        // company would have lost 40 credits of what it bought to a free allowance.
+        assert_eq!(usage.month_used.cpu, 60);
+        assert_eq!(usage.day_extra_cpu, 50);
+    }
+
     #[tokio::test]
     async fn accepted_request_dirties_company_user_and_platform_rows() {
         let store = Arc::new(MemoryStore::default());
@@ -1246,6 +1720,7 @@ mod tests {
                 inference: 5,
             },
             required_access: [0; MAX_REQUIRED_ACCESS],
+            extra_credits_allowed: false,
         };
         assert_eq!(
             limiter
@@ -1289,6 +1764,7 @@ mod tests {
                             inference: 5,
                         },
                         required_access: [0; MAX_REQUIRED_ACCESS],
+                        extra_credits_allowed: false,
                     },
                     unix_seconds,
                     Instant::now(),
@@ -1347,6 +1823,7 @@ mod tests {
                         inference: 5,
                     },
                     required_access: [0; MAX_REQUIRED_ACCESS],
+                    extra_credits_allowed: false,
                 },
                 unix_seconds,
                 Instant::now(),
@@ -1387,6 +1864,7 @@ mod tests {
                 inference: 0,
             },
             required_access: [0; MAX_REQUIRED_ACCESS],
+            extra_credits_allowed: false,
         };
         assert_eq!(
             limiter.admit_at(request, 1_800_000_000, now).await.unwrap(),
@@ -1434,6 +1912,7 @@ mod tests {
                 inference: 4,
             },
             required_access: [0; MAX_REQUIRED_ACCESS],
+            extra_credits_allowed: false,
         };
         assert_eq!(
             limiter
@@ -1519,6 +1998,7 @@ mod tests {
                 inference: 0,
             },
             required_access: [0; MAX_REQUIRED_ACCESS],
+            extra_credits_allowed: false,
         };
         assert_eq!(
             limiter
@@ -1563,6 +2043,7 @@ mod tests {
                 inference: 0,
             },
             required_access: [0; MAX_REQUIRED_ACCESS],
+            extra_credits_allowed: false,
         };
         assert_eq!(
             limiter
@@ -1613,6 +2094,7 @@ mod tests {
                                 inference: 0,
                             },
                             required_access: [0; MAX_REQUIRED_ACCESS],
+                            extra_credits_allowed: false,
                         },
                         unix_seconds,
                         Instant::now(),
@@ -1633,6 +2115,7 @@ mod tests {
                         inference: 0,
                     },
                     required_access: [0; MAX_REQUIRED_ACCESS],
+                    extra_credits_allowed: false,
                 },
                 unix_seconds,
                 Instant::now(),
@@ -1807,6 +2290,7 @@ mod tests {
                 inference: 0,
             },
             required_access,
+            extra_credits_allowed: false,
         }
     }
 

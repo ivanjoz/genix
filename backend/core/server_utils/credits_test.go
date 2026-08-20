@@ -11,7 +11,7 @@ import (
 // required_access_slots_are_read_by_offset (limiter/protocol.rs) are the same charge written from
 // both ends. This test and its Rust twin are the only thing holding the layout.
 func TestChargePayloadMatchesTheWireOffsets(t *testing.T) {
-	payload, err := encodeCharge(0x123456, 42, 103, 300, 25, []uint16{0x0139, 0x008B})
+	payload, err := encodeCharge(0x123456, 42, 103, 300, 25, []uint16{0x0139, 0x008B}, false)
 	if err != nil {
 		t.Fatalf("encodeCharge refused a valid charge: %v", err)
 	}
@@ -39,17 +39,17 @@ func TestRequiredAccessSlotsAreValidated(t *testing.T) {
 	for slot := range tooMany {
 		tooMany[slot] = uint16(slot+1) << 2
 	}
-	if _, err := encodeCharge(1, 1, 1, 1, 0, tooMany); err == nil {
+	if _, err := encodeCharge(1, 1, 1, 1, 0, tooMany, false); err == nil {
 		t.Fatal("a route requiring more accesses than the frame holds was accepted")
 	}
-	if _, err := encodeCharge(1, 1, 1, 1, 0, []uint16{0x008B, 0}); err == nil {
+	if _, err := encodeCharge(1, 1, 1, 1, 0, []uint16{0x008B, 0}, false); err == nil {
 		t.Fatal("a zero required access was accepted")
 	}
 	full := make([]uint16, MaxRequiredAccess)
 	for slot := range full {
 		full[slot] = uint16(slot+1) << 2
 	}
-	if _, err := encodeCharge(1, 1, 1, 1, 0, full); err != nil {
+	if _, err := encodeCharge(1, 1, 1, 1, 0, full, false); err != nil {
 		t.Fatalf("a full slot list was refused: %v", err)
 	}
 }
@@ -58,10 +58,10 @@ func TestRequiredAccessSlotsAreValidated(t *testing.T) {
 // charge, and three of those routes are access-mapped: skipping the frame with them would leave
 // them open to any session.
 func TestAFrameNeedsCreditsOrARequiredAccess(t *testing.T) {
-	if _, err := encodeCharge(1, 1, 1, 0, 0, nil); err == nil {
+	if _, err := encodeCharge(1, 1, 1, 0, 0, nil, false); err == nil {
 		t.Fatal("a frame with neither credits nor a required access was accepted")
 	}
-	if _, err := encodeCharge(1, 1, 1, 0, 0, []uint16{0x008B}); err != nil {
+	if _, err := encodeCharge(1, 1, 1, 0, 0, []uint16{0x008B}, false); err != nil {
 		t.Fatalf("an authorize-only frame was refused: %v", err)
 	}
 }
@@ -134,12 +134,46 @@ func TestGetBaseAndTopUpSumToTheWholeCharge(t *testing.T) {
 // route table's, because this side must not go stale when a handler is added.
 func TestChargeAcceptsUnknownRoutesAndRefusesUnencodableOnes(t *testing.T) {
 	for _, routeID := range []int16{0, 1, maxChargeRouteID} {
-		if _, err := encodeCharge(1, 1, routeID, 1, 0, nil); err != nil {
+		if _, err := encodeCharge(1, 1, routeID, 1, 0, nil, false); err != nil {
 			t.Fatalf("route %d was refused: %v", routeID, err)
 		}
 	}
-	if _, err := encodeCharge(1, 1, maxChargeRouteID+1, 1, 0, nil); err == nil {
+	if _, err := encodeCharge(1, 1, maxChargeRouteID+1, 1, 0, nil, false); err == nil {
 		t.Fatal("a route past the encoding ceiling was accepted")
+	}
+}
+
+// The extra-credit mark rides in the high bit of the route field, which maxChargeRouteID leaves
+// free. Two things must hold and neither is visible from the Rust side alone: the bit lands on
+// byte 6 and nowhere else, and a route number can never set it by itself.
+func TestTheExtraCreditFlagRidesInTheRouteField(t *testing.T) {
+	unmarked, err := encodeCharge(1, 1, 103, 2, 0, nil, false)
+	if err != nil {
+		t.Fatalf("encodeCharge refused a valid charge: %v", err)
+	}
+	marked, err := encodeCharge(1, 1, 103, 2, 0, nil, true)
+	if err != nil {
+		t.Fatalf("encodeCharge refused a marked charge: %v", err)
+	}
+	if marked[6] != unmarked[6]|0x80 {
+		t.Fatalf("the mark did not set the high bit of byte 6: % X vs % X", marked, unmarked)
+	}
+	// Byte 6 is the only difference: a mark must not move a single credit or access slot.
+	marked[6] = unmarked[6]
+	if !bytes.Equal(marked, unmarked) {
+		t.Fatalf("marking a charge changed more than the route field: % X vs % X", marked, unmarked)
+	}
+
+	// The highest encodable route still leaves the bit free, which is what makes the field safe to
+	// share: fourteen bits of route against a bit-15 marker.
+	for _, routeID := range []int16{0, 1, 103, maxChargeRouteID} {
+		payload, err := encodeCharge(1, 1, routeID, 2, 0, nil, false)
+		if err != nil {
+			t.Fatalf("route %d was refused: %v", routeID, err)
+		}
+		if payload[6]&0x80 != 0 {
+			t.Fatalf("route %d set the extra-credit flag by itself", routeID)
+		}
 	}
 }
 
@@ -195,7 +229,7 @@ func TestMonthlyCreditLimitResponseUsesTheReservedWindow(t *testing.T) {
 func TestChargeFrameMatchesTheRustAuthVector(t *testing.T) {
 	secret := []byte("test-secret")
 	nonce := [serverUtilsNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
-	payload, err := encodeCharge(0x123456, 42, 103, 300, 25, []uint16{0x0139, 0x008B})
+	payload, err := encodeCharge(0x123456, 42, 103, 300, 25, []uint16{0x0139, 0x008B}, false)
 	if err != nil {
 		t.Fatalf("encodeCharge refused a valid charge: %v", err)
 	}

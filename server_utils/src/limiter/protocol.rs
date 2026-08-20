@@ -12,6 +12,19 @@ use crate::limiter::credits_blob::{Credits, MAX_ROUTE_ID};
 /// Twelve bytes of charge plus four u16 authorization slots.
 pub const CHARGE_PAYLOAD_SIZE: usize = 12 + 2 * MAX_REQUIRED_ACCESS;
 
+/// The high bit of the route field, which the route number itself can never reach: `MAX_ROUTE_ID`
+/// is fourteen bits and route numbers are never reused, so the top two bits of those sixteen have
+/// always been dead space that both sides already validated as zero.
+///
+/// Set, it means the router classified this charge as a read, making it eligible for the company's
+/// extra daily pool once normal quota refuses. It is a *permission*, not an instruction: a frame
+/// that is eligible and fits in normal quota is charged normally and spends no extra.
+///
+/// Riding on an existing field rather than widening the payload keeps the frame at 29 bytes, and
+/// the mismatch story is better than a length change would give: an old daemon reads the bit as
+/// part of the route number, fails the `MAX_ROUTE_ID` check, and refuses the frame loudly.
+pub const EXTRA_CREDIT_FLAG: u16 = 0x8000;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Request {
     pub company_id: i32,
@@ -25,6 +38,9 @@ pub struct Request {
     /// from index 0 with zero terminating. All zero means the router asked for no authorization —
     /// the common case, since only a route-gated request carries one.
     pub required_access: [u16; MAX_REQUIRED_ACCESS],
+    /// Whether this charge may fall back to the company's extra daily pool. Decoded from
+    /// `EXTRA_CREDIT_FLAG`; the route number arrives here already stripped of it.
+    pub extra_credits_allowed: bool,
 }
 
 impl Request {
@@ -90,7 +106,13 @@ pub enum ProtocolError {
 pub fn parse_charge(payload: &[u8; CHARGE_PAYLOAD_SIZE]) -> Result<Request, ProtocolError> {
     let company_id = read_u24(&payload[0..3]) as i32;
     let user_id = read_u24(&payload[3..6]) as i32;
-    let route_id = u16::from_be_bytes([payload[6], payload[7]]);
+    let encoded_route = u16::from_be_bytes([payload[6], payload[7]]);
+    let extra_credits_allowed = encoded_route & EXTRA_CREDIT_FLAG != 0;
+    // Only bit 15 is cleared, deliberately, rather than masking down to fourteen. Bit 14 is not
+    // assigned to anything, so leaving it in place keeps the range check below as its guard: a
+    // frame from a future protocol that started using it is refused here instead of being charged
+    // against a route number nobody meant.
+    let route_id = encoded_route & !EXTRA_CREDIT_FLAG;
     let cpu = u16::from_be_bytes([payload[8], payload[9]]) as u64;
     let inference = u16::from_be_bytes([payload[10], payload[11]]) as u64;
     let mut required_access = [0_u16; MAX_REQUIRED_ACCESS];
@@ -133,6 +155,7 @@ pub fn parse_charge(payload: &[u8; CHARGE_PAYLOAD_SIZE]) -> Result<Request, Prot
         route_id,
         credits: Credits { cpu, inference },
         required_access,
+        extra_credits_allowed,
     })
 }
 
@@ -181,10 +204,45 @@ mod tests {
                 .route_id,
             MAX_ROUTE_ID
         );
+        // MAX_ROUTE_ID + 1 is bit 14, the unassigned one, which is exactly what the range check
+        // still guards now that bit 15 has a meaning.
         assert_eq!(
             parse_charge(&charge_payload(MAX_ROUTE_ID + 1)),
             Err(ProtocolError::InvalidRouteID(MAX_ROUTE_ID + 1))
         );
+    }
+
+    /// The flag shares the route field, so the one thing that must never happen is a route number
+    /// arriving with the flag still in it: `credits_blob::encode` shifts this value left by two to
+    /// build the persisted header, and a leaked bit would attribute credits to a route that does
+    /// not exist while overflowing the fourteen-bit header.
+    #[test]
+    fn the_extra_credit_flag_is_stripped_from_the_route_number() {
+        let mut payload = charge_payload(103);
+        payload[6..8].copy_from_slice(&(103_u16 | EXTRA_CREDIT_FLAG).to_be_bytes());
+        let request = parse_charge(&payload).unwrap();
+        assert_eq!(request.route_id, 103);
+        assert!(request.extra_credits_allowed);
+        assert!(request.route_id <= MAX_ROUTE_ID);
+
+        // And the highest encodable route still round-trips with the flag on top of it.
+        payload[6..8].copy_from_slice(&(MAX_ROUTE_ID | EXTRA_CREDIT_FLAG).to_be_bytes());
+        let request = parse_charge(&payload).unwrap();
+        assert_eq!(request.route_id, MAX_ROUTE_ID);
+        assert!(request.extra_credits_allowed);
+    }
+
+    /// A legitimate route number can never reach the flag, which is what makes the field safe to
+    /// share: fourteen bits of route against a bit-15 marker.
+    #[test]
+    fn an_unmarked_frame_is_not_eligible_for_extra_credits() {
+        for route_id in [0, 1, 103, MAX_ROUTE_ID] {
+            let request = parse_charge(&charge_payload(route_id)).unwrap();
+            assert!(
+                !request.extra_credits_allowed,
+                "route {route_id} set the extra-credit flag by itself"
+            );
+        }
     }
 
     /// The four slots are the newest half of the layout, so their offsets are asserted by hand.

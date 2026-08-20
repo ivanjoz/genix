@@ -192,6 +192,31 @@ func TestChargedMethodFor(t *testing.T) {
 	}
 }
 
+// The extra daily pool exists so a tenant out of credit can still read, so the mark that unlocks it
+// must ride on reads and nothing else. It is derived inside ChargeAPIUsage from the very string that
+// picked the tariff, which is what makes this a property and not a convention — but the derivation
+// is one comparison, and a comparison is exactly the kind of thing that gets edited.
+//
+// A write reaching the pool would let a tenant with no credit keep writing for free.
+func TestOnlyReadsAreMarkedForTheExtraPool(t *testing.T) {
+	// The mark is not observable through ChargeAPIUsage without a daemon, so this asserts the one
+	// input it is derived from: the charged method. GET is the only value that may unlock the pool.
+	for _, method := range []string{"POST", "PUT", "DELETE", "PATCH", "HEAD"} {
+		if chargedMethodFor(method, "POST.productos") == "GET" {
+			t.Errorf("%s was charged as a read and would reach the extra pool", method)
+		}
+	}
+	if chargedMethodFor("GET", "GET.productos") != "GET" {
+		t.Fatal("a plain GET is not charged as a read; the extra pool is unreachable")
+	}
+	// A credit-exempt route sends no charge at all, so it cannot spend the pool either way.
+	for route := range creditControlRoutes {
+		if chargedMethodFor("GET", route) != "" {
+			t.Errorf("%s is credit-exempt but was charged", route)
+		}
+	}
+}
+
 // The one assertion that makes "no distinction between POST and PUT" true rather than intended:
 // identical credits at every payload size, and the same required access at the same level.
 func TestPostAndPutAreIndistinguishable(t *testing.T) {

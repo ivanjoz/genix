@@ -70,11 +70,22 @@ live session token.
 
 ## Rate limiter behavior
 
+**For the whole flow — what Go decides, what the daemon decides, and where the numbers end up —
+read [CREDIT_LIMITER_WALKTHROUGH.md](CREDIT_LIMITER_WALKTHROUGH.md) first.** The sections below are
+the reference material it ties together.
+
 - Authenticates persistent TCP connections with an eight-byte server nonce and sequence-bound
   HMAC-SHA256 frames.
+- Answers **two** questions per frame: whether the caller holds the access the route requires, and
+  whether the tenant can afford the request. Authorization is resolved first and a refusal charges
+  nothing.
 - Atomically checks company/user burst and hourly limits plus company-configured daily/monthly budgets.
 - Derives each user's daily allowance as 50% of its company's CPU and inference allowances.
-- Requires an explicitly activated current UTC month; a new month stays blocked until `SET_CURRENT`.
+- Requires an explicitly activated current month; a new one stays blocked until `SET_CURRENT`. The
+  month is the **local business month** (UTC-5), the same boundary the daily frames use — not the UTC
+  month.
+- Optionally serves reads from a company's extra daily pool once its entitlement has refused, without
+  ever relaxing a burst gate.
 - Aggregates every accepted charge into user/company and five-minute/daily in-memory records.
 - Flushes only changed absolute records to `credit_usage` every 15 seconds.
 - Fails closed in the Go backend for quota exhaustion and daemon/storage unavailability.
@@ -305,7 +316,7 @@ shared frame shape, and the three operations have no field in common.
 
 | Op | Name | Payload | Frame |
 |---|---|---|---|
-| `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · route `u16` · CPU `u16` · inference `u16` · required_access `4×u16` | 29 |
+| `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · extra_flag+route `u16` · CPU `u16` · inference `u16` · required_access `4×u16` | 29 |
 | `0x02` | `LOCK_ACQUIRE` | action `u16` · identifier `i64` · max_waiters `u8` · wait_ms `u16` · lease_ms `u16` | 24 |
 | `0x03` | `LOCK_RELEASE` | action `u16` · identifier `i64` · generation `u16` | 21 |
 | `0x04` | `LOG_REQUEST` | `[length:u16]` then date `i16` · request `i64` · route `i16` · frame `u8` · company `u24` · user `i32` · elapsed `u16` · errors `u8`, then per error: id `i32` · line `u8`+bytes · text `u16`+bytes | ≤ 1 110 |
@@ -323,6 +334,13 @@ no authorization was asked for, which is the common case. See "Authorization" be
 Because the two are independent, a frame is valid with credits, with a required access, or with
 both — but not with neither. An authorize-only frame (zero credits, slots filled) is what the Go
 router sends for the routes it exempts from charging.
+
+The high bit of the route field is `EXTRA_CREDIT_FLAG` and is not part of the route number:
+`MAX_ROUTE_ID` is fourteen bits, so the top two of those sixteen have always been dead space that
+both sides validated as zero. Set, it says the router classified this charge as a read, making it
+eligible for the extra daily pool — see "Extra credits" below. Bit 14 stays unassigned, and the
+range check both sides already run is what refuses a frame carrying it — the flag is stripped
+before the check, so anything left above fourteen bits is an error.
 
 `LOG_REQUEST` is the exception to both rules the others share. It is **length-prefixed**, because it
 carries strings, and it is **never answered**, because making a response wait for an acknowledgement
@@ -380,12 +398,11 @@ writing 6, 5 would desynchronize the HMAC and every later frame would fail.
 
 The charge frame also answers "may this user do this", and that is the second reason it exists.
 
-The Go router used to answer it itself: `CheckUser` ran `SELECT accesos_computed FROM users` behind a
-five-minute in-process cache. On a VPS that is nearly free — one long-lived process, a hit on almost
-every request. **On Lambda it is not.** Every new execution environment starts with an empty cache
-and pays a full ScyllaDB round trip on the authorization path before the handler does anything, and
-at any scale a large share of requests are somebody's first. This daemon is the one process that is
-always resident, and the frame was already going out, so the question moved here.
+The grants are cached here because this is the only process that is always resident. The backend
+cannot cache them usefully: on Lambda every new execution environment starts empty, and at any scale
+a large share of requests are somebody's first, so an in-process cache there would pay a full
+ScyllaDB round trip on the authorization path before the handler does anything. The frame was going
+out regardless, so the question rides on it.
 
 **What is cached.** Per `(company, user)`: the sorted packed grants, `users.status`, and whether the
 row exists at all. Two bytes per grant — a user holding every access in today's catalogue costs 68
@@ -415,6 +432,48 @@ there: an unmapped `GET` is free to any session, `POST.user-self` needs a sessio
 persists it, so its stored blob is empty and this daemon would deny it. A mapped route with no
 accesses at all is refused in Go without a frame, because the catalogue denies by default and an
 empty slot list would have meant the opposite.
+
+## Extra credits
+
+`rate_limit.company_extra_credits_24h` is CPU a company may spend per local business day **after**
+its normal quota has already refused, and only on a frame marked as a read. It is the difference
+between a tenant out of credit seeing a 429 everywhere and one that can still look at its data.
+Zero — the default — removes the feature entirely.
+
+**Reads only, and the daemon does not decide which.** Eligibility rides in the frame, derived on the
+Go side inside `ChargeAPIUsage` from the same string that chose the tariff, so a write cannot be
+marked by a caller disagreeing with itself. A marked frame that also asks for inference credits is
+not relaxed in any dimension: the pool is a single CPU figure and has nothing that could authorize
+one.
+
+**The burst gates are never relaxed.** The 10-second buckets and the hourly ceilings protect the
+machine, and a flood of reads is precisely what they protect it from, so a charge paid out of the
+pool still consumes burst tokens and still counts against `hour_used`. Skipping them would hand a
+company in read-only mode unlimited burst. What the pool bypasses is the *entitlement*: the daily
+company gate, the daily user gate, and the monthly ceiling.
+
+**The pool is consulted last.** A read that fits inside the entitlement is charged against it. Only
+once one of the three entitlement gates refuses is the pool asked, and if it cannot cover the charge
+the original violation is returned unchanged — the client sees exactly the 429 it would have seen.
+
+**No per-user share.** The pool belongs to the company and one user can drain it. Halving it the way
+the daily user gate is halved would leave a single-user company — most of them — unable to reach it
+at all, and the burst gates already bound the rate.
+
+**Counted apart.** Extra spending never touches `day_used` or `month_used`, so `daily - day_used`
+keeps meaning what a write is judged against and the monthly ceiling that was paid for never moves.
+It lands in `company_credit_budget.day_extra_cpu_used` instead, keyed by the same
+`usage_day_period` as the other counters.
+
+`month_extra_cpu_used` is *not* a second ceiling — there is no monthly extra limit. It is the
+correction term `ensure_budget` subtracts when it rebuilds `month_used` by summing the month's usage
+rows, because a request served from the pool is still a request that was served and still lands in
+those rows. Without it, every restart would quietly shrink the entitlement by whatever the pool had
+paid for.
+
+Nothing about the reply frame changes: a request served from the pool is answered exactly like one
+served from quota, and the client cannot tell. The daemon logs it at `info` — that line is the only
+outward sign a tenant is in read-only mode.
 
 ## Lock behavior
 
@@ -557,9 +616,8 @@ A GET is split, because its byte count only exists after the handler while its a
 is needed before it. The pre-handler frame carries the access check and the **base** charge of two
 credits; a **top-up** frame follows only when the response exceeded the first 8 KiB, which is the
 only case that costs more than the base. Most GETs therefore send one frame and no top-up. Two
-consequences worth knowing when reading the usage tables: a GET that ends in an error now costs its
-two base credits where it used to cost nothing, and a streamed response is charged its base and never
-topped up.
+consequences worth knowing when reading the usage tables: a GET that ends in an error still costs its
+two base credits, and a streamed response is charged its base and never topped up.
 
 A method with no tariff at all — anything that is neither a read nor a write — is authorized and not
 charged, rather than becoming a 503: the tariff errors on a method it does not know, and the router

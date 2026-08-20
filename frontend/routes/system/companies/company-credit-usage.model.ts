@@ -102,6 +102,9 @@ export interface ICompanyCreditBudgetMeter {
   MonthlyInferenceCeiling: number;
   RemainingCPU: number;
   RemainingInference: number;
+  ExtraCPU: number;
+  DayExtraCPUUsed: number;
+  ExtraRemainingCPU: number;
   IsCurrentMonth: boolean;
   upd: number;
   ss: number;

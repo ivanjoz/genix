@@ -105,6 +105,21 @@ user_inference_10s     = 500
 user_cpu_1h            = 20000
 user_inference_1h      = 5000
 
+# Créditos de CPU que una company puede gastar al día DESPUÉS de que su cuota normal la haya
+# rechazado, y sólo en requests de lectura (el router marca el frame; GET sí, POST/PUT no). Es el
+# modo degradado de sólo lectura en vez de un 429 en toda la aplicación.
+#
+# 0 la desactiva, y es el valor por defecto si falta la clave: a diferencia de los ocho techos de
+# arriba —que son obligatorios y el daemon no arranca sin ellos— una asignación gratuita ausente es
+# simplemente ninguna asignación gratuita.
+#
+# Los tramos de ráfaga (10s y 1h) nunca se relajan con esto, y el consumo extra no toca el techo
+# mensual comprado: se contabiliza aparte, en company_credit_budget.day_extra_cpu_used.
+#
+# No hay claves *_24h aquí: el techo diario NO es política de este archivo, sale de la tabla
+# company_credit_budget que administra el panel SaaS.
+company_extra_credits_24h = 50000
+
 # ─── Lock service (server_utils/) ──────────────────────────────────────────
 # Mismo proceso y mismo puerto que [rate_limit]; el opcode del frame decide el
 # servicio. Aquí sólo hay techos de proceso: qué acción bloquea qué, y con qué

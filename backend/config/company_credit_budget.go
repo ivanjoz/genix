@@ -37,7 +37,14 @@ type companyCreditBudgetResponse struct {
 	DayInferenceUsed        uint64
 	DailyRemainingCPU       uint64
 	DailyRemainingInference uint64
-	IsCurrentMonth          bool
+	// El pool diario de créditos extra: lo que la company puede gastar en lecturas DESPUÉS de que su
+	// cuota la haya rechazado. Viaja aunque no haya presupuesto del mes en curso, y eso no es un
+	// descuido: esa es precisamente la company que vive del pool, así que esconderlo dejaría el modo
+	// de sólo lectura invisible justo cuando está en uso.
+	ExtraCPU          int64
+	DayExtraCPUUsed   uint64
+	ExtraRemainingCPU uint64
+	IsCurrentMonth    bool
 }
 
 // El panel guarda con un solo botón, así que la petición es la lista de filas que el usuario tocó
@@ -257,7 +264,7 @@ func getCompanyCreditBudget(companyID int32) (companyCreditBudgetResponse, error
 	if err != nil {
 		return companyCreditBudgetResponse{}, err
 	}
-	response := makeCompanyCreditBudgetResponse(record)
+	response := makeCompanyCreditBudgetResponse(record, core.Env.COMPANY_EXTRA_CREDITS_24H)
 	// El daemon nunca escribió los contadores de esta empresa, así que no hay nada que restar y las
 	// cifras se reconstruyen igual que él las reconstruye al arrancar: sumando los días del mes. Sólo
 	// pasa con filas escritas antes de que el flush existiera, y se corrige solo en el primer cargo.
@@ -280,7 +287,12 @@ func getCompanyCreditBudget(companyID int32) (companyCreditBudgetResponse, error
 // Las columnas de período dicen a qué ventana pertenece cada contador: nadie reescribe la fila
 // cuando cambia el día o el mes sin tráfico, así que un período que no es el actual significa que
 // esa ventana todavía no gastó nada.
-func makeCompanyCreditBudgetResponse(record coreTypes.CompanyCreditBudget) companyCreditBudgetResponse {
+// extraPoolCeiling es un parámetro y no una lectura de core.Env aquí dentro: esta función es pura y
+// los tests la llaman directamente, donde Env es un puntero nil. Un cero significa "no se sabe" y el
+// panel esconde el tramo, que es exactamente el caso Lambda.
+func makeCompanyCreditBudgetResponse(
+	record coreTypes.CompanyCreditBudget, extraPoolCeiling int64,
+) companyCreditBudgetResponse {
 	response := companyCreditBudgetResponse{
 		CompanyID:               record.CompanyID,
 		DailyCPU:                record.DailyCPU,
@@ -292,7 +304,14 @@ func makeCompanyCreditBudgetResponse(record coreTypes.CompanyCreditBudget) compa
 		LastSetInference:        record.LastSetInference,
 		Updated:                 record.Updated,
 		IsCurrentMonth:          record.BudgetMonthStartDay == currentMonthStartDay(),
+		ExtraCPU:                extraPoolCeiling,
 	}
+	// El pool se resuelve antes del retorno anticipado de abajo, no después, porque no depende del
+	// presupuesto mensual: lo concede la configuración de la plataforma y sólo lo acota el día.
+	if record.UsageDayPeriod == currentCreditUnixDay() {
+		response.DayExtraCPUUsed = uint64(max(record.DayExtraCPUUsed, 0))
+	}
+	response.ExtraRemainingCPU = remainingCredits(response.ExtraCPU, response.DayExtraCPUUsed)
 	// Sin presupuesto del mes en curso el daemon rechaza todo cargo, así que no hay crédito que
 	// mostrar y el gasto acumulado pertenece a un presupuesto que ya caducó.
 	if !response.IsCurrentMonth {
@@ -364,7 +383,8 @@ func getCompanyCreditBudgets() ([]companyCreditBudgetResponse, error) {
 		if record.CompanyID <= 0 {
 			continue
 		}
-		budgets = append(budgets, makeCompanyCreditBudgetResponse(record))
+		budgets = append(budgets,
+			makeCompanyCreditBudgetResponse(record, core.Env.COMPANY_EXTRA_CREDITS_24H))
 	}
 	return budgets, nil
 }

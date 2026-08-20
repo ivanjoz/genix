@@ -207,7 +207,7 @@ func TestRepliesCorrelateToTheRightCallerOutOfOrder(t *testing.T) {
 
 	// A charge sent afterwards must be answered while the acquire still waits.
 	charged := make(chan error, 1)
-	go func() { charged <- client.Charge(context.Background(), 1, 1, 0, 2, 0, nil) }()
+	go func() { charged <- client.Charge(context.Background(), 1, 1, 0, 2, 0, nil, false) }()
 	select {
 	case err := <-charged:
 		if err != nil {
@@ -326,7 +326,7 @@ func TestConcurrentSendersKeepTheSequenceInLockstep(t *testing.T) {
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			_ = client.Charge(context.Background(), 1, 1, 0, 1, 0, nil)
+			_ = client.Charge(context.Background(), 1, 1, 0, 1, 0, nil, false)
 		}()
 	}
 	waitGroup.Wait()

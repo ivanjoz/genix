@@ -214,9 +214,18 @@ impl AppConfig {
             bail!("rate-limiter durations and connection limits must be positive");
         }
 
+        // Absent means zero means off, unlike the eight credit ceilings, which are required. The
+        // asymmetry is deliberate: a missing quota is a configuration mistake worth refusing to
+        // start over, while a missing free allowance is simply no free allowance.
         let policy = LimitPolicy {
             company: load_scope_limits(&config, "COMPANY", "company")?,
             user: load_scope_limits(&config, "USER", "user")?,
+            company_extra_daily_cpu: optional_u64(
+                &config,
+                "RATE_LIMIT_COMPANY_EXTRA_CREDITS_24H",
+                "rate_limit.company_extra_credits_24h",
+            )?
+            .unwrap_or(0),
         };
         validate_policy(policy)?;
 
@@ -478,6 +487,11 @@ fn validate_policy(policy: LimitPolicy) -> Result<()> {
             }
         }
     }
+    // No ordering rule against the hourly ceilings: this is a different axis, not a longer window.
+    // The only bound is the int64 column the counter is flushed to.
+    if policy.company_extra_daily_cpu > i64::MAX as u64 {
+        bail!("rate_limit.company_extra_credits_24h must fit a signed 64-bit database column");
+    }
     Ok(())
 }
 
@@ -665,8 +679,35 @@ mod tests {
                 cpu: positive,
                 inference: positive,
             },
+            company_extra_daily_cpu: 0,
         };
 
         assert!(validate_policy(policy).is_err());
+    }
+
+    #[test]
+    fn an_extra_daily_pool_beyond_int64_is_rejected() {
+        let positive = CreditLimits {
+            ten_seconds: 1,
+            hour: 1,
+        };
+        let scope = ScopeLimits {
+            cpu: positive,
+            inference: positive,
+        };
+        // The counter that tracks this pool is persisted in an int64 column, so a ceiling above it
+        // could never be enforced after a restart.
+        let policy = LimitPolicy {
+            company: scope,
+            user: scope,
+            company_extra_daily_cpu: i64::MAX as u64 + 1,
+        };
+        assert!(validate_policy(policy).is_err());
+
+        let usable = LimitPolicy {
+            company_extra_daily_cpu: 50_000,
+            ..policy
+        };
+        assert!(validate_policy(usable).is_ok());
     }
 }

@@ -19,7 +19,10 @@ use genix_server_utils::{
         credits_blob::Credits,
         protocol::CHARGE_PAYLOAD_SIZE,
         quota::{CreditLimits, LimitPolicy, RateLimiter, ScopeLimits},
-        storage::{LimiterStore, StoredBudget, StoredBudgetUsage, StoredUsage, StoredUserAccess},
+        storage::{
+            LimiterStore, StoredBudget, StoredBudgetRow, StoredBudgetUsage, StoredUsage,
+            StoredUserAccess,
+        },
         time_frame,
     },
     lock::registry::{LockLimits, LockRegistry},
@@ -58,19 +61,23 @@ impl LimiterStore for EmptyStore {
     async fn upsert(&self, _key: UsageKey, _used_credits: Vec<u8>) -> Result<()> {
         Ok(())
     }
-    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudget>> {
+    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudgetRow>> {
         let unix_seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         let unlimited = Credits {
             cpu: i64::MAX as u64,
             inference: i64::MAX as u64,
         };
-        Ok(Some(StoredBudget {
+        let budget = StoredBudget {
             company_id,
             daily: unlimited,
             budget_month_start_day: time_frame::month_start_day(unix_seconds)?,
             monthly_ceiling: unlimited,
             last_set: unlimited,
             updated: 0,
+        };
+        Ok(Some(StoredBudgetRow {
+            budget,
+            ..Default::default()
         }))
     }
     async fn upsert_budget(&self, _budget: StoredBudget) -> Result<()> {
@@ -105,6 +112,7 @@ async fn start_server() -> TestServer {
         LimitPolicy {
             company: generous,
             user: generous,
+            company_extra_daily_cpu: 0,
         },
         Arc::new(EmptyStore),
         600,

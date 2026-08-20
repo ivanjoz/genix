@@ -41,6 +41,30 @@ pub struct StoredBudget {
     pub updated: i32,
 }
 
+/// The extra-pool counters as persisted, with the periods that say which window each belongs to.
+///
+/// Read back at cold start for two different reasons. The daily figure is the pool itself: without
+/// it a restart would hand a company a fresh allowance mid-day. The monthly figure is not a quota at
+/// all — there is no monthly extra ceiling — it is the correction term that keeps `month_used`
+/// honest, because that counter is recovered by summing the usage rows and those rows include
+/// whatever the pool paid for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StoredExtraUsage {
+    pub day_period: i16,
+    pub day_cpu: u64,
+    pub month_start_day: i16,
+    pub month_cpu: u64,
+}
+
+/// The two halves of one `company_credit_budget` row. Read together because it is one row and one
+/// point query; written by two separate statements because the two writes race and each must leave
+/// the other's columns alone.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct StoredBudgetRow {
+    pub budget: StoredBudget,
+    pub extra: StoredExtraUsage,
+}
+
 /// The daemon's own usage counters for one company, so a reader can subtract them from the ceilings
 /// in `StoredBudget` instead of re-summing the usage rows the way the daemon does on a cold miss.
 ///
@@ -55,6 +79,10 @@ pub struct StoredBudgetUsage {
     pub day_used: Credits,
     pub month_start_day: i16,
     pub month_used: Credits,
+    /// CPU paid out of the extra daily pool, in the two windows above. Not part of `day_used` or
+    /// `month_used`: extra spending is counted apart from the quota it was granted outside of.
+    pub day_extra_cpu: u64,
+    pub month_extra_cpu: u64,
     pub updated: i32,
 }
 
@@ -72,7 +100,7 @@ pub trait LimiterStore: Send + Sync {
         end_time_frame: i32,
     ) -> Result<Vec<StoredUsage>>;
     async fn upsert(&self, key: UsageKey, used_credits: Vec<u8>) -> Result<()>;
-    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudget>>;
+    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudgetRow>>;
     async fn upsert_budget(&self, budget: StoredBudget) -> Result<()>;
     /// Writes only the usage columns, never the entitlement ones: the two writes race (a flush and a
     /// mutation can land in either order) and each must leave the other's columns untouched.
@@ -151,7 +179,8 @@ impl ScyllaLimiterStore {
             .prepare(
                 "SELECT daily_cpu, daily_inference, budget_month_start_day, \
                  monthly_cpu_ceiling, monthly_inference_ceiling, last_set_cpu, \
-                 last_set_inference, updated \
+                 last_set_inference, updated, usage_day_period, day_extra_cpu_used, \
+                 usage_month_start_day, month_extra_cpu_used \
                  FROM company_credit_budget WHERE company_id = ?",
             )
             .await
@@ -174,8 +203,9 @@ impl ScyllaLimiterStore {
             .prepare(
                 "INSERT INTO company_credit_budget \
                  (company_id, usage_day_period, day_cpu_used, day_inference_used, \
-                  usage_month_start_day, month_cpu_used, month_inference_used, usage_updated) \
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  usage_month_start_day, month_cpu_used, month_inference_used, \
+                  day_extra_cpu_used, month_extra_cpu_used, usage_updated) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .await
             .context("failed to prepare company_credit_budget usage upsert")?;
@@ -275,7 +305,7 @@ impl LimiterStore for ScyllaLimiterStore {
         Ok(())
     }
 
-    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudget>> {
+    async fn load_budget(&self, company_id: i32) -> Result<Option<StoredBudgetRow>> {
         let query_result = self
             .session
             .execute_unpaged(&self.select_budget, (company_id,))
@@ -285,9 +315,24 @@ impl LimiterStore for ScyllaLimiterStore {
             .into_rows_result()
             .context("company_credit_budget read did not return rows")?;
         let mut rows = rows_result
-            // last_set_* arrived through an ALTER, so rows written before it exist with those cells
-            // empty: decoding them as non-nullable would fail every pre-existing company.
-            .rows::<(i64, i64, i16, i64, i64, Option<i64>, Option<i64>, i32)>()
+            // last_set_* and the two extra-pool columns arrived through an ALTER, so rows written
+            // before them exist with those cells empty: decoding them as non-nullable would fail
+            // every pre-existing company. usage_day_period is nullable for the same reason — a
+            // company the daemon has never flushed for has no usage cells at all.
+            .rows::<(
+                i64,
+                i64,
+                i16,
+                i64,
+                i64,
+                Option<i64>,
+                Option<i64>,
+                i32,
+                Option<i16>,
+                Option<i64>,
+                Option<i16>,
+                Option<i64>,
+            )>()
             .context("company_credit_budget row shape is invalid")?;
         let Some(row) = rows.next() else {
             return Ok(None);
@@ -301,9 +346,15 @@ impl LimiterStore for ScyllaLimiterStore {
             last_set_cpu,
             last_set_inference,
             updated,
+            extra_day_period,
+            extra_day_cpu,
+            extra_month_start_day,
+            extra_month_cpu,
         ) = row.context("company_credit_budget row decode failed")?;
         let (last_set_cpu, last_set_inference) =
             (last_set_cpu.unwrap_or(0), last_set_inference.unwrap_or(0));
+        let (extra_day_cpu, extra_month_cpu) =
+            (extra_day_cpu.unwrap_or(0), extra_month_cpu.unwrap_or(0));
         if [
             daily_cpu,
             daily_inference,
@@ -311,13 +362,15 @@ impl LimiterStore for ScyllaLimiterStore {
             monthly_inference,
             last_set_cpu,
             last_set_inference,
+            extra_day_cpu,
+            extra_month_cpu,
         ]
         .into_iter()
         .any(|value| value < 0)
         {
             anyhow::bail!("company_credit_budget contains negative credits");
         }
-        Ok(Some(StoredBudget {
+        let budget = StoredBudget {
             company_id,
             daily: Credits {
                 cpu: daily_cpu as u64,
@@ -333,6 +386,15 @@ impl LimiterStore for ScyllaLimiterStore {
                 inference: last_set_inference as u64,
             },
             updated,
+        };
+        Ok(Some(StoredBudgetRow {
+            budget,
+            extra: StoredExtraUsage {
+                day_period: extra_day_period.unwrap_or(0),
+                day_cpu: extra_day_cpu as u64,
+                month_start_day: extra_month_start_day.unwrap_or(0),
+                month_cpu: extra_month_cpu as u64,
+            },
         }))
     }
 
@@ -377,6 +439,10 @@ impl LimiterStore for ScyllaLimiterStore {
             i64::try_from(usage.month_used.cpu).context("monthly CPU usage exceeds int64")?;
         let month_inference = i64::try_from(usage.month_used.inference)
             .context("monthly inference usage exceeds int64")?;
+        let day_extra_cpu =
+            i64::try_from(usage.day_extra_cpu).context("daily extra CPU usage exceeds int64")?;
+        let month_extra_cpu = i64::try_from(usage.month_extra_cpu)
+            .context("monthly extra CPU usage exceeds int64")?;
         self.session
             .execute_unpaged(
                 &self.upsert_budget_usage,
@@ -388,6 +454,8 @@ impl LimiterStore for ScyllaLimiterStore {
                     usage.month_start_day,
                     month_cpu,
                     month_inference,
+                    day_extra_cpu,
+                    month_extra_cpu,
                     usage.updated,
                 ),
             )

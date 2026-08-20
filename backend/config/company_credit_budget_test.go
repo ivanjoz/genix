@@ -176,7 +176,7 @@ func TestMakeCompanyCreditBudgetResponseSubtractsOnlyTheCurrentWindows(t *testin
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			response := makeCompanyCreditBudgetResponse(testCase.record)
+			response := makeCompanyCreditBudgetResponse(testCase.record, 0)
 			if !response.IsCurrentMonth {
 				t.Fatalf("IsCurrentMonth = false, want true")
 			}
@@ -205,12 +205,19 @@ func TestMakeCompanyCreditBudgetResponseReportsNoBudgetOutsideTheCurrentMonth(t 
 	response := makeCompanyCreditBudgetResponse(coreTypes.CompanyCreditBudget{
 		CompanyID: 7, DailyCPU: 1_000, BudgetMonthStartDay: 20_635, MonthlyCPUCeiling: 40_000,
 		UsageDayPeriod: 20_681, DayCPUUsed: 300, UsageMonthStartDay: 20_635, MonthCPUUsed: 12_000,
-		UsageUpdated: 393_538_913,
-	})
+		UsageUpdated: 393_538_913, DayExtraCPUUsed: 400,
+	}, 50_000)
 	if response.IsCurrentMonth {
 		t.Fatalf("IsCurrentMonth = true, want false")
 	}
 	if response.CurrentCPU != 0 || response.DailyRemainingCPU != 0 || response.MonthCPUUsed != 0 {
 		t.Fatalf("response = %+v, want every credit figure at zero", response)
+	}
+	// El pool extra es la excepción, y es a propósito: una company sin presupuesto del mes en curso
+	// es precisamente la que vive de él, así que esconderlo dejaría invisible el modo de sólo lectura
+	// justo cuando está en uso.
+	if response.ExtraCPU != 50_000 || response.DayExtraCPUUsed != 400 ||
+		response.ExtraRemainingCPU != 49_600 {
+		t.Fatalf("el pool extra no sobrevivió a un mes sin presupuesto: %+v", response)
 	}
 }

@@ -463,8 +463,11 @@ func chargeGetResponseTopUp(args *core.HandlerArgs, responseBytes int) *core.Han
 		requestContext = args.ReqContext.Context()
 	}
 	topUpCredits := totalCredits - baseCredits
+	// Eligible para los créditos extra, igual que la base que ya se cobró: es la segunda mitad del
+	// cargo de un GET, no un cargo distinto. Si la base salió del pool y la liquidación no pudiera,
+	// una respuesta grande sería lo único que el modo de sólo lectura no puede servir.
 	if err := core.ChargeAPICredits(
-		requestContext, args.User.CompanyID, args.User.ID, args.RouteID, topUpCredits,
+		requestContext, args.User.CompanyID, args.User.ID, args.RouteID, topUpCredits, true,
 	); err != nil {
 		core.Log("credit rate limiter rejected GET top-up::", " company::", args.User.CompanyID,
 			" user::", args.User.ID, " route::", args.RouteID, " bytes::", responseBytes,

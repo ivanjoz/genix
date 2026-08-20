@@ -24,6 +24,15 @@
     },
   ]);
   const hasBudget = $derived(!!budget?.IsCurrentMonth);
+  // El pool diario de lecturas. Se lee aparte de los dos medidores de arriba porque no es una
+  // pareja CPU/IA: es una sola cifra de CPU, y meterla en esa rejilla insinuaría una mitad de IA
+  // que no existe. Sin techo configurado no se dibuja nada, que es lo que pasa en Lambda.
+  const extraTotal = $derived(budget?.ExtraCPU || 0);
+  const extraUsed = $derived(budget?.DayExtraCPUUsed || 0);
+  const extraRemaining = $derived(budget?.ExtraRemainingCPU || 0);
+  // Que se esté gastando es la señal, no que exista: significa que la cuota ya rechazó algo y la
+  // company está sirviendo sólo lecturas.
+  const inExtraMode = $derived(extraUsed > 0);
   const cellTitle = (metric: string, remaining: number, total: number) => (
     hasBudget
       ? `${metric}: ${formatN(remaining) || '0'} ${tr('of|de')} ${formatN(total) || '0'} ${tr('credits left|créditos restantes')}`
@@ -66,3 +75,31 @@
     </div>
   {/each}
 </div>
+{#if extraTotal > 0}
+  <div
+    class="mt-6"
+    title={`${tr('Extra read-only credits|Créditos extra de sólo lectura')}: ${formatN(extraRemaining) || '0'} ${tr('of|de')} ${formatN(extraTotal) || '0'}`}
+  >
+    <div class="flex items-center gap-4 text-[12px] text-slate-600">
+      <T text="Extra (reads)|Extra (lecturas)" />
+      {#if inExtraMode}
+        <span class="icon-[fa--exclamation-triangle] text-amber-500"></span>
+        <span class="text-amber-700"><T text="quota exhausted|cuota agotada" /></span>
+      {/if}
+    </div>
+    <div
+      class="relative mt-2 h-9 overflow-hidden rounded-[4px] border leading-[18px]"
+      class:border-slate-300={!inExtraMode}
+      class:border-amber-300={inExtraMode}
+      class:bg-amber-50={inExtraMode}
+    >
+      {#if extraRemaining > 0}
+        <div
+          class={`absolute inset-y-0 left-0 ${inExtraMode ? 'bg-amber-200' : 'bg-emerald-200'}`}
+          style={`width:${creditMeterFillPercent(extraRemaining, extraTotal)}%`}
+        ></div>
+      {/if}
+      <span class="absolute inset-y-0 right-4 ff-mono">{numberToK(extraRemaining) || '0'}</span>
+    </div>
+  </div>
+{/if}

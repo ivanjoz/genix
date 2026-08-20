@@ -70,9 +70,15 @@ type companyCreditBudgetMeter struct {
 	MonthlyInferenceCeiling int64
 	RemainingCPU            uint64
 	RemainingInference      uint64
-	IsCurrentMonth          bool
-	Updated                 int32 `json:"upd"`
-	Status                  int8  `json:"ss"`
+	// El pool diario de lecturas y lo que queda de él. Una company con estas dos cifras separadas de
+	// las de arriba es una que puede estar sirviendo GET con la cuota agotada, que es lo único que
+	// explica tráfico después de un rechazo.
+	ExtraCPU          int64
+	DayExtraCPUUsed   uint64
+	ExtraRemainingCPU uint64
+	IsCurrentMonth    bool
+	Updated           int32 `json:"upd"`
+	Status            int8  `json:"ss"`
 }
 
 type companyCreditReport struct {
@@ -180,6 +186,9 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 			MonthlyInferenceCeiling: budget.MonthlyInferenceCeiling,
 			RemainingCPU:            budget.CurrentCPU,
 			RemainingInference:      budget.CurrentInference,
+			ExtraCPU:                budget.ExtraCPU,
+			DayExtraCPUUsed:         budget.DayExtraCPUUsed,
+			ExtraRemainingCPU:       budget.ExtraRemainingCPU,
 			IsCurrentMonth:          budget.IsCurrentMonth,
 			Updated:                 lastFrame,
 			Status:                  1,

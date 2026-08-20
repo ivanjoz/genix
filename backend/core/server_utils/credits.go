@@ -29,6 +29,16 @@ const (
 	// unencodable route is a caller's error and not a rejected frame — a rejection would be
 	// indistinguishable from the limiter being down and would produce the wrong 503 response.
 	maxChargeRouteID = 16_383
+
+	// extraCreditFlag rides in the high bit of the route field, which maxChargeRouteID leaves free.
+	// Set, it tells the daemon this charge is a read and may therefore fall back to the company's
+	// extra daily pool once normal quota refuses. Mirrored from EXTRA_CREDIT_FLAG in
+	// server_utils/src/limiter/protocol.rs.
+	//
+	// It is a permission and not an instruction: an eligible frame that fits in normal quota is
+	// charged normally. Only reads carry it, because the pool exists to keep a tenant out of credit
+	// able to look at its data, not to keep writing.
+	extraCreditFlag = uint16(0x8000)
 )
 
 var ErrCreditLimiterMissing = errors.New("credit rate limiter is not configured")
@@ -155,7 +165,11 @@ func ChargeAPIUsage(
 	if err != nil {
 		return err
 	}
-	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0, requiredAccess)
+	// Eligibility for the extra pool is derived here, from the same string that just chose the
+	// tariff, and is not a parameter. That is the point: a caller cannot mark a write as a read by
+	// disagreeing with itself, because there is only one value to disagree with.
+	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0, requiredAccess,
+		strings.ToUpper(method) == "GET")
 }
 
 // ChargeAPIAccessOnly authorizes without charging. The credit-exempt routes use it: they skip the
@@ -167,18 +181,24 @@ func ChargeAPIAccessOnly(
 	if len(requiredAccess) == 0 {
 		return nil
 	}
-	return chargeConfiguredCredits(ctx, companyID, userID, routeID, 0, 0, requiredAccess)
+	// No credits, so nothing could come out of any pool.
+	return chargeConfiguredCredits(ctx, companyID, userID, routeID, 0, 0, requiredAccess, false)
 }
 
 // ChargeAPICredits submits an already-computed credit amount. The GET top-up uses it, because the
 // amount it owes is a difference between two payload sizes and not a payload size of its own.
+//
+// extraCreditsAllowed is a parameter here and derived in ChargeAPIUsage, because this function has
+// no method to derive it from: the caller is the only one who knows what it is settling.
 func ChargeAPICredits(
 	ctx context.Context, companyID, userID int32, routeID int16, cpuCredits uint16,
+	extraCreditsAllowed bool,
 ) error {
 	if cpuCredits == 0 {
 		return nil
 	}
-	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0, nil)
+	return chargeConfiguredCredits(
+		ctx, companyID, userID, routeID, cpuCredits, 0, nil, extraCreditsAllowed)
 }
 
 type creditRateLimitIdentity struct {
@@ -213,8 +233,10 @@ func ChargeInferenceUsage(ctx context.Context, inputBytes, outputBytes int) erro
 	if inferenceCredits == 0 {
 		return nil
 	}
+	// Never eligible: the pool is CPU-only, and the daemon refuses to relax anything for a frame
+	// that asks for inference.
 	return chargeConfiguredCredits(
-		ctx, identity.companyID, identity.userID, identity.routeID, 0, inferenceCredits, nil,
+		ctx, identity.companyID, identity.userID, identity.routeID, 0, inferenceCredits, nil, false,
 	)
 }
 
@@ -241,13 +263,15 @@ func chargeConfiguredCredits(
 	routeID int16,
 	cpuCredits, inferenceCredits uint16,
 	requiredAccess []uint16,
+	extraCreditsAllowed bool,
 ) error {
 	client := serverUtils()
 	if client == nil {
 		logLine("credit rate limiter not configured, refusing request::", ErrCreditLimiterMissing)
 		return ErrCreditLimiterMissing
 	}
-	err := client.Charge(ctx, companyID, userID, routeID, cpuCredits, inferenceCredits, requiredAccess)
+	err := client.Charge(ctx, companyID, userID, routeID, cpuCredits, inferenceCredits,
+		requiredAccess, extraCreditsAllowed)
 	if err != nil {
 		logLine("credit rate limiter refused request::", err)
 	}
@@ -265,7 +289,7 @@ func chargeConfiguredCredits(
 // maxChargeRouteID.
 func encodeCharge(
 	companyID, userID int32, routeID int16, cpuCredits, inferenceCredits uint16,
-	requiredAccess []uint16,
+	requiredAccess []uint16, extraCreditsAllowed bool,
 ) ([]byte, error) {
 	if companyID <= 0 || companyID > 0xFF_FFFF || userID <= 0 || userID > 0xFF_FFFF {
 		return nil, errors.New("company and user IDs must fit positive uint24")
@@ -294,7 +318,13 @@ func encodeCharge(
 	payload := make([]byte, creditChargePayloadSize)
 	writeUint24(payload[0:3], uint32(companyID))
 	writeUint24(payload[3:6], uint32(userID))
-	binary.BigEndian.PutUint16(payload[6:8], uint16(routeID))
+	// The flag is applied after the conversion to uint16, so the int16 parameter never has to hold
+	// it: routeID stays a plain route number, validated above against maxChargeRouteID.
+	encodedRoute := uint16(routeID)
+	if extraCreditsAllowed {
+		encodedRoute |= extraCreditFlag
+	}
+	binary.BigEndian.PutUint16(payload[6:8], encodedRoute)
 	binary.BigEndian.PutUint16(payload[8:10], cpuCredits)
 	binary.BigEndian.PutUint16(payload[10:12], inferenceCredits)
 	for slot, packedAccess := range requiredAccess {
@@ -315,9 +345,11 @@ func (client *ServerUtilsClient) Charge(
 	routeID int16,
 	cpuCredits, inferenceCredits uint16,
 	requiredAccess []uint16,
+	extraCreditsAllowed bool,
 ) error {
 	payload, err := encodeCharge(
-		companyID, userID, routeID, cpuCredits, inferenceCredits, requiredAccess)
+		companyID, userID, routeID, cpuCredits, inferenceCredits, requiredAccess,
+		extraCreditsAllowed)
 	if err != nil {
 		return err
 	}

@@ -190,6 +190,11 @@ type EnvStruct struct {
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
 	SIGNUP_WINDOW_MINUTES    int32
+	// COMPANY_EXTRA_CREDITS_24H es el techo del pool diario de créditos extra, y este proceso NO lo
+	// aplica: lo aplica el daemon, que lee la misma clave del mismo archivo. Aquí sólo sirve para que
+	// el panel pueda dibujar la fracción, así que un 0 esconde el tramo del medidor sin cambiar nada
+	// de lo que el limiter concede. Env var para el caso Lambda, donde config.toml no existe.
+	COMPANY_EXTRA_CREDITS_24H int64
 	// CONTACT_EMAIL is the inbox the public contact form delivers to. Empty disables the endpoint
 	// outright: with nowhere to send a message, accepting one would only be a way to fill a table.
 	// It is read from config and never from the request, for the same reason APP_URL is — a caller
@@ -316,6 +321,11 @@ type fileConfig struct {
 	} `toml:"agent"`
 
 	RateLimit struct {
+		// El techo del pool diario de créditos extra, leído sólo para que el panel pueda dibujar la
+		// fracción. La autoridad es el daemon, que lee la misma clave del mismo archivo: aquí no se
+		// aplica nada. En Lambda, donde este archivo no existe, queda en 0 y el medidor esconde el
+		// tramo mientras el daemon lo sigue concediendo.
+		CompanyExtraCredits24h int64 `toml:"company_extra_credits_24h"`
 	} `toml:"rate_limit"`
 
 	SignUp struct {
@@ -463,6 +473,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 		file.ServerUtils.Host, file.ServerUtils.Port, file.ServerUtils.Public)
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
+	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
 	env.CONTACT_EMAIL = strings.ToLower(strings.TrimSpace(file.Contact.Email))
 	env.CONTACT_MAX_MESSAGES_PER_IP = file.Contact.MaxMessagesPerIP
 	env.CONTACT_WINDOW_MINUTES = file.Contact.WindowMinutes
@@ -627,6 +638,13 @@ func PopulateVariables() {
 	if signUpWindow := strings.TrimSpace(os.Getenv("SIGNUP_WINDOW_MINUTES")); signUpWindow != "" {
 		if parsed, err := strconv.Atoi(signUpWindow); err == nil {
 			Env.SIGNUP_WINDOW_MINUTES = int32(parsed)
+		}
+	}
+	// Sin valor por defecto, a diferencia de los de abajo: una cifra inventada aquí dibujaría un
+	// tramo de medidor que el daemon no concede. Cero significa "no lo sé", y el panel lo esconde.
+	if extraPool := strings.TrimSpace(os.Getenv("RATE_LIMIT_COMPANY_EXTRA_CREDITS_24H")); extraPool != "" {
+		if parsed, err := strconv.ParseInt(extraPool, 10, 64); err == nil {
+			Env.COMPANY_EXTRA_CREDITS_24H = parsed
 		}
 	}
 	if Env.SIGNUP_MAX_EMAILS_PER_IP <= 0 {

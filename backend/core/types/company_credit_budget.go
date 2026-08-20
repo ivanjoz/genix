@@ -29,6 +29,16 @@ type CompanyCreditBudget struct {
 	UsageMonthStartDay int16
 	MonthCPUUsed       int64
 	MonthInferenceUsed int64
+	// CPU served out of the extra daily pool (rate_limit.company_extra_credits_24h), which is what a
+	// tenant whose quota already refused is allowed to spend on reads. Counted apart from the two
+	// pairs above on purpose: extra spending must not eat the daily figure a POST is judged against,
+	// and must never touch the monthly ceiling that was paid for.
+	//
+	// The daily one is the pool. The monthly one is not a second ceiling — there is none — it is the
+	// correction the daemon subtracts when it rebuilds MonthCPUUsed by summing the usage rows, which
+	// include what the pool paid for. Both belong to the periods above.
+	DayExtraCPUUsed   int64
+	MonthExtraCPUUsed int64
 	// Zero means the daemon has never flushed for this company, which is the only case where the
 	// counters cannot be trusted and month usage has to be summed from the usage rows instead.
 	UsageUpdated int32
@@ -51,6 +61,8 @@ type CompanyCreditBudgetTable struct {
 	UsageMonthStartDay      db.Col[CompanyCreditBudgetTable, int16]
 	MonthCPUUsed            db.Col[CompanyCreditBudgetTable, int64]
 	MonthInferenceUsed      db.Col[CompanyCreditBudgetTable, int64]
+	DayExtraCPUUsed         db.Col[CompanyCreditBudgetTable, int64]
+	MonthExtraCPUUsed       db.Col[CompanyCreditBudgetTable, int64]
 	UsageUpdated            db.Col[CompanyCreditBudgetTable, int32]
 }
 
