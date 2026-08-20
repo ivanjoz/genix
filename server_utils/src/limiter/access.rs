@@ -242,6 +242,61 @@ mod tests {
         assert!(!state.holds(packed(8896, 1)));
     }
 
+    /// The real `accesos_computed` blob of user 2 / company 3 in the development database, byte for
+    /// byte as ScyllaDB holds it. The synthetic fixtures above prove the codec is self-consistent;
+    /// this one proves it agrees with what the Go ORM actually wrote.
+    ///
+    /// Read big-endian these same bytes decode to accesos 1984..3840 — every one of them outside the
+    /// catalogue, so every check would silently deny. That is the failure this test exists to catch.
+    #[test]
+    fn decodes_a_real_blob_from_the_database() {
+        let stored = vec![
+            0x1F, 0x00, 0x23, 0x00, 0x27, 0x00, 0x2B, 0x00, 0x2F, 0x00, 0x33, 0x00, 0x37, 0x00,
+            0x38, 0x00, 0x3C, 0x00,
+        ];
+        let state = UserAccessState::from_row(
+            Some(StoredUserAccess {
+                grants_blob: stored,
+                status: 1,
+            }),
+            0,
+        )
+        .unwrap();
+        assert_eq!(
+            state.grants.as_ref(),
+            &[31, 35, 39, 43, 47, 51, 55, 56, 60],
+            "must match what the Go ORM read back from the same bytes"
+        );
+
+        // Accesos 7..13 were granted at nivel 4, so they satisfy every level.
+        for acceso_id in 7..=13 {
+            for nivel in 1..=4 {
+                assert!(
+                    state
+                        .verdict(&required(&[packed(acceso_id, nivel)]))
+                        .is_none(),
+                    "acceso {acceso_id} nivel {nivel} should be granted"
+                );
+            }
+        }
+        // Accesos 14 and 15 were granted at nivel 1 only: reading yes, writing no.
+        for acceso_id in [14, 15] {
+            assert!(state.verdict(&required(&[packed(acceso_id, 1)])).is_none());
+            assert_eq!(
+                state.verdict(&required(&[packed(acceso_id, 2)])),
+                Some(AccessDenial::NoAccess),
+                "acceso {acceso_id} was granted nivel 1, so a write must be refused"
+            );
+        }
+        // Nothing outside the granted range leaks in.
+        for acceso_id in [1, 6, 16, 34] {
+            assert_eq!(
+                state.verdict(&required(&[packed(acceso_id, 1)])),
+                Some(AccessDenial::NoAccess)
+            );
+        }
+    }
+
     #[test]
     fn an_odd_length_blob_is_corrupt() {
         assert!(decode_grants(&[0x01, 0x00, 0x02]).is_err());

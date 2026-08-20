@@ -87,6 +87,11 @@ shards                = 0      # 0 = logical CPU count
 # hay que declararlo: sin él un cliente autenticado podría lanzar tareas y encolar
 # respuestas sin límite. Al superarlo se responde "no disponible", no se encola.
 max_inflight_per_connection = 64
+# Cuánto viven en memoria los accesos de un user (users.accesos_computed) contra los que se autoriza
+# la trama 0x01. Es un respaldo, no el mecanismo: el backend manda 0x06 al reescribir la columna, así
+# que un acceso revocado deja de funcionar en el acto y esto sólo cubre una trama perdida o un
+# backend reiniciado.
+access_cache_seconds  = 600
 
 # Whole-company limits. CPU and inference credits are independent.
 company_cpu_10s        = 2000

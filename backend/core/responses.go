@@ -45,13 +45,6 @@ type HandlerArgs struct {
 	RequestID int64
 	// RouteID is the generated number of Method+"."+Route; zero means the path matched no handler.
 	RouteID int16
-	// RequiredAccess are los accesos empaquetados (accesoID<<2 | nivel-1) que el gate exige para
-	// esta ruta, y que viajan en el frame del limitador para que server_utils los verifique. Vacío
-	// es el caso normal: GET sin acceso mapeado, ruta self-service, o user 1.
-	RequiredAccess []uint16
-	// RequiredAccessNames acompaña a RequiredAccess sólo para el mensaje de error. El daemon no
-	// conoce access_list.yml, así que los nombres tienen que salir de este lado.
-	RequiredAccessNames []string
 }
 
 // ClientIPFromRequest resolves the caller's address behind the project's own Nginx.

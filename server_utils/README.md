@@ -542,14 +542,16 @@ terminates TLS in front of it.
 The backend uses uncompressed bytes and binary KiB (`1 KiB = 1024 bytes`):
 
 - GET groups `0/1/2` use response sizes `<32 KiB`, `32..256 KiB`, and `>256 KiB`.
-- POST groups `3/4/5` use request-body sizes with the same boundaries.
+- POST groups `3/4/5` use request-body sizes with the same boundaries. `PUT` is a write like `POST`
+  and shares every rule below with it — same tariff, same required access level. The two are one
+  behaviour, declared once (`isWriteMethod` in the router, one `case "POST", "PUT"` in the tariff).
 - GET CPU usage is two base credits for the first 8 KiB, then one credit per started 16 KiB.
-- POST CPU usage is five base credits for the first 8 KiB, then one credit per started 8 KiB.
+- POST/PUT CPU usage is five base credits for the first 8 KiB, then one credit per started 8 KiB.
 - Successful inference usage is one credit per started 8 KiB of provider input and two credits per
   started 8 KiB of provider output.
 
-Authenticated private POST requests are admitted before their handler runs, in one frame that also
-authorizes them.
+Authenticated private writes (`POST`, `PUT`) are admitted before their handler runs, in one frame
+that also authorizes them.
 
 A GET is split, because its byte count only exists after the handler while its authorization verdict
 is needed before it. The pre-handler frame carries the access check and the **base** charge of two
@@ -558,6 +560,10 @@ only case that costs more than the base. Most GETs therefore send one frame and 
 consequences worth knowing when reading the usage tables: a GET that ends in an error now costs its
 two base credits where it used to cost nothing, and a streamed response is charged its base and never
 topped up.
+
+A method with no tariff at all — anything that is neither a read nor a write — is authorized and not
+charged, rather than becoming a 503: the tariff errors on a method it does not know, and the router
+fails closed on an error.
 
 Routes exempt from charging (the credit panel's own reads, so a tenant out of credit can still see
 why) skip the **credits**, never the **frame**: three of them are access-mapped and two are

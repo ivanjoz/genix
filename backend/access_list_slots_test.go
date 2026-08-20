@@ -158,9 +158,9 @@ func TestResolveRouteAccess(t *testing.T) {
 	})
 }
 
-// PUT has no credit tariff — APICPUCredits knows only GET and POST — and it was never charged before
-// this change either. Charging it would have made every PUT a 503, since the formula returns an error
-// for an unknown method and the router fails closed on one.
+// POST and PUT are one behaviour, not two: same tariff, same required level. A method with no
+// tariff at all is authorized and not charged, rather than becoming a 503 — APICPUCredits errors on
+// a method it does not know and the router fails closed on an error.
 func TestChargedMethodFor(t *testing.T) {
 	checks := []struct {
 		method   string
@@ -169,8 +169,7 @@ func TestChargedMethodFor(t *testing.T) {
 	}{
 		{"GET", "GET.productos", "GET"},
 		{"POST", "POST.productos", "POST"},
-		// Mapped, authorized, and deliberately free: see chargedMethodFor.
-		{"PUT", "PUT.purchase-orders", ""},
+		{"PUT", "PUT.purchase-orders", "PUT"},
 		{"DELETE", "DELETE.whatever", ""},
 		// The credit panel reading itself.
 		{"GET", "GET.credit-usage", ""},
@@ -185,10 +184,37 @@ func TestChargedMethodFor(t *testing.T) {
 
 	// Every credit-exempt route must be exempt whatever method reaches it.
 	for route := range creditControlRoutes {
-		for _, method := range []string{"GET", "POST"} {
+		for _, method := range []string{"GET", "POST", "PUT"} {
 			if got := chargedMethodFor(method, route); got != "" {
 				t.Errorf("%s %s was charged; the credit panel must stay reachable", method, route)
 			}
 		}
+	}
+}
+
+// The one assertion that makes "no distinction between POST and PUT" true rather than intended:
+// identical credits at every payload size, and the same required access at the same level.
+func TestPostAndPutAreIndistinguishable(t *testing.T) {
+	for _, payloadBytes := range []int{0, 1, 8 * 1024, 8*1024 + 1, 64 * 1024, 1 << 20} {
+		post, postErr := core.APICPUCredits("POST", payloadBytes)
+		put, putErr := core.APICPUCredits("PUT", payloadBytes)
+		if postErr != nil || putErr != nil {
+			t.Fatalf("%d bytes: POST err %v, PUT err %v", payloadBytes, postErr, putErr)
+		}
+		if post != put {
+			t.Errorf("%d bytes: POST costs %d but PUT costs %d", payloadBytes, post, put)
+		}
+	}
+
+	accessInfos := []core.AccessInfo{{ID: 3, Name: "Comercial"}}
+	postDecision := resolveRouteAccess("POST", "POST.mapped", 42, accessInfos)
+	putDecision := resolveRouteAccess("PUT", "PUT.mapped", 42, accessInfos)
+	if !slices.Equal(postDecision.requiredAccess, putDecision.requiredAccess) {
+		t.Errorf("POST requires %v but PUT requires %v",
+			postDecision.requiredAccess, putDecision.requiredAccess)
+	}
+	// Both are writes, so both must ask for nivel 2 and not nivel 1.
+	if want := core.MakeAccesoNivelPacked(3, 2); !slices.Equal(putDecision.requiredAccess, []uint16{want}) {
+		t.Errorf("PUT required %v; want nivel 2 (%d)", putDecision.requiredAccess, want)
 	}
 }

@@ -153,6 +153,11 @@ func TestCreditFormulasRoundPartialBlocksUp(t *testing.T) {
 		{"GET", 24 * 1024, 3}, {"GET", 24*1024 + 1, 4},
 		{"POST", 0, 5}, {"POST", 8 * 1024, 5}, {"POST", 8*1024 + 1, 6},
 		{"POST", 16 * 1024, 6}, {"POST", 16*1024 + 1, 7},
+		// PUT is a write like POST and shares its tariff exactly; see APICPUCredits.
+		{"PUT", 0, 5}, {"PUT", 8 * 1024, 5}, {"PUT", 8*1024 + 1, 6},
+		{"PUT", 16 * 1024, 6}, {"PUT", 16*1024 + 1, 7},
+		// Lower case reaches the same case arm, since the switch upper-cases first.
+		{"put", 16*1024 + 1, 7}, {"post", 16*1024 + 1, 7},
 	}
 	for _, check := range checks {
 		got, err := APICPUCredits(check.method, check.bytes)
@@ -160,6 +165,12 @@ func TestCreditFormulasRoundPartialBlocksUp(t *testing.T) {
 			t.Fatalf("APICPUCredits(%q, %d) = %d, %v; want %d", check.method, check.bytes, got, err, check.want)
 		}
 	}
+	// A method with no tariff must error rather than silently cost nothing — that error is what
+	// makes chargedMethodFor's guard necessary instead of decorative.
+	if _, err := APICPUCredits("DELETE", 0); err == nil {
+		t.Fatal("an unknown method was given a tariff")
+	}
+
 	inference, err := InferenceCredits(8*1024+1, 8*1024+1)
 	if err != nil || inference != 6 {
 		t.Fatalf("InferenceCredits() = %d, %v; want 6", inference, err)

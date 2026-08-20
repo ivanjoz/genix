@@ -87,7 +87,12 @@ func (limit *CreditLimitExceeded) Error() string {
 	return fmt.Sprintf("%s %s credit limit exhausted (code=%d)", scope, limit.Window, limit.Code)
 }
 
-// APICPUCredits applies the GET/POST base charge and rounds each partial extra block up.
+// APICPUCredits applies the read/write base charge and rounds each partial extra block up.
+//
+// POST and PUT share one case, and that is the whole point: they are the same operation as far as
+// this tariff is concerned — a body arrives and the handler writes — so the two must never be able
+// to disagree about what they cost. Splitting them into separate cases is what let PUT fall through
+// to the error branch and be silently free.
 func APICPUCredits(method string, payloadBytes int) (uint16, error) {
 	if payloadBytes < 0 {
 		return 0, errors.New("payload size cannot be negative")
@@ -96,7 +101,7 @@ func APICPUCredits(method string, payloadBytes int) (uint16, error) {
 	switch strings.ToUpper(method) {
 	case "GET":
 		baseCredits, extraBlockBytes = 2, 16*1024
-	case "POST":
+	case "POST", "PUT":
 		baseCredits, extraBlockBytes = 5, 8*1024
 	default:
 		return 0, fmt.Errorf("credit rate limiting does not support method %q", method)
