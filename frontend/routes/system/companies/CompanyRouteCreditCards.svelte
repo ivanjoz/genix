@@ -1,14 +1,13 @@
 <script lang="ts">
   import T from '$components/misc/T.svelte';
   import { formatN } from '$libs/helpers';
-  import type { ICompanyCreditUsageRoute } from './company-credit-usage';
-  import { splitCompanyCreditRoute, usagePercent } from './company-credit-usage.model';
+  import { splitCompanyCreditRoute, usagePercent, type ICompanyCreditRoute } from './company-credit-usage.model';
 
   let {
     routes,
     totalCPU,
   }: {
-    routes: ICompanyCreditUsageRoute[];
+    routes: Required<ICompanyCreditRoute>[];
     totalCPU: number;
   } = $props();
 </script>

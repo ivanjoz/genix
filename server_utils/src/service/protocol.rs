@@ -6,6 +6,7 @@
 //! handshake nonce, and the frame sequence that binds each HMAC to that connection.
 
 use crate::{
+    limiter::access::INVALIDATE_ACCESS_PAYLOAD_SIZE,
     limiter::budget::MUTATE_BUDGET_PAYLOAD_SIZE,
     limiter::protocol::CHARGE_PAYLOAD_SIZE,
     lock::protocol::{ACQUIRE_PAYLOAD_SIZE, RELEASE_PAYLOAD_SIZE},
@@ -73,6 +74,7 @@ pub enum Opcode {
     LockRelease = 0x03,
     LogRequest = 0x04,
     MutateCompanyBudget = 0x05,
+    InvalidateUserAccess = 0x06,
 }
 
 /// How the reader learns where a frame's payload ends.
@@ -98,6 +100,7 @@ impl Opcode {
             0x03 => Some(Self::LockRelease),
             0x04 => Some(Self::LogRequest),
             0x05 => Some(Self::MutateCompanyBudget),
+            0x06 => Some(Self::InvalidateUserAccess),
             _ => None,
         }
     }
@@ -111,16 +114,19 @@ impl Opcode {
                 maximum: REQUEST_LOG_MAX_PAYLOAD_SIZE,
             },
             Self::MutateCompanyBudget => PayloadWidth::Fixed(MUTATE_BUDGET_PAYLOAD_SIZE),
+            Self::InvalidateUserAccess => PayloadWidth::Fixed(INVALIDATE_ACCESS_PAYLOAD_SIZE),
         }
     }
 
     /// Whether the daemon answers this opcode at all.
     ///
-    /// The request log is the one operation with nothing to say back: it is best effort, and
-    /// making the caller wait for an acknowledgement would put the daemon's latency on the
-    /// response path of every request in the system. The client writes the frame and moves on.
+    /// Two operations have nothing to say back. The request log is best effort, and making the
+    /// caller wait for an acknowledgement would put the daemon's latency on the response path of
+    /// every request in the system. An access invalidation is the same shape of promise: the TTL
+    /// bounds the damage if it is lost, so a user save must not wait on it. Both write the frame
+    /// and move on.
     pub fn expects_reply(self) -> bool {
-        !matches!(self, Self::LogRequest)
+        !matches!(self, Self::LogRequest | Self::InvalidateUserAccess)
     }
 
     /// Whole frame width for the fixed-width opcodes: opcode, payload, and tag.
@@ -144,6 +150,7 @@ mod tests {
             Opcode::LockRelease,
             Opcode::LogRequest,
             Opcode::MutateCompanyBudget,
+            Opcode::InvalidateUserAccess,
         ] {
             let widest = match opcode.payload_width() {
                 PayloadWidth::Fixed(payload) => OPCODE_SIZE + payload + AUTH_TAG_SIZE,
@@ -156,15 +163,17 @@ mod tests {
     }
 
     #[test]
-    fn only_the_request_log_is_length_prefixed_and_unanswered() {
+    fn only_the_request_log_is_length_prefixed_and_two_opcodes_are_unanswered() {
         assert_eq!(Opcode::from_byte(0x04), Some(Opcode::LogRequest));
         assert!(matches!(
             Opcode::LogRequest.payload_width(),
             PayloadWidth::LengthPrefixed { .. }
         ));
         assert_eq!(Opcode::LogRequest.fixed_frame_size(), None);
-        // Nothing is sent back for a request log, so a client must not park a caller waiting.
+        // Nothing is sent back for either of these, so a client must not park a caller waiting.
         assert!(!Opcode::LogRequest.expects_reply());
+        assert_eq!(Opcode::from_byte(0x06), Some(Opcode::InvalidateUserAccess));
+        assert!(!Opcode::InvalidateUserAccess.expects_reply());
         for opcode in [
             Opcode::ChargeCredits,
             Opcode::LockAcquire,
@@ -190,8 +199,11 @@ mod tests {
         assert_eq!(Opcode::from_byte(0x01), Some(Opcode::ChargeCredits));
         assert_eq!(Opcode::from_byte(0x02), Some(Opcode::LockAcquire));
         assert_eq!(Opcode::from_byte(0x03), Some(Opcode::LockRelease));
-        // Opcode, then company, user, route, cpu and inference, then the tag.
-        assert_eq!(Opcode::ChargeCredits.fixed_frame_size(), Some(21));
+        // Opcode, then company, user, route, cpu, inference and four authorization slots, then
+        // the tag.
+        assert_eq!(Opcode::ChargeCredits.fixed_frame_size(), Some(29));
+        // Company and user, and nothing else: which grants to drop is implied by the pair.
+        assert_eq!(Opcode::InvalidateUserAccess.fixed_frame_size(), Some(15));
         assert_eq!(Opcode::LockAcquire.fixed_frame_size(), Some(24));
         // Release names the lock it ends: action, identifier, generation.
         assert_eq!(Opcode::LockRelease.fixed_frame_size(), Some(21));

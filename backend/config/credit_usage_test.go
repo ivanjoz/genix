@@ -1,7 +1,6 @@
 package config
 
 import (
-	coreTypes "app/core/types"
 	"reflect"
 	"testing"
 )
@@ -71,8 +70,8 @@ func TestDecodeCreditUsageAccumulatesOneRouteAcrossRows(t *testing.T) {
 
 func TestDecodeCreditUsageRejectsInvalidEncoding(t *testing.T) {
 	invalidBlobs := [][]byte{
-		{0x00, 0x05, 0x00},                               // Truncated two-byte values.
-		{0x00},                                           // A trailing byte that is half a header.
+		{0x00, 0x05, 0x00}, // Truncated two-byte values.
+		{0x00},             // A trailing byte that is half a header.
 		{0x00, 0x04, 0x01, 0x01, 0x00, 0x04, 0x02, 0x02}, // Duplicate route.
 		{0x00, 0x08, 0x01, 0x01, 0x00, 0x04, 0x02, 0x02}, // Routes going backwards.
 		{0x00, 0x00, 0x00, 0x00},                         // All-zero route.
@@ -86,7 +85,7 @@ func TestDecodeCreditUsageRejectsInvalidEncoding(t *testing.T) {
 }
 
 func TestMakeCreditUsageScopeZeroFillsFifteenUTCDays(t *testing.T) {
-	rows := []coreTypes.CreditUsage{{
+	rows := []creditUsageBlobRow{{
 		TimeFrame:   dailyTimeFramePrefix + 103,
 		UsedCredits: []byte{0x00, 0x04, 0x05, 0x07},
 	}}
@@ -109,7 +108,7 @@ func TestMakeCreditUsageScopeZeroFillsFifteenUTCDays(t *testing.T) {
 // The breakdown is ordered by cost so a client can render its head and stop, and it names each
 // route: the numbers alone say nothing, and the generated table is the only authority on them.
 func TestMakeCreditUsageScopeRanksRoutesByCost(t *testing.T) {
-	rows := []coreTypes.CreditUsage{{
+	rows := []creditUsageBlobRow{{
 		TimeFrame: dailyTimeFramePrefix + 103,
 		// Route 1 with cpu 5, then route 34 with cpu 300.
 		UsedCredits: []byte{0x00, 0x04, 0x05, 0x07, 0x00, 0x89, 0x01, 0x2C, 0x00, 0x19},

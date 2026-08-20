@@ -36,10 +36,16 @@ Empresa)** configuration page.
   pools. The page ranks by one selected pool and never adds both into a synthetic total.
 - The daily allowance caps the whole company. Each individual user receives half of that company
   allowance, calculated independently for CPU and AI credits.
+- Remaining credits (`créditos restantes`) exist in two independent windows: what is left of today's
+  daily allowance, and what is left of the month's balance. Either one at zero blocks new charges
+  for the pool it belongs to, so a company with plenty of monthly credit can still be stopped until
+  tomorrow.
 - The current monthly budget is a remaining balance, while storage keeps an absolute ceiling equal
   to accepted month usage plus that balance. This lets accepted usage remain the only consumption
   source of truth.
 - Each card chart covers today and the previous 29 days. Missing daily records display as zero.
+- A credit day is the business day in Lima time (UTC-5), not a UTC day: daily usage, the daily
+  allowance and the month boundary are all counted on it.
 
 <!-- DOC-ID: capability.review-companies -->
 ## Review and find companies (Revisar y buscar empresas)
@@ -55,20 +61,27 @@ administrator name, or administrator login. Each card shows:
 - company name, with its ID in the top-right edit position;
 - administrator name, or **Administrator unavailable (Administrador no disponible)**;
 - 30-day CPU total with a green marker;
-- 30-day inference total with a purple marker; and
+- 30-day inference total with a purple marker;
 - a grouped 30-day chart where green and purple bars are side by side rather than summed. When
   only one pool has usage on a day, that bar expands across the available day width for clarity.
   Its vertical labels use 100-credit base intervals and may skip whole intervals when the compact
-  card cannot show every label without overlap. Point to a day to see its exact CPU and inference
-  values; each bottom date is aligned with that exact sampled day rather than the following date
-  interval.
+  card cannot show every label without overlap. The chart carries no dates along its bottom edge:
+  point to a day to read its exact date with its CPU and inference values; and
+- two meters below the chart, **Daily (Diario)** and **Credits (Créditos)**, each split into a green
+  CPU cell and a purple AI cell. Every number is what is **still available**, not what was spent:
+  the daily allowance minus today's usage, and the month's ceiling minus its accumulated usage. The
+  colored fill is that remainder as a fraction of its own allowance, so an emptying bar is a company
+  running out. A company with no budget for the current month shows both meters at zero on an amber
+  track with a warning icon, which is the state the limiter reads as "reject every charge".
 
 Use **Refresh (Actualizar)** to reload the historical report. The company master list continues to
 use its normal cached synchronization, while credit history is refreshed on demand rather than
-polling continuously.
+polling continuously. The meters travel with that same report and are always sent in full, never
+incrementally, because a remaining balance changes with every charge.
 
 Common questions and vocabulary: `¿qué empresa consume más créditos?`, `buscar empresa por RUC`,
-`administrador del tenant`, `ranking de compañías`, `CPU credits`, `AI credits`, `uso de 30 días`.
+`administrador del tenant`, `ranking de compañías`, `CPU credits`, `AI credits`, `uso de 30 días`,
+`créditos restantes`, `cuánto le queda hoy`, `sin presupuesto`.
 
 <!-- DOC-ID: capability.configure-company -->
 ## Create, edit, or deactivate a company (Crear, editar o desactivar una empresa)
@@ -99,14 +112,14 @@ Common questions and vocabulary: `¿cómo creo una empresa?`, `editar tenant`, `
 ## Manage a company credit budget (Administrar el presupuesto de créditos)
 
 Open an existing company's edit modal to find **Credit budget (Presupuesto de créditos)** below the
-company fields. CPU and AI are always configured separately. The summary shows the persisted usage
-for the current UTC month and the remaining balance derived from that usage.
+company fields. CPU and AI are always configured separately. The summary shows the accumulated usage
+of the current month and the remaining balance derived from it.
 
 Use the three controls according to the intended change:
 
 - **Set daily (Establecer diario)** replaces the company's daily CPU and AI allowances. Each user
-  can consume up to 50% of the corresponding company allowance per UTC day.
-- **Set current (Establecer actual)** activates the current UTC month and replaces its remaining
+  can consume up to 50% of the corresponding company allowance per business day.
+- **Set current (Establecer actual)** activates the current month and replaces its remaining
   CPU and AI balances with the entered values. Already accepted usage is not erased.
 - **Add credits (Agregar créditos)** adds the entered CPU and AI amounts to the active month's
   current balances. This action is disabled until the current month has been activated.
@@ -116,14 +129,17 @@ to zero blocks charges that consume that pool. A newly created company has zero 
 no active month, so both the daily allowance and current balance must be configured before its
 credit-consuming APIs can run.
 
-Month activation is manual for now: when UTC enters a new month, the previous monthly ceiling no
+Month activation is manual for now: when a new month starts, the previous monthly ceiling no
 longer authorizes requests. Use **Set current** to activate and assign the new month's balance. If
 the credit-limit service cannot be reached, mutations and credit-consuming backend requests fail
 closed instead of bypassing the budget.
 
-The screen reads accepted usage from persisted `credit_usage` rows. Recent accepted requests can
-take roughly one flush interval to appear after a change; enforcement in the running limiter is
-immediate. If a mutation reply is lost, the screen reloads the durable record before another action,
+Accumulated usage is the figure the credit service itself decides on: every flush writes its own
+daily and monthly counters next to the entitlement they are compared against, so the screen subtracts
+the same numbers the limiter would. Recent accepted requests can therefore take roughly one flush
+interval to appear; enforcement in the running limiter is immediate. A company the service has never
+flushed for falls back to adding up its persisted daily rows, which is how the service itself
+recovers those counters when it restarts. If a mutation reply is lost, the screen reloads the durable record before another action,
 but an **Add credits** request is deliberately not retried automatically because repeating it could
 double the increase.
 
@@ -153,9 +169,9 @@ Open **Users (Usuarios)** to compare the selected company's user consumption acr
 window. User cards appear in two columns and are ordered by CPU credits, then AI credits, from most
 to least usage. Each card shows the user's display name, login when available, ID, 30-day CPU and AI
 totals, and a compact 40-pixel grouped chart whose green and purple bars represent daily CPU and AI
-usage. The report includes user records with zero usage and does not hide a legacy administrator
-merely because its older record lacks the current active-status marker. The user report loads only
-when this tab is opened and can be reused in memory until **Actualizar** clears it.
+usage. Only users that actually consumed credits in the window appear: the list is built from usage
+records, not from the company's user roster. Names are resolved separately and cached, so a user
+whose record is not resolved yet shows as **User #ID**.
 
 Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`, `detalle por endpoint`,
 `CPU por ruta`, `créditos por usuario`, `quién consume más créditos`, `créditos de una compañía`,
@@ -164,17 +180,28 @@ Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
-- All catalog companies, including zero-usage companies, can appear in the 30-day report.
+- All catalog companies, including zero-usage companies, appear in the 30-day report; the company
+  catalog drives the card list and usage is joined onto it.
+- The user breakdown works the other way: it lists only users with recorded usage in the window.
 - Administrator identity on each card is deliberately limited to the display name; cards do not
-  expose the repeated login, credentials, profiles, access lists, documents, or other user data.
+  expose credentials, profiles, access lists, documents, or other user data. Names are resolved
+  through a by-IDs endpoint that returns only login, first name and last name.
+- Usage reads are incremental: the client keeps the days it already holds and the server returns
+  only the current day plus any day that has since started.
 - CPU and AI card charts and the daily calendar use the same time window but remain separately
   identifiable. Ranking always uses the selected independent pool.
-- Company credit totals come from the absolute daily company aggregate, not from the signed-in
-  administrator's personal usage.
+- Company credit totals come from the absolute daily company total, which is stored separately from
+  per-user totals, not from the signed-in administrator's personal usage.
 - User cards come from each user's own absolute daily snapshots; their totals are not estimated
-  from the company aggregate or apportioned from API totals.
-- Daily and monthly enforcement uses UTC boundaries. CPU and AI balances are checked independently,
-  and one exhausted pool rejects only requests that charge that pool.
+  from the company total or apportioned from API totals.
+- The API breakdown is company-wide for the selected day. It is not available per user: only the
+  company total records which endpoint spent what.
+- Daily and monthly enforcement uses the Lima business day (UTC-5), the same day the usage rows are
+  bucketed by, so a daily allowance resets at local midnight. CPU and AI balances are checked
+  independently, and one exhausted pool rejects only requests that charge that pool.
+- The two card meters are read as "what remains" in each window, and both windows are labeled with
+  the day and month they belong to: a window the credit service has not touched yet reads as unused
+  rather than as the previous window's spending.
 - Budget administration endpoints and the SaaS-only company catalog/summary reads are not
   themselves charged credits, so the SaaS administrator can reach the editor and restore an
   exhausted company's allowance. Detail reports and company writes remain charged.
@@ -200,6 +227,11 @@ Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`
   a month.
 - **The displayed balance is briefly higher than the value just set:** recently accepted usage has
   not reached its persisted daily row yet. It converges after the limiter flushes usage.
+- **A card's Daily meter is at zero while Credits still shows a balance:** the company spent its
+  whole daily allowance. Its charges resume at local midnight, or immediately after raising the
+  daily allowance with **Set daily**.
+- **Both meters show zero on an amber track:** no budget is active for the current month, so every
+  charge is rejected. Use **Set current** in the company's edit modal.
 - **The credit service is unavailable:** budget changes return an error and ordinary charged APIs
   remain blocked until `server_utils` is reachable; the backend does not fail open.
 
@@ -229,51 +261,55 @@ files:
     supports: [page-purpose, capability.configure-company, capability.manage-credit-budget]
   - path: frontend/routes/system/companies/CompanyCreditBudget.svelte
     role: user-interface
-    hash: sha256:f770a2194ca0195d772b581605d7bafdb7e821205588f0b8c36b20405ffeeede
+    hash: sha256:4c92b7f692fb9dd99d759a6948feb4cd70bd60a4dfe4b3e2468b7b699a518fc4
     supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
   - path: frontend/routes/system/companies/company-credit-budget.ts
     role: frontend-service
-    hash: sha256:2be08b12d617c17b67650738c680e6eebbb79741f3e3c6786870c36c21ff2b85
+    hash: sha256:13ac2e1efb545d509fe1782e78c9d14dc2b85b6b8c1e2b2e31d999785c9e1a6f
     supports: [capability.manage-credit-budget]
   - path: frontend/routes/system/companies/CompanyCards.svelte
     role: user-interface
-    hash: sha256:21fafc1b759178232a33233ba18285d06c711e012f72a81ee927e561a6a6545c
+    hash: sha256:cba7956e874c5cee5cf986aa318bf298643fb302ff6459b9e0ef1a75589320a1
     supports: [capability.review-companies, capability.review-credit-detail, rules, troubleshooting]
   - path: frontend/routes/system/companies/CompanyRouteCreditCards.svelte
     role: user-interface
-    hash: sha256:e773bd76d6d20f3d773d55e79a6111c3423fe9e5c12a40f1805967347bcb4d02
+    hash: sha256:a2c26c04bcac6c07f864b150d983e0eff47474cf221c49ad29338d0af4225045
     supports: [capability.review-credit-detail, troubleshooting]
   - path: frontend/routes/system/companies/CompanyUserCreditCards.svelte
     role: user-interface
-    hash: sha256:7c9411c8ddcf77ef4ef31950b3e0771b07f109eb606a98e84a436f5146d65ede
+    hash: sha256:2efb480f3c68a8237f8764424733eca595e30f400aaf6d65e8c1850d1130326d
     supports: [capability.review-credit-detail, rules, troubleshooting]
   - path: frontend/routes/system/companies/CompanyCreditCalendar.svelte
     role: user-interface
-    hash: sha256:fe5ee633a885063ef6b77e5c299f52e32537d278b2cb6fef5e6c81f45dfdea05
+    hash: sha256:2a950920fb1057b9b4b5816a4c778afe240f3e5a6497203fc88cd92e1d58ca52
     supports: [capability.review-credit-detail, rules]
   - path: frontend/routes/system/companies/company-credit-calendar.ts
     role: business-logic
-    hash: sha256:d4268261cdea63d794de8e6f0fb3f98fd5d8314a0db5282d4238351fe46a7de7
+    hash: sha256:a75a865c97771a335a73239db346207b07b41bb7fdcb7e747df036a84e18176d
     supports: [concepts, capability.review-credit-detail, rules]
   - path: frontend/routes/system/companies/CompanyCreditCard.svelte
     role: user-interface
-    hash: sha256:4959a59c8e451ea641381a3139422ee755aea519c3e2af4a2b48a57f91b7fb7c
+    hash: sha256:f495d1f9a30e9ef38c93af0a96a9145170c10fc9d99b1eff4b0b4f2aa5385270
     supports: [concepts, capability.review-companies, capability.configure-company, troubleshooting]
+  - path: frontend/routes/system/companies/CompanyCreditMeters.svelte
+    role: user-interface
+    hash: sha256:8f2c5c3d3c9ae127cbe6b3fe2e4b18179698e547d671fb5e60d8f468c2243a2e
+    supports: [concepts, capability.review-companies, rules, troubleshooting]
   - path: frontend/routes/system/companies/empresas.svelte.ts
     role: frontend-service
     hash: sha256:4d916555b86fb688c1926b602c8bdf63e20f7fbe0789c84fd2832c47d062444d
     supports: [capability.configure-company]
-  - path: frontend/routes/system/companies/company-credit-usage.ts
+  - path: frontend/routes/system/companies/company-credit-usage.svelte.ts
     role: frontend-service
-    hash: sha256:c67d405bb05563cb4e5fb5f697bb3e9bcb150edba8af5acb1bf81572fd66cd34
+    hash: sha256:01c376d2cda2ab12782db3f3e8f4c46945e7e092217479dde56490d7c5bb921e
     supports: [capability.review-companies, capability.review-credit-detail, troubleshooting]
   - path: frontend/routes/system/companies/company-credit-usage.model.ts
     role: business-logic
-    hash: sha256:b540f473489453fb4a8c51c5dea2f123396f0d37e1a6a6bf827d3fb7d41e4082
+    hash: sha256:3b1b11cd1ca3e37c252c393a6ca704a4f0d1c1fa16fd2ffb580aa586df4a8627
     supports: [concepts, capability.review-companies, capability.review-credit-detail, rules]
   - path: frontend/packages/genix-ui/charts/ChartCanvas.svelte
     role: shared-domain
-    hash: sha256:53d785220f015d7130aaa7e12cb362c09e212016ae3f647562d6b85d2269a584
+    hash: sha256:accb366d779fd2499af4f74978a40b7e9f275c791d7ab995074f08e096b58658
     supports: [capability.review-companies]
   - path: frontend/packages/genix-ui/charts/chart-axis-layout.ts
     role: shared-domain
@@ -289,15 +325,15 @@ files:
     supports: [capability.configure-company, troubleshooting]
   - path: backend/config/company_credit_usage.go
     role: backend-handler
-    hash: sha256:db87d9d0fb5a6d9603204168a92a22049d7928aa90947ae784269c0da46c3381
+    hash: sha256:a2a76cc3418b8b52f94085009dc6bebcda200c987d4a8d33ec7770b721928a12
     supports: [concepts, capability.review-companies, capability.review-credit-detail, rules, troubleshooting]
   - path: backend/config/credit_usage.go
     role: business-logic
-    hash: sha256:e86a27c207c3c5427342c9d0bffa65a0f4e3863bf824f2315e59ebaf7991591a
+    hash: sha256:4b30c32fafd9c3a84eaa2b21cccd8c9e67f7d8f526c3fa9623cddb1b5a22597d
     supports: [concepts, capability.review-companies, capability.review-credit-detail, capability.manage-credit-budget, rules]
   - path: backend/config/company_credit_budget.go
     role: backend-handler
-    hash: sha256:524f707561acad52ca9ea6424dd66e0f598a41e312be44b5190d79fca8670a65
+    hash: sha256:08f7c37e23a822e34f5aab0975187640272b53033a17e8b05ec30dad300ecd43
     supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
   - path: backend/core/server_utils/budgets.go
     role: business-logic
@@ -305,11 +341,19 @@ files:
     supports: [capability.manage-credit-budget, troubleshooting]
   - path: backend/core/types/company_credit_budget.go
     role: data-model
-    hash: sha256:13c64687b60ea611a617e640ea2d2d2f932728cba9710ff260b2a18f4f73ed76
+    hash: sha256:7c7db01450949828b8450a5678dff023a22a0b0b93cde31bd56b2bbc2a68fccc
     supports: [concepts, capability.manage-credit-budget]
+  - path: server_utils/src/limiter/storage.rs
+    role: business-logic
+    hash: sha256:59c3857cea6c81b30153d4eeee37af6ac2634df97f9fff62b4ddbd99cbb79269
+    supports: [concepts, capability.manage-credit-budget, rules]
+  - path: server_utils/src/limiter/time_frame.rs
+    role: business-logic
+    hash: sha256:010fbb19a95da09186006dc5d2042e8608236f79925f1d897b86a92b7a75be60
+    supports: [concepts, rules]
   - path: server_utils/src/limiter/quota.rs
     role: business-logic
-    hash: sha256:6559be790ee3c9708b700f772bfc8beb31e0121ee2518b35b3020862f5174caf
+    hash: sha256:8f45bcd7011451cf77cbf0a72b4d15ca838f69e07db844cefc22b75c1462911e
     supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
   - path: backend/config/types/empresas.go
     role: data-model
@@ -321,10 +365,10 @@ files:
     supports: [concepts, capability.review-companies, rules, troubleshooting]
   - path: backend/access_list.yml
     role: permissions
-    hash: sha256:4b3ea5059b84d77af3f79f2ee87ac00389e99947f81f46786b66bb3070b55799
+    hash: sha256:f11c349be832baa870463eb18658a8f637436c84f39e80bb5bcb47d9118c7f2a
     supports: [page-purpose, capability.manage-credit-budget]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:65fc3572f3db3be8763b14088f9783dea817e279695f044e449eea22c6d7c2e1
+    hash: sha256:5c82fc28d43e45327b373a75c6901e5a141cc993e47a998dc57f6ac0b89a0d75
     supports: [page-purpose, capability.manage-credit-budget, rules]
 ```

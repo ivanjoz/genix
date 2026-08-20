@@ -84,9 +84,14 @@ var saasOnlyRoutes = map[string]bool{
 	"GET.cron-actions-scheduled":      true,
 }
 
-// Budget control and the two SaaS-only reads needed to reach it remain available after the
-// platform company exhausts its own credits. Detail reports and company writes stay charged.
+// Rutas exentas del cobro y del límite de créditos: son las que se usan para *ver o corregir* el
+// consumo, así que cobrarlas las volvería inalcanzables justo cuando hacen falta. "credit-usage" es
+// la lectura propia de cada tenant (panel Config. → Créditos): sin la exención, un usuario con el
+// límite agotado no puede ni averiguar por qué. Las otras tres son el control de presupuesto del
+// SaaS más las dos lecturas necesarias para llegar a él. Los reportes de detalle y las escrituras
+// de company siguen cobrándose.
 var creditControlRoutes = map[string]bool{
+	"GET.credit-usage":                true,
 	"GET.empresas":                    true,
 	"GET.company-credit-usage-report": true,
 	"GET.company-credit-budget":       true,
@@ -198,37 +203,16 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		delete(args.Query, "cmp")
 
 		accessInfos, _ := accessHelper.GetAccesosByRoute(funcPath)
-		// Un GET sin acceso mapeado es libre para cualquier sesión; POST/PUT siempre exigen uno. Pero
-		// un GET que SÍ figura en el catálogo se comporta como el resto: hay que tener el acceso. Así
-		// se cierra lectura por lectura, sin bloquear de golpe los GET que todavía no están mapeados.
-		hasAllowedAccess := (args.Method == "GET" && len(accessInfos) == 0) || selfServiceRoutes[funcPath]
-
-		nivel := uint8(1)
-		if args.Method == "POST" || args.Method == "PUT" {
-			nivel = 2
-			if len(accessInfos) == 0 && !selfServiceRoutes[funcPath] {
-				core.Log(fmt.Sprintf("Warning: La ruta \"%v\" está desprotegida.", funcPath))
-			}
-		}
-
-		for _, accessInfo := range accessInfos {
-			if args.HasAccesoNivel(accessInfo.ID, nivel) {
-				core.Log("Acceso:", funcPath, "con", accessInfo.ID, ":", nivel)
-				hasAllowedAccess = true
-				break
-			}
-		}
-
-		if !hasAllowedAccess && args.User.ID != 1 {
-			accessNames := []string{}
-			for _, accessInfo := range accessInfos {
-				accessNames = append(accessNames, accessInfo.Name)
-			}
-
-			handlerResponse.Error = fmt.Sprintf("El user no posee alguno de los accesos: %s", strings.Join(accessNames, ", "))
+		decision := resolveRouteAccess(args.Method, funcPath, args.User.ID, accessInfos)
+		if decision.denyMessage != "" {
+			core.Log("Gate de accesos rechazó::", funcPath, "user::", args.User.ID,
+				"motivo::", decision.denyMessage)
+			handlerResponse = args.MakeErrCode(decision.denyMessage, decision.denyCode)
 			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
 		}
+		args.RequiredAccess = decision.requiredAccess
+		args.RequiredAccessNames = decision.accessNames
 	} else {
 		args.User = &core.UsuarioToken{}
 	}
@@ -253,13 +237,22 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		core.Log("no hay una lambda para el path solicitado::", funcPath)
 		handlerResponse.Error = "no hay una lambda para el path solicitado: " + funcPath
 	} else {
-		if !isPublicPath && !creditControlRoutes[funcPath] && args.Method == "POST" {
-			requestBodyBytes := 0
-			if args.Body != nil {
-				requestBodyBytes = len(*args.Body)
+		// Un solo frame antes del handler resuelve las dos preguntas: cuánto cuesta y si el user
+		// puede. Para POST el cobro es completo porque el body ya se conoce; para GET se cobra sólo
+		// la base y el excedente se liquida después, cuando existe el tamaño de la respuesta.
+		//
+		// La exención de creditControlRoutes salta el COBRO, nunca el frame: tres de esas rutas están
+		// mapeadas en access_list.yml y dos son sólo-SaaS, así que saltar el frame las dejaría
+		// abiertas a cualquier sesión. Con exención se manda un frame de sólo autorización.
+		if !isPublicPath {
+			payloadBytes := 0
+			if args.Method == "POST" && args.Body != nil {
+				payloadBytes = len(*args.Body)
 			}
-			if rateLimitResponse := enforceAPICreditLimit(args, requestBodyBytes); rateLimitResponse != nil {
-				handlerResponse = *rateLimitResponse
+			if limitResponse := enforceAPICreditLimit(
+				args, chargedMethodFor(args.Method, funcPath), payloadBytes,
+			); limitResponse != nil {
+				handlerResponse = *limitResponse
 				setResponseMetadata(&handlerResponse)
 				return prepareResponse(args, &handlerResponse)
 			}
@@ -272,9 +265,13 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			respLen = len(*handlerResponse.Body)
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
-		if !isPublicPath && !creditControlRoutes[funcPath] && args.Method == "GET" && handlerResponse.Error == "" && !handlerResponse.StreamHandled {
-			if rateLimitResponse := enforceAPICreditLimit(args, respLen); rateLimitResponse != nil {
-				handlerResponse = *rateLimitResponse
+		// Liquidación del GET: sólo lo que excede el primer bloque, que para un GET significa sólo
+		// cuando la respuesta pasó de 8 KB. La mayoría no llega, así que la mayoría no manda un
+		// segundo frame. Un error o un stream no liquidan: esos bytes no se enviaron.
+		if !isPublicPath && !creditControlRoutes[funcPath] && args.Method == "GET" &&
+			handlerResponse.Error == "" && !handlerResponse.StreamHandled {
+			if topUpResponse := chargeGetResponseTopUp(args, respLen); topUpResponse != nil {
+				handlerResponse = *topUpResponse
 			}
 		}
 
@@ -287,23 +284,184 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	return prepareResponse(args, &handlerResponse)
 }
 
-func enforceAPICreditLimit(args *core.HandlerArgs, payloadBytes int) *core.HandlerResponse {
+// routeAccessDecision es lo que el gate concluyó sobre la autorización de una request: los accesos
+// empaquetados que server_utils debe verificar, o un rechazo que no necesita preguntarle nada.
+type routeAccessDecision struct {
+	requiredAccess []uint16
+	// accessNames acompaña a requiredAccess sólo para el mensaje de error: el daemon no conoce
+	// access_list.yml, así que los nombres salen de este lado.
+	accessNames []string
+	denyMessage string
+	denyCode    int32
+}
+
+// resolveRouteAccess traduce el catálogo a lo que viaja en el frame. Es una función pura sobre
+// (método, ruta, user, accesos mapeados) justamente porque es la decisión de seguridad del router:
+// toda la política vive aquí, en el proceso que embebe access_list.yml, y el daemon sólo responde
+// "este user tiene alguno de estos accesos".
+//
+// Devolver una lista vacía significa "no preguntes", así que cada camino que no exige acceso tiene
+// que ser deliberado. Son tres: un GET sin mapear, una ruta self-service, y el user 1.
+func resolveRouteAccess(
+	method, funcPath string, userID int32, accessInfos []core.AccessInfo,
+) routeAccessDecision {
+	// Un GET sin acceso mapeado es libre para cualquier sesión; POST/PUT siempre exigen uno. Pero un
+	// GET que SÍ figura en el catálogo se comporta como el resto: hay que tener el acceso. Así se
+	// cierra lectura por lectura, sin bloquear de golpe los GET que todavía no están mapeados.
+	if (method == "GET" && len(accessInfos) == 0) || selfServiceRoutes[funcPath] {
+		return routeAccessDecision{}
+	}
+	// El user 1 salta la comprobación, y esto NO es una comodidad: login.go le sintetiza la lista
+	// completa de accesos sólo en la respuesta de login y nunca la persiste, así que su blob en
+	// ScyllaDB está vacío y el daemon lo negaría. No se le puede preguntar.
+	if userID == 1 {
+		return routeAccessDecision{}
+	}
+	// Sin accesos mapeados no hay nada que preguntarle al daemon, y el catálogo niega por defecto lo
+	// que no figura: un POST/PUT sin mapear se rechaza aquí mismo. Delegarlo al frame lo habría
+	// convertido en una ruta abierta, porque un frame sin accesos requeridos es exactamente un frame
+	// que no pide autorización.
+	if len(accessInfos) == 0 {
+		return routeAccessDecision{
+			denyMessage: fmt.Sprintf(
+				"La ruta \"%v\" no declara accesos, así que nadie puede usarla.", funcPath),
+			denyCode: 403,
+		}
+	}
+	// Una ruta mapeada a más accesos de los que caben en un frame es un error de configuración, no
+	// del cliente: truncar la lista autorizaría contra menos accesos de los declarados, así que
+	// negar es lo único seguro. TestEveryRouteFitsTheRequiredAccessSlots lo detecta antes.
+	if len(accessInfos) > core.MaxRequiredAccess {
+		return routeAccessDecision{
+			denyMessage: "La ruta declara más accesos de los que el limitador puede verificar.",
+			denyCode:    500,
+		}
+	}
+
+	nivel := uint8(1)
+	if method == "POST" || method == "PUT" {
+		nivel = 2
+	}
+	decision := routeAccessDecision{
+		requiredAccess: make([]uint16, 0, len(accessInfos)),
+		accessNames:    make([]string, 0, len(accessInfos)),
+	}
+	for _, accessInfo := range accessInfos {
+		decision.requiredAccess = append(
+			decision.requiredAccess, core.MakeAccesoNivelPacked(accessInfo.ID, nivel))
+		decision.accessNames = append(decision.accessNames, accessInfo.Name)
+	}
+	return decision
+}
+
+// chargedMethodFor decide qué se cobra en el frame; vacío significa "sólo autoriza".
+//
+// Son dos los casos que no se cobran. Las creditControlRoutes son deliberadas: es el panel de
+// créditos leyéndose a sí mismo, y cobrarlo lo volvería inalcanzable justo cuando hace falta.
+//
+// El otro es que APICPUCredits sólo conoce GET y POST, así que un PUT no tiene tarifa. PUT.
+// purchase-orders existe y está mapeada, y tampoco se cobraba antes de este cambio —el router sólo
+// cobraba POST antes del handler y GET después—, así que esto conserva exactamente esa conducta en
+// vez de ampliarla. Es un hueco real: una escritura que no consume créditos. Darle tarifa es una
+// decisión de facturación y no de este cambio.
+func chargedMethodFor(method, funcPath string) string {
+	if creditControlRoutes[funcPath] {
+		return ""
+	}
+	if method != "GET" && method != "POST" {
+		return ""
+	}
+	return method
+}
+
+// enforceAPICreditLimit manda el único frame que decide la request: cobro y autorización juntos.
+//
+// chargedMethod vacío significa "no cobres nada": es el caso de creditControlRoutes, que igual
+// necesitan el frame por la autorización. Para GET se cobra la base y el excedente se liquida en
+// chargeGetResponseTopUp; para POST payloadBytes ya es el body completo.
+func enforceAPICreditLimit(
+	args *core.HandlerArgs, chargedMethod string, payloadBytes int,
+) *core.HandlerResponse {
+	// Sin créditos ni accesos que verificar no hay nada que preguntar: un GET sin acceso mapeado en
+	// una ruta exenta no manda frame.
+	if chargedMethod == "" && len(args.RequiredAccess) == 0 {
+		return nil
+	}
+
 	requestContext := context.Background()
 	if args.ReqContext != nil {
 		requestContext = args.ReqContext.Context()
 	}
-	err := core.ChargeAPIUsage(
-		requestContext, args.User.CompanyID, args.User.ID, args.RouteID, args.Method, payloadBytes,
-	)
+
+	var err error
+	cpuCredits := uint16(0)
+	switch chargedMethod {
+	case "":
+		err = core.ChargeAPIAccessOnly(
+			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, args.RequiredAccess)
+	case "GET":
+		// La base y nada más: el tamaño de la respuesta todavía no existe.
+		cpuCredits, _ = core.APICPUBaseCredits("GET")
+		err = core.ChargeAPIUsage(
+			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, "GET", 0,
+			args.RequiredAccess)
+	default:
+		cpuCredits, _ = core.APICPUCredits(chargedMethod, payloadBytes)
+		err = core.ChargeAPIUsage(
+			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, chargedMethod,
+			payloadBytes, args.RequiredAccess)
+	}
+
 	if err != nil {
-		core.Log("credit rate limiter rejected::", " method::", args.Method, " company::", args.User.CompanyID,
-			" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes, " err::", err)
+		core.Log("server utils rejected::", " method::", args.Method, " company::", args.User.CompanyID,
+			" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
+			" accesos::", len(args.RequiredAccess), " err::", err)
+		var response core.HandlerResponse
+		if core.IsAccessDeniedError(err) {
+			response = args.MakeAccessDeniedResponse(err, args.RequiredAccessNames)
+		} else {
+			response = args.MakeCreditRateLimitResponse(err)
+		}
+		return &response
+	}
+
+	core.Log("server utils accepted::", " method::", args.Method, " company::", args.User.CompanyID,
+		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
+		" cpu_credits::", cpuCredits, " accesos::", len(args.RequiredAccess))
+	return nil
+}
+
+// chargeGetResponseTopUp cobra lo que la respuesta excedió sobre la base ya cobrada. Devuelve nil
+// cuando no excedió nada, que es el caso normal: una respuesta de hasta 8 KB cuesta exactamente la
+// base y no manda un segundo frame.
+func chargeGetResponseTopUp(args *core.HandlerArgs, responseBytes int) *core.HandlerResponse {
+	totalCredits, err := core.APICPUCredits("GET", responseBytes)
+	if err != nil {
+		core.Log("no se pudo calcular el excedente del GET::", err)
+		return nil
+	}
+	baseCredits, _ := core.APICPUBaseCredits("GET")
+	if totalCredits <= baseCredits {
+		return nil
+	}
+
+	requestContext := context.Background()
+	if args.ReqContext != nil {
+		requestContext = args.ReqContext.Context()
+	}
+	topUpCredits := totalCredits - baseCredits
+	if err := core.ChargeAPICredits(
+		requestContext, args.User.CompanyID, args.User.ID, args.RouteID, topUpCredits,
+	); err != nil {
+		core.Log("credit rate limiter rejected GET top-up::", " company::", args.User.CompanyID,
+			" user::", args.User.ID, " route::", args.RouteID, " bytes::", responseBytes,
+			" credits::", topUpCredits, " err::", err)
 		response := args.MakeCreditRateLimitResponse(err)
 		return &response
 	}
-	cpuCredits, _ := core.APICPUCredits(args.Method, payloadBytes)
-	core.Log("credit rate limiter accepted::", " method::", args.Method, " company::", args.User.CompanyID,
-		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes, " cpu_credits::", cpuCredits)
+	core.Log("credit rate limiter accepted GET top-up::", " company::", args.User.CompanyID,
+		" user::", args.User.ID, " route::", args.RouteID, " bytes::", responseBytes,
+		" credits::", topUpCredits)
 	return nil
 }
 

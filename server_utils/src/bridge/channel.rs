@@ -95,8 +95,11 @@ impl ClientChannel {
     /// into two malformed ones. The Go bridge had to call `json.Compact` and could fail on
     /// invalid JSON; here the type already guarantees both.
     pub async fn send_frame(&self, message: &serde_json::Value) -> Result<(), SendFrameError> {
-        match tokio::time::timeout(FRAME_SEND_TIMEOUT, self.frame_sender.send(message.to_string()))
-            .await
+        match tokio::time::timeout(
+            FRAME_SEND_TIMEOUT,
+            self.frame_sender.send(message.to_string()),
+        )
+        .await
         {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_)) => Err(SendFrameError::Closed),
@@ -115,7 +118,10 @@ impl ClientChannel {
     /// cancelled turn) does not leak.
     pub async fn await_reply(&self, command_id: u64) -> oneshot::Receiver<ReplyEnvelope> {
         let (reply_sender, reply_receiver) = oneshot::channel();
-        self.pending_replies.lock().await.insert(command_id, reply_sender);
+        self.pending_replies
+            .lock()
+            .await
+            .insert(command_id, reply_sender);
         reply_receiver
     }
 
@@ -183,7 +189,9 @@ impl ChannelRegistry {
         if let Some(previous_channel) = previous_channel {
             previous_channel.try_send_payload("{\"Type\":\"replaced\"}");
             previous_channel.close();
-            previous_channel.fail_all_pending_replies("el cliente reconectó").await;
+            previous_channel
+                .fail_all_pending_replies("el cliente reconectó")
+                .await;
             info!(channel = key, "channel replaced by a newer connection");
         }
         for waiter in waiters_to_wake {
@@ -206,7 +214,9 @@ impl ChannelRegistry {
             }
         }
         channel.close();
-        let failed_count = channel.fail_all_pending_replies("el cliente se desconectó").await;
+        let failed_count = channel
+            .fail_all_pending_replies("el cliente se desconectó")
+            .await;
         if failed_count > 0 {
             tracing::warn!(
                 channel = channel.key,
@@ -229,11 +239,7 @@ impl ChannelRegistry {
     /// This is the server-side half of the handshake: the client normally opens its stream
     /// before sending a turn, but a reconnect mid-turn can leave a short window where the
     /// backend has something to say and nobody to say it to.
-    pub async fn await_channel(
-        &self,
-        key: &str,
-        max_wait: Duration,
-    ) -> Option<Arc<ClientChannel>> {
+    pub async fn await_channel(&self, key: &str, max_wait: Duration) -> Option<Arc<ClientChannel>> {
         if let Some(channel) = self.find_channel(key).await {
             return Some(channel);
         }
@@ -249,7 +255,11 @@ impl ChannelRegistry {
                 return Some(channel.clone());
             }
             let (arrival_sender, arrival_receiver) = oneshot::channel();
-            state.arrival_waiters.entry(key.to_owned()).or_default().push(arrival_sender);
+            state
+                .arrival_waiters
+                .entry(key.to_owned())
+                .or_default()
+                .push(arrival_sender);
             arrival_receiver
         };
 
@@ -289,7 +299,10 @@ mod tests {
         let registry = ChannelRegistry::new();
         let (channel, mut frames) = registry.open_channel(TEST_KEY).await;
 
-        channel.send_frame(&serde_json::json!({ "Type": "agentStatus" })).await.unwrap();
+        channel
+            .send_frame(&serde_json::json!({ "Type": "agentStatus" }))
+            .await
+            .unwrap();
         assert_eq!(frames.recv().await.unwrap(), "{\"Type\":\"agentStatus\"}");
     }
 
@@ -300,13 +313,25 @@ mod tests {
         let (second_channel, mut second_frames) = registry.open_channel(TEST_KEY).await;
 
         // The evicted stream learns why it ended, then its stream terminates.
-        assert_eq!(first_frames.recv().await.unwrap(), "{\"Type\":\"replaced\"}");
+        assert_eq!(
+            first_frames.recv().await.unwrap(),
+            "{\"Type\":\"replaced\"}"
+        );
         assert!(first_channel.is_closed());
 
         // Only the newest channel is routable, and it still works.
-        assert!(Arc::ptr_eq(&registry.find_channel(TEST_KEY).await.unwrap(), &second_channel));
-        second_channel.send_frame(&serde_json::json!({ "Type": "agentStatus" })).await.unwrap();
-        assert_eq!(second_frames.recv().await.unwrap(), "{\"Type\":\"agentStatus\"}");
+        assert!(Arc::ptr_eq(
+            &registry.find_channel(TEST_KEY).await.unwrap(),
+            &second_channel
+        ));
+        second_channel
+            .send_frame(&serde_json::json!({ "Type": "agentStatus" }))
+            .await
+            .unwrap();
+        assert_eq!(
+            second_frames.recv().await.unwrap(),
+            "{\"Type\":\"agentStatus\"}"
+        );
     }
 
     /// A stream that unwinds after its successor took over must not evict the successor.
@@ -318,7 +343,10 @@ mod tests {
 
         registry.close_channel(&first_channel).await;
 
-        assert!(Arc::ptr_eq(&registry.find_channel(TEST_KEY).await.unwrap(), &second_channel));
+        assert!(Arc::ptr_eq(
+            &registry.find_channel(TEST_KEY).await.unwrap(),
+            &second_channel
+        ));
         assert_eq!(registry.connected_channel_count().await, 1);
     }
 
@@ -350,8 +378,10 @@ mod tests {
         let registry = ChannelRegistry::new();
         let (channel, _frames) = registry.open_channel(TEST_KEY).await;
 
-        let envelope =
-            ReplyEnvelope { kind: "result".to_owned(), payload: serde_json::Value::Null };
+        let envelope = ReplyEnvelope {
+            kind: "result".to_owned(),
+            payload: serde_json::Value::Null,
+        };
         // Never registered, and then again after the waiter was released: both are drops.
         assert!(!channel.deliver_reply(9, envelope.clone()).await);
         drop(channel.await_reply(9).await);
@@ -371,7 +401,12 @@ mod tests {
         for reply_receiver in [first_reply, second_reply] {
             let envelope = reply_receiver.await.unwrap();
             assert_eq!(envelope.kind, "error");
-            assert!(envelope.payload["Message"].as_str().unwrap().contains("desconect"));
+            assert!(
+                envelope.payload["Message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("desconect")
+            );
         }
         channel.wait_closed().await; // already closed: must return immediately
     }
@@ -383,7 +418,9 @@ mod tests {
         drop(frames); // the browser went away
 
         assert_eq!(
-            channel.send_frame(&serde_json::json!({ "Type": "agentStatus" })).await,
+            channel
+                .send_frame(&serde_json::json!({ "Type": "agentStatus" }))
+                .await,
             Err(SendFrameError::Closed)
         );
     }
@@ -393,7 +430,10 @@ mod tests {
         let registry = ChannelRegistry::new();
         let (channel, _frames) = registry.open_channel(TEST_KEY).await;
 
-        let awaited = registry.await_channel(TEST_KEY, Duration::from_millis(0)).await.unwrap();
+        let awaited = registry
+            .await_channel(TEST_KEY, Duration::from_millis(0))
+            .await
+            .unwrap();
         assert!(Arc::ptr_eq(&awaited, &channel));
     }
 
@@ -408,7 +448,9 @@ mod tests {
         });
 
         // The publisher is already waiting when the tab shows up.
-        let awaited = registry.await_channel(TEST_KEY, Duration::from_secs(3)).await;
+        let awaited = registry
+            .await_channel(TEST_KEY, Duration::from_secs(3))
+            .await;
         assert!(awaited.is_some());
         let (channel, _frames) = late_connect.await.unwrap();
         assert!(Arc::ptr_eq(&awaited.unwrap(), &channel));
@@ -418,9 +460,19 @@ mod tests {
     async fn await_channel_gives_up_after_the_wait_and_leaves_no_waiter_behind() {
         let registry = ChannelRegistry::new();
 
-        assert!(registry.await_channel(TEST_KEY, Duration::from_millis(30)).await.is_none());
+        assert!(
+            registry
+                .await_channel(TEST_KEY, Duration::from_millis(30))
+                .await
+                .is_none()
+        );
         assert!(registry.state.read().await.arrival_waiters.is_empty());
         // A zero wait drops immediately, which is the no-buffering contract.
-        assert!(registry.await_channel(TEST_KEY, Duration::from_millis(0)).await.is_none());
+        assert!(
+            registry
+                .await_channel(TEST_KEY, Duration::from_millis(0))
+                .await
+                .is_none()
+        );
     }
 }

@@ -35,7 +35,9 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[core.CronAction](),
 		makeDBController[core.GlobalCache](),
 		makeDBController[coreTypes.CompanyCreditBudget](),
-		makeDBController[coreTypes.CreditUsage](),
+		makeDBController[coreTypes.CreditHistory](),
+		makeDBController[coreTypes.CreditUsageCompany](),
+		makeDBController[coreTypes.CreditUsageUser](),
 		makeDBController[coreTypes.RequestError](),
 		makeDBController[coreTypes.ServerMetric](),
 		makeDBController[coreTypes.UsageLog](),
@@ -87,7 +89,9 @@ func init() {
 	db.RegisterTableFactory("cron_actions", func() db.Table { return db.MakeTable[core.CronAction]() })
 	db.RegisterTableFactory("cache_global", func() db.Table { return db.MakeTable[core.GlobalCache]() })
 	db.RegisterTableFactory("company_credit_budget", func() db.Table { return db.MakeTable[coreTypes.CompanyCreditBudget]() })
-	db.RegisterTableFactory("credit_usage", func() db.Table { return db.MakeTable[coreTypes.CreditUsage]() })
+	db.RegisterTableFactory("credit_history", func() db.Table { return db.MakeTable[coreTypes.CreditHistory]() })
+	db.RegisterTableFactory("credit_usage_company", func() db.Table { return db.MakeTable[coreTypes.CreditUsageCompany]() })
+	db.RegisterTableFactory("credit_usage_user", func() db.Table { return db.MakeTable[coreTypes.CreditUsageUser]() })
 	db.RegisterTableFactory("request_errors", func() db.Table { return db.MakeTable[coreTypes.RequestError]() })
 	db.RegisterTableFactory("server_metrics", func() db.Table { return db.MakeTable[coreTypes.ServerMetric]() })
 	db.RegisterTableFactory("usage_log", func() db.Table { return db.MakeTable[coreTypes.UsageLog]() })

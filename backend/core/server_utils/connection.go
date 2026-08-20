@@ -34,7 +34,7 @@ const (
 	serverUtilsReplySize = 5
 	// Names the framing of the whole port, request and reply, and is bumped on every wire change
 	// so a mismatched peer fails at the first frame instead of misreading bytes.
-	serverUtilsAuthDomain = "genix-server-utils:v5"
+	serverUtilsAuthDomain = "genix-server-utils:v6"
 
 	opcodeChargeCredits = byte(0x01)
 	opcodeLockAcquire   = byte(0x02)
@@ -44,6 +44,9 @@ const (
 	// never make a response wait.
 	opcodeLogRequest          = byte(0x04)
 	opcodeMutateCompanyBudget = byte(0x05)
+	// opcodeInvalidateUserAccess is the second unanswered opcode: the TTL on the daemon's grant
+	// cache is the backstop if it is lost, so a user save does not wait for an acknowledgement.
+	opcodeInvalidateUserAccess = byte(0x06)
 
 	// Frames are tiny and the daemon is on loopback or a private network, so a write that cannot
 	// complete in this long means the connection is gone.

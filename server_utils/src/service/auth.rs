@@ -14,11 +14,13 @@ use thiserror::Error;
 /// Bumped on every wire change so a mismatched peer fails loudly at the first frame instead of
 /// misreading bytes. `genix-rate-limiter:v1` was the opcode-less 19-byte frame; `:v1` here added
 /// the opcode byte; `:v2` widened the reply to 5 bytes; `:v3` gave `LOCK_RELEASE` a payload; `:v4`
-/// added `LOG_REQUEST`, the first length-prefixed frame and the first that is never answered.
+/// added `LOG_REQUEST`, the first length-prefixed frame and the first that is never answered; `:v5`
+/// added `MUTATE_COMPANY_BUDGET`; `:v6` widened `CHARGE_CREDITS` with four authorization slots and
+/// gave the reply's `detail` a meaning for that opcode, and added `INVALIDATE_USER_ACCESS`.
 /// Replies are not themselves authenticated, so without the bump an old client would keep
 /// authenticating fine, read 1 byte of a 5-byte reply, and silently misinterpret everything
 /// after that.
-const DOMAIN: &[u8] = b"genix-server-utils:v5";
+const DOMAIN: &[u8] = b"genix-server-utils:v6";
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -101,17 +103,19 @@ mod tests {
     fn matches_the_go_client_vectors() {
         let secret = b"test-secret";
         let nonce = [1, 2, 3, 4, 5, 6, 7, 8];
-        // Opcode 0x01 followed by the 11-byte charge payload.
+        // Opcode 0x01 followed by the 20-byte charge payload: company, user, route 103, cpu 300,
+        // inference 25, then two filled authorization slots so the vector covers the new bytes.
         let payload = [
-            0x01, 0x12, 0x34, 0x56, 0x00, 0x00, 0x2A, 0x04, 0x00, 0x07, 0x00, 0x09,
+            0x01, 0x12, 0x34, 0x56, 0x00, 0x00, 0x2A, 0x00, 0x67, 0x01, 0x2C, 0x00, 0x19, 0x01,
+            0x39, 0x00, 0x8B, 0x00, 0x00, 0x00, 0x00,
         ];
         assert_eq!(
             compute_hash(secret, &nonce, 0, &payload).unwrap(),
-            [0xDE, 0x05, 0x11, 0x1B, 0x8A, 0x5E, 0xE4, 0xB3]
+            [0x0F, 0x13, 0xFA, 0xB1, 0xDE, 0xF3, 0xCA, 0xA8]
         );
         assert_eq!(
             compute_hash(secret, &nonce, 1, &payload).unwrap(),
-            [0xE0, 0x16, 0xDA, 0x16, 0xEA, 0x21, 0xB9, 0x0A]
+            [0xA9, 0x87, 0x64, 0x7C, 0xD4, 0x89, 0x26, 0xAD]
         );
 
         // Opcode 0x02 with action 7, identifier -42, 3 waiters, 5000 ms wait, 15000 ms lease.
@@ -121,7 +125,14 @@ mod tests {
         ];
         assert_eq!(
             compute_hash(secret, &nonce, 0, &acquire).unwrap(),
-            [0x78, 0xC0, 0xDA, 0x15, 0xCF, 0xC2, 0x9C, 0xCC]
+            [0x63, 0xFE, 0x19, 0x83, 0xE2, 0x84, 0xE6, 0x3E]
+        );
+
+        // Opcode 0x06 for company 7 / user 300: the invalidation is signed like everything else.
+        let invalidate = [0x06, 0x00, 0x00, 0x07, 0x00, 0x01, 0x2C];
+        assert_eq!(
+            compute_hash(secret, &nonce, 0, &invalidate).unwrap(),
+            [0x82, 0xE1, 0xEA, 0x44, 0x84, 0xB5, 0x90, 0x74]
         );
     }
 }

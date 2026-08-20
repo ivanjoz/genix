@@ -32,7 +32,7 @@ type RequestErrorTable struct {
 
 func (e RequestErrorTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		// Written externally, like user_logs and credit_usage.
+		// Written externally, like user_logs and the credit_usage_* tables.
 		ID:        45,
 		Name:      "request_errors",
 		Partition: e.ID,

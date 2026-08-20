@@ -12,6 +12,9 @@ use crate::{
 
 const DEFAULT_LISTEN_PORT: u16 = 14013;
 const DEFAULT_FLUSH_SECONDS: u64 = 15;
+/// How long a user's authorization grants stay cached. The backend invalidates actively after
+/// rewriting them, so this bounds only the case where that frame was lost or the backend restarted.
+const DEFAULT_ACCESS_CACHE_SECONDS: u64 = 600;
 const DEFAULT_FRAME_TIMEOUT_SECONDS: u64 = 30;
 const DEFAULT_MAX_CONNECTIONS: usize = 1_024;
 /// Requests one connection may have in flight at once. With one request per socket the socket
@@ -75,6 +78,8 @@ pub struct AppConfig {
     pub max_connections: usize,
     pub max_inflight_per_connection: usize,
     pub shard_count: usize,
+    /// TTL of the cached `users.accesos_computed` grants the charge frame is authorized against.
+    pub access_cache_seconds: i64,
     /// Signs the browser session tokens the SSE bridge verifies. Nothing else reads it.
     pub secret_phrase: Vec<u8>,
     /// Service-to-service secret: the rate limiter's TCP frame HMAC and the bridge's
@@ -193,11 +198,18 @@ impl AppConfig {
             "rate_limit.max_inflight_per_connection",
         )?
         .unwrap_or(DEFAULT_MAX_INFLIGHT_PER_CONNECTION);
+        let access_cache_seconds = optional_u64(
+            &config,
+            "RATE_LIMIT_ACCESS_CACHE_SECONDS",
+            "rate_limit.access_cache_seconds",
+        )?
+        .unwrap_or(DEFAULT_ACCESS_CACHE_SECONDS);
 
         if flush_seconds == 0
             || frame_timeout_seconds == 0
             || max_connections == 0
             || max_inflight_per_connection == 0
+            || access_cache_seconds == 0
         {
             bail!("rate-limiter durations and connection limits must be positive");
         }
@@ -297,6 +309,7 @@ impl AppConfig {
             max_connections,
             max_inflight_per_connection,
             shard_count,
+            access_cache_seconds: access_cache_seconds as i64,
             secret_phrase: required_string(&config, "SECRET_PHRASE", "secret_phrase")?.into_bytes(),
             internal_apikey: required_string(&config, "INTERNAL_APIKEY", "internal_apikey")?
                 .into_bytes(),

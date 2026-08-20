@@ -11,17 +11,29 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 use crate::limiter::{
-    aggregation::{UsageKey, UsageRecord, UsageSnapshot, merge_loaded},
+    access::{AccessDenial, UserAccessState},
+    aggregation::{COMPANY_AGGREGATE_USER_ID, UsageKey, UsageRecord, UsageSnapshot, merge_loaded},
     budget::{BudgetMutation, BudgetMutationReply, BudgetOperation},
     credits_blob::{Credits, RoutedCredits, decode, encode, sum},
     protocol::{LimitViolation, Request, Scope, Window},
-    storage::{StoredBudget, UsageStore},
+    storage::{LimiterStore, StoredBudget, StoredBudgetUsage},
     time_frame,
 };
 
-const COMPANY_AGGREGATE_USER_ID: i32 = -1;
 const PLATFORM_AGGREGATE_COMPANY_ID: i32 = 0;
 const TOKEN_PERIOD: Duration = Duration::from_secs(10);
+
+/// What one frame was answered with.
+///
+/// Authorization and quota are separate refusals with separate HTTP answers on the Go side, so they
+/// are separate variants rather than one status byte: a 403 is not a 429 and must not be reported as
+/// one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decision {
+    Allowed,
+    CreditViolation(LimitViolation),
+    AccessDenied(AccessDenial),
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct CreditLimits {
@@ -83,6 +95,9 @@ struct SubjectState {
     cpu_bucket: TokenBucket,
     inference_bucket: TokenBucket,
     hour_period: i64,
+    // The local business UnixDay, not the UTC one: this counter is seeded from the daily usage row,
+    // which is bucketed by `time_frame::daily`, so counting it on any other day would both reset the
+    // daily cap five hours early and reseed it from a window it does not cover.
     day_period: i64,
     hour_used: Credits,
     day_used: Credits,
@@ -93,6 +108,11 @@ struct CompanyBudgetState {
     stored: StoredBudget,
     usage_month_start_day: i16,
     month_used: Credits,
+    // Mutation versions, exactly as UsageRecord carries them: the flush publishes the counters this
+    // company enforces on, and a write that completes after a concurrent charge must not mark the
+    // newer figure as durable.
+    version: u64,
+    flushed_version: u64,
 }
 
 impl CompanyBudgetState {
@@ -100,6 +120,50 @@ impl CompanyBudgetState {
         if self.usage_month_start_day != current_month_start_day {
             self.usage_month_start_day = current_month_start_day;
             self.month_used = Credits::default();
+        }
+    }
+
+    fn add_month_used(&mut self, credits: Credits) -> Result<()> {
+        self.month_used = self
+            .month_used
+            .checked_add(credits)
+            .ok_or_else(|| anyhow!("monthly usage overflowed uint64"))?;
+        // A rollover needs no version bump of its own: the flushed row names the month and the day it
+        // belongs to, so a reader already reads a window the daemon has not touched as unused.
+        self.version = self
+            .version
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("budget usage mutation version overflowed uint64"))?;
+        Ok(())
+    }
+
+    /// The row to flush, or `None` when nothing was charged since the last successful write. The
+    /// daily counter lives on the company aggregate subject, so it is read in the same shard pass.
+    fn usage_snapshot(
+        &self,
+        company_id: i32,
+        day_used: Credits,
+        day_period: i64,
+        unix_seconds: i64,
+    ) -> Result<Option<(StoredBudgetUsage, u64)>> {
+        if self.version == self.flushed_version {
+            return Ok(None);
+        }
+        let snapshot = StoredBudgetUsage {
+            company_id,
+            day_period: i16::try_from(day_period)
+                .context("local business day does not fit int16")?,
+            day_used,
+            month_start_day: self.usage_month_start_day,
+            month_used: self.month_used,
+            updated: sunix_time(unix_seconds)?,
+        };
+        Ok(Some((snapshot, self.version)))
+    }
+
+    fn mark_usage_flushed(&mut self, version: u64) {
+        if self.version == version {
+            self.flushed_version = version;
         }
     }
 
@@ -132,6 +196,7 @@ impl SubjectState {
     fn recovered(
         limits: ScopeLimits,
         unix_seconds: i64,
+        day_period: i64,
         now: Instant,
         hour_used: Credits,
         day_used: Credits,
@@ -140,13 +205,19 @@ impl SubjectState {
             cpu_bucket: TokenBucket::full(limits.cpu.ten_seconds, now),
             inference_bucket: TokenBucket::full(limits.inference.ten_seconds, now),
             hour_period: unix_seconds / 3_600,
-            day_period: unix_seconds / 86_400,
+            day_period,
             hour_used,
             day_used,
         }
     }
 
-    fn refresh_periods(&mut self, limits: ScopeLimits, unix_seconds: i64, now: Instant) {
+    fn refresh_periods(
+        &mut self,
+        limits: ScopeLimits,
+        unix_seconds: i64,
+        day_period: i64,
+        now: Instant,
+    ) {
         self.cpu_bucket.refill(limits.cpu.ten_seconds, now);
         self.inference_bucket
             .refill(limits.inference.ten_seconds, now);
@@ -155,7 +226,6 @@ impl SubjectState {
             self.hour_period = hour_period;
             self.hour_used = Credits::default();
         }
-        let day_period = unix_seconds / 86_400;
         if self.day_period != day_period {
             self.day_period = day_period;
             self.day_used = Credits::default();
@@ -236,31 +306,44 @@ struct ShardState {
     subjects: HashMap<(i32, i32), SubjectState>,
     budgets: HashMap<i32, CompanyBudgetState>,
     usage: HashMap<UsageKey, UsageRecord>,
+    // Authorization grants, on the same key and behind the same mutex as the quota state so a
+    // request that both authorizes and charges still takes one lock. A separate map rather than a
+    // field on SubjectState: the lifetimes differ (a TTL and an invalidation channel, versus state
+    // that lives as long as the process), the company aggregate has no accesses, and because
+    // denial precedes charging an unauthorized caller must not get a SubjectState allocated for it.
+    access: HashMap<(i32, i32), UserAccessState>,
 }
 
 pub struct RateLimiter {
     shards: Vec<Mutex<ShardState>>,
+    access_cache_seconds: i64,
     // Platform usage has one reserved key shared by every company. Keeping it outside the
     // company-sharded maps prevents competing absolute snapshots from overwriting one another.
     platform_usage: Mutex<HashMap<UsageKey, UsageRecord>>,
     policy: LimitPolicy,
-    store: Arc<dyn UsageStore>,
+    store: Arc<dyn LimiterStore>,
 }
 
 impl RateLimiter {
-    pub fn new(shard_count: usize, policy: LimitPolicy, store: Arc<dyn UsageStore>) -> Self {
+    pub fn new(
+        shard_count: usize,
+        policy: LimitPolicy,
+        store: Arc<dyn LimiterStore>,
+        access_cache_seconds: i64,
+    ) -> Self {
         let shards = (0..shard_count.max(1))
             .map(|_| Mutex::new(ShardState::default()))
             .collect();
         Self {
             shards,
+            access_cache_seconds,
             platform_usage: Mutex::new(HashMap::new()),
             policy,
             store,
         }
     }
 
-    pub async fn admit(&self, request: Request) -> Result<Option<LimitViolation>> {
+    pub async fn admit(&self, request: Request) -> Result<Decision> {
         let unix_seconds = current_unix_seconds()?;
         self.admit_at(request, unix_seconds, Instant::now()).await
     }
@@ -270,9 +353,37 @@ impl RateLimiter {
         request: Request,
         unix_seconds: i64,
         now: Instant,
-    ) -> Result<Option<LimitViolation>> {
+    ) -> Result<Decision> {
         let shard_index = request.company_id as usize % self.shards.len();
         let mut shard = self.shards[shard_index].lock().await;
+
+        // Authorization first, and on refusal nothing is charged: no usage row, no SubjectState, no
+        // budget load. A 403 costs the tenant nothing, which is the deliberate trade — the work
+        // being given away is one binary search over a cached list.
+        if request.requests_authorization() {
+            self.ensure_access(
+                &mut shard,
+                request.company_id,
+                request.user_id,
+                unix_seconds,
+            )
+            .await?;
+            let denial = shard
+                .access
+                .get(&(request.company_id, request.user_id))
+                .expect("user access initialized")
+                .verdict(&request.required_access);
+            if let Some(denial) = denial {
+                debug!(
+                    company_id = request.company_id,
+                    user_id = request.user_id,
+                    route_id = request.route_id,
+                    ?denial,
+                    "authorization refused"
+                );
+                return Ok(Decision::AccessDenied(denial));
+            }
+        }
 
         self.ensure_subject(
             &mut shard,
@@ -297,16 +408,17 @@ impl RateLimiter {
 
         let company_key = (request.company_id, COMPANY_AGGREGATE_USER_ID);
         let user_key = (request.company_id, request.user_id);
+        let current_day_period = time_frame::local_unix_day(unix_seconds)?;
         shard
             .subjects
             .get_mut(&company_key)
             .expect("company state initialized")
-            .refresh_periods(self.policy.company, unix_seconds, now);
+            .refresh_periods(self.policy.company, unix_seconds, current_day_period, now);
         shard
             .subjects
             .get_mut(&user_key)
             .expect("user state initialized")
-            .refresh_periods(self.policy.user, unix_seconds, now);
+            .refresh_periods(self.policy.user, unix_seconds, current_day_period, now);
         let current_month_start_day = time_frame::month_start_day(unix_seconds)?;
         shard
             .budgets
@@ -323,7 +435,7 @@ impl RateLimiter {
             if let Some(violation) =
                 company.violation(Scope::Company, window, self.policy.company, request.credits)
             {
-                return Ok(Some(violation));
+                return Ok(Decision::CreditViolation(violation));
             }
             let user = shard
                 .subjects
@@ -332,7 +444,7 @@ impl RateLimiter {
             if let Some(violation) =
                 user.violation(Scope::User, window, self.policy.user, request.credits)
             {
-                return Ok(Some(violation));
+                return Ok(Decision::CreditViolation(violation));
             }
         }
 
@@ -355,7 +467,7 @@ impl RateLimiter {
             request.credits,
             budget.stored.daily,
         ) {
-            return Ok(Some(violation));
+            return Ok(Decision::CreditViolation(violation));
         }
         let user_daily = Credits {
             cpu: budget.stored.daily.cpu / 2,
@@ -368,10 +480,10 @@ impl RateLimiter {
             request.credits,
             user_daily,
         ) {
-            return Ok(Some(violation));
+            return Ok(Decision::CreditViolation(violation));
         }
         if let Some(violation) = budget.monthly_violation(request.credits) {
-            return Ok(Some(violation));
+            return Ok(Decision::CreditViolation(violation));
         }
 
         // Load the reserved absolute row before mutating accepted usage. A storage failure then
@@ -390,17 +502,14 @@ impl RateLimiter {
             .get_mut(&user_key)
             .expect("user state initialized")
             .charge(request.credits)?;
-        let company_budget = shard
+        shard
             .budgets
             .get_mut(&request.company_id)
-            .expect("company budget initialized");
-        company_budget.month_used = company_budget
-            .month_used
-            .checked_add(request.credits)
-            .ok_or_else(|| anyhow!("monthly usage overflowed uint64"))?;
+            .expect("company budget initialized")
+            .add_month_used(request.credits)?;
         increment_usage(&mut shard.usage, request, unix_seconds)?;
         increment_platform_usage(&mut platform_usage, request, unix_seconds)?;
-        Ok(None)
+        Ok(Decision::Allowed)
     }
 
     pub async fn mutate_budget(&self, mutation: BudgetMutation) -> Result<BudgetMutationReply> {
@@ -425,6 +534,9 @@ impl RateLimiter {
         budget_state.refresh_month(current_month_start_day);
         let mut stored = budget_state.stored;
 
+        // last_set tracks the granted figure, not the ceiling: SetCurrent restates it, IncreaseCurrent
+        // moves it by the same amount it moves the ceiling so "consumed since the grant" stays
+        // continuous across a top-up, and SetDaily leaves it alone because a rate limit grants nothing.
         match mutation.operation {
             BudgetOperation::SetDaily => stored.daily = mutation.credits,
             BudgetOperation::SetCurrent => {
@@ -452,6 +564,7 @@ impl RateLimiter {
                     cpu: monthly_cpu_ceiling,
                     inference: monthly_inference_ceiling,
                 };
+                stored.last_set = mutation.credits;
             }
             BudgetOperation::IncreaseCurrent => {
                 if stored.budget_month_start_day != current_month_start_day {
@@ -461,12 +574,18 @@ impl RateLimiter {
                 else {
                     return Ok(BudgetMutationReply::Overflow);
                 };
+                let Some(last_set) = stored.last_set.checked_add(mutation.credits) else {
+                    return Ok(BudgetMutationReply::Overflow);
+                };
                 if monthly_ceiling.cpu > i64::MAX as u64
                     || monthly_ceiling.inference > i64::MAX as u64
+                    || last_set.cpu > i64::MAX as u64
+                    || last_set.inference > i64::MAX as u64
                 {
                     return Ok(BudgetMutationReply::Overflow);
                 }
                 stored.monthly_ceiling = monthly_ceiling;
+                stored.last_set = last_set;
             }
         }
 
@@ -533,6 +652,10 @@ impl RateLimiter {
                 stored,
                 usage_month_start_day: current_month_start_day,
                 month_used,
+                // Recovered counters are already durable: they were summed from flushed usage rows,
+                // so they must not be rewritten until something is charged against them.
+                version: 0,
+                flushed_version: 0,
             },
         );
         debug!(
@@ -568,6 +691,55 @@ impl RateLimiter {
         merge_loaded(platform_usage, key, routes);
         debug!(time_frame = key.time_frame, "initialized platform usage");
         Ok(())
+    }
+
+    /// Loads a user's grants into the shard on a miss or past the TTL.
+    ///
+    /// The ScyllaDB read happens while holding the shard mutex, which is head-of-line blocking for
+    /// other callers in the same shard. That is worth saying out loud, but it is exactly what
+    /// `ensure_subject` already does for the daily and hourly usage rows: this adds a third awaited
+    /// read to a path that already had two. `server.rs` spawns each charge onto its own task
+    /// specifically so none of them block the frame reader.
+    async fn ensure_access(
+        &self,
+        shard: &mut ShardState,
+        company_id: i32,
+        user_id: i32,
+        unix_seconds: i64,
+    ) -> Result<()> {
+        if let Some(cached) = shard.access.get(&(company_id, user_id))
+            && cached.is_fresh(unix_seconds, self.access_cache_seconds)
+        {
+            return Ok(());
+        }
+        let row = self
+            .store
+            .load_user_access(company_id, user_id)
+            .await
+            .context("failed to load user access grants")?;
+        // A miss is cached like a hit, or a token naming a deleted user would re-read ScyllaDB on
+        // every request it sends.
+        let state = UserAccessState::from_row(row, unix_seconds)?;
+        shard.access.insert((company_id, user_id), state);
+        Ok(())
+    }
+
+    /// Drops cached grants so the next request re-reads them. `user_id == 0` drops every user of the
+    /// company.
+    ///
+    /// This is what makes the TTL a backstop rather than the mechanism: the backend sends it after
+    /// rewriting `accesos_computed`, so a revoked access stops working immediately instead of at the
+    /// end of the window. Sharding is by company, so a wildcard touches exactly one shard.
+    pub async fn invalidate_access(&self, company_id: i32, user_id: i32) {
+        let shard_index = company_id as usize % self.shards.len();
+        let mut shard = self.shards[shard_index].lock().await;
+        if user_id == 0 {
+            shard
+                .access
+                .retain(|(company, _), _| *company != company_id);
+        } else {
+            shard.access.remove(&(company_id, user_id));
+        }
     }
 
     async fn ensure_subject(
@@ -625,7 +797,14 @@ impl RateLimiter {
         let day_used = sum(&daily_routes)?;
         shard.subjects.insert(
             (company_id, user_id),
-            SubjectState::recovered(limits, unix_seconds, now, hour_used, day_used),
+            SubjectState::recovered(
+                limits,
+                unix_seconds,
+                time_frame::local_unix_day(unix_seconds)?,
+                now,
+                hour_used,
+                day_used,
+            ),
         );
         debug!(
             company_id,
@@ -685,7 +864,83 @@ impl RateLimiter {
         if let Err(cleanup_error) = self.prune_clean_usage().await {
             error!(error = %cleanup_error, "failed to prune clean historical usage from memory");
         }
+        written += self.flush_dirty_budget_usage().await;
         info!(written, "usage flush completed");
+        written
+    }
+
+    /// Publishes the counters admission is decided on — the company's daily and month-to-date usage —
+    /// next to the entitlement they are compared against, so a reader gets the limiter's own figures
+    /// instead of re-summing the usage rows the way `ensure_budget` has to on a cold miss.
+    async fn flush_dirty_budget_usage(&self) -> usize {
+        let unix_seconds = match current_unix_seconds() {
+            Ok(unix_seconds) => unix_seconds,
+            Err(clock_error) => {
+                error!(error = %clock_error, "budget usage flush skipped: unreadable clock");
+                return 0;
+            }
+        };
+        let day_period = match time_frame::local_unix_day(unix_seconds) {
+            Ok(day_period) => day_period,
+            Err(day_error) => {
+                error!(error = %day_error, "budget usage flush skipped: unresolved business day");
+                return 0;
+            }
+        };
+
+        let mut snapshots = Vec::new();
+        for shard in &self.shards {
+            let shard = shard.lock().await;
+            for (&company_id, budget) in &shard.budgets {
+                // The day the snapshot carries is the subject's own, not the wall clock's: a subject
+                // whose day rolled over keeps reporting the previous day's counter until its next
+                // charge resets it, and labelling that figure with today would overstate today.
+                let (day_used, day_period) = shard
+                    .subjects
+                    .get(&(company_id, COMPANY_AGGREGATE_USER_ID))
+                    .map(|subject| (subject.day_used, subject.day_period))
+                    .unwrap_or((Credits::default(), day_period));
+                match budget.usage_snapshot(company_id, day_used, day_period, unix_seconds) {
+                    Ok(Some(snapshot)) => snapshots.push(snapshot),
+                    Ok(None) => {}
+                    Err(snapshot_error) => error!(
+                        company_id,
+                        error = %snapshot_error,
+                        "company budget usage snapshot could not be built"
+                    ),
+                }
+            }
+        }
+        if snapshots.is_empty() {
+            debug!("budget usage flush skipped because no company was charged");
+            return 0;
+        }
+
+        let mut written = 0;
+        for (snapshot, version) in snapshots {
+            if let Err(flush_error) = self.store.upsert_budget_usage(snapshot).await {
+                error!(
+                    company_id = snapshot.company_id,
+                    error = %flush_error,
+                    "company budget usage remains dirty after failed flush"
+                );
+                continue;
+            }
+            let shard_index = snapshot.company_id as usize % self.shards.len();
+            let mut shard = self.shards[shard_index].lock().await;
+            if let Some(budget) = shard.budgets.get_mut(&snapshot.company_id) {
+                budget.mark_usage_flushed(version);
+            }
+            written += 1;
+            debug!(
+                company_id = snapshot.company_id,
+                day_period = snapshot.day_period,
+                day_cpu = snapshot.day_used.cpu,
+                month_start_day = snapshot.month_start_day,
+                month_cpu = snapshot.month_used.cpu,
+                "company budget usage flushed"
+            );
+        }
         written
     }
 
@@ -796,20 +1051,54 @@ fn sunix_time(unix_seconds: i64) -> Result<i32> {
 #[cfg(test)]
 mod tests {
     use std::sync::Mutex as StdMutex;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use async_trait::async_trait;
 
     use super::*;
-    use crate::limiter::storage::{StoredBudget, StoredUsage};
+    use crate::limiter::access::MAX_REQUIRED_ACCESS;
+    use crate::limiter::storage::{StoredBudget, StoredBudgetUsage, StoredUsage, StoredUserAccess};
+
+    impl Decision {
+        /// The credit violation this decision carries, or a panic naming what it carried instead.
+        fn violation(self) -> LimitViolation {
+            match self {
+                Decision::CreditViolation(violation) => violation,
+                other => panic!("expected a credit violation, got {other:?}"),
+            }
+        }
+    }
 
     #[derive(Default)]
     struct MemoryStore {
         rows: StdMutex<HashMap<UsageKey, Vec<u8>>>,
         budgets: StdMutex<HashMap<i32, StoredBudget>>,
+        /// What the flush published per company, plus how many times it published it: a flush that
+        /// writes an unchanged row is as wrong as one that skips a changed one.
+        budget_usages: StdMutex<HashMap<i32, (StoredBudgetUsage, u32)>>,
+        users: StdMutex<HashMap<(i32, i32), StoredUserAccess>>,
+        /// Counts the point reads, so a test can prove the cache is actually a cache.
+        user_reads: AtomicU64,
+    }
+
+    impl MemoryStore {
+        fn budget_usage(&self, company_id: i32) -> Option<(StoredBudgetUsage, u32)> {
+            self.budget_usages.lock().unwrap().get(&company_id).copied()
+        }
+
+        fn put_user(&self, company_id: i32, user_id: i32, grants: &[u16], status: i8) {
+            self.users.lock().unwrap().insert(
+                (company_id, user_id),
+                StoredUserAccess {
+                    grants_blob: grants.iter().flat_map(|g| g.to_le_bytes()).collect(),
+                    status,
+                },
+            );
+        }
     }
 
     #[async_trait]
-    impl UsageStore for MemoryStore {
+    impl LimiterStore for MemoryStore {
         async fn load_exact(&self, key: UsageKey) -> Result<Option<StoredUsage>> {
             Ok(self
                 .rows
@@ -868,6 +1157,10 @@ mod tests {
                     cpu: i64::MAX as u64,
                     inference: i64::MAX as u64,
                 },
+                last_set: Credits {
+                    cpu: i64::MAX as u64,
+                    inference: i64::MAX as u64,
+                },
                 updated: 0,
             }))
         }
@@ -878,6 +1171,27 @@ mod tests {
                 .unwrap()
                 .insert(budget.company_id, budget);
             Ok(())
+        }
+
+        async fn upsert_budget_usage(&self, usage: StoredBudgetUsage) -> Result<()> {
+            let mut usages = self.budget_usages.lock().unwrap();
+            let writes = usages.get(&usage.company_id).map_or(0, |(_, w)| *w);
+            usages.insert(usage.company_id, (usage, writes + 1));
+            Ok(())
+        }
+
+        async fn load_user_access(
+            &self,
+            company_id: i32,
+            user_id: i32,
+        ) -> Result<Option<StoredUserAccess>> {
+            self.user_reads.fetch_add(1, Ordering::Relaxed);
+            Ok(self
+                .users
+                .lock()
+                .unwrap()
+                .get(&(company_id, user_id))
+                .cloned())
         }
     }
 
@@ -910,6 +1224,11 @@ mod tests {
                 cpu: monthly,
                 inference: monthly,
             },
+            // The fixtures grant the ceiling from a zero-usage month, so both figures coincide.
+            last_set: Credits {
+                cpu: monthly,
+                inference: monthly,
+            },
             updated: 0,
         }
     }
@@ -917,7 +1236,7 @@ mod tests {
     #[tokio::test]
     async fn accepted_request_dirties_company_user_and_platform_rows() {
         let store = Arc::new(MemoryStore::default());
-        let limiter = RateLimiter::new(1, test_policy(100), store.clone());
+        let limiter = RateLimiter::new(1, test_policy(100), store.clone(), 600);
         let request = Request {
             company_id: 7,
             user_id: 42,
@@ -926,15 +1245,17 @@ mod tests {
                 cpu: 4,
                 inference: 5,
             },
+            required_access: [0; MAX_REQUIRED_ACCESS],
         };
         assert_eq!(
             limiter
                 .admit_at(request, 1_800_000_000, Instant::now())
                 .await
                 .unwrap(),
-            None
+            Decision::Allowed
         );
-        assert_eq!(limiter.flush_dirty().await, 5);
+        // Five usage rows plus the company's budget usage counters, which the same flush publishes.
+        assert_eq!(limiter.flush_dirty().await, 6);
         assert_eq!(store.rows.lock().unwrap().len(), 5);
         let platform_key = platform_usage_key(1_800_000_000).unwrap();
         let platform_routes = decode(
@@ -953,7 +1274,7 @@ mod tests {
     #[tokio::test]
     async fn platform_aggregate_is_shared_across_company_shards() {
         let store = Arc::new(MemoryStore::default());
-        let limiter = RateLimiter::new(4, test_policy(100), store.clone());
+        let limiter = RateLimiter::new(4, test_policy(100), store.clone(), 600);
         let unix_seconds = 1_800_000_000;
 
         for company_id in [1, 2] {
@@ -967,13 +1288,14 @@ mod tests {
                             cpu: 4,
                             inference: 5,
                         },
+                        required_access: [0; MAX_REQUIRED_ACCESS],
                     },
                     unix_seconds,
                     Instant::now(),
                 )
                 .await
                 .unwrap();
-            assert_eq!(result, None);
+            assert_eq!(result, Decision::Allowed);
         }
 
         limiter.flush_dirty().await;
@@ -1012,7 +1334,7 @@ mod tests {
             )]))
             .unwrap(),
         );
-        let limiter = RateLimiter::new(1, test_policy(100), store.clone());
+        let limiter = RateLimiter::new(1, test_policy(100), store.clone(), 600);
 
         limiter
             .admit_at(
@@ -1024,6 +1346,7 @@ mod tests {
                         cpu: 4,
                         inference: 5,
                     },
+                    required_access: [0; MAX_REQUIRED_ACCESS],
                 },
                 unix_seconds,
                 Instant::now(),
@@ -1053,7 +1376,7 @@ mod tests {
     #[tokio::test]
     async fn exact_limit_is_allowed_and_next_credit_is_rejected() {
         let store = Arc::new(MemoryStore::default());
-        let limiter = RateLimiter::new(1, test_policy(10), store);
+        let limiter = RateLimiter::new(1, test_policy(10), store, 600);
         let now = Instant::now();
         let request = Request {
             company_id: 7,
@@ -1063,10 +1386,11 @@ mod tests {
                 cpu: 10,
                 inference: 0,
             },
+            required_access: [0; MAX_REQUIRED_ACCESS],
         };
         assert_eq!(
             limiter.admit_at(request, 1_800_000_000, now).await.unwrap(),
-            None
+            Decision::Allowed
         );
         let violation = limiter
             .admit_at(
@@ -1082,13 +1406,142 @@ mod tests {
             )
             .await
             .unwrap()
-            .unwrap();
+            .violation();
         assert_eq!(violation.scope, Scope::Company);
         assert_eq!(violation.window, Window::TenSeconds);
         assert!(violation.cpu);
         // The rejected second request must not create another dirty platform mutation.
-        assert_eq!(limiter.flush_dirty().await, 5);
+        assert_eq!(limiter.flush_dirty().await, 6);
         assert_eq!(limiter.flush_dirty().await, 0);
+    }
+
+    #[tokio::test]
+    async fn flush_publishes_the_counters_admission_is_decided_on() {
+        let store = Arc::new(MemoryStore::default());
+        let unix_seconds = 1_800_000_000;
+        store
+            .budgets
+            .lock()
+            .unwrap()
+            .insert(7, stored_budget(7, unix_seconds, 1_000, 5_000));
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        let request = Request {
+            company_id: 7,
+            user_id: 42,
+            route_id: 1,
+            credits: Credits {
+                cpu: 30,
+                inference: 4,
+            },
+            required_access: [0; MAX_REQUIRED_ACCESS],
+        };
+        assert_eq!(
+            limiter
+                .admit_at(request, unix_seconds, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        limiter.flush_dirty().await;
+
+        let (usage, writes) = store.budget_usage(7).expect("budget usage was flushed");
+        assert_eq!(writes, 1);
+        assert_eq!(
+            usage.day_used,
+            Credits {
+                cpu: 30,
+                inference: 4
+            }
+        );
+        assert_eq!(
+            usage.month_used,
+            Credits {
+                cpu: 30,
+                inference: 4
+            }
+        );
+        assert_eq!(
+            usage.day_period,
+            time_frame::local_unix_day(unix_seconds).unwrap() as i16
+        );
+        assert_eq!(
+            usage.month_start_day,
+            time_frame::month_start_day(unix_seconds).unwrap()
+        );
+
+        // Nothing charged since, so the row must not be rewritten: a re-write would republish the
+        // same figures with a newer stamp and make a stale reader look fresh.
+        limiter.flush_dirty().await;
+        assert_eq!(store.budget_usage(7).unwrap().1, 1);
+
+        assert_eq!(
+            limiter
+                .admit_at(request, unix_seconds, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        limiter.flush_dirty().await;
+        let (usage, writes) = store.budget_usage(7).unwrap();
+        assert_eq!(writes, 2);
+        assert_eq!(
+            usage.month_used,
+            Credits {
+                cpu: 60,
+                inference: 8
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn daily_usage_resets_on_the_local_day_boundary() {
+        let store = Arc::new(MemoryStore::default());
+        // 2027-01-15 18:00 local (UTC-5), and two hours later — the same business day, but already
+        // the next UTC day. On the raw UTC division the counter reset at 19:00 local and the caller
+        // could spend its daily cap twice in one business day.
+        let evening = 1_800_054_000;
+        let after_utc_midnight = evening + 2 * 3_600;
+        let next_business_day = evening + 7 * 3_600;
+        store
+            .budgets
+            .lock()
+            .unwrap()
+            .insert(7, stored_budget(7, evening, 10, 5_000));
+        let limiter = RateLimiter::new(1, test_policy(1_000), store, 600);
+        // Five credits is the user's whole daily half, so the second charge must be refused for the
+        // day no matter which side of UTC midnight it lands on.
+        let request = Request {
+            company_id: 7,
+            user_id: 42,
+            route_id: 1,
+            credits: Credits {
+                cpu: 5,
+                inference: 0,
+            },
+            required_access: [0; MAX_REQUIRED_ACCESS],
+        };
+        assert_eq!(
+            limiter
+                .admit_at(request, evening, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        let violation = limiter
+            .admit_at(request, after_utc_midnight, Instant::now())
+            .await
+            .unwrap()
+            .violation();
+        assert_eq!(violation.scope, Scope::User);
+        assert_eq!(violation.window, Window::Day);
+        // The business day rolls over five hours after UTC midnight, and only then is the cap fresh.
+        assert_eq!(
+            limiter
+                .admit_at(request, next_business_day, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
     }
 
     #[tokio::test]
@@ -1100,7 +1553,7 @@ mod tests {
             .lock()
             .unwrap()
             .insert(7, stored_budget(7, unix_seconds, 10, 100));
-        let limiter = RateLimiter::new(1, test_policy(1_000), store);
+        let limiter = RateLimiter::new(1, test_policy(1_000), store, 600);
         let request = Request {
             company_id: 7,
             user_id: 42,
@@ -1109,13 +1562,14 @@ mod tests {
                 cpu: 5,
                 inference: 0,
             },
+            required_access: [0; MAX_REQUIRED_ACCESS],
         };
         assert_eq!(
             limiter
                 .admit_at(request, unix_seconds, Instant::now())
                 .await
                 .unwrap(),
-            None
+            Decision::Allowed
         );
         let violation = limiter
             .admit_at(
@@ -1131,7 +1585,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .unwrap();
+            .violation();
         assert_eq!(violation.scope, Scope::User);
         assert_eq!(violation.window, Window::Day);
     }
@@ -1145,7 +1599,7 @@ mod tests {
             .lock()
             .unwrap()
             .insert(7, stored_budget(7, unix_seconds, 100, 8));
-        let limiter = RateLimiter::new(1, test_policy(1_000), store);
+        let limiter = RateLimiter::new(1, test_policy(1_000), store, 600);
         for user_id in [41, 42] {
             assert_eq!(
                 limiter
@@ -1158,13 +1612,14 @@ mod tests {
                                 cpu: 4,
                                 inference: 0,
                             },
+                            required_access: [0; MAX_REQUIRED_ACCESS],
                         },
                         unix_seconds,
                         Instant::now(),
                     )
                     .await
                     .unwrap(),
-                None
+                Decision::Allowed
             );
         }
         let violation = limiter
@@ -1177,13 +1632,14 @@ mod tests {
                         cpu: 1,
                         inference: 0,
                     },
+                    required_access: [0; MAX_REQUIRED_ACCESS],
                 },
                 unix_seconds,
                 Instant::now(),
             )
             .await
             .unwrap()
-            .unwrap();
+            .violation();
         assert_eq!(violation.scope, Scope::Company);
         assert_eq!(violation.window, Window::Month);
     }
@@ -1212,7 +1668,7 @@ mod tests {
             .lock()
             .unwrap()
             .insert(7, stored_budget(7, unix_seconds, 100, 40));
-        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone());
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
 
         assert_eq!(
             limiter
@@ -1255,5 +1711,330 @@ mod tests {
         let increased = store.budgets.lock().unwrap()[&7];
         assert_eq!(increased.monthly_ceiling.cpu, 125);
         assert_eq!(increased.monthly_ceiling.inference, 12);
+    }
+
+    /// last_set is what lets a reader say "300 of the granted 1000 are gone": the ceiling cannot,
+    /// because it folds in the usage that already existed when the grant was made.
+    #[tokio::test]
+    async fn last_set_records_the_granted_figure_and_survives_a_top_up() {
+        let store = Arc::new(MemoryStore::default());
+        let unix_seconds = 1_800_000_000;
+        store.rows.lock().unwrap().insert(
+            UsageKey {
+                company_id: 7,
+                user_id: COMPANY_AGGREGATE_USER_ID,
+                time_frame: time_frame::daily(unix_seconds).unwrap(),
+            },
+            encode(&RoutedCredits::from([(
+                1,
+                Credits {
+                    cpu: 30,
+                    inference: 3,
+                },
+            )]))
+            .unwrap(),
+        );
+        store
+            .budgets
+            .lock()
+            .unwrap()
+            .insert(7, stored_budget(7, unix_seconds, 100, 40));
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        let limiter_ref = &limiter;
+        let mutate = |operation, cpu, inference| async move {
+            limiter_ref
+                .mutate_budget_at(
+                    BudgetMutation {
+                        company_id: 7,
+                        operation,
+                        credits: Credits { cpu, inference },
+                    },
+                    unix_seconds,
+                )
+                .await
+                .unwrap()
+        };
+
+        assert_eq!(
+            mutate(BudgetOperation::SetCurrent, 70, 7).await,
+            BudgetMutationReply::Ok
+        );
+        let granted = store.budgets.lock().unwrap()[&7];
+        // The grant is stored verbatim, while the ceiling carries the 30/3 already spent.
+        assert_eq!(granted.last_set.cpu, 70);
+        assert_eq!(granted.last_set.inference, 7);
+        assert_eq!(granted.monthly_ceiling.cpu, 100);
+        // Nothing is consumed yet against this grant: granted minus what remains is zero.
+        assert_eq!(granted.last_set.cpu - (granted.monthly_ceiling.cpu - 30), 0);
+
+        // A daily rate limit grants no credit, so it must leave the reference untouched.
+        assert_eq!(
+            mutate(BudgetOperation::SetDaily, 5, 5).await,
+            BudgetMutationReply::Ok
+        );
+        assert_eq!(store.budgets.lock().unwrap()[&7].last_set.cpu, 70);
+
+        // A top-up moves the reference by the same amount as the ceiling, so "consumed since the
+        // grant" stays continuous instead of jumping when credits are added.
+        assert_eq!(
+            mutate(BudgetOperation::IncreaseCurrent, 25, 2).await,
+            BudgetMutationReply::Ok
+        );
+        let topped_up = store.budgets.lock().unwrap()[&7];
+        assert_eq!(topped_up.last_set.cpu, 95);
+        assert_eq!(topped_up.last_set.inference, 9);
+        assert_eq!(topped_up.monthly_ceiling.cpu, 125);
+        assert_eq!(
+            topped_up.last_set.cpu - (topped_up.monthly_ceiling.cpu - 30),
+            0
+        );
+    }
+
+    /// Mirrors `core.makeAccesoNivelUint16`: the packed form both processes agree on.
+    fn packed(acceso_id: u16, nivel: u16) -> u16 {
+        (acceso_id << 2) | (nivel - 1)
+    }
+
+    fn authorized_request(required: &[u16]) -> Request {
+        let mut required_access = [0_u16; MAX_REQUIRED_ACCESS];
+        required_access[..required.len()].copy_from_slice(required);
+        Request {
+            company_id: 7,
+            user_id: 42,
+            route_id: 1,
+            credits: Credits {
+                cpu: 5,
+                inference: 0,
+            },
+            required_access,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_held_access_is_admitted_and_charged() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_user(7, 42, &[packed(3, 2), packed(20, 4)], 1);
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        assert_eq!(
+            limiter
+                .admit_at(
+                    authorized_request(&[packed(20, 2)]),
+                    1_800_000_000,
+                    Instant::now()
+                )
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        // Admitted means charged: the usage rows exist.
+        assert!(limiter.flush_dirty().await > 0);
+    }
+
+    /// The load-bearing assertion for "deny first, no charge": a refusal must leave every usage map
+    /// untouched, so nothing to flush and no subject allocated for the caller.
+    #[tokio::test]
+    async fn a_refusal_charges_nothing_at_all() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_user(7, 42, &[packed(3, 1)], 1);
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        assert_eq!(
+            limiter
+                .admit_at(
+                    authorized_request(&[packed(3, 2)]),
+                    1_800_000_000,
+                    Instant::now()
+                )
+                .await
+                .unwrap(),
+            Decision::AccessDenied(AccessDenial::NoAccess)
+        );
+        assert_eq!(limiter.flush_dirty().await, 0);
+        assert!(store.rows.lock().unwrap().is_empty());
+        {
+            let shard = limiter.shards[0].lock().await;
+            assert!(
+                shard.subjects.is_empty(),
+                "no quota state for a refused user"
+            );
+            assert!(shard.usage.is_empty());
+            assert!(shard.budgets.is_empty(), "the budget was never even loaded");
+        }
+        assert!(limiter.platform_usage.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn identity_failures_are_distinct_from_permission_failures() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_user(7, 43, &[packed(3, 4)], 0);
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+
+        // No row at all: the token names a user this company does not have.
+        assert_eq!(
+            limiter
+                .admit_at(
+                    authorized_request(&[packed(3, 1)]),
+                    1_800_000_000,
+                    Instant::now()
+                )
+                .await
+                .unwrap(),
+            Decision::AccessDenied(AccessDenial::UnknownUser)
+        );
+
+        // Soft-deleted, and holding the access it is asking for. Status still wins.
+        let mut inactive = authorized_request(&[packed(3, 1)]);
+        inactive.user_id = 43;
+        assert_eq!(
+            limiter
+                .admit_at(inactive, 1_800_000_000, Instant::now())
+                .await
+                .unwrap(),
+            Decision::AccessDenied(AccessDenial::InactiveUser)
+        );
+    }
+
+    /// A frame with empty slots must never reach the access map: that is the unmapped-GET,
+    /// self-service and user-1 path, and it has to stay free of a ScyllaDB read.
+    #[tokio::test]
+    async fn a_frame_with_no_required_access_never_reads_the_user_row() {
+        let store = Arc::new(MemoryStore::default());
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        let mut request = authorized_request(&[]);
+        request.route_id = 34;
+        assert_eq!(
+            limiter
+                .admit_at(request, 1_800_000_000, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        assert_eq!(store.user_reads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn grants_are_read_once_and_reread_past_the_ttl() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_user(7, 42, &[packed(3, 4)], 1);
+        let limiter = RateLimiter::new(1, test_policy(100_000), store.clone(), 600);
+        let request = authorized_request(&[packed(3, 1)]);
+
+        for _ in 0..5 {
+            limiter
+                .admit_at(request, 1_800_000_000, Instant::now())
+                .await
+                .unwrap();
+        }
+        assert_eq!(
+            store.user_reads.load(Ordering::Relaxed),
+            1,
+            "cached, not re-read"
+        );
+
+        // Inside the window, still one read. Past it, exactly one more.
+        limiter
+            .admit_at(request, 1_800_000_600, Instant::now())
+            .await
+            .unwrap();
+        assert_eq!(store.user_reads.load(Ordering::Relaxed), 1);
+        limiter
+            .admit_at(request, 1_800_000_601, Instant::now())
+            .await
+            .unwrap();
+        assert_eq!(store.user_reads.load(Ordering::Relaxed), 2);
+    }
+
+    /// A token naming a user that does not exist must not turn into a database read per request.
+    #[tokio::test]
+    async fn a_missing_user_is_cached_too() {
+        let store = Arc::new(MemoryStore::default());
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        let request = authorized_request(&[packed(3, 1)]);
+        for _ in 0..4 {
+            assert_eq!(
+                limiter
+                    .admit_at(request, 1_800_000_000, Instant::now())
+                    .await
+                    .unwrap(),
+                Decision::AccessDenied(AccessDenial::UnknownUser)
+            );
+        }
+        assert_eq!(store.user_reads.load(Ordering::Relaxed), 1);
+    }
+
+    /// What makes the TTL a backstop rather than the mechanism.
+    #[tokio::test]
+    async fn invalidation_forces_a_reread_for_one_user_or_a_whole_company() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_user(7, 42, &[packed(3, 1)], 1);
+        store.put_user(7, 43, &[packed(3, 1)], 1);
+        let limiter = RateLimiter::new(1, test_policy(100_000), store.clone(), 600);
+        let request = authorized_request(&[packed(3, 2)]);
+        let mut other_user = request;
+        other_user.user_id = 43;
+
+        // Both denied at nivel 2, and both now cached.
+        for probe in [request, other_user] {
+            assert_eq!(
+                limiter
+                    .admit_at(probe, 1_800_000_000, Instant::now())
+                    .await
+                    .unwrap(),
+                Decision::AccessDenied(AccessDenial::NoAccess)
+            );
+        }
+        assert_eq!(store.user_reads.load(Ordering::Relaxed), 2);
+
+        // A profile edit raises user 42 to nivel 4 and tells the daemon about it. Without the
+        // invalidation this would stay denied for the rest of the TTL.
+        store.put_user(7, 42, &[packed(3, 4)], 1);
+        store.put_user(7, 43, &[packed(3, 4)], 1);
+        limiter.invalidate_access(7, 42).await;
+        assert_eq!(
+            limiter
+                .admit_at(request, 1_800_000_000, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        // User 43 was not named, so it is still holding the stale answer.
+        assert_eq!(
+            limiter
+                .admit_at(other_user, 1_800_000_000, Instant::now())
+                .await
+                .unwrap(),
+            Decision::AccessDenied(AccessDenial::NoAccess)
+        );
+
+        // The wildcard drops every user of the company.
+        limiter.invalidate_access(7, 0).await;
+        assert_eq!(
+            limiter
+                .admit_at(other_user, 1_800_000_000, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+    }
+
+    /// An authorize-only frame: `creditControlRoutes` sends these so an exempt-but-mapped route is
+    /// still gated. It carries no credits and must still be authorized rather than refused.
+    #[tokio::test]
+    async fn an_authorize_only_frame_is_gated_and_admitted() {
+        let store = Arc::new(MemoryStore::default());
+        store.put_user(7, 42, &[packed(3, 4)], 1);
+        let limiter = RateLimiter::new(1, test_policy(1_000), store.clone(), 600);
+        let mut request = authorized_request(&[packed(3, 1)]);
+        request.credits = Credits::default();
+        assert_eq!(
+            limiter
+                .admit_at(request, 1_800_000_000, Instant::now())
+                .await
+                .unwrap(),
+            Decision::Allowed
+        );
+        // Zero credits still walk the quota path, so state exists — it just carries nothing.
+        let shard = limiter.shards[0].lock().await;
+        assert!(shard.subjects.contains_key(&(7, 42)));
+        assert_eq!(shard.subjects[&(7, 42)].day_used, Credits::default());
     }
 }

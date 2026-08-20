@@ -6,11 +6,23 @@ use anyhow::{Result, anyhow};
 
 use crate::limiter::credits_blob::{Credits, RoutedCredits};
 
+/// Charging a request updates the user's row and the company's total, so the in-memory map needs a
+/// key for "the company itself". It is a discriminator, not a user, and it is not stored: the two
+/// usage tables are separate, and `UsageKey::is_company_aggregate` is what routes a flush to the
+/// right one.
+pub const COMPANY_AGGREGATE_USER_ID: i32 = -1;
+
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct UsageKey {
     pub company_id: i32,
     pub user_id: i32,
     pub time_frame: i32,
+}
+
+impl UsageKey {
+    pub fn is_company_aggregate(&self) -> bool {
+        self.user_id == COMPANY_AGGREGATE_USER_ID
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

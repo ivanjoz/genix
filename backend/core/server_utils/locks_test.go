@@ -153,7 +153,7 @@ func TestAcquireAndReleaseFramesMatchTheRustVectors(t *testing.T) {
 	// Pinned byte for byte against service/auth.rs.
 	expected := []byte{
 		0x02, 0x00, 0x07, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xD6, 0x03, 0x13, 0x88,
-		0x3A, 0x98, 0x78, 0xC0, 0xDA, 0x15, 0xCF, 0xC2, 0x9C, 0xCC,
+		0x3A, 0x98, 0x63, 0xFE, 0x19, 0x83, 0xE2, 0x84, 0xE6, 0x3E,
 	}
 	if frame := <-stub.frames; string(frame) != string(expected) {
 		t.Fatalf("acquire frame = % X; want % X", frame, expected)
@@ -207,7 +207,7 @@ func TestRepliesCorrelateToTheRightCallerOutOfOrder(t *testing.T) {
 
 	// A charge sent afterwards must be answered while the acquire still waits.
 	charged := make(chan error, 1)
-	go func() { charged <- client.Charge(context.Background(), 1, 1, 0, 2, 0) }()
+	go func() { charged <- client.Charge(context.Background(), 1, 1, 0, 2, 0, nil) }()
 	select {
 	case err := <-charged:
 		if err != nil {
@@ -326,7 +326,7 @@ func TestConcurrentSendersKeepTheSequenceInLockstep(t *testing.T) {
 		waitGroup.Add(1)
 		go func() {
 			defer waitGroup.Done()
-			_ = client.Charge(context.Background(), 1, 1, 0, 1, 0)
+			_ = client.Charge(context.Background(), 1, 1, 0, 1, 0, nil)
 		}()
 	}
 	waitGroup.Wait()

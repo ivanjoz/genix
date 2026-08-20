@@ -75,7 +75,12 @@ struct BitReader<'a> {
 
 impl<'a> BitReader<'a> {
     fn new(buffer: &'a [u8]) -> Self {
-        Self { buffer, byte_position: 0, accumulator: 0, accumulated_bits: 0 }
+        Self {
+            buffer,
+            byte_position: 0,
+            accumulator: 0,
+            accumulated_bits: 0,
+        }
     }
 
     /// Reads `width` bits (0..=64) as the low bits of the result.
@@ -157,8 +162,14 @@ impl<'a> ColbinCursor<'a> {
     }
 
     fn take(&mut self, length: usize) -> Result<&'a [u8], TokenError> {
-        let end = self.position.checked_add(length).ok_or(TokenError::Truncated)?;
-        let slice = self.data.get(self.position..end).ok_or(TokenError::Truncated)?;
+        let end = self
+            .position
+            .checked_add(length)
+            .ok_or(TokenError::Truncated)?;
+        let slice = self
+            .data
+            .get(self.position..end)
+            .ok_or(TokenError::Truncated)?;
         self.position = end;
         Ok(slice)
     }
@@ -186,7 +197,11 @@ impl<'a> ColbinCursor<'a> {
         let mut reader = BitReader::new(self.take(total_bits.div_ceil(8))?);
 
         let raw_base = reader.read_bits(native_width);
-        let base = if is_signed { sign_extend(raw_base, native_width) } else { raw_base as i64 };
+        let base = if is_signed {
+            sign_extend(raw_base, native_width)
+        } else {
+            raw_base as i64
+        };
         Ok((0..count)
             .map(|_| {
                 let delta = reader.read_bits(delta_width);
@@ -223,7 +238,10 @@ impl<'a> ColbinCursor<'a> {
 /// `[version][recordCount uvarint][colCount][column...]` and columns may arrive in any
 /// order — each is self-identified by its field id.
 pub fn decode_session_token(payload: &[u8]) -> Result<UserToken, TokenError> {
-    let mut cursor = ColbinCursor { data: payload, position: 0 };
+    let mut cursor = ColbinCursor {
+        data: payload,
+        position: 0,
+    };
     if cursor.read_byte()? != COLBIN_VERSION {
         return Err(TokenError::Version);
     }
@@ -452,9 +470,15 @@ mod tests {
     #[test]
     fn rejects_a_truncated_or_mistyped_session_token() {
         assert_eq!(decode_session_token(&[]), Err(TokenError::Truncated));
-        assert_eq!(decode_session_token(&[0x02, 0x01, 0x00]), Err(TokenError::Version));
+        assert_eq!(
+            decode_session_token(&[0x02, 0x01, 0x00]),
+            Err(TokenError::Version)
+        );
         // recordCount = 2: a session token names exactly one identity.
-        assert_eq!(decode_session_token(&[0x01, 0x02, 0x00]), Err(TokenError::RecordCount));
+        assert_eq!(
+            decode_session_token(&[0x01, 0x02, 0x00]),
+            Err(TokenError::RecordCount)
+        );
     }
 
     /// Cross-language vectors: the expected column was produced by the TypeScript codec in
@@ -490,18 +514,31 @@ mod tests {
     fn rejects_non_canonical_and_malformed_channel_tokens() {
         // Overlong company varint (0x81 0x00 == 1): decodes to the same triple as "AQE...",
         // so accepting it would let one tab own two registry keys.
-        let overlong = general_purpose::URL_SAFE_NO_PAD.encode([0x81, 0x00, 0x01, 1, 2, 3, 4, 5, 6]);
-        assert_eq!(decode_channel_token(&overlong), Err(TokenError::ChannelNotCanonical));
+        let overlong =
+            general_purpose::URL_SAFE_NO_PAD.encode([0x81, 0x00, 0x01, 1, 2, 3, 4, 5, 6]);
+        assert_eq!(
+            decode_channel_token(&overlong),
+            Err(TokenError::ChannelNotCanonical)
+        );
 
         // A zero id is not a valid identity.
         let zero_company = general_purpose::URL_SAFE_NO_PAD.encode([0x00, 0x01, 1, 2, 3, 4, 5, 6]);
-        assert_eq!(decode_channel_token(&zero_company), Err(TokenError::ChannelRange));
+        assert_eq!(
+            decode_channel_token(&zero_company),
+            Err(TokenError::ChannelRange)
+        );
 
         // Tab id must be exactly 6 bytes.
         let short_tab = general_purpose::URL_SAFE_NO_PAD.encode([0x01, 0x01, 1, 2, 3]);
-        assert_eq!(decode_channel_token(&short_tab), Err(TokenError::ChannelTabID));
+        assert_eq!(
+            decode_channel_token(&short_tab),
+            Err(TokenError::ChannelTabID)
+        );
 
-        assert_eq!(decode_channel_token("not base64!!"), Err(TokenError::ChannelBase64));
+        assert_eq!(
+            decode_channel_token("not base64!!"),
+            Err(TokenError::ChannelBase64)
+        );
         // Non-positive ids and a tab id that is not 6 decoded bytes have no valid encoding.
         assert_eq!(encode_channel_token(0, 1, "N2xQaG8x"), None);
         assert_eq!(encode_channel_token(1, -1, "N2xQaG8x"), None);
@@ -528,7 +565,10 @@ mod tests {
     }
 
     fn decode_hex(text: &str) -> Vec<u8> {
-        let compact: String = text.chars().filter(|character| !character.is_whitespace()).collect();
+        let compact: String = text
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
         (0..compact.len())
             .step_by(2)
             .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).unwrap())

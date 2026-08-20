@@ -114,6 +114,12 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 				if err = db.Update(&usersWithChangedAccesos, usuarioQuery.AccesosComputed); err != nil {
 					return req.MakeErr("Error al actualizar usuarios afectados en ScyllaDB: " + err.Error())
 				}
+				// Uno por user y no el comodín de la company: esta lista es exactamente la de los
+				// blobs que cambiaron, así que tirar el caché de los demás sólo les costaría una
+				// lectura a ScyllaDB para volver a la misma respuesta.
+				for _, affectedUser := range usersWithChangedAccesos {
+					invalidateCachedUserAccess(req, affectedUser.CompanyID, affectedUser.ID)
+				}
 			}
 			/*
 				if err = cloud.Insert(affectedUsers); err != nil {

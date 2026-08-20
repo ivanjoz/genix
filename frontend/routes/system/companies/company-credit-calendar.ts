@@ -1,4 +1,4 @@
-import type { ICompanyCreditUsageDay } from './company-credit-usage';
+import type { ICreditUsageDay } from './company-credit-usage.model';
 
 export const COMPANY_CREDIT_WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -8,7 +8,7 @@ const MILLISECONDS_PER_DAY = 86400000;
 export interface ICompanyCreditCalendarCell {
   unixDay: number;
   dayOfMonth: number;
-  usage: ICompanyCreditUsageDay | null;
+  usage: ICreditUsageDay | null;
   cpuPercent: number;
   inferencePercent: number;
 }
@@ -26,7 +26,7 @@ const usagePercent = (value: number, maximum: number): number => (
 );
 
 export const buildCompanyCreditCalendar = (
-  sourceDays: ICompanyCreditUsageDay[],
+  sourceDays: ICreditUsageDay[],
 ): ICompanyCreditCalendarWeek[] => {
   if (!sourceDays.length) return [];
 

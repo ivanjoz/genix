@@ -68,7 +68,7 @@ type ServerMetricTable struct {
 
 func (e ServerMetricTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		// Written externally in whole rows, like user_logs and credit_usage: no ORM-managed
+		// Written externally in whole rows, like user_logs and the credit_usage_* tables: no ORM-managed
 		// created/updated columns and no update counter. A sample is written once and never
 		// touched again, so there is nothing for either to describe.
 		ID:                    47,

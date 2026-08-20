@@ -303,6 +303,17 @@ export function formatN(
   return xString
 }
 
+// Compact form for cells too narrow for a grouped number: past 5 digits the value is shown in
+// thousands (100,000 -> 100K), past 8 in millions. Below that formatN is used unchanged, so the
+// exact figure stays readable while it still fits.
+export function numberToK(x: number, decimal?: number): string {
+  if (typeof x !== 'number' || !isFinite(x)) return ''
+  const magnitude = Math.abs(x)
+  if (magnitude > 99999999) return `${formatN(x / 1000000, 0)}M`
+  if (magnitude > 99999) return `${formatN(x / 1000, 0)}K`
+  return String(formatN(x, decimal))
+}
+
 export const normalizeComparableValue = (value: unknown): unknown => {
   if (!value || (Array.isArray(value) && value.length === 0)) return 0
 

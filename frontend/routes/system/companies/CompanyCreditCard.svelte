@@ -1,36 +1,36 @@
 <script lang="ts">
-  import { useUI } from '@genix/ui';
   import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
   import Button from '$components/buttons/Button.svelte';
   import Card from '$components/cards/Card.svelte';
   import T from '$components/misc/T.svelte';
-  import { formatN, formatTime } from '$libs/helpers';
-  import type { ICompanyCreditUsageRanked } from './company-credit-usage.model';
+  import { formatTime, numberToK } from '$libs/helpers';
+  import CompanyCreditMeters from './CompanyCreditMeters.svelte';
+  import type { ICompanyCreditBudgetMeter, ICompanyCreditSummaryRanked } from './company-credit-usage.model';
 
   let {
     company,
+    administratorName = '',
+    budget,
     onOpen,
     onEdit,
   }: {
-    company: ICompanyCreditUsageRanked;
+    company: ICompanyCreditSummaryRanked;
+    administratorName?: string;
+    budget?: ICompanyCreditBudgetMeter;
     onOpen: () => void;
     onEdit?: () => void;
   } = $props();
 
-  const ui = useUI();
   const chartSeries = $derived<ChartCanvasSeries[]>([
     { type: 'bar', name: 'CPU credits', color: '#10b981', values: company.Days.map((day) => day.CPU) },
     { type: 'bar', name: 'Inference credits', color: '#a855f7', values: company.Days.map((day) => day.Inference) },
   ]);
-  const administratorName = $derived(
-    company.AdminName && company.AdminName !== company.AdminUser ? company.AdminName : '',
-  );
   const formatDayLabel = (day: string | number) => String(formatTime(Number(day), 'd-M') || '');
 </script>
 
 <Card
   label={`Open 30-day credit usage for ${company.Company}|Abrir uso de créditos de 30 días de ${company.Company}`}
-  css="group relative flex h-full min-h-250 flex-col rounded-[12px] border border-slate-200 bg-white p-14 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
+  css="group relative flex h-full min-h-200 flex-col rounded-[12px] border border-slate-200 bg-white p-14 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
   onClick={onOpen}
 >
   <div class="min-w-0 pr-96 md:pr-42">
@@ -61,30 +61,28 @@
     {/if}
   </div>
 
-  <div class="mt-12 rounded-[9px] border border-slate-200 bg-slate-50 p-10">
-    <div class="flex flex-wrap items-center gap-x-14 gap-y-4">
-      <span class="ff-bold text-slate-700"><T text="30-day usage|Uso de 30 días" /></span>
-      <span class="ml-auto flex items-center gap-4 ff-mono">
-        <span class="h-8 w-8 rounded-[2px] bg-emerald-500"></span>{formatN(company.CPU)} CPU
-      </span>
-      <span class="flex items-center gap-4 ff-mono">
-        <span class="h-8 w-8 rounded-[2px] bg-purple-500"></span>{formatN(company.Inference)} <T text="AI|IA" />
-      </span>
+  <!-- No inner container: the chart spans the whole card width, headed by the 30-day totals. -->
+  <div class="mt-8">
+    <div class="mb-4 flex min-w-0 items-center justify-end gap-8 ff-mono">
+      <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-emerald-500"></i>{numberToK(company.CPU)} CPU</span>
+      <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-500"></i>{numberToK(company.Inference)} <T text="AI|IA" /></span>
     </div>
+    <ChartCanvas
+      id={`company-credit-card-${company.CompanyID}`}
+      data={chartSeries}
+      barMode="grouped"
+      dateLabels={company.Days.map((day) => day.Day)}
+      dateLabelFormatter={formatDayLabel}
+      hideXAxisLabels={true}
+      useHtmlRendered={true}
+      showBottomBaseline={true}
+      yAxisStepSize={100}
+      height={92}
+      style="background-color:#f4f4f4;outline:6px solid #f4f4f4"
+      showTooltip={true}
+    />
     <div class="mt-8">
-      <ChartCanvas
-        id={`company-credit-card-${company.CompanyID}`}
-        data={chartSeries}
-        barMode="grouped"
-        dateLabels={company.Days.map((day) => day.Day)}
-        dateLabelEvery={ui.state.deviceType === 3 ? 10 : 6	}
-        dateLabelFormatter={formatDayLabel}
-        useHtmlRendered={true}
-        showBottomBaseline={true}
-        yAxisStepSize={100}
-        height={92}
-        showTooltip={true}
-      />
+      <CompanyCreditMeters {budget} />
     </div>
   </div>
 </Card>

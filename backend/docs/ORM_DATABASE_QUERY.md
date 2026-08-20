@@ -760,26 +760,31 @@ IDs are never reused or renumbered, because they are packed into `cache_updated_
 
 | ID | Table | ID | Table |
 |---:|---|---:|---|
-| 1 | client_provider | 22 | products |
-| 2 | agent_messages | 23 | profiles |
-| 3 | cache | 24 | purchase_order |
-| 4 | cache_global | 25 | sale_order |
-| 5 | cash_bank_movements | 26 | sale_summary |
-| 6 | cash_banks | 27 | sales_planning |
-| 7 | cash_reconciliations | 28 | seasonality_curve |
-| 8 | city_locations | 29 | shared_list_records |
-| 9 | companies | 30 | shipping_costs |
-| 10 | cron_actions | 31 | sites |
-| 11 | delivery_order_note | 32 | supply_material |
-| 12 | ecommerce_page_content | 33 | system_parameters |
-| 13 | expenses | 34 | usage_log |
-| 14 | expenses_scheduled | 35 | users |
-| 15 | gallery_images | 36 | warehouse_product_movement |
-| 16 | image_assets | 37 | warehouse_product_stock |
-| 17 | image_assets_category | 38 | warehouse_product_stock_detail |
-| 18 | parameters | 39 | warehouses |
-| 19 | product_sale_summary | 40 | webpages |
-| 20 | product_stock_lot | 41 | zz_demo_struct |
-| 21 | product_supply | 16383 | sequences (ORM-internal) |
+| 1 | client_provider | 27 | sales_planning |
+| 2 | agent_messages | 28 | seasonality_curve |
+| 3 | cache | 29 | shared_list_records |
+| 4 | cache_global | 30 | shipping_costs |
+| 5 | cash_bank_movements | 31 | sites |
+| 6 | cash_banks | 32 | supply_material |
+| 7 | cash_reconciliations | 33 | system_parameters |
+| 8 | city_locations | 34 | usage_log |
+| 9 | companies | 35 | users |
+| 10 | cron_actions | 36 | warehouse_product_movement |
+| 11 | delivery_order_note | 37 | warehouse_product_stock |
+| 12 | ecommerce_page_content | 38 | warehouse_product_stock_detail |
+| 13 | expenses | 39 | warehouses |
+| 14 | expenses_scheduled | 40 | webpages |
+| 15 | gallery_images | 41 | zz_demo_struct |
+| 16 | image_assets | 42 | _retired_ (was credit_usage, split into 50/51) |
+| 17 | image_assets_category | 43 | sign_up_requests |
+| 18 | parameters | 44 | user_logs |
+| 19 | product_sale_summary | 45 | request_errors |
+| 20 | product_stock_lot | 46 | contact_messages |
+| 21 | product_supply | 47 | server_metrics |
+| 22 | products | 48 | company_credit_budget |
+| 23 | profiles | 49 | credit_history |
+| 24 | purchase_order | 50 | credit_usage_company |
+| 25 | sale_order | 51 | credit_usage_user |
+| 26 | _retired_ | | |
 
-**Next free ID: 42.**
+**Next free ID: 52.**

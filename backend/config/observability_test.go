@@ -62,7 +62,7 @@ func TestMakeObservabilityFramesCombinesCreditsAndExactErrors(t *testing.T) {
 	firstFrame := unixToObservabilityTimeFrame(firstUnix)
 	requestUnix := firstUnix + 60
 	requestID := int64(core.UnixToSunix(requestUnix))*10_000_000 + 1
-	creditRows := []coreTypes.CreditUsage{{
+	creditRows := []coreTypes.CreditUsageCompany{{
 		TimeFrame: firstFrame,
 		// Route 34, one-byte values, 10 CPU and 3 inference credits.
 		UsedCredits: []byte{0x00, 0x88, 0x0A, 0x03},

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // The seam between core and the server-utils client.
@@ -24,6 +25,7 @@ type (
 	Lock                = server_utils.Lock
 	LockOptions         = server_utils.LockOptions
 	CreditLimitExceeded = server_utils.CreditLimitExceeded
+	AccessDenied        = server_utils.AccessDenied
 	BudgetOperation     = server_utils.BudgetOperation
 	ServerUtilsClient   = server_utils.ServerUtilsClient
 	RequestLogRecord    = server_utils.RequestLogRecord
@@ -31,6 +33,13 @@ type (
 )
 
 const (
+	// InvalidateAllCompanyUsers drops every cached user of a company instead of one.
+	InvalidateAllCompanyUsers = server_utils.InvalidateAllCompanyUsers
+
+	// MaxRequiredAccess bounds how many accesses one route may map to. The gate refuses to encode
+	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access_list.yml inside it.
+	MaxRequiredAccess = server_utils.MaxRequiredAccess
+
 	BudgetSetDaily        = server_utils.BudgetSetDaily
 	BudgetSetCurrent      = server_utils.BudgetSetCurrent
 	BudgetIncreaseCurrent = server_utils.BudgetIncreaseCurrent
@@ -49,7 +58,12 @@ var (
 	ConfigureServerUtils = server_utils.ConfigureServerUtils
 
 	SendRequestLog              = server_utils.SendRequestLog
+	InvalidateUserAccess        = server_utils.InvalidateUserAccess
 	ChargeAPIUsage              = server_utils.ChargeAPIUsage
+	ChargeAPICredits            = server_utils.ChargeAPICredits
+	ChargeAPIAccessOnly         = server_utils.ChargeAPIAccessOnly
+	APICPUBaseCredits           = server_utils.APICPUBaseCredits
+	IsAccessDeniedError         = server_utils.IsAccessDeniedError
 	ChargeInferenceUsage        = server_utils.ChargeInferenceUsage
 	WithCreditRateLimitIdentity = server_utils.WithCreditRateLimitIdentity
 	IsCreditRateLimitError      = server_utils.IsCreditRateLimitError
@@ -119,4 +133,24 @@ func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
 	}
 	Log("credit rate limiter unavailable::", err)
 	return req.MakeErrCode("El servicio de límites de crédito no está disponible.", 503)
+}
+
+// MakeAccessDeniedResponse maps the daemon's authorization refusal to an HTTP answer.
+//
+// The two codes are not interchangeable. A missing or inactive user is a statement about the
+// session, so it is a 401 and the client must re-authenticate; lacking a permission is a 403 and
+// re-authenticating would achieve nothing. accessNames comes from the caller because the daemon
+// never sees them — it holds no copy of access_list.yml, deliberately.
+func (req *HandlerArgs) MakeAccessDeniedResponse(err error, accessNames []string) HandlerResponse {
+	var denied *server_utils.AccessDenied
+	if !errors.As(err, &denied) {
+		Log("credit rate limiter unavailable during authorization::", err)
+		return req.MakeErrCode("El servicio de límites de crédito no está disponible.", 503)
+	}
+	if denied.IdentityFailed() {
+		return req.MakeErrCode("La sesión no es válida o el user está inactivo.", 401)
+	}
+	return req.MakeErrCode(
+		fmt.Sprintf("El user no posee alguno de los accesos: %s", strings.Join(accessNames, ", ")),
+		403)
 }

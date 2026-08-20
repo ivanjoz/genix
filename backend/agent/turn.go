@@ -109,8 +109,10 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	runContext, cancelRun := context.WithTimeout(parentContext, turnTimeout)
 	defer cancelRun()
+	// No required access: the route gate in main-handlers.go already decided this request, and this
+	// charge is a second one for the turn's own budget rather than a repeat of the gate.
 	if rateLimitError := core.ChargeAPIUsage(
-		runContext, req.User.CompanyID, req.User.ID, req.RouteID, "POST", len(*req.Body),
+		runContext, req.User.CompanyID, req.User.ID, req.RouteID, "POST", len(*req.Body), nil,
 	); rateLimitError != nil {
 		core.Log("agent.turn base credit rejected tab::", shortTabID(tab), " err::", rateLimitError)
 		return req.MakeCreditRateLimitResponse(rateLimitError)

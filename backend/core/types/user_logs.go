@@ -39,7 +39,7 @@ type UserLogTable struct {
 func (e UserLogTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		// Written externally in whole rows; no ORM-managed created/updated columns and no update
-		// counter, the same arrangement credit_usage uses.
+		// counter, the same arrangement the credit_usage_* tables use.
 		ID:                    44,
 		Name:                  "user_logs",
 		Partition:             e.Date,

@@ -12,7 +12,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -45,8 +44,14 @@ type HandlerArgs struct {
 	// that core.Log prints from is only accurate under Lambda, where invocations are serialized.
 	RequestID int64
 	// RouteID is the generated number of Method+"."+Route; zero means the path matched no handler.
-	RouteID      int16
-	accesosNivel []uint16
+	RouteID int16
+	// RequiredAccess are los accesos empaquetados (accesoID<<2 | nivel-1) que el gate exige para
+	// esta ruta, y que viajan en el frame del limitador para que server_utils los verifique. Vacío
+	// es el caso normal: GET sin acceso mapeado, ruta self-service, o user 1.
+	RequiredAccess []uint16
+	// RequiredAccessNames acompaña a RequiredAccess sólo para el mensaje de error. El daemon no
+	// conoce access_list.yml, así que los nombres tienen que salir de este lado.
+	RequiredAccessNames []string
 }
 
 // ClientIPFromRequest resolves the caller's address behind the project's own Nginx.
@@ -88,32 +93,14 @@ func (req *HandlerArgs) ClientIPKey() (int64, bool) {
 	return int64(binary.BigEndian.Uint64(asIPv6[:8]) >> 1), true
 }
 
-func makeAccesoNivelUint16(accesoID int32, nivel uint8) uint16 {
-	// Pack acceso + nivel into the same sortable representation used by AccesosComputed.
+// MakeAccesoNivelPacked empaqueta acceso + nivel en el uint16 que la columna accesos_computed
+// guarda y que el frame del limitador transporta. Es el único codificador que los dos procesos
+// comparten: server_utils/src/limiter/access.rs decodifica exactamente esto.
+func MakeAccesoNivelPacked(accesoID int32, nivel uint8) uint16 {
 	if nivel < 1 || nivel > 4 {
 		nivel = 1
 	}
 	return uint16(accesoID<<2) | uint16(nivel-1)
-}
-
-func getAccesoNivelSearchRange(accesoID int32, nivel uint8) (uint16, uint16) {
-	// Require granted levels to be >= the requested level while staying within the same access ID bucket.
-	if nivel < 1 || nivel > 4 {
-		nivel = 1
-	}
-	requiredPackedAccesoNivel := makeAccesoNivelUint16(accesoID, nivel)
-	maxPackedAccesoNivel := makeAccesoNivelUint16(accesoID, 4)
-	return requiredPackedAccesoNivel, maxPackedAccesoNivel
-}
-
-func hasPackedAccesoInRange(accesosNivel []uint16, rangeStart uint16, rangeEnd uint16) bool {
-	// Use binary search over the sorted packed access slice instead of scanning every user access.
-	searchStartIndex, foundExactStart := slices.BinarySearch(accesosNivel, rangeStart)
-	if foundExactStart {
-		return true
-	} else {
-		return searchStartIndex < len(accesosNivel) && accesosNivel[searchStartIndex] <= rangeEnd
-	}
 }
 
 func DecompressBase64GzipM(base64String *string, isUrl ...bool) (string, error) {
@@ -287,29 +274,6 @@ func normalizedErrorStatus(statusCode int32) int {
 		return int(statusCode)
 	}
 	return http.StatusBadRequest
-}
-
-func (e HandlerArgs) HasAcceso(accesosIDs ...int32) bool {
-	if e.User == nil || e.User.ID == 0 || len(e.accesosNivel) == 0 {
-		return false
-	}
-
-	for _, accesoID := range accesosIDs {
-		// Plain access checks require at least level 1 for the requested access ID.
-		if e.HasAccesoNivel(accesoID, 1) {
-			return true
-		}
-	}
-	return false
-}
-
-func (e HandlerArgs) HasAccesoNivel(accesoID int32, nivel uint8) bool {
-	if e.User == nil || e.User.ID == 0 || len(e.accesosNivel) == 0 || accesoID <= 0 {
-		return false
-	}
-
-	rangeStart, rangeEnd := getAccesoNivelSearchRange(accesoID, nivel)
-	return hasPackedAccesoInRange(e.accesosNivel, rangeStart, rangeEnd)
 }
 
 func (e HandlerArgs) IsUser(usuarioIDs ...int32) bool {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { useUI } from '@genix/ui';
+  import { getStaticRecordsByID } from '@genix/ui/cache';
   import Button from '$components/buttons/Button.svelte';
   import FilterInput from '$components/form/FilterInput.svelte';
   import Layer from '$components/layers/Layer.svelte';
@@ -12,22 +13,20 @@
   import CompanyRouteCreditCards from './CompanyRouteCreditCards.svelte';
   import CompanyUserCreditCards from './CompanyUserCreditCards.svelte';
   import type { ICompany } from './empresas.svelte';
+  import { CompanyCreditReportService, CompanyCreditUsageService } from './company-credit-usage.svelte';
   import {
-    getCompanyCreditUsageDetail,
-    getCompanyCreditUsageReport,
-    getCompanyCreditUsageUsers,
-    type ICompanyCreditUsageDay,
-    type ICompanyCreditUsageDetail,
-    type ICompanyCreditUsageReport,
-    type ICompanyCreditUsageUsersReport,
-  } from './company-credit-usage';
-  import {
-    normalizeCompanyCreditDetail,
-    normalizeCompanyCreditReport,
-    normalizeCompanyCreditUsers,
+    COMPANY_ADMINISTRATOR_USER_ID,
+    packCompanyUserLabelID,
+    buildCompanyDays,
+    buildCompanyCreditSummaries,
+    buildCompanyDayDetail,
+    buildCompanyUserSummaries,
+    companyUserDisplayName,
     rankCompanyCreditUsage,
     type CompanyCreditMetric,
-    type ICompanyCreditUsageRanked,
+    type ICompanyCreditSummaryRanked,
+    type ICompanyUserLabel,
+    type ICreditUsageDay,
   } from './company-credit-usage.model';
 
   let {
@@ -44,57 +43,75 @@
 
   const ui = useUI();
   const COMPANY_USAGE_LAYER_ID = 1;
+  const COMPANY_USER_LABELS_ROUTE = 'company-users-by-ids';
   const metricOptions = [
     { id: 'CPU', name: 'CPU Credits|Créditos CPU' },
     { id: 'Inference', name: 'AI Credits|Créditos IA' },
   ];
 
-  let report = $state<ICompanyCreditUsageReport | null>(null);
+  const report = new CompanyCreditReportService(true);
   let selectedMetric = $state<CompanyCreditMetric>('CPU');
   let filterText = $state('');
   let isLoading = $state(false);
   let reportError = $state('');
-  let selectedCompany = $state<ICompanyCreditUsageRanked | null>(null);
-  let selectedDay = $state<ICompanyCreditUsageDay | null>(null);
-  let selectedDetail = $state<ICompanyCreditUsageDetail | null>(null);
-  let isDetailLoading = $state(false);
-  let detailError = $state('');
-  let usersReport = $state<ICompanyCreditUsageUsersReport | null>(null);
-  let isUsersLoading = $state(false);
-  let usersError = $state('');
+  let selectedCompany = $state<ICompanyCreditSummaryRanked | null>(null);
+  let selectedDay = $state<ICreditUsageDay | null>(null);
   let layerView = $state(1);
   let observedRefreshVersion = $state<number | null>(null);
-  const detailMemo = new Map<string, ICompanyCreditUsageDetail>();
-  const usersMemo = new Map<number, ICompanyCreditUsageUsersReport>();
+  // One usage service per opened company: each keeps its own delta collection and watermark.
+  let usageServices = $state(new Map<number, CompanyCreditUsageService>());
+  let userLabels = $state(new Map<number, ICompanyUserLabel>());
 
-  const normalizedCompanies = $derived(normalizeCompanyCreditReport(report?.Companies));
+  const summaries = $derived(buildCompanyCreditSummaries(report.days, companies));
+  const budgetMeterByCompanyID = $derived(new Map(report.budgetMeters.map((meter) => [meter.ID, meter])));
   const companiesByID = $derived(new Map(companies.map((company) => [company.id, company])));
   const masterSearchTextByCompanyID = $derived(new Map(companies.map((company) => [
     company.id,
     [company.Name, company.LegalName, company.RUC, company.Email].filter(Boolean).join(' '),
   ])));
-  const rankedCompanies = $derived(
-    rankCompanyCreditUsage(normalizedCompanies, selectedMetric, filterText, masterSearchTextByCompanyID),
+  const administratorTextByCompanyID = $derived(new Map(summaries.map((company) => {
+    const label = userLabels.get(packCompanyUserLabelID(company.CompanyID, COMPANY_ADMINISTRATOR_USER_ID));
+    return [company.CompanyID, [label?.FirstName, label?.LastName, label?.User].filter(Boolean).join(' ')];
+  })));
+  $effect(() => {
+    console.debug(`[company-cards] summaries=${summaries.length} `
+      + summaries.map((c) => `#${c.CompanyID}:cpu=${c.CPU},today=${c.TodayCPU},days=${c.Days.length}`).join(' '));
+  });
+  const rankedCompanies = $derived(rankCompanyCreditUsage(
+    summaries, selectedMetric, filterText, masterSearchTextByCompanyID, administratorTextByCompanyID,
+  ));
+
+  const selectedUsage = $derived(selectedCompany ? usageServices.get(selectedCompany.CompanyID) : undefined);
+  const selectedCompanyDays = $derived(buildCompanyDays(selectedUsage?.companyDays));
+  const selectedDetail = $derived(
+    selectedDay ? buildCompanyDayDetail(selectedUsage?.companyDays, selectedDay.Day) : null,
   );
+  const selectedUsers = $derived(buildCompanyUserSummaries(selectedUsage?.userDays));
+
   const requestErrorText = (requestError: any): string => String(
     requestError?.errorMessage || requestError?.error || requestError?.message ||
     (typeof requestError === 'string' ? requestError : 'error')
   );
+
+  // Labels are packed (company, user) ids so one static endpoint answers across tenants; the cache
+  // only reaches the server for ids it holds in neither memory nor IndexedDB.
+  const resolveUserLabels = async (packedIDs: number[]) => {
+    const missingIDs = packedIDs.filter((packedID) => !userLabels.has(packedID));
+    if (missingIDs.length === 0) return;
+    const resolved = await getStaticRecordsByID<ICompanyUserLabel>(COMPANY_USER_LABELS_ROUTE, missingIDs);
+    userLabels = new Map([...userLabels, ...resolved]);
+    console.debug(`[company-cards] labels requested=${missingIDs.length} resolved=${resolved.size}`);
+  };
 
   const refreshReport = async () => {
     if (isLoading) return;
     isLoading = true;
     reportError = '';
     try {
-      report = await getCompanyCreditUsageReport();
-      detailMemo.clear();
-      usersMemo.clear();
-      selectedCompany = null;
-      selectedDay = null;
-      selectedDetail = null;
-      usersReport = null;
-      ui.openSideLayer(0);
-      console.debug('[company-cards] report loaded', { companies: report?.Companies?.length || 0 });
+      // fetchOnline, not fetch: the button means "go to the server now", while fetch would answer
+      // from the cache snapshot whenever its TTL is still valid.
+      await report.fetchOnline();
+      console.debug(`[company-cards] report loaded days=${report.days.length}`);
     } catch (fetchError: any) {
       reportError = requestErrorText(fetchError);
       console.error('[company-cards] report failed', { error: reportError });
@@ -103,72 +120,20 @@
     }
   };
 
-  const openCompanyUsage = (company: ICompanyCreditUsageRanked) => {
+  const openCompanyUsage = (company: ICompanyCreditSummaryRanked) => {
     selectedCompany = company;
     selectedDay = null;
-    selectedDetail = null;
-    detailError = '';
-    usersReport = null;
-    usersError = '';
     layerView = 1;
+    if (!usageServices.has(company.CompanyID)) {
+      usageServices = new Map(usageServices).set(
+        company.CompanyID, new CompanyCreditUsageService(company.CompanyID, true),
+      );
+    }
     ui.openSideLayer(COMPANY_USAGE_LAYER_ID);
-    console.debug('[company-cards] usage layer opened', { companyID: company.CompanyID });
+    console.debug(`[company-cards] usage layer opened company=${company.CompanyID}`);
   };
 
-  const loadCompanyUsers = async (companyID: number) => {
-    if (isUsersLoading || usersReport?.CompanyID === companyID) return;
-    const memoReport = usersMemo.get(companyID);
-    if (memoReport) {
-      usersReport = memoReport;
-      console.debug('[company-cards] users cache hit', { companyID, users: memoReport.Users.length });
-      return;
-    }
-    isUsersLoading = true;
-    usersError = '';
-    console.debug('[company-cards] users requested', { companyID });
-    try {
-      const nextReport = normalizeCompanyCreditUsers(await getCompanyCreditUsageUsers(companyID));
-      usersMemo.set(companyID, nextReport);
-      if (selectedCompany?.CompanyID === companyID) usersReport = nextReport;
-      console.debug('[company-cards] users loaded', { companyID, users: nextReport.Users.length });
-    } catch (fetchError: any) {
-      if (selectedCompany?.CompanyID === companyID) usersError = requestErrorText(fetchError);
-      console.error('[company-cards] users failed', { companyID, error: requestErrorText(fetchError) });
-    } finally {
-      isUsersLoading = false;
-    }
-  };
-
-  const openDayDetail = async (day: ICompanyCreditUsageDay) => {
-    if (!selectedCompany) return;
-    selectedDay = day;
-    selectedDetail = null;
-    detailError = '';
-    layerView = 2;
-    const memoKey = `${selectedCompany.CompanyID}:${day.Day}`;
-    const memoDetail = detailMemo.get(memoKey);
-    if (memoDetail) {
-      selectedDetail = memoDetail;
-      console.debug('[company-cards] detail cache hit', { companyID: selectedCompany.CompanyID, day: day.Day });
-      return;
-    }
-
-    isDetailLoading = true;
-    console.debug('[company-cards] detail requested', { companyID: selectedCompany.CompanyID, day: day.Day });
-    try {
-      const detail = normalizeCompanyCreditDetail(await getCompanyCreditUsageDetail(selectedCompany.CompanyID, day.Day));
-      detailMemo.set(memoKey, detail);
-      selectedDetail = detail;
-      console.debug('[company-cards] detail loaded', { companyID: selectedCompany.CompanyID, day: day.Day, routes: detail.Routes.length });
-    } catch (fetchError: any) {
-      detailError = requestErrorText(fetchError);
-      console.error('[company-cards] detail failed', { companyID: selectedCompany.CompanyID, day: day.Day, error: detailError });
-    } finally {
-      isDetailLoading = false;
-    }
-  };
-
-  onMount(() => { void refreshReport(); });
+  onMount(() => { ui.openSideLayer(0); });
   $effect(() => {
     if (observedRefreshVersion === null) {
       observedRefreshVersion = refreshVersion;
@@ -178,11 +143,23 @@
     observedRefreshVersion = refreshVersion;
     void refreshReport();
   });
+  // Administrator labels are resolved for every company, not just the visible ones: the filter
+  // searches administrator names, so a name that is not resolved yet could never be matched.
+  // Reading `summaries` rather than `rankedCompanies` also keeps this out of a cycle, since the
+  // ranking depends on the very label map this effect fills.
+  $effect(() => {
+    const packedIDs = summaries.map(
+      (company) => packCompanyUserLabelID(company.CompanyID, COMPANY_ADMINISTRATOR_USER_ID),
+    );
+    untrack(() => { void resolveUserLabels(packedIDs); });
+  });
   $effect(() => {
     const companyID = selectedCompany?.CompanyID;
+    const users = selectedUsers;
     if (layerView !== 3 || !companyID) return;
-    // Loading mutates tab state, so keep it outside this effect's reactive dependency graph.
-    untrack(() => { void loadCompanyUsers(companyID); });
+    untrack(() => {
+      void resolveUserLabels(users.map((user) => packCompanyUserLabelID(companyID, user.UserID)));
+    });
   });
   onDestroy(() => {
     if (ui.state.sideLayerId === COMPANY_USAGE_LAYER_ID) ui.openSideLayer(0);
@@ -211,9 +188,6 @@
       <span class="shrink-0 rounded-full border border-slate-300 bg-slate-50 px-9 py-4 text-slate-800">
         <T text="Last 30 days|Últimos 30 días" />
       </span>
-      {#if report}
-        <span class="min-w-0 text-slate-600"><T text="Updated|Actualizado" />: {formatTime(report.GeneratedAt, 'd-M-Y h:n')}</span>
-      {/if}
       <div class="ml-auto flex shrink-0 items-center gap-8 md:contents">
         <Button
           name="Refresh|Actualizar"
@@ -237,28 +211,29 @@
     <div class="rounded-[8px] border border-red-200 bg-red-50 px-10 py-8 text-red-800">{reportError}</div>
   {/if}
 
-  {#if isLoading && !report}
+  {#if rankedCompanies.length === 0}
     <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-slate-600">
-      <T text="Loading companies and credit usage...|Cargando empresas y uso de créditos..." />
-    </div>
-  {:else if report}
-    <Layer type="content">
-      {#if rankedCompanies.length === 0}
-        <div class="rounded-[10px] border border-slate-200 bg-white px-14 py-24 text-center text-slate-600">
-          <T text="No companies match the filter.|No hay empresas que coincidan con el filtro." />
-        </div>
+      {#if summaries.length === 0}
+        <T text="Loading companies and credit usage...|Cargando empresas y uso de créditos..." />
       {:else}
-        <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 2xl:grid-cols-3">
-          {#each rankedCompanies as company (company.CompanyID)}
-            {@const masterCompany = companiesByID.get(company.CompanyID)}
-            <CompanyCreditCard
-              {company}
-              onOpen={() => { openCompanyUsage(company); }}
-              onEdit={masterCompany ? () => { onEdit(masterCompany); } : undefined}
-            />
-          {/each}
-        </div>
+        <T text="No companies match the filter.|No hay empresas que coincidan con el filtro." />
       {/if}
+    </div>
+  {:else}
+    <Layer type="content">
+      <div class="grid grid-cols-1 gap-12 lg:grid-cols-2 2xl:grid-cols-3">
+        {#each rankedCompanies as company (company.CompanyID)}
+          {@const masterCompany = companiesByID.get(company.CompanyID)}
+          {@const adminLabel = userLabels.get(packCompanyUserLabelID(company.CompanyID, COMPANY_ADMINISTRATOR_USER_ID))}
+          <CompanyCreditCard
+            {company}
+            administratorName={adminLabel ? companyUserDisplayName(adminLabel, COMPANY_ADMINISTRATOR_USER_ID) : ''}
+            budget={budgetMeterByCompanyID.get(company.CompanyID)}
+            onOpen={() => { openCompanyUsage(company); }}
+            onEdit={masterCompany ? () => { onEdit(masterCompany); } : undefined}
+          />
+        {/each}
+      </div>
     </Layer>
   {/if}
 
@@ -273,10 +248,6 @@
     onClose={() => {
       selectedCompany = null;
       selectedDay = null;
-      selectedDetail = null;
-      detailError = '';
-      usersReport = null;
-      usersError = '';
     }}
   >
     {#if selectedCompany && layerView === 1}
@@ -293,45 +264,33 @@
         </div>
 
         <CompanyCreditCalendar
-          days={selectedCompany.Days}
+          days={selectedCompanyDays.length ? selectedCompanyDays : selectedCompany.Days}
           selectedDay={selectedDay?.Day}
-          onSelect={(day) => { void openDayDetail(day); }}
+          onSelect={(day) => { selectedDay = day; layerView = 2; }}
         />
       </div>
     {:else if selectedCompany && layerView === 2}
       <div class="flex flex-col gap-12 text-[14px]">
-        {#if !selectedDay}
+        {#if !selectedDay || !selectedDetail}
           <div class="rounded-[8px] border border-slate-200 bg-slate-50 p-14 text-center text-slate-600">
             <T text="Select a day in the By day tab.|Seleccione un día en la pestaña Por día." />
           </div>
         {:else}
           <div class="flex flex-wrap items-center gap-12 rounded-[8px] bg-slate-50 p-10">
             <span class="ff-bold">{formatTime(selectedDay.Day, 'd-M-Y')}</span>
-            <span>{formatN(selectedDay.CPU)} CPU cr.</span>
-            <span>{formatN(selectedDay.Inference)} <T text="AI cr.|cr. IA" /></span>
+            <span>{formatN(selectedDetail.CPU)} CPU cr.</span>
+            <span>{formatN(selectedDetail.Inference)} <T text="AI cr.|cr. IA" /></span>
           </div>
-          {#if detailError}
-            <div class="rounded-[8px] border border-red-200 bg-red-50 p-10 text-red-800">{detailError}</div>
-          {:else if isDetailLoading}
-            <div class="rounded-[8px] border border-slate-200 bg-slate-50 p-14 text-center text-slate-600">
-              <T text="Loading API detail...|Cargando detalle por API..." />
-            </div>
-          {:else if selectedDetail}
-            <CompanyRouteCreditCards routes={selectedDetail.Routes} totalCPU={selectedDetail.CPU} />
-          {/if}
+          <CompanyRouteCreditCards routes={selectedDetail.Routes} totalCPU={selectedDetail.CPU} />
         {/if}
       </div>
     {:else if selectedCompany && layerView === 3}
       <div class="text-[14px]">
-        {#if usersError}
-          <div class="rounded-[8px] border border-red-200 bg-red-50 p-10 text-red-800">{usersError}</div>
-        {:else if isUsersLoading && !usersReport}
-          <div class="rounded-[8px] border border-slate-200 bg-slate-50 p-14 text-center text-slate-600">
-            <T text="Loading user usage...|Cargando uso por usuario..." />
-          </div>
-        {:else if usersReport}
-          <CompanyUserCreditCards users={usersReport.Users} />
-        {/if}
+        <CompanyUserCreditCards
+          users={selectedUsers}
+          companyID={selectedCompany.CompanyID}
+          labels={userLabels}
+        />
       </div>
     {/if}
   </Layer>

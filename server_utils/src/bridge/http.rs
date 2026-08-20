@@ -60,8 +60,14 @@ pub struct BridgeState {
 /// from the app's own domain; the service endpoints are only ever called server-to-server.
 pub fn routes(state: Arc<BridgeState>) -> Router {
     Router::new()
-        .route("/sse", get(handle_client_stream).options(handle_client_preflight))
-        .route("/in", post(handle_client_inbound).options(handle_client_preflight))
+        .route(
+            "/sse",
+            get(handle_client_stream).options(handle_client_preflight),
+        )
+        .route(
+            "/in",
+            post(handle_client_inbound).options(handle_client_preflight),
+        )
         .route("/publish", post(handle_service_publish))
         .route("/rpc", post(handle_service_rpc))
         .route("/health", get(handle_health))
@@ -82,7 +88,10 @@ async fn handle_client_preflight() -> Response {
 
 fn client_cors_headers() -> HeaderMap {
     let mut headers = HeaderMap::new();
-    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    headers.insert(
+        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+        HeaderValue::from_static("*"),
+    );
     headers.insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
         HeaderValue::from_static("GET, POST, OPTIONS"),
@@ -91,12 +100,20 @@ fn client_cors_headers() -> HeaderMap {
         header::ACCESS_CONTROL_ALLOW_HEADERS,
         HeaderValue::from_static("Authorization, Content-Type"),
     );
-    headers.insert(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_static("86400"));
+    headers.insert(
+        header::ACCESS_CONTROL_MAX_AGE,
+        HeaderValue::from_static("86400"),
+    );
     headers
 }
 
 fn json_error(status: StatusCode, message: impl Into<String>) -> Response {
-    (status, client_cors_headers(), Json(json!({ "Error": message.into() }))).into_response()
+    (
+        status,
+        client_cors_headers(),
+        Json(json!({ "Error": message.into() })),
+    )
+        .into_response()
 }
 
 fn json_body(value: Value) -> Response {
@@ -121,9 +138,11 @@ async fn resolve_client_channel(
     let (channel_company_id, channel_user_id, _) =
         decode_channel_token(channel_token).map_err(|error| error.to_string())?;
 
-    let authorization = headers.get(header::AUTHORIZATION).and_then(|value| value.to_str().ok());
-    let user_token =
-        authenticate_user(authorization, &state.secret_phrase).map_err(|error| error.to_string())?;
+    let authorization = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok());
+    let user_token = authenticate_user(authorization, &state.secret_phrase)
+        .map_err(|error| error.to_string())?;
 
     if channel_company_id != user_token.company_id || channel_user_id != user_token.id {
         return Err("el canal solicitado no pertenece al usuario autenticado".to_owned());
@@ -151,16 +170,26 @@ async fn handle_client_stream(
     // Handshake, queued only after open_channel: a client that has seen this frame is
     // guaranteed to be routable, which is what lets the frontend delay its first turn until
     // the backend can actually reach it.
-    if channel.send_frame(&json!({ "Type": "bridgeReady" })).await.is_err() {
+    if channel
+        .send_frame(&json!({ "Type": "bridgeReady" }))
+        .await
+        .is_err()
+    {
         warn!(channel = channel_key, "handshake failed");
         state.registry.close_channel(&channel).await;
-        return json_error(StatusCode::INTERNAL_SERVER_ERROR, "no se pudo iniciar el stream");
+        return json_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "no se pudo iniciar el stream",
+        );
     }
     info!(channel = channel_key, "stream connected");
 
     let event_stream = ChannelEventStream {
         frames: frame_receiver,
-        deregister_on_drop: DeregisterOnDrop { state: state.clone(), channel },
+        deregister_on_drop: DeregisterOnDrop {
+            state: state.clone(),
+            channel,
+        },
     };
 
     let mut response = Sse::new(event_stream)
@@ -169,8 +198,12 @@ async fn handle_client_stream(
     response.headers_mut().extend(client_cors_headers());
     // Defeat reverse-proxy response buffering (nginx honours this), otherwise every event is
     // held back until the buffer fills.
-    response.headers_mut().insert("X-Accel-Buffering", HeaderValue::from_static("no"));
-    response.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
+        .headers_mut()
+        .insert("X-Accel-Buffering", HeaderValue::from_static("no"));
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     response
 }
 
@@ -259,14 +292,21 @@ async fn handle_client_inbound(
     }
 
     let Some(channel) = state.registry.find_channel(&channel_key).await else {
-        warn!(channel = channel_key, id = inbound.id, "reply for a channel that is not connected");
+        warn!(
+            channel = channel_key,
+            id = inbound.id,
+            "reply for a channel that is not connected"
+        );
         return json_body(json!({ "Delivered": false }));
     };
 
     let was_delivered = channel
         .deliver_reply(
             inbound.id,
-            ReplyEnvelope { kind: inbound.message_type.clone(), payload: inbound.payload },
+            ReplyEnvelope {
+                kind: inbound.message_type.clone(),
+                payload: inbound.payload,
+            },
         )
         .await;
     if !was_delivered {
@@ -311,11 +351,15 @@ pub struct RpcRequest {
 }
 
 fn current_unix_seconds() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| elapsed.as_secs() as i64)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64)
 }
 
 fn verify_service_call(state: &BridgeState, headers: &HeaderMap) -> Result<(), Response> {
-    let header_value = headers.get(SERVICE_AUTH_HEADER).and_then(|value| value.to_str().ok());
+    let header_value = headers
+        .get(SERVICE_AUTH_HEADER)
+        .and_then(|value| value.to_str().ok());
     verify_service_auth(header_value, &state.internal_apikey, current_unix_seconds()).map_err(
         |error| {
             warn!(error = %error, "service call rejected");
@@ -420,8 +464,15 @@ async fn handle_service_rpc(
 
     let wait = clamp_duration(rpc.wait_ms, Duration::ZERO, MAX_CHANNEL_WAIT);
     let Some(channel) = state.registry.await_channel(&channel_key, wait).await else {
-        warn!(channel = channel_key, id = rpc.id, "rpc with no connected channel");
-        return json_error(StatusCode::CONFLICT, "no hay ningún cliente conectado para ese tab");
+        warn!(
+            channel = channel_key,
+            id = rpc.id,
+            "rpc with no connected channel"
+        );
+        return json_error(
+            StatusCode::CONFLICT,
+            "no hay ningún cliente conectado para ese tab",
+        );
     };
 
     // The waiter is registered *before* the command goes out, otherwise a very fast browser
@@ -434,7 +485,12 @@ async fn handle_service_rpc(
             SendFrameError::Closed => "el stream del cliente ya está cerrado",
             SendFrameError::Timeout => "timeout escribiendo en el stream del cliente",
         };
-        warn!(channel = channel_key, id = rpc.id, reason, "rpc could not be sent");
+        warn!(
+            channel = channel_key,
+            id = rpc.id,
+            reason,
+            "rpc could not be sent"
+        );
         return json_error(StatusCode::BAD_GATEWAY, reason);
     }
 
@@ -451,16 +507,33 @@ async fn handle_service_rpc(
     match outcome {
         RpcOutcome::Answered(envelope) => {
             if state.verbose_logs {
-                debug!(channel = channel_key, id = rpc.id, kind = envelope.kind, "rpc answered");
+                debug!(
+                    channel = channel_key,
+                    id = rpc.id,
+                    kind = envelope.kind,
+                    "rpc answered"
+                );
             }
             json_body(json!({ "Kind": envelope.kind, "Payload": envelope.payload }))
         }
         RpcOutcome::Disconnected => {
-            warn!(channel = channel_key, id = rpc.id, "rpc aborted: the client disconnected");
-            json_error(StatusCode::CONFLICT, "el cliente se desconectó antes de responder")
+            warn!(
+                channel = channel_key,
+                id = rpc.id,
+                "rpc aborted: the client disconnected"
+            );
+            json_error(
+                StatusCode::CONFLICT,
+                "el cliente se desconectó antes de responder",
+            )
         }
         RpcOutcome::TimedOut => {
-            warn!(channel = channel_key, id = rpc.id, ?reply_timeout, "rpc timed out");
+            warn!(
+                channel = channel_key,
+                id = rpc.id,
+                ?reply_timeout,
+                "rpc timed out"
+            );
             json_error(
                 StatusCode::GATEWAY_TIMEOUT,
                 format!("el cliente no respondió en {reply_timeout:?}"),
@@ -485,4 +558,3 @@ async fn handle_health(State(state): State<Arc<BridgeState>>) -> Response {
     }))
     .into_response()
 }
-

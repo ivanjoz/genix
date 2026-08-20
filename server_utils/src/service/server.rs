@@ -22,9 +22,10 @@ use tracing::{debug, info, warn};
 
 use crate::{
     limiter::{
+        access::{INVALIDATE_ACCESS_PAYLOAD_SIZE, parse_access_invalidation},
         budget::{MUTATE_BUDGET_PAYLOAD_SIZE, parse_budget_mutation},
         protocol::{CHARGE_PAYLOAD_SIZE, parse_charge},
-        quota::RateLimiter,
+        quota::{Decision, RateLimiter},
     },
     lock::{
         protocol::{
@@ -323,14 +324,24 @@ async fn handle_connection(
                     let _permit = permit;
                     // A cold subject loads its usage from Scylla, so this cannot be inlined in the
                     // reader without head-of-line blocking every other request behind it.
-                    let status = match limiter.admit(request).await {
-                        Ok(decision) => decision.map_or(0, |violation| violation.response_byte()),
+                    //
+                    // The two refusals travel in different fields: a credit violation in `status`,
+                    // which keeps its exact historical meaning, and an authorization denial in
+                    // `detail`, which was always zero for a charge until now. Because denial
+                    // short-circuits the charge, the two can never both be set and cannot
+                    // contradict each other.
+                    let (status, detail) = match limiter.admit(request).await {
+                        Ok(Decision::Allowed) => (0, u16::from(request.requests_authorization())),
+                        Ok(Decision::CreditViolation(violation)) => (violation.response_byte(), 0),
+                        Ok(Decision::AccessDenied(denial)) => (0, denial.detail_code()),
                         Err(admit_error) => {
+                            // Including a failed grant read: "I could not answer" is already a
+                            // status the client fails closed on, so it needs no code of its own.
                             warn!(error = %admit_error, "charge admission failed");
-                            UNAVAILABLE_STATUS
+                            (UNAVAILABLE_STATUS, 0)
                         }
                     };
-                    send_reply(&reply_sender, frame_sequence, status, 0).await;
+                    send_reply(&reply_sender, frame_sequence, status, detail).await;
                 });
             }
             Opcode::MutateCompanyBudget => {
@@ -455,6 +466,35 @@ async fn handle_connection(
                               "discarding a malformed request log frame");
                     }
                 }
+            }
+            Opcode::InvalidateUserAccess => {
+                let payload: &[u8; INVALIDATE_ACCESS_PAYLOAD_SIZE] = frame[OPCODE_SIZE..tag_offset]
+                    .try_into()
+                    .expect("the opcode fixes the payload width");
+                let invalidation = match parse_access_invalidation(payload) {
+                    Ok(invalidation) => invalidation,
+                    Err(error) => break Err(error).context("authenticated frame is invalid"),
+                };
+                // Takes a permit, unlike the request log: this awaits the shard mutex, which the
+                // charge path holds across ScyllaDB reads, so it can genuinely wait. At the ceiling
+                // the frame is dropped — there is nobody to answer, and the TTL is precisely the
+                // backstop for an invalidation that did not land.
+                let Some(permit) = permit else {
+                    warn!(%peer, "in-flight ceiling reached, dropping an access invalidation");
+                    continue;
+                };
+                let limiter = limiter.clone();
+                handlers.spawn(async move {
+                    let _permit = permit;
+                    limiter
+                        .invalidate_access(invalidation.company_id, invalidation.user_id)
+                        .await;
+                    debug!(
+                        company_id = invalidation.company_id,
+                        user_id = invalidation.user_id,
+                        "dropped cached user access grants"
+                    );
+                });
             }
         }
     };

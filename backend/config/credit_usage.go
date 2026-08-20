@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -18,8 +17,29 @@ const (
 	creditUsageDaysCount = int32(15)
 	dailyTimeFramePrefix = int32(200_000_000)
 	secondsPerUTCDate    = int64(86_400)
-	companyAggregateID   = int32(-1)
 )
+
+// creditDayZoneOffsetSeconds pins the daily bucket to the Lima business day (UTC-5). It mirrors
+// DAY_ZONE_OFFSET_SECONDS in server_utils/src/limiter/time_frame.rs, which is the writer: the two
+// processes have to agree on where a day starts or the reader queries a frame the writer never
+// wrote. A fixed offset rather than a zone lookup because Peru has no DST and because either
+// process can run on a host in any timezone, including a Lambda that is always UTC.
+const creditDayZoneOffsetSeconds = int64(-5 * 60 * 60)
+
+// currentDailyTimeFrame is the frame the credit daemon is writing right now.
+//
+// Not core.FechaUnix(): that reads the host's zone, so it agrees with the daemon only on a machine
+// that happens to be set to Lima, and on any other it names the wrong frame for part of every day.
+// core.Now() rather than time.Now() so a frozen clock moves the reports with the data it generated.
+func currentDailyTimeFrame() int32 {
+	return dailyTimeFramePrefix + int32((core.Now().Unix()+creditDayZoneOffsetSeconds)/secondsPerUTCDate)
+}
+
+// currentCreditUnixDay es el día de negocio que el daemon usa para su ventana diaria y para la
+// columna usage_day_period: el mismo día que nombra el frame diario, sin el prefijo.
+func currentCreditUnixDay() int16 {
+	return int16(currentDailyTimeFrame() - dailyTimeFramePrefix)
+}
 
 type creditUsageTotals struct {
 	CPU       uint64
@@ -58,11 +78,12 @@ type creditUsageResponse struct {
 }
 
 func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
-	currentUnixDay := int32(time.Now().UTC().Unix() / secondsPerUTCDate)
-	firstUnixDay := currentUnixDay - creditUsageDaysCount + 1
-	firstTimeFrame := dailyTimeFramePrefix + firstUnixDay
-	lastTimeFrame := dailyTimeFramePrefix + currentUnixDay
-	userRows, companyRows := []coreTypes.CreditUsage{}, []coreTypes.CreditUsage{}
+	lastTimeFrame := currentDailyTimeFrame()
+	firstTimeFrame := lastTimeFrame - creditUsageDaysCount + 1
+	currentUnixDay := lastTimeFrame - dailyTimeFramePrefix
+	firstUnixDay := firstTimeFrame - dailyTimeFramePrefix
+	userRows := []coreTypes.CreditUsageUser{}
+	companyRows := []coreTypes.CreditUsageCompany{}
 	budget := coreTypes.CompanyCreditBudget{CompanyID: req.User.CompanyID}
 
 	core.Log("credit usage query started::", " company::", req.User.CompanyID,
@@ -79,8 +100,9 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		return budgetError
 	})
 	queries.Go(func() error {
+		// The company total has its own table now, so there is no user predicate to write.
 		query := db.Query(&companyRows)
-		query.CompanyID.Equals(req.User.CompanyID).UserID.Equals(companyAggregateID).TimeFrame.Between(firstTimeFrame, lastTimeFrame)
+		query.CompanyID.Equals(req.User.CompanyID).TimeFrame.Between(firstTimeFrame, lastTimeFrame)
 		return query.Exec()
 	})
 	if err := queries.Wait(); err != nil {
@@ -90,13 +112,13 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 
 	companyCPUDailyLimit := nonNegativeBudget(budget.DailyCPU)
 	companyInferenceDailyLimit := nonNegativeBudget(budget.DailyInference)
-	userUsage, err := makeCreditUsageScope(userRows, firstUnixDay,
+	userUsage, err := makeCreditUsageScope(creditUsageUserBlobs(userRows), firstUnixDay,
 		companyCPUDailyLimit/2, companyInferenceDailyLimit/2)
 	if err != nil {
 		core.Log("credit usage user blob invalid::", " company::", req.User.CompanyID, " user::", req.User.ID, " err::", err)
 		return req.MakeErr("No se pudo interpretar el uso de créditos del usuario.", err)
 	}
-	companyUsage, err := makeCreditUsageScope(companyRows, firstUnixDay,
+	companyUsage, err := makeCreditUsageScope(creditUsageCompanyBlobs(companyRows), firstUnixDay,
 		companyCPUDailyLimit, companyInferenceDailyLimit)
 	if err != nil {
 		core.Log("credit usage company blob invalid::", " company::", req.User.CompanyID, " err::", err)
@@ -108,7 +130,31 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(creditUsageResponse{User: userUsage, Company: companyUsage})
 }
 
-func makeCreditUsageScope(rows []coreTypes.CreditUsage, firstUnixDay int32, cpuLimit, inferenceLimit uint64) (creditUsageScope, error) {
+// creditUsageBlobRow is the shape the two usage tables share: a frame and its absolute blob.
+// Converting to it is what lets one aggregation serve both without a generic parameter, which Go
+// cannot express here because field access through a type parameter is not allowed.
+type creditUsageBlobRow struct {
+	TimeFrame   int32
+	UsedCredits []byte
+}
+
+func creditUsageUserBlobs(rows []coreTypes.CreditUsageUser) []creditUsageBlobRow {
+	blobs := make([]creditUsageBlobRow, len(rows))
+	for rowIndex, row := range rows {
+		blobs[rowIndex] = creditUsageBlobRow{TimeFrame: row.TimeFrame, UsedCredits: row.UsedCredits}
+	}
+	return blobs
+}
+
+func creditUsageCompanyBlobs(rows []coreTypes.CreditUsageCompany) []creditUsageBlobRow {
+	blobs := make([]creditUsageBlobRow, len(rows))
+	for rowIndex, row := range rows {
+		blobs[rowIndex] = creditUsageBlobRow{TimeFrame: row.TimeFrame, UsedCredits: row.UsedCredits}
+	}
+	return blobs
+}
+
+func makeCreditUsageScope(rows []creditUsageBlobRow, firstUnixDay int32, cpuLimit, inferenceLimit uint64) (creditUsageScope, error) {
 	// Zero-fill the fixed UTC range so chart columns never shift when a day has no usage.
 	days := make([]creditUsageDay, creditUsageDaysCount)
 	for dayOffset := range creditUsageDaysCount {

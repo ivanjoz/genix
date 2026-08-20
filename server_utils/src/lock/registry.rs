@@ -84,7 +84,9 @@ impl LockRegistry {
     pub fn new(shard_count: usize, limits: LockLimits) -> Self {
         let shard_count = shard_count.max(1);
         Self {
-            shards: (0..shard_count).map(|_| Mutex::new(HashMap::new())).collect(),
+            shards: (0..shard_count)
+                .map(|_| Mutex::new(HashMap::new()))
+                .collect(),
             total_queued: AtomicU32::new(0),
             key_count: AtomicUsize::new(0),
             next_generation: AtomicU16::new(0),
@@ -148,9 +150,15 @@ impl LockRegistry {
     ) -> LockGuard {
         // Incremented per grant, so no two live holds of one key can ever carry the same value.
         // Zero is skipped so it can keep meaning "no generation".
-        let mut generation = self.next_generation.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+        let mut generation = self
+            .next_generation
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1);
         if generation == 0 {
-            generation = self.next_generation.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
+            generation = self
+                .next_generation
+                .fetch_add(1, Ordering::Relaxed)
+                .wrapping_add(1);
         }
         LockGuard {
             registry: self.clone(),
@@ -205,7 +213,8 @@ impl LockRegistry {
     fn shard_index(&self, (action, identifier): LockKey) -> usize {
         // Fibonacci hashing spreads sequential identifiers — company ids, IPv4 addresses — across
         // shards instead of piling them onto one.
-        let mixed = (identifier as u64 ^ (u64::from(action) << 48)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let mixed =
+            (identifier as u64 ^ (u64::from(action) << 48)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
         (mixed >> 32) as usize % self.shards.len()
     }
 
@@ -261,10 +270,18 @@ mod tests {
 
         let waiting = tokio::spawn({
             let registry = registry.clone();
-            async move { matches!(registry.acquire(request(4, 1000)).await, LockOutcome::Acquired(_)) }
+            async move {
+                matches!(
+                    registry.acquire(request(4, 1000)).await,
+                    LockOutcome::Acquired(_)
+                )
+            }
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert!(!waiting.is_finished(), "the second caller must still be queued");
+        assert!(
+            !waiting.is_finished(),
+            "the second caller must still be queued"
+        );
 
         drop(guard);
         assert!(waiting.await.unwrap(), "releasing must hand the lock over");

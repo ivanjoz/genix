@@ -265,7 +265,7 @@ class ConfigurationResolutionTest(unittest.TestCase):
         self.assertIn(
             "check_tables",
             configure_server_utils.diagnose_service_failure(
-                "genix-server-utils[1]: Error: unconfigured table credit_usage\n"
+                "genix-server-utils[1]: Error: unconfigured table credit_usage_company\n"
             ),
         )
 

@@ -64,7 +64,11 @@ fn compute_user_token_hash(user_token: &UserToken, secret_phrase: &[u8]) -> u64 
     mac.update(user_token.user.as_bytes());
 
     let digest = mac.finalize().into_bytes();
-    u64::from_be_bytes(digest[..8].try_into().expect("SHA-256 digests are 32 bytes"))
+    u64::from_be_bytes(
+        digest[..8]
+            .try_into()
+            .expect("SHA-256 digests are 32 bytes"),
+    )
 }
 
 /// Verifies the `Authorization: Bearer <token>` header and returns the identity it proves.
@@ -77,7 +81,10 @@ pub fn authenticate_user(
         return Err(BridgeAuthError::MissingSessionToken);
     }
 
-    let encoded_token = header_value.strip_prefix("Bearer ").unwrap_or(header_value).trim();
+    let encoded_token = header_value
+        .strip_prefix("Bearer ")
+        .unwrap_or(header_value)
+        .trim();
     let user_token = decode_session_token(&decode_session_base64(encoded_token)?)?;
     if user_token.company_id <= 0 || user_token.id <= 0 {
         return Err(BridgeAuthError::NoIdentity);
@@ -86,7 +93,11 @@ pub fn authenticate_user(
     // Constant-time comparison: a byte-by-byte early exit would leak the expected hash to a
     // caller able to time many attempts.
     let expected_hash = compute_user_token_hash(&user_token, secret_phrase);
-    if !bool::from(expected_hash.to_be_bytes().ct_eq(&user_token.hash.to_be_bytes())) {
+    if !bool::from(
+        expected_hash
+            .to_be_bytes()
+            .ct_eq(&user_token.hash.to_be_bytes()),
+    ) {
         return Err(BridgeAuthError::InvalidSessionSignature);
     }
     Ok(user_token)
@@ -117,10 +128,12 @@ pub fn verify_service_auth(
         return Err(BridgeAuthError::MissingServiceAuth);
     }
 
-    let (timestamp_text, _) =
-        header_value.split_once('.').ok_or(BridgeAuthError::MalformedServiceAuth)?;
-    let signed_unix_seconds: i64 =
-        timestamp_text.parse().map_err(|_| BridgeAuthError::MalformedServiceAuth)?;
+    let (timestamp_text, _) = header_value
+        .split_once('.')
+        .ok_or(BridgeAuthError::MalformedServiceAuth)?;
+    let signed_unix_seconds: i64 = timestamp_text
+        .parse()
+        .map_err(|_| BridgeAuthError::MalformedServiceAuth)?;
 
     let elapsed_seconds = (now_unix_seconds - signed_unix_seconds).abs();
     if elapsed_seconds > SERVICE_AUTH_MAX_SKEW_SECONDS {
@@ -154,9 +167,11 @@ mod tests {
 
     #[test]
     fn accepts_the_go_issued_session_token() {
-        let authenticated =
-            authenticate_user(Some(&format!("Bearer {}", go_session_token_base64())), TEST_SECRET)
-                .unwrap();
+        let authenticated = authenticate_user(
+            Some(&format!("Bearer {}", go_session_token_base64())),
+            TEST_SECRET,
+        )
+        .unwrap();
         assert_eq!(authenticated.company_id, 7);
         assert_eq!(authenticated.id, 42);
         assert_eq!(authenticated.user, "tester");
@@ -176,7 +191,10 @@ mod tests {
 
     #[test]
     fn rejects_a_missing_session_token() {
-        assert_eq!(authenticate_user(None, TEST_SECRET), Err(BridgeAuthError::MissingSessionToken));
+        assert_eq!(
+            authenticate_user(None, TEST_SECRET),
+            Err(BridgeAuthError::MissingSessionToken)
+        );
         assert_eq!(
             authenticate_user(Some("Bearer "), TEST_SECRET),
             Err(BridgeAuthError::MissingSessionToken)
@@ -200,8 +218,14 @@ mod tests {
         let header = make_service_auth_header(TEST_SECRET, now);
         assert_eq!(verify_service_auth(Some(&header), TEST_SECRET, now), Ok(()));
         // Inside the skew window in both directions.
-        assert_eq!(verify_service_auth(Some(&header), TEST_SECRET, now + 299), Ok(()));
-        assert_eq!(verify_service_auth(Some(&header), TEST_SECRET, now - 299), Ok(()));
+        assert_eq!(
+            verify_service_auth(Some(&header), TEST_SECRET, now + 299),
+            Ok(())
+        );
+        assert_eq!(
+            verify_service_auth(Some(&header), TEST_SECRET, now - 299),
+            Ok(())
+        );
 
         assert_eq!(
             verify_service_auth(Some(&header), TEST_SECRET, now + 400),
@@ -227,7 +251,10 @@ mod tests {
     }
 
     fn decode_hex(text: &str) -> Vec<u8> {
-        let compact: String = text.chars().filter(|character| !character.is_whitespace()).collect();
+        let compact: String = text
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
         (0..compact.len())
             .step_by(2)
             .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).unwrap())

@@ -10,8 +10,17 @@ import (
 )
 
 const (
-	// Opcode 0x01: [opcode][company:u24][user:u24][route:u16][cpu:u16][inference:u16][hmac:8].
-	creditChargePayloadSize = 12
+	// Opcode 0x01: [opcode][company:u24][user:u24][route:u16][cpu:u16][inference:u16]
+	// [requiredAccess:4xu16][hmac:8].
+	creditChargePayloadSize = 12 + 2*MaxRequiredAccess
+
+	// MaxRequiredAccess is how many packed grants one frame can carry. access_list.yml maps at most
+	// two accesses to any one backend route, so this is 2x headroom for eight bytes of frame. A
+	// route needing a fifth is refused here rather than by the daemon, for the same reason
+	// maxChargeRouteID is: a rejected frame is indistinguishable from the daemon being down and
+	// would surface as a 503 instead of as the bug it is. TestEveryRouteFitsTheRequiredAccessSlots
+	// is what catches it before a request ever does.
+	MaxRequiredAccess = 4
 
 	creditBlockBytes = 8 * 1024
 
@@ -23,6 +32,43 @@ const (
 )
 
 var ErrCreditLimiterMissing = errors.New("credit rate limiter is not configured")
+
+// accessDeniedReason is the reply frame's detail field. Zero means no authorization was requested
+// and one means granted, which is why the refusals start at two — mirrored from
+// server_utils/src/limiter/access.rs.
+type accessDeniedReason uint16
+
+const (
+	accessGranted      accessDeniedReason = 1
+	accessReasonNone   accessDeniedReason = 2
+	accessReasonNoUser accessDeniedReason = 3
+	accessReasonStatus accessDeniedReason = 4
+)
+
+// AccessDenied is the daemon's authorization refusal. Separate from CreditLimitExceeded because the
+// two are different answers: one says the tenant has spent its allowance, the other says this
+// session may not do this at all.
+type AccessDenied struct {
+	reason accessDeniedReason
+}
+
+func (denied *AccessDenied) Error() string {
+	switch denied.reason {
+	case accessReasonNoUser:
+		return "no such user in this company"
+	case accessReasonStatus:
+		return "the user is not active"
+	default:
+		return "the user does not hold the required access"
+	}
+}
+
+// IdentityFailed separates "this session is not valid" from "this session may not do this". The
+// caller turns the first into a 401 and the second into a 403: a client that has lost its identity
+// must re-authenticate, while one that merely lacks a permission must not.
+func (denied *AccessDenied) IdentityFailed() bool {
+	return denied.reason == accessReasonNoUser || denied.reason == accessReasonStatus
+}
 
 // CreditLimitExceeded is the authenticated one-byte rejection returned by the Rust service.
 type CreditLimitExceeded struct {
@@ -66,6 +112,16 @@ func APICPUCredits(method string, payloadBytes int) (uint16, error) {
 	return uint16(credits), nil
 }
 
+// APICPUBaseCredits is what a request costs before its payload is measured.
+//
+// It exists because a GET is charged in two steps: the byte count only exists after the handler has
+// run, but the authorization verdict is needed before it. The pre-handler frame therefore carries
+// the base, and a top-up follows only when the response exceeded the first free block — which for a
+// GET means only when it is over 8 KB.
+func APICPUBaseCredits(method string) (uint16, error) {
+	return APICPUCredits(method, 0)
+}
+
 // InferenceCredits charges one credit per input block and two per output block.
 func InferenceCredits(inputBytes, outputBytes int) (uint16, error) {
 	if inputBytes < 0 || outputBytes < 0 {
@@ -80,15 +136,44 @@ func InferenceCredits(inputBytes, outputBytes int) (uint16, error) {
 }
 
 // ChargeAPIUsage calculates and submits one HTTP request/response CPU charge, attributed to the
-// route being served.
+// route being served, and asks the daemon to authorize the caller against requiredAccess in the
+// same frame.
+//
+// requiredAccess holds packed grants (acceso_id<<2 | nivel-1) the caller must hold at least one of.
+// Empty is the common case and means no authorization is requested: an unmapped GET, a self-service
+// route, or user 1, all of which the router decides before calling this.
 func ChargeAPIUsage(
 	ctx context.Context, companyID, userID int32, routeID int16, method string, payloadBytes int,
+	requiredAccess []uint16,
 ) error {
 	cpuCredits, err := APICPUCredits(method, payloadBytes)
 	if err != nil {
 		return err
 	}
-	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0)
+	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0, requiredAccess)
+}
+
+// ChargeAPIAccessOnly authorizes without charging. The credit-exempt routes use it: they skip the
+// charge so a tenant out of credit can still see why, and skipping the frame with them would leave
+// the mapped ones open to any session.
+func ChargeAPIAccessOnly(
+	ctx context.Context, companyID, userID int32, routeID int16, requiredAccess []uint16,
+) error {
+	if len(requiredAccess) == 0 {
+		return nil
+	}
+	return chargeConfiguredCredits(ctx, companyID, userID, routeID, 0, 0, requiredAccess)
+}
+
+// ChargeAPICredits submits an already-computed credit amount. The GET top-up uses it, because the
+// amount it owes is a difference between two payload sizes and not a payload size of its own.
+func ChargeAPICredits(
+	ctx context.Context, companyID, userID int32, routeID int16, cpuCredits uint16,
+) error {
+	if cpuCredits == 0 {
+		return nil
+	}
+	return chargeConfiguredCredits(ctx, companyID, userID, routeID, cpuCredits, 0, nil)
 }
 
 type creditRateLimitIdentity struct {
@@ -124,8 +209,14 @@ func ChargeInferenceUsage(ctx context.Context, inputBytes, outputBytes int) erro
 		return nil
 	}
 	return chargeConfiguredCredits(
-		ctx, identity.companyID, identity.userID, identity.routeID, 0, inferenceCredits,
+		ctx, identity.companyID, identity.userID, identity.routeID, 0, inferenceCredits, nil,
 	)
+}
+
+// IsAccessDeniedError reports whether the daemon refused the request on authorization grounds.
+func IsAccessDeniedError(err error) bool {
+	var denied *AccessDenied
+	return errors.As(err, &denied)
 }
 
 // IsCreditRateLimitError identifies both quota exhaustion and fail-closed transport failures.
@@ -144,13 +235,14 @@ func chargeConfiguredCredits(
 	companyID, userID int32,
 	routeID int16,
 	cpuCredits, inferenceCredits uint16,
+	requiredAccess []uint16,
 ) error {
 	client := serverUtils()
 	if client == nil {
 		logLine("credit rate limiter not configured, refusing request::", ErrCreditLimiterMissing)
 		return ErrCreditLimiterMissing
 	}
-	err := client.Charge(ctx, companyID, userID, routeID, cpuCredits, inferenceCredits)
+	err := client.Charge(ctx, companyID, userID, routeID, cpuCredits, inferenceCredits, requiredAccess)
 	if err != nil {
 		logLine("credit rate limiter refused request::", err)
 	}
@@ -158,7 +250,7 @@ func chargeConfiguredCredits(
 }
 
 // encodeCharge validates one charge and lays it out for the wire. Separate from Charge so the
-// layout can be asserted without a daemon: these twelve bytes are read by offset on the Rust side
+// layout can be asserted without a daemon: these twenty bytes are read by offset on the Rust side
 // (server_utils/src/limiter/protocol.rs), and a field that shifts here charges the wrong number to
 // the wrong route with nothing in either process to say so.
 //
@@ -168,6 +260,7 @@ func chargeConfiguredCredits(
 // maxChargeRouteID.
 func encodeCharge(
 	companyID, userID int32, routeID int16, cpuCredits, inferenceCredits uint16,
+	requiredAccess []uint16,
 ) ([]byte, error) {
 	if companyID <= 0 || companyID > 0xFF_FFFF || userID <= 0 || userID > 0xFF_FFFF {
 		return nil, errors.New("company and user IDs must fit positive uint24")
@@ -175,8 +268,22 @@ func encodeCharge(
 	if routeID < 0 || routeID > maxChargeRouteID {
 		return nil, fmt.Errorf("route %d is outside 0..%d", routeID, maxChargeRouteID)
 	}
-	if cpuCredits == 0 && inferenceCredits == 0 {
-		return nil, errors.New("at least one credit amount must be positive")
+	if len(requiredAccess) > MaxRequiredAccess {
+		return nil, fmt.Errorf(
+			"a route may require at most %d accesses, got %d", MaxRequiredAccess, len(requiredAccess))
+	}
+	// Zero terminates the slot list on the far side, so it cannot also be a grant. A zero here means
+	// the caller built a packed value from acceso 0, which does not exist.
+	for _, packedAccess := range requiredAccess {
+		if packedAccess == 0 {
+			return nil, errors.New("a required access cannot be zero")
+		}
+	}
+	// A frame with neither is nothing to ask. Credits alone or an access alone are both valid: the
+	// credit-exempt routes in main-handlers.go send authorize-only frames, which is what keeps an
+	// exempt-but-mapped route from being open to any session.
+	if cpuCredits == 0 && inferenceCredits == 0 && len(requiredAccess) == 0 {
+		return nil, errors.New("a frame must carry credits, a required access, or both")
 	}
 
 	payload := make([]byte, creditChargePayloadSize)
@@ -185,17 +292,27 @@ func encodeCharge(
 	binary.BigEndian.PutUint16(payload[6:8], uint16(routeID))
 	binary.BigEndian.PutUint16(payload[8:10], cpuCredits)
 	binary.BigEndian.PutUint16(payload[10:12], inferenceCredits)
+	for slot, packedAccess := range requiredAccess {
+		offset := 12 + 2*slot
+		binary.BigEndian.PutUint16(payload[offset:offset+2], packedAccess)
+	}
 	return payload, nil
 }
 
-// Charge sends one authenticated frame and returns nil only for status zero.
+// Charge sends one authenticated frame and returns nil only when both verdicts allow the request.
+//
+// The two refusals arrive in different fields: a credit violation in status, an authorization denial
+// in detail. Because the daemon resolves authorization first and returns without charging on a
+// refusal, the two can never both be set.
 func (client *ServerUtilsClient) Charge(
 	ctx context.Context,
 	companyID, userID int32,
 	routeID int16,
 	cpuCredits, inferenceCredits uint16,
+	requiredAccess []uint16,
 ) error {
-	payload, err := encodeCharge(companyID, userID, routeID, cpuCredits, inferenceCredits)
+	payload, err := encodeCharge(
+		companyID, userID, routeID, cpuCredits, inferenceCredits, requiredAccess)
 	if err != nil {
 		return err
 	}
@@ -206,10 +323,31 @@ func (client *ServerUtilsClient) Charge(
 		return err
 	}
 
-	if reply.status == 0 {
+	if reply.status != 0 {
+		return decodeCreditLimitResponse(reply.status)
+	}
+	return decodeAccessResponse(reply.detail, len(requiredAccess) > 0)
+}
+
+// decodeAccessResponse reads the authorization verdict out of the reply's detail field.
+//
+// A daemon that ignored the slots would answer zero. That is treated as unavailability rather than
+// as a grant: failing open here would silently unauthorize every gated route the moment the two
+// binaries drifted apart.
+func decodeAccessResponse(detail uint16, wasRequested bool) error {
+	if !wasRequested {
 		return nil
 	}
-	return decodeCreditLimitResponse(reply.status)
+	switch reason := accessDeniedReason(detail); reason {
+	case accessGranted:
+		return nil
+	case accessReasonNone, accessReasonNoUser, accessReasonStatus:
+		return &AccessDenied{reason: reason}
+	default:
+		return fmt.Errorf(
+			"%w: credit limiter did not answer the access check (detail %d)",
+			ErrServerUtilsUnavailable, detail)
+	}
 }
 
 // chargeWait keeps a charge inside the caller's own deadline when it has one.

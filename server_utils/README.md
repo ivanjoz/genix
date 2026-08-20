@@ -43,7 +43,8 @@ src/
 ├── config.rs    # the only thing they share
 ├── service/     # the raw-TCP port: server (listener, handshake, opcode dispatch),
 │                # protocol (opcode table), auth (frame HMAC)
-├── limiter/     # opcodes 0x01/0x05: charging and company-budget mutation,
+├── limiter/     # opcodes 0x01/0x05/0x06: charging, authorization, company-budget
+│                # mutation and grant-cache invalidation,
 │                # quota, protocol, aggregation, credits_blob, time_frame, storage
 ├── lock/        # opcodes 0x02/0x03: registry.rs (sharded key mutexes), protocol
 ├── reqlog/      # opcode 0x04: protocol (the one variable-length payload), errors
@@ -111,6 +112,7 @@ shards                = 0 # 0 uses the logical CPU count
 # Requests one connection may have in flight at once. Multiplexing removed the backpressure that
 # one-request-per-socket used to give for free, so it has to be stated.
 max_inflight_per_connection = 64
+access_cache_seconds  = 600 # TTL of the cached user grants; INVALIDATE_USER_ACCESS is the fast path
 
 company_cpu_10s       = 2000
 company_inference_10s = 1000
@@ -169,7 +171,11 @@ setting can be overridden by its uppercase environment equivalent, such as
 `RATE_LIMIT_USER_CPU_10S`, `SSE_BRIDGE_PORT`, or `DB_HOST`.
 
 All quota values must be positive and nondecreasing from ten seconds to one hour. Daily and monthly
-entitlements are stored per company in `company_credit_budget`, not in this file.
+entitlements are stored per company in `company_credit_budget`, not in this file. Every usage flush
+writes the counters those entitlements are compared against back into the same row
+(`usage_day_period`, `day_*_used`, `usage_month_start_day`, `month_*_used`, `usage_updated`), so the
+SaaS panel can show remaining credits without re-summing the usage rows. Both windows are counted on
+the Lima business day, the same day `time_frame::daily` buckets by.
 
 `sse_bridge.url` is *not* parsed by this process — the backend reads it for service-to-service
 publishing and the deployment script uses it for the Nginx `server_name`. The frontend gets the
@@ -299,21 +305,35 @@ shared frame shape, and the three operations have no field in common.
 
 | Op | Name | Payload | Frame |
 |---|---|---|---|
-| `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · API group `u8` · CPU `u16` · inference `u16` | 20 |
+| `0x01` | `CHARGE_CREDITS` | company `u24` · user `u24` · route `u16` · CPU `u16` · inference `u16` · required_access `4×u16` | 29 |
 | `0x02` | `LOCK_ACQUIRE` | action `u16` · identifier `i64` · max_waiters `u8` · wait_ms `u16` · lease_ms `u16` | 24 |
 | `0x03` | `LOCK_RELEASE` | action `u16` · identifier `i64` · generation `u16` | 21 |
 | `0x04` | `LOG_REQUEST` | `[length:u16]` then date `i16` · request `i64` · route `i16` · frame `u8` · company `u24` · user `i32` · elapsed `u16` · errors `u8`, then per error: id `i32` · line `u8`+bytes · text `u16`+bytes | ≤ 1 110 |
+| `0x05` | `MUTATE_COMPANY_BUDGET` | company `u24` · operation `u8` · CPU `u64` · inference `u64` | 29 |
+| `0x06` | `INVALIDATE_USER_ACCESS` | company `u24` · user `u24` (`0` = every user of the company) | 15 |
 
-`0x00` stays unassigned so an all-zero frame cannot route. 251 opcodes remain free; new *use
+`0x00` stays unassigned so an all-zero frame cannot route. 249 opcodes remain free; new *use
 cases* for the lock cost none of them, since they are namespaced by the `u16` action instead.
 
-`LOG_REQUEST` is the exception to both rules the other three share. It is **length-prefixed**,
-because it carries strings, and it is **never answered**, because making a response wait for an
-acknowledgement that a log row was stored would put this daemon's latency on the critical path of
-every request in the system. The client writes the frame and returns; the sequence still advances,
-since that is what the HMAC is bound to. The length header is inside the signed bytes, and anything
-declaring more than the ceiling closes the connection — a length is an instruction from an
-unauthenticated peer until the tag at the end says otherwise.
+`CHARGE_CREDITS` answers **two** questions in one round trip: how much this request costs, and
+whether the caller may make it. `required_access` holds packed `acceso_id << 2 | (nivel - 1)` grants
+the caller must hold at least one of, filled from index 0 with zero terminating; all four zero means
+no authorization was asked for, which is the common case. See "Authorization" below.
+
+Because the two are independent, a frame is valid with credits, with a required access, or with
+both — but not with neither. An authorize-only frame (zero credits, slots filled) is what the Go
+router sends for the routes it exempts from charging.
+
+`LOG_REQUEST` is the exception to both rules the others share. It is **length-prefixed**, because it
+carries strings, and it is **never answered**, because making a response wait for an acknowledgement
+that a log row was stored would put this daemon's latency on the critical path of every request in
+the system. The client writes the frame and returns; the sequence still advances, since that is what
+the HMAC is bound to. The length header is inside the signed bytes, and anything declaring more than
+the ceiling closes the connection — a length is an instruction from an unauthenticated peer until
+the tag at the end says otherwise.
+
+`INVALIDATE_USER_ACCESS` is the second unanswered opcode, for a related reason: the grant cache's
+TTL already bounds the damage if the frame is lost, so a user save must not wait on it.
 
 A malformed `0x04` payload is discarded with a warning rather than closing the connection, unlike
 every other opcode. The others decide whether a request is admitted, so a frame the two sides
@@ -324,7 +344,7 @@ The HMAC covers the opcode and payload plus the connection nonce and the implici
 so a frame can be replayed neither as itself nor as a different operation. Authentication,
 malformed-frame, unknown-opcode, initialization, and transport failures close the connection.
 
-The domain string is bumped on every wire change — `genix-server-utils:v5` today. Replies are not
+The domain string is bumped on every wire change — `genix-server-utils:v6` today. Replies are not
 themselves authenticated, so a version skew cannot be caught by the signature: without the bump
 an old client would keep authenticating fine and then misread a reply that grew under it.
 
@@ -340,10 +360,14 @@ charges sent after it are answered immediately. Every reply is therefore five by
 `correlation` is the low 16 bits of the request's frame sequence, echoed back. Nothing extra
 travels on the wire to carry it — the sequence already exists for the HMAC — and it is what lets
 one connection serve many callers at once. `detail` carries the lock generation on a granted
-acquire and is zero everywhere else.
+acquire, the authorization verdict on a charge, and zero everywhere else.
 
 Zero is success for every opcode. `CHARGE_CREDITS` rejections use the low five bits to identify
-the scope, time window, and exhausted credit types. Lock replies are `1` queue full, `2` wait
+the scope, time window, and exhausted credit types. Its authorization verdict travels in `detail`
+instead: `0` nothing was asked, `1` granted, `2` the user holds none of the required accesses, `3`
+no such user, `4` the user is not active. The two refusals can never both be set — authorization is
+resolved first and returns without charging — so a client reads `status` for a 429 and `detail` for
+a 403 or 401. Lock replies are `1` queue full, `2` wait
 timed out, `3` daemon at capacity, `4` protocol misuse (releasing a lock this connection does not
 hold, or presenting a superseded generation). `0xFF` means the daemon could not answer at all; it
 is deliberately not a valid verdict for any opcode. Credit charges and budget mutations fail
@@ -351,6 +375,46 @@ closed; call sites for locks retain their operation-specific policy.
 
 The client must assign a sequence and write its frame atomically. Two callers taking 5 and 6 but
 writing 6, 5 would desynchronize the HMAC and every later frame would fail.
+
+## Authorization behavior
+
+The charge frame also answers "may this user do this", and that is the second reason it exists.
+
+The Go router used to answer it itself: `CheckUser` ran `SELECT accesos_computed FROM users` behind a
+five-minute in-process cache. On a VPS that is nearly free — one long-lived process, a hit on almost
+every request. **On Lambda it is not.** Every new execution environment starts with an empty cache
+and pays a full ScyllaDB round trip on the authorization path before the handler does anything, and
+at any scale a large share of requests are somebody's first. This daemon is the one process that is
+always resident, and the frame was already going out, so the question moved here.
+
+**What is cached.** Per `(company, user)`: the sorted packed grants, `users.status`, and whether the
+row exists at all. Two bytes per grant — a user holding every access in today's catalogue costs 68
+bytes, less than the `HashMap` entry around it. It lives in the same shard, behind the same mutex and
+on the same key as the quota state, so a request that both authorizes and charges takes one lock.
+
+**The blob is little-endian.** `accesos_computed` is a `blob` of `u16`s written by
+`backend/genix-orm/scylla/converter.go` with `binary.LittleEndian.PutUint16`, while every integer in
+this protocol is big-endian. Reading it the wrong way round would not fail — it would authorize the
+wrong things.
+
+**Refusal precedes charging.** The verdict is resolved before any quota work, and a refusal returns
+without touching usage, without allocating quota state, and without loading the budget. A 403 is
+therefore free; the work given away is one binary search over a cached list.
+
+**Freshness.** `rate_limit.access_cache_seconds` (default 600) is a backstop, not the mechanism. The
+backend sends `INVALIDATE_USER_ACCESS` right after rewriting the column — per user from
+`POST.users`, and once per affected user from `POST.perfiles`, which already knows exactly whose
+grants moved — so a revoked access stops working immediately. The TTL only covers a lost frame or a
+restarted backend.
+
+**What stays in Go.** This daemon holds no copy of `access_list.yml` and never sees an access *name*,
+which route maps to which access, or what level a method implies. All of that is `resolveRouteAccess`
+in `backend/main-handlers.go`, and every rule that means "do not ask" produces an empty slot list
+there: an unmapped `GET` is free to any session, `POST.user-self` needs a session and no access, and
+**user 1 is never sent** — `login.go` synthesizes its full grant list in the login response and never
+persists it, so its stored blob is empty and this daemon would deny it. A mapped route with no
+accesses at all is refused in Go without a frame, because the catalogue denies by default and an
+empty slot list would have meant the opposite.
 
 ## Lock behavior
 
@@ -484,5 +548,18 @@ The backend uses uncompressed bytes and binary KiB (`1 KiB = 1024 bytes`):
 - Successful inference usage is one credit per started 8 KiB of provider input and two credits per
   started 8 KiB of provider output.
 
-Authenticated private POST requests are admitted before their handler runs. Successful GET
-responses are admitted after serialization because their response size is not known earlier.
+Authenticated private POST requests are admitted before their handler runs, in one frame that also
+authorizes them.
+
+A GET is split, because its byte count only exists after the handler while its authorization verdict
+is needed before it. The pre-handler frame carries the access check and the **base** charge of two
+credits; a **top-up** frame follows only when the response exceeded the first 8 KiB, which is the
+only case that costs more than the base. Most GETs therefore send one frame and no top-up. Two
+consequences worth knowing when reading the usage tables: a GET that ends in an error now costs its
+two base credits where it used to cost nothing, and a streamed response is charged its base and never
+topped up.
+
+Routes exempt from charging (the credit panel's own reads, so a tenant out of credit can still see
+why) skip the **credits**, never the **frame**: three of them are access-mapped and two are
+SaaS-only, so skipping the frame would leave them open to any session. They send an authorize-only
+frame with zero credits.

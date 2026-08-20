@@ -19,7 +19,6 @@ const (
 	observabilityFiveMinuteSeconds = int64(300)
 	observabilityFiveMinutePrefix  = int32(100_000_000)
 	observabilityPlatformCompanyID = int32(0)
-	observabilityCompanyUserID     = int32(-1)
 	observabilityMaxEvictedFrames  = int32(600)
 	observabilityRoutesVersion     = int32(1)
 )
@@ -82,12 +81,12 @@ func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("observability query started::", " hours::", windowHours, " watermark::", watermark,
 		" first_frame::", firstQueryFrame, " current_frame::", currentTimeFrame)
-	creditRows, logRows := []coreTypes.CreditUsage{}, []coreTypes.UserLog{}
+	creditRows, logRows := []coreTypes.CreditUsageCompany{}, []coreTypes.UserLog{}
 	queries := errgroup.Group{}
 	queries.Go(func() error {
+		// The platform aggregate is a company row under the reserved company id zero.
 		query := db.Query(&creditRows)
 		query.CompanyID.Equals(observabilityPlatformCompanyID).
-			UserID.Equals(observabilityCompanyUserID).
 			TimeFrame.Between(firstQueryFrame, currentTimeFrame)
 		return query.Exec()
 	})
@@ -179,7 +178,7 @@ func makeObservabilityLogQuery(
 
 func makeObservabilityFrames(
 	firstTimeFrame, lastTimeFrame int32,
-	creditRows []coreTypes.CreditUsage,
+	creditRows []coreTypes.CreditUsageCompany,
 	logRows []coreTypes.UserLog,
 ) ([]ObservabilityFrame, error) {
 	if firstTimeFrame > lastTimeFrame {

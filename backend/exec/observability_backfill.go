@@ -49,12 +49,11 @@ func BackfillObservabilityCredits(args *core.ExecArgs) core.FuncResponse {
 	rowsRead := 0
 
 	for _, company := range companies {
-		rows := []coreTypes.CreditUsage{}
+		rows := []coreTypes.CreditUsageCompany{}
 		query := db.Query(&rows)
-		query.CompanyID.Equals(company.ID).UserID.Equals(backfillCompanyUserID).
-			TimeFrame.Between(firstTimeFrame, currentTimeFrame)
+		query.CompanyID.Equals(company.ID).TimeFrame.Between(firstTimeFrame, currentTimeFrame)
 		if queryError := query.Exec(); queryError != nil {
-			return args.MakeErr(fmt.Sprintf("no se pudo leer credit_usage de CompanyID %d:", company.ID), queryError)
+			return args.MakeErr(fmt.Sprintf("no se pudo leer credit_usage_company de CompanyID %d:", company.ID), queryError)
 		}
 		rowsRead += len(rows)
 		for _, row := range rows {
@@ -69,20 +68,19 @@ func BackfillObservabilityCredits(args *core.ExecArgs) core.FuncResponse {
 		}
 	}
 
-	platformRows := make([]coreTypes.CreditUsage, 0, len(totalsByFrame))
+	platformRows := make([]coreTypes.CreditUsageCompany, 0, len(totalsByFrame))
 	for timeFrame, routeTotals := range totalsByFrame {
 		encoded, encodeError := encodeBackfillCreditBlob(routeTotals)
 		if encodeError != nil {
 			return args.MakeErr(fmt.Sprintf("no se pudo codificar frame %d:", timeFrame), encodeError)
 		}
-		platformRows = append(platformRows, coreTypes.CreditUsage{
+		platformRows = append(platformRows, coreTypes.CreditUsageCompany{
 			CompanyID:   backfillPlatformCompanyID,
-			UserID:      backfillCompanyUserID,
 			TimeFrame:   timeFrame,
 			UsedCredits: encoded,
 		})
 	}
-	slices.SortFunc(platformRows, func(left, right coreTypes.CreditUsage) int {
+	slices.SortFunc(platformRows, func(left, right coreTypes.CreditUsageCompany) int {
 		return int(left.TimeFrame - right.TimeFrame)
 	})
 	if len(platformRows) > 0 {

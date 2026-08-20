@@ -9,6 +9,9 @@ export interface ICompanyCreditBudget {
   BudgetMonthStartDay: number;
   MonthlyCPUCeiling: number;
   MonthlyInferenceCeiling: number;
+  // The figure the last "set current" wrote. Consumed-since-that-grant is LastSetCPU - CurrentCPU.
+  LastSetCPU: number;
+  LastSetInference: number;
   Updated: number;
   MonthCPUUsed: number;
   MonthInferenceUsed: number;
@@ -21,15 +24,21 @@ export const getCompanyCreditBudget = (companyID: number): Promise<ICompanyCredi
   return GET({ route: `company-credit-budget?target-company-id=${companyID}` });
 };
 
+export interface ICompanyCreditBudgetOperation {
+  Operation: CompanyCreditBudgetOperation;
+  CPU: number;
+  Inference: number;
+}
+
+// The panel saves every edited row in one request; the backend orders the operations itself, so the
+// caller only has to send the ones that changed.
 export const mutateCompanyCreditBudget = (
   companyID: number,
-  operation: CompanyCreditBudgetOperation,
-  cpu: number,
-  inference: number,
+  operations: ICompanyCreditBudgetOperation[],
 ): Promise<ICompanyCreditBudget> => {
   return POST({
     route: 'company-credit-budget',
-    data: { CompanyID: companyID, Operation: operation, CPU: cpu, Inference: inference },
+    data: { CompanyID: companyID, Operations: operations },
     silentError: true,
   });
 };

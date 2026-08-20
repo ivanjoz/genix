@@ -1,7 +1,7 @@
 <script lang="ts">
   import Card from '$components/cards/Card.svelte';
   import { formatN } from '$libs/helpers';
-  import type { ICompanyCreditUsageDay } from './company-credit-usage';
+  import type { ICreditUsageDay } from './company-credit-usage.model';
   import { buildCompanyCreditCalendar, COMPANY_CREDIT_WEEKDAY_LABELS } from './company-credit-calendar';
 
   let {
@@ -9,9 +9,9 @@
     selectedDay,
     onSelect,
   }: {
-    days: ICompanyCreditUsageDay[];
+    days: ICreditUsageDay[];
     selectedDay?: number;
-    onSelect: (day: ICompanyCreditUsageDay) => void;
+    onSelect: (day: ICreditUsageDay) => void;
   } = $props();
 
   const weeks = $derived(buildCompanyCreditCalendar(days));

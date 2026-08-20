@@ -20,7 +20,9 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use scylla::{client::session::Session, statement::batch::Batch, statement::prepared::PreparedStatement};
+use scylla::{
+    client::session::Session, statement::batch::Batch, statement::prepared::PreparedStatement,
+};
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, info, warn};
 
@@ -134,10 +136,8 @@ impl RequestLogWriter {
 
         let flush_interval = self.config.flush_interval;
         let max_batch = self.config.max_batch;
-        let mut gate = ErrorWriteGate::new(
-            self.config.error_freshness,
-            self.config.error_cache_entries,
-        );
+        let mut gate =
+            ErrorWriteGate::new(self.config.error_freshness, self.config.error_cache_entries);
 
         tokio::spawn(async move {
             let mut pending: Vec<RequestLogRecord> = Vec::with_capacity(max_batch);
@@ -314,10 +314,7 @@ mod tests {
             errors: vec![],
         });
         assert_eq!(sink.metrics().queued.load(Ordering::Relaxed), 0);
-        assert_eq!(
-            sink.metrics().dropped_queue_full.load(Ordering::Relaxed),
-            0
-        );
+        assert_eq!(sink.metrics().dropped_queue_full.load(Ordering::Relaxed), 0);
     }
 
     /// The guarantee that matters on the request path: a queue nobody is draining drops records

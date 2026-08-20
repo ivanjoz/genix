@@ -850,7 +850,7 @@ def build_service_contents(runtime_username, repository_config_path, bridge_port
 Description=Genix Server Utilities (credit rate limiter + SSE bridge)
 # The rate limiter loads existing usage from ScyllaDB before admitting anything and exits when
 # it cannot, which also stops the bridge: one process, shared fate. Deploy the backend tables
-# (so credit_usage exists) before enabling this unit.
+# (so the credit_usage_* tables exist) before enabling this unit.
 After=network-online.target
 Wants=network-online.target
 
@@ -935,7 +935,8 @@ def start_service(systemd_configuration_changed, bridge_port):
 
     # The binary is installed before the watcher is (re)started, so that first change is never
     # seen by it. A service that cannot start must not fail the whole run: the units are already
-    # in place and journalctl has the reason (most often: credit_usage is not deployed yet).
+    # in place and journalctl has the reason (most often: the credit_usage_* tables are not
+    # deployed yet).
     service_start_result = run_command(["systemctl", "restart", SERVICE_NAME], allow_failure=True)
     if service_start_result.returncode != 0:
         report_service_failure("systemctl restart returned an error")

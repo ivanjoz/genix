@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use genix_server_utils::{
     bridge::{self, channel::ChannelRegistry, http::BridgeState},
     config::AppConfig,
-    limiter::{quota::RateLimiter, storage::ScyllaUsageStore},
+    limiter::{quota::RateLimiter, storage::ScyllaLimiterStore},
     lock::registry::LockRegistry,
     reqlog::writer::{RequestLogSink, RequestLogWriter, connect_session},
     service::server,
@@ -36,8 +36,13 @@ async fn main() -> Result<()> {
     let session = connect_session(&config.database)
         .await
         .context("ScyllaDB connection failed")?;
-    let store = Arc::new(ScyllaUsageStore::with_session(session.clone()).await?);
-    let limiter = Arc::new(RateLimiter::new(config.shard_count, config.policy, store));
+    let store = Arc::new(ScyllaLimiterStore::with_session(session.clone()).await?);
+    let limiter = Arc::new(RateLimiter::new(
+        config.shard_count,
+        config.policy,
+        store,
+        config.access_cache_seconds,
+    ));
     // Purely in-memory, unlike the limiter: locks are not loaded from anywhere and do not
     // survive a restart.
     let locks = Arc::new(LockRegistry::new(config.shard_count, config.locks));

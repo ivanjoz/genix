@@ -346,7 +346,8 @@ mod tests {
             .map(|index| u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16).unwrap())
             .collect();
 
-        let record = parse_request_log(&payload).expect("the Go encoder produced an unparsable frame");
+        let record =
+            parse_request_log(&payload).expect("the Go encoder produced an unparsable frame");
         assert_eq!(record.date, 20_500);
         assert_eq!(record.request_id, 1_767_225_600_123);
         assert_eq!(record.route_id, 102);
@@ -446,7 +447,10 @@ mod tests {
     fn trailing_bytes_are_refused() {
         let mut payload = encode(&sample());
         payload.push(0);
-        assert_eq!(parse_request_log(&payload), Err(RequestLogError::TrailingBytes(1)));
+        assert_eq!(
+            parse_request_log(&payload),
+            Err(RequestLogError::TrailingBytes(1))
+        );
     }
 
     #[test]

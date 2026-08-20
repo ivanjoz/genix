@@ -96,7 +96,7 @@ func main() {
 		routesOutputPath, len(assignments), newlyAssigned)
 }
 
-// maxEncodableRouteID is the ceiling of the fourteen-bit route field in the credit_usage blob
+// maxEncodableRouteID is the ceiling of the fourteen-bit route field in the credit usage blob
 // header, mirrored from server_utils/src/limiter/credits_blob.rs and
 // backend/core/server_utils/credits.go. Numbers are never reused, so the count only ever climbs;
 // failing here is the one place that can say so before a route exists that cannot be charged.
@@ -126,7 +126,7 @@ func mergeAssignments(existing map[string]int16, declared map[string]bool) ([]ro
 	for _, route := range unassigned {
 		if highestID >= maxEncodableRouteID {
 			return nil, 0, fmt.Errorf(
-				"route %q would be numbered past %d, the widest ID the credit_usage blob header can "+
+				"route %q would be numbered past %d, the widest ID the credit usage blob header can "+
 					"hold; widen the header in server_utils/src/limiter/credits_blob.rs and both "+
 					"decoders before adding it", route, maxEncodableRouteID)
 		}

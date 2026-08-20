@@ -17,8 +17,9 @@ use genix_server_utils::{
     limiter::{
         aggregation::UsageKey,
         credits_blob::Credits,
+        protocol::CHARGE_PAYLOAD_SIZE,
         quota::{CreditLimits, LimitPolicy, RateLimiter, ScopeLimits},
-        storage::{StoredBudget, StoredUsage, UsageStore},
+        storage::{LimiterStore, StoredBudget, StoredBudgetUsage, StoredUsage, StoredUserAccess},
         time_frame,
     },
     lock::registry::{LockLimits, LockRegistry},
@@ -41,7 +42,7 @@ const OPCODE_LOG_REQUEST: u8 = 0x04;
 struct EmptyStore;
 
 #[async_trait]
-impl UsageStore for EmptyStore {
+impl LimiterStore for EmptyStore {
     async fn load_exact(&self, _key: UsageKey) -> Result<Option<StoredUsage>> {
         Ok(None)
     }
@@ -68,11 +69,18 @@ impl UsageStore for EmptyStore {
             daily: unlimited,
             budget_month_start_day: time_frame::month_start_day(unix_seconds)?,
             monthly_ceiling: unlimited,
+            last_set: unlimited,
             updated: 0,
         }))
     }
     async fn upsert_budget(&self, _budget: StoredBudget) -> Result<()> {
         Ok(())
+    }
+    async fn upsert_budget_usage(&self, _usage: StoredBudgetUsage) -> Result<()> {
+        Ok(())
+    }
+    async fn load_user_access(&self, _c: i32, _u: i32) -> Result<Option<StoredUserAccess>> {
+        Ok(None)
     }
 }
 
@@ -99,6 +107,7 @@ async fn start_server() -> TestServer {
             user: generous,
         },
         Arc::new(EmptyStore),
+        600,
     ));
     let locks = Arc::new(LockRegistry::new(
         2,
@@ -151,7 +160,7 @@ impl Client {
         let mut frame = vec![opcode];
         frame.extend_from_slice(body);
         let mut mac = Hmac::<Sha256>::new_from_slice(SECRET).unwrap();
-        mac.update(b"genix-server-utils:v5");
+        mac.update(b"genix-server-utils:v6");
         mac.update(&self.nonce);
         mac.update(&self.sequence.to_be_bytes());
         mac.update(&frame);
@@ -184,13 +193,15 @@ impl Client {
         )
     }
 
+    /// Authorization slots left empty: this test is about frame sequencing, not about grants.
     fn charge_payload() -> Vec<u8> {
-        let mut payload = Vec::with_capacity(12);
+        let mut payload = Vec::with_capacity(CHARGE_PAYLOAD_SIZE);
         payload.extend_from_slice(&[0, 0, 1]);
         payload.extend_from_slice(&[0, 0, 1]);
         payload.extend_from_slice(&1_u16.to_be_bytes());
         payload.extend_from_slice(&1_u16.to_be_bytes());
         payload.extend_from_slice(&0_u16.to_be_bytes());
+        payload.resize(CHARGE_PAYLOAD_SIZE, 0);
         payload
     }
 }

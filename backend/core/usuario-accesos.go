@@ -1,14 +1,10 @@
 package core
 
 import (
-	coretypes "app/core/types"
-	"app/db"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"github.com/ivanjoz/colbin"
-	"slices"
 	"strings"
 	"sync"
 
@@ -25,11 +21,6 @@ type UsuarioToken struct {
 }
 
 var User UsuarioToken
-
-type UsuarioAccesos struct {
-	updated              int32 // SUnixTime()
-	accesosNivelComputed []uint16
-}
 
 type AccessInfo struct {
 	ID   int32
@@ -55,11 +46,7 @@ type AccessHelper struct {
 	loadErr               error
 }
 
-var companyUsuarioAccesos = map[uint64]UsuarioAccesos{}
-var companyUsuarioAccesosMu sync.RWMutex
 var embeddedAccessHelper = &AccessHelper{}
-
-const usuarioAccesosCacheTTL int32 = 150 // 5 minutes with SUnixTime 2-second ticks.
 
 func (accessHelper *AccessHelper) Load(accessListYamlContent []byte) {
 	// Build the access map eagerly during startup so request-time checks only perform lookups.
@@ -153,73 +140,6 @@ func ComputeUsuarioTokenHash(usuarioToken UsuarioToken) uint64 {
 	return binary.BigEndian.Uint64(hashMac.Sum(nil)[:8])
 }
 
-func makeCompanyUsuarioAccesosKey(companyID, userID int32) uint64 {
-	return uint64(uint32(companyID))<<32 | uint64(uint32(userID))
-}
-
-func formatAccesosNivelForLog(accesosNivel []uint16) string {
-	// Decode packed acceso+nivel values into a readable list for auth debugging.
-	if len(accesosNivel) == 0 {
-		return ""
-	}
-
-	formattedAccesos := make([]string, 0, len(accesosNivel))
-	for _, packedAccesoNivel := range accesosNivel {
-		accesoID := int32(packedAccesoNivel >> 2)
-		nivel := uint8(packedAccesoNivel&0b11) + 1
-		formattedAccesos = append(formattedAccesos, fmt.Sprintf("%d:%d", accesoID, nivel))
-	}
-
-	return strings.Join(formattedAccesos, ",")
-}
-
-func loadUsuarioAccesosComputed(companyID, userID int32) ([]uint16, error) {
-	nowTime := SUnixTime()
-	cacheKey := makeCompanyUsuarioAccesosKey(companyID, userID)
-
-	companyUsuarioAccesosMu.RLock()
-	cachedUsuarioAccesos, cacheFound := companyUsuarioAccesos[cacheKey]
-	companyUsuarioAccesosMu.RUnlock()
-
-	cacheIsFresh := nowTime >= cachedUsuarioAccesos.updated && (nowTime-cachedUsuarioAccesos.updated) <= usuarioAccesosCacheTTL
-
-	if !cacheFound {
-		Log("CheckUser:: cache miss", "companyID", companyID, "userID", userID)
-	} else if !cacheIsFresh {
-		Log("CheckUser:: cache stale", "companyID", companyID, "userID", userID, "cacheAge", nowTime-cachedUsuarioAccesos.updated)
-	}
-
-	if !cacheIsFresh {
-		usuarios := []coretypes.User{}
-		usuarioQuery := db.Query(&usuarios)
-		usuarioQuery.Select(usuarioQuery.CompanyID, usuarioQuery.ID, usuarioQuery.AccesosComputed).
-			CompanyID.Equals(companyID).ID.Equals(userID).Limit(1)
-
-		Log("CheckUser:: querying user accesos", "companyID", companyID, "userID", userID)
-		if err := usuarioQuery.Exec(); err != nil {
-			return nil, Err("Error al obtener los accesos computados del user en ScyllaDB:", err)
-		}
-		if len(usuarios) == 0 {
-			return nil, Err(fmt.Sprintf("No se encontró el user %d de la company %d en ScyllaDB.", userID, companyID))
-		}
-		slices.Sort(usuarios[0].AccesosComputed)
-
-		companyUsuarioAccesosMu.Lock()
-		companyUsuarioAccesos[cacheKey] = UsuarioAccesos{
-			updated:              nowTime,
-			accesosNivelComputed: usuarios[0].AccesosComputed,
-		}
-		cachedUsuarioAccesos = companyUsuarioAccesos[cacheKey]
-		companyUsuarioAccesosMu.Unlock()
-
-		Log("CheckUser:: cache updated", "companyID", companyID, "userID", userID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed), "updated", nowTime)
-	} else {
-		Log("CheckUser:: cache hit", "companyID", companyID, "userID", userID, "accesosComputed", len(cachedUsuarioAccesos.accesosNivelComputed), "accesosDetalle", formatAccesosNivelForLog(cachedUsuarioAccesos.accesosNivelComputed))
-	}
-
-	return cachedUsuarioAccesos.accesosNivelComputed, nil
-}
-
 func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 	userToken := req.Headers["authorization"]
 	if len(userToken) < 8 {
@@ -258,18 +178,10 @@ func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 		}
 	}
 
-	var accesosErr error
-
-	if user.Error == "" && user.CompanyID > 0 && user.ID > 0 {
-		req.accesosNivel, accesosErr = loadUsuarioAccesosComputed(user.CompanyID, user.ID)
-		if accesosErr != nil {
-			Log("CheckUser:: error cargar accesos", accesosErr)
-			user.Error = accesosErr.Error()
-		} else {
-			Log("CheckUser:: accesos computados cargados", "companyID", user.CompanyID, "userID", user.ID, "accesosComputed", len(req.accesosNivel), "requiredAccess", access)
-		}
-	}
-
+	// Los accesos ya no se cargan aquí. El gate los pide a server_utils dentro del mismo frame que
+	// cobra la request, que es lo que le quita a Lambda una lectura a ScyllaDB en el camino de
+	// autorización: un entorno de ejecución nuevo empieza con la caché vacía y pagaba ese viaje
+	// antes de que el handler hiciera nada.
 	// NOTE: In local/VPS HTTP mode requests are concurrent; avoid mutating global user state.
 	if Env.IS_SERVERLESS {
 		User = user

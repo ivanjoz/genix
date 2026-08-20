@@ -242,5 +242,10 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al actualizar el user (Cloud ORM): " + err.Error())
 	}
 
+	// server_utils tiene los accesos de este user en memoria y acaban de cambiar. Sin esto seguiría
+	// autorizando con los viejos hasta que expire su TTL. No es fatal: el guardado ya está hecho y
+	// el TTL es el respaldo, así que un fallo se registra y no revierte nada.
+	invalidateCachedUserAccess(req, body.CompanyID, body.ID)
+
 	return req.MakeResponse(body)
 }

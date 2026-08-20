@@ -1,0 +1,3 @@
+I want the server_utils, in the same call enforceAPICreditLimit() to also check the user access if requested. So the new funcion will have userID (int32), accessIDs (int16)
+
+So, in the Rust backend, must be a very memory eficient way to encode the access of an user, similar of how Go encoded it, but in rust, and keep them in memory for 10 minutes, so when using Lambda, at the router level it will only call the server_utils once and the server utils will return the credits and also the access

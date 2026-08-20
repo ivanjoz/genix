@@ -62,8 +62,8 @@ They share only the process: the config load, the shutdown signal, and the tokio
 > **Deploy the backend tables first.** The rate limiter loads existing usage from ScyllaDB
 > before admitting anything and **exits** when it cannot — which also stops the bridge, since
 > it is one process. On a fresh host, run `cd scripts && go run . check_tables` (so
-> `credit_usage` exists) before enabling the unit, or the service restart-loops with
-> `unconfigured table credit_usage` in `journalctl`.
+> `credit_usage_company` and `credit_usage_user` exist) before enabling the unit, or the service
+> restart-loops with `unconfigured table credit_usage_company` in `journalctl`.
 
 Why Nginx must run on this machine: what it proxies is a permanent stream, and a second hop
 buys nothing. So there is no upstream to configure — the vhost always forwards to `127.0.0.1`.

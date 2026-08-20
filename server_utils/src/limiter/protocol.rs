@@ -1,14 +1,16 @@
 //! Charge payload and one-byte decision codecs for opcode `0x01`.
 //!
 //! Transport concerns — the opcode byte, the authentication tag, the frame sequence — belong to
-//! `service`, so this module never sees them: it decodes exactly the twelve bytes that describe
-//! one charge.
+//! `service`, so this module never sees them: it decodes exactly the twenty bytes that describe one
+//! charge and the authorization question that rides with it.
 
 use thiserror::Error;
 
+use crate::limiter::access::MAX_REQUIRED_ACCESS;
 use crate::limiter::credits_blob::{Credits, MAX_ROUTE_ID};
 
-pub const CHARGE_PAYLOAD_SIZE: usize = 12;
+/// Twelve bytes of charge plus four u16 authorization slots.
+pub const CHARGE_PAYLOAD_SIZE: usize = 12 + 2 * MAX_REQUIRED_ACCESS;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Request {
@@ -19,6 +21,16 @@ pub struct Request {
     /// out zero for a path that matched no generated entry, and those credits are still real.
     pub route_id: u16,
     pub credits: Credits,
+    /// Packed grants (`acceso_id << 2 | (nivel - 1)`) the caller must hold at least one of, filled
+    /// from index 0 with zero terminating. All zero means the router asked for no authorization —
+    /// the common case, since only a route-gated request carries one.
+    pub required_access: [u16; MAX_REQUIRED_ACCESS],
+}
+
+impl Request {
+    pub fn requests_authorization(&self) -> bool {
+        self.required_access[0] != 0
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -61,8 +73,10 @@ pub enum ProtocolError {
     InvalidUser,
     #[error("route {0} does not fit the {MAX_ROUTE_ID}-route encoding")]
     InvalidRouteID(u16),
-    #[error("at least one credit amount must be positive")]
+    #[error("a frame must carry credits, a required access, or both")]
     EmptyCharge,
+    #[error("required access slots must fill from index 0 without gaps")]
+    SparseRequiredAccess,
 }
 
 /// Decodes one charge. The route is range-checked against what the blob can hold and against
@@ -79,6 +93,13 @@ pub fn parse_charge(payload: &[u8; CHARGE_PAYLOAD_SIZE]) -> Result<Request, Prot
     let route_id = u16::from_be_bytes([payload[6], payload[7]]);
     let cpu = u16::from_be_bytes([payload[8], payload[9]]) as u64;
     let inference = u16::from_be_bytes([payload[10], payload[11]]) as u64;
+    let mut required_access = [0_u16; MAX_REQUIRED_ACCESS];
+    for (slot, encoded) in required_access
+        .iter_mut()
+        .zip(payload[12..].chunks_exact(2))
+    {
+        *slot = u16::from_be_bytes([encoded[0], encoded[1]]);
+    }
 
     if company_id <= 0 {
         return Err(ProtocolError::InvalidCompany);
@@ -89,7 +110,20 @@ pub fn parse_charge(payload: &[u8; CHARGE_PAYLOAD_SIZE]) -> Result<Request, Prot
     if route_id > MAX_ROUTE_ID {
         return Err(ProtocolError::InvalidRouteID(route_id));
     }
-    if cpu == 0 && inference == 0 {
+    // A gap would silently truncate the list and under-authorize, so it is refused rather than
+    // interpreted. `verdict` reads up to the first zero, and that has to mean "the end".
+    let filled = required_access
+        .iter()
+        .take_while(|slot| **slot != 0)
+        .count();
+    if required_access[filled..].iter().any(|slot| *slot != 0) {
+        return Err(ProtocolError::SparseRequiredAccess);
+    }
+    // An authorize-only frame carries no credits, and it is the whole reason this is not
+    // "credits must be positive": `creditControlRoutes` on the Go side skips the charge so a
+    // tenant out of credit can still see why, and three of those routes are access-mapped. If the
+    // exemption skipped the frame, those routes would be open to any session.
+    if cpu == 0 && inference == 0 && filled == 0 {
         return Err(ProtocolError::EmptyCharge);
     }
 
@@ -98,6 +132,7 @@ pub fn parse_charge(payload: &[u8; CHARGE_PAYLOAD_SIZE]) -> Result<Request, Prot
         user_id,
         route_id,
         credits: Credits { cpu, inference },
+        required_access,
     })
 }
 
@@ -150,6 +185,48 @@ mod tests {
             parse_charge(&charge_payload(MAX_ROUTE_ID + 1)),
             Err(ProtocolError::InvalidRouteID(MAX_ROUTE_ID + 1))
         );
+    }
+
+    /// The four slots are the newest half of the layout, so their offsets are asserted by hand.
+    #[test]
+    fn required_access_slots_are_read_by_offset() {
+        let mut payload = charge_payload(103);
+        payload[12..14].copy_from_slice(&0x0139_u16.to_be_bytes());
+        payload[14..16].copy_from_slice(&0x008B_u16.to_be_bytes());
+        let request = parse_charge(&payload).unwrap();
+        assert_eq!(request.required_access, [0x0139, 0x008B, 0, 0]);
+        assert!(request.requests_authorization());
+        // Untouched slots stay zero, and zero is what terminates the list.
+        assert!(
+            !parse_charge(&charge_payload(103))
+                .unwrap()
+                .requests_authorization()
+        );
+    }
+
+    /// A hole between slots would truncate the list at the hole and authorize against fewer
+    /// accesses than the caller named, so it is a malformed frame rather than a short list.
+    #[test]
+    fn a_gap_between_slots_is_refused() {
+        let mut payload = charge_payload(103);
+        payload[14..16].copy_from_slice(&0x008B_u16.to_be_bytes());
+        assert_eq!(
+            parse_charge(&payload),
+            Err(ProtocolError::SparseRequiredAccess)
+        );
+    }
+
+    /// An authorize-only frame is valid: see the comment on the EmptyCharge check.
+    #[test]
+    fn a_frame_needs_credits_or_a_required_access_but_not_both() {
+        let mut payload = charge_payload(103);
+        payload[8..12].copy_from_slice(&[0, 0, 0, 0]);
+        assert_eq!(parse_charge(&payload), Err(ProtocolError::EmptyCharge));
+
+        payload[12..14].copy_from_slice(&0x008B_u16.to_be_bytes());
+        let request = parse_charge(&payload).unwrap();
+        assert_eq!(request.credits, Credits::default());
+        assert!(request.requests_authorization());
     }
 
     #[test]
