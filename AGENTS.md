@@ -1,95 +1,183 @@
-# AGENT OPERATIONAL PROTOCOL (V2)
+# AGENT OPERATIONAL PROTOCOL
 
-IMPORTANT: You are not an autonomous agent. The human is watching you very step and it has all the answers. Keep the human in the loop and ask questions.
+## 1. OPERATING MODES
 
-IMPORTANT: If you have any questions, ask. NEVER have long trains of thought with yourself. Explan your rationale, you are pair programming.
+The human has all the context and is available. Two modes decide what you do with that.
 
-## 1. INTELLIGENT RESEARCH
-- **One-Shot Research:** Gather enough info in one search to form a hypothesis. Avoid "research loops" where you search for the same thing multiple times without writing code.
+**Supervised — the default.** Assume this unless the user says otherwise.
+- Any design decision, any choice between approaches, anything unclear or underspecified: **stop and ask.** Ask everything you need in one go — a question upfront is cheap, building the wrong thing is not.
+- Do not resolve an ambiguity by assumption and move on. The human has all the context and domain knowledge.
 
-## 2. LOOP DETECTION & PREVENTION
-- **The "Two-Strike" Rule:** If a tool call (shell command or file edit) returns the same error twice, or if the code state doesn't change after an application, you are STUCK.
-- **STALL PROTOCOL:** Upon detecting a loop, you MUST stop all autonomous actions and present the following to the user:
-    1. **Summary:** What was attempted and why it failed.
-    2. **Hypothesis:** Your best guess on the root cause.
-    3. **Assumption:** A specific assumption you are making to move forward.
-    4. **The Ask:** "I'm stuck. Should I try [Proposed Fix] based on my assumption, or do you have a different direction?"
+**Unsupervised — only when the user asks for it.**
+- Make the non-compromising decisions yourself and keep going: anything local, reversible, and cheap to change later — naming, file layout, which helper to reuse, how to structure a function.
+- Still stop and ask on **compromising** decisions, whatever the mode: database schema, API contracts and route shapes, new dependencies, deleting work that isn't obviously dead, anything hard to reverse.
+- If a question is genuinely blocking and you cannot proceed under any reasonable assumption, ask anyway. Unsupervised means fewer interruptions, not guessing.
 
-## 3. ITERATION STYLE
-- **Keep in Loop:** Every tool execution should be preceded by a 1-sentence "Intent" (e.g., "Updating the ScyllaDB connection string to test the timeout hypothesis").
-- **Extensive Logging**: Always implement and use debug logs extensively to diagnose errors and trace execution flow.
+**In both modes:**
+- Once the approach is settled, carry out the mechanical steps without asking permission for each one. Think as long as the problem needs, run independent searches and tool calls in parallel. Report what you found and what you changed.
+- **Record decisions in `RATIONALE.md`.** Every design decision or assumption goes into a `RATIONALE.md` in the module or feature folder it affects, next to the code it explains. Append newest first; create the file if it doesn't exist. Three headings, concise — no essays:
 
-## 4. RULES
-- **IMPORTANT — ALWAYS CHECK SKILLS FIRST:** At the start of every task, review the available skills list (shown in the system-reminder block at conversation start). Skills contain authoritative documentation and project conventions for common operations. If any skill matches the task, invoke it via the Skill tool BEFORE doing manual exploration or writing code. The skills list may change — never rely on memory, always re-check.
-- This project in is pre-alpha, you can remove deprecated stuff. DO NOT implemente backwards compatibility.
-- NEVER write more code than necesary. ALWAYS TRY to reduce code size to the minimun posible.
-- Search for the correct .md documentation before proceed
-- If some points in the task are unclear, stop and ask for clarification
-- ALWAYS add concise comments in every code block to explain the rationale and the goal, especially when code contains business logic.
-- ALWAYS use expresive names for varibles and functions. DONT USE generic names.
-## Project Overview
+  ```markdown
+  ## <short title of the decision>
+  **Context** — the problem, and what constraint made it a decision at all.
+  **Decision** — what was chosen and implemented.
+  **Rationale** — why this over the alternative, and what it costs.
+  ```
 
-The Genix project is an ERP and E-commerce platform for small businesses. It consists of a Go backend and a Svelte.js frontend. The project is currently migrating its frontend from Solid.js to Svelte.js.
+  **This is the review surface.** The human reads `RATIONALE.md` before committing anything, so a decision missing from it is a decision that ships unreviewed. Read the existing file before changing an area — it explains why the code looks the way it does. This is for developers; `DOCUMENTATION.md` is a separate, support-facing artifact and is not a substitute.
 
-## Backend
+- Report honestly. If a build fails or you skipped part of the scope, say so plainly with the output.
 
-The backend is written in Go and uses ScyllaDB/Cassandra as its database. The backend code is located in the `backend/` directory.
+- **Language: always English.** The user is bilingual and may write in Spanish — reply in English regardless. Write everything in English: code, identifiers, comments, commit messages and `.md` docs.
 
-## Key Documentation Files
+## 2. RESEARCH & DEBUGGING
 
-### Project Overview
-- **README.md** - General project overview: ERP+Ecommerce for small businesses
+- **One-shot research:** gather enough in one pass to form a hypothesis. Don't re-search the same thing without writing code in between.
+- **Debug with logs, deliberately:** when stuck, the fastest path is to instrument heavily — add debug logs across the suspect path, run it, read the output, and let the trace tell you where the assumption broke. Prefer this over guessing at fixes.
+- **Verify, don't assume.** See section 4.
 
-### Deployment
-- **DEPLOYMENT.md** - Deployment options including AWS Lambda + ScyllaDB on VPS/EC2, self-host deployment with systemd
+## 3. CODE RULES
 
-### Backend Documentation
-- **backend/README.md** - Brief overview of the Go backend for Genix
-- **backend/db/** - The project's single ORM entry point. ALL application code imports `app/db` and never a database driver. `db/driver.go` holds the one declaration that names a database; pointing it at another driver switches the whole project.
-- **backend/genix-orm/db/** - Driver-agnostic ORM layer shared by every driver: schema declaration, columns, predicates, the accessor engine, the `Executor` contract
-- **backend/genix-orm/scylla/ORM_INTERNALS.md** - Deep dive into ScyllaDB driver internals: memory model, reflection engine, and query optimization
-- **backend/docs/CREATE_API_HANDLERS.md** - API handler development guide, MUST read before creating APIs. Key concepts: "updated" parameter for delta responses, query examples, conventions.
-- **backend/docs/ORM_DATABASE_QUERY.md** - Comprehensive ORM documentation covering model definitions, CRUD operations, query building
+- **ALWAYS CHECK SKILLS FIRST:** review the available skills list at the start of every task.
+- Read the relevant `.md` doc (section 6) before working in an area.
+- Pre-alpha: delete deprecated code freely. **NEVER** implement backwards compatibility.
+- **NEVER write more code than necessary.** Reduce implementations to the minimum that works. Comments are not code — this rule is about logic.
+- **Comment the relevant blocks,** not every line: explain rationale and intent wherever business logic is non-obvious.
+- **Use expressive names** for variables and functions. Never generic ones.
 
-### Server Utils (Rust)
-- **server_utils/README.md** - Un solo binario Rust (`genix-server-utils`) con dos transportes: el puerto **TCP crudo** (sección `[server_utils]` de config.toml — no `rate_limit.address`: el puerto es del proceso, no de un servicio; `public` decide el bind, `0.0.0.0` o loopback, y `host` es sólo la dirección que marca el cliente), donde el opcode del frame enruta al **credit rate limiter** (`0x01` cobro + autorización, `0x05` presupuesto, `0x06` invalidar accesos cacheados) o al **lock service** (`0x02`/`0x03`), más el **request log** (`0x04`), y el **SSE bridge** (HTTP) que sostiene el stream del navegador cuando el backend corre en Lambda (que no puede mantener conexiones abiertas). Contratos, tokens y los dos secretos (`internal_apikey` proceso-a-proceso, `secret_phrase` sólo para el token de sesión). Diseños en **server_utils/PLAN.md**, **server_utils/PLAN_LOCK_SERVICE.md** y **server_utils/PLAN_SSE_BRIDGE.md**.
-- El frame `0x01` resuelve **dos** preguntas en un solo viaje: cuánto cuesta la request y si el user tiene el acceso que la ruta exige. `server_utils` cachea `users.accesos_computed` diez minutos, así que Lambda ya no lee ScyllaDB para autorizar. Toda la política sigue en Go (`resolveRouteAccess` en `backend/main-handlers.go`): el daemon no conoce `access_list.yml` ni los nombres de los accesos, sólo responde "este user tiene alguno de estos grants". Detalles y las trampas —el blob es little-endian, el user 1 nunca se le pregunta, las rutas exentas de cobro igual mandan frame— en la sección "Authorization behavior" del README y en **docs/SECURITY_PLAN.md**.
-- El bit alto del campo `route` del frame `0x01` es `EXTRA_CREDIT_FLAG` y no es parte del número de ruta (`MAX_ROUTE_ID` son catorce bits). Puesto, dice que el router clasificó el cargo como lectura, lo que lo hace elegible para `rate_limit.company_extra_credits_24h`: CPU que una company puede gastar al día **después** de que su cuota la haya rechazado, para que un tenant sin crédito siga pudiendo leer en vez de recibir 429 en todo. La marca se deriva en Go dentro de `ChargeAPIUsage` del mismo string que eligió la tarifa, así que una escritura no puede llevarla. Nunca relaja las puertas de ráfaga (10s y 1h) y el gasto se contabiliza aparte, en `company_credit_budget.day_extra_cpu_used`, sin tocar el techo mensual comprado. Sección "Extra credits" del README y **docs/EXTRA_CREDITS_PLAN.md**.
-- El **lock service** serializa una acción entre Lambdas concurrentes: clave `(action:u16, identifier:i64)` elegida por el backend, un solo poseedor, y la propiedad va atada a la conexión TCP (si el cliente muere, el lock se libera solo). Cliente Go en `backend/core/server_utils/` (conexión multiplexada compartida con el limiter), reexportado en `core` por `backend/core/server_utils_api.go`; `ErrLockBusy` es una respuesta real (rechaza al cliente) y `ErrLockUnavailable` es ausencia de respuesta (cada call site decide si sigue sin lock o corta).
-- **server_utils/CREDIT_LIMITER_WALKTHROUGH.md** - Recorrido end-to-end del credit limiter, en inglés y con diagramas: las dos preguntas que resuelve un frame, qué decide Go antes de mandarlo (catálogo de accesos, tarifa, por qué un GET se cobra en dos frames), los bytes exactos del frame `0x01` y de la respuesta de 5, el orden de las puertas en `admit_at`, el pool de créditos extra, dónde acaban los números (time frames, blob por ruta, el flush sin pérdidas) y qué pasa cuando algo falla. **Leer esto antes que PLAN.md**, que es el registro de diseño y precede a la autorización, al multiplexado y al pool.
-- **server_utils/LOCK_SERVICE_WALKTHROUGH.md** - Recorrido end-to-end con diagramas: la carrera que el lock resuelve, el handshake, los bytes exactos de un `LOCK_ACQUIRE` real, los tres modos de fallo y dónde vive cada pieza del código. Leer esto antes que los PLAN_*.
-- **scripts/configure/CONFIGURE_SERVER_UTILS.md** - Despliegue en un servidor: `scripts/configure.py` selecciona fuente o binario precompilado y el instalador interno configura las units de systemd y el vhost de Nginx del bridge (HTTP/3 cuando hay certificado, sin buffering para SSE). El puerto del rate limiter no se expone.
+## 4. ARCHITECTURAL PRINCIPLES
 
-### Frontend Documentation
-- **frontend/FRONTEND.md** - Monorepo architecture with independent ecommerce app, directory structure, package system, development workflow
-- **frontend/docs/UI_COMPONENTS.md** - UI component library documentation: Page, OptionsStrip, Layer/Modal components, form components, VTable, services
-- **frontend/webpage/ECOMMERCE.md** - Ecommerce integration notes: thumbhash implementation, routes, CSS hashing
-- **frontend/docs/SERVICES_GUIDE.md** - Guide for creating frontend services (connectors), explaining Cached Services (Delta Cache) vs. Report Services. ALWAYS read before creating one.
+These apply to backend and frontend alike:
 
-### Scripts
-- **scripts/CREATE_EDIT_TABLE.md** - Creates new database table structures and adds columns to existing tables. USE ALWAYS.
-- **scripts/CHECK_TABLES_SCRIPT.md** - Validates data model conventions for the custom ORM
-- **scripts/GENERATE_ERP_HISTORY.md** - `generate_erp_history` genera historial ERP con fechas pasadas (compras → recepción con lotes/series → ventas). Documenta el **reloj efectivo global**: `GENIX_HISTORICAL_UNIX` / `core.SetHistoricalUnix()` congelan el proceso entero, y de ahí derivan todas las fechas persistidas, incluidas las columnas `created`/`updated` que escribe el propio ORM
-- **scripts/GENERATE_VECTOR_IMAGE.md** - `generate_vector_image` genera assets **SVG** para el sitio con los modelos Recraft vía OpenRouter (`POST /api/v1/images`, distinto de `/chat/completions`). Lee la tabla `[[image_models]]` de config.toml, **separada de `[[models]]`** porque aquella es el registro de modelos de chat del agente. Cobra por token de imagen (~$0.08 por SVG), así que cada llamada se confirma antes. El recorrido operativo está en la skill `create-vector-image`
-- **scripts/SCRIPTS.md** - Central dispatcher and wrapper script management for project utilities
-- **scripts/AGENT_BROWSER.md** - `agent_browser`: navegador headless de desarrollo que se autentica solo (empresa 1 / usuario 1 por defecto) y sostiene la pestaña que necesita la API agéntica. Permite navegar la app real, leer el HTML agéntico de una página, ejecutar acciones de componentes y capturar lo que el navegador realmente pinta, para contrastar lo que el agente lee contra lo que el usuario ve. El recorrido operativo está en la skill `agent-browser`
-- **scripts/DEPLOYER.md** - `deploy.sh` es un wrapper del TUI en `scripts/deployer/` (Go + Bubble Tea v2): navegación Environment / Actions / Scripts con teclado y mouse, y el orden fijo de ejecución. Reemplaza a `app.sh`, que queda deprecado
-- **scripts/configure/CONFIGURE_SERVER.md** - Despliegue del backend en un VPS: units de systemd, auto-reload del binario y proxy inverso de Nginx
-- **scripts/configure/CONFIGURE_DB.md** - Despliegue del host de datos: el instalador interno configura ScyllaDB (sysconfig, yaml, superusuario, keyspace) e instala GenixSearch y Qdrant desde sus releases musl estáticos, escribiendo `search.url`/`search.password` y `qdrant.host` en config.toml. Qdrant se configura por variables `QDRANT__*` en un EnvironmentFile y su api key es `internal_apikey`
+- Reduce cyclomatic complexity.
+- Increase grepability — prefer literal, searchable names over abstraction.
+- Reduce indirection; favor top-to-bottom reading.
+- Separate business logic from utils and components.
+- Favor functional code; discourage hook-based abstraction and class-based dependency injection.
+- Favor composition over inheritance.
+- Reduce the number of interface conversions and overlaps. Favor backend interfaces.
+- Group code by domain — keep domain-related code together.
+- Favor standalone exported functions over namespace/"controller" objects.
+- Favor pure, encapsulated business logic that can be unit-tested in isolation.
 
-### General Rules
-- ALWAYS save dates in UnixDay int16 format: The number of days since unix-epoch
-- ALWAYS save datetime as int32 SUnixTime(). SUnixTime = int32((time.Now().Unix() - 1e9) / 2)
-- NEVER use `time.Now()` for a date that gets persisted. Use `core.Now()`, `core.SUnixTime()` or `core.FechaUnix()`: they read the **effective clock**, which `GENIX_HISTORICAL_UNIX` or `core.SetHistoricalUnix()` can freeze so seed/sample generators write records dated in the past. The ORM's own `created`/`updated` columns follow the same clock. `time.Now()` stays correct only for elapsed time, network deadlines and token expiry, which need the monotonic clock.
+## 5. FRONTEND ARCHITECTURE
 
-### Frontend Rules
-- Use untrack inside $effect to avoid render loops
-- GetHandler fetched records need fields: "upd" (Updated) and "ID" (unique id) for delta cache. Or use GetHandler.keyID or .KeysIDs for setting another field.
-- Tailwind --spacing is 1px. So "h-4" is actually 4px.
-- NEVER use font-weight or font-size in a css class. USE tailwind instead.
-- ALWAYS use this helpers functions:
-	- formatTime(unix day | unix time, layout)
+SvelteKit dictates the routing, not the architecture. One folder per feature, every file grepable by its feature name, business logic separated from utils and from components:
 
-### Backend Rules
-- NEVER trust the client. ALWAYS validate the required field and consistency of the data, and return a descriptive error if any validation fails.
-- Naming for parallel-array `Detail*` columns: use SINGULAR words for the field name; the only exception is the `IDs` suffix, which stays plural. Examples: `DetailProductIDs`, `DetailProductQuantity` (not `DetailProductQuantities`), `DetailProductPrice` (not `DetailProductPrices`), `DetailProductPresentationIDs`, `DetailSupplyIDs`, `DetailSupplyQuantity`, `DetailSupplyPrice`. Applies to both the Go struct fields and the frontend interface mirrors.
+```text
+frontend/routes/<domain>/<feature>/
+  +page.svelte            Route entry: page shell, tab/view switching, wiring. No business logic
+  FeatureThing.svelte     Extracted sub-components, PascalCase, one concern each
+  feature.svelte.ts       Reactive state ($state) and the service calls that feed it
+  feature.ts              Pure business logic — no Svelte, no fetch. Unit-testable in isolation
+  feature.utils.ts        Generic helpers with NO business logic
+  feature.test.ts         Vitest
+  RATIONALE.md            Design decisions for this feature (see section 1)
+  DOCUMENTATION.md        Support-agent indexing of user workflows, NOT developer docs
+                          (skill: `document-user-routes`)
+```
+
+- **Feature folders are `kebab-case`** (the majority convention; a few older `snake_case` folders remain).
+- Split a file when it starts doing two jobs. A single `feature.svelte.ts` holding interfaces, constants, fetch calls and business rules is the pattern to break up — pull the rules into `feature.ts` so they can be tested without a component or a network call.
+- **Every function in `+page.svelte`, `feature.svelte.ts` and `feature.ts` must carry business logic.** Anything generic belongs in `libs/` or a `*.utils.ts`.
+- A Svelte 5 class holding `$state` is fine — that is reactive state, not dependency injection.
+
+**Shared layers.** Imports flow one way, from generic to specific:
+
+```text
+libs/  styles/          Generic, non-business utilities and CSS
+packages/genix-ui/      Shared UI component library ($components) — git submodule
+core/                   Cross-cutting code that DOES hold business logic
+services/               API connectors (skill: `delta-cache-api`)
+domain-components/      Reusable domain widgets
+routes/                 Leaves — features consume everything above
+```
+
+## 6. VERIFY YOUR WORK
+
+Independence only works with a closed feedback loop. Run the check that covers what you touched:
+
+| Changed | Run |
+| --- | --- |
+| Backend Go | `cd backend && go build ./...` then `go vet ./...` |
+| Backend tests | `cd backend && go test ./<pkg>/...` |
+| DB table structs | `cd scripts && go run . check_tables` (skill: `static-project-validation`) |
+| Frontend | `cd frontend && bun run check` (svelte-kit sync + svelte-check) |
+| Frontend build | `cd frontend && bun run build` |
+| server_utils (Rust) | `cd server_utils && cargo build` / `cargo test` |
+| Real app behaviour | skill: `agent-browser` — drives the running app, reads the page, screenshots what renders |
+
+Operational scripts run through the dispatcher: `cd scripts && go run . <script_name>`. Deploys go through `./deploy.sh` (TUI). `app.sh` is deprecated.
+
+## 7. REPOSITORY MAP
+
+```
+backend/          Go API. Domain packages: sales, logistics, finance, invoicing,
+                  business, security, system, agent, webpage. core/ = shared helpers,
+                  db/ = the ONLY ORM entry point, exec/ = entrypoints, tests/, docs/
+backend/genix-orm/     git submodule (github.com/ivanjoz/genix-orm) — separate repo
+backend/facturago/     git submodule (github.com/ivanjoz/facturago) — separate repo,
+                       public: SUNAT electronic invoicing, names no consumer
+frontend/         SvelteKit app. routes/ core/ services/ domain-components/ libs/ styles/
+frontend/packages/genix-ui/  git submodule (github.com/ivanjoz/genix-ui) — separate repo
+frontend/webpage/ Independent public storefront app (own build)
+server_utils/     Rust daemon: credit limiter, lock service, request log, SSE bridge
+scripts/          Go script dispatcher + deployer TUI + configure.py
+cloud/  db-backup/  webpage-renderer/   standalone Go/JS services
+docs/             Cross-cutting design docs (SECURITY_PLAN, EXTRA_CREDITS_PLAN, ...)
+config.toml       Local config (not committed). config.example.toml is the template.
+```
+
+**Submodules:** `genix-orm`, `genix-ui` and `facturago` are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. No pointer bump is needed in the parent repo: it follows the submodule's `main`. Builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI), so what is on disk is what compiles.
+
+`facturago` is **public**. It implements SUNAT and names no consumer: no ERP identifiers, no tenancy, no business rules from this repo. A leak there is a leak in public.
+
+## 8. KEY DOCUMENTATION
+
+**Project & deployment**
+- `README.md` — ERP + Ecommerce platform for small businesses (Go backend, Svelte frontend; frontend is migrating off Solid.js)
+- `DEPLOYMENT.md` — AWS Lambda + ScyllaDB on VPS/EC2, and self-host via systemd
+
+**Backend** (Go + ScyllaDB/Cassandra)
+- `backend/docs/CREATE_API_HANDLERS.md` — **MUST read before creating any API.** The `updated` delta param, query examples, conventions
+- `backend/docs/ORM_DATABASE_QUERY.md` — model definitions, CRUD, query building
+- `backend/db/` — the single ORM entry point. All app code imports `app/db`, never a driver. `db/driver.go` names the database; repointing it switches the whole project
+- `backend/genix-orm/db/` — driver-agnostic layer: schema, columns, predicates, accessors, the `Executor` contract
+- `backend/genix-orm/scylla/ORM_INTERNALS.md` — driver internals: memory model, reflection engine, query optimization
+
+**server_utils (Rust)** — one daemon: credit limiter, lock service, request log, SSE bridge. Rarely changes; read only when working on it.
+- `server_utils/README.md` — the entry point. The `*_WALKTHROUGH.md` files explain the limiter and lock service end-to-end. `docs/SECURITY_PLAN.md` and `docs/EXTRA_CREDITS_PLAN.md` cover authorization and the extra-credit pool; `scripts/configure/CONFIGURE_SERVER_UTILS.md` covers deployment
+- Go client: `backend/core/server_utils/`, re-exported via `backend/core/server_utils_api.go`. Authorization policy stays in Go.
+
+**Frontend**
+- `frontend/FRONTEND.md` — monorepo architecture, directory structure, package system, dev workflow
+- `frontend/docs/UI_COMPONENTS.md` — Page, OptionsStrip, Layer/Modal, form components, VTable, services
+- `frontend/docs/SERVICES_GUIDE.md` — **read before creating a service/connector.** Cached (delta) vs. report services
+- `frontend/webpage/ECOMMERCE.md` — storefront: thumbhash, routes, CSS hashing
+
+**Scripts**
+- `scripts/SCRIPTS.md` — the dispatcher convention; **read before adding a script**
+- `scripts/CREATE_EDIT_TABLE.md` — creating tables / adding columns. **USE ALWAYS**
+- `scripts/CHECK_TABLES_SCRIPT.md` — validates data-model conventions for the ORM
+- `scripts/AGENT_BROWSER.md` — self-authenticating headless browser for driving the real app
+- `scripts/GENERATE_ERP_HISTORY.md` — seeds past-dated ERP history; documents the global effective clock
+- `scripts/DEPLOYER.md` — the `deploy.sh` TUI and its fixed execution order
+- `scripts/configure/CONFIGURE_SERVER.md` — backend on a VPS: systemd, binary auto-reload, Nginx proxy
+- `scripts/configure/CONFIGURE_DB.md` — data host: ScyllaDB, GenixSearch, Qdrant
+
+## 9. GENERAL CONVENTIONS
+
+- Save dates as **UnixDay** `int16` — days since the unix epoch.
+- Save datetimes as **SUnixTime** `int32` = `int32((unix - 1e9) / 2)`.
+- **NEVER use `time.Now()` for a persisted date.** Use `core.Now()`, `core.SUnixTime()` or `core.FechaUnix()` — they read the **effective clock**, which `GENIX_HISTORICAL_UNIX` / `core.SetHistoricalUnix()` can freeze so seed generators write past-dated records. The ORM's own `created`/`updated` columns follow the same clock.
+
+### Backend
+- **NEVER trust the client.** Validate required fields and data consistency, and return a descriptive error on every failed validation.
+- Parallel-array `Detail*` columns use **singular** field names; only the `IDs` suffix stays plural. `DetailProductIDs`, `DetailProductQuantity` (not `Quantities`), `DetailProductPrice` (not `Prices`), `DetailSupplyIDs`, `DetailSupplyQuantity`. Applies to Go structs and their frontend interface mirrors.
+
+### Frontend
+- Use `untrack` inside `$effect` to avoid render loops.
+- `GetHandler` records need `upd` (Updated) and `ID` for the delta cache — or set `GetHandler.keyID` / `.KeysIDs` to name different fields.
+- Tailwind `--spacing` is **1px**, so `h-4` is 4px.
+- **NEVER** set `font-weight` or `font-size` in a CSS class — use Tailwind.
+- Use the helpers: `formatTime(unixDay | unixTime, layout)`.

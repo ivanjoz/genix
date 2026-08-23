@@ -233,9 +233,9 @@ const imageSelectSystemPrompt = `You pick the single best image for a web page s
 // and answers with a strict verdict: "OK" to ship, or "REVISE: <fixes>".
 /*
  *   - Image visibility: a plain ImageEffect (no effect/layout/fill, no overlay children) acts like a regular <img> and sizes itself from its own classes — fine as long as it has a sensible width (e.g. w-full). The rich modes layer the photo absolutely and have zero intrinsic height, which must come from the component itself, NEVER its parent. REVISE if: a fill ImageEffect sits in a flex/grid column or wrapper with no real height; OR an ImageEffect that has an effect/layout/overlay-children has NEITHER aspectRatio NOR a min-h-* on itself — adding min-h only to the PARENT div does NOT fix it (it still collapses to 0px). The fix is to put aspectRatio="4/3" (or similar) and/or min-h-[360px] on the ImageEffect tag itself.
- * 
+ *
  */
- 
+
 const aestheticReviewSystemPrompt = `You are a senior web designer doing a final visual review of one website section's HTML before it ships. Judge ONLY the aesthetics you can infer from the markup and its Tailwind classes — not the wording.
 
 CRITICAL — spacing scale: this project sets Tailwind's --spacing to 1px, so spacing/sizing tokens are PIXELS, not 0.25rem. p-8 = 8px, px-6 = 6px, w-72 = 72px, w-96 = 96px. Flag any spacing/size token that's too small once read as pixels.

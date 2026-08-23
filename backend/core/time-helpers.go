@@ -47,13 +47,13 @@ func LogHistoricalClockIfActive() {
 }
 
 type FecSemana struct {
-	Id          int
-	Code        int16
+	Id         int
+	Code       int16
 	DateUnix   int16
-	Nro         uint8
-	Year        int16
+	Nro        uint8
+	Year       int16
 	DateString string
-	Idx         int16
+	Idx        int16
 }
 
 func (e *FecSemana) MakeName() string {
@@ -152,15 +152,15 @@ func GetSemanasFromFecha(dateUnix int16, incremento uint8, decremento uint8) []*
 }
 
 type TimeHelper struct {
-	init          bool
+	init         bool
 	dateToSemana map[int16]*FecSemana
-	codeToSemana  map[int16]*FecSemana
+	codeToSemana map[int16]*FecSemana
 	dateToString map[int16]string
-	semanas       []*FecSemana
-	idxToSemana   map[int16]*FecSemana
-	semanaToIdx   map[int16]int16
-	maxSemana     int16
-	minSemana     int16
+	semanas      []*FecSemana
+	idxToSemana  map[int16]*FecSemana
+	semanaToIdx  map[int16]int16
+	maxSemana    int16
+	minSemana    int16
 }
 
 func (e *TimeHelper) Init() {
@@ -354,11 +354,11 @@ func (e *TimeHelper) SemanaFromCode(semanaCode int16) *FecSemana {
 	// Log(dateLunes)
 
 	fecSemana := FecSemana{
-		Id:          (year)*100 + semanaNro,
-		Code:        semanaCode,
+		Id:         (year)*100 + semanaNro,
+		Code:       semanaCode,
 		DateUnix:   TimeToFechaUnix(dateLunes),
-		Nro:         uint8(semanaNro),
-		Year:        int16(year),
+		Nro:        uint8(semanaNro),
+		Year:       int16(year),
 		DateString: dateLunes.Local().UTC().Format("2006-01-02"),
 	}
 	e.codeToSemana[semanaCode] = &fecSemana

@@ -46,7 +46,7 @@ func TestLint_RichModeWithHeightIsClean(t *testing.T) {
 		`<ImageEffect effect="overlay" aspectRatio="4/3" src="x.avif"></ImageEffect>`,
 		`<ImageEffect layout="curve-right" class="min-h-[360px]" src="x.avif"></ImageEffect>`,
 		`<ImageEffect effect="overlay" class="md:min-h-[500px]" src="x.avif"></ImageEffect>`, // responsive prefix
-		`<ImageEffect effect="overlay" class="aspect-[4/3]" src="x.avif"></ImageEffect>`,      // aspect-* class now valid
+		`<ImageEffect effect="overlay" class="aspect-[4/3]" src="x.avif"></ImageEffect>`,     // aspect-* class now valid
 	}
 	for _, c := range cases {
 		if obs := lintOne(c); hasObs(obs, "NO height source") {

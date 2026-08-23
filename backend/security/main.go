@@ -14,10 +14,10 @@ var ModuleHandlers = core.AppRouterType{
 	// Sesión sin password para el navegador headless de desarrollo. Sólo responde con
 	// is_local y desde loopback; ver dev_login.go.
 	"GET.p-dev-login": DevLogin,
-	"GET.users":             GetUsuarios,
-	"GET.users-ids":         GetUsuariosByIDs,
-	"POST.users":            PostUsuarios,
-	"POST.user-self":        PostUsuarios,
-	"POST.perfiles":         PostPerfiles,
-	"GET.perfiles":          GetPerfiles,
+	"GET.users":       GetUsuarios,
+	"GET.users-ids":   GetUsuariosByIDs,
+	"POST.users":      PostUsuarios,
+	"POST.user-self":  PostUsuarios,
+	"POST.perfiles":   PostPerfiles,
+	"GET.perfiles":    GetPerfiles,
 }

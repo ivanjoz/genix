@@ -5,13 +5,13 @@ import (
 )
 
 var ModuleHandlers = core.AppRouterType{
-	"POST.sale-order":       PostSaleOrder,
-	"GET.sale-orders":       GetSaleOrders,
-	"GET.sale-order-query":  SaleOrderQuery,
-	"GET.sale-summary":      GetSaleSummary,
-	"GET.sale-order-by-ids": GetSaleOrderByIDs,
-	"GET.shipping-costs":    GetShippingCosts,
-	"POST.shipping-costs":   PostShippingCosts,
+	"POST.sale-order":        PostSaleOrder,
+	"GET.sale-orders":        GetSaleOrders,
+	"GET.sale-order-query":   SaleOrderQuery,
+	"GET.sale-summary":       GetSaleSummary,
+	"GET.sale-order-by-ids":  GetSaleOrderByIDs,
+	"GET.shipping-costs":     GetShippingCosts,
+	"POST.shipping-costs":    PostShippingCosts,
 	"GET.sales-planning":     GetSalesPlanning,
 	"POST.sales-planning":    PostSalesPlanning,
 	"GET.seasonality-curve":  GetSeasonalityCurve,

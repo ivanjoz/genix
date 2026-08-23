@@ -11,6 +11,7 @@
 		"./docs/**",
 		"**/store_deprecated/**",
 		"**/.svelte-kit/**",
+		"**/server_utils/**"
 	],
 	"languages": {
 		"TypeScript": {

@@ -122,7 +122,7 @@ type errorQueryBuilder[RecordT any] struct {
 	err error
 }
 
-func (b *errorQueryBuilder[RecordT]) Where(column string) QueryBuilder[RecordT]  { return b }
+func (b *errorQueryBuilder[RecordT]) Where(column string) QueryBuilder[RecordT]      { return b }
 func (b *errorQueryBuilder[RecordT]) Equals(value interface{}) QueryBuilder[RecordT] { return b }
 func (b *errorQueryBuilder[RecordT]) Between(start interface{}, end interface{}) QueryBuilder[RecordT] {
 	return b

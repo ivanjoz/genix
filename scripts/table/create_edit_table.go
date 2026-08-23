@@ -185,7 +185,7 @@ func buildFieldString(name, typeName string, isKey, isSlice bool, sliceEType str
 		jsonTag = `json:"ss,omitempty"`
 	}
 
-	return fmt.Sprintf("\t%s %s `" + jsonTag + " " + dbTag + "`\n", name, typeName)
+	return fmt.Sprintf("\t%s %s `"+jsonTag+" "+dbTag+"`\n", name, typeName)
 }
 
 func buildTableFieldString(name, typeName string, isSlice bool, sliceEType, tableCamelName string) string {
@@ -214,8 +214,8 @@ func NewTableColumn(args []string) {
 	}
 
 	field := Field{
-		Name:     toCamelCase(parts[0]),
-		IsKey:    len(parts) > 2 && parts[2] == "key",
+		Name:  toCamelCase(parts[0]),
+		IsKey: len(parts) > 2 && parts[2] == "key",
 	}
 	if strings.HasPrefix(parts[1], "[]") {
 		field.IsSlice = true

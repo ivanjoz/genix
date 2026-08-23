@@ -1,10 +1,10 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
-	"errors"
 )
 
 // ProjectTmpDir returns the repository-local tmp directory during local

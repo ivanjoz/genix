@@ -215,11 +215,11 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 }
 
 func Test51(args *core.ExecArgs) core.FuncResponse {
-	
+
 	controller := makeDBController[businessTypes.Product]()
 
 	controller.FlushTextSearchIndex(1)
-	
+
 	// controller := makeDBController[webpageTypes.Webpage]()
 	//	controller.RecalcVirtualColumns(1)
 	// controller.DeleteViewsAndIndexes()
