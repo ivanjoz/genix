@@ -2,6 +2,7 @@
 package exec
 
 import (
+	accountingTypes "app/accounting/types"
 	agentTypes "app/agent/types"
 	businessTypes "app/business/types"
 	configTypes "app/config/types"
@@ -9,6 +10,7 @@ import (
 	coreTypes "app/core/types"
 	"app/db"
 	financeTypes "app/finance/types"
+	invoicingTypes "app/invoicing/types"
 	logisticsTypes "app/logistics/types"
 	salesTypes "app/sales/types"
 	securityTypes "app/security/types"
@@ -18,6 +20,7 @@ import (
 func MakeScyllaControllers() []db.Controller {
 	return []db.Controller{
 		makeDBController[DemoStruct](),
+		makeDBController[accountingTypes.Asset](),
 		makeDBController[agentTypes.AgentMessage](),
 		makeDBController[businessTypes.CityLocation](),
 		makeDBController[businessTypes.ClientProvider](),
@@ -48,13 +51,16 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[financeTypes.CashReconciliation](),
 		makeDBController[financeTypes.Expense](),
 		makeDBController[financeTypes.ExpenseScheduled](),
+		makeDBController[invoicingTypes.CompanySecrets](),
+		makeDBController[invoicingTypes.InvoiceDocument](),
+		makeDBController[invoicingTypes.InvoiceSeries](),
+		makeDBController[invoicingTypes.InvoiceSummary](),
 		makeDBController[logisticsTypes.DeliveryOrderNote](),
 		makeDBController[logisticsTypes.ProductStock](),
 		makeDBController[logisticsTypes.ProductStockDetail](),
 		makeDBController[logisticsTypes.ProductStockLot](),
 		makeDBController[logisticsTypes.ProductSupply](),
 		makeDBController[logisticsTypes.PurchaseOrder](),
-		makeDBController[logisticsTypes.SupplyMaterial](),
 		makeDBController[logisticsTypes.WarehouseProductMovement](),
 		makeDBController[salesTypes.ProductSaleSummary](),
 		makeDBController[salesTypes.SaleOrder](),
@@ -72,6 +78,7 @@ func MakeScyllaControllers() []db.Controller {
 // Resolves table names for db.QueryCachedGenericByIDs.
 func init() {
 	db.RegisterTableFactory("zz_demo_struct", func() db.Table { return db.MakeTable[DemoStruct]() })
+	db.RegisterTableFactory("accounting_asset", func() db.Table { return db.MakeTable[accountingTypes.Asset]() })
 	db.RegisterTableFactory("agent_messages", func() db.Table { return db.MakeTable[agentTypes.AgentMessage]() })
 	db.RegisterTableFactory("city_locations", func() db.Table { return db.MakeTable[businessTypes.CityLocation]() })
 	db.RegisterTableFactory("client_provider", func() db.Table { return db.MakeTable[businessTypes.ClientProvider]() })
@@ -102,13 +109,16 @@ func init() {
 	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })
 	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[financeTypes.Expense]() })
 	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
+	db.RegisterTableFactory("company_secrets", func() db.Table { return db.MakeTable[invoicingTypes.CompanySecrets]() })
+	db.RegisterTableFactory("invoice_document", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceDocument]() })
+	db.RegisterTableFactory("invoice_series", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSeries]() })
+	db.RegisterTableFactory("invoice_summary", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSummary]() })
 	db.RegisterTableFactory("delivery_order_note", func() db.Table { return db.MakeTable[logisticsTypes.DeliveryOrderNote]() })
 	db.RegisterTableFactory("warehouse_product_stock", func() db.Table { return db.MakeTable[logisticsTypes.ProductStock]() })
 	db.RegisterTableFactory("warehouse_product_stock_detail", func() db.Table { return db.MakeTable[logisticsTypes.ProductStockDetail]() })
 	db.RegisterTableFactory("product_stock_lot", func() db.Table { return db.MakeTable[logisticsTypes.ProductStockLot]() })
 	db.RegisterTableFactory("product_supply", func() db.Table { return db.MakeTable[logisticsTypes.ProductSupply]() })
 	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
-	db.RegisterTableFactory("supply_material", func() db.Table { return db.MakeTable[logisticsTypes.SupplyMaterial]() })
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("product_sale_summary", func() db.Table { return db.MakeTable[salesTypes.ProductSaleSummary]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })

@@ -2,6 +2,7 @@ package exec
 
 import (
 	"app/core"
+	"app/invoicing"
 )
 
 type ExecRouterType map[string]func(args *core.ExecArgs) core.FuncResponse
@@ -28,6 +29,10 @@ var ExecHandlers = ExecRouterType{
 	"fn-deploy-cloudflare-worker":       DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":         DeployCompanyWebpage,
 	"fn-sync-image-assets":              SyncImageAssetsHandler,
+	"fn-emit-cpe":                       invoicing.EmitHandler,
+	"fn-sunat-beta-setup":               SetupSunatBeta,
+	"fn-emit-invoice":                   EmitInvoice,
+	"fn-send-invoice":                   SendInvoice,
 	"fn-db":                             DbConsole,
 	"compress-image":                    CompressImage,
 }
@@ -43,8 +48,6 @@ var ExecHandlersTesting = ExecRouterType{
 		"fn18":  TestDeploy,
 	*/
 	"fn014": Test14,
-	"fn015": Test15,
-	"fn016": Test16,
 	"fn018": Test18,
 	"fn019": Test19,
 	"fn020": Test20,

@@ -10,6 +10,8 @@ package core
 // different route would rewrite what those rows mean.
 var APIRouteIDs = map[string]int16{
 	"GET.agent-models":                1,
+	"GET.asset-depreciation":          114,
+	"GET.assets":                      115,
 	"GET.backups":                     2,
 	"GET.cash-bank-movement-by-id":    3,
 	"GET.cash-banks":                  4,
@@ -23,6 +25,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.company-credit-usage-report": 108,
 	"GET.company-credit-usage-users":  109, // retired
 	"GET.company-parametros":          9,
+	"GET.company-secrets":             116,
 	"GET.company-users-by-ids":        113,
 	"GET.country-cities":              10,
 	"GET.credit-usage":                11,
@@ -36,6 +39,9 @@ var APIRouteIDs = map[string]int16{
 	"GET.image-asset-text-search":     19,
 	"GET.image-assets":                20,
 	"GET.image-id-counter":            21,
+	"GET.invoice-series":              117,
+	"GET.invoice-xml":                 118,
+	"GET.invoices":                    119,
 	"GET.locations-warehouses":        22,
 	"GET.observability":               105,
 	"GET.p-company-names-by-ids":      23,
@@ -76,6 +82,9 @@ var APIRouteIDs = map[string]int16{
 	"GET.warehouse-product-stock":     56,
 	"GET.webpage-pages":               57,
 	"GET.website-config":              58,
+	"POST.asset":                      120,
+	"POST.asset-depreciation-run":     121,
+	"POST.asset-payment":              130,
 	"POST.backup-create":              59,
 	"POST.backup-restore":             60,
 	"POST.cash-banks":                 61,
@@ -85,12 +94,18 @@ var APIRouteIDs = map[string]int16{
 	"POST.company":                    65,
 	"POST.company-credit-budget":      111,
 	"POST.company-parametros":         66,
+	"POST.company-secrets":            122,
+	"POST.company-secrets-test":       123,
 	"POST.ecommerce-page-content":     67,
+	"POST.expense-inventory":          129,
 	"POST.expense-payment":            68,
 	"POST.expenses":                   69,
 	"POST.expenses-scheduled":         70,
 	"POST.gallery-image":              71,
 	"POST.initial-data":               72,
+	"POST.invoice":                    124,
+	"POST.invoice-retry":              125,
+	"POST.invoice-series":             126,
 	"POST.p-agent-turn":               73,
 	"POST.p-contact-message":          103,
 	"POST.p-signup-company":           74,
@@ -121,6 +136,8 @@ var APIRouteIDs = map[string]int16{
 	"POST.webpage-showcase-image":     99,
 	"POST.website-domain":             100,
 	"POST.website-seo":                101,
+	"PUT.asset-disposal":              127,
+	"PUT.asset-transfer":              128,
 	"PUT.purchase-orders":             102,
 }
 
@@ -139,7 +156,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 113
+const MaxAPIRouteID int16 = 130
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

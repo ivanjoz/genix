@@ -152,7 +152,7 @@ export const AdminModule: IModule = {
 				},
 				{ name: "Balance|Balance",
 				},
-				{ name: "Assets|Activos",
+				{ name: "Assets|Activos", route: "/accounting/assets"
         },
       ]
     },

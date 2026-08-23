@@ -1,0 +1,126 @@
+package accounting
+
+import (
+	accountingTypes "app/accounting/types"
+	"app/core"
+	"app/db"
+	"app/finance"
+	financeTypes "app/finance/types"
+	"encoding/json"
+)
+
+// movementTypeAssetPayment is the CashBankMovement.Type for paying off an asset acquisition
+// (outflow). Mirrors `cajaMovimientoTipos` id 10 on the frontend, and it is what separates
+// these movements from expense payments (type 9) — both use DocumentID, and an Asset ID and
+// an Expense ID can collide, so the type is the discriminator when summing what was paid.
+const movementTypeAssetPayment int8 = 10
+
+// AssetPaymentPayload settles part or all of an asset's acquisition.
+type AssetPaymentPayload struct {
+	AssetID     int32 `json:",omitempty"`
+	CashBankID  int32 `json:",omitempty"`
+	Amount      int32 `json:",omitempty"` // Positive payment amount, in cents.
+	Date        int16 `json:",omitempty"`
+	IsFullyPaid bool  `json:",omitempty"` // Forces settled status (write-off case).
+}
+
+// PostAssetPayment records a payment against an asset. The asset is not an expense, so this
+// does not go through the expense payment path: it writes the cash movement directly and
+// recomputes the asset's own PaidAmount from the ledger.
+func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
+	payload := AssetPaymentPayload{}
+	if deserializeError := json.Unmarshal([]byte(*req.Body), &payload); deserializeError != nil {
+		return req.MakeErr("Error al deserializar el body.", deserializeError)
+	}
+	if payload.Amount <= 0 {
+		return req.MakeErr("El monto del pago debe ser mayor a 0.")
+	}
+	if payload.AssetID <= 0 || payload.CashBankID <= 0 {
+		return req.MakeErr("Faltan parámetros: (AssetID o CashBankID).")
+	}
+
+	asset, loadError := loadAsset(req.User.CompanyID, payload.AssetID)
+	if loadError != nil {
+		return req.MakeErr(loadError)
+	}
+	if asset.PurchaseAmount <= 0 {
+		return req.MakeErr("Este activo no fue comprado, no hay nada que pagar.")
+	}
+
+	// Server-authoritative: this also blocks any payment on an already settled asset, whose
+	// pending balance is 0.
+	if payload.Amount > asset.PendingAmount() {
+		return req.MakeErr("El monto del pago no puede ser mayor al monto pendiente.")
+	}
+
+	cashBank, cashBankError := finance.GetCaja(req.User.CompanyID, payload.CashBankID)
+	if cashBankError != nil {
+		return req.MakeErr(cashBankError)
+	}
+	if cashBank.CurrencyType != asset.CurrencyType {
+		return req.MakeErr("La moneda de la caja no coincide con la del activo.")
+	}
+	if cashBank.CurrentAmount-payload.Amount < 0 {
+		return req.MakeErr("El saldo de la caja no puede quedar negativo.")
+	}
+
+	// The movement is an outflow, so its amount is negative. FinalAmount stays 0 so the cash
+	// side computes the resulting balance authoritatively.
+	movement := financeTypes.InternalCashMovement{
+		CashBankID:  payload.CashBankID,
+		DocumentID:  int64(asset.ID),
+		ReferenceID: asset.ProductID,
+		Date:        payload.Date,
+		Type:        movementTypeAssetPayment,
+		Amount:      -payload.Amount,
+		FinalAmount: 0,
+	}
+	if movementError := finance.ApplyCashBankMovement(
+		req, []financeTypes.InternalCashMovement{movement},
+	); movementError != nil {
+		return req.MakeErr(movementError)
+	}
+
+	// Recompute PaidAmount from the ledger rather than incrementing it, so a retry or a
+	// concurrent payment cannot drift the total. Type filters out anything that is not an
+	// asset payment, since DocumentID alone is shared with the expense register.
+	movements := []financeTypes.CashBankMovement{}
+	movementQuery := db.Query(&movements)
+	movementQuery.Select().
+		CompanyID.Equals(req.User.CompanyID).
+		DocumentID.Equals(int64(asset.ID))
+
+	if queryError := movementQuery.Exec(); queryError != nil {
+		return req.MakeErr("Error al recalcular el monto pagado.", queryError)
+	}
+
+	paidAmount := int32(0)
+	for _, cashMovement := range movements {
+		if cashMovement.Type != movementTypeAssetPayment {
+			continue
+		}
+		paidAmount += core.If(cashMovement.Amount < 0, -cashMovement.Amount, cashMovement.Amount)
+	}
+
+	asset.PaidAmount = paidAmount
+	asset.PaymentStatus = core.If(
+		payload.IsFullyPaid || paidAmount >= asset.PurchaseAmount,
+		accountingTypes.AssetPaymentPaid, accountingTypes.AssetPaymentPending,
+	)
+	asset.Updated = core.SUnixTime()
+	asset.UpdatedBy = req.User.ID
+
+	assetTable := db.TableOf[accountingTypes.Asset]()
+	assetRecords := []accountingTypes.Asset{asset}
+	// Status is written even though a payment never changes it: it shares the delta view's
+	// composite key with UpdatedVersion, so the ORM requires the pair be updated together.
+	if updateError := db.Update(&assetRecords,
+		assetTable.PaidAmount, assetTable.PaymentStatus, assetTable.Status,
+		assetTable.Updated, assetTable.UpdatedBy,
+	); updateError != nil {
+		return req.MakeErr("Error al actualizar el pago del activo.", updateError)
+	}
+
+	core.Log("PostAssetPayment asset:", asset.ID, "paid:", paidAmount, "of:", asset.PurchaseAmount)
+	return req.MakeResponse(assetRecords[0])
+}

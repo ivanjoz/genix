@@ -20,17 +20,29 @@ import {
   ExpensesService,
   postExpense,
   postExpensePayment,
+  postInventoryExpense,
   expenseCategories,
   currencyTypes,
   expenseStatusTabs,
   ExpenseStatus,
+  ExpenseType,
+  expenseTypeLabels,
   localizeOptions,
   type IExpense,
   type IExpensePayment,
+  type IInventoryExpense,
 } from './expenses.svelte'
+import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
+import {
+  SupplyMaterialService, type ISupplyMaterial,
+} from '../../logistics/supplies-materials/supply-material.svelte'
 
 const cajas = new CajasService()	
 const ui = useUI()
+
+// An inventory expense lands in a warehouse, so both catalogs are needed to register one.
+const warehouses = new WarehousesService()
+const supplies = new SupplyMaterialService(true)
 
 // Localized option lists (re-resolve when the language switches).
 const categoryOptions = $derived(localizeOptions(expenseCategories))
@@ -48,6 +60,12 @@ let isLoading = $state(false)
 let form = $state({} as IExpense)
 let layerView = $state(1)
 let paymentForm = $state({} as IExpensePayment)
+
+// Inventory tab state. Kept apart from `form` because the inventory purchase posts a
+// different payload to a different endpoint — it writes stock as well as money.
+let inventoryForm = $state({} as IInventoryExpense)
+// "Create on the fly": when set, a supply with this name is saved first and its new ID used.
+let newSupplyName = $state({ text: "" })
 
 // A fully-paid expense (ss=2) is locked: its detail fields can't be edited and no further
 // payments are allowed (the backend enforces both rules authoritatively).
@@ -142,7 +160,13 @@ const applyExpenseToList = (updated: IExpense) => {
 }
 
 const newExpense = () => {
-  form = { ss: 1, ExpenseScheduledID: 0, CurrencyType: 1, CategoryID: 10, Date: todayUnixDay, DueDate: todayUnixDay } as IExpense
+  form = { ss: 1, ExpenseScheduledID: 0, Type: ExpenseType.SIMPLE, CurrencyType: 1, CategoryID: 10, Date: todayUnixDay, DueDate: todayUnixDay } as IExpense
+  inventoryForm = {
+    Name: "", Description: "", CategoryID: 4, SupplierID: 0, CurrencyType: 1,
+    Date: todayUnixDay, DueDate: todayUnixDay,
+    ProductID: 0, WarehouseID: 0, Quantity: 1, UnitPrice: 0,
+  }
+  newSupplyName = { text: "" }
   paymentForm = {} as IExpensePayment
   layerView = 1
   ui.openSideLayer(1)
@@ -181,6 +205,65 @@ const saveExpense = async () => {
     Loading.remove()
   }
 }
+
+// Save an inventory purchase. The supply is resolved first because the backend needs a real
+// ProductID; creating it here reuses the supplies endpoint rather than duplicating it server-side.
+const saveInventoryExpense = async () => {
+  const typedSupplyName = (newSupplyName.text || "").trim()
+  if (!inventoryForm.ProductID && !typedSupplyName) {
+    Notify.failure(tr("Select a supply or type a new one.|Seleccione un insumo o escriba uno nuevo."))
+    return
+  }
+  if (!inventoryForm.WarehouseID) {
+    Notify.failure(tr("Select a warehouse.|Seleccione un almacén."))
+    return
+  }
+  if ((inventoryForm.Quantity || 0) <= 0) {
+    Notify.failure(tr("The quantity must be greater than 0.|La cantidad debe ser mayor a 0."))
+    return
+  }
+  if ((inventoryForm.UnitPrice || 0) <= 0) {
+    Notify.failure(tr("The unit price must be greater than 0.|El precio unitario debe ser mayor a 0."))
+    return
+  }
+
+  Loading.standard(tr("Saving expense...|Guardando gasto..."))
+  try {
+    let productID = inventoryForm.ProductID
+    if (!productID) {
+      // postAndSync returns a tempID->ID map and rewrites record.ID in place; read it back.
+      const newSupply = {
+        ss: 2, Name: typedSupplyName, Price: inventoryForm.UnitPrice, DepreciationMonths: 0,
+      } as ISupplyMaterial
+      await supplies.postAndSync([newSupply])
+      productID = newSupply.ID || 0
+      if (!productID) { throw tr("The supply could not be created.|No se pudo crear el insumo.") }
+    }
+
+    const saved = await postInventoryExpense({
+      ...inventoryForm,
+      ProductID: productID,
+      Name: inventoryForm.Name || typedSupplyName
+        || supplies.recordsMap.get(productID)?.Name || tr("Purchase|Compra"),
+    })
+    ui.openSideLayer(0)
+    if (ui.state.deviceType === 3) setTimeout(() => { form = {} as IExpense }, 300)
+    else form = {} as IExpense
+    applyExpenseToList(saved)
+  } catch (error) {
+    Notify.failure(error as string)
+  } finally {
+    Loading.remove()
+  }
+}
+
+// Which save the layer button runs depends on the open tab. Tab 3 (Inventory) exists only
+// for a new expense; an existing one shows Details/Payment instead.
+const saveHandler = $derived(
+  layerView === 3
+    ? saveInventoryExpense
+    : (layerView === 1 && !isPaid ? saveExpense : undefined),
+)
 
 // Record a payment against the open expense via POST.expense-payment.
 const registerPayment = async () => {
@@ -252,9 +335,16 @@ const columns: ITableColumn<IExpense>[] = [
   { header: "Name|Nombre", css: "px-6", getValue: e => e.Name,
     mobile: { order: 3, css: "col-span-24", render: e => `<strong>${e.Name || ''}</strong>` } },
   {
+    header: "Type|Tipo", headerCss: "w-110", css: "px-6",
+    // Two types reach this list: a simple cost and an inventory purchase. Depreciation
+    // never does (ss=3), and an asset acquisition writes no expense row at all.
+    getValue: e => tr(expenseTypeLabels[e.Type || ExpenseType.SIMPLE] || ""),
+    mobile: { order: 4, css: "col-span-12", labelLeft: "Tipo:" },
+  },
+  {
     header: "Category|Categoría", css: "px-6",
     getValue: e => tr(categoriesMap.get(e.CategoryID)?.label || ""),
-    mobile: { order: 4, css: "col-span-24", labelLeft: "Categoría:" },
+    mobile: { order: 5, css: "col-span-24", labelLeft: "Categoría:" },
   },
   {
     header: "Due Date|Vencimiento", headerCss: "w-120", css: "whitespace-nowrap px-6",
@@ -365,8 +455,10 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
   title={form?.ID ? (form?.Name || tr("Expense|Gasto")) : tr("New Expense|Nuevo Gasto")}
   titleCss="h2 ff-bold"
   bind:selected={layerView}
-  options={form?.ID ? [[1, tr("Details|Detalle")], [2, tr("Payment|Pago")]] : [[1, tr("Details|Detalle")]]}
-  onSave={layerView === 1 && !isPaid ? saveExpense : undefined}
+  options={form?.ID
+    ? [[1, tr("Details|Detalle")], [2, tr("Payment|Pago")]]
+    : [[1, tr("Simple|Simple")], [3, tr("Inventory|Inventario")]]}
+  onSave={saveHandler}
   onClose={() => { form = {} as IExpense }}
 >
   {#if layerView === 1}
@@ -387,6 +479,43 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
         inputCss="ff-mono text-center pr-8" css="col-span-24 md:col-span-16" label="Amount|Monto" required={true} disabled={isPaid} />
       <DateInput bind:saveOn={form} save="Date" css="col-span-24 md:col-span-12" label="Date|Fecha" disabled={isPaid} />
       <DateInput bind:saveOn={form} save="DueDate" css="col-span-24 md:col-span-12" label="Due Date|Vencimiento" disabled={isPaid} />
+    </div>
+  {/if}
+
+  {#if layerView === 3}
+    <!-- Inventory purchase: the money becomes stock rather than a P&L cost, so it posts a
+         Type-2 expense and an inbound movement together. -->
+    <div class="grid grid-cols-24 gap-10 mt-12">
+      <SearchSelect bind:saveOn={inventoryForm} save="ProductID" css="col-span-24 md:col-span-14"
+        label="Supply / Material|Insumo o Material" keyId="ID" keyName="Name" options={supplies.records || []} />
+      <SearchSelect bind:saveOn={inventoryForm} save="WarehouseID" css="col-span-24 md:col-span-10"
+        label="Warehouse|Almacén" keyId="ID" keyName="Name" options={warehouses.Almacenes || []} required={true} />
+
+      {#if !inventoryForm.ProductID}
+        <!-- Nothing picked: let the user name a new supply instead of leaving the page. -->
+        <Input bind:saveOn={newSupplyName} save="text" css="col-span-24"
+          label="…or create a new supply|…o crear un insumo nuevo" />
+      {/if}
+
+      <Input bind:saveOn={inventoryForm} save="Quantity" type="number"
+        inputCss="ff-mono text-center" css="col-span-12 md:col-span-6" label="Quantity|Cantidad" required={true} />
+      <Input bind:saveOn={inventoryForm} save="UnitPrice" type="number" baseDecimals={2}
+        inputCss="ff-mono text-right" css="col-span-12 md:col-span-9" label="Unit Price|Precio Unitario" required={true} />
+      <SearchSelect bind:saveOn={inventoryForm} save="CurrencyType" css="col-span-24 md:col-span-9"
+        label="Currency|Moneda" keyId="id" keyName="name" options={currencyOptions} required={true} />
+
+      <div class="col-span-24 bg-slate-100 rounded py-8 text-center">
+        <div class="text-sm text-slate-600">{tr("Total|Total")}</div>
+        <div class="ff-mono ff-bold">
+          {formatN(((inventoryForm.Quantity || 0) * (inventoryForm.UnitPrice || 0)) / 100, 2)}
+        </div>
+      </div>
+
+      <Input bind:saveOn={inventoryForm} save="Name" css="col-span-24 md:col-span-14" label="Name|Nombre" />
+      <SearchSelect bind:saveOn={inventoryForm} save="CategoryID" css="col-span-24 md:col-span-10"
+        label="Category|Categoría" keyId="id" keyName="name" options={categoryOptions} />
+      <DateInput bind:saveOn={inventoryForm} save="Date" css="col-span-24 md:col-span-12" label="Date|Fecha" />
+      <DateInput bind:saveOn={inventoryForm} save="DueDate" css="col-span-24 md:col-span-12" label="Due Date|Vencimiento" />
     </div>
   {/if}
 

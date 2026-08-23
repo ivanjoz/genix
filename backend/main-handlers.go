@@ -1,12 +1,14 @@
 package main
 
 import (
+	"app/accounting"
 	"app/agent"
 	"app/business"
 	"app/config"
 	"app/core"
 	"app/exec"
 	"app/finance"
+	"app/invoicing"
 	"app/logistics"
 	"app/sales"
 	"app/security"
@@ -28,7 +30,9 @@ var appHandlersModules = []core.AppRouterType{
 	sales.ModuleHandlers,
 	config.ModuleHandlers,
 	webpage.ModuleHandlers,
+	accounting.ModuleHandlers,
 	finance.ModuleHandlers,
+	invoicing.ModuleHandlers,
 	logistics.ModuleHandlers,
 	business.ModuleHandlers,
 	security.ModuleHandlers,

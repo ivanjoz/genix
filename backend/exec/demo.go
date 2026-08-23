@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"app/billing"
 	businessTypes "app/business/types"
 	configTypes "app/config/types"
 	"app/core"
@@ -12,7 +11,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"github.com/ivanjoz/genix-orm/scylla"
 	"os"
@@ -95,73 +93,6 @@ func Test14(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	core.Log("String Desencriptado:: ", string(decriptedBytes))
-
-	return core.FuncResponse{}
-}
-
-func Test15(args *core.ExecArgs) core.FuncResponse {
-	type Address struct {
-		City, State string
-	}
-	type Person struct {
-		XMLName   xml.Name `xml:"person"`
-		Id        int      `xml:"id,attr"`
-		FirstName string   `xml:"name>first"`
-		LastName  string   `xml:"name>last"`
-		Age       int      `xml:"age"`
-		Height    float32  `xml:"height,omitempty"`
-		Married   bool
-		Address
-		Comment string `xml:",comment"`
-	}
-
-	v := &Person{Id: 13, FirstName: "John", LastName: "Doe", Age: 42}
-	// v.Comment = " Need more details. "
-	v.Address = Address{"Hanga Roa", "Easter Island"}
-
-	var buffer bytes.Buffer
-	enc := xml.NewEncoder(&buffer)
-	enc.Indent("  ", "    ")
-	if err := enc.Encode(v); err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-
-	core.Log(buffer.String())
-
-	invoice := billing.NewInvoice()
-
-	var buffer2 bytes.Buffer
-	enc = xml.NewEncoder(&buffer2)
-	enc.Indent("  ", "    ")
-	if err := enc.Encode(invoice); err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-
-	core.Log(buffer2.String())
-
-	return core.FuncResponse{}
-}
-
-func Test16(args *core.ExecArgs) core.FuncResponse {
-
-	signatureArgs := billing.MakeSignatureArgs{
-		SignatureID:     "signatureKG",
-		DigestValue:     "ld6X+TvM42Fe+F1KM/OB jiKpnko=",
-		SignatureValue:  "W6DbMHJEFmU7GuiU0O+HRUqVzQZZW3QndYtUyeL0VxXuTafHu2vBC+OXvnnali43VXRGQ+/E0tPlZAssqI/PEPfzIU79Wufq6saxYGHKvzdnBi6hnaMuCSG5THHNFppx4aT1KNg7p/koBB3U8PT9C6m6		UnkJJNUquHkFc9BCqI8=",
-		X509SubjectName: "1.2.840.113549.1.9.1=#161a4253554c434140534f55544845524e504552552e434f4d2e5045,CN=CarlosVega,OU=10200545523,O=Vega Poblete Carlos Enrique,L=CHICLAYO,ST=LAMBAYEQUE,C=PE",
-		X509Certificate: "MIIESTCCAz		GgAwIBAgIKWOCRzgAAAAAAIjANBgkqhkiG9w0BAQUFADAnMRUwEwYKCZImiZPyLGQB		GRYFU1VOQVQxDjAMBgNVBAMTBVNVTkFUMB4XDTEwMTIyODE5NTExMFoXDTExMTIyODIwMDExMFowgZUxCzAJBgNVBAYTAlBFMQ0wCwYDVQQIEwRMSU1BMQ0wCwYDVQQHEwRMSU1BMREwDwYDVQQKEwhT",
-	}
-
-	signature := billing.MakeSignature(signatureArgs)
-
-	var buffer bytes.Buffer
-	enc := xml.NewEncoder(&buffer)
-	enc.Indent("  ", "    ")
-	if err := enc.Encode(signature); err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-
-	core.Log(buffer.String())
 
 	return core.FuncResponse{}
 }

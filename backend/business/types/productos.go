@@ -46,6 +46,10 @@ type Product struct {
 	SbuFinalPrice int32   `json:",omitempty"`
 	SKU           string  `json:",omitempty"`
 	NameHash      int32   `json:",omitempty"`
+	// Straight-line depreciation term for supplies that are fixed assets (Status=2).
+	// 0 = not depreciable. Copied onto accounting.Asset at acquisition so later catalog
+	// edits never rewrite the schedule of an asset already in service.
+	DepreciationMonths int16 `json:",omitempty"`
 
 	Properties    []ProductProperties   `json:",omitempty"`
 	Presentations []ProductPresentation `json:",omitempty"`
@@ -104,6 +108,7 @@ type ProductTable struct {
 	SbuFinalPrice       db.Col[ProductTable, int32]
 	SKU                 db.Col[ProductTable, string]
 	NameHash            db.Col[ProductTable, int32]
+	DepreciationMonths  db.Col[ProductTable, int16]
 	Properties          db.Col[ProductTable, []ProductProperties]
 	Presentations       db.Col[ProductTable, []ProductPresentation]
 	ImageMain           db.Col[ProductTable, int32]
@@ -148,8 +153,10 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		},
 		Keys: db.Cols(e.ID.Autoincrement(0)),
 		// Delta() enumerates its filter column, so every Status value must be declared.
+		// 2 = supply/material: same catalog row, same stock engine, but excluded from every
+		// product flow because they all pin Status=1 (products.go, product-ecommerce.go).
 		FixedValues: []db.FixedValues{
-			{Col: e.Status, Values: []int64{0, 1}},
+			{Col: e.Status, Values: []int64{0, 1, 2}},
 		},
 		Indexes: []db.Index{
 			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.CategoriesWithStock)},

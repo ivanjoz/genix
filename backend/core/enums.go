@@ -20,4 +20,8 @@ const (
 	// message while a registration is in flight from the same IP is not the abuse either limit is
 	// looking for.
 	ActionContactByIP LockAction = 2
+	// ActionInvoiceSaleOrder serializes issuing an electronic document for one
+	// sale, so two clicks cannot produce two documents for it. Keyed on the sale,
+	// so unrelated sales never queue behind each other.
+	ActionInvoiceSaleOrder LockAction = 3
 )

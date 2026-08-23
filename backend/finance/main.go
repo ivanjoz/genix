@@ -3,8 +3,8 @@ package finance
 import "app/core"
 
 var ModuleHandlers = core.AppRouterType{
-	"GET.cash-banks":                      GetCashBanks,
-	"POST.cash-banks":                     PostCashBanks,
+	"GET.cash-banks":                 GetCashBanks,
+	"POST.cash-banks":                PostCashBanks,
 	"GET.cash-banks-movements":       GetCashBankMovements,
 	"GET.cash-bank-movement-by-id":   GetCashBankMovementByID,
 	"GET.cash-banks-reconciliations": GetCashReconciliation,

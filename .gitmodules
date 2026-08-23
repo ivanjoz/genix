@@ -6,3 +6,7 @@
 	path = backend/genix-orm
 	url = git@github.com:ivanjoz/genix-orm.git
 	branch = main
+[submodule "backend/facturago"]
+	path = backend/facturago
+	url = git@github.com:ivanjoz/facturago.git
+	branch = main

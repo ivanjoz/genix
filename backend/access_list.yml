@@ -189,7 +189,7 @@ access_list:
     group: 5
     levels: 14
     frontend_routes: "finance/expenses"
-    backend_apis: "POST.expenses,POST.expenses-scheduled,POST.expense-payment"
+    backend_apis: "POST.expenses,POST.expenses-scheduled,POST.expense-payment,POST.expense-inventory,GET.supply-material,POST.supply-material"
   - id: 20
     name: "Gestión de Cuentas"
     group: 5
@@ -236,5 +236,17 @@ access_list:
     name: "Activos"
     group: 7
     levels: 14
-    frontend_routes: ""
-    backend_apis: ""
+    frontend_routes: "accounting/assets"
+    backend_apis: "GET.assets,POST.asset,PUT.asset-disposal,PUT.asset-transfer,POST.asset-depreciation-run,GET.asset-depreciation"
+  - id: 35
+    name: "Facturación Electrónica"
+    group: 7
+    levels: 14
+    frontend_routes: "accounting/invoicing,accounting/invoice-series"
+    backend_apis: "POST.invoice,POST.invoice-retry,POST.invoice-series,GET.invoices,GET.invoice-xml,GET.invoice-series"
+  - id: 36
+    name: "Credenciales SUNAT"
+    group: 1
+    levels: 14
+    frontend_routes: "configuration/company-secrets"
+    backend_apis: "GET.company-secrets,POST.company-secrets,POST.company-secrets-test"
