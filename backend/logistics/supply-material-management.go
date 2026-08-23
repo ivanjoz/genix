@@ -8,14 +8,6 @@ import (
 	"encoding/json"
 )
 
-// A supply/material is a Product row with Status = 2. It shares the catalog, the stock
-// engine and the movement ledger with ordinary products; the status is what keeps it out
-// of every product-facing flow, since those all pin Status = 1.
-//
-// An asset is a supply whose DepreciationMonths > 0. Nothing else distinguishes it here —
-// the accounting overlay lives in app/accounting.
-const SupplyProductStatus int8 = 2
-
 // GetSupplyMaterials returns the supply catalog using the delta-cache protocol. The status
 // slot is pinned to 2, so a first sync (upv=0) returns supplies only, and later syncs also
 // carry rows that left the bucket (deleted, or converted to a product) so the client evicts them.
@@ -34,7 +26,7 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 		supplyQuery.DepreciationMonths, supplyQuery.Status, supplyQuery.Updated,
 		supplyQuery.UpdatedVersion,
 	)
-	supplyQuery.Delta(updatedSince, int64(SupplyProductStatus))
+	supplyQuery.Delta(updatedSince, int64(business.ProductStatusSupply))
 
 	if queryError := supplyQuery.Exec(); queryError != nil {
 		core.Log("GetSupplyMaterials query error:", queryError)
@@ -129,7 +121,7 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			DepreciationMonths: supplyPayload.DepreciationMonths,
 			// Deleting is only meaningful for a row that already exists; a new record with no
 			// ss in the payload must not be born as a tombstone.
-			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), SupplyProductStatus),
+			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), business.ProductStatusSupply),
 			Updated:   currentTimestamp,
 			UpdatedBy: req.User.ID,
 		}

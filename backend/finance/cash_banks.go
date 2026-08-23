@@ -260,7 +260,7 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Hay parámetros faltantes (Type, Amount o CashBank-ID)")
 	}
 
-	if record.Type == 3 && record.CashBankRefID == 0 {
+	if record.Type == types.CashMovementTypeTransfer && record.CashBankRefID == 0 {
 		return req.MakeErr("Las trasferencias necesitan especificar una cashBank de destino.")
 	}
 

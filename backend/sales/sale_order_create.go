@@ -155,7 +155,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			movimiento := financeTypes.InternalCashMovement{
 				CashBankID: sale.LastPaymentCajaID,
 				DocumentID: sale.ID,
-				Type:       8, // Cobro (Venta)
+				Type:       financeTypes.CashMovementTypeSaleCollection,
 				Amount:     montoPago,
 			}
 

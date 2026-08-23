@@ -9,12 +9,6 @@ import (
 	"encoding/json"
 )
 
-// movementTypeAssetPayment is the CashBankMovement.Type for paying off an asset acquisition
-// (outflow). Mirrors `cajaMovimientoTipos` id 10 on the frontend, and it is what separates
-// these movements from expense payments (type 9) — both use DocumentID, and an Asset ID and
-// an Expense ID can collide, so the type is the discriminator when summing what was paid.
-const movementTypeAssetPayment int8 = 10
-
 // AssetPaymentPayload settles part or all of an asset's acquisition.
 type AssetPaymentPayload struct {
 	AssetID     int32 `json:",omitempty"`
@@ -71,7 +65,7 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 		DocumentID:  int64(asset.ID),
 		ReferenceID: asset.ProductID,
 		Date:        payload.Date,
-		Type:        movementTypeAssetPayment,
+		Type:        financeTypes.CashMovementTypeAssetPayment,
 		Amount:      -payload.Amount,
 		FinalAmount: 0,
 	}
@@ -96,7 +90,7 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 
 	paidAmount := int32(0)
 	for _, cashMovement := range movements {
-		if cashMovement.Type != movementTypeAssetPayment {
+		if cashMovement.Type != financeTypes.CashMovementTypeAssetPayment {
 			continue
 		}
 		paidAmount += core.If(cashMovement.Amount < 0, -cashMovement.Amount, cashMovement.Amount)

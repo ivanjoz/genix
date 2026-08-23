@@ -1,25 +1,37 @@
-## `system/` was never a module — it is now `libs/servermetrics/`
+## The cash-movement and product-status vocabularies are owned by one module each
 
-**Context** — `backend/system/` sat at module level next to `sales`, `finance` and the rest, but
-it declared no `ModuleHandlers`, had **zero** `app/` imports, and contained only OS metric
-collection (`ServerMetricsCollector`, `CollectGoHeapPackageReport`, snapshot structs). Its only
-consumer, `config`, imported it as `servermetrics "app/system"` — an alias whose sole job was to
-correct the folder name. Under the module-boundary rule (`MODULE_BOUNDARIES_PLAN.md`) a module
-body may not import another module body, so `config -> system` read as a violation of a rule it
-was never really breaking.
+**Context** — `CashBankMovement.Type` was four private constants in four modules
+(`logistics/purchase-order-management.go`, `finance/expenses.go`,
+`accounting/asset_payment.go`, and a bare literal `Type: 8` in `sales/sale_order_create.go`),
+each with a comment saying it mirrors the frontend's `cajaMovimientoTipos`. The type is the
+discriminator that separates movements sharing a `DocumentID` — an asset payment and an expense
+payment can carry the same document id — so a collision is a real accounting bug, yet nothing
+stopped the next module from reusing a taken number. `Product.Status == 2` had the same problem
+in two copies: `logistics.SupplyProductStatus` and a hand copy `supplyProductStatus` in
+`accounting/asset_api.go`, in a file that also imported `logistics`.
 
-**Decision** — moved to `libs/servermetrics/`, package renamed `system` -> `servermetrics`. The
-two importers in `config` now use a bare `"app/libs/servermetrics"` with no alias. Stale path
-references updated in `server_utils/PLAN_SERVER_METRICS.md`,
-`server_utils/src/sysmetrics/collector.rs`, the repo map in `AGENTS.md`, and — the one that
-would have broken a test — the evidence `path:` entries in
-`frontend/routes/system/server-panel/DOCUMENTATION.md`, which the ragdocs parser validates by
-path and content hash.
+**Decision** — `finance/types` owns `type CashMovementType int8` with **all ten** values from the
+frontend list, not just the four the backend writes, so a new module cannot claim a used number.
+`CashBankMovement.Type`, its `db.Col`, and `InternalCashMovement.Type` are all typed with it.
+`business/types` owns `ProductStatusInactive/Active/Supply` as plain `int8` constants next to
+`Product`, and both copies are deleted.
 
-**Rationale** — `libs/` over `core/` because this reads the OS, not the domain, and `libs/` is
-where non-business generics live; `core/` holds cross-cutting code that does carry business
-logic. Classifying it as a foundation package rather than a module is what makes the boundary
-rule honest: the import was never the problem, the folder's position was. Cost is a moved
-folder and the four external references above, none of which are load-bearing at build time
-except the DOCUMENTATION.md evidence paths.
+**Rationale** — the named type is worth it for the ledger because the column is written from four
+modules and the values are load-bearing; typing the column (rather than only the constants) is
+what makes a wrong assignment a compile error instead of an arithmetic surprise. It required
+fixing the ORM first — see `genix-orm/scylla/RATIONALE.md`; a named integer type was silently
+mishandled by six type switches.
+
+`Product.Status` deliberately stays `int8`. Its three values are already enumerated in the delta
+view's `FixedValues`, so the vocabulary is worth naming, but the column is read and written across
+`business`, `logistics` and the delta view's `[]int64` fixed values — retyping a table that
+central is a much larger change than this one, and it buys less, since `Status` is not the
+cross-module discriminator that `Type` is.
+
+Cost: `CashMovementType` is a named type inside a `types` folder, which the frontend interface
+generator reads. It mapped unknown identifiers to `I<Name>` and then degraded them to `any`, so
+`ICashBankMovement.type` would have silently dropped from `number` to `any` on the next
+`sync_struct_interfaces` run. The generator now resolves named basic types to their underlying
+TypeScript type (`scripts/generators/sync_struct_interfaces.go`, covered by
+`named_basic_test.go`) — a general fix, since the plan puts more logic and types into `*/types`.
 

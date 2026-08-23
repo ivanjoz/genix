@@ -10,10 +10,6 @@ import (
 	"encoding/json"
 )
 
-// supplyProductStatus mirrors logistics.SupplyProductStatus: a supply/material is a
-// Product row with Status = 2. Only a supply can be acquired as an asset.
-const supplyProductStatus int8 = 2
-
 // GetAssets returns the asset register using the delta-cache protocol. Depreciation is not
 // generated here — a list read does not write. The page calls PostAssetDepreciationRun first.
 func GetAssets(req *core.HandlerArgs) core.HandlerResponse {
@@ -88,7 +84,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se encontró el insumo indicado.")
 	}
 	supplyProduct := supplyProducts[0]
-	if supplyProduct.Status != supplyProductStatus {
+	if supplyProduct.Status != businessTypes.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
 

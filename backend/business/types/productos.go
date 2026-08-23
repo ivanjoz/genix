@@ -21,6 +21,20 @@ type ProductPresentation struct {
 	Status          int8   `ms:"s" json:"ss,omitempty"`
 }
 
+// Product.Status is the row's role in the catalog, and it is enumerated in the delta view's
+// FixedValues below — so these three are the only legal values, and adding one means changing
+// the schema. A supply/material shares the catalog, the stock engine and the movement ledger
+// with an ordinary product; the status is the only thing that keeps it out of every
+// product-facing flow, since those all pin Active.
+//
+// An asset is a supply whose DepreciationMonths > 0. Nothing else distinguishes it here — the
+// accounting overlay lives in app/accounting.
+const (
+	ProductStatusInactive int8 = 0 // Evicted / soft-deleted; delta syncs ship these as removals.
+	ProductStatusActive   int8 = 1
+	ProductStatusSupply   int8 = 2
+)
+
 type Product struct {
 	db.TableStruct[ProductTable, Product]
 	CompanyID     int32   `json:",omitempty"`

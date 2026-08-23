@@ -21,10 +21,6 @@ var expenseCategoryIDs = map[int8]bool{
 	6: true, 7: true, 8: true, 9: true, 10: true,
 }
 
-// movementTypeExpensePayment is the CashBankMovement.Type used for expense payments
-// (outflow). Mirrors `cajaMovimientoTipos` id 9 on the frontend.
-const movementTypeExpensePayment int8 = 9
-
 // validateExpenseCommon checks the fields shared by Expense and ExpenseScheduled.
 func validateExpenseCommon(amount int32, currencyType, categoryID int8) error {
 	if amount <= 0 {
@@ -496,7 +492,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		DocumentID:  int64(expense.ID),
 		ReferenceID: expense.ExpenseScheduledID,
 		Date:        body.Date,
-		Type:        movementTypeExpensePayment,
+		Type:        types.CashMovementTypeExpensePayment,
 		Amount:      movementAmount,
 		FinalAmount: 0,
 	}

@@ -86,6 +86,7 @@ func findProjectRoot() (string, error) {
 
 func collectBackendStructs(projectRoot string) (map[string][]backendStruct, error) {
 	structsByName := map[string][]backendStruct{}
+	namedBasicTypes := map[string]string{}
 	backendRoot := filepath.Join(projectRoot, "backend")
 
 	err := filepath.WalkDir(backendRoot, func(path string, entry os.DirEntry, walkErr error) error {
@@ -100,26 +101,63 @@ func collectBackendStructs(projectRoot string) (map[string][]backendStruct, erro
 		}
 
 		folderName := filepath.Base(filepath.Dir(filepath.Dir(path)))
-		fileStructs, err := parseBackendStructFile(path, folderName)
+		fileStructs, fileNamedBasics, err := parseBackendStructFile(path, folderName)
 		if err != nil {
 			return err
 		}
 		for _, backendStruct := range fileStructs {
 			structsByName[backendStruct.Name] = append(structsByName[backendStruct.Name], backendStruct)
 		}
+		for namedType, underlyingType := range fileNamedBasics {
+			namedBasicTypes[namedType] = underlyingType
+		}
 		return nil
 	})
-	return structsByName, err
-}
-
-func parseBackendStructFile(path string, folderName string) ([]backendStruct, error) {
-	fileSet := token.NewFileSet()
-	parsedFile, err := parser.ParseFile(fileSet, path, nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 
+	// Second pass: a named type over a basic one (`type CashMovementType int8`) parses as an
+	// unknown identifier, which would degrade its field to `any`. The declaration can live in a
+	// different file of the same types folder than the struct using it, so this can only be
+	// resolved once every file has been walked.
+	for _, structsWithName := range structsByName {
+		for structIndex := range structsWithName {
+			fields := structsWithName[structIndex].Fields
+			for fieldIndex := range fields {
+				fields[fieldIndex].TSType = resolveNamedBasicType(fields[fieldIndex].TSType, namedBasicTypes)
+			}
+		}
+	}
+	return structsByName, nil
+}
+
+// resolveNamedBasicType rewrites `ICashMovementType` (and its slice form) to the TypeScript
+// type of whatever basic type it was declared over. Anything not in the map is left alone, so
+// genuine struct references still resolve through the existing interface lookup.
+func resolveNamedBasicType(typeScriptType string, namedBasicTypes map[string]string) string {
+	baseType, suffix := strings.TrimSuffix(typeScriptType, "[]"), ""
+	if baseType != typeScriptType {
+		suffix = "[]"
+	}
+	if !strings.HasPrefix(baseType, "I") {
+		return typeScriptType
+	}
+	if underlyingType, isNamedBasic := namedBasicTypes[strings.TrimPrefix(baseType, "I")]; isNamedBasic {
+		return identToTypeScript(underlyingType) + suffix
+	}
+	return typeScriptType
+}
+
+func parseBackendStructFile(path string, folderName string) ([]backendStruct, map[string]string, error) {
+	fileSet := token.NewFileSet()
+	parsedFile, err := parser.ParseFile(fileSet, path, nil, parser.ParseComments)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	var structs []backendStruct
+	namedBasicTypes := map[string]string{}
 	astutil.Apply(parsedFile, func(cursor *astutil.Cursor) bool {
 		typeSpec, ok := cursor.Node().(*ast.TypeSpec)
 		if !ok {
@@ -127,6 +165,11 @@ func parseBackendStructFile(path string, folderName string) ([]backendStruct, er
 		}
 		structType, ok := typeSpec.Type.(*ast.StructType)
 		if !ok {
+			// `type CashMovementType int8` — record it so fields using it map to `number`
+			// instead of falling through to `any`.
+			if underlyingIdent, isIdent := typeSpec.Type.(*ast.Ident); isIdent {
+				namedBasicTypes[typeSpec.Name.Name] = underlyingIdent.Name
+			}
 			return true
 		}
 
@@ -155,7 +198,7 @@ func parseBackendStructFile(path string, folderName string) ([]backendStruct, er
 		return false
 	}, nil)
 
-	return structs, nil
+	return structs, namedBasicTypes, nil
 }
 
 func syncFrontendInterfaces(projectRoot string, structsByName map[string][]backendStruct) (int, error) {

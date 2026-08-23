@@ -18,7 +18,6 @@ const (
 )
 
 // Tipo del movimiento de cashBank para pagos a proveedor (Pago Proveedor).
-const cajaMovimientoTipoPagoProveedor int8 = 6
 
 // Body esperado para PurchaseOrderActionPay.
 type purchaseOrderPayPayload struct {
@@ -366,7 +365,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		movimiento := financeTypes.InternalCashMovement{
 			CashBankID: payload.CashBankID,
 			DocumentID: int64(orderCurrent.ID),
-			Type:       cajaMovimientoTipoPagoProveedor,
+			Type:       financeTypes.CashMovementTypeSupplierPayment,
 			Amount:     -payload.Amount,
 		}
 		if err := finance.ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {

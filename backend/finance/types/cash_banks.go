@@ -60,6 +60,30 @@ func (e CashBankTable) GetSchema() db.TableSchema {
 	}
 }
 
+// CashMovementType is the CashBankMovement.Type vocabulary — one owned enum instead of the
+// private copy each module used to keep. It is the discriminator that separates movements
+// sharing a DocumentID: an asset payment and an expense payment can both carry the same
+// document id, so the type is the only thing that tells them apart when summing what was paid.
+//
+// The ids are fixed by the frontend's cajaMovimientoTipos list
+// (frontend/routes/finance/cash-banks/cajas.svelte.ts) and are persisted, so they must not be
+// renumbered. Every value is listed even where the backend never writes it, so a new module
+// cannot silently reuse a taken number.
+type CashMovementType int8
+
+const (
+	CashMovementTypeUnspecified     CashMovementType = 1
+	CashMovementTypePhysicalCount   CashMovementType = 2
+	CashMovementTypeTransfer        CashMovementType = 3
+	CashMovementTypeWithdrawal      CashMovementType = 4
+	CashMovementTypeLoss            CashMovementType = 5
+	CashMovementTypeSupplierPayment CashMovementType = 6
+	CashMovementTypeCollection      CashMovementType = 7
+	CashMovementTypeSaleCollection  CashMovementType = 8
+	CashMovementTypeExpensePayment  CashMovementType = 9
+	CashMovementTypeAssetPayment    CashMovementType = 10
+)
+
 type CashBankMovement struct {
 	db.TableStruct[CashBankMovementTable, CashBankMovement]
 	CompanyID     int32 `json:",omitempty"`
@@ -69,7 +93,7 @@ type CashBankMovement struct {
 	DocumentID    int64 `json:",omitempty"` // Sale Order ID / ExpenseID
 	ReferenceID   int32 `json:",omitempty"` //
 	Date          int16
-	Type          int8 `json:",omitempty"`
+	Type          CashMovementType `json:",omitempty"`
 	FinalAmount   int32
 	Amount        int32
 	Created       int32 `json:",omitempty"`
@@ -85,7 +109,7 @@ type CashBankMovementTable struct {
 	DocumentID    db.Col[CashBankMovementTable, int64]
 	ReferenceID   db.Col[CashBankMovementTable, int32]
 	Date          db.Col[CashBankMovementTable, int16]
-	Type          db.Col[CashBankMovementTable, int8]
+	Type          db.Col[CashBankMovementTable, CashMovementType]
 	FinalAmount   db.Col[CashBankMovementTable, int32]
 	Amount        db.Col[CashBankMovementTable, int32]
 	Created       db.Col[CashBankMovementTable, int32]
@@ -157,7 +181,7 @@ type InternalCashMovement struct {
 	DocumentID    int64
 	ReferenceID   int32 // Optional: e.g. the originating ExpenseScheduled.ID for expense payments.
 	Date          int16 // Optional: movement date; falls back to the request's effective date if 0.
-	Type          int8
+	Type          CashMovementType
 	Amount        int32
 	FinalAmount   int32 // Optional: calculated if 0
 }

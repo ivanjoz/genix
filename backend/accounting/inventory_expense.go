@@ -71,7 +71,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	if len(supplyProducts) == 0 {
 		return req.MakeErr("No se encontró el insumo indicado.")
 	}
-	if supplyProducts[0].Status != supplyProductStatus {
+	if supplyProducts[0].Status != businessTypes.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
 
