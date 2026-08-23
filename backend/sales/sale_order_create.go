@@ -1,8 +1,7 @@
 package sales
 
 import (
-	"app/business"
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
@@ -266,14 +265,14 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID i
 		return 0, core.Err("ClientInfo.Name es obligatorio.")
 	}
 
-	clientPersonType := businessTypes.PersonTypeNatural
+	clientPersonType := business.PersonTypeNatural
 	if clientRegistryNumber != "" {
 		// Preserve the provided registry number so identity matching can reuse existing client rows.
-		clientPersonType = businessTypes.PersonTypeCompany
+		clientPersonType = business.PersonTypeCompany
 	}
 
-	clientProviders := []businessTypes.ClientProvider{{
-		Type:           businessTypes.ClientProviderTypeClient,
+	clientProviders := []business.ClientProvider{{
+		Type:           business.ClientProviderTypeClient,
 		Name:           clientName,
 		RegistryNumber: clientRegistryNumber,
 		PersonType:     clientPersonType,

@@ -1,4 +1,4 @@
-package webpage
+package pagebuilder
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"app/agent/llm"
-	"app/business"
+	business "app/business/types"
 	"app/core"
 )
 

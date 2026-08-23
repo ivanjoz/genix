@@ -8,7 +8,7 @@
 // this loop needs is declared as the Sink interface below (satisfied
 // structurally by *agent.AgentSession), so this package never imports agent
 // and there is no import cycle.
-package webpage
+package pagebuilder
 
 import (
 	"context"

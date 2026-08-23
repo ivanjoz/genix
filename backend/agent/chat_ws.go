@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"app/agent/pagebuilder"
 	"app/agent/routing"
-	"app/agent/webpage"
 	"app/core"
 )
 
@@ -74,7 +74,7 @@ type ChatAgentError struct {
 // turn generated, keyed by sprite id, to merge into the target SectionData.
 type ChatAgentSections struct {
 	ModeID    int
-	Sections  []webpage.SectionEdit
+	Sections  []pagebuilder.SectionEdit
 	Svgs      map[string]string
 	Message   string
 	Summary   string
@@ -227,7 +227,7 @@ func (s *AgentSession) sendError(msg string) {
 
 // PushStatus and PushReply expose the session's event helpers to the webpage
 // agentic loop, which lives in a sub-package and can't reach the unexported
-// ones. Together they satisfy webpage.Sink.
+// ones. Together they satisfy pagebuilder.Sink.
 func (s *AgentSession) PushStatus(state, label string, step, maxSteps int) {
 	s.pushStatus(state, label, step, maxSteps)
 }
@@ -236,7 +236,7 @@ func (s *AgentSession) PushReply(message, summary string, _ int64) error {
 	return s.completeTurn(message, summary, 0)
 }
 
-func (s *AgentSession) PushSections(modeID int, sections []webpage.SectionEdit, svgs map[string]string, message, summary string, _ int64) error {
+func (s *AgentSession) PushSections(modeID int, sections []pagebuilder.SectionEdit, svgs map[string]string, message, summary string, _ int64) error {
 	timestamp, err := saveAgentMessage(s, message, summary, 0)
 	if err != nil {
 		return err

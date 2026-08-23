@@ -1,10 +1,10 @@
 package accounting
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
-	financeTypes "app/finance/types"
+	finance "app/finance/types"
 	logistics "app/logistics/types"
 	"encoding/json"
 )
@@ -59,7 +59,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 
 	// The catalog row has to be a supply. Buying a sellable product is a purchase order,
 	// which has its own reception flow with lots and differences.
-	supplyProducts := []businessTypes.Product{}
+	supplyProducts := []business.Product{}
 	supplyQuery := db.Query(&supplyProducts)
 	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Status).
 		CompanyID.Equals(req.User.CompanyID).ID.Equals(payload.ProductID)
@@ -70,18 +70,18 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	if len(supplyProducts) == 0 {
 		return req.MakeErr("No se encontró el insumo indicado.")
 	}
-	if supplyProducts[0].Status != businessTypes.ProductStatusSupply {
+	if supplyProducts[0].Status != business.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
 
 	currentTimestamp := core.SUnixTime()
 	expenseDate := core.If(payload.Date > 0, payload.Date, core.FechaUnix())
 
-	inventoryExpense := financeTypes.Expense{
+	inventoryExpense := finance.Expense{
 		CompanyID:    req.User.CompanyID,
 		Name:         payload.Name,
 		Description:  payload.Description,
-		Type:         financeTypes.ExpenseTypeInventory,
+		Type:         finance.ExpenseTypeInventory,
 		CategoryID:   core.If(payload.CategoryID > 0, payload.CategoryID, int8(4)),
 		SupplierID:   payload.SupplierID,
 		ProductID:    payload.ProductID,
@@ -98,7 +98,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		CreatedBy:    req.User.ID,
 	}
 
-	expenseRecords := []financeTypes.Expense{inventoryExpense}
+	expenseRecords := []finance.Expense{inventoryExpense}
 	if insertError := db.Insert(&expenseRecords); insertError != nil {
 		return req.MakeErr("Error al registrar el gasto de inventario.", insertError)
 	}

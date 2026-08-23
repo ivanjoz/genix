@@ -1,8 +1,8 @@
 package accounting
 
 import (
-	accountingTypes "app/accounting/types"
-	businessTypes "app/business/types"
+	"app/accounting/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
 	logistics "app/logistics/types"
@@ -16,14 +16,14 @@ func GetAssets(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	assets := []accountingTypes.Asset{}
+	assets := []types.Asset{}
 	assetQuery := db.Query(&assets).CompanyID.Equals(req.User.CompanyID)
 	// Active, fully depreciated and disposed assets all stay on the register; only a removed
 	// row (status 0) leaves it, and the delta carries it so the client can evict it.
 	assetQuery.Delta(updatedSince,
-		int64(accountingTypes.AssetStatusActive),
-		int64(accountingTypes.AssetStatusFullyDepreciated),
-		int64(accountingTypes.AssetStatusDisposed),
+		int64(types.AssetStatusActive),
+		int64(types.AssetStatusFullyDepreciated),
+		int64(types.AssetStatusDisposed),
 	)
 
 	if queryError := assetQuery.Exec(); queryError != nil {
@@ -70,7 +70,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 1. The catalog row has to exist, be a supply, and be depreciable — an asset that does
 	//    not depreciate is just stock, and belongs in an inventory expense instead.
-	supplyProducts := []businessTypes.Product{}
+	supplyProducts := []business.Product{}
 	supplyQuery := db.Query(&supplyProducts)
 	supplyQuery.Select(
 		supplyQuery.ID, supplyQuery.Name, supplyQuery.DepreciationMonths, supplyQuery.Status,
@@ -83,7 +83,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se encontró el insumo indicado.")
 	}
 	supplyProduct := supplyProducts[0]
-	if supplyProduct.Status != businessTypes.ProductStatusSupply {
+	if supplyProduct.Status != business.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
 
@@ -127,10 +127,10 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 3. The asset rows. They are inserted before the stock movement so each movement can
 	//    carry its own asset as DocumentID — the ORM assigns the IDs during the insert.
-	newAssets := []accountingTypes.Asset{}
-	makeAsset := func(serialNumber string, quantity int32) accountingTypes.Asset {
+	newAssets := []types.Asset{}
+	makeAsset := func(serialNumber string, quantity int32) types.Asset {
 		purchaseAmount := payload.PurchaseAmount * quantity
-		return accountingTypes.Asset{
+		return types.Asset{
 			CompanyID:    req.User.CompanyID,
 			ProductID:    payload.ProductID,
 			SerialNumber: serialNumber,
@@ -141,13 +141,13 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 			SupplierID:   payload.SupplierID,
 			// A donation owes nothing, so it is never payable; anything else starts pending.
 			PurchaseAmount:     purchaseAmount,
-			PaymentStatus:      core.If(purchaseAmount > 0, accountingTypes.AssetPaymentPending, accountingTypes.AssetPaymentNone),
+			PaymentStatus:      core.If(purchaseAmount > 0, types.AssetPaymentPending, types.AssetPaymentNone),
 			DueDate:            core.If(payload.DueDate > 0, payload.DueDate, acquisitionDate),
 			AcquisitionDate:    acquisitionDate,
 			AcquisitionValue:   payload.AcquisitionValue * quantity,
 			DepreciationMonths: depreciationMonths,
 			CurrencyType:       payload.CurrencyType,
-			Status:             accountingTypes.AssetStatusActive,
+			Status:             types.AssetStatusActive,
 			Updated:            currentTimestamp,
 			UpdatedBy:          req.User.ID,
 			Created:            currentTimestamp,
@@ -238,8 +238,8 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 	asset.Updated = core.SUnixTime()
 	asset.UpdatedBy = req.User.ID
 
-	assetTable := db.TableOf[accountingTypes.Asset]()
-	assetRecords := []accountingTypes.Asset{asset}
+	assetTable := db.TableOf[types.Asset]()
+	assetRecords := []types.Asset{asset}
 	if updateError := db.Update(&assetRecords,
 		assetTable.DisposalDate, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
 	); updateError != nil {
@@ -294,8 +294,8 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 	asset.Updated = core.SUnixTime()
 	asset.UpdatedBy = req.User.ID
 
-	assetTable := db.TableOf[accountingTypes.Asset]()
-	assetRecords := []accountingTypes.Asset{asset}
+	assetTable := db.TableOf[types.Asset]()
+	assetRecords := []types.Asset{asset}
 	// Status rides along for the delta view's composite key, as in PostAssetPayment.
 	if updateError := db.Update(&assetRecords,
 		assetTable.WarehouseID, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
@@ -306,16 +306,16 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(assetRecords[0])
 }
 
-func loadAsset(companyID, assetID int32) (accountingTypes.Asset, error) {
-	assets := []accountingTypes.Asset{}
+func loadAsset(companyID, assetID int32) (types.Asset, error) {
+	assets := []types.Asset{}
 	assetQuery := db.Query(&assets)
 	assetQuery.Select().CompanyID.Equals(companyID).ID.Equals(assetID)
 
 	if queryError := assetQuery.Exec(); queryError != nil {
-		return accountingTypes.Asset{}, core.Err("Error al obtener el activo.", queryError)
+		return types.Asset{}, core.Err("Error al obtener el activo.", queryError)
 	}
 	if len(assets) == 0 {
-		return accountingTypes.Asset{}, core.Err("No se encontró el activo.")
+		return types.Asset{}, core.Err("No se encontró el activo.")
 	}
 	return assets[0], nil
 }

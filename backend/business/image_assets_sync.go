@@ -17,7 +17,6 @@ import (
 )
 
 const imageAssetsRawBaseURL = "https://raw.githubusercontent.com/ivanjoz/genix-assets/main/docs/images"
-const imageAssetCategoryGroupID int32 = 1
 
 var imageAssetCategoryPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -140,7 +139,7 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (map[string]types.ImageAssetCategory, int, error) {
 	storedCategories := []types.ImageAssetCategory{}
 	query := db.Query(&storedCategories)
-	if err := query.GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
+	if err := query.GroupID.Equals(types.ImageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, 0, fmt.Errorf("query image asset categories: %w", err)
 	}
 
@@ -162,7 +161,7 @@ func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (ma
 			continue
 		}
 		categoriesToInsert = append(categoriesToInsert, types.ImageAssetCategory{
-			GroupID: imageAssetCategoryGroupID,
+			GroupID: types.ImageAssetCategoryGroupID,
 			Name:    categorySummary.Name,
 			Updated: updated,
 		})
@@ -308,7 +307,7 @@ func buildImageAssetRecords(
 		// Bigrams index the Spanish keywords for the frontend local search.
 		spanishSearchText := strings.Join(spanishRow.keywords, " ")
 		records = append(records, types.ImageAsset{
-			GroupID:            imageAssetCategoryGroupID,
+			GroupID:            types.ImageAssetCategoryGroupID,
 			ID:                 imageID,
 			CategoryID:         categoryID,
 			Description:        englishRow.description,

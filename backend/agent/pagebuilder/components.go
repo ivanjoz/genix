@@ -1,4 +1,4 @@
-package webpage
+package pagebuilder
 
 import (
 	_ "embed"

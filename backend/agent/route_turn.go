@@ -13,8 +13,8 @@ import (
 	"app/agent/embedding"
 	"app/agent/knowledge"
 	"app/agent/llm"
+	"app/agent/pagebuilder"
 	"app/agent/routing"
-	"app/agent/webpage"
 	"app/core"
 )
 
@@ -428,25 +428,25 @@ func (s *AgentSession) runBuilderDiscoveryRoute(ctx context.Context, message Cha
 		)
 	}
 
-	modeID := webpage.ModeBuildPage
-	routedOperation := webpage.RoutedOperationBuild
+	modeID := pagebuilder.ModeBuildPage
+	routedOperation := pagebuilder.RoutedOperationBuild
 	if plan.Builder.ContextScope == routing.BuilderScopeSelectedSection {
-		modeID = webpage.ModeEditSection
-		routedOperation = webpage.RoutedOperationEdit
+		modeID = pagebuilder.ModeEditSection
+		routedOperation = pagebuilder.RoutedOperationEdit
 	} else {
 		switch plan.Builder.Operation {
 		case routing.BuilderEditSection:
-			routedOperation = webpage.RoutedOperationEdit
+			routedOperation = pagebuilder.RoutedOperationEdit
 		case routing.BuilderAddSection:
-			routedOperation = webpage.RoutedOperationAdd
+			routedOperation = pagebuilder.RoutedOperationAdd
 		case routing.BuilderRemoveSection:
-			routedOperation = webpage.RoutedOperationRemove
+			routedOperation = pagebuilder.RoutedOperationRemove
 		case routing.BuilderReorderSection:
-			routedOperation = webpage.RoutedOperationReorder
+			routedOperation = pagebuilder.RoutedOperationReorder
 		}
 	}
 	return s.completeExecutionFailure(
-		webpage.RunTurn(ctx, s, modeID, routedOperation, userText, message.ModelHash, liveContext.Content),
+		pagebuilder.RunTurn(ctx, s, modeID, routedOperation, userText, message.ModelHash, liveContext.Content),
 		plan.ResponseLanguage,
 	)
 }

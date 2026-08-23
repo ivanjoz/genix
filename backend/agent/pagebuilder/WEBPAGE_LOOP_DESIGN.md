@@ -165,7 +165,7 @@ The toolset registered every iteration: `generate_svg`, `find_image`,
 
 ### `find_image` — library search + LLM-select subagent
 - **Args:** `{ keywords, intention?, ratio? }`.
-- `business.FindImageCandidates(keywords, 10)` ranks matches (with a fallback so there
+- `business/types.FindImageCandidates(keywords, 10)` ranks matches (with a fallback so there
   is always at least one candidate). When >1, the select subagent (`imageSelectSystemPrompt`,
   no reasoning) picks the best index for the intention + ratio; on any failure it
   falls back to index 0.
@@ -212,7 +212,7 @@ Frontend (`[pageID]/+page.svelte` `applyAgentSections`):
 ## 7. File layout
 
 ```
-backend/agent/webpage/
+backend/agent/pagebuilder/
 ├── WEBPAGE_LOOP_DESIGN.md        this file — loop design & rationale
 ├── CONTENT_PRESERVATION_PLAN.md  intent classifier + deterministic verifier
 ├── loop.go         RunTurn, the iteration loop, both gates, apply_sections, subagent runner

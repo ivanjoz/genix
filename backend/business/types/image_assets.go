@@ -46,3 +46,5 @@ func (e ImageAssetTable) GetSchema() db.TableSchema {
 		},
 	}
 }
+
+const ImageAssetCategoryGroupID int32 = 1

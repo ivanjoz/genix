@@ -48,7 +48,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 		query := db.Query(&storedAssets)
 		// Image assets have no status, so Delta() constrains nothing but the watermark.
 		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated, query.UpdatedVersion).
-			GroupID.Equals(imageAssetCategoryGroupID).
+			GroupID.Equals(types.ImageAssetCategoryGroupID).
 			Delta(imagesUpdatedSince)
 		if err := query.Exec(); err != nil {
 			return err
@@ -70,7 +70,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 		storedCategories := []types.ImageAssetCategory{}
 		query := db.Query(&storedCategories)
 		query.Select(query.ID, query.Name, query.Updated, query.UpdatedVersion).
-			GroupID.Equals(imageAssetCategoryGroupID).
+			GroupID.Equals(types.ImageAssetCategoryGroupID).
 			Delta(categoriesUpdatedSince)
 		if err := query.Exec(); err != nil {
 			return err
@@ -110,7 +110,7 @@ func GetImageAssetTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Image assets share the single group partition and carry no Status column,
 	// so they index into status group 0.
-	matches, err := db.SearchTextIDs[types.ImageAsset](imageAssetCategoryGroupID, query, 0, limit)
+	matches, err := db.SearchTextIDs[types.ImageAsset](types.ImageAssetCategoryGroupID, query, 0, limit)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de imágenes:", err)
 	}

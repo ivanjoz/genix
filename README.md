@@ -85,7 +85,7 @@ A serializer (`backend/libs/colbin/`) that replaced CBOR project-wide. Transpose
 ### Agentic capabilities (backend-driven)
 The agent loop runs on the backend. A user sends a request from an in-app chat widget; the backend runs an LLM tool-calling loop (OpenRouter) that either drives the live ERP page or authors website HTML. Two loops share the infrastructure:
 - **ERP chat/navigation loop** (`backend/agent/chat_loop.go`) — tools `get_page`, `get_menu`, `navigate`, `invoke_batch`, and a `finish` terminator; bounded iterations with tool-result truncation and rolling context windows. Transport is SSE + POST per browser tab; history persisted in ScyllaDB with per-user token accounting.
-- **Website-building loop** (`backend/agent/webpage/`) — an intent classifier with a relevance gate, a deterministic content-preservation gate (diffs old vs. new HTML as ASTs, enforcing a keep/add/modify/replace policy per text/image/icon), an aesthetic critic, plus SVG-generation and image-selection subagents.
+- **Website-building loop** (`backend/agent/pagebuilder/`) — an intent classifier with a relevance gate, a deterministic content-preservation gate (diffs old vs. new HTML as ASTs, enforcing a keep/add/modify/replace policy per text/image/icon), an aesthetic critic, plus SVG-generation and image-selection subagents.
 - **External HTTP API** (`POST /agent`) lets external agents (e.g. Claude Code) drive the ERP directly.
 
 ### Agent-navigable UI components

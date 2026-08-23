@@ -1,30 +1,29 @@
-## The stock movement engine lives in `logistics/types`, and the `sales` copy of its key packer is gone
+## The last two cross-module calls move into `business/types`, and `agent/webpage` is renamed
 
-**Context** — `ApplyMovimientos` is the only writer of `ProductStockV2` and the movement ledger,
-and `sales` (delivery) and `accounting` (asset acquisition, inventory expense) both have to call
-it. Both reached it by importing `app/logistics` (V2, V4). The cost of that missing seam was
-already visible: `sales/sale_order_create.go` carried `packProductStockIDForSale`, a hand copy of
-`logistics.packProductStockID` — the ORM's `KeyIntPacking` formula for `ProductStockV2`,
-duplicated in two places where it must agree with the schema. Its comment justified the copy with
-a circular dependency that did not exist: `logistics` imports only `business/types`, never
-`business`.
+**Context** — two violations remained. `sales` imported `app/business` for
+`SaveClientProviders` (it resolves or creates the buyer while recording a sale), and
+`agent/webpage` imported it for `FindImageCandidates` (the page-builder's image picker).
 
-**Decision** — `logistics/product-stock-movement.go:262`–end plus all of
-`logistics/stock-reprocess.go` moved into `logistics/types/stock_movement_apply.go`. The
-duplicate in `sales` is deleted and calls `logistics.PackProductStockID`.
+**Decision** — `SaveClientProviders` plus its private validators
+(`companyRegistryNumberPattern`, `isValidEmailAddress`, used nowhere else) moved to
+`business/types/client_provider_save.go`. The whole of `image_assets_agent.go` moved to
+`business/types/image_assets_agent.go`. `imageAssetCategoryGroupID` moved with it into
+`business/types/image_assets.go` and had to be **exported** as `ImageAssetCategoryGroupID`,
+because six call sites in the `business` body still read it.
 
-**Rationale** — the recalc moved with the engine (not left behind) because the two share one
-per-company write lock: splitting them would have forced `getApplyMovimientosCompanyLock` to be
-exported for no reason other than the file boundary. `RecalcProductStockByMovements` is called
-from `exec`, a composition root, so exporting it costs nothing.
+Separately, `agent/webpage` is now `agent/pagebuilder`.
 
-One correction to the plan's Q3 reasoning: moving the recalc keeps the **lock** private, but
-`packProductStockID` had to be exported as `PackProductStockID` regardless, because `sales` needs
-the packed key for stock validation — which is precisely why the duplicate existed. Trading one
-export for one deleted copy of a schema-coupled formula is the right side of that trade; the plan
-was wrong to imply both could stay private.
+**Rationale** — `imageAssetCategoryGroupID` is a schema constant: it names the group partition
+every image asset lives in, so it belongs next to the table it partitions rather than in the sync
+job that happened to declare it. Exporting it is the one avoidable-looking cost of the move, and
+it is the honest one: the constant is genuinely shared between the module body and the types
+package now.
 
-**Cost** — `logistics/types` is now the largest package in the module by a wide margin, most of it
-the engine rather than type declarations. The filename and a file-level comment carry the
-explanation; the folder name does not.
+The rename removes a real trap. `app/agent/webpage` (the page-builder loop) and `app/webpage`
+(the storefront module) were two unrelated packages with the same name. Nothing imported both, so
+it compiled — but any file that ever needed both would have required an alias, and `rg webpage`
+spanned two unrelated domains. `pagebuilder` says what it is.
+
+**All six violations from `MODULE_BOUNDARIES_PLAN.md` are now closed.** The only packages that
+import a module body are the composition roots: root `main`, `exec` and `tests/sample_records`.
 

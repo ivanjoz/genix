@@ -349,7 +349,7 @@ files:
     supports: [capability.configure-sales-parameters]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:7e35116bcbba123f82b1e36461bdeeb961b34318f1a2c3e84ef53c4330f7f2b2
+    hash: sha256:ddf16aaeca22e2b0f5a90cc30e7c7d810db8ac6f8f343ae14a3008db77f424e6
     supports: [capability.assign-client, capability.set-payment-delivery, rules, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model
@@ -357,7 +357,7 @@ files:
     supports: [concepts, capability.set-payment-delivery, rules]
   - path: backend/business/client_provider.go
     role: business-logic
-    hash: sha256:db76017c6c58931e11f5edd085a447ba767cfaafe3a66f51c6006cbf3aa312ce
+    hash: sha256:28d9246dc7396fd2fb572fc01703b17512350c56a76965b593b4eafbcc86caba
     supports: [capability.assign-client]
   - path: backend/finance/types/cash_movement_apply.go
     role: business-logic

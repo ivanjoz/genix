@@ -1,7 +1,10 @@
-package business
+// Image lookup for the page-builder agent. This is business logic in a `types` package on
+// purpose: `agent/pagebuilder` needs image candidates, and a module body may not import another
+// module body (see backend/docs/MODULE_BOUNDARIES.md).
+
+package types
 
 import (
-	"app/business/types"
 	"app/db"
 	"net/url"
 	"strconv"
@@ -32,20 +35,20 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 	if limit <= 0 {
 		limit = 10
 	}
-	assets := []types.ImageAsset{}
+	assets := []ImageAsset{}
 	keywords = strings.TrimSpace(keywords)
 	if len(keywords) >= 2 {
 		// Image assets share one group partition and have no Status column, so
 		// they index into status group 0. SearchText hydrates `assets` ordered
 		// by relevance (best match first).
-		if _, err := db.SearchText[types.ImageAsset](&assets, imageAssetCategoryGroupID, keywords, 0, limit); err != nil {
+		if _, err := db.SearchText[ImageAsset](&assets, ImageAssetCategoryGroupID, keywords, 0, limit); err != nil {
 			return nil, err
 		}
 	}
 	if len(assets) == 0 {
 		// Fallback: return any images so find_image never comes back empty.
 		query := db.Query(&assets)
-		if err := query.GroupID.Equals(imageAssetCategoryGroupID).Limit(int32(limit)).Exec(); err != nil {
+		if err := query.GroupID.Equals(ImageAssetCategoryGroupID).Limit(int32(limit)).Exec(); err != nil {
 			return nil, err
 		}
 	}
@@ -69,9 +72,9 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 
 // imageCategoryNames loads the CategoryID→Name map used to build public URLs.
 func imageCategoryNames() (map[int16]string, error) {
-	categories := []types.ImageAssetCategory{}
+	categories := []ImageAssetCategory{}
 	query := db.Query(&categories)
-	if err := query.Select(query.ID, query.Name).GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
+	if err := query.Select(query.ID, query.Name).GroupID.Equals(ImageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, err
 	}
 	names := make(map[int16]string, len(categories))
