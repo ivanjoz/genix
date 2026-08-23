@@ -20,12 +20,20 @@ import { ClientProviderService, ClientProviderType } from '../../business/custom
 import {
   createEmptyProviderSupplyRow,
   normalizeProviderSupplyRows,
+  ProductSupplyService,
   type IProductSupplyProviderRow,
 } from '../purchase-management/supply-management.svelte';
-import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.svelte';
+import {
+  depreciationTerms,
+  SUPPLY_PRODUCT_STATUS,
+  SupplyMaterialService,
+  type ISupplyMaterial,
+} from './supply-material.svelte';
 
   // Insumos catalog (master data) + Marcas list for the BrandID picker.
   const supplies = new SupplyMaterialService(true);
+  // Minimum stock and provider rows live in product_supply, keyed by ProductID.
+  const supplyConfigs = new ProductSupplyService(true);
   // ListaID=2 corresponds to "Marcas" (same convention used by the productos page).
   const listas = new SharedListsService([2], true);
   // Reuse the shared provider catalog so the picker mirrors the gestion-compras flow.
@@ -33,6 +41,10 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
 
   let filterText = $state("");
   let supplyForm = $state({} as ISupplyMaterial);
+
+  const depreciationOptions = $derived(
+    depreciationTerms.map(term => ({ id: term.id, name: tr(term.label) })),
+  );
 
   // Lookup brand name by ID for the table cell — reuses the same shared list as productos.
   const brandLabelById = $derived.by(() => {
@@ -67,6 +79,11 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       header: "Brand|Marca",
       getValue: (record) => brandLabelById.get(record.BrandID) || "",
       mobile: { order: 4, css: "col-span-12", labelLeft: "Marca:" },
+    },
+    {
+      header: "Type|Tipo",
+      getValue: (record) => record.DepreciationMonths > 0 ? tr("Asset|Activo") : tr("Consumable|Consumible"),
+      mobile: { order: 6, css: "col-span-12", labelLeft: "Tipo:" },
     },
     {
       header: "Price|Precio",
@@ -188,7 +205,9 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       hideNameOnMobile
       css="col-span-3 ml-auto"
       onClick={() => {
-        supplyForm = { ss: 1, ProviderSupply: [] } as ISupplyMaterial;
+        supplyForm = {
+          ss: SUPPLY_PRODUCT_STATUS, DepreciationMonths: 0, ProviderSupply: [],
+        } as unknown as ISupplyMaterial;
         ui.openSideLayer(1);
       }}
     />
@@ -205,9 +224,11 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
       onRowClick={(record) => {
         // Clone so editing the form doesn't mutate the cached service record.
         // Normalize ProviderSupply so the layer only renders meaningful rows on load.
+        const supplyConfig = supplyConfigs.recordsMap.get(record.ID);
         supplyForm = {
           ...record,
-          ProviderSupply: normalizeProviderSupplyRows(record.ProviderSupply || []),
+          MinimunStock: supplyConfig?.MinimunStock || 0,
+          ProviderSupply: normalizeProviderSupplyRows(supplyConfig?.ProviderSupply || []),
         };
         ui.openSideLayer(1);
       }}
@@ -274,6 +295,14 @@ import { SupplyMaterialService, type ISupplyMaterial } from './supply-material.s
         keyId="ID"
         keyName="Name"
         options={listas.ListaRecordsMap.get(2) || []}
+      />
+      <SearchSelect label="Depreciation|Depreciación"
+        saveOn={supplyForm}
+        css="col-span-24 md:col-span-12"
+        save="DepreciationMonths"
+        keyId="id"
+        keyName="name"
+        options={depreciationOptions}
       />
       <Input label="Description|Descripción"
         saveOn={supplyForm}

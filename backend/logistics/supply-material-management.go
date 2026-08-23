@@ -1,129 +1,207 @@
 package logistics
 
 import (
+	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
 	logisticsTypes "app/logistics/types"
 	"encoding/json"
 )
 
-// GetSupplyMaterials returns the supply-material catalog using the delta-cache
-// protocol: with `upv=0` only active rows are returned; with `upv>0` every row
-// written after that watermark (including soft-deleted Status=0) is returned so
-// the client can evict stale local entries.
+// A supply/material is a Product row with Status = 2. It shares the catalog, the stock
+// engine and the movement ledger with ordinary products; the status is what keeps it out
+// of every product-facing flow, since those all pin Status = 1.
+//
+// An asset is a supply whose DepreciationMonths > 0. Nothing else distinguishes it here —
+// the accounting overlay lives in app/accounting.
+const SupplyProductStatus int8 = 2
+
+// GetSupplyMaterials returns the supply catalog using the delta-cache protocol. The status
+// slot is pinned to 2, so a first sync (upv=0) returns supplies only, and later syncs also
+// carry rows that left the bucket (deleted, or converted to a product) so the client evicts them.
 func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	supplyMaterialRecords := []logisticsTypes.SupplyMaterial{}
-	supplyMaterialQuery := db.Query(&supplyMaterialRecords)
-	supplyMaterialQuery.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
+	supplyRecords := []businessTypes.Product{}
+	supplyQuery := db.Query(&supplyRecords).CompanyID.Equals(req.User.CompanyID)
 
-	if queryError := supplyMaterialQuery.Exec(); queryError != nil {
+	// Supplies carry none of the storefront payload; excluding it keeps the sync small.
+	supplyQuery.Select(
+		supplyQuery.ID, supplyQuery.Name, supplyQuery.Description, supplyQuery.SKU,
+		supplyQuery.BrandID, supplyQuery.Price, supplyQuery.CurrencyID, supplyQuery.UnitID,
+		supplyQuery.DepreciationMonths, supplyQuery.Status, supplyQuery.Updated,
+		supplyQuery.UpdatedVersion,
+	)
+	supplyQuery.Delta(updatedSince, int64(SupplyProductStatus))
+
+	if queryError := supplyQuery.Exec(); queryError != nil {
 		core.Log("GetSupplyMaterials query error:", queryError)
 		return req.MakeErr("Error al obtener los insumos.", queryError)
 	}
 
-	core.Log("GetSupplyMaterials result_count:", len(supplyMaterialRecords))
-	return req.MakeResponse(supplyMaterialRecords)
+	core.Log("GetSupplyMaterials result_count:", len(supplyRecords))
+	return req.MakeResponse(supplyRecords)
 }
 
-// supplyMaterialIDMapping is the shape the frontend GetHandler.postAndSync expects
-// back: for each input record, the resolved server ID paired with the client-sent
-// (possibly negative/temporary) ID so optimistic local rows can be reconciled.
+// SupplyMaterialPayload is what the Supplies & Materials form sends: the catalog fields that
+// live on Product plus the replenishment config that lives on ProductSupply. Both are saved
+// in one call because the user sees a single record.
+type SupplyMaterialPayload struct {
+	ID                 int32                                     `json:",omitempty"`
+	Name               string                                    `json:",omitempty"`
+	Description        string                                    `json:",omitempty"`
+	SKU                string                                    `json:",omitempty"`
+	BrandID            int32                                     `json:",omitempty"`
+	Price              int32                                     `json:",omitempty"`
+	CurrencyID         int16                                     `json:",omitempty"`
+	UnitID             int16                                     `json:",omitempty"`
+	DepreciationMonths int16                                     `json:",omitempty"`
+	MinimunStock       int32                                     `json:",omitempty"`
+	ProviderSupply     []logisticsTypes.ProductSupplyProviderRow `json:",omitempty"`
+	// Only 0 is honoured, as the soft-delete tombstone. Anything else saves as a supply;
+	// a client cannot promote its own row into the product catalog.
+	Status int8 `json:"ss"`
+}
+
+// supplyMaterialIDMapping is the shape the frontend GetHandler.postAndSync expects back: for
+// each input record, the resolved server ID paired with the client-sent (possibly negative,
+// temporary) ID so optimistic local rows can be reconciled.
 type supplyMaterialIDMapping struct {
 	ID     int32 `json:",omitempty"`
 	TempID int32 `json:",omitempty"`
 }
 
-// PostSupplyMaterial upserts a batch of supply-material records. Mirrors the
-// productos POST contract: payload is an array, response is []{ID, TempID} so
-// the frontend can map its temp IDs to the server-assigned ones. New rows
-// (ID<=0) get an autoincrement ID; existing rows are updated while protecting
-// Created/CreatedBy.
+// PostSupplyMaterial upserts a batch of supplies as Product rows with Status = 2, then writes
+// each one's ProductSupply configuration. Response is []{ID, TempID}.
 func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
-	incomingSupplyMaterials := []logisticsTypes.SupplyMaterial{}
-	if deserializeError := json.Unmarshal([]byte(*req.Body), &incomingSupplyMaterials); deserializeError != nil {
+	incomingSupplies := []SupplyMaterialPayload{}
+	if deserializeError := json.Unmarshal([]byte(*req.Body), &incomingSupplies); deserializeError != nil {
 		core.Log("PostSupplyMaterial deserialization error:", deserializeError)
 		return req.MakeErr("Error al deserializar el body.", deserializeError)
 	}
-	if len(incomingSupplyMaterials) == 0 {
+	if len(incomingSupplies) == 0 {
 		return req.MakeErr("No se recibieron insumos para guardar.")
 	}
 
 	currentTimestamp := core.SUnixTime()
-	// Preserve the client-sent ID (TempID) per record so we can return ID mappings
-	// after the autoincrement assigns real IDs to the inserts.
-	clientSentIDs := make([]int32, len(incomingSupplyMaterials))
+	supplyProducts := make([]businessTypes.Product, len(incomingSupplies))
+	// Preserve the client-sent ID per record so we can return ID mappings after the
+	// autoincrement assigns real IDs to the inserts.
+	clientSentIDs := make([]int32, len(incomingSupplies))
 
-	// Bucket the batch into inserts and updates to use the right ORM call per group.
-	toInsert := []logisticsTypes.SupplyMaterial{}
-	toUpdate := []logisticsTypes.SupplyMaterial{}
-	for recordIndex := range incomingSupplyMaterials {
-		supplyMaterialRecord := &incomingSupplyMaterials[recordIndex]
-		clientSentIDs[recordIndex] = supplyMaterialRecord.ID
+	for recordIndex := range incomingSupplies {
+		supplyPayload := &incomingSupplies[recordIndex]
+		clientSentIDs[recordIndex] = supplyPayload.ID
 
-		// Server is the source of truth — validate every record before persisting any.
-		if len(supplyMaterialRecord.Name) < 2 {
+		if len(supplyPayload.Name) < 2 {
 			return req.MakeErr("El nombre del insumo debe tener al menos 2 caracteres.")
 		}
-		if supplyMaterialRecord.Price < 0 {
-			return req.MakeErr("El precio no puede ser negativo.")
+		if supplyPayload.Price < 0 {
+			return req.MakeErr("El precio del insumo no puede ser negativo.")
+		}
+		if supplyPayload.MinimunStock < 0 {
+			return req.MakeErr("El stock mínimo no puede ser negativo.")
+		}
+		// A depreciation term is what makes a supply an asset; a negative one is meaningless,
+		// and anything past a century is a typo rather than an intent.
+		if supplyPayload.DepreciationMonths < 0 || supplyPayload.DepreciationMonths > 1200 {
+			return req.MakeErr("Los meses de depreciación deben estar entre 0 y 1200.")
 		}
 
-		// Reuse the existing provider-row sanitization/validation from product-supply.
-		supplyMaterialRecord.ProviderSupply = sanitizeProviderSupplyRows(supplyMaterialRecord.ProviderSupply)
-		if validationError := validateProviderSupplyRows(req, supplyMaterialRecord.ProviderSupply); validationError != nil {
+		supplyPayload.ProviderSupply = sanitizeProviderSupplyRows(supplyPayload.ProviderSupply)
+		if validationError := validateProviderSupplyRows(req, supplyPayload.ProviderSupply); validationError != nil {
 			return req.MakeErr(validationError)
 		}
 
-		supplyMaterialRecord.CompanyID = req.User.CompanyID
-		supplyMaterialRecord.Updated = currentTimestamp
-		supplyMaterialRecord.UpdatedBy = req.User.ID
-
-		if supplyMaterialRecord.ID <= 0 {
-			// New row → ORM auto-assigns the ID via the schema's Autoincrement(0).
-			supplyMaterialRecord.ID = 0
-			supplyMaterialRecord.Status = 1
-			supplyMaterialRecord.Created = currentTimestamp
-			supplyMaterialRecord.CreatedBy = req.User.ID
-			toInsert = append(toInsert, *supplyMaterialRecord)
-		} else {
-			toUpdate = append(toUpdate, *supplyMaterialRecord)
+		supplyProducts[recordIndex] = businessTypes.Product{
+			CompanyID:          req.User.CompanyID,
+			ID:                 supplyPayload.ID,
+			TempID:             supplyPayload.ID,
+			Name:               supplyPayload.Name,
+			Description:        supplyPayload.Description,
+			SKU:                supplyPayload.SKU,
+			BrandID:            supplyPayload.BrandID,
+			Price:              supplyPayload.Price,
+			CurrencyID:         supplyPayload.CurrencyID,
+			UnitID:             supplyPayload.UnitID,
+			DepreciationMonths: supplyPayload.DepreciationMonths,
+			// Deleting is only meaningful for a row that already exists; a new record with no
+			// ss in the payload must not be born as a tombstone.
+			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), SupplyProductStatus),
+			Updated:   currentTimestamp,
+			UpdatedBy: req.User.ID,
+		}
+		if supplyProducts[recordIndex].ID < 0 {
+			// Negative IDs are the frontend's temporary keys; the autoincrement assigns the real one.
+			supplyProducts[recordIndex].ID = 0
 		}
 	}
 
-	if len(toInsert) > 0 {
-		if insertError := db.Insert(&toInsert); insertError != nil {
-			core.Log("PostSupplyMaterial insert error:", insertError)
-			return req.MakeErr("Error al guardar los insumos.", insertError)
-		}
+	productTable := db.TableOf[businessTypes.Product]()
+	// Merge resolves insert vs. update per key. The excluded columns are the storefront and
+	// stock-derived ones a supply never sets — leaving them out stops a save from blanking
+	// values the stock engine maintains.
+	mergeError := db.Merge(&supplyProducts,
+		db.Cols(
+			productTable.Stock, productTable.ReservedStock, productTable.StockStatus,
+			productTable.CategoriesWithStock, productTable.Created, productTable.CreatedBy,
+			productTable.ImageMain, productTable.ImageIDs, productTable.ImageDescriptions,
+			productTable.Presentations, productTable.Properties, productTable.ContentHTML,
+			productTable.CategoryIDs,
+		),
+		func(previousProduct, currentProduct *businessTypes.Product) bool {
+			currentProduct.CompanyID = req.User.CompanyID
+			currentProduct.Created = previousProduct.Created
+			currentProduct.CreatedBy = previousProduct.CreatedBy
+			return true
+		},
+		func(currentProduct *businessTypes.Product) {
+			currentProduct.Created = currentTimestamp
+			currentProduct.CreatedBy = req.User.ID
+		},
+	)
+	if mergeError != nil {
+		core.Log("PostSupplyMaterial merge error:", mergeError)
+		return req.MakeErr("Error al guardar los insumos.", mergeError)
 	}
-	if len(toUpdate) > 0 {
-		supplyMaterialTable := db.TableOf[logisticsTypes.SupplyMaterial]()
-		// Protect immutable creation fields from being overwritten on update.
-		if updateError := db.UpdateExclude(&toUpdate, supplyMaterialTable.Created, supplyMaterialTable.CreatedBy); updateError != nil {
-			core.Log("PostSupplyMaterial update error:", updateError)
-			return req.MakeErr("Error al actualizar los insumos.", updateError)
+
+	// ProductSupply is keyed by ProductID, so it can only be written once the inserts above
+	// have real IDs. This is the same table the products page uses for replenishment config.
+	supplyConfigs := make([]logisticsTypes.ProductSupply, len(incomingSupplies))
+	for recordIndex := range incomingSupplies {
+		supplyConfigs[recordIndex] = logisticsTypes.ProductSupply{
+			CompanyID:      req.User.CompanyID,
+			ProductID:      supplyProducts[recordIndex].ID,
+			MinimunStock:   incomingSupplies[recordIndex].MinimunStock,
+			ProviderSupply: incomingSupplies[recordIndex].ProviderSupply,
+			Status:         core.If(supplyProducts[recordIndex].Status == 0, int8(0), int8(1)),
+			Updated:        currentTimestamp,
+			UpdatedBy:      req.User.ID,
 		}
 	}
 
-	// Rebuild the mapping list in the original input order so the frontend can
-	// match by index — autoincrement only filled IDs in the insert slice.
-	insertCursor := 0
-	updateCursor := 0
-	idMappings := make([]supplyMaterialIDMapping, len(incomingSupplyMaterials))
-	for recordIndex, originalID := range clientSentIDs {
-		if originalID <= 0 {
-			idMappings[recordIndex] = supplyMaterialIDMapping{ID: toInsert[insertCursor].ID, TempID: originalID}
-			insertCursor++
-		} else {
-			idMappings[recordIndex] = supplyMaterialIDMapping{ID: toUpdate[updateCursor].ID, TempID: originalID}
-			updateCursor++
+	configMergeError := db.Merge(&supplyConfigs, nil,
+		func(previousConfig, currentConfig *logisticsTypes.ProductSupply) bool {
+			// SalesPerDayEstimated is owned by the products page; a supply save must not clear it.
+			currentConfig.SalesPerDayEstimated = previousConfig.SalesPerDayEstimated
+			return true
+		},
+		nil,
+	)
+	if configMergeError != nil {
+		core.Log("PostSupplyMaterial product_supply merge error:", configMergeError)
+		return req.MakeErr("Error al guardar la configuración de abastecimiento del insumo.", configMergeError)
+	}
+
+	idMappings := make([]supplyMaterialIDMapping, len(supplyProducts))
+	for recordIndex := range supplyProducts {
+		idMappings[recordIndex] = supplyMaterialIDMapping{
+			ID:     supplyProducts[recordIndex].ID,
+			TempID: clientSentIDs[recordIndex],
 		}
 	}
 
-	core.Log("PostSupplyMaterial saved:", "inserted=", len(toInsert), "updated=", len(toUpdate))
 	return req.MakeResponse(idMappings)
 }

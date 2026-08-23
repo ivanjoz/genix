@@ -670,7 +670,6 @@
     border: 1px solid rgb(255 255 255 / 24%);
     box-shadow: 0 16px 60px rgb(0 0 0 / 40%), inset 0 0 4px 2px rgb(255 255 255 / 10%);
     backdrop-filter: blur(25px) saturate(100%);
-    -webkit-backdrop-filter: blur(25px) saturate(100%);
   }
 
   /* Two quiet highlights create the reflected-edge effect of physical glass. */

@@ -19,23 +19,20 @@ type PurchaseOrder struct {
 	Week         int16 `json:",omitempty"`
 	DeliveryDate int16 `json:",omitempty"`
 	PaymentDate  int16 `json:",omitempty"`
-	// Producto: parallel arrays in the same order — one row per product line.
+	// Parallel arrays in the same order — one row per line. Supplies and materials are
+	// Product rows with Status=2, so they are ordinary product lines here and move stock
+	// through the same reception path as anything else.
 	DetailProductIDs             []int32 `json:",omitempty"`
 	DetailProductQuantity        []int32 `json:",omitempty"`
 	DetailProductPrice           []int32 `json:",omitempty"`
 	DetailProductPresentationIDs []int32 `json:",omitempty"`
-	// Insumo (supply_material): parallel arrays in the same order — one row per supply line.
-	// Independiente de la lista de productos: una orden puede mezclar ambas.
-	DetailSupplyIDs      []int32 `json:",omitempty"`
-	DetailSupplyQuantity []int32 `json:",omitempty"`
-	DetailSupplyPrice    []int32 `json:",omitempty"`
-	TotalAmount          int32   `json:",omitempty"`
-	TaxAmount            int32   `json:",omitempty"`
-	DebtAmount           int32   `json:",omitempty"`
-	DifferenceQuantity   int32   `json:",omitempty"`
-	DifferenceValue      int32   `json:",omitempty"`
-	InvoiceNumber        string  `json:",omitempty"`
-	Notes                string  `json:",omitempty"`
+	TotalAmount                  int32   `json:",omitempty"`
+	TaxAmount                    int32   `json:",omitempty"`
+	DebtAmount                   int32   `json:",omitempty"`
+	DifferenceQuantity           int32   `json:",omitempty"`
+	DifferenceValue              int32   `json:",omitempty"`
+	InvoiceNumber                string  `json:",omitempty"`
+	Notes                        string  `json:",omitempty"`
 
 	Created        int32 `json:",omitempty"`
 	CreatedBy      int32 `json:",omitempty"`
@@ -59,9 +56,6 @@ type PurchaseOrderTable struct {
 	DetailProductQuantity        db.Col[PurchaseOrderTable, []int32]
 	DetailProductPrice           db.Col[PurchaseOrderTable, []int32]
 	DetailProductPresentationIDs db.Col[PurchaseOrderTable, []int32]
-	DetailSupplyIDs              db.Col[PurchaseOrderTable, []int32]
-	DetailSupplyQuantity         db.Col[PurchaseOrderTable, []int32]
-	DetailSupplyPrice            db.Col[PurchaseOrderTable, []int32]
 	TotalAmount                  db.Col[PurchaseOrderTable, int32]
 	TaxAmount                    db.Col[PurchaseOrderTable, int32]
 	DebtAmount                   db.Col[PurchaseOrderTable, int32]

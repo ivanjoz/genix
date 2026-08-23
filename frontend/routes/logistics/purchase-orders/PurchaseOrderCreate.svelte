@@ -46,11 +46,6 @@ interface IPurchaseOrderForm {
   DetailProductPrice: number[]
   DetailProductQuantity: number[]
   DetailProductPresentationIDs: number[]
-  // Insumo (supply_material): independent parallel arrays; this UI does not yet edit supplies,
-  // so the fields are sent empty for forward compatibility with the backend contract.
-  DetailSupplyIDs: number[]
-  DetailSupplyQuantity: number[]
-  DetailSupplyPrice: number[]
   Notes: string
   // Dates stored as UnixDay int16 (days since unix-epoch).
   DeliveryDate: number
@@ -70,9 +65,6 @@ class PurchaseOrderState {
     DetailProductPrice: [],
     DetailProductQuantity: [],
     DetailProductPresentationIDs: [],
-    DetailSupplyIDs: [],
-    DetailSupplyQuantity: [],
-    DetailSupplyPrice: [],
     Notes: '',
     DeliveryDate: 0,
     PaymentDate: 0,

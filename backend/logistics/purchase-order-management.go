@@ -207,41 +207,22 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe seleccionar un proveedor.")
 	}
 
+	// Supplies are Product rows with Status=2, so they arrive as ordinary product lines.
 	productLineCount := len(record.DetailProductIDs)
-	supplyLineCount := len(record.DetailSupplyIDs)
-
-	// Productos e insumos son listas independientes; la orden necesita al menos una línea entre ambas.
-	if productLineCount == 0 && supplyLineCount == 0 {
-		return req.MakeErr("Debe agregar al menos un product o insumo.")
+	if productLineCount == 0 {
+		return req.MakeErr("Debe agregar al menos un producto o insumo.")
 	}
-
-	// Validar la lista de productos (si tiene contenido).
-	if productLineCount > 0 {
-		if len(record.DetailProductQuantity) != productLineCount || len(record.DetailProductPrice) != productLineCount {
-			return req.MakeErr("Los detalles de productos de la orden son inconsistentes.")
-		}
-		if len(record.DetailProductPresentationIDs) > 0 && len(record.DetailProductPresentationIDs) != productLineCount {
-			return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
-		}
-		if slices.Contains(record.DetailProductIDs, 0) {
-			return req.MakeErr("Hay un product con ID = 0")
-		}
-		if slices.Contains(record.DetailProductQuantity, 0) {
-			return req.MakeErr("Hay un product con cantidad = 0")
-		}
+	if len(record.DetailProductQuantity) != productLineCount || len(record.DetailProductPrice) != productLineCount {
+		return req.MakeErr("Los detalles de productos de la orden son inconsistentes.")
 	}
-
-	// Validar la lista de insumos (si tiene contenido).
-	if supplyLineCount > 0 {
-		if len(record.DetailSupplyQuantity) != supplyLineCount || len(record.DetailSupplyPrice) != supplyLineCount {
-			return req.MakeErr("Los detalles de insumos de la orden son inconsistentes.")
-		}
-		if slices.Contains(record.DetailSupplyIDs, 0) {
-			return req.MakeErr("Hay un insumo con ID = 0")
-		}
-		if slices.Contains(record.DetailSupplyQuantity, 0) {
-			return req.MakeErr("Hay un insumo con cantidad = 0")
-		}
+	if len(record.DetailProductPresentationIDs) > 0 && len(record.DetailProductPresentationIDs) != productLineCount {
+		return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
+	}
+	if slices.Contains(record.DetailProductIDs, 0) {
+		return req.MakeErr("Hay una línea con ID = 0")
+	}
+	if slices.Contains(record.DetailProductQuantity, 0) {
+		return req.MakeErr("Hay una línea con cantidad = 0")
 	}
 
 	now := core.SUnixTime()

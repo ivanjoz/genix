@@ -97,10 +97,6 @@ export interface IPurchaseOrder {
   DetailProductQuantity?: number[]
   DetailProductPrice?: number[]
   DetailProductPresentationIDs?: number[]
-  // Insumo (supply_material): independent parallel arrays; an order may have products, supplies, or both.
-  DetailSupplyIDs?: number[]
-  DetailSupplyQuantity?: number[]
-  DetailSupplyPrice?: number[]
   ss: number
   upd: number
 }
