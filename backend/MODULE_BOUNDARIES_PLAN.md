@@ -1,6 +1,10 @@
 # Backend Module Boundaries — Analysis & Refactor Plan
 
-Status: **proposal, nothing moved yet.** Baseline `go build ./...` is green.
+Status: **DONE.** All eight steps executed across seven commits (`ca28b4db` … `25aa19de`), plus
+`4613a2c` in `genix-orm`. All six violations closed and enforced by
+`cd scripts && go run . check_module_imports`. The rule now lives in
+`backend/docs/MODULE_BOUNDARIES.md`; decisions in `backend/RATIONALE.md`. This file is the
+historical plan — the doc is the reference.
 
 Goal: a module body may never import another module body. Only `core`, `db`, generic
 layers, and `*/types` cross module lines. Anything genuinely shared moves into
@@ -357,10 +361,25 @@ Wire it into `deploy.sh` alongside `check_tables`, and document the rule in
 | Q4 | Rename `agent/webpage` | **Yes** → `agent/pagebuilder`. |
 | Q5 | Alias sweep: one commit or incremental | **One commit** — and promoted to step 1, since §3's zero-churn property depends on it landing first. |
 
-### Status
+### Status: complete
 
-Nothing in `backend/` has moved. The only code written so far is the `genix-orm` fix that
-Q2 depended on — uncommitted, in a submodule that already had unrelated dirty files
-(`scylla/deploy.go`, `index_view_compile.go`, `insert-update.go`, `main.go`).
+| Step | Commit |
+| --- | --- |
+| ORM fix (Q2 prerequisite) | `4613a2c` in `genix-orm` |
+| 1 — alias sweep, 93 imports / 61 files | `ca28b4db` |
+| 2 — `system/` → `libs/servermetrics/` (V6) | `1a7ffef6` |
+| 3 — ledger enum + product status | `c1d5e4e5` |
+| 4 — cash ledger → `finance/types` (V1, V3, V4) | `b37d3776` |
+| 5 — stock engine → `logistics/types` (V2, V4) | `77260796` |
+| 6+7 — `business/types`, `agent/pagebuilder` (V4, V5) | `ea44c600` |
+| 8 — `check_module_imports` + docs | `25aa19de` |
 
-Ready to execute in the §6 order on your go-ahead.
+Verified: `go build ./...`, `go vet ./...`, `gofmt` clean, full backend test suite, `check_tables`
+(53 pairs), `check_module_imports` (43 packages), `scripts` tests, `genix-orm` all three modules.
+
+One pre-existing test failure is untouched: `agent/ragdocs`
+`TestParseExamplesAndBuildStableChunks` reports stale evidence for
+`frontend/core/modules.ts` in `finance/cash-banks/DOCUMENTATION.md`. It fails identically at
+`b9dbe1cf` — `modules.ts` last changed in `7a044df8`, after the doc recorded its hash in
+`287d1005`. 127 further evidence entries were already stale and were deliberately left alone;
+the 46 that this refactor invalidated were repointed and refreshed.
