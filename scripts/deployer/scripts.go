@@ -33,6 +33,10 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "check_tables")
 	}},
 
+	{key: "check_module_imports", group: scriptGroupDatabase, label: "Validar Límites de Módulos", run: func(context deployContext, _ []string) error {
+		return runCommand(context, "scripts", context.goBinary, "run", ".", "check_module_imports")
+	}},
+
 	{key: "create", group: scriptGroupDatabase, label: "Crear Tabla",
 		argumentsHint: "<output_path> <table_name> [campo:tipo:key]...",
 		run: func(context deployContext, arguments []string) error {

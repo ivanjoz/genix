@@ -37,6 +37,17 @@ When you create a new script, you **must** integrate it by following these steps
 
 By following these steps, you ensure that your script is available through the standard `./app.sh <script_name>` interface, making it discoverable and usable by other developers and agents.
 
+## Static validation scripts
+
+Two scripts check invariants the compiler cannot:
+
+- `check_tables` — data-model conventions for the ORM (`CHECK_TABLES_SCRIPT.md`)
+- `check_module_imports` — the module boundary rule (`CHECK_MODULE_IMPORTS.md`)
+
+Both live in their own subpackage under `scripts/` and are dispatched with
+`runSubpackage`, because they need `golang.org/x/tools/go/packages` and their own `main`.
+Both are also registered in the `./deploy.sh` TUI under the database group.
+
 ## Server configuration exception
 
 Server provisioning has one public Python entrypoint: `scripts/configure.py`. Its internal

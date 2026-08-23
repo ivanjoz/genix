@@ -102,6 +102,7 @@ Independence only works with a closed feedback loop. Run the check that covers w
 | Backend Go | `cd backend && go build ./...` then `go vet ./...` |
 | Backend tests | `cd backend && go test ./<pkg>/...` |
 | DB table structs | `cd scripts && go run . check_tables` (skill: `static-project-validation`) |
+| Moved code between modules | `cd scripts && go run . check_module_imports` |
 | Frontend | `cd frontend && bun run check` (svelte-kit sync + svelte-check) |
 | Frontend build | `cd frontend && bun run build` |
 | server_utils (Rust) | `cd server_utils && cargo build` / `cargo test` |
@@ -139,6 +140,7 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - `DEPLOYMENT.md` — AWS Lambda + ScyllaDB on VPS/EC2, and self-host via systemd
 
 **Backend** (Go + ScyllaDB/Cassandra)
+- `backend/docs/MODULE_BOUNDARIES.md` — **MUST read before moving code between modules.** A module body may never import another module body; shared code goes in `<module>/types`. Enforced by `check_module_imports`
 - `backend/docs/CREATE_API_HANDLERS.md` — **MUST read before creating any API.** The `updated` delta param, query examples, conventions
 - `backend/docs/ORM_DATABASE_QUERY.md` — model definitions, CRUD, query building
 - `backend/db/` — the single ORM entry point. All app code imports `app/db`, never a driver. `db/driver.go` names the database; repointing it switches the whole project
@@ -173,6 +175,8 @@ config.toml       Local config (not committed). config.example.toml is the templ
 
 ### Backend
 - **NEVER trust the client.** Validate required fields and data consistency, and return a descriptive error on every failed validation.
+- **A module body may never import another module body.** Only `core`, `db`, `libs`, `cloud` and any `*/types` cross module lines. Shared logic goes in `<module>/types`. See `backend/docs/MODULE_BOUNDARIES.md`.
+- **Import `<module>/types` under the module's name**, not a `<module>Types` alias: `finance "app/finance/types"` → `finance.CashBank`. Inside the owning module, drop the alias and use `types.CashBank`. `core/types` stays `coreTypes` because `app/core` owns `core`.
 - Parallel-array `Detail*` columns use **singular** field names; only the `IDs` suffix stays plural. `DetailProductIDs`, `DetailProductQuantity` (not `Quantities`), `DetailProductPrice` (not `Prices`), `DetailSupplyIDs`, `DetailSupplyQuantity`. Applies to Go structs and their frontend interface mirrors.
 
 ### Frontend

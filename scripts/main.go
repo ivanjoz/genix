@@ -18,6 +18,9 @@ func main() {
 	case "check_tables":
 		runSubpackage("./validation")
 
+	case "check_module_imports":
+		runSubpackage("./boundaries")
+
 	case "sync_struct_interfaces":
 		runSubpackage("./generators")
 

@@ -1,29 +1,29 @@
-## The last two cross-module calls move into `business/types`, and `agent/webpage` is renamed
+## The boundary rule is enforced by a script, not by good intentions
 
-**Context** — two violations remained. `sales` imported `app/business` for
-`SaveClientProviders` (it resolves or creates the buyer while recording a sale), and
-`agent/webpage` imported it for `FindImageCandidates` (the page-builder's image picker).
+**Context** — Go cannot catch a module-to-module import: `accounting` importing `finance`
+compiles cleanly. The six violations this refactor removed had accumulated exactly that way,
+and two of them had already produced copy-pasted code rather than a compile error. Left
+unchecked the rule would decay again.
 
-**Decision** — `SaveClientProviders` plus its private validators
-(`companyRegistryNumberPattern`, `isValidEmailAddress`, used nowhere else) moved to
-`business/types/client_provider_save.go`. The whole of `image_assets_agent.go` moved to
-`business/types/image_assets_agent.go`. `imageAssetCategoryGroupID` moved with it into
-`business/types/image_assets.go` and had to be **exported** as `ImageAssetCategoryGroupID`,
-because six call sites in the `business` body still read it.
+**Decision** — `scripts/boundaries/check_module_imports.go`, dispatched as
+`go run . check_module_imports` and registered in the `deploy.sh` TUI beside `check_tables`.
+It reads `go list -json ./...` from `backend/` and classifies every import edge against the
+layer table. The rule and its consequences are documented in
+`backend/docs/MODULE_BOUNDARIES.md`, with pointers from `AGENTS.md`.
 
-Separately, `agent/webpage` is now `agent/pagebuilder`.
+**Rationale** — the layer membership is written as **literal path lists**, not inferred from
+directory shape. A new top-level package then fails loudly ("not classified") instead of being
+silently guessed into the wrong layer, and `rg moduleBodies` shows the whole policy. Test
+imports are included, since a `_test.go` in `accounting` importing `finance` is the same
+violation.
 
-**Rationale** — `imageAssetCategoryGroupID` is a schema constant: it names the group partition
-every image asset lives in, so it belongs next to the table it partitions rather than in the sync
-job that happened to declare it. Exporting it is the one avoidable-looking cost of the move, and
-it is the honest one: the constant is genuinely shared between the module body and the types
-package now.
+Writing the test first paid for itself: it caught that the checker allowed
+`finance/types -> cloud`, because the infrastructure allowance was evaluated before the
+`*/types`-must-stay-a-leaf rule. That edge does not exist today, so nothing would have
+surfaced it until someone added it — which is exactly the case a checker is for. The order is
+now leaf-rule first, and `check_module_imports_test.go` pins all six original violations plus
+the leaf property.
 
-The rename removes a real trap. `app/agent/webpage` (the page-builder loop) and `app/webpage`
-(the storefront module) were two unrelated packages with the same name. Nothing imported both, so
-it compiled — but any file that ever needed both would have required an alias, and `rg webpage`
-spanned two unrelated domains. `pagebuilder` says what it is.
-
-**All six violations from `MODULE_BOUNDARIES_PLAN.md` are now closed.** The only packages that
-import a module body are the composition roots: root `main`, `exec` and `tests/sample_records`.
+The checker was also verified end-to-end by injecting `accounting -> finance` and confirming a
+non-zero exit and a message naming the fix, then reverting.
 
