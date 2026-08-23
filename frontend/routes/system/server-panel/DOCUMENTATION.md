@@ -272,15 +272,15 @@ files:
     supports: [capability.monitor-dashboard, rules, troubleshooting]
   - path: backend/config/system_memory_packages.go
     role: backend-handler
-    hash: sha256:8748f7e70b47ca8fa4fe46897efc1111a8d2c8a8cfc654c7d95ed108dd4c4100
+    hash: sha256:1759e41f830c0e43f80ce08ccf834a2a2aa8d6747198932344bb19bebd6f106e
     supports: [capability.inspect-memory, rules, troubleshooting]
   - path: backend/libs/servermetrics/memory_packages_report.go
     role: business-logic
-    hash: sha256:3564ee1079241b2a3935b69df0a744d55daaa026f30289a4a14ec46487869f64
+    hash: sha256:e50c922abd0eacddd1c3f759057f5b0bb1711183174af128f747d4fed7d16154
     supports: [concepts, capability.inspect-memory]
   - path: backend/libs/servermetrics/metrics_collector.go
     role: business-logic
-    hash: sha256:efedf0e94a3a3b8f18ece2993541f37408a5d9aa482cdd034ee8f5c0086d23f2
+    hash: sha256:bb9241e865e19b016b0fad55b42e75ce41fc4bda41fa95b6baba1fe5de0576b0
     supports: [concepts, capability.inspect-memory, troubleshooting]
   - path: backend/core/types/server_metrics.go
     role: data-model
@@ -296,11 +296,11 @@ files:
     supports: [rules]
   - path: server_utils/PLAN_SERVER_METRICS.md
     role: reference-document
-    hash: sha256:7bd6588afcc2f8d51041bee0d25835198cd34849b5d44cc12c477ceddf74a072
+    hash: sha256:11629f175137234443da98ee3d6c32b04a9f10fae3e12eaffcfe006211f17add
     supports: [concepts, rules, troubleshooting]
   - path: server_utils/src/sysmetrics/collector.rs
     role: business-logic
-    hash: sha256:12fb9251f99e291297b231acc7627d6ce1e16eb906cf5c3018e549a26a30d684
+    hash: sha256:d02509edc479c3c8dd7e4b4d950bdfe9a10b3fc3f06faf3ed67c0d831ce95b62
     supports: [concepts, rules]
   - path: server_utils/src/config.rs
     role: business-logic

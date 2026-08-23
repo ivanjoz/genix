@@ -338,7 +338,7 @@ files:
     supports: [related-pages, rules]
   - path: backend/security/usuarios.go
     role: backend-handler
-    hash: sha256:935f2eaa69e09aeec251d13599c9e5d4de36907e6e9d6bcece051cd542e5218d
+    hash: sha256:4fdce6a6f623a1b5277ac6291288406e68efa73e720d004fa3765607e1079d9b
     supports: [capability.create-edit, capability.assign-access, capability.set-password, capability.remove, rules, troubleshooting]
   - path: backend/core/types/users.go
     role: data-model

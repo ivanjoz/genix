@@ -326,11 +326,11 @@ files:
     supports: [capability.po-entry]
   - path: backend/logistics/product-stock-movement.go
     role: business-logic
-    hash: sha256:3f1bcf6a690c536448f47b89173b6ee636aab1150be37a0adfd11819b58a8a2e
+    hash: sha256:4de10daa67c3c1b9f5fd42817b1647b54e2485542ead3a04623e65850bf89be1
     supports: [concepts, capability.movement-view, capability.batch-serial-detail, capability.po-entry, rules, troubleshooting]
   - path: backend/logistics/purchase-order-management.go
     role: business-logic
-    hash: sha256:d0c3d59fe6e6f5f47a5a82ef4e0f5fc8fa62f10466dba242af3f5ba39bff65a8
+    hash: sha256:719c51df665801490860ad81d5d4c4a858b6be28dff182f83fa1cc46a05c9ef6
     supports: [capability.po-entry, rules, troubleshooting]
   - path: backend/logistics/types/product-stock.go
     role: data-model

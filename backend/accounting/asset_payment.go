@@ -1,11 +1,10 @@
 package accounting
 
 import (
-	accountingTypes "app/accounting/types"
+	"app/accounting/types"
 	"app/core"
 	"app/db"
-	"app/finance"
-	financeTypes "app/finance/types"
+	finance "app/finance/types"
 	"encoding/json"
 )
 
@@ -60,17 +59,17 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 
 	// The movement is an outflow, so its amount is negative. FinalAmount stays 0 so the cash
 	// side computes the resulting balance authoritatively.
-	movement := financeTypes.InternalCashMovement{
+	movement := finance.InternalCashMovement{
 		CashBankID:  payload.CashBankID,
 		DocumentID:  int64(asset.ID),
 		ReferenceID: asset.ProductID,
 		Date:        payload.Date,
-		Type:        financeTypes.CashMovementTypeAssetPayment,
+		Type:        finance.CashMovementTypeAssetPayment,
 		Amount:      -payload.Amount,
 		FinalAmount: 0,
 	}
 	if movementError := finance.ApplyCashBankMovement(
-		req, []financeTypes.InternalCashMovement{movement},
+		req, []finance.InternalCashMovement{movement},
 	); movementError != nil {
 		return req.MakeErr(movementError)
 	}
@@ -78,7 +77,7 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 	// Recompute PaidAmount from the ledger rather than incrementing it, so a retry or a
 	// concurrent payment cannot drift the total. Type filters out anything that is not an
 	// asset payment, since DocumentID alone is shared with the expense register.
-	movements := []financeTypes.CashBankMovement{}
+	movements := []finance.CashBankMovement{}
 	movementQuery := db.Query(&movements)
 	movementQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
@@ -90,7 +89,7 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 
 	paidAmount := int32(0)
 	for _, cashMovement := range movements {
-		if cashMovement.Type != financeTypes.CashMovementTypeAssetPayment {
+		if cashMovement.Type != finance.CashMovementTypeAssetPayment {
 			continue
 		}
 		paidAmount += core.If(cashMovement.Amount < 0, -cashMovement.Amount, cashMovement.Amount)
@@ -99,13 +98,13 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 	asset.PaidAmount = paidAmount
 	asset.PaymentStatus = core.If(
 		payload.IsFullyPaid || paidAmount >= asset.PurchaseAmount,
-		accountingTypes.AssetPaymentPaid, accountingTypes.AssetPaymentPending,
+		types.AssetPaymentPaid, types.AssetPaymentPending,
 	)
 	asset.Updated = core.SUnixTime()
 	asset.UpdatedBy = req.User.ID
 
-	assetTable := db.TableOf[accountingTypes.Asset]()
-	assetRecords := []accountingTypes.Asset{asset}
+	assetTable := db.TableOf[types.Asset]()
+	assetRecords := []types.Asset{asset}
 	// Status is written even though a payment never changes it: it shares the delta view's
 	// composite key with UpdatedVersion, so the ORM requires the pair be updated together.
 	if updateError := db.Update(&assetRecords,

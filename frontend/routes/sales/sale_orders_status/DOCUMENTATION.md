@@ -308,14 +308,14 @@ files:
     supports: [capability.browse-filter, rules, troubleshooting]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:03dfbe6e253c0d73c85654993442e2479e33fdb08a44d74e00fd66076643656f
+    hash: sha256:8068f85ffdc9c0382877528bde49699817c439b629e907d2391656574d4bef2f
     supports: [capability.pay, capability.deliver, rules, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model
     hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc
     supports: [concepts, capability.pay, capability.deliver, rules]
-  - path: backend/finance/cash_bank_movement.go
+  - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:dced7592fe610decf9352eb1705b09a46b75a2be73c438cff81d4be7f03a4775
+    hash: sha256:356b238b23cee7b4a084ccab1e5d8e281232a986feefa2b92d1d184c6aa78cb1
     supports: [capability.pay]
 ```

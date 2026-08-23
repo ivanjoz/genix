@@ -1,37 +1,30 @@
-## The cash-movement and product-status vocabularies are owned by one module each
+## The cash ledger writer lives in `finance/types`, not in `finance`
 
-**Context** — `CashBankMovement.Type` was four private constants in four modules
-(`logistics/purchase-order-management.go`, `finance/expenses.go`,
-`accounting/asset_payment.go`, and a bare literal `Type: 8` in `sales/sale_order_create.go`),
-each with a comment saying it mirrors the frontend's `cajaMovimientoTipos`. The type is the
-discriminator that separates movements sharing a `DocumentID` — an asset payment and an expense
-payment can carry the same document id — so a collision is a real accounting bug, yet nothing
-stopped the next module from reusing a taken number. `Product.Status == 2` had the same problem
-in two copies: `logistics.SupplyProductStatus` and a hand copy `supplyProductStatus` in
-`accounting/asset_api.go`, in a file that also imported `logistics`.
+**Context** — `ApplyCashBankMovement` is the only way money moves: `sales` writes a collection,
+`logistics` a supplier payment, `finance` an expense payment, `accounting` an asset payment. All
+four reached it by importing `app/finance`, which is exactly the module-body-to-module-body
+import the boundary rule forbids (V1, V3, V4 in `MODULE_BOUNDARIES_PLAN.md`).
 
-**Decision** — `finance/types` owns `type CashMovementType int8` with **all ten** values from the
-frontend list, not just the four the backend writes, so a new module cannot claim a used number.
-`CashBankMovement.Type`, its `db.Col`, and `InternalCashMovement.Type` are all typed with it.
-`business/types` owns `ProductStatusInactive/Active/Supply` as plain `int8` constants next to
-`Product`, and both copies are deleted.
+**Decision** — `finance/cash_bank_movement.go` and `finance/shared.go` (`GetCaja`) are gone; both
+functions now live in `finance/types/cash_movement_apply.go`. Consumers import only
+`app/finance/types`.
 
-**Rationale** — the named type is worth it for the ledger because the column is written from four
-modules and the values are load-bearing; typing the column (rather than only the constants) is
-what makes a wrong assignment a compile error instead of an arithmetic surprise. It required
-fixing the ORM first — see `genix-orm/scylla/RATIONALE.md`; a named integer type was silently
-mishandled by six type switches.
+**Rationale** — the alternative was a `finance/shared` package, which is one more layer and one
+more name to learn. Putting it in `types` works because of the import convention: consumers
+already alias `app/finance/types` to `finance`, so
+`finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{...})` is **byte-for-byte the
+call site that existed before** — the two-line import block collapsed to one line and nothing
+below it changed. The moved code depends on nothing but `core`, `db` and its own tables, so
+`types` stays a leaf and the rule has no escape hatch, which is the point.
 
-`Product.Status` deliberately stays `int8`. Its three values are already enumerated in the delta
-view's `FixedValues`, so the vocabulary is worth naming, but the column is read and written across
-`business`, `logistics` and the delta view's `[]int64` fixed values — retyping a table that
-central is a much larger change than this one, and it buys less, since `Status` is not the
-cross-module discriminator that `Type` is.
+The cost is honest: `types` now holds the heaviest logic in the module, so the folder name
+undersells it. A file-level comment in `cash_movement_apply.go` says why it is there, and the
+filename is specific enough that `fd cash_movement` still finds it.
 
-Cost: `CashMovementType` is a named type inside a `types` folder, which the frontend interface
-generator reads. It mapped unknown identifiers to `I<Name>` and then degraded them to `any`, so
-`ICashBankMovement.type` would have silently dropped from `number` to `any` on the next
-`sync_struct_interfaces` run. The generator now resolves named basic types to their underlying
-TypeScript type (`scripts/generators/sync_struct_interfaces.go`, covered by
-`named_basic_test.go`) — a general fix, since the plan puts more logic and types into `*/types`.
+Fallout worth recording: four `DOCUMENTATION.md` files cited
+`backend/finance/cash_bank_movement.go` as evidence, and the ragdocs parser validates evidence
+by path **and** content hash. Deleting the file broke them, and editing 60+ backend files in the
+earlier steps invalidated 42 more hashes. All 46 were repointed and refreshed. 127 evidence
+entries were **already** stale before this work started and were deliberately left alone — that
+is pre-existing documentation drift, not ours to absorb into a refactor commit.
 

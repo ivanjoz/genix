@@ -245,7 +245,7 @@ files:
     supports: [rules]
   - path: backend/core/request_errors.go
     role: business-logic
-    hash: sha256:ca6216e2ecf05a12a055f1cb8412907efd7b500d292b0b0c234ea499fa556a30
+    hash: sha256:52dcf52dfa2ce066ae89dac5f8e6689784c70d8e7dc8ccc7031cdaa20d881b23
     supports: [rules, troubleshooting]
   - path: backend/business/product-ecommerce-cron.go
     role: business-logic

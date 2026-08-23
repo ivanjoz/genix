@@ -1,12 +1,35 @@
-package finance
+// Cash ledger writer. This is business logic in a `types` package on purpose: every module
+// that moves money — sales collections, purchase-order supplier payments, expense payments,
+// asset payments — has to write through it, and a module body may not import another module
+// body (see backend/docs/MODULE_BOUNDARIES.md). Living here is what lets `accounting`,
+// `logistics` and `sales` call it while importing only `app/finance/types`.
+//
+// It depends on nothing but core, db and this package's own tables, so it stays a leaf.
+
+package types
 
 import (
 	"app/core"
 	"app/db"
-	"app/finance/types"
 )
 
-func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []types.InternalCashMovement) error {
+func GetCaja(companyID, cashBankID int32) (CashBank, error) {
+	cajas := []CashBank{}
+	query := db.Query(&cajas)
+	query.Select().
+		CompanyID.Equals(companyID).
+		ID.Equals(cashBankID)
+
+	if err := query.Exec(); err != nil {
+		return CashBank{}, core.Err("Error al obtener información de la cashBank:", err)
+	}
+	if len(cajas) == 0 {
+		return CashBank{}, core.Err("No se encontró la cashBank")
+	}
+	return cajas[0], nil
+}
+
+func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMovement) error {
 	if len(movimientos) == 0 {
 		return nil
 	}
@@ -20,7 +43,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []types.InternalCa
 		cashBankIDs.Add(m.CashBankID)
 	}
 
-	cashBankMap := make(map[int32]types.CashBank)
+	cashBankMap := make(map[int32]CashBank)
 	for _, id := range cashBankIDs.Values {
 		cashBank, err := GetCaja(req.User.CompanyID, id)
 		if err != nil {
@@ -29,8 +52,8 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []types.InternalCa
 		cashBankMap[id] = cashBank
 	}
 
-	records := []types.CashBankMovement{}
-	cashBanksToUpdate := []types.CashBank{}
+	records := []CashBankMovement{}
+	cashBanksToUpdate := []CashBank{}
 
 	// Track current balance per cash bank across multiple movements in the same batch.
 	currentAmounts := make(map[int32]int32)
@@ -58,7 +81,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []types.InternalCa
 			movementDate = m.Date
 		}
 
-		record := types.CashBankMovement{
+		record := CashBankMovement{
 			ID:            core.SUnixTimeUUIDConcatID(m.CashBankID, core.SUnixTimeUUID()),
 			CompanyID:     req.User.CompanyID,
 			CashBankID:    m.CashBankID,
@@ -90,7 +113,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []types.InternalCa
 		cashBanksToUpdate = append(cashBanksToUpdate, cashBankMap[id])
 	}
 
-	q := db.TableOf[types.CashBank]()
+	q := db.TableOf[CashBank]()
 	// Status is part of the delta-view key and must be written with the managed UpdatedVersion.
 	if err := db.Update(&cashBanksToUpdate, q.Status, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar saldo de las cajas:", err)

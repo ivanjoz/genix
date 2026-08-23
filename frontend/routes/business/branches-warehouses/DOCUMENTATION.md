@@ -328,7 +328,7 @@ files:
     supports: [capability.warehouse-layout]
   - path: backend/business/locations-warehouses.go
     role: backend-handler
-    hash: sha256:591db493e761ac7d062bca3889e7ff4b3f6e85ced92017621658957d8742af39
+    hash: sha256:636d6418f5b766d54835e02c5644b769a6d5b4fc18fbc769c422fa256fd48a31
     supports: [capability.manage-branches, capability.manage-warehouses, capability.warehouse-layout, rules, troubleshooting]
   - path: backend/business/main.go
     role: backend-handler
@@ -336,7 +336,7 @@ files:
     supports: [capability.manage-branches, capability.manage-warehouses]
   - path: backend/business/types/productos.go
     role: data-model
-    hash: sha256:a26703a968048adf7aa708d753e7d689bfeea5e0d9ad5c98447f078cc1a63ef5
+    hash: sha256:ef0c9c9510bfa7e46e54f5d803ac4365a2bcfe30e7cf1ba22abcf191d08b3fb6
     supports: [concepts, capability.manage-branches, capability.manage-warehouses, capability.warehouse-layout, rules]
   - path: backend/business/types/generales.go
     role: data-model

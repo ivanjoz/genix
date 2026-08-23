@@ -215,7 +215,7 @@ files:
     supports: [concepts, capability.browse-zones, related-pages]
   - path: backend/sales/shipping_costs.go
     role: backend-handler
-    hash: sha256:a68c0cc9312a1def76bb21205d1594c04e59c39fd48d911c7b403dbecaa008a7
+    hash: sha256:cebbce399ca821eb0c9972f0e53ec1fc198d2e88edf3e2666f2c039fc9857296
     supports: [capability.set-shipping-rates, rules, troubleshooting]
   - path: backend/sales/types/shipping_costs.go
     role: data-model
@@ -223,7 +223,7 @@ files:
     supports: [concepts, capability.set-shipping-rates]
   - path: backend/business/locations-warehouses.go
     role: backend-handler
-    hash: sha256:591db493e761ac7d062bca3889e7ff4b3f6e85ced92017621658957d8742af39
+    hash: sha256:636d6418f5b766d54835e02c5644b769a6d5b4fc18fbc769c422fa256fd48a31
     supports: [concepts, capability.browse-zones]
   - path: backend/business/types/generales.go
     role: data-model

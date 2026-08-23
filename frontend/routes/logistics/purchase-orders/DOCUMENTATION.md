@@ -310,22 +310,22 @@ files:
     supports: [concepts, capability.create, capability.review-report, capability.confirm-edit, capability.pay, capability.cancel, capability.receive, rules]
   - path: backend/logistics/purchase-order-management.go
     role: business-logic
-    hash: sha256:d0c3d59fe6e6f5f47a5a82ef4e0f5fc8fa62f10466dba242af3f5ba39bff65a8
+    hash: sha256:719c51df665801490860ad81d5d4c4a858b6be28dff182f83fa1cc46a05c9ef6
     supports: [concepts, capability.create, capability.confirm-edit, capability.pay, capability.cancel, capability.receive, rules, troubleshooting]
   - path: backend/logistics/purchase_order.go
     role: backend-handler
-    hash: sha256:a83600a74b3b355fe2ce9536a89549c7d115afbe57de8297e5154519c208aa39
+    hash: sha256:a4fd6b0a3e66673b7772f64a2d67f7a8f999d76e10fd23f3095c561c506a7da7
     supports: [capability.review-report]
   - path: backend/logistics/product-stock-movement.go
     role: business-logic
-    hash: sha256:3f1bcf6a690c536448f47b89173b6ee636aab1150be37a0adfd11819b58a8a2e
+    hash: sha256:4de10daa67c3c1b9f5fd42817b1647b54e2485542ead3a04623e65850bf89be1
     supports: [capability.receive, rules]
   - path: backend/logistics/types/purchase_order.go
     role: data-model
     hash: sha256:b25095c917dbab906be5199930849f8d8d51cad94f95ac6fb7eaed7b2806aa69
     supports: [concepts, capability.create, capability.confirm-edit, capability.pay, capability.cancel, capability.receive, rules]
-  - path: backend/finance/cash_bank_movement.go
+  - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:dced7592fe610decf9352eb1705b09a46b75a2be73c438cff81d4be7f03a4775
+    hash: sha256:356b238b23cee7b4a084ccab1e5d8e281232a986feefa2b92d1d184c6aa78cb1
     supports: [capability.pay, rules]
 ```

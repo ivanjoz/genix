@@ -477,19 +477,19 @@ files:
     supports: [capability.categories-brands, troubleshooting]
   - path: backend/business/products.go
     role: backend-handler
-    hash: sha256:0142daf60d7e0d4b3196977bc7382ff906fc31a1f60b4aab96745441c117e2fd
+    hash: sha256:7d371b6346611946c6e28283a074fc0a3e84300d83f80ef24989165f765b181c
     supports: [capability.create-edit-product, capability.delete-product, capability.product-photos, capability.import-export, rules, troubleshooting]
   - path: backend/business/shared-lists.go
     role: backend-handler
-    hash: sha256:96520ce6eda5bf98ed074e6de3a5579ccef39340b7e4643910712c28de08b907
+    hash: sha256:79187a2b1144faecea407dc465e3e2a609f38bc6c10e49228544480ec33c2f3e
     supports: [capability.categories-brands, rules]
   - path: backend/business/types/productos.go
     role: data-model
-    hash: sha256:a26703a968048adf7aa708d753e7d689bfeea5e0d9ad5c98447f078cc1a63ef5
+    hash: sha256:ef0c9c9510bfa7e46e54f5d803ac4365a2bcfe30e7cf1ba22abcf191d08b3fb6
     supports: [concepts, capability.create-edit-product, capability.presentations, rules]
   - path: backend/business/product-ecommerce.go
     role: business-logic
-    hash: sha256:e396e5fc6059db4716dbe375a38c41101d14677e7754523e740f1082e56b8043
+    hash: sha256:cb89b769e506d2f10a8c22cc09e51bda7fa000ec33311af858360559d8587597
     supports: [rules]
   - path: backend/access_list.yml
     role: permissions

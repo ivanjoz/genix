@@ -223,7 +223,7 @@ files:
     supports: [related-pages]
   - path: backend/business/client_provider.go
     role: backend-handler
-    hash: sha256:c7ecb92cebcdf753b5a7f27110eb7ab5c941e65709f59db146c529063e434938
+    hash: sha256:db76017c6c58931e11f5edd085a447ba767cfaafe3a66f51c6006cbf3aa312ce
     supports: [capability.create-edit, rules, troubleshooting]
   - path: backend/business/types/client_provider.go
     role: data-model

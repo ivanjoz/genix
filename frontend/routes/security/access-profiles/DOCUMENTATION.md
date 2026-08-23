@@ -269,7 +269,7 @@ files:
     supports: [capability.create-edit-profile]
   - path: backend/security/perfiles.go
     role: backend-handler
-    hash: sha256:861f732beabf364927b86442008150b031b2713d81fe32d2fd5111e41cd79680
+    hash: sha256:113302558b3786f75888ce60a4fa77b986407b4c329a0517a6faa3f6772a5765
     supports: [capability.create-edit-profile, capability.assign-access, rules]
   - path: backend/security/types/perfiles.go
     role: data-model
@@ -277,7 +277,7 @@ files:
     supports: [concepts, capability.assign-access]
   - path: backend/security/usuarios.go
     role: business-logic
-    hash: sha256:935f2eaa69e09aeec251d13599c9e5d4de36907e6e9d6bcece051cd542e5218d
+    hash: sha256:4fdce6a6f623a1b5277ac6291288406e68efa73e720d004fa3765607e1079d9b
     supports: [concepts, capability.assign-access, rules]
   - path: backend/access_list.yml
     role: permissions

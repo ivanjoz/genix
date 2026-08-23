@@ -263,14 +263,14 @@ files:
     supports: [concepts, capability.configure-account, capability.manual-movement, capability.reconcile, capability.inspect-history]
   - path: backend/finance/cash_banks.go
     role: backend-handler
-    hash: sha256:d3bd7b24ab258a52e5d404fee29c8b796d91507f84fb2caf2c0f44330504e36f
+    hash: sha256:179d00458a197a4838419259a259497a73c526921fcae7fe0a9e96015697b8f6
     supports: [capability.configure-account, capability.manual-movement, capability.reconcile, capability.inspect-history, rules, troubleshooting]
-  - path: backend/finance/cash_bank_movement.go
+  - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:dced7592fe610decf9352eb1705b09a46b75a2be73c438cff81d4be7f03a4775
+    hash: sha256:356b238b23cee7b4a084ccab1e5d8e281232a986feefa2b92d1d184c6aa78cb1
     supports: [concepts, capability.manual-movement, capability.reconcile, rules]
   - path: backend/finance/types/cash_banks.go
     role: data-model
-    hash: sha256:82ac985de5ca9fe560af0386a7bb6c35c8b65352c3a0b006cce8620fc5b84957
+    hash: sha256:f15985cf09aff1a934c1d9b6f5634c5f510570e4bc3025c14a6131c1d140b614
     supports: [concepts, capability.configure-account, capability.manual-movement, capability.reconcile, rules]
 ```

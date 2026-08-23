@@ -191,7 +191,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan Parámetros: [CashBank-ID]")
 	}
 
-	cashBank, err := GetCaja(req.User.CompanyID, record.CashBankID)
+	cashBank, err := types.GetCaja(req.User.CompanyID, record.CashBankID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -264,7 +264,7 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Las trasferencias necesitan especificar una cashBank de destino.")
 	}
 
-	cashBank, err := GetCaja(req.User.CompanyID, record.CashBankID)
+	cashBank, err := types.GetCaja(req.User.CompanyID, record.CashBankID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -285,7 +285,7 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		FinalAmount:   record.FinalAmount,
 	}
 
-	if err := ApplyCashBankMovement(req, []types.InternalCashMovement{movimientoInterno}); err != nil {
+	if err := types.ApplyCashBankMovement(req, []types.InternalCashMovement{movimientoInterno}); err != nil {
 		return req.MakeErr(err)
 	}
 

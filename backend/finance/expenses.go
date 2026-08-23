@@ -469,7 +469,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// 2. Load the source cash bank and enforce a matching currency.
-	cashBank, err := GetCaja(req.User.CompanyID, body.CashBankID)
+	cashBank, err := types.GetCaja(req.User.CompanyID, body.CashBankID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -496,7 +496,7 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		Amount:      movementAmount,
 		FinalAmount: 0,
 	}
-	if err := ApplyCashBankMovement(req, []types.InternalCashMovement{movement}); err != nil {
+	if err := types.ApplyCashBankMovement(req, []types.InternalCashMovement{movement}); err != nil {
 		return req.MakeErr(err)
 	}
 

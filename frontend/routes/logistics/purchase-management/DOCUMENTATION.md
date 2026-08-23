@@ -215,7 +215,7 @@ files:
     supports: [concepts, capability.browse-supply]
   - path: backend/logistics/product-supply-management.go
     role: backend-handler
-    hash: sha256:370d9917b816780728a24f3c573b03600cfe39c4e0f79b2565918f71fcf92622
+    hash: sha256:5a5453a1af321db2b1f2f5edabd8b7c2dc2c12fcaec9bc6d415d8dcdb133c68b
     supports: [capability.browse-supply, capability.configure-supply, rules, troubleshooting]
   - path: backend/logistics/types/product_supply.go
     role: data-model

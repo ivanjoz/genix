@@ -349,7 +349,7 @@ files:
     supports: [capability.configure-sales-parameters]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:03dfbe6e253c0d73c85654993442e2479e33fdb08a44d74e00fd66076643656f
+    hash: sha256:8068f85ffdc9c0382877528bde49699817c439b629e907d2391656574d4bef2f
     supports: [capability.assign-client, capability.set-payment-delivery, rules, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model
@@ -357,15 +357,15 @@ files:
     supports: [concepts, capability.set-payment-delivery, rules]
   - path: backend/business/client_provider.go
     role: business-logic
-    hash: sha256:c7ecb92cebcdf753b5a7f27110eb7ab5c941e65709f59db146c529063e434938
+    hash: sha256:db76017c6c58931e11f5edd085a447ba767cfaafe3a66f51c6006cbf3aa312ce
     supports: [capability.assign-client]
-  - path: backend/finance/cash_bank_movement.go
+  - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:dced7592fe610decf9352eb1705b09a46b75a2be73c438cff81d4be7f03a4775
+    hash: sha256:356b238b23cee7b4a084ccab1e5d8e281232a986feefa2b92d1d184c6aa78cb1
     supports: [capability.set-payment-delivery]
   - path: backend/logistics/product-stock-movement.go
     role: business-logic
-    hash: sha256:3f1bcf6a690c536448f47b89173b6ee636aab1150be37a0adfd11819b58a8a2e
+    hash: sha256:4de10daa67c3c1b9f5fd42817b1647b54e2485542ead3a04623e65850bf89be1
     supports: [capability.set-payment-delivery]
   - path: backend/sales/sale_summary.go
     role: business-logic

@@ -3,9 +3,8 @@ package logistics
 import (
 	"app/core"
 	"app/db"
-	"app/finance"
-	financeTypes "app/finance/types"
-	logisticsTypes "app/logistics/types"
+	finance "app/finance/types"
+	"app/logistics/types"
 	"encoding/json"
 	"slices"
 )
@@ -59,7 +58,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Obtener la OC para validar estado y mapear precios pedidos.
-	existing := []logisticsTypes.PurchaseOrder{}
+	existing := []types.PurchaseOrder{}
 	if err := db.Query(&existing).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.Equals(payload.PurchaseOrderID).Limit(1).Exec(); err != nil {
@@ -69,7 +68,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Orden de compra no encontrada.")
 	}
 	order := existing[0]
-	if order.Status != logisticsTypes.PurchaseOrderStatusConfirmed {
+	if order.Status != types.PurchaseOrderStatusConfirmed {
 		return req.MakeErr("La orden no está en estado Confirmada y no puede recibirse.")
 	}
 
@@ -135,10 +134,10 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	// Construir movimientos: ReemplazarCantidad=false (suma a stock), DocumentID enlaza
 	// el ledger con la OC, SupplierID se completa con el ProviderID de la OC para
 	// que la resolución de lotes use el hash (date, proveedor, nombre).
-	movimientos := make([]logisticsTypes.InternalMovement, 0, len(payload.Items))
+	movimientos := make([]types.InternalMovement, 0, len(payload.Items))
 	for _, item := range payload.Items {
 		key := orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}
-		movimientos = append(movimientos, logisticsTypes.InternalMovement{
+		movimientos = append(movimientos, types.InternalMovement{
 			DocumentID:     int64(order.ID),
 			WarehouseID:    payload.WarehouseID,
 			ProductID:      item.ProductID,
@@ -158,14 +157,14 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Cumplir la OC: Status=Fulfilled + diferencias calculadas.
 	now := core.SUnixTime()
-	order.Status = logisticsTypes.PurchaseOrderStatusFulfilled
+	order.Status = types.PurchaseOrderStatusFulfilled
 	order.DifferenceQuantity = diffQuantity
 	order.DifferenceValue = diffValue
 	order.Updated = now
 	order.UpdatedBy = req.User.ID
 
-	q := db.TableOf[logisticsTypes.PurchaseOrder]()
-	if err := db.Update(&[]logisticsTypes.PurchaseOrder{order},
+	q := db.TableOf[types.PurchaseOrder]()
+	if err := db.Update(&[]types.PurchaseOrder{order},
 		q.Status, q.DifferenceQuantity, q.DifferenceValue, q.Updated, q.UpdatedBy,
 	); err != nil {
 		return req.MakeErr("Error al actualizar la orden de compra.", err)
@@ -180,12 +179,12 @@ func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
 	statusParam := int8(req.GetQueryInt("status"))
 
 	if statusParam == 0 {
-		statusParam = logisticsTypes.PurchaseOrderStatusPending
+		statusParam = types.PurchaseOrderStatusPending
 	}
 
 	// Delta() reproduces exactly what this handler used to fan out by hand: the requested status only
 	// on a first sync, every declared status afterwards so the client can evict rows that moved.
-	records := []logisticsTypes.PurchaseOrder{}
+	records := []types.PurchaseOrder{}
 	query := db.Query(&records)
 	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, int64(statusParam))
 
@@ -197,7 +196,7 @@ func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
-	record := logisticsTypes.PurchaseOrder{}
+	record := types.PurchaseOrder{}
 	if err := json.Unmarshal([]byte(*req.Body), &record); err != nil {
 		return req.MakeErr("Error al deserializar el body.", err)
 	}
@@ -229,7 +228,7 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	currentSemana := core.MakeSemanaFromFechaUnix(todayFecha, false)
 
 	record.CompanyID = req.User.CompanyID
-	record.Status = logisticsTypes.PurchaseOrderStatusPending
+	record.Status = types.PurchaseOrderStatusPending
 	record.Updated = now
 	record.UpdatedBy = req.User.ID
 	if record.ID == 0 {
@@ -241,22 +240,22 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		record.DebtAmount = record.TotalAmount
 	}
 
-	records := []logisticsTypes.PurchaseOrder{record}
+	records := []types.PurchaseOrder{record}
 	if err := db.Merge(&records, nil,
-		func(prev, curr *logisticsTypes.PurchaseOrder) bool {
+		func(prev, curr *types.PurchaseOrder) bool {
 			curr.CompanyID = req.User.CompanyID
 			curr.Created = prev.Created
 			curr.CreatedBy = prev.CreatedBy
 			curr.Date = prev.Date
 			curr.Week = prev.Week
-			curr.Status = logisticsTypes.PurchaseOrderStatusPending
+			curr.Status = types.PurchaseOrderStatusPending
 			curr.Updated = now
 			curr.UpdatedBy = req.User.ID
 			return true
 		},
-		func(curr *logisticsTypes.PurchaseOrder) {
+		func(curr *types.PurchaseOrder) {
 			curr.CompanyID = req.User.CompanyID
-			curr.Status = logisticsTypes.PurchaseOrderStatusPending
+			curr.Status = types.PurchaseOrderStatusPending
 			curr.Updated = now
 			curr.UpdatedBy = req.User.ID
 			curr.Date = todayFecha
@@ -281,7 +280,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Obtener la orden actual para validar su estado antes de modificarla
-	existing := []logisticsTypes.PurchaseOrder{}
+	existing := []types.PurchaseOrder{}
 	if err := db.Query(&existing).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.Equals(orderID).Limit(1).Exec(); err != nil {
@@ -293,19 +292,19 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	orderCurrent := existing[0]
 	now := core.SUnixTime()
-	q := db.TableOf[logisticsTypes.PurchaseOrder]()
+	q := db.TableOf[types.PurchaseOrder]()
 
 	switch action {
 	case PurchaseOrderActionConfirm:
 		// Solo se puede confirmar si está en estado Pendiente (1)
-		if orderCurrent.Status != logisticsTypes.PurchaseOrderStatusPending {
+		if orderCurrent.Status != types.PurchaseOrderStatusPending {
 			return req.MakeErr("La orden no está en estado Pendiente y no puede confirmarse.")
 		}
-		orderCurrent.Status = logisticsTypes.PurchaseOrderStatusConfirmed
+		orderCurrent.Status = types.PurchaseOrderStatusConfirmed
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -313,14 +312,14 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	case PurchaseOrderActionEdit:
 		// Solo se permite editar mientras la orden esté Pendiente (1) o Confirmada (2);
 		// los demás estados (Cancelada, Cumplida) son inmutables.
-		if orderCurrent.Status != logisticsTypes.PurchaseOrderStatusPending &&
-			orderCurrent.Status != logisticsTypes.PurchaseOrderStatusConfirmed {
+		if orderCurrent.Status != types.PurchaseOrderStatusPending &&
+			orderCurrent.Status != types.PurchaseOrderStatusConfirmed {
 			return req.MakeErr("La orden no se puede editar en su estado actual.")
 		}
 
 		// Decodifica únicamente los campos editables; ProviderID, Status, productos y totales
 		// se preservan desde el registro existente para evitar modificaciones no autorizadas.
-		patch := logisticsTypes.PurchaseOrder{}
+		patch := types.PurchaseOrder{}
 		if err := json.Unmarshal([]byte(*req.Body), &patch); err != nil {
 			return req.MakeErr("Error al deserializar el body.", err)
 		}
@@ -333,7 +332,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent},
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
 			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.InvoiceNumber, q.Notes, q.Updated, q.UpdatedBy, q.Status,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
@@ -343,7 +342,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	case PurchaseOrderActionPay:
 		// Solo se registra pago cuando la orden está Confirmada: Pendiente debe pasar primero
 		// por Confirmar (acción 1) y los demás estados son inmutables.
-		if orderCurrent.Status != logisticsTypes.PurchaseOrderStatusConfirmed {
+		if orderCurrent.Status != types.PurchaseOrderStatusConfirmed {
 			return req.MakeErr("La orden no está en estado Confirmada y no puede pagarse.")
 		}
 
@@ -362,13 +361,13 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		// El pago sale de la cashBank: Amount negativo para que ApplyCajaMovimientos descuente del saldo.
-		movimiento := financeTypes.InternalCashMovement{
+		movimiento := finance.InternalCashMovement{
 			CashBankID: payload.CashBankID,
 			DocumentID: int64(orderCurrent.ID),
-			Type:       financeTypes.CashMovementTypeSupplierPayment,
+			Type:       finance.CashMovementTypeSupplierPayment,
 			Amount:     -payload.Amount,
 		}
-		if err := finance.ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
+		if err := finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{movimiento}); err != nil {
 			return req.MakeErr("Error al registrar el movimiento de cashBank:", err)
 		}
 
@@ -376,7 +375,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.DebtAmount, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.DebtAmount, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al actualizar la deuda de la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -384,15 +383,15 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	case PurchaseOrderActionAnnul:
 		// Solo se permite anular órdenes en estado Pendiente o Confirmada; las ya Canceladas
 		// o Cumplidas son inmutables para preservar consistencia contable.
-		if orderCurrent.Status != logisticsTypes.PurchaseOrderStatusPending &&
-			orderCurrent.Status != logisticsTypes.PurchaseOrderStatusConfirmed {
+		if orderCurrent.Status != types.PurchaseOrderStatusPending &&
+			orderCurrent.Status != types.PurchaseOrderStatusConfirmed {
 			return req.MakeErr("La orden no se puede anular en su estado actual.")
 		}
-		orderCurrent.Status = logisticsTypes.PurchaseOrderStatusCanceled
+		orderCurrent.Status = types.PurchaseOrderStatusCanceled
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]logisticsTypes.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al anular la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)

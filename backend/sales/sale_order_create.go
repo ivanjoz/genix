@@ -5,8 +5,7 @@ import (
 	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
-	"app/finance"
-	financeTypes "app/finance/types"
+	finance "app/finance/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
 	"app/sales/types"
@@ -152,15 +151,15 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		montoPago := sale.TotalAmount - sale.DebtAmount
 		if montoPago != 0 {
-			movimiento := financeTypes.InternalCashMovement{
+			movimiento := finance.InternalCashMovement{
 				CashBankID: sale.LastPaymentCajaID,
 				DocumentID: sale.ID,
-				Type:       financeTypes.CashMovementTypeSaleCollection,
+				Type:       finance.CashMovementTypeSaleCollection,
 				Amount:     montoPago,
 			}
 
 			eg.Go(func() error {
-				if err := finance.ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimiento}); err != nil {
+				if err := finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{movimiento}); err != nil {
 					core.Log("Error al aplicar movimiento de cashBank:", err)
 					return core.Err("Error al registrar el movimiento de cashBank:", err)
 				}

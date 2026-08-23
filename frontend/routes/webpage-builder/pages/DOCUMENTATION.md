@@ -404,7 +404,7 @@ files:
     supports: [related-pages]
   - path: backend/webpage/webpage_pages.go
     role: backend-handler
-    hash: sha256:4556f16d7bf4808ee3007bd81a46493a7e8d2d770d3238da79a9f1376c73f72d
+    hash: sha256:67fb61f8432c25edf62f9f3a35b252482ed3886aabdd71a2bcdf332dd886829c
     supports: [capability.browse-pages, capability.create-edit-page, capability.delete-page, rules, troubleshooting]
   - path: backend/webpage/types/webpages.go
     role: data-model
@@ -412,23 +412,23 @@ files:
     supports: [concepts, capability.create-edit-page, capability.delete-page]
   - path: backend/webpage/webpage_showcase.go
     role: backend-handler
-    hash: sha256:6a56679fe9bddb197c002c145ebc613e75a1639b01aa24d2938a7f29073318be
+    hash: sha256:176f8183cd97956437b20e7326890736f940ab99b43e0283bfacd585101ca91d
     supports: [capability.edit-page-content]
   - path: backend/webpage/webpage_config.go
     role: backend-handler
-    hash: sha256:747c8286f496b2eb9c1ba6762139384ff12ccbdaf1d33e32f2e5a3764df7172e
+    hash: sha256:d0f3e9b041dba461d73db84f5331b8769dd09b0089f075ee8124dcbf55046d4b
     supports: [capability.site-domain, capability.site-seo]
   - path: backend/webpage/webpage_render.go
     role: business-logic
-    hash: sha256:fa1be448cb0dbcbf4b5663ea3414808b1c4834e1bd34f8ffd78d389055d4a85d
+    hash: sha256:785085c7a47c91770800e4d8588748702bf10f3a48499e20d1487c780bfab23e
     supports: [concepts, capability.create-edit-page, capability.edit-page-content, capability.site-domain]
   - path: backend/webpage/webpage_public.go
     role: backend-handler
-    hash: sha256:860df08cc3c0a9c2afc4dcde95ba22683878bb0b99abe2cf53618d710918838c
+    hash: sha256:1ab8da2813a9df779e6a7b9c5cb4d2b5cf4901b30794a80f8edb7ef74f76eb1d
     supports: [capability.site-seo]
   - path: backend/webpage/page_content.go
     role: backend-handler
-    hash: sha256:61983a447011932a81ddb4dbe55dad359b266bba58fbfe78dca50d6210a689f2
+    hash: sha256:0999af64bb0fed3bef10c7e02c06dd9528501b5f70cfd0714e7bc8ce551f79a9
     supports: [capability.edit-page-content]
   - path: backend/access_list.yml
     role: permissions
