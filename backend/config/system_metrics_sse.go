@@ -2,7 +2,7 @@ package config
 
 import (
 	"app/core"
-	servermetrics "app/system"
+	"app/libs/servermetrics"
 	"errors"
 	"net/http"
 	"strconv"

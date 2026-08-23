@@ -1,36 +1,25 @@
-## `*/types` packages are imported under the module's name, not a `<module>Types` alias
+## `system/` was never a module — it is now `libs/servermetrics/`
 
-**Context** — every `<module>/types` folder declares `package types`, so every import of one
-needs a local name. 147 such imports had accumulated in five competing styles:
-`businessTypes`, `coreTypes`, `coretypes`, bare `types`, and `s` — the last of which made
-`s.ClientProvider` in `business/client_provider.go` effectively ungrepable. This mattered
-beyond tidiness: the module-boundary work (`MODULE_BOUNDARIES_PLAN.md`) moves cross-module
-shared functions into `*/types`, and the call sites only stay unchanged if consumers already
-refer to the types package by the domain's name.
+**Context** — `backend/system/` sat at module level next to `sales`, `finance` and the rest, but
+it declared no `ModuleHandlers`, had **zero** `app/` imports, and contained only OS metric
+collection (`ServerMetricsCollector`, `CollectGoHeapPackageReport`, snapshot structs). Its only
+consumer, `config`, imported it as `servermetrics "app/system"` — an alias whose sole job was to
+correct the folder name. Under the module-boundary rule (`MODULE_BOUNDARIES_PLAN.md`) a module
+body may not import another module body, so `config -> system` read as a violation of a rule it
+was never really breaking.
 
-**Decision** — two rules. Outside the owning module, alias to the module name:
-`finance "app/finance/types"` → `finance.CashBank`. Inside the owning module, no alias — use
-the package name: `import "app/finance/types"` → `types.CashBank`. Applied across 93 imports
-in 61 files.
+**Decision** — moved to `libs/servermetrics/`, package renamed `system` -> `servermetrics`. The
+two importers in `config` now use a bare `"app/libs/servermetrics"` with no alias. Stale path
+references updated in `server_utils/PLAN_SERVER_METRICS.md`,
+`server_utils/src/sysmetrics/collector.rs`, the repo map in `AGENTS.md`, and — the one that
+would have broken a test — the evidence `path:` entries in
+`frontend/routes/system/server-panel/DOCUMENTATION.md`, which the ragdocs parser validates by
+path and content hash.
 
-Three exceptions, all forced rather than chosen:
-- **`core/types` is always `coreTypes`.** `app/core` is imported by 147 files as `core`, so
-  `core/types` can never take that name. 23 occurrences.
-- **A file importing both a module body and its types keeps `<module>Types`.** Only
-  composition roots legitimately do this — `exec/demo2.go`, `exec/invoicing_beta.go` and the
-  two `tests/sample_records` generators — since after the boundary work no module body imports
-  another.
-- **The five files carrying a cross-module violation were left untouched** —
-  `accounting/asset_api.go`, `asset_payment.go`, `inventory_expense.go`,
-  `sales/sale_order_create.go`, `logistics/purchase-order-management.go`. Moving the shared
-  functions into `*/types` removes their module-body import, and with it the collision, so
-  converting them now would mean editing them twice.
+**Rationale** — `libs/` over `core/` because this reads the OS, not the domain, and `libs/` is
+where non-business generics live; `core/` holds cross-cutting code that does carry business
+logic. Classifying it as a foundation package rather than a module is what makes the boundary
+rule honest: the import was never the problem, the folder's position was. Cost is a moved
+folder and the four external references above, none of which are load-bearing at build time
+except the DOCUMENTATION.md evidence paths.
 
-**Rationale** — reading `logistics.InternalMovement` at a call site names the domain; reading
-`logisticsTypes.InternalMovement` names the plumbing. The split at the module border is what
-makes both halves read well: inside `package finance`, `finance.CashBank` looks like a
-self-reference and forces an alias line into every file for nothing, while outside it is
-unambiguous. The cost is that the local name no longer matches the package clause, so a reader
-must look at the import block to resolve `finance.` — accepted because the alternative is 147
-call sites naming a folder instead of a domain. `sales/sale_order_create.go` already used the
-inside-module half of this convention, so it was half-adopted by accident before being decided.

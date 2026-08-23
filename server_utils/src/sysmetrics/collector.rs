@@ -3,7 +3,7 @@
 //! Per-service numbers come from the unit's cgroup rather than from walking its PIDs: one file read
 //! covers a multi-process service like Scylla correctly, and a missing directory is exactly the
 //! "this service is not on the box" signal the Lambda case needs. Host-wide numbers mirror the
-//! algorithms already in `backend/system/metrics_collector.go`, so the stored series and the live
+//! algorithms already in `backend/libs/servermetrics/metrics_collector.go`, so the stored series and the live
 //! SSE panel cannot disagree about what the same second looked like.
 //!
 //! Every read is fallible and no failure is fatal: a metric that could not be read comes back as

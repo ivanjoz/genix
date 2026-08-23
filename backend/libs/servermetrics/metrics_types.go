@@ -1,4 +1,4 @@
-package system
+package servermetrics
 
 type CPUMetrics struct {
 	PercentUsed float64 `json:"percent_used"`

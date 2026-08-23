@@ -274,11 +274,11 @@ files:
     role: backend-handler
     hash: sha256:8748f7e70b47ca8fa4fe46897efc1111a8d2c8a8cfc654c7d95ed108dd4c4100
     supports: [capability.inspect-memory, rules, troubleshooting]
-  - path: backend/system/memory_packages_report.go
+  - path: backend/libs/servermetrics/memory_packages_report.go
     role: business-logic
     hash: sha256:3564ee1079241b2a3935b69df0a744d55daaa026f30289a4a14ec46487869f64
     supports: [concepts, capability.inspect-memory]
-  - path: backend/system/metrics_collector.go
+  - path: backend/libs/servermetrics/metrics_collector.go
     role: business-logic
     hash: sha256:efedf0e94a3a3b8f18ece2993541f37408a5d9aa482cdd034ee8f5c0086d23f2
     supports: [concepts, capability.inspect-memory, troubleshooting]

@@ -11,7 +11,7 @@ Still outstanding: `deploy.sh` → [5] Recrear Tablas, so the table exists befor
 restarted against it. See "Deploying it".
 
 Today the server panel at `/system/server-panel` shows live numbers and forgets them: the Go
-collector in `backend/system/` samples on demand and streams the snapshot over SSE, so nothing
+collector in `backend/libs/servermetrics/` samples on demand and streams the snapshot over SSE, so nothing
 survives the tab being closed.
 
 This adds the missing half — a daemon in `server_utils/` that samples the box every second and, every
@@ -141,7 +141,7 @@ Two file reads per service, correct for multi-process and multi-threaded units a
 directory is exactly the "service is absent" signal. `cpuCount` comes from counting the `cpuN` lines
 in `/proc/stat`, so no `num_cpus` dependency.
 
-**Host-wide**, mirroring the algorithms already in `backend/system/metrics_collector.go` so the
+**Host-wide**, mirroring the algorithms already in `backend/libs/servermetrics/metrics_collector.go` so the
 stored series and the live panel cannot disagree:
 
 - CPU: `/proc/stat` aggregate line, `(totalDelta - idleDelta) / totalDelta`.
@@ -255,4 +255,4 @@ a day is a short one. `sample_seconds` must divide `row_seconds`.
 ## Not in this plan
 
 Reading the series back: the Go handler for a day's slots, and the history view in the panel. The
-live SSE stream and `backend/system/metrics_collector.go` stay exactly as they are.
+live SSE stream and `backend/libs/servermetrics/metrics_collector.go` stay exactly as they are.
