@@ -2,7 +2,7 @@ package exec
 
 import (
 	"app/core"
-	"app/logistics"
+	logisticsTypes "app/logistics/types"
 )
 
 func RecalcStock(args *core.ExecArgs) core.FuncResponse {
@@ -12,7 +12,7 @@ func RecalcStock(args *core.ExecArgs) core.FuncResponse {
 		companyID = 1
 	}
 
-	if err := logistics.RecalcProductStockByMovements(companyID); err != nil {
+	if err := logisticsTypes.RecalcProductStockByMovements(companyID); err != nil {
 		return core.FuncResponse{Error: err.Error()}
 	}
 

@@ -310,7 +310,7 @@ files:
     supports: [concepts, capability.create, capability.review-report, capability.confirm-edit, capability.pay, capability.cancel, capability.receive, rules]
   - path: backend/logistics/purchase-order-management.go
     role: business-logic
-    hash: sha256:719c51df665801490860ad81d5d4c4a858b6be28dff182f83fa1cc46a05c9ef6
+    hash: sha256:517ae84b29a0a72d496e7e2ae960e93044b9e87cc844f704e40d4c66543bdef3
     supports: [concepts, capability.create, capability.confirm-edit, capability.pay, capability.cancel, capability.receive, rules, troubleshooting]
   - path: backend/logistics/purchase_order.go
     role: backend-handler
@@ -318,7 +318,7 @@ files:
     supports: [capability.review-report]
   - path: backend/logistics/product-stock-movement.go
     role: business-logic
-    hash: sha256:4de10daa67c3c1b9f5fd42817b1647b54e2485542ead3a04623e65850bf89be1
+    hash: sha256:2e444cb603b22f38bdb3ca5f0928679bcbbb884da60e2442a458b4e237f3a6a3
     supports: [capability.receive, rules]
   - path: backend/logistics/types/purchase_order.go
     role: data-model

@@ -308,7 +308,7 @@ files:
     supports: [capability.browse-filter, rules, troubleshooting]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:8068f85ffdc9c0382877528bde49699817c439b629e907d2391656574d4bef2f
+    hash: sha256:7e35116bcbba123f82b1e36461bdeeb961b34318f1a2c3e84ef53c4330f7f2b2
     supports: [capability.pay, capability.deliver, rules, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model

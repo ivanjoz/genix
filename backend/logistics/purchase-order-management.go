@@ -151,7 +151,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 			Price:          getStats(key).price,
 		})
 	}
-	if err := ApplyMovimientos(req, movimientos); err != nil {
+	if err := types.ApplyMovimientos(req, movimientos); err != nil {
 		return req.MakeErr(err)
 	}
 

@@ -5,8 +5,7 @@ import (
 	"app/core"
 	"app/db"
 	financeTypes "app/finance/types"
-	"app/logistics"
-	logisticsTypes "app/logistics/types"
+	logistics "app/logistics/types"
 	"encoding/json"
 )
 
@@ -106,7 +105,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 
 	// The stock movement carries the expense as its DocumentID, so the ledger points back
 	// at what paid for it.
-	inboundMovement := logisticsTypes.InternalMovement{
+	inboundMovement := logistics.InternalMovement{
 		ProductID:   payload.ProductID,
 		WarehouseID: payload.WarehouseID,
 		SupplierID:  payload.SupplierID,
@@ -115,7 +114,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		DocumentID:  int64(expenseRecords[0].ID),
 	}
 	if movementError := logistics.ApplyMovimientos(
-		req, []logisticsTypes.InternalMovement{inboundMovement},
+		req, []logistics.InternalMovement{inboundMovement},
 	); movementError != nil {
 		return req.MakeErr("Error al ingresar el insumo al almacén.", movementError)
 	}

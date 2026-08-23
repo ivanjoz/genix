@@ -1,30 +1,30 @@
-## The cash ledger writer lives in `finance/types`, not in `finance`
+## The stock movement engine lives in `logistics/types`, and the `sales` copy of its key packer is gone
 
-**Context** — `ApplyCashBankMovement` is the only way money moves: `sales` writes a collection,
-`logistics` a supplier payment, `finance` an expense payment, `accounting` an asset payment. All
-four reached it by importing `app/finance`, which is exactly the module-body-to-module-body
-import the boundary rule forbids (V1, V3, V4 in `MODULE_BOUNDARIES_PLAN.md`).
+**Context** — `ApplyMovimientos` is the only writer of `ProductStockV2` and the movement ledger,
+and `sales` (delivery) and `accounting` (asset acquisition, inventory expense) both have to call
+it. Both reached it by importing `app/logistics` (V2, V4). The cost of that missing seam was
+already visible: `sales/sale_order_create.go` carried `packProductStockIDForSale`, a hand copy of
+`logistics.packProductStockID` — the ORM's `KeyIntPacking` formula for `ProductStockV2`,
+duplicated in two places where it must agree with the schema. Its comment justified the copy with
+a circular dependency that did not exist: `logistics` imports only `business/types`, never
+`business`.
 
-**Decision** — `finance/cash_bank_movement.go` and `finance/shared.go` (`GetCaja`) are gone; both
-functions now live in `finance/types/cash_movement_apply.go`. Consumers import only
-`app/finance/types`.
+**Decision** — `logistics/product-stock-movement.go:262`–end plus all of
+`logistics/stock-reprocess.go` moved into `logistics/types/stock_movement_apply.go`. The
+duplicate in `sales` is deleted and calls `logistics.PackProductStockID`.
 
-**Rationale** — the alternative was a `finance/shared` package, which is one more layer and one
-more name to learn. Putting it in `types` works because of the import convention: consumers
-already alias `app/finance/types` to `finance`, so
-`finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{...})` is **byte-for-byte the
-call site that existed before** — the two-line import block collapsed to one line and nothing
-below it changed. The moved code depends on nothing but `core`, `db` and its own tables, so
-`types` stays a leaf and the rule has no escape hatch, which is the point.
+**Rationale** — the recalc moved with the engine (not left behind) because the two share one
+per-company write lock: splitting them would have forced `getApplyMovimientosCompanyLock` to be
+exported for no reason other than the file boundary. `RecalcProductStockByMovements` is called
+from `exec`, a composition root, so exporting it costs nothing.
 
-The cost is honest: `types` now holds the heaviest logic in the module, so the folder name
-undersells it. A file-level comment in `cash_movement_apply.go` says why it is there, and the
-filename is specific enough that `fd cash_movement` still finds it.
+One correction to the plan's Q3 reasoning: moving the recalc keeps the **lock** private, but
+`packProductStockID` had to be exported as `PackProductStockID` regardless, because `sales` needs
+the packed key for stock validation — which is precisely why the duplicate existed. Trading one
+export for one deleted copy of a schema-coupled formula is the right side of that trade; the plan
+was wrong to imply both could stay private.
 
-Fallout worth recording: four `DOCUMENTATION.md` files cited
-`backend/finance/cash_bank_movement.go` as evidence, and the ragdocs parser validates evidence
-by path **and** content hash. Deleting the file broke them, and editing 60+ backend files in the
-earlier steps invalidated 42 more hashes. All 46 were repointed and refreshed. 127 evidence
-entries were **already** stale before this work started and were deliberately left alone — that
-is pre-existing documentation drift, not ours to absorb into a refactor commit.
+**Cost** — `logistics/types` is now the largest package in the module by a wide margin, most of it
+the engine rather than type declarations. The filename and a file-level comment carry the
+explanation; the folder name does not.
 

@@ -6,8 +6,7 @@ import (
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
-	"app/logistics"
-	logisticsTypes "app/logistics/types"
+	logistics "app/logistics/types"
 	"app/sales/types"
 	"encoding/json"
 	"fmt"
@@ -176,7 +175,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if slices.Contains(sale.ActionsIncluded, 3) {
 		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
 
-		movimientosInternos := []logisticsTypes.InternalMovement{}
+		movimientosInternos := []logistics.InternalMovement{}
 		for i, productID := range sale.DetailProductsIDs {
 			if i >= len(sale.DetailQuantities) {
 				break
@@ -186,7 +185,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				continue
 			}
 
-			movimientosInternos = append(movimientosInternos, logisticsTypes.InternalMovement{
+			movimientosInternos = append(movimientosInternos, logistics.InternalMovement{
 				WarehouseID:    sale.WarehouseID,
 				ProductID:      productID,
 				PresentationID: core.GetIndex(sale.DetailProductPresentations, i),
@@ -314,7 +313,7 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		}
 		presentationID := core.GetIndex(sale.DetailProductPresentations, index)
 		key := lineKey{
-			stockID:      packProductStockIDForSale(sale.WarehouseID, productID, presentationID),
+			stockID:      logistics.PackProductStockID(sale.WarehouseID, productID, presentationID),
 			lotID:        core.GetIndex(sale.DetailProductLotIDs, index),
 			serialNumber: core.GetIndex(sale.DetailProductSkus, index),
 		}
@@ -334,12 +333,12 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		}
 	}
 
-	stockByID := map[int64]logisticsTypes.ProductStock{}
-	detailsByKey := map[lineKey]logisticsTypes.ProductStockDetail{}
+	stockByID := map[int64]logistics.ProductStock{}
+	detailsByKey := map[lineKey]logistics.ProductStockDetail{}
 
 	eg := errgroup.Group{}
 	eg.Go(func() error {
-		stocks := []logisticsTypes.ProductStock{}
+		stocks := []logistics.ProductStock{}
 		q := db.Query(&stocks)
 		q.Select(q.ID, q.Quantity, q.DetailQuantity).
 			CompanyID.Equals(req.User.CompanyID).
@@ -354,7 +353,7 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	})
 	if needsDetailFetch {
 		eg.Go(func() error {
-			details := []logisticsTypes.ProductStockDetail{}
+			details := []logistics.ProductStockDetail{}
 			q := db.Query(&details)
 			q.Select().
 				CompanyID.Equals(req.User.CompanyID).
@@ -402,14 +401,6 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		}
 	}
 	return nil
-}
-
-// packProductStockIDForSale mirrors logistics.packProductStockID without importing the package
-// to avoid a circular dependency (logistica already depends on comercial via some paths).
-// Schema: WarehouseID.DecimalSize(5) + ProductID.DecimalSize(9) + PresentationID.DecimalSize(4),
-// 19-digit starting budget.
-func packProductStockIDForSale(warehouseID int32, productID int32, presentationID int16) int64 {
-	return int64(warehouseID)*1e14 + int64(productID)*1e5 + int64(presentationID)*10
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {

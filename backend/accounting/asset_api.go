@@ -5,8 +5,7 @@ import (
 	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
-	"app/logistics"
-	logisticsTypes "app/logistics/types"
+	logistics "app/logistics/types"
 	"encoding/json"
 )
 
@@ -169,9 +168,9 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 4. The asset's existence is its stock, so the units move in through the same engine as
 	//    anything else. A serial-tracked unit lands on its own ProductStockDetail row.
-	movements := make([]logisticsTypes.InternalMovement, len(newAssets))
+	movements := make([]logistics.InternalMovement, len(newAssets))
 	for assetIndex := range newAssets {
-		movements[assetIndex] = logisticsTypes.InternalMovement{
+		movements[assetIndex] = logistics.InternalMovement{
 			ProductID:    payload.ProductID,
 			WarehouseID:  payload.WarehouseID,
 			SerialNumber: newAssets[assetIndex].SerialNumber,
@@ -221,7 +220,7 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Take the units out of the warehouse through the ordinary movement path.
-	outboundMovement := logisticsTypes.InternalMovement{
+	outboundMovement := logistics.InternalMovement{
 		ProductID:    asset.ProductID,
 		WarehouseID:  asset.WarehouseID,
 		SerialNumber: asset.SerialNumber,
@@ -229,7 +228,7 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 		DocumentID:   int64(asset.ID),
 	}
 	if movementError := logistics.ApplyMovimientos(
-		req, []logisticsTypes.InternalMovement{outboundMovement},
+		req, []logistics.InternalMovement{outboundMovement},
 	); movementError != nil {
 		return req.MakeErr("Error al retirar el activo del almacén.", movementError)
 	}
@@ -277,7 +276,7 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El activo ya está en ese almacén.")
 	}
 
-	transferMovement := logisticsTypes.InternalMovement{
+	transferMovement := logistics.InternalMovement{
 		ProductID:       asset.ProductID,
 		WarehouseID:     asset.WarehouseID,
 		DestWarehouseID: payload.TargetWarehouseID,
@@ -286,7 +285,7 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 		DocumentID:      int64(asset.ID),
 	}
 	if movementError := logistics.ApplyMovimientos(
-		req, []logisticsTypes.InternalMovement{transferMovement},
+		req, []logistics.InternalMovement{transferMovement},
 	); movementError != nil {
 		return req.MakeErr("Error al trasladar el activo.", movementError)
 	}

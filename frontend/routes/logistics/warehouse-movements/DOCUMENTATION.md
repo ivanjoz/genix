@@ -262,7 +262,7 @@ files:
     supports: [concepts]
   - path: backend/logistics/product-stock-movement.go
     role: backend-handler
-    hash: sha256:4de10daa67c3c1b9f5fd42817b1647b54e2485542ead3a04623e65850bf89be1
+    hash: sha256:2e444cb603b22f38bdb3ca5f0928679bcbbb884da60e2442a458b4e237f3a6a3
     supports: [concepts, capability.query-range, capability.lookup-direct, rules, troubleshooting]
   - path: backend/logistics/types/product-stock-movement.go
     role: data-model
@@ -270,11 +270,11 @@ files:
     supports: [concepts, rules]
   - path: backend/logistics/purchase-order-management.go
     role: business-logic
-    hash: sha256:719c51df665801490860ad81d5d4c4a858b6be28dff182f83fa1cc46a05c9ef6
+    hash: sha256:517ae84b29a0a72d496e7e2ae960e93044b9e87cc844f704e40d4c66543bdef3
     supports: [concepts, related-pages]
   - path: backend/sales/sale_order_create.go
     role: business-logic
-    hash: sha256:8068f85ffdc9c0382877528bde49699817c439b629e907d2391656574d4bef2f
+    hash: sha256:7e35116bcbba123f82b1e36461bdeeb961b34318f1a2c3e84ef53c4330f7f2b2
     supports: [concepts, related-pages]
   - path: backend/access_list.yml
     role: permissions
