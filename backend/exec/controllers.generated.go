@@ -2,38 +2,38 @@
 package exec
 
 import (
-	accountingTypes "app/accounting/types"
-	agentTypes "app/agent/types"
-	businessTypes "app/business/types"
-	configTypes "app/config/types"
+	accounting "app/accounting/types"
+	agent "app/agent/types"
+	business "app/business/types"
+	config "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	financeTypes "app/finance/types"
-	invoicingTypes "app/invoicing/types"
-	logisticsTypes "app/logistics/types"
-	salesTypes "app/sales/types"
-	securityTypes "app/security/types"
-	webpageTypes "app/webpage/types"
+	finance "app/finance/types"
+	invoicing "app/invoicing/types"
+	logistics "app/logistics/types"
+	sales "app/sales/types"
+	security "app/security/types"
+	webpage "app/webpage/types"
 )
 
 func MakeScyllaControllers() []db.Controller {
 	return []db.Controller{
 		makeDBController[DemoStruct](),
-		makeDBController[accountingTypes.Asset](),
-		makeDBController[agentTypes.AgentMessage](),
-		makeDBController[businessTypes.CityLocation](),
-		makeDBController[businessTypes.ClientProvider](),
-		makeDBController[businessTypes.GalleryImage](),
-		makeDBController[businessTypes.ImageAsset](),
-		makeDBController[businessTypes.ImageAssetCategory](),
-		makeDBController[businessTypes.Product](),
-		makeDBController[businessTypes.SharedListRecord](),
-		makeDBController[businessTypes.Site](),
-		makeDBController[businessTypes.Warehouse](),
-		makeDBController[configTypes.Company](),
-		makeDBController[configTypes.Parameters](),
-		makeDBController[configTypes.SystemParameters](),
+		makeDBController[accounting.Asset](),
+		makeDBController[agent.AgentMessage](),
+		makeDBController[business.CityLocation](),
+		makeDBController[business.ClientProvider](),
+		makeDBController[business.GalleryImage](),
+		makeDBController[business.ImageAsset](),
+		makeDBController[business.ImageAssetCategory](),
+		makeDBController[business.Product](),
+		makeDBController[business.SharedListRecord](),
+		makeDBController[business.Site](),
+		makeDBController[business.Warehouse](),
+		makeDBController[config.Company](),
+		makeDBController[config.Parameters](),
+		makeDBController[config.SystemParameters](),
 		makeDBController[core.Cache](),
 		makeDBController[core.CronAction](),
 		makeDBController[core.GlobalCache](),
@@ -46,52 +46,52 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[coreTypes.UsageLog](),
 		makeDBController[coreTypes.User](),
 		makeDBController[coreTypes.UserLog](),
-		makeDBController[financeTypes.CashBank](),
-		makeDBController[financeTypes.CashBankMovement](),
-		makeDBController[financeTypes.CashReconciliation](),
-		makeDBController[financeTypes.Expense](),
-		makeDBController[financeTypes.ExpenseScheduled](),
-		makeDBController[invoicingTypes.CompanySecrets](),
-		makeDBController[invoicingTypes.InvoiceDocument](),
-		makeDBController[invoicingTypes.InvoiceSeries](),
-		makeDBController[invoicingTypes.InvoiceSummary](),
-		makeDBController[logisticsTypes.DeliveryOrderNote](),
-		makeDBController[logisticsTypes.ProductStock](),
-		makeDBController[logisticsTypes.ProductStockDetail](),
-		makeDBController[logisticsTypes.ProductStockLot](),
-		makeDBController[logisticsTypes.ProductSupply](),
-		makeDBController[logisticsTypes.PurchaseOrder](),
-		makeDBController[logisticsTypes.WarehouseProductMovement](),
-		makeDBController[salesTypes.ProductSaleSummary](),
-		makeDBController[salesTypes.SaleOrder](),
-		makeDBController[salesTypes.SalesPlanning](),
-		makeDBController[salesTypes.SeasonalityCurve](),
-		makeDBController[salesTypes.ShippingCost](),
-		makeDBController[securityTypes.ContactMessage](),
-		makeDBController[securityTypes.Profile](),
-		makeDBController[securityTypes.SignUpRequest](),
-		makeDBController[webpageTypes.EcommercePageContent](),
-		makeDBController[webpageTypes.Webpage](),
+		makeDBController[finance.CashBank](),
+		makeDBController[finance.CashBankMovement](),
+		makeDBController[finance.CashReconciliation](),
+		makeDBController[finance.Expense](),
+		makeDBController[finance.ExpenseScheduled](),
+		makeDBController[invoicing.CompanySecrets](),
+		makeDBController[invoicing.InvoiceDocument](),
+		makeDBController[invoicing.InvoiceSeries](),
+		makeDBController[invoicing.InvoiceSummary](),
+		makeDBController[logistics.DeliveryOrderNote](),
+		makeDBController[logistics.ProductStock](),
+		makeDBController[logistics.ProductStockDetail](),
+		makeDBController[logistics.ProductStockLot](),
+		makeDBController[logistics.ProductSupply](),
+		makeDBController[logistics.PurchaseOrder](),
+		makeDBController[logistics.WarehouseProductMovement](),
+		makeDBController[sales.ProductSaleSummary](),
+		makeDBController[sales.SaleOrder](),
+		makeDBController[sales.SalesPlanning](),
+		makeDBController[sales.SeasonalityCurve](),
+		makeDBController[sales.ShippingCost](),
+		makeDBController[security.ContactMessage](),
+		makeDBController[security.Profile](),
+		makeDBController[security.SignUpRequest](),
+		makeDBController[webpage.EcommercePageContent](),
+		makeDBController[webpage.Webpage](),
 	}
 }
 
 // Resolves table names for db.QueryCachedGenericByIDs.
 func init() {
 	db.RegisterTableFactory("zz_demo_struct", func() db.Table { return db.MakeTable[DemoStruct]() })
-	db.RegisterTableFactory("accounting_asset", func() db.Table { return db.MakeTable[accountingTypes.Asset]() })
-	db.RegisterTableFactory("agent_messages", func() db.Table { return db.MakeTable[agentTypes.AgentMessage]() })
-	db.RegisterTableFactory("city_locations", func() db.Table { return db.MakeTable[businessTypes.CityLocation]() })
-	db.RegisterTableFactory("client_provider", func() db.Table { return db.MakeTable[businessTypes.ClientProvider]() })
-	db.RegisterTableFactory("gallery_images", func() db.Table { return db.MakeTable[businessTypes.GalleryImage]() })
-	db.RegisterTableFactory("image_assets", func() db.Table { return db.MakeTable[businessTypes.ImageAsset]() })
-	db.RegisterTableFactory("image_assets_category", func() db.Table { return db.MakeTable[businessTypes.ImageAssetCategory]() })
-	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[businessTypes.Product]() })
-	db.RegisterTableFactory("shared_list_records", func() db.Table { return db.MakeTable[businessTypes.SharedListRecord]() })
-	db.RegisterTableFactory("sites", func() db.Table { return db.MakeTable[businessTypes.Site]() })
-	db.RegisterTableFactory("warehouses", func() db.Table { return db.MakeTable[businessTypes.Warehouse]() })
-	db.RegisterTableFactory("companies", func() db.Table { return db.MakeTable[configTypes.Company]() })
-	db.RegisterTableFactory("parameters", func() db.Table { return db.MakeTable[configTypes.Parameters]() })
-	db.RegisterTableFactory("system_parameters", func() db.Table { return db.MakeTable[configTypes.SystemParameters]() })
+	db.RegisterTableFactory("accounting_asset", func() db.Table { return db.MakeTable[accounting.Asset]() })
+	db.RegisterTableFactory("agent_messages", func() db.Table { return db.MakeTable[agent.AgentMessage]() })
+	db.RegisterTableFactory("city_locations", func() db.Table { return db.MakeTable[business.CityLocation]() })
+	db.RegisterTableFactory("client_provider", func() db.Table { return db.MakeTable[business.ClientProvider]() })
+	db.RegisterTableFactory("gallery_images", func() db.Table { return db.MakeTable[business.GalleryImage]() })
+	db.RegisterTableFactory("image_assets", func() db.Table { return db.MakeTable[business.ImageAsset]() })
+	db.RegisterTableFactory("image_assets_category", func() db.Table { return db.MakeTable[business.ImageAssetCategory]() })
+	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[business.Product]() })
+	db.RegisterTableFactory("shared_list_records", func() db.Table { return db.MakeTable[business.SharedListRecord]() })
+	db.RegisterTableFactory("sites", func() db.Table { return db.MakeTable[business.Site]() })
+	db.RegisterTableFactory("warehouses", func() db.Table { return db.MakeTable[business.Warehouse]() })
+	db.RegisterTableFactory("companies", func() db.Table { return db.MakeTable[config.Company]() })
+	db.RegisterTableFactory("parameters", func() db.Table { return db.MakeTable[config.Parameters]() })
+	db.RegisterTableFactory("system_parameters", func() db.Table { return db.MakeTable[config.SystemParameters]() })
 	db.RegisterTableFactory("cache", func() db.Table { return db.MakeTable[core.Cache]() })
 	db.RegisterTableFactory("cron_actions", func() db.Table { return db.MakeTable[core.CronAction]() })
 	db.RegisterTableFactory("cache_global", func() db.Table { return db.MakeTable[core.GlobalCache]() })
@@ -104,30 +104,30 @@ func init() {
 	db.RegisterTableFactory("usage_log", func() db.Table { return db.MakeTable[coreTypes.UsageLog]() })
 	db.RegisterTableFactory("users", func() db.Table { return db.MakeTable[coreTypes.User]() })
 	db.RegisterTableFactory("user_logs", func() db.Table { return db.MakeTable[coreTypes.UserLog]() })
-	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
-	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
-	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })
-	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[financeTypes.Expense]() })
-	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
-	db.RegisterTableFactory("company_secrets", func() db.Table { return db.MakeTable[invoicingTypes.CompanySecrets]() })
-	db.RegisterTableFactory("invoice_document", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceDocument]() })
-	db.RegisterTableFactory("invoice_series", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSeries]() })
-	db.RegisterTableFactory("invoice_summary", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSummary]() })
-	db.RegisterTableFactory("delivery_order_note", func() db.Table { return db.MakeTable[logisticsTypes.DeliveryOrderNote]() })
-	db.RegisterTableFactory("warehouse_product_stock", func() db.Table { return db.MakeTable[logisticsTypes.ProductStock]() })
-	db.RegisterTableFactory("warehouse_product_stock_detail", func() db.Table { return db.MakeTable[logisticsTypes.ProductStockDetail]() })
-	db.RegisterTableFactory("product_stock_lot", func() db.Table { return db.MakeTable[logisticsTypes.ProductStockLot]() })
-	db.RegisterTableFactory("product_supply", func() db.Table { return db.MakeTable[logisticsTypes.ProductSupply]() })
-	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
-	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
-	db.RegisterTableFactory("product_sale_summary", func() db.Table { return db.MakeTable[salesTypes.ProductSaleSummary]() })
-	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })
-	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
-	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })
-	db.RegisterTableFactory("shipping_costs", func() db.Table { return db.MakeTable[salesTypes.ShippingCost]() })
-	db.RegisterTableFactory("contact_messages", func() db.Table { return db.MakeTable[securityTypes.ContactMessage]() })
-	db.RegisterTableFactory("profiles", func() db.Table { return db.MakeTable[securityTypes.Profile]() })
-	db.RegisterTableFactory("sign_up_requests", func() db.Table { return db.MakeTable[securityTypes.SignUpRequest]() })
-	db.RegisterTableFactory("ecommerce_page_content", func() db.Table { return db.MakeTable[webpageTypes.EcommercePageContent]() })
-	db.RegisterTableFactory("webpages", func() db.Table { return db.MakeTable[webpageTypes.Webpage]() })
+	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[finance.CashBank]() })
+	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[finance.CashBankMovement]() })
+	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[finance.CashReconciliation]() })
+	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[finance.Expense]() })
+	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[finance.ExpenseScheduled]() })
+	db.RegisterTableFactory("company_secrets", func() db.Table { return db.MakeTable[invoicing.CompanySecrets]() })
+	db.RegisterTableFactory("invoice_document", func() db.Table { return db.MakeTable[invoicing.InvoiceDocument]() })
+	db.RegisterTableFactory("invoice_series", func() db.Table { return db.MakeTable[invoicing.InvoiceSeries]() })
+	db.RegisterTableFactory("invoice_summary", func() db.Table { return db.MakeTable[invoicing.InvoiceSummary]() })
+	db.RegisterTableFactory("delivery_order_note", func() db.Table { return db.MakeTable[logistics.DeliveryOrderNote]() })
+	db.RegisterTableFactory("warehouse_product_stock", func() db.Table { return db.MakeTable[logistics.ProductStock]() })
+	db.RegisterTableFactory("warehouse_product_stock_detail", func() db.Table { return db.MakeTable[logistics.ProductStockDetail]() })
+	db.RegisterTableFactory("product_stock_lot", func() db.Table { return db.MakeTable[logistics.ProductStockLot]() })
+	db.RegisterTableFactory("product_supply", func() db.Table { return db.MakeTable[logistics.ProductSupply]() })
+	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logistics.PurchaseOrder]() })
+	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logistics.WarehouseProductMovement]() })
+	db.RegisterTableFactory("product_sale_summary", func() db.Table { return db.MakeTable[sales.ProductSaleSummary]() })
+	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[sales.SaleOrder]() })
+	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[sales.SalesPlanning]() })
+	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[sales.SeasonalityCurve]() })
+	db.RegisterTableFactory("shipping_costs", func() db.Table { return db.MakeTable[sales.ShippingCost]() })
+	db.RegisterTableFactory("contact_messages", func() db.Table { return db.MakeTable[security.ContactMessage]() })
+	db.RegisterTableFactory("profiles", func() db.Table { return db.MakeTable[security.Profile]() })
+	db.RegisterTableFactory("sign_up_requests", func() db.Table { return db.MakeTable[security.SignUpRequest]() })
+	db.RegisterTableFactory("ecommerce_page_content", func() db.Table { return db.MakeTable[webpage.EcommercePageContent]() })
+	db.RegisterTableFactory("webpages", func() db.Table { return db.MakeTable[webpage.Webpage]() })
 }

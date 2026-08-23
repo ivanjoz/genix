@@ -1,7 +1,7 @@
 package business
 
 import (
-	s "app/business/types"
+	"app/business/types"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -19,13 +19,13 @@ func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 	requestedClientProviderType := req.GetQueryInt("type")
 
 	// Type is required so the query hits the packed delta view.
-	if requestedClientProviderType != int32(s.ClientProviderTypeClient) && requestedClientProviderType != int32(s.ClientProviderTypeProvider) {
+	if requestedClientProviderType != int32(types.ClientProviderTypeClient) && requestedClientProviderType != int32(types.ClientProviderTypeProvider) {
 		return req.MakeErr("Debe enviar type=1 (cliente) o type=2 (proveedor).")
 	}
 
 	core.Log("GetClientProviders params:", "empresa_id=", req.User.CompanyID, "type=", requestedClientProviderType, "upv_since=", updatedSince)
 
-	clientProviders := []s.ClientProvider{}
+	clientProviders := []types.ClientProvider{}
 	clientProvidersQuery := db.Query(&clientProviders)
 	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend can
 	// evict deleted ones from its cache.
@@ -51,7 +51,7 @@ func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("GetClientProvidersByIDs cached_ids_count:", len(clientProviderCachedIDs))
 
-	clientProviders := []s.ClientProvider{}
+	clientProviders := []types.ClientProvider{}
 	// Query only stale or missing cached rows, using the slot versions the frontend sent back.
 	if queryError := db.QueryCachedIDs(&clientProviders, clientProviderCachedIDs); queryError != nil {
 		core.Log("GetClientProvidersByIDs query error:", queryError)
@@ -63,7 +63,7 @@ func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostClientProviders(req *core.HandlerArgs) core.HandlerResponse {
-	clientProvidersPayload := []s.ClientProvider{}
+	clientProvidersPayload := []types.ClientProvider{}
 	if deserializeError := json.Unmarshal([]byte(*req.Body), &clientProvidersPayload); deserializeError != nil {
 		core.Log("PostClientProviders deserialization error:", deserializeError)
 		return req.MakeErr("Error al deserializar el body:", deserializeError)
@@ -84,7 +84,7 @@ func PostClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(clientProvidersPayload)
 }
 
-func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID int32, userID int32, onlyInsert bool) error {
+func SaveClientProviders(clientProvidersPayload *[]types.ClientProvider, companyID int32, userID int32, onlyInsert bool) error {
 	currentTimestamp := core.SUnixTime()
 	clientProviderRegistryNumbers := core.SliceSet[string]{}
 	clientProviderHashes := core.SliceSet[int64]{}
@@ -98,7 +98,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 		clientProvider.RegistryNumber = strings.TrimSpace(clientProvider.RegistryNumber)
 		clientProvider.CityID = strings.TrimSpace(clientProvider.CityID)
 
-		if clientProvider.Type != s.ClientProviderTypeClient && clientProvider.Type != s.ClientProviderTypeProvider {
+		if clientProvider.Type != types.ClientProviderTypeClient && clientProvider.Type != types.ClientProviderTypeProvider {
 			return core.Err("El registro en posición", clientProviderIndex, "tiene un Type inválido. Use 1 (cliente) o 2 (proveedor).")
 		}
 
@@ -106,7 +106,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 			return core.Err("El registro en posición", clientProviderIndex, "debe tener Name.")
 		}
 
-		if clientProvider.PersonType != s.PersonTypeNatural && clientProvider.PersonType != s.PersonTypeCompany {
+		if clientProvider.PersonType != types.PersonTypeNatural && clientProvider.PersonType != types.PersonTypeCompany {
 			return core.Err("El registro en posición", clientProviderIndex, "tiene PersonType inválido. Use 1 (persona) o 2 (company).")
 		}
 
@@ -114,16 +114,16 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 			return core.Err("El registro en posición", clientProviderIndex, "tiene un Email inválido.")
 		}
 
-		if clientProvider.Type == s.ClientProviderTypeProvider && clientProvider.CountryID <= 0 {
+		if clientProvider.Type == types.ClientProviderTypeProvider && clientProvider.CountryID <= 0 {
 			return core.Err("El registro en posición", clientProviderIndex, "debe tener CountryID válido.")
 		}
 
-		if clientProvider.Type == s.ClientProviderTypeProvider && len(clientProvider.CityID) == 0 {
+		if clientProvider.Type == types.ClientProviderTypeProvider && len(clientProvider.CityID) == 0 {
 			return core.Err("El registro en posición", clientProviderIndex, "debe tener CityID válido.")
 		}
 
 		// Providers must keep a numeric registry number; natural clients can omit it completely.
-		if clientProvider.Type == s.ClientProviderTypeProvider && !companyRegistryNumberPattern.MatchString(clientProvider.RegistryNumber) {
+		if clientProvider.Type == types.ClientProviderTypeProvider && !companyRegistryNumberPattern.MatchString(clientProvider.RegistryNumber) {
 			return core.Err("El registro en posición", clientProviderIndex, "debe tener RegistryNumber numérico de 7 a 12 dígitos para proveedores.")
 		}
 
@@ -150,7 +150,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	}
 
 	// Resolve existing IDs before Merge so equal identities update instead of inserting duplicates.
-	existingByRegistryNumber := []s.ClientProvider{}
+	existingByRegistryNumber := []types.ClientProvider{}
 	if !clientProviderRegistryNumbers.IsEmpty() {
 		q := db.Query(&existingByRegistryNumber).AllowFilter()
 		err := q.Select(q.RegistryNumber, q.ID).
@@ -163,9 +163,9 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	}
 
 	existingByRegistryNumberMap := core.SliceToMapE(existingByRegistryNumber,
-		func(e s.ClientProvider) string { return e.RegistryNumber })
+		func(e types.ClientProvider) string { return e.RegistryNumber })
 
-	existingByHash := []s.ClientProvider{}
+	existingByHash := []types.ClientProvider{}
 	if !clientProviderHashes.IsEmpty() {
 		q := db.Query(&existingByHash).AllowFilter()
 		err := q.Select(q.NameRegistryHash, q.ID).
@@ -178,7 +178,7 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	}
 
 	existingByHashMap := core.SliceToMapE(existingByHash,
-		func(e s.ClientProvider) int64 { return e.NameRegistryHash })
+		func(e types.ClientProvider) int64 { return e.NameRegistryHash })
 
 	for clientProviderIndex := range *clientProvidersPayload {
 		currentClientProvider := &(*clientProvidersPayload)[clientProviderIndex]
@@ -197,13 +197,13 @@ func SaveClientProviders(clientProvidersPayload *[]s.ClientProvider, companyID i
 	}
 
 	core.Log("saveClientProviders merge start:", "payload_count=", len(*clientProvidersPayload))
-	clientProviderTable := db.TableOf[s.ClientProvider]()
+	clientProviderTable := db.TableOf[types.ClientProvider]()
 	if mergeError := db.Merge(clientProvidersPayload,
 		db.Cols(clientProviderTable.Created, clientProviderTable.CreatedBy),
-		func(_ *s.ClientProvider, currentClientProvider *s.ClientProvider) bool {
+		func(_ *types.ClientProvider, currentClientProvider *types.ClientProvider) bool {
 			return !onlyInsert || currentClientProvider.ID <= 0
 		},
-		func(_ *s.ClientProvider) {},
+		func(_ *types.ClientProvider) {},
 	); mergeError != nil {
 		return mergeError
 	}

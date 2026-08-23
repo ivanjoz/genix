@@ -3,7 +3,7 @@ package finance
 import (
 	"app/core"
 	"app/db"
-	financeTypes "app/finance/types"
+	"app/finance/types"
 	"encoding/json"
 )
 
@@ -12,7 +12,7 @@ func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	cajas := []financeTypes.CashBank{}
+	cajas := []types.CashBank{}
 	query := db.Query(&cajas)
 	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
 	// can evict deleted ones from its cache.
@@ -30,7 +30,7 @@ func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 
-	body := financeTypes.CashBank{}
+	body := types.CashBank{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -55,14 +55,14 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 		body.CreatedBy = req.User.ID
 	}
 
-	cajas := &[]financeTypes.CashBank{body}
+	cajas := &[]types.CashBank{body}
 
 	if isNewCashBank {
 		err = db.Insert(cajas)
 	} else {
 		// The balance and audit columns are never sent by the client, so they are excluded from the
 		// update: writing the zero values would wipe the reconciled amounts and the creation stamp.
-		q1 := db.TableOf[financeTypes.CashBank]()
+		q1 := db.TableOf[types.CashBank]()
 		err = db.UpdateExclude(cajas, q1.ReconciliationDate, q1.ReconciliationAmount,
 			q1.CurrentAmount, q1.Created, q1.CreatedBy)
 	}
@@ -84,7 +84,7 @@ func GetCashBankMovements(req *core.HandlerArgs) core.HandlerResponse {
 
 	lastRegistrosLimit := req.GetQueryInt("last-registros")
 
-	movimientos := []financeTypes.CashBankMovement{}
+	movimientos := []types.CashBankMovement{}
 	query := db.Query(&movimientos)
 	query.Select().CompanyID.Equals(req.User.CompanyID).CashBankID.Equals(cashBankID)
 
@@ -128,7 +128,7 @@ func GetCashBankMovementByID(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe enviar un document-id o un reference-id.")
 	}
 
-	movimientos := []financeTypes.CashBankMovement{}
+	movimientos := []types.CashBankMovement{}
 	query := db.Query(&movimientos)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	// DocumentID and ReferenceID are separate local indexes; prefer the more specific DocumentID.
@@ -156,7 +156,7 @@ func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	lastRegistros := req.GetQueryInt("last-registros")
 	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
 
-	cuadres := []financeTypes.CashReconciliation{}
+	cuadres := []types.CashReconciliation{}
 	query := db.Query(&cuadres)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	if lastRegistros > 0 {
@@ -181,7 +181,7 @@ func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 
 	nowTime := core.SUnixTime()
-	record := financeTypes.CashReconciliation{}
+	record := types.CashReconciliation{}
 	err := json.Unmarshal([]byte(*req.Body), &record)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -216,7 +216,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	cashBank.UpdatedBy = req.User.ID
 
 	// Record the reconciliation movement
-	movimiento := financeTypes.CashBankMovement{
+	movimiento := types.CashBankMovement{
 		ID:          core.SUnixTimeUUIDConcatID(record.CashBankID),
 		CompanyID:   req.User.CompanyID,
 		CashBankID:  record.CashBankID,
@@ -228,19 +228,19 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Insert records using db2
-	if err := db.Insert(&[]financeTypes.CashReconciliation{record}); err != nil {
+	if err := db.Insert(&[]types.CashReconciliation{record}); err != nil {
 		core.Log("Error ScyllaDB inserting cuadre: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
 
-	q1 := db.TableOf[financeTypes.CashBank]()
+	q1 := db.TableOf[types.CashBank]()
 	// Status is part of the delta-view key and must be written with the managed UpdatedVersion.
-	if err := db.Update(&[]financeTypes.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
+	if err := db.Update(&[]types.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating cashBank: ", err)
 		return req.MakeErr("Error al actualizar la cashBank:", err)
 	}
 
-	if err := db.Insert(&[]financeTypes.CashBankMovement{movimiento}); err != nil {
+	if err := db.Insert(&[]types.CashBankMovement{movimiento}); err != nil {
 		core.Log("Error ScyllaDB inserting movimiento: ", err)
 		return req.MakeErr("Error al registrar el movimiento:", err)
 	}
@@ -250,7 +250,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 
-	record := financeTypes.CashBankMovement{}
+	record := types.CashBankMovement{}
 	err := json.Unmarshal([]byte(*req.Body), &record)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body:", err)
@@ -277,7 +277,7 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(&re)
 	}
 
-	movimientoInterno := financeTypes.InternalCashMovement{
+	movimientoInterno := types.InternalCashMovement{
 		CashBankID:    record.CashBankID,
 		CashBankRefID: record.CashBankRefID,
 		Type:          record.Type,
@@ -285,7 +285,7 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		FinalAmount:   record.FinalAmount,
 	}
 
-	if err := ApplyCashBankMovement(req, []financeTypes.InternalCashMovement{movimientoInterno}); err != nil {
+	if err := ApplyCashBankMovement(req, []types.InternalCashMovement{movimientoInterno}); err != nil {
 		return req.MakeErr(err)
 	}
 

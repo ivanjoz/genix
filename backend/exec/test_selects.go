@@ -1,11 +1,11 @@
 package exec
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
-	financeTypes "app/finance/types"
-	logisticsTypes "app/logistics/types"
+	finance "app/finance/types"
+	logistics "app/logistics/types"
 	sales "app/sales/types"
 	"fmt"
 )
@@ -35,7 +35,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// Using Fixed values to create parallel queries for a View
 	fmt.Println("\n--- Test 9: Using Fixed values to create parallel queries for a View ---")
 
-	clientProvider := []businessTypes.ClientProvider{}
+	clientProvider := []business.ClientProvider{}
 	err = db.Query(&clientProvider).
 		CompanyID.Equals(1).Type.Equals(1).Limit(10).Exec()
 
@@ -79,7 +79,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// 1. Test AlmacenProducto with KeyConcatenated Smart Logic
 	// This should trigger a range query on the 'id' column because it's the first column of KeyConcatenated.
 	fmt.Println("\n--- Test 1: AlmacenProducto (Smart ORM for KeyConcatenated) ---")
-	productos := []logisticsTypes.ProductStock{}
+	productos := []logistics.ProductStock{}
 	q1 := db.Query(&productos)
 	err = q1.CompanyID.Equals(1).
 		WarehouseID.Equals(1). // This is the first column in KeyConcatenated for AlmacenProducto
@@ -93,7 +93,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 2. Test AlmacenProducto with multiple prefix columns
 	fmt.Println("\n--- Test 2: AlmacenProducto (Multiple prefix columns) ---")
-	productos2 := []logisticsTypes.ProductStock{}
+	productos2 := []logistics.ProductStock{}
 	q2 := db.Query(&productos2)
 	err = q2.CompanyID.Equals(1).
 		WarehouseID.Equals(1).
@@ -108,7 +108,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// New test
 	fmt.Println("\n--- Test 21: AlmacenProducto. Using delta index: db.Cols(e.WarehouseID, e.Status) ---")
-	productos21 := []logisticsTypes.ProductStock{}
+	productos21 := []logistics.ProductStock{}
 	q21 := db.Query(&productos21)
 	// Pinning WarehouseID + Status leaves the packed view's trailing updated_version slot as the range,
 	// which is the only shape that reaches [warehouse_id, status, updated_version].
@@ -124,7 +124,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 3. Test SharedListRecord with complex view concatenation
 	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
-	registros := []businessTypes.SharedListRecord{}
+	registros := []business.SharedListRecord{}
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.CompanyID.Equals(1).
@@ -140,7 +140,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 4. Test CashBankMovement with View
 	fmt.Println("\n--- Test 4: CashBankMovement (Query using View) ---")
-	movimientos := []financeTypes.CashBankMovement{}
+	movimientos := []finance.CashBankMovement{}
 	q4 := db.Query(&movimientos)
 	err = q4.CompanyID.Equals(1).
 		DocumentID.Equals(12345). // This uses a view defined in CashBankMovementTable
@@ -154,7 +154,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordRegistrosListas := []businessTypes.SharedListRecord{}
+	recordRegistrosListas := []business.SharedListRecord{}
 	q5 := db.Query(&recordRegistrosListas)
 	err = q5.CompanyID.Equals(1).
 		ListID.Equals(1).
@@ -174,7 +174,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 	var err error
 
-	movimientos := []logisticsTypes.WarehouseProductMovement{}
+	movimientos := []logistics.WarehouseProductMovement{}
 
 	query := db.Query(&movimientos).
 		CompanyID.Equals(1).
@@ -186,7 +186,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 
 	// 3. Test SharedListRecord with complex view concatenation
 	fmt.Println("\n--- Test 3: SharedListRecord (Complex View/Concatenation) ---")
-	registros := []businessTypes.SharedListRecord{}
+	registros := []business.SharedListRecord{}
 	q3 := db.Query(&registros)
 	// This query should use a view that concatenates ListaID and Status or Updated
 	err = q3.CompanyID.Equals(1).
@@ -202,7 +202,7 @@ func TestSelects2(args *core.ExecArgs) core.FuncResponse {
 
 	// 5. Test with range query (Between)
 	fmt.Println("\n--- Test 5: Range Query (Between) ---")
-	recordRegistrosListas := []businessTypes.SharedListRecord{}
+	recordRegistrosListas := []business.SharedListRecord{}
 	q5 := db.Query(&recordRegistrosListas)
 	err = q5.CompanyID.Equals(1).
 		ListID.Equals(1).

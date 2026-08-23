@@ -2,9 +2,9 @@ package security
 
 import (
 	"app/cloud"
-	configTypes "app/config/types"
+	config "app/config/types"
 	"app/core"
-	coretypes "app/core/types"
+	coreTypes "app/core/types"
 	"app/db"
 	"app/security/types"
 	"context"
@@ -161,7 +161,7 @@ func countRecentEmailsFromIP(ipKey int64, email string) (int32, bool, error) {
 // companyExistsWithEmail enforces "one company per email". The lookup rides on the global index
 // declared on Company.Email; companies have no tenant partition, so it cannot be a local one.
 func companyExistsWithEmail(email string) (bool, error) {
-	companies := []configTypes.Company{}
+	companies := []config.Company{}
 	var err error
 	if cloud.IsDataMirrorEnabled() {
 		err = cloud.Select(&companies).Where("email").Equals(email).Exec()
@@ -485,7 +485,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	nowTime := core.SUnixTime()
-	newCompanies := []configTypes.Company{{
+	newCompanies := []config.Company{{
 		Name:      body.CompanyName,
 		LegalName: body.CompanyName,
 		RUC:       strings.TrimSpace(body.RUC),
@@ -504,7 +504,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("PostSignUpCompany:: empresa creada", newCompany.ID, newCompany.Name)
 
 	if cloud.IsDataMirrorEnabled() {
-		if err := cloud.Insert([]configTypes.Company{newCompany}); err != nil {
+		if err := cloud.Insert([]config.Company{newCompany}); err != nil {
 			return req.MakeErr("Error al guardar la empresa en el espejo cloud.", err)
 		}
 	}
@@ -515,7 +515,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 	// FirstName falls back to "admin" because it is optional here but required when the profile is
 	// saved from the users page, which would otherwise reject the record it just loaded.
 	passwordHash := core.FnvHashString64(core.Env.SECRET_PHRASE+body.AdminPassword, -1, 20)
-	newUsers := []coretypes.User{{
+	newUsers := []coreTypes.User{{
 		CompanyID:    newCompany.ID,
 		User:         "admin",
 		FirstName:    core.If(len(body.AdminFirstName) > 0, body.AdminFirstName, "admin"),
@@ -533,7 +533,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("PostSignUpCompany:: usuario administrador creado", newUser.ID, "en la empresa", newCompany.ID)
 
 	if cloud.IsDataMirrorEnabled() {
-		if err := cloud.Insert([]coretypes.User{newUser}); err != nil {
+		if err := cloud.Insert([]coreTypes.User{newUser}); err != nil {
 			return req.MakeErr("Error al guardar el usuario en el espejo cloud.", err)
 		}
 	}

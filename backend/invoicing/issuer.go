@@ -1,11 +1,11 @@
 package invoicing
 
 import (
-	businessTypes "app/business/types"
-	configTypes "app/config/types"
+	business "app/business/types"
+	config "app/config/types"
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
+	"app/invoicing/types"
 	"errors"
 	"fmt"
 
@@ -46,7 +46,7 @@ func BuildIssuer(companyID int32, siteID int32) (model.Issuer, error) {
 	}
 
 	environment := model.EnvBeta
-	if secrets.Environment == invoicingTypes.SunatEnvProduction {
+	if secrets.Environment == types.SunatEnvProduction {
 		environment = model.EnvProduction
 	}
 
@@ -85,16 +85,16 @@ func BuildIssuer(companyID int32, siteID int32) (model.Issuer, error) {
 // Several rows can exist — replacing an expiring certificate leaves the old one
 // behind for the documents it signed — so the active one is the newest with
 // Status 1.
-func LoadActiveSecrets(companyID int32) (*invoicingTypes.CompanySecrets, error) {
-	secrets := []invoicingTypes.CompanySecrets{}
+func LoadActiveSecrets(companyID int32) (*types.CompanySecrets, error) {
+	secrets := []types.CompanySecrets{}
 	query := db.Query(&secrets)
-	query.Select().CompanyID.Equals(companyID).Type.Equals(invoicingTypes.SecretTypeSunatCPE)
+	query.Select().CompanyID.Equals(companyID).Type.Equals(types.SecretTypeSunatCPE)
 
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al leer las credenciales SUNAT: %w", err)
 	}
 
-	var active *invoicingTypes.CompanySecrets
+	var active *types.CompanySecrets
 	for index := range secrets {
 		candidate := &secrets[index]
 		if candidate.Status != 1 {
@@ -113,8 +113,8 @@ func LoadActiveSecrets(companyID int32) (*invoicingTypes.CompanySecrets, error) 
 	return active, nil
 }
 
-func loadCompany(companyID int32) (*configTypes.Company, error) {
-	companies := []configTypes.Company{}
+func loadCompany(companyID int32) (*config.Company, error) {
+	companies := []config.Company{}
 	query := db.Query(&companies)
 	query.Select().ID.Equals(companyID)
 
@@ -141,7 +141,7 @@ func loadSiteAddress(companyID int32, siteID int32) (model.Address, error) {
 		return model.Address{}, errors.New("no se pudo determinar la sede que emite el comprobante")
 	}
 
-	sites := []businessTypes.Site{}
+	sites := []business.Site{}
 	query := db.Query(&sites)
 	query.Select().CompanyID.Equals(companyID).ID.Equals(siteID)
 

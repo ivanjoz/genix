@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/db"
-	s "app/webpage/types"
+	"app/webpage/types"
 	"encoding/json"
 	"fmt"
 	"github.com/ivanjoz/minijson"
@@ -20,7 +20,7 @@ const livePageFolder = "live/pages"
 // WebpagePublicResult payload (SEO Config + active Sections) that GetWebpagePublic
 // returns, serialized with minijson.Marshal (compact array format) so the file is
 // smaller. activeSections must already be the post-save active set, in position order.
-func publishPagePublicSnapshot(companyID int32, pageID int16, activeSections []s.EcommercePageContent) error {
+func publishPagePublicSnapshot(companyID int32, pageID int16, activeSections []types.EcommercePageContent) error {
 	seoConfig, err := publicSeoMetatags(companyID)
 	if err != nil {
 		return fmt.Errorf("error al obtener la configuración pública del sitio: %w", err)
@@ -53,7 +53,7 @@ const defaultPageID = int16(10)
 // sectionHash is the FNV-1a 64-bit hash of a section's JSON. It detects whether a
 // section's content changed since the last save and is computed server-side only
 // — the client never sends a hash.
-func sectionHash(content s.SectionContent) int64 {
+func sectionHash(content types.SectionContent) int64 {
 	raw, _ := json.Marshal(content)
 	hasher := fnv.New64a()
 	hasher.Write(raw)
@@ -74,7 +74,7 @@ func resolvePageID(req *core.HandlerArgs) int16 {
 func GetPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	pageID := resolvePageID(req)
 
-	rows := []s.EcommercePageContent{}
+	rows := []types.EcommercePageContent{}
 	query := db.Query(&rows)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 	query.PageID.Equals(pageID)
@@ -83,7 +83,7 @@ func GetPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Drop soft-deleted positions; rows come back in clustering (SectionID) order.
-	activeSections := []s.EcommercePageContent{}
+	activeSections := []types.EcommercePageContent{}
 	for _, row := range rows {
 		if row.Status >= 1 {
 			activeSections = append(activeSections, row)
@@ -101,31 +101,31 @@ func GetPageContent(req *core.HandlerArgs) core.HandlerResponse {
 func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	pageID := resolvePageID(req)
 
-	incomingSections := []s.SectionContent{}
+	incomingSections := []types.SectionContent{}
 	if err := json.Unmarshal([]byte(*req.Body), &incomingSections); err != nil {
 		return req.MakeErr("Error al procesar las secciones:", err)
 	}
 
 	// Load current rows for this page to compare hashes and detect removed positions.
-	currentRows := []s.EcommercePageContent{}
+	currentRows := []types.EcommercePageContent{}
 	currentQuery := db.Query(&currentRows)
 	currentQuery.Select().CompanyID.Equals(req.User.CompanyID).PageID.Equals(pageID)
 
 	if err := currentQuery.Exec(); err != nil {
 		return req.MakeErr("Error al leer el contenido actual:", err)
 	}
-	currentBySection := map[int16]s.EcommercePageContent{}
+	currentBySection := map[int16]types.EcommercePageContent{}
 	for _, row := range currentRows {
 		currentBySection[row.SectionID] = row
 	}
 
 	now := core.SUnixTime()
-	sectionsToWrite := []s.EcommercePageContent{}
+	sectionsToWrite := []types.EcommercePageContent{}
 
 	// activeSections is the post-save active set in position order — built inline here
 	// (the loop already visits every section 1..N in order) so it can be published as
 	// the CDN snapshot without a re-query or a second pass over the rows.
-	activeSections := []s.EcommercePageContent{}
+	activeSections := []types.EcommercePageContent{}
 
 	for index, content := range incomingSections {
 		sectionID := int16(index + 1)
@@ -149,7 +149,7 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 			continue
 		}
 
-		row := s.EcommercePageContent{
+		row := types.EcommercePageContent{
 			CompanyID: req.User.CompanyID,
 			PageID:    pageID,
 			SectionID: sectionID,
@@ -167,7 +167,7 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	// Soft-delete positions beyond the new length that are still active
 	// (e.g. the page shrank from 12 to 10 sections).
 	sectionCount := int16(len(incomingSections))
-	sectionsToDelete := []s.EcommercePageContent{}
+	sectionsToDelete := []types.EcommercePageContent{}
 	for sectionID, row := range currentBySection {
 		if sectionID > sectionCount && row.Status == 1 {
 			row.Status = 0
@@ -183,7 +183,7 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 	if len(sectionsToDelete) > 0 {
-		table := db.TableOf[s.EcommercePageContent]()
+		table := db.TableOf[types.EcommercePageContent]()
 		if err := db.Update(&sectionsToDelete, table.Status, table.Updated, table.UpdatedBy); err != nil {
 			return req.MakeErr("Error al eliminar las secciones removidas:", err)
 		}

@@ -3,7 +3,7 @@ package sales
 import (
 	"app/core"
 	"app/db"
-	s "app/sales/types"
+	"app/sales/types"
 	"encoding/json"
 )
 
@@ -12,7 +12,7 @@ func GetSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	records := []s.SalesPlanning{}
+	records := []types.SalesPlanning{}
 
 	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
 	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
@@ -27,7 +27,7 @@ func GetSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
-	payload := []s.SalesPlanning{}
+	payload := []types.SalesPlanning{}
 	if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
 		return req.MakeErr("Error al deserializar la planificación de ventas:", err)
 	}
@@ -43,17 +43,17 @@ func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	nowTime := core.SUnixTime()
-	t := s.SalesPlanningTable{}
+	t := types.SalesPlanningTable{}
 	err := db.Merge(&payload,
 		db.Cols(t.Created),
-		func(prev, current *s.SalesPlanning) bool {
+		func(prev, current *types.SalesPlanning) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
 			current.Updated = nowTime
 			current.UpdatedBy = req.User.ID
 			return true
 		},
-		func(current *s.SalesPlanning) {
+		func(current *types.SalesPlanning) {
 			current.CompanyID = req.User.CompanyID
 			current.Created = nowTime
 			current.Updated = nowTime
@@ -73,7 +73,7 @@ func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 func GetSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
 	updatedSince := req.GetQueryInt("upv")
 
-	records := []s.SeasonalityCurve{}
+	records := []types.SeasonalityCurve{}
 
 	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
 	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
@@ -88,7 +88,7 @@ func GetSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
-	payload := []s.SeasonalityCurve{}
+	payload := []types.SeasonalityCurve{}
 	if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
 		return req.MakeErr("Error al deserializar las curvas de estacionalidad:", err)
 	}
@@ -103,17 +103,17 @@ func PostSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	nowTime := core.SUnixTime()
-	t := s.SeasonalityCurveTable{}
+	t := types.SeasonalityCurveTable{}
 	err := db.Merge(&payload,
 		db.Cols(t.Created),
-		func(prev, current *s.SeasonalityCurve) bool {
+		func(prev, current *types.SeasonalityCurve) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
 			current.Updated = nowTime
 			current.UpdatedBy = req.User.ID
 			return true
 		},
-		func(current *s.SeasonalityCurve) {
+		func(current *types.SeasonalityCurve) {
 			current.CompanyID = req.User.CompanyID
 			current.Created = nowTime
 			current.Updated = nowTime

@@ -3,8 +3,8 @@ package invoicing
 import (
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
-	salesTypes "app/sales/types"
+	"app/invoicing/types"
+	sales "app/sales/types"
 	"errors"
 	"fmt"
 	"time"
@@ -25,8 +25,8 @@ import (
 // partitioned by series when the row is inserted, so two concurrent sales cannot
 // take the same number without one of them failing on the primary key.
 func ReserveDocument(
-	companyID, userID int32, order *salesTypes.SaleOrder, series *invoicingTypes.InvoiceSeries,
-) (*invoicingTypes.InvoiceDocument, error) {
+	companyID, userID int32, order *sales.SaleOrder, series *types.InvoiceSeries,
+) (*types.InvoiceDocument, error) {
 
 	if existing, err := FindBySaleOrder(companyID, order.ID); err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func ReserveDocument(
 	document.Correlativo = 0
 
 	row := rowFromDocument(companyID, userID, order, series, document)
-	rows := &[]invoicingTypes.InvoiceDocument{row}
+	rows := &[]types.InvoiceDocument{row}
 	if err := db.Insert(rows); err != nil {
 		return nil, fmt.Errorf("error al reservar el correlativo: %w", err)
 	}
@@ -70,14 +70,14 @@ func ReserveDocument(
 // to be able to rebuild the document on its own: a retry that happens tomorrow
 // must produce the same XML even if the product was renamed in between.
 func rowFromDocument(
-	companyID, userID int32, order *salesTypes.SaleOrder,
-	series *invoicingTypes.InvoiceSeries, document *model.Document,
-) invoicingTypes.InvoiceDocument {
+	companyID, userID int32, order *sales.SaleOrder,
+	series *types.InvoiceSeries, document *model.Document,
+) types.InvoiceDocument {
 
 	now := core.SUnixTime()
-	row := invoicingTypes.InvoiceDocument{
+	row := types.InvoiceDocument{
 		CompanyID:     companyID,
-		DocTypeSeries: invoicingTypes.PackDocTypeSeries(series.DocType, series.SeriesID),
+		DocTypeSeries: types.PackDocTypeSeries(series.DocType, series.SeriesID),
 		DocType:       series.DocType,
 		SeriesID:      series.SeriesID,
 		SeriesCode:    series.SeriesCode,
@@ -90,7 +90,7 @@ func rowFromDocument(
 		ClientName:      document.Customer.LegalName,
 		ClientDocType:   identityDocTypeCode(document.Customer.DocType),
 
-		Currency:         invoicingTypes.CurrencyPEN,
+		Currency:         types.CurrencyPEN,
 		TotalAmount:      int64(document.Totals.Payable),
 		TaxAmount:        int64(document.Totals.TotalTaxes),
 		TaxableAmount:    int64(document.Totals.Taxable),
@@ -98,7 +98,7 @@ func rowFromDocument(
 		UnaffectedAmount: int64(document.Totals.Unaffected),
 		FreeAmount:       int64(document.Totals.Free),
 
-		State:     invoicingTypes.InvoicePending,
+		State:     types.InvoicePending,
 		Status:    1,
 		Created:   now,
 		CreatedBy: userID,
@@ -130,7 +130,7 @@ func rowFromDocument(
 
 // DocumentFromRow rebuilds what was reserved, so a transmission that never
 // happened can be attempted again without consulting the sale.
-func DocumentFromRow(row *invoicingTypes.InvoiceDocument) *model.Document {
+func DocumentFromRow(row *types.InvoiceDocument) *model.Document {
 	document := &model.Document{
 		Type:        sunatDocType(row.DocType),
 		Series:      row.SeriesCode,
@@ -163,8 +163,8 @@ func DocumentFromRow(row *invoicingTypes.InvoiceDocument) *model.Document {
 // FindBySaleOrder answers whether a sale has already been invoiced. Asked before
 // every emission, because the second document for one sale is the mistake that
 // cannot be undone without a credit note.
-func FindBySaleOrder(companyID int32, saleOrderID int64) (*invoicingTypes.InvoiceDocument, error) {
-	documents := []invoicingTypes.InvoiceDocument{}
+func FindBySaleOrder(companyID int32, saleOrderID int64) (*types.InvoiceDocument, error) {
+	documents := []types.InvoiceDocument{}
 	query := db.Query(&documents)
 	query.Select().CompanyID.Equals(companyID).SaleOrderID.Equals(saleOrderID)
 
@@ -174,7 +174,7 @@ func FindBySaleOrder(companyID int32, saleOrderID int64) (*invoicingTypes.Invoic
 	for index := range documents {
 		// A rejected document does not exist for SUNAT, and neither does one
 		// that was discarded, so in both cases the sale may be invoiced again.
-		if documents[index].Status == 0 || documents[index].State == invoicingTypes.InvoiceRejected {
+		if documents[index].Status == 0 || documents[index].State == types.InvoiceRejected {
 			continue
 		}
 		return &documents[index], nil
@@ -183,8 +183,8 @@ func FindBySaleOrder(companyID int32, saleOrderID int64) (*invoicingTypes.Invoic
 }
 
 // LoadDocument reads one document by its packed key.
-func LoadDocument(companyID int32, documentID int64) (*invoicingTypes.InvoiceDocument, error) {
-	documents := []invoicingTypes.InvoiceDocument{}
+func LoadDocument(companyID int32, documentID int64) (*types.InvoiceDocument, error) {
+	documents := []types.InvoiceDocument{}
 	query := db.Query(&documents)
 	query.Select().CompanyID.Equals(companyID).ID.Equals(documentID)
 

@@ -1,7 +1,7 @@
 package accounting
 
 import (
-	accountingTypes "app/accounting/types"
+	"app/accounting/types"
 	"testing"
 	"time"
 )
@@ -13,13 +13,13 @@ func dayOf(year int, month time.Month, day int) int16 {
 }
 
 // A laptop bought for 4,000.00 (400000 cents) depreciating over 48 months.
-func laptop() *accountingTypes.Asset {
-	return &accountingTypes.Asset{
+func laptop() *types.Asset {
+	return &types.Asset{
 		AcquisitionDate:    dayOf(2024, time.January, 15),
 		AcquisitionValue:   400000,
 		DepreciationMonths: 48,
 		Quantity:           1,
-		Status:             accountingTypes.AssetStatusActive,
+		Status:             types.AssetStatusActive,
 	}
 }
 
@@ -69,7 +69,7 @@ func TestFullScheduleSumsToAcquisitionValueExactly(t *testing.T) {
 // 100000 over 3 months is 33333.33...; integer division loses a cent per period, and the
 // final period has to absorb it or the book value never reaches zero.
 func TestFinalPeriodAbsorbsTheRoundingRemainder(t *testing.T) {
-	asset := &accountingTypes.Asset{
+	asset := &types.Asset{
 		AcquisitionDate:    dayOf(2024, time.January, 1),
 		AcquisitionValue:   100000,
 		DepreciationMonths: 3,
@@ -112,14 +112,14 @@ func TestDisposalStopsTheSchedule(t *testing.T) {
 
 // The donated computer: it cost nothing and is still worth 10,000, so it still depreciates.
 func TestDonatedAssetDepreciatesOnValueNotPrice(t *testing.T) {
-	asset := &accountingTypes.Asset{
+	asset := &types.Asset{
 		AcquisitionDate:    dayOf(2024, time.January, 1),
 		AcquisitionValue:   1000000, // 10,000.00 — the book value.
 		DepreciationMonths: 48,
 		// A donation owes nothing: PurchaseAmount stays 0 and the asset is never payable,
 		// but it still carries a book value and still depreciates.
 		PurchaseAmount: 0,
-		PaymentStatus:  accountingTypes.AssetPaymentNone,
+		PaymentStatus:  types.AssetPaymentNone,
 	}
 	periods := DepreciationSchedule(asset, dayOf(2024, time.March, 31))
 
@@ -132,7 +132,7 @@ func TestDonatedAssetDepreciatesOnValueNotPrice(t *testing.T) {
 }
 
 func TestNonDepreciableSupplyYieldsNothing(t *testing.T) {
-	asset := &accountingTypes.Asset{
+	asset := &types.Asset{
 		AcquisitionDate:    dayOf(2024, time.January, 1),
 		AcquisitionValue:   50000,
 		DepreciationMonths: 0, // A plain consumable.
@@ -173,19 +173,19 @@ func TestPendingPeriodsAreIdempotentAgainstTheWatermark(t *testing.T) {
 func TestResolveAssetStatus(t *testing.T) {
 	fullyDepreciated := laptop()
 	fullyDepreciated.AccumulatedDepreciation = fullyDepreciated.AcquisitionValue
-	if got := ResolveAssetStatus(fullyDepreciated); got != accountingTypes.AssetStatusFullyDepreciated {
-		t.Errorf("fully depreciated status = %d, want %d", got, accountingTypes.AssetStatusFullyDepreciated)
+	if got := ResolveAssetStatus(fullyDepreciated); got != types.AssetStatusFullyDepreciated {
+		t.Errorf("fully depreciated status = %d, want %d", got, types.AssetStatusFullyDepreciated)
 	}
 
 	// Disposal outranks full depreciation: an asset can be sold before its life ends.
 	disposed := laptop()
 	disposed.AccumulatedDepreciation = disposed.AcquisitionValue
 	disposed.DisposalDate = dayOf(2025, time.January, 1)
-	if got := ResolveAssetStatus(disposed); got != accountingTypes.AssetStatusDisposed {
-		t.Errorf("disposed status = %d, want %d", got, accountingTypes.AssetStatusDisposed)
+	if got := ResolveAssetStatus(disposed); got != types.AssetStatusDisposed {
+		t.Errorf("disposed status = %d, want %d", got, types.AssetStatusDisposed)
 	}
 
-	if got := ResolveAssetStatus(laptop()); got != accountingTypes.AssetStatusActive {
-		t.Errorf("new asset status = %d, want %d", got, accountingTypes.AssetStatusActive)
+	if got := ResolveAssetStatus(laptop()); got != types.AssetStatusActive {
+		t.Errorf("new asset status = %d, want %d", got, types.AssetStatusActive)
 	}
 }

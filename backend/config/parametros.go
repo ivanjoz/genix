@@ -1,7 +1,7 @@
 package config
 
 import (
-	configTypes "app/config/types"
+	"app/config/types"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -14,7 +14,7 @@ func GetParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió el ID del grupo.")
 	}
 
-	records := []configTypes.Parameters{}
+	records := []types.Parameters{}
 	q := db.Query(&records)
 	err := q.Exclude(q.UpdatedBy).Exec()
 	if err != nil {
@@ -26,7 +26,7 @@ func GetParametros(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostParametros(req *core.HandlerArgs) core.HandlerResponse {
 
-	records := []configTypes.Parameters{}
+	records := []types.Parameters{}
 	err := json.Unmarshal([]byte(*req.Body), &records)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())

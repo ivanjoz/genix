@@ -1,7 +1,7 @@
 package exec
 
 import (
-	configTypes "app/config/types"
+	config "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
@@ -36,7 +36,7 @@ func BackfillObservabilityCredits(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(parseError)
 	}
 
-	companies := []configTypes.Company{}
+	companies := []config.Company{}
 	companyQuery := db.Query(&companies)
 	companyQuery.Status.GreaterEqual(1).AllowFilter()
 	if queryError := companyQuery.Exec(); queryError != nil {

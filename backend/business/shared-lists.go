@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -17,9 +17,9 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron los ids de las listas a consultar.")
 	}
 
-	listaRegistrosMap := map[int32]*[]businessTypes.SharedListRecord{}
+	listaRegistrosMap := map[int32]*[]types.SharedListRecord{}
 	for _, listaID := range listasIDs {
-		listaRegistrosMap[listaID] = &[]businessTypes.SharedListRecord{}
+		listaRegistrosMap[listaID] = &[]types.SharedListRecord{}
 	}
 	eg := errgroup.Group{}
 
@@ -44,7 +44,7 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	response := map[string]*[]businessTypes.SharedListRecord{}
+	response := map[string]*[]types.SharedListRecord{}
 	for id, registros := range listaRegistrosMap {
 		response[fmt.Sprintf("id_%v", id)] = registros
 
@@ -66,7 +66,7 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Deserialize input payload into records to upsert.
-	records := []businessTypes.SharedListRecord{}
+	records := []types.SharedListRecord{}
 	err := json.Unmarshal([]byte(*req.Body), &records)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -83,7 +83,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	seenIncomingListIDs := map[int32]bool{}
 
 	// Preserve client IDs as TempID for response mapping.
-	newIDs := []businessTypes.NewIDToID{}
+	newIDs := []types.NewIDToID{}
 
 	for index := range records {
 		e := &records[index]
@@ -93,7 +93,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		// Save original incoming ID before potential ID reuse/autoincrement.
-		newIDs = append(newIDs, businessTypes.NewIDToID{TempID: e.ID})
+		newIDs = append(newIDs, types.NewIDToID{TempID: e.ID})
 
 		// Keep NameHash consistent with model SelfParse logic.
 		e.SelfParse()
@@ -120,7 +120,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Load all potentially colliding rows for this tenant by incoming hash set.
-	existingRecordsByHash := []businessTypes.SharedListRecord{}
+	existingRecordsByHash := []types.SharedListRecord{}
 	existingRecordsQuery := db.Query(&existingRecordsByHash)
 	existingRecordsQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
@@ -133,7 +133,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	existingRecordsGroupedByRecordKey := core.SliceToMapP(existingRecordsByHash,
-		func(e businessTypes.SharedListRecord) string {
+		func(e types.SharedListRecord) string {
 			return fmt.Sprintf("%v_%v", e.ListID, e.NameHash)
 		})
 

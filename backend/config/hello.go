@@ -1,7 +1,7 @@
 package config
 
 import (
-	configTypes "app/config/types"
+	"app/config/types"
 	"app/core"
 	"os"
 	"strings"
@@ -35,16 +35,16 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 type DemoStruct4 struct {
-	configTypes.TAGS `table:"demo_structs"`
-	CompanyID        int32    `json:"companyID,omitempty" db:"company_id,pk"`
-	ID               int32    `json:"id,omitempty" db:"id,pk"`
-	Edad             int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre           string   `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras         []string `json:"palabras,omitempty" db:"palabras"`
-	Rangos           []int32  `json:"rangos,omitempty" db:"rangos"`
-	Smallint         int16    `json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso             float32  `json:"peso,omitempty" db:"peso"`
-	Peso64           float64  `json:"peso64,omitempty" db:"peso_64"`
+	types.TAGS `table:"demo_structs"`
+	CompanyID  int32    `json:"companyID,omitempty" db:"company_id,pk"`
+	ID         int32    `json:"id,omitempty" db:"id,pk"`
+	Edad       int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre     string   `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras   []string `json:"palabras,omitempty" db:"palabras"`
+	Rangos     []int32  `json:"rangos,omitempty" db:"rangos"`
+	Smallint   int16    `json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso       float32  `json:"peso,omitempty" db:"peso"`
+	Peso64     float64  `json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Demo1(req *core.HandlerArgs) core.HandlerResponse {

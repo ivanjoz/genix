@@ -1,7 +1,7 @@
 package config
 
 import (
-	configTypes "app/config/types"
+	"app/config/types"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -13,7 +13,7 @@ func GetSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	records := []configTypes.SystemParameters{}
+	records := []types.SystemParameters{}
 	q := db.Query(&records)
 	// No status to filter here, so Delta() constrains nothing but the watermark.
 	q.CompanyID.Equals(companyID).Delta(updatedSince)
@@ -30,7 +30,7 @@ func GetSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 func PostSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 	companyID := req.User.CompanyID
 
-	records := []configTypes.SystemParameters{}
+	records := []types.SystemParameters{}
 	err := json.Unmarshal([]byte(*req.Body), &records)
 	if err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())

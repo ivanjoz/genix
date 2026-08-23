@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/db"
-	s "app/webpage/types"
+	"app/webpage/types"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -79,14 +79,14 @@ func PostWebpageShowcaseImage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Load the existing page row to update its Image without wiping Name/Route.
-	pages := []s.Webpage{}
+	pages := []types.Webpage{}
 	query := db.Query(&pages).CompanyID.Equals(req.User.CompanyID)
 	query.ID.Equals(pageID)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al leer la página:", err)
 	}
 
-	var page s.Webpage
+	var page types.Webpage
 	if len(pages) > 0 {
 		page = pages[0]
 	} else {
@@ -96,14 +96,14 @@ func PostWebpageShowcaseImage(req *core.HandlerArgs) core.HandlerResponse {
 		if !isSystem {
 			return req.MakeErr("No se encontró la página con ID:", pageID)
 		}
-		page = s.Webpage{ID: pageID, Name: route, Route: route, Status: 1}
+		page = types.Webpage{ID: pageID, Name: route, Route: route, Status: 1}
 	}
 	page.CompanyID = req.User.CompanyID
 	page.Image = imageID
 	page.Updated = core.SUnixTime()
 	page.UpdatedBy = req.User.ID
 
-	if err := db.Insert(&[]s.Webpage{page}); err != nil {
+	if err := db.Insert(&[]types.Webpage{page}); err != nil {
 		return req.MakeErr("Error al actualizar la página:", err)
 	}
 

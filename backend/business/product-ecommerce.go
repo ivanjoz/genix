@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/cloud"
 	"app/core"
 	"app/db"
@@ -68,9 +68,9 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		core.Log("GetProductsEcommerce:: lazy rebuild skipped", "| companyID:", companyID, "| err:", rebuildErr)
 	}
 
-	productos := []businessTypes.Product{}
-	marcas := []businessTypes.SharedListRecord{}
-	categorias := []businessTypes.SharedListRecord{}
+	productos := []types.Product{}
+	marcas := []types.SharedListRecord{}
+	categorias := []types.SharedListRecord{}
 	errGroup := errgroup.Group{}
 
 	// Products delta: keyed by Updated. Only the [company_id, updated] view supports a range scan
@@ -122,8 +122,8 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 
 // querySharedListDelta returns the delta for a single shared list (marca or categoría). On first
 // sync (watermark == 0) it returns active rows only; on delta it includes Status=0 evictions.
-func querySharedListDelta(companyID, listID, watermark int32) ([]businessTypes.SharedListRecord, error) {
-	records := []businessTypes.SharedListRecord{}
+func querySharedListDelta(companyID, listID, watermark int32) ([]types.SharedListRecord, error) {
+	records := []types.SharedListRecord{}
 	query := db.Query(&records)
 	query.Select(query.ID, query.Name, query.Updated, query.Status).
 		CompanyID.Equals(companyID).
@@ -146,8 +146,8 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 		return 0, 0, 0, fmt.Errorf("company ID inválido para construir el archivo de productos")
 	}
 
-	productos := []businessTypes.Product{}
-	sharedRows := []businessTypes.SharedListRecord{}
+	productos := []types.Product{}
+	sharedRows := []types.SharedListRecord{}
 	loadGroup := errgroup.Group{}
 
 	loadGroup.Go(func() error {
@@ -219,7 +219,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 	// Marcas / categorías rows share the same column layout: ID|Name|Updated|Status.
 	marcasBuilder := strings.Builder{}
 	categoriasBuilder := strings.Builder{}
-	writeSharedRow := func(builder *strings.Builder, row *businessTypes.SharedListRecord) {
+	writeSharedRow := func(builder *strings.Builder, row *types.SharedListRecord) {
 		builder.WriteString(strconv.Itoa(int(row.ID)))
 		builder.WriteByte('|')
 		builder.WriteString(sanitizeDbText(row.Name))

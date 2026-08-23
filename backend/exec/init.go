@@ -1,13 +1,13 @@
 package exec
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/cloud"
-	configTypes "app/config/types"
+	config "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	securityTypes "app/security/types"
+	security "app/security/types"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -71,20 +71,20 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 
 	DeployDatabaseSchemas(args)
 
-	if err := cloud.Init[configTypes.Company](); err != nil {
+	if err := cloud.Init[config.Company](); err != nil {
 		panic("Error al inicializar la tabla cloud de empresas. " + err.Error())
 	}
 	if err := cloud.Init[coreTypes.User](); err != nil {
 		panic("Error al inicializar la tabla cloud de usuarios. " + err.Error())
 	}
-	if err := cloud.Init[securityTypes.Profile](); err != nil {
+	if err := cloud.Init[security.Profile](); err != nil {
 		panic("Error al inicializar la tabla cloud de perfiles. " + err.Error())
 	}
 
 	seedTimestamp := core.SUnixTime()
 	password := core.Env.SECRET_PHRASE + core.Env.ADMIN_PASSWORD
 	passwordHash := core.FnvHashString64(password, -1, 20)
-	empresas := []configTypes.Company{
+	empresas := []config.Company{
 		{
 			ID:        1,
 			Name:      "Principal",
@@ -175,7 +175,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	recordsMap := map[int32]businessTypes.CityLocation{}
+	recordsMap := map[int32]business.CityLocation{}
 
 	addRecords := func(id, padreID, nombre string, jerarquia int8) {
 		cityID, err := strconv.ParseInt(id, 10, 32)
@@ -191,7 +191,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 		}
 		cityID32 := int32(cityID)
 		if _, ok := recordsMap[cityID32]; !ok {
-			recordsMap[cityID32] = businessTypes.CityLocation{
+			recordsMap[cityID32] = business.CityLocation{
 				ID:        cityID32,
 				CountryID: 604,
 				ParentID:  int32(parentID),
@@ -237,7 +237,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	// ciudades de Peru
-	ciudades := []businessTypes.CityLocation{}
+	ciudades := []business.CityLocation{}
 	q1 := db.Query(&ciudades)
 	err := q1.Select(q1.ID, q1.Name, q1.ParentID, q1.Hierarchy).
 		CountryID.Equals(604).Exec()

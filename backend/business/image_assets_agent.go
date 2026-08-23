@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/db"
 	"net/url"
 	"strconv"
@@ -32,13 +32,13 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 	if limit <= 0 {
 		limit = 10
 	}
-	assets := []businessTypes.ImageAsset{}
+	assets := []types.ImageAsset{}
 	keywords = strings.TrimSpace(keywords)
 	if len(keywords) >= 2 {
 		// Image assets share one group partition and have no Status column, so
 		// they index into status group 0. SearchText hydrates `assets` ordered
 		// by relevance (best match first).
-		if _, err := db.SearchText[businessTypes.ImageAsset](&assets, imageAssetCategoryGroupID, keywords, 0, limit); err != nil {
+		if _, err := db.SearchText[types.ImageAsset](&assets, imageAssetCategoryGroupID, keywords, 0, limit); err != nil {
 			return nil, err
 		}
 	}
@@ -69,7 +69,7 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 
 // imageCategoryNames loads the CategoryID→Name map used to build public URLs.
 func imageCategoryNames() (map[int16]string, error) {
-	categories := []businessTypes.ImageAssetCategory{}
+	categories := []types.ImageAssetCategory{}
 	query := db.Query(&categories)
 	if err := query.Select(query.ID, query.Name).GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, err

@@ -5,7 +5,7 @@ package fixtures
 // MakeProducts: a products-list response shaped like what GET.products actually
 // returns (business/products.go:43 → core.MakeResponse(req, &productos)).
 //
-// The real businessTypes.Product is used rather than a mirror struct so the benchmark cannot
+// The real business.Product is used rather than a mirror struct so the benchmark cannot
 // drift from production: 35+ fields, almost all `omitempty`, three nested slice types, and an
 // embedded db.TableStruct whose only exported field is tagged `json:"-"`.
 //
@@ -13,18 +13,18 @@ package fixtures
 // benchmarks can use the production Product type without creating an import cycle.
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"fmt"
 )
 
 // MakeProducts builds `count` products with a realistic sparse-field distribution.
 // GET.products excludes Stock, StockStatus, CompanyID, Created, CreatedBy and NameHash
 // (business/products.go:27), so those stay zero here too.
-func MakeProducts(count int) []businessTypes.Product {
-	products := make([]businessTypes.Product, 0, count)
+func MakeProducts(count int) []business.Product {
+	products := make([]business.Product, 0, count)
 
 	for i := range count {
-		product := businessTypes.Product{
+		product := business.Product{
 			ID:             int32(i + 1),
 			Name:           fmt.Sprintf("Producto de prueba %d con nombre largo", i),
 			SKU:            fmt.Sprintf("SKU-%06d", i),
@@ -67,7 +67,7 @@ func MakeProducts(count int) []businessTypes.Product {
 		if i%2 == 0 {
 			presentationCount := i%3 + 1
 			for p := range presentationCount {
-				product.Presentations = append(product.Presentations, businessTypes.ProductPresentation{
+				product.Presentations = append(product.Presentations, business.ProductPresentation{
 					ID:              int16(p + 1),
 					AtributoID:      int16(p%2 + 1),
 					Name:            fmt.Sprintf("Presentación %d", p+1),
@@ -81,11 +81,11 @@ func MakeProducts(count int) []businessTypes.Product {
 		}
 
 		if i%6 == 0 {
-			product.Properties = []businessTypes.ProductProperties{{
+			product.Properties = []business.ProductProperties{{
 				ID:     1,
 				Name:   "Talla",
 				Status: 1,
-				Options: []businessTypes.ProductProperty{
+				Options: []business.ProductProperty{
 					{ID: 1, Name: "S", Status: 1},
 					{ID: 2, Name: "M", Status: 1},
 					{ID: 3, Name: "L", Status: 1},

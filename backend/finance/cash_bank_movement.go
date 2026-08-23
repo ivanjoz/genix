@@ -3,10 +3,10 @@ package finance
 import (
 	"app/core"
 	"app/db"
-	financeTypes "app/finance/types"
+	"app/finance/types"
 )
 
-func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.InternalCashMovement) error {
+func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []types.InternalCashMovement) error {
 	if len(movimientos) == 0 {
 		return nil
 	}
@@ -20,7 +20,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		cashBankIDs.Add(m.CashBankID)
 	}
 
-	cashBankMap := make(map[int32]financeTypes.CashBank)
+	cashBankMap := make(map[int32]types.CashBank)
 	for _, id := range cashBankIDs.Values {
 		cashBank, err := GetCaja(req.User.CompanyID, id)
 		if err != nil {
@@ -29,8 +29,8 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		cashBankMap[id] = cashBank
 	}
 
-	records := []financeTypes.CashBankMovement{}
-	cashBanksToUpdate := []financeTypes.CashBank{}
+	records := []types.CashBankMovement{}
+	cashBanksToUpdate := []types.CashBank{}
 
 	// Track current balance per cash bank across multiple movements in the same batch.
 	currentAmounts := make(map[int32]int32)
@@ -58,7 +58,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 			movementDate = m.Date
 		}
 
-		record := financeTypes.CashBankMovement{
+		record := types.CashBankMovement{
 			ID:            core.SUnixTimeUUIDConcatID(m.CashBankID, core.SUnixTimeUUID()),
 			CompanyID:     req.User.CompanyID,
 			CashBankID:    m.CashBankID,
@@ -90,7 +90,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []financeTypes.Int
 		cashBanksToUpdate = append(cashBanksToUpdate, cashBankMap[id])
 	}
 
-	q := db.TableOf[financeTypes.CashBank]()
+	q := db.TableOf[types.CashBank]()
 	// Status is part of the delta-view key and must be written with the managed UpdatedVersion.
 	if err := db.Update(&cashBanksToUpdate, q.Status, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar saldo de las cajas:", err)

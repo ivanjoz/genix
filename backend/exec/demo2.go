@@ -3,7 +3,7 @@ package exec
 import (
 
 	// sales "app/sales/types"
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
 	"app/libs"
@@ -110,7 +110,7 @@ func Test39(args *core.ExecArgs) core.FuncResponse {
 
 func Test41(args *core.ExecArgs) core.FuncResponse {
 	/*
-		records := []businessTypes.SharedListRecord{}
+		records := []business.SharedListRecord{}
 
 		query := db.Query(&records)
 		err := query.CompanyID.Equals(1).Exec()
@@ -130,7 +130,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	/*
-		records := []businessTypes.CityLocation{}
+		records := []business.CityLocation{}
 
 		query := db.Query(&records)
 		err := query.Exec()
@@ -150,7 +150,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 
-	records := []businessTypes.Product{}
+	records := []business.Product{}
 
 	query := db.Query(&records)
 	err := query.Select(query.ID).Exec()
@@ -216,7 +216,7 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
-	controller := makeDBController[businessTypes.Product]()
+	controller := makeDBController[business.Product]()
 
 	controller.FlushTextSearchIndex(1)
 

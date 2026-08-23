@@ -6,7 +6,7 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	financeTypes "app/finance/types"
+	finance "app/finance/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
 	"app/sales"
@@ -238,7 +238,7 @@ func (generator *saleOrderGenerator) validateContext() error {
 
 // resolveActiveCajaID picks the lowest active cashBank ID so the sample generator can run in seeded environments without assuming ID=1.
 func (generator *saleOrderGenerator) resolveActiveCajaID() (int32, error) {
-	activeCajas := []financeTypes.CashBank{}
+	activeCajas := []finance.CashBank{}
 	cajaQuery := db.Query(&activeCajas)
 	cajaQuery.Select(cajaQuery.ID, cajaQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
@@ -250,7 +250,7 @@ func (generator *saleOrderGenerator) resolveActiveCajaID() (int32, error) {
 		return 0, core.Err("no se encontró ninguna cashBank activa")
 	}
 
-	slices.SortFunc(activeCajas, func(leftCaja, rightCaja financeTypes.CashBank) int {
+	slices.SortFunc(activeCajas, func(leftCaja, rightCaja finance.CashBank) int {
 		switch {
 		case leftCaja.ID < rightCaja.ID:
 			return -1

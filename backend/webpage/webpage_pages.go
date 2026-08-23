@@ -1,10 +1,10 @@
 package webpage
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
-	s "app/webpage/types"
+	"app/webpage/types"
 	"encoding/json"
 	"strings"
 )
@@ -27,7 +27,7 @@ func GetWebpages(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	pages := []s.Webpage{}
+	pages := []types.Webpage{}
 	query := db.Query(&pages).CompanyID.Equals(req.User.CompanyID)
 	// A first sync returns active + published only; a delta sync also returns Status=0 rows so the
 	// client can evict them.
@@ -44,7 +44,7 @@ func GetWebpages(req *core.HandlerArgs) core.HandlerResponse {
 // (<= 14) cannot be written; new pages get sequential IDs starting at 15; routes
 // must start with "/", be unique, and not collide with a system route.
 func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
-	incomingPages := []s.Webpage{}
+	incomingPages := []types.Webpage{}
 	if err := json.Unmarshal([]byte(*req.Body), &incomingPages); err != nil {
 		return req.MakeErr("Error al deserializar las páginas:", err)
 	}
@@ -59,7 +59,7 @@ func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Load current stored pages to validate route uniqueness and compute the next ID.
-	currentPages := []s.Webpage{}
+	currentPages := []types.Webpage{}
 	currentQuery := db.Query(&currentPages).CompanyID.Equals(req.User.CompanyID)
 	if err := currentQuery.Exec(); err != nil {
 		return req.MakeErr("Error al leer las páginas actuales:", err)
@@ -79,7 +79,7 @@ func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	nowTime := core.SUnixTime()
-	newIDs := []businessTypes.NewIDToID{}
+	newIDs := []business.NewIDToID{}
 
 	for index := range incomingPages {
 		page := &incomingPages[index]
@@ -105,7 +105,7 @@ func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		// Preserve the incoming (possibly temporary/negative) ID for the response map.
-		newIDs = append(newIDs, businessTypes.NewIDToID{TempID: int32(page.ID)})
+		newIDs = append(newIDs, business.NewIDToID{TempID: int32(page.ID)})
 
 		// Assign a fresh sequential ID to new pages instead of relying on the ORM
 		// autoincrement, so reserved IDs (<= 14) are never produced.

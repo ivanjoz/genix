@@ -1,10 +1,10 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/core"
 	"app/db"
-	financeTypes "app/finance/types"
+	finance "app/finance/types"
 	"encoding/json"
 
 	"golang.org/x/sync/errgroup"
@@ -54,9 +54,9 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 
 	// The endpoint is reachable by URL at any time, so it re-reads what already exists and only
 	// inserts what is missing. Delta(0, 1) is the first-sync form: it pins Status to 1.
-	sites := []businessTypes.Site{}
-	warehouses := []businessTypes.Warehouse{}
-	cashBanks := []financeTypes.CashBank{}
+	sites := []types.Site{}
+	warehouses := []types.Warehouse{}
+	cashBanks := []finance.CashBank{}
 
 	errGroup := errgroup.Group{}
 
@@ -103,7 +103,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("La sede seleccionada no existe en la empresa.")
 		}
 	} else {
-		newSites := []businessTypes.Site{{
+		newSites := []types.Site{{
 			CompanyID: req.User.CompanyID,
 			Name:      body.SiteName,
 			Address:   body.SiteAddress,
@@ -124,7 +124,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 
 	warehouseID := int32(0)
 	if len(warehouses) == 0 {
-		newWarehouses := []businessTypes.Warehouse{{
+		newWarehouses := []types.Warehouse{{
 			CompanyID: req.User.CompanyID,
 			SiteID:    siteID,
 			Name:      body.WarehouseName,
@@ -143,7 +143,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 
 	cashBankID := int32(0)
 	if len(cashBanks) == 0 {
-		newCashBanks := []financeTypes.CashBank{{
+		newCashBanks := []finance.CashBank{{
 			CompanyID: req.User.CompanyID,
 			SiteID:    siteID,
 			Name:      body.CashBankName,

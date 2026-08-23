@@ -3,7 +3,7 @@ package logistics
 import (
 	"app/core"
 	"app/db"
-	logisticsTypes "app/logistics/types"
+	"app/logistics/types"
 )
 
 // RecalcProductStockByMovements rebuilds ProductStockV2 + ProductStockDetail
@@ -23,14 +23,14 @@ func RecalcProductStockByMovements(companyID int32) error {
 	// Start by loading the persisted rows. Excluding Created+CreatedBy (and Updated/UpdatedBy on
 	// details) means any in-memory row still carrying Created==0 at the end of the pass was
 	// loaded from DB and must be persisted as an UPDATE; Created>0 flags INSERT.
-	stockByID := map[int64]*logisticsTypes.ProductStock{}
-	detailByKey := map[string]*logisticsTypes.ProductStockDetail{}
+	stockByID := map[int64]*types.ProductStock{}
+	detailByKey := map[string]*types.ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
 
 	{
-		existing := []logisticsTypes.ProductStock{}
+		existing := []types.ProductStock{}
 		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy).CompanyID.Equals(companyID)
 		if err := q.Exec(); err != nil {
@@ -45,7 +45,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 		}
 	}
 	{
-		existing := []logisticsTypes.ProductStockDetail{}
+		existing := []types.ProductStockDetail{}
 		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).CompanyID.Equals(companyID)
 		if err := q.Exec(); err != nil {
@@ -58,12 +58,12 @@ func RecalcProductStockByMovements(companyID int32) error {
 		}
 	}
 
-	accumulate := func(warehouseID int32, quantity int32, subQuantity int32, movement *logisticsTypes.WarehouseProductMovement) {
+	accumulate := func(warehouseID int32, quantity int32, subQuantity int32, movement *types.WarehouseProductMovement) {
 		stockID := packProductStockID(warehouseID, movement.ProductID, movement.PresentationID)
 		stock := stockByID[stockID]
 		if stock == nil {
 			// Fresh V2 row (no historical record): Created stamps it as INSERT at write time.
-			stock = &logisticsTypes.ProductStock{
+			stock = &types.ProductStock{
 				ID:             stockID,
 				CompanyID:      companyID,
 				WarehouseID:    warehouseID,
@@ -81,7 +81,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 		key := detailKey(stockID, movement.LotID, movement.SerialNumber)
 		detail := detailByKey[key]
 		if detail == nil {
-			detail = &logisticsTypes.ProductStockDetail{
+			detail = &types.ProductStockDetail{
 				CompanyID:      companyID,
 				ProductStockID: stockID,
 				LotID:          movement.LotID,
@@ -96,9 +96,9 @@ func RecalcProductStockByMovements(companyID int32) error {
 		detail.SubQuantity += subQuantity
 	}
 
-	query := db.Query(&[]logisticsTypes.WarehouseProductMovement{})
+	query := db.Query(&[]types.WarehouseProductMovement{})
 	query.CompanyID.Equals(companyID)
-	if err := query.ExecScan(func(movement *logisticsTypes.WarehouseProductMovement) bool {
+	if err := query.ExecScan(func(movement *types.WarehouseProductMovement) bool {
 		accumulate(movement.WarehouseID, movement.Quantity, movement.SubQuantity, movement)
 		if movement.WarehouseRefID > 0 {
 			// Transfers mirror an outbound leg on the source warehouse.
@@ -125,11 +125,11 @@ func RecalcProductStockByMovements(companyID int32) error {
 
 	// Flatten and let InsertUpdateInclude route by the Created>0 marker: fresh rows go to INSERT,
 	// preloaded rows go to UPDATE (touching only the listed columns).
-	stocks := make([]logisticsTypes.ProductStock, 0, len(stockByID))
+	stocks := make([]types.ProductStock, 0, len(stockByID))
 	for _, stock := range stockByID {
 		stocks = append(stocks, *stock)
 	}
-	details := make([]logisticsTypes.ProductStockDetail, 0, len(detailByKey))
+	details := make([]types.ProductStockDetail, 0, len(detailByKey))
 	for _, detail := range detailByKey {
 		details = append(details, *detail)
 	}
@@ -137,9 +137,9 @@ func RecalcProductStockByMovements(companyID int32) error {
 	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details))
 
 	if len(stocks) > 0 {
-		stockTable := db.TableOf[logisticsTypes.ProductStock]()
+		stockTable := db.TableOf[types.ProductStock]()
 		if err := db.InsertUpdateInclude(&stocks,
-			func(e *logisticsTypes.ProductStock) bool { return e.Created > 0 },
+			func(e *types.ProductStock) bool { return e.Created > 0 },
 			db.Cols(
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
@@ -151,9 +151,9 @@ func RecalcProductStockByMovements(companyID int32) error {
 	}
 
 	if len(details) > 0 {
-		detailTable := db.TableOf[logisticsTypes.ProductStockDetail]()
+		detailTable := db.TableOf[types.ProductStockDetail]()
 		if err := db.InsertUpdateInclude(&details,
-			func(e *logisticsTypes.ProductStockDetail) bool { return e.Created > 0 },
+			func(e *types.ProductStockDetail) bool { return e.Created > 0 },
 			db.Cols(
 				detailTable.Quantity, detailTable.SubQuantity,
 				detailTable.Updated, detailTable.Status,

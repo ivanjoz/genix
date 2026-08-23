@@ -3,7 +3,7 @@ package invoicing
 import (
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
+	"app/invoicing/types"
 	"encoding/json"
 	"strings"
 )
@@ -12,7 +12,7 @@ import (
 func GetInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 	updatedVersion := req.GetQueryInt("upv")
 
-	series := []invoicingTypes.InvoiceSeries{}
+	series := []types.InvoiceSeries{}
 	query := db.Query(&series)
 	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
 
@@ -28,7 +28,7 @@ func GetInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 // with them, so the validation here is not a preference: the wrong letter means
 // every document numbered under it is rejected.
 func PostInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
-	body := invoicingTypes.InvoiceSeries{}
+	body := types.InvoiceSeries{}
 	if err := json.Unmarshal([]byte(*req.Body), &body); err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())
 	}
@@ -39,14 +39,14 @@ func PostInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	companyID := req.User.CompanyID
-	existing := []invoicingTypes.InvoiceSeries{}
+	existing := []types.InvoiceSeries{}
 	query := db.Query(&existing)
 	query.Select().CompanyID.Equals(companyID)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al leer las series:", err)
 	}
 
-	packedID := invoicingTypes.PackDocTypeSeries(body.DocType, body.SeriesID)
+	packedID := types.PackDocTypeSeries(body.DocType, body.SeriesID)
 	isNew := true
 	for index := range existing {
 		current := &existing[index]
@@ -74,12 +74,12 @@ func PostInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 		body.CreatedBy = req.User.ID
 	}
 
-	records := &[]invoicingTypes.InvoiceSeries{body}
+	records := &[]types.InvoiceSeries{body}
 	var err error
 	if isNew {
 		err = db.Insert(records)
 	} else {
-		table := db.TableOf[invoicingTypes.InvoiceSeries]()
+		table := db.TableOf[types.InvoiceSeries]()
 		err = db.UpdateExclude(records, table.Created, table.CreatedBy)
 	}
 	if err != nil {
@@ -90,10 +90,10 @@ func PostInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 
 // validateSeries checks what SUNAT checks: four characters, and a first letter
 // that matches the family of document the series numbers.
-func validateSeries(series *invoicingTypes.InvoiceSeries) error {
+func validateSeries(series *types.InvoiceSeries) error {
 	switch series.DocType {
-	case invoicingTypes.DocTypeFactura, invoicingTypes.DocTypeBoleta,
-		invoicingTypes.DocTypeCreditNote, invoicingTypes.DocTypeDebitNote:
+	case types.DocTypeFactura, types.DocTypeBoleta,
+		types.DocTypeCreditNote, types.DocTypeDebitNote:
 	default:
 		return core.Err("El tipo de comprobante no es válido.")
 	}
@@ -105,10 +105,10 @@ func validateSeries(series *invoicingTypes.InvoiceSeries) error {
 	if prefix != 'F' && prefix != 'B' {
 		return core.Err("El código de serie debe empezar con F o con B.")
 	}
-	if series.DocType == invoicingTypes.DocTypeFactura && prefix != 'F' {
+	if series.DocType == types.DocTypeFactura && prefix != 'F' {
 		return core.Err("Una factura necesita una serie que empiece con F.")
 	}
-	if series.DocType == invoicingTypes.DocTypeBoleta && prefix != 'B' {
+	if series.DocType == types.DocTypeBoleta && prefix != 'B' {
 		return core.Err("Una boleta necesita una serie que empiece con B.")
 	}
 

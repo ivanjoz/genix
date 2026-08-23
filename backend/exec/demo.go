@@ -1,12 +1,12 @@
 package exec
 
 import (
-	businessTypes "app/business/types"
-	configTypes "app/config/types"
+	business "app/business/types"
+	config "app/config/types"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	logisticsTypes "app/logistics/types"
+	logistics "app/logistics/types"
 	"bufio"
 	"bytes"
 	"encoding/gob"
@@ -125,32 +125,32 @@ type DemoStruct3 struct {
 }
 
 type DemoStruct5 struct {
-	configTypes.TAGS `table:"demo_structs"`
-	CompanyID        int32         `json:"companyID,omitempty" db:"company_id,pk"`
-	ID               int32         `json:"id,omitempty" db:"id,pk"`
-	Edad             int32         `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre           string        `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras         []string      `json:"palabras,omitempty" db:"palabras"`
-	Peso             float32       `json:"peso,omitempty" db:"peso"`
-	Peso64           float64       `json:"peso64,omitempty" db:"peso_64"`
-	Rangos           []int32       `json:"rangos,omitempty" db:"rangos"`
-	Smallint         int16         `db:"small_int,zx2"`
-	Struct1          DemoStruct1   `json:"struct_1,omitempty" db:"struct_1"`
-	Struct2          DemoStruct3   `json:"struct_2,omitempty" db:"struct_2"`
-	Struct3          []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3"`
+	config.TAGS `table:"demo_structs"`
+	CompanyID   int32         `json:"companyID,omitempty" db:"company_id,pk"`
+	ID          int32         `json:"id,omitempty" db:"id,pk"`
+	Edad        int32         `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre      string        `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras    []string      `json:"palabras,omitempty" db:"palabras"`
+	Peso        float32       `json:"peso,omitempty" db:"peso"`
+	Peso64      float64       `json:"peso64,omitempty" db:"peso_64"`
+	Rangos      []int32       `json:"rangos,omitempty" db:"rangos"`
+	Smallint    int16         `db:"small_int,zx2"`
+	Struct1     DemoStruct1   `json:"struct_1,omitempty" db:"struct_1"`
+	Struct2     DemoStruct3   `json:"struct_2,omitempty" db:"struct_2"`
+	Struct3     []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3"`
 }
 
 type DemoStruct4 struct {
-	configTypes.TAGS `table:"demo_structs"`
-	CompanyID        int32    `json:"companyID,omitempty" db:"company_id,pk"`
-	ID               int32    `json:"id,omitempty" db:"id,pk"`
-	Edad             int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre           string   `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras         []string `json:"palabras,omitempty" db:"palabras"`
-	Rangos           []int32  `json:"rangos,omitempty" db:"rangos"`
-	Smallint         int16    `json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso             float32  `json:"peso,omitempty" db:"peso"`
-	Peso64           float64  `json:"peso64,omitempty" db:"peso_64"`
+	config.TAGS `table:"demo_structs"`
+	CompanyID   int32    `json:"companyID,omitempty" db:"company_id,pk"`
+	ID          int32    `json:"id,omitempty" db:"id,pk"`
+	Edad        int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
+	Nombre      string   `json:"nombre,omitempty" db:"nombre,zx1"`
+	Palabras    []string `json:"palabras,omitempty" db:"palabras"`
+	Rangos      []int32  `json:"rangos,omitempty" db:"rangos"`
+	Smallint    int16    `json:"small_int,omitempty" db:"small_int,zx2"`
+	Peso        float32  `json:"peso,omitempty" db:"peso"`
+	Peso64      float64  `json:"peso64,omitempty" db:"peso_64"`
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {
@@ -503,7 +503,7 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 func Test29(args *core.ExecArgs) core.FuncResponse {
 
 	// Migrated to db2 - scylla.RecalcVirtualColumns not needed anymore
-	// scylla.RecalcVirtualColumns[businessTypes.SharedListRecord]()
+	// scylla.RecalcVirtualColumns[business.SharedListRecord]()
 
 	return core.FuncResponse{}
 }
@@ -514,14 +514,14 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 	updated := int32(789456123)
 	errGroup := errgroup.Group{}
 
-	listasRegistrosMap := map[int32]*[]businessTypes.SharedListRecord{}
+	listasRegistrosMap := map[int32]*[]business.SharedListRecord{}
 	for _, listaID := range listasIDs {
-		listasRegistrosMap[listaID] = &[]businessTypes.SharedListRecord{}
+		listasRegistrosMap[listaID] = &[]business.SharedListRecord{}
 	}
 
 	// Migrated to db2
 	errGroup.Go(func() error {
-		registros := []businessTypes.SharedListRecord{}
+		registros := []business.SharedListRecord{}
 		query := db.Query(&registros)
 		query.Select().
 			CompanyID.Equals(1).
@@ -546,7 +546,7 @@ func Test30(args *core.ExecArgs) core.FuncResponse {
 		panic(err)
 	}
 
-	listasRegistros := []businessTypes.SharedListRecord{}
+	listasRegistros := []business.SharedListRecord{}
 	for _, registros := range listasRegistrosMap {
 		listasRegistros = append(listasRegistros, *registros...)
 	}
@@ -564,8 +564,8 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	// Migrated to db2 - use makeDBController and scylla.DeployScylla
-	// scylla.DeployScylla(0, businessTypes.SharedListRecord{})
-	controller := makeDBController[businessTypes.SharedListRecord]()
+	// scylla.DeployScylla(0, business.SharedListRecord{})
+	controller := makeDBController[business.SharedListRecord]()
 	scylla.DeployScylla(0, controller)
 	return core.FuncResponse{}
 }
@@ -635,7 +635,7 @@ func (e TableHelper[T]) Query2() []int32 {
 		core.Log(records)
 	*/
 	// Migrated to db2 - scylla.RecalcVirtualColumns not needed anymore
-	// scylla.RecalcVirtualColumns[businessTypes.SharedListRecord]()
+	// scylla.RecalcVirtualColumns[business.SharedListRecord]()
 
 	return []int32{}
 }
@@ -667,9 +667,9 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	scylla.MakeScyllaConnection(makeConnParams())
-	registros := []businessTypes.SharedListRecord{}
+	registros := []business.SharedListRecord{}
 
-	recordToInsert := businessTypes.SharedListRecord{
+	recordToInsert := business.SharedListRecord{
 		ID:          2,
 		CompanyID:   1,
 		ListID:      3,
@@ -683,7 +683,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := db.Insert(&[]businessTypes.SharedListRecord{recordToInsert})
+	err := db.Insert(&[]business.SharedListRecord{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)
@@ -691,7 +691,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Registros insertado!")
 
-	recordToUpdate := businessTypes.SharedListRecord{
+	recordToUpdate := business.SharedListRecord{
 		ID:          1,
 		CompanyID:   1,
 		ListID:      3,
@@ -705,8 +705,8 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Actualizando registros....")
 
-	q1 := db.TableOf[businessTypes.SharedListRecord]()
-	err = db.Update(&[]businessTypes.SharedListRecord{recordToUpdate},
+	q1 := db.TableOf[business.SharedListRecord]()
+	err = db.Update(&[]business.SharedListRecord{recordToUpdate},
 		q1.Status, q1.ListID, q1.Name, q1.Images, q1.Description, q1.Updated)
 	if err != nil {
 		fmt.Println("Error al actualizar::", err)
@@ -746,8 +746,8 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 	// Migrated to db2 - use makeDBController and scylla.DeployScylla
-	// scylla.DeployScylla(0, businessTypes.SharedListRecord{})
-	controller := makeDBController[logisticsTypes.ProductStock]()
+	// scylla.DeployScylla(0, business.SharedListRecord{})
+	controller := makeDBController[logistics.ProductStock]()
 	controller.RecalcVirtualColumns(1)
 	return core.FuncResponse{}
 }

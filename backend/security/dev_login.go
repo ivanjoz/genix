@@ -3,7 +3,7 @@ package security
 import (
 	"app/cloud"
 	"app/core"
-	coretypes "app/core/types"
+	coreTypes "app/core/types"
 	"app/db"
 	"net"
 	"strings"
@@ -63,12 +63,12 @@ func DevLogin(req *core.HandlerArgs) core.HandlerResponse {
 		userID = 1
 	}
 
-	var user *coretypes.User
+	var user *coreTypes.User
 	var err error
 	if cloud.IsDataMirrorEnabled() {
-		user, err = cloud.GetByID(coretypes.User{CompanyID: companyID, ID: userID})
+		user, err = cloud.GetByID(coreTypes.User{CompanyID: companyID, ID: userID})
 	} else {
-		users := []coretypes.User{}
+		users := []coreTypes.User{}
 		userQuery := db.Query(&users)
 		userQuery.CompanyID.Equals(companyID).ID.Equals(userID).Limit(1)
 		err = userQuery.Exec()

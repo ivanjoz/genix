@@ -4,8 +4,8 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
-	salesTypes "app/sales/types"
+	"app/invoicing/types"
+	sales "app/sales/types"
 	"context"
 	"encoding/json"
 	"errors"
@@ -72,7 +72,7 @@ func PostInvoice(req *core.HandlerArgs) core.HandlerResponse {
 func GetInvoices(req *core.HandlerArgs) core.HandlerResponse {
 	updatedVersion := req.GetQueryInt("upv")
 
-	documents := []invoicingTypes.InvoiceDocument{}
+	documents := []types.InvoiceDocument{}
 	query := db.Query(&documents)
 	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
 
@@ -135,9 +135,9 @@ func PostInvoiceRetry(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err.Error())
 	}
 	switch document.State {
-	case invoicingTypes.InvoiceAccepted, invoicingTypes.InvoiceObserved:
+	case types.InvoiceAccepted, types.InvoiceObserved:
 		return req.MakeErr("El comprobante ya fue aceptado por SUNAT.")
-	case invoicingTypes.InvoiceRejected:
+	case types.InvoiceRejected:
 		return req.MakeErr("El comprobante fue rechazado por SUNAT. Debe emitir uno corregido.")
 	}
 
@@ -149,8 +149,8 @@ func PostInvoiceRetry(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 // loadSaleOrder reads the sale being invoiced.
-func loadSaleOrder(companyID int32, saleOrderID int64) (*salesTypes.SaleOrder, error) {
-	orders := []salesTypes.SaleOrder{}
+func loadSaleOrder(companyID int32, saleOrderID int64) (*sales.SaleOrder, error) {
+	orders := []sales.SaleOrder{}
 	query := db.Query(&orders)
 	query.Select().CompanyID.Equals(companyID).ID.Equals(saleOrderID)
 
@@ -160,7 +160,7 @@ func loadSaleOrder(companyID int32, saleOrderID int64) (*salesTypes.SaleOrder, e
 	if len(orders) == 0 {
 		return nil, errors.New("la venta no existe")
 	}
-	if orders[0].Status == salesTypes.OrderStatusAnnulled {
+	if orders[0].Status == sales.OrderStatusAnnulled {
 		return nil, errors.New("la venta está anulada")
 	}
 	return &orders[0], nil
@@ -172,20 +172,20 @@ func loadSaleOrder(companyID int32, saleOrderID int64) (*salesTypes.SaleOrder, e
 // type is used, which is what a till does: it knows it is selling, not which
 // series the accountant set up.
 func resolveSeries(companyID int32, docType int8, seriesID int16,
-	order *salesTypes.SaleOrder) (*invoicingTypes.InvoiceSeries, error) {
+	order *sales.SaleOrder) (*types.InvoiceSeries, error) {
 
 	if docType == 0 {
-		docType = invoicingTypes.DocTypeBoleta
+		docType = types.DocTypeBoleta
 	}
 
-	series := []invoicingTypes.InvoiceSeries{}
+	series := []types.InvoiceSeries{}
 	query := db.Query(&series)
 	query.Select().CompanyID.Equals(companyID)
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al leer las series: %w", err)
 	}
 
-	var chosen, fallback *invoicingTypes.InvoiceSeries
+	var chosen, fallback *types.InvoiceSeries
 	for index := range series {
 		candidate := &series[index]
 		if candidate.Status != 1 || candidate.DocType != docType {

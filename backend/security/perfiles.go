@@ -3,15 +3,15 @@ package security
 import (
 	"app/cloud"
 	"app/core"
-	coretypes "app/core/types"
+	coreTypes "app/core/types"
 	"app/db"
-	securityTypes "app/security/types"
+	"app/security/types"
 	"encoding/json"
 )
 
 func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("upd")
-	records := []securityTypes.Profile{}
+	records := []types.Profile{}
 
 	var err error
 	if !cloud.IsDataMirrorEnabled() {
@@ -42,7 +42,7 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
-	body := securityTypes.Profile{}
+	body := types.Profile{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -53,18 +53,18 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	core.Print(body)
 
 	body.Updated = core.SUnixTime()
-	perfilesToSave := []securityTypes.Profile{body}
+	perfilesToSave := []types.Profile{body}
 	if err = db.Insert(&perfilesToSave); err != nil {
 		return req.MakeErr("Error al actualizar el profile en ScyllaDB: " + err.Error())
 	}
 
 	body = perfilesToSave[0]
-	if err = cloud.Insert([]securityTypes.Profile{body}); err != nil {
+	if err = cloud.Insert([]types.Profile{body}); err != nil {
 		return req.MakeErr("Error al actualizar el profile en cloud: " + err.Error())
 	}
 
 	if isExistingPerfil {
-		affectedUsers := []coretypes.User{}
+		affectedUsers := []coreTypes.User{}
 		affectedUsersQuery := db.Query(&affectedUsers)
 		affectedUsersQuery.CompanyID.Equals(req.User.CompanyID).ProfileIDs.Contains(body.ID)
 		if err = affectedUsersQuery.AllowFilter().Exec(); err != nil {
@@ -87,7 +87,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 			// Keep the just-saved profile in-memory so recomputations use the new access list immediately.
 			perfilesByID[body.ID] = body
 
-			usersWithChangedAccesos := make([]coretypes.User, 0, len(affectedUsers))
+			usersWithChangedAccesos := make([]coreTypes.User, 0, len(affectedUsers))
 
 			for userIndex := range affectedUsers {
 				affectedUser := &affectedUsers[userIndex]

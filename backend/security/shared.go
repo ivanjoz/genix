@@ -2,7 +2,7 @@ package security
 
 import (
 	"app/core"
-	coretypes "app/core/types"
+	coreTypes "app/core/types"
 	"app/db"
 	"context"
 )
@@ -25,14 +25,14 @@ func invalidateCachedUserAccess(req *core.HandlerArgs, companyID, userID int32) 
 	}
 }
 
-func GetUsuariosList(companyID int32, userIDs []int32) ([]coretypes.User, error) {
+func GetUsuariosList(companyID int32, userIDs []int32) ([]coreTypes.User, error) {
 	ids := core.MakeSliceInclude(userIDs)
 
 	if len(userIDs) == 0 {
-		return []coretypes.User{}, nil
+		return []coreTypes.User{}, nil
 	}
 
-	usuarios := []coretypes.User{}
+	usuarios := []coreTypes.User{}
 	query := db.Query(&usuarios)
 	query.Select().
 		CompanyID.Equals(companyID).

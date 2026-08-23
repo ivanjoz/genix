@@ -1,7 +1,7 @@
 package core
 
 import (
-	types "app/core/types"
+	"app/core/types"
 	"sync"
 )
 

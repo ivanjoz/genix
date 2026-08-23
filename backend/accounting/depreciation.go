@@ -1,7 +1,7 @@
 package accounting
 
 import (
-	accountingTypes "app/accounting/types"
+	"app/accounting/types"
 	"time"
 )
 
@@ -40,7 +40,7 @@ type DepreciationPeriod struct {
 //     at the start of it.
 //
 // A zero DepreciationMonths (a plain consumable) or a non-positive value yields nothing.
-func DepreciationSchedule(asset *accountingTypes.Asset, throughDate int16) []DepreciationPeriod {
+func DepreciationSchedule(asset *types.Asset, throughDate int16) []DepreciationPeriod {
 	if asset.DepreciationMonths <= 0 || asset.AcquisitionValue <= 0 || asset.AcquisitionDate <= 0 {
 		return nil
 	}
@@ -92,7 +92,7 @@ func DepreciationSchedule(asset *accountingTypes.Asset, throughDate int16) []Dep
 // PendingDepreciationPeriods narrows a schedule to the periods not yet posted, which is
 // what lazy generation writes. Filtering on the stored watermark rather than on a count
 // keeps generation idempotent: running it twice in one day produces nothing the second time.
-func PendingDepreciationPeriods(asset *accountingTypes.Asset, throughDate int16) []DepreciationPeriod {
+func PendingDepreciationPeriods(asset *types.Asset, throughDate int16) []DepreciationPeriod {
 	schedule := DepreciationSchedule(asset, throughDate)
 	pending := make([]DepreciationPeriod, 0, len(schedule))
 	for _, period := range schedule {
@@ -105,15 +105,15 @@ func PendingDepreciationPeriods(asset *accountingTypes.Asset, throughDate int16)
 
 // ResolveAssetStatus derives the lifecycle slot from the asset's own numbers, so the
 // status can never disagree with the ledger that produced it.
-func ResolveAssetStatus(asset *accountingTypes.Asset) int8 {
-	if asset.Status == accountingTypes.AssetStatusRemoved {
-		return accountingTypes.AssetStatusRemoved
+func ResolveAssetStatus(asset *types.Asset) int8 {
+	if asset.Status == types.AssetStatusRemoved {
+		return types.AssetStatusRemoved
 	}
 	if asset.DisposalDate > 0 {
-		return accountingTypes.AssetStatusDisposed
+		return types.AssetStatusDisposed
 	}
 	if asset.DepreciationMonths > 0 && asset.AccumulatedDepreciation >= asset.AcquisitionValue {
-		return accountingTypes.AssetStatusFullyDepreciated
+		return types.AssetStatusFullyDepreciated
 	}
-	return accountingTypes.AssetStatusActive
+	return types.AssetStatusActive
 }

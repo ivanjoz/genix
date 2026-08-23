@@ -1,7 +1,7 @@
 package exec
 
 import (
-	configTypes "app/config/types"
+	config "app/config/types"
 	"app/core"
 	"app/db"
 	"app/webpage"
@@ -68,7 +68,7 @@ func parseCompanyIDArgument(rawArgument string) (int32, error) {
 }
 
 func getCompanyWebpageDomain(companyID int32) (string, error) {
-	parameters := []configTypes.Parameters{}
+	parameters := []config.Parameters{}
 	query := db.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
 	query.Key.Equals("domain")

@@ -3,15 +3,15 @@ package webpage
 import (
 	"app/core"
 	"app/db"
-	s "app/webpage/types"
+	"app/webpage/types"
 )
 
 // WebpagePublicResult is the unauthenticated payload for a single storefront page:
 // its SEO metatags (Config) plus its content sections (Sections, with the
 // section-1 whole-page CSS). Consumed by the prerender build and deployed storefronts.
 type WebpagePublicResult struct {
-	Config   map[string]string        `json:"Config"`
-	Sections []s.EcommercePageContent `json:"Sections"`
+	Config   map[string]string            `json:"Config"`
+	Sections []types.EcommercePageContent `json:"Sections"`
 }
 
 // GetWebpagePublic is the single public (no-auth, "p-" prefix) read for a storefront
@@ -32,7 +32,7 @@ func GetWebpagePublic(req *core.HandlerArgs) core.HandlerResponse {
 
 	result := WebpagePublicResult{
 		Config:   map[string]string{},
-		Sections: []s.EcommercePageContent{},
+		Sections: []types.EcommercePageContent{},
 	}
 
 	seoConfig, err := publicSeoMetatags(companyID)
@@ -41,7 +41,7 @@ func GetWebpagePublic(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	result.Config = seoConfig
 
-	rows := []s.EcommercePageContent{}
+	rows := []types.EcommercePageContent{}
 	query := db.Query(&rows)
 	query.Select().CompanyID.Equals(companyID)
 	query.PageID.Equals(pageID)

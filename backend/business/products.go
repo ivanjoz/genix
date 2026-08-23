@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/cloud"
 	"app/core"
 	"app/db"
@@ -18,7 +18,7 @@ func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	productos := []businessTypes.Product{}
+	productos := []types.Product{}
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
@@ -60,7 +60,7 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Active products live in status group 1. Return only ids + weights (no
 	// record bodies) — the client resolves names from its by-id cache.
-	matches, err := db.SearchTextIDs[businessTypes.Product](companyID, query, 1, limit)
+	matches, err := db.SearchTextIDs[types.Product](companyID, query, 1, limit)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de texto de productos:", err)
 	}
@@ -75,7 +75,7 @@ func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron ids a buscar.")
 	}
 
-	productos := []businessTypes.Product{}
+	productos := []types.Product{}
 	err := db.QueryCachedIDs(&productos, cachedIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los productos.", err)
@@ -87,12 +87,12 @@ func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// db.SetDebugLogging(2)
 
-	productos := []businessTypes.Product{}
+	productos := []types.Product{}
 	if err := json.Unmarshal([]byte(*req.Body), &productos); err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	nameHashToName := make(map[int32]*businessTypes.Product, len(productos))
+	nameHashToName := make(map[int32]*types.Product, len(productos))
 	// SelfParse each product to populate NombreHash and fail fast on duplicate names in this payload.
 	for i := range productos {
 		e := &productos[i]
@@ -118,13 +118,13 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Group existing records by NameHash so we can check active collisions and reuse inactive IDs.
-	existingProductsByHash := make(map[int32][]businessTypes.Product, len(nameHashToName))
+	existingProductsByHash := make(map[int32][]types.Product, len(nameHashToName))
 	nameHashesToValidate := make([]int32, 0, len(nameHashToName))
 	for nameHash := range nameHashToName {
 		nameHashesToValidate = append(nameHashesToValidate, nameHash)
 	}
 
-	existingProducts := []businessTypes.Product{}
+	existingProducts := []types.Product{}
 	query := db.Query(&existingProducts)
 	query.Select(query.NameHash, query.ID, query.Status).
 		CompanyID.Equals(req.User.CompanyID).
@@ -162,9 +162,9 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	nowTime := core.SUnixTime()
 	core.Log("PostProductos merge payload:", len(productos))
 
-	buildPresentaciones := func(current *businessTypes.Product, incoming *businessTypes.Product) {
-		presentacionesMap := map[int16]businessTypes.ProductPresentation{}
-		presentacionesNameMap := map[string]businessTypes.ProductPresentation{}
+	buildPresentaciones := func(current *types.Product, incoming *types.Product) {
+		presentacionesMap := map[int16]types.ProductPresentation{}
+		presentacionesNameMap := map[string]types.ProductPresentation{}
 		presentacionMaxID := int16(0)
 
 		if current != nil {
@@ -199,13 +199,13 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		incoming.Presentations = core.MapToSliceT(presentacionesMap)
 	}
 
-	t := businessTypes.ProductTable{}
+	t := types.ProductTable{}
 	sunixTime := core.SUnixTime()
 
 	// Merge resolves insert/update per primary key and applies only required writes.
 	err = db.Merge(&productos,
 		db.Cols(t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions),
-		func(prev, current *businessTypes.Product) bool {
+		func(prev, current *types.Product) bool {
 			current.CompanyID = req.User.CompanyID
 			current.Created = prev.Created
 			current.CreatedBy = prev.CreatedBy
@@ -233,7 +233,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 			current.UpdatedBy = req.User.ID
 			return true
 		},
-		func(current *businessTypes.Product) {
+		func(current *types.Product) {
 			current.CompanyID = req.User.CompanyID
 			current.Created = nowTime
 			current.CreatedBy = req.User.ID
@@ -259,7 +259,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(productos)
 }
 
-func getProductBrandNames(companyID int32, productos []businessTypes.Product) (map[int32]string, error) {
+func getProductBrandNames(companyID int32, productos []types.Product) (map[int32]string, error) {
 	brandIDs := core.SliceSet[int32]{}
 	for _, product := range productos {
 		brandIDs.AddIf(product.BrandID)
@@ -268,7 +268,7 @@ func getProductBrandNames(companyID int32, productos []businessTypes.Product) (m
 		return map[int32]string{}, nil
 	}
 
-	brands := []businessTypes.SharedListRecord{}
+	brands := []types.SharedListRecord{}
 	query := db.Query(&brands)
 	query.Select(query.ID, query.Name).
 		CompanyID.Equals(companyID).ID.In(brandIDs.Values...)
@@ -316,7 +316,7 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	productos := []businessTypes.Product{}
+	productos := []types.Product{}
 	query := db.Query(&productos)
 	query.Select().
 		CompanyID.Equals(req.User.CompanyID).
@@ -411,7 +411,7 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(product)
 
-	err = db.Insert(&[]businessTypes.Product{product})
+	err = db.Insert(&[]types.Product{product})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el product:", err)

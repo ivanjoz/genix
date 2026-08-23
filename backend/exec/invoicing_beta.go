@@ -5,7 +5,7 @@ import (
 	"app/db"
 	"app/invoicing"
 	invoicingTypes "app/invoicing/types"
-	salesTypes "app/sales/types"
+	sales "app/sales/types"
 	"errors"
 	"fmt"
 	"os"
@@ -275,8 +275,8 @@ func SendInvoice(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{}
 }
 
-func loadOrderForEmission(companyID int32, saleOrderID int64) (*salesTypes.SaleOrder, error) {
-	orders := []salesTypes.SaleOrder{}
+func loadOrderForEmission(companyID int32, saleOrderID int64) (*sales.SaleOrder, error) {
+	orders := []sales.SaleOrder{}
 	query := db.Query(&orders)
 	query.Select().CompanyID.Equals(companyID).ID.Equals(saleOrderID)
 	if err := query.Exec(); err != nil {

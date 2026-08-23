@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/core"
 	"app/db"
 	textsearch "app/libs/text-search"
@@ -78,8 +78,8 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 	result.CategoriesInserted = categoriesInserted
 
 	// Parse every changed list before writing image rows; category rows are intentionally created first.
-	recordsToInsert := []businessTypes.ImageAsset{}
-	categoriesToUpdate := []businessTypes.ImageAssetCategory{}
+	recordsToInsert := []types.ImageAsset{}
+	categoriesToUpdate := []types.ImageAssetCategory{}
 	categoryByImageID := map[int32]string{}
 	updated := core.SUnixTime()
 	for _, categorySummary := range categorySummaries {
@@ -128,7 +128,7 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 	if err := db.Insert(&recordsToInsert); err != nil {
 		return result, fmt.Errorf("insert image assets: %w", err)
 	}
-	categoryTable := db.TableOf[businessTypes.ImageAssetCategory]()
+	categoryTable := db.TableOf[types.ImageAssetCategory]()
 	if err := db.Update(&categoriesToUpdate, categoryTable.MaxID, categoryTable.Updated); err != nil {
 		return result, fmt.Errorf("update image asset category watermarks: %w", err)
 	}
@@ -137,14 +137,14 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 	return result, nil
 }
 
-func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (map[string]businessTypes.ImageAssetCategory, int, error) {
-	storedCategories := []businessTypes.ImageAssetCategory{}
+func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (map[string]types.ImageAssetCategory, int, error) {
+	storedCategories := []types.ImageAssetCategory{}
 	query := db.Query(&storedCategories)
 	if err := query.GroupID.Equals(imageAssetCategoryGroupID).Exec(); err != nil {
 		return nil, 0, fmt.Errorf("query image asset categories: %w", err)
 	}
 
-	categoryByName := make(map[string]businessTypes.ImageAssetCategory, len(categorySummaries))
+	categoryByName := make(map[string]types.ImageAssetCategory, len(categorySummaries))
 	for _, category := range storedCategories {
 		if category.ID <= 0 || !imageAssetCategoryPattern.MatchString(category.Name) {
 			return nil, 0, fmt.Errorf("invalid stored image asset category: ID=%d name=%q", category.ID, category.Name)
@@ -156,12 +156,12 @@ func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (ma
 	}
 
 	updated := core.SUnixTime()
-	categoriesToInsert := []businessTypes.ImageAssetCategory{}
+	categoriesToInsert := []types.ImageAssetCategory{}
 	for _, categorySummary := range categorySummaries {
 		if categoryByName[categorySummary.Name].ID > 0 {
 			continue
 		}
-		categoriesToInsert = append(categoriesToInsert, businessTypes.ImageAssetCategory{
+		categoriesToInsert = append(categoriesToInsert, types.ImageAssetCategory{
 			GroupID: imageAssetCategoryGroupID,
 			Name:    categorySummary.Name,
 			Updated: updated,
@@ -282,7 +282,7 @@ func buildImageAssetRecords(
 	updated int32,
 	spanishContent string,
 	englishContent string,
-) ([]businessTypes.ImageAsset, error) {
+) ([]types.ImageAsset, error) {
 	spanishRows, spanishMaxID, err := parseImageAssetList(categorySummary.Name, spanishContent)
 	if err != nil {
 		return nil, err
@@ -296,7 +296,7 @@ func buildImageAssetRecords(
 		return nil, fmt.Errorf("%s maximum ID mismatch: SUMMARY.md=%d spanish=%d english=%d", categorySummary.Name, categorySummary.MaxID, spanishMaxID, englishMaxID)
 	}
 
-	records := []businessTypes.ImageAsset{}
+	records := []types.ImageAsset{}
 	for imageID, spanishRow := range spanishRows {
 		if imageID <= storedMaxID {
 			continue
@@ -307,7 +307,7 @@ func buildImageAssetRecords(
 		}
 		// Bigrams index the Spanish keywords for the frontend local search.
 		spanishSearchText := strings.Join(spanishRow.keywords, " ")
-		records = append(records, businessTypes.ImageAsset{
+		records = append(records, types.ImageAsset{
 			GroupID:            imageAssetCategoryGroupID,
 			ID:                 imageID,
 			CategoryID:         categoryID,
@@ -319,7 +319,7 @@ func buildImageAssetRecords(
 			Updated:            updated,
 		})
 	}
-	slices.SortFunc(records, func(left, right businessTypes.ImageAsset) int {
+	slices.SortFunc(records, func(left, right types.ImageAsset) int {
 		return int(left.ID - right.ID)
 	})
 	return records, nil

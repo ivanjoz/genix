@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/core"
 	"app/db"
 	"encoding/base64"
@@ -44,7 +44,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("[image-assets] delta query started; images=", imagesUpdatedSince, " categories=", categoriesUpdatedSince)
 	queryGroup := errgroup.Group{}
 	queryGroup.Go(func() error {
-		storedAssets := []businessTypes.ImageAsset{}
+		storedAssets := []types.ImageAsset{}
 		query := db.Query(&storedAssets)
 		// Image assets have no status, so Delta() constrains nothing but the watermark.
 		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated, query.UpdatedVersion).
@@ -67,7 +67,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 	queryGroup.Go(func() error {
-		storedCategories := []businessTypes.ImageAssetCategory{}
+		storedCategories := []types.ImageAssetCategory{}
 		query := db.Query(&storedCategories)
 		query.Select(query.ID, query.Name, query.Updated, query.UpdatedVersion).
 			GroupID.Equals(imageAssetCategoryGroupID).
@@ -110,7 +110,7 @@ func GetImageAssetTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Image assets share the single group partition and carry no Status column,
 	// so they index into status group 0.
-	matches, err := db.SearchTextIDs[businessTypes.ImageAsset](imageAssetCategoryGroupID, query, 0, limit)
+	matches, err := db.SearchTextIDs[types.ImageAsset](imageAssetCategoryGroupID, query, 0, limit)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de imágenes:", err)
 	}

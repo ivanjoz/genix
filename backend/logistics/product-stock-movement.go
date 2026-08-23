@@ -3,7 +3,7 @@ package logistics
 import (
 	"app/core"
 	"app/db"
-	logisticsTypes "app/logistics/types"
+	"app/logistics/types"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -41,12 +41,12 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron registros.")
 	}
 
-	movimientos := make([]logisticsTypes.InternalMovement, 0, len(items))
+	movimientos := make([]types.InternalMovement, 0, len(items))
 	for _, item := range items {
 		if item.WarehouseID == 0 || item.ProductID == 0 {
 			return req.MakeErr("Hay un registro sin Almacén-ID o Producto-ID.")
 		}
-		movimientos = append(movimientos, logisticsTypes.InternalMovement{
+		movimientos = append(movimientos, types.InternalMovement{
 			ReplaceQuantity: true,
 			WarehouseID:     item.WarehouseID,
 			ProductID:       item.ProductID,
@@ -80,7 +80,7 @@ func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	// ProductStockLot.ID is int32; cache-version values come in as int64.
 	lotIDs := core.Map(lotIDRecords, func(e db.IDUpdatedVersion) int32 { return int32(e.ID) })
 
-	lots := []logisticsTypes.ProductStockLot{}
+	lots := []types.ProductStockLot{}
 	query := db.Query(&lots)
 	if err := query.CompanyID.Equals(req.User.CompanyID).ID.In(lotIDs...).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los lotes.", err)
@@ -104,7 +104,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	var lotIDs []int32
 
 	if lotCode != "" {
-		lots := []logisticsTypes.ProductStockLot{}
+		lots := []types.ProductStockLot{}
 		query := db.Query(&lots).CompanyID.Equals(req.User.CompanyID)
 
 		if err := query.Select(query.ID).Name.Equals(lotCode).Exec(); err != nil {
@@ -118,12 +118,12 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	movimientos := []db.RecordGroup[logisticsTypes.WarehouseProductMovement]{}
+	movimientos := []db.RecordGroup[types.WarehouseProductMovement]{}
 
 	// Direct-lookup path: SerialNumber / lotIDs / DocumentID target non-grouped local indexes,
 	// so plain Query applies and the Date range is ignored.
 	if serialNumber != "" || len(lotIDs) > 0 || documentID > 0 {
-		flat := []logisticsTypes.WarehouseProductMovement{}
+		flat := []types.WarehouseProductMovement{}
 		query := db.Query(&flat)
 		query.CompanyID.Equals(req.User.CompanyID)
 		switch {
@@ -138,7 +138,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Error al obtener los movimientos:", err)
 		}
 		if len(flat) > 0 {
-			movimientos = append(movimientos, db.RecordGroup[logisticsTypes.WarehouseProductMovement]{
+			movimientos = append(movimientos, db.RecordGroup[types.WarehouseProductMovement]{
 				IndexID: -1,
 				Records: flat,
 			})
@@ -196,8 +196,8 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 type GetProductsStockResult struct {
-	ProductStock       []logisticsTypes.ProductStock
-	ProductStockDetail []logisticsTypes.ProductStockDetail
+	ProductStock       []types.ProductStock
+	ProductStockDetail []types.ProductStockDetail
 }
 
 func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
@@ -245,7 +245,7 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
 	updatedSince := req.GetQueryInt("upv")
 
-	productsStock := []logisticsTypes.ProductStock{}
+	productsStock := []types.ProductStock{}
 	// No WarehouseID pinned here, so Delta() routes to the [Status] delta index instead.
 	query := db.Query(&productsStock)
 	query.Select().
@@ -285,7 +285,7 @@ func packProductStockID(warehouseID int32, productID int32, presentationID int16
 
 const maxProductStockLastPrices = 8
 
-func appendProductStockLastPrice(stock *logisticsTypes.ProductStock, movementQuantity int32, price int32) {
+func appendProductStockLastPrice(stock *types.ProductStock, movementQuantity int32, price int32) {
 	if movementQuantity <= 0 || price <= 0 {
 		return
 	}
@@ -307,7 +307,7 @@ func appendProductStockLastPrice(stock *logisticsTypes.ProductStock, movementQua
 		"stockID", stock.ID, "quantity", movementQuantity, "price", price, "entries", len(stock.LastPricesPrice))
 }
 
-func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.InternalMovement) error {
+func ApplyMovimientos(req *core.HandlerArgs, movimientos []types.InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
 
@@ -317,7 +317,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	defer companyLock.Unlock()
 
 	// Filter out no-ops and validate lot/supplier prerequisites in one pass.
-	activeMovements := make([]*logisticsTypes.InternalMovement, 0, len(movimientos))
+	activeMovements := make([]*types.InternalMovement, 0, len(movimientos))
 	for i := range movimientos {
 		mov := &movimientos[i]
 		if mov.Quantity == 0 && mov.SubQuantity == 0 {
@@ -362,15 +362,15 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	// - V2 preload excludes Created/CreatedBy so loaded rows carry them as 0, flagging UPDATE at write time.
 	// - Detail preload also excludes Updated/UpdatedBy so untouched preloaded details stay at Updated==0
 	//   and get skipped by the write step.
-	stockByID := map[int64]*logisticsTypes.ProductStock{}
-	detailByKey := map[string]*logisticsTypes.ProductStockDetail{}
+	stockByID := map[int64]*types.ProductStock{}
+	detailByKey := map[string]*types.ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
 
 	preloadGroup := errgroup.Group{}
 	preloadGroup.Go(func() error {
-		existing := []logisticsTypes.ProductStock{}
+		existing := []types.ProductStock{}
 		q := db.Query(&existing)
 		q.Exclude(q.Created, q.CreatedBy).
 			CompanyID.Equals(companyID).
@@ -385,7 +385,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	})
 	if !stockIDsWithDetails.IsEmpty() {
 		preloadGroup.Go(func() error {
-			existing := []logisticsTypes.ProductStockDetail{}
+			existing := []types.ProductStockDetail{}
 			q := db.Query(&existing)
 			q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).
 				CompanyID.Equals(companyID).
@@ -408,13 +408,13 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	dateUnix := core.FechaUnix()
 
 	// Build ledger rows and mutate V2/Detail in place.
-	warehouseMovements := make([]logisticsTypes.WarehouseProductMovement, 0, len(activeMovements))
+	warehouseMovements := make([]types.WarehouseProductMovement, 0, len(activeMovements))
 	for i, mov := range activeMovements {
 		stockID := stockIDByMovement[i]
 		stock := stockByID[stockID]
 		if stock == nil {
 			// New V2 row: stamp Created/CreatedBy so the partition step can flag it for insert.
-			stock = &logisticsTypes.ProductStock{
+			stock = &types.ProductStock{
 				ID:             stockID,
 				CompanyID:      companyID,
 				WarehouseID:    mov.WarehouseID,
@@ -426,7 +426,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 			stockByID[stockID] = stock
 		}
 
-		movement := logisticsTypes.WarehouseProductMovement{
+		movement := types.WarehouseProductMovement{
 			DocumentID:     mov.DocumentID,
 			CompanyID:      companyID,
 			WarehouseID:    mov.WarehouseID,
@@ -444,7 +444,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 			key := detailKey(stockID, mov.LotID, mov.SerialNumber)
 			detail := detailByKey[key]
 			if detail == nil {
-				detail = &logisticsTypes.ProductStockDetail{
+				detail = &types.ProductStockDetail{
 					CompanyID:      companyID,
 					ProductStockID: stockID,
 					LotID:          mov.LotID,
@@ -529,7 +529,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 
 	// Flatten to value slices. Validate non-negative balances at the same time.
 	// Untouched preloaded details (Updated==0) are skipped so InsertUpdateInclude only sees dirty rows.
-	stocks := make([]logisticsTypes.ProductStock, 0, len(stockByID))
+	stocks := make([]types.ProductStock, 0, len(stockByID))
 	for _, stock := range stockByID {
 		if stock.Quantity < 0 || stock.DetailQuantity < 0 {
 			return core.Err(fmt.Sprintf(
@@ -538,7 +538,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 		}
 		stocks = append(stocks, *stock)
 	}
-	details := make([]logisticsTypes.ProductStockDetail, 0, len(detailByKey))
+	details := make([]types.ProductStockDetail, 0, len(detailByKey))
 	for _, detail := range detailByKey {
 		if detail.Updated == 0 {
 			continue
@@ -560,9 +560,9 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	writeGroup := errgroup.Group{}
 	if len(stocks) > 0 {
 		writeGroup.Go(func() error {
-			stockTable := db.TableOf[logisticsTypes.ProductStock]()
+			stockTable := db.TableOf[types.ProductStock]()
 			if err := db.InsertUpdateInclude(&stocks,
-				func(e *logisticsTypes.ProductStock) bool { return e.Created > 0 },
+				func(e *types.ProductStock) bool { return e.Created > 0 },
 				db.Cols(
 					// Keep the materialized view tuple consistent on updates.
 					stockTable.WarehouseID,
@@ -579,9 +579,9 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 	}
 	if len(details) > 0 {
 		writeGroup.Go(func() error {
-			detailTable := db.TableOf[logisticsTypes.ProductStockDetail]()
+			detailTable := db.TableOf[types.ProductStockDetail]()
 			if err := db.InsertUpdateInclude(&details,
-				func(e *logisticsTypes.ProductStockDetail) bool { return e.Created > 0 },
+				func(e *types.ProductStockDetail) bool { return e.Created > 0 },
 				db.Cols(
 					// Keep the materialized view tuple consistent on updates.
 					detailTable.WarehouseID,
@@ -606,14 +606,14 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []logisticsTypes.Intern
 // resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements
 // that only carry a LotName. It dedups by Hash(today, SupplierID, Name) against
 // ProductStockLot and creates any missing lot rows in one batch.
-func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsTypes.InternalMovement, lotDate int16) error {
+func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*types.InternalMovement, lotDate int16) error {
 	// Group movements by hash so we only touch each unique (date, supplier, name) lot once.
 	type lotLookupKey struct {
 		hash       string
 		supplierID int32
 		name       string
 	}
-	movementsByHash := map[string][]*logisticsTypes.InternalMovement{}
+	movementsByHash := map[string][]*types.InternalMovement{}
 	hashToKey := map[string]lotLookupKey{}
 
 	for _, mov := range movements {
@@ -638,7 +638,7 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 	// CompanyID + Hash query cannot route through it: Scylla then sees a plain restriction on a
 	// non-key column, which it only accepts for a single value. Batching the hashes into one IN
 	// would need ALLOW FILTERING — a full partition scan of every lot the tenant ever created.
-	lotsByHashIndex := make([][]logisticsTypes.ProductStockLot, len(hashes))
+	lotsByHashIndex := make([][]types.ProductStockLot, len(hashes))
 	lotLookupGroup := errgroup.Group{}
 	lotLookupGroup.SetLimit(8)
 
@@ -663,13 +663,13 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*logisticsType
 	}
 
 	// Insert any missing lots in one batch. The ORM assigns autoincrement IDs in-place.
-	lotsToInsert := []logisticsTypes.ProductStockLot{}
+	lotsToInsert := []types.ProductStockLot{}
 	insertedHashOrder := []string{}
 	for hash, key := range hashToKey {
 		if _, found := lotIDByHash[hash]; found {
 			continue
 		}
-		lotsToInsert = append(lotsToInsert, logisticsTypes.ProductStockLot{
+		lotsToInsert = append(lotsToInsert, types.ProductStockLot{
 			CompanyID:  req.User.CompanyID,
 			Date:       lotDate,
 			Name:       key.name,

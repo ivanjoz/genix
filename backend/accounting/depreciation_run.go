@@ -1,10 +1,10 @@
 package accounting
 
 import (
-	accountingTypes "app/accounting/types"
+	"app/accounting/types"
 	"app/core"
 	"app/db"
-	financeTypes "app/finance/types"
+	finance "app/finance/types"
 )
 
 // PostAssetDepreciationRun materializes every depreciation period that has come due and has
@@ -18,19 +18,19 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Only assets that are still depreciating: a disposed or fully depreciated one has
 	// nothing left to post.
-	assets := []accountingTypes.Asset{}
+	assets := []types.Asset{}
 	assetQuery := db.Query(&assets)
 	assetQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
-		Status.Equals(accountingTypes.AssetStatusActive)
+		Status.Equals(types.AssetStatusActive)
 
 	if queryError := assetQuery.Exec(); queryError != nil {
 		return req.MakeErr("Error al obtener los activos.", queryError)
 	}
 
 	currentTimestamp := core.SUnixTime()
-	depreciationEntries := []financeTypes.Expense{}
-	assetsToUpdate := []accountingTypes.Asset{}
+	depreciationEntries := []finance.Expense{}
+	assetsToUpdate := []types.Asset{}
 
 	for assetIndex := range assets {
 		asset := &assets[assetIndex]
@@ -40,12 +40,12 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		for _, period := range pendingPeriods {
-			depreciationEntries = append(depreciationEntries, financeTypes.Expense{
+			depreciationEntries = append(depreciationEntries, finance.Expense{
 				CompanyID: req.User.CompanyID,
 				// Concatn joins with underscores, so the period fraction is built with an
 				// explicit empty separator: "Depreciación 7/60".
 				Name:         core.Concats("Depreciación", core.Concat("", period.PeriodIndex, "/", asset.DepreciationMonths)),
-				Type:         financeTypes.ExpenseTypeDepreciation,
+				Type:         finance.ExpenseTypeDepreciation,
 				AssetID:      asset.ID,
 				ProductID:    asset.ProductID,
 				CategoryID:   depreciationCategoryID,
@@ -56,7 +56,7 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 				Value:        period.Amount,
 				// Posted, not payable: a depreciation entry moves no cash, so it never
 				// belongs in the Pend. Pago or Pagados tabs.
-				Status:    financeTypes.ExpenseStatusPosted,
+				Status:    finance.ExpenseStatusPosted,
 				Updated:   currentTimestamp,
 				UpdatedBy: req.User.ID,
 				Created:   currentTimestamp,
@@ -85,7 +85,7 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al registrar los asientos de depreciación.", insertError)
 	}
 
-	assetTable := db.TableOf[accountingTypes.Asset]()
+	assetTable := db.TableOf[types.Asset]()
 	if updateError := db.Update(&assetsToUpdate,
 		assetTable.AccumulatedDepreciation, assetTable.LastDepreciationDate,
 		assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
@@ -107,7 +107,7 @@ func GetAssetDepreciation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe indicar el activo.")
 	}
 
-	entries := []financeTypes.Expense{}
+	entries := []finance.Expense{}
 	entryQuery := db.Query(&entries)
 	entryQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).

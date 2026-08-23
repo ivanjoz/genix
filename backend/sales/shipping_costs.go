@@ -3,7 +3,7 @@ package sales
 import (
 	"app/core"
 	"app/db"
-	s "app/sales/types"
+	"app/sales/types"
 	"encoding/json"
 	"strconv"
 )
@@ -13,7 +13,7 @@ func GetShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	shippingCosts := []s.ShippingCost{}
+	shippingCosts := []types.ShippingCost{}
 	query := db.Query(&shippingCosts)
 	// No status to filter here, so Delta() constrains nothing but the watermark.
 	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince)
@@ -28,13 +28,13 @@ func GetShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
-	shippingCostsPayload := []s.ShippingCost{}
+	shippingCostsPayload := []types.ShippingCost{}
 	if err := json.Unmarshal([]byte(*req.Body), &shippingCostsPayload); err != nil {
 		core.Log("PostShippingCosts deserialization error:", err)
 		return req.MakeErr("Error al deserializar costos de envío:", err)
 	}
 
-	recordsToSave := []s.ShippingCost{}
+	recordsToSave := []types.ShippingCost{}
 	nowTime := core.SUnixTime()
 	seenCityIDs := map[int32]struct{}{}
 	for recordIndex := range shippingCostsPayload {
@@ -66,16 +66,16 @@ func PostShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(recordsToSave)
 	}
 
-	shippingCostTable := db.TableOf[s.ShippingCost]()
+	shippingCostTable := db.TableOf[types.ShippingCost]()
 	if err := db.Merge(&recordsToSave,
 		db.Cols(shippingCostTable.Created, shippingCostTable.CreatedBy),
-		func(prev, current *s.ShippingCost) bool {
+		func(prev, current *types.ShippingCost) bool {
 			// Merge avoids write churn; unchanged cost rows keep their previous Updated watermark.
 			current.Created = prev.Created
 			current.CreatedBy = prev.CreatedBy
 			return current.FlatCost != prev.FlatCost || current.CostPerKg != prev.CostPerKg
 		},
-		func(current *s.ShippingCost) {
+		func(current *types.ShippingCost) {
 			current.Created = nowTime
 			current.CreatedBy = req.User.ID
 		},

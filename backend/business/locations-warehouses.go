@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -16,7 +16,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 	warehousesUpdatedSince := req.GetQueryInt("Almacenes")
 	sitesUpdatedSince := req.GetQueryInt("Sedes")
 
-	almacenes := []businessTypes.Warehouse{}
+	almacenes := []types.Warehouse{}
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
@@ -31,7 +31,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 
-	sedes := []businessTypes.Site{}
+	sedes := []types.Site{}
 	errGroup.Go(func() error {
 		query := db.Query(&sedes)
 		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(sitesUpdatedSince, 1)
@@ -57,7 +57,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	paisCiudades := []businessTypes.CityLocation{}
+	paisCiudades := []types.CityLocation{}
 
 	if !ubigeosSlice.IsEmpty() {
 		query := db.Query(&paisCiudades)
@@ -71,7 +71,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		paisCiudadesMap := core.SliceToMapK(paisCiudades,
-			func(e businessTypes.CityLocation) int32 { return e.ID })
+			func(e types.CityLocation) int32 { return e.ID })
 
 		for _, pc := range paisCiudadesMap {
 			if pc.Hierarchy != 3 {
@@ -107,7 +107,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 
-	body := businessTypes.Site{}
+	body := types.Site{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -126,7 +126,7 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = core.SUnixTime()
 	body.CreatedBy = req.User.ID
 
-	records := []businessTypes.Site{body}
+	records := []types.Site{body}
 	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
 	}
@@ -140,7 +140,7 @@ func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	paisCiudades := []businessTypes.CityLocation{}
+	paisCiudades := []types.CityLocation{}
 	query := db.Query(&paisCiudades)
 	// Cities have no status, so Delta() constrains nothing but the watermark.
 	query.Select().
@@ -163,7 +163,7 @@ func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 
 func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 
-	body := businessTypes.Warehouse{}
+	body := types.Warehouse{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -186,7 +186,7 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = core.SUnixTime()
 	body.CreatedBy = req.User.ID
 
-	almacenes := []businessTypes.Warehouse{body}
+	almacenes := []types.Warehouse{body}
 	if err := db.Insert(&almacenes); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}

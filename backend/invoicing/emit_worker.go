@@ -4,7 +4,7 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
+	"app/invoicing/types"
 	"errors"
 	"fmt"
 
@@ -65,10 +65,10 @@ func SendDocument(companyID int32, documentID int64) error {
 	if err != nil {
 		return err
 	}
-	if row.State == invoicingTypes.InvoiceAccepted || row.State == invoicingTypes.InvoiceObserved {
+	if row.State == types.InvoiceAccepted || row.State == types.InvoiceObserved {
 		return nil // already issued; nothing to do
 	}
-	if row.State == invoicingTypes.InvoiceRejected {
+	if row.State == types.InvoiceRejected {
 		return errors.New("el comprobante fue rechazado por SUNAT y no puede reenviarse")
 	}
 
@@ -92,7 +92,7 @@ func SendDocument(companyID int32, documentID int64) error {
 	}
 	row.XmlPath = xmlPath
 	row.DigestValue = emission.Digest
-	row.State = invoicingTypes.InvoiceQueued
+	row.State = types.InvoiceQueued
 	saveDocument(row)
 
 	cdr, err := new(sunat.Client).SendBill(issuer, emission)
@@ -124,7 +124,7 @@ func SendDocument(companyID int32, documentID int64) error {
 }
 
 // recordFailure writes down what went wrong and decides whether to try again.
-func recordFailure(row *invoicingTypes.InvoiceDocument, cause error, retryable bool) error {
+func recordFailure(row *types.InvoiceDocument, cause error, retryable bool) error {
 	row.LastError = core.StrCut(cause.Error(), 500)
 
 	var sunatError *sunat.Error
@@ -133,9 +133,9 @@ func recordFailure(row *invoicingTypes.InvoiceDocument, cause error, retryable b
 		row.SunatDescription = sunatError.Description
 		row.State = stateFromSeverity(sunatError.Severity)
 	} else if retryable {
-		row.State = invoicingTypes.InvoiceException
+		row.State = types.InvoiceException
 	} else {
-		row.State = invoicingTypes.InvoiceException
+		row.State = types.InvoiceException
 	}
 
 	if retryable && row.RetryCount < maxRetries {
@@ -158,13 +158,13 @@ func recordFailure(row *invoicingTypes.InvoiceDocument, cause error, retryable b
 func stateFromSeverity(severity sunat.Severity) int8 {
 	switch severity {
 	case sunat.SeverityAccepted:
-		return invoicingTypes.InvoiceAccepted
+		return types.InvoiceAccepted
 	case sunat.SeverityObserved:
-		return invoicingTypes.InvoiceObserved
+		return types.InvoiceObserved
 	case sunat.SeverityRejected:
-		return invoicingTypes.InvoiceRejected
+		return types.InvoiceRejected
 	}
-	return invoicingTypes.InvoiceException
+	return types.InvoiceException
 }
 
 // saveDocument writes a state transition.
@@ -173,11 +173,11 @@ func stateFromSeverity(severity sunat.Severity) int8 {
 // identifies the document — its number, its customer, its lines — is immutable
 // once reserved, and naming only what moves makes that explicit. State travels
 // with the delta view's key, which the ORM requires to be written together.
-func saveDocument(row *invoicingTypes.InvoiceDocument) {
+func saveDocument(row *types.InvoiceDocument) {
 	row.Updated = core.SUnixTime()
-	rows := &[]invoicingTypes.InvoiceDocument{*row}
+	rows := &[]types.InvoiceDocument{*row}
 
-	table := db.TableOf[invoicingTypes.InvoiceDocument]()
+	table := db.TableOf[types.InvoiceDocument]()
 	err := db.Update(rows,
 		table.State, table.Status, table.Updated,
 		table.SunatCode, table.SunatDescription, table.SunatNotes, table.Ticket,
@@ -191,7 +191,7 @@ func saveDocument(row *invoicingTypes.InvoiceDocument) {
 
 // storeArtifact keeps the XML and the CDR. Both have to survive five years, so
 // they go to object storage and the row keeps the path.
-func storeArtifact(companyID int32, row *invoicingTypes.InvoiceDocument,
+func storeArtifact(companyID int32, row *types.InvoiceDocument,
 	name string, content []byte, contentType string) (string, error) {
 
 	path := fmt.Sprintf("cpe/%v/%v", companyID, row.IssueDate/30)
@@ -210,11 +210,11 @@ func storeArtifact(companyID int32, row *invoicingTypes.InvoiceDocument,
 
 // siteOfDocument finds the establishment a document is issued from, which is the
 // site its series belongs to.
-func siteOfDocument(companyID int32, row *invoicingTypes.InvoiceDocument) int32 {
-	series := []invoicingTypes.InvoiceSeries{}
+func siteOfDocument(companyID int32, row *types.InvoiceDocument) int32 {
+	series := []types.InvoiceSeries{}
 	query := db.Query(&series)
 	query.Select().CompanyID.Equals(companyID).
-		ID.Equals(invoicingTypes.PackDocTypeSeries(row.DocType, row.SeriesID))
+		ID.Equals(types.PackDocTypeSeries(row.DocType, row.SeriesID))
 
 	if err := query.Exec(); err != nil || len(series) == 0 {
 		return 0

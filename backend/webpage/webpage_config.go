@@ -1,7 +1,7 @@
 package webpage
 
 import (
-	configTypes "app/config/types"
+	config "app/config/types"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -35,7 +35,7 @@ var seoMetatagKeys = []string{"title", "description", "keywords", "ogTitle", "og
 // as a flat key -> value map read from the parameters table (Group 10). It is
 // company-scoped server-side so no tenant data leaks.
 func GetWebsiteConfig(req *core.HandlerArgs) core.HandlerResponse {
-	parameters := []configTypes.Parameters{}
+	parameters := []config.Parameters{}
 	query := db.Query(&parameters).CompanyID.Equals(req.User.CompanyID)
 	query.Group.Equals(webpageConfigGroup)
 	if err := query.Exec(); err != nil {
@@ -55,7 +55,7 @@ func GetWebsiteConfig(req *core.HandlerArgs) core.HandlerResponse {
 // known SEO keys — never the domain or any other parameter. Shared by the public
 // webpage read.
 func publicSeoMetatags(companyID int32) (map[string]string, error) {
-	parameters := []configTypes.Parameters{}
+	parameters := []config.Parameters{}
 	query := db.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
 	if err := query.Exec(); err != nil {
@@ -85,10 +85,10 @@ func PostWebsiteSeo(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	nowTime := core.SUnixTime()
-	parameters := []configTypes.Parameters{}
+	parameters := []config.Parameters{}
 	// Only persist the known SEO keys so the client can't write arbitrary parameters.
 	for _, key := range seoMetatagKeys {
-		parameters = append(parameters, configTypes.Parameters{
+		parameters = append(parameters, config.Parameters{
 			CompanyID: req.User.CompanyID,
 			Group:     webpageConfigGroup,
 			Key:       key,
@@ -172,7 +172,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 	// hostname sirva algo, y volver a guardar el mismo dominio es el único camino que tiene el
 	// usuario para reintentar una publicación que falló.
 	if isDomainChange {
-		parametersToSave := []configTypes.Parameters{{
+		parametersToSave := []config.Parameters{{
 			CompanyID: req.User.CompanyID,
 			Group:     webpageConfigGroup,
 			Key:       domainParameterKey,
@@ -185,7 +185,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 			// El dominio saliente se guarda en su propia fila para que la limpieza sobreviva a un
 			// render fallido: en el reintento el guardado ya no es un cambio y currentDomain apunta
 			// al nuevo, así que sin esto el anterior se perdería y quedaría huérfano en Cloudflare.
-			parametersToSave = append(parametersToSave, configTypes.Parameters{
+			parametersToSave = append(parametersToSave, config.Parameters{
 				CompanyID: req.User.CompanyID,
 				Group:     webpageConfigGroup,
 				Key:       previousDomainParameterKey,
@@ -222,14 +222,14 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 // getCompanyDomain returns the single upserted domain row and its last-change timestamp.
-func getCompanyDomain(companyID int32) (*configTypes.Parameters, error) {
+func getCompanyDomain(companyID int32) (*config.Parameters, error) {
 	return getCompanyWebpageParameter(companyID, domainParameterKey)
 }
 
 // getCompanyWebpageParameter reads one upserted row of the storefront config group, or nil when it
 // was never written or was cleared.
-func getCompanyWebpageParameter(companyID int32, key string) (*configTypes.Parameters, error) {
-	parameters := []configTypes.Parameters{}
+func getCompanyWebpageParameter(companyID int32, key string) (*config.Parameters, error) {
+	parameters := []config.Parameters{}
 	query := db.Query(&parameters).CompanyID.Equals(companyID)
 	query.Group.Equals(webpageConfigGroup)
 	query.Key.Equals(key)
@@ -271,7 +271,7 @@ func releasePreviousDomain(companyID int32, currentDomain string, userID int32) 
 }
 
 func clearPreviousDomainMark(companyID int32, userID int32) {
-	clearedParameter := []configTypes.Parameters{{
+	clearedParameter := []config.Parameters{{
 		CompanyID: companyID,
 		Group:     webpageConfigGroup,
 		Key:       previousDomainParameterKey,

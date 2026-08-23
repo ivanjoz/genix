@@ -3,7 +3,7 @@ package webpage
 import (
 	"app/cloud"
 	"app/db"
-	s "app/webpage/types"
+	"app/webpage/types"
 	"fmt"
 	"strings"
 )
@@ -50,7 +50,7 @@ func companyWebpageRenderPages(companyID int32) ([]cloud.WebpageRenderPage, erro
 		{ID: webpageAboutPageID, Path: "/about"},
 	}
 
-	storedPages := []s.Webpage{}
+	storedPages := []types.Webpage{}
 	query := db.Query(&storedPages).CompanyID.Equals(companyID)
 	if queryError := query.Exec(); queryError != nil {
 		return nil, fmt.Errorf("error consultando las páginas de CompanyID %d: %w", companyID, queryError)

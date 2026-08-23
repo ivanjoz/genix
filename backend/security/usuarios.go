@@ -3,7 +3,7 @@ package security
 import (
 	"app/cloud"
 	"app/core"
-	coretypes "app/core/types"
+	coreTypes "app/core/types"
 	"app/db"
 	"app/security/types"
 	"encoding/json"
@@ -104,7 +104,7 @@ func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, prof
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("updated")
 
-	records := []coretypes.User{}
+	records := []coreTypes.User{}
 	var err error
 	if cloud.IsDataMirrorEnabled() {
 		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
@@ -134,7 +134,7 @@ func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("buscando usuarios ids::", len(cachedIDs), "|", cachedIDs)
 
-	usuarios := []coretypes.User{}
+	usuarios := []coreTypes.User{}
 	// QueryCachedIDs checks cache version and only fetches stale/missing records from ScyllaDB.
 	queryError := db.QueryCachedIDs(&usuarios, cachedIDs)
 	if queryError != nil {
@@ -145,7 +145,7 @@ func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
-	body := coretypes.User{}
+	body := coreTypes.User{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
@@ -181,7 +181,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.CreatedBy = req.User.ID
 		body.Status = 1
 	} else {
-		usuariosExistentes := []coretypes.User{}
+		usuariosExistentes := []coreTypes.User{}
 		query := db.Query(&usuariosExistentes)
 		query.CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID).Limit(1)
 		if err = query.Exec(); err != nil {
@@ -232,13 +232,13 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs, "accesosComputed", len(body.AccesosComputed))
 	core.Print(body)
 
-	usuariosToSave := []coretypes.User{body}
+	usuariosToSave := []coreTypes.User{body}
 	if err = db.Insert(&usuariosToSave); err != nil {
 		return req.MakeErr("Error al actualizar el user (SQL): " + err.Error())
 	}
 
 	body = usuariosToSave[0]
-	if err = cloud.Insert([]coretypes.User{body}); err != nil {
+	if err = cloud.Insert([]coreTypes.User{body}); err != nil {
 		return req.MakeErr("Error al actualizar el user (Cloud ORM): " + err.Error())
 	}
 

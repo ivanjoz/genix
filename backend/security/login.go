@@ -3,15 +3,15 @@ package security
 import (
 	"app/cloud"
 	"app/core"
-	coretypes "app/core/types"
+	coreTypes "app/core/types"
 	"app/db"
 	"encoding/binary"
 	"encoding/json"
 	"slices"
 	"time"
 
-	businessTypes "app/business/types"
-	financeTypes "app/finance/types"
+	business "app/business/types"
+	finance "app/finance/types"
 
 	"github.com/ivanjoz/colbin"
 )
@@ -45,7 +45,7 @@ func hasPendingInitialData(companyID int32) (pending bool, err error) {
 		}
 	}()
 
-	warehouses := []businessTypes.Warehouse{}
+	warehouses := []business.Warehouse{}
 	warehousesQuery := db.Query(&warehouses)
 	// Delta(0, 1) is the first-sync form: it pins Status to 1, so soft-deleted rows don't count.
 	warehousesQuery.Select().CompanyID.Equals(companyID).Delta(0, 1)
@@ -56,7 +56,7 @@ func hasPendingInitialData(companyID int32) (pending bool, err error) {
 		return true, nil
 	}
 
-	cashBanks := []financeTypes.CashBank{}
+	cashBanks := []finance.CashBank{}
 	cashBanksQuery := db.Query(&cashBanks)
 	cashBanksQuery.Select().CompanyID.Equals(companyID).Delta(0, 1)
 	if err := cashBanksQuery.Exec(); err != nil {
@@ -89,7 +89,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El CipherKey es necesario.")
 	}
 
-	usuarios := []coretypes.User{}
+	usuarios := []coreTypes.User{}
 	if cloud.IsDataMirrorEnabled() {
 		// The mirror resolves the same lookup through the index declared on the "user" column.
 		err = cloud.Select(&usuarios).Where("company_id").Equals(body.CompanyID).Where("user").Equals(body.User).Exec()
@@ -129,7 +129,7 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(response)
 }
 
-func MakeUsuarioResponse(user coretypes.User, cipherKey string) (map[string]any, error) {
+func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any, error) {
 
 	usuarioToken := core.UsuarioToken{
 		CompanyID: user.CompanyID,
@@ -215,16 +215,16 @@ func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 
 	cipherKey := req.GetQuery("cipher-key")
 
-	var user *coretypes.User
+	var user *coreTypes.User
 	var err error
 	if cloud.IsDataMirrorEnabled() {
-		user, err = cloud.GetByID(coretypes.User{
+		user, err = cloud.GetByID(coreTypes.User{
 			CompanyID: req.User.CompanyID,
 			ID:        req.User.ID,
 		})
 	} else {
 		// Reload the current login from Scylla when no cloud mirror is configured.
-		users := []coretypes.User{}
+		users := []coreTypes.User{}
 		userQuery := db.Query(&users)
 		userQuery.CompanyID.Equals(req.User.CompanyID).ID.Equals(req.User.ID).Limit(1)
 		err = userQuery.Exec()

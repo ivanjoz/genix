@@ -3,7 +3,7 @@ package logistics
 import (
 	"app/core"
 	"app/db"
-	logisticsTypes "app/logistics/types"
+	"app/logistics/types"
 )
 
 // GetPurchaseOrdersQuery powers the optional report view over purchase orders.
@@ -37,7 +37,7 @@ func GetPurchaseOrdersQuery(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	records := []db.RecordGroup[logisticsTypes.PurchaseOrder]{}
+	records := []db.RecordGroup[types.PurchaseOrder]{}
 	query := db.QueryIndexGroup(&records).
 		CompanyID.Equals(req.User.CompanyID)
 

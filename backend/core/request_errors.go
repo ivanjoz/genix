@@ -1,7 +1,7 @@
 package core
 
 import (
-	coretypes "app/core/types"
+	"app/core/types"
 	"context"
 	"math"
 	"runtime"
@@ -79,7 +79,7 @@ func RegisterRequestErrorAt(codeLine, message string) {
 	}
 
 	requestErrors = append(requestErrors, RequestError{
-		ID:   coretypes.MakeRequestErrorID(codeLine),
+		ID:   types.MakeRequestErrorID(codeLine),
 		Line: codeLine,
 		Text: truncateErrorText(message),
 	})
@@ -152,7 +152,7 @@ func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 		Date:      int16(now.Unix() / 86_400),
 		RequestID: req.RequestID,
 		RouteID:   req.RouteID,
-		Frame:     coretypes.FrameOfDay(now.Unix()),
+		Frame:     types.FrameOfDay(now.Unix()),
 		CompanyID: companyID,
 		UserID:    userID,
 		ElapsedMs: int16(elapsedMs),

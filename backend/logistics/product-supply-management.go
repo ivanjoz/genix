@@ -1,16 +1,16 @@
 package logistics
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
-	logisticsTypes "app/logistics/types"
+	"app/logistics/types"
 	"encoding/json"
 	"slices"
 )
 
 func GetProductSupply(req *core.HandlerArgs) core.HandlerResponse {
-	productSupplyRecords := []logisticsTypes.ProductSupply{}
+	productSupplyRecords := []types.ProductSupply{}
 	productSupplyQuery := db.Query(&productSupplyRecords)
 	productSupplyQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
@@ -26,7 +26,7 @@ func GetProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
-	productSupplyRecord := logisticsTypes.ProductSupply{}
+	productSupplyRecord := types.ProductSupply{}
 	if deserializeError := json.Unmarshal([]byte(*req.Body), &productSupplyRecord); deserializeError != nil {
 		core.Log("PostProductSupply deserialization error:", deserializeError)
 		return req.MakeErr("Error al deserializar el body.", deserializeError)
@@ -54,9 +54,9 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 	productSupplyRecord.Updated = currentTimestamp
 	productSupplyRecord.UpdatedBy = req.User.ID
 
-	productSupplyRecords := []logisticsTypes.ProductSupply{productSupplyRecord}
+	productSupplyRecords := []types.ProductSupply{productSupplyRecord}
 	if mergeError := db.Merge(&productSupplyRecords, nil,
-		func(previousProductSupply, currentProductSupply *logisticsTypes.ProductSupply) bool {
+		func(previousProductSupply, currentProductSupply *types.ProductSupply) bool {
 			// Keep the product key immutable and refresh only mutable configuration fields.
 			currentProductSupply.CompanyID = req.User.CompanyID
 			currentProductSupply.ProductID = previousProductSupply.ProductID
@@ -65,7 +65,7 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 			currentProductSupply.UpdatedBy = req.User.ID
 			return true
 		},
-		func(currentProductSupply *logisticsTypes.ProductSupply) {
+		func(currentProductSupply *types.ProductSupply) {
 			// Fill server-owned metadata on insert so clients only send configuration fields.
 			currentProductSupply.CompanyID = req.User.CompanyID
 			currentProductSupply.Status = 1
@@ -81,8 +81,8 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(productSupplyRecords[0])
 }
 
-func sanitizeProviderSupplyRows(providerSupplyRows []logisticsTypes.ProductSupplyProviderRow) []logisticsTypes.ProductSupplyProviderRow {
-	sanitizedProviderSupplyRows := make([]logisticsTypes.ProductSupplyProviderRow, 0, len(providerSupplyRows))
+func sanitizeProviderSupplyRows(providerSupplyRows []types.ProductSupplyProviderRow) []types.ProductSupplyProviderRow {
+	sanitizedProviderSupplyRows := make([]types.ProductSupplyProviderRow, 0, len(providerSupplyRows))
 
 	for _, providerSupplyRow := range providerSupplyRows {
 		if providerSupplyRow.ProviderID <= 0 && providerSupplyRow.Capacity == 0 && providerSupplyRow.DeliveryTime == 0 && providerSupplyRow.Price == 0 {
@@ -94,7 +94,7 @@ func sanitizeProviderSupplyRows(providerSupplyRows []logisticsTypes.ProductSuppl
 	return sanitizedProviderSupplyRows
 }
 
-func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []logisticsTypes.ProductSupplyProviderRow) error {
+func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []types.ProductSupplyProviderRow) error {
 	if len(providerSupplyRows) == 0 {
 		return nil
 	}
@@ -119,9 +119,9 @@ func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []logi
 		providerIDs = append(providerIDs, providerSupplyRow.ProviderID)
 	}
 
-	providers := []businessTypes.ClientProvider{}
+	providers := []business.ClientProvider{}
 	providerQuery := db.Query(&providers)
-	providerTable := db.TableOf[businessTypes.ClientProvider]()
+	providerTable := db.TableOf[business.ClientProvider]()
 	providerQuery.Select(providerTable.ID, providerTable.Type, providerTable.Status).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.In(providerIDs...)
@@ -138,7 +138,7 @@ func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []logi
 		if providerRecord.Status <= 0 {
 			return core.Err("Uno o más proveedores están inactivos.")
 		}
-		if providerRecord.Type != businessTypes.ClientProviderTypeProvider {
+		if providerRecord.Type != business.ClientProviderTypeProvider {
 			return core.Err("Uno o más registros seleccionados no son proveedores.")
 		}
 	}
@@ -162,7 +162,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 	movimientosFecha := req.GetQueryInt16("movimientos")
 	productosStockUpdated := req.GetQueryInt("productosStock")
 
-	movimientos := []logisticsTypes.WarehouseProductMovement{}
+	movimientos := []types.WarehouseProductMovement{}
 
 	query := db.Query(&movimientos).
 		CompanyID.Equals(req.User.CompanyID).
@@ -217,7 +217,7 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Productos Stock (V2). "Quantity" on the response is the combined bucket
 	// so consumers stay compatible with the old shape without needing detail rows here.
-	productosStockV2 := []logisticsTypes.ProductStock{}
+	productosStockV2 := []types.ProductStock{}
 
 	psQuery := db.Query(&productosStockV2)
 	// No WarehouseID pinned, so Delta() routes to the [Status] delta index.

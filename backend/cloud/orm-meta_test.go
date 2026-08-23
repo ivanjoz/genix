@@ -1,10 +1,10 @@
 package cloud
 
 import (
-	configTypes "app/config/types"
+	config "app/config/types"
 	coreTypes "app/core/types"
 	"app/db"
-	securityTypes "app/security/types"
+	security "app/security/types"
 	"reflect"
 	"testing"
 )
@@ -17,10 +17,10 @@ func TestMirroredSchemasCompile(t *testing.T) {
 	if columnCount := len(db.MakeTable[coreTypes.User]().GetColumns()); columnCount == 0 {
 		t.Error("users compiled with no columns")
 	}
-	if columnCount := len(db.MakeTable[securityTypes.Profile]().GetColumns()); columnCount == 0 {
+	if columnCount := len(db.MakeTable[security.Profile]().GetColumns()); columnCount == 0 {
 		t.Error("profiles compiled with no columns")
 	}
-	if columnCount := len(db.MakeTable[configTypes.Company]().GetColumns()); columnCount == 0 {
+	if columnCount := len(db.MakeTable[config.Company]().GetColumns()); columnCount == 0 {
 		t.Error("companies compiled with no columns")
 	}
 }
@@ -199,7 +199,7 @@ func TestMatchIndexRejectsUnindexedAndMisorderedQueries(t *testing.T) {
 }
 
 func TestCompanyHasNoPartitionPrefix(t *testing.T) {
-	meta, err := buildTableMeta[configTypes.Company]()
+	meta, err := buildTableMeta[config.Company]()
 	if err != nil {
 		t.Fatalf("buildTableMeta(Company): %v", err)
 	}

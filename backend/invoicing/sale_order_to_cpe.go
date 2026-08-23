@@ -1,11 +1,11 @@
 package invoicing
 
 import (
-	businessTypes "app/business/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
-	salesTypes "app/sales/types"
+	"app/invoicing/types"
+	sales "app/sales/types"
 	"errors"
 	"fmt"
 
@@ -40,7 +40,7 @@ func splitGrossAmount(gross int64) (net int64, tax int64) {
 // document, the product descriptions — is read here, because a document is a
 // snapshot: once issued it must not change when a product is renamed.
 func SaleOrderToDocument(
-	companyID int32, order *salesTypes.SaleOrder, series *invoicingTypes.InvoiceSeries,
+	companyID int32, order *sales.SaleOrder, series *types.InvoiceSeries,
 ) (*model.Document, error) {
 
 	if len(order.DetailProductsIDs) == 0 {
@@ -75,11 +75,11 @@ func SaleOrderToDocument(
 //
 // A factura is business to business and SUNAT only accepts a RUC on one, so the
 // check happens here rather than after a correlativo has been spent.
-func buildCustomer(companyID int32, order *salesTypes.SaleOrder, docType int8) (model.Party, error) {
+func buildCustomer(companyID int32, order *sales.SaleOrder, docType int8) (model.Party, error) {
 	name, registryNumber := "", ""
 
 	if order.ClientID > 0 {
-		clients := []businessTypes.ClientProvider{}
+		clients := []business.ClientProvider{}
 		query := db.Query(&clients)
 		query.Select().CompanyID.Equals(companyID).ID.Equals(order.ClientID)
 		if err := query.Exec(); err != nil {
@@ -106,7 +106,7 @@ func buildCustomer(companyID int32, order *salesTypes.SaleOrder, docType int8) (
 	}
 
 	// A factura always names a business, so a missing RUC is an error.
-	if docType == invoicingTypes.DocTypeFactura {
+	if docType == types.DocTypeFactura {
 		if customer.DocType != model.IDDocRUC {
 			return model.Party{}, errors.New(
 				"una factura necesita un cliente con RUC de 11 dígitos")
@@ -154,7 +154,7 @@ func identityDocTypeOf(registryNumber string) string {
 }
 
 // buildLines turns the sale's parallel detail arrays into document lines.
-func buildLines(companyID int32, order *salesTypes.SaleOrder) ([]model.Line, error) {
+func buildLines(companyID int32, order *sales.SaleOrder) ([]model.Line, error) {
 	names, err := loadProductNames(companyID, order.DetailProductsIDs)
 	if err != nil {
 		return nil, err
@@ -202,7 +202,7 @@ func loadProductNames(companyID int32, productIDs []int32) (map[int32]string, er
 		return names, nil
 	}
 
-	products := []businessTypes.Product{}
+	products := []business.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name).
 		CompanyID.Equals(companyID).ID.In(productIDs...)
@@ -219,11 +219,11 @@ func loadProductNames(companyID int32, productIDs []int32) (map[int32]string, er
 // sunatDocType maps the stored numeric type to the catalog code facturago uses.
 func sunatDocType(docType int8) model.DocType {
 	switch docType {
-	case invoicingTypes.DocTypeBoleta:
+	case types.DocTypeBoleta:
 		return model.Boleta
-	case invoicingTypes.DocTypeCreditNote:
+	case types.DocTypeCreditNote:
 		return model.CreditNote
-	case invoicingTypes.DocTypeDebitNote:
+	case types.DocTypeDebitNote:
 		return model.DebitNote
 	}
 	return model.Factura

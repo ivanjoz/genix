@@ -1,8 +1,8 @@
 package invoicing
 
 import (
-	invoicingTypes "app/invoicing/types"
-	salesTypes "app/sales/types"
+	"app/invoicing/types"
+	sales "app/sales/types"
 	"testing"
 
 	"github.com/ivanjoz/facturago"
@@ -45,9 +45,9 @@ func TestSplitGrossAmountIsExact(t *testing.T) {
 	}
 }
 
-func testSeries() *invoicingTypes.InvoiceSeries {
-	return &invoicingTypes.InvoiceSeries{
-		DocType: invoicingTypes.DocTypeFactura, SeriesID: 1,
+func testSeries() *types.InvoiceSeries {
+	return &types.InvoiceSeries{
+		DocType: types.DocTypeFactura, SeriesID: 1,
 		SeriesCode: "F001", SiteID: 1, Status: 1,
 	}
 }
@@ -87,7 +87,7 @@ func TestRowRoundTripsIntoAValidDocument(t *testing.T) {
 		t.Fatalf("CompleteTotals: %v", err)
 	}
 
-	order := &salesTypes.SaleOrder{ID: 55, ClientID: 7, DetailProductsIDs: []int32{101}}
+	order := &sales.SaleOrder{ID: 55, ClientID: 7, DetailProductsIDs: []int32{101}}
 	row := rowFromDocument(1, 1, order, testSeries(), original)
 	// The ORM assigns the key on insert, and the number is read off it; the test
 	// stands in for that.

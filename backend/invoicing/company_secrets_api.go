@@ -3,7 +3,7 @@ package invoicing
 import (
 	"app/core"
 	"app/db"
-	invoicingTypes "app/invoicing/types"
+	"app/invoicing/types"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -47,7 +47,7 @@ type CompanySecretsView struct {
 
 // GetCompanySecrets lists the company's SUNAT credentials, without the secrets.
 func GetCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
-	secrets := []invoicingTypes.CompanySecrets{}
+	secrets := []types.CompanySecrets{}
 	query := db.Query(&secrets)
 	query.Select().CompanyID.Equals(req.User.CompanyID)
 
@@ -89,10 +89,10 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 	companyID := req.User.CompanyID
 	now := core.SUnixTime()
 
-	record := invoicingTypes.CompanySecrets{
+	record := types.CompanySecrets{
 		CompanyID:   companyID,
 		ID:          body.ID,
-		Type:        invoicingTypes.SecretTypeSunatCPE,
+		Type:        types.SecretTypeSunatCPE,
 		Name:        body.Name,
 		SolUser:     body.SolUser,
 		Environment: body.Environment,
@@ -101,7 +101,7 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 		UpdatedBy:   req.User.ID,
 	}
 	if record.Environment == 0 {
-		record.Environment = invoicingTypes.SunatEnvBeta
+		record.Environment = types.SunatEnvBeta
 	}
 
 	isNew := body.ID <= 0
@@ -155,14 +155,14 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 		record.CertValidTo = core.UnixToSunix(credential.NotAfter.Unix())
 	}
 
-	records := &[]invoicingTypes.CompanySecrets{record}
+	records := &[]types.CompanySecrets{record}
 	var err error
 	if isNew {
 		err = db.Insert(records)
 	} else {
 		// A save that does not re-upload the certificate must not blank it, so
 		// the untouched columns are excluded rather than written as empty.
-		table := db.TableOf[invoicingTypes.CompanySecrets]()
+		table := db.TableOf[types.CompanySecrets]()
 		excluded := []db.Coln{table.Created, table.CreatedBy}
 		if len(record.SolPasswordEnc) == 0 {
 			excluded = append(excluded, table.SolPasswordEnc)
@@ -233,7 +233,7 @@ func buildIssuerForTest(companyID int32) (model.Issuer, error) {
 	}
 
 	environment := model.EnvBeta
-	if secrets.Environment == invoicingTypes.SunatEnvProduction {
+	if secrets.Environment == types.SunatEnvProduction {
 		environment = model.EnvProduction
 	}
 	return model.Issuer{

@@ -1,7 +1,7 @@
 package business
 
 import (
-	businessTypes "app/business/types"
+	"app/business/types"
 	"app/cloud"
 	"app/core"
 	"app/db"
@@ -48,7 +48,7 @@ func PostGalleryImage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	galleryImage := businessTypes.GalleryImage{
+	galleryImage := types.GalleryImage{
 		CompanyID:   req.User.CompanyID,
 		ImageID:     imageID,
 		Image:       imageName,
@@ -56,7 +56,7 @@ func PostGalleryImage(req *core.HandlerArgs) core.HandlerResponse {
 		Status:      1,
 		Updated:     core.SUnixTime(),
 	}
-	if err := db.Insert(&[]businessTypes.GalleryImage{galleryImage}); err != nil {
+	if err := db.Insert(&[]types.GalleryImage{galleryImage}); err != nil {
 		return req.MakeErr("Error al guardar la imagen en BD.", err)
 	}
 
@@ -71,7 +71,7 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 		return req.MakeErr("El ID no corresponde a una imagen de galería.")
 	}
 
-	images := []businessTypes.GalleryImage{}
+	images := []types.GalleryImage{}
 	query := db.Query(&images)
 	query.CompanyID.Equals(req.User.CompanyID).
 		Image.Equals(fmt.Sprintf("%v_%v", req.User.CompanyID, imageID))
@@ -97,9 +97,9 @@ func GetGalleryImages(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
-	images := []businessTypes.GalleryImage{}
+	images := []types.GalleryImage{}
 	query := db.Query(&images)
-	table := db.TableOf[businessTypes.GalleryImage]()
+	table := db.TableOf[types.GalleryImage]()
 
 	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
 	// can evict deleted ones from its cache.

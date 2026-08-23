@@ -1,17 +1,17 @@
 package accounting
 
 import (
-	accountingTypes "app/accounting/types"
+	"app/accounting/types"
 	"testing"
 	"time"
 )
 
 // A purchased asset owes money on its own account, not through the expense register.
 func TestPendingAmountTracksPartialPayments(t *testing.T) {
-	asset := &accountingTypes.Asset{
+	asset := &types.Asset{
 		AcquisitionValue: 400000,
 		PurchaseAmount:   400000,
-		PaymentStatus:    accountingTypes.AssetPaymentPending,
+		PaymentStatus:    types.AssetPaymentPending,
 	}
 
 	if got := asset.PendingAmount(); got != 400000 {
@@ -33,11 +33,11 @@ func TestPendingAmountTracksPartialPayments(t *testing.T) {
 // A donated asset owes nothing, so it is never payable — but it is still on the books and
 // still depreciates. This is the case that made purchase and value separate numbers.
 func TestDonatedAssetOwesNothingButStillHasValue(t *testing.T) {
-	donated := &accountingTypes.Asset{
+	donated := &types.Asset{
 		AcquisitionDate:    dayOf(2024, time.January, 1),
 		AcquisitionValue:   1000000,
 		PurchaseAmount:     0,
-		PaymentStatus:      accountingTypes.AssetPaymentNone,
+		PaymentStatus:      types.AssetPaymentNone,
 		DepreciationMonths: 48,
 	}
 
@@ -55,16 +55,16 @@ func TestDonatedAssetOwesNothingButStillHasValue(t *testing.T) {
 // Depreciation reduces book value; it has nothing to do with what was paid. An asset can be
 // fully paid and barely depreciated, or fully depreciated and still unpaid.
 func TestBookValueIsIndependentOfPayment(t *testing.T) {
-	asset := &accountingTypes.Asset{
+	asset := &types.Asset{
 		AcquisitionValue:        400000,
 		PurchaseAmount:          400000,
 		PaidAmount:              400000,
-		PaymentStatus:           accountingTypes.AssetPaymentPaid,
+		PaymentStatus:           types.AssetPaymentPaid,
 		AccumulatedDepreciation: 100000,
 		DepreciationMonths:      48,
 		// Set explicitly: ResolveAssetStatus preserves an explicit removal, and status 0 is
 		// both "removed" and the zero value, so a live asset always carries its own.
-		Status: accountingTypes.AssetStatusActive,
+		Status: types.AssetStatusActive,
 	}
 
 	if got := asset.PendingAmount(); got != 0 {
@@ -73,7 +73,7 @@ func TestBookValueIsIndependentOfPayment(t *testing.T) {
 	if got := asset.BookValue(); got != 300000 {
 		t.Errorf("fully paid but only a quarter depreciated: book value = %d, want 300000", got)
 	}
-	if got := ResolveAssetStatus(asset); got != accountingTypes.AssetStatusActive {
+	if got := ResolveAssetStatus(asset); got != types.AssetStatusActive {
 		t.Errorf("paying an asset off does not retire it: status = %d, want active", got)
 	}
 }
