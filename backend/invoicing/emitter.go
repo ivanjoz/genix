@@ -50,7 +50,7 @@ func ReserveDocument(
 	}
 	document.Correlativo = 1
 	if problems := model.ValidateDocument(document); len(problems) > 0 {
-		return nil, errors.Join(problems...)
+		return nil, model.JoinProblems(problems)
 	}
 	document.Correlativo = 0
 
