@@ -89,10 +89,16 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/gocql/gocql v1.6.0 => github.com/scylladb/gocql v1.13.0
+// gocql is genix-orm's dependency, so the fork lives in that repo (genix-orm/thirdparty/gocql,
+// which drops recreate.go and with it text/template). A replace in a non-main module is ignored,
+// so the app has to name the same directory itself.
+replace github.com/gocql/gocql v1.6.0 => ./genix-orm/thirdparty/gocql
 
 // facturago is a submodule like genix-orm: what is checked out is what compiles.
 replace github.com/ivanjoz/facturago => ./facturago
+
+// Forked to restore the linker's dead-method elimination; see thirdparty/README.md.
+replace google.golang.org/protobuf => ./thirdparty/protobuf
 
 replace github.com/ivanjoz/genix-orm => ./genix-orm
 

@@ -1,0 +1,22 @@
+diff --git a/internal/descfmt/stringer.go b/protobuf/internal/descfmt/stringer.go
+index 87e46bd..de1d2c6 100644
+--- a/internal/descfmt/stringer.go
++++ b/internal/descfmt/stringer.go
+@@ -261,8 +261,16 @@ func formatDescOpt(t protoreflect.Descriptor, isRoot, allowMulti bool, record fu
+ 			}...)
+ 
+ 		case protoreflect.ServiceDescriptor:
++			// PATCHED (genix): MethodByName with a constant emits an R_USENAMEDMETHOD reloc, and
++			// the linker's genericIfaceMethod set is keyed by NAME ONLY -- it retains every
++			// exported method called "Methods" on every reachable type, reflect.Value.Methods
++			// included. That one carries AttrReflectMethod, because it calls v.Method(i) with a
++			// non-constant index and is absent from cmd/compile's usemethod exclusion list, so
++			// reaching it sets the linker's global reflectSeen and disables dead-method
++			// elimination for the whole binary. Taking the method value directly is the same
++			// value by another route, and names nothing.
+ 			rs.Append(rv, []methodAndName{
+-				{rv.MethodByName("Methods"), "Methods"},
++				{reflect.ValueOf(t.Methods), "Methods"},
+ 			}...)
+ 
+ 		case protoreflect.MethodDescriptor:

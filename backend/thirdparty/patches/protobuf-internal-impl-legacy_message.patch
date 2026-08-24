@@ -1,0 +1,44 @@
+diff --git a/internal/impl/legacy_message.go b/protobuf/internal/impl/legacy_message.go
+index a51dffb..7dd44c4 100644
+--- a/internal/impl/legacy_message.go
++++ b/internal/impl/legacy_message.go
+@@ -207,15 +207,24 @@ func aberrantLoadMessageDescReentrant(t reflect.Type, name protoreflect.FullName
+ 	md.L1.EditionFeatures = md.L0.ParentFile.L1.EditionFeatures
+ 	// Obtain a list of oneof wrapper types.
+ 	var oneofWrappers []reflect.Type
+-	methods := make([]reflect.Method, 0, 2)
+-	if m, ok := t.MethodByName("XXX_OneofFuncs"); ok {
++	// PATCHED (genix): reflect.Type.MethodByName is an INTERFACE call, so it registers the
++	// methodsig {MethodByName, func(string) (Method, bool)} in the linker's ifaceMethod set.
++	// github.com/viant/xunsafe.Field embeds reflect.Type, so its compiler-generated promoted
++	// wrapper matches that signature and is retained -- and that wrapper carries
++	// AttrReflectMethod, because its argument is not a constant, which sets the linker's global
++	// reflectSeen and disables dead-method elimination for the whole binary.
++	// reflect.Value.MethodByName is a concrete struct method: same method, same zero receiver,
++	// different signature, no interface registration. Legacy proto1 support is unchanged.
++	zeroMessage := reflect.Zero(t)
++	methods := make([]reflect.Value, 0, 2)
++	if m := zeroMessage.MethodByName("XXX_OneofFuncs"); m.IsValid() {
+ 		methods = append(methods, m)
+ 	}
+-	if m, ok := t.MethodByName("XXX_OneofWrappers"); ok {
++	if m := zeroMessage.MethodByName("XXX_OneofWrappers"); m.IsValid() {
+ 		methods = append(methods, m)
+ 	}
+ 	for _, fn := range methods {
+-		for _, v := range fn.Func.Call([]reflect.Value{reflect.Zero(fn.Type.In(0))}) {
++		for _, v := range fn.Call(nil) {
+ 			if vs, ok := v.Interface().([]any); ok {
+ 				for _, v := range vs {
+ 					oneofWrappers = append(oneofWrappers, reflect.TypeOf(v))
+@@ -225,8 +234,8 @@ func aberrantLoadMessageDescReentrant(t reflect.Type, name protoreflect.FullName
+ 	}
+ 
+ 	// Obtain a list of the extension ranges.
+-	if fn, ok := t.MethodByName("ExtensionRangeArray"); ok {
+-		vs := fn.Func.Call([]reflect.Value{reflect.Zero(fn.Type.In(0))})[0]
++	if fn := zeroMessage.MethodByName("ExtensionRangeArray"); fn.IsValid() {
++		vs := fn.Call(nil)[0]
+ 		for i := 0; i < vs.Len(); i++ {
+ 			v := vs.Index(i)
+ 			md.L2.ExtensionRanges.List = append(md.L2.ExtensionRanges.List, [2]protoreflect.FieldNumber{

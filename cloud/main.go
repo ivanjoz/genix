@@ -61,6 +61,18 @@ type DeployParams struct {
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
 const compilePath = "/cloud/main-compiled"
 
+// BuildTags are required on every shipping backend build, not optional size tuning.
+//
+//   - lambda.norpc  drops aws-lambda-go's legacy local-RPC entry path, and with it net/rpc.
+//   - grpcnotrace   drops golang.org/x/net/trace from grpc, and with it html/template.
+//
+// Both packages call reflect.Value.MethodByName with a runtime string, which sets the linker's
+// program-global reflectSeen flag. While it is set, every exported method of every reachable type
+// is retained and the ORM's generic instantiations alone cost ~11 MB. The flag is boolean, so
+// these tags do nothing on their own -- they only pay off together with the thirdparty/ forks.
+// scripts/deploy_vps.go carries the same list. See docs/BINARY_SIZE_PLAN.md.
+const BuildTags = "lambda.norpc,grpcnotrace"
+
 // El backend deduce IS_PROD con strings.Contains(APP_CODE, "_prd"), con guion bajo
 // (backend/core/security.go). Un guion normal apagaría el modo producción en silencio, así
 // que el valor vive aquí una sola vez y lo usan tanto la plantilla como la acción 2.
@@ -188,7 +200,10 @@ func main() {
 func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 
 	compiledPath := GetBaseWD() + compilePath
-	command := `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 /usr/local/go/bin/go build -ldflags '-s -w' -o %v`
+	// BuildTags must match every other shipping build path (scripts/deploy_vps.go). They drop
+	// net/rpc and x/net/trace, each of which disables the linker's dead-method elimination for
+	// the whole binary. See docs/BINARY_SIZE_PLAN.md.
+	command := `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 /usr/local/go/bin/go build -tags ` + BuildTags + ` -ldflags '-s -w' -o %v`
 
 	command = fmt.Sprintf(command, compiledPath)
 	fmt.Println("Compilando con:: ", command)

@@ -1,0 +1,27 @@
+diff --git a/internal/impl/message.go b/protobuf/internal/impl/message.go
+index d50423d..79ec86e 100644
+--- a/internal/impl/message.go
++++ b/internal/impl/message.go
+@@ -194,15 +194,18 @@ fieldLoop:
+ 
+ 	// Derive a mapping of oneof wrappers to fields.
+ 	oneofWrappers := mi.OneofWrappers
+-	methods := make([]reflect.Method, 0, 2)
+-	if m, ok := reflect.PtrTo(t).MethodByName("XXX_OneofFuncs"); ok {
++	// PATCHED (genix): see legacy_message.go for why this goes through reflect.Value rather
++	// than reflect.Type. Same methods, same zero receiver.
++	zeroMessagePointer := reflect.Zero(reflect.PtrTo(t))
++	methods := make([]reflect.Value, 0, 2)
++	if m := zeroMessagePointer.MethodByName("XXX_OneofFuncs"); m.IsValid() {
+ 		methods = append(methods, m)
+ 	}
+-	if m, ok := reflect.PtrTo(t).MethodByName("XXX_OneofWrappers"); ok {
++	if m := zeroMessagePointer.MethodByName("XXX_OneofWrappers"); m.IsValid() {
+ 		methods = append(methods, m)
+ 	}
+ 	for _, fn := range methods {
+-		for _, v := range fn.Func.Call([]reflect.Value{reflect.Zero(fn.Type.In(0))}) {
++		for _, v := range fn.Call(nil) {
+ 			if vs, ok := v.Interface().([]any); ok {
+ 				oneofWrappers = vs
+ 			}
