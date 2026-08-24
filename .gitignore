@@ -48,6 +48,7 @@ backend/.gocache/*
 .gocache/*
 scripts/__pycache__/*
 scripts/tests/__pycache__/*
+scripts/configure/__pycache__*/
 frontend/.bun-install/install/*
 backend/libs/productos.txt
 backend/libs/products_search.idx
