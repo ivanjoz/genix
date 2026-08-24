@@ -92,3 +92,25 @@ export const canDisposeAsset = (asset: IAsset) =>
 // Serial-tracked assets are one unit each; a grouped acquisition carries its lot size.
 export const assetUnitLabel = (asset: IAsset) =>
   asset.SerialNumber || `x${asset.Quantity || 1}`
+
+// One asset's posted depreciation ledger — the Type-4 expense rows. The backend stores
+// neither a Name nor a PeriodDate on them, so nothing here mirrors those: Date is the
+// first of the month the period covers, and the label is composed below.
+export interface IDepreciationEntry {
+  ID: number
+  Date: number
+  Amount: number
+}
+
+// The schedule's running order. The ledger is queried by asset, so the rows arrive in
+// insertion order; sorting on Date makes the numbering hold even if a re-run ever
+// interleaved them, and it is the period — not the row's age — the number refers to.
+export const depreciationSchedule = (entries: IDepreciationEntry[], totalMonths: number) =>
+  [...entries]
+    .sort((a, b) => a.Date - b.Date)
+    .map((entry, index) => ({
+      entry,
+      // Composed here rather than persisted: a stored label cannot be translated, and it
+      // freezes DepreciationMonths at the value it had the day the row was written.
+      label: `Depreciation ${index + 1}/${totalMonths}|Depreciación ${index + 1}/${totalMonths}`,
+    }))

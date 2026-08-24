@@ -7,6 +7,7 @@ import FilterInput from '$components/form/FilterInput.svelte'
 import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import Layer from '$components/layers/Layer.svelte'
+import Modal from '$components/layers/Modal.svelte'
 import T from '$components/misc/T.svelte'
 import VTable from '$components/vTable/VTable.svelte'
 import type { ExcelTableColumn } from '@genix/ui/excel'
@@ -19,7 +20,7 @@ import { SupplyMaterialService } from '../../logistics/supplies-materials/supply
 import {
   assetBookValue, assetDepreciatedPercent, assetPaymentLabels, assetPendingAmount,
   assetRemainingMonths, assetStatusLabels, assetUnitLabel, canDisposeAsset, canPayAsset,
-  type IAsset,
+  depreciationSchedule, type IAsset,
 } from './assets'
 import {
   AssetsService, getAssetDepreciation, postAssetAcquisition, postAssetPayment,
@@ -29,6 +30,9 @@ import {
 import { CajasService } from '../../finance/cash-banks/cajas.svelte'
 
 const ui = useUI()
+
+// Side layers are 1 (acquisition) and 2 (asset detail); the payment dialog is its own handle.
+const PAYMENT_MODAL_ID = 11
 
 const assets = new AssetsService(true)
 const warehouses = new WarehousesService()
@@ -183,16 +187,23 @@ const onAcquire = async () => {
 const openDepreciationLayer = async (asset: IAsset) => {
   selectedAsset = asset
   depreciationEntries = []
-  paymentForm = {
-    AssetID: asset.ID, CashBankID: 0,
-    Amount: assetPendingAmount(asset), Date: 0, IsFullyPaid: false,
-  }
   ui.openSideLayer(2)
   try {
     depreciationEntries = await getAssetDepreciation(asset.ID)
   } catch (error) {
     Notify.failure(error as string)
   }
+}
+
+// The dialog opens pre-filled with the outstanding balance, which is the payment the user
+// makes in almost every case.
+const openPaymentModal = () => {
+  if (!selectedAsset) return
+  paymentForm = {
+    AssetID: selectedAsset.ID, CashBankID: 0,
+    Amount: assetPendingAmount(selectedAsset), Date: 0, IsFullyPaid: false,
+  }
+  ui.openModal(PAYMENT_MODAL_ID)
 }
 
 const registerAssetPayment = async () => {
@@ -210,8 +221,9 @@ const registerAssetPayment = async () => {
   try {
     const updated = await postAssetPayment({ ...paymentForm, AssetID: selectedAsset.ID })
     selectedAsset = { ...selectedAsset, ...updated }
-    paymentForm = { ...paymentForm, Amount: assetPendingAmount(selectedAsset) }
     await assets.fetch()
+    // Only on success: a failed post keeps the dialog open with the input intact.
+    ui.closeModal(PAYMENT_MODAL_ID)
   } catch (error) {
     Notify.failure(error as string)
   } finally {
@@ -391,19 +403,19 @@ const onDispose = () => {
     {#if selectedAsset}
       <div class="grid grid-cols-24 gap-10 mt-6 md:mt-16">
         <div class="col-span-12">
-          <div class="text-sm c-gray"><T text="Acquisition Value|Valor de Adquisición" /></div>
+          <div class="text-[15px] leading-[16px] stat-label"><T text="Acquisition Value|Valor de Adquisición" /></div>
           <div class="h3 ff-bold">{formatN(selectedAsset.AcquisitionValue / 100, 2)}</div>
         </div>
         <div class="col-span-12">
-          <div class="text-sm c-gray"><T text="Book Value|Valor en Libros" /></div>
+          <div class="text-[15px] leading-[16px] stat-label"><T text="Book Value|Valor en Libros" /></div>
           <div class="h3 ff-bold">{formatN(assetBookValue(selectedAsset) / 100, 2)}</div>
         </div>
         <div class="col-span-12">
-          <div class="text-sm c-gray"><T text="Depreciated|Depreciado" /></div>
+          <div class="text-[15px] leading-[16px] stat-label"><T text="Depreciated|Depreciado" /></div>
           <div class="h4">{assetDepreciatedPercent(selectedAsset)}%</div>
         </div>
         <div class="col-span-12">
-          <div class="text-sm c-gray"><T text="Months Remaining|Meses Restantes" /></div>
+          <div class="text-[15px] leading-[16px] stat-label"><T text="Months Remaining|Meses Restantes" /></div>
           <div class="h4">{assetRemainingMonths(selectedAsset)} / {selectedAsset.DepreciationMonths}</div>
         </div>
       </div>
@@ -411,14 +423,12 @@ const onDispose = () => {
       <!-- Purchase and payment. An asset is not an expense, so this is settled here rather
            than in the expense register; only depreciation reaches that table. -->
       <div class="mt-16" aria-label="Asset purchase and payment">
-        <div class="h4 ff-bold mb-8"><T text="Purchase|Compra" /></div>
-
         {#if (selectedAsset.PurchaseAmount || 0) === 0}
           <div class="c-gray">
             <T text="Donated or contributed — nothing was owed for this asset.|Donado o aportado: no se adeuda nada por este activo." />
           </div>
         {:else}
-          <div class="grid grid-cols-3 gap-10 mb-10">
+          <div class="grid grid-cols-3 gap-10">
             <div class="bg-slate-100 rounded py-8 text-center">
               <div class="text-sm text-slate-600"><T text="Purchase|Compra" /></div>
               <div class="ff-mono ff-bold">{formatN(selectedAsset.PurchaseAmount / 100, 2)}</div>
@@ -433,54 +443,29 @@ const onDispose = () => {
             </div>
           </div>
 
-          {#if canPayAsset(selectedAsset)}
-            <div class="grid grid-cols-24 gap-10">
-              <SearchSelect label="Source Register|Caja de Origen"
-                bind:saveOn={paymentForm}
-                css="col-span-24 md:col-span-12"
-                save="CashBankID"
-                keyId="ID"
-                keyName="Name"
-                options={cajas.Cajas}
-              />
-              <Input label="Payment Amount|Monto del Pago"
-                bind:saveOn={paymentForm}
-                css="col-span-24 md:col-span-12"
-                save="Amount"
-                type="number"
-                baseDecimals={2}
-                inputCss="ff-mono text-right"
-              />
-              <DateInput label="Payment Date|Fecha del Pago"
-                bind:saveOn={paymentForm}
-                css="col-span-24 md:col-span-12"
-                save="Date"
-              />
-              <div class="col-span-24 md:col-span-12 flex items-end">
-                <Checkbox bind:saveOn={paymentForm} save="IsFullyPaid" label="Is Fully Paid|Pagado Completo" />
-              </div>
-              <div class="col-span-24 mt-4">
-                <Button color="blue" icon="icon-[fa--check]"
-                  name="Register Payment|Registrar Pago"
-                  label="Registers a payment against this asset from the selected cash register."
-                  onClick={registerAssetPayment}
-                />
-              </div>
-            </div>
-          {:else}
-            <div class="c-gray"><T text="Fully paid.|Pagado completamente." /></div>
+          {#if !canPayAsset(selectedAsset)}
+            <div class="c-gray mt-10"><T text="Fully paid.|Pagado completamente." /></div>
           {/if}
         {/if}
       </div>
 
-      {#if canDisposeAsset(selectedAsset)}
-        <div class="mt-16">
-          <Button name="Dispose|Dar de Baja"
-            label="Disposes the asset: removes it from the warehouse and stops its depreciation."
-            color="red"
-            icon="icon-[fa--trash]"
-            onClick={onDispose}
-          />
+      {#if canPayAsset(selectedAsset) || canDisposeAsset(selectedAsset)}
+        <div class="flex gap-10 mt-16">
+          {#if canPayAsset(selectedAsset)}
+            <Button color="blue" icon="icon-[fa--check]"
+              name="Register Payment|Registrar Pago"
+              label="Opens the dialog to register a payment against this asset."
+              onClick={openPaymentModal}
+            />
+          {/if}
+          {#if canDisposeAsset(selectedAsset)}
+            <Button name="Dispose|Dar de Baja"
+              label="Disposes the asset: removes it from the warehouse and stops its depreciation."
+              color="red"
+              icon="icon-[fa--trash]"
+              onClick={onDispose}
+            />
+          {/if}
         </div>
       {/if}
 
@@ -490,12 +475,12 @@ const onDispose = () => {
           <div class="c-gray"><T text="No entries posted yet.|Aún no hay asientos registrados." /></div>
         {:else}
           <div class="flex flex-col gap-4">
-            {#each depreciationEntries as entry (entry.ID)}
+            {#each depreciationSchedule(depreciationEntries, selectedAsset.DepreciationMonths) as period (period.entry.ID)}
               <div class="flex justify-between border-b py-6">
-                <div>{entry.Name}</div>
+                <div><T text={period.label} /></div>
                 <div class="flex gap-16">
-                  <div class="c-gray">{formatTime(entry.PeriodDate, "d-m-Y")}</div>
-                  <div class="ff-bold">{formatN(entry.Amount / 100, 2)}</div>
+                  <div class="c-gray">{formatTime(period.entry.Date, "d-m-Y")}</div>
+                  <div class="ff-bold">{formatN(period.entry.Amount / 100, 2)}</div>
                 </div>
               </div>
             {/each}
@@ -504,4 +489,53 @@ const onDispose = () => {
       </div>
     {/if}
   </Layer>
+
+  <!-- Payment dialog. Kept out of the detail panel so the panel stays a read surface:
+       the balances above it are what the payment changes. -->
+  <Modal id={PAYMENT_MODAL_ID} size={3}
+    css="min-h-0!"
+    title="Register Payment|Registrar Pago"
+    saveButtonLabel="Register Payment|Registrar Pago"
+    saveIcon="icon-[fa--check]"
+    onSave={registerAssetPayment}
+  >
+    <!-- Amount first on purpose: Modal focuses the dialog's first input on open, and a
+         SearchSelect opens its dropdown on focus — leading with the register would cover
+         the date field with the list. The amount is also the field users actually edit,
+         since it arrives pre-filled with the outstanding balance. -->
+    <div class="grid grid-cols-24 gap-10 py-8">
+      <Input label="Payment Amount|Monto del Pago"
+        bind:saveOn={paymentForm}
+        css="col-span-24 md:col-span-12"
+        save="Amount"
+        type="number"
+        baseDecimals={2}
+        inputCss="ff-mono text-right"
+      />
+      <SearchSelect label="Source Register|Caja de Origen"
+        bind:saveOn={paymentForm}
+        css="col-span-24 md:col-span-12"
+        save="CashBankID"
+        keyId="ID"
+        keyName="Name"
+        options={cajas.Cajas}
+      />
+      <DateInput label="Payment Date|Fecha del Pago"
+        bind:saveOn={paymentForm}
+        css="col-span-24 md:col-span-12"
+        save="Date"
+      />
+      <div class="col-span-24 md:col-span-12 flex items-end">
+        <Checkbox bind:saveOn={paymentForm} save="IsFullyPaid" label="Is Fully Paid|Pagado Completo" />
+      </div>
+    </div>
+  </Modal>
 </Page>
+
+<style>
+  /* Stat labels read as field labels — same token FieldShell paints its <label> with,
+     so a theme override on `body` moves both together. */
+  .stat-label {
+    color: var(--input-label-color, #6d5dad);
+  }
+</style>

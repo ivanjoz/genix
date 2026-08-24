@@ -98,15 +98,12 @@ type Expense struct {
 	ProductID          int32  `json:",omitempty"` // Type 2 → the supply purchased.
 	// Type 2 only: where the units landed and how many. Stored so the expense says what it
 	// bought without having to reconstruct it from the movement ledger.
-	WarehouseID  int32 `json:",omitempty"`
-	Quantity     int32 `json:",omitempty"`
-	CurrencyType int8  `json:",omitempty"` // 1 = PEN, 2 = USD.
-	Date         int16 `json:",omitempty"` // UnixDay the expense was incurred.
-	DueDate      int16 `json:",omitempty"` // UnixDay payment is due.
-	Amount       int32 `json:",omitempty"` // Total owed for this expense/period, in cents.
-	// Book value, which is not the same as what was paid. A computer the owner donated to the
-	// business has Amount = 0 and Value = 10000: it cost no cash and still depreciates.
-	Value          int32 `json:",omitempty"`
+	WarehouseID    int32 `json:",omitempty"`
+	Quantity       int32 `json:",omitempty"`
+	CurrencyType   int8  `json:",omitempty"`   // 1 = PEN, 2 = USD.
+	Date           int16 `json:",omitempty"`   // UnixDay the expense was incurred.
+	DueDate        int16 `json:",omitempty"`   // UnixDay payment is due.
+	Amount         int32 `json:",omitempty"`   // Total owed for this expense/period, in cents.
 	PaidAmount     int32 `json:",omitempty"`   // Positive running sum of payments applied (server-maintained).
 	Status         int8  `json:"ss,omitempty"` // 0 removed · 1 pending · 2 fully paid · 3 posted (non-cash).
 	Updated        int32 `json:"upd,omitempty"`

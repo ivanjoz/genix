@@ -3,6 +3,38 @@
 Design decisions behind the asset register and depreciation, newest first.
 Full design in `PLAN.md`.
 
+## A depreciation entry stores no PeriodDate either, because it dedupes elsewhere
+
+**Context** — `Expense.PeriodDate` is the key the scheduled-expense generator matches on to avoid
+materializing a period twice (`finance/expenses.go:384`). Depreciation was writing it too, always
+equal to `Date`.
+
+**Decision** — Type-4 rows carry only `Date`. `PeriodDate` stays for scheduled expenses, which is
+its only reader.
+
+**Rationale** — Depreciation does not dedupe against the expenses table at all: `PendingDepreciation
+Periods` compares the computed schedule against `Asset.LastDepreciationDate`. So the column was
+write-only on a Type-4 row, and could never diverge from `Date` anyway — `PostExpenses` refuses to
+edit a row at `ExpenseStatusPosted`. `Date` is the column kept because it is the accounting date
+every date-ranged report filters on, and depreciation is a real non-cash P&L expense. The cost: if
+posting ever moves off the first of the month, the two stop being the same fact and `PeriodDate`
+has to come back.
+
+## A depreciation entry stores no Name, because the label is presentation
+
+**Context** — `PostAssetDepreciationRun` persisted `"Depreciación 7/60"` into `Expense.Name`. That
+put a rendering decision in the database: the string is Spanish-only in a bilingual app, and it
+freezes `DepreciationMonths` at whatever it was the day the row was written.
+
+**Decision** — The Type-4 expense is written with no `Name`. The Activos page composes the label
+from `PeriodDate` and the asset's own `DepreciationMonths` (`depreciationSchedule` in
+`frontend/routes/accounting/assets/assets.ts`).
+
+**Rationale** — Nothing else reads that column for a Type-4 row: `belongsToTab` in the Gastos
+register only admits `ss` 1 and 2, and depreciation is posted at `ss` 3, so the schedule in the
+asset panel is its only reader. The cost is that rows written before this change keep a dead
+`Name` in the database — harmless, since no code reads it any more.
+
 ## Every asset update writes Status, even when it does not change it
 
 **Context** — `PostAssetPayment` updated `PaidAmount`, `PaymentStatus`, `Updated` and `UpdatedBy`,

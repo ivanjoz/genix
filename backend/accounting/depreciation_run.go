@@ -42,18 +42,19 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 		for _, period := range pendingPeriods {
 			depreciationEntries = append(depreciationEntries, finance.Expense{
 				CompanyID: req.User.CompanyID,
-				// Concatn joins with underscores, so the period fraction is built with an
-				// explicit empty separator: "Depreciación 7/60".
-				Name:         core.Concats("Depreciación", core.Concat("", period.PeriodIndex, "/", asset.DepreciationMonths)),
+				// No Name. "Depreciación 7/60" is presentation, not data: the frontend
+				// composes it from Date and the asset's DepreciationMonths, which is
+				// what makes it translatable — a stored string would be Spanish forever.
 				Type:         finance.ExpenseTypeDepreciation,
 				AssetID:      asset.ID,
 				ProductID:    asset.ProductID,
 				CategoryID:   depreciationCategoryID,
 				CurrencyType: asset.CurrencyType,
-				Date:         period.PeriodDate,
-				PeriodDate:   period.PeriodDate,
-				Amount:       period.Amount,
-				Value:        period.Amount,
+				// No PeriodDate either. That column is the scheduled-expense dedupe key;
+				// depreciation dedupes on Asset.LastDepreciationDate instead, so on a Type-4
+				// row it would only ever be a second copy of Date that nothing reads.
+				Date:   period.PeriodDate,
+				Amount: period.Amount,
 				// Posted, not payable: a depreciation entry moves no cash, so it never
 				// belongs in the Pend. Pago or Pagados tabs.
 				Status:    finance.ExpenseStatusPosted,

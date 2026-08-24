@@ -1,7 +1,7 @@
 import { GetHandler, GET, POST, PUT } from '$libs/ui-runtime.svelte'
-import { AssetStatus, type IAsset } from './assets'
+import { AssetStatus, type IAsset, type IDepreciationEntry } from './assets'
 
-export type { IAsset }
+export type { IAsset, IDepreciationEntry }
 
 export class AssetsService extends GetHandler<IAsset> {
   route = "assets"
@@ -77,14 +77,6 @@ export const runAssetDepreciation = (): Promise<{ PostedEntries: number, Updated
 }
 
 // One asset's posted depreciation ledger — the Type-4 expense rows.
-export interface IDepreciationEntry {
-  ID: number
-  Name: string
-  Date: number
-  PeriodDate: number
-  Amount: number
-}
-
 export const getAssetDepreciation = async (assetID: number): Promise<IDepreciationEntry[]> => {
   const result = await GET({ route: `asset-depreciation?assetID=${assetID}` })
   return result || []
