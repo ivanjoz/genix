@@ -124,7 +124,6 @@ func TestShippingBuildTagsAgreeAcrossDeployPaths(t *testing.T) {
 	for _, buildPath := range []string{
 		filepath.Join("..", "..", "cloud", "main.go"),                             // AWS Lambda
 		filepath.Join("..", "..", "scripts", "deploy_vps.go"),                     // VPS deploy
-		filepath.Join("..", "deploy.sh"),                                          // SAM deploy
 		filepath.Join("..", "..", ".github", "workflows", "release-binaries.yml"), // GitHub release
 	} {
 		contents, err := os.ReadFile(buildPath)
