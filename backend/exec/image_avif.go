@@ -1,3 +1,5 @@
+//go:build avif
+
 package exec
 
 import (
@@ -5,12 +7,14 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/ivanjoz/avif-webp-encoder/imageconv"
+	"app/cloud"
 )
 
+// CompressImage is the handler the `_2` conversion Lambda runs. It exists only under `-tags avif`;
+// see image_disabled.go for the default build.
 func CompressImage(args *core.ExecArgs) core.FuncResponse {
 
-	input := imageconv.ImageConvertInput{}
+	input := cloud.ImageConvertInput{}
 	// Param6 stores the JSON conversion options in the compact ExecArgs payload.
 	err := json.Unmarshal([]byte(args.Param6), &input)
 	if err != nil {
@@ -32,7 +36,7 @@ func CompressImage(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("Error al convertir el contenido de la imagen a bytes")
 	}
 
-	images, err := imageconv.Convert(input)
+	images, err := cloud.ConvertImageForLambda(input)
 
 	if err != nil {
 		return args.MakeErr("Error al convertir la imagen.", err)
