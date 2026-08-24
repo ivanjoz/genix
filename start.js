@@ -80,37 +80,15 @@ const rateLimiterPath = path.join(__dirname, 'server_utils')
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
 
-// go mod tidy reescribe go.mod/go.sum, y eso invalida el build cache de Go: la
-// compilación en frío toma ~36s vs ~5s en caliente. Por eso solo corre cuando
-// go.mod/go.sum cambiaron de verdad (se compara contra un stamp en tmp/).
-const goModStampPath = path.join(__dirname, 'tmp', '.go-mod-stamp')
-const goModFiles = ['go.mod', 'go.sum'].map(name => path.join(backendGoPath, name))
-const goModStamp = goModFiles.map(file => {
-  const stat = fs.existsSync(file) ? fs.statSync(file) : null
-  return stat ? `${path.basename(file)}:${stat.size}:${stat.mtimeMs}` : `${path.basename(file)}:missing`
-}).join('|')
-
-const runGoModTidy = () => {
-  console.log("Instalando los paquetes de Go (si no lo están)...")
-  execSync('go mod tidy', { stdio: "inherit", shell: true, cwd: backendGoPath })
-  // Se releen los stats: go mod tidy pudo haber reescrito los archivos.
-  const nextStamp = goModFiles.map(file => {
-    const stat = fs.existsSync(file) ? fs.statSync(file) : null
-    return stat ? `${path.basename(file)}:${stat.size}:${stat.mtimeMs}` : `${path.basename(file)}:missing`
-  }).join('|')
-  fs.mkdirSync(path.dirname(goModStampPath), { recursive: true })
-  fs.writeFileSync(goModStampPath, nextStamp)
-}
-
-const previousGoModStamp = fs.existsSync(goModStampPath)
-  ? fs.readFileSync(goModStampPath, 'utf-8').trim()
-  : null
-
-if (previousGoModStamp === goModStamp) {
-  console.log("Paquetes de Go sin cambios, se omite go mod tidy.")
-} else {
-  runGoModTidy()
-}
+// `go mod download`, NOT `go mod tidy`. Tidy walks the test imports of every dependency, and
+// grpc/status's own tests import google.golang.org/protobuf/{testing/protocmp,reflect/protodesc}:
+// two packages the trimmed protobuf fork in backend/thirdparty/ deliberately does not carry, so
+// tidy fails here by construction (see backend/thirdparty/README.md). `go mod download` only
+// fetches the modules go.mod already requires and never rewrites go.mod/go.sum, which also removes
+// the reason the old stamp file existed -- tidy rewrote those files and invalidated the Go build
+// cache, turning a ~5s warm build into ~36s.
+console.log("Instalando los paquetes de Go (si no lo están)...")
+execSync('go mod download', { stdio: "inherit", shell: true, cwd: backendGoPath })
 
 // Remove enviroment variables
 const ENV_PATH = path.join(__dirname, '.env')

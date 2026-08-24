@@ -82,6 +82,28 @@ If new code imports a protobuf package that was trimmed away, the build fails wi
 ./regenerate.sh refresh-packages && ./regenerate.sh protobuf
 ```
 
+**`go mod tidy` does not run against this fork, by design.** Tidy walks the *test* imports of every
+dependency, and `google.golang.org/grpc/status`'s own tests reach
+`protobuf/testing/protocmp` and `protobuf/reflect/protodesc` — two of the 458 packages the trim
+drops. Tidy therefore exits 1 with `module google.golang.org/protobuf@latest found ..., but does not
+contain package ...`. Nothing is broken: `go build ./...`, `go vet ./...` and `go test ./...` all
+resolve only non-test imports and are unaffected. `start.js` runs `go mod download` for this reason.
+
+Carrying those two packages just to satisfy tidy is not worth it — `protodesc` drags in the
+~250 KB generated `types/descriptorpb`, and `protocmp` adds a `github.com/google/go-cmp` require —
+all of it dead weight no shipping code reaches. If you genuinely need to re-tidy after adding or
+dropping a dependency, comment out the protobuf `replace` in `../go.mod` first:
+
+```sh
+cd .. && sed -i 's|^replace google.golang.org/protobuf|// &|' go.mod
+go mod tidy                       # resolves against upstream v1.36.11
+sed -i 's|^// replace google.golang.org/protobuf|replace google.golang.org/protobuf|' go.mod
+go build ./... && go test ./thirdparty/
+```
+
+Tidy moves the `google.golang.org/protobuf` require out of the `// indirect` block while the replace
+is off; that is cosmetic and can be left as tidy wrote it.
+
 **Verifying the forks still do their job.** Binary size is a poor signal — removing a template
 package shrinks the binary without clearing the flag. Count concrete `Col` instantiations instead:
 

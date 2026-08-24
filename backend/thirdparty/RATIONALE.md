@@ -1,5 +1,22 @@
 # RATIONALE — thirdparty
 
+## start.js runs `go mod download`, not `go mod tidy`
+**Context** — `bun start.js` failed at "Instalando los paquetes de Go" the first time it ran after
+the trimmed protobuf fork landed. `go mod tidy` resolves the test imports of dependencies, and
+`grpc/status`'s tests reach `protobuf/testing/protocmp` and `protobuf/reflect/protodesc`, which the
+trim removes — so tidy exits 1 against a tree that builds, vets and tests fine.
+**Decision** — `start.js` now runs `go mod download`. The stamp file in `tmp/` that gated the tidy
+call was deleted along with it. The `go mod tidy` limitation and its workaround are documented in
+`README.md`.
+**Rationale** — Tidy was the wrong command for what that step does ("install the Go packages if they
+are not already there"): it rewrites `go.mod`/`go.sum` as a side effect, which is what invalidated
+the build cache and forced the stamp file in the first place. `go mod download` fetches exactly the
+requires already in `go.mod`, touches nothing, and measured 23 ms warm — so the stamp became dead
+code. The alternative, carrying `protocmp` and `protodesc` in the fork, adds the ~250 KB generated
+`descriptorpb` and a `go-cmp` require to satisfy an import path no shipping code reaches. Cost:
+`go mod tidy` needs the protobuf `replace` commented out to run at all, which is only felt when a
+dependency is added or dropped.
+
 ## Named thirdparty/, not vendor/
 **Context** — Two patched dependency forks need a home in the repo. `vendor/` is the obvious name.
 **Decision** — `backend/thirdparty/`, with a `replace` per fork in `../go.mod`. `vendor/` is
