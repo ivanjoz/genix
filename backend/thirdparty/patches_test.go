@@ -114,21 +114,28 @@ func TestForkedModulesStillCarryTheirPatches(t *testing.T) {
 	}
 }
 
-// TestShippingBuildTagsAgreeAcrossDeployPaths catches the two build-tag lists drifting apart.
-// They live in different Go modules, so the compiler cannot relate them.
+// TestShippingBuildTagsAgreeAcrossDeployPaths catches the build-tag lists drifting apart. They are
+// spread across Go modules, a shell script and a CI workflow, so nothing else relates them --
+// which is exactly how the CI release build and backend/deploy.sh were first missed. Any new path
+// that produces a shipping binary belongs in this list.
 func TestShippingBuildTagsAgreeAcrossDeployPaths(t *testing.T) {
 	const expectedTags = "lambda.norpc,grpcnotrace"
 
 	for _, buildPath := range []string{
-		filepath.Join("..", "..", "cloud", "main.go"),
-		filepath.Join("..", "..", "scripts", "deploy_vps.go"),
+		filepath.Join("..", "..", "cloud", "main.go"),                             // AWS Lambda
+		filepath.Join("..", "..", "scripts", "deploy_vps.go"),                     // VPS deploy
+		filepath.Join("..", "deploy.sh"),                                          // SAM deploy
+		filepath.Join("..", "..", ".github", "workflows", "release-binaries.yml"), // GitHub release
 	} {
 		contents, err := os.ReadFile(buildPath)
 		if err != nil {
 			t.Errorf("%s: %v", buildPath, err)
 			continue
 		}
-		if !strings.Contains(string(contents), `"`+expectedTags+`"`) {
+		// Matched bare rather than quoted: the Go files and the shell script quote it, the YAML
+		// workflow does not. The joined form only ever appears in a real declaration -- the prose
+		// around it names the two tags separately.
+		if !strings.Contains(string(contents), expectedTags) {
 			t.Errorf("%s does not declare the shipping build tags %q. Every shipping build path must "+
 				"carry them or the binary silently grows ~12 MB", buildPath, expectedTags)
 		}

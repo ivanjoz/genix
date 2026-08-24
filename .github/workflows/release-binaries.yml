@@ -109,6 +109,13 @@ jobs:
         working-directory: backend
         env:
           CGO_ENABLED: '0'
+          # Required on every shipping build, not optional size tuning: lambda.norpc drops net/rpc
+          # and grpcnotrace drops x/net/trace with html/template. Each calls
+          # reflect.Value.MethodByName with a runtime string, which sets the linker's global
+          # reflectSeen flag and retains every exported method of every reachable type. The flag is
+          # boolean, so omitting either tag costs ~12 MB even with backend/thirdparty/ in place.
+          # cloud/main.go and scripts/deploy_vps.go carry the same list; a test keeps them in sync.
+          BACKEND_BUILD_TAGS: lambda.norpc,grpcnotrace
         run: |
           # Tag and commit identify a release reproducibly without embedding the runner clock.
           release_identity="${GITHUB_REF_NAME}-${GITHUB_SHA:0:12}"
@@ -117,7 +124,7 @@ jobs:
           for target_architecture in amd64 arm64; do
             echo "Building backend for linux/${target_architecture} (${release_identity})"
             GOOS=linux GOARCH="$target_architecture" \
-              go build -trimpath \
+              go build -trimpath -tags "$BACKEND_BUILD_TAGS" \
               -ldflags="-s -w -X app/core.BuildDate=${release_identity}" \
               -o "../dist/genix_app_linux_${target_architecture}" .
           done

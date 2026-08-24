@@ -27,11 +27,17 @@ echo "Enviado código de funcion: $FUNCTION_NAME_GO | profile: $AWS_PROFILE"
 echo "Generando compilado..."
 echo "Ejecutando:  GOOS=linux GOARCH=arm64 go build -ldflags -X main.ENVIROMENT=$ENVIROMENT_NAME -o .aws-sam/build/main"
 
+# BACKEND_BUILD_TAGS is required on every shipping build, not optional size tuning: both tags drop
+# a package that calls reflect.Value.MethodByName with a runtime string, which sets the linker's
+# global reflectSeen flag and retains every exported method of every reachable type. Omitting them
+# costs ~12 MB. cloud/main.go, scripts/deploy_vps.go and .github/workflows/release-binaries.yml
+# carry the same list; backend/thirdparty/patches_test.go keeps them in sync.
+BACKEND_BUILD_TAGS="lambda.norpc,grpcnotrace"
+
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then # comando para LINUX
-    # GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.ENVIROMENT=$ENVIROMENT_NAME" -o .aws-sam/build/main
-    GOOS=linux GOARCH=arm64 /usr/local/go/bin/go build -ldflags "-s -w" -o .aws-sam/build/main
+    GOOS=linux GOARCH=arm64 /usr/local/go/bin/go build -tags "$BACKEND_BUILD_TAGS" -ldflags "-s -w" -o .aws-sam/build/main
 else # comando para WINDOWS
-    GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.ENVIROMENT=$ENVIROMENT_NAME" -o .aws-sam/build/main
+    GOOS=linux GOARCH=arm64 go build -tags "$BACKEND_BUILD_TAGS" -ldflags "-s -w -X main.ENVIROMENT=$ENVIROMENT_NAME" -o .aws-sam/build/main
 fi
 
 # crea el zip para ser subido a aws-lambda
