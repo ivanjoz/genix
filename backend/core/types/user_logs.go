@@ -25,15 +25,15 @@ type UserLog struct {
 
 type UserLogTable struct {
 	db.TableStruct[UserLogTable, UserLog]
-	Date                 db.Col[UserLogTable, int16]
-	RequestID            db.Col[UserLogTable, int64]
-	CompanyID            db.Col[UserLogTable, int32]
-	UserID               db.Col[UserLogTable, int32]
-	RouteID              db.Col[UserLogTable, int16]
-	FrameRouteCompanyAgg db.Col[UserLogTable, int64]
-	ElapsedMs            db.Col[UserLogTable, int16]
-	ErrorCount           db.Col[UserLogTable, int8]
-	ErrorIDs             db.Col[UserLogTable, []int32]
+	Date                 db.Col[*UserLogTable, int16]
+	RequestID            db.Col[*UserLogTable, int64]
+	CompanyID            db.Col[*UserLogTable, int32]
+	UserID               db.Col[*UserLogTable, int32]
+	RouteID              db.Col[*UserLogTable, int16]
+	FrameRouteCompanyAgg db.Col[*UserLogTable, int64]
+	ElapsedMs            db.Col[*UserLogTable, int16]
+	ErrorCount           db.Col[*UserLogTable, int8]
+	ErrorIDs             db.Col[*UserLogTable, []int32]
 }
 
 func (e UserLogTable) GetSchema() db.TableSchema {

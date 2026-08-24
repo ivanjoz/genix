@@ -35,16 +35,16 @@ type ContactMessage struct {
 
 type ContactMessageTable struct {
 	db.TableStruct[ContactMessageTable, ContactMessage]
-	WeekCode db.Col[ContactMessageTable, int32]
-	IP       db.Col[ContactMessageTable, int64]
-	Created  db.Col[ContactMessageTable, int32]
-	ID       db.Col[ContactMessageTable, int64]
-	Name     db.Col[ContactMessageTable, string]
-	Email    db.Col[ContactMessageTable, string]
-	Company  db.Col[ContactMessageTable, string]
-	Message  db.Col[ContactMessageTable, string]
-	Updated  db.Col[ContactMessageTable, int32]
-	Status   db.Col[ContactMessageTable, int8]
+	WeekCode db.Col[*ContactMessageTable, int32]
+	IP       db.Col[*ContactMessageTable, int64]
+	Created  db.Col[*ContactMessageTable, int32]
+	ID       db.Col[*ContactMessageTable, int64]
+	Name     db.Col[*ContactMessageTable, string]
+	Email    db.Col[*ContactMessageTable, string]
+	Company  db.Col[*ContactMessageTable, string]
+	Message  db.Col[*ContactMessageTable, string]
+	Updated  db.Col[*ContactMessageTable, int32]
+	Status   db.Col[*ContactMessageTable, int8]
 }
 
 func (e ContactMessageTable) GetSchema() db.TableSchema {

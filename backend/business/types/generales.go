@@ -21,13 +21,13 @@ type CityLocation struct {
 
 type CityLocationTable struct {
 	db.TableStruct[CityLocationTable, CityLocation]
-	ID             db.Col[CityLocationTable, int32]
-	CountryID      db.Col[CityLocationTable, int32]
-	Name           db.Col[CityLocationTable, string]
-	ParentID       db.Col[CityLocationTable, int32]
-	Hierarchy      db.Col[CityLocationTable, int8]
-	Updated        db.Col[CityLocationTable, int32]
-	UpdatedVersion db.Col[CityLocationTable, int32]
+	ID             db.Col[*CityLocationTable, int32]
+	CountryID      db.Col[*CityLocationTable, int32]
+	Name           db.Col[*CityLocationTable, string]
+	ParentID       db.Col[*CityLocationTable, int32]
+	Hierarchy      db.Col[*CityLocationTable, int8]
+	Updated        db.Col[*CityLocationTable, int32]
+	UpdatedVersion db.Col[*CityLocationTable, int32]
 }
 
 func (e CityLocationTable) GetSchema() db.TableSchema {
@@ -61,17 +61,17 @@ type SharedListRecord struct {
 
 type SharedListRecordTable struct {
 	db.TableStruct[SharedListRecordTable, SharedListRecord]
-	CompanyID      db.Col[SharedListRecordTable, int32]
-	ID             db.Col[SharedListRecordTable, int32]
-	ListID         db.Col[SharedListRecordTable, int32]
-	Name           db.Col[SharedListRecordTable, string]
-	Images         db.ColSlice[SharedListRecordTable, string]
-	Description    db.Col[SharedListRecordTable, string]
-	NameHash       db.Col[SharedListRecordTable, int32]
-	Status         db.Col[SharedListRecordTable, int8]
-	Updated        db.Col[SharedListRecordTable, int32]
-	UpdatedVersion db.Col[SharedListRecordTable, int32]
-	UpdatedBy      db.Col[SharedListRecordTable, int32]
+	CompanyID      db.Col[*SharedListRecordTable, int32]
+	ID             db.Col[*SharedListRecordTable, int32]
+	ListID         db.Col[*SharedListRecordTable, int32]
+	Name           db.Col[*SharedListRecordTable, string]
+	Images         db.ColSlice[*SharedListRecordTable, string]
+	Description    db.Col[*SharedListRecordTable, string]
+	NameHash       db.Col[*SharedListRecordTable, int32]
+	Status         db.Col[*SharedListRecordTable, int8]
+	Updated        db.Col[*SharedListRecordTable, int32]
+	UpdatedVersion db.Col[*SharedListRecordTable, int32]
+	UpdatedBy      db.Col[*SharedListRecordTable, int32]
 }
 
 func (e SharedListRecordTable) GetSchema() db.TableSchema {

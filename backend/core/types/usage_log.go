@@ -19,17 +19,17 @@ type UsageLog struct {
 
 type UsageLogTable struct {
 	db.TableStruct[UsageLogTable, UsageLog]
-	CompanyID              db.Col[UsageLogTable, int32]
-	ID                     db.Col[UsageLogTable, int32]
-	GetBandwith            db.Col[UsageLogTable, int32]
-	PostBandwith           db.Col[UsageLogTable, int32]
-	GetCpuTimeUsage        db.Col[UsageLogTable, int32]
-	PostCpuTimeUsage       db.Col[UsageLogTable, int32]
-	DetailUserID           db.Col[UsageLogTable, []int32]
-	DetailGetBandwith      db.Col[UsageLogTable, []int32]
-	DetailPostBandwith     db.Col[UsageLogTable, []int32]
-	DetailGetCpuTimeUsage  db.Col[UsageLogTable, []int32]
-	DetailPostCpuTimeUsage db.Col[UsageLogTable, []int32]
+	CompanyID              db.Col[*UsageLogTable, int32]
+	ID                     db.Col[*UsageLogTable, int32]
+	GetBandwith            db.Col[*UsageLogTable, int32]
+	PostBandwith           db.Col[*UsageLogTable, int32]
+	GetCpuTimeUsage        db.Col[*UsageLogTable, int32]
+	PostCpuTimeUsage       db.Col[*UsageLogTable, int32]
+	DetailUserID           db.Col[*UsageLogTable, []int32]
+	DetailGetBandwith      db.Col[*UsageLogTable, []int32]
+	DetailPostBandwith     db.Col[*UsageLogTable, []int32]
+	DetailGetCpuTimeUsage  db.Col[*UsageLogTable, []int32]
+	DetailPostCpuTimeUsage db.Col[*UsageLogTable, []int32]
 }
 
 func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {

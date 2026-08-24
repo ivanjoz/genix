@@ -14,12 +14,12 @@ type ImageAssetCategory struct {
 
 type ImageAssetCategoryTable struct {
 	db.TableStruct[ImageAssetCategoryTable, ImageAssetCategory]
-	GroupID        db.Col[ImageAssetCategoryTable, int32]
-	ID             db.Col[ImageAssetCategoryTable, int16]
-	Name           db.Col[ImageAssetCategoryTable, string]
-	Updated        db.Col[ImageAssetCategoryTable, int32]
-	UpdatedVersion db.Col[ImageAssetCategoryTable, int32]
-	MaxID          db.Col[ImageAssetCategoryTable, int32]
+	GroupID        db.Col[*ImageAssetCategoryTable, int32]
+	ID             db.Col[*ImageAssetCategoryTable, int16]
+	Name           db.Col[*ImageAssetCategoryTable, string]
+	Updated        db.Col[*ImageAssetCategoryTable, int32]
+	UpdatedVersion db.Col[*ImageAssetCategoryTable, int32]
+	MaxID          db.Col[*ImageAssetCategoryTable, int32]
 }
 
 func (e ImageAssetCategoryTable) GetSchema() db.TableSchema {

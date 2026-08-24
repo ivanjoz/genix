@@ -61,29 +61,29 @@ type InvoiceSummary struct {
 
 type InvoiceSummaryTable struct {
 	db.TableStruct[InvoiceSummaryTable, InvoiceSummary]
-	CompanyID        db.Col[InvoiceSummaryTable, int32]
-	ID               db.Col[InvoiceSummaryTable, int64]
-	Type             db.Col[InvoiceSummaryTable, int8]
-	ReferenceDate    db.Col[InvoiceSummaryTable, int16]
-	IssueDate        db.Col[InvoiceSummaryTable, int16]
-	Sequence         db.Col[InvoiceSummaryTable, int16]
-	XmlName          db.Col[InvoiceSummaryTable, string] `db:"xml_name"`
-	DocumentIDs      db.ColSlice[InvoiceSummaryTable, int64]
-	Ticket           db.Col[InvoiceSummaryTable, string]
-	State            db.Col[InvoiceSummaryTable, int8]
-	SunatCode        db.Col[InvoiceSummaryTable, string]
-	SunatDescription db.Col[InvoiceSummaryTable, string]
-	SunatNotes       db.ColSlice[InvoiceSummaryTable, string]
-	XmlPath          db.Col[InvoiceSummaryTable, string] `db:"xml_path"`
-	CdrPath          db.Col[InvoiceSummaryTable, string] `db:"cdr_path"`
-	RetryCount       db.Col[InvoiceSummaryTable, int8]
-	LastError        db.Col[InvoiceSummaryTable, string]
-	Status           db.Col[InvoiceSummaryTable, int8]
-	Updated          db.Col[InvoiceSummaryTable, int32]
-	UpdatedVersion   db.Col[InvoiceSummaryTable, int32]
-	UpdatedBy        db.Col[InvoiceSummaryTable, int32]
-	Created          db.Col[InvoiceSummaryTable, int32]
-	CreatedBy        db.Col[InvoiceSummaryTable, int32]
+	CompanyID        db.Col[*InvoiceSummaryTable, int32]
+	ID               db.Col[*InvoiceSummaryTable, int64]
+	Type             db.Col[*InvoiceSummaryTable, int8]
+	ReferenceDate    db.Col[*InvoiceSummaryTable, int16]
+	IssueDate        db.Col[*InvoiceSummaryTable, int16]
+	Sequence         db.Col[*InvoiceSummaryTable, int16]
+	XmlName          db.Col[*InvoiceSummaryTable, string] `db:"xml_name"`
+	DocumentIDs      db.ColSlice[*InvoiceSummaryTable, int64]
+	Ticket           db.Col[*InvoiceSummaryTable, string]
+	State            db.Col[*InvoiceSummaryTable, int8]
+	SunatCode        db.Col[*InvoiceSummaryTable, string]
+	SunatDescription db.Col[*InvoiceSummaryTable, string]
+	SunatNotes       db.ColSlice[*InvoiceSummaryTable, string]
+	XmlPath          db.Col[*InvoiceSummaryTable, string] `db:"xml_path"`
+	CdrPath          db.Col[*InvoiceSummaryTable, string] `db:"cdr_path"`
+	RetryCount       db.Col[*InvoiceSummaryTable, int8]
+	LastError        db.Col[*InvoiceSummaryTable, string]
+	Status           db.Col[*InvoiceSummaryTable, int8]
+	Updated          db.Col[*InvoiceSummaryTable, int32]
+	UpdatedVersion   db.Col[*InvoiceSummaryTable, int32]
+	UpdatedBy        db.Col[*InvoiceSummaryTable, int32]
+	Created          db.Col[*InvoiceSummaryTable, int32]
+	CreatedBy        db.Col[*InvoiceSummaryTable, int32]
 }
 
 func (e InvoiceSummaryTable) GetSchema() db.TableSchema {

@@ -24,10 +24,10 @@ type RequestError struct {
 
 type RequestErrorTable struct {
 	db.TableStruct[RequestErrorTable, RequestError]
-	ID       db.Col[RequestErrorTable, int32]
-	CodeLine db.Col[RequestErrorTable, string]
-	Text     db.Col[RequestErrorTable, string]
-	Updated  db.Col[RequestErrorTable, int32]
+	ID       db.Col[*RequestErrorTable, int32]
+	CodeLine db.Col[*RequestErrorTable, string]
+	Text     db.Col[*RequestErrorTable, string]
+	Updated  db.Col[*RequestErrorTable, int32]
 }
 
 func (e RequestErrorTable) GetSchema() db.TableSchema {

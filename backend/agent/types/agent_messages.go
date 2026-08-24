@@ -38,18 +38,18 @@ func (e *AgentMessage) PrepareCloudSync() {
 
 type AgentMessageTable struct {
 	db.TableStruct[AgentMessageTable, AgentMessage]
-	CompanyUserID   db.Col[AgentMessageTable, int64]
-	SessionID       db.Col[AgentMessageTable, int64]
-	Timestamp       db.Col[AgentMessageTable, int64]
-	CompanyID       db.Col[AgentMessageTable, int32]
-	UserID          db.Col[AgentMessageTable, int32]
-	Role            db.Col[AgentMessageTable, int8]
-	Message         db.Col[AgentMessageTable, string]
-	AttachedContent db.Col[AgentMessageTable, string]
-	Summary         db.Col[AgentMessageTable, string]
-	TokensUsed      db.Col[AgentMessageTable, int32]
-	Status          db.Col[AgentMessageTable, int8]
-	Updated         db.Col[AgentMessageTable, int32]
+	CompanyUserID   db.Col[*AgentMessageTable, int64]
+	SessionID       db.Col[*AgentMessageTable, int64]
+	Timestamp       db.Col[*AgentMessageTable, int64]
+	CompanyID       db.Col[*AgentMessageTable, int32]
+	UserID          db.Col[*AgentMessageTable, int32]
+	Role            db.Col[*AgentMessageTable, int8]
+	Message         db.Col[*AgentMessageTable, string]
+	AttachedContent db.Col[*AgentMessageTable, string]
+	Summary         db.Col[*AgentMessageTable, string]
+	TokensUsed      db.Col[*AgentMessageTable, int32]
+	Status          db.Col[*AgentMessageTable, int8]
+	Updated         db.Col[*AgentMessageTable, int32]
 }
 
 func (e AgentMessageTable) GetSchema() db.TableSchema {

@@ -17,6 +17,7 @@ type (
 	TableSchema         = orm.TableSchema
 	Index               = orm.Index
 	Coln                = orm.Coln
+	TableHandle         = orm.TableHandle
 	ColumnStatement     = orm.ColumnStatement
 	TableInfo           = orm.TableInfo
 	GenericRecordSchema = orm.GenericRecordSchema
@@ -31,8 +32,8 @@ type (
 )
 
 type (
-	Col[TableT orm.TableInterface[TableT], ValueT any]     = orm.Col[TableT, ValueT]
-	ColSlice[TableT orm.TableInterface[TableT], ElemT any] = orm.ColSlice[TableT, ElemT]
+	Col[TableT orm.TableHandle, ValueT any]     = orm.Col[TableT, ValueT]
+	ColSlice[TableT orm.TableHandle, ElemT any] = orm.ColSlice[TableT, ElemT]
 	RecordGroup[RecordT any]                               = orm.RecordGroup[RecordT]
 	Executor[TableT any, RecordT any]                      = orm.Executor[TableT, RecordT]
 )

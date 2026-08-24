@@ -15,13 +15,13 @@ type GalleryImage struct {
 
 type GalleryImageTable struct {
 	db.TableStruct[GalleryImageTable, GalleryImage]
-	CompanyID      db.Col[GalleryImageTable, int32]
-	Image          db.Col[GalleryImageTable, string]
-	ImageID        db.Col[GalleryImageTable, int32]
-	Description    db.Col[GalleryImageTable, string]
-	Status         db.Col[GalleryImageTable, int8]
-	Updated        db.Col[GalleryImageTable, int32]
-	UpdatedVersion db.Col[GalleryImageTable, int32]
+	CompanyID      db.Col[*GalleryImageTable, int32]
+	Image          db.Col[*GalleryImageTable, string]
+	ImageID        db.Col[*GalleryImageTable, int32]
+	Description    db.Col[*GalleryImageTable, string]
+	Status         db.Col[*GalleryImageTable, int8]
+	Updated        db.Col[*GalleryImageTable, int32]
+	UpdatedVersion db.Col[*GalleryImageTable, int32]
 }
 
 func (e GalleryImageTable) GetSchema() db.TableSchema {

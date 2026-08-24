@@ -42,18 +42,18 @@ type SignUpRequest struct {
 
 type SignUpRequestTable struct {
 	db.TableStruct[SignUpRequestTable, SignUpRequest]
-	WeekCode  db.Col[SignUpRequestTable, int32]
-	ID        db.Col[SignUpRequestTable, int64]
-	Email     db.Col[SignUpRequestTable, string]
-	Code      db.Col[SignUpRequestTable, string]
-	Attempts  db.Col[SignUpRequestTable, int8]
-	CompanyID db.Col[SignUpRequestTable, int32]
-	UserID    db.Col[SignUpRequestTable, int32]
-	Created   db.Col[SignUpRequestTable, int32]
-	LastSent  db.Col[SignUpRequestTable, int32]
-	Updated   db.Col[SignUpRequestTable, int32]
-	Status    db.Col[SignUpRequestTable, int8]
-	IP        db.Col[SignUpRequestTable, int64]
+	WeekCode  db.Col[*SignUpRequestTable, int32]
+	ID        db.Col[*SignUpRequestTable, int64]
+	Email     db.Col[*SignUpRequestTable, string]
+	Code      db.Col[*SignUpRequestTable, string]
+	Attempts  db.Col[*SignUpRequestTable, int8]
+	CompanyID db.Col[*SignUpRequestTable, int32]
+	UserID    db.Col[*SignUpRequestTable, int32]
+	Created   db.Col[*SignUpRequestTable, int32]
+	LastSent  db.Col[*SignUpRequestTable, int32]
+	Updated   db.Col[*SignUpRequestTable, int32]
+	Status    db.Col[*SignUpRequestTable, int8]
+	IP        db.Col[*SignUpRequestTable, int64]
 }
 
 func (e SignUpRequestTable) GetSchema() db.TableSchema {

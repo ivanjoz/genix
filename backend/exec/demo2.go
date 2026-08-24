@@ -35,16 +35,16 @@ type DemoStruct struct {
 
 type DemoStructTable struct {
 	db.TableStruct[DemoStructTable, DemoStruct]
-	CompanyID   db.Col[DemoStructTable, int32]
-	ID          db.Col[DemoStructTable, int32]
-	ListID      db.Col[DemoStructTable, int32]
-	Name        db.Col[DemoStructTable, string]
-	Images      db.ColSlice[DemoStructTable, string]
-	Description db.Col[DemoStructTable, string]
-	DemoColumn  db.Col[DemoStructTable, InnerStruct]
-	Status      db.Col[DemoStructTable, int8]
-	Updated     db.Col[DemoStructTable, int64]
-	UpdatedBy   db.Col[DemoStructTable, int32]
+	CompanyID   db.Col[*DemoStructTable, int32]
+	ID          db.Col[*DemoStructTable, int32]
+	ListID      db.Col[*DemoStructTable, int32]
+	Name        db.Col[*DemoStructTable, string]
+	Images      db.ColSlice[*DemoStructTable, string]
+	Description db.Col[*DemoStructTable, string]
+	DemoColumn  db.Col[*DemoStructTable, InnerStruct]
+	Status      db.Col[*DemoStructTable, int8]
+	Updated     db.Col[*DemoStructTable, int64]
+	UpdatedBy   db.Col[*DemoStructTable, int32]
 }
 
 func (e DemoStructTable) GetSchema() db.TableSchema {

@@ -376,14 +376,17 @@ func buildTableFieldAST(field Field, tableName string) *ast.Field {
 		elemType = field.TypeName
 	}
 
-	// Build db.Col[TableType, FieldType] or db.ColSlice[TableType, ElementType]
+	// Build db.Col[*TableType, FieldType] or db.ColSlice[*TableType, ElementType].
+	// The table type argument MUST stay a pointer: a pointer collapses to a single gcshape, so
+	// every table shares one stencil per column value type. Emitting a bare identifier here
+	// silently reintroduces a per-table stencil. See genix-orm/BINARY_SIZE_FINDINGS.md §1.
 	fieldType := &ast.IndexListExpr{
 		X: &ast.SelectorExpr{
 			X:   ast.NewIdent("db"),
 			Sel: ast.NewIdent(colType),
 		},
 		Indices: []ast.Expr{
-			ast.NewIdent(tableName + "Table"),
+			&ast.StarExpr{X: ast.NewIdent(tableName + "Table")},
 			ast.NewIdent(elemType),
 		},
 	}

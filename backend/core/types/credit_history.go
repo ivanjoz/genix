@@ -28,16 +28,16 @@ type CreditHistory struct {
 
 type CreditHistoryTable struct {
 	db.TableStruct[CreditHistoryTable, CreditHistory]
-	CompanyID        db.Col[CreditHistoryTable, int32]
-	ID               db.Col[CreditHistoryTable, int64]
-	Day              db.Col[CreditHistoryTable, int16]
-	Created          db.Col[CreditHistoryTable, int32]
-	CreatedBy        db.Col[CreditHistoryTable, int32]
-	Operation        db.Col[CreditHistoryTable, int8]
-	CPUCredits       db.Col[CreditHistoryTable, int64]
-	InferenceCredits db.Col[CreditHistoryTable, int64]
-	CPUCeiling       db.Col[CreditHistoryTable, int64]
-	InferenceCeiling db.Col[CreditHistoryTable, int64]
+	CompanyID        db.Col[*CreditHistoryTable, int32]
+	ID               db.Col[*CreditHistoryTable, int64]
+	Day              db.Col[*CreditHistoryTable, int16]
+	Created          db.Col[*CreditHistoryTable, int32]
+	CreatedBy        db.Col[*CreditHistoryTable, int32]
+	Operation        db.Col[*CreditHistoryTable, int8]
+	CPUCredits       db.Col[*CreditHistoryTable, int64]
+	InferenceCredits db.Col[*CreditHistoryTable, int64]
+	CPUCeiling       db.Col[*CreditHistoryTable, int64]
+	InferenceCeiling db.Col[*CreditHistoryTable, int64]
 }
 
 func (e CreditHistoryTable) GetSchema() db.TableSchema {

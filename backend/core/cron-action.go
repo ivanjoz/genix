@@ -30,18 +30,18 @@ type CronAction struct {
 
 type CronActionTable struct {
 	db.TableStruct[CronActionTable, CronAction]
-	UnixMinutesFrame   db.Col[CronActionTable, int32]
-	CompanyID          db.Col[CronActionTable, int32]
-	ID                 db.Col[CronActionTable, int64]
-	ActionID           db.Col[CronActionTable, int16]
-	Params             db.Col[CronActionTable, ExecArgs]
-	Updated            db.Col[CronActionTable, int32]
-	Status             db.Col[CronActionTable, int8]
-	InvocationCount    db.Col[CronActionTable, int16]
-	FrameLengthMinutes db.Col[CronActionTable, int8]
-	ClaimedAt          db.Col[CronActionTable, int32]
-	ClaimedBy          db.Col[CronActionTable, int32]
-	Messages           db.ColSlice[CronActionTable, string]
+	UnixMinutesFrame   db.Col[*CronActionTable, int32]
+	CompanyID          db.Col[*CronActionTable, int32]
+	ID                 db.Col[*CronActionTable, int64]
+	ActionID           db.Col[*CronActionTable, int16]
+	Params             db.Col[*CronActionTable, ExecArgs]
+	Updated            db.Col[*CronActionTable, int32]
+	Status             db.Col[*CronActionTable, int8]
+	InvocationCount    db.Col[*CronActionTable, int16]
+	FrameLengthMinutes db.Col[*CronActionTable, int8]
+	ClaimedAt          db.Col[*CronActionTable, int32]
+	ClaimedBy          db.Col[*CronActionTable, int32]
+	Messages           db.ColSlice[*CronActionTable, string]
 }
 
 func (cronActionTable CronActionTable) GetSchema() db.TableSchema {

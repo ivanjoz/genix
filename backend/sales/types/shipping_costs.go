@@ -19,15 +19,15 @@ type ShippingCost struct {
 
 type ShippingCostTable struct {
 	db.TableStruct[ShippingCostTable, ShippingCost]
-	CompanyID      db.Col[ShippingCostTable, int32]
-	CityID         db.Col[ShippingCostTable, int32]
-	FlatCost       db.Col[ShippingCostTable, float64]
-	CostPerKg      db.Col[ShippingCostTable, float64]
-	Updated        db.Col[ShippingCostTable, int32]
-	UpdatedVersion db.Col[ShippingCostTable, int32]
-	UpdatedBy      db.Col[ShippingCostTable, int32]
-	Created        db.Col[ShippingCostTable, int32]
-	CreatedBy      db.Col[ShippingCostTable, int32]
+	CompanyID      db.Col[*ShippingCostTable, int32]
+	CityID         db.Col[*ShippingCostTable, int32]
+	FlatCost       db.Col[*ShippingCostTable, float64]
+	CostPerKg      db.Col[*ShippingCostTable, float64]
+	Updated        db.Col[*ShippingCostTable, int32]
+	UpdatedVersion db.Col[*ShippingCostTable, int32]
+	UpdatedBy      db.Col[*ShippingCostTable, int32]
+	Created        db.Col[*ShippingCostTable, int32]
+	CreatedBy      db.Col[*ShippingCostTable, int32]
 }
 
 func (e ShippingCostTable) GetSchema() db.TableSchema {

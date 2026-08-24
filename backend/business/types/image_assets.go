@@ -19,17 +19,17 @@ type ImageAsset struct {
 
 type ImageAssetTable struct {
 	db.TableStruct[ImageAssetTable, ImageAsset]
-	GroupID            db.Col[ImageAssetTable, int32]
-	ID                 db.Col[ImageAssetTable, int32]
-	CategoryID         db.Col[ImageAssetTable, int16]
-	Description        db.Col[ImageAssetTable, string]
-	SpanishDescription db.Col[ImageAssetTable, string]
-	Keywords           db.Col[ImageAssetTable, string]
-	SpanishKeywords    db.ColSlice[ImageAssetTable, string]
-	Bigrams            db.ColSlice[ImageAssetTable, int8]
-	Ratio              db.Col[ImageAssetTable, float32]
-	Updated            db.Col[ImageAssetTable, int32]
-	UpdatedVersion     db.Col[ImageAssetTable, int32]
+	GroupID            db.Col[*ImageAssetTable, int32]
+	ID                 db.Col[*ImageAssetTable, int32]
+	CategoryID         db.Col[*ImageAssetTable, int16]
+	Description        db.Col[*ImageAssetTable, string]
+	SpanishDescription db.Col[*ImageAssetTable, string]
+	Keywords           db.Col[*ImageAssetTable, string]
+	SpanishKeywords    db.ColSlice[*ImageAssetTable, string]
+	Bigrams            db.ColSlice[*ImageAssetTable, int8]
+	Ratio              db.Col[*ImageAssetTable, float32]
+	Updated            db.Col[*ImageAssetTable, int32]
+	UpdatedVersion     db.Col[*ImageAssetTable, int32]
 }
 
 func (e ImageAssetTable) GetSchema() db.TableSchema {

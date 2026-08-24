@@ -34,24 +34,24 @@ type User struct {
 
 type UserTable struct {
 	db.TableStruct[UserTable, User]
-	ID              db.Col[UserTable, int32]
-	CompanyID       db.Col[UserTable, int32]
-	User            db.Col[UserTable, string]
-	LastName        db.Col[UserTable, string]
-	FirstName       db.Col[UserTable, string]
-	ProfileIDs      db.ColSlice[UserTable, int32] `db:"profile_ids"`
-	AccessLevelIDs  db.Col[UserTable, []int32]    `db:"access_level_ids"`
-	AccesosComputed db.Col[UserTable, []uint16]
-	Email           db.Col[UserTable, string]
-	JobTitle        db.Col[UserTable, string]
-	DocumentNumber  db.Col[UserTable, string]
-	PasswordHash    db.Col[UserTable, string]
-	Created         db.Col[UserTable, int32]
-	CreatedBy       db.Col[UserTable, int32]
-	Updated         db.Col[UserTable, int32]
-	UpdatedBy       db.Col[UserTable, int32]
-	Status          db.Col[UserTable, int8]
-	UpdatedVersion  db.Col[UserTable, int32]
+	ID              db.Col[*UserTable, int32]
+	CompanyID       db.Col[*UserTable, int32]
+	User            db.Col[*UserTable, string]
+	LastName        db.Col[*UserTable, string]
+	FirstName       db.Col[*UserTable, string]
+	ProfileIDs      db.ColSlice[*UserTable, int32] `db:"profile_ids"`
+	AccessLevelIDs  db.Col[*UserTable, []int32]    `db:"access_level_ids"`
+	AccesosComputed db.Col[*UserTable, []uint16]
+	Email           db.Col[*UserTable, string]
+	JobTitle        db.Col[*UserTable, string]
+	DocumentNumber  db.Col[*UserTable, string]
+	PasswordHash    db.Col[*UserTable, string]
+	Created         db.Col[*UserTable, int32]
+	CreatedBy       db.Col[*UserTable, int32]
+	Updated         db.Col[*UserTable, int32]
+	UpdatedBy       db.Col[*UserTable, int32]
+	Status          db.Col[*UserTable, int8]
+	UpdatedVersion  db.Col[*UserTable, int32]
 }
 
 func (usuarioTable UserTable) GetSchema() db.TableSchema {

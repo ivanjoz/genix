@@ -18,14 +18,14 @@ type Profile struct {
 
 type ProfileTable struct {
 	db.TableStruct[ProfileTable, Profile]
-	ID          db.Col[ProfileTable, int32]
-	CompanyID   db.Col[ProfileTable, int32]
-	Name        db.Col[ProfileTable, string]
-	Description db.Col[ProfileTable, string]
-	Modules     db.ColSlice[ProfileTable, int16] `db:"modulos_ids"`
-	Accesos     db.ColSlice[ProfileTable, int32] `db:"accesos"`
-	Status      db.Col[ProfileTable, int8]
-	Updated     db.Col[ProfileTable, int32]
+	ID          db.Col[*ProfileTable, int32]
+	CompanyID   db.Col[*ProfileTable, int32]
+	Name        db.Col[*ProfileTable, string]
+	Description db.Col[*ProfileTable, string]
+	Modules     db.ColSlice[*ProfileTable, int16] `db:"modulos_ids"`
+	Accesos     db.ColSlice[*ProfileTable, int32] `db:"accesos"`
+	Status      db.Col[*ProfileTable, int8]
+	Updated     db.Col[*ProfileTable, int32]
 }
 
 func (e ProfileTable) GetSchema() db.TableSchema {

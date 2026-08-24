@@ -23,14 +23,14 @@ type ProductSupply struct {
 
 type ProductSupplyTable struct {
 	db.TableStruct[ProductSupplyTable, ProductSupply]
-	CompanyID            db.Col[ProductSupplyTable, int32]
-	ProductID            db.Col[ProductSupplyTable, int32]
-	MinimunStock         db.Col[ProductSupplyTable, int32]
-	SalesPerDayEstimated db.Col[ProductSupplyTable, int32]
-	ProviderSupply       db.Col[ProductSupplyTable, []ProductSupplyProviderRow]
-	Status               db.Col[ProductSupplyTable, int8]
-	Updated              db.Col[ProductSupplyTable, int32]
-	UpdatedBy            db.Col[ProductSupplyTable, int32]
+	CompanyID            db.Col[*ProductSupplyTable, int32]
+	ProductID            db.Col[*ProductSupplyTable, int32]
+	MinimunStock         db.Col[*ProductSupplyTable, int32]
+	SalesPerDayEstimated db.Col[*ProductSupplyTable, int32]
+	ProviderSupply       db.Col[*ProductSupplyTable, []ProductSupplyProviderRow]
+	Status               db.Col[*ProductSupplyTable, int8]
+	Updated              db.Col[*ProductSupplyTable, int32]
+	UpdatedBy            db.Col[*ProductSupplyTable, int32]
 }
 
 func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {

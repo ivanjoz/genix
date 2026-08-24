@@ -22,9 +22,9 @@ type CreditUsageCompany struct {
 
 type CreditUsageCompanyTable struct {
 	db.TableStruct[CreditUsageCompanyTable, CreditUsageCompany]
-	CompanyID   db.Col[CreditUsageCompanyTable, int32]
-	TimeFrame   db.Col[CreditUsageCompanyTable, int32]
-	UsedCredits db.Col[CreditUsageCompanyTable, []byte]
+	CompanyID   db.Col[*CreditUsageCompanyTable, int32]
+	TimeFrame   db.Col[*CreditUsageCompanyTable, int32]
+	UsedCredits db.Col[*CreditUsageCompanyTable, []byte]
 }
 
 func (e CreditUsageCompanyTable) GetSchema() db.TableSchema {
@@ -61,10 +61,10 @@ type CreditUsageUser struct {
 
 type CreditUsageUserTable struct {
 	db.TableStruct[CreditUsageUserTable, CreditUsageUser]
-	CompanyID   db.Col[CreditUsageUserTable, int32]
-	UserID      db.Col[CreditUsageUserTable, int32]
-	TimeFrame   db.Col[CreditUsageUserTable, int32]
-	UsedCredits db.Col[CreditUsageUserTable, []byte]
+	CompanyID   db.Col[*CreditUsageUserTable, int32]
+	UserID      db.Col[*CreditUsageUserTable, int32]
+	TimeFrame   db.Col[*CreditUsageUserTable, int32]
+	UsedCredits db.Col[*CreditUsageUserTable, []byte]
 }
 
 func (e CreditUsageUserTable) GetSchema() db.TableSchema {

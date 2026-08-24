@@ -118,16 +118,16 @@ type EcommercePageContent struct {
 
 type EcommercePageContentTable struct {
 	db.TableStruct[EcommercePageContentTable, EcommercePageContent]
-	CompanyID db.Col[EcommercePageContentTable, int32]
-	PageID    db.Col[EcommercePageContentTable, int16]
-	SectionID db.Col[EcommercePageContentTable, int16]
-	Route     db.Col[EcommercePageContentTable, string]
-	Content   db.Col[EcommercePageContentTable, SectionContent]
-	Css       db.Col[EcommercePageContentTable, string]
-	Hash      db.Col[EcommercePageContentTable, int64]
-	Status    db.Col[EcommercePageContentTable, int8]
-	Updated   db.Col[EcommercePageContentTable, int32]
-	UpdatedBy db.Col[EcommercePageContentTable, int32]
+	CompanyID db.Col[*EcommercePageContentTable, int32]
+	PageID    db.Col[*EcommercePageContentTable, int16]
+	SectionID db.Col[*EcommercePageContentTable, int16]
+	Route     db.Col[*EcommercePageContentTable, string]
+	Content   db.Col[*EcommercePageContentTable, SectionContent]
+	Css       db.Col[*EcommercePageContentTable, string]
+	Hash      db.Col[*EcommercePageContentTable, int64]
+	Status    db.Col[*EcommercePageContentTable, int8]
+	Updated   db.Col[*EcommercePageContentTable, int32]
+	UpdatedBy db.Col[*EcommercePageContentTable, int32]
 }
 
 func (e EcommercePageContentTable) GetSchema() db.TableSchema {

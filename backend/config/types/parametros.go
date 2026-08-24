@@ -17,15 +17,15 @@ type Parameters struct {
 
 type ParametersTable struct {
 	db.TableStruct[ParametersTable, Parameters]
-	CompanyID db.Col[ParametersTable, int32]
-	Group     db.Col[ParametersTable, int32]
-	Key       db.Col[ParametersTable, string]
-	Value     db.Col[ParametersTable, string]
-	ValueInt  db.Col[ParametersTable, int32]
-	Values    db.ColSlice[ParametersTable, int32]
-	Status    db.Col[ParametersTable, int8]
-	Updated   db.Col[ParametersTable, int32]
-	UpdatedBy db.Col[ParametersTable, int32]
+	CompanyID db.Col[*ParametersTable, int32]
+	Group     db.Col[*ParametersTable, int32]
+	Key       db.Col[*ParametersTable, string]
+	Value     db.Col[*ParametersTable, string]
+	ValueInt  db.Col[*ParametersTable, int32]
+	Values    db.ColSlice[*ParametersTable, int32]
+	Status    db.Col[*ParametersTable, int8]
+	Updated   db.Col[*ParametersTable, int32]
+	UpdatedBy db.Col[*ParametersTable, int32]
 }
 
 func (e ParametersTable) GetSchema() db.TableSchema {

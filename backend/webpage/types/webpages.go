@@ -25,15 +25,15 @@ type Webpage struct {
 
 type WebpageTable struct {
 	db.TableStruct[WebpageTable, Webpage]
-	CompanyID      db.Col[WebpageTable, int32]
-	ID             db.Col[WebpageTable, int16]
-	Name           db.Col[WebpageTable, string]
-	Route          db.Col[WebpageTable, string]
-	Image          db.Col[WebpageTable, int32]
-	Status         db.Col[WebpageTable, int8]
-	Updated        db.Col[WebpageTable, int32]
-	UpdatedVersion db.Col[WebpageTable, int32]
-	UpdatedBy      db.Col[WebpageTable, int32]
+	CompanyID      db.Col[*WebpageTable, int32]
+	ID             db.Col[*WebpageTable, int16]
+	Name           db.Col[*WebpageTable, string]
+	Route          db.Col[*WebpageTable, string]
+	Image          db.Col[*WebpageTable, int32]
+	Status         db.Col[*WebpageTable, int8]
+	Updated        db.Col[*WebpageTable, int32]
+	UpdatedVersion db.Col[*WebpageTable, int32]
+	UpdatedBy      db.Col[*WebpageTable, int32]
 }
 
 func (e WebpageTable) GetSchema() db.TableSchema {

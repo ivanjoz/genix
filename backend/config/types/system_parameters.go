@@ -16,14 +16,14 @@ type SystemParameters struct {
 
 type SystemParametersTable struct {
 	db.TableStruct[SystemParametersTable, SystemParameters]
-	CompanyID      db.Col[SystemParametersTable, int32]
-	ID             db.Col[SystemParametersTable, int32]
-	ValueText      db.Col[SystemParametersTable, string]
-	ValueInts      db.ColSlice[SystemParametersTable, int32]
-	Value          db.Col[SystemParametersTable, int32]
-	Updated        db.Col[SystemParametersTable, int32]
-	UpdatedVersion db.Col[SystemParametersTable, int32]
-	UpdatedBy      db.Col[SystemParametersTable, int32]
+	CompanyID      db.Col[*SystemParametersTable, int32]
+	ID             db.Col[*SystemParametersTable, int32]
+	ValueText      db.Col[*SystemParametersTable, string]
+	ValueInts      db.ColSlice[*SystemParametersTable, int32]
+	Value          db.Col[*SystemParametersTable, int32]
+	Updated        db.Col[*SystemParametersTable, int32]
+	UpdatedVersion db.Col[*SystemParametersTable, int32]
+	UpdatedBy      db.Col[*SystemParametersTable, int32]
 }
 
 func (e SystemParametersTable) GetSchema() db.TableSchema {

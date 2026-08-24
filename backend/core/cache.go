@@ -20,12 +20,12 @@ type Cache struct {
 
 type CacheTable struct {
 	db.TableStruct[CacheTable, Cache]
-	CompanyID    db.Col[CacheTable, int32]
-	ID           db.Col[CacheTable, int32]
-	Key          db.Col[CacheTable, string]
-	ContentBytes db.Col[CacheTable, []byte]
-	Content      db.Col[CacheTable, string]
-	Updated      db.Col[CacheTable, int32]
+	CompanyID    db.Col[*CacheTable, int32]
+	ID           db.Col[*CacheTable, int32]
+	Key          db.Col[*CacheTable, string]
+	ContentBytes db.Col[*CacheTable, []byte]
+	Content      db.Col[*CacheTable, string]
+	Updated      db.Col[*CacheTable, int32]
 }
 
 func (e CacheTable) GetSchema() db.TableSchema {
@@ -212,10 +212,10 @@ type GlobalCache struct {
 
 type GlobalCacheTable struct {
 	db.TableStruct[GlobalCacheTable, GlobalCache]
-	GroupID db.Col[GlobalCacheTable, int16]
-	ID      db.Col[GlobalCacheTable, int32]
-	Content db.Col[GlobalCacheTable, []byte]
-	Updated db.Col[GlobalCacheTable, int32]
+	GroupID db.Col[*GlobalCacheTable, int16]
+	ID      db.Col[*GlobalCacheTable, int32]
+	Content db.Col[*GlobalCacheTable, []byte]
+	Updated db.Col[*GlobalCacheTable, int32]
 }
 
 func (e GlobalCacheTable) GetSchema() db.TableSchema {
