@@ -14,8 +14,8 @@ import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import FilterInput from '$components/form/FilterInput.svelte'
 import Button from '$components/buttons/Button.svelte'
 import { onDestroy, onMount, untrack } from 'svelte'
-import { ClientProviderService, ClientProviderType } from '../../business/customers/customers.svelte'
-import { ProductsService } from '../../business/products/products.svelte'
+import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
+import { ProductsService } from '$services/production/products.svelte'
 import {
   AlmacenMovimientosGroupedService,
   createEmptyProviderSupplyRow,

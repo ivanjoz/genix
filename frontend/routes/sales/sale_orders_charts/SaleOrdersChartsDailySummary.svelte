@@ -3,7 +3,7 @@
   import VirtualCards from '$components/misc/VirtualCards.svelte'
   import { DateHelper } from '@genix/ui/utilities'
   import { formatN, formatTime } from '$libs/helpers'
-  import type { IProduct } from '$routes/business/products/products.svelte'
+  import type { IProduct } from '$services/production/products.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
   // Money only, and no metric selector. A quantity mode here summed across every product in

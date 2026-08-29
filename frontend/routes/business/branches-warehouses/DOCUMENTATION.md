@@ -334,7 +334,7 @@ files:
     role: backend-handler
     hash: sha256:2672bd44b6ca86e692c601c6c7389de2bc72eef25ccfa584c7b75233e5786a83
     supports: [capability.manage-branches, capability.manage-warehouses]
-  - path: backend/business/types/productos.go
+  - path: backend/production/types/product.go
     role: data-model
     hash: sha256:ef0c9c9510bfa7e46e54f5d803ac4365a2bcfe30e7cf1ba22abcf191d08b3fb6
     supports: [concepts, capability.manage-branches, capability.manage-warehouses, capability.warehouse-layout, rules]

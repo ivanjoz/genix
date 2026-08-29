@@ -5,7 +5,8 @@
   import Button from '$components/buttons/Button.svelte';
   import { Loading, Notify } from '$libs/helpers';
   import { tr } from '$core/store.svelte';
-  import { WarehousesService, CountryCitiesService } from '../business/branches-warehouses/branches-warehouses.svelte';
+  import { CountryCitiesService } from '$services/business/country-cities.svelte';
+  import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte';
   import { initialDataDefaults, postInitialData } from './initial-data.svelte';
 
   interface Props {

@@ -2,10 +2,10 @@ package accounting
 
 import (
 	"app/accounting/types"
-	business "app/business/types"
 	"app/core"
 	"app/db"
 	logistics "app/logistics/types"
+	production "app/production/types"
 	"encoding/json"
 )
 
@@ -70,7 +70,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 1. The catalog row has to exist, be a supply, and be depreciable — an asset that does
 	//    not depreciate is just stock, and belongs in an inventory expense instead.
-	supplyProducts := []business.Product{}
+	supplyProducts := []production.Product{}
 	supplyQuery := db.Query(&supplyProducts)
 	supplyQuery.Select(
 		supplyQuery.ID, supplyQuery.Name, supplyQuery.DepreciationMonths, supplyQuery.Status,
@@ -83,7 +83,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se encontró el insumo indicado.")
 	}
 	supplyProduct := supplyProducts[0]
-	if supplyProduct.Status != business.ProductStatusSupply {
+	if supplyProduct.Status != production.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
 

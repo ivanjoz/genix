@@ -2,7 +2,7 @@
 	import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 	import Page from '$domain/Page.svelte';
 	import T from '$components/misc/T.svelte';
-	import { ProductsService } from '$routes/business/products/products.svelte';
+	import { ProductsService } from '$services/production/products.svelte';
 	import SaleOrdersChartsDailySummary from './SaleOrdersChartsDailySummary.svelte';
 	import SaleOrdersChartsByProduct from './SaleOrdersChartsByProduct.svelte';
 	import { SaleOrdersChartsService } from './sale_orders_charts.svelte';

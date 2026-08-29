@@ -2,6 +2,11 @@ package types
 
 import "app/db"
 
+// ImageConfigDigitFull is the last digit of an imageID for the standard product upload
+// (base x6 + x4 + x2). Exported because the id counter lives in `business` while the product
+// uploader lives in `production`, and both encode the same digit.
+const ImageConfigDigitFull = 7
+
 type ImageAsset struct {
 	db.TableStruct[ImageAssetTable, ImageAsset]
 	GroupID            int32    `json:"-"`

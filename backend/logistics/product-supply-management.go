@@ -1,12 +1,10 @@
 package logistics
 
 import (
-	business "app/business/types"
 	"app/core"
 	"app/db"
 	"app/logistics/types"
 	"encoding/json"
-	"slices"
 )
 
 func GetProductSupply(req *core.HandlerArgs) core.HandlerResponse {
@@ -32,7 +30,7 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body.", deserializeError)
 	}
 
-	productSupplyRecord.ProviderSupply = sanitizeProviderSupplyRows(productSupplyRecord.ProviderSupply)
+	productSupplyRecord.ProviderSupply = types.SanitizeProviderSupplyRows(productSupplyRecord.ProviderSupply)
 
 	if productSupplyRecord.ProductID <= 0 {
 		return req.MakeErr("Debe enviar un ProductID válido.")
@@ -44,7 +42,7 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Las ventas por día estimadas no pueden ser negativas.")
 	}
 
-	if validationError := validateProviderSupplyRows(req, productSupplyRecord.ProviderSupply); validationError != nil {
+	if validationError := types.ValidateProviderSupplyRows(req.User.CompanyID, productSupplyRecord.ProviderSupply); validationError != nil {
 		return req.MakeErr(validationError)
 	}
 
@@ -79,71 +77,6 @@ func PostProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Log("PostProductSupply saved:", "product_id=", productSupplyRecord.ProductID, "provider_count=", len(productSupplyRecord.ProviderSupply))
 	return req.MakeResponse(productSupplyRecords[0])
-}
-
-func sanitizeProviderSupplyRows(providerSupplyRows []types.ProductSupplyProviderRow) []types.ProductSupplyProviderRow {
-	sanitizedProviderSupplyRows := make([]types.ProductSupplyProviderRow, 0, len(providerSupplyRows))
-
-	for _, providerSupplyRow := range providerSupplyRows {
-		if providerSupplyRow.ProviderID <= 0 && providerSupplyRow.Capacity == 0 && providerSupplyRow.DeliveryTime == 0 && providerSupplyRow.Price == 0 {
-			continue
-		}
-		sanitizedProviderSupplyRows = append(sanitizedProviderSupplyRows, providerSupplyRow)
-	}
-
-	return sanitizedProviderSupplyRows
-}
-
-func validateProviderSupplyRows(req *core.HandlerArgs, providerSupplyRows []types.ProductSupplyProviderRow) error {
-	if len(providerSupplyRows) == 0 {
-		return nil
-	}
-
-	providerIDs := make([]int32, 0, len(providerSupplyRows))
-	for _, providerSupplyRow := range providerSupplyRows {
-		if providerSupplyRow.ProviderID <= 0 {
-			return core.Err("Cada fila de proveedor debe tener un proveedor válido.")
-		}
-		if providerSupplyRow.Capacity < 0 {
-			return core.Err("La capacidad no puede ser negativa.")
-		}
-		if providerSupplyRow.DeliveryTime < 0 {
-			return core.Err("El tiempo de entrega no puede ser negativo.")
-		}
-		if providerSupplyRow.Price < 0 {
-			return core.Err("El precio no puede ser negativo.")
-		}
-		if slices.Contains(providerIDs, providerSupplyRow.ProviderID) {
-			return core.Err("No se puede repetir el mismo proveedor en un product.")
-		}
-		providerIDs = append(providerIDs, providerSupplyRow.ProviderID)
-	}
-
-	providers := []business.ClientProvider{}
-	providerQuery := db.Query(&providers)
-	providerTable := db.TableOf[business.ClientProvider]()
-	providerQuery.Select(providerTable.ID, providerTable.Type, providerTable.Status).
-		CompanyID.Equals(req.User.CompanyID).
-		ID.In(providerIDs...)
-
-	if queryError := providerQuery.Exec(); queryError != nil {
-		return core.Err("Error al validar los proveedores.", queryError)
-	}
-
-	if len(providers) != len(providerIDs) {
-		return core.Err("Uno o más proveedores no existen.")
-	}
-
-	for _, providerRecord := range providers {
-		if providerRecord.Status <= 0 {
-			return core.Err("Uno o más proveedores están inactivos.")
-		}
-		if providerRecord.Type != business.ClientProviderTypeProvider {
-			return core.Err("Uno o más registros seleccionados no son proveedores.")
-		}
-	}
-
-	return nil
 }
 
 /* GET: WAREHOUSE MOVIMIENTOS GROUPED */

@@ -1,16 +1,16 @@
 package invoicing
 
 import (
-	business "app/business/types"
 	"app/core"
+	production "app/production/types"
 	sales "app/sales/types"
 	"testing"
 
 	"github.com/ivanjoz/facturago/model"
 )
 
-func candyBoxProducts() map[int32]business.Product {
-	return map[int32]business.Product{
+func candyBoxProducts() map[int32]production.Product {
+	return map[int32]production.Product{
 		101: {ID: 101, Name: "CAJA DE CARAMELOS", SbuUnit: "unidad"},
 	}
 }

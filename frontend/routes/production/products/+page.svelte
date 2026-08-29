@@ -31,7 +31,7 @@ import {
     mainProductImage,
     type IProduct,
     type IProductoImage
-} from "./products.svelte";
+} from "$services/production/products.svelte";
     import TableGrid from '$components/vTable/TableGrid.svelte';
 
   let filterText = $state("");

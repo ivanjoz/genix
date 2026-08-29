@@ -113,8 +113,8 @@ Operational scripts run through the dispatcher: `cd scripts && go run . <script_
 ## 7. REPOSITORY MAP
 
 ```
-backend/          Go API. Domain packages: sales, logistics, finance, invoicing,
-                  business, security, agent, webpage. core/ = shared helpers,
+backend/          Go API. Domain packages: sales, production, crm, logistics, finance,
+                  invoicing, business, security, agent, webpage. core/ = shared helpers,
                   db/ = the ONLY ORM entry point, exec/ = entrypoints, tests/, docs/
 backend/genix-orm/     git submodule (github.com/ivanjoz/genix-orm) — separate repo
 backend/facturago/     git submodule (github.com/ivanjoz/facturago) — separate repo,

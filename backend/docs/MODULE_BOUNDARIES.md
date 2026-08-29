@@ -17,7 +17,7 @@ Imports flow one way. A package may import its own layer and anything below it.
 | **L1 Core** | `core`, `core/types`, `core/server_utils` | L0 |
 | **L2 Contracts** | `<module>/types` | L0, L1, other `<module>/types` — **and nothing else, ever** |
 | **L3 Infra** | `cloud` | L0–L2 |
-| **L4 Module bodies** | `accounting`, `agent`, `business`, `config`, `finance`, `invoicing`, `logistics`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |
+| **L4 Module bodies** | `accounting`, `agent`, `business`, `config`, `crm`, `finance`, `invoicing`, `logistics`, `production`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |
 | **L5 Composition roots** | root `main`, `exec`, `tests/*`, `scripts` | anything |
 
 A module's own subpackages (`agent/llm`, `agent/pagebuilder`) are internal to it and may be
@@ -39,7 +39,8 @@ Some `*/types` packages hold real logic, not just declarations:
 | --- | --- | --- |
 | `finance/types/cash_movement_apply.go` | `ApplyCashBankMovement`, `GetCaja` — the cash ledger writer | `sales`, `logistics`, `accounting`, `finance` |
 | `logistics/types/stock_movement_apply.go` | `ApplyMovimientos`, `RecalcProductStockByMovements` — the stock engine | `sales`, `accounting`, `logistics`, `exec` |
-| `business/types/client_provider_save.go` | `SaveClientProviders` | `sales`, `business` |
+| `crm/types/client_provider_save.go` | `SaveClientProviders` | `sales`, `crm` |
+| `logistics/types/product_supply_providers.go` | `SanitizeProviderSupplyRows`, `ValidateProviderSupplyRows` | `logistics`, `production` |
 | `business/types/image_assets_agent.go` | `FindImageCandidates` | `agent/pagebuilder` |
 
 The folder name undersells these. Each carries a file-level comment saying why it lives there,
@@ -52,7 +53,8 @@ Every `<module>/types` folder declares `package types`, so every import needs a 
 
 - **Outside the owning module** — alias to the module name:
   `finance "app/finance/types"` → `finance.CashBank`, `logistics.ApplyMovimientos(...)`.
-  The call site names the domain, not the plumbing.
+  The call site names the domain, not the plumbing. A file that needs two of them takes two
+  aliases — `production.Product` next to `crm.ClientProvider` in `sales/sale_order_create.go`.
 - **Inside the owning module** — no alias, use the package name:
   `import "app/finance/types"` → `types.CashBank`.
 

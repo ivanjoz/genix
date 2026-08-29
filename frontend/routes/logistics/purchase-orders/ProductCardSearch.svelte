@@ -1,6 +1,6 @@
 <script lang="ts" module>
-import type { ProductsService, IProduct, IProductPresentation } from '$routes/business/products/products.svelte'
-import type { ClientProviderService } from '$routes/business/customers/customers.svelte'
+import type { ProductsService, IProduct, IProductPresentation } from '$services/production/products.svelte'
+import type { ClientProviderService } from '$services/crm/client-provider.svelte'
 
 export interface IProductCard {
   key: string
@@ -44,7 +44,7 @@ export interface ProductCardSearchProps {
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import VirtualCards from '$components/misc/VirtualCards.svelte'
 import { formatN, wordInclude } from '$libs/helpers'
-    import { ProductSupplyService } from '../purchase-management/supply-management.svelte';
+    import { ProductSupplyService } from '$routes/logistics/purchase-management/supply-management.svelte';
 
   let {
     productosService,

@@ -248,7 +248,7 @@ files:
     role: user-interface
     hash: sha256:66e23ca883a86fa735ccf8c627adb2e0051dbd3e8e804045e0bfa79301a201cc
     supports: [capability.daily-summary, troubleshooting]
-  - path: frontend/routes/business/products/products.svelte.ts
+  - path: frontend/services/production/products.svelte.ts
     role: shared-domain
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
     supports: [concepts, capability.by-product, troubleshooting]

@@ -1,14 +1,16 @@
 package sample_records
 
 import (
-	"app/business"
 	businessTypes "app/business/types"
 	"app/core"
 	coreTypes "app/core/types"
+	"app/crm"
+	crmTypes "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
+	production "app/production/types"
 	"app/sales"
 	salesTypes "app/sales/types"
 	_ "embed"
@@ -273,18 +275,18 @@ func (generator *saleOrderGenerator) seedClientsFromJSON() error {
 		return core.Err("el JSON de clientes sample debe contener exactamente 50 registros")
 	}
 
-	clientPayload := make([]businessTypes.ClientProvider, 0, len(clientSeeds))
+	clientPayload := make([]crmTypes.ClientProvider, 0, len(clientSeeds))
 	for seedIndex, clientSeed := range clientSeeds {
 		if strings.TrimSpace(clientSeed.Name) == "" {
 			return core.Err("el cliente sample en posición", seedIndex, "no tiene Name")
 		}
-		if clientSeed.PersonType != businessTypes.PersonTypeNatural && clientSeed.PersonType != businessTypes.PersonTypeCompany {
+		if clientSeed.PersonType != crmTypes.PersonTypeNatural && clientSeed.PersonType != crmTypes.PersonTypeCompany {
 			return core.Err("el cliente sample en posición", seedIndex, "tiene PersonType inválido")
 		}
 
 		// Keep the JSON as the source of truth so sample seeds can mix clients with and without registry numbers.
-		clientPayload = append(clientPayload, businessTypes.ClientProvider{
-			Type:           businessTypes.ClientProviderTypeClient,
+		clientPayload = append(clientPayload, crmTypes.ClientProvider{
+			Type:           crmTypes.ClientProviderTypeClient,
 			Name:           clientSeed.Name,
 			PersonType:     clientSeed.PersonType,
 			RegistryNumber: strings.TrimSpace(clientSeed.RegistryNumber),
@@ -297,7 +299,7 @@ func (generator *saleOrderGenerator) seedClientsFromJSON() error {
 	}
 
 	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes))
-	response := business.PostClientProviders(&request)
+	response := crm.PostClientProviders(&request)
 	if response.StatusCode != 200 {
 		return core.Err(response.Error)
 	}
@@ -309,18 +311,18 @@ func (generator *saleOrderGenerator) seedClientsFromJSON() error {
 // loadAvailableClients fetches active clients after POST so generated sales use persisted IDs instead of payload-local assumptions.
 func (generator *saleOrderGenerator) loadAvailableClients() error {
 	query := map[string]string{
-		"type":    strconv.Itoa(int(businessTypes.ClientProviderTypeClient)),
+		"type":    strconv.Itoa(int(crmTypes.ClientProviderTypeClient)),
 		"updated": "0",
 	}
 	request := generator.makeRequest("GET.client-provider", query, "")
-	clientProviders := []businessTypes.ClientProvider{}
-	if err := decodeResponse(business.GetClientProviders(&request), &clientProviders); err != nil {
+	clientProviders := []crmTypes.ClientProvider{}
+	if err := decodeResponse(crm.GetClientProviders(&request), &clientProviders); err != nil {
 		return err
 	}
 
 	generator.availableClientIDs = generator.availableClientIDs[:0]
 	for _, clientProvider := range clientProviders {
-		if clientProvider.Type != businessTypes.ClientProviderTypeClient || clientProvider.Status == 0 || clientProvider.ID <= 0 {
+		if clientProvider.Type != crmTypes.ClientProviderTypeClient || clientProvider.Status == 0 || clientProvider.ID <= 0 {
 			continue
 		}
 		generator.availableClientIDs = append(generator.availableClientIDs, clientProvider.ID)
@@ -370,7 +372,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 		return slices.Clone(selectedProductIDs[:selectedProductsCount]), nil
 	}
 
-	products := []businessTypes.Product{}
+	products := []production.Product{}
 	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Status).
 		CompanyID.Equals(sampleCompanyID).
@@ -401,7 +403,7 @@ func (generator *saleOrderGenerator) selectProducts(stocks []logisticsTypes.Prod
 
 // loadProductCatalog resolves names and prices once so every generated line uses the persisted product price.
 func (generator *saleOrderGenerator) loadProductCatalog() error {
-	products := []businessTypes.Product{}
+	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.Price, query.FinalPrice, query.Status).
 		CompanyID.Equals(sampleCompanyID).

@@ -11,8 +11,6 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.product-stock-lots-by-ids":   GetProductStockLotsByIDs,
 	"GET.product-supply":              GetProductSupply,
 	"POST.product-supply":             PostProductSupply,
-	"GET.supply-material":             GetSupplyMaterials,
-	"POST.supply-material":            PostSupplyMaterial,
 	"GET.purchase-orders":             GetPurchaseOrders,
 	"GET.purchase-orders-query":       GetPurchaseOrdersQuery,
 	"POST.purchase-orders":            PostPurchaseOrder,

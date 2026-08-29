@@ -16,7 +16,7 @@ import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
 import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
-import { ProductsService } from '../../business/products/products.svelte';
+import { ProductsService } from '$services/production/products.svelte';
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte';
 import {
     getWarehouseProductStock,

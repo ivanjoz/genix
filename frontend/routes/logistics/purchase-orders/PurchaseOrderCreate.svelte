@@ -10,15 +10,15 @@ import { tr } from '$core/store.svelte'
 import T from '$components/misc/T.svelte'
 import { POST } from '$libs/ui-runtime.svelte'
 import { ProductStockSimpleService } from '$routes/logistics/products-stock/stock-movement'
-import { ClientProviderService, ClientProviderType } from '$routes/business/customers/customers.svelte'
-import type { IProduct, IProductPresentation } from '$routes/business/products/products.svelte'
-import { ProductsService } from '$routes/business/products/products.svelte'
+import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
+import type { IProduct, IProductPresentation } from '$services/production/products.svelte'
+import { ProductsService } from '$services/production/products.svelte'
 import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
 import { clearRouteRecordQueryParam, loadRouteRecordFromQueryParam } from '@genix/ui/cache'
 import { onMount, untrack } from 'svelte'
 import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
-    import { ProductSupplyService } from '../purchase-management/supply-management.svelte';
+    import { ProductSupplyService } from '$routes/logistics/purchase-management/supply-management.svelte';
 import type { IPurchaseOrder } from './purchase_order.svelte';
 
 // Line item shown in the cart; keyed by productID+presentationID composite.

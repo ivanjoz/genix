@@ -1,7 +1,7 @@
 ---
 schema: 1
 page_id: business.customers
-route: /business/customers
+route: /crm/customers
 title: Customers (Clientes)
 status: implemented
 visibility: tenant
@@ -29,7 +29,7 @@ This page does not manage sales, invoices, or debt for a customer; it only owns 
 identity data. Choosing a customer for a transaction happens on the **Sales Order (Orden de
 Venta)** creation screen and related sales pages, which read this same customer list. This page
 also shares its entire form and table implementation with **Suppliers (Proveedores)**
-(`/business/suppliers`) — both routes render the identical `CustomersView`/`ClientesProveedoresView`
+(`/logistics/suppliers`) — both routes render the identical `CustomersView`/`ClientesProveedoresView`
 component and save through the same backend record type, distinguished only by a fixed `Type`
 value (1 = cliente, 2 = proveedor) that each route passes in.
 
@@ -52,7 +52,7 @@ value (1 = cliente, 2 = proveedor) that each route passes in.
 <!-- DOC-ID: capability.browse -->
 ## Find a customer (Buscar un cliente)
 
-Open **Business (Negocio) → Customers (Clientes)** at `/business/customers`. The table lists
+Open **Clients CRM (Clientes CRM) → Customers (Clientes)** at `/crm/customers`. The table lists
 every active customer (`ss > 0`) with ID, Name, Person Type, Registry/RUC, Email, Location
 (province and district), and the last-updated date/time. Use the search box (placeholder "Search
 by name, email or registry|Buscar por nombre, email o registro") to filter locally against the
@@ -69,7 +69,7 @@ person type, registry number, email, or location.
 
 ### Where to find it (Dónde encontrarlo)
 
-On `/business/customers`, use the green **New|Nuevo** button to open the side layer for a new
+On `/crm/customers`, use the green **New|Nuevo** button to open the side layer for a new
 customer, or click an existing row to open the same layer pre-filled for editing. Save with the
 layer's Save action; the layer title switches between "New Client|Nuevo Cliente" and "Edit
 Client|Editar Cliente" depending on whether a record is selected.
@@ -177,7 +177,7 @@ those original creation fields.
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **Suppliers (Proveedores)** at `/business/suppliers`: the same form and table, fixed to
+- **Suppliers (Proveedores)** at `/logistics/suppliers`: the same form and table, fixed to
   `Type = Proveedor` instead of `Type = Cliente`; use it to manage vendors instead of buyers.
 - **Sales Order creation (Orden de Venta)** under Sales/Commercial reads this same customer list
   (`ClientProviderService` with `Type = Cliente`) to let a user pick or search a customer by name
@@ -197,19 +197,19 @@ files:
     role: user-interface
     hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
     supports: [page-purpose, related-pages]
-  - path: frontend/routes/business/customers/+page.svelte
+  - path: frontend/routes/crm/customers/+page.svelte
     role: page
     hash: sha256:419beda428b9235c11d648b2f28850f80de9144fe7f331f49bf91d84deb2c0cc
     supports: [page-purpose, concepts]
-  - path: frontend/routes/business/customers/CustomersView.svelte
+  - path: frontend/domain-components/ClientProviderMaintainer.svelte
     role: user-interface
     hash: sha256:bf3182c34a440abdc24136d753a4c779c9bf6a732e6933ffeb063db13b30d351
     supports: [page-purpose, concepts, capability.browse, capability.create-edit, rules, troubleshooting]
-  - path: frontend/routes/business/customers/customers.svelte.ts
+  - path: frontend/services/crm/client-provider.svelte.ts
     role: frontend-service
     hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
     supports: [concepts, capability.browse, capability.create-edit, rules]
-  - path: frontend/routes/business/suppliers/+page.svelte
+  - path: frontend/routes/logistics/suppliers/+page.svelte
     role: page
     hash: sha256:58e322b1569671bdf54af0aa42ebf84f9514e47c23bd0bc8c6f377e59e6f6556
     supports: [page-purpose, related-pages]
@@ -221,11 +221,11 @@ files:
     role: user-interface
     hash: sha256:c8650707d5e88cc6cfe386a6b6c240225b8c5ba153f63f4b00be04c92f4cbf65
     supports: [related-pages]
-  - path: backend/business/client_provider.go
+  - path: backend/crm/client_provider.go
     role: backend-handler
     hash: sha256:28d9246dc7396fd2fb572fc01703b17512350c56a76965b593b4eafbcc86caba
     supports: [capability.create-edit, rules, troubleshooting]
-  - path: backend/business/types/client_provider.go
+  - path: backend/crm/types/client_provider.go
     role: data-model
     hash: sha256:83d725eaeac0c081e5b5871f1f015a171981bab763d7b2e1a700ddfdc22ce748
     supports: [concepts, capability.create-edit, rules]

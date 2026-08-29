@@ -310,7 +310,7 @@ files:
     role: frontend-service
     hash: sha256:6a48386ff77d68cc054874abee00698871233580e5e776d37d492ab118398c7d
     supports: [concepts, capability.po-entry, rules]
-  - path: frontend/routes/business/products/products.svelte.ts
+  - path: frontend/services/production/products.svelte.ts
     role: shared-domain
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
     supports: [concepts, capability.movement-view, capability.po-entry]
@@ -318,7 +318,7 @@ files:
     role: shared-domain
     hash: sha256:8f3a3fdc8dc47344ada0fc5f56361026effe8099d44c68c9a6ef54a68e488302
     supports: [concepts, capability.movement-view, capability.po-entry, related-pages]
-  - path: frontend/routes/business/customers/customers.svelte.ts
+  - path: frontend/services/crm/client-provider.svelte.ts
     role: shared-domain
     hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
     supports: [capability.po-entry]

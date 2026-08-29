@@ -12,8 +12,8 @@
   import { Loading, Notify, formatTime } from '$libs/helpers'
   import FilterInput from '$components/form/FilterInput.svelte'
   import Button from '$components/buttons/Button.svelte'
-  import { CountryCitiesService } from '../branches-warehouses/branches-warehouses.svelte'
-  import { ClientProviderService, PersonType, postClientProviders, type IClientProvider } from './customers.svelte'
+  import { CountryCitiesService } from '$services/business/country-cities.svelte'
+  import { ClientProviderService, PersonType, postClientProviders, type IClientProvider } from '$services/crm/client-provider.svelte'
 
   interface IClientProvidersViewProps {
     clientProviderType: number

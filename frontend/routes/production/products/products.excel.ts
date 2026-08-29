@@ -14,7 +14,7 @@ import {
 import type { ISharedListRecord, SharedListsService } from '$services/business/shared-lists.svelte';
 import { normalizeStringN } from '@genix/ui/utilities';
 import { normalizeComparableValue } from '$libs/helpers';
-import type { IProduct, ProductsService } from './products.svelte';
+import type { IProduct, ProductsService } from '$services/production/products.svelte';
 
 // Centralizes Productos Excel export so the page only triggers the action.
 export const exportProductosToExcel = async (

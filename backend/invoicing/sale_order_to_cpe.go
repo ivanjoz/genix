@@ -1,10 +1,11 @@
 package invoicing
 
 import (
-	business "app/business/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	"app/invoicing/types"
+	production "app/production/types"
 	sales "app/sales/types"
 	"errors"
 	"fmt"
@@ -85,7 +86,7 @@ func buildCustomer(companyID int32, order *sales.SaleOrder, docType int8) (model
 	name, registryNumber := "", ""
 
 	if order.ClientID > 0 {
-		clients := []business.ClientProvider{}
+		clients := []crm.ClientProvider{}
 		query := db.Query(&clients)
 		query.Select().CompanyID.Equals(companyID).ID.Equals(order.ClientID)
 		if err := query.Exec(); err != nil {
@@ -169,7 +170,7 @@ func identityDocTypeOf(registryNumber string) string {
 // matches what SUNAT wants: four candies invoice as four, not as 0.667 of a box.
 // It takes the product descriptions rather than loading them, so the splitting rule can be
 // tested without a database.
-func buildLines(order *sales.SaleOrder, products map[int32]business.Product) ([]model.Line, []int32, error) {
+func buildLines(order *sales.SaleOrder, products map[int32]production.Product) ([]model.Line, []int32, error) {
 	lines := make([]model.Line, 0, len(order.DetailProductsIDs))
 	lineProductIDs := make([]int32, 0, len(order.DetailProductsIDs))
 
@@ -224,13 +225,13 @@ func buildLines(order *sales.SaleOrder, products map[int32]business.Product) ([]
 
 // loadProductDescriptions reads what a document line needs to describe itself: the product
 // name and, for a sub-unit line, the name of the sub-unit.
-func loadProductDescriptions(companyID int32, productIDs []int32) (map[int32]business.Product, error) {
-	descriptions := map[int32]business.Product{}
+func loadProductDescriptions(companyID int32, productIDs []int32) (map[int32]production.Product, error) {
+	descriptions := map[int32]production.Product{}
 	if len(productIDs) == 0 {
 		return descriptions, nil
 	}
 
-	products := []business.Product{}
+	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.SbuUnit).
 		CompanyID.Equals(companyID).ID.In(productIDs...)

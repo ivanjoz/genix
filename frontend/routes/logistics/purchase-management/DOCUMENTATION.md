@@ -174,7 +174,7 @@ warehouse.
   comparison.
 - **Movements Report (Rep. Movimientos)** at `/logistics/warehouse-movements`: the detailed,
   filterable ledger behind the summarized 30-day inflow/outflow chart shown here.
-- **Supplies (Suministros)** at `/logistics/supplies-materials`: manages the separate
+- **Supplies (Suministros)** at `/production/supplies-materials`: manages the separate
   supply-material (`insumo`) catalog, which has its own independent provider/price
   configuration, distinct from the finished-product supply configuration on this page.
 
@@ -201,11 +201,11 @@ files:
     role: frontend-service
     hash: sha256:6c8b010d28cee8128e1577df7c99f659de9145bd4e1c6ee2dcdad30ee891c29a
     supports: [concepts, capability.browse-supply, capability.configure-supply, rules]
-  - path: frontend/routes/business/products/products.svelte.ts
+  - path: frontend/services/production/products.svelte.ts
     role: shared-domain
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
     supports: [concepts, capability.browse-supply, capability.configure-supply]
-  - path: frontend/routes/business/customers/customers.svelte.ts
+  - path: frontend/services/crm/client-provider.svelte.ts
     role: shared-domain
     hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
     supports: [concepts, capability.configure-supply]

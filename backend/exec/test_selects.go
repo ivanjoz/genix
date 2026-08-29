@@ -3,6 +3,7 @@ package exec
 import (
 	business "app/business/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	logistics "app/logistics/types"
@@ -35,7 +36,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	// Using Fixed values to create parallel queries for a View
 	fmt.Println("\n--- Test 9: Using Fixed values to create parallel queries for a View ---")
 
-	clientProvider := []business.ClientProvider{}
+	clientProvider := []crm.ClientProvider{}
 	err = db.Query(&clientProvider).
 		CompanyID.Equals(1).Type.Equals(1).Limit(10).Exec()
 

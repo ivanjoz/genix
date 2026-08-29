@@ -35,7 +35,7 @@ import {
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 import {
   SupplyMaterialService, type ISupplyMaterial,
-} from '../../logistics/supplies-materials/supply-material.svelte'
+} from '../../production/supplies-materials/supply-material.svelte'
 
 const cajas = new CajasService()	
 const ui = useUI()

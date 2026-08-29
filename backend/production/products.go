@@ -1,10 +1,11 @@
-package business
+package production
 
 import (
-	"app/business/types"
+	business "app/business/types"
 	"app/cloud"
 	"app/core"
 	"app/db"
+	"app/production/types"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -257,7 +258,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// product write, incl. price edits) so the snapshot self-heals on any change, matching the
 	// ecommerce delta watermark. NameUpdated is reserved for other purposes.
 	if len(productos) > 0 {
-		if cacheErr := core.SaveCacheGlobal(cacheGroupProducts, req.User.CompanyID, nil, nowTime); cacheErr != nil {
+		if cacheErr := core.SaveCacheGlobal(business.CacheGroupProducts, req.User.CompanyID, nil, nowTime); cacheErr != nil {
 			core.Log("PostProducts:: error registrando cambio de productos para ecommerce", cacheErr)
 		}
 	}
@@ -352,7 +353,7 @@ func getProductBrandNames(companyID int32, productos []types.Product) (map[int32
 		return map[int32]string{}, nil
 	}
 
-	brands := []types.SharedListRecord{}
+	brands := []business.SharedListRecord{}
 	query := db.Query(&brands)
 	query.Select(query.ID, query.Name).
 		CompanyID.Equals(companyID).ID.In(brandIDs.Values...)
@@ -379,10 +380,6 @@ type productoImage struct {
 	ImageID       int32 // client-reserved imageID (from GET.image-id-counter)
 	ImageToDelete int32 // imageID to remove (autoincrement*10 + configDigit)
 }
-
-// imageConfigDigitFull is the last digit of the imageID for the standard product
-// upload (base x6 + x4 + x2). The digit→resolution-set dictionary is defined later.
-const imageConfigDigitFull = 7
 
 func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 	image := productoImage{}
@@ -511,7 +508,7 @@ func PostProductCategoryImage(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if image.ImageID <= 0 || image.ImageID%10 != imageConfigDigitFull {
+	if image.ImageID <= 0 || image.ImageID%10 != business.ImageConfigDigitFull {
 		return req.MakeErr("El ID reservado no corresponde a una imagen completa.")
 	}
 	if len(image.Content_x6) < 50 || len(image.Content_x4) < 50 || len(image.Content_x2) < 50 {

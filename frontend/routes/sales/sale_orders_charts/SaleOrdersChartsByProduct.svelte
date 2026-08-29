@@ -6,7 +6,7 @@
   import { DateHelper } from '@genix/ui/utilities'
   import { formatN, formatTime, wordInclude } from '$libs/helpers'
   import FilterInput from '$components/form/FilterInput.svelte'
-  import type { IProduct } from '$routes/business/products/products.svelte'
+  import type { IProduct } from '$services/production/products.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
   type TChartMetricMode = 'amount' | 'quantity'

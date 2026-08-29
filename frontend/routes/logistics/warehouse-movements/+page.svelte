@@ -15,7 +15,7 @@ import Input from '$components/form/Input.svelte';
 import { getStaticRecordsByID } from '@genix/ui/cache';
 import { SvelteMap } from 'svelte/reactivity';
   import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte"
-  import { ProductsService } from "../../business/products/products.svelte"
+  import { ProductsService } from '$services/production/products.svelte'
   import { UsuariosService } from "../../security/users/users.svelte"
   import {
     queryAlmacenMovimientos, movimientoTipos,

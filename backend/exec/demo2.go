@@ -3,10 +3,10 @@ package exec
 import (
 
 	// sales "app/sales/types"
-	business "app/business/types"
 	"app/core"
 	"app/db"
 	"app/libs"
+	production "app/production/types"
 	"app/sales"
 	salesTypes "app/sales/types"
 	"fmt"
@@ -150,7 +150,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 		}
 	*/
 
-	records := []business.Product{}
+	records := []production.Product{}
 
 	query := db.Query(&records)
 	err := query.Select(query.ID).Exec()
@@ -216,7 +216,7 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
-	controller := makeDBController[business.Product]()
+	controller := makeDBController[production.Product]()
 
 	controller.FlushTextSearchIndex(1)
 

@@ -13,7 +13,7 @@
   import T from '$components/misc/T.svelte'
   import { Core, tr } from '$core/store.svelte'
   import { Loading, Notify, ConfirmWarn } from '$libs/helpers'
-  import { ProductsService, type IProduct } from '$routes/business/products/products.svelte'
+  import { ProductsService, type IProduct } from '$services/production/products.svelte'
   import {
     SalesPlanningService,
     SeasonalityCurveService,

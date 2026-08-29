@@ -14,9 +14,9 @@ import T from '$components/misc/T.svelte';
 import AlmacenLayoutEditor from './WarehouseLayoutEditor.svelte';
 import { useUI } from '@genix/ui';
 
+import { CountryCitiesService } from '$services/business/country-cities.svelte';
 import {
     WarehousesService,
-    CountryCitiesService,
     postSite,
     postWarehouse,
     type ISite,

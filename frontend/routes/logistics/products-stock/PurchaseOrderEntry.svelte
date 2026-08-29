@@ -13,8 +13,8 @@ import type { ITableColumn } from '$components/vTable/types'
 import { Core, tr } from '$core/store.svelte'
 import T from '$components/misc/T.svelte'
 import { formatN, formatTime, Notify } from '$libs/helpers'
-import { ClientProviderService, ClientProviderType } from '../../business/customers/customers.svelte'
-import { ProductsService } from '../../business/products/products.svelte'
+import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
+import { ProductsService } from '$services/production/products.svelte'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 import {
   postPurchaseOrderEntry,

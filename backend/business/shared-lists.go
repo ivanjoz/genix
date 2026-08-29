@@ -191,9 +191,9 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	for _, listID := range uniqueIncomingListIDs {
 		cacheGroup := int16(0)
 		if listID == ecommerceSharedListBrandID {
-			cacheGroup = cacheGroupBrands
+			cacheGroup = types.CacheGroupBrands
 		} else if listID == ecommerceSharedListCategoryID {
-			cacheGroup = cacheGroupCategories
+			cacheGroup = types.CacheGroupCategories
 		}
 		if cacheGroup == 0 {
 			continue

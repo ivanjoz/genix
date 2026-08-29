@@ -15,8 +15,8 @@ import Page from '$domain/Page.svelte'
 import { tr } from '$core/store.svelte'
 import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
-import { ClientProviderService, ClientProviderType } from '../../business/customers/customers.svelte'
-import { SupplyMaterialService } from '../../logistics/supplies-materials/supply-material.svelte'
+import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
+import { SupplyMaterialService } from '../../production/supplies-materials/supply-material.svelte'
 import {
   assetBookValue, assetDepreciatedPercent, assetPaymentLabels, assetPendingAmount,
   assetRemainingMonths, assetStatusLabels, assetUnitLabel, canDisposeAsset, canPayAsset,

@@ -9,7 +9,7 @@ import SearchSelect from '$components/form/SearchSelect.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import { tr } from '$core/store.svelte';
 import { formatN } from '$libs/helpers';
-import { productoAtributos, type IProduct, type IProductPresentation } from "./products.svelte";
+import { productoAtributos, type IProduct, type IProductPresentation } from "$services/production/products.svelte";
     import type { ITableColumn } from '$components/vTable/types';
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))

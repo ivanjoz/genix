@@ -1,8 +1,8 @@
-package business
+package crm
 
 import (
-	"app/business/types"
 	"app/core"
+	"app/crm/types"
 	"app/db"
 	"encoding/json"
 )

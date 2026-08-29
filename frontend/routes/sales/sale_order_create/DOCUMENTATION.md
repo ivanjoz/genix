@@ -302,7 +302,7 @@ setting changes anything besides its own stored value.
   day-level sale summary that every **Generar** action here updates.
 - **Cash & Banks (Cajas y Bancos)**: register the cash/bank account offered in the **CAJA**
   selector, and review the resulting `Cobro (Venta)` movement afterward.
-- **Customers (Clientes)** at `/business/customers`: maintain full customer records beyond the
+- **Customers (Clientes)** at `/crm/customers`: maintain full customer records beyond the
   minimal name/document captured by the inline **Registrar Cliente** flow here.
 - **Sites & Warehouses (Sedes y Almacenes)** and **Product Stock**: manage warehouses and
   inspect stock levels before and after a **Recibido** sale.
@@ -334,11 +334,11 @@ files:
     role: frontend-service
     hash: sha256:5f468bbace2e4a7000cb389e48473da271bdd717bcad8f274ef4f308c3d7ea5e
     supports: [capability.search-add-products, capability.warehouse-cash-selection]
-  - path: frontend/routes/business/products/products.svelte.ts
+  - path: frontend/services/production/products.svelte.ts
     role: shared-domain
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
     supports: [concepts, capability.search-add-products]
-  - path: frontend/routes/business/customers/customers.svelte.ts
+  - path: frontend/services/crm/client-provider.svelte.ts
     role: shared-domain
     hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
     supports: [capability.assign-client]
@@ -366,7 +366,7 @@ files:
     role: data-model
     hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc
     supports: [concepts, capability.set-payment-delivery, rules]
-  - path: backend/business/client_provider.go
+  - path: backend/crm/client_provider.go
     role: business-logic
     hash: sha256:28d9246dc7396fd2fb572fc01703b17512350c56a76965b593b4eafbcc86caba
     supports: [capability.assign-client]

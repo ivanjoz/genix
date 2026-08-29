@@ -17,12 +17,12 @@
   import {
       ClientProviderService,
       type IClientProvider
-  } from '$routes/business/customers/customers.svelte';
+  } from '$services/crm/client-provider.svelte';
   import {
       ProductsService,
       type IProduct,
       type IProductPresentation,
-  } from '$routes/business/products/products.svelte';
+  } from '$services/production/products.svelte';
   import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte';
   import { onMount, untrack } from 'svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';

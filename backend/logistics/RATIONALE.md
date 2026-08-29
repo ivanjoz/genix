@@ -2,6 +2,24 @@
 
 Design decisions for supplies, stock and purchase orders, newest first.
 
+## Supplies and the suppliers page left; the suppliers *route* arrived
+
+**Context** — the Producción and Clientes (CRM) modules were carved out of `business`, and two
+things that lived here had to be re-homed.
+
+**Decision** — `supply-material-management.go` moved to `app/production` (a supply is a `Product`
+row at `Status = 2`, so the catalog owns it), while `product-supply-management.go` stayed: minimum
+stock and provider rows are a purchasing policy. The shared provider-row helpers became
+`types.SanitizeProviderSupplyRows` / `types.ValidateProviderSupplyRows` in
+`logistics/types/product_supply_providers.go`, since both modules now call them. In the frontend,
+`/logistics/supplies-materials` became `/production/supplies-materials`, and `/business/suppliers`
+became `/logistics/suppliers` — the supplier list sits with the purchase orders that consume it,
+even though `crm/types` owns the row.
+
+**Rationale** — the boundary follows who writes the row, not which menu shows it. Splitting on
+that line keeps `PostSupplyMaterial` (which writes both `Product` and `ProductSupply`) importing
+only `logistics/types`, and leaves no module body importing another module body.
+
 ## The sub-unit divisor lives on the movement, and may only be refined
 
 **Context** — With quantities as a `(Units, Sub)` pair (see `backend/RATIONALE.md`), `Sub` is

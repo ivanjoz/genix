@@ -33,6 +33,10 @@ access_groups:
     name: "Contabilidad"
   - id: 8
     name: "System"
+  - id: 9
+    name: "Producción"
+  - id: 10
+    name: "Clientes (CRM)"
 access_list:
   - id: 1
     name: "Mi Empresa"
@@ -90,21 +94,21 @@ access_list:
     backend_apis: "POST.sites,POST.warehouses"
   - id: 8
     name: "Productos"
-    group: 2
+    group: 9
     levels: 14
-    frontend_routes: "business/products"
+    frontend_routes: "production/products"
     backend_apis: "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists"
   - id: 9
     name: "Clientes"
-    group: 2
+    group: 10
     levels: 14
-    frontend_routes: "business/customers"
+    frontend_routes: "crm/customers"
     backend_apis: "POST.client-provider"
   - id: 26
     name: "Proveedores"
-    group: 2
+    group: 4
     levels: 14
-    frontend_routes: "business/suppliers"
+    frontend_routes: "logistics/suppliers"
     backend_apis: "POST.client-provider"
   - id: 10
     name: "Punto de Venta"
@@ -167,10 +171,10 @@ access_list:
     frontend_routes: "logistics/purchase-orders"
     backend_apis: "POST.purchase-orders,PUT.purchase-orders,POST.purchase-order-entry"
   - id: 30
-    name: "Suministros"
-    group: 4
+    name: "Insumos & Materiales"
+    group: 9
     levels: 14
-    frontend_routes: "logistics/supplies-materials"
+    frontend_routes: "production/supplies-materials"
     backend_apis: "POST.supply-material,POST.shared-lists"
   - id: 17
     name: "Cajas & Bancos"

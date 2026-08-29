@@ -1,7 +1,7 @@
 ---
 schema: 1
 page_id: business.suppliers
-route: /business/suppliers
+route: /logistics/suppliers
 title: Suppliers (Proveedores)
 status: implemented
 visibility: tenant
@@ -56,7 +56,7 @@ Department/Province/District picker.
 <!-- DOC-ID: capability.browse -->
 ## Find a supplier (Buscar un proveedor)
 
-Open **Business (Negocio) → Suppliers (Proveedores)** at `/business/suppliers`. The list shows
+Open **Logistics (Logística) → Suppliers (Proveedores)** at `/logistics/suppliers`. The list shows
 every active supplier (records with a stored status greater than 0) with ID, Name, Person Type,
 Registry/RUC number, Email, Location (province and district), and the last-updated date/time.
 Use the search box (`Search by name, email or registry`) to filter; the filter matches the ID,
@@ -75,7 +75,7 @@ name, person type, registry number, email, or location.
 
 ### Where to find it (Dónde encontrarlo)
 
-On `/business/suppliers`, use the green **New (Nuevo)** button (top right of the list toolbar) to
+On `/logistics/suppliers`, use the green **New (Nuevo)** button (top right of the list toolbar) to
 open the side layer for a new supplier, or click an existing row to open the same layer
 pre-filled. Save with the layer's **Save (Guardar)** action.
 
@@ -119,7 +119,7 @@ status afterward.
 
 - There is no delete or deactivate action on this page — the side layer used here does not offer
   a **Delete (Eliminar)** button (unlike some other record pages), so once created a supplier
-  cannot be removed or deactivated from `/business/suppliers`.
+  cannot be removed or deactivated from `/logistics/suppliers`.
 - There is no phone field and no free-text street address field; location is limited to
   Department/Province/District, and the country is always Peru.
 - The Registry Number field always shows the English label "Registry Number (RUC)" even in the
@@ -172,7 +172,7 @@ status afterward.
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **Customers (Clientes)** at `/business/customers` uses this same form and list component with
+- **Customers (Clientes)** at `/crm/customers` uses this same form and list component with
   `Type = 1`; use it for records that buy from the business instead of supplying it.
 - **Purchase Orders (Órdenes de Compra)** and other Logistics purchasing pages (Supplies &
   Materials, Purchase Order Entry, Product Supply Management) select the supplier for a purchase
@@ -193,15 +193,15 @@ files:
     role: user-interface
     hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
     supports: [page-purpose, capability.browse, related-pages]
-  - path: frontend/routes/business/suppliers/+page.svelte
+  - path: frontend/routes/logistics/suppliers/+page.svelte
     role: page
     hash: sha256:58e322b1569671bdf54af0aa42ebf84f9514e47c23bd0bc8c6f377e59e6f6556
     supports: [page-purpose, concepts, capability.create-edit, rules]
-  - path: frontend/routes/business/customers/CustomersView.svelte
+  - path: frontend/domain-components/ClientProviderMaintainer.svelte
     role: user-interface
     hash: sha256:bf3182c34a440abdc24136d753a4c779c9bf6a732e6933ffeb063db13b30d351
     supports: [page-purpose, concepts, capability.browse, capability.create-edit, troubleshooting, related-pages]
-  - path: frontend/routes/business/customers/customers.svelte.ts
+  - path: frontend/services/crm/client-provider.svelte.ts
     role: frontend-service
     hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
     supports: [concepts, capability.browse, capability.create-edit, rules]
@@ -217,11 +217,11 @@ files:
     role: user-interface
     hash: sha256:1be98d963afdb8e485ea32615c307e730683ad2d483dd148e09580ede89315cf
     supports: [related-pages]
-  - path: backend/business/client_provider.go
+  - path: backend/crm/client_provider.go
     role: backend-handler
     hash: sha256:28d9246dc7396fd2fb572fc01703b17512350c56a76965b593b4eafbcc86caba
     supports: [capability.browse, capability.create-edit, rules, troubleshooting]
-  - path: backend/business/types/client_provider.go
+  - path: backend/crm/types/client_provider.go
     role: data-model
     hash: sha256:83d725eaeac0c081e5b5871f1f015a171981bab763d7b2e1a700ddfdc22ce748
     supports: [concepts, capability.create-edit, rules]

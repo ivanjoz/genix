@@ -37,7 +37,7 @@ export const mainProductImage = (e: IProduct): IProductoImage | undefined => {
   return { id: e.ImageMain, n: productImageName(e.ImageMain), d: e.ImageDescriptions?.[index] || "" }
 }
 
-//STRUCT:negocio.Product
+//STRUCT:production.Product
 export interface IProduct {
   ID: number,
   TempID: number,

@@ -63,17 +63,19 @@ export const AdminModule: IModule = {
 					icon: "icon-[fa--home]",
 					descripcion: "Crea sedes y almacenes. Crea los layouts de tus almacenes."
         },
+      ]
+    },
+    { name: "Production|Producción", minName: "PRD",  id: 10, icon: "icon-[fa--cubes]",
+      options: [
 				{
-					name: "Products|Productos", route: "/business/products",
+					name: "Products|Productos", route: "/production/products",
 					descripcion: "Crea productos y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones de tus productos.",
           icon: "icon-[fa--cube]"
 				},
-				{ name: "Customers|Clientes", route: "/business/customers",
-          icon: "icon-[fa--user]"
-        },
-				{ name: "Suppliers|Proveedores", route: "/business/suppliers",
-          icon: "icon-[fa--truck]"
-        },
+				{ name: "Supplies & Materials|Insumos & Materiales", route: "/production/supplies-materials",
+					descripcion: "Registra los insumos y materiales que consume tu producción, con sus proveedores y stock mínimo.",
+					icon: "icon-[fa--flask]"
+				},
       ]
     },
     { name: "Commercial|Comercial", minName: "Com",  id: 3, icon: "icon-[fa--tasks]",
@@ -98,6 +100,14 @@ export const AdminModule: IModule = {
         },
       ]
 		},
+    { name: "Clients (CRM)|Clientes (CRM)", minName: "CRM",  id: 11, icon: "icon-[fa--users]",
+      options: [
+				{ name: "Customers|Clientes", route: "/crm/customers",
+					descripcion: "Registra tus clientes con RUC o DNI y consulta su historial de compras.",
+          icon: "icon-[fa--user]"
+        },
+      ]
+    },
 		{ name: "Logistics|Logística", minName: "LOG",  id: 4, icon: "icon-[fa--tasks]",
       options: [
 	      { name: "Stock Changes|Cambios Stock", route: "/logistics/products-stock",
@@ -112,8 +122,8 @@ export const AdminModule: IModule = {
 		    { name: "Purchase Orders|Órdenes Compra", route: "/logistics/purchase-orders",
 		      icon: "icon-[fa--truck]"
 		    },
-		    { name: "Supplies|Suministros", route: "/logistics/supplies-materials",
-		      icon: "icon-[fa--cube]"
+		    { name: "Suppliers|Proveedores", route: "/logistics/suppliers",
+		      icon: "icon-[fa--truck]"
 		    },
       ]
     },

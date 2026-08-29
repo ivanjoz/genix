@@ -1,10 +1,10 @@
-package logistics
+package production
 
 import (
-	business "app/business/types"
 	"app/core"
 	"app/db"
-	"app/logistics/types"
+	logistics "app/logistics/types"
+	"app/production/types"
 	"encoding/json"
 )
 
@@ -16,7 +16,7 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("upv")
 
-	supplyRecords := []business.Product{}
+	supplyRecords := []types.Product{}
 	supplyQuery := db.Query(&supplyRecords).CompanyID.Equals(req.User.CompanyID)
 
 	// Supplies carry none of the storefront payload; excluding it keeps the sync small.
@@ -26,7 +26,7 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 		supplyQuery.DepreciationMonths, supplyQuery.Status, supplyQuery.Updated,
 		supplyQuery.UpdatedVersion,
 	)
-	supplyQuery.Delta(updatedSince, int64(business.ProductStatusSupply))
+	supplyQuery.Delta(updatedSince, int64(types.ProductStatusSupply))
 
 	if queryError := supplyQuery.Exec(); queryError != nil {
 		core.Log("GetSupplyMaterials query error:", queryError)
@@ -41,17 +41,17 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 // live on Product plus the replenishment config that lives on ProductSupply. Both are saved
 // in one call because the user sees a single record.
 type SupplyMaterialPayload struct {
-	ID                 int32                            `json:",omitempty"`
-	Name               string                           `json:",omitempty"`
-	Description        string                           `json:",omitempty"`
-	SKU                string                           `json:",omitempty"`
-	BrandID            int32                            `json:",omitempty"`
-	Price              int32                            `json:",omitempty"`
-	CurrencyID         int16                            `json:",omitempty"`
-	UnitID             int16                            `json:",omitempty"`
-	DepreciationMonths int16                            `json:",omitempty"`
-	MinimunStock       int32                            `json:",omitempty"`
-	ProviderSupply     []types.ProductSupplyProviderRow `json:",omitempty"`
+	ID                 int32                                `json:",omitempty"`
+	Name               string                               `json:",omitempty"`
+	Description        string                               `json:",omitempty"`
+	SKU                string                               `json:",omitempty"`
+	BrandID            int32                                `json:",omitempty"`
+	Price              int32                                `json:",omitempty"`
+	CurrencyID         int16                                `json:",omitempty"`
+	UnitID             int16                                `json:",omitempty"`
+	DepreciationMonths int16                                `json:",omitempty"`
+	MinimunStock       int32                                `json:",omitempty"`
+	ProviderSupply     []logistics.ProductSupplyProviderRow `json:",omitempty"`
 	// Only 0 is honoured, as the soft-delete tombstone. Anything else saves as a supply;
 	// a client cannot promote its own row into the product catalog.
 	Status int8 `json:"ss"`
@@ -78,7 +78,7 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	currentTimestamp := core.SUnixTime()
-	supplyProducts := make([]business.Product, len(incomingSupplies))
+	supplyProducts := make([]types.Product, len(incomingSupplies))
 	// Preserve the client-sent ID per record so we can return ID mappings after the
 	// autoincrement assigns real IDs to the inserts.
 	clientSentIDs := make([]int32, len(incomingSupplies))
@@ -102,12 +102,12 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Los meses de depreciación deben estar entre 0 y 1200.")
 		}
 
-		supplyPayload.ProviderSupply = sanitizeProviderSupplyRows(supplyPayload.ProviderSupply)
-		if validationError := validateProviderSupplyRows(req, supplyPayload.ProviderSupply); validationError != nil {
+		supplyPayload.ProviderSupply = logistics.SanitizeProviderSupplyRows(supplyPayload.ProviderSupply)
+		if validationError := logistics.ValidateProviderSupplyRows(req.User.CompanyID, supplyPayload.ProviderSupply); validationError != nil {
 			return req.MakeErr(validationError)
 		}
 
-		supplyProducts[recordIndex] = business.Product{
+		supplyProducts[recordIndex] = types.Product{
 			CompanyID:          req.User.CompanyID,
 			ID:                 supplyPayload.ID,
 			TempID:             supplyPayload.ID,
@@ -121,7 +121,7 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			DepreciationMonths: supplyPayload.DepreciationMonths,
 			// Deleting is only meaningful for a row that already exists; a new record with no
 			// ss in the payload must not be born as a tombstone.
-			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), business.ProductStatusSupply),
+			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), types.ProductStatusSupply),
 			Updated:   currentTimestamp,
 			UpdatedBy: req.User.ID,
 		}
@@ -131,7 +131,7 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	productTable := db.TableOf[business.Product]()
+	productTable := db.TableOf[types.Product]()
 	// Merge resolves insert vs. update per key. The excluded columns are the storefront and
 	// stock-derived ones a supply never sets — leaving them out stops a save from blanking
 	// values the stock engine maintains.
@@ -143,13 +143,13 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			productTable.Presentations, productTable.Properties, productTable.ContentHTML,
 			productTable.CategoryIDs,
 		),
-		func(previousProduct, currentProduct *business.Product) bool {
+		func(previousProduct, currentProduct *types.Product) bool {
 			currentProduct.CompanyID = req.User.CompanyID
 			currentProduct.Created = previousProduct.Created
 			currentProduct.CreatedBy = previousProduct.CreatedBy
 			return true
 		},
-		func(currentProduct *business.Product) {
+		func(currentProduct *types.Product) {
 			currentProduct.Created = currentTimestamp
 			currentProduct.CreatedBy = req.User.ID
 		},
@@ -161,9 +161,9 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 
 	// ProductSupply is keyed by ProductID, so it can only be written once the inserts above
 	// have real IDs. This is the same table the products page uses for replenishment config.
-	supplyConfigs := make([]types.ProductSupply, len(incomingSupplies))
+	supplyConfigs := make([]logistics.ProductSupply, len(incomingSupplies))
 	for recordIndex := range incomingSupplies {
-		supplyConfigs[recordIndex] = types.ProductSupply{
+		supplyConfigs[recordIndex] = logistics.ProductSupply{
 			CompanyID:      req.User.CompanyID,
 			ProductID:      supplyProducts[recordIndex].ID,
 			MinimunStock:   incomingSupplies[recordIndex].MinimunStock,
@@ -175,7 +175,7 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	configMergeError := db.Merge(&supplyConfigs, nil,
-		func(previousConfig, currentConfig *types.ProductSupply) bool {
+		func(previousConfig, currentConfig *logistics.ProductSupply) bool {
 			// SalesPerDayEstimated is owned by the products page; a supply save must not clear it.
 			currentConfig.SalesPerDayEstimated = previousConfig.SalesPerDayEstimated
 			return true

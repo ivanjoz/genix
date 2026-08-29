@@ -1,11 +1,12 @@
 package sales
 
 import (
-	business "app/business/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	logistics "app/logistics/types"
+	production "app/production/types"
 	"app/sales/types"
 	"encoding/json"
 	"fmt"
@@ -288,7 +289,7 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 		return nil
 	}
 
-	products := []business.Product{}
+	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice).
 		CompanyID.Equals(req.User.CompanyID).
@@ -297,7 +298,7 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 		return core.Err("Error al obtener los productos de la venta:", err)
 	}
 
-	productByID := make(map[int32]business.Product, len(products))
+	productByID := make(map[int32]production.Product, len(products))
 	for _, product := range products {
 		productByID[product.ID] = product
 	}
@@ -364,21 +365,21 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID i
 		return 0, core.Err("ClientInfo.Name es obligatorio.")
 	}
 
-	clientPersonType := business.PersonTypeNatural
+	clientPersonType := crm.PersonTypeNatural
 	if clientRegistryNumber != "" {
 		// Preserve the provided registry number so identity matching can reuse existing client rows.
-		clientPersonType = business.PersonTypeCompany
+		clientPersonType = crm.PersonTypeCompany
 	}
 
-	clientProviders := []business.ClientProvider{{
-		Type:           business.ClientProviderTypeClient,
+	clientProviders := []crm.ClientProvider{{
+		Type:           crm.ClientProviderTypeClient,
 		Name:           clientName,
 		RegistryNumber: clientRegistryNumber,
 		PersonType:     clientPersonType,
 	}}
 	// Sale-order client creation must never update an existing client record from frontend input
 	// to prevent accidental data corruption of shared client/provider records.
-	saveError := business.SaveClientProviders(&clientProviders, companyID, userID, true)
+	saveError := crm.SaveClientProviders(&clientProviders, companyID, userID, true)
 	if saveError != nil {
 		return 0, saveError
 	}

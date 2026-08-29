@@ -1,7 +1,7 @@
 // Client/provider upsert. This is business logic in a `types` package on purpose: `sales`
 // resolves or creates the buyer while recording a sale, and a module body may not import
 // another module body (see backend/docs/MODULE_BOUNDARIES.md). Living here is what lets
-// `sales` call it while importing only `app/business/types`.
+// `sales` call it while importing only `app/crm/types`.
 
 package types
 

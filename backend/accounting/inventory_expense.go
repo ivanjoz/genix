@@ -1,11 +1,11 @@
 package accounting
 
 import (
-	business "app/business/types"
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
 	logistics "app/logistics/types"
+	production "app/production/types"
 	"encoding/json"
 )
 
@@ -59,7 +59,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 
 	// The catalog row has to be a supply. Buying a sellable product is a purchase order,
 	// which has its own reception flow with lots and differences.
-	supplyProducts := []business.Product{}
+	supplyProducts := []production.Product{}
 	supplyQuery := db.Query(&supplyProducts)
 	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Status).
 		CompanyID.Equals(req.User.CompanyID).ID.Equals(payload.ProductID)
@@ -70,7 +70,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	if len(supplyProducts) == 0 {
 		return req.MakeErr("No se encontró el insumo indicado.")
 	}
-	if supplyProducts[0].Status != business.ProductStatusSupply {
+	if supplyProducts[0].Status != production.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
 

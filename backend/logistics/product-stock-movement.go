@@ -1,10 +1,10 @@
 package logistics
 
 import (
-	business "app/business/types"
 	"app/core"
 	"app/db"
 	"app/logistics/types"
+	production "app/production/types"
 	"encoding/json"
 	"fmt"
 
@@ -43,7 +43,7 @@ func loadProductSubDivisors(companyID int32, items []PostStockAdjustItem) (map[i
 		return divisorByProductID, nil
 	}
 
-	products := []business.Product{}
+	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.SbuQuantity).
 		CompanyID.Equals(companyID).

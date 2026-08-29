@@ -3,8 +3,8 @@
   import SearchSelect from '$components/form/SearchSelect.svelte';
   import Page from '$domain/Page.svelte';
   import { formatTime, Loading } from '$libs/helpers';
-  import { ProductsService } from '$routes/business/products/products.svelte';
-  import { ClientProviderService, ClientProviderType } from '$routes/business/customers/customers.svelte';
+  import { ProductsService } from '$services/production/products.svelte';
+  import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import { querySaleOrderReport, saleOrderStatusOptions, type ISaleOrder } from './sale_order_report.svelte';
     import ButtonLayer from '$components/buttons/ButtonLayer.svelte';

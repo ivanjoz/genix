@@ -1,6 +1,6 @@
 <script lang="ts">
-  import ClientesProveedoresView from '../customers/CustomersView.svelte'
-  import { ClientProviderType } from '../customers/customers.svelte'
+  import ClientesProveedoresView from '$domain/ClientProviderMaintainer.svelte'
+  import { ClientProviderType } from '$services/crm/client-provider.svelte'
 </script>
 
 <ClientesProveedoresView

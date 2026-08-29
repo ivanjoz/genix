@@ -235,11 +235,11 @@ files:
     role: frontend-service
     hash: sha256:c018a9646819280b1dcba31a2e7d97f050820b333fcd3c113be8fa145f505cf9
     supports: [capability.run-report]
-  - path: frontend/routes/business/customers/customers.svelte.ts
+  - path: frontend/services/crm/client-provider.svelte.ts
     role: shared-domain
     hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
     supports: [capability.run-report]
-  - path: frontend/routes/business/products/products.svelte.ts
+  - path: frontend/services/production/products.svelte.ts
     role: shared-domain
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
     supports: [capability.run-report]

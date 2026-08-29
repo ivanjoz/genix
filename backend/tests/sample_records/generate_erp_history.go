@@ -1,15 +1,17 @@
 package sample_records
 
 import (
-	"app/business"
 	businessTypes "app/business/types"
 	"app/core"
 	coreTypes "app/core/types"
+	"app/crm"
+	crmTypes "app/crm/types"
 	"app/db"
 	"app/finance"
 	financeTypes "app/finance/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
+	production "app/production/types"
 	"app/sales"
 	salesTypes "app/sales/types"
 	_ "embed"
@@ -519,13 +521,13 @@ func (generator *erpHistoryGenerator) seedProvidersAndClients() error {
 		return core.Err("error al leer el JSON de clientes:", err)
 	}
 
-	providerIDs, err := generator.saveAndLoadParties(providerSeeds, businessTypes.ClientProviderTypeProvider)
+	providerIDs, err := generator.saveAndLoadParties(providerSeeds, crmTypes.ClientProviderTypeProvider)
 	if err != nil {
 		return err
 	}
 	generator.providerIDs = providerIDs
 
-	clientIDs, err := generator.saveAndLoadParties(clientSeeds, businessTypes.ClientProviderTypeClient)
+	clientIDs, err := generator.saveAndLoadParties(clientSeeds, crmTypes.ClientProviderTypeClient)
 	if err != nil {
 		return err
 	}
@@ -541,12 +543,12 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []erpPartySeed, p
 		return nil, core.Err("la lista de terceros a sembrar está vacía")
 	}
 
-	payload := make([]businessTypes.ClientProvider, 0, len(seeds))
+	payload := make([]crmTypes.ClientProvider, 0, len(seeds))
 	for seedIndex, seed := range seeds {
 		if strings.TrimSpace(seed.Name) == "" {
 			return nil, core.Err("el tercero en posición", seedIndex, "no tiene Name")
 		}
-		payload = append(payload, businessTypes.ClientProvider{
+		payload = append(payload, crmTypes.ClientProvider{
 			Type:           partyType,
 			Name:           seed.Name,
 			PersonType:     seed.PersonType,
@@ -561,7 +563,7 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []erpPartySeed, p
 		return nil, err
 	}
 	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes))
-	if response := business.PostClientProviders(&request); response.StatusCode != 200 {
+	if response := crm.PostClientProviders(&request); response.StatusCode != 200 {
 		return nil, core.Err(response.Error)
 	}
 
@@ -570,8 +572,8 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []erpPartySeed, p
 		"type": strconv.Itoa(int(partyType)),
 		"upv":  "0",
 	}, "")
-	storedParties := []businessTypes.ClientProvider{}
-	if err := decodeResponse(business.GetClientProviders(&listRequest), &storedParties); err != nil {
+	storedParties := []crmTypes.ClientProvider{}
+	if err := decodeResponse(crm.GetClientProviders(&listRequest), &storedParties); err != nil {
 		return nil, err
 	}
 
@@ -590,7 +592,7 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []erpPartySeed, p
 // loadProductPool fixes the working catalog once: the same products are reused every simulated
 // day, which is what makes the generated history look like a real business restocking its shelves.
 func (generator *erpHistoryGenerator) loadProductPool() error {
-	products := []businessTypes.Product{}
+	products := []production.Product{}
 	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Name, productQuery.Price,
 		productQuery.FinalPrice, productQuery.Status).
@@ -599,7 +601,7 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 		return core.Err("error al consultar los productos:", err)
 	}
 
-	eligibleProducts := make([]businessTypes.Product, 0, len(products))
+	eligibleProducts := make([]production.Product, 0, len(products))
 	for _, product := range products {
 		if product.ID > 0 {
 			eligibleProducts = append(eligibleProducts, product)
@@ -618,7 +620,7 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 		for _, productID := range generator.state.ProductPool {
 			pooledProductIDs.Add(productID)
 		}
-		selectedProducts = []businessTypes.Product{}
+		selectedProducts = []production.Product{}
 		for _, product := range eligibleProducts {
 			if slices.Contains(pooledProductIDs.Values, product.ID) {
 				selectedProducts = append(selectedProducts, product)

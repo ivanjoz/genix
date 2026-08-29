@@ -5,6 +5,7 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/db"
+	production "app/production/types"
 	"fmt"
 	"strconv"
 	"strings"
@@ -20,11 +21,6 @@ const (
 	// Shared-list IDs distinguish categorías from marcas inside the single shared-list table.
 	ecommerceSharedListCategoryID = int32(1)
 	ecommerceSharedListBrandID    = int32(2)
-
-	// cache_global group IDs registering, per company, the latest searchable change watermark.
-	cacheGroupProducts   = int16(1)
-	cacheGroupBrands     = int16(2)
-	cacheGroupCategories = int16(3)
 
 	// core.Cache key holding the watermarks observed the last time the .db file was built.
 	productsDbBuiltCacheKey = "products_db_built"
@@ -68,7 +64,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		core.Log("GetProductsEcommerce:: lazy rebuild skipped", "| companyID:", companyID, "| err:", rebuildErr)
 	}
 
-	productos := []types.Product{}
+	productos := []production.Product{}
 	marcas := []types.SharedListRecord{}
 	categorias := []types.SharedListRecord{}
 	errGroup := errgroup.Group{}
@@ -146,7 +142,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 		return 0, 0, 0, fmt.Errorf("company ID inválido para construir el archivo de productos")
 	}
 
-	productos := []types.Product{}
+	productos := []production.Product{}
 	sharedRows := []types.SharedListRecord{}
 	loadGroup := errgroup.Group{}
 
@@ -272,9 +268,9 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 // maybeRebuildProductsDbFile rebuilds + reuploads the snapshot only when any source group watermark
 // (productos/marcas/categorías) advanced beyond the watermarks stamped at the last build.
 func maybeRebuildProductsDbFile(companyID int32, force bool) error {
-	sourceProductos := latestGroupWatermark(cacheGroupProducts, companyID)
-	sourceMarcas := latestGroupWatermark(cacheGroupBrands, companyID)
-	sourceCategorias := latestGroupWatermark(cacheGroupCategories, companyID)
+	sourceProductos := latestGroupWatermark(types.CacheGroupProducts, companyID)
+	sourceMarcas := latestGroupWatermark(types.CacheGroupBrands, companyID)
+	sourceCategorias := latestGroupWatermark(types.CacheGroupCategories, companyID)
 
 	builtProductos, builtMarcas, builtCategorias, hasBuilt := loadBuiltWatermarks(companyID)
 

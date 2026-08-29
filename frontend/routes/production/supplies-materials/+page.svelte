@@ -16,13 +16,13 @@ import Page from '$domain/Page.svelte';
 import type { ExcelTableColumn } from '@genix/ui/excel';
 import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
 import { SharedListsService } from '$services/business/shared-lists.svelte';
-import { ClientProviderService, ClientProviderType } from '../../business/customers/customers.svelte';
+import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte';
 import {
   createEmptyProviderSupplyRow,
   normalizeProviderSupplyRows,
   ProductSupplyService,
   type IProductSupplyProviderRow,
-} from '../purchase-management/supply-management.svelte';
+} from '$routes/logistics/purchase-management/supply-management.svelte';
 import {
   depreciationTerms,
   SUPPLY_PRODUCT_STATUS,

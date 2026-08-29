@@ -1,7 +1,7 @@
 ---
 schema: 1
 page_id: business.products
-route: /business/products
+route: /production/products
 title: Products (Productos)
 status: implemented
 visibility: tenant
@@ -70,7 +70,7 @@ logistics stock changes, the public storefront) read to describe and sell the pr
 <!-- DOC-ID: capability.browse-products -->
 ## Browse and switch views (Buscar y cambiar de vista)
 
-Open **Business (Negocio) → Products (Productos)** at `/business/products`. The top strip
+Open **Production (Producción) → Products (Productos)** at `/production/products`. The top strip
 switches between three views: **Products (Productos)**, **Categories (Categorías)**, and
 **Brands (Marcas)**; switching views closes any open side layer/modal and resets the working
 form. The filter box ("Filter products|Filtrar productos") narrows the currently loaded list by
@@ -455,23 +455,23 @@ files:
     role: user-interface
     hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
     supports: [page-purpose, related-pages]
-  - path: frontend/routes/business/products/+page.svelte
+  - path: frontend/routes/production/products/+page.svelte
     role: page
     hash: sha256:fe3a456a075eec7e1174e98ed783f018df6a75073080e4b7a33833238b40bb23
     supports: [page-purpose, concepts, capability.browse-products, capability.create-edit-product, capability.product-sheet, capability.product-photos, capability.delete-product, rules, troubleshooting]
-  - path: frontend/routes/business/products/Attributes.svelte
+  - path: frontend/routes/production/products/Attributes.svelte
     role: user-interface
     hash: sha256:7bf7b27546743f9b8d20976e5b83bc863514b445b01a65b5968950e6ae3882b8
     supports: [concepts, capability.presentations]
-  - path: frontend/routes/business/products/CategoriesBrands.svelte
+  - path: frontend/routes/production/products/CategoriesBrands.svelte
     role: user-interface
     hash: sha256:1113f2b82649fd332fb579a3b83e931601822861fb6a6a6523e62acf37ad6688
     supports: [capability.categories-brands, troubleshooting]
-  - path: frontend/routes/business/products/products.svelte.ts
+  - path: frontend/services/production/products.svelte.ts
     role: frontend-service
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
     supports: [concepts, capability.create-edit-product, capability.presentations, capability.product-photos, capability.delete-product, capability.browse-products, rules]
-  - path: frontend/routes/business/products/products.excel.ts
+  - path: frontend/routes/production/products/products.excel.ts
     role: frontend-service
     hash: sha256:228618822d23f333a447f7289bbf5c51a8c761bc374643f01d3e3e5286d797c9
     supports: [capability.import-export]
@@ -487,7 +487,7 @@ files:
     role: backend-handler
     hash: sha256:2672bd44b6ca86e692c601c6c7389de2bc72eef25ccfa584c7b75233e5786a83
     supports: [capability.categories-brands, troubleshooting]
-  - path: backend/business/products.go
+  - path: backend/production/products.go
     role: backend-handler
     hash: sha256:7d371b6346611946c6e28283a074fc0a3e84300d83f80ef24989165f765b181c
     supports: [capability.create-edit-product, capability.delete-product, capability.product-photos, capability.import-export, rules, troubleshooting]
@@ -495,7 +495,7 @@ files:
     role: backend-handler
     hash: sha256:79187a2b1144faecea407dc465e3e2a609f38bc6c10e49228544480ec33c2f3e
     supports: [capability.categories-brands, rules]
-  - path: backend/business/types/productos.go
+  - path: backend/production/types/product.go
     role: data-model
     hash: sha256:ef0c9c9510bfa7e46e54f5d803ac4365a2bcfe30e7cf1ba22abcf191d08b3fb6
     supports: [concepts, capability.create-edit-product, capability.presentations, rules]

@@ -6,10 +6,12 @@ import (
 	"app/business"
 	"app/config"
 	"app/core"
+	"app/crm"
 	"app/exec"
 	"app/finance"
 	"app/invoicing"
 	"app/logistics"
+	"app/production"
 	"app/sales"
 	"app/security"
 	"app/webpage"
@@ -35,6 +37,8 @@ var appHandlersModules = []core.AppRouterType{
 	invoicing.ModuleHandlers,
 	logistics.ModuleHandlers,
 	business.ModuleHandlers,
+	production.ModuleHandlers,
+	crm.ModuleHandlers,
 	security.ModuleHandlers,
 }
 

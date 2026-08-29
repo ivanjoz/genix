@@ -2,7 +2,7 @@
 import DateInput from '$components/form/DateInput.svelte'
 import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
-import type { IClientProvider } from '$routes/business/customers/customers.svelte'
+import type { IClientProvider } from '$services/crm/client-provider.svelte'
 import type { IWarehouse } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
 import type { IPurchaseOrder } from './purchase_order.svelte'
 

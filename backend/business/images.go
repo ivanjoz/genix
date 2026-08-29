@@ -1,6 +1,7 @@
 package business
 
 import (
+	"app/business/types"
 	"app/core"
 	"app/db"
 	"fmt"
@@ -13,7 +14,7 @@ func GetImageIdCounter(req *core.HandlerArgs) core.HandlerResponse {
 	// configDigit selects the resolution-set scheme (default 7 = full product upload).
 	configDigit := int32(req.GetQueryInt64("config"))
 	if configDigit == 0 {
-		configDigit = imageConfigDigitFull
+		configDigit = types.ImageConfigDigitFull
 	}
 
 	autoincrement, err := db.GetAutoincrementID(fmt.Sprintf("images_%v", req.User.CompanyID), 1)
