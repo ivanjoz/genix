@@ -50,7 +50,6 @@
 			/>
 		{:else if view === 2}
 			<SaleOrdersChartsDailySummary
-				chartMetricForm={chartMetricForm}
 				saleSummaryRecords={saleOrdersChartsService.records}
 				productsByIdMap={productosService.recordsMap}
 			/>

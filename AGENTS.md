@@ -172,6 +172,11 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - Save dates as **UnixDay** `int16` — days since the unix epoch.
 - Save datetimes as **SUnixTime** `int32` = `int32((unix - 1e9) / 2)`.
 - **NEVER use `time.Now()` for a persisted date.** Use `core.Now()`, `core.SUnixTime()` or `core.FechaUnix()` — they read the **effective clock**, which `GENIX_HISTORICAL_UNIX` / `core.SetHistoricalUnix()` can freeze so seed generators write past-dated records. The ORM's own `created`/`updated` columns follow the same clock.
+- **Product quantities are the `core.Quantity{Units, Sub}` pair** read at a divisor (`Product.SbuQuantity`: how many sub-units make one unit, `int16`, max 1000). Value = `Units + Sub/Divisor`. `Units` is never scaled.
+  - **Aggregates split** — stock, the movement ledger and the sale summaries keep `Quantity` and `SubQuantity` in separate columns, because they are accumulated with a plain `+` and `SUM()`-ed by Scylla. There `Sub` is **unnormalized**: it may exceed the divisor and go negative (a shop buying boxes and selling loose runs a negative sub balance).
+  - **Documents pack** — a sale-order line stores `Units*1000 + Sub` in one column (`1001` at divisor 6 = one box + one candy) plus its own `DetailSubDivisor`. Convert with `core.PackQuantityLine` / `core.UnpackQuantityLine`.
+  - A divisor may only be **refined to a multiple** (6→12 yes, 12→6 no); adding a sub-unit to a product with history rewrites nothing. Never test `Quantity < 0` for a stock check — use `IsNegative(divisor)`, since `{0,-4}` is oversold with a zero whole-unit half.
+  - See `docs/QUANTITY_SCALE_PLAN.md` and `backend/RATIONALE.md`.
 
 ### Backend
 - **NEVER trust the client.** Validate required fields and data consistency, and return a descriptive error on every failed validation.

@@ -13,6 +13,48 @@ type ProductSummaryChange struct {
 	types.SaleOrderProductStats
 }
 
+// The summary row stores its pairs normalized, which is what keeps the Sub halves — and the
+// pending whole-unit count — inside int16. These four accessors are the only places that
+// widen or narrow them, so the normalization can never be skipped by accident.
+
+func statsDivisorOf(stats *types.SaleOrderProductStats) int16 {
+	if stats.SubDivisor > 0 {
+		return stats.SubDivisor
+	}
+	return core.QuantityDivisorNone
+}
+
+func statsSoldQuantity(stats *types.SaleOrderProductStats) core.Quantity {
+	return core.Quantity{Units: stats.Quantity, Sub: int32(stats.SubQuantity)}
+}
+
+func statsPendingQuantity(stats *types.SaleOrderProductStats) core.Quantity {
+	return core.Quantity{
+		Units: stats.QuantityPendingDelivery,
+		Sub:   int32(stats.SubQuantityPendingDelivery),
+	}
+}
+
+func setStatsSoldQuantity(stats *types.SaleOrderProductStats, quantity core.Quantity) error {
+	normalized, err := quantity.Normalize(statsDivisorOf(stats))
+	if err != nil {
+		return err
+	}
+	stats.Quantity = normalized.Units
+	stats.SubQuantity = int16(normalized.Sub)
+	return nil
+}
+
+func setStatsPendingQuantity(stats *types.SaleOrderProductStats, quantity core.Quantity) error {
+	normalized, err := quantity.Normalize(statsDivisorOf(stats))
+	if err != nil {
+		return err
+	}
+	stats.QuantityPendingDelivery = normalized.Units
+	stats.SubQuantityPendingDelivery = int16(normalized.Sub)
+	return nil
+}
+
 func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []ProductSummaryChange {
 	changes := []ProductSummaryChange{}
 	if len(sale.DetailProductsIDs) == 0 {
@@ -29,22 +71,41 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 	changesByProduct := map[int32]ProductSummaryChange{}
 
 	for lineIndex, productID := range sale.DetailProductsIDs {
-		quantity := sale.DetailQuantities[lineIndex]
-		if productID <= 0 || quantity <= 0 {
+		packedQuantity := sale.DetailQuantities[lineIndex]
+		if productID <= 0 || packedQuantity <= 0 {
 			continue
 		}
 
-		lineAmount := core.MultiplyInt32Saturated(sale.DetailPrices[lineIndex], quantity)
+		// The order stores lines packed; the summary accumulates, so it works on the split
+		// pair. 1004 at divisor 6 is one box plus four candies.
+		lineQuantity := core.UnpackQuantityLine(packedQuantity)
+		lineDivisor := core.GetIndex(sale.DetailSubDivisor, lineIndex)
+		if lineDivisor <= 0 {
+			lineDivisor = core.QuantityDivisorNone
+		}
+		// Sub-units are charged at their own price, so the line total is exact rather than
+		// a prorated fraction of the whole-unit price.
+		lineAmount := core.QuantityAmount(lineQuantity,
+			core.GetIndex(sale.DetailPrices, lineIndex), core.GetIndex(sale.DetailSubPrices, lineIndex))
+
 		currentChange := changesByProduct[productID]
 		currentChange.productID = productID
+		alignedQuantity, err := alignSummaryChangeDivisor(&currentChange, lineQuantity, lineDivisor)
+		if err != nil {
+			core.LogError("Resumen de ventas: divisores de sub-unidad incompatibles.", err)
+			continue
+		}
+
+		soldQuantity := statsSoldQuantity(&currentChange.SaleOrderProductStats)
+		pendingQuantity := statsPendingQuantity(&currentChange.SaleOrderProductStats)
 
 		if includeSale {
 			// Sale creation adds units and total amount once.
-			currentChange.Quantity += quantity
+			soldQuantity = soldQuantity.Add(alignedQuantity)
 			currentChange.TotalAmount += lineAmount
 			// When delivery is still pending, the full quantity remains pending.
 			if !includeDelivery {
-				currentChange.QuantityPendingDelivery += quantity
+				pendingQuantity = pendingQuantity.Add(alignedQuantity)
 			}
 			// When payment is still pending, the full line amount remains as debt.
 			if !includePayment {
@@ -57,7 +118,16 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 		}
 		if includeDelivery && !includeSale {
 			// Pure delivery updates only reduce pending quantity.
-			currentChange.QuantityPendingDelivery -= quantity
+			pendingQuantity = pendingQuantity.Add(alignedQuantity.Negate())
+		}
+
+		if err := setStatsSoldQuantity(&currentChange.SaleOrderProductStats, soldQuantity); err != nil {
+			core.LogError("Resumen de ventas: cantidad vendida fuera de rango.", err)
+			continue
+		}
+		if err := setStatsPendingQuantity(&currentChange.SaleOrderProductStats, pendingQuantity); err != nil {
+			core.LogError("Resumen de ventas: cantidad pendiente fuera de rango.", err)
+			continue
 		}
 		changesByProduct[productID] = currentChange
 	}
@@ -66,6 +136,46 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 		changes = append(changes, summaryChange)
 	}
 	return changes
+}
+
+// alignSummaryChangeDivisor brings an accumulating change and an incoming line to one
+// divisor before their sub-units are added together. Lines of the same product normally
+// share a divisor, but a refinement between two sales of the same day would otherwise have
+// the row adding sixths to twelfths.
+func alignSummaryChangeDivisor(change *ProductSummaryChange, lineQuantity core.Quantity,
+	lineDivisor int16) (core.Quantity, error) {
+
+	changeDivisor := change.SubDivisor
+	if changeDivisor <= 0 {
+		change.SubDivisor = lineDivisor
+		return lineQuantity, nil
+	}
+	if changeDivisor == lineDivisor {
+		return lineQuantity, nil
+	}
+
+	// A finer line pulls the accumulator forward; a coarser one converts up to it.
+	if core.IsQuantityDivisorRefinement(changeDivisor, lineDivisor) {
+		refined, err := statsSoldQuantity(&change.SaleOrderProductStats).
+			ConvertToDivisor(changeDivisor, lineDivisor)
+		if err != nil {
+			return core.Quantity{}, err
+		}
+		refinedPending, err := statsPendingQuantity(&change.SaleOrderProductStats).
+			ConvertToDivisor(changeDivisor, lineDivisor)
+		if err != nil {
+			return core.Quantity{}, err
+		}
+		change.SubDivisor = lineDivisor
+		if err := setStatsSoldQuantity(&change.SaleOrderProductStats, refined); err != nil {
+			return core.Quantity{}, err
+		}
+		if err := setStatsPendingQuantity(&change.SaleOrderProductStats, refinedPending); err != nil {
+			return core.Quantity{}, err
+		}
+		return lineQuantity, nil
+	}
+	return lineQuantity.ConvertToDivisor(lineDivisor, changeDivisor)
 }
 
 func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
@@ -142,11 +252,72 @@ func applySummaryChangeToStats(summaryStats *types.SaleOrderProductStats, summar
 		return
 	}
 
+	// Bring the stored row to the change's divisor before the sub-units are added, so a
+	// refinement between two sales of the same day never mixes sixths with twelfths.
+	if err := alignStatsToChangeDivisor(summaryStats, summaryChange); err != nil {
+		core.LogError("Resumen de ventas: no se pudo alinear el divisor de sub-unidad.", err)
+		return
+	}
+
 	// Clamp every counter to zero because the compact serializer only stores unsigned values.
-	summaryStats.Quantity = core.ClampInt32ToZero(summaryStats.Quantity + summaryChange.Quantity)
-	summaryStats.QuantityPendingDelivery = core.ClampInt32ToZero(summaryStats.QuantityPendingDelivery + summaryChange.QuantityPendingDelivery)
+	// A pair is clamped as one value: zeroing the halves independently would turn {0,-4}
+	// into {0,0} on the sub side while leaving a positive whole count, inventing stock.
+	divisor := statsDivisorOf(summaryStats)
+	sold := clampQuantityToZero(
+		statsSoldQuantity(summaryStats).Add(statsSoldQuantity(&summaryChange.SaleOrderProductStats)), divisor)
+	pending := clampQuantityToZero(
+		statsPendingQuantity(summaryStats).Add(statsPendingQuantity(&summaryChange.SaleOrderProductStats)), divisor)
+
+	if err := setStatsSoldQuantity(summaryStats, sold); err != nil {
+		core.LogError("Resumen de ventas: cantidad vendida fuera de rango.", err)
+		return
+	}
+	if err := setStatsPendingQuantity(summaryStats, pending); err != nil {
+		core.LogError("Resumen de ventas: cantidad pendiente fuera de rango.", err)
+		return
+	}
 	summaryStats.TotalAmount = core.ClampInt32ToZero(summaryStats.TotalAmount + summaryChange.TotalAmount)
 	summaryStats.TotalDebtAmount = core.ClampInt32ToZero(summaryStats.TotalDebtAmount + summaryChange.TotalDebtAmount)
+}
+
+func clampQuantityToZero(quantity core.Quantity, divisor int16) core.Quantity {
+	if quantity.IsNegative(divisor) {
+		return core.Quantity{}
+	}
+	return quantity
+}
+
+// alignStatsToChangeDivisor refines a stored summary row up to the incoming change's
+// divisor. Only that direction is possible: a divisor may never be coarsened, so a change
+// arriving at a coarser divisor than the row is a real inconsistency, not a conversion.
+func alignStatsToChangeDivisor(summaryStats *types.SaleOrderProductStats, summaryChange ProductSummaryChange) error {
+	changeDivisor := summaryChange.SubDivisor
+	storedDivisor := summaryStats.SubDivisor
+	if changeDivisor <= 0 {
+		return nil
+	}
+	if storedDivisor <= 0 {
+		summaryStats.SubDivisor = summaryChange.SubDivisor
+		return nil
+	}
+	if storedDivisor == changeDivisor {
+		return nil
+	}
+
+	sold, err := statsSoldQuantity(summaryStats).ConvertToDivisor(storedDivisor, changeDivisor)
+	if err != nil {
+		return err
+	}
+	pending, err := statsPendingQuantity(summaryStats).ConvertToDivisor(storedDivisor, changeDivisor)
+	if err != nil {
+		return err
+	}
+
+	summaryStats.SubDivisor = summaryChange.SubDivisor
+	if err := setStatsSoldQuantity(summaryStats, sold); err != nil {
+		return err
+	}
+	return setStatsPendingQuantity(summaryStats, pending)
 }
 
 func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSummaryChange, replaceCurrentValues bool) error {
@@ -165,8 +336,27 @@ func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSumm
 		}
 		currentChange := mergedChanges[summaryChange.productID]
 		currentChange.productID = summaryChange.productID
-		currentChange.Quantity += summaryChange.Quantity
-		currentChange.QuantityPendingDelivery += summaryChange.QuantityPendingDelivery
+		// Align first, then add through the accessors so the result is normalized. Adding the
+		// raw halves would let Sub climb past its field on a product with many changes in
+		// one day — a few hundred lines at ~999 sub-units each is enough.
+		if err := alignStatsToChangeDivisor(&currentChange.SaleOrderProductStats, summaryChange); err != nil {
+			core.LogError("Resumen de ventas: no se pudo alinear el divisor al fusionar cambios.", err)
+			continue
+		}
+		mergedSold := statsSoldQuantity(&currentChange.SaleOrderProductStats).
+			Add(statsSoldQuantity(&summaryChange.SaleOrderProductStats))
+		mergedPending := statsPendingQuantity(&currentChange.SaleOrderProductStats).
+			Add(statsPendingQuantity(&summaryChange.SaleOrderProductStats))
+		// No clamping here: a merge of changes is signed, and the floor is applied when the
+		// change lands on the stored row.
+		if err := setStatsSoldQuantity(&currentChange.SaleOrderProductStats, mergedSold); err != nil {
+			core.LogError("Resumen de ventas: cantidad vendida fuera de rango al fusionar.", err)
+			continue
+		}
+		if err := setStatsPendingQuantity(&currentChange.SaleOrderProductStats, mergedPending); err != nil {
+			core.LogError("Resumen de ventas: cantidad pendiente fuera de rango al fusionar.", err)
+			continue
+		}
 		currentChange.TotalAmount += summaryChange.TotalAmount
 		currentChange.TotalDebtAmount += summaryChange.TotalDebtAmount
 		mergedChanges[summaryChange.productID] = currentChange
@@ -244,10 +434,20 @@ func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSumm
 
 func makeSaleSummaryStatsFromChange(summaryChange ProductSummaryChange) types.SaleOrderProductStats {
 	// Rebuild rows use the change struct as the final summary payload for the product.
-	return types.SaleOrderProductStats{
-		Quantity:                core.ClampInt32ToZero(summaryChange.Quantity),
-		QuantityPendingDelivery: core.ClampInt32ToZero(summaryChange.QuantityPendingDelivery),
-		TotalAmount:             core.ClampInt32ToZero(summaryChange.TotalAmount),
-		TotalDebtAmount:         core.ClampInt32ToZero(summaryChange.TotalDebtAmount),
+	divisor := statsDivisorOf(&summaryChange.SaleOrderProductStats)
+	rebuiltStats := types.SaleOrderProductStats{
+		SubDivisor:      divisor,
+		TotalAmount:     core.ClampInt32ToZero(summaryChange.TotalAmount),
+		TotalDebtAmount: core.ClampInt32ToZero(summaryChange.TotalDebtAmount),
 	}
+	// Clamped as whole values, so a negative pair zeroes both halves together.
+	sold := clampQuantityToZero(statsSoldQuantity(&summaryChange.SaleOrderProductStats), divisor)
+	pending := clampQuantityToZero(statsPendingQuantity(&summaryChange.SaleOrderProductStats), divisor)
+	if err := setStatsSoldQuantity(&rebuiltStats, sold); err != nil {
+		core.LogError("Resumen de ventas: cantidad vendida fuera de rango al reconstruir.", err)
+	}
+	if err := setStatsPendingQuantity(&rebuiltStats, pending); err != nil {
+		core.LogError("Resumen de ventas: cantidad pendiente fuera de rango al reconstruir.", err)
+	}
+	return rebuiltStats
 }

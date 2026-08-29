@@ -28,9 +28,12 @@ export interface IWarehouseProductMovement {
   DocumentID?: number
   ProductID?: number
   PresentationID?: number
+  // The ledger keeps the pair in separate columns so it can accumulate with a plain + and
+  // still be SUM()-ed. SubDivisor says what SubQuantity is counted in.
   Quantity?: number
   WarehouseQuantity?: number
   SubQuantity?: number
+  SubDivisor?: number
   MonetaryValue?: number
   Type?: number
   Created?: number

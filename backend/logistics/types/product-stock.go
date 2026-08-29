@@ -9,17 +9,26 @@ import (
 // - Quantity         : stock with no lot/serial tracking (the "free" bucket).
 // - DetailQuantity   : sum of ProductStockDetail.Quantity rows linked to this row.
 // - DetailComputed*  : async-precomputed snapshot (populated by a separate job).
+//
+// Every Quantity has a SubQuantity companion: together they are the core.Quantity pair
+// {Units, Sub} read at SubDivisor. Sub is NOT normalized — it may exceed the divisor and go
+// negative (a shop that buys boxes and sells candies runs a negative sub balance against
+// whole-unit inflows), which is what lets movements accumulate with a plain +.
 type ProductStock struct {
 	db.TableStruct[ProductStockTable, ProductStock]
-	ID                        int64
-	CompanyID                 int32   `json:",omitempty"`
-	WarehouseID               int32   `json:",omitempty"`
-	ProductID                 int32   `json:",omitempty"`
-	PresentationID            int16   `json:",omitempty"`
-	Quantity                  int32   `json:",omitempty"`
-	SubQuantity               int32   `json:",omitempty"`
-	DetailQuantity            int32   `json:",omitempty"`
-	DetailSubQuantity         int32   `json:",omitempty"`
+	ID                int64
+	CompanyID         int32 `json:",omitempty"`
+	WarehouseID       int32 `json:",omitempty"`
+	ProductID         int32 `json:",omitempty"`
+	PresentationID    int16 `json:",omitempty"`
+	Quantity          int32 `json:",omitempty"`
+	SubQuantity       int32 `json:",omitempty"`
+	DetailQuantity    int32 `json:",omitempty"`
+	DetailSubQuantity int32 `json:",omitempty"`
+	// SubDivisor is the divisor every SubQuantity on this row (and on its detail rows, which
+	// are the same product) is expressed in. Kept here rather than read from the product so a
+	// divisor refinement converts this row on the fly instead of rewriting history.
+	SubDivisor                int16   `json:",omitempty"`
 	DetailComputedDate        int16   `json:",omitempty"`
 	DetailComputedQuantity    int32   `json:",omitempty"`
 	DetailComputedSubQuantity int32   `json:",omitempty"`
@@ -35,9 +44,13 @@ type ProductStock struct {
 	Status         int8  `json:"ss,omitempty"`
 }
 
-// Derive Status from the two live buckets (Quantity + DetailQuantity).
+// Derive Status from the two live buckets (Quantity + DetailQuantity). The sub-unit halves
+// count: a row holding no whole units but four loose candies still has stock, and a Status
+// of 0 would evict it from the delta sync as if the warehouse were empty.
 func (e *ProductStock) SelfParse() {
-	e.Status = core.If(e.Quantity == 0 && e.DetailQuantity == 0, int8(0), int8(1))
+	freeBucket := core.Quantity{Units: e.Quantity, Sub: e.SubQuantity}
+	detailBucket := core.Quantity{Units: e.DetailQuantity, Sub: e.DetailSubQuantity}
+	e.Status = core.If(freeBucket.IsZero() && detailBucket.IsZero(), int8(0), int8(1))
 }
 
 type ProductStockTable struct {
@@ -51,6 +64,7 @@ type ProductStockTable struct {
 	SubQuantity               db.Col[*ProductStockTable, int32]
 	DetailQuantity            db.Col[*ProductStockTable, int32]
 	DetailSubQuantity         db.Col[*ProductStockTable, int32]
+	SubDivisor                db.Col[*ProductStockTable, int16]
 	DetailComputedDate        db.Col[*ProductStockTable, int16]
 	DetailComputedQuantity    db.Col[*ProductStockTable, int32]
 	DetailComputedSubQuantity db.Col[*ProductStockTable, int32]

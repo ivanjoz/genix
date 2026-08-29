@@ -66,6 +66,89 @@ func appendProductStockLastPrice(stock *ProductStock, movementQuantity int32, pr
 		"stockID", stock.ID, "quantity", movementQuantity, "price", price, "entries", len(stock.LastPricesPrice))
 }
 
+// movementDivisorOf treats an unset divisor as "whole units only". A movement carrying
+// sub-units without saying what they are is rejected rather than guessed at, because the
+// guess would be silently wrong for exactly the products this feature exists for.
+func movementDivisorOf(mov *InternalMovement) (int16, error) {
+	if mov.SubDivisor > 0 {
+		if err := core.ValidateQuantityDivisor(mov.SubDivisor); err != nil {
+			return 0, err
+		}
+		return mov.SubDivisor, nil
+	}
+	if mov.SubQuantity != 0 {
+		return 0, core.Err(fmt.Sprintf(
+			"Movimiento con sub-cantidad %v sin divisor de sub-unidad (producto %v, almacén %v).",
+			mov.SubQuantity, mov.ProductID, mov.WarehouseID))
+	}
+	return core.QuantityDivisorNone, nil
+}
+
+// stockDivisorOf reads the divisor a stock row is currently expressed in. A row that has
+// never carried sub-units has none, and adopts whatever the next movement brings.
+func stockDivisorOf(stock *ProductStock) int16 {
+	if stock.SubDivisor > 0 {
+		return stock.SubDivisor
+	}
+	return core.QuantityDivisorNone
+}
+
+// refineStockDivisor re-expresses a stock row and every detail row under it at a finer
+// divisor. It must be atomic across the details: ProductStock.DetailSubQuantity is an
+// absolute re-sum of them, so converting only some would leave the row summing sixths
+// together with twelfths.
+func refineStockDivisor(stock *ProductStock, details []*ProductStockDetail,
+	toDivisor int16, updatedTime int32, userID int32) error {
+
+	fromDivisor := stockDivisorOf(stock)
+	if fromDivisor == toDivisor {
+		stock.SubDivisor = toDivisor
+		return nil
+	}
+
+	freeBucket, err := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}.
+		ConvertToDivisor(fromDivisor, toDivisor)
+	if err != nil {
+		return err
+	}
+	detailBucket, err := core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity}.
+		ConvertToDivisor(fromDivisor, toDivisor)
+	if err != nil {
+		return err
+	}
+	computedBucket, err := core.Quantity{Units: stock.DetailComputedQuantity, Sub: stock.DetailComputedSubQuantity}.
+		ConvertToDivisor(fromDivisor, toDivisor)
+	if err != nil {
+		return err
+	}
+
+	// Convert the details first so a failure leaves nothing half-converted.
+	convertedDetails := make([]core.Quantity, len(details))
+	for i, detail := range details {
+		converted, err := core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}.
+			ConvertToDivisor(fromDivisor, toDivisor)
+		if err != nil {
+			return err
+		}
+		convertedDetails[i] = converted
+	}
+	for i, detail := range details {
+		detail.Quantity, detail.SubQuantity = convertedDetails[i].Units, convertedDetails[i].Sub
+		// Stamp so the write step sees the row as dirty; an unstamped detail is skipped and
+		// would stay behind at the old divisor.
+		detail.Updated = updatedTime
+		detail.UpdatedBy = userID
+	}
+
+	stock.Quantity, stock.SubQuantity = freeBucket.Units, freeBucket.Sub
+	stock.DetailQuantity, stock.DetailSubQuantity = detailBucket.Units, detailBucket.Sub
+	stock.DetailComputedQuantity, stock.DetailComputedSubQuantity = computedBucket.Units, computedBucket.Sub
+	stock.SubDivisor = toDivisor
+	core.Log("ApplyMovimientos refinó el divisor de stock:",
+		"stockID", stock.ID, "de", fromDivisor, "a", toDivisor, "detalles", len(details))
+	return nil
+}
+
 func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
@@ -105,6 +188,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 
 	// Compute V2 packed IDs per movement and bucket them for preload.
 	stockIDByMovement := make([]int64, len(activeMovements))
+	divisorByMovement := make([]int16, len(activeMovements))
 	stockIDSet := core.SliceSet[int64]{}
 	stockIDsWithDetails := core.SliceSet[int64]{}
 	for i, mov := range activeMovements {
@@ -114,6 +198,11 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 		if mov.HasDetail() {
 			stockIDsWithDetails.Add(id)
 		}
+		movementDivisor, err := movementDivisorOf(mov)
+		if err != nil {
+			return err
+		}
+		divisorByMovement[i] = movementDivisor
 	}
 
 	// Preload V2 rows and detail rows in parallel. Each goroutine owns its own map
@@ -166,6 +255,69 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 	updatedTime := core.SUnixTime()
 	dateUnix := core.FechaUnix()
 
+	// Divisor reconciliation, before any mutation. A stock row records the divisor it was
+	// last written under; when a movement arrives at a finer one the row converts itself,
+	// which is what lets a divisor refinement stay lazy instead of rewriting the ledger.
+	// Refinements are rare by design, so the extra detail load below almost never fires.
+	refinementTargetByStockID := map[int64]int16{}
+	for i := range activeMovements {
+		stock := stockByID[stockIDByMovement[i]]
+		if stock == nil {
+			continue
+		}
+		currentDivisor := stockDivisorOf(stock)
+		if currentDivisor == divisorByMovement[i] {
+			continue
+		}
+		// Only a strictly finer movement divisor pulls the stock row forward. A coarser one
+		// is converted up to the row instead, in the mutation loop.
+		if !core.IsQuantityDivisorRefinement(currentDivisor, divisorByMovement[i]) {
+			continue
+		}
+		if target, seen := refinementTargetByStockID[stock.ID]; !seen ||
+			core.IsQuantityDivisorRefinement(target, divisorByMovement[i]) {
+			refinementTargetByStockID[stock.ID] = divisorByMovement[i]
+		}
+	}
+
+	if len(refinementTargetByStockID) > 0 {
+		// A stock touched only by a free-bucket movement had no details preloaded, but its
+		// details still hold sub-units at the old divisor and must convert with it.
+		missingDetailStockIDs := core.SliceSet[int64]{}
+		for stockID := range refinementTargetByStockID {
+			if !stockIDsWithDetails.Include(stockID) {
+				missingDetailStockIDs.Add(stockID)
+			}
+		}
+		if !missingDetailStockIDs.IsEmpty() {
+			existing := []ProductStockDetail{}
+			q := db.Query(&existing)
+			q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).
+				CompanyID.Equals(companyID).
+				ProductStockID.In(missingDetailStockIDs.Values...)
+			if err := q.Exec(); err != nil {
+				return core.Err("Error al obtener detalle de stock para refinar el divisor:", err)
+			}
+			for i := range existing {
+				row := &existing[i]
+				detailByKey[detailKey(row.ProductStockID, row.LotID, row.SerialNumber)] = row
+			}
+		}
+
+		detailsByStockID := map[int64][]*ProductStockDetail{}
+		for _, detail := range detailByKey {
+			if _, refining := refinementTargetByStockID[detail.ProductStockID]; refining {
+				detailsByStockID[detail.ProductStockID] = append(detailsByStockID[detail.ProductStockID], detail)
+			}
+		}
+		for stockID, targetDivisor := range refinementTargetByStockID {
+			if err := refineStockDivisor(stockByID[stockID], detailsByStockID[stockID],
+				targetDivisor, updatedTime, userID); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Build ledger rows and mutate V2/Detail in place.
 	warehouseMovements := make([]WarehouseProductMovement, 0, len(activeMovements))
 	for i, mov := range activeMovements {
@@ -179,10 +331,26 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 				WarehouseID:    mov.WarehouseID,
 				ProductID:      mov.ProductID,
 				PresentationID: mov.PresentationID,
+				SubDivisor:     divisorByMovement[i],
 				Created:        updatedTime,
 				CreatedBy:      userID,
 			}
 			stockByID[stockID] = stock
+		}
+
+		// The row's divisor wins. The reconciliation pass already pulled it forward if any
+		// movement was finer, so anything still different here is a coarser movement, which
+		// converts up to the row exactly.
+		effectiveDivisor := stockDivisorOf(stock)
+		movementQuantity := core.Quantity{Units: mov.Quantity, Sub: mov.SubQuantity}
+		if divisorByMovement[i] != effectiveDivisor {
+			converted, convertErr := movementQuantity.ConvertToDivisor(divisorByMovement[i], effectiveDivisor)
+			if convertErr != nil {
+				return core.Err(fmt.Sprintf(
+					"Movimiento incompatible con el divisor del stock (producto %v, almacén %v, divisor stock %v, divisor movimiento %v).",
+					mov.ProductID, mov.WarehouseID, effectiveDivisor, divisorByMovement[i]))
+			}
+			movementQuantity = converted
 		}
 
 		movement := WarehouseProductMovement{
@@ -194,6 +362,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			SerialNumber:   mov.SerialNumber,
 			LotID:          mov.LotID,
 			Type:           core.Coalesce(mov.Type, core.If(mov.Quantity > 0, int8(1), int8(2))),
+			SubDivisor:     effectiveDivisor,
 			Date:           dateUnix,
 			Created:        updatedTime,
 			CreatedBy:      userID,
@@ -216,42 +385,49 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 				detailByKey[key] = detail
 			}
 
-			prevQuantity, prevSubQuantity := detail.Quantity, detail.SubQuantity
+			previous := core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}
+			var next core.Quantity
 			if mov.ReplaceQuantity {
-				movement.Quantity = mov.Quantity - prevQuantity
-				movement.SubQuantity = mov.SubQuantity - prevSubQuantity
-				detail.Quantity = mov.Quantity
-				detail.SubQuantity = mov.SubQuantity
+				// "Set stock to X": the ledger records the delta that gets it there.
+				delta := movementQuantity.Add(previous.Negate())
+				movement.Quantity, movement.SubQuantity = delta.Units, delta.Sub
+				next = movementQuantity
 			} else {
-				movement.Quantity = mov.Quantity
-				movement.SubQuantity = mov.SubQuantity
-				detail.Quantity = prevQuantity + mov.Quantity
-				detail.SubQuantity = prevSubQuantity + mov.SubQuantity
+				movement.Quantity, movement.SubQuantity = movementQuantity.Units, movementQuantity.Sub
+				next = previous.Add(movementQuantity)
 			}
+			detail.Quantity, detail.SubQuantity = next.Units, next.Sub
 			// Stamp Updated/UpdatedBy so the partition step recognises this detail as dirty.
 			detail.Updated = updatedTime
 			detail.UpdatedBy = userID
-			detail.Status = core.If(detail.Quantity == 0 && detail.SubQuantity == 0, int8(0), int8(1))
+			detail.Status = core.If(next.IsZero(), int8(0), int8(1))
 		} else {
 			// Free bucket: mutate V2.Quantity only, leave DetailQuantity for the final re-sum pass.
-			prevQuantity, prevSubQuantity := stock.Quantity, stock.SubQuantity
+			previous := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
+			var next core.Quantity
 			if mov.ReplaceQuantity {
-				movement.Quantity = mov.Quantity - prevQuantity
-				movement.SubQuantity = mov.SubQuantity - prevSubQuantity
-				stock.Quantity = mov.Quantity
-				stock.SubQuantity = mov.SubQuantity
+				delta := movementQuantity.Add(previous.Negate())
+				movement.Quantity, movement.SubQuantity = delta.Units, delta.Sub
+				next = movementQuantity
 			} else {
-				movement.Quantity = mov.Quantity
-				movement.SubQuantity = mov.SubQuantity
-				stock.Quantity = prevQuantity + mov.Quantity
-				stock.SubQuantity = prevSubQuantity + mov.SubQuantity
+				movement.Quantity, movement.SubQuantity = movementQuantity.Units, movementQuantity.Sub
+				next = previous.Add(movementQuantity)
 			}
+			stock.Quantity, stock.SubQuantity = next.Units, next.Sub
 		}
 
 		appendProductStockLastPrice(stock, movement.Quantity, mov.Price)
 		if mov.Price > 0 {
 			// Persist the unit price on the ledger as total line value for later reports.
-			movement.MonetaryValue = movement.Quantity * mov.Price
+			// The sub-unit part is prorated: the ledger carries only a purchase price, with
+			// no separate sub-unit price to charge against.
+			lineValue, valueErr := core.QuantityValueAtUnitPrice(
+				core.Quantity{Units: movement.Quantity, Sub: movement.SubQuantity},
+				effectiveDivisor, mov.Price)
+			if valueErr != nil {
+				return valueErr
+			}
+			movement.MonetaryValue = lineValue
 		}
 		stock.Updated = updatedTime
 		stock.UpdatedBy = userID
@@ -290,10 +466,17 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 	// Untouched preloaded details (Updated==0) are skipped so InsertUpdateInclude only sees dirty rows.
 	stocks := make([]ProductStock, 0, len(stockByID))
 	for _, stock := range stockByID {
-		if stock.Quantity < 0 || stock.DetailQuantity < 0 {
+		// A plain Quantity < 0 test misses {0,-4}: four sub-units oversold, whose whole-unit
+		// field is exactly zero. Both buckets have to be judged as normalized values.
+		stockDivisor := stockDivisorOf(stock)
+		freeBucket := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
+		detailBucket := core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity}
+		if freeBucket.IsNegative(stockDivisor) || detailBucket.IsNegative(stockDivisor) {
 			return core.Err(fmt.Sprintf(
-				"Stock resultante negativo: almacén %v product %v presentación %v (Quantity=%v DetailQuantity=%v).",
-				stock.WarehouseID, stock.ProductID, stock.PresentationID, stock.Quantity, stock.DetailQuantity))
+				"Stock resultante negativo: almacén %v producto %v presentación %v "+
+					"(Quantity=%v SubQuantity=%v DetailQuantity=%v DetailSubQuantity=%v divisor=%v).",
+				stock.WarehouseID, stock.ProductID, stock.PresentationID,
+				stock.Quantity, stock.SubQuantity, stock.DetailQuantity, stock.DetailSubQuantity, stockDivisor))
 		}
 		stocks = append(stocks, *stock)
 	}
@@ -302,10 +485,15 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 		if detail.Updated == 0 {
 			continue
 		}
-		if detail.Quantity < 0 {
+		detailDivisor := core.QuantityDivisorNone
+		if parentStock := stockByID[detail.ProductStockID]; parentStock != nil {
+			detailDivisor = stockDivisorOf(parentStock)
+		}
+		if (core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}).IsNegative(detailDivisor) {
 			return core.Err(fmt.Sprintf(
-				"Detalle de stock negativo: stockID %v lotID %v serial %q (Quantity=%v).",
-				detail.ProductStockID, detail.LotID, detail.SerialNumber, detail.Quantity))
+				"Detalle de stock negativo: stockID %v lotID %v serial %q (Quantity=%v SubQuantity=%v divisor=%v).",
+				detail.ProductStockID, detail.LotID, detail.SerialNumber,
+				detail.Quantity, detail.SubQuantity, detailDivisor))
 		}
 		details = append(details, *detail)
 	}
@@ -327,6 +515,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 					stockTable.WarehouseID,
 					stockTable.Quantity, stockTable.SubQuantity,
 					stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+					stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
+					stockTable.SubDivisor,
 					stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
 					stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
 				),
@@ -479,6 +669,9 @@ func RecalcProductStockByMovements(companyID int32) error {
 	// loaded from DB and must be persisted as an UPDATE; Created>0 flags INSERT.
 	stockByID := map[int64]*ProductStock{}
 	detailByKey := map[string]*ProductStockDetail{}
+	// Indexed by stock so a divisor refinement mid-replay can convert a row's whole detail
+	// set at once; DetailSubQuantity is their absolute sum and cannot mix divisors.
+	detailsByStock := map[int64][]*ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
@@ -493,8 +686,11 @@ func RecalcProductStockByMovements(companyID int32) error {
 		for i := range existing {
 			stock := &existing[i]
 			// Reset so movements recompute from scratch; untouched rows will blank out below.
+			// SubDivisor resets too: the ledger is the source of truth for it, so the replay
+			// adopts whatever the movements carry rather than trusting the stale row.
 			stock.Quantity, stock.SubQuantity = 0, 0
 			stock.DetailQuantity, stock.DetailSubQuantity = 0, 0
+			stock.SubDivisor = 0
 			stockByID[stock.ID] = stock
 		}
 	}
@@ -505,14 +701,23 @@ func RecalcProductStockByMovements(companyID int32) error {
 		if err := q.Exec(); err != nil {
 			return core.Err("Error al obtener detalle de stock previo:", err)
 		}
+		detailsByStockID := map[int64][]*ProductStockDetail{}
 		for i := range existing {
 			detail := &existing[i]
 			detail.Quantity, detail.SubQuantity = 0, 0
 			detailByKey[detailKey(detail.ProductStockID, detail.LotID, detail.SerialNumber)] = detail
+			detailsByStockID[detail.ProductStockID] = append(detailsByStockID[detail.ProductStockID], detail)
 		}
+		detailsByStock = detailsByStockID
 	}
 
-	accumulate := func(warehouseID int32, quantity int32, subQuantity int32, movement *WarehouseProductMovement) {
+	// The ledger can span a divisor refinement, so the scan cannot assume every movement for a
+	// product speaks the same divisor. Each accumulator adopts the first divisor it sees and
+	// then reconciles: a finer movement pulls the accumulator (and its details) forward, a
+	// coarser one is converted up to it. Both directions are exact.
+	accumulate := func(warehouseID int32, quantity core.Quantity, movementDivisor int16,
+		movement *WarehouseProductMovement) error {
+
 		stockID := PackProductStockID(warehouseID, movement.ProductID, movement.PresentationID)
 		stock := stockByID[stockID]
 		if stock == nil {
@@ -527,10 +732,30 @@ func RecalcProductStockByMovements(companyID int32) error {
 			}
 			stockByID[stockID] = stock
 		}
+
+		if stock.SubDivisor <= 0 {
+			stock.SubDivisor = movementDivisor
+		} else if stock.SubDivisor != movementDivisor {
+			if core.IsQuantityDivisorRefinement(stock.SubDivisor, movementDivisor) {
+				if err := refineStockDivisor(stock, detailsByStock[stockID],
+					movementDivisor, updatedTime, 0); err != nil {
+					return err
+				}
+			} else {
+				converted, err := quantity.ConvertToDivisor(movementDivisor, stock.SubDivisor)
+				if err != nil {
+					return core.Err(fmt.Sprintf(
+						"Movimiento con divisor %v incompatible con el divisor %v del stock (producto %v, almacén %v).",
+						movementDivisor, stock.SubDivisor, movement.ProductID, warehouseID))
+				}
+				quantity = converted
+			}
+		}
+
 		if movement.LotID == 0 && movement.SerialNumber == "" {
-			stock.Quantity += quantity
-			stock.SubQuantity += subQuantity
-			return
+			next := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}.Add(quantity)
+			stock.Quantity, stock.SubQuantity = next.Units, next.Sub
+			return nil
 		}
 		key := detailKey(stockID, movement.LotID, movement.SerialNumber)
 		detail := detailByKey[key]
@@ -545,35 +770,54 @@ func RecalcProductStockByMovements(companyID int32) error {
 				Created:        updatedTime,
 			}
 			detailByKey[key] = detail
+			detailsByStock[stockID] = append(detailsByStock[stockID], detail)
 		}
-		detail.Quantity += quantity
-		detail.SubQuantity += subQuantity
+		next := core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}.Add(quantity)
+		detail.Quantity, detail.SubQuantity = next.Units, next.Sub
+		return nil
 	}
 
 	query := db.Query(&[]WarehouseProductMovement{})
 	query.CompanyID.Equals(companyID)
+	var accumulateError error
 	if err := query.ExecScan(func(movement *WarehouseProductMovement) bool {
-		accumulate(movement.WarehouseID, movement.Quantity, movement.SubQuantity, movement)
+		movementDivisor := movement.SubDivisor
+		if movementDivisor <= 0 {
+			movementDivisor = core.QuantityDivisorNone
+		}
+		moved := core.Quantity{Units: movement.Quantity, Sub: movement.SubQuantity}
+		if accumulateError = accumulate(movement.WarehouseID, moved, movementDivisor, movement); accumulateError != nil {
+			return false
+		}
 		if movement.WarehouseRefID > 0 {
 			// Transfers mirror an outbound leg on the source warehouse.
-			accumulate(movement.WarehouseRefID, -movement.Quantity, -movement.SubQuantity, movement)
+			if accumulateError = accumulate(movement.WarehouseRefID, moved.Negate(), movementDivisor, movement); accumulateError != nil {
+				return false
+			}
 		}
 		return true
 	}); err != nil {
 		return core.Err("Error al escanear movimientos:", err)
 	}
+	if accumulateError != nil {
+		return accumulateError
+	}
 
-	// Roll up DetailQuantity onto each stock once every movement is accumulated.
+	// Roll up DetailQuantity onto each stock once every movement is accumulated. Every detail
+	// under a stock is at that stock's divisor by now, so the sum is well defined.
 	for _, detail := range detailByKey {
 		if stock := stockByID[detail.ProductStockID]; stock != nil {
 			stock.DetailQuantity += detail.Quantity
 			stock.DetailSubQuantity += detail.SubQuantity
 		}
-		detail.Status = core.If(detail.Quantity == 0 && detail.SubQuantity == 0, int8(0), int8(1))
+		detail.Status = core.If((core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}).IsZero(),
+			int8(0), int8(1))
 		detail.Updated = updatedTime
 	}
 	for _, stock := range stockByID {
-		stock.Status = core.If(stock.Quantity == 0 && stock.DetailQuantity == 0, int8(0), int8(1))
+		freeBucket := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
+		detailBucket := core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity}
+		stock.Status = core.If(freeBucket.IsZero() && detailBucket.IsZero(), int8(0), int8(1))
 		stock.Updated = updatedTime
 	}
 
@@ -597,6 +841,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 			db.Cols(
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+				stockTable.SubDivisor,
 				stockTable.Updated, stockTable.Status,
 			),
 		); err != nil {

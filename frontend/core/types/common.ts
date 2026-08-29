@@ -43,5 +43,4 @@ export interface ILoginResult {
   CompanyID: number;
   // The company has no warehouse or no cash bank yet, so it cannot operate: the login routes to
   // the "Datos Iniciales" page instead of home.
-  InitialDataPending?: boolean;
 }

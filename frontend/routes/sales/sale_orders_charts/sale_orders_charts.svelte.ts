@@ -4,8 +4,13 @@ export interface ISaleSummaryRecord {
 	CompanyID: number;
 	Date: number;
 	ProductIDs: number[];
+	// Split pair per product: a summary is accumulated across sales, so it never uses the
+	// packed document form. SubDivisor says what the Sub* halves are counted in.
 	Quantity: number[];
+	SubQuantity: number[];
 	QuantityPendingDelivery: number[];
+	SubQuantityPendingDelivery: number[];
+	SubDivisor: number[];
 	TotalAmount: number[];
 	TotalDebtAmount: number[];
 	upd: number;
@@ -14,12 +19,13 @@ export interface ISaleSummaryRecord {
 export class SaleOrdersChartsService extends GetHandler {
 	route = 'sale-summary';
 	// Keep cache short for chart pages while preserving delta behavior.
-	useCache = { min: 0.2, ver: 3 };
+	useCache = { min: 0.2, ver: 4 };
 	// Backend key for delta merge when records don't expose `ID`.
 	keyID = 'Date';
 	columnarIDField = "ProductIDs";
 	combineColumnarValuesOnFields = [
-		"Quantity", "QuantityPendingDelivery", "TotalAmount", "TotalDebtAmount"
+		"Quantity", "SubQuantity", "QuantityPendingDelivery", "SubQuantityPendingDelivery",
+		"SubDivisor", "TotalAmount", "TotalDebtAmount"
 	];
 
 	records: ISaleSummaryRecord[] = $state([]);

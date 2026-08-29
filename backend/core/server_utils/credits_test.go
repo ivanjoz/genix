@@ -2,6 +2,7 @@ package server_utils
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"testing"
 )
@@ -273,5 +274,44 @@ func TestAccessInvalidationFrameMatchesTheRustAuthVector(t *testing.T) {
 	}
 	if _, err := encodeAccessInvalidation(0, 1); err == nil {
 		t.Fatal("company zero was accepted")
+	}
+}
+
+// The operator's own company runs without a budget. With no daemon configured, an exempt
+// charge has to come back nil where any other company gets ErrCreditLimiterMissing — that
+// difference is the whole exemption, and it is what keeps company 1 usable when the limiter
+// says the tenant is out of credit.
+func TestTheOperatorCompanyIsExemptFromCreditBudgets(t *testing.T) {
+	if err := chargeConfiguredCredits(
+		context.Background(), CreditExemptCompanyID, 1, 10, 5, 0, nil, false,
+	); err != nil {
+		t.Fatalf("the exempt company must not be charged, got %v", err)
+	}
+
+	// Any other tenant still reaches the limiter, so the exemption is not a global bypass.
+	if err := chargeConfiguredCredits(
+		context.Background(), CreditExemptCompanyID+1, 1, 10, 5, 0, nil, false,
+	); err == nil {
+		t.Fatal("a non-exempt company must still be metered")
+	}
+
+	// Inference credits go through the same seam, so the agent is exempt too.
+	if err := chargeConfiguredCredits(
+		context.Background(), CreditExemptCompanyID, 1, 10, 0, 500, nil, false,
+	); err != nil {
+		t.Fatalf("inference credits must be exempt as well, got %v", err)
+	}
+}
+
+// Exemption is from the budget, not from permissions: a frame that still has an access to
+// check must reach the daemon rather than be short-circuited to nil.
+func TestTheExemptCompanyIsStillAuthorized(t *testing.T) {
+	err := chargeConfiguredCredits(
+		context.Background(), CreditExemptCompanyID, 1, 10, 5, 0, []uint16{9}, false)
+	if err == nil {
+		t.Fatal("an access check must still be sent for the exempt company")
+	}
+	if !errors.Is(err, ErrCreditLimiterMissing) {
+		t.Fatalf("expected the frame to reach the limiter, got %v", err)
 	}
 }

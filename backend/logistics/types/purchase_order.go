@@ -29,10 +29,12 @@ type PurchaseOrder struct {
 	TotalAmount                  int32   `json:",omitempty"`
 	TaxAmount                    int32   `json:",omitempty"`
 	DebtAmount                   int32   `json:",omitempty"`
-	DifferenceQuantity           int32   `json:",omitempty"`
-	DifferenceValue              int32   `json:",omitempty"`
-	InvoiceNumber                string  `json:",omitempty"`
-	Notes                        string  `json:",omitempty"`
+	// DifferenceValue is the signed money gap between what was ordered and what arrived.
+	// There is no DifferenceQuantity companion: it summed quantities across product lines,
+	// so it added kilograms to screws and had no unit. Money is the figure that sums.
+	DifferenceValue int32  `json:",omitempty"`
+	InvoiceNumber   string `json:",omitempty"`
+	Notes           string `json:",omitempty"`
 
 	Created        int32 `json:",omitempty"`
 	CreatedBy      int32 `json:",omitempty"`
@@ -59,7 +61,6 @@ type PurchaseOrderTable struct {
 	TotalAmount                  db.Col[*PurchaseOrderTable, int32]
 	TaxAmount                    db.Col[*PurchaseOrderTable, int32]
 	DebtAmount                   db.Col[*PurchaseOrderTable, int32]
-	DifferenceQuantity           db.Col[*PurchaseOrderTable, int32]
 	DifferenceValue              db.Col[*PurchaseOrderTable, int32]
 	InvoiceNumber                db.Col[*PurchaseOrderTable, string]
 	Notes                        db.Col[*PurchaseOrderTable, string]

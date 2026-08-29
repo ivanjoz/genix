@@ -257,6 +257,15 @@ func IsCreditRateLimitError(err error) bool {
 }
 
 // chargeConfiguredCredits fails closed: no authenticated decision means no API work is allowed.
+// CreditExemptCompanyID is the platform operator's own company, seeded as ID 1 by fn-init. It
+// runs without a credit budget: the limiter exists to meter tenants, and metering the operator
+// would lock the software exactly when someone needs to get in and fix it.
+//
+// The exemption is from the *budget*, not from permissions. The access frame still goes out and
+// is still enforced, which is the same split ChargeAPIAccessOnly already makes for the
+// credit-exempt routes.
+const CreditExemptCompanyID int32 = 1
+
 func chargeConfiguredCredits(
 	ctx context.Context,
 	companyID, userID int32,
@@ -265,6 +274,15 @@ func chargeConfiguredCredits(
 	requiredAccess []uint16,
 	extraCreditsAllowed bool,
 ) error {
+	if companyID == CreditExemptCompanyID {
+		cpuCredits, inferenceCredits = 0, 0
+		// Nothing left to charge and nothing to authorize: encodeCharge rejects an empty frame,
+		// and sending one would turn every exempt read into a limiter error.
+		if len(requiredAccess) == 0 {
+			return nil
+		}
+	}
+
 	client := serverUtils()
 	if client == nil {
 		logLine("credit rate limiter not configured, refusing request::", ErrCreditLimiterMissing)

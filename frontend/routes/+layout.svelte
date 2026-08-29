@@ -116,7 +116,7 @@
 		Env.navigate('/')
 	})
 
-	const routesWithoutLayout: string[] = ["/welcome","/initial-data","/store","/webpage-builder/template-preview"]
+	const routesWithoutLayout: string[] = ["/welcome","/store","/webpage-builder/template-preview"]
 	// Check if current route should show Header and SideMenu
 	let showLayout = $derived(
 		!routesWithoutLayout.some(x => page.url.pathname.startsWith(x))

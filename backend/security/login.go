@@ -10,9 +10,6 @@ import (
 	"slices"
 	"time"
 
-	business "app/business/types"
-	finance "app/finance/types"
-
 	"github.com/ivanjoz/colbin"
 )
 
@@ -28,42 +25,6 @@ func encodeAccesosComputedBase64(accesosComputed []uint16) string {
 	}
 
 	return core.BytesToBase64(packedAccessBytes, true)
-}
-
-// hasPendingInitialData reports whether the company still lacks the minimum records it needs to
-// operate. Warehouse and CashBank both require a SiteID, so an existing warehouse already implies
-// an existing site: checking those two tables is enough to know the bootstrap is still pending.
-//
-// The queries run sequentially and inside a recover: users live in the cloud store, so the login is
-// the one handler that does not otherwise depend on ScyllaDB, and the ORM panics when it cannot
-// dial it. Degrading to "nothing pending" keeps a valid login from turning into a 500.
-func hasPendingInitialData(companyID int32) (pending bool, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			pending = false
-			err = core.Err("panic al verificar los datos iniciales:", recovered)
-		}
-	}()
-
-	warehouses := []business.Warehouse{}
-	warehousesQuery := db.Query(&warehouses)
-	// Delta(0, 1) is the first-sync form: it pins Status to 1, so soft-deleted rows don't count.
-	warehousesQuery.Select().CompanyID.Equals(companyID).Delta(0, 1)
-	if err := warehousesQuery.Exec(); err != nil {
-		return false, err
-	}
-	if len(warehouses) == 0 {
-		return true, nil
-	}
-
-	cashBanks := []finance.CashBank{}
-	cashBanksQuery := db.Query(&cashBanks)
-	cashBanksQuery.Select().CompanyID.Equals(companyID).Delta(0, 1)
-	if err := cashBanksQuery.Exec(); err != nil {
-		return false, err
-	}
-
-	return len(cashBanks) == 0, nil
 }
 
 func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
@@ -191,21 +152,13 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 		return nil, core.Err("Error al encriptar la información del user.", err)
 	}
 
-	// Signals the frontend to route to the "Datos Iniciales" page instead of home. A failed check
-	// must never block the login, so the error is logged and the flag stays false.
-	initialDataPending, initialDataErr := hasPendingInitialData(user.CompanyID)
-	if initialDataErr != nil {
-		core.Log("MakeUsuarioResponse:: error al verificar los datos iniciales:", initialDataErr)
-	}
-
 	response := map[string]any{
-		"UserID":             user.ID,
-		"UserToken":          core.BytesToBase64(usuarioTokenCBOR, true),
-		"TokenExpTime":       time.Now().Unix() + (4 * 60 * 40),
-		"UserInfo":           core.BytesToBase64(userInfoJsonEncrypted),
-		"AccesosComputed":    accesosComputedBase64,
-		"CompanyID":          user.CompanyID,
-		"InitialDataPending": initialDataPending,
+		"UserID":          user.ID,
+		"UserToken":       core.BytesToBase64(usuarioTokenCBOR, true),
+		"TokenExpTime":    time.Now().Unix() + (4 * 60 * 40),
+		"UserInfo":        core.BytesToBase64(userInfoJsonEncrypted),
+		"AccesosComputed": accesosComputedBase64,
+		"CompanyID":       user.CompanyID,
 	}
 
 	return response, nil

@@ -2,16 +2,21 @@ import { POST } from '$libs/ui-runtime.svelte';
 import { type IProduct } from '$routes/business/products/products.svelte';
 import { type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
 import { Loading, Notify } from '$libs/helpers';
+import {
+  type Quantity, addQuantity, formatQuantity, packQuantityLine, quantityAmount, totalSubUnits,
+} from '$core/quantity';
 
 export interface ProductoVenta {
   key: string
-  cant: number
+  // Stock on hand for this row, as the {units, sub} pair. There is no separate sub-unit
+  // row: a product with a sub-unit is one row that can be sold either way.
+  available: Quantity
+  subDivisor: number
   producto: IProduct
   presentationID: number
   presentationName: string
   displayName: string
   searchText: string
-  isSubUnidad?: boolean
   serialNumbers?: IProductStockDetail[]
 }
 
@@ -27,8 +32,8 @@ export interface VentaProducto {
   displayName: string
   serialNumbers?: Map<string,number>
   lote?: string
-  cantidad: number
-  isSubUnidad?: boolean
+  cantidad: Quantity
+  subDivisor: number
   producto?: IProduct // Helper reference
 }
 
@@ -39,7 +44,10 @@ export interface ISaleOrder {
   ID: number
   DetailProductsIDs: number[]
   DetailPrices: number[]
+  // Packed: units * 1000 + sub. The server re-resolves the divisor and both prices from the
+  // catalog, so what travels here is the quantity, not the pricing.
   DetailQuantities: number[]
+  DetailSubDivisor: number[]
   DetailProductSkus: string[]
   DetailProductLotIDs: number[]
   DetailProductPresentations: number[]
@@ -76,14 +84,17 @@ export const SALE_ACTION_DELIVERY = 3
 export class SaleOrderState {
   // State
   productosStock = $state([] as IProductStock[])
-  form = $state({
+  form = $state<ISaleOrder>({
     ID: 0, CompanyID: 0, WarehouseID: 0, LastPaymentCajaID: 0, ClientID: 0, // No payment caja until one is loaded/picked.
-    TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
+    Date: 0, TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
     ActionsIncluded: [SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY],
-    DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [],
-    DetailProductSkus: [], DetailProductPresentations: [],
+    DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [], DetailSubDivisor: [],
+    DetailProductSkus: [], DetailProductLotIDs: [], DetailProductPresentations: [],
+    Created: 0, upd: 0, upc: 0, UpdatedBy: 0, ss: 0,
+    LastPaymentTime: 0, LastPaymentUser: 0, DeliveryTime: 0, DeliveryUser: 0,
+    PaymentDueDate: 0, ClientInfo: undefined, Name: "", RegistryNumber: "",
     montoRecibido: 0, montoVuelto: 0
-  } as ISaleOrder)
+  })
   filterText = $state("")
   ventaErrorMessage = $state("")
   filterSerialNumber = $state("")
@@ -99,18 +110,21 @@ export class SaleOrderState {
   constructor() {}
 
   // Methods
-  addProducto(e: ProductoVenta, cant: number, serialNumber?: string) {
-    const ventaCant = this.ventaProductosMap.get(e.key)?.cantidad || 0
-    const stock = e.cant - ventaCant
+  addProducto(e: ProductoVenta, cant: Quantity, serialNumber?: string) {
+    const inCart = this.ventaProductosMap.get(e.key)?.cantidad || { units: 0, sub: 0 }
+    // Compare in sub-units so a request for whole units is checked against loose stock too:
+    // one box on hand covers six candies when the divisor is 6.
+    const remaining = totalSubUnits(e.available, e.subDivisor) - totalSubUnits(inCart, e.subDivisor)
 
-    if(stock < cant){
-      this.ventaErrorMessage = `No hay suficiente stock de "${e.displayName}" para agregar ${cant} unidades.`
+    if(remaining < totalSubUnits(cant, e.subDivisor)){
+      const requested = formatQuantity(cant, e.subDivisor, e.producto.SbuUnit)
+      this.ventaErrorMessage = `No hay suficiente stock de "${e.displayName}" para agregar ${requested}.`
       return
     }
 
     const ventaProducto = this.ventaProductos.find(x => x.key === e.key)
     if(ventaProducto){
-      ventaProducto.cantidad += cant
+      ventaProducto.cantidad = addQuantity(ventaProducto.cantidad, cant)
       if(serialNumber){
         const currentSerialNumbers = ventaProducto.serialNumbers || new Map<string, number>()
         const serialAdded = currentSerialNumbers.get(serialNumber)
@@ -136,12 +150,12 @@ export class SaleOrderState {
       this.ventaProductos.push({
         key: e.key,
         cantidad: cant,
+        subDivisor: e.subDivisor,
         productoID: e.producto.ID,
         presentationID: e.presentationID,
         presentationName: e.presentationName,
         displayName: e.displayName,
         serialNumbers: new Map(serialNumber ? [[serialNumber,1]] : []),
-        isSubUnidad: e.isSubUnidad || false,
         producto: e.producto
       })
     }
@@ -161,13 +175,8 @@ export class SaleOrderState {
     for(let vp of this.ventaProductos){
       const producto = vp.producto
       if(producto){
-        let precio = producto.FinalPrice
-
-        if (vp.isSubUnidad && producto.SbuFinalPrice) {
-           precio = producto.SbuFinalPrice
-        }
-
-        total += precio * vp.cantidad
+        // Whole units at their price, sub-units at theirs — never prorated.
+        total += quantityAmount(vp.cantidad, producto.FinalPrice, producto.SbuFinalPrice || 0)
       }
     }
 
@@ -204,37 +213,37 @@ export class SaleOrderState {
     this.form.DetailProductsIDs = []
     this.form.DetailPrices = []
     this.form.DetailQuantities = []
+    this.form.DetailSubDivisor = []
 		this.form.DetailProductSkus = []
     this.form.DetailProductPresentations = []
 
+    const pushLine = (vp: VentaProducto, quantity: Quantity, serialNumber: string) => {
+      this.form.DetailProductsIDs.push(vp.productoID)
+      // Sent for the operator's reference only; the server overwrites both prices from the
+      // catalog before anything is stored.
+      this.form.DetailPrices.push(vp.producto?.FinalPrice || 0)
+      this.form.DetailQuantities.push(packQuantityLine(quantity, vp.subDivisor))
+      this.form.DetailSubDivisor.push(vp.subDivisor)
+      this.form.DetailProductSkus.push(serialNumber)
+      this.form.DetailProductPresentations.push(vp.presentationID)
+    }
+
     // Flatten cart into order details, keeping the backend's legacy field name for serial numbers.
     for (const vp of this.ventaProductos) {
-      let precio = vp.producto?.FinalPrice || 0
-      if (vp.isSubUnidad && vp.producto?.SbuFinalPrice) {
-        precio = vp.producto.SbuFinalPrice
-      }
-
       let totalSerialQty = 0
       if (vp.serialNumbers && vp.serialNumbers.size > 0) {
         // Serialized lines travel independently so backend can deduct the matching detail row.
+        // A serial number is one physical item, so these are always whole units.
         for (const [serialNumber, qty] of vp.serialNumbers.entries()) {
-          this.form.DetailProductsIDs.push(vp.productoID)
-          this.form.DetailPrices.push(precio)
-          this.form.DetailQuantities.push(qty)
-          this.form.DetailProductSkus.push(serialNumber)
-          this.form.DetailProductPresentations.push(vp.presentationID)
+          pushLine(vp, { units: qty, sub: 0 }, serialNumber)
           totalSerialQty += qty
         }
       }
 
       // Remaining quantity belongs to the generic stock bucket with no serial number.
-      const remainingQty = vp.cantidad - totalSerialQty
-      if (remainingQty > 0) {
-        this.form.DetailProductsIDs.push(vp.productoID)
-        this.form.DetailPrices.push(precio)
-        this.form.DetailQuantities.push(remainingQty)
-        this.form.DetailProductSkus.push("")
-        this.form.DetailProductPresentations.push(vp.presentationID)
+      const remainingQty: Quantity = { units: vp.cantidad.units - totalSerialQty, sub: vp.cantidad.sub }
+      if (remainingQty.units > 0 || remainingQty.sub > 0) {
+        pushLine(vp, remainingQty, "")
       }
     }
 

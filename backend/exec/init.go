@@ -7,6 +7,7 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
+	finance "app/finance/types"
 	security "app/security/types"
 	"encoding/csv"
 	"encoding/json"
@@ -50,6 +51,84 @@ func configureTextSearchGenixSearch() {
 		core.Log("text_search: GENIXSEARCH_PASSWORD empty in prod; writes will fail at handshake")
 	}
 	text_search.Configure(host, port, password)
+}
+
+// seedCompanyOperatingRecords gives each seeded company the Site, Warehouse and CashBank it needs
+// to be operational, mirroring what business.PostInitialData creates for a company registered
+// through the sign-up wizard.
+//
+// Without them, login reports InitialDataPending and the company can do nothing until those rows
+// exist. The wizard covers the companies it creates; the ones fn-init writes by hand were left to
+// a separate bootstrap screen, which is the only reason that screen had to exist.
+//
+// IDs are left at zero so the ORM autoincrements them. That is deliberate and unlike the companies
+// and users above: those carry literal IDs and therefore need reserveSeededAutoincrementIDs to
+// push the counter past them, while an autoincremented insert advances its own counter.
+func seedCompanyOperatingRecords(companyIDs []int32, seedTimestamp int32) {
+	cityID := firstSeededCityID()
+
+	for _, companyID := range companyIDs {
+		sites := []business.Site{{
+			CompanyID: companyID,
+			Name:      "Principal",
+			Address:   "Principal",
+			CityID:    cityID,
+			Status:    1,
+			Created:   seedTimestamp,
+			Updated:   seedTimestamp,
+		}}
+		if err := db.Insert(&sites); err != nil {
+			panic(fmt.Sprintf("Error al crear la sede inicial de la empresa %v. %v", companyID, err))
+		}
+		siteID := sites[0].ID
+
+		warehouses := []business.Warehouse{{
+			CompanyID: companyID,
+			SiteID:    siteID,
+			Name:      "Central",
+			Status:    1,
+			Created:   seedTimestamp,
+			Updated:   seedTimestamp,
+		}}
+		if err := db.Insert(&warehouses); err != nil {
+			panic(fmt.Sprintf("Error al crear el almacén inicial de la empresa %v. %v", companyID, err))
+		}
+
+		cashBanks := []finance.CashBank{{
+			CompanyID: companyID,
+			SiteID:    siteID,
+			Name:      "Caja Principal",
+			// Type 1 = "Caja" and CurrencyType 1 = PEN, the same defaults PostInitialData uses.
+			Type:         1,
+			CurrencyType: 1,
+			Status:       1,
+			Created:      seedTimestamp,
+			Updated:      seedTimestamp,
+		}}
+		if err := db.Insert(&cashBanks); err != nil {
+			panic(fmt.Sprintf("Error al crear la caja inicial de la empresa %v. %v", companyID, err))
+		}
+
+		core.Log("Datos iniciales sembrados para la empresa", companyID,
+			":: sede", siteID, "almacén", warehouses[0].ID, "caja", cashBanks[0].ID)
+	}
+}
+
+// firstSeededCityID picks a district for the seeded sites so the row is complete. It is best
+// effort: a site with no city is still a usable site, and failing the whole bootstrap over a
+// cosmetic field would be worse than leaving it at zero.
+func firstSeededCityID() int32 {
+	cities := []business.CityLocation{}
+	query := db.Query(&cities)
+	query.Select(query.ID, query.Hierarchy).CountryID.Equals(604).Limit(1)
+	if err := query.Exec(); err != nil {
+		core.Log("No se pudo resolver una ciudad para las sedes iniciales:", err)
+		return 0
+	}
+	if len(cities) == 0 {
+		return 0
+	}
+	return cities[0].ID
 }
 
 func ConfigInit(args *core.ExecArgs) core.FuncResponse {
@@ -153,6 +232,14 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	// Run the city import as part of the base bootstrap to leave the environment operational after init.
 	ImportCiudades(args)
 	core.Log("Se importaron las ciudades iniciales.")
+
+	// After the cities, because a seeded site references one.
+	seededCompanyIDs := make([]int32, 0, len(empresas))
+	for _, seededCompany := range empresas {
+		seededCompanyIDs = append(seededCompanyIDs, seededCompany.ID)
+	}
+	seedCompanyOperatingRecords(seededCompanyIDs, seedTimestamp)
+
 	core.Print(usuarios)
 
 	return core.FuncResponse{}

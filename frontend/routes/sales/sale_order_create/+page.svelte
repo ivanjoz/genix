@@ -20,6 +20,7 @@ import { EmpresaParametrosService } from '../../configuration/parameters/empresa
 import type { IWarehouse } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';
+import { type Quantity, addQuantity, formatQuantity, quantityAmount, quantityDivisorOf, totalSubUnits } from '$core/quantity';
 import type { ProductoVenta } from "./sale_order.svelte";
 import { useUI } from '@genix/ui';
 import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sale_order.svelte";
@@ -146,27 +147,39 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
       const genericDetailQuantity = (e.StockDetails || []).reduce((detailQuantity, stockDetail) => {
         return stockDetail.SerialNumber?.trim() ? detailQuantity : detailQuantity + stockDetail.Quantity
       }, 0)
+      const genericDetailSubQuantity = (e.StockDetails || []).reduce((detailSub, stockDetail) => {
+        return stockDetail.SerialNumber?.trim() ? detailSub : detailSub + (stockDetail.SubQuantity || 0)
+      }, 0)
+      const stockDivisor = quantityDivisorOf(producto.SbuQuantity)
+
       const stockBuckets: Array<{
         key: string
-        quantity: number
+        quantity: Quantity
         serialNumbers?: IProductStockDetail[]
       }> = [
         {
           key: [e.ProductID, e.PresentationID || 0, 0].join("_"),
-          quantity: e.Quantity + genericDetailQuantity,
+          quantity: {
+            units: e.Quantity + genericDetailQuantity,
+            sub: (e.SubQuantity || 0) + genericDetailSubQuantity,
+          },
         },
       ]
 
       if (serialNumbers.length > 0) {
         stockBuckets.push({
           key: [e.ProductID, e.PresentationID || 0, 1].join("_"),
-          quantity: serialNumbers.reduce((detailQuantity, stockDetail) => detailQuantity + stockDetail.Quantity, 0),
+          // A serial number is one physical item, so serialized stock has no sub-unit half.
+          quantity: {
+            units: serialNumbers.reduce((detailQuantity, stockDetail) => detailQuantity + stockDetail.Quantity, 0),
+            sub: 0,
+          },
           serialNumbers,
         })
       }
 
       for (const stockBucket of stockBuckets) {
-        if (stockBucket.quantity <= 0) { continue }
+        if (totalSubUnits(stockBucket.quantity, stockDivisor) <= 0) { continue }
 
         if(!productStockGroups.has(stockBucket.key)){
           const presentationID = e.PresentationID || 0
@@ -179,7 +192,8 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
           // Build the final sale row once and only mutate the aggregated fields while iterating stock.
           productStockGroups.set(stockBucket.key, {
             key: stockBucket.key,
-            cant: 0,
+            available: { units: 0, sub: 0 },
+            subDivisor: quantityDivisorOf(producto.SbuQuantity),
             presentationID,
             presentationName,
             displayName,
@@ -191,7 +205,7 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
 
         const productStockGroup = productStockGroups.get(stockBucket.key)
         if(productStockGroup){
-          productStockGroup.cant += stockBucket.quantity
+          productStockGroup.available = addQuantity(productStockGroup.available, stockBucket.quantity)
           if (stockBucket.serialNumbers?.length) {
             // Keep serial numbers attached to the serialized row for filtering and selection.
             productStockGroup.serialNumbers = [
@@ -204,25 +218,9 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
       }
     }
 
-    const productosParsedNew = [...productStockGroups.values()]
-
-    for (const productoVenta of [...productStockGroups.values()]) {
-      if (productoVenta.key.endsWith("_1") || (productoVenta.producto.SbuQuantity || 0) <= 1) { continue }
-
-      // Only create sub-unit rows for generic stock groups so the UI preserves the existing sale flow.
-      productosParsedNew.push({
-        key: `${productoVenta.key}_s`,
-        cant: productoVenta.producto.SbuQuantity!,
-        producto: productoVenta.producto,
-        presentationID: productoVenta.presentationID,
-        presentationName: productoVenta.presentationName,
-        displayName: productoVenta.displayName,
-        searchText: productoVenta.searchText,
-        isSubUnidad: true,
-      })
-    }
-
-    productosParsedAll = productosParsedNew
+    // No synthesized sub-unit row: a product with a sub-unit is one row whose card offers
+    // both whole units and sub-units, so the two can never disagree about available stock.
+    productosParsedAll = [...productStockGroups.values()]
     filterProductos(ventasState.filterText)
   }
 
@@ -288,7 +286,7 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
         ventasState.ventaErrorMessage = "Seleccione una serie específica.";
         return;
       }
-      ventasState.addProducto(prod, 1);
+      ventasState.addProducto(prod, { units: 1, sub: 0 });
       filterProductos("");
     } else if (ev.key === "Escape") {
       productoSelected = -1;
@@ -521,13 +519,9 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
             >
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-gray-800 truncate">
-                  <span class="text-blue-600 font-bold mr-4">{item.cantidad} X</span>
+                  <span class="text-blue-600 font-bold mr-4"
+                    >{formatQuantity(item.cantidad, item.subDivisor, item.producto?.SbuUnit)} X</span>
                   {item.displayName}
-                  {#if item.isSubUnidad}
-                    <span class="text-purple-600 text-[10px] ml-4 font-normal"
-                      >({item.producto?.SbuUnit})</span
-                  >
-                  {/if}
                 </div>
                 {#if item.serialNumbers && item.serialNumbers.size > 0}
                   <div class="flex flex-wrap gap-4 mt-2">
@@ -544,7 +538,7 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
 
               <div class="flex items-center gap-8">
                 <div class="font-mono text-sm font-bold text-gray-700">
-                  {formatMo((item.isSubUnidad && item.producto?.SbuFinalPrice ? item.producto.SbuFinalPrice : (item.producto?.FinalPrice || 0)) * item.cantidad)}
+                  {formatMo(quantityAmount(item.cantidad, item.producto?.FinalPrice || 0, item.producto?.SbuFinalPrice || 0))}
                 </div>
                 <Button icon="icon-[fa--trash]"
                   css="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"

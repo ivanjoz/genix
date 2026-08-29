@@ -134,7 +134,7 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
 
 export class ProductStockSimpleService extends GetHandler<IProductStock> {
   route = "products-stock"
-  useCache = { min: 0.2, ver: 9 }
+  useCache = { min: 0.2, ver: 10 }
   inferRemoveFromStatus = true
 
   constructor(init: boolean = false) {

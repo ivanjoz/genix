@@ -46,7 +46,7 @@ export interface IWarehouses {
 
 export class WarehousesService extends GetHandler {
   route = "locations-warehouses"
-  useCache = { min: 5, ver: 4 }
+  useCache = { min: 5, ver: 5 }
 
   Almacenes: IWarehouse[] = $state([])
   AlmacenesMap: Map<number,IWarehouse> = $state(new Map())

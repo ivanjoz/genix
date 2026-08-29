@@ -107,7 +107,10 @@ func buildSaleSummariesFromProductRows(productRows []types.ProductSaleSummary) [
 
 		summary.ProductIDs = append(summary.ProductIDs, productRow.ProductID)
 		summary.Quantity = append(summary.Quantity, productStats.Quantity)
+		summary.SubQuantity = append(summary.SubQuantity, productStats.SubQuantity)
 		summary.QuantityPendingDelivery = append(summary.QuantityPendingDelivery, productStats.QuantityPendingDelivery)
+		summary.SubQuantityPendingDelivery = append(summary.SubQuantityPendingDelivery, productStats.SubQuantityPendingDelivery)
+		summary.SubDivisor = append(summary.SubDivisor, productStats.SubDivisor)
 		summary.TotalAmount = append(summary.TotalAmount, productStats.TotalAmount)
 		summary.TotalDebtAmount = append(summary.TotalDebtAmount, productStats.TotalDebtAmount)
 		if productRow.Updated > summary.Updated {

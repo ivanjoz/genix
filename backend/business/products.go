@@ -159,6 +159,12 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
+	// Runs before db.Merge: the merge callback fires during the write, so a divisor rejected
+	// there would leave the other rows already persisted.
+	if err := validateProductSubUnitDivisors(req.User.CompanyID, productos); err != nil {
+		return req.MakeErr(err)
+	}
+
 	nowTime := core.SUnixTime()
 	core.Log("PostProductos merge payload:", len(productos))
 
@@ -257,6 +263,84 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(productos)
+}
+
+// validateProductSubUnitDivisors enforces the refinement-only rule on Product.SbuQuantity,
+// which is the divisor every stored SubQuantity for that product is expressed in.
+//
+// A product may gain a sub-unit freely — the frequent case, an operator deciding to start
+// selling an existing product in pieces — because every stored row holds SubQuantity = 0 and
+// zero sixths, zero twelfths and zero thousandths are the same zero, so nothing is rewritten.
+// Afterwards the divisor may only move to a multiple: 6 -> 12 splits each sixth into two
+// twelfths exactly, while 12 -> 6 would turn 9/12 into 4.5 sixths and round away real stock.
+func validateProductSubUnitDivisors(companyID int32, productos []types.Product) error {
+	productIDsToCheck := core.SliceSet[int32]{}
+	for i := range productos {
+		if err := validateSubUnitDivisorRange(&productos[i]); err != nil {
+			return err
+		}
+		if productos[i].ID > 0 {
+			productIDsToCheck.Add(productos[i].ID)
+		}
+	}
+	if productIDsToCheck.IsEmpty() {
+		return nil
+	}
+
+	existing := []types.Product{}
+	query := db.Query(&existing)
+	query.Select(query.ID, query.SbuQuantity).
+		CompanyID.Equals(companyID).
+		ID.In(productIDsToCheck.Values...)
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al validar la sub-unidad de los productos:", err)
+	}
+
+	previousDivisorByID := make(map[int32]int16, len(existing))
+	for _, product := range existing {
+		previousDivisorByID[product.ID] = product.SbuQuantity
+	}
+
+	for i := range productos {
+		product := &productos[i]
+		previousDivisor, isUpdate := previousDivisorByID[product.ID]
+		// A divisor that was never set leaves every stored row at SubQuantity = 0, so any
+		// valid divisor is reachable without changing what a single number means.
+		if !isUpdate || previousDivisor <= core.QuantityDivisorNone {
+			continue
+		}
+		if product.SbuQuantity == previousDivisor {
+			continue
+		}
+		if product.SbuQuantity <= core.QuantityDivisorNone {
+			return core.Err(fmt.Sprintf(
+				`Producto "%s": no se puede quitar la sub-unidad (divisor %v). El stock y los movimientos ya guardados quedarían sin interpretación.`,
+				product.Name, previousDivisor))
+		}
+		if !core.IsQuantityDivisorRefinement(previousDivisor, product.SbuQuantity) {
+			return core.Err(fmt.Sprintf(
+				`Producto "%s": el divisor de sub-unidad sólo puede refinarse a un múltiplo de %v. Se recibió %v.`,
+				product.Name, previousDivisor, product.SbuQuantity))
+		}
+	}
+	return nil
+}
+
+func validateSubUnitDivisorRange(product *types.Product) error {
+	if product.SbuQuantity == 0 {
+		return nil
+	}
+	if err := core.ValidateQuantityDivisor(product.SbuQuantity); err != nil {
+		return core.Err(fmt.Sprintf(`Producto "%s":`, product.Name), err)
+	}
+	// A sub-unit the operator cannot name is not sellable: the cart, the stock page and the
+	// invoice line all label it with SbuUnit.
+	if product.SbuQuantity > core.QuantityDivisorNone && len(strings.TrimSpace(product.SbuUnit)) == 0 {
+		return core.Err(fmt.Sprintf(
+			`Producto "%s": se definió una sub-unidad (divisor %v) sin nombre de sub-unidad.`,
+			product.Name, product.SbuQuantity))
+	}
+	return nil
 }
 
 func getProductBrandNames(companyID int32, productos []types.Product) (map[int32]string, error) {

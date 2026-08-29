@@ -691,7 +691,8 @@ func (generator *saleOrderGenerator) makeSalePayload(status saleOrderStatusTarge
 		lineQuantity := quantities[stockIndex]
 		payload.DetailProductsIDs = append(payload.DetailProductsIDs, selectedStock.productID)
 		payload.DetailPrices = append(payload.DetailPrices, selectedStock.price)
-		payload.DetailQuantities = append(payload.DetailQuantities, lineQuantity)
+		// Sale-order lines are packed; the seeder emits whole units only.
+		payload.DetailQuantities = append(payload.DetailQuantities, lineQuantity*core.QuantityLineScale)
 		payload.DetailProductPresentations = append(payload.DetailProductPresentations, selectedStock.presentationID)
 		totalAmount += selectedStock.price * lineQuantity
 	}

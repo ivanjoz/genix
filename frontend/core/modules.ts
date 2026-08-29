@@ -136,7 +136,7 @@ export const AdminModule: IModule = {
 				},
       ]
     },
-    { name: "Website|Página Web", minName: "WEB",  id: 7, icon: "icon-[fa--th-large]",
+    { name: "Website|Tienda /Web", minName: "WEB",  id: 7, icon: "icon-[fa--th-large]",
       options: [
         { name: "Pages|Páginas", route: "/webpage-builder/pages"
         },

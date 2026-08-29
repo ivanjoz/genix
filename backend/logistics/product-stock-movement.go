@@ -1,10 +1,12 @@
 package logistics
 
 import (
+	business "app/business/types"
 	"app/core"
 	"app/db"
 	"app/logistics/types"
 	"encoding/json"
+	"fmt"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -29,6 +31,33 @@ type PostStockAdjustItem struct {
 	SupplierID     int32  `json:",omitempty"`
 }
 
+// loadProductSubDivisors reads the current sub-unit divisor of every product an adjustment
+// touches. A product with no sub-unit maps to core.QuantityDivisorNone.
+func loadProductSubDivisors(companyID int32, items []PostStockAdjustItem) (map[int32]int16, error) {
+	productIDs := core.SliceSet[int32]{}
+	for _, item := range items {
+		productIDs.AddIf(item.ProductID)
+	}
+	divisorByProductID := map[int32]int16{}
+	if productIDs.IsEmpty() {
+		return divisorByProductID, nil
+	}
+
+	products := []business.Product{}
+	query := db.Query(&products)
+	query.Select(query.ID, query.SbuQuantity).
+		CompanyID.Equals(companyID).
+		ID.In(productIDs.Values...)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener la sub-unidad de los productos:", err)
+	}
+	for _, product := range products {
+		divisorByProductID[product.ID] = core.If(
+			product.SbuQuantity > core.QuantityDivisorNone, product.SbuQuantity, core.QuantityDivisorNone)
+	}
+	return divisorByProductID, nil
+}
+
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	// Handler takes absolute target quantities; each item maps to one InternalMovement{ReemplazarCantidad:true}.
 	items := []PostStockAdjustItem{}
@@ -39,12 +68,27 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron registros.")
 	}
 
+	// The divisor is resolved from the catalog, not taken from the client: a movement that
+	// carries sub-units without one is rejected by the stock engine, and guessing it would be
+	// silently wrong for exactly the products this exists for.
+	subDivisorByProductID, err := loadProductSubDivisors(req.User.CompanyID, items)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+
 	movimientos := make([]types.InternalMovement, 0, len(items))
 	for _, item := range items {
 		if item.WarehouseID == 0 || item.ProductID == 0 {
 			return req.MakeErr("Hay un registro sin Almacén-ID o Producto-ID.")
 		}
+		subDivisor := subDivisorByProductID[item.ProductID]
+		if item.SubQuantity != 0 && subDivisor <= core.QuantityDivisorNone {
+			return req.MakeErr(fmt.Sprintf(
+				"El producto %v no tiene sub-unidad configurada, pero el ajuste envía %v sub-unidades.",
+				item.ProductID, item.SubQuantity))
+		}
 		movimientos = append(movimientos, types.InternalMovement{
+			SubDivisor:      subDivisor,
 			ReplaceQuantity: true,
 			WarehouseID:     item.WarehouseID,
 			ProductID:       item.ProductID,

@@ -35,7 +35,7 @@ type purchaseOrderEntryPayload struct {
 
 // PostPurchaseOrderEntry recibe la mercadería de una orden de compra Confirmada:
 //  1. compara los productos recibidos vs. los pedidos en la OC y calcula
-//     DifferenceQuantity (Σ recibido - pedido) y DifferenceValue (Σ (recibido - pedido) * precio),
+//     DifferenceValue (Σ (recibido - pedido) * precio),
 //     ambos firmados (negativo = subentrega, positivo = sobreentrega);
 //  2. llama a ApplyMovimientos para insertar el stock en el almacén;
 //  3. actualiza la OC: Status=Fulfilled + diferencias calculadas.
@@ -119,15 +119,14 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 		getStats(orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}).received += item.Quantity
 	}
 
-	// Diferencia firmada: positiva = sobreentrega, negativa = subentrega, cero = exacto.
-	// price=0 cubre productos recibidos que no están en la OC (suman a quantity, no a value).
-	var diffQuantity, diffValue int32
+	// Diferencia firmada en dinero: positiva = sobreentrega, negativa = subentrega.
+	// price=0 cubre productos recibidos que no están en la OC (no suman a value).
+	var diffValue int32
 	for _, s := range statsByKey {
 		diff := s.received - s.ordered
 		if diff == 0 {
 			continue
 		}
-		diffQuantity += diff
 		diffValue += diff * s.price
 	}
 
@@ -158,14 +157,13 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	// Cumplir la OC: Status=Fulfilled + diferencias calculadas.
 	now := core.SUnixTime()
 	order.Status = types.PurchaseOrderStatusFulfilled
-	order.DifferenceQuantity = diffQuantity
 	order.DifferenceValue = diffValue
 	order.Updated = now
 	order.UpdatedBy = req.User.ID
 
 	q := db.TableOf[types.PurchaseOrder]()
 	if err := db.Update(&[]types.PurchaseOrder{order},
-		q.Status, q.DifferenceQuantity, q.DifferenceValue, q.Updated, q.UpdatedBy,
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy,
 	); err != nil {
 		return req.MakeErr("Error al actualizar la orden de compra.", err)
 	}

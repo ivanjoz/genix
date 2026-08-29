@@ -10,7 +10,8 @@ func SaleOrderReprocess(companyID int32, date int16) {
 	// Load every persisted sale state for the requested scope so the rebuild ignores transient action history.
 	sales := []types.SaleOrder{}
 	query := db.Query(&sales)
-	query.Select(query.ID, query.Status, query.Date, query.DetailProductsIDs, query.DetailPrices, query.DetailQuantities).
+	query.Select(query.ID, query.Status, query.Date, query.DetailProductsIDs,
+		query.DetailPrices, query.DetailSubPrices, query.DetailQuantities, query.DetailSubDivisor).
 		CompanyID.Equals(companyID)
 
 	if date > 0 {
@@ -43,16 +44,26 @@ func SaleOrderReprocess(companyID int32, date int16) {
 
 		summaryChanges := []ProductSummaryChange{}
 		for lineIndex, productID := range sale.DetailProductsIDs {
-			quantity := sale.DetailQuantities[lineIndex]
-			if productID <= 0 || quantity <= 0 {
+			packedQuantity := sale.DetailQuantities[lineIndex]
+			if productID <= 0 || packedQuantity <= 0 {
 				continue
 			}
 
-			lineAmount := core.MultiplyInt32Saturated(sale.DetailPrices[lineIndex], quantity)
-			quantityPendingDelivery := int32(0)
+			// The order line is packed; the summary accumulates, so split it back apart.
+			lineQuantity := core.UnpackQuantityLine(packedQuantity)
+			lineDivisor := core.GetIndex(sale.DetailSubDivisor, lineIndex)
+			if lineDivisor <= 0 {
+				lineDivisor = core.QuantityDivisorNone
+			}
+			// Reconstructed from what was charged on the line, not from the product's price
+			// today: a reprocess must reproduce the original amounts.
+			lineAmount := core.QuantityAmount(lineQuantity,
+				core.GetIndex(sale.DetailPrices, lineIndex), core.GetIndex(sale.DetailSubPrices, lineIndex))
+
+			pendingDelivery := core.Quantity{}
 			if !hasDeliveryCompleted {
 				// Reprocess derives pending delivery directly from the persisted sale status.
-				quantityPendingDelivery = quantity
+				pendingDelivery = lineQuantity
 			}
 			totalDebtAmount := int32(0)
 			if !hasPaymentCompleted {
@@ -62,10 +73,15 @@ func SaleOrderReprocess(companyID int32, date int16) {
 			summaryChanges = append(summaryChanges, ProductSummaryChange{
 				productID: productID,
 				SaleOrderProductStats: types.SaleOrderProductStats{
-					Quantity:                quantity,
-					QuantityPendingDelivery: quantityPendingDelivery,
-					TotalAmount:             lineAmount,
-					TotalDebtAmount:         totalDebtAmount,
+					Quantity: lineQuantity.Units,
+					// A packed line always unpacks normalized, so Sub is already below the
+					// divisor and fits the narrow field.
+					SubQuantity:                int16(lineQuantity.Sub),
+					QuantityPendingDelivery:    pendingDelivery.Units,
+					SubQuantityPendingDelivery: int16(pendingDelivery.Sub),
+					SubDivisor:                 lineDivisor,
+					TotalAmount:                lineAmount,
+					TotalDebtAmount:            totalDebtAmount,
 				},
 			})
 		}

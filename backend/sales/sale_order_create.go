@@ -75,6 +75,13 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 
+		// Resolve the divisor and the prices against the catalog rather than trusting what
+		// the client sent. This is the only place that loads products, and it is what stops
+		// a crafted request from booking a sale at an invented price.
+		if err := validateSaleOrderLines(req, &sale); err != nil {
+			return req.MakeErr(err)
+		}
+
 		sale.Date = core.FechaUnix()
 		sale.Created = nowTime
 		sale.Status = 1
@@ -179,9 +186,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			if i >= len(sale.DetailQuantities) {
 				break
 			}
-			cantidad := sale.DetailQuantities[i]
-			if cantidad == 0 {
+			packedQuantity := sale.DetailQuantities[i]
+			if packedQuantity == 0 {
 				continue
+			}
+
+			// The order line is packed; the ledger keeps the halves apart so it can accumulate
+			// and be SUM()-ed. This is the single conversion point between the two forms.
+			lineQuantity := core.UnpackQuantityLine(packedQuantity).Negate() // Salida de almacén
+			lineDivisor := core.GetIndex(sale.DetailSubDivisor, i)
+			if lineDivisor <= 0 {
+				lineDivisor = core.QuantityDivisorNone
 			}
 
 			movimientosInternos = append(movimientosInternos, logistics.InternalMovement{
@@ -191,8 +206,10 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				SerialNumber:   core.GetIndex(sale.DetailProductSkus, i),
 				LotID:          core.GetIndex(sale.DetailProductLotIDs, i),
 				DocumentID:     sale.ID,
-				Type:           8,         // Entrega a cliente final (Venta)
-				Quantity:       -cantidad, // Salida de almacén
+				Type:           8, // Entrega a cliente final (Venta)
+				Quantity:       lineQuantity.Units,
+				SubQuantity:    lineQuantity.Sub,
+				SubDivisor:     lineDivisor,
 			})
 		}
 
@@ -258,6 +275,88 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(sale)
 }
 
+// validateSaleOrderLines resolves each line against the product catalog: the sub-unit
+// divisor, whether a sub-unit part is even allowed, and the prices. PostSaleOrder is the
+// only place that loads products, and without it DetailPrices and TotalAmount arrive
+// straight off the request body unchecked — a client could book a sale at any price.
+func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error {
+	productIDs := core.SliceSet[int32]{}
+	for _, productID := range sale.DetailProductsIDs {
+		productIDs.AddIf(productID)
+	}
+	if productIDs.IsEmpty() {
+		return nil
+	}
+
+	products := []business.Product{}
+	query := db.Query(&products)
+	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice).
+		CompanyID.Equals(req.User.CompanyID).
+		ID.In(productIDs.Values...)
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al obtener los productos de la venta:", err)
+	}
+
+	productByID := make(map[int32]business.Product, len(products))
+	for _, product := range products {
+		productByID[product.ID] = product
+	}
+
+	sale.DetailSubDivisor = make([]int16, len(sale.DetailProductsIDs))
+	sale.DetailSubPrices = make([]int32, len(sale.DetailProductsIDs))
+
+	for lineIndex, productID := range sale.DetailProductsIDs {
+		product, found := productByID[productID]
+		if !found {
+			return core.Err(fmt.Sprintf("El producto %v de la venta no existe.", productID))
+		}
+
+		lineQuantity := core.UnpackQuantityLine(sale.DetailQuantities[lineIndex])
+		productDivisor := product.SbuQuantity
+		if productDivisor <= 0 {
+			productDivisor = core.QuantityDivisorNone
+		}
+
+		if lineQuantity.Sub > 0 {
+			if productDivisor <= core.QuantityDivisorNone {
+				return core.Err(fmt.Sprintf(
+					`El producto "%s" no tiene sub-unidad configurada, pero la venta envía %v sub-unidades.`,
+					product.Name, lineQuantity.Sub))
+			}
+			if product.SbuFinalPrice <= 0 {
+				return core.Err(fmt.Sprintf(
+					`El producto "%s" no tiene precio de sub-unidad; no se puede vender fraccionado.`,
+					product.Name))
+			}
+			// Packing normalizes, so a Sub at or past the divisor means the client packed a
+			// value the catalog cannot represent.
+			if lineQuantity.Sub >= int32(productDivisor) {
+				return core.Err(fmt.Sprintf(
+					`El producto "%s" admite hasta %v sub-unidades por unidad; la venta envía %v.`,
+					product.Name, productDivisor-1, lineQuantity.Sub))
+			}
+		}
+
+		// Prices come from the catalog, never from the request.
+		sale.DetailPrices[lineIndex] = product.FinalPrice
+		sale.DetailSubPrices[lineIndex] = product.SbuFinalPrice
+		sale.DetailSubDivisor[lineIndex] = productDivisor
+	}
+
+	// Recompute the order total from the resolved lines for the same reason.
+	totalAmount := int32(0)
+	for lineIndex := range sale.DetailProductsIDs {
+		totalAmount += core.QuantityAmount(
+			core.UnpackQuantityLine(sale.DetailQuantities[lineIndex]),
+			sale.DetailPrices[lineIndex], sale.DetailSubPrices[lineIndex])
+	}
+	sale.TotalAmount = totalAmount
+	if sale.DebtAmount > totalAmount {
+		return core.Err("El monto adeudado no puede superar el total de la venta.")
+	}
+	return nil
+}
+
 func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID int32, userID int32) (int32, error) {
 	clientName := strings.TrimSpace(clientInfo.Name)
 	clientRegistryNumber := strings.TrimSpace(clientInfo.RegistryNumber)
@@ -304,11 +403,17 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		lotID        int32
 		serialNumber string
 	}
-	requestedByKey := map[lineKey]int32{}
+	requestedByKey := map[lineKey]core.Quantity{}
+	divisorByKey := map[lineKey]int16{}
 	for index, productID := range sale.DetailProductsIDs {
-		quantity := core.GetIndex(sale.DetailQuantities, index)
-		if quantity == 0 {
+		packedQuantity := core.GetIndex(sale.DetailQuantities, index)
+		if packedQuantity == 0 {
 			continue
+		}
+		quantity := core.UnpackQuantityLine(packedQuantity)
+		lineDivisor := core.GetIndex(sale.DetailSubDivisor, index)
+		if lineDivisor <= 0 {
+			lineDivisor = core.QuantityDivisorNone
 		}
 		presentationID := core.GetIndex(sale.DetailProductPresentations, index)
 		key := lineKey{
@@ -316,7 +421,8 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 			lotID:        core.GetIndex(sale.DetailProductLotIDs, index),
 			serialNumber: core.GetIndex(sale.DetailProductSkus, index),
 		}
-		requestedByKey[key] += quantity
+		requestedByKey[key] = requestedByKey[key].Add(quantity)
+		divisorByKey[key] = lineDivisor
 	}
 	if len(requestedByKey) == 0 {
 		return nil
@@ -339,7 +445,7 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	eg.Go(func() error {
 		stocks := []logistics.ProductStock{}
 		q := db.Query(&stocks)
-		q.Select(q.ID, q.Quantity, q.DetailQuantity).
+		q.Select(q.ID, q.Quantity, q.SubQuantity, q.DetailQuantity, q.DetailSubQuantity, q.SubDivisor).
 			CompanyID.Equals(req.User.CompanyID).
 			ID.In(stockIDSet.Values...)
 		if err := q.Exec(); err != nil {
@@ -371,13 +477,36 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	}
 
 	for key, requested := range requestedByKey {
-		var available int32
-		if key.lotID == 0 && key.serialNumber == "" {
-			available = stockByID[key.stockID].Quantity
-		} else {
-			available = detailsByKey[key].Quantity
+		stock := stockByID[key.stockID]
+		// The stock row and the line can sit at different divisors while a refinement is
+		// still rolling out, so compare both at the finer of the two.
+		comparisonDivisor := divisorByKey[key]
+		if stockDivisor := stock.SubDivisor; stockDivisor > 0 && stockDivisor != comparisonDivisor {
+			if core.IsQuantityDivisorRefinement(comparisonDivisor, stockDivisor) {
+				converted, convErr := requested.ConvertToDivisor(comparisonDivisor, stockDivisor)
+				if convErr != nil {
+					return convErr
+				}
+				requested, comparisonDivisor = converted, stockDivisor
+			}
 		}
-		if available < requested {
+
+		var available core.Quantity
+		if key.lotID == 0 && key.serialNumber == "" {
+			available = core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
+		} else {
+			detail := detailsByKey[key]
+			available = core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}
+		}
+		if stock.SubDivisor > 0 && stock.SubDivisor != comparisonDivisor {
+			converted, convErr := available.ConvertToDivisor(stock.SubDivisor, comparisonDivisor)
+			if convErr != nil {
+				return convErr
+			}
+			available = converted
+		}
+
+		if core.CompareQuantities(available, requested, comparisonDivisor) < 0 {
 			// Decompose the packed stock ID for a human-readable error.
 			warehouseDigits := key.stockID / 1e14
 			productDigits := (key.stockID / 1e5) % 1e9
@@ -396,7 +525,9 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 				metadata = append(metadata, fmt.Sprintf("Lote: %v", key.lotID))
 			}
 			return core.Err(strings.Join(metadata, " | ")+". ",
-				fmt.Sprintf("Se necesita %v. Se posee en stock: %v", requested, available))
+				fmt.Sprintf("Se necesita %v+%v/%v. Se posee en stock: %v+%v/%v",
+					requested.Units, requested.Sub, comparisonDivisor,
+					available.Units, available.Sub, comparisonDivisor))
 		}
 	}
 	return nil

@@ -45,10 +45,17 @@ maintained on their own pages and only consumed here.
   creates outbound warehouse stock movements (`Entrega a cliente final (Venta)`) that reduce
   the selected **almacén**'s stock. These are independent switches: a sale can be generated
   with neither, either, or both.
-- A **sub-unit (Sub)** row is an alternate way to sell a product in a smaller unit (for
-  example grams cut from a kilogram-priced product) using the product's own `SbuUnit` name
-  and its separate `SbuFinalPrice`; it only appears for products configured with a sub-unit
-  quantity greater than 1, alongside their normal stock row.
+- A **sub-unit** is a smaller unit the same product can be sold in — grams cut from a
+  kilogram, or single candies from a box. There is **no separate sub-unit row**: a product
+  configured with a sub-unit shows one card that offers both, with the whole-unit quick
+  buttons in grey and the sub-unit ones in purple (labelled with the first letter of the
+  sub-unit name), and both prices displayed. Sub-unit buttons stop below one whole unit —
+  past that the operator adds a unit instead. Sub-units are charged at the product's
+  `SbuFinalPrice`, never at a fraction of the whole-unit price.
+- **Stock is shared between the two.** The card's stock figure counts both, so one box on
+  hand covers six candies when the sub-unit divisor is 6, and the remaining stock is shown
+  as `2 + 3 unidad` when part of a unit is left. Selling four candies deducts four candies
+  from the warehouse, not four boxes.
 - **Serialized stock (Serie)** is inventory tracked by individual serial number; for those
   products the card shows clickable serial-number chips instead of quick-quantity buttons,
   and each serial is sold and validated independently.
@@ -95,8 +102,12 @@ per-serial quantity map), then recalculates the cart totals.
 
 There is no free-text quantity input on a card — only the fixed quick-quantity buttons, +1 via
 Enter, or one unit per serial chip click. The line price is always the product's stored
-`FinalPrice` (or `SbuFinalPrice` for a sub-unit row); this page offers no way to discount or
-override a line's price.
+`FinalPrice` (and `SbuFinalPrice` for the sub-unit part); this page offers no way to discount
+or override a line's price, and the server re-reads both prices from the catalog when the sale
+is posted, so a price sent by the browser is never trusted.
+
+Serialized stock is sold in whole units only: a serial number identifies one physical item, so
+serial chips never carry a sub-unit part.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 

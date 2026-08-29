@@ -1,5 +1,4 @@
 <script lang="ts">
-  import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
   import SquareBarSized from '$components/misc/SquareBarSized.svelte'
   import VirtualCards from '$components/misc/VirtualCards.svelte'
   import { DateHelper } from '@genix/ui/utilities'
@@ -7,11 +6,9 @@
   import type { IProduct } from '$routes/business/products/products.svelte'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
-  type TChartMetricMode = 'amount' | 'quantity'
-
-  interface IChartMetricForm {
-    metricMode?: TChartMetricMode
-  }
+  // Money only, and no metric selector. A quantity mode here summed across every product in
+  // a day, adding kilograms of one product to pieces of another — a figure with no unit.
+  // SaleOrdersChartsByProduct keeps its quantity mode, where every figure is one product.
 
   interface IDailyProductSummary {
     productID: number
@@ -26,8 +23,9 @@
     unpaidMetricValue: number
     paidRatio: number
     unpaidRatio: number
-    totalQuantity: number
-    deliveredQuantity: number
+    // Delivery progress is measured in money, the only figure that sums across products.
+    totalDeliverableAmount: number
+    deliveredAmount: number
     deliveredRatio: number
     variationAgainstLast7DaysAvg: number | null
     variationAgainstPreviousWeekday: number | null
@@ -36,25 +34,18 @@
   }
 
   interface SaleOrdersChartsDailySummaryProps {
-    chartMetricForm: IChartMetricForm
     saleSummaryRecords: ISaleSummaryRecord[]
     productsByIdMap: Map<number, IProduct>
   }
 
   const dateHelper = new DateHelper()
   const CARD_ROW_HEIGHT_PX = 332
-  const chartMetricSelectionOptions: Array<{ ID: TChartMetricMode; Name: string }> = [
-    { ID: 'amount', Name: 'Por Monto Facturado' },
-    { ID: 'quantity', Name: 'Por Cantidad' }
-  ]
 
   let {
-    chartMetricForm,
     saleSummaryRecords,
     productsByIdMap,
   }: SaleOrdersChartsDailySummaryProps = $props()
 
-  const selectedMetricMode = $derived<TChartMetricMode>(chartMetricForm.metricMode || 'amount')
 
   const dateUnixRangeToRender = $derived.by(() => {
     const currentFechaUnix = dateHelper.dateUnixCurrent()
@@ -89,8 +80,8 @@
           unpaidMetricValue: 0,
           paidRatio: 0,
           unpaidRatio: 0,
-          totalQuantity: 0,
-          deliveredQuantity: 0,
+          totalDeliverableAmount: 0,
+          deliveredAmount: 0,
           deliveredRatio: 0,
           variationAgainstLast7DaysAvg: null,
           variationAgainstPreviousWeekday: null,
@@ -109,8 +100,8 @@
 
       let paidMetricValue = 0
       let unpaidMetricValue = 0
-      let totalQuantity = 0
-      let deliveredQuantity = 0
+      let totalDeliverableAmount = 0
+      let deliveredAmount = 0
 
       for (let recordIndex = 0; recordIndex < productIDs.length; recordIndex += 1) {
         const productID = productIDs[recordIndex] || 0
@@ -124,14 +115,17 @@
         const unpaidAmount = (unpaidAmountsInCents[recordIndex] || 0) / 100
         const paidAmount = Math.max(0, totalAmount - unpaidAmount)
 
-        paidMetricValue += selectedMetricMode === 'quantity' ? deliveredQuantityForProduct : paidAmount
-        unpaidMetricValue += selectedMetricMode === 'quantity' ? pendingQuantityForProduct : unpaidAmount
-        totalQuantity += totalQuantityForProduct
-        deliveredQuantity += deliveredQuantityForProduct
+        paidMetricValue += paidAmount
+        unpaidMetricValue += unpaidAmount
+        // The delivered share of one product is unit-free, so weighting the product's own
+        // amount by it produces a figure that can be summed across products.
+        const deliveredShare = totalQuantityForProduct > 0
+          ? deliveredQuantityForProduct / totalQuantityForProduct
+          : 0
+        totalDeliverableAmount += totalAmount
+        deliveredAmount += totalAmount * deliveredShare
 
-        const productMetricValue = selectedMetricMode === 'quantity'
-          ? totalQuantityForProduct
-          : totalAmount
+        const productMetricValue = totalAmount
 
         if (productMetricValue > 0) {
           topProducts.push({
@@ -154,7 +148,7 @@
       const totalSalesMetricValue = totalInvoicedMetricValue
       const paidRatio = totalInvoicedMetricValue > 0 ? paidMetricValue / totalInvoicedMetricValue : 0
       const unpaidRatio = totalInvoicedMetricValue > 0 ? unpaidMetricValue / totalInvoicedMetricValue : 0
-      const deliveredRatio = totalQuantity > 0 ? deliveredQuantity / totalQuantity : 0
+      const deliveredRatio = totalDeliverableAmount > 0 ? deliveredAmount / totalDeliverableAmount : 0
 
       dailyCards.push({
         dateUnix,
@@ -163,8 +157,8 @@
         unpaidMetricValue,
         paidRatio,
         unpaidRatio,
-        totalQuantity,
-        deliveredQuantity,
+        totalDeliverableAmount,
+        deliveredAmount,
         deliveredRatio,
         variationAgainstLast7DaysAvg: null,
         variationAgainstPreviousWeekday: null,
@@ -204,11 +198,8 @@
   })
 
   const formatMetricValue = (metricValue: number) => {
-    if (!metricValue) { return selectedMetricMode === 'quantity' ? '0' : '0.00' }
-
-    return selectedMetricMode === 'quantity'
-      ? formatN(metricValue, 0)
-      : `${formatN(metricValue, 2)}`
+    if (!metricValue) { return '0.00' }
+    return formatN(metricValue, 2)
   }
 
   const getTopProductWidthPercent = (metricValue: number, topMetricMaxValue: number) => {
@@ -233,14 +224,6 @@
 </script>
 
 <div class="mb-12 flex flex-wrap items-center gap-10">
-  <CheckboxOptions useButtons
-    options={chartMetricSelectionOptions}
-    saveOn={chartMetricForm}
-    save={'metricMode'}
-    keyId={'ID'}
-    keyName={'Name'}
-    type="single"
-  />
   <div class="ml-auto flex items-center gap-12 text-[13px] text-slate-600">
     <div>{dailySummaryCards.length} días</div>
     <div>Top 10 productos</div>
@@ -299,7 +282,7 @@
               <SquareBarSized useStripedLines="#F0F0F0"
                 label="Delivered|Entregado"
                 value={`${formatN(dailySummaryCard.deliveredRatio * 100, 0)}%`}
-                sublabel={`${formatN(dailySummaryCard.deliveredQuantity, 0)} / ${formatN(dailySummaryCard.totalQuantity, 0)}`}
+                sublabel={`${formatN(dailySummaryCard.deliveredAmount / 100, 2)} / ${formatN(dailySummaryCard.totalDeliverableAmount / 100, 2)}`}
                 size={dailySummaryCard.deliveredRatio}
                 backgroundColor="#d9e7bf"
                 background="linear-gradient(32deg, #d1fdd5 0%, #94ed9c 99%)"

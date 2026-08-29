@@ -39,21 +39,27 @@ func splitGrossAmount(gross int64) (net int64, tax int64) {
 // Everything the document needs beyond the sale itself — the customer's identity
 // document, the product descriptions — is read here, because a document is a
 // snapshot: once issued it must not change when a product is renamed.
+// A line with a sub-unit part becomes two document lines, so the second return value maps
+// each generated line back to the product it came from.
 func SaleOrderToDocument(
 	companyID int32, order *sales.SaleOrder, series *types.InvoiceSeries,
-) (*model.Document, error) {
+) (*model.Document, []int32, error) {
 
 	if len(order.DetailProductsIDs) == 0 {
-		return nil, errors.New("la venta no tiene productos")
+		return nil, nil, errors.New("la venta no tiene productos")
 	}
 
 	customer, err := buildCustomer(companyID, order, series.DocType)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	lines, err := buildLines(companyID, order)
+	products, err := loadProductDescriptions(companyID, order.DetailProductsIDs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	lines, lineProductIDs, err := buildLines(order, products)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	issuedAt := core.Now()
@@ -68,7 +74,7 @@ func SaleOrderToDocument(
 		// come from the sale's payment plan, which the order does not carry yet.
 		Payment: model.PaymentCash,
 	}
-	return document, nil
+	return document, lineProductIDs, nil
 }
 
 // buildCustomer resolves who is being billed.
@@ -154,30 +160,27 @@ func identityDocTypeOf(registryNumber string) string {
 }
 
 // buildLines turns the sale's parallel detail arrays into document lines.
-func buildLines(companyID int32, order *sales.SaleOrder) ([]model.Line, error) {
-	names, err := loadProductNames(companyID, order.DetailProductsIDs)
-	if err != nil {
-		return nil, err
-	}
-
+//
+// A sale line is packed (Units*QuantityLineScale + Sub) and its two halves were charged at
+// different prices, so a line holding both becomes **two** document lines: whole units at
+// DetailPrices, sub-units at DetailSubPrices. That keeps every emitted quantity a whole
+// count — no fraction of a box ever reaches the XML — which matters because facturago
+// scales quantities by 1e6 and a sixth of a unit is not representable there. It also
+// matches what SUNAT wants: four candies invoice as four, not as 0.667 of a box.
+// It takes the product descriptions rather than loading them, so the splitting rule can be
+// tested without a database.
+func buildLines(order *sales.SaleOrder, products map[int32]business.Product) ([]model.Line, []int32, error) {
 	lines := make([]model.Line, 0, len(order.DetailProductsIDs))
-	for index, productID := range order.DetailProductsIDs {
-		quantity := int64(core.GetIndex(order.DetailQuantities, index))
-		grossUnit := int64(core.GetIndex(order.DetailPrices, index))
-		if quantity <= 0 || grossUnit <= 0 {
-			continue
-		}
+	lineProductIDs := make([]int32, 0, len(order.DetailProductsIDs))
 
+	appendLine := func(productID int32, description string, quantity int32, grossUnit int32, index int) {
+		if quantity <= 0 || grossUnit <= 0 {
+			return
+		}
 		// The line total is exact in cents because that is what was charged;
 		// the split is what SUNAT reads.
-		gross := quantity * grossUnit
+		gross := int64(quantity) * int64(grossUnit)
 		net, tax := splitGrossAmount(gross)
-
-		description := names[productID]
-		if description == "" {
-			description = fmt.Sprintf("PRODUCTO %v", productID)
-		}
-
 		lines = append(lines, model.Line{
 			ProductCode: core.GetIndex(order.DetailProductSkus, index),
 			Description: description,
@@ -188,32 +191,57 @@ func buildLines(companyID int32, order *sales.SaleOrder) ([]model.Line, error) {
 			Value:       model.Cents(net),
 			IGV:         model.Cents(tax),
 		})
+		lineProductIDs = append(lineProductIDs, productID)
+	}
+
+	for index, productID := range order.DetailProductsIDs {
+		lineQuantity := core.UnpackQuantityLine(core.GetIndex(order.DetailQuantities, index))
+
+		description := products[productID].Name
+		if description == "" {
+			description = fmt.Sprintf("PRODUCTO %v", productID)
+		}
+
+		appendLine(productID, description, lineQuantity.Units, core.GetIndex(order.DetailPrices, index), index)
+
+		if lineQuantity.Sub > 0 {
+			// The sub-unit name is carried in the description because SUNAT's unit-of-measure
+			// catalog (03) has no entry this free-text field maps to.
+			subDescription := description
+			if subUnit := products[productID].SbuUnit; subUnit != "" {
+				subDescription = fmt.Sprintf("%s (%s)", description, subUnit)
+			}
+			appendLine(productID, subDescription, lineQuantity.Sub,
+				core.GetIndex(order.DetailSubPrices, index), index)
+		}
 	}
 
 	if len(lines) == 0 {
-		return nil, errors.New("la venta no tiene líneas con cantidad y precio válidos")
+		return nil, nil, errors.New("la venta no tiene líneas con cantidad y precio válidos")
 	}
-	return lines, nil
+	return lines, lineProductIDs, nil
 }
 
-func loadProductNames(companyID int32, productIDs []int32) (map[int32]string, error) {
-	names := map[int32]string{}
+// loadProductDescriptions reads what a document line needs to describe itself: the product
+// name and, for a sub-unit line, the name of the sub-unit.
+func loadProductDescriptions(companyID int32, productIDs []int32) (map[int32]business.Product, error) {
+	descriptions := map[int32]business.Product{}
 	if len(productIDs) == 0 {
-		return names, nil
+		return descriptions, nil
 	}
 
 	products := []business.Product{}
 	query := db.Query(&products)
-	query.Select(query.ID, query.Name).
+	query.Select(query.ID, query.Name, query.SbuUnit).
 		CompanyID.Equals(companyID).ID.In(productIDs...)
 
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al leer los productos de la venta: %w", err)
 	}
 	for _, product := range products {
-		names[product.ID] = product.Name
+		descriptions[product.ID] = product
 	}
-	return names, nil
+	return descriptions, nil
 }
 
 // sunatDocType maps the stored numeric type to the catalog code facturago uses.

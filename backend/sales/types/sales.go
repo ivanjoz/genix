@@ -19,9 +19,21 @@ type SaleOrder struct {
 	ID          int64
 
 	//Table: Following slices must be same size
-	DetailProductsIDs          []int32  `json:",omitempty" db:",list"`
-	DetailPrices               []int32  `json:",omitempty" db:",list"`
-	DetailQuantities           []int32  `json:",omitempty" db:",list"`
+	DetailProductsIDs []int32 `json:",omitempty" db:",list"`
+	// DetailPrices is the price of one whole unit; DetailSubPrices the price of one sub-unit.
+	// Both are needed per line and neither is derivable from the other: selling loose is
+	// deliberately not proportional (four candies from a 5000-cent box of six is not 3333).
+	// A summary reprocess has to reconstruct what was charged, not what the product costs now.
+	DetailPrices    []int32 `json:",omitempty" db:",list"`
+	DetailSubPrices []int32 `json:",omitempty" db:",list"`
+	// DetailQuantities is the packed line quantity: Units*core.QuantityLineScale + Sub, so
+	// 1001 at divisor 6 is one box plus one candy. A sale order is a document — it is never
+	// accumulated and never SUM()-ed — so it packs both halves into one column, where the
+	// stock and ledger tables keep them separate. core.UnpackQuantityLine splits it.
+	DetailQuantities []int32 `json:",omitempty" db:",list"`
+	// DetailSubDivisor is the divisor each line's packed sub-unit part is expressed in,
+	// recorded per line so a later refinement of the product never restates a past sale.
+	DetailSubDivisor           []int16  `json:",omitempty" db:",list"`
 	DetailProductSkus          []string `json:",omitempty" db:",list"`
 	DetailProductLotIDs        []int32  `json:",omitempty" db:",list"`
 	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
@@ -78,7 +90,9 @@ type SaleOrderTable struct {
 	LastPaymentCajaID          db.Col[*SaleOrderTable, int32]
 	DetailProductsIDs          db.Col[*SaleOrderTable, []int32]
 	DetailPrices               db.Col[*SaleOrderTable, []int32]
+	DetailSubPrices            db.Col[*SaleOrderTable, []int32]
 	DetailQuantities           db.Col[*SaleOrderTable, []int32]
+	DetailSubDivisor           db.Col[*SaleOrderTable, []int16]
 	DetailProductSkus          db.Col[*SaleOrderTable, []string]
 	DetailProductLotIDs        db.Col[*SaleOrderTable, []int32]
 	DetailProductPresentations db.Col[*SaleOrderTable, []int16]
@@ -147,20 +161,39 @@ type SaleSummary struct {
 	CompanyID int32 `json:",omitempty"`
 	Date      int16 `json:",omitempty"`
 	// Products are sent columnar: every slice is aligned by index with ProductIDs.
-	ProductIDs              []int32 `json:",omitempty"`
-	Quantity                []int32 `json:",omitempty"`
-	QuantityPendingDelivery []int32 `json:",omitempty"`
-	TotalAmount             []int32 `json:",omitempty"`
-	TotalDebtAmount         []int32 `json:",omitempty"`
-	Updated                 int32   `json:"upd,omitempty"`
+	ProductIDs []int32 `json:",omitempty"`
+	// Quantity/SubQuantity are the split pair: a summary is accumulated across sales, so it
+	// cannot use the packed document form (1004 + 1004 would be 2008, not 3002).
+	Quantity                   []int32 `json:",omitempty"`
+	QuantityPendingDelivery    []int32 `json:",omitempty"`
+	SubQuantity                []int16 `json:",omitempty"`
+	SubQuantityPendingDelivery []int16 `json:",omitempty"`
+	SubDivisor                 []int16 `json:",omitempty"`
+	TotalAmount                []int32 `json:",omitempty"`
+	TotalDebtAmount            []int32 `json:",omitempty"`
+	Updated                    int32   `json:"upd,omitempty"`
 }
 
 /* Sale summary 2 */
+// SaleOrderProductStats is packed by libs.SerializeInt30Struct, which stores every field in
+// at most 30 bits and saturates silently past that.
+//
+// Unlike the ledger and stock rows, this one keeps its pairs **normalized**: it is updated
+// by a Go-side read-modify-write, not by a Scylla SUM(), so carrying on every write costs
+// nothing. That is what bounds the Sub* fields — a normalized Sub is always below the
+// divisor, and the divisor tops out at core.MaxQuantityDivisor (1000) — so they are int16.
 type SaleOrderProductStats struct {
-	Quantity                int32
-	QuantityPendingDelivery int32
-	TotalAmount             int32
-	TotalDebtAmount         int32
+	Quantity int32 `cb:"1,minimal"`
+	// Bounded by Quantity, so it carries the same width. Only the Sub* halves are bounded by
+	// the divisor and can narrow.
+	QuantityPendingDelivery    int32 `cb:"2"`
+	SubQuantity                int16 `cb:"3"`
+	SubQuantityPendingDelivery int16 `cb:"4"`
+	// SubDivisor the two Sub* fields are counted in. One per (date, product) row: a
+	// refinement mid-day would otherwise have the row adding sixths to twelfths.
+	SubDivisor      int16 `cb:"5"`
+	TotalAmount     int32 `cb:"6"`
+	TotalDebtAmount int32 `cb:"7"`
 }
 
 type ProductSaleSummary struct {

@@ -34,7 +34,7 @@ func ReserveDocument(
 		return nil, fmt.Errorf("la venta ya tiene el comprobante %v", existing.Number())
 	}
 
-	document, err := SaleOrderToDocument(companyID, order, series)
+	document, lineProductIDs, err := SaleOrderToDocument(companyID, order, series)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func ReserveDocument(
 	}
 	document.Correlativo = 0
 
-	row := rowFromDocument(companyID, userID, order, series, document)
+	row := rowFromDocument(companyID, userID, order, series, document, lineProductIDs)
 	rows := &[]types.InvoiceDocument{row}
 	if err := db.Insert(rows); err != nil {
 		return nil, fmt.Errorf("error al reservar el correlativo: %w", err)
@@ -71,7 +71,7 @@ func ReserveDocument(
 // must produce the same XML even if the product was renamed in between.
 func rowFromDocument(
 	companyID, userID int32, order *sales.SaleOrder,
-	series *types.InvoiceSeries, document *model.Document,
+	series *types.InvoiceSeries, document *model.Document, lineProductIDs []int32,
 ) types.InvoiceDocument {
 
 	now := core.SUnixTime()
@@ -108,7 +108,9 @@ func rowFromDocument(
 
 	for index := range document.Lines {
 		line := &document.Lines[index]
-		row.DetailProductIDs = append(row.DetailProductIDs, core.GetIndex(order.DetailProductsIDs, index))
+		// Not order.DetailProductsIDs[index]: a sale line with a sub-unit part produces two
+		// document lines, so the two slices are no longer index-aligned.
+		row.DetailProductIDs = append(row.DetailProductIDs, core.GetIndex(lineProductIDs, index))
 		quantity := int32(line.Quantity / model.QuantityScale)
 		row.DetailQuantity = append(row.DetailQuantity, quantity)
 		// The unit value is derived when the caller priced the line as a whole,

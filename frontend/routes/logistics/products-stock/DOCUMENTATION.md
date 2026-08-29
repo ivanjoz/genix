@@ -93,12 +93,10 @@ total) is rejected for the whole request rather than partially applied.
 
 ### Limitations (Limitaciones)
 
-- There is no field on this page to enter `SubQuantity` (a secondary quantity unit the data
-  model supports); only the main `Quantity` is editable here.
-- There is no delete action for a stock row; setting a quantity to `0` is the only way to clear
-  it, and the row itself remains as a record at zero.
-- The grid has no server-side search — the filter box matches only rows already loaded for the
-  selected warehouse (plus any product added through **All Products**).
+- The **Simple Stock** column edits whole units only. When a product holds a loose sub-unit
+  balance (from selling part of a box, for example) it is shown beside the whole-unit figure in
+  purple — `12 +4 unidad` — but cannot be edited here. A whole-unit correction posts the existing
+  sub-unit balance back unchanged, so it never wipes loose stock.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 

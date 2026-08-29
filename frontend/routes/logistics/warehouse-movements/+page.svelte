@@ -7,6 +7,7 @@ import DateInput from '$components/form/DateInput.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Loading, formatTime, highlString } from '$libs/helpers';
+import { formatQuantity, quantityDivisorOf, totalSubUnits } from '$core/quantity';
 import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
 import FilterInput from '$components/form/FilterInput.svelte';
 import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
@@ -161,8 +162,16 @@ import { SvelteMap } from 'svelte/reactivity';
       headerCss: "w-100",
       css: "text-right ff-mono px-6",
       render: e => {
-        return `<div class="flex justify-end ${(e.Quantity || 0) < 0 ? 'text-red-500' : 'text-blue-600'}">
-          ${e.Quantity || 0}
+        // A movement can be sub-units only, where Quantity is 0 and the whole change lives
+        // in SubQuantity — printing Quantity alone would show the row as no movement.
+        const movedSubUnits = totalSubUnits(
+          { units: e.Quantity || 0, sub: e.SubQuantity || 0 }, quantityDivisorOf(e.SubDivisor))
+        const label = formatQuantity(
+          { units: e.Quantity || 0, sub: e.SubQuantity || 0 },
+          quantityDivisorOf(e.SubDivisor),
+          productos.recordsMap.get(e.ProductID || 0)?.SbuUnit)
+        return `<div class="flex justify-end ${movedSubUnits < 0 ? 'text-red-500' : 'text-blue-600'}">
+          ${label}
         </div>`
       },
       mobile: { order: 6, css: "col-span-12", labelLeft: "Cant:" }

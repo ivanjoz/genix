@@ -44,9 +44,17 @@ logistics stock changes, the public storefront) read to describe and sell the pr
 - A **category (categoría)** and a **brand (marca)** are two independent shared lists
   (`shared-lists`, list IDs 1 and 2) reused across the whole business module — a product can
   belong to several categories but only one brand.
-- **Sub-units (`Sub-Unidades`)** capture an alternate name, price, discount, final price, and
-  quantity for the same product (for example selling by box in addition to by unit). They are
-  plain fields on the product row itself, not a separate product or a related SKU.
+- **Sub-units (`Sub-Unidades`)** let the same product be sold fractionally — a box of six
+  candies sold one candy at a time, or a kilogram sold by the gram. They are plain fields on
+  the product row, not a separate product or SKU. **`Quantity` (Cantidad) is the divisor: how
+  many sub-units make one whole unit** — 6 for a box of six, 1000 for a kilogram in grams.
+  `Name` (Nombre) labels it, and `Final Price` (Precio Final) is what one sub-unit costs; a
+  sub-unit is charged at its own price, never at a fraction of the whole-unit price.
+- **A sub-unit can be added to a product that already has stock and sales**, and nothing is
+  restated: existing records simply hold no sub-unit part. Once set, the divisor may only be
+  **refined to a multiple of itself** (6 → 12 is accepted, 12 → 6 and 6 → 5 are rejected), and
+  it cannot be removed while the product has history — coarsening would round away real
+  stock. The maximum divisor is 1000.
 - A **presentation (`Presentación`)**, also called a variant, is a product option distinguished
   by a fixed attribute (`Atributo`: Color, Talla, Tamaño, Forma, or Presentación), with its own
   name, price, price difference, optional SKU, and color swatch. Presentations are stored inside
@@ -110,6 +118,10 @@ tabs: **Info (Información)**, **Sheet (Ficha)**, **Presentations (Presentacione
   the sub-unit **Base Price** field's `onChange` actually recomputes the *main* product's Final
   Price (from the main Price/Discount), not a sub-unit total — entering a sub-unit base price can
   unexpectedly change the main Final Price shown above it.
+- Saving is rejected with a descriptive message when the sub-unit **Quantity** (the divisor) is
+  above 1000, when a sub-unit is defined without a **Name**, when the divisor is changed to
+  something that is not a multiple of the current one, or when it is removed from a product that
+  already has stock or sales.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 

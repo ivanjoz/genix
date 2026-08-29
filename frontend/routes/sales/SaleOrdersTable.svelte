@@ -4,6 +4,7 @@
   import VTable from '$components/vTable/VTable.svelte';
   import type { ITableColumn } from '$components/vTable/types';
   import { formatN, formatTime, wordInclude } from '$libs/helpers';
+  import { unpackQuantityLine } from '$core/quantity';
 
   interface IProductLookupRecord {
     Name?: string;
@@ -189,9 +190,12 @@
     for (let detailIndex = 0; detailIndex < detailCount; detailIndex += 1) {
       const productID = saleOrder.DetailProductsIDs?.[detailIndex] || 0;
       const unitPrice = saleOrder.DetailPrices?.[detailIndex] || 0;
-      const quantity = saleOrder.DetailQuantities?.[detailIndex] || 0;
+      // Lines are packed (units * 1000 + sub); the ranking counts whole units, since a
+      // ranking that mixed loose sub-units across products would have no unit.
+      const packedQuantity = saleOrder.DetailQuantities?.[detailIndex] || 0;
+      const quantity = unpackQuantityLine(packedQuantity).units;
       const lineAmount = unitPrice * quantity;
-      if (!productID || quantity <= 0 || lineAmount <= 0) {
+      if (!productID || packedQuantity <= 0 || lineAmount <= 0) {
         continue;
       }
 

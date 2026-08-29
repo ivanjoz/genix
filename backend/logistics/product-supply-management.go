@@ -168,7 +168,10 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID.Equals(req.User.CompanyID).
 		Date.GreaterEqual(movimientosFecha)
 
-	if err := query.GroupBy(query.Date, query.ProductID, query.Type, query.Quantity.Sum()).Exec(); err != nil {
+	// SubDivisor is in the group key so each sum stays within one divisor; the fold below
+	// converts each group's sub-units to whole units before adding them together.
+	if err := query.GroupBy(query.Date, query.ProductID, query.Type, query.SubDivisor,
+		query.Quantity.Sum(), query.SubQuantity.Sum()).Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros del almacén:", err)
 	}
 
@@ -202,11 +205,21 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 			dateAccumulator.record.DetailOutflows = append(dateAccumulator.record.DetailOutflows, 0)
 		}
 
+		// This report is whole-unit by design (supply thresholds are), so the sub-unit part is
+		// folded in truncated rather than dropped: a product sold only in candies would
+		// otherwise show no movement at all and read as dead stock to supply planning.
+		groupedQuantity := movimiento.Quantity
+		if movimiento.SubQuantity != 0 && movimiento.SubDivisor > 0 {
+			groupedQuantity = int32(core.Quantity{
+				Units: movimiento.Quantity, Sub: movimiento.SubQuantity,
+			}.TotalSubUnits(movimiento.SubDivisor) / int64(movimiento.SubDivisor))
+		}
+
 		// Split the signed grouped quantity into inflow/outflow columns for the cached payload.
-		if movimiento.Quantity > 0 {
-			dateAccumulator.record.DetailInflows[productIndex] += movimiento.Quantity
-		} else if movimiento.Quantity < 0 {
-			dateAccumulator.record.DetailOutflows[productIndex] += -movimiento.Quantity
+		if groupedQuantity > 0 {
+			dateAccumulator.record.DetailInflows[productIndex] += groupedQuantity
+		} else if groupedQuantity < 0 {
+			dateAccumulator.record.DetailOutflows[productIndex] += -groupedQuantity
 		}
 	}
 

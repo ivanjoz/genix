@@ -88,7 +88,8 @@ func TestRowRoundTripsIntoAValidDocument(t *testing.T) {
 	}
 
 	order := &sales.SaleOrder{ID: 55, ClientID: 7, DetailProductsIDs: []int32{101}}
-	row := rowFromDocument(1, 1, order, testSeries(), original)
+	// One document line, so the line-to-product mapping is the product itself.
+	row := rowFromDocument(1, 1, order, testSeries(), original, []int32{101})
 	// The ORM assigns the key on insert, and the number is read off it; the test
 	// stands in for that.
 	row.ID = int64(row.DocTypeSeries)*100_000_000_00000 + 123

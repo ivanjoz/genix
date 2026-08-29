@@ -13,7 +13,10 @@ export interface ISaleOrder {
     WarehouseID: number;
     DetailProductsIDs: number[];
     DetailPrices: number[];
+    // Packed: units * 1000 + sub. Unpack with $core/quantity before displaying.
     DetailQuantities: number[];
+    DetailSubDivisor?: number[];
+    DetailSubPrices?: number[];
     DetailProductSkus: string[];
     DetailProductPresentations: number[];
     TotalAmount: number;
@@ -60,7 +63,7 @@ export interface ISaleOrdersResult {
 export class SaleOrdersService extends GetHandler {
   route = "sale-orders"
   // Route now depends on group; bump version to avoid mixing old cached queries.
-  useCache = { min: 0.1, ver: 9 }
+  useCache = { min: 0.1, ver: 10 }
 
 	records: ISaleOrder[] = $state([])
 

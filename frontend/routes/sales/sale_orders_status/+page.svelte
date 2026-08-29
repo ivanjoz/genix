@@ -12,6 +12,7 @@
   import T from '$components/misc/T.svelte';
   import Page from '$domain/Page.svelte';
   import { Notify, formatN, formatTime } from '$libs/helpers';
+  import { type Quantity, formatQuantity, quantityAmount, quantityDivisorOf, unpackQuantityLine } from '$core/quantity';
   import { CajasService } from '$routes/finance/cash-banks/cajas.svelte';
   import {
       ClientProviderService,
@@ -39,7 +40,9 @@
     productName: string;
     presentationName: string;
     sku: string;
-    quantity: number;
+    // Rendered from the packed line, so it reads "1 + 4 unidad" when a sub-unit was sold.
+    quantityLabel: string;
+    quantity: Quantity;
     unitPrice: number;
     subtotalAmount: number;
   }
@@ -243,6 +246,7 @@
     const detailProductIDs = saleOrder.DetailProductsIDs || [];
     const detailPrices = saleOrder.DetailPrices || [];
     const detailQuantities = saleOrder.DetailQuantities || [];
+    const detailSubPrices = saleOrder.DetailSubPrices || [];
     const detailProductSkus = saleOrder.DetailProductSkus || [];
     const detailProductPresentations = saleOrder.DetailProductPresentations || [];
 
@@ -257,7 +261,9 @@
     for (let detailPosition = 0; detailPosition < detailCount; detailPosition += 1) {
       const productID = detailProductIDs[detailPosition] || 0;
       const unitPrice = detailPrices[detailPosition] || 0;
-      const quantity = detailQuantities[detailPosition] || 0;
+      const quantity = unpackQuantityLine(detailQuantities[detailPosition] || 0);
+      const subDivisor = quantityDivisorOf(productosService.recordsMap.get(productID)?.SbuQuantity);
+      const subUnitName = productosService.recordsMap.get(productID)?.SbuUnit;
       const sku = detailProductSkus[detailPosition] || '';
       const presentationID = detailProductPresentations[detailPosition] || 0;
 
@@ -269,8 +275,10 @@
         presentationName: getProductPresentationName(productID, presentationID),
         sku,
         quantity,
+        quantityLabel: formatQuantity(quantity, subDivisor, subUnitName),
         unitPrice,
-        subtotalAmount: unitPrice * quantity,
+        subtotalAmount: quantityAmount(
+          quantity, unitPrice, detailSubPrices[detailPosition] || 0),
       });
     }
 
@@ -372,7 +380,7 @@
       header: 'Qty.|Cant.',
       width: '90px',
       align: 'right',
-      getValue: (detailLineRecord) => detailLineRecord.quantity,
+      getValue: (detailLineRecord) => detailLineRecord.quantityLabel,
       mobile: { order: 3, css: 'col-span-12', labelLeft: 'Cant:' },
     },
     {

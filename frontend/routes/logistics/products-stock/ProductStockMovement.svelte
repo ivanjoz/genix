@@ -662,6 +662,20 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
           ],
         }
       }
+      // The loose sub-unit balance is shown but not editable here: this column sets whole
+      // units, and the adjustment posts the existing SubQuantity back unchanged so a
+      // whole-unit correction never wipes loose stock.
+      const looseSubUnits = productStockDisplay.base.SubQuantity || 0
+      if (looseSubUnits) {
+        const subUnitName = productos.recordsMap.get(productStockDisplay.base.ProductID)?.SbuUnit || ''
+        return {
+          css: 'flex items-center justify-end',
+          children: [
+            { text: productStockDisplay.stockSimpleNew || '0' },
+            { text: `+${looseSubUnits}${subUnitName ? ' ' + subUnitName : ''}`, css: 'ml-4 text-purple-600 text-[11px]' },
+          ],
+        }
+      }
       return { css: 'text-right', text: productStockDisplay.stockSimpleNew || '' }
     },
   },

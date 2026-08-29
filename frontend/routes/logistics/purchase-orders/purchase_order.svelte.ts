@@ -119,7 +119,7 @@ export interface IPurchaseOrderReportForm {
 // Cached fetch of purchase orders filtered by status; ss>0 = active (soft-delete aware).
 export class PurchaseOrdersService extends GetHandler<IPurchaseOrder> {
   route = ''
-  useCache = { min: 0.2, ver: 2 }
+  useCache = { min: 0.2, ver: 3 }
 
   records: IPurchaseOrder[] = $state([])
   recordsMap: Map<number, IPurchaseOrder> = $state(new Map())

@@ -37,23 +37,29 @@ const (
 
 type Product struct {
 	db.TableStruct[ProductTable, Product]
-	CompanyID     int32   `json:",omitempty"`
-	ID            int32   `db:"id,pk"`
-	TempID        int32   `json:",omitempty"`
-	Name          string  `db:"nombre"`
-	Description   string  `json:",omitempty"`
-	ContentHTML   string  `json:",omitempty"`
-	CategoryIDs   []int32 `json:",omitempty" db:"category_ids"`
-	BrandID       int32   `json:",omitempty"`
-	Params        []int8  `json:",omitempty"`
-	Price         int32   `json:",omitempty"`
-	CurrencyID    int16   `json:",omitempty"`
-	UnitID        int16   `json:",omitempty"`
-	Discount      float32 `json:",omitempty"`
-	FinalPrice    int32   `json:",omitempty"`
-	Weight        float32 `json:",omitempty"`
-	Volume        float32 `json:",omitempty"`
-	SbuQuantity   int32   `json:",omitempty"`
+	CompanyID   int32   `json:",omitempty"`
+	ID          int32   `db:"id,pk"`
+	TempID      int32   `json:",omitempty"`
+	Name        string  `db:"nombre"`
+	Description string  `json:",omitempty"`
+	ContentHTML string  `json:",omitempty"`
+	CategoryIDs []int32 `json:",omitempty" db:"category_ids"`
+	BrandID     int32   `json:",omitempty"`
+	Params      []int8  `json:",omitempty"`
+	Price       int32   `json:",omitempty"`
+	CurrencyID  int16   `json:",omitempty"`
+	UnitID      int16   `json:",omitempty"`
+	Discount    float32 `json:",omitempty"`
+	FinalPrice  int32   `json:",omitempty"`
+	Weight      float32 `json:",omitempty"`
+	Volume      float32 `json:",omitempty"`
+	// Sub-unit: the divisor of the (Units, Sub) quantity pair. SbuQuantity is how many
+	// sub-units make one whole unit — 1000 for a kilogram sold by the gram, 6 for a box sold
+	// by the candy. 0 or 1 means the product has no sub-unit. It may only ever be refined to
+	// a multiple (see core.IsQuantityDivisorRefinement): coarsening would round away real
+	// stock, since 9/12 is 4.5 sixths. int16 to match SubDivisor on the stock and movement
+	// rows, so one concept has one type.
+	SbuQuantity   int16   `json:",omitempty"`
 	SbuUnit       string  `json:",omitempty"`
 	SbuPrice      int32   `json:",omitempty"`
 	SbuDiscount   float32 `json:",omitempty"`
@@ -115,7 +121,7 @@ type ProductTable struct {
 	FinalPrice          db.Col[*ProductTable, int32]
 	Weight              db.Col[*ProductTable, float32]
 	Volume              db.Col[*ProductTable, float32]
-	SbuQuantity         db.Col[*ProductTable, int32]
+	SbuQuantity         db.Col[*ProductTable, int16]
 	SbuUnit             db.Col[*ProductTable, string]
 	SbuPrice            db.Col[*ProductTable, int32]
 	SbuDiscount         db.Col[*ProductTable, float32]

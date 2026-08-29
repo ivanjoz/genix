@@ -3,6 +3,7 @@ import { useUI } from '@genix/ui';
 import { formatN } from '$libs/helpers';
 import Card from '$components/cards/Card.svelte';
   import { type ProductoVenta, type VentaProducto } from "./sale_order.svelte";
+  import { type Quantity, formatQuantity, hasSubUnit, totalSubUnits } from '$core/quantity';
   const ui = useUI();
 
   interface Props {
@@ -11,7 +12,7 @@ import Card from '$components/cards/Card.svelte';
     isSelected: boolean
     ventaProducto?: VentaProducto
     filterText: string
-    onadd: (cant: number, serialNumber?: string) => void
+    onadd: (cant: Quantity, serialNumber?: string) => void
     onselect: (idx: number) => void
   }
 
@@ -39,25 +40,26 @@ import Card from '$components/cards/Card.svelte';
   };
 
   const hasSerialNumbers = $derived((productoStock.serialNumbers?.length || 0) > 0);
-  const mobileSelectedCount = $derived(ventaProducto?.cantidad || 0)
+  const inCart = $derived(ventaProducto?.cantidad || { units: 0, sub: 0 })
+  const mobileSelectedCount = $derived(totalSubUnits(inCart, productoStock.subDivisor))
 
-  const getCant = $derived.by(() => {
-     let ventaCant = ventaProducto?.cantidad || 0
+  const productHasSubUnit = $derived(hasSubUnit(productoStock.producto))
 
-     // Legacy logic for sub-units counting against parent stock
-     // If this is a parent (P..), check if S.. exists
-     // This logic was in legacy `ProductoVentaCard`.
-     // We might need access to the whole map or pass down the related subunit quanity?
-     // For now, simpler approach: pass accurate `ventaProducto` or handle in parent?
-     // In legacy it received `ventasProductosMap`.
-
-     // Let's assume passed `ventaProducto` corresponds to THIS card's key.
-     // But strictly speaking, stock is shared if it's the main unit.
-     // Let's implement basic stock substraction first.
-     return productoStock.cant - ventaCant
+  // Remaining stock, in sub-units so a whole-unit request is checked against loose stock
+  // too: one box on hand covers six candies at divisor 6.
+  const remainingSubUnits = $derived(
+    totalSubUnits(productoStock.available, productoStock.subDivisor) -
+      totalSubUnits(inCart, productoStock.subDivisor)
+  )
+  const remainingQuantity = $derived({
+    units: Math.floor(remainingSubUnits / productoStock.subDivisor),
+    sub: remainingSubUnits % productoStock.subDivisor,
   })
+  const remainingLabel = $derived(
+    formatQuantity(remainingQuantity, productoStock.subDivisor, productoStock.producto.SbuUnit)
+  )
 
-  const hasCriticalStock = $derived(getCant <= 2)
+  const hasCriticalStock = $derived(remainingQuantity.units <= 2)
 
   // Serialized rows only expose available serial numbers that are not exhausted in cart.
   const firstSerialNumbers = $derived.by(() => {
@@ -72,12 +74,8 @@ import Card from '$components/cards/Card.svelte';
     return serialNumbers.slice(0, 5)
   })
 
-  const price = $derived.by(() => {
-      if(productoStock.isSubUnidad && productoStock.producto.SbuFinalPrice){
-          return productoStock.producto.SbuFinalPrice
-      }
-      return productoStock.producto.FinalPrice
-  })
+  const price = $derived(productoStock.producto.FinalPrice)
+  const subUnitPrice = $derived(productoStock.producto.SbuFinalPrice || 0)
 
   const highlightedDisplayName = $derived.by(() => {
     const productName = highlightText(productoStock.producto.Name, filterText)
@@ -92,7 +90,17 @@ import Card from '$components/cards/Card.svelte';
   const mobileQuickQuantities = [1,2,5,10]
   const quickQuantities = $derived.by(() => {
     const availableQuantities = ui.state.deviceType === 3 ? mobileQuickQuantities : desktopQuickQuantities
-    return availableQuantities.filter((cantidad) => cantidad <= getCant)
+    return availableQuantities.filter((cantidad) => cantidad <= remainingQuantity.units)
+  })
+
+  // Sub-unit shortcuts only go up to one whole unit; past that the operator adds a unit.
+  const quickSubQuantities = $derived.by(() => {
+    if (!productHasSubUnit || subUnitPrice <= 0) { return [] as number[] }
+    const divisor = productoStock.subDivisor
+    const steps = [1, Math.round(divisor / 4), Math.round(divisor / 2), divisor - 1]
+    return [...new Set(steps)]
+      .filter((cantidad) => cantidad > 0 && cantidad < divisor && cantidad <= remainingSubUnits)
+      .sort((a, b) => a - b)
   })
 
   const css = $derived.by(() => {
@@ -129,9 +137,9 @@ import Card from '$components/cards/Card.svelte';
     <div class="flex items-center gap-8">
        <div class="flex items-center gap-8 pr-20 leading-tight text-gray-700 md:pr-0">
           <span>{@html highlightedDisplayName}</span>
-          {#if productoStock.isSubUnidad}
+          {#if productHasSubUnit}
              <span class="text-gray-300">|</span>
-             <span class="text-purple-600 font-bold text-xs">{productoStock.producto.SbuUnit}</span>
+             <span class="text-purple-600 font-bold text-xs">x{productoStock.subDivisor} {productoStock.producto.SbuUnit}</span>
           {/if}
           {#if hasSerialNumbers}
              <span class="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-1 rounded">(Serie)</span>
@@ -151,7 +159,7 @@ import Card from '$components/cards/Card.svelte';
                         aria-label="Add serial number {stockDetail.SerialNumber} to cart"
                         onclick={(e) => {
                             e.stopPropagation()
-                            onadd(1, stockDetail.SerialNumber)
+                            onadd({ units: 1, sub: 0 }, stockDetail.SerialNumber)
                         }}
                       >
                        {stockDetail.SerialNumber}
@@ -161,7 +169,7 @@ import Card from '$components/cards/Card.svelte';
             {:else}
               <div class={"flex w-50 shrink-0 flex-col items-center justify-center rounded bg-gray-50 py-2 leading-none md:hidden" + (hasCriticalStock ? " text-red-500" : " text-gray-600")}>
                   <span class="text-[13px] text-gray-500">Stock</span>
-                  <span class="font-mono ff-bold">{getCant}</span>
+                  <span class="font-mono ff-bold">{remainingLabel}</span>
               </div>
               <div class="z-10 flex flex-1 flex-wrap justify-center gap-4 md:flex-none md:opacity-0 md:duration-200 md:group-hover:opacity-100">
                   {#each quickQuantities as cantidad}
@@ -170,10 +178,22 @@ import Card from '$components/cards/Card.svelte';
                        aria-label="Add {cantidad} units to cart"
                        onclick={(e) => {
                            e.stopPropagation()
-                           onadd(cantidad)
+                           onadd({ units: cantidad, sub: 0 })
                        }}
                      >
                         {cantidad}
+                     </button>
+                  {/each}
+                  {#each quickSubQuantities as subCantidad}
+                     <button
+                       class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-purple-50 text-xs font-bold text-purple-600 transition-colors hover:bg-purple-100 md:w-32 md:min-w-0"
+                       aria-label="Add {subCantidad} {productoStock.producto.SbuUnit} to cart"
+                       onclick={(e) => {
+                           e.stopPropagation()
+                           onadd({ units: 0, sub: subCantidad })
+                       }}
+                     >
+                        {subCantidad}{productoStock.producto.SbuUnit?.slice(0, 1) || ""}
                      </button>
                   {/each}
               </div>
@@ -187,13 +207,18 @@ import Card from '$components/cards/Card.svelte';
         {#if !hasSerialNumbers}
           <div class={"absolute bottom-0 left-0 text-right text-sm text-gray-500 group-hover:invisible" + (hasCriticalStock ? " text-red-500 font-bold" : "")}>
             <div class="hidden w-50 font-mono md:block">
-                {getCant}
+                {remainingLabel}
             </div>
           </div>
         {/if}
         <!-- Col 4: Price -->
         <div class="font-mono ml-auto text-sm font-medium text-gray-700 text-right w-80">
             {formatN(price/100, 2)}
+            {#if productHasSubUnit && subUnitPrice > 0}
+              <div class="text-[11px] text-purple-600">
+                {formatN(subUnitPrice/100, 2)} / {productoStock.producto.SbuUnit}
+              </div>
+            {/if}
         </div>
     </div>
   </Card>

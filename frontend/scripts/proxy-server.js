@@ -37,31 +37,27 @@ const storeProxy = httpProxy.createProxyServer({
   changeOrigin: true
 });
 
-// Handle proxy errors
-mainProxy.on('error', (err, req, res) => {
-  console.error('[Proxy Error] Main:', err.message);
-  if (!res.headersSent) {
-    res.writeHead(500, { 'Content-Type': 'text/plain' });
-    res.end('Proxy error: ' + err.message);
+// http-proxy 1.18 emits a single 'error' event for both HTTP and WebSocket failures.
+// On an upgrade the third argument is the raw socket, not a ServerResponse, so anything
+// that calls res.writeHead() there throws and takes the proxy process down.
+const handleProxyError = (label) => (err, req, resOrSocket) => {
+  const isWebSocket = typeof resOrSocket?.writeHead !== 'function';
+  // Bun leaves .message empty on connection refusals, so fall back to the errno code.
+  const reason = err.message || err.code || 'unknown error';
+  console.error(`[Proxy Error] ${label}${isWebSocket ? ' (ws)' : ''}: ${reason} — ${req.url}`);
+
+  if (isWebSocket) {
+    resOrSocket?.destroy?.();
+    return;
   }
-});
-
-storeProxy.on('error', (err, req, res) => {
-  console.error('[Proxy Error] Store:', err.message);
-  if (!res.headersSent) {
-    res.writeHead(500, { 'Content-Type': 'text/plain' });
-    res.end('Proxy error: ' + err.message);
+  if (!resOrSocket.headersSent) {
+    resOrSocket.writeHead(500, { 'Content-Type': 'text/plain' });
   }
-});
+  resOrSocket.end('Proxy error: ' + reason);
+};
 
-// Log proxy requests
-mainProxy.on('proxyReq', (proxyReq, req, res) => {
-  // console.log(`[Proxy] Main: ${req.method} ${req.url}`);
-});
-
-storeProxy.on('proxyReq', (proxyReq, req, res) => {
-  // console.log(`[Proxy] Store: ${req.method} ${req.url}`);
-});
+mainProxy.on('error', handleProxyError('Main'));
+storeProxy.on('error', handleProxyError('Store'));
 
 // Log WebSocket upgrades
 mainProxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
@@ -70,17 +66,6 @@ mainProxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
 
 storeProxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
   console.log(`[WS] Store: ${req.url}`);
-});
-
-// Handle proxy errors on WebSocket connections
-mainProxy.on('proxyErrorWs', (err, req, socket) => {
-  console.error('[WS Error] Main:', err.message);
-  socket.end();
-});
-
-storeProxy.on('proxyErrorWs', (err, req, socket) => {
-  console.error('[WS Error] Store:', err.message);
-  socket.end();
 });
 
 // Create main HTTP server
