@@ -642,6 +642,10 @@ def configure_bridge_nginx_vhost(bridge_domain, bridge_port):
 
 
 def detect_source_directory(repository_root_path):
+    """Find the crate, which is a submodule (the auth-limiter repository) and therefore an empty
+    directory on a checkout that never initialised it. That is why the probe is for the files and
+    not for the directory: an uninitialised submodule must read as "no source", not as a broken
+    tree, so the prebuilt binary path stays available."""
     source_directory = repository_root_path / SOURCE_DIRECTORY_NAME
     has_cargo_manifest = (source_directory / "Cargo.toml").is_file()
     has_main_source = (source_directory / "src" / "main.rs").is_file()
@@ -821,7 +825,8 @@ def provide_binary(repository_root_path, runtime_user_entry, binary_source=BINAR
         if not source_directory:
             fail_with_error(
                 f"Building from source was selected, but no compilable Rust source exists under "
-                f"{repository_root_path / SOURCE_DIRECTORY_NAME}."
+                f"{repository_root_path / SOURCE_DIRECTORY_NAME}. It is a git submodule: run "
+                f"`git submodule update --init {SOURCE_DIRECTORY_NAME}` and try again."
             )
         install_binary(compile_binary(source_directory, repository_root_path), runtime_user_entry)
         return
@@ -838,8 +843,9 @@ def provide_binary(repository_root_path, runtime_user_entry, binary_source=BINAR
     if not prebuilt_binary_path:
         fail_with_error(
             f"No source under {repository_root_path / SOURCE_DIRECTORY_NAME} and no prebuilt "
-            f"binary found. Clone the repository with its {SOURCE_DIRECTORY_NAME} folder, or "
-            f"place a compiled binary at {BINARY_PATH}, and run the script again."
+            f"binary found. Initialise the submodule with "
+            f"`git submodule update --init {SOURCE_DIRECTORY_NAME}`, or place a compiled binary "
+            f"at {BINARY_PATH}, and run the script again."
         )
 
     install_binary(prebuilt_binary_path, runtime_user_entry)

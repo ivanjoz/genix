@@ -43,6 +43,9 @@ jobs:
               git describe --tags --match 'v*' --abbrev=0 "${current_commit}^" 2>/dev/null || true
             )"
 
+            # server_utils is a submodule: the diff compares the recorded gitlinks, which is the
+            # same pair of commits the tag builds check out below. A push to auth-limiter that the
+            # parent repository has not pointed at yet is deliberately not a rebuild trigger.
             if [[ -n "$previous_tag" ]] &&
               git diff --quiet "${previous_tag}^{commit}" "$current_commit" -- \
                 server_utils .github/workflows/release-binaries.yml; then
@@ -183,6 +186,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Initialize the server utils submodule
+        # server_utils/ is the auth-limiter repository; the crate itself lives there, so nothing
+        # below this step has sources to compile until the submodule is checked out.
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            # Releases must build the exact submodule commit recorded by the immutable tag, which
+            # is also the commit plan-server-utils compared when it decided to rebuild.
+            git submodule update --init --depth 1 server_utils
+          else
+            # Main validation follows the configured branch tip, matching the other jobs.
+            git submodule update --init --remote --depth 1 server_utils
+          fi
 
       - name: Install pinned Rust target
         env:

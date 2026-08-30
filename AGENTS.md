@@ -122,14 +122,15 @@ backend/facturago/     git submodule (github.com/ivanjoz/facturago) — separate
 frontend/         SvelteKit app. routes/ core/ services/ domain-components/ libs/ styles/
 frontend/packages/genix-ui/  git submodule (github.com/ivanjoz/genix-ui) — separate repo
 frontend/webpage/ Independent public storefront app (own build)
-server_utils/     Rust daemon: credit limiter, lock service, request log, SSE bridge
+server_utils/     git submodule (github.com/ivanjoz/auth-limiter) — separate repo:
+                  Rust daemon with credit limiter, lock service, request log, SSE bridge
 scripts/          Go script dispatcher + deployer TUI + configure.py
 cloud/  db-backup/  webpage-renderer/   standalone Go/JS services
 docs/             Cross-cutting design docs (SECURITY_PLAN, EXTRA_CREDITS_PLAN, ...)
 config.toml       Local config (not committed). config.example.toml is the template.
 ```
 
-**Submodules:** `genix-orm`, `genix-ui` and `facturago` are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. No pointer bump is needed in the parent repo: it follows the submodule's `main`. Builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI), so what is on disk is what compiles.
+**Submodules:** `genix-orm`, `genix-ui`, `facturago` and `server_utils` (the `auth-limiter` repo) are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. For day-to-day work no pointer bump is needed in the parent repo: it follows the submodule's `main`, and builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI, `cargo build` in place for `server_utils`), so what is on disk is what compiles. Tagged releases are the exception: `release-binaries.yml` builds the commit the tag recorded, so a `server_utils` change only ships once the parent repo commits the new pointer.
 
 `facturago` is **public**. It implements SUNAT and names no consumer: no ERP identifiers, no tenancy, no business rules from this repo. A leak there is a leak in public.
 

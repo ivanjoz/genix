@@ -10,3 +10,7 @@
 	path = backend/facturago
 	url = git@github.com:ivanjoz/facturago.git
 	branch = main
+[submodule "server_utils"]
+	path = server_utils
+	url = git@github.com:ivanjoz/auth-limiter.git
+	branch = main
