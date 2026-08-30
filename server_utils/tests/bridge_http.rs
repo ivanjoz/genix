@@ -12,7 +12,6 @@ use axum::{
     http::{Request, StatusCode, header},
     response::Response,
 };
-use base64::{Engine, engine::general_purpose};
 use genix_server_utils::bridge::{
     auth::{SERVICE_AUTH_HEADER, make_service_auth_header},
     channel::ChannelRegistry,
@@ -28,9 +27,9 @@ use tower::ServiceExt;
 const TEST_SECRET: &[u8] = b"K1OzWIN0yarCc9ge";
 
 /// A colbin session token for company 7 / user 42 / "tester", produced by the Go
-/// `colbin.Marshal` + `computeUserTokenHash` with TEST_SECRET.
-const GO_SESSION_TOKEN_HEX: &str = "010105ca000600000001350029000000019f00d1040000011a68ed671d93b9\
-                                    3189b000000000000000006a02000500000001746573746572";
+/// `colbin.Marshal` + `core.ComputeUsuarioTokenHash` with TEST_SECRET, and printed by
+/// `go run ./server_utils/vectors`.
+const SESSION_TOKEN: &str = "Q5mjBvVTyUTj9mc7Ts4bJyNY1FI+iZwkAv4B";
 
 /// Channel token for company 7 / user 42 / tab "N2xQaG8x", pinned by the cross-language vectors.
 const TEST_CHANNEL: &str = "Byo3bFBobzE";
@@ -47,25 +46,13 @@ fn test_router() -> Router {
     }))
 }
 
-fn session_token() -> String {
-    let compact: String = GO_SESSION_TOKEN_HEX
-        .chars()
-        .filter(|character| !character.is_whitespace())
-        .collect();
-    let bytes: Vec<u8> = (0..compact.len())
-        .step_by(2)
-        .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).unwrap())
-        .collect();
-    general_purpose::STANDARD.encode(bytes)
-}
-
 /// Opens a tab's stream and consumes the handshake, leaving the body ready for events.
 async fn open_stream(router: &Router, channel_token: &str) -> BodyDataStream {
     let response = router
         .clone()
         .oneshot(
             Request::get(format!("/sse?ch={channel_token}"))
-                .header(header::AUTHORIZATION, format!("Bearer {}", session_token()))
+                .header(header::AUTHORIZATION, format!("Bearer {SESSION_TOKEN}"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -196,7 +183,7 @@ async fn a_client_cannot_open_a_channel_of_another_identity() {
     let response = router
         .oneshot(
             Request::get(format!("/sse?ch={OTHER_COMPANY_CHANNEL}"))
-                .header(header::AUTHORIZATION, format!("Bearer {}", session_token()))
+                .header(header::AUTHORIZATION, format!("Bearer {SESSION_TOKEN}"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -269,7 +256,7 @@ async fn rpc_correlates_the_browser_reply() {
     let reply = router
         .oneshot(
             Request::post(format!("/in?ch={TEST_CHANNEL}"))
-                .header(header::AUTHORIZATION, format!("Bearer {}", session_token()))
+                .header(header::AUTHORIZATION, format!("Bearer {SESSION_TOKEN}"))
                 .body(Body::from(
                     json!({ "ID": 9, "Type": "result", "Payload": { "Route": "/negocio/productos" } })
                         .to_string(),
@@ -395,7 +382,7 @@ async fn an_unsolicited_client_event_is_dropped() {
     let response = router
         .oneshot(
             Request::post(format!("/in?ch={TEST_CHANNEL}"))
-                .header(header::AUTHORIZATION, format!("Bearer {}", session_token()))
+                .header(header::AUTHORIZATION, format!("Bearer {SESSION_TOKEN}"))
                 .body(Body::from(
                     json!({ "ID": 0, "Type": "somethingElse" }).to_string(),
                 ))
@@ -458,8 +445,7 @@ async fn events_are_flushed_incrementally_over_a_real_socket() {
         .write_all(
             format!(
                 "GET /sse?ch={TEST_CHANNEL} HTTP/1.1\r\nHost: localhost\r\n\
-                 Authorization: Bearer {}\r\n\r\n",
-                session_token()
+                 Authorization: Bearer {SESSION_TOKEN}\r\n\r\n"
             )
             .as_bytes(),
         )
@@ -545,8 +531,7 @@ async fn a_disconnected_socket_deregisters_the_channel() {
             .write_all(
                 format!(
                     "GET /sse?ch={TEST_CHANNEL} HTTP/1.1\r\nHost: localhost\r\n\
-                     Authorization: Bearer {}\r\n\r\n",
-                    session_token()
+                     Authorization: Bearer {SESSION_TOKEN}\r\n\r\n"
                 )
                 .as_bytes(),
             )

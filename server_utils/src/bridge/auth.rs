@@ -150,28 +150,20 @@ pub fn verify_service_auth(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::{Engine, engine::general_purpose};
 
     /// The secret the Go-generated vectors below were produced with.
     const TEST_SECRET: &[u8] = b"K1OzWIN0yarCc9ge";
 
     /// Vector 1 of the colbin set: company 7, user 42, created 1234, user "tester", whose
     /// Hash field was computed by Go's `core.ComputeUsuarioTokenHash` with TEST_SECRET. If
-    /// this passes, the Rust and Go session-token HMACs agree byte for byte.
-    const GO_SESSION_TOKEN_HEX: &str = "010105ca000600000001350029000000019f00d1040000011a68ed671d\
-                                        93b93189b000000000000000006a02000500000001746573746572";
-
-    fn go_session_token_base64() -> String {
-        general_purpose::STANDARD.encode(decode_hex(GO_SESSION_TOKEN_HEX))
-    }
+    /// this passes, the Rust and Go session-token HMACs agree byte for byte. Printed by
+    /// `go run ./server_utils/vectors`, which is also where token.rs's vectors come from.
+    const GO_SESSION_TOKEN: &str = "Q5mjBvVTyUTj9mc7Ts4bJyNY1FI+iZwkAv4B";
 
     #[test]
     fn accepts_the_go_issued_session_token() {
-        let authenticated = authenticate_user(
-            Some(&format!("Bearer {}", go_session_token_base64())),
-            TEST_SECRET,
-        )
-        .unwrap();
+        let authenticated =
+            authenticate_user(Some(&format!("Bearer {GO_SESSION_TOKEN}")), TEST_SECRET).unwrap();
         assert_eq!(authenticated.company_id, 7);
         assert_eq!(authenticated.id, 42);
         assert_eq!(authenticated.user, "tester");
@@ -181,10 +173,7 @@ mod tests {
     fn rejects_a_session_token_signed_with_another_secret() {
         // This is what stops a client from minting its own identity.
         assert_eq!(
-            authenticate_user(
-                Some(&format!("Bearer {}", go_session_token_base64())),
-                b"otro-secreto"
-            ),
+            authenticate_user(Some(&format!("Bearer {GO_SESSION_TOKEN}")), b"otro-secreto"),
             Err(BridgeAuthError::InvalidSessionSignature)
         );
     }
@@ -248,16 +237,5 @@ mod tests {
             verify_service_auth(None, TEST_SECRET, now),
             Err(BridgeAuthError::MissingServiceAuth)
         );
-    }
-
-    fn decode_hex(text: &str) -> Vec<u8> {
-        let compact: String = text
-            .chars()
-            .filter(|character| !character.is_whitespace())
-            .collect();
-        (0..compact.len())
-            .step_by(2)
-            .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).unwrap())
-            .collect()
     }
 }

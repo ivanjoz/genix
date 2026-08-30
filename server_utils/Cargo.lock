@@ -183,6 +183,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "colbin"
+version = "0.1.0"
+source = "git+https://github.com/ivanjoz/colbin?rev=9643bc87e9ca14fdc8eb5b87af123b8c6fa1b362#9643bc87e9ca14fdc8eb5b87af123b8c6fa1b362"
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -428,6 +433,7 @@ dependencies = [
  "async-trait",
  "axum",
  "base64",
+ "colbin",
  "getrandom 0.4.3",
  "hmac",
  "libc",

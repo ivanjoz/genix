@@ -1,32 +1,26 @@
 //! Two independent token codecs the bridge needs at its HTTP boundary.
 //!
-//! 1. A fixed-shape colbin decoder for the browser's session token. colbin
-//!    (`github.com/ivanjoz/colbin`) is a columnar format; this decodes exactly the
-//!    five-field `UsuarioToken` struct the backend issues, not the general format.
-//! 2. The channel token, a small custom varint format naming one browser tab.
+//! 1. The browser's session token: a colbin message holding the backend's
+//!    `core.UsuarioToken`. The format itself lives in the `colbin` crate, which is the
+//!    repository that defines it; what belongs here is the shape of *this* struct.
+//! 2. The channel token, a small custom varint format naming one browser tab. It is not
+//!    colbin and shares nothing with it beyond sitting at the same boundary.
 //!
 //! Both are mirrors of Go code in another repository, so every rule here is pinned by
-//! vectors generated from that Go code (see the tests at the bottom).
+//! vectors generated from that Go code — see `server_utils/vectors`, which prints them.
+
+use std::sync::OnceLock;
 
 use base64::{Engine, engine::general_purpose};
+use colbin::{Kind, Schema};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum TokenError {
     #[error("session token is not valid base64")]
     SessionBase64,
-    #[error("session token is truncated")]
-    Truncated,
-    #[error("session token has an unsupported colbin version byte")]
-    Version,
-    #[error("session token must hold exactly one colbin record")]
-    RecordCount,
-    #[error("session token carries an unknown colbin field id {0}")]
-    UnknownField(u8),
-    #[error("session token carries an unexpected colbin column type for field {0}")]
-    ColumnType(&'static str),
-    #[error("session token user name is not valid UTF-8")]
-    UserNotUtf8,
+    #[error("session token is not a valid colbin message: {0}")]
+    Session(#[from] colbin::Error),
     #[error("channel token is not valid unpadded base64url")]
     ChannelBase64,
     #[error("channel token does not contain a company id")]
@@ -41,19 +35,6 @@ pub enum TokenError {
     ChannelNotCanonical,
 }
 
-// --- colbin wire constants (mirror of colbin/format.go) ----------------------------
-
-const COLBIN_VERSION: u8 = 0x01;
-const FT_INT: u8 = 0;
-const FT_STRING: u8 = 2;
-/// Packed bit width per 3-bit precision code. 12/24/48 straddle byte boundaries.
-const INT_WIDTHS: [u8; 7] = [8, 12, 16, 24, 32, 48, 64];
-
-/// The session token's five encoded fields, in Go declaration order. colbin derives each
-/// wire id by hashing the Go field name, so the order matters: it decides which field wins
-/// a hash collision during linear probing.
-const SESSION_FIELD_NAMES: [&str; 5] = ["CompanyID", "ID", "Created", "Hash", "User"];
-
 /// Session identity proven by the token. Mirrors `core.UsuarioToken`; the transient `Error`
 /// field carries `cb:"-"` in Go and is never on the wire.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -65,225 +46,74 @@ pub struct UserToken {
     pub user: String,
 }
 
-/// LSB-first bit reader; mirror of colbin/bitstream.go's `bitReader`.
-struct BitReader<'a> {
-    buffer: &'a [u8],
-    byte_position: usize,
-    accumulator: u64,
-    accumulated_bits: u8,
+/// The token's fields, in Go declaration order and with the Go widths.
+///
+/// Both matter. colbin derives each wire id by hashing the field name and linear-probing
+/// past the ids already taken, so the order decides which field wins a collision; and the
+/// width is what says where a value ends, since it never reaches the wire.
+const SESSION_FIELDS: [(&str, Kind); 5] = [
+    ("CompanyID", Kind::Int32),
+    ("ID", Kind::Int32),
+    ("Created", Kind::Int32),
+    ("Hash", Kind::Uint64),
+    ("User", Kind::String),
+];
+
+/// The schema and the ids it produced, resolved once. The ids are what the message names
+/// its fields by, so they are read out of the schema rather than restated here.
+struct SessionSchema {
+    schema: Schema,
+    ids: [u8; SESSION_FIELDS.len()],
 }
 
-impl<'a> BitReader<'a> {
-    fn new(buffer: &'a [u8]) -> Self {
-        Self {
-            buffer,
-            byte_position: 0,
-            accumulator: 0,
-            accumulated_bits: 0,
-        }
-    }
-
-    /// Reads `width` bits (0..=64) as the low bits of the result.
-    fn read_bits(&mut self, width: u8) -> u64 {
-        let mut output = 0_u64;
-        let mut shift = 0_u8;
-        let mut remaining = width;
-        while remaining > 32 {
-            output |= self.read_chunk(32) << shift;
-            shift += 32;
-            remaining -= 32;
-        }
-        output | (self.read_chunk(remaining) << shift)
-    }
-
-    /// Reads at most 32 bits, so every shift stays inside the u64 accumulator.
-    fn read_chunk(&mut self, width: u8) -> u64 {
-        if width == 0 {
-            return 0;
-        }
-        while self.accumulated_bits < width && self.byte_position < self.buffer.len() {
-            self.accumulator |= u64::from(self.buffer[self.byte_position]) << self.accumulated_bits;
-            self.byte_position += 1;
-            self.accumulated_bits += 8;
-        }
-        let output = self.accumulator & ((1_u64 << width) - 1);
-        self.accumulator >>= width;
-        self.accumulated_bits = self.accumulated_bits.saturating_sub(width);
-        output
-    }
-}
-
-/// Interprets the low `width` bits of `value` as two's complement and widens to i64.
-fn sign_extend(value: u64, width: u8) -> i64 {
-    if width < 64 && value & (1_u64 << (width - 1)) != 0 {
-        return (value | !((1_u64 << width) - 1)) as i64;
-    }
-    value as i64
-}
-
-/// FNV-1a 32-bit over `name`, xor-folded to 8 bits. Mirror of colbin/typeinfo.go's `fnv8`.
-fn fnv8(name: &str) -> u8 {
-    let mut hash = 2_166_136_261_u32;
-    for byte in name.as_bytes() {
-        hash ^= u32::from(*byte);
-        hash = hash.wrapping_mul(16_777_619);
-    }
-    (hash ^ (hash >> 8) ^ (hash >> 16) ^ (hash >> 24)) as u8
-}
-
-/// Assigns each field its colbin wire id: hash the name, then linear-probe past ids already
-/// taken. Id 255 is reserved as colbin's terminator, so it is pre-marked as used.
-fn session_field_ids() -> [u8; 5] {
-    let mut used = [false; 256];
-    used[255] = true;
-    let mut assigned = [0_u8; 5];
-    for (index, field_name) in SESSION_FIELD_NAMES.iter().enumerate() {
-        let mut candidate = fnv8(field_name);
-        while used[candidate as usize] {
-            candidate = candidate.wrapping_add(1);
-        }
-        used[candidate as usize] = true;
-        assigned[index] = candidate;
-    }
-    assigned
-}
-
-/// Cursor over the colbin message, advancing column by column.
-struct ColbinCursor<'a> {
-    data: &'a [u8],
-    position: usize,
-}
-
-impl<'a> ColbinCursor<'a> {
-    fn read_byte(&mut self) -> Result<u8, TokenError> {
-        let byte = *self.data.get(self.position).ok_or(TokenError::Truncated)?;
-        self.position += 1;
-        Ok(byte)
-    }
-
-    fn take(&mut self, length: usize) -> Result<&'a [u8], TokenError> {
-        let end = self
-            .position
-            .checked_add(length)
-            .ok_or(TokenError::Truncated)?;
-        let slice = self
-            .data
-            .get(self.position..end)
-            .ok_or(TokenError::Truncated)?;
-        self.position = end;
-        Ok(slice)
-    }
-
-    /// Reads one integer column of `count` values. `native_width` comes from the Go field
-    /// type (32 for the i32 fields, 64 for the u64 hash) and is known on both sides, which
-    /// is why it is not on the wire.
-    ///
-    /// Frame-of-reference: every value is stored as a small delta from a per-column base.
-    /// In unsigned mode 0 is a sentinel meaning "Go zero value"; in signed mode it is not.
-    fn read_int_column(&mut self, count: usize, native_width: u8) -> Result<Vec<i64>, TokenError> {
-        let flags = self.read_byte()?;
-        if flags & 7 != FT_INT {
-            return Err(TokenError::ColumnType("int"));
-        }
-        let is_signed = flags >> 3 & 1 == 1;
-        let precision_code = flags >> 4 & 7;
-        let is_empty = flags >> 7 & 1 == 1;
-        if is_empty {
-            return Ok(vec![0; count]);
-        }
-
-        let delta_width = INT_WIDTHS[precision_code as usize];
-        let total_bits = usize::from(native_width) + count * usize::from(delta_width);
-        let mut reader = BitReader::new(self.take(total_bits.div_ceil(8))?);
-
-        let raw_base = reader.read_bits(native_width);
-        let base = if is_signed {
-            sign_extend(raw_base, native_width)
-        } else {
-            raw_base as i64
-        };
-        Ok((0..count)
-            .map(|_| {
-                let delta = reader.read_bits(delta_width);
-                if !is_signed && delta == 0 {
-                    return 0;
-                }
-                base.wrapping_add(delta as i64)
-            })
-            .collect())
-    }
-
-    /// Reads one string column: a flags byte, an embedded 32-bit-native length column, then
-    /// the concatenated UTF-8 bytes.
-    fn read_string_column(&mut self, count: usize) -> Result<Vec<String>, TokenError> {
-        let flags = self.read_byte()?;
-        if flags & 7 != FT_STRING {
-            return Err(TokenError::ColumnType("string"));
-        }
-        let lengths = self.read_int_column(count, 32)?;
-        let mut values = Vec::with_capacity(count);
-        for length in lengths {
-            let length = usize::try_from(length).map_err(|_| TokenError::Truncated)?;
-            let bytes = self.take(length)?;
-            values.push(String::from_utf8(bytes.to_vec()).map_err(|_| TokenError::UserNotUtf8)?);
-        }
-        Ok(values)
-    }
+fn session_schema() -> &'static SessionSchema {
+    static SCHEMA: OnceLock<SessionSchema> = OnceLock::new();
+    SCHEMA.get_or_init(|| {
+        let schema =
+            Schema::from_go(&SESSION_FIELDS).expect("the session layout is a valid schema");
+        let ids = schema
+            .ids()
+            .try_into()
+            .expect("the schema has one id per declared field");
+        SessionSchema { schema, ids }
+    })
 }
 
 /// Decodes the colbin payload of a session token.
 ///
-/// A single Go struct still travels through colbin's *records* path with `recordCount = 1`
-/// (`topLevelIsRecords` is true for a struct), so the layout is
-/// `[version][recordCount uvarint][colCount][column...]` and columns may arrive in any
-/// order — each is self-identified by its field id.
+/// A single struct is one record, which colbin routes through compact mode: the fields
+/// arrive as a run of `[key][value]` pairs, and a field holding its zero value is not
+/// there at all. That is why every field is read through an accessor that answers with the
+/// zero value rather than an option — it is the same answer the Go decoder writes into the
+/// destination struct.
 pub fn decode_session_token(payload: &[u8]) -> Result<UserToken, TokenError> {
-    let mut cursor = ColbinCursor {
-        data: payload,
-        position: 0,
-    };
-    if cursor.read_byte()? != COLBIN_VERSION {
-        return Err(TokenError::Version);
-    }
+    let session = session_schema();
+    let [company_id, id, created, hash, user] = session.ids;
+    let record = colbin::decode_one(payload, &session.schema)?;
+    Ok(UserToken {
+        company_id: record.i64(company_id) as i32,
+        id: record.i64(id) as i32,
+        created: record.i64(created) as i32,
+        hash: record.u64(hash),
+        user: record.str(user).to_owned(),
+    })
+}
 
-    // recordCount is a uvarint; only the single-record shape is valid for a session token.
-    let mut record_count = 0_u64;
-    let mut shift = 0_u32;
-    loop {
-        let byte = cursor.read_byte()?;
-        record_count |= u64::from(byte & 0x7F) << shift;
-        if byte & 0x80 == 0 {
-            break;
-        }
-        shift += 7;
-        if shift > 63 {
-            return Err(TokenError::RecordCount);
-        }
-    }
-    if record_count != 1 {
-        return Err(TokenError::RecordCount);
-    }
-
-    let field_ids = session_field_ids();
-    let column_count = cursor.read_byte()?;
-    let mut token = UserToken::default();
-
-    for _ in 0..column_count {
-        let field_id = cursor.read_byte()?;
-        match field_id {
-            id if id == field_ids[0] => token.company_id = cursor.read_int_column(1, 32)?[0] as i32,
-            id if id == field_ids[1] => token.id = cursor.read_int_column(1, 32)?[0] as i32,
-            id if id == field_ids[2] => token.created = cursor.read_int_column(1, 32)?[0] as i32,
-            // The hash is a u64 whose high bit is usually set, which colbin sees as a
-            // negative i64 and stores in signed mode. Reinterpreting recovers the original.
-            id if id == field_ids[3] => token.hash = cursor.read_int_column(1, 64)?[0] as u64,
-            id if id == field_ids[4] => {
-                token.user = cursor.read_string_column(1)?.remove(0);
-            }
-            unknown => return Err(TokenError::UnknownField(unknown)),
-        }
-    }
-    Ok(token)
+/// Undoes the backend's `MakeB64UrlEncode` alphabet substitution before standard base64
+/// decoding (`core/helpers.go`).
+pub fn decode_session_base64(encoded_token: &str) -> Result<Vec<u8>, TokenError> {
+    let standard_alphabet: String = encoded_token
+        .chars()
+        .map(|character| match character {
+            '_' => '/',
+            '-' => '+',
+            '~' => '=',
+            other => other,
+        })
+        .collect();
+    general_purpose::STANDARD
+        .decode(standard_alphabet)
+        .map_err(|_| TokenError::SessionBase64)
 }
 
 // --- Channel token (mirrored in backend/agent/channel.go, frontend/core/agent/channel.ts) ---
@@ -370,43 +200,28 @@ fn append_uvarint(output: &mut Vec<u8>, mut value: u64) {
     output.push(value as u8);
 }
 
-/// Undoes the backend's `MakeB64UrlEncode` alphabet substitution before standard base64
-/// decoding (`core/helpers.go`).
-pub fn decode_session_base64(encoded_token: &str) -> Result<Vec<u8>, TokenError> {
-    let standard_alphabet: String = encoded_token
-        .chars()
-        .map(|character| match character {
-            '_' => '/',
-            '-' => '+',
-            '~' => '=',
-            other => other,
-        })
-        .collect();
-    general_purpose::STANDARD
-        .decode(standard_alphabet)
-        .map_err(|_| TokenError::SessionBase64)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Field ids printed by the Go generator against the real colbin package. A change here
-    /// means every session token silently decodes to zero values.
+    /// Field ids assigned by the Go colbin builder for this struct's field names. A change
+    /// here means every session token silently decodes to zero values, since a message
+    /// names its fields by id and an unknown one is the only thing that would be reported.
     #[test]
     fn field_ids_match_the_go_colbin_layout() {
-        assert_eq!(session_field_ids(), [202, 53, 159, 26, 106]);
+        assert_eq!(session_schema().ids, [202, 53, 159, 26, 106]);
     }
 
-    /// Vectors produced by `colbin.Marshal` on the real Go struct. Each covers a different
-    /// column shape: the plain case, an all-zero (elided) column plus an empty string, the
-    /// i32 maximum, multi-byte UTF-8, and a wider length column.
+    /// Tokens produced by `colbin.Marshal` on the real Go struct, printed by
+    /// `go run ./server_utils/vectors`. Each covers a different shape: the plain case, an
+    /// omitted field (`Created` is zero) with an empty string, the i32 maximum, multi-byte
+    /// UTF-8, a long user name, and a negative value, which is what clears the message's
+    /// ALL_POSITIVE flag and puts the integers on the zigzag path.
     #[test]
     fn decodes_the_go_colbin_vectors() {
-        let vectors: [(&str, UserToken); 5] = [
+        let vectors: [(&str, UserToken); 6] = [
             (
-                "010105ca000600000001350029000000019f00d1040000011a68ed671d93b93189b00000000000\
-                 0000006a02000500000001746573746572",
+                "Q5mjBvVTyUTj9mc7Ts4bJyNY1FI+iZwkAv4B",
                 UserToken {
                     company_id: 7,
                     id: 42,
@@ -416,7 +231,7 @@ mod tests {
                 },
             ),
             (
-                "010105ca000000000001350000000000019f801a68cd5335e9a50952af00000000000000006a0280",
+                "Q5mghkDj5lNrpi+bQtZV/gE=",
                 UserToken {
                     company_id: 1,
                     id: 1,
@@ -426,8 +241,7 @@ mod tests {
                 },
             ),
             (
-                "010105ca00feffff7f013500feffff7f019f00feffff7f011a6892cf323dc360a9d10000000000\
-                 0000006a0200000000000178",
+                "Q/n////9a/7//9//8/////01lvxsZq/h4LKGRg0B7x8=",
                 UserToken {
                     company_id: 2_147_483_647,
                     id: 2_147_483_647,
@@ -437,8 +251,7 @@ mod tests {
                 },
             ),
             (
-                "010105ca003e420f0001350038300000019f00fff05365011a00e1b6cc14f8bf0d20016a020012\
-                 00000001c3b1616e64c3ba406578616d706c652e636f6d",
+                "Q9k/gr7mHDA+Byh/SllD8XY5s6D/dwNQLa4dgzZ675BcwN4iXoVj4B8=",
                 UserToken {
                     company_id: 999_999,
                     id: 12_345,
@@ -448,9 +261,7 @@ mod tests {
                 },
             ),
             (
-                "010105ca007f0000000135007e000000019f00ffff0000011a6881d5a49e00b13ef90000000000\
-                 0000006a02002600000001612d766572792d6c6f6e672d757365722d6e616d652d666f722d7769\
-                 6474682d74657374696e67",
+                "QzlAavrjcwAANQ5srbRnIHH9xEctWeBXEvFfrplPJYm/AUZ+cfFbNOb5k8iJmuEf",
                 UserToken {
                     company_id: 128,
                     id: 127,
@@ -459,25 +270,64 @@ mod tests {
                     user: "a-very-long-user-name-for-width-testing".to_owned(),
                 },
             ),
+            (
+                "QRmjBuSTRMPrKiA5fv1uj00Nw63s7B8=",
+                UserToken {
+                    company_id: 3,
+                    id: 4,
+                    created: -5,
+                    hash: 1_962_856_781_231_164_119,
+                    user: "neg".to_owned(),
+                },
+            ),
         ];
 
-        for (hex_payload, expected) in vectors {
-            let payload = decode_hex(hex_payload);
-            assert_eq!(decode_session_token(&payload).unwrap(), expected);
+        for (encoded, expected) in vectors {
+            let payload = decode_session_base64(encoded).unwrap();
+            assert_eq!(
+                decode_session_token(&payload).unwrap(),
+                expected,
+                "{encoded}"
+            );
+            // The backend publishes the same bytes under its own alphabet, so both spellings
+            // of one token must name one identity.
+            let url_alphabet: String = encoded
+                .chars()
+                .map(|character| match character {
+                    '/' => '_',
+                    '+' => '-',
+                    '=' => '~',
+                    other => other,
+                })
+                .collect();
+            assert_eq!(
+                decode_session_base64(&url_alphabet).unwrap(),
+                payload,
+                "{url_alphabet}"
+            );
         }
     }
 
     #[test]
     fn rejects_a_truncated_or_mistyped_session_token() {
-        assert_eq!(decode_session_token(&[]), Err(TokenError::Truncated));
         assert_eq!(
-            decode_session_token(&[0x02, 0x01, 0x00]),
-            Err(TokenError::Version)
+            decode_session_token(&[]),
+            Err(TokenError::Session(colbin::Error::Truncated))
         );
-        // recordCount = 2: a session token names exactly one identity.
+        // An even first byte is a standard-mode version byte; 0x0a is not one colbin writes.
         assert_eq!(
-            decode_session_token(&[0x01, 0x02, 0x00]),
-            Err(TokenError::RecordCount)
+            decode_session_token(&[0x0a, 0x01, 0x00]),
+            Err(TokenError::Session(colbin::Error::BadVersion(0x0a)))
+        );
+        // A compact message whose first key names no field of this struct. It cannot be
+        // stepped over: the wire carries no type tag, so there is no way to know how far.
+        assert!(matches!(
+            decode_session_token(&[0x43, 0x00, 0x00]),
+            Err(TokenError::Session(colbin::Error::UnknownField(_)))
+        ));
+        assert_eq!(
+            decode_session_base64("not base64!!"),
+            Err(TokenError::SessionBase64)
         );
     }
 
@@ -562,16 +412,5 @@ mod tests {
         assert_eq!(decode_session_base64(&substituted).unwrap(), payload);
         // Standard base64 is accepted unchanged, which is what the Go tests emit.
         assert_eq!(decode_session_base64(&standard).unwrap(), payload);
-    }
-
-    fn decode_hex(text: &str) -> Vec<u8> {
-        let compact: String = text
-            .chars()
-            .filter(|character| !character.is_whitespace())
-            .collect();
-        (0..compact.len())
-            .step_by(2)
-            .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).unwrap())
-            .collect()
     }
 }

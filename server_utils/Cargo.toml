@@ -9,6 +9,11 @@ anyhow = "1.0"
 async-trait = "0.1"
 axum = "0.8"
 base64 = "0.22"
+# The colbin wire format, decoded by the repository that defines it rather than
+# transcribed here. Pinned by rev: that repository's tags are its Go module's
+# version ladder, so a tag requirement would either entangle the two release
+# cadences or resolve to a tag that predates the crate.
+colbin = { git = "https://github.com/ivanjoz/colbin", rev = "9643bc87e9ca14fdc8eb5b87af123b8c6fa1b362" }
 getrandom = "0.4"
 hmac = "0.12"
 # Only for statvfs, which is how the disk column is read: nothing under /proc reports free space.

@@ -10,8 +10,7 @@
 		"**/.vscode/**",
 		"./docs/**",
 		"**/store_deprecated/**",
-		"**/.svelte-kit/**",
-		"**/server_utils/**"
+		"**/.svelte-kit/**"
 	],
 	"languages": {
 		"TypeScript": {
