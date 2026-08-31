@@ -138,19 +138,19 @@ files:
     role: backend-handler
     hash: sha256:f55ea24bade44ba6585a63d9adaa53c869304ed5decd955620541dcc490b8f93
     supports: [capability.find-errors, troubleshooting]
-  - path: backend/core/auth_limiter/credits.go
+  - path: backend/core/fareward/credits.go
     role: business-logic
-    hash: sha256:f16e3cf19b53ed74c60b584c1d0108d00d7b41e9f060b3ed7212061be6e906c1
+    hash: sha256:1d496cde9163f5f32ca11751de9e7ea4c3593ca8305e666c35e2488c6ff863e4
     supports: [concepts, rules]
   - path: backend/core/types/request_errors.go
     role: data-model
-    hash: sha256:3ba99470e9ffaa85f5f8ae539d04b019e021bcebe225b7b4bd4dd50f6667b91a
+    hash: sha256:cebfe151b9c8712a3b505eb8425f67d6031c9865c1219ef713943835bf7740d5
     supports: [concepts, capability.find-errors]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
+    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
     supports: [page-purpose]
-  - path: auth-limiter/src/limiter/quota.rs
+  - path: fareward/src/limiter/quota.rs
     role: business-logic
     hash: sha256:5e53b1cb704d348ad6e00297796a8a98c10f7f55e0f78dba20b3acef1ad151f9
     supports: [page-purpose, capability.monitor-routes, rules, troubleshooting]

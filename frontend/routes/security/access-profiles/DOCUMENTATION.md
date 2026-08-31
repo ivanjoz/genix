@@ -277,7 +277,7 @@ files:
     supports: [concepts, capability.assign-access]
   - path: backend/security/usuarios.go
     role: business-logic
-    hash: sha256:a4c1eca2e4f2a839623753a6c8b5362ee8b839b49bf20f017c835a3901f85309
+    hash: sha256:7b302ab72bc3ebe8e5e06a4b12cf0cf95e55534e49733087ad078ebca69dfaa8
     supports: [concepts, capability.assign-access, rules]
   - path: backend/access_list.yml
     role: permissions
@@ -285,6 +285,6 @@ files:
     supports: [concepts, capability.assign-access, related-pages]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
+    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
     supports: [capability.assign-access, rules]
 ```

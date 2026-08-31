@@ -17,7 +17,7 @@ def load_configure_module():
 
 
 class SelectionTest(unittest.TestCase):
-    def test_238_selects_backend_and_auth_limiter_from_precompiled_binaries(self):
+    def test_238_selects_backend_and_fareward_from_precompiled_binaries(self):
         configure = load_configure_module()
 
         selected_components, binary_source = configure.parse_selection("238")
@@ -83,19 +83,19 @@ class ReleaseVerificationTest(unittest.TestCase):
                 configure.download_selected_binaries({"2"}, "2")
 
     def test_each_component_is_verified_against_its_own_release_manifest(self):
-        """The backend and auth-limiter publish separate releases, so mixing the two manifests
+        """The backend and fareward publish separate releases, so mixing the two manifests
         would verify each binary against checksums that never covered it."""
         configure = load_configure_module()
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             download_directory = Path(temporary_directory)
             backend_asset = "genix_app_linux_amd64"
-            limiter_asset = "auth-limiter_linux_amd64"
+            limiter_asset = "fareward_linux_amd64"
 
             manifests = {}
             for asset_name, manifest_local_name in (
                 (backend_asset, "SHA256SUMS.genix"),
-                (limiter_asset, "SHA256SUMS.auth-limiter"),
+                (limiter_asset, "SHA256SUMS.fareward"),
             ):
                 asset_path = download_directory / asset_name
                 asset_path.write_bytes(f"bytes of {asset_name}".encode())
@@ -127,13 +127,13 @@ class ReleaseVerificationTest(unittest.TestCase):
                 requested_urls,
                 {
                     "SHA256SUMS.genix": configure.GENIX_RELEASE_URL,
-                    "SHA256SUMS.auth-limiter": configure.AUTH_LIMITER_RELEASE_URL,
+                    "SHA256SUMS.fareward": configure.FAREWARD_RELEASE_URL,
                 },
             )
 
 
 class DispatchTest(unittest.TestCase):
-    def test_238_downloads_then_runs_backend_before_auth_limiter(self):
+    def test_238_downloads_then_runs_backend_before_fareward(self):
         configure = load_configure_module()
         executed_configurers = []
 
@@ -156,14 +156,14 @@ class DispatchTest(unittest.TestCase):
             [
                 ("configure_server.py", ("2", "--binary-source", "precompiled")),
                 (
-                    "configure_auth_limiter.py",
+                    "configure_fareward.py",
                     ("--binary-source", "precompiled", "--service-only"),
                 ),
             ],
         )
 
-    def run_auth_limiter_only(self, backend_unit_exists, typed_answer):
-        """Selection '37': Auth Limiter alone, built from source. Returns the arguments it passed.
+    def run_fareward_only(self, backend_unit_exists, typed_answer):
+        """Selection '37': Fareward alone, built from source. Returns the arguments it passed.
 
         A `typed_answer` of None makes the prompt itself a failure, which is how the "does not ask"
         case is asserted rather than merely assumed.
@@ -196,7 +196,7 @@ class DispatchTest(unittest.TestCase):
         self.assertEqual(len(executed_configurers), 1)
         return executed_configurers[0][1]
 
-    # Installing Auth Limiter on its own used to demand sse_bridge.url on every host, because
+    # Installing Fareward on its own used to demand sse_bridge.url on every host, because
     # --service-only was only passed when the Backend component happened to be selected in the same
     # run. On a box that already runs the backend that is a bridge nobody wants.
     #
@@ -204,25 +204,25 @@ class DispatchTest(unittest.TestCase):
     # there is no deployment that wants a bridge in front of it. Asking would be a question with one
     # possible answer, so typed_answer=None makes any prompt fail this test.
     def test_a_detected_backend_skips_the_bridge_without_asking(self):
-        arguments = self.run_auth_limiter_only(backend_unit_exists=True, typed_answer=None)
+        arguments = self.run_fareward_only(backend_unit_exists=True, typed_answer=None)
         self.assertIn("--service-only", arguments)
 
     # Finding nothing settles nothing, so this is the one case that asks. Default is the bridge,
     # because a missing sse_bridge.url then stops the install by name instead of shipping a Lambda
     # companion that cannot bridge.
     def test_no_backend_here_defaults_to_requiring_the_bridge(self):
-        arguments = self.run_auth_limiter_only(backend_unit_exists=False, typed_answer="")
+        arguments = self.run_fareward_only(backend_unit_exists=False, typed_answer="")
         self.assertNotIn("--service-only", arguments)
 
     # The other half of the ambiguity: another VPS whose backend serves its own stream needs the
     # daemon's TCP services but no bridge.
     def test_a_remote_self_hosted_backend_skips_the_bridge(self):
-        arguments = self.run_auth_limiter_only(backend_unit_exists=False, typed_answer="n")
+        arguments = self.run_fareward_only(backend_unit_exists=False, typed_answer="n")
         self.assertIn("--service-only", arguments)
 
     def test_an_unreadable_answer_stops_without_a_traceback(self):
         with self.assertRaises(SystemExit) as exit_context:
-            self.run_auth_limiter_only(backend_unit_exists=False, typed_answer="maybe")
+            self.run_fareward_only(backend_unit_exists=False, typed_answer="maybe")
         self.assertEqual(
             str(exit_context.exception),
             "[!] Answer the SSE bridge question with y or n.",

@@ -108,7 +108,7 @@ type EnvStruct struct {
 	// hashes. It never authenticates one Genix process to another — that is INTERNAL_APIKEY.
 	SECRET_PHRASE string
 	// INTERNAL_APIKEY authenticates service-to-service calls: the credit rate limiter's TCP
-	// frames and the SSE bridge's X-Bridge-Auth header, both handled by auth-limiter/. Split
+	// frames and the SSE bridge's X-Bridge-Auth header, both handled by fareward/. Split
 	// from SECRET_PHRASE so the inter-service key can be rotated without invalidating every
 	// live session token.
 	INTERNAL_APIKEY string
@@ -137,7 +137,7 @@ type EnvStruct struct {
 	// this to the Node process, so the value has to reach the backend and not only the deploy
 	// CLI. Optional: defaults to the CI-published URL, same as cloud/webpage-renderer.go.
 	WEBPAGE_RENDERER_URL string
-	// SSE_BRIDGE_URL is the SSE relay (auth-limiter/, bridge half) that keeps the browser's
+	// SSE_BRIDGE_URL is the SSE relay (fareward/, bridge half) that keeps the browser's
 	// stream open on behalf of this backend. Lambda cannot hold a stream for a
 	// whole agent turn nor receive the browser's reply inside the same
 	// invocation, so in serverless mode every server→browser message and every
@@ -183,9 +183,9 @@ type EnvStruct struct {
 	EMBEDDING_PROVIDER   string
 	EMBEDDING_MODEL_ID   string
 	EMBEDDING_DIMENSIONS int
-	// AUTH_LIMITER_ADDRESS is the Rust raw-TCP endpoint: the credit limiter and the lock service
+	// FAREWARD_ADDRESS is the Rust raw-TCP endpoint: the credit limiter and the lock service
 	// share it, routed by the frame's opcode. One address for every operation the daemon serves.
-	AUTH_LIMITER_ADDRESS string
+	FAREWARD_ADDRESS string
 	// Public registration is unauthenticated and skips the credit limiter, so the only platform
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
@@ -252,17 +252,17 @@ type fileConfig struct {
 	SecretPhrase   string `toml:"secret_phrase"`
 	InternalApikey string `toml:"internal_apikey"`
 	// Its own section, not a key under [rate_limit]: one raw-TCP endpoint serves every
-	// auth-limiter operation, and the opcode picks which. Nesting it under one of its consumers
+	// fareward operation, and the opcode picks which. Nesting it under one of its consumers
 	// would read as if the lock service had an address of its own.
 	//
 	// Host is where a client dials; Public is what the daemon binds (0.0.0.0 vs loopback). They
 	// are separate fields because behind NAT they cannot be the same value: the public IP a
 	// Lambda dials is never an address the VM's own interface holds.
-	AuthLimiter struct {
+	Fareward struct {
 		Host   string `toml:"host"`
 		Port   int    `toml:"port"`
 		Public bool   `toml:"public"`
-	} `toml:"auth_limiter"`
+	} `toml:"fareward"`
 
 	Providers struct {
 		Backend string `toml:"backend"`
@@ -370,7 +370,7 @@ type fileConfig struct {
 	} `toml:"logs"`
 
 	// Shares the [request_log] section with the daemon, which reads every other key in it
-	// (auth-limiter/src/config.rs). This one is the backend's alone: the daemon's `enabled`
+	// (fareward/src/config.rs). This one is the backend's alone: the daemon's `enabled`
 	// decides whether a record that arrives is written, this decides whether one is sent at all.
 	RequestLog struct {
 		LogAllRequests bool `toml:"log_all_requests"`
@@ -382,9 +382,9 @@ type fileConfig struct {
 
 // applyToEnv vuelca el archivo por secciones sobre la Env plana. Es el único punto donde
 // las dos formas se tocan.
-// Same default the daemon falls back to (auth-limiter/src/config.rs), so an omitted port keeps
+// Same default the daemon falls back to (fareward/src/config.rs), so an omitted port keeps
 // both halves pointing at the same socket.
-const defaultAuthLimiterPort = 14013
+const defaultFarewardPort = 14013
 
 const (
 	defaultQdrantHTTPPort      = 14014
@@ -394,16 +394,16 @@ const (
 	defaultEmbeddingDimensions = 4096
 )
 
-// makeAuthLimiterAddress turns the [auth_limiter] section into the one address this process dials.
+// makeFarewardAddress turns the [fareward] section into the one address this process dials.
 //
 // A private daemon is only reachable on loopback no matter what host is written, so the host is
 // ignored rather than trusted: a value left over from a public deployment would otherwise turn
 // every lock call into a connection to a machine that cannot answer. A public daemon with no host
-// is left empty on purpose, so ConfigureAuthLimiter refuses it at startup instead of the first
+// is left empty on purpose, so ConfigureFareward refuses it at startup instead of the first
 // lock failing at request time.
-func makeAuthLimiterAddress(host string, port int, public bool) string {
+func makeFarewardAddress(host string, port int, public bool) string {
 	if port <= 0 {
-		port = defaultAuthLimiterPort
+		port = defaultFarewardPort
 	}
 	if !public {
 		return fmt.Sprintf("127.0.0.1:%d", port)
@@ -469,8 +469,8 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
 	env.MODELS = file.Models
-	env.AUTH_LIMITER_ADDRESS = makeAuthLimiterAddress(
-		file.AuthLimiter.Host, file.AuthLimiter.Port, file.AuthLimiter.Public)
+	env.FAREWARD_ADDRESS = makeFarewardAddress(
+		file.Fareward.Host, file.Fareward.Port, file.Fareward.Public)
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
@@ -589,7 +589,7 @@ func PopulateVariables() {
 	parsedFile := fileConfig{}
 	if err := toml.Unmarshal(variablesBytes, &parsedFile); err != nil {
 		// Volver con Env vacío hacía que el fallo apareciera mucho después, como un panic por
-		// campo faltante (p. ej. auth_limiter) que no menciona la configuración. Un CONFIG que
+		// campo faltante (p. ej. fareward) que no menciona la configuración. Un CONFIG que
 		// aún trae el JSON anterior a la migración a TOML es exactamente ese caso: el error real
 		// es este, así que se aborta aquí y con el origen del contenido a la vista.
 		source := "config.toml"
@@ -621,12 +621,12 @@ func PopulateVariables() {
 		Env.WEBPAGE_RENDERER_URL = DefaultWebpageRendererURL
 	}
 	// The environment override lets systemd/Lambda point at a private daemon without rewriting TOML.
-	if authLimiterAddress := strings.TrimSpace(os.Getenv("AUTH_LIMITER_ADDRESS")); authLimiterAddress != "" {
-		Env.AUTH_LIMITER_ADDRESS = authLimiterAddress
+	if farewardAddress := strings.TrimSpace(os.Getenv("FAREWARD_ADDRESS")); farewardAddress != "" {
+		Env.FAREWARD_ADDRESS = farewardAddress
 	}
-	Env.AUTH_LIMITER_ADDRESS = strings.TrimSpace(Env.AUTH_LIMITER_ADDRESS)
-	if Env.AUTH_LIMITER_ADDRESS == "" {
-		Env.AUTH_LIMITER_ADDRESS = "127.0.0.1:14013"
+	Env.FAREWARD_ADDRESS = strings.TrimSpace(Env.FAREWARD_ADDRESS)
+	if Env.FAREWARD_ADDRESS == "" {
+		Env.FAREWARD_ADDRESS = "127.0.0.1:14013"
 	}
 	// Public registration must never be unlimited by omission, so an absent or nonsensical
 	// setting falls back to the documented defaults instead of to zero.

@@ -1,29 +1,92 @@
-## The auth-limiter client keeps its Go package name aligned with the daemon, minus two contracts
+## The webpage-renderer zip URL is derived from `frontend.app_url`, not hardcoded per module
 
-**Context** — The submodule folder became `auth-limiter/` to match its repository, and the daemon
+**Context** — The renderer artifact URL was declared as a literal in three separate Go modules —
+`backend/core/security.go` (`DefaultWebpageRendererURL`), `cloud/webpage-renderer.go`
+(`defaultRendererZipUrl`) and `scripts/deployer/lambda_env.go` (`defaultRendererZipURL`). They are
+separate modules and cannot import each other, so nothing but a comment kept the three equal, and
+the comments only named two of the three copies. Moving the app off `genix-dev.un.pe` meant editing
+the same domain in three places that the compiler could not cross-check.
+
+**Decision** — The three constants are deleted. `frontend.webpage_renderer_url` still wins when
+set; otherwise every module derives `<frontend.app_url>/webpage-renderer.zip` from config.toml.
+`app_url` was missing from `config.example.toml` and was added. Where the derivation cannot
+produce a URL (both keys empty) each module reports it in its local idiom: the backend leaves
+`Env.WEBPAGE_RENDERER_URL` empty and `backend/cloud/webpage_renderer.go` names it in the
+required-variable check before running the renderer locally, `cloud/webpage-renderer.go` panics
+like its neighbouring `cdn_url` check, and the deployer prints a warning and skips the renderer
+Lambda, matching the existing `cdn_url`-empty branch.
+
+**Rationale** — CI publishes `webpage-renderer.zip` next to the frontend, so the artifact URL is
+not independent information: it is `app_url` plus a filename. Deriving it makes the domain a single
+declaration in config.toml and removes a class of silent drift, at the cost of one implicit
+coupling — if CI ever publishes the zip somewhere other than `app_url`, every deployment must set
+`webpage_renderer_url` explicitly. The derivation is duplicated rather than shared because the
+three modules cannot import one another; that duplication is one string concatenation each instead
+of three literal domains.
+
+## The fareward client is no longer part of this module
+
+**Context** — The client lived in `core/fareward/`, importing only the standard library. That made
+it portable by accident, and its location cost two things: a wire change to the daemon's HMAC
+domain meant editing this repository and the daemon's in lockstep with nothing enforcing it, and
+the cross-language vectors that pin the two implementations byte for byte sat on opposite sides of
+a repository boundary.
+
+**Decision** — The package moved to the daemon's repository as `github.com/ivanjoz/fareward/go`,
+reached through `replace github.com/ivanjoz/fareward/go => ../fareward/go`, the pattern
+`genix-orm` and `facturago` already use. `core/fareward_api.go` stays: it is the seam, and
+everything in it is a Genix concern — the aliases that keep call sites saying `core.X`, the
+`LockAction` enum, and the three `HandlerArgs`/`HandlerResponse` mappings. `main.go` still pushes
+`core.Log` in through `fareward.SetLogger`. No signature changed on either side.
+
+**Rationale** — The module boundary now enforces what a convention used to. `core/fareward` was
+forbidden from importing `core` because `CreditLimitExceeded` would have made a cycle; that rule
+was a comment and a code review. It is now a different Go module, so the compiler states it.
+
+In `MODULE_BOUNDARIES.md` the client therefore drops from **L1 Core** to **L0 Foundation**,
+alongside `genix-orm` and `facturago` — external, importing nothing from `app/`.
+
+The cost is that a wire-protocol fix is now a submodule commit before it is a backend commit, which
+is the same cost `genix-orm` already imposes and the same one that keeps the daemon and its client
+from drifting.
+
+## The fareward client takes the name all the way down, including the wire and the schema
+
+**Context** — The submodule folder became `fareward/` to match its repository, and the daemon
 renamed its crate, TOML section and env vars to suit. The Go client still lived in
 `core/server_utils/`, re-exported through `core/server_utils_api.go`, so the backend named the
-service one thing and the service named itself another.
+service one thing and the service named itself another. An earlier pass fixed the Go package but
+deliberately stopped at two contracts — the HMAC domain string and the `server_metrics` columns —
+on the grounds that neither is really a name. That left `server_metrics` reading `server_utils_*`
+for columns owned by `fareward`, and a wire whose identity nothing in either repository spelled.
 
-**Decision** — `core/server_utils/` → `core/auth_limiter/` (package `auth_limiter`),
-`core/server_utils_api.go` → `core/auth_limiter_api.go`, and every identifier renamed with it:
-`ServerUtilsClient` → `AuthLimiterClient`, `ErrServerUtilsUnavailable` →
-`ErrAuthLimiterUnavailable`, `Env.SERVER_UTILS_ADDRESS` → `Env.AUTH_LIMITER_ADDRESS`, and the
-`toml:"server_utils"` tag on the config struct → `toml:"auth_limiter"`. Two exceptions stayed:
+**Decision** — `core/server_utils/` → `core/fareward/` (package `fareward`),
+`core/server_utils_api.go` → `core/fareward_api.go`, and every identifier renamed with it:
+`ServerUtilsClient` → `FarewardClient`, `ErrServerUtilsUnavailable` → `ErrFarewardUnavailable`,
+`Env.SERVER_UTILS_ADDRESS` → `Env.FAREWARD_ADDRESS`, and the `toml:"server_utils"` tag on the
+config struct → `toml:"fareward"`. The two contracts followed:
 
-- `authLimiterAuthDomain = "genix-server-utils:v6"` in `core/auth_limiter/connection.go`. The
-  identifier was renamed; **the string was not.** It is the HMAC domain separator the Rust daemon
-  mirrors in `src/service/auth.rs`, so its bytes are a wire contract with a `:v6` version channel.
-- `ServerMetricRecord.ServerUtilsMemMb` / `.ServerUtilsCpuPercent` in `core/types/server_metrics.go`
-  and their mirrors in `config/server_metrics.go`. These carry no column tag, so the ORM derives
-  `server_utils_mem_mb` / `server_utils_cpu_percent` from the field name — the exact columns the
-  Rust writer's INSERT names and the frontend's JSON keys. Renaming them is a schema migration on a
-  table that already holds rows, so it is a separate decision from a rename.
+- `farewardAuthDomain` in `core/fareward/connection.go` is now `"fareward:v7"`, mirrored byte for
+  byte by `DOMAIN` in `fareward/src/service/auth.rs`. Renaming it is not a frame-format change, but
+  it invalidates every tag a peer still signing `genix-server-utils:v6` produces, so it spends a
+  version bump rather than leaving two incompatible protocols both answering to `:v6`. The
+  cross-language vectors in `credits_test.go` and `locks_test.go` were regenerated against the new
+  domain and re-pinned on the Rust side, so the pair still proves the two implementations agree.
+  **Backend and daemon must cross this boundary in a single deploy.**
+- `ServerMetricRecord.FarewardMemMb` / `.FarewardCpuPercent` in `core/types/server_metrics.go`,
+  their mirrors in `config/server_metrics.go`, and the frontend's `ServerMetricField` union. These
+  carry no column tag, so the ORM derives `fareward_mem_mb` / `fareward_cpu_percent` from the field
+  name — the exact columns the Rust writer's INSERT names and the JSON keys the Server Panel reads.
 
-**Rationale** — Grepping `auth_limiter` now finds the whole path from handler to daemon. Holding the
-two contracts back keeps a cosmetic rename from turning into a wire break plus a data migration; the
-cost is that `server_metrics` reads `server_utils_*` for columns owned by `auth-limiter`, which the
-comments above both declarations now state outright.
+**Rationale** — Grepping `fareward` now finds the whole path from handler to daemon to column, and
+the two exceptions were precisely the half that made grepping unreliable: names you could only find
+by already knowing them. The costs are real and accepted. The domain change is a lockstep deploy.
+The column change is a schema change on a table that already holds rows: the ORM adds missing
+columns and never drops them, so a deployed `server_metrics` gains the new pair and keeps
+`server_utils_*` until those rows expire under the table's TTL. Nothing back-fills, so the Server
+Panel reads not-measured for windows sampled before the deploy. Ordering is not a constraint in
+either direction — the daemon's `ensure_prepared` retries on a one-minute interval, so a daemon that
+starts before the schema deploy heals on its own rather than needing a choreographed rollout.
 
 ## fn-init seeds a company that can already operate, and the bootstrap page is gone
 
@@ -60,7 +123,7 @@ records are managed anyway.
 meters the platform operator's own company, so an exhausted budget locked company 1 out of its own
 software — including the "Datos Iniciales" bootstrap, which is exactly when someone needs to get in.
 
-**Decision** — `auth-limiter.CreditExemptCompanyID = 1` (the company `fn-init` seeds as
+**Decision** — `fareward.CreditExemptCompanyID = 1` (the company `fn-init` seeds as
 "Principal"). In `chargeConfiguredCredits`, that company's CPU and inference credits are zeroed. If
 the frame then carries no required access there is nothing left to ask and the call returns nil;
 if it does carry one, the frame still goes to the daemon and the access is still enforced.

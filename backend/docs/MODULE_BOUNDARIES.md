@@ -13,8 +13,8 @@ Imports flow one way. A package may import its own layer and anything below it.
 
 | Layer | Packages | May import |
 | --- | --- | --- |
-| **L0 Foundation** | `db`, `libs/*`, `genix-orm`, `facturago` | nothing from `app/` |
-| **L1 Core** | `core`, `core/types`, `core/auth-limiter` | L0 |
+| **L0 Foundation** | `db`, `libs/*`, `genix-orm`, `facturago`, `fareward/go` | nothing from `app/` |
+| **L1 Core** | `core`, `core/types` | L0 |
 | **L2 Contracts** | `<module>/types` | L0, L1, other `<module>/types` — **and nothing else, ever** |
 | **L3 Infra** | `cloud` | L0–L2 |
 | **L4 Module bodies** | `accounting`, `agent`, `business`, `config`, `crm`, `finance`, `invoicing`, `logistics`, `production`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |

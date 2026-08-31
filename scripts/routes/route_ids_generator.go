@@ -97,8 +97,8 @@ func main() {
 }
 
 // maxEncodableRouteID is the ceiling of the fourteen-bit route field in the credit usage blob
-// header, mirrored from auth-limiter/src/limiter/credits_blob.rs and
-// backend/core/auth-limiter/credits.go. Numbers are never reused, so the count only ever climbs;
+// header, mirrored from fareward/src/limiter/credits_blob.rs and
+// backend/core/fareward/credits.go. Numbers are never reused, so the count only ever climbs;
 // failing here is the one place that can say so before a route exists that cannot be charged.
 const maxEncodableRouteID = int16(16_383)
 
@@ -127,7 +127,7 @@ func mergeAssignments(existing map[string]int16, declared map[string]bool) ([]ro
 		if highestID >= maxEncodableRouteID {
 			return nil, 0, fmt.Errorf(
 				"route %q would be numbered past %d, the widest ID the credit usage blob header can "+
-					"hold; widen the header in auth-limiter/src/limiter/credits_blob.rs and both "+
+					"hold; widen the header in fareward/src/limiter/credits_blob.rs and both "+
 					"decoders before adding it", route, maxEncodableRouteID)
 		}
 		highestID++

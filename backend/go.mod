@@ -62,6 +62,7 @@ require (
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/ivanjoz/colbin v0.1.0
 	github.com/ivanjoz/facturago v0.0.0
+	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
 	github.com/ivanjoz/minijson v0.1.0
@@ -93,6 +94,13 @@ replace github.com/gocql/gocql v1.6.0 => ./genix-orm/thirdparty/gocql
 
 // facturago is a submodule like genix-orm: what is checked out is what compiles.
 replace github.com/ivanjoz/facturago => ./facturago
+
+// The fareward Go client, which lives in the daemon's own repository so the wire protocol and its
+// reference implementation stay in one place. Replaced into the submodule for the same reason
+// genix-orm and facturago are: the client and the daemon share a versioned wire domain, and
+// resolving the client from the module proxy would let a backend compile against a client whose
+// `fareward:vN` no longer matches the daemon checked out beside it.
+replace github.com/ivanjoz/fareward/go => ../fareward/go
 
 // Forked to restore the linker's dead-method elimination; see thirdparty/README.md.
 replace google.golang.org/protobuf => ./thirdparty/protobuf

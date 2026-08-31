@@ -14,13 +14,13 @@ const NOT_MEASURED = -1
 export type ServerMetricField =
 	| 'CpuPercent' | 'MemPercent' | 'DiskPercent' | 'NetRxRate' | 'NetTxRate'
 	| 'BackendMemMb' | 'BackendCpuPercent'
-	| 'ServerUtilsMemMb' | 'ServerUtilsCpuPercent'
+	| 'FarewardMemMb' | 'FarewardCpuPercent'
 	| 'SearchMemMb' | 'SearchCpuPercent'
 	| 'ScyllaMemMb' | 'ScyllaCpuPercent'
 
 export const SERVER_METRIC_FIELDS: ServerMetricField[] = [
 	'CpuPercent', 'MemPercent', 'DiskPercent', 'NetRxRate', 'NetTxRate',
-	'BackendMemMb', 'BackendCpuPercent', 'ServerUtilsMemMb', 'ServerUtilsCpuPercent',
+	'BackendMemMb', 'BackendCpuPercent', 'FarewardMemMb', 'FarewardCpuPercent',
 	'SearchMemMb', 'SearchCpuPercent', 'ScyllaMemMb', 'ScyllaCpuPercent',
 ]
 
@@ -30,7 +30,7 @@ const METRIC_DISPLAY_SCALE: Record<ServerMetricField, number> = {
 	CpuPercent: 0.01, MemPercent: 0.01, DiskPercent: 0.01,
 	NetRxRate: 5, NetTxRate: 5,
 	BackendMemMb: 1, BackendCpuPercent: 0.01,
-	ServerUtilsMemMb: 1, ServerUtilsCpuPercent: 0.01,
+	FarewardMemMb: 1, FarewardCpuPercent: 0.01,
 	SearchMemMb: 1, SearchCpuPercent: 0.01,
 	ScyllaMemMb: 1, ScyllaCpuPercent: 0.01,
 }
@@ -80,7 +80,7 @@ const makeEmptySeries = (): IServerMetricsSeries => ({
  * of the chart is to make that gap visible.
  *
  * Points are reduced by MAXIMUM. Every stored value is already the peak of its five seconds
- * (auth-limiter/src/sysmetrics/collector.rs), so max-of-peaks is still a peak, while an average would
+ * (fareward/src/sysmetrics/collector.rs), so max-of-peaks is still a peak, while an average would
  * invent a number that never happened and hide the spikes the table exists to record.
  */
 export const buildServerMetricsSeries = (

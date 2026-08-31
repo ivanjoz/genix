@@ -1,14 +1,14 @@
 ## The deployer resolves one release per component, not one release for all of them
 
 **Context** — `configure.py` had a single `LATEST_RELEASE_URL` pointing at `ivanjoz/genix` and one
-`SHA256SUMS` covering all four assets, because one workflow published all of them. `auth-limiter`
+`SHA256SUMS` covering all four assets, because one workflow published all of them. `fareward`
 now releases from its own repository, so its binary and its manifest live somewhere else.
 
-**Decision** — `GENIX_RELEASE_URL` and `AUTH_LIMITER_RELEASE_URL`, and
+**Decision** — `GENIX_RELEASE_URL` and `FAREWARD_RELEASE_URL`, and
 `download_selected_binaries` groups the requested assets by publisher: each group downloads that
 release's `SHA256SUMS` and verifies only its own assets against it. Both releases name their
 manifest `SHA256SUMS`, so `download_latest_release_file` takes a `local_name` and they land in
-`tmp/` as `SHA256SUMS.genix` and `SHA256SUMS.auth-limiter`.
+`tmp/` as `SHA256SUMS.genix` and `SHA256SUMS.fareward`.
 
 **Rationale** — The grouping is what makes the verification honest: a flat asset list with one
 manifest would have to either skip entries it cannot find or verify a binary against checksums

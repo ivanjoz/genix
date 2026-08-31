@@ -210,7 +210,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		// necesitan leer "cmp", por eso esto vive solo en esta rama.
 		delete(args.Query, "cmp")
 
-		// Las dos preguntas que deciden la request, en un solo viaje a auth_limiter: si el user
+		// Las dos preguntas que deciden la request, en un solo viaje a fareward: si el user
 		// tiene el acceso que la ruta exige y si a su company le quedan créditos.
 		//
 		// Corre antes de buscar el handler, así que una ruta que no existe también se cobra: un GET
@@ -277,7 +277,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 }
 
 // routeAccessDecision es lo que el gate concluyó sobre la autorización de una request: los accesos
-// empaquetados que auth_limiter debe verificar, o un rechazo que no necesita preguntarle nada.
+// empaquetados que fareward debe verificar, o un rechazo que no necesita preguntarle nada.
 type routeAccessDecision struct {
 	requiredAccess []uint16
 	// accessNames acompaña a requiredAccess sólo para el mensaje de error: el daemon no conoce
@@ -373,7 +373,7 @@ func chargedMethodFor(method, funcPath string) string {
 }
 
 // enforceAccessAndCredits es la única puerta de una request autenticada: resuelve el acceso y los
-// créditos en un solo viaje a auth_limiter. Devuelve la respuesta de error, o nil para continuar.
+// créditos en un solo viaje a fareward. Devuelve la respuesta de error, o nil para continuar.
 //
 // Una sola función y un solo frame porque son la misma decisión tomada con los mismos datos: el
 // daemon cachea los accesos del user y su cuota en el mismo shard, bajo la misma clave
@@ -433,7 +433,7 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 	}
 
 	if err != nil {
-		core.Log("auth-limiter rechazó::", " method::", args.Method, " company::", args.User.CompanyID,
+		core.Log("fareward rechazó::", " method::", args.Method, " company::", args.User.CompanyID,
 			" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
 			" accesos::", len(decision.requiredAccess), " err::", err)
 		var response core.HandlerResponse
@@ -446,7 +446,7 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		return &response
 	}
 
-	core.Log("auth-limiter aceptó::", " method::", args.Method, " company::", args.User.CompanyID,
+	core.Log("fareward aceptó::", " method::", args.Method, " company::", args.User.CompanyID,
 		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
 		" cpu_credits::", cpuCredits, " accesos::", len(decision.requiredAccess))
 	return nil

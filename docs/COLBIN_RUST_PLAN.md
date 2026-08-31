@@ -1,8 +1,8 @@
-# Plan — a Rust colbin decoder in the colbin repo, consumed by auth-limiter over git
+# Plan — a Rust colbin decoder in the colbin repo, consumed by fareward over git
 
 ## Why
 
-`auth-limiter/src/bridge/token.rs` hand-writes a colbin decoder in Rust: 577 lines mirroring
+`fareward/src/bridge/token.rs` hand-writes a colbin decoder in Rust: 577 lines mirroring
 `colbin/format.go`, `colbin/bitstream.go`, `colbin/typeinfo.go` and the packed5 string codec, all
 pinned by vectors generated from Go. It decodes exactly one struct, `core.UsuarioToken`, and it is
 now wrong: colbin v0.1.0 routes every single-record message through **compact mode**, so the
@@ -78,10 +78,10 @@ must yield. `tests/vectors.rs` reads that file and asserts. The corpus covers, a
 Vectors are committed, so `cargo test` needs no Go toolchain; CI regenerates them and fails on a
 diff, which is what catches a Go-side format change that nobody ported.
 
-## Wiring auth-limiter
+## Wiring fareward
 
 ```toml
-# auth-limiter/Cargo.toml
+# fareward/Cargo.toml
 colbin = { git = "https://github.com/ivanjoz/colbin", rev = "<sha>" }
 ```
 
@@ -103,12 +103,12 @@ Net: ~577 lines down to roughly 150, and none of the removed lines describe a wi
 ## Order of work
 
 1. `rust/` crate skeleton + root `Cargo.toml` workspace; confirm `cargo build` and that a git dep
-   from auth-limiter resolves before writing the decoder.
+   from fareward resolves before writing the decoder.
 2. Port `bitstream`, `packed5`, `fieldid`, columnar int/string columns from `token.rs`.
 3. Write `compact.rs` and the selector varint — the new work.
 4. `rust/vectors/main.go` + `tests/vectors.rs`; iterate until the corpus passes.
 5. Commit and **push** the colbin repo (it is a separate remote; a genix commit does not publish it).
-6. Point `auth-limiter/Cargo.toml` at the pushed `rev`, gut `token.rs`, `cargo test`.
+6. Point `fareward/Cargo.toml` at the pushed `rev`, gut `token.rs`, `cargo test`.
 7. `RATIONALE.md` in both repos; update the colbin README's port list and Limitations.
 
 Steps 1–5 are inside `/run/media/ivanjoz/projects/colbin`, a separate repository from genix.

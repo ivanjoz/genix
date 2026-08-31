@@ -274,7 +274,7 @@ files:
     supports: [concepts, capability.browse-backups, capability.generate-backup, capability.restore-backup]
   - path: frontend/core/env.ts
     role: frontend-service
-    hash: sha256:04527b0ea2ec0949b2bf1992df4889db83871c496226612e00abef89c44c0dec
+    hash: sha256:617de03880bc13ffe209c46f03750cbd8162c18f0d05a4e2b43acf979fbe8e7c
     supports: [capability.download-backup, troubleshooting]
   - path: frontend/packages/genix-ui/service-worker/client.ts
     role: frontend-service
@@ -314,6 +314,6 @@ files:
     supports: [capability.browse-backups, capability.generate-backup, capability.restore-backup, rules]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
+    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
     supports: [capability.browse-backups, capability.generate-backup, capability.restore-backup, rules]
 ```

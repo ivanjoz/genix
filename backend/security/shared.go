@@ -7,7 +7,7 @@ import (
 	"context"
 )
 
-// invalidateCachedUserAccess le dice a auth_limiter que vuelva a leer los accesos de un user, o de
+// invalidateCachedUserAccess le dice a fareward que vuelva a leer los accesos de un user, o de
 // toda una company cuando userID es core.InvalidateAllCompanyUsers.
 //
 // El daemon cachea users.accesos_computed para responder el gate de rutas sin ir a ScyllaDB, así que

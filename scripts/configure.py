@@ -17,19 +17,19 @@ PROJECT_ROOT_DIRECTORY = SCRIPT_DIRECTORY.parent
 CONFIGURE_DIRECTORY = SCRIPT_DIRECTORY / "configure"
 DOWNLOAD_DIRECTORY = PROJECT_ROOT_DIRECTORY / "tmp"
 GENIX_RELEASE_URL = "https://github.com/ivanjoz/genix/releases/latest/download"
-# auth-limiter releases from its own repository, so its binaries and its checksum manifest
+# fareward releases from its own repository, so its binaries and its checksum manifest
 # come from a different release than the backend's and must be verified against that one.
-AUTH_LIMITER_RELEASE_URL = "https://github.com/ivanjoz/auth-limiter/releases/latest/download"
+FAREWARD_RELEASE_URL = "https://github.com/ivanjoz/fareward/releases/latest/download"
 
 COMPONENT_DATABASE = "1"
 COMPONENT_BACKEND = "2"
-COMPONENT_AUTH_LIMITER = "3"
+COMPONENT_FAREWARD = "3"
 BINARY_SOURCE = "7"
 BINARY_PRECOMPILED = "8"
-COMPONENT_DIGITS = {COMPONENT_DATABASE, COMPONENT_BACKEND, COMPONENT_AUTH_LIMITER}
+COMPONENT_DIGITS = {COMPONENT_DATABASE, COMPONENT_BACKEND, COMPONENT_FAREWARD}
 BINARY_MODE_DIGITS = {BINARY_SOURCE, BINARY_PRECOMPILED}
 
-# The unit configure_server.py installs. Its presence is what tells Auth Limiter, installed on its
+# The unit configure_server.py installs. Its presence is what tells Fareward, installed on its
 # own, that the backend is on this same host. Kept in sync with SERVICE_NAME there by this name.
 BACKEND_SERVICE_UNIT_PATH = Path("/etc/systemd/system/genix.service")
 
@@ -39,11 +39,11 @@ def print_menu():
     print("Select components:")
     print("    [1] Database")
     print("    [2] Backend Service")
-    print("    [3] Auth Limiter")
+    print("    [3] Fareward")
     print("Select one binary source:")
     print("    [7] Build from source")
     print("    [8] Download precompiled binaries from the latest release")
-    print("Example: 238 configures Backend Service and Auth Limiter from precompiled binaries.")
+    print("Example: 238 configures Backend Service and Fareward from precompiled binaries.")
 
 
 def parse_selection(raw_selection):
@@ -85,7 +85,7 @@ def download_latest_release_file(asset_name, release_base_url=GENIX_RELEASE_URL,
     """Download one latest-release file atomically into tmp/.
 
     local_name exists because every release publishes its manifest as SHA256SUMS: without it the
-    auth-limiter manifest would overwrite the backend's in tmp/ and each would be checked against
+    fareward manifest would overwrite the backend's in tmp/ and each would be checked against
     the other's checksums.
     """
     DOWNLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
@@ -149,10 +149,10 @@ def download_selected_binaries(selected_components, backend_mode):
         assets_by_release.setdefault((GENIX_RELEASE_URL, "SHA256SUMS.genix"), []).append(
             f"genix_app_linux_{release_architecture}"
         )
-    if COMPONENT_AUTH_LIMITER in selected_components:
+    if COMPONENT_FAREWARD in selected_components:
         assets_by_release.setdefault(
-            (AUTH_LIMITER_RELEASE_URL, "SHA256SUMS.auth-limiter"), []
-        ).append(f"auth-limiter_linux_{release_architecture}")
+            (FAREWARD_RELEASE_URL, "SHA256SUMS.fareward"), []
+        ).append(f"fareward_linux_{release_architecture}")
     if not assets_by_release:
         print("[*] No Genix service binary is needed for the selected components.")
         return
@@ -190,11 +190,11 @@ def resolve_backend_mode():
 
 
 def resolve_bridge_is_needed():
-    """Decide whether Auth Limiter, selected on its own, still needs the public SSE bridge.
+    """Decide whether Fareward, selected on its own, still needs the public SSE bridge.
 
     The bridge exists for one reason: a Lambda backend cannot hold an open connection, so something
     else has to. A backend on this same host serves /agent/stream itself and needs no vhost and no
-    sse_bridge.url — which is why the answer cannot be assumed either way. Installing Auth Limiter
+    sse_bridge.url — which is why the answer cannot be assumed either way. Installing Fareward
     on a VPS *specifically* to bridge for a Lambda is exactly as ordinary as installing it next to a
     self-hosted backend.
 
@@ -242,7 +242,7 @@ def run_configurer(script_name, *arguments):
 
 def parse_command_arguments():
     argument_parser = argparse.ArgumentParser(
-        description="Configure Database, Backend Service and Auth Limiter with one compact selection."
+        description="Configure Database, Backend Service and Fareward with one compact selection."
     )
     argument_parser.add_argument(
         "selection",
@@ -274,16 +274,16 @@ def main():
         except RuntimeError as download_error:
             raise SystemExit(f"[!] {download_error}") from download_error
 
-    # Database first because Auth Limiter needs its schema and connectivity at startup.
+    # Database first because Fareward needs its schema and connectivity at startup.
     if COMPONENT_DATABASE in selected_components:
         run_configurer("configure_db.py")
     if COMPONENT_BACKEND in selected_components:
         run_configurer("configure_server.py", backend_mode, "--binary-source", binary_source)
-    if COMPONENT_AUTH_LIMITER in selected_components:
-        auth_limiter_arguments = ["--binary-source", binary_source]
+    if COMPONENT_FAREWARD in selected_components:
+        fareward_arguments = ["--binary-source", binary_source]
         # A self-hosted backend serves /agent/stream itself, so it needs the daemon's raw TCP
         # services but no public SSE vhost or sse_bridge.url. When the Backend component was
-        # selected in this same run its mode already answers that; when Auth Limiter is installed
+        # selected in this same run its mode already answers that; when Fareward is installed
         # alone — which used to demand a bridge URL on every self-hosted box — it has to be asked.
         bridge_is_needed = (
             backend_mode not in {"1", "2"}
@@ -291,9 +291,9 @@ def main():
             else resolve_bridge_is_needed()
         )
         if not bridge_is_needed:
-            auth_limiter_arguments.append("--service-only")
+            fareward_arguments.append("--service-only")
             print("[*] The backend serves its own /agent/stream; skipping the public SSE bridge.")
-        run_configurer("configure_auth_limiter.py", *auth_limiter_arguments)
+        run_configurer("configure_fareward.py", *fareward_arguments)
 
 
 if __name__ == "__main__":

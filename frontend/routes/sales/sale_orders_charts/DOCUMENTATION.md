@@ -278,10 +278,10 @@ files:
     supports: [page-purpose]
   - path: backend/core/usuario-accesos.go
     role: permissions
-    hash: sha256:85b06f639a041aa8f727c99e61b0228ead1b8c34b676fa05c68b0df97a329930
+    hash: sha256:78cd42453bc7e37d54867ffef85881f091554059141607ba164e4bb163bfde2a
     supports: [page-purpose]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
+    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
     supports: [page-purpose]
 ```

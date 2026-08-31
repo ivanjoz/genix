@@ -105,7 +105,7 @@ Independence only works with a closed feedback loop. Run the check that covers w
 | Moved code between modules | `cd scripts && go run . check_module_imports` |
 | Frontend | `cd frontend && bun run check` (svelte-kit sync + svelte-check) |
 | Frontend build | `cd frontend && bun run build` |
-| auth-limiter (Rust) | `cd auth-limiter && cargo build` / `cargo test` |
+| fareward (Rust) | `cd fareward && cargo build` / `cargo test` |
 | Real app behaviour | skill: `agent-browser` — drives the running app, reads the page, screenshots what renders |
 
 Operational scripts run through the dispatcher: `cd scripts && go run . <script_name>`. Deploys go through `./deploy.sh` (TUI). `app.sh` is deprecated.
@@ -122,15 +122,16 @@ backend/facturago/     git submodule (github.com/ivanjoz/facturago) — separate
 frontend/         SvelteKit app. routes/ core/ services/ domain-components/ libs/ styles/
 frontend/packages/genix-ui/  git submodule (github.com/ivanjoz/genix-ui) — separate repo
 frontend/webpage/ Independent public storefront app (own build)
-auth-limiter/     git submodule (github.com/ivanjoz/auth-limiter) — separate repo:
-                  Rust daemon with credit limiter, lock service, request log, SSE bridge
+fareward/     git submodule (github.com/ivanjoz/fareward) — separate repo:
+                  Rust daemon with credit limiter, lock service, request log, SSE bridge,
+                  plus fareward/go/ — the Go client this backend imports
 scripts/          Go script dispatcher + deployer TUI + configure.py
 cloud/  db-backup/  webpage-renderer/   standalone Go/JS services
 docs/             Cross-cutting design docs (SECURITY_PLAN, EXTRA_CREDITS_PLAN, ...)
 config.toml       Local config (not committed). config.example.toml is the template.
 ```
 
-**Submodules:** `genix-orm`, `genix-ui`, `facturago` and `auth-limiter` are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. For day-to-day work no pointer bump is needed in the parent repo: it follows the submodule's `main`, and builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI, `cargo build` in place for `auth-limiter`), so what is on disk is what compiles. Tagged releases are the exception: this repo's `release-binaries.yml` builds the commit the tag recorded, so a `genix-orm` or `facturago` change only ships once the parent repo commits the new pointer. `auth-limiter` is no longer one of those: it has its own `release-binaries.yml` and publishes its own `auth-limiter_linux_{amd64,arm64}` assets, which `scripts/configure.py` downloads from `github.com/ivanjoz/auth-limiter` independently of any parent tag.
+**Submodules:** `genix-orm`, `genix-ui`, `facturago` and `fareward` are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. For day-to-day work no pointer bump is needed in the parent repo: it follows the submodule's `main`, and builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI, `cargo build` in place for `fareward`), so what is on disk is what compiles. Tagged releases are the exception: this repo's `release-binaries.yml` builds the commit the tag recorded, so a `genix-orm` or `facturago` change only ships once the parent repo commits the new pointer. `fareward` is no longer one of those: it has its own `release-binaries.yml` and publishes its own `fareward_linux_{amd64,arm64}` assets, which `scripts/configure.py` downloads from `github.com/ivanjoz/fareward` independently of any parent tag.
 
 `facturago` is **public**. It implements SUNAT and names no consumer: no ERP identifiers, no tenancy, no business rules from this repo. A leak there is a leak in public.
 
@@ -148,9 +149,10 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - `backend/genix-orm/db/` — driver-agnostic layer: schema, columns, predicates, accessors, the `Executor` contract
 - `backend/genix-orm/scylla/ORM_INTERNALS.md` — driver internals: memory model, reflection engine, query optimization
 
-**auth-limiter (Rust)** — one daemon: credit limiter, lock service, request log, SSE bridge. Rarely changes; read only when working on it.
-- `auth-limiter/README.md` — the entry point. The `*_WALKTHROUGH.md` files explain the limiter and lock service end-to-end. `docs/SECURITY_PLAN.md` and `docs/EXTRA_CREDITS_PLAN.md` cover authorization and the extra-credit pool; `scripts/configure/CONFIGURE_AUTH_LIMITER.md` covers deployment
-- Go client: `backend/core/auth_limiter/`, re-exported via `backend/core/auth_limiter_api.go`. Authorization policy stays in Go.
+**fareward (Rust)** — one daemon: credit limiter, lock service, request log, SSE bridge. Rarely changes; read only when working on it.
+- `fareward/README.md` — the entry point. The `*_WALKTHROUGH.md` files explain the limiter and lock service end-to-end. `docs/SECURITY_PLAN.md` and `docs/EXTRA_CREDITS_PLAN.md` cover authorization and the extra-credit pool; `scripts/configure/CONFIGURE_FAREWARD.md` covers deployment
+- Go client: `fareward/go/` **in the submodule**, module `github.com/ivanjoz/fareward/go`, `replace`d into `backend/go.mod`. Stdlib only. Editing it is a submodule change — commit and push it there, like `genix-orm`.
+- `backend/core/fareward_api.go` is the seam that stays here: the `core.X` aliases, the `LockAction` enum, and the `HandlerArgs`/`HandlerResponse` mappings. Authorization and charging policy stay in Go, on this side.
 
 **Frontend**
 - `frontend/FRONTEND.md` — monorepo architecture, directory structure, package system, dev workflow

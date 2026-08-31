@@ -7,7 +7,7 @@ status: implemented
 visibility: saas
 description_en: >-
   Machine-level health monitoring, SaaS only. Dashboard view charts the last four hours of host
-  and per-service (Backend, ScyllaDB, GenixSearch, Auth Limiter) CPU, memory, and network; Memory
+  and per-service (Backend, ScyllaDB, GenixSearch, Fareward) CPU, memory, and network; Memory
   view inspects the backend process's live heap usage by Go package.
 description_es: >-
   Monitoreo de salud a nivel de máquina, exclusivo SaaS. Vista Dashboard grafica las últimas cuatro
@@ -28,7 +28,7 @@ administers the SaaS platform (`onlySaaS`), and both API routes it calls
 company through `saasOnlyRoutes` in `main-handlers.go`.
 
 It has two views, switched with the top tab strip: **Dashboard**, which charts historical CPU,
-memory, disk, and network samples written every 5 seconds by the `auth-limiter` daemon into the
+memory, disk, and network samples written every 5 seconds by the `fareward` daemon into the
 `server_metrics` table; and **Memory**, which asks the running backend process itself for a live
 snapshot of its Go heap. This page does not own API-route credit accounting or per-route error
 counts — that is **Observability (Observabilidad)** — and it does not manage tenant companies —
@@ -37,12 +37,12 @@ that is **Companies (Empresas)**.
 <!-- DOC-ID: concepts -->
 ## Business concepts (Conceptos del negocio)
 
-- **`server_metrics`** is one row every 5 seconds written directly by `auth-limiter`, never by
+- **`server_metrics`** is one row every 5 seconds written directly by `fareward`, never by
   the backend itself. Every stored value is the **peak** observed during those 5 seconds (not an
   average and not a single point sample), so a one-second spike is never smoothed away. Rows are
-  kept for 30 days by default (`ttl_days`, `auth-limiter` config) before the database expires them.
+  kept for 30 days by default (`ttl_days`, `fareward` config) before the database expires them.
 - **Host vs. per-service metrics**: the Host chart is the whole machine's CPU/memory. Backend,
-  ScyllaDB, GenixSearch, and Auth Limiter each get their own CPU-percent-of-whole-machine and
+  ScyllaDB, GenixSearch, and Fareward each get their own CPU-percent-of-whole-machine and
   memory-in-MB, read from that unit's own Linux cgroup (`memory.stat`, `cpu.stat`), located by
   searching `/sys/fs/cgroup` for the unit rather than assuming a fixed path.
 - **Unmeasured vs. zero (`Sin medición` vs. `0`)**: a service metric is a sentinel "not measured"
@@ -66,13 +66,13 @@ that is **Companies (Empresas)**.
 
 ### User intention (Intención del usuario)
 
-See whether the host or any Genix service (Backend, ScyllaDB, GenixSearch, Auth Limiter) is under
+See whether the host or any Genix service (Backend, ScyllaDB, GenixSearch, Fareward) is under
 unusual CPU, memory, or network load over the last few hours, to diagnose slowness or a crash.
 
 ### Where to find it (Dónde encontrarlo)
 
 `/system/server-panel`, **Dashboard** tab (selected by default). Six cards: **Host: CPU & Memory
-(Host: CPU y Memoria)**, **Backend Service**, **ScyllaDB**, **GenixSearch**, **Auth Limiter**, and
+(Host: CPU y Memoria)**, **Backend Service**, **ScyllaDB**, **GenixSearch**, **Fareward**, and
 **Network (Red)**. Each service card overlays its CPU line (blue, `%`) and memory line (red, MB) on
 one chart. Use **Refresh (Actualizar)** for an immediate reload.
 
@@ -93,7 +93,7 @@ on this page to widen or narrow that window, even though the backend endpoint it
   **maximum**, matching how the daemon itself already stores each row as a peak — averaging at this
   stage would dilute a real spike by the quiet slots beside it.
 - The chart's right edge is always **now**, not the newest row the server actually returned: if
-  `auth-limiter` stops writing, the series keeps growing an empty gap at the right instead of
+  `fareward` stops writing, the series keeps growing an empty gap at the right instead of
   looking healthy by ending at its last real sample.
 - The page polls every 15 seconds while its browser tab is visible, pauses while the tab is hidden,
   and catches up immediately when the tab becomes visible again.
@@ -116,7 +116,7 @@ Read-only: nothing on this view creates, edits, or deletes any record. It only q
 - `¿por qué el backend no aparece en la gráfica?` Normal si el backend corre en Lambda: ese servicio
   no tiene cgroup en esta máquina y se muestra como "Sin medición" (hueco en la gráfica), no como 0%.
 - `¿cómo veo el uso de CPU del servidor?`, `memoria de ScyllaDB`, `ancho de banda de red`, `uso de
-  disco`, `salud del servidor`, `host caído`, `auth-limiter no está corriendo`.
+  disco`, `salud del servidor`, `host caído`, `fareward no está corriendo`.
 
 <!-- DOC-ID: capability.inspect-memory -->
 ## Inspect backend heap memory (Inspeccionar memoria heap del backend)
@@ -199,7 +199,7 @@ runtime and `/proc` state at the moment of the request.
 <!-- DOC-ID: troubleshooting -->
 ## Common problems (Problemas comunes)
 
-- **"No samples in this window" / "Sin muestras en esta ventana":** `auth-limiter` is not
+- **"No samples in this window" / "Sin muestras en esta ventana":** `fareward` is not
   running (or not writing) on the monitored host; the Dashboard has no rows for the last 4 hours.
 - **A service's CPU/memory chart is entirely empty:** that unit has no cgroup on this box — expected
   for Backend when the backend actually runs on Lambda, or for any unit that is stopped.
@@ -240,7 +240,7 @@ files:
     supports: [page-purpose, capability.monitor-dashboard, capability.inspect-memory]
   - path: frontend/routes/system/server-panel/DashboardView.svelte
     role: user-interface
-    hash: sha256:419024f0efa9b43a894e9ba6e707d5e0a4d64c0137bfeb9db5cd520d2bf145b6
+    hash: sha256:d8632a1deb98c04835cb132a886c20b88a39d860bbbf3286e1177e5128d0c575
     supports: [concepts, capability.monitor-dashboard, rules, troubleshooting]
   - path: frontend/routes/system/server-panel/MemoryView.svelte
     role: user-interface
@@ -248,7 +248,7 @@ files:
     supports: [concepts, capability.inspect-memory, rules, troubleshooting]
   - path: frontend/routes/system/server-panel/server-metrics.model.ts
     role: business-logic
-    hash: sha256:dbb41c1ba4a7cbe0981feacf3b1f52df197e3f57ef83711df0f9932b605bc1e2
+    hash: sha256:3c9658a90fc937806d79743f8f06298db30cfb43a67df2a1c5f20579bd883053
     supports: [concepts, capability.monitor-dashboard, rules]
   - path: frontend/routes/system/server-panel/server-metrics.svelte.ts
     role: frontend-service
@@ -268,7 +268,7 @@ files:
     supports: [capability.inspect-memory]
   - path: backend/config/server_metrics.go
     role: backend-handler
-    hash: sha256:5fa01e73bf0c0e9515fa18999ccbd226486d0f226692f22ca933336ec2fbf60f
+    hash: sha256:dcf11e8c6b226c5b64303fbe4a250e2951a3a2703cb0bb766fbee8c8983b8387
     supports: [capability.monitor-dashboard, rules, troubleshooting]
   - path: backend/config/system_memory_packages.go
     role: backend-handler
@@ -284,21 +284,21 @@ files:
     supports: [concepts, capability.inspect-memory, troubleshooting]
   - path: backend/core/types/server_metrics.go
     role: data-model
-    hash: sha256:1fd8138f4b85e986ffeef9a8b9edbaf8ea32fc9b1bfa1a64e6853324d0928083
+    hash: sha256:cd43eefa9398ef8e9ce454e514988d903b166036c37ef152970a76a3a734d81e
     supports: [concepts, rules]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
+    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
     supports: [page-purpose, rules]
   - path: backend/access_list.yml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [rules]
-  - path: auth-limiter/src/sysmetrics/collector.rs
+  - path: fareward/src/sysmetrics/collector.rs
     role: business-logic
     hash: sha256:45fba65ab25bb60c52994e7ce415214c54ffb9500c157bdeafa817b48369c8cf
     supports: [concepts, rules]
-  - path: auth-limiter/src/config.rs
+  - path: fareward/src/config.rs
     role: business-logic
     hash: sha256:cc28fe1d52dc8d71488484dea50bbb03ed5dc0aef8d08428acb6eaba0d8ee787
     supports: [concepts]

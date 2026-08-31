@@ -1,7 +1,7 @@
 name: Build and release Linux binaries
 
 # Version tags publish; manual main runs validate the backend and warm its cache.
-# auth-limiter builds and publishes its own binaries from github.com/ivanjoz/auth-limiter.
+# fareward builds and publishes its own binaries from github.com/ivanjoz/fareward.
 on:
   push:
     tags: ['v*']

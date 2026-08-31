@@ -1,6 +1,6 @@
 package agent
 
-// Client of the SSE bridge (see auth-limiter/README.md).
+// Client of the SSE bridge (see fareward/README.md).
 //
 // In Lambda the backend cannot hold the browser's stream open: an invocation
 // ends when the handler returns, and the browser's answer to a command would
@@ -34,7 +34,7 @@ import (
 
 const (
 	// bridgeServiceAuthHeaderName and bridgeServiceAuthMessagePrefix mirror
-	// auth-limiter/src/bridge/auth.rs. The bridge is a Rust process, so the compiler
+	// fareward/src/bridge/auth.rs. The bridge is a Rust process, so the compiler
 	// cannot enforce this — changing one side requires changing the other.
 	bridgeServiceAuthHeaderName    = "X-Bridge-Auth"
 	bridgeServiceAuthMessagePrefix = "sse-bridge:v1|"

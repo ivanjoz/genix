@@ -18,7 +18,7 @@ func TestRequestLogSchemasCompile(t *testing.T) {
 	}
 }
 
-// These vectors are the contract with auth-limiter/src/reqlog/protocol.rs, which is the side that
+// These vectors are the contract with fareward/src/reqlog/protocol.rs, which is the side that
 // writes the column. The Rust test file carries the same numbers; if either moves, the dashboard
 // silently reads rows that were packed under a different layout.
 func TestMakeFrameRouteCompanyAgg(t *testing.T) {

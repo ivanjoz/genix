@@ -2,7 +2,7 @@ package types
 
 import "app/db"
 
-// One row per finished request, written by auth_limiter and never by this backend: the ORM owns
+// One row per finished request, written by fareward and never by this backend: the ORM owns
 // the schema, the daemon owns the writes.
 //
 // What is here is what answers "which requests failed, on what route, for which company, when".
@@ -81,7 +81,7 @@ const (
 //	bits 39..24  routeID
 //	bits 23..0   companyID
 //
-// Mirrored byte for byte in auth-limiter/src/reqlog/protocol.rs, which is the side that actually
+// Mirrored byte for byte in fareward/src/reqlog/protocol.rs, which is the side that actually
 // writes it; the vectors in both test files pin the two implementations together.
 func MakeFrameRouteCompanyAgg(frame uint8, routeID int16, companyID int32) int64 {
 	return int64(frame)<<agLoggedFrameShift |

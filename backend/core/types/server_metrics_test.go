@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The column names ARE the contract with auth-limiter/src/sysmetrics/writer.rs, which names every
+// The column names ARE the contract with fareward/src/sysmetrics/writer.rs, which names every
 // one of them in its INSERT. Renaming a field here changes the derived column name and the daemon's
 // prepare fails at startup — and since the collector fails open, the only symptom in production
 // would be a table that quietly stops filling. This asserts the names at build time instead.
@@ -20,8 +20,8 @@ func TestServerMetricsColumnsMatchTheRustWriter(t *testing.T) {
 		"net_tx_rate",
 		"backend_mem_mb",
 		"backend_cpu_percent",
-		"server_utils_mem_mb",
-		"server_utils_cpu_percent",
+		"fareward_mem_mb",
+		"fareward_cpu_percent",
 		"search_mem_mb",
 		"search_cpu_percent",
 		"scylla_mem_mb",

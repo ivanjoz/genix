@@ -44,14 +44,14 @@ type ServerMetricsHour struct {
 	NetRxRate   []int16
 	NetTxRate   []int16
 
-	BackendMemMb          []int16
-	BackendCpuPercent     []int16
-	ServerUtilsMemMb      []int16
-	ServerUtilsCpuPercent []int16
-	SearchMemMb           []int16
-	SearchCpuPercent      []int16
-	ScyllaMemMb           []int16
-	ScyllaCpuPercent      []int16
+	BackendMemMb       []int16
+	BackendCpuPercent  []int16
+	FarewardMemMb      []int16
+	FarewardCpuPercent []int16
+	SearchMemMb        []int16
+	SearchCpuPercent   []int16
+	ScyllaMemMb        []int16
+	ScyllaCpuPercent   []int16
 
 	// Absolute slot (unix seconds / 5) of the newest sample here. This is the delta watermark: the
 	// client keeps the maximum across records and sends it back, and the handler returns strictly
@@ -71,7 +71,7 @@ type ServerMetricsResponse struct {
 	HoursIDsToRemove []int32 `json:"Hours_IDsToRemove,omitempty"`
 }
 
-// GetServerMetrics serves the Server Panel charts from the rows auth-limiter writes every five
+// GetServerMetrics serves the Server Panel charts from the rows fareward writes every five
 // seconds. It reads no CompanyID: server_metrics describes the machine, not a tenant, and the route
 // is restricted to the SaaS company in saasOnlyRoutes.
 func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
@@ -84,7 +84,7 @@ func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
 	// trailing single-watermark param it also sends. Either one answers the same question.
 	watermarkSlot := int64(core.Coalesce(req.GetQueryInt("Hours"), req.GetQueryInt("upd")))
 
-	// The real clock, not core.Now(): auth-limiter writes these rows with the real clock and has no
+	// The real clock, not core.Now(): fareward writes these rows with the real clock and has no
 	// historical-clock override, so a frozen backend clock would query a day nothing ever wrote.
 	nowUnixSeconds := time.Now().UTC().Unix()
 	newestSlot := nowUnixSeconds / coreTypes.ServerMetricSlotSeconds
@@ -176,8 +176,8 @@ func groupServerMetricsByHour(rows []coreTypes.ServerMetric) []ServerMetricsHour
 		bucket.NetTxRate = append(bucket.NetTxRate, row.NetTxRate)
 		bucket.BackendMemMb = append(bucket.BackendMemMb, row.BackendMemMb)
 		bucket.BackendCpuPercent = append(bucket.BackendCpuPercent, row.BackendCpuPercent)
-		bucket.ServerUtilsMemMb = append(bucket.ServerUtilsMemMb, row.ServerUtilsMemMb)
-		bucket.ServerUtilsCpuPercent = append(bucket.ServerUtilsCpuPercent, row.ServerUtilsCpuPercent)
+		bucket.FarewardMemMb = append(bucket.FarewardMemMb, row.FarewardMemMb)
+		bucket.FarewardCpuPercent = append(bucket.FarewardCpuPercent, row.FarewardCpuPercent)
 		bucket.SearchMemMb = append(bucket.SearchMemMb, row.SearchMemMb)
 		bucket.SearchCpuPercent = append(bucket.SearchCpuPercent, row.SearchCpuPercent)
 		bucket.ScyllaMemMb = append(bucket.ScyllaMemMb, row.ScyllaMemMb)

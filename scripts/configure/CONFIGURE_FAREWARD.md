@@ -1,6 +1,6 @@
-# Auth Limiter Deployment (`configure_auth_limiter.py`)
+# Fareward Deployment (`configure_fareward.py`)
 
-Installs `auth-limiter/` on **one** host. The systemd service always provides the raw-TCP rate
+Installs `fareward/` on **one** host. The systemd service always provides the raw-TCP rate
 limiter and lock service. Its public SSE Nginx vhost is installed only for a Lambda deployment.
 
 The public entrypoint selects whether to compile (`37`) or use the latest verified release (`38`):
@@ -17,7 +17,7 @@ With the unified selection `238`, choosing Backend mode `1` or `2` means self-ho
 The dispatcher passes `--service-only`: `sse_bridge.url` is not required and Nginx is not touched,
 because that backend serves `/agent/stream` itself.
 
-Selecting Auth Limiter **on its own** (`37`, `38`) is the case the dispatcher has to work out, and
+Selecting Fareward **on its own** (`37`, `38`) is the case the dispatcher has to work out, and
 it does so by looking for `/etc/systemd/system/genix.service`.
 
 Finding it settles the question outright and **nothing is asked**: a local backend serves
@@ -27,26 +27,26 @@ VPS serving its own stream — so that is the one case that prompts, defaulting 
 default keeps a missing `sse_bridge.url` an install-time error with the key name, rather than
 quietly producing a Lambda companion that cannot do the one job it was installed for.
 
-This used to demand `sse_bridge.url` on *every* auth-limiter-only run, which failed the install on
+This used to demand `sse_bridge.url` on *every* fareward-only run, which failed the install on
 hosts that already served `/agent/stream` themselves.
 
 Must be run as `root`; the service itself runs as a non-root user. Endpoints and protocol:
-[`../../auth-limiter/README.md`](../../auth-limiter/README.md). Design of the two halves:
-[`../../auth-limiter/PLAN.md`](../../auth-limiter/PLAN.md) (rate limiter); the bridge half is
+[`../../fareward/README.md`](../../fareward/README.md). Design of the two halves:
+[`../../fareward/PLAN.md`](../../fareward/PLAN.md) (rate limiter); the bridge half is
 covered by the README above.
 
 ---
 
 ## 🧩 One binary, two transports
 
-`auth-limiter` hosts everything in one process:
+`fareward` hosts everything in one process:
 
 | Transport | Port | Exposure | Nginx vhost |
 | --------- | ---- | -------- | ----------- |
-| Raw TCP — credit rate limiter and lock service, told apart by the frame's opcode | `auth_limiter.port` (default `14013`) | Loopback, or the whole internet with `auth_limiter.public = true`. HMAC-authenticated but **not encrypted**. | No — never proxied. |
+| Raw TCP — credit rate limiter and lock service, told apart by the frame's opcode | `fareward.port` (default `14013`) | Loopback, or the whole internet with `fareward.public = true`. HMAC-authenticated but **not encrypted**. | No — never proxied. |
 | SSE bridge | `sse_bridge.port` (default `14012`) | HTTP, must be reachable by browsers. | Yes — TLS + HTTP/3, no buffering. |
 
-`[auth_limiter]` is its own section, not `rate_limit.address`: one port serves every raw-TCP
+`[fareward]` is its own section, not `rate_limit.address`: one port serves every raw-TCP
 operation, so it belongs to the process rather than to one service inside it.
 
 The bind address is **derived from `public`** (`0.0.0.0` or `127.0.0.1`) and never taken from
@@ -77,12 +77,12 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 | `secret_phrase` | yes | Verifying the browser's session token. Must equal the backend's value. |
 | `internal_apikey` | yes | Authenticating the backend's calls: the bridge's `X-Bridge-Auth` header and the rate limiter's TCP frames. Must equal the backend's value. |
 | `sse_bridge.url` | Lambda only | Its hostname becomes `server_name`, the config file name, and the `/etc/letsencrypt/live/` directory that is looked up. Not read in VPS service-only mode. |
-| `sse_bridge.port` | no | Defaults to **14012** (`DEFAULT_BRIDGE_PORT` in `auth-limiter/src/config.rs`). |
+| `sse_bridge.port` | no | Defaults to **14012** (`DEFAULT_BRIDGE_PORT` in `fareward/src/config.rs`). |
 | `sse_bridge.verbose` | no | `true` logs every delivered message. |
-| `auth_limiter.port` | no | Raw-TCP listen port. Defaults to **14013** (`DEFAULT_LISTEN_PORT` in `auth-limiter/src/config.rs`). |
-| `auth_limiter.public` | no | `true` binds `0.0.0.0`, absent or `false` binds `127.0.0.1`. |
-| `auth_limiter.host` | no | Read by the **backend**, not by the daemon: the address it dials. Ignored when `public = false`, where loopback is the only thing that can work. |
-| `rate_limit.*` | filled in | Quota policy; see `auth-limiter/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
+| `fareward.port` | no | Raw-TCP listen port. Defaults to **14013** (`DEFAULT_LISTEN_PORT` in `fareward/src/config.rs`). |
+| `fareward.public` | no | `true` binds `0.0.0.0`, absent or `false` binds `127.0.0.1`. |
+| `fareward.host` | no | Read by the **backend**, not by the daemon: the address it dials. Ignored when `public = false`, where loopback is the only thing that can work. |
+| `rate_limit.*` | filled in | Quota policy; see `fareward/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
 | `db.*` | yes | Where usage snapshots are persisted. |
 
 - **The two secrets are never prompted for.** They are root-level keys that initial project
@@ -112,9 +112,9 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 
 | Unit | Role |
 | ---- | ---- |
-| `auth-limiter.service` | The process, running as `ubuntu` (or the non-root `SUDO_USER`). |
-| `auth-limiter-restart.path` | Watches `/usr/local/bin/genix/auth-limiter` for changes. |
-| `auth-limiter-restart.service` | Root helper the path unit triggers to restart the service. |
+| `fareward.service` | The process, running as `ubuntu` (or the non-root `SUDO_USER`). |
+| `fareward-restart.path` | Watches `/usr/local/bin/genix/fareward` for changes. |
+| `fareward-restart.service` | Root helper the path unit triggers to restart the service. |
 
 ```ini
 [Service]
@@ -123,7 +123,7 @@ User=ubuntu
 WorkingDirectory=/usr/local/bin/genix
 Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml
 Environment=SSE_BRIDGE_PORT=14012
-ExecStart=/usr/local/bin/genix/auth-limiter
+ExecStart=/usr/local/bin/genix/fareward
 Restart=always
 RestartSec=3
 ```
@@ -134,13 +134,13 @@ Neither secret is exported in the unit: files under `/etc/systemd/system` are wo
 
 ### Where the binary comes from
 
-1. **Option `7`** requires `auth-limiter/` and compiles it with `cargo build --release` into
-   `auth-limiter/target/release/auth-limiter`, as the repository owner so that account's
+1. **Option `7`** requires `fareward/` and compiles it with `cargo build --release` into
+   `fareward/target/release/fareward`, as the repository owner so that account's
    Cargo registry and `target/` cache are reused (and nothing root-owned is left in the clone).
    `cargo` is found on `PATH`, then at `~<owner>/.cargo/bin/cargo`, then
    `/usr/local/cargo/bin/cargo`; `CARGO_BINARY=/path/to/cargo` overrides all of it (`sudo`
    strips `~/.cargo/bin` from `PATH`).
-2. **Option `8`** downloads `auth-limiter_linux_<arch>` and `SHA256SUMS` from the latest
+2. **Option `8`** downloads `fareward_linux_<arch>` and `SHA256SUMS` from the latest
    public release, verifies the checksum, and deploys that `tmp/` asset ahead of any older
    installed binary. Cargo is never invoked in this mode, even when source is present.
 3. Missing source under option `7`, or a missing/invalid release under option `8`, stops the run.
@@ -151,7 +151,7 @@ The unified entrypoint performs the latest download and verification automatical
 sudo python3 scripts/configure.py 38
 ```
 
-It is copied to `.auth-limiter.staged` and renamed into place, so the running service
+It is copied to `.fareward.staged` and renamed into place, so the running service
 never reads a half-written file, and later deploys that overwrite it restart the service by
 themselves through the path watcher.
 
@@ -181,8 +181,8 @@ that and omits the option instead of failing `nginx -t`.
 ## ✅ Verifying
 
 ```bash
-systemctl status auth-limiter
-journalctl -u auth-limiter -n 50
+systemctl status fareward
+journalctl -u fareward -n 50
 
 # The bridge, locally and through Nginx.
 curl -s http://127.0.0.1:14012/health
@@ -192,7 +192,7 @@ curl -s https://<sse_bridge.url host>/health   # {"Ok":true,"Channels":0,"Uptime
 ss -lntp | grep 14013
 ```
 
-`RUST_LOG=auth_limiter=debug` in the unit turns on per-request diagnostics for both
+`RUST_LOG=fareward=debug` in the unit turns on per-request diagnostics for both
 services.
 
 When the daemon does not come up, the script reads the journal and names the cause

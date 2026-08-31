@@ -262,7 +262,7 @@ files:
     supports: [rules, troubleshooting]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
+    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
     supports: [rules, troubleshooting]
   - path: frontend/routes/sales/sale_order_create/+page.svelte
     role: user-interface

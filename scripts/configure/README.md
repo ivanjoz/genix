@@ -12,31 +12,31 @@ The selection combines component digits with exactly one binary-source digit:
 | --- | --- |
 | `1` | Database host: ScyllaDB, GenixSearch and Qdrant |
 | `2` | Backend service and/or its Nginx proxy |
-| `3` | Auth Limiter service and SSE bridge proxy |
+| `3` | Fareward service and SSE bridge proxy |
 | `7` | Compile selected Genix services from source |
 | `8` | Download selected Genix services from the latest public GitHub release |
 
-For example, `238` configures Backend and Auth Limiter from precompiled binaries. The same
+For example, `238` configures Backend and Fareward from precompiled binaries. The same
 selection can be passed non-interactively as `sudo python3 scripts/configure.py 238`; Backend
 still asks whether this host owns systemd, Nginx, or both.
 
-When Backend mode `1` or `2` places the backend systemd service on this host, Auth Limiter is
+When Backend mode `1` or `2` places the backend systemd service on this host, Fareward is
 installed in VPS service-only mode: the backend serves `/agent/stream` itself, so
-`sse_bridge.url` is optional and no Auth Limiter Nginx vhost is generated. A standalone Server
+`sse_bridge.url` is optional and no Fareward Nginx vhost is generated. A standalone Server
 Utils selection (`38`) remains the Lambda companion mode and requires `sse_bridge.url` for its
 public SSE bridge.
 
 Option `8` maps `x86_64` to the `amd64` assets and `aarch64`/`arm64` to the `arm64` assets. It
 downloads `SHA256SUMS` and the required files from the release that publishes each component —
-the backend from `https://github.com/ivanjoz/genix/releases/latest/download`, Auth Limiter from
-`https://github.com/ivanjoz/auth-limiter/releases/latest/download` — verifies each SHA-256
+the backend from `https://github.com/ivanjoz/genix/releases/latest/download`, Fareward from
+`https://github.com/ivanjoz/fareward/releases/latest/download` — verifies each SHA-256
 checksum against the manifest of the release it came from, and
 only then invokes the nested installer. A matching asset already under `tmp/` is reused after
 verification, so rerunning configuration does not download the large binaries again. A verified
 latest asset takes precedence over an older installed binary. Option `7` requires the
 corresponding source tree and never falls back to a binary.
 
-The `7`/`8` choice applies only to Backend and Auth Limiter. Database configuration already owns
+The `7`/`8` choice applies only to Backend and Fareward. Database configuration already owns
 the package/release strategy for ScyllaDB, GenixSearch and Qdrant, so the selected digit is ignored
 when component `1` runs.
 
@@ -44,4 +44,4 @@ Detailed component behavior:
 
 - [Database](CONFIGURE_DB.md)
 - [Backend Service](CONFIGURE_SERVER.md)
-- [Auth Limiter](CONFIGURE_AUTH_LIMITER.md)
+- [Fareward](CONFIGURE_FAREWARD.md)

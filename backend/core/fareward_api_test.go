@@ -59,7 +59,7 @@ func TestClientIPKeyIsStableAndPrefixedForIPv6(t *testing.T) {
 	}
 }
 
-func TestAuthLimiterAddressDerivesTheHostFromPublic(t *testing.T) {
+func TestFarewardAddressDerivesTheHostFromPublic(t *testing.T) {
 	checks := []struct {
 		name   string
 		host   string
@@ -72,13 +72,13 @@ func TestAuthLimiterAddressDerivesTheHostFromPublic(t *testing.T) {
 		{"private ignores a stale host", "150.136.42.240", 14013, false, "127.0.0.1:14013"},
 		{"private without a host", "", 14013, false, "127.0.0.1:14013"},
 		{"public dials the host", "150.136.42.240", 14013, true, "150.136.42.240:14013"},
-		// Empty means unconfigured, which ConfigureAuthLimiter refuses at startup instead of
+		// Empty means unconfigured, which ConfigureFareward refuses at startup instead of
 		// letting the first lock fail at request time.
 		{"public without a host", "  ", 14013, true, ""},
 		{"an omitted port falls back", "10.0.1.65", 0, true, "10.0.1.65:14013"},
 	}
 	for _, check := range checks {
-		if got := makeAuthLimiterAddress(check.host, check.port, check.public); got != check.want {
+		if got := makeFarewardAddress(check.host, check.port, check.public); got != check.want {
 			t.Fatalf("%s: got %q; want %q", check.name, got, check.want)
 		}
 	}

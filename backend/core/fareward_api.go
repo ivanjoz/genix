@@ -1,75 +1,81 @@
 package core
 
 import (
-	auth_limiter "app/core/auth_limiter"
 	"context"
 	"errors"
 	"fmt"
+	fareward "github.com/ivanjoz/fareward/go"
 	"strings"
 )
 
-// The seam between core and the auth-limiter client.
+// The seam between core and the fareward client.
 //
-// The implementation lives in app/core/auth_limiter because it must not import core: core needs
-// CreditLimitExceeded for MakeCreditRateLimitResponse below, and that would be an import cycle.
-// The dependency therefore runs core -> auth_limiter only, and core.Log is pushed in from main.
-// Same shape as text_search, which cannot import core either.
+// The client is no longer part of this module: it lives in the daemon's own repository as
+// github.com/ivanjoz/fareward/go, replaced into the fareward submodule, so the wire protocol and
+// its reference implementation sit in one place and a non-Genix backend can depend on the client
+// without depending on this repository. It imports only the standard library.
+//
+// That it is external also settles what used to be an internal rule. The client must not import
+// core — core needs CreditLimitExceeded for MakeCreditRateLimitResponse below, and that would be
+// an import cycle — so the dependency runs core -> fareward only and core.Log is pushed in from
+// main. A module boundary now enforces what a convention used to. Same shape as text_search,
+// which cannot import core either.
 //
 // The re-exports keep call sites saying core.X like everything else in this backend. Most are
-// aliases rather than wrappers: core.LockOptions and auth_limiter.LockOptions are the same type,
+// aliases rather than wrappers: core.LockOptions and fareward.LockOptions are the same type,
 // and core.ErrLockBusy is the same sentinel, so errors.Is and type assertions work across both
 // names. AcquireLock is the exception, and only because it has work to do on this side of the
 // seam — the LockAction namespace and the HandlerResponse mapping both live here.
 
 type (
-	Lock                = auth_limiter.Lock
-	LockOptions         = auth_limiter.LockOptions
-	CreditLimitExceeded = auth_limiter.CreditLimitExceeded
-	AccessDenied        = auth_limiter.AccessDenied
-	BudgetOperation     = auth_limiter.BudgetOperation
-	AuthLimiterClient   = auth_limiter.AuthLimiterClient
-	RequestLogRecord    = auth_limiter.RequestLogRecord
-	RequestLogEntry     = auth_limiter.RequestLogError
+	Lock                = fareward.Lock
+	LockOptions         = fareward.LockOptions
+	CreditLimitExceeded = fareward.CreditLimitExceeded
+	AccessDenied        = fareward.AccessDenied
+	BudgetOperation     = fareward.BudgetOperation
+	FarewardClient      = fareward.FarewardClient
+	RequestLogRecord    = fareward.RequestLogRecord
+	RequestLogEntry     = fareward.RequestLogError
 )
 
 const (
 	// InvalidateAllCompanyUsers drops every cached user of a company instead of one.
-	InvalidateAllCompanyUsers = auth_limiter.InvalidateAllCompanyUsers
+	InvalidateAllCompanyUsers = fareward.InvalidateAllCompanyUsers
 
 	// MaxRequiredAccess bounds how many accesses one route may map to. The gate refuses to encode
 	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access_list.yml inside it.
-	MaxRequiredAccess = auth_limiter.MaxRequiredAccess
+	MaxRequiredAccess = fareward.MaxRequiredAccess
 
-	BudgetSetDaily        = auth_limiter.BudgetSetDaily
-	BudgetSetCurrent      = auth_limiter.BudgetSetCurrent
-	BudgetIncreaseCurrent = auth_limiter.BudgetIncreaseCurrent
+	BudgetSetDaily        = fareward.BudgetSetDaily
+	BudgetSetCurrent      = fareward.BudgetSetCurrent
+	BudgetIncreaseCurrent = fareward.BudgetIncreaseCurrent
 )
 
 var (
 	// ErrLockBusy is a real answer: the key is taken and the queue is full, or our patience ran
 	// out. ErrLockUnavailable is the absence of an answer, which each call site judges for
 	// itself — sign-up refuses, most others carry on unlocked.
-	ErrLockBusy                 = auth_limiter.ErrLockBusy
-	ErrLockUnavailable          = auth_limiter.ErrLockUnavailable
-	ErrCreditLimiterMissing     = auth_limiter.ErrCreditLimiterMissing
-	ErrBudgetMonthNotConfigured = auth_limiter.ErrBudgetMonthNotConfigured
-	ErrBudgetMutationOverflow   = auth_limiter.ErrBudgetMutationOverflow
+	ErrLockBusy                 = fareward.ErrLockBusy
+	ErrLockUnavailable          = fareward.ErrLockUnavailable
+	ErrCreditLimiterMissing     = fareward.ErrCreditLimiterMissing
+	ErrBudgetMonthNotConfigured = fareward.ErrBudgetMonthNotConfigured
+	ErrBudgetMutationOverflow   = fareward.ErrBudgetMutationOverflow
 
-	ConfigureAuthLimiter = auth_limiter.ConfigureAuthLimiter
+	ConfigureFareward = fareward.ConfigureFareward
 
-	SendRequestLog              = auth_limiter.SendRequestLog
-	InvalidateUserAccess        = auth_limiter.InvalidateUserAccess
-	ChargeAPIUsage              = auth_limiter.ChargeAPIUsage
-	ChargeAPICredits            = auth_limiter.ChargeAPICredits
-	ChargeAPIAccessOnly         = auth_limiter.ChargeAPIAccessOnly
-	APICPUBaseCredits           = auth_limiter.APICPUBaseCredits
-	IsAccessDeniedError         = auth_limiter.IsAccessDeniedError
-	ChargeInferenceUsage        = auth_limiter.ChargeInferenceUsage
-	WithCreditRateLimitIdentity = auth_limiter.WithCreditRateLimitIdentity
-	IsCreditRateLimitError      = auth_limiter.IsCreditRateLimitError
-	APICPUCredits               = auth_limiter.APICPUCredits
-	InferenceCredits            = auth_limiter.InferenceCredits
-	MutateCompanyCreditBudget   = auth_limiter.MutateCompanyCreditBudget
+	SendRequestLog              = fareward.SendRequestLog
+	InvalidateUserAccess        = fareward.InvalidateUserAccess
+	ChargeAPIUsage              = fareward.ChargeAPIUsage
+	ChargeAPICredits            = fareward.ChargeAPICredits
+	ChargeAPIAccessOnly         = fareward.ChargeAPIAccessOnly
+	APICPUBaseCredits           = fareward.APICPUBaseCredits
+	IsAccessDeniedError         = fareward.IsAccessDeniedError
+	ChargeInferenceUsage        = fareward.ChargeInferenceUsage
+	WithCreditRateLimitIdentity = fareward.WithCreditRateLimitIdentity
+	IsCreditRateLimitError      = fareward.IsCreditRateLimitError
+	APICPUCredits               = fareward.APICPUCredits
+	InferenceCredits            = fareward.InferenceCredits
+	MutateCompanyCreditBudget   = fareward.MutateCompanyCreditBudget
 )
 
 // LockError is every way AcquireLock can fail to hand back a lock. It exists so a handler can turn
@@ -89,7 +95,7 @@ func (lockErr *LockError) Unwrap() error { return lockErr.err }
 
 // Busy separates the two answers: the daemon refused us because the key is taken and the queue is
 // full, versus the daemon never answered at all.
-func (lockErr *LockError) Busy() bool { return errors.Is(lockErr.err, auth_limiter.ErrLockBusy) }
+func (lockErr *LockError) Busy() bool { return errors.Is(lockErr.err, fareward.ErrLockBusy) }
 
 // Response is the fail-closed mapping: a contended key is the caller's problem (429), a daemon we
 // cannot reach is ours (503), and neither runs the work the lock was protecting.
@@ -110,7 +116,7 @@ func (lockErr *LockError) Response(req *HandlerArgs) HandlerResponse {
 func AcquireLock(
 	ctx context.Context, action LockAction, identifier int64, maxWaiters uint8,
 ) (*Lock, *LockError) {
-	lock, err := auth_limiter.AcquireLock(ctx, uint16(action), identifier, maxWaiters)
+	lock, err := fareward.AcquireLock(ctx, uint16(action), identifier, maxWaiters)
 	if err != nil {
 		return nil, &LockError{err: err}
 	}
@@ -121,7 +127,7 @@ func AcquireLock(
 // header. It stays on this side of the seam because it is an HTTP concern: it takes HandlerArgs
 // and returns a HandlerResponse, neither of which the protocol package knows about.
 func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
-	var exceeded *auth_limiter.CreditLimitExceeded
+	var exceeded *fareward.CreditLimitExceeded
 	if errors.As(err, &exceeded) {
 		message := "Límite de créditos agotado."
 		if exceeded.Window == "month" {
@@ -142,7 +148,7 @@ func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
 // re-authenticating would achieve nothing. accessNames comes from the caller because the daemon
 // never sees them — it holds no copy of access_list.yml, deliberately.
 func (req *HandlerArgs) MakeAccessDeniedResponse(err error, accessNames []string) HandlerResponse {
-	var denied *auth_limiter.AccessDenied
+	var denied *fareward.AccessDenied
 	if !errors.As(err, &denied) {
 		Log("credit rate limiter unavailable during authorization::", err)
 		return req.MakeErrCode("El servicio de límites de crédito no está disponible.", 503)
