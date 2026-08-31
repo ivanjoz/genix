@@ -46,7 +46,7 @@ func TestEveryRouteFitsTheRequiredAccessSlots(t *testing.T) {
 }
 
 // The packed form is the one thing both processes must agree on byte for byte. Its Rust twin is
-// `packed` in server_utils/src/limiter/access.rs; the level occupies the low two bits and nothing
+// `packed` in auth-limiter/src/limiter/access.rs; the level occupies the low two bits and nothing
 // else, which is what makes `required | 0b11` the bucket ceiling over there.
 func TestAccesoNivelPacking(t *testing.T) {
 	checks := []struct {

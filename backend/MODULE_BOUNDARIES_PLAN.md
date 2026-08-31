@@ -24,7 +24,7 @@ Imports flow one way. A package may import its own layer's siblings only where n
 | Layer | Packages | May import |
 | --- | --- | --- |
 | **L0 Foundation** | `db`, `libs/*`, `genix-orm`, `facturago` | nothing from `app/` |
-| **L1 Core** | `core`, `core/types`, `core/server_utils` | L0 |
+| **L1 Core** | `core`, `core/types`, `core/auth-limiter` | L0 |
 | **L2 Contracts** | `<module>/types` | L0, L1, other `<module>/types` |
 | **L3 Infra** | `cloud` (`system` relocates to L0, §5.3) | L0–L2 |
 | **L4 Module bodies** | `accounting`, `agent`, `business`, `config`, `finance`, `invoicing`, `logistics`, `sales`, `security`, `webpage` | L0–L3 + own subpackages. **Never** another module body |

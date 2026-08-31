@@ -105,7 +105,7 @@ Independence only works with a closed feedback loop. Run the check that covers w
 | Moved code between modules | `cd scripts && go run . check_module_imports` |
 | Frontend | `cd frontend && bun run check` (svelte-kit sync + svelte-check) |
 | Frontend build | `cd frontend && bun run build` |
-| server_utils (Rust) | `cd server_utils && cargo build` / `cargo test` |
+| auth-limiter (Rust) | `cd auth-limiter && cargo build` / `cargo test` |
 | Real app behaviour | skill: `agent-browser` — drives the running app, reads the page, screenshots what renders |
 
 Operational scripts run through the dispatcher: `cd scripts && go run . <script_name>`. Deploys go through `./deploy.sh` (TUI). `app.sh` is deprecated.
@@ -122,7 +122,7 @@ backend/facturago/     git submodule (github.com/ivanjoz/facturago) — separate
 frontend/         SvelteKit app. routes/ core/ services/ domain-components/ libs/ styles/
 frontend/packages/genix-ui/  git submodule (github.com/ivanjoz/genix-ui) — separate repo
 frontend/webpage/ Independent public storefront app (own build)
-server_utils/     git submodule (github.com/ivanjoz/auth-limiter) — separate repo:
+auth-limiter/     git submodule (github.com/ivanjoz/auth-limiter) — separate repo:
                   Rust daemon with credit limiter, lock service, request log, SSE bridge
 scripts/          Go script dispatcher + deployer TUI + configure.py
 cloud/  db-backup/  webpage-renderer/   standalone Go/JS services
@@ -130,7 +130,7 @@ docs/             Cross-cutting design docs (SECURITY_PLAN, EXTRA_CREDITS_PLAN, 
 config.toml       Local config (not committed). config.example.toml is the template.
 ```
 
-**Submodules:** `genix-orm`, `genix-ui`, `facturago` and `server_utils` (the `auth-limiter` repo) are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. For day-to-day work no pointer bump is needed in the parent repo: it follows the submodule's `main`, and builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI, `cargo build` in place for `server_utils`), so what is on disk is what compiles. Tagged releases are the exception: `release-binaries.yml` builds the commit the tag recorded, so a `server_utils` change only ships once the parent repo commits the new pointer.
+**Submodules:** `genix-orm`, `genix-ui`, `facturago` and `auth-limiter` are separate git repos, all tracking `main` (see `.gitmodules`). Edits there must be committed **and pushed inside the submodule** — a root-level commit does not publish them. For day-to-day work no pointer bump is needed in the parent repo: it follows the submodule's `main`, and builds read the checked-out files directly (`go mod replace` for the ORM and facturago, a vite alias for the UI, `cargo build` in place for `auth-limiter`), so what is on disk is what compiles. Tagged releases are the exception: `release-binaries.yml` builds the commit the tag recorded, so an `auth-limiter` change only ships once the parent repo commits the new pointer.
 
 `facturago` is **public**. It implements SUNAT and names no consumer: no ERP identifiers, no tenancy, no business rules from this repo. A leak there is a leak in public.
 
@@ -148,9 +148,9 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - `backend/genix-orm/db/` — driver-agnostic layer: schema, columns, predicates, accessors, the `Executor` contract
 - `backend/genix-orm/scylla/ORM_INTERNALS.md` — driver internals: memory model, reflection engine, query optimization
 
-**server_utils (Rust)** — one daemon: credit limiter, lock service, request log, SSE bridge. Rarely changes; read only when working on it.
-- `server_utils/README.md` — the entry point. The `*_WALKTHROUGH.md` files explain the limiter and lock service end-to-end. `docs/SECURITY_PLAN.md` and `docs/EXTRA_CREDITS_PLAN.md` cover authorization and the extra-credit pool; `scripts/configure/CONFIGURE_SERVER_UTILS.md` covers deployment
-- Go client: `backend/core/server_utils/`, re-exported via `backend/core/server_utils_api.go`. Authorization policy stays in Go.
+**auth-limiter (Rust)** — one daemon: credit limiter, lock service, request log, SSE bridge. Rarely changes; read only when working on it.
+- `auth-limiter/README.md` — the entry point. The `*_WALKTHROUGH.md` files explain the limiter and lock service end-to-end. `docs/SECURITY_PLAN.md` and `docs/EXTRA_CREDITS_PLAN.md` cover authorization and the extra-credit pool; `scripts/configure/CONFIGURE_AUTH_LIMITER.md` covers deployment
+- Go client: `backend/core/auth_limiter/`, re-exported via `backend/core/auth_limiter_api.go`. Authorization policy stays in Go.
 
 **Frontend**
 - `frontend/FRONTEND.md` — monorepo architecture, directory structure, package system, dev workflow

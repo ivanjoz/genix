@@ -35,7 +35,7 @@ func TestMakeCreditRouteNamesIsSortedAndSkipsTheUnmatchedRoute(t *testing.T) {
 }
 
 // The frames are written by the Rust credit daemon and read here, so the two have to agree on where
-// a day starts. DAY_ZONE_OFFSET_SECONDS in server_utils/src/limiter/time_frame.rs is the other half
+// a day starts. DAY_ZONE_OFFSET_SECONDS in auth-limiter/src/limiter/time_frame.rs is the other half
 // of this constant; if one moves without the other, the reader queries frames the writer never
 // wrote and every report silently comes back empty.
 func TestCurrentDailyTimeFrameFollowsTheLimaDayNotTheHostZone(t *testing.T) {

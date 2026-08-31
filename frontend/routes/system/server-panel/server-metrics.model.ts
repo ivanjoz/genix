@@ -80,7 +80,7 @@ const makeEmptySeries = (): IServerMetricsSeries => ({
  * of the chart is to make that gap visible.
  *
  * Points are reduced by MAXIMUM. Every stored value is already the peak of its five seconds
- * (server_utils/PLAN_SERVER_METRICS.md), so max-of-peaks is still a peak, while an average would
+ * (auth-limiter/src/sysmetrics/collector.rs), so max-of-peaks is still a peak, while an average would
  * invent a number that never happened and hide the spikes the table exists to record.
  */
 export const buildServerMetricsSeries = (

@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func MutateCompanyCreditBudget(
 	operation BudgetOperation,
 	cpuCredits, inferenceCredits uint64,
 ) error {
-	client := serverUtils()
+	client := authLimiter()
 	if client == nil {
 		return ErrCreditLimiterMissing
 	}
@@ -49,7 +49,7 @@ func MutateCompanyCreditBudget(
 	case 2:
 		return ErrBudgetMutationOverflow
 	default:
-		return fmt.Errorf("%w: budget mutation returned status %d", ErrServerUtilsUnavailable, reply.status)
+		return fmt.Errorf("%w: budget mutation returned status %d", ErrAuthLimiterUnavailable, reply.status)
 	}
 }
 

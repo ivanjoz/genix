@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"encoding/binary"
@@ -21,7 +21,7 @@ func sampleRecord() RequestLogRecord {
 	}
 }
 
-// These offsets are the wire contract with server_utils/src/reqlog/protocol.rs. Nothing at runtime
+// These offsets are the wire contract with auth-limiter/src/reqlog/protocol.rs. Nothing at runtime
 // notices when they drift — the daemon would simply parse different values out of the same bytes
 // and write rows that look plausible and are wrong.
 func TestEncodeRequestLogWireOffsets(t *testing.T) {
@@ -159,13 +159,13 @@ func TestEncodeRequestLogKeepsRunesWhole(t *testing.T) {
 // then the tag. The length is inside the signed bytes, so a peer cannot make the daemon buffer a
 // different amount than the one that was authenticated.
 func TestLengthPrefixedFrameLayout(t *testing.T) {
-	nonce := [serverUtilsNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
+	nonce := [authLimiterNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	payload, err := encodeRequestLog(sampleRecord())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	frame := buildServerUtilsLengthPrefixedFrame([]byte("test-secret"), &nonce, 0, opcodeLogRequest, payload)
+	frame := buildAuthLimiterLengthPrefixedFrame([]byte("test-secret"), &nonce, 0, opcodeLogRequest, payload)
 
 	if frame[0] != opcodeLogRequest {
 		t.Fatalf("opcode = %#x, expected %#x", frame[0], opcodeLogRequest)
@@ -173,14 +173,14 @@ func TestLengthPrefixedFrameLayout(t *testing.T) {
 	if declared := int(binary.BigEndian.Uint16(frame[1:3])); declared != len(payload) {
 		t.Fatalf("declared length %d does not match the %d-byte payload", declared, len(payload))
 	}
-	if len(frame) != 1+2+len(payload)+serverUtilsAuthTagSize {
+	if len(frame) != 1+2+len(payload)+authLimiterAuthTagSize {
 		t.Fatalf("frame is %d bytes; opcode + length + payload + tag is %d",
-			len(frame), 1+2+len(payload)+serverUtilsAuthTagSize)
+			len(frame), 1+2+len(payload)+authLimiterAuthTagSize)
 	}
 
-	signed := frame[:len(frame)-serverUtilsAuthTagSize]
-	expected := serverUtilsAuthTag([]byte("test-secret"), &nonce, 0, signed)
-	if string(frame[len(frame)-serverUtilsAuthTagSize:]) != string(expected) {
+	signed := frame[:len(frame)-authLimiterAuthTagSize]
+	expected := authLimiterAuthTag([]byte("test-secret"), &nonce, 0, signed)
+	if string(frame[len(frame)-authLimiterAuthTagSize:]) != string(expected) {
 		t.Fatal("the tag does not cover the opcode, length and payload")
 	}
 }

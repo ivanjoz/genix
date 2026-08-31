@@ -33,7 +33,7 @@ GET. Modo degradado de sólo lectura en vez de un 429 en toda la aplicación.
 
 1. **`company_extra_credits_24h` no lo lee nadie.** La clave sólo aparece en `config.toml`.
 2. **Las cuatro claves `_24h` que ya estaban tampoco.** `load_scope_limits`
-   (`server_utils/src/config.rs:420`) lee únicamente `_10s` y `_1h`. El techo diario real sale de la
+   (`auth-limiter/src/config.rs:420`) lee únicamente `_10s` y `_1h`. El techo diario real sale de la
    tabla `company_credit_budget`. Detalle importante: `config.toml` está en `.gitignore`, y
    `config.example.toml` —el que sí está en el repo— **no tiene ninguna clave `_24h`**. Así que no
    hay nada deprecado que borrar del repositorio: son cuatro líneas muertas en tu archivo local.

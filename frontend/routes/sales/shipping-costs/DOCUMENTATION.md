@@ -235,7 +235,7 @@ files:
     supports: [rules]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:2474ede3472c063c1e28ea584cd6265dc4b7b8437231cfa94aa5671e66b62330
+    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
     supports: [rules]
   - path: frontend/routes/security/access-profiles/access-profiles.svelte.ts
     role: shared-domain

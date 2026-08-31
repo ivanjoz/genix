@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 //
 // Unanswered, like the request log, and for the same kind of reason — the TTL already bounds the
 // damage if the frame is lost, so a user save must not wait on the daemon to acknowledge it. The
-// payload layout is mirrored in server_utils/src/limiter/access.rs.
+// payload layout is mirrored in auth-limiter/src/limiter/access.rs.
 
 const invalidateAccessPayloadSize = 6
 
@@ -25,7 +25,7 @@ const invalidateAccessPayloadSize = 6
 // free to mean "every cached user of this company".
 const InvalidateAllCompanyUsers int32 = 0
 
-var ErrAccessInvalidationNotConfigured = errors.New("server utils is not configured")
+var ErrAccessInvalidationNotConfigured = errors.New("auth-limiter is not configured")
 
 // InvalidateUserAccess tells the daemon to re-read one user's grants, or every user of a company.
 //
@@ -33,7 +33,7 @@ var ErrAccessInvalidationNotConfigured = errors.New("server utils is not configu
 // succeeded, and the TTL is the fallback. A caller that treated this as fatal would roll back a
 // correct user edit because a cache hint did not land.
 func InvalidateUserAccess(ctx context.Context, companyID, userID int32) error {
-	client := serverUtils()
+	client := authLimiter()
 	if client == nil {
 		return ErrAccessInvalidationNotConfigured
 	}

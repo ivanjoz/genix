@@ -43,7 +43,7 @@ import ipaddress
 import shlex
 
 from toml_config import get_config_value, read_config, set_config_values
-# Vive en su propio modulo porque configure_server_utils.py abre su puerto TCP con lo mismo, y
+# Vive en su propio modulo porque configure_auth_limiter.py abre su puerto TCP con lo mismo, y
 # ese script no tiene por que importar el instalador de ScyllaDB para pedir un socket.
 from firewall_ports import ensure_tcp_port_open
 
@@ -1461,7 +1461,7 @@ def wait_for_qdrant_readiness(http_port, timeout_seconds=60):
 def configure_qdrant(credentials_data, broadcast_ip_address, release_version):
     http_port, grpc_port, is_public, qdrant_api_key = resolve_qdrant_settings(credentials_data)
     qdrant_host, was_host_generated = resolve_qdrant_host(credentials_data, broadcast_ip_address)
-    # public decide el bind, igual que en [server_utils]: expuesto o solo loopback.
+    # public decide el bind, igual que en [auth_limiter]: expuesto o solo loopback.
     bind_address = "0.0.0.0" if is_public else "127.0.0.1"
 
     with tempfile.TemporaryDirectory(prefix="qdrant-release-") as download_directory_name:

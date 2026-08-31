@@ -48,7 +48,7 @@ func (e RequestErrorTable) GetSchema() db.TableSchema {
 // masked to stay positive because the column is a signed int32 and a negative ID reads as a bug
 // every time someone sees one.
 //
-// Mirrored in server_utils/src/reqlog/protocol.rs — though the daemon only ever receives this
+// Mirrored in auth-limiter/src/reqlog/protocol.rs — though the daemon only ever receives this
 // value, it never recomputes it, so the Go side is the sole authority on what a code line hashes
 // to. The Rust test vectors exist to catch the day that stops being true.
 func MakeRequestErrorID(codeLine string) int32 {

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The column names ARE the contract with server_utils/src/sysmetrics/writer.rs, which names every
+// The column names ARE the contract with auth-limiter/src/sysmetrics/writer.rs, which names every
 // one of them in its INSERT. Renaming a field here changes the derived column name and the daemon's
 // prepare fails at startup — and since the collector fails open, the only symptom in production
 // would be a table that quietly stops filling. This asserts the names at build time instead.

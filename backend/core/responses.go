@@ -88,7 +88,7 @@ func (req *HandlerArgs) ClientIPKey() (int64, bool) {
 
 // MakeAccesoNivelPacked empaqueta acceso + nivel en el uint16 que la columna accesos_computed
 // guarda y que el frame del limitador transporta. Es el único codificador que los dos procesos
-// comparten: server_utils/src/limiter/access.rs decodifica exactamente esto.
+// comparten: auth-limiter/src/limiter/access.rs decodifica exactamente esto.
 func MakeAccesoNivelPacked(accesoID int32, nivel uint8) uint16 {
 	if nivel < 1 || nivel > 4 {
 		nivel = 1

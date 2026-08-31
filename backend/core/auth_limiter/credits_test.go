@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"bytes"
@@ -98,7 +98,7 @@ func TestAccessVerdictDecoding(t *testing.T) {
 
 	// A daemon that ignored the slots, and one that answered something invented.
 	for _, detail := range []uint16{0, 5, 65535} {
-		if err := decodeAccessResponse(detail, true); !errors.Is(err, ErrServerUtilsUnavailable) {
+		if err := decodeAccessResponse(detail, true); !errors.Is(err, ErrAuthLimiterUnavailable) {
 			t.Fatalf("detail %d decoded as %v; want unavailability", detail, err)
 		}
 	}
@@ -224,18 +224,18 @@ func TestMonthlyCreditLimitResponseUsesTheReservedWindow(t *testing.T) {
 }
 
 // The whole signed charge frame, pinned against matches_the_go_client_vectors in
-// server_utils/src/service/auth.rs. The payload test above proves the fields sit at the right
+// auth-limiter/src/service/auth.rs. The payload test above proves the fields sit at the right
 // offsets; this proves the twenty bytes are also what gets signed, which is what a widened payload
 // could quietly get wrong — the tag would still verify on both ends while covering different bytes.
 func TestChargeFrameMatchesTheRustAuthVector(t *testing.T) {
 	secret := []byte("test-secret")
-	nonce := [serverUtilsNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
+	nonce := [authLimiterNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
 	payload, err := encodeCharge(0x123456, 42, 103, 300, 25, []uint16{0x0139, 0x008B}, false)
 	if err != nil {
 		t.Fatalf("encodeCharge refused a valid charge: %v", err)
 	}
 
-	frame := buildServerUtilsFrame(secret, &nonce, 0, opcodeChargeCredits, payload)
+	frame := buildAuthLimiterFrame(secret, &nonce, 0, opcodeChargeCredits, payload)
 	want := []byte{
 		0x01, 0x12, 0x34, 0x56, 0x00, 0x00, 0x2A, 0x00, 0x67, 0x01, 0x2C, 0x00, 0x19, 0x01,
 		0x39, 0x00, 0x8B, 0x00, 0x00, 0x00, 0x00,
@@ -245,10 +245,10 @@ func TestChargeFrameMatchesTheRustAuthVector(t *testing.T) {
 		t.Fatalf("charge frame = % X; want % X", frame, want)
 	}
 	// The tag is bound to the sequence, so frame two of a connection differs in its last eight bytes.
-	next := buildServerUtilsFrame(secret, &nonce, 1, opcodeChargeCredits, payload)
+	next := buildAuthLimiterFrame(secret, &nonce, 1, opcodeChargeCredits, payload)
 	wantTag := []byte{0xA9, 0x87, 0x64, 0x7C, 0xD4, 0x89, 0x26, 0xAD}
-	if !bytes.Equal(next[len(next)-serverUtilsAuthTagSize:], wantTag) {
-		t.Fatalf("sequence 1 tag = % X; want % X", next[len(next)-serverUtilsAuthTagSize:], wantTag)
+	if !bytes.Equal(next[len(next)-authLimiterAuthTagSize:], wantTag) {
+		t.Fatalf("sequence 1 tag = % X; want % X", next[len(next)-authLimiterAuthTagSize:], wantTag)
 	}
 }
 
@@ -258,8 +258,8 @@ func TestAccessInvalidationFrameMatchesTheRustAuthVector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encodeAccessInvalidation refused a valid target: %v", err)
 	}
-	nonce := [serverUtilsNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
-	frame := buildServerUtilsFrame([]byte("test-secret"), &nonce, 0, opcodeInvalidateUserAccess, payload)
+	nonce := [authLimiterNonceSize]byte{1, 2, 3, 4, 5, 6, 7, 8}
+	frame := buildAuthLimiterFrame([]byte("test-secret"), &nonce, 0, opcodeInvalidateUserAccess, payload)
 	want := []byte{
 		0x06, 0x00, 0x00, 0x07, 0x00, 0x01, 0x2C,
 		0x82, 0xE1, 0xEA, 0x44, 0x84, 0xB5, 0x90, 0x74,

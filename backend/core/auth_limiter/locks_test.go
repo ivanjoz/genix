@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -36,11 +36,11 @@ type deferredReply struct {
 func frameSizeFor(opcode byte) int {
 	switch opcode {
 	case opcodeChargeCredits:
-		return 1 + creditChargePayloadSize + serverUtilsAuthTagSize
+		return 1 + creditChargePayloadSize + authLimiterAuthTagSize
 	case opcodeLockAcquire:
-		return 1 + lockAcquirePayloadSize + serverUtilsAuthTagSize
+		return 1 + lockAcquirePayloadSize + authLimiterAuthTagSize
 	default:
-		return 1 + lockReleasePayloadSize + serverUtilsAuthTagSize
+		return 1 + lockReleasePayloadSize + authLimiterAuthTagSize
 	}
 }
 
@@ -89,7 +89,7 @@ func (stub *muxDaemonStub) handle(connection net.Conn) {
 		stub.mu.Lock()
 		answer := stub.answer
 		stub.mu.Unlock()
-		payload := body[:len(body)-serverUtilsAuthTagSize]
+		payload := body[:len(body)-authLimiterAuthTagSize]
 		status, detail, ok := answer(sequence, opcode[0], payload)
 		if !ok {
 			stub.mu.Lock()
@@ -126,15 +126,15 @@ func (stub *muxDaemonStub) dropConnections() {
 }
 
 func makeStubReply(sequence uint64, status byte, detail uint16) []byte {
-	reply := make([]byte, serverUtilsReplySize)
+	reply := make([]byte, authLimiterReplySize)
 	binary.BigEndian.PutUint16(reply[0:2], uint16(sequence))
 	reply[2] = status
 	binary.BigEndian.PutUint16(reply[3:5], detail)
 	return reply
 }
 
-func (stub *muxDaemonStub) client() *ServerUtilsClient {
-	return &ServerUtilsClient{address: stub.listener.Addr().String(), secret: []byte("test-secret")}
+func (stub *muxDaemonStub) client() *AuthLimiterClient {
+	return &AuthLimiterClient{address: stub.listener.Addr().String(), secret: []byte("test-secret")}
 }
 
 func TestAcquireAndReleaseFramesMatchTheRustVectors(t *testing.T) {
@@ -348,7 +348,7 @@ func TestConcurrentSendersKeepTheSequenceInLockstep(t *testing.T) {
 func TestAnUnreachableDaemonIsDistinguishableFromBusy(t *testing.T) {
 	// A port nobody listens on: the caller must be able to tell "no answer" from "taken", since
 	// that is what decides whether it fails open or closed.
-	client := &ServerUtilsClient{address: "127.0.0.1:1", secret: []byte("test-secret")}
+	client := &AuthLimiterClient{address: "127.0.0.1:1", secret: []byte("test-secret")}
 	_, err := client.Acquire(context.Background(), 1, 5, LockOptions{Lease: time.Second})
 	if !errors.Is(err, ErrLockUnavailable) {
 		t.Fatalf("err = %v; want ErrLockUnavailable", err)
@@ -376,7 +376,7 @@ func TestBusyAndTimeoutRepliesBothReportBusy(t *testing.T) {
 }
 
 func TestLeaseAndWaitMustFitTheWireWidth(t *testing.T) {
-	client := &ServerUtilsClient{address: "127.0.0.1:1", secret: []byte("s")}
+	client := &AuthLimiterClient{address: "127.0.0.1:1", secret: []byte("s")}
 	if _, err := client.Acquire(context.Background(), 1, 5, LockOptions{Lease: 0}); err == nil {
 		t.Fatal("a zero lease must be rejected before dialing")
 	}

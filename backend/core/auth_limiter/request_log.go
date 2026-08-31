@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 //
 //	[opcode:1][length:u16][payload:length][hmac:8]
 //
-// The payload layout is mirrored in server_utils/src/reqlog/protocol.rs. Every field is
+// The payload layout is mirrored in auth-limiter/src/reqlog/protocol.rs. Every field is
 // big-endian, like the rest of this port.
 
 const (
@@ -54,8 +54,8 @@ type RequestLogRecord struct {
 var (
 	ErrRequestLogTooLarge = errors.New("request log payload exceeds the protocol ceiling")
 	// ErrRequestLogNotConfigured means no daemon address was installed at startup — a local run
-	// without server_utils, most often. Requests still work; they simply leave no row.
-	ErrRequestLogNotConfigured = errors.New("server utils client is not configured")
+	// without auth_limiter, most often. Requests still work; they simply leave no row.
+	ErrRequestLogNotConfigured = errors.New("auth-limiter client is not configured")
 )
 
 // SendRequestLog writes one record and returns without waiting for anything.
@@ -64,7 +64,7 @@ var (
 // it beyond logging: a request that has already produced its response must not fail because its
 // log row did not land.
 func SendRequestLog(ctx context.Context, record RequestLogRecord) error {
-	client := serverUtils()
+	client := authLimiter()
 	if client == nil {
 		return ErrRequestLogNotConfigured
 	}

@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"bytes"

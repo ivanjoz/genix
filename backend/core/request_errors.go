@@ -13,7 +13,7 @@ import (
 )
 
 // The failures of the request currently being served, collected so prepareResponse can hand them
-// to server_utils in one frame.
+// to auth_limiter in one frame.
 //
 // Only the code line and a preview travel. The full message and its stack are already going to
 // CloudWatch under this request's ID, and duplicating them into ScyllaDB would buy nothing except
@@ -103,7 +103,7 @@ func TakeRequestErrors() []RequestError {
 	return drained
 }
 
-// EmitRequestLog hands one finished request to server_utils, and is the last thing that happens to
+// EmitRequestLog hands one finished request to auth_limiter, and is the last thing that happens to
 // it. Everything it needs is already resolved: the identity from HandlerArgs, the failures from
 // the accumulator, the elapsed time from the response.
 //

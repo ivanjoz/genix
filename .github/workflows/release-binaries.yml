@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan-server-utils:
-    name: Plan server-utils release input
+  plan-auth-limiter:
+    name: Plan auth-limiter release input
     runs-on: ubuntu-24.04
     outputs:
       build_required: ${{ steps.plan.outputs.build_required }}
@@ -43,25 +43,25 @@ jobs:
               git describe --tags --match 'v*' --abbrev=0 "${current_commit}^" 2>/dev/null || true
             )"
 
-            # server_utils is a submodule: the diff compares the recorded gitlinks, which is the
+            # auth-limiter is a submodule: the diff compares the recorded gitlinks, which is the
             # same pair of commits the tag builds check out below. A push to auth-limiter that the
             # parent repository has not pointed at yet is deliberately not a rebuild trigger.
             if [[ -n "$previous_tag" ]] &&
               git diff --quiet "${previous_tag}^{commit}" "$current_commit" -- \
-                server_utils .github/workflows/release-binaries.yml; then
+                auth-limiter .github/workflows/release-binaries.yml; then
               release_asset_names="$(
                 gh release view "$previous_tag" --json assets --jq '.assets[].name' 2>/dev/null || true
               )"
 
-              if grep -Fxq 'genix-server-utils_linux_amd64' <<<"$release_asset_names" &&
-                grep -Fxq 'genix-server-utils_linux_arm64' <<<"$release_asset_names"; then
+              if grep -Fxq 'auth-limiter_linux_amd64' <<<"$release_asset_names" &&
+                grep -Fxq 'auth-limiter_linux_arm64' <<<"$release_asset_names"; then
                 build_required=false
-                echo "Reusing unchanged server-utils binaries from ${previous_tag}"
+                echo "Reusing unchanged auth-limiter binaries from ${previous_tag}"
               else
-                echo "${previous_tag} lacks reusable server-utils assets; rebuilding"
+                echo "${previous_tag} lacks reusable auth-limiter assets; rebuilding"
               fi
             else
-              echo 'server_utils or its release build definition changed; rebuilding'
+              echo 'auth-limiter or its release build definition changed; rebuilding'
             fi
           else
             echo 'Manual validation run; rebuilding server utils and warming caches'
@@ -163,10 +163,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  build-server-utils:
+  build-auth-limiter:
     name: Server utils (${{ matrix.asset_architecture }})
-    needs: plan-server-utils
-    if: ${{ needs.plan-server-utils.outputs.build_required == 'true' }}
+    needs: plan-auth-limiter
+    if: ${{ needs.plan-auth-limiter.outputs.build_required == 'true' }}
     env:
       # Apply the pin even to cache metadata commands that execute from the repository root.
       RUSTUP_TOOLCHAIN: 1.95.0
@@ -188,17 +188,17 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Initialize the server utils submodule
-        # server_utils/ is the auth-limiter repository; the crate itself lives there, so nothing
+        # auth-limiter/ is the auth-limiter repository; the crate itself lives there, so nothing
         # below this step has sources to compile until the submodule is checked out.
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
             # Releases must build the exact submodule commit recorded by the immutable tag, which
-            # is also the commit plan-server-utils compared when it decided to rebuild.
-            git submodule update --init --depth 1 server_utils
+            # is also the commit plan-auth-limiter compared when it decided to rebuild.
+            git submodule update --init --depth 1 auth-limiter
           else
             # Main validation follows the configured branch tip, matching the other jobs.
-            git submodule update --init --remote --depth 1 server_utils
+            git submodule update --init --remote --depth 1 auth-limiter
           fi
 
       - name: Install pinned Rust target
@@ -215,20 +215,20 @@ jobs:
         # Swatinem/rust-cache v2 is pinned to its immutable commit, not a moving tag.
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
-          workspaces: server_utils -> target
+          workspaces: auth-limiter -> target
           key: ${{ matrix.rust_target }}
           cache-bin: false
           # Tags restore the default-branch cache but do not save isolated tag caches.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Test server utils natively
-        working-directory: server_utils
+        working-directory: auth-limiter
         env:
           RUST_TARGET: ${{ matrix.rust_target }}
         run: cargo test --locked --release --target "$RUST_TARGET"
 
-      - name: Build static server-utils binary
-        working-directory: server_utils
+      - name: Build static auth-limiter binary
+        working-directory: auth-limiter
         env:
           RUST_TARGET: ${{ matrix.rust_target }}
           ASSET_ARCHITECTURE: ${{ matrix.asset_architecture }}
@@ -237,16 +237,16 @@ jobs:
           cargo build --locked --release --target "$RUST_TARGET"
           mkdir -p ../dist
           install -m 0755 \
-            "target/${RUST_TARGET}/release/genix-server-utils" \
-            "../dist/genix-server-utils_linux_${ASSET_ARCHITECTURE}"
+            "target/${RUST_TARGET}/release/auth-limiter" \
+            "../dist/auth-limiter_linux_${ASSET_ARCHITECTURE}"
 
-      - name: Verify server-utils ELF file
+      - name: Verify auth-limiter ELF file
         env:
           ASSET_ARCHITECTURE: ${{ matrix.asset_architecture }}
           EXPECTED_MACHINE: ${{ matrix.expected_machine }}
         run: |
           # Validate the renamed release file, not only Cargo's target-directory output.
-          binary_path="dist/genix-server-utils_linux_${ASSET_ARCHITECTURE}"
+          binary_path="dist/auth-limiter_linux_${ASSET_ARCHITECTURE}"
           binary_description="$(file -b "$binary_path")"
           echo "${binary_path}: ${binary_description}"
           if [[ "$binary_description" != *"$EXPECTED_MACHINE"* ]]; then
@@ -258,37 +258,37 @@ jobs:
             exit 1
           fi
 
-      - name: Stage server-utils binary for the publisher
+      - name: Stage auth-limiter binary for the publisher
         if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@v7
         with:
-          name: server-utils-${{ matrix.asset_architecture }}
-          path: dist/genix-server-utils_linux_${{ matrix.asset_architecture }}
+          name: auth-limiter-${{ matrix.asset_architecture }}
+          path: dist/auth-limiter_linux_${{ matrix.asset_architecture }}
           if-no-files-found: error
           retention-days: 1
 
-  reuse-server-utils:
-    name: Reuse unchanged server-utils binaries
-    needs: plan-server-utils
-    if: ${{ needs.plan-server-utils.outputs.build_required == 'false' }}
+  reuse-auth-limiter:
+    name: Reuse unchanged auth-limiter binaries
+    needs: plan-auth-limiter
+    if: ${{ needs.plan-auth-limiter.outputs.build_required == 'false' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Download binaries from the previous release
         env:
           GH_TOKEN: ${{ github.token }}
-          REUSE_TAG: ${{ needs.plan-server-utils.outputs.previous_tag }}
+          REUSE_TAG: ${{ needs.plan-auth-limiter.outputs.previous_tag }}
         run: |
           # Reusing immutable release assets avoids starting either Rust runner.
           mkdir -p dist
           gh release download "$REUSE_TAG" --dir dist \
-            --pattern 'genix-server-utils_linux_amd64' \
-            --pattern 'genix-server-utils_linux_arm64'
+            --pattern 'auth-limiter_linux_amd64' \
+            --pattern 'auth-limiter_linux_arm64'
 
       - name: Verify reused ELF files
         run: |
           # Apply the same architecture and static-link checks used for freshly built files.
           for target_architecture in amd64 arm64; do
-            binary_path="dist/genix-server-utils_linux_${target_architecture}"
+            binary_path="dist/auth-limiter_linux_${target_architecture}"
             case "$target_architecture" in
               amd64) expected_machine='x86-64' ;;
               arm64) expected_machine='ARM aarch64' ;;
@@ -309,15 +309,15 @@ jobs:
       - name: Stage reused binaries for the publisher
         uses: actions/upload-artifact@v7
         with:
-          name: server-utils-reused
-          path: dist/genix-server-utils_linux_*
+          name: auth-limiter-reused
+          path: dist/auth-limiter_linux_*
           if-no-files-found: error
           retention-days: 1
 
   publish-release:
     name: Publish GitHub Release
-    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.plan-server-utils.result == 'success' && needs.build-backend.result == 'success' && (needs.build-server-utils.result == 'success' || needs.reuse-server-utils.result == 'success') }}
-    needs: [plan-server-utils, build-backend, build-server-utils, reuse-server-utils]
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && needs.plan-auth-limiter.result == 'success' && needs.build-backend.result == 'success' && (needs.build-auth-limiter.result == 'success' || needs.reuse-auth-limiter.result == 'success') }}
+    needs: [plan-auth-limiter, build-backend, build-auth-limiter, reuse-auth-limiter]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -334,8 +334,8 @@ jobs:
           expected_asset_names=(
             genix_app_linux_amd64
             genix_app_linux_arm64
-            genix-server-utils_linux_amd64
-            genix-server-utils_linux_arm64
+            auth-limiter_linux_amd64
+            auth-limiter_linux_arm64
           )
 
           found_asset_count="$(find dist -maxdepth 1 -type f | wc -l)"

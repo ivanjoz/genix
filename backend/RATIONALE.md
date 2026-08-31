@@ -1,3 +1,30 @@
+## The auth-limiter client keeps its Go package name aligned with the daemon, minus two contracts
+
+**Context** — The submodule folder became `auth-limiter/` to match its repository, and the daemon
+renamed its crate, TOML section and env vars to suit. The Go client still lived in
+`core/server_utils/`, re-exported through `core/server_utils_api.go`, so the backend named the
+service one thing and the service named itself another.
+
+**Decision** — `core/server_utils/` → `core/auth_limiter/` (package `auth_limiter`),
+`core/server_utils_api.go` → `core/auth_limiter_api.go`, and every identifier renamed with it:
+`ServerUtilsClient` → `AuthLimiterClient`, `ErrServerUtilsUnavailable` →
+`ErrAuthLimiterUnavailable`, `Env.SERVER_UTILS_ADDRESS` → `Env.AUTH_LIMITER_ADDRESS`, and the
+`toml:"server_utils"` tag on the config struct → `toml:"auth_limiter"`. Two exceptions stayed:
+
+- `authLimiterAuthDomain = "genix-server-utils:v6"` in `core/auth_limiter/connection.go`. The
+  identifier was renamed; **the string was not.** It is the HMAC domain separator the Rust daemon
+  mirrors in `src/service/auth.rs`, so its bytes are a wire contract with a `:v6` version channel.
+- `ServerMetricRecord.ServerUtilsMemMb` / `.ServerUtilsCpuPercent` in `core/types/server_metrics.go`
+  and their mirrors in `config/server_metrics.go`. These carry no column tag, so the ORM derives
+  `server_utils_mem_mb` / `server_utils_cpu_percent` from the field name — the exact columns the
+  Rust writer's INSERT names and the frontend's JSON keys. Renaming them is a schema migration on a
+  table that already holds rows, so it is a separate decision from a rename.
+
+**Rationale** — Grepping `auth_limiter` now finds the whole path from handler to daemon. Holding the
+two contracts back keeps a cosmetic rename from turning into a wire break plus a data migration; the
+cost is that `server_metrics` reads `server_utils_*` for columns owned by `auth-limiter`, which the
+comments above both declarations now state outright.
+
 ## fn-init seeds a company that can already operate, and the bootstrap page is gone
 
 **Context** — A company needs a Site, a Warehouse and a CashBank before it can do anything. The
@@ -33,7 +60,7 @@ records are managed anyway.
 meters the platform operator's own company, so an exhausted budget locked company 1 out of its own
 software — including the "Datos Iniciales" bootstrap, which is exactly when someone needs to get in.
 
-**Decision** — `server_utils.CreditExemptCompanyID = 1` (the company `fn-init` seeds as
+**Decision** — `auth-limiter.CreditExemptCompanyID = 1` (the company `fn-init` seeds as
 "Principal"). In `chargeConfiguredCredits`, that company's CPU and inference credits are zeroed. If
 the frame then carries no required access there is nothing left to ask and the call returns nil;
 if it does carry one, the frame still goes to the daemon and the access is still enforced.

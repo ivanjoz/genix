@@ -74,8 +74,8 @@ if (!fs.existsSync(frontendNodeModules) || !viteInstalled || !storeNodeModules){
   execSync('bun install', { stdio: "inherit", shell: true, cwd: frontendPath })
 }
 
-// Rate limiter + SSE bridge (server_utils/, un solo binario Rust con los dos servicios)
-const rateLimiterPath = path.join(__dirname, 'server_utils')
+// Rate limiter + SSE bridge (auth-limiter/, un solo binario Rust con los dos servicios)
+const rateLimiterPath = path.join(__dirname, 'auth-limiter')
 
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
@@ -153,7 +153,7 @@ const runScripts = () => {
   runScript(FRONTEND_SCRIPT, YELLOW_BAR, frontendPath)
   startBackendGo()
   runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, rateLimiterPath, {
-    RUST_LOG: process.env.RUST_LOG || "genix_server_utils=debug"
+    RUST_LOG: process.env.RUST_LOG || "auth_limiter=debug"
   })
 }
 

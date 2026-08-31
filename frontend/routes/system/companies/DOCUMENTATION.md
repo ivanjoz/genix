@@ -233,7 +233,7 @@ Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`
 - **Both meters show zero on an amber track:** no budget is active for the current month, so every
   charge is rejected. Use **Set current** in the company's edit modal.
 - **The credit service is unavailable:** budget changes return an error and ordinary charged APIs
-  remain blocked until `server_utils` is reachable; the backend does not fail open.
+  remain blocked until `auth-limiter` is reachable; the backend does not fail open.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
@@ -329,29 +329,29 @@ files:
     supports: [concepts, capability.review-companies, capability.review-credit-detail, rules, troubleshooting]
   - path: backend/config/credit_usage.go
     role: business-logic
-    hash: sha256:4b30c32fafd9c3a84eaa2b21cccd8c9e67f7d8f526c3fa9623cddb1b5a22597d
+    hash: sha256:346df89f65544eeb1c4426a6e39fdc57111107604b53884e7047fb1cc62948d4
     supports: [concepts, capability.review-companies, capability.review-credit-detail, capability.manage-credit-budget, rules]
   - path: backend/config/company_credit_budget.go
     role: backend-handler
     hash: sha256:08f7c37e23a822e34f5aab0975187640272b53033a17e8b05ec30dad300ecd43
     supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
-  - path: backend/core/server_utils/budgets.go
+  - path: backend/core/auth_limiter/budgets.go
     role: business-logic
-    hash: sha256:4f300cce6d5a808b480f4e9f291ef4c4463943f22dbc1d789e9a928542efb1a5
+    hash: sha256:1d5ed8c00fea750b9b80795f3a41da72ffef31ff9b29c970a32879bace8402ae
     supports: [capability.manage-credit-budget, troubleshooting]
   - path: backend/core/types/company_credit_budget.go
     role: data-model
     hash: sha256:7c7db01450949828b8450a5678dff023a22a0b0b93cde31bd56b2bbc2a68fccc
     supports: [concepts, capability.manage-credit-budget]
-  - path: server_utils/src/limiter/storage.rs
+  - path: auth-limiter/src/limiter/storage.rs
     role: business-logic
     hash: sha256:59c3857cea6c81b30153d4eeee37af6ac2634df97f9fff62b4ddbd99cbb79269
     supports: [concepts, capability.manage-credit-budget, rules]
-  - path: server_utils/src/limiter/time_frame.rs
+  - path: auth-limiter/src/limiter/time_frame.rs
     role: business-logic
     hash: sha256:010fbb19a95da09186006dc5d2042e8608236f79925f1d897b86a92b7a75be60
     supports: [concepts, rules]
-  - path: server_utils/src/limiter/quota.rs
+  - path: auth-limiter/src/limiter/quota.rs
     role: business-logic
     hash: sha256:8f45bcd7011451cf77cbf0a72b4d15ca838f69e07db844cefc22b75c1462911e
     supports: [concepts, capability.manage-credit-budget, rules, troubleshooting]
@@ -369,6 +369,6 @@ files:
     supports: [page-purpose, capability.manage-credit-budget]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:5c82fc28d43e45327b373a75c6901e5a141cc993e47a998dc57f6ac0b89a0d75
+    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
     supports: [page-purpose, capability.manage-credit-budget, rules]
 ```

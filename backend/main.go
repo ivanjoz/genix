@@ -4,7 +4,7 @@ import (
 	"app/agent"
 	"app/business"
 	"app/core"
-	server_utils "app/core/server_utils"
+	auth_limiter "app/core/auth_limiter"
 	"app/db"
 	"app/exec"
 	"context"
@@ -292,9 +292,9 @@ func main() {
 	// One address, one secret, one connection: the credit limiter and the lock service share it
 	// and are told apart by the frame's opcode. The logger is pushed in because that package
 	// cannot import core (cycle), the same as text_search.
-	server_utils.SetLogger(core.Log)
-	if err := core.ConfigureServerUtils(core.Env.SERVER_UTILS_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
-		panic("invalid server-utils configuration: " + err.Error())
+	auth_limiter.SetLogger(core.Log)
+	if err := core.ConfigureAuthLimiter(core.Env.AUTH_LIMITER_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
+		panic("invalid auth-limiter configuration: " + err.Error())
 	}
 	serverPort := resolveServerPort()
 	// Wire the GenixSearch endpoint before any DB write that might
@@ -420,7 +420,7 @@ func main() {
 		// replies and unsolicited events). The turn itself is not here: it is a
 		// plain API route (POST p-agent-turn, agent/turn.go) so that the exact
 		// same client code works against Lambda, where the stream lives on the
-		// SSE bridge (server_utils/) instead of this process.
+		// SSE bridge (auth-limiter/) instead of this process.
 		mux := http.NewServeMux()
 		// The browser connects to these cross-origin (app served from the dev
 		// proxy, backend on another port), so unlike the old WS upgrade they need

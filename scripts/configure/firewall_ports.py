@@ -10,7 +10,7 @@ Cloud images ship: an INPUT chain ending in REJECT --reject-with icmp-host-prohi
 frontend installed.
 
 Extracted from configure_db.py, which needed it for the CQL port and is still its other caller.
-It lives on its own because the second caller (configure_server_utils.py) must not import a
+It lives on its own because the second caller (configure_auth_limiter.py) must not import a
 ScyllaDB installer to open a socket, and because the iptables half is subtle enough that two
 copies would drift: a rule only helps if it lands *before* whatever was dropping the packet, so
 the position is computed rather than appended, and the chain is re-read afterwards to prove it.

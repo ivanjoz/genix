@@ -20,7 +20,7 @@ const (
 )
 
 // creditDayZoneOffsetSeconds pins the daily bucket to the Lima business day (UTC-5). It mirrors
-// DAY_ZONE_OFFSET_SECONDS in server_utils/src/limiter/time_frame.rs, which is the writer: the two
+// DAY_ZONE_OFFSET_SECONDS in auth-limiter/src/limiter/time_frame.rs, which is the writer: the two
 // processes have to agree on where a day starts or the reader queries a frame the writer never
 // wrote. A fixed offset rather than a zone lookup because Peru has no DST and because either
 // process can run on a host in any timezone, including a Lambda that is always UTC.
@@ -220,7 +220,7 @@ func makeCreditUsageRoutes(routeTotals map[int16]creditUsageTotals) []creditUsag
 // split into routeTotals, which may be nil when only the totals are wanted.
 //
 // This is the second implementation of the format; the writer is Rust
-// (server_utils/src/limiter/credits_blob.rs). It is deliberately strict about the three rules that
+// (auth-limiter/src/limiter/credits_blob.rs). It is deliberately strict about the three rules that
 // make the encoding canonical — ascending routes, no all-zero entry, narrowest width — because a
 // blob that breaks one of them was not written by that encoder, and the alternative to refusing it
 // is charting a number nobody produced.

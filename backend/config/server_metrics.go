@@ -71,7 +71,7 @@ type ServerMetricsResponse struct {
 	HoursIDsToRemove []int32 `json:"Hours_IDsToRemove,omitempty"`
 }
 
-// GetServerMetrics serves the Server Panel charts from the rows server_utils writes every five
+// GetServerMetrics serves the Server Panel charts from the rows auth-limiter writes every five
 // seconds. It reads no CompanyID: server_metrics describes the machine, not a tenant, and the route
 // is restricted to the SaaS company in saasOnlyRoutes.
 func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
@@ -84,7 +84,7 @@ func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
 	// trailing single-watermark param it also sends. Either one answers the same question.
 	watermarkSlot := int64(core.Coalesce(req.GetQueryInt("Hours"), req.GetQueryInt("upd")))
 
-	// The real clock, not core.Now(): server_utils writes these rows with the real clock and has no
+	// The real clock, not core.Now(): auth-limiter writes these rows with the real clock and has no
 	// historical-clock override, so a frozen backend clock would query a day nothing ever wrote.
 	nowUnixSeconds := time.Now().UTC().Unix()
 	newestSlot := nowUnixSeconds / coreTypes.ServerMetricSlotSeconds

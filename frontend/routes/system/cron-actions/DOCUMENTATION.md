@@ -237,7 +237,7 @@ files:
     supports: [concepts]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:2474ede3472c063c1e28ea584cd6265dc4b7b8437231cfa94aa5671e66b62330
+    hash: sha256:ec40f51da7a76ec834e474663352149946ecb0de60a333003d5577c740ac6c1d
     supports: [page-purpose, rules]
   - path: backend/access_list.yml
     role: permissions
@@ -245,7 +245,7 @@ files:
     supports: [rules]
   - path: backend/core/request_errors.go
     role: business-logic
-    hash: sha256:52dcf52dfa2ce066ae89dac5f8e6689784c70d8e7dc8ccc7031cdaa20d881b23
+    hash: sha256:9755bd86c631f6bacac63c7afc86401198289d7fd17a306b281d84385285c344
     supports: [rules, troubleshooting]
   - path: backend/business/product-ecommerce-cron.go
     role: business-logic

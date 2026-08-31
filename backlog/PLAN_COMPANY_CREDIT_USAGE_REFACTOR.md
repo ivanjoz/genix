@@ -51,7 +51,7 @@ Reference shape to copy: `backend/config/observability.go` — a multi-collectio
 ## 3. Schema — two materialized views, no column changes
 
 `backend/core/types/credit_usage.go`. Base PK stays `((company_id), user_id, time_frame)`, so
-`server_utils/src/limiter/storage.rs` is **not** touched: `db.TypeView` compiles to a real Scylla
+`auth-limiter/src/limiter/storage.rs` is **not** touched: `db.TypeView` compiles to a real Scylla
 `CREATE MATERIALIZED VIEW` (`backend/genix-orm/scylla/index_view_compile.go:859`), maintained by
 the database, so the Rust writer populates both views for free.
 
@@ -264,7 +264,7 @@ once the routes settle.
    not update the operator panel until `clearCacheByIDs()`. Acceptable, or should
    `company-users-by-ids` be a versioned endpoint with a `cmp`-carrying variant instead?
 2. ~~**Materialized view cost.**~~ Resolved: the limiter flushes dirty rows only, every 15 s
-   (`server_utils/src/limiter/mod.rs:9`), so an active `(company, user, day)` row costs 4 writes per
+   (`auth-limiter/src/limiter/mod.rs:9`), so an active `(company, user, day)` row costs 4 writes per
    minute — 12 with both views. Even a few hundred simultaneously active rows stays under ~50
    writes/s. Not a concern.
 3. **Window length.** The 30-day window is currently a backend constant. After the refactor the
@@ -317,7 +317,7 @@ Verified plans (ORM planner, no database):
 | `CompanyID = 7 AND TimeFrame BETWEEN a,b` on the user table | `credit_usage_user__pk_time_frame_view` |
 | `CompanyID = 7 AND UserID = 42 AND TimeFrame BETWEEN a,b` (the limiter's own read) | base table |
 
-Touched beyond §8: `server_utils` (`aggregation.rs` owns the sentinel, `storage.rs` picks the table
+Touched beyond §8: `auth-limiter` (`aggregation.rs` owns the sentinel, `storage.rs` picks the table
 from the key), `observability.go` and `observability_backfill.go` (platform aggregate is a company
 row under company id 0), `credit_usage.go`, `company_credit_budget.go`, ORM docs §13 (regenerated;
 it had drifted and still claimed 42 was free), and the `credit_usage` prose references across Go,
@@ -356,7 +356,7 @@ Genuinely lost their unit test, and now need a live database to exercise:
 The report came back empty against a database that had data. Cause: **the writer and the reader
 disagreed about when a day starts.**
 
-- Rust (`server_utils/src/limiter/time_frame.rs`) bucketed `daily()` as `unix_seconds / 86_400` —
+- Rust (`auth-limiter/src/limiter/time_frame.rs`) bucketed `daily()` as `unix_seconds / 86_400` —
   a UTC day.
 - Go read the window from `core.FechaUnix()`, which is `(unix + hostZoneOffset) / 86_400`.
 

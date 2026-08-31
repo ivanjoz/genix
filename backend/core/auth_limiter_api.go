@@ -1,75 +1,75 @@
 package core
 
 import (
-	server_utils "app/core/server_utils"
+	auth_limiter "app/core/auth_limiter"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 )
 
-// The seam between core and the server-utils client.
+// The seam between core and the auth-limiter client.
 //
-// The implementation lives in app/core/server_utils because it must not import core: core needs
+// The implementation lives in app/core/auth_limiter because it must not import core: core needs
 // CreditLimitExceeded for MakeCreditRateLimitResponse below, and that would be an import cycle.
-// The dependency therefore runs core -> server_utils only, and core.Log is pushed in from main.
+// The dependency therefore runs core -> auth_limiter only, and core.Log is pushed in from main.
 // Same shape as text_search, which cannot import core either.
 //
 // The re-exports keep call sites saying core.X like everything else in this backend. Most are
-// aliases rather than wrappers: core.LockOptions and server_utils.LockOptions are the same type,
+// aliases rather than wrappers: core.LockOptions and auth_limiter.LockOptions are the same type,
 // and core.ErrLockBusy is the same sentinel, so errors.Is and type assertions work across both
 // names. AcquireLock is the exception, and only because it has work to do on this side of the
 // seam — the LockAction namespace and the HandlerResponse mapping both live here.
 
 type (
-	Lock                = server_utils.Lock
-	LockOptions         = server_utils.LockOptions
-	CreditLimitExceeded = server_utils.CreditLimitExceeded
-	AccessDenied        = server_utils.AccessDenied
-	BudgetOperation     = server_utils.BudgetOperation
-	ServerUtilsClient   = server_utils.ServerUtilsClient
-	RequestLogRecord    = server_utils.RequestLogRecord
-	RequestLogEntry     = server_utils.RequestLogError
+	Lock                = auth_limiter.Lock
+	LockOptions         = auth_limiter.LockOptions
+	CreditLimitExceeded = auth_limiter.CreditLimitExceeded
+	AccessDenied        = auth_limiter.AccessDenied
+	BudgetOperation     = auth_limiter.BudgetOperation
+	AuthLimiterClient   = auth_limiter.AuthLimiterClient
+	RequestLogRecord    = auth_limiter.RequestLogRecord
+	RequestLogEntry     = auth_limiter.RequestLogError
 )
 
 const (
 	// InvalidateAllCompanyUsers drops every cached user of a company instead of one.
-	InvalidateAllCompanyUsers = server_utils.InvalidateAllCompanyUsers
+	InvalidateAllCompanyUsers = auth_limiter.InvalidateAllCompanyUsers
 
 	// MaxRequiredAccess bounds how many accesses one route may map to. The gate refuses to encode
 	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access_list.yml inside it.
-	MaxRequiredAccess = server_utils.MaxRequiredAccess
+	MaxRequiredAccess = auth_limiter.MaxRequiredAccess
 
-	BudgetSetDaily        = server_utils.BudgetSetDaily
-	BudgetSetCurrent      = server_utils.BudgetSetCurrent
-	BudgetIncreaseCurrent = server_utils.BudgetIncreaseCurrent
+	BudgetSetDaily        = auth_limiter.BudgetSetDaily
+	BudgetSetCurrent      = auth_limiter.BudgetSetCurrent
+	BudgetIncreaseCurrent = auth_limiter.BudgetIncreaseCurrent
 )
 
 var (
 	// ErrLockBusy is a real answer: the key is taken and the queue is full, or our patience ran
 	// out. ErrLockUnavailable is the absence of an answer, which each call site judges for
 	// itself — sign-up refuses, most others carry on unlocked.
-	ErrLockBusy                 = server_utils.ErrLockBusy
-	ErrLockUnavailable          = server_utils.ErrLockUnavailable
-	ErrCreditLimiterMissing     = server_utils.ErrCreditLimiterMissing
-	ErrBudgetMonthNotConfigured = server_utils.ErrBudgetMonthNotConfigured
-	ErrBudgetMutationOverflow   = server_utils.ErrBudgetMutationOverflow
+	ErrLockBusy                 = auth_limiter.ErrLockBusy
+	ErrLockUnavailable          = auth_limiter.ErrLockUnavailable
+	ErrCreditLimiterMissing     = auth_limiter.ErrCreditLimiterMissing
+	ErrBudgetMonthNotConfigured = auth_limiter.ErrBudgetMonthNotConfigured
+	ErrBudgetMutationOverflow   = auth_limiter.ErrBudgetMutationOverflow
 
-	ConfigureServerUtils = server_utils.ConfigureServerUtils
+	ConfigureAuthLimiter = auth_limiter.ConfigureAuthLimiter
 
-	SendRequestLog              = server_utils.SendRequestLog
-	InvalidateUserAccess        = server_utils.InvalidateUserAccess
-	ChargeAPIUsage              = server_utils.ChargeAPIUsage
-	ChargeAPICredits            = server_utils.ChargeAPICredits
-	ChargeAPIAccessOnly         = server_utils.ChargeAPIAccessOnly
-	APICPUBaseCredits           = server_utils.APICPUBaseCredits
-	IsAccessDeniedError         = server_utils.IsAccessDeniedError
-	ChargeInferenceUsage        = server_utils.ChargeInferenceUsage
-	WithCreditRateLimitIdentity = server_utils.WithCreditRateLimitIdentity
-	IsCreditRateLimitError      = server_utils.IsCreditRateLimitError
-	APICPUCredits               = server_utils.APICPUCredits
-	InferenceCredits            = server_utils.InferenceCredits
-	MutateCompanyCreditBudget   = server_utils.MutateCompanyCreditBudget
+	SendRequestLog              = auth_limiter.SendRequestLog
+	InvalidateUserAccess        = auth_limiter.InvalidateUserAccess
+	ChargeAPIUsage              = auth_limiter.ChargeAPIUsage
+	ChargeAPICredits            = auth_limiter.ChargeAPICredits
+	ChargeAPIAccessOnly         = auth_limiter.ChargeAPIAccessOnly
+	APICPUBaseCredits           = auth_limiter.APICPUBaseCredits
+	IsAccessDeniedError         = auth_limiter.IsAccessDeniedError
+	ChargeInferenceUsage        = auth_limiter.ChargeInferenceUsage
+	WithCreditRateLimitIdentity = auth_limiter.WithCreditRateLimitIdentity
+	IsCreditRateLimitError      = auth_limiter.IsCreditRateLimitError
+	APICPUCredits               = auth_limiter.APICPUCredits
+	InferenceCredits            = auth_limiter.InferenceCredits
+	MutateCompanyCreditBudget   = auth_limiter.MutateCompanyCreditBudget
 )
 
 // LockError is every way AcquireLock can fail to hand back a lock. It exists so a handler can turn
@@ -89,7 +89,7 @@ func (lockErr *LockError) Unwrap() error { return lockErr.err }
 
 // Busy separates the two answers: the daemon refused us because the key is taken and the queue is
 // full, versus the daemon never answered at all.
-func (lockErr *LockError) Busy() bool { return errors.Is(lockErr.err, server_utils.ErrLockBusy) }
+func (lockErr *LockError) Busy() bool { return errors.Is(lockErr.err, auth_limiter.ErrLockBusy) }
 
 // Response is the fail-closed mapping: a contended key is the caller's problem (429), a daemon we
 // cannot reach is ours (503), and neither runs the work the lock was protecting.
@@ -110,7 +110,7 @@ func (lockErr *LockError) Response(req *HandlerArgs) HandlerResponse {
 func AcquireLock(
 	ctx context.Context, action LockAction, identifier int64, maxWaiters uint8,
 ) (*Lock, *LockError) {
-	lock, err := server_utils.AcquireLock(ctx, uint16(action), identifier, maxWaiters)
+	lock, err := auth_limiter.AcquireLock(ctx, uint16(action), identifier, maxWaiters)
 	if err != nil {
 		return nil, &LockError{err: err}
 	}
@@ -121,7 +121,7 @@ func AcquireLock(
 // header. It stays on this side of the seam because it is an HTTP concern: it takes HandlerArgs
 // and returns a HandlerResponse, neither of which the protocol package knows about.
 func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
-	var exceeded *server_utils.CreditLimitExceeded
+	var exceeded *auth_limiter.CreditLimitExceeded
 	if errors.As(err, &exceeded) {
 		message := "Límite de créditos agotado."
 		if exceeded.Window == "month" {
@@ -142,7 +142,7 @@ func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
 // re-authenticating would achieve nothing. accessNames comes from the caller because the daemon
 // never sees them — it holds no copy of access_list.yml, deliberately.
 func (req *HandlerArgs) MakeAccessDeniedResponse(err error, accessNames []string) HandlerResponse {
-	var denied *server_utils.AccessDenied
+	var denied *auth_limiter.AccessDenied
 	if !errors.As(err, &denied) {
 		Log("credit rate limiter unavailable during authorization::", err)
 		return req.MakeErrCode("El servicio de límites de crédito no está disponible.", 503)

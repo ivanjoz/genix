@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -37,7 +37,7 @@ var (
 	// ErrLockUnavailable means we got no answer at all. Whether that is fatal is the call site's
 	// decision, which is why it is a distinct error: registration fails closed on it, most other
 	// callers should carry on unlocked.
-	ErrLockUnavailable = ErrServerUtilsUnavailable
+	ErrLockUnavailable = ErrAuthLimiterUnavailable
 )
 
 // Daemon reply statuses. Zero is success for every opcode on this port.
@@ -66,7 +66,7 @@ type LockOptions struct {
 
 // Lock is one held lock. Release is idempotent and safe to defer.
 type Lock struct {
-	client     *ServerUtilsClient
+	client     *AuthLimiterClient
 	connection *muxConnection
 	action     uint16
 	identifier int64
@@ -100,7 +100,7 @@ func (lock *Lock) Release() {
 		payload := makeLockReleasePayload(lock.action, lock.identifier, lock.generation)
 		reply, err := lock.connection.exchange(
 			context.Background(), lock.client.secret, opcodeLockRelease, payload,
-			serverUtilsWriteTimeout, lock.action, lock.identifier)
+			authLimiterWriteTimeout, lock.action, lock.identifier)
 		if err != nil {
 			logLine("lock release failed::", err)
 			return
@@ -136,7 +136,7 @@ const (
 func AcquireLock(
 	ctx context.Context, action uint16, identifier int64, maxWaiters uint8,
 ) (*Lock, error) {
-	client := serverUtils()
+	client := authLimiter()
 	if client == nil {
 		return nil, fmt.Errorf("%w: not configured", ErrLockUnavailable)
 	}
@@ -147,7 +147,7 @@ func AcquireLock(
 	})
 }
 
-func (client *ServerUtilsClient) Acquire(
+func (client *AuthLimiterClient) Acquire(
 	ctx context.Context, action uint16, identifier int64, options LockOptions,
 ) (*Lock, error) {
 	waitMillis, err := lockDurationToMillis(options.Wait, "Wait")
@@ -190,7 +190,7 @@ func (client *ServerUtilsClient) Acquire(
 }
 
 func newLock(
-	client *ServerUtilsClient, connection *muxConnection,
+	client *AuthLimiterClient, connection *muxConnection,
 	action uint16, identifier int64, generation uint16, lease time.Duration,
 ) *Lock {
 	lock := &Lock{

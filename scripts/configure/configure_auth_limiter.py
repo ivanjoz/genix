@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-"""Install server_utils/ on this host: systemd units plus the Nginx vhost for its SSE bridge.
+"""Install auth-limiter/ on this host: systemd units plus the Nginx vhost for its SSE bridge.
 
-One Rust binary, genix-server-utils, over two transports:
+One Rust binary, auth-limiter, over two transports:
 
   - A raw TCP port where the frame's opcode routes to the credit rate limiter or the lock
     service. It is authenticated by HMAC but not encrypted, so it never gets an Nginx vhost.
-    [server_utils] public decides whether the daemon binds loopback or every interface: false
+    [auth_limiter] public decides whether the daemon binds loopback or every interface: false
     when the backend runs on this same host, true when it runs elsewhere (Lambda, another VPS).
     When it is true this script also opens the port in the host firewall — a daemon bound to
     0.0.0.0 behind a REJECT rule looks healthy from here and times out from everywhere else.
@@ -69,19 +69,19 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
 from toml_config import get_config_value, set_config_values  # noqa: E402
 from firewall_ports import ensure_tcp_port_open  # noqa: E402
 
-SOURCE_DIRECTORY_NAME = "server_utils"
+SOURCE_DIRECTORY_NAME = "auth-limiter"
 # Cargo's package name, which is also the file name it produces.
-BINARY_NAME = "genix-server-utils"
+BINARY_NAME = "auth-limiter"
 BINARY_PATH = SERVICE_INSTALL_DIRECTORY / BINARY_NAME
 BINARY_SOURCE_AUTO = "auto"
 BINARY_SOURCE_SOURCE = "source"
 BINARY_SOURCE_PRECOMPILED = "precompiled"
-SERVICE_NAME = "genix-server-utils.service"
-RESTART_SERVICE_NAME = "genix-server-utils-restart.service"
-RESTART_PATH_NAME = "genix-server-utils-restart.path"
+SERVICE_NAME = "auth-limiter.service"
+RESTART_SERVICE_NAME = "auth-limiter-restart.service"
+RESTART_PATH_NAME = "auth-limiter-restart.path"
 
-# Must match DEFAULT_BRIDGE_PORT and DEFAULT_LISTEN_PORT in server_utils/src/config.rs, and
-# defaultServerUtilsPort in backend/core/security.go, which is the client's half of the same
+# Must match DEFAULT_BRIDGE_PORT and DEFAULT_LISTEN_PORT in auth-limiter/src/config.rs, and
+# defaultAuthLimiterPort in backend/core/security.go, which is the client's half of the same
 # default. The three drifting apart puts the daemon on one port and every caller on another.
 DEFAULT_BRIDGE_PORT = 14012
 DEFAULT_LISTEN_PORT = 14013
@@ -104,7 +104,7 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
     (
         "Cannot assign requested address",
         "the listen address is not on any interface of this host. The bind is derived from "
-        "[server_utils] public (true = 0.0.0.0, false = 127.0.0.1) precisely so a NAT'd public IP "
+        "[auth_limiter] public (true = 0.0.0.0, false = 127.0.0.1) precisely so a NAT'd public IP "
         "is never bound: on a cloud VM that address lives in the provider's NAT, not on the NIC.",
     ),
     (
@@ -128,7 +128,7 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
 )
 
 # The twelve credit ceilings the daemon requires. Unlike every other [rate_limit] key they have
-# no fallback in server_utils/src/config.rs — a guessed quota is worse than none — so an absent
+# no fallback in auth-limiter/src/config.rs — a guessed quota is worse than none — so an absent
 # one makes the process exit at startup and systemd restart it every RestartSec forever. The
 # numbers mirror config.example.toml: (10s, 1h, 24h) per scope and credit kind.
 RATE_LIMIT_CREDIT_DEFAULTS = {
@@ -202,30 +202,30 @@ def resolve_bridge_port(project_credentials):
 
 def resolve_listen_port(project_credentials):
     """Resolve the raw-TCP port. Absent is normal — the Rust default covers it."""
-    configured_port = get_config_value(project_credentials, "server_utils.port")
+    configured_port = get_config_value(project_credentials, "auth_limiter.port")
     if configured_port is None:
-        print_debug(f"server_utils.port is not set in config.toml. Using {DEFAULT_LISTEN_PORT}.")
+        print_debug(f"auth_limiter.port is not set in config.toml. Using {DEFAULT_LISTEN_PORT}.")
         return DEFAULT_LISTEN_PORT
 
     listen_port, validation_error = validate_server_port(str(configured_port))
     if listen_port is None:
         # Same reason resolve_bridge_port refuses to guess: this number decides which port gets
         # a firewall rule, and opening the wrong one is worse than not opening any.
-        fail_with_error(f"server_utils.port in config.toml is unusable: {validation_error}")
+        fail_with_error(f"auth_limiter.port in config.toml is unusable: {validation_error}")
 
     print_debug(f"Raw TCP listen port: {listen_port}")
     return listen_port
 
 
 def resolve_listen_is_public(project_credentials):
-    """Read [server_utils] public, the flag the daemon turns into 0.0.0.0 vs 127.0.0.1.
+    """Read [auth_limiter] public, the flag the daemon turns into 0.0.0.0 vs 127.0.0.1.
 
     Only a real TOML boolean counts, and absent means false. The daemon reads this same key with
-    the same rule (optional_bool in server_utils/src/config.rs), so a value this script would
+    the same rule (optional_bool in auth-limiter/src/config.rs), so a value this script would
     interpret differently is a value that opens a firewall port for a listener that never binds
     to it — or worse, leaves one closed for a listener that does.
     """
-    configured_flag = get_config_value(project_credentials, "server_utils.public")
+    configured_flag = get_config_value(project_credentials, "auth_limiter.public")
     if isinstance(configured_flag, bool):
         return configured_flag
     if configured_flag is None:
@@ -236,13 +236,13 @@ def resolve_listen_is_public(project_credentials):
     if normalized_flag in {"true", "false"}:
         return normalized_flag == "true"
     fail_with_error(
-        f"server_utils.public in config.toml is not a boolean: {configured_flag!r}. Use "
+        f"auth_limiter.public in config.toml is not a boolean: {configured_flag!r}. Use "
         "true (bind 0.0.0.0, backend runs off this host) or false (bind 127.0.0.1)."
     )
 
 
 def resolve_client_address(project_credentials, listen_port, listen_is_public):
-    """The address a backend dials, mirroring makeServerUtilsAddress in backend/core/security.go.
+    """The address a backend dials, mirroring makeAuthLimiterAddress in backend/core/security.go.
 
     Only for the summary, but it is the number the reader has to put in their own config.toml,
     so it is derived the same way the backend derives it rather than echoed back from a key.
@@ -250,7 +250,7 @@ def resolve_client_address(project_credentials, listen_port, listen_is_public):
     if not listen_is_public:
         return f"127.0.0.1:{listen_port}"
 
-    configured_host = str(get_config_value(project_credentials, "server_utils.host", "")).strip()
+    configured_host = str(get_config_value(project_credentials, "auth_limiter.host", "")).strip()
     return f"{configured_host}:{listen_port}" if configured_host else ""
 
 
@@ -268,12 +268,12 @@ def open_listen_port_in_firewall(listen_port, listen_is_public):
     """
     if not listen_is_public:
         print_debug(
-            f"[server_utils] public is false: the daemon binds 127.0.0.1:{listen_port} and needs "
+            f"[auth_limiter] public is false: the daemon binds 127.0.0.1:{listen_port} and needs "
             "no firewall rule. Set it to true only if the backend runs on another host."
         )
         return
 
-    if ensure_tcp_port_open(listen_port, "server_utils raw TCP"):
+    if ensure_tcp_port_open(listen_port, "auth_limiter raw TCP"):
         # The host firewall is one of two, and the other one is not on this machine.
         print_debug(
             f"TCP port {listen_port} is open on this host. On a cloud VM the provider's own "
@@ -284,7 +284,7 @@ def open_listen_port_in_firewall(listen_port, listen_is_public):
         return
 
     print_debug(
-        f"WARNING: TCP port {listen_port} could not be opened, but [server_utils] public is "
+        f"WARNING: TCP port {listen_port} could not be opened, but [auth_limiter] public is "
         "true, so the daemon is listening on every interface for callers that cannot reach it. "
         "An off-host backend will fail every lock and credit call with a timeout, which it "
         "reports as 'El servicio no está disponible.' (HTTP 503)."
@@ -743,7 +743,7 @@ def ensure_c_linker():
 
 
 def compile_binary(source_directory, repository_root_path):
-    """Build server_utils/ in release mode, as the repository owner so the Cargo registry and
+    """Build auth-limiter/ in release mode, as the repository owner so the Cargo registry and
     target/ cache are reused instead of being recreated root-owned inside the clone."""
     unprivileged_username = detect_unprivileged_username(repository_root_path)
     cargo_binary_path = detect_cargo_binary(unprivileged_username)
@@ -835,7 +835,7 @@ def provide_binary(repository_root_path, runtime_user_entry, binary_source=BINAR
         install_binary(compile_binary(source_directory, repository_root_path), runtime_user_entry)
         return
 
-    print_debug(f"Selecting a prebuilt Server Utils binary (binary source: {binary_source}).")
+    print_debug(f"Selecting a prebuilt Auth Limiter binary (binary source: {binary_source}).")
     prebuilt_binary_path = find_prebuilt_binary(
         repository_root_path,
         prefer_downloaded=binary_source == BINARY_SOURCE_PRECOMPILED,
@@ -898,7 +898,7 @@ WantedBy=multi-user.target
 
 def build_restart_path_contents():
     return f"""[Unit]
-Description=Watch for changes to the genix server-utils binary
+Description=Watch for changes to the genix auth-limiter binary
 
 [Path]
 PathChanged={BINARY_PATH}
@@ -1067,7 +1067,7 @@ def print_summary(
         # public = true with no host is the one combination that installs cleanly and then
         # refuses to start on the backend side, where the message names neither key.
         print_debug(
-            "WARNING: [server_utils] public is true but host is empty. The backend builds its "
+            "WARNING: [auth_limiter] public is true but host is empty. The backend builds its "
             "dial address from that key and refuses an empty one at startup. Set host to this "
             "machine's public address in every config.toml that talks to this daemon."
         )
@@ -1091,7 +1091,7 @@ def print_summary(
 
 def parse_command_arguments():
     argument_parser = argparse.ArgumentParser(
-        description="Install the Genix Server Utils service and SSE bridge proxy."
+        description="Install the Genix Auth Limiter service and SSE bridge proxy."
     )
     argument_parser.add_argument(
         "--binary-source",

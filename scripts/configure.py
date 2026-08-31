@@ -20,13 +20,13 @@ LATEST_RELEASE_URL = "https://github.com/ivanjoz/genix/releases/latest/download"
 
 COMPONENT_DATABASE = "1"
 COMPONENT_BACKEND = "2"
-COMPONENT_SERVER_UTILS = "3"
+COMPONENT_AUTH_LIMITER = "3"
 BINARY_SOURCE = "7"
 BINARY_PRECOMPILED = "8"
-COMPONENT_DIGITS = {COMPONENT_DATABASE, COMPONENT_BACKEND, COMPONENT_SERVER_UTILS}
+COMPONENT_DIGITS = {COMPONENT_DATABASE, COMPONENT_BACKEND, COMPONENT_AUTH_LIMITER}
 BINARY_MODE_DIGITS = {BINARY_SOURCE, BINARY_PRECOMPILED}
 
-# The unit configure_server.py installs. Its presence is what tells Server Utils, installed on its
+# The unit configure_server.py installs. Its presence is what tells Auth Limiter, installed on its
 # own, that the backend is on this same host. Kept in sync with SERVICE_NAME there by this name.
 BACKEND_SERVICE_UNIT_PATH = Path("/etc/systemd/system/genix.service")
 
@@ -36,11 +36,11 @@ def print_menu():
     print("Select components:")
     print("    [1] Database")
     print("    [2] Backend Service")
-    print("    [3] Server Utils")
+    print("    [3] Auth Limiter")
     print("Select one binary source:")
     print("    [7] Build from source")
     print("    [8] Download precompiled binaries from the latest release")
-    print("Example: 238 configures Backend Service and Server Utils from precompiled binaries.")
+    print("Example: 238 configures Backend Service and Auth Limiter from precompiled binaries.")
 
 
 def parse_selection(raw_selection):
@@ -137,8 +137,8 @@ def download_selected_binaries(selected_components, backend_mode):
     selected_assets = []
     if COMPONENT_BACKEND in selected_components and backend_mode != "3":
         selected_assets.append(f"genix_app_linux_{release_architecture}")
-    if COMPONENT_SERVER_UTILS in selected_components:
-        selected_assets.append(f"genix-server-utils_linux_{release_architecture}")
+    if COMPONENT_AUTH_LIMITER in selected_components:
+        selected_assets.append(f"auth-limiter_linux_{release_architecture}")
     if not selected_assets:
         print("[*] No Genix service binary is needed for the selected components.")
         return
@@ -171,11 +171,11 @@ def resolve_backend_mode():
 
 
 def resolve_bridge_is_needed():
-    """Decide whether Server Utils, selected on its own, still needs the public SSE bridge.
+    """Decide whether Auth Limiter, selected on its own, still needs the public SSE bridge.
 
     The bridge exists for one reason: a Lambda backend cannot hold an open connection, so something
     else has to. A backend on this same host serves /agent/stream itself and needs no vhost and no
-    sse_bridge.url — which is why the answer cannot be assumed either way. Installing Server Utils
+    sse_bridge.url — which is why the answer cannot be assumed either way. Installing Auth Limiter
     on a VPS *specifically* to bridge for a Lambda is exactly as ordinary as installing it next to a
     self-hosted backend.
 
@@ -223,7 +223,7 @@ def run_configurer(script_name, *arguments):
 
 def parse_command_arguments():
     argument_parser = argparse.ArgumentParser(
-        description="Configure Database, Backend Service and Server Utils with one compact selection."
+        description="Configure Database, Backend Service and Auth Limiter with one compact selection."
     )
     argument_parser.add_argument(
         "selection",
@@ -255,16 +255,16 @@ def main():
         except RuntimeError as download_error:
             raise SystemExit(f"[!] {download_error}") from download_error
 
-    # Database first because Server Utils needs its schema and connectivity at startup.
+    # Database first because Auth Limiter needs its schema and connectivity at startup.
     if COMPONENT_DATABASE in selected_components:
         run_configurer("configure_db.py")
     if COMPONENT_BACKEND in selected_components:
         run_configurer("configure_server.py", backend_mode, "--binary-source", binary_source)
-    if COMPONENT_SERVER_UTILS in selected_components:
-        server_utils_arguments = ["--binary-source", binary_source]
+    if COMPONENT_AUTH_LIMITER in selected_components:
+        auth_limiter_arguments = ["--binary-source", binary_source]
         # A self-hosted backend serves /agent/stream itself, so it needs the daemon's raw TCP
         # services but no public SSE vhost or sse_bridge.url. When the Backend component was
-        # selected in this same run its mode already answers that; when Server Utils is installed
+        # selected in this same run its mode already answers that; when Auth Limiter is installed
         # alone — which used to demand a bridge URL on every self-hosted box — it has to be asked.
         bridge_is_needed = (
             backend_mode not in {"1", "2"}
@@ -272,9 +272,9 @@ def main():
             else resolve_bridge_is_needed()
         )
         if not bridge_is_needed:
-            server_utils_arguments.append("--service-only")
+            auth_limiter_arguments.append("--service-only")
             print("[*] The backend serves its own /agent/stream; skipping the public SSE bridge.")
-        run_configurer("configure_server_utils.py", *server_utils_arguments)
+        run_configurer("configure_auth_limiter.py", *auth_limiter_arguments)
 
 
 if __name__ == "__main__":

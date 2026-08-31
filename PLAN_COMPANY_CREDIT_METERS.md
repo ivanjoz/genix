@@ -14,7 +14,7 @@ The numbers must be the *same numbers the limiter enforces on*, not an independe
 
 ## Where the enforcement numbers live today
 
-`server_utils/src/limiter/quota.rs:392-420` — a charge is refused when either:
+`auth-limiter/src/limiter/quota.rs:392-420` — a charge is refused when either:
 
 | Window  | Check                                                        | Source of the counter |
 | ------- | ------------------------------------------------------------ | --------------------- |
@@ -77,7 +77,7 @@ daemon, `core.MutateCompanyCreditBudget`). Column adds are applied by the ORM de
 
 Then: `cd scripts && go run . check_tables` (skill `static-project-validation`).
 
-## Step 2 — `server_utils`: flush the counters
+## Step 2 — `auth-limiter`: flush the counters
 
 `src/limiter/storage.rs`
 - New `BudgetUsageSnapshot { company_id, usage_day_period, day_used: Credits, usage_month_start_day,
@@ -224,13 +224,13 @@ above ceiling, exhausted).
 - `frontend/routes/system/companies/DOCUMENTATION.md` — "Review and find companies" gains the two
   meters and what they mean; "Manage a company credit budget" gains the daily-remaining figures and
   the ≤15s flush lag; refresh the `FILES` hashes (skill `document-user-routes`).
-- `server_utils/README.md` + `src/limiter/mod.rs` header — the flush now also writes budget counters.
+- `auth-limiter/README.md` + `src/limiter/mod.rs` header — the flush now also writes budget counters.
 - `backend/docs/` needs nothing: no new route.
 
 ## Verification
 
 1. `cd scripts && go run . check_tables`
-2. `cd server_utils && cargo test -p genix-server-utils limiter::`
+2. `cd auth-limiter && cargo test -p auth-limiter limiter::`
 3. `cd backend && go test ./config/...`
 4. `cd frontend && npx vitest run routes/system/companies`
 5. Deploy tables, restart the daemon, spend a credit, and confirm within 15s that

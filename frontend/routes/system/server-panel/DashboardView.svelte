@@ -71,7 +71,7 @@
       ]
     },
     {
-      id: 'server_utils', title: 'Server Utils', sharedAxisMaxValue: CPU_AXIS_MAX,
+      id: 'auth-limiter', title: 'Auth Limiter', sharedAxisMaxValue: CPU_AXIS_MAX,
       series: [
         { field: 'ServerUtilsCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
         { field: 'ServerUtilsMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
@@ -249,7 +249,7 @@
 
   {#if !hasSamples}
     <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-[13px] text-slate-600">
-      <T text="No samples in this window. Check that genix-server-utils is running on this host.|Sin muestras en esta ventana. Verifica que genix-server-utils esté corriendo en este host." />
+      <T text="No samples in this window. Check that auth-limiter is running on this host.|Sin muestras en esta ventana. Verifica que auth-limiter esté corriendo en este host." />
     </div>
   {/if}
 

@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// One multiplexed TCP connection to the server-utils daemon, shared by every operation in this
+// One multiplexed TCP connection to the auth-limiter daemon, shared by every operation in this
 // process: credit charges and locks alike.
 //
 // Requests travel in order and carry a sequence that both sides advance in lockstep for the
@@ -28,13 +28,15 @@ import (
 // That is what writeMu guards, and it is held for a socket write, never for a round trip.
 
 const (
-	serverUtilsNonceSize   = 8
-	serverUtilsAuthTagSize = 8
+	authLimiterNonceSize   = 8
+	authLimiterAuthTagSize = 8
 	// Every reply is [correlation:u16][status:u8][detail:u16].
-	serverUtilsReplySize = 5
+	authLimiterReplySize = 5
 	// Names the framing of the whole port, request and reply, and is bumped on every wire change
 	// so a mismatched peer fails at the first frame instead of misreading bytes.
-	serverUtilsAuthDomain = "genix-server-utils:v6"
+	// The value deliberately survived the auth-limiter rename: it is a protocol identifier, and
+	// changing it would invalidate every frame without any wire change to justify the bump.
+	authLimiterAuthDomain = "genix-server-utils:v6"
 
 	opcodeChargeCredits = byte(0x01)
 	opcodeLockAcquire   = byte(0x02)
@@ -50,8 +52,8 @@ const (
 
 	// Frames are tiny and the daemon is on loopback or a private network, so a write that cannot
 	// complete in this long means the connection is gone.
-	serverUtilsWriteTimeout = 5 * time.Second
-	serverUtilsDialTimeout  = 2 * time.Second
+	authLimiterWriteTimeout = 5 * time.Second
+	authLimiterDialTimeout  = 2 * time.Second
 )
 
 // logLine is how this package reports anything: it cannot import core, because core needs
@@ -66,9 +68,9 @@ func SetLogger(logger func(args ...any)) {
 	}
 }
 
-// ErrServerUtilsUnavailable means no answer arrived. Callers distinguish it from a real verdict:
+// ErrAuthLimiterUnavailable means no answer arrived. Callers distinguish it from a real verdict:
 // a charge treats it as permission to proceed, sign-up treats it as a reason to refuse.
-var ErrServerUtilsUnavailable = errors.New("server utils service is unavailable")
+var ErrAuthLimiterUnavailable = errors.New("auth-limiter service is unavailable")
 
 type muxReply struct {
 	status byte
@@ -88,7 +90,7 @@ type pendingRequest struct {
 
 type muxConnection struct {
 	conn  net.Conn
-	nonce [serverUtilsNonceSize]byte
+	nonce [authLimiterNonceSize]byte
 
 	writeMu  sync.Mutex
 	sequence uint64
@@ -100,7 +102,7 @@ type muxConnection struct {
 	closeOnce sync.Once
 }
 
-type ServerUtilsClient struct {
+type AuthLimiterClient struct {
 	address string
 	secret  []byte
 	mu      sync.Mutex
@@ -108,39 +110,39 @@ type ServerUtilsClient struct {
 }
 
 var (
-	configuredServerUtilsMu sync.RWMutex
-	configuredServerUtils   *ServerUtilsClient
+	configuredAuthLimiterMu sync.RWMutex
+	configuredAuthLimiter   *AuthLimiterClient
 )
 
-// ConfigureServerUtils installs the process-wide client. One address, one secret, one connection
+// ConfigureAuthLimiter installs the process-wide client. One address, one secret, one connection
 // for both the credit limiter and the lock service — the opcode decides which.
-func ConfigureServerUtils(address, secret string) error {
+func ConfigureAuthLimiter(address, secret string) error {
 	address = strings.TrimSpace(address)
 	if address == "" {
-		return errors.New("server_utils is required by the server-utils client")
+		return errors.New("auth_limiter is required by the auth-limiter client")
 	}
 	if strings.TrimSpace(secret) == "" {
-		return errors.New("internal_apikey is required by the server-utils client")
+		return errors.New("internal_apikey is required by the auth-limiter client")
 	}
-	client := &ServerUtilsClient{address: address, secret: []byte(secret)}
-	configuredServerUtilsMu.Lock()
-	previous := configuredServerUtils
-	configuredServerUtils = client
-	configuredServerUtilsMu.Unlock()
+	client := &AuthLimiterClient{address: address, secret: []byte(secret)}
+	configuredAuthLimiterMu.Lock()
+	previous := configuredAuthLimiter
+	configuredAuthLimiter = client
+	configuredAuthLimiterMu.Unlock()
 	if previous != nil {
 		previous.Close()
 	}
 	return nil
 }
 
-func serverUtils() *ServerUtilsClient {
-	configuredServerUtilsMu.RLock()
-	defer configuredServerUtilsMu.RUnlock()
-	return configuredServerUtils
+func authLimiter() *AuthLimiterClient {
+	configuredAuthLimiterMu.RLock()
+	defer configuredAuthLimiterMu.RUnlock()
+	return configuredAuthLimiter
 }
 
 // Close drops the current connection, which releases every lock held on it.
-func (client *ServerUtilsClient) Close() {
+func (client *AuthLimiterClient) Close() {
 	client.mu.Lock()
 	connection := client.current
 	client.current = nil
@@ -152,7 +154,7 @@ func (client *ServerUtilsClient) Close() {
 
 // request sends one frame and waits for its reply, retrying once on a connection that turned out
 // to be dead. It returns the connection used, because a lock must be released on the same one.
-func (client *ServerUtilsClient) request(
+func (client *AuthLimiterClient) request(
 	ctx context.Context, opcode byte, payload []byte, wait time.Duration,
 	action uint16, identifier int64,
 ) (muxReply, *muxConnection, error) {
@@ -160,7 +162,7 @@ func (client *ServerUtilsClient) request(
 	for attempt := range 2 {
 		connection, reused, err := client.connection(ctx)
 		if err != nil {
-			return muxReply{}, nil, fmt.Errorf("%w: connect: %v", ErrServerUtilsUnavailable, err)
+			return muxReply{}, nil, fmt.Errorf("%w: connect: %v", ErrAuthLimiterUnavailable, err)
 		}
 		reply, err := connection.exchange(
 			ctx, client.secret, opcode, payload, wait, action, identifier)
@@ -177,21 +179,21 @@ func (client *ServerUtilsClient) request(
 		}
 		break
 	}
-	return muxReply{}, nil, fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, lastError)
+	return muxReply{}, nil, fmt.Errorf("%w: %v", ErrAuthLimiterUnavailable, lastError)
 }
 
 // requestOnce avoids replaying non-idempotent operations such as increasing a credit balance.
 // An ambiguous disconnect is returned to the caller, which must re-read durable state.
-func (client *ServerUtilsClient) requestOnce(
+func (client *AuthLimiterClient) requestOnce(
 	ctx context.Context, opcode byte, payload []byte, wait time.Duration,
 ) (muxReply, error) {
 	connection, _, err := client.connection(ctx)
 	if err != nil {
-		return muxReply{}, fmt.Errorf("%w: connect: %v", ErrServerUtilsUnavailable, err)
+		return muxReply{}, fmt.Errorf("%w: connect: %v", ErrAuthLimiterUnavailable, err)
 	}
 	reply, err := connection.exchange(ctx, client.secret, opcode, payload, wait, 0, 0)
 	if err != nil {
-		return muxReply{}, fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, err)
+		return muxReply{}, fmt.Errorf("%w: %v", ErrAuthLimiterUnavailable, err)
 	}
 	return reply, nil
 }
@@ -207,12 +209,12 @@ func (client *ServerUtilsClient) requestOnce(
 //
 // One retry, for the same reason a request gets one: a pooled connection the daemon closed while
 // idle is indistinguishable from a live one until the write fails.
-func (client *ServerUtilsClient) send(ctx context.Context, opcode byte, payload []byte) error {
+func (client *AuthLimiterClient) send(ctx context.Context, opcode byte, payload []byte) error {
 	var lastError error
 	for attempt := range 2 {
 		connection, reused, err := client.connection(ctx)
 		if err != nil {
-			return fmt.Errorf("%w: connect: %v", ErrServerUtilsUnavailable, err)
+			return fmt.Errorf("%w: connect: %v", ErrAuthLimiterUnavailable, err)
 		}
 		if err := connection.write(client.secret, opcode, payload); err == nil {
 			return nil
@@ -224,7 +226,7 @@ func (client *ServerUtilsClient) send(ctx context.Context, opcode byte, payload 
 		}
 		break
 	}
-	return fmt.Errorf("%w: %v", ErrServerUtilsUnavailable, lastError)
+	return fmt.Errorf("%w: %v", ErrAuthLimiterUnavailable, lastError)
 }
 
 // write builds and writes one length-prefixed frame under the sequence lock.
@@ -238,9 +240,9 @@ func (connection *muxConnection) write(secret []byte, opcode byte, payload []byt
 	sequence := connection.sequence
 	connection.sequence++
 
-	frame := buildServerUtilsLengthPrefixedFrame(
+	frame := buildAuthLimiterLengthPrefixedFrame(
 		secret, &connection.nonce, sequence, opcode, payload)
-	writeErr := connection.conn.SetWriteDeadline(time.Now().Add(serverUtilsWriteTimeout))
+	writeErr := connection.conn.SetWriteDeadline(time.Now().Add(authLimiterWriteTimeout))
 	if writeErr == nil {
 		writeErr = writeCompleteFrame(connection.conn, frame)
 	}
@@ -254,11 +256,11 @@ func (connection *muxConnection) write(secret []byte, opcode byte, payload []byt
 
 // connection returns the shared connection, dialing one if none is healthy, and reports whether
 // it was already open.
-func (client *ServerUtilsClient) connection(ctx context.Context) (*muxConnection, bool, error) {
+func (client *AuthLimiterClient) connection(ctx context.Context) (*muxConnection, bool, error) {
 	// The dial happens under the lock on purpose. Releasing it first lets every concurrent
 	// caller open its own socket and then throw all but one away — a burst of six requests on a
 	// cold client opened six connections. Waiting behind one dial is what they would have spent
-	// anyway, and it is bounded by serverUtilsDialTimeout.
+	// anyway, and it is bounded by authLimiterDialTimeout.
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	if client.current != nil && !client.current.isClosed() {
@@ -274,8 +276,8 @@ func (client *ServerUtilsClient) connection(ctx context.Context) (*muxConnection
 	return dialed, false, nil
 }
 
-func (client *ServerUtilsClient) dial(ctx context.Context) (*muxConnection, error) {
-	dialer := net.Dialer{Timeout: serverUtilsDialTimeout, KeepAlive: 30 * time.Second}
+func (client *AuthLimiterClient) dial(ctx context.Context) (*muxConnection, error) {
+	dialer := net.Dialer{Timeout: authLimiterDialTimeout, KeepAlive: 30 * time.Second}
 	socket, err := dialer.DialContext(ctx, "tcp", client.address)
 	if err != nil {
 		return nil, err
@@ -285,7 +287,7 @@ func (client *ServerUtilsClient) dial(ctx context.Context) (*muxConnection, erro
 		pending: map[uint16]*pendingRequest{},
 		closed:  make(chan struct{}),
 	}
-	if err := socket.SetReadDeadline(time.Now().Add(serverUtilsDialTimeout)); err != nil {
+	if err := socket.SetReadDeadline(time.Now().Add(authLimiterDialTimeout)); err != nil {
 		socket.Close()
 		return nil, err
 	}
@@ -332,8 +334,8 @@ func (connection *muxConnection) exchange(
 	connection.pendingMu.Unlock()
 	connection.sequence++
 
-	frame := buildServerUtilsFrame(secret, &connection.nonce, sequence, opcode, payload)
-	writeErr := connection.conn.SetWriteDeadline(time.Now().Add(serverUtilsWriteTimeout))
+	frame := buildAuthLimiterFrame(secret, &connection.nonce, sequence, opcode, payload)
+	writeErr := connection.conn.SetWriteDeadline(time.Now().Add(authLimiterWriteTimeout))
 	if writeErr == nil {
 		writeErr = writeCompleteFrame(connection.conn, frame)
 	}
@@ -364,9 +366,9 @@ func (connection *muxConnection) exchange(
 
 // readLoop is the only reader of this socket. It dispatches by correlation, which is what lets
 // several callers share the connection.
-func (connection *muxConnection) readLoop(client *ServerUtilsClient) {
+func (connection *muxConnection) readLoop(client *AuthLimiterClient) {
 	for {
-		reply := [serverUtilsReplySize]byte{}
+		reply := [authLimiterReplySize]byte{}
 		if _, err := io.ReadFull(connection.conn, reply[:]); err != nil {
 			connection.fail(err)
 			return
@@ -384,7 +386,7 @@ func (connection *muxConnection) readLoop(client *ServerUtilsClient) {
 		if !known {
 			// Nobody is waiting for this. Not fatal — the caller may have been abandoned and
 			// already cleaned up — but it should never happen in a healthy stream.
-			logLine("server utils reply with no matching request::", correlation)
+			logLine("auth-limiter reply with no matching request::", correlation)
 			continue
 		}
 		if request.abandoned {
@@ -400,17 +402,17 @@ func (connection *muxConnection) readLoop(client *ServerUtilsClient) {
 }
 
 // releaseAbandoned returns a lock that was granted to a caller which had already stopped waiting.
-func (client *ServerUtilsClient) releaseAbandoned(
+func (client *AuthLimiterClient) releaseAbandoned(
 	connection *muxConnection, action uint16, identifier int64, generation uint16,
 ) {
-	logLine("server utils releasing a lock granted after its caller gave up::", action, identifier)
+	logLine("auth-limiter releasing a lock granted after its caller gave up::", action, identifier)
 	payload := makeLockReleasePayload(action, identifier, generation)
 	_, err := connection.exchange(
 		context.Background(), client.secret, opcodeLockRelease, payload,
-		serverUtilsWriteTimeout, action, identifier)
+		authLimiterWriteTimeout, action, identifier)
 	if err != nil {
 		// Not recoverable, and not fatal: the lease is the backstop.
-		logLine("server utils could not release an abandoned lock::", err)
+		logLine("auth-limiter could not release an abandoned lock::", err)
 	}
 }
 
@@ -434,7 +436,7 @@ func (connection *muxConnection) fail(cause error) {
 	connection.closeOnce.Do(func() {
 		connection.conn.Close()
 		close(connection.closed)
-		logLine("server utils connection closed::", cause)
+		logLine("auth-limiter connection closed::", cause)
 	})
 }
 
@@ -447,42 +449,42 @@ func (connection *muxConnection) isClosed() bool {
 	}
 }
 
-func buildServerUtilsFrame(
-	secret []byte, nonce *[serverUtilsNonceSize]byte, sequence uint64, opcode byte, payload []byte,
+func buildAuthLimiterFrame(
+	secret []byte, nonce *[authLimiterNonceSize]byte, sequence uint64, opcode byte, payload []byte,
 ) []byte {
-	frame := make([]byte, 0, 1+len(payload)+serverUtilsAuthTagSize)
+	frame := make([]byte, 0, 1+len(payload)+authLimiterAuthTagSize)
 	frame = append(frame, opcode)
 	frame = append(frame, payload...)
-	return append(frame, serverUtilsAuthTag(secret, nonce, sequence, frame)...)
+	return append(frame, authLimiterAuthTag(secret, nonce, sequence, frame)...)
 }
 
-// buildServerUtilsLengthPrefixedFrame is the variable-width form: the payload's length travels
+// buildAuthLimiterLengthPrefixedFrame is the variable-width form: the payload's length travels
 // between the opcode and the payload. The tag covers the length header too, so a peer cannot make
 // the daemon buffer a different amount than the one that was signed.
-func buildServerUtilsLengthPrefixedFrame(
-	secret []byte, nonce *[serverUtilsNonceSize]byte, sequence uint64, opcode byte, payload []byte,
+func buildAuthLimiterLengthPrefixedFrame(
+	secret []byte, nonce *[authLimiterNonceSize]byte, sequence uint64, opcode byte, payload []byte,
 ) []byte {
-	frame := make([]byte, 0, 1+2+len(payload)+serverUtilsAuthTagSize)
+	frame := make([]byte, 0, 1+2+len(payload)+authLimiterAuthTagSize)
 	frame = append(frame, opcode)
 	frame = binary.BigEndian.AppendUint16(frame, uint16(len(payload)))
 	frame = append(frame, payload...)
-	return append(frame, serverUtilsAuthTag(secret, nonce, sequence, frame)...)
+	return append(frame, authLimiterAuthTag(secret, nonce, sequence, frame)...)
 }
 
-// serverUtilsAuthTag signs one frame for one position in one connection's stream. Binding the
+// authLimiterAuthTag signs one frame for one position in one connection's stream. Binding the
 // tag to both the server nonce and the frame sequence is what stops a captured frame from being
 // replayed, on this connection or any other.
-func serverUtilsAuthTag(
-	secret []byte, nonce *[serverUtilsNonceSize]byte, sequence uint64, signed []byte,
+func authLimiterAuthTag(
+	secret []byte, nonce *[authLimiterNonceSize]byte, sequence uint64, signed []byte,
 ) []byte {
 	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(serverUtilsAuthDomain))
+	mac.Write([]byte(authLimiterAuthDomain))
 	mac.Write(nonce[:])
 	sequenceBytes := [8]byte{}
 	binary.BigEndian.PutUint64(sequenceBytes[:], sequence)
 	mac.Write(sequenceBytes[:])
 	mac.Write(signed)
-	return mac.Sum(nil)[:serverUtilsAuthTagSize]
+	return mac.Sum(nil)[:authLimiterAuthTagSize]
 }
 
 func writeCompleteFrame(connection net.Conn, frame []byte) error {

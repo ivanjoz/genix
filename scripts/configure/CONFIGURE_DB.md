@@ -123,7 +123,7 @@ public    = true
 
 - `http_port` / `grpc_port` — Qdrant expone REST y gRPC en **dos puertos distintos**
   (defaults propios: 6333 y 6334). El SDK Go oficial habla gRPC. Si son iguales, aborta.
-- `public` — decide el bind y si se abren los puertos, igual que en `[server_utils]`.
+- `public` — decide el bind y si se abren los puertos, igual que en `[auth_limiter]`.
 - `host` — misma regla que `search.url`: si ya tiene valor no se toca, porque la
   dirección por la que el backend entra de verdad (IP pública, dominio o túnel) no se
   deduce desde el host. Sólo cuando está vacío escribe la IP detectada, y avisa si es

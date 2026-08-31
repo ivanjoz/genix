@@ -2,9 +2,9 @@ package types
 
 import "app/db"
 
-// One row every five seconds with what the machine was doing, written by server_utils and never by
+// One row every five seconds with what the machine was doing, written by auth-limiter and never by
 // this backend: the ORM owns the schema, the daemon owns the writes. That is the same split
-// user_logs uses, and here it is not a preference — server_utils is the only Genix process
+// user_logs uses, and here it is not a preference — auth-limiter is the only Genix process
 // guaranteed to be on the box, since the backend may be a Lambda, so it is the only one that can
 // promise a continuous series.
 //
@@ -37,8 +37,12 @@ type ServerMetric struct {
 	// Per-service memory in megabytes (saturating at the int16 ceiling, 32 GB) and CPU as a
 	// percentage of the WHOLE machine, so a Scylla pinning eight of eight cores reads 100.00% and
 	// not the top-style 800% that would not fit here.
-	BackendMemMb          int16 `json:",omitempty"`
-	BackendCpuPercent     int16 `json:",omitempty"`
+	BackendMemMb      int16 `json:",omitempty"`
+	BackendCpuPercent int16 `json:",omitempty"`
+	// ServerUtils* keeps the daemon's old name on purpose: these fields carry no column tag, so
+	// the ORM derives server_utils_mem_mb / server_utils_cpu_percent from the field name, and those
+	// are the live columns the auth-limiter INSERT names and the frontend's JSON keys. Renaming
+	// them to match auth-limiter is a schema migration, not a rename.
 	ServerUtilsMemMb      int16 `json:",omitempty"`
 	ServerUtilsCpuPercent int16 `json:",omitempty"`
 	SearchMemMb           int16 `json:",omitempty"`
@@ -49,15 +53,16 @@ type ServerMetric struct {
 
 type ServerMetricTable struct {
 	db.TableStruct[ServerMetricTable, ServerMetric]
-	Date                  db.Col[*ServerMetricTable, int16]
-	Slot                  db.Col[*ServerMetricTable, int16]
-	CpuPercent            db.Col[*ServerMetricTable, int16]
-	MemPercent            db.Col[*ServerMetricTable, int16]
-	DiskPercent           db.Col[*ServerMetricTable, int16]
-	NetRxRate             db.Col[*ServerMetricTable, int16]
-	NetTxRate             db.Col[*ServerMetricTable, int16]
-	BackendMemMb          db.Col[*ServerMetricTable, int16]
-	BackendCpuPercent     db.Col[*ServerMetricTable, int16]
+	Date              db.Col[*ServerMetricTable, int16]
+	Slot              db.Col[*ServerMetricTable, int16]
+	CpuPercent        db.Col[*ServerMetricTable, int16]
+	MemPercent        db.Col[*ServerMetricTable, int16]
+	DiskPercent       db.Col[*ServerMetricTable, int16]
+	NetRxRate         db.Col[*ServerMetricTable, int16]
+	NetTxRate         db.Col[*ServerMetricTable, int16]
+	BackendMemMb      db.Col[*ServerMetricTable, int16]
+	BackendCpuPercent db.Col[*ServerMetricTable, int16]
+	// See the record above: these two keep the pre-rename spelling because it is the column name.
 	ServerUtilsMemMb      db.Col[*ServerMetricTable, int16]
 	ServerUtilsCpuPercent db.Col[*ServerMetricTable, int16]
 	SearchMemMb           db.Col[*ServerMetricTable, int16]
@@ -87,7 +92,7 @@ func (e ServerMetricTable) GetSchema() db.TableSchema {
 const SlotsPerDay = 86_400 / ServerMetricSlotSeconds
 
 // ServerMetricSlotSeconds is the width of one slot. Mirrored by server_metrics.row_seconds in
-// config.toml, which server_utils validates against this same arithmetic: change one and the
+// config.toml, which auth-limiter validates against this same arithmetic: change one and the
 // clustering key stops meaning what every stored row meant.
 const ServerMetricSlotSeconds = 5
 

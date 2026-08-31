@@ -173,10 +173,10 @@ class ManagerSelectionTest(unittest.TestCase):
 
         with mock.patch.object(firewall_ports, "which", return_value=None):
             with redirect_stdout(io.StringIO()) as captured_output:
-                self.assertFalse(firewall_ports.ensure_tcp_port_open(14013, "server_utils raw TCP"))
+                self.assertFalse(firewall_ports.ensure_tcp_port_open(14013, "auth_limiter raw TCP"))
 
         self.assertIn("Could not confirm", captured_output.getvalue())
-        self.assertIn("server_utils raw TCP", captured_output.getvalue())
+        self.assertIn("auth_limiter raw TCP", captured_output.getvalue())
 
 
 if __name__ == "__main__":

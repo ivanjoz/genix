@@ -171,7 +171,7 @@ export interface ICompanyParams {
 }
 
 // Every endpoint resolves its own stream host. `bridge === route` means the backend serves
-// /agent/stream directly; a different value selects server_utils' /sse endpoint.
+// /agent/stream directly; a different value selects auth-limiter' /sse endpoint.
 const getAgentStreamBase = (selectedEndpoint: IApiEndpointOption): string =>
   String(selectedEndpoint.bridge || selectedEndpoint.route || "").trim().replace(/\/+$/, "")
 

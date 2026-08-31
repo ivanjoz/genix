@@ -1,4 +1,4 @@
-package server_utils
+package auth_limiter
 
 import (
 	"context"
@@ -25,7 +25,7 @@ const (
 	creditBlockBytes = 8 * 1024
 
 	// Fourteen bits of the persisted blob's two-byte header, mirrored from
-	// server_utils/src/limiter/credits_blob.rs. Refused here rather than at the daemon so an
+	// auth-limiter/src/limiter/credits_blob.rs. Refused here rather than at the daemon so an
 	// unencodable route is a caller's error and not a rejected frame — a rejection would be
 	// indistinguishable from the limiter being down and would produce the wrong 503 response.
 	maxChargeRouteID = 16_383
@@ -33,7 +33,7 @@ const (
 	// extraCreditFlag rides in the high bit of the route field, which maxChargeRouteID leaves free.
 	// Set, it tells the daemon this charge is a read and may therefore fall back to the company's
 	// extra daily pool once normal quota refuses. Mirrored from EXTRA_CREDIT_FLAG in
-	// server_utils/src/limiter/protocol.rs.
+	// auth-limiter/src/limiter/protocol.rs.
 	//
 	// It is a permission and not an instruction: an eligible frame that fits in normal quota is
 	// charged normally. Only reads carry it, because the pool exists to keep a tenant out of credit
@@ -45,7 +45,7 @@ var ErrCreditLimiterMissing = errors.New("credit rate limiter is not configured"
 
 // accessDeniedReason is the reply frame's detail field. Zero means no authorization was requested
 // and one means granted, which is why the refusals start at two — mirrored from
-// server_utils/src/limiter/access.rs.
+// auth-limiter/src/limiter/access.rs.
 type accessDeniedReason uint16
 
 const (
@@ -283,7 +283,7 @@ func chargeConfiguredCredits(
 		}
 	}
 
-	client := serverUtils()
+	client := authLimiter()
 	if client == nil {
 		logLine("credit rate limiter not configured, refusing request::", ErrCreditLimiterMissing)
 		return ErrCreditLimiterMissing
@@ -298,7 +298,7 @@ func chargeConfiguredCredits(
 
 // encodeCharge validates one charge and lays it out for the wire. Separate from Charge so the
 // layout can be asserted without a daemon: these twenty bytes are read by offset on the Rust side
-// (server_utils/src/limiter/protocol.rs), and a field that shifts here charges the wrong number to
+// (auth-limiter/src/limiter/protocol.rs), and a field that shifts here charges the wrong number to
 // the wrong route with nothing in either process to say so.
 //
 // Route zero is accepted, and means the request matched no generated route. Those credits are as
@@ -357,7 +357,7 @@ func encodeCharge(
 // The two refusals arrive in different fields: a credit violation in status, an authorization denial
 // in detail. Because the daemon resolves authorization first and returns without charging on a
 // refusal, the two can never both be set.
-func (client *ServerUtilsClient) Charge(
+func (client *AuthLimiterClient) Charge(
 	ctx context.Context,
 	companyID, userID int32,
 	routeID int16,
@@ -401,7 +401,7 @@ func decodeAccessResponse(detail uint16, wasRequested bool) error {
 	default:
 		return fmt.Errorf(
 			"%w: credit limiter did not answer the access check (detail %d)",
-			ErrServerUtilsUnavailable, detail)
+			ErrAuthLimiterUnavailable, detail)
 	}
 }
 
@@ -421,7 +421,7 @@ func decodeCreditLimitResponse(code uint8) error {
 	// 0xFF is the daemon saying it could not answer; anything else malformed is treated the same
 	// way, as unavailability rather than as a verdict.
 	if code&0b1110_0000 != 0 || code&0b0001_1000 == 0 {
-		return fmt.Errorf("%w: credit limiter returned status %d", ErrServerUtilsUnavailable, code)
+		return fmt.Errorf("%w: credit limiter returned status %d", ErrAuthLimiterUnavailable, code)
 	}
 	windows := [...]string{"10 seconds", "1 hour", "24 hours", "month"}
 	return &CreditLimitExceeded{
