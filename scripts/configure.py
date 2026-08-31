@@ -16,7 +16,10 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 PROJECT_ROOT_DIRECTORY = SCRIPT_DIRECTORY.parent
 CONFIGURE_DIRECTORY = SCRIPT_DIRECTORY / "configure"
 DOWNLOAD_DIRECTORY = PROJECT_ROOT_DIRECTORY / "tmp"
-LATEST_RELEASE_URL = "https://github.com/ivanjoz/genix/releases/latest/download"
+GENIX_RELEASE_URL = "https://github.com/ivanjoz/genix/releases/latest/download"
+# auth-limiter releases from its own repository, so its binaries and its checksum manifest
+# come from a different release than the backend's and must be verified against that one.
+AUTH_LIMITER_RELEASE_URL = "https://github.com/ivanjoz/auth-limiter/releases/latest/download"
 
 COMPONENT_DATABASE = "1"
 COMPONENT_BACKEND = "2"
@@ -78,12 +81,17 @@ def resolve_release_architecture():
     raise RuntimeError(f"Unsupported architecture: {machine_architecture}.")
 
 
-def download_latest_release_file(asset_name):
-    """Download one latest-release file atomically into tmp/."""
+def download_latest_release_file(asset_name, release_base_url=GENIX_RELEASE_URL, local_name=None):
+    """Download one latest-release file atomically into tmp/.
+
+    local_name exists because every release publishes its manifest as SHA256SUMS: without it the
+    auth-limiter manifest would overwrite the backend's in tmp/ and each would be checked against
+    the other's checksums.
+    """
     DOWNLOAD_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    destination_path = DOWNLOAD_DIRECTORY / asset_name
+    destination_path = DOWNLOAD_DIRECTORY / (local_name or asset_name)
     staged_path = destination_path.with_name(f".{destination_path.name}.download")
-    release_url = f"{LATEST_RELEASE_URL}/{asset_name}"
+    release_url = f"{release_base_url}/{asset_name}"
     print(f"[*] Downloading {release_url}")
 
     request = urllib.request.Request(release_url, headers={"User-Agent": "genix-configure"})
@@ -132,30 +140,41 @@ def verify_release_asset(asset_path, release_checksums):
 
 
 def download_selected_binaries(selected_components, backend_mode):
-    """Download only the latest binaries needed on this host."""
+    """Download only the latest binaries needed on this host, each from its own release."""
     release_architecture = resolve_release_architecture()
-    selected_assets = []
+    # Grouped by publisher: an asset may only ever be checked against the manifest of the release
+    # it was published in, so the release it came from has to travel with its name.
+    assets_by_release = {}
     if COMPONENT_BACKEND in selected_components and backend_mode != "3":
-        selected_assets.append(f"genix_app_linux_{release_architecture}")
+        assets_by_release.setdefault((GENIX_RELEASE_URL, "SHA256SUMS.genix"), []).append(
+            f"genix_app_linux_{release_architecture}"
+        )
     if COMPONENT_AUTH_LIMITER in selected_components:
-        selected_assets.append(f"auth-limiter_linux_{release_architecture}")
-    if not selected_assets:
+        assets_by_release.setdefault(
+            (AUTH_LIMITER_RELEASE_URL, "SHA256SUMS.auth-limiter"), []
+        ).append(f"auth-limiter_linux_{release_architecture}")
+    if not assets_by_release:
         print("[*] No Genix service binary is needed for the selected components.")
         return
 
-    checksum_manifest_path = download_latest_release_file("SHA256SUMS")
-    release_checksums = parse_release_checksums(checksum_manifest_path)
-    for selected_asset in selected_assets:
-        cached_asset_path = DOWNLOAD_DIRECTORY / selected_asset
-        if cached_asset_path.is_file():
-            try:
-                verify_release_asset(cached_asset_path, release_checksums)
-                print(f"[*] Reusing verified latest-release asset: {cached_asset_path}")
-                continue
-            except RuntimeError as cache_error:
-                print(f"[*] Cached asset cannot be reused: {cache_error}")
+    for (release_base_url, manifest_local_name), selected_assets in assets_by_release.items():
+        checksum_manifest_path = download_latest_release_file(
+            "SHA256SUMS", release_base_url, manifest_local_name
+        )
+        release_checksums = parse_release_checksums(checksum_manifest_path)
+        for selected_asset in selected_assets:
+            cached_asset_path = DOWNLOAD_DIRECTORY / selected_asset
+            if cached_asset_path.is_file():
+                try:
+                    verify_release_asset(cached_asset_path, release_checksums)
+                    print(f"[*] Reusing verified latest-release asset: {cached_asset_path}")
+                    continue
+                except RuntimeError as cache_error:
+                    print(f"[*] Cached asset cannot be reused: {cache_error}")
 
-        verify_release_asset(download_latest_release_file(selected_asset), release_checksums)
+            verify_release_asset(
+                download_latest_release_file(selected_asset, release_base_url), release_checksums
+            )
 
 
 def resolve_backend_mode():

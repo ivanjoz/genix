@@ -68,7 +68,7 @@ class ReleaseVerificationTest(unittest.TestCase):
             manifest_path = download_directory / "SHA256SUMS"
             manifest_path.write_text(f"{expected_checksum}  {asset_name}\n", encoding="utf-8")
 
-            def download_manifest_only(requested_name):
+            def download_manifest_only(requested_name, release_base_url=None, local_name=None):
                 if requested_name == "SHA256SUMS":
                     return manifest_path
                 self.fail(f"Unexpected binary download: {requested_name}")
@@ -81,6 +81,55 @@ class ReleaseVerificationTest(unittest.TestCase):
                         side_effect=download_manifest_only,
                     ), redirect_stdout(io.StringIO()):
                 configure.download_selected_binaries({"2"}, "2")
+
+    def test_each_component_is_verified_against_its_own_release_manifest(self):
+        """The backend and auth-limiter publish separate releases, so mixing the two manifests
+        would verify each binary against checksums that never covered it."""
+        configure = load_configure_module()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            download_directory = Path(temporary_directory)
+            backend_asset = "genix_app_linux_amd64"
+            limiter_asset = "auth-limiter_linux_amd64"
+
+            manifests = {}
+            for asset_name, manifest_local_name in (
+                (backend_asset, "SHA256SUMS.genix"),
+                (limiter_asset, "SHA256SUMS.auth-limiter"),
+            ):
+                asset_path = download_directory / asset_name
+                asset_path.write_bytes(f"bytes of {asset_name}".encode())
+                checksum = configure.hashlib.sha256(asset_path.read_bytes()).hexdigest()
+                manifest_path = download_directory / manifest_local_name
+                # Each manifest names ONLY its own asset: if the code fell back to a single
+                # manifest, one of the two assets would raise "no entry for".
+                manifest_path.write_text(f"{checksum}  {asset_name}\n", encoding="utf-8")
+                manifests[manifest_local_name] = manifest_path
+
+            requested_urls = {}
+
+            def download_manifest_only(requested_name, release_base_url=None, local_name=None):
+                if requested_name == "SHA256SUMS":
+                    requested_urls[local_name] = release_base_url
+                    return manifests[local_name]
+                self.fail(f"Unexpected binary download: {requested_name}")
+
+            with mock.patch.object(configure, "DOWNLOAD_DIRECTORY", download_directory), \
+                    mock.patch.object(configure, "resolve_release_architecture", return_value="amd64"), \
+                    mock.patch.object(
+                        configure,
+                        "download_latest_release_file",
+                        side_effect=download_manifest_only,
+                    ), redirect_stdout(io.StringIO()):
+                configure.download_selected_binaries({"2", "3"}, "2")
+
+            self.assertEqual(
+                requested_urls,
+                {
+                    "SHA256SUMS.genix": configure.GENIX_RELEASE_URL,
+                    "SHA256SUMS.auth-limiter": configure.AUTH_LIMITER_RELEASE_URL,
+                },
+            )
 
 
 class DispatchTest(unittest.TestCase):

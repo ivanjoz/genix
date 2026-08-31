@@ -27,8 +27,10 @@ Utils selection (`38`) remains the Lambda companion mode and requires `sse_bridg
 public SSE bridge.
 
 Option `8` maps `x86_64` to the `amd64` assets and `aarch64`/`arm64` to the `arm64` assets. It
-downloads `SHA256SUMS` and the required files from
-`https://github.com/ivanjoz/genix/releases/latest/download`, verifies each SHA-256 checksum, and
+downloads `SHA256SUMS` and the required files from the release that publishes each component —
+the backend from `https://github.com/ivanjoz/genix/releases/latest/download`, Auth Limiter from
+`https://github.com/ivanjoz/auth-limiter/releases/latest/download` — verifies each SHA-256
+checksum against the manifest of the release it came from, and
 only then invokes the nested installer. A matching asset already under `tmp/` is reused after
 verification, so rerunning configuration does not download the large binaries again. A verified
 latest asset takes precedence over an older installed binary. Option `7` requires the
