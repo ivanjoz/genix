@@ -28,7 +28,7 @@ jobs:
           # The nearest reachable version tag is the only safe release reuse candidate.
           fetch-depth: 0
 
-      - name: Decide whether server utils must be rebuilt
+      - name: Decide whether auth-limiter must be rebuilt
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
@@ -64,7 +64,7 @@ jobs:
               echo 'auth-limiter or its release build definition changed; rebuilding'
             fi
           else
-            echo 'Manual validation run; rebuilding server utils and warming caches'
+            echo 'Manual validation run; rebuilding auth-limiter and warming caches'
           fi
 
           echo "build_required=${build_required}" >> "$GITHUB_OUTPUT"
@@ -164,7 +164,7 @@ jobs:
           retention-days: 1
 
   build-auth-limiter:
-    name: Server utils (${{ matrix.asset_architecture }})
+    name: Auth limiter (${{ matrix.asset_architecture }})
     needs: plan-auth-limiter
     if: ${{ needs.plan-auth-limiter.outputs.build_required == 'true' }}
     env:
@@ -187,7 +187,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Initialize the server utils submodule
+      - name: Initialize the auth-limiter submodule
         # auth-limiter/ is the auth-limiter repository; the crate itself lives there, so nothing
         # below this step has sources to compile until the submodule is checked out.
         run: |
@@ -221,7 +221,7 @@ jobs:
           # Tags restore the default-branch cache but do not save isolated tag caches.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Test server utils natively
+      - name: Test auth-limiter natively
         working-directory: auth-limiter
         env:
           RUST_TARGET: ${{ matrix.rust_target }}
