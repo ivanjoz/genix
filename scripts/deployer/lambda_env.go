@@ -21,9 +21,6 @@ const (
 	lambdaResponseStreaming = "1"
 )
 
-// Mismo default que cloud/webpage-renderer.go.
-const defaultRendererZipURL = "https://genix-dev.un.pe/webpage-renderer.zip"
-
 // El CONFIG viaja zstd + base64 url-safe: es exactamente lo que MakeB64UrlDecode +
 // DecompressZstd deshacen en backend/core/security.go, donde el payload descomprimido
 // se parsea como TOML.
@@ -37,6 +34,7 @@ type lambdaConfig struct {
 	} `toml:"aws"`
 	Frontend struct {
 		CDNURL             string `toml:"cdn_url"`
+		AppURL             string `toml:"app_url"`
 		WebpageRendererURL string `toml:"webpage_renderer_url"`
 	} `toml:"frontend"`
 	Cloudflare struct {
@@ -91,18 +89,25 @@ func updateLambdaEnvironmentVariables(context deployContext) error {
 		}
 	}
 
+	// Same derivation as cloud/webpage-renderer.go and backend/core/security.go: CI publishes the
+	// zip next to the frontend, so the domain comes from frontend.app_url.
+	rendererZipURL := strings.TrimSpace(config.Frontend.WebpageRendererURL)
+	if rendererZipURL == "" {
+		if appURL := strings.TrimRight(strings.TrimSpace(config.Frontend.AppURL), "/"); appURL != "" {
+			rendererZipURL = appURL + "/webpage-renderer.zip"
+		}
+	}
+
 	// La Lambda de render recibe las variables sueltas (no el CONFIG comprimido) para no
 	// obligar al handler de Node a descomprimir zstd.
 	if config.Frontend.CDNURL == "" {
 		fmt.Println("⚠️  frontend.cdn_url vacío: se omite la Lambda de render.")
+	} else if rendererZipURL == "" {
+		fmt.Println("⚠️  frontend.app_url y frontend.webpage_renderer_url vacíos: se omite la Lambda de render.")
 	} else {
 		cloudflareBucket := config.Cloudflare.Bucket
 		if cloudflareBucket == "" {
 			cloudflareBucket = config.AppName + "-files"
-		}
-		rendererZipURL := config.Frontend.WebpageRendererURL
-		if rendererZipURL == "" {
-			rendererZipURL = defaultRendererZipURL
 		}
 
 		rendererEnvironment := map[string]map[string]string{"Variables": {

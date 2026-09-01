@@ -116,10 +116,13 @@ func runWebpageRendererLocally(request WebpageRenderRequest) (WebpageRenderResul
 	}
 
 	for variableName, variableValue := range map[string]string{
-		"FRONTEND_CDN":       core.Env.FRONTEND_CDN,
-		"CLOUDFLARE_ACCOUNT": core.Env.CLOUDFLARE_ACCOUNT,
-		"CLOUDFLARE_TOKEN":   core.Env.CLOUDFLARE_TOKEN,
-		"CLOUDFLARE_BUCKET":  core.Env.CLOUDFLARE_BUCKET,
+		// Without frontend.app_url or frontend.webpage_renderer_url in config.toml this is empty
+		// and the renderer would fetch the zip from a hostless URL.
+		"WEBPAGE_RENDERER_URL": core.Env.WEBPAGE_RENDERER_URL,
+		"FRONTEND_CDN":         core.Env.FRONTEND_CDN,
+		"CLOUDFLARE_ACCOUNT":   core.Env.CLOUDFLARE_ACCOUNT,
+		"CLOUDFLARE_TOKEN":     core.Env.CLOUDFLARE_TOKEN,
+		"CLOUDFLARE_BUCKET":    core.Env.CLOUDFLARE_BUCKET,
 	} {
 		// El handler valida lo mismo y aborta, pero desde aquí el mensaje dice qué falta en
 		// config.toml en vez de aparecer como un fallo del proceso de Node.

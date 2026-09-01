@@ -25,19 +25,18 @@ const rendererHandlerPath = "/webpage-renderer/handler.mjs"
 const rendererS3Path = "gerp-artifacts/webpage-renderer-lambda.zip"
 const rendererLocalZipPath = "/cloud/webpage-renderer-lambda.zip"
 
-// URL por defecto del artefacto de CI (GitHub Pages, siempre la última versión). Se puede
-// sobrescribir con frontend.webpage_renderer_url en config.toml.
-//
-// Duplicada en backend/core/security.go (DefaultWebpageRendererURL) porque el backend también
-// necesita el artefacto cuando ejecuta el renderer en local, y este directorio es otro módulo
-// Go: el compilador no puede vigilar que las dos sigan iguales.
-const defaultRendererZipUrl = "https://genix-dev.un.pe/webpage-renderer.zip"
-
+// rendererZipUrl resolves the CI-published artifact (GitHub Pages, always the latest build).
+// frontend.webpage_renderer_url overrides it; otherwise it is derived from frontend.app_url, so
+// the domain is declared once in config.toml instead of in every Go module that deploys.
 func rendererZipUrl(params DeployParams) string {
 	if url := strings.TrimSpace(params.Frontend.WebpageRendererURL); url != "" {
 		return url
 	}
-	return defaultRendererZipUrl
+	appUrl := strings.TrimRight(strings.TrimSpace(params.Frontend.AppURL), "/")
+	if appUrl == "" {
+		panic("frontend.app_url o frontend.webpage_renderer_url son requeridos en config.toml")
+	}
+	return appUrl + "/webpage-renderer.zip"
 }
 
 // Empaqueta el handler de Node y lo sube al bucket de despliegues, desde donde

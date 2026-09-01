@@ -518,11 +518,6 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.LOG_ALL_REQUESTS = file.RequestLog.LogAllRequests
 }
 
-// DefaultWebpageRendererURL is the CI-published storefront renderer artifact. It is duplicated in
-// cloud/webpage-renderer.go (defaultRendererZipUrl) and the two must stay equal — `cloud` is a
-// separate Go module and cannot import this package, so the compiler cannot enforce it.
-const DefaultWebpageRendererURL = "https://genix-dev.un.pe/webpage-renderer.zip"
-
 var Env *EnvStruct
 var BuildDate string
 
@@ -614,11 +609,12 @@ func PopulateVariables() {
 	if len(Env.CLOUDFLARE_BUCKET) == 0 {
 		Env.CLOUDFLARE_BUCKET = Env.APP_NAME + "-files"
 	}
-	// Keep this default identical to defaultRendererZipUrl in cloud/webpage-renderer.go: the same
-	// artifact has to be used whether the renderer runs in Lambda or locally.
+	// The renderer artifact is published by CI next to the frontend, so app_url is where it lands.
+	// Deriving it keeps the domain declared once in config.toml; cloud/webpage-renderer.go and
+	// scripts/deployer/lambda_env.go derive the same URL for the deploys they drive.
 	Env.WEBPAGE_RENDERER_URL = strings.TrimSpace(Env.WEBPAGE_RENDERER_URL)
-	if len(Env.WEBPAGE_RENDERER_URL) == 0 {
-		Env.WEBPAGE_RENDERER_URL = DefaultWebpageRendererURL
+	if len(Env.WEBPAGE_RENDERER_URL) == 0 && len(Env.APP_URL) > 0 {
+		Env.WEBPAGE_RENDERER_URL = Env.APP_URL + "/webpage-renderer.zip"
 	}
 	// The environment override lets systemd/Lambda point at a private daemon without rewriting TOML.
 	if farewardAddress := strings.TrimSpace(os.Getenv("FAREWARD_ADDRESS")); farewardAddress != "" {

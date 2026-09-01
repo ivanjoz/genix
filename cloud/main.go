@@ -52,8 +52,10 @@ type DeployParams struct {
 		// CDNURL es el origen público del CDN. La Lambda de render lo necesita para construir
 		// la base de assets de cada company (<CDNURL>/websites/<companyID>).
 		CDNURL string `toml:"cdn_url"`
-		// WebpageRendererURL es la URL del artefacto webpage-renderer.zip que publica CI.
-		// Vacío = el valor por defecto de cloud/webpage-renderer.go.
+		// AppURL is the origin where CI publishes the frontend, and with it webpage-renderer.zip.
+		AppURL string `toml:"app_url"`
+		// WebpageRendererURL is the webpage-renderer.zip artifact published by CI.
+		// Empty = derived from AppURL in rendererZipUrl.
 		WebpageRendererURL string `toml:"webpage_renderer_url"`
 	} `toml:"frontend"`
 }

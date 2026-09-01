@@ -245,10 +245,10 @@ database_id = ""
 
 # ─── Frontend / CDN público ─────────────────────────────────────────────────
 [frontend]
+app_url   = ""
 cdn_url   = ""
 zone_name = ""
-# Artefacto webpage-renderer.zip publicado por CI. Vacío = el default de
-# core.DefaultWebpageRendererURL, que debe seguir igual al de cloud/webpage-renderer.go.
+# webpage-renderer.zip artifact published by CI. Empty = derived from app_url.
 webpage_renderer_url = ""
 
 # ─── SMTP ───────────────────────────────────────────────────────────────────

@@ -1,3 +1,14 @@
+## `WEBPAGE_RENDERER_URL` is validated before running the renderer locally
+
+**Context** — `core.Env.WEBPAGE_RENDERER_URL` used to fall back to a hardcoded constant, so it was
+never empty. It is now derived from `frontend.app_url`, which can be absent from config.toml.
+
+**Decision** — `WEBPAGE_RENDERER_URL` joined the required-variable map in
+`runWebpageRendererLocally`, so a missing key is reported as a config.toml problem instead of the
+renderer failing on a hostless download URL.
+
+**Rationale** — See the full entry in `backend/RATIONALE.md`.
+
 ## Backend AVIF/WebP conversion moves behind the `avif` build tag
 
 **Context** — `github.com/ivanjoz/avif-webp-encoder` was **4,194,304 bytes of the production
