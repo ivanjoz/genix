@@ -3,7 +3,7 @@
    +layout.svelte — same config as the admin/builder so the canvas preview matches
    the live store. Only the storefront-specific italic accent face stays here. */
 @font-face {
-  font-family: 'bold-italic'; src: url("https://genix-dev.un.pe/libs/lato-v24-latin-italic.woff2");
+  font-family: 'bold-italic'; src: url("https://genix.un.pe/libs/lato-v24-latin-italic.woff2");
   font-weight: 700;
   font-style: italic;
 }

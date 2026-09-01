@@ -133,15 +133,25 @@ body.dark {
 	background-color: #27262a;
 }
 
-/* Headings */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-	margin: 0;
-	font-family: bold;
+/* Headings. Inside @layer base so that Tailwind's utilities — which live in
+   @layer utilities — win over this reset. Unlayered, `margin: 0` beat every
+   `mt-*`/`mx-auto` on a heading, silently: `mx-auto` on an <h2> did nothing. */
+@layer base {
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		margin: 0;
+		font-family: bold;
+	}
+
+	/* Same reason: unlayered, `color: inherit` beat every `text-*` utility on an <a>. */
+	a {
+		text-decoration: none;
+		color: inherit;
+	}
 }
 
 .h3,

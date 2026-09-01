@@ -5,7 +5,7 @@
   import Input from '$components/form/Input.svelte';
   import T from '$components/misc/T.svelte';
   import { Core, setLanguaje, tr } from '$core/store.svelte';
-  import { Env, lastLoginCompanyIDStorageKey, type IApiEndpointOption } from '$core/env';
+  import { Env, lastLoginCompanyIDStorageKey } from '$core/env';
   import { Notify } from '$libs/helpers';
   import { security } from '$libs/ui-runtime.svelte';
   import { getPublicCompanyName, sendUserLogin, type ILogin } from '$services/login';
@@ -13,12 +13,13 @@
   import { featureSections } from './features';
 
   const REGISTRATION_MODAL_ID = 71;
+  const WELCOME_DEVELOPER_MODE_STORAGE_KEY = 'genixWelcomeDeveloperMode';
+  const GITHUB_REPOSITORY_URL = 'https://github.com/ivanjoz/genix';
   const ui = useUI();
 
   const navigationItems = [
     { id: 'home', label: 'Home|Inicio' },
     { id: 'features', label: 'Features|Funcionalidades' },
-    { id: 'roadmap', label: 'Roadmap|Roadmap' },
     { id: 'contact', label: 'Contact|Contacto' },
   ];
 
@@ -95,8 +96,6 @@
 
   // Resolved synchronously so the Input reads the stored tenant on its first render.
   let loginForm = $state<ILogin>({ User: '', Password: '', CompanyID: readStoredCompanyID(), CipherKey: '' });
-  let selectedApiEndpointRoute = $state('');
-  let apiEndpointOptions = $state<IApiEndpointOption[]>([]);
   let isLoginLoading = $state(false);
   let isCompanyLookupLoading = $state(false);
   let companyName = $state('');
@@ -107,24 +106,13 @@
   // Filled from /welcome?req=…&code=…, the link the registration email carries.
   let signUpRequestID = $state(0);
   let signUpCode = $state('');
+  let developerMode = $state(false);
 
-  // Keep endpoint selection identical to the former login page so authentication behavior does not change.
-  const syncApiEndpointSelector = () => {
-    apiEndpointOptions = [...Env.availableApiEndpoints];
-    selectedApiEndpointRoute = Env.selectedApiEndpointRoute || apiEndpointOptions[0]?.route || '';
-  };
-
-  const onApiEndpointChange = (selectedEndpoint?: IApiEndpointOption) => {
-    if (!selectedEndpoint?.route) return;
-    Env.setSelectedApiEndpoint(selectedEndpoint.route);
-    selectedApiEndpointRoute = selectedEndpoint.route;
-    // A name resolved on another server is no longer authoritative, so resolve it again there.
-    companyLookupSequence += 1;
-    isCompanyLookupLoading = false;
-    companyName = '';
-    companyLookupError = '';
-    console.info('[WelcomeLogin] API endpoint selected:', selectedEndpoint.route);
-    void lookupCompanyName();
+  // The public app has one backend: always use the first configured endpoint instead of exposing
+  // a server choice or retaining a selection from a prior browser session.
+  const selectDefaultApiEndpoint = () => {
+    const defaultEndpointRoute = Env.availableApiEndpoints[0]?.route;
+    if (defaultEndpointRoute) Env.setSelectedApiEndpoint(defaultEndpointRoute);
   };
 
   // Company IDs are positive database identifiers; reject values that cannot identify a tenant.
@@ -203,7 +191,7 @@
   };
 
   onMount(() => {
-    syncApiEndpointSelector();
+    selectDefaultApiEndpoint();
     if (security.checkIsLogin() === 2) {
       Env.navigate('/');
       return;
@@ -214,6 +202,11 @@
 
     // Landing from the registration email opens the wizard straight on the code check.
     const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('dev') === 'x') {
+      localStorage.setItem(WELCOME_DEVELOPER_MODE_STORAGE_KEY, '1');
+    }
+    developerMode = localStorage.getItem(WELCOME_DEVELOPER_MODE_STORAGE_KEY) === '1';
+
     const requestIDParam = Number(urlParams.get('req'));
     if (Number.isSafeInteger(requestIDParam) && requestIDParam > 0) {
       signUpRequestID = requestIDParam;
@@ -240,6 +233,12 @@
 </svelte:head>
 
 <svelte:window onkeydown={handleWindowKeydown} />
+
+{#snippet githubMark(sizeClass: string)}
+  <svg class={sizeClass} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+    <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z" />
+  </svg>
+{/snippet}
 
 <div class="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-200 selection:text-indigo-950">
   <header class="fixed inset-x-0 top-0 z-50">
@@ -287,12 +286,23 @@
           >
             <T text="Sign in|Ingresar" />
           </button>
-          <button
-            class="hidden h-38 items-center rounded-[10px] bg-indigo-600 px-16 text-sm text-white shadow-md shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 md:flex"
-            onclick={openRegistration}
+          <a
+            class="hidden h-38 items-center gap-7 rounded-[10px] px-12 text-sm text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline-3 focus-visible:outline-white md:flex"
+            href={GITHUB_REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
           >
-            <T text="Register|Regístrese" />
-          </button>
+            {@render githubMark('size-16')}
+            Github
+          </a>
+          {#if developerMode}
+            <button
+              class="hidden h-38 items-center rounded-[10px] bg-indigo-600 px-16 text-sm text-white shadow-md shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 md:flex"
+              onclick={openRegistration}
+            >
+              <T text="Register|Regístrese" />
+            </button>
+          {/if}
           <button
             class="flex size-38 items-center justify-center rounded-[10px] border border-white/20 bg-white/10 text-white lg:hidden"
             aria-label={tr('Toggle navigation menu|Alternar menú de navegación')}
@@ -315,14 +325,25 @@
               <T text={navigationItem.label} />
             </button>
           {/each}
-          <div class="mt-4 grid grid-cols-2 gap-8">
+          <div class="mt-4 grid gap-8 {developerMode ? 'grid-cols-2' : 'grid-cols-1'}">
             <button class="rounded-[10px] border border-white/25 px-12 py-10 text-white" onclick={focusLogin}>
               <T text="Sign in|Ingresar" />
             </button>
-            <button class="rounded-[10px] bg-indigo-600 px-12 py-10 text-white" onclick={openRegistration}>
-              <T text="Register|Regístrese" />
-            </button>
+            {#if developerMode}
+              <button class="rounded-[10px] bg-indigo-600 px-12 py-10 text-white" onclick={openRegistration}>
+                <T text="Register|Regístrese" />
+              </button>
+            {/if}
           </div>
+          <a
+            class="mt-4 flex items-center justify-center gap-7 rounded-[10px] border border-white/25 px-12 py-10 text-white"
+            href={GITHUB_REPOSITORY_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {@render githubMark('size-16')}
+            Github
+          </a>
         </div>
       {/if}
     </nav>
@@ -345,27 +366,37 @@
               <i class="icon-[fa--code-fork] text-violet-200" aria-hidden="true"></i>
               <T text="ERP + e-commerce|ERP + comercio electrónico" />
             </div>
-            <h1 class="max-w-620 text-4xl font-bold leading-tight md:text-5xl lg:text-[56px]">
+            <h1 class="ff-display max-w-620 text-4xl font-bold leading-tight md:text-5xl lg:text-[56px]">
               <T text="Run your business from one clear, connected system.|Gestione cada proceso de su empresa" />
             </h1>
             <p class="mt-20 max-w-600 text-lg leading-[1.6] text-indigo-100 md:text-xl">
               <T text="Genix brings sales, inventory, purchasing, finance, and online commerce together for small businesses that want control without complexity.|Genix reúne ventas, inventario, compras, finanzas y comercio electrónico para pequeñas empresas que buscan control sin complejidad." />
             </p>
-            <div class="mt-28 flex flex-col gap-10 sm:flex-row">
-              <button
-                class="flex h-46 items-center justify-center gap-8 rounded-[11px] bg-white px-20 text-indigo-800 shadow-lg transition hover:-translate-y-1 hover:bg-indigo-50 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-white"
-                onclick={openRegistration}
+            {#if developerMode}
+              <div class="mt-28 flex flex-col gap-10 sm:flex-row">
+                <button
+                  class="flex h-46 items-center justify-center gap-8 rounded-[11px] bg-white px-20 text-indigo-800 shadow-lg transition hover:-translate-y-1 hover:bg-indigo-50 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-white"
+                  onclick={openRegistration}
+                >
+                  <span class="font-semibold"><T text="Register|Regístrese" /></span>
+                  <i class="icon-[fa--arrow-right]" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="flex h-46 items-center justify-center rounded-[11px] border border-white/25 bg-white/10 px-20 text-white backdrop-blur transition hover:bg-white/15 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-white"
+                  onclick={() => navigateToSection('features')}
+                >
+                  <T text="Discover Genix|Conozca Genix" />
+                </button>
+              </div>
+            {:else}
+              <div
+                class="mt-28 flex max-w-600 items-start gap-10 rounded-[14px] border border-violet-300/45 bg-slate-900/82 px-16 py-14 text-sm leading-[1.55] text-[#ffeed6] shadow-lg shadow-slate-950/40 backdrop-blur"
+                role="status"
               >
-                <span class="font-semibold"><T text="Register|Regístrese" /></span>
-                <i class="icon-[fa--arrow-right]" aria-hidden="true"></i>
-              </button>
-              <button
-                class="flex h-46 items-center justify-center rounded-[11px] border border-white/25 bg-white/10 px-20 text-white backdrop-blur transition hover:bg-white/15 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-white"
-                onclick={() => navigateToSection('features')}
-              >
-                <T text="Discover Genix|Conozca Genix" />
-              </button>
-            </div>
+                <span class="w-4 shrink-0 self-stretch rounded-[2px] bg-[#ffeed6]" aria-hidden="true"></span>
+                <T text="Available from February 8, 2027, with a free-use limit or a paid business plan.|Disponible desde el 8 de Febrero 2027, con límite para uso gratuito o con plan empresarial de pago." />
+              </div>
+            {/if}
             <div class="mt-30 flex flex-wrap gap-x-20 gap-y-9 text-sm text-indigo-100">
               <span class="flex items-center gap-7"><i class="icon-[fa--check-circle]" aria-hidden="true"></i><T text="Open source|Código abierto" /></span>
               <span class="flex items-center gap-7"><i class="icon-[fa--check-circle]" aria-hidden="true"></i><T text="Self-hostable|Autohospedable" /></span>
@@ -387,27 +418,6 @@
               aria-label={tr('Login form with username and password|Formulario de acceso con usuario y contraseña')}
               onsubmit={(event) => { event.preventDefault(); void submitLogin(); }}
             >
-              {#if apiEndpointOptions.length > 0}
-                <fieldset>
-                  <legend class="mb-9 text-sm text-violet-100"><T text="Server|Servidor" /></legend>
-                  <div class="grid grid-cols-3 gap-10">
-                    {#each apiEndpointOptions as apiEndpointOption}
-                      <button
-                        type="button"
-                        class="flex min-h-56 w-full items-center justify-start gap-8 rounded-[12px] border px-10 text-left text-sm transition focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-violet-300 disabled:cursor-not-allowed disabled:opacity-60 {selectedApiEndpointRoute === apiEndpointOption.route
-                          ? 'border-violet-300 bg-violet-500/35 text-white shadow-lg shadow-violet-950/20'
-                          : 'border-white/20 bg-white/8 text-white/75 hover:border-white/40 hover:bg-white/15 hover:text-white'}"
-                        aria-pressed={selectedApiEndpointRoute === apiEndpointOption.route}
-                        disabled={isLoginLoading}
-                        onclick={() => onApiEndpointChange(apiEndpointOption)}
-                      >
-                        <i class="icon-[fa--server] shrink-0 -ml-1 -mr-1" aria-hidden="true"></i>
-                        <span class="min-w-0 leading-tight">{apiEndpointOption.name}</span>
-                      </button>
-                    {/each}
-                  </div>
-                </fieldset>
-              {/if}
               <div class="relative mt-8">
                 <Input
                   label="Company ID|ID Empresa"
@@ -458,7 +468,7 @@
     <section class="px-16 py-72 md:px-28 md:py-96" aria-labelledby="what-is-genix">
       <div class="mx-auto max-w-1320 text-center">
         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Your business, under control|Su negocio bajo control" /></p>
-        <h2 id="what-is-genix" class="mx-auto mt-12 max-w-760 text-3xl font-bold leading-tight text-slate-950 md:text-4xl">
+        <h2 id="what-is-genix" class="ff-display mx-auto mt-12 max-w-760 text-3xl font-bold leading-tight text-slate-950 md:text-4xl">
           <T text="Your business under control, a few clicks away.|El control de su empresa a pocos clicks." />
         </h2>
         <p class="mx-auto mt-16 max-w-760 text-lg leading-[1.6] text-slate-600">
@@ -498,7 +508,7 @@
       <div class="mx-auto max-w-1320 px-16 pb-40 pt-72 md:px-28 md:pb-48 md:pt-96">
         <div class="max-w-760">
           <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Capabilities|Funcionalidades" /></p>
-          <h2 id="features-title" class="mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Everything your business needs, in one system.|Todo lo que su negocio necesita, en un solo sistema." /></h2>
+          <h2 id="features-title" class="ff-display mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Everything your business needs, in one system.|Todo lo que su negocio necesita, en un solo sistema." /></h2>
           <p class="mt-14 text-lg leading-[1.6] text-slate-600"><T text="Genix covers the daily life of a small business — selling, buying, producing, and controlling stock and cash — and grows with you into planning, accounting, and online sales.|Genix cubre el día a día de una micro o pequeña empresa: vender, comprar, producir, controlar el stock y la caja, y crece con usted hacia la planificación, la contabilidad y la venta en línea." /></p>
           <!-- The product is unfinished on purpose and says so: the legend explains both marks before
                the first list, so a planned item is never read as something that already works. -->
@@ -563,43 +573,13 @@
         </article>
       {/each}
     </section>
-
-    <section id="roadmap" class="scroll-mt-110 px-16 py-72 md:px-28 md:py-96" aria-labelledby="roadmap-title">
-      <div class="mx-auto max-w-1320">
-        <div class="text-center">
-          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Transparent roadmap|Roadmap transparente" /></p>
-          <h2 id="roadmap-title" class="mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="What works today, and what comes next.|Lo que funciona hoy y lo que viene después." /></h2>
-          <p class="mx-auto mt-14 max-w-760 text-lg leading-[1.6] text-slate-600"><T text="Genix is in pre-alpha and under active development. Priorities, interfaces, and schemas may change as the product evolves.|Genix está en etapa pre-alfa y en desarrollo activo. Las prioridades, interfaces y esquemas pueden cambiar mientras evoluciona el producto." /></p>
-        </div>
-
-        <div class="mt-40 grid gap-14 lg:grid-cols-3">
-          {#each roadmapGroups as roadmapGroup}
-            <article class="rounded-[20px] border border-slate-200 bg-white p-22 shadow-sm">
-              <div class="inline-flex items-center gap-8 rounded-full border px-12 py-7 text-sm font-semibold {roadmapGroup.accent}">
-                <i class={roadmapGroup.icon} aria-hidden="true"></i>
-                <T text={roadmapGroup.status} />
-              </div>
-              <ul class="mt-20 grid gap-13">
-                {#each roadmapGroup.items as roadmapItem}
-                  <li class="flex gap-10 leading-[1.55] text-slate-600">
-                    <i class="icon-[fa--circle] mt-10 text-[6px] text-indigo-400" aria-hidden="true"></i>
-                    <span><T text={roadmapItem} /></span>
-                  </li>
-                {/each}
-              </ul>
-            </article>
-          {/each}
-        </div>
-      </div>
-    </section>
-
     <section id="contact" class="scroll-mt-110 px-16 pb-80 pt-24 md:px-28 md:pb-100 md:pt-40" aria-labelledby="contact-title">
       <div class="mx-auto grid max-w-1320 overflow-hidden rounded-[26px] bg-indigo-950 shadow-2xl shadow-indigo-950/15 lg:grid-cols-[0.85fr_1.15fr]">
         <div class="relative overflow-hidden px-24 py-40 text-white md:px-40 md:py-54">
           <div class="absolute -bottom-120 -left-80 size-300 rounded-full bg-violet-500/25 blur-3xl"></div>
           <div class="relative">
             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-200"><T text="Contact|Contacto" /></p>
-            <h2 id="contact-title" class="mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Tell us what your business needs.|Cuéntenos qué necesita su empresa." /></h2>
+            <h2 id="contact-title" class="ff-display mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Tell us what your business needs.|Cuéntenos qué necesita su empresa." /></h2>
             <p class="mt-16 max-w-430 leading-[1.55] text-indigo-100"><T text="Share your current workflow, deployment preference, or the Genix capability you want to evaluate.|Comparta su flujo actual, preferencia de implementación o la funcionalidad de Genix que desea evaluar." /></p>
             <div class="mt-28 grid gap-12 text-sm text-indigo-100">
               <span class="flex items-center gap-10"><i class="icon-[fa--code]" aria-hidden="true"></i><T text="Open-source foundation|Base de código abierto" /></span>
@@ -655,9 +635,6 @@
     id={REGISTRATION_MODAL_ID}
     presetRequestID={signUpRequestID}
     presetCode={signUpCode}
-    {apiEndpointOptions}
-    {selectedApiEndpointRoute}
-    {onApiEndpointChange}
   />
 </div>
 
@@ -670,6 +647,10 @@
     border: 1px solid rgb(255 255 255 / 24%);
     box-shadow: 0 16px 60px rgb(0 0 0 / 40%), inset 0 0 4px 2px rgb(255 255 255 / 10%);
     backdrop-filter: blur(25px) saturate(100%);
+    min-height: 440px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   /* Two quiet highlights create the reflected-edge effect of physical glass. */

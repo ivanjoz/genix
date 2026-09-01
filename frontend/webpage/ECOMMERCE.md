@@ -11,7 +11,7 @@ each company's pages from it on demand:
 1. **CI** (`scripts/build-renderer.mjs`, on push to main) runs the SvelteKit build with
    `VITE_RENDERER_BUILD=1`, bundles the SSR server into a single `render.mjs` with esbuild,
    merges the stylesheets, renders a smoke page to validate its own rewrite rules, and ships
-   `webpage-renderer.zip` (~466 KB) to `https://genix-dev.un.pe/webpage-renderer.zip`.
+   `webpage-renderer.zip` (~466 KB) to `https://genix.un.pe/webpage-renderer.zip`.
 2. **`deploy.sh 11 <companyID>`** → `backend/exec/company_webpage_deploy.go`: resolves the
    hostname (`Parameters` group 10, key `domain`), builds the page list (IDs 10 and 11 plus
    active user pages with ID >= 15) and invokes the render Lambda synchronously.

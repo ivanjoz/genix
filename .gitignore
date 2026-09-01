@@ -71,3 +71,6 @@ frontend/webpage/static/sw.js
 frontend/webpage/static/sw.js.map
 
 # Binarios compilados del relay SSE
+
+# SvelteKit genera esto en la raíz cuando se corre svelte fuera de frontend/.
+/.svelte-kit

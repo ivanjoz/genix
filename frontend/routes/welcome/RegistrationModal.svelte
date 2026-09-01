@@ -3,7 +3,7 @@
   import Input from '$components/form/Input.svelte';
   import Modal from '$components/layers/Modal.svelte';
   import T from '$components/misc/T.svelte';
-  import { Env, type IApiEndpointOption } from '$core/env';
+  import { Env } from '$core/env';
   import { tr } from '$core/store.svelte';
   import { formatTime, Notify } from '$libs/helpers';
   import { extractError, security } from '$libs/ui-runtime.svelte';
@@ -16,16 +16,10 @@
     // opens straight on the code check instead of asking for the address again.
     presetRequestID?: number
     presetCode?: string
-    // The server picker is shared with the login form rather than duplicated, so both always agree
-    // on which backend the visitor is talking to.
-    apiEndpointOptions?: IApiEndpointOption[]
-    selectedApiEndpointRoute?: string
-    onApiEndpointChange?: (selectedEndpoint: IApiEndpointOption) => void
   }
 
   let {
     id, presetRequestID = 0, presetCode = '',
-    apiEndpointOptions = [], selectedApiEndpointRoute = '', onApiEndpointChange,
   }: Props = $props();
 
   const steps = [
@@ -299,28 +293,6 @@
               aria-hidden="true"
             />
 
-            <!-- Hidden once a code has been mailed: that request only exists on the server that
-                 issued it, so switching backends mid-flow would silently invalidate it. -->
-            {#if apiEndpointOptions.length > 0 && !isCodeStage}
-              <fieldset class="shrink-0 mt-24">
-                <legend class="mb-6 text-xs text-slate-500"><T text="Server|Servidor" /></legend>
-                <div class="flex gap-6">
-                  {#each apiEndpointOptions as apiEndpointOption}
-                    <button
-                      type="button"
-                      class="flex min-h-44 w-105 items-center gap-6 rounded-[10px] border px-8 text-left text-xs leading-tight transition focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 {selectedApiEndpointRoute === apiEndpointOption.route
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'}"
-                      aria-pressed={selectedApiEndpointRoute === apiEndpointOption.route}
-                      onclick={() => onApiEndpointChange?.(apiEndpointOption)}
-                    >
-                      <i class="icon-[fa--server] shrink-0" aria-hidden="true"></i>
-                      <span class="min-w-0">{apiEndpointOption.name}</span>
-                    </button>
-                  {/each}
-                </div>
-              </fieldset>
-            {/if}
           </div>
 
           <p class="mb-8 text-lg font-semibold text-slate-900">

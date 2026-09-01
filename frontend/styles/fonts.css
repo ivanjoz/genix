@@ -11,39 +11,49 @@
 /* Desktop — Open Sans */
 @font-face {
 	font-family: 'main';
-	src: url("https://genix-dev.un.pe/fonts/open-sans-regular.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/open-sans-regular.woff2") format("woff2");
 	font-display: swap;
 }
 @font-face {
 	font-family: 'bold';
-	src: url("https://genix-dev.un.pe/fonts/open-sans-v40-latin-600.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/open-sans-v40-latin-600.woff2") format("woff2");
 	font-display: swap;
 }
 @font-face {
 	font-family: 'semibold';
-	src: url("https://genix-dev.un.pe/fonts/open-sans-v40-latin-500.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/open-sans-v40-latin-500.woff2") format("woff2");
 	font-display: swap;
 }
 @font-face {
 	font-family: 'mono';
-	src: url("https://genix-dev.un.pe/fonts/jetbrains-mono-regular.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/jetbrains-mono-regular.woff2") format("woff2");
+	font-display: swap;
+}
+
+/* Display — Raleway SemiBold, for large headlines only. Local path first so it
+   resolves in dev before the static folder is deployed; the genix.un.pe copy is
+   the fallback for the storefront, which ships no static/fonts of its own. */
+@font-face {
+	font-family: 'display';
+	src: url("/fonts/raleway-v37-latin-600.woff2") format("woff2"),
+	     url("https://genix.un.pe/fonts/raleway-v37-latin-600.woff2") format("woff2");
 	font-display: swap;
 }
 
 /* Mobile — Inter, exposed through parallel `*-mobile` aliases. */
 @font-face {
 	font-family: 'main-mobile';
-	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-regular.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/inter-v20-latin-regular.woff2") format("woff2");
 	font-display: swap;
 }
 @font-face {
 	font-family: 'bold-mobile';
-	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-700.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/inter-v20-latin-700.woff2") format("woff2");
 	font-display: swap;
 }
 @font-face {
 	font-family: 'semibold-mobile';
-	src: url("https://genix-dev.un.pe/fonts/inter-v20-latin-600.woff2") format("woff2");
+	src: url("https://genix.un.pe/fonts/inter-v20-latin-600.woff2") format("woff2");
 	font-display: swap;
 }
 
@@ -52,6 +62,7 @@
 .ff-bold { font-family: bold; }
 .ff-semibold { font-family: semibold; }
 .ff-mono, .ff-mono p { font-family: mono; }
+.ff-display { font-family: display; }  /* kept on mobile too — see the media query below */
 
 h1, h2, h3, h4, h5, h6 { font-family: bold; }
 
@@ -67,4 +78,9 @@ h1, h2, h3, h4, h5, h6 { font-family: bold; }
 	.font-semibold { font-family: 'semibold-mobile'; }
 
 	h1, h2, h3, h4, h5, h6 { font-family: bold-mobile; }
+
+	/* Raleway is a display face, not part of the Open Sans → Inter swap, so it
+	   is re-asserted here: the `.font-bold` remap above matches with the same
+	   specificity and would otherwise win on the headline elements. */
+	.ff-display { font-family: display; }
 }

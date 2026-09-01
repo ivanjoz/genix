@@ -17,11 +17,9 @@ button:disabled {
 	opacity: 0.6;
 }
 
-/* Links */
-a {
-	text-decoration: none;
-	color: inherit;
-}
+/* Links: the reset lives in tailwind.css's @layer base. It cannot be declared here —
+   this file is imported before tailwind.css, so an @layer block would register `base`
+   ahead of Tailwind's own layer-order statement and push the theme layer after it. */
 
 /* Inputs */
 input,
