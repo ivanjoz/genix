@@ -1,6 +1,6 @@
 name: Deploy frontend to GitHub Pages
 
-# Build the combined Svelte frontend and publish it at genix-dev.un.pe.
+# Build the combined Svelte frontend and publish it at genix.un.pe.
 on:
   push:
     branches: [main]
@@ -96,7 +96,7 @@ jobs:
       - name: Verify Pages metadata
         # Keep GitHub Pages at the custom domain and bypass Jekyll processing.
         run: |
-          test "$(cat frontend/build/CNAME)" = 'genix-dev.un.pe'
+          test "$(cat frontend/build/CNAME)" = 'genix.un.pe'
           touch frontend/build/.nojekyll
 
       - name: Upload Pages artifact

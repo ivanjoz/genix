@@ -1,1 +1,2 @@
 static/** filter=lfs diff=lfs merge=lfs -text
+static/CNAME -filter -diff -merge text
