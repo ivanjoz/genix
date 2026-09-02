@@ -96,9 +96,11 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	asset.PaidAmount = paidAmount
+	// IsFullyPaid is the write-off override: the balance is declared settled without the cash
+	// covering it, which is the one case the amounts alone cannot decide.
 	asset.PaymentStatus = core.If(
-		payload.IsFullyPaid || paidAmount >= asset.PurchaseAmount,
-		types.AssetPaymentPaid, types.AssetPaymentPending,
+		payload.IsFullyPaid,
+		types.AssetPaymentPaid, ResolveAssetPaymentStatus(asset.PurchaseAmount, paidAmount),
 	)
 	asset.Updated = core.SUnixTime()
 	asset.UpdatedBy = req.User.ID

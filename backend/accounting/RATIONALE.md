@@ -3,6 +3,70 @@
 Design decisions behind the asset register and depreciation, newest first.
 Full design in `PLAN.md`.
 
+## Editing an asset rewrites its depreciation ledger in place
+
+**Context** — `DepreciationSchedule` is a pure function of `AcquisitionValue`, `AcquisitionDate`
+and `DepreciationMonths`. `PUT.asset` makes the first two editable, so the moment either changes
+every Type-4 `Expense` already posted for the asset describes a schedule that no longer exists —
+and the ORM has no `Delete`, so those rows cannot simply be dropped.
+
+**Decision** — `rewriteAssetDepreciation` reads the asset's live Type-4 rows, sorts them by `Date`,
+and pairs them index-for-index against the schedule the *new* values produce: the first
+`min(old, new)` rows have their `Date` and `Amount` overwritten, surplus periods are inserted, and
+surplus rows are retired with `Status = 0`. `AccumulatedDepreciation` and `LastDepreciationDate`
+then take the last new period's values, or zero when nothing has elapsed under the new dates.
+`GetAssetDepreciation` filters `Status != 0` so the retired tail leaves the panel.
+
+**Rationale** — Chosen over retiring the whole ledger and regenerating it, which was the simpler
+implementation: with no `Delete`, a wholesale rebuild leaves one dead row per period *per edit* in
+`expenses` forever, and shows the expense register a removal followed by an insert rather than an
+amount change. Pairing by date index costs about twenty lines more and keeps the row IDs stable.
+Chosen over a forward-only adjustment — spreading the difference over the months still to come —
+because that needs a basis column on the table and destroys the purity of `DepreciationSchedule`,
+and because an edit here is a correction of a data-entry mistake, not a revaluation: the register
+should end up looking like the asset was entered correctly the first time. The cost is real, and
+deliberate: the P&L of a closed past month changes.
+
+## An asset edit refuses to lower the purchase amount below what was paid
+
+**Context** — `Asset.PaidAmount` is recomputed from the `CashBankMovement` ledger and this handler
+never touches it. A new `PurchaseAmount` under it would leave the asset over-paid with no record
+of why.
+
+**Decision** — Rejected, with the paid amount named in the message: *"El monto de compra no puede
+ser menor a lo ya pagado (X). Revierta el pago antes de reducirlo."*
+
+**Rationale** — The alternative is to clamp and mark the asset `Paid`, which loses the discrepancy
+silently. Reversing cash is a cash operation; an asset edit does not get to do it implicitly.
+
+## Changing a serial moves the stock rather than relabelling it
+
+**Context** — `ProductStockDetail`'s key is `(ProductStockID, LotID, SerialNumber)`, so a serial
+cannot be updated in place at all. Writing `Asset.SerialNumber` alone would leave the asset naming
+a stock detail row that does not exist, with the old serial still holding the units.
+
+**Decision** — A serial change posts two `InternalMovement`s through `ApplyMovimientos`:
+`-Quantity` on the old serial, `+Quantity` on the new one. An empty serial is the no-detail bucket,
+so adding or clearing a serial is the same pair. A serial change on a *disposed* asset is rejected —
+its units are already out of stock, so there is nothing to move — and a serial another live asset
+of the same material carries is rejected too, since both would claim one detail row.
+
+**Rationale** — The same engine acquisition and disposal already use, so stock stays consistent
+without a second code path. Cost: two rows in the movement ledger per typo corrected.
+
+## The acquisition movement's price is left stale after an edit
+
+**Context** — `PostAsset` writes the inbound stock movement with `Price = AcquisitionValue`.
+Correcting the value through `PUT.asset` does not go back and fix it.
+
+**Decision** — Left as it was. Only the serial change re-posts movements, and it carries the new
+per-unit value on the inbound leg because it is writing a fresh movement anyway.
+
+**Rationale** — Rewriting a historical movement to correct a price is a larger change than the edit
+warrants, and the movement ledger is not what the balance sheet reads — `Asset.AcquisitionValue`
+and the depreciation entries are. Recorded here because it is a real inconsistency, not an oversight.
+
+
 ## A depreciation entry stores no PeriodDate either, because it dedupes elsewhere
 
 **Context** — `Expense.PeriodDate` is the key the scheduled-expense generator matches on to avoid

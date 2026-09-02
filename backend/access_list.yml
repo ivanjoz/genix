@@ -239,7 +239,7 @@ access_list:
     group: 7
     levels: 14
     frontend_routes: "accounting/assets"
-    backend_apis: "GET.assets,POST.asset,PUT.asset-disposal,PUT.asset-transfer,POST.asset-depreciation-run,GET.asset-depreciation"
+    backend_apis: "GET.assets,POST.asset,PUT.asset,PUT.asset-disposal,PUT.asset-transfer,POST.asset-depreciation-run,GET.asset-depreciation"
   - id: 35
     name: "Facturación Electrónica"
     group: 7

@@ -1,7 +1,7 @@
 import { GetHandler, GET, POST, PUT } from '$libs/ui-runtime.svelte'
-import { AssetStatus, type IAsset, type IDepreciationEntry } from './assets'
+import { AssetStatus, type IAsset, type IAssetForm, type IDepreciationEntry } from './assets'
 
-export type { IAsset, IDepreciationEntry }
+export type { IAsset, IAssetForm, IDepreciationEntry }
 
 export class AssetsService extends GetHandler<IAsset> {
   route = "assets"
@@ -26,21 +26,12 @@ export class AssetsService extends GetHandler<IAsset> {
   }
 }
 
-export interface IAssetAcquisition {
-  ProductID: number
+// The acquisition payload is the form's fields plus the serial list. Whether serials were
+// entered is what decides the granularity: one asset per serial, or one grouped row carrying
+// the lot size. AcquisitionValue and PurchaseAmount are per unit here and the backend
+// multiplies them by the quantity — unlike IAssetEdit, which works in row totals.
+export interface IAssetAcquisition extends Omit<IAssetForm, "SerialNumber"> {
   SerialNumbers: string[]
-  Quantity: number
-  WarehouseID: number
-  AcquisitionDate: number
-  Name: string
-  Description: string
-  SupplierID: number
-  CurrencyType: number
-  AcquisitionValue: number
-  // Cash owed per unit. 0 = donated: nothing is owed and the asset is never payable.
-  PurchaseAmount: number
-  DueDate: number
-  DepreciationMonths: number
 }
 
 // Acquiring an asset writes no expense — only the asset rows and the stock movement.
@@ -60,6 +51,22 @@ export interface IAssetPayment {
 // the asset list and the cash banks whose balance it moved.
 export const postAssetPayment = (data: IAssetPayment): Promise<IAsset> => {
   return POST({ data, route: "asset-payment", refreshRoutes: ["assets", "cash-banks"] })
+}
+
+// AcquisitionValue and PurchaseAmount are the asset row's totals here, not per-unit figures as
+// in IAssetAcquisition. Editing either one, or the acquisition date, makes the backend rewrite
+// the asset's whole posted depreciation ledger — hence the expenses refresh.
+export interface IAssetEdit {
+  AssetID: number
+  SerialNumber: string
+  AcquisitionDate: number
+  DueDate: number
+  AcquisitionValue: number
+  PurchaseAmount: number
+}
+
+export const putAssetEdit = (data: IAssetEdit): Promise<IAsset> => {
+  return PUT({ data, route: "asset", refreshRoutes: ["assets", "expenses"] })
 }
 
 export const putAssetDisposal = (data: { AssetID: number, DisposalDate: number }): Promise<IAsset> => {

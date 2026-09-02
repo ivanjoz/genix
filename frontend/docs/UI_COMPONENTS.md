@@ -201,6 +201,7 @@ Text/number input with validation support.
 | `placeholder` | `string` | No | Placeholder text |
 | `required` | `boolean` | No | Shows validation indicator |
 | `disabled` | `boolean` | No | Disables input |
+| `focusOnOpen` | `boolean` | No | Marks this field as the one a `Modal` focuses when it opens, overriding the Modal's first-enabled-control default. Needed when an earlier field would take focus and open something over the form — a `DateInput` opens its calendar on focus |
 | `validator` | `(v: string \| number) => boolean` | No | Custom validation function |
 | `onChange` | `() => void` | No | Called on value change (on blur) |
 | `postValue` | `string \| ElementAST[]` | No | Content after input |

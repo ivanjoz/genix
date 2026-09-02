@@ -10,6 +10,7 @@ const depreciationCategoryID int8 = 6
 var ModuleHandlers = core.AppRouterType{
 	"GET.assets":                  GetAssets,
 	"POST.asset":                  PostAsset,
+	"PUT.asset":                   PutAssetEdit,
 	"PUT.asset-disposal":          PutAssetDisposal,
 	"PUT.asset-transfer":          PutAssetTransfer,
 	"POST.asset-depreciation-run": PostAssetDepreciationRun,

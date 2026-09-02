@@ -118,5 +118,15 @@ func GetAssetDepreciation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener la depreciación del activo.", queryError)
 	}
 
-	return req.MakeResponse(entries)
+	// An edit that shortens the schedule retires the periods that no longer happen by setting
+	// Status 0 (rewriteAssetDepreciation), so the ledger has to drop them or the panel would
+	// still show months the asset never depreciated for.
+	liveEntries := make([]finance.Expense, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Status != 0 {
+			liveEntries = append(liveEntries, entry)
+		}
+	}
+
+	return req.MakeResponse(liveEntries)
 }

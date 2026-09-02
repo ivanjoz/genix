@@ -180,7 +180,9 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			currentConfig.SalesPerDayEstimated = previousConfig.SalesPerDayEstimated
 			return true
 		},
-		nil,
+		// Every column of supplyConfigs is already filled above from the payload plus the
+		// server-owned metadata, so an insert has nothing left to complete.
+		func(_ *logistics.ProductSupply) {},
 	)
 	if configMergeError != nil {
 		core.Log("PostSupplyMaterial product_supply merge error:", configMergeError)

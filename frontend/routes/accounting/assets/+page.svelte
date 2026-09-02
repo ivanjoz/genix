@@ -4,6 +4,7 @@ import Button from '$components/buttons/Button.svelte'
 import Checkbox from '$components/form/Checkbox.svelte'
 import DateInput from '$components/form/DateInput.svelte'
 import FilterInput from '$components/form/FilterInput.svelte'
+import Info from '$components/misc/Info.svelte'
 import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import Layer from '$components/layers/Layer.svelte'
@@ -17,22 +18,24 @@ import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
 import { SupplyMaterialService } from '../../production/supplies-materials/supply-material.svelte'
+import AssetForm from './AssetForm.svelte'
 import {
-  assetBookValue, assetDepreciatedPercent, assetPaymentLabels, assetPendingAmount,
-  assetRemainingMonths, assetStatusLabels, assetUnitLabel, canDisposeAsset, canPayAsset,
-  depreciationSchedule, type IAsset,
+  assetBookValue, assetDepreciatedPercent, assetEditForm, assetPaymentLabels, assetPendingAmount,
+  assetRemainingMonths, assetStatusLabels, assetUnitLabel, canDisposeAsset, canEditAsset,
+  canPayAsset, depreciationSchedule, type IAsset, type IAssetForm,
 } from './assets'
 import {
   AssetsService, getAssetDepreciation, postAssetAcquisition, postAssetPayment,
-  putAssetDisposal, runAssetDepreciation, type IAssetAcquisition, type IAssetPayment,
+  putAssetDisposal, putAssetEdit, runAssetDepreciation, type IAssetPayment,
   type IDepreciationEntry,
 } from './assets.svelte'
 import { CajasService } from '../../finance/cash-banks/cajas.svelte'
 
 const ui = useUI()
 
-// Side layers are 1 (acquisition) and 2 (asset detail); the payment dialog is its own handle.
+// Side layers are 1 (acquisition) and 2 (asset detail); the two dialogs have their own handles.
 const PAYMENT_MODAL_ID = 11
+const EDIT_MODAL_ID = 12
 
 const assets = new AssetsService(true)
 const warehouses = new WarehousesService()
@@ -43,7 +46,10 @@ const supplies = new SupplyMaterialService(true)
 const cajas = new CajasService()
 
 let filterText = $state("")
-let acquisitionForm = $state({} as IAssetAcquisition)
+// Both shells write through AssetForm, so both hold the same shape; only the handler they post
+// to differs. Kept separate so opening the edit dialog never disturbs a half-typed acquisition.
+let acquisitionForm = $state({} as IAssetForm)
+let editForm = $state({} as IAssetForm)
 // Serial numbers are typed as one per line: entering any makes the acquisition per-unit.
 // Held in an object because Input writes through saveOn/save rather than bind:value.
 let serialsInput = $state({ text: "" })
@@ -146,9 +152,8 @@ const assetColumns: ExcelTableColumn<IAsset>[] = [
 
 const openAcquisitionLayer = () => {
   acquisitionForm = {
-    ProductID: 0, SerialNumbers: [], Quantity: 1, WarehouseID: 0,
-    AcquisitionDate: 0, DueDate: 0, Name: "", Description: "", SupplierID: 0,
-    CurrencyType: 1, AcquisitionValue: 0, PurchaseAmount: 0, DepreciationMonths: 0,
+    ProductID: 0, WarehouseID: 0, SupplierID: 0, CurrencyType: 1, Quantity: 1,
+    SerialNumber: "", AcquisitionDate: 0, DueDate: 0, AcquisitionValue: 0, PurchaseAmount: 0,
   }
   serialsInput = { text: "" }
   ui.openSideLayer(1)
@@ -173,7 +178,8 @@ const onAcquire = async () => {
 
   Loading.standard(tr("Registering asset...|Registrando activo..."))
   try {
-    await postAssetAcquisition({ ...acquisitionForm, SerialNumbers: serialNumbers })
+    const { SerialNumber, ...acquisitionFields } = acquisitionForm
+    await postAssetAcquisition({ ...acquisitionFields, SerialNumbers: serialNumbers })
   } catch (error) {
     Notify.failure(error as string)
     Loading.remove()
@@ -224,6 +230,49 @@ const registerAssetPayment = async () => {
     await assets.fetch()
     // Only on success: a failed post keeps the dialog open with the input intact.
     ui.closeModal(PAYMENT_MODAL_ID)
+  } catch (error) {
+    Notify.failure(error as string)
+  } finally {
+    Loading.remove()
+  }
+}
+
+// The edit dialog corrects acquisition data that was mistyped. It opens seeded from the asset
+// row, so what the user sees is what is stored — including the locked fields.
+const openAssetEditModal = () => {
+  if (!selectedAsset) return
+  editForm = assetEditForm(selectedAsset)
+  ui.openModal(EDIT_MODAL_ID)
+}
+
+const saveAssetEdit = async () => {
+  if (!selectedAsset) return
+  if (!editForm.AcquisitionValue) {
+    Notify.failure(tr("The book value must be greater than 0.|El valor en libros debe ser mayor a 0."))
+    return
+  }
+  if (!editForm.AcquisitionDate) {
+    Notify.failure(tr("Enter the acquisition date.|Ingrese la fecha de adquisición."))
+    return
+  }
+
+  Loading.standard(tr("Saving changes...|Guardando cambios..."))
+  try {
+    const updated = await putAssetEdit({
+      AssetID: selectedAsset.ID,
+      SerialNumber: editForm.SerialNumber || "",
+      AcquisitionDate: editForm.AcquisitionDate,
+      DueDate: editForm.DueDate || 0,
+      AcquisitionValue: editForm.AcquisitionValue,
+      PurchaseAmount: editForm.PurchaseAmount || 0,
+    })
+    selectedAsset = { ...selectedAsset, ...updated }
+    await assets.fetch()
+    // The ledger behind the panel was just rewritten period by period, so it has to be reread
+    // rather than left showing the amounts the old value produced.
+    depreciationEntries = await getAssetDepreciation(selectedAsset.ID)
+    // Only on success: a rejected edit keeps the dialog open with the input intact.
+    ui.closeModal(EDIT_MODAL_ID)
   } catch (error) {
     Notify.failure(error as string)
   } finally {
@@ -298,94 +347,19 @@ const onDispose = () => {
     title="Nuevo Activo"
     titleCss="h2 mb-6"
     contentCss="px-0 md:px-0"
-    onClose={() => { acquisitionForm = {} as IAssetAcquisition; serialsInput = { text: "" } }}
+    onClose={() => { acquisitionForm = {} as IAssetForm; serialsInput = { text: "" } }}
     onSave={() => { onAcquire() }}
   >
-    <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16" aria-label="Asset Acquisition Form">
-      <SearchSelect label="Supply / Material|Insumo o Material"
-        saveOn={acquisitionForm}
-        css="col-span-24 md:col-span-14"
-        save="ProductID"
-        keyId="ID"
-        keyName="Name"
-        options={depreciableSupplies}
+    <div class="mt-6 md:mt-16">
+      <AssetForm
+        mode="create"
+        form={acquisitionForm}
+        {serialsInput}
+        supplyOptions={depreciableSupplies}
+        {warehouseOptions}
+        providerOptions={providers.records || []}
+        {currencyOptions}
       />
-      <SearchSelect label="Warehouse|Almacén"
-        saveOn={acquisitionForm}
-        css="col-span-24 md:col-span-10"
-        save="WarehouseID"
-        keyId="ID"
-        keyName="Name"
-        options={warehouseOptions}
-      />
-      <DateInput label="Acquisition Date|Fecha de Adquisición"
-        bind:saveOn={acquisitionForm}
-        css="col-span-24 md:col-span-12"
-        save="AcquisitionDate"
-      />
-      <SearchSelect label="Supplier|Proveedor"
-        saveOn={acquisitionForm}
-        css="col-span-24 md:col-span-12"
-        save="SupplierID"
-        keyId="ID"
-        keyName="Name"
-        options={providers.records || []}
-      />
-      <Input label="Book Value (per unit)|Valor en Libros (por unidad)"
-        saveOn={acquisitionForm}
-        css="col-span-12 md:col-span-8"
-        save="AcquisitionValue"
-        type="number"
-        baseDecimals={2}
-      />
-      <Input label="Purchase Amount (per unit)|Monto de Compra (por unidad)"
-        saveOn={acquisitionForm}
-        css="col-span-12 md:col-span-8"
-        save="PurchaseAmount"
-        type="number"
-        baseDecimals={2}
-      />
-      <SearchSelect label="Currency|Moneda"
-        saveOn={acquisitionForm}
-        css="col-span-24 md:col-span-8"
-        save="CurrencyType"
-        keyId="id"
-        keyName="name"
-        options={currencyOptions}
-      />
-      <DateInput label="Payment Due|Vencimiento del Pago"
-        bind:saveOn={acquisitionForm}
-        css="col-span-24 md:col-span-12"
-        save="DueDate"
-      />
-    </div>
-
-    <!-- Purchase 0 with a value above 0 is the donated case: nothing is owed, but it is
-         still an asset on the books and still depreciates. -->
-    <div class="mt-8 text-sm c-gray">
-      <T text="Leave the purchase amount at 0 for a donated or contributed asset — nothing is owed, but it still has a book value and still depreciates.|Deje el monto de compra en 0 para un activo donado o aportado: no se debe nada, pero igual tiene valor en libros y se deprecia." />
-    </div>
-
-    <div class="mt-16" aria-label="Asset units">
-      <div class="h4 ff-bold mb-6">
-        <T text="Units|Unidades" />
-      </div>
-      <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10">
-        <Input label="Quantity|Cantidad"
-          saveOn={acquisitionForm}
-          css="col-span-12 md:col-span-6"
-          save="Quantity"
-          type="number"
-        />
-        <Input label="Serial Numbers (one per line)|Números de Serie (uno por línea)"
-          saveOn={serialsInput}
-          save="text"
-          css="col-span-24 md:col-span-18"
-        />
-      </div>
-      <div class="mt-6 text-sm c-gray">
-        <T text="Enter serials to track each unit as its own asset; leave empty to register the whole lot as one.|Ingrese series para registrar cada unidad como un activo independiente; déjelo vacío para registrar todo el lote como uno solo." />
-      </div>
     </div>
   </Layer>
 
@@ -449,8 +423,15 @@ const onDispose = () => {
         {/if}
       </div>
 
-      {#if canPayAsset(selectedAsset) || canDisposeAsset(selectedAsset)}
+      {#if canEditAsset(selectedAsset) || canPayAsset(selectedAsset) || canDisposeAsset(selectedAsset)}
         <div class="flex gap-10 mt-16">
+          {#if canEditAsset(selectedAsset)}
+            <Button color="purple" icon="icon-[fa--pencil]"
+              name="Edit|Editar"
+              label="Opens the dialog to correct this asset's acquisition data."
+              onClick={openAssetEditModal}
+            />
+          {/if}
           {#if canPayAsset(selectedAsset)}
             <Button color="blue" icon="icon-[fa--check]"
               name="Register Payment|Registrar Pago"
@@ -489,6 +470,36 @@ const onDispose = () => {
       </div>
     {/if}
   </Layer>
+
+  <!-- Edit dialog. A Modal rather than the acquisition Layer: the panel it corrects stays on
+       screen behind it, so the numbers being edited and the ledger they produced are both
+       visible. Everything that is not editable renders locked — the material, the warehouse,
+       the supplier, the currency and the lot size are the asset's identity. -->
+  <Modal id={EDIT_MODAL_ID} size={5}
+    css="min-h-0!"
+    title="Edit Asset|Editar Activo"
+    saveIcon="icon-[fa--save]"
+    isEdit
+    onSave={saveAssetEdit}
+    onClose={() => { editForm = {} as IAssetForm }}
+  >
+    <div class="py-8">
+      <AssetForm
+        mode="edit"
+        form={editForm}
+        supplyOptions={depreciableSupplies}
+        {warehouseOptions}
+        providerOptions={providers.records || []}
+        {currencyOptions}
+      />
+      <!-- Both consequences are worth stating before the save, because neither is visible in
+           the form: the ledger is rewritten period by period, and a purchase amount below what
+           has already been paid is rejected outright. -->
+      <Info css="mt-12"
+        text="Changing the book value or the acquisition date rewrites every depreciation entry already posted for this asset. The purchase amount cannot go below what has already been paid.|Cambiar el valor en libros o la fecha de adquisición reescribe todos los asientos de depreciación ya registrados para este activo. El monto de compra no puede ser menor a lo ya pagado."
+      />
+    </div>
+  </Modal>
 
   <!-- Payment dialog. Kept out of the detail panel so the panel stays a read surface:
        the balances above it are what the payment changes. -->

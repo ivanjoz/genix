@@ -89,6 +89,44 @@ export const canPayAsset = (asset: IAsset) =>
 export const canDisposeAsset = (asset: IAsset) =>
   asset.ss === AssetStatus.ACTIVE || asset.ss === AssetStatus.FULLY_DEPRECIATED
 
+// The shape AssetForm.svelte writes into, whichever shell renders it. It is the union of the
+// acquisition payload and the edit payload rather than either one: the form paints the locked
+// fields of an existing asset too, so it needs Material, Almacén, Proveedor and Moneda present
+// even in edit mode, where the handler ignores them.
+export interface IAssetForm {
+  ProductID: number
+  WarehouseID: number
+  SupplierID: number
+  CurrencyType: number
+  Quantity: number
+  SerialNumber: string
+  AcquisitionDate: number
+  DueDate: number
+  AcquisitionValue: number
+  PurchaseAmount: number
+}
+
+// Seeds the edit form from the asset row. The money is the row's *total*, not a per-unit
+// figure: that is what the column holds, and dividing a total by a lot of three would not
+// round-trip. AssetForm drops the "(por unidad)" suffix in edit mode for exactly this reason.
+export const assetEditForm = (asset: IAsset): IAssetForm => ({
+  ProductID: asset.ProductID,
+  WarehouseID: asset.WarehouseID,
+  SupplierID: asset.SupplierID,
+  CurrencyType: asset.CurrencyType,
+  Quantity: asset.Quantity,
+  SerialNumber: asset.SerialNumber || "",
+  AcquisitionDate: asset.AcquisitionDate,
+  DueDate: asset.DueDate,
+  AcquisitionValue: asset.AcquisitionValue,
+  PurchaseAmount: asset.PurchaseAmount || 0,
+})
+
+// An edit corrects acquisition data; a disposed asset's units are already out of stock, so its
+// serial has nowhere to move and the backend rejects the change. Removed rows never reach here.
+export const canEditAsset = (asset: IAsset) =>
+  asset.ss === AssetStatus.ACTIVE || asset.ss === AssetStatus.FULLY_DEPRECIATED
+
 // Serial-tracked assets are one unit each; a grouped acquisition carries its lot size.
 export const assetUnitLabel = (asset: IAsset) =>
   asset.SerialNumber || `x${asset.Quantity || 1}`

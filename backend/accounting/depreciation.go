@@ -103,6 +103,19 @@ func PendingDepreciationPeriods(asset *types.Asset, throughDate int16) []Depreci
 	return pending
 }
 
+// ResolveAssetPaymentStatus derives the payment slot from the two amounts, so the three places
+// that move either of them (acquisition, payment, edit) cannot disagree about what "paid" means.
+// A purchase amount of 0 is the donated case: nothing was ever owed, so it is never payable.
+func ResolveAssetPaymentStatus(purchaseAmount, paidAmount int32) int8 {
+	if purchaseAmount <= 0 {
+		return types.AssetPaymentNone
+	}
+	if paidAmount >= purchaseAmount {
+		return types.AssetPaymentPaid
+	}
+	return types.AssetPaymentPending
+}
+
 // ResolveAssetStatus derives the lifecycle slot from the asset's own numbers, so the
 // status can never disagree with the ledger that produced it.
 func ResolveAssetStatus(asset *types.Asset) int8 {

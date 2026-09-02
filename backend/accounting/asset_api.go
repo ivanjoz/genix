@@ -141,7 +141,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 			SupplierID:   payload.SupplierID,
 			// A donation owes nothing, so it is never payable; anything else starts pending.
 			PurchaseAmount:     purchaseAmount,
-			PaymentStatus:      core.If(purchaseAmount > 0, types.AssetPaymentPending, types.AssetPaymentNone),
+			PaymentStatus:      ResolveAssetPaymentStatus(purchaseAmount, 0),
 			DueDate:            core.If(payload.DueDate > 0, payload.DueDate, acquisitionDate),
 			AcquisitionDate:    acquisitionDate,
 			AcquisitionValue:   payload.AcquisitionValue * quantity,
