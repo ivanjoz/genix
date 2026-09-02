@@ -1,11 +1,11 @@
 <script lang="ts">
   import SearchDualCard from '$components/cards/SearchDualCard.svelte';
-  import { accesoAcciones } from '../access-profiles/access-profiles.svelte';
+  import { accesoAcciones } from './users-profiles.svelte';
   import type {
     IAccessGroupCatalogEntry,
     IAccessListCatalogEntry
-  } from '../access-profiles/access-list-catalog';
-  import type { IProfile, IUser } from './users.svelte';
+  } from './access-list-catalog';
+  import type { IProfile, IUser } from './users-profiles.svelte';
 
   interface IProfileAccessSummary {
     readableAccessNames: string[]

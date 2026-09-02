@@ -16,7 +16,7 @@ import { ProductsService } from '$services/production/products.svelte';
 import { SharedListsService } from "$services/business/shared-lists.svelte";
 import { SystemParametersService } from '$services/services/system-parameters.svelte';
 import { untrack } from 'svelte';
-import { EmpresaParametrosService } from '../../configuration/parameters/empresas.svelte';
+import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte';
 import type { IWarehouse } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';

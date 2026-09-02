@@ -130,7 +130,7 @@ Each tenant can export, download, and restore all of their data.
 - **Create** (`POST backup-create`) — iterates every registered table, exports each tenant's rows as pipe-delimited base64 CSV (typed headers), zstd-compresses each table, and bundles them into a single `.tar` in S3 under `backups/{companyID}/…`.
 - **List / Download** — the Backups page lists the tenant's archives and downloads the raw `.tar` directly from the CDN.
 - **Restore** (`POST backup-restore`) — downloads the tar, decompresses, maps entries to tables by name, and re-inserts the records.
-- UI: `frontend/routes/configuration/backups/`.
+- UI: `frontend/routes/company/configuration/` (Backups tab).
 
 ---
 

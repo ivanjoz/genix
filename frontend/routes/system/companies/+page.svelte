@@ -18,7 +18,7 @@
   let companyRefreshVersion = $state(0);
 
   const openCreateCompany = () => {
-    empresaForm = { ss: 1, SmtpConfig: {}, CulquiConfig: {} } as ICompany;
+    empresaForm = { ss: 1, CulquiConfig: {} } as ICompany;
     ui.openModal(1);
   };
 

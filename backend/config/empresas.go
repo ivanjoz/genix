@@ -138,9 +138,10 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
 
-	if len(record.Name) == 0 || len(record.RUC) == 0 ||
-		len(record.LegalName) == 0 || len(record.Email) == 0 {
-		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC, Email.")
+	// Email is not required: seeded and imported companies have none, and the global email index
+	// on the companies table tolerates a blank value. Public sign-up sets it on its own path.
+	if len(record.Name) == 0 || len(record.RUC) == 0 || len(record.LegalName) == 0 {
+		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC.")
 	}
 
 	// Escribir exige "Mi Empresa" en nivel de escritura; mainHandler ya lo validó por el catálogo.

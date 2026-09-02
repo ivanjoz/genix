@@ -16,7 +16,7 @@ import { getStaticRecordsByID } from '@genix/ui/cache';
 import { SvelteMap } from 'svelte/reactivity';
   import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte"
   import { ProductsService } from '$services/production/products.svelte'
-  import { UsuariosService } from "../../security/users/users.svelte"
+  import { UsuariosService } from "../../security/users-profiles/users-profiles.svelte"
   import {
     queryAlmacenMovimientos, movimientoTipos,
     type IWarehouseProductMovement, type IProductStockLot

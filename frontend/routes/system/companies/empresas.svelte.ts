@@ -1,13 +1,5 @@
 import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 
-export interface ICompanySmtp {
-  Host: string
-  Port: string
-  User: string
-  Password: string
-  Email: string
-}
-
 export interface ICompanyCulqui {
   RsaKey: string
   RsaKeyID: string
@@ -28,7 +20,6 @@ export interface ICompany {
   Representante: string
   Direccion: string
   Ciudad: string
-  SmtpConfig: ICompanySmtp
   CulquiConfig: ICompanyCulqui
   ss: number
   upd: number
@@ -49,7 +40,6 @@ export class EmpresasService extends GetHandler {
       ...empresa,
       // Normalize the Go `ID` field once so CRUD and card joins share the established lowercase key.
       id: Number(empresa.id || empresa.ID || 0),
-      SmtpConfig: empresa.SmtpConfig || {} as ICompanySmtp,
       CulquiConfig: empresa.CulquiConfig || {} as ICompanyCulqui,
     }))
     

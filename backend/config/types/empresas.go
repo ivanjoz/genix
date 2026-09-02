@@ -19,7 +19,6 @@ type Company struct {
 	FormApiKey        string      `json:",omitempty" db:"form_api_key"`
 	EmailVerified     int8        `json:",omitempty"`
 	PhoneVerified     int8        `json:",omitempty"`
-	SmtpConfig        SmtpConfig  `json:",omitempty" db:"smtp_config"`
 	CulqiConfig       CulqiConfig `json:",omitempty" db:"culqui_config"`
 	Updated           int32       `json:"upd" db:"updated"`
 	Status            int8        `json:"ss" db:"status"`
@@ -40,7 +39,6 @@ type CompanyTable struct {
 	FormApiKey        db.Col[*CompanyTable, string]
 	EmailVerified     db.Col[*CompanyTable, int8]
 	PhoneVerified     db.Col[*CompanyTable, int8]
-	SmtpConfig        db.Col[*CompanyTable, SmtpConfig]
 	CulqiConfig       db.Col[*CompanyTable, CulqiConfig]
 	Updated           db.Col[*CompanyTable, int32]
 	Status            db.Col[*CompanyTable, int8]
@@ -62,14 +60,6 @@ func (e CompanyTable) GetSchema() db.TableSchema {
 			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Email)},
 		},
 	}
-}
-
-type SmtpConfig struct {
-	Email    string `json:",omitempty"`
-	User     string `json:",omitempty"`
-	Password string `json:",omitempty"`
-	Post     int32  `json:",omitempty"`
-	Host     string `json:",omitempty"`
 }
 
 type CulqiConfig struct {

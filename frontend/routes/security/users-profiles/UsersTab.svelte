@@ -3,32 +3,33 @@
   const ui = useUI();
 import Input from '$components/form/Input.svelte';
 import Layer from '$components/layers/Layer.svelte';
-import Page from '$domain/Page.svelte';
 import UserProfilesAccessSelector from './UserProfilesAccessSelector.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import { Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { Core, tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
+import { tr } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
-import { onMount } from 'svelte';
   import pkg from 'notiflix'
 const { Loading } = pkg
-  import { fetchAccessListCatalog, type IAccessGroupCatalogEntry, type IAccessListCatalogEntry } from "../access-profiles/access-list-catalog"
-  import { accesoAcciones } from "../access-profiles/access-profiles.svelte"
-  import { UsuariosService, PerfilesService, postUser, type IUser } from "./users.svelte"
+  import type { IAccessGroupCatalogEntry, IAccessListCatalogEntry } from "./access-list-catalog"
+  import { accesoAcciones, UsuariosService, PerfilesService, postUser, type IUser } from "./users-profiles.svelte"
+
+  // The profiles service and the access catalog are owned by +page.svelte so both tabs read the
+  // same records: a profile created on the Profiles tab is selectable here without a refetch.
+  let { perfilesService, accessGroupEntries, accessCatalogEntries, accessCatalogLoadError = "" }: {
+    perfilesService: PerfilesService
+    accessGroupEntries: IAccessGroupCatalogEntry[]
+    accessCatalogEntries: IAccessListCatalogEntry[]
+    accessCatalogLoadError?: string
+  } = $props()
 
   const usuariosService = new UsuariosService()
-  const perfilesService = new PerfilesService()
   const accessActionShortNameByID = new Map(accesoAcciones.map((accessActionRecord) => [accessActionRecord.id, accessActionRecord.short]))
 
   let filterText = $state("")
   let usuarioForm = $state({} as IUser)
-  let accessGroupEntries = $state([] as IAccessGroupCatalogEntry[])
-  let accessCatalogEntries = $state([] as IAccessListCatalogEntry[])
-  let accessCatalogLoadError = $state("")
 
   interface IUsuarioAccessSummary {
     readableAccessNames: string[]
@@ -167,21 +168,6 @@ const { Loading } = pkg
     ui.openSideLayer(1)
   }
 
-  onMount(async () => {
-    try {
-      const accessCatalogPayload = await fetchAccessListCatalog()
-      accessGroupEntries = accessCatalogPayload.access_groups || []
-      accessCatalogEntries = accessCatalogPayload.access_list || []
-      console.info("usuarios::accessCatalogLoaded", {
-        totalGroups: accessGroupEntries.length,
-        totalEntries: accessCatalogEntries.length
-      })
-    } catch (error) {
-      accessCatalogLoadError = error as string
-      console.error("usuarios::accessCatalogLoadError", { error })
-    }
-  })
-
   async function saveUsuario(isDelete?: boolean) {
     const form = usuarioForm
 
@@ -276,7 +262,6 @@ const { Loading } = pkg
   ]
 </script>
 
-<Page title="Users|Usuarios">
   <Layer type="content">
     <div class="h-full w-full">
       <div class="flex items-center justify-between mb-6" aria-label="Users toolbar with filter and create button">
@@ -412,7 +397,6 @@ const { Loading } = pkg
       />
     </div>
   </Layer>
-</Page>
 
 <style>
   :global(.vtable-row > td._usuario-access-td) {

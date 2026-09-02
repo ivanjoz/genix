@@ -192,7 +192,7 @@ import {
   };
 </script>
 
-<Page title="Supplies & Materials|Insumos">
+<Page title="Supplies & Materials|Insumos & Materiales">
   <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
     <FilterInput label="Filter supplies|Filtrar insumos"
       css="w-full md:w-200 col-span-9"
@@ -240,7 +240,7 @@ import {
     type="side"
     sideLayerSize={680}
     css="px-8 py-8 md:px-16 md:py-10"
-    title={supplyForm?.Name || "Nuevo Insumo"}
+    title={supplyForm?.Name || "New Supply or Material|Nuevo Insumo o Material"}
     titleCss="h2 mb-6"
     contentCss="px-0 md:px-0"
     id={1}

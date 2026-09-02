@@ -1,7 +1,7 @@
 <script lang="ts">
 import { arrayToMapN } from '$libs/helpers';
 import { useUI } from '@genix/ui';
-  import { accesoAcciones, type IAccess, type IProfile } from "./access-profiles.svelte"
+  import { accesoAcciones, type IAccess, type IProfile } from "./users-profiles.svelte"
   const ui = useUI()
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')

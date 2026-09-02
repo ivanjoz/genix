@@ -8,14 +8,11 @@ import type { ITableColumn } from '$components/vTable/types';
 import Modules from '$core/modules';
 import { Core, tr } from '$core/store.svelte';
 import T from '$components/misc/T.svelte';
-import Page from '$domain/Page.svelte';
 import { arrayToMapN, Loading, Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
-import { onMount } from 'svelte';
 import AccesoCard from './AccessCard.svelte';
 import {
-  fetchAccessListCatalog,
   normalizeAccessFrontendRoutes,
   type IAccessGroupCatalogEntry,
   type IAccessListCatalogEntry
@@ -25,9 +22,15 @@ import {
     postPerfil,
     type IAccess,
     type IProfile
-} from "./access-profiles.svelte";
+} from "./users-profiles.svelte";
 
-  const perfilesService = new PerfilesService()
+  // Services and catalog live in +page.svelte so both tabs share one copy of the profiles.
+  let { perfilesService, accessGroups, accessListEntries, accessListLoadError = "" }: {
+    perfilesService: PerfilesService
+    accessGroups: IAccessGroupCatalogEntry[]
+    accessListEntries: IAccessListCatalogEntry[]
+    accessListLoadError?: string
+  } = $props()
 
   const modulesMap = arrayToMapN(Modules, 'id')
   const routeCatalogIndex = new Map<string, {
@@ -55,9 +58,6 @@ import {
   let perfilForm = $state({} as IProfile)
   let moduleSelected = $state(0)
   let filterText = $state("")
-  let accessGroups = $state([] as IAccessGroupCatalogEntry[])
-  let accessListEntries = $state([] as IAccessListCatalogEntry[])
-  let accessListLoadError = $state("")
 
   const accessGroupNameByID = $derived.by(() => {
     const accessGroupMap = new Map<number, string>()
@@ -156,22 +156,6 @@ import {
     })
   })
 
-  onMount(async () => {
-    try {
-      // Load the hashed static catalog so this page can compare backend records against the CDN-shipped source of truth.
-      const accessListPayload = await fetchAccessListCatalog()
-      accessGroups = accessListPayload.access_groups || []
-      accessListEntries = accessListPayload.access_list || []
-      console.info('[access-list] Catalog loaded', {
-        totalGroups: accessGroups.length,
-        totalEntries: accessListEntries.length
-      })
-    } catch (error) {
-      accessListLoadError = error as string
-      console.error('[access-list] Catalog load failed', { error })
-    }
-  })
-
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
     const form = perfilForm
     if (!form.Name) {
@@ -201,7 +185,6 @@ import {
       const result = await postPerfil(form)
 
       if ((form.ID || 0) <= 0) form.ID = result.ID
-      form._open = false
       perfilesService.updatePerfil(form)
 
       perfilForm = {} as IProfile
@@ -240,7 +223,6 @@ import {
   ]
 </script>
 
-<Page title="Profiles & Access|Perfiles & Accesos">
   <div class="flex justify-between h-full gap-8 max-md:flex-col">
     <!-- Left side: Profiles table -->
     <div class="w-full md:w-[32%]">
@@ -266,7 +248,7 @@ import {
           if (e.ID === perfilForm.ID) {
             perfilForm = {} as IProfile
           } else {
-            perfilForm = { ...e, _open: true, accesosMap: new Map(e.accesosMap) }
+            perfilForm = { ...e, accesosMap: new Map(e.accesosMap) }
           }
         }}
       />
@@ -343,7 +325,6 @@ import {
       />
     </div>
   </Modal>
-</Page>
 
 <style>
   ._access-group-title {

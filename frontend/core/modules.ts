@@ -12,24 +12,20 @@ export const AdminModule: IModule = {
   id: 1,
   code: "admin",
   menus: [
-    { name: "Configuration|Configuración", minName: "CON", id: 1, icon: "icon-[fa--sitemap]",
+    { name: "My Company|Mi Empresa", minName: "EMP", id: 1, icon: "icon-[fa--sitemap]",
       options: [
 				{
-					name: "My Company|Mi Empresa", route: "/configuration/parameters", icon: "icon-[fa--cog]",
-					descripcion: "Edita los datos de tu empresa, pasarela de pago, envío de correos."
+					name: "Configuration|Configuración", route: "/company/configuration", icon: "icon-[fa--cog]",
+					descripcion: "Edita los datos de tu empresa, pasarela de pago, envío de correos. Genera y descarga backups."
+        },
+        { name: "Sites & Warehouses|Sedes & Almacenes", route: "/business/branches-warehouses",
+					icon: "icon-[fa--home]",
+					descripcion: "Crea sedes y almacenes. Crea los layouts de tus almacenes."
         },
 				{
-					name: "Users|Usuarios", route: "/security/users", icon: "icon-[fa--user-secret]",
-					descripcion: "Gestiona usuario y asígnales perfiles."
-				},
-				{
-					name: "Profiles & Access|Perfiles & Accesos", route: "/security/access-profiles",
-					descripcion: "Crea perfiles y asígnales accesos.",
-          icon: "icon-[fa--shield]",
-				},
-				{
-					name: "Backups|Backups", route: "/configuration/backups", icon: "icon-[fa--database]",
-					descripcion: "Descarga y genera respaldos de tu información.",
+					name: "Users & Profiles|Usuarios & Perfiles", route: "/security/users-profiles",
+					descripcion: "Gestiona usuarios, crea perfiles y asígnales accesos.",
+          icon: "icon-[fa--user-secret]",
 				},
       ]
     },
@@ -55,14 +51,6 @@ export const AdminModule: IModule = {
 					name: "Testing|Testing", route: "/system/testing", icon: "icon-[fa--flask]",
 					onlySaaS: true,
 				},
-      ]
-    },
-    { name: "Business|Negocio", minName: "NEG",  id: 2, icon: "icon-[fa--cube]",
-      options: [
-        { name: "Sites & Warehouses|Sedes & Almacenes", route: "/business/branches-warehouses",
-					icon: "icon-[fa--home]",
-					descripcion: "Crea sedes y almacenes. Crea los layouts de tus almacenes."
-        },
       ]
     },
     { name: "Production|Producción", minName: "PRD",  id: 10, icon: "icon-[fa--cubes]",

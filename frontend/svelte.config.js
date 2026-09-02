@@ -13,7 +13,6 @@ const config = {
 	// for more information about preprocessors
 	preprocess: vitePreprocess(),
 	compilerOptions: {
-		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
 			if (isBuild) {
 				// Deterministic keyed name; keyed by file (or css hash when filename

@@ -18,9 +18,7 @@
 #   - `levels`: dígitos concatenados de los niveles ofrecidos. 14 = 1 (VER) + 4 (TODO).
 access_groups:
   - id: 1
-    name: "Configuración"
-  - id: 2
-    name: "Negocio"
+    name: "Mi Empresa"
   - id: 3
     name: "Comercial"
   - id: 4
@@ -39,28 +37,28 @@ access_groups:
     name: "Clientes (CRM)"
 access_list:
   - id: 1
-    name: "Mi Empresa"
+    name: "Configuración"
     group: 1
     levels: 14
-    frontend_routes: "configuration/parameters"
+    frontend_routes: "company/configuration"
     backend_apis: "GET.company-parametros,POST.company-parametros,POST.parametros,POST.system-parameters,POST.initial-data"
   - id: 2
     name: "Usuarios"
     group: 1
     levels: 14
-    frontend_routes: "security/users"
+    frontend_routes: "security/users-profiles"
     backend_apis: "POST.users"
   - id: 3
     name: "Perfiles & Accesos"
     group: 1
     levels: 14
-    frontend_routes: "security/access-profiles"
+    frontend_routes: "security/users-profiles"
     backend_apis: "POST.perfiles"
   - id: 4
     name: "Backups"
     group: 1
     levels: 14
-    frontend_routes: "configuration/backups"
+    frontend_routes: "company/configuration"
     backend_apis: "POST.backup-create,POST.backup-restore"
   - id: 5
     name: "Empresas"
@@ -88,7 +86,7 @@ access_list:
     backend_apis: ""
   - id: 7
     name: "Sedes & Almacenes"
-    group: 2
+    group: 1
     levels: 14
     frontend_routes: "business/branches-warehouses"
     backend_apis: "POST.sites,POST.warehouses"

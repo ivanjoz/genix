@@ -14,7 +14,6 @@ console.log('--- SVELTE CONFIG LOADED (pkg-store) ---');
 const config = {
 	preprocess: vitePreprocess(),
 	compilerOptions: {
-		hmr: false,
 		cssHash: ({ hash, css, name, filename }) => {
 			// MUST be deterministic: SSR/prerender runs two separate build passes
 			// (server + client). The persisted keyed counter (../plugins.js) resolves the

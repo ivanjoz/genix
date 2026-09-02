@@ -170,7 +170,7 @@ export interface ICajaCuadresResult {
 }
 
 export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICashReconciliation[]> => {
-  let route = `cash-bank-reconciliations?caja-id=${args.CajaID}`
+  let route = `cash-banks-reconciliations?caja-id=${args.CajaID}`
 
   if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
     throw ("No se encontró una date de inicio o fin.")
