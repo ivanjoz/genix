@@ -1,3 +1,26 @@
+## A dev backend dials its own fareward daemon unless `use_remote_dev_host` says otherwise
+
+**Context** — `config.toml` carried `[fareward] public = true, host = <server IP>`, so a developer
+running the backend locally dialed the deployed daemon while a freshly built one listened, unused,
+on `127.0.0.1:14013`. The two builds were on different sides of the `fareward:v6` → `fareward:v7`
+domain rename, so every frame's HMAC failed and the daemon closed the connection. There is no
+diagnosis in that: the client reports `connection closed while waiting for a reply`, the daemon
+logs a rejected frame at `debug!` on another machine, and only the operations that wait for a reply
+surface it at all — a fire-and-forget log frame or an exempt company hides it completely.
+
+**Decision** — `makeFarewardAddress` takes `is_local` and a new `[fareward] use_remote_dev_host`.
+With `is_local = true` the address is `127.0.0.1:<port>` regardless of `host` and `public`, unless
+`use_remote_dev_host = true`. `public = false` still forces loopback on its own, so the opt-in only
+ever chooses between two hosts and can never invent a route to a daemon bound to loopback elsewhere.
+
+**Rationale** — The wire protocol is versioned precisely because backend and daemon have to cross a
+format change together, and a checkout already contains the daemon that matches it: on a dev
+machine the local one is the only correct default. Making it a default rather than advice means the
+mismatch cannot happen by leaving a deployment value in `config.toml`. The cost is that pointing a
+dev backend at the shared daemon — to reproduce a limiter state that only exists there — now needs
+a config key instead of just working; that is the rarer case, and it fails loudly (a stale build
+closes the connection) rather than silently.
+
 ## The webpage-renderer zip URL is derived from `frontend.app_url`, not hardcoded per module
 
 **Context** — The renderer artifact URL was declared as a literal in three separate Go modules —

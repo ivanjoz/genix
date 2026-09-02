@@ -262,6 +262,9 @@ type fileConfig struct {
 		Host   string `toml:"host"`
 		Port   int    `toml:"port"`
 		Public bool   `toml:"public"`
+		// UseRemoteDevHost lets a developer dial the deployed daemon on purpose. Off by default,
+		// because on a dev machine the daemon that matches this checkout is the local one.
+		UseRemoteDevHost bool `toml:"use_remote_dev_host"`
 	} `toml:"fareward"`
 
 	Providers struct {
@@ -401,11 +404,17 @@ const (
 // every lock call into a connection to a machine that cannot answer. A public daemon with no host
 // is left empty on purpose, so ConfigureFareward refuses it at startup instead of the first
 // lock failing at request time.
-func makeFarewardAddress(host string, port int, public bool) string {
+//
+// A dev machine dials its own daemon for the same reason, and it overrides a public host to do
+// it: the wire protocol is versioned (`fareward:vN`) and the daemon that matches this checkout is
+// the one running beside it, not whatever build the server happens to have. Silently crossing
+// that boundary fails as a closed connection with no diagnosis on either side. Dialing the
+// deployed daemon from a dev machine stays possible, but it has to be asked for.
+func makeFarewardAddress(host string, port int, public, isLocal, useRemoteDevHost bool) string {
 	if port <= 0 {
 		port = defaultFarewardPort
 	}
-	if !public {
+	if !public || (isLocal && !useRemoteDevHost) {
 		return fmt.Sprintf("127.0.0.1:%d", port)
 	}
 	host = strings.TrimSpace(host)
@@ -470,7 +479,8 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
 	env.MODELS = file.Models
 	env.FAREWARD_ADDRESS = makeFarewardAddress(
-		file.Fareward.Host, file.Fareward.Port, file.Fareward.Public)
+		file.Fareward.Host, file.Fareward.Port, file.Fareward.Public,
+		file.IsLocal, file.Fareward.UseRemoteDevHost)
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h

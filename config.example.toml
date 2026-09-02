@@ -25,10 +25,17 @@ github_account = "mi-cuenta"
 #
 # public = true expone el puerto a Internet: las tramas van autenticadas con HMAC pero SIN cifrar,
 # así que sólo tiene sentido cuando el backend corre fuera del servidor (p. ej. en Lambda).
+#
+# use_remote_dev_host sólo aplica con is_local = true: por defecto una máquina de desarrollo marca
+# su propio daemon aunque host apunte a un servidor, porque el protocolo va versionado
+# ("fareward:vN") y el daemon que corresponde a este checkout es el que corre al lado. Ponerlo en
+# true marca el daemon desplegado, que puede tener otro build u otro internal_apikey; el síntoma de
+# no coincidir es que el daemon cierra la conexión sin decir por qué.
 [fareward]
 host = "127.0.0.1"
 port = 14013
 public = false
+use_remote_dev_host = false
 
 # ─── Qdrant (base de datos vectorial) ───────────────────────────────────────
 # Lo instala 'scripts/configure/configure_db.py qdrant'. host vacío = lo escribe el script con la IP

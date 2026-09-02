@@ -61,24 +61,35 @@ func TestClientIPKeyIsStableAndPrefixedForIPv6(t *testing.T) {
 
 func TestFarewardAddressDerivesTheHostFromPublic(t *testing.T) {
 	checks := []struct {
-		name   string
-		host   string
-		port   int
-		public bool
-		want   string
+		name             string
+		host             string
+		port             int
+		public           bool
+		isLocal          bool
+		useRemoteDevHost bool
+		want             string
 	}{
 		// A private daemon only listens on loopback, so a leftover public host must not be dialed:
 		// every lock call would go to a machine that cannot answer.
-		{"private ignores a stale host", "150.136.42.240", 14013, false, "127.0.0.1:14013"},
-		{"private without a host", "", 14013, false, "127.0.0.1:14013"},
-		{"public dials the host", "150.136.42.240", 14013, true, "150.136.42.240:14013"},
+		{"private ignores a stale host", "150.136.42.240", 14013, false, false, false, "127.0.0.1:14013"},
+		{"private without a host", "", 14013, false, false, false, "127.0.0.1:14013"},
+		{"public dials the host", "150.136.42.240", 14013, true, false, false, "150.136.42.240:14013"},
 		// Empty means unconfigured, which ConfigureFareward refuses at startup instead of
 		// letting the first lock fail at request time.
-		{"public without a host", "  ", 14013, true, ""},
-		{"an omitted port falls back", "10.0.1.65", 0, true, "10.0.1.65:14013"},
+		{"public without a host", "  ", 14013, true, false, false, ""},
+		{"an omitted port falls back", "10.0.1.65", 0, true, false, false, "10.0.1.65:14013"},
+		// A dev machine runs the daemon that matches its checkout, so a public host meant for a
+		// deployment is overridden rather than dialed across a wire-protocol boundary.
+		{"dev overrides a public host", "150.136.42.240", 14013, true, true, false, "127.0.0.1:14013"},
+		{"dev opts into the remote daemon", "150.136.42.240", 14013, true, true, true, "150.136.42.240:14013"},
+		// The opt-in only chooses between hosts. It cannot reach a daemon bound to loopback on
+		// another machine, so a private daemon stays loopback.
+		{"dev opt-in cannot reach a private daemon", "150.136.42.240", 14013, false, true, true, "127.0.0.1:14013"},
 	}
 	for _, check := range checks {
-		if got := makeFarewardAddress(check.host, check.port, check.public); got != check.want {
+		got := makeFarewardAddress(
+			check.host, check.port, check.public, check.isLocal, check.useRemoteDevHost)
+		if got != check.want {
 			t.Fatalf("%s: got %q; want %q", check.name, got, check.want)
 		}
 	}

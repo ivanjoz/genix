@@ -82,6 +82,7 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 | `fareward.port` | no | Raw-TCP listen port. Defaults to **14013** (`DEFAULT_LISTEN_PORT` in `fareward/src/config.rs`). |
 | `fareward.public` | no | `true` binds `0.0.0.0`, absent or `false` binds `127.0.0.1`. |
 | `fareward.host` | no | Read by the **backend**, not by the daemon: the address it dials. Ignored when `public = false`, where loopback is the only thing that can work. |
+| `fareward.use_remote_dev_host` | no | Read by the **backend**, and only when `is_local = true`: a dev machine dials `127.0.0.1` even with a public `host`, because the daemon that matches its checkout is the one running beside it. `true` dials `host` instead. |
 | `rate_limit.*` | filled in | Quota policy; see `fareward/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
 | `db.*` | yes | Where usage snapshots are persisted. |
 
