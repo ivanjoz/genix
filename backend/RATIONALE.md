@@ -1,3 +1,46 @@
+## A user is valid with direct accesses and no profile
+
+**Context** — `PostUsuarios` rejected any user whose `ProfileIDs` was empty ("El user debe tener al
+menos 1 permiso"), but the users form grants permissions two ways: through profiles (`ProfileIDs`)
+and directly, per access+level (`AccessLevelIDs`). Assigning only direct accesses — the common case
+for a one-off user who does not warrant a profile — was rejected even though the form showed the
+granted cards.
+
+**Decision** — the check passes when either list is non-empty, and the message names both sources:
+"El user debe tener al menos 1 perfil o 1 acceso directo".
+
+**Rationale** — `AccesosComputed` is already built from the union of both lists further down the
+same handler, so the validation was the only place that treated profiles as the sole source of
+permissions. The invariant that matters is "the saved user ends up with at least one access", and
+both inputs feed it.
+
+## The session token's hash is a 128-bit keyed BLAKE2s tag
+
+**Context** — `ComputeUsuarioTokenHash` produced a `uint64` by taking the first eight bytes of an
+HMAC-SHA256, and fareward's SSE bridge recomputes it to verify a browser identity without a round
+trip. Two problems in one function: a 256-bit digest paid for and mostly discarded, and — the one
+that matters — only 64 bits of tag on a bearer credential. The token carries no random component,
+so the tag is not integrity protection over a secret, it *is* the credential; 64 bits sat exactly on
+the floor NIST sets for session secrets, below what every mainstream signed-token format uses.
+
+**Decision** — Keyed BLAKE2s-128 under the `usrToken:v3` domain, keyed by the full
+`SHA-256(SECRET_PHRASE)` — 32 bytes, exactly BLAKE2s' maximum key length, so a configuration string
+of any length reaches the key whole. `UsuarioToken.Hash` widened from `uint64` to `[]byte`, and
+`CheckUser` compares with `subtle.ConstantTimeCompare`. `golang.org/x/crypto` becomes a direct
+dependency. `agent/bridge.go` moved in the same change but to a different primitive: `X-Bridge-Auth`
+is SipHash-2-4 under `sse-bridge:v2`, 16 hex characters, because it is an internal
+service-to-service header with a 300 s window rather than something a user holds.
+
+**Rationale** — Keyed BLAKE2s-128 rather than HMAC-SHA256 truncated to 128 bits: RFC 7693 defines
+the keyed mode as a MAC, `x/crypto` refuses to construct `New128` without a key precisely because a
+128-bit digest is only safe as one, and it is a purpose-built 128-bit tag instead of a truncation.
+The Rust mirror in `fareward/src/bridge/auth.rs` uses RustCrypto's `Blake2sMac<U16>`, pinned against
+`x/crypto`'s own `hashes128` vectors — BLAKE2 folds digest and key length into its parameter block,
+so BLAKE2s-128 keyed is not BLAKE2s-256 truncated, and a mismatch would only surface as every
+browser being rejected. The cost is breaking and taken deliberately in pre-alpha: tokens under
+`usrToken:v1`/`v2` no longer validate, so every session logs in again, the token grew 8 bytes, and
+the backend and the daemon must deploy together. See `fareward/RATIONALE.md` for the full decision.
+
 ## A dev backend dials its own fareward daemon unless `use_remote_dev_host` says otherwise
 
 **Context** — `config.toml` carried `[fareward] public = true, host = <server IP>`, so a developer

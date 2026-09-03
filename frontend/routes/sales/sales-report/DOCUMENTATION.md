@@ -251,7 +251,7 @@ files:
     role: data-model
     hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc
     supports: [concepts, capability.run-report, rules]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [rules]

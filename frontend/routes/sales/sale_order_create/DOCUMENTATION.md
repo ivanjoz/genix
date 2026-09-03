@@ -382,7 +382,7 @@ files:
     role: business-logic
     hash: sha256:6009c242673ce18ffeff7b157154789b459f4c3b55f97be881aec0fbbc718c5d
     supports: [capability.set-payment-delivery, related-pages]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [rules]

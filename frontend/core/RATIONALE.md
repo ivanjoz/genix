@@ -6,7 +6,7 @@ read as the page, the page as the group) and a group with a single option wasted
 
 **Decision** — Group id 1 is now `My Company|Mi Empresa` (minName `EMP`) and its first option is
 `Configuration|Configuración`. `Sedes & Almacenes` moved into it as the second option, and the
-`Negocio` group (id 2) was deleted. `backend/access_list.yml` mirrors the change: access group 1 is
+`Negocio` group (id 2) was deleted. `backend/access.toml` mirrors the change: access group 1 is
 renamed to `Mi Empresa`, access id 1 to `Configuración`, access id 7 moves to group 1, and access
 group 2 (`Negocio`) is removed.
 

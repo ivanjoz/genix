@@ -18,7 +18,7 @@
   let selectedTab = $state(1);
 
   // The shared security runtime carries no access catalog (routes/+layout.svelte registers it
-  // for the admin app only), so reading the session here keeps access_list.yml out of the
+  // for the admin app only), so reading the session here keeps access.toml out of the
   // public storefront bundle.
   const userInfo = $derived.by<IUser | null>(() => security.getUserInfo());
 

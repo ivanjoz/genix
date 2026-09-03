@@ -272,7 +272,7 @@ files:
     role: backend-handler
     hash: sha256:b1f47217c39ad2e920ed7916a7a2e104af3ebf3610743c69d58733ef097e8d90
     supports: [concepts]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [page-purpose]

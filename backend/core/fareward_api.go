@@ -34,8 +34,12 @@ type (
 	AccessDenied        = fareward.AccessDenied
 	BudgetOperation     = fareward.BudgetOperation
 	FarewardClient      = fareward.FarewardClient
-	RequestLogRecord    = fareward.RequestLogRecord
-	RequestLogEntry     = fareward.RequestLogError
+	// AccessGrant is what the daemon answered about this request: which required slots the caller
+	// holds, and each one's sub-access bytes still in wire form. The bytes stay opaque over there
+	// on purpose — the client holds no catalogue — so accesos-blob.go decodes them here.
+	AccessGrant      = fareward.AccessGrant
+	RequestLogRecord = fareward.RequestLogRecord
+	RequestLogEntry  = fareward.RequestLogError
 )
 
 const (
@@ -43,7 +47,7 @@ const (
 	InvalidateAllCompanyUsers = fareward.InvalidateAllCompanyUsers
 
 	// MaxRequiredAccess bounds how many accesses one route may map to. The gate refuses to encode
-	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access_list.yml inside it.
+	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access.toml inside it.
 	MaxRequiredAccess = fareward.MaxRequiredAccess
 
 	BudgetSetDaily        = fareward.BudgetSetDaily
@@ -146,7 +150,7 @@ func (req *HandlerArgs) MakeCreditRateLimitResponse(err error) HandlerResponse {
 // The two codes are not interchangeable. A missing or inactive user is a statement about the
 // session, so it is a 401 and the client must re-authenticate; lacking a permission is a 403 and
 // re-authenticating would achieve nothing. accessNames comes from the caller because the daemon
-// never sees them — it holds no copy of access_list.yml, deliberately.
+// never sees them — it holds no copy of access.toml, deliberately.
 func (req *HandlerArgs) MakeAccessDeniedResponse(err error, accessNames []string) HandlerResponse {
 	var denied *fareward.AccessDenied
 	if !errors.As(err, &denied) {

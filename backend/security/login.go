@@ -5,26 +5,39 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
-	"encoding/binary"
 	"encoding/json"
-	"slices"
 	"time"
 
 	"github.com/ivanjoz/colbin"
 )
 
-func encodeAccesosComputedBase64(accesosComputed []uint16) string {
-	if len(accesosComputed) == 0 {
-		return ""
+// buildBootstrapAdminAccesos synthesizes user 1's grants from the catalog.
+//
+// They are built here and never persisted, and that is precisely why resolveRouteAccess lets user 1
+// bypass the daemon: its stored blobs are empty, so asking fareward would deny it. The two places
+// have to keep agreeing — a bypass without this synthesis leaves the admin with no access in the
+// UI, and this synthesis without the bypass gets it 403s from the gate.
+func buildBootstrapAdminAccesos() ([]byte, []byte, error) {
+	accessHelper := core.GetEmbeddedAccessHelper()
+	allAccessIDs, err := core.GetAllEmbeddedAccesosIDs()
+	if err != nil {
+		return nil, nil, core.Err("No se pudo cargar el catálogo de accesos para el user administrador.", err)
 	}
 
-	// Encode packed accesses as little-endian uint16 bytes so the frontend can hydrate a Uint16Array directly.
-	packedAccessBytes := make([]byte, len(accesosComputed)*2)
-	for index, packedAccesoNivel := range accesosComputed {
-		binary.LittleEndian.PutUint16(packedAccessBytes[index*2:], packedAccesoNivel)
+	accesoGrants := make([]core.AccesoGrant, 0, len(allAccessIDs))
+	for _, accesoID := range allAccessIDs {
+		accesoGrant := core.AccesoGrant{AccesoID: accesoID, Nivel: 4}
+		// "Todos" rather than the access's declared mask: it satisfies every sub-access check on
+		// that access, costs one byte instead of two, and stays correct the day the catalog gains
+		// another sub-access. Only accesses that declare any get it, or an access with none would
+		// land in accesos_sub_computed carrying nothing.
+		if accessInfo, found := accessHelper.GetAccesoInfo(accesoID); found && accessInfo.SubAccesosMask != 0 {
+			accesoGrant.SubMask = 1 << (core.SubAccesoTodosID - 1)
+		}
+		accesoGrants = append(accesoGrants, accesoGrant)
 	}
 
-	return core.BytesToBase64(packedAccessBytes, true)
+	return core.EncodeAccesosGrants(accesoGrants)
 }
 
 func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
@@ -99,21 +112,16 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 		User:      user.User,
 	}
 
-	sortedAccesosComputed := append([]uint16{}, user.AccesosComputed...)
+	// The stored blobs go out as-is: they are already sorted and split by the single encoder that
+	// wrote them, so the login path re-encodes nothing.
+	accesosBlob, accesosSubBlob := user.AccesosComputed, user.AccesosSubComputed
 	if user.ID == 1 {
-		// Bootstrap admin receives all declared accesses at max level in the login payload.
-		allAccessIDs, err := core.GetAllEmbeddedAccesosIDs()
-		if err != nil {
-			return nil, core.Err("No se pudo cargar el catálogo de accesos para el user administrador.", err)
-		}
-
-		for _, accessID := range allAccessIDs {
-			sortedAccesosComputed = append(sortedAccesosComputed, uint16(accessID<<2)|3)
+		var adminErr error
+		accesosBlob, accesosSubBlob, adminErr = buildBootstrapAdminAccesos()
+		if adminErr != nil {
+			return nil, adminErr
 		}
 	}
-	slices.Sort(sortedAccesosComputed)
-	sortedAccesosComputed = slices.Compact(sortedAccesosComputed)
-	accesosComputedBase64 := encodeAccesosComputedBase64(sortedAccesosComputed)
 
 	// Persist a deterministic keyed fingerprint in the token so auth can recompute and validate it.
 	usuarioToken.Hash = core.ComputeUsuarioTokenHash(usuarioToken)
@@ -124,7 +132,8 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 		return nil, core.Err("Error al serializar el Token de user.", err)
 	}
 	core.Log("MakeUsuarioResponse:: usuarioTokenCBOR bytes", len(usuarioTokenCBOR))
-	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "companyID", user.CompanyID, "userID", user.ID, "accesosComputed", len(sortedAccesosComputed))
+	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "companyID", user.CompanyID,
+		"userID", user.ID, "accesos bytes", len(accesosBlob), "sub bytes", len(accesosSubBlob))
 
 	// Publish the token as raw CBOR bytes in base64 so auth can decode it without extra transforms.
 	core.Log("MakeUsuarioResponse:: token bytes", len(usuarioTokenCBOR))
@@ -153,12 +162,13 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 	}
 
 	response := map[string]any{
-		"UserID":          user.ID,
-		"UserToken":       core.BytesToBase64(usuarioTokenCBOR, true),
-		"TokenExpTime":    time.Now().Unix() + (4 * 60 * 40),
-		"UserInfo":        core.BytesToBase64(userInfoJsonEncrypted),
-		"AccesosComputed": accesosComputedBase64,
-		"CompanyID":       user.CompanyID,
+		"UserID":             user.ID,
+		"UserToken":          core.BytesToBase64(usuarioTokenCBOR, true),
+		"TokenExpTime":       time.Now().Unix() + (4 * 60 * 40),
+		"UserInfo":           core.BytesToBase64(userInfoJsonEncrypted),
+		"AccesosComputed":    core.BytesToBase64(accesosBlob, true),
+		"AccesosSubComputed": core.BytesToBase64(accesosSubBlob, true),
+		"CompanyID":          user.CompanyID,
 	}
 
 	return response, nil

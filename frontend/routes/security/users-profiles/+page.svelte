@@ -31,8 +31,8 @@ import { PerfilesService, PROFILES_ACCESS_ID, USERS_ACCESS_ID } from './users-pr
       // One load for both tabs: the catalog is the shared, read-only source of truth for the
       // access cards on Profiles and the per-user access selector on Users.
       const accessCatalogPayload = await fetchAccessListCatalog()
-      accessGroups = accessCatalogPayload.access_groups || []
-      accessListEntries = accessCatalogPayload.access_list || []
+      accessGroups = accessCatalogPayload.groups || []
+      accessListEntries = accessCatalogPayload.access || []
     } catch (error) {
       accessCatalogLoadError = error as string
       console.error('[access-list] Catalog load failed', { error })

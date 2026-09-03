@@ -4,7 +4,7 @@ export { postUser, postOwnUser } from '$services/services/users.svelte';
 
 export type { IProfile, IUser };
 
-// Access ids from backend/access_list.yml. Both accesses resolve to this single route, so
+// Access ids from backend/access.toml. Both accesses resolve to this single route, so
 // canAccessRoute only tells us the page is reachable — each tab is gated on its own id.
 export const USERS_ACCESS_ID = 2
 export const PROFILES_ACCESS_ID = 3

@@ -229,7 +229,7 @@ files:
     role: data-model
     hash: sha256:9d96bb2ae3bc6a5d8626bdc4a6a6348e63ddb97072434bde3403ec70b3178789
     supports: [concepts]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [rules]

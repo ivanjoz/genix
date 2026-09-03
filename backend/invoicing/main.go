@@ -4,7 +4,7 @@ import "app/core"
 
 // ModuleHandlers routes the electronic-invoicing APIs.
 //
-// The paths are the ones access_list.yml grants (ids 35 and 36) and
+// The paths are the ones access.toml grants (ids 35 and 36) and
 // core/api_routes.generated.go numbers, so adding one here means adding it in
 // both of those too, or the route exists and nobody can reach it.
 var ModuleHandlers = core.AppRouterType{

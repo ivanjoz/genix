@@ -1,4 +1,4 @@
-import accessListYamlContent from '../../../../backend/access_list.yml?raw';
+import accessCatalogTomlContent from '../../../../backend/access.toml?raw';
 
 export interface IAccessGroupCatalogEntry {
   id: number
@@ -15,63 +15,68 @@ export interface IAccessListCatalogEntry {
 }
 
 export interface IAccessListCatalogPayload {
-  access_groups: IAccessGroupCatalogEntry[]
-  access_list: IAccessListCatalogEntry[]
+  groups: IAccessGroupCatalogEntry[]
+  access: IAccessListCatalogEntry[]
 }
 
 let accessListCatalog: IAccessListCatalogPayload | null = null
 const accessEntriesByRoute = new Map<string, IAccessListCatalogEntry[]>()
 
-// Parse only the controlled access-list YAML shape: top-level lists of scalar records.
-function parseAccessListCatalog(yamlContent: string): IAccessListCatalogPayload {
-  const parsedCatalog: IAccessListCatalogPayload = { access_groups: [], access_list: [] }
-  let activeRecords: Record<string, string | number>[] | null = null
-  let activeRecord: Record<string, string | number> | null = null
+type CatalogRecord = Record<string, string | number | (string | number)[]>
 
-  for (const [lineIndex, sourceLine] of yamlContent.split(/\r?\n/).entries()) {
+// Parse only the controlled access-catalog TOML shape: arrays of tables holding scalar or
+// single-line-array fields. Hand-written rather than pulled from a library because the catalog is
+// imported as text and must not drag a parser into the bundle.
+function parseAccessCatalog(tomlContent: string): IAccessListCatalogPayload {
+  const parsedCatalog: IAccessListCatalogPayload = { groups: [], access: [] }
+  let activeRecord: CatalogRecord | null = null
+
+  for (const [lineIndex, sourceLine] of tomlContent.split(/\r?\n/).entries()) {
     const trimmedLine = sourceLine.trim()
     if (!trimmedLine || trimmedLine.startsWith('#')) { continue }
 
-    const sectionMatch = /^([a-z_]+):$/.exec(trimmedLine)
-    if (sourceLine === trimmedLine && sectionMatch) {
+    // `[[name]]` is unambiguous, so a record needs no indentation tracking to delimit it.
+    const sectionMatch = /^\[\[([a-z_]+)\]\]$/.exec(trimmedLine)
+    if (sectionMatch) {
       const sectionName = sectionMatch[1] as keyof IAccessListCatalogPayload
       if (!(sectionName in parsedCatalog)) {
-        throw new Error(`Unsupported access-list section "${sectionName}" at line ${lineIndex + 1}`)
+        throw new Error(`Unsupported access-catalog section "${sectionName}" at line ${lineIndex + 1}`)
       }
-      activeRecords = parsedCatalog[sectionName] as unknown as Record<string, string | number>[]
-      activeRecord = null
+      activeRecord = {}
+      ;(parsedCatalog[sectionName] as unknown as CatalogRecord[]).push(activeRecord)
       continue
     }
 
-    if (!activeRecords) {
-      throw new Error(`Access-list field found before a section at line ${lineIndex + 1}`)
-    }
-
-    const fieldLine = trimmedLine.startsWith('- ') ? trimmedLine.slice(2) : trimmedLine
-    if (trimmedLine.startsWith('- ')) {
-      activeRecord = {}
-      activeRecords.push(activeRecord)
+    const fieldMatch = /^([a-z_]+)\s*=\s*(.*)$/.exec(trimmedLine)
+    if (!fieldMatch) {
+      throw new Error(`Unsupported access-catalog TOML at line ${lineIndex + 1}: ${trimmedLine}`)
     }
     if (!activeRecord) {
-      throw new Error(`Access-list field found before a record at line ${lineIndex + 1}`)
-    }
-
-    const fieldMatch = /^([a-z_]+):\s*(.*)$/.exec(fieldLine)
-    if (!fieldMatch) {
-      throw new Error(`Unsupported access-list YAML at line ${lineIndex + 1}: ${trimmedLine}`)
+      throw new Error(`Access-catalog field found before a [[section]] at line ${lineIndex + 1}`)
     }
 
     const [, fieldName, rawValue] = fieldMatch
-    if (/^-?\d+$/.test(rawValue)) {
-      activeRecord[fieldName] = Number(rawValue)
-    } else if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
-      activeRecord[fieldName] = JSON.parse(rawValue)
-    } else {
-      throw new Error(`Access-list values must be integers or quoted strings at line ${lineIndex + 1}`)
-    }
+    activeRecord[fieldName] = parseCatalogValue(rawValue, lineIndex + 1)
   }
 
   return parsedCatalog
+}
+
+// A single-line TOML array of integers or double-quoted strings is already valid JSON, so the whole
+// value parser is one JSON.parse plus the two TOML-only spellings it would choke on.
+function parseCatalogValue(rawValue: string, lineNumber: number): string | number | (string | number)[] {
+  if (rawValue.startsWith('[')) {
+    if (!rawValue.endsWith(']')) {
+      throw new Error(`Access-catalog arrays must fit on one line (line ${lineNumber})`)
+    }
+    if (/,\s*\]$/.test(rawValue)) {
+      throw new Error(`Access-catalog arrays must not carry a trailing comma (line ${lineNumber})`)
+    }
+    return JSON.parse(rawValue)
+  }
+  if (rawValue.startsWith('"')) { return JSON.parse(rawValue) }
+  if (/^-?\d+$/.test(rawValue)) { return Number(rawValue) }
+  throw new Error(`Access-catalog values must be integers, quoted strings or arrays (line ${lineNumber})`)
 }
 
 // Split the catalog's compact comma list once so every consumer uses the same routes.
@@ -88,7 +93,7 @@ function indexAccessEntries(payload: IAccessListCatalogPayload): void {
   accessEntriesByRoute.clear()
 
   // One route can be unlocked by multiple access IDs.
-  for (const accessEntry of payload.access_list || []) {
+  for (const accessEntry of payload.access || []) {
     for (const normalizedRoute of normalizeAccessFrontendRoutes(accessEntry.frontend_routes)) {
       const matchedAccessEntries = accessEntriesByRoute.get(normalizedRoute) || []
       matchedAccessEntries.push(accessEntry)
@@ -100,12 +105,12 @@ function indexAccessEntries(payload: IAccessListCatalogPayload): void {
 export async function fetchAccessListCatalog(): Promise<IAccessListCatalogPayload> {
   if (!accessListCatalog) {
     console.debug('[access-list] Parsing access catalog')
-    accessListCatalog = parseAccessListCatalog(accessListYamlContent)
+    accessListCatalog = parseAccessCatalog(accessCatalogTomlContent)
     indexAccessEntries(accessListCatalog)
 
     console.info('[access-list] Access catalog ready', {
-      accessGroupCount: accessListCatalog.access_groups.length,
-      accessEntryCount: accessListCatalog.access_list.length
+      accessGroupCount: accessListCatalog.groups.length,
+      accessEntryCount: accessListCatalog.access.length
     })
   }
 
@@ -134,3 +139,7 @@ export function getAccessEntriesForRoute(routeValue: string | undefined | null):
 
   return []
 }
+
+// Exported for the tests: the parser is the only thing standing between the catalog file and every
+// access check in the app, so its rejections are worth asserting directly.
+export const parseAccessCatalogForTest = parseAccessCatalog

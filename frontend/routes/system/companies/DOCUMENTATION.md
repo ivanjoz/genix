@@ -363,7 +363,7 @@ files:
     role: data-model
     hash: sha256:b6d7a7c08f228d3315d5c1d831dcec406094d4ae9c6218a3e8b51c19bca2ca9c
     supports: [concepts, capability.review-companies, rules, troubleshooting]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:f11c349be832baa870463eb18658a8f637436c84f39e80bb5bcb47d9118c7f2a
     supports: [page-purpose, capability.manage-credit-budget]

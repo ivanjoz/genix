@@ -59,7 +59,7 @@ type TurnResponse struct {
 // The route is registered as `p-agent-turn`: in mainHandler the `p-` prefix only
 // means "no acceso requirement", which is what the agent chat needs (any signed
 // in user may use it), so the session token is validated right here instead. A
-// POST without an access_list entry would otherwise be rejected for every user
+// POST without an access.toml entry would otherwise be rejected for every user
 // except the admin.
 func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	req.User = core.CheckUser(req, 0)
@@ -111,7 +111,7 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	defer cancelRun()
 	// No required access: the route gate in main-handlers.go already decided this request, and this
 	// charge is a second one for the turn's own budget rather than a repeat of the gate.
-	if rateLimitError := core.ChargeAPIUsage(
+	if _, rateLimitError := core.ChargeAPIUsage(
 		runContext, req.User.CompanyID, req.User.ID, req.RouteID, "POST", len(*req.Body), nil,
 	); rateLimitError != nil {
 		core.Log("agent.turn base credit rejected tab::", shortTabID(tab), " err::", rateLimitError)

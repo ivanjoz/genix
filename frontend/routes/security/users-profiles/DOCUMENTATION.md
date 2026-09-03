@@ -33,7 +33,7 @@ company (`empresa`) and what they are allowed to do. It holds two tabs:
   level (`Visualizar` or `Todo`).
 
 The page does not define the catalog of accesses itself (their names, which pages/APIs they gate,
-which levels they offer); that catalog lives in `backend/access_list.yml` and is shared,
+which levels they offer); that catalog lives in `backend/access.toml` and is shared,
 read-only input to both tabs. It also does not handle a signed-in user editing their own profile
 from the account/header menu; that is a separate self-service flow using the same backend
 endpoint family (`user-self`).
@@ -165,7 +165,7 @@ selected chip and use its trash icon to remove it.
 ### Required information and prerequisites (Requisitos previos)
 
 Profiles come from the **Profiles (Perfiles)** tab; only profiles with an active status appear in the
-selector. Individual accesses come from the same access catalog (`access_list.yml`) used
+selector. Individual accesses come from the same access catalog (`access.toml`) used
 across Genix, covering accesses for every module (Finance, Logistics, Security, System, etc.),
 not only this page's own access. Each catalog access lists the levels it makes available (for
 example some accesses offer View, Create, Edit, and Full; the Users/Perfiles & Accesos
@@ -310,7 +310,7 @@ deleting the account. There is currently no verified way on this page to deactiv
 - A **profile (perfil)** is a named, reusable bundle of accesses: `Name (Nombre)`,
   `Description (Descripción)`, and the list of accesses/levels it grants. Assigning a profile to a
   user (on the Users (Usuarios) tab) grants that user every access the profile contains.
-- An **access (acceso)** is one entry in the system-wide catalog (`access_list.yml`), such as
+- An **access (acceso)** is one entry in the system-wide catalog (`access.toml`), such as
   "Usuarios", "Perfiles & Accesos", "Cajas & Bancos", or "Órdenes Compra". Each catalog entry
   declares which levels it offers via a `levels` field (concatenated digits, e.g. `14` = level 1 +
   level 4).
@@ -503,7 +503,7 @@ removals) to take effect on their next access-checked call.
 
 - The two tabs are each other's counterpart: use **Profiles (Perfiles)** to decide what a profile
   grants, and **Users (Usuarios)** to decide who holds it and to add individual accesses on top.
-- `backend/access_list.yml` is the shared source of every access name, group, and level shown on
+- `backend/access.toml` is the shared source of every access name, group, and level shown on
   both tabs; changing what an access offers or unlocks requires a backend/catalog change, not an
   action on this page.
 - The account/header profile editor (self-service) lets a signed-in user update their own
@@ -586,7 +586,7 @@ files:
     role: data-model
     hash: sha256:ebe1a63290b8e313dc31dfa6113a1fa228a1437279e4286c86717d7416aa7aa3
     supports: [users.concepts, profiles.concepts, profiles.capability.assign-access]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:491c43a25f0837ef39fc1cb43a82ac890610cf3fa74c9dee4757744eb72f396b
     supports: [navigation, users.capability.assign-access, users.rules, profiles.concepts, profiles.capability.assign-access, related-pages]

@@ -70,7 +70,7 @@ not remembered between visits, unlike routes that use `Page options`.
 
 ## Both access ids kept; the tab, not the route, is what gets gated
 
-**Context** — `access_list.yml` id 1 (`Configuración`, the company-parameters APIs) and id 4
+**Context** — `access.toml` id 1 (`Configuración`, the company-parameters APIs) and id 4
 (`Backups`, `POST.backup-create` / `POST.backup-restore`) were separate accesses on separate
 routes. `canAccessRoute` grants a route if **any** access mapped to it passes, so pointing both ids
 at one route would let a user holding only `Backups` open the company-parameters form.

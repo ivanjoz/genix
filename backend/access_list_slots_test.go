@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // The charge frame carries a fixed number of packed-grant slots, so a backend route mapped to more
@@ -18,13 +18,13 @@ import (
 // widening MaxRequiredAccess means widening CHARGE_PAYLOAD_SIZE on both sides — the two byte-layout
 // tests will say so.
 func TestEveryRouteFitsTheRequiredAccessSlots(t *testing.T) {
-	parsed := core.AccessListYaml{}
-	if err := yaml.Unmarshal(accessListYamlContent, &parsed); err != nil {
-		t.Fatalf("access_list.yml did not parse: %v", err)
+	parsed := core.AccessCatalog{}
+	if err := toml.Unmarshal(accessCatalogContent, &parsed); err != nil {
+		t.Fatalf("access.toml did not parse: %v", err)
 	}
 
 	accessesByRoute := map[string][]string{}
-	for _, entry := range parsed.AccessList {
+	for _, entry := range parsed.Access {
 		for _, route := range strings.Split(entry.BackendAPIs, ",") {
 			route = strings.TrimSpace(route)
 			if route == "" {
@@ -241,5 +241,46 @@ func TestPostAndPutAreIndistinguishable(t *testing.T) {
 	// Both are writes, so both must ask for nivel 2 and not nivel 1.
 	if want := core.MakeAccesoNivelPacked(3, 2); !slices.Equal(putDecision.requiredAccess, []uint16{want}) {
 		t.Errorf("PUT required %v; want nivel 2 (%d)", putDecision.requiredAccess, want)
+	}
+}
+
+// The catalog is the only place sub-accesses are declared, and a malformed declaration is a
+// build-time mistake: the file is embedded, so nothing can fix it at runtime. Load must therefore
+// refuse rather than silently offer an access fewer sub-accesses than its author wrote.
+func TestSubAccesosAreDeclaredAndValidated(t *testing.T) {
+	// Punto de Venta is the first access to carry sub-accesses; it pins the catalog against the
+	// mask the grant blob will actually store.
+	puntoDeVenta, found := accessHelper.GetAccesoInfo(10)
+	if !found {
+		t.Fatal("acceso 10 (Punto de Venta) is missing from the catalog")
+	}
+	if want := uint16(0b110); puntoDeVenta.SubAccesosMask != want {
+		t.Errorf("Punto de Venta sub-accesos = %b; want %b (2 Recibir Pago, 3 Despachar Producto)",
+			puntoDeVenta.SubAccesosMask, want)
+	}
+
+	// An access that declares none carries an empty mask, which is also what puts it in
+	// accesos_computed rather than accesos_sub_computed.
+	if usuarios, _ := accessHelper.GetAccesoInfo(2); usuarios.SubAccesosMask != 0 {
+		t.Errorf("Usuarios declares no sub-accesos but its mask is %b", usuarios.SubAccesosMask)
+	}
+
+	// Every declaration in the shipped catalog has to be inside the encodable range, or the blob
+	// encoder would reject a profile that legitimately grants what the catalog offers.
+	allAccesoIDs, err := accessHelper.GetAllAccesosIDs()
+	if err != nil {
+		t.Fatalf("catalog did not load: %v", err)
+	}
+	for _, accesoID := range allAccesoIDs {
+		accessInfo, _ := accessHelper.GetAccesoInfo(accesoID)
+		if accessInfo.SubAccesosMask >= 1<<core.MaxSubAccesoID {
+			t.Errorf("acceso %d declares sub-accesos past the %d ceiling: %b",
+				accesoID, core.MaxSubAccesoID, accessInfo.SubAccesosMask)
+		}
+		// Bit 0 is "Todos", synthesized rather than declared; a catalog that declared it would
+		// make every other sub-access on that access unreachable.
+		if accessInfo.SubAccesosMask&1 != 0 {
+			t.Errorf("acceso %d declares sub-acceso 1, which is reserved for Todos", accesoID)
+		}
 	}
 }

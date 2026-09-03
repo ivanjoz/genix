@@ -25,6 +25,13 @@ import { useUI } from '@genix/ui';
 
   const cardIsSelected = $derived((acciones?.length || 0) > 0)
 
+  // Highest-level-first, so the badge reads "Todo, Ver" and not the insertion order.
+  const selectedAcciones = $derived(
+    [...acciones].sort((leftLevel, rightLevel) => rightLevel - leftLevel)
+      .map(id => accesoAccionesMap.get(id))
+      .filter(accion => !!accion)
+  )
+
   function handleCardClick(ev: MouseEvent) {
     if (ui.state.deviceType === 1 || !perfilForm) { return }
     ev.stopPropagation()
@@ -45,7 +52,7 @@ import { useUI } from '@genix/ui';
 
   function handleAccionClick(ev: MouseEvent, id: number) {
     ev.stopPropagation()
-    if (!perfilForm) return
+    if (!perfilForm?.accesosMap) return
 
     let newAcciones = [...(perfilForm.accesosMap.get(acceso.id) || [])]
     if (newAcciones.includes(id)) {
@@ -74,7 +81,7 @@ import { useUI } from '@genix/ui';
 <div
   class={cN}
   class:is-selected={cardIsSelected}
-  style:border-left-color={accionColor}
+  style:--access-color={accionColor}
   onclick={handleCardClick}
   role="button"
   tabindex="0"
@@ -99,8 +106,16 @@ import { useUI } from '@genix/ui';
     <div class="line-1 absolute" style:background-color={accionColor}></div>
   {/if}
 
-  {#if perfilForm}
-    <div class="acciones-ac2 w-full flex justify-start z-10">
+  {#if perfilForm?.accesosMap}
+    {#if cardIsSelected}
+      <!-- Compact granted-level badge: replaced by the action buttons while the card is hovered. -->
+      <div class="acciones-badge">
+        {#each selectedAcciones as accion}
+          <i class={accion.icon} style:color={accion.color} title={accion.name}></i>
+        {/each}
+      </div>
+    {/if}
+    <div class="acciones-ac2 flex justify-start z-10">
       {#each acceso.acciones as id}
         {@const accion = accesoAccionesMap.get(id)}
         {@const selected = acciones.includes(id)}
@@ -132,7 +147,6 @@ import { useUI } from '@genix/ui';
 
 <style>
   .acceso-card {
-    min-height: 68px;
     position: relative;
     background-color: white;
     cursor: pointer;
@@ -140,13 +154,21 @@ import { useUI } from '@genix/ui';
     flex-direction: column;
     justify-content: space-between;
     gap: 6px;
-    padding: 8px;
+    padding: 6px 8px 6px 13px;
     line-height: 1.15;
     border: 1px solid #d9dce8;
-    border-left: 4px solid transparent;
-    border-radius: 10px;
     user-select: none;
-    transition: border-color 0.12s ease, outline-color 0.12s ease, background-color 0.12s ease;
+  }
+
+  /* Flush against the outer edge, full height, square ends — no border miter. */
+  .acceso-card::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    bottom: -1px;
+    left: -1px;
+    width: 5px;
+    background-color: var(--access-color, transparent);
   }
 
   .acceso-card:hover {
@@ -155,15 +177,14 @@ import { useUI } from '@genix/ui';
   }
 
   .acceso-card.is-selected {
-    border-color: #b4a3ff;
-    outline: 1px solid #7c5cff;
-    outline-offset: 0;
     background: #f8f6ff;
   }
 
   .acceso-card .content-wrap {
     width: 100%;
     min-height: 0;
+    /* Keeps the text clear of the badge sitting in the top-right corner. */
+    padding-right: 46px;
   }
 
   .acceso-card .title-row {
@@ -177,26 +198,82 @@ import { useUI } from '@genix/ui';
   }
 
   .acceso-card .route-text {
-    margin-top: 4px;
+    margin-top: 2px;
     color: #6b7280;
     overflow-wrap: anywhere;
     line-height: 1.15;
   }
 
-  .acceso-card .acciones-ac2 {
+  .acciones-badge {
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    display: flex;
+    gap: 3px;
+  }
+
+  .acciones-badge i {
+    height: 14px;
+    width: 14px;
+  }
+
+  /* Desktop: the buttons float over the card centre-right and only on hover, so the
+     card itself only has to be as tall as its two text lines. */
+  .acceso-card:not(.mobile) .acciones-ac2 {
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+    gap: 4px;
+    opacity: 0;
+    pointer-events: none;
+    padding-left: 10px;
+    border-radius: 10px;
+    background-color: white;
+    box-shadow: -10px 0 10px -4px white;
+  }
+
+  .acceso-card.is-selected:not(.mobile) .acciones-ac2 {
+    background-color: #f8f6ff;
+    box-shadow: -10px 0 10px -4px #f8f6ff;
+  }
+
+  .acceso-card:not(.mobile):hover .acciones-ac2 {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .acceso-card:not(.mobile):hover .acciones-badge {
+    opacity: 0;
+  }
+
+  .acceso-card:not(.mobile) .acciones-ac2 > div {
+    height: 1.7rem;
+    min-width: 42px;
+    padding: 0 10px;
+    font-size: 15px;
+  }
+
+  .acceso-card.mobile {
+    padding: 0.6rem 8px 6px 8px;
+    min-height: 4.25rem;
+  }
+
+  /* Touch keeps the horizontal .line-1 marker instead. */
+  .acceso-card.mobile::before {
+    display: none;
+  }
+
+  .acceso-card.mobile .acciones-ac2 {
     position: static;
+    width: 100%;
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .acciones-ac2 {
-    visibility: visible;
-  }
-
-  .acceso-card.mobile {
-    padding-top: 0.6rem;
-    min-height: 4.25rem;
-    border-left-width: 0;
+  /* On touch there is no hover, so the badge would just duplicate the buttons. */
+  .acceso-card.mobile .acciones-badge {
+    display: none;
   }
 
   .acceso-card .line-1 {

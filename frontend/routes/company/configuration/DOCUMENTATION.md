@@ -496,7 +496,7 @@ files:
     role: business-logic
     hash: sha256:bddb0793b217cc905b2a852b2fe42a26f41f0b1d7026fcf401d84d2b3bbdecef
     supports: [concepts, capability.restore-backup]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:ec1a17b2bd06f28bd9749d1dc8097171986737abe9dba06822452a529ab7ada7
     supports: [rules, capability.browse-backups, capability.generate-backup, capability.restore-backup, troubleshooting]

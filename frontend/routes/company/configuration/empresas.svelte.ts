@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 
-// Access id from backend/access_list.yml. It gates the "My Company" tab of this route, whose
+// Access id from backend/access.toml. It gates the "My Company" tab of this route, whose
 // other tab (Backups) carries its own id.
 export const CONFIGURATION_ACCESS_ID = 1
 

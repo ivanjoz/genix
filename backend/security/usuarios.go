@@ -7,22 +7,7 @@ import (
 	"app/db"
 	"app/security/types"
 	"encoding/json"
-	"sort"
 )
-
-func makeAccesoNivelUint16(accesoID int32, nivel int32) uint16 {
-	// Clamp invalid levels to the minimum allowed representation to avoid granting extra permissions.
-	if nivel < 1 || nivel > 4 {
-		nivel = 1
-	}
-
-	return uint16(accesoID<<2) | uint16(nivel-1)
-}
-
-func makeAccesoNivelPacked(accesoNivelID int32) uint16 {
-	// Reuse the same normalization path for any acceso encoded as accesoID*10+nivel.
-	return makeAccesoNivelUint16(accesoNivelID/10, accesoNivelID%10)
-}
 
 func getPerfilesMapByIDs(companyID int32, profileIDs []int32) (map[int32]types.Profile, error) {
 	if len(profileIDs) == 0 {
@@ -49,13 +34,63 @@ func getPerfilesMapByIDs(companyID int32, profileIDs []int32) (map[int32]types.P
 	return perfilesByID, nil
 }
 
-func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, profileIDs []int32) ([]uint16, error) {
-	if len(profileIDs) == 0 {
-		core.Log("buildAccesosComputedFromPerfiles:: user sin perfiles")
-		return []uint16{}, nil
+// addAccesoNivelToGrants folds one `accesoID*10 + nivel` entry into the merge, keeping the highest
+// nivel seen. Assigning a user a second profile is expected to widen what they may do, never to
+// narrow it, so every merge in this file is "most permissive wins".
+func addAccesoNivelToGrants(grantsByAccesoID map[int32]*core.AccesoGrant, accesoNivelID int32) {
+	accesoID := accesoNivelID / 10
+	nivel := uint8(accesoNivelID % 10)
+
+	// Normalize malformed levels down to the minimum, never up: a corrupt value must not be able
+	// to widen a grant.
+	if nivel < 1 || nivel > 4 {
+		core.Log("addAccesoNivelToGrants:: normalizando nivel", accesoNivelID, "=>", accesoID, 1)
+		nivel = 1
 	}
 
-	highestLevelByAccesoID := map[int32]int32{}
+	accesoGrant, alreadyMerged := grantsByAccesoID[accesoID]
+	if !alreadyMerged {
+		grantsByAccesoID[accesoID] = &core.AccesoGrant{AccesoID: accesoID, Nivel: nivel}
+		return
+	}
+	if nivel > accesoGrant.Nivel {
+		accesoGrant.Nivel = nivel
+	}
+}
+
+// addSubAccesoToGrants folds one `accesoID*100 + subID` entry into the merge.
+//
+// A sub-access on an access the user does not hold is dropped, not stored: sub-accesses qualify a
+// permission rather than granting one, so one with no parent has nothing to qualify, and keeping it
+// would put an access into accesos_sub_computed at a nivel nobody granted.
+func addSubAccesoToGrants(grantsByAccesoID map[int32]*core.AccesoGrant, subAccesoRef int32) {
+	accesoID := subAccesoRef / 100
+	subAccesoID := subAccesoRef % 100
+
+	accesoGrant, holdsParentAcceso := grantsByAccesoID[accesoID]
+	if !holdsParentAcceso {
+		core.Log("addSubAccesoToGrants:: sub-acceso sin su acceso padre, descartado", subAccesoRef)
+		return
+	}
+	if subAccesoID < 1 || subAccesoID > core.MaxSubAccesoID {
+		core.Log("addSubAccesoToGrants:: sub-acceso fuera de rango, descartado", subAccesoRef)
+		return
+	}
+	accesoGrant.SubMask |= uint16(1) << uint16(subAccesoID-1)
+}
+
+// buildAccesosComputedFromPerfiles merges every profile assigned to a user into the two blobs the
+// user row stores.
+//
+// Two passes over the profiles, and the order matters: a sub-access granted by one profile may
+// qualify an access granted by another, so every access has to be merged before any sub-access is
+// applied. Doing it profile by profile would drop those.
+func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, profileIDs []int32) (map[int32]*core.AccesoGrant, error) {
+	grantsByAccesoID := map[int32]*core.AccesoGrant{}
+	if len(profileIDs) == 0 {
+		core.Log("buildAccesosComputedFromPerfiles:: user sin perfiles")
+		return grantsByAccesoID, nil
+	}
 
 	for _, perfilID := range profileIDs {
 		profile, exists := perfilesByID[perfilID]
@@ -63,42 +98,36 @@ func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, prof
 			core.Log("buildAccesosComputedFromPerfiles:: profile no encontrado", perfilID)
 			continue
 		}
-
 		core.Log("buildAccesosComputedFromPerfiles:: profile", profile.ID, "accesos", len(profile.Accesos))
-
 		for _, accesoNivelID := range profile.Accesos {
-			accesoID := accesoNivelID / 10
-			nivel := accesoNivelID % 10
-
-			// Normalize malformed levels to the minimum valid level expected by the bit-packing format.
-			if nivel > 4 || nivel < 1 {
-				core.Log("buildAccesosComputedFromPerfiles:: normalizando nivel", accesoNivelID, "=>", accesoID, 1)
-				nivel = 1
-			}
-
-			currentLevel, alreadyExists := highestLevelByAccesoID[accesoID]
-			if !alreadyExists || nivel > currentLevel {
-				highestLevelByAccesoID[accesoID] = nivel
-			}
+			addAccesoNivelToGrants(grantsByAccesoID, accesoNivelID)
 		}
 	}
 
-	sortedAccesoIDs := make([]int32, 0, len(highestLevelByAccesoID))
-	for accesoID := range highestLevelByAccesoID {
-		sortedAccesoIDs = append(sortedAccesoIDs, accesoID)
-	}
-	sort.Slice(sortedAccesoIDs, func(i int, j int) bool {
-		return sortedAccesoIDs[i] < sortedAccesoIDs[j]
-	})
-
-	accesosComputed := make([]uint16, 0, len(sortedAccesoIDs))
-	for _, accesoID := range sortedAccesoIDs {
-		accesosComputed = append(accesosComputed, makeAccesoNivelPacked(accesoID*10+highestLevelByAccesoID[accesoID]))
+	for _, perfilID := range profileIDs {
+		for _, subAccesoRef := range perfilesByID[perfilID].SubAccesos {
+			addSubAccesoToGrants(grantsByAccesoID, subAccesoRef)
+		}
 	}
 
-	core.Log("buildAccesosComputedFromPerfiles:: accesos computados", len(accesosComputed))
+	return grantsByAccesoID, nil
+}
 
-	return accesosComputed, nil
+// encodeMergedAccesoGrants hands the merge to the single encoder in core, which sorts it and splits
+// it across the two columns.
+func encodeMergedAccesoGrants(grantsByAccesoID map[int32]*core.AccesoGrant) ([]byte, []byte, error) {
+	accesoGrants := make([]core.AccesoGrant, 0, len(grantsByAccesoID))
+	for _, accesoGrant := range grantsByAccesoID {
+		accesoGrants = append(accesoGrants, *accesoGrant)
+	}
+
+	accesosBlob, accesosSubBlob, err := core.EncodeAccesosGrants(accesoGrants)
+	if err != nil {
+		return nil, nil, err
+	}
+	core.Log("encodeMergedAccesoGrants:: accesos", len(accesoGrants),
+		"bytes", len(accesosBlob), "sub-bytes", len(accesosSubBlob))
+	return accesosBlob, accesosSubBlob, nil
 }
 
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
@@ -159,8 +188,9 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.ID = req.User.ID
 	}
 
-	if body.ID != 1 && len(body.ProfileIDs) == 0 && !isUsuarioPropio {
-		return req.MakeErr("El user debe tener al menos 1 permiso")
+	// Los accesos se otorgan por perfil o directamente (AccessLevelIDs); basta con uno de los dos.
+	if body.ID != 1 && len(body.ProfileIDs) == 0 && len(body.AccessLevelIDs) == 0 && !isUsuarioPropio {
+		return req.MakeErr("El user debe tener al menos 1 perfil o 1 acceso directo")
 	}
 	if (len(body.User) < 4 && !isUsuarioPropio) || len(body.FirstName) < 4 {
 		return req.MakeErr("El usuario y el nombre deben tener al menos 4 caracteres")
@@ -216,20 +246,28 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los perfiles del user.", err)
 	}
 
-	accesosComputed, err := buildAccesosComputedFromPerfiles(perfilesByID, body.ProfileIDs)
+	grantsByAccesoID, err := buildAccesosComputedFromPerfiles(perfilesByID, body.ProfileIDs)
 	if err != nil {
 		return req.MakeErr("Error al obtener los accesos del profile.", err)
 	}
+	// AccessLevelIDs are the accesses granted to this user directly, on top of their profiles.
+	// They merge exactly like a profile's would, so the same "highest nivel wins" rule applies and
+	// there is no separate dedup step: the merge is keyed by access id.
 	for _, accesoNivelID := range body.AccessLevelIDs {
-		accesosComputed = append(accesosComputed, makeAccesoNivelPacked(accesoNivelID))
+		addAccesoNivelToGrants(grantsByAccesoID, accesoNivelID)
 	}
-	accesosComputed = core.MakeUnique(accesosComputed)
+	accesosBlob, accesosSubBlob, err := encodeMergedAccesoGrants(grantsByAccesoID)
+	if err != nil {
+		return req.MakeErr("Error al codificar los accesos del user.", err)
+	}
 
 	body.Password = ""
-	body.AccesosComputed = accesosComputed
+	body.AccesosComputed = accesosBlob
+	body.AccesosSubComputed = accesosSubBlob
 	body.Updated = now
 	body.UpdatedBy = req.User.ID
-	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs, "accesosComputed", len(body.AccesosComputed))
+	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs,
+		"accesos bytes", len(body.AccesosComputed), "sub bytes", len(body.AccesosSubComputed))
 	core.Print(body)
 
 	usuariosToSave := []coreTypes.User{body}

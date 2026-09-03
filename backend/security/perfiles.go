@@ -1,6 +1,8 @@
 package security
 
 import (
+	"bytes"
+
 	"app/cloud"
 	"app/core"
 	coreTypes "app/core/types"
@@ -52,6 +54,14 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	body.CompanyID = req.User.CompanyID
 	core.Print(body)
 
+	// NEVER trust the client: the catalog decides which sub-accesses exist, and storing one it
+	// never declared would put a bit into every affected user's blob that no UI can show and no
+	// handler can name. Rejecting is right rather than dropping — a profile silently saved
+	// without what the operator just ticked is worse than an error.
+	if err = validateProfileSubAccesos(body); err != nil {
+		return req.MakeErr(err)
+	}
+
 	body.Updated = core.SUnixTime()
 	perfilesToSave := []types.Profile{body}
 	if err = db.Insert(&perfilesToSave); err != nil {
@@ -91,27 +101,36 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 
 			for userIndex := range affectedUsers {
 				affectedUser := &affectedUsers[userIndex]
-				accesosComputed, accessErr := buildAccesosComputedFromPerfiles(perfilesByID, affectedUser.ProfileIDs)
+				grantsByAccesoID, accessErr := buildAccesosComputedFromPerfiles(perfilesByID, affectedUser.ProfileIDs)
 				if accessErr != nil {
 					return req.MakeErr("Error al recomputar los accesos del user afectado.", accessErr)
 				}
+				accesosBlob, accesosSubBlob, accessErr := encodeMergedAccesoGrants(grantsByAccesoID)
+				if accessErr != nil {
+					return req.MakeErr("Error al codificar los accesos del user afectado.", accessErr)
+				}
 
-				previousAccesosComputed := append([]uint16{}, affectedUser.AccesosComputed...)
-				nextAccesosComputed := append([]uint16{}, accesosComputed...)
-				if core.CompareSlice(previousAccesosComputed, nextAccesosComputed) {
+				// Both columns decide "unchanged": a profile edit that only adds a sub-access
+				// leaves accesos_computed byte-identical, and comparing just that one would skip
+				// the write and leave the user with stale sub-accesses.
+				if bytes.Equal(affectedUser.AccesosComputed, accesosBlob) &&
+					bytes.Equal(affectedUser.AccesosSubComputed, accesosSubBlob) {
 					core.Log("PostPerfiles:: user sin cambios", affectedUser.ID)
 					continue
 				}
 
 				// Only persist the recomputed access payload for affected users.
-				affectedUser.AccesosComputed = accesosComputed
-				core.Log("PostPerfiles:: user actualizado", affectedUser.ID, "accesosComputed", len(affectedUser.AccesosComputed))
+				affectedUser.AccesosComputed = accesosBlob
+				affectedUser.AccesosSubComputed = accesosSubBlob
+				core.Log("PostPerfiles:: user actualizado", affectedUser.ID,
+					"accesos bytes", len(accesosBlob), "sub bytes", len(accesosSubBlob))
 				usersWithChangedAccesos = append(usersWithChangedAccesos, *affectedUser)
 			}
 
 			if len(usersWithChangedAccesos) > 0 {
 				usuarioQuery := db.Query(&usersWithChangedAccesos)
-				if err = db.Update(&usersWithChangedAccesos, usuarioQuery.AccesosComputed); err != nil {
+				if err = db.Update(&usersWithChangedAccesos,
+					usuarioQuery.AccesosComputed, usuarioQuery.AccesosSubComputed); err != nil {
 					return req.MakeErr("Error al actualizar usuarios afectados en ScyllaDB: " + err.Error())
 				}
 				// Uno por user y no el comodín de la company: esta lista es exactamente la de los
@@ -130,4 +149,51 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(body)
+}
+
+// validateProfileSubAccesos checks every `accesoID*100 + subID` entry against the embedded catalog.
+//
+// Three things have to hold, and each one fails differently if it does not: the access must exist,
+// the sub-access must be one that access declares, and the profile must actually grant the parent
+// access. The last is what stops a sub-access from outliving the permission it qualifies — the
+// merge would drop it anyway, so accepting it here would just store a grant that silently does
+// nothing.
+func validateProfileSubAccesos(profile types.Profile) error {
+	if len(profile.SubAccesos) == 0 {
+		return nil
+	}
+
+	grantedAccesoIDs := make(map[int32]bool, len(profile.Accesos))
+	for _, accesoNivelID := range profile.Accesos {
+		grantedAccesoIDs[accesoNivelID/10] = true
+	}
+
+	accessHelper := core.GetEmbeddedAccessHelper()
+	for _, subAccesoRef := range profile.SubAccesos {
+		accesoID := subAccesoRef / 100
+		subAccesoID := subAccesoRef % 100
+
+		accessInfo, accesoExists := accessHelper.GetAccesoInfo(accesoID)
+		if !accesoExists {
+			return core.Err("El sub-acceso", subAccesoRef, "referencia el acceso", accesoID, "que no existe.")
+		}
+		if !grantedAccesoIDs[accesoID] {
+			return core.Err("El profile otorga el sub-acceso", subAccesoID, "de", accessInfo.Name,
+				"sin otorgar el acceso en sí.")
+		}
+		// "Todos" is never declared in the catalog — it is synthesized — so it is allowed on any
+		// access that offers sub-accesses at all, and refused on one that offers none.
+		if subAccesoID == core.SubAccesoTodosID {
+			if accessInfo.SubAccesosMask == 0 {
+				return core.Err("El acceso", accessInfo.Name, "no declara sub-accesos.")
+			}
+			continue
+		}
+		if subAccesoID < 1 || subAccesoID > core.MaxSubAccesoID ||
+			accessInfo.SubAccesosMask&(1<<uint16(subAccesoID-1)) == 0 {
+			return core.Err("El acceso", accessInfo.Name, "no declara el sub-acceso", subAccesoID, ".")
+		}
+	}
+
+	return nil
 }

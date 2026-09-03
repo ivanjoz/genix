@@ -13,12 +13,17 @@ type User struct {
 	FirstName  string  `json:",omitempty"`
 	ProfileIDs []int32 `json:",omitempty"`
 	// AccesoID * 10 + Nivel
-	AccessLevelIDs  []int32  `json:",omitempty"`
-	AccesosComputed []uint16 `json:",omitempty"`
-	Email           string   `json:",omitempty"`
-	JobTitle        string   `json:",omitempty"`
-	DocumentNumber  string   `json:",omitempty"`
-	PasswordHash    string   `json:",omitempty"`
+	AccessLevelIDs []int32 `json:",omitempty"`
+	// The two grant blobs, encoded by core.EncodeAccesosGrants and read byte for byte by
+	// fareward and by genix-ui. Which blob an access lands in is itself the "has sub-accesses"
+	// flag: accesos_computed is fixed-stride grant words, accesos_sub_computed appends each
+	// grant's sub bytes. See core/accesos-blob.go.
+	AccesosComputed    []byte `json:",omitempty"`
+	AccesosSubComputed []byte `json:",omitempty"`
+	Email              string `json:",omitempty"`
+	JobTitle           string `json:",omitempty"`
+	DocumentNumber     string `json:",omitempty"`
+	PasswordHash       string `json:",omitempty"`
 	// Password is write-only input from the client. It is absent from UserTable, which is
 	// what keeps it out of every database: the column set comes from the table struct.
 	Password  string `json:",omitempty"`
@@ -34,24 +39,25 @@ type User struct {
 
 type UserTable struct {
 	db.TableStruct[UserTable, User]
-	ID              db.Col[*UserTable, int32]
-	CompanyID       db.Col[*UserTable, int32]
-	User            db.Col[*UserTable, string]
-	LastName        db.Col[*UserTable, string]
-	FirstName       db.Col[*UserTable, string]
-	ProfileIDs      db.ColSlice[*UserTable, int32] `db:"profile_ids"`
-	AccessLevelIDs  db.Col[*UserTable, []int32]    `db:"access_level_ids"`
-	AccesosComputed db.Col[*UserTable, []uint16]
-	Email           db.Col[*UserTable, string]
-	JobTitle        db.Col[*UserTable, string]
-	DocumentNumber  db.Col[*UserTable, string]
-	PasswordHash    db.Col[*UserTable, string]
-	Created         db.Col[*UserTable, int32]
-	CreatedBy       db.Col[*UserTable, int32]
-	Updated         db.Col[*UserTable, int32]
-	UpdatedBy       db.Col[*UserTable, int32]
-	Status          db.Col[*UserTable, int8]
-	UpdatedVersion  db.Col[*UserTable, int32]
+	ID                 db.Col[*UserTable, int32]
+	CompanyID          db.Col[*UserTable, int32]
+	User               db.Col[*UserTable, string]
+	LastName           db.Col[*UserTable, string]
+	FirstName          db.Col[*UserTable, string]
+	ProfileIDs         db.ColSlice[*UserTable, int32] `db:"profile_ids"`
+	AccessLevelIDs     db.Col[*UserTable, []int32]    `db:"access_level_ids"`
+	AccesosComputed    db.Col[*UserTable, []byte]
+	AccesosSubComputed db.Col[*UserTable, []byte]
+	Email              db.Col[*UserTable, string]
+	JobTitle           db.Col[*UserTable, string]
+	DocumentNumber     db.Col[*UserTable, string]
+	PasswordHash       db.Col[*UserTable, string]
+	Created            db.Col[*UserTable, int32]
+	CreatedBy          db.Col[*UserTable, int32]
+	Updated            db.Col[*UserTable, int32]
+	UpdatedBy          db.Col[*UserTable, int32]
+	Status             db.Col[*UserTable, int8]
+	UpdatedVersion     db.Col[*UserTable, int32]
 }
 
 func (usuarioTable UserTable) GetSchema() db.TableSchema {

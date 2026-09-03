@@ -24,7 +24,7 @@
 	import '../styles/fonts.css';
 
 	// Registered here, not in the runtime options: this layout is the authenticated app, so
-	// the catalog (and backend/access_list.yml with it) stays out of the storefront bundle.
+	// the catalog (and backend/access.toml with it) stays out of the storefront bundle.
 	security.setRouteAccessResolver(getAccessEntriesForRoute);
 
 	let { children } = $props();

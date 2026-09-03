@@ -86,16 +86,6 @@ func (req *HandlerArgs) ClientIPKey() (int64, bool) {
 	return int64(binary.BigEndian.Uint64(asIPv6[:8]) >> 1), true
 }
 
-// MakeAccesoNivelPacked empaqueta acceso + nivel en el uint16 que la columna accesos_computed
-// guarda y que el frame del limitador transporta. Es el único codificador que los dos procesos
-// comparten: fareward/src/limiter/access.rs decodifica exactamente esto.
-func MakeAccesoNivelPacked(accesoID int32, nivel uint8) uint16 {
-	if nivel < 1 || nivel > 4 {
-		nivel = 1
-	}
-	return uint16(accesoID<<2) | uint16(nivel-1)
-}
-
 func DecompressBase64GzipM(base64String *string, isUrl ...bool) (string, error) {
 
 	if len(isUrl) == 1 && isUrl[0] {

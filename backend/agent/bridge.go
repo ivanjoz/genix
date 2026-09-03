@@ -16,9 +16,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivanjoz/fareward/go/siphash"
+
 	"app/core"
 )
 
@@ -37,7 +36,7 @@ const (
 	// fareward/src/bridge/auth.rs. The bridge is a Rust process, so the compiler
 	// cannot enforce this — changing one side requires changing the other.
 	bridgeServiceAuthHeaderName    = "X-Bridge-Auth"
-	bridgeServiceAuthMessagePrefix = "sse-bridge:v1|"
+	bridgeServiceAuthMessagePrefix = "sse-bridge:v2|"
 
 	// bridgeChannelWaitMs lets the bridge hold a message for a tab that is
 	// reconnecting instead of dropping it. Short: the client opens its stream
@@ -79,11 +78,15 @@ func bridgeBaseURL() string {
 // project's service-to-service secret (the same key the credit rate limiter's TCP
 // frames use, under a different domain string). Both processes read the same
 // config.toml, so no extra secret has to be provisioned for the bridge.
+//
+// SipHash-2-4, like the TCP frame tag: 16 hex characters, big-endian.
 func makeBridgeServiceAuthHeader() string {
 	timestampText := strconv.FormatInt(time.Now().Unix(), 10)
-	hashMac := hmac.New(sha256.New, []byte(core.Env.INTERNAL_APIKEY))
-	hashMac.Write([]byte(bridgeServiceAuthMessagePrefix + timestampText))
-	return timestampText + "." + hex.EncodeToString(hashMac.Sum(nil))
+	hasher := siphash.New(siphash.DeriveKey([]byte(core.Env.INTERNAL_APIKEY)))
+	hasher.WriteString(bridgeServiceAuthMessagePrefix + timestampText)
+	// %016x, not FormatUint: a tag whose top nibble is zero must still be 16 characters, or the
+	// bridge's fixed-width comparison rejects it.
+	return timestampText + "." + fmt.Sprintf("%016x", hasher.Sum64())
 }
 
 // bridgeCall posts one authenticated request to the bridge and decodes its JSON

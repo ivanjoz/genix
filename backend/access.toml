@@ -1,0 +1,350 @@
+# System access catalog. Single source of truth: the backend embeds it (main-handlers.go) to
+# authorize every POST/PUT route, and the frontend imports it as text (access-list-catalog.ts) to
+# decide which pages and menu options are shown.
+#
+# RULES
+#   - `id`s are permanent: they are persisted in `profiles.accesos` as (id*10 + nivel). They are
+#     never renumbered and never reused; a retired access is deleted and its id is retired with it.
+#   - `frontend_routes`: comma-separated, NO leading "/". Matching is by segment prefix and the
+#     longest one wins, so "webpage-builder" also covers "/webpage-builder/<pageID>".
+#   - `backend_apis`: comma-separated "<METHOD>.<route>". EVERY non-public POST/PUT route must
+#     appear here, because the backend denies by default whatever is not mapped. GETs work the
+#     other way round: unmapped they are open to any session, and mapping one is what closes it,
+#     so reads are restricted one at a time. A route may appear under several accesses: holding
+#     any one of them is enough.
+#     Deliberate exceptions: the "p-" (public) routes and the `selfServiceRoutes` of
+#     main-handlers.go, where the user operates on itself.
+#   - `levels`: concatenated digits of the offered levels. 14 = 1 (VER) + 4 (TODO).
+#   - `sub_accesses_ids` / `sub_accesses_names`: parallel arrays of the same length. Sub-accesses
+#     are flags, not levels: they qualify what a holder may do inside an access they already have.
+#     Ids are permanent and run 2..13, exactly like access ids — never renumbered, never reused.
+#     Id 1 is reserved for "Todos" and is never declared here: it is offered as a synthetic option
+#     and, when granted, satisfies every sub-access check on that access.
+#
+# FORMAT: single-line values only. Arrays must fit on one line and carry no trailing comma.
+
+[[groups]]
+id = 1
+name = "Mi Empresa"
+
+[[groups]]
+id = 3
+name = "Comercial"
+
+[[groups]]
+id = 4
+name = "Logística"
+
+[[groups]]
+id = 5
+name = "Finanzas"
+
+[[groups]]
+id = 6
+name = "Tienda"
+
+[[groups]]
+id = 7
+name = "Contabilidad"
+
+[[groups]]
+id = 8
+name = "System"
+
+[[groups]]
+id = 9
+name = "Producción"
+
+[[groups]]
+id = 10
+name = "Clientes (CRM)"
+
+[[access]]
+id = 1
+name = "Configuración"
+group = 1
+levels = 14
+frontend_routes = "company/configuration"
+backend_apis = "GET.company-parametros,POST.company-parametros,POST.parametros,POST.system-parameters,POST.initial-data"
+
+[[access]]
+id = 2
+name = "Usuarios"
+group = 1
+levels = 14
+frontend_routes = "security/users-profiles"
+backend_apis = "POST.users"
+
+[[access]]
+id = 3
+name = "Perfiles & Accesos"
+group = 1
+levels = 14
+frontend_routes = "security/users-profiles"
+backend_apis = "POST.perfiles"
+
+[[access]]
+id = 4
+name = "Backups"
+group = 1
+levels = 14
+frontend_routes = "company/configuration"
+backend_apis = "POST.backup-create,POST.backup-restore"
+
+[[access]]
+id = 5
+name = "Empresas"
+group = 8
+levels = 14
+frontend_routes = "system/companies"
+backend_apis = "POST.company,GET.company-credit-usage-report,GET.company-credit-usage,GET.company-users-by-ids,GET.company-credit-budget,POST.company-credit-budget"
+
+[[access]]
+id = 6
+name = "Server Panel y Observabilidad"
+group = 8
+levels = 14
+frontend_routes = "system/server-panel,system/observability"
+backend_apis = "GET.server-metrics,GET.observability,GET.request-errors-by-ids"
+
+[[access]]
+id = 33
+name = "Acciones Cron"
+group = 8
+levels = 14
+frontend_routes = "system/cron-actions"
+backend_apis = ""
+
+[[access]]
+id = 34
+name = "Testing"
+group = 8
+levels = 14
+frontend_routes = "system/testing"
+backend_apis = ""
+
+[[access]]
+id = 7
+name = "Sedes & Almacenes"
+group = 1
+levels = 14
+frontend_routes = "business/branches-warehouses"
+backend_apis = "POST.sites,POST.warehouses"
+
+[[access]]
+id = 8
+name = "Productos"
+group = 9
+levels = 14
+frontend_routes = "production/products"
+backend_apis = "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists"
+
+[[access]]
+id = 9
+name = "Clientes"
+group = 10
+levels = 14
+frontend_routes = "crm/customers"
+backend_apis = "POST.client-provider"
+
+[[access]]
+id = 26
+name = "Proveedores"
+group = 4
+levels = 14
+frontend_routes = "logistics/suppliers"
+backend_apis = "POST.client-provider"
+
+[[access]]
+id = 10
+name = "Punto de Venta"
+group = 3
+levels = 14
+frontend_routes = "sales/sale_order_create"
+backend_apis = "GET.company-parametros,POST.sale-order,POST.system-parameters"
+sub_accesses_ids = [2, 3]
+sub_accesses_names = ["Recibir Pago", "Despachar Producto"]
+
+[[access]]
+id = 11
+name = "Gestión Ventas"
+group = 3
+levels = 14
+frontend_routes = "sales/sale_orders_status"
+backend_apis = "POST.sale-order"
+
+[[access]]
+id = 12
+name = "Gráficos Ventas"
+group = 3
+levels = 14
+frontend_routes = "sales/sale_orders_charts"
+backend_apis = ""
+
+[[access]]
+id = 27
+name = "Reporte Ventas"
+group = 3
+levels = 14
+frontend_routes = "sales/sales-report"
+backend_apis = ""
+
+[[access]]
+id = 13
+name = "Costos de Envio"
+group = 3
+levels = 14
+frontend_routes = "sales/shipping-costs"
+backend_apis = "POST.shipping-costs"
+
+[[access]]
+id = 28
+name = "Proyección Ventas"
+group = 3
+levels = 14
+frontend_routes = "sales/sale_planning"
+backend_apis = "POST.sales-planning,POST.seasonality-curve"
+
+[[access]]
+id = 14
+name = "Gestión de Stock"
+group = 4
+levels = 14
+frontend_routes = "logistics/products-stock"
+backend_apis = "POST.productos-stock"
+
+[[access]]
+id = 29
+name = "Gestión de Compras"
+group = 4
+levels = 14
+frontend_routes = "logistics/purchase-management"
+backend_apis = "POST.product-supply"
+
+[[access]]
+id = 15
+name = "Rep. Movimientos"
+group = 4
+levels = 14
+frontend_routes = "logistics/warehouse-movements"
+backend_apis = ""
+
+[[access]]
+id = 16
+name = "Órdenes Compra"
+group = 4
+levels = 14
+frontend_routes = "logistics/purchase-orders"
+backend_apis = "POST.purchase-orders,PUT.purchase-orders,POST.purchase-order-entry"
+
+[[access]]
+id = 30
+name = "Insumos & Materiales"
+group = 9
+levels = 14
+frontend_routes = "production/supplies-materials"
+backend_apis = "POST.supply-material,POST.shared-lists"
+
+[[access]]
+id = 17
+name = "Cajas & Bancos"
+group = 5
+levels = 14
+frontend_routes = "finance/cash-banks"
+backend_apis = "POST.cash-banks,POST.cash-banks-movement,POST.cash-banks-reconciliation"
+
+[[access]]
+id = 18
+name = "Cajas Movimientos"
+group = 5
+levels = 14
+frontend_routes = "finance/cash-banks-movements"
+backend_apis = ""
+
+[[access]]
+id = 19
+name = "Gastos"
+group = 5
+levels = 14
+frontend_routes = "finance/expenses"
+backend_apis = "POST.expenses,POST.expenses-scheduled,POST.expense-payment,POST.expense-inventory,GET.supply-material,POST.supply-material"
+
+[[access]]
+id = 20
+name = "Gestión de Cuentas"
+group = 5
+levels = 14
+frontend_routes = "finance/gestion-cuentas"
+backend_apis = ""
+
+[[access]]
+id = 21
+name = "Flujo de Caja"
+group = 5
+levels = 14
+frontend_routes = "finance/flujo-de-caja"
+backend_apis = ""
+
+[[access]]
+id = 31
+name = "Páginas Web"
+group = 6
+levels = 14
+frontend_routes = "webpage-builder"
+backend_apis = "POST.webpage-page,POST.webpage-showcase-image,POST.ecommerce-page-content,POST.website-seo,POST.website-domain"
+
+[[access]]
+id = 32
+name = "Galería"
+group = 6
+levels = 14
+frontend_routes = "webpage-builder/gallery"
+backend_apis = "POST.gallery-image"
+
+[[access]]
+id = 22
+name = "Facturación"
+group = 7
+levels = 14
+frontend_routes = ""
+backend_apis = ""
+
+[[access]]
+id = 23
+name = "Estados Financieros"
+group = 7
+levels = 14
+frontend_routes = ""
+backend_apis = ""
+
+[[access]]
+id = 24
+name = "Balance"
+group = 7
+levels = 14
+frontend_routes = ""
+backend_apis = ""
+
+[[access]]
+id = 25
+name = "Activos"
+group = 7
+levels = 14
+frontend_routes = "accounting/assets"
+backend_apis = "GET.assets,POST.asset,PUT.asset,PUT.asset-disposal,PUT.asset-transfer,POST.asset-depreciation-run,GET.asset-depreciation"
+
+[[access]]
+id = 35
+name = "Facturación Electrónica"
+group = 7
+levels = 14
+frontend_routes = "accounting/invoicing,accounting/invoice-series"
+backend_apis = "POST.invoice,POST.invoice-retry,POST.invoice-series,GET.invoices,GET.invoice-xml,GET.invoice-series"
+
+[[access]]
+id = 36
+name = "Credenciales SUNAT"
+group = 1
+levels = 14
+frontend_routes = "configuration/company-secrets"
+backend_apis = "GET.company-secrets,POST.company-secrets,POST.company-secrets-test"

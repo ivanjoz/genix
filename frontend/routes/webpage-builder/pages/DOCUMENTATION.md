@@ -430,7 +430,7 @@ files:
     role: backend-handler
     hash: sha256:0999af64bb0fed3bef10c7e02c06dd9528501b5f70cfd0714e7bc8ce551f79a9
     supports: [capability.edit-page-content]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [rules]

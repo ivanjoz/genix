@@ -59,14 +59,14 @@ func makeAppHandlers() *core.AppRouterType {
 // Handler principal (para lambda y para local)
 var apiNames = []string{"api", "go1", "go2", "go3", "go4", "go5"}
 
-// Keep the YAML embedded in the main package because the source file remains in backend/.
+// Keep the catalog embedded in the main package because the source file remains in backend/.
 //
-//go:embed access_list.yml
-var accessListYamlContent []byte
+//go:embed access.toml
+var accessCatalogContent []byte
 
 // The helper lives in core, but the main package owns the embedded bytes and injects them once.
 var accessHelper = func() *core.AccessHelper {
-	return core.LoadEmbeddedAccessList(accessListYamlContent)
+	return core.LoadEmbeddedAccessList(accessCatalogContent)
 }()
 
 // saasCompanyID identifica a la company dueña de la plataforma: la única que opera el módulo SYSTEM.
@@ -280,8 +280,11 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 // empaquetados que fareward debe verificar, o un rechazo que no necesita preguntarle nada.
 type routeAccessDecision struct {
 	requiredAccess []uint16
+	// accessInfos son los mismos accesos, en el mismo orden que requiredAccess, para poder mapear
+	// los slots que el daemon devuelve de vuelta a IDs de acceso.
+	accessInfos []core.AccessInfo
 	// accessNames acompaña a requiredAccess sólo para el mensaje de error: el daemon no conoce
-	// access_list.yml, así que los nombres salen de este lado.
+	// access.toml, así que los nombres salen de este lado.
 	accessNames []string
 	denyMessage string
 	denyCode    int32
@@ -289,7 +292,7 @@ type routeAccessDecision struct {
 
 // resolveRouteAccess traduce el catálogo a lo que viaja en el frame. Es una función pura sobre
 // (método, ruta, user, accesos mapeados) justamente porque es la decisión de seguridad del router:
-// toda la política vive aquí, en el proceso que embebe access_list.yml, y el daemon sólo responde
+// toda la política vive aquí, en el proceso que embebe access.toml, y el daemon sólo responde
 // "este user tiene alguno de estos accesos".
 //
 // Devolver una lista vacía significa "no preguntes", así que cada camino que no exige acceso tiene
@@ -336,6 +339,7 @@ func resolveRouteAccess(
 	}
 	decision := routeAccessDecision{
 		requiredAccess: make([]uint16, 0, len(accessInfos)),
+		accessInfos:    accessInfos,
 		accessNames:    make([]string, 0, len(accessInfos)),
 	}
 	for _, accessInfo := range accessInfos {
@@ -386,11 +390,11 @@ func chargedMethodFor(method, funcPath string) string {
 //   - GET: sólo la base; el excedente lo liquida chargeGetResponseTopUp cuando ya existe el tamaño
 //     de la respuesta, que es la única cosa que no se sabe todavía aquí.
 //   - creditControlRoutes: nada. Se manda un frame de sólo autorización, porque la exención salta
-//     el COBRO y nunca el frame: tres de esas rutas están mapeadas en access_list.yml y dos son
+//     el COBRO y nunca el frame: tres de esas rutas están mapeadas en access.toml y dos son
 //     sólo-SaaS, así que saltar el frame las dejaría abiertas a cualquier sesión.
 func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.HandlerResponse {
 	// El catálogo decide qué accesos exigir. Toda la política vive de este lado, en el proceso que
-	// embebe access_list.yml; el daemon sólo responde "este user tiene alguno de estos accesos".
+	// embebe access.toml; el daemon sólo responde "este user tiene alguno de estos accesos".
 	accessInfos, _ := accessHelper.GetAccesosByRoute(funcPath)
 	decision := resolveRouteAccess(args.Method, funcPath, args.User.ID, accessInfos)
 	if decision.denyMessage != "" {
@@ -420,14 +424,15 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 	}
 
 	var err error
+	var accessGrant *core.AccessGrant
 	cpuCredits := uint16(0)
 	if chargedMethod == "" {
-		err = core.ChargeAPIAccessOnly(
+		accessGrant, err = core.ChargeAPIAccessOnly(
 			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, decision.requiredAccess)
 	} else {
 		// APICPUCredits(GET, 0) es exactamente la base, así que el mismo cálculo sirve para los dos.
 		cpuCredits, _ = core.APICPUCredits(chargedMethod, payloadBytes)
-		err = core.ChargeAPIUsage(
+		accessGrant, err = core.ChargeAPIUsage(
 			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, chargedMethod,
 			payloadBytes, decision.requiredAccess)
 	}
@@ -438,7 +443,7 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 			" accesos::", len(decision.requiredAccess), " err::", err)
 		var response core.HandlerResponse
 		if core.IsAccessDeniedError(err) {
-			// Los nombres salen de aquí: el daemon no conoce access_list.yml.
+			// Los nombres salen de aquí: el daemon no conoce access.toml.
 			response = args.MakeAccessDeniedResponse(err, decision.accessNames)
 		} else {
 			response = args.MakeCreditRateLimitResponse(err)
@@ -446,10 +451,46 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		return &response
 	}
 
+	// El daemon devuelve los sub-accesos por SLOT, porque no conoce access.toml y no sabe a qué
+	// acceso corresponde cada uno. La traducción a IDs vive aquí, del lado que sí lo embebe.
+	args.User.SubAccesos = mapGrantedSubAccesos(accessGrant, decision.accessInfos)
+
 	core.Log("fareward aceptó::", " method::", args.Method, " company::", args.User.CompanyID,
 		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
-		" cpu_credits::", cpuCredits, " accesos::", len(decision.requiredAccess))
+		" cpu_credits::", cpuCredits, " accesos::", len(decision.requiredAccess),
+		" sub_accesos::", len(args.User.SubAccesos))
 	return nil
+}
+
+// mapGrantedSubAccesos traduce los slots que fareward otorgó a los IDs de acceso que el gate pidió,
+// que es la única traducción que el daemon no puede hacer: manda slots porque el catálogo no existe
+// de su lado.
+//
+// Un acceso otorgado sin sub-accesos entra igual, con máscara cero. La diferencia importa: "no
+// tiene ese sub-acceso" y "ese acceso ni siquiera autorizó esta ruta" son respuestas distintas, y
+// HasSubAcceso las distingue por la presencia de la clave.
+func mapGrantedSubAccesos(
+	accessGrant *core.AccessGrant, accessInfos []core.AccessInfo,
+) map[int32]uint16 {
+	if accessGrant == nil {
+		return nil
+	}
+
+	subAccesosByAccesoID := make(map[int32]uint16, len(accessInfos))
+	for slotIndex, accessInfo := range accessInfos {
+		if accessGrant.GrantedSlots&(1<<slotIndex) == 0 {
+			continue
+		}
+		subMask, err := core.DecodeSubAccesoBytes(accessGrant.SubAccesoBytes[slotIndex])
+		if err != nil {
+			// El frame ya fue aceptado, así que el acceso está otorgado; lo que no se pudo leer es
+			// el detalle. Registrar y seguir con máscara cero niega los sub-accesos sin negar la
+			// ruta, que es la lectura conservadora de los dos.
+			core.Log("no se pudieron leer los sub-accesos del acceso", accessInfo.ID, "::", err)
+		}
+		subAccesosByAccesoID[accessInfo.ID] = subMask
+	}
+	return subAccesosByAccesoID
 }
 
 // chargeGetResponseTopUp cobra lo que la respuesta excedió sobre la base ya cobrada. Devuelve nil

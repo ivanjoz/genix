@@ -503,7 +503,7 @@ files:
     role: business-logic
     hash: sha256:cb89b769e506d2f10a8c22cc09e51bda7fa000ec33311af858360559d8587597
     supports: [rules]
-  - path: backend/access_list.yml
+  - path: backend/access.toml
     role: permissions
     hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
     supports: [rules]
