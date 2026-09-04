@@ -8,13 +8,14 @@ visibility: tenant
 description_en: >-
   User and access-profile management on one page with two tabs. The Users tab creates and edits
   login accounts with their personal data, assigned profiles, individual permissions and password;
-  the Profiles tab creates reusable profiles and grants each one View or Full control over the
-  accesses in the system catalog.
+  the Profiles tab creates reusable profiles, grants each one View or Full control over the
+  accesses in the system catalog, and ticks the sub-accesses an access offers.
 description_es: >-
   Gestión de usuarios y perfiles de acceso en una sola página con dos pestañas. La pestaña
   Usuarios crea y edita cuentas de acceso con sus datos personales, perfiles asignados, permisos
-  individuales y contraseña; la pestaña Perfiles crea perfiles reutilizables y les otorga el nivel
-  Visualizar o Todo sobre los accesos del catálogo del sistema.
+  individuales y contraseña; la pestaña Perfiles crea perfiles reutilizables, les otorga el nivel
+  Visualizar o Todo sobre los accesos del catálogo del sistema y marca los sub-accesos que un
+  acceso ofrece.
 ---
 
 # Users & Profiles (Usuarios & Perfiles)
@@ -28,13 +29,14 @@ company (`empresa`) and what they are allowed to do. It holds two tabs:
 - **Users (Usuarios)** — the login accounts (`cuentas de usuario`): personal data (name, job
   title, email, document number), the access profiles (`perfiles`) and individual per-user
   permissions (`accesos individuales`) assigned to each one, and the login password.
-- **Profiles (Perfiles)** — the reusable profiles themselves: their name and description, and
+- **Profiles (Perfiles)** — the reusable profiles themselves: their name and description,
   exactly which accesses (`accesos`) from the system catalog each profile grants and at which
-  level (`Visualizar` or `Todo`).
+  level (`Visualizar` or `Todo`), and — for the accesses that offer them — which sub-accesses
+  (`sub-accesos`) the profile ticks.
 
 The page does not define the catalog of accesses itself (their names, which pages/APIs they gate,
-which levels they offer); that catalog lives in `backend/access.toml` and is shared,
-read-only input to both tabs. It also does not handle a signed-in user editing their own profile
+which levels they offer, which sub-accesses they declare); that catalog lives in
+`backend/access.toml` and is shared, read-only input to both tabs. It also does not handle a signed-in user editing their own profile
 from the account/header menu; that is a separate self-service flow using the same backend
 endpoint family (`user-self`).
 
@@ -69,10 +71,19 @@ reopens the tab they were last working in.
   specific access/level directly on one user, independent of their profiles. Genix computes
   the user's effective access as the union of every level coming from assigned profiles plus
   every individually granted level.
+- A **sub-access (sub-acceso)** is a named permission *inside* one access, not a fifth level and
+  not a nested access. It carries no level of its own: it is a flag that says what the holder may
+  do once they are already inside the page or operation the access unlocks — for example
+  `Recibir Pago` and `Despachar Producto` inside `Punto de Venta`. Sub-accesses are granted on
+  the **Profiles (Perfiles)** tab only; an individual access granted directly on a user carries
+  none.
 - On this page, the table's Access (`Accesos`) column and the form's profile chips summarize
   effective access into two buckets: a view-only eye icon for accesses granted at level 1
   (Visualizar) and a pencil icon for accesses granted at any higher level (Crear, Editar, or
-  Todo), listing the access name under each icon.
+  Todo), listing the access name under each icon. A selected profile's chip adds a third row with
+  a shield icon when that profile also grants sub-accesses, each written as
+  `<access>: <sub-access>` (for example `Punto de Venta: Recibir Pago`) so the sub-access is never
+  shown without the access it qualifies.
 
 <!-- DOC-ID: users.capability.browse-users -->
 ## Find a user (Buscar un usuario)
@@ -198,6 +209,10 @@ the current profile assignments plus the individual accesses.
 - This selector cannot create or edit a profile itself; use the **Profiles (Perfiles)** tab for that.
 - Removing every profile from a user without granting equivalent individual accesses can
   leave them without access to pages they used to reach through that profile.
+- **An individual access grants no sub-accesses.** Granting `Punto de Venta` through
+  **ACCESOS ::** gives the user the page but none of its sub-accesses (`Recibir Pago`,
+  `Despachar Producto`); an access whose sub-accesses matter has to be granted through a profile
+  that ticks them.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
@@ -207,8 +222,10 @@ the current profile assignments plus the individual accesses.
   Genix usa el nivel más alto entre ambos.
 - `¿Por qué sólo veo "Visualizar" y "Todo" para Usuarios/Perfiles & Accesos?` Esos dos
   accesos del catálogo no ofrecen niveles intermedios de Crear/Editar.
+- `¿Le di "Punto de Venta" por acceso individual y no puede recibir pagos?` Los sub-accesos sólo
+  se otorgan por perfil; asígnale un perfil que los tenga marcados.
 - Search terms: `perfiles`, `accesos individuales`, `permisos`, `acceso total`, `sólo lectura`,
-  `visualizar`, `todo`.
+  `visualizar`, `todo`, `sub-accesos`.
 
 <!-- DOC-ID: users.capability.set-password -->
 ## Set or change the password (Establecer o cambiar la contraseña)
@@ -323,10 +340,21 @@ deleting the account. There is currently no verified way on this page to deactiv
 - Each catalog entry belongs to a **group (grupo)** (`Mi Empresa`, `Producción`, `Comercial`,
   `Clientes (CRM)`, `Logística`, `Finanzas`, `Tienda`, `Contabilidad`, `System`) used purely to
   organize the access grid into labeled sections on this page; it does not affect what the access unlocks.
+- A **sub-access (sub-acceso)** is a named permission *inside* one access. It is not a fifth
+  level and not a nested access: it carries no level, and it only means anything on top of the
+  access it belongs to. An access declares in the catalog which sub-accesses it offers (up to
+  13, each with a permanent id and a name) and most accesses declare none. **As of the current
+  catalog, `Punto de Venta` is the only access that declares any**, offering `Recibir Pago` and
+  `Despachar Producto`.
+- **Todos** is offered as the first sub-access option on every access that declares any, even
+  though it is not written in the catalog. It means "every sub-access of this access, including
+  ones added later", so it is exclusive with the individual ticks: choosing `Todos` clears them,
+  and choosing any individual sub-access clears `Todos`.
 - Saving a profile encodes its granted accesses as one packed number per access/level
-  (`accesoID * 10 + nivel`) in the profile's `Accesos` list. Access IDs are permanent in the
-  catalog and are never renumbered or reused, so a profile's stored grants keep meaning even as
-  the catalog grows.
+  (`accesoID * 10 + nivel`) in the profile's `Accesos` list, and its sub-accesses as one packed
+  number per access/sub-access (`accesoID * 100 + subAccesoID`) in a separate `SubAccesos` list.
+  Access IDs and sub-access IDs are both permanent in the catalog and are never renumbered or
+  reused, so a profile's stored grants keep meaning even as the catalog grows.
 
 <!-- DOC-ID: profiles.capability.browse-profiles -->
 ## Find a profile (Buscar un perfil)
@@ -395,17 +423,21 @@ this page.
 
 ### User intention (Intención del usuario)
 
-Decide exactly which pages/capabilities a profile unlocks, and at which level, so every user later
-assigned that profile inherits the same grants.
+Decide exactly which pages/capabilities a profile unlocks, at which level, and — where the access
+offers them — which sub-accesses (`sub-accesos`) it includes, so every user later assigned that
+profile inherits the same grants.
 
 ### Where to find it (Dónde encontrarlo)
 
 Select a profile in the left table so its name appears at the top of the right panel
 ("Access (Accesos) of/de <name>"). The panel shows the full catalog as a grid of access cards
 grouped under section headers (the catalog group name, e.g. `Configuración`, `Finanzas`), sorted
-by group. Toggle cards/level buttons as described below, then use the panel's own
-**Save (Guardar)** button (next to the profile name) — this is a separate action from the
-name/description modal's save.
+by group. Toggle cards/level buttons as described below. When an access both offers sub-accesses
+and is currently granted, a row of checkboxes appears **directly under that access's card**, one
+per sub-access plus `Todos` first; ticking a box (or its label — the label is part of the same
+control) toggles that sub-access. Then use the panel's own **Save (Guardar)** button (next to the
+profile name) — this is a separate action from the name/description modal's save, and it saves the
+accesses and the sub-accesses together.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -433,6 +465,19 @@ allowed by the interface, but is functionally redundant: Genix's access checks o
 level to be at or above what a route demands, so granting the higher level already covers the
 lower one.
 
+Sub-accesses follow three rules, all visible on the page:
+
+- **The row only appears while the access itself is granted.** A sub-access qualifies a
+  permission rather than granting one, so an access nobody holds has nothing to qualify. Clearing
+  every level on a card hides its sub-access row.
+- **`Todos` and the individual sub-accesses are mutually exclusive.** Ticking `Todos` unticks the
+  rest; ticking any individual sub-access unticks `Todos`. `Todos` also covers sub-accesses added
+  to that access in a future release, which the individual ticks do not.
+- **Sub-accesses ticked on an access that is then cleared are discarded on save,** not saved and
+  not reported as an error. The server refuses a profile that grants a sub-access without its
+  parent access ("El profile otorga el sub-acceso … sin otorgar el acceso en sí"), so the page
+  cleans up its own leftover instead of turning it into a rejection the user cannot act on.
+
 Saving this panel requires the acting user to hold the "Perfiles & Accesos" access itself at the
 **Todo (Full)** level — because that access only offers Visualizar or Todo, granting someone the
 ability to edit profiles on this page always means granting them full control of it. Viewing the
@@ -441,20 +486,37 @@ is mapped for the underlying read endpoint in the catalog.
 
 ### Result and side effects (Resultado y efectos)
 
-Saving replaces the profile's stored `Accesos` (encoded access/level pairs) and recomputed
-`Modules` list with exactly what the grid currently shows selected — clearing every card and
-saving leaves the profile with zero accesses (it still exists, it simply grants nothing).
+Saving replaces the profile's stored `Accesos` (encoded access/level pairs), its `SubAccesos`
+(encoded access/sub-access pairs) and its recomputed `Modules` list with exactly what the grid
+currently shows selected — clearing every card and saving leaves the profile with zero accesses
+and zero sub-accesses (it still exists, it simply grants nothing).
 
-If the profile already has users, saving also recomputes each affected user's effective access
-(`AccesosComputed`, the union of every profile assigned to that user plus their individual
-accesses, keeping the highest level per access) and persists it immediately for every user whose
-result actually changed; the user does not need to re-save their own record for the new grants (or
-removals) to take effect on their next access-checked call.
+If the profile already has users, saving also recomputes each affected user's effective access —
+the union of every profile assigned to that user plus their individual accesses, keeping the
+highest level per access and the union of the sub-accesses — and persists it immediately for every
+user whose result actually changed; the user does not need to re-save their own record for the new
+grants (or removals) to take effect on their next access-checked call. Adding nothing but a
+sub-access counts as a change, so a sub-access-only edit still propagates to every user of the
+profile.
+
+When a user holds the same access through two profiles, their sub-accesses **add up**: profile A
+granting `Recibir Pago` and profile B granting `Despachar Producto` on `Punto de Venta` leaves the
+user with both.
 
 ### Limitations (Limitaciones)
 
 - No access on this page's catalog currently offers a Crear/Editar level distinct from Visualizar
   or Todo; do not expect a partial "can create but not edit" grant to be configurable today.
+- **No page or operation in Genix reads a sub-access yet.** `Punto de Venta` declares `Recibir
+  Pago` and `Despachar Producto`, and this panel stores them correctly, but no screen or API
+  currently changes its behaviour based on them — so ticking or unticking a sub-access today has
+  no visible effect anywhere else in Genix. The grants are stored and enforced-ready; the
+  operations that consult them are not built.
+- Sub-accesses cannot be granted directly on a user. The Users (Usuarios) tab's **ACCESOS ::**
+  selector grants an access with no sub-accesses at all.
+- The panel offers no sub-access row for the 35 accesses that declare none, and there is no way
+  to declare one from this page; adding a sub-access to an access is a catalog change in
+  `backend/access.toml`.
 - The Access panel has no per-module filter or tab in the current interface: state exists
   internally to scope the grid to one module, but nothing on the page sets it, so every group
   from every catalog entry always renders together, ordered by group.
@@ -470,8 +532,16 @@ removals) to take effect on their next access-checked call.
   niveles intermedios de Crear/Editar para ningún acceso.
 - `¿Puedo filtrar los accesos por módulo?` No hay un selector de módulo visible actualmente; se
   muestran todos los grupos juntos.
-- Search terms: `accesos`, `perfil`, `nivel`, `visualizar`, `todo`, `permisos`, `catálogo de
-  accesos`, `grupo`.
+- `¿Qué son los sub-accesos de "Punto de Venta"?` Son permisos dentro del acceso — `Recibir Pago`
+  y `Despachar Producto` — que se marcan en la fila de casillas debajo de la tarjeta.
+- `¿Por qué no veo las casillas de sub-accesos?` Porque el acceso no está otorgado (activa
+  Visualizar o Todo primero) o porque ese acceso no declara sub-accesos en el catálogo.
+- `¿Qué diferencia hay entre marcar "Todos" y marcar todos los sub-accesos uno por uno?` `Todos`
+  también incluye los sub-accesos que se agreguen después al catálogo; las marcas individuales no.
+- `Marqué "Recibir Pago" y el cajero sigue igual` Todavía ninguna pantalla de Genix consulta los
+  sub-accesos; se guardan pero aún no cambian el comportamiento de ninguna operación.
+- Search terms: `accesos`, `sub-accesos`, `sub acceso`, `perfil`, `nivel`, `visualizar`, `todo`,
+  `permisos`, `catálogo de accesos`, `grupo`, `recibir pago`, `despachar producto`.
 
 <!-- DOC-ID: profiles.rules -->
 ## Cross-capability business rules (Reglas generales)
@@ -480,8 +550,10 @@ removals) to take effect on their next access-checked call.
   profile: saving one never implicitly changes the other (accesses survive a name-only edit; a
   brand-new profile has no accesses until the Access panel is saved once).
 - Every capability that changes what a profile grants ultimately writes the same encoded
-  `Accesos` list, which is the single source `buildAccesosComputedFromPerfiles` reads when
-  recomputing what a user assigned to this profile can actually do.
+  `Accesos` and `SubAccesos` lists, which are the single source `buildAccesosComputedFromPerfiles`
+  reads when recomputing what a user assigned to this profile can actually do.
+- A sub-access never widens what an access unlocks and never stands on its own: it is stored,
+  merged and enforced only alongside its parent access, at whatever level that access was granted.
 
 <!-- DOC-ID: profiles.troubleshooting -->
 ## Common problems (Problemas comunes)
@@ -497,6 +569,17 @@ removals) to take effect on their next access-checked call.
 - **A user still can't reach a page after being granted the right profile:** confirm the access
   was actually saved from the panel's own Save button, not only typed into the card, and check the
   Users (Usuarios) tab to confirm that profile is assigned to the user.
+- **The sub-access checkboxes do not appear under a card:** either the access is not granted yet
+  (activate Visualizar or Todo first — the row only shows for a granted access) or that access
+  declares no sub-accesses in the catalog, which is the case for every access except
+  `Punto de Venta` today.
+- **A sub-access was ticked and saved but nothing changed for the user:** expected today. No
+  screen or API in Genix consults a sub-access yet, so the grant is stored and propagated to the
+  affected users but no operation behaves differently because of it.
+- **The save was rejected mentioning a sub-access:** the server refuses a sub-access the catalog
+  does not declare for that access, or one granted without its parent access. Re-select the
+  profile row to reload it from the server, then re-tick from the panel rather than retrying the
+  same save.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
@@ -520,11 +603,11 @@ hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
     role: user-interface
-    hash: sha256:9c8c3f964115419c52460054da95dcebb0712239278102487705331d1973d39b
+    hash: sha256:f60ca2c4d17f36984b5994230c5df7fbe056e5646d2f1817707ce6827e4cab25
     supports: [page-purpose, users.capability.browse-users, profiles.capability.browse-profiles, related-pages]
   - path: frontend/routes/security/users-profiles/+page.svelte
     role: page
-    hash: sha256:4d5d4d24228c8636b9ec9a351c9a0cee8bbbb7182e6f9b735e63232c59e5f4fb
+    hash: sha256:84dd458e5614fea1ca61fb7ef8821badc6c1fe722d6c8f23a8e45079a3035cf9
     supports: [page-purpose, navigation]
   - path: frontend/routes/security/users-profiles/UsersTab.svelte
     role: page
@@ -532,23 +615,27 @@ files:
     supports: [users.concepts, users.capability.browse-users, users.capability.create-edit, users.capability.assign-access, users.capability.set-password, users.capability.remove, users.rules, users.troubleshooting]
   - path: frontend/routes/security/users-profiles/ProfilesTab.svelte
     role: page
-    hash: sha256:926539cd0f6bae44d117d266e24c3862d3b86248f608bffdc6e1d906a2580a06
+    hash: sha256:41aa7c2c1ce00f4fdb8aee233481733f80ec87382a64f7dfaecf69362bc78870
     supports: [profiles.concepts, profiles.capability.browse-profiles, profiles.capability.create-edit-profile, profiles.capability.assign-access, profiles.rules, profiles.troubleshooting]
   - path: frontend/routes/security/users-profiles/UserProfilesAccessSelector.svelte
     role: user-interface
-    hash: sha256:85190ef3ed8f569bd18ff4943a9d112c4de2012afb23a2bd9bfba0f0d57b8427
+    hash: sha256:c2faba71ee62542bd6605620e260bbb588391669eea12370c3fbb22dc41039e6
     supports: [users.concepts, users.capability.assign-access]
   - path: frontend/routes/security/users-profiles/AccessCard.svelte
     role: user-interface
-    hash: sha256:81712f82226d6bc6dc663d38ac29792a16b5403eca57b106b212afbf1b9283c3
+    hash: sha256:92fde2fc42c0e3f8eb2286f37d80bd29ed04818196e86d78d37e601b1880c4ae
     supports: [profiles.concepts, profiles.capability.assign-access]
   - path: frontend/routes/security/users-profiles/users-profiles.svelte.ts
     role: frontend-service
-    hash: sha256:ca4c0b2f8b4246a970aa9192df9e6b4479f4aa104a69a226c55f03ccfcc05322
+    hash: sha256:27e00f8369d23401af44c82fd5c889318844a618d5fff143bec75c5dc641c8ad
     supports: [navigation, users.concepts, users.capability.create-edit, users.capability.assign-access, users.capability.remove, profiles.concepts, profiles.capability.create-edit-profile, profiles.capability.assign-access, profiles.rules]
+  - path: frontend/routes/security/users-profiles/users-profiles.ts
+    role: business-logic
+    hash: sha256:131b5f2a9710e64b63581e38b5668abf9a24abda7efc2dd1f220a3f7c78b23ed
+    supports: [profiles.concepts, profiles.capability.assign-access, profiles.rules, users.concepts, users.capability.assign-access]
   - path: frontend/routes/security/users-profiles/access-list-catalog.ts
     role: shared-domain
-    hash: sha256:0518ffb7303826a8017dddf235b6b3dd9eb83fb4748ffe8afc6588c3587bcb09
+    hash: sha256:8d132cc5197bd05841c3f70b0966e42233aa8c661c6fcfa52c4d60e7e20895de
     supports: [users.concepts, users.capability.assign-access, profiles.concepts, profiles.capability.assign-access, profiles.troubleshooting]
   - path: frontend/services/services/users.svelte.ts
     role: frontend-service
@@ -572,26 +659,26 @@ files:
     supports: [related-pages, users.rules]
   - path: backend/security/usuarios.go
     role: backend-handler
-    hash: sha256:7b302ab72bc3ebe8e5e06a4b12cf0cf95e55534e49733087ad078ebca69dfaa8
+    hash: sha256:1f0760c9d318c08bc3770412d05a13d7d44ab2168fd99c45f6d9b1872ce70bc8
     supports: [users.capability.create-edit, users.capability.assign-access, users.capability.set-password, users.capability.remove, users.rules, users.troubleshooting, profiles.capability.assign-access]
   - path: backend/security/perfiles.go
     role: backend-handler
-    hash: sha256:113302558b3786f75888ce60a4fa77b986407b4c329a0517a6faa3f6772a5765
+    hash: sha256:d82a71a9f7c9f34d17898bf587fee2da1c570595a74318eaf4902cdfbb14d4ad
     supports: [profiles.capability.create-edit-profile, profiles.capability.assign-access, profiles.rules]
   - path: backend/core/types/users.go
     role: data-model
-    hash: sha256:4a69d1976058bea987c991c59e97a5b16f0a1c91e12a120f702e929bbe53aa22
+    hash: sha256:c7ae8b0c54f4317d1154d0d152fd02cc6b3698856419320554fa78f5fb3765a2
     supports: [users.concepts, users.capability.create-edit, users.capability.assign-access, users.rules]
   - path: backend/security/types/perfiles.go
     role: data-model
-    hash: sha256:ebe1a63290b8e313dc31dfa6113a1fa228a1437279e4286c86717d7416aa7aa3
+    hash: sha256:3f6b45ed210de32bfd3a9775e1c13f9e9525a3be5aa4eb475521c3a75431db7f
     supports: [users.concepts, profiles.concepts, profiles.capability.assign-access]
   - path: backend/access.toml
     role: permissions
-    hash: sha256:491c43a25f0837ef39fc1cb43a82ac890610cf3fa74c9dee4757744eb72f396b
+    hash: sha256:d97a6c713fd68231f0f9d93b69270a1dd4c0493c538a6956ce69fe76558e053b
     supports: [navigation, users.capability.assign-access, users.rules, profiles.concepts, profiles.capability.assign-access, related-pages]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
+    hash: sha256:d570faec0086ba758405eeace921354c7ff58502109c4f6e2eeff5c5fae2ae6f
     supports: [users.capability.assign-access, users.rules, profiles.capability.assign-access]
 ```

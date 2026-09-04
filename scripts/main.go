@@ -53,6 +53,10 @@ func main() {
 
 	case "backfill_observability_credits":
 		runBackendExec("fn-backfill-observability-credits", os.Args[2:]...)
+
+	case "recompute_user_accesos":
+		runBackendExec("fn-recompute-user-accesos", os.Args[2:]...)
+
 	case "rebuild_observability_log_view":
 		runBackendExec("fn-rebuild-observability-log-view", os.Args[2:]...)
 

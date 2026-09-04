@@ -160,3 +160,46 @@ func TestHasSubAccesoExpandsTodos(t *testing.T) {
 		t.Error("an empty mask or an out-of-range id must never be held")
 	}
 }
+
+// DecodeSubAccesoBytes is the seam where the daemon's opacity ends: fareward copies these bytes out
+// of accesos_sub_computed without knowing what a bit means, and this is the only thing that turns
+// them back into a mask the catalog can name. Everything below is a shape the daemon can hand over.
+func TestDecodeSubAccesoBytes(t *testing.T) {
+	for name, check := range map[string]struct {
+		subAccesoBytes []byte
+		wantMask       uint16
+	}{
+		// No sub bytes is a legitimate answer, not a corruption: it is an access the gate
+		// authorized whose slot contributed nothing to the reply's tail.
+		"no bytes at all":  {subAccesoBytes: nil, wantMask: 0},
+		"empty slice":      {subAccesoBytes: []byte{}, wantMask: 0},
+		"todos only":       {subAccesoBytes: []byte{0x01}, wantMask: 0b1},
+		"first byte full":  {subAccesoBytes: []byte{0x7F}, wantMask: 0b1111111},
+		"spills to second": {subAccesoBytes: []byte{0x80, 0x01}, wantMask: 0b10000000},
+		// Subs 1 and 13. The near-miss worth pinning: sub 13 is bit 12, which lands at bit 5 of
+		// the second byte (0x20), not bit 6 (0x40). Reading 0x40 here would grant sub 14.
+		"lowest and highest": {subAccesoBytes: []byte{0x81, 0x20}, wantMask: 0b1000000000001},
+		// A tail longer than the run is not an error here: the run self-terminates on MORE and the
+		// reply packs one run per slot, so the caller slices per slot and never sees the rest.
+		"stops at the terminator": {subAccesoBytes: []byte{0x01, 0x7F}, wantMask: 0b1},
+	} {
+		gotMask, err := DecodeSubAccesoBytes(check.subAccesoBytes)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if gotMask != check.wantMask {
+			t.Errorf("%s: decoded %013b; want %013b", name, gotMask, check.wantMask)
+		}
+	}
+
+	for name, subAccesoBytes := range map[string][]byte{
+		"dangling more bit":  {0x81},
+		"never terminates":   {0x80, 0x80, 0x80},
+		"mask past the ceil": {0xC0, 0xC0, 0x7F},
+	} {
+		if _, err := DecodeSubAccesoBytes(subAccesoBytes); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}

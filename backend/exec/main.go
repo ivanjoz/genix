@@ -3,6 +3,7 @@ package exec
 import (
 	"app/core"
 	"app/invoicing"
+	"app/security"
 )
 
 type ExecRouterType map[string]func(args *core.ExecArgs) core.FuncResponse
@@ -25,6 +26,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-generate-sale-orders":           GenerateSampleSaleOrders,
 	"fn-generate-erp-history":           GenerateErpHistory,
 	"fn-backfill-observability-credits": BackfillObservabilityCredits,
+	"fn-recompute-user-accesos":         security.RecomputeUserAccesos,
 	"fn-reset-counters":                 ResetCounterPart,
 	"fn-deploy-cloudflare-worker":       DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":         DeployCompanyWebpage,

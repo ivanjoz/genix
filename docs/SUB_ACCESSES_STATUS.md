@@ -3,8 +3,10 @@
 Companion to `docs/SUB_ACCESSES_PLAN.md`, which holds the design and the rationale. This file is the
 handoff: what is finished, what is not, and what has to happen before any of it can deploy.
 
-**Nothing is committed.** Everything below is in the working tree of the parent repo and of the
-`fareward` submodule.
+Steps 1–3 and 5 landed in `3d04ec13 feat(security)!: sub-accesses per access, and a TOML access
+catalog`, together with the matching `fareward` submodule pointer. Everything since — the recompute
+script, the frontend, the missing tests and the RATIONALE entries — is **uncommitted**, in the
+working tree of the parent repo and of `frontend/packages/genix-ui`.
 
 ---
 
@@ -14,21 +16,24 @@ handoff: what is finished, what is not, and what has to happen before any of it 
 | --- | --- | --- |
 | Backend build | `cd backend && go build ./...` | clean |
 | Backend vet | `cd backend && go vet ./...` | clean |
-| Backend tests | `cd backend && go test ./...` | 21 packages ok; **1 pre-existing failure**, see below |
+| Backend tests | `cd backend && go test ./...` | all pass; **1 pre-existing failure**, see below |
+| Module boundaries | `cd scripts && go run . check_module_imports` | 47 packages, no violations |
 | Table schema | `cd scripts && go run . check_tables` | 53 struct pairs, pass |
 | Daemon + client | `cd fareward && cargo test` | **187 pass, 0 fail** |
 | Go client | `cd fareward/go && go test ./...` | pass |
 | Frontend types | `cd frontend && bun run check` | 10 errors, **all pre-existing**, see below |
-| Catalog parser | `cd frontend && bun test routes/security/users-profiles/` | 6 pass |
+| Frontend build | `cd frontend && bun run build` | clean |
+| Frontend tests | `bun test frontend/packages/genix-ui/security/ frontend/routes/security/users-profiles/` | 40 pass |
+| Route documentation | `cd backend && go run ./agent/cmd/documentation-index -mode validate -document frontend/routes/security/users-profiles/DOCUMENTATION.md` | valid, 17 sections / 22 chunks |
 
 **Pre-existing failures, not caused by this work and not fixed by it:**
 
 - `app/agent/ragdocs` — `TestParseExamplesAndBuildStableChunks` fails on stale evidence for
-  `frontend/core/modules.ts` in `frontend/routes/finance/cash-banks/DOCUMENTATION.md`. Confirmed by
-  stashing this work and re-running: it fails identically on the untouched tree.
-- `bun run check` — 10 errors across `SaleOrdersTable.svelte`,
-  `warehouse-movements.svelte.ts`, `PurchaseOrderReport.svelte`, `ProductSupplyManagement.svelte`
-  and `ONNXInference.svelte`. None of those files were touched here.
+  `frontend/core/modules.ts` in `frontend/routes/finance/cash-banks/DOCUMENTATION.md`. The test
+  only checks `finance/cash-banks` and `logistics/purchase-orders`; neither is touched here.
+- `bun run check` — 10 errors across `SaleOrdersTable.svelte`, `warehouse-movements.svelte.ts`,
+  `PurchaseOrderReport.svelte`, `ProductSupplyManagement.svelte` and `ONNXInference.svelte`. None
+  of those files were touched here.
 
 ---
 
@@ -37,168 +42,199 @@ handoff: what is finished, what is not, and what has to happen before any of it 
 ### Step 1 — catalog migrated to TOML
 
 `backend/access_list.yml` → `backend/access.toml`, sections renamed `access_list` → `access` and
-`access_groups` → `groups`. The file was generated programmatically from the YAML and asserted
-equal to it field by field (9 groups, 36 access entries) before the old one was deleted.
+`access_groups` → `groups`. Generated programmatically from the YAML and asserted equal to it field
+by field (9 groups, 36 access entries) before the old one was deleted.
 
-- `core/usuario-accesos.go` — `AccessListYaml` → `AccessCatalog`, `yaml` tags → `toml`,
-  `gopkg.in/yaml.v3` → `github.com/pelletier/go-toml/v2` (**already a direct dependency**, no new
-  one added).
-- `main-handlers.go` — `//go:embed access.toml`.
-- `routes/security/users-profiles/access-list-catalog.ts` — parser rewritten for TOML. It gets
-  shorter: no indentation tracking, no `- ` prefix handling, records self-delimit on `[[name]]`, and
-  single-line TOML arrays parse as JSON. Multi-line arrays and trailing commas are rejected with a
-  message naming the problem rather than surfacing a `SyntaxError`.
-- Every reference to the old filename updated across Go, Svelte, `RATIONALE.md` and
-  `DOCUMENTATION.md` files.
+`core/usuario-accesos.go` swapped `gopkg.in/yaml.v3` for `github.com/pelletier/go-toml/v2` (already
+a direct dependency). `routes/security/users-profiles/access-list-catalog.ts` was rewritten and got
+shorter: `[[access]]` self-delimits, so no indentation tracking and no `- ` prefixes. Multi-line
+arrays and trailing commas are rejected by name.
 
 ### Step 2 — sub-accesses in the catalog and on the profile
 
 - `core/usuario-accesos.go` parses `sub_accesses_ids` / `sub_accesses_names` into
-  `AccessInfo.SubAccesosMask`. Load **refuses** — it does not repair — on a length mismatch between
-  the two parallel arrays, an id outside `2..13`, a duplicate id, or a blank name. The catalog is
-  embedded at build time, so a malformed declaration is a build-time mistake and must surface as
-  one. New `AccessHelper.GetAccesoInfo(id)`.
-- `security/types/perfiles.go` — new column `SubAccesos db.ColSlice[*ProfileTable, int32]`, holding
-  `accesoID*100 + subID`. Readable on purpose: the profile is what a human edits.
-- `security/perfiles.go::validateProfileSubAccesos` — rejects a sub-access the catalog never
-  declared, one on an access that does not exist, and one granted without its parent access.
+  `AccessInfo.SubAccesosMask`. Load **refuses** on a length mismatch, an id outside `2..13`, a
+  duplicate, or a blank name — the catalog is embedded at build time, so a malformed declaration is
+  a build-time mistake. New `AccessHelper.GetAccesoInfo(id)`.
+- `security/types/perfiles.go` — `SubAccesos db.ColSlice[*ProfileTable, int32]`, holding
+  `accesoID*100 + subID`.
+- `security/perfiles.go::validateProfileSubAccesos` — rejects an undeclared sub-access, one on an
+  access that does not exist, and one granted without its parent access.
 - `backend/access.toml` — acceso 10 (Punto de Venta) declares `[2, 3]` =
-  `["Recibir Pago", "Despachar Producto"]`. **It is the only access with sub-accesses so far.**
+  `["Recibir Pago", "Despachar Producto"]`. **Still the only access with sub-accesses.**
 
 ### Step 3 — the two grant blobs, in Go and Rust
 
-New `backend/core/accesos-blob.go` is the **only** writer of these bytes in Go:
-`EncodeAccesosGrants`, `DecodeAccesosGrants`, `DecodeSubAccesoBytes`, `HasSubAcceso`,
-`MakeAccesoNivelPacked` / `UnpackAccesoNivel`. The encoder sorts rather than requiring sorted input,
-and refuses out-of-range ids, invalid levels, duplicates and over-ceiling masks.
-
-- `core/types/users.go` — `AccesosComputed` is now `[]byte`; `AccesosSubComputed` added. Both are
-  CQL `blob`, which `[]uint16` already was, so **no `ALTER TABLE` for the first column**.
-- `security/usuarios.go` — `buildAccesosComputedFromPerfiles` merges in **two passes** over the
-  profiles: every access first, then every sub-access. Order matters — a sub-access granted by one
-  profile may qualify an access granted by another, and a single interleaved pass would drop those.
-  Deleted the now-dead local `makeAccesoNivelUint16` / `makeAccesoNivelPacked`.
-- `security/perfiles.go` — change detection compares **both** columns. Comparing only the first
-  would skip the write for an edit that adds nothing but a sub-access, leaving users stale.
-- `security/login.go` — sends both blobs; `buildBootstrapAdminAccesos` gives user 1 "Todos" on every
-  access that declares sub-accesses.
-- **Rust** `limiter/access.rs` — `UserAccessState` holds both blobs as `Box<[u8]>` verbatim; the
-  `Vec<u16>` allocation, sort and dedup per cache load are gone. `verdict()` returns
-  `Result<AccessVerdict, AccessDenial>`. `accesos_computed` keeps a real binary search on its fixed
-  stride; `accesos_sub_computed` scans linearly with an early exit. Both are validated on load
-  (ascending ids, whole words, terminated sub runs, no empty mask).
-- **Rust** `limiter/storage.rs` — reads the second column; the doc comment claiming the blob is
-  little-endian u16s is rewritten.
+`backend/core/accesos-blob.go` is the **only** writer of these bytes in Go. `core/types/users.go`
+made `AccesosComputed` a `[]byte` and added `AccesosSubComputed`; both are CQL `blob`, which
+`[]uint16` already was. `security/usuarios.go::buildAccesosComputedFromPerfiles` merges in two
+passes; `security/perfiles.go` change-detects on both columns; `security/login.go` sends both and
+synthesizes "Todos" for user 1. Rust `limiter/access.rs` holds both blobs verbatim as `Box<[u8]>`
+and validates them on load.
 
 ### Step 5 — the `:v9` reply frame
 
-`[correlation:u16][status:u8][detail:u16][extra_len:u8][extra…]`.
-
-- Locks, budgets and unauthorized charges keep their exact `status`/`detail` meaning and pay one
-  byte of `extra_len = 0`. Locks still carry their generation in `detail` — which is why `detail`
-  is a `u16` at all.
-- `detail` on an authorized charge: bits 0..2 the code, bits 3..6 the granted-slot mask, bits 7..10
-  the has-subs mask.
-- The tail is the sub bytes **copied verbatim** out of the cached blob. The daemon re-encodes
-  nothing and still knows nothing about what a sub-access means.
-- `service/auth.rs` — `DOMAIN` bumped `fareward:v8` → `fareward:v9`. **SipHash-2-4 is unchanged**;
-  only the domain-separator string moved, which is exactly what makes a mixed pair fail at the first
-  frame instead of misparsing the new layout. All pinned vectors regenerated from the Go client and
-  updated on both sides, plus the TCP integration harnesses that hardcoded `:v8` and a 5-byte reply.
-- `go/connection.go` — reads the tail **before dispatching** (an unread tail desynchronizes every
-  later reply), and refuses one over 8 bytes.
-- `go/credits.go` — new `AccessGrant{GrantedSlots, SubAccesoBytes}`. `decodeAccessGrant` refuses
-  every way the masks and the tail can disagree rather than half-reading them.
-  `ChargeAPIUsage` / `ChargeAPIAccessOnly` now return `(*AccessGrant, error)`.
+`[correlation:u16][status:u8][detail:u16][extra_len:u8][extra…]`, one shape for every opcode.
+`DOMAIN` bumped `fareward:v8` → `fareward:v9` with SipHash-2-4 unchanged, so a mixed pair fails at
+the first frame. `go/connection.go` reads the tail before dispatching; `go/credits.go` decodes
+`AccessGrant{GrantedSlots, SubAccesoBytes}`.
 
 ### The handler surface
 
-- `core.UsuarioToken.SubAccesos map[int32]uint16`, tagged **`cb:"-"`** so it never rides in the
-  browser-held session token.
-- `main-handlers.go::mapGrantedSubAccesos` translates the daemon's slot indexes back to access ids
-  on the side that embeds the catalog, and sets them on the **per-request** `args.User` — never the
-  `IS_SERVERLESS` global, which is single-threaded-only by design.
-- Handlers call `req.User.HasSubAcceso(accesoID, subAccesoID)`.
+`core.UsuarioToken.SubAccesos map[int32]uint16`, tagged `cb:"-"`.
+`main-handlers.go::mapGrantedSubAccesos` translates slot indexes back to access ids and sets them on
+the **per-request** `args.User`. Handlers call `req.User.HasSubAcceso(accesoID, subAccesoID)`.
+
+### Step 4 — the recompute script
+
+- `backend/security/recompute_accesos.go` — `RecomputeUserAccesos`, registered as
+  `fn-recompute-user-accesos` in `exec/main.go` (the `invoicing.EmitHandler` precedent: the merge it
+  reproduces is unexported in `security`, and a second copy in a script is what would silently
+  disagree with `PostUsuarios`).
+- Dispatched as `cd scripts && go run . recompute_user_accesos`, and listed in the `./deploy.sh` TUI
+  under **Base de Datos → Recomputar Accesos de Usuarios**.
+- Walks every active company's users — **including inactive ones** — merges profiles *and* direct
+  `AccessLevelIDs`, writes only the rows whose bytes changed naming only the two grant columns, and
+  fires one `InvalidateUserAccess(companyID, InvalidateAllCompanyUsers)` per company that had
+  writes. Idempotent: it recomputes from the profiles, so a second run reports `0 reescritos`.
+- `scripts/RECOMPUTE_USER_ACCESOS.md` documents it. `exec/recompute_accesos_test.go` guards the
+  registration.
+
+### Step 6 — frontend
+
+**`genix-ui` submodule** (commit and push inside it):
+
+- `utilities/parsers.ts` — `base64ToUInt16` **replaced** by `base64ToBytes`; the export in
+  `utilities/index.ts` follows.
+- `security/accesos.ts` — rewritten as the third reader of the byte format:
+  `decodeStoredAccesosComputed` returns `Uint8Array`, plus `makeAccesoNivelPacked`,
+  `unpackAccesoNivel`, `findAccesoNivel` (binary search, fixed stride), `findAccesoSubGrant`
+  (linear walk with early exit), `hasAcceso` (**the two-payload lookup**), `hasSubAcceso` (the
+  "Todos" expansion) and `validateAccesosBlobs`.
+- `security/create-security.ts` — holds both payloads, stores them under `AccesosV2` and
+  `AccesosSub`, validates on load and discards a bad pair whole, keys `accesoResultCache` on
+  `(accesoID, nivel, subAccesoID)`, and exposes `checkSubAcceso`. `isTokenValid` accepts either
+  payload being non-empty.
+- `security/types.ts` / `index.ts` / `SECURITY.md` updated.
+- `form/Checkbox.svelte` and `form/CheckboxOptions.svelte` — box and label are now **one**
+  `<button role="checkbox">`, so clicking the text toggles. `Checkbox` gained a controlled mode
+  (`checked` + `onToggle`) for a value that is not a property of an object.
+
+**App:**
+
+- `core/types/common.ts` — `IProfile.SubAccesos` + `subAccesosMap`; `ILoginResult.AccesosSubComputed`.
+- `routes/security/users-profiles/users-profiles.ts` — **new**, pure: `buildSubAccesoOptions`,
+  `toggleSubAcceso` ("Todos" exclusive both ways), `packSubAccesos` (drops a sub-access whose parent
+  access was cleared), `unpackSubAccesos`. Unit-tested in `users-profiles.test.ts`.
+- `users-profiles.svelte.ts` — builds `subAccesosMap`, strips it before the POST, `useCache.ver` 2 → 3.
+- `access-list-catalog.ts` — `sub_accesses_ids` / `sub_accesses_names` on the catalog entry type.
+- `ProfilesTab.svelte` — `IAccess.subAccesos` from the catalog; packs `form.SubAccesos` on save,
+  after `Accesos`.
+- `AccessCard.svelte` — a checkbox row **under** the card, inside the same grid cell, shown only
+  when the access declares sub-accesses **and** is granted.
+- `UserProfilesAccessSelector.svelte` — a third row on the profile chip, `<access>: <sub-access>`.
+
+### Tests written
+
+- `core/accesos-blob_test.go::TestDecodeSubAccesoBytes` — the seam where the daemon's opacity ends,
+  including the empty tail as a legitimate answer and the sub-13-is-bit-5-of-byte-2 near-miss.
+- `sub_accesos_gate_test.go` (package `main`) — `mapGrantedSubAccesos`: slot→id translation, a
+  granted access with no sub bytes (present with an empty mask), the no-grant paths (unmapped GET /
+  `selfServiceRoutes` / user 1), and unreadable sub bytes keeping the entry.
+- `security/perfiles_test.go` — `validateProfileSubAccesos` against the **real** `access.toml`,
+  read off disk because the catalog is embedded into package `main`.
+- `exec/recompute_accesos_test.go` — the deploy-blocking command is registered.
+- `genix-ui/security/accesos.test.ts` — 23 cases: big-endian, the two-payload lookup, bit positions,
+  the "Todos" expansion, and every rejection `validateAccesosBlobs` makes.
+- `users-profiles.test.ts` — 17 cases over the editing rules.
+
+### RATIONALE and documentation
+
+- `backend/RATIONALE.md` — four entries: the two-column big-endian format (and what replaced the
+  defensive re-sort), the TOML catalog and parallel arrays, the readable profile column, the gate's
+  slot translation. Includes the **deferred scope**: sub-accesses are a profile concept and a direct
+  `AccessLevelIDs` grant carries none.
+- `scripts/RATIONALE.md` — why the format change is a data rebuild rather than a compatibility shim,
+  and why the script lives in `security`.
+- `fareward/RATIONALE.md` — the `:v9` length-prefixed tail and why the daemon copies sub bytes.
+- `frontend/packages/genix-ui/RATIONALE.md` + `form/RATIONALE.md` — the `Uint8Array` change, the
+  three-input cache key, the `AccesosV2` key bump, and the one-control checkbox.
+- `frontend/routes/security/users-profiles/RATIONALE.md` — the editing model and the wire shape.
+- `.../users-profiles/DOCUMENTATION.md` — sub-accesses documented across concepts, the grant
+  capability, rules and troubleshooting; every source hash reviewed and refreshed, and
+  `users-profiles.ts` added as evidence. Validator passes. **Not indexed** — indexing writes to
+  Qdrant and was not requested.
 
 ---
 
 ## PENDING
 
-### 1. The recompute script — DEPLOY BLOCKING
+### 1. The end-to-end `agent-browser` check — now unblocked, still not run
 
-Every stored `accesos_computed` is still little-endian `id<<2|nivel-1`. Under the new reader those
-bytes decode to nonsense and **every user would be denied**. Nothing can ship until this runs.
+The migration was taken on the dev database (`150.136.42.240`, keyspace `genix`) on 2026-09-03.
+Steps 1 and 3 of the deploy order below are **done**:
 
-Needs `scripts/recompute_user_accesos.go` following `scripts/SCRIPTS.md`: walk every company's
-users, rebuild both columns through `buildAccesosComputedFromPerfiles`, write them back, and fire
-one `InvalidateUserAccess(companyID, InvalidateAllCompanyUsers)` per company.
+- `fn-homologate` added `users.accesos_sub_computed` and `profiles.sub_accesos`. Adding
+  `sub_accesos` also rebuilt `profiles__pk_updated_view` and `profiles__pk_status_updated_rng_view`,
+  which is a DROP + CREATE the homologator does on its own.
+- `recompute_user_accesos` rewrote 1 of 3 users (company 1 user 2, `ZwCEAA==` → `AGcAhA==`, the same
+  two grant words byte-swapped to big-endian). A second run reports `0 reescritos`.
 
-`users.accesos_sub_computed` and `profiles.sub_accesos` are new columns and need the DDL applied
-(`check_tables` validates the structs; it does not create columns).
+Two things had to be fixed to get there, and both are worth knowing:
 
-### 2. Frontend (step 6)
+- Both companies in that database were `status = 0`, so the script's `Status.GreaterEqual(1)` filter
+  matched nothing and it exited `no hay empresas activas`. They were legacy rows predating
+  `PostSignUpCompany`, which writes `Status: 1`; both were set to `1`. Nothing gates *login* on
+  company status, which is why they worked while being invisible to this script and to
+  `observability_backfill`.
+- The `db.Update` in `recompute_accesos.go` and in `PostPerfiles` named only the two blob columns,
+  which the `(status, updated)` view on `users` rejects. Both now name `Status`. See
+  `backend/RATIONALE.md` — the `PostPerfiles` one was a live bug, not only a migration-script bug.
 
-- `genix-ui` submodule, `security/accesos.ts` — `decodeStoredAccesosComputed` must return
-  `Uint8Array`; add the second blob, the big-endian scan and `hasSubAcceso`. `create-security.ts`
-  holds `Uint16Array` today and its `accesoResultCache` keys on a bare number, which must become
-  `(accesoID, nivel, subID)`. **Submodule change — commit and push inside it.**
-- `users-profiles.svelte.ts` — build `subAccesosMap`, send `SubAccesos` as `accesoID*100 + subID`,
-  bump `useCache.ver`.
-- `AccessCard.svelte` / `ProfilesTab.svelte` — sub-access chips, with "Todos" as a synthetic first
-  option that clears the rest.
-- `UserProfilesAccessSelector.svelte` — reflect sub-accesses in the read-only user view.
+What remains is the browser check itself: that the checkbox row renders and saves against a real
+backend. Everything else it would cover is asserted by the test suites above.
 
-### 3. Tests not yet written
+### 2. Nothing reads a sub-access yet
 
-- `core.DecodeSubAccesoBytes` — the seam where the daemon's opacity ends. Has no test of its own.
-- `mapGrantedSubAccesos` — slot-to-access-id translation, including the user-1 and unmapped-GET
-  paths that produce no grant at all.
-- `validateProfileSubAccesos` — the three rejection cases.
-- An end-to-end check through the `agent-browser` skill, against a route with sub-accesses.
+`Punto de Venta` declares `Recibir Pago` and `Despachar Producto`, the profile stores them, the
+daemon carries them and `req.User.HasSubAcceso` is available — but **no handler calls it** and no
+frontend calls `security.checkSubAcceso`. The mechanism is complete and unused; the first consumer
+is a separate piece of work. This is documented as a limitation on the route.
 
-### 4. RATIONALE entries
+### 3. Deferred, by decision
 
-Required by `CLAUDE.md` before commit — the plan's decisions have not been written into any
-`RATIONALE.md` yet:
-
-- `backend/RATIONALE.md` — the TOML catalog and parallel arrays; the two-column split and why the
-  column name carries the "has sub-accesses" bit; big-endian; what replaced the defensive re-sort.
-- `fareward/RATIONALE.md` — the `:v9` length-prefixed tail, and why the daemon copies sub bytes
-  rather than re-encoding them.
-- `frontend/routes/security/users-profiles/RATIONALE.md` — the editing model and the
-  `accesoID*100 + subID` wire shape.
-- `frontend/packages/genix-ui` — the `Uint16Array` → `Uint8Array` change and the cache-key change.
+Sub-accesses on a **direct** per-user access grant (`AccessLevelIDs`). Recorded in
+`backend/RATIONALE.md` so it is a decision rather than a gap; the user asked to plan it separately.
 
 ---
 
 ## Deploy order
 
-1. Apply the DDL for `users.accesos_sub_computed` and `profiles.sub_accesos`.
+1. `fn-homologate` (deploy.sh → **Recrear Tablas**) — adds `users.accesos_sub_computed` and
+   `profiles.sub_accesos`. `check_tables` validates the structs; it does not create columns.
 2. Deploy backend **and** daemon together. The `:v9` domain makes a mixed pair fail at the first
-   frame — loud, and intended, but it means the window is real.
-3. Run `recompute_user_accesos`.
-4. Deploy the frontend. Bump the stored-accesos storage key or its wrap checksum so a stale
-   `Uint16Array` payload is discarded rather than misread.
+   frame — loud, and intended, but the window is real.
+3. `cd scripts && go run . recompute_user_accesos`.
+4. Deploy the frontend. The stored-accesos key is already bumped to `AccesosV2`, so a stale
+   `Uint16Array` payload is discarded rather than misread; no further action needed there.
+
+Between 2 and 3 every authenticated request is denied. Keep it short.
 
 ---
 
 ## Known risks
 
-1. **The two-array lookup.** An access lives in exactly one column, so any check that misses
+1. **The two-payload lookup.** An access lives in exactly one column, so any check that misses
    `accesos_computed` must also scan `accesos_sub_computed`. Missing that second lookup fails closed
-   — a user is denied something they hold — but it has to be right in Go, Rust and TS. Rust has a
-   test for it (`an_access_is_found_in_either_blob`); TS does not exist yet.
-2. **Three hand-written parsers.** Go and Rust agree and are cross-pinned by a fixture captured from
-   the Go encoder (`decodes_the_blobs_the_go_encoder_writes`). TS is the outstanding third.
-   A concrete near-miss while writing these: a hand-written fixture for sub-accesses 1+13 expected
-   `0x40` when the correct byte is `0x20` — sub 13 is bit 12, which lands at bit **5** of the second
-   byte, not bit 6. Nothing about `0x40` looks wrong, and a reader making the same slip would grant
-   sub-access 14 where 13 was meant.
+   — a user is denied something they hold. All three languages now have a test for exactly that
+   lookup: Rust `an_access_is_found_in_either_blob`, Go `TestGrantsRoundTripThroughBothBlobs`, TS
+   `an access held only in the sub payload`.
+2. **Three hand-written parsers.** Go and Rust are cross-pinned by a fixture captured from the Go
+   encoder (`decodes_the_blobs_the_go_encoder_writes`); TS is pinned by hand-written bytes matching
+   the Go test's. The near-miss worth remembering: sub-access 13 is bit 12, which lands at bit **5**
+   of the second byte (`0x20`), not bit 6 (`0x40`). Nothing about `0x40` looks wrong, and a reader
+   making the same slip grants sub-access 14.
 3. **Scope limit, by design.** A handler can read sub-accesses only for the accesses that gated
-   **its own route** — that is all the reply carries. Reading an unrelated access's sub-flags would
-   need a different transport.
-4. **Unrelated working-tree changes.** The `fareward` submodule and the backend carry pre-existing
-   modifications that are **not part of this work** and should not be attributed to it: the SipHash
-   migration (`src/siphash.rs`, `go/siphash/`, `vectors/`, `src/bridge/*`, `Cargo.*`, the walkthrough
-   docs), the session-token move to BLAKE2s-128 (`usrToken:v3`), `backend/agent/bridge.go`, and
-   `frontend/.../AccessCard.svelte`.
+   **its own route** — that is all the reply carries.
+4. **Unrelated working-tree changes.** `frontend/static/sw.js` is modified and `server_utils/` is
+   untracked; neither is part of this work.

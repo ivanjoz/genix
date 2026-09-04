@@ -102,6 +102,155 @@ session credential is `UserToken`, which is unaffected. The cost is a second res
 a dev backend can emit. `makeCipherKey` also replaced the hardcoded `"12341234..."` key the login had
 been sending, and merged the duplicate copy in `RegistrationModal.svelte`.
 
+## A partial write to `users` must name `status`, because the delta view keys on it
+
+**Context** — `recompute_user_accesos` and `PostPerfiles` both rewrite only the two grant blobs on a
+user row, naming exactly those columns in `db.Update` so a concurrent edit of an unrelated field
+cannot be lost. Both panicked on the first real run: `Table "users": A composit index/view requires
+the columns "status", "updated" be updated together. Not Included: status`. `UserTable.GetSchema`
+declares `{Type: db.TypeView, Keys: db.Cols(Status, Updated.DecimalSize(10))}` and the ORM assigns
+`updated` on every write, so a write that touches `updated` without `status` cannot maintain that
+view's key.
+
+**Decision** — Both call sites name `usuarioQuery.Status` alongside the two blob columns. The value
+written is the one the read returned, so nothing about the row's meaning changes.
+
+**Rationale** — The alternative readings were both worse. Dropping the view is not on the table: it
+is the delta read the whole user cache depends on. Widening the update to the full row is what the
+narrow column list exists to avoid, and would reintroduce the lost-update it was written to prevent.
+Naming `status` is the minimum that satisfies the view, and it is not a new coupling -- the ORM has
+always required a composite view's key columns to move together. The cost is that any future partial
+write to `users` has to remember the same thing; the error message says so explicitly, which is why
+this is a note rather than a helper. Worth recording that `PostPerfiles` carried this bug in the
+live profile-save path, not only in the one-off migration script: no test caught it because both are
+integration paths against a real view, and the migration had never been run.
+
+## A user's grants live in two big-endian byte columns, split by whether they carry sub-accesses
+
+**Context** — Sub-accesses are up to 13 flags an access may declare, and a user's grants had to
+carry them. `users.accesos_computed` was a `[]uint16` of `accesoID<<2 | nivel-1`, one word per
+access, with no room for a mask. Widening the word to `uint32` was the obvious move; the format is
+read by three separate processes (this backend, the Rust daemon, and the browser), so whatever it
+became had to be identical in all three.
+
+**Decision** — Two `[]byte` columns, both big-endian, both sorted ascending by accesoID, sharing one
+16-bit grant word `[14 bits accesoID][2 bits nivel-1]`:
+
+- `accesos_computed` — accesses with **no** granted sub-access. Grant words only, fixed 2-byte
+  stride, binary searchable.
+- `accesos_sub_computed` — accesses with **at least one**. Every grant word is followed by sub bytes
+  of `[1 bit MORE][7 bits flags]`.
+
+`core/accesos-blob.go` is the only encoder in Go; nothing else may write these bytes.
+
+**Rationale** — `[]byte` over a wider integer slice because `genix-orm/scylla/converter.go` takes a
+`reflect.Copy` fast path for `[]uint8` in both directions while `[]uint16` pays a per-element
+`binary.LittleEndian` loop, and because the Rust side reads the column into a `Vec<u8>` straight out
+of Scylla — with `[]byte` both processes hold the identical bytes and the conversion disappears.
+Neither CQL type is new (both map to `blob`), so `accesos_computed` needed no `ALTER TABLE`, only a
+data rebuild.
+
+**Two columns rather than one self-delimiting blob, because the column name carries the bit for
+free.** The alternative spent one bit of the grant word on a `SUB_FOLLOWS` flag, dropping the id
+ceiling from 16383 to 8191 and making the whole array variable-width. Here, a sub byte always
+follows in `accesos_sub_computed` — that is the *definition* of the column — so nothing encodes it,
+both arrays keep 14-bit ids, and the common array keeps a fixed stride and a single-modulo length
+check. The variable half is the small one by construction: an access appears there only when a
+profile actually granted it a sub-access.
+
+The accepted cost is that **an access lives in exactly one column**, so every check that misses the
+first must scan the second. It fails closed — a missed second lookup denies a user something they
+hold — but it has to be right in Go, Rust and TypeScript. Each side has a test for exactly that
+lookup. The performance question that prompted the split is empty either way and is written down so
+it is not reopened: a user's grants are ~110 bytes total, and the daemon's check already sits behind
+a per-shard mutex and a `HashMap` lookup, each costing more than scanning every byte of both arrays.
+
+**Big-endian** because `access.rs` carried a standing warning that this column was the one
+little-endian integer in a daemon whose entire wire protocol is big-endian, and that reading it
+backwards would not fail — it would silently authorize the wrong things. The bytes are ours to
+choose and the ORM only copies them, so one endianness everywhere deletes the exception, and sorting
+by raw `u16` becomes sorting by accesoID.
+
+**What replaced the defensive re-sort.** `decode_grants` used to sort and dedup on load, so an
+out-of-order blob degraded into a wrong answer for one user rather than a broken binary search. That
+cannot survive on a variable-width array where position is load-bearing. Instead every reader
+validates while it walks — ascending ids, whole words, terminated sub runs, no empty mask — and
+rejects the blob loudly. Free, since the parser is already walking; same intent, better failure
+mode; and it also catches the corruptions the old defense could not name.
+
+## The access catalog is TOML, and sub-accesses are two parallel arrays
+
+**Context** — `backend/access_list.yml` was the single source of truth for authorization, embedded
+by the backend and imported as *text* by the frontend, which parses it with a hand-written parser
+because dragging a YAML library into the bundle for one file is not worth it. That parser had to
+track indentation and strip `- ` prefixes to know where a record began.
+
+**Decision** — `backend/access.toml`, sections renamed `access_list` → `access` and `access_groups`
+→ `groups`. `github.com/pelletier/go-toml/v2` was already a direct dependency, so nothing new was
+added. Sub-accesses are declared as two parallel single-line arrays, `sub_accesses_ids` and
+`sub_accesses_names`. The file was generated from the YAML and asserted equal to it field by field —
+9 groups, 36 access entries — before the old one was deleted.
+
+**Rationale** — The win is the frontend parser: `[[access]]` is unambiguous, so indentation stops
+mattering and records self-delimit. It gets shorter, and its remaining failure modes (a multi-line
+array, a trailing comma) are rejected by name rather than surfacing as a `SyntaxError`.
+
+Parallel arrays have one hazard — two lists drifting out of step mis-name every entry after the gap —
+so **load refuses rather than repairs**: a length mismatch, an id outside 2..13, a duplicate, or a
+blank name aborts the load naming the offending access. The catalog is embedded at build time, so
+a malformed declaration is a build-time mistake and must surface as one. Id 1 is reserved for
+"Todos": never declared, satisfies every sub-access check on its access, and costs one byte in the
+blob because it is bit 0.
+
+## A profile stores sub-accesses readably; the binary packing happens once
+
+**Context** — Sub-accesses had to be editable, and the thing being edited is a profile. Storing the
+grant blob on the profile would have put the binary format in a second place, and one a human reads.
+
+**Decision** — `profiles.sub_accesos` is a `[]int32` of `accesoID*100 + subID`. The frontend sends
+that shape, `PostPerfiles` validates every entry against the embedded catalog, and the blob is packed
+exactly once — in `core/accesos-blob.go`, when a *user's* grants are computed from their profiles.
+
+**Rationale** — The profile is the human-facing record: `1002` is legible in a database console and
+in a log line, and a binary column there would need a decoder to answer "what does this profile
+grant". `buildAccesosComputedFromPerfiles` merges in **two passes** over the profiles, every access
+first and then every sub-access, because a sub-access granted by one profile may qualify an access
+granted by another and a single interleaved pass would drop those. `PostPerfiles` compares **both**
+grant columns before deciding an affected user is unchanged; comparing only the first would skip the
+write for an edit that adds nothing but a sub-access, leaving every affected user stale.
+
+Validation rejects rather than drops: a sub-access the catalog never declared, one on an access that
+does not exist, and one granted without its parent access. A profile silently saved without what
+the operator just ticked is worse than an error.
+
+**Scope, stated so it is a decision and not a gap.** Sub-accesses are a *profile* concept. A user
+may also be granted an access directly through `AccessLevelIDs`, and that path produces an empty
+sub-mask — so an access whose sub-accesses matter must be granted through a profile. Extending
+direct grants is deliberately deferred, not overlooked.
+
+## The gate translates fareward's slots into access ids, and only for the current request
+
+**Context** — The daemon answers authorization in *slots* over the `requiredAccess` list the gate
+sent it, because it holds no copy of `access.toml` and cannot know which access a slot stands for.
+Something had to turn slots back into ids, and handlers had to be able to ask.
+
+**Decision** — `mapGrantedSubAccesos` does the translation in `main-handlers.go` and sets the result
+on the **per-request** `args.User`. `core.UsuarioToken.SubAccesos` is tagged `cb:"-"`, so it never
+rides in the browser-held session token. Handlers call
+`req.User.HasSubAcceso(accesoID, subAccesoID)`.
+
+**Rationale** — The translation belongs on the side that embeds the catalog; that is the same reason
+the daemon returns a raw mask and "id 1 means all" is expanded here. It goes on `args.User` and never
+on the `core.User` global, which is only assigned under `IS_SERVERLESS` precisely because local and
+VPS mode are concurrent. `cb:"-"` because the map is a statement about one request, not an identity:
+serializing it would both bloat the token and let a stale copy answer a later request.
+
+Two consequences worth naming. A granted access with no sub-accesses still enters the map with an
+empty mask, because "holds none of them" and "that access did not authorize this route at all" are
+different answers and only the presence of the key states it. And the **scope limit**: a handler can
+read the sub-accesses of the accesses that gated *its own route*, and nothing else — that is all the
+reply carries. Reading an unrelated access's flags would need a different transport.
+
 ## A user is valid with direct accesses and no profile
 
 **Context** — `PostUsuarios` rejected any user whose `ProfileIDs` was empty ("El user debe tener al

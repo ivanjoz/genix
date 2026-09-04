@@ -23,6 +23,7 @@ import {
     type IAccess,
     type IProfile
 } from "./users-profiles.svelte";
+import { buildSubAccesoOptions, packSubAccesos } from './users-profiles';
 
   // Services and catalog live in +page.svelte so both tabs share one copy of the profiles.
   let { perfilesService, accessGroups, accessListEntries, accessListLoadError = "" }: {
@@ -96,6 +97,7 @@ import {
         descripcion: normalizedRoute,
         orden: accessListEntry.id,
         acciones: catalogActions.length > 0 ? catalogActions : [1],
+        subAccesos: buildSubAccesoOptions(accessListEntry.sub_accesses_ids, accessListEntry.sub_accesses_names),
         grupo: accessListEntry.group || routeMeta?.groupID || 0,
         modulosIDs: routeMeta ? [routeMeta.moduleID] : [],
         ss: 1,
@@ -171,6 +173,10 @@ import {
           form.Accesos.push(accesoID * 10 + n)
         }
       }
+      // After Accesos, because packSubAccesos drops any sub-access whose parent access the
+      // operator cleared during this same edit.
+      form.SubAccesos = packSubAccesos(form.subAccesosMap || new Map(), form.accesosMap)
+
       const accesosFiltered = accesosCatalog.filter(x => form.accesosMap.has(x.id))
       const modulosIDSet: Set<number> = new Set()
       for (let e of accesosFiltered) {
@@ -215,7 +221,7 @@ import {
       css: "text-center",
       id: "actions",
       buttonEditHandler: (rec) => {
-        perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap) }
+        perfilForm = { ...rec, accesosMap: new Map(rec.accesosMap), subAccesosMap: new Map(rec.subAccesosMap) }
         ui.openModal(2)
       },
       mobile: { order: 3, css: "col-span-4 justify-end" }
@@ -230,7 +236,7 @@ import {
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
           <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new access profile." onClick={() => {
-            perfilForm = { ss: 1, accesosMap: new Map() } as IProfile
+            perfilForm = { ss: 1, accesosMap: new Map(), subAccesosMap: new Map() } as IProfile
             ui.openModal(2)
           }} />
         </div>
@@ -248,7 +254,7 @@ import {
           if (e.ID === perfilForm.ID) {
             perfilForm = {} as IProfile
           } else {
-            perfilForm = { ...e, accesosMap: new Map(e.accesosMap) }
+            perfilForm = { ...e, accesosMap: new Map(e.accesosMap), subAccesosMap: new Map(e.subAccesosMap) }
           }
         }}
       />

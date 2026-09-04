@@ -37,6 +37,12 @@ var deployScripts = []scriptEntry{
 		return runCommand(context, "scripts", context.goBinary, "run", ".", "check_module_imports")
 	}},
 
+	// Después de homologar y antes de que el backend nuevo sirva tráfico: reescribe
+	// users.accesos_computed, que cambió de little-endian []uint16 a big-endian []byte.
+	{key: "recompute_user_accesos", group: scriptGroupDatabase, label: "Recomputar Accesos de Usuarios", run: func(context deployContext, _ []string) error {
+		return runCommand(context, "scripts", context.goBinary, "run", ".", "recompute_user_accesos")
+	}},
+
 	{key: "create", group: scriptGroupDatabase, label: "Crear Tabla",
 		argumentsHint: "<output_path> <table_name> [campo:tipo:key]...",
 		run: func(context deployContext, arguments []string) error {

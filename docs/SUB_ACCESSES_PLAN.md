@@ -1,11 +1,18 @@
 # Sub-Accesses Plan
 
-> **Status.** Steps 1, 2, 3 and 5 are implemented: the TOML catalog, the two grant columns and
-> their codec, the Rust reader, and the `:v9` reply frame with its Go client. Backend `go build` /
-> `go vet` / `go test` pass (except a pre-existing `agent/ragdocs` stale-evidence failure unrelated
-> to this work), `check_tables` passes, and `cargo test` passes across the daemon, its Go client and
-> the TCP integration suites. **Not yet done:** step 4 (the recompute script), step 6 (the frontend),
-> the `DecodeSubAccesoBytes` seam's own tests, and the RATIONALE entries.
+> **Status.** Every step is implemented. Steps 1, 2, 3 and 5 landed in `3d04ec13`; steps 4 and 6 —
+> the recompute script and the frontend — plus the remaining tests and the RATIONALE entries are in
+> the working tree. Backend build/vet/test, `check_tables`, `check_module_imports`, `cargo test`
+> (187), the frontend typecheck and build, and the route-documentation validator all pass; the two
+> failures that remain (`agent/ragdocs` stale evidence, 10 `svelte-check` errors) are pre-existing
+> and unrelated. **The one thing left is the end-to-end `agent-browser` check**, which is blocked on
+> the live migration in §6 because it rewrites authorization data on the shared database. Read
+> `docs/SUB_ACCESSES_STATUS.md` for the handoff and the deploy order.
+>
+> Two things the plan did not decide, now decided: nothing in Genix **reads** a sub-access yet
+> (`req.User.HasSubAcceso` and `security.checkSubAcceso` exist and have no callers — the first
+> consumer is separate work), and sub-accesses on a **direct** per-user access grant are deferred by
+> request, recorded in `backend/RATIONALE.md`.
 
 Adds a second, flag-shaped permission level under each access: an access may declare up to 13
 sub-accesses (id + name), and a profile may grant any subset of them. Sub-accesses are **not** a
@@ -301,10 +308,12 @@ fixture rewritten.
 
 ### TypeScript (reader) — `genix-ui` submodule
 
-- `security/accesos.ts`: `decodeStoredAccesosComputed` returns `Uint8Array`; `base64ToUInt16` →
-  a `Uint8Array` decode; `hasPackedAccesoInRange` stays but over the fixed-stride `accesos_computed`
-  bytes; `getAccesoNivelSearchRange` is replaced by the unpacked level compare; add the
-  `accesos_sub_computed` scan and `hasSubAcceso(subBlob, accesoID, subID)`.
+- `security/accesos.ts`: `decodeStoredAccesosComputed` returns `Uint8Array`; `base64ToUInt16` is
+  **replaced** by `base64ToBytes`. As built, the range helpers are gone rather than adapted:
+  `findAccesoNivel` binary-searches the fixed stride and returns the level, `findAccesoSubGrant`
+  walks the variable-width bytes, `hasAcceso` does the two-payload lookup, and
+  `hasSubAcceso(subBlob, accesoID, subID)` applies "Todos". `validateAccesosBlobs` replaces the
+  defensive re-sort.
 - `security/create-security.ts`: `accesosComputed: Uint16Array` → two `Uint8Array`s, and
   `accesoResultCache` must key on `(accesoID, nivel, subID)` rather than a bare number.
 - `security/index.ts` + `types.ts`: update the exports and `checkAcceso`'s signature; add

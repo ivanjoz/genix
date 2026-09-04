@@ -1,7 +1,9 @@
 <script lang="ts">
 import { arrayToMapN } from '$libs/helpers';
 import { useUI } from '@genix/ui';
+import Checkbox from '$components/form/Checkbox.svelte';
   import { accesoAcciones, type IAccess, type IProfile } from "./users-profiles.svelte"
+  import { toggleSubAcceso } from "./users-profiles"
   const ui = useUI()
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')
@@ -24,6 +26,25 @@ import { useUI } from '@genix/ui';
   })
 
   const cardIsSelected = $derived((acciones?.length || 0) > 0)
+
+  const subAccesosSelected = $derived(perfilForm?.subAccesosMap?.get(acceso.id) || [])
+
+  // Only while the access itself is granted: a sub-access qualifies a permission rather than
+  // granting one, so offering it on an access nobody holds would be offering nothing.
+  const showSubAccesos = $derived(
+    !!perfilForm?.accesosMap && acceso.subAccesos.length > 0 && cardIsSelected
+  )
+
+  function handleSubAccesoToggle(subAccesoID: number) {
+    if (!perfilForm?.subAccesosMap) { return }
+
+    const nextSubAccesoIDs = toggleSubAcceso(subAccesosSelected, subAccesoID)
+    nextSubAccesoIDs.length > 0
+      ? perfilForm.subAccesosMap.set(acceso.id, nextSubAccesoIDs)
+      : perfilForm.subAccesosMap.delete(acceso.id)
+    // Force reactivity
+    perfilForm.subAccesosMap = new Map(perfilForm.subAccesosMap)
+  }
 
   // Highest-level-first, so the badge reads "Todo, Ver" and not the insertion order.
   const selectedAcciones = $derived(
@@ -78,6 +99,7 @@ import { useUI } from '@genix/ui';
   })
 </script>
 
+<div class="acceso-cell">
 <div
   class={cN}
   class:is-selected={cardIsSelected}
@@ -145,7 +167,39 @@ import { useUI } from '@genix/ui';
   {/if}
 </div>
 
+<!-- A row under the card, not inside it: the card is deliberately as tall as its two text lines,
+     and only one access in the catalog declares sub-accesses today. -->
+{#if showSubAccesos}
+  <div class="sub-accesos-row text-[13px]">
+    {#each acceso.subAccesos as subAcceso}
+      <Checkbox
+        label={subAcceso.name}
+        checked={subAccesosSelected.includes(subAcceso.id)}
+        onToggle={() => handleSubAccesoToggle(subAcceso.id)}
+      />
+    {/each}
+  </div>
+{/if}
+</div>
+
 <style>
+  .acceso-cell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sub-accesos-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    padding: 5px 8px 3px 13px;
+    border: 1px solid #d9dce8;
+    border-top: none;
+    background: #fcfbff;
+    color: #4b4f66;
+    line-height: 1.15;
+  }
+
   .acceso-card {
     position: relative;
     background-color: white;

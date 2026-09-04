@@ -12,6 +12,10 @@ export interface IAccessListCatalogEntry {
   levels: number
   frontend_routes: string | string[]
   backend_apis: string
+  // Parallel arrays, equal length, ids 2..13. Absent on the accesses that declare no sub-access,
+  // which is most of them. Id 1 is reserved for "Todos" and is never declared here.
+  sub_accesses_ids?: number[]
+  sub_accesses_names?: string[]
 }
 
 export interface IAccessListCatalogPayload {

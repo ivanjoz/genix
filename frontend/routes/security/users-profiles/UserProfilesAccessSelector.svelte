@@ -6,10 +6,13 @@
     IAccessListCatalogEntry
   } from './access-list-catalog';
   import type { IProfile, IUser } from './users-profiles.svelte';
+  import { buildSubAccesoOptions } from './users-profiles';
 
   interface IProfileAccessSummary {
     readableAccessNames: string[]
     editableAccessNames: string[]
+    // "<access>: <sub-access>", because a bare "Recibir Pago" says nothing about what it qualifies.
+    subAccessLabels: string[]
   }
 
   interface ISelectedAccessPresentation {
@@ -70,12 +73,33 @@
     return groupNameByID;
   });
 
+  // Keyed by the stored wire shape, accesoID * 100 + subAccesoID, so a profile's SubAccesos list
+  // resolves to names without re-deriving the encoding here.
+  const subAccessLabelByRef = $derived.by(() => {
+    const labelByRef = new Map<number, string>();
+
+    for (const accessCatalogEntry of accessCatalogEntries) {
+      const subAccesoOptions = buildSubAccesoOptions(
+        accessCatalogEntry.sub_accesses_ids,
+        accessCatalogEntry.sub_accesses_names
+      );
+      for (const subAccesoOption of subAccesoOptions) {
+        labelByRef.set(
+          accessCatalogEntry.id * 100 + subAccesoOption.id,
+          `${accessCatalogEntry.name}: ${subAccesoOption.name}`
+        );
+      }
+    }
+
+    return labelByRef;
+  });
+
   function summarizeProfileAccesses(profileRecord?: IProfile): IProfileAccessSummary {
     const readableAccessNames = new Set<string>();
     const editableAccessNames = new Set<string>();
 
     if (!profileRecord?.accesosMap) {
-      return { readableAccessNames: [], editableAccessNames: [] };
+      return { readableAccessNames: [], editableAccessNames: [], subAccessLabels: [] };
     }
 
     // Split profile permissions into view and edit buckets for the custom card renderer.
@@ -92,9 +116,20 @@
       }
     }
 
+    // Sub-accesses are flags inside an access, not a third level, so they get their own row
+    // instead of being folded into the view/edit split.
+    const subAccessLabels = new Set<string>();
+    for (const [accessID, subAccesoIDs] of profileRecord.subAccesosMap || []) {
+      for (const subAccesoID of subAccesoIDs) {
+        const subAccessLabel = subAccessLabelByRef.get(accessID * 100 + subAccesoID);
+        if (subAccessLabel) { subAccessLabels.add(subAccessLabel); }
+      }
+    }
+
     return {
       readableAccessNames: [...readableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName)),
-      editableAccessNames: [...editableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName))
+      editableAccessNames: [...editableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName)),
+      subAccessLabels: [...subAccessLabels].sort((leftLabel, rightLabel) => leftLabel.localeCompare(rightLabel))
     };
   }
 
@@ -153,6 +188,12 @@
             <div class="_selected-profile-row">
               <i class="icon-[fa--pencil] _selected-profile-icon _selected-profile-icon-edit pt-2 text-red-600"></i>
               <span class="text-sm">{selectedProfileAccessSummary.editableAccessNames.join(', ')}</span>
+            </div>
+          {/if}
+          {#if selectedProfileAccessSummary.subAccessLabels.length > 0}
+            <div class="_selected-profile-row">
+              <i class="icon-[fa--shield] _selected-profile-icon pt-2 text-purple-600"></i>
+              <span class="text-sm">{selectedProfileAccessSummary.subAccessLabels.join(', ')}</span>
             </div>
           {/if}
         </div>

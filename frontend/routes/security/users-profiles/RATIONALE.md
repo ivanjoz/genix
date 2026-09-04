@@ -1,3 +1,60 @@
+## Sub-accesses are a checkbox row under the card, and "Todos" is exclusive
+
+**Context** — An access may declare up to 13 sub-accesses: flags a handler reads to decide what it
+may do inside a route it is already authorized for. They had to be editable on the profile, and the
+access card is deliberately compact — as tall as its two text lines, with its level buttons floating
+over it on hover, which is the decision the entry below this one records. Putting anything else
+inside the card undoes that.
+
+**Decision** — A row of checkboxes **below** the card, inside the same grid cell, shown only while
+the access is granted and only for the accesses that declare sub-accesses. The card keeps its
+height; the cell grows. `AccessCard` gained a wrapper element to hold both. Sub-access id 1 is
+offered as a synthetic first option, "Todos": selecting it clears the rest, and selecting anything
+else clears it.
+
+**Rationale** — The row is visible rather than hover-revealed because a permission the operator
+cannot see is one they will not grant, and because a hover strip has no equivalent on touch. It goes
+under the card rather than in it so the 35 accesses that declare no sub-access are unaffected — one
+access declares them today.
+
+"Todos" is exclusive in both directions because it *satisfies every check on its access*, so holding
+it alongside individual sub-accesses is contradictory: the individual ticks would be stored, read,
+and then have no effect. Making it clear the others says that in the UI instead of leaving the
+operator to discover it. It is never declared in the catalog, so it is offered on any access that
+declares sub-accesses at all and refused on one that declares none.
+
+The checkbox itself is `@genix/ui`'s `Checkbox` in controlled mode, because the value lives in a
+`Map` rather than on an object — see that package's `form/RATIONALE.md`.
+
+## The wire shape is `accesoID * 100 + subAccesoID`, and the rules are a pure module
+
+**Context** — The profile posts its sub-accesses to the backend, which validates them against the
+embedded catalog and packs them into a user's binary grant blob. The frontend needed a shape to send
+and somewhere to put the editing rules.
+
+**Decision** — `SubAccesos: number[]` of `accesoID * 100 + subAccesoID`, mirroring how `Accesos`
+already encodes `accesoID * 10 + nivel`. `subAccesosMap: Map<accesoID, subAccesoID[]>` is the
+editable form shape and is stripped before the POST, exactly like `accesosMap`.
+`buildSubAccesoOptions`, `toggleSubAcceso`, `packSubAccesos` and `unpackSubAccesos` live in
+`users-profiles.ts` — no Svelte, no fetch — and are unit-tested there.
+
+**Rationale** — Readable on purpose: the profile is what a human edits, so `1002` is legible in a
+database console and in a log line. Binary encoding happens exactly once, in
+`backend/core/accesos-blob.go`, when a *user's* grants are computed. Three hand-written parsers of
+that binary format already exist; a fourth, in the browser's editing path, would be one too many.
+
+Two rules earn their place in the pure module rather than the component. `packSubAccesos` **drops**
+any sub-access whose parent access is no longer granted, because the backend rejects the whole
+profile over one — dropping is right here and rejecting is right there: this is clearing a leftover
+of the operator's own editing (tick sub-accesses, then clear the access), not accepting an
+unauthorized grant. And `buildSubAccesoOptions` returns **nothing** when the catalog's two parallel
+arrays disagree in length, rather than a shifted list: naming the wrong sub-access is how an
+operator grants the wrong permission. The backend refuses to load a mismatched pair at all, so
+reaching that branch means the text parser dropped something.
+
+`PerfilesService.useCache.ver` went to 3. A cached v2 record has no `SubAccesos`, so it would edit
+as if the profile granted none — and saving it would silently revoke every sub-access it holds.
+
 ## The access card is compact; its action buttons live on hover
 
 **Context** — the access grid renders 36 cards, and each one reserved a third row for the

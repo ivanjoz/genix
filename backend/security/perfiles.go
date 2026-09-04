@@ -128,9 +128,14 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 			}
 
 			if len(usersWithChangedAccesos) > 0 {
+				// Status rides along because the users table declares a composite view on
+				// (status, updated) and the ORM assigns updated on every write: naming only the
+				// blob columns fails with "requires the columns status, updated be updated
+				// together". The value is the one the read returned.
 				usuarioQuery := db.Query(&usersWithChangedAccesos)
 				if err = db.Update(&usersWithChangedAccesos,
-					usuarioQuery.AccesosComputed, usuarioQuery.AccesosSubComputed); err != nil {
+					usuarioQuery.AccesosComputed, usuarioQuery.AccesosSubComputed,
+					usuarioQuery.Status); err != nil {
 					return req.MakeErr("Error al actualizar usuarios afectados en ScyllaDB: " + err.Error())
 				}
 				// Uno por user y no el comodín de la company: esta lista es exactamente la de los

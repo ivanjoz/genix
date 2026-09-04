@@ -1,8 +1,10 @@
 import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 import type { IProfile, IUser } from '$core/types/common';
+import { unpackSubAccesos, type ISubAccesoOption } from './users-profiles';
 export { postUser, postOwnUser } from '$services/services/users.svelte';
 
 export type { IProfile, IUser };
+export type { ISubAccesoOption } from './users-profiles';
 
 // Access ids from backend/access.toml. Both accesses resolve to this single route, so
 // canAccessRoute only tells us the page is reachable — each tab is gated on its own id.
@@ -15,6 +17,8 @@ export interface IAccess {
   descripcion?: string
   orden: number
   acciones: number[]
+  // The sub-access flags this access offers, "Todos" first. Empty for most accesses.
+  subAccesos: ISubAccesoOption[]
   grupo: number
   modulosIDs: number[]
   ss: number
@@ -67,8 +71,9 @@ export class UsuariosService extends GetHandler {
 
 export class PerfilesService extends GetHandler {
   route = "perfiles"
-  // Bump cache version because perfiles now arrive with Go field names instead of lowercase aliases.
-  useCache = { min: 5, ver: 2 }
+  // v3: perfiles now carry SubAccesos, so a cached v2 record would edit as if the profile granted
+  // none of them and saving it would silently revoke every sub-access it holds.
+  useCache = { min: 5, ver: 3 }
 
   perfiles: IProfile[] = $state([])
   perfilesMap: Map<number, IProfile> = $state(new Map())
@@ -86,6 +91,9 @@ export class PerfilesService extends GetHandler {
           ? pr.accesosMap.get(accessID)!.push(accessLevel)
           : pr.accesosMap.set(accessID, [accessLevel])
       }
+
+      pr.SubAccesos = pr.SubAccesos || []
+      pr.subAccesosMap = unpackSubAccesos(pr.SubAccesos)
     }
     this.perfiles = perfiles
     this.perfilesMap = new Map(perfiles.map(profileRecord => [profileRecord.ID, profileRecord]))
@@ -113,9 +121,11 @@ export class PerfilesService extends GetHandler {
 }
 
 export const postPerfil = (data: IProfile) => {
-  // accesosMap is the editable form shape; the backend only takes the packed Accesos array.
+  // The two maps are the editable form shape; the backend only takes the packed Accesos and
+  // SubAccesos arrays.
   const dataToSend = { ...data }
   delete (dataToSend as any).accesosMap
+  delete (dataToSend as any).subAccesosMap
 
   return POST({
     data: dataToSend,

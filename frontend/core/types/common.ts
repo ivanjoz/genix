@@ -26,8 +26,13 @@ export interface IProfile {
   Name: string;
   Description?: string;
   Accesos: number[];
+  // accesoID * 100 + subAccesoID. Readable on purpose: the profile is what a human edits, so the
+  // binary packing happens once, in the backend, when a user's grants are computed.
+  SubAccesos: number[];
   Modulos: number[];
   accesosMap: Map<number, number[]>;
+  // Editable form shape, stripped before the POST like accesosMap.
+  subAccesosMap: Map<number, number[]>;
   ss: number;
   upd: number;
 }
@@ -41,6 +46,7 @@ export interface ILoginResult {
   UserInfo?: string;
   UserInfoPlain?: string;
   AccesosComputed: string;
+  AccesosSubComputed: string;
   TokenExpTime: number;
   CompanyID: number;
   // The company has no warehouse or no cash bank yet, so it cannot operate: the login routes to
