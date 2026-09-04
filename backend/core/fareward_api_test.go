@@ -65,7 +65,7 @@ func TestFarewardAddressDerivesTheHostFromPublic(t *testing.T) {
 		host             string
 		port             int
 		public           bool
-		isLocal          bool
+		isDevArg         bool
 		useRemoteDevHost bool
 		want             string
 	}{
@@ -88,7 +88,7 @@ func TestFarewardAddressDerivesTheHostFromPublic(t *testing.T) {
 	}
 	for _, check := range checks {
 		got := makeFarewardAddress(
-			check.host, check.port, check.public, check.isLocal, check.useRemoteDevHost)
+			check.host, check.port, check.public, check.isDevArg, check.useRemoteDevHost)
 		if got != check.want {
 			t.Fatalf("%s: got %q; want %q", check.name, got, check.want)
 		}

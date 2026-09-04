@@ -11,10 +11,11 @@ import (
 
 // isLoopbackClient reports whether the caller reached this process over the loopback interface.
 //
-// Second half of the DevLogin guard. The first half (is_local) is a config value, and a config
-// value that is wrong turns a password-less session mint into a full authentication bypass, so
-// the address is checked independently: an is_local=true deploy that is publicly reachable still
-// refuses everyone who is not on the machine itself.
+// Second half of the DevLogin guard. The first half (the dev launch argument) says how this
+// process was started, and a password-less session mint is worth two independent conditions rather
+// than one, so the address is checked as well: a `go run . dev` backend that is reachable from
+// outside the machine — serve_tailscale makes exactly that reachable — still refuses everyone who
+// is not on the machine itself.
 func isLoopbackClient(clientIP string) bool {
 	clientIP = strings.TrimSpace(clientIP)
 	if clientIP == "" {
@@ -34,23 +35,24 @@ func isLoopbackClient(clientIP string) bool {
 // only way an automated tool can reach an authenticated page: every other entry point needs a
 // password nobody stores for test users.
 //
-// Guarded twice — the process must be configured local AND the caller must be on loopback. Both
-// must hold; see isLoopbackClient for why is_local alone is not enough.
+// Guarded twice — the process must have been launched with the dev argument AND the caller must be
+// on loopback. Both must hold; see isLoopbackClient for why the argument alone is not enough.
 //
 // The response is deliberately identical in shape to PostLogin's: it is built by the same
 // MakeUsuarioResponse, so the frontend consumes it with the unmodified security.parseLogin and no
 // second session-hydration path exists to drift.
 func DevLogin(req *core.HandlerArgs) core.HandlerResponse {
-	if !core.Env.IS_LOCAL || !isLoopbackClient(req.ClientIP) {
-		core.Log("DevLogin:: rechazado. is_local::", core.Env.IS_LOCAL, " clientIP::", req.ClientIP)
+	if !core.Env.IS_DEV_ARG || !isLoopbackClient(req.ClientIP) {
+		core.Log("DevLogin:: rechazado. is_dev_arg::", core.Env.IS_DEV_ARG, " clientIP::", req.ClientIP)
 		return req.MakeErr401("La ruta de desarrollo p-dev-login no está habilitada.")
 	}
 
 	// The cipher key travels from the caller because MakeUsuarioResponse encrypts UserInfo with
 	// it, exactly as the real login does — the browser generates it and decrypts with the same key.
+	// Empty is the "no WebCrypto here" request and MakeUsuarioResponse answers it in plaintext.
 	cipherKey := req.GetQuery("cipher-key")
-	if len(cipherKey) < 16 {
-		return req.MakeErr("El cipher-key es necesario y debe tener al menos 16 caracteres.")
+	if cipherKey != "" && len(cipherKey) < 16 {
+		return req.MakeErr("El cipher-key debe tener al menos 16 caracteres.")
 	}
 
 	// Company 1 / user 1 is the bootstrap admin, which is what a dev session wants by default.

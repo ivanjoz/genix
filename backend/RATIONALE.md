@@ -1,3 +1,107 @@
+## A dev backend binds loopback and the tailnet, not every interface
+
+**Context** — The dev backend listened on `*:14010`. It holds the production database credentials
+and has no nginx and no firewall rule in front of it, so every interface meant the LAN and anything
+forwarded to this host as well. It showed up as bursts of rejected requests for routes the app does
+not serve — `/dana-na`, `/global-protect/prelogin.esp`, `/remote/login`, `/sslvpnclient`, the
+standard VPN-appliance scanner sweep — each one writing a row into the request log, which for a dev
+run is the *production* Scylla.
+
+**Decision** — `resolveDevListenAddresses` returns `127.0.0.1:<port>` plus every interface address
+inside 100.64.0.0/10, and a dev launch opens one `net.Listen` per address sharing a single
+`http.Server`. A deployed binary is untouched and still calls `ListenAndServe` on `:<port>`.
+
+**Rationale** — Those two addresses are exactly the reachability `serve_tailscale` needs: the machine
+itself, and a browser on another tailnet node. Matching on the CGNAT block rather than on an
+interface named `tailscale0` keeps it correct on macOS `utun` and on the userspace daemon. Narrowing
+the *deployed* listener is a deploy decision — nginx, the health check and the Function URL each
+arrive by a different address — so it is gated on `IS_DEV_ARG` rather than applied to both. A
+listener that fails to open is logged by address and skipped instead of being fatal: losing the
+tailnet address still leaves a working loopback backend. Verified live: `ss` shows `127.0.0.1:14010`
+and `100.64.0.2:14010` and no longer `*:14010`.
+
+## The route log line carries the caller's address
+
+**Context** — `core.Log("Route:", args.Route)` printed the route alone, so a burst of rejected
+requests read as an application error with no way to tell where it came from. `args.ClientIP` was
+already resolved three lines earlier and simply not used.
+
+**Decision** — The line is now `Route: <route> clientIP: <ip>`.
+
+**Rationale** — One field, already computed, that turns "the app is failing" into "someone is
+scanning this port". The cost is a slightly longer line on every request.
+
+## `is_local` is gone: the dev launch argument is the only "this is a development machine" signal
+
+**Context** — `is_local` was a root key in `config.toml`, and it gated things that must never be
+live in a deployment: verbose logs, the agent prompt log, `DevLogin`'s password-less session mint,
+and (as of this change) the plaintext `UserInfo`. A config key is exactly the wrong shape for that
+guarantee — the value ships with the deploy, and one stale `is_local = true` in a server's config
+silently turns every one of those on. The trigger was the plaintext `UserInfo`: gating a new hole on
+`is_local` would have widened what a single wrong config line costs.
+
+**Decision** — Removed `is_local` from `config.toml`, `config.example.toml` and `fileConfig`, and
+deleted `Env.IS_LOCAL`. `core.ReadDevArgument()` scans `os.Args` for `dev` and `PopulateVariables`
+assigns the result to `Env.IS_DEV_ARG` *before* `applyToEnv`, so nothing in the file can set or clear
+it. Every former `IS_LOCAL` reader now reads `IS_DEV_ARG`: `main.go` (LOGS_FULL, the cron seed),
+`main-handlers.go` (local usage accounting), `agent/prompt_log.go`, `agent/pagebuilder/loop_log.go`,
+`makeFarewardAddress` and `DevLogin`.
+
+**Rationale** — `start.js` is the only launcher that passes the argument
+(`BACKEND_GO_SCRIPT = "go run . dev"`); the systemd unit is `ExecStart={SERVICE_BINARY_PATH}` with no
+arguments and Lambda passes none, so a compiled binary cannot be talked into a dev relaxation by its
+configuration no matter what it was deployed with. The name keeps the `_ARG` suffix at every call
+site on purpose — the provenance *is* the security property. `DevLogin` keeps its second, independent
+loopback check: `serve_tailscale` makes a dev backend reachable from other machines, so the argument
+alone is not enough for a password-less session mint. Cost: the flag is invisible to `config.toml`,
+so someone who runs the backend by hand (`go run .`) gets production behaviour and has to know to add
+`dev`; the startup log line `[core.config] config_parsed is_dev_arg=%t` is there to make that legible.
+
+## `MakeCipherKey` hung the process on an empty `secret_phrase`
+
+**Context** — Found while unit-testing `MakeUsuarioResponse`: the test froze until the Go test
+timeout fired. `MakeCipherKey` built its key with `for len(key) < 32 { key += Env.SECRET_PHRASE }`,
+which never terminates when the phrase is empty. `Encrypt` called it unconditionally, *before*
+honouring an explicit key argument, so a backend with no `secret_phrase` hung on its first encrypt
+with no error and no log. Two neighbouring defects: `Encrypt` did `cypherKey_[0][:32]`, which panics
+on a key shorter than 32 — and the keys come from clients — while `Decrypt` sliced
+`MakeCipherKey()`'s result instead of the argument, silently ignoring any explicit key it was given.
+
+**Decision** — `MakeCipherKey` returns `""` for an empty phrase. Both entry points now go through
+`resolveCipherKey`, which picks the explicit key over the default and returns an error for anything
+under 32 characters rather than slicing it.
+
+**Rationale** — A hang is the worst of the available failure modes: no stack, no log, and a stuck
+goroutine that looks like a slow database. An error naming the length is diagnosable. The `Decrypt`
+fix is behaviour-changing in principle, but no caller in the repo passes it an explicit key — every
+one relies on the `SECRET_PHRASE` default — so no stored ciphertext (the invoicing company secrets)
+changes meaning.
+
+## An insecure origin has no WebCrypto, so an empty CipherKey asks for the UserInfo in clear
+
+**Context** — `serve_tailscale` hands the dev app out at `http://100.x.y.z:3572`. That origin is not
+a secure context (only https and loopback are), so the browser never defines `crypto.subtle`, and
+`parseLogin` died on `Cannot read properties of undefined (reading 'importKey')` — the login POST
+had already succeeded, so the token and the access blobs were in hand and only the AES-GCM decrypt
+of `UserInfo` failed. Serving the dev app over real HTTPS would need `tailscale serve`, tailnet
+certs, and the Go API moved behind the same origin to dodge mixed content: a lot of machinery for a
+dev-only convenience.
+
+**Decision** — The client decides. `makeCipherKey` (`frontend/services/login.ts`) returns `''` when
+`crypto.subtle` is absent, and `MakeUsuarioResponse` reads an empty key as "this browser cannot
+decrypt": on a dev launch it answers `UserInfoPlain` (the same JSON, unciphered) instead of
+`UserInfo`, and otherwise errors exactly as before. The per-caller `CipherKey` checks in `PostLogin`,
+`PostSignUpCompany` and `DevLogin` were removed or relaxed so the rule lives in the one function all
+four login paths already funnel through.
+
+**Rationale** — Keying the fallback on the *client's* capability rather than on the environment alone
+keeps localhost dev exercising the real encrypt/decrypt path, so a break in it still surfaces before
+production. `UserInfo` was never a trust boundary anyway: the client generates `CipherKey` and sends
+it in the request body in clear, so anyone who can read the response can read the key — the real
+session credential is `UserToken`, which is unaffected. The cost is a second response shape that only
+a dev backend can emit. `makeCipherKey` also replaced the hardcoded `"12341234..."` key the login had
+been sending, and merged the duplicate copy in `RegistrationModal.svelte`.
+
 ## A user is valid with direct accesses and no profile
 
 **Context** — `PostUsuarios` rejected any user whose `ProfileIDs` was empty ("El user debe tener al

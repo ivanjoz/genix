@@ -46,8 +46,8 @@ type promptTurnLog struct {
 // InitPromptLog ensures tmp/promps exists. Called once at app startup so
 // the per-write path can skip the parent-dir check. No-op outside local dev.
 func InitPromptLog() {
-	if !core.Env.IS_LOCAL {
-		core.Log("agent.prompt-log disabled (IS_LOCAL=false)")
+	if !core.Env.IS_DEV_ARG {
+		core.Log("agent.prompt-log disabled (IS_DEV_ARG=false)")
 		return
 	}
 	promptLogRoot := promptLogRoot()
@@ -61,7 +61,7 @@ func InitPromptLog() {
 // beginPromptTurn reserves one persistent daily turn number. All planner and
 // executor calls derived from the same user message share this context value.
 func beginPromptTurn(ctx context.Context) context.Context {
-	if !core.Env.IS_LOCAL {
+	if !core.Env.IS_DEV_ARG {
 		return ctx
 	}
 	promptLogMu.Lock()
@@ -100,7 +100,7 @@ func LogExecutorPrompt(ctx context.Context, messages []llm.Message, tools []llm.
 // writePromptLog increments the call number inside one reserved user turn.
 // Failures remain observable but never affect the user-facing agent turn.
 func writePromptLog(ctx context.Context, stage, content string) {
-	if !core.Env.IS_LOCAL {
+	if !core.Env.IS_DEV_ARG {
 		return
 	}
 	turnLog, ok := ctx.Value(promptTurnLogContextKey{}).(*promptTurnLog)

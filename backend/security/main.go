@@ -12,7 +12,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.p-contact-message": PostContactMessage,
 	"GET.reload-login":       ReloadLogin,
 	// Sesión sin password para el navegador headless de desarrollo. Sólo responde con
-	// is_local y desde loopback; ver dev_login.go.
+	// el argumento dev y desde loopback; ver dev_login.go.
 	"GET.p-dev-login": DevLogin,
 	"GET.users":       GetUsuarios,
 	"GET.users-ids":   GetUsuariosByIDs,

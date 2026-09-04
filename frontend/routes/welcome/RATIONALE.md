@@ -1,3 +1,17 @@
+## The registration modal borrows the login's cipher key helper
+
+**Context** — `RegistrationModal.svelte` had its own `makeCipherKey`, a copy of the login's. Once an
+empty key became the signal that the browser has no `crypto.subtle` (see `frontend/RATIONALE.md`),
+two implementations meant signup would keep sending a key it cannot decrypt with and would fail on
+an insecure origin exactly as the login did.
+
+**Decision** — Deleted the local copy and imported `makeCipherKey` from `$services/login`.
+
+**Rationale** — `p-signup-company` returns the same payload as `p-user-login` and finishes through
+the same `security.parseLogin`, so the two calls have to agree on the key or they do not agree on
+anything. The cost is a welcome-route component importing from the login service, which it already
+depends on transitively through `security`.
+
 ## Github link in the header
 **Context** — The landing page had no route to the source, which is one of its three selling points ("Código abierto").
 **Decision** — A "Github" link sits after "Ingresar" in the desktop nav and as its own full-width row under the account actions in the mobile menu, pointing at `https://github.com/ivanjoz/genix` in a new tab. The Octicons mark is inlined as a `{#snippet githubMark}` on its native 16-unit grid, filled with `currentColor`.

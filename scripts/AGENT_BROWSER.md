@@ -8,7 +8,7 @@ Launches a headless Chrome that **logs itself in**, holds the browser tab the ag
 needs, and lets an external agent read, drive and *see* the running app with no human involved.
 
 Development only: the password-less session it mints is refused unless the backend is configured
-`is_local` **and** the caller is on loopback.
+the backend was launched with the `dev` argument **and** the caller is on loopback.
 
 The agent-facing walkthrough lives in the `agent-browser` skill
 (`.agents/skills/agent-browser/SKILL.md`). This file documents the design.
@@ -65,9 +65,10 @@ frontend hydrates it with the unmodified `security.parseLogin`
 one wrapped by the bespoke rolling `checksum` in `packages/genix-ui/utilities/parsers.ts`, and a
 second writer would eventually drift from the first.
 
-**Two guards on the mint endpoint, not one.** `is_local` is a config value, and a config value that
-is wrong turns a password-less session into a full auth bypass — so the client address is checked
-independently. An `is_local=true` host that is publicly reachable still refuses everyone but itself.
+**Two guards on the mint endpoint, not one.** The `dev` launch argument says how the process was
+started, and a password-less session mint deserves a second, independent condition, so the caller's
+address is checked too. A `go run . dev` backend that is reachable from outside the machine —
+`serve_tailscale` makes exactly that reachable — still refuses everyone but itself.
 
 **`start` is resident.** Collecting console events requires holding a CDP connection somewhere;
 making `start` be that process avoids spawning a second daemon from a binary `go run` deletes on

@@ -97,6 +97,12 @@ const main = async () => {
   console.log(`   🔗 Proxy     ${status(proxyReady, PROXY_PORT)}`);
   console.log(`📋 Main (Admin): http://localhost:${PROXY_PORT}`);
   console.log(`🛒 Store: http://localhost:${PROXY_PORT}/webpage-app`);
+  // El proxy ya escucha en 0.0.0.0, así que la IP del tailnet no cambia nada del arranque:
+  // sólo hay que decirla. La pone start.js cuando serve_tailscale está activo.
+  const tailscaleHost = process.env.GENIX_TAILSCALE_HOST;
+  if (tailscaleHost) {
+    console.log(`🔗 Tailnet (otra máquina): http://${tailscaleHost}:${PROXY_PORT}`);
+  }
   console.log('\n💡 Tips:');
   console.log('   - Main app runs internally on port 3570');
   console.log('   - Store app runs internally on port 3571');

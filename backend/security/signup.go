@@ -462,9 +462,8 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 	if len(body.AdminPassword) < 6 {
 		return req.MakeErr("La contraseña debe poseer al menos 6 caracteres.")
 	}
-	if len(body.CipherKey) == 0 {
-		return req.MakeErr("El CipherKey es necesario.")
-	}
+	// The CipherKey is validated by MakeUsuarioResponse, which is the only place that knows when an
+	// empty one is admissible (see the UserInfoPlain branch there).
 
 	request, err := resolveVerifiedSignUpRequest(body.RequestID, body.Code)
 	if err != nil {

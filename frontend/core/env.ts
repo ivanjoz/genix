@@ -4,7 +4,7 @@ declare global {
 
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { PUBLIC_ENDPOINTS, PUBLIC_LOCAL_API_PORT } from '$env/static/public';
+import { PUBLIC_ENDPOINTS, PUBLIC_LOCAL_API_PORT, PUBLIC_TAILSCALE_HOST } from '$env/static/public';
 export { browser };
 
 export const IsClient = () => {
@@ -36,9 +36,17 @@ const localApiPort = Number.isInteger(parsedLocalApiPort) && parsedLocalApiPort 
 // el primer PUBLIC_ENDPOINTS, nunca localStorage ni la opción "Local" de desarrollo.
 const isStorefrontBuild = !!import.meta.env.VITE_RENDERER_BUILD
 
+// La IP del tailnet que start.js resolvió para esta corrida (serve_tailscale en config.toml).
+// Una página servida ahí es la misma página de desarrollo que en localhost, así que tiene que
+// pasar el mismo chequeo: si no, el selector del login se queda sin el endpoint "Local" y la
+// otra máquina no tiene backend al que llamar.
+const tailscaleDevHost = String(PUBLIC_TAILSCALE_HOST || "").trim()
+
 if(browser){
   const host = window.location.host
-  if((host.includes("localhost") || host.includes("127.0.0.1")) && host !== "localhost:8000"){
+  const isLoopbackHost = (host.includes("localhost") || host.includes("127.0.0.1"))
+    && host !== "localhost:8000"
+  if(isLoopbackHost || (!!tailscaleDevHost && window.location.hostname === tailscaleDevHost)){
     globalThis._isLocal = true
   }
 }
@@ -78,7 +86,11 @@ const parsePublicApiEndpoints = (serializedEndpoints: string): IApiEndpointOptio
     // Never offer the localhost endpoint in a pinned storefront build, even when the
     // static output is previewed on localhost.
     if (globalThis._isLocal && !isStorefrontBuild) {
-      const localRoute = `http://localhost:${localApiPort}/`
+      // El host de la API es el mismo del que vino la página: en localhost es localhost, y
+      // sobre el tailnet es la IP del tailnet. Fijar "localhost" aquí mandaba al navegador de
+      // la otra máquina contra su propio loopback, donde no hay ningún backend.
+      const localApiHost = browser ? window.location.hostname : "localhost"
+      const localRoute = `http://${localApiHost}:${localApiPort}/`
       parsedEndpoints.unshift({
         name: "Local",
         route: localRoute,

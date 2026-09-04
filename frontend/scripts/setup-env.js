@@ -16,11 +16,16 @@ export const setupEnv = () => {
       const serializedPublicEndpoints = JSON.stringify(
         Array.isArray(config.endpoints) ? config.endpoints : []
       );
+      // start.js resolves this from `tailscale ip -4` when serve_tailscale is on. The browser
+      // needs it to know that a page served at the tailnet address is still a dev page, so the
+      // login selector keeps offering the "Local" endpoint there. Empty = localhost only.
+      const tailscaleHost = process.env.GENIX_TAILSCALE_HOST || '';
       const envContent = [
         `VITE_PROXY_PORT=${process.env.GENIX_PROXY_PORT || '3572'}`,
         `PUBLIC_ZONE_NAME=${config.frontend?.zone_name || ''}`,
         // Mirror the backend's configured standalone port for the local endpoint selector.
         `PUBLIC_LOCAL_API_PORT=${config.server?.port || 3589}`,
+        `PUBLIC_TAILSCALE_HOST=${tailscaleHost}`,
         `PUBLIC_ENDPOINTS=${serializedPublicEndpoints}`
       ].join('\n') + '\n';
 

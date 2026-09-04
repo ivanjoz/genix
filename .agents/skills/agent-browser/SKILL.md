@@ -22,7 +22,7 @@ cd scripts
 go run . agent_browser <command>
 ```
 
-Development only. The session it mints is gated on `is_local` **and** loopback
+Development only. The session it mints is gated on the backend's `dev` launch argument **and** loopback
 (`backend/security/dev_login.go`), so none of this exists for an end user.
 
 ## Prerequisites

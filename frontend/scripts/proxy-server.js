@@ -107,6 +107,11 @@ server.listen(PROXY_PORT, () => {
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`\n  📦 Main (Admin):    http://localhost:${PROXY_PORT}/`);
   console.log(`  🛒 Store:          http://localhost:${PROXY_PORT}/webpage-app`);
+  // Este server escucha en 0.0.0.0, así que la IP del tailnet sirve exactamente la misma app.
+  // GENIX_TAILSCALE_HOST la pone start.js cuando serve_tailscale está activo en config.toml.
+  if (process.env.GENIX_TAILSCALE_HOST) {
+    console.log(`  🔗 Tailnet:        http://${process.env.GENIX_TAILSCALE_HOST}:${PROXY_PORT}/`);
+  }
   console.log(`\n  🔧 Main Target:    http://localhost:${MAIN_PORT}`);
   console.log(`  🔧 Store Target:   http://localhost:${STORE_PORT}`);
   console.log('\n  Proxying HTTP requests and WebSocket connections...\n');

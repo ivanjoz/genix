@@ -7,6 +7,7 @@
   import { tr } from '$core/store.svelte';
   import { formatTime, Notify } from '$libs/helpers';
   import { extractError, security } from '$libs/ui-runtime.svelte';
+  import { makeCipherKey } from '$services/login';
   import { createSignUpCompany, requestSignUpCode, verifySignUpCode } from '$services/signup';
   import InitialDataForm from '../initial-data/InitialDataForm.svelte';
 
@@ -50,13 +51,6 @@
   });
 
   const isValidEmail = $derived(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailForm.Email.trim()));
-
-  // parseLogin decrypts the user payload with the same key the client generated, so it only has
-  // to be unpredictable and exactly 32 characters (AES-256).
-  const makeCipherKey = () => {
-    const randomBytes = crypto.getRandomValues(new Uint8Array(16));
-    return [...randomBytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-  };
 
   // The backend only reports the seconds left at response time, so the countdown runs here to
   // keep the notice honest and to re-enable the button by itself.

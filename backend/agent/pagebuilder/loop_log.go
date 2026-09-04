@@ -39,7 +39,7 @@ var (
 
 func initBuilderLog() {
 	builderLogInitOnce.Do(func() {
-		if !core.Env.IS_LOCAL {
+		if !core.Env.IS_DEV_ARG {
 			return
 		}
 		builderLogRoot := builderPromptLogRoot()
@@ -64,7 +64,7 @@ type turnLog struct {
 // newTurnLog allocates a turn code, creates its folder, and returns the logger.
 // Returns nil (no-op) outside local dev or if the folder can't be created.
 func newTurnLog(modeID int, activeModel string) *turnLog {
-	if !core.Env.IS_LOCAL {
+	if !core.Env.IS_DEV_ARG {
 		return nil
 	}
 	initBuilderLog()

@@ -1,3 +1,53 @@
+## An insecure origin has no WebCrypto, so an empty CipherKey asks for the UserInfo in clear
+
+**Context** — `serve_tailscale` hands the dev app out at `http://100.x.y.z:3572`. That origin is not
+a secure context (only https and loopback are), so the browser never defines `crypto.subtle`, and
+`parseLogin` died on `Cannot read properties of undefined (reading 'importKey')` — the login POST
+had already succeeded, so the token and the access blobs were in hand and only the AES-GCM decrypt
+of `UserInfo` failed. Serving the dev app over real HTTPS would need `tailscale serve`, tailnet
+certs, and the Go API moved behind the same origin to dodge mixed content: a lot of machinery for a
+dev-only convenience.
+
+**Decision** — The client decides. `makeCipherKey` (`frontend/services/login.ts`) returns `''` when
+`crypto.subtle` is absent, and `MakeUsuarioResponse` reads an empty key as "this browser cannot
+decrypt": on a dev launch it answers `UserInfoPlain` (the same JSON, unciphered) instead of
+`UserInfo`, and otherwise errors exactly as before. The per-caller `CipherKey` checks in `PostLogin`,
+`PostSignUpCompany` and `DevLogin` were removed or relaxed so the rule lives in the one function all
+four login paths already funnel through.
+
+**Rationale** — Keying the fallback on the *client's* capability rather than on the environment alone
+keeps localhost dev exercising the real encrypt/decrypt path, so a break in it still surfaces before
+production. `UserInfo` was never a trust boundary anyway: the client generates `CipherKey` and sends
+it in the request body in clear, so anyone who can read the response can read the key — the real
+session credential is `UserToken`, which is unaffected. The cost is a second response shape that only
+a dev backend can emit. `makeCipherKey` also replaced the hardcoded `"12341234..."` key the login had
+been sending, and merged the duplicate copy in `RegistrationModal.svelte`.
+## Serving dev over Tailscale: the browser's own hostname is the API host
+
+**Context** — Opening the dev app from another machine on the tailnet needed nothing on the
+listening side: the frontend proxy (`scripts/proxy-server.js`) already binds `0.0.0.0`, the Go
+backend binds `:<server.port>` and fareward binds `0.0.0.0:14013`. What broke was purely the URL the
+browser builds. `core/env.ts` set `_isLocal` only for `localhost`/`127.0.0.1`, so a page served at
+`100.64.0.2:3572` never got the "Local" entry in the login endpoint selector, and the entry itself
+hardcoded `http://localhost:<port>/`, which on the remote machine points at *its own* loopback.
+
+**Decision** — `serve_tailscale` in `config.toml` (root table). `start.js` resolves the tailnet
+address with `tailscale ip -4` and passes it as `GENIX_TAILSCALE_HOST`; `scripts/setup-env.js`
+writes it to `.env` as `PUBLIC_TAILSCALE_HOST`. `core/env.ts` treats that host as local, and builds
+the local endpoint from `window.location.hostname` instead of the literal `localhost`.
+
+**Rationale** — `tailscale serve` was the other option and would have given HTTPS on a MagicDNS
+name, but this tailnet reports `CertDomains: None` (a self-hosted control server, MagicDNS suffix
+`example.com`), so there is no cert to issue and `--https` cannot work. Plain HTTP on the tailnet
+address needs no new listener, no `tailscale serve reset` on exit, and no second mount for the API —
+an HTTPS page calling `http://…:14010` would have been blocked as mixed content anyway. Deriving the
+API host from `window.location.hostname` rather than from `PUBLIC_TAILSCALE_HOST` means the endpoint
+is right for *any* address the page is reached at, including a plain LAN IP, and is identical to the
+old behaviour on localhost. `PUBLIC_TAILSCALE_HOST` is still needed for the `_isLocal` test, which
+cannot be inferred from the hostname without guessing at CGNAT ranges. Cost: one more `PUBLIC_` var,
+and the flag only takes effect through `start.js` — running `vite dev` by hand still serves
+localhost-only endpoints.
+
 ## Svelte HMR is enabled in dev (no more full page reloads)
 
 **Context** — `compilerOptions.hmr: false` was set in both `svelte.config.js` and

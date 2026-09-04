@@ -174,7 +174,10 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		args.Route = strings.Join(pathSegments[1:], "/")
 	}
 
-	core.Log("Route:", args.Route)
+	// The caller's address next to the route: without it a burst of rejected requests for routes
+	// this app does not serve (VPN-appliance scanners probe /dana-na, /remote/login and friends)
+	// reads as an application error instead of as traffic from somewhere worth identifying.
+	core.Log("Route:", args.Route, "clientIP:", args.ClientIP)
 	handlerResponse := core.HandlerResponse{Encoding: args.Encoding}
 
 	// Los es públicos comienzan con "p-" y no necesitan validacion del user Tocken
@@ -267,7 +270,7 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 			}
 		}
 
-		if !core.Env.IS_SERVERLESS && !core.Env.IS_LOCAL {
+		if !core.Env.IS_SERVERLESS && !core.Env.IS_DEV_ARG {
 			registerLocalRequestUsage(args, &handlerResponse, requestStartedAt)
 		}
 	}

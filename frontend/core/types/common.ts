@@ -37,7 +37,9 @@ export interface ILoginResult {
   UserNames: string;
   UserEmail: string;
   UserToken: string;
-  UserInfo: string;
+  // Ciphered with the cipher key sent on login; UserInfoPlain replaces it when none was sent.
+  UserInfo?: string;
+  UserInfoPlain?: string;
   AccesosComputed: string;
   TokenExpTime: number;
   CompanyID: number;

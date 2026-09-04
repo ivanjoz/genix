@@ -90,6 +90,58 @@ const backendGoPath = path.join(__dirname, 'backend')
 console.log("Instalando los paquetes de Go (si no lo están)...")
 execSync('go mod download', { stdio: "inherit", shell: true, cwd: backendGoPath })
 
+// Tailscale. serve_tailscale = true en config.toml expone el frontend de desarrollo en la IP
+// del tailnet para poder abrir la app desde otra máquina. El backend (:3589), fareward
+// (0.0.0.0:14013) y el proxy del frontend ya escuchan en todas las interfaces, así que lo
+// único que hace falta es que el navegador remoto sepa a qué host llamar: esa IP viaja al
+// frontend por GENIX_TAILSCALE_HOST y termina en PUBLIC_TAILSCALE_HOST del .env.
+const readConfigText = () => {
+  const configPath = process.env.GENIX_CONFIG_FILE || path.join(__dirname, 'config.toml')
+  return fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf-8') : ''
+}
+
+// Se leen dos claves sueltas con regex en vez de cargar un parser de TOML: config.toml ya lo
+// parsea de verdad el backend (Go) y el frontend (Bun.TOML), y el launcher sólo necesita un
+// bool y un puerto para decidir qué levantar e imprimir.
+const readServeTailscaleFlag = () => {
+  // Sólo la tabla raíz -- lo que va antes del primer [section] -- para no leer por error una
+  // clave del mismo nombre dentro de otra sección.
+  const rootTable = readConfigText().split(/^\s*\[/m)[0]
+  return /^\s*serve_tailscale\s*=\s*true\s*$/m.test(rootTable)
+}
+
+// El puerto del backend sale de [server].port, no de una constante: aquí vale 14010, y una
+// URL impresa con el 3589 por defecto mandaría a la otra máquina a un puerto cerrado.
+const readBackendPort = () => {
+  const afterSectionHeader = readConfigText().split(/^\s*\[server\]\s*$/m)[1]
+  if (!afterSectionHeader) { return '3589' }
+  const portMatch = afterSectionHeader.split(/^\s*\[/m)[0].match(/^\s*port\s*=\s*(\d+)/m)
+  const parsedPort = portMatch ? Number.parseInt(portMatch[1], 10) : 0
+  return parsedPort > 0 ? String(parsedPort) : '3589'
+}
+
+// La IP la da el propio tailscale: preguntarle es a la vez el chequeo de "está instalado" y
+// el de "está conectado", que es lo que importa. Un binario presente pero sin IP asignada no
+// sirve para nada aquí.
+const resolveTailscaleHost = () => {
+  try {
+    const addresses = execSync('tailscale ip -4', {
+      encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore']
+    })
+    return (addresses || '').trim().split('\n')[0].trim()
+  } catch (error) {
+    return ''
+  }
+}
+
+const serveTailscale = readServeTailscaleFlag()
+const tailscaleHost = serveTailscale ? resolveTailscaleHost() : ''
+if (serveTailscale && !tailscaleHost) {
+  console.log('serve_tailscale = true, pero tailscale no responde con una IP: se sirve sólo en localhost.')
+} else if (tailscaleHost) {
+  console.log(`Tailscale detectado: sirviendo también en ${tailscaleHost}`)
+}
+
 // Remove enviroment variables
 const ENV_PATH = path.join(__dirname, '.env')
 if (fs.existsSync(ENV_PATH)) { fs.unlinkSync(ENV_PATH) }
@@ -150,11 +202,20 @@ const runScripts = () => {
   console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${MAGENTA_BAR}${MAGENTA_BAR} Rate limiter (Rust)`)
 
   // Run all scripts in parallel
-  runScript(FRONTEND_SCRIPT, YELLOW_BAR, frontendPath)
+  runScript(FRONTEND_SCRIPT, YELLOW_BAR, frontendPath, {
+    GENIX_TAILSCALE_HOST: tailscaleHost
+  })
   startBackendGo()
   runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, rateLimiterPath, {
     RUST_LOG: process.env.RUST_LOG || "fareward=debug"
   })
+
+  if (tailscaleHost) {
+    console.log(`\nDesde otra máquina del tailnet:`)
+    console.log(`   App:      http://${tailscaleHost}:${FRONTEND_PROXY_PORT}`)
+    console.log(`   API (Go): http://${tailscaleHost}:${readBackendPort()}`)
+    console.log(`   En el selector de endpoint del login, "Local" ya apunta a esta IP.\n`)
+  }
 }
 
 // Function to run a script and capture output.

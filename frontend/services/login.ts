@@ -25,16 +25,24 @@ export const getPublicCompanyName = async (companyID: number): Promise<IPublicCo
   return companiesByID.get(companyID)
 }
 
-const makeRamdomString = (len?: number) => {
-	return "123412341234123412341234123412341234".substring(0, len || 32)
+// The backend ciphers UserInfo with this key and parseLogin decrypts it with the same one, so it
+// only has to be unpredictable and exactly 32 characters (AES-256).
+//
+// Returning '' is a request, not a failure: AES-GCM lives in crypto.subtle, which the browser only
+// exposes in a secure context (https, or localhost). serve_tailscale hands the dev app out over
+// plain http on a tailnet IP, so there is nothing to decrypt with — an empty key asks the backend
+// for UserInfoPlain instead. Only a backend started as `go run . dev` grants it; any deployed one
+// answers "El CipherKey es necesario.".
+export const makeCipherKey = () => {
+  if (typeof crypto === 'undefined' || !crypto.subtle) { return '' }
+  const randomBytes = crypto.getRandomValues(new Uint8Array(16))
+  return [...randomBytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 export const sendUserLogin = async (data: ILogin): Promise<any> => {
   let loginInfo: ILoginResult
-  data.CipherKey = makeRamdomString(32)
+  data.CipherKey = makeCipherKey()
 
-  console.log(data)
-  
   try {
     loginInfo = await POST({
       data,
@@ -69,7 +77,7 @@ export const sendUserLogin = async (data: ILogin): Promise<any> => {
 
 export const reloadLogin = async (): Promise<any> => {
   let loginInfo: ILoginResult
-  const CipherKey = makeRamdomString(32)
+  const CipherKey = makeCipherKey()
 
   try {
     loginInfo = await GET({
@@ -95,7 +103,7 @@ export const reloadLogin = async (): Promise<any> => {
 }
 
 // applyDevLogin mints a password-less session for a "<companyID>:<userID>" pair through the
-// p-dev-login route, which the backend only answers with is_local and from loopback. It exists so
+// p-dev-login route, which the backend only answers on a `dev` launch and from loopback. It exists so
 // the headless dev browser (scripts/agent_browser) can attach to the app as any user: no test
 // user's password is stored anywhere, so no automated tool could otherwise reach a logged-in page.
 //
@@ -104,7 +112,7 @@ export const reloadLogin = async (): Promise<any> => {
 // eventually drift from the first.
 export const applyDevLogin = async (companyAndUser: string): Promise<void> => {
   const [companyID, userID] = companyAndUser.split(':')
-  const CipherKey = makeRamdomString(32)
+  const CipherKey = makeCipherKey()
 
   try {
     const loginInfo: ILoginResult = await GET({

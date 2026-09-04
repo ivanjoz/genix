@@ -1436,7 +1436,13 @@ func MakeB64UrlDecode(contentString string) string {
 	return contentString
 }
 
+// MakeCipherKey repeats SECRET_PHRASE up to the 32 bytes AES-256 needs. An empty phrase returns
+// empty instead of looping: appending "" can never reach 32, so the old loop spun forever, turning
+// a missing secret_phrase into a hung goroutine with no error and no log.
 func MakeCipherKey() string {
+	if len(Env.SECRET_PHRASE) == 0 {
+		return ""
+	}
 	key := ""
 	for len(key) < 32 {
 		key += Env.SECRET_PHRASE
@@ -1444,10 +1450,24 @@ func MakeCipherKey() string {
 	return key[:32]
 }
 
-func Encrypt(data []byte, cypherKey_ ...string) ([]byte, error) {
+// resolveCipherKey picks the explicit key over the SECRET_PHRASE default and rejects anything that
+// is not a full AES-256 key. It is validated rather than sliced because cypherKey_[0][:32] panicked
+// on a short key, and the keys come from clients (login, signup, p-dev-login).
+func resolveCipherKey(cypherKey_ []string) (string, error) {
 	cypherKey := MakeCipherKey()
 	if len(cypherKey_) == 1 {
-		cypherKey = cypherKey_[0][:32]
+		cypherKey = cypherKey_[0]
+	}
+	if len(cypherKey) < 32 {
+		return "", Err("La clave de cifrado debe tener al menos 32 caracteres, tiene", len(cypherKey))
+	}
+	return cypherKey[:32], nil
+}
+
+func Encrypt(data []byte, cypherKey_ ...string) ([]byte, error) {
+	cypherKey, err := resolveCipherKey(cypherKey_)
+	if err != nil {
+		return nil, err
 	}
 
 	block, err := aes.NewCipher([]byte(cypherKey))
@@ -1475,9 +1495,11 @@ func Encrypt(data []byte, cypherKey_ ...string) ([]byte, error) {
 }
 
 func Decrypt(encryptedData []byte, cypherKey_ ...string) ([]byte, error) {
-	cypherKey := MakeCipherKey()
-	if len(cypherKey_) == 1 {
-		cypherKey = cypherKey[:32]
+	// The old body sliced MakeCipherKey()'s result instead of the argument, so an explicit key was
+	// accepted and then silently ignored in favour of SECRET_PHRASE.
+	cypherKey, err := resolveCipherKey(cypherKey_)
+	if err != nil {
+		return nil, err
 	}
 
 	block, err := aes.NewCipher([]byte(cypherKey))

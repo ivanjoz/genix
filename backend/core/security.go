@@ -54,8 +54,15 @@ func ParseGenixSearchURL(raw string) (string, int) {
 }
 
 type EnvStruct struct {
-	IS_PROD       bool
-	IS_LOCAL      bool
+	IS_PROD bool
+	// IS_DEV_ARG is true when the process was launched as `go run . dev`, which only start.js does.
+	// It replaced the config key is_local as the "this is a development machine" signal, and the
+	// name states why: a config value is something a deploy can carry by mistake, and everything
+	// keyed on this — verbose logs, the agent prompt log, DevLogin's password-less session mint,
+	// the plaintext UserInfo — is a relaxation that must never survive being compiled and shipped.
+	// A deployed binary is started with no arguments (systemd ExecStart, Lambda), so it cannot be
+	// talked into any of them by its configuration. Set by ReadDevArgument.
+	IS_DEV_ARG    bool
 	IS_SERVERLESS bool
 	// LAMBDA_RESPONSE_STREAMING must mirror the deployed Function URL's InvokeMode. When true the
 	// handler returns a RESPONSE_STREAM body (raw bytes, no base64, 20 MB ceiling); when false it
@@ -246,7 +253,6 @@ type ModelRouting struct {
 // asignación de PopulateVariables, o queda silenciosamente en su cero-valor.
 type fileConfig struct {
 	AppName        string `toml:"app_name"`
-	IsLocal        bool   `toml:"is_local"`
 	Environment    string `toml:"environment"`
 	AdminPassword  string `toml:"admin_password"`
 	SecretPhrase   string `toml:"secret_phrase"`
@@ -410,11 +416,11 @@ const (
 // the one running beside it, not whatever build the server happens to have. Silently crossing
 // that boundary fails as a closed connection with no diagnosis on either side. Dialing the
 // deployed daemon from a dev machine stays possible, but it has to be asked for.
-func makeFarewardAddress(host string, port int, public, isLocal, useRemoteDevHost bool) string {
+func makeFarewardAddress(host string, port int, public, isDevArg, useRemoteDevHost bool) string {
 	if port <= 0 {
 		port = defaultFarewardPort
 	}
-	if !public || (isLocal && !useRemoteDevHost) {
+	if !public || (isDevArg && !useRemoteDevHost) {
 		return fmt.Sprintf("127.0.0.1:%d", port)
 	}
 	host = strings.TrimSpace(host)
@@ -426,7 +432,6 @@ func makeFarewardAddress(host string, port int, public, isLocal, useRemoteDevHos
 
 func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.APP_NAME = file.AppName
-	env.IS_LOCAL = file.IsLocal
 	env.ENVIROMENT = file.Environment
 	env.ADMIN_PASSWORD = file.AdminPassword
 	env.SECRET_PHRASE = file.SecretPhrase
@@ -478,9 +483,11 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
 	env.MODELS = file.Models
+	// env.IS_DEV_ARG, not a config field: PopulateVariables sets it before this runs, precisely so
+	// that which daemon a process dials cannot be changed by editing a file.
 	env.FAREWARD_ADDRESS = makeFarewardAddress(
 		file.Fareward.Host, file.Fareward.Port, file.Fareward.Public,
-		file.IsLocal, file.Fareward.UseRemoteDevHost)
+		env.IS_DEV_ARG, file.Fareward.UseRemoteDevHost)
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
@@ -530,6 +537,19 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 
 var Env *EnvStruct
 var BuildDate string
+
+// ReadDevArgument reports whether "dev" was passed on the command line. start.js is the only
+// launcher that passes it (BACKEND_GO_SCRIPT = "go run . dev"); the deployer, systemd and Lambda
+// all start the binary without arguments.
+func ReadDevArgument() bool {
+	// os.Args[0] is the binary path and could itself be named "dev", so it is skipped.
+	for _, argument := range os.Args[1:] {
+		if argument == "dev" {
+			return true
+		}
+	}
+	return false
+}
 
 func PopulateVariables() {
 	log.Printf("[core.config] populate_variables")
@@ -603,9 +623,12 @@ func PopulateVariables() {
 		}
 		panic(fmt.Sprintf("no se pudo parsear %s como TOML: %v", source, err))
 	}
+	// Before applyToEnv, which reads it for the fareward address. Nothing in the file can set or
+	// clear it: the flag describes how this process was launched. See IS_DEV_ARG.
+	Env.IS_DEV_ARG = ReadDevArgument()
 	parsedFile.applyToEnv(Env)
 
-	log.Printf("[core.config] config_parsed is_local=%t", Env.IS_LOCAL)
+	log.Printf("[core.config] config_parsed is_dev_arg=%t", Env.IS_DEV_ARG)
 
 	if len(Env.DYNAMO_TABLE) == 0 {
 		Env.DYNAMO_TABLE = Env.APP_NAME + "-db"

@@ -270,6 +270,40 @@ func resolveServerPort() string {
 	return ":3589"
 }
 
+// tailnetCGNATBlock is the range Tailscale assigns every node (100.64.0.0/10). Matching on the
+// address rather than on an interface name keeps this working whether the device is tailscale0,
+// utun on macOS or a userspace one.
+var tailnetCGNATBlock = net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+
+// resolveDevListenAddresses returns the addresses a dev backend binds, instead of every interface.
+//
+// A dev run holds the production database credentials and answers on a port with no nginx and no
+// firewall rule in front of it, so "all interfaces" hands it to the LAN and to anything forwarded
+// to this host — which is how VPN-appliance scanner traffic ends up in the request log. Loopback
+// serves the machine itself, and the tailnet address is what serve_tailscale needs for the browser
+// on another node; nothing else has a reason to reach it.
+//
+// An empty result means no tailnet address was found, and the caller falls back to the port alone.
+func resolveDevListenAddresses(serverPort string) []string {
+	addresses := []string{"127.0.0.1" + serverPort}
+
+	interfaceAddresses, err := net.InterfaceAddrs()
+	if err != nil {
+		core.Log("No se pudieron enumerar las interfaces, se escucha sólo en loopback:", err)
+		return addresses
+	}
+	for _, interfaceAddress := range interfaceAddresses {
+		addressCIDR, ok := interfaceAddress.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		if ipv4 := addressCIDR.IP.To4(); ipv4 != nil && tailnetCGNATBlock.Contains(ipv4) {
+			addresses = append(addresses, ipv4.String()+serverPort)
+		}
+	}
+	return addresses
+}
+
 // bootstrapCronSchedulers starts the VPS cron watcher and seeds the recurring products rebuild.
 // It recovers on its own because a panic in a goroutine takes the whole process down, and a cron
 // seed that cannot reach the database is not a reason to kill a working HTTP server.
@@ -341,16 +375,16 @@ func main() {
 		}
 	}
 
-	if core.Env.IS_LOCAL {
+	if core.Env.IS_DEV_ARG {
 		core.Env.LOGS_FULL = true
 	}
 
 	// Mirror runtime logging flags into db so query debug logs follow the
-	// resolved environment: LOGS_FULL → level 2 (verbose), IS_LOCAL → level
+	// resolved environment: LOGS_FULL → level 2 (verbose), IS_DEV_ARG → level
 	// 1 (basic), otherwise silent.
 	dbLogLevel := 0
 	/*
-		if core.Env.IS_LOCAL {
+		if core.Env.IS_DEV_ARG {
 			dbLogLevel = 1
 		}
 		if core.Env.LOGS_FULL {
@@ -396,7 +430,7 @@ func main() {
 	// Si se está desarrollando en local
 	if !core.Env.IS_SERVERLESS {
 		exec.StartUsageLogFlushWorker()
-		if !core.Env.IS_LOCAL {
+		if !core.Env.IS_DEV_ARG {
 			// Off the main goroutine on purpose: ScheduleCronAction panics when its query fails,
 			// and on a VPS (IS_SERVERLESS=false) no recover is installed, so a database that is
 			// briefly unreachable at boot would otherwise stop the HTTP listener from ever
@@ -452,7 +486,40 @@ func main() {
 			},
 		}
 
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		// A deployed binary keeps binding every interface: nginx, the health check and the Function
+		// URL all reach it by a different address, and narrowing that is a deploy decision, not this
+		// one. Only a dev launch restricts itself. See resolveDevListenAddresses.
+		if !core.Env.IS_DEV_ARG {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				core.Log("HTTP server error:", err)
+			}
+			return
+		}
+
+		// One http.Server, one listener per address: Serve can be called concurrently on the same
+		// server, and sharing it keeps the timeouts and the ConnState metrics identical on both.
+		devListeners := []net.Listener{}
+		for _, listenAddress := range resolveDevListenAddresses(serverPort) {
+			listener, err := net.Listen("tcp", listenAddress)
+			if err != nil {
+				// Not fatal on its own: losing the tailnet address still leaves a usable loopback
+				// backend, and the address that failed is named so the cause is visible.
+				core.Log("No se pudo escuchar en", listenAddress, "::", err)
+				continue
+			}
+			core.Log("Escuchando en", listenAddress)
+			devListeners = append(devListeners, listener)
+		}
+		if len(devListeners) == 0 {
+			core.Log("HTTP server error: ninguna dirección de desarrollo pudo abrirse")
+			return
+		}
+
+		serveErrors := make(chan error, len(devListeners))
+		for _, listener := range devListeners {
+			go func(listener net.Listener) { serveErrors <- srv.Serve(listener) }(listener)
+		}
+		if err := <-serveErrors; err != nil && err != http.ErrServerClosed {
 			core.Log("HTTP server error:", err)
 		}
 	} else {

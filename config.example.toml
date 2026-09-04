@@ -2,7 +2,6 @@
 # config.toml está en .gitignore: nunca se versiona.
 
 app_name       = "genix"
-is_local       = true
 environment    = ""
 admin_email    = "admin@example.com"
 admin_password = "admin_password"
@@ -12,6 +11,11 @@ secret_phrase  = "cambie_esta_frase"
 # X-Bridge-Auth del SSE bridge (ambos en fareward/). Separado de secret_phrase para poder
 # rotarlo sin invalidar todas las sesiones activas.
 internal_apikey = "cambie_esta_clave"
+
+# serve_tailscale expone el frontend de desarrollo y la API en la IP del tailnet, para abrir
+# la app desde otra máquina. El launcher (start.js) sólo lo aplica si `tailscale` está
+# instalado y tiene IP asignada; si no, arranca en localhost como siempre.
+serve_tailscale = false
 github_account = "mi-cuenta"
 
 # Puerto TCP crudo del proceso fareward. Sección propia y no una clave de [rate_limit]
@@ -26,7 +30,8 @@ github_account = "mi-cuenta"
 # public = true expone el puerto a Internet: las tramas van autenticadas con HMAC pero SIN cifrar,
 # así que sólo tiene sentido cuando el backend corre fuera del servidor (p. ej. en Lambda).
 #
-# use_remote_dev_host sólo aplica con is_local = true: por defecto una máquina de desarrollo marca
+# use_remote_dev_host sólo aplica a un backend arrancado con `go run . dev`: por defecto una
+# máquina de desarrollo marca
 # su propio daemon aunque host apunte a un servidor, porque el protocolo va versionado
 # ("fareward:vN") y el daemon que corresponde a este checkout es el que corre al lado. Ponerlo en
 # true marca el daemon desplegado, que puede tener otro build u otro internal_apikey; el síntoma de

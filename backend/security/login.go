@@ -59,9 +59,8 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 		core.Print(body)
 		return req.MakeErr("El user/password enviado no posee el formato correcto.")
 	}
-	if len(body.CipherKey) == 0 {
-		return req.MakeErr("El CipherKey es necesario.")
-	}
+	// The CipherKey is validated by MakeUsuarioResponse, which is the only place that knows when an
+	// empty one is admissible (see the UserInfoPlain branch there).
 
 	usuarios := []coreTypes.User{}
 	if cloud.IsDataMirrorEnabled() {
@@ -155,21 +154,37 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 	}
 
 	userInfoJson := core.ToJsonNoErr(userInfo)
-	userInfoJsonEncrypted, err := core.Encrypt([]byte(userInfoJson), cipherKey)
-
-	if err != nil {
-		return nil, core.Err("Error al encriptar la información del user.", err)
-	}
 
 	response := map[string]any{
 		"UserID":             user.ID,
 		"UserToken":          core.BytesToBase64(usuarioTokenCBOR, true),
 		"TokenExpTime":       time.Now().Unix() + (4 * 60 * 40),
-		"UserInfo":           core.BytesToBase64(userInfoJsonEncrypted),
 		"AccesosComputed":    core.BytesToBase64(accesosBlob, true),
 		"AccesosSubComputed": core.BytesToBase64(accesosSubBlob, true),
 		"CompanyID":          user.CompanyID,
 	}
+
+	// An empty CipherKey means "this browser cannot decrypt". Only a page served from a secure
+	// context (https, or localhost) gets window.crypto.subtle, and serve_tailscale hands the dev
+	// app out over plain http on a tailnet IP, which is neither — so AES-GCM is simply not there.
+	// Such a client asks for the plaintext by sending no key.
+	//
+	// Granted on IS_DEV_ARG: the argument comes from `go run . dev` and start.js is the only thing
+	// that passes it, so no deployed binary can be configured into answering this.
+	if cipherKey == "" {
+		if !core.Env.IS_DEV_ARG {
+			return nil, core.Err("El CipherKey es necesario.")
+		}
+		core.Log("MakeUsuarioResponse:: sin CipherKey, se envía el UserInfo en claro (arranque dev)")
+		response["UserInfoPlain"] = userInfoJson
+		return response, nil
+	}
+
+	userInfoJsonEncrypted, err := core.Encrypt([]byte(userInfoJson), cipherKey)
+	if err != nil {
+		return nil, core.Err("Error al encriptar la información del user.", err)
+	}
+	response["UserInfo"] = core.BytesToBase64(userInfoJsonEncrypted)
 
 	return response, nil
 }
