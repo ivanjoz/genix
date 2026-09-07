@@ -51,6 +51,8 @@ export interface IWarehouseProductMovementGroupRecord {
 export const movimientoTipos = [
   { id: 1, name: 'Entrada Manual' },
   { id: 2, name: 'Salida Manual' },
+  { id: 8, name: 'Entrega (Venta)' },
+  { id: 9, name: 'Reingreso (Anulación Venta)' },
 ]
 
 export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<IWarehouseProductMovement[]> => {

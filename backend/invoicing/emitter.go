@@ -28,7 +28,7 @@ func ReserveDocument(
 	companyID, userID int32, order *sales.SaleOrder, series *types.InvoiceSeries,
 ) (*types.InvoiceDocument, error) {
 
-	if existing, err := FindBySaleOrder(companyID, order.ID); err != nil {
+	if existing, err := types.FindBySaleOrder(companyID, order.ID); err != nil {
 		return nil, err
 	} else if existing != nil {
 		return nil, fmt.Errorf("la venta ya tiene el comprobante %v", existing.Number())
@@ -160,28 +160,6 @@ func DocumentFromRow(row *types.InvoiceDocument) *model.Document {
 		})
 	}
 	return document
-}
-
-// FindBySaleOrder answers whether a sale has already been invoiced. Asked before
-// every emission, because the second document for one sale is the mistake that
-// cannot be undone without a credit note.
-func FindBySaleOrder(companyID int32, saleOrderID int64) (*types.InvoiceDocument, error) {
-	documents := []types.InvoiceDocument{}
-	query := db.Query(&documents)
-	query.Select().CompanyID.Equals(companyID).SaleOrderID.Equals(saleOrderID)
-
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al verificar si la venta ya fue facturada: %w", err)
-	}
-	for index := range documents {
-		// A rejected document does not exist for SUNAT, and neither does one
-		// that was discarded, so in both cases the sale may be invoiced again.
-		if documents[index].Status == 0 || documents[index].State == types.InvoiceRejected {
-			continue
-		}
-		return &documents[index], nil
-	}
-	return nil, nil
 }
 
 // LoadDocument reads one document by its packed key.

@@ -1,5 +1,13 @@
 # Sub-Accesses Plan
 
+> **SUPERSEDED (input format only).** The `accesoID*100 + subID` array and the `accesoID*10 + nivel`
+> arrays this document describes are gone: a profile and a user now both store one
+> `[]AccesoGrantRecord` in an `accesos_grants` blob, with the sub-accesses nested inside each grant.
+> See `docs/ACCESO_GRANTS_STORAGE_PLAN.md`. Everything here about the **derived** blobs
+> (`accesos_computed`, `accesos_sub_computed`, the fareward wire format, the "Todos" rule and the
+> catalog) still holds — only the editable input shape changed.
+
+
 > **Status.** Every step is implemented. Steps 1, 2, 3 and 5 landed in `3d04ec13`; steps 4 and 6 —
 > the recompute script and the frontend — plus the remaining tests and the RATIONALE entries are in
 > the working tree. Backend build/vet/test, `check_tables`, `check_module_imports`, `cargo test`

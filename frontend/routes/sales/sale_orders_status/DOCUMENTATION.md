@@ -7,12 +7,14 @@ status: implemented
 visibility: tenant
 description_en: >-
   Work queue for existing sale orders (pedidos de venta): browse them grouped as Pending
-  Payment, Pending Delivery, or Completed, filter by customer or product, and register the
-  cash-register payment or the dispatch-warehouse delivery for a selected order.
+  Payment, Pending Delivery, Completed or Annulled, filter by customer or product, and
+  register the cash-register payment, the dispatch-warehouse delivery, or the annulment of a
+  selected order.
 description_es: >-
   Cola de trabajo para pedidos de venta existentes: consultarlos agrupados en Pendiente de
-  Pago, Pendiente de Entrega o Finalizados, filtrar por cliente o producto, y registrar el
-  pago (con la caja) o la entrega (con el almacén de despacho) de un pedido seleccionado.
+  Pago, Pendiente de Entrega, Finalizados o Anuladas, filtrar por cliente o producto, y
+  registrar el pago (con la caja), la entrega (con el almacén de despacho) o la anulación de
+  un pedido seleccionado.
 ---
 
 # Sales Management (Gestión Ventas)
@@ -25,7 +27,8 @@ Pedidos`) is the operational queue for sale orders (`pedidos de venta`) that alr
 It lets a user find an order by its current workflow stage, open it to see its status,
 total, debt, and product lines, and push it through the two remaining actions of its
 lifecycle: registering the customer's payment (`pago`) and registering the warehouse
-delivery (`entrega`).
+delivery (`entrega`). It is also where an order is annulled (`anulado`), which reverses the
+payment and the stock movement it had already produced.
 
 This page does not create new sale orders — that happens at **Point of Sale (Punto de
 Venta)** (`/sales/sale_order_create`). It also does not offer a date-range historical search
@@ -40,15 +43,15 @@ across every order regardless of status; that broader lookup belongs to **Sales 
   outstanding **Debt (Deuda)**, and a numeric **Status (Estado)**.
 - Status values (`ss`) form a small state machine: **1 Generated (Generado)** — created,
   neither paid nor delivered; **2 Paid (Pagado)**; **3 Delivered (Entregado)**; **4
-  Completed (Finalizado)** — both paid and delivered. Status **0 (Anulado/annulled)**
-  exists in the data model but this page's data source filters those rows out, so an
-  annulled order never appears in any of its three tabs.
-- The page groups orders into three tabs (`OptionsStrip`), each mapped to a specific
+  Completed (Finalizado)** — both paid and delivered; **0 Annulled (Anulada)** — voided,
+  with whatever it had collected and delivered given back. Annulment is **terminal**: an
+  annulled order can never return to another status.
+- The page groups orders into four tabs (`OptionsStrip`), each mapped to a specific
   backend query, not simply to one status value: **Pend. Payment (Pend. Pago)** loads
   orders in status 1 (Generated) or 3 (Delivered but unpaid); **Pend. Delivery (Pend.
   Entrega)** loads orders in status 1 (Generated) or 2 (Paid but undelivered); **Completed
-  (Finalizadas)** loads only status 4. Switching tabs re-queries the server; it is not a
-  local re-filter of one big list.
+  (Finalizadas)** loads only status 4; **Annulled (Anuladas)** loads only status 0.
+  Switching tabs re-queries the server; it is not a local re-filter of one big list.
 - In the results table, two independent letter chips summarize progress per row: **P**
   (green, checked when status is 2 or 4) means paid, **E** (blue, checked when status is 3
   or 4) means delivered. These are separate from the textual **Status** shown inside the
@@ -67,8 +70,8 @@ the customer, or one already closed — and open it to review or act on it.
 ### Where to find it (Dónde encontrarlo)
 
 Open **Commercial (Comercial) → Sales Management (Gestión Ventas)** at
-`/sales/sale_orders_status`. Choose one of the three tabs (**Pend. Pago**, **Pend. Entrega**,
-**Finalizadas**) and optionally use the **CLIENTE ::** and **PRODUCTO ::** selectors above
+`/sales/sale_orders_status`. Choose one of the four tabs (**Pend. Pago**, **Pend. Entrega**,
+**Finalizadas**, **Anuladas**) and optionally use the **CLIENTE ::** and **PRODUCTO ::** selectors above
 the table. Click a row to open the order in the right-side detail layer.
 
 ### Required information and prerequisites (Requisitos previos)
@@ -217,19 +220,69 @@ refreshes.
   insuficiente`.
 
 <!-- DOC-ID: capability.cancel -->
-## Cancel button (Botón de anular)
+## Annul an order (Anular un pedido)
 
-The order detail layer shows a trash-icon **Cancel order (Anular pedido)** button in its
-title bar. Clicking it currently only shows a "Cancellation coming soon (Anulación
-disponible próximamente)" notice; it does not call the server, does not change the order's
-stored status, and does not reverse any payment or stock movement. Treat this control as not
-implemented yet rather than as a way to void an order.
+### User intention (Intención del usuario)
+
+`Necesito anular una venta que se registró por error`, `el cliente devolvió todo y hay que
+deshacer el pedido`, `cómo cancelo un pedido ya pagado y entregado`.
+
+### Where to find it (Dónde encontrarlo)
+
+Open the order from any tab; the detail layer shows a red trash-icon **Anular pedido** button
+in its title bar. Pressing it replaces the payment/delivery panels with the annulment form.
+The button is only shown to users whose profile holds the **Anular Venta** sub-access of
+**Gestión Ventas**; without it the button is absent and the server refuses the operation.
+
+### Required information and prerequisites (Requisitos previos)
+
+- A **reason (motivo)** is mandatory, free text up to 200 characters.
+- If the order was paid, a **Caja para la Devolución** must be chosen. It does **not** have to
+  be the cash register or bank account that collected the money — pick wherever the refund is
+  physically taken from. The refund **amount** is not entered by the user: the server computes
+  it from the cash movements the order actually produced.
+- The order must not already be annulled, and must not have a live electronic invoice.
+
+### Business rules and rationale (Reglas y razón de negocio)
+
+- Annulment reverses whatever the order actually did, read from the ledgers rather than
+  assumed from its status: money collected is refunded, stock delivered re-enters the exact
+  warehouse, lot and serial it left from, and the sale is removed from the day's sales
+  summary. An order that was never paid refunds nothing; one that was never delivered moves
+  no stock.
+- An order with an issued electronic invoice (`comprobante electrónico`) **cannot** be
+  annulled here — SUNAT requires a credit note (`nota de crédito`), which this system does not
+  issue yet. The error names the document number.
+- Annulment is terminal and cannot be undone. To reinstate a sale, create a new one.
+- Repeating a failed annulment is safe: the server nets what it already gave back, so a retry
+  returns only the part that never left.
+
+### Result and side effects (Resultado y efectos)
+
+The order's status becomes **0 (Anulada)** and it moves to the **Anuladas** tab on the next
+query. A refund movement (`Devolución (Anulación Venta)`) appears on the chosen cash/bank
+account, lowering its balance; a `Reingreso (Anulación Venta)` stock movement appears for each
+delivered line; and the day's sales summary drops the order's quantities and amounts. The
+detail panel then shows when it was annulled, by whom, and the reason.
+
+### Limitations (Limitaciones)
+
+- Partial annulment is not supported: the whole order is voided or none of it.
+- The refund is a single movement to one cash/bank account even if the order was collected
+  across several.
+- Nothing checks that the returned stock physically exists — annulling a delivered order that
+  really did leave the premises re-adds stock that is not on the shelf.
+- No balance check is performed on the refund account; it can be driven negative.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
-- `¿Cómo anulo o cancelo un pedido de venta?` Actualmente no es posible desde esta página;
-  el botón de anular sólo muestra un aviso y no realiza ningún cambio.
-- Search terms: `anular pedido`, `cancelar venta`, `anulación disponible próximamente`.
+- `¿Cómo anulo o cancelo un pedido de venta?` Ábralo, presione el botón rojo de anular en el
+  título, indique el motivo y (si estaba pagado) la caja de la devolución.
+- `¿Puedo devolver el dinero desde otra caja?` Sí; la caja de la devolución se elige y no tiene
+  que ser la que cobró.
+- `¿Por qué no veo el botón de anular?` Su perfil no tiene el sub-acceso `Anular Venta`.
+- Search terms: `anular pedido`, `cancelar venta`, `devolución`, `motivo de anulación`,
+  `reingreso de stock`, `nota de crédito`.
 
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
@@ -242,6 +295,9 @@ implemented yet rather than as a way to void an order.
 - Whichever tab an order currently satisfies is purely a function of its stored status
   against that tab's query; there is no separate "hide/show" flag a user sets — the order
   moves tabs automatically as its status changes.
+- Annulment is the only transition that removes an order from the payment/delivery workflow
+  entirely: an annulled order can no longer be paid or delivered, and its panels are replaced
+  by the annulment record.
 
 <!-- DOC-ID: troubleshooting -->
 ## Common problems (Problemas comunes)
@@ -258,8 +314,14 @@ implemented yet rather than as a way to void an order.
 - **An order does not appear in the expected tab:** confirm its current status — Pend. Pago
   and Pend. Entrega both include status 1, so a brand-new order appears in both until it is
   paid and delivered.
-- **The Cancel button does nothing:** it is not wired to the server yet; it only displays a
-  notice.
+- **The annul button is not visible:** the profile lacks the `Anular Venta` sub-access of
+  `Gestión Ventas`. An administrator must tick it on the profile — holding the access itself
+  is not enough.
+- **"La venta tiene el comprobante ... emitido; requiere una nota de crédito.":** the order was
+  invoiced electronically and cannot be annulled from here.
+- **"Se requiere el motivo de la anulación.":** the reason box is empty or only spaces.
+- **"Se requiere la caja de la cual se devolverá el dinero." / "La caja seleccionada está
+  inactiva.":** the order was paid, so a refund account is required and it must be active.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
@@ -271,9 +333,12 @@ implemented yet rather than as a way to void an order.
 - **Sales Charts (Gráficos Ventas)**: visual/aggregated view of sales instead of the
   per-order action queue offered here.
 - **Cash & Banks (Cajas & Bancos)**: review the `Cobro (Venta)` movement and account balance
-  created after paying an order here.
+  created after paying an order here, and the `Devolución (Anulación Venta)` movement created
+  after annulling one.
 - **Stock Changes (Cambios Stock)**: review the stock movement created after delivering an
-  order here.
+  order here, and the `Reingreso (Anulación Venta)` movement created after annulling one.
+- **Users & Profiles (Usuarios & Perfiles)**: where the `Anular Venta` sub-access of
+  `Gestión Ventas` is granted to a profile.
 
 ### FILES
 
@@ -288,34 +353,42 @@ files:
     supports: [page-purpose, related-pages]
   - path: frontend/routes/sales/sale_orders_status/+page.svelte
     role: page
-    hash: sha256:0823d47f681dc029a6e900ee7fe7e1407baea786f37cd21907ec09263510eb40
+    hash: sha256:5f7f5b32fc36f5f70dac04bec597945bfeb6848654f9c68f5e4205a3e068b34e
     supports: [page-purpose, concepts, capability.browse-filter, capability.pay, capability.deliver, capability.cancel, rules, troubleshooting]
   - path: frontend/routes/sales/sale_orders_status/sale_order_status.svelte.ts
     role: frontend-service
-    hash: sha256:6bb6df93714c0918e463ed2a369b7808b4e6ba2f059a12d0821b4bbf184f7a1b
-    supports: [concepts, capability.browse-filter, capability.pay, capability.deliver, rules]
+    hash: sha256:277b447a62b4f4a4141cd5a784c2d3588b30089f799ea09e9f3a3a6f94341b33
+    supports: [concepts, capability.browse-filter, capability.pay, capability.deliver, capability.cancel, rules]
   - path: frontend/routes/sales/SaleOrdersTable.svelte
     role: user-interface
     hash: sha256:187483386db7e604710e8893046b160bc0d523d81540137b0e3c482733466b1f
     supports: [concepts, capability.browse-filter]
   - path: frontend/routes/finance/cash-banks/cajas.svelte.ts
     role: shared-domain
-    hash: sha256:57abecc19b2da874e32d06acbf244f6bcd786470c746551be381ca02070e6887
-    supports: [capability.pay]
+    hash: sha256:6b8e304283715cf7293c68424b6fd45d8d048828ed1b3d6498ab1e28cf2dcfd3
+    supports: [capability.pay, capability.cancel]
   - path: backend/sales/sale_orders_status.go
     role: backend-handler
-    hash: sha256:536150f96a4e074412e7e173d943c3d97372b10d731d3cc7861fdd75b016e9fb
-    supports: [capability.browse-filter, rules, troubleshooting]
+    hash: sha256:b057b5ba3afbf2646d67e735e4641cfe1f0fbba9c948395ced2387a0ef081f12
+    supports: [capability.browse-filter, concepts, rules, troubleshooting]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:ddf16aaeca22e2b0f5a90cc30e7c7d810db8ac6f8f343ae14a3008db77f424e6
+    hash: sha256:4ca1e1d0ce8e9e76ed8f7c28eef6c6ee3c82ccf72632f50ef06677e9b11bb33b
     supports: [capability.pay, capability.deliver, rules, troubleshooting]
+  - path: backend/sales/sale_order_annul.go
+    role: backend-handler
+    hash: sha256:a78b48742015dca5b09eb80b7bc6bde05ded39923cdfff1d16040571558cdb6d
+    supports: [capability.cancel, rules, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model
-    hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc
-    supports: [concepts, capability.pay, capability.deliver, rules]
+    hash: sha256:0adbe8feee5fac7738768421619f5ae8c4dcb899ba0fb901a07b94ce44fa7315
+    supports: [concepts, capability.pay, capability.deliver, capability.cancel, rules]
+  - path: backend/access.toml
+    role: business-logic
+    hash: sha256:2ef8205a98ce60021767edd0a0dda5f1809c035647623e84a2781f1f30f3160e
+    supports: [capability.cancel, troubleshooting]
   - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:356b238b23cee7b4a084ccab1e5d8e281232a986feefa2b92d1d184c6aa78cb1
-    supports: [capability.pay]
+    hash: sha256:6b47d33cfaa81d34eec52d00172ac223307b6a0869dd2ec2b3616af9154b5e5a
+    supports: [capability.pay, capability.cancel]
 ```

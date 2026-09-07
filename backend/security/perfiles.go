@@ -58,7 +58,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	// never declared would put a bit into every affected user's blob that no UI can show and no
 	// handler can name. Rejecting is right rather than dropping — a profile silently saved
 	// without what the operator just ticked is worse than an error.
-	if err = validateProfileSubAccesos(body); err != nil {
+	if err = ValidateAccesoGrants(body.AccesosGrants); err != nil {
 		return req.MakeErr(err)
 	}
 
@@ -156,47 +156,49 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(body)
 }
 
-// validateProfileSubAccesos checks every `accesoID*100 + subID` entry against the embedded catalog.
+// ValidateAccesoGrants checks stored grants against the embedded catalog. A profile and a user
+// grant access with the same records, so both handlers run this — which is how a user's direct
+// grants came to be validated at all.
 //
-// Three things have to hold, and each one fails differently if it does not: the access must exist,
-// the sub-access must be one that access declares, and the profile must actually grant the parent
-// access. The last is what stops a sub-access from outliving the permission it qualifies — the
-// merge would drop it anyway, so accepting it here would just store a grant that silently does
-// nothing.
-func validateProfileSubAccesos(profile types.Profile) error {
-	if len(profile.SubAccesos) == 0 {
-		return nil
-	}
-
-	grantedAccesoIDs := make(map[int32]bool, len(profile.Accesos))
-	for _, accesoNivelID := range profile.Accesos {
-		grantedAccesoIDs[accesoNivelID/10] = true
-	}
-
+// The "sub-access without its access" case that the flat `accesoID*100` arrays needed a check for
+// cannot be expressed here: a sub-access lives inside the grant that carries its access. What is
+// left is that the access exists, that it is granted at a real level, once, and that every
+// sub-access is one the catalog says that access declares.
+func ValidateAccesoGrants(grantRecords []coreTypes.AccesoGrantRecord) error {
 	accessHelper := core.GetEmbeddedAccessHelper()
-	for _, subAccesoRef := range profile.SubAccesos {
-		accesoID := subAccesoRef / 100
-		subAccesoID := subAccesoRef % 100
+	seenAccesoIDs := make(map[int32]bool, len(grantRecords))
+
+	for _, grantRecord := range grantRecords {
+		accesoID := int32(grantRecord.AccesoID)
 
 		accessInfo, accesoExists := accessHelper.GetAccesoInfo(accesoID)
 		if !accesoExists {
-			return core.Err("El sub-acceso", subAccesoRef, "referencia el acceso", accesoID, "que no existe.")
+			return core.Err("El acceso", accesoID, "no existe en el catálogo.")
 		}
-		if !grantedAccesoIDs[accesoID] {
-			return core.Err("El profile otorga el sub-acceso", subAccesoID, "de", accessInfo.Name,
-				"sin otorgar el acceso en sí.")
+		// Two records for one access would merge silently, and which nivel survived would depend on
+		// their order — so the client is told instead.
+		if seenAccesoIDs[accesoID] {
+			return core.Err("El acceso", accessInfo.Name, "aparece más de una vez en los accesos otorgados.")
 		}
-		// "Todos" is never declared in the catalog — it is synthesized — so it is allowed on any
-		// access that offers sub-accesses at all, and refused on one that offers none.
-		if subAccesoID == core.SubAccesoTodosID {
-			if accessInfo.SubAccesosMask == 0 {
-				return core.Err("El acceso", accessInfo.Name, "no declara sub-accesos.")
+		seenAccesoIDs[accesoID] = true
+
+		if grantRecord.Nivel < 1 || grantRecord.Nivel > 4 {
+			return core.Err("El acceso", accessInfo.Name, "tiene un nivel inválido:", grantRecord.Nivel)
+		}
+
+		for _, subAccesoID := range grantRecord.SubAccesos {
+			// "Todos" is never declared in the catalog — it is synthesized — so it is allowed on any
+			// access that offers sub-accesses at all, and refused on one that offers none.
+			if int32(subAccesoID) == core.SubAccesoTodosID {
+				if accessInfo.SubAccesosMask == 0 {
+					return core.Err("El acceso", accessInfo.Name, "no declara sub-accesos.")
+				}
+				continue
 			}
-			continue
-		}
-		if subAccesoID < 1 || subAccesoID > core.MaxSubAccesoID ||
-			accessInfo.SubAccesosMask&(1<<uint16(subAccesoID-1)) == 0 {
-			return core.Err("El acceso", accessInfo.Name, "no declara el sub-acceso", subAccesoID, ".")
+			if subAccesoID < 1 || int32(subAccesoID) > core.MaxSubAccesoID ||
+				accessInfo.SubAccesosMask&(1<<uint16(subAccesoID-1)) == 0 {
+				return core.Err("El acceso", accessInfo.Name, "no declara el sub-acceso", subAccesoID, ".")
+			}
 		}
 	}
 

@@ -12,8 +12,9 @@ type User struct {
 	LastName   string  `json:",omitempty"`
 	FirstName  string  `json:",omitempty"`
 	ProfileIDs []int32 `json:",omitempty"`
-	// AccesoID * 10 + Nivel
-	AccessLevelIDs []int32 `json:",omitempty"`
+	// AccesosGrants are the accesses granted to this user directly, on top of their profiles.
+	// Same shape a profile stores, so both are edited and merged by the same code.
+	AccesosGrants []AccesoGrantRecord `json:",omitempty"`
 	// The two grant blobs, encoded by core.EncodeAccesosGrants and read byte for byte by
 	// fareward and by genix-ui. Which blob an access lands in is itself the "has sub-accesses"
 	// flag: accesos_computed is fixed-stride grant words, accesos_sub_computed appends each
@@ -45,7 +46,7 @@ type UserTable struct {
 	LastName           db.Col[*UserTable, string]
 	FirstName          db.Col[*UserTable, string]
 	ProfileIDs         db.ColSlice[*UserTable, int32] `db:"profile_ids"`
-	AccessLevelIDs     db.Col[*UserTable, []int32]    `db:"access_level_ids"`
+	AccesosGrants      db.Col[*UserTable, []AccesoGrantRecord] `db:"accesos_grants"`
 	AccesosComputed    db.Col[*UserTable, []byte]
 	AccesosSubComputed db.Col[*UserTable, []byte]
 	Email              db.Col[*UserTable, string]

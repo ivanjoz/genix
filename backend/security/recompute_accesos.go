@@ -91,8 +91,8 @@ func recomputeCompanyUserAccesos(companyID int32) (int, int, error) {
 		}
 		// The same second source PostUsuarios merges. Leaving it out would silently strip every
 		// access granted to a user directly rather than through a profile.
-		for _, accesoNivelID := range user.AccessLevelIDs {
-			addAccesoNivelToGrants(grantsByAccesoID, accesoNivelID)
+		for _, grantRecord := range user.AccesosGrants {
+			addAccesoGrantToMerge(grantsByAccesoID, grantRecord)
 		}
 
 		accesosBlob, accesosSubBlob, encodeErr := encodeMergedAccesoGrants(grantsByAccesoID)

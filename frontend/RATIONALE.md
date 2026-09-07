@@ -1,3 +1,25 @@
+## HMR is off in dev: a save must leave the open page untouched (supersedes the entry below)
+
+**Context** — With Svelte HMR on, saving a `.svelte` file did *not* reload the page (verified on the
+HMR socket: only self-accepted `js-update`s, never a `full-reload`; the browser kept the app shell,
+the session and an open `Layer`). What it did do is what Svelte 5 HMR is defined to do — destroy and
+re-create the edited component's subtree. So `const usuariosService = new UsuariosService()` in
+`UsersTab.svelte` ran again on every save, firing a delta `GET /api/users` and rebuilding the table
+under the cursor. Read from the dev terminal that is indistinguishable from a reload, and it is
+disruptive in the middle of an edit.
+
+**Decision** — `server.hmr: false` in `frontend/vite.config.ts`. Vite pushes nothing to the open
+page — no component rebuild, no CSS swap, no refetch. Changes are picked up with a manual refresh.
+`vite-plugin-svelte` reads `server.hmr` and forces `compilerOptions.hmr` off by itself
+(`enforceOptionsForHmr`), so the svelte configs need no flag and the compiler stops emitting the HMR
+wrapper. `frontend/webpage/` is a separate app and was left on HMR.
+
+**Rationale** — The two knobs do opposite things and only one matches the goal: `compilerOptions.hmr:
+false` alone (the pre-2026-09 state) leaves Vite unable to patch a component, so it escalates to a
+*real* `full-reload` on every save — strictly worse. Turning the channel off at `server.hmr` is the
+only setting where a save has zero effect on the running page. The cost is that every change now
+needs an F5, and CSS edits no longer hot-swap either.
+
 ## An insecure origin has no WebCrypto, so an empty CipherKey asks for the UserInfo in clear
 
 **Context** — `serve_tailscale` hands the dev app out at `http://100.x.y.z:3572`. That origin is not

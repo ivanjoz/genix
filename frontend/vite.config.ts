@@ -178,6 +178,10 @@ export default defineConfig({
   },
   server: {
     port: 3570, // Change this to your desired port
+    // No HMR: a save must leave the open page untouched. Vite pushes nothing, so neither the
+    // component subtree nor its services are rebuilt — pick up the change with a manual refresh.
+    // vite-plugin-svelte reads this and turns compilerOptions.hmr off on its own.
+    hmr: false,
     fs: {
       strict: false,
       allow: [

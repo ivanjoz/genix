@@ -37,54 +37,45 @@ func getPerfilesMapByIDs(companyID int32, profileIDs []int32) (map[int32]types.P
 // addAccesoNivelToGrants folds one `accesoID*10 + nivel` entry into the merge, keeping the highest
 // nivel seen. Assigning a user a second profile is expected to widen what they may do, never to
 // narrow it, so every merge in this file is "most permissive wins".
-func addAccesoNivelToGrants(grantsByAccesoID map[int32]*core.AccesoGrant, accesoNivelID int32) {
-	accesoID := accesoNivelID / 10
-	nivel := uint8(accesoNivelID % 10)
+// addAccesoGrantToMerge folds one stored grant record into the merge, keyed by access id.
+//
+// Two grants of the same access — one from each of two profiles, or one from a profile and one
+// direct — merge to the widest of the two: the highest nivel, and the union of the sub-accesses.
+// Nothing here can drop a sub-access for having no parent, which the flat arrays this replaced had
+// to guard against: a sub-access lives inside the grant that carries its access.
+func addAccesoGrantToMerge(grantsByAccesoID map[int32]*core.AccesoGrant, grantRecord coreTypes.AccesoGrantRecord) {
+	accesoID := int32(grantRecord.AccesoID)
+	nivel := grantRecord.Nivel
 
 	// Normalize malformed levels down to the minimum, never up: a corrupt value must not be able
 	// to widen a grant.
 	if nivel < 1 || nivel > 4 {
-		core.Log("addAccesoNivelToGrants:: normalizando nivel", accesoNivelID, "=>", accesoID, 1)
+		core.Log("addAccesoGrantToMerge:: normalizando nivel", grantRecord.Nivel, "=>", accesoID, 1)
 		nivel = 1
+	}
+
+	subMask := uint16(0)
+	for _, subAccesoID := range grantRecord.SubAccesos {
+		if subAccesoID < 1 || int32(subAccesoID) > core.MaxSubAccesoID {
+			core.Log("addAccesoGrantToMerge:: sub-acceso fuera de rango, descartado", accesoID, subAccesoID)
+			continue
+		}
+		subMask |= uint16(1) << uint16(subAccesoID-1)
 	}
 
 	accesoGrant, alreadyMerged := grantsByAccesoID[accesoID]
 	if !alreadyMerged {
-		grantsByAccesoID[accesoID] = &core.AccesoGrant{AccesoID: accesoID, Nivel: nivel}
+		grantsByAccesoID[accesoID] = &core.AccesoGrant{AccesoID: accesoID, Nivel: nivel, SubMask: subMask}
 		return
 	}
 	if nivel > accesoGrant.Nivel {
 		accesoGrant.Nivel = nivel
 	}
-}
-
-// addSubAccesoToGrants folds one `accesoID*100 + subID` entry into the merge.
-//
-// A sub-access on an access the user does not hold is dropped, not stored: sub-accesses qualify a
-// permission rather than granting one, so one with no parent has nothing to qualify, and keeping it
-// would put an access into accesos_sub_computed at a nivel nobody granted.
-func addSubAccesoToGrants(grantsByAccesoID map[int32]*core.AccesoGrant, subAccesoRef int32) {
-	accesoID := subAccesoRef / 100
-	subAccesoID := subAccesoRef % 100
-
-	accesoGrant, holdsParentAcceso := grantsByAccesoID[accesoID]
-	if !holdsParentAcceso {
-		core.Log("addSubAccesoToGrants:: sub-acceso sin su acceso padre, descartado", subAccesoRef)
-		return
-	}
-	if subAccesoID < 1 || subAccesoID > core.MaxSubAccesoID {
-		core.Log("addSubAccesoToGrants:: sub-acceso fuera de rango, descartado", subAccesoRef)
-		return
-	}
-	accesoGrant.SubMask |= uint16(1) << uint16(subAccesoID-1)
+	accesoGrant.SubMask |= subMask
 }
 
 // buildAccesosComputedFromPerfiles merges every profile assigned to a user into the two blobs the
 // user row stores.
-//
-// Two passes over the profiles, and the order matters: a sub-access granted by one profile may
-// qualify an access granted by another, so every access has to be merged before any sub-access is
-// applied. Doing it profile by profile would drop those.
 func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, profileIDs []int32) (map[int32]*core.AccesoGrant, error) {
 	grantsByAccesoID := map[int32]*core.AccesoGrant{}
 	if len(profileIDs) == 0 {
@@ -98,15 +89,9 @@ func buildAccesosComputedFromPerfiles(perfilesByID map[int32]types.Profile, prof
 			core.Log("buildAccesosComputedFromPerfiles:: profile no encontrado", perfilID)
 			continue
 		}
-		core.Log("buildAccesosComputedFromPerfiles:: profile", profile.ID, "accesos", len(profile.Accesos))
-		for _, accesoNivelID := range profile.Accesos {
-			addAccesoNivelToGrants(grantsByAccesoID, accesoNivelID)
-		}
-	}
-
-	for _, perfilID := range profileIDs {
-		for _, subAccesoRef := range perfilesByID[perfilID].SubAccesos {
-			addSubAccesoToGrants(grantsByAccesoID, subAccesoRef)
+		core.Log("buildAccesosComputedFromPerfiles:: profile", profile.ID, "accesos", len(profile.AccesosGrants))
+		for _, grantRecord := range profile.AccesosGrants {
+			addAccesoGrantToMerge(grantsByAccesoID, grantRecord)
 		}
 	}
 
@@ -188,8 +173,8 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.ID = req.User.ID
 	}
 
-	// Los accesos se otorgan por perfil o directamente (AccessLevelIDs); basta con uno de los dos.
-	if body.ID != 1 && len(body.ProfileIDs) == 0 && len(body.AccessLevelIDs) == 0 && !isUsuarioPropio {
+	// Los accesos se otorgan por perfil o directamente (AccesosGrants); basta con uno de los dos.
+	if body.ID != 1 && len(body.ProfileIDs) == 0 && len(body.AccesosGrants) == 0 && !isUsuarioPropio {
 		return req.MakeErr("El user debe tener al menos 1 perfil o 1 acceso directo")
 	}
 	if (len(body.User) < 4 && !isUsuarioPropio) || len(body.FirstName) < 4 {
@@ -227,10 +212,10 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.CreatedBy = usuarioActual.CreatedBy
 		// "user-self" no exige acceso del catálogo (selfServiceRoutes en main-handlers.go), así que
 		// todo lo que determina permisos se restaura desde el registro guardado: de lo contrario
-		// cualquier usuario se auto-otorgaría accesos mandando ProfileIDs o AccessLevelIDs en el body.
+		// cualquier usuario se auto-otorgaría accesos mandando ProfileIDs o AccesosGrants en el body.
 		if isUsuarioPropio {
 			body.ProfileIDs = usuarioActual.ProfileIDs
-			body.AccessLevelIDs = usuarioActual.AccessLevelIDs
+			body.AccesosGrants = usuarioActual.AccesosGrants
 			body.User = usuarioActual.User
 			body.Status = usuarioActual.Status
 		}
@@ -239,6 +224,12 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	if len(body.Password) >= 6 {
 		passwordConcat := core.Env.SECRET_PHRASE + body.Password
 		body.PasswordHash = core.FnvHashString64(passwordConcat, -1, 20)
+	}
+
+	// NEVER trust the client: the catalog decides which accesses and sub-accesses exist. Same check
+	// a profile gets — direct grants reach the same blobs, so they earn the same scrutiny.
+	if err = ValidateAccesoGrants(body.AccesosGrants); err != nil {
+		return req.MakeErr(err)
 	}
 
 	perfilesByID, err := getPerfilesMapByIDs(body.CompanyID, body.ProfileIDs)
@@ -250,11 +241,11 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr("Error al obtener los accesos del profile.", err)
 	}
-	// AccessLevelIDs are the accesses granted to this user directly, on top of their profiles.
-	// They merge exactly like a profile's would, so the same "highest nivel wins" rule applies and
-	// there is no separate dedup step: the merge is keyed by access id.
-	for _, accesoNivelID := range body.AccessLevelIDs {
-		addAccesoNivelToGrants(grantsByAccesoID, accesoNivelID)
+	// AccesosGrants are the accesses granted to this user directly, on top of their profiles. They
+	// merge exactly like a profile's would — same shape, same function — so the same "highest nivel
+	// wins, sub-accesses union" rule applies and there is no separate dedup step.
+	for _, grantRecord := range body.AccesosGrants {
+		addAccesoGrantToMerge(grantsByAccesoID, grantRecord)
 	}
 	accesosBlob, accesosSubBlob, err := encodeMergedAccesoGrants(grantsByAccesoID)
 	if err != nil {

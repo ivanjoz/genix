@@ -183,6 +183,46 @@ func updateSaleSummaryForChange(sale types.SaleOrder, actions ...int8) error {
 	return applyChangesToSaleSumary(sale.CompanyID, sale.Date, summaryChanges, false)
 }
 
+// annulSaleSummary takes back everything the sale ever put into its day summary. It rebuilds
+// the change set the sale would produce today and negates it, rather than composing a rollback
+// by hand: whatever MakeSummaryChangeFromOSaleOrder added is exactly what has to come off, so
+// deriving the two from one function is what keeps them from drifting apart.
+func annulSaleSummary(sale types.SaleOrder) error {
+	summaryChanges := negateSummaryChanges(
+		MakeSummaryChangeFromOSaleOrder(sale, summaryActionsOfStatus(sale.Status)...))
+	return applyChangesToSaleSumary(sale.CompanyID, sale.Date, summaryChanges, false)
+}
+
+// summaryActionsOfStatus reads back the actions a sale's persisted status implies. Status is the
+// only surviving record of what happened to it — ActionsIncluded is a per-request field, not a
+// history — so this is how an annulment learns whether the sale was ever paid or delivered.
+func summaryActionsOfStatus(status int8) []int8 {
+	actions := []int8{1}
+	if status == types.OrderStatusPaid || status == types.OrderStatusCompleted {
+		actions = append(actions, 2)
+	}
+	if status == types.OrderStatusDelivered || status == types.OrderStatusCompleted {
+		actions = append(actions, 3)
+	}
+	return actions
+}
+
+// negateSummaryChanges flips every counter so the change subtracts what it used to add.
+// SubDivisor is deliberately untouched: it is the unit the other fields are counted in, not a
+// quantity, and negating it would make the change unmergeable with the stored row.
+func negateSummaryChanges(changes []ProductSummaryChange) []ProductSummaryChange {
+	for index := range changes {
+		stats := &changes[index].SaleOrderProductStats
+		stats.Quantity = -stats.Quantity
+		stats.SubQuantity = -stats.SubQuantity
+		stats.QuantityPendingDelivery = -stats.QuantityPendingDelivery
+		stats.SubQuantityPendingDelivery = -stats.SubQuantityPendingDelivery
+		stats.TotalAmount = -stats.TotalAmount
+		stats.TotalDebtAmount = -stats.TotalDebtAmount
+	}
+	return changes
+}
+
 func loadSaleSummaryRowsByProducts(companyID int32, date int16, summaryChanges []ProductSummaryChange) (map[int32]types.ProductSaleSummary, error) {
 	productIDs := make([]int32, 0, len(summaryChanges))
 	seenProducts := map[int32]struct{}{}

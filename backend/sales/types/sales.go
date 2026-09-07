@@ -60,6 +60,10 @@ type SaleOrder struct {
 	DeliveryUser    int32                `json:",omitempty"`
 	ClientInfo      *SaleOrderClientInfo `json:",omitempty"`
 	PaymentDueDate  int16                `json:",omitempty" db:"payment_due_date"`
+	// AnnulReason is why the sale was annulled, required by the annul endpoint. There is no
+	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
+	// already the "when and by whom" and a second pair could only drift from them.
+	AnnulReason string `json:",omitempty"`
 }
 
 func (e *SaleOrder) AddStatus(orderState int8) error {
@@ -111,6 +115,7 @@ type SaleOrderTable struct {
 	DeliveryTime               db.Col[*SaleOrderTable, int32]
 	DeliveryUser               db.Col[*SaleOrderTable, int32]
 	PaymentDueDate             db.Col[*SaleOrderTable, int16]
+	AnnulReason                db.Col[*SaleOrderTable, string]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -232,3 +237,14 @@ const (
 	OrderStatusCompleted = int8(4)
 	OrderStatusAnnulled  = int8(0)
 )
+
+// The ids of the "Gestión Ventas" entry in backend/access.toml. Named here rather than written
+// as literals in the handler so a catalog edit can be found by grep from the code that depends
+// on it — the catalog is data and the compiler cannot check the link.
+const (
+	AccesoIDGestionVentas  = int32(11)
+	SubAccesoIDAnularVenta = int32(2)
+)
+
+// MaxAnnulReasonLength bounds the free-text reason so the column cannot be used as storage.
+const MaxAnnulReasonLength = 200

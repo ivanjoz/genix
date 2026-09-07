@@ -2,6 +2,19 @@
 
 Design decisions for the Activos page, newest first.
 
+## The detail panel's four figures moved to `LabelCell`
+
+**Context** — The acquisition/book-value block was four copies of the same label/value markup, with a
+page-local `.stat-label` class colouring the label with `--input-label-color` so it read as a field
+label. The users page needed the identical pattern.
+
+**Decision** — Extracted as `$components/form/LabelCell.svelte` and used here; `.stat-label` and the
+page's `<style>` block are gone. `valueCss="h4"` keeps the two smaller figures as they were.
+
+**Rationale** — A straight 1:1 swap, so the panel is unchanged. Note it was **not** verified in the
+browser: the detail layer only opens from the table's `onRowClick`, which the agent's `selectRow`
+does not invoke, so the check was `svelte-check` plus reading the diff.
+
 ## The acquisition form is a component, and the edit shell is a Modal
 
 **Context** — Once an asset was created there was no way back into it: the detail panel is a read

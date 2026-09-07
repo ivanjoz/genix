@@ -11,7 +11,8 @@
   import { Core, tr } from '$core/store.svelte';
   import T from '$components/misc/T.svelte';
   import Page from '$domain/Page.svelte';
-  import { Notify, formatN, formatTime } from '$libs/helpers';
+  import { security } from '$libs/ui-runtime.svelte';
+  import { ConfirmWarn, Notify, formatN, formatTime } from '$libs/helpers';
   import { type Quantity, formatQuantity, quantityAmount, quantityDivisorOf, unpackQuantityLine } from '$core/quantity';
   import { CajasService } from '$routes/finance/cash-banks/cajas.svelte';
   import {
@@ -27,8 +28,11 @@
   import { onMount, untrack } from 'svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import {
+      ANNUL_SALE_SUB_ACCESS_ID,
+      SALES_MANAGEMENT_ACCESS_ID,
       SaleOrderGroup,
       SaleOrdersService,
+      postSaleOrderAnnul,
       postSaleOrderUpdate,
       type ISaleOrder
   } from './sale_order_status.svelte';
@@ -64,9 +68,12 @@
   let selectedSaleOrder = $state<ISaleOrder | null>(null);
   let isQueryingSaleOrders = $state(false);
   let isPostingSaleOrderAction = $state(false);
-  let saleOrderActionInProgress = $state<'pago' | 'entrega' | null>(null);
+  let saleOrderActionInProgress = $state<'pago' | 'entrega' | 'anulacion' | null>(null);
   let saleOrderPaymentForm = $state({ LastPaymentCajaID: 0 });
   let saleOrderDeliveryForm = $state({ WarehouseID: 0 });
+  // The annul form replaces the payment/delivery panels while it is open.
+  let isAnnulFormOpen = $state(false);
+  let saleOrderAnnulForm = $state({ RefundCashBankID: 0, Reason: '' });
   let saleOrderFilterForm = $state<ISaleOrderFilterForm>({ clientID: 0, productID: 0 });
   let clientOptions = $state<ISaleOrderClientOption[]>([]);
   let productOptions = $state<IProduct[]>([]);
@@ -206,11 +213,13 @@
   const options = [
     [SaleOrderGroup.PENDIENTE_DE_PAGO, 'Pend. Payment|Pend. Pago'],
     [SaleOrderGroup.PENDIENTE_DE_ENTREGA, 'Pend. Delivery|Pend. Entrega'],
-    [SaleOrderGroup.FINALIZADO, 'Completed|Finalizadas']
+    [SaleOrderGroup.FINALIZADO, 'Completed|Finalizadas'],
+    [SaleOrderGroup.ANULADO, 'Annulled|Anuladas']
   ];
 
   function getSaleOrderStatusName(saleOrder: ISaleOrder): string {
     switch(saleOrder.ss) {
+      case 0: return tr('Annulled|Anulada');
       case 1: return tr('Generated|Generado');
       case 2: return tr('Paid|Pagado');
       case 3: return tr('Delivered|Entregado');
@@ -218,6 +227,14 @@
       default: return tr('Unknown|Desconocido');
     }
   }
+
+  function isSaleOrderAnnulled(saleOrder: ISaleOrder): boolean {
+    return saleOrder.ss === 0;
+  }
+
+  // The handler enforces this too; hiding the button only keeps operators from being offered
+  // an action that would be refused.
+  const canAnnulSaleOrders = security.checkSubAcceso(SALES_MANAGEMENT_ACCESS_ID, ANNUL_SALE_SUB_ACCESS_ID);
 
   function saleOrderHasSelectedProduct(saleOrder: ISaleOrder, selectedProductID: number): boolean {
     if (!selectedProductID) { return true; }
@@ -308,10 +325,11 @@
     return String(formatTime(unixTime, 'd-M-Y h:n'));
   }
 
-  function getActionInProgressLabel(actionInProgress: 'pago' | 'entrega' | null): string {
+  function getActionInProgressLabel(actionInProgress: 'pago' | 'entrega' | 'anulacion' | null): string {
     // Keep message explicit so operators know the exact transition being processed.
     if (actionInProgress === 'pago') { return tr('Processing Payment...|Realizando Pago...'); }
     if (actionInProgress === 'entrega') { return tr('Processing Delivery...|Realizando Entrega...'); }
+    if (actionInProgress === 'anulacion') { return tr('Annulling...|Anulando...'); }
     return tr('Processing...|Procesando...');
   }
 
@@ -418,6 +436,7 @@
     selectedSaleOrder = saleOrder;
     // Keep selectors prefilled with the order values to reduce manual clicks.
     resetSaleOrderActionForms(saleOrder);
+    isAnnulFormOpen = false;
     saleOrderDetailsView = 1;
     ui.openSideLayer(10);
   }
@@ -471,9 +490,64 @@
     });
   }
 
-  function onClickAnularSoloUI() {
-    // This button is intentionally UI-only until backend supports cancel action.
-    Notify.failure(tr('Cancellation coming soon.|Anulación disponible próximamente.'));
+  // A paid order needs somewhere to take the refund from; an unpaid one has nothing to give back
+  // and the selector is not shown at all.
+  function saleOrderWasPaid(saleOrder: ISaleOrder): boolean {
+    return saleOrder.ss === 2 || saleOrder.ss === 4;
+  }
+
+  function openAnnulForm() {
+    if (!selectedSaleOrder) { return; }
+    // Default to the cash bank that collected — the common case — while leaving it changeable.
+    saleOrderAnnulForm.RefundCashBankID = selectedSaleOrder.LastPaymentCajaID || 0;
+    saleOrderAnnulForm.Reason = '';
+    isAnnulFormOpen = true;
+  }
+
+  function onClickAnular() {
+    if (!selectedSaleOrder || isPostingSaleOrderAction) { return; }
+
+    const annulReason = saleOrderAnnulForm.Reason.trim();
+    if (!annulReason) {
+      Notify.failure(tr('A reason is required to annul.|Se requiere un motivo para anular.'));
+      return;
+    }
+    if (saleOrderWasPaid(selectedSaleOrder) && !saleOrderAnnulForm.RefundCashBankID) {
+      Notify.failure(tr('Select the cash register the refund comes from.|Seleccione la caja de la cual se devolverá el dinero.'));
+      return;
+    }
+
+    const saleOrderToAnnul = selectedSaleOrder;
+    ConfirmWarn(
+      tr('Annul Order|Anular Pedido'),
+      tr(`Annul order #${saleOrderToAnnul.ID}? The payment is returned, delivered stock re-enters the warehouse, and the sale leaves the day totals.`
+        + `|¿Anular el pedido #${saleOrderToAnnul.ID}? Se devuelve el pago, el stock entregado reingresa al almacén y la venta sale de los totales del día.`),
+      'SI', 'NO',
+      () => { void processSaleOrderAnnul(saleOrderToAnnul, annulReason); },
+    );
+  }
+
+  async function processSaleOrderAnnul(saleOrderToAnnul: ISaleOrder, annulReason: string) {
+    saleOrderActionInProgress = 'anulacion';
+    isPostingSaleOrderAction = true;
+
+    try {
+      const annulledSaleOrder = await postSaleOrderAnnul({
+        ID: saleOrderToAnnul.ID,
+        RefundCashBankID: saleOrderAnnulForm.RefundCashBankID,
+        Reason: annulReason,
+      }) as ISaleOrder;
+
+      applyUpdatedSaleOrderLocally(annulledSaleOrder);
+      isAnnulFormOpen = false;
+      Notify.success(tr('Order annulled.|Pedido anulado.'));
+    } catch (error) {
+      console.error('[sale_orders_status] annul error', { saleOrderID: saleOrderToAnnul.ID, error });
+      Notify.failure(String(error) || tr('Could not annul the order.|No se pudo anular el pedido.'));
+    } finally {
+      isPostingSaleOrderAction = false;
+      saleOrderActionInProgress = null;
+    }
   }
 
   function getSaleOrderLayerTitle(saleOrder: ISaleOrder | null): string {
@@ -599,18 +673,19 @@
     onClose={() => {
       selectedSaleOrder = null;
       saleOrderActionInProgress = null;
+      isAnnulFormOpen = false;
     }}
   >
     {#snippet titleSide()}
-      {#if selectedSaleOrder}
+      {#if selectedSaleOrder && canAnnulSaleOrders && !isSaleOrderAnnulled(selectedSaleOrder)}
      	<div class="flex items-center">
 	       <button
 	         class="w-30 h-30 text-sm rounded-full bg-red-100 text-red-700 fx-c"
 	         type="button"
-	         title={tr("Cancel order|Anular pedido")}
-	         aria-label="Cancel this sale order"
+	         title={tr("Annul order|Anular pedido")}
+	         aria-label="Annul this sale order"
 	         onclick={() => {
-	           onClickAnularSoloUI();
+	           openAnnulForm();
 	         }}
 	       >
 	         <i class="icon-[fa--trash]"></i>
@@ -645,6 +720,55 @@
           {#if isPostingSaleOrderAction}
             <div class="col-span-2 p-12 bg-gray-100 min-h-64 w-full rounded-md fx-c">
               <LoadingBar label={getActionInProgressLabel(saleOrderActionInProgress)} />
+            </div>
+          {:else if isSaleOrderAnnulled(selectedSaleOrder)}
+            <div class="col-span-2 p-10 bg-red-50 w-full rounded-md text-13 leading-20 text-gray-700"
+              aria-label="Annulment details: date, user and reason">
+              <span class="ff-bold text-xs color-label mr-2"><T text="Annulled on:|Anulada el:" /></span> {formatActionTime(selectedSaleOrder.upd)}.<br>
+              <span class="ff-bold text-xs color-label mr-2"><T text="User:|Usuario:" /></span>
+              <RecordByIDText apiRoute="users-ids" recordID={selectedSaleOrder.UpdatedBy} placeholder="-" />.<br>
+              <span class="ff-bold text-xs color-label mr-2"><T text="Reason:|Motivo:" /></span> {selectedSaleOrder.AnnulReason || '-'}
+            </div>
+          {:else if isAnnulFormOpen}
+            <div class="col-span-2 p-10 bg-red-50 w-full rounded-md" aria-label="Annul order form with refund cash register and reason">
+              {#if saleOrderWasPaid(selectedSaleOrder)}
+                <SearchSelect
+                  bind:saveOn={saleOrderAnnulForm}
+                  save="RefundCashBankID"
+                  css="mb-8"
+                  options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
+                  keyId="ID"
+                  keyName="Name"
+                  label="Cash Register for Refund|Caja para la Devolución"
+                  placeholder=":: seleccione ::"
+                />
+              {/if}
+              <label class="block mb-8">
+                <span class="text-xs color-label ff-bold"><T text="Reason|Motivo" /></span>
+                <textarea
+                  bind:value={saleOrderAnnulForm.Reason}
+                  class="w-full h-56 px-8 py-6 text-13 rounded-md border border-gray-300"
+                  maxlength="200"
+                  aria-label="Reason for annulling this sale order"
+                  placeholder={tr('Why is this order annulled?|¿Por qué se anula este pedido?')}
+                ></textarea>
+              </label>
+              <div class="flex items-center gap-8">
+                <button class={`bx-red justify-center h-36 px-16 ${!saleOrderAnnulForm.Reason.trim() ? 'opacity-60' : ''}`}
+                  disabled={!saleOrderAnnulForm.Reason.trim()}
+                  aria-label="Confirm annulling this sale order"
+                  onclick={() => { onClickAnular(); }}
+                >
+                  <i class="icon-[fa--trash]"></i>
+                  <span><T text="Annul|Anular" /></span>
+                </button>
+                <button class="bn-white justify-center h-36 px-16"
+                  aria-label="Cancel the annulment and go back"
+                  onclick={() => { isAnnulFormOpen = false; }}
+                >
+                  <T text="Cancel|Cancelar" />
+                </button>
+              </div>
             </div>
           {:else}
             <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md" aria-label="Payment action panel with cash register selector">

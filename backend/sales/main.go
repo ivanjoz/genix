@@ -6,6 +6,7 @@ import (
 
 var ModuleHandlers = core.AppRouterType{
 	"POST.sale-order":        PostSaleOrder,
+	"POST.sale-order-annul":  PostSaleOrderAnnul,
 	"GET.sale-orders":        GetSaleOrders,
 	"GET.sale-order-query":   SaleOrderQuery,
 	"GET.sale-summary":       GetSaleSummary,

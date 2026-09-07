@@ -6,6 +6,7 @@ import DateInput from '$components/form/DateInput.svelte'
 import FilterInput from '$components/form/FilterInput.svelte'
 import Info from '$components/misc/Info.svelte'
 import Input from '$components/form/Input.svelte'
+import LabelCell from '$components/form/LabelCell.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import Layer from '$components/layers/Layer.svelte'
 import Modal from '$components/layers/Modal.svelte'
@@ -376,22 +377,14 @@ const onDispose = () => {
   >
     {#if selectedAsset}
       <div class="grid grid-cols-24 gap-10 mt-6 md:mt-16">
-        <div class="col-span-12">
-          <div class="text-[15px] leading-[16px] stat-label"><T text="Acquisition Value|Valor de Adquisición" /></div>
-          <div class="h3 ff-bold">{formatN(selectedAsset.AcquisitionValue / 100, 2)}</div>
-        </div>
-        <div class="col-span-12">
-          <div class="text-[15px] leading-[16px] stat-label"><T text="Book Value|Valor en Libros" /></div>
-          <div class="h3 ff-bold">{formatN(assetBookValue(selectedAsset) / 100, 2)}</div>
-        </div>
-        <div class="col-span-12">
-          <div class="text-[15px] leading-[16px] stat-label"><T text="Depreciated|Depreciado" /></div>
-          <div class="h4">{assetDepreciatedPercent(selectedAsset)}%</div>
-        </div>
-        <div class="col-span-12">
-          <div class="text-[15px] leading-[16px] stat-label"><T text="Months Remaining|Meses Restantes" /></div>
-          <div class="h4">{assetRemainingMonths(selectedAsset)} / {selectedAsset.DepreciationMonths}</div>
-        </div>
+        <LabelCell css="col-span-12" label="Acquisition Value|Valor de Adquisición"
+          value={formatN(selectedAsset.AcquisitionValue / 100, 2)} />
+        <LabelCell css="col-span-12" label="Book Value|Valor en Libros"
+          value={formatN(assetBookValue(selectedAsset) / 100, 2)} />
+        <LabelCell css="col-span-12" label="Depreciated|Depreciado" valueCss="h4"
+          value={`${assetDepreciatedPercent(selectedAsset)}%`} />
+        <LabelCell css="col-span-12" label="Months Remaining|Meses Restantes" valueCss="h4"
+          value={`${assetRemainingMonths(selectedAsset)} / ${selectedAsset.DepreciationMonths}`} />
       </div>
 
       <!-- Purchase and payment. An asset is not an expense, so this is settled here rather
@@ -542,11 +535,3 @@ const onDispose = () => {
     </div>
   </Modal>
 </Page>
-
-<style>
-  /* Stat labels read as field labels — same token FieldShell paints its <label> with,
-     so a theme override on `body` moves both together. */
-  .stat-label {
-    color: var(--input-label-color, #6d5dad);
-  }
-</style>

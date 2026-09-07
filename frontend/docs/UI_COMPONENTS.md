@@ -326,6 +326,7 @@ Versatile table component with filtering and custom cell rendering. Requires a c
 | `getFilterContent` | `(row: T) => string` | No | Builds string for filter comparison |
 | `useFilterCache` | `boolean` | No | Cache filter results |
 | `mobileCardCss` | `string` | No | CSS classes for mobile cards |
+| `disableHeaderPadding` | `boolean` | No | Header shrinks to its content height and loses its side padding (same prop and look in `TableGrid`) |
 
 ### ITableColumn Interface
 
@@ -525,6 +526,7 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
 | `mobileBreakpointPx` | `number` | No | Width threshold to switch to card mode when mobile columns exist (default `580`) |
 | `css` | `string` | No | Extra CSS classes for root container |
 | `headerCss` | `string` | No | Extra CSS classes for header |
+| `disableHeaderPadding` | `boolean` | No | Header shrinks to its content height and loses its side padding (same prop and look in `VTable`) |
 | `rowCss` | `string` | No | Extra CSS classes for each row |
 | `mobileCardCss` | `string` | No | Extra CSS classes for each mobile card |
 | `emptyMessage` | `string` | No | Message shown when data is empty |

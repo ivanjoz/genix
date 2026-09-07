@@ -4,6 +4,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/sales/types"
+	"slices"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -19,6 +20,9 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	// two writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
 	updatedSince := req.GetQueryInt("records")
 	orderPendingStatus := int8(req.GetQueryInt("pending-status"))
+	// Read presence, not value: the Anuladas tab pins Status 0, which a `> 0` test cannot
+	// distinguish from the parameter being absent.
+	orderStatusValue, hasOrderStatus := req.Query["order-status"]
 	orderStatus := int8(req.GetQueryInt("order-status"))
 	queryGroup := errgroup.Group{}
 
@@ -26,7 +30,7 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 	// mutate the shared backing array stored in the status map.
 	orderStatusToQuery := append([]int8{}, pendingStatusToStatus[orderPendingStatus]...)
 
-	if orderStatus > 0 {
+	if hasOrderStatus && orderStatusValue != "" {
 		orderStatusToQuery = append(orderStatusToQuery, orderStatus)
 	}
 
@@ -34,9 +38,17 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El order status es incorrecto.")
 	}
 
-	orderStatusToRemove := []int8{types.OrderStatusCompleted, types.OrderStatusAnnulled}
-	if orderPendingStatus > 0 {
-		orderStatusToRemove = append(orderStatusToRemove, orderPendingStatus)
+	// Every status the tab does NOT show: a record that moved into one of these has left this
+	// tab, and the client is told to drop it. The statuses being queried are excluded because
+	// telling a client to delete the rows just sent it would empty the tab on every delta sync.
+	orderStatusToRemove := []int8{}
+	for _, candidateStatus := range []int8{
+		types.OrderStatusAnnulled, types.OrderStatusPending, types.OrderStatusPaid,
+		types.OrderStatusDelivered, types.OrderStatusCompleted,
+	} {
+		if !slices.Contains(orderStatusToQuery, candidateStatus) {
+			orderStatusToRemove = append(orderStatusToRemove, candidateStatus)
+		}
 	}
 
 	saleOrdersByStatus := make([][]types.SaleOrder, len(orderStatusToQuery))

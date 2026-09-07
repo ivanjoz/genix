@@ -1,5 +1,13 @@
 # Sub-Accesses — Implementation Status
 
+> **SUPERSEDED (input format only).** The `accesoID*100 + subID` array and the `accesoID*10 + nivel`
+> arrays this document describes are gone: a profile and a user now both store one
+> `[]AccesoGrantRecord` in an `accesos_grants` blob, with the sub-accesses nested inside each grant.
+> See `docs/ACCESO_GRANTS_STORAGE_PLAN.md`. Everything here about the **derived** blobs
+> (`accesos_computed`, `accesos_sub_computed`, the fareward wire format, the "Todos" rule and the
+> catalog) still holds — only the editable input shape changed.
+
+
 Companion to `docs/SUB_ACCESSES_PLAN.md`, which holds the design and the rationale. This file is the
 handoff: what is finished, what is not, and what has to happen before any of it can deploy.
 

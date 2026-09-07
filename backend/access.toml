@@ -171,7 +171,9 @@ name = "Gestión Ventas"
 group = 3
 levels = 14
 frontend_routes = "sales/sale_orders_status"
-backend_apis = "POST.sale-order"
+backend_apis = "POST.sale-order,POST.sale-order-annul"
+sub_accesses_ids = [2]
+sub_accesses_names = ["Anular Venta"]
 
 [[access]]
 id = 12

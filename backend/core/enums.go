@@ -24,4 +24,8 @@ const (
 	// sale, so two clicks cannot produce two documents for it. Keyed on the sale,
 	// so unrelated sales never queue behind each other.
 	ActionInvoiceSaleOrder LockAction = 3
+	// ActionAnnulSaleOrder serializes annulling one sale. The annulment reads both ledgers to
+	// decide what to give back, so two concurrent clicks would each read a zero reversal and
+	// each write one — refunding twice. Keyed on the sale.
+	ActionAnnulSaleOrder LockAction = 4
 )

@@ -38,8 +38,11 @@
   </div>
 
   <div class="absolute right-12 top-12 z-10 flex h-32 items-center justify-end gap-8">
-    <!-- Desktop swaps the identifier for edit; touch layouts keep both controls discoverable. -->
-    <span class="ff-mono text-slate-500 transition-opacity md:group-hover:opacity-0 md:group-focus-within:opacity-0">
+    <!-- Desktop swaps the identifier for edit; touch layouts keep both controls discoverable.
+         The keyboard reveal is :focus-visible, not :focus-within: clicking the card focuses its
+         own tabindex div and clicking the pencil focuses the button, so focus-within left the
+         swap latched after every click, long after the pointer had gone. -->
+    <span class="ff-mono text-slate-500 transition-opacity md:group-hover:opacity-0 md:group-focus-visible:opacity-0 md:group-has-[:focus-visible]:opacity-0">
       #{company.CompanyID}
     </span>
     {#if onEdit}
@@ -48,7 +51,7 @@
         color="purple"
         useCircle={true}
         label={`Edit ${company.Company}|Editar ${company.Company}`}
-        css="shrink-0 transition-opacity md:absolute md:right-0 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:focus:opacity-100"
+        css="shrink-0 transition-opacity md:absolute md:right-0 md:opacity-0 md:group-hover:opacity-100 md:group-focus-visible:opacity-100 md:group-has-[:focus-visible]:opacity-100"
         onClick={onEdit}
       />
     {/if}

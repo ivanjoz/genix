@@ -82,6 +82,11 @@ const (
 	CashMovementTypeSaleCollection  CashMovementType = 8
 	CashMovementTypeExpensePayment  CashMovementType = 9
 	CashMovementTypeAssetPayment    CashMovementType = 10
+	// CashMovementTypeSaleRefund gives back what a sale collected, when that sale is annulled.
+	// It is its own type rather than a negative SaleCollection because the annulment nets the
+	// two to decide what is still owed back, and a retry that could not tell them apart would
+	// refund a second time.
+	CashMovementTypeSaleRefund CashMovementType = 11
 )
 
 type CashBankMovement struct {

@@ -1,6 +1,7 @@
 package types
 
 import (
+	coreTypes "app/core/types"
 	"app/db"
 )
 
@@ -11,13 +12,12 @@ type Profile struct {
 	Name        string  `db:"nombre"`
 	Description string  `db:"descripcion"`
 	Modules     []int16 `db:"modulos_ids"`
-	Accesos     []int32 `db:"accesos"`
-	// SubAccesos are the granted sub-accesses as accesoID*100 + subID, one entry per grant.
-	// Readable on purpose: the profile is what a human edits, so the binary packing happens once
-	// in core.EncodeAccesosGrants when the user's blobs are built, not here.
-	SubAccesos []int32 `db:"sub_accesos"`
-	Status     int8    `json:"ss" db:"status"`
-	Updated    int32   `json:"upd" db:"updated"`
+	// AccesosGrants is what the profile grants: one record per access, carrying its level and its
+	// sub-accesses. Exactly the shape a user's direct grants take, which is what lets one editor
+	// and one merge serve both.
+	AccesosGrants []coreTypes.AccesoGrantRecord `db:"accesos_grants"`
+	Status        int8                          `json:"ss" db:"status"`
+	Updated       int32                         `json:"upd" db:"updated"`
 }
 
 type ProfileTable struct {
@@ -27,10 +27,10 @@ type ProfileTable struct {
 	Name        db.Col[*ProfileTable, string]
 	Description db.Col[*ProfileTable, string]
 	Modules     db.ColSlice[*ProfileTable, int16] `db:"modulos_ids"`
-	Accesos     db.ColSlice[*ProfileTable, int32] `db:"accesos"`
-	SubAccesos  db.ColSlice[*ProfileTable, int32] `db:"sub_accesos"`
-	Status      db.Col[*ProfileTable, int8]
-	Updated     db.Col[*ProfileTable, int32]
+
+	AccesosGrants db.Col[*ProfileTable, []coreTypes.AccesoGrantRecord] `db:"accesos_grants"`
+	Status        db.Col[*ProfileTable, int8]
+	Updated       db.Col[*ProfileTable, int32]
 }
 
 func (e ProfileTable) GetSchema() db.TableSchema {

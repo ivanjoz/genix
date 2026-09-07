@@ -219,5 +219,6 @@ export const cajaMovimientoTipos = [
 	{ id: 7, name: "Cobro", group: 2 },
   { id: 8, name: "Cobro (Venta)", group: 2 },
   { id: 9, name: "Pago Gasto", group: 2, isNegative: true },
-  { id: 10, name: "Pago Activo", group: 2, isNegative: true }
+  { id: 10, name: "Pago Activo", group: 2, isNegative: true },
+  { id: 11, name: "Devolución (Anulación Venta)", group: 2, isNegative: true }
 ]
