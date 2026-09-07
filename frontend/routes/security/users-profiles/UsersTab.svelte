@@ -2,6 +2,7 @@
   import { useUI } from '@genix/ui';
   const ui = useUI();
 import Input from '$components/form/Input.svelte';
+import LabelCell from '$components/form/LabelCell.svelte';
 import Layer from '$components/layers/Layer.svelte';
 import UserProfilesAccessSelector from './UserProfilesAccessSelector.svelte';
 import VTable from '$components/vTable/VTable.svelte';
@@ -9,12 +10,15 @@ import type { ITableColumn } from '$components/vTable/types';
 import { Notify } from '$libs/helpers';
 import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import { tr } from '$core/store.svelte';
 import { formatTime } from '$libs/helpers';
   import pkg from 'notiflix'
 const { Loading } = pkg
   import type { IAccessGroupCatalogEntry, IAccessListCatalogEntry } from "./access-list-catalog"
-  import { accesoAcciones, UsuariosService, PerfilesService, postUser, type IUser } from "./users-profiles.svelte"
+  import { UsuariosService, PerfilesService, postUser, type IUser } from "./users-profiles.svelte"
+  import AccessGroupBars from "./AccessGroupBars.svelte"
+  import AccessUsersTable from "./AccessUsersTable.svelte"
 
   // The profiles service and the access catalog are owned by +page.svelte so both tabs read the
   // same records: a profile created on the Profiles tab is selectable here without a refetch.
@@ -26,33 +30,9 @@ const { Loading } = pkg
   } = $props()
 
   const usuariosService = new UsuariosService()
-  const accessActionShortNameByID = new Map(accesoAcciones.map((accessActionRecord) => [accessActionRecord.id, accessActionRecord.short]))
 
   let filterText = $state("")
   let usuarioForm = $state({} as IUser)
-
-  interface IUsuarioAccessSummary {
-    readableAccessNames: string[]
-    editableAccessNames: string[]
-  }
-
-  function formatAccessSummary(accessNames: string[], maxVisibleAccesses = 8): string {
-    // Keep the table compact by truncating long access lists with a clear remaining-count suffix.
-    if (accessNames.length <= maxVisibleAccesses) {
-      return accessNames.join(", ")
-    }
-
-    const visibleAccessNames = accessNames.slice(0, maxVisibleAccesses)
-    const hiddenAccessCount = accessNames.length - maxVisibleAccesses
-    return `${visibleAccessNames.join(", ")} ... (${hiddenAccessCount} más)`
-  }
-
-  function decodeAccessLevels(accessLevelMask: number): number[] {
-    // Expand the compact catalog format (for example 14) into individual selectable access levels.
-    return [...String(accessLevelMask)]
-      .map((levelDigit) => Number(levelDigit))
-      .filter((levelValue) => levelValue > 0)
-  }
 
   const sortedPerfiles = $derived.by(() => {
     // Keep profile ordering stable for the selector without re-sorting inside the child component.
@@ -62,98 +42,36 @@ const { Loading } = pkg
     })
   })
 
-  const accessLevelOptions = $derived.by(() => {
-    const flattenedAccessLevelOptions: { ID: number, Name: string }[] = []
-
-    // Build and sort access options once per catalog refresh so the child component stays render-only.
-    for (const accessCatalogEntry of accessCatalogEntries) {
-      const accessLevels = decodeAccessLevels(accessCatalogEntry.levels)
-      for (const accessLevel of accessLevels) {
-        const accessActionShortName = accessActionShortNameByID.get(accessLevel) || `N${accessLevel}`
-        flattenedAccessLevelOptions.push({
-          ID: accessCatalogEntry.id * 10 + accessLevel,
-          Name: `${accessCatalogEntry.name} (${accessActionShortName})`
-        })
-      }
-    }
-
-    return flattenedAccessLevelOptions.sort((leftOption, rightOption) => {
-      const nameComparison = leftOption.Name.localeCompare(rightOption.Name)
-      return nameComparison !== 0 ? nameComparison : leftOption.ID - rightOption.ID
-    })
-  })
-
   const perfilesByID = $derived.by(() => {
     return new Map(sortedPerfiles.map((profileRecord) => [profileRecord.ID, profileRecord]))
   })
 
-  const accessCatalogNameByID = $derived.by(() => {
-    const accessNameByID = new Map<number, string>()
-
-    for (const accessCatalogEntry of accessCatalogEntries) {
-      accessNameByID.set(accessCatalogEntry.id, accessCatalogEntry.name)
-    }
-
-    return accessNameByID
+  // The layer titles itself with whoever is being edited, so the name has to survive a record with
+  // only a login, and a brand-new record with neither.
+  const usuarioLayerTitle = $derived.by(() => {
+    const fullName = [usuarioForm?.FirstName, usuarioForm?.LastName].filter(Boolean).join(" ").trim()
+    return fullName || usuarioForm?.User || "New User|Nuevo Usuario"
   })
 
-  function summarizeUsuarioAccesses(usuarioRecord: IUser): IUsuarioAccessSummary {
-    const accessLevelsByAccessID = new Map<number, Set<number>>()
+  // The same grants, read from either end: "Por Usuario" answers what one person can do, "Por
+  // Acceso" answers who can do one thing — the question an audit actually starts from.
+  const USUARIOS_VIEW_BY_USER = 1
+  const USUARIOS_VIEW_BY_ACCESS = 2
+  let usuariosView = $state(USUARIOS_VIEW_BY_USER)
 
-    // Merge profile-derived and user-specific access levels so the table shows the effective access summary.
-    for (const profileID of usuarioRecord.ProfileIDs || []) {
-      const profileRecord = perfilesByID.get(profileID)
-      if (!profileRecord?.accesosMap) { continue }
-
-      for (const [accessID, accessLevels] of profileRecord.accesosMap) {
-        if (!accessLevelsByAccessID.has(accessID)) {
-          accessLevelsByAccessID.set(accessID, new Set())
-        }
-        for (const accessLevel of accessLevels) {
-          accessLevelsByAccessID.get(accessID)!.add(accessLevel)
-        }
-      }
-    }
-
-    for (const encodedAccessLevelID of usuarioRecord.AccessLevelIDs || []) {
-      const accessID = Math.floor(encodedAccessLevelID / 10)
-      const accessLevel = encodedAccessLevelID % 10
-      if (!accessLevelsByAccessID.has(accessID)) {
-        accessLevelsByAccessID.set(accessID, new Set())
-      }
-      accessLevelsByAccessID.get(accessID)!.add(accessLevel)
-    }
-
-    const readableAccessNames = new Set<string>()
-    const editableAccessNames = new Set<string>()
-
-    for (const [accessID, accessLevels] of accessLevelsByAccessID) {
-      const accessName = accessCatalogNameByID.get(accessID)
-      if (!accessName) { continue }
-
-      if (accessLevels.has(1)) {
-        readableAccessNames.add(accessName)
-      }
-
-      if ([...accessLevels].some((accessLevel) => accessLevel > 1)) {
-        editableAccessNames.add(accessName)
-      }
-    }
-
-    return {
-      readableAccessNames: [...readableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName)),
-      editableAccessNames: [...editableAccessNames].sort((leftName, rightName) => leftName.localeCompare(rightName))
-    }
-  }
+  const USUARIO_VIEW_INFO = 1
+  const USUARIO_VIEW_ACCESS = 2
+  let usuarioLayerView = $state(USUARIO_VIEW_INFO)
 
   const resetUsuarioForm = () => {
     // Initialize the create form with an active status so the layer always opens in a valid default state.
-    usuarioForm = { Status: 1, ProfileIDs: [], AccessLevelIDs: [] } as unknown as IUser
+    usuarioForm = { Status: 1, ProfileIDs: [], AccesosGrants: [] } as unknown as IUser
   }
 
   const openCreateUsuarioLayer = () => {
     resetUsuarioForm()
     console.log("openCreateUsuarioLayer::")
+    usuarioLayerView = USUARIO_VIEW_INFO
     ui.openSideLayer(1)
   }
 
@@ -162,9 +80,12 @@ const { Loading } = pkg
     usuarioForm = {
       ...selectedUsuario,
       ProfileIDs: [...(selectedUsuario.ProfileIDs || [])],
-      AccessLevelIDs: [...(selectedUsuario.AccessLevelIDs || [])]
+      AccesosGrants: [...(selectedUsuario.AccesosGrants || [])]
     }
     console.log("openEditUsuarioLayer::", $state.snapshot(usuarioForm))
+    // The view is NOT reset here: reviewing accesses across several users is one task, and
+    // snapping back to Información on every row click restarts it. Creating a user does reset,
+    // since the required identity fields live on the Información tab.
     ui.openSideLayer(1)
   }
 
@@ -264,21 +185,42 @@ const { Loading } = pkg
 
   <Layer type="content">
     <div class="h-full w-full">
-      <div class="flex items-center justify-between mb-6" aria-label="Users toolbar with filter and create button">
-        <FilterInput bind:value={filterText} css="mr-16 w-256" />
+      <div class="flex items-center justify-between mb-6" aria-label="Users toolbar with view switch, filter and create button">
+        <div class="flex items-center">
+          <OptionsStrip
+            selected={usuariosView}
+            options={[
+              [USUARIOS_VIEW_BY_USER, "By User|Por Usuario"],
+              [USUARIOS_VIEW_BY_ACCESS, "By Access|Por Acceso"],
+            ]}
+            buttonCss="ff-bold"
+            css="mr-16"
+            onSelect={(selectedOption) => { usuariosView = selectedOption[0] as number }}
+          />
+          <FilterInput bind:value={filterText} css="w-256" />
+        </div>
         <div class="flex items-center">
           <Button color="green" icon="icon-[fa--plus]" label="Opens the side layer to create a new user."
             onClick={openCreateUsuarioLayer} />
         </div>
       </div>
 
-      {#snippet accessSummaryRow(iconName: string, iconCss: string, accessNames: string[])}
-        <div class="_usuario-access-row">
-          <i class={`${iconName} _usuario-access-icon ${iconCss}`}></i>
-          <span class="text-sm">{formatAccessSummary(accessNames)}</span>
-        </div>
-      {/snippet}
-
+      {#if usuariosView === USUARIOS_VIEW_BY_ACCESS}
+      <AccessUsersTable
+        usuarios={usuariosService.usuarios}
+        {perfilesByID}
+        {accessCatalogEntries}
+        {accessGroupEntries}
+        {filterText}
+        onUsuarioSelect={(selectedUsuario) => {
+          // Editing a user belongs to the other view, so picking one there hands the tab over to it
+          // — with the record already open, which is the step the operator was heading for.
+          usuariosView = USUARIOS_VIEW_BY_USER
+          usuarioLayerView = USUARIO_VIEW_ACCESS
+          openEditUsuarioLayer(selectedUsuario)
+        }}
+      />
+      {:else}
       <VTable
         columns={columns}
         data={usuariosService.usuarios}
@@ -300,18 +242,11 @@ const { Loading } = pkg
               <div class="_usuario-info-login">{usuarioRecord.User}</div>
             </div>
           {:else if columnDefinition.id === "usuario_accesos"}
-            {@const usuarioAccessSummary = summarizeUsuarioAccesses(usuarioRecord)}
-            <div class="_usuario-access-cell">
-              {#if usuarioAccessSummary.readableAccessNames.length > 0}
-                {@render accessSummaryRow("icon-[fa--eye]", "text-blue-600", usuarioAccessSummary.readableAccessNames)}
-              {/if}
-              {#if usuarioAccessSummary.editableAccessNames.length > 0}
-                {@render accessSummaryRow("icon-[fa--pencil]", "text-red-600", usuarioAccessSummary.editableAccessNames)}
-              {/if}
-            </div>
+            <AccessGroupBars usuario={usuarioRecord} {perfilesByID} {accessCatalogEntries} {accessGroupEntries} />
           {/if}
         {/snippet}
       </VTable>
+      {/if}
     </div>
   </Layer>
 
@@ -319,8 +254,11 @@ const { Loading } = pkg
     id={1}
     type="side"
     sideLayerSize={760}
-    title={(usuarioForm?.ID > 0 ? tr("Update|Actualizar") : tr("Save|Guardar")) + " " + tr("User|Usuario")}
+    title={usuarioLayerTitle}
+    titleIcon="icon-[fa--user] w-20 h-20 mb-6 c-purple"
     titleCss="h2 mb-6"
+    options={[[USUARIO_VIEW_INFO, "Information|Información"], [USUARIO_VIEW_ACCESS, "Access|Accesos"]]}
+    bind:selected={usuarioLayerView}
     css="px-12 py-10"
     contentCss="px-0"
     onSave={() => saveUsuario()}
@@ -329,7 +267,8 @@ const { Loading } = pkg
       resetUsuarioForm()
     }}
   >
-    <div class="grid grid-cols-24 gap-10 mt-8" aria-label="User form with username, names, email, profiles, and password">
+    {#if usuarioLayerView === USUARIO_VIEW_INFO}
+    <div class="grid grid-cols-24 gap-10 mt-8" aria-label="User form with username, names, email and password">
       <Input
         bind:saveOn={usuarioForm}
         save="User"
@@ -369,15 +308,6 @@ const { Loading } = pkg
         css="col-span-24 md:col-span-12"
         label="Email"
       />
-      <UserProfilesAccessSelector
-        bind:saveOn={usuarioForm}
-        perfiles={sortedPerfiles}
-        accessGroupEntries={accessGroupEntries}
-        accessCatalogEntries={accessCatalogEntries}
-        accessLevelOptions={accessLevelOptions}
-        accessCatalogLoadError={accessCatalogLoadError}
-        css="col-span-24"
-      />
       <Input
         bind:saveOn={usuarioForm}
         save="Password"
@@ -396,6 +326,24 @@ const { Loading } = pkg
         required={!usuarioForm.ID}
       />
     </div>
+    {:else}
+    <!-- Unmounting the selector is safe: its editable maps are rebuilt from the form's AccesosGrants
+         every time it mounts, and that field is written on every grant. -->
+    <div class="grid grid-cols-24 gap-10 mt-8" aria-label="User profiles and individual accesses">
+      <!-- Read-only echo of the identity fields: who is being granted this is on the other tab. -->
+      <LabelCell css="col-span-8" valueCss="text-[15px]" label="Username|Usuario" value={usuarioForm?.User} />
+      <LabelCell css="col-span-8" valueCss="text-[15px]" label="Job Title|Cargo" value={usuarioForm?.JobTitle} />
+      <LabelCell css="col-span-8" valueCss="text-[15px]" label="Email" value={usuarioForm?.Email} />
+      <UserProfilesAccessSelector
+        bind:saveOn={usuarioForm}
+        perfiles={sortedPerfiles}
+        accessGroupEntries={accessGroupEntries}
+        accessCatalogEntries={accessCatalogEntries}
+        accessCatalogLoadError={accessCatalogLoadError}
+        css="col-span-24"
+      />
+    </div>
+    {/if}
   </Layer>
 
 <style>
@@ -420,29 +368,4 @@ const { Loading } = pkg
     line-height: 16px;
   }
 
-  ._usuario-access-cell {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    line-height: 1.25;
-    max-width: 100%;
-  }
-
-  ._usuario-access-row {
-    align-items: flex-start;
-    color: #435166;
-    display: flex;
-    gap: 6px;
-  }
-
-  ._usuario-access-icon {
-    flex: 0 0 auto;
-    margin-top: 2px;
-  }
-
-  ._usuario-access-row span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    white-space: normal;
-  }
 </style>

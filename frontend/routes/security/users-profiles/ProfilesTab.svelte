@@ -13,7 +13,6 @@ import FilterInput from '$components/form/FilterInput.svelte';
 import Button from '$components/buttons/Button.svelte';
 import AccesoCard from './AccessCard.svelte';
 import {
-  normalizeAccessFrontendRoutes,
   type IAccessGroupCatalogEntry,
   type IAccessListCatalogEntry
 } from './access-list-catalog';
@@ -23,7 +22,7 @@ import {
     type IAccess,
     type IProfile
 } from "./users-profiles.svelte";
-import { buildSubAccesoOptions, packSubAccesos } from './users-profiles';
+import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './users-profiles';
 
   // Services and catalog live in +page.svelte so both tabs share one copy of the profiles.
   let { perfilesService, accessGroups, accessListEntries, accessListLoadError = "" }: {
@@ -34,27 +33,7 @@ import { buildSubAccesoOptions, packSubAccesos } from './users-profiles';
   } = $props()
 
   const modulesMap = arrayToMapN(Modules, 'id')
-  const routeCatalogIndex = new Map<string, {
-    moduleID: number
-    moduleName: string
-    groupID: number
-    groupName: string
-  }>()
-
-  for (const moduleRecord of Modules) {
-    for (const menuRecord of moduleRecord.menus) {
-      for (const menuOption of menuRecord.options || []) {
-        const normalizedRoute = (menuOption.route || "").replace(/^\//, "")
-        if (!normalizedRoute) { continue }
-        routeCatalogIndex.set(normalizedRoute, {
-          moduleID: moduleRecord.id,
-          moduleName: moduleRecord.name,
-          groupID: menuRecord.id || 0,
-          groupName: menuRecord.name
-        })
-      }
-    }
-  }
+  const routeCatalogIndex = buildRouteCatalogIndex()
 
   let perfilForm = $state({} as IProfile)
   let moduleSelected = $state(0)
@@ -68,45 +47,7 @@ import { buildSubAccesoOptions, packSubAccesos } from './users-profiles';
     return accessGroupMap
   })
 
-  function decodeAccessLevels(accessLevelMask: number): number[] {
-    const levelDigitMap = new Map<number, number>([
-      [1, 1],
-      [2, 2],
-      [3, 3],
-      [4, 4],
-    ])
-
-    // The YAML catalog stores levels as concatenated digits, e.g. 19 => VER + TODO.
-    return [...String(accessLevelMask)]
-      .map(levelDigit => levelDigitMap.get(Number(levelDigit)) || 0)
-      .filter(levelValue => levelValue > 0)
-  }
-
-  const accesosCatalog = $derived.by(() => {
-    if (accessListEntries.length === 0) { return [] as IAccess[] }
-
-    const catalogAccesos = accessListEntries.map((accessListEntry) => {
-      // Resolve the primary frontend route from the shared catalog normalizer so arrays and strings behave the same.
-      const normalizedRoute = normalizeAccessFrontendRoutes(accessListEntry.frontend_routes)[0] || ""
-      const routeMeta = routeCatalogIndex.get(normalizedRoute)
-      const catalogActions = decodeAccessLevels(accessListEntry.levels)
-
-      return {
-        id: accessListEntry.id,
-        nombre: accessListEntry.name,
-        descripcion: normalizedRoute,
-        orden: accessListEntry.id,
-        acciones: catalogActions.length > 0 ? catalogActions : [1],
-        subAccesos: buildSubAccesoOptions(accessListEntry.sub_accesses_ids, accessListEntry.sub_accesses_names),
-        grupo: accessListEntry.group || routeMeta?.groupID || 0,
-        modulosIDs: routeMeta ? [routeMeta.moduleID] : [],
-        ss: 1,
-        upd: 0
-      }
-    })
-
-    return catalogAccesos.sort((leftAccess, rightAccess) => leftAccess.orden - rightAccess.orden)
-  })
+  const accesosCatalog = $derived(buildAccesosCatalog(accessListEntries, routeCatalogIndex))
 
   const accesosGrouped = $derived.by(() => {
     const gruposMap: Map<string, IAccess[]> = new Map()
@@ -166,16 +107,9 @@ import { buildSubAccesoOptions, packSubAccesos } from './users-profiles';
     }
 
     if (isAccesos) {
-      form.Accesos = []
-      for (let [accesoID, niveles] of form.accesosMap) {
-        if (niveles.length === 0) { form.accesosMap.delete(accesoID) }
-        for (let n of niveles) {
-          form.Accesos.push(accesoID * 10 + n)
-        }
-      }
-      // After Accesos, because packSubAccesos drops any sub-access whose parent access the
-      // operator cleared during this same edit.
-      form.SubAccesos = packSubAccesos(form.subAccesosMap || new Map(), form.accesosMap)
+      // toAccesoGrants drops any sub-access whose parent access the operator cleared during this
+      // same edit, so a leftover tick cannot reach the backend and be rejected there.
+      form.AccesosGrants = toAccesoGrants(form.accesosMap, form.subAccesosMap)
 
       const accesosFiltered = accesosCatalog.filter(x => form.accesosMap.has(x.id))
       const modulosIDSet: Set<number> = new Set()

@@ -64,9 +64,10 @@ reopens the tab they were last working in.
   access the profiles contain.
 - An **access (acceso)** identifies one restricted page or capability in the access catalog
   (for example "Usuarios", "Perfiles & Accesos", or accesses belonging to other modules such
-  as Finance or Logistics). Each access can be granted at one or more levels; the levels
-  configured for that specific access decide which of **View (Visualizar)**, **Create
-  (Crear)**, **Edit (Editar)**, or **Full (Todo)** are actually offered for it.
+  as Finance or Logistics). An access is held at exactly **one** level; the levels configured for
+  that specific access decide which of **View (Visualizar)**, **Create (Crear)**, **Edit
+  (Editar)**, or **Full (Todo)** are offered for it. Where a user's profiles and their individual
+  grants disagree on the level, the widest one wins.
 - **Individual access (`Accesos` on this page, labeled "ACCESOS ::")** grants or overrides a
   specific access/level directly on one user, independent of their profiles. Genix computes
   the user's effective access as the union of every level coming from assigned profiles plus
@@ -74,9 +75,9 @@ reopens the tab they were last working in.
 - A **sub-access (sub-acceso)** is a named permission *inside* one access, not a fifth level and
   not a nested access. It carries no level of its own: it is a flag that says what the holder may
   do once they are already inside the page or operation the access unlocks — for example
-  `Recibir Pago` and `Despachar Producto` inside `Punto de Venta`. Sub-accesses are granted on
-  the **Profiles (Perfiles)** tab only; an individual access granted directly on a user carries
-  none.
+  `Recibir Pago` and `Despachar Producto` inside `Punto de Venta`. They can be granted on a profile
+  or directly on a user, on the access they belong to; a sub-access cannot be held without the
+  access it qualifies.
 - On this page, the table's Access (`Accesos`) column and the form's profile chips summarize
   effective access into two buckets: a view-only eye icon for accesses granted at level 1
   (Visualizar) and a pencil icon for accesses granted at any higher level (Crear, Editar, or
@@ -109,7 +110,10 @@ personal data, job title, email, document number, profiles, or individual access
 
 On the **Users (Usuarios)** tab, use the green create button (top right of the toolbar) to open the side
 layer for a new user, or click an existing row to open the same layer pre-filled for editing.
-Save with the layer's **Save (Guardar)**/**Update (Actualizar)** action.
+The layer is titled with the user being edited (**New User / Nuevo Usuario** while creating) and
+splits into two tabs: **Information (Información)** holds the personal data and password fields,
+**Access (Accesos)** holds the profile and individual-access selectors. Switching between them keeps
+everything entered so far; **Save (Guardar)**/**Update (Actualizar)** saves both tabs at once.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -168,10 +172,15 @@ grant or restrict specific accesses directly on that user without changing a sha
 
 ### Where to find it (Dónde encontrarlo)
 
-Inside the create/edit layer, use the dual selector below the personal-data fields:
+Inside the create/edit layer, open its **Access (Accesos)** tab and use the dual selector:
 **PERFILES ::** on the left to search and add profiles, **ACCESOS ::** on the right to search
-and add individual access/level entries. Click a search result to add it as a chip; hover a
-selected chip and use its trash icon to remove it.
+and add individual accesses. The **ACCESOS ::** list opens as two columns of access cards —
+the same cards the **Profiles (Perfiles)** tab uses. Hover a card to reveal its level buttons
+(**VER**, **TODO**, …) and click one to grant that level; the list stays open, so several
+accesses can be granted in one pass. Each granted access then appears once as a compact card
+below, showing only the icon of its widest granted level — those cards are a summary, not an
+editor: change a level from the list above, and hover a card to reveal its trash icon and
+revoke the access entirely.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -182,7 +191,12 @@ not only this page's own access. Each catalog access lists the levels it makes a
 example some accesses offer View, Create, Edit, and Full; the Users/Perfiles & Accesos
 accesses on this catalog only offer **View (Visualizar)** and **Full (Todo)** — there is no
 separate Create/Edit granularity for managing users and profiles). Only levels declared for
-that access appear as selectable options for it.
+that access appear as buttons on its card, and they are a **one-of** choice: an access is held at a
+single level, so clicking a second level moves the grant rather than adding to it, and clicking the
+selected level revokes the access. Where a granted access declares sub-accesses (`sub-accesos`), it
+gets a card in the **Sub-accesses (Sub-accesos)** section below the granted-access cards, with one
+checkbox per sub-access — a user stores them exactly as a profile does. Revoking the access removes
+its sub-accesses with it.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 

@@ -3,42 +3,48 @@ import { arrayToMapN } from '$libs/helpers';
 import { useUI } from '@genix/ui';
 import Checkbox from '$components/form/Checkbox.svelte';
   import { accesoAcciones, type IAccess, type IProfile } from "./users-profiles.svelte"
-  import { toggleSubAcceso } from "./users-profiles"
+  import { isSubAccesoChecked, toggleSubAcceso } from "./users-profiles"
   const ui = useUI()
 
   const accesoAccionesMap = arrayToMapN(accesoAcciones, 'id')
 
   let {
     acceso,
-    perfilForm = $bindable()
+    perfilForm = $bindable(),
+    hideSubAccesos = false
   }: {
     acceso: IAccess
     perfilForm?: IProfile
+    /** Drop the sub-access row when something else on the page owns it — the user layer edits
+        sub-accesses in its own section, not inside a dropdown option. */
+    hideSubAccesos?: boolean
   } = $props()
 
-  const acciones = $derived(perfilForm?.accesosMap?.get(acceso.id) || [])
+  // One nivel per access, not a list: the merge that builds a user's grants keeps only the highest,
+  // so a list only ever let the editor express something the backend immediately discarded.
+  const nivel = $derived(perfilForm?.accesosMap?.get(acceso.id) || 0)
+  const accion = $derived(accesoAccionesMap.get(nivel))
 
-  const accionColor = $derived.by(() => {
-    if (acciones.length === 0) return undefined
-    const acciones_ = [...acciones].sort().reverse()
-    const accion = accesoAccionesMap.get(acciones_[0] || 0)
-    return accion?.color2 || accion?.color || ""
-  })
+  const accionColor = $derived(accion?.color2 || accion?.color || undefined)
 
-  const cardIsSelected = $derived((acciones?.length || 0) > 0)
+  const cardIsSelected = $derived(nivel > 0)
 
   const subAccesosSelected = $derived(perfilForm?.subAccesosMap?.get(acceso.id) || [])
 
   // Only while the access itself is granted: a sub-access qualifies a permission rather than
-  // granting one, so offering it on an access nobody holds would be offering nothing.
+  // granting one, so offering it on an access nobody holds would be offering nothing. The
+  // subAccesosMap check is what keeps the row out of the user layer, which grants levels only.
   const showSubAccesos = $derived(
-    !!perfilForm?.accesosMap && acceso.subAccesos.length > 0 && cardIsSelected
+    !hideSubAccesos && !!perfilForm?.accesosMap && !!perfilForm?.subAccesosMap
+      && acceso.subAccesos.length > 0 && cardIsSelected
   )
+
+  const declaredSubAccesoIDs = $derived(acceso.subAccesos.map(subAcceso => subAcceso.id))
 
   function handleSubAccesoToggle(subAccesoID: number) {
     if (!perfilForm?.subAccesosMap) { return }
 
-    const nextSubAccesoIDs = toggleSubAcceso(subAccesosSelected, subAccesoID)
+    const nextSubAccesoIDs = toggleSubAcceso(subAccesosSelected, subAccesoID, declaredSubAccesoIDs)
     nextSubAccesoIDs.length > 0
       ? perfilForm.subAccesosMap.set(acceso.id, nextSubAccesoIDs)
       : perfilForm.subAccesosMap.delete(acceso.id)
@@ -46,47 +52,30 @@ import Checkbox from '$components/form/Checkbox.svelte';
     perfilForm.subAccesosMap = new Map(perfilForm.subAccesosMap)
   }
 
-  // Highest-level-first, so the badge reads "Todo, Ver" and not the insertion order.
-  const selectedAcciones = $derived(
-    [...acciones].sort((leftLevel, rightLevel) => rightLevel - leftLevel)
-      .map(id => accesoAccionesMap.get(id))
-      .filter(accion => !!accion)
-  )
-
   function handleCardClick(ev: MouseEvent) {
     if (ui.state.deviceType === 1 || !perfilForm) { return }
     ev.stopPropagation()
-    const currentAcciones = perfilForm.accesosMap.get(acceso.id) || []
-    if (currentAcciones.length > 0) {
+    if (perfilForm.accesosMap.has(acceso.id)) {
       perfilForm.accesosMap.delete(acceso.id)
     } else {
-      // A card click should behave like a fast toggle, promoting to full access when that level exists.
-      const preferredAccessLevel = acceso.acciones.includes(7)
-        ? 7
-        : [...acceso.acciones].sort((leftLevel, rightLevel) => rightLevel - leftLevel)[0]
-      const newAcciones = preferredAccessLevel ? [preferredAccessLevel] : []
-      perfilForm.accesosMap.set(acceso.id, newAcciones)
+      // A card click is a fast toggle: it grants the widest level the access declares.
+      const widestNivel = [...acceso.acciones].sort((leftLevel, rightLevel) => rightLevel - leftLevel)[0]
+      if (widestNivel) { perfilForm.accesosMap.set(acceso.id, widestNivel) }
     }
     // Force reactivity
     perfilForm.accesosMap = new Map(perfilForm.accesosMap)
   }
 
+  // The levels are a one-of choice, so clicking a level selects it and clicking the selected one
+  // revokes the access — which is the only way to give the row an "off" state.
   function handleAccionClick(ev: MouseEvent, id: number) {
     ev.stopPropagation()
     if (!perfilForm?.accesosMap) return
 
-    let newAcciones = [...(perfilForm.accesosMap.get(acceso.id) || [])]
-    if (newAcciones.includes(id)) {
-      newAcciones = newAcciones.filter(x => x !== id)
-    } else {
-      newAcciones.push(id)
-    }
-    newAcciones.sort((a, b) => b - a)
-
-    if (newAcciones.length === 0) {
+    if (perfilForm.accesosMap.get(acceso.id) === id) {
       perfilForm.accesosMap.delete(acceso.id)
     } else {
-      perfilForm.accesosMap.set(acceso.id, newAcciones)
+      perfilForm.accesosMap.set(acceso.id, id)
     }
     // Force reactivity
     perfilForm.accesosMap = new Map(perfilForm.accesosMap)
@@ -132,22 +121,22 @@ import Checkbox from '$components/form/Checkbox.svelte';
     {#if cardIsSelected}
       <!-- Compact granted-level badge: replaced by the action buttons while the card is hovered. -->
       <div class="acciones-badge">
-        {#each selectedAcciones as accion}
+        {#if accion}
           <i class={accion.icon} style:color={accion.color} title={accion.name}></i>
-        {/each}
+        {/if}
       </div>
     {/if}
     <div class="acciones-ac2 flex justify-start z-10">
       {#each acceso.acciones as id}
-        {@const accion = accesoAccionesMap.get(id)}
-        {@const selected = acciones.includes(id)}
-        {#if accion}
+        {@const nivelAccion = accesoAccionesMap.get(id)}
+        {@const selected = nivel === id}
+        {#if nivelAccion}
           <div
             class="accion-btn"
-            title={accion.name}
-            aria-label={accion.name}
-            style:background-color={selected ? accion.color : undefined}
-            style:border-color={selected ? accion.color : undefined}
+            title={nivelAccion.name}
+            aria-label={nivelAccion.name}
+            style:background-color={selected ? nivelAccion.color : undefined}
+            style:border-color={selected ? nivelAccion.color : undefined}
             style:color={selected ? 'white' : undefined}
             onclick={ev => handleAccionClick(ev, id)}
             role="button"
@@ -159,7 +148,7 @@ import Checkbox from '$components/form/Checkbox.svelte';
               }
             }}
           >
-            <i class={accion.icon}></i>
+            <i class={nivelAccion.icon}></i>
           </div>
         {/if}
       {/each}
@@ -173,8 +162,10 @@ import Checkbox from '$components/form/Checkbox.svelte';
   <div class="sub-accesos-row text-[13px]">
     {#each acceso.subAccesos as subAcceso}
       <Checkbox
+        size="tiny"
         label={subAcceso.name}
-        checked={subAccesosSelected.includes(subAcceso.id)}
+        checked={isSubAccesoChecked(subAccesosSelected, subAcceso.id)}
+        underlineOnHover={true}
         onToggle={() => handleSubAccesoToggle(subAcceso.id)}
       />
     {/each}
@@ -192,7 +183,7 @@ import Checkbox from '$components/form/Checkbox.svelte';
     display: flex;
     flex-wrap: wrap;
     gap: 4px 14px;
-    padding: 5px 8px 3px 13px;
+    padding: 5px 8px 3px 9px;
     border: 1px solid #d9dce8;
     border-top: none;
     background: #fcfbff;
@@ -208,7 +199,9 @@ import Checkbox from '$components/form/Checkbox.svelte';
     flex-direction: column;
     justify-content: space-between;
     gap: 6px;
-    padding: 6px 8px 6px 13px;
+    /* 9px on the left, not 13: the ::before colour bar takes the first 4px inside the card, so
+       anything wider than that plus a normal gutter read as dead space on an ungranted card. */
+    padding: 6px 8px 6px 9px;
     line-height: 1.15;
     border: 1px solid #d9dce8;
     user-select: none;
@@ -269,6 +262,13 @@ import Checkbox from '$components/form/Checkbox.svelte';
   .acciones-badge i {
     height: 14px;
     width: 14px;
+  }
+
+  /* The eye is the one icon from MDI: its glyph fills 62% of its 24×24 box where the FontAwesome
+     ones fill theirs edge to edge, so next to the shield it reads a size smaller. A transform, not
+     a bigger box — the buttons keep their size and nothing shifts. */
+  i[class*="mdi--eye"] {
+    transform: scale(1.25);
   }
 
   /* Desktop: the buttons float over the card centre-right and only on hover, so the

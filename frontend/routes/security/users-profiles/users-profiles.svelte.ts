@@ -1,6 +1,6 @@
 import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 import type { IProfile, IUser } from '$core/types/common';
-import { unpackSubAccesos, type ISubAccesoOption } from './users-profiles';
+import { fromAccesoGrants, type ISubAccesoOption } from './users-profiles';
 export { postUser, postOwnUser } from '$services/services/users.svelte';
 
 export type { IProfile, IUser };
@@ -27,7 +27,7 @@ export interface IAccess {
 
 export const accesoAcciones = [
   { id: 1, name: "Visualizar", short: "VER",
-    icon: "icon-[fa--eye]", color: "#00c07d", color2: "#49c99c" },
+    icon: "icon-[mdi--eye]", color: "#00c07d", color2: "#49c99c" },
   { id: 2, name: "Crear", short: "CREAR",
     icon: "icon-[fa--pencil]", color: "#0080f9" },
   { id: 3, name: "Editar", short: "EDITAR",
@@ -38,7 +38,9 @@ export const accesoAcciones = [
 
 export class UsuariosService extends GetHandler {
   route = "users"
-  useCache = { min: 0.1, ver: 1 }
+  // v2: AccessLevelIDs became AccesosGrants, so a cached v1 record would edit as a user with no
+  // direct accesses at all.
+  useCache = { min: 0.1, ver: 2 }
 
   usuarios: IUser[] = $state([])
   usuariosMap: Map<number, IUser> = $state(new Map())
@@ -71,9 +73,9 @@ export class UsuariosService extends GetHandler {
 
 export class PerfilesService extends GetHandler {
   route = "perfiles"
-  // v3: perfiles now carry SubAccesos, so a cached v2 record would edit as if the profile granted
-  // none of them and saving it would silently revoke every sub-access it holds.
-  useCache = { min: 5, ver: 3 }
+  // v4: accesos and sub_accesos collapsed into one AccesosGrants list, so a cached v3 record would
+  // hydrate as a profile that grants nothing and saving it would revoke every access it holds.
+  useCache = { min: 5, ver: 4 }
 
   perfiles: IProfile[] = $state([])
   perfilesMap: Map<number, IProfile> = $state(new Map())
@@ -81,19 +83,10 @@ export class PerfilesService extends GetHandler {
   handler(response: IProfile[]) {
     const perfiles = (response || []).filter(x => x.ss > 0)
     for (const pr of perfiles) {
-      pr.Accesos = pr.Accesos || []
-      pr.accesosMap = pr.accesosMap || new Map()
-
-      for (const encodedAccess of pr.Accesos) {
-        const accessID = Math.floor(encodedAccess / 10)
-        const accessLevel = encodedAccess - (accessID * 10)
-        pr.accesosMap.has(accessID)
-          ? pr.accesosMap.get(accessID)!.push(accessLevel)
-          : pr.accesosMap.set(accessID, [accessLevel])
-      }
-
-      pr.SubAccesos = pr.SubAccesos || []
-      pr.subAccesosMap = unpackSubAccesos(pr.SubAccesos)
+      pr.AccesosGrants = pr.AccesosGrants || []
+      const { accesosMap, subAccesosMap } = fromAccesoGrants(pr.AccesosGrants)
+      pr.accesosMap = accesosMap
+      pr.subAccesosMap = subAccesosMap
     }
     this.perfiles = perfiles
     this.perfilesMap = new Map(perfiles.map(profileRecord => [profileRecord.ID, profileRecord]))
@@ -121,8 +114,8 @@ export class PerfilesService extends GetHandler {
 }
 
 export const postPerfil = (data: IProfile) => {
-  // The two maps are the editable form shape; the backend only takes the packed Accesos and
-  // SubAccesos arrays.
+  // The two maps are the editable form shape; the backend only takes the AccesosGrants list, which
+  // the caller has already built from them.
   const dataToSend = { ...data }
   delete (dataToSend as any).accesosMap
   delete (dataToSend as any).subAccesosMap
