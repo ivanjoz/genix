@@ -14,8 +14,9 @@ The human has all the context and is available. Two modes decide what you do wit
 - If a question is genuinely blocking and you cannot proceed under any reasonable assumption, ask anyway. Unsupervised means fewer interruptions, not guessing.
 
 **In both modes:**
-- Once the approach is settled, carry out the mechanical steps without asking permission for each one. Think as long as the problem needs, run independent searches and tool calls in parallel. Report what you found and what you changed.
-- **Record decisions in `RATIONALE.md`.** Every design decision or assumption goes into a `RATIONALE.md` in the module or feature folder it affects, next to the code it explains. Append newest first; create the file if it doesn't exist. Three headings, concise — no essays:
+- Once the approach is settled, carry out the mechanical steps without asking permission for each one. Always report what you found and what you changed.
+
+- **Record YOUR decisions in `RATIONALE.md`** — the ones the human does not already know about. It goes in the feature folder it affects, next to the code it explains. Append newest first; create the file if it doesn't exist. Three headings, concise — no essays:
 
   ```markdown
   ## <short title of the decision>
@@ -24,7 +25,11 @@ The human has all the context and is available. Two modes decide what you do wit
   **Rationale** — why this over the alternative, and what it costs.
   ```
 
-  **This is the review surface.** The human reads `RATIONALE.md` before committing anything, so a decision missing from it is a decision that ships unreviewed. Read the existing file before changing an area — it explains why the code looks the way it does. This is for developers; `DOCUMENTATION.md` is a separate, support-facing artifact and is not a substitute.
+  **WRITE** an assumption you resolved without asking, a choice the request left open, a consequence the human has not been told about.
+
+  **DO NOT WRITE** what they specified or approved, and do not record your own corrections — only the decision that stands. Repeating back their rationale buries the decisions they need to review.
+
+  **This is the review surface.** The human reads it before committing, so a decision of yours missing from it ships unreviewed. This is for developers; `DOCUMENTATION.md` is support-facing and is not a substitute.
 
 - Report honestly. If a build fails or you skipped part of the scope, say so plainly with the output.
 
@@ -134,9 +139,12 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - **NEVER use `time.Now()` for a persisted date.** Use `core.Now()`, `core.SUnixTime()` or `core.FechaUnix()` — they read the **effective clock**, which `GENIX_HISTORICAL_UNIX` / `core.SetHistoricalUnix()` can freeze. ORM is also affected.
 
 ### Frontend
+- Prefer using Tailwind over css class
+- Tailwind `--spacing` is **1px**, so `h-4` is 4px
+- Avoid text size below 14px
+- Hover effects MUST be done in CSS, avoid onMouseEnter / onMouseLeave
 - Use `untrack` inside `$effect` to avoid render loops.
 - `GetHandler` records need `upd` (Updated) and `ID` for the delta cache — or set `GetHandler.keyID` / `.KeysIDs` to name different fields.
-- Tailwind `--spacing` is **1px**, so `h-4` is 4px.
 - **NEVER** set `font-weight` or `font-size` in a CSS class — use Tailwind.
 - Use the helpers: `formatTime(unixDay | unixTime, layout)`.
 
