@@ -1,6 +1,7 @@
 package invoicing
 
 import (
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"app/invoicing/types"
@@ -89,6 +90,18 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 	companyID := req.User.CompanyID
 	now := core.SUnixTime()
 
+	// The row the form is editing, when it is editing one. It is read before anything
+	// is written, because a rotation both inherits the SOL password the form did not
+	// ask again for and has to retire this row afterwards.
+	var previous *types.CompanySecrets
+	if body.ID > 0 {
+		found, err := loadSecretsByID(companyID, body.ID)
+		if err != nil {
+			return req.MakeErr(err.Error())
+		}
+		previous = found
+	}
+
 	record := types.CompanySecrets{
 		CompanyID:   companyID,
 		ID:          body.ID,
@@ -102,13 +115,6 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if record.Environment == 0 {
 		record.Environment = types.SunatEnvBeta
-	}
-
-	isNew := body.ID <= 0
-	if isNew {
-		record.ID = -1
-		record.Created = now
-		record.CreatedBy = req.User.ID
 	}
 
 	if body.SolPassword != "" {
@@ -155,22 +161,39 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 		record.CertValidTo = core.UnixToSunix(credential.NotAfter.Unix())
 	}
 
+	// A new certificate never overwrites the one in place: it goes into a new row and
+	// the previous one is retired, so a document signed six months ago keeps the
+	// certificate that signed it. Everything else edits the row it came from.
+	isRotation := previous != nil && len(record.CertificateEnc) > 0
+	isNew := previous == nil
+
+	if isRotation && len(record.SolPasswordEnc) == 0 {
+		record.SolPasswordEnc = previous.SolPasswordEnc
+	}
+	// Without it the row cannot authenticate, and the failure would only surface when
+	// SUNAT rejects the first real sale.
+	if isNew && len(record.SolPasswordEnc) == 0 {
+		return req.MakeErr("Debe indicar la clave SOL.")
+	}
+
+	table := db.TableOf[types.CompanySecrets]()
 	records := &[]types.CompanySecrets{record}
 	var err error
-	if isNew {
+
+	if isNew || isRotation {
+		record.ID = -1
+		record.Created = now
+		record.CreatedBy = req.User.ID
+		(*records)[0] = record
 		err = db.Insert(records)
 	} else {
-		// A save that does not re-upload the certificate must not blank it, so
-		// the untouched columns are excluded rather than written as empty.
-		table := db.TableOf[types.CompanySecrets]()
-		excluded := []db.Coln{table.Created, table.CreatedBy}
+		// A save that does not upload a certificate must not blank the one this row
+		// already holds, so those columns are excluded rather than written as empty.
+		excluded := []db.Coln{table.Created, table.CreatedBy,
+			table.CertificateEnc, table.CertPasswordEnc, table.CertSubject, table.CertIssuer,
+			table.CertSerial, table.CertRUC, table.CertValidFrom, table.CertValidTo}
 		if len(record.SolPasswordEnc) == 0 {
 			excluded = append(excluded, table.SolPasswordEnc)
-		}
-		if len(record.CertificateEnc) == 0 {
-			excluded = append(excluded, table.CertificateEnc, table.CertPasswordEnc,
-				table.CertSubject, table.CertIssuer, table.CertSerial, table.CertRUC,
-				table.CertValidFrom, table.CertValidTo)
 		}
 		err = db.UpdateExclude(records, excluded...)
 	}
@@ -178,7 +201,21 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al guardar las credenciales:", err)
 	}
 
+	// Retired after the new row is in, never before: if this write fails, the company
+	// has two active rows and emission takes the newest, which is the right one. The
+	// other order would leave it with none.
+	if isRotation {
+		previous.Status = 0
+		previous.Updated = now
+		previous.UpdatedBy = req.User.ID
+		retired := &[]types.CompanySecrets{*previous}
+		if err := db.Update(retired, table.Status, table.Updated, table.UpdatedBy); err != nil {
+			return req.MakeErr("El certificado se guardó, pero no se pudo retirar el anterior:", err)
+		}
+	}
+
 	saved := (*records)[0]
+	cloud.StoreCompanyConfigAsync(req.User.CompanyID)
 	return req.MakeResponse(CompanySecretsView{
 		ID: saved.ID, Name: saved.Name, SolUser: saved.SolUser,
 		Environment: saved.Environment, CertSubject: saved.CertSubject,
@@ -190,29 +227,27 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 
 // PostCompanySecretsTest checks the credentials against SUNAT without issuing.
 //
-// It asks for the CDR of a document that does not exist. SUNAT answers that it
-// has no record of it, which is a successful round trip: the credentials were
-// accepted. Anything else is the real problem, reported before a real sale hits
-// it.
+// The check itself is facturago's VerifyCredentials, which sends a file that cannot
+// be accepted and reads whether SUNAT refused the credentials or the file. It used
+// to ask for the CDR of a document that does not exist, which only works in
+// production: beta does not host the CDR lookup service at all.
 func PostCompanySecretsTest(req *core.HandlerArgs) core.HandlerResponse {
 	issuer, err := buildIssuerForTest(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr(err.Error())
 	}
 
-	status, err := new(sunat.Client).StatusOf(issuer, model.Factura, "F001", 1)
-	if err != nil {
-		var sunatError *sunat.Error
-		if errors.As(err, &sunatError) {
-			return req.MakeErr("SUNAT rechazó las credenciales: " + sunatError.Error())
+	if err := new(sunat.Client).VerifyCredentials(issuer); err != nil {
+		var authError *sunat.AuthError
+		if errors.As(err, &authError) {
+			return req.MakeErr("SUNAT rechazó las credenciales: revise el usuario y la clave SOL.")
 		}
 		return req.MakeErr("No se pudo contactar a SUNAT: " + err.Error())
 	}
 
 	return req.MakeResponse(map[string]any{
 		"Ok":      true,
-		"Code":    status.Code,
-		"Message": sunat.ErrorDescription(status.Code),
+		"Message": "SUNAT aceptó las credenciales.",
 	})
 }
 
@@ -243,6 +278,22 @@ func buildIssuerForTest(companyID int32) (model.Issuer, error) {
 		SolPassword: string(solPassword),
 		Environment: environment,
 	}, nil
+}
+
+// loadSecretsByID reads one credential row of this company. The company id is part
+// of the lookup, not checked afterwards, so an id from another tenant finds nothing.
+func loadSecretsByID(companyID int32, secretsID int32) (*types.CompanySecrets, error) {
+	records := []types.CompanySecrets{}
+	query := db.Query(&records)
+	query.Select().CompanyID.Equals(companyID).ID.Equals(secretsID)
+
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al leer las credenciales:", err)
+	}
+	if len(records) == 0 {
+		return nil, core.Err("Las credenciales indicadas no existen.")
+	}
+	return &records[0], nil
 }
 
 // checkCertificateRUC refuses a certificate issued to another taxpayer. SUNAT

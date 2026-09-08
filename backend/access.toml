@@ -65,7 +65,7 @@ name = "Configuración"
 group = 1
 levels = 14
 frontend_routes = "company/configuration"
-backend_apis = "GET.company-parametros,POST.company-parametros,POST.parametros,POST.system-parameters,POST.initial-data"
+backend_apis = "GET.company-parametros,POST.company-parametros,POST.parametros,POST.system-parameters,POST.initial-data,GET.company-secrets,POST.company-secrets,POST.company-secrets-test"
 
 [[access]]
 id = 2
@@ -117,10 +117,10 @@ backend_apis = ""
 
 [[access]]
 id = 34
-name = "Testing"
+name = "Developer"
 group = 8
 levels = 14
-frontend_routes = "system/testing"
+frontend_routes = "system/developer"
 backend_apis = ""
 
 [[access]]
@@ -341,12 +341,4 @@ name = "Facturación Electrónica"
 group = 7
 levels = 14
 frontend_routes = "accounting/invoicing"
-backend_apis = "POST.invoice,POST.invoice-retry,GET.invoices,GET.invoice-xml"
-
-[[access]]
-id = 36
-name = "Credenciales SUNAT"
-group = 1
-levels = 14
-frontend_routes = "configuration/company-secrets"
-backend_apis = "GET.company-secrets,POST.company-secrets,POST.company-secrets-test"
+backend_apis = "POST.invoice,POST.invoice-retry,GET.invoices,GET.invoice-xml,POST.invoice-series"

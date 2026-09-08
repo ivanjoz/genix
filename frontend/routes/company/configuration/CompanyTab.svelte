@@ -3,18 +3,23 @@ import Input from '$components/form/Input.svelte';
 import Button from '$components/buttons/Button.svelte';
 import T from '$components/misc/T.svelte';
 import InvoiceSeriesTable from './InvoiceSeriesTable.svelte';
+import CompanySecretsPanel from './CompanySecretsPanel.svelte';
 import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas.svelte"
 
   const { service }: { service: EmpresaParametrosService } = $props()
 </script>
 
-<div class="flex justify-end items-center mb-8" aria-label="Company parameters header with save button">
-  <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves all company parameter changes." onClick={() => saveCompanyParameters(service.empresa)} />
-</div>
-<div class="grid grid-cols-24 gap-14">
+<div class="grid grid-cols-24 gap-14 items-start">
   <section class="col-span-24 lg:col-span-12 rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
     aria-label="Company parameters form with name, RUC, legal address and contact fields">
-    <div class="h3 ff-bold mb-14"><T text="Company Parameters|Parámetros de la Empresa" /></div>
+    <!-- Save sits inside this panel, not above the page: the series alongside it save
+         through their own endpoint, so a button at the top would claim to write both. -->
+    <div class="flex items-center gap-10 mb-14">
+      <div class="h3 ff-bold flex-1 min-w-0"><T text="Company Parameters|Parámetros de la Empresa" /></div>
+      <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar"
+        label="Saves the company parameters on this panel."
+        onClick={() => saveCompanyParameters(service.empresa)} />
+    </div>
     <div class="grid grid-cols-24 gap-10 content-start">
       <Input css="col-span-24" label="Name|Nombre" save="Name" bind:saveOn={service.empresa}
         required={true} />
@@ -32,5 +37,10 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
       <Input css="col-span-24" label="City|Ciudad" save="City" bind:saveOn={service.empresa} />
     </div>
   </section>
-  <InvoiceSeriesTable company={service.empresa} />
+  <!-- The invoicing panels stack in their own column: the certificate belongs under the
+       series it signs, not under the company form on the other side of the page. -->
+  <div class="col-span-24 lg:col-span-12 flex flex-col gap-14">
+    <InvoiceSeriesTable company={service.empresa} />
+    <CompanySecretsPanel />
+  </div>
 </div>

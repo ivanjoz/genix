@@ -1,3 +1,52 @@
+## The secrets form object is replaced, not mutated, so `Input` re-reads it
+
+**Context** — A stored SOL user came back blank in the panel: the row held `MODDATOS`, the GET
+returned it, and the field still rendered empty. `Input` re-reads `saveOn` only when the object
+*identity* changes — its effect returns early while `lastSaveOn === saveOn`
+(`packages/genix-ui/form/Input.svelte:155`). The panel held one `form` object for the component's
+whole life and assigned `form.SolUser` once the GET resolved, which is after the inputs mounted, so
+they kept the empty value they started with.
+
+**Decision** — The sync effect assigns a whole new `form` object instead of setting three fields on
+the existing one. `Input` was left alone.
+
+**Rationale** — The identity guard is not a bug to fix: without it the effect would re-run on every
+keystroke, since typing writes back into `saveOn[save]`. Replacing the object is the mechanism that
+guard was built to allow, and it fixes this at the call site instead of changing a component every
+form in the app renders. The cost is that the effect now also clears `SolPassword` and
+`CertPassword`; it only fires when the edited row's id changes — first load, or after a rotation —
+and both are moments the passwords are meant to be empty anyway.
+
+## The credentials panel refuses what the endpoint accepts, and reads uncached
+
+**Context** — `POST company-secrets` only requires the SOL user. It will happily store credentials
+with no password and no certificate, and the panel could have mirrored that. The page around it
+reads through the delta cache, so the credentials would naturally have been read the same way.
+
+**Decision** — `validateSecretsForm` refuses to create a record without a SOL password *and*
+without a certificate, and `CompanySecretsService` reads `company-secrets` with a plain `GET`, no
+`useCache`. Passwords are never prefilled: an empty one means "keep the stored one", which is what
+the endpoint does with it.
+
+**Rationale** — a credentials row missing either piece cannot sign or authenticate, so accepting it
+only moves the failure to the first real sale, where it surfaces as a SUNAT rejection at the till
+instead of a message on the form that created it. On existing records both stay optional, because
+the stored ones are still there. The uncached read costs one request per visit to a page nobody
+opens often, and buys the one thing this panel cannot get wrong: showing a certificate that was
+rotated or expired in another tab as if it were still the one signing.
+
+## The certificate panel lives in the invoicing column
+
+**Context** — `CompanyTab` was a two-column grid, company form on the left and series on the right.
+A third `col-span-12` section would have flowed into the left column, under the company form.
+
+**Decision** — the right half is now a `flex` column holding the series and the certificate, and
+`InvoiceSeriesTable` lost the `col-span` it used to carry (its parent places it now).
+
+**Rationale** — the certificate signs the series, and the two are read together when somebody sets
+up invoicing; the company's legal fields are a different job. The cost is that `InvoiceSeriesTable`
+is no longer droppable straight into a 24-column grid — it needs a parent that positions it.
+
 ## The series maintainer is a form plus a list, because a cell cannot hold a select
 
 **Context** — The request was a `TableGrid` maintainer for the invoicing series, inline on the

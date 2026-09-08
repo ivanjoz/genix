@@ -38,6 +38,7 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error guardar la company en cloud.", err)
 	}
 
+	cloud.StoreCompanyConfigAsync(body.ID)
 	return req.MakeResponse(body)
 }
 
@@ -151,11 +152,16 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC.")
 	}
 
-	// The series travel inline with the company, so this is the only place they are
-	// checked. A series id already handed to a document must never change meaning,
-	// which is why the rules are about the set and not about the row being edited.
-	if err := invoicing.ValidateSeries(record.InvoiceSeries); err != nil {
-		return req.MakeErr(err.Error())
+	// The invoicing series travel inline on this record but are NOT written here.
+	// They have their own endpoint (POST.invoice-series), so this form's Save means
+	// what the user sees on it — and a payload that omits the field, or carries a
+	// stale copy, cannot wipe series somebody added in the meantime.
+	stored, err := getCompanyByID(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr("Error al leer la company:", err)
+	}
+	if stored != nil {
+		record.InvoiceSeries = stored.InvoiceSeries
 	}
 
 	// Escribir exige "Mi Empresa" en nivel de escritura; mainHandler ya lo validó por el catálogo.
@@ -195,5 +201,6 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	})
 
 	core.Print(empresaPublic)
+	cloud.StoreCompanyConfigAsync(record.ID)
 	return core.MakeResponse(req, &record)
 }

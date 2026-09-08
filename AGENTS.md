@@ -25,9 +25,10 @@ The human has all the context and is available. Two modes decide what you do wit
   **Rationale** — why this over the alternative, and what it costs.
   ```
 
-  **WRITE** an assumption you resolved without asking, a choice the request left open, a consequence the human has not been told about.
+  **WRITE** an assumption you resolved without asking, or a choice the request left
+  open that you settled on your own. **One test: would this be news to the human?** Apply it per decision, not per task.
 
-  **DO NOT WRITE** what they specified or approved, and do not record your own corrections — only the decision that stands. Repeating back their rationale buries the decisions they need to review.
+  **DO NOT WRITE** anything they specified or approved, or anything they already acknowledge. Do not record your own corrections — only the decision that stands.
 
   **This is the review surface.** The human reads it before committing, so a decision of yours missing from it ships unreviewed. This is for developers; `DOCUMENTATION.md` is support-facing and is not a substitute.
 

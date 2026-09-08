@@ -191,6 +191,68 @@ func ValidateSeries(allSeries []InvoiceSeries) error {
 	return nil
 }
 
+// ApplyDefaultSeries settles the defaults across the whole set, after the series
+// identified by changedSeriesID was added, edited or deactivated.
+//
+// Being the default is a property of the set, not of a row, so it cannot be saved
+// one series at a time: a caller marking a new default without clearing the old one
+// produces two, which is what ValidateSeries refuses. It is resolved here so every
+// writer gets the same answer.
+//
+// Two rules, in order. A series that is active and claims the default takes it from
+// whoever held it. Then any document type that has an active series but no active
+// default adopts one — which is what keeps deactivating a default from leaving its
+// type with none, and what makes the first series of a type its default.
+func ApplyDefaultSeries(allSeries []InvoiceSeries, changedSeriesID int8) {
+	changed := FindSeries(allSeries, changedSeriesID)
+	if changed != nil && changed.Status == 1 && changed.IsDefault == 1 {
+		for index := range allSeries {
+			if allSeries[index].DocType == changed.DocType && allSeries[index].SeriesID != changedSeriesID {
+				allSeries[index].IsDefault = 0
+			}
+		}
+	}
+
+	// An inactive series is never the default: it cannot be issued under.
+	for index := range allSeries {
+		if allSeries[index].Status != 1 {
+			allSeries[index].IsDefault = 0
+		}
+	}
+
+	for docType := range activeDocTypes(allSeries) {
+		if hasActiveDefault(allSeries, docType) {
+			continue
+		}
+		for index := range allSeries {
+			if allSeries[index].Status == 1 && allSeries[index].DocType == docType {
+				allSeries[index].IsDefault = 1
+				break
+			}
+		}
+	}
+}
+
+func activeDocTypes(allSeries []InvoiceSeries) map[int8]bool {
+	docTypes := map[int8]bool{}
+	for index := range allSeries {
+		if allSeries[index].Status == 1 {
+			docTypes[allSeries[index].DocType] = true
+		}
+	}
+	return docTypes
+}
+
+func hasActiveDefault(allSeries []InvoiceSeries, docType int8) bool {
+	for index := range allSeries {
+		if allSeries[index].Status == 1 && allSeries[index].DocType == docType &&
+			allSeries[index].IsDefault == 1 {
+			return true
+		}
+	}
+	return false
+}
+
 // NextSeriesID is the id a newly added series takes. Ids are never reused:
 // documents already issued point at theirs forever.
 func NextSeriesID(allSeries []InvoiceSeries) int8 {

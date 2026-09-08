@@ -1,3 +1,29 @@
+## The company config cache hands out a shared pointer, and its sweeper starts on the first write
+
+**Context** — `LoadCompanyConfig` now keeps a 20-second in-memory map in front of the blob. Three
+things about it were not part of the request: what a caller gets back, who starts the ticker, and
+which clock the TTL reads.
+
+**Decision** — `readCompanyConfigCache` returns the **same `*config.CompanyConfig`** every concurrent
+caller holds, documented as read-only; there is no copy. The sweeper goroutine is started by a
+`sync.Once` inside `writeCompanyConfigCache`, not from `main`. `CompactAndStoreCompanyConfig` caches
+what it just built, so the write-through after a mutation is also the invalidation. The TTL uses
+`time.Now`, not `core.Now`.
+
+**Rationale** — Deep-copying would mean copying the private key and the certificate on every read,
+which is the work the cache exists to avoid; `BuildIssuer` only reads, so the cost is a convention
+someone could break — a caller that mutates the result corrupts every other holder. Starting from
+`main` would put a ticker in the Lambda, in every script and in the test binaries, including
+processes that never cache a company; starting it on the first write means it exists exactly where
+there is something to sweep, and it is never stopped. `core.Now` is the wrong clock here because
+`GENIX_HISTORICAL_UNIX` can freeze it, which would expire either nothing or everything.
+
+**Cost** — an entry is held up to twice the TTL before its memory is released (expires at 20s, swept
+by the following tick). It is never *served* in that window: the deadline is checked on the read.
+The deadline is stored as unix nanoseconds, so it reads the wall clock and not the monotonic one a
+`time.Time` carries: an NTP step or a VM suspend of more than 20 seconds expires the cache early,
+which costs one rebuild.
+
 ## `WEBPAGE_RENDERER_URL` is validated before running the renderer locally
 
 **Context** — `core.Env.WEBPAGE_RENDERER_URL` used to fall back to a hardcoded constant, so it was

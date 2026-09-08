@@ -1,6 +1,7 @@
 package config
 
 import (
+	"app/cloud"
 	"app/config/types"
 	"app/core"
 	"app/db"
@@ -45,5 +46,6 @@ func PostParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al insertar los registros", err)
 	}
 
+	cloud.StoreCompanyConfigAsync(req.User.CompanyID)
 	return req.MakeResponse(records)
 }

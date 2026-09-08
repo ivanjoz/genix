@@ -563,7 +563,12 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 		return response
 	}
 
-	bodyBytes, err := minijson.Marshal(respStruct)
+	marshal := minijson.Marshal
+	if req.WantsRawJSON() {
+		marshal = sonic.Marshal
+	}
+
+	bodyBytes, err := marshal(respStruct)
 	if err != nil {
 		return req.MakeErr("No se pudo serializar respuesta:", err)
 	}
@@ -573,6 +578,22 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	response.Body = &bodyBytes
 
 	return response
+}
+
+// WantsRawJSON reports whether ?raw=1 asked for the response as ordinary JSON instead of
+// the compact [keys, content] encoding.
+//
+// The compact format drops the bytes of repeating every field name on every row, but it
+// costs a decoder: reading a response by hand — curl, a log, a test — means aligning values
+// against the keys header, and that header's field order is derived from the content, so it
+// varies between two responses of the same route. raw=1 exists for those callers. It changes
+// only how the same struct is written, never which fields it carries, so it can be left on
+// in any environment.
+//
+// The frontend never sends it: unmarshal() only reads the compact form.
+func (req *HandlerArgs) WantsRawJSON() bool {
+	raw := req.Query["raw"]
+	return len(raw) > 0 && raw != "0"
 }
 
 func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {

@@ -15,8 +15,10 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.invoices":       GetInvoices,
 	"GET.invoice-xml":    GetInvoiceXML,
 
-	// Series are not routed here: they travel inline on the company record, so
-	// GET/POST.company-parametros reads and writes them.
+	// Series travel inline on the company record, so GET.company-parametros is how
+	// they are read. Writing them is its own route: the company form must not be
+	// able to overwrite a series, nor a series save the company.
+	"POST.invoice-series": PostInvoiceSeries,
 
 	// SUNAT credentials: the SOL user and the signing certificate, both stored
 	// encrypted and never returned to the client.

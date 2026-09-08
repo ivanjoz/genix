@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"app/invoicing"
@@ -32,6 +33,9 @@ const (
 	betaCertPassword    = "demo123"
 	betaSolUser         = "MODDATOS"
 	betaSolPassword     = "MODDATOS"
+	// betaRUC is the taxpayer SUNAT's test service answers for, and the one the
+	// test certificate is issued to. A company issuing against beta has to be it.
+	betaRUC = "20000000001"
 )
 
 // SetupSunatBeta configures a company to issue against SUNAT's test service.
@@ -65,9 +69,27 @@ func SetupSunatBeta(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(err.Error())
 	}
 
+	// This path writes the rows directly instead of going through the endpoints, so
+	// it has to refresh the config blob itself: an existing blob would keep serving
+	// the credentials that were just replaced.
+	companyConfig, err := cloud.CompactAndStoreCompanyConfig(companyID)
+	if err != nil {
+		return args.MakeErr(fmt.Sprintf("credenciales guardadas, pero no se pudo actualizar la configuración: %v", err))
+	}
+
 	args.AddMessage(fmt.Sprintf(
 		"empresa %v configurada contra SUNAT beta (usuario %v, %v series creadas)",
 		companyID, betaSolUser, created))
+
+	// SUNAT beta only answers for its own taxpayer, and BuildIssuer refuses a
+	// certificate whose RUC is not the company's. Saying so here beats discovering
+	// it as a rejected emission.
+	if companyConfig.Company.RUC != betaRUC {
+		args.AddMessage(fmt.Sprintf(
+			"ATENCIÓN: el RUC de la empresa es %q y el certificado de pruebas es de %v. "+
+				"Cambie el RUC de la empresa a %v para poder emitir contra beta.",
+			companyConfig.Company.RUC, betaRUC, betaRUC))
+	}
 	return core.FuncResponse{}
 }
 

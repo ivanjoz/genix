@@ -28,4 +28,9 @@ const (
 	// decide what to give back, so two concurrent clicks would each read a zero reversal and
 	// each write one — refunding twice. Keyed on the sale.
 	ActionAnnulSaleOrder LockAction = 4
+	// ActionSaveInvoiceSeries serializes editing a company's invoicing series. They travel inline
+	// on the company row, so saving one is a read-modify-write of the whole set: two concurrent
+	// saves would each start from the same list and the later one would drop the other's series.
+	// Keyed on the company.
+	ActionSaveInvoiceSeries LockAction = 5
 )

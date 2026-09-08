@@ -17,6 +17,8 @@ import { SharedListsService } from "$services/business/shared-lists.svelte";
 import { SystemParametersService } from '$services/services/system-parameters.svelte';
 import { untrack } from 'svelte';
 import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte';
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '../../company/configuration/invoice-series';
+import { tr } from '$core/store.svelte';
 import type { IWarehouse } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';
@@ -58,9 +60,22 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
   const hasCashBankRegistered = $derived(cajas.isReady > 0 && cajas.Cajas.length > 0);
   const missingCashBankWarning = $derived(cajas.isReady > 0 && cajas.Cajas.length === 0);
   const saleActionOptions = $derived([
-    ...(hasCashBankRegistered ? [{ id: SALE_ACTION_PAYMENT, name: "Pagado" }] : []),
     { id: SALE_ACTION_DELIVERY, name: "Recibido" },
+    ...(hasCashBankRegistered ? [{ id: SALE_ACTION_PAYMENT, name: "Pagado" }] : []),
   ]);
+  // Paid now: the money lands in a caja. Not paid: only a due date makes sense, so the two selectors are exclusive.
+  const isPaidNow = $derived(ventasState.form.ActionsIncluded.includes(SALE_ACTION_PAYMENT));
+  // A sale is only ever issued as a factura or a boleta; note series exist to correct a document
+  // that already went out, so offering them here would mint a sale id no document can use.
+  const invoiceSeriesOptions = $derived(
+    (parametrosService.empresa.InvoiceSeries || [])
+      .filter((series) => series.ss === 1
+        && (series.DocType === DOC_TYPE_FACTURA || series.DocType === DOC_TYPE_BOLETA))
+      .map((series) => ({
+        ID: series.SeriesID,
+        Name: `${tr(docTypeName(series.DocType)).toUpperCase()} · ${series.SeriesCode}`,
+      })),
+  );
   const clientOptions = $derived.by(() => {
     // Build a combined label so the selector matches by name and registry number with the shared SearchSelect component.
     return clientesService.records.map((clientRecord) => ({
@@ -92,14 +107,10 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
 	  if(!cajas.isReady){ return }
 	  const firstCajaID = cajas.Cajas[0]?.ID || 0
 
-	  // Untracked: the form fields written here are also read here, so tracking them would re-trigger this effect forever.
-	  untrack(() => {
-	  	ventasState.form.LastPaymentCajaID = firstCajaID
-	  	// No caja exists: drop the payment action so the order is generated as unpaid.
-	  	if(!firstCajaID && ventasState.form.ActionsIncluded.includes(SALE_ACTION_PAYMENT)){
-	  		ventasState.form.ActionsIncluded = ventasState.form.ActionsIncluded.filter((actionID) => actionID !== SALE_ACTION_PAYMENT)
-	  	}
-	  })
+	  // Untracked: the form field written here is also read here, so tracking it would re-trigger this effect forever.
+	  // A missing caja is NOT resolved here: the first (cached) response can arrive empty, and dropping the payment
+	  // action on it would silently untick "Pagado". postSaleOrder drops it at submit time instead.
+	  untrack(() => { ventasState.form.LastPaymentCajaID = firstCajaID })
   });
   
   $effect(() => {
@@ -437,13 +448,32 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
           <Button color="blue" icon="icon-[fa--floppy-o]" name="Generar" hideNameOnMobile
             css="shrink-0" label="Saves the current sale order and generates it in the system." onClick={handlePostSaleOrder} />
         </div>
+        <!-- Every row below shares the same 12-column grid so the left column (actions, client mode,
+             document) and the right column (caja/due date, client name) line up across rows. -->
         <div class="w-full px-12 mt-6 mb-6">
-	        <div class="col-span-2">
-	      	  <CheckboxOptions type="multiple"
+	        <div class="grid grid-cols-12 gap-8 items-center" aria-label="Sale order actions and payment">
+	      	  <CheckboxOptions type="multiple" css="col-span-5"
 	     			  options={saleActionOptions}
 	       		  keyId="id" keyName="name" save="ActionsIncluded"
 	       		  saveOn={ventasState.form}
 	       	  />
+	        	{#if isPaidNow && hasCashBankRegistered}
+		        	<SearchSelect
+		             css="col-span-7"
+			            label="" save="LastPaymentCajaID"
+			            keyId="ID"
+			            keyName="Name" saveOn={ventasState.form}
+			            options={cajas.Cajas}
+			            placeholder="CAJA"
+			          />
+	        	{:else}
+		          <DateInput
+		            css="col-span-7"
+		            label="" save="PaymentDueDate"
+		            saveOn={ventasState.form}
+		            placeholder="Date Pago"
+		          />
+	        	{/if}
 	        </div>
 	        {#if missingCashBankWarning}
 	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
@@ -452,64 +482,50 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
 	          </div>
 	        {/if}
         </div>
-        <div class="grid w-full grid-cols-2 gap-8 px-12 py-6 md:flex md:items-center" aria-label="Sale order payment and client options">
-        	{#if hasCashBankRegistered}
-	        	<SearchSelect
-	             css="w-[30%] md:order-1"
-		            label="" save="LastPaymentCajaID"
-		            keyId="ID"
-		            keyName="Name" saveOn={ventasState.form}
-		            options={cajas.Cajas}
-		            placeholder="CAJA"
-		          />
-        	{/if}
-          <DateInput
-            css="md:w-[30%] md:order-2"
-            label="" save="PaymentDueDate"
-            saveOn={ventasState.form}
-            placeholder="Date Pago"
-          />
-          <div class="md:order-3 md:ml-auto md:max-w-168">
-	          <SearchSelect useStyle={1}
-	             label=""
-	             keyId="ID" css="w-full text-sm"
-	             keyName="Name"
-	             options={clientModeOptions}
-	             selected={clientModeSelected}
-	             onChange={handleClientModeChange}
-	             placeholder="SIN CLIENTE"
-	           />
-          </div>
+        <div class="px-12 grid grid-cols-12 gap-8" aria-label="Client mode and invoice series">
+          <SearchSelect useStyle={1}
+             label=""
+             keyId="ID" css="col-span-5 text-sm"
+             keyName="Name"
+             options={clientModeOptions}
+             selected={clientModeSelected}
+             onChange={handleClientModeChange}
+             placeholder="SIN CLIENTE"
+           />
+          <SearchSelect useStyle={1}
+             label="" save="IssueSeriesID"
+             keyId="ID" css="col-span-7 text-sm"
+             keyName="Name" saveOn={ventasState.form}
+             options={invoiceSeriesOptions}
+             placeholder="SIN COMPROBANTE"
+           />
         </div>
-        <div class="px-12 pb-10 mt-6" aria-label="Client selection or registration form">
-          <div class="grid grid-cols-[170px,1fr] gap-8">
-            {#if clientModeSelected === 1}
-              <SearchSelect
-                label=""
-                keyId="ID"
-                keyName="DisplayName"
-                options={clientOptions}
-                selected={ventasState.form.ClientID}
-                onChange={handleClientSelected}
-                placeholder="Buscar cliente por nombre o documento"
-              />
-            {:else if clientModeSelected === 2 && ventasState.form.ClientInfo}
-              <div class="grid grid-cols-12 gap-8">
-	              <Input
-	                label="" css="col-span-5"
-	                saveOn={ventasState.form.ClientInfo}
-	                save="RegistryNumber"
-	                placeholder="Documento / RUC"
-	              />
-                <Input
-                  label="" css="col-span-7"
-                  saveOn={ventasState.form.ClientInfo}
-                  save="Name"
-                  placeholder="Nombre del cliente"
-                />
-              </div>
-            {/if}
-          </div>
+        <div class="px-12 pb-10 mt-8 grid grid-cols-12 gap-8" aria-label="Client selection or registration form">
+          {#if clientModeSelected === 1}
+            <SearchSelect
+              css="col-span-12"
+              label=""
+              keyId="ID"
+              keyName="DisplayName"
+              options={clientOptions}
+              selected={ventasState.form.ClientID}
+              onChange={handleClientSelected}
+              placeholder="Buscar cliente por nombre o documento"
+            />
+          {:else if clientModeSelected === 2 && ventasState.form.ClientInfo}
+            <Input
+              label="" css="col-span-5"
+              saveOn={ventasState.form.ClientInfo}
+              save="RegistryNumber"
+              placeholder="Documento / RUC"
+            />
+            <Input
+              label="" css="col-span-7"
+              saveOn={ventasState.form.ClientInfo}
+              save="Name"
+              placeholder="Nombre del cliente"
+            />
+          {/if}
         </div>
         <!-- List -->
         <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4" aria-label="Sale order cart items list">

@@ -59,6 +59,11 @@ func LoadCompanySeries(companyID int32) ([]types.InvoiceSeries, error) {
 // The set is validated as a whole because that is where the rules live: ids and
 // codes have to be unique across it, and only one series per document type can be
 // the default.
+//
+// Only the series column is written. Saving the whole row would rewrite the RUC,
+// the address and the Culqi keys from a copy read moments earlier, so a company
+// form saved in between would be silently undone — the two endpoints exist
+// precisely so that cannot happen, and a whole-row write would hand it back.
 func SaveCompanySeries(companyID int32, allSeries []types.InvoiceSeries) error {
 	company, err := loadCompanyRecord(companyID)
 	if err != nil {
@@ -71,9 +76,14 @@ func SaveCompanySeries(companyID int32, allSeries []types.InvoiceSeries) error {
 	company.InvoiceSeries = allSeries
 	company.Updated = core.SUnixTime()
 	companies := &[]config.Company{*company}
-	if err := db.Insert(companies); err != nil {
+
+	table := db.TableOf[config.Company]()
+	if err := db.Update(companies, table.InvoiceSeries, table.Updated); err != nil {
 		return fmt.Errorf("error al guardar las series: %w", err)
 	}
+	// The mirror has no column-scoped write, so this one is whole-row. It is a read
+	// replica for reports rather than the record anything is decided from, and the
+	// copy being written was read inside the lock a moment earlier.
 	if cloud.IsDataMirrorEnabled() {
 		if err := cloud.Insert([]config.Company{(*companies)[0]}); err != nil {
 			return fmt.Errorf("error al guardar las series en cloud: %w", err)

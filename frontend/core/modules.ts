@@ -48,7 +48,7 @@ export const AdminModule: IModule = {
 					onlySaaS: true,
 				},
 				{
-					name: "Testing|Testing", route: "/system/testing", icon: "icon-[fa--flask]",
+					name: "Developer|Developer", route: "/system/developer", icon: "icon-[fa--flask]",
 					onlySaaS: true,
 				},
       ]

@@ -131,11 +131,14 @@ way to only decrease a quantity, only remove-and-re-add. **Sub Total** shows `to
 
 The **ALMACÉN** selector at the top decides which warehouse's stock is shown and is the
 `WarehouseID` sent with the order — it also drives which warehouse is debited when **Recibido**
-is included. The **CAJA** selector only appears when the company has at least one registered
-cash/bank account (`caja o banco`); it is the account credited when **Pagado** is included, and
-the page picks the first available caja by default. When no cash/bank account exists yet, the
-selector and the **Pagado** action option both disappear and the page shows: `Necesitas
-registrar una caja para aceptar pagos.`
+is included. The **CAJA** selector sits on the same row as the action checkboxes and only appears
+when **Pagado** is checked and the company has at least one registered cash/bank account
+(`caja o banco`); it is the account credited when **Pagado** is included, and the page picks the
+first available caja by default. With **Pagado** unchecked, that same cell shows the **Date Pago**
+field instead — the caja and the due date are never visible at the same time, because a sale
+already paid has no due date. When no cash/bank account exists yet, the caja selector and the
+**Pagado** action option both disappear and the page shows: `Necesitas registrar una caja para
+aceptar pagos.`
 
 <!-- DOC-ID: capability.assign-client -->
 ## Assign a customer (Asignar un cliente)
@@ -147,7 +150,7 @@ or leave the sale without a customer (anonymous sale).
 
 ### Where to find it (Dónde encontrarlo)
 
-The small selector next to the payment/date row: **SIN CLIENTE** (default, no customer),
+The left-hand selector on the row below the action checkboxes: **SIN CLIENTE** (default, no customer),
 **Seleccionar Cliente** (search box matching by name or document/registry number), or
 **Registrar Cliente** (inline **Documento / RUC** and **Nombre del cliente** fields).
 
@@ -183,6 +186,48 @@ existing customer's data from this page.
   reutiliza el cliente existente en vez de crear uno duplicado.
 - Search terms: `cliente`, `registrar cliente`, `venta anónima`, `RUC`, `documento`.
 
+<!-- DOC-ID: capability.choose-invoice-series -->
+## Choose the invoicing series (Elegir el comprobante)
+
+### User intention (Intención del usuario)
+
+Decide which SUNAT series (`serie de facturación`) the sale will be issued under, so the
+electronic document later emitted for it carries the right type and code.
+
+### Where to find it (Dónde encontrarlo)
+
+The **SIN COMPROBANTE** selector, to the right of the client-mode selector. Options read as
+type and code, for example `BOLETA · B001` or `FACTURA · F001`.
+
+### Required information and prerequisites (Requisitos previos)
+
+The series come from the company's **Series de Facturación** table (Configuración → Mi Empresa).
+Only **active** series of type **Boleta** and **Factura** are offered: credit and debit note
+series exist to correct a document that already went out, never to open a sale.
+
+### Business rules and rationale (Reglas y razón de negocio)
+
+The chosen series is sent as `IssueSeriesID` and the backend folds it into the last two digits
+of the sale order's ID, so the electronic document issued for that sale can derive its own ID
+from the sale's. Nothing is preselected: leaving **SIN COMPROBANTE** sends `0`, which records a
+sale that names no series, and the document takes its own series when it is actually issued.
+
+### Result and side effects (Resultado y efectos)
+
+The series is fixed at creation and cannot be changed afterwards — it is part of the sale
+order's ID, not an editable field.
+
+### Limitations (Limitaciones)
+
+The page does not emit the electronic document; it only records which series the sale is meant
+for. A company with no series configured sees an empty list.
+
+### Common questions and vocabulary (Preguntas y vocabulario)
+
+- `¿Puedo vender sin comprobante?` Sí, dejando "SIN COMPROBANTE".
+- `¿Por qué no aparece mi serie?` Porque está inactiva, o es una serie de nota de crédito/débito.
+- Search terms: `comprobante`, `serie`, `boleta`, `factura`, `SUNAT`.
+
 <!-- DOC-ID: capability.set-payment-delivery -->
 ## Choose Pagado / Recibido and generate the sale (Definir Pagado / Recibido y generar la venta)
 
@@ -194,9 +239,10 @@ both, or neither — then create the sale order.
 
 ### Where to find it (Dónde encontrarlo)
 
-The **Pagado** / **Recibido** checkboxes above the client selector (both checked by default,
+The **Recibido** / **Pagado** checkboxes above the client selector (both checked by default,
 though **Pagado** is hidden if no caja exists) and the payment due-date field (**Date Pago**,
-optional); the green **Generar** button in the cart header creates the order.
+optional, shown in place of the caja selector while **Pagado** is unchecked); the green
+**Generar** button in the cart header creates the order.
 
 ### Required information and prerequisites (Requisitos previos)
 

@@ -2,8 +2,8 @@ package invoicing
 
 import (
 	business "app/business/types"
+	"app/cloud"
 	config "app/config/types"
-	"app/core"
 	"app/db"
 	"app/invoicing/types"
 	"errors"
@@ -22,46 +22,39 @@ import (
 // The fiscal address comes from the site the sale was made at, because that is
 // what SUNAT wants declared: a company with three branches issues from three
 // addresses, each with the establishment code SUNAT assigned to it.
+// The identity, the credentials and the signing material all come from the
+// company config blob, which is one GET instead of a company read, a secrets read
+// and three decryptions. The blob rebuilds itself when it is missing or stale, so
+// this path does not need a fallback of its own.
 func BuildIssuer(companyID int32, siteID int32) (model.Issuer, error) {
-	company, err := loadCompany(companyID)
+	companyConfig, err := cloud.LoadCompanyConfig(companyID)
 	if err != nil {
 		return model.Issuer{}, err
 	}
-	secrets, err := LoadActiveSecrets(companyID)
-	if err != nil {
-		return model.Issuer{}, err
+	if len(companyConfig.Company.RUC) != 11 {
+		return model.Issuer{}, errors.New("la empresa no tiene un RUC válido de 11 dígitos")
 	}
-
-	solPassword, err := core.Decrypt(secrets.SolPasswordEnc)
-	if err != nil {
-		return model.Issuer{}, errors.New("no se pudo descifrar la clave SOL de la empresa")
-	}
-	certificate, err := core.Decrypt(secrets.CertificateEnc)
-	if err != nil {
-		return model.Issuer{}, errors.New("no se pudo descifrar el certificado de la empresa")
-	}
-	certPassword, err := core.Decrypt(secrets.CertPasswordEnc)
-	if err != nil {
-		return model.Issuer{}, errors.New("no se pudo descifrar la clave del certificado")
+	sunat := companyConfig.Sunat
+	if len(sunat.CertificateDER) == 0 {
+		return model.Issuer{}, errors.New("la empresa no tiene un certificado digital cargado")
 	}
 
 	environment := model.EnvBeta
-	if secrets.Environment == types.SunatEnvProduction {
+	if sunat.Environment == types.SunatEnvProduction {
 		environment = model.EnvProduction
 	}
 
+	// The key and the certificate travel unwrapped: the .pfx container around them
+	// is transport the signer discards, so the blob never carried it.
 	issuer := model.Issuer{
-		RUC:            company.RUC,
-		LegalName:      company.LegalName,
-		TradeName:      company.Name,
-		SolUser:        secrets.SolUser,
-		SolPassword:    string(solPassword),
-		PKCS12:         certificate,
-		PKCS12Password: string(certPassword),
+		RUC:            companyConfig.Company.RUC,
+		LegalName:      companyConfig.Company.LegalName,
+		TradeName:      companyConfig.Company.TradeName,
+		SolUser:        sunat.SolUser,
+		SolPassword:    sunat.SolPassword,
+		PrivateKeyDER:  sunat.PrivateKeyDER,
+		CertificateDER: sunat.CertificateDER,
 		Environment:    environment,
-	}
-	if issuer.LegalName == "" {
-		issuer.LegalName = company.Name
 	}
 
 	address, err := loadSiteAddress(companyID, siteID)
@@ -73,9 +66,9 @@ func BuildIssuer(companyID int32, siteID int32) (model.Issuer, error) {
 	// The certificate has to belong to the company issuing. SUNAT rejects the
 	// mismatch, and catching it here names the real problem instead of leaving
 	// a code to look up.
-	if secrets.CertRUC != "" && secrets.CertRUC != company.RUC {
+	if sunat.CertRUC != "" && sunat.CertRUC != issuer.RUC {
 		return model.Issuer{}, fmt.Errorf(
-			"el certificado pertenece al RUC %v y la empresa es %v", secrets.CertRUC, company.RUC)
+			"el certificado pertenece al RUC %v y la empresa es %v", sunat.CertRUC, issuer.RUC)
 	}
 	return issuer, nil
 }

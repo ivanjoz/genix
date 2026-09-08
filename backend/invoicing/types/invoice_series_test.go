@@ -111,6 +111,118 @@ func TestResolveSeriesRefusesToGuessANoteSeries(t *testing.T) {
 	}
 }
 
+// The first series of a document type becomes its default, because a till that
+// names no series still has to get one.
+func TestApplyDefaultSeriesAdoptsTheFirstOfItsType(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeBoleta, SeriesCode: "B001", Status: 1},
+	}
+	ApplyDefaultSeries(allSeries, 1)
+	if allSeries[0].IsDefault != 1 {
+		t.Error("the only series of its type did not become the default")
+	}
+}
+
+// Claiming the default has to clear the previous holder, or the set ends up with
+// two and ValidateSeries refuses it — which is what saving one series at a time
+// would otherwise produce.
+func TestApplyDefaultSeriesMovesTheDefault(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeBoleta, SeriesCode: "B001", SiteID: 1, IsDefault: 1, Status: 1},
+		{SeriesID: 2, DocType: DocTypeBoleta, SeriesCode: "B002", SiteID: 1, IsDefault: 1, Status: 1},
+		{SeriesID: 3, DocType: DocTypeFactura, SeriesCode: "F001", SiteID: 1, IsDefault: 1, Status: 1},
+	}
+	ApplyDefaultSeries(allSeries, 2)
+
+	if allSeries[0].IsDefault != 0 {
+		t.Error("the previous default of that type kept the flag")
+	}
+	if allSeries[1].IsDefault != 1 {
+		t.Error("the series claiming the default lost it")
+	}
+	// A different document type is untouched: defaults are per type.
+	if allSeries[2].IsDefault != 1 {
+		t.Error("clearing one type's default cleared another's")
+	}
+	if err := ValidateSeries(allSeries); err != nil {
+		t.Errorf("the settled set does not validate: %v", err)
+	}
+}
+
+// Adding a second series of a type must not steal the default from the one holding it.
+func TestApplyDefaultSeriesLeavesAnExistingDefaultAlone(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeBoleta, SeriesCode: "B001", IsDefault: 1, Status: 1},
+		{SeriesID: 2, DocType: DocTypeBoleta, SeriesCode: "B002", Status: 1},
+	}
+	ApplyDefaultSeries(allSeries, 2)
+	if allSeries[0].IsDefault != 1 || allSeries[1].IsDefault != 0 {
+		t.Error("adding a series moved the default off the one that held it")
+	}
+}
+
+// A retired series is not a candidate, and retiring the default must not resurrect it.
+func TestApplyDefaultSeriesIgnoresARetiredSeries(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeBoleta, SeriesCode: "B001", IsDefault: 0, Status: 0},
+	}
+	ApplyDefaultSeries(allSeries, 1)
+	if allSeries[0].IsDefault != 0 {
+		t.Error("a retired series was made the default")
+	}
+}
+
+// Deactivating the default must not leave its type without one, or a till that
+// names no series stops being able to sell.
+func TestApplyDefaultSeriesPromotesWhenTheDefaultIsDeactivated(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeBoleta, SeriesCode: "B001", IsDefault: 0, Status: 0},
+		{SeriesID: 2, DocType: DocTypeBoleta, SeriesCode: "B002", IsDefault: 0, Status: 1},
+	}
+	ApplyDefaultSeries(allSeries, 1)
+
+	if allSeries[0].IsDefault != 0 {
+		t.Error("a deactivated series kept the default")
+	}
+	if allSeries[1].IsDefault != 1 {
+		t.Error("no active series of that type picked up the default")
+	}
+}
+
+// An inactive series is never the default: it cannot be issued under.
+func TestApplyDefaultSeriesStripsTheDefaultFromAnInactiveSeries(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeFactura, SeriesCode: "F001", IsDefault: 1, Status: 0},
+	}
+	ApplyDefaultSeries(allSeries, 1)
+	if allSeries[0].IsDefault != 0 {
+		t.Error("an inactive series is still marked as the default")
+	}
+}
+
+// A type with no active series at all is simply left alone — there is nothing to
+// promote, and ResolveSeries refuses it with a message that says so.
+func TestApplyDefaultSeriesLeavesATypeWithNoActiveSeries(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeFactura, SeriesCode: "F001", Status: 0},
+	}
+	ApplyDefaultSeries(allSeries, 1)
+	if _, err := ResolveSeries(allSeries, DocTypeFactura, 0); err == nil {
+		t.Error("a type with only inactive series resolved to one")
+	}
+}
+
+// The checkbox has to mean something: an inactive series cannot be issued under,
+// even when it is named explicitly.
+func TestResolveSeriesRefusesAnInactiveSeriesNamedExplicitly(t *testing.T) {
+	allSeries := []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeBoleta, SeriesCode: "B001", Status: 0},
+	}
+	if _, err := ResolveSeries(allSeries, DocTypeBoleta, 1); err == nil {
+		t.Error("an inactive series was accepted when named explicitly")
+	}
+}
+
 func TestValidateSeriesAcceptsAValidSet(t *testing.T) {
 	if err := ValidateSeries(activeSeries()); err != nil {
 		t.Errorf("valid set rejected: %v", err)

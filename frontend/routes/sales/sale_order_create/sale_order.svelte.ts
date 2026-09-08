@@ -67,6 +67,9 @@ export interface ISaleOrder {
   DeliveryTime: number
   DeliveryUser: number
   PaymentDueDate: number
+  // The invoicing series the sale will be issued under. The backend folds it into the last two
+  // digits of the sale id, so it is only read on creation. 0 = the till named no series.
+  IssueSeriesID: number
   ClientInfo: any
   /* extra fields */
   CompanyID: number
@@ -92,7 +95,7 @@ export class SaleOrderState {
     DetailProductSkus: [], DetailProductLotIDs: [], DetailProductPresentations: [],
     Created: 0, upd: 0, upc: 0, UpdatedBy: 0, ss: 0,
     LastPaymentTime: 0, LastPaymentUser: 0, DeliveryTime: 0, DeliveryUser: 0,
-    PaymentDueDate: 0, ClientInfo: undefined, Name: "", RegistryNumber: "",
+    PaymentDueDate: 0, IssueSeriesID: 0, ClientInfo: undefined, Name: "", RegistryNumber: "",
     montoRecibido: 0, montoVuelto: 0
   })
   filterText = $state("")
@@ -205,6 +208,11 @@ export class SaleOrderState {
     // A payment always books a cash-bank movement, so the "Pagado" action can never travel without a caja.
     if (!this.form.LastPaymentCajaID) {
       this.form.ActionsIncluded = this.form.ActionsIncluded.filter((actionID) => actionID !== SALE_ACTION_PAYMENT)
+    }
+
+    // Paid on creation: a due date would contradict it, and the form hides that input, so it must not travel.
+    if (this.form.ActionsIncluded.includes(SALE_ACTION_PAYMENT)) {
+      this.form.PaymentDueDate = 0
     }
 
     Loading.standard("Procesando venta...")

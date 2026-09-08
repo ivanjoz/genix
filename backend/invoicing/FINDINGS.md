@@ -166,7 +166,20 @@ own counter names — are invisible to any table-driven walk and must be reset b
 reservation is dropped in the same critical section as the move, which is what opcode `0x08` was
 built for.
 
-## 4. Minor
+## 4. A Modal's Save button is invisible to the product's own agent
+
+**Severity: low, but it is not specific to this feature.**
+
+`Modal` registers itself with a `close` method and nothing else — its Save button never calls
+`agentRegister`. Reading `/company/configuration` through the agentic API shows
+`26 Modal "Nueva serie" close` and no handle for saving, so the agent can open a dialog, fill it, and
+then have no way to commit it.
+
+Found while verifying the invoicing-series dialog, which is why that endpoint had to be exercised
+over HTTP instead. It affects every modal in the app, not this one, so the fix belongs in
+`packages/genix-ui/layers/Modal.svelte` rather than here.
+
+## 5. Minor
 
 - ~~**Dead branch** in `recordFailure`.~~ **Resolved.** There was no missing distinction: the state is
   `InvoiceException` either way, and what differs is whether a retry is scheduled. The branch is

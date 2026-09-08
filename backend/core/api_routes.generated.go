@@ -105,7 +105,7 @@ var APIRouteIDs = map[string]int16{
 	"POST.initial-data":               72,
 	"POST.invoice":                    124,
 	"POST.invoice-retry":              125,
-	"POST.invoice-series":             126, // retired
+	"POST.invoice-series":             126,
 	"POST.p-agent-turn":               73,
 	"POST.p-contact-message":          103,
 	"POST.p-signup-company":           74,

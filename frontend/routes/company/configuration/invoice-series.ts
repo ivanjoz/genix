@@ -117,13 +117,3 @@ export function makeSeries(allSeries: IInvoiceSeries[], docType: number, code: s
     ss: 1,
   }
 }
-
-// setDefaultSeries makes one series the default of its type, clearing whichever
-// held it. Toggling the current default off would leave the type without one.
-export function setDefaultSeries(allSeries: IInvoiceSeries[], seriesID: number): IInvoiceSeries[] {
-  const chosen = allSeries.find(series => series.SeriesID === seriesID)
-  if (!chosen) return allSeries
-  return allSeries.map(series => series.DocType === chosen.DocType
-    ? { ...series, IsDefault: series.SeriesID === seriesID ? 1 : 0 }
-    : series)
-}

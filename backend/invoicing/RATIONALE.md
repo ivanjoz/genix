@@ -5,6 +5,125 @@ Design decisions behind the SUNAT integration, newest first. The library's own d
 
 Full design in `PLAN.md`. Open problems in `FINDINGS.md`.
 
+## BuildIssuer reads the config blob; the credentials test still reads the database
+
+**Context** — `BuildIssuer` now takes everything but the fiscal address from
+`cloud.LoadCompanyConfig`: identity, SOL credentials and the signing material, which the blob
+carries as an unwrapped PKCS#8 key plus leaf certificate rather than the `.pfx` they came from.
+That leaves `buildIssuerForTest` — the "test my credentials against SUNAT" button — reading
+`loadCompany` and `LoadActiveSecrets` directly, which now looks like a leftover.
+
+**Decision** — It is deliberate and stays. The test button runs right after an upload, against the
+row that was just written.
+
+**Rationale** — The write-through that refreshes the blob cannot fail the save, so it may not have
+run when the user presses Test. Pointing that button at the blob would test a stale certificate and
+report a result about the wrong file — the one failure mode that button exists to rule out. It is
+also the only caller for which one extra database read costs nothing.
+
+**Also decided here:** `CertRUC` and `CertValidTo` in the blob are read off the certificate at
+compaction, not copied from the `company_secrets` row. The row's copy is what the upload recorded;
+the blob's is what will actually sign, and the RUC check before an emission has to be about the
+latter.
+
+## A rotation inserts before it retires, and inherits the SOL password it never asked for
+
+**Context** — Uploading a certificate over an existing one now writes a second row and retires the
+first, which is two writes with no transaction between them. The panel that sends the upload does
+not re-ask for the SOL password either — it is stored, and no endpoint returns it — so the new row
+would be born unable to authenticate.
+
+**Decision** — `PostCompanySecrets` reads the row being edited first, copies its `SolPasswordEnc`
+into the new one when the body carries no password, inserts, and only then writes `Status = 0` on
+the old row. A brand-new record (no predecessor to inherit from) is refused without a SOL password,
+the same way it is refused without a certificate.
+
+**Rationale** — the order is what decides how a half-finished rotation fails. Insert-then-retire can
+leave two active rows, and `LoadActiveSecrets` takes the active one of the highest id, which is the
+certificate that was just uploaded — the right one. Retire-then-insert would leave a company with
+no active credentials and no way to invoice until someone noticed. The cost is that a failed retire
+needs a second save to clean up, which the panel makes obvious: it lists the retired ones, and the
+old row is still sitting among the active.
+
+## The series save through their own endpoint, and the default is settled server-side
+
+**Context** — The series live inline on the company row, so the obvious thing is for the company form
+to write them with everything else. That makes one Save button claim two panels, and a stale tab able
+to wipe series it never loaded.
+
+**Decision** — `POST.invoice-series` takes **one** series and writes it. `POST.company-parametros`
+reads the stored series and carries them forward untouched, so it only writes what its panel shows.
+The endpoint owns three things the caller cannot get right on its own: the id of a new series, its
+active status, and which series of a document type is the default (`ApplyDefaultSeries`).
+
+**Rationale** — A set-shaped body is what lets a stale client delete series it never saw, so the body
+is one series and the reply is the whole set. Being the default is a property of the *set*, though:
+sending one series marked default would leave the previous holder still marked, which
+`ValidateSeries` then refuses — the save would fail with a confusing message about two defaults. It
+is settled where the whole set is visible, and the client just says which series should hold it.
+
+Three bugs this design had, all found by calling the endpoint rather than by reading it:
+
+- nothing set `IsDefault`, so a series added through the API had none and `ResolveSeries` fell through
+  to "first active of the type" — right by accident;
+- moving the default produced two of them and failed validation, because the client cleared the old
+  one locally and then sent only the new one;
+- `if body.Status == 0 { body.Status = 1 }` flipped a retire straight back to active, so a series
+  could never be retired. Defaulting to active now happens only when the id is being allocated.
+
+The lock is `ActionSaveInvoiceSeries`, keyed on the company: the set is read, changed and written
+back, so two saves have to be ordered or the later one drops what the earlier one added.
+
+## Editing one series touches only that series, and only that column
+
+**Context** — The series are one inline array on the company row. The point of giving them their own
+endpoint was that saving one must not disturb anything else, and two things were still short of that.
+
+**Decision** — `PostInvoiceSeries` reads the stored set, replaces the one entry whose id matches, and
+writes back — under a per-company lock, so the read and the write cannot interleave with another
+save. An id the caller names that does not exist is refused rather than appended. And
+`SaveCompanySeries` writes with `db.Update(rows, table.InvoiceSeries, table.Updated)` rather than
+`db.Insert`.
+
+**Rationale** — A whole-row write is the failure this endpoint exists to prevent, just moved one level
+down: `db.Insert` rewrites the RUC, the address and the Culqi keys from a copy read moments earlier,
+so a company form saved in between would be silently undone. The two endpoints only stay independent
+if the writes are column-scoped as well as the payloads.
+
+Appending on an unknown id was the other gap. Ids come from `NextSeriesID`; honouring a client-chosen
+one would let a stale tab burn numbers out of the ninety-nine that exist, or resurrect an id it
+remembers from a set it no longer has. Naming a series that is not there is a mistake, not an insert.
+
+The mirror write stays whole-row because `cloud` has no column-scoped update. It is a read replica for
+reports rather than the record anything is decided from, and the copy it writes was read inside the
+lock a moment earlier.
+
+## A series is never deleted, only deactivated
+
+**Context** — A series started with a trash button in its table row. Deleting one is not something
+the data model can support.
+
+**Decision** — There is no delete anywhere: no button in the row, none in the dialog. An "Activa"
+checkbox is the whole of it. The table lists every series with the inactive ones sorted to the end and
+marked in red.
+
+**Rationale** — `NextSeriesID` is `max + 1` over what is stored, so removing a series would hand its
+id to the next one — which would then inherit its correlativo counter (`cpe_{company}_{id}`) and start
+numbering mid-sequence, under a code that means something else. Documents already issued resolve their
+type and code by that id, so the id has to outlive any interest in the series. A delete button that
+can only ever mean "deactivate" is worse than no delete button, because it promises something the
+system will not do.
+
+That is also why the table stopped filtering to active series: hiding an inactive one makes it
+unreachable, and the checkbox that brings it back lives in its dialog. Sorting them last keeps them
+out of the way without hiding them.
+
+`ApplyDefaultSeries` had to become total rather than incremental to make the checkbox safe: an
+inactive series is never the default, and any document type left with active series but no active
+default adopts one. Without that, deactivating a default left its type with none and a till that names
+no series stopped being able to sell it. Verified against the running backend — deactivating a default
+stripped it, and reactivating the remaining series of that type promoted it.
+
 ## The series is fixed by the sale, not chosen when invoicing
 
 **Context** — With `ID = SaleOrderID`, the document that bills a sale is keyed by that sale. That only

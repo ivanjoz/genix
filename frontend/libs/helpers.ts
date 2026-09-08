@@ -81,6 +81,17 @@ export const cn = (...classNames: (string|boolean)[]) => {
   return classNames.filter(x => x).join(" ")
 }
 
+// A File as plain base64, without the data-URL prefix a FileReader would add: what an
+// endpoint that carries a binary inside a JSON body expects. The byte loop is fine for
+// the small files that travel this way (a .pfx is 3-6 KB); a megabyte-sized upload
+// belongs in POST_XMLHR, not in a JSON field.
+export const readFileAsBase64 = async (file: File): Promise<string> => {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  let binary = ""
+  for (const byte of bytes) { binary += String.fromCharCode(byte) }
+  return btoa(binary)
+}
+
 const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 const base62IndexesByCharCode = new Int16Array(123)
 

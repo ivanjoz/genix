@@ -9,6 +9,8 @@ import HeaderConfig from '$domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
 import NotificationsButton from '$domain/NotificationsButton.svelte';
 import { useUI } from '@genix/ui';
+import { markPageServicesForRefresh } from '@genix/ui/runtime';
+import { Env } from '$core/env';
 
 	// Props
 	const {
@@ -57,10 +59,17 @@ import { useUI } from '@genix/ui';
 		showSettings = false;
 	}
 
-	function handleReload() {
+	// Reloading by itself would replay the same cached responses, so the routes this page read are
+	// flagged in the service worker first: the reload then re-fetches them from the server.
+	async function handleReload() {
 		isReloading = true;
-		const now5secodsMore = Math.floor(Date.now() / 1000) + 5;
-		localStorage.setItem('force_sync_cache_until', String(now5secodsMore));
+		try {
+			const markedRoutes = await markPageServicesForRefresh(Env.getPathname());
+			console.log('[AppHeader] Routes marked for a forced fetch:', markedRoutes);
+		} catch (error) {
+			// A failed mark only means the reload reads the cache, which is the old behavior.
+			console.warn('[AppHeader] Could not mark the page routes for refresh.', error);
+		}
 		window.location.reload();
 	}
 

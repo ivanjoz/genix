@@ -40,7 +40,10 @@ export interface ICompany {
 
 export class EmpresaParametrosService extends GetHandler {
     route = "company-parametros"
-    useCache = { min: 10, ver: 1 }
+    // ver 2: the record gained InvoiceSeries. A copy cached before that field existed
+    // would show a company with no series while the server has six, which reads as
+    // configuration having been lost.
+    useCache = { min: 10, ver: 2 }
 
     empresa = $state({
         CulqiConfig: {},
