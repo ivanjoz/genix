@@ -20,10 +20,6 @@ import (
 // about the document. Persisting in between means a failed transmission is
 // retried with the number it already has, instead of burning a new one on every
 // attempt.
-//
-// The correlativo is not chosen here. The ORM allocates it from a Scylla counter
-// partitioned by series when the row is inserted, so two concurrent sales cannot
-// take the same number without one of them failing on the primary key.
 func ReserveDocument(
 	companyID, userID int32, order *sales.SaleOrder, series *types.InvoiceSeries,
 ) (*types.InvoiceDocument, error) {
@@ -31,20 +27,19 @@ func ReserveDocument(
 	if existing, err := types.FindBySaleOrder(companyID, order.ID); err != nil {
 		return nil, err
 	} else if existing != nil {
-		return nil, fmt.Errorf("la venta ya tiene el comprobante %v", existing.Number())
+		return nil, fmt.Errorf("la venta ya tiene el comprobante %v",
+			existing.Number(series.SeriesCode))
 	}
 
-	document, lineProductIDs, err := SaleOrderToDocument(companyID, order, series)
+	document, _, err := SaleOrderToDocument(companyID, order, series)
 	if err != nil {
 		return nil, err
 	}
 
-	// Complete and validate before anything is written: a document SUNAT would
-	// reject should not consume a number at all.
-	//
-	// The number is the one thing that cannot be checked yet — the ORM assigns
-	// it on insert — so validation runs against a stand-in. Emit validates again
-	// at send time, by which point the real number is in place.
+	// Complete and validate before a number is spent: a document SUNAT would
+	// reject should not consume one at all. The correlativo is the only thing not
+	// yet known, so validation runs against a stand-in — Emit validates again at
+	// send time with the real number in place.
 	if err := model.CompleteTotals(document); err != nil {
 		return nil, err
 	}
@@ -52,43 +47,45 @@ func ReserveDocument(
 	if problems := model.ValidateDocument(document); len(problems) > 0 {
 		return nil, model.JoinProblems(problems)
 	}
-	document.Correlativo = 0
 
-	row := rowFromDocument(companyID, userID, order, series, document, lineProductIDs)
+	// The number comes from the series' own counter, reserved through the
+	// fareward allocator — the same path every id in the system takes, and the
+	// reason two tills cannot be handed the same correlativo.
+	correlativo, err := db.GetAutoincrementID(
+		types.CorrelativoCounterName(companyID, series.SeriesID), 1)
+	if err != nil {
+		return nil, fmt.Errorf("error al reservar el correlativo: %w", err)
+	}
+	document.Correlativo = correlativo
+
+	row := rowFromDocument(companyID, userID, order, series, document, correlativo)
 	rows := &[]types.InvoiceDocument{row}
 	if err := db.Insert(rows); err != nil {
-		return nil, fmt.Errorf("error al reservar el correlativo: %w", err)
+		return nil, fmt.Errorf("error al guardar el comprobante: %w", err)
 	}
 
 	saved := (*rows)[0]
 	return &saved, nil
 }
 
-// rowFromDocument flattens a document into the row that will outlive it.
+// rowFromDocument records what only the row knows: which sale, which number, and
+// what it totalled.
 //
-// The lines are copied out in full rather than referenced, because the row has
-// to be able to rebuild the document on its own: a retry that happens tomorrow
-// must produce the same XML even if the product was renamed in between.
+// The lines are deliberately not copied. They are rebuilt from the sale on every
+// send, and once SUNAT accepts the document the signed XML in object storage is
+// the artifact that matters — a second copy in the row could only disagree with it.
 func rowFromDocument(
 	companyID, userID int32, order *sales.SaleOrder,
-	series *types.InvoiceSeries, document *model.Document, lineProductIDs []int32,
+	series *types.InvoiceSeries, document *model.Document, correlativo int64,
 ) types.InvoiceDocument {
 
 	now := core.SUnixTime()
-	row := types.InvoiceDocument{
-		CompanyID:     companyID,
-		DocTypeSeries: types.PackDocTypeSeries(series.DocType, series.SeriesID),
-		DocType:       series.DocType,
-		SeriesID:      series.SeriesID,
-		SeriesCode:    series.SeriesCode,
-		IssueDate:     core.FechaUnix(),
-		IssueTime:     now,
-		SaleOrderID:   order.ID,
-		ClientID:      order.ClientID,
-
-		ClientDocNumber: document.Customer.DocNumber,
-		ClientName:      document.Customer.LegalName,
-		ClientDocType:   identityDocTypeCode(document.Customer.DocType),
+	return types.InvoiceDocument{
+		CompanyID:   companyID,
+		ID:          types.DocumentIDForSale(order.ID, series.SeriesID),
+		Correlativo: int32(correlativo),
+		IssueDate:   core.FechaUnix(),
+		IssueTime:   now,
 
 		Currency:         types.CurrencyPEN,
 		TotalAmount:      int64(document.Totals.Payable),
@@ -103,66 +100,35 @@ func rowFromDocument(
 		Created:   now,
 		CreatedBy: userID,
 		Updated:   now,
-		UpdatedBy: userID,
 	}
-
-	for index := range document.Lines {
-		line := &document.Lines[index]
-		// Not order.DetailProductsIDs[index]: a sale line with a sub-unit part produces two
-		// document lines, so the two slices are no longer index-aligned.
-		row.DetailProductIDs = append(row.DetailProductIDs, core.GetIndex(lineProductIDs, index))
-		quantity := int32(line.Quantity / model.QuantityScale)
-		row.DetailQuantity = append(row.DetailQuantity, quantity)
-		// The unit value is derived when the caller priced the line as a whole,
-		// which is the usual path here: a column that always stored zero would
-		// only mislead whoever reads the row later.
-		unitValue := line.UnitValue
-		if unitValue == 0 && quantity > 0 {
-			unitValue = line.Value / model.Cents(quantity)
-		}
-		row.DetailUnitValue = append(row.DetailUnitValue, int32(unitValue))
-		row.DetailValue = append(row.DetailValue, int32(line.Value))
-		row.DetailIgvAmount = append(row.DetailIgvAmount, int32(line.IGV))
-		row.DetailIgvType = append(row.DetailIgvType, igvTypeCode(line.IgvType))
-		row.DetailUnitCode = append(row.DetailUnitCode, line.UnitCode)
-		row.DetailDescription = append(row.DetailDescription, line.Description)
-	}
-	return row
 }
 
-// DocumentFromRow rebuilds what was reserved, so a transmission that never
-// happened can be attempted again without consulting the sale.
-func DocumentFromRow(row *types.InvoiceDocument) *model.Document {
-	document := &model.Document{
-		Type:        sunatDocType(row.DocType),
-		Series:      row.SeriesCode,
-		Correlativo: int64(row.Correlativo()),
-		IssuedAt:    time.Unix(core.SunixToUnix(row.IssueTime), 0),
-		Currency:    model.DefaultCurrency,
-		Payment:     model.PaymentCash,
-		Customer: model.Party{
-			DocType:   identityDocTypeOfCode(row.ClientDocType),
-			DocNumber: row.ClientDocNumber,
-			LegalName: row.ClientName,
-		},
+// RebuildDocument reconstructs what was reserved, from the sale it bills.
+//
+// The issue date comes off the row, not the clock: a retry tomorrow must declare
+// the day the document was issued, not the day it finally got through.
+func RebuildDocument(companyID int32, row *types.InvoiceDocument,
+	series *types.InvoiceSeries) (*model.Document, error) {
+
+	order, err := loadSaleOrder(companyID, saleIDOfDocument(row))
+	if err != nil {
+		return nil, err
 	}
 
-	for index := range row.DetailDescription {
-		document.Lines = append(document.Lines, model.Line{
-			ProductCode: "",
-			Description: core.GetIndex(row.DetailDescription, index),
-			Quantity:    model.Units(int(core.GetIndex(row.DetailQuantity, index))),
-			UnitCode:    core.GetIndex(row.DetailUnitCode, index),
-			IgvType:     igvTypeOfCode(core.GetIndex(row.DetailIgvType, index)),
-			IgvPercent:  model.Percent(igvPercentHundredths),
-			Value:       model.Cents(core.GetIndex(row.DetailValue, index)),
-			IGV:         model.Cents(core.GetIndex(row.DetailIgvAmount, index)),
-		})
+	document, _, err := SaleOrderToDocument(companyID, order, series)
+	if err != nil {
+		return nil, err
 	}
-	return document
+	document.Correlativo = int64(row.Correlativo)
+	document.IssuedAt = time.Unix(core.SunixToUnix(row.IssueTime), 0)
+
+	if err := model.CompleteTotals(document); err != nil {
+		return nil, err
+	}
+	return document, nil
 }
 
-// LoadDocument reads one document by its packed key.
+// LoadDocument reads one document by its id.
 func LoadDocument(companyID int32, documentID int64) (*types.InvoiceDocument, error) {
 	documents := []types.InvoiceDocument{}
 	query := db.Query(&documents)
@@ -177,65 +143,29 @@ func LoadDocument(companyID int32, documentID int64) (*types.InvoiceDocument, er
 	return &documents[0], nil
 }
 
-// Identity document codes are stored as small integers and travel as catalog-06
-// strings. The two conversions live together so they cannot drift apart.
-func identityDocTypeCode(docType string) int8 {
-	switch docType {
-	case model.IDDocDNI:
-		return 1
-	case model.IDDocForeign:
-		return 4
-	case model.IDDocRUC:
-		return 6
-	case model.IDDocPassport:
-		return 7
+// saleIDOfDocument is the sale a document bills.
+//
+// A document that bills a sale is keyed by that sale — the sale carries the series
+// it will be issued under, so the two ids are the same value. A note is issued
+// under its own series and lands elsewhere, so it reaches the sale through the
+// document it corrects, which is the one keyed by the sale.
+func saleIDOfDocument(row *types.InvoiceDocument) int64 {
+	if row.AffectedDocID != 0 {
+		return row.AffectedDocID
 	}
-	return 0
+	return row.ID
 }
 
-func identityDocTypeOfCode(code int8) string {
-	switch code {
-	case 1:
-		return model.IDDocDNI
-	case 4:
-		return model.IDDocForeign
-	case 6:
-		return model.IDDocRUC
-	case 7:
-		return model.IDDocPassport
+// seriesOfDocument resolves the series a document was issued under, from the tail
+// of its own id.
+func seriesOfDocument(companyID int32, row *types.InvoiceDocument) (*types.InvoiceSeries, error) {
+	allSeries, err := LoadCompanySeries(companyID)
+	if err != nil {
+		return nil, err
 	}
-	return model.IDDocNone
-}
-
-// The IGV affectation is catalog 07, stored numerically.
-func igvTypeCode(igvType string) int8 {
-	switch igvType {
-	case model.IgvExempt:
-		return 20
-	case model.IgvUnaffected:
-		return 30
-	case model.IgvExport:
-		return 40
-	case model.IgvFreeTaxed:
-		return 11
-	case model.IgvIVAP:
-		return 17
+	series := types.FindSeries(allSeries, row.SeriesID())
+	if series == nil {
+		return nil, fmt.Errorf("la serie %v del comprobante ya no existe", row.SeriesID())
 	}
-	return 10
-}
-
-func igvTypeOfCode(code int8) string {
-	switch code {
-	case 20:
-		return model.IgvExempt
-	case 30:
-		return model.IgvUnaffected
-	case 40:
-		return model.IgvExport
-	case 11:
-		return model.IgvFreeTaxed
-	case 17:
-		return model.IgvIVAP
-	}
-	return model.IgvTaxed
+	return series, nil
 }

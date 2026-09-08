@@ -5,6 +5,7 @@ import (
 	"app/config/types"
 	"app/core"
 	"app/db"
+	invoicing "app/invoicing/types"
 	"encoding/json"
 	"fmt"
 )
@@ -18,6 +19,12 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 
 	if len(body.Email) < 4 || len(body.Name) < 5 {
 		return req.MakeErr("Faltan parámetros para la company a crear/actualizar.")
+	}
+
+	// Every company starts able to invoice: the six SUNAT series, two for selling
+	// and four for the notes that correct each family.
+	if len(body.InvoiceSeries) == 0 {
+		body.InvoiceSeries = invoicing.DefaultInvoiceSeries()
 	}
 
 	body.Updated = core.SUnixTime()
@@ -142,6 +149,13 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	// on the companies table tolerates a blank value. Public sign-up sets it on its own path.
 	if len(record.Name) == 0 || len(record.RUC) == 0 || len(record.LegalName) == 0 {
 		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC.")
+	}
+
+	// The series travel inline with the company, so this is the only place they are
+	// checked. A series id already handed to a document must never change meaning,
+	// which is why the rules are about the set and not about the row being edited.
+	if err := invoicing.ValidateSeries(record.InvoiceSeries); err != nil {
+		return req.MakeErr(err.Error())
 	}
 
 	// Escribir exige "Mi Empresa" en nivel de escritura; mainHandler ya lo validó por el catálogo.

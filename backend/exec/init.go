@@ -8,6 +8,7 @@ import (
 	coreTypes "app/core/types"
 	"app/db"
 	finance "app/finance/types"
+	invoicingTypes "app/invoicing/types"
 	security "app/security/types"
 	"encoding/csv"
 	"encoding/json"
@@ -165,18 +166,20 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	passwordHash := core.FnvHashString64(password, -1, 20)
 	empresas := []config.Company{
 		{
-			ID:        1,
-			Name:      "Principal",
-			LegalName: "Principal",
-			RUC:       "11000000000",
-			Updated:   seedTimestamp,
+			ID:            1,
+			Name:          "Principal",
+			LegalName:     "Principal",
+			RUC:           "11000000000",
+			InvoiceSeries: invoicingTypes.DefaultInvoiceSeries(),
+			Updated:       seedTimestamp,
 		},
 		{
-			ID:        2,
-			Name:      "Test",
-			LegalName: "Test",
-			RUC:       "12000000000",
-			Updated:   seedTimestamp,
+			ID:            2,
+			Name:          "Test",
+			LegalName:     "Test",
+			RUC:           "12000000000",
+			InvoiceSeries: invoicingTypes.DefaultInvoiceSeries(),
+			Updated:       seedTimestamp,
 		},
 	}
 	usuarios := []coreTypes.User{

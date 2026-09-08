@@ -50,6 +50,10 @@ const (
 	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access.toml inside it.
 	MaxRequiredAccess = fareward.MaxRequiredAccess
 
+	// OperatorCompanyID is metered like any tenant but never blocked by a credit refusal, which is
+	// what TolerateCreditRefusal decides.
+	OperatorCompanyID = fareward.OperatorCompanyID
+
 	BudgetSetDaily        = fareward.BudgetSetDaily
 	BudgetSetCurrent      = fareward.BudgetSetCurrent
 	BudgetIncreaseCurrent = fareward.BudgetIncreaseCurrent
@@ -77,6 +81,7 @@ var (
 	ChargeInferenceUsage        = fareward.ChargeInferenceUsage
 	WithCreditRateLimitIdentity = fareward.WithCreditRateLimitIdentity
 	IsCreditRateLimitError      = fareward.IsCreditRateLimitError
+	TolerateCreditRefusal       = fareward.TolerateCreditRefusal
 	APICPUCredits               = fareward.APICPUCredits
 	InferenceCredits            = fareward.InferenceCredits
 	MutateCompanyCreditBudget   = fareward.MutateCompanyCreditBudget

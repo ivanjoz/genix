@@ -54,7 +54,6 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[financeTypes.ExpenseScheduled](),
 		makeDBController[invoicingTypes.CompanySecrets](),
 		makeDBController[invoicingTypes.InvoiceDocument](),
-		makeDBController[invoicingTypes.InvoiceSeries](),
 		makeDBController[invoicingTypes.InvoiceSummary](),
 		makeDBController[logisticsTypes.DeliveryOrderNote](),
 		makeDBController[logisticsTypes.ProductStock](),
@@ -112,7 +111,6 @@ func init() {
 	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
 	db.RegisterTableFactory("company_secrets", func() db.Table { return db.MakeTable[invoicingTypes.CompanySecrets]() })
 	db.RegisterTableFactory("invoice_document", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceDocument]() })
-	db.RegisterTableFactory("invoice_series", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSeries]() })
 	db.RegisterTableFactory("invoice_summary", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSummary]() })
 	db.RegisterTableFactory("delivery_order_note", func() db.Table { return db.MakeTable[logisticsTypes.DeliveryOrderNote]() })
 	db.RegisterTableFactory("warehouse_product_stock", func() db.Table { return db.MakeTable[logisticsTypes.ProductStock]() })

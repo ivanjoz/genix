@@ -4,6 +4,7 @@ import (
 	"app/invoicing/types"
 	sales "app/sales/types"
 	"testing"
+	"time"
 
 	"github.com/ivanjoz/facturago"
 	"github.com/ivanjoz/facturago/model"
@@ -57,6 +58,7 @@ func testDocument() *model.Document {
 	return &model.Document{
 		Type:     model.Factura,
 		Series:   "F001",
+		IssuedAt: time.Unix(1_700_000_000, 0),
 		Currency: model.DefaultCurrency,
 		Payment:  model.PaymentCash,
 		Customer: model.Party{
@@ -74,51 +76,85 @@ func testDocument() *model.Document {
 	}
 }
 
-// TestRowRoundTripsIntoAValidDocument is the check that matters for this module:
-// a document flattened into its row and rebuilt from it has to still be one
-// SUNAT would accept.
+// A note is issued under its own series, so it is not keyed by the sale — it
+// reaches it through the document it corrects.
+func TestANoteReachesTheSaleThroughTheDocumentItCorrects(t *testing.T) {
+	const saleOrderID = int64(550301)
+	note := types.InvoiceDocument{
+		ID:            types.DocumentIDForSale(saleOrderID, 3), // FC01
+		AffectedDocID: saleOrderID,
+	}
+	if note.ID == saleOrderID {
+		t.Fatal("the note took the same key as the document it corrects")
+	}
+	if saleIDOfDocument(&note) != saleOrderID {
+		t.Errorf("saleIDOfDocument = %v, want %v", saleIDOfDocument(&note), saleOrderID)
+	}
+}
+
+// TestRowRecordsWhatOnlyItKnows checks the flattening that is left now that the
+// lines are rebuilt from the sale rather than copied.
 //
-// It is not a formality. The row is what a retry works from — possibly days
-// later, after the product was renamed — so anything the flattening loses is
-// lost from every retry, and the failure would only appear as a rejection.
-func TestRowRoundTripsIntoAValidDocument(t *testing.T) {
+// What the row must carry is the identity and the money: the id that ties it to a
+// sale and a series, the number it was issued under, and the totals every list
+// reads. Anything it got wrong here would be wrong on every retry and in every
+// report.
+func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 	original := testDocument()
 	if err := model.CompleteTotals(original); err != nil {
 		t.Fatalf("CompleteTotals: %v", err)
 	}
 
-	order := &sales.SaleOrder{ID: 55, ClientID: 7, DetailProductsIDs: []int32{101}}
-	// One document line, so the line-to-product mapping is the product itself.
-	row := rowFromDocument(1, 1, order, testSeries(), original, []int32{101})
-	// The ORM assigns the key on insert, and the number is read off it; the test
-	// stands in for that.
-	row.ID = int64(row.DocTypeSeries)*100_000_000_00000 + 123
+	// The sale was created under series 1, which is the series it is issued in —
+	// so the document is keyed by the sale itself.
+	order := &sales.SaleOrder{ID: 550301, ClientID: 7, DetailProductsIDs: []int32{101}}
+	row := rowFromDocument(1, 1, order, testSeries(), original, 123)
 
-	rebuilt := DocumentFromRow(&row)
-	if err := model.CompleteTotals(rebuilt); err != nil {
-		t.Fatalf("CompleteTotals on the rebuilt document: %v", err)
+	if row.ID != order.ID {
+		t.Errorf("id = %v, want the sale's own id %v", row.ID, order.ID)
 	}
-	if problems := model.ValidateDocument(rebuilt); len(problems) > 0 {
-		t.Fatalf("the rebuilt document is not valid: %v", problems)
+	if row.SeriesID() != testSeries().SeriesID {
+		t.Errorf("series = %v, want %v", row.SeriesID(), testSeries().SeriesID)
+	}
+	// And that is how the sale is found again: no stored reference.
+	if saleIDOfDocument(&row) != order.ID {
+		t.Errorf("saleIDOfDocument = %v, want %v", saleIDOfDocument(&row), order.ID)
+	}
+	if row.Correlativo != 123 {
+		t.Errorf("correlativo = %v, want 123", row.Correlativo)
+	}
+	if row.Number("F001") != "F001-123" {
+		t.Errorf("number = %q, want F001-123", row.Number("F001"))
+	}
+	if row.TotalAmount != int64(original.Totals.Payable) {
+		t.Errorf("total = %v, want %v", row.TotalAmount, original.Totals.Payable)
+	}
+	if row.TaxAmount != int64(original.Totals.TotalTaxes) {
+		t.Errorf("tax = %v, want %v", row.TaxAmount, original.Totals.TotalTaxes)
+	}
+	if row.State != types.InvoicePending {
+		t.Errorf("state = %v, want pending", row.State)
+	}
+}
+
+// The document still has to serialize — that is what the reserve path validates
+// before it spends a number.
+func TestDocumentSerializes(t *testing.T) {
+	document := testDocument()
+	if err := model.CompleteTotals(document); err != nil {
+		t.Fatalf("CompleteTotals: %v", err)
+	}
+	document.Correlativo = 123
+	if problems := model.ValidateDocument(document); len(problems) > 0 {
+		t.Fatalf("the document is not valid: %v", problems)
 	}
 
-	if rebuilt.Totals.Payable != original.Totals.Payable {
-		t.Errorf("payable = %d, want %d", rebuilt.Totals.Payable, original.Totals.Payable)
-	}
-	if rebuilt.Totals.IGV != original.Totals.IGV {
-		t.Errorf("IGV = %d, want %d", rebuilt.Totals.IGV, original.Totals.IGV)
-	}
-	if rebuilt.Number() != "F001-123" {
-		t.Errorf("number = %q, want F001-123", rebuilt.Number())
-	}
-
-	// And it has to serialize: a document that cannot be built cannot be sent.
 	issuer := model.Issuer{
 		RUC: "20000000001", LegalName: "EMPRESA DEMO S.A.C.",
 		Address: model.Address{Ubigeo: "150101", Line: "AV. LIMA 100"},
 	}
-	if _, err := facturago.BuildXML(issuer, rebuilt); err != nil {
-		t.Fatalf("the rebuilt document does not serialize: %v", err)
+	if _, err := facturago.BuildXML(issuer, document); err != nil {
+		t.Fatalf("the document does not serialize: %v", err)
 	}
 }
 
@@ -145,27 +181,6 @@ func TestRowKeepsTheAmountCharged(t *testing.T) {
 	if int64(document.Totals.Payable) != charged {
 		t.Errorf("payable = %d, want exactly the %d that was charged",
 			document.Totals.Payable, charged)
-	}
-}
-
-func TestIdentityDocumentCodesRoundTrip(t *testing.T) {
-	for _, docType := range []string{
-		model.IDDocNone, model.IDDocDNI, model.IDDocForeign, model.IDDocRUC, model.IDDocPassport,
-	} {
-		if got := identityDocTypeOfCode(identityDocTypeCode(docType)); got != docType {
-			t.Errorf("identity doc %q round-tripped to %q", docType, got)
-		}
-	}
-}
-
-func TestIgvTypeCodesRoundTrip(t *testing.T) {
-	for _, igvType := range []string{
-		model.IgvTaxed, model.IgvExempt, model.IgvUnaffected,
-		model.IgvExport, model.IgvFreeTaxed, model.IgvIVAP,
-	} {
-		if got := igvTypeOfCode(igvTypeCode(igvType)); got != igvType {
-			t.Errorf("IGV type %q round-tripped to %q", igvType, got)
-		}
 	}
 }
 

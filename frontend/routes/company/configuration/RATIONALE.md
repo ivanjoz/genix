@@ -1,3 +1,76 @@
+## The series maintainer is a form plus a list, because a cell cannot hold a select
+
+**Context** — The request was a `TableGrid` maintainer for the invoicing series, inline on the
+company record. Two of the five fields are choices — the document type and the branch — and the
+obvious shape is a grid whose rows are edited in place.
+
+**Decision** — `InvoiceSeriesTable.svelte` is an add form (type, code, branch) above a list. The grid
+edits nothing: it shows the series, moves the default on a cell click, and retires a row. `required`
+is deliberately **not** set on the three add fields.
+
+**Rationale** — `CellInput` only renders `text` and `number`. `ITableColumn` declares `cellOptions`
+and `onCellSelect`, but `TableGrid` never forwards them, so a select cell renders as a free-text box
+that writes a site name where a `SiteID` belongs. Extending the shared component was out of scope for
+a small maintainer, and typing a branch by hand is worse than picking it from a list. The cost is that
+correcting a series means retiring it and adding it again — acceptable while a company has a handful,
+and the alternative is editing the component library.
+
+`required` came off after seeing it rendered: `SearchSelect` paints a red warning triangle the moment
+a required field is empty, so a form nobody had touched yet showed two errors. Adding validates all
+three anyway and names the one that is missing, which says more than a glyph does.
+
+## Adding a series does not save it
+
+**Context** — The series live on the company record, and the tab already has one Save button.
+
+**Decision** — `Agregar` appends to `company.InvoiceSeries` in memory. Nothing reaches the backend
+until the tab's existing Save is pressed. The panel says so in its subtitle.
+
+**Rationale** — One record, one save. A separate write would mean two save paths for one row and a
+half-saved tab whenever the second failed, and `POST company-parametros` writes the company whole —
+so a series-only save would have to send every other field along regardless. The cost is that leaving
+the tab loses unsaved series with no warning, which is the same behaviour every other field on it
+already has.
+
+## The branch list is fetched here rather than reused
+
+**Context** — The site list already exists in `WarehousesService`, in the branches-warehouses route.
+
+**Decision** — `invoice-series.svelte.ts` declares its own two-field `IInvoiceSeriesSite` and reads
+`locations-warehouses` itself.
+
+**Rationale** — Routes are leaves; importing one route's service into another is the dependency the
+architecture rules out, and it would have pulled in warehouses and their layouts to render a
+dropdown of names. The endpoint is cached, so the second reader costs nothing. The duplication is
+two fields of a shape this panel already only partly uses.
+
+## Culqi moved to a Store tab, gated on the same access, fed by one shared service
+
+**Context** — The request was a third tab, `Store|Tienda`, holding the Culqi configuration split
+into a Pruebas section and a Live section. Three things it left open: which access gates the new
+tab, how a second tab editing the same record gets its data, and where the single RSA pair goes
+when the other credentials are split by environment.
+
+**Decision** — `StoreTab.svelte` is gated on `CONFIGURATION_ACCESS_ID`, the same id as My Company,
+so no new entry in `backend/access.toml`. `EmpresaParametrosService` is now instantiated once in
+`+page.svelte` and passed to both tabs as a prop; `saveEmpresa` moved out of `CompanyTab.svelte`
+into `empresas.svelte.ts` as `saveCompanyParameters(company)`, and both tabs' Save buttons call it.
+Inside the Culqi card, `Culqi Pruebas` (amber) and `Culqi Live` (emerald) are two boxes side by
+side holding a public/private key each, with `RsaKeyID`/`RsaKey` in a third, neutral box below
+labelled `Encriptación RSA` and marked optional. The RSA key ID sits on its own grid row rather
+than beside the textarea, because a field bottom-aligns in its grid cell by design
+(`field-shell`'s `margin-top: auto`) and would otherwise drop to the textarea's baseline.
+
+**Rationale** — One access rather than a new id: the tab writes the same company record through
+`POST company-parametros`, so a separate id would claim a boundary the backend does not enforce,
+and every profile holding `Configuración` would silently lose the Culqi form until regranted. One
+service instance rather than two because the endpoint writes the record **whole**: two instances
+would each hold their own copy and whichever tab saved last would revert the other tab's edits. The
+cost is that the Store tab's Save validates Name/RUC/Razón Social — fields that live on the other
+tab — and refuses naming them; the alternative, a Culqi-only endpoint, is a backend change the
+request did not ask for. The RSA pair is outside both environment boxes because the record stores
+one pair for both, and duplicating it into each would suggest two.
+
 ## My Company split into two cards: Company Parameters and Culqi Configuration
 
 **Context** — `CompanyTab.svelte` was one flat 24-column grid: eight company fields in 14/10 pairs,

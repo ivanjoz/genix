@@ -15,10 +15,10 @@ import (
 // PostInvoiceBody is what the till sends to issue a document for a sale.
 type PostInvoiceBody struct {
 	SaleOrderID int64 `json:"SaleOrderID"`
-	// SeriesID names the series to number the document in. Omitted, the
-	// company's default series for that document type is used.
-	SeriesID int16 `json:"SeriesID"`
-	DocType  int8  `json:"DocType"`
+	// DocType is optional and only asserts what the caller believes it is issuing.
+	// The series is not a parameter: it is fixed when the sale is created, because
+	// the document is keyed by the sale.
+	DocType int8 `json:"DocType"`
 }
 
 // PostInvoice issues an electronic document for a sale.
@@ -51,7 +51,7 @@ func PostInvoice(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr(err.Error())
 	}
-	series, err := resolveSeries(companyID, body.DocType, body.SeriesID, order)
+	series, err := seriesOfSale(companyID, order, body.DocType)
 	if err != nil {
 		return req.MakeErr(err.Error())
 	}
@@ -84,8 +84,9 @@ func GetInvoices(req *core.HandlerArgs) core.HandlerResponse {
 
 // GetInvoiceXML downloads the signed document or the CDR SUNAT returned.
 //
-// Both have to be kept for five years, and this is how they are retrieved: the
-// row holds a path, not the bytes.
+// Both have to be kept for five years, and this is how they are retrieved. The
+// row holds neither the bytes nor a path: the object name is derived from the
+// document id, which is already unique per sale and series.
 func GetInvoiceXML(req *core.HandlerArgs) core.HandlerResponse {
 	documentID := req.GetQueryInt64("id")
 	if documentID == 0 {
@@ -97,18 +98,22 @@ func GetInvoiceXML(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err.Error())
 	}
 
-	path, contentType := document.XmlPath, "application/xml"
+	// The artifact names are derived from the document id, so there is no stored
+	// path to consult — but there is also nothing to tell us the file exists yet.
+	// A document that never reached the signing step has no XML, and object
+	// storage answering "not found" is what says so.
+	kind, contentType := xmlArtifactName, "application/xml"
 	if req.Query["tipo"] == "cdr" {
-		path, contentType = document.CdrPath, "application/zip"
+		kind, contentType = cdrArtifactName, "application/zip"
 	}
-	if path == "" {
-		return req.MakeErr("El comprobante todavía no tiene ese archivo.")
+	if document.State == types.InvoicePending {
+		return req.MakeErr("El comprobante todavía no ha sido firmado ni enviado.")
 	}
 
 	content, err := cloud.GetFile(cloud.SaveFileArgs{
 		Bucket: core.Env.S3_BUCKET,
-		Path:   pathFolder(path),
-		Name:   pathName(path),
+		Path:   ArtifactFolder(req.User.CompanyID),
+		Name:   ArtifactName(document.ID, kind),
 	})
 	if err != nil {
 		return req.MakeErr("No se pudo leer el archivo del comprobante:", err)
@@ -166,66 +171,37 @@ func loadSaleOrder(companyID int32, saleOrderID int64) (*sales.SaleOrder, error)
 	return &orders[0], nil
 }
 
-// resolveSeries picks the series to number the document in.
+// seriesOfSale is the series a sale's document is numbered in, and it is not a
+// choice: the sale carries it in the last two digits of its id, and the document
+// is keyed by the sale, so any other series would key the document somewhere the
+// sale cannot be found.
 //
-// Naming one explicitly wins. Otherwise the company's default for that document
-// type is used, which is what a till does: it knows it is selling, not which
-// series the accountant set up.
-func resolveSeries(companyID int32, docType int8, seriesID int16,
-	order *sales.SaleOrder) (*types.InvoiceSeries, error) {
-
-	if docType == 0 {
-		docType = types.DocTypeBoleta
+// A sale whose tail is 00 was never registered for electronic invoicing — the
+// company had none configured when it was made — and cannot be invoiced now
+// without changing its id, which is its identity everywhere else in the system.
+func seriesOfSale(companyID int32, order *sales.SaleOrder, assertedDocType int8) (*types.InvoiceSeries, error) {
+	seriesID := order.SeriesID()
+	if seriesID == 0 {
+		return nil, errors.New(
+			"la venta no fue registrada para facturación electrónica y no puede facturarse")
 	}
 
-	series := []types.InvoiceSeries{}
-	query := db.Query(&series)
-	query.Select().CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer las series: %w", err)
+	allSeries, err := LoadCompanySeries(companyID)
+	if err != nil {
+		return nil, err
 	}
-
-	var chosen, fallback *types.InvoiceSeries
-	for index := range series {
-		candidate := &series[index]
-		if candidate.Status != 1 || candidate.DocType != docType {
-			continue
-		}
-		if seriesID != 0 && candidate.SeriesID == seriesID {
-			chosen = candidate
-			break
-		}
-		if seriesID == 0 && (candidate.IsDefault == 1 || fallback == nil) {
-			fallback = candidate
-			if candidate.IsDefault == 1 {
-				break
-			}
-		}
+	series := types.FindSeries(allSeries, seriesID)
+	if series == nil {
+		return nil, fmt.Errorf("la serie %v con la que se registró la venta ya no existe", seriesID)
 	}
-	if chosen == nil {
-		chosen = fallback
+	if series.Status != 1 {
+		return nil, fmt.Errorf("la serie %v con la que se registró la venta está inactiva", series.SeriesCode)
 	}
-	if chosen == nil {
-		return nil, errors.New("la empresa no tiene una serie configurada para ese tipo de comprobante")
+	// The caller may say what it expects to issue; it may not choose something else.
+	if assertedDocType != 0 && assertedDocType != series.DocType {
+		return nil, fmt.Errorf(
+			"la venta se registró para la serie %v y no puede emitirse como otro tipo de comprobante",
+			series.SeriesCode)
 	}
-	return chosen, nil
-}
-
-// The stored artifact path is "folder/name"; object storage wants them apart.
-func pathFolder(path string) string {
-	for index := len(path) - 1; index >= 0; index-- {
-		if path[index] == '/' {
-			return path[:index]
-		}
-	}
-	return ""
-}
-
-func pathName(path string) string {
-	for index := len(path) - 1; index >= 0; index-- {
-		if path[index] == '/' {
-			return path[index+1:]
-		}
-	}
-	return path
+	return series, nil
 }

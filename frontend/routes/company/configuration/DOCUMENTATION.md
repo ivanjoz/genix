@@ -6,17 +6,18 @@ title: Configuration (Configuración)
 status: implemented
 visibility: tenant
 description_en: >-
-  Tenant company settings and database backups on one page, split into two tabs. My Company edits
-  the company's name, tax ID, legal name, email, phone, address, city and representative, plus the
-  Culqi payment-gateway keys for ecommerce. Backups generates an on-demand snapshot of the
-  company's operational data, downloads an existing backup file, and restores the database to a
-  selected backup.
+  Tenant company settings and database backups on one page, split into three tabs. My Company edits
+  the company's name, tax ID, legal name, email, phone, address, city and representative. Store
+  holds the Culqi payment-gateway keys for the online store, separated into Culqi Test and Culqi
+  Live sections. Backups generates an on-demand snapshot of the company's operational data,
+  downloads an existing backup file, and restores the database to a selected backup.
 description_es: >-
-  Configuración de la empresa del tenant y copias de seguridad en una sola página, dividida en dos
+  Configuración de la empresa del tenant y copias de seguridad en una sola página, dividida en tres
   pestañas. Mi Empresa edita nombre, RUC, razón social, correo, teléfono, dirección, ciudad y
-  representante, además de las llaves de la pasarela de pago Culqi para ecommerce. Backups genera
-  un respaldo bajo demanda de la información operativa, descarga un backup existente y restaura la
-  base de datos al estado de un backup seleccionado.
+  representante. Tienda contiene las llaves de la pasarela de pago Culqi para la tienda online,
+  separadas en las secciones Culqi Pruebas y Culqi Live. Backups genera un respaldo bajo demanda de
+  la información operativa, descarga un backup existente y restaura la base de datos al estado de un
+  backup seleccionado.
 ---
 
 # Configuration (Configuración)
@@ -25,19 +26,22 @@ description_es: >-
 ## Page purpose
 
 Configuration (`Configuración`) is the single settings page for the company (`empresa`) that owns
-the current tenant session. It is divided into two tabs shown at the top of the page:
+the current tenant session. It is divided into three tabs shown at the top of the page:
 
-- **My Company (Mi Empresa)** — edits one company record: identity data (name, tax ID/RUC, legal
-  name/razón social, email, phone, address, city, representative) and the Culqi payment-gateway
-  keys used for ecommerce checkout. Its form heading reads "Company Parameters" (`Parámetros de la
-  Empresa`).
+- **My Company (Mi Empresa)** — edits the identity data of one company record (name, tax ID/RUC,
+  legal name/razón social, email, phone, address, city, representative). Its form heading reads
+  "Company Parameters" (`Parámetros de la Empresa`).
+- **Store (Tienda)** — the online store's settings on the same company record. Today it holds one
+  card, **Culqi Configuration (Configuración Culqi)**, split into a **Culqi Test (Culqi Pruebas)**
+  section, a **Culqi Live** section, and an **RSA Encryption (Encriptación RSA)** section.
 - **Backups** (also `respaldos` or `copias de seguridad`) — manages point-in-time snapshots of the
   company's own operational data: sales, inventory, finance, logistics and every other business
   table backed by Genix's ScyllaDB storage. From here a user generates a new snapshot, downloads an
   existing one, and restores the database back to a previously generated snapshot.
 
-The two tabs are deliberately independent: a backup never contains the company configuration edited
-on the My Company tab, and a restore never overwrites it. Security's users, profiles and access
+My Company and Store edit the same underlying company record and share one Save button each, but
+Backups is independent of both: a backup never contains the company configuration edited on those
+two tabs, and a restore never overwrites it. Security's users, profiles and access
 assignments (**Users & Profiles / Usuarios & Perfiles**) are likewise outside backup and restore
 scope, and are edited on their own page.
 
@@ -55,10 +59,12 @@ on the Backups tab.
   `LegalName`/razón social also feed the sales receipt/voucher (`comprobante`) header on the
   Point of Sale (`Punto de Venta`) screen, which is why POS can read this data even without the
   Configuración access (see permissions below).
-- **Culqi Configuration (Configuración Culqi)** keys configure the Culqi payment gateway used by
-  the online store: a test
-  mode pair (`Llave Pública/Privada (Pruebas)`) and a live mode pair (`Llave Pública/Privada
-  (Live)`), plus an RSA key/RSA key ID pair used for Culqi's 3-D Secure/antifraud flow.
+- **Culqi Configuration (Configuración Culqi)**, on the **Store (Tienda)** tab, keys configure the
+  Culqi payment gateway used by the online store: a test mode pair (`Llave Pública`/`Llave Privada`
+  under **Culqi Pruebas**) and a live mode pair (the same two labels under **Culqi Live**), plus one
+  RSA key/RSA key ID pair used for Culqi's 3-D Secure/antifraud flow. There is a single RSA pair for
+  both environments, not one per environment, which is why it sits in its own section rather than
+  inside either one.
 - **Outgoing notification email** is *not* configured here. Genix sends mail (sign-up
   verification, contact form) through a single platform-wide mail server configured by the
   operator; a company cannot point Genix at its own mail server from any screen.
@@ -144,10 +150,11 @@ payments under the company's account rather than a shared/test account.
 
 ### Where to find it (Dónde encontrarlo)
 
-The **Culqi Configuration (Configuración Culqi)** card, the right-hand panel of the **My Company
-(Mi Empresa)** tab: **Public Key (Test)**, **Private Key (Test)**, **Public Key (Live)**, **Private
-Key (Live)**, **Culqi RSA Key ID**, and **Culqi RSA Key**. Saved together with the left-hand
-**Company Parameters** card through the single **Save (Guardar)** button above them.
+The **Store (Tienda)** tab, in the **Culqi Configuration (Configuración Culqi)** card. It is
+divided into three sections: **Culqi Test (Culqi Pruebas)** with **Public Key (Llave Pública)** and
+**Private Key (Llave Privada)**; **Culqi Live** with its own **Public Key** and **Private Key**; and
+**RSA Encryption (Encriptación RSA)** with **RSA Key ID (ID de Llave RSA)** and **RSA Key (Llave
+RSA)**. All six are saved by the **Save (Guardar)** button at the top right of the tab.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -156,11 +163,13 @@ the company's own Culqi dashboard.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
-The six fields are stored together as one Culqi configuration on the company record and are saved
-by the same **Save (Guardar)** button as the rest of the tab. Test and live credentials are kept
-side by side, so a company can be configured against Culqi's test environment before switching the
-store to live keys. **Private Key (Live)** is masked as a password field; the other five are shown
-in clear text.
+The six fields are stored together as one Culqi configuration on the company record. Saving from
+the Store tab writes the **whole** company record — the same request the My Company tab sends — so
+it also validates Name, RUC and Legal Name and refuses with "Faltan datos a guardar: …" if any of
+those three is empty, even though none of them appear on this tab. Test and live credentials are
+kept in two separate boxes, so a company can be configured against Culqi's test environment before
+switching the store to live keys. Both **Private Key** fields are masked as password fields with a
+reveal toggle; the two public keys and the RSA pair are shown in clear text.
 
 ### Result and side effects (Resultado y efectos)
 
@@ -181,8 +190,9 @@ ecommerce file, so a store running on live keys still reads its public key from 
 - `¿Cómo configuro Culqi para cobrar en la tienda online?`
 - `¿Cuál es la diferencia entre las llaves de pruebas y las llaves live?` Las de pruebas sirven
   para probar el checkout sin cobrar de verdad; las live cobran a la tarjeta del cliente.
-- Search terms: `Culqi`, `pasarela de pago`, `llave pública`, `llave privada`, `modo pruebas`,
-  `modo live`, `RSA key`, `ecommerce`.
+- `¿Dónde configuro la tienda online?` En la pestaña **Tienda** de Configuración.
+- Search terms: `Culqi`, `tienda`, `pasarela de pago`, `llave pública`, `llave privada`,
+  `modo pruebas`, `modo live`, `RSA key`, `ecommerce`.
 
 <!-- DOC-ID: capability.browse-backups -->
 ## Browse available backups (Ver los backups disponibles)
@@ -351,10 +361,12 @@ confirmation step beyond the single Yes/No dialog, and no dry-run or preview of 
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
-- The two tabs carry two different accesses: **My Company (Mi Empresa)** needs the "Configuración"
-  access and **Backups** needs the "Backups" access. Reaching the page requires only one of the
-  two, and the tab strip then shows only the tabs the user is allowed to read: a user holding just
-  one of the accesses lands directly on that tab and never sees the other one.
+- The three tabs carry two different accesses: **My Company (Mi Empresa)** and **Store (Tienda)**
+  both need the "Configuración" access — they edit the same record through the same endpoint —
+  while **Backups** needs the "Backups" access. Reaching the page requires only one of the two, and
+  the tab strip then shows only the tabs the user is allowed to read: a user holding just
+  "Configuración" sees My Company and Store, and a user holding just "Backups" lands directly on
+  Backups and never sees the other two.
 - Both accesses only offer **View (Visualizar)** or **Full (Todo)** levels, so granting someone the
   ability to save company data — or to generate/restore a backup — always means granting full
   control of that tab, not a partial edit level.
@@ -362,9 +374,9 @@ confirmation step beyond the single Yes/No dialog, and no dry-run or preview of 
   Sale) access, without needing the Configuración access, because the POS screen reads this same
   record's RUC and legal name for the sale receipt header. Punto de Venta access alone does **not**
   grant permission to Save changes here.
-- On the My Company tab, both cards are saved by one **Save (Guardar)** button and one request:
+- My Company and Store hold two Save buttons but write the same whole record in one request each:
   there is no way to save the company parameters without also writing the Culqi configuration, or
-  the other way round.
+  the other way round. Both therefore enforce the same required fields (Name, RUC, Legal Name).
 - Backup generation, listing, and restore all operate on the signed-in user's own company only,
   read from the session on the server — the one exception is the download link's known company-ID
   defect documented under **Download a backup**.
@@ -376,16 +388,17 @@ confirmation step beyond the single Yes/No dialog, and no dry-run or preview of 
 
 - **"Missing required data: … (Faltan datos a guardar: …)":** the message lists the empty required
   fields by name — Name, RUC and/or Legal Name. Fill the ones it names and Save again. Email is not
-  required.
+  required. This can also appear when saving from the **Store (Tienda)** tab, because that Save
+  writes the same whole company record; the fields it names are on the **My Company** tab.
 - **A field shows empty after saving it:** a save writes the whole company record, so a field left
   blank on screen is stored blank. Check that the value was still in the field when Save was
   pressed.
 - **"El user no posee alguno de los accesos: Configuración":** the acting user's profile(s) do not
   include the Configuración access; ask an administrator to grant it at the Full (Todo) level to
   allow saving.
-- **Only one tab is visible:** the missing tab's access is not granted to the acting user's
-  profile(s) — the Backups tab needs the "Backups" access and the My Company tab needs the
-  "Configuración" access.
+- **A tab is missing:** the missing tab's access is not granted to the acting user's profile(s) —
+  the Backups tab needs the "Backups" access, and My Company and Store both need the "Configuración"
+  access, so those two always appear or disappear together.
 - **The receipt on Punto de Venta shows the wrong RUC/razón social:** confirm the values saved
   here (Name, RUC, Legal Name persist correctly), since the sale screen reads this same record.
 - **"Select a Backup / Seleccione un Backup"**: no row is selected yet; click one in the table
@@ -430,19 +443,23 @@ files:
     supports: [page-purpose, capability.edit-company-data, capability.browse-backups, related-pages]
   - path: frontend/routes/company/configuration/+page.svelte
     role: page
-    hash: sha256:95f30c0843f2eba47864f1c29d0624e4fdbae0b99b41a30bf218aa582bc3115d
+    hash: sha256:245a3c35c96126eb7869b9014d5ee2c1fe349df94cd5f8ca148cf98a9e96f537
     supports: [page-purpose, capability.edit-company-data, capability.browse-backups, rules, troubleshooting]
   - path: frontend/routes/company/configuration/CompanyTab.svelte
     role: user-interface
-    hash: sha256:45fd576a4997df9d16ef2c496acbd7b5cdb050f80b7162092b60a25b7e8daf76
-    supports: [page-purpose, concepts, capability.edit-company-data, capability.configure-culqui, troubleshooting]
+    hash: sha256:3185971c0b916d534a918776cb6cc3f58c256821de7b76acd2ce6722319ecd6f
+    supports: [page-purpose, concepts, capability.edit-company-data, troubleshooting]
+  - path: frontend/routes/company/configuration/StoreTab.svelte
+    role: user-interface
+    hash: sha256:8384d4c7ed96fd654d93fd8f39a73bd9ad00d2aae251d184e7708ca2b2f6eba2
+    supports: [page-purpose, concepts, capability.configure-culqui, rules, troubleshooting]
   - path: frontend/routes/company/configuration/BackupsTab.svelte
     role: user-interface
     hash: sha256:157677f6f1c549726a33c4f8c88d33b2ede62585f8d73e07045e9f7ad8a2ff20
     supports: [page-purpose, concepts, capability.browse-backups, capability.generate-backup, capability.download-backup, capability.restore-backup, rules, troubleshooting]
   - path: frontend/routes/company/configuration/empresas.svelte.ts
     role: frontend-service
-    hash: sha256:6566f13d799616fd4aeb4dc2e60018518c8ee8627fd64a69ae6bc9e12cde56fe
+    hash: sha256:bcd8e9e49f13a27253a101d56e4f550168e4c85e67dd8a65c58fce46eef01596
     supports: [concepts, capability.edit-company-data, capability.configure-culqui, rules]
   - path: frontend/routes/company/configuration/backups.svelte.ts
     role: frontend-service

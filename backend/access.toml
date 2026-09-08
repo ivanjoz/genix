@@ -340,8 +340,8 @@ id = 35
 name = "Facturación Electrónica"
 group = 7
 levels = 14
-frontend_routes = "accounting/invoicing,accounting/invoice-series"
-backend_apis = "POST.invoice,POST.invoice-retry,POST.invoice-series,GET.invoices,GET.invoice-xml,GET.invoice-series"
+frontend_routes = "accounting/invoicing"
+backend_apis = "POST.invoice,POST.invoice-retry,GET.invoices,GET.invoice-xml"
 
 [[access]]
 id = 36

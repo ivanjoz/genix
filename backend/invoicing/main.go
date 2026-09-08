@@ -15,9 +15,8 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.invoices":       GetInvoices,
 	"GET.invoice-xml":    GetInvoiceXML,
 
-	// Series — the numbering a document is issued under.
-	"GET.invoice-series":  GetInvoiceSeries,
-	"POST.invoice-series": PostInvoiceSeries,
+	// Series are not routed here: they travel inline on the company record, so
+	// GET/POST.company-parametros reads and writes them.
 
 	// SUNAT credentials: the SOL user and the signing certificate, both stored
 	// encrypted and never returned to the client.

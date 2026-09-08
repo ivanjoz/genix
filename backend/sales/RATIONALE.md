@@ -1,3 +1,44 @@
+## The sale id carries the invoicing series, and is minted here rather than by the ORM
+
+**Context** — A sale id was `Autoincrement(2)`: a counter with two random digits. The electronic
+document now derives its own id from the sale's, replacing the last two digits with the series it is
+issued under, which needs those two digits to be reserved for that purpose.
+
+**Decision** — `sale_order` declares a plain `Keys: db.Cols(e.ID)` and `MakeSaleOrderID` builds
+`[counter][rand:2][series:2]` in `sales/types/sale_order_id.go`. The counter is reserved with
+`db.GetAutoincrementID` under the ORM's own historical name, `x{companyID}_sale_order_0`.
+
+**Rationale** — The ORM cannot express this layout: its autoincrement appends random digits and then
+takes the rest of the key, and the table-level `Autoincrement()` builds a synthetic column with no
+settable decimal width, so a non-last packing slot overflows (`insert-update.go:373`, shift of
+10^19). Extending the ORM was the alternative; minting here costs nothing now that the reservation
+itself is serialized by fareward, and it puts the layout somewhere a reader can find it.
+
+Keeping the ORM's counter name is not cosmetic. The sequence is live, so a fresh counter starting at
+1 would mint ids inside the range of rows already written — `1*10000 + …` lands on top of an existing
+sale at counter 100. Nothing else writes that row now that the table declares no autoincrement, so
+owning it from here is safe. There is a test pinning the name for exactly this reason.
+
+**Consequence worth knowing:** `ResetCounter` skips tables with no autoincrement column
+(`deploy.go:458`), so it no longer covers `sale_order` — and it never covered the new correlativo
+counters. After a restore, neither can be realigned with the rows that exist. It was already wrong
+for this table (it derived the target from the packed key), so nothing regressed, but the gap is now
+total rather than partial. Recorded in `invoicing/FINDINGS.md`.
+
+## IssueSeriesID is a request field, not a column
+
+**Context** — The series has to arrive with the request that creates the sale, but it also lives in
+the id afterwards.
+
+**Decision** — `SaleOrder.IssueSeriesID` is on the record and not on the table, like
+`ActionsIncluded` and `ClientInfo`. Reads go through `SeriesID()`, which derives from the id.
+
+**Rationale** — A stored copy would be a second source of truth for something the key already
+encodes. The trap is that a request-only field reads back as zero after a query, so the two are named
+differently on purpose: code that reads `IssueSeriesID` off a row it loaded is visibly asking for the
+wrong thing. Zero is legitimate on the way in — a till that does not say which series it will invoice
+under leaves the tail at 00, and the document takes its own series when it is issued.
+
 # RATIONALE — sales
 
 Design decisions for sale orders and sale summaries, newest first.

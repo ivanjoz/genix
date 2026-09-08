@@ -6,6 +6,7 @@ import (
 	"app/core"
 	coreTypes "app/core/types"
 	"app/db"
+	invoicing "app/invoicing/types"
 	"app/security/types"
 	"context"
 	"crypto/rand"
@@ -493,6 +494,9 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 		// The address is proven at this point: the code only reached whoever controls the inbox.
 		EmailVerified: 1,
 		FormApiKey:    core.MakeRandomBase36String(18),
+		// Every company starts able to invoice: the six SUNAT series, two for
+		// selling and four for the notes that correct each family.
+		InvoiceSeries: invoicing.DefaultInvoiceSeries(),
 		Updated:       nowTime,
 		Status:        1,
 	}}

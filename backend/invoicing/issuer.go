@@ -113,18 +113,14 @@ func LoadActiveSecrets(companyID int32) (*types.CompanySecrets, error) {
 	return active, nil
 }
 
+// loadCompany reads the issuer's own company. The RUC check lives here rather
+// than in loadCompanyRecord because it is an issuing requirement: reading a
+// company's series is legitimate before anyone has typed a RUC.
 func loadCompany(companyID int32) (*config.Company, error) {
-	companies := []config.Company{}
-	query := db.Query(&companies)
-	query.Select().ID.Equals(companyID)
-
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer la empresa: %w", err)
+	company, err := loadCompanyRecord(companyID)
+	if err != nil {
+		return nil, err
 	}
-	if len(companies) == 0 {
-		return nil, errors.New("la empresa no existe")
-	}
-	company := &companies[0]
 	if len(company.RUC) != 11 {
 		return nil, errors.New("la empresa no tiene un RUC válido de 11 dígitos")
 	}

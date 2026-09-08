@@ -17,10 +17,14 @@ import (
 // every emission, because the second document for one sale is the mistake that
 // cannot be undone without a credit note — and before an annulment, because a sale
 // with a live document cannot simply vanish either.
+//
+// It is a primary-key read: the document that bills a sale is keyed by that sale.
+// A sale whose tail is 00 was not registered for electronic invoicing and has no
+// document, so this correctly finds nothing for it.
 func FindBySaleOrder(companyID int32, saleOrderID int64) (*InvoiceDocument, error) {
 	documents := []InvoiceDocument{}
 	query := db.Query(&documents)
-	query.Select().CompanyID.Equals(companyID).SaleOrderID.Equals(saleOrderID)
+	query.Select().CompanyID.Equals(companyID).ID.Equals(saleOrderID)
 
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al verificar si la venta ya fue facturada: %w", err)

@@ -137,16 +137,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	saleActions := []int8{}
 	if !isUpdate {
+		saleID, idErr := types.MakeSaleOrderID(req.User.CompanyID, sale.IssueSeriesID)
+		if idErr != nil {
+			return req.MakeErr("Error al obtener el ID de la venta:", idErr)
+		}
+		sale.ID = saleID
+
 		sales := []types.SaleOrder{sale}
 		saleActions = append(saleActions, 1)
 
-		// Insertar el registro de venta para obtener el ID (autoincrement)
 		if err := db.Insert(&sales); err != nil {
 			return req.MakeErr("Error al registrar la venta:", err)
-		}
-
-		if sale.ID = sales[0].ID; sale.ID == 0 {
-			return req.MakeErr("Error al obtener el ID de la venta.")
 		}
 	}
 

@@ -395,6 +395,9 @@ func chargedMethodFor(method, funcPath string) string {
 //   - creditControlRoutes: nada. Se manda un frame de sólo autorización, porque la exención salta
 //     el COBRO y nunca el frame: tres de esas rutas están mapeadas en access.toml y dos son
 //     sólo-SaaS, así que saltar el frame las dejaría abiertas a cualquier sesión.
+//
+// La company del operador se cobra igual que cualquier tenant, pero su rechazo por crédito no
+// llega al cliente: core.TolerateCreditRefusal decide, y el reintento de abajo recupera el grant.
 func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.HandlerResponse {
 	// El catálogo decide qué accesos exigir. Toda la política vive de este lado, en el proceso que
 	// embebe access.toml; el daemon sólo responde "este user tiene alguno de estos accesos".
@@ -444,14 +447,32 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		core.Log("fareward rechazó::", " method::", args.Method, " company::", args.User.CompanyID,
 			" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
 			" accesos::", len(decision.requiredAccess), " err::", err)
-		var response core.HandlerResponse
-		if core.IsAccessDeniedError(err) {
-			// Los nombres salen de aquí: el daemon no conoce access.toml.
-			response = args.MakeAccessDeniedResponse(err, decision.accessNames)
-		} else {
-			response = args.MakeCreditRateLimitResponse(err)
+
+		// El reintento no es opcional cuando se tolera el rechazo: la trama rechazada no trae
+		// AccessGrant —el daemon retorna CreditViolation antes de devolverlo— así que sin este
+		// segundo frame una ruta con accesos requeridos seguiría con SubAccesos vacío, y los
+		// sub-accesos del operador se apagarían justo al agotar el presupuesto.
+		//
+		// Cero créditos no puede ser rechazado por cuota: la comparación es `current + 0 > limit`, y
+		// como un rechazo no cobra nada el consumo nunca llega a pasar del techo. Así que este frame
+		// sólo autoriza, y devuelve el grant real con los permisos igual de aplicados.
+		if core.TolerateCreditRefusal(args.User.CompanyID, err) {
+			core.Log("fareward: rechazo por crédito tolerado, reintentando sólo autorización::",
+				" user::", args.User.ID, " route::", args.RouteID, " cpu_credits::", cpuCredits)
+			accessGrant, err = core.ChargeAPIAccessOnly(
+				requestContext, args.User.CompanyID, args.User.ID, args.RouteID, decision.requiredAccess)
 		}
-		return &response
+
+		if err != nil {
+			var response core.HandlerResponse
+			if core.IsAccessDeniedError(err) {
+				// Los nombres salen de aquí: el daemon no conoce access.toml.
+				response = args.MakeAccessDeniedResponse(err, decision.accessNames)
+			} else {
+				response = args.MakeCreditRateLimitResponse(err)
+			}
+			return &response
+		}
 	}
 
 	// El daemon devuelve los sub-accesos por SLOT, porque no conoce access.toml y no sabe a qué
@@ -524,6 +545,11 @@ func chargeGetResponseTopUp(args *core.HandlerArgs, responseBytes int) *core.Han
 		core.Log("credit rate limiter rejected GET top-up::", " company::", args.User.CompanyID,
 			" user::", args.User.ID, " route::", args.RouteID, " bytes::", responseBytes,
 			" credits::", topUpCredits, " err::", err)
+		// Aquí no hay grant que recuperar —la liquidación no lleva accesos, la autorización ya
+		// ocurrió al entrar— así que tolerar es sólo no convertir el rechazo en respuesta.
+		if core.TolerateCreditRefusal(args.User.CompanyID, err) {
+			return nil
+		}
 		response := args.MakeCreditRateLimitResponse(err)
 		return &response
 	}

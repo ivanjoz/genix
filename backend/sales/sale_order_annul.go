@@ -90,8 +90,13 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al verificar si la venta fue facturada:", invoiceErr)
 	}
 	if invoiceDocument != nil {
-		return req.MakeErr("La venta tiene el comprobante", invoiceDocument.Number(),
-			"emitido; requiere una nota de crédito.")
+		// The series code is not named here on purpose: it lives on the company
+		// record, and reaching it from this module would cross a module body. The
+		// series number and the correlativo identify the document well enough for
+		// somebody to go find it.
+		return req.MakeErr("La venta tiene un comprobante emitido (serie",
+			invoiceDocument.SeriesID(), "correlativo", invoiceDocument.Correlativo,
+			"); requiere una nota de crédito.")
 	}
 
 	// Read both ledgers before anything is written: the refund amount decides whether a cash bank

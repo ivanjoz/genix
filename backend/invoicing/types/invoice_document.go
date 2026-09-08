@@ -36,61 +36,67 @@ const (
 	CurrencyUSD = int8(2)
 )
 
-// docTypeSeriesFactor packs the document type and the series into one number.
-// Six digits: two for the type, up to four for the series.
-const docTypeSeriesFactor = 1000
+// SeriesDigits is the width the series occupies at the tail of an id, in both a
+// sale id and a document id. It is what caps a company at 99 series.
+const SeriesDigits = int64(100)
 
-// PackDocTypeSeries builds the value the primary key is partitioned by.
-func PackDocTypeSeries(docType int8, seriesID int16) int32 {
-	return int32(docType)*docTypeSeriesFactor + int32(seriesID)
+// DocumentIDForSale is the id a document takes: the sale's id with its last two
+// digits replaced by the series this document is issued under.
+//
+// For the document that bills the sale those are the same digits — a sale already
+// carries the series it will be issued under — so its id *is* the sale's id. A note
+// is issued under its own series (FC01 corrects a factura, BC01 a boleta) and so
+// lands on a neighbouring id, which is what lets a sale hold a boleta and the
+// credit note correcting it without a second key column.
+func DocumentIDForSale(saleOrderID int64, seriesID int8) int64 {
+	return SalePrefix(saleOrderID)*SeriesDigits + int64(seriesID)
 }
 
-// correlativoDigits is the width reserved for the number inside the packed key.
-const correlativoDigits = 100_000_000
+// SalePrefix is the counter and the random digits a sale shares with every
+// document issued for it.
+func SalePrefix(id int64) int64 {
+	return id / SeriesDigits
+}
+
+// CorrelativoCounterName names the sequence a series numbers from: one counter
+// per company and series, which is exactly the scope SUNAT requires the numbering
+// to be unique in. Reserved through the fareward-backed allocator like every
+// other counter in the system.
+func CorrelativoCounterName(companyID int32, seriesID int8) string {
+	return "cpe_" + itoa(int64(companyID)) + "_" + itoa(int64(seriesID))
+}
 
 // InvoiceDocument is one electronic document that has been issued, or is about
 // to be.
 //
-// The SUNAT identity of a document is its type, series and number, and here that
-// identity *is* the primary key: ID packs the type and series with an
-// autoincrement, and the ORM allocates the number from a Scylla counter
-// partitioned by DocTypeSeries. Two things follow. Numbering is atomic without
-// any lock being held across a call to SUNAT, and a duplicate becomes a
-// primary-key collision rather than a rule somebody has to remember to check.
+// The row holds what only it knows: the number it was issued under, what SUNAT
+// answered, and where it is in the send cycle. Everything describing *what* was
+// sold is read back from the sale, so nothing is stored twice. The artifacts that
+// must survive five years are the signed XML and the CDR, and those live in object
+// storage under a path derived from the id.
 //
-// A failed emission still consumes its number. That is deliberate: the row is
-// written before the document is signed, so a retry reuses its own number
-// instead of taking a fresh one, and SUNAT tolerates gaps in a series.
+// There is no SaleOrderID column: the document that bills a sale is keyed by that
+// sale, and a note reaches it through AffectedDocID — the document it corrects is
+// the one whose id is the sale's.
 type InvoiceDocument struct {
 	db.TableStruct[InvoiceDocumentTable, InvoiceDocument]
 	CompanyID int32 `json:",omitempty"`
-	ID        int64 `json:",omitempty"`
+	// ID is the sale's id with the series in its last two digits. Set by the
+	// caller, not the ORM — see DocumentIDForSale.
+	ID int64 `json:",omitempty"`
 
-	// DocTypeSeries is the packed key part; the two that follow are the same
-	// identity spelled out, because a report should not have to unpack a key.
-	// The number itself is not stored — see Correlativo.
-	DocTypeSeries int32  `json:",omitempty"`
-	DocType       int8   `json:",omitempty"`
-	SeriesID      int16  `json:",omitempty"`
-	SeriesCode    string `json:",omitempty"`
+	// Correlativo is the document number within its series, reserved from the
+	// series counter when the row is written.
+	Correlativo int32 `json:",omitempty"`
 
 	IssueDate int16 `json:",omitempty"`
 	IssueTime int32 `json:",omitempty"`
 
-	// SaleOrderID is the sale this document bills. Zero for a document issued
-	// on its own, such as a note correcting an earlier one.
-	SaleOrderID int64 `json:",omitempty"`
-
-	// The customer as it was at the moment of issue. Copied rather than joined:
-	// a document is immutable, and the client record is not.
-	ClientID        int32  `json:",omitempty"`
-	ClientDocType   int8   `json:",omitempty"`
-	ClientDocNumber string `json:",omitempty"`
-	ClientName      string `json:",omitempty"`
-
 	Currency int8 `json:",omitempty"`
 
-	// Amounts in cents. They aggregate the lines, so they are 64 bits.
+	// Amounts in cents. They aggregate the lines, so they are 64 bits. Kept even
+	// though the lines are not: every list and report reads these, and joining to
+	// the sale for each row would be the wrong trade.
 	TotalAmount      int64 `json:",omitempty"`
 	TaxAmount        int64 `json:",omitempty"`
 	TaxableAmount    int64 `json:",omitempty"`
@@ -98,25 +104,17 @@ type InvoiceDocument struct {
 	UnaffectedAmount int64 `json:",omitempty"`
 	FreeAmount       int64 `json:",omitempty"`
 
-	// The lines as they were sent, in parallel slices. Amounts are per-line, so
-	// they are 32 bits, and quantities are whole units as everywhere else.
-	DetailProductIDs  []int32  `json:",omitempty" db:",list"`
-	DetailQuantity    []int32  `json:",omitempty" db:",list"`
-	DetailUnitValue   []int32  `json:",omitempty" db:",list"`
-	DetailValue       []int32  `json:",omitempty" db:",list"`
-	DetailIgvAmount   []int32  `json:",omitempty" db:",list"`
-	DetailIgvType     []int8   `json:",omitempty" db:",list"`
-	DetailUnitCode    []string `json:",omitempty" db:",list"`
-	DetailDescription []string `json:",omitempty" db:",list"`
-
-	// Notes only: what this document corrects, and why.
+	// Notes only: what this document corrects, and why. AffectedDocID is also how a
+	// note reaches its sale — the document it corrects is the one whose id is the
+	// sale's.
 	AffectedDocID  int64  `json:",omitempty"`
 	NoteReasonCode string `json:",omitempty"`
 	NoteReason     string `json:",omitempty"`
 
-	State            int8     `json:",omitempty"`
-	SunatCode        string   `json:",omitempty"`
-	SunatDescription string   `json:",omitempty"`
+	State     int8   `json:",omitempty"`
+	SunatCode string `json:",omitempty"`
+	// SunatNotes are the CDR's observations. Unlike the description, which is
+	// derivable from the code, these exist nowhere but in the CDR.
 	SunatNotes       []string `json:",omitempty" db:",list"`
 	Ticket           string   `json:",omitempty"`
 	InvoiceSummaryID int64    `json:",omitempty"`
@@ -124,95 +122,60 @@ type InvoiceDocument struct {
 	// QR code, so it has to survive as long as the document does.
 	DigestValue string `json:",omitempty"`
 
-	// Where the artifacts live. Keeping both for five years is a legal
-	// obligation, which is why the paths are columns and not a convention.
-	XmlPath string `json:",omitempty" db:"xml_path"`
-	CdrPath string `json:",omitempty" db:"cdr_path"`
-
 	RetryCount int8   `json:",omitempty"`
 	LastError  string `json:",omitempty"`
 
-	Status         int8  `json:"ss,omitempty"`
+	Status int8 `json:"ss,omitempty"`
+	// UpdatedVersion drives the delta list: State moves several times after the
+	// row is written and the frontend syncs on those transitions.
 	Updated        int32 `json:"upd,omitempty"`
 	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	CreatedBy      int32 `json:",omitempty"`
 }
 
-// Correlativo is the document number, read off the key rather than stored.
-//
-// It cannot be a column: the ORM assigns the key during the insert, after
-// SelfParse has run, so a stored copy would be written as zero and then disagree
-// with the number the document was actually issued under. Deriving it leaves one
-// source of truth.
-func (e *InvoiceDocument) Correlativo() int32 {
-	return int32(e.ID % correlativoDigits)
+// SeriesID is the series this document was issued under, read off the tail of the
+// id. It resolves against the company's inline series for the type and the code.
+func (e *InvoiceDocument) SeriesID() int8 {
+	return int8(e.ID % SeriesDigits)
 }
 
-// Number is the document identifier the way SUNAT writes it: F001-123.
-func (e *InvoiceDocument) Number() string {
-	return e.SeriesCode + "-" + itoa(int64(e.Correlativo()))
-}
-
-// SelfParse derives the packed key part, so a caller sets the identity once and
-// cannot leave the two disagreeing.
-func (e *InvoiceDocument) SelfParse() {
-	if e.DocTypeSeries == 0 {
-		e.DocTypeSeries = PackDocTypeSeries(e.DocType, e.SeriesID)
-	}
+// Number is the identifier the way SUNAT writes it: F001-123. The code is not
+// stored — it belongs to the series — so the caller supplies it.
+func (e *InvoiceDocument) Number(seriesCode string) string {
+	return seriesCode + "-" + itoa(int64(e.Correlativo))
 }
 
 type InvoiceDocumentTable struct {
 	db.TableStruct[InvoiceDocumentTable, InvoiceDocument]
-	CompanyID         db.Col[*InvoiceDocumentTable, int32]
-	ID                db.Col[*InvoiceDocumentTable, int64]
-	DocTypeSeries     db.Col[*InvoiceDocumentTable, int32]
-	DocType           db.Col[*InvoiceDocumentTable, int8]
-	SeriesID          db.Col[*InvoiceDocumentTable, int16]
-	SeriesCode        db.Col[*InvoiceDocumentTable, string]
-	IssueDate         db.Col[*InvoiceDocumentTable, int16]
-	IssueTime         db.Col[*InvoiceDocumentTable, int32]
-	SaleOrderID       db.Col[*InvoiceDocumentTable, int64]
-	ClientID          db.Col[*InvoiceDocumentTable, int32]
-	ClientDocType     db.Col[*InvoiceDocumentTable, int8]
-	ClientDocNumber   db.Col[*InvoiceDocumentTable, string]
-	ClientName        db.Col[*InvoiceDocumentTable, string]
-	Currency          db.Col[*InvoiceDocumentTable, int8]
-	TotalAmount       db.Col[*InvoiceDocumentTable, int64]
-	TaxAmount         db.Col[*InvoiceDocumentTable, int64]
-	TaxableAmount     db.Col[*InvoiceDocumentTable, int64]
-	ExemptAmount      db.Col[*InvoiceDocumentTable, int64]
-	UnaffectedAmount  db.Col[*InvoiceDocumentTable, int64]
-	FreeAmount        db.Col[*InvoiceDocumentTable, int64]
-	DetailProductIDs  db.ColSlice[*InvoiceDocumentTable, int32]
-	DetailQuantity    db.ColSlice[*InvoiceDocumentTable, int32]
-	DetailUnitValue   db.ColSlice[*InvoiceDocumentTable, int32]
-	DetailValue       db.ColSlice[*InvoiceDocumentTable, int32]
-	DetailIgvAmount   db.ColSlice[*InvoiceDocumentTable, int32]
-	DetailIgvType     db.ColSlice[*InvoiceDocumentTable, int8]
-	DetailUnitCode    db.ColSlice[*InvoiceDocumentTable, string]
-	DetailDescription db.ColSlice[*InvoiceDocumentTable, string]
-	AffectedDocID     db.Col[*InvoiceDocumentTable, int64]
-	NoteReasonCode    db.Col[*InvoiceDocumentTable, string]
-	NoteReason        db.Col[*InvoiceDocumentTable, string]
-	State             db.Col[*InvoiceDocumentTable, int8]
-	SunatCode         db.Col[*InvoiceDocumentTable, string]
-	SunatDescription  db.Col[*InvoiceDocumentTable, string]
-	SunatNotes        db.ColSlice[*InvoiceDocumentTable, string]
-	Ticket            db.Col[*InvoiceDocumentTable, string]
-	InvoiceSummaryID  db.Col[*InvoiceDocumentTable, int64]
-	DigestValue       db.Col[*InvoiceDocumentTable, string]
-	XmlPath           db.Col[*InvoiceDocumentTable, string] `db:"xml_path"`
-	CdrPath           db.Col[*InvoiceDocumentTable, string] `db:"cdr_path"`
-	RetryCount        db.Col[*InvoiceDocumentTable, int8]
-	LastError         db.Col[*InvoiceDocumentTable, string]
-	Status            db.Col[*InvoiceDocumentTable, int8]
-	Updated           db.Col[*InvoiceDocumentTable, int32]
-	UpdatedVersion    db.Col[*InvoiceDocumentTable, int32]
-	UpdatedBy         db.Col[*InvoiceDocumentTable, int32]
-	Created           db.Col[*InvoiceDocumentTable, int32]
-	CreatedBy         db.Col[*InvoiceDocumentTable, int32]
+	CompanyID        db.Col[*InvoiceDocumentTable, int32]
+	ID               db.Col[*InvoiceDocumentTable, int64]
+	Correlativo      db.Col[*InvoiceDocumentTable, int32]
+	IssueDate        db.Col[*InvoiceDocumentTable, int16]
+	IssueTime        db.Col[*InvoiceDocumentTable, int32]
+	Currency         db.Col[*InvoiceDocumentTable, int8]
+	TotalAmount      db.Col[*InvoiceDocumentTable, int64]
+	TaxAmount        db.Col[*InvoiceDocumentTable, int64]
+	TaxableAmount    db.Col[*InvoiceDocumentTable, int64]
+	ExemptAmount     db.Col[*InvoiceDocumentTable, int64]
+	UnaffectedAmount db.Col[*InvoiceDocumentTable, int64]
+	FreeAmount       db.Col[*InvoiceDocumentTable, int64]
+	AffectedDocID    db.Col[*InvoiceDocumentTable, int64]
+	NoteReasonCode   db.Col[*InvoiceDocumentTable, string]
+	NoteReason       db.Col[*InvoiceDocumentTable, string]
+	State            db.Col[*InvoiceDocumentTable, int8]
+	SunatCode        db.Col[*InvoiceDocumentTable, string]
+	SunatNotes       db.Col[*InvoiceDocumentTable, []string]
+	Ticket           db.Col[*InvoiceDocumentTable, string]
+	InvoiceSummaryID db.Col[*InvoiceDocumentTable, int64]
+	DigestValue      db.Col[*InvoiceDocumentTable, string]
+	RetryCount       db.Col[*InvoiceDocumentTable, int8]
+	LastError        db.Col[*InvoiceDocumentTable, string]
+	Status           db.Col[*InvoiceDocumentTable, int8]
+	Updated          db.Col[*InvoiceDocumentTable, int32]
+	UpdatedVersion   db.Col[*InvoiceDocumentTable, int32]
+	Created          db.Col[*InvoiceDocumentTable, int32]
+	CreatedBy        db.Col[*InvoiceDocumentTable, int32]
 }
 
 func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
@@ -220,28 +183,21 @@ func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 		ID:                 42,
 		Name:               "invoice_document",
 		Partition:          e.CompanyID,
-		Keys:               db.Cols(e.ID),
 		SaveUpdatedVersion: true,
-		// The number is the autoincrement, counted per series rather than per
-		// company: F001 and B001 advance independently, which is what SUNAT
-		// requires and what makes the counter contention-free.
-		//
-		// Autoincrement(0) is not a default — it is the clean 1, 2, 3 sequence a
-		// correlativo has to be. Any other value appends that many random digits,
-		// which is right for an opaque id and wrong for a document number.
-		KeyIntPacking:     db.Cols(e.DocTypeSeries.DecimalSize(6), e.Autoincrement(0)),
-		AutoincrementPart: e.DocTypeSeries,
+		// A plain key. The id is built by the caller from the sale and the series,
+		// so there is nothing for the ORM to allocate or pack — and no autoincrement
+		// declaration that could be spelled wrong.
+		Keys: db.Cols(e.ID),
 		FixedValues: []db.FixedValues{
 			{Col: e.State, Min: 0, Max: 6},
-			{Col: e.Status, Values: []int64{0, 1}},
 		},
+		// No index on the series: it lives in the tail of the id rather than in a
+		// column, so there is nothing to index. Filtering a list by series happens
+		// on the client, over the set the delta view already synced.
+		// "Was this sale invoiced?" needs no index: the documents of a sale are a
+		// contiguous range of the key, so the question is a slice of the partition.
 		Indexes: []db.Index{
-			// Free: a range scan over the key prefix lists a whole series in
-			// order, which is how an accountant reads them.
-			{Type: db.TypeInheritFromKey, Keys: db.Cols(e.DocTypeSeries), UseIndexGroup: true},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.IssueDate)},
-			// "Has this sale been invoiced?" — asked before every emission.
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SaleOrderID)},
 			{Type: db.TypeDelta, Keys: db.Cols(e.State)},
 		},
 	}

@@ -1,87 +1,215 @@
 package types
 
 import (
-	"app/db"
 	"strconv"
+	"strings"
 )
+
+// MaxSeriesID is the ceiling on a series id, and it is not a preference: the id
+// is the two-digit suffix a document id carries, so ninety-nine is all the room
+// there is.
+const MaxSeriesID = int8(99)
 
 // InvoiceSeries is a series a company is allowed to issue under.
 //
-// The counter that hands out numbers lives in the ORM, not here — this table
-// answers the questions the counter cannot: which series exist, what each one is
-// called, which document type it serves and which establishment it belongs to.
+// It lives inline on the company record rather than in a table of its own. A
+// company has a handful of series, every emission needs one, and a table meant
+// a full scan per document to find it.
 //
-// SeriesID is a small local number, and SeriesCode is what SUNAT sees. They are
-// separate because a series code is alphanumeric — F001, B001, FC01 — and cannot
-// be packed into a numeric key, while the key needs to be numeric to partition
-// the counter.
+// SeriesID and SeriesCode carry no relation to each other. SeriesID is a small
+// local number that partitions the correlativo counter; SeriesCode is the
+// alphanumeric string SUNAT sees. Series 1 may well be B001 and series 2 F001 —
+// the code is a label hanging off the id, nothing more.
 type InvoiceSeries struct {
-	db.TableStruct[InvoiceSeriesTable, InvoiceSeries]
-	CompanyID int32 `json:",omitempty"`
-	ID        int32 `json:",omitempty"`
-
-	DocType    int8   `json:",omitempty"`
-	SeriesID   int16  `json:",omitempty"`
+	// SeriesID is 1..99, and is what a document id carries in its last two digits.
+	SeriesID int8 `json:",omitempty"`
+	// DocType is SUNAT catalog 01: 1 factura, 3 boleta, 7 credit note, 8 debit note.
+	DocType int8 `json:",omitempty"`
+	// SeriesCode is what SUNAT sees, e.g. F001.
 	SeriesCode string `json:",omitempty"`
-
-	// Where documents of this series are issued from. The establishment code
-	// SUNAT assigned to the site travels in the XML, so a company with several
-	// branches keeps one series per branch.
-	SiteID      int32 `json:",omitempty"`
-	WarehouseID int32 `json:",omitempty"`
-
-	// IsDefault marks the series a sale falls back to when the caller does not
-	// name one. At most one per document type, which the handler enforces.
+	// SiteID is the establishment issuing under this series. The code SUNAT
+	// assigned to the site travels in the XML, so a company with several branches
+	// keeps one series per branch.
+	SiteID int32 `json:",omitempty"`
+	// IsDefault marks the series used when the caller names none for a document
+	// type. At most one per type.
 	IsDefault int8 `json:",omitempty"`
-
-	Status         int8  `json:"ss,omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	Status    int8 `json:"ss,omitempty"`
 }
 
-// SelfParse keeps the key and the identity it encodes in agreement.
-func (e *InvoiceSeries) SelfParse() {
-	if e.ID == 0 {
-		e.ID = PackDocTypeSeries(e.DocType, e.SeriesID)
+// DefaultInvoiceSeries is the set every new company starts with.
+//
+// Six rather than four: a note has to carry the prefix of the document it
+// corrects — F for a factura, B for a boleta — so covering notes over boletas,
+// which are the majority of sales, needs its own pair. The last three characters
+// of a note series do not have to match the document it affects, which is why
+// FC01 can correct any F-series factura.
+//
+// Only the two selling series are marked default. A note's series is decided by
+// what it corrects, not by a per-type preference, so a default there would be a
+// wrong answer waiting to be used.
+// They are seeded with no site, because a company has none when it is created.
+// SiteID 0 means the company's own fiscal address, which is what SUNAT calls the
+// main establishment and codes 0000 — the right answer for a single-site company
+// and the fallback BuildIssuer already implements.
+func DefaultInvoiceSeries() []InvoiceSeries {
+	return []InvoiceSeries{
+		{SeriesID: 1, DocType: DocTypeFactura, SeriesCode: "F001", IsDefault: 1, Status: 1},
+		{SeriesID: 2, DocType: DocTypeBoleta, SeriesCode: "B001", IsDefault: 1, Status: 1},
+		{SeriesID: 3, DocType: DocTypeCreditNote, SeriesCode: "FC01", Status: 1},
+		{SeriesID: 4, DocType: DocTypeDebitNote, SeriesCode: "FD01", Status: 1},
+		{SeriesID: 5, DocType: DocTypeCreditNote, SeriesCode: "BC01", Status: 1},
+		{SeriesID: 6, DocType: DocTypeDebitNote, SeriesCode: "BD01", Status: 1},
 	}
 }
 
-type InvoiceSeriesTable struct {
-	db.TableStruct[InvoiceSeriesTable, InvoiceSeries]
-	CompanyID      db.Col[*InvoiceSeriesTable, int32]
-	ID             db.Col[*InvoiceSeriesTable, int32]
-	DocType        db.Col[*InvoiceSeriesTable, int8]
-	SeriesID       db.Col[*InvoiceSeriesTable, int16]
-	SeriesCode     db.Col[*InvoiceSeriesTable, string]
-	SiteID         db.Col[*InvoiceSeriesTable, int32]
-	WarehouseID    db.Col[*InvoiceSeriesTable, int32]
-	IsDefault      db.Col[*InvoiceSeriesTable, int8]
-	Status         db.Col[*InvoiceSeriesTable, int8]
-	Updated        db.Col[*InvoiceSeriesTable, int32]
-	UpdatedVersion db.Col[*InvoiceSeriesTable, int32]
-	UpdatedBy      db.Col[*InvoiceSeriesTable, int32]
-	Created        db.Col[*InvoiceSeriesTable, int32]
-	CreatedBy      db.Col[*InvoiceSeriesTable, int32]
+// IsNote is true for the two document types that correct another document.
+func IsNote(docType int8) bool {
+	return docType == DocTypeCreditNote || docType == DocTypeDebitNote
 }
 
-func (e InvoiceSeriesTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		ID:                 53,
-		Name:               "invoice_series",
-		Partition:          e.CompanyID,
-		Keys:               db.Cols(e.ID),
-		SaveUpdatedVersion: true,
-		FixedValues: []db.FixedValues{
-			{Col: e.Status, Values: []int64{0, 1}},
-		},
-		Indexes: []db.Index{
-			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
-		},
+// FindSeries returns the series with that id, or nil. Inactive series are
+// returned: a document issued last year still has to name the series it used.
+func FindSeries(allSeries []InvoiceSeries, seriesID int8) *InvoiceSeries {
+	for index := range allSeries {
+		if allSeries[index].SeriesID == seriesID {
+			return &allSeries[index]
+		}
 	}
+	return nil
 }
+
+// ResolveSeries picks the series a document is numbered in.
+//
+// Naming one explicitly wins. Otherwise the default for that document type is
+// used, which is what a till does: it knows it is selling, not which series the
+// accountant set up.
+func ResolveSeries(allSeries []InvoiceSeries, docType int8, seriesID int8) (*InvoiceSeries, error) {
+	if seriesID != 0 {
+		found := FindSeries(allSeries, seriesID)
+		if found == nil || found.Status != 1 {
+			return nil, errSeries("La serie indicada no existe o está inactiva.")
+		}
+		if docType != 0 && found.DocType != docType {
+			return nil, errSeries("La serie indicada no corresponde a ese tipo de comprobante.")
+		}
+		return found, nil
+	}
+
+	if docType == 0 {
+		docType = DocTypeBoleta
+	}
+	// A note has to be issued in a series of the same family as the document it
+	// corrects, and only the caller knows which that is. Picking one here would
+	// mean issuing an F-series note against a boleta about a third of the time.
+	if IsNote(docType) {
+		return nil, errSeries("Una nota de crédito o débito debe indicar la serie con la que se emite.")
+	}
+
+	var fallback *InvoiceSeries
+	for index := range allSeries {
+		candidate := &allSeries[index]
+		if candidate.Status != 1 || candidate.DocType != docType {
+			continue
+		}
+		if candidate.IsDefault == 1 {
+			return candidate, nil
+		}
+		if fallback == nil {
+			fallback = candidate
+		}
+	}
+	if fallback == nil {
+		return nil, errSeries("La empresa no tiene una serie configurada para ese tipo de comprobante.")
+	}
+	return fallback, nil
+}
+
+// ValidateSeries checks the whole set, because the rules that matter are about
+// the set: ids and codes have to be unique, and a document type can only have
+// one default. It also normalizes the codes to upper case in place.
+//
+// The per-series rules are SUNAT's, not preferences — the wrong first letter
+// means every document numbered under it is rejected.
+func ValidateSeries(allSeries []InvoiceSeries) error {
+	seenID := map[int8]bool{}
+	seenCode := map[string]bool{}
+	defaultOfType := map[int8]bool{}
+
+	for index := range allSeries {
+		series := &allSeries[index]
+		series.SeriesCode = strings.ToUpper(strings.TrimSpace(series.SeriesCode))
+
+		switch series.DocType {
+		case DocTypeFactura, DocTypeBoleta, DocTypeCreditNote, DocTypeDebitNote:
+		default:
+			return errSeries("El tipo de comprobante de la serie " + series.SeriesCode + " no es válido.")
+		}
+
+		if series.SeriesID <= 0 || series.SeriesID > MaxSeriesID {
+			return errSeries("El número interno de la serie debe estar entre 1 y 99.")
+		}
+		if seenID[series.SeriesID] {
+			return errSeries("Hay dos series con el número interno " + itoa(int64(series.SeriesID)) + ".")
+		}
+		seenID[series.SeriesID] = true
+
+		if len(series.SeriesCode) != 4 {
+			return errSeries("El código de serie debe tener 4 caracteres, por ejemplo F001.")
+		}
+		prefix := series.SeriesCode[0]
+		if prefix != 'F' && prefix != 'B' {
+			return errSeries("El código de serie " + series.SeriesCode + " debe empezar con F o con B.")
+		}
+		if series.DocType == DocTypeFactura && prefix != 'F' {
+			return errSeries("Una factura necesita una serie que empiece con F.")
+		}
+		if series.DocType == DocTypeBoleta && prefix != 'B' {
+			return errSeries("Una boleta necesita una serie que empiece con B.")
+		}
+
+		// Only active codes have to be unique: a retired series keeps its code so
+		// the documents issued under it still read correctly.
+		if series.Status == 1 {
+			if seenCode[series.SeriesCode] {
+				return errSeries("Ya existe una serie activa con el código " + series.SeriesCode + ".")
+			}
+			seenCode[series.SeriesCode] = true
+		}
+
+		// SiteID 0 is allowed and means the company's own fiscal address — SUNAT's
+		// main establishment, coded 0000. Requiring a site would make the seeded
+		// series unsaveable until somebody created one.
+
+		if series.IsDefault == 1 && series.Status == 1 {
+			if defaultOfType[series.DocType] {
+				return errSeries("Solo una serie puede ser la predeterminada por tipo de comprobante.")
+			}
+			defaultOfType[series.DocType] = true
+		}
+	}
+	return nil
+}
+
+// NextSeriesID is the id a newly added series takes. Ids are never reused:
+// documents already issued point at theirs forever.
+func NextSeriesID(allSeries []InvoiceSeries) int8 {
+	highest := int8(0)
+	for index := range allSeries {
+		if allSeries[index].SeriesID > highest {
+			highest = allSeries[index].SeriesID
+		}
+	}
+	return highest + 1
+}
+
+// seriesError keeps this package free of an app/core import: it is a leaf that
+// the config module reads, and core would drag a module body across the line.
+type seriesError string
+
+func (e seriesError) Error() string { return string(e) }
+
+func errSeries(message string) error { return seriesError(message) }
 
 // itoa is the one number-to-string this package needs, kept here so the
 // document type does not import strconv for a single call.

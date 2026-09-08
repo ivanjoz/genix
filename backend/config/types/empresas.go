@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/db"
+	invoicing "app/invoicing/types"
+)
 
 type TAGS struct{}
 
@@ -20,8 +23,12 @@ type Company struct {
 	EmailVerified     int8        `json:",omitempty"`
 	PhoneVerified     int8        `json:",omitempty"`
 	CulqiConfig       CulqiConfig `json:",omitempty" db:"culqui_config"`
-	Updated           int32       `json:"upd" db:"updated"`
-	Status            int8        `json:"ss" db:"status"`
+	// InvoiceSeries are the SUNAT series this company issues under. Inline rather
+	// than a table of their own: there are at most 99, every emission needs one,
+	// and reading the company already brings them along.
+	InvoiceSeries []invoicing.InvoiceSeries `json:",omitempty"`
+	Updated       int32                     `json:"upd" db:"updated"`
+	Status        int8                      `json:"ss" db:"status"`
 }
 
 type CompanyTable struct {
@@ -40,6 +47,7 @@ type CompanyTable struct {
 	EmailVerified     db.Col[*CompanyTable, int8]
 	PhoneVerified     db.Col[*CompanyTable, int8]
 	CulqiConfig       db.Col[*CompanyTable, CulqiConfig]
+	InvoiceSeries     db.Col[*CompanyTable, []invoicing.InvoiceSeries]
 	Updated           db.Col[*CompanyTable, int32]
 	Status            db.Col[*CompanyTable, int8]
 }

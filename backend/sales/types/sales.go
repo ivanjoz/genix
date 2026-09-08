@@ -59,7 +59,12 @@ type SaleOrder struct {
 	DeliveryTime    int32                `json:",omitempty"`
 	DeliveryUser    int32                `json:",omitempty"`
 	ClientInfo      *SaleOrderClientInfo `json:",omitempty"`
-	PaymentDueDate  int16                `json:",omitempty" db:"payment_due_date"`
+	// IssueSeriesID names the invoicing series this sale will be issued under. It
+	// is a request field, not a column: it is folded into the last two digits of
+	// the id on creation, and read back with SeriesID(). Zero when the till does
+	// not say.
+	IssueSeriesID  int8  `json:",omitempty"`
+	PaymentDueDate int16 `json:",omitempty" db:"payment_due_date"`
 	// AnnulReason is why the sale was annulled, required by the annul endpoint. There is no
 	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
 	// already the "when and by whom" and a second pair could only drift from them.
@@ -123,7 +128,10 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		ID:        25,
 		Name:      "sale_order",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(2)),
+		// A plain key. The id is built by MakeSaleOrderID, which packs the counter,
+		// two random digits and the invoicing series into it — a layout the ORM's
+		// autoincrement cannot express.
+		Keys: db.Cols(e.ID),
 		// Sizes the Status slot of the delta index.
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Min: 0, Max: 4},

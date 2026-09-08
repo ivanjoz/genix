@@ -1,3 +1,76 @@
+## ResetCounter does nothing now, and warns instead
+
+**Context** — `ResetCounter` realigned a table's sequence with the rows that exist, and ran after
+every restore. It was wrong in three ways, and the id rework made the third total.
+
+**Decision** — `resetCounterForTable` in genix-orm is a no-op returning nil. `exec/restore.go`'s
+`ResetCounters` prints one warning naming what was skipped, and both carry a TODO describing what a
+correct version needs. `applyCounterReset` and opcode `0x08` are untouched.
+
+**Rationale** — It was only ever right for a key that is a bare `Autoincrement(0)`. The counter name
+hardcoded the autoincrement part as `0`, so a table declaring `AutoincrementPart` had its real
+per-part counters missed and a phantom one written instead; and the target was `max(key)`, which packs
+the counter with random digits and any `KeyIntPacking` columns, so the figure was orders of magnitude
+too large. Since sale and document ids became caller-built, it also skips both tables anyone would
+actually want to realign. A function that confidently writes a wrong value into a sequence the
+allocator owns is worse than one that admits it does not work.
+
+The failure this leaves is the mild direction: counters keep climbing, so an id is skipped, never
+reused. The case it does not survive is a restore into a *fresh* keyspace, where every counter starts
+at zero while the restored rows carry high ids — the next insert then collides with one of them. That
+is what the warning says.
+
+A real implementation has to reach further than the old one did. Sale ids and invoice correlativos are
+minted by this project under their own counter names through `db.GetAutoincrementID`, so no
+table-driven walk can discover them; they have to be reset by name. `applyCounterReset` is the
+primitive, and it already routes through the allocator so a live reservation is dropped in the same
+critical section as the move — which is the reason `0x08 SetSequence` exists at all.
+
+## `db/autoincrement.go` wires the ORM to fareward in package init
+
+**Context** — The daemon has to be the *only* writer of the `sequences` counters: it claims ranges
+in advance, so anything still on the ORM's read-then-increment would hand out ids from inside a
+range the daemon already owns. That is a silently overwritten record. The backend reaches the ORM
+from several places — `main.go`'s `SetScyllaConnection` and a handful of `exec/*.go`
+`MakeScyllaConnection` calls — and `exec/init.go` even calls `db.GetAutoincrementID` directly.
+
+**Decision** — A new `db/autoincrement.go` sets `scylla.ReserveCounterRange` and
+`scylla.SetCounterValue` in package `init()`, alongside `db/driver.go` which already declares the
+project's database choice. No configuration switch anywhere: in Genix the ORM always reserves
+through fareward. The keyspace argument is dropped, since the daemon writes the one it is configured
+against. Both hooks go in together — the second is what routes `ResetCounter` (reached from
+`RestoreBackup`, a live handler) through the daemon, so it can drop the block it derived from the
+value being erased instead of being left serving ids from a range that no longer exists.
+
+**Rationale** — Wiring it beside each `SetScyllaConnection` call would have made "forgetting a line"
+produce duplicate primary keys, which is exactly the failure this feature exists to remove; an
+`init()` in the one package every module already imports makes the unwired state unreachable. It
+buys that at the cost of implicit setup — `init()` is not top-to-bottom readable, so the file is
+named for what it does and carries the reasoning. Verified that `backend` is the only binary that
+writes through the ORM: `scripts/validation` names the ORM path only as a string in AST analysis,
+and `cloud`/`db-backup` do not link it. The remaining consequence is that a write attempted before
+`ConfigureFareward` fails with "not configured" rather than falling back — deliberate, and loud.
+
+## A tolerated credit refusal retries as an authorize-only frame
+
+**Context** — The operator company (ID 1) now sends real credit charges, so the daemon can refuse
+it, and that refusal must not become the HTTP response. Swallowing the error alone is not enough:
+the daemon returns `CreditViolation` *before* it returns the access verdict, so a tolerated refusal
+leaves `accessGrant` nil and `args.User.SubAccesos` empty — the operator's sub-accesses would turn
+off precisely when its budget ran out, which is unreadable as a symptom.
+
+**Decision** — In `enforceAccessAndCredits`, a refusal that `core.TolerateCreditRefusal` accepts is
+followed by a second `core.ChargeAPIAccessOnly` frame, and only its error can produce a response.
+`chargeGetResponseTopUp` tolerates without retrying — the settlement carries no accesses, so there
+is no grant to recover. An `AccessDenied` is never tolerated in either place.
+
+**Rationale** — The retry is safe rather than merely likely to work: a zero-credit frame cannot be
+refused on quota, because the gate compares `current + requested > limit` and a refusal charges
+nothing, so accumulated usage never gets past the ceiling. Alternative was widening the daemon's
+reply so `CreditViolation` also carries the verdict — a protocol change on both ends to save a
+round trip that only happens when the operator is already over budget. What this costs: two frames
+in that degraded case, and the tolerated request itself goes uncounted.
+
 ## A dev backend binds loopback and the tailnet, not every interface
 
 **Context** — The dev backend listened on `*:14010`. It holds the production database credentials

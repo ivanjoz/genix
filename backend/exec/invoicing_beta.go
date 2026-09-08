@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/ivanjoz/facturago"
+	"github.com/ivanjoz/facturago/sunat"
 )
 
 // Command-line access to electronic invoicing, for the two things that have no
@@ -129,11 +130,9 @@ func storeBetaCredentials(companyID int32, certificate []byte) error {
 
 // ensureBetaSeries gives the company one series per document type if it has none.
 func ensureBetaSeries(companyID, siteID int32) (int, error) {
-	existing := []invoicingTypes.InvoiceSeries{}
-	query := db.Query(&existing)
-	query.Select().CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return 0, fmt.Errorf("error al leer las series: %w", err)
+	allSeries, err := invoicing.LoadCompanySeries(companyID)
+	if err != nil {
+		return 0, err
 	}
 
 	wanted := []struct {
@@ -144,12 +143,11 @@ func ensureBetaSeries(companyID, siteID int32) (int, error) {
 		{invoicingTypes.DocTypeBoleta, "B001"},
 	}
 
-	now := core.SUnixTime()
-	toCreate := []invoicingTypes.InvoiceSeries{}
+	created := 0
 	for _, want := range wanted {
 		found := false
-		for index := range existing {
-			if existing[index].DocType == want.docType {
+		for index := range allSeries {
+			if allSeries[index].DocType == want.docType {
 				found = true
 				break
 			}
@@ -157,21 +155,25 @@ func ensureBetaSeries(companyID, siteID int32) (int, error) {
 		if found {
 			continue
 		}
-		toCreate = append(toCreate, invoicingTypes.InvoiceSeries{
-			CompanyID: companyID,
-			ID:        invoicingTypes.PackDocTypeSeries(want.docType, 1),
-			DocType:   want.docType, SeriesID: 1, SeriesCode: want.code,
-			SiteID: siteID, IsDefault: 1, Status: 1,
-			Created: now, Updated: now,
+		allSeries = append(allSeries, invoicingTypes.InvoiceSeries{
+			// Ids are unique across the whole set now, not per document type: the id
+			// is what partitions the correlativo counter.
+			SeriesID:   invoicingTypes.NextSeriesID(allSeries),
+			DocType:    want.docType,
+			SeriesCode: want.code,
+			SiteID:     siteID,
+			IsDefault:  1,
+			Status:     1,
 		})
+		created++
 	}
-	if len(toCreate) == 0 {
+	if created == 0 {
 		return 0, nil
 	}
-	if err := db.Insert(&toCreate); err != nil {
-		return 0, fmt.Errorf("error al crear las series: %w", err)
+	if err := invoicing.SaveCompanySeries(companyID, allSeries); err != nil {
+		return 0, err
 	}
-	return len(toCreate), nil
+	return created, nil
 }
 
 // EmitInvoice issues an electronic document for a sale, from the command line.
@@ -205,7 +207,8 @@ func EmitInvoice(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		return args.MakeErr(fmt.Sprintf("no se pudo reservar el correlativo: %v", err))
 	}
-	args.AddMessage(fmt.Sprintf("reservado %v (id %v)", document.Number(), document.ID))
+	args.AddMessage(fmt.Sprintf("reservado %v (id %v)",
+		document.Number(series.SeriesCode), document.ID))
 
 	if err := invoicing.SendDocument(companyID, document.ID); err != nil {
 		return args.MakeErr(fmt.Sprintf("SUNAT: %v", err))
@@ -216,9 +219,10 @@ func EmitInvoice(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(err.Error())
 	}
 	args.AddMessage(fmt.Sprintf("SUNAT respondió %v: %v",
-		issued.SunatCode, issued.SunatDescription))
-	args.AddMessage(fmt.Sprintf("estado %v | xml %v | cdr %v",
-		issued.State, issued.XmlPath, issued.CdrPath))
+		issued.SunatCode, sunat.ErrorDescription(issued.SunatCode)))
+	args.AddMessage(fmt.Sprintf("estado %v | artefactos en %v/%v",
+		issued.State, invoicing.ArtifactFolder(companyID),
+		invoicing.ArtifactName(issued.ID, "xml")))
 
 	return core.FuncResponse{}
 }
@@ -270,8 +274,9 @@ func SendInvoice(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		return args.MakeErr(err.Error())
 	}
-	args.AddMessage(fmt.Sprintf("%v | SUNAT %v: %v | estado %v",
-		issued.Number(), issued.SunatCode, issued.SunatDescription, issued.State))
+	args.AddMessage(fmt.Sprintf("serie %v correlativo %v | SUNAT %v: %v | estado %v",
+		issued.SeriesID(), issued.Correlativo, issued.SunatCode,
+		sunat.ErrorDescription(issued.SunatCode), issued.State))
 	return core.FuncResponse{}
 }
 
@@ -289,16 +294,9 @@ func loadOrderForEmission(companyID int32, saleOrderID int64) (*sales.SaleOrder,
 }
 
 func findSeries(companyID int32, docType int8) (*invoicingTypes.InvoiceSeries, error) {
-	series := []invoicingTypes.InvoiceSeries{}
-	query := db.Query(&series)
-	query.Select().CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer las series: %w", err)
+	allSeries, err := invoicing.LoadCompanySeries(companyID)
+	if err != nil {
+		return nil, err
 	}
-	for index := range series {
-		if series[index].DocType == docType && series[index].Status == 1 {
-			return &series[index], nil
-		}
-	}
-	return nil, errors.New("la empresa no tiene una serie para ese tipo de comprobante")
+	return invoicingTypes.ResolveSeries(allSeries, docType, 0)
 }

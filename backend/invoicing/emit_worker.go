@@ -72,25 +72,34 @@ func SendDocument(companyID int32, documentID int64) error {
 		return errors.New("el comprobante fue rechazado por SUNAT y no puede reenviarse")
 	}
 
-	issuer, err := BuildIssuer(companyID, siteOfDocument(companyID, row))
+	series, err := seriesOfDocument(companyID, row)
 	if err != nil {
 		return recordFailure(row, err, false)
 	}
 
-	// Signing regenerates the XML from the row rather than reusing a stored
-	// one, so a document that never got past this point is reproduced exactly.
-	document := DocumentFromRow(row)
+	issuer, err := BuildIssuer(companyID, series.SiteID)
+	if err != nil {
+		return recordFailure(row, err, false)
+	}
+
+	// The document is rebuilt from the sale on every attempt rather than kept in
+	// the row. Nothing that reaches the XML can drift between attempts: the number,
+	// the issue date and the series come off the row, and the sale is frozen while
+	// it has a live document.
+	document, err := RebuildDocument(companyID, row, series)
+	if err != nil {
+		return recordFailure(row, err, false)
+	}
+
 	emission, err := facturago.Emit(issuer, document)
 	if err != nil {
 		// A build or validation failure is about the document, not the network.
 		return recordFailure(row, err, false)
 	}
 
-	xmlPath, err := storeArtifact(companyID, row, emission.FileName+".xml", emission.XML, "application/xml")
-	if err != nil {
+	if err := storeArtifact(companyID, row, xmlArtifactName, emission.XML, "application/xml"); err != nil {
 		return recordFailure(row, err, true)
 	}
-	row.XmlPath = xmlPath
 	row.DigestValue = emission.Digest
 	row.State = types.InvoiceQueued
 	saveDocument(row)
@@ -101,17 +110,12 @@ func SendDocument(companyID int32, documentID int64) error {
 	}
 
 	if len(cdr.Zip) > 0 {
-		cdrPath, storeErr := storeArtifact(companyID, row,
-			facturago.CDRName(emission.FileName)+".zip", cdr.Zip, "application/zip")
-		if storeErr != nil {
+		if storeErr := storeArtifact(companyID, row, cdrArtifactName, cdr.Zip, "application/zip"); storeErr != nil {
 			core.Log("no se pudo guardar la CDR del comprobante", row.ID, storeErr)
-		} else {
-			row.CdrPath = cdrPath
 		}
 	}
 
 	row.SunatCode = cdr.Code
-	row.SunatDescription = cdr.Description
 	row.SunatNotes = cdr.Notes
 	row.State = stateFromSeverity(cdr.Severity)
 	row.LastError = ""
@@ -130,11 +134,10 @@ func recordFailure(row *types.InvoiceDocument, cause error, retryable bool) erro
 	var sunatError *sunat.Error
 	if errors.As(cause, &sunatError) {
 		row.SunatCode = sunatError.Code
-		row.SunatDescription = sunatError.Description
 		row.State = stateFromSeverity(sunatError.Severity)
-	} else if retryable {
-		row.State = types.InvoiceException
 	} else {
+		// Retryable or not, the state is the same; what differs is whether a retry
+		// is scheduled below.
 		row.State = types.InvoiceException
 	}
 
@@ -180,44 +183,50 @@ func saveDocument(row *types.InvoiceDocument) {
 	table := db.TableOf[types.InvoiceDocument]()
 	err := db.Update(rows,
 		table.State, table.Status, table.Updated,
-		table.SunatCode, table.SunatDescription, table.SunatNotes, table.Ticket,
-		table.DigestValue, table.XmlPath, table.CdrPath,
-		table.RetryCount, table.LastError,
+		table.SunatCode, table.SunatNotes, table.Ticket,
+		table.DigestValue, table.RetryCount, table.LastError,
 	)
 	if err != nil {
 		core.Log("no se pudo actualizar el comprobante", row.ID, err)
 	}
 }
 
-// storeArtifact keeps the XML and the CDR. Both have to survive five years, so
-// they go to object storage and the row keeps the path.
-func storeArtifact(companyID int32, row *types.InvoiceDocument,
-	name string, content []byte, contentType string) (string, error) {
+// The artifacts a document must keep for five years, named by convention rather
+// than by a stored path. Both are derived from the document id, which is unique
+// per sale and series, so a sale's boleta and its credit note never collide.
+const (
+	xmlArtifactName = "xml"
+	cdrArtifactName = "cdr"
+)
 
-	path := fmt.Sprintf("cpe/%v/%v", companyID, row.IssueDate/30)
+// ArtifactFolder is where a company's documents live. Kept next to the naming so
+// the read path and the write path cannot drift.
+func ArtifactFolder(companyID int32) string {
+	return fmt.Sprintf("cpe/%v", companyID)
+}
+
+// ArtifactName is the object a document's XML or CDR is stored under.
+func ArtifactName(documentID int64, kind string) string {
+	if kind == cdrArtifactName {
+		return fmt.Sprintf("%v-cdr.zip", documentID)
+	}
+	return fmt.Sprintf("%v.xml", documentID)
+}
+
+// storeArtifact keeps the XML and the CDR. Both have to survive five years, so
+// they go to object storage; the row keeps no path because the name is derived.
+func storeArtifact(companyID int32, row *types.InvoiceDocument,
+	kind string, content []byte, contentType string) error {
+
 	err := cloud.SaveFile(cloud.SaveFileArgs{
 		Bucket:      core.Env.S3_BUCKET,
-		Path:        path,
-		Name:        name,
+		Path:        ArtifactFolder(companyID),
+		Name:        ArtifactName(row.ID, kind),
 		FileContent: content,
 		ContentType: contentType,
 	})
 	if err != nil {
-		return "", fmt.Errorf("no se pudo guardar %v: %w", name, err)
+		return fmt.Errorf("no se pudo guardar el archivo del comprobante: %w", err)
 	}
-	return path + "/" + name, nil
-}
-
-// siteOfDocument finds the establishment a document is issued from, which is the
-// site its series belongs to.
-func siteOfDocument(companyID int32, row *types.InvoiceDocument) int32 {
-	series := []types.InvoiceSeries{}
-	query := db.Query(&series)
-	query.Select().CompanyID.Equals(companyID).
-		ID.Equals(types.PackDocTypeSeries(row.DocType, row.SeriesID))
-
-	if err := query.Exec(); err != nil || len(series) == 0 {
-		return 0
-	}
-	return series[0].SiteID
+	return nil
 }

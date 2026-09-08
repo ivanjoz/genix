@@ -147,13 +147,11 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		restoredEntriesCount++
-		if err = controller.ResetCounter(req.User.CompanyID); err != nil {
-			core.Log("RestoreBackup reset counter error | table:", tableName, "| err:", err)
-			continue
-		}
-
 		core.Log("RestoreBackup entry restored | table:", tableName, "| company:", req.User.CompanyID)
 	}
+
+	// Counters are not realigned with the restored rows — see ResetCounters.
+	ResetCounters(req.User.CompanyID)
 
 	core.Log(
 		"RestoreBackup summary | backup:", body.Name,
@@ -175,19 +173,28 @@ func CreateBackup(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(map[string]int{"ok": 1})
 }
 
+// ResetCounters realigns the id counters with the rows that actually exist. It does
+// not work, and this is the warning that says so.
+//
+// WARNING: after a restore the counters are left exactly where they were. That is the
+// safe direction — they keep climbing, so an id is never reused, only skipped — but a
+// restore into a fresh keyspace leaves every counter at zero while the restored rows
+// carry high ids, and the next insert then collides with one of them.
+//
+// TODO: implement it. genix-orm's resetCounterForTable (scylla/deploy.go) records what
+// a correct version needs: counter names built per AutoincrementPart instead of
+// assuming 0, and a target derived from the counter rather than from the packed key,
+// which carries random digits and any KeyIntPacking columns. Beyond that, the ids this
+// project mints itself — sale orders and invoice correlativos, which call
+// db.GetAutoincrementID under their own counter names — are invisible to any
+// table-driven walk and have to be reset by name. genix-orm's applyCounterReset is the
+// primitive to build on: it already routes through the fareward allocator, so a live
+// reservation is dropped in the same critical section as the move.
 func ResetCounters(partValue any) {
-	fmt.Println("Recalculando Counter de Tablas...")
-	resetAppliedCount := 0
-	resetErrorCount := 0
-	for _, sc := range MakeScyllaControllers() {
-		if err := sc.ResetCounter(partValue); err != nil {
-			resetErrorCount++
-			fmt.Printf("ResetCounter error | table=%s | partition=%v | err=%v\n", sc.GetTableName(), partValue, err)
-			continue
-		}
-		resetAppliedCount++
-	}
-	fmt.Printf("ResetCounter summary | partition=%v | processed=%d | errors=%d\n", partValue, resetAppliedCount, resetErrorCount)
+	fmt.Printf("WARNING ResetCounters | partition=%v | NOT IMPLEMENTED: counters were left "+
+		"unchanged. Ids continue from their current value, so restoring into a keyspace "+
+		"whose counters sit behind the restored rows will collide on the next insert.\n",
+		partValue)
 }
 
 func ResetCounterPart(args *core.ExecArgs) core.FuncResponse {
