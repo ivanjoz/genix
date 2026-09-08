@@ -75,6 +75,9 @@ jobs:
           # En CI no hay config.toml del que leer [server].port, así que se declara aquí.
           PUBLIC_LOCAL_API_PORT: ${{ vars.PUBLIC_LOCAL_API_PORT || '3589' }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
+          # Solo existe en desarrollo (lo resuelve start.js con `tailscale ip -4`). Vacío en CI,
+          # pero core/env.ts lo importa de $env/static/public, así que tiene que estar declarado.
+          PUBLIC_TAILSCALE_HOST: ''
         run: bun run build
 
       - name: Build webpage renderer
@@ -89,6 +92,7 @@ jobs:
           # En CI no hay config.toml del que leer [server].port, así que se declara aquí.
           PUBLIC_LOCAL_API_PORT: ${{ vars.PUBLIC_LOCAL_API_PORT || '3589' }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
+          PUBLIC_TAILSCALE_HOST: ''
         run: |
           bun scripts/build-renderer.mjs
           cp frontend/webpage/build-renderer/webpage-renderer.zip frontend/build/webpage-renderer.zip
