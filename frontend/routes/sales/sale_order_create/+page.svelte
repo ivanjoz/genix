@@ -28,7 +28,15 @@ import { type Quantity, addQuantity, formatQuantity, quantityAmount, quantityDiv
 import type { ProductoVenta, VentaProducto } from "./sale_order.svelte";
 import { useUI } from '@genix/ui';
 import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sale_order.svelte";
-    import DateInput from '$components/form/DateInput.svelte';
+import DateInput from '$components/form/DateInput.svelte';
+import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+import { security } from '$libs/ui-runtime.svelte';
+import SaleHistoryCards from './SaleHistoryCards.svelte';
+import SaleTicketModal from './SaleTicketModal.svelte';
+import { SaleHistoryState } from './sale_history.svelte';
+import { buildSaleHistoryRow } from './sale_history';
+import type { SaleHistoryRow } from './sale_history.idb';
+import type { TicketContext } from './sale_ticket';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -44,12 +52,19 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
 
   // State
   const ventasState = new SaleOrderState();
+  const saleHistory = new SaleHistoryState();
   const ui = useUI();
+
+  const SALE_LAYER_CART = 1;
+  const SALE_LAYER_HISTORY = 2;
+  const TICKET_MODAL_ID = 21;
 
   let almacenSelected = $state(-1);
   let productoSelected = $state(-1);
   let searchInput = $state<HTMLInputElement>();
   let clientModeSelected = $state(0);
+  let saleLayerView = $state(SALE_LAYER_CART);
+  let saleToPrint = $state<SaleHistoryRow>();
 
   // Computed
   const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);
@@ -78,6 +93,31 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
         Name: `${tr(docTypeName(series.DocType)).toUpperCase()} · ${series.SeriesCode}`,
       })),
   );
+  // The session user is the cashier, and the only user this page can put a name to — there is
+  // no users service at the till, and loading one to label a ticket would not earn its weight.
+  const sessionUser = security.getUserInfo();
+  // Everything the tickets and the history cards resolve, handed over as the records the page
+  // already loads. The history itself stores only ids.
+  const ticketContext = $derived<TicketContext>({
+    company: {
+      name: parametrosService.empresa.Name || "",
+      legalName: parametrosService.empresa.LegalName || "",
+      ruc: parametrosService.empresa.RUC || "",
+      address: parametrosService.empresa.Address || "",
+    },
+    seriesByID: new Map((parametrosService.empresa.InvoiceSeries || [])
+      .map((series) => [series.SeriesID, series] as const)),
+    productsByID: productosService.recordsMap,
+    // Built from `records` and not from `recordsMap`: syncIDs merges a fetched client by
+    // mutating the map in place, and a plain Map is not reactive — reading the array is what
+    // makes this recompute when a client registered at the till arrives.
+    clientsByID: new Map(clientesService.records.map((client) => [client.ID, client] as const)),
+    warehousesByID: almacenesService.AlmacenesMap,
+    cashBanksByID: cajas.CajasMap,
+    cashierNamesByID: new Map(sessionUser
+      ? [[sessionUser.ID, `${sessionUser.FirstName || ""} ${sessionUser.LastName || ""}`.trim()]]
+      : []),
+  });
   const clientOptions = $derived.by(() => {
     // Build a combined label so the selector matches by name and registry number with the shared SearchSelect component.
     return clientesService.records.map((clientRecord) => ({
@@ -318,11 +358,29 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
   async function handlePostSaleOrder() {
     const selectedClient = clientesService.records.find(
       (clientRecord) => clientRecord.ID === ventasState.form.ClientID);
-    const wasSaved = await ventasState.postSaleOrder(
+    const postedSale = await ventasState.postSaleOrder(
       parametrosService.empresa.InvoiceSeries || [], selectedClient);
-    if (wasSaved) {
-      clientModeSelected = 0;
+    if (!postedSale) { return }
+
+    clientModeSelected = 0;
+
+    // A client registered at the till was just created by the backend, so the delta-cached list
+    // this page loaded does not have it and the ticket would print "VARIOS" for a buyer it was
+    // explicitly given. syncIDs is a no-op when the client was picked from the list.
+    if (postedSale.sale.ClientID > 0) {
+      await clientesService.syncIDs([postedSale.sale.ClientID]);
     }
+
+    await saleHistory.register(
+      buildSaleHistoryRow(postedSale.sale, postedSale.soldProducts, Date.now()));
+    // The ticket is what the sale is for, so the operator lands on the card that prints it
+    // instead of on an emptied cart.
+    saleLayerView = SALE_LAYER_HISTORY;
+  }
+
+  function handlePrintSale(row: SaleHistoryRow) {
+    saleToPrint = row;
+    ui.openModal(TICKET_MODAL_ID);
   }
 
   // The table runs with disableHeaderPadding, so the header's whole box comes from here.
@@ -459,11 +517,29 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
         </div>
       </div>
 
+      <!-- The -4px mirrors Page's own shell (`min-height: calc(100vh - var(--header-height) - 4px)`),
+           which is 4px shorter than the viewport on purpose. Without it this layer overflows the
+           shell by exactly that much, and the moment a modal locks `html`'s scrolling the overflow
+           surfaces as a body scrollbar. -->
       <LayerStatic
-        css="w-[40%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
-        mobileLayerTitle="Detalle de Venta"
+        css="w-[40%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height)-4px)] shadow-lg md:-m-10"
+        mobileLayerTitle="Venta"
         useMobileLayerVertical={124}
       >
+        <div class="px-10 pt-8">
+          <OptionsStrip
+            selected={saleLayerView}
+            options={[
+              [SALE_LAYER_CART, "New Sale|NUEVA VENTA"],
+              [SALE_LAYER_HISTORY, "History|HISTORIAL"],
+            ]}
+            buttonCss="ff-bold"
+            useMobileGrid
+            onSelect={(option) => { saleLayerView = option[0] as number; }}
+          />
+        </div>
+
+      {#if saleLayerView === SALE_LAYER_CART}
         <!-- Error Message -->
         {#if ventasState.ventaErrorMessage}
           <div class="bg-red-50 m-8 text-red-600 p-12 text-sm font-medium border-b border-red-100 animate-in slide-in-from-top-2"
@@ -476,9 +552,6 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
           aria-label="Sale order totals and save action bar"
         >
        	<div class="mr-16">
-          <div class="hidden font-bold font-xl mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
-            <span>Detalle de Venta</span>
-          </div>
           <div class="flex items-center gap-6">
             <div class="bg-gray-100 flex flex-1 p-6 rounded-md items-center gap-6 min-h-36 md:min-w-170">
                 <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase mr-8">
@@ -592,6 +665,16 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
             disableHeaderPadding
           />
         </div>
+      {:else}
+        <div class="flex-1 min-h-0 pt-10">
+          <SaleHistoryCards
+            rows={saleHistory.rows}
+            isLoaded={saleHistory.isLoaded}
+            context={ticketContext}
+            onPrint={handlePrintSale}
+          />
+        </div>
+      {/if}
       </LayerStatic>
     </div>
   {:else if ui.state.pageOptionSelected === 2}
@@ -599,4 +682,6 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
       <SystemParametersEditor />
     </div>
   {/if}
+
+  <SaleTicketModal id={TICKET_MODAL_ID} row={saleToPrint} context={ticketContext} />
 </Page>

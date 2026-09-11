@@ -88,6 +88,13 @@ export interface ISaleOrder {
 export const SALE_ACTION_PAYMENT = 2
 export const SALE_ACTION_DELIVERY = 3
 
+// What a successful submit hands back. The cart travels with the sale because the local
+// ticket history is built from both, and postSaleOrder empties the cart on its way out.
+export interface PostedSaleOrder {
+  sale: ISaleOrder
+  soldProducts: VentaProducto[]
+}
+
 export class SaleOrderState {
   // State
   productosStock = $state([] as IProductStock[])
@@ -201,15 +208,17 @@ export class SaleOrderState {
   // allSeries and selectedClient come from the page's services: the sale can only be
   // stamped with a series the company has, and the buyer it will bill is either the
   // picked client row or the details typed at the till.
-  async postSaleOrder(allSeries: IInvoiceSeries[], selectedClient?: IClientProvider) {
+  async postSaleOrder(allSeries: IInvoiceSeries[], selectedClient?: IClientProvider):
+    Promise<PostedSaleOrder | undefined> {
+
     if (this.ventaProductos.length === 0) {
       Notify.failure("El carrito está vacío.")
-      return false
+      return undefined
     }
 
     if (this.form.WarehouseID === 0) {
       Notify.failure("Seleccione un almacén.")
-      return false
+      return undefined
     }
 
     const issueSeries = allSeries.find(series => series.SeriesID === this.form.IssueSeriesID)
@@ -222,7 +231,7 @@ export class SaleOrderState {
 
       if (identityProblem) {
         Notify.failure(tr(identityProblem))
-        return false
+        return undefined
       }
     }
 
@@ -288,13 +297,18 @@ export class SaleOrderState {
         this.form.ClientInfo = undefined
       }
 
-      const res = await POST({
+      const createdSale = await POST({
         route: "sale-order",
         data: this.form,
         successMessage: "Venta registrada con éxito"
-      })
+      }) as ISaleOrder | undefined
 
-      if (res) {
+      if (createdSale) {
+        // Handed over before the cart is cleared: the response carries packed detail lines,
+        // not the products behind them, so this is the only moment the sale can still be
+        // described as what was sold.
+        const soldProducts = this.ventaProductos
+
         // Reset state
         this.ventaProductos = []
         this.recalcTotales()
@@ -302,7 +316,7 @@ export class SaleOrderState {
         this.form.ClientInfo = undefined
         this.form.montoRecibido = 0
         this.form.montoVuelto = 0
-        return true
+        return { sale: createdSale, soldProducts }
       }
     } catch (error) {
       console.error("Error posting sale order:", error)
@@ -310,6 +324,6 @@ export class SaleOrderState {
       Loading.remove()
     }
 
-    return false
+    return undefined
   }
 }

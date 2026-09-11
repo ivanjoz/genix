@@ -1,5 +1,125 @@
 # RATIONALE — sale_order_create
 
+## A client registered at the till is fetched by id, not stored on the row
+
+**Context** — The history stores `clientID` and resolves the name through the page's
+`ClientProviderService`. That service is a delta-cached list loaded on mount, so a client the
+operator typed into the form is created by `POST sale-order` *after* the list was fetched: the id
+comes back on the sale, the record is nowhere in the browser, and the ticket printed "CLIENTE:
+VARIOS" for a buyer it had been given explicitly — on a factura, which cannot legally be anonymous.
+
+**Decision** — After a successful post, the page calls `clientesService.syncIDs([sale.ClientID])`
+before registering the history row. `clientsByID` in `TicketContext` is built from
+`clientesService.records`, not from `recordsMap`.
+
+**Rationale** — `syncIDs` is the project's by-id cache path (`routeByID = client-provider-ids`): it
+fetches only what is missing and is a no-op when the client was picked from the list, so the common
+case costs nothing and the rule that rows hold references survives intact. The `records` detail is
+load bearing and not a style choice — `syncIDs` merges by mutating `recordsMap` in place, and a
+plain `Map` is not reactive in Svelte 5, so a `$derived` reading the map would never recompute.
+Cost: one extra request on a sale that registers a new client, and the post now awaits it before
+the view switches.
+
+## The detail layer is 4px shorter than the viewport
+
+**Context** — `LayerStatic` here was `h-[calc(100vh-var(--header-height))]`, while the `Page` shell
+it sits in is deliberately 4px shorter: `min-height: calc(100vh - var(--header-height) - 4px)` in
+`domain-components/Page.svelte`. The layer therefore overflowed its own shell by exactly 4px. That
+was invisible until this feature added the first modal to the route — `Modal` locks `html`'s
+scrolling, `body` is a scroll container because `app.css` sets `overflow-x: hidden` on it, and the
+4px surfaced as a full-height scrollbar beside the open dialog.
+
+**Decision** — The layer now uses `calc(100vh - var(--header-height) - 4px)`, the shell's own
+expression.
+
+**Rationale** — Fixed in this route rather than in `Page`, whose `-4px` is intentional and shared by
+every other route; changing it there to make one layer fit would move layout everywhere. Copying
+the expression keeps the two in sync by construction instead of by a bare number. Cost: the
+constant is now written in two places, so a change to the shell's padding has to be repeated here.
+
+## What a history row stores, given that it must store references
+
+**Context** — The rule for the local history is that nothing derivable is persisted: the row keeps
+ids and the sale id, and `TicketContext` resolves them against the services the page already holds.
+But three per-line values are not references and are not recoverable either — the sub-unit divisor
+and the two prices the line was sold at.
+
+**Decision** — `SaleHistoryLine` stores `quantity`, `subDivisor`, `unitPrice` and `subUnitPrice`,
+and nothing else beyond `productID` / `presentationID` / `serialNumbers`. The line's amount is not
+stored: it is `quantityAmount` of the three.
+
+**Rationale** — The catalog is free to reprice or reconfigure a product, and a ticket already handed
+to a customer cannot change when it does. `subDivisor` is the sharpest case: `quantity.sub` is
+meaningless without it, so a product whose `SbuQuantity` changes would make every older row
+misread. Cost: a line whose product was deleted prints `(producto no encontrado)` — the price
+survives, the name does not, which is the trade the rule asks for.
+
+## The correlativo is padded to 8 digits here and not in the invoicing panel
+
+**Context** — `invoiceNumber` in `routes/accounting/invoicing/invoicing.ts` renders
+`B001-130`. This ticket renders `B001-00000130` from the same two numbers.
+
+**Decision** — `saleDocumentNumber` pads to 8 digits. The invoicing panel was left alone.
+
+**Rationale** — They are not the same artifact. The panel is a list column an operator scans; the
+ticket is the printed representation of the comprobante, and SUNAT numbers those with a zero-padded
+8-digit correlativo. Cost: the same sale reads two ways across two screens, so anyone comparing
+them has to know which one is the document.
+
+## The printed copy is a second `<pre>`, outside the dialog
+
+**Context** — Printing is done with `@media print` over the open modal. `Modal`'s dialog box carries
+`transform: translateY(...)` for its open transition, and a transform makes an element the
+containing block for any `position: fixed` descendant — so a print element placed inside the dialog
+anchors to the dialog, not to the page.
+
+**Decision** — `SaleTicketModal` renders the ticket text twice: the on-screen preview inside the
+`Modal`, and a `_printCopy` in its own `Portal` at body level, `display: none` except in print.
+
+**Rationale** — The alternative was reaching into `Modal` to drop the transform while printing,
+which would change a shared component for one caller. Both elements render the same
+`renderSaleTicket` string, so there is one layout and only the element is duplicated. Cost: two
+nodes holding the same text, and a reader has to notice why.
+
+## The preview is 14px on screen and 2.5mm only on paper
+
+**Context** — The ticket is sized for the physical roll: a 1.5 mm character cell, which at Courier's
+0.6em advance means a 2.5 mm type size. On a 96 dpi screen that is about 9 px — below the project's
+14 px floor and genuinely hard to read.
+
+**Decision** — The preview renders at `text-[14px]` with its box set to `{columns}ch`; only the
+print rule uses millimetres.
+
+**Rationale** — Line breaks are decided in the string by character count, not by the font, so the
+preview wraps identically at any type size — the fidelity that matters is preserved while the
+fidelity that does not (absolute size) is dropped. `box-sizing: content-box` on that box is load
+bearing: with the inherited `border-box` the horizontal padding eats into the `ch` width and the
+widest rows silently lose their last characters.
+
+## Three `sale_history` files instead of one
+
+**Context** — The approved plan had a single `sale_history.idb.ts`. In writing it the module ended
+up doing three jobs: the Dexie schema, the rules that shape a row from a posted sale, and the
+reactive list the view renders.
+
+**Decision** — Split along the folder convention: `sale_history.idb.ts` (persistence and the row
+shape), `sale_history.ts` (pure — `buildSaleHistoryRow`, the status predicates),
+`sale_history.svelte.ts` (`SaleHistoryState`).
+
+**Rationale** — `sale_history.ts` is the half with rules in it and it is now unit-testable without
+Dexie or a browser. Cost: three files for a feature whose whole surface is a list of sales.
+
+## `sale_ticket.ts` formats money itself
+
+**Context** — `$libs/helpers` exports `formatN`, but it also imports notiflix and calls
+`Loading.init()` at module scope.
+
+**Decision** — `formatTicketAmount` is eight lines inside `sale_ticket.ts`.
+
+**Rationale** — Importing `formatN` would make the renderer — and its test — need a DOM for a
+thousands separator. Cost: a second money formatter in the codebase, which is why it says so where
+it is defined.
+
 ## The cart columns declare no `mobile` config on purpose
 
 **Context** — The cart list is now a `VTable` (CANT. / PRODUCTO / PRECIO) whose remove button is
