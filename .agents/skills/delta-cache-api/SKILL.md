@@ -6,35 +6,51 @@ version: 0.1.0
 
 # Delta Cache API
 
-The delta cache minimizes traffic by sending only records changed since the client's last sync. The frontend stores a watermark (max `Updated`) per response key and resends it on the next request. The backend returns records newer than the watermark, plus rows flipped to `Status=0` so the client can evict them.
+The delta cache minimizes traffic by sending only records changed since the client's last sync. The frontend stores a watermark per response key — the max `UpdatedVersion` and the max `Updated` of the records it holds — and resends both on the next request. The backend returns records newer than the watermark, plus rows flipped to `Status=0` so the client can evict them.
 
 ## Core concepts
 
-- **`Updated`** — integer Unix timestamp on every record. Drives the index key and the client watermark. JSON tag: `json:"upd,omitempty"`.
+- **`UpdatedVersion`** — the write sequence number of a table with a `db.TypeDelta` index, strictly increasing and unique per write. The watermark of choice. JSON tag: `json:"upv,omitempty"`.
+- **`Updated`** — integer Unix timestamp on every record. The watermark for tables with no delta index. JSON tag: `json:"upd,omitempty"`.
 - **`Status`** — `int8`. Active (`>= 1`) or inactive (`0`). Initial fetch returns only active; delta fetch returns all statuses so the client can evict `ss=0` rows. JSON tag: `json:"ss,omitempty"`.
-- **Watermark** — the client sends `?updated=<max>` (single table) or `?<ResponseKey>=<max>` (multi-table). Named after the response struct field.
-- **First-sync vs delta** — branch on whether the watermark query param is present and `> 0`.
+- **Watermark** — one query param per response key, carrying **both** values as `"<upv>.<upd>"`: `?up=21.394157968` for a bare-array route, `?ProductStock=5.394161574` for a multi-table one. The client always sends both; the handler reads the half its table is keyed on with `req.GetUpVersion()` or `req.GetUpdated()` (pass the response key on a multi-table route). Never read a watermark with `GetQueryInt` — the dot makes it 0.
+- **First-sync vs delta** — branch on whether the half you read is `> 0`.
 
 ---
 
 ## 1. Backend — single-table handler
 
 ```go
-func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
-    updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+// Table with a delta index: Delta() keeps only active rows on a first sync and every status
+// afterwards, so the client can evict what was deleted.
+func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
+    updatedSince := req.GetUpVersion()
 
-    records := []negocioTypes.Producto{}
-    query := scylla.Query(&records)
-    query.EmpresaID.Equals(req.Usuario.EmpresaID)
+    records := []types.Product{}
+    query := db.Query(&records).CompanyID.Equals(req.User.CompanyID)
+    query.Delta(updatedSince, 1)
+
+    if err := query.Exec(); err != nil {
+        return req.MakeErr("error al obtener los productos:", err)
+    }
+    return core.MakeResponse(req, &records)
+}
+
+// Table with no delta index: the timestamp half, and the status branch written by hand.
+func GetSaleSummaryStatus(req *core.HandlerArgs) core.HandlerResponse {
+    updated := req.GetUpdated()
+
+    records := []types.SaleSummary{}
+    query := db.Query(&records).CompanyID.Equals(req.User.CompanyID)
 
     if updated > 0 {
         query.Updated.GreaterThan(updated) // delta: include Status=0 rows
     } else {
-        query.Status.GreaterEqual(1)        // initial: active only
+        query.Status.GreaterEqual(1)       // initial: active only
     }
 
     if err := query.Exec(); err != nil {
-        return req.MakeErr("error al obtener productos:", err)
+        return req.MakeErr("error al obtener los resúmenes:", err)
     }
     return core.MakeResponse(req, &records)
 }
@@ -58,8 +74,8 @@ type GetProductosStockResult struct {
 }
 
 func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
-    productStockUpdated       := req.GetQueryInt("ProductStock")
-    productStockDetailUpdated := req.GetQueryInt("ProductStockDetail")
+    productStockUpdated       := req.GetUpVersion("ProductStock")
+    productStockDetailUpdated := req.GetUpVersion("ProductStockDetail")
 
     statuses := []int8{1}
     if productStockUpdated > 0 || productStockDetailUpdated > 0 {
@@ -242,10 +258,10 @@ On merge the cache aligns by `ProductIDs` position, updating matching indices an
 ## 9. Checklist
 
 **Backend**
-- [ ] `Updated int32 \`json:"upd,omitempty"\`` and `Status int8 \`json:"ss,omitempty"\`` on the record struct
+- [ ] `Updated int32 \`json:"upd,omitempty"\`` and `Status int8 \`json:"ss,omitempty"\`` on the record struct, plus `UpdatedVersion int32 \`json:"upv,omitempty"\`` when the table declares a `db.TypeDelta` index
 - [ ] `TypeView` index that matches the query shape (Updated last when composite)
-- [ ] Handler reads `upd`/`updated` (single-table) or per-response-key param (multi-table)
-- [ ] `updated > 0` → filter by `Updated`, include inactive rows; else filter by `Status >= 1`
+- [ ] Handler reads the watermark with `req.GetUpVersion()` / `req.GetUpdated()`, passing the response key on a multi-table route — never `GetQueryInt`
+- [ ] `> 0` → filter by the watermark, include inactive rows; else filter by `Status >= 1` (`query.Delta()` does both)
 - [ ] Multi-table: response struct field names match the expected query-param names
 
 **Frontend**

@@ -1,4 +1,4 @@
-package invoicing
+package types
 
 import (
 	"app/core"

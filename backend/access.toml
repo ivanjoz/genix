@@ -341,4 +341,4 @@ name = "Facturación Electrónica"
 group = 7
 levels = 14
 frontend_routes = "accounting/invoicing"
-backend_apis = "POST.invoice,POST.invoice-retry,GET.invoices,GET.invoice-xml,POST.invoice-series"
+backend_apis = "POST.invoice-retry,GET.invoices,GET.invoice-xml,POST.invoice-series"

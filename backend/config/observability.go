@@ -68,7 +68,7 @@ func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 		windowHours = min(requestedHours, observabilityMaxHours)
 	}
 
-	watermark := core.Coalesce(req.GetQueryInt("Frames"), req.GetQueryInt("upd"))
+	watermark := core.Coalesce(req.GetUpdated("Frames"), req.GetUpdated())
 	nowUnix := time.Now().UTC().Unix()
 	currentTimeFrame := unixToObservabilityTimeFrame(nowUnix)
 	windowFrameCount := windowHours * 12
@@ -113,7 +113,7 @@ func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	// Routes is an independent cold collection. A partial cache write may already have a Frames
 	// watermark while lacking route metadata, so never infer one collection's state from the other.
-	if req.GetQueryInt("Routes") < observabilityRoutesVersion {
+	if req.GetUpdated("Routes") < observabilityRoutesVersion {
 		response.Routes = makeObservabilityRoutes()
 	}
 

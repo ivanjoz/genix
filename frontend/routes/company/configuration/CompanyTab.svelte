@@ -1,12 +1,19 @@
 <script lang="ts">
 import Input from '$components/form/Input.svelte';
+import SearchSelect from '$components/form/SearchSelect.svelte';
 import Button from '$components/buttons/Button.svelte';
 import T from '$components/misc/T.svelte';
 import InvoiceSeriesTable from './InvoiceSeriesTable.svelte';
 import CompanySecretsPanel from './CompanySecretsPanel.svelte';
+import { CountryCitiesService } from '$services/business/country-cities.svelte';
 import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas.svelte"
 
   const { service }: { service: EmpresaParametrosService } = $props()
+
+  // The district is the company's ubigeo, which every electronic document declares
+  // as the issuer's fiscal address. Same catalog and same selector the sites use,
+  // so the two cannot disagree about what a district is.
+  const citiesService = new CountryCitiesService(true)
 </script>
 
 <div class="grid grid-cols-24 gap-14 items-start">
@@ -34,7 +41,11 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
         bind:saveOn={service.empresa} />
       <Input css="col-span-24" label="Legal Address|Dirección Legal" save="Address"
         bind:saveOn={service.empresa} />
-      <Input css="col-span-24" label="City|Ciudad" save="City" bind:saveOn={service.empresa} />
+      <SearchSelect css="col-span-24"
+        label="Department | Province | District|Departamento | Provincia | Distrito"
+        keyId="ID" keyName="_nombre" options={citiesService.distritos}
+        save="CityID" bind:saveOn={service.empresa}
+      />
     </div>
   </section>
   <!-- The invoicing panels stack in their own column: the certificate belongs under the

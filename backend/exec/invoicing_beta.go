@@ -225,9 +225,24 @@ func EmitInvoice(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(err.Error())
 	}
 
-	document, err := invoicing.ReserveDocument(companyID, 1, order, series)
+	// A sale created after the deferred-emission change already carries its
+	// document. This command is what issues one for a sale that predates it, or
+	// re-issues after the first attempt was discarded.
+	existing, err := invoicingTypes.FindBySaleOrder(companyID, saleOrderID)
+	if err != nil {
+		return args.MakeErr(err.Error())
+	}
+	if existing != nil {
+		return args.MakeErr(fmt.Sprintf("la venta ya tiene el comprobante %v",
+			existing.Number(series.SeriesCode)))
+	}
+
+	document, err := invoicingTypes.PrepareDocumentForSale(companyID, 1, order, series)
 	if err != nil {
 		return args.MakeErr(fmt.Sprintf("no se pudo reservar el correlativo: %v", err))
+	}
+	if err := invoicingTypes.SaveNewDocument(document); err != nil {
+		return args.MakeErr(err.Error())
 	}
 	args.AddMessage(fmt.Sprintf("reservado %v (id %v)",
 		document.Number(series.SeriesCode), document.ID))

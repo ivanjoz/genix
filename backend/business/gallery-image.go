@@ -96,7 +96,7 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 func GetGalleryImages(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 	images := []types.GalleryImage{}
 	query := db.Query(&images)
 	table := db.TableOf[types.GalleryImage]()

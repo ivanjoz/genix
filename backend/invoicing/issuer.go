@@ -1,7 +1,6 @@
 package invoicing
 
 import (
-	business "app/business/types"
 	"app/cloud"
 	config "app/config/types"
 	"app/db"
@@ -19,14 +18,15 @@ import (
 // somebody else's certificate — the worst failure this module could have, and
 // one that would only be discovered by whoever received the invoice.
 //
-// The fiscal address comes from the site the sale was made at, because that is
-// what SUNAT wants declared: a company with three branches issues from three
-// addresses, each with the establishment code SUNAT assigned to it.
-// The identity, the credentials and the signing material all come from the
-// company config blob, which is one GET instead of a company read, a secrets read
-// and three decryptions. The blob rebuilds itself when it is missing or stale, so
-// this path does not need a fallback of its own.
-func BuildIssuer(companyID int32, siteID int32) (model.Issuer, error) {
+// The identity, the credentials, the signing material and the fiscal address all
+// come from the company config blob, which is one GET instead of a company read, a
+// secrets read, a city read and three decryptions. The blob rebuilds itself when it
+// is missing or stale, so this path does not need a fallback of its own.
+//
+// It takes no site: the address is the company's own, under establishment code
+// 0000 — see fiscalAddress. A branch is declared by the annex code SUNAT assigned
+// to it, which nothing stores yet.
+func BuildIssuer(companyID int32) (model.Issuer, error) {
 	companyConfig, err := cloud.LoadCompanyConfig(companyID)
 	if err != nil {
 		return model.Issuer{}, err
@@ -57,7 +57,7 @@ func BuildIssuer(companyID int32, siteID int32) (model.Issuer, error) {
 		Environment:    environment,
 	}
 
-	address, err := loadSiteAddress(companyID, siteID)
+	address, err := fiscalAddress(companyConfig.Company)
 	if err != nil {
 		return model.Issuer{}, err
 	}
@@ -120,36 +120,38 @@ func loadCompany(companyID int32) (*config.Company, error) {
 	return company, nil
 }
 
-// loadSiteAddress turns a site into the fiscal address the XML declares.
+// fiscalAddress is the domicilio fiscal every document declares for the issuer.
 //
-// CityID is the six-digit INEI code, which is exactly the ubigeo SUNAT expects,
-// and its prefixes are the province and the department — the same decomposition
-// the rest of the codebase already does.
-func loadSiteAddress(companyID int32, siteID int32) (model.Address, error) {
-	if siteID == 0 {
-		return model.Address{}, errors.New("no se pudo determinar la sede que emite el comprobante")
+// It is the company's own address and not the branch's, because the establishment
+// code that travels with it is 0000 — SUNAT's code for the main establishment, the
+// fiscal address itself. Declaring a branch's street under 0000 is what produced
+// the observations 4093 and 4096-4098 on the first documents this system emitted.
+// A branch has to be declared under the annex code SUNAT assigned to it, and that
+// is a column the Site table does not have yet.
+//
+// Everything it needs was resolved when the config blob was built, so this reads
+// nothing.
+func fiscalAddress(company config.CompanyConfigCompany) (model.Address, error) {
+	ubigeo := company.Ubigeo()
+	if ubigeo == "" {
+		return model.Address{}, errors.New(
+			"la empresa no tiene ciudad configurada: selecciónela en Mi Empresa para poder emitir")
+	}
+	// The names come from the same catalog row the ubigeo does, so a missing one
+	// means the blob was built against a catalog that no longer has that district.
+	if company.District == "" || company.Province == "" || company.Department == "" {
+		return model.Address{}, fmt.Errorf(
+			"el ubigeo %v de la empresa no corresponde a un distrito del catálogo", ubigeo)
 	}
 
-	sites := []business.Site{}
-	query := db.Query(&sites)
-	query.Select().CompanyID.Equals(companyID).ID.Equals(siteID)
-
-	if err := query.Exec(); err != nil {
-		return model.Address{}, fmt.Errorf("error al leer la sede: %w", err)
-	}
-	if len(sites) == 0 {
-		return model.Address{}, errors.New("la sede que emite el comprobante no existe")
-	}
-	site := sites[0]
-
-	address := model.Address{
-		Line:      site.Address,
-		AnnexCode: defaultAnnexCode,
-	}
-	if site.CityID > 0 {
-		address.Ubigeo = fmt.Sprintf("%06d", site.CityID)
-	}
-	return address, nil
+	return model.Address{
+		Ubigeo:     ubigeo,
+		AnnexCode:  defaultAnnexCode,
+		Department: company.Department,
+		Province:   company.Province,
+		District:   company.District,
+		Line:       company.Address,
+	}, nil
 }
 
 // defaultAnnexCode is the establishment code of a main office. A company with

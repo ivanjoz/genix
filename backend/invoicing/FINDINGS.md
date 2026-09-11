@@ -213,10 +213,15 @@ Recorded only so they are not re-reported as bugs. All are phase 6/7 in `PLAN.md
 - `InvoiceSummary` (table 54) is defined and registered but has no read or write path anywhere. RC
   and RA are not implemented; `facturago.EmitSummary` / `EmitVoided` / `SendSummary` are unused.
 - Credit and debit notes are modelled (`AffectedDocID`, `NoteReasonCode`, `NoteReason`) but no
-  handler emits one, which is why `sales/sale_order_annul.go:86-95` refuses to annul an invoiced
-  sale.
-- No frontend exists for issuing documents. `access.toml` grants `accounting/invoicing`, which does
-  not exist yet; the live driver is `exec/invoicing_beta.go`. Series are the exception — they moved
-  inline onto the company and are maintained from `company/configuration`.
+  handler emits one, which is why `sales/sale_order_annul.go` still refuses to annul a sale whose
+  document was **sent**. One that has not been sent is voided instead, and the annulment proceeds.
+- A voided document leaves its correlativo spent, and the **comunicación de baja** that SUNAT
+  expects for that gap is not emitted. Deferred emission made this reachable from the UI — annulling
+  a sale at the till now produces one — where before it took the beta driver to get there.
+- The frontend is `accounting/invoicing`: a register that filters by date, state and id, downloads
+  the XML and the CDR, and pushes a pending document out ahead of the sweep. It does **not** issue
+  documents — a document is created with its sale — and there is no printable representation
+  (`representación impresa`) anywhere yet. `exec/invoicing_beta.go` remains the driver for issuing a
+  document for a sale that predates deferred emission, and for the SUNAT beta setup.
 - `sunat.Configure` is never called, so the client runs on its 45 s default timeout. `PLAN.md:695`
   flags that the worker Lambda needs a timeout >= 60 s; still unconfirmed against the deployment.

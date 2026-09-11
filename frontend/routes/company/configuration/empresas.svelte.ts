@@ -29,7 +29,10 @@ export interface ICompany {
   Phone: string
   Representative: string
   Address: string
-  City: string
+  // The district of the fiscal address, which is the INEI ubigeo itself. It
+  // replaced a free-text city: SUNAT validates this code on every document the
+  // company issues, and a typed city name is not one.
+  CityID: number
   CulqiConfig: ICompanyCulqi
   // The SUNAT series travel inline on the company: there are at most 99 and every
   // emission needs one, so they are not worth a table of their own.
@@ -43,7 +46,9 @@ export class EmpresaParametrosService extends GetHandler {
     // ver 2: the record gained InvoiceSeries. A copy cached before that field existed
     // would show a company with no series while the server has six, which reads as
     // configuration having been lost.
-    useCache = { min: 10, ver: 2 }
+    // ver 3: the free-text City became CityID, the district's ubigeo. A cached copy
+    // would keep feeding the old string into a selector that expects a number.
+    useCache = { min: 10, ver: 3 }
 
     empresa = $state({
         CulqiConfig: {},

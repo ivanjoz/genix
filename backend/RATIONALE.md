@@ -1,3 +1,56 @@
+## A delta watermark is read through `GetUpVersion` / `GetUpdated`, never `GetQueryInt`
+
+**Context** — the client now sends both watermarks of a response key in one param, `"<upv>.<upd>"`,
+so the handler picks the half its table is keyed on instead of the client guessing which one to
+send. Every handler read that param with `req.GetQueryInt("upv")` or `req.GetQueryInt("Frames")`,
+which returns 0 for a value with a dot in it — silently, as a first sync.
+
+**Decision** — Two readers on `HandlerArgs`, `GetUpVersion(responseKey ...string)` and
+`GetUpdated(responseKey ...string)`, the variadic key naming the param on a multi-table route and
+its absence meaning the single-array param `up`. Every watermark call site moved to them.
+
+**Rationale** — Naming the two halves in the reader is what makes a handler's choice greppable:
+`GetUpVersion()` says this table has a delta index, `GetUpdated()` says it is keyed on the
+timestamp, and neither can be confused with an ordinary query param again. A single
+`GetWatermark() (int32, int32)` would have been one function instead of two, but every call site
+would then discard one half at the call site, which reads as if the handler had a choice to make.
+A value with no dot is read as a bare `upv`, so a URL typed by hand still works.
+
+## The local API queue lives in `LocalHandler` and excludes by path suffix
+
+**Context** — `disable_api_concurrency_local` serializes the standalone server so one request's logs
+are never cut in half by another's. Two shapes must stay outside that queue or the flag turns into a
+hang: SSE routes, which hold the connection until the client leaves, and the agent turn, which waits
+on an LLM.
+
+**Decision** — A single `sync.Mutex` taken at the top of `LocalHandler`, skipped when the path ends
+in `-stream` or `agent-turn`.
+
+**Rationale** — `LocalHandler` is mounted at `/`, and `/agent/stream`, `/agent/in` and `/agent` have
+their own mux entries, so the browser's permanent event stream is already outside the queue without
+naming it. The suffix test is used instead of a list of route names because the naming convention is
+what the exclusion is really about — a future `*-stream` route is excluded the day it is written,
+and a list would have to be remembered. It costs the ability to queue a route that happens to end in
+those words, which is precisely the route that should not be queued.
+
+## The dev handler line carries the query string, and `GET.products` prints its watermark
+
+**Context** — A delta sync that arrives without its `upv` watermark and a client that has nothing
+cached both produce the same terminal output: `Ejecutando Handler:: GET.products` followed by
+`Rows Scanned 10010`. There was no way to tell, from the backend alone, whether the frontend had
+sent a watermark at all — which is exactly the question when a delta route looks like it is
+re-sending everything.
+
+**Decision** — `formatDevQueryParams` appends the sorted query string to the existing
+`Ejecutando Handler::` line, gated on `core.Env.IS_DEV_ARG`. `GetProducts` additionally logs the
+`upv` it received next to the row count it returned.
+
+**Rationale** — The handler line is printed for every request already, so the diagnostic costs one
+string join and no new line. It is dev-only because in serverless every line is billed and query
+params carry client-supplied values that do not belong in CloudWatch. The `GET.products` line
+duplicates part of that on purpose: it pairs cause with effect in one line, so the ORM flag is only
+needed when the answer is "the watermark did arrive and the query still scanned everything".
+
 ## ResetCounter does nothing now, and warns instead
 
 **Context** — `ResetCounter` realigned a table's sequence with the rows that exist, and ran after

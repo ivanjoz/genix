@@ -80,9 +80,9 @@ func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
 		windowHours = min(requestedHours, serverMetricsMaxWindowHours)
 	}
 
-	// `Hours` is what the delta cache names the watermark after this response's field; `upd` is the
-	// trailing single-watermark param it also sends. Either one answers the same question.
-	watermarkSlot := int64(core.Coalesce(req.GetQueryInt("Hours"), req.GetQueryInt("upd")))
+	// `Hours` is the watermark named after this response's field; `up` is the trailing
+	// single-watermark param the cache also sends. Either one answers the same question.
+	watermarkSlot := int64(core.Coalesce(req.GetUpdated("Hours"), req.GetUpdated()))
 
 	// The real clock, not core.Now(): fareward writes these rows with the real clock and has no
 	// historical-clock override, so a frozen backend clock would query a day nothing ever wrote.

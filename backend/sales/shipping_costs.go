@@ -11,7 +11,7 @@ import (
 func GetShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 
 	shippingCosts := []types.ShippingCost{}
 	query := db.Query(&shippingCosts)

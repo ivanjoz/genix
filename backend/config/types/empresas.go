@@ -18,7 +18,11 @@ type Company struct {
 	Phone             string      `json:",omitempty"`
 	Representative    string      `json:",omitempty"`
 	Address           string      `json:",omitempty"`
-	City              string      `json:",omitempty"`
+	// CityID is the district the fiscal address sits in, and it is the INEI ubigeo
+	// itself: the catalog is keyed by the code, so 150101 is Lima / Lima / Lima.
+	// SUNAT reads it off every document the company issues, which is why this is a
+	// picked district and not the free-text city it replaced.
+	CityID            int32       `json:",omitempty"`
 	FormApiKey        string      `json:",omitempty" db:"form_api_key"`
 	EmailVerified     int8        `json:",omitempty"`
 	PhoneVerified     int8        `json:",omitempty"`
@@ -42,7 +46,7 @@ type CompanyTable struct {
 	Phone             db.Col[*CompanyTable, string]
 	Representative    db.Col[*CompanyTable, string]
 	Address           db.Col[*CompanyTable, string]
-	City              db.Col[*CompanyTable, string]
+	CityID            db.Col[*CompanyTable, int32]
 	FormApiKey        db.Col[*CompanyTable, string]
 	EmailVerified     db.Col[*CompanyTable, int8]
 	PhoneVerified     db.Col[*CompanyTable, int8]

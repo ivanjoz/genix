@@ -1,3 +1,20 @@
+## The city is a district picker, not a text field, because SUNAT validates it
+
+**Context** — "Ciudad" was a free-text `Input` writing `Company.City`. Every electronic document
+declares the issuer's fiscal address, and SUNAT validated the first ones with four observations:
+the ubigeo was not in its catalog and the department, province and district were empty. A typed
+"Lima" cannot produce any of that.
+
+**Decision** — The field is now the same `SearchSelect` the sites form uses, over
+`CountryCitiesService.distritos`, writing `CityID`. The free-text `City` is gone from the record on
+both sides; the service cache went to `ver: 3` so a cached copy cannot feed the old string into a
+selector that expects a number.
+
+**Rationale** — The catalog is keyed by the INEI ubigeo, so picking a district yields the code and
+the three names in one choice, and reusing the sites' selector means the two pages cannot disagree
+about what a district is. Cost: a company that had typed a city loses that text — it was never
+usable for anything, but somebody will have to pick their district once.
+
 ## The secrets form object is replaced, not mutated, so `Input` re-reads it
 
 **Context** — A stored SOL user came back blank in the panel: the row held `MODDATOS`, the GET

@@ -250,7 +250,10 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 		core.Log("no hay una lambda para el path solicitado::", funcPath)
 		handlerResponse.Error = "no hay una lambda para el path solicitado: " + funcPath
 	} else {
-		core.Log("Ejecutando Handler::", funcPath)
+		// The query string is what a delta sync carries its watermark in, so in dev it is printed
+		// with the handler name: a client that syncs without one is otherwise indistinguishable
+		// from a client that has nothing cached yet.
+		core.Log("Ejecutando Handler::", funcPath+formatDevQueryParams(args.Query))
 		handlerResponse = handlerFunc(args)
 		respLen := 0
 		if handlerResponse.Body != nil {
@@ -351,6 +354,27 @@ func resolveRouteAccess(
 		decision.accessNames = append(decision.accessNames, accessInfo.Name)
 	}
 	return decision
+}
+
+// formatDevQueryParams renders the query the handler is about to read, sorted so two requests to
+// the same route are comparable line by line. Dev only: in serverless every line costs money and
+// the params can carry client-supplied values that nobody wants in CloudWatch.
+func formatDevQueryParams(query map[string]string) string {
+	if !core.Env.IS_DEV_ARG || len(query) == 0 {
+		return ""
+	}
+
+	paramNames := make([]string, 0, len(query))
+	for paramName := range query {
+		paramNames = append(paramNames, paramName)
+	}
+	slices.Sort(paramNames)
+
+	params := make([]string, 0, len(paramNames))
+	for _, paramName := range paramNames {
+		params = append(params, paramName+"="+query[paramName])
+	}
+	return " ?" + strings.Join(params, "&")
 }
 
 // isWriteMethod: POST y PUT son la misma cosa en todo lo que este router decide —exigen nivel 2 y

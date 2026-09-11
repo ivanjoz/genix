@@ -9,7 +9,7 @@ import (
 
 // GetSaleSummary returns day-level summaries reconstructed from per-product rows.
 func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
-	updated := core.Coalesce(req.GetQueryInt("upd"), req.GetQueryInt("updated"))
+	updated := req.GetUpdated()
 	dateInicio := req.GetQueryInt16("date-inicio")
 	if dateInicio == 0 {
 		dateInicio = core.FechaUnix() - (8 * 7)

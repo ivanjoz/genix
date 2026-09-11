@@ -83,9 +83,21 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("La venta ya está anulada.")
 	}
 
-	// A sale with a live electronic document cannot simply vanish: SUNAT requires a credit note,
-	// which this system does not emit yet.
-	invoiceDocument, invoiceErr := invoicing.FindBySaleOrder(req.User.CompanyID, sale.ID)
+	// Every sale issued under a series carries a document from birth, so what decides this is
+	// whether it was sent. One still waiting for the sweep is voided and never goes out; one that
+	// reached SUNAT cannot simply vanish, because SUNAT requires a credit note and this system
+	// does not emit them yet.
+	//
+	// Under the invoicing lock, which is the one the sweep takes before sending: without it the
+	// sweep could send the document a moment after this decided to void it.
+	invoiceLock, invoiceLockErr := core.AcquireLock(
+		context.Background(), core.ActionInvoiceSaleOrder, sale.ID, 2)
+	if invoiceLockErr != nil {
+		return invoiceLockErr.Response(req)
+	}
+	invoiceDocument, invoiceErr := invoicing.VoidPendingDocumentForSale(req.User.CompanyID, sale.ID)
+	invoiceLock.Release()
+
 	if invoiceErr != nil {
 		return req.MakeErr("Error al verificar si la venta fue facturada:", invoiceErr)
 	}

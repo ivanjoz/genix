@@ -194,7 +194,7 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 			Status:                  1,
 		})
 	}
-	if req.GetQueryInt("Routes") < companyCreditRoutesVersion {
+	if req.GetUpdated("Routes") < companyCreditRoutesVersion {
 		report.Routes = makeCreditRouteNames()
 	}
 	core.Log("company credit report completed::", " first_frame::", firstFrame, " last_frame::", lastFrame,
@@ -272,7 +272,7 @@ func GetCompanyCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 			Updated: row.TimeFrame, Status: 1,
 		})
 	}
-	if req.GetQueryInt("Routes") < companyCreditRoutesVersion {
+	if req.GetUpdated("Routes") < companyCreditRoutesVersion {
 		usage.Routes = makeCreditRouteNames()
 	}
 
@@ -359,7 +359,7 @@ type companyUserLabel struct {
 // creditUsageWatermark reads the delta bound, accepting either the collection-named parameter the
 // multi-collection cache sends or the plain one a single-collection client would.
 func creditUsageWatermark(req *core.HandlerArgs, collection string) int32 {
-	return core.Coalesce(req.GetQueryInt(collection), req.GetQueryInt("upd"))
+	return core.Coalesce(req.GetUpdated(collection), req.GetUpdated())
 }
 
 func makeCreditRouteNames() []creditRouteName {

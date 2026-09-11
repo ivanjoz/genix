@@ -1,7 +1,6 @@
-package invoicing
+package types
 
 import (
-	"app/invoicing/types"
 	sales "app/sales/types"
 	"testing"
 	"time"
@@ -46,9 +45,9 @@ func TestSplitGrossAmountIsExact(t *testing.T) {
 	}
 }
 
-func testSeries() *types.InvoiceSeries {
-	return &types.InvoiceSeries{
-		DocType: types.DocTypeFactura, SeriesID: 1,
+func testSeries() *InvoiceSeries {
+	return &InvoiceSeries{
+		DocType: DocTypeFactura, SeriesID: 1,
 		SeriesCode: "F001", SiteID: 1, Status: 1,
 	}
 }
@@ -80,15 +79,15 @@ func testDocument() *model.Document {
 // reaches it through the document it corrects.
 func TestANoteReachesTheSaleThroughTheDocumentItCorrects(t *testing.T) {
 	const saleOrderID = int64(550301)
-	note := types.InvoiceDocument{
-		ID:            types.DocumentIDForSale(saleOrderID, 3), // FC01
+	note := InvoiceDocument{
+		ID:            DocumentIDForSale(saleOrderID, 3), // FC01
 		AffectedDocID: saleOrderID,
 	}
 	if note.ID == saleOrderID {
 		t.Fatal("the note took the same key as the document it corrects")
 	}
-	if saleIDOfDocument(&note) != saleOrderID {
-		t.Errorf("saleIDOfDocument = %v, want %v", saleIDOfDocument(&note), saleOrderID)
+	if note.SaleOrderID() != saleOrderID {
+		t.Errorf("SaleOrderID = %v, want %v", note.SaleOrderID(), saleOrderID)
 	}
 }
 
@@ -106,9 +105,10 @@ func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 	}
 
 	// The sale was created under series 1, which is the series it is issued in —
-	// so the document is keyed by the sale itself.
+	// so the document is keyed by the sale itself. Its id reads as correlativo 55,
+	// random 03, series 01.
 	order := &sales.SaleOrder{ID: 550301, ClientID: 7, DetailProductsIDs: []int32{101}}
-	row := rowFromDocument(1, 1, order, testSeries(), original, 123)
+	row := rowFromDocument(1, 1, order, testSeries(), original)
 
 	if row.ID != order.ID {
 		t.Errorf("id = %v, want the sale's own id %v", row.ID, order.ID)
@@ -117,14 +117,15 @@ func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 		t.Errorf("series = %v, want %v", row.SeriesID(), testSeries().SeriesID)
 	}
 	// And that is how the sale is found again: no stored reference.
-	if saleIDOfDocument(&row) != order.ID {
-		t.Errorf("saleIDOfDocument = %v, want %v", saleIDOfDocument(&row), order.ID)
+	if row.SaleOrderID() != order.ID {
+		t.Errorf("SaleOrderID = %v, want %v", row.SaleOrderID(), order.ID)
 	}
-	if row.Correlativo != 123 {
-		t.Errorf("correlativo = %v, want 123", row.Correlativo)
+	// The number is not a second sequence: it is the head of the sale's own id.
+	if row.Correlativo != 55 {
+		t.Errorf("correlativo = %v, want 55", row.Correlativo)
 	}
-	if row.Number("F001") != "F001-123" {
-		t.Errorf("number = %q, want F001-123", row.Number("F001"))
+	if row.Number("F001") != "F001-55" {
+		t.Errorf("number = %q, want F001-55", row.Number("F001"))
 	}
 	if row.TotalAmount != int64(original.Totals.Payable) {
 		t.Errorf("total = %v, want %v", row.TotalAmount, original.Totals.Payable)
@@ -132,7 +133,7 @@ func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 	if row.TaxAmount != int64(original.Totals.TotalTaxes) {
 		t.Errorf("tax = %v, want %v", row.TaxAmount, original.Totals.TotalTaxes)
 	}
-	if row.State != types.InvoicePending {
+	if row.State != InvoicePending {
 		t.Errorf("state = %v, want pending", row.State)
 	}
 }

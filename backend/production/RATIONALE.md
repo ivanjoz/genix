@@ -2,6 +2,30 @@
 
 Design decisions for the product catalog and its supplies, newest first.
 
+## `GET.products` evicts a supply by id instead of shipping it with `ss=2`
+
+**Context** — `Delta(updatedSince, 1)` pinned `Status=1` only on a first sync; every later delta
+fanned out over all three declared statuses so the client could evict deletions. That also handed
+it every supply (`Status=2`), and the frontend `GetHandler` evicts on `ss === 0` alone, so supplies
+piled up in the products cache. `sale_order_create` joins warehouse stock against that cache and
+rendered a supply as a sellable row — with `NaN` for a price, because a supply is saved with a
+purchase `Price` and no `FinalPrice`.
+
+**Decision** — the handler now pins `Status.Equals(ProductStatusActive)` and calls `Delta()` with
+no filter values, so the record bodies are Status=1 on every sync. Two extra ID-only delta scans
+(status 0 and status 2) feed a `records_IDsToRemove` key, which is the delta cache's existing
+eviction channel. The response shape goes from a bare array to
+`{records, records_IDsToRemove}`, matching `GetExpenses` and `GetSaleOrdersStatus`; the frontend
+service reads `result.records` and its cache `ver` went 12 → 13.
+
+**Rationale** — the cheaper-looking fix was to leave the row in the response and rewrite its
+`Status` to 0 so `inferRemoveFromStatus` would drop it. That does not work: `addSavedRecords` calls
+`recordsMap.set` *before* the tombstone check, so an `ss=0` row stays reachable through
+`recordsMap.get(id)` — which is exactly how `sale_order_create` looks products up. Only the
+`_IDsToRemove` channel deletes the row from the IndexedDB snapshot, so `handler()` never sees it at
+all. The cost is a second and third delta query per sync (ID-only, and skipped entirely on a first
+sync) and a response shape that is no longer a bare array.
+
 ## The catalog leaves `business` and becomes its own module
 
 **Context** — `business` had grown into two unrelated jobs: company infrastructure (sites,

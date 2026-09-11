@@ -1,6 +1,7 @@
 package types
 
 import (
+	business "app/business/types"
 	"app/core"
 	invoicing "app/invoicing/types"
 	"bytes"
@@ -19,7 +20,7 @@ func testCompany() *Company {
 		NotificationEmail: "avisos@frutas.pe",
 		Phone:             "987654321",
 		Address:           "Av. Siempre Viva 742",
-		City:              "150101",
+		CityID:            150101,
 		Updated:           1000,
 		CulqiConfig: CulqiConfig{
 			RsaKey: "rsa", RsaKeyID: "rsa-id", KeyLive: "sk_live", KeyDev: "sk_test",
@@ -31,8 +32,19 @@ func testCompany() *Company {
 	}
 }
 
+// The ubigeo catalog is keyed by the code itself, so a district contains its
+// parents: 150101 sits under 1501 under 15.
+func peruCities() []business.CityLocation {
+	return []business.CityLocation{
+		{ID: 15, Name: "LIMA", Hierarchy: 1},
+		{ID: 1501, Name: "LIMA", ParentID: 15, Hierarchy: 2},
+		{ID: 150101, Name: "LIMA", ParentID: 1501, Hierarchy: 3},
+		{ID: 150102, Name: "ANCON", ParentID: 1501, Hierarchy: 3},
+	}
+}
+
 func TestAssembleCompanyConfigMapsTheCompany(t *testing.T) {
-	config, err := AssembleCompanyConfig(testCompany(), nil, nil)
+	config, err := AssembleCompanyConfig(testCompany(), nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -54,7 +66,7 @@ func TestAssembleCompanyConfigMapsTheCompany(t *testing.T) {
 // The public Culqi keys are the browser's half. A secret store holding what is
 // already public is a liability with no upside, so they must not be copied.
 func TestAssembleCompanyConfigDropsThePublicCulqiKeys(t *testing.T) {
-	config, err := AssembleCompanyConfig(testCompany(), nil, nil)
+	config, err := AssembleCompanyConfig(testCompany(), nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -73,11 +85,55 @@ func TestAssembleCompanyConfigDropsThePublicCulqiKeys(t *testing.T) {
 	}
 }
 
+// SUNAT observes a document whose issuer address is missing the ubigeo or any of
+// the three names, so the blob has to carry them resolved.
+func TestAssembleCompanyConfigResolvesTheFiscalAddress(t *testing.T) {
+	config, err := AssembleCompanyConfig(testCompany(), nil, nil, nil, peruCities())
+	if err != nil {
+		t.Fatalf("AssembleCompanyConfig: %v", err)
+	}
+
+	if config.Company.Ubigeo() != "150101" {
+		t.Errorf("ubigeo = %q, want 150101", config.Company.Ubigeo())
+	}
+	if config.Company.District != "LIMA" || config.Company.Province != "LIMA" ||
+		config.Company.Department != "LIMA" {
+		t.Errorf("the address names did not resolve: %+v", config.Company)
+	}
+}
+
+// A department's code is two digits, so the ubigeo has to be padded back to six
+// rather than printed as the integer the catalog stores.
+func TestCompanyUbigeoIsPaddedAndEmptyWithoutACity(t *testing.T) {
+	company := CompanyConfigCompany{CityID: 10101}
+	if company.Ubigeo() != "010101" {
+		t.Errorf("ubigeo = %q, want 010101", company.Ubigeo())
+	}
+	if (CompanyConfigCompany{}).Ubigeo() != "" {
+		t.Error("a company with no city produced a ubigeo")
+	}
+}
+
+// A company that has not picked its district yet still has a config worth caching:
+// it just cannot issue, which is what the issuer says when it reads this.
+func TestAssembleCompanyConfigToleratesACompanyWithoutACity(t *testing.T) {
+	company := testCompany()
+	company.CityID = 0
+
+	config, err := AssembleCompanyConfig(company, nil, nil, nil, peruCities())
+	if err != nil {
+		t.Fatalf("AssembleCompanyConfig: %v", err)
+	}
+	if config.Company.District != "" || config.Company.Ubigeo() != "" {
+		t.Errorf("an address appeared out of nowhere: %+v", config.Company)
+	}
+}
+
 func TestAssembleCompanyConfigFallsBackToTheTradeName(t *testing.T) {
 	company := testCompany()
 	company.LegalName = ""
 
-	config, err := AssembleCompanyConfig(company, nil, nil)
+	config, err := AssembleCompanyConfig(company, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -93,7 +149,7 @@ func TestAssembleCompanyConfigKeepsOnlyActiveParameters(t *testing.T) {
 		{Group: 2, Key: "igv", ValueInt: 18, Values: []int32{18}, Status: 1},
 	}
 
-	config, err := AssembleCompanyConfig(testCompany(), nil, parameters)
+	config, err := AssembleCompanyConfig(testCompany(), nil, parameters, nil, nil)
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -109,14 +165,14 @@ func TestAssembleCompanyConfigKeepsOnlyActiveParameters(t *testing.T) {
 }
 
 func TestAssembleCompanyConfigRefusesAnEmptyCompany(t *testing.T) {
-	if _, err := AssembleCompanyConfig(nil, nil, nil); err == nil {
+	if _, err := AssembleCompanyConfig(nil, nil, nil, nil, nil); err == nil {
 		t.Fatal("a nil company was accepted")
 	}
 }
 
 // A company with no SUNAT credentials still has a configuration worth caching.
 func TestAssembleCompanyConfigToleratesMissingSecrets(t *testing.T) {
-	config, err := AssembleCompanyConfig(testCompany(), nil, nil)
+	config, err := AssembleCompanyConfig(testCompany(), nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -142,7 +198,7 @@ func TestAssembleCompanyConfigCarriesTheSolCredentials(t *testing.T) {
 		Environment: invoicing.SunatEnvProduction, Status: 1, Updated: 5000,
 	}
 
-	config, err := AssembleCompanyConfig(testCompany(), secrets, nil)
+	config, err := AssembleCompanyConfig(testCompany(), secrets, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -162,7 +218,9 @@ func TestAssembleCompanyConfigCarriesTheSolCredentials(t *testing.T) {
 func TestCompanyConfigSurvivesAColbinRoundTrip(t *testing.T) {
 	original, err := AssembleCompanyConfig(testCompany(), nil, []Parameters{
 		{Group: 2, Key: "igv", ValueInt: 18, Values: []int32{18, 10}, Status: 1},
-	})
+	}, []business.Site{
+		{ID: 3, Name: "Tienda Centro", Address: "Jr. Union 100", CityID: 150101, Status: 1},
+	}, peruCities())
 	if err != nil {
 		t.Fatalf("AssembleCompanyConfig: %v", err)
 	}
@@ -194,6 +252,11 @@ func TestCompanyConfigSurvivesAColbinRoundTrip(t *testing.T) {
 	}
 	if len(decoded.Sunat.Series) != 1 || decoded.Sunat.Series[0].SeriesCode != "F001" {
 		t.Fatalf("series changed: %+v", decoded.Sunat.Series)
+	}
+	// The ubigeo is what a document declares as the place it was issued from, so a
+	// site that does not survive the round trip is a document that cannot be built.
+	if len(decoded.Sites) != 1 || decoded.Sites[0] != original.Sites[0] {
+		t.Fatalf("sites changed: %+v vs %+v", decoded.Sites, original.Sites)
 	}
 	if string(decoded.Sunat.PrivateKeyDER) != string(original.Sunat.PrivateKeyDER) ||
 		string(decoded.Sunat.CertificateDER) != string(original.Sunat.CertificateDER) {

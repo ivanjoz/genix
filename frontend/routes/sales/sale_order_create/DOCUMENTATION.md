@@ -156,7 +156,8 @@ The left-hand selector on the row below the action checkboxes: **SIN CLIENTE** (
 
 ### Required information and prerequisites (Requisitos previos)
 
-Registering inline only requires **Name**; the document/registry number is optional. Existing
+Registering inline only requires **Name**; the document/registry number is optional — unless the
+sale names an invoicing series that demands a buyer, see *Elegir el comprobante* below. Existing
 customers come from the same catalog as the Customers (`Clientes`) page.
 
 ### Business rules and rationale (Reglas y razón de negocio)
@@ -181,7 +182,8 @@ existing customer's data from this page.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
-- `¿Puedo vender sin asignar cliente?` Sí, dejando "SIN CLIENTE".
+- `¿Puedo vender sin asignar cliente?` Sí, dejando "SIN CLIENTE", salvo que el comprobante elegido
+  sea una factura, o una boleta desde S/ 700.
 - `¿Qué pasa si registro un cliente con el mismo RUC/documento que uno ya existente?` Genix
   reutiliza el cliente existente en vez de crear uno duplicado.
 - Search terms: `cliente`, `registrar cliente`, `venta anónima`, `RUC`, `documento`.
@@ -212,21 +214,44 @@ of the sale order's ID, so the electronic document issued for that sale can deri
 from the sale's. Nothing is preselected: leaving **SIN COMPROBANTE** sends `0`, which records a
 sale that names no series, and the document takes its own series when it is actually issued.
 
+Choosing a series imposes the buyer SUNAT requires on that document type, and the sale is refused
+if it is missing — at the till, not later at emission, because the series cannot be changed once
+the sale exists:
+
+- **FACTURA** — the customer must have an **11-digit RUC** and a name (razón social). The message
+  is `Una factura necesita un cliente con RUC de 11 dígitos.`
+- **BOLETA from S/ 700** — the customer must have a document (**DNI**, RUC, or a foreign document
+  of at least 8 characters) and a name. Below S/ 700 a boleta stays anonymous.
+- The series must still exist and be active on the company when the sale is generated.
+
 ### Result and side effects (Resultado y efectos)
 
 The series is fixed at creation and cannot be changed afterwards — it is part of the sale
 order's ID, not an editable field.
 
+Generating the sale also **creates its electronic document (comprobante)**, already numbered
+with its correlativo, in state *Pendiente de envío*. Nothing is sent to SUNAT from here: a
+scheduled process sends it minutes later, and the result is followed on **Contabilidad →
+Facturación** (`/accounting/invoicing`). Because the comprobante is created with the sale, a
+sale that cannot be invoiced is refused whole — nothing is registered.
+
 ### Limitations (Limitaciones)
 
-The page does not emit the electronic document; it only records which series the sale is meant
-for. A company with no series configured sees an empty list.
+The page does not send the electronic document to SUNAT, nor does it show its state; that is
+what the Facturación page is for. A company with no series configured sees an empty list.
+
+Choosing a series makes the sale harder to undo: once its comprobante has been sent, the sale
+can no longer be annulled and needs a nota de crédito, which Genix does not emit yet. While the
+comprobante is still pending, annulling the sale voids it and it never goes out.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
 - `¿Puedo vender sin comprobante?` Sí, dejando "SIN COMPROBANTE".
 - `¿Por qué no aparece mi serie?` Porque está inactiva, o es una serie de nota de crédito/débito.
-- Search terms: `comprobante`, `serie`, `boleta`, `factura`, `SUNAT`.
+- `¿Por qué no me deja generar la factura?` Porque la factura exige un cliente con RUC de 11
+  dígitos y razón social; asígnelo en el selector de cliente.
+- `¿Dónde veo si la factura llegó a SUNAT?` En **Contabilidad → Facturación**.
+- Search terms: `comprobante`, `serie`, `boleta`, `factura`, `SUNAT`, `RUC`, `correlativo`.
 
 <!-- DOC-ID: capability.set-payment-delivery -->
 ## Choose Pagado / Recibido and generate the sale (Definir Pagado / Recibido y generar la venta)
@@ -362,20 +387,24 @@ hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
     role: user-interface
-    hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
+    hash: sha256:010936e67bd5d99e9bbf9916814ed818def3e45451511301c46f070e133d6231
     supports: [page-purpose, related-pages]
   - path: frontend/routes/sales/sale_order_create/+page.svelte
     role: page
-    hash: sha256:c8650707d5e88cc6cfe386a6b6c240225b8c5ba153f63f4b00be04c92f4cbf65
-    supports: [page-purpose, concepts, capability.search-add-products, capability.manage-cart, capability.warehouse-cash-selection, capability.assign-client, capability.set-payment-delivery, capability.configure-sales-parameters]
+    hash: sha256:18a0be83832d4232dc724bcd61793becf904809422a433a4a86f3731d5e6efca
+    supports: [page-purpose, concepts, capability.search-add-products, capability.manage-cart, capability.warehouse-cash-selection, capability.assign-client, capability.choose-invoice-series, capability.set-payment-delivery, capability.configure-sales-parameters]
   - path: frontend/routes/sales/sale_order_create/SaleProductCard.svelte
     role: user-interface
     hash: sha256:c5413f38194021ba8c793d0bf3133044ad0b91c3494be76831654616edeb3f96
     supports: [concepts, capability.search-add-products]
   - path: frontend/routes/sales/sale_order_create/sale_order.svelte.ts
     role: frontend-service
-    hash: sha256:2395527ccde4ac57d8c13334fb56f17f9b28c60406b8dabd5de7878a477b0bc6
-    supports: [concepts, capability.search-add-products, capability.manage-cart, capability.set-payment-delivery, rules]
+    hash: sha256:1bf2f0836645d6c3cf2426962bb8d5844859d35e7cf109520beac0107d73bef9
+    supports: [concepts, capability.search-add-products, capability.manage-cart, capability.choose-invoice-series, capability.set-payment-delivery, rules]
+  - path: frontend/routes/sales/sale_order_create/sale_order.ts
+    role: business-logic
+    hash: sha256:28300d33d9a09e65887ce98b147d0360d2b00d7c7faeccd5aef60461c6761330
+    supports: [capability.assign-client, capability.choose-invoice-series, rules]
   - path: frontend/routes/logistics/products-stock/stock-movement.ts
     role: frontend-service
     hash: sha256:5f468bbace2e4a7000cb389e48473da271bdd717bcad8f274ef4f308c3d7ea5e
@@ -406,8 +435,16 @@ files:
     supports: [capability.configure-sales-parameters]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:ddf16aaeca22e2b0f5a90cc30e7c7d810db8ac6f8f343ae14a3008db77f424e6
+    hash: sha256:7da1bc6583ec67fcfec5e136272a240dde4be4454b5da53e89371623b1b4df9d
     supports: [capability.assign-client, capability.set-payment-delivery, rules, troubleshooting]
+  - path: backend/sales/sale_order_issuance.go
+    role: business-logic
+    hash: sha256:fb10b3dfed01ff5b2fa20f86b35eb0f60d994388bb87ff457e718e05cde4facb
+    supports: [capability.assign-client, capability.choose-invoice-series, rules, troubleshooting]
+  - path: backend/invoicing/types/customer_identity.go
+    role: business-logic
+    hash: sha256:7dfd832529c2a43322972097c2c843d019f9e537c3e3a5803bf837bb06e847cc
+    supports: [capability.choose-invoice-series, rules]
   - path: backend/sales/types/sales.go
     role: data-model
     hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc

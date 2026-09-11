@@ -5,6 +5,159 @@ Design decisions behind the SUNAT integration, newest first. The library's own d
 
 Full design in `PLAN.md`. Open problems in `FINDINGS.md`.
 
+## The issuer declares the company's own address, because the establishment code is 0000
+
+**Context** — SUNAT accepted the first document with four observations, all about the same block:
+4093 (ubigeo `000001` not in the catalog), 4096, 4097 and 4098 (province, department and district
+empty). The address came from the sale's site, and two things were wrong with it: the seeded site
+points at `CityLocation` id 1 — which is the *department* AMAZONAS, not a district — and
+`BuildIssuer` never filled the three names facturago writes into `cbc:CityName`,
+`cbc:CountrySubentity` and `cbc:District`.
+
+**Decision** — `fiscalAddress` builds the block from the company: its `CityID` (the district), the
+district, province and department names resolved into the blob, and its legal address line.
+`BuildIssuer` no longer takes a site.
+
+**Rationale** — The address travels under `cbc:AddressTypeCode` = `0000`, which is SUNAT's code for
+the *main establishment*, meaning the domicilio fiscal. Declaring a branch's street under 0000 is a
+misdeclaration however valid the ubigeo is — which is what the module was doing. A branch is
+declared under the annex code SUNAT assigned to it, and nothing stores those yet, so today every
+document is issued from the fiscal address and the site plays no part in it.
+
+`CompanyConfig.Sites` stays in the blob. Nothing reads it now, and it was put there one turn earlier
+at the human's instruction; it is also exactly what the annex-code work will need. Left rather than
+removed and re-added.
+
+**The ubigeo is the catalog id.** `city_locations` is keyed by the INEI code itself — 150101 sits
+under 1501 under 15 — so the three rows that name an address are one `ID.In` away, and the padding
+to six digits is only putting back the leading zeros the integer column drops.
+
+## The sites travel in the config blob, and SiteID 0 resolves to the only active one
+
+**Context** — `BuildIssuer` refused any series with `SiteID = 0` — "no se pudo determinar la sede
+que emite el comprobante" — while every seeded series carries exactly that, the series editor labels
+it "Dirección legal", and the code comment claimed a fallback that was never written. No company
+could emit until somebody assigned a site to the series. The site was also a cluster read on every
+emission.
+
+**Decision** — At the human's instruction the sites now travel inside the company config blob
+(`CompanyConfig.Sites`, read by `cloud.readSitesForConfig`), and `resolveIssuingSite` answers from
+there with no read at all. A series that names a site uses it, retired or not. A series that names
+none falls back to the company's **only active site**; with several, it refuses and asks for the
+series to name one. The blob version went to 2 so every cached copy is rebuilt.
+
+**Rationale** — The address is declared to SUNAT as the place the document was issued from, so the
+one case that can be answered without guessing is the company that has one place — which is every
+company until somebody opens a branch. Guessing between two branches would be a misdeclaration on a
+legal document, and there is nothing in the data that says which one. The company record was the
+other candidate and cannot serve: its `City` is a free-text input, not the six-digit INEI code the
+ubigeo needs, while a site's `CityID` already is one.
+
+Retired sites are kept in the blob, unlike retired parameters, because a series outlives the branch
+it was opened for and the documents issued under it still have to build. The version bump is not
+cosmetic: a version-1 blob decodes fine with an empty `Sites`, and an issuer reading it would refuse
+a document that is perfectly issuable.
+
+## "Enviar ahora" waits for SUNAT inside the request, at the human's instruction
+
+**Context** — The endpoint queued an asynchronous send and returned immediately. The human asked
+for the opposite: the button must send at that moment and the API must wait for the answer.
+
+**Decision** — `PostInvoiceRetry` runs `SendDocumentNow` inline and returns the document with
+SUNAT's verdict already written on it. `SendDocumentAsync` had no callers left and was deleted;
+`EmitHandler` stays as the cron retry and the `fn-emit-cpe` command line.
+
+**Rationale** — The operator presses that button precisely to learn the answer, and the previous
+shape made them press it, read "puesto en cola", and then go looking for what happened. The cost is
+real and was raised before building: SUNAT regularly takes tens of seconds, the client gives up at
+45, and an API Gateway deployment cuts a request at 30 — so behind a gateway the caller can time out
+while the send completes. That is safe rather than merely tolerable, because the row is written by
+`SendDocument` and not by the handler: the state is correct whether or not the answer got back, and
+the page shows it on the next load. On the standalone server nothing cuts the request at all.
+
+**Both paths share one function.** `SendDocumentNow` takes the sale's lock, re-reads the state and
+sends, and the sweep calls it too — so the rule about what may be sent lives in
+`types.CanSendInvoice` and cannot differ between the automatic path and the manual one. It returns
+the reloaded row even when the send failed, because a rejection is a state the caller has to show.
+
+## The document is created with the sale, so the builder moved into the types leaf
+
+**Context** — A document is now written when the sale is created, and `sales` is the module that
+creates it. A module body may not import another module body, so `ReserveDocument` and
+`SaleOrderToDocument` were unreachable from where they had to be called.
+
+**Decision** — Both moved to `invoicing/types` (`sale_order_to_cpe.go`, `document_reserve.go`), and
+the reservation split in two: `PrepareDocumentForSale` builds, validates and numbers without
+writing, `SaveNewDocument` writes. The series is passed in rather than resolved, which is what keeps
+the leaf free of `cloud`. `RebuildDocument`, `LoadDocument` and the whole send path stayed in the
+body — they need `LoadCompanySeries`, and that reads the company through `cloud`.
+
+**Rationale** — Everything the builder touches (`crm/types`, `production/types`, `sales/types`,
+`db`, `core`, facturago) is legal for a leaf, and no cycle appears. The split into prepare/save is
+not cosmetic: it is what lets the caller put every failure before the sale is written and the single
+unavoidable write after it. Cost: `invoicing/types` is no longer a small package of table
+definitions — it now holds the document builder, which is the biggest piece of logic in the module.
+
+## The sweep is one-shot per company, enqueued by whoever wrote a document
+
+**Context** — Something has to pick up documents sitting in `InvoicePending`. The cron offers a
+recurring row per company, a single global tick over a registry of dirty companies (what
+`business/product-ecommerce-cron.go` does), or a one-shot enqueued on demand.
+
+**Decision** — One-shot, action id 6, scheduled from `ScheduleEmitPendingSweep` every time a
+document is written. `ScheduleCronAction` already dedupes the same logical action inside a frame, so
+a hundred sales in five minutes enqueue one row. A run that fills its batch of 50 enqueues the next
+one itself.
+
+**Rationale** — No recurring row idles forever for a company that stopped selling, and no registry
+of dirty companies to keep in sync. The read it performs is a range read, not a scan: the delta
+index on `State` serves a query that pins the partition and the state
+(`genix-orm/scylla/index_delta_view_test.go:671`), so no schema change was needed. Cost: the enqueue
+is best-effort — it swallows its errors, because the document is already persisted and a scheduler
+that cannot write its row must not fail the sale. A company whose only sale of the day hit that
+failure has a document nobody sweeps until the next sale; the report shows it as pending and
+"enviar ahora" sends it.
+
+## The retry action had never been registered
+
+**Context** — `recordFailure` has always scheduled cron action 5 for a retryable transport failure.
+Nothing ever called `RegisterActionHandler` for it, so the executor logged "missing handler" and
+skipped the row: no failed document has ever been retried.
+
+**Decision** — Both actions are registered in an `init()` in `emit_worker.go`, next to what they
+run: 6 to the sweep and 5 to `EmitHandler`, which was already the right function and was only
+reachable as an async lambda entry point.
+
+**Rationale** — Found while adding the sweep, and fixed with it rather than filed: the sweep and the
+retry are the same subsystem, and shipping a sweep on top of a retry that never ran would have hidden
+the failure mode one layer deeper.
+
+## POST.invoice is deleted; the retry endpoint absorbed "send now"
+
+**Context** — `POST.invoice` reserved a document for a sale. With the document created by the sale
+itself, the only thing it could ever answer is "la venta ya tiene el comprobante".
+
+**Decision** — Deleted, and its route id marked retired by the generator. `POST.invoice-retry` now
+accepts a document in `InvoicePending` as well as one that failed, and refuses a voided one.
+
+**Rationale** — Pre-alpha: a dead endpoint that can only error is not worth keeping, and the report
+needs exactly one button — "send it now instead of waiting for the sweep" — which is the same
+operation as a retry with a different reason. Cost: the name no longer describes everything it does.
+
+## GetInvoices fanned out over one state and hid the rest
+
+**Context** — The delta index of `invoice_document` is keyed on `State`, and `GetInvoices` called
+`.Delta(updatedVersion, 1)`. On a first sync `Delta` keeps only the values named, so the endpoint
+returned only pending documents; a report built on it would have shown a document until it was sent
+and then lost it.
+
+**Decision** — `.Delta(updatedVersion, types.AllInvoiceStates...)`, with the list of every state
+declared next to the constants.
+
+**Rationale** — The alternative was re-keying the delta index on `Status`, which is a schema change
+for a table that has a perfectly good index — the fan-out is what that index is for. The list has to
+be complete, which is why it lives beside the constants it enumerates rather than at the call site.
+
 ## BuildIssuer reads the config blob; the credentials test still reads the database
 
 **Context** — `BuildIssuer` now takes everything but the fiscal address from

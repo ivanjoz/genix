@@ -17,9 +17,15 @@ import (
 func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 
 	productos := []types.Product{}
+	// The catalog is Status=1 and nothing else. A deleted row (0) and a supply/material (2) live
+	// in the same table, so a delta still has to mention them — but as ids to drop, never as
+	// record bodies: a supply carries a purchase Price and no FinalPrice, and every screen that
+	// reads this cache treats what it finds there as sellable.
+	evictedStatuses := []int8{types.ProductStatusInactive, types.ProductStatusSupply}
+	evictedIDsByStatus := make([][]int32, len(evictedStatuses))
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
@@ -27,9 +33,10 @@ func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 
 		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
 
-		// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
-		// can evict deleted ones from its cache.
-		query.Delta(updatedSince, 1)
+		// Pinning Status leaves the delta index's every key bound, so Delta() only adds the
+		// watermark and the read stays inside the active bucket on a first sync and a delta alike.
+		query.Status.Equals(types.ProductStatusActive)
+		query.Delta(updatedSince)
 
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los productos: %v", err)
@@ -37,11 +44,44 @@ func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 
+	// A first sync has no cached rows to evict, so the eviction scans are pure delta work.
+	if updatedSince > 0 {
+		for statusIndex, evictedStatus := range evictedStatuses {
+			errGroup.Go(func() error {
+				query := db.Query(&[]types.Product{}).CompanyID.Equals(req.User.CompanyID)
+				query.Select(query.ID)
+				query.Status.Equals(evictedStatus)
+				query.Delta(updatedSince)
+
+				// Only the ids matter, so every decoded row is discarded as it is scanned.
+				return query.ExecScan(func(record *types.Product) bool {
+					evictedIDsByStatus[statusIndex] = append(evictedIDsByStatus[statusIndex], record.ID)
+					return true
+				})
+			})
+		}
+	}
+
 	if err := errGroup.Wait(); err != nil {
 		return req.MakeErr(err)
 	}
 
-	return core.MakeResponse(req, &productos)
+	evictedProductIDs := []int32{}
+	for _, evictedIDs := range evictedIDsByStatus {
+		evictedProductIDs = append(evictedProductIDs, evictedIDs...)
+	}
+
+	// The watermark the client sent, next to what it bought: upv=0 means the client asked for a
+	// first sync, so a 10k-row answer is the request being obeyed, not the delta failing.
+	core.Log("GET.products:: upv recibido::", updatedSince, "| registros devueltos::", len(productos),
+		"| ids a evictar::", len(evictedProductIDs))
+
+	response := map[string]any{
+		"records":             &productos,
+		"records_IDsToRemove": &evictedProductIDs,
+	}
+
+	return req.MakeResponse(&response)
 }
 
 func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {

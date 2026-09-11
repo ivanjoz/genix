@@ -18,6 +18,12 @@ internal_apikey = "cambie_esta_clave"
 serve_tailscale = false
 github_account = "mi-cuenta"
 
+# disable_api_concurrency_local hace que el servidor local atienda una API a la vez, en cola: los
+# logs de cada request salen en un bloque seguido en vez de intercalados con los de las demás.
+# Sólo para depurar en local (Lambda no lee este archivo). Las rutas SSE (`*-stream`) y el turno
+# del agente quedan fuera de la cola: sostienen la conexión minutos y bloquearían todo lo demás.
+disable_api_concurrency_local = false
+
 # Puerto TCP crudo del proceso fareward. Sección propia y no una clave de [rate_limit]
 # porque no es de un servicio: el opcode de la trama decide si atiende el credit limiter o el
 # lock service, y los dos escuchan aquí.

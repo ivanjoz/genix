@@ -1,7 +1,11 @@
 import { POST } from '$libs/ui-runtime.svelte';
 import { type IProduct } from '$services/production/products.svelte';
 import { type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
+import { type IClientProvider } from '$services/crm/client-provider.svelte';
+import { type IInvoiceSeries } from '$routes/company/configuration/invoice-series';
+import { tr } from '$core/store.svelte';
 import { Loading, Notify } from '$libs/helpers';
+import { validateCustomerIdentity } from './sale_order';
 import {
   type Quantity, addQuantity, formatQuantity, packQuantityLine, quantityAmount, totalSubUnits,
 } from '$core/quantity';
@@ -194,7 +198,10 @@ export class SaleOrderState {
     this.form.montoVuelto = (this.form.montoRecibido || 0) - this.form.TotalAmount
   }
 
-  async postSaleOrder() {
+  // allSeries and selectedClient come from the page's services: the sale can only be
+  // stamped with a series the company has, and the buyer it will bill is either the
+  // picked client row or the details typed at the till.
+  async postSaleOrder(allSeries: IInvoiceSeries[], selectedClient?: IClientProvider) {
     if (this.ventaProductos.length === 0) {
       Notify.failure("El carrito está vacío.")
       return false
@@ -203,6 +210,20 @@ export class SaleOrderState {
     if (this.form.WarehouseID === 0) {
       Notify.failure("Seleccione un almacén.")
       return false
+    }
+
+    const issueSeries = allSeries.find(series => series.SeriesID === this.form.IssueSeriesID)
+    if (issueSeries) {
+      // The client row is the base and what was typed at the till overrides it,
+      // which is how the backend resolves the buyer too.
+      const identityProblem = validateCustomerIdentity(issueSeries.DocType, this.form.TotalAmount,
+        this.form.ClientInfo?.Name || selectedClient?.Name || "",
+        this.form.ClientInfo?.RegistryNumber || selectedClient?.RegistryNumber || "")
+
+      if (identityProblem) {
+        Notify.failure(tr(identityProblem))
+        return false
+      }
     }
 
     // A payment always books a cash-bank movement, so the "Pagado" action can never travel without a caja.

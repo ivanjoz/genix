@@ -3,6 +3,8 @@ import Input from '$components/form/Input.svelte';
 import LayerStatic from '$components/layers/LayerStatic.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VirtualCards from '$components/misc/VirtualCards.svelte';
+import VTable from '$components/vTable/VTable.svelte';
+import type { ITableColumn } from '$components/vTable/types';
 import Page from '$domain/Page.svelte';
 import { Loading, formatN, wordInclude } from '$libs/helpers';
 import Button from '$components/buttons/Button.svelte';
@@ -23,7 +25,7 @@ import type { IWarehouse } from "../../business/branches-warehouses/branches-war
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';
 import { type Quantity, addQuantity, formatQuantity, quantityAmount, quantityDivisorOf, totalSubUnits } from '$core/quantity';
-import type { ProductoVenta } from "./sale_order.svelte";
+import type { ProductoVenta, VentaProducto } from "./sale_order.svelte";
 import { useUI } from '@genix/ui';
 import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sale_order.svelte";
     import DateInput from '$components/form/DateInput.svelte';
@@ -314,14 +316,65 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
   }
 
   async function handlePostSaleOrder() {
-    const wasSaved = await ventasState.postSaleOrder();
+    const selectedClient = clientesService.records.find(
+      (clientRecord) => clientRecord.ID === ventasState.form.ClientID);
+    const wasSaved = await ventasState.postSaleOrder(
+      parametrosService.empresa.InvoiceSeries || [], selectedClient);
     if (wasSaved) {
       clientModeSelected = 0;
     }
   }
+
+  // The table runs with disableHeaderPadding, so the header's whole box comes from here.
+  const cartHeaderCss = 'text-[14px] pt-6 pb-4 px-8';
+
+  const cartColumns: ITableColumn<VentaProducto>[] = [
+    {
+      id: 'quantity',
+      header: 'CANT.',
+      align: 'right',
+      headerStyle: { width: '55px' },
+      headerInnerCss: cartHeaderCss,
+      css: 'text-blue-600 font-bold text-sm',
+      getValue: (item) => formatQuantity(item.cantidad, item.subDivisor, item.producto?.SbuUnit),
+    },
+    {
+      id: 'product',
+      header: 'PRODUCTO',
+      align: 'left',
+      headerInnerCss: cartHeaderCss,
+      css: 'text-sm text-gray-800 py-4',
+      getValue: (item) => item.displayName,
+      // Serialized items carry their picked series as chips under the name.
+      render: (item) => {
+        const serialChips = [...(item.serialNumbers?.entries() || [])].map(([serialNumber, qty]) =>
+          `<span class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600">Serie ${serialNumber} <span class="font-bold text-gray-800">x${qty}</span></span>`);
+        if (serialChips.length === 0) { return item.displayName }
+        return `<div>${item.displayName}</div><div class="flex flex-wrap gap-4 mt-2">${serialChips.join("")}</div>`;
+      },
+    },
+    {
+      id: 'price',
+      header: 'PRECIO',
+      align: 'right',
+      headerStyle: { width: '80px' },
+      headerInnerCss: cartHeaderCss,
+      css: 'font-mono text-sm font-bold text-gray-700',
+      getValue: (item) => formatMo(quantityAmount(
+        item.cantidad, item.producto?.FinalPrice || 0, item.producto?.SbuFinalPrice || 0)),
+    },
+  ];
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
+
+{#snippet cartRowRemoveButton(item: VentaProducto)}
+  <Button icon="icon-[fa--trash]"
+    css="mr-6 flex h-24 w-24 items-center justify-center rounded-full bg-red-500 text-[12px] text-white shadow-sm hover:bg-red-600"
+    onClick={() => ventasState.removeProducto(item.key)}
+    label="Removes this product from the current sale order cart."
+  />
+{/snippet}
 
 <Page title="Ventas"
   options={[{ id: 1, name: "Ventas" }, { id: 2, name: "Configuración" }]}
@@ -528,51 +581,16 @@ import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sal
           {/if}
         </div>
         <!-- List -->
-        <div class="flex-1 overflow-y-auto px-8 py-4 space-y-4" aria-label="Sale order cart items list">
-          {#each ventasState.ventaProductos as item (item.key)}
-            <div
-              class="flex items-center gap-8 py-4 px-8 rounded-lg bg-gray-50 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 transition-all group"
-            >
-              <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-gray-800 truncate">
-                  <span class="text-blue-600 font-bold mr-4"
-                    >{formatQuantity(item.cantidad, item.subDivisor, item.producto?.SbuUnit)} X</span>
-                  {item.displayName}
-                </div>
-                {#if item.serialNumbers && item.serialNumbers.size > 0}
-                  <div class="flex flex-wrap gap-4 mt-2">
-                    {#each item.serialNumbers.entries() as [serialNumber, qty]}
-                      <span
-                        class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600"
-                      >
-                        Serie {serialNumber} <span class="font-bold text-gray-800">x{qty}</span>
-                      </span>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-
-              <div class="flex items-center gap-8">
-                <div class="font-mono text-sm font-bold text-gray-700">
-                  {formatMo(quantityAmount(item.cantidad, item.producto?.FinalPrice || 0, item.producto?.SbuFinalPrice || 0))}
-                </div>
-                <Button icon="icon-[fa--trash]"
-                  css="p-4 text-red-400 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
-                  onClick={() => ventasState.removeProducto(item.key)}
-                  label="Removes this product from the current sale order cart."
-                />
-              </div>
-            </div>
-          {/each}
-
-          {#if ventasState.ventaProductos.length === 0}
-            <div
-              class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8"
-            >
-              <i class="icon--supermarket-cart text-4xl"></i>
-              <span class="text-sm">Carrito vacío</span>
-            </div>
-          {/if}
+        <div class="flex-1 min-h-0 px-8 pb-8" aria-label="Sale order cart items list">
+          <VTable
+            columns={cartColumns}
+            data={ventasState.ventaProductos}
+            maxHeight="100%"
+            disableVirtualizer
+            emptyMessage="Empty cart|Carrito vacío"
+            onRowHover={cartRowRemoveButton}
+            disableHeaderPadding
+          />
         </div>
       </LayerStatic>
     </div>

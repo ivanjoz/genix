@@ -55,15 +55,15 @@ func TestTheBillingDocumentIsKeyedByTheSale(t *testing.T) {
 	}
 }
 
-func TestCorrelativoCounterIsPerCompanyAndSeries(t *testing.T) {
-	if CorrelativoCounterName(7, 1) == CorrelativoCounterName(7, 2) {
-		t.Error("two series of one company share a counter")
-	}
-	if CorrelativoCounterName(7, 1) == CorrelativoCounterName(8, 1) {
-		t.Error("two companies share a series counter")
-	}
-	if got := CorrelativoCounterName(7, 1); got != "cpe_7_1" {
-		t.Errorf("counter name = %q, want cpe_7_1", got)
+// The correlativo is the head of the sale's id, so a document numbered from it
+// reads its own number back without a column lookup. The counter that produces
+// both is tested in sales/types.
+func TestTheCorrelativoIsReadableFromTheDocumentID(t *testing.T) {
+	const saleOrderID = int64(1301102) // correlativo 130, random 11, series 02
+	documentID := DocumentIDForSale(saleOrderID, 2)
+
+	if SalePrefix(documentID)/100 != 130 {
+		t.Errorf("correlativo in %v = %v, want 130", documentID, SalePrefix(documentID)/100)
 	}
 }
 

@@ -128,9 +128,9 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		ID:        25,
 		Name:      "sale_order",
 		Partition: e.CompanyID,
-		// A plain key. The id is built by MakeSaleOrderID, which packs the counter,
-		// two random digits and the invoicing series into it — a layout the ORM's
-		// autoincrement cannot express.
+		// A plain key. The id is built by MakeSaleOrderID, which packs the series'
+		// correlativo, two random digits and the series itself into it — a layout
+		// the ORM's autoincrement cannot express.
 		Keys: db.Cols(e.ID),
 		// Sizes the Status slot of the delta index.
 		FixedValues: []db.FixedValues{

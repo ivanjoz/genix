@@ -51,9 +51,9 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Company inválida para obtener productos de ecommerce.")
 	}
 
-	productosWatermark := req.GetQueryInt("productos")
-	marcasWatermark := req.GetQueryInt("marcas")
-	categoriasWatermark := req.GetQueryInt("categorias")
+	productosWatermark := req.GetUpdated("productos")
+	marcasWatermark := req.GetUpdated("marcas")
+	categoriasWatermark := req.GetUpdated("categorias")
 
 	// Best-effort lazy rebuild: refresh the snapshot file when source data advanced past the last
 	// build. The client sets missingFile=1 when the CDN file was absent, which forces a rebuild
@@ -72,6 +72,9 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	// Products delta: keyed by Updated. Only the [company_id, updated] view supports a range scan
 	// with full-column projection (NameUpdated is a local index → ALLOW FILTERING). Using Updated
 	// also means price-only edits reach already-synced clients.
+	//
+	// The client sends both watermarks and this handler reads the timestamp half (GetUpdated), so
+	// projecting UpdatedVersion would only add bytes to a public payload that nobody reads.
 	errGroup.Go(func() error {
 		query := db.Query(&productos)
 		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).

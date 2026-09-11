@@ -5,6 +5,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/invoicing/types"
+	"context"
 	"errors"
 	"fmt"
 
@@ -12,39 +13,142 @@ import (
 	"github.com/ivanjoz/facturago/sunat"
 )
 
-// Sending happens outside the request that asked for it.
+// Sending, by whichever of the two paths asked for it.
 //
-// SUNAT regularly takes tens of seconds and the API gateway gives up at thirty,
-// so an emission cannot finish inline. It runs as an asynchronous invoke, which
-// starts immediately, and the cron action is the net underneath: it survives a
-// panic, caps at ten attempts, and leaves a row somebody can read afterwards.
+// A document is written with its sale and waits in InvoicePending. Normally the
+// sweep below picks it up on the next frame and nobody watches; when an operator
+// presses "enviar ahora" the same send runs inside their request and they wait for
+// SUNAT's answer. Both go through SendDocumentNow, so the lock and the state rules
+// cannot differ between them.
 //
-// Only a transport or configuration failure is retried. A rejection is final —
-// the same XML will be refused forever, and re-sending it just fills a queue.
+// The per-document retry is the net underneath the sweep: it survives a panic,
+// caps the attempts, and leaves a row somebody can read afterwards. Only a
+// transport or configuration failure is retried. A rejection is final — the same
+// XML will be refused forever, and re-sending it just fills a queue.
 const (
-	// EmitFunctionName is the async entry point, registered in exec.
+	// EmitFunctionName is the command-line entry point, registered in exec.
 	EmitFunctionName = "fn-emit-cpe"
-	// emitRetryActionID is this module's cron action. Values 1 to 4 are taken.
+	// emitRetryActionID is the per-document retry. Values 1 to 4 are taken by
+	// other modules, and 6 is the sweep in invoicing/types.
 	emitRetryActionID = int16(5)
 	// retryFrameMinutes is the first retry delay; the executor keeps the cadence.
 	retryFrameMinutes = int8(5)
 	// maxRetries stops a document that keeps failing from being attempted forever.
 	maxRetries = int8(6)
+	// maxDocumentsPerSweep bounds one run. SUNAT answers in seconds, so an
+	// unbounded batch would hold the cron worker for as long as the backlog is;
+	// a full batch re-schedules instead.
+	maxDocumentsPerSweep = 50
+	// sendLockWaiters is how many callers may queue on one sale's lock. The sweep
+	// and an operator pressing "enviar ahora" are the only contenders.
+	sendLockWaiters = 2
 )
 
-// SendDocumentAsync starts the transmission without waiting for it.
-func SendDocumentAsync(companyID int32, documentID int64) {
-	cloud.ExecLambda(core.ExecArgs{
-		LambdaName:    core.Env.LAMBDA_NAME,
-		FuncToExec:    EmitFunctionName,
-		InvokeAsEvent: true,
-		Param1:        int64(companyID),
-		Param2:        documentID,
-	})
+// Both cron actions are registered here, next to what they run.
+func init() {
+	core.RegisterActionHandler(types.EmitPendingActionID,
+		"Enviar comprobantes pendientes", EmitPendingDocumentsHandler)
+	core.RegisterActionHandler(emitRetryActionID,
+		"Reintentar envío de comprobante", EmitHandler)
 }
 
-// EmitHandler is the async entry point and the body of the retry. Both paths are
-// the same work, which is why they are the same function.
+// EmitPendingDocumentsHandler sends everything a company has waiting.
+//
+// It reads the pending bucket directly: the delta index on State serves a query
+// that pins the partition and the state, so this is a range read and not a scan.
+func EmitPendingDocumentsHandler(args *core.ExecArgs) core.FuncResponse {
+	companyID := int32(args.Param1)
+	if companyID == 0 {
+		return args.MakeErr("falta la empresa para enviar los comprobantes pendientes")
+	}
+
+	pending, err := loadPendingDocuments(companyID)
+	if err != nil {
+		return args.MakeErr(err.Error())
+	}
+	args.AddMessage(core.Concat(" ", "Comprobantes pendientes:", len(pending)))
+
+	for index := range pending {
+		if _, sendErr := SendDocumentNow(companyID, pending[index].ID); sendErr != nil {
+			core.Log("error al enviar el comprobante", pending[index].ID, sendErr)
+			args.AddMessage(core.Concat(" ", "Comprobante", pending[index].ID, ":", sendErr))
+		}
+	}
+
+	// A full batch means there is very likely more behind it. Anything that failed
+	// left the pending bucket, so this cannot loop on the same rows.
+	if len(pending) == maxDocumentsPerSweep {
+		types.ScheduleEmitPendingSweep(companyID)
+	}
+	return core.FuncResponse{}
+}
+
+// loadPendingDocuments reads the documents waiting to be sent, oldest first.
+func loadPendingDocuments(companyID int32) ([]types.InvoiceDocument, error) {
+	documents := []types.InvoiceDocument{}
+	query := db.Query(&documents)
+	query.Select(query.ID).
+		CompanyID.Equals(companyID).
+		State.Equals(types.InvoicePending).
+		Limit(maxDocumentsPerSweep)
+
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al leer los comprobantes pendientes: %w", err)
+	}
+	return documents, nil
+}
+
+// SendDocumentNow sends one document under the sale's lock and waits for SUNAT.
+//
+// It is what both the sweep and the "enviar ahora" endpoint run, so a document is
+// never sent by two paths with different rules. The document it returns is the row
+// as it stands after the attempt — including when the attempt failed, because a
+// rejection is a state the caller has to show.
+//
+// The lock is the same one an annulment takes, and it is why a sale annulled a
+// moment ago does not get its document sent anyway: the state is re-read inside
+// it, after whoever was voiding the document has finished.
+func SendDocumentNow(companyID int32, documentID int64) (*types.InvoiceDocument, error) {
+	document, err := LoadDocument(companyID, documentID)
+	if err != nil {
+		return nil, err
+	}
+
+	lock, lockErr := core.AcquireLock(context.Background(),
+		core.ActionInvoiceSaleOrder, document.SaleOrderID(), sendLockWaiters)
+	if lockErr != nil {
+		return nil, lockErr
+	}
+	defer lock.Release()
+
+	current, err := LoadDocument(companyID, documentID)
+	if err != nil {
+		return nil, err
+	}
+	if !types.CanSendInvoice(current.State) {
+		// Voided while we waited, or sent by whoever held the lock before us. The
+		// row as it stands is the answer.
+		return current, nil
+	}
+
+	sendErr := SendDocument(companyID, documentID)
+
+	// Reloaded either way: SendDocument records what SUNAT said before it returns
+	// the rejection, and that row is what the caller has to show.
+	sent, loadErr := LoadDocument(companyID, documentID)
+	if loadErr != nil {
+		return nil, loadErr
+	}
+	return sent, sendErr
+}
+
+// EmitHandler is the body of the automatic retry (cron action 5) and the
+// command-line entry point registered in exec as "fn-emit-cpe". Both are the same
+// work on the same arguments, which is why they are the same function.
+//
+// It does not take the sale's lock, because the retry runs on a document that
+// already failed and the CLI is a person deciding. SendDocumentNow is the path
+// everything else goes through.
 func EmitHandler(args *core.ExecArgs) core.FuncResponse {
 	companyID, documentID := int32(args.Param1), args.Param2
 	if companyID == 0 || documentID == 0 {
@@ -77,7 +181,7 @@ func SendDocument(companyID int32, documentID int64) error {
 		return recordFailure(row, err, false)
 	}
 
-	issuer, err := BuildIssuer(companyID, series.SiteID)
+	issuer, err := BuildIssuer(companyID)
 	if err != nil {
 		return recordFailure(row, err, false)
 	}

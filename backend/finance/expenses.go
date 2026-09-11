@@ -71,7 +71,7 @@ func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	statusFilter := int8(req.GetQueryInt("status"))
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 	queryGroup := errgroup.Group{}
 
 	// Map the tab's status code to the concrete ss values to fetch.
@@ -233,7 +233,7 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 func GetExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 
 	records := []types.ExpenseScheduled{}
 

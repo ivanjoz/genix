@@ -11,7 +11,7 @@ type ActionRegistered struct {
 }
 
 func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt("actionsScheduled")
+	updated := req.GetUpdated("actionsScheduled")
 
 	if updated == 0 {
 		updated = core.SUnixTime() - int32((7*24*60*60)/2) // Last 7 days

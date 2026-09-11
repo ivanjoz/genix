@@ -30,6 +30,25 @@ const (
 	InvoiceException = int8(6)
 )
 
+// CanSendInvoice is whether a document may still be transmitted.
+//
+// Everything SUNAT already answered is final — an acceptance needs nothing and a
+// rejection will be refused forever — and a voided document must never go out at
+// all. What is left is a document waiting for the sweep, one whose send died
+// halfway, and one whose send failed.
+func CanSendInvoice(state int8) bool {
+	return state == InvoicePending || state == InvoiceQueued || state == InvoiceException
+}
+
+// AllInvoiceStates is every value the State column can hold, in one place so a
+// delta read can fan out over all of them. A list that misses one silently hides
+// those documents from a first sync.
+var AllInvoiceStates = []int64{
+	int64(InvoiceVoided), int64(InvoicePending), int64(InvoiceQueued),
+	int64(InvoiceAccepted), int64(InvoiceObserved), int64(InvoiceRejected),
+	int64(InvoiceException),
+}
+
 // Currencies a document can be issued in.
 const (
 	CurrencyPEN = int8(1)
@@ -58,13 +77,10 @@ func SalePrefix(id int64) int64 {
 	return id / SeriesDigits
 }
 
-// CorrelativoCounterName names the sequence a series numbers from: one counter
-// per company and series, which is exactly the scope SUNAT requires the numbering
-// to be unique in. Reserved through the fareward-backed allocator like every
-// other counter in the system.
-func CorrelativoCounterName(companyID int32, seriesID int8) string {
-	return "cpe_" + itoa(int64(companyID)) + "_" + itoa(int64(seriesID))
-}
+// The sequence a series numbers from lives in `sales`, as
+// sales.IssueSeriesCounterName: the correlativo and the sale id are the same
+// number now, minted once when the sale is created. A note, when notes are
+// emitted, will draw its own series counter from that same function.
 
 // InvoiceDocument is one electronic document that has been issued, or is about
 // to be.
@@ -138,6 +154,19 @@ type InvoiceDocument struct {
 // id. It resolves against the company's inline series for the type and the code.
 func (e *InvoiceDocument) SeriesID() int8 {
 	return int8(e.ID % SeriesDigits)
+}
+
+// SaleOrderID is the sale this document bills.
+//
+// A document that bills a sale is keyed by that sale — the sale carries the series
+// it will be issued under, so the two ids are the same value. A note is issued
+// under its own series and lands elsewhere, so it reaches the sale through the
+// document it corrects, which is the one keyed by the sale.
+func (e *InvoiceDocument) SaleOrderID() int64 {
+	if e.AffectedDocID != 0 {
+		return e.AffectedDocID
+	}
+	return e.ID
 }
 
 // Number is the identifier the way SUNAT writes it: F001-123. The code is not

@@ -10,6 +10,7 @@
 package cloud
 
 import (
+	business "app/business/types"
 	config "app/config/types"
 	"app/core"
 	"app/db"
@@ -135,8 +136,16 @@ func CompactAndStoreCompanyConfig(companyID int32) (*config.CompanyConfig, error
 	if err != nil {
 		return nil, err
 	}
+	sites, err := readSitesForConfig(companyID)
+	if err != nil {
+		return nil, err
+	}
+	cities, err := readFiscalAddressCities(company.CityID)
+	if err != nil {
+		return nil, err
+	}
 
-	companyConfig, err := config.AssembleCompanyConfig(company, secrets, parameters)
+	companyConfig, err := config.AssembleCompanyConfig(company, secrets, parameters, sites, cities)
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +161,12 @@ func CompactAndStoreCompanyConfig(companyID int32) (*config.CompanyConfig, error
 		return nil, err
 	}
 
+	// A failed upload is logged and not returned. What the caller asked for is the
+	// configuration, and it is complete and correct at this point — the object is a
+	// cache in front of the rows it was just built from. Failing here would take
+	// every reader down with object storage, and the till, which now validates a
+	// sale's series against this, is not something to stop for a cache miss. The
+	// next mutation or the next reader rewrites the object.
 	err = SaveFile(SaveFileArgs{
 		Name:        objectName,
 		Path:        companyConfigPath,
@@ -162,7 +177,7 @@ func CompactAndStoreCompanyConfig(companyID int32) (*config.CompanyConfig, error
 		CacheControl: "no-store",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("no se pudo guardar la configuración de la empresa: %w", err)
+		core.Log("no se pudo guardar la configuración de la empresa", companyID, ":", err)
 	}
 
 	// Cached here rather than only on the read path, so the write-through that follows
@@ -372,4 +387,49 @@ func readParametersForConfig(companyID int32) ([]config.Parameters, error) {
 		return nil, fmt.Errorf("error al leer los parámetros de la empresa: %w", err)
 	}
 	return parameters, nil
+}
+
+// readFiscalAddressCities reads the three catalog rows that name the company's
+// ubigeo: the district it picked and the province and department above it.
+//
+// Three ids from one number, because the catalog is keyed by the ubigeo itself and
+// a district's code contains its parents'. Returns nothing when the company has no
+// district picked — a company can exist without a fiscal address, it just cannot
+// issue.
+func readFiscalAddressCities(districtID int32) ([]business.CityLocation, error) {
+	if districtID <= 0 {
+		return nil, nil
+	}
+	provinceID := districtID / 100
+	departmentID := provinceID / 100
+
+	cities := []business.CityLocation{}
+	query := db.Query(&cities)
+	query.Select(query.ID, query.Name, query.Hierarchy).
+		CountryID.Equals(peruCountryID).
+		ID.In(districtID, provinceID, departmentID)
+
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al leer la ciudad de la empresa: %w", err)
+	}
+	return cities, nil
+}
+
+// peruCountryID is the partition the ubigeo catalog lives in. The catalog is Peru's
+// INEI codes, so this is the only country it has rows for.
+const peruCountryID = int32(604)
+
+// readSitesForConfig reads the establishments an electronic document can be issued
+// from. Every site is read, retired ones included — the blob keeps their status and
+// lets the reader decide.
+func readSitesForConfig(companyID int32) ([]business.Site, error) {
+	sites := []business.Site{}
+	query := db.Query(&sites)
+	query.Select(query.ID, query.Name, query.Address, query.CityID, query.Status, query.Updated).
+		CompanyID.Equals(companyID)
+
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al leer las sedes de la empresa: %w", err)
+	}
+	return sites, nil
 }

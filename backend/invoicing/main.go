@@ -8,9 +8,9 @@ import "app/core"
 // core/api_routes.generated.go numbers, so adding one here means adding it in
 // both of those too, or the route exists and nobody can reach it.
 var ModuleHandlers = core.AppRouterType{
-	// Issuing. POST.invoice returns as soon as the document has a number;
-	// SUNAT answers later and the state moves on its own.
-	"POST.invoice":       PostInvoice,
+	// Issuing has no endpoint: the document is created with the sale and sent by
+	// the cron sweep. POST.invoice-retry pushes one out ahead of the sweep, or
+	// again after a failure.
 	"POST.invoice-retry": PostInvoiceRetry,
 	"GET.invoices":       GetInvoices,
 	"GET.invoice-xml":    GetInvoiceXML,

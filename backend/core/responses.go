@@ -294,6 +294,55 @@ func (e HandlerArgs) GetQueryInt(key string) int32 {
 	return 0
 }
 
+// WatermarkParamOfDefaultKey names the delta watermark of a route whose response is a bare array.
+// A multi-table route names one param per response key instead ("ProductStock", "Frames"), which
+// is why every reader below takes the key.
+const WatermarkParamOfDefaultKey = "up"
+
+// GetUpVersion returns the write-sequence half of a delta watermark, and GetUpdated the timestamp
+// half. The client sends both, always, as one param per response key shaped "<upv>.<upd>": which
+// of the two bounds the query is the handler's decision and nothing else's.
+//
+// It used to be the client's: it guessed the field from whether the records carried `upv` and
+// remembered the guess, so a route that guessed wrong sent a watermark its handler never read and
+// was answered with the whole table on every sync, silently, forever.
+//
+// responseKey names the param for a multi-table route; omit it for the single-array param.
+func (e HandlerArgs) GetUpVersion(responseKey ...string) int32 {
+	updatedVersion, _ := e.getWatermark(responseKey)
+	return updatedVersion
+}
+
+func (e HandlerArgs) GetUpdated(responseKey ...string) int32 {
+	_, updated := e.getWatermark(responseKey)
+	return updated
+}
+
+func (e HandlerArgs) getWatermark(responseKey []string) (int32, int32) {
+	paramName := WatermarkParamOfDefaultKey
+	if len(responseKey) > 0 && responseKey[0] != "" {
+		paramName = responseKey[0]
+	}
+
+	rawWatermark := e.Query[paramName]
+	if rawWatermark == "" {
+		return 0, 0
+	}
+
+	// A watermark with no separator is read as a bare `upv`: that is what a caller building the
+	// URL by hand writes, and the pair is what the delta cache sends.
+	rawUpdatedVersion, rawUpdated, _ := strings.Cut(rawWatermark, ".")
+	return parseWatermarkValue(rawUpdatedVersion), parseWatermarkValue(rawUpdated)
+}
+
+func parseWatermarkValue(rawValue string) int32 {
+	value, err := strconv.Atoi(rawValue)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return int32(value)
+}
+
 // Obtiene un parámetro como un slice de enteros desde un string separado por comas
 func (e HandlerArgs) GetQueryIntSliceBase(key string, sep string) []int32 {
 	intSlice := []int32{}

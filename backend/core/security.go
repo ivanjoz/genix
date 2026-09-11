@@ -104,8 +104,12 @@ type EnvStruct struct {
 	// request. Off, a request that produced no error leaves no row — which is what keeps the
 	// table small enough to scan a fifteen-minute window. Turn it on to measure traffic, and
 	// expect a row per request for as long as it stays on.
-	LOG_ALL_REQUESTS   bool
-	DB_DISABLE_SSL     bool
+	LOG_ALL_REQUESTS bool
+	// DISABLE_API_CONCURRENCY_LOCAL serializes the standalone HTTP server: one API request at a
+	// time, so the log of a request is never cut in half by another one. Debug aid, off by
+	// default, and it does nothing under IS_SERVERLESS — a Lambda invocation is already alone.
+	DISABLE_API_CONCURRENCY_LOCAL bool
+	DB_DISABLE_SSL                bool
 	DB_PORT            int32
 	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
 	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
@@ -257,6 +261,10 @@ type fileConfig struct {
 	AdminPassword  string `toml:"admin_password"`
 	SecretPhrase   string `toml:"secret_phrase"`
 	InternalApikey string `toml:"internal_apikey"`
+	// DisableAPIConcurrencyLocal makes the local HTTP server answer one request at a time, so a
+	// page that fires eight parallel GETs leaves eight readable blocks in the terminal instead of
+	// eight interleaved ones. Only the standalone server reads it; Lambda never sees this file.
+	DisableAPIConcurrencyLocal bool `toml:"disable_api_concurrency_local"`
 	// Its own section, not a key under [rate_limit]: one raw-TCP endpoint serves every
 	// fareward operation, and the opcode picks which. Nesting it under one of its consumers
 	// would read as if the lock service had an address of its own.
@@ -436,6 +444,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.ADMIN_PASSWORD = file.AdminPassword
 	env.SECRET_PHRASE = file.SecretPhrase
 	env.INTERNAL_APIKEY = file.InternalApikey
+	env.DISABLE_API_CONCURRENCY_LOCAL = file.DisableAPIConcurrencyLocal
 
 	env.BACKEND_PROVIDER = file.Providers.Backend
 	env.CDN_PROVIDER = file.Providers.CDN

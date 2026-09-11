@@ -13,8 +13,8 @@ import (
 func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 	// Each table advances its own "updated_version" sequence, so the two response keys carry
 	// independent watermarks; the frontend sends one query param per key, named after it.
-	warehousesUpdatedSince := req.GetQueryInt("Almacenes")
-	sitesUpdatedSince := req.GetQueryInt("Sedes")
+	warehousesUpdatedSince := req.GetUpVersion("Almacenes")
+	sitesUpdatedSince := req.GetUpVersion("Sedes")
 
 	almacenes := []types.Warehouse{}
 	errGroup := errgroup.Group{}
@@ -138,7 +138,7 @@ func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 	paisID := req.GetQueryInt("pais-id")
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 
 	paisCiudades := []types.CityLocation{}
 	query := db.Query(&paisCiudades)

@@ -1,10 +1,17 @@
-package invoicing
+// Turning a sale into the document that bills it.
+//
+// This lives in the types leaf rather than in the invoicing body because both
+// sides of the flow need it: `sales` builds and numbers the document when the sale
+// is created, and `invoicing` rebuilds it on every send. A module body may not
+// import another module body, and everything here is legal for a leaf — db, core
+// and other */types (docs/MODULE_BOUNDARIES.md).
+
+package types
 
 import (
 	"app/core"
 	crm "app/crm/types"
 	"app/db"
-	"app/invoicing/types"
 	production "app/production/types"
 	sales "app/sales/types"
 	"errors"
@@ -43,7 +50,7 @@ func splitGrossAmount(gross int64) (net int64, tax int64) {
 // A line with a sub-unit part becomes two document lines, so the second return value maps
 // each generated line back to the product it came from.
 func SaleOrderToDocument(
-	companyID int32, order *sales.SaleOrder, series *types.InvoiceSeries,
+	companyID int32, order *sales.SaleOrder, series *InvoiceSeries,
 ) (*model.Document, []int32, error) {
 
 	if len(order.DetailProductsIDs) == 0 {
@@ -80,8 +87,9 @@ func SaleOrderToDocument(
 
 // buildCustomer resolves who is being billed.
 //
-// A factura is business to business and SUNAT only accepts a RUC on one, so the
-// check happens here rather than after a correlativo has been spent.
+// The identity rules are checked here as well as when the sale was created,
+// because a send happens later and from a different process: this is the last
+// point where a document SUNAT would refuse can still be stopped.
 func buildCustomer(companyID int32, order *sales.SaleOrder, docType int8) (model.Party, error) {
 	name, registryNumber := "", ""
 
@@ -106,25 +114,20 @@ func buildCustomer(companyID int32, order *sales.SaleOrder, docType int8) (model
 		}
 	}
 
+	if err := ValidateCustomerIdentity(docType, order.TotalAmount, name, registryNumber); err != nil {
+		return model.Party{}, err
+	}
+
 	customer := model.Party{
 		DocNumber: registryNumber,
 		LegalName: name,
 		DocType:   identityDocTypeOf(registryNumber),
 	}
-
-	// A factura always names a business, so a missing RUC is an error.
-	if docType == types.DocTypeFactura {
-		if customer.DocType != model.IDDocRUC {
-			return model.Party{}, errors.New(
-				"una factura necesita un cliente con RUC de 11 dígitos")
-		}
-		if customer.LegalName == "" {
-			return model.Party{}, errors.New("el cliente de la factura no tiene nombre")
-		}
+	if docType == DocTypeFactura {
 		return customer, nil
 	}
 
-	// A boleta usually has no customer at all: someone paid at the till and
+	// A small boleta usually has no customer at all: someone paid at the till and
 	// left. SUNAT still requires the block, so an unidentified buyer is declared
 	// as one — which is what every point of sale in the country does.
 	if customer.DocNumber == "" {
@@ -248,11 +251,11 @@ func loadProductDescriptions(companyID int32, productIDs []int32) (map[int32]pro
 // sunatDocType maps the stored numeric type to the catalog code facturago uses.
 func sunatDocType(docType int8) model.DocType {
 	switch docType {
-	case types.DocTypeBoleta:
+	case DocTypeBoleta:
 		return model.Boleta
-	case types.DocTypeCreditNote:
+	case DocTypeCreditNote:
 		return model.CreditNote
-	case types.DocTypeDebitNote:
+	case DocTypeDebitNote:
 		return model.DebitNote
 	}
 	return model.Factura

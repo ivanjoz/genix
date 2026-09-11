@@ -1,3 +1,116 @@
+## The sale id carries the correlativo, so there is one counter and not two
+
+**Context** — The human's instruction for the id layout was `[correlativo][rand:2][series:2]`. What
+was built was `[counter][rand:2][series:2]` with a *separate* per-series counter for the correlativo:
+two autoincrements for one number, and a sale id that said nothing about the comprobante it would
+produce.
+
+**Decision** — `MakeSaleOrderID` draws from `IssueSeriesCounterName(companyID, seriesID)` — the same
+`cpe_{company}_{series}` sequence invoicing was using — and `SaleOrder.Correlativo()` reads it back
+off the id. `CorrelativoCounterName` is gone from `invoicing/types`, and the global
+`x{company}_sale_order_0` counter with it. The sale 1301102 *is* F001-130.
+
+Four things around it were mine to settle:
+
+- **The counter name lives in `sales/types`.** `invoicing/types` already imports it — since the
+  document builder moved there — so the other direction would be a cycle. A note that needs its own
+  series counter reaches it from there.
+- **Series 0 gets a counter of its own.** A sale that issues no comprobante still needs an id;
+  drawing from `cpe_{company}_0` keeps one rule for every sale and never consumes a number anybody
+  declares to SUNAT.
+- **A note cannot follow the rule.** It is issued under its own series but its id has to stay
+  adjacent to the sale it corrects, so its correlativo keeps coming from the `Correlativo` column.
+  The derivation is for facturas and boletas.
+- **The document is validated before the id is minted.** `PrepareDocumentForSale` now assigns
+  `order.ID` itself, after `ValidateDocument` passes. With the counters merged, minting first would
+  mean a document facturago rejects leaves a permanent gap in the series — the exact thing the old
+  ordering existed to prevent.
+
+**Rationale** — One number, one sequence, and no lookup to go from a sale to its comprobante. The
+cost is that every sale under a series consumes a correlativo at creation, which was already true
+since the document is created with the sale. The migration cost was real and paid once: the ids
+already written came from the global counter, and per-series counters restarting at 1 would have
+re-minted into that range, so the company's test rows were deleted rather than left to collide.
+The `cpe_1_2` counter was deliberately **not** reset — SUNAT beta already holds F001-1, so the next
+factura has to be F001-2 or it is refused as a duplicate.
+
+## A sale writes its own electronic document, and the one write that can leave the two out of step
+
+**Context** — The document is created with the sale now. The sale row and the document row are two
+ORM writes and there is no transaction between them, so something had to give: either a sale can
+exist without its document, or a document can exist without its sale.
+
+**Decision** — Ordered so only the first is possible, and only on a database failure. Building the
+document, validating it against facturago and reserving the correlativo all happen **before**
+`db.Insert(sale)`; the document is written **after** it. A failure before the sale rejects the whole
+request with nothing persisted. A failure on the document write returns an error and logs
+`VENTA SIN COMPROBANTE::` with the sale id.
+
+**Rationale** — A document must be written after its sale because every send rebuilds it from the
+sale: a document whose sale cannot be read is one nobody can send, and the sweep would keep failing
+on it. Reversing the order would trade a rare recoverable state for a permanent orphan. The residual
+window is one ORM insert wide and is the only thing between this and a transaction the database does
+not offer. Cost: a sale can, in that window, exist with no comprobante and nothing sweeps for it —
+finding those means scanning sales, which the partition layout cannot serve cheaply, so the log line
+is the trail.
+
+## Annulling a sale voids its pending document, under the invoicing lock
+
+**Context** — The annulment refused any sale that had a document. Now every sale issued under a
+series has one from birth, so that rule would have made annulment impossible.
+
+**Decision** — `VoidPendingDocumentForSale` in `invoicing/types`: a document still in
+`InvoicePending` is set to `InvoiceVoided` with `Status = 0` and the annulment proceeds; one that
+reached SUNAT is returned and the annulment is refused as before. It runs under
+`core.ActionInvoiceSaleOrder` on the sale id — the same lock the sweep takes before sending.
+
+**Rationale** — The lock is the whole correctness argument: without it the sweep could read a
+pending document, and this could void it, and the document would go to SUNAT anyway. The annulment
+takes it nested inside its own `ActionAnnulSaleOrder` lock and nothing takes them in the other
+order, so no cycle exists. `FindBySaleOrder` already skips `Status = 0`, so the voided document
+stops blocking anything without a second rule. Cost: the correlativo stays spent and the series
+keeps a gap, which SUNAT expects to be declared through a comunicación de baja that this system does
+not emit yet.
+
+## The customer-identity rule is shared with the emission path, which changes what a boleta may hide
+
+**Context** — `PostSaleOrder` had to start refusing a sale stamped with a factura series and no
+client. The same rule already existed at emission (`buildCustomer`), and two copies of it drifting
+apart is the worst outcome: a sale accepted at the till and refused hours later has an id that
+cannot be re-keyed.
+
+**Decision** — The rule lives once, in `invoicing/types/customer_identity.go`, as
+`RequiresCustomerIdentity` + `ValidateCustomerIdentity`, and both `sales` (creation) and `invoicing`
+(emission) call it. Three choices inside it are mine:
+- **The boleta threshold now binds at emission too.** `buildCustomer` used to fall back to
+  `CLIENTES VARIOS` for *any* anonymous boleta; from S/ 700 it now errors instead.
+- **A boleta buyer needs a document of 8 characters or more**, not exactly a DNI's 8 digits, so a
+  carné de extranjería or a passport still identifies them.
+- **A factura RUC must be 11 *digits***, stricter than `identityDocTypeOf`, which infers a RUC from
+  length alone and would let 11 letters through to SUNAT.
+
+**Rationale** — Sharing costs `sales` an import of `invoicing/types`, which the module rules allow
+and which is already how the sale id learns its series width. The emission change is the point:
+SUNAT rejects an unidentified boleta from S/ 700, so the old fallback only moved the refusal to the
+slowest, least fixable place. Cost: a company that was quietly issuing large anonymous boletas will
+now see them fail at the till instead — which is the correct failure, but it is a failure that did
+not happen yesterday.
+
+## A sale reads the series from the cached company config, and pays for the client with one read
+
+**Context** — Validating the series meant `sales` learning the company's series set, and the open
+question recorded in the frontend RATIONALE was what that read should cost per sale.
+
+**Decision** — `cloud.LoadCompanyConfig` (memory cache with a 20 s TTL in front of the sealed blob),
+so the common path is no cluster read at all. The buyer costs one read of the client row, and only
+when the series actually demands an identity — a small boleta reads nothing. A `ClientID` that
+matches no row is also an error now, and a note series (credit/debit) is refused on a sale.
+
+**Rationale** — The blob is the same source the issuer already builds from, so the creation check
+and the emission check cannot disagree about which series exist. Cost: a series activated or retired
+in the last twenty seconds is judged on stale data — one sale refused, or one sale accepted for a
+series that is about to be gone, and the emission check catches the second case.
+
 ## The sale id carries the invoicing series, and is minted here rather than by the ORM
 
 **Context** — A sale id was `Autoincrement(2)`: a counter with two random digits. The electronic

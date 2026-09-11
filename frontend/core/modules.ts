@@ -144,7 +144,7 @@ export const AdminModule: IModule = {
     },
     { name: "Accounting|Contabilidad", minName: "CNT",  id: 8, icon: "icon-[fa--tasks]",
       options: [
-        { name: "Invoicing|Facturación",
+        { name: "Invoicing|Facturación", route: "/accounting/invoicing"
         },
         { name: "Financial Statements|Estados Financieros",
 				},

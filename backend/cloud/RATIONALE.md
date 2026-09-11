@@ -1,3 +1,18 @@
+## A failed blob upload no longer fails the caller that asked for the config
+
+**Context** — `CompactAndStoreCompanyConfig` returned an error when `SaveFile` failed, so
+`LoadCompanyConfig` failed with it whenever the object could not be written. That was tolerable
+while the only reader was an emission; `sales` now validates every sale's invoicing series against
+this config, which put object storage in the path of the till.
+
+**Decision** — The upload failure is logged and the assembled config is returned.
+
+**Rationale** — The caller asked for the configuration, and at that point it is complete and
+correct: it was just built from the rows, and the object is a cache in front of them. The function's
+own comment already said it must never fail a caller's request; this makes that true. Cost: a
+persistently unwritable object is now silent apart from the log, and every reader pays the rebuild
+(three row reads and a certificate parse) until it can be stored again.
+
 ## The company config cache hands out a shared pointer, and its sweeper starts on the first write
 
 **Context** — `LoadCompanyConfig` now keeps a 20-second in-memory map in front of the blob. Three

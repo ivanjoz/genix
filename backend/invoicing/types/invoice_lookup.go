@@ -9,6 +9,7 @@
 package types
 
 import (
+	"app/core"
 	"app/db"
 	"fmt"
 )
@@ -36,6 +37,43 @@ func FindBySaleOrder(companyID int32, saleOrderID int64) (*InvoiceDocument, erro
 			continue
 		}
 		return &documents[index], nil
+	}
+	return nil, nil
+}
+
+// VoidPendingDocumentForSale clears the way for a sale to be annulled.
+//
+// Every sale issued under a series carries a document from the moment it is
+// created, so an annulment always finds one. What decides the outcome is whether
+// it ever left: a document still waiting for the sweep is voided here and never
+// sent, and one that reached SUNAT is returned so the caller can refuse.
+//
+// A nil document means the sale is free to annul. The correlativo of a voided
+// document stays spent — the series keeps a gap that SUNAT expects to be declared
+// through a comunicación de baja, which this system does not emit yet.
+//
+// The caller must hold the sale's ActionInvoiceSaleOrder lock: the sweep re-reads
+// the state inside that same lock, and that is what stops it from sending a
+// document while this is voiding it.
+func VoidPendingDocumentForSale(companyID int32, saleOrderID int64) (*InvoiceDocument, error) {
+	document, err := FindBySaleOrder(companyID, saleOrderID)
+	if err != nil || document == nil {
+		return nil, err
+	}
+	if document.State != InvoicePending {
+		return document, nil
+	}
+
+	document.State = InvoiceVoided
+	document.Status = 0
+	document.Updated = core.SUnixTime()
+
+	table := db.TableOf[InvoiceDocument]()
+	rows := &[]InvoiceDocument{*document}
+	// State travels with the delta view's key, which the ORM requires to be
+	// written together with Status and Updated.
+	if err := db.Update(rows, table.State, table.Status, table.Updated); err != nil {
+		return nil, fmt.Errorf("no se pudo anular el comprobante de la venta: %w", err)
 	}
 	return nil, nil
 }

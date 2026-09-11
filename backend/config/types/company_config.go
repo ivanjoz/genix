@@ -19,6 +19,7 @@
 package types
 
 import (
+	business "app/business/types"
 	"app/core"
 	invoicing "app/invoicing/types"
 	"crypto/x509"
@@ -30,7 +31,11 @@ import (
 
 // CompanyConfigVersion is the blob format. A reader that does not recognise it
 // rebuilds instead of guessing at the payload.
-const CompanyConfigVersion = int8(1)
+//
+// 2: the sites travel in the blob. Bumped rather than relying on a missing field
+// decoding as empty, because an issuer reading a version-1 blob would find no site
+// and refuse to build a document that is perfectly issuable.
+const CompanyConfigVersion = int8(2)
 
 type CompanyConfig struct {
 	Version       int8                     `cb:"1"`
@@ -41,17 +46,54 @@ type CompanyConfig struct {
 	Sunat         CompanyConfigSunat       `cb:"6"`
 	Culqi         CompanyConfigCulqi       `cb:"7"`
 	Parameters    []CompanyConfigParameter `cb:"8"`
+	Sites         []CompanyConfigSite      `cb:"9"`
 }
 
+// CompanyConfigSite is an establishment, carrying what a document has to declare
+// about the place it was issued from and nothing else.
+//
+// The sites are in the blob because every emission needs one: the series names the
+// establishment, and resolving it used to be a cluster read per document. CityID is
+// the six-digit INEI code, which is exactly the ubigeo SUNAT expects.
+//
+// Status travels with them because a series can name a site that was later retired,
+// and a document already issued under it still has to build.
+type CompanyConfigSite struct {
+	ID      int32  `cb:"1"`
+	Name    string `cb:"2"`
+	Address string `cb:"3"`
+	CityID  int32  `cb:"4"`
+	Status  int8   `cb:"5"`
+}
+
+// CompanyConfigCompany is the taxpayer, as every document declares it.
+//
+// The fiscal address is carried resolved — the ubigeo and the three names SUNAT
+// asks for — rather than as the district id alone. The names live in the city
+// catalog, which is a table of 2000 rows nobody should read to sign one document,
+// and they only change when the catalog is re-imported.
 type CompanyConfigCompany struct {
 	RUC               string `cb:"1"`
 	LegalName         string `cb:"2"`
 	TradeName         string `cb:"3"`
 	Address           string `cb:"4"`
-	City              string `cb:"5"`
+	CityID            int32  `cb:"5"`
 	Phone             string `cb:"6"`
 	Email             string `cb:"7"`
 	NotificationEmail string `cb:"8"`
+	District          string `cb:"9"`
+	Province          string `cb:"10"`
+	Department        string `cb:"11"`
+}
+
+// Ubigeo is the six-digit INEI code of the fiscal address, which is what SUNAT
+// validates. The catalog is keyed by the code but stores it as an integer, so the
+// leading zeros of a department like Amazonas (01) have to be put back.
+func (e CompanyConfigCompany) Ubigeo() string {
+	if e.CityID <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%06d", e.CityID)
 }
 
 // CompanyConfigSunat is what signing and transmitting a document needs.
@@ -101,7 +143,8 @@ type CompanyConfigParameter struct {
 // secrets may be nil: a company that has not configured SUNAT yet still has a
 // config worth caching, it just cannot issue. Everything else is required.
 func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
-	parameters []Parameters) (*CompanyConfig, error) {
+	parameters []Parameters, sites []business.Site,
+	cities []business.CityLocation) (*CompanyConfig, error) {
 
 	if company == nil {
 		return nil, errors.New("no se puede compactar la configuración de una empresa vacía")
@@ -117,7 +160,7 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 			LegalName:         company.LegalName,
 			TradeName:         company.Name,
 			Address:           company.Address,
-			City:              company.City,
+			CityID:            company.CityID,
 			Phone:             company.Phone,
 			Email:             company.Email,
 			NotificationEmail: company.NotificationEmail,
@@ -136,6 +179,7 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 	if config.Company.LegalName == "" {
 		config.Company.LegalName = company.Name
 	}
+	fillFiscalAddressNames(&config.Company, cities)
 
 	for _, parameter := range parameters {
 		if parameter.Status != 1 {
@@ -153,6 +197,22 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 		}
 	}
 
+	// Retired sites are kept, unlike retired parameters: a series can name a site
+	// that was deactivated afterwards, and the documents issued under it still have
+	// to declare the address they were issued from.
+	for _, site := range sites {
+		config.Sites = append(config.Sites, CompanyConfigSite{
+			ID:      site.ID,
+			Name:    site.Name,
+			Address: site.Address,
+			CityID:  site.CityID,
+			Status:  site.Status,
+		})
+		if site.Updated > config.SourceUpdated {
+			config.SourceUpdated = site.Updated
+		}
+	}
+
 	if secrets != nil {
 		if err := fillSunatSecrets(&config.Sunat, secrets); err != nil {
 			return nil, err
@@ -163,6 +223,36 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 	}
 
 	return &config, nil
+}
+
+// fillFiscalAddressNames resolves the district, province and department of the
+// company's ubigeo.
+//
+// The three are read off the catalog rows the caller passed, matched by id: the
+// ubigeo *is* the id, and a district's parents are its own code truncated — 150101
+// sits under 1501 under 15 — which is how the rest of the codebase walks it too.
+// Nothing is filled when the company has no district picked, so a company that has
+// not completed its address produces a blob that says so rather than a plausible
+// wrong address.
+func fillFiscalAddressNames(company *CompanyConfigCompany, cities []business.CityLocation) {
+	if company.CityID <= 0 {
+		return
+	}
+
+	districtID := company.CityID
+	provinceID := districtID / 100
+	departmentID := provinceID / 100
+
+	for _, city := range cities {
+		switch city.ID {
+		case districtID:
+			company.District = city.Name
+		case provinceID:
+			company.Province = city.Name
+		case departmentID:
+			company.Department = city.Name
+		}
+	}
 }
 
 // fillSunatSecrets decrypts the credentials and reduces the .pfx to the two pieces

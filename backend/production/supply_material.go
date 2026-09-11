@@ -14,7 +14,7 @@ import (
 func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
 	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 
 	supplyRecords := []types.Product{}
 	supplyQuery := db.Query(&supplyRecords).CompanyID.Equals(req.User.CompanyID)

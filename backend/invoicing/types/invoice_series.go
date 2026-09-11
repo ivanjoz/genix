@@ -49,9 +49,11 @@ type InvoiceSeries struct {
 // what it corrects, not by a per-type preference, so a default there would be a
 // wrong answer waiting to be used.
 // They are seeded with no site, because a company has none when it is created.
-// SiteID 0 means the company's own fiscal address, which is what SUNAT calls the
-// main establishment and codes 0000 — the right answer for a single-site company
-// and the fallback BuildIssuer already implements.
+// SiteID 0 means "the company's only establishment": BuildIssuer resolves it to the
+// single active site, which is the right answer for a single-site company and the
+// only unambiguous one. A company with several branches has to name the site on the
+// series, because the address travels to SUNAT and the wrong branch is a
+// misdeclaration.
 func DefaultInvoiceSeries() []InvoiceSeries {
 	return []InvoiceSeries{
 		{SeriesID: 1, DocType: DocTypeFactura, SeriesCode: "F001", IsDefault: 1, Status: 1},
@@ -177,9 +179,10 @@ func ValidateSeries(allSeries []InvoiceSeries) error {
 			seenCode[series.SeriesCode] = true
 		}
 
-		// SiteID 0 is allowed and means the company's own fiscal address — SUNAT's
-		// main establishment, coded 0000. Requiring a site would make the seeded
-		// series unsaveable until somebody created one.
+		// SiteID 0 is allowed and means the company's only establishment, resolved
+		// at emission. Requiring a site here would make the seeded series unsaveable
+		// until somebody created one, and a company with a single site never has to
+		// think about it.
 
 		if series.IsDefault == 1 && series.Status == 1 {
 			if defaultOfType[series.DocType] {

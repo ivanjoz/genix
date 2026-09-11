@@ -248,8 +248,8 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 	warehouseID := int32(req.GetQueryInt("warehouse-id"))
 	// Each table advances its own "updated_version" sequence, so the two response keys carry
 	// independent watermarks; the frontend sends one query param per key, named after it.
-	productStockUpdatedSince := int32(req.GetQueryInt("ProductStock"))
-	productStockDetailUpdatedSince := int32(req.GetQueryInt("ProductStockDetail"))
+	productStockUpdatedSince := req.GetUpVersion("ProductStock")
+	productStockDetailUpdatedSince := req.GetUpVersion("ProductStockDetail")
 
 	result := GetProductsStockResult{}
 
@@ -285,7 +285,7 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
-	updatedSince := req.GetQueryInt("upv")
+	updatedSince := req.GetUpVersion()
 
 	productsStock := []types.ProductStock{}
 	// No WarehouseID pinned here, so Delta() routes to the [Status] delta index instead.

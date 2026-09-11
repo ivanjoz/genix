@@ -5,6 +5,7 @@ import (
 	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
+	invoicing "app/invoicing/types"
 	logistics "app/logistics/types"
 	production "app/production/types"
 	"app/sales/types"
@@ -37,6 +38,11 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	sale := saleRequest
+
+	// The series the sale is issued under, resolved in the create branch below and
+	// used to number its document. Nil when the till named none, and always nil on
+	// an update: the series is part of the sale id and cannot change.
+	var issueSeries *invoicing.InvoiceSeries
 
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
@@ -80,6 +86,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// the client sent. This is the only place that loads products, and it is what stops
 		// a crafted request from booking a sale at an invented price.
 		if err := validateSaleOrderLines(req, &sale); err != nil {
+			return req.MakeErr(err)
+		}
+
+		// Runs on the total the catalog just resolved, and before the client is
+		// created: a sale that cannot be issued must not leave a client row behind.
+		// The series it returns is what the document is numbered in, further down.
+		issueSeries, err = resolveSaleOrderIssueSeries(req, &sale)
+		if err != nil {
 			return req.MakeErr(err)
 		}
 
@@ -137,17 +151,45 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	saleActions := []int8{}
 	if !isUpdate {
-		saleID, idErr := types.MakeSaleOrderID(req.User.CompanyID, sale.IssueSeriesID)
-		if idErr != nil {
-			return req.MakeErr("Error al obtener el ID de la venta:", idErr)
+		// The sale id carries the correlativo of its series, so minting it and
+		// reserving the comprobante's number are one act — and the document is
+		// validated before that number is spent, so a sale that cannot be invoiced
+		// is refused with nothing persisted and no gap left in the series.
+		var pendingDocument *invoicing.InvoiceDocument
+		if issueSeries != nil {
+			pendingDocument, err = invoicing.PrepareDocumentForSale(
+				req.User.CompanyID, req.User.ID, &sale, issueSeries)
+			if err != nil {
+				return req.MakeErr("No se pudo generar el comprobante de la venta:", err)
+			}
+		} else {
+			// No comprobante: the id comes from the series-0 counter, which nothing
+			// is ever declared from.
+			saleID, idErr := types.MakeSaleOrderID(req.User.CompanyID, 0)
+			if idErr != nil {
+				return req.MakeErr("Error al obtener el ID de la venta:", idErr)
+			}
+			sale.ID = saleID
 		}
-		sale.ID = saleID
 
 		sales := []types.SaleOrder{sale}
 		saleActions = append(saleActions, 1)
 
 		if err := db.Insert(&sales); err != nil {
 			return req.MakeErr("Error al registrar la venta:", err)
+		}
+
+		// Written after the sale, because every send rebuilds the document from it.
+		// This is the one step that can leave the two out of step: the sale is
+		// already committed and there is no transaction to undo it, so the failure
+		// is reported and logged rather than silently swallowed.
+		if pendingDocument != nil {
+			if docErr := invoicing.SaveNewDocument(pendingDocument); docErr != nil {
+				core.Log("VENTA SIN COMPROBANTE:: la venta", sale.ID,
+					"se registró pero su comprobante no pudo guardarse:", docErr)
+				return req.MakeErr("La venta se registró pero no se pudo guardar su comprobante:", docErr)
+			}
+			invoicing.ScheduleEmitPendingSweep(req.User.CompanyID)
 		}
 	}
 

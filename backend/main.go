@@ -19,6 +19,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -149,7 +150,29 @@ func LambdaStreamingHandler(_ context.Context, request *events.APIGatewayV2HTTPR
 	return runLambdaRequest(request).LambdaStreamingResponse, nil
 }
 
+// serializedAPIRequests is the queue behind config.toml's disable_api_concurrency_local. The lock
+// is taken for the whole request, so the log of one API is never interleaved with another's.
+var serializedAPIRequests sync.Mutex
+
+// shouldSerializeRequest keeps the queue away from the two shapes that would turn it into a hang.
+//
+// A `-stream` route (SSE) holds its connection until the client goes away, and an agent turn waits
+// on an LLM: either one would own the lock for minutes while every other request piles up behind
+// it. They are also the two shapes whose logs are already self-contained, which is what the flag
+// is for. Everything else — the delta syncs a page load fires in parallel — queues.
+func shouldSerializeRequest(routePath string) bool {
+	if !core.Env.DISABLE_API_CONCURRENCY_LOCAL {
+		return false
+	}
+	return !strings.HasSuffix(routePath, "-stream") && !strings.HasSuffix(routePath, "agent-turn")
+}
+
 func LocalHandler(w http.ResponseWriter, request *http.Request) {
+	if shouldSerializeRequest(request.URL.Path) {
+		serializedAPIRequests.Lock()
+		defer serializedAPIRequests.Unlock()
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			errStr := fmt.Sprintf("Internal Server Error (Panic in LocalHandler): %v", r)
@@ -379,18 +402,14 @@ func main() {
 		core.Env.LOGS_FULL = true
 	}
 
-	// Mirror runtime logging flags into db so query debug logs follow the
-	// resolved environment: LOGS_FULL → level 2 (verbose), IS_DEV_ARG → level
-	// 1 (basic), otherwise silent.
-	dbLogLevel := 0
-	/*
-		if core.Env.IS_DEV_ARG {
-			dbLogLevel = 1
-		}
-		if core.Env.LOGS_FULL {
-			dbLogLevel = 2
-		}
-	*/
+	// GENIX_DB_LOG turns the ORM's own logging on for a debugging session without touching code:
+	// 1 prints every statement with its values inlined — which is what makes a delta's watermark
+	// predicate visible — and 2 adds the verbose internal traces. Unset means silent, because at
+	// level 1 a page load prints one line per query.
+	dbLogLevel, _ := strconv.Atoi(os.Getenv("GENIX_DB_LOG"))
+	if dbLogLevel > 0 {
+		fmt.Println("ORM logging habilitado. GENIX_DB_LOG =", dbLogLevel)
+	}
 	db.SetDebugLogging(dbLogLevel)
 
 	// Create project-local tmp/promps once so per-call prompt writes can skip

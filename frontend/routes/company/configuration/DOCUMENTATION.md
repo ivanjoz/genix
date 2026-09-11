@@ -103,8 +103,14 @@ the form directly (no separate edit mode) and use the top-right **Save (Guardar)
   the page blocks Save locally and names the empty ones, e.g. "Missing required data: RUC, Legal
   Name (Faltan datos a guardar: RUC, Razón Social)".
 - **Email (Correo Electrónico)**, **Phone (Teléfono)**, **Representative (Representante)**, **Legal
-  Address (Dirección Legal)**, and **City (Ciudad)** are optional. Email is optional because
-  companies created by seeding or import have none; only public sign-up sets one.
+  Address (Dirección Legal)** and the district selector are optional to save. Email is optional
+  because companies created by seeding or import have none; only public sign-up sets one.
+- The district field — **Departamento | Provincia | Distrito** — is a picker over the official
+  ubigeo catalog, the same one the Sedes form uses, not a free-text city. It is optional to save
+  but **required to issue an electronic document**: the ubigeo and the three names it carries are
+  what the comprobante declares as the issuer's fiscal address (`domicilio fiscal`), and SUNAT
+  validates them. A company that has not picked one gets *"la empresa no tiene ciudad configurada:
+  selecciónela en Mi Empresa para poder emitir"* when a comprobante is sent.
 - The server independently rejects a save whose Name, RUC, or Legal Name is empty with
   "Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC." — but, unlike the
   SaaS **Companies** page, it does not enforce any minimum character length on these values here.

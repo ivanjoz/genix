@@ -103,23 +103,26 @@ export interface IProductResult {
 export class ProductsService extends GetHandler<IProduct> {
   route = "products"
   routeByID = "p-products-ids"
-  useCache = { min: 1, ver: 12 }
+  // ver 13: the route answers {records, records_IDsToRemove} instead of a bare array, so a
+  // supply (ss=2) is dropped from the snapshot rather than cached as a priceless product.
+  useCache = { min: 1, ver: 13 }
 	inferRemoveFromStatus = true
   prependOnSave = true
-	
+
 	makeName(record: Partial<IProduct>) {
 		return record.Name || ""
 	}
 
-  handler(result: IProduct[]): void {
-    for(const e of result){
+  handler(result: { records?: IProduct[] }): void {
+    const products = result?.records || []
+    for(const e of products){
       e.Image = mainProductImage(e)
       e.CategoryIDs = e.CategoryIDs || []
     }
     this.records = []
     this.recordsMap = new Map()
     this.nameToRecordMap = new Map()
-		this.addSavedRecords(...result)
+		this.addSavedRecords(...products)
 		this.records.sort((a, b) => b.ID - a.ID)
   }
 
