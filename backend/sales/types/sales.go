@@ -196,7 +196,7 @@ type SaleSummary struct {
 // nothing. That is what bounds the Sub* fields — a normalized Sub is always below the
 // divisor, and the divisor tops out at core.MaxQuantityDivisor (1000) — so they are int16.
 type SaleOrderProductStats struct {
-	Quantity int32 `cb:"1,minimal"`
+	Quantity int32 `cb:"1"`
 	// Bounded by Quantity, so it carries the same width. Only the Sub* halves are bounded by
 	// the divisor and can narrow.
 	QuantityPendingDelivery    int32 `cb:"2"`

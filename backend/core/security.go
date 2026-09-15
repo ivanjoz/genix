@@ -438,6 +438,33 @@ func makeFarewardAddress(host string, port int, public, isDevArg, useRemoteDevHo
 	return fmt.Sprintf("%v:%d", host, port)
 }
 
+// farewardAddressUnusableInLambda reports whether a resolved address can only be wrong for a
+// Lambda-hosted backend. Nothing listens on the loopback interface of an invocation sandbox, so a
+// loopback address there is never a deployment's choice: it is the signature of a CONFIG whose
+// [fareward] section is absent, renamed or private, which makeFarewardAddress cannot tell apart
+// from a deliberate public = false. The stale-CONFIG case is the likely one, because publishing
+// code and pushing CONFIG are two different deploy actions.
+//
+// It is only checked under Lambda. A VPS or a dev machine dials its own daemon over loopback, which
+// is the normal arrangement there.
+func farewardAddressUnusableInLambda(address string, isServerless bool) bool {
+	if !isServerless {
+		return false
+	}
+	host, _, splitErr := net.SplitHostPort(strings.TrimSpace(address))
+	if splitErr != nil {
+		// No port component: judge the whole token as the host.
+		host = strings.TrimSpace(address)
+	}
+	if host == "" {
+		return true
+	}
+	if parsedIP := net.ParseIP(host); parsedIP != nil {
+		return parsedIP.IsLoopback() || parsedIP.IsUnspecified()
+	}
+	return strings.EqualFold(host, "localhost")
+}
+
 func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.APP_NAME = file.AppName
 	env.ENVIROMENT = file.Environment
@@ -665,6 +692,15 @@ func PopulateVariables() {
 	Env.FAREWARD_ADDRESS = strings.TrimSpace(Env.FAREWARD_ADDRESS)
 	if Env.FAREWARD_ADDRESS == "" {
 		Env.FAREWARD_ADDRESS = "127.0.0.1:14013"
+	}
+	// Fail at startup rather than at the first lock, credit charge or access check, each of which
+	// would report a connection refused to an address nobody configured on purpose.
+	if farewardAddressUnusableInLambda(Env.FAREWARD_ADDRESS, isServerlessRuntime) {
+		panic(fmt.Sprintf(
+			"fareward address %q cannot be reached from Lambda: the CONFIG variable carries no "+
+				"[fareward] section with public = true and a host. Push the current config.toml "+
+				"with deploy action 13 (or `cd cloud && go run . accion=2`).",
+			Env.FAREWARD_ADDRESS))
 	}
 	// Public registration must never be unlimited by omission, so an absent or nonsensical
 	// setting falls back to the documented defaults instead of to zero.

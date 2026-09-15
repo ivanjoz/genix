@@ -12,12 +12,18 @@ import (
 	"golang.org/x/crypto/blake2s"
 )
 
+// UsuarioToken is the session credential the browser holds. Five of its fields reach the wire,
+// and their `cb` ids are declared rather than left to colbin's name hash for two reasons: ids
+// under sixteen put the message on four-bit keys, which is a byte per field off a cookie sent
+// with every request, and the fareward bridge decodes this same token in Rust — a declared id is
+// a number both sides can read, where a derived one is an agreement between two hash
+// implementations that nothing checks until a login silently fails.
 type UsuarioToken struct {
-	CompanyID int32  `json:"c"`
-	ID        int32  `json:"i"`
-	Created   int32  `json:"e"`
-	Hash      []byte `json:"h"`
-	User      string `json:"u"`
+	CompanyID int32  `json:"c" cb:"1"`
+	ID        int32  `json:"i" cb:"2"`
+	Created   int32  `json:"e" cb:"3"`
+	Hash      []byte `json:"h" cb:"4"`
+	User      string `json:"u" cb:"5"`
 	Error     string `json:"-" cb:"-"` // transient; never serialized into the token
 	// SubAccesos is what the gate learned from fareward about THIS request: the sub-access mask of
 	// each access that authorized the route being served, keyed by access id.

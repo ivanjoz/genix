@@ -689,7 +689,7 @@ err := db.Merge(
   - `db:",set"` forces `set<...>`
   - `db:",frozen"` forces `frozen<list<...>>`
   - `db:",frozen,set"` (or `db:",set,frozen"`) forces `frozen<set<...>>`
-- **Complex structs/maps/slices**: persisted as CBOR `blob`
+- **Complex structs/maps/slices**: persisted as a colbin `blob`
 
 ---
 

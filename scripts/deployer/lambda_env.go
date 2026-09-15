@@ -70,16 +70,20 @@ func updateLambdaEnvironmentVariables(context deployContext) error {
 	fmt.Printf("Perfil: %s | Región: %s | App: %s\n",
 		config.AWS.Profile, config.AWS.Region, config.AppName)
 
-	configValue, err := compressToUrlSafeBase64(configContent)
+	configValue, err := compressToUrlSafeBase64(stripTomlComments(configContent))
 	if err != nil {
 		return err
 	}
 
-	backendEnvironment := map[string]map[string]string{"Variables": {
+	backendVariables := map[string]string{
 		"APP_CODE":                  lambdaAppCode,
 		"CONFIG":                    configValue,
 		"LAMBDA_RESPONSE_STREAMING": lambdaResponseStreaming,
-	}}
+	}
+	if err := checkLambdaEnvironmentFits(backendVariables); err != nil {
+		return err
+	}
+	backendEnvironment := map[string]map[string]string{"Variables": backendVariables}
 
 	someLambdaFailed := false
 	for _, lambdaName := range []string{config.AppName + "-backend", config.AppName + "-backend_2"} {
@@ -128,6 +132,44 @@ func updateLambdaEnvironmentVariables(context deployContext) error {
 		return fmt.Errorf("una o más Lambdas no se pudieron actualizar")
 	}
 	fmt.Println("✅ Variables de entorno actualizadas!")
+	return nil
+}
+
+// lambdaEnvironmentMaxBytes es el límite duro de AWS para la suma de claves y valores del entorno
+// de una función. Mismo valor y mismo motivo que en cloud/helpers.go, que es otro módulo Go.
+const lambdaEnvironmentMaxBytes = 4096
+
+// stripTomlComments quita los comentarios de línea completa y las líneas vacías: config.toml está
+// documentado línea por línea y comprimido en base64 ya no cabe en los 4 KB del entorno. El
+// backend parsea TOML, donde un comentario no aporta nada, así que se pierden sólo en la copia que
+// viaja. Seguro mientras config.toml no use cadenas multilínea ("""), donde un # inicial sería
+// contenido. Gemela de cloud.StripTomlComments.
+func stripTomlComments(content []byte) []byte {
+	keptLines := []string{}
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		keptLines = append(keptLines, line)
+	}
+	return []byte(strings.Join(keptLines, "\n") + "\n")
+}
+
+// checkLambdaEnvironmentFits reporta el tamaño antes de llamar a AWS, cuyo
+// InvalidParameterValueException no dice qué variable creció ni cuánto margen queda.
+func checkLambdaEnvironmentFits(variables map[string]string) error {
+	totalBytes := 0
+	for name, value := range variables {
+		totalBytes += len(name) + len(value)
+	}
+	if totalBytes > lambdaEnvironmentMaxBytes {
+		return fmt.Errorf(
+			"el entorno de la Lambda mide %v bytes y el límite de AWS es %v: recorte config.toml "+
+				"(los comentarios ya no viajan) o mueva alguna sección fuera de la CONFIG",
+			totalBytes, lambdaEnvironmentMaxBytes)
+	}
+	fmt.Printf("Entorno de la Lambda: %v de %v bytes\n", totalBytes, lambdaEnvironmentMaxBytes)
 	return nil
 }
 

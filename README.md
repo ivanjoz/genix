@@ -80,7 +80,7 @@ The frontend (`frontend/libs/cache/`) minimizes network traffic and moves relati
 3. **Cache-by-IDs** (`cache-by-ids.*`) — resolves individual records by `ID` with backend delta validation via the `ccv` cache-version. Requests are batched into one call per route. This is how joins happen on the client: a page fetches its primary data, then resolves referenced dictionaries/lookups by ID from cache — fetching only the IDs that are missing or stale.
 
 ### colbin — columnar delta binary serializer
-A serializer (`backend/libs/colbin/`) that replaced CBOR project-wide. Transposes slices-of-structs from row layout to columnar (SoA) layout and applies frame-of-reference delta encoding plus bit-level bit-packing per numeric column. Benchmarks at ~3× smaller and ~2.8× faster to decode than CBOR on ERP row batches. Used by the ORM to persist complex blob columns. Struct tag: `cb:"name"` (`cb:"-"` to skip).
+A serializer ([`github.com/ivanjoz/colbin`](https://github.com/ivanjoz/colbin), its own repo) that is the project's only binary format. A message is a sequence of `[key][descriptor][payload]` fields: nothing is packed across a byte boundary, no size is a varint, and a field holding its zero value is not written at all. A long slice of structs transposes from row layout to columnar (SoA) and gets per-column bit-packing. Used by the ORM to persist complex blob columns, by the session token, and by six of the eight fareward wire shapes. Struct tag: `cb:"1"` — ids count from one, `cb:"name,1"` also names the field for a schema reader, `cb:"-"` skips it.
 
 ### Agentic capabilities (backend-driven)
 The agent loop runs on the backend. A user sends a request from an in-app chat widget; the backend runs an LLM tool-calling loop (OpenRouter) that either drives the live ERP page or authors website HTML. Two loops share the infrastructure:
@@ -141,7 +141,7 @@ Legend: ✅ done · 🟡 partial / in progress · ⬜ not started
 ### Foundations & platform
 - ✅ Custom ScyllaDB ORM (fluent queries, views, delta cache, schema deploy)
 - ✅ Three-layer frontend cache (delta cache, query-block cache, cache-by-IDs) with client-side joins
-- ✅ colbin columnar serializer (replaced CBOR project-wide)
+- ✅ colbin columnar serializer (the project's only binary format)
 - ✅ Hybrid runtime: AWS Lambda / single binary / exec+cron modes
 - ✅ Multi-tenancy by `empresa_id` partitioning + tenant-scoped auth
 - ✅ Independent providers via `providers.backend` (DynamoDB / D1) and `providers.cdn` (S3 / R2)

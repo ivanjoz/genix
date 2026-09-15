@@ -107,6 +107,10 @@ github.com/ivanjoz/colbin v0.0.0-20260801035440-7af4690efc94 h1:do3Fu7qSRyd451IU
 github.com/ivanjoz/colbin v0.0.0-20260801035440-7af4690efc94/go.mod h1:7H1tvZkQWq/TQkXqltx+l0jhuC5gCMOLvn6yXyNTcHg=
 github.com/ivanjoz/colbin v0.1.0 h1:XPIrgh0wNRnRJTJS3Lo2PrpDzr7VjHEmMfbcy8kvhvc=
 github.com/ivanjoz/colbin v0.1.0/go.mod h1:rek4A5VCaLUov8kkxEfvJOjnQvw3CxYms+dKKA4ClbU=
+github.com/ivanjoz/colbin v0.2.0 h1:i17YPRasgAJaEk7fltEAA3glui9pnCuuG7f28ZW3wQs=
+github.com/ivanjoz/colbin v0.2.0/go.mod h1:pWdUjr0rQ6L6TzHvLSYoCysah4J49adSuttNZyvMKOs=
+github.com/ivanjoz/colbin v0.3.0 h1:iyNAjwvDU6RK0auiE7U7htBgoZCeCQ9m78JZ7viDhhs=
+github.com/ivanjoz/colbin v0.3.0/go.mod h1:zBw/J/PSmEpn5YbOLq+ssIyK1QCTBBkEOWytIaiywI0=
 github.com/ivanjoz/minijson v0.1.0 h1:hcdHza31zvndZxhS0lzwVvJ4e290Q3/kknIpwphSJeY=
 github.com/ivanjoz/minijson v0.1.0/go.mod h1:/1F+A16/a/oz8auzRfT6LiscYdph5swvutI+4KeUb7Q=
 github.com/jmespath/go-jmespath v0.4.0 h1:BEgLn5cpjn8UN1mAw4NjwDrS35OdebyEtFe+9YPoQUg=

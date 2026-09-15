@@ -94,3 +94,33 @@ func TestFarewardAddressDerivesTheHostFromPublic(t *testing.T) {
 		}
 	}
 }
+
+func TestFarewardLoopbackIsRefusedOnlyUnderLambda(t *testing.T) {
+	checks := []struct {
+		name         string
+		address      string
+		isServerless bool
+		want         bool
+	}{
+		// The shape a stale CONFIG produces: no readable [fareward] section, so public is false and
+		// the address collapses to loopback, which no Lambda sandbox has anything listening on.
+		{"loopback under lambda", "127.0.0.1:14013", true, true},
+		{"another loopback address", "127.0.0.53:14013", true, true},
+		{"localhost by name", "localhost:14013", true, true},
+		{"unspecified address", "0.0.0.0:14013", true, true},
+		{"ipv6 loopback", "[::1]:14013", true, true},
+		{"empty address", "   ", true, true},
+		{"host without a port", "localhost", true, true},
+		{"a reachable host", "150.136.42.240:14013", true, false},
+		{"a reachable hostname", "fareward.un.pe:14013", true, false},
+		// A VPS and a dev machine run the daemon beside the backend, so loopback is correct there.
+		{"loopback off lambda", "127.0.0.1:14013", false, false},
+		{"empty off lambda", "", false, false},
+	}
+	for _, check := range checks {
+		got := farewardAddressUnusableInLambda(check.address, check.isServerless)
+		if got != check.want {
+			t.Fatalf("%s: got %t; want %t", check.name, got, check.want)
+		}
+	}
+}

@@ -80,6 +80,18 @@ SERVICE_NAME = "fareward.service"
 RESTART_SERVICE_NAME = "fareward-restart.service"
 RESTART_PATH_NAME = "fareward-restart.path"
 
+# The unit names this daemon shipped under before the repository was renamed to fareward. They are
+# not history: a host configured before the rename still has them enabled and running, and the old
+# process keeps the listen port, so the new unit cannot bind and restarts forever while the old
+# binary — which speaks an older wire domain and knows nothing of the newer opcodes — answers the
+# backend and closes every frame it cannot parse. Removing them is part of installing this service.
+LEGACY_UNIT_NAMES = (
+    "genix-server-utils.service",
+    "genix-server-utils-restart.service",
+    "genix-server-utils-restart.path",
+)
+LEGACY_BINARY_PATH = SERVICE_INSTALL_DIRECTORY / "genix-server-utils"
+
 # Must match DEFAULT_BRIDGE_PORT and DEFAULT_LISTEN_PORT in fareward/src/config.rs, and
 # defaultFarewardPort in backend/core/security.go, which is the client's half of the same
 # default. The three drifting apart puts the daemon on one port and every caller on another.
@@ -107,10 +119,18 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
         "[fareward] public (true = 0.0.0.0, false = 127.0.0.1) precisely so a NAT'd public IP "
         "is never bound: on a cloud VM that address lives in the provider's NAT, not on the NIC.",
     ),
+    # Two fragments for one failure: the daemon reports the OS error verbatim as "Address in use
+    # (os error 98)", which does not contain the phrase systemd and most tools print. Matching only
+    # the long form is why a bind conflict used to be diagnosed as "no known cause".
+    (
+        "Address in use",
+        "another process already holds that port. Find it with 'ss -lntp | grep <port>' — most "
+        "often the pre-rename genix-server-utils service, or a copy started outside systemd.",
+    ),
     (
         "Address already in use",
         "another process already holds that port. Find it with 'ss -lntp | grep <port>' — most "
-        "often a copy of this daemon started outside systemd.",
+        "often the pre-rename genix-server-utils service, or a copy started outside systemd.",
     ),
     (
         "credit_usage",
@@ -918,8 +938,39 @@ ExecStart=/usr/bin/systemctl restart {SERVICE_NAME}
 """
 
 
+def remove_legacy_units():
+    """Retire the pre-rename units so the port they hold is free for this one.
+
+    Each step tolerates failure because most hosts have none of them: stop and disable are no-ops
+    on a name systemd never knew, and the unit file may already be gone. The old binary is left on
+    disk — inert once nothing starts it, and evidence of what was running here.
+    """
+    removed_any_unit = False
+    for legacy_unit_name in LEGACY_UNIT_NAMES:
+        unit_path = SYSTEMD_DIRECTORY / legacy_unit_name
+        unit_is_known = (
+            run_command(
+                ["systemctl", "list-unit-files", legacy_unit_name], allow_failure=True
+            ).returncode
+            == 0
+            and unit_path.exists()
+        )
+        if not unit_is_known:
+            continue
+        print_debug(f"Removing the pre-rename unit {legacy_unit_name}.")
+        run_command(["systemctl", "stop", legacy_unit_name], allow_failure=True)
+        run_command(["systemctl", "disable", legacy_unit_name], allow_failure=True)
+        unit_path.unlink(missing_ok=True)
+        removed_any_unit = True
+
+    if removed_any_unit and LEGACY_BINARY_PATH.exists():
+        print_debug(f"The superseded binary is left in place: {LEGACY_BINARY_PATH}")
+    return removed_any_unit
+
+
 def configure_systemd_units(runtime_username, repository_config_path, bridge_port):
     unit_files_changed = [
+        remove_legacy_units(),
         write_unit_file(
             SYSTEMD_DIRECTORY / SERVICE_NAME,
             build_service_contents(runtime_username, repository_config_path, bridge_port),

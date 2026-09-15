@@ -1,3 +1,36 @@
+## Installing fareward retires the `genix-server-utils` units
+
+**Context** — The rename gave the daemon new unit names and the installer simply started writing
+them. On a host configured before the rename the old unit stayed enabled and running, so the new
+`fareward.service` could never bind 14013 — 530 restarts on the production VPS — while the August
+binary kept the port and answered the backend it no longer speaks the protocol of (`:v8`, no
+sequence opcode). The backend saw a connection closed with no reply, which only the sequence
+allocator reports, because locks and charges tolerate an unreachable daemon.
+
+**Decision** — `remove_legacy_units` stops, disables and deletes `genix-server-utils.service` and
+its two helper units before the new units are written, and counts as a systemd change so the
+reload happens. The superseded binary is left on disk. The failure table also matches `Address in
+use`, the daemon's own wording, next to the `Address already in use` that systemd prints.
+
+**Rationale** — Only the installer touches units, so only it can retire one; leaving the removal to
+the operator is what produced a port conflict that nothing diagnosed. It is not a compatibility
+shim — nothing reads the old unit, it is deleted — and the diagnosis bug is the reason to do both at
+once: the installer had the perfect explanation for this failure and printed "no known cause",
+because it was matching a phrase this daemon never writes.
+
+## The deploy TUI keeps a separate env-only action
+
+**Context** — `cloud accion=1` now pushes the Lambda `CONFIG` as well as the code, which makes the
+TUI's action 13 (`updateLambdaEnvironmentVariables`, AWS CLI) look redundant.
+
+**Decision** — Action 13 stays, and it grew the same comment-stripping and 4 KB environment check
+as `cloud` — copied, not shared, because `scripts` and `cloud` are separate Go modules.
+
+**Rationale** — Pushing configuration without recompiling and re-uploading a binary is worth an
+action of its own, and it is the only path that also updates the renderer Lambda. Copying twenty
+lines beats a module dependency between two deploy tools; the two are named as each other's twin in
+comments so a change to one is findable from the other.
+
 ## The grant-column change is a data rebuild, not a compatibility shim
 
 **Context** — `users.accesos_computed` kept its grant word but changed container and byte order:

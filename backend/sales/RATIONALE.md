@@ -1,3 +1,17 @@
+## `cb:"1,minimal"` on SaleOrderProductStats.Quantity lost its second token
+
+**Context** — `Quantity` was tagged `cb:"1,minimal"`. `minimal` was a mode in the old colbin — a
+second encoding a field could ask for — and that mode no longer exists. colbin v0.3.0 reads a `cb`
+tag as `id` or `name,id`, so a leftover word is not ignored: it is taken as the field's **name**.
+
+**Decision** — Cut it back to `cb:"1"`.
+
+**Rationale** — The tag was silently renaming the field to `minimal` for anything reading the type
+through a schema — `SchemaFor`, `ToJSON`, the browser client. Nothing in the tree does that with
+this type today, so nothing was broken, which is exactly why it would have kept sitting there. The
+wire bytes are unaffected either way: a name lives in the schema section, never in a message. This
+was the only tag in the repo still carrying the dead token.
+
 ## The sale id carries the correlativo, so there is one counter and not two
 
 **Context** — The human's instruction for the id layout was `[correlativo][rand:2][series:2]`. What

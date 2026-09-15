@@ -125,17 +125,15 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 	// Persist a deterministic keyed fingerprint in the token so auth can recompute and validate it.
 	usuarioToken.Hash = core.ComputeUsuarioTokenHash(usuarioToken)
 
-	// Encode the auth token with colbin to keep the encrypted payload compact and schema-driven.
-	usuarioTokenCBOR, err := colbin.Marshal(usuarioToken)
+	// Encode the auth token with colbin to keep the encrypted payload compact. The five wire
+	// fields carry explicit `cb` ids, which is also what the fareward bridge decodes in Rust.
+	usuarioTokenBytes, err := colbin.Marshal(usuarioToken)
 	if err != nil {
 		return nil, core.Err("Error al serializar el Token de user.", err)
 	}
-	core.Log("MakeUsuarioResponse:: usuarioTokenCBOR bytes", len(usuarioTokenCBOR))
-	core.Log("MakeUsuarioResponse:: token hash", usuarioToken.Hash, "companyID", user.CompanyID,
+	core.Log("MakeUsuarioResponse:: token bytes", len(usuarioTokenBytes),
+		"hash", usuarioToken.Hash, "companyID", user.CompanyID,
 		"userID", user.ID, "accesos bytes", len(accesosBlob), "sub bytes", len(accesosSubBlob))
-
-	// Publish the token as raw CBOR bytes in base64 so auth can decode it without extra transforms.
-	core.Log("MakeUsuarioResponse:: token bytes", len(usuarioTokenCBOR))
 
 	// Crea la informacion del user encriptada
 	userInfo := map[string]any{
@@ -157,7 +155,7 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 
 	response := map[string]any{
 		"UserID":             user.ID,
-		"UserToken":          core.BytesToBase64(usuarioTokenCBOR, true),
+		"UserToken":          core.BytesToBase64(usuarioTokenBytes, true),
 		"TokenExpTime":       time.Now().Unix() + (4 * 60 * 40),
 		"AccesosComputed":    core.BytesToBase64(accesosBlob, true),
 		"AccesosSubComputed": core.BytesToBase64(accesosSubBlob, true),

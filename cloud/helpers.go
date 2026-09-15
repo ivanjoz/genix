@@ -16,6 +16,47 @@ import (
 	"github.com/kr/pretty"
 )
 
+// LambdaEnvironmentMaxBytes es el límite duro de AWS para la suma de claves y valores del
+// entorno de una función. No hay forma de subirlo, así que es la CONFIG la que tiene que caber.
+const LambdaEnvironmentMaxBytes = 4096
+
+// StripTomlComments quita los comentarios de línea completa y las líneas vacías del archivo de
+// configuración antes de comprimirlo. config.toml está documentado línea por línea y eso ya no
+// cabe: comprimido y en base64 pasa de los 4 KB del entorno de la Lambda. El backend parsea TOML,
+// donde un comentario no aporta nada, así que se pierden sólo en la copia que viaja.
+//
+// Sólo mira el primer carácter no vacío de cada línea, lo que es seguro porque config.toml no usa
+// cadenas multilínea ("""): dentro de una, un # inicial sería contenido y no un comentario.
+// scripts/deployer/lambda_env.go repite esta función porque es otro módulo Go.
+func StripTomlComments(content []byte) []byte {
+	keptLines := []string{}
+	for _, line := range strings.Split(string(content), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		keptLines = append(keptLines, line)
+	}
+	return []byte(strings.Join(keptLines, "\n") + "\n")
+}
+
+// AssertLambdaEnvironmentFits falla con el tamaño a la vista en vez de dejar que AWS devuelva su
+// InvalidParameterValueException, que no dice qué variable creció ni cuánto margen queda.
+func AssertLambdaEnvironmentFits(variables map[string]string) {
+	totalBytes := 0
+	for name, value := range variables {
+		totalBytes += len(name) + len(value)
+	}
+	if totalBytes <= LambdaEnvironmentMaxBytes {
+		fmt.Printf("Entorno de la Lambda: %v de %v bytes\n", totalBytes, LambdaEnvironmentMaxBytes)
+		return
+	}
+	panic(fmt.Sprintf(
+		"el entorno de la Lambda mide %v bytes y el límite de AWS es %v: recorte config.toml "+
+			"(los comentarios ya no viajan) o mueva alguna sección fuera de la CONFIG",
+		totalBytes, LambdaEnvironmentMaxBytes))
+}
+
 func MakeAwsConfig(profile, region string) (aws.Config, error) {
 	var cfg aws.Config
 	var err error

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	lambdaTypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
@@ -185,6 +186,12 @@ func main() {
 		DeployLambda(params, 0)
 		CompileBackendToS3(params, false)
 		DeployLambda(params, 2)
+		// El código y su CONFIG viajan juntos: publicar sólo el binario deja a la Lambda leyendo
+		// una configuración de un formato anterior, y una sección renombrada o nueva queda
+		// silenciosamente ausente hasta que alguien recuerda la acción 2. Así pasó con [fareward],
+		// que sin su sección cae a 127.0.0.1 y ninguna petición puede tomar un lock.
+		UpdateEnviromentVariables(params, 0)
+		UpdateEnviromentVariables(params, 2)
 	} else if w1 == "2" {
 		UpdateEnviromentVariables(params, 0)
 		UpdateEnviromentVariables(params, 2)
@@ -298,7 +305,7 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 
 	fmt.Println("Leyendo y comprimiendo el archivo de configuración seleccionado...")
 
-	configText := string(configFileBytes)
+	configText := string(StripTomlComments(configFileBytes))
 	configBase64 := BytesToBase64(CompressZstd(&configText), true)
 
 	// UpdateFunctionConfiguration reemplaza el entorno completo, no lo fusiona: toda variable
@@ -308,6 +315,7 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 		"CONFIG":                    configBase64,
 		"LAMBDA_RESPONSE_STREAMING": lambdaResponseStreamingFlag,
 	}
+	AssertLambdaEnvironmentFits(variables)
 
 	configInput := lambda.UpdateFunctionConfigurationInput{
 		FunctionName: &lambdaName,
@@ -319,15 +327,31 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 	awsConfig, _ := MakeAwsConfig(params.AWS.Profile, params.AWS.Region)
 	client := lambda.NewFromConfig(awsConfig)
 
+	// UpdateFunctionCode deja la función en LastUpdateStatus=InProgress y AWS rechaza cualquier
+	// otra actualización mientras dure, así que publicar código y empujar CONFIG en la misma
+	// corrida fallaría con ResourceConflictException sin esta espera.
+	WaitForLambdaReady(client, lambdaName)
+
 	fmt.Println("Enviando actualización a AWS Lambda...")
 
 	_, err = client.UpdateFunctionConfiguration(context.TODO(), &configInput)
 	if err != nil {
-		fmt.Println("Error al actualizar los parámetros de la Lambda. ", err)
-		return
+		// Un fallo silencioso aquí es el que deja al binario nuevo leyendo la CONFIG anterior,
+		// que es justo lo que la acción 1 pasó a prevenir: se aborta el despliegue.
+		panic("Error al actualizar los parámetros de la Lambda: " + err.Error())
 	}
 
 	fmt.Println("Variables actualizadas!")
+}
+
+// WaitForLambdaReady bloquea hasta que la función acepta otra actualización. Una Lambda ausente
+// no es motivo de espera: la acción que sigue reportará el error real.
+func WaitForLambdaReady(client *lambda.Client, lambdaName string) {
+	waiter := lambda.NewFunctionUpdatedV2Waiter(client)
+	input := lambda.GetFunctionInput{FunctionName: &lambdaName}
+	if err := waiter.Wait(context.TODO(), &input, 5*time.Minute); err != nil {
+		fmt.Println("No se pudo confirmar que la Lambda esté lista:", err)
+	}
 }
 
 // Despliega la infraestructura

@@ -27,7 +27,7 @@ The `req` object is the primary source of information for the handler:
 
 ### Response Patterns
 Handlers must return a `core.HandlerResponse`. Available methods include:
-- **`req.MakeResponse(data)`**: The standard way to return data. It automatically serializes the payload to JSON or CBOR based on the client's `Accept` header.
+- **`req.MakeResponse(data)`**: The standard way to return data. It serializes to JSON — the compact `[keys, content]` form the frontend's `unmarshal()` expects, or plain JSON when the client asked for it. One path for every size, so a large response can never silently change wire format.
 - **`req.MakeResponsePlain(bytes)`**: Returns raw bytes without wrapping. Ideal for file exports, raw text, or custom binary formats.
 - **`req.MakeErr(msg, [err])`**: Returns a structured error. The `msg` parameter should always be in Spanish for consistent user-facing feedback.
 
@@ -49,13 +49,13 @@ var ModuleHandlers = core.AppRouterType{
 
 Understanding how a request flows through the system is vital for debugging and implementing complex logic:
 
-1.  **Transport Layer**: The request arrives via HTTP. If the `Accept` header is `application/cbor`, the system prepares for binary communication.
+1.  **Transport Layer**: The request arrives via HTTP.
 2.  **Authentication Middleware**: The system first validates the session token. If valid, it populates `req.User` with the user's details and permissions.
 3.  **Decompression**: If the payload is compressed (e.g., using Zstd), the system decompresses it before passing it to the handler.
 4.  **Handler Execution**: The specific handler function is called with the populated `HandlerArgs`.
 5.  **Business Logic & DB**: The handler performs validation, interacts with the database (ScyllaDB), and processes assets (S3).
 6.  **Response Construction**: The handler returns a `HandlerResponse` via `MakeResponse` or `MakeErr`.
-7.  **Serialization**: The system serializes the response based on headers (JSON/CBOR).
+7.  **Serialization**: The system serializes the response as JSON.
 8.  **Compression (Optional)**: If the client supports it, the response may be compressed before being sent back.
 
 ---
@@ -409,9 +409,11 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 
 ---
 
-## 12. Serialization: JSON vs CBOR Tags
+## 12. Serialization: JSON and colbin Tags
 
-Structs in `app/types` must be tagged for both formats to ensure consistency.
+A handler response is always JSON. `colbin` is the binary format, and it is used for *storage* —
+complex blob columns, the session token — not for responses, so a struct only needs `cb` tags when
+it is persisted or sent over the fareward wire.
 
 ### JSON Tagging Rules
 - **NEVER** use explicit field names in JSON tags (e.g., `json:"nombre,omitempty"` is forbidden).
@@ -422,16 +424,23 @@ Structs in `app/types` must be tagged for both formats to ensure consistency.
     - `UpdatedVersion` MUST use `json:"upv,omitempty"`, and is required on every table with a
       `db.TypeDelta` index or `SaveUpdatedVersion: true`.
 
-### CBOR Tagging Rules
-- **CBOR**: Used for high-performance internal and mobile traffic. Use integer keys.
-- Integer keys in CBOR are significantly more efficient than string keys.
+### colbin Tagging Rules
+- Only for a struct that is **persisted as a blob column** or crosses the fareward wire.
+- **Ids count from one.** `cb:"1"` is the first field; the wire key it writes is the id minus one.
+- Number the fields rather than leaving them untagged. An untagged field gets its key from a hash of
+  its name, which lands anywhere in 0..255 and forces the message onto eight-bit keys; ids `1..16`
+  keep it on four-bit keys. A number is also what lets a reader in another language agree.
+- `cb:"-"` skips a field entirely. `cb:"name,1"` also gives it a name for a schema reader.
+- A field holding its zero value is never written, so there is no `omitempty` to ask for.
+- **Never renumber an id on a type whose blobs already exist** — the key is the whole of what the
+  decoder matches on, so a renumber silently reassigns stored data to the wrong fields.
 
 ```go
 type Entity struct {
-    ID     int32  `json:",omitempty" cbor:"1,keyasint,omitempty"`
-    Nombre string `json:",omitempty" cbor:"2,keyasint,omitempty"`
-    Status int8   `json:"ss,omitempty" cbor:"3,keyasint,omitempty"`
-    Updated int64 `json:"upd,omitempty" cbor:"4,keyasint,omitempty"`
+    ID      int32  `json:",omitempty" cb:"1"`
+    Nombre  string `json:",omitempty" cb:"2"`
+    Status  int8   `json:"ss,omitempty" cb:"3"`
+    Updated int64  `json:"upd,omitempty" cb:"4"`
 }
 ```
 
@@ -444,7 +453,7 @@ type Entity struct {
 - [ ] Delta reads go through `.Delta(req.GetQueryInt("upv"), 1)` against a `db.TypeDelta` index, not a hand-written `updated > 0` branch.
 - [ ] New records (`ID <= 0`) rely on the ORM to auto-assign the ID during `db.Insert` via the schema's `Autoincrement(N)`. Read back `records[i].ID` after insert when you need the assigned values.
 - [ ] Sensitive fields are protected using `db.UpdateExclude`.
-- [ ] Structs are properly tagged with both JSON and CBOR integer keys.
+- [ ] Structs are properly tagged with JSON keys, plus one-based `cb` ids if they are persisted as a blob column.
 - [ ] All user-facing error messages are in Spanish.
 - [ ] Use `errgroup` for multiple unrelated data fetches.
 - [ ] Verify permissions using `req.HasAcceso(...)` or `req.HasAccesoNivel(...)`.

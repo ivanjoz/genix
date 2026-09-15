@@ -15,33 +15,3 @@ func makeConnParams() scylla.ConnParams {
 		MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
 	}
 }
-
-/*
-func TestInsert(args *core.ExecArgs) core.FuncResponse {
-
-	scylla.TestInsert(makeConnParams())
-
-	return core.FuncResponse{}
-}
-
-func TestQuery(args *core.ExecArgs) core.FuncResponse {
-
-	scylla.TestQuery(makeConnParams())
-
-	return core.FuncResponse{}
-}
-
-func TestCBOR(args *core.ExecArgs) core.FuncResponse {
-
-	scylla.TestCBOR()
-
-	return core.FuncResponse{}
-}
-
-func TestDeploy(args *core.ExecArgs) core.FuncResponse {
-
-	scylla.TestDeploy(makeConnParams())
-
-	return core.FuncResponse{}
-}
-*/

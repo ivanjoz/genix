@@ -1,3 +1,44 @@
+## The session token declares its `cb` ids, and every live session ends at the deploy
+
+**Context** — `core.UsuarioToken` had no `cb` tags, so colbin derived each field id by hashing the
+field name. That works as long as every reader runs the same hash — and one of them is the fareward
+bridge, in Rust, which decodes this token on every SSE connection. An id derived on one side and
+re-derived on the other is an agreement between two hash implementations that nothing checks: if
+they ever disagreed, every token would decode to zero values with no error anywhere.
+
+**Decision** — The five fields that reach the wire carry explicit ids `1..5`. `fareward/vectors`
+prints what the encoder resolved so the Rust side can be compared against it by eye, and
+`src/bridge/token.rs` declares the same numbers in `#[cb(N)]`.
+
+**Rationale** — Two things, one of which is the point. The wire is four bytes shorter, because ids
+`1..16` put the message on colbin's four-bit keys and the derived ones landed anywhere in
+0..255 — a cookie sent with every request. And the cross-language agreement becomes a number both
+sides state rather than a behaviour both sides have to reproduce, which is the same reason
+`RATIONALE.md`'s "Decode the session token with the colbin crate instead of transcribing the format"
+exists.
+
+The cost is that the token's bytes changed, so **every session ends at the deploy** and every user
+logs in again. There is no compatibility path and none was written: the token is short-lived and
+pre-alpha, and carrying two encodings to spare one round of logins would be the wrong trade.
+
+## A loopback fareward address is a startup panic under Lambda
+
+**Context** — `makeFarewardAddress` cannot tell a deliberate `public = false` from a `[fareward]`
+section that is absent, renamed or unparseable: both produce `127.0.0.1:14013`. Under Lambda the
+second case is the likely one, and nothing listens on an invocation sandbox's loopback interface, so
+it surfaced as a connection refused on the first lock — per request, with nothing naming the config
+as the cause.
+
+**Decision** — `farewardAddressUnusableInLambda` judges the resolved address (loopback,
+unspecified, `localhost`, or empty) and `PopulateVariables` panics when it is true and the process is
+serverless. The message names the missing `[fareward]` section and the action that pushes it.
+
+**Rationale** — Checking the address beats validating the section, because every way the section can
+fail to arrive collapses into this one value. A panic is a real cost: a deployment that was merely
+degraded — the callers that tolerate an unreachable daemon still worked — is now dead on arrival,
+which is the trade for the failure naming its own fix. It is scoped to `IS_SERVERLESS` because a VPS
+and a dev machine both run the daemon beside the backend, where loopback is correct.
+
 ## A delta watermark is read through `GetUpVersion` / `GetUpdated`, never `GetQueryInt`
 
 **Context** — the client now sends both watermarks of a response key in one param, `"<upv>.<upd>"`,

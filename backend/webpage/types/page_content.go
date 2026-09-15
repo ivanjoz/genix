@@ -106,7 +106,7 @@ type EcommercePageContent struct {
 	Content   SectionContent `json:",omitempty"`
 	// Css holds the whole-page pre-generated runtime Tailwind CSS (the UnoCSS output
 	// for every section's tokens). It is stored only on section 1 so the storefront
-	// serves a single stylesheet from a plain column — no CBOR decode of Content
+	// serves a single stylesheet from a plain column — no colbin decode of Content
 	// needed. The builder ships it inside section 1's SectionContent.PageCss on save;
 	// the handler moves it here and clears PageCss to avoid storing two copies.
 	Css       string `json:",omitempty"`

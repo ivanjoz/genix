@@ -53,6 +53,9 @@ var deployActions = []deployAction{
 		return nil
 	}},
 
+	// 'cloud accion=1' publica el binario Y empuja el CONFIG de la Lambda (cloud/main.go), así que
+	// esta acción ya deja código y configuración en el mismo formato. La acción 13 sigue existiendo
+	// para empujar sólo variables, sin recompilar.
 	{id: 2, group: groupPublish, label: "Backend (AWS Cloud)", run: func(context deployContext) error {
 		if err := generateRouteIDs(context); err != nil {
 			return err
