@@ -27,6 +27,11 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 		body.InvoiceSeries = invoicing.DefaultInvoiceSeries()
 	}
 
+	body.Flags, err = core.SanitizeCompanyFlags(body.Flags)
+	if err != nil {
+		return req.MakeErr(err.Error())
+	}
+
 	body.Updated = core.SUnixTime()
 	empresasToSave := []types.Company{body}
 	if err = db.Insert(&empresasToSave); err != nil {
@@ -162,6 +167,13 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if stored != nil {
 		record.InvoiceSeries = stored.InvoiceSeries
+	}
+
+	// The flags tab posts the whole company, so a payload can carry any id it likes: refuse the
+	// ones the catalog does not declare instead of storing a rule the browser cannot show back.
+	record.Flags, err = core.SanitizeCompanyFlags(record.Flags)
+	if err != nil {
+		return req.MakeErr(err.Error())
 	}
 
 	// Escribir exige "Mi Empresa" en nivel de escritura; mainHandler ya lo validó por el catálogo.

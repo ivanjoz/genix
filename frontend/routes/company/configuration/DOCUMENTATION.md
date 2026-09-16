@@ -6,18 +6,21 @@ title: Configuration (Configuración)
 status: implemented
 visibility: tenant
 description_en: >-
-  Tenant company settings and database backups on one page, split into three tabs. My Company edits
-  the company's name, tax ID, legal name, email, phone, address, city and representative. Store
-  holds the Culqi payment-gateway keys for the online store, separated into Culqi Test and Culqi
-  Live sections. Backups generates an on-demand snapshot of the company's operational data,
-  downloads an existing backup file, and restores the database to a selected backup.
+  Tenant company settings and database backups on one page, split into four tabs. My Company edits
+  the company's name, tax ID, legal name, email, phone, address, city and representative, and
+  carries the Company Flags table that turns business rules on. Invoicing holds the SUNAT series and
+  the SUNAT credentials and certificate. Store holds the Culqi payment-gateway keys for the online
+  store, separated into Culqi Test and Culqi Live sections. Backups generates an on-demand snapshot
+  of the company's operational data, downloads an existing backup file, and restores the database to
+  a selected backup.
 description_es: >-
-  Configuración de la empresa del tenant y copias de seguridad en una sola página, dividida en tres
+  Configuración de la empresa del tenant y copias de seguridad en una sola página, dividida en cuatro
   pestañas. Mi Empresa edita nombre, RUC, razón social, correo, teléfono, dirección, ciudad y
-  representante. Tienda contiene las llaves de la pasarela de pago Culqi para la tienda online,
-  separadas en las secciones Culqi Pruebas y Culqi Live. Backups genera un respaldo bajo demanda de
-  la información operativa, descarga un backup existente y restaura la base de datos al estado de un
-  backup seleccionado.
+  representante, y contiene la tabla Flags de la Empresa que activa reglas de negocio. Facturación
+  contiene las series SUNAT y las credenciales y el certificado SUNAT. Tienda contiene las llaves de
+  la pasarela de pago Culqi para la tienda online, separadas en las secciones Culqi Pruebas y Culqi
+  Live. Backups genera un respaldo bajo demanda de la información operativa, descarga un backup
+  existente y restaura la base de datos al estado de un backup seleccionado.
 ---
 
 # Configuration (Configuración)
@@ -26,11 +29,18 @@ description_es: >-
 ## Page purpose
 
 Configuration (`Configuración`) is the single settings page for the company (`empresa`) that owns
-the current tenant session. It is divided into three tabs shown at the top of the page:
+the current tenant session. It is divided into four tabs shown at the top of the page:
 
 - **My Company (Mi Empresa)** — edits the identity data of one company record (name, tax ID/RUC,
   legal name/razón social, email, phone, address, city, representative). Its form heading reads
-  "Company Parameters" (`Parámetros de la Empresa`).
+  "Company Parameters" (`Parámetros de la Empresa`). Beside it, **Company Flags (Flags de la
+  Empresa)** lists the business rules the company can turn on, one checkbox per rule, grouped by
+  area (today only **Commercial / Comercial**). A checked flag applies to the whole company. Both
+  panels are the same record: either Save button writes both.
+- **Invoicing (Facturación)** — the electronic invoicing setup: **Invoicing Series (Series de
+  Facturación)**, the SUNAT series each document is issued under, and **SUNAT Credentials
+  (Credenciales SUNAT)**, the SOL user, SOL password and digital certificate used to sign. Each of
+  those two panels saves on its own, separately from the company parameters.
 - **Store (Tienda)** — the online store's settings on the same company record. Today it holds one
   card, **Culqi Configuration (Configuración Culqi)**, split into a **Culqi Test (Culqi Pruebas)**
   section, a **Culqi Live** section, and an **RSA Encryption (Encriptación RSA)** section.
@@ -39,9 +49,9 @@ the current tenant session. It is divided into three tabs shown at the top of th
   table backed by Genix's ScyllaDB storage. From here a user generates a new snapshot, downloads an
   existing one, and restores the database back to a previously generated snapshot.
 
-My Company and Store edit the same underlying company record and share one Save button each, but
-Backups is independent of both: a backup never contains the company configuration edited on those
-two tabs, and a restore never overwrites it. Security's users, profiles and access
+My Company and Store edit the same underlying company record, so a Save on either writes it whole,
+but Backups is independent of both: a backup never contains the company configuration edited on
+those tabs, and a restore never overwrites it. Security's users, profiles and access
 assignments (**Users & Profiles / Usuarios & Perfiles**) are likewise outside backup and restore
 scope, and are edited on their own page.
 

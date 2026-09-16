@@ -9,30 +9,34 @@ type TAGS struct{}
 
 type Company struct {
 	db.TableStruct[CompanyTable, Company]
-	ID                int32       `db:"id,pk"`
-	Name              string      `json:",omitempty"`
-	LegalName         string      `json:",omitempty"`
-	RUC               string      `json:",omitempty" db:"ruc"`
-	Email             string      `json:",omitempty" db:"email"`
-	NotificationEmail string      `json:",omitempty"`
-	Phone             string      `json:",omitempty"`
-	Representative    string      `json:",omitempty"`
-	Address           string      `json:",omitempty"`
+	ID                int32  `db:"id,pk"`
+	Name              string `json:",omitempty"`
+	LegalName         string `json:",omitempty"`
+	RUC               string `json:",omitempty" db:"ruc"`
+	Email             string `json:",omitempty" db:"email"`
+	NotificationEmail string `json:",omitempty"`
+	Phone             string `json:",omitempty"`
+	Representative    string `json:",omitempty"`
+	Address           string `json:",omitempty"`
 	// CityID is the district the fiscal address sits in, and it is the INEI ubigeo
 	// itself: the catalog is keyed by the code, so 150101 is Lima / Lima / Lima.
 	// SUNAT reads it off every document the company issues, which is why this is a
 	// picked district and not the free-text city it replaced.
-	CityID            int32       `json:",omitempty"`
-	FormApiKey        string      `json:",omitempty" db:"form_api_key"`
-	EmailVerified     int8        `json:",omitempty"`
-	PhoneVerified     int8        `json:",omitempty"`
-	CulqiConfig       CulqiConfig `json:",omitempty" db:"culqui_config"`
+	CityID        int32       `json:",omitempty"`
+	FormApiKey    string      `json:",omitempty" db:"form_api_key"`
+	EmailVerified int8        `json:",omitempty"`
+	PhoneVerified int8        `json:",omitempty"`
+	CulqiConfig   CulqiConfig `json:",omitempty" db:"culqui_config"`
 	// InvoiceSeries are the SUNAT series this company issues under. Inline rather
 	// than a table of their own: there are at most 99, every emission needs one,
 	// and reading the company already brings them along.
 	InvoiceSeries []invoicing.InvoiceSeries `json:",omitempty"`
-	Updated       int32                     `json:"upd" db:"updated"`
-	Status        int8                      `json:"ss" db:"status"`
+	// Flags are the ids the company has checked in company_flags.toml, and only those:
+	// an unchecked flag is absent, never stored as a zero. One flat list because the
+	// catalog's ids are unique across its sections. core.HasCompanyFlag reads it.
+	Flags   []int16 `json:",omitempty"`
+	Updated int32   `json:"upd" db:"updated"`
+	Status  int8    `json:"ss" db:"status"`
 }
 
 type CompanyTable struct {
@@ -52,6 +56,7 @@ type CompanyTable struct {
 	PhoneVerified     db.Col[*CompanyTable, int8]
 	CulqiConfig       db.Col[*CompanyTable, CulqiConfig]
 	InvoiceSeries     db.Col[*CompanyTable, []invoicing.InvoiceSeries]
+	Flags             db.ColSlice[*CompanyTable, int16]
 	Updated           db.Col[*CompanyTable, int32]
 	Status            db.Col[*CompanyTable, int8]
 }

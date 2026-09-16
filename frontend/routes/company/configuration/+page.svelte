@@ -3,6 +3,7 @@ import Page from '$domain/Page.svelte';
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
 import { security } from '$libs/ui-runtime.svelte';
 import CompanyTab from './CompanyTab.svelte';
+import InvoicingTab from './InvoicingTab.svelte';
 import StoreTab from './StoreTab.svelte';
 import BackupsTab from './BackupsTab.svelte';
 import { CONFIGURATION_ACCESS_ID, EmpresaParametrosService } from './empresas.svelte';
@@ -14,6 +15,9 @@ import { BACKUPS_ACCESS_ID } from './backups.svelte';
   // access because it edits the same record through the same endpoint.
   const tabOptions = ([
     [1, "My Company|Mi Empresa", CONFIGURATION_ACCESS_ID],
+    // Invoicing reads the company to know its series and issuer data, so it rides on the same
+    // access rather than declaring one of its own.
+    [4, "Invoicing|Facturación", CONFIGURATION_ACCESS_ID],
     [3, "Store|Tienda", CONFIGURATION_ACCESS_ID],
     [2, "Backups", BACKUPS_ACCESS_ID]
   ] as [number, string, number][]).filter(([, , accessID]) => security.checkAcceso(accessID, 1))
@@ -30,6 +34,9 @@ import { BACKUPS_ACCESS_ID } from './backups.svelte';
     onSelect={(opt) => { tabSelected = opt[0] }} />
   {#if tabSelected === 1}
     <CompanyTab {service} />
+  {/if}
+  {#if tabSelected === 4}
+    <InvoicingTab {service} />
   {/if}
   {#if tabSelected === 3}
     <StoreTab {service} />

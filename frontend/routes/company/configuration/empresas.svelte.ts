@@ -37,6 +37,9 @@ export interface ICompany {
   // The SUNAT series travel inline on the company: there are at most 99 and every
   // emission needs one, so they are not worth a table of their own.
   InvoiceSeries: IInvoiceSeries[]
+  // The checked flag ids from backend/company_flags.toml, and only those. Saved as int16
+  // on the backend, which the Flags tab never has to know.
+  Flags: number[]
   ss: number
   upd: number
 }
@@ -48,11 +51,14 @@ export class EmpresaParametrosService extends GetHandler {
     // configuration having been lost.
     // ver 3: the free-text City became CityID, the district's ubigeo. A cached copy
     // would keep feeding the old string into a selector that expects a number.
-    useCache = { min: 10, ver: 3 }
+    // ver 4: the record gained Flags. A copy cached before it would show every flag
+    // unchecked, and saving from that tab would then clear the ones that are on.
+    useCache = { min: 10, ver: 4 }
 
     empresa = $state({
         CulqiConfig: {},
-        InvoiceSeries: []
+        InvoiceSeries: [],
+        Flags: []
     } as unknown as ICompany)
 
     handler(response: any) {
@@ -61,6 +67,8 @@ export class EmpresaParametrosService extends GetHandler {
       record.CulqiConfig = record.CulqiConfig || {} as ICompanyCulqi
       // Omitted when the company has none, and the series table binds into it.
       record.InvoiceSeries = record.InvoiceSeries || []
+      // Omitted when no flag is checked, which is every company until somebody checks one.
+      record.Flags = record.Flags || []
       this.empresa = record
     }
 

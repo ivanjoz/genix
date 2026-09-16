@@ -3,8 +3,7 @@ import Input from '$components/form/Input.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import Button from '$components/buttons/Button.svelte';
 import T from '$components/misc/T.svelte';
-import InvoiceSeriesTable from './InvoiceSeriesTable.svelte';
-import CompanySecretsPanel from './CompanySecretsPanel.svelte';
+import CompanyFlagsPanel from './CompanyFlagsPanel.svelte';
 import { CountryCitiesService } from '$services/business/country-cities.svelte';
 import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas.svelte"
 
@@ -48,10 +47,10 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
       />
     </div>
   </section>
-  <!-- The invoicing panels stack in their own column: the certificate belongs under the
-       series it signs, not under the company form on the other side of the page. -->
-  <div class="col-span-24 lg:col-span-12 flex flex-col gap-14">
-    <InvoiceSeriesTable company={service.empresa} />
-    <CompanySecretsPanel />
+  <!-- The flags sit beside the parameters because they are the same record and the same Save:
+       the invoicing panels that used to be here write through their own endpoints and moved to
+       their own tab. -->
+  <div class="col-span-24 lg:col-span-12">
+    <CompanyFlagsPanel {service} />
   </div>
 </div>

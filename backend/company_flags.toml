@@ -1,0 +1,29 @@
+# Company flags: per-company switches that turn a business rule on.
+#
+# The file lives here and not in db/ because it is embedded into the binary with go:embed,
+# which refuses a symlink and cannot reach outside the module directory. db/company_flags.toml
+# is a symlink pointing here, so the catalog is still managed from that folder.
+#
+# Both sides read THIS file: the backend embeds it to validate what a company saves, and the
+# frontend imports it with ?raw to draw the checkbox table. There is no second copy.
+#
+# Ids are unique across every section — a company stores them as one flat list of int16, so the
+# same id under two sections would be ambiguous. Never reuse an id of a deleted flag: a company
+# that had it checked would silently inherit the new rule.
+#
+# `label` is the section heading; every other key is a flag id. Names are "English|Español".
+
+[comercial]
+label = "Commercial|Comercial"
+1 = { name = "Force sale > 700 with identified receipt|Forzar venta > 700 con comprobante identificado" }
+2 = { name = "Force sale with full payment|Forzar venta con pago completo" }
+3 = { name = "Force sale with consigned delivery|Forzar venta con entrega consignada" }
+4 = { name = "Disable payment at Point of Sale|Deshabilitar pago en Punto de Venta" }
+5 = { name = "Disable consigned delivery at Point of Sale|Deshabilitar entrega consignada en Punto de Venta" }
+6 = { name = "Disable express inventory entry (no P.O.)|Deshabilitar ingreso express de inventario (sin O.C.)" }
+
+[logistics]
+label = "Logistics|Logística"
+
+[clients]
+label = "Clients|Clientes"

@@ -1,3 +1,41 @@
+## Invoicing moved to its own tab and the flags took its place beside the company parameters
+
+**Context** — the flags panel had a tab of its own while the invoicing series and the SUNAT
+credentials sat in the right column of My Company. The request was to swap them: flags next to the
+parameters, and one tab named Facturación holding everything invoicing.
+
+**Decision** — `CompanyFlagsTab.svelte` became `CompanyFlagsPanel.svelte` (it is a panel now, with
+no `col-span` of its own — the parent places it) and hangs in the right column of `CompanyTab`. The
+new `InvoicingTab.svelte` holds `InvoiceSeriesTable` and `CompanySecretsPanel` side by side, twelve
+columns each, instead of the stack they formed in the narrow column. Tab id 4 kept its slot and only
+its label changed, to "Invoicing|Facturación". The flags panel keeps its own Save.
+
+**Rationale** — the swap follows what each panel writes: flags go through the company-parameters
+endpoint, so they belong beside the form that uses it, while the series and the certificate have
+endpoints of their own and no longer need to explain why a Save above them would not write them.
+Side by side rather than stacked because a whole tab is twice the width the column gave them. The
+second Save on the flags panel does the same call as the parameters one — that is the cost of
+saving where you edit, and the comment in the component says so.
+
+## The Flags tab reads the backend TOML directly, and each row is one checkbox, not two cells
+
+**Context** — the new Flags tab needed the flag catalog the backend embeds. The request was a
+two-column table: a checkbox column and a name column.
+
+**Decision** — `company-flags.ts` imports `backend/company_flags.toml?raw` and parses it, the same
+route `access-list-catalog.ts` already takes for the access catalog: no endpoint, no second copy of
+the names, and a flag added to the file appears on both sides at once. Each row is a single
+`Checkbox` carrying the flag name as its label — its box and label already lay out as two columns,
+so the table looks as asked while the name stays a click target. The tab rides on
+`CONFIGURATION_ACCESS_ID` and shares the one `EmpresaParametrosService`, so Save writes the whole
+company through the same endpoint as My Company. The service cache went to `ver: 4`.
+
+**Rationale** — a box in one `<td>` and inert text in the next would either leave the control with
+no accessible name or need two `Checkbox` instances over one value, which a screen reader announces
+as two checkboxes per flag. The cache bump is not optional: a copy cached before `Flags` existed
+would show every flag unchecked, and saving from this tab would then clear the ones that are on.
+Cost: the tab's strict DOM is one column, not two.
+
 ## The city is a district picker, not a text field, because SUNAT validates it
 
 **Context** — "Ciudad" was a free-text `Input` writing `Company.City`. Every electronic document

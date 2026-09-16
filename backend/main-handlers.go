@@ -69,6 +69,17 @@ var accessHelper = func() *core.AccessHelper {
 	return core.LoadEmbeddedAccessList(accessCatalogContent)
 }()
 
+// Same arrangement for the company flags: go:embed only reads files under this directory, so the
+// bytes are owned here and the catalog they feed lives in core, where every module can ask it.
+//
+//go:embed company_flags.toml
+var companyFlagsCatalogContent []byte
+
+var _ = func() bool {
+	core.LoadEmbeddedCompanyFlags(companyFlagsCatalogContent)
+	return true
+}()
+
 // saasCompanyID identifica a la company dueña de la plataforma: la única que opera el módulo SYSTEM.
 const saasCompanyID = 1
 
