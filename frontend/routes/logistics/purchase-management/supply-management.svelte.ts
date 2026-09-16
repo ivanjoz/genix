@@ -67,14 +67,16 @@ export class ProductSupplyService extends GetHandler<any> {
   }
 }
 
-export const postProductSupply = (productSupplyRecord: IProductSupplyRow) => {
-  const normalizedPayload: IProductSupplyRow = {
+// The route is bulk: a single-record save from the side panel sends a one-element array, and the
+// Excel import sends batches of the same shape.
+export const postProductSupply = (productSupplyRecords: IProductSupplyRow[]) => {
+  const normalizedPayload: IProductSupplyRow[] = productSupplyRecords.map((productSupplyRecord) => ({
     ProductID: productSupplyRecord.ProductID,
     MinimunStock: productSupplyRecord.MinimunStock || 0,
     SalesPerDayEstimated: productSupplyRecord.SalesPerDayEstimated || 0,
     // Keep the payload sanitized so the backend only receives meaningful provider rows.
     ProviderSupply: normalizeProviderSupplyRows(productSupplyRecord.ProviderSupply),
-  }
+  }))
 
   return POST({
     data: normalizedPayload,

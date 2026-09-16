@@ -81,7 +81,7 @@ mismas, así que también funcionan por línea de comandos:
 |---|---|
 | Base de Datos | `check_tables`, `create`, `edit` |
 | Servidores | `configure`, `follow_cloudwatch_logs` |
-| Generadores | `generate_controllers`, `sync_struct_interfaces`, `generate_menu_descriptions`, `generate_sale_orders` |
+| Generadores | `generate_controllers`, `generate_route_ids`, `sync_struct_interfaces`, `generate_menu_descriptions`, `index_documentation`, `search_documentation`, `plan_agent_discovery` |
 
 `create` y `edit` necesitan argumentos: si no vinieron por línea de comandos se piden por stdin
 antes de ejecutar. Los tres `configure_*` preguntan su propio modo de instalación, así que no se

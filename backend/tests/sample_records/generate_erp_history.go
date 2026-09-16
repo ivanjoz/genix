@@ -50,9 +50,13 @@ const (
 //go:embed erp_history_providers.json
 var erpProviderSeedJSON []byte
 
-// erpPartySeed is the seed shape for both parties. CountryID only matters for providers, which
+//go:embed erp_history_clients.json
+var erpClientSeedJSON []byte
+
+// partySeed is the seed shape shared by every party JSON in this package — clients, ERP providers
+// and supply providers. CountryID only matters for providers, which
 // SaveClientProviders rejects without one.
-type erpPartySeed struct {
+type partySeed struct {
 	Name           string `json:"name"`
 	PersonType     int8   `json:"personType"`
 	RegistryNumber string `json:"registryNumber"`
@@ -512,12 +516,12 @@ func (generator *erpHistoryGenerator) validateContext() error {
 // seedProvidersAndClients writes both parties through POST.client-provider, which deduplicates by
 // name+registry hash, so re-running the script reuses the same rows instead of piling up copies.
 func (generator *erpHistoryGenerator) seedProvidersAndClients() error {
-	providerSeeds := []erpPartySeed{}
+	providerSeeds := []partySeed{}
 	if err := json.Unmarshal(erpProviderSeedJSON, &providerSeeds); err != nil {
 		return core.Err("error al leer el JSON de proveedores:", err)
 	}
-	clientSeeds := []erpPartySeed{}
-	if err := json.Unmarshal(saleOrderClientsJSON, &clientSeeds); err != nil {
+	clientSeeds := []partySeed{}
+	if err := json.Unmarshal(erpClientSeedJSON, &clientSeeds); err != nil {
 		return core.Err("error al leer el JSON de clientes:", err)
 	}
 
@@ -538,7 +542,7 @@ func (generator *erpHistoryGenerator) seedProvidersAndClients() error {
 	return nil
 }
 
-func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []erpPartySeed, partyType int8) ([]int32, error) {
+func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, partyType int8) ([]int32, error) {
 	if len(seeds) == 0 {
 		return nil, core.Err("la lista de terceros a sembrar está vacía")
 	}

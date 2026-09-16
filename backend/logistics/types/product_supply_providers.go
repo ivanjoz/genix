@@ -25,28 +25,47 @@ func SanitizeProviderSupplyRows(providerSupplyRows []ProductSupplyProviderRow) [
 }
 
 func ValidateProviderSupplyRows(companyID int32, providerSupplyRows []ProductSupplyProviderRow) error {
-	if len(providerSupplyRows) == 0 {
-		return nil
+	return ValidateProviderSupplyRowsBatch(companyID, [][]ProductSupplyProviderRow{providerSupplyRows})
+}
+
+// ValidateProviderSupplyRowsBatch checks every record's rows structurally and then resolves the
+// union of their providers in a single query. A bulk import carries thousands of records drawing
+// from the same handful of providers, so validating record by record would mean thousands of round
+// trips to read the same rows over and over.
+func ValidateProviderSupplyRowsBatch(companyID int32, providerSupplyRowsPerRecord [][]ProductSupplyProviderRow) error {
+	providerIDs := []int32{}
+	seenProviderIDs := map[int32]bool{}
+
+	for _, providerSupplyRows := range providerSupplyRowsPerRecord {
+		providerIDsOfRecord := make([]int32, 0, len(providerSupplyRows))
+
+		for _, providerSupplyRow := range providerSupplyRows {
+			if providerSupplyRow.ProviderID <= 0 {
+				return core.Err("Cada fila de proveedor debe tener un proveedor válido.")
+			}
+			if providerSupplyRow.Capacity < 0 {
+				return core.Err("La capacidad no puede ser negativa.")
+			}
+			if providerSupplyRow.DeliveryTime < 0 {
+				return core.Err("El tiempo de entrega no puede ser negativo.")
+			}
+			if providerSupplyRow.Price < 0 {
+				return core.Err("El precio no puede ser negativo.")
+			}
+			if slices.Contains(providerIDsOfRecord, providerSupplyRow.ProviderID) {
+				return core.Err("No se puede repetir el mismo proveedor en un product.")
+			}
+			providerIDsOfRecord = append(providerIDsOfRecord, providerSupplyRow.ProviderID)
+
+			if !seenProviderIDs[providerSupplyRow.ProviderID] {
+				seenProviderIDs[providerSupplyRow.ProviderID] = true
+				providerIDs = append(providerIDs, providerSupplyRow.ProviderID)
+			}
+		}
 	}
 
-	providerIDs := make([]int32, 0, len(providerSupplyRows))
-	for _, providerSupplyRow := range providerSupplyRows {
-		if providerSupplyRow.ProviderID <= 0 {
-			return core.Err("Cada fila de proveedor debe tener un proveedor válido.")
-		}
-		if providerSupplyRow.Capacity < 0 {
-			return core.Err("La capacidad no puede ser negativa.")
-		}
-		if providerSupplyRow.DeliveryTime < 0 {
-			return core.Err("El tiempo de entrega no puede ser negativo.")
-		}
-		if providerSupplyRow.Price < 0 {
-			return core.Err("El precio no puede ser negativo.")
-		}
-		if slices.Contains(providerIDs, providerSupplyRow.ProviderID) {
-			return core.Err("No se puede repetir el mismo proveedor en un product.")
-		}
-		providerIDs = append(providerIDs, providerSupplyRow.ProviderID)
+	if len(providerIDs) == 0 {
+		return nil
 	}
 
 	providers := []crm.ClientProvider{}

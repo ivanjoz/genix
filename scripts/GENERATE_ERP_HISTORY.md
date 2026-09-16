@@ -140,7 +140,7 @@ cd scripts && go run . generate_erp_history --days=15           # continúa dond
 - Company 1, usuario 1, los almacenes indicados y al menos una caja activa (se toma la de menor
   ID). Proveedores y clientes se siembran solos: 5 proveedores desde
   `backend/tests/sample_records/erp_history_providers.json` y los 50 clientes de
-  `sale_order_clients.json`. `POST.client-provider` deduplica, así que repetir la corrida no
+  `erp_history_clients.json`. `POST.client-provider` deduplica, así que repetir la corrida no
   los duplica.
 - **Es acumulativo**: no borra nada. Correrlo dos veces duplica el historial de esos días.
 - Los resúmenes de venta los reconstruye la acción cron 2, que no corre en un proceso `fn-…`.

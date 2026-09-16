@@ -102,10 +102,6 @@ var deployScripts = []scriptEntry{
 		run: func(context deployContext, arguments []string) error {
 			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/discovery-eval"}, arguments...)...)
 		}},
-
-	{key: "generate_sale_orders", group: scriptGroupGenerators, label: "Generar Órdenes de Venta (demo)", run: func(context deployContext, _ []string) error {
-		return runCommand(context, "backend", context.goBinary, "run", ".", "fn-generate-sale-orders")
-	}},
 }
 
 func runTableScript(context deployContext, command string, arguments []string) error {

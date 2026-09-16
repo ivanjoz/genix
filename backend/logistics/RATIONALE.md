@@ -2,6 +2,28 @@
 
 Design decisions for supplies, stock and purchase orders, newest first.
 
+## The bulk supply save validates what the single-record one never did
+
+**Context** — `POST.product-supply` became an array route to back the Excel import. The old
+single-record handler trusted `ProductID` completely: it wrote the supply row without ever checking
+the product existed. That was survivable while the only caller was a side panel that had just
+rendered the product, and stops being survivable the moment a spreadsheet full of typed product
+names reaches the same handler.
+
+**Decision** — the bulk path adds three checks the old one lacked: every `ProductID` must resolve to
+a product in the company (one query for the whole payload), a `ProductID` may not repeat inside one
+payload, and a payload above `maxProductSupplyBulkRecords` (1000) is refused. Provider validation
+moved to `ValidateProviderSupplyRowsBatch`, which runs the structural checks per record but resolves
+the union of provider IDs in a single query; `ValidateProviderSupplyRows` is now a one-element
+wrapper over it, so `production`'s insumo save keeps its old behaviour.
+
+**Rationale** — the per-record validator would have meant one provider query per row: 2000 rows
+reading the same hundred providers 2000 times. Rejecting a duplicated `ProductID` rather than
+letting the last one win keeps the outcome independent of slice order — with two rows for one
+product inside a single `db.Merge`, which survives is an implementation detail, not a decision the
+caller made. The 1000 cap costs the client a loop it already has (it batches at 500) and bounds what
+one request can do.
+
 ## Supplies and the suppliers page left; the suppliers *route* arrived
 
 **Context** — the Producción and Clientes (CRM) modules were carved out of `business`, and two

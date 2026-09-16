@@ -9,12 +9,14 @@ description_en: >-
   Product supply planning (`abastecimiento`). Compare each product's current stock against a
   configured minimum stock and view a 30-day inflow/outflow/final-stock chart; configure a
   product's minimum stock, estimated daily sales, and supplier options (price, capacity, delivery
-  time). Does not create purchase orders.
+  time), one product at a time or in bulk through an Excel export/import. Does not create purchase
+  orders.
 description_es: >-
   Planificación de abastecimiento por producto. Comparar el stock actual de cada producto contra
   un stock mínimo configurado y ver un gráfico de 30 días de entradas/salidas/stock final;
   configurar el stock mínimo, las ventas diarias estimadas y las opciones de proveedor (precio,
-  capacidad, tiempo de entrega) de un producto. No crea órdenes de compra.
+  capacidad, tiempo de entrega) de un producto, uno por uno o masivamente con exportación e
+  importación de Excel. No crea órdenes de compra.
 ---
 
 # Purchase Management (Gestión de Compras)
@@ -101,9 +103,11 @@ supplier row, and the trash icon on a supplier card to remove it. Save with the 
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
-Saving posts one product's supply configuration at a time (not a batch of products). The server
-keeps the product's key fixed and merges the submitted values into the existing configuration
-for that (company, product) pair, or creates a new one. Empty supplier rows (no provider,
+Saving from this side layer sends that one product's configuration (the same endpoint accepts many
+at once, which is what the Excel import uses). The server keeps the product's key fixed and merges
+the submitted values into the existing configuration for that (company, product) pair, or creates a
+new one. It also rejects a configuration pointing at a product that does not exist. Empty supplier
+rows (no provider,
 capacity, delivery time, or price set) are dropped both by the browser and again by the server
 before validation, so an accidentally added blank row never blocks saving.
 
@@ -134,6 +138,66 @@ warehouse.
 - Search terms: `abastecimiento`, `stock mínimo`, `ventas por día`, `proveedores`, `capacidad`,
   `tiempo de entrega`, `gestión de compras`.
 
+<!-- DOC-ID: capability.import-export-supply -->
+## Update supply in bulk with Excel (Actualizar el abastecimiento masivamente con Excel)
+
+### User intention (Intención del usuario)
+
+`Quiero exportar el abastecimiento a Excel`, `necesito cambiar el stock mínimo de muchos productos
+a la vez`, `quiero cargar los proveedores de todos mis productos desde un archivo`.
+
+### Where to find it (Dónde encontrarlo)
+
+The **Exportar** and **Importar** buttons sit in the page toolbar, to the right of the search box
+and next to the record counter.
+
+### Required information and prerequisites (Requisitos previos)
+
+The file is the round trip of the export, so the normal way to import is: export, edit, upload.
+The sheet has one row per product and these columns — `Producto`, `Stock Actual`, `Stock Mínimo`,
+`Ventas / Día Estimadas`, and then one group per supplier (`Proveedor 1`, `Proveedor 2`,
+`Proveedor 3`, …) each holding `Proveedor`, `Capacidad`, `Entrega` and `Precio`.
+
+Products and suppliers are matched **by name**, ignoring case and accents, so those names must
+already exist in the platform. The sheet normally carries three supplier groups; if some product
+has more suppliers configured, the export adds as many groups as that product needs.
+
+### Business rules and rationale (Reglas y razón de negocio)
+
+- `Stock Actual` is exported for reference only. It is reconstructed from warehouse movements, and
+  whatever is typed into that column is ignored on import — this page never changes stock.
+- `Precio` is written and read in currency units (e.g. `19.90`), the same as the side panel shows.
+- Only rows whose values **differ from what the platform already has** are listed in the preview
+  and sent when saving. Re-uploading an unedited export saves nothing.
+- The sheet is authoritative for the row: the supplier list it carries replaces the saved one, so
+  clearing a supplier's cells removes that supplier from the product.
+- A row with an unknown or ambiguous product/supplier name is reported as an error and is excluded;
+  the remaining rows can still be saved once the errors are resolved.
+
+### Result and side effects (Resultado y efectos)
+
+Uploading only previews. Nothing is written until **Importar** is pressed in the modal, at which
+point the changed rows are sent in batches of up to 500 and the table refreshes. Each saved row has
+exactly the same effect as saving that product in the side panel.
+
+### Limitations (Limitaciones)
+
+- The export writes the rows currently listed, so an active search filter narrows the file too.
+  Clear the filter to export the whole catalog.
+- The import cannot create products or suppliers; a name that does not exist is an error.
+- Changing the header texts, or exporting in one language and importing with the app in the other,
+  leaves columns unmatched and they are silently ignored.
+- The preview highlights changed cells but is read-only; corrections are made in the spreadsheet
+  and the file is uploaded again.
+
+### Common questions and vocabulary (Preguntas y vocabulario)
+
+- `¿Por qué no aparece ninguna fila después de subir el archivo?` Porque ninguna fila cambió
+  respecto a lo guardado, o todas tienen errores listados bajo el selector de archivo.
+- `¿El Excel puede modificar el stock?` No; la columna `Stock Actual` es informativa.
+- `¿Cómo quito un proveedor de un producto?` Borra sus celdas en el Excel y vuelve a subirlo.
+- Search terms: `exportar`, `importar`, `excel`, `carga masiva`, `plantilla`, `abastecimiento`.
+
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
@@ -162,6 +226,19 @@ warehouse.
 - **"El stock mínimo no puede ser negativo." / "Las ventas por día estimadas no pueden ser
   negativas." / capacity, delivery time, or price rejected as negative:** correct the numeric
   field; none of these values may be negative.
+- **"producto no encontrado …" / "proveedor no encontrado …" (Excel import):** the name in the
+  sheet does not match any product/supplier; fix the spelling or create the record first.
+- **"hay más de un producto llamado …" (Excel import):** two catalog records share that name once
+  case and accents are ignored, so the row is rejected rather than guessed; rename one of them.
+- **"hay una columna de proveedor con datos pero sin nombre" (Excel import):** a supplier group has
+  capacity/delivery/price filled in but its `Proveedor` cell is empty; either name the supplier or
+  clear the whole group.
+- **"El producto N no existe." (server):** the imported row points at a product that is not in the
+  company; re-export the file to get current product names.
+- **"El producto N está repetido en el envío." (server):** the sheet lists the same product on two
+  rows; keep only one.
+- **"No se pueden guardar más de 1000 registros de abastecimiento por solicitud." (server):** only
+  reachable by calling the API directly, since the page batches at 500.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
@@ -195,12 +272,12 @@ files:
     supports: [page-purpose]
   - path: frontend/routes/logistics/purchase-management/ProductSupplyManagement.svelte
     role: user-interface
-    hash: sha256:f72d9bacc4b303a7e65001819571654a057b26ede67ed804a784d38112b8e35a
-    supports: [page-purpose, concepts, capability.browse-supply, capability.configure-supply, rules, troubleshooting]
+    hash: sha256:b961309172184dad04f68bf156ee606aa865263778021d519a3fbb2b13a44be8
+    supports: [page-purpose, concepts, capability.browse-supply, capability.configure-supply, capability.import-export-supply, rules, troubleshooting]
   - path: frontend/routes/logistics/purchase-management/supply-management.svelte.ts
     role: frontend-service
-    hash: sha256:6c8b010d28cee8128e1577df7c99f659de9145bd4e1c6ee2dcdad30ee891c29a
-    supports: [concepts, capability.browse-supply, capability.configure-supply, rules]
+    hash: sha256:69121c4ea2b5a2920cbdab44beaede0351be269b8c24f5a79a4d7e652d9a71bc
+    supports: [concepts, capability.browse-supply, capability.configure-supply, capability.import-export-supply, rules]
   - path: frontend/services/production/products.svelte.ts
     role: shared-domain
     hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
@@ -213,10 +290,18 @@ files:
     role: data-model
     hash: sha256:5f468bbace2e4a7000cb389e48473da271bdd717bcad8f274ef4f308c3d7ea5e
     supports: [concepts, capability.browse-supply]
+  - path: frontend/routes/logistics/purchase-management/supply-management.excel.ts
+    role: frontend-service
+    hash: sha256:cfea7121f31d890152cd2156d6da91bc2b94545e781cbe6ca544269f17719c9a
+    supports: [capability.import-export-supply, troubleshooting]
+  - path: backend/logistics/types/product_supply_providers.go
+    role: data-model
+    hash: sha256:1bdba99849003fb73d341c4fbde6281040e2f1b09a8bb7ebc193abbeafa1ebe1
+    supports: [capability.configure-supply, capability.import-export-supply, troubleshooting]
   - path: backend/logistics/product-supply-management.go
     role: backend-handler
-    hash: sha256:5a5453a1af321db2b1f2f5edabd8b7c2dc2c12fcaec9bc6d415d8dcdb133c68b
-    supports: [capability.browse-supply, capability.configure-supply, rules, troubleshooting]
+    hash: sha256:a269dc49f8473a2e1816e4c31eb9378d4cb070f0c396e9dda35d9e0584955a38
+    supports: [capability.browse-supply, capability.configure-supply, capability.import-export-supply, rules, troubleshooting]
   - path: backend/logistics/types/product_supply.go
     role: data-model
     hash: sha256:d6e1c813b7974f7e16027bc804f243914122eb93462acbd4cf2120573df39a8e

@@ -13,6 +13,8 @@ import { DateHelper } from '@genix/ui/utilities'
 import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
 import FilterInput from '$components/form/FilterInput.svelte'
 import Button from '$components/buttons/Button.svelte'
+import Modal from '$components/layers/Modal.svelte'
+import VTable from '$components/vTable/VTable.svelte'
 import { onDestroy, onMount, untrack } from 'svelte'
 import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
 import { ProductsService } from '$services/production/products.svelte'
@@ -25,6 +27,14 @@ import {
   type IProductSupplyProviderRow,
   type IProductSupplyRow,
 } from './supply-management.svelte'
+import {
+  buildSupplyExcelRows,
+  countProviderGroups,
+  exportSupplyToExcel,
+  makeSupplyExcelColumns,
+  processSupplyImportFile,
+  type ISupplyExcelRow,
+} from './supply-management.excel'
 
   const productos = new ProductsService(true)
   const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
@@ -338,7 +348,7 @@ import {
     Loading.standard(tr('Saving supply configuration...|Guardando abastecimiento...'))
 
     try {
-      const savedProductSupply = await postProductSupply(productSupplyForm)
+      const [savedProductSupply] = await postProductSupply([productSupplyForm])
       const normalizedSavedProductSupply = {
         ...savedProductSupply,
         ProviderSupply: (savedProductSupply.ProviderSupply || []).filter((providerSupplyRow: IProductSupplyProviderRow) => providerSupplyRow.ProviderID > 0),
@@ -360,6 +370,123 @@ import {
       Notify.success(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
     } catch (saveError) {
       Notify.failure(String(saveError))
+    } finally {
+      Loading.remove()
+    }
+  }
+
+  const IMPORT_SUPPLY_MODAL_ID = 21
+  const IMPORT_SAVE_BATCH_SIZE = 500
+
+  let importExcelRowsPreview = $state<ISupplyExcelRow[]>([])
+  let importExcelErrors = $state<string[]>([])
+  let isImportExcelProcessing = $state(false)
+
+  // The sheet widens to the product with the most suppliers, so a fourth provider is never dropped
+  // on export and then deleted when the file comes back.
+  const providerGroupCount = $derived(countProviderGroups(productSupplyTableRows))
+  const supplyExportColumns = $derived(makeSupplyExcelColumns(providerGroupCount))
+  // Parse with spare groups so a sheet someone widened by hand is still read in full.
+  const supplyImportColumns = $derived(makeSupplyExcelColumns(providerGroupCount + 3))
+  const supplyPreviewColumns = $derived(makeSupplyExcelColumns(countProviderGroups(importExcelRowsPreview)))
+
+  const productNamesByID = $derived(new Map(productos.records.map((productRecord) => [productRecord.ID, productRecord.Name])))
+  const providerNamesByID = $derived(new Map(providers.records.map((providerRecord) => [providerRecord.ID, providerRecord.Name])))
+
+  async function exportSupplyExcel() {
+    Loading.standard(tr('Generating Excel file...|Generando archivo Excel...'))
+    try {
+      // Export what the page is showing, so a filtered search exports just that subset.
+      const excelRows = buildSupplyExcelRows(
+        filteredProductSupplyRows,
+        productNamesByID,
+        providerNamesByID,
+        groupedMovementsService.productoCurrentStock,
+      )
+      await exportSupplyToExcel(supplyExportColumns, excelRows)
+      Notify.success(tr('Excel generated successfully.|Excel generado correctamente.'))
+    } catch (exportError) {
+      console.error('[supply-export] failed:', exportError)
+      Notify.failure(`${tr('Could not export the file:|No se pudo exportar el archivo:')} ${exportError}`)
+    } finally {
+      Loading.remove()
+    }
+  }
+
+  function openImportSupplyModal() {
+    importExcelRowsPreview = []
+    importExcelErrors = []
+    isImportExcelProcessing = false
+    ui.openModal(IMPORT_SUPPLY_MODAL_ID)
+  }
+
+  async function onImportExcelFileChange(file?: File, isRemoved?: boolean) {
+    importExcelRowsPreview = []
+    importExcelErrors = []
+
+    if (isRemoved || !file) {
+      isImportExcelProcessing = false
+      return
+    }
+
+    isImportExcelProcessing = true
+    try {
+      const importResult = await processSupplyImportFile(
+        supplyImportColumns,
+        file,
+        productos.records,
+        providers.records,
+        productSupplyService.recordsMap,
+      )
+
+      // Current stock is not in the file; fill it back so the preview shows the same context column.
+      importExcelRowsPreview = importResult.rows.map((importedRow) => ({
+        ...importedRow,
+        _currentStock: groupedMovementsService.productoCurrentStock.get(importedRow.ProductID) || 0,
+      }))
+      importExcelErrors = importResult.errors
+
+      if (importResult.rows.length === 0 && importResult.errors.length === 0) {
+        Notify.warning(tr('No changes detected in the file.|No se detectaron cambios en el archivo.'))
+      }
+    } catch (importError) {
+      console.error('[supply-import] failed:', importError)
+      importExcelErrors = [`${tr('Error processing the file:|Error procesando el archivo:')} ${importError}`]
+      Notify.failure(`${tr('Could not process the Excel:|No se pudo procesar el Excel:')} ${importError}`)
+    } finally {
+      isImportExcelProcessing = false
+    }
+  }
+
+  async function saveImportSupply() {
+    if (importExcelErrors.length > 0) {
+      Notify.failure(tr('Fix import errors before saving.|Corrige los errores de importación antes de guardar.'))
+      return
+    }
+    if (importExcelRowsPreview.length === 0) {
+      Notify.failure(tr('No rows with changes to import.|No hay filas con cambios para importar.'))
+      return
+    }
+
+    Loading.standard(tr('Saving supply import...|Guardando importación de abastecimiento...'))
+    try {
+      const totalBatches = Math.ceil(importExcelRowsPreview.length / IMPORT_SAVE_BATCH_SIZE)
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batch = importExcelRowsPreview.slice(
+          batchIndex * IMPORT_SAVE_BATCH_SIZE,
+          (batchIndex + 1) * IMPORT_SAVE_BATCH_SIZE,
+        )
+        Loading.change(`${tr('Sending|Enviando')} ${batchIndex + 1}/${totalBatches}...`)
+        await postProductSupply(batch)
+      }
+
+      productSupplyService.fetchOnline()
+      importExcelRowsPreview = []
+      ui.closeModal(IMPORT_SUPPLY_MODAL_ID)
+      Notify.success(tr('Import completed successfully.|Importación completada correctamente.'))
+    } catch (saveError) {
+      console.error('[supply-import] save failed:', saveError)
+      Notify.failure(`${tr('Could not complete the import:|No se pudo completar la importación:')} ${saveError}`)
     } finally {
       Loading.remove()
     }
@@ -387,7 +514,13 @@ import {
 	  <div class="mb-6 flex items-center justify-between p-1" aria-label="Product supply management toolbar with search filter">
 	    <FilterInput bind:value={supplyFilterText} placeholder="Buscar producto o proveedor"
 	      css="mr-16 w-320 max-w-full" />
-	    <div class="flex items-center">
+	    <div class="flex items-center gap-8">
+	      <Button color="purple" icon="icon-[fa--download]" css="h-32 px-10" hideNameOnMobile
+	        label="Downloads the supply configuration of the listed products as an Excel file."
+	        name="Export|Exportar" onClick={exportSupplyExcel} />
+	      <Button color="blue" icon="icon-[fa--upload]" css="h-32 px-10" hideNameOnMobile
+	        label="Opens the Excel import dialog to update the supply configuration in bulk."
+	        name="Import|Importar" onClick={openImportSupplyModal} />
 	      <div class="h6 ff-bold pr-8 text-slate-500">
 	        {filteredProductSupplyRows.length} registros
 	      </div>
@@ -572,3 +705,29 @@ import {
     />
   </div>
 </Layer>
+
+<Modal id={IMPORT_SUPPLY_MODAL_ID}
+  title="Import Supply from Excel|Importar Abastecimiento desde Excel"
+  size={9} css="px-4"
+  useFileImportWithErrors={true}
+  fileErrors={importExcelErrors}
+  onFileChange={onImportExcelFileChange}
+  onSave={importExcelRowsPreview.length > 0 ? saveImportSupply : undefined}
+  saveButtonLabel="Importar"
+  saveIcon="icon-[fa--upload]"
+>
+  <div class="mb-6 flex items-center justify-between px-4">
+    <div class="h6 text-slate-500">
+      <!-- Only rows whose configuration differs from the platform reach the preview. -->
+      <T text="Rows with changes|Filas con cambios" />: {importExcelRowsPreview.length}
+    </div>
+  </div>
+  <div class="overflow-hidden rounded-md border border-slate-200 h-[58vh] min-h-[260px]">
+    <VTable columns={supplyPreviewColumns} css="h-full" maxHeight="58vh"
+      data={importExcelRowsPreview} estimateSize={40}
+      emptyMessage={isImportExcelProcessing
+        ? 'Procesando archivo Excel...'
+        : 'Selecciona un archivo para visualizar las filas con cambios.'}
+    />
+  </div>
+</Modal>

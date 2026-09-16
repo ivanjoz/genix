@@ -1,0 +1,101 @@
+Name|SKU|Price|UnitID|CurrencyID|DepreciationMonths
+Laptop Dell Latitude 5440|INS-001|4500.00|1|1|36
+Monitor LG 24 pulgadas|INS-002|780.00|1|1|36
+Impresora térmica Epson TM-T20|INS-003|950.00|1|1|36
+Balanza electrónica 30 kg|INS-004|1250.00|1|1|60
+Refrigeradora industrial 500 L|INS-005|6800.00|1|1|120
+Congeladora horizontal 300 L|INS-006|3200.00|1|1|120
+Cocina industrial 4 hornillas|INS-007|2900.00|1|1|120
+Campana extractora inoxidable|INS-008|2400.00|1|1|120
+Mesa de trabajo inoxidable 2 m|INS-009|1850.00|1|1|120
+Estantería metálica 5 niveles|INS-010|620.00|1|1|120
+Carretilla hidráulica 2.5 T|INS-011|2100.00|1|1|60
+Apilador manual 1 T|INS-012|5400.00|1|1|60
+Selladora de bolsas 40 cm|INS-013|890.00|1|1|60
+Envasadora al vacío|INS-014|3600.00|1|1|60
+Licuadora industrial 10 L|INS-015|1450.00|1|1|60
+Batidora planetaria 20 L|INS-016|4200.00|1|1|120
+Horno convector 6 bandejas|INS-017|8900.00|1|1|120
+Amasadora 25 kg|INS-018|7300.00|1|1|120
+Cortadora de fiambres 300 mm|INS-019|2650.00|1|1|120
+Molino de granos 1 HP|INS-020|3100.00|1|1|120
+Compresora de aire 100 L|INS-021|2350.00|1|1|60
+Generador eléctrico 5 kW|INS-022|4800.00|1|1|60
+Motobomba 2 pulgadas|INS-023|1750.00|1|1|60
+Hidrolavadora 150 bar|INS-024|1980.00|1|1|60
+Aspiradora industrial 30 L|INS-025|1420.00|1|1|60
+Aire acondicionado 18000 BTU|INS-026|3450.00|1|1|120
+Extintor PQS 12 kg|INS-027|320.00|1|1|60
+Escritorio melamina 1.4 m|INS-028|690.00|1|1|120
+Silla ergonómica con apoyabrazos|INS-029|540.00|1|1|120
+Archivador metálico 4 gavetas|INS-030|880.00|1|1|120
+Mostrador de atención 2 m|INS-031|1650.00|1|1|120
+Vitrina refrigerada 1.5 m|INS-032|5200.00|1|1|120
+Caja registradora|INS-033|1350.00|1|1|60
+Lector de código de barras|INS-034|420.00|1|1|36
+Router Wi-Fi empresarial|INS-035|690.00|1|1|36
+Switch de red 24 puertos|INS-036|1180.00|1|1|60
+UPS 1500 VA|INS-037|980.00|1|1|36
+Cámara de seguridad IP|INS-038|380.00|1|1|60
+Videograbador NVR 8 canales|INS-039|1260.00|1|1|60
+Camioneta furgón de reparto|INS-040|68000.00|1|1|60
+Bolsa de polietileno 20x30 (paquete 100)|INS-041|8.50|1|1|0
+Bolsa kraft 1 kg (paquete 100)|INS-042|15.80|1|1|0
+Film stretch 500 mm|INS-043|23.10|1|1|0
+Cinta de embalaje 2 pulgadas|INS-044|30.40|1|1|0
+Etiquetas adhesivas 50x25 (rollo 1000)|INS-045|37.70|1|1|0
+Caja de cartón 30x20x15|INS-046|45.00|1|1|0
+Caja de cartón 40x30x25|INS-047|52.30|1|1|0
+Precinto de seguridad (paquete 100)|INS-048|59.60|1|1|0
+Bandeja de poliestireno N2 (paquete 100)|INS-049|66.90|1|1|0
+Papel film PVC 45 cm|INS-050|74.20|1|1|0
+Papel aluminio 30 cm|INS-051|81.50|1|1|0
+Vaso descartable 8 oz (paquete 50)|INS-052|88.80|1|1|0
+Cubiertos descartables (paquete 100)|INS-053|96.10|1|1|0
+Servilletas blancas (paquete 500)|INS-054|103.40|1|1|0
+Guantes de nitrilo talla M (caja 100)|INS-055|110.70|1|1|0
+Mascarilla descartable (caja 50)|INS-056|118.00|1|1|0
+Gorro descartable (paquete 100)|INS-057|125.30|1|1|0
+Mandil de polipropileno (paquete 10)|INS-058|132.60|1|1|0
+Detergente industrial 5 L|INS-059|139.90|1|1|0
+Desinfectante de amonio cuaternario 5 L|INS-060|147.20|1|1|0
+Lejía concentrada 5 L|INS-061|154.50|1|1|0
+Alcohol isopropílico 1 L|INS-062|161.80|1|1|0
+Jabón líquido antibacterial 5 L|INS-063|169.10|1|1|0
+Papel toalla industrial (rollo)|INS-064|176.40|1|1|0
+Papel higiénico jumbo (rollo)|INS-065|183.70|1|1|0
+Escoba industrial|INS-066|191.00|1|1|0
+Trapeador industrial|INS-067|198.30|1|1|0
+Recogedor metálico|INS-068|205.60|1|1|0
+Bolsa para residuos 140 L (paquete 50)|INS-069|212.90|1|1|0
+Esponja abrasiva (paquete 10)|INS-070|220.20|1|1|0
+Paño de microfibra (paquete 10)|INS-071|227.50|1|1|0
+Papel bond A4 75 g (millar)|INS-072|234.80|1|1|0
+Lapicero azul (caja 50)|INS-073|242.10|1|1|0
+Resaltador (caja 12)|INS-074|9.40|1|1|0
+Cuaderno anillado A4|INS-075|16.70|1|1|0
+Folder manila A4 (paquete 100)|INS-076|24.00|1|1|0
+Archivador de palanca A4|INS-077|31.30|1|1|0
+Grapas 26/6 (caja 5000)|INS-078|38.60|1|1|0
+Clips metálicos (caja 100)|INS-079|45.90|1|1|0
+Cinta adhesiva media pulgada|INS-080|53.20|1|1|0
+Tóner compatible HP 85A|INS-081|60.50|1|1|0
+Tinta para impresora térmica|INS-082|67.80|1|1|0
+Rollo de papel térmico 80 mm|INS-083|75.10|1|1|0
+Pila alcalina AA (paquete 4)|INS-084|82.40|1|1|0
+Foco LED 12 W|INS-085|89.70|1|1|0
+Fluorescente LED 18 W|INS-086|97.00|1|1|0
+Cable eléctrico 14 AWG (metro)|INS-087|104.30|1|1|0
+Tomacorriente doble|INS-088|111.60|1|1|0
+Interruptor simple|INS-089|118.90|1|1|0
+Cinta aislante|INS-090|126.20|1|1|0
+Azúcar rubia (saco 50 kg)|INS-091|133.50|1|1|0
+Harina de trigo (saco 50 kg)|INS-092|140.80|1|1|0
+Sal industrial (saco 25 kg)|INS-093|148.10|1|1|0
+Aceite vegetal (bidón 20 L)|INS-094|155.40|1|1|0
+Levadura seca (caja 10 kg)|INS-095|162.70|1|1|0
+Manteca vegetal (caja 10 kg)|INS-096|170.00|1|1|0
+Ácido cítrico (bolsa 25 kg)|INS-097|177.30|1|1|0
+Benzoato de sodio (bolsa 25 kg)|INS-098|184.60|1|1|0
+Esencia de vainilla 1 L|INS-099|191.90|1|1|0
+Colorante alimentario rojo 1 L|INS-100|199.20|1|1|0

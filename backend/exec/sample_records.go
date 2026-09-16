@@ -5,13 +5,14 @@ import (
 	"app/tests/sample_records"
 )
 
-// GenerateSampleSaleOrders delegates the heavy sample data generation to the dedicated tests/sample_records package.
-func GenerateSampleSaleOrders(args *core.ExecArgs) core.FuncResponse {
-	return sample_records.GenerateSaleOrders(args)
-}
-
 // GenerateErpHistory replays N past days of purchases, receptions and sales with the process
 // clock frozen on each simulated day.
 func GenerateErpHistory(args *core.ExecArgs) core.FuncResponse {
 	return sample_records.GenerateErpHistory(args)
+}
+
+// GenerateSupplyData seeds the static provider list and a replenishment configuration for the
+// first N products.
+func GenerateSupplyData(args *core.ExecArgs) core.FuncResponse {
+	return sample_records.GenerateSupplyData(args)
 }
