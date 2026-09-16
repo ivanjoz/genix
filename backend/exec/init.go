@@ -138,6 +138,12 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		panic("No se especificado el admin_password y el secret_phrase en config.toml")
 	}
 
+	// This entry point numbers its seed rows itself, without the daemon. It creates the database
+	// that holds the counters, it runs alone, and it is the one operation that cannot require a
+	// fareward reachable on the client's own wire version. See db.BypassFarewardSequences for why
+	// that is safe exactly here and nowhere else.
+	db.BypassFarewardSequences()
+
 	// Wire the GenixSearch endpoint before any seed write hits a
 	// TextSearchColumn-backed table. The text_search package can't
 	// import core (cycle: core -> core/types -> db -> text_search), so

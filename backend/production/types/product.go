@@ -203,9 +203,8 @@ type ProductProperty struct {
 }
 
 type ProductProperties struct {
-	ID         int16                       `ms:"i"`
-	Name       string                      `ms:"n"`
-	Options    []ProductProperty           `ms:"o"`
-	Status     int8                        `ms:"s"`
-	OptionsMap map[string]*ProductProperty `json:"-" ms:"-"`
+	ID      int16             `ms:"i"`
+	Name    string            `ms:"n"`
+	Options []ProductProperty `ms:"o"`
+	Status  int8              `ms:"s"`
 }

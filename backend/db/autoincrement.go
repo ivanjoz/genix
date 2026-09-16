@@ -38,6 +38,25 @@ func init() {
 	scylla.SetCounterValue = setAutoincrementValue
 }
 
+// BypassFarewardSequences hands the counters back to the ORM's own GetCounter, which reads the
+// `sequences` row and increments it in place. It undoes the init above and is the only way out of
+// it, so every caller is one grep away.
+//
+// It exists for bootstrap entry points — fn-init — that must number a handful of seed rows on a
+// database that has no daemon it can talk to: a wire protocol is versioned, and a checkout ahead of
+// the deployed daemon cannot exchange a single frame with it. Refusing to seed for that reason
+// makes the daemon a dependency of creating the database it stores its counters in.
+//
+// The safety argument is the caller's, not this function's, and it is narrow: GetCounter's
+// read-then-increment races only against a CONCURRENT writer on the same counter. One process
+// seeding a database nobody is serving yet has no such writer. Calling this anywhere a backend is
+// live reintroduces the duplicate-id bug the daemon exists to remove — including a second process
+// racing the daemon itself, which is why it can never move behind a flag or a config key.
+func BypassFarewardSequences() {
+	scylla.ReserveCounterRange = nil
+	scylla.SetCounterValue = nil
+}
+
 // reserveAutoincrementRange asks the daemon for `increment` consecutive values on
 // a counter and returns the first, which is the contract the ORM's own GetCounter
 // had.

@@ -19,6 +19,71 @@ never get in. The loader refuses the whole catalog on a duplicated id — the id
 namespace because the company stores them as a single list. Cost: adding a flag means editing a file
 the binary embeds, so it ships with a deploy, not a database write.
 
+## A backup is colbin batches of 50k, one TAR entry each, and the first entry of a table deletes
+
+**Context** — a backup exported each table as one pipe-separated CSV blob: every value base64'd by
+hand, the whole table in memory twice (the CSV and its zstd), and a restore that re-parsed it byte
+by byte. colbin replaced every other serializer here, and the request was to replace this one too,
+reading the table in groups of 50k.
+
+**Decision** — `exec.SaveBackup` calls `controller.ExportRecordsColbin(companyID, 50_000, emit)`,
+which streams the partition and hands back one colbin-encoded batch per 50k records. Each batch is
+zstd'd and written as its own TAR entry, named `<table>.<companyID>.<batchIndex>.colbin.zstd`. The
+restore still reads the table name off the first dot-segment, so the entry name is the only contract
+between the two halves and it did not change shape. `db.Controller` lost `GetRecordsCSV` /
+`RestoreCSVRecords` and `db.CSVResult` with them — nothing else called any of the three.
+
+**Rationale** — 50k records is the point of the exercise: nothing bigger than one batch is ever in
+memory, on either side, whatever the table's size (10,010 products encode to 1.05 MB before zstd,
+so a full batch is around 5 MB). One entry per batch rather than one concatenated entry per table
+means the TAR's own framing carries the batch boundaries and neither side needs a length prefix.
+What it costs is that a table now arrives as several entries, so the partition delete had to move:
+`RestoreRecordsColbin` takes `deletePartitionFirst`, and the restore loop sets it the first time it
+sees a table name — tracked by name in a map rather than by `batchIndex == 0`, so a reordered or
+missing first entry cannot turn the delete into "wipe the batches already restored".
+
+## The backup encodes the record, so it stops encoding three kinds of column
+
+**Context** — the CSV export picked its columns, wrote a `name:type` header, and the restore read
+the header back to know what it was parsing. colbin encodes the Go struct instead, so the batch
+carries whatever `T` has and the column list only decides what gets *read out of the database*.
+
+**Decision** — `exportableColumns` selects the clustering keys plus every plain column, and skips
+three kinds: the partition key, virtual columns, and columns with no struct field. The restore
+writes the partition key onto every decoded record from its own `companyID`.
+
+**Rationale** — the partition key holds one value for the entire export, so selecting it would pay
+for a constant on every row, and the restore has to set it anyway — that is what lets one company's
+backup be restored into another. Virtual columns and ORM-managed field-less columns are recomputed
+by `Insert`, and a field-less column has nowhere in `T` to live in the first place. This is the same
+selection the CSV export made, minus the field-less columns it used to read and silently drop.
+
+## `fn-init` numbers its own seed rows, with the daemon out of the loop
+
+**Context** — `fn-init` panicked at `reserveSeededAutoincrementIDs` with `connection closed while
+waiting for a reply`. The checkout speaks `fareward:v11`, landed the same day; the daemon on the
+server is release `v0.1.0`, built before that break, and the release workflow only fires on a `v*`
+tag that has not been pushed. So the daemon closed every frame. The deeper point is that the
+failure is structural, not incidental: `fn-init` is the operation that *creates* the database whose
+`sequences` table the daemon stores its counters in, and it had come to require that daemon to be
+reachable on the client's exact wire version first.
+
+**Decision** — `db.BypassFarewardSequences()` sets `scylla.ReserveCounterRange` and
+`scylla.SetCounterValue` back to `nil`, which is all it takes: the ORM's `GetCounter` is still
+there and serves every caller whenever the hooks are unset. `exec.ConfigInit` calls it as its first
+statement. Nothing else calls it, and `fn-homologate` was deliberately left alone — the table
+deploy reaches a counter only through `resetCounterForTable`, which is a no-op today.
+
+**Rationale** — Un-installing the hooks rather than adding a second code path means the bypass owns
+no allocation logic of its own; there is exactly one direct implementation and the seed path uses
+the same one every caller used before the daemon existed. `backend/db/autoincrement.go` warns that
+falling back reintroduces the duplicate-id race, and that warning is about a *fallback* — a live
+backend dropping to the direct path while the daemon holds ranges. This is not that: it is one
+process, alone, seeding a database nothing is serving yet, which is the one shape with no
+concurrent writer for `GetCounter` to race. That distinction is the whole safety argument, so it is
+an exported function a caller opts into by name and never a config key or an env var — a flag would
+let the exemption reach a running backend, where it is the bug.
+
 ## The session token declares its `cb` ids, and every live session ends at the deploy
 
 **Context** — `core.UsuarioToken` had no `cb` tags, so colbin derived each field id by hashing the

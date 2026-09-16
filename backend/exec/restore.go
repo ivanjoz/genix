@@ -67,7 +67,11 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 
 	processedEntriesCount := 0
 	restoredEntriesCount := 0
+	restoredRecordsCount := 0
 	skippedEntriesCount := 0
+	// A table arrives as several batch entries. Only the first of them wipes the
+	// partition: the ones after it would erase the batches already restored.
+	partitionDeletedTables := map[string]bool{}
 
 	for {
 		header, err := reader.Next()
@@ -127,27 +131,31 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 			log.Fatalf("Error descomprimiendo registro TAR: %v | %v", header.Name, err)
 		}
 
-		csvPreview := string(content)
-		if len(csvPreview) > 180 {
-			csvPreview = csvPreview[:180]
-		}
-		csvPreview = strings.ReplaceAll(csvPreview, "\n", "\\n")
-
 		core.Log(
 			"RestoreBackup payload | table:", tableName,
 			"| compressed_bytes:", len(contentCompressed),
 			"| decompressed_bytes:", len(content),
-			"| preview:", csvPreview,
 		)
 
-		core.Log("Restaurando registros:", header.Name, "| table:", tableName)
-		if err = controller.RestoreCSVRecords(req.User.CompanyID, &content); err != nil {
+		deletePartitionFirst := !partitionDeletedTables[tableName]
+
+		core.Log("Restaurando registros:", header.Name, "| table:", tableName,
+			"| delete_partition:", deletePartitionFirst)
+
+		recordsRestored, err := controller.RestoreRecordsColbin(
+			req.User.CompanyID, content, deletePartitionFirst)
+		if err != nil {
+			// The flag stays unset: a batch that failed restored nothing, so the next one
+			// still has to be the batch that wipes the partition.
 			core.Log(err)
 			continue
 		}
+		partitionDeletedTables[tableName] = true
 
 		restoredEntriesCount++
-		core.Log("RestoreBackup entry restored | table:", tableName, "| company:", req.User.CompanyID)
+		restoredRecordsCount += recordsRestored
+		core.Log("RestoreBackup entry restored | table:", tableName,
+			"| records:", recordsRestored, "| company:", req.User.CompanyID)
 	}
 
 	// Counters are not realigned with the restored rows — see ResetCounters.
@@ -157,6 +165,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 		"RestoreBackup summary | backup:", body.Name,
 		"| processed_entries:", processedEntriesCount,
 		"| restored_entries:", restoredEntriesCount,
+		"| restored_records:", restoredRecordsCount,
 		"| skipped_entries:", skippedEntriesCount,
 	)
 

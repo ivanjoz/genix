@@ -1,5 +1,4 @@
 {
-	"project_name": "genix",
 	"file_scan_exclusions": [
 		"**/frontend_deprecated/**",
 		"**/node_modules/**",
@@ -13,45 +12,23 @@
 		"**/.svelte-kit/**"
 	],
 	"languages": {
-		"TypeScript": {
-			"language_servers": [
-				"vtsls",
-				"!tailwindcss-language-server"
-			]
-		},
-		"TSX": {
-			"language_servers": [
-				"vtsls",
-				"!tailwindcss-language-server"
-			]
-		},
-		"Svelte": {
-			"language_servers": [
-				"svelte-language-server",
-				"!tailwindcss-language-server"
-			]
-		},
-		"HTML": {
-			"language_servers": [
-				"!tailwindcss-language-server"
-			]
-		},
-		"CSS": {
-			"language_servers": [
-				"!tailwindcss-language-server"
-			]
-		}
-	},
-	"lsp": {
-		"vtsls": {
-			"settings": {
-				"typescript": {
-					"tsserver": {
-						"maxTsServerMemory": 3072,
-						"useSeparateSyntaxServer": false
-					}
-				}
-			}
-		}
-	}
+    "CSS": {
+      "language_servers": ["typescript-ls", "!vtsls", "!typescript-language-server","...", "!tailwindcss-language-server"]
+    },
+    "HTML": {
+      "language_servers": ["typescript-ls", "!vtsls", "!typescript-language-server","...", "!tailwindcss-language-server"]
+    },
+    "JavaScript": {
+      "language_servers": ["typescript-ls", "!vtsls", "!typescript-language-server","...", "!tailwindcss-language-server"]
+    },
+    "Svelte": {
+      "language_servers": ["typescript-ls", "!vtsls", "!typescript-language-server","...", "!tailwindcss-language-server"]
+    },
+    "TSX": {
+      "language_servers": ["typescript-ls", "!vtsls", "!typescript-language-server","...", "!tailwindcss-language-server"]
+    },
+    "TypeScript": {
+      "language_servers": ["typescript-ls", "!vtsls", "!typescript-language-server","...", "!tailwindcss-language-server"]
+    }
+  }
 }

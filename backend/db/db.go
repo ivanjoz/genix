@@ -55,7 +55,6 @@ var Cols = orm.Cols
 type (
 	Table      = orm.Table
 	Controller = orm.Controller
-	CSVResult  = orm.CSVResult
 )
 
 var (

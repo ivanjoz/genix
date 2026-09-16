@@ -2,6 +2,24 @@
 
 Design decisions for the product catalog and its supplies, newest first.
 
+## `ProductProperties.OptionsMap` is deleted rather than tagged `cb:"-"`
+
+**Context** — writing a product printed `Error colbin-encoding column: Properties`. The cause was
+`OptionsMap map[string]*ProductProperty`: colbin does not carry a map whose value is a pointer, and
+the `json:"-" ms:"-"` already on the field mean nothing to colbin, which reads only `cb`. Since
+`scyllaValueCodec.EncodeStatementValue` swallows the error and returns `""`, every product write
+since the colbin v0.3.0 migration stored an empty `Properties` blob. The field had no reader
+anywhere — no Go reference outside its own declaration, no frontend mirror.
+
+**Decision** — the field is gone. `ProductProperties` is now `ID`, `Name`, `Options`, `Status`.
+
+**Rationale** — `cb:"-"` would have fixed the encode just as well, but it keeps a field that nothing
+builds and nothing reads, and leaves the next reader to work out whether it is a live index or
+residue. Deleting it is the smaller surface and costs nothing: any lookup map over `Options` is
+cheaper to rebuild at the call site than to carry on a record that is never populated. The residual
+risk is that `Properties` data written between the colbin migration and this fix is already empty in
+the database, which this change does not recover.
+
 ## `GET.products` evicts a supply by id instead of shipping it with `ss=2`
 
 **Context** — `Delta(updatedSince, 1)` pinned `Status=1` only on a first sync; every later delta

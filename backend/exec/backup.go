@@ -12,6 +12,11 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+// backupBatchSize is how many records go into one TAR entry. A table is exported in
+// batches so neither the backup nor the restore ever holds more than this many records
+// in memory, whatever the table's size.
+const backupBatchSize = 50_000
+
 func SaveBackup(companyID int32) error {
 
 	var buf bytes.Buffer
@@ -22,31 +27,38 @@ func SaveBackup(companyID int32) error {
 
 	// Scylla Tables - Controllers
 	for _, controller := range MakeScyllaControllers() {
-		scyllaTable := controller.GetTable()
-		name := fmt.Sprintf("%v.%v.csv.zstd", scyllaTable.GetName(), companyID)
+		tableName := controller.GetTableName()
+		core.Log("Obteniendo registros de:", tableName, "...")
 
-		core.Log("Obteniendo registros de: ", name, "...")
+		batchIndex := 0
+		rowsCount, err := controller.ExportRecordsColbin(companyID, backupBatchSize,
+			func(encoded []byte, batchRowsCount int32) error {
+				// The restore reads the table name off the first segment, so it stays first.
+				name := fmt.Sprintf("%v.%v.%v.colbin.zstd", tableName, companyID, batchIndex)
+				batchIndex++
 
-		csv, err := controller.GetRecordsCSV(companyID)
+				compressed := encoder.EncodeAll(encoded, make([]byte, 0, len(encoded)))
+				core.Log(fmt.Sprintf("%v | %v registros | colbin: %.3f kb | zstd: %.3f kb",
+					name, batchRowsCount, float64(len(encoded))/1000, float64(len(compressed))/1000))
+
+				hdr := &tar.Header{
+					Name: name, Mode: 0600, Size: int64(len(compressed)),
+					ModTime: time.Now(),
+				}
+				if err := tw.WriteHeader(hdr); err != nil {
+					return core.Err("Error al escribir TAR header:", name, "|", err)
+				}
+				if _, err := tw.Write(compressed); err != nil {
+					return core.Err("Error al escribir TAR body:", name, "|", err)
+				}
+				return nil
+			})
+
 		if err != nil {
-			return core.Err(err)
+			return core.Err("Error al exportar la tabla", tableName, ":", err)
 		}
 
-		core.Log("Registros obtenidos: ", csv.RowsCount)
-
-		compressed := encoder.EncodeAll(csv.Content, make([]byte, 0, len(csv.Content)))
-		core.Log(fmt.Sprintf("%v registros comprimidos: %.3f kb", csv.RowsCount, float64(len(compressed))/1000))
-
-		hdr := &tar.Header{
-			Name: name, Mode: 0600, Size: int64(len(compressed)),
-			ModTime: time.Now(),
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return core.Err("Error al escribir TAR header:", name, "|", err)
-		}
-		if _, err := tw.Write(compressed); err != nil {
-			return core.Err("Error al escribir TAR body:", name, "|", err)
-		}
+		core.Log("Registros obtenidos:", tableName, "|", rowsCount, "| batches:", batchIndex)
 	}
 
 	if err := tw.Close(); err != nil {
