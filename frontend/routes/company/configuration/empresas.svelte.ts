@@ -2,6 +2,7 @@ import { GetHandler, POST } from '$libs/ui-runtime.svelte';
 import { Notify } from '$libs/helpers';
 import { tr } from '$core/store.svelte';
 import type { IInvoiceSeries } from './invoice-series';
+import { companyFlagValueSlots, storedCompanyFlagValues, type ICompanyFlagValue } from './company-flags';
 import pkg from 'notiflix'
 const { Loading } = pkg;
 
@@ -40,6 +41,9 @@ export interface ICompany {
   // The checked flag ids from backend/company_flags.toml, and only those. Saved as int16
   // on the backend, which the Flags tab never has to know.
   Flags: number[]
+  // The flags that carry a number instead of an on/off. In memory this holds one slot per
+  // valued flag in the catalog; postEmpresaParametros drops the empty ones on the way out.
+  FlagValues: ICompanyFlagValue[]
   ss: number
   upd: number
 }
@@ -53,12 +57,15 @@ export class EmpresaParametrosService extends GetHandler {
     // would keep feeding the old string into a selector that expects a number.
     // ver 4: the record gained Flags. A copy cached before it would show every flag
     // unchecked, and saving from that tab would then clear the ones that are on.
-    useCache = { min: 10, ver: 4 }
+    // ver 5: the record gained FlagValues, for the flags that hold a number. Same hazard:
+    // a cached copy would show every valued field empty and saving would clear it.
+    useCache = { min: 10, ver: 5 }
 
     empresa = $state({
         CulqiConfig: {},
         InvoiceSeries: [],
-        Flags: []
+        Flags: [],
+        FlagValues: companyFlagValueSlots([])
     } as unknown as ICompany)
 
     handler(response: any) {
@@ -69,6 +76,9 @@ export class EmpresaParametrosService extends GetHandler {
       record.InvoiceSeries = record.InvoiceSeries || []
       // Omitted when no flag is checked, which is every company until somebody checks one.
       record.Flags = record.Flags || []
+      // One slot per valued flag, stored value or zero: the inputs in the flags panel write into
+      // these objects, and a missing slot would leave a field with nothing to bind to.
+      record.FlagValues = companyFlagValueSlots(record.FlagValues)
       this.empresa = record
     }
 
@@ -80,7 +90,10 @@ export class EmpresaParametrosService extends GetHandler {
 
 export const postEmpresaParametros = (data: ICompany) => {
   return POST({
-    data,
+    // The empty value slots the panel binds to are dropped here rather than in the panel: both
+    // Saves on this route go through this one call, so this is the only place that cannot be
+    // bypassed by saving from the parameters form instead of the flags one.
+    data: { ...data, FlagValues: storedCompanyFlagValues(data.FlagValues) },
     route: "company-parametros",
     refreshRoutes: ["company-parametros"]
   })

@@ -11,10 +11,8 @@ import { tr } from '$core/store.svelte';
 import { useUI } from '@genix/ui';
 import { Loading, Notify } from '$libs/helpers';
 import { InvoiceSeriesSitesService, postInvoiceSeries } from './invoice-series.svelte';
-import {
-  DOC_TYPES, docTypeName, makeSeries, validateSeries,
-  type IInvoiceSeries,
-} from './invoice-series';
+import { DOC_TYPES, docTypeName } from '$core/sunat-doc-type';
+import { makeSeries, validateSeries, type IInvoiceSeries } from './invoice-series';
 import type { ICompany } from './empresas.svelte';
 
   const { company }: { company: ICompany } = $props()

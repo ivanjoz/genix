@@ -132,6 +132,9 @@ export const AdminModule: IModule = {
 		    { name: "Cash Flow|Flujo de Caja", route: "/finance/flujo-de-caja",
 		      icon: "icon-[fa--exchange]"
 				},
+		    { name: "Exchange Rate|Tipo de Cambio", route: "/finance/exchange-rate",
+		      icon: "icon-[fa--money]"
+				},
       ]
     },
     { name: "Website|Tienda /Web", minName: "WEB",  id: 7, icon: "icon-[fa--th-large]",
@@ -145,6 +148,8 @@ export const AdminModule: IModule = {
     { name: "Accounting|Contabilidad", minName: "CNT",  id: 8, icon: "icon-[fa--tasks]",
       options: [
         { name: "Invoicing|Facturación", route: "/accounting/invoicing"
+        },
+        { name: "Books|Libros", route: "/accounting/books", icon: "icon-[fa--book]"
         },
         { name: "Financial Statements|Estados Financieros",
 				},

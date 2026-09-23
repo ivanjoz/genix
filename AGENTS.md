@@ -58,6 +58,7 @@ through Bash.
 ## 3. CODE RULES
 
 - Pre-alpha: delete deprecated code freely. **NEVER** implement backwards compatibility.
+- **Fix the data, never patch the flow.** When stored data doesn't fit the shape the code now needs, reprocess it: migrate it, regenerate it. **NEVER** leave a runtime fallback that detects the old shape and repairs it on read. That fallback is legacy code the moment you write it.
 - **NEVER write more code than necessary.** Reduce implementations to the minimum that works. Comments are not code — this rule is about logic.
 - **Comment the relevant blocks,** not every line: explain rationale and intent wherever business logic is non-obvious.
 - **Use expressive names** for variables and functions. Never generic ones.

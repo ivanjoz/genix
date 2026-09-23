@@ -32,6 +32,11 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err.Error())
 	}
 
+	body.FlagValues, err = core.SanitizeCompanyFlagValues(body.FlagValues)
+	if err != nil {
+		return req.MakeErr(err.Error())
+	}
+
 	body.Updated = core.SUnixTime()
 	empresasToSave := []types.Company{body}
 	if err = db.Insert(&empresasToSave); err != nil {
@@ -172,6 +177,14 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	// The flags tab posts the whole company, so a payload can carry any id it likes: refuse the
 	// ones the catalog does not declare instead of storing a rule the browser cannot show back.
 	record.Flags, err = core.SanitizeCompanyFlags(record.Flags)
+	if err != nil {
+		return req.MakeErr(err.Error())
+	}
+
+	// Same gate for the flags that carry a number instead of an on/off: an id the catalog does
+	// not declare as valued, or a number wider than the declared byte width, is refused rather
+	// than truncated into something the company never typed.
+	record.FlagValues, err = core.SanitizeCompanyFlagValues(record.FlagValues)
 	if err != nil {
 		return req.MakeErr(err.Error())
 	}

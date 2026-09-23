@@ -11,10 +11,14 @@ const (
 
 type PurchaseOrder struct {
 	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
-	ID           int32
-	CompanyID    int32 `json:",omitempty"`
-	ProviderID   int32 `json:",omitempty"`
-	WarehouseID  int32 `json:",omitempty"`
+	ID         int32
+	CompanyID  int32 `json:",omitempty"`
+	ProviderID int32 `json:",omitempty"`
+	// ProviderSnapshotID freezes the supplier's name and RUC as of this purchase, in
+	// crm.ClientProviderSnapshot. The Registro de Compras prints them (fields 10-12 of PLE
+	// 8.3) and a filed book may not move when the supplier is later renamed.
+	ProviderSnapshotID int32 `json:",omitempty"`
+	WarehouseID        int32 `json:",omitempty"`
 	Date         int16 `json:",omitempty"`
 	Week         int16 `json:",omitempty"`
 	DeliveryDate int16 `json:",omitempty"`
@@ -49,6 +53,7 @@ type PurchaseOrderTable struct {
 	CompanyID                    db.Col[*PurchaseOrderTable, int32]
 	ID                           db.Col[*PurchaseOrderTable, int32]
 	ProviderID                   db.Col[*PurchaseOrderTable, int32]
+	ProviderSnapshotID           db.Col[*PurchaseOrderTable, int32]
 	WarehouseID                  db.Col[*PurchaseOrderTable, int32]
 	Date                         db.Col[*PurchaseOrderTable, int16]
 	Week                         db.Col[*PurchaseOrderTable, int16]

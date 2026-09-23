@@ -55,10 +55,23 @@ func main() {
 	if err != nil {
 		exitWithError(err)
 	}
-
-	updated, err := syncFrontendInterfaces(projectRoot, structs)
+	catalogs, err := collectBackendCatalogs(projectRoot)
 	if err != nil {
 		exitWithError(err)
+	}
+
+	// Catalogs first, and independently: the //STRUCT: pass aborts the whole run on a tag it
+	// cannot resolve, and one stale tag must not be what stops a catalog from being written.
+	updated, err := syncFrontendCatalogs(projectRoot, catalogs)
+	if err != nil {
+		exitWithError(err)
+	}
+
+	interfacesUpdated, err := syncFrontendInterfaces(projectRoot, structs)
+	updated += interfacesUpdated
+	if err != nil {
+		fmt.Printf("\nWARNING: the //STRUCT: pass stopped early: %v\n"+
+			"Catalogs above were written; the interfaces after that tag were not.\n", err)
 	}
 	if updated == 0 {
 		fmt.Println("no changes needed")
@@ -306,13 +319,21 @@ func findNextInterface(content string, offset int) (tsInterface, error) {
 }
 
 func findMatchingBrace(content string, openBrace int) (int, error) {
+	return findMatchingDelimiter(content, openBrace, '{', '}')
+}
+
+// findMatchingDelimiter walks TypeScript source from an opening delimiter to the one that
+// closes it, skipping over comments and string literals so a brace inside `"{"` or a
+// bracket inside a `//` note cannot unbalance the count. The catalog sync uses it for
+// `[`/`]`, the interface sync for `{`/`}`.
+func findMatchingDelimiter(content string, openIndex int, openRune, closeRune rune) (int, error) {
 	depth := 0
 	inLineComment := false
 	inBlockComment := false
 	inString := rune(0)
 
-	for index, currentRune := range content[openBrace:] {
-		absoluteIndex := openBrace + index
+	for index, currentRune := range content[openIndex:] {
+		absoluteIndex := openIndex + index
 		nextByte := byte(0)
 		if absoluteIndex+1 < len(content) {
 			nextByte = content[absoluteIndex+1]
@@ -352,18 +373,19 @@ func findMatchingBrace(content string, openBrace int) (int, error) {
 			inString = currentRune
 			continue
 		}
-		if currentRune == '{' {
+		if currentRune == openRune {
 			depth++
 			continue
 		}
-		if currentRune == '}' {
+		if currentRune == closeRune {
 			depth--
 			if depth == 0 {
 				return absoluteIndex, nil
 			}
 		}
 	}
-	return 0, errors.New("could not find matching interface brace")
+	return 0, fmt.Errorf("could not find the %q that closes the %q at %d",
+		closeRune, openRune, openIndex)
 }
 
 func resolveStruct(reference string, structsByName map[string][]backendStruct) (backendStruct, error) {

@@ -7,6 +7,7 @@
       "dependencies": {
         "@genix/ui": "workspace:*",
         "@humanspeak/svelte-virtual-list": "^0.3.5",
+        "@ivanjoz/public-business-data": "github:ivanjoz/public-business-data#main",
         "billboard.js": "^3.14.3",
         "date-fns": "^4.1.0",
         "dexie": "^4.2.0",
@@ -235,6 +236,8 @@
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.34.5", "", { "os": "win32", "cpu": "x64" }, "sha512-+29YMsqY2/9eFEiW93eqWnuLcWcufowXewwSNIT6UwZdUUCrM3oFjMWH/Z6/TMmb4hlFenmfAVbpWeup2jryCw=="],
 
     "@ivanjoz/minijson": ["@ivanjoz/minijson@github:ivanjoz/minijson#f3aa796", {}, "ivanjoz-minijson-f3aa796", "sha512-7HMkCtOTldVblUyCOxsJqhnt26gUrUZrpOzi4VHppzLZcnCa0n3oyt8EG6IBgRynQ03TYIAChyop0FIBKXhkmQ=="],
+
+    "@ivanjoz/public-business-data": ["@ivanjoz/public-business-data@github:ivanjoz/public-business-data#3dcab38", {}, "ivanjoz-public-business-data-3dcab38", "sha512-6nTdFm37/93udsUOxtYdQ24J+tC/7Qwgubud1w6BZdw/NR++Q8sE2O6Iy61u6qyzFchvu2UZFtqJZacReDVxwg=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
@@ -815,8 +818,6 @@
     "vitefu": ["vitefu@1.1.2", "", { "peerDependencies": { "vite": "^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-beta.0" }, "optionalPeers": ["vite"] }, "sha512-zpKATdUbzbsycPFBN71nS2uzBUQiVnFoOrr2rvqv34S1lcAgMKKkjWleLGeiJlZ8lwCXvtWaRn7R3ZC16SYRuw=="],
 
     "wasm-feature-detect": ["wasm-feature-detect@1.8.0", "", {}, "sha512-zksaLKM2fVlnB5jQQDqKXXwYHLQUVH9es+5TOOHwGOVJOCeRBCiPjwSg+3tN2AdTCzjgli4jijCH290kXb/zWQ=="],
-
-    "yaml": ["yaml@2.8.2", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A=="],
 
     "zimmerframe": ["zimmerframe@1.1.4", "", {}, "sha512-B58NGBEoc8Y9MWWCQGl/gq9xBCe4IiKM0a2x7GZdQKOW5Exr8S1W24J6OgM1njK8xCRGvAJIL/MxXHf6SkmQKQ=="],
 

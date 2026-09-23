@@ -8,7 +8,7 @@ visibility: tenant
 description_en: >-
   Tenant company settings and database backups on one page, split into four tabs. My Company edits
   the company's name, tax ID, legal name, email, phone, address, city and representative, and
-  carries the Company Flags table that turns business rules on. Invoicing holds the SUNAT series and
+  carries the Company Flags table that turns business rules on or sets the value they use. Invoicing holds the SUNAT series and
   the SUNAT credentials and certificate. Store holds the Culqi payment-gateway keys for the online
   store, separated into Culqi Test and Culqi Live sections. Backups generates an on-demand snapshot
   of the company's operational data, downloads an existing backup file, and restores the database to
@@ -16,7 +16,7 @@ description_en: >-
 description_es: >-
   Configuración de la empresa del tenant y copias de seguridad en una sola página, dividida en cuatro
   pestañas. Mi Empresa edita nombre, RUC, razón social, correo, teléfono, dirección, ciudad y
-  representante, y contiene la tabla Flags de la Empresa que activa reglas de negocio. Facturación
+  representante, y contiene la tabla Flags de la Empresa que activa reglas de negocio o define el valor que usan. Facturación
   contiene las series SUNAT y las credenciales y el certificado SUNAT. Tienda contiene las llaves de
   la pasarela de pago Culqi para la tienda online, separadas en las secciones Culqi Pruebas y Culqi
   Live. Backups genera un respaldo bajo demanda de la información operativa, descarga un backup
@@ -34,9 +34,11 @@ the current tenant session. It is divided into four tabs shown at the top of the
 - **My Company (Mi Empresa)** — edits the identity data of one company record (name, tax ID/RUC,
   legal name/razón social, email, phone, address, city, representative). Its form heading reads
   "Company Parameters" (`Parámetros de la Empresa`). Beside it, **Company Flags (Flags de la
-  Empresa)** lists the business rules the company can turn on, one checkbox per rule, grouped by
-  area (today only **Commercial / Comercial**). A checked flag applies to the whole company. Both
-  panels are the same record: either Save button writes both.
+  Empresa)** lists the business rules the company can configure, grouped by area (today only
+  **Commercial / Comercial**). Most rules are a checkbox, and a checked flag applies to the whole
+  company. A few rules take a number instead and show an input field — today **Spread** (the
+  exchange-rate spread), which accepts up to three decimals; leaving that field empty means the rule
+  uses its own default. Both panels are the same record: either Save button writes both.
 - **Invoicing (Facturación)** — the electronic invoicing setup: **Invoicing Series (Series de
   Facturación)**, the SUNAT series each document is issued under, and **SUNAT Credentials
   (Credenciales SUNAT)**, the SOL user, SOL password and digital certificate used to sign. Each of

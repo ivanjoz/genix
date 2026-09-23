@@ -234,7 +234,7 @@ files:
     supports: [concepts, capability.query-range, capability.lookup-direct, troubleshooting]
   - path: frontend/core/modules.ts
     role: user-interface
-    hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
+    hash: sha256:5823f8cd8df9d03acf80c3fecb539fb069743f5fb330cba0a78a7957ab01c5aa
     supports: [page-purpose, capability.query-range]
   - path: frontend/domain-components/SideMenu.svelte
     role: user-interface

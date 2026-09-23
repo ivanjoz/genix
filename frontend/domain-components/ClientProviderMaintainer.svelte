@@ -13,7 +13,10 @@
   import FilterInput from '$components/form/FilterInput.svelte'
   import Button from '$components/buttons/Button.svelte'
   import { CountryCitiesService } from '$services/business/country-cities.svelte'
-  import { ClientProviderService, PersonType, postClientProviders, type IClientProvider } from '$services/crm/client-provider.svelte'
+  import { IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '$services/crm/identity-doc'
+  import {
+    ClientProviderService, PersonType, postClientProviders, type IClientProvider,
+  } from '$services/crm/client-provider.svelte'
 
   interface IClientProvidersViewProps {
     clientProviderType: number
@@ -61,6 +64,10 @@
       Type: clientProviderType,
       Name: '',
       RegistryNumber: '',
+      // Left blank on purpose: the backend derives it from the registry number's shape.
+      // 0 leaves the picker's derive rule in charge until the user overrides it.
+      IdentityDocType: 0,
+      SnapshotID: 0,
       PersonType: PersonType.PERSON,
       Email: '',
       CountryID: 604,
@@ -310,6 +317,9 @@
         save="RegistryNumber"
         css="col-span-24 md:col-span-12"
         required={clientProviderForm.PersonType === PersonType.COMPANY}
+        leftOptions={IDENTITY_DOC_OPTIONS}
+        saveLeft="IdentityDocType"
+        deriveLeftOption={(value) => deriveIdentityDocType(String(value ?? ''))}
       />
       <SearchSelect
         label="Department | Province | District|Departamento | Provincia | Distrito"

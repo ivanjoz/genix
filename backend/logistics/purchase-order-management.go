@@ -2,6 +2,7 @@ package logistics
 
 import (
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	"app/logistics/types"
@@ -236,6 +237,20 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		record.Week = currentSemana.Code
 		// La deuda inicial corresponde al monto total: cada Pago la reduce hasta llegar a 0.
 		record.DebtAmount = record.TotalAmount
+
+		// Congela la identidad del proveedor al crear la orden: el Registro de Compras
+		// imprime su razón social y RUC tal como estaban en la compra, y renombrarlo
+		// después no puede reescribir un libro ya presentado.
+		providers := []crm.ClientProvider{}
+		providerQuery := db.Query(&providers)
+		providerQuery.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(record.ProviderID)
+		if err := providerQuery.Exec(); err != nil {
+			return req.MakeErr("Error al leer el proveedor.", err)
+		}
+		if len(providers) == 0 {
+			return req.MakeErr("El proveedor", record.ProviderID, "no existe.")
+		}
+		record.ProviderSnapshotID = providers[0].SnapshotID
 	}
 
 	records := []types.PurchaseOrder{record}
@@ -246,6 +261,8 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			curr.CreatedBy = prev.CreatedBy
 			curr.Date = prev.Date
 			curr.Week = prev.Week
+			// La identidad se congela una sola vez, al crear la orden.
+			curr.ProviderSnapshotID = prev.ProviderSnapshotID
 			curr.Status = types.PurchaseOrderStatusPending
 			curr.Updated = now
 			curr.UpdatedBy = req.User.ID

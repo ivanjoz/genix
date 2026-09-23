@@ -45,6 +45,17 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 			return core.Err("El registro en posición", clientProviderIndex, "tiene un Email inválido.")
 		}
 
+		// A row with no declared document type falls back to the shape of its registry
+		// number, so the sales book always has something to print in column 11. Only what
+		// the client actually sent is validated — the fallback is ours and is known good.
+		if clientProvider.IdentityDocType == 0 {
+			clientProvider.IdentityDocType = DeriveIdentityDocType(clientProvider.RegistryNumber)
+		} else if !IsIdentityDocType(clientProvider.IdentityDocType) {
+			return core.Err("El registro en posición", clientProviderIndex,
+				"tiene un IdentityDocType inválido. Use uno de la tabla SUNAT (id=código):",
+				IdentityDocTypeNames())
+		}
+
 		if clientProvider.Type == ClientProviderTypeProvider && clientProvider.CountryID <= 0 {
 			return core.Err("El registro en posición", clientProviderIndex, "debe tener CountryID válido.")
 		}
@@ -125,6 +136,21 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 		if existing, ok := existingByHashMap[currentClientProvider.NameRegistryHash]; ok {
 			currentClientProvider.ID = existing.ID
 		}
+	}
+
+	// Point every row at the snapshot holding the identity it is about to store. Done before
+	// the merge so the column lands in the same write, and outside the loop so one payload
+	// costs one lookup rather than one per row.
+	identities := make([]ClientProviderSnapshot, len(*clientProvidersPayload))
+	for clientProviderIndex := range *clientProvidersPayload {
+		identities[clientProviderIndex] = (*clientProvidersPayload)[clientProviderIndex].IdentitySnapshot()
+	}
+	snapshotIDs, snapshotError := ResolveIdentitySnapshots(identities, companyID, userID)
+	if snapshotError != nil {
+		return snapshotError
+	}
+	for clientProviderIndex := range *clientProvidersPayload {
+		(*clientProvidersPayload)[clientProviderIndex].SnapshotID = snapshotIDs[clientProviderIndex]
 	}
 
 	core.Log("saveClientProviders merge start:", "payload_count=", len(*clientProvidersPayload))

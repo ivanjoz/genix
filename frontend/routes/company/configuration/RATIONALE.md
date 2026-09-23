@@ -1,3 +1,43 @@
+## A valued flag draws an Input, and its slot lives on the record so nothing syncs two copies
+
+**Context** — `company_flags.toml` gained a flag with `type = "i:3", bytes = 2`, which is a number
+instead of a checkbox. `Input` writes into `saveOn[save]`, so the field needs an object to bind to,
+and it only re-reads that object when its identity changes — a value fetched into a stable object
+after mount would never appear in the field.
+
+**Decision** — `EmpresaParametrosService.handler` runs `companyFlagValueSlots` over the fetched
+record, so `empresa.FlagValues` always carries one `{ID, Value}` object per valued flag in the
+catalog, stored number or `undefined`. The panel binds each `Input` straight to its slot with
+`baseDecimals={flag.decimals}`, which is exactly the catalog's scale. `postEmpresaParametros` runs
+`storedCompanyFlagValues` on the way out, dropping the empty slots. The service cache went to
+`ver: 5`. The parser refuses a `type` it cannot scale or a `bytes` that is not 2 or 4, mirroring
+the backend loader.
+
+**Rationale** — binding to the record itself rather than a draft object plus an `$effect`: the
+effect would have to read `FlagValues` to seed and write it to sync, so a save would re-enter it
+and reseed the field the user is typing in. A new slot array per fetch is what makes `Input`
+re-read, so the identity requirement is met without a `dependencyValue` prop. `Value` is
+`undefined` and not `0` while unset because `Input` renders the number it is handed, and a `0`
+would show over a field nobody filled. Pruning in `postEmpresaParametros` rather than in the panel:
+both Saves on this route go through that one call, so the parameters form cannot bypass it.
+
+## The document-type catalog moved out of the configuration route
+
+**Context** — `DOC_TYPES`, the four `DOC_TYPE_*` constants, `docTypeName` and `isNoteDocType` lived
+in `invoice-series.ts`. Three features read them: the series form here, the till in
+`sale_order_create`, and the accounting books — so two routes were importing from a third.
+
+**Decision** — they are in `$core/sunat-doc-type.ts`, together with a new `sunatDocCode`.
+`invoice-series.ts` keeps only what is about a *series*: the interface, id allocation and
+`validateSeries`.
+
+**Rationale** — routes are leaves, and `$routes/company/configuration/invoice-series` appearing in
+a sales import was the symptom. `core/` is where cross-cutting code that holds business logic goes,
+and a SUNAT catalog is exactly that: nobody owns it, everybody reads it. It also gives the padding
+one home on each side of the wire — `sunatDocCode` here, `SunatDocCode` in
+`backend/accounting/types/sales_book.go` — now that rows carry the id rather than the code. Cost:
+one more file, and `invoice-series.ts` re-imports two constants it used to declare.
+
 ## Invoicing moved to its own tab and the flags took its place beside the company parameters
 
 **Context** — the flags panel had a tab of its own while the invoicing series and the SUNAT

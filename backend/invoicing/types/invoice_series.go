@@ -127,6 +127,37 @@ func ResolveSeries(allSeries []InvoiceSeries, docType int8, seriesID int8) (*Inv
 	return fallback, nil
 }
 
+// The two families a series can belong to. A note is issued in the family of the document
+// it corrects — FC01 corrects a factura, BC01 a boleta — which is why the family, and not
+// the document type, is what a series code has to agree with.
+const (
+	FamilyFactura = byte('F')
+	FamilyBoleta  = byte('B')
+)
+
+// SeriesFamily reads which family a four-character series code belongs to.
+//
+// SUNAT's comprobante table accepts two shapes per family: the contribuyente's own codes,
+// FXXX and BXXX, and the two codes it issues for documents emitted from its own system,
+// E001 for facturas and EB01 for boletas. E001 and EB01 are exact strings, not prefixes —
+// "E002" is not a series, it is a typo.
+func SeriesFamily(seriesCode string) (byte, bool) {
+	switch seriesCode {
+	case "E001":
+		return FamilyFactura, true
+	case "EB01":
+		return FamilyBoleta, true
+	}
+	if len(seriesCode) == 0 {
+		return 0, false
+	}
+	switch seriesCode[0] {
+	case FamilyFactura, FamilyBoleta:
+		return seriesCode[0], true
+	}
+	return 0, false
+}
+
 // ValidateSeries checks the whole set, because the rules that matter are about
 // the set: ids and codes have to be unique, and a document type can only have
 // one default. It also normalizes the codes to upper case in place.
@@ -159,16 +190,19 @@ func ValidateSeries(allSeries []InvoiceSeries) error {
 		if len(series.SeriesCode) != 4 {
 			return errSeries("El código de serie debe tener 4 caracteres, por ejemplo F001.")
 		}
-		prefix := series.SeriesCode[0]
-		if prefix != 'F' && prefix != 'B' {
-			return errSeries("El código de serie " + series.SeriesCode + " debe empezar con F o con B.")
+		family, isKnownFamily := SeriesFamily(series.SeriesCode)
+		if !isKnownFamily {
+			return errSeries("El código de serie " + series.SeriesCode +
+				" debe empezar con F o con B, o ser E001 o EB01.")
 		}
-		if series.DocType == DocTypeFactura && prefix != 'F' {
-			return errSeries("Una factura necesita una serie que empiece con F.")
+		if series.DocType == DocTypeFactura && family != FamilyFactura {
+			return errSeries("Una factura necesita una serie de la familia F (FXXX o E001).")
 		}
-		if series.DocType == DocTypeBoleta && prefix != 'B' {
-			return errSeries("Una boleta necesita una serie que empiece con B.")
+		if series.DocType == DocTypeBoleta && family != FamilyBoleta {
+			return errSeries("Una boleta necesita una serie de la familia B (BXXX o EB01).")
 		}
+		// A note is not checked against a family: it inherits the one of the document it
+		// corrects, and only the caller knows which that is.
 
 		// Only active codes have to be unique: a retired series keeps its code so
 		// the documents issued under it still read correctly.

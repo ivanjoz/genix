@@ -9,18 +9,18 @@ import { Env } from '$core/env'
 
 const LOG_PREFIX = '[notifications:idb]'
 const NOTIFICATIONS_DB_PREFIX = 'notifications'
-const NOTIFICATIONS_DB_VERSION = 1
+// v2 replaced name/text/type with title/subtitle/message/color/icon; the upgrade clears v1 rows.
+const NOTIFICATIONS_DB_VERSION = 2
 // Hard cap on persisted rows: keep the newest MAX_ROWS, drop the rest on hydrate.
 export const MAX_NOTIFICATION_ROWS = 500
 
 // kind discriminates the two item families that share this store.
-export const NOTIFICATION_KIND = 1 // static message carrying a `type`
+export const NOTIFICATION_KIND = 1 // static message carrying a `color` + `icon`
 export const PROCESS_KIND = 2      // long-running task carrying a live `status`
 
-// Notification `type`: severity of a static message.
-export const NOTIFICATION_TYPE_INFO = 1
-export const NOTIFICATION_TYPE_WARN = 2
-export const NOTIFICATION_TYPE_ERROR = 3
+// The fixed color schemes and icons a message can use (see NotificationsButton.svelte).
+export type NotificationColor = 'blue' | 'green' | 'yellow' | 'red'
+export type NotificationIcon = 'info' | 'success' | 'warning' | 'error'
 
 // Process `status`: 0 canceled, 1 in progress, 2 done. A process can never be
 // created with status 0 — that value is only ever set later by the producer.
@@ -29,19 +29,20 @@ export const PROCESS_STATUS_IN_PROGRESS = 1
 export const PROCESS_STATUS_DONE = 2
 
 export type NotificationKind = typeof NOTIFICATION_KIND | typeof PROCESS_KIND
-export type NotificationType = 1 | 2 | 3
 export type ProcessStatus = 0 | 1 | 2
 
 // One persisted item. `id` is the synchronous counter id we own (see
 // notifications.svelte.ts) — NOT a Dexie autoincrement — so the caller can use
-// the returned id immediately without awaiting the write. `type` is meaningful
-// only for notifications, `status` only for processes.
+// the returned id immediately without awaiting the write. `color`/`icon` are
+// meaningful only for notifications, `status` only for processes.
 export interface NotificationRow {
   id: number
   kind: NotificationKind
-  name: string
-  text: string
-  type: NotificationType
+  title: string
+  subtitle: string
+  message: string
+  color: NotificationColor
+  icon: NotificationIcon
   status: ProcessStatus
   createdAt: number
   updatedAt: number
@@ -56,7 +57,7 @@ class NotificationsDatabase extends Dexie {
     // `createdAt` is indexed to slice/prune the newest rows cheaply.
     this.version(NOTIFICATIONS_DB_VERSION).stores({
       notifications: 'id, createdAt',
-    })
+    }).upgrade((transaction) => transaction.table('notifications').clear())
   }
 }
 

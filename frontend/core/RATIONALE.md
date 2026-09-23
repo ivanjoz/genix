@@ -1,3 +1,21 @@
+## sendUserNotification: popup window, color vs. icon, and the v2 row shape
+**Context** — The header layer needed a message API and a "recent only" popup, which left some
+behavior open: whether icon and color are one choice, what "last 5 seconds" is measured against
+while the popup stays open, whether processes pop it too, and what to do with v1 rows.
+**Decision** — `color` (blue|green|yellow|red) and `icon` (info|success|warning|error) are separate
+options, and `icon` defaults to the one that matches the color. The 5-second window is fixed when the
+popup opens (`notificationsLayer.recentSinceTime`), so messages that arrive while it's open are added
+and nothing drops out. A layer the user already opened on the full list stays on the full list.
+Only `sendUserNotification` pops the layer; `addProcess`/`updateProcess` do not. A process has no
+color of its own: its status decides it (running blue + spinner, done green, canceled red). Rows now
+carry `title/subtitle/message/color/icon` for both kinds (no `name/text/type`). The IndexedDB version
+went to 2, and its upgrade clears the v1 rows.
+**Rationale** — Keeping the icon separate costs one optional field and lets a green card carry, say,
+an info icon. Fixing the window at open time matches "they don't disappear until you click outside".
+Processes already announce themselves through the spinning ring and badge, so popping the layer on
+every upload would only interrupt the user. Clearing
+v1 rows loses only local UI history and avoids a read-time shape fallback.
+
 ## Menu group "Negocio" folded into "Mi Empresa"
 
 **Context** — The side menu had a group `Configuración` whose first option was `Mi Empresa`, and a

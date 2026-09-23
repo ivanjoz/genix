@@ -26,6 +26,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-generate-erp-history":           GenerateErpHistory,
 	"fn-generate-supply-data":           GenerateSupplyData,
 	"fn-backfill-observability-credits": BackfillObservabilityCredits,
+	"fn-backfill-identity-snapshots":    BackfillIdentitySnapshots,
 	"fn-recompute-user-accesos":         security.RecomputeUserAccesos,
 	"fn-reset-counters":                 ResetCounterPart,
 	"fn-deploy-cloudflare-worker":       DeployCloudflareWorkerHandler,

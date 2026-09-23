@@ -288,6 +288,14 @@ frontend_routes = "finance/flujo-de-caja"
 backend_apis = ""
 
 [[access]]
+id = 37
+name = "Tipo de Cambio"
+group = 5
+levels = 14
+frontend_routes = "finance/exchange-rate"
+backend_apis = "POST.exchange-rates"
+
+[[access]]
 id = 31
 name = "Páginas Web"
 group = 6
@@ -342,3 +350,11 @@ group = 7
 levels = 14
 frontend_routes = "accounting/invoicing"
 backend_apis = "POST.invoice-retry,GET.invoices,GET.invoice-xml,POST.invoice-series"
+
+[[access]]
+id = 36
+name = "Libros Contables"
+group = 7
+levels = 14
+frontend_routes = "accounting/books"
+backend_apis = "GET.sales-book,GET.client-provider-snapshot-ids"

@@ -230,7 +230,7 @@ hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
     role: user-interface
-    hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
+    hash: sha256:5823f8cd8df9d03acf80c3fecb539fb069743f5fb330cba0a78a7957ab01c5aa
     supports: [page-purpose, related-pages]
   - path: frontend/routes/sales/sale_orders_charts/+page.svelte
     role: page

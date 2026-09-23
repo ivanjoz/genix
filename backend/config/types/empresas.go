@@ -1,6 +1,7 @@
 package types
 
 import (
+	"app/core"
 	"app/db"
 	invoicing "app/invoicing/types"
 )
@@ -34,9 +35,13 @@ type Company struct {
 	// Flags are the ids the company has checked in company_flags.toml, and only those:
 	// an unchecked flag is absent, never stored as a zero. One flat list because the
 	// catalog's ids are unique across its sections. core.HasCompanyFlag reads it.
-	Flags   []int16 `json:",omitempty"`
-	Updated int32   `json:"upd" db:"updated"`
-	Status  int8    `json:"ss" db:"status"`
+	Flags []int16 `json:",omitempty"`
+	// FlagValues carries the flags the catalog declares with a `type`: those hold a number
+	// instead of an on/off, so their id never appears in Flags. The value is already scaled
+	// by the flag's decimals — core.GetCompanyFlagValue unscales it back.
+	FlagValues []core.CompanyFlagValue `json:",omitempty"`
+	Updated    int32                   `json:"upd" db:"updated"`
+	Status     int8                    `json:"ss" db:"status"`
 }
 
 type CompanyTable struct {
@@ -57,6 +62,7 @@ type CompanyTable struct {
 	CulqiConfig       db.Col[*CompanyTable, CulqiConfig]
 	InvoiceSeries     db.Col[*CompanyTable, []invoicing.InvoiceSeries]
 	Flags             db.ColSlice[*CompanyTable, int16]
+	FlagValues        db.Col[*CompanyTable, []core.CompanyFlagValue]
 	Updated           db.Col[*CompanyTable, int32]
 	Status            db.Col[*CompanyTable, int8]
 }

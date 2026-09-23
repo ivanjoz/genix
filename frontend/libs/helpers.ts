@@ -356,6 +356,26 @@ export const normalizeComparableValue = (value: unknown): unknown => {
   return value
 }
 
+// downloadTextFile hands the browser a text file the page built itself.
+//
+// Latin-1 and not UTF-8: SUNAT's flat files are read as ISO-8859-1, so a BOM or a multi-byte
+// "Ñ" is a rejected record. Every character the encoder cannot represent becomes "?", which is
+// what the callers strip before they get here.
+export const downloadTextFile = (fileName: string, content: string): void => {
+  const latin1Bytes = Uint8Array.from(
+    content, character => {
+      const code = character.charCodeAt(0)
+      return code < 256 ? code : 63
+    },
+  )
+  const url = URL.createObjectURL(new Blob([latin1Bytes], { type: 'text/plain' }))
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), 2500)
+}
+
 export const splitTwoStrings = (str: string, maxLen?: number): [string,string] => {
   if(!str){ return ["",""] }
   if(maxLen && str?.length <= maxLen){ return [str,""] }

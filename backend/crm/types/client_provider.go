@@ -27,11 +27,20 @@ type ClientProvider struct {
 	Name             string `json:",omitempty"`
 	RegistryNumber   string `json:",omitempty"`
 	NameRegistryHash int64  `json:",omitempty"`
-	PersonType       int8   `json:",omitempty"`
-	Email            string `json:",omitempty"`
-	CountryID        int16  `json:",omitempty"`
-	CityID           string `json:",omitempty"`
-	Created          int32  `json:",omitempty"`
+	// IdentityDocType is SUNAT's tipo de documento de identidad, as the numeric id of an
+	// IdentityDocOptions entry — see identity_doc_type.go. It cannot be inferred from
+	// RegistryNumber: a carné de extranjería, a pasaporte and a PTP are all "not 8 and not
+	// 11 digits", which is why the till offers a picker. 0 means nothing was declared.
+	IdentityDocType int8 `json:",omitempty"`
+	// SnapshotID is the identity this row currently presents, in client_provider_snapshot.
+	// A document copies it when it is issued and never reads it again, which is what keeps
+	// a filed book from moving when the name here is corrected.
+	SnapshotID int32  `json:",omitempty"`
+	PersonType int8   `json:",omitempty"`
+	Email      string `json:",omitempty"`
+	CountryID  int16  `json:",omitempty"`
+	CityID     string `json:",omitempty"`
+	Created    int32  `json:",omitempty"`
 	CreatedBy        int32  `json:",omitempty"`
 	Status           int8   `json:"ss,omitempty"`
 	Updated          int32  `json:"upd,omitempty"`
@@ -47,6 +56,8 @@ type ClientProviderTable struct {
 	Name             db.Col[*ClientProviderTable, string]
 	RegistryNumber   db.Col[*ClientProviderTable, string]
 	NameRegistryHash db.Col[*ClientProviderTable, int64]
+	IdentityDocType  db.Col[*ClientProviderTable, int8]
+	SnapshotID       db.Col[*ClientProviderTable, int32]
 	PersonType       db.Col[*ClientProviderTable, int8]
 	Email            db.Col[*ClientProviderTable, string]
 	CountryID        db.Col[*ClientProviderTable, int16]

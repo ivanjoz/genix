@@ -108,6 +108,12 @@ type InvoiceDocument struct {
 	IssueDate int16 `json:",omitempty"`
 	IssueTime int32 `json:",omitempty"`
 
+	// ClientSnapshotID freezes who was billed, in crm.ClientProviderSnapshot. Everything
+	// else about the sale is read back from the sale, but the customer cannot be: renaming
+	// a client in CRM would rewrite the name this document already printed, and the
+	// Registro de Ventas has to read the same name five years from now.
+	ClientSnapshotID int32 `json:",omitempty"`
+
 	Currency int8 `json:",omitempty"`
 
 	// Amounts in cents. They aggregate the lines, so they are 64 bits. Kept even
@@ -182,6 +188,7 @@ type InvoiceDocumentTable struct {
 	Correlativo      db.Col[*InvoiceDocumentTable, int32]
 	IssueDate        db.Col[*InvoiceDocumentTable, int16]
 	IssueTime        db.Col[*InvoiceDocumentTable, int32]
+	ClientSnapshotID db.Col[*InvoiceDocumentTable, int32]
 	Currency         db.Col[*InvoiceDocumentTable, int8]
 	TotalAmount      db.Col[*InvoiceDocumentTable, int64]
 	TaxAmount        db.Col[*InvoiceDocumentTable, int64]
@@ -226,7 +233,11 @@ func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 		// "Was this sale invoiced?" needs no index: the documents of a sale are a
 		// contiguous range of the key, so the question is a slice of the partition.
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.IssueDate)},
+			// An index group and not a plain local index: the accounting books read a whole
+			// month at a time, and Scylla only takes equality on a secondary index — a BETWEEN
+			// on one is refused outright. The group is what fans a range out into per-day reads.
+			// The CQL index it declares is the same one a local index declares.
+			{Keys: db.Cols(e.IssueDate), UseIndexGroup: true},
 			{Type: db.TypeDelta, Keys: db.Cols(e.State)},
 		},
 	}

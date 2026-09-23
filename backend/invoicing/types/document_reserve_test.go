@@ -1,6 +1,7 @@
 package types
 
 import (
+	crm "app/crm/types"
 	sales "app/sales/types"
 	"testing"
 	"time"
@@ -108,8 +109,12 @@ func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 	// so the document is keyed by the sale itself. Its id reads as correlativo 55,
 	// random 03, series 01.
 	order := &sales.SaleOrder{ID: 550301, ClientID: 7, DetailProductsIDs: []int32{101}}
-	row := rowFromDocument(1, 1, order, testSeries(), original)
+	row := rowFromDocument(1, 1, order, testSeries(), original, 42)
 
+	// The buyer is pinned, not looked up again: this is what stops a filed book moving.
+	if row.ClientSnapshotID != 42 {
+		t.Errorf("ClientSnapshotID = %v, want the identity the document froze", row.ClientSnapshotID)
+	}
 	if row.ID != order.ID {
 		t.Errorf("id = %v, want the sale's own id %v", row.ID, order.ID)
 	}
@@ -185,16 +190,36 @@ func TestRowKeepsTheAmountCharged(t *testing.T) {
 	}
 }
 
-func TestIdentityDocTypeOfInfersFromShape(t *testing.T) {
+// The fallback lives in crm now, where the column it fills in does. What this asserts is
+// that the two catalogs still line up: crm stores SUNAT's codes and facturago reads them
+// straight out of the record, so a divergence would silently mislabel every buyer.
+func TestIdentityDocTypeMatchesFacturagoCatalog(t *testing.T) {
 	cases := map[string]string{
 		"20000000002": model.IDDocRUC,
 		"12345678":    model.IDDocDNI,
 		"":            "",
 		"X1234":       model.IDDocForeign,
 	}
+	// crm stores a catalog id and prints SUNAT's character through SunatIdentityDocCode, so
+	// the comparison goes through the conversion — which is the half that can drift.
 	for registryNumber, want := range cases {
-		if got := identityDocTypeOf(registryNumber); got != want {
-			t.Errorf("identityDocTypeOf(%q) = %q, want %q", registryNumber, got, want)
+		if got := crm.SunatIdentityDocCode(crm.DeriveIdentityDocType(registryNumber)); got != want {
+			t.Errorf("DeriveIdentityDocType(%q) = %q, want %q", registryNumber, got, want)
 		}
+	}
+	if crm.SunatIdentityDocCode(crm.IdentityDocNone) != model.IDDocNone ||
+		crm.SunatIdentityDocCode(crm.IdentityDocPassport) != model.IDDocPassport {
+		t.Error("the crm identity catalog drifted from facturago's")
+	}
+}
+
+// AnonymousDocType is the literal "0" because a const cannot call SunatIdentityDocCode. It
+// is what an unidentified boleta declares and what the Registro de Ventas prints for it, so
+// letting it drift from the catalog would put a character on a filed book that the
+// comprobante never carried.
+func TestAnonymousDocTypeIsSunatNone(t *testing.T) {
+	if AnonymousDocType != crm.SunatIdentityDocCode(crm.IdentityDocNone) {
+		t.Errorf("AnonymousDocType = %q, but the catalog says %q",
+			AnonymousDocType, crm.SunatIdentityDocCode(crm.IdentityDocNone))
 	}
 }

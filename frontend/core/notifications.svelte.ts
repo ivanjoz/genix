@@ -1,7 +1,8 @@
 // Reactive store + public API for the header notifications & process layer.
 //
 // Two item families share one store:
-//   - Notifications: static messages with a `type` (1 info | 2 warn | 3 error).
+//   - Notifications: static messages sent via sendUserNotification(), decorated
+//     with one of the fixed color schemes and icons.
 //   - Processes: long-running tasks with a live `status` (1 in progress | 2 done
 //     | 0 canceled), updated over time via updateProcess().
 //
@@ -14,12 +15,25 @@ import { SvelteMap } from 'svelte/reactivity'
 import {
   loadNotifications, putNotification, patchNotification,
   NOTIFICATION_KIND, PROCESS_KIND,
-  NOTIFICATION_TYPE_INFO, PROCESS_STATUS_CANCELED, PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_DONE,
-  type NotificationRow, type NotificationType, type ProcessStatus,
+  PROCESS_STATUS_CANCELED, PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_DONE,
+  type NotificationRow, type NotificationColor, type NotificationIcon, type ProcessStatus,
 } from './notifications.idb'
+import { DEFAULT_ICON_BY_COLOR, RECENT_NOTIFICATIONS_WINDOW_MS } from './notifications'
 
 // Reactive map keyed by id; the UI derives sorted lists / in-progress counts from it.
 export const notifications = $state(new SvelteMap<number, NotificationRow>())
+
+export const NOTIFICATIONS_TAB_MESSAGES = 1
+export const NOTIFICATIONS_TAB_INFORMATION = 2
+
+// Header layer state, owned here so sendUserNotification can pop the layer open.
+// recentSinceTime > 0 means the layer was popped by a message and lists only the
+// rows created since then; 0 means the full list.
+export const notificationsLayer = $state({
+  isOpen: false,
+  recentSinceTime: 0,
+  selectedTab: NOTIFICATIONS_TAB_MESSAGES,
+})
 
 // Counter seeded once at module load to "last 6 digits of unix-seconds × 1000",
 // then incremented per item. This gives short, monotonic, collision-free ids
@@ -50,17 +64,37 @@ export const hydrateNotifications = async (): Promise<void> => {
   idCounter = maxID
 }
 
-// Add a static notification. Defaults to type 1 (info). Returns its id synchronously.
-export const addNotification = (
-  name: string, text: string, type: NotificationType = NOTIFICATION_TYPE_INFO,
-): number => {
+export interface UserNotificationOptions {
+  title?: string
+  subtitle?: string
+  // Color scheme of the card. Defaults to blue.
+  color?: NotificationColor
+  // Defaults to the icon matching the color (blue info, green success, yellow warning, red error).
+  icon?: NotificationIcon
+}
+
+// Send a message to the user: it is persisted, and the header layer pops open
+// showing the messages of the last few seconds until the user clicks outside.
+// `message` may span several lines. Returns its id synchronously.
+export const sendUserNotification = (message: string, options: UserNotificationOptions = {}): number => {
   const now = Date.now()
+  const color = options.color || 'blue'
   const row: NotificationRow = {
-    id: nextID(), kind: NOTIFICATION_KIND, name, text,
-    type, status: PROCESS_STATUS_DONE, createdAt: now, updatedAt: now,
+    id: nextID(), kind: NOTIFICATION_KIND,
+    title: options.title || '', subtitle: options.subtitle || '', message,
+    color, icon: options.icon || DEFAULT_ICON_BY_COLOR[color],
+    status: PROCESS_STATUS_DONE, createdAt: now, updatedAt: now,
   }
   notifications.set(row.id, row)
   putNotification($state.snapshot(row) as NotificationRow)
+
+  // An already-open layer keeps its mode: a popup keeps its window start (so the
+  // list only grows while it stays open), and a full list stays full.
+  if (!notificationsLayer.isOpen) {
+    notificationsLayer.recentSinceTime = now - RECENT_NOTIFICATIONS_WINDOW_MS
+    notificationsLayer.selectedTab = NOTIFICATIONS_TAB_MESSAGES
+    notificationsLayer.isOpen = true
+  }
   return row.id
 }
 
@@ -71,8 +105,8 @@ export const addProcess = (
 ): number => {
   const now = Date.now()
   const row: NotificationRow = {
-    id: nextID(), kind: PROCESS_KIND, name, text,
-    type: NOTIFICATION_TYPE_INFO, status, createdAt: now, updatedAt: now,
+    id: nextID(), kind: PROCESS_KIND, title: name, subtitle: '', message: text,
+    color: 'blue', icon: 'info', status, createdAt: now, updatedAt: now,
   }
   notifications.set(row.id, row)
   putNotification($state.snapshot(row) as NotificationRow)
@@ -94,14 +128,14 @@ export const updateProcess = (
   // in-progress count driving the spinning border/badge) would never recompute.
   const updated: NotificationRow = {
     ...row,
-    name: name || row.name,
-    text: text || row.text,
+    title: name || row.title,
+    message: text || row.message,
     status: status !== undefined ? status : row.status,
     updatedAt: Date.now(),
   }
   notifications.set(id, updated)
   patchNotification(id, {
-    name: updated.name, text: updated.text, status: updated.status, updatedAt: updated.updatedAt,
+    title: updated.title, message: updated.message, status: updated.status, updatedAt: updated.updatedAt,
   })
 }
 

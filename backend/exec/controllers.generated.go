@@ -47,9 +47,11 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[coreTypes.User](),
 		makeDBController[coreTypes.UserLog](),
 		makeDBController[crmTypes.ClientProvider](),
+		makeDBController[crmTypes.ClientProviderSnapshot](),
 		makeDBController[financeTypes.CashBank](),
 		makeDBController[financeTypes.CashBankMovement](),
 		makeDBController[financeTypes.CashReconciliation](),
+		makeDBController[financeTypes.ExchangeRate](),
 		makeDBController[financeTypes.Expense](),
 		makeDBController[financeTypes.ExpenseScheduled](),
 		makeDBController[invoicingTypes.CompanySecrets](),
@@ -104,9 +106,11 @@ func init() {
 	db.RegisterTableFactory("users", func() db.Table { return db.MakeTable[coreTypes.User]() })
 	db.RegisterTableFactory("user_logs", func() db.Table { return db.MakeTable[coreTypes.UserLog]() })
 	db.RegisterTableFactory("client_provider", func() db.Table { return db.MakeTable[crmTypes.ClientProvider]() })
+	db.RegisterTableFactory("client_provider_snapshot", func() db.Table { return db.MakeTable[crmTypes.ClientProviderSnapshot]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
 	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })
+	db.RegisterTableFactory("exchange_rates", func() db.Table { return db.MakeTable[financeTypes.ExchangeRate]() })
 	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[financeTypes.Expense]() })
 	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
 	db.RegisterTableFactory("company_secrets", func() db.Table { return db.MakeTable[invoicingTypes.CompanySecrets]() })

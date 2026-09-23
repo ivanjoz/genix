@@ -3,6 +3,11 @@
 // They mirror backend/invoicing/types/invoice_series.go, which is the authority —
 // this copy exists so the form can refuse a bad series before a round trip, not
 // so the backend can trust it.
+//
+// The document-type catalog is in $core/sunat-doc-type: the books and the till read it too,
+// and a route folder is the wrong place for something three features share.
+
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, DOC_TYPES } from '$core/sunat-doc-type'
 
 export interface IInvoiceSeries {
   SeriesID: number
@@ -12,27 +17,6 @@ export interface IInvoiceSeries {
   IsDefault: number
   ss: number
 }
-
-// SUNAT catalog 01, mirroring the DocType constants in invoice_document.go.
-export const DOC_TYPE_FACTURA = 1
-export const DOC_TYPE_BOLETA = 3
-export const DOC_TYPE_CREDIT_NOTE = 7
-export const DOC_TYPE_DEBIT_NOTE = 8
-
-export const DOC_TYPES = [
-  { ID: DOC_TYPE_FACTURA, Name: "Invoice|Factura" },
-  { ID: DOC_TYPE_BOLETA, Name: "Receipt|Boleta" },
-  { ID: DOC_TYPE_CREDIT_NOTE, Name: "Credit Note|Nota de Crédito" },
-  { ID: DOC_TYPE_DEBIT_NOTE, Name: "Debit Note|Nota de Débito" },
-]
-
-export const docTypeName = (docType: number): string =>
-  DOC_TYPES.find(type => type.ID === docType)?.Name || "—"
-
-// A note carries the prefix of the document it corrects, so each note type needs
-// one series per family. This is why a new company is seeded with six.
-export const isNoteDocType = (docType: number): boolean =>
-  docType === DOC_TYPE_CREDIT_NOTE || docType === DOC_TYPE_DEBIT_NOTE
 
 // A series id is the two-digit suffix a document id carries, so 99 is the ceiling.
 export const MAX_SERIES_ID = 99

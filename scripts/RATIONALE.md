@@ -1,3 +1,21 @@
+## The `//CATALOG:` pass runs before `//STRUCT:` and independently of it
+
+**Context** — The catalog generator was added to `sync_struct_interfaces`, which already carried
+Go→TS sync. That script aborts the entire run on the first `//STRUCT:` tag it cannot resolve, and
+one such tag is live today: `sale_order.svelte.ts` still says `comercial.SaleOrder`, a module
+renamed to `sales`. The script has therefore been failing before writing anything.
+
+**Decision** — `syncFrontendCatalogs` runs first and on its own, over `routes` *and* `services`.
+The `//STRUCT:` pass runs after, over `routes` only as before, and its error is reported as a
+warning instead of killing the process.
+
+**Rationale** — A stale tag in one route must not be what stops a catalog from being generated.
+Fixing the tag was tempting and is a one-word change, but reviving the struct pass rewrites three
+long-drifted interfaces — including renaming `IProduct.MonedaID` to `CurrencyID` while the app
+still reads `MonedaID` — which is a separate decision with its own testing, not a side effect of
+adding a picker. The cost is that the warning is easy to scroll past, and the struct pass stays
+dead until someone takes that decision.
+
 ## Installing fareward retires the `genix-server-utils` units
 
 **Context** — The rename gave the daemon new unit names and the installer simply started writing
