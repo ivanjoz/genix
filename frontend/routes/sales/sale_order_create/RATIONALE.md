@@ -1,5 +1,31 @@
 # RATIONALE — sale_order_create
 
+## USD sale preview: where the rules live and what the till shows
+
+**Context** — The till previews the prices the server will charge in dollars, so it needs the same
+rate, spread and rounding the backend applies.
+
+**Decision** — The pure rules (`latestSellRate`, `effectiveExchangeRate`, `convertUnitPrice`,
+`currencySymbol`) sit in `routes/finance/exchange-rate/exchange-rate.ts`, next to the rate model
+they read, mirroring `finance/types/exchange_rate.go`. The product cards on the left also show
+converted prices. While no usable rate exists, a converted price shows as 0.00 and the amber
+warning says why; the sale is blocked before it is posted.
+
+**Rationale** — One place per side for the conversion, with the same test cases on both sides.
+Showing 0.00 rather than the catalog price avoids displaying soles in a dollar sale.
+
+## The local history takes line prices from the server's response
+
+**Context** — `buildSaleHistoryLine` copied `FinalPrice` from the catalog. For a USD sale that is a
+soles price next to a dollar total, and the ticket would print it.
+
+**Decision** — Line prices come from `DetailPrices` / `DetailSubPrices` of the sale `POST` returns,
+and rows carry `currencyType`. The IndexedDB version goes to 2, and its upgrade stamps existing rows
+as PEN.
+
+**Rationale** — The server has the final say on prices, and the response already has the prices it
+converted. The upgrade fixes the stored rows once instead of guessing on every read.
+
 ## A client registered at the till is fetched by id, not stored on the row
 
 **Context** — The history stores `clientID` and resolves the name through the page's

@@ -5,6 +5,7 @@
   import type { ITableColumn } from '$components/vTable/types';
   import { formatN, formatTime, wordInclude } from '$libs/helpers';
   import { unpackQuantityLine } from '$core/quantity';
+  import { CURRENCY_USD } from '$routes/finance/exchange-rate/exchange-rate';
 
   interface IProductLookupRecord {
     Name?: string;
@@ -23,6 +24,7 @@
     DetailQuantities?: number[];
     TotalAmount?: number;
     DebtAmount?: number;
+    CurrencyType?: number;
     ss: number;
   }
 
@@ -85,6 +87,12 @@
     }
 
     return getClientName(saleOrder.ClientID);
+  }
+
+  // Soles is the default the column reads in, so only a dollar sale is marked.
+  function formatSaleAmount(saleOrder: T, amount: number | undefined): string {
+    const formattedAmount = formatN((amount || 0) / 100, 2);
+    return saleOrder.CurrencyType === CURRENCY_USD ? `US$ ${formattedAmount}` : formattedAmount;
   }
 
   const normalizedSearchTerms = $derived(
@@ -250,7 +258,6 @@
       {
         header: 'Date & Time|Fecha Hora',
         getValue: saleOrder => formatTime(saleOrder.Created, 'd-M h:n') as string,
-        css: 'text-right',
         headerCss: 'w-100',
         css: 'px-6 whitespace-nowrap',
         mobile: { order: 1, css: 'col-span-8' }
@@ -268,13 +275,13 @@
       {
         header: 'Total',
         css: 'ff-mono text-right',
-        getValue: saleOrder => formatN((saleOrder.TotalAmount || 0) / 100, 2),
+        getValue: saleOrder => formatSaleAmount(saleOrder, saleOrder.TotalAmount),
         mobile: { order: 4, css: 'col-span-7', labelTop: 'Total' }
       },
       {
         header: 'Debt|Deuda',
         css: 'ff-mono text-right',
-        getValue: saleOrder => formatN((saleOrder.DebtAmount || 0) / 100, 2),
+        getValue: saleOrder => formatSaleAmount(saleOrder, saleOrder.DebtAmount),
         mobile: { order: 5, css: 'col-span-7', labelTop: 'Debt|Deuda' }
       },
     ];
@@ -293,7 +300,6 @@
     saleOrderColumns.push({
       header: 'Top Products|Top Productos',
       headerCss: 'w-[60%]',
-      css: 'px-0 py-0',
       css: 'px-0 py-0 align-top',
       id: 'top-products',
       mobile: {

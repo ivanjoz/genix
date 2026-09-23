@@ -1,6 +1,42 @@
+## The sale's BCRP fallback is cached an hour and fails open to the company's rates
+
+**Context** — A sale's rate falls back to the BCRP interbank series for the days the company did
+not load, read by the backend from public-business-data.un.pe (one gzipped file per year). That
+is an outbound call on the sale path.
+
+**Decision** — `bcrpSellRatesByDay` keeps each year in memory. A past year is kept for good; the
+current year is re-read after an hour. A year that cannot be downloaded is logged and skipped, so
+the sale still uses the company's own rates, and is refused only if the whole window is empty.
+
+**Rationale** — The current-year file gains one day per working day, so an hour of staleness never
+changes today's rate in practice, and at most one download per hour per instance is added. Failing
+closed would make every dollar sale depend on a third-party host even when the company has its
+own rates.
+
 # RATIONALE — finance
 
 Design decisions for cash banks and expenses, newest first.
+
+## The exchange rate month is its own id
+
+**Context** — A month of exchange rates is 31 numbers that always arrive and are read together, and
+the month it belongs to already identifies it. An autoincremented id would have added a second
+identity that every write then has to resolve back to the month before it can update the right row.
+
+**Decision** — `exchange_rates` is keyed by `ID int16` holding the month in YYMM form: 2601 is
+January 2026. The rates live in two parallel `[]int32` arrays, `DetailBuyRate` and
+`DetailSellRate`, where the position is the day (index 0 is day 1) and the value is the rate x 1000.
+`PostExchangeRates` merges by that key, so saving a month is an upsert with no lookup of its own.
+
+**Rationale** — The client can name the row it wants before it has ever seen it, which is what lets
+the page build its 12-column grid from the year alone and post only the months that were touched.
+The cost is that rewriting a single day rewrites the month's arrays; at one row per month that is
+around 60 rows per company for five years, so the write amplification never shows up.
+
+A rate of 0 means the day has no published rate — a weekend, a holiday, or a day nobody filled in —
+and trailing zeros are trimmed before the row is stored, so a month loaded up to the 12th keeps 12
+numbers. The handler rejects a rate above 1000.000 because at that magnitude it is a misplaced
+decimal separator, and accounting would otherwise take it at face value.
 
 ## Expense.Type: what the money became
 

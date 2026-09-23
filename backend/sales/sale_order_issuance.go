@@ -47,7 +47,9 @@ func resolveSaleOrderIssueSeries(req *core.HandlerArgs, sale *types.SaleOrder) (
 		return nil, core.Err("Una venta no puede registrarse con una serie de nota de crédito o débito.")
 	}
 
-	if !invoicing.RequiresCustomerIdentity(series.DocType, sale.TotalAmount) {
+	// The S/ 700 threshold is in soles whatever the sale is charged in.
+	totalInPEN := sale.TotalInPEN()
+	if !invoicing.RequiresCustomerIdentity(series.DocType, totalInPEN) {
 		return series, nil
 	}
 
@@ -56,7 +58,7 @@ func resolveSaleOrderIssueSeries(req *core.HandlerArgs, sale *types.SaleOrder) (
 		return nil, err
 	}
 	if err := invoicing.ValidateCustomerIdentity(
-		series.DocType, sale.TotalAmount, name, registryNumber); err != nil {
+		series.DocType, totalInPEN, name, registryNumber); err != nil {
 		return nil, err
 	}
 	return series, nil

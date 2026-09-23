@@ -1,3 +1,40 @@
+## The company flags travel in the cached company config blob
+
+**Context** — A sale that converts currencies needs the company's spread (flag 7). `sales` could
+read the company row itself, but the loader lives in the `invoicing` body, and a second copy would
+also need its own cloud-mirror branch.
+
+**Decision** — `CompanyConfigCompany` carries `Flags` and `FlagValues` (`cb` 12 and 13), and
+`CompanyConfigVersion` goes to 3 so older blobs rebuild instead of reading as "no flags". `sales`
+reads the spread through `cloud.LoadCompanyConfig`.
+
+**Rationale** — That blob is already the per-request company read (the issuance check uses it), and
+any module can reach the flags the same way. Cost: up to twenty seconds of staleness after the
+company edits a flag, the same window the series already has.
+
+## A valued company flag is a second kind of flag, stored apart from the checked ids
+
+**Context** — `company_flags.toml` gained `7 = { name = "Spread…", type = "i:3", bytes = 2 }`: a
+flag that holds a number instead of an on/off. `Company.Flags` is `[]int16` of checked ids and has
+nowhere to put a value, and the ids are one flat namespace, so the number could not ride along in
+that list without making an id mean two things.
+
+**Decision** — `Company.FlagValues []core.CompanyFlagValue` (`{ID int16; Value int32}`) is a new
+column beside `Flags`, and a flag belongs to exactly one of the two: `SanitizeCompanyFlags` now
+**refuses** a valued id, `SanitizeCompanyFlagValues` refuses a checkbox id, an id the catalog does
+not declare, a duplicate, and a number wider than the declared `bytes`. `Value` is the typed number
+scaled by the `type`'s decimals — `i:3` stores 2.5 as 2500 — and `core.GetCompanyFlagValue` is the
+only way to read it, returning the unscaled float. A zero is dropped rather than stored. `bytes` is
+mandatory beside a `type`, and the loader refuses the whole catalog without it.
+
+**Rationale** — a separate column rather than packing `id<<16 | value` into the existing `[]int16`:
+the packing caps every valued flag at two bytes forever and puts the catalog's scale at every call
+site. Refusing the wrong list rather than tolerating it keeps "is this flag on" and "what is this
+flag set to" from becoming two half-answers for one id — a valued id in `Flags` would be an on/off
+no screen shows and no rule reads. Dropping a zero makes "left empty" and "typed 0" one state, so a
+rule's fallback is reached the same way in both. Cost: `flag_values` is a new column, so a
+deployed database needs `fn-homologate` before a company can save one.
+
 ## The company flags catalog is embedded TOML parsed in core, and unknown ids are refused
 
 **Context** — the flags a company can turn on had to live in one file both halves read: the

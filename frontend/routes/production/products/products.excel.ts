@@ -58,8 +58,8 @@ interface ProductoImportProcessResult {
 const IMPORT_FIELD_TO_PRODUCT_FIELD: Record<string, keyof IProduct> = {
   _categoriasNames: 'CategoryIDs',
   _marcaNombre: 'BrandID',
-  _unidadNombre: 'UnidadID',
-  _monedaNombre: 'MonedaID',
+  _unidadNombre: 'UnitID',
+  _monedaNombre: 'CurrencyID',
 };
 
 const collectComparableFieldKeys = (
@@ -144,7 +144,7 @@ export const processProductosImportFile = async (
       if (!unidad?.i) {
         validationErrors.push(`unidad no válida "${currentRow._unidadNombre}"`);
       } else {
-        currentRow.UnidadID = unidad.i;
+        currentRow.UnitID = unidad.i;
       }
     }
 
@@ -153,7 +153,7 @@ export const processProductosImportFile = async (
       if (!moneda?.i) {
         validationErrors.push(`moneda no válida "${currentRow._monedaNombre}"`);
       } else {
-        currentRow.MonedaID = moneda.i;
+        currentRow.CurrencyID = moneda.i;
       }
     }
 

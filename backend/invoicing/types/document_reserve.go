@@ -33,7 +33,8 @@ import (
 func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
 	series *InvoiceSeries) (*InvoiceDocument, error) {
 
-	document, _, err := SaleOrderToDocument(companyID, order, series)
+	// No pin yet — this is where the client's current identity gets frozen onto the row.
+	document, clientSnapshotID, err := SaleOrderToDocument(companyID, order, series, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
 	order.ID = saleOrderID
 	document.Correlativo = order.Correlativo()
 
-	row := rowFromDocument(companyID, userID, order, series, document)
+	row := rowFromDocument(companyID, userID, order, series, document, clientSnapshotID)
 	return &row, nil
 }
 
@@ -78,6 +79,15 @@ func SaveNewDocument(document *InvoiceDocument) error {
 	return nil
 }
 
+// documentCurrencyCode is the row's currency code; a sale from before currencies were
+// tracked has none and was in soles.
+func documentCurrencyCode(order *sales.SaleOrder) int8 {
+	if order.CurrencyType == CurrencyUSD {
+		return CurrencyUSD
+	}
+	return CurrencyPEN
+}
+
 // rowFromDocument records what only the row knows: which sale, which number, and
 // what it totalled.
 //
@@ -86,7 +96,7 @@ func SaveNewDocument(document *InvoiceDocument) error {
 // the artifact that matters — a second copy in the row could only disagree with it.
 func rowFromDocument(
 	companyID, userID int32, order *sales.SaleOrder,
-	series *InvoiceSeries, document *model.Document,
+	series *InvoiceSeries, document *model.Document, clientSnapshotID int32,
 ) InvoiceDocument {
 
 	now := core.SUnixTime()
@@ -100,7 +110,10 @@ func rowFromDocument(
 		IssueDate:   core.FechaUnix(),
 		IssueTime:   now,
 
-		Currency:         CurrencyPEN,
+		// Pinned, not looked up later: this is the identity the document printed.
+		ClientSnapshotID: clientSnapshotID,
+
+		Currency:         documentCurrencyCode(order),
 		TotalAmount:      int64(document.Totals.Payable),
 		TaxAmount:        int64(document.Totals.TotalTaxes),
 		TaxableAmount:    int64(document.Totals.Taxable),

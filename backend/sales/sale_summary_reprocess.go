@@ -11,7 +11,8 @@ func SaleOrderReprocess(companyID int32, date int16) {
 	sales := []types.SaleOrder{}
 	query := db.Query(&sales)
 	query.Select(query.ID, query.Status, query.Date, query.DetailProductsIDs,
-		query.DetailPrices, query.DetailSubPrices, query.DetailQuantities, query.DetailSubDivisor).
+		query.DetailPrices, query.DetailSubPrices, query.DetailQuantities, query.DetailSubDivisor,
+		query.CurrencyType, query.ExchangeRate).
 		CompanyID.Equals(companyID)
 
 	if date > 0 {
@@ -57,8 +58,9 @@ func SaleOrderReprocess(companyID int32, date int16) {
 			}
 			// Reconstructed from what was charged on the line, not from the product's price
 			// today: a reprocess must reproduce the original amounts.
-			lineAmount := core.QuantityAmount(lineQuantity,
-				core.GetIndex(sale.DetailPrices, lineIndex), core.GetIndex(sale.DetailSubPrices, lineIndex))
+			// Summaries are in soles: a USD sale's line is restated with the sale's own rate.
+			lineAmount := sale.AmountInPEN(core.QuantityAmount(lineQuantity,
+				core.GetIndex(sale.DetailPrices, lineIndex), core.GetIndex(sale.DetailSubPrices, lineIndex)))
 
 			pendingDelivery := core.Quantity{}
 			if !hasDeliveryCompleted {

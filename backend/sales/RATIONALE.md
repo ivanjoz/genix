@@ -1,3 +1,54 @@
+## An unpaid sale stores no cash-bank
+
+**Context** — The till always sent its default cash-bank, even when "Pagado" was unchecked, and the
+sale stored it. A later payment on Gestión Ventas uses the stored one before the selector. With
+currencies, a dollar sale saved with the soles default could never be paid.
+
+**Decision** — On create, the server clears `LastPaymentCajaID` when the payment action is not
+included. The till also posts 0 for an unpaid sale.
+
+**Rationale** — A payment is what names a cash-bank, and the server must not trust the client to
+omit it. Unpaid sales created before this still carry one; they keep the old behaviour.
+
+## A USD sale always carries an exchange rate, even when every product is in dollars
+
+**Context** — The plan said the rate is only needed when a line crosses currencies. But the sale
+summaries are in soles, and restating a USD sale needs a rate whatever its products are priced in.
+
+**Decision** — `validateSaleOrderLines` resolves the rate for every USD sale, and for a PEN sale only
+when it carries a USD-priced product. `SaleOrder.ExchangeRate` stores the effective rate of the
+sale's direction (sell − spread for USD, sell + spread for PEN).
+
+**Rationale** — Without it a dollar-only sale would reach the summaries with no way back to soles.
+Cost: a stale or missing rate (older than 7 days) also blocks a USD sale whose products are all
+priced in dollars.
+
+## A sale's currency is also enforced on later payment and on the annulment refund
+
+**Context** — The amounts of a sale are fixed in its currency, but two other endpoints book money
+against it: paying a pending sale (`PostSaleOrder` update) and the refund on `PostSaleOrderAnnul`.
+Both let the operator pick any cash-bank.
+
+**Decision** — Both reject a cash-bank whose currency differs from the sale's
+(`resolveSaleOrderCurrency`, and the same check in the annul). The status page only offers the
+cash-banks of the sale's currency.
+
+**Rationale** — A USD sale collected or refunded through a soles register would move a dollar
+amount as if it were soles. Converting at payment time was the alternative, but that is a second
+rate for the same sale, and nobody asked for it.
+
+## A sale with CurrencyType 0 is read as PEN
+
+**Context** — The human approved reading a product's `CurrencyID` 0 as soles. Every sale created
+before this change has `CurrencyType` 0 too.
+
+**Decision** — The same rule (`normalizeCurrency`) covers old sales: invoicing, the summaries, the
+refund check and the later-payment check all read 0 as PEN.
+
+**Rationale** — Every one of those sales was in soles, and migrating the whole `sale_order` table
+for a value the rule already reads right did not seem worth it. It is a read-side fallback, which
+CLAUDE.md discourages — say so if you want a backfill instead.
+
 ## `cb:"1,minimal"` on SaleOrderProductStats.Quantity lost its second token
 
 **Context** — `Quantity` was tagged `cb:"1,minimal"`. `minimal` was a mode in the old colbin — a

@@ -10,21 +10,26 @@ import type { ISaleOrder, VentaProducto } from './sale_order.svelte'
 export const isSalePaid = (status: number): boolean => status === 2 || status === 4
 export const isSaleDelivered = (status: number): boolean => status === 3 || status === 4
 
-export const buildSaleHistoryLine = (soldProduct: VentaProducto): SaleHistoryLine => ({
-  productID: soldProduct.productoID,
-  presentationID: soldProduct.presentationID,
-  // Spelled out field by field rather than passed through: the cart is `$state`, so its nested
-  // objects are reactive proxies, and IndexedDB refuses to structured-clone one.
-  quantity: { units: soldProduct.cantidad.units, sub: soldProduct.cantidad.sub },
-  subDivisor: soldProduct.subDivisor,
-  unitPrice: soldProduct.producto?.FinalPrice || 0,
-  subUnitPrice: soldProduct.producto?.SbuFinalPrice || 0,
-  // The cart keeps serials as serial → quantity; the ticket lists each one once and only
-  // says "x2" when the same serial covers more than one item.
-  serialNumbers: [...(soldProduct.serialNumbers?.entries() || [])]
-    .map(([serialNumber, serialQuantity]) =>
-      serialQuantity > 1 ? `${serialNumber} x${serialQuantity}` : serialNumber),
-})
+// The prices come from the sale the backend returned, not from the catalog: the server converts
+// them into the sale's currency, so a USD sale's lines are dollars the catalog never held.
+export const buildSaleHistoryLine = (soldProduct: VentaProducto, sale: ISaleOrder): SaleHistoryLine => {
+  const lineIndex = sale.DetailProductsIDs.indexOf(soldProduct.productoID)
+  return {
+    productID: soldProduct.productoID,
+    presentationID: soldProduct.presentationID,
+    // Spelled out field by field rather than passed through: the cart is `$state`, so its nested
+    // objects are reactive proxies, and IndexedDB refuses to structured-clone one.
+    quantity: { units: soldProduct.cantidad.units, sub: soldProduct.cantidad.sub },
+    subDivisor: soldProduct.subDivisor,
+    unitPrice: sale.DetailPrices[lineIndex] || 0,
+    subUnitPrice: sale.DetailSubPrices?.[lineIndex] || 0,
+    // The cart keeps serials as serial → quantity; the ticket lists each one once and only
+    // says "x2" when the same serial covers more than one item.
+    serialNumbers: [...(soldProduct.serialNumbers?.entries() || [])]
+      .map(([serialNumber, serialQuantity]) =>
+        serialQuantity > 1 ? `${serialNumber} x${serialQuantity}` : serialNumber),
+  }
+}
 
 // soldProducts is the cart as it stood at submit time: postSaleOrder hands it over before
 // clearing it, because the sale response carries packed lines and not the products behind them.
@@ -38,7 +43,8 @@ export const buildSaleHistoryRow = (
   cashierID: sale.UpdatedBy || 0,
   cashBankID: sale.LastPaymentCajaID || 0,
   status: sale.ss,
+  currencyType: sale.CurrencyType,
   totalAmount: sale.TotalAmount,
   taxAmount: sale.TaxAmount,
-  lines: soldProducts.map(buildSaleHistoryLine),
+  lines: soldProducts.map((soldProduct) => buildSaleHistoryLine(soldProduct, sale)),
 })

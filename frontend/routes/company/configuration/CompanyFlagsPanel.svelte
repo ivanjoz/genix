@@ -1,6 +1,7 @@
 <script lang="ts">
 import Button from '$components/buttons/Button.svelte';
 import Checkbox from '$components/form/Checkbox.svelte';
+import Input from '$components/form/Input.svelte';
 import T from '$components/misc/T.svelte';
 import { companyFlagsCatalog, toggleCompanyFlag } from './company-flags';
 import { saveCompanyParameters, type EmpresaParametrosService } from './empresas.svelte';
@@ -14,6 +15,11 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
   const setFlag = (flagID: number, isChecked: boolean) => {
     service.empresa.Flags = toggleCompanyFlag(service.empresa.Flags, flagID, isChecked)
   }
+
+  // A valued flag has a slot on the record for every catalog entry, made by the service, so the
+  // Input writes into the stored object itself and nothing has to copy the number back.
+  const valueSlotOf = (flagID: number) =>
+    service.empresa.FlagValues.find(slot => slot.ID === flagID)!
 </script>
 
 <section class="rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
@@ -27,7 +33,7 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
       onClick={() => saveCompanyParameters(service.empresa)} />
   </div>
   <div class="text-slate-500 mb-14">
-    <T text="A checked flag turns its rule on for the whole company.|Un flag marcado activa su regla para toda la empresa." />
+    <T text="A checked flag turns its rule on for the whole company; a flag with a field takes the value that rule uses.|Un flag marcado activa su regla para toda la empresa; un flag con campo toma el valor que esa regla usa." />
   </div>
 
   <table class="w-full border-collapse">
@@ -43,9 +49,21 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
                  Checkbox already lays its box and its label out as two columns, and keeping them
                  in one control means the name is a click target and announces once. -->
             <td class="px-10 py-6">
-              <Checkbox label={flag.name} underlineOnHover={true}
-                checked={isFlagChecked(flag.id)}
-                onToggle={(isChecked) => setFlag(flag.id, isChecked)} />
+              {#if flag.decimals === undefined}
+                <Checkbox label={flag.name} underlineOnHover={true}
+                  checked={isFlagChecked(flag.id)}
+                  onToggle={(isChecked) => setFlag(flag.id, isChecked)} />
+              {:else}
+                <!-- The catalog's decimals are Input's baseDecimals: the field shows the number
+                     the user thinks in and stores it scaled, which is exactly how it is saved. -->
+                <!-- ml-32 = the Checkbox box (28px) plus its 4px gap, so this name lines up
+                     with the checkbox labels above it. -->
+                <div class="flex items-center gap-10 ml-32">
+                  <span><T text={flag.name} /></span>
+                  <Input type="number" css="flex-1 max-w-200" inputCss="text-center" baseDecimals={flag.decimals}
+                    saveOn={valueSlotOf(flag.id)} save="Value" />
+                </div>
+              {/if}
             </td>
           </tr>
         {/each}

@@ -9,6 +9,7 @@ import (
 	"app/sales/types"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
@@ -131,6 +132,12 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		if refundCashBank.Status == 0 {
 			return req.MakeErr("La caja seleccionada está inactiva.")
+		}
+		// The refund gives back the collected amount as it was booked: in the sale's currency.
+		saleCurrency := normalizeCurrency(sale.CurrencyType)
+		if refundCurrency := normalizeCurrency(refundCashBank.CurrencyType); refundCurrency != saleCurrency {
+			return req.MakeErr(fmt.Sprintf(`La venta está en %v pero la caja "%v" es en %v.`,
+				currencyName(saleCurrency), refundCashBank.Name, currencyName(refundCurrency)))
 		}
 
 		refundMovements = append(refundMovements, finance.InternalCashMovement{

@@ -42,126 +42,159 @@ func splitGrossAmount(gross int64) (net int64, tax int64) {
 	return net, gross - net
 }
 
-// SaleOrderToDocument turns a sale into the document that will be issued for it.
+// SaleOrderToDocument turns a sale into the document that will be issued for it, and the
+// identity that document bills — the value InvoiceDocument pins so the sales book can
+// still read the same buyer years later.
 //
-// Everything the document needs beyond the sale itself — the customer's identity
-// document, the product descriptions — is read here, because a document is a
-// snapshot: once issued it must not change when a product is renamed.
-// A line with a sub-unit part becomes two document lines, so the second return value maps
-// each generated line back to the product it came from.
+// Everything the document needs beyond the sale itself — the customer, the product
+// descriptions — is read here, because a document is a snapshot: once issued it must not
+// change when a product is renamed.
+//
+// pinnedClientSnapshotID is `0` when the document is being reserved, and the identity the
+// row already froze when it is being rebuilt for a send. A resend has to declare the same
+// buyer it declared the first time, whatever CRM says today, so the rebuild reads the pin
+// instead of resolving the customer again.
 func SaleOrderToDocument(
 	companyID int32, order *sales.SaleOrder, series *InvoiceSeries,
-) (*model.Document, []int32, error) {
+	pinnedClientSnapshotID int32,
+) (*model.Document, int32, error) {
 
 	if len(order.DetailProductsIDs) == 0 {
-		return nil, nil, errors.New("la venta no tiene productos")
+		return nil, 0, errors.New("la venta no tiene productos")
 	}
 
-	customer, err := buildCustomer(companyID, order, series.DocType)
+	customer, clientSnapshotID, err := buildCustomer(
+		companyID, order, series.DocType, pinnedClientSnapshotID)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 	products, err := loadProductDescriptions(companyID, order.DetailProductsIDs)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
-	lines, lineProductIDs, err := buildLines(order, products)
+	lines, _, err := buildLines(order, products)
 	if err != nil {
-		return nil, nil, err
+		return nil, 0, err
 	}
 
-	issuedAt := core.Now()
 	document := &model.Document{
 		Type:     sunatDocType(series.DocType),
 		Series:   series.SeriesCode,
-		IssuedAt: issuedAt,
-		Currency: model.DefaultCurrency,
+		IssuedAt: core.Now(),
+		// The document bills what the sale charged: a USD sale's lines are already dollars.
+		Currency: saleDocumentCurrency(order),
 		Customer: customer,
 		Lines:    lines,
 		// A sale settled at the till is a cash sale. Credit terms would have to
 		// come from the sale's payment plan, which the order does not carry yet.
 		Payment: model.PaymentCash,
 	}
-	return document, lineProductIDs, nil
+	return document, clientSnapshotID, nil
 }
 
-// buildCustomer resolves who is being billed.
+// saleDocumentCurrency is the ISO 4217 code of the currency the sale was charged in.
+func saleDocumentCurrency(order *sales.SaleOrder) string {
+	if order.CurrencyType == CurrencyUSD {
+		return "USD"
+	}
+	return model.DefaultCurrency
+}
+
+// buildCustomer resolves who is being billed, and which identity the row pins for them.
 //
-// The identity rules are checked here as well as when the sale was created,
-// because a send happens later and from a different process: this is the last
-// point where a document SUNAT would refuse can still be stopped.
-func buildCustomer(companyID int32, order *sales.SaleOrder, docType int8) (model.Party, error) {
-	name, registryNumber := "", ""
+// The identity rules are checked here as well as when the sale was created, because a
+// send happens later and from a different process: this is the last point where a
+// document SUNAT would refuse can still be stopped.
+func buildCustomer(
+	companyID int32, order *sales.SaleOrder, docType int8, pinnedClientSnapshotID int32,
+) (model.Party, int32, error) {
 
-	if order.ClientID > 0 {
-		clients := []crm.ClientProvider{}
-		query := db.Query(&clients)
-		query.Select().CompanyID.Equals(companyID).ID.Equals(order.ClientID)
-		if err := query.Exec(); err != nil {
-			return model.Party{}, fmt.Errorf("error al leer el cliente: %w", err)
-		}
-		if len(clients) > 0 {
-			name, registryNumber = clients[0].Name, clients[0].RegistryNumber
-		}
+	customer, clientSnapshotID, err := readBuyerIdentity(
+		companyID, order.ClientID, pinnedClientSnapshotID)
+	if err != nil {
+		return model.Party{}, 0, err
 	}
-	// A walk-in sale carries the buyer's details on the order itself.
-	if order.ClientInfo != nil {
-		if order.ClientInfo.Name != "" {
-			name = order.ClientInfo.Name
-		}
-		if order.ClientInfo.RegistryNumber != "" {
-			registryNumber = order.ClientInfo.RegistryNumber
-		}
-	}
-
-	if err := ValidateCustomerIdentity(docType, order.TotalAmount, name, registryNumber); err != nil {
-		return model.Party{}, err
-	}
-
-	customer := model.Party{
-		DocNumber: registryNumber,
-		LegalName: name,
-		DocType:   identityDocTypeOf(registryNumber),
-	}
-	if docType == DocTypeFactura {
-		return customer, nil
+	if err := ValidateCustomerIdentity(
+		docType, order.TotalInPEN(), customer.LegalName, customer.DocNumber); err != nil {
+		return model.Party{}, 0, err
 	}
 
 	// A small boleta usually has no customer at all: someone paid at the till and
 	// left. SUNAT still requires the block, so an unidentified buyer is declared
-	// as one — which is what every point of sale in the country does.
-	if customer.DocNumber == "" {
-		customer.DocType = model.IDDocNone
-		customer.DocNumber = anonymousDocNumber
+	// as one — which is what every point of sale in the country does. There is nobody
+	// to snapshot, so the id stays 0 and the book prints the same declared buyer.
+	if docType != DocTypeFactura {
+		if customer.DocNumber == "" {
+			customer.DocType, customer.DocNumber = AnonymousDocType, AnonymousDocNumber
+		}
+		if customer.LegalName == "" {
+			customer.LegalName = AnonymousBuyerName
+		}
 	}
-	if customer.LegalName == "" {
-		customer.LegalName = anonymousCustomerName
+	return customer, clientSnapshotID, nil
+}
+
+// readBuyerIdentity reads the buyer from the identity the document already pinned, or —
+// while it is still being reserved and has none — from the client the sale resolved to.
+//
+// Those are the same identity at reservation and can diverge afterwards, which is the
+// whole point: a client renamed between the reservation and the send must not change what
+// this document declares. Creating the sale already wrote a walk-in's typed details into a
+// ClientProvider row and pointed ClientID at it, so that row is the buyer either way.
+func readBuyerIdentity(
+	companyID, clientID, pinnedClientSnapshotID int32,
+) (model.Party, int32, error) {
+
+	if pinnedClientSnapshotID > 0 {
+		snapshots := []crm.ClientProviderSnapshot{}
+		query := db.Query(&snapshots)
+		query.Select().CompanyID.Equals(companyID).ID.Equals(pinnedClientSnapshotID)
+		if err := query.Exec(); err != nil {
+			return model.Party{}, 0, fmt.Errorf("error al leer la identidad del cliente: %w", err)
+		}
+		if len(snapshots) == 0 {
+			return model.Party{}, 0, fmt.Errorf(
+				"el comprobante apunta a la identidad %v, que no existe", pinnedClientSnapshotID)
+		}
+		return model.Party{
+			LegalName: snapshots[0].Name,
+			DocNumber: snapshots[0].RegistryNumber,
+			DocType:   crm.SunatIdentityDocCode(snapshots[0].IdentityDocType),
+		}, pinnedClientSnapshotID, nil
 	}
-	return customer, nil
+
+	if clientID == 0 {
+		return model.Party{}, 0, nil
+	}
+	clients := []crm.ClientProvider{}
+	query := db.Query(&clients)
+	query.Select().CompanyID.Equals(companyID).ID.Equals(clientID)
+	if err := query.Exec(); err != nil {
+		return model.Party{}, 0, fmt.Errorf("error al leer el cliente: %w", err)
+	}
+	if len(clients) == 0 {
+		return model.Party{}, 0, nil
+	}
+	return model.Party{
+		LegalName: clients[0].Name,
+		DocNumber: clients[0].RegistryNumber,
+		DocType:   crm.SunatIdentityDocCode(clients[0].IdentityDocType),
+	}, clients[0].SnapshotID, nil
 }
 
 // How an unidentified buyer is declared on a boleta.
-const (
-	anonymousDocNumber    = "00000000"
-	anonymousCustomerName = "CLIENTES VARIOS"
-)
-
-// identityDocTypeOf reads the kind of identity document from its shape, which is
-// unambiguous in Peru: eleven digits is a RUC and eight is a DNI.
 //
-// A dedicated column on the client would be better and is planned; until then
-// this is the same inference the rest of the ERP makes.
-func identityDocTypeOf(registryNumber string) string {
-	switch len(registryNumber) {
-	case 11:
-		return model.IDDocRUC
-	case 8:
-		return model.IDDocDNI
-	case 0:
-		return ""
-	}
-	return model.IDDocForeign
-}
+// Exported because the Registro de Ventas has to print the same three values: a document
+// with no pinned identity declared these, and the book may not invent different ones.
+// AnonymousDocType is SUNAT's character, not a crm.IdentityDoc* id: it travels straight
+// into model.Party, which speaks the catalog's printed form. It is the literal rather than
+// crm.SunatIdentityDocCode(crm.IdentityDocNone) because a const cannot call a function —
+// TestAnonymousDocTypeIsSunatNone is what keeps the two from drifting.
+const (
+	AnonymousDocType   = "0"
+	AnonymousDocNumber = "00000000"
+	AnonymousBuyerName = "CLIENTES VARIOS"
+)
 
 // buildLines turns the sale's parallel detail arrays into document lines.
 //

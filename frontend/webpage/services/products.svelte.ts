@@ -45,8 +45,8 @@ export interface IProduct {
   FinalPrice?: number
   ContentHTML?: string
   Properties?: IProductProperties[]
-  Peso?: number
-  Volumen?: number
+  Weight?: number
+  Volume?: number
   SbuQuantity?: number
   SbuUnit?: string
   SbuPrice?: number

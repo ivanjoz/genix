@@ -48,12 +48,12 @@ export interface IProduct {
   BrandID: number
   Params: number[]
   Price: number
-  MonedaID: number
-  UnidadID: number
+  CurrencyID: number
+  UnitID: number
   Discount: number
   FinalPrice: number
-  Peso: number
-  Volumen: number
+  Weight: number
+  Volume: number
   SbuQuantity: number
   SbuUnit: string
   SbuPrice: number
@@ -87,9 +87,9 @@ export interface IProduct {
   _categoriasNames?: string
   /** Holds the raw brand label read from Excel so we can resolve MarcaID afterward. */
   _marcaNombre?: string
-  /** Holds the raw unit label read from Excel so we can resolve UnidadID afterward. */
+  /** Holds the raw unit label read from Excel so we can resolve UnitID afterward. */
   _unidadNombre?: string
-  /** Holds the raw currency label read from Excel so we can resolve MonedaID afterward. */
+  /** Holds the raw currency label read from Excel so we can resolve CurrencyID afterward. */
 	_monedaNombre?: string
   _updatedFields?: string[]
 }

@@ -54,6 +54,7 @@ const makeRow = (fields: Partial<SaleHistoryRow>): SaleHistoryRow => ({
   cashierID: 2,
   cashBankID: 5,
   status: 4,
+  currencyType: 1,
   totalAmount: 2010,
   taxAmount: 307,
   lines: [makeLine({})],
@@ -222,5 +223,10 @@ describe('the whole ticket fits the paper', () => {
   it('prints no cashier line for a sale rung up by another user', () => {
     const ticket = renderSaleTicket(makeRow({ cashierID: 99 }), makeContext({}), TICKET_58MM)
     expect(ticket).not.toContain("CAJERO")
+  })
+
+  it('prints the total in the currency the sale was charged in', () => {
+    expect(renderSaleTicket(makeRow({}), makeContext({}), TICKET_58MM)).toMatch(/TOTAL S\/ +20\.10/)
+    expect(renderSaleTicket(makeRow({ currencyType: 2 }), makeContext({}), TICKET_58MM)).toMatch(/TOTAL US\$ +20\.10/)
   })
 })

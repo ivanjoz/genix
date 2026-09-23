@@ -27,6 +27,7 @@
   import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte';
   import { onMount, untrack } from 'svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
+  import { currencySymbol, normalizeCurrency } from '$routes/finance/exchange-rate/exchange-rate';
   import {
       ANNUL_SALE_SUB_ACCESS_ID,
       SALES_MANAGEMENT_ACCESS_ID,
@@ -406,7 +407,7 @@
       header: 'Price|Precio',
       width: '120px',
       align: 'right',
-      getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.unitPrice / 100, 2)}`,
+      getValue: (detailLineRecord) => `${currencySymbol(selectedSaleOrder?.CurrencyType)} ${formatN(detailLineRecord.unitPrice / 100, 2)}`,
       mobile: { order: 4, css: 'col-span-12', labelLeft: 'Precio:', contentCss: 'ff-mono' },
     },
     {
@@ -414,18 +415,24 @@
       header: 'Subtotal',
       width: '130px',
       align: 'right',
-      getValue: (detailLineRecord) => `S/ ${formatN(detailLineRecord.subtotalAmount / 100, 2)}`,
+      getValue: (detailLineRecord) => `${currencySymbol(selectedSaleOrder?.CurrencyType)} ${formatN(detailLineRecord.subtotalAmount / 100, 2)}`,
       mobile: { order: 5, css: 'col-span-12', labelLeft: 'Sub:', contentCss: 'ff-mono ff-bold' },
     },
   ];
 
+  // A sale is paid and refunded in its own currency, so only the active cash-banks of that
+  // currency are offered — the server refuses any other.
+  const saleCurrencyCajas = $derived((cajasService.Cajas || []).filter((cajaRecord) =>
+    (cajaRecord?.ss || 0) > 0
+    && normalizeCurrency(cajaRecord.CurrencyType) === normalizeCurrency(selectedSaleOrder?.CurrencyType)));
+
   $effect(() => {
-    cajasService.Cajas;
+    saleCurrencyCajas;
     saleOrderPaymentForm.LastPaymentCajaID;
     untrack(() => {
       // Default caja selector to the first active caja so payment can be processed in one click.
       if (saleOrderPaymentForm.LastPaymentCajaID > 0) { return; }
-      const firstActiveCajaRecord = (cajasService.Cajas || []).find((cajaRecord) => (cajaRecord?.ss || 0) > 0);
+      const firstActiveCajaRecord = saleCurrencyCajas[0];
       if (firstActiveCajaRecord?.ID) {
         saleOrderPaymentForm.LastPaymentCajaID = firstActiveCajaRecord.ID;
       }
@@ -702,11 +709,11 @@
           </div>
           <div class="col-span-8">
             <div class="text-gray-500">Total</div>
-            <div class="ff-mono">S/ {formatN(selectedSaleOrder.TotalAmount / 100, 2)}</div>
+            <div class="ff-mono">{currencySymbol(selectedSaleOrder.CurrencyType)} {formatN(selectedSaleOrder.TotalAmount / 100, 2)}</div>
           </div>
           <div class="col-span-8">
             <div class="text-gray-500"><T text="Debt|Deuda" /></div>
-            <div class="ff-mono">S/ {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
+            <div class="ff-mono">{currencySymbol(selectedSaleOrder.CurrencyType)} {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
           </div>
         </div>
 
@@ -736,7 +743,7 @@
                   bind:saveOn={saleOrderAnnulForm}
                   save="RefundCashBankID"
                   css="mb-8"
-                  options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
+                  options={saleCurrencyCajas}
                   keyId="ID"
                   keyName="Name"
                   label="Cash Register for Refund|Caja para la Devolución"
@@ -777,7 +784,7 @@
                   bind:saveOn={saleOrderPaymentForm}
                   save="LastPaymentCajaID"
                   css="mb-8"
-                  options={(cajasService.Cajas || []).filter((cajaRecord) => (cajaRecord?.ss || 0) > 0)}
+                  options={saleCurrencyCajas}
                   keyId="ID"
                   keyName="Name"
                   label="Cash Register for Payment|Caja para Pago"

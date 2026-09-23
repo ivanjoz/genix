@@ -38,9 +38,11 @@ logistics stock changes, the public storefront) read to describe and sell the pr
 - A **product (producto)** is one catalog item: name, base price (`Precio Base`), discount
   (`Descuento`), final price (`Precio Final`), currency (`Moneda`, PEN or USD), unit (`Unidad`,
   Kg/g/Libras), brand (`Marca`), one or more categories (`Categorías`), optional sub-units,
-  presentations, and photos. These three currency and unit lists are fixed values built into the
+  presentations, and photos. The currency and unit lists are fixed values built into the
   frontend, not per-tenant configuration; there is no in-app screen to add a new unit or currency
-  here, and this page never converts amounts between PEN and USD.
+  here, and this page never converts amounts between PEN and USD. The product's currency says
+  which currency its prices are in; the Point of Sale reads it to convert the price when the product
+  is sold in the other currency.
 - A **category (categoría)** and a **brand (marca)** are two independent shared lists
   (`shared-lists`, list IDs 1 and 2) reused across the whole business module — a product can
   belong to several categories but only one brand.
@@ -107,7 +109,8 @@ tabs: **Info (Información)**, **Sheet (Ficha)**, **Presentations (Presentacione
   `Final Price = Base Price × (100 − Discount%) / 100`. Discount must stay under 100% (enforced
   only on the frontend).
 - **Currency (Moneda)**, **Unit (Unidad)**, **Weight (Peso)**, **Volume (Volumen)**, **Brand
-  (Marca)**, **SKU**, and **Short Description (Descripción Corta)** are optional.
+  (Marca)**, **SKU**, and **Short Description (Descripción Corta)** are optional. Currency, unit,
+  weight and volume are saved with the product and shown again when it is reopened.
 - The **SKU Individual** checkbox stores a flag on the product but nothing on this page — or
   anywhere else in the codebase currently — reads or reacts to it; treat it as not wired to any
   visible behavior yet.
@@ -441,8 +444,10 @@ Volume, Weight, or Currency columns.
   sites/warehouses that hold stock for these products; this page does not create them.
 - **Stock Changes (Cambios Stock)** under Logistics reads/updates stock quantities for these
   products; this page only shows stock as a read-only figure.
-- Sales and Point of Sale workflows read this page's price, discount, final price, and
-  presentation data when selling a product, but do not edit the catalog from there.
+- Sales and Point of Sale workflows read this page's price, discount, final price, currency, and
+  presentation data when selling a product, but do not edit the catalog from there. A product
+  priced in one currency and sold in the other is converted at the Point of Sale with the
+  company's exchange rate (**Tipo de Cambio**, `/finance/exchange-rate`).
 
 ### FILES
 
@@ -453,15 +458,15 @@ hash_algorithm: sha256
 files:
   - path: frontend/core/modules.ts
     role: user-interface
-    hash: sha256:0839d4ae72db6d7a902b99dae286edd5be0a16d691543ee7c1643e61fb4bf014
+    hash: sha256:0232bd261462eee1bcbf2bd20cc37658f85aa3a0a4aa355af975bf5b32c2be2c
     supports: [page-purpose, related-pages]
   - path: frontend/routes/production/products/+page.svelte
     role: page
-    hash: sha256:fe3a456a075eec7e1174e98ed783f018df6a75073080e4b7a33833238b40bb23
+    hash: sha256:ee0679e85677c89556f96e6f5c76d768710fbcf483a603765864480e5e5a4069
     supports: [page-purpose, concepts, capability.browse-products, capability.create-edit-product, capability.product-sheet, capability.product-photos, capability.delete-product, rules, troubleshooting]
   - path: frontend/routes/production/products/Attributes.svelte
     role: user-interface
-    hash: sha256:7bf7b27546743f9b8d20976e5b83bc863514b445b01a65b5968950e6ae3882b8
+    hash: sha256:278dde9811fc1fc800de116617dc6c2548f68df512fcd0628031a92087f5f42e
     supports: [concepts, capability.presentations]
   - path: frontend/routes/production/products/CategoriesBrands.svelte
     role: user-interface
@@ -469,12 +474,16 @@ files:
     supports: [capability.categories-brands, troubleshooting]
   - path: frontend/services/production/products.svelte.ts
     role: frontend-service
-    hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
+    hash: sha256:64b802038c223a036d232e9f409295bcf78faf98d5cb84b0bac9d6fa85822abf
     supports: [concepts, capability.create-edit-product, capability.presentations, capability.product-photos, capability.delete-product, capability.browse-products, rules]
   - path: frontend/routes/production/products/products.excel.ts
     role: frontend-service
-    hash: sha256:228618822d23f333a447f7289bbf5c51a8c761bc374643f01d3e3e5286d797c9
+    hash: sha256:168b60470be2fc2b0c0e5d883fde6abe2c1f8cb5b2ed71f5bd8f07c14b45ac0b
     supports: [capability.import-export]
+  - path: frontend/routes/sales/sale_order_create/sale_order.svelte.ts
+    role: shared-domain
+    hash: sha256:39359a3890c09db37c8ee0785d9aa511134f2d9f45033ae382a405116b6df865
+    supports: [concepts, related-pages]
   - path: frontend/core/products-lists.ts
     role: shared-domain
     hash: sha256:8259b07d640e22b297c675c28abde05da72ae96111e15dd9eb35f96b8b408524
@@ -485,34 +494,34 @@ files:
     supports: [concepts, capability.categories-brands]
   - path: backend/business/main.go
     role: backend-handler
-    hash: sha256:2672bd44b6ca86e692c601c6c7389de2bc72eef25ccfa584c7b75233e5786a83
+    hash: sha256:018538288bfa5a5c8a47249453f508a5a1dbc525c73ba4e25c167bda3c28166b
     supports: [capability.categories-brands, troubleshooting]
   - path: backend/production/products.go
     role: backend-handler
-    hash: sha256:7d371b6346611946c6e28283a074fc0a3e84300d83f80ef24989165f765b181c
+    hash: sha256:7edafcbcc1fb14d2d10d4e273afeacf14d0bde90684e3ba929ea9b4baebe634d
     supports: [capability.create-edit-product, capability.delete-product, capability.product-photos, capability.import-export, rules, troubleshooting]
   - path: backend/business/shared-lists.go
     role: backend-handler
-    hash: sha256:79187a2b1144faecea407dc465e3e2a609f38bc6c10e49228544480ec33c2f3e
+    hash: sha256:7095ea8d00f03e5760fafa86ebd1cfa1155013fd79f5c931af8bb976645705e7
     supports: [capability.categories-brands, rules]
   - path: backend/production/types/product.go
     role: data-model
-    hash: sha256:ef0c9c9510bfa7e46e54f5d803ac4365a2bcfe30e7cf1ba22abcf191d08b3fb6
+    hash: sha256:f010650bc5d83f8c9b77526f92c01a21e1e39cd7f5c2e9626fb1036a4376eb04
     supports: [concepts, capability.create-edit-product, capability.presentations, rules]
   - path: backend/business/product-ecommerce.go
     role: business-logic
-    hash: sha256:cb89b769e506d2f10a8c22cc09e51bda7fa000ec33311af858360559d8587597
+    hash: sha256:73d013f9a92349f203f40dc6f818ba70f9d09696903c8717e75ba1f2147a5a9b
     supports: [rules]
   - path: backend/access.toml
     role: permissions
-    hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
+    hash: sha256:31c7071defebf7ecec268a2ae932e58667d2f0e143dee894d0262d8eab4baa3c
     supports: [rules]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
+    hash: sha256:28ec9bfba2a22520cec0747298a924f4329a43d08e9773074246a16da2459849
     supports: [rules]
   - path: backend/core/api_routes.generated.go
     role: backend-handler
-    hash: sha256:6e91c22103d2d352bf41ca7b5a4083656f4a60930aaffbb88da8c4c59319e190
+    hash: sha256:3d9c7fd60ad3a88982066111dc4942af93a612ed509664de29b2835e5405926a
     supports: [capability.categories-brands, troubleshooting]
 ```

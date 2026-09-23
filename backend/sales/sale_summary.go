@@ -85,8 +85,9 @@ func MakeSummaryChangeFromOSaleOrder(sale types.SaleOrder, actions ...int8) []Pr
 		}
 		// Sub-units are charged at their own price, so the line total is exact rather than
 		// a prorated fraction of the whole-unit price.
-		lineAmount := core.QuantityAmount(lineQuantity,
-			core.GetIndex(sale.DetailPrices, lineIndex), core.GetIndex(sale.DetailSubPrices, lineIndex))
+		// Summaries are in soles: a USD sale's line is restated with the sale's own rate.
+		lineAmount := sale.AmountInPEN(core.QuantityAmount(lineQuantity,
+			core.GetIndex(sale.DetailPrices, lineIndex), core.GetIndex(sale.DetailSubPrices, lineIndex)))
 
 		currentChange := changesByProduct[productID]
 		currentChange.productID = productID

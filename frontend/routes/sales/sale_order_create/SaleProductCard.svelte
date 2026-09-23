@@ -14,6 +14,8 @@ import Card from '$components/cards/Card.svelte';
     filterText: string
     onadd: (cant: Quantity, serialNumber?: string) => void
     onselect: (idx: number) => void
+    // Restates a catalog price in the sale's currency, so the card shows what the cart charges.
+    toSaleCurrency: (price: number) => number
   }
 
   let {
@@ -24,6 +26,7 @@ import Card from '$components/cards/Card.svelte';
     filterText,
     onadd,
     onselect,
+    toSaleCurrency,
   }: Props = $props();
 
   let inputRef: HTMLInputElement | undefined = $state();
@@ -109,7 +112,7 @@ import Card from '$components/cards/Card.svelte';
       // Keep mobile selection quiet while restoring the stronger desktop ring from md and up.
       cn += "bg-white shadow-sm border-gray-200 md:ring-2 md:ring-blue-500 md:ring-inset md:shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
     } else {
-      cn += "bg-white hover:border-gray-200 hover:shadow-sm"
+      cn += "bg-white shadow-[0_1px_3px_0_rgb(50_54_70_/_10%)] hover:border-gray-200 hover:shadow-sm"
     }
     return cn
   })
@@ -213,10 +216,10 @@ import Card from '$components/cards/Card.svelte';
         {/if}
         <!-- Col 4: Price -->
         <div class="font-mono ml-auto text-sm font-medium text-gray-700 text-right w-80">
-            {formatN(price/100, 2)}
+            {formatN(toSaleCurrency(price)/100, 2)}
             {#if productHasSubUnit && subUnitPrice > 0}
               <div class="text-[11px] text-purple-600">
-                {formatN(subUnitPrice/100, 2)} / {productoStock.producto.SbuUnit}
+                {formatN(toSaleCurrency(subUnitPrice)/100, 2)} / {productoStock.producto.SbuUnit}
               </div>
             {/if}
         </div>

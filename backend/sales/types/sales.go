@@ -3,12 +3,19 @@ package types
 import (
 	"app/core"
 	"app/db"
+	finance "app/finance/types"
 )
 
+// SaleOrderClientInfo is a walk-in client typed at the till. It is request-only — SaleOrderTable has
+// no column for it — and is turned into a ClientProvider row, which (with its snapshot) is the only
+// place these fields are stored.
 type SaleOrderClientInfo struct {
 	Name           string `json:",omitempty"`
 	RegistryNumber string `json:",omitempty"`
-	OnlyInsert     bool   `json:",omitempty"`
+	// IdentityDocType is the SUNAT document type the till picked (crm.IdentityDoc*). 0 leaves
+	// SaveClientProviders to derive it from the number's shape.
+	IdentityDocType int8 `json:",omitempty"`
+	OnlyInsert      bool `json:",omitempty"`
 }
 
 type SaleOrder struct {
@@ -38,9 +45,18 @@ type SaleOrder struct {
 	DetailProductLotIDs        []int32  `json:",omitempty" db:",list"`
 	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
 
-	TotalAmount    int32 `json:",omitempty"`
-	TaxAmount      int32 `json:",omitempty"`
-	DebtAmount     int32 `json:",omitempty"`
+	// DetailPrices, DetailSubPrices and the three amounts below are all in the sale's
+	// currency: a USD sale stores dollars, converted per unit from the catalog on creation.
+	TotalAmount int32 `json:",omitempty"`
+	TaxAmount   int32 `json:",omitempty"`
+	DebtAmount  int32 `json:",omitempty"`
+	// CurrencyType is the sale's currency: 1 = PEN, 2 = USD (the cash-bank codes). A paid
+	// sale takes its cash-bank's currency; an unpaid one takes what the till picked.
+	CurrencyType int8 `json:",omitempty"`
+	// ExchangeRate is the effective rate × 1000 the lines were converted with, spread
+	// included — what a report needs to restate a USD sale in PEN. A USD sale always has one;
+	// a PEN sale only when it sold a USD-priced product.
+	ExchangeRate   int32 `json:",omitempty"`
 	ClientID       int32 `json:",omitempty"`
 	Created        int32 `json:",omitempty"`
 	Updated        int32 `json:"upd,omitempty"`
@@ -69,6 +85,21 @@ type SaleOrder struct {
 	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
 	// already the "when and by whom" and a second pair could only drift from them.
 	AnnulReason string `json:",omitempty"`
+}
+
+// AmountInPEN restates an amount of this sale in soles, with the rate the sale was converted
+// with — a USD sale always carries one. The sale summaries and the S/ 700 boleta rule are
+// both in soles whatever the sale was charged in.
+func (e *SaleOrder) AmountInPEN(amount int32) int32 {
+	if e.CurrencyType != finance.CurrencyUSD {
+		return amount
+	}
+	return finance.ConvertUnitPrice(amount, finance.CurrencyUSD, finance.CurrencyPEN, e.ExchangeRate)
+}
+
+// TotalInPEN is the total restated in soles (see AmountInPEN).
+func (e *SaleOrder) TotalInPEN() int32 {
+	return e.AmountInPEN(e.TotalAmount)
 }
 
 func (e *SaleOrder) AddStatus(orderState int8) error {
@@ -108,6 +139,8 @@ type SaleOrderTable struct {
 	TotalAmount                db.Col[*SaleOrderTable, int32]
 	TaxAmount                  db.Col[*SaleOrderTable, int32]
 	DebtAmount                 db.Col[*SaleOrderTable, int32]
+	CurrencyType               db.Col[*SaleOrderTable, int8]
+	ExchangeRate               db.Col[*SaleOrderTable, int32]
 	Created                    db.Col[*SaleOrderTable, int32]
 	ClientID                   db.Col[*SaleOrderTable, int32]
 	Updated                    db.Col[*SaleOrderTable, int32]

@@ -1,12 +1,14 @@
-// Who a sale has to identify before it can be stamped with an invoicing series.
-// Pure: no Svelte, no fetch.
+// Who a sale has to identify before it can be stamped with an invoicing series, and the spread
+// its currency conversion uses. Pure: no Svelte, no fetch.
 //
 // Mirrors backend/invoicing/types/customer_identity.go, which is the authority —
 // this copy exists so the till refuses the sale before the round trip, not so the
 // backend can trust it. The stamp is permanent (the series lives in the last two
 // digits of the sale id), so a sale that gets this wrong can never be invoiced.
 
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '$routes/company/configuration/invoice-series'
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '$core/sunat-doc-type'
+import { getCompanyFlagValue, type ICompanyFlagValue } from '$routes/company/configuration/company-flags'
+import { EXCHANGE_RATE_SCALE } from '$routes/finance/exchange-rate/exchange-rate'
 
 // Cents. SUNAT requires the buyer to be named on a boleta from 700 soles up.
 export const BOLETA_IDENTIFIED_FROM = 70000
@@ -49,4 +51,12 @@ export function validateCustomerIdentity(docType: number, totalAmount: number,
     return "A receipt from S/ 700 needs the client's name.|Una boleta desde S/ 700 necesita el nombre del cliente."
   }
   return ""
+}
+
+// The valued company flag holding the exchange-rate spread (backend/company_flags.toml).
+export const COMPANY_FLAG_EXCHANGE_RATE_SPREAD = 7
+
+// The spread × 1000, the scale a stored rate uses, so it adds to the sell rate directly.
+export function exchangeRateSpread(companyFlagValues: ICompanyFlagValue[] | undefined): number {
+  return Math.round(getCompanyFlagValue(companyFlagValues, COMPANY_FLAG_EXCHANGE_RATE_SPREAD) * EXCHANGE_RATE_SCALE)
 }

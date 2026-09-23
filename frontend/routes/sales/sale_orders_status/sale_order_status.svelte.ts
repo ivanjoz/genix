@@ -22,6 +22,8 @@ export interface ISaleOrder {
     TotalAmount: number;
     TaxAmount: number;
     DebtAmount: number;
+    // 1 PEN, 2 USD: the prices and amounts above are in it.
+    CurrencyType?: number;
     DeliveryStatus: number;
     LastPaymentCajaID: number;
     ActionsIncluded: number[];

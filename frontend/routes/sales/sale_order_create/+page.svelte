@@ -3,6 +3,7 @@ import Input from '$components/form/Input.svelte';
 import LayerStatic from '$components/layers/LayerStatic.svelte';
 import SearchSelect from '$components/form/SearchSelect.svelte';
 import VirtualCards from '$components/misc/VirtualCards.svelte';
+import Label from '$components/misc/Label.svelte';
 import VTable from '$components/vTable/VTable.svelte';
 import type { ITableColumn } from '$components/vTable/types';
 import Page from '$domain/Page.svelte';
@@ -11,20 +12,23 @@ import Button from '$components/buttons/Button.svelte';
 
 import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
 import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
-import { CajasService } from '$routes/finance/cash-banks/cajas.svelte';
+import { CajasService, type ICashBank } from '$routes/finance/cash-banks/cajas.svelte';
 import { getWarehouseProductStock, type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
-import { ClientProviderService, ClientProviderType, type IClientProvider } from '$services/crm/client-provider.svelte';
+import { TILL_IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '$services/crm/identity-doc';
+import {
+  ClientProviderService, ClientProviderType, type IClientProvider,
+} from '$services/crm/client-provider.svelte';
 import { ProductsService } from '$services/production/products.svelte';
 import { SharedListsService } from "$services/business/shared-lists.svelte";
 import { SystemParametersService } from '$services/services/system-parameters.svelte';
 import { untrack } from 'svelte';
 import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte';
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '../../company/configuration/invoice-series';
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '$core/sunat-doc-type';
 import { tr } from '$core/store.svelte';
 import type { IWarehouse } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';
-import { type Quantity, addQuantity, formatQuantity, quantityAmount, quantityDivisorOf, totalSubUnits } from '$core/quantity';
+import { type Quantity, addQuantity, formatQuantity, quantityDivisorOf, totalSubUnits } from '$core/quantity';
 import type { ProductoVenta, VentaProducto } from "./sale_order.svelte";
 import { useUI } from '@genix/ui';
 import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sale_order.svelte";
@@ -37,6 +41,12 @@ import { SaleHistoryState } from './sale_history.svelte';
 import { buildSaleHistoryRow } from './sale_history';
 import type { SaleHistoryRow } from './sale_history.idb';
 import type { TicketContext } from './sale_ticket';
+import { exchangeRateSpread } from './sale_order';
+import { BcrpDefaultRates, ExchangeRatesService } from '$routes/finance/exchange-rate/exchange-rate.svelte';
+import {
+  CURRENCY_PEN, CURRENCY_USD, EXCHANGE_RATE_MAX_AGE_DAYS, EXCHANGE_RATE_SCALE, currencySymbol,
+  calendarMonthKeys, latestSellRate, normalizeCurrency,
+} from '$routes/finance/exchange-rate/exchange-rate';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -49,6 +59,11 @@ import type { TicketContext } from './sale_ticket';
   const parametrosService = new EmpresaParametrosService();
   const systemParamsService = new SystemParametersService();
   const cajas = new CajasService()
+  const exchangeRatesService = new ExchangeRatesService(true)
+  // The days the company did not load fall back to BCRP; the current and previous month cover
+  // the whole look-back window.
+  const bcrpDefaultRates = new BcrpDefaultRates()
+  bcrpDefaultRates.load(calendarMonthKeys(new Date(), 2))
 
   // State
   const ventasState = new SaleOrderState();
@@ -66,6 +81,12 @@ import type { TicketContext } from './sale_ticket';
   let saleLayerView = $state(SALE_LAYER_CART);
   let saleToPrint = $state<SaleHistoryRow>();
 
+  const todayUnixDay = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
+  const saleCurrencyOptions = [
+    { ID: CURRENCY_PEN, Name: "Soles" },
+    { ID: CURRENCY_USD, Name: tr("Dollars|Dólares") },
+  ];
+
   // Computed
   const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);
   const isSeparadoProceso = $derived(separarProcesoVenta.includes(2));
@@ -82,6 +103,7 @@ import type { TicketContext } from './sale_ticket';
   ]);
   // Paid now: the money lands in a caja. Not paid: only a due date makes sense, so the two selectors are exclusive.
   const isPaidNow = $derived(ventasState.form.ActionsIncluded.includes(SALE_ACTION_PAYMENT));
+  const paymentCashBank = $derived(cajas.CajasMap.get(ventasState.form.LastPaymentCajaID));
   // A sale is only ever issued as a factura or a boleta; note series exist to correct a document
   // that already went out, so offering them here would mint a sale id no document can use.
   const invoiceSeriesOptions = $derived(
@@ -155,6 +177,26 @@ import type { TicketContext } from './sale_ticket';
 	  untrack(() => { ventasState.form.LastPaymentCajaID = firstCajaID })
   });
   
+  // The rate the till previews with; the server resolves the same one when it creates the sale.
+  $effect(() => {
+    ventasState.sellRate = latestSellRate(exchangeRatesService.records, bcrpDefaultRates.ratesByMonthKey,
+      todayUnixDay, EXCHANGE_RATE_MAX_AGE_DAYS);
+    ventasState.spread = exchangeRateSpread(parametrosService.empresa.FlagValues);
+  });
+
+  // A paid sale is charged in the currency of the cash-bank that collects it; an unpaid one
+  // keeps whatever the currency selector holds.
+  $effect(() => {
+    if (!isPaidNow || !paymentCashBank) { return }
+    ventasState.form.CurrencyType = normalizeCurrency(paymentCashBank.CurrencyType);
+  });
+
+  $effect(() => {
+    ventasState.form.CurrencyType;
+    ventasState.effectiveRate;
+    untrack(() => ventasState.recalcTotales());
+  });
+
   $effect(() => {
   	productosService.records;
 	   untrack(() => {
@@ -171,6 +213,8 @@ import type { TicketContext } from './sale_ticket';
       ventasState.form.ClientInfo = ventasState.form.ClientInfo || {
         Name: "",
         RegistryNumber: "",
+        // 0 hands the choice to the picker's derive rule until the cashier overrides it.
+        IdentityDocType: 0,
       };
     } else {
       ventasState.form.ClientID = 0;
@@ -418,8 +462,7 @@ import type { TicketContext } from './sale_ticket';
       headerStyle: { width: '80px' },
       headerInnerCss: cartHeaderCss,
       css: 'font-mono text-sm font-bold text-gray-700',
-      getValue: (item) => formatMo(quantityAmount(
-        item.cantidad, item.producto?.FinalPrice || 0, item.producto?.SbuFinalPrice || 0)),
+      getValue: (item) => formatMo(ventasState.lineAmount(item)),
     },
   ];
 </script>
@@ -507,6 +550,7 @@ import type { TicketContext } from './sale_ticket';
                 ventaProducto={ventasState.ventaProductosMap.get(item.key)}
                 filterText={ventasState.filterText}
                 onselect={(i) => (productoSelected = i)}
+                toSaleCurrency={(price) => ventasState.priceInSaleCurrency(price, item.producto)}
                 onadd={(n, serialNumber) => {
                   ventasState.addProducto(item, n, serialNumber);
                   filterProductos("");
@@ -530,8 +574,8 @@ import type { TicketContext } from './sale_ticket';
           <OptionsStrip
             selected={saleLayerView}
             options={[
-              [SALE_LAYER_CART, "New Sale|NUEVA VENTA"],
-              [SALE_LAYER_HISTORY, "History|HISTORIAL"],
+              [SALE_LAYER_CART, "New Sale|Venta"],
+              [SALE_LAYER_HISTORY, "History|Historial"],
             ]}
             buttonCss="ff-bold"
             useMobileGrid
@@ -559,6 +603,7 @@ import type { TicketContext } from './sale_ticket';
                   <div>Total</div>
                 </div>
                 <div class="leading-[1] text-gray-800 text-[16px] ml-auto">
+                    <span class="text-[14px] text-gray-500 mr-2">{currencySymbol(ventasState.form.CurrencyType)}</span>
                     {formatMo(ventasState.form.TotalAmount - ventasState.form.TaxAmount)}
                 </div>
             </div>
@@ -566,6 +611,7 @@ import type { TicketContext } from './sale_ticket';
             <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 min-h-36 md:min-w-170">
                 <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider mr-8">Total</div>
                 <div class="leading-[1] text-blue-700 font-bold text-[22px] ml-auto">
+                    <span class="text-[14px] text-blue-600 mr-2">{currencySymbol(ventasState.form.CurrencyType)}</span>
                     {formatMo(ventasState.form.TotalAmount)}
                 </div>
             </div>
@@ -577,30 +623,67 @@ import type { TicketContext } from './sale_ticket';
         <!-- Every row below shares the same 12-column grid so the left column (actions, client mode,
              document) and the right column (caja/due date, client name) line up across rows. -->
         <div class="w-full px-12 mt-6 mb-6">
-	        <div class="grid grid-cols-12 gap-8 items-center" aria-label="Sale order actions and payment">
-	      	  <CheckboxOptions type="multiple" css="col-span-5"
+	        <div class="grid grid-cols-24 gap-8 items-center" aria-label="Sale order actions and payment">
+	      	  <CheckboxOptions type="multiple" css="col-span-9"
 	     			  options={saleActionOptions}
 	       		  keyId="id" keyName="name" save="ActionsIncluded"
 	       		  saveOn={ventasState.form}
 	       	  />
 	        	{#if isPaidNow && hasCashBankRegistered}
 		        	<SearchSelect
-		             css="col-span-7"
+		             css="col-span-8"
 			            label="" save="LastPaymentCajaID"
 			            keyId="ID"
 			            keyName="Name" saveOn={ventasState.form}
 			            options={cajas.Cajas}
 			            placeholder="CAJA"
+			            optionsCss="min-w-full w-280"
+			            {optionRenderer}
 			          />
+			          {#snippet optionRenderer(caja: ICashBank)}
+			            <div class="flex w-full min-w-0 items-center gap-8">
+			              <span class="truncate">{caja.Name}</span>
+			              {#if caja.CurrencyType === 2}
+			                <Label text="Dollars|Dólares" color="green" />
+			              {:else}
+			                <Label text="Soles" color="blue" />
+			              {/if}
+			            </div>
+			          {/snippet}
+			          {#if paymentCashBank}
+			            <div class="col-span-7 flex h-full items-center gap-4 whitespace-nowrap rounded-[6px] bg-[#f1f2fd] px-8">
+			              <span class="mr-4 text-[14px] text-[var(--input-label-color,#6d5dad)]">{tr('Currency|Moneda')}:</span>
+			              <span>{paymentCashBank.CurrencyType === 2 ? tr('Dollars|Dólares') : 'Soles'}</span>
+			            </div>
+			          {/if}
 	        	{:else}
 		          <DateInput
-		            css="col-span-7"
+		            css="col-span-8"
 		            label="" save="PaymentDueDate"
 		            saveOn={ventasState.form}
 		            placeholder="Date Pago"
 		          />
+		          <!-- No cash-bank names the currency of an unpaid sale, so the till picks it. -->
+		          <SearchSelect
+		            css="col-span-7"
+		            label="" save="CurrencyType"
+		            keyId="ID" keyName="Name"
+		            saveOn={ventasState.form}
+		            options={saleCurrencyOptions}
+		            placeholder="MONEDA"
+		          />
 	        	{/if}
 	        </div>
+	        {#if ventasState.exchangeRateProblem}
+	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
+	            <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
+	            <span>{tr(ventasState.exchangeRateProblem)}</span>
+	          </div>
+	        {:else if ventasState.needsExchangeRate}
+	          <div class="mt-6 text-[14px] text-gray-500">
+	            {tr("Exchange rate|Tipo de cambio")}: <span class="ff-mono text-gray-700">{formatN(ventasState.effectiveRate / EXCHANGE_RATE_SCALE, 3)}</span>
+	          </div>
+	        {/if}
 	        {#if missingCashBankWarning}
 	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
 	            <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
@@ -608,28 +691,28 @@ import type { TicketContext } from './sale_ticket';
 	          </div>
 	        {/if}
         </div>
-        <div class="px-12 grid grid-cols-12 gap-8" aria-label="Client mode and invoice series">
+        <div class="px-12 grid grid-cols-24 gap-8" aria-label="Client mode and invoice series">
           <SearchSelect useStyle={1}
              label=""
-             keyId="ID" css="col-span-5 text-sm"
+             keyId="ID" css="col-span-9 text-sm"
              keyName="Name"
              options={clientModeOptions}
              selected={clientModeSelected}
              onChange={handleClientModeChange}
              placeholder="SIN CLIENTE"
            />
-          <SearchSelect useStyle={1}
+          <SearchSelect
              label="" save="IssueSeriesID"
-             keyId="ID" css="col-span-7 text-sm"
+             keyId="ID" css="col-span-8 text-sm"
              keyName="Name" saveOn={ventasState.form}
              options={invoiceSeriesOptions}
              placeholder="SIN COMPROBANTE"
            />
         </div>
-        <div class="px-12 pb-10 mt-8 grid grid-cols-12 gap-8" aria-label="Client selection or registration form">
+        <div class="px-12 pb-10 mt-8 grid grid-cols-24 gap-8" aria-label="Client selection or registration form">
           {#if clientModeSelected === 1}
             <SearchSelect
-              css="col-span-12"
+              css="col-span-24"
               label=""
               keyId="ID"
               keyName="DisplayName"
@@ -640,13 +723,16 @@ import type { TicketContext } from './sale_ticket';
             />
           {:else if clientModeSelected === 2 && ventasState.form.ClientInfo}
             <Input
-              label="" css="col-span-5"
+              label="" css="col-span-9"
               saveOn={ventasState.form.ClientInfo}
               save="RegistryNumber"
-              placeholder="Documento / RUC"
+              placeholder="Nº Documento"
+              leftOptions={TILL_IDENTITY_DOC_OPTIONS}
+              saveLeft="IdentityDocType"
+              deriveLeftOption={(value) => deriveIdentityDocType(String(value ?? ''))}
             />
             <Input
-              label="" css="col-span-7"
+              label="" css="col-span-15"
               saveOn={ventasState.form.ClientInfo}
               save="Name"
               placeholder="Nombre del cliente"
@@ -654,7 +740,7 @@ import type { TicketContext } from './sale_ticket';
           {/if}
         </div>
         <!-- List -->
-        <div class="flex-1 min-h-0 px-8 pb-8" aria-label="Sale order cart items list">
+        <div class="flex-1 min-h-0 px-12 pb-8" aria-label="Sale order cart items list">
           <VTable
             columns={cartColumns}
             data={ventasState.ventaProductos}

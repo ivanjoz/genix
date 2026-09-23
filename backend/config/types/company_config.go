@@ -35,7 +35,10 @@ import (
 // 2: the sites travel in the blob. Bumped rather than relying on a missing field
 // decoding as empty, because an issuer reading a version-1 blob would find no site
 // and refuse to build a document that is perfectly issuable.
-const CompanyConfigVersion = int8(2)
+//
+// 3: the company flags travel in the blob. A version-2 blob would read as "no flags", so a
+// sale would convert currencies without the company's spread.
+const CompanyConfigVersion = int8(3)
 
 type CompanyConfig struct {
 	Version       int8                     `cb:"1"`
@@ -84,6 +87,10 @@ type CompanyConfigCompany struct {
 	District          string `cb:"9"`
 	Province          string `cb:"10"`
 	Department        string `cb:"11"`
+	// The company flags travel here because they gate rules in several modules, and this
+	// cached blob is the read those modules can afford per request.
+	Flags      []int16                 `cb:"12"`
+	FlagValues []core.CompanyFlagValue `cb:"13"`
 }
 
 // Ubigeo is the six-digit INEI code of the fiscal address, which is what SUNAT
@@ -164,6 +171,8 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 			Phone:             company.Phone,
 			Email:             company.Email,
 			NotificationEmail: company.NotificationEmail,
+			Flags:             company.Flags,
+			FlagValues:        company.FlagValues,
 		},
 		Culqi: CompanyConfigCulqi{
 			RsaKey:   company.CulqiConfig.RsaKey,

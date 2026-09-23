@@ -495,13 +495,17 @@ func (generator *erpHistoryGenerator) validateContext() error {
 	// The cash register is resolved rather than hardcoded so the script runs on any seeded tenant.
 	cashBanks := []financeTypes.CashBank{}
 	cashBankQuery := db.Query(&cashBanks)
-	cashBankQuery.Select(cashBankQuery.ID, cashBankQuery.Status).
+	cashBankQuery.Select(cashBankQuery.ID, cashBankQuery.Status, cashBankQuery.CurrencyType).
 		CompanyID.Equals(erpCompanyID).Status.Equals(1)
 	if err := cashBankQuery.Exec(); err != nil {
 		return core.Err("error al consultar las cajas:", err)
 	}
+	// The history is generated in soles, and a sale must be collected in its own currency.
+	cashBanks = slices.DeleteFunc(cashBanks, func(cashBank financeTypes.CashBank) bool {
+		return cashBank.CurrencyType == financeTypes.CurrencyUSD
+	})
 	if len(cashBanks) == 0 {
-		return core.Err("no hay ninguna caja activa en la company", erpCompanyID)
+		return core.Err("no hay ninguna caja activa en soles en la company", erpCompanyID)
 	}
 	slices.SortFunc(cashBanks, func(leftCashBank, rightCashBank financeTypes.CashBank) int {
 		return int(leftCashBank.ID - rightCashBank.ID)
@@ -605,9 +609,12 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 		return core.Err("error al consultar los productos:", err)
 	}
 
+	// Only products the sale handler will price above zero. It recomputes every line from
+	// FinalPrice and ignores the prices sent in the payload, so a product priced at 0 there totals
+	// the sale at 0 — and the DebtAmount an unpaid sale carries would then exceed its own total.
 	eligibleProducts := make([]production.Product, 0, len(products))
 	for _, product := range products {
-		if product.ID > 0 {
+		if product.ID > 0 && product.FinalPrice > 0 {
 			eligibleProducts = append(eligibleProducts, product)
 		}
 	}
@@ -642,13 +649,9 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 
 	generator.productPool = make([]int32, 0, len(selectedProducts))
 	for _, product := range selectedProducts {
+		// Exactly what the sale handler will charge, with no fallback: any other number here makes
+		// the generator's totals disagree with the ones the server recomputes.
 		salePrice := product.FinalPrice
-		if salePrice <= 0 {
-			salePrice = product.Price
-		}
-		if salePrice <= 0 {
-			salePrice = 100
-		}
 		// Buying below the sale price is what leaves a margin for the reports to show.
 		costPrice := salePrice * int32(60+generator.random.Intn(21)) / 100
 		if costPrice <= 0 {
@@ -683,10 +686,18 @@ func (generator *erpHistoryGenerator) reloadWarehouseLedger(warehouseID int32) e
 	bucketsByProduct := map[int32][]*stockBucket{}
 	presentationByStockID := map[int64]int16{}
 
+	// Only the pool's products. A warehouse holds stock this generator never put there — supplies
+	// and fixed assets land in it too — and selling one of those would price its line at 0, which
+	// the sale handler rejects outright.
+	isInProductPool := func(productID int32) bool {
+		_, hasPrice := generator.salePriceByProduct[productID]
+		return hasPrice
+	}
+
 	for _, stock := range stockResult.ProductStock {
 		presentationByStockID[stock.ID] = stock.PresentationID
 		// ProductStock.Quantity is only the free bucket; the lot/serial units live in the details.
-		if stock.Status == 0 || stock.Quantity <= 0 {
+		if stock.Status == 0 || stock.Quantity <= 0 || !isInProductPool(stock.ProductID) {
 			continue
 		}
 		bucketsByProduct[stock.ProductID] = append(bucketsByProduct[stock.ProductID], &stockBucket{
@@ -698,7 +709,7 @@ func (generator *erpHistoryGenerator) reloadWarehouseLedger(warehouseID int32) e
 	}
 
 	for _, detail := range stockResult.ProductStockDetail {
-		if detail.Status == 0 || detail.Quantity <= 0 {
+		if detail.Status == 0 || detail.Quantity <= 0 || !isInProductPool(detail.ProductID) {
 			continue
 		}
 		bucketKind := stockBucketLot
@@ -1128,6 +1139,7 @@ func (generator *erpHistoryGenerator) makeSalePayload(warehouseID int32, isUnpai
 	salePayload := salesTypes.SaleOrder{
 		WarehouseID:       warehouseID,
 		LastPaymentCajaID: generator.cashBankID,
+		CurrencyType:      financeTypes.CurrencyPEN,
 	}
 	reservedBuckets := []*stockBucket{}
 
@@ -1147,9 +1159,6 @@ func (generator *erpHistoryGenerator) makeSalePayload(warehouseID int32, isUnpai
 		}
 
 		salePrice := generator.salePriceByProduct[productID]
-		if salePrice <= 0 {
-			salePrice = 100
-		}
 
 		salePayload.DetailProductsIDs = append(salePayload.DetailProductsIDs, productID)
 		// Sale-order lines are packed (Units*QuantityLineScale + Sub); the seeder emits whole

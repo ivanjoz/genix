@@ -264,31 +264,31 @@ import {
     {
       header: "Unit|Unidad",
       hidden: !isImport,
-      getValue: (e) => e._unidadNombre || unidadLabelById.get(e.UnidadID) || "",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "UnidadID"),
+      getValue: (e) => e._unidadNombre || unidadLabelById.get(e.UnitID) || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "UnitID"),
       excel: { type: "string", importField: "_unidadNombre" },
     },
     {
       header: "Volume|Volumen", width: "100px",
       hidden: !isImport,
-      getValue: (e) => e.Volumen || "",
-      field: "Volumen",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "Volumen"),
+      getValue: (e) => e.Volume || "",
+      field: "Volume",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Volume"),
       excel: { type: "number", format: "#,##0.00" },
     },
     {
       header: "Weight|Peso",
       hidden: !isImport,
-      getValue: (e) => e.Peso || "",
-      field: "Peso",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "Peso"),
+      getValue: (e) => e.Weight || "",
+      field: "Weight",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Weight"),
       excel: { type: "number", format: "#,##0.00" },
     },
     {
       header: "Currency|Moneda",
       hidden: !isImport,
-      getValue: (e) => e._monedaNombre || monedaLabelById.get(e.MonedaID) || "",
-      setCellCss: (record) => getUpdatedFieldCellCss(record, "MonedaID"),
+      getValue: (e) => e._monedaNombre || monedaLabelById.get(e.CurrencyID) || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "CurrencyID"),
       excel: { type: "string", importField: "_monedaNombre" },
     },
   ];
@@ -447,7 +447,7 @@ import {
 
   const importEditableProductKeys = new Set<keyof IProduct>([
     "ID", "Name", "CategoryIDs", "Price", "Discount", "FinalPrice",
-    "BrandID", "UnidadID", "Volumen", "Peso", "MonedaID",
+    "BrandID", "UnitID", "Volume", "Weight", "CurrencyID",
   ]);
 
   // Flush optimistic product images held in memory. Runs AFTER the product is saved so the
@@ -739,7 +739,7 @@ import {
           label="Currency|Moneda"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          save="MonedaID"
+          save="CurrencyID"
           keyId="i"
           keyName="v"
           options={productoMonedaOptions}
@@ -748,14 +748,14 @@ import {
           label="Weight|Peso"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          save="Peso"
+          save="Weight"
           type="number"
         />
         <SearchSelect
           label="Unit|Unidad"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          save="UnidadID"
+          save="UnitID"
           keyId="i"
           keyName="v"
           options={productoUnidadOptions}
@@ -764,7 +764,7 @@ import {
           label="Volume|Volumen"
           saveOn={productoForm}
           css="col-span-12 md:col-span-5"
-          save="Volumen"
+          save="Volume"
           type="number"
         />
         <SearchSelect

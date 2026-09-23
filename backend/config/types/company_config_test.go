@@ -5,6 +5,7 @@ import (
 	"app/core"
 	invoicing "app/invoicing/types"
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/ivanjoz/colbin"
@@ -29,6 +30,8 @@ func testCompany() *Company {
 		InvoiceSeries: []invoicing.InvoiceSeries{
 			{SeriesID: 1, DocType: 1, SeriesCode: "F001", IsDefault: 1, Status: 1},
 		},
+		Flags:      []int16{2, 3},
+		FlagValues: []core.CompanyFlagValue{{ID: 7, Value: 20}},
 	}
 }
 
@@ -240,7 +243,7 @@ func TestCompanyConfigSurvivesAColbinRoundTrip(t *testing.T) {
 	if decoded.CompanyID != original.CompanyID || decoded.Version != original.Version {
 		t.Fatalf("header changed: %+v", decoded)
 	}
-	if decoded.Company != original.Company {
+	if !reflect.DeepEqual(decoded.Company, original.Company) {
 		t.Fatalf("company changed: %+v vs %+v", decoded.Company, original.Company)
 	}
 	if decoded.Culqi != original.Culqi {

@@ -11,9 +11,11 @@
 // series — 0 meaning the till named none (backend/sales/types/sale_order_id.go).
 
 import { normalizeQuantity } from '$core/quantity'
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, type IInvoiceSeries } from '$routes/company/configuration/invoice-series'
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '$core/sunat-doc-type'
+import { type IInvoiceSeries } from '$routes/company/configuration/invoice-series'
 import type { IWarehouse } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
 import type { ICashBank } from '$routes/finance/cash-banks/cajas.svelte'
+import { currencySymbol } from '$routes/finance/exchange-rate/exchange-rate'
 import type { IClientProvider } from '$services/crm/client-provider.svelte'
 import type { IProduct } from '$services/production/products.svelte'
 import type { SaleHistoryLine, SaleHistoryRow } from './sale_history.idb'
@@ -235,7 +237,8 @@ export const renderSaleTicket = (
   ticketRows.push(padColumns("OP. GRAVADA",
     formatTicketAmount(row.totalAmount - row.taxAmount), columns))
   ticketRows.push(padColumns("IGV", formatTicketAmount(row.taxAmount), columns))
-  ticketRows.push(padColumns("TOTAL S/", formatTicketAmount(row.totalAmount), columns))
+  ticketRows.push(padColumns(`TOTAL ${currencySymbol(row.currencyType)}`,
+    formatTicketAmount(row.totalAmount), columns))
   ticketRows.push(dividerLine(columns))
 
   const cashBank = context.cashBanksByID.get(row.cashBankID)

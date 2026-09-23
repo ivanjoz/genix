@@ -69,6 +69,11 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		sale.PaymentDueDate = saleRequest.PaymentDueDate
 		if slices.Contains(saleRequest.ActionsIncluded, 2) {
 			sale.DebtAmount = saleRequest.DebtAmount
+			// The sale's amounts are fixed in its own currency, so a later payment must land
+			// in a cash-bank of that currency.
+			if err := resolveSaleOrderCurrency(req, &sale); err != nil {
+				return req.MakeErr(err)
+			}
 		}
 	} else {
 		// Create rule: detail slices must keep one-to-one cardinality.
@@ -80,6 +85,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			if value == 0 {
 				return req.MakeErr("Hay un valor incorrecto.")
 			}
+		}
+
+		// Only a payment names a cash-bank. An unpaid sale that kept the till's default one would
+		// be paid later into it before the register the operator picks, whatever its currency.
+		if !slices.Contains(sale.ActionsIncluded, 2) {
+			sale.LastPaymentCajaID = 0
+		}
+
+		// Before the lines: the currency decides what the catalog prices are converted into.
+		if err := resolveSaleOrderCurrency(req, &sale); err != nil {
+			return req.MakeErr(err)
 		}
 
 		// Resolve the divisor and the prices against the catalog rather than trusting what
@@ -334,16 +350,32 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 
 	products := []production.Product{}
 	query := db.Query(&products)
-	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice).
+	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
+		query.CurrencyID).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.In(productIDs.Values...)
 	if err := query.Exec(); err != nil {
 		return core.Err("Error al obtener los productos de la venta:", err)
 	}
 
+	// A USD sale always carries its rate, even when every product is already in dollars:
+	// the sale summaries restate it in PEN with it. A PEN sale only needs one for a USD product.
+	needsExchangeRate := sale.CurrencyType == finance.CurrencyUSD
 	productByID := make(map[int32]production.Product, len(products))
 	for _, product := range products {
 		productByID[product.ID] = product
+		if normalizeCurrency(int8(product.CurrencyID)) != sale.CurrencyType {
+			needsExchangeRate = true
+		}
+	}
+
+	sale.ExchangeRate = 0
+	if needsExchangeRate {
+		exchangeRate, err := resolveSaleExchangeRate(req.User.CompanyID, sale.CurrencyType)
+		if err != nil {
+			return err
+		}
+		sale.ExchangeRate = exchangeRate
 	}
 
 	sale.DetailSubDivisor = make([]int16, len(sale.DetailProductsIDs))
@@ -381,9 +413,12 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 			}
 		}
 
-		// Prices come from the catalog, never from the request.
-		sale.DetailPrices[lineIndex] = product.FinalPrice
-		sale.DetailSubPrices[lineIndex] = product.SbuFinalPrice
+		// Prices come from the catalog, never from the request, restated in the sale's currency.
+		productCurrency := normalizeCurrency(int8(product.CurrencyID))
+		sale.DetailPrices[lineIndex] = finance.ConvertUnitPrice(
+			product.FinalPrice, productCurrency, sale.CurrencyType, sale.ExchangeRate)
+		sale.DetailSubPrices[lineIndex] = finance.ConvertUnitPrice(
+			product.SbuFinalPrice, productCurrency, sale.CurrencyType, sale.ExchangeRate)
 		sale.DetailSubDivisor[lineIndex] = productDivisor
 	}
 
@@ -419,6 +454,8 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID i
 		Name:           clientName,
 		RegistryNumber: clientRegistryNumber,
 		PersonType:     clientPersonType,
+		// Validated (or derived when 0) by SaveClientProviders, which also pins it on the snapshot.
+		IdentityDocType: clientInfo.IdentityDocType,
 	}}
 	// Sale-order client creation must never update an existing client record from frontend input
 	// to prevent accidental data corruption of shared client/provider records.

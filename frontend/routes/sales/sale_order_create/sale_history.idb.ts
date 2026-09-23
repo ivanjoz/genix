@@ -17,7 +17,8 @@ import type { Quantity } from '$core/quantity'
 
 const LOG_PREFIX = '[sale-history:idb]'
 const SALE_HISTORY_DB_PREFIX = 'sale_history'
-const SALE_HISTORY_DB_VERSION = 1
+// 2: rows carry currencyType; the upgrade stamps the older rows, all rung up in soles.
+const SALE_HISTORY_DB_VERSION = 2
 
 // Hard cap on persisted rows: the newest MAX_SALE_HISTORY_ROWS survive, the rest are dropped
 // on load. A till does hundreds of sales a day and only the recent ones are ever reprinted.
@@ -56,6 +57,8 @@ export interface SaleHistoryRow {
   // SaleOrder.Status exactly as the backend persisted it: 0 anulado, 1 generado, 2 pagado,
   // 3 entregado, 4 pagado + entregado. Kept raw so both flags derive from one field.
   status: number
+  // The sale's currency (1 PEN, 2 USD): the prices and amounts below are all in it.
+  currencyType: number
   // Cents.
   totalAmount: number
   taxAmount: number
@@ -70,7 +73,8 @@ class SaleHistoryDatabase extends Dexie {
     this.version(SALE_HISTORY_DB_VERSION).stores({
       // saleID is the primary key, savedAt the index the history view reads in order.
       sales: 'saleID, savedAt',
-    })
+    }).upgrade((transaction) => transaction.table('sales').toCollection()
+      .modify((row: SaleHistoryRow) => { row.currencyType = row.currencyType || 1 }))
   }
 }
 

@@ -7,6 +7,10 @@ import { tr } from '$core/store.svelte';
 import { Loading, Notify } from '$libs/helpers';
 import { validateCustomerIdentity } from './sale_order';
 import {
+  CURRENCY_PEN, CURRENCY_USD, EXCHANGE_RATE_MAX_AGE_DAYS, convertUnitPrice, effectiveExchangeRate,
+  normalizeCurrency,
+} from '$routes/finance/exchange-rate/exchange-rate';
+import {
   type Quantity, addQuantity, formatQuantity, packQuantityLine, quantityAmount, totalSubUnits,
 } from '$core/quantity';
 
@@ -47,7 +51,10 @@ export interface ISaleOrder {
   WarehouseID: number
   ID: number
   DetailProductsIDs: number[]
+  // Both in the sale's currency. The server resolves them from the catalog; DetailSubPrices
+  // only travels back.
   DetailPrices: number[]
+  DetailSubPrices?: number[]
   // Packed: units * 1000 + sub. The server re-resolves the divisor and both prices from the
   // catalog, so what travels here is the quantity, not the pricing.
   DetailQuantities: number[]
@@ -58,6 +65,10 @@ export interface ISaleOrder {
   TotalAmount: number
   TaxAmount: number
   DebtAmount: number
+  // 1 PEN, 2 USD. Paid: the payment cash-bank's currency. Unpaid: what the till picked.
+  CurrencyType: number
+  // The effective rate × 1000 the server converted the lines with. Only travels back.
+  ExchangeRate: number
   ClientID: number
   Created: number
   upd: number
@@ -100,7 +111,7 @@ export class SaleOrderState {
   productosStock = $state([] as IProductStock[])
   form = $state<ISaleOrder>({
     ID: 0, CompanyID: 0, WarehouseID: 0, LastPaymentCajaID: 0, ClientID: 0, // No payment caja until one is loaded/picked.
-    Date: 0, TotalAmount: 0, TaxAmount: 0, DebtAmount: 0,
+    Date: 0, TotalAmount: 0, TaxAmount: 0, DebtAmount: 0, CurrencyType: CURRENCY_PEN, ExchangeRate: 0,
     ActionsIncluded: [SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY],
     DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [], DetailSubDivisor: [],
     DetailProductSkus: [], DetailProductLotIDs: [], DetailProductPresentations: [],
@@ -116,9 +127,31 @@ export class SaleOrderState {
   // Cart
   ventaProductos = $state([] as VentaProducto[])
 
+  // The latest sell rate (the company's, or BCRP's for a day it did not load) and the spread,
+  // both × 1000, fed by the page. The till only previews the conversion: the server resolves
+  // the same rate again when it creates the sale.
+  sellRate = $state(0)
+  spread = $state(0)
+
   // Computed
   ventaProductosMap = $derived.by(() => {
     return new Map(this.ventaProductos.map(x => [x.key, x]))
+  })
+
+  effectiveRate = $derived(effectiveExchangeRate(this.sellRate, this.spread, this.form.CurrencyType))
+
+  // A USD sale always needs the rate (the server stores it to restate the sale in PEN); a PEN
+  // sale only when it carries a USD-priced product.
+  needsExchangeRate = $derived(this.form.CurrencyType === CURRENCY_USD
+    || this.ventaProductos.some((ventaProducto) =>
+      normalizeCurrency(ventaProducto.producto?.CurrencyID) !== this.form.CurrencyType))
+
+  exchangeRateProblem = $derived.by(() => {
+    if (!this.needsExchangeRate || this.effectiveRate > 0) { return "" }
+    if (this.sellRate > 0) {
+      return "The exchange rate spread leaves no valid rate.|El spread de tipo de cambio no deja un tipo de cambio válido."
+    }
+    return `No sell exchange rate (own or BCRP) in the last ${EXCHANGE_RATE_MAX_AGE_DAYS} days. Load it in Finance > Exchange rate.|No hay tipo de cambio de venta (propio ni BCRP) en los últimos ${EXCHANGE_RATE_MAX_AGE_DAYS} días. Regístrelo en Finanzas > Tipo de cambio.`
   })
 
   constructor() {}
@@ -184,14 +217,33 @@ export class SaleOrderState {
     this.recalcTotales()
   }
 
+  // A catalog price restated in the sale's currency. Without a usable rate a converted price is
+  // 0 and exchangeRateProblem says why, instead of showing a number the server would refuse.
+  priceInSaleCurrency(price: number, producto: IProduct): number {
+    const productCurrency = normalizeCurrency(producto.CurrencyID)
+    if (productCurrency !== this.form.CurrencyType && !this.effectiveRate) { return 0 }
+    return convertUnitPrice(price, productCurrency, this.form.CurrencyType, this.effectiveRate)
+  }
+
+  lineAmount(ventaProducto: VentaProducto): number {
+    const producto = ventaProducto.producto
+    if (!producto) { return 0 }
+    // Whole units at their price, sub-units at theirs — never prorated.
+    return quantityAmount(ventaProducto.cantidad,
+      this.priceInSaleCurrency(producto.FinalPrice, producto),
+      this.priceInSaleCurrency(producto.SbuFinalPrice || 0, producto))
+  }
+
+  // The S/ 700 boleta rule is in soles whatever the sale is charged in.
+  totalInPEN(): number {
+    if (this.form.CurrencyType !== CURRENCY_USD) { return this.form.TotalAmount }
+    return convertUnitPrice(this.form.TotalAmount, CURRENCY_USD, CURRENCY_PEN, this.effectiveRate)
+  }
+
   recalcTotales() {
     let total = 0
     for(let vp of this.ventaProductos){
-      const producto = vp.producto
-      if(producto){
-        // Whole units at their price, sub-units at theirs — never prorated.
-        total += quantityAmount(vp.cantidad, producto.FinalPrice, producto.SbuFinalPrice || 0)
-      }
+      total += this.lineAmount(vp)
     }
 
     this.form.TotalAmount = total
@@ -221,11 +273,16 @@ export class SaleOrderState {
       return undefined
     }
 
+    if (this.exchangeRateProblem) {
+      Notify.failure(tr(this.exchangeRateProblem))
+      return undefined
+    }
+
     const issueSeries = allSeries.find(series => series.SeriesID === this.form.IssueSeriesID)
     if (issueSeries) {
       // The client row is the base and what was typed at the till overrides it,
       // which is how the backend resolves the buyer too.
-      const identityProblem = validateCustomerIdentity(issueSeries.DocType, this.form.TotalAmount,
+      const identityProblem = validateCustomerIdentity(issueSeries.DocType, this.totalInPEN(),
         this.form.ClientInfo?.Name || selectedClient?.Name || "",
         this.form.ClientInfo?.RegistryNumber || selectedClient?.RegistryNumber || "")
 
@@ -259,7 +316,7 @@ export class SaleOrderState {
       this.form.DetailProductsIDs.push(vp.productoID)
       // Sent for the operator's reference only; the server overwrites both prices from the
       // catalog before anything is stored.
-      this.form.DetailPrices.push(vp.producto?.FinalPrice || 0)
+      this.form.DetailPrices.push(vp.producto ? this.priceInSaleCurrency(vp.producto.FinalPrice, vp.producto) : 0)
       this.form.DetailQuantities.push(packQuantityLine(quantity, vp.subDivisor))
       this.form.DetailSubDivisor.push(vp.subDivisor)
       this.form.DetailProductSkus.push(serialNumber)
@@ -291,15 +348,19 @@ export class SaleOrderState {
         this.form.ClientInfo = {
           Name: this.form.ClientInfo.Name.trim(),
           RegistryNumber: this.form.ClientInfo.RegistryNumber?.trim() || "",
+          // The type the till picked. 0 leaves the backend to derive it from the shape.
+          IdentityDocType: this.form.ClientInfo.IdentityDocType || 0,
         }
         this.form.ClientID = 0
       } else {
         this.form.ClientInfo = undefined
       }
 
+      // An unpaid sale names no cash-bank; the form keeps its pick for the next paid sale.
+      const isPaid = this.form.ActionsIncluded.includes(SALE_ACTION_PAYMENT)
       const createdSale = await POST({
         route: "sale-order",
-        data: this.form,
+        data: isPaid ? this.form : { ...this.form, LastPaymentCajaID: 0 },
         successMessage: "Venta registrada con éxito"
       }) as ISaleOrder | undefined
 
