@@ -14,7 +14,7 @@ import (
 const (
 	PurchaseOrderActionConfirm = 1 // Cambia status de Pendiente (1) a Cumplido (2)
 	PurchaseOrderActionEdit    = 2 // Edita campos no críticos cuando la orden está Pendiente o Cumplida
-	PurchaseOrderActionPay     = 3 // Registra un pago: descuenta DebtAmount y crea movimiento de cashBank Tipo=6
+	PurchaseOrderActionPay     = 3 // Registra un pago (Confirmada o Cumplida): descuenta DebtAmount y crea movimiento de cashBank Tipo=6
 	PurchaseOrderActionAnnul   = 4 // Anula la orden: cambia status a Cancelada (0). Solo desde Pendiente o Confirmada.
 	// Registra o corrige el comprobante del proveedor. También en Cumplida: la factura suele
 	// llegar con la mercadería o después, y sin ella la compra no entra al Registro de Compras.
@@ -424,10 +424,12 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(orderCurrent)
 
 	case PurchaseOrderActionPay:
-		// Solo se registra pago cuando la orden está Confirmada: Pendiente debe pasar primero
-		// por Confirmar (acción 1) y los demás estados son inmutables.
-		if orderCurrent.Status != types.PurchaseOrderStatusConfirmed {
-			return req.MakeErr("La orden no está en estado Confirmada y no puede pagarse.")
+		// Se paga una orden Confirmada o Cumplida: al proveedor se le suele pagar después de
+		// entregar, así que recibir la mercadería no puede cerrar la deuda. Pendiente debe pasar
+		// primero por Confirmar (acción 1) y una Cancelada no se paga.
+		if orderCurrent.Status != types.PurchaseOrderStatusConfirmed &&
+			orderCurrent.Status != types.PurchaseOrderStatusFulfilled {
+			return req.MakeErr("La orden no está Confirmada ni Cumplida y no puede pagarse.")
 		}
 
 		payload := purchaseOrderPayPayload{}
@@ -442,6 +444,19 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		if payload.Amount > orderCurrent.DebtAmount {
 			return req.MakeErr("El monto del pago excede la deuda pendiente de la orden.")
+		}
+
+		// DebtAmount is in the order's currency and the cash movement subtracts it as is, so a
+		// soles register paying a dollar order would lose the wrong amount. No conversion here:
+		// the payment has to come from a register in the order's currency.
+		cashBank, err := finance.GetCaja(req.User.CompanyID, payload.CashBankID)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		cashBankCurrency := core.Coalesce(cashBank.CurrencyType, finance.CurrencyPEN)
+		orderCurrency := core.Coalesce(orderCurrent.CurrencyType, finance.CurrencyPEN)
+		if cashBankCurrency != orderCurrency {
+			return req.MakeErr(fmt.Sprintf("La caja \"%v\" no está en la moneda de la orden de compra.", cashBank.Name))
 		}
 
 		// El pago sale de la cashBank: Amount negativo para que ApplyCajaMovimientos descuente del saldo.

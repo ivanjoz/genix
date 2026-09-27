@@ -259,6 +259,26 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 	return lines, lineProductIDs, nil
 }
 
+// SaleOrderTaxAmount is the IGV inside the sale's total, split per line part exactly as
+// buildLines splits it, so the sale and its comprobante never differ by a rounding cent.
+// A sale with no comprobante still carries it: the sales book reads it from the sale.
+func SaleOrderTaxAmount(order *sales.SaleOrder) int32 {
+	taxAmount := int64(0)
+	addLinePart := func(quantity int32, grossUnit int32) {
+		if quantity <= 0 || grossUnit <= 0 {
+			return
+		}
+		_, tax := splitGrossAmount(int64(quantity) * int64(grossUnit))
+		taxAmount += tax
+	}
+	for index := range order.DetailProductsIDs {
+		lineQuantity := core.UnpackQuantityLine(core.GetIndex(order.DetailQuantities, index))
+		addLinePart(lineQuantity.Units, core.GetIndex(order.DetailPrices, index))
+		addLinePart(lineQuantity.Sub, core.GetIndex(order.DetailSubPrices, index))
+	}
+	return int32(taxAmount)
+}
+
 // loadProductDescriptions reads what a document line needs to describe itself: the product
 // name and, for a sub-unit line, the name of the sub-unit.
 func loadProductDescriptions(companyID int32, productIDs []int32) (map[int32]production.Product, error) {

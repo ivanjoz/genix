@@ -610,8 +610,8 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 	}
 
 	// Only products the sale handler will price above zero. It recomputes every line from
-	// FinalPrice and ignores the prices sent in the payload, so a product priced at 0 there totals
-	// the sale at 0 — and the DebtAmount an unpaid sale carries would then exceed its own total.
+	// FinalPrice and ignores the prices sent in the payload, so a product priced at 0 there would
+	// book a line that charges nothing.
 	eligibleProducts := make([]production.Product, 0, len(products))
 	for _, product := range products {
 		if product.ID > 0 && product.FinalPrice > 0 {
@@ -945,6 +945,7 @@ func (generator *erpHistoryGenerator) injectCash(at time.Time, currentBalance in
 	payloadBytes, err := json.Marshal(financeTypes.CashBankMovement{
 		CashBankID:  generator.cashBankID,
 		Type:        7,
+		AccountCode: financeTypes.PCGECapital,
 		Amount:      amountToInject,
 		FinalAmount: currentBalance + amountToInject,
 	})
@@ -1177,11 +1178,10 @@ func (generator *erpHistoryGenerator) makeSalePayload(warehouseID int32, isUnpai
 	}
 
 	// ActionsIncluded is what drives the sale status: 2 registers the payment in the cash
-	// register, 3 moves the goods out of the warehouse.
+	// register, 3 moves the goods out of the warehouse. An unpaid sale needs no DebtAmount: the
+	// handler books its whole total as owed.
 	if !isUnpaid {
 		salePayload.ActionsIncluded = append(salePayload.ActionsIncluded, 2)
-	} else {
-		salePayload.DebtAmount = salePayload.TotalAmount
 	}
 	if !isUndelivered {
 		salePayload.ActionsIncluded = append(salePayload.ActionsIncluded, 3)

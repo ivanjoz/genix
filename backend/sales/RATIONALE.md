@@ -1,3 +1,14 @@
+## A payment must collect something, and the sale's TaxAmount is per line
+
+**Context** — With the server owning the debt, the payment rules and the tax split were open.
+**Decision** — A payment that leaves the debt unchanged is refused, and so is a payment on a sale
+with no debt. A zero-total sale paid at creation is allowed and marked Pagado. `TaxAmount` is
+`invoicing.SaleOrderTaxAmount`: the IGV of each line part (units and sub-units) summed, the same
+split the comprobante makes.
+**Rationale** — Otherwise an empty "payment" would stamp the payer and the time on a sale that
+collected nothing. Summing per line means the sales book and the comprobante never differ by a
+rounding cent. Splitting the total once could.
+
 ## An unpaid sale stores no cash-bank
 
 **Context** — The till always sent its default cash-bank, even when "Pagado" was unchecked, and the

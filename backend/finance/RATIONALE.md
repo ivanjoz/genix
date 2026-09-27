@@ -1,3 +1,24 @@
+## A manual Cobro picks one of five accounts
+
+**Context** — Type 7 "Cobro" is the only manual inflow, and it must post against a PCGE account. The
+list of options was left open.
+**Decision** — 759 other income, 142 shareholder repayment, 1419 repayment by an employee, 50
+capital contribution, 451 loan received. There is no default: the user always chooses. The sample-data
+generators, which inject cash with a Cobro, book it as capital (50).
+**Rationale** — These are the counterparts of the manual outflows (142 and 1419 are what a Retiro and a
+Pérdida charge) plus the two usual ways new money enters a small business. A customer paying a sale is
+not on the list because it is written by the sale (type 8).
+
+## Manual cash movements keep the document types out
+
+**Context** — `POST.cash-banks-movement` accepted any type, so a "Pago Proveedor" or a "Cobro (Venta)"
+could be typed with no order or sale behind it.
+**Decision** — `ValidateManualCashMovement` allows only 3, 4 and 5 (negative) and 7 (positive). The
+form lists those four (`group: 2` in `cajaMovimientoTipos`); the document-driven types moved to
+`group: 3`, and the amount input forces the sign of the chosen type.
+**Rationale** — The Libro Diario derives the other side of a document-driven movement from its
+document. A manual one with no document would post against nothing.
+
 ## The purchase document rules live in finance/types
 
 **Context** — Purchase orders (logistics), expenses (finance) and assets (accounting) carry the same

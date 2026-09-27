@@ -123,3 +123,47 @@ func TestStockDivisorOfDefaultsToNone(t *testing.T) {
 		t.Fatalf("expected 1000, got %v", divisor)
 	}
 }
+
+// A transfer is one input movement but two ledger rows: the origin loses the quantity and the
+// destination gains it, each naming the other through WarehouseRefID.
+func TestExpandStockTransfersEmitsBothLegs(t *testing.T) {
+	plainMovement := InternalMovement{ProductID: 7, WarehouseID: 1, Quantity: -2}
+	transfer := InternalMovement{ProductID: 9, WarehouseID: 1, DestWarehouseID: 4, Quantity: 3, SubQuantity: 1, SubDivisor: 6, Price: 500}
+
+	expanded, err := expandStockTransfers([]InternalMovement{plainMovement, transfer})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(expanded) != 3 {
+		t.Fatalf("expected the plain movement plus two transfer legs, got %v rows", len(expanded))
+	}
+	if expanded[0] != plainMovement {
+		t.Fatalf("expected a non-transfer movement to pass through untouched, got %+v", expanded[0])
+	}
+
+	outflow, inflow := expanded[1], expanded[2]
+	if outflow.WarehouseID != 1 || outflow.Quantity != -3 || outflow.SubQuantity != -1 || outflow.transferPeerWarehouseID != 4 {
+		t.Fatalf("unexpected outflow leg %+v", outflow)
+	}
+	if inflow.WarehouseID != 4 || inflow.Quantity != 3 || inflow.SubQuantity != 1 || inflow.transferPeerWarehouseID != 1 {
+		t.Fatalf("unexpected inflow leg %+v", inflow)
+	}
+	// The inflow is priced inside the engine at the origin's average; a typed price never survives.
+	if outflow.Price != 0 || inflow.Price != 0 || outflow.DestWarehouseID != 0 || inflow.DestWarehouseID != 0 {
+		t.Fatalf("expected both legs to drop Price and DestWarehouseID, got %+v / %+v", outflow, inflow)
+	}
+}
+
+func TestExpandStockTransfersRefusesInvalidTransfers(t *testing.T) {
+	invalidTransfers := map[string]InternalMovement{
+		"replace quantity":  {WarehouseID: 1, DestWarehouseID: 2, Quantity: 3, ReplaceQuantity: true},
+		"same warehouse":    {WarehouseID: 1, DestWarehouseID: 1, Quantity: 3},
+		"negative quantity": {WarehouseID: 1, DestWarehouseID: 2, Quantity: -3},
+		"zero quantity":     {WarehouseID: 1, DestWarehouseID: 2},
+	}
+	for name, transfer := range invalidTransfers {
+		if _, err := expandStockTransfers([]InternalMovement{transfer}); err == nil {
+			t.Fatalf("expected a %v transfer to be refused", name)
+		}
+	}
+}

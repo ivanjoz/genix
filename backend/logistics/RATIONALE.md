@@ -2,6 +2,17 @@
 
 Design decisions for supplies, stock and purchase orders, newest first.
 
+## A transfer's inflow is priced at the origin's average, not at a typed price
+
+**Context** — A stock transfer is now two ledger rows (`expandStockTransfers`), and the receiving
+warehouse has its own moving average that the inflow feeds.
+**Decision** — Both legs drop any `Price` the caller sent; inside the lock the inflow takes the origin
+row's `AverageCost` at that moment. A transfer cannot set stock ("set to X") and must move a positive
+quantity between two different warehouses.
+**Rationale** — Moving goods between warehouses creates no value, so the destination must receive
+them at what they cost the origin. The cost: an origin with no average (0) delivers uncosted stock,
+which leaves the destination's average unchanged.
+
 ## An uncosted inflow leaves the average cost where it was
 
 **Context** — `ProductStock.AverageCost` moves on every costed inflow. Receptions of an order in

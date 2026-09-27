@@ -44,6 +44,11 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// an update: the series is part of the sale id and cannot change.
 	var issueSeries *invoicing.InvoiceSeries
 
+	// What this request's payment action puts in the cash-bank. The server owns the debt: the
+	// client only says how much stays owed, and the amount collected is the drop from what the
+	// sale owed before — never the client's word on the total.
+	collectedAmount := int32(0)
+
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
 		existingSales := []types.SaleOrder{}
@@ -68,6 +73,13 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// PaymentDueDate is editable post-creation (e.g., reschedule a payment).
 		sale.PaymentDueDate = saleRequest.PaymentDueDate
 		if slices.Contains(saleRequest.ActionsIncluded, 2) {
+			if sale.DebtAmount <= 0 {
+				return req.MakeErr("La venta no tiene deuda pendiente.")
+			}
+			collectedAmount, err = saleOrderCollectedAmount(sale.DebtAmount, saleRequest.DebtAmount)
+			if err != nil {
+				return req.MakeErr(err)
+			}
 			sale.DebtAmount = saleRequest.DebtAmount
 			// The sale's amounts are fixed in its own currency, so a later payment must land
 			// in a cash-bank of that currency.
@@ -103,6 +115,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// a crafted request from booking a sale at an invented price.
 		if err := validateSaleOrderLines(req, &sale); err != nil {
 			return req.MakeErr(err)
+		}
+
+		// A new sale owes its whole total until a payment says otherwise, so an unpaid sale is
+		// a receivable from its first write.
+		if slices.Contains(sale.ActionsIncluded, 2) {
+			collectedAmount, err = saleOrderCollectedAmount(sale.TotalAmount, sale.DebtAmount)
+			if err != nil {
+				return req.MakeErr(err)
+			}
+		} else {
+			sale.DebtAmount = sale.TotalAmount
 		}
 
 		// Runs on the total the catalog just resolved, and before the client is
@@ -141,7 +164,12 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 2 = Pago (Registro en CashBank)
 	if slices.Contains(sale.ActionsIncluded, 2) {
-		sale.AddStatus(2)
+		// A partial payment leaves the sale unpaid: only the payment that clears the debt marks it Pagado.
+		if sale.DebtAmount == 0 {
+			if err := sale.AddStatus(2); err != nil {
+				return req.MakeErr(err)
+			}
+		}
 		// Track when and who executed the latest payment action.
 		sale.LastPaymentTime = nowTime
 		sale.LastPaymentUser = req.User.ID
@@ -214,13 +242,12 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// 2 = Pago (Registro en CashBank)
 	if slices.Contains(sale.ActionsIncluded, 2) {
 
-		montoPago := sale.TotalAmount - sale.DebtAmount
-		if montoPago != 0 {
+		if collectedAmount != 0 {
 			movimiento := finance.InternalCashMovement{
 				CashBankID: sale.LastPaymentCajaID,
 				DocumentID: sale.ID,
 				Type:       finance.CashMovementTypeSaleCollection,
-				Amount:     montoPago,
+				Amount:     collectedAmount,
 			}
 
 			eg.Go(func() error {
@@ -430,10 +457,24 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 			sale.DetailPrices[lineIndex], sale.DetailSubPrices[lineIndex])
 	}
 	sale.TotalAmount = totalAmount
-	if sale.DebtAmount > totalAmount {
-		return core.Err("El monto adeudado no puede superar el total de la venta.")
-	}
+	sale.TaxAmount = invoicing.SaleOrderTaxAmount(sale)
 	return nil
+}
+
+// saleOrderCollectedAmount is what a payment collects when the sale owed pendingDebt and the
+// client says remainingDebt stays owed. A payment must collect something while there is debt,
+// and can neither overpay nor raise what is owed.
+func saleOrderCollectedAmount(pendingDebt int32, remainingDebt int32) (int32, error) {
+	if remainingDebt < 0 {
+		return 0, core.Err("El monto adeudado no puede ser negativo.")
+	}
+	if remainingDebt > pendingDebt {
+		return 0, core.Err("El monto adeudado no puede superar la deuda pendiente de la venta.")
+	}
+	if pendingDebt > 0 && remainingDebt == pendingDebt {
+		return 0, core.Err("El pago debe cobrar un monto mayor a 0.")
+	}
+	return pendingDebt - remainingDebt, nil
 }
 
 func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID int32, userID int32) (int32, error) {

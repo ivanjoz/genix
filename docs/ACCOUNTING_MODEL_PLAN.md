@@ -97,6 +97,18 @@ checked.
 These make the facts wrong, so no projection can be right on top of them. They are fixed first,
 whatever level is being built.
 
+**Status: all six fixed (phase 0).**
+1. `expandStockTransfers` writes a transfer as two rows, each naming the other warehouse in
+   `WarehouseRefID`. The inflow is priced at the origin's average.
+2. The type comes from the delta, and a replace-to-zero applies.
+3. A PO can be paid while Confirmed or Fulfilled, from a register in the order's currency.
+4. The server owns the sale debt. An unpaid sale owes its total, a payment collects the drop in
+   debt, and only a zero debt marks it Pagado.
+5. Only 3, 4, 5 (negative) and 7 (positive, with a PCGE account) are manual cash types.
+6. `TaxAmount` is computed per line by `invoicing.SaleOrderTaxAmount`.
+
+The descriptions below are kept as the record of what was wrong.
+
 1. **An asset transfer adds stock at the origin warehouse.** `PutAssetTransfer` sets
    `DestWarehouseID` (`accounting/asset_api.go:308`) and a positive quantity, but
    `ApplyMovimientos` never reads `DestWarehouseID` and never writes `WarehouseRefID`. Net

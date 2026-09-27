@@ -12,7 +12,7 @@ export const PurchaseOrderStatus = {
 
 // Mirrors backend action codes accepted by PUT /purchase-orders.
 // CONFIRM: Pendiente (1) -> Confirmada (2). EDIT: updates editable fields while status ∈ {1,2}.
-// PAY: registra un pago, descuenta DebtAmount y crea movimiento de caja Tipo=6 (solo en Confirmada).
+// PAY: registra un pago, descuenta DebtAmount y crea movimiento de caja Tipo=6 (en Confirmada o Cumplida, desde una caja en la moneda de la orden).
 export const PurchaseOrderAction = {
   CONFIRM: 1,
   EDIT: 2,

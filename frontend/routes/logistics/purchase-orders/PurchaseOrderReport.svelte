@@ -288,12 +288,17 @@ const saveDocumentPurchaseOrder = async () => {
 const orderDocumentLabel = (r: IPurchaseOrder): string =>
   r.DocType ? `${r.DocSeries}-${r.DocNumber}` : ''
 
+// The backend subtracts the payment from the order's debt without converting, so only a caja in
+// the order's currency can pay it. Currency 0 on either side means soles.
+const payCashBanks = $derived(cajasService.Cajas.filter((caja) =>
+  (caja.CurrencyType || 1) === (selectedPurchaseOrder?.CurrencyType || 1)))
+
 // Opens the payment modal pre-filled with the remaining DebtAmount and the first available caja.
-// Backend only accepts payments while the order is Confirmada; mirror that constraint here for fast feedback.
+// Backend only accepts payments while the order is Confirmada or Cumplida; mirror that here for fast feedback.
 const openPayPurchaseOrderModal = () => {
   if (!selectedPurchaseOrder) { return }
-  if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.CONFIRMED) {
-    Notify.failure(tr('Only Confirmed orders can be paid.|Solo se pueden pagar órdenes en estado Confirmada.'))
+  if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.CONFIRMED && selectedPurchaseOrder.ss !== PurchaseOrderStatus.FULFILLED) {
+    Notify.failure(tr('Only Confirmed or Fulfilled orders can be paid.|Solo se pueden pagar órdenes Confirmadas o Cumplidas.'))
     return
   }
   const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
@@ -304,7 +309,7 @@ const openPayPurchaseOrderModal = () => {
 
   // Monto starts at 0 so the user explicitly types the amount; "Deuda pendiente" reflects the order's full debt.
   payForm = {
-    CashBankID: cajasService.Cajas[0]?.ID || 0,
+    CashBankID: payCashBanks[0]?.ID || 0,
     Amount: 0,
   }
   ui.openModal(PAY_PURCHASE_ORDER_MODAL_ID)
@@ -861,7 +866,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
         label="Cash Register|Caja"
         keyId="ID"
         keyName="Name"
-        options={cajasService.Cajas}
+        options={payCashBanks}
         selected={payForm.CashBankID}
         onChange={(caja) => { payForm.CashBankID = caja?.ID || 0 }}
       />

@@ -71,6 +71,32 @@ func TestBuildLinesSplitsASubUnitSale(t *testing.T) {
 	}
 }
 
+// The sale's TaxAmount is the sum of the IGV the document lines carry, never a split of the
+// total: splitting 5000+3400 at once could round a cent away from what the comprobante declares.
+func TestSaleOrderTaxAmountMatchesTheDocumentLines(t *testing.T) {
+	order := &sales.SaleOrder{
+		DetailProductsIDs: []int32{101, 101},
+		DetailQuantities:  []int32{1004, 3000},
+		DetailPrices:      []int32{5000, 1999},
+		DetailSubPrices:   []int32{850, 0},
+		DetailSubDivisor:  []int16{6, 6},
+	}
+	lines, _, err := buildLines(order, candyBoxProducts())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	documentTax := int64(0)
+	for _, line := range lines {
+		documentTax += int64(line.IGV)
+	}
+	if got := SaleOrderTaxAmount(order); int64(got) != documentTax {
+		t.Fatalf("expected the sale's tax to equal the document's %v, got %v", documentTax, got)
+	}
+	if SaleOrderTaxAmount(&sales.SaleOrder{}) != 0 {
+		t.Fatal("expected an empty sale to carry no tax")
+	}
+}
+
 // A whole-unit sale must stay a single line, so ordinary invoices are unchanged.
 func TestBuildLinesKeepsWholeUnitSalesAsOneLine(t *testing.T) {
 	packed, err := core.PackQuantityLine(core.Quantity{Units: 3}, core.QuantityDivisorNone)

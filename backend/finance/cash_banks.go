@@ -277,6 +277,9 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 	if record.Type == 0 || record.Amount == 0 || record.CashBankID == 0 {
 		return req.MakeErr("Hay parámetros faltantes (Type, Amount o CashBank-ID)")
 	}
+	if err := types.ValidateManualCashMovement(record.Type, record.Amount); err != nil {
+		return req.MakeErr(err)
+	}
 
 	cashBank, err := types.GetCaja(req.User.CompanyID, record.CashBankID)
 	if err != nil {

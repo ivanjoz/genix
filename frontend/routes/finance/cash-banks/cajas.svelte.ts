@@ -211,18 +211,20 @@ export const cajaMonedaTipos = [
   { id: 2, name: "USD" }
 ]
 
+// group 2 = registered by hand from the cash register (backend ManualCashMovementTypes);
+// group 3 = written by its own document (order, sale, expense, asset) and never typed here.
 export const cajaMovimientoTipos = [
   { id: 1, name: "-", group: 1 },
   { id: 2, name: "Cuadre Físico", group: 1 },
   { id: 3, name: "Transferencia", group: 2, isNegative: true },
   { id: 4, name: "Retiro", group: 2, isNegative: true },
   { id: 5, name: "Pérdida", group: 2, isNegative: true },
-  { id: 6, name: "Pago Proveedor", group: 2, isNegative: true },
-	{ id: 7, name: "Cobro", group: 2 },
-  { id: 8, name: "Cobro (Venta)", group: 2 },
-  { id: 9, name: "Pago Gasto", group: 2, isNegative: true },
-  { id: 10, name: "Pago Activo", group: 2, isNegative: true },
-  { id: 11, name: "Devolución (Anulación Venta)", group: 2, isNegative: true }
+  { id: 6, name: "Pago Proveedor", group: 3, isNegative: true },
+  { id: 7, name: "Cobro", group: 2 },
+  { id: 8, name: "Cobro (Venta)", group: 3 },
+  { id: 9, name: "Pago Gasto", group: 3, isNegative: true },
+  { id: 10, name: "Pago Activo", group: 3, isNegative: true },
+  { id: 11, name: "Devolución (Anulación Venta)", group: 3, isNegative: true }
 ]
 
 export interface ICashMovementAccountOption {
@@ -244,6 +246,11 @@ export const CASH_MOVEMENT_ACCOUNT_OPTIONS: ICashMovementAccountOption[] = [
   { movementType: 2, direction: -1, accountCode: 659, name: 'Other expense|Otro gasto' },
   { movementType: 2, direction: -1, accountCode: 1419, name: 'Charged to the cashier|Cargo al cajero' },
   { movementType: 2, direction: 1, accountCode: 759, name: 'Other income|Otro ingreso' },
+  { movementType: 7, accountCode: 759, name: 'Other income|Otro ingreso' },
+  { movementType: 7, accountCode: 142, name: 'Owner or shareholder repayment|Devolución del socio o accionista' },
+  { movementType: 7, accountCode: 1419, name: 'Repayment by an employee|Devolución de un trabajador' },
+  { movementType: 7, accountCode: 50, name: 'Capital contribution|Aporte de capital' },
+  { movementType: 7, accountCode: 451, name: 'Loan received|Préstamo recibido' },
 ]
 
 /** The accounts a movement of this type and amount may post against, mirroring

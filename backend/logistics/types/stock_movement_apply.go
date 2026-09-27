@@ -149,6 +149,41 @@ func refineStockDivisor(stock *ProductStock, details []*ProductStockDetail,
 	return nil
 }
 
+// expandStockTransfers turns every movement that names a DestWarehouseID into its two ledger
+// rows: the outflow at the origin and the inflow at the destination, each naming the other
+// warehouse. Two rows, like a cash transfer, so each warehouse's history and Kardex come from its
+// own movements. The inflow's cost is left for ApplyMovimientos, which knows the origin's average.
+func expandStockTransfers(movements []InternalMovement) ([]InternalMovement, error) {
+	expanded := make([]InternalMovement, 0, len(movements))
+	for _, movement := range movements {
+		if movement.DestWarehouseID == 0 {
+			expanded = append(expanded, movement)
+			continue
+		}
+		if movement.ReplaceQuantity {
+			return nil, core.Err("Un traslado mueve una cantidad, no puede fijar el stock del almacén.")
+		}
+		if movement.DestWarehouseID == movement.WarehouseID {
+			return nil, core.Err("El almacén de destino debe ser distinto al de origen.")
+		}
+		if movement.Quantity < 0 || movement.SubQuantity < 0 || (movement.Quantity == 0 && movement.SubQuantity == 0) {
+			return nil, core.Err(fmt.Sprintf("La cantidad a trasladar del producto %v debe ser positiva.", movement.ProductID))
+		}
+
+		outflow := movement
+		outflow.DestWarehouseID, outflow.Price = 0, 0
+		outflow.Quantity, outflow.SubQuantity = -movement.Quantity, -movement.SubQuantity
+		outflow.transferPeerWarehouseID = movement.DestWarehouseID
+
+		inflow := movement
+		inflow.WarehouseID, inflow.DestWarehouseID, inflow.Price = movement.DestWarehouseID, 0, 0
+		inflow.transferPeerWarehouseID = movement.WarehouseID
+
+		expanded = append(expanded, outflow, inflow)
+	}
+	return expanded, nil
+}
+
 func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
@@ -157,6 +192,11 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 	core.Log("ApplyMovimientos esperando lock company:", companyID, "movimientos:", len(movimientos))
 	companyLock.Lock()
 	defer companyLock.Unlock()
+
+	movimientos, err := expandStockTransfers(movimientos)
+	if err != nil {
+		return err
+	}
 
 	// Filter out no-ops and validate lot/supplier prerequisites in one pass.
 	activeMovements := make([]*InternalMovement, 0, len(movimientos))
@@ -435,6 +475,16 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 		}
 		isInflow := !delta.IsNegative(effectiveDivisor)
 		movement.Type = core.Coalesce(mov.Type, core.If(isInflow, int8(1), int8(2)))
+		movement.WarehouseRefID = mov.transferPeerWarehouseID
+
+		if isInflow && mov.transferPeerWarehouseID > 0 {
+			// A transfer's inflow is costed at what the units left the origin with: the origin's
+			// average, which its own outflow leg, processed just before, did not move.
+			originStockID := PackProductStockID(mov.transferPeerWarehouseID, mov.ProductID, mov.PresentationID)
+			if originStock := stockByID[originStockID]; originStock != nil {
+				mov.Price = originStock.AverageCost
+			}
+		}
 
 		if isInflow && mov.RejectInbound {
 			return core.Err(fmt.Sprintf(
@@ -796,8 +846,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 			}
 		}
 
-		// Same rule as ApplyMovimientos: only a costed inflow moves the average. The mirrored
-		// outbound leg of a transfer shares the movement's value but is negative, so it is skipped.
+		// Same rule as ApplyMovimientos: only a costed inflow moves the average.
 		balanceBefore := balanceByStockID[stockID]
 		if movement.MonetaryValue > 0 && !quantity.IsZero() && !quantity.IsNegative(stock.SubDivisor) {
 			stock.AverageCost = NextMovingAverageCost(stock.AverageCost,
@@ -843,12 +892,8 @@ func RecalcProductStockByMovements(companyID int32) error {
 		if accumulateError = accumulate(movement.WarehouseID, moved, movementDivisor, movement); accumulateError != nil {
 			return false
 		}
-		if movement.WarehouseRefID > 0 {
-			// Transfers mirror an outbound leg on the source warehouse.
-			if accumulateError = accumulate(movement.WarehouseRefID, moved.Negate(), movementDivisor, movement); accumulateError != nil {
-				return false
-			}
-		}
+		// A transfer is two rows, one per warehouse (expandStockTransfers), so each row only
+		// accumulates on its own warehouse; WarehouseRefID just names the other side.
 		return true
 	}); err != nil {
 		return core.Err("Error al escanear movimientos:", err)

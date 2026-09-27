@@ -696,11 +696,8 @@
 				type="number"
 				transform={(v) => {
 					const movTipo = cajaMovimientoTiposMap.get(cajaMovimientoForm.Type);
-					console.log("movimiento tipo::", movTipo);
-					if (movTipo?.isNegative && typeof v === "number" && v > 0) {
-						v = v * -1;
-					}
-					return v;
+					if (typeof v !== "number") return v;
+					return movTipo?.isNegative ? -Math.abs(v) : Math.abs(v);
 				}}
 				onChange={() => {
 					const form = { ...cajaMovimientoForm };

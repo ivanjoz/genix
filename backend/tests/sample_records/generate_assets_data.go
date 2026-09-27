@@ -414,9 +414,10 @@ func (generator *supplyDataGenerator) ensureCashBalance(cashBank financeTypes.Ca
 
 	amountToInject := amountNeeded - cashBank.CurrentAmount + assetCashPadding
 	bodyBytes, marshalError := json.Marshal(financeTypes.CashBankMovement{
-		CashBankID: cashBank.ID,
-		Type:       7,
-		Amount:     amountToInject,
+		CashBankID:  cashBank.ID,
+		Type:        7,
+		AccountCode: financeTypes.PCGECapital,
+		Amount:      amountToInject,
 		// The handler rejects the write unless FinalAmount - Amount matches the stored balance,
 		// so it is sent pre-computed exactly like the frontend does.
 		FinalAmount: cashBank.CurrentAmount + amountToInject,

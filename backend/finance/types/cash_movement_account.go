@@ -20,6 +20,8 @@ const (
 	PCGEShareholdersPayable    int16 = 441  // Accionistas (o socios) — cuentas por pagar (dividendos)
 	PCGEOtherOperatingExpenses int16 = 659  // Otros gastos de gestión
 	PCGEOtherOperatingIncome   int16 = 759  // Otros ingresos de gestión
+	PCGECapital                int16 = 50   // Capital — aporte de los socios
+	PCGELoansReceived          int16 = 451  // Préstamos de instituciones financieras y otras entidades
 )
 
 // CashMovementAccountOption is one account a movement type may post against.
@@ -45,6 +47,38 @@ var CashMovementAccountOptions = []CashMovementAccountOption{
 	{MovementType: CashMovementTypePhysicalCount, Direction: -1, AccountCode: PCGEOtherOperatingExpenses, Name: "Other expense|Otro gasto"},
 	{MovementType: CashMovementTypePhysicalCount, Direction: -1, AccountCode: PCGEOtherStaffReceivables, Name: "Charged to the cashier|Cargo al cajero"},
 	{MovementType: CashMovementTypePhysicalCount, Direction: 1, AccountCode: PCGEOtherOperatingIncome, Name: "Other income|Otro ingreso"},
+	// A manual Cobro is money coming in that no sale explains; the account says from where.
+	{MovementType: CashMovementTypeCollection, AccountCode: PCGEOtherOperatingIncome, Name: "Other income|Otro ingreso"},
+	{MovementType: CashMovementTypeCollection, AccountCode: PCGEShareholdersReceivable, Name: "Owner or shareholder repayment|Devolución del socio o accionista"},
+	{MovementType: CashMovementTypeCollection, AccountCode: PCGEOtherStaffReceivables, Name: "Repayment by an employee|Devolución de un trabajador"},
+	{MovementType: CashMovementTypeCollection, AccountCode: PCGECapital, Name: "Capital contribution|Aporte de capital"},
+	{MovementType: CashMovementTypeCollection, AccountCode: PCGELoansReceived, Name: "Loan received|Préstamo recibido"},
+}
+
+// ManualCashMovementTypes are the types a user registers by hand on a cash register, with the
+// sign each must carry: -1 money out, 1 money in. Every other type is written by the document
+// that explains it (a sale, a purchase order, an expense, an asset) or by a physical count; a
+// manual one would move cash with nothing behind it.
+var ManualCashMovementTypes = map[CashMovementType]int8{
+	CashMovementTypeTransfer:   -1,
+	CashMovementTypeWithdrawal: -1,
+	CashMovementTypeLoss:       -1,
+	CashMovementTypeCollection: 1,
+}
+
+// ValidateManualCashMovement refuses a type the user may not register by hand, and an amount
+// whose sign contradicts the type.
+func ValidateManualCashMovement(movementType CashMovementType, amount int32) error {
+	requiredSign, isManual := ManualCashMovementTypes[movementType]
+	if !isManual {
+		return core.Err("Este tipo de movimiento no se registra manualmente, se registra desde su propio documento.")
+	}
+	if amount == 0 || (amount < 0) != (requiredSign < 0) {
+		return core.Err(core.If(requiredSign < 0,
+			"El monto de este movimiento debe ser negativo: es una salida de la caja.",
+			"El monto de este movimiento debe ser positivo: es un ingreso a la caja."))
+	}
+	return nil
 }
 
 // CashMovementAccountOptionsFor lists the accounts a movement of this type and amount may post

@@ -140,6 +140,10 @@ type InternalMovement struct {
 	// check and the write see the same balance.
 	RejectInbound      bool // the company only lets stock in through a purchase order
 	RequireInboundCost bool // every inflow must carry a Price
+
+	// transferPeerWarehouseID is set by expandStockTransfers on both legs of a transfer: the
+	// other warehouse, written to the ledger as WarehouseRefID.
+	transferPeerWarehouseID int32
 }
 
 // HasDetail reports whether the movement targets a ProductStockDetail row
