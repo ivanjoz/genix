@@ -2,6 +2,17 @@
 
 Design decisions for the Activos page, newest first.
 
+## An acquisition's comprobante is entered per unit, like its purchase amount
+
+**Context** — One acquisition can write several `Asset` rows (one per serial), and the document
+columns live on each row.
+**Decision** — On create, the document amounts are per unit. The backend multiplies them by each
+row's quantity, the same way it does `PurchaseAmount`. On edit they are the row's totals. The
+Registro de Compras sums the rows back into one factura.
+**Rationale** — It follows the convention the form already uses for money, so the document total
+can be checked against `PurchaseAmount` in the same unit. The cost: a factura whose total does not
+divide evenly by the lot size needs a lot of one.
+
 ## The detail panel's four figures moved to `LabelCell`
 
 **Context** — The acquisition/book-value block was four copies of the same label/value markup, with a

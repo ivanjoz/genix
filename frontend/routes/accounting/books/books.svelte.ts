@@ -5,6 +5,7 @@ import {
   getClientProviderSnapshots, type IClientProviderSnapshot,
 } from '$services/crm/client-provider.svelte'
 import type { ISalesBookResponse } from './books'
+import type { IPurchasesBookResponse } from './books.purchases'
 
 // A book is read for a period, not synced.
 //
@@ -12,12 +13,18 @@ import type { ISalesBookResponse } from './books'
 // rows are a slice of the month rather than a growing list. The identities are the opposite —
 // a snapshot is immutable and the same few hundred come back every period — so those go
 // through the by-ids cache and are downloaded once, ever.
-export class SalesBookService {
-  response: ISalesBookResponse | null = $state(null)
+export class BookService<TResponse extends { Period: string }> {
+  response: TResponse | null = $state(null)
   identityBySnapshotID: Map<number, IClientProviderSnapshot> = $state(new Map())
   isLoading = $state(false)
   // What was last asked for, so the page can tell "nothing yet" from "this period is empty".
   loadedPeriod = $state("")
+
+  // route is the book's endpoint; snapshotIDsOf lists the counterpart identities a response pins.
+  constructor(
+    private route: string,
+    private snapshotIDsOf: (response: TResponse) => number[],
+  ) {}
 
   // Fetches a whole period (YYYYMM) or, when unixDay is given, a single day inside one.
   async fetch(period: string, unixDay: number = 0): Promise<void> {
@@ -26,14 +33,18 @@ export class SalesBookService {
       return
     }
 
-    const route = period ? `sales-book?period=${period}` : `sales-book?date=${unixDay}`
+    const route = period ? `${this.route}?period=${period}` : `${this.route}?date=${unixDay}`
     this.isLoading = true
     Loading.standard(tr("Reading the book...|Leyendo el libro..."))
     try {
-      const response = await GET({ route }) as ISalesBookResponse
+      const response = await GET({ route }) as TResponse
       this.response = response
       this.loadedPeriod = response?.Period || period
-      this.identityBySnapshotID = await this.resolveIdentities(response)
+      // The second-grade read: a period whose counterparts are already known costs no request.
+      const snapshotIDs = response ? this.snapshotIDsOf(response).filter(snapshotID => snapshotID > 0) : []
+      this.identityBySnapshotID = snapshotIDs.length > 0
+        ? await getClientProviderSnapshots(snapshotIDs)
+        : new Map()
     } catch (error) {
       this.reset()
       // The rejection is the raw response, so String() on it says "[object Object]".
@@ -46,22 +57,19 @@ export class SalesBookService {
     }
   }
 
-  // The second-grade read: the documents carry a snapshot id and the identities come from the
-  // by-ids cache, so a period whose buyers are already known costs no request at all.
-  private async resolveIdentities(
-    response: ISalesBookResponse,
-  ): Promise<Map<number, IClientProviderSnapshot>> {
-    const snapshotIDs = (response?.Documents || [])
-      .map(document => document.ClientSnapshotID)
-      .filter(snapshotID => snapshotID > 0)
-
-    if (snapshotIDs.length === 0) return new Map()
-    return await getClientProviderSnapshots(snapshotIDs)
-  }
-
-  private reset(): void {
+  reset(): void {
     this.response = null
     this.identityBySnapshotID = new Map()
     this.loadedPeriod = ""
   }
 }
+
+export const makeSalesBookService = () => new BookService<ISalesBookResponse>(
+  "sales-book",
+  response => (response.Documents || []).map(document => document.ClientSnapshotID),
+)
+
+export const makePurchasesBookService = () => new BookService<IPurchasesBookResponse>(
+  "purchases-book",
+  response => (response.Documents || []).map(document => document.ProviderSnapshotID),
+)

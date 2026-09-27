@@ -18,6 +18,13 @@ import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { ProductsService } from '$services/production/products.svelte';
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte';
+import { EmpresaParametrosService } from '$routes/company/configuration/empresas.svelte';
+import {
+    COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND,
+    COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST,
+    findManualStockRefusal,
+    type IManualStockChange,
+} from './stock-cost';
 import {
     getWarehouseProductStock,
     makeStockID,
@@ -53,6 +60,10 @@ type IProductoStockDisplay = {
 
 const almacenes = new WarehousesService()
 const productos = new ProductsService(true)
+const empresaParametros = new EmpresaParametrosService()
+
+const blockManualInbound = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND))
+const requireManualCost = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST))
 
 let stockFilters = $state({ warehouseID: 0, showTodosProductos: false })
 let stockFilterText = $state('')
@@ -584,6 +595,36 @@ const computeStockDisplay = (productStockDisplay: IProductoStockDisplay) => {
   productStockDisplay.computed = true
 }
 
+const rowAddsStock = (productStockDisplay: IProductoStockDisplay) => {
+  computeStockDisplay(productStockDisplay)
+  return productStockDisplay.stockSimpleNew > productStockDisplay.stockSimple
+    || productStockDisplay.stockLoteadoNew > productStockDisplay.stockLoteado
+    || productStockDisplay.stockSerialNumbersNew > productStockDisplay.stockSerialNumbers
+}
+
+// One cost per product row: it prices every unit this save adds to the row, lots and serials included.
+const unitCostColumn: ITableColumn<IProductoStockDisplay> = {
+  header: 'Cost|Costo', css: 'justify-end px-6', inputCss: 'text-right',
+  headerCss: 'w-120',
+  mobile: { order: 8, css: 'col-span-12', labelLeft: 'Costo' },
+  showEditIcon: true,
+  cellInputType: 'number',
+  getValue: (productStockDisplay) => productStockDisplay.base._unitCost ? productStockDisplay.base._unitCost / 100 : '',
+  onCellEdit: (productStockDisplay, value, rerender) => {
+    productStockDisplay.base._unitCost = Math.round((parseFloat(String(value || '0')) || 0) * 100)
+    rerender()
+  },
+  render: (productStockDisplay) => {
+    if (productStockDisplay.base._unitCost) {
+      return { css: 'text-right', text: formatN(productStockDisplay.base._unitCost / 100, 2) }
+    }
+    if (requireManualCost && rowAddsStock(productStockDisplay)) {
+      return { css: 'text-right text-red-500', text: tr('Required|Requerido') }
+    }
+    return ''
+  },
+}
+
 const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   {
     header: 'Product|Producto', highlight: true,
@@ -636,6 +677,14 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
       return { css: 'text-right', text: productStockDisplay.serialNumbersCountNew || '' }
     },
   },
+  {
+    header: 'Current cost|Costo actual', css: 'justify-end text-right',
+    headerCss: 'w-120',
+    mobile: { order: 7, css: 'col-span-12 pr-4', labelLeft: 'Costo actual' },
+    getValue: (productStockDisplay) => productStockDisplay.base.AverageCost
+      ? formatN(productStockDisplay.base.AverageCost / 100, 2) : '',
+  },
+  unitCostColumn,
   {
     header: 'Simple Stock|Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
     headerCss: 'w-150',
@@ -718,6 +767,11 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   },
 ]
 
+// With manual entries blocked nothing here can add stock, so there is nothing to cost.
+const visibleStockColumns = $derived(blockManualInbound
+  ? stockColumns.filter((column) => column !== unitCostColumn)
+  : stockColumns)
+
 const onChangeAlmacen = async () => {
   if (!stockFilters.warehouseID) { return }
 
@@ -756,8 +810,12 @@ const guardarRegistros = async () => {
   }
 
   const recordsForUpdate: IPostProductoStockItem[] = []
+  const stockChanges: IManualStockChange[] = []
 
   for (const productStockRecord of almacenStock) {
+    const productName = productos.recordsMap.get(productStockRecord.ProductID)?.Name || `Producto-${productStockRecord.ProductID}`
+    const unitCost = productStockRecord._unitCost || 0
+
     if (productStockRecord._hasUpdated) {
       recordsForUpdate.push({
         WarehouseID: productStockRecord.WarehouseID,
@@ -765,6 +823,12 @@ const guardarRegistros = async () => {
         PresentationID: productStockRecord.PresentationID || 0,
         Quantity: productStockRecord.Quantity || 0,
         SubQuantity: productStockRecord.SubQuantity || 0,
+        UnitCost: unitCost || undefined,
+      })
+      stockChanges.push({
+        productName, unitCost,
+        previousQuantity: getCantPrevia(productStockRecord),
+        nextQuantity: productStockRecord.Quantity || 0,
       })
     }
 
@@ -787,12 +851,27 @@ const guardarRegistros = async () => {
         SerialNumber: stockDetail.SerialNumber || '',
         LotID: stockDetail.LotID || 0,
         LotCode: stockDetail.LotCode || '',
+        UnitCost: unitCost || undefined,
+      })
+      stockChanges.push({
+        productName, unitCost,
+        // A new serial gets its quantity set directly, with no previous one recorded: it adds all of it.
+        previousQuantity: stockDetail._isNew ? 0 : getCantPrevia(stockDetail),
+        nextQuantity: stockDetail.Quantity || 0,
       })
     }
   }
 
   if (recordsForUpdate.length === 0) {
     Notify.failure(tr('No records to update.|No hay registros a actualizar.'))
+    return
+  }
+
+  const refusal = findManualStockRefusal(stockChanges, blockManualInbound, requireManualCost)
+  if (refusal) {
+    Notify.failure(`${refusal.productName}: ` + (refusal.reason === 'inbound-blocked'
+      ? tr('stock can only increase through a purchase order.|el stock solo puede aumentar mediante una orden de compra.')
+      : tr('enter the purchase cost of the stock being added.|ingrese el costo de compra del stock que ingresa.')))
     return
   }
 
@@ -805,6 +884,7 @@ const guardarRegistros = async () => {
       productStockRecord._cantidadPrev = undefined
       productStockRecord._hasUpdated = false
       productStockRecord._isNew = false
+      productStockRecord._unitCost = undefined
 
       const persistedStockDetails = [
         ...(productStockRecord.StockDetails as IProductStockDetailRow[]),
@@ -826,6 +906,14 @@ const guardarRegistros = async () => {
       newLotRowsByProductStockID.delete(productStockRecord.ID)
       touchPendingDetailRows('save-clear', productStockRecord.ID)
     }
+
+    // The server moved the average with every costed increase; read it back rather than re-deriving it here.
+    const refreshedStock = await getWarehouseProductStock(stockFilters.warehouseID)
+    const averageCostByStockID = new Map(refreshedStock.map((productStockRecord) => [productStockRecord.ID, productStockRecord.AverageCost]))
+    for (const productStockRecord of almacenStock) {
+      productStockRecord.AverageCost = averageCostByStockID.get(productStockRecord.ID)
+    }
+    touchPendingDetailRows('average-cost-refresh')
 
     rerenderHandler?.()
   } finally {
@@ -931,7 +1019,19 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   {/if}
 </div>
 
-<VTable columns={stockColumns} data={displayStock}
+{#if blockManualInbound}
+  <div class="mb-8 flex items-center gap-6 text-orange-700">
+    <i class="icon-[fa--info-circle] shrink-0"></i>
+    <T text="Stock can only increase through a purchase order (Ingreso OC). Decreases are still allowed here.|El stock solo puede aumentar mediante una orden de compra (Ingreso OC). Aquí aún se pueden registrar disminuciones." />
+  </div>
+{:else if requireManualCost}
+  <div class="mb-8 flex items-center gap-6 text-orange-700">
+    <i class="icon-[fa--info-circle] shrink-0"></i>
+    <T text="Every stock increase needs its unit purchase cost, in soles.|Todo aumento de stock necesita su costo unitario de compra, en soles." />
+  </div>
+{/if}
+
+<VTable columns={visibleStockColumns} data={displayStock}
   filterText={stockFilterText}
   useFilterCache={true}
   getFilterContent={(productStockDisplay) => {

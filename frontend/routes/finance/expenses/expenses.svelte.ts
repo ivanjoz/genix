@@ -1,4 +1,5 @@
 import { GetHandler, POST, GET } from '$libs/ui-runtime.svelte'
+import type { IPurchaseDocument } from '$core/purchase-document'
 import { Notify } from '$libs/helpers'
 import { tr } from '$core/store.svelte'
 
@@ -21,7 +22,9 @@ export const expenseTypeLabels: Record<number, string> = {
   [ExpenseType.DEPRECIATION]: "Depreciation|Depreciación",
 }
 
-export interface IExpense {
+// The document columns are the supplier's comprobante (the Registro de Compras row). Its
+// currency is CurrencyType and its total must equal Amount.
+export interface IExpense extends IPurchaseDocument {
   ID: number
   ExpenseScheduledID: number
   PeriodDate: number
@@ -188,7 +191,7 @@ export const postExpense = (data: IExpense): Promise<IExpense> => {
 
 // An inventory purchase writes the expense AND the stock movement, so it goes through the
 // accounting module rather than POST.expenses (finance cannot import logistics).
-export interface IInventoryExpense {
+export interface IInventoryExpense extends IPurchaseDocument {
   Name: string
   Description: string
   CategoryID: number

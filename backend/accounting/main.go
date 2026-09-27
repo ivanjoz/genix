@@ -18,4 +18,5 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.asset-payment":          PostAssetPayment,
 	"POST.expense-inventory":      PostInventoryExpense,
 	"GET.sales-book":              GetSalesBook,
+	"GET.purchases-book":          GetPurchasesBook,
 }

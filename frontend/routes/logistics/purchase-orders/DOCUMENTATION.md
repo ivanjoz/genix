@@ -65,16 +65,29 @@ detail layer has **Información** for header data and **Productos** for the cart
 - Select the destination warehouse (`almacén destino`) used by the order.
 - Add at least one product with a non-zero quantity and a unit price.
 - A product presentation (`presentación`) may be selected when the item uses one.
-- Delivery date, payment date, invoice number, and notes provide operational context.
+- Delivery date, payment date, and notes provide operational context.
+- The supplier's comprobante can be entered with the order, in the **Información** tab. It
+  starts as a **Factura** issued today; enter its **Serie** and **Número**. Base imponible and
+  IGV (18%) are calculated from the cart total, as in the **Comprobante** action (see
+  **Register the supplier's comprobante**). Choose **Sin comprobante** to create
+  the order without one and register it later with **Acciones → Comprobante**.
+- **Ingreso Express** (checkbox next to the tabs) is for goods that arrive together with the
+  order. It sets the delivery date to today, and **Generar** creates the order and enters every
+  product, exactly as ordered, into the selected warehouse. The order is saved directly as
+  **Completada**, skipping Confirm. Stock enters without lot or serial; products that need them
+  go through the normal reception instead. If the stock entry fails, the order is annulled and
+  the error names its number.
 
 The backend accepts either product or supply-material lines, but this page currently
 provides a product-entry interface only; it does not expose an insumos/materiales cart.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
-For the current product interface, total is the sum of `quantity × unit price`. The form
-derives an 18% included tax breakdown: subtotal is the integer part of `total / 1.18`, and
-IGV is `total - subtotal`. The new order is assigned the current generation date, enters
+For the current product interface, total is the sum of `quantity × unit price`; the server
+recomputes it from the lines. A comprobante entered with the order follows the same rules
+as the **Comprobante** action, including that its total must equal the order total. The header
+shows an estimated subtotal (the integer part of `total / 1.18`); it is not stored. The real
+base imponible and IGV are the ones on the supplier's comprobante. The new order is assigned the current generation date, enters
 **Pending (Pendiente)** status, and begins with debt equal to its total.
 
 Product IDs, quantities, prices, and presentations are kept as aligned detail rows. The
@@ -90,8 +103,8 @@ not increase stock, confirm the order, or pay the supplier automatically.
 
 - This page does not currently add supply-material (`insumo`) lines despite backend data
   support for them.
-- Tax uses the fixed 18% included-tax calculation in the form; there is no tax-rate
-  selector here.
+- The subtotal shown while creating uses a fixed 18% included tax. It is only an estimate;
+  the booked IGV comes from the supplier's comprobante.
 - Creating an order does not reserve or receive stock.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
@@ -108,7 +121,7 @@ not increase stock, confirm the order, or pay the supplier automatically.
 Open **Report (Reporte)** to search by start/end generation date, supplier, product, and
 status. Results are trimmed to the exact selected dates, sorted newest first, and limited
 to 2,000 rows in the browser. Selecting an order opens its supplier, state, dates,
-invoice, total, paid amount, notes, and product lines.
+comprobante, total, paid amount, notes, and product lines.
 
 The default orders list focuses on pending orders. Use **Reporte** when looking for
 confirmed, completed, or canceled history, or when a date/provider/product filter is
@@ -120,7 +133,7 @@ needed.
 ### User intention (Intención del usuario)
 
 Confirm an order when it is approved to proceed. Edit operational header information
-when dates, destination, invoice reference, or notes change without renegotiating the
+when dates, destination, or notes change without renegotiating the
 commercial detail.
 
 ### Where to find it (Dónde encontrarlo)
@@ -131,8 +144,7 @@ In **Report (Reporte)**, select an order and open **Acciones → Confirmar** or
 ### Business rules and rationale (Reglas y razón de negocio)
 
 Only a pending order can be confirmed. Editing is allowed while the order is pending or
-confirmed. Edit changes only warehouse, delivery date, payment date, invoice number, and
-notes. Supplier, products, quantities, prices, totals, debt, and status are preserved to
+confirmed. Edit changes only warehouse, delivery date, payment date, and notes. Supplier, products, quantities, prices, totals, debt, and status are preserved to
 prevent an ordinary header edit from rewriting the approved commercial or accounting
 content.
 
@@ -155,6 +167,62 @@ order instead of using **Editar**.
 - `¿Puedo editar productos o proveedor después de crear la OC?` Not with the current edit
   action.
 - `Why can’t I edit a completed or canceled purchase order?`
+
+<!-- DOC-ID: capability.document -->
+## Register the supplier's comprobante (Registrar el comprobante del proveedor)
+
+### User intention (Intención del usuario)
+
+Record the factura, boleta, recibo por honorarios, ticket, or recibo de servicios públicos
+the supplier issued for the order, so the purchase enters the Registro de Compras.
+
+### Where to find it (Dónde encontrarlo)
+
+In **Report (Reporte)**, select the order and open **Acciones → Comprobante**.
+
+### Required information and prerequisites (Requisitos previos)
+
+Document type, series, number, issue date (not in the future), and the amounts:
+**Base imponible**, **IGV**, **No gravado** (exonerated + unaffected), and **Otros cargos**.
+Also the currency. A dollar comprobante needs the exchange rate of its issue date (the SBS
+weighted-average selling rate). A recibo de servicios públicos needs the order's payment date
+as its due date.
+
+On an order with no comprobante yet, the form opens as a **Factura** issued on the order date.
+The read-only **Total** field shows the order total. Only **No gravado** and **Otros cargos**
+are typed; **Base imponible** and **IGV** are read-only and always the 18% split of what
+remains (total − no gravado − otros cargos), so the amounts always add up to the order total.
+On a boleta or recibo por honorarios, **No gravado** is the read-only remainder instead.
+Changing the document type clears the typed amounts.
+
+### Business rules and rationale (Reglas y razón de negocio)
+
+- Allowed on every status except **Cancelada**, including **Completada**: the invoice
+  usually arrives with the goods or after them.
+- A boleta or a recibo por honorarios gives no crédito fiscal. Its whole amount goes in
+  **No gravado**, and the base/IGV fields are hidden.
+- The comprobante total (base + IGV + no gravado + otros cargos) must equal the order total;
+  saving is rejected otherwise. If the invoice differs, edit the order first (only possible
+  while it is Pendiente or Confirmada).
+- The Registro de Compras books the purchase in the month of the issue date, not the order
+  date.
+
+### Result and side effects (Resultado y efectos)
+
+The order shows the comprobante (`F001-123`) in the report and in its detail. It does not
+change the order status, the debt, or stock.
+
+### Limitations (Limitaciones)
+
+Supplier credit and debit notes (tipos 07/08) cannot be registered yet.
+
+### Common questions and vocabulary (Preguntas y vocabulario)
+
+- `¿Dónde pongo la factura del proveedor?` Acciones → Comprobante.
+- `¿Puedo registrar la factura de una orden ya completada?` Yes.
+- `¿Por qué mi compra no aparece en el Registro de Compras?` It has no comprobante yet.
+- Search terms: `factura proveedor`, `comprobante`, `serie`, `número`, `IGV`, `crédito fiscal`,
+  `registro de compras`.
 
 <!-- DOC-ID: capability.pay -->
 ## Register a supplier payment (Pagar una orden al proveedor)
@@ -223,8 +291,8 @@ supplier, warehouse, and available product lines, including presentation, quanti
 price. The original order ID, status, payments, and audit history are not reused.
 
 Products deleted since the original order—or presentations that no longer exist—are
-skipped from the copied cart. Review every copied line and complete dates, invoice, and
-notes before saving. Saving creates a separate pending order with a new number and newly
+skipped from the copied cart. Review every copied line and complete dates and notes
+before saving. The comprobante is not copied: each order has its own. Saving creates a separate pending order with a new number and newly
 calculated totals.
 
 <!-- DOC-ID: capability.receive -->
@@ -235,16 +303,16 @@ movements, changes the order to **Fulfilled (Cumplida/Completada)**, and records
 quantity/value differences: negative for under-delivery (`faltante`) and positive for
 over-delivery (`sobrante`). A mismatch is recorded rather than rejected.
 
-However, this route currently has no visible **Recibir** action wired to that service.
-Do not tell users they can complete reception from the Purchase Orders page until a
-receiving interface or documented navigation path is implemented.
+This route has no **Recibir** action for an existing order. The only way to receive from
+this page is **Ingreso Express** while creating the order (see **Create a purchase order**).
 
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
 - State order is operational: create Pending, confirm to Confirmed, receive to Fulfilled;
-  cancellation is available only before fulfillment.
-- Creation does not affect stock or cash. Payment affects cash and debt. Reception affects
+  cancellation is available only before fulfillment. **Ingreso Express** goes from creation
+  straight to Fulfilled.
+- Creation does not affect stock or cash, except with **Ingreso Express**, which enters stock. Payment affects cash and debt. Reception affects
   stock and fulfillment status. Keeping these events separate makes each business event
   auditable.
 

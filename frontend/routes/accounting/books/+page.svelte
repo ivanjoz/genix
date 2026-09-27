@@ -1,5 +1,6 @@
 <script lang="ts">
 import Button from '$components/buttons/Button.svelte'
+import Checkbox from '$components/form/Checkbox.svelte'
 import DateInput from '$components/form/DateInput.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import Layer from '$components/layers/Layer.svelte'
@@ -24,9 +25,17 @@ import {
   downloadSalesBookTxt, salesBookExportBlockers, salesBookFileName,
   type ISalesBookIssuer,
 } from './books.txt'
-import { SalesBookService } from './books.svelte'
+import { makePurchasesBookService, makeSalesBookService } from './books.svelte'
+import {
+  buildPurchasesBook, purchaseRowDocument, purchasesBookExportBlockers, purchaseSourceLabels,
+  sumPurchasesBook, type IPurchaseBookRow, type IUndocumentedPurchase,
+} from './books.purchases'
+import { downloadPurchasesBookTxt, purchasesBookFileName } from './books.purchases.txt'
+import { exportPurchasesBookToExcel } from './books.excel'
+import { purchaseDocTypeName } from '$core/purchase-document'
 
-const salesBook = new SalesBookService()
+const salesBook = makeSalesBookService()
+const purchasesBook = makePurchasesBookService()
 // The series code and the document type are not on a comprobante — they live on the company
 // record, and the row only carries the series id in the tail of its own id. Same join the
 // invoicing page does.
@@ -44,6 +53,8 @@ let selection = $state({
 
 // 1 = the book's comprobantes, 2 = the period's sales that have none.
 let salesView = $state(1)
+// Purchases without a comprobante are not book rows; they are shown only on request.
+let purchasesView = $state({ showUndocumented: false })
 
 const periodOptions = buildPeriodOptions(today)
 const bookSelectOptions = bookOptions.map(option => ({ ID: option.ID, Name: tr(option.Name) }))
@@ -68,8 +79,19 @@ const uninvoicedTotal = $derived(
   uninvoiced.reduce((runningTotal, sale) => runningTotal + (sale.TotalAmount || 0), 0),
 )
 
+const purchases = $derived(
+  purchasesBook.response
+    ? buildPurchasesBook(purchasesBook.response, purchasesBook.identityBySnapshotID)
+    : { rows: [], undocumented: [] },
+)
+const purchaseTotals = $derived(sumPurchasesBook(purchases.rows))
+
+const isPurchases = $derived(selection.book === BOOK_PURCHASES)
+const loadedPeriod = $derived(isPurchases ? purchasesBook.loadedPeriod : salesBook.loadedPeriod)
+const bookRowCount = $derived(isPurchases ? purchases.rows.length : rows.length)
+
 async function loadBook() {
-  if (selection.book !== BOOK_SALES) {
+  if (selection.book !== BOOK_SALES && selection.book !== BOOK_PURCHASES) {
     Notify.failure(tr("This book is not available yet.|Este libro aún no está disponible."))
     return
   }
@@ -77,7 +99,8 @@ async function loadBook() {
     Notify.failure(tr("Pick a month or a date.|Elige un mes o una fecha."))
     return
   }
-  await salesBook.fetch(isWholeMonth ? selection.period : "", selection.date)
+  const book = isPurchases ? purchasesBook : salesBook
+  await book.fetch(isWholeMonth ? selection.period : "", selection.date)
   if (exportBlockers.length > 0) notifyExportBlockers()
 }
 
@@ -88,18 +111,24 @@ function notifyExportBlockers() {
     exportBlockers.map(blocker => `• ${tr(blocker)}`).join("\n"),
     {
       title: tr(`Period ${periodName} cannot be filed yet|El periodo ${periodName} todavía no se puede presentar`),
-      subtitle: tr("Accounting Books · Sales Register|Libros Contables · Registro de Ventas"),
+      subtitle: tr(isPurchases
+        ? "Accounting Books · Purchases Register|Libros Contables · Registro de Compras"
+        : "Accounting Books · Sales Register|Libros Contables · Registro de Ventas"),
       color: "yellow",
     },
   )
 }
 
 async function exportBook() {
-  if (rows.length === 0) {
+  if (bookRowCount === 0) {
     Notify.failure(tr("There is nothing to export.|No hay nada que exportar."))
     return
   }
-  await exportSalesBookToExcel(rows, shownPeriod)
+  if (isPurchases) {
+    await exportPurchasesBookToExcel(purchases.rows, shownPeriod)
+  } else {
+    await exportSalesBookToExcel(rows, shownPeriod)
+  }
 }
 
 // Fields 1-2 of the file. LegalName is the razón social SUNAT matches against the RUC; Name is
@@ -112,12 +141,14 @@ const issuer = $derived({
 // Everything standing between this period and a filable file. Empty means the TXT is writable —
 // including for a month with no comprobantes, which is filed as a "sin información" book.
 const exportBlockers = $derived(
-  salesBook.loadedPeriod ? salesBookExportBlockers(rows, issuer, shownPeriod) : [],
+  !loadedPeriod ? []
+    : isPurchases ? purchasesBookExportBlockers(purchases.rows, issuer, shownPeriod)
+    : salesBookExportBlockers(rows, issuer, shownPeriod),
 )
 const txtFileName = $derived(
-  exportBlockers.length === 0 && salesBook.loadedPeriod
-    ? salesBookFileName(issuer.RUC, shownPeriod, rows.length > 0)
-    : "",
+  exportBlockers.length > 0 || !loadedPeriod ? ""
+    : isPurchases ? purchasesBookFileName(issuer.RUC, shownPeriod, bookRowCount > 0)
+    : salesBookFileName(issuer.RUC, shownPeriod, bookRowCount > 0),
 )
 
 function exportBookTxt() {
@@ -125,7 +156,11 @@ function exportBookTxt() {
     Notify.failure(tr(exportBlockers[0]))
     return
   }
-  downloadSalesBookTxt(rows, issuer, shownPeriod)
+  if (isPurchases) {
+    downloadPurchasesBookTxt(purchases.rows, issuer, shownPeriod)
+  } else {
+    downloadSalesBookTxt(rows, issuer, shownPeriod)
+  }
 }
 
 // Columns are in SUNAT's field order, and the header says which field each one is — that is how
@@ -201,6 +236,107 @@ const salesColumns: ExcelTableColumn<ISalesBookRow>[] = [
   },
 ]
 
+const purchaseColumns: ExcelTableColumn<IPurchaseBookRow>[] = [
+  {
+    header: "Comprobante|Comprobante",
+    highlight: true,
+    css: "c-blue",
+    headerCss: "w-150",
+    getValue: (row) => purchaseRowDocument(row),
+    mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--file-text-o]" },
+  },
+  {
+    header: "Type|Tipo",
+    headerCss: "w-110",
+    getValue: (row) => tr(purchaseDocTypeName(row.DocType)),
+    mobile: { order: 2, css: "col-span-12", labelLeft: "Tipo:" },
+  },
+  {
+    header: "Issued|Emisión",
+    headerCss: "w-100",
+    getValue: (row) => formatTime(row.IssueDate, "d-m-Y") as string,
+    mobile: { order: 3, css: "col-span-12", labelLeft: "Emisión:" },
+  },
+  {
+    header: "Supplier|Proveedor",
+    getValue: (row) => row.SupplierName,
+    useLineClamp: true,
+    mobile: { order: 4, css: "col-span-24", labelLeft: "Proveedor:" },
+  },
+  {
+    header: "RUC",
+    headerCss: "w-110",
+    getValue: (row) => row.SupplierDocNumber,
+    mobile: { order: 5, css: "col-span-12", labelLeft: "RUC:" },
+  },
+  {
+    header: "Taxable|Base imp.",
+    css: "text-right",
+    getValue: (row) => formatN(row.TaxableAmount / 100, 2),
+    mobile: { order: 6, css: "col-span-12", labelLeft: "Base:" },
+  },
+  {
+    header: "IGV",
+    css: "text-right",
+    getValue: (row) => formatN(row.TaxAmount / 100, 2),
+    mobile: { order: 7, css: "col-span-12", labelLeft: "IGV:" },
+  },
+  {
+    header: "Untaxed|No grav.",
+    css: "text-right",
+    getValue: (row) => formatN(row.UntaxedAmount / 100, 2),
+    mobile: { order: 8, css: "col-span-12", labelLeft: "No grav.:" },
+  },
+  {
+    header: "Total",
+    css: "text-right",
+    getValue: (row) => `${formatN(row.TotalAmount / 100, 2)}${row.Currency === "PEN" ? "" : ` ${row.Currency}`}`,
+    mobile: { order: 9, css: "col-span-12 ff-bold", labelLeft: "Total:" },
+  },
+  {
+    header: "Source|Origen",
+    headerCss: "w-140",
+    getValue: (row) => row.Sources.map(source => `${tr(purchaseSourceLabels[source.Source])} ${source.SourceID}`).join(", "),
+    useLineClamp: true,
+    mobile: { order: 10, css: "col-span-24", labelLeft: "Origen:" },
+  },
+]
+
+const undocumentedColumns: ExcelTableColumn<IUndocumentedPurchase>[] = [
+  {
+    header: "Source|Origen",
+    highlight: true,
+    css: "c-blue",
+    headerCss: "w-170",
+    getValue: (purchase) => `${tr(purchaseSourceLabels[purchase.Source])} ${purchase.SourceID}`,
+    mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--exclamation-triangle]" },
+  },
+  {
+    header: "Date|Fecha",
+    headerCss: "w-100",
+    getValue: (purchase) => formatTime(purchase.Date, "d-m-Y") as string,
+    mobile: { order: 2, css: "col-span-12", labelLeft: "Fecha:" },
+  },
+  {
+    header: "Purchase|Compra",
+    getValue: (purchase) => purchase.Name,
+    useLineClamp: true,
+    mobile: { order: 3, css: "col-span-24" },
+  },
+  {
+    header: "Supplier|Proveedor",
+    getValue: (purchase) => purchase.SupplierName,
+    useLineClamp: true,
+    mobile: { order: 4, css: "col-span-12", labelLeft: "Proveedor:" },
+  },
+  {
+    header: "Amount|Monto",
+    css: "text-right",
+    getValue: (purchase) => `${formatN(purchase.Amount / 100, 2)}${purchase.Currency === "PEN" ? "" : ` ${purchase.Currency}`}`,
+    mobile: { order: 5, css: "col-span-12", labelLeft: "Monto:" },
+  },
+]
+
 const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
   {
     header: "Sale|Venta",
@@ -244,7 +380,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
     <Button name="Excel" color="green" icon="icon-[fa--file-excel-o]"
       css="col-span-6" onClick={exportBook} />
     <Button name="TXT SUNAT" color="blue" icon="icon-[fa--file-text-o]"
-      css="col-span-6" disabled={!salesBook.loadedPeriod || exportBlockers.length > 0}
+      css="col-span-6" disabled={!loadedPeriod || exportBlockers.length > 0}
       onClick={exportBookTxt} />
 
     {#if shownPeriod}
@@ -299,15 +435,45 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
         {/if}
       {/if}
     </Layer>
+  {:else if isPurchases}
+    <div class="flex flex-wrap items-center gap-16 mb-8">
+      <div class="flex items-center gap-6">
+        <i class="icon-[fa--exclamation-triangle] text-amber-500 shrink-0"></i>
+        <Checkbox saveOn={purchasesView} save="showUndocumented"
+          label={tr(`Purchases without comprobante (${purchases.undocumented.length})|Compras sin comprobante (${purchases.undocumented.length})`)} />
+      </div>
+      {#if purchases.rows.length > 0}
+        <div class="flex flex-wrap items-center gap-16 md:ml-auto text-sm">
+          <div><T text="Comprobantes|Comprobantes" />: <span class="font-semibold">{purchaseTotals.comprobantes}</span></div>
+          <div><T text="Taxable|Base imp." />: <span class="font-semibold">{formatN(purchaseTotals.taxable / 100, 2)}</span></div>
+          <div>IGV: <span class="font-semibold">{formatN(purchaseTotals.tax / 100, 2)}</span></div>
+          <div><T text="Total (S/)|Total (S/)" />: <span class="font-semibold">{formatN(purchaseTotals.total / 100, 2)}</span></div>
+        </div>
+      {/if}
+    </div>
+
+    {#if txtFileName}
+      <div class="mb-8 text-sm text-gray-600 flex items-center gap-6">
+        <i class="icon-[fa--file-text-o] shrink-0"></i>
+        <T text="Replacement file|Archivo de reemplazo" />
+        <span class="ff-mono">{txtFileName}</span>
+      </div>
+    {/if}
+
+    <Layer type="content">
+      <VTable columns={purchaseColumns} data={purchases.rows} mobileCardCss="mb-2" />
+      {#if purchasesView.showUndocumented}
+        <div class="mt-16 mb-8 text-sm text-amber-700 flex items-center gap-6">
+          <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
+          <T text="Not part of the book — these purchases have no supplier comprobante, so they give no crédito fiscal. Register it on the purchase to book it.|No forman parte del libro — estas compras no tienen comprobante del proveedor, así que no dan crédito fiscal. Regístralo en la compra para anotarla." />
+        </div>
+        <VTable columns={undocumentedColumns} data={purchases.undocumented} mobileCardCss="mb-2" />
+      {/if}
+    </Layer>
   {:else}
     <Layer type="content">
       <div class="py-40 text-center text-gray-500">
         <T text="This book is not built yet.|Este libro aún no está construido." />
-        {#if selection.book === BOOK_PURCHASES}
-          <div class="mt-6 text-sm">
-            <T text="Purchases need the supplier's comprobante on each purchase and expense.|Compras necesita el comprobante del proveedor en cada compra y gasto." />
-          </div>
-        {/if}
       </div>
     </Layer>
   {/if}

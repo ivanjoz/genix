@@ -162,7 +162,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 	activeMovements := make([]*InternalMovement, 0, len(movimientos))
 	for i := range movimientos {
 		mov := &movimientos[i]
-		if mov.Quantity == 0 && mov.SubQuantity == 0 {
+		// A zero is only a no-op as a delta. As a "set stock to X" target it writes the row off.
+		if mov.Quantity == 0 && mov.SubQuantity == 0 && !mov.ReplaceQuantity {
 			continue
 		}
 		if mov.WarehouseID == 0 || mov.ProductID == 0 {
@@ -320,6 +321,10 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 
 	// Build ledger rows and mutate V2/Detail in place.
 	warehouseMovements := make([]WarehouseProductMovement, 0, len(activeMovements))
+	// Units held by each stock row (free + detail) as the batch replays, which is what an inflow
+	// averages its cost against. DetailQuantity is only re-summed after the loop, so it cannot
+	// be read mid-batch; this map is seeded from the loaded row and carries every delta since.
+	balanceByStockID := map[int64]core.Quantity{}
 	for i, mov := range activeMovements {
 		stockID := stockIDByMovement[i]
 		stock := stockByID[stockID]
@@ -353,6 +358,12 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			movementQuantity = converted
 		}
 
+		balanceBefore, balanceSeeded := balanceByStockID[stockID]
+		if !balanceSeeded {
+			balanceBefore = core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}.
+				Add(core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity})
+		}
+
 		movement := WarehouseProductMovement{
 			DocumentID:     mov.DocumentID,
 			CompanyID:      companyID,
@@ -361,7 +372,6 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			PresentationID: mov.PresentationID,
 			SerialNumber:   mov.SerialNumber,
 			LotID:          mov.LotID,
-			Type:           core.Coalesce(mov.Type, core.If(mov.Quantity > 0, int8(1), int8(2))),
 			SubDivisor:     effectiveDivisor,
 			Date:           dateUnix,
 			Created:        updatedTime,
@@ -416,19 +426,41 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			stock.Quantity, stock.SubQuantity = next.Units, next.Sub
 		}
 
-		appendProductStockLastPrice(stock, movement.Quantity, mov.Price)
-		if mov.Price > 0 {
+		// Everything below reads the delta, never the requested quantity: for a "set stock to X"
+		// movement the two differ, and lowering stock from 10 to 5 is an outflow of 5.
+		delta := core.Quantity{Units: movement.Quantity, Sub: movement.SubQuantity}
+		if delta.IsZero() {
+			// A target equal to the current stock moves nothing and leaves no ledger row.
+			continue
+		}
+		isInflow := !delta.IsNegative(effectiveDivisor)
+		movement.Type = core.Coalesce(mov.Type, core.If(isInflow, int8(1), int8(2)))
+
+		if isInflow && mov.RejectInbound {
+			return core.Err(fmt.Sprintf(
+				"El producto %v no puede aumentar su stock con un movimiento manual: la empresa sólo permite ingresos por orden de compra.",
+				mov.ProductID))
+		}
+		if isInflow && mov.RequireInboundCost && mov.Price <= 0 {
+			return core.Err(fmt.Sprintf(
+				"El producto %v necesita el costo de compra del stock que ingresa.", mov.ProductID))
+		}
+
+		if isInflow && mov.Price > 0 {
+			appendProductStockLastPrice(stock, movement.Quantity, mov.Price)
 			// Persist the unit price on the ledger as total line value for later reports.
 			// The sub-unit part is prorated: the ledger carries only a purchase price, with
 			// no separate sub-unit price to charge against.
-			lineValue, valueErr := core.QuantityValueAtUnitPrice(
-				core.Quantity{Units: movement.Quantity, Sub: movement.SubQuantity},
-				effectiveDivisor, mov.Price)
+			lineValue, valueErr := core.QuantityValueAtUnitPrice(delta, effectiveDivisor, mov.Price)
 			if valueErr != nil {
 				return valueErr
 			}
 			movement.MonetaryValue = lineValue
+			stock.AverageCost = NextMovingAverageCost(stock.AverageCost,
+				balanceBefore.TotalSubUnits(effectiveDivisor), delta.TotalSubUnits(effectiveDivisor),
+				lineValue, effectiveDivisor)
 		}
+		balanceByStockID[stockID] = balanceBefore.Add(delta)
 		stock.Updated = updatedTime
 		stock.UpdatedBy = userID
 		// WarehouseQuantity on the ledger row uses the post-mutation total (free + detail).
@@ -517,7 +549,7 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 					stockTable.DetailQuantity, stockTable.DetailSubQuantity,
 					stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
 					stockTable.SubDivisor,
-					stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
+					stockTable.LastPricesPrice, stockTable.LastPricesQuantity, stockTable.AverageCost,
 					stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
 				),
 			); err != nil {
@@ -691,6 +723,8 @@ func RecalcProductStockByMovements(companyID int32) error {
 			stock.Quantity, stock.SubQuantity = 0, 0
 			stock.DetailQuantity, stock.DetailSubQuantity = 0, 0
 			stock.SubDivisor = 0
+			// The average is replayed from the costed inflows on the ledger, like the quantities.
+			stock.AverageCost = 0
 			stockByID[stock.ID] = stock
 		}
 	}
@@ -715,6 +749,11 @@ func RecalcProductStockByMovements(companyID int32) error {
 	// product speaks the same divisor. Each accumulator adopts the first divisor it sees and
 	// then reconciles: a finer movement pulls the accumulator (and its details) forward, a
 	// coarser one is converted up to it. Both directions are exact.
+	//
+	// balanceByStockID is each row's running free + detail total, at the row's divisor. The
+	// average cost needs the units held before each inflow, and DetailQuantity is only rolled up
+	// after the scan.
+	balanceByStockID := map[int64]core.Quantity{}
 	accumulate := func(warehouseID int32, quantity core.Quantity, movementDivisor int16,
 		movement *WarehouseProductMovement) error {
 
@@ -737,10 +776,15 @@ func RecalcProductStockByMovements(companyID int32) error {
 			stock.SubDivisor = movementDivisor
 		} else if stock.SubDivisor != movementDivisor {
 			if core.IsQuantityDivisorRefinement(stock.SubDivisor, movementDivisor) {
+				refinedBalance, err := balanceByStockID[stockID].ConvertToDivisor(stock.SubDivisor, movementDivisor)
+				if err != nil {
+					return err
+				}
 				if err := refineStockDivisor(stock, detailsByStock[stockID],
 					movementDivisor, updatedTime, 0); err != nil {
 					return err
 				}
+				balanceByStockID[stockID] = refinedBalance
 			} else {
 				converted, err := quantity.ConvertToDivisor(movementDivisor, stock.SubDivisor)
 				if err != nil {
@@ -751,6 +795,16 @@ func RecalcProductStockByMovements(companyID int32) error {
 				quantity = converted
 			}
 		}
+
+		// Same rule as ApplyMovimientos: only a costed inflow moves the average. The mirrored
+		// outbound leg of a transfer shares the movement's value but is negative, so it is skipped.
+		balanceBefore := balanceByStockID[stockID]
+		if movement.MonetaryValue > 0 && !quantity.IsZero() && !quantity.IsNegative(stock.SubDivisor) {
+			stock.AverageCost = NextMovingAverageCost(stock.AverageCost,
+				balanceBefore.TotalSubUnits(stock.SubDivisor), quantity.TotalSubUnits(stock.SubDivisor),
+				movement.MonetaryValue, stock.SubDivisor)
+		}
+		balanceByStockID[stockID] = balanceBefore.Add(quantity)
 
 		if movement.LotID == 0 && movement.SerialNumber == "" {
 			next := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}.Add(quantity)
@@ -841,7 +895,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 			db.Cols(
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
-				stockTable.SubDivisor,
+				stockTable.SubDivisor, stockTable.AverageCost,
 				stockTable.Updated, stockTable.Status,
 			),
 		); err != nil {

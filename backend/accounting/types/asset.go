@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/db"
+	finance "app/finance/types"
+)
 
 // Payment lifecycle of the acquisition, tracked on the asset itself. An asset is not an
 // expense: buying one is cash turning into a balance-sheet item, not a cost, so the money
@@ -49,8 +52,22 @@ type Asset struct {
 	// nothing was owed, and PaymentStatus stays AssetPaymentNone.
 	PurchaseAmount int32 `json:",omitempty"`
 	PaidAmount     int32 `json:",omitempty"` // Server-maintained sum of payments applied.
-	PaymentStatus  int8  `json:",omitempty"`
-	DueDate        int16 `json:",omitempty"`
+	// The supplier's comprobante — the Registro de Compras row. See finance.PurchaseDocument.
+	// The amounts are this row's share: an acquisition split into one row per serial splits
+	// its factura the same way, and the book sums the rows back by document. The document's
+	// currency is CurrencyType, and its total must equal PurchaseAmount.
+	ProviderSnapshotID int32  `json:",omitempty"` // Frozen supplier identity (RCE fields 12-14).
+	DocType            int8   `json:",omitempty"`
+	DocSeries          string `json:",omitempty"`
+	DocNumber          int64  `json:",omitempty"`
+	DocIssueDate       int16  `json:",omitempty"`
+	TaxableAmount      int32  `json:",omitempty"`
+	TaxAmount          int32  `json:",omitempty"`
+	UntaxedAmount      int32  `json:",omitempty"`
+	OtherAmount        int32  `json:",omitempty"`
+	ExchangeRate       int32  `json:",omitempty"`
+	PaymentStatus      int8   `json:",omitempty"`
+	DueDate            int16  `json:",omitempty"`
 	// The real acquisition date, which is not Created: a donated or backdated asset is
 	// registered long after it was acquired, and the schedule has to run from the latter.
 	AcquisitionDate int16 `json:",omitempty"`
@@ -87,6 +104,16 @@ type AssetTable struct {
 	SupplierID              db.Col[*AssetTable, int32]
 	PurchaseAmount          db.Col[*AssetTable, int32]
 	PaidAmount              db.Col[*AssetTable, int32]
+	ProviderSnapshotID      db.Col[*AssetTable, int32]
+	DocType                 db.Col[*AssetTable, int8]
+	DocSeries               db.Col[*AssetTable, string]
+	DocNumber               db.Col[*AssetTable, int64]
+	DocIssueDate            db.Col[*AssetTable, int16]
+	TaxableAmount           db.Col[*AssetTable, int32]
+	TaxAmount               db.Col[*AssetTable, int32]
+	UntaxedAmount           db.Col[*AssetTable, int32]
+	OtherAmount             db.Col[*AssetTable, int32]
+	ExchangeRate            db.Col[*AssetTable, int32]
 	PaymentStatus           db.Col[*AssetTable, int8]
 	DueDate                 db.Col[*AssetTable, int16]
 	AcquisitionDate         db.Col[*AssetTable, int16]
@@ -121,8 +148,26 @@ func (e AssetTable) GetSchema() db.TableSchema {
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ProductID)},
 			// Serial lookup, for resolving an asset from the stock detail row it shadows.
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SerialNumber)},
+			// The Registro de Compras reads a period of documents, one indexed read per day.
+			{Keys: db.Cols(e.DocIssueDate), UseIndexGroup: true},
 		},
 	}
+}
+
+func (e *Asset) PurchaseDocument() finance.PurchaseDocument {
+	return finance.PurchaseDocument{
+		DocType: e.DocType, DocSeries: e.DocSeries, DocNumber: e.DocNumber, DocIssueDate: e.DocIssueDate,
+		TaxableAmount: e.TaxableAmount, TaxAmount: e.TaxAmount, UntaxedAmount: e.UntaxedAmount,
+		OtherAmount: e.OtherAmount, CurrencyType: e.CurrencyType, ExchangeRate: e.ExchangeRate,
+	}
+}
+
+func (e *Asset) SetPurchaseDocument(document finance.PurchaseDocument) {
+	e.DocType, e.DocSeries, e.DocNumber = document.DocType, document.DocSeries, document.DocNumber
+	e.DocIssueDate = document.DocIssueDate
+	e.TaxableAmount, e.TaxAmount = document.TaxableAmount, document.TaxAmount
+	e.UntaxedAmount, e.OtherAmount = document.UntaxedAmount, document.OtherAmount
+	e.CurrencyType, e.ExchangeRate = document.CurrencyType, document.ExchangeRate
 }
 
 // PendingAmount is what is still owed on the acquisition. Nothing is owed on a donation.

@@ -34,7 +34,12 @@ type ProductStock struct {
 	DetailComputedSubQuantity int32   `json:",omitempty"`
 	LastPricesPrice           []int32 `json:",omitempty"`
 	LastPricesQuantity        []int32 `json:",omitempty"`
-	StockStatus               int8    `json:",omitempty"`
+	// AverageCost is the moving weighted average cost of one whole unit, in PEN cents, net of
+	// recoverable IGV. ApplyMovimientos moves it on every costed inflow; outflows and uncosted
+	// inflows leave it as it is. It is an operational figure: a purchase whose comprobante is
+	// registered after the goods arrive does not restate it — the accounting valuation does.
+	AverageCost int32 `json:",omitempty"`
+	StockStatus int8  `json:",omitempty"`
 
 	Created        int32 `json:",omitempty"`
 	CreatedBy      int32 `json:",omitempty"`
@@ -70,6 +75,7 @@ type ProductStockTable struct {
 	DetailComputedSubQuantity db.Col[*ProductStockTable, int32]
 	LastPricesPrice           db.ColSlice[*ProductStockTable, int32]
 	LastPricesQuantity        db.ColSlice[*ProductStockTable, int32]
+	AverageCost               db.Col[*ProductStockTable, int32]
 	StockStatus               db.Col[*ProductStockTable, int8]
 	Created                   db.Col[*ProductStockTable, int32]
 	CreatedBy                 db.Col[*ProductStockTable, int32]

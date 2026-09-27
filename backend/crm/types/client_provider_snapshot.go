@@ -201,3 +201,21 @@ func findIdentitySnapshot(
 	}
 	return nil
 }
+
+// ProviderSnapshotID is the identity snapshot a purchase pins for its supplier: the name and
+// RUC the Registro de Compras prints (fields 12-14). No supplier pins nothing.
+func ProviderSnapshotID(companyID, providerID int32) (int32, error) {
+	if providerID <= 0 {
+		return 0, nil
+	}
+	providers := []ClientProvider{}
+	query := db.Query(&providers)
+	query.Select(query.SnapshotID).CompanyID.Equals(companyID).ID.Equals(providerID)
+	if err := query.Exec(); err != nil {
+		return 0, core.Err("Error al leer el proveedor.", err)
+	}
+	if len(providers) == 0 {
+		return 0, core.Err("El proveedor", providerID, "no existe.")
+	}
+	return providers[0].SnapshotID, nil
+}

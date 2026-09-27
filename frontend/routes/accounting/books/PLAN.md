@@ -31,11 +31,10 @@ go wrong:
 | CUO / correlativo A-M-C | obligatorios | **no existen** — SUNAT asigna el CAR |
 | Diario Simplificado 5.2 | **PLE. No está en SIRE.** | — |
 
-**A gap to close before phase 6.** RS 112-2021 is the *RVIE* (ventas) rulebook. The **RCE**
-(compras) equivalent lives in the later resolutions — RS 040-2022 and RS 138-2023 — whose annexes
-I do not have. The 8.3 field list below is the PLE one and is a good guide to *which columns to
-store*, but the RCE flat-file structure must be read from its own annex before the Compras
-exporter is written. Storing the columns is safe now; mapping them to a file is not.
+**The RCE annex is in hand.** RS 040-2022 (Anexo 11, the file that replaces the RCE proposal:
+`080400`, fields 1-37) and RS 138-2023 were provided and are summarized field by field in
+`../docs/SUNAT-RCE-Diario-annexes-summary.md`. The Compras exporter targets Anexo 11. The PLE 8.3
+list in §1.9 is reference only.
 
 The user's intuition that the sales book "can be simplified" is right twice over: PLE has an
 actual **format 14.2 "simplificado"** (drops exportación, descuentos, exonerado/inafecto, ISC,
@@ -271,7 +270,7 @@ for electronic issuance (`SaleOrder.SeriesID()`, `sales/types/sale_order_id.go:8
 *not* book rows — the Libro de Ventas is a book of comprobantes — but the user explicitly wants
 them visible, so they belong on the page as a separate, clearly-labelled control block.
 
-### 2.2 Compras — **cannot be produced today**
+### 2.2 Compras — ✅ built (phase 6)
 
 **The supplier's identity is solved**, the same way as the customer's:
 `PurchaseOrder.ProviderSnapshotID` is frozen when the order is created
@@ -296,31 +295,46 @@ Missing against 8.3, none of it derivable:
 - fields 23/24 — constancia de detracción
 - field 31 — estado de la anotación
 
-**Decided: the columns go on both `PurchaseOrder` and `Expense`**, and `Expense` gets a
-`ProviderSnapshotID` of its own. A recibo por honorarios, an electricity bill and a stock
-purchase are all Registro de Compras rows; splitting them across a table that has the document
-and one that does not would mean the book could never be complete.
+**Decided: the columns go on `PurchaseOrder`, `Expense` and `Asset`** (confirmed 2026-09-24). A
+recibo por honorarios, an electricity bill and a fixed-asset factura are all RCE rows, so without
+them the book would miss those purchases.
 
-The column set, identical on both:
+The column set, mapped to **RCE Anexo 11** (revised from the PLE 8.3 draft against the annex):
 
-| Column | 8.3 field | Notes |
+| Column | Anexo 11 field | Notes |
 | --- | --- | --- |
-| `DocType int8` | 6 | SUNAT catalog — reuse `invoicing.DocType*` values (`01`,`03`,`07`,`08`,`14`…) |
-| `DocSeries string` | 7 | separated from the número at last |
-| `DocNumber int32` | 8 | |
-| `DocIssueDate int16` | 4 | UnixDay — the **supplier's** issue date, not the order's |
-| `TaxableAmount int32` | 13 | base imponible con derecho a crédito fiscal |
-| `TaxAmount int32` | 14 | IGV — already a column on `PurchaseOrder`, currently never written |
-| `OtherAmount int32` | 15 | conceptos fuera de la base |
-| `Currency int8` | 17 | `Expense.CurrencyType` already exists; `PurchaseOrder` needs it |
-| `ExchangeRate int32` | 18 | required only when currency ≠ PEN; 3 decimals, so store ×1000 |
-| `DetractionCode string` | 24 | constancia de depósito |
-| `DetractionDate int16` | 23 | |
+| `DocType int8` | 7 | SUNAT catalog — reuse `invoicing.DocType*` values (`01`,`03`,`07`,`08`…). `0` = the purchase has no comprobante |
+| `DocSeries string` | 8 | separated from the number at last |
+| `DocNumber int64` | 10 | numeric on every type the ERP books; `int64` because supermarket tickets run past `int32`. Only the series is alphanumeric |
+| `DocIssueDate int16` | 5 | UnixDay — the **supplier's** issue date, not the order's. **Also picks the RCE period** |
+| `TaxableAmount int32` | 15 | base DG. A company that only makes taxed sales never uses DGNG/DNG (17-20) |
+| `TaxAmount int32` | 16 | IGV — already a column, currently never written |
+| `UntaxedAmount int32` | 21 | 🆕 exonerado + inafecto together |
+| `OtherAmount int32` | 24 | charges outside the base |
+| `CurrencyType int8` | 26 | existing column on `Expense`/`Asset`, new on `PurchaseOrder` — same name on all three |
+| `ExchangeRate int32` | 27 | ×1000; required when currency ≠ PEN. SBS weighted-average selling rate of `DocIssueDate` |
 
-Field 16 (importe total) is **not** a new column: 8.3 requires it to equal 13+14+15 exactly, so
-it is computed, and `TotalAmount` staying independent is what would let the two disagree. This is
-the one place the mapper must validate rather than trust — `InvoiceNumber` (free text) is
-replaced by `DocSeries`/`DocNumber` and deleted, since pre-alpha keeps no compatibility.
+Dropped from the draft: **`DetractionCode`/`DetractionDate`**. Anexo 11 has no detracción field
+(field 38 is a SUNAT-filled mark, not sent).
+
+Plus `ProviderSnapshotID` on `Expense` and `Asset` (fields 12-14; `PurchaseOrder` already had
+it). Field 6 reads the existing `DueDate` (`PaymentDate` on orders), so no new column. The rules
+are one function, `finance.NormalizePurchaseDocument` (`backend/finance/types/purchase_document.go`);
+the form block is `$domain/PurchaseDocumentFields.svelte`; the book is `books.purchases.ts` +
+`books.purchases.txt.ts`, read from `GET.purchases-book`. Existing rows are normalized by
+`fn-backfill-purchase-documents`.
+
+Field 25 (Total CP) is computed as 15+16+21+23+24, never stored. ICBPER (23) is written as
+`0.00`. `InvoiceNumber` (free text) is replaced by `DocSeries`/`DocNumber` and deleted, since
+pre-alpha keeps no compatibility.
+
+**Rows the exporter omits** (Anexo 11 note 2): canceled orders, and documents with baja, reverted
+or annulled by a type-02 credit note. **This is the opposite of RVIE nota 3.** Supplier credit
+notes go in as negative amounts in 15-25.
+
+**Purchases without a comprobante** (`DocType = 0`) are not RCE rows. The page hides them behind a
+checkbox with a warning icon. They are excluded from totals and the TXT, and they are not an
+export blocker.
 
 None of this is optional: a Libro de Compras assembled from what exists today would have its
 mandatory columns blank, which is worse than no book.
@@ -441,11 +455,13 @@ phase 5 it receives the file text, zips it, hashes it and uploads it to SIRE.
 | 3 | Backfill script for pre-snapshot rows (§2.1, point 2) | — |
 | 4 | ~~**TXT export** — Anexo 3 replacement file with the Tabla 6 filename~~ | ✅ **done** — `books.txt.ts` |
 | 5 | SIRE API upload (Anexo 6: OAuth2 + ZIP + SHA-256 + ticket polling) | — |
-| 6 | **Libro de Compras**: the column set above on `PurchaseOrder` + `Expense`, form capture, then the RCE mapping | RCE annex (§1.1) |
-| 7 | **Diario Simplificado**: PCGE mapping + read-time derivation, field 20 via CAR | — |
+| 6 | ~~**Libro de Compras**: the §2.2 column set on `PurchaseOrder`, `Expense`, `Asset`, form capture, Anexo 11 mapping + TXT, "sin comprobante" checkbox~~ | ✅ **done** — supplier credit notes (07/08) still open, see §6 |
+| 7 | **Diario Simplificado**: PCGE chart (codes + names, feeds 5.4) and mapping, read-time derivation, 5.2 + 5.4 TXT, field 20 via CAR | open decisions: chart of accounts fixed in code or per company, periodic vs permanent inventory, counter-accounts for the unspecified/withdrawal/loss/count cash movements, CUO prefixing, a PEN rate for USD documents |
 
-Every phase is specified. Phase 6 can start on the schema and the forms immediately; only its
-exporter waits on the RCE annex (§1.1).
+The full 5.2 (21 fields) and 5.4 (8 fields) structures are in `Estructura del PLE.xls`,
+summarized in `../docs/SUNAT-RCE-Diario-annexes-summary.md` §3.3. Every entry line carries a
+document type and number (`00` plus an internal number when there is no comprobante), and that
+number is part of the row's unique key.
 
 **Two things phase 4 could not close**, both visible on the page as export blockers rather than
 guessed at:
@@ -463,11 +479,34 @@ guessed at:
 
 ### Settled
 
+- **The RCE file replaces the proposal (Anexo 11)**, the same path as Ventas (Anexo 3).
 - **Target: SIRE.** Ventas against Anexo 3 of RS 112-2021, Compras against the RCE annex. PLE
   14.x/8.x are reference only. The Diario Simplificado goes through PLE 5.2/5.4 because SUNAT
   offers no alternative.
-- **Purchase documents on both `PurchaseOrder` and `Expense`**, with `ProviderSnapshotID` added
-  to `Expense`. Column set in §2.2.
+- **Compras must be SUNAT-compliant** — a filable Anexo 11 file, not a preview.
+- **Purchase document columns on `PurchaseOrder`, `Expense` and `Asset`.** Column set in §2.2.
+  `Expense` also needs the due date (RCE field 6, mandatory for type `14`).
+- **The PCGE chart of accounts is fixed in code**, not configurable per company.
+- **Periodic inventory.** A purchase posts Dr 60 / Dr 40 / Cr 42, and its warehouse entry posts
+  Dr 20 / Cr 61. A sale posts only the income. Cost of sales (Dr 69 / Cr 20 = opening + purchases −
+  closing) is posted at period end, valuing the closing stock at stock × last purchase price. No
+  per-sale costing.
+- **Cash-movement counter-accounts.** The cash side is 101 (till) or 1041 (bank account). A
+  transfer is 101 ↔ 1041. It is stored as two rows (source outflow + destination inflow,
+  `BuildCashTransferMovements`), and **the Diario posts it once, from the negative row**.
+  Withdrawals, losses and physical counts are classified by the user when
+  the movement is created. The account is stored in `CashBankMovement.AccountCode int16`, and the
+  options are listed in `finance/types/cash_movement_account.go` (done).
+- **The RCE period is the month of `DocIssueDate`.** No separate book-period column.
+- **Purchases without a comprobante**: shown behind a checkbox with a warning icon, never part of
+  the book.
+
+### Open
+
+- **Supplier credit notes (`07`).** A credit note needs fields 28-32 (the modified document).
+  The user placed it on the purchase-order table; still to settle is whether it is its own
+  `purchase_order` row pointing at the original order, or extra columns on the original order.
+  Until then the purchase doc types are 01/02/03/12/14 and the book has no negative rows.
 - The three §2.1 follow-ups are approved: export the declared-buyer constants, write the
   backfill, relax `ValidateSeries` to accept `E001`/`EB01`.
 

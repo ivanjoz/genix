@@ -181,11 +181,17 @@ func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 
 	nowTime := core.SUnixTime()
-	record := types.CashReconciliation{}
-	err := json.Unmarshal([]byte(*req.Body), &record)
+	// The account classifies the difference, so it travels with the request and is stored on
+	// the movement, not on the reconciliation.
+	body := struct {
+		types.CashReconciliation
+		AccountCode int16
+	}{}
+	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
 		return req.MakeErr("Error al deserilizar el body: " + err.Error())
 	}
+	record := body.CashReconciliation
 
 	if record.CashBankID == 0 {
 		return req.MakeErr("Faltan Parámetros: [CashBank-ID]")
@@ -208,6 +214,14 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	record.CreatedBy = req.User.ID
 	record.DifferenceAmount = record.ActualAmount - cashBank.CurrentAmount
 
+	// The sign is the server's own difference, not the client's, so a shortage can never be
+	// filed as a surplus.
+	accountCode, err := types.ResolveCashMovementAccount(
+		types.CashMovementTypePhysicalCount, record.DifferenceAmount, body.AccountCode)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+
 	// Update the cash bank
 	cashBank.ReconciliationAmount = record.ActualAmount
 	cashBank.ReconciliationDate = nowTime
@@ -217,10 +231,14 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Record the reconciliation movement
 	movimiento := types.CashBankMovement{
-		ID:          core.SUnixTimeUUIDConcatID(record.CashBankID),
-		CompanyID:   req.User.CompanyID,
-		CashBankID:  record.CashBankID,
-		Type:        2, // Cash bank reconciliation
+		ID:         core.SUnixTimeUUIDConcatID(record.CashBankID),
+		CompanyID:  req.User.CompanyID,
+		CashBankID: record.CashBankID,
+		// The Libro Diario reads movements by period, so a count without a date would never
+		// reach it.
+		Date:        core.FechaUnix(),
+		Type:        types.CashMovementTypePhysicalCount,
+		AccountCode: accountCode,
 		FinalAmount: record.ActualAmount,
 		Amount:      record.DifferenceAmount,
 		Created:     nowTime,
@@ -260,10 +278,6 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Hay parámetros faltantes (Type, Amount o CashBank-ID)")
 	}
 
-	if record.Type == types.CashMovementTypeTransfer && record.CashBankRefID == 0 {
-		return req.MakeErr("Las trasferencias necesitan especificar una cashBank de destino.")
-	}
-
 	cashBank, err := types.GetCaja(req.User.CompanyID, record.CashBankID)
 	if err != nil {
 		return req.MakeErr(err)
@@ -277,15 +291,35 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(&re)
 	}
 
-	movimientoInterno := types.InternalCashMovement{
-		CashBankID:    record.CashBankID,
-		CashBankRefID: record.CashBankRefID,
-		Type:          record.Type,
-		Amount:        record.Amount,
-		FinalAmount:   record.FinalAmount,
+	movements := []types.InternalCashMovement{}
+	if record.Type == types.CashMovementTypeTransfer {
+		if record.CashBankRefID == 0 {
+			return req.MakeErr("Las transferencias necesitan especificar una caja de destino.")
+		}
+		// GetCaja is scoped to the company, so a destination id from another tenant is not found.
+		destinationCashBank, err := types.GetCaja(req.User.CompanyID, record.CashBankRefID)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		movements, err = types.BuildCashTransferMovements(
+			cashBank, destinationCashBank, record.Amount, record.FinalAmount)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+	} else {
+		// Only a transfer names a counterpart register.
+		record.CashBankRefID = 0
+		movements = append(movements, types.InternalCashMovement{
+			CashBankID:  record.CashBankID,
+			Type:        record.Type,
+			AccountCode: record.AccountCode,
+			Amount:      record.Amount,
+			FinalAmount: record.FinalAmount,
+		})
 	}
 
-	if err := types.ApplyCashBankMovement(req, []types.InternalCashMovement{movimientoInterno}); err != nil {
+	// Both sides of a transfer go in one call, so the two balances move together.
+	if err := types.ApplyCashBankMovement(req, movements); err != nil {
 		return req.MakeErr(err)
 	}
 

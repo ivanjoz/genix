@@ -82,10 +82,16 @@ import {
   let saleToPrint = $state<SaleHistoryRow>();
 
   const todayUnixDay = Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
-  const saleCurrencyOptions = [
+  // The exchange rate rides next to the dollar label, only while some product must be converted.
+  const exchangeRateTag = $derived(
+    ventasState.needsExchangeRate && !ventasState.exchangeRateProblem
+      ? `(TC ${formatN(ventasState.effectiveRate / EXCHANGE_RATE_SCALE, 3)})`
+      : ""
+  );
+  const saleCurrencyOptions = $derived([
     { ID: CURRENCY_PEN, Name: "Soles" },
-    { ID: CURRENCY_USD, Name: tr("Dollars|Dólares") },
-  ];
+    { ID: CURRENCY_USD, Name: `${tr("Dollars|Dólares")} ${exchangeRateTag}`.trim() },
+  ]);
 
   // Computed
   const separarProcesoVenta = $derived(systemParamsService.recordsMap.get(1)?.ValueInts || []);
@@ -651,9 +657,13 @@ import {
 			            </div>
 			          {/snippet}
 			          {#if paymentCashBank}
-			            <div class="col-span-7 flex h-full items-center gap-4 whitespace-nowrap rounded-[6px] bg-[#f1f2fd] px-8">
-			              <span class="mr-4 text-[14px] text-[var(--input-label-color,#6d5dad)]">{tr('Currency|Moneda')}:</span>
-			              <span>{paymentCashBank.CurrencyType === 2 ? tr('Dollars|Dólares') : 'Soles'}</span>
+			            <div class="col-span-7 flex h-full flex-col justify-center whitespace-nowrap rounded-[6px] bg-[#f1f2fd] px-8 py-2 text-center leading-[1]">
+			              <span class="mb-2 text-[14px] text-[var(--input-label-color,#6d5dad)]">{tr('Currency|Moneda')}:</span>
+			              {#if paymentCashBank.CurrencyType === 2}
+			                <span>{tr('Dollars|Dólares')} <span class="text-[14px]">{exchangeRateTag}</span></span>
+			              {:else}
+			                <span>Soles</span>
+			              {/if}
 			            </div>
 			          {/if}
 	        	{:else}
@@ -678,10 +688,6 @@ import {
 	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
 	            <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
 	            <span>{tr(ventasState.exchangeRateProblem)}</span>
-	          </div>
-	        {:else if ventasState.needsExchangeRate}
-	          <div class="mt-6 text-[14px] text-gray-500">
-	            {tr("Exchange rate|Tipo de cambio")}: <span class="ff-mono text-gray-700">{formatN(ventasState.effectiveRate / EXCHANGE_RATE_SCALE, 3)}</span>
 	          </div>
 	        {/if}
 	        {#if missingCashBankWarning}

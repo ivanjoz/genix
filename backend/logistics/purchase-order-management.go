@@ -7,6 +7,7 @@ import (
 	finance "app/finance/types"
 	"app/logistics/types"
 	"encoding/json"
+	"fmt"
 	"slices"
 )
 
@@ -15,6 +16,9 @@ const (
 	PurchaseOrderActionEdit    = 2 // Edita campos no críticos cuando la orden está Pendiente o Cumplida
 	PurchaseOrderActionPay     = 3 // Registra un pago: descuenta DebtAmount y crea movimiento de cashBank Tipo=6
 	PurchaseOrderActionAnnul   = 4 // Anula la orden: cambia status a Cancelada (0). Solo desde Pendiente o Confirmada.
+	// Registra o corrige el comprobante del proveedor. También en Cumplida: la factura suele
+	// llegar con la mercadería o después, y sin ella la compra no entra al Registro de Compras.
+	PurchaseOrderActionDocument = 5
 )
 
 // Tipo del movimiento de cashBank para pagos a proveedor (Pago Proveedor).
@@ -34,15 +38,8 @@ type purchaseOrderEntryPayload struct {
 	Items           []PostStockAdjustItem
 }
 
-// PostPurchaseOrderEntry recibe la mercadería de una orden de compra Confirmada:
-//  1. compara los productos recibidos vs. los pedidos en la OC y calcula
-//     DifferenceValue (Σ (recibido - pedido) * precio),
-//     ambos firmados (negativo = subentrega, positivo = sobreentrega);
-//  2. llama a ApplyMovimientos para insertar el stock en el almacén;
-//  3. actualiza la OC: Status=Fulfilled + diferencias calculadas.
-//
-// La diferencia se registra pero NO se rechaza: la OC se cumple aunque haya
-// mismatches, y los valores quedan asentados para reportería.
+// PostPurchaseOrderEntry recibe la mercadería de una orden de compra Confirmada
+// (ver receivePurchaseOrder) y la persiste como Cumplida.
 func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	payload := purchaseOrderEntryPayload{}
 	if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
@@ -72,7 +69,39 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	if order.Status != types.PurchaseOrderStatusConfirmed {
 		return req.MakeErr("La orden no está en estado Confirmada y no puede recibirse.")
 	}
+	for _, item := range payload.Items {
+		if item.ProductID == 0 {
+			return req.MakeErr("Hay un item sin ProductID.")
+		}
+		if item.Quantity <= 0 {
+			return req.MakeErr("Hay un item con Cantidad inválida (debe ser > 0).")
+		}
+	}
 
+	if err := receivePurchaseOrder(req, &order, payload.WarehouseID, payload.Items); err != nil {
+		return req.MakeErr(err)
+	}
+	q := db.TableOf[types.PurchaseOrder]()
+	if err := db.Update(&[]types.PurchaseOrder{order},
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy,
+	); err != nil {
+		return req.MakeErr("Error al actualizar la orden de compra.", err)
+	}
+	return req.MakeResponse(order)
+}
+
+// receivePurchaseOrder ingresa la mercadería de una orden al almacén:
+//  1. compara los productos recibidos vs. los pedidos en la OC y calcula
+//     DifferenceValue (Σ (recibido - pedido) * precio), firmado
+//     (negativo = subentrega, positivo = sobreentrega);
+//  2. llama a ApplyMovimientos para insertar el stock en el almacén;
+//  3. deja la OC en Status=Fulfilled con la diferencia calculada. Persistirla es del llamador.
+//
+// La diferencia se registra pero NO se rechaza: la OC se cumple aunque haya
+// mismatches, y los valores quedan asentados para reportería.
+func receivePurchaseOrder(
+	req *core.HandlerArgs, order *types.PurchaseOrder, warehouseID int32, items []PostStockAdjustItem,
+) error {
 	// Indexar el detalle pedido por (ProductID, PresentationID). El ORM almacena la
 	// presentación como int32 pero MovimientoInterno la maneja como int16; usamos int32
 	// para la clave a fin de no perder información si una OC contiene presentaciones > int16.
@@ -110,13 +139,7 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	for _, item := range payload.Items {
-		if item.ProductID == 0 {
-			return req.MakeErr("Hay un item sin ProductID.")
-		}
-		if item.Quantity <= 0 {
-			return req.MakeErr("Hay un item con Cantidad inválida (debe ser > 0).")
-		}
+	for _, item := range items {
 		getStats(orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}).received += item.Quantity
 	}
 
@@ -134,12 +157,16 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	// Construir movimientos: ReemplazarCantidad=false (suma a stock), DocumentID enlaza
 	// el ledger con la OC, SupplierID se completa con el ProviderID de la OC para
 	// que la resolución de lotes use el hash (date, proveedor, nombre).
-	movimientos := make([]types.InternalMovement, 0, len(payload.Items))
-	for _, item := range payload.Items {
+	// The order's prices are gross and in the order's currency; the stock is costed in soles and
+	// net of the IGV the comprobante lets the company recover. An order whose comprobante is not
+	// registered yet enters at the gross price, which is what it has.
+	orderDocument := order.PurchaseDocument()
+	movimientos := make([]types.InternalMovement, 0, len(items))
+	for _, item := range items {
 		key := orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}
 		movimientos = append(movimientos, types.InternalMovement{
 			DocumentID:     int64(order.ID),
-			WarehouseID:    payload.WarehouseID,
+			WarehouseID:    warehouseID,
 			ProductID:      item.ProductID,
 			PresentationID: item.PresentationID,
 			SerialNumber:   item.SerialNumber,
@@ -148,27 +175,18 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 			SupplierID:     order.ProviderID,
 			Quantity:       item.Quantity,
 			SubQuantity:    item.SubQuantity,
-			Price:          getStats(key).price,
+			Price:          orderDocument.InventoryUnitCost(getStats(key).price),
 		})
 	}
 	if err := types.ApplyMovimientos(req, movimientos); err != nil {
-		return req.MakeErr(err)
+		return err
 	}
 
-	// Cumplir la OC: Status=Fulfilled + diferencias calculadas.
-	now := core.SUnixTime()
 	order.Status = types.PurchaseOrderStatusFulfilled
 	order.DifferenceValue = diffValue
-	order.Updated = now
+	order.Updated = core.SUnixTime()
 	order.UpdatedBy = req.User.ID
-
-	q := db.TableOf[types.PurchaseOrder]()
-	if err := db.Update(&[]types.PurchaseOrder{order},
-		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy,
-	); err != nil {
-		return req.MakeErr("Error al actualizar la orden de compra.", err)
-	}
-	return req.MakeResponse(order)
+	return nil
 }
 
 func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
@@ -199,9 +217,20 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &record); err != nil {
 		return req.MakeErr("Error al deserializar el body.", err)
 	}
+	// Ingreso express: la orden nace y se recibe completa en su almacén en la misma llamada.
+	express := struct{ ExpressEntry bool }{}
+	if err := json.Unmarshal([]byte(*req.Body), &express); err != nil {
+		return req.MakeErr("Error al deserializar el body.", err)
+	}
 
 	if record.ProviderID <= 0 {
 		return req.MakeErr("Debe seleccionar un proveedor.")
+	}
+	if express.ExpressEntry && record.ID != 0 {
+		return req.MakeErr("El ingreso express sólo aplica a una orden nueva.")
+	}
+	if express.ExpressEntry && record.WarehouseID <= 0 {
+		return req.MakeErr("Debe seleccionar el almacén donde ingresa la mercadería.")
 	}
 
 	// Supplies are Product rows with Status=2, so they arrive as ordinary product lines.
@@ -222,6 +251,12 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Hay una línea con cantidad = 0")
 	}
 
+	// The total is the lines', never the client's: the debt and the comprobante check read it.
+	record.TotalAmount = 0
+	for lineIndex := range productLineCount {
+		record.TotalAmount += record.DetailProductPrice[lineIndex] * record.DetailProductQuantity[lineIndex]
+	}
+
 	now := core.SUnixTime()
 	todayFecha := core.FechaUnix()
 	currentSemana := core.MakeSemanaFromFechaUnix(todayFecha, false)
@@ -237,20 +272,23 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		record.Week = currentSemana.Code
 		// La deuda inicial corresponde al monto total: cada Pago la reduce hasta llegar a 0.
 		record.DebtAmount = record.TotalAmount
+		if express.ExpressEntry {
+			record.DeliveryDate = todayFecha
+		}
 
 		// Congela la identidad del proveedor al crear la orden: el Registro de Compras
 		// imprime su razón social y RUC tal como estaban en la compra, y renombrarlo
 		// después no puede reescribir un libro ya presentado.
-		providers := []crm.ClientProvider{}
-		providerQuery := db.Query(&providers)
-		providerQuery.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(record.ProviderID)
-		if err := providerQuery.Exec(); err != nil {
-			return req.MakeErr("Error al leer el proveedor.", err)
+		snapshotID, err := crm.ProviderSnapshotID(req.User.CompanyID, record.ProviderID)
+		if err != nil {
+			return req.MakeErr(err)
 		}
-		if len(providers) == 0 {
-			return req.MakeErr("El proveedor", record.ProviderID, "no existe.")
+		record.ProviderSnapshotID = snapshotID
+		// El comprobante puede venir con la orden o registrarse después con su propia acción.
+		record.CurrencyType = core.If(record.CurrencyType == 0, finance.CurrencyPEN, record.CurrencyType)
+		if err := record.ApplyPurchaseDocument(); err != nil {
+			return req.MakeErr(err)
 		}
-		record.ProviderSnapshotID = providers[0].SnapshotID
 	}
 
 	records := []types.PurchaseOrder{record}
@@ -261,8 +299,10 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			curr.CreatedBy = prev.CreatedBy
 			curr.Date = prev.Date
 			curr.Week = prev.Week
-			// La identidad se congela una sola vez, al crear la orden.
+			// La identidad se congela una sola vez, al crear la orden, y el comprobante sólo
+			// cambia por PurchaseOrderActionDocument.
 			curr.ProviderSnapshotID = prev.ProviderSnapshotID
+			curr.SetPurchaseDocument(prev.PurchaseDocument())
 			curr.Status = types.PurchaseOrderStatusPending
 			curr.Updated = now
 			curr.UpdatedBy = req.User.ID
@@ -279,8 +319,38 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	); err != nil {
 		return req.MakeErr("Error al guardar la orden de compra.", err)
 	}
+	if !express.ExpressEntry {
+		return req.MakeResponse(records[0])
+	}
 
-	return req.MakeResponse(records[0])
+	// Se recibe exactamente lo pedido, sin lote ni serie: quien necesite registrarlos usa el
+	// ingreso normal. Los movimientos necesitan el ID de la orden, por eso se inserta antes.
+	order := &records[0]
+	entryItems := make([]PostStockAdjustItem, productLineCount)
+	for lineIndex := range productLineCount {
+		entryItems[lineIndex] = PostStockAdjustItem{
+			ProductID:      order.DetailProductIDs[lineIndex],
+			PresentationID: int16(core.GetIndex(order.DetailProductPresentationIDs, lineIndex)),
+			Quantity:       order.DetailProductQuantity[lineIndex],
+		}
+	}
+	q := db.TableOf[types.PurchaseOrder]()
+	if err := receivePurchaseOrder(req, order, order.WarehouseID, entryItems); err != nil {
+		// El ORM no borra registros: la orden se anula para que el ingreso fallido no deje una
+		// compra pendiente que nadie pidió.
+		order.Status = types.PurchaseOrderStatusCanceled
+		order.Updated = core.SUnixTime()
+		if annulErr := db.Update(&[]types.PurchaseOrder{*order}, q.Status, q.Updated); annulErr != nil {
+			core.Log("Error al anular la orden express", order.ID, annulErr)
+		}
+		return req.MakeErr(fmt.Sprintf("No se pudo ingresar la mercadería; la orden Nº %v quedó anulada.", order.ID), err)
+	}
+	if err := db.Update(&[]types.PurchaseOrder{*order},
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy,
+	); err != nil {
+		return req.MakeErr("Error al actualizar la orden de compra.", err)
+	}
+	return req.MakeResponse(*order)
 }
 
 func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
@@ -342,13 +412,12 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.WarehouseID = patch.WarehouseID
 		orderCurrent.DeliveryDate = patch.DeliveryDate
 		orderCurrent.PaymentDate = patch.PaymentDate
-		orderCurrent.InvoiceNumber = patch.InvoiceNumber
 		orderCurrent.Notes = patch.Notes
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
 		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
-			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.InvoiceNumber, q.Notes, q.Updated, q.UpdatedBy, q.Status,
+			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.Notes, q.Updated, q.UpdatedBy, q.Status,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
 		}
@@ -408,6 +477,30 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
 			return req.MakeErr("Error al anular la orden de compra.", err)
+		}
+		return req.MakeResponse(orderCurrent)
+
+	case PurchaseOrderActionDocument:
+		if orderCurrent.Status == types.PurchaseOrderStatusCanceled {
+			return req.MakeErr("Una orden anulada no se registra en el Registro de Compras.")
+		}
+		patch := types.PurchaseOrder{}
+		if err := json.Unmarshal([]byte(*req.Body), &patch); err != nil {
+			return req.MakeErr("Error al deserializar el body.", err)
+		}
+		orderCurrent.SetPurchaseDocument(patch.PurchaseDocument())
+		if err := orderCurrent.ApplyPurchaseDocument(); err != nil {
+			return req.MakeErr(err)
+		}
+		orderCurrent.Updated = now
+		orderCurrent.UpdatedBy = req.User.ID
+
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
+			q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate, q.TaxableAmount, q.TaxAmount,
+			q.UntaxedAmount, q.OtherAmount, q.CurrencyType, q.ExchangeRate,
+			q.Updated, q.UpdatedBy, q.Status,
+		); err != nil {
+			return req.MakeErr("Error al registrar el comprobante de la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
 

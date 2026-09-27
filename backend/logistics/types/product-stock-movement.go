@@ -131,8 +131,15 @@ type InternalMovement struct {
 	Quantity        int32
 	SubQuantity     int32
 	SubDivisor      int16
-	Price           int32
-	DocumentID      int64
+	// Price is the unit cost of an inflow, in PEN cents net of recoverable IGV. It is ignored on
+	// an outflow: stock leaves at the row's AverageCost, not at a price someone typed.
+	Price      int32
+	DocumentID int64
+	// The company's manual-stock policy (company flags 6 and 9). They are judged on the delta,
+	// which only the engine knows for a "set stock to X" movement, and inside its lock, so the
+	// check and the write see the same balance.
+	RejectInbound      bool // the company only lets stock in through a purchase order
+	RequireInboundCost bool // every inflow must carry a Price
 }
 
 // HasDetail reports whether the movement targets a ProductStockDetail row

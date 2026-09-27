@@ -149,6 +149,17 @@ amount for that period plus its payment state.
 | `Created`           | `int32`  | |
 | `CreatedBy`         | `int32`  | |
 
+**Supplier comprobante (the Registro de Compras row):** `ProviderSnapshotID`, `DocType`,
+`DocSeries`, `DocNumber`, `DocIssueDate`, `TaxableAmount`, `TaxAmount`, `UntaxedAmount`,
+`OtherAmount`, `ExchangeRate`. They are validated by `finance.NormalizePurchaseDocument`
+(`backend/finance/types/purchase_document.go`), and the document's currency is `CurrencyType`.
+When `DocType` is set, the document total (base + IGV + untaxed + other) must equal `Amount`.
+With `DocType = 0` the columns are cleared, and `DocIssueDate` holds `Date`, so the book's
+"sin comprobante" list finds the expense. A paid expense (`ss = 2`) still accepts its supplier
+and comprobante, and nothing else. The form picks the supplier, and the comprobante block is
+`$domain/PurchaseDocumentFields.svelte`. An inventory expense (`POST.expense-inventory`) takes
+the same fields flattened into its body.
+
 **Payment lifecycle (`Status`/`ss`):** `PostExpensePayment` sets `ss` after recomputing
 `PaidAmount`: `2` (fully paid) when the "Is Fully Paid" flag was sent or
 `PaidAmount >= Amount`, else `1` (pending). New rows are created with `ss = 1`; `0` means

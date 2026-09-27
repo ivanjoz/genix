@@ -86,6 +86,13 @@ The currency must be `PEN` or `USD`. Supplier (`Proveedor`), acquisition date, a
 are optional — an empty acquisition date means today, and an empty due date follows the acquisition
 date.
 
+The **Supplier comprobante (Comprobante del proveedor)** block records the factura (or other
+document) the asset was bought with, so the purchase enters the Registro de Compras: type, series,
+number, issue date, **Base imponible**, **IGV**, **No gravado**, and **Otros cargos**. When a type is
+chosen, the supplier becomes required, and the document total must equal the purchase amount. On
+this form those amounts are per unit too. **Desglosar el total** proposes base and IGV from the
+purchase amount. A donated asset has no comprobante: leave it on *Sin comprobante*.
+
 ### Business rules and rationale (Reglas y razón de negocio)
 
 On this form the money is **per unit** (`por unidad`) and Genix multiplies it by the quantity.
@@ -177,7 +184,8 @@ The asset must be **Active (Activo)** or **Fully depreciated (Totalmente depreci
 
 **Only five fields can be changed:** Purchase Amount (`Monto de Compra`), Book Value
 (`Valor en Libros`), Acquisition Date (`Fecha de Adquisición`), Payment Due (`Vencimiento del
-Pago`), and Serial Number (`Número de Serie`).
+Pago`), and Serial Number (`Número de Serie`). The supplier's comprobante can also be registered
+or corrected here, with this asset's totals.
 
 **Everything else appears greyed out and locked:** Material, Warehouse (`Almacén`), Supplier
 (`Proveedor`), Currency (`Moneda`), and Quantity (`Cantidad`). They are the asset's identity — the

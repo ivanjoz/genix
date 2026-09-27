@@ -33,6 +33,8 @@ import {
   type IInventoryExpense,
 } from './expenses.svelte'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
+import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
+import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
 import {
   SupplyMaterialService, type ISupplyMaterial,
 } from '../../production/supplies-materials/supply-material.svelte'
@@ -43,6 +45,8 @@ const ui = useUI()
 // An inventory expense lands in a warehouse, so both catalogs are needed to register one.
 const warehouses = new WarehousesService()
 const supplies = new SupplyMaterialService(true)
+// The supplier is who issued the comprobante — the Registro de Compras names it.
+const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
 
 // Localized option lists (re-resolve when the language switches).
 const categoryOptions = $derived(localizeOptions(expenseCategories))
@@ -165,7 +169,7 @@ const newExpense = () => {
     Name: "", Description: "", CategoryID: 4, SupplierID: 0, CurrencyType: 1,
     Date: todayUnixDay, DueDate: todayUnixDay,
     ProductID: 0, WarehouseID: 0, Quantity: 1, UnitPrice: 0,
-  }
+  } as IInventoryExpense
   newSupplyName = { text: "" }
   paymentForm = {} as IExpensePayment
   layerView = 1
@@ -262,7 +266,8 @@ const saveInventoryExpense = async () => {
 const saveHandler = $derived(
   layerView === 3
     ? saveInventoryExpense
-    : (layerView === 1 && !isPaid ? saveExpense : undefined),
+    // A paid expense keeps accepting its comprobante: the bill often arrives after the payment.
+    : (layerView === 1 ? saveExpense : undefined),
 )
 
 // Record a payment against the open expense via POST.expense-payment.
@@ -465,7 +470,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
     {#if isPaid}
       <!-- A fully-paid expense is locked from edits; surface why the fields are read-only. -->
       <div class="col-span-24 mt-12 mb-2 px-10 py-6 rounded bg-green-50 text-green-700 text-sm">
-        {tr("This expense is fully paid and can no longer be edited.|Este gasto está pagado y ya no puede editarse.")}
+        {tr("This expense is fully paid: only its comprobante can still be registered.|Este gasto está pagado: sólo se puede registrar su comprobante.")}
       </div>
     {/if}
     <div class="grid grid-cols-24 gap-10 mt-12">
@@ -479,6 +484,11 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
         inputCss="ff-mono text-center pr-8" css="col-span-24 md:col-span-16" label="Amount|Monto" required={true} disabled={isPaid} />
       <DateInput bind:saveOn={form} save="Date" css="col-span-24 md:col-span-12" label="Date|Fecha" disabled={isPaid} />
       <DateInput bind:saveOn={form} save="DueDate" css="col-span-24 md:col-span-12" label="Due Date|Vencimiento" disabled={isPaid} />
+      <SearchSelect bind:saveOn={form} save="SupplierID" css="col-span-24"
+        label="Supplier|Proveedor" keyId="ID" keyName="Name" options={providers.records} />
+    </div>
+    <div class="mt-12">
+      <PurchaseDocumentFields document={form} expectedTotal={form.Amount || 0} />
     </div>
   {/if}
 
@@ -516,6 +526,12 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
         label="Category|Categoría" keyId="id" keyName="name" options={categoryOptions} />
       <DateInput bind:saveOn={inventoryForm} save="Date" css="col-span-24 md:col-span-12" label="Date|Fecha" />
       <DateInput bind:saveOn={inventoryForm} save="DueDate" css="col-span-24 md:col-span-12" label="Due Date|Vencimiento" />
+      <SearchSelect bind:saveOn={inventoryForm} save="SupplierID" css="col-span-24"
+        label="Supplier|Proveedor" keyId="ID" keyName="Name" options={providers.records} />
+    </div>
+    <div class="mt-12">
+      <PurchaseDocumentFields document={inventoryForm}
+        expectedTotal={(inventoryForm.Quantity || 0) * (inventoryForm.UnitPrice || 0)} />
     </div>
   {/if}
 

@@ -1,6 +1,7 @@
 package logistics
 
 import (
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"app/logistics/types"
@@ -29,7 +30,17 @@ type PostStockAdjustItem struct {
 	LotID          int32  `json:",omitempty"`
 	LotCode        string `json:",omitempty"`
 	SupplierID     int32  `json:",omitempty"`
+	// UnitCost is the purchase cost of one unit of the stock this adjustment adds, in PEN cents,
+	// taken as typed: a manual entry has no comprobante, so there is no IGV to recover from it.
+	// Only an increase reads it. A purchase-order reception ignores it and costs from the order.
+	UnitCost int32 `json:",omitempty"`
 }
+
+// The company flags that govern manual stock adjustments (backend/company_flags.toml).
+const (
+	companyFlagBlockManualStockInbound = int16(6) // stock only enters through a purchase order
+	companyFlagRequireManualStockCost  = int16(9) // a manual increase must carry its UnitCost
+)
 
 // loadProductSubDivisors reads the current sub-unit divisor of every product an adjustment
 // touches. A product with no sub-unit maps to core.QuantityDivisorNone.
@@ -76,10 +87,22 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
+	// The page enforces these too, but only the engine knows whether a "set stock to X" item is
+	// an increase, so the flags travel on each movement and are judged there.
+	companyConfig, err := cloud.LoadCompanyConfig(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr("Error al leer la configuración de la empresa:", err)
+	}
+	rejectManualInbound := core.HasCompanyFlag(companyConfig.Company.Flags, companyFlagBlockManualStockInbound)
+	requireManualCost := core.HasCompanyFlag(companyConfig.Company.Flags, companyFlagRequireManualStockCost)
+
 	movimientos := make([]types.InternalMovement, 0, len(items))
 	for _, item := range items {
 		if item.WarehouseID == 0 || item.ProductID == 0 {
 			return req.MakeErr("Hay un registro sin Almacén-ID o Producto-ID.")
+		}
+		if item.UnitCost < 0 {
+			return req.MakeErr(fmt.Sprintf("El costo del producto %v no puede ser negativo.", item.ProductID))
 		}
 		subDivisor := subDivisorByProductID[item.ProductID]
 		if item.SubQuantity != 0 && subDivisor <= core.QuantityDivisorNone {
@@ -100,6 +123,10 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 			SupplierID:  item.SupplierID,
 			Quantity:    item.Quantity,
 			SubQuantity: item.SubQuantity,
+			Price:       item.UnitCost,
+
+			RejectInbound:      rejectManualInbound,
+			RequireInboundCost: requireManualCost,
 		})
 	}
 

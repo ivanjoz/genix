@@ -4,6 +4,7 @@ import Info from '$components/misc/Info.svelte'
 import Input from '$components/form/Input.svelte'
 import SearchSelect from '$components/form/SearchSelect.svelte'
 import T from '$components/misc/T.svelte'
+import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
 import type { IAssetForm } from './assets'
 
 // One form, two shells: the create Layer and the edit Modal in +page.svelte both render this.
@@ -119,6 +120,14 @@ const bookValueLabel = $derived(isEdit
     text="Leave the purchase amount at 0 for a donated or contributed asset — nothing is owed, but it still has a book value and still depreciates.|Deje el monto de compra en 0 para un activo donado o aportado."
   />
 {/if}
+
+<div class="mt-16" aria-label="Supplier comprobante">
+  <div class="h4 ff-bold mb-6">
+    <T text={isEdit ? "Supplier comprobante|Comprobante del proveedor"
+      : "Supplier comprobante (amounts per unit)|Comprobante del proveedor (importes por unidad)"} />
+  </div>
+  <PurchaseDocumentFields document={form} expectedTotal={form.PurchaseAmount || 0} />
+</div>
 
 <div class="mt-16" aria-label="Asset units">
   <div class="h4 ff-bold mb-6">

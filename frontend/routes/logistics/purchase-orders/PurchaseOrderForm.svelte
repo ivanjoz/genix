@@ -24,7 +24,7 @@ let {
 } = $props()
 </script>
 
-<div class="grid grid-cols-2 gap-8" aria-label="Purchase order header form with provider, warehouse, dates, notes, and invoice number">
+<div class="grid grid-cols-2 gap-8" aria-label="Purchase order header form with provider, warehouse, dates and notes">
   <SearchSelect
     label="Supplier|Proveedor"
     keyId="ID"
@@ -58,10 +58,5 @@ let {
     bind:saveOn={form}
     save="Notes"
     label="Notes|Notas"
-  />
-  <Input
-    bind:saveOn={form}
-    save="InvoiceNumber"
-    label="Invoice|Factura"
   />
 </div>

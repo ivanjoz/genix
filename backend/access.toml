@@ -213,7 +213,7 @@ name = "Gestión de Stock"
 group = 4
 levels = 14
 frontend_routes = "logistics/products-stock"
-backend_apis = "POST.productos-stock"
+backend_apis = "GET.company-parametros,POST.productos-stock"
 
 [[access]]
 id = 29
@@ -357,4 +357,4 @@ name = "Libros Contables"
 group = 7
 levels = 14
 frontend_routes = "accounting/books"
-backend_apis = "GET.sales-book,GET.client-provider-snapshot-ids"
+backend_apis = "GET.sales-book,GET.purchases-book,GET.client-provider-snapshot-ids"

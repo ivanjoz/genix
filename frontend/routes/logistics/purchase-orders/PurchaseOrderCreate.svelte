@@ -1,6 +1,8 @@
 <script lang="ts">
 import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
 import Button from '$components/buttons/Button.svelte'
+import Checkbox from '$components/form/Checkbox.svelte'
+import Info from '$components/misc/Info.svelte'
 import LayerStatic from '$components/layers/LayerStatic.svelte'
 import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
 import VTable from '$components/vTable/VTable.svelte'
@@ -20,6 +22,9 @@ import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
     import { ProductSupplyService } from '$routes/logistics/purchase-management/supply-management.svelte';
 import type { IPurchaseOrder } from './purchase_order.svelte';
+import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
+import { PURCHASE_DOC_TYPE_INVOICE, splitPurchaseTotal, type IPurchaseDocument } from '$core/purchase-document'
+import { getFechaUnix } from '@genix/ui/utilities'
 
 // Line item shown in the cart; keyed by productID+presentationID composite.
 // Composes the product + (optional) presentation refs instead of cloning their fields,
@@ -34,13 +39,12 @@ interface PurchaseOrderItem {
   presentation?: IProductPresentation
 }
 
-// Payload shape sent to POST /purchase-orders.
-interface IPurchaseOrderForm {
+// Payload shape sent to POST /purchase-orders. The supplier's comprobante travels with the order.
+interface IPurchaseOrderForm extends IPurchaseDocument {
   ID: number
   ProviderID: number
   WarehouseID: number
   TotalAmount: number
-  TaxAmount: number
   // Producto: parallel arrays in the same order — one row per product line.
   DetailProductIDs: number[]
   DetailProductPrice: number[]
@@ -50,8 +54,17 @@ interface IPurchaseOrderForm {
   // Dates stored as UnixDay int16 (days since unix-epoch).
   DeliveryDate: number
   PaymentDate: number
-  InvoiceNumber: string
+  // The server receives every line as ordered into the warehouse and saves the order as Completada.
+  ExpressEntry: boolean
 }
+
+// A new order starts with a factura issued today; its amounts follow the cart total.
+const makeNewOrderDocument = (): IPurchaseDocument => ({
+  DocType: PURCHASE_DOC_TYPE_INVOICE, DocSeries: '', DocNumber: 0, DocIssueDate: getFechaUnix(),
+  TaxableAmount: 0, TaxAmount: 0, UntaxedAmount: 0, OtherAmount: 0, CurrencyType: 1, ExchangeRate: 0,
+})
+
+const currencyOptions = [{ id: 1, name: "PEN" }, { id: 2, name: "USD" }]
 
 // Holds the cart state and submits the order; amounts stored as cents (int).
 class PurchaseOrderState {
@@ -60,7 +73,6 @@ class PurchaseOrderState {
     ProviderID: 0,
     WarehouseID: 0,
     TotalAmount: 0,
-    TaxAmount: 0,
     DetailProductIDs: [],
     DetailProductPrice: [],
     DetailProductQuantity: [],
@@ -68,7 +80,8 @@ class PurchaseOrderState {
     Notes: '',
     DeliveryDate: 0,
     PaymentDate: 0,
-    InvoiceNumber: '',
+    ExpressEntry: false,
+    ...makeNewOrderDocument(),
   } as IPurchaseOrderForm)
 
   items = $state([] as PurchaseOrderItem[])
@@ -124,25 +137,39 @@ class PurchaseOrderState {
     this.recalcTotals()
   }
 
-  // Recomputes totals after any item mutation; IGV is 18% inclusive.
+  // An estimate for the header only (IGV 18% inclusive). The real base and IGV are the
+  // supplier's invoice, registered later with the Comprobante action.
+  subtotalAmount = $derived(Math.floor(this.form.TotalAmount / 1.18))
+
+  // Recomputes totals after any item mutation. The comprobante must add up to the order total,
+  // so its calculated amounts follow it; the typed No Gravado and Otros Cargos are kept.
+  // Done here too because the comprobante block is unmounted while the Productos tab is open.
   recalcTotals() {
     let total = 0
     for (const item of this.items) {
       total += (item.price || 0) * (item.quantity || 0)
     }
     this.form.TotalAmount = total
-    const subtotal = Math.floor(total / 1.18)
-    this.form.TaxAmount = total - subtotal
+    if (this.form.DocType) {
+      Object.assign(this.form, splitPurchaseTotal(
+        this.form.DocType, total, this.form.UntaxedAmount, this.form.OtherAmount,
+      ))
+    }
+  }
+
+  // An express entry is received today, so the delivery date is today too.
+  setExpressEntry(isExpressEntry: boolean) {
+    this.form.ExpressEntry = isExpressEntry
+    if (isExpressEntry) { this.form.DeliveryDate = getFechaUnix() }
   }
 
   reset() {
     this.items = []
-    this.form.ProviderID = 0
-    this.form.Notes = ''
-    this.form.DeliveryDate = 0
-    this.form.PaymentDate = 0
-    this.form.InvoiceNumber = ''
-    this.recalcTotals()
+    // A new object, so every Input bound to the form re-reads its value.
+    this.form = {
+      ...this.form, ProviderID: 0, Notes: '', DeliveryDate: 0, PaymentDate: 0, TotalAmount: 0,
+      ExpressEntry: false, ...makeNewOrderDocument(),
+    }
   }
 
   async postPurchaseOrder(): Promise<boolean> {
@@ -152,6 +179,10 @@ class PurchaseOrderState {
     }
     if (!this.form.ProviderID) {
       Notify.failure(tr('Please select a supplier.|Seleccione un proveedor.'))
+      return false
+    }
+    if (this.form.ExpressEntry && !this.form.WarehouseID) {
+      Notify.failure(tr('Select the warehouse the goods enter.|Seleccione el almacén donde ingresa la mercadería.'))
       return false
     }
     const zeroQuantityItem = this.items.find((item) => !item.quantity)
@@ -171,7 +202,9 @@ class PurchaseOrderState {
 
     const result = await POST({
       data: $state.snapshot(this.form), route: 'purchase-orders',
-      refreshRoutes: ["purchase-orders"]
+      refreshRoutes: this.form.ExpressEntry
+        ? ["purchase-orders", "warehouse-product-stock", "products-stock"]
+        : ["purchase-orders"]
     })
     // Return the saved order ID so the caller can show a confirmation notification.
     return result?.ID || 0
@@ -271,9 +304,12 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
 ]
 
 async function handleSave() {
+  const isExpressEntry = orderState.form.ExpressEntry
   const orderID = await orderState.postPurchaseOrder()
   if (orderID) {
-    Notify.success(`La orden Nº ${orderID} ha sido generada`)
+    Notify.success(isExpressEntry
+      ? `La orden Nº ${orderID} ha sido generada e ingresada al almacén`
+      : `La orden Nº ${orderID} ha sido generada`)
     orderState.reset()
   }
 }
@@ -444,7 +480,7 @@ const formatDateOrDash = (value: string | number) => {
               <div>Total</div>
             </div>
             <div class="leading-[1] text-gray-800 text-[16px] ml-auto">
-              {formatMo(orderState.form.TotalAmount - orderState.form.TaxAmount)}
+              {formatMo(orderState.subtotalAmount)}
             </div>
           </div>
 
@@ -460,22 +496,39 @@ const formatDateOrDash = (value: string | number) => {
         css="shrink-0" label="Saves and submits the current purchase order to the system." onClick={handleSave} />
     </div>
 
-    <div class="px-12 pt-4 mb-4">
+    <div class="px-12 pt-4 mb-4 flex items-center justify-between gap-12">
       <OptionsStrip
         options={detailViewOptions}
         selected={detailView}
         onSelect={(opt) => { detailView = opt[0] }}
       />
+      <Checkbox label="Express entry|Ingreso Express" size="tiny"
+        checked={orderState.form.ExpressEntry}
+        onToggle={(isChecked) => { orderState.setExpressEntry(isChecked) }}
+      />
     </div>
 
     {#if detailView === 1}
-      <!-- Información block: order header form (provider, warehouse, dates, invoice, notes). -->
+      <!-- Información block: order header form (provider, warehouse, dates, notes). -->
       <div class="px-12 py-8" aria-label="Purchase order information form with provider, warehouse, dates, and notes">
         <PurchaseOrderForm
           bind:form={orderState.form}
           providers={providersService.records}
           almacenes={almacenesService.Almacenes}
         />
+        <div class="mt-12">
+          <Info color="yellow" css="mb-12 flex items-center gap-8">
+            <i class="icon-[fa--info-circle] shrink-0 text-[16px]"></i>
+            <T text="If you don't have the document now, you can fill it in later|Si no posee el documento ahora, es posible llenarlo luego" />
+          </Info>
+          <PurchaseDocumentFields
+            document={orderState.form}
+            showCurrency={true}
+            currencyOptions={currencyOptions}
+            expectedTotal={orderState.form.TotalAmount}
+            isTotalFixed={true}
+          />
+        </div>
       </div>
     {:else}
       <!-- Productos block: read-only summary of the form above the cart table. -->
@@ -494,12 +547,9 @@ const formatDateOrDash = (value: string | number) => {
           label4="Fec. Pago"
           value4={orderState.form.PaymentDate}
           getContent4={formatDateOrDash}
-          label5="Factura"
-          value5={orderState.form.InvoiceNumber}
+          label5="Notas"
+          value5={orderState.form.Notes}
           getContent5={(v) => String(v) || '—'}
-          label6="Notas"
-          value6={orderState.form.Notes}
-          getContent6={(v) => String(v) || '—'}
         />
       </div>
 

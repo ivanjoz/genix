@@ -99,10 +99,14 @@ type CashBankMovement struct {
 	ReferenceID   int32 `json:",omitempty"` //
 	Date          int16
 	Type          CashMovementType `json:",omitempty"`
-	FinalAmount   int32
-	Amount        int32
-	Created       int32 `json:",omitempty"`
-	CreatedBy     int32 `json:",omitempty"`
+	// AccountCode is the PCGE account on the other side of the cash, for the types the user
+	// classifies (see CashMovementAccountOptions). 0 for every other type: its counter-account
+	// follows from the type and the document it pays.
+	AccountCode int16 `json:",omitempty"`
+	FinalAmount int32
+	Amount      int32
+	Created     int32 `json:",omitempty"`
+	CreatedBy   int32 `json:",omitempty"`
 }
 
 type CashBankMovementTable struct {
@@ -115,6 +119,7 @@ type CashBankMovementTable struct {
 	ReferenceID   db.Col[*CashBankMovementTable, int32]
 	Date          db.Col[*CashBankMovementTable, int16]
 	Type          db.Col[*CashBankMovementTable, CashMovementType]
+	AccountCode   db.Col[*CashBankMovementTable, int16]
 	FinalAmount   db.Col[*CashBankMovementTable, int32]
 	Amount        db.Col[*CashBankMovementTable, int32]
 	Created       db.Col[*CashBankMovementTable, int32]
@@ -187,6 +192,7 @@ type InternalCashMovement struct {
 	ReferenceID   int32 // Optional: e.g. the originating ExpenseScheduled.ID for expense payments.
 	Date          int16 // Optional: movement date; falls back to the request's effective date if 0.
 	Type          CashMovementType
+	AccountCode   int16 // Required only for the types in CashMovementAccountOptions.
 	Amount        int32
 	FinalAmount   int32 // Optional: calculated if 0
 }

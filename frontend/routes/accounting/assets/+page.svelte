@@ -155,7 +155,7 @@ const openAcquisitionLayer = () => {
   acquisitionForm = {
     ProductID: 0, WarehouseID: 0, SupplierID: 0, CurrencyType: 1, Quantity: 1,
     SerialNumber: "", AcquisitionDate: 0, DueDate: 0, AcquisitionValue: 0, PurchaseAmount: 0,
-  }
+  } as IAssetForm
   serialsInput = { text: "" }
   ui.openSideLayer(1)
 }
@@ -259,12 +259,12 @@ const saveAssetEdit = async () => {
 
   Loading.standard(tr("Saving changes...|Guardando cambios..."))
   try {
+    const { ProductID, WarehouseID, SupplierID, Quantity, ...editFields } = editForm
     const updated = await putAssetEdit({
+      ...editFields,
       AssetID: selectedAsset.ID,
       SerialNumber: editForm.SerialNumber || "",
-      AcquisitionDate: editForm.AcquisitionDate,
       DueDate: editForm.DueDate || 0,
-      AcquisitionValue: editForm.AcquisitionValue,
       PurchaseAmount: editForm.PurchaseAmount || 0,
     })
     selectedAsset = { ...selectedAsset, ...updated }

@@ -1,4 +1,5 @@
 import { GetHandler, GET, POST, PUT } from '$libs/ui-runtime.svelte'
+import type { IPurchaseDocument } from '$core/purchase-document'
 import { AssetStatus, type IAsset, type IAssetForm, type IDepreciationEntry } from './assets'
 
 export type { IAsset, IAssetForm, IDepreciationEntry }
@@ -56,7 +57,8 @@ export const postAssetPayment = (data: IAssetPayment): Promise<IAsset> => {
 // AcquisitionValue and PurchaseAmount are the asset row's totals here, not per-unit figures as
 // in IAssetAcquisition. Editing either one, or the acquisition date, makes the backend rewrite
 // the asset's whole posted depreciation ledger — hence the expenses refresh.
-export interface IAssetEdit {
+// The document columns carry this row's totals too; its currency stays the asset's.
+export interface IAssetEdit extends IPurchaseDocument {
   AssetID: number
   SerialNumber: string
   AcquisitionDate: number

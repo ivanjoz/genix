@@ -3,6 +3,7 @@ package accounting
 import (
 	"app/accounting/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	logistics "app/logistics/types"
@@ -26,6 +27,8 @@ type AssetEditPayload struct {
 	DueDate          int16  `json:",omitempty"`
 	AcquisitionValue int32  `json:",omitempty"`
 	PurchaseAmount   int32  `json:",omitempty"`
+	// The supplier's comprobante, with this row's totals. Its currency stays the asset's.
+	finance.PurchaseDocument
 }
 
 // PutAssetEdit rewrites an asset's acquisition data, and everything that was derived from it.
@@ -76,6 +79,19 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El vencimiento del pago no puede ser anterior a la fecha de adquisición.")
 	}
 
+	dueDate := core.If(payload.DueDate > 0, payload.DueDate, payload.AcquisitionDate)
+	document := payload.PurchaseDocument
+	document.CurrencyType = asset.CurrencyType
+	if documentError := normalizeAssetDocument(
+		&document, asset.SupplierID, payload.AcquisitionDate, dueDate, payload.PurchaseAmount,
+	); documentError != nil {
+		return req.MakeErr(documentError)
+	}
+	providerSnapshotID, snapshotError := crm.ProviderSnapshotID(req.User.CompanyID, asset.SupplierID)
+	if snapshotError != nil {
+		return req.MakeErr(snapshotError)
+	}
+
 	serialChanged := payload.SerialNumber != asset.SerialNumber
 	if serialChanged {
 		if asset.DisposalDate > 0 {
@@ -118,7 +134,9 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 
 	asset.SerialNumber = payload.SerialNumber
 	asset.AcquisitionDate = payload.AcquisitionDate
-	asset.DueDate = core.If(payload.DueDate > 0, payload.DueDate, payload.AcquisitionDate)
+	asset.DueDate = dueDate
+	asset.SetPurchaseDocument(document)
+	asset.ProviderSnapshotID = providerSnapshotID
 	asset.AcquisitionValue = payload.AcquisitionValue
 	asset.PurchaseAmount = payload.PurchaseAmount
 	asset.PaymentStatus = ResolveAssetPaymentStatus(payload.PurchaseAmount, asset.PaidAmount)
@@ -141,6 +159,9 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 		assetTable.SerialNumber, assetTable.AcquisitionDate, assetTable.DueDate,
 		assetTable.AcquisitionValue, assetTable.PurchaseAmount, assetTable.PaymentStatus,
 		assetTable.AccumulatedDepreciation, assetTable.LastDepreciationDate,
+		assetTable.ProviderSnapshotID, assetTable.DocType, assetTable.DocSeries, assetTable.DocNumber,
+		assetTable.DocIssueDate, assetTable.TaxableAmount, assetTable.TaxAmount,
+		assetTable.UntaxedAmount, assetTable.OtherAmount, assetTable.ExchangeRate,
 		assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
 	); updateError != nil {
 		return req.MakeErr("Error al actualizar el activo.", updateError)

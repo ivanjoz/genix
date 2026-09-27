@@ -27,6 +27,7 @@
 		postCajaMovimiento,
 		cajaTipos,
 		cajaMovimientoTipos,
+		cashMovementAccountOptions,
 		type ICashBank,
 		type ICashReconciliation,
 		type ICashBankMovement,
@@ -134,7 +135,15 @@
 
 	const saveCajaCuadre = async () => {
 		const form = cajaCuadreForm;
-		form.SaldoSistema = cajaForm.CurrentAmount;
+		form.SystemAmount = cajaForm.CurrentAmount;
+		// A choice made before the difference flipped sign belongs to the other side.
+		if (!cuadreAccountOptions.some((option) => option.accountCode === form.AccountCode)) {
+			form.AccountCode = 0;
+		}
+		if (cuadreAccountOptions.length > 1 && !form.AccountCode) {
+			Notify.failure(tr("Select the account for the difference.|Seleccione la cuenta contable de la diferencia."));
+			return;
+		}
 
 		Loading.standard(tr("Saving cash register...|Guardando caja..."));
 		let recordSaved: ICashReconciliation & { NeedUpdateSaldo: number };
@@ -174,6 +183,10 @@
 			);
 			return;
 		}
+		if (movimientoAccountOptions.length > 1 && !form.AccountCode) {
+			Notify.failure(tr("Select the account for the movement.|Seleccione la cuenta contable del movimiento."));
+			return;
+		}
 		Loading.standard(tr("Saving Movement...|Guardando Movimiento..."));
 		let movimientoSaved: ICashBankMovement;
 		try {
@@ -188,6 +201,11 @@
 		if (!caja) return;
 
 		caja.CurrentAmount = form.FinalAmount;
+		// The backend also wrote the inflow on the destination register.
+		const destinationCaja = form.Type === 3 ? cajas.CajasMap.get(form.CashBankRefID) : undefined;
+		if (destinationCaja) {
+			destinationCaja.CurrentAmount -= form.Amount;
+		}
 		cajas.Cajas = [...cajas.Cajas];
 		Object.assign(cajaForm, caja);
 
@@ -196,6 +214,24 @@
 	};
 
 	const isCajaMovimiento = $derived([3].includes(cajaMovimientoForm.Type));
+
+	// A transfer moves the same money between two active registers: never to itself, and never
+	// across currencies, which would need an exchange rate the movement does not carry.
+	const transferDestinationCajas = $derived(cajas.Cajas.filter((caja) =>
+		caja.ss === 1 && caja.ID !== cajaForm.ID && caja.CurrencyType === cajaForm.CurrencyType));
+
+	// Before an amount is typed, the type's own sign picks the options, so the picker shows as
+	// soon as the type is chosen.
+	const movimientoAccountOptions = $derived.by(() => {
+		const movementType = cajaMovimientoTiposMap.get(cajaMovimientoForm.Type);
+		const signedAmount = cajaMovimientoForm.Amount || (movementType?.isNegative ? -1 : 1);
+		return cashMovementAccountOptions(cajaMovimientoForm.Type, signedAmount);
+	});
+	// A reconciliation writes a physical-count movement (type 2); its difference's sign decides
+	// between the shortage and the surplus accounts.
+	const cuadreAccountOptions = $derived(cajaCuadreForm.ActualAmount
+		? cashMovementAccountOptions(2, cajaCuadreForm.ActualAmount - (cajaForm.CurrentAmount || 0))
+		: []);
 
 	// Load cajaMovimientos when cajaForm changes
 	$effect(() => {
@@ -340,8 +376,13 @@
 								},
 								{
 									header: "Movement Type|Tipo Mov.",
-									getValue: (e) =>
-										cajaMovimientoTiposMap.get(e.Type)?.name || "",
+									getValue: (e) => {
+										const typeName = cajaMovimientoTiposMap.get(e.Type)?.name || "";
+										if (!e.CashBankRefID) return typeName;
+										// A transfer row names the register on its other side.
+										const counterpartName = cajas.CajasMap.get(e.CashBankRefID)?.Name || `#${e.CashBankRefID}`;
+										return `${typeName} ${e.Amount < 0 ? "→" : "←"} ${counterpartName}`;
+									},
 									mobile: { order: 2, css: "col-span-12", contentCss: "text-right" },
 								},
 								{
@@ -429,7 +470,7 @@
 								{
 									header: "Saldo Sistema",
 									css: "ff-mono text-right px-6",
-									getValue: (e) => formatN((e.SaldoSistema || 0) / 100, 2),
+									getValue: (e) => formatN((e.SystemAmount || 0) / 100, 2),
 									mobile: { order: 2, css: "col-span-12", labelLeft: "Sistema:", contentCss: "ff-mono" },
 								},
 								{
@@ -559,6 +600,19 @@
 						{/if}
 					</div>
 				</div>
+				{#if cuadreAccountOptions.length > 1}
+					<SearchSelect
+						bind:saveOn={cajaCuadreForm}
+						save="AccountCode"
+						css="w-full mt-12"
+						label="Accounting account|Cuenta contable"
+						keyId="accountCode"
+						keyName="name"
+						options={cuadreAccountOptions}
+						placeholder=""
+						required={true}
+					/>
+				{/if}
 			</div>
 
 			<div class="flex items-end">
@@ -601,18 +655,32 @@
 				placeholder=""
 				required={true}
 				onChange={() => {
-					cajaMovimientoForm.CajaRefID = 0;
+					cajaMovimientoForm.CashBankRefID = 0;
+					cajaMovimientoForm.AccountCode = 0;
 					cajaMovimientoForm = { ...cajaMovimientoForm };
 				}}
 			/>
+			{#if movimientoAccountOptions.length > 1}
+				<SearchSelect
+					bind:saveOn={cajaMovimientoForm}
+					save="AccountCode"
+					css="col-span-24"
+					label="Accounting account|Cuenta contable"
+					keyId="accountCode"
+					keyName="name"
+					options={movimientoAccountOptions}
+					placeholder=""
+					required={true}
+				/>
+			{/if}
 			<SearchSelect
 				bind:saveOn={cajaMovimientoForm}
-				save="CajaRefID"
+				save="CashBankRefID"
 				css="col-span-24 md:col-span-12"
 				label="Destination Register|Caja Destino"
-				keyId="id"
-				keyName="name"
-				options={cajaTipos}
+				keyId="ID"
+				keyName="Name"
+				options={transferDestinationCajas}
 				disabled={!isCajaMovimiento}
 				placeholder={isCajaMovimiento ? "seleccione" : "no aplica"}
 				required={true}

@@ -3,10 +3,13 @@ package accounting
 import (
 	"app/accounting/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
+	finance "app/finance/types"
 	logistics "app/logistics/types"
 	production "app/production/types"
 	"encoding/json"
+	"fmt"
 )
 
 // GetAssets returns the asset register using the delta-cache protocol. Depreciation is not
@@ -48,7 +51,6 @@ type AssetAcquisitionPayload struct {
 	Name            string `json:",omitempty"`
 	Description     string `json:",omitempty"`
 	SupplierID      int32  `json:",omitempty"`
-	CurrencyType    int8   `json:",omitempty"`
 	// Book value per unit, in cents. This is what depreciates.
 	AcquisitionValue int32 `json:",omitempty"`
 	// Cash owed per unit, in cents. 0 means the asset was donated or contributed: nothing is
@@ -57,6 +59,9 @@ type AssetAcquisitionPayload struct {
 	DueDate        int16 `json:",omitempty"`
 	// Overrides the product's own term. 0 inherits it.
 	DepreciationMonths int16 `json:",omitempty"`
+	// The supplier's comprobante, flattened into the body. Its amounts are per unit, like
+	// PurchaseAmount, and its CurrencyType is the asset's.
+	finance.PurchaseDocument
 }
 
 // PostAsset acquires one or more assets. It writes no Expense: buying a fixed asset is cash
@@ -122,6 +127,18 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	acquisitionDate := core.If(payload.AcquisitionDate > 0, payload.AcquisitionDate, core.FechaUnix())
 	assetName := core.If(len(payload.Name) > 0, payload.Name, supplyProduct.Name)
+	dueDate := core.If(payload.DueDate > 0, payload.DueDate, acquisitionDate)
+
+	unitDocument := payload.PurchaseDocument
+	if documentError := normalizeAssetDocument(
+		&unitDocument, payload.SupplierID, acquisitionDate, dueDate, payload.PurchaseAmount,
+	); documentError != nil {
+		return req.MakeErr(documentError)
+	}
+	providerSnapshotID, snapshotError := crm.ProviderSnapshotID(req.User.CompanyID, payload.SupplierID)
+	if snapshotError != nil {
+		return req.MakeErr(snapshotError)
+	}
 
 	currentTimestamp := core.SUnixTime()
 
@@ -130,7 +147,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 	newAssets := []types.Asset{}
 	makeAsset := func(serialNumber string, quantity int32) types.Asset {
 		purchaseAmount := payload.PurchaseAmount * quantity
-		return types.Asset{
+		asset := types.Asset{
 			CompanyID:    req.User.CompanyID,
 			ProductID:    payload.ProductID,
 			SerialNumber: serialNumber,
@@ -142,7 +159,8 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 			// A donation owes nothing, so it is never payable; anything else starts pending.
 			PurchaseAmount:     purchaseAmount,
 			PaymentStatus:      ResolveAssetPaymentStatus(purchaseAmount, 0),
-			DueDate:            core.If(payload.DueDate > 0, payload.DueDate, acquisitionDate),
+			DueDate:            dueDate,
+			ProviderSnapshotID: providerSnapshotID,
 			AcquisitionDate:    acquisitionDate,
 			AcquisitionValue:   payload.AcquisitionValue * quantity,
 			DepreciationMonths: depreciationMonths,
@@ -153,6 +171,14 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 			Created:            currentTimestamp,
 			CreatedBy:          req.User.ID,
 		}
+		// Each row carries its share of the factura; the book sums the rows back by document.
+		rowDocument := unitDocument
+		rowDocument.TaxableAmount *= quantity
+		rowDocument.TaxAmount *= quantity
+		rowDocument.UntaxedAmount *= quantity
+		rowDocument.OtherAmount *= quantity
+		asset.SetPurchaseDocument(rowDocument)
+		return asset
 	}
 	if len(serialNumbers) > 0 {
 		for _, serialNumber := range serialNumbers {
@@ -304,6 +330,22 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(assetRecords[0])
+}
+
+// normalizeAssetDocument validates an asset's comprobante against the amount it pays for. The
+// document is the bill for that purchase, so its total is the purchase amount: a donated asset
+// (nothing owed) has no purchase document to book.
+func normalizeAssetDocument(
+	document *finance.PurchaseDocument, supplierID int32, acquisitionDate, dueDate int16, purchaseAmount int32,
+) error {
+	if err := finance.NormalizePurchaseDocument(document, supplierID, acquisitionDate, dueDate); err != nil {
+		return err
+	}
+	if document.DocType != finance.PurchaseDocTypeNone && document.Total() != purchaseAmount {
+		return core.Err(fmt.Sprintf("El total del comprobante (%.2f) no coincide con el monto de compra (%.2f).",
+			float64(document.Total())/100, float64(purchaseAmount)/100))
+	}
+	return nil
 }
 
 func loadAsset(companyID, assetID int32) (types.Asset, error) {

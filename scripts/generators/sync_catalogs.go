@@ -35,10 +35,11 @@ import (
 
 var catalogTagPattern = regexp.MustCompile(`(?m)^[ \t]*//CATALOG:([A-Za-z0-9_.]+)[ \t]*$`)
 
-// syncFrontendCatalogs fills every //CATALOG: array under routes and services.
+// syncFrontendCatalogs fills every //CATALOG: array under routes, services and core.
 //
 // It reaches further than the //STRUCT: pass, which only covers routes: a list that both a
-// route and a domain component show belongs with the shared API connectors in `services`.
+// route and a domain component show belongs with the shared API connectors in `services`,
+// or in `core` when it carries business rules several features share.
 func syncFrontendCatalogs(projectRoot string, catalogsByName map[string][]backendCatalog) (int, error) {
 	updatedCount := 0
 
@@ -66,7 +67,7 @@ func syncFrontendCatalogs(projectRoot string, catalogsByName map[string][]backen
 		return os.WriteFile(path, []byte(updatedFile), 0644)
 	}
 
-	for _, folder := range []string{"routes", "services"} {
+	for _, folder := range []string{"routes", "services", "core"} {
 		if err := filepath.WalkDir(filepath.Join(projectRoot, "frontend", folder), walkFile); err != nil {
 			return updatedCount, err
 		}

@@ -183,6 +183,10 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	// An asset link only belongs on the types the server itself writes.
 	body.AssetID = 0
 
+	if err := body.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
+		return req.MakeErr(err)
+	}
+
 	nowTime := core.SUnixTime()
 	body.CompanyID = req.User.CompanyID
 	body.Status = core.If(body.Status == 0, int8(1), body.Status)
@@ -199,10 +203,10 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		err = db.Insert(records)
 	} else {
 		// Lock rule (server-authoritative, never trust the client): a fully-paid expense
-		// (Status == 2) cannot be edited. Load the current Status to enforce it.
+		// (Status == 2) cannot be edited. Load the current row to enforce it.
 		existing := []types.Expense{}
 		eq := db.Query(&existing)
-		eq.Select(eq.Status).CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID)
+		eq.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID)
 		if err := eq.Exec(); err != nil {
 			return req.MakeErr("Error al obtener el gasto:", err)
 		}
@@ -210,7 +214,9 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No se encontró el gasto.")
 		}
 		if existing[0].Status == 2 {
-			return req.MakeErr("No se puede editar un gasto que ya fue pagado.")
+			// Except for its comprobante: the bill often arrives after the payment, and without it
+			// the purchase never reaches the Registro de Compras. Everything else stays as paid.
+			return savePaidExpenseDocument(req, existing[0], body)
 		}
 		if existing[0].Status == types.ExpenseStatusPosted {
 			return req.MakeErr("No se puede editar un asiento de depreciación.")
@@ -226,6 +232,30 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al guardar el gasto:", err)
 	}
 	return req.MakeResponse((*records)[0])
+}
+
+// savePaidExpenseDocument writes only the supplier and the comprobante of a paid expense,
+// validated against the amount that was actually paid.
+func savePaidExpenseDocument(req *core.HandlerArgs, stored types.Expense, body types.Expense) core.HandlerResponse {
+	document := body.PurchaseDocument()
+	document.CurrencyType = stored.CurrencyType
+	stored.SupplierID = body.SupplierID
+	stored.SetPurchaseDocument(document)
+	if err := stored.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
+		return req.MakeErr(err)
+	}
+	stored.Updated = core.SUnixTime()
+	stored.UpdatedBy = req.User.ID
+
+	q := db.TableOf[types.Expense]()
+	if err := db.Update(&[]types.Expense{stored},
+		q.SupplierID, q.ProviderSnapshotID, q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate,
+		q.TaxableAmount, q.TaxAmount, q.UntaxedAmount, q.OtherAmount, q.ExchangeRate,
+		q.Updated, q.UpdatedBy, q.Status,
+	); err != nil {
+		return req.MakeErr("Error al guardar el comprobante del gasto:", err)
+	}
+	return req.MakeResponse(stored)
 }
 
 // --- GET / POST: recurring schedules ----------------------------------------------
@@ -403,12 +433,14 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 			CurrencyType:       schedule.CurrencyType,
 			Date:               periodDate,
 			DueDate:            periodDate,
-			Amount:             schedule.Amount,
-			Status:             1,
-			Updated:            nowTime,
-			UpdatedBy:          req.User.ID,
-			Created:            nowTime,
-			CreatedBy:          req.User.ID,
+			// A period is born without its bill; the "sin comprobante" list finds it by this date.
+			DocIssueDate: periodDate,
+			Amount:       schedule.Amount,
+			Status:       1,
+			Updated:      nowTime,
+			UpdatedBy:    req.User.ID,
+			Created:      nowTime,
+			CreatedBy:    req.User.ID,
 		})
 	}
 

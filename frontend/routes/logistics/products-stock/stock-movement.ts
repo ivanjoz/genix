@@ -47,6 +47,8 @@ export interface IProductStock {
   DetailComputedDate?: number
   DetailComputedQuantity?: number
   DetailComputedSubQuantity?: number
+  /** Moving weighted average cost of one unit, PEN cents net of recoverable IGV. */
+  AverageCost?: number
   StockStatus?: number
   Created?: number
   CreatedBy?: number
@@ -54,6 +56,8 @@ export interface IProductStock {
   UpdatedBy?: number
   ss?: number
   StockDetails: IProductStockDetail[]
+  /** Unit cost typed for the stock this save adds, PEN cents. Applies to the row's lots and serials too. */
+  _unitCost?: number
   _cantidadPrev?: number
   _isVirtual?: boolean
   _isNew?: boolean
@@ -75,6 +79,7 @@ export interface IPostProductoStockItem {
   SerialNumber?: string
   LotID?: number
   LotCode?: string
+  UnitCost?: number
 }
 
 export const getWarehouseProductStock = async (almacenID: number): Promise<IProductStock[]> => {

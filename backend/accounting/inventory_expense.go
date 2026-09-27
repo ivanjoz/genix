@@ -15,18 +15,19 @@ import (
 // This lives in accounting rather than finance because it needs both sides, and logistics
 // already imports finance for cash movements — the reverse edge would be a cycle.
 type InventoryExpensePayload struct {
-	Name         string `json:",omitempty"`
-	Description  string `json:",omitempty"`
-	CategoryID   int8   `json:",omitempty"`
-	SupplierID   int32  `json:",omitempty"`
-	CurrencyType int8   `json:",omitempty"`
-	Date         int16  `json:",omitempty"`
-	DueDate      int16  `json:",omitempty"`
-	ProductID    int32  `json:",omitempty"`
-	WarehouseID  int32  `json:",omitempty"`
-	Quantity     int32  `json:",omitempty"`
+	Name        string `json:",omitempty"`
+	Description string `json:",omitempty"`
+	CategoryID  int8   `json:",omitempty"`
+	SupplierID  int32  `json:",omitempty"`
+	Date        int16  `json:",omitempty"`
+	DueDate     int16  `json:",omitempty"`
+	ProductID   int32  `json:",omitempty"`
+	WarehouseID int32  `json:",omitempty"`
+	Quantity    int32  `json:",omitempty"`
 	// Unit price in cents. The expense total is this times the quantity.
 	UnitPrice int32 `json:",omitempty"`
+	// The supplier's comprobante, flattened into the body. Its CurrencyType is the expense's.
+	finance.PurchaseDocument
 }
 
 // PostInventoryExpense registers a purchase that lands in stock. Unlike a Simple expense it
@@ -98,6 +99,11 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		CreatedBy:    req.User.ID,
 	}
 
+	inventoryExpense.SetPurchaseDocument(payload.PurchaseDocument)
+	if documentError := inventoryExpense.ApplyPurchaseDocument(req.User.CompanyID); documentError != nil {
+		return req.MakeErr(documentError)
+	}
+
 	expenseRecords := []finance.Expense{inventoryExpense}
 	if insertError := db.Insert(&expenseRecords); insertError != nil {
 		return req.MakeErr("Error al registrar el gasto de inventario.", insertError)
@@ -110,7 +116,8 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		WarehouseID: payload.WarehouseID,
 		SupplierID:  payload.SupplierID,
 		Quantity:    payload.Quantity,
-		Price:       payload.UnitPrice,
+		// Costed like a purchase-order reception: soles, net of the IGV the comprobante recovers.
+		Price:       expenseRecords[0].PurchaseDocument().InventoryUnitCost(payload.UnitPrice),
 		DocumentID:  int64(expenseRecords[0].ID),
 	}
 	if movementError := logistics.ApplyMovimientos(

@@ -1,7 +1,11 @@
 // Pure asset accounting. No Svelte, no fetch — unit-testable in isolation.
 // Mirrors backend/accounting/types/asset.go and backend/accounting/depreciation.go.
 
-export interface IAsset {
+import type { IPurchaseDocument } from '$core/purchase-document'
+
+// The document columns are the supplier's comprobante (the Registro de Compras row), with this
+// row's share of the amounts. Its currency is CurrencyType and its total must equal PurchaseAmount.
+export interface IAsset extends IPurchaseDocument {
   ID: number
   ProductID: number
   SerialNumber: string
@@ -93,7 +97,7 @@ export const canDisposeAsset = (asset: IAsset) =>
 // acquisition payload and the edit payload rather than either one: the form paints the locked
 // fields of an existing asset too, so it needs Material, Almacén, Proveedor and Moneda present
 // even in edit mode, where the handler ignores them.
-export interface IAssetForm {
+export interface IAssetForm extends IPurchaseDocument {
   ProductID: number
   WarehouseID: number
   SupplierID: number
@@ -120,6 +124,16 @@ export const assetEditForm = (asset: IAsset): IAssetForm => ({
   DueDate: asset.DueDate,
   AcquisitionValue: asset.AcquisitionValue,
   PurchaseAmount: asset.PurchaseAmount || 0,
+  DocType: asset.DocType || 0,
+  DocSeries: asset.DocSeries || "",
+  DocNumber: asset.DocNumber || 0,
+  // Without a comprobante the column holds the acquisition date, which is not an issue date.
+  DocIssueDate: asset.DocType ? asset.DocIssueDate : 0,
+  TaxableAmount: asset.TaxableAmount || 0,
+  TaxAmount: asset.TaxAmount || 0,
+  UntaxedAmount: asset.UntaxedAmount || 0,
+  OtherAmount: asset.OtherAmount || 0,
+  ExchangeRate: asset.ExchangeRate || 0,
 })
 
 // An edit corrects acquisition data; a disposed asset's units are already out of stock, so its

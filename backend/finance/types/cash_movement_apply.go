@@ -65,6 +65,13 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMove
 		cashBank := cashBankMap[m.CashBankID]
 		previousAmount := currentAmounts[m.CashBankID]
 
+		// Validated here rather than in each handler, so no writer can store a classified type
+		// without its counter-account — the Libro Diario would have no other side to post.
+		accountCode, accountErr := ResolveCashMovementAccount(m.Type, m.Amount, m.AccountCode)
+		if accountErr != nil {
+			return accountErr
+		}
+
 		// If FinalAmount is provided, validate it matches the calculated result.
 		if m.FinalAmount != 0 {
 			calculatedAmount := previousAmount + m.Amount
@@ -90,6 +97,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMove
 			ReferenceID:   m.ReferenceID,
 			Date:          movementDate,
 			Type:          m.Type,
+			AccountCode:   accountCode,
 			Amount:        m.Amount,
 			FinalAmount:   m.FinalAmount,
 			Created:       nowTime,

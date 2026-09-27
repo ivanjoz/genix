@@ -20,6 +20,10 @@ import { ProductsService, type IProduct } from '$services/production/products.sv
 import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
 import { onDestroy } from 'svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
+import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
+import {
+  PURCHASE_DOC_TYPE_INVOICE, purchaseDocTypeName, splitPurchaseTotal, type IPurchaseDocument,
+} from '$core/purchase-document'
 import { useUI } from '@genix/ui'
 import {
   PurchaseOrderAction,
@@ -42,9 +46,13 @@ const almacenesService = new WarehousesService()
 const cajasService = new CajasService()
 const EDIT_PURCHASE_ORDER_MODAL_ID = 31
 const PAY_PURCHASE_ORDER_MODAL_ID = 32
+const DOCUMENT_PURCHASE_ORDER_MODAL_ID = 33
+const currencyOptions = [{ id: 1, name: "PEN" }, { id: 2, name: "USD" }]
 
 // Patch sent to PUT /purchase-orders?action=2; ProviderID is read-only in edit mode but kept for the form display.
 let editForm = $state<Partial<IPurchaseOrder>>({})
+// Supplier comprobante for PUT /purchase-orders?action=5.
+let documentForm = $state<Partial<IPurchaseDocument>>({})
 // Payment form for PUT /purchase-orders?action=3. Amount is stored in cents (Input baseDecimals=2 handles the display).
 let payForm = $state({ CashBankID: 0, Amount: 0 })
 // Live preview of the debt that will remain after the current Amount is applied; recalculates as the user types.
@@ -231,6 +239,54 @@ const saveEditPurchaseOrder = async () => {
     Loading.remove()
   }
 }
+
+// The supplier's invoice usually arrives with the goods or after them, so the comprobante can be
+// registered on any order that was not annulled — Fulfilled included.
+const openDocumentPurchaseOrderModal = () => {
+  if (!selectedPurchaseOrder) { return }
+  if (selectedPurchaseOrder.ss === PurchaseOrderStatus.CANCELED) {
+    Notify.failure(tr('An annulled order has no comprobante.|Una orden anulada no tiene comprobante.'))
+    return
+  }
+  const { DocType, DocSeries, DocNumber, DocIssueDate, TaxableAmount, TaxAmount, UntaxedAmount,
+    OtherAmount, CurrencyType, ExchangeRate, Date: orderDate, TotalAmount } = selectedPurchaseOrder
+  if (DocType) {
+    documentForm = {
+      DocType, DocSeries, DocNumber, DocIssueDate, TaxableAmount, TaxAmount, UntaxedAmount, OtherAmount,
+      ExchangeRate, CurrencyType: CurrencyType || 1,
+    }
+  } else {
+    // No comprobante yet: propose the usual case — a factura issued on the order date for the
+    // order total, split at 18% IGV. The user corrects it against the paper document.
+    documentForm = {
+      DocType: PURCHASE_DOC_TYPE_INVOICE, DocIssueDate: orderDate, CurrencyType: CurrencyType || 1, ExchangeRate,
+      ...splitPurchaseTotal(PURCHASE_DOC_TYPE_INVOICE, TotalAmount || 0),
+    }
+  }
+  ui.openModal(DOCUMENT_PURCHASE_ORDER_MODAL_ID)
+}
+
+const saveDocumentPurchaseOrder = async () => {
+  if (!selectedPurchaseOrder) { return }
+  const orderID = selectedPurchaseOrder.ID
+  Loading.standard(tr('Saving comprobante...|Guardando comprobante...'))
+  try {
+    const updated = await updatePurchaseOrder(orderID, PurchaseOrderAction.DOCUMENT, documentForm)
+    Object.assign(selectedPurchaseOrder, updated)
+    const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
+    if (selectedRecord) { Object.assign(selectedRecord, updated) }
+    rowRerender?.()
+    ui.closeModal(DOCUMENT_PURCHASE_ORDER_MODAL_ID)
+  } catch (error) {
+    console.error('[purchase-orders-report] document error', { orderID, error })
+  } finally {
+    Loading.remove()
+  }
+}
+
+// The comprobante as the report shows it: "F001-123", or nothing while there is none.
+const orderDocumentLabel = (r: IPurchaseOrder): string =>
+  r.DocType ? `${r.DocSeries}-${r.DocNumber}` : ''
 
 // Opens the payment modal pre-filled with the remaining DebtAmount and the first available caja.
 // Backend only accepts payments while the order is Confirmada; mirror that constraint here for fast feedback.
@@ -437,10 +493,10 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
     mobile: { order: 3, css: 'col-span-24', render: (r) => `<strong>${providerNameOf(r.ProviderID)}</strong>` },
   },
   {
-    header: 'Invoice|Factura',
+    header: 'Comprobante|Comprobante',
     width: 'minmax(110px, 0.8fr)',
-    getValue: (r) => r.InvoiceNumber || '',
-    mobile: { order: 8, css: 'col-span-12', labelLeft: 'Factura:', if: (r) => !!r.InvoiceNumber },
+    getValue: orderDocumentLabel,
+    mobile: { order: 8, css: 'col-span-12', labelLeft: 'Comprobante:', if: (r) => !!r.DocType },
   },
   {
     header: 'Total Amount|Monto Total',
@@ -644,6 +700,11 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
        	label: "Opens the modal to edit the selected purchase order.",
        	handler: () => { openEditPurchaseOrderModal() }
      	},
+     	{ id: 6,
+    		name: "Comprobante", icon: "icon-[fa--file-text-o] text-blue-500",
+       	label: "Registers the supplier's comprobante for the Registro de Compras.",
+       	handler: () => { openDocumentPurchaseOrderModal() }
+     	},
      	{ id: 2,
     		name: "Pagar", icon: "icon-[fa--tag]",
        	label: "Opens the payment form for the selected purchase order.",
@@ -686,8 +747,10 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
           />
           <LabelText
             css="col-span-7"
-            label="Invoice|Factura"
-            text={selectedPurchaseOrder.InvoiceNumber || '—'}
+            label="Comprobante|Comprobante"
+            text={selectedPurchaseOrder.DocType
+              ? `${tr(purchaseDocTypeName(selectedPurchaseOrder.DocType))} ${orderDocumentLabel(selectedPurchaseOrder)}`
+              : tr('No comprobante|Sin comprobante')}
           />
           <LabelText
             css="col-span-5"
@@ -762,6 +825,23 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       providers={providersService.records}
       almacenes={almacenesService.Almacenes}
       disableProvider={true}
+    />
+  </Modal>
+
+  <!-- Comprobante modal: the supplier's document, which is what puts the order in the
+       Registro de Compras. Its total must equal the order total. -->
+  <Modal id={DOCUMENT_PURCHASE_ORDER_MODAL_ID}
+    size={5}
+    isEdit={true}
+    title={tr(`Comprobante of Order #${selectedPurchaseOrder?.ID || ''}|Comprobante de la Orden #${selectedPurchaseOrder?.ID || ''}`)}
+    onSave={() => { void saveDocumentPurchaseOrder() }}
+  >
+    <PurchaseDocumentFields
+      document={documentForm}
+      showCurrency={true}
+      currencyOptions={currencyOptions}
+      expectedTotal={selectedPurchaseOrder?.TotalAmount || 0}
+      isTotalFixed={true}
     />
   </Modal>
 

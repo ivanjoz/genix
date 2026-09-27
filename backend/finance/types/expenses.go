@@ -98,19 +98,31 @@ type Expense struct {
 	ProductID          int32  `json:",omitempty"` // Type 2 → the supply purchased.
 	// Type 2 only: where the units landed and how many. Stored so the expense says what it
 	// bought without having to reconstruct it from the movement ledger.
-	WarehouseID    int32 `json:",omitempty"`
-	Quantity       int32 `json:",omitempty"`
-	CurrencyType   int8  `json:",omitempty"`   // 1 = PEN, 2 = USD.
-	Date           int16 `json:",omitempty"`   // UnixDay the expense was incurred.
-	DueDate        int16 `json:",omitempty"`   // UnixDay payment is due.
-	Amount         int32 `json:",omitempty"`   // Total owed for this expense/period, in cents.
-	PaidAmount     int32 `json:",omitempty"`   // Positive running sum of payments applied (server-maintained).
-	Status         int8  `json:"ss,omitempty"` // 0 removed · 1 pending · 2 fully paid · 3 posted (non-cash).
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	WarehouseID  int32 `json:",omitempty"`
+	Quantity     int32 `json:",omitempty"`
+	CurrencyType int8  `json:",omitempty"` // 1 = PEN, 2 = USD.
+	Date         int16 `json:",omitempty"` // UnixDay the expense was incurred.
+	DueDate      int16 `json:",omitempty"` // UnixDay payment is due.
+	Amount       int32 `json:",omitempty"` // Total owed for this expense/period, in cents.
+	// The supplier's comprobante — the Registro de Compras row. See PurchaseDocument; the
+	// document's currency is CurrencyType, and its total must equal Amount.
+	ProviderSnapshotID int32  `json:",omitempty"` // Frozen supplier identity (RCE fields 12-14).
+	DocType            int8   `json:",omitempty"`
+	DocSeries          string `json:",omitempty"`
+	DocNumber          int64  `json:",omitempty"`
+	DocIssueDate       int16  `json:",omitempty"`
+	TaxableAmount      int32  `json:",omitempty"`
+	TaxAmount          int32  `json:",omitempty"`
+	UntaxedAmount      int32  `json:",omitempty"`
+	OtherAmount        int32  `json:",omitempty"`
+	ExchangeRate       int32  `json:",omitempty"`
+	PaidAmount         int32  `json:",omitempty"`   // Positive running sum of payments applied (server-maintained).
+	Status             int8   `json:"ss,omitempty"` // 0 removed · 1 pending · 2 fully paid · 3 posted (non-cash).
+	Updated            int32  `json:"upd,omitempty"`
+	UpdatedVersion     int32  `json:"upv,omitempty"`
+	UpdatedBy          int32  `json:",omitempty"`
+	Created            int32  `json:",omitempty"`
+	CreatedBy          int32  `json:",omitempty"`
 }
 
 type ExpenseTable struct {
@@ -132,6 +144,16 @@ type ExpenseTable struct {
 	Date               db.Col[*ExpenseTable, int16]
 	DueDate            db.Col[*ExpenseTable, int16]
 	Amount             db.Col[*ExpenseTable, int32]
+	ProviderSnapshotID db.Col[*ExpenseTable, int32]
+	DocType            db.Col[*ExpenseTable, int8]
+	DocSeries          db.Col[*ExpenseTable, string]
+	DocNumber          db.Col[*ExpenseTable, int64]
+	DocIssueDate       db.Col[*ExpenseTable, int16]
+	TaxableAmount      db.Col[*ExpenseTable, int32]
+	TaxAmount          db.Col[*ExpenseTable, int32]
+	UntaxedAmount      db.Col[*ExpenseTable, int32]
+	OtherAmount        db.Col[*ExpenseTable, int32]
+	ExchangeRate       db.Col[*ExpenseTable, int32]
 	PaidAmount         db.Col[*ExpenseTable, int32]
 	Status             db.Col[*ExpenseTable, int8]
 	Updated            db.Col[*ExpenseTable, int32]
@@ -160,6 +182,24 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 			// The Register list reads one status bucket at a time, so its handler pins Status itself
 			// and calls Delta(upv) for the watermark alone rather than the status fan-out.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// The Registro de Compras reads a period of documents, one indexed read per day.
+			{Keys: db.Cols(e.DocIssueDate), UseIndexGroup: true},
 		},
 	}
+}
+
+func (e *Expense) PurchaseDocument() PurchaseDocument {
+	return PurchaseDocument{
+		DocType: e.DocType, DocSeries: e.DocSeries, DocNumber: e.DocNumber, DocIssueDate: e.DocIssueDate,
+		TaxableAmount: e.TaxableAmount, TaxAmount: e.TaxAmount, UntaxedAmount: e.UntaxedAmount,
+		OtherAmount: e.OtherAmount, CurrencyType: e.CurrencyType, ExchangeRate: e.ExchangeRate,
+	}
+}
+
+func (e *Expense) SetPurchaseDocument(document PurchaseDocument) {
+	e.DocType, e.DocSeries, e.DocNumber = document.DocType, document.DocSeries, document.DocNumber
+	e.DocIssueDate = document.DocIssueDate
+	e.TaxableAmount, e.TaxAmount = document.TaxableAmount, document.TaxAmount
+	e.UntaxedAmount, e.OtherAmount = document.UntaxedAmount, document.OtherAmount
+	e.CurrencyType, e.ExchangeRate = document.CurrencyType, document.ExchangeRate
 }

@@ -25,12 +25,13 @@ export interface ICajaResult {
 export interface ICashBankMovement {
   ID: number
   CashBankID: number
-  CajaRefID: number
+  CashBankRefID: number
   VentaID: number
   DocumentID: number
   ReferenceID: number
   Date: number          // UnixDay the movement occurred.
   Type: number
+  AccountCode: number   // PCGE counter-account, only for the types in CASH_MOVEMENT_ACCOUNT_OPTIONS.
   Amount: number        // Outflows are negative.
   FinalAmount: number
   Created: number
@@ -41,9 +42,10 @@ export interface ICashReconciliation {
   ID: number
   Type: number
   CashBankID: number
-  SaldoSistema: number
+  SystemAmount: number
   DifferenceAmount: number
   ActualAmount: number
+  AccountCode: number   // Sent with the request; the backend stores it on the movement.
   Created: number
   CreatedBy: number
   _error?: string
@@ -222,3 +224,34 @@ export const cajaMovimientoTipos = [
   { id: 10, name: "Pago Activo", group: 2, isNegative: true },
   { id: 11, name: "Devolución (Anulación Venta)", group: 2, isNegative: true }
 ]
+
+export interface ICashMovementAccountOption {
+  movementType: number
+  /** -1 outflow, 1 inflow, absent = either. Only a physical count needs it. */
+  direction?: number
+  accountCode: number
+  name: string
+}
+
+/** Generated from `CashMovementAccountOptions` in backend/finance/types/cash_movement_account.go —
+ *  run `go run ./scripts sync_struct_interfaces` after changing it there. */
+//CATALOG:finance.CashMovementAccountOptions
+export const CASH_MOVEMENT_ACCOUNT_OPTIONS: ICashMovementAccountOption[] = [
+  { movementType: 4, accountCode: 142, name: 'Owner or shareholder withdrawal|Retiro del socio o accionista' },
+  { movementType: 4, accountCode: 441, name: 'Dividend payment|Pago de dividendos' },
+  { movementType: 5, accountCode: 659, name: 'Other expense|Otro gasto' },
+  { movementType: 5, accountCode: 1419, name: 'Charged to an employee|Cargo a un trabajador' },
+  { movementType: 2, direction: -1, accountCode: 659, name: 'Other expense|Otro gasto' },
+  { movementType: 2, direction: -1, accountCode: 1419, name: 'Charged to the cashier|Cargo al cajero' },
+  { movementType: 2, direction: 1, accountCode: 759, name: 'Other income|Otro ingreso' },
+]
+
+/** The accounts a movement of this type and amount may post against, mirroring
+ *  CashMovementAccountOptionsFor in the backend. The form asks only when there is more than
+ *  one; a single option is assigned by the backend. */
+export const cashMovementAccountOptions = (movementType: number, amount: number): ICashMovementAccountOption[] => {
+  if (!amount) return []
+  const direction = amount < 0 ? -1 : 1
+  return CASH_MOVEMENT_ACCOUNT_OPTIONS.filter((option) =>
+    option.movementType === movementType && (!option.direction || option.direction === direction))
+}

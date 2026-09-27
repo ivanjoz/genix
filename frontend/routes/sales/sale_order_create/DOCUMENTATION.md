@@ -312,8 +312,9 @@ On the **Venta** panel, row of the **Recibido** / **Pagado** checkboxes:
 - With **Pagado** unchecked, no caja names the currency, so the **MONEDA** selector (**Soles** /
   **Dólares**) appears next to **Date Pago** and the cashier picks it.
 
-When the sale needs a conversion, the line under the actions row reads **Tipo de cambio: X.XXX**
-with the rate actually applied.
+When the sale needs a conversion, the dollar label carries the rate actually applied in
+parentheses — **Dólares (TC X.XXX)** — in the **Moneda:** box, or in the currency selector when the
+sale is unpaid.
 
 ### Required information and prerequisites (Requisitos previos)
 

@@ -24,12 +24,14 @@ label = "Commercial|Comercial"
 2 = { name = "Force sale with full payment|Forzar venta con pago completo" }
 3 = { name = "Force sale with consigned delivery|Forzar venta con entrega consignada" }
 4 = { name = "Disable payment at Point of Sale|Deshabilitar pago en Punto de Venta" }
+8 = { name = "Disable partial charge|Deshabilitar cobro parcial en Punto de Venta" }
 5 = { name = "Disable consigned delivery at Point of Sale|Deshabilitar entrega consignada en Punto de Venta" }
 6 = { name = "Disable express inventory entry (no P.O.)|Deshabilitar ingreso express de inventario (sin O.C.)" }
 7 = { name = "Spread Exchange Rate|Spread de tipo de cambio", type = "i:3", bytes = 2 }
 
 [logistics]
 label = "Logistics|Logística"
+9 = { name = "Block stock movements without a purchase cost|Bloquear movimientos de stock sin costo de compra" }
 
 [clients]
 label = "Clients|Clientes"

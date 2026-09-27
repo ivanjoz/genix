@@ -117,6 +117,12 @@ Choose a visible movement type and enter the amount.
 An existing account, a non-zero amount, and a movement type are required. For
 `Transferencia`, the server additionally requires a destination reference.
 
+A `Retiro` or `Pérdida` also requires an accounting account (`cuenta contable`). This
+tells the accounting books what the money became:
+
+- `Retiro`: an owner or shareholder withdrawal (142), or a dividend payment (441).
+- `Pérdida`: another expense (659), or a charge to an employee who must repay it (1419).
+
 ### Business rules and rationale (Reglas y razón de negocio)
 
 The interface turns an entered positive value into a negative amount for an outflow
@@ -131,10 +137,11 @@ movement records its type, amount, resulting balance, date, and user.
 
 ### Limitations (Limitaciones)
 
-The current `Transferencia` behavior records an outflow and a destination reference,
-but it does not automatically create the matching inflow in the destination account.
-Therefore it is not a complete two-sided bank transfer (`traspaso entre cajas`). The
-current destination selector also does not reliably list actual accounts.
+A `Transferencia` (`traspaso entre cajas`) records two movements at once: the outflow in
+the source register and the matching inflow in the destination register, so both
+balances change together. Each register's history shows its side, with the other register
+named (`→` sent to, `←` received from). The destination selector lists only the other
+active registers in the same currency; moving money between currencies is not a transfer.
 
 The server currently has no general rule that prevents a movement from leaving a
 negative balance (`saldo en rojo`).
@@ -143,7 +150,8 @@ negative balance (`saldo en rojo`).
 
 - `¿Cómo registro un retiro, pérdida, cobro o pago manual?`
 - `¿Por qué cambió el saldo antes de guardar mi movimiento?`
-- `Does Transferencia credit the destination caja automatically?` No, not currently.
+- `Does Transferencia credit the destination caja automatically?` Yes, it writes the inflow
+  in the destination register in the same operation.
 - Search terms: `movimiento`, `ingreso`, `egreso`, `retiro`, `pérdida`, `cobro`,
   `transferencia`, `pago proveedor`, `pago gasto`.
 
@@ -164,6 +172,10 @@ review the displayed system balance, and enter the actual amount found.
 
 The account must exist. Enter the complete observed balance, not only the shortage or
 surplus. Genix calculates `difference = actual balance - system balance`.
+
+A shortage requires an accounting account (`cuenta contable`): another expense (659), or a
+charge to the cashier (1419). A surplus is always recorded as other income (759), so Genix
+does not ask.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
@@ -221,9 +233,8 @@ document rather than only its cash effect.
 - **“Nombre, Tipo y Sede son obligatorios”:** complete those three fields before saving.
 - **The balance was updated while entering a movement or reconciliation:** review the new
   system balance and submit again; another operation changed the ledger first.
-- **A transfer did not increase the destination balance:** current transfers are not
-  two-sided; inspect both accounts and register the necessary destination operation using
-  the business procedure approved for the company.
+- **The destination register is missing from the transfer picker:** only active registers
+  in the same currency as the source are listed.
 - **A payment appears in the movement list:** open the related purchase order, expense, or
   sale when a document identifier is present to understand its origin.
 

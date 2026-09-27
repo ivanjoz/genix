@@ -1,5 +1,51 @@
 # RATIONALE — Accounting Books
 
+## The purchases file replaces the RCE proposal (Anexo 11), not complements it
+
+**Context** — SIRE accepts a replacement of SUNAT's proposal (Anexo 11) or a complement to it
+(Anexo 8). The choice was still listed as open in PLAN §6.
+**Decision** — The exporter writes the Anexo 11 replacement file, the same path as the sales book.
+**Rationale** — The filed book is then exactly what the ERP holds, with one writer and no merge
+against SUNAT's list. The cost: a supplier factura that was never entered in the ERP is missing
+from the filed book, even though the proposal had it.
+
+## Supplier credit and debit notes are not offered yet
+
+**Context** — A note needs fields 28-32 (the document it modifies). Where a supplier note lives
+(a `purchase_order` row that points at the original order, or extra columns on the order itself)
+is still open.
+**Decision** — The purchase doc types are 01, 02, 03, 12 and 14. The backend rejects 07/08, and
+the writer has no negative-sign path.
+**Rationale** — A note that cannot name its modified document would be filed as an invalid record.
+Leaving it out is visible and cheap to add once its home is decided.
+
+## One comprobante carried by several records is one book row
+
+**Context** — Acquiring five serial-tracked assets writes five `Asset` rows that share one factura.
+Anexo 11 forbids duplicate documents.
+**Decision** — `buildPurchasesBook` keys a document by supplier, type, series and number. It sums
+the records' shares into one row and lists every source record on it.
+**Rationale** — Each record keeps its own share (what it paid for), and the book still files the
+factura once. The same key also merges a factura someone split between an order and an expense.
+
+## Crédito fiscal is always booked as destined to taxed sales (fields 15-16)
+
+**Context** — Anexo 11 splits the base and the IGV three ways: DG (taxed sales only), DGNG (mixed)
+and DNG (untaxed only).
+**Decision** — Fields 15-16 carry the document's base and IGV. Fields 17-20 go out as `0.00`.
+Exonerado + inafecto go to field 21. Detailed rows only: field 11 (consolidation) is never used.
+**Rationale** — A company whose sales are all taxed never uses DGNG or DNG. A company with untaxed
+sales would need a per-document destination the ERP does not capture.
+
+## Purchase totals on the page are in soles
+
+**Context** — A month can hold dollar comprobantes, and the IGV figure has to tie to the
+Formulario 621.
+**Decision** — `sumPurchasesBook` converts each dollar row at its own stored rate (field 27). The
+rows and the file keep the document's currency, as the annex requires.
+**Rationale** — Summing soles and dollars as plain numbers would give a meaningless figure. A
+dollar row with no rate counts as 0, and an export blocker already stops that period.
+
 ## The export blockers are a notification sent after "Consultar", not a banner
 
 **Context** — The amber banner explaining why TXT SUNAT is disabled moved into

@@ -110,7 +110,8 @@ body {
 	--font-mono: mono;
 
 	/* z-indexes */
-	--modal-zindex: 175;
+	/* Above AppHeader (z-250), below SideMenu and the TopLayer pickers (300) */
+	--modal-zindex: 260;
 	--layer-zindex: 101;
 	--portal-zindex: 201;
 }

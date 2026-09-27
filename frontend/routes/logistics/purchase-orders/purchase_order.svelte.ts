@@ -1,5 +1,6 @@
 import { GetHandler, GETWithGroupCache, POST, PUT } from '$libs/ui-runtime.svelte'
 import { Notify } from '$libs/helpers'
+import type { IPurchaseDocument } from '$core/purchase-document'
 
 // Backend status codes for purchase orders.
 export const PurchaseOrderStatus = {
@@ -17,6 +18,8 @@ export const PurchaseOrderAction = {
   EDIT: 2,
   PAY: 3,
   ANNUL: 4,
+  // Registers the supplier's comprobante. Allowed on every status but Canceled.
+  DOCUMENT: 5,
 } as const
 
 // Statuses where the editable fields (warehouse, dates, invoice, notes) can still be changed.
@@ -80,13 +83,13 @@ export const purchaseOrderStatusOptions = [
   { ID: PurchaseOrderStatus.CANCELED, Name: 'Cancelada' },
 ]
 
-// Minimal shape read by the report; full record lives on the backend.
-export interface IPurchaseOrder {
+// Minimal shape read by the report; full record lives on the backend. The document columns are
+// the supplier's comprobante (the Registro de Compras row).
+export interface IPurchaseOrder extends IPurchaseDocument {
   ID: number
   Date: number
   DeliveryDate: number
   PaymentDate: number
-  InvoiceNumber: string
   ProviderID: number
   WarehouseID: number
   TotalAmount: number
