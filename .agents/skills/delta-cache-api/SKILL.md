@@ -108,13 +108,13 @@ Query each status bucket separately so the `[Partition, Status, Updated]` view i
 ```go
 Indexes: []scylla.Index{
     {Type: scylla.TypeView, Keys: []scylla.Coln{e.Updated}, KeepPart: true},
-    {Type: scylla.TypeView, Keys: []scylla.Coln{e.Type.Int32(), e.Updated.DecimalSize(8)}, KeepPart: true},
-    {Type: scylla.TypeView, Keys: []scylla.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
+    {Type: scylla.TypeView, Keys: []scylla.Coln{e.Type, e.Updated.Size(31)}, KeepPart: true},
+    {Type: scylla.TypeView, Keys: []scylla.Coln{e.WarehouseID, e.Status.Size(4), e.Updated.Size(31)}, KeepPart: true},
 },
 ```
 
 - `Updated` should be the **last** key when combined with filter columns.
-- `DecimalSize(N)` packs numeric columns into fewer bytes — apply to `int8` status (`1`), mid-range ints (`8–9`), or Unix seconds (`10`). It's an optimization, not a requirement.
+- `Size(N)` gives every key after the first an `N`-bit slot; the first key takes the bits left. It is a range cap: a value at or past 2^N panics on write. An int32 `Updated` needs `Size(31)`. `.Int32()` packs into an `int` instead of a `bigint`, so it only fits when all the slots add up to 32 bits or fewer.
 - `KeepPart: true` keeps partition scoping in the view.
 - Two narrow views (`[Status]` + `[Updated]`) are fine if the access pattern never ANDs them (e.g. `productos.go`).
 

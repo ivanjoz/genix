@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -32,8 +33,8 @@ type ColumnMeta struct {
 type IndexKeyMeta struct {
 	ColumnName string
 	FieldName  string
-	// Digits is the zero-padded width this component occupies, taken from the column's
-	// .DecimalSize(n). Padding is what makes a range scan over the composite string
+	// Digits is the zero-padded width this component occupies, derived from the column's
+	// .Size(bits). Padding is what makes a range scan over the composite string
 	// compare in numeric order; a zero width means the value is written as-is and the
 	// component can only be matched for equality.
 	Digits int8
@@ -184,7 +185,7 @@ func buildTableMeta[RecordT db.Record[TableT, RecordT, D], TableT db.Schema[Tabl
 			// A view's leading column takes its width from the ones after it, so the schema
 			// cannot declare one there. The mirror needs an explicit width for every
 			// component regardless, and derives the missing ones from the Go type.
-			digits := keyInfo.DecimalDigits
+			digits := digitsForSlotBits(keyInfo.SlotBits)
 			if digits <= 0 {
 				digits = inferKeyDigits(keyColumn.FieldType)
 			}
@@ -261,6 +262,16 @@ func formatIndexKeyValue(key IndexKeyMeta, value any) string {
 		return fmt.Sprintf("%v", value)
 	}
 	return fmt.Sprintf("%0*d", int(key.Digits), toInt64(value))
+}
+
+// digitsForSlotBits is the decimal padding a Size(bits) slot needs: the length of its largest
+// value, 2^bits - 1. The mirror compares decimal strings, so the bit width only sets how many
+// digits to pad to. Zero bits means no declared width.
+func digitsForSlotBits(slotBits int8) int8 {
+	if slotBits <= 0 {
+		return 0
+	}
+	return int8(len(strconv.FormatUint(uint64(1)<<slotBits-1, 10)))
 }
 
 // inferKeyDigits is the widest decimal representation a Go integer type can take, which

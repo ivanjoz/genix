@@ -13,8 +13,8 @@ import "app/db"
 type CreditHistory struct {
 	db.TableStruct[CreditHistoryTable, CreditHistory]
 	CompanyID int32
-	// ID packs Day(5)+Autoincrement(3) into an int64. Budget changes are rare administrative acts,
-	// so 999 of them in one day is far beyond anything real.
+	// ID packs Day(15 bits)+Autoincrement(8 random bits) into an int64. Budget changes are rare
+	// administrative acts, so the 2^40 sequences a day leaves are far beyond anything real.
 	ID               int64
 	Day              int16
 	Created          int32
@@ -48,7 +48,7 @@ func (e CreditHistoryTable) GetSchema() db.TableSchema {
 		Keys:      db.Cols(e.ID),
 		// The counter runs per day, which is what keeps the packed ID dense instead of leaving a
 		// company's whole history in one ever-growing sequence.
-		KeyIntPacking:     db.Cols(e.Day.DecimalSize(5), e.Autoincrement(3)),
+		KeyIntPacking:     db.Cols(e.Day.Size(15), e.Autoincrement(8)),
 		AutoincrementPart: e.Day,
 		// Rows are written once and never touched, and Created already carries the write time.
 		DisableDefaultColumns: true,

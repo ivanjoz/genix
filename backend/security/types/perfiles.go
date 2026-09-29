@@ -44,7 +44,7 @@ func (e ProfileTable) GetSchema() db.TableSchema {
 		// plain delta read first, then the one restricted to active profiles.
 		Indexes: []db.Index{
 			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
-			{Type: db.TypeView, Keys: db.Cols(e.Status, e.Updated.DecimalSize(10))},
+			{Type: db.TypeView, Keys: db.Cols(e.Status, e.Updated.Size(31))},
 		},
 	}
 }

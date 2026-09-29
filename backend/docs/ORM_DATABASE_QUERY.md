@@ -378,9 +378,9 @@ func (e MovementTable) GetSchema() db.TableSchema {
         Partition: e.EmpresaID,
         Keys:      db.Cols(e.ID),
         KeyIntPacking: db.Cols(
-            e.StoreID.DecimalSize(5),
-            e.DayCode.DecimalSize(5),
-            e.Autoincrement(3),
+            e.StoreID.Size(17), // 0..131,071
+            e.DayCode.Size(15), // a UnixDay: 0..32,767
+            e.Autoincrement(8), // sequence<<8 | 8 random bits
         ),
         AutoincrementPart: e.DayCode,
     }
@@ -389,9 +389,12 @@ func (e MovementTable) GetSchema() db.TableSchema {
 
 Rules:
 - Use exactly one key column (`int64`) in `Keys`.
-- First packing component must not define `DecimalSize()`.
-- Remaining components should define `DecimalSize()`.
-- `Autoincrement(size)` may be used as a packed component placeholder.
+- `.Size(bits)` is a range cap: the column's values must stay below 2^bits. A value that does not
+  fit panics on write; it is never truncated.
+- Every component but the last must define `.Size()`; the last one (normally `Autoincrement(n)`)
+  takes the rest of the 63-bit budget. The ID stays a positive `int64`.
+- `Autoincrement(randomBits)` may be used as a packed component placeholder.
+- `db.DecodePackedKey[RecordT](id)` splits an ID back into its components for debugging.
 
 ### 7.2 Key Concatenation (`KeyConcatenated`)
 
@@ -424,7 +427,7 @@ func (e OrderTable) GetSchema() db.TableSchema {
         Keys:      db.Cols(e.ID),
         Indexes: []db.Index{
             {
-                Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
+                Keys: db.Cols(e.Status, e.Updated.Size(31)),
             },
         },
     }
@@ -452,7 +455,7 @@ Indexes: []db.Index{
 Indexes: []db.Index{
     {
         Type: db.TypeGlobalIndex,
-        Keys: db.Cols(e.Status.Int32(), e.Updated.DecimalSize(8)),
+        Keys: db.Cols(e.Status, e.Updated.Size(31)),
     },
 }
 ```
@@ -473,7 +476,7 @@ Indexes: []db.Index{
     },
     {
         Type: db.TypeView,
-        Keys: db.Cols(e.StoreID.Int32(), e.Updated.DecimalSize(10)),
+        Keys: db.Cols(e.StoreID, e.Updated.Size(31)),
     },
     // Partition overrides the view partition; without it the view keeps the
     // table partition (company_id) as its own, which is what you normally want.
@@ -493,7 +496,7 @@ Use for any table the frontend syncs incrementally. One declaration replaces the
 
 ```go
 // Purpose: Serve both halves of a delta-cache sync from one packed view.
-// Rationale: The declared value ranges size each digit slot, so the engine — not the developer —
+// Rationale: The declared value ranges size each bit slot, so the engine — not the developer —
 // decides whether the packed column fits an int.
 func (t ClientProviderTable) GetSchema() db.TableSchema {
     return db.TableSchema{
@@ -515,14 +518,14 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
 
 Rules:
 - Every declared key needs a `FixedValues` entry (`Values` list, or `Min`/`Max`). That range sizes
-  its digit slot; the schema panics without one.
+  its bit slot (`bits.Len(max)`); the schema panics without one.
 - Do **not** list `UpdatedVersion` — it is implicit and takes the trailing slot.
-- No `.DecimalSize()` or `.Int32()` needed. Both remain as escape hatches; a forced `.Int32()` that
-  cannot hold the declared ranges panics with the computed maximum.
-- The packed column is `int` when the maximum packed value fits `2,147,483,647`, else `bigint`.
-  `updated_version` gets 8 digits in the `int` case and 10 in the `bigint` case, since the digits are
-  already paid for. 8 digits caps the table at 10^8 write calls per partition; a write past that
-  fails loudly rather than silently truncating the packed key.
+- No `.Size()` or `.Int32()` needed. Both remain as escape hatches; a forced `.Int32()` that
+  cannot hold the declared ranges panics.
+- The packed column is `int` when the key slots plus the 27-bit `updated_version` slot fit 32 bits
+  (all key ranges together: at most 32 combinations), else `bigint` with a 34-bit version slot.
+  Key order does not change the fit. 27 bits cap the table at 2^27 (~134M) write calls per
+  partition; a write past that fails loudly instead of overflowing the packed key.
 - **`Keys[0]` decides the fit** — it is the most significant slot. `[Status{0,1}, Type{1,2}]` reaches
   `1_2_99999999` → `int`; reversed it reaches `2_1_99999999` → `bigint`. Declare the most tightly
   bounded column first. When `bigint` is chosen the compiler logs which order would have fit.
@@ -699,10 +702,10 @@ err := db.Merge(
   - Fix: add suitable `Indexes` entries or adjust predicates.
 
 - **Packed index overfetch concerns**:
-  - Fix: keep `DecimalSize` design coherent and rely on ORM post-filter exactness.
+  - Fix: keep `Size` design coherent and rely on ORM post-filter exactness.
 
 - **Autoincrement/key packing panic**:
-  - Fix: verify `KeyIntPacking` rules (single bigint key, decimal sizes, non-negative domain).
+  - Fix: verify `KeyIntPacking` rules (single bigint key, `.Size()` bits that fit 63, every value below its slot's 2^bits).
 
 - **Composite bucketing config panic**:
   - Fix: ensure exactly one `CompositeBucketing(...)` column in each composite-bucket `Indexes` entry.

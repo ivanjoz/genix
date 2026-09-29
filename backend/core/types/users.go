@@ -81,7 +81,7 @@ func (usuarioTable UserTable) GetSchema() db.TableSchema {
 			{Type: db.TypeLocalIndex, Keys: db.Cols(usuarioTable.User)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(usuarioTable.Email)},
 			{Type: db.TypeView, Keys: db.Cols(
-				usuarioTable.Status, usuarioTable.Updated.DecimalSize(10))},
+				usuarioTable.Status, usuarioTable.Updated.Size(31))},
 		},
 	}
 }

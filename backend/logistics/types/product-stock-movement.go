@@ -10,7 +10,7 @@ import (
 type WarehouseProductMovement struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
 	CompanyID int32 `json:",omitempty"`
-	// ID packs Date(5)+WarehouseID(5)+Autoincrement(3) into an int64.
+	// ID packs Date(15 bits)+WarehouseID(17 bits)+Autoincrement(8 random bits) into an int64.
 	ID                   int64
 	SerialNumber         string `json:",omitempty"`
 	LotID                int32  `json:",omitempty"`
@@ -66,7 +66,7 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		KeyIntPacking: db.Cols(
-			e.Date.DecimalSize(5), e.WarehouseID.DecimalSize(5), e.Autoincrement(3),
+			e.Date.Size(15), e.WarehouseID.Size(17), e.Autoincrement(8),
 		),
 		AutoincrementPart: e.Date,
 		Indexes: []db.Index{
@@ -96,12 +96,12 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			},
 			// Backs the grouped movement report. SubDivisor joins the key so a SUM(SubQuantity)
 			// spanning a divisor refinement never adds sixths to twelfths; the caller folds the
-			// per-divisor groups back together. Out of the 19-digit budget: Date 5, ProductID 8
-			// (99,999,999 products per company), Type 2 (99 StockMovementTypes — the catalog is never
-			// capped by this view) and SubDivisor 4, hence core.MaxQuantityDivisor.
+			// per-divisor groups back together. Out of the 64-bit budget: ProductID 27 (134M products
+			// per company), Type 7 (127 StockMovementTypes — the catalog is never capped by this view),
+			// SubDivisor 14 (core.MaxQuantityDivisor fits), and Date takes the remaining 16.
 			{
 				Type: db.TypeView,
-				Keys: db.Cols(e.Date, e.ProductID.DecimalSize(8), e.Type.DecimalSize(2), e.SubDivisor.DecimalSize(4)),
+				Keys: db.Cols(e.Date, e.ProductID.Size(27), e.Type.Size(7), e.SubDivisor.Size(14)),
 				Cols: db.Cols(e.Quantity, e.SubQuantity),
 			},
 		},

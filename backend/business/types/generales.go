@@ -91,8 +91,8 @@ func (e SharedListRecordTable) GetSchema() db.TableSchema {
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameHash)},
 			// Both still read by the ecommerce delta (product-ecommerce.go), which keeps its timestamp
 			// watermark because it also drives the prerendered .db snapshot.
-			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
-			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.DecimalSize(10))},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.Size(7))},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.Size(31))},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status, e.ListID)},
 		},
 	}

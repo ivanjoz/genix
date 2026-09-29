@@ -133,8 +133,8 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		KeyIntPacking: db.Cols(
-			//TODO: decrease to e.Autoincrement(2) in the future
-			e.CashBankID.DecimalSize(5), e.Date.DecimalSize(5), e.Autoincrement(3),
+			//TODO: decrease to e.Autoincrement(7) in the future
+			e.CashBankID.Size(17), e.Date.Size(15), e.Autoincrement(8),
 		),
 		AutoincrementPart: e.Date,
 		Indexes: []db.Index{

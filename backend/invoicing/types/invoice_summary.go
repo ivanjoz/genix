@@ -95,7 +95,7 @@ func (e InvoiceSummaryTable) GetSchema() db.TableSchema {
 		SaveUpdatedVersion: true,
 		// A clean sequence: the ### of RC-YYYYMMDD-### counts the batches of the
 		// day, so random digits would make no sense there either.
-		KeyIntPacking:     db.Cols(e.IssueDate.DecimalSize(5), e.Autoincrement(0)),
+		KeyIntPacking:     db.Cols(e.IssueDate.Size(15), e.Autoincrement(0)),
 		AutoincrementPart: e.IssueDate,
 		FixedValues: []db.FixedValues{
 			{Col: e.State, Min: 0, Max: 6},

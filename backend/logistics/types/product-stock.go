@@ -93,9 +93,9 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 		Keys:      db.Cols(e.ID),
 		// ID packs (WarehouseID, ProductID, PresentationID) into the single int64 key.
 		KeyIntPacking: db.Cols(
-			e.WarehouseID.DecimalSize(5),
-			e.ProductID.DecimalSize(9),
-			e.PresentationID.DecimalSize(4),
+			e.WarehouseID.Size(17),
+			e.ProductID.Size(30),
+			e.PresentationID.Size(14),
 		),
 		// Delta() enumerates its filter column, so every Status value must be declared.
 		FixedValues: []db.FixedValues{
@@ -103,9 +103,9 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 		},
 		// Two delta indexes for the two read shapes. Delta() picks by what the query already pinned:
 		// one warehouse's stock routes to the first, a whole-company sweep to the second. WarehouseID
-		// reuses the 5-digit width the packed ID key gives it.
+		// reuses the 17-bit width the packed ID key gives it.
 		Indexes: []db.Index{
-			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.DecimalSize(5), e.Status)},
+			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.Size(17), e.Status)},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
@@ -165,7 +165,7 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 			{Col: e.Status, Values: []int64{0, 1}},
 		},
 		Indexes: []db.Index{
-			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.DecimalSize(5), e.Status)},
+			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.Size(17), e.Status)},
 		},
 	}
 }

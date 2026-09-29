@@ -138,7 +138,7 @@ func buildCompositeRange(index IndexMeta, partitionValue string, conditions []qu
 	for _, remainingKey := range remainingKeys {
 		if remainingKey.Digits <= 0 {
 			return compositeRange{}, fmt.Errorf(
-				"index key %s has no declared digit width, so it cannot be left unconstrained in a range query; add .DecimalSize(n) or pin it with Equals()",
+				"index key %s has no declared digit width, so it cannot be left unconstrained in a range query; add .Size(bits) or pin it with Equals()",
 				remainingKey.ColumnName)
 		}
 		lowerParts = append(lowerParts, strings.Repeat("0", int(remainingKey.Digits)))
@@ -158,7 +158,7 @@ func boundsForOperator(key IndexKeyMeta, condition queryCondition) (string, stri
 	if key.Digits <= 0 {
 		if condition.Operator != "=" {
 			return "", "", fmt.Errorf(
-				"index key %s has no declared digit width, so it only supports Equals(); add .DecimalSize(n) to range over it",
+				"index key %s has no declared digit width, so it only supports Equals(); add .Size(bits) to range over it",
 				key.ColumnName)
 		}
 		value := formatIndexKeyValue(key, condition.Value)

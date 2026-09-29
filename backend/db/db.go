@@ -212,6 +212,15 @@ func MakeSchema[RecordT orm.TableBaseInterface[TableT, RecordT], TableT Schema[T
 	return orm.MakeSchema[RecordT, TableT]()
 }
 
+// PackedKeyComponent is one decoded slot of a KeyIntPacking ID.
+type PackedKeyComponent = orm.PackedKeyComponent
+
+// DecodePackedKey splits a KeyIntPacking ID into its column values, for debugging:
+// db.DecodePackedKey[types.CashBankMovement](movement.ID).
+func DecodePackedKey[RecordT orm.TableBaseInterface[TableT, RecordT], TableT Schema[TableT]](packedKey int64) []PackedKeyComponent {
+	return orm.DecodeKeyIntPacking(MakeSchema[RecordT, TableT](), packedKey)
+}
+
 var (
 	// MakeKeyConcat joins values into the deterministic string a KeyConcatenated
 	// column stores.

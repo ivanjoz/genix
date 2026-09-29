@@ -54,8 +54,8 @@ func (e DemoStructTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.DecimalSize(2))},
-			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.DecimalSize(10))},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID.Int32(), e.Status.Size(7))},
+			{Type: db.TypeView, Keys: db.Cols(e.ListID, e.Updated.Size(31))},
 		},
 	}
 }

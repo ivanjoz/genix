@@ -144,17 +144,19 @@ Keys: []scylla.Coln{e.ProductStockID, e.LotID, e.SerialNumber},
 
 ### 5.3 KeyIntPacking — pack multiple ints into one int64 ID
 
-When natural identity is `(WarehouseID, ProductID, PresentationID)` but you want a single `int64 ID`, pack the components into the ID using `DecimalSize(N)` digit allocations. Total digits must fit in int64 (~18 digits).
+When natural identity is `(WarehouseID, ProductID, PresentationID)` but you want a single `int64 ID`, pack the components into the ID using `Size(bits)` slots. `Size(n)` is a range cap (values below 2^n; a value past it panics on write, it is never truncated). Every slot but the last needs a `Size`; the total must fit the 63 bits of a positive int64.
 
 ```go
-// backend/logistica/types/product-stock.go:149
+// backend/logistics/types/product-stock.go
 Keys: []scylla.Coln{e.ID},
 KeyIntPacking: []scylla.Coln{
-    e.WarehouseID.DecimalSize(5),     // 0..99,999
-    e.ProductID.DecimalSize(9),       // 0..999,999,999
-    e.PresentationID.DecimalSize(4),  // 0..9,999
+    e.WarehouseID.Size(17),     // 0..131,071
+    e.ProductID.Size(30),       // 0..1,073,741,823
+    e.PresentationID.Size(14),  // 0..16,383
 },
 ```
+
+`db.DecodePackedKey[RecordT](id)` splits an ID back into its components when debugging.
 
 Packed components are recoverable — the ID can be queried by any prefix via `TypeInheritFromKey` indexes (§6).
 
@@ -166,9 +168,9 @@ Movement/ledger tables pack a date or bucket column with an autoincrement *withi
 // backend/logistica/types/product-stock-movement.go:60
 Keys: []scylla.Coln{e.ID},
 KeyIntPacking: []scylla.Coln{
-    e.Fecha.DecimalSize(5),
-    e.WarehouseID.DecimalSize(5),
-    e.Autoincrement(3),                // counter is the last 3 digits
+    e.Fecha.Size(15),                  // a UnixDay
+    e.WarehouseID.Size(17),
+    e.Autoincrement(8),                // counter<<8 | 8 random bits, takes the remaining bits
 },
 AutoincrementPart: e.Fecha,            // counter scoped per Fecha
 ```
@@ -237,14 +239,14 @@ type Index struct {
 // Delta-cache view (status + updated). KeepPart keeps EmpresaID in the view PK.
 {
     Type:     scylla.TypeView,
-    Keys:     []scylla.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+    Keys:     []scylla.Coln{e.Status, e.Updated.Size(31)},
     KeepPart: true,
 },
 
 // View with column projection — only carry these payload columns
 {
     Type:     scylla.TypeView,
-    Keys:     []scylla.Coln{e.IsWarehouseProductStatus, e.Updated.DecimalSize(10)},
+    Keys:     []scylla.Coln{e.IsWarehouseProductStatus, e.Updated.Size(31)},
     Cols:     []scylla.Coln{e.WarehouseProductQuantity, e.PresentationID},
     KeepPart: true,
 },
@@ -258,14 +260,14 @@ type Index struct {
 
 | Method                       | Effect                                                                  |
 | ---------------------------- | ----------------------------------------------------------------------- |
-| `.DecimalSize(N)`            | Allocate `N` decimal digits inside a packed key.                        |
+| `.Size(N)`                   | Allocate an `N`-bit slot inside a packed key (values below 2^N).        |
 | `.Int32()`                   | Use 32-bit packing instead of 64-bit (smaller keys).                    |
 | `.StoreAsWeek()`             | Convert a date int16 to its week bucket inside the key.                 |
 | `.IsWeek()`                  | Mark a column as already storing a week value.                          |
 | `.CompositeBucketing(a, b…)` | Virtual bucketing across slice columns.                                 |
-| `.Autoincrement(N)`          | Inside `KeyIntPacking`, reserve trailing digits for the counter.        |
+| `.Autoincrement(N)`          | Inside `KeyIntPacking`, the counter followed by `N` random low bits.    |
 
-**Conventions:** `Status.DecimalSize(1)` (0–9), `Updated.DecimalSize(10)` (Unix timestamp).
+**Conventions:** the first key of a packed view takes the bits the others leave, so it carries no `Size`. `Updated.Size(31)` (an int32 SUnixTime), a UnixDay `Size(15)`.
 
 ---
 
@@ -300,7 +302,7 @@ func (e AlmacenTable) GetSchema() scylla.TableSchema {
         Partition: e.EmpresaID,
         Keys:      []scylla.Coln{e.ID.Autoincrement(0)},
         Indexes: []scylla.Index{
-            {Type: scylla.TypeView, Keys: []scylla.Coln{e.Status.DecimalSize(1), e.Updated.DecimalSize(10)}, KeepPart: true},
+            {Type: scylla.TypeView, Keys: []scylla.Coln{e.Status, e.Updated.Size(31)}, KeepPart: true},
         },
     }
 }
@@ -320,14 +322,14 @@ func (e ProductStockV2Table) GetSchema() scylla.TableSchema {
         Keys:                 []scylla.Coln{e.ID},
         DisableUpdateCounter: true,
         KeyIntPacking: []scylla.Coln{
-            e.WarehouseID.DecimalSize(5),
-            e.ProductID.DecimalSize(9),
-            e.PresentationID.DecimalSize(4),
+            e.WarehouseID.Size(17),
+            e.ProductID.Size(30),
+            e.PresentationID.Size(14),
         },
         Indexes: []scylla.Index{
             {
                 Type:     scylla.TypeView,
-                Keys:     []scylla.Coln{e.WarehouseID, e.Status.DecimalSize(1), e.Updated.DecimalSize(10)},
+                Keys:     []scylla.Coln{e.WarehouseID, e.Status.Size(4), e.Updated.Size(31)},
                 KeepPart: true,
             },
         },
@@ -344,9 +346,9 @@ func (e WarehouseProductMovementTable) GetSchema() scylla.TableSchema {
         Partition: e.CompanyID,
         Keys:      []scylla.Coln{e.ID},
         KeyIntPacking: []scylla.Coln{
-            e.Fecha.DecimalSize(5),
-            e.WarehouseID.DecimalSize(5),
-            e.Autoincrement(3),
+            e.Fecha.Size(15),
+            e.WarehouseID.Size(17),
+            e.Autoincrement(8),
         },
         AutoincrementPart: e.Fecha,
         Indexes: []scylla.Index{
@@ -414,5 +416,5 @@ The edit command finds the file containing `type <CamelName> struct`, appends th
 
 1. Run **`static-project-validation`** (`cd scripts && go run . check_tables`) to catch field mismatches between the two structs and wrong `Col`/`ColSlice` usage.
 2. Add **`SelfParse()`** if any field is derived from others (status from quantity, hash from name, KeyConcatenated string from tuple).
-3. For any field the frontend filters on, add a `TypeLocalIndex`, a `TypeView` (with `Updated.DecimalSize(10)` for delta cache), or — if the field is part of a packed key — a free `TypeInheritFromKey` with `UseIndexGroup: true`.
+3. For any field the frontend filters on, add a `TypeLocalIndex`, a `TypeView` (with `Updated.Size(31)` for delta cache), or — if the field is part of a packed key — a free `TypeInheritFromKey` with `UseIndexGroup: true`.
 4. If the table is read by the frontend on every load, pair it with a handler following the **`delta-cache-api`** skill.

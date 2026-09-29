@@ -2,8 +2,9 @@ import { Notify } from '$libs/helpers';
 import { GET, GetHandler, POST } from '$libs/ui-runtime.svelte';
 
 export const makeStockID = (e: Pick<IProductStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
-  // Mirrors backend/logistics/product-stock-movement.go::packProductStockID.
-  e.WarehouseID * 1e14 + e.ProductID * 1e5 + (e.PresentationID || 0) * 10
+  // Mirrors backend/logistics/types/stock_movement_apply.go::PackProductStockID (bit shifts 46/16/2).
+  // JS `<<` is 32-bit, so it multiplies instead; the result is exact while WarehouseID < 128 (2^53).
+  e.WarehouseID * 2 ** 46 + e.ProductID * 2 ** 16 + (e.PresentationID || 0) * 4
 
 export interface IProductStockDetail {
   ProductStockID: number
