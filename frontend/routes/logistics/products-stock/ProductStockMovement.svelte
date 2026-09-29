@@ -19,10 +19,14 @@ import { SvelteMap } from 'svelte/reactivity';
 import { ProductsService } from '$services/production/products.svelte';
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte';
 import { EmpresaParametrosService } from '$routes/company/configuration/empresas.svelte';
+import Modal from '$components/layers/Modal.svelte';
+import { manualStockDecreaseTypes, manualStockIncreaseTypes } from '$core/stock-movement-type';
 import {
     COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND,
     COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST,
     findManualStockRefusal,
+    isStockIncrease,
+    manualStockChangeType,
     type IManualStockChange,
 } from './stock-cost';
 import {
@@ -64,6 +68,17 @@ const empresaParametros = new EmpresaParametrosService()
 
 const blockManualInbound = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND))
 const requireManualCost = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST))
+
+const STOCK_SAVE_SUMMARY_MODAL_ID = 21
+const increaseTypeOptions = manualStockIncreaseTypes.map((movementType) => ({ id: movementType.id, name: tr(movementType.name) }))
+const decreaseTypeOptions = manualStockDecreaseTypes.map((movementType) => ({ id: movementType.id, name: tr(movementType.name) }))
+
+// What Guardar collected, waiting in the summary modal for the reason of its increases and of its
+// decreases. records[i] and changes[i] describe the same item.
+let pendingSave = $state({ records: [] as IPostProductoStockItem[], changes: [] as IManualStockChange[] })
+let saveReasons = $state({ increaseType: increaseTypeOptions[0].id, decreaseType: decreaseTypeOptions[0].id })
+const pendingSaveHasIncrease = $derived(pendingSave.changes.some(isStockIncrease))
+const pendingSaveHasDecrease = $derived(pendingSave.changes.some((change) => change.nextQuantity < change.previousQuantity))
 
 let stockFilters = $state({ warehouseID: 0, showTodosProductos: false })
 let stockFilterText = $state('')
@@ -767,11 +782,6 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
   },
 ]
 
-// With manual entries blocked nothing here can add stock, so there is nothing to cost.
-const visibleStockColumns = $derived(blockManualInbound
-  ? stockColumns.filter((column) => column !== unitCostColumn)
-  : stockColumns)
-
 const onChangeAlmacen = async () => {
   if (!stockFilters.warehouseID) { return }
 
@@ -788,7 +798,7 @@ const onChangeAlmacen = async () => {
   }
 }
 
-const guardarRegistros = async () => {
+const openSaveSummary = () => {
   const seenDetailKeys = new Set<string>()
   for (const productStockRecord of almacenStock) {
     const stockDetails = [
@@ -824,9 +834,10 @@ const guardarRegistros = async () => {
         Quantity: productStockRecord.Quantity || 0,
         SubQuantity: productStockRecord.SubQuantity || 0,
         UnitCost: unitCost || undefined,
+        Type: 0,
       })
       stockChanges.push({
-        productName, unitCost,
+        productName, unitCost, detailName: '',
         previousQuantity: getCantPrevia(productStockRecord),
         nextQuantity: productStockRecord.Quantity || 0,
       })
@@ -852,9 +863,11 @@ const guardarRegistros = async () => {
         LotID: stockDetail.LotID || 0,
         LotCode: stockDetail.LotCode || '',
         UnitCost: unitCost || undefined,
+        Type: 0,
       })
       stockChanges.push({
         productName, unitCost,
+        detailName: stockDetail.SerialNumber || getLotDisplay(stockDetail),
         // A new serial gets its quantity set directly, with no previous one recorded: it adds all of it.
         previousQuantity: stockDetail._isNew ? 0 : getCantPrevia(stockDetail),
         nextQuantity: stockDetail.Quantity || 0,
@@ -867,17 +880,28 @@ const guardarRegistros = async () => {
     return
   }
 
-  const refusal = findManualStockRefusal(stockChanges, blockManualInbound, requireManualCost)
+  pendingSave = { records: recordsForUpdate, changes: stockChanges }
+  saveReasons = { increaseType: increaseTypeOptions[0].id, decreaseType: decreaseTypeOptions[0].id }
+  ui.openModal(STOCK_SAVE_SUMMARY_MODAL_ID)
+}
+
+const confirmSave = async () => {
+  const { records, changes } = pendingSave
+  const refusal = findManualStockRefusal(changes, blockManualInbound, requireManualCost, saveReasons.increaseType)
   if (refusal) {
     Notify.failure(`${refusal.productName}: ` + (refusal.reason === 'inbound-blocked'
-      ? tr('stock can only increase through a purchase order.|el stock solo puede aumentar mediante una orden de compra.')
+      ? tr('stock can only increase through a purchase order or as opening stock.|el stock solo puede aumentar mediante una orden de compra o como saldo inicial.')
       : tr('enter the purchase cost of the stock being added.|ingrese el costo de compra del stock que ingresa.')))
     return
   }
 
   Loading.standard('Enviando registros...')
   try {
-    await postProductosStock(recordsForUpdate)
+    await postProductosStock(records.map((record, changeIndex) => ({
+      ...record,
+      Type: manualStockChangeType(changes[changeIndex], saveReasons.increaseType, saveReasons.decreaseType),
+    })))
+    ui.closeModal(STOCK_SAVE_SUMMARY_MODAL_ID)
 
     for (const productStockRecord of almacenStock) {
       // After a successful save, the current quantity becomes the new baseline for diff rendering.
@@ -1005,7 +1029,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
     {#if stockFilters.warehouseID > 0}
       <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" css="shrink-0"
         label="Saves all pending stock changes for the selected warehouse."
-        onClick={guardarRegistros} />
+        onClick={openSaveSummary} />
     {/if}
   </div>
 
@@ -1022,7 +1046,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 {#if blockManualInbound}
   <div class="mb-8 flex items-center gap-6 text-orange-700">
     <i class="icon-[fa--info-circle] shrink-0"></i>
-    <T text="Stock can only increase through a purchase order (Ingreso OC). Decreases are still allowed here.|El stock solo puede aumentar mediante una orden de compra (Ingreso OC). Aquí aún se pueden registrar disminuciones." />
+    <T text="Stock can only increase through a purchase order (Ingreso OC), or here as opening stock with its cost. Decreases are still allowed.|El stock solo puede aumentar mediante una orden de compra (Ingreso OC), o aquí como saldo inicial con su costo. Las disminuciones aún se permiten." />
   </div>
 {:else if requireManualCost}
   <div class="mb-8 flex items-center gap-6 text-orange-700">
@@ -1031,7 +1055,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   </div>
 {/if}
 
-<VTable columns={visibleStockColumns} data={displayStock}
+<VTable columns={stockColumns} data={displayStock}
   filterText={stockFilterText}
   useFilterCache={true}
   getFilterContent={(productStockDisplay) => {
@@ -1077,3 +1101,54 @@ let rerenderHandler: ((() => void) | undefined) = undefined
     />
   {/if}
 </Layer>
+
+<Modal id={STOCK_SAVE_SUMMARY_MODAL_ID}
+  size={4}
+  bodyCss="px-16 py-12"
+  isEdit={true}
+  saveButtonLabel="Guardar"
+  title={tr('Stock changes|Cambios de stock')}
+  onSave={() => { void confirmSave() }}
+>
+  <div class="grid grid-cols-2 gap-8 mb-12" aria-label="Reason for the stock increases and decreases being saved">
+    {#if pendingSaveHasIncrease}
+      <SearchSelect css="col-span-2 md:col-span-1" label="Reason for the increases|Motivo de los ingresos"
+        keyId="id" keyName="name" options={increaseTypeOptions}
+        bind:saveOn={saveReasons} save="increaseType" required={true} />
+    {/if}
+    {#if pendingSaveHasDecrease}
+      <SearchSelect css="col-span-2 md:col-span-1" label="Reason for the decreases|Motivo de las salidas"
+        keyId="id" keyName="name" options={decreaseTypeOptions}
+        bind:saveOn={saveReasons} save="decreaseType" required={true} />
+    {/if}
+  </div>
+  <table class="w-full text-sm" aria-label="Summary of the stock changes being saved">
+    <thead>
+      <tr class="border-b border-gray-200 text-gray-500">
+        <th class="text-left py-4"><T text="Product|Producto" /></th>
+        <th class="text-left py-4"><T text="Batch / Serial|Lote / Serie" /></th>
+        <th class="text-right py-4"><T text="Before|Antes" /></th>
+        <th class="text-right py-4"><T text="After|Después" /></th>
+        <th class="text-right py-4"><T text="Change|Cambio" /></th>
+        <th class="text-right py-4"><T text="Unit cost|Costo unit." /></th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each pendingSave.changes as change}
+        {@const quantityChange = change.nextQuantity - change.previousQuantity}
+        <tr class="border-b border-gray-100">
+          <td class="py-4">{change.productName}</td>
+          <td class="py-4 text-gray-600">{change.detailName}</td>
+          <td class="py-4 text-right ff-mono">{formatN(change.previousQuantity)}</td>
+          <td class="py-4 text-right ff-mono">{formatN(change.nextQuantity)}</td>
+          <td class="py-4 text-right ff-mono {quantityChange > 0 ? 'text-green-700' : quantityChange < 0 ? 'text-red-600' : ''}">
+            {quantityChange > 0 ? '+' : ''}{formatN(quantityChange)}
+          </td>
+          <td class="py-4 text-right ff-mono">
+            {isStockIncrease(change) && change.unitCost ? formatN(change.unitCost / 100, 2) : ''}
+          </td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+</Modal>

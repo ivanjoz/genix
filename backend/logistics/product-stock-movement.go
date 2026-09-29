@@ -8,6 +8,7 @@ import (
 	production "app/production/types"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -34,6 +35,17 @@ type PostStockAdjustItem struct {
 	// taken as typed: a manual entry has no comprobante, so there is no IGV to recover from it.
 	// Only an increase reads it. A purchase-order reception ignores it and costs from the order.
 	UnitCost int32 `json:",omitempty"`
+	// Type is the reason the user chose for the change, one of manualStockAdjustmentTypes. The
+	// page picks it per direction (one for the increases, one for the decreases); the engine
+	// refuses it if the delta turns out to go the other way.
+	Type types.StockMovementType `json:",omitempty"`
+}
+
+// manualStockAdjustmentTypes are the reasons a user may give a manual stock change. Every other
+// type is written by its own document.
+var manualStockAdjustmentTypes = []types.StockMovementType{
+	types.StockMovementTypeManualEntry, types.StockMovementTypeOpeningStock,
+	types.StockMovementTypeManualExit, types.StockMovementTypeShrinkage, types.StockMovementTypeInternalConsumption,
 }
 
 // The company flags that govern manual stock adjustments (backend/company_flags.toml).
@@ -104,6 +116,12 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		if item.UnitCost < 0 {
 			return req.MakeErr(fmt.Sprintf("El costo del producto %v no puede ser negativo.", item.ProductID))
 		}
+		if !slices.Contains(manualStockAdjustmentTypes, item.Type) {
+			return req.MakeErr(fmt.Sprintf("Seleccione el motivo del cambio de stock del producto %v.", item.ProductID))
+		}
+		// Opening stock is how a company onboards, so flag 6 does not block it; and every
+		// valuation starts from it, so it always carries its cost, flag 9 or not.
+		isOpeningStock := item.Type == types.StockMovementTypeOpeningStock
 		subDivisor := subDivisorByProductID[item.ProductID]
 		if item.SubQuantity != 0 && subDivisor <= core.QuantityDivisorNone {
 			return req.MakeErr(fmt.Sprintf(
@@ -111,6 +129,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 				item.ProductID, item.SubQuantity))
 		}
 		movimientos = append(movimientos, types.InternalMovement{
+			Type:            item.Type,
 			SubDivisor:      subDivisor,
 			ReplaceQuantity: true,
 			WarehouseID:     item.WarehouseID,
@@ -125,8 +144,8 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 			SubQuantity: item.SubQuantity,
 			Price:       item.UnitCost,
 
-			RejectInbound:      rejectManualInbound,
-			RequireInboundCost: requireManualCost,
+			RejectInbound:      rejectManualInbound && !isOpeningStock,
+			RequireInboundCost: requireManualCost || isOpeningStock,
 		})
 	}
 
@@ -167,7 +186,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 	lotCode := req.GetQuery("lot-code")
 	documentID := req.GetQueryInt64("document-id")
 	serialNumber := req.GetQuery("serial-number")
-	tipo := int8(req.GetQueryInt("tipo"))
+	tipo := types.StockMovementType(req.GetQueryInt("tipo"))
 
 	// Resolve lot-code → all matching lotIDs (same Name can exist across multiple entries).
 	var lotIDs []int32

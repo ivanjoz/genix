@@ -40,13 +40,12 @@ report.
   (warehouse, product, presentation) bucket, optionally scoped to a **batch/lot (lote)** and/or
   a **serial number (SKU)**. Movements are never edited or deleted; correcting stock means
   recording a new movement.
-- **Movement type (Tipo Movimiento)** on this page's filter and column only recognizes two
-  labels: **Entrada Manual** and **Salida Manual**, which correspond to manual stock adjustments
-  made on **Stock Changes (Cambios Stock)**. Merchandise received through Purchase Orders is
-  also stored as an unlabeled positive movement (it is not literally a manual entry but is not
-  distinguished from one here), and product deliveries created by a sale order carry a different
-  internal type that this page does not name — those rows still appear in the list and count
-  in totals, but their **Movimiento** cell renders as `-` and they cannot be isolated with the
+- **Movement type (Tipo Movimiento)** says what caused each movement, and every movement has
+  one. The manual reasons chosen on **Stock Changes (Cambios Stock)** are **Entrada manual**,
+  **Saldo inicial**, **Salida manual**, **Merma** and **Consumo interno**. The rest are written
+  by their own document: **Ingreso por orden de compra**, **Compra de insumos**, **Entrega
+  (venta)**, **Reingreso (anulación de venta)**, and the asset movements (**Alta**, **Baja**,
+  **Traslado** and **Corrección de serie de activo**). Any of them can be isolated with the
   **Tipo Movimiento** filter.
 - A **batch/lot (lote)** groups received merchandise under one code (`Código Lote`); a
   **serial number (Nº Serie / SKU)** identifies one unit. Either can carry its own detail
@@ -200,21 +199,19 @@ those extra filters are simply ignored while a lote/serie/documento value is pre
   span over 120 days; adjust Fecha Inicio/Fecha Fin accordingly.
 - **"No se encontró un lote con ese código.":** the batch/lot code typed in Código Lote does not
   match any recorded lot for the company.
-- **A movement's "Movimiento" cell shows `-`:** the row comes from an operation (for example a
-  sale delivery) whose internal movement type has no label configured on this page; it is still
-  a real, correctly recorded entry or exit.
-- **Almacén Origen is always empty:** expected today — no implemented Genix action currently
-  records the source side of a warehouse-to-warehouse transfer.
+- **An asset transfer shows two rows:** a transfer is recorded as an exit from the origin
+  warehouse and an entry into the destination, each naming the other warehouse.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
 - **Stock Changes (Cambios Stock)** at `/logistics/products-stock`: register the manual stock
-  adjustments that appear here as **Entrada Manual** / **Salida Manual**.
+  adjustments that appear here with the reason chosen on save (Entrada manual, Saldo inicial,
+  Salida manual, Merma, Consumo interno).
 - **Purchase Orders (Órdenes de Compra)** at `/logistics/purchase-orders`: merchandise reception
-  against a confirmed order is the source of the unlabeled positive movements linked to a
-  purchase-order document ID.
-- Sale orders create the unlabeled outbound movements linked to a sale document ID when a sale
+  against a confirmed order is the source of the **Ingreso por orden de compra** movements linked
+  to a purchase-order document ID.
+- Sale orders create the **Entrega (venta)** movements linked to a sale document ID when a sale
   includes product delivery; this route does not expose a page to create or edit that sale.
 
 ### FILES

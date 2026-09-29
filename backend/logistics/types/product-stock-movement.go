@@ -27,12 +27,12 @@ type WarehouseProductMovement struct {
 	// SubDivisor is the divisor SubQuantity was recorded in. It must live on the ledger row
 	// itself: RecalcProductStockByMovements replays the whole history, and without it a
 	// SUM(SubQuantity) spanning a divisor refinement would add sixths to twelfths.
-	SubDivisor    int16 `json:",omitempty"`
-	MonetaryValue int32 `json:",omitempty"`
-	Type          int8  `json:",omitempty"`
-	Created       int32 `json:",omitempty"`
-	CreatedBy     int32 `json:",omitempty"`
-	UpdateCounter int32 `json:",omitempty"`
+	SubDivisor    int16             `json:",omitempty"`
+	MonetaryValue int32             `json:",omitempty"`
+	Type          StockMovementType `json:",omitempty"`
+	Created       int32             `json:",omitempty"`
+	CreatedBy     int32             `json:",omitempty"`
+	UpdateCounter int32             `json:",omitempty"`
 }
 
 type WarehouseProductMovementTable struct {
@@ -51,7 +51,7 @@ type WarehouseProductMovementTable struct {
 	WarehouseQuantity    db.Col[*WarehouseProductMovementTable, int32]
 	SubQuantity          db.Col[*WarehouseProductMovementTable, int32]
 	SubDivisor           db.Col[*WarehouseProductMovementTable, int16]
-	Type                 db.Col[*WarehouseProductMovementTable, int8]
+	Type                 db.Col[*WarehouseProductMovementTable, StockMovementType]
 	Created              db.Col[*WarehouseProductMovementTable, int32]
 	MonetaryValue        db.Col[*WarehouseProductMovementTable, int32]
 	CreatedBy            db.Col[*WarehouseProductMovementTable, int32]
@@ -96,12 +96,12 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			},
 			// Backs the grouped movement report. SubDivisor joins the key so a SUM(SubQuantity)
 			// spanning a divisor refinement never adds sixths to twelfths; the caller folds the
-			// per-divisor groups back together. Its slot is 4 digits, which is what leaves Date
-			// the 5 it needs out of the 19-digit budget once ProductID (9) and Type (1) are spent
-			// — hence core.MaxQuantityDivisor.
+			// per-divisor groups back together. Out of the 19-digit budget: Date 5, ProductID 8
+			// (99,999,999 products per company), Type 2 (99 StockMovementTypes — the catalog is never
+			// capped by this view) and SubDivisor 4, hence core.MaxQuantityDivisor.
 			{
 				Type: db.TypeView,
-				Keys: db.Cols(e.Date, e.ProductID.DecimalSize(9), e.Type.DecimalSize(1), e.SubDivisor.DecimalSize(4)),
+				Keys: db.Cols(e.Date, e.ProductID.DecimalSize(8), e.Type.DecimalSize(2), e.SubDivisor.DecimalSize(4)),
 				Cols: db.Cols(e.Quantity, e.SubQuantity),
 			},
 		},
@@ -121,7 +121,7 @@ type InternalMovement struct {
 	ProductID       int32
 	PresentationID  int16
 	ReplaceQuantity bool
-	Type            int8
+	Type            StockMovementType
 	SerialNumber    string
 	LotName         string
 	LotID           int32

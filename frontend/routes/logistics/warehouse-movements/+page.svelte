@@ -18,9 +18,10 @@ import { SvelteMap } from 'svelte/reactivity';
   import { ProductsService } from '$services/production/products.svelte'
   import { UsuariosService } from "../../security/users-profiles/users-profiles.svelte"
   import {
-    queryAlmacenMovimientos, movimientoTipos,
+    queryAlmacenMovimientos,
     type IWarehouseProductMovement, type IProductStockLot
   } from "./warehouse-movements.svelte"
+  import { stockMovementTypes } from '$core/stock-movement-type'
     import { untrack } from "svelte";
 
   const almacenes = new WarehousesService()
@@ -47,6 +48,7 @@ import { SvelteMap } from 'svelte/reactivity';
     return lotsByID.get(lotID)?.Name || `LOT-${lotID}`
   }
 
+  const movimientoTipos = stockMovementTypes.map(x => ({ id: x.id, name: tr(x.name) }))
   const movimientoTiposMap = new Map(movimientoTipos.map(x => [x.id, x]))
 
   // Set default almacen when almacenes are loaded

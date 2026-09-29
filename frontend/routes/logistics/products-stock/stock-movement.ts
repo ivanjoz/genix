@@ -80,6 +80,7 @@ export interface IPostProductoStockItem {
   LotID?: number
   LotCode?: string
   UnitCost?: number
+  Type: number // StockMovementType: the reason chosen for this item's direction
 }
 
 export const getWarehouseProductStock = async (almacenID: number): Promise<IProductStock[]> => {

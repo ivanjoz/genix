@@ -48,13 +48,6 @@ export interface IWarehouseProductMovementGroupRecord {
   upc: number
 }
 
-export const movimientoTipos = [
-  { id: 1, name: 'Entrada Manual' },
-  { id: 2, name: 'Salida Manual' },
-  { id: 8, name: 'Entrega (Venta)' },
-  { id: 9, name: 'Reingreso (Anulación Venta)' },
-]
-
 export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<IWarehouseProductMovement[]> => {
   const isDirectLookup = !!(args.serialNumber?.trim() || args.lotCode?.trim() || (args.documentID || 0) > 0)
   if (!isDirectLookup && (!args.dateInicio || !args.dateFin)) {

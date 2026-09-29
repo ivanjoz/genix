@@ -209,6 +209,10 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 		if mov.WarehouseID == 0 || mov.ProductID == 0 {
 			return core.Err("Movimiento inválido: falta WarehouseID o ProductID.")
 		}
+		// The writer always names the type; the engine never guesses it from the sign.
+		if err := validateStockMovementDocument(mov.Type, mov.DocumentID); err != nil {
+			return err
+		}
 		// Outbound (Quantity < 0) must ship a resolved LotID; name-based lookup is inbound-only.
 		if mov.LotID == 0 && mov.LotName != "" && mov.Quantity < 0 {
 			return core.Err(fmt.Sprintf("Movimiento con Lote %q sin LotID para salida (product %v, almacén %v).",
@@ -474,7 +478,10 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			continue
 		}
 		isInflow := !delta.IsNegative(effectiveDivisor)
-		movement.Type = core.Coalesce(mov.Type, core.If(isInflow, int8(1), int8(2)))
+		if err := validateStockMovementDirection(mov.Type, isInflow, mov.ProductID); err != nil {
+			return err
+		}
+		movement.Type = mov.Type
 		movement.WarehouseRefID = mov.transferPeerWarehouseID
 
 		if isInflow && mov.transferPeerWarehouseID > 0 {

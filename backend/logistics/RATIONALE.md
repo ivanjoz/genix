@@ -2,6 +2,19 @@
 
 Design decisions for supplies, stock and purchase orders, newest first.
 
+## The movement type is validated on the delta, and asset moves may go both ways
+
+**Context** — `ApplyMovimientos` no longer guesses the type from the sign; the writer names it. A
+"set stock to X" adjustment only learns its direction inside the engine.
+**Decision** — Each `StockMovementType` carries a direction: inflow only, outflow only, or either.
+The engine refuses a delta that contradicts it, after computing the delta and before writing. Asset
+transfer (7) and asset serial correction (10) are "either", because each writes an out leg and an in
+leg under one type. Type 11 stays reserved and unknown, so the engine refuses it until the stock
+transfer screen exists.
+**Rationale** — It is the same "judge on the delta, inside the lock" rule the company flags follow.
+The cost: a user whose screen was stale, who types 12 over a stock that has meanwhile become 13,
+gets "un movimiento Entrada manual no puede disminuir el stock" and must reload.
+
 ## A transfer's inflow is priced at the origin's average, not at a typed price
 
 **Context** — A stock transfer is now two ledger rows (`expandStockTransfers`), and the receiving

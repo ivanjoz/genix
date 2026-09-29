@@ -107,6 +107,7 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 		// no-detail bucket, so adding or clearing a serial is the same pair of movements.
 		serialMovements := []logistics.InternalMovement{
 			{
+				Type:         logistics.StockMovementTypeAssetSerialCorrection,
 				ProductID:    asset.ProductID,
 				WarehouseID:  asset.WarehouseID,
 				SerialNumber: asset.SerialNumber,
@@ -114,6 +115,7 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 				DocumentID:   int64(asset.ID),
 			},
 			{
+				Type:         logistics.StockMovementTypeAssetSerialCorrection,
 				ProductID:    asset.ProductID,
 				WarehouseID:  asset.WarehouseID,
 				SerialNumber: payload.SerialNumber,

@@ -293,7 +293,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				SerialNumber:   core.GetIndex(sale.DetailProductSkus, i),
 				LotID:          core.GetIndex(sale.DetailProductLotIDs, i),
 				DocumentID:     sale.ID,
-				Type:           8, // Entrega a cliente final (Venta)
+				Type:           logistics.StockMovementTypeSaleDelivery,
 				Quantity:       lineQuantity.Units,
 				SubQuantity:    lineQuantity.Sub,
 				SubDivisor:     lineDivisor,

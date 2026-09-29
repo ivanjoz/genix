@@ -197,6 +197,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 	movements := make([]logistics.InternalMovement, len(newAssets))
 	for assetIndex := range newAssets {
 		movements[assetIndex] = logistics.InternalMovement{
+			Type:         logistics.StockMovementTypeAssetAcquisition,
 			ProductID:    payload.ProductID,
 			WarehouseID:  payload.WarehouseID,
 			SerialNumber: newAssets[assetIndex].SerialNumber,
@@ -247,6 +248,7 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Take the units out of the warehouse through the ordinary movement path.
 	outboundMovement := logistics.InternalMovement{
+		Type:         logistics.StockMovementTypeAssetDisposal,
 		ProductID:    asset.ProductID,
 		WarehouseID:  asset.WarehouseID,
 		SerialNumber: asset.SerialNumber,
@@ -303,6 +305,7 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	transferMovement := logistics.InternalMovement{
+		Type:            logistics.StockMovementTypeAssetTransfer,
 		ProductID:       asset.ProductID,
 		WarehouseID:     asset.WarehouseID,
 		DestWarehouseID: payload.TargetWarehouseID,

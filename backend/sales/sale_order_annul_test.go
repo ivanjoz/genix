@@ -75,7 +75,7 @@ func TestNetStockReturnsReversesWhatIsStillDelivered(t *testing.T) {
 	if stockReturn.SubDivisor != 6 {
 		t.Fatalf("expected the divisor the movement was written in, got %v", stockReturn.SubDivisor)
 	}
-	if stockReturn.Type != warehouseMovementTypeSaleAnnulment {
+	if stockReturn.Type != logistics.StockMovementTypeSaleAnnulmentReturn {
 		t.Fatalf("expected the annulment type, got %v", stockReturn.Type)
 	}
 	// Without the document id the next annulment could not find this row and would return the
@@ -156,9 +156,9 @@ func TestAnnulmentSummaryChangeCancelsTheCreationChange(t *testing.T) {
 		DetailProductsIDs: []int32{77, 78},
 		// Packed lines: 3002 is three units plus two sub-units at divisor 6; 2000 is two whole.
 		DetailQuantities: []int32{3002, 2000},
-		DetailPrices:      []int32{500, 1200},
-		DetailSubPrices:   []int32{100, 0},
-		DetailSubDivisor:  []int16{6, 1},
+		DetailPrices:     []int32{500, 1200},
+		DetailSubPrices:  []int32{100, 0},
+		DetailSubDivisor: []int16{6, 1},
 	}
 
 	for _, status := range []int8{types.OrderStatusPending, types.OrderStatusPaid,

@@ -84,6 +84,23 @@ resulting ledger movement (in or out) internally as the difference from the prev
 grid shows the change as `previous → new` in red until the record is saved. Saving sends only
 rows that were actually changed (`_hasUpdated`) or newly filled in through **All Products**.
 
+**Save (Guardar)** first opens a **Stock changes (Cambios de stock)** summary: every change with
+its before, after, difference and unit cost. There the user picks the reason, once for all the
+increases in the save and once for all the decreases:
+
+- Increases: **Entrada manual** or **Saldo inicial** (the stock a company starts with).
+- Decreases: **Salida manual**, **Merma** or **Consumo interno**.
+
+The summary's **Guardar** posts the changes. To save two increases with different reasons, save
+them separately.
+
+- **Cost (Costo)** is the unit purchase cost, in soles, of the stock the row adds. **Current cost
+  (Costo actual)** is the product's moving average in this warehouse.
+- **Saldo inicial always needs a cost**, whatever the company settings.
+- When the company blocks manual stock entries (only a purchase order may add stock), increases
+  are refused unless their reason is **Saldo inicial**.
+- When the company requires a purchase cost, every increase needs its **Cost**.
+
 ### Result and side effects (Resultado y efectos)
 
 Saving posts the changed rows to the stock-adjustment endpoint, which recomputes each affected
@@ -104,7 +121,12 @@ total) is rejected for the whole request rather than partially applied.
 - `¿Por qué no veo un producto en la lista?` Actívalo con **Todos los Productos**, o revisa que
   tenga stock en ese almacén.
 - `¿El ajuste registra entrada o salida?` Genix calcula automáticamente si el nuevo valor implica
-  entrada o salida según la diferencia con el valor anterior.
+  entrada o salida según la diferencia con el valor anterior; el motivo de cada una se elige en el
+  resumen al guardar.
+- `¿Cómo cargo el inventario inicial?` Ingrese las cantidades y su **Costo**, y al guardar elija
+  **Saldo inicial** como motivo de los ingresos.
+- `¿Cómo registro una merma?` Baje la cantidad y al guardar elija **Merma** como motivo de las
+  salidas.
 - Search terms: `ajuste de stock`, `conteo físico`, `inventario`, `stock simple`, `cambio de
   stock`, `stock negativo`.
 

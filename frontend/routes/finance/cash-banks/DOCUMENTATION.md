@@ -104,8 +104,9 @@ the balance.
 ### User intention (Intención del usuario)
 
 Use a manual movement when money changes outside an automated document workflow and the
-account ledger must reflect it—for example a withdrawal (`retiro`), loss (`pérdida`),
-general collection (`cobro`), or a supplier/expense payment registered manually.
+account ledger must reflect it: a transfer (`transferencia`), withdrawal (`retiro`), loss
+(`pérdida`) or general collection (`cobro`). A supplier, expense or asset payment, and a sale
+collection, are registered from their own document, never by hand.
 
 ### Where to find it (Dónde encontrarlo)
 
@@ -117,11 +118,15 @@ Choose a visible movement type and enter the amount.
 An existing account, a non-zero amount, and a movement type are required. For
 `Transferencia`, the server additionally requires a destination reference.
 
-A `Retiro` or `Pérdida` also requires an accounting account (`cuenta contable`). This
-tells the accounting books what the money became:
+A `Retiro`, `Pérdida` or `Cobro` also requires an accounting account (`cuenta contable`). This
+tells the accounting books what the money became, or where it came from:
 
 - `Retiro`: an owner or shareholder withdrawal (142), or a dividend payment (441).
 - `Pérdida`: another expense (659), or a charge to an employee who must repay it (1419).
+- `Cobro`: other income (759), a repayment by a shareholder (142) or by an employee (1419), a
+  capital contribution (50), or a loan received (451).
+
+`Transferencia`, `Retiro` and `Pérdida` always take money out; `Cobro` always brings it in.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
@@ -241,10 +246,10 @@ document rather than only its cash effect.
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **Purchase Orders (Órdenes de Compra)** can create a `Pago Proveedor` movement when a
-  confirmed purchase order is paid from an account.
+- **Purchase Orders (Órdenes de Compra)** create a `Pago Proveedor` movement when a confirmed
+  or fulfilled purchase order is paid from an account in the order's currency.
 - Expense workflows can create `Pago Gasto` movements.
-- Sales collections can appear as `Cobro` or `Cobro (Venta)` movements.
+- Sale payments appear as `Cobro (Venta)` movements; a manual `Cobro` is money no sale explains.
 - **Cash Movements (Cajas Movimientos)** is a separate finance route intended for a
   broader movement-oriented view; use this page when the task is account configuration,
   reconciliation, or one account's recent history.

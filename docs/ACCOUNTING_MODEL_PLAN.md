@@ -376,6 +376,25 @@ Inflow sources and where each gets its cost:
 
 ### 4.6 Movement catalog
 
+**Status: implemented (phase 1)**, in `backend/logistics/types/stock_movement_type.go` and mirrored
+in `frontend/core/stock-movement-type.ts`.
+
+- **Engine contract.** The engine enforces the DocumentID rule and each type's direction. The
+  grouped view is widened.
+- **Deliberately not yet built:**
+  - **Type 11:** reserved until a stock transfer screen exists; asset transfers use 7.
+  - **`StockMovementSunatOperation`:** built together with the Kardex report, when the Tabla 12
+    codes are verified.
+- **Manual reasons.** Types 12, 13 and 14 are chosen on the stock page's save summary.
+  - The user picks one reason for the save's increases and one for its decreases.
+  - Opening stock gets past company flag 6, and always needs its cost.
+- **Tabla 5 and Tabla 6 are derived, not stored** (settled).
+  - Tabla 5: a product is `01`, a supply `06`.
+  - Tabla 6: from `UnitID` (Kg → `KGM`, g → `GRM`, Libras → `LBR`, none → `NIU`).
+  - Both are written with the Kardex header.
+- **To check against Tabla 12:** code `28 Ajuste por diferencia de inventario` may fit types 1/2
+  better than `99`.
+
 **The movement type is the only discriminator.** `WarehouseProductMovement.Type` becomes an owned
 enum, `StockMovementType` in `logistics/types`, the same pattern `CashMovementType` already uses
 (`finance/types/cash_banks.go:63`). Each value is written by exactly one code path and names
@@ -752,7 +771,7 @@ Each phase ships on its own and leaves the system consistent.
 | # | Scope | Unlocks |
 | --- | --- | --- |
 | 0 | Fix the six fact bugs (§1.3) | correct quantities, cash, debts for everyone |
-| 1 | Complete facts: `StockMovementType` enum + engine contract + widened grouped view; opening-stock, consumption and shrinkage types; adjustment cost; product existence type and SUNAT unit | Level 0: Kardex 12.1 |
+| 1 ✓ | Complete facts: `StockMovementType` enum + engine contract + widened grouped view; opening-stock, consumption and shrinkage types; adjustment cost; product existence type and SUNAT unit (derived — §4.6) | Level 0: Kardex 12.1 |
 | 2 | Company settings (level, method, regime) + level-0 cash result report | the settings every projection reads |
 | 3 | `ResolveInflowCost` + valuation engine (periodic and perpetual) + `INV-*` diagnostics | Level 1: valued stock, COGS, margin, Kardex 13.1, management P&L |
 | 4 | Posting rules + derived journal + trial balance + `ACC-*` diagnostics | Level 2 preview |

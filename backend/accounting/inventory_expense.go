@@ -112,13 +112,14 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	// The stock movement carries the expense as its DocumentID, so the ledger points back
 	// at what paid for it.
 	inboundMovement := logistics.InternalMovement{
+		Type:        logistics.StockMovementTypeSuppliesPurchase,
 		ProductID:   payload.ProductID,
 		WarehouseID: payload.WarehouseID,
 		SupplierID:  payload.SupplierID,
 		Quantity:    payload.Quantity,
 		// Costed like a purchase-order reception: soles, net of the IGV the comprobante recovers.
-		Price:       expenseRecords[0].PurchaseDocument().InventoryUnitCost(payload.UnitPrice),
-		DocumentID:  int64(expenseRecords[0].ID),
+		Price:      expenseRecords[0].PurchaseDocument().InventoryUnitCost(payload.UnitPrice),
+		DocumentID: int64(expenseRecords[0].ID),
 	}
 	if movementError := logistics.ApplyMovimientos(
 		req, []logistics.InternalMovement{inboundMovement},

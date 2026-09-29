@@ -15,15 +15,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// warehouseMovementTypeSaleDelivery and warehouseMovementTypeSaleAnnulment are the two
-// WarehouseProductMovement.Type values a sale writes. The ledger's type vocabulary has no Go enum
-// (unlike finance.CashMovementType); these two are named here because the annulment nets them
-// against each other and a bare 8 and 9 in that arithmetic would say nothing.
-const (
-	warehouseMovementTypeSaleDelivery  = int8(8)
-	warehouseMovementTypeSaleAnnulment = int8(9)
-)
-
 type saleOrderAnnulRequest struct {
 	ID int64
 	// RefundCashBankID is where the money is withdrawn from, chosen by the operator: the refund
@@ -279,8 +270,8 @@ func netStockReturns(stockMovements []logistics.WarehouseProductMovement,
 	bucketOrder := []stockBucket{}
 
 	for _, stockMovement := range stockMovements {
-		if stockMovement.Type != warehouseMovementTypeSaleDelivery &&
-			stockMovement.Type != warehouseMovementTypeSaleAnnulment {
+		if stockMovement.Type != logistics.StockMovementTypeSaleDelivery &&
+			stockMovement.Type != logistics.StockMovementTypeSaleAnnulmentReturn {
 			continue
 		}
 		// A row written before the product had a sub-unit carries divisor 0, which means the same
@@ -329,7 +320,7 @@ func netStockReturns(stockMovements []logistics.WarehouseProductMovement,
 			// The reversal has to carry the sale it undoes, or the next annulment of this sale
 			// could not find it and would return the stock a second time.
 			DocumentID: saleOrderID,
-			Type:       warehouseMovementTypeSaleAnnulment,
+			Type:       logistics.StockMovementTypeSaleAnnulmentReturn,
 		})
 	}
 	return stockReturns

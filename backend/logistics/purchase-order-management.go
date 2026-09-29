@@ -165,6 +165,7 @@ func receivePurchaseOrder(
 	for _, item := range items {
 		key := orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}
 		movimientos = append(movimientos, types.InternalMovement{
+			Type:           types.StockMovementTypePurchaseReception,
 			DocumentID:     int64(order.ID),
 			WarehouseID:    warehouseID,
 			ProductID:      item.ProductID,
