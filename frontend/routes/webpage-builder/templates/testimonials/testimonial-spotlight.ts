@@ -1,4 +1,4 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * Single large testimonial spotlight: an oversized quotation mark, one centered quote and

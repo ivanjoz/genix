@@ -1,9 +1,9 @@
 <script lang="ts">
 import { setContext } from 'svelte';
-import type { SectionData } from '$ecommerce/renderer/section-types';
-import HtmlSection, { schema as htmlSectionSchema } from '$ecommerce/renderer/HtmlSection.svelte';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
+import HtmlSection, { schema as htmlSectionSchema } from '#ecommerce/renderer/HtmlSection.svelte';
 import { editorStore } from '../stores/editor.svelte';
-import { EC_BUILDER_MODE } from '$ecommerce/renderer/builder-context';
+import { EC_BUILDER_MODE } from '#ecommerce/renderer/builder-context.ts';
 
 // Mark everything rendered below as builder-mode so AST components (e.g. EcommerceSlider)
 // can sync with the editor and disable production-only behaviour like autoplay.

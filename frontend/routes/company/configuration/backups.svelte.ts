@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 
 // Access id from backend/access.toml. It gates the "Backups" tab of this route, whose other
 // tab (My Company) carries its own id.

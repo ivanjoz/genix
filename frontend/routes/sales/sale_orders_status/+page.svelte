@@ -1,33 +1,34 @@
 <script lang="ts">
+  import { confirmWarn, notifyFailure, notifySuccess } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-  import Layer from '$components/layers/Layer.svelte';
-  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-  import SearchSelect from '$components/form/SearchSelect.svelte';
-  import LoadingBar from '$components/misc/LoadingBar.svelte';
-  import RecordByIDText from '$components/misc/RecordByIDText.svelte';
-  import VTable from '$components/vTable/VTable.svelte';
-  import type { ITableColumn } from '$components/vTable/types';
-  import { Core, tr } from '$core/store.svelte';
-  import T from '$components/misc/T.svelte';
-  import Page from '$domain/Page.svelte';
-  import { security } from '$libs/ui-runtime.svelte';
-  import { ConfirmWarn, Notify, formatN, formatTime } from '$libs/helpers';
-  import { type Quantity, formatQuantity, quantityAmount, quantityDivisorOf, unpackQuantityLine } from '$core/quantity';
-  import { CajasService } from '$routes/finance/cash-banks/cajas.svelte';
+  import Layer from '#components/layers/Layer.svelte';
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+  import SearchSelect from '#components/form/SearchSelect.svelte';
+  import LoadingBar from '#components/misc/LoadingBar.svelte';
+  import RecordByIDText from '#components/misc/RecordByIDText.svelte';
+  import VTable from '#components/vTable/VTable.svelte';
+  import type { ITableColumn } from '#components/vTable/types.ts';
+  import { Core, tr } from '#core/store.svelte.ts';
+  import T from '#components/misc/T.svelte';
+  import Page from '#domain/Page.svelte';
+  import { security } from '#libs/ui-runtime.svelte.ts';
+  import { formatN, formatTime } from '#libs/helpers.ts';
+  import { type Quantity, formatQuantity, quantityAmount, quantityDivisorOf, unpackQuantityLine } from '#core/quantity.ts';
+  import { CajasService } from '#routes/finance/cash-banks/cajas.svelte.ts';
   import {
       ClientProviderService,
       type IClientProvider
-  } from '$services/crm/client-provider.svelte';
+  } from '#services/crm/client-provider.svelte.ts';
   import {
       ProductsService,
       type IProduct,
       type IProductPresentation,
-  } from '$services/production/products.svelte';
-  import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte';
+  } from '#services/production/products.svelte.ts';
+  import { WarehousesService } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts';
   import { onMount, untrack } from 'svelte';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
-  import { currencySymbol, normalizeCurrency } from '$routes/finance/exchange-rate/exchange-rate';
+  import { currencySymbol, normalizeCurrency } from '#routes/finance/exchange-rate/exchange-rate.ts';
   import {
       ANNUL_SALE_SUB_ACCESS_ID,
       SALES_MANAGEMENT_ACCESS_ID,
@@ -450,17 +451,17 @@
 
   function onClickPagar() {
     if (!selectedSaleOrder) {
-      Notify.failure(tr('No order selected.|No hay una orden seleccionada.'));
+      notifyFailure(tr('No order selected.|No hay una orden seleccionada.'));
       return;
     }
     if (isPostingSaleOrderAction) {
-      Notify.failure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
+      notifyFailure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
       return;
     }
     // Payment caja priority: order caja first, otherwise use the user-selected caja.
     const paymentCajaID = selectedSaleOrder.LastPaymentCajaID || saleOrderPaymentForm.LastPaymentCajaID;
     if (!paymentCajaID) {
-      Notify.failure(tr('Order has no Cash Register ID for payment.|La orden no posee Caja ID para registrar el pago.'));
+      notifyFailure(tr('Order has no Cash Register ID for payment.|La orden no posee Caja ID para registrar el pago.'));
       return;
     }
 
@@ -475,17 +476,17 @@
 
   function onClickEntregar() {
     if (!selectedSaleOrder) {
-      Notify.failure(tr('No order selected.|No hay una orden seleccionada.'));
+      notifyFailure(tr('No order selected.|No hay una orden seleccionada.'));
       return;
     }
     if (isPostingSaleOrderAction) {
-      Notify.failure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
+      notifyFailure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
       return;
     }
     // Delivery uses the selector value so the operator can choose a different almacén.
     const selectedAlmacenID = saleOrderDeliveryForm.WarehouseID || selectedSaleOrder.WarehouseID;
     if (!selectedAlmacenID) {
-      Notify.failure(tr('Order has no Warehouse ID for delivery.|La orden no posee Almacén ID para registrar la entrega.'));
+      notifyFailure(tr('Order has no Warehouse ID for delivery.|La orden no posee Almacén ID para registrar la entrega.'));
       return;
     }
 
@@ -511,27 +512,26 @@
     isAnnulFormOpen = true;
   }
 
-  function onClickAnular() {
+  async function onClickAnular() {
     if (!selectedSaleOrder || isPostingSaleOrderAction) { return; }
 
     const annulReason = saleOrderAnnulForm.Reason.trim();
     if (!annulReason) {
-      Notify.failure(tr('A reason is required to annul.|Se requiere un motivo para anular.'));
+      notifyFailure(tr('A reason is required to annul.|Se requiere un motivo para anular.'));
       return;
     }
     if (saleOrderWasPaid(selectedSaleOrder) && !saleOrderAnnulForm.RefundCashBankID) {
-      Notify.failure(tr('Select the cash register the refund comes from.|Seleccione la caja de la cual se devolverá el dinero.'));
+      notifyFailure(tr('Select the cash register the refund comes from.|Seleccione la caja de la cual se devolverá el dinero.'));
       return;
     }
 
     const saleOrderToAnnul = selectedSaleOrder;
-    ConfirmWarn(
-      tr('Annul Order|Anular Pedido'),
-      tr(`Annul order #${saleOrderToAnnul.ID}? The payment is returned, delivered stock re-enters the warehouse, and the sale leaves the day totals.`
+    const confirmed = await confirmWarn({
+      title: tr('Annul Order|Anular Pedido'),
+      message: tr(`Annul order #${saleOrderToAnnul.ID}? The payment is returned, delivered stock re-enters the warehouse, and the sale leaves the day totals.`
         + `|¿Anular el pedido #${saleOrderToAnnul.ID}? Se devuelve el pago, el stock entregado reingresa al almacén y la venta sale de los totales del día.`),
-      'SI', 'NO',
-      () => { void processSaleOrderAnnul(saleOrderToAnnul, annulReason); },
-    );
+    });
+    if (confirmed) { void processSaleOrderAnnul(saleOrderToAnnul, annulReason); }
   }
 
   async function processSaleOrderAnnul(saleOrderToAnnul: ISaleOrder, annulReason: string) {
@@ -547,10 +547,10 @@
 
       applyUpdatedSaleOrderLocally(annulledSaleOrder);
       isAnnulFormOpen = false;
-      Notify.success(tr('Order annulled.|Pedido anulado.'));
+      notifySuccess(tr('Order annulled.|Pedido anulado.'));
     } catch (error) {
       console.error('[sale_orders_status] annul error', { saleOrderID: saleOrderToAnnul.ID, error });
-      Notify.failure(String(error) || tr('Could not annul the order.|No se pudo anular el pedido.'));
+      notifyFailure(String(error) || tr('Could not annul the order.|No se pudo anular el pedido.'));
     } finally {
       isPostingSaleOrderAction = false;
       saleOrderActionInProgress = null;
@@ -584,7 +584,7 @@
       const updatedSaleOrder = await postSaleOrderUpdate(updatePayload) as ISaleOrder;
       applyUpdatedSaleOrderLocally(updatedSaleOrder);
       
-      Notify.success(tr(`Order updated (${actionLabel}).|Pedido actualizado (${actionLabel}).`));
+      notifySuccess(tr(`Order updated (${actionLabel}).|Pedido actualizado (${actionLabel}).`));
       console.debug('[sale_orders_status] action success', {
         actionLabel,
         saleOrderID: updatePayload.ID,
@@ -595,7 +595,7 @@
         updatePayload,
         error,
       });
-      Notify.failure(tr(`Could not process: ${actionLabel}.|No se pudo procesar la ${actionLabel}.`));
+      notifyFailure(tr(`Could not process: ${actionLabel}.|No se pudo procesar la ${actionLabel}.`));
     } finally {
       isPostingSaleOrderAction = false;
       saleOrderActionInProgress = null;

@@ -15,13 +15,13 @@
 //                          records changed, the catalog state is re-published and components
 //                          re-render. Cold passes the already-downloaded bytes so the .db file is
 //                          never fetched twice.
-import { browser } from '$app/environment';
-import { arrayToMapN } from '$libs/helpers';
-import { buildHeaders } from '$libs/ui-runtime.svelte';
-import { Env } from '$core/env';
+import { browser } from '$app/env';
+import { arrayToMapN } from '#libs/helpers.ts';
+import { buildHeaders } from '#libs/ui-runtime.svelte.ts';
+import { Env } from '#core/env.ts';
 import { parsePsvResponse, fetchDeltaCache, readDeltaCacheSubObject } from '@genix/ui/cache';
 import type { serviceHttpProps } from '@genix/ui/cache';
-import type { ISharedListRecord } from '$services/business/shared-lists.svelte';
+import type { ISharedListRecord } from '#services/business/shared-lists.svelte.ts';
 
 export interface IProductProperty {
   id: number, nm: string, ss: number

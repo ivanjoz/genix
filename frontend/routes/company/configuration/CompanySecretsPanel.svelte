@@ -1,11 +1,12 @@
 <script lang="ts">
-import Button from '$components/buttons/Button.svelte';
-import Checkbox from '$components/form/Checkbox.svelte';
-import FileDropZone from '$components/files/FileDropZone.svelte';
-import Input from '$components/form/Input.svelte';
-import T from '$components/misc/T.svelte';
-import { tr } from '$core/store.svelte';
-import { formatTime, Loading, Notify, readFileAsBase64 } from '$libs/helpers';
+import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
+import Button from '#components/buttons/Button.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
+import FileDropZone from '#components/files/FileDropZone.svelte';
+import Input from '#components/form/Input.svelte';
+import T from '#components/misc/T.svelte';
+import { tr } from '#core/store.svelte.ts';
+import { formatTime, readFileAsBase64 } from '#libs/helpers.ts';
 import { untrack } from 'svelte';
 import { CompanySecretsService, postCompanySecrets, testCompanySecrets } from './company-secrets.svelte';
 import {
@@ -63,12 +64,12 @@ import {
     // certificate itself again — password, expiry and RUC — because it is the one that can.
     const problem = validateSecretsForm(payload, current)
     if (problem) {
-      Notify.failure(tr(problem))
+      notifyFailure(tr(problem))
       return
     }
 
     isSaving = true
-    Loading.standard(tr("Saving...|Guardando..."))
+    showLoading(tr("Saving...|Guardando..."))
     try {
       await postCompanySecrets(payload)
       // Reloaded rather than patched: uploading a certificate retires the previous row and
@@ -77,23 +78,23 @@ import {
       form.SolPassword = ""
       form.CertPassword = ""
       certificateFile = undefined
-      Notify.success(tr("Credentials saved|Credenciales guardadas"))
+      notifySuccess(tr("Credentials saved|Credenciales guardadas"))
     } catch (error) {
       // Reported by POST.
     }
-    Loading.remove()
+    hideLoading()
     isSaving = false
   }
 
   const testSecrets = async () => {
-    Loading.standard(tr("Checking with SUNAT...|Consultando a SUNAT..."))
+    showLoading(tr("Checking with SUNAT...|Consultando a SUNAT..."))
     try {
       const result = await testCompanySecrets()
-      Notify.success(tr("SUNAT accepted the credentials|SUNAT aceptó las credenciales") + `: ${result.Message}`)
+      notifySuccess(tr("SUNAT accepted the credentials|SUNAT aceptó las credenciales") + `: ${result.Message}`)
     } catch (error) {
       // Reported by POST.
     }
-    Loading.remove()
+    hideLoading()
   }
 </script>
 

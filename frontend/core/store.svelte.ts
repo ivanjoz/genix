@@ -1,5 +1,5 @@
 import { goto } from '$app/navigation';
-import type { IMenuRecord, IModule } from '$core/types/modules';
+import type { IMenuRecord, IModule } from '#core/types/modules.ts';
 import { SvelteMap } from 'svelte/reactivity';
 import { Env, browser } from './env';
 
@@ -134,7 +134,7 @@ export const suscribeUrlFlag = (elementId: string, callbackOnClose: (() => void)
     uriParams = uriParams.filter(x => x.substring(0,3) !== "nf=")
     uriParams.push(`nf=${navFlagCounter},${navFlags.map(x => x.id).join(",")}`)
 
-    goto(window.location.pathname +"?"+ uriParams.join("&"), { noScroll: true, replaceState: false })
+    goto(window.location.pathname +"?"+ uriParams.join("&"), { reset: false })
   }
 }
 

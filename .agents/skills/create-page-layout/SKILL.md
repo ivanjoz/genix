@@ -23,8 +23,8 @@ A page is invisible until added to `frontend/core/modules.ts`. Append one entry 
 
 The automation agent reads the page through a sanitized HTML snapshot plus a registry of component handles (see `frontend/ui-components/AGENTIC_COMPONENTS.md`). Bare `<button>`, `<div onclick>`, or hand-rolled clickable elements are **invisible to the agent** — they have no `data-id`, no registered handle, and no `click` method. Always reach for the project components:
 
-- **Buttons** → `$components/buttons/Button.svelte`. Never write a raw `<button>` for a command action.
-- **Clickable cards / tiles** → `$components/cards/Card.svelte` with `onClick`. Avoid put `onclick` on a raw `<div>`.
+- **Buttons** → `#components/buttons/Button.svelte`. Never write a raw `<button>` for a command action.
+- **Clickable cards / tiles** → `#components/cards/Card.svelte` with `onClick`. Avoid put `onclick` on a raw `<div>`.
 - **All other interactive surfaces** (`Input`, `SearchSelect`, `Checkbox`, `DateInput`, `OptionsStrip`, `Layer`, `Modal`, `VTable`, `ImageUploader`, …) come from `frontend/ui-components/*`. See `AGENTIC_COMPONENTS.md` for the full spec.
 
 Rule of thumb: if you're about to write a tag with an `onclick`, `class="cursor-pointer"`, or your own `role="button"`, **stop and use `Button` or `Card` instead.** The agent (and accessibility) depend on it.
@@ -167,15 +167,15 @@ For heavy mobile-first forms, prefer a side `Layer`.
 
 ```svelte
 <script lang="ts">
-import Page         from '$domain/Page.svelte'
-import Layer        from '$components/layers/Layer.svelte'
-import VTable       from '$components/vTable/VTable.svelte'
-import Button       from '$components/buttons/Button.svelte'
-import FilterInput  from '$components/form/FilterInput.svelte'
-import Input        from '$components/form/Input.svelte'
-import { Core }     from '$core/store.svelte'
-import { Loading, Notify } from '$libs/helpers'
-import { FooService, type IFoo } from './foo.svelte'
+import Page         from '#domain/Page.svelte'
+import Layer        from '#components/layers/Layer.svelte'
+import VTable       from '#components/vTable/VTable.svelte'
+import Button       from '#components/buttons/Button.svelte'
+import FilterInput  from '#components/form/FilterInput.svelte'
+import Input        from '#components/form/Input.svelte'
+import { Core }     from '#core/store.svelte.ts'
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify'
+import { FooService, type IFoo } from './foo.svelte.ts'
 
   const foo = new FooService(true)
 
@@ -184,10 +184,10 @@ import { FooService, type IFoo } from './foo.svelte'
   let layerView  = $state(1)
 
   const onSave = async () => {
-    if ((form.Nombre || "").length < 3) { Notify.failure("Nombre muy corto"); return }
-    Loading.standard("Guardando…")
+    if ((form.Nombre || "").length < 3) { notifyFailure("Nombre muy corto"); return }
+    showLoading("Guardando…")
     await foo.postAndSync([form])
-    Loading.remove()
+    hideLoading()
     Core.openSideLayer(0)
   }
 </script>
@@ -225,4 +225,4 @@ import { FooService, type IFoo } from './foo.svelte'
 </Page>
 ```
 
-Forms use a 24-column grid (`grid-cols-24`, `gap-10`). Filtering is `VTable.filterText` + `getFilterContent` — don't reimplement. Loading/toasts: `Loading.standard(msg)` → work → `Loading.remove()`; `Notify.success` / `Notify.failure`.
+Forms use a 24-column grid (`grid-cols-24`, `gap-10`). Filtering is `VTable.filterText` + `getFilterContent` — don't reimplement. Loading/toasts (`@genix/ui/notify`): `showLoading(msg)` → work → `hideLoading()`; `notifySuccess` / `notifyFailure`; destructive confirms with `if (await confirmWarn({ title, message }))`.

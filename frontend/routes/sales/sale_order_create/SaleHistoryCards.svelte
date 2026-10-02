@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Button from '$components/buttons/Button.svelte'
-  import T from '$components/misc/T.svelte'
+  import Button from '#components/buttons/Button.svelte'
+  import T from '#components/misc/T.svelte'
   import { isSaleDelivered, isSalePaid } from './sale_history'
   import type { SaleHistoryRow } from './sale_history.idb'
   import {

@@ -1,12 +1,12 @@
 <script lang="ts">
 import { editorStore } from '../stores/editor.svelte';
-import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
 import { collectEditableNodes, editorPropNames, editorPropLabel, getNodeProp, setNodeProp } from '../html-ast/editable';
-import { getProductEcommerceData, type ProductCatalog } from '$ecommerce/services/products.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
+import { getProductEcommerceData, type ProductCatalog } from '#ecommerce/services/products.svelte.ts';
+import SearchSelect from '#components/form/SearchSelect.svelte';
 import AstEditor from './AstEditor.svelte';
 import SectionStyleEditor from './SectionStyleEditor.svelte';
-    import T from '$components/misc/T.svelte';
+    import T from '#components/misc/T.svelte';
 
   // Active palette drives the color swatches inside TextBlockEditor.
   interface Props { palette?: ColorPalette }

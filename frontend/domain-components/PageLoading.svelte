@@ -1,5 +1,5 @@
 <script lang="ts">
-import T from '$components/misc/T.svelte';
+import T from '#components/misc/T.svelte';
 import { useUI } from '@genix/ui';
 
 // Route being navigated to. Empty on boot (service worker init), where there is no target yet.

@@ -1,4 +1,4 @@
-import type { IMenuRecord } from '$core/types/modules';
+import type { IMenuRecord } from '#core/types/modules.ts';
 
 export interface IModule {
   name: string

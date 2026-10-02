@@ -5,7 +5,7 @@
 // list, matching how the delta cache and agent chat are scoped).
 
 import Dexie from 'dexie'
-import { Env } from '$core/env'
+import { Env } from '#core/env.ts'
 
 const LOG_PREFIX = '[notifications:idb]'
 const NOTIFICATIONS_DB_PREFIX = 'notifications'

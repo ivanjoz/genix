@@ -1,7 +1,7 @@
-import { GetHandler, POST, GET } from '$libs/ui-runtime.svelte';
+import { notifyFailure } from '@genix/ui/notify';
+import { GetHandler, POST, GET } from '#libs/ui-runtime.svelte.ts';
 import { GETCached } from '@genix/ui/cache';
-import { formatTime } from '$libs/helpers';
-import { Notify } from '$libs/helpers';
+import { formatTime } from '#libs/helpers.ts';
 
 export interface ICashBank {
   ID: number
@@ -113,7 +113,7 @@ export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICa
     result = await GET({ route })
   } catch (error) {
     console.log("Error:", error)
-    Notify.failure(error as string)
+    notifyFailure(error as string)
     throw error
   }
 
@@ -136,7 +136,7 @@ export const getCashBankMovementByID = async (
     try {
       return await GETCached<ICashBankMovement>(route, args.updated, p => p?.movimientos || [])
     } catch (error) {
-      Notify.failure(error as string)
+      notifyFailure(error as string)
       throw error
     }
   }
@@ -145,7 +145,7 @@ export const getCashBankMovementByID = async (
   try {
     result = await GET({ route })
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
     throw error
   }
   return result.movimientos || []
@@ -192,7 +192,7 @@ export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICashRe
     result = await GET({ route })
   } catch (error) {
     console.log("Error:", error)
-    Notify.failure(error as string)
+    notifyFailure(error as string)
     throw error
   }
 

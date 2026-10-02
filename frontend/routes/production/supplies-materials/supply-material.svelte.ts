@@ -1,5 +1,5 @@
-import { GetHandler } from '$libs/ui-runtime.svelte';
-import type { IProductSupplyProviderRow } from '$routes/logistics/purchase-management/supply-management.svelte';
+import { GetHandler } from '#libs/ui-runtime.svelte.ts';
+import type { IProductSupplyProviderRow } from '#routes/logistics/purchase-management/supply-management.svelte.ts';
 
 // A supply/material is a Product row with ss = 2. The catalog fields below mirror
 // businessTypes.Product; MinimunStock and ProviderSupply live in the separate

@@ -1,4 +1,4 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * HTML-based image hero. Demonstrates ImageEffect in `fill` mode: the photo is an

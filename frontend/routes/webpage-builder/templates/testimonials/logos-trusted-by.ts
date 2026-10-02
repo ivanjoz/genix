@@ -1,4 +1,4 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * "Trusted by" social-proof strip: an eyebrow line above a row of text wordmarks rendered

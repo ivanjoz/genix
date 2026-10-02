@@ -1,5 +1,5 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
+import Page from '#domain/Page.svelte';
     import { DemoService } from "./demo-service.svelte";
 
 	let demoService = new DemoService()

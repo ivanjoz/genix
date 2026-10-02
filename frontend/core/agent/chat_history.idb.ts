@@ -5,7 +5,7 @@
 // browser tab (rows are keyed by the same TabID the WS uses).
 
 import Dexie from 'dexie'
-import { Env } from '$core/env'
+import { Env } from '#core/env.ts'
 
 const LOG_PREFIX = '[agent-chat:idb]'
 const AGENT_CHAT_DB_PREFIX = 'agent_chat'

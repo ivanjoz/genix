@@ -1,14 +1,15 @@
-import { browser } from "$app/environment";
-import { Env } from '$core/env';
-import { fetchEvent, tr, Core } from '$core/store.svelte';
-import { addProcess, updateProcess } from '$core/notifications.svelte';
+import { notifyFailure, setLoadingDetail } from '@genix/ui/notify';
+import { browser } from "$app/env";
+import { Env } from '#core/env.ts';
+import { fetchEvent, tr, Core } from '#core/store.svelte.ts';
+import { addProcess, updateProcess } from '#core/notifications.svelte.ts';
 import { createUiRuntime } from '@genix/ui';
 import {
   GetHandler as ReusableGetHandler,
   type GetHandlerRecord,
 } from '@genix/ui/http';
-import { formatN, Notify } from '$libs/helpers';
-import type { IUser } from '$core/types/common';
+import { formatN } from '#libs/helpers.ts';
+import type { IUser } from '#core/types/common.ts';
 
 let progressTimeStart = 0
 let progressBytes = 0
@@ -35,18 +36,8 @@ export const setFetchProgress = (bytesLen: number) => {
     msg += ` (${formatN(mbps,2)} MB/s)`
   }
 
-  const loadingMsgDiv = document.getElementById("NotiflixLoadingMessage")
-  if(loadingMsgDiv){
-    let nextElement = loadingMsgDiv.nextElementSibling
-    if(!nextElement && loadingMsgDiv.parentNode){
-      nextElement = document.createElement("div")
-      nextElement.setAttribute("id","NotifyProgressMessage")
-      loadingMsgDiv.parentNode.insertBefore(nextElement, loadingMsgDiv.nextSibling)
-    }
-    if(nextElement){
-      nextElement.innerHTML = msg
-    }
-  }
+  // No-op unless a loading overlay is shown.
+  setLoadingDetail(msg)
 }
 
 export const isPublicFrontendRoute = (routeValue?: string | null): boolean => {
@@ -74,7 +65,6 @@ export const genixUiRuntime = createUiRuntime<IUser>({
   getWorkerUrl: () => Env.serviceWorker,
   getPathname: Env.getPathname,
   navigate: Env.navigate,
-  notify: Notify,
   security: {
     storageNamespace: Env.appId,
     // Public storefront routes return home; authenticated admin routes return to the welcome page.
@@ -95,7 +85,7 @@ export const genixUiRuntime = createUiRuntime<IUser>({
     if (browser) {
       document.dispatchEvent(new Event('userLogout'));
     }
-    Notify.failure('La sesión ha expirado, vuelva a iniciar sesión.');
+    notifyFailure('La sesión ha expirado, vuelva a iniciar sesión.');
   },
   startRequest: (route) => {
     if (!browser) { return 0; }

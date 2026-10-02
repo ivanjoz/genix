@@ -28,8 +28,4 @@ interface Window {
 }
 
 // Build-time constants injected via Vite
-declare module '$domain/libs/blurhash?raw' {
-	const content: string;
-	export default content;
-}
 declare const appId: string;

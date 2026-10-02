@@ -1,16 +1,17 @@
 <script lang="ts">
-import { browser } from '$app/environment';
+import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
+import { browser } from '$app/env';
 import { onMount, untrack } from 'svelte';
-import Input from '$components/form/Input.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-import TableGrid from '$components/vTable/TableGrid.svelte';
-import { security } from '$libs/ui-runtime.svelte';
-import { Core, setLanguaje, type ILanguaje } from '$core/store.svelte';
-import { BROWSER_PREFERENCE_STORAGE_KEYS, Env } from '$core/env';
+import Input from '#components/form/Input.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+import TableGrid from '#components/vTable/TableGrid.svelte';
+import { security } from '#libs/ui-runtime.svelte.ts';
+import { Core, setLanguaje, type ILanguaje } from '#core/store.svelte.ts';
+import { BROWSER_PREFERENCE_STORAGE_KEYS, Env } from '#core/env.ts';
 import type { ICacheDebugRow } from '@genix/ui/cache';
-import type { ITableColumn } from '$components/vTable/types';
+import type { ITableColumn } from '#components/vTable/types.ts';
 import {
   listEnvironmentCacheRouteStats,
   makeDeltaCacheDatabaseName,
@@ -18,24 +19,22 @@ import {
 import { clearGroupCache, listGroupCacheStats } from '@genix/ui/cache';
 import { clearCacheByIDs } from '@genix/ui/cache';
 import { sendServiceMessage } from '@genix/ui/service-worker';
-import pkg from 'notiflix'
-const { Loading, Notify } = pkg;
-import { postOwnUser } from '$services/services/users.svelte';
-import type { IUser } from '$core/types/common';
-import { HEADER_REQUEST_LOGS_MODAL_ID } from '$domain/HeaderRequestLogsModal.svelte';
-import { formatN } from '$libs/helpers';
-import { formatTime } from '$libs/helpers';
+import { postOwnUser } from '#services/services/users.svelte.ts';
+import type { IUser } from '#core/types/common.ts';
+import { HEADER_REQUEST_LOGS_MODAL_ID } from '#domain/HeaderRequestLogsModal.svelte';
+import { formatN } from '#libs/helpers.ts';
+import { formatTime } from '#libs/helpers.ts';
 import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
 import {
   getCreditUsage,
   type ICreditUsageResponse,
   type ICreditUsageScope,
-} from '$services/services/credit-usage';
+} from '#services/services/credit-usage.ts';
 import {
   AgentModelsService,
   getSelectedAgentModelHash,
   setSelectedAgentModelHash,
-} from '$core/agent/models.svelte';
+} from '#core/agent/models.svelte.ts';
 import { useUI } from '@genix/ui';
 
   const options = [
@@ -273,7 +272,7 @@ import { useUI } from '@genix/ui';
       })
     } catch (error) {
       console.warn('[HeaderConfig] Failed to load local cache inspector data.', error)
-      Notify.failure('No se pudo leer el cache local.')
+      notifyFailure('No se pudo leer el cache local.')
     } finally {
       cacheDataLoading = false
     }
@@ -283,7 +282,7 @@ import { useUI } from '@genix/ui';
     if (!browser || cacheDataClearing) { return }
 
     cacheDataClearing = true
-    Loading.standard('Eliminando cache local...')
+    showLoading('Eliminando cache local...')
     console.debug('[HeaderConfig] Clearing local cache.', {
       enviroment: Env.enviroment,
       companyID: Env.getCompanyID(),
@@ -305,14 +304,14 @@ import { useUI } from '@genix/ui';
         clearedIDsCache,
         deletedGroupRows,
       })
-      Notify.success(
+      notifySuccess(
         `Cache eliminado. Delta: ${deletedDeltaRoutes} rutas. Group: ${deletedGroupRows} grupos. IDs: ${clearedIDsCache.databaseName}.`
       )
     } catch (error) {
       console.warn('[HeaderConfig] Failed to clear local cache.', error)
-      Notify.failure('No se pudo eliminar el cache local.')
+      notifyFailure('No se pudo eliminar el cache local.')
     } finally {
-      Loading.remove()
+      hideLoading()
       cacheDataClearing = false
     }
   }
@@ -340,18 +339,18 @@ import { useUI } from '@genix/ui';
     // getUserInfo() is null until a session exists, so the form has nothing to save.
     if(!userInfo){ return }
     if(userInfo.Password && userInfo.Password !== userInfo.Password2){
-      Notify.failure("Los password no coinciden.")
+      notifyFailure("Los password no coinciden.")
     }
 
-    Loading.standard("Creando/Actualizando Usuario...")
+    showLoading("Creando/Actualizando Usuario...")
     try {
       var result = await postOwnUser(userInfo)
     } catch (error) {
-      Notify.failure(error as string)
-      Loading.remove()
+      notifyFailure(error as string)
+      hideLoading()
       return
     }
-    Loading.remove()
+    hideLoading()
     security.setUserInfo(userInfo)
     console.log("usuario result::", result)
   }
@@ -524,8 +523,10 @@ import { useUI } from '@genix/ui';
     <div class="mr-auto"></div>
     <button class="bx-blue min-w-120 px-12" aria-label="Ver logs de requests"
       onclick={() => {
-        // Close the global header dropdown first so the modal is the only visible overlay.
+        // Close the global header dropdown first so the modal is the only visible overlay. On mobile
+        // this panel sits in the side menu drawer, which is above modals, so the drawer closes too.
         ui.state.headerSettingsOpen = false
+        ui.state.mobileMenuOpen = false
         // Opening a globally mounted modal avoids losing it when the settings dropdown auto-closes.
         ui.openModal(HEADER_REQUEST_LOGS_MODAL_ID)
       }}

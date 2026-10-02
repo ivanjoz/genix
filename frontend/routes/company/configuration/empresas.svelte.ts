@@ -1,10 +1,8 @@
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
-import { Notify } from '$libs/helpers';
-import { tr } from '$core/store.svelte';
+import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import { tr } from '#core/store.svelte.ts';
 import type { IInvoiceSeries } from './invoice-series';
 import { companyFlagValueSlots, storedCompanyFlagValues, type ICompanyFlagValue } from './company-flags';
-import pkg from 'notiflix'
-const { Loading } = pkg;
 
 // Access id from backend/access.toml. It gates the "My Company" tab of this route, whose
 // other tab (Backups) carries its own id.
@@ -116,16 +114,16 @@ export async function saveCompanyParameters(company: ICompany) {
     .map(([, label]) => tr(label))
 
   if (missing.length > 0) {
-    Notify.failure(`${tr("Missing required data:|Faltan datos a guardar:")} ${missing.join(", ")}`)
+    notifyFailure(`${tr("Missing required data:|Faltan datos a guardar:")} ${missing.join(", ")}`)
     return
   }
 
-  Loading.standard(tr("Saving...|Guardando..."))
+  showLoading(tr("Saving...|Guardando..."))
   try {
     await postEmpresaParametros(company)
-    Notify.success(tr("Data saved successfully|Datos guardados correctamente"))
+    notifySuccess(tr("Data saved successfully|Datos guardados correctamente"))
   } catch (error) {
     // Error handled by POST
   }
-  Loading.remove()
+  hideLoading()
 }

@@ -4,20 +4,19 @@ export const HEADER_REQUEST_LOGS_MODAL_ID = 9201
 </script>
 
 <script lang="ts">
+  import { notifyFailure } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { onMount } from 'svelte';
-import Modal from '$components/layers/Modal.svelte';
-import TableGrid from '$components/vTable/TableGrid.svelte';
-import { Env } from '$core/env';
+import Modal from '#components/layers/Modal.svelte';
+import TableGrid from '#components/vTable/TableGrid.svelte';
+import { Env } from '#core/env.ts';
 import { listRecentRequestLogRows, makeDeltaCacheDatabaseName } from '@genix/ui/cache';
 import type { IRequestLogRow } from '@genix/ui/cache';
-import { formatN, formatTime } from '$libs/helpers';
-import type { ITableColumn } from '$components/vTable/types';
-import pkg from 'notiflix'
+import { formatN, formatTime } from '#libs/helpers.ts';
+import type { ITableColumn } from '#components/vTable/types.ts';
 
-const { Notify } = pkg;
 
 let requestLogRows = $state<IRequestLogRow[]>([])
 let requestLogsLoaded = $state(false)
@@ -134,7 +133,7 @@ const loadRecentRequestLogs = async (forceReload = false) => {
     })
   } catch (error) {
     console.warn('[HeaderRequestLogsModal] Failed to load request logs.', error)
-    Notify.failure('No se pudieron leer los request logs.')
+    notifyFailure('No se pudieron leer los request logs.')
   } finally {
     requestLogsLoading = false
   }

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Page from '$domain/Page.svelte';
-  import Button from '$components/buttons/Button.svelte';
-  import TableGrid from '$components/vTable/TableGrid.svelte';
-  import type { ITableColumn } from '$components/vTable/types';
+  import Page from '#domain/Page.svelte';
+  import Button from '#components/buttons/Button.svelte';
+  import TableGrid from '#components/vTable/TableGrid.svelte';
+  import type { ITableColumn } from '#components/vTable/types.ts';
 
   interface DemoTableGridRow {
     id: string;

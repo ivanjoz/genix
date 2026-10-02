@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DOC_TYPE_BOLETA, DOC_TYPE_CREDIT_NOTE, DOC_TYPE_FACTURA } from '$core/sunat-doc-type'
-import type { IClientProviderSnapshot } from '$services/crm/client-provider.svelte'
+import { DOC_TYPE_BOLETA, DOC_TYPE_CREDIT_NOTE, DOC_TYPE_FACTURA } from '#core/sunat-doc-type.ts'
+import type { IClientProviderSnapshot } from '#services/crm/client-provider.svelte.ts'
 import {
   bookRowDocument, bookRowModifiedDocument, bookRowNumber, buildPeriodOptions, buildSalesBook,
   countPendingRows, isWholeMonthPeriod, periodCode, periodLabel, periodOfUnixDay, sumSalesBook,

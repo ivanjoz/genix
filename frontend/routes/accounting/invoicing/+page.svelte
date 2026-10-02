@@ -1,16 +1,17 @@
 <script lang="ts">
+import { hideLoading, notifySuccess, showLoading } from '@genix/ui/notify';
 import { useUI } from '@genix/ui'
-import Button from '$components/buttons/Button.svelte'
-import DateInput from '$components/form/DateInput.svelte'
-import FilterInput from '$components/form/FilterInput.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import Layer from '$components/layers/Layer.svelte'
-import T from '$components/misc/T.svelte'
-import VTable from '$components/vTable/VTable.svelte'
+import Button from '#components/buttons/Button.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import FilterInput from '#components/form/FilterInput.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import Layer from '#components/layers/Layer.svelte'
+import T from '#components/misc/T.svelte'
+import VTable from '#components/vTable/VTable.svelte'
 import type { ExcelTableColumn } from '@genix/ui/excel'
-import Page from '$domain/Page.svelte'
-import { tr } from '$core/store.svelte'
-import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
+import Page from '#domain/Page.svelte'
+import { tr } from '#core/store.svelte.ts'
+import { formatN, formatTime } from '#libs/helpers.ts'
 import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte'
 import InvoiceDetailLayer from './InvoiceDetailLayer.svelte'
 import {
@@ -92,11 +93,11 @@ async function sendSelectedDocument() {
 
   // The request waits for SUNAT, which regularly takes tens of seconds, so the
   // message says what is being waited on rather than a generic "guardando".
-  Loading.standard(tr("Sending to SUNAT, this may take a moment...|Enviando a SUNAT, puede demorar un momento..."))
+  showLoading(tr("Sending to SUNAT, this may take a moment...|Enviando a SUNAT, puede demorar un momento..."))
   try {
     // What comes back is the document with SUNAT's verdict already on it.
     const sentDocument = await postInvoiceSend(selectedDocument.ID) as IInvoiceDocument
-    Notify.success(tr(sunatVerdictMessage(sentDocument)))
+    notifySuccess(tr(sunatVerdictMessage(sentDocument)))
     // The panel stays open on the answer: a rejection is what the operator needs
     // to read, and closing the layer would hide the code that explains it.
     selectedDocument = sentDocument
@@ -105,7 +106,7 @@ async function sendSelectedDocument() {
   } finally {
     // Either way the document moved, so the list has to show where it landed.
     await invoices.fetch()
-    Loading.remove()
+    hideLoading()
   }
 }
 </script>

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import Modal from '$components/layers/Modal.svelte'
-  import Portal from '$components/misc/Portal.svelte'
-  import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
+  import Modal from '#components/layers/Modal.svelte'
+  import Portal from '#components/misc/Portal.svelte'
+  import CheckboxOptions from '#components/form/CheckboxOptions.svelte'
   import {
     TICKET_58MM, TICKET_WIDTH_OPTIONS, renderSaleTicket, saleDocumentNumber, saleSeriesID,
     type TicketContext,

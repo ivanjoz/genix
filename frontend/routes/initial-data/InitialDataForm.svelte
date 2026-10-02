@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
   import { untrack } from "svelte";
-  import Input from '$components/form/Input.svelte';
-  import SearchSelect from '$components/form/SearchSelect.svelte';
-  import Button from '$components/buttons/Button.svelte';
-  import { Loading, Notify } from '$libs/helpers';
-  import { tr } from '$core/store.svelte';
-  import { CountryCitiesService } from '$services/business/country-cities.svelte';
-  import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte';
+  import Input from '#components/form/Input.svelte';
+  import SearchSelect from '#components/form/SearchSelect.svelte';
+  import Button from '#components/buttons/Button.svelte';
+  import { tr } from '#core/store.svelte.ts';
+  import { CountryCitiesService } from '#services/business/country-cities.svelte.ts';
+  import { WarehousesService } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts';
   import { initialDataDefaults, postInitialData } from './initial-data.svelte';
 
   interface Props {
@@ -35,43 +35,42 @@
   const saveInitialData = async () => {
     if(isCreatingSite){
       if((form.SiteName||"").length < 4){
-        Notify.failure(tr("The branch name must be at least 4 characters.|El nombre de la sede debe tener al menos 4 caracteres."))
+        notifyFailure(tr("The branch name must be at least 4 characters.|El nombre de la sede debe tener al menos 4 caracteres."))
         return
       }
       if((form.SiteAddress||"").length < 4){
-        Notify.failure(tr("The branch address must be at least 4 characters.|La dirección de la sede debe tener al menos 4 caracteres."))
+        notifyFailure(tr("The branch address must be at least 4 characters.|La dirección de la sede debe tener al menos 4 caracteres."))
         return
       }
       if(!form.CityID){
-        Notify.failure(tr("Please select a city.|Debe seleccionar una ciudad."))
+        notifyFailure(tr("Please select a city.|Debe seleccionar una ciudad."))
         return
       }
     }
     if((form.WarehouseName||"").length < 4){
-      Notify.failure(tr("The warehouse name must be at least 4 characters.|El nombre del almacén debe tener al menos 4 caracteres."))
+      notifyFailure(tr("The warehouse name must be at least 4 characters.|El nombre del almacén debe tener al menos 4 caracteres."))
       return
     }
     if((form.CashBankName||"").length < 4){
-      Notify.failure(tr("The cash register name must be at least 4 characters.|El nombre de la caja debe tener al menos 4 caracteres."))
+      notifyFailure(tr("The cash register name must be at least 4 characters.|El nombre de la caja debe tener al menos 4 caracteres."))
       return
     }
 
     isSaving = true
-    Loading.standard(tr("Saving initial data...|Guardando los datos iniciales..."))
+    showLoading(tr("Saving initial data...|Guardando los datos iniciales..."))
     try {
       await postInitialData(form)
     } catch (error) {
-      // No Notify here: the http layer already raised the toast with the server's message, and this
-      // rejects with the raw response object, which Notiflix renders as an empty box.
+      // No toast here: the http layer already raised one with the server's message.
       console.error("[initial-data] Save failed:", error)
-      Loading.remove()
+      hideLoading()
       isSaving = false
       return
     }
 
-    Loading.remove()
+    hideLoading()
     isSaving = false
-    Notify.success(tr("Initial data saved.|Datos iniciales guardados."))
+    notifySuccess(tr("Initial data saved.|Datos iniciales guardados."))
     onSaved()
   }
 </script>

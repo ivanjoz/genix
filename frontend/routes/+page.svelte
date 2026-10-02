@@ -1,5 +1,5 @@
 <script lang="ts">
-  import T from '$components/misc/T.svelte';
+  import T from '#components/misc/T.svelte';
   // Welcome/Home page
 </script>
 

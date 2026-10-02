@@ -1,20 +1,21 @@
 <script lang="ts">
+  import { hideLoading, showLoading } from '@genix/ui/notify';
   import { untrack } from 'svelte'
-  import Input from '$components/form/Input.svelte'
-  import LayerStatic from '$components/layers/LayerStatic.svelte'
-  import FilterInput from '$components/form/FilterInput.svelte'
-  import Button from '$components/buttons/Button.svelte'
-  import TableTree, { type TableTreeNode } from '$components/vTable/TableTree.svelte'
-  import type { ITableColumn } from '$components/vTable/types'
-  import Page from '$domain/Page.svelte'
-  import { GetHandler, POST } from '$libs/ui-runtime.svelte'
-  import { formatN, Loading } from '$libs/helpers'
-  import { tr } from '$core/store.svelte'
-  import T from '$components/misc/T.svelte'
+  import Input from '#components/form/Input.svelte'
+  import LayerStatic from '#components/layers/LayerStatic.svelte'
+  import FilterInput from '#components/form/FilterInput.svelte'
+  import Button from '#components/buttons/Button.svelte'
+  import TableTree, { type TableTreeNode } from '#components/vTable/TableTree.svelte'
+  import type { ITableColumn } from '#components/vTable/types.ts'
+  import Page from '#domain/Page.svelte'
+  import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
+  import { formatN } from '#libs/helpers.ts'
+  import { tr } from '#core/store.svelte.ts'
+  import T from '#components/misc/T.svelte'
   import {
     CountryCitiesService,
     type ICityLocation,
-  } from '$services/business/country-cities.svelte'
+  } from '#services/business/country-cities.svelte.ts'
 
   type DeliveryCostField = 'Fijo' | 'PorKg'
 
@@ -276,7 +277,7 @@
     console.debug('[delivery-costs] save requested', { changedCount: changedCosts.length, changedCosts })
     if (changedCosts.length === 0) { return }
 
-    Loading.standard(tr("Saving records...|Guardando Registros..."))
+    showLoading(tr("Saving records...|Guardando Registros..."))
     try {
       const savedCosts = await POST({
         route: 'shipping-costs',
@@ -292,7 +293,7 @@
       }
       shippingCostsService.fetchOnline()
     } finally {
-      Loading.remove()
+      hideLoading()
     }
   }
 

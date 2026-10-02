@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
+import type { ComponentAST } from '#ecommerce/renderer/renderer-types.ts';
 import { scopeCustomCss, nextGlobalId } from './scope-custom-css';
 
 // Sequential allocator starting at 1, mirrors nextGlobalId on an empty page.

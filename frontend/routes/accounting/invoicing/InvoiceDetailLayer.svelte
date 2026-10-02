@@ -1,12 +1,13 @@
 <script lang="ts">
-import Button from '$components/buttons/Button.svelte'
-import LabelCell from '$components/form/LabelCell.svelte'
-import T from '$components/misc/T.svelte'
-import { formatN, formatTime, Notify } from '$libs/helpers'
-import { tr } from '$core/store.svelte'
+import { notifyFailure } from '@genix/ui/notify';
+import Button from '#components/buttons/Button.svelte'
+import LabelCell from '#components/form/LabelCell.svelte'
+import T from '#components/misc/T.svelte'
+import { formatN, formatTime } from '#libs/helpers.ts'
+import { tr } from '#core/store.svelte.ts'
 import { getRecordByID } from '@genix/ui/cache'
-import { formatQuantity, quantityAmount, unpackQuantityLine } from '$core/quantity'
-import type { ISaleOrder } from '$routes/sales/sale_orders_status/sale_order_status.svelte'
+import { formatQuantity, quantityAmount, unpackQuantityLine } from '#core/quantity.ts'
+import type { ISaleOrder } from '#routes/sales/sale_orders_status/sale_order_status.svelte.ts'
 import {
   hasInvoiceCDR, hasInvoiceXML, invoiceNumber, invoiceSaleOrderID, invoiceStateCss,
   invoiceStateLabels, type IInvoiceDocument,
@@ -79,7 +80,7 @@ async function download(artifact: "xml" | "cdr") {
     await downloadInvoiceArtifact(invoiceDocument.ID, artifact, fileName)
   } catch (downloadError) {
     console.error("invoice artifact download failed", downloadError)
-    Notify.failure(tr("The file could not be downloaded.|No se pudo descargar el archivo."))
+    notifyFailure(tr("The file could not be downloaded.|No se pudo descargar el archivo."))
   }
 }
 </script>

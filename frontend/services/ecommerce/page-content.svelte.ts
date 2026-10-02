@@ -1,8 +1,8 @@
-import { GET, POST } from '$libs/ui-runtime.svelte';
-import { Env } from '$core/env';
+import { GET, POST } from '#libs/ui-runtime.svelte.ts';
+import { Env } from '#core/env.ts';
 import { unmarshal } from '@genix/ui/utilities';
-import { collectTokens, generateCss, normalizeRuntimeCss } from '$ecommerce/stores/uno-generator';
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import { collectTokens, generateCss, normalizeRuntimeCss } from '#ecommerce/stores/uno-generator.ts';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 // The "Inicio" page (ID 10 server-side). The storefront passes pageID 0 for the
 // root page; the published CDN snapshot is named with the resolved id (10), so

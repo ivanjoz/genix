@@ -1,4 +1,4 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * Two alternating feature rows: photo + text, with the image on opposite sides each row

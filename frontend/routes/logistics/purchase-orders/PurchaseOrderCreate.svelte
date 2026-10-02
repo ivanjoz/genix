@@ -1,29 +1,30 @@
 <script lang="ts">
-import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
-import Button from '$components/buttons/Button.svelte'
-import Checkbox from '$components/form/Checkbox.svelte'
-import Info from '$components/misc/Info.svelte'
-import LayerStatic from '$components/layers/LayerStatic.svelte'
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
-import VTable from '$components/vTable/VTable.svelte'
-import type { ITableColumn } from '$components/vTable/types'
-import { formatN, formatTime, Notify } from '$libs/helpers'
-import { tr } from '$core/store.svelte'
-import T from '$components/misc/T.svelte'
-import { POST } from '$libs/ui-runtime.svelte'
-import { ProductStockSimpleService } from '$routes/logistics/products-stock/stock-movement'
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
-import type { IProduct, IProductPresentation } from '$services/production/products.svelte'
-import { ProductsService } from '$services/production/products.svelte'
-import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
+import { notifyFailure, notifySuccess } from '@genix/ui/notify';
+import KeyValueStrip from '#components/misc/KeyValueStrip.svelte'
+import Button from '#components/buttons/Button.svelte'
+import Checkbox from '#components/form/Checkbox.svelte'
+import Info from '#components/misc/Info.svelte'
+import LayerStatic from '#components/layers/LayerStatic.svelte'
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+import VTable from '#components/vTable/VTable.svelte'
+import type { ITableColumn } from '#components/vTable/types.ts'
+import { formatN, formatTime } from '#libs/helpers.ts'
+import { tr } from '#core/store.svelte.ts'
+import T from '#components/misc/T.svelte'
+import { POST } from '#libs/ui-runtime.svelte.ts'
+import { ProductStockSimpleService } from '#routes/logistics/products-stock/stock-movement.ts'
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
+import type { IProduct, IProductPresentation } from '#services/production/products.svelte.ts'
+import { ProductsService } from '#services/production/products.svelte.ts'
+import { WarehousesService } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import { clearRouteRecordQueryParam, loadRouteRecordFromQueryParam } from '@genix/ui/cache'
 import { onMount, untrack } from 'svelte'
 import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
-    import { ProductSupplyService } from '$routes/logistics/purchase-management/supply-management.svelte';
+    import { ProductSupplyService } from '#routes/logistics/purchase-management/supply-management.svelte.ts';
 import type { IPurchaseOrder } from './purchase_order.svelte';
-import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
-import { PURCHASE_DOC_TYPE_INVOICE, splitPurchaseTotal, type IPurchaseDocument } from '$core/purchase-document'
+import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
+import { PURCHASE_DOC_TYPE_INVOICE, splitPurchaseTotal, type IPurchaseDocument } from '#core/purchase-document.ts'
 import { getFechaUnix } from '@genix/ui/utilities'
 
 // Line item shown in the cart; keyed by productID+presentationID composite.
@@ -174,15 +175,15 @@ class PurchaseOrderState {
 
   async postPurchaseOrder(): Promise<boolean> {
     if (this.items.length === 0) {
-      Notify.failure(tr('Add at least one product to the order.|Agregue al menos un producto a la orden.'))
+      notifyFailure(tr('Add at least one product to the order.|Agregue al menos un producto a la orden.'))
       return false
     }
     if (!this.form.ProviderID) {
-      Notify.failure(tr('Please select a supplier.|Seleccione un proveedor.'))
+      notifyFailure(tr('Please select a supplier.|Seleccione un proveedor.'))
       return false
     }
     if (this.form.ExpressEntry && !this.form.WarehouseID) {
-      Notify.failure(tr('Select the warehouse the goods enter.|Seleccione el almacén donde ingresa la mercadería.'))
+      notifyFailure(tr('Select the warehouse the goods enter.|Seleccione el almacén donde ingresa la mercadería.'))
       return false
     }
     const zeroQuantityItem = this.items.find((item) => !item.quantity)
@@ -190,7 +191,7 @@ class PurchaseOrderState {
       const zeroQuantityName = zeroQuantityItem.presentation
         ? `${zeroQuantityItem.product.Name} (${zeroQuantityItem.presentation.nm})`
         : zeroQuantityItem.product.Name
-      Notify.failure(`El producto "${zeroQuantityName}" no tiene cantidad.`)
+      notifyFailure(`El producto "${zeroQuantityName}" no tiene cantidad.`)
       return false
     }
 
@@ -307,7 +308,7 @@ async function handleSave() {
   const isExpressEntry = orderState.form.ExpressEntry
   const orderID = await orderState.postPurchaseOrder()
   if (orderID) {
-    Notify.success(isExpressEntry
+    notifySuccess(isExpressEntry
       ? `La orden Nº ${orderID} ha sido generada e ingresada al almacén`
       : `La orden Nº ${orderID} ha sido generada`)
     orderState.reset()
@@ -405,7 +406,7 @@ onMount(async () => {
       recordID: record?.ID,
     })
     if (err) {
-      Notify.failure('No se encontró la orden de compra a copiar.')
+      notifyFailure('No se encontró la orden de compra a copiar.')
       return
     }
     if (!record) { return }

@@ -10,11 +10,11 @@ import {
   PRODUCT_OPTION_LIST_UNIDAD_ID,
   PRODUCT_SHARED_LIST_CATEGORIA_ID,
   PRODUCT_SHARED_LIST_MARCA_ID,
-} from '$core/products-lists';
-import type { ISharedListRecord, SharedListsService } from '$services/business/shared-lists.svelte';
+} from '#core/products-lists.ts';
+import type { ISharedListRecord, SharedListsService } from '#services/business/shared-lists.svelte.ts';
 import { normalizeStringN } from '@genix/ui/utilities';
-import { normalizeComparableValue } from '$libs/helpers';
-import type { IProduct, ProductsService } from '$services/production/products.svelte';
+import { normalizeComparableValue } from '#libs/helpers.ts';
+import type { IProduct, ProductsService } from '#services/production/products.svelte.ts';
 
 // Centralizes Productos Excel export so the page only triggers the action.
 export const exportProductosToExcel = async (

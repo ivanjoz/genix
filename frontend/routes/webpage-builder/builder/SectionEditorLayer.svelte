@@ -1,12 +1,12 @@
 <script lang="ts">
-import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+import { hideLoading, notifyInfo, showLoading } from '@genix/ui/notify';
+import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
 import { editorStore } from '../stores/editor.svelte';
-  import { savePageContent, getCurrentPageID } from '$services/ecommerce/page-content.svelte';
-  import { uploadShowcaseImage } from '$services/webpage/pages.svelte';
+  import { savePageContent, getCurrentPageID } from '#services/ecommerce/page-content.svelte.ts';
+  import { uploadShowcaseImage } from '#services/webpage/pages.svelte.ts';
   import { captureShowcaseBlob } from './showcase-capture';
-  import { Loading, Notify } from '$libs/helpers';
-  import { Core, tr } from '$core/store.svelte';
-  import T from '$components/misc/T.svelte';
+  import { Core, tr } from '#core/store.svelte.ts';
+  import T from '#components/misc/T.svelte';
   import EditorTab from '../components/EditorTab.svelte';
   import TemplatesTab from '../components/TemplatesTab.svelte';
   import GalleryTab from '../components/GalleryTab.svelte';
@@ -47,14 +47,14 @@ import { editorStore } from '../stores/editor.svelte';
     // Nothing to persist if no section was created, deleted, reordered, or edited
     // since the last load/save — avoid a pointless round-trip and tell the user.
     if (!editorStore.hasUnsavedChanges) {
-      Notify.info('No hay cambios a enviar.');
+      notifyInfo('No hay cambios a enviar.');
       return;
     }
 
     // Capture the showcase thumbnail first — the only step the user waits on (the
     // DOM must be in its current, unmodified state). Conversion + upload run in the
     // background afterwards so saving isn't blocked.
-    Loading.standard(tr('Generating preview...|Generando vista previa...', Core.languaje));
+    showLoading(tr('Generating preview...|Generando vista previa...', Core.languaje));
     // The thumbnail is best-effort: its own try/catch keeps a capture failure from
     // aborting the save below (which is what the user actually asked for).
     let thumbnail: Blob | null = null;
@@ -71,7 +71,7 @@ import { editorStore } from '../stores/editor.svelte';
       // correctly reports "no changes".
       editorStore.captureBaseline();
     } finally {
-      Loading.remove();
+      hideLoading();
     }
 
     // Fire-and-forget: convert to AVIF and upload as the page thumbnail. Skipped for

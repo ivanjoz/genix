@@ -16,9 +16,9 @@
 // chat is used and stays open from then on, reconnecting on drops. Command
 // execution lives in commands.ts.
 
-import { Env } from "$core/env";
-import { security } from "$libs/ui-runtime.svelte";
-import { Agent, isAgentEnabled } from "$components/agent/registry";
+import { Env } from "#core/env.ts";
+import { security } from "#libs/ui-runtime.svelte.ts";
+import { Agent, isAgentEnabled } from "#components/agent/registry.ts";
 import { encodeChannelToken, isValidTabID, mintTabID } from "./channel";
 import { releaseScreenStream, runCommand, type WsMessage } from "./commands";
 

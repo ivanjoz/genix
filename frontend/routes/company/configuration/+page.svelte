@@ -1,7 +1,7 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-import { security } from '$libs/ui-runtime.svelte';
+import Page from '#domain/Page.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+import { security } from '#libs/ui-runtime.svelte.ts';
 import CompanyTab from './CompanyTab.svelte';
 import InvoicingTab from './InvoicingTab.svelte';
 import StoreTab from './StoreTab.svelte';

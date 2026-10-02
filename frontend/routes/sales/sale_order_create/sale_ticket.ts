@@ -10,14 +10,14 @@
 // an internal note is read off the sale id itself, whose last two digits are the invoicing
 // series — 0 meaning the till named none (backend/sales/types/sale_order_id.go).
 
-import { normalizeQuantity } from '$core/quantity'
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '$core/sunat-doc-type'
-import { type IInvoiceSeries } from '$routes/company/configuration/invoice-series'
-import type { IWarehouse } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
-import type { ICashBank } from '$routes/finance/cash-banks/cajas.svelte'
-import { currencySymbol } from '$routes/finance/exchange-rate/exchange-rate'
-import type { IClientProvider } from '$services/crm/client-provider.svelte'
-import type { IProduct } from '$services/production/products.svelte'
+import { normalizeQuantity } from '#core/quantity.ts'
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '#core/sunat-doc-type.ts'
+import { type IInvoiceSeries } from '#routes/company/configuration/invoice-series.ts'
+import type { IWarehouse } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
+import type { ICashBank } from '#routes/finance/cash-banks/cajas.svelte.ts'
+import { currencySymbol } from '#routes/finance/exchange-rate/exchange-rate.ts'
+import type { IClientProvider } from '#services/crm/client-provider.svelte.ts'
+import type { IProduct } from '#services/production/products.svelte.ts'
 import type { SaleHistoryLine, SaleHistoryRow } from './sale_history.idb'
 import { isSaleDelivered, isSalePaid } from './sale_history'
 

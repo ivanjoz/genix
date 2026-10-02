@@ -1,11 +1,11 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { formatTime } from '$libs/helpers';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
-import { tr } from '$core/store.svelte';
+import Page from '#domain/Page.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import { formatTime } from '#libs/helpers.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
+import { tr } from '#core/store.svelte.ts';
 import {
   CronActionsService,
   type ICronActionTableRow,

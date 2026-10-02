@@ -1,4 +1,4 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * Category showcase: a heading, the category's own description via <CategoryDescription>,

@@ -11,9 +11,9 @@
 //
 // Field numbers in the comments are Anexo 3 of RS 112-2021. See ./PLAN.md.
 
-import { DOC_TYPE_BOLETA } from '$core/sunat-doc-type'
-import { sunatIdentityDocCode } from '$services/crm/identity-doc'
-import type { IClientProviderSnapshot } from '$services/crm/client-provider.svelte'
+import { DOC_TYPE_BOLETA } from '#core/sunat-doc-type.ts'
+import { sunatIdentityDocCode } from '#services/crm/identity-doc.ts'
+import type { IClientProviderSnapshot } from '#services/crm/client-provider.svelte.ts'
 
 export const BOOK_SALES = "ventas"
 export const BOOK_PURCHASES = "compras"

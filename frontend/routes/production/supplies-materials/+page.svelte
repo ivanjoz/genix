@@ -1,28 +1,29 @@
 <script lang="ts">
+  import { confirmWarn, hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Button from '$components/buttons/Button.svelte';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Input from '$components/form/Input.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import Layer from '$components/layers/Layer.svelte';
-import CardsList from '$components/vTable/CardsList.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ICardCell } from '$components/vTable/types';
-import { productoMonedaOptions } from '$core/products-lists';
-import { Core, tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-import Page from '$domain/Page.svelte';
+import Button from '#components/buttons/Button.svelte';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Input from '#components/form/Input.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import Layer from '#components/layers/Layer.svelte';
+import CardsList from '#components/vTable/CardsList.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ICardCell } from '#components/vTable/types.ts';
+import { productoMonedaOptions } from '#core/products-lists.ts';
+import { Core, tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import Page from '#domain/Page.svelte';
 import type { ExcelTableColumn } from '@genix/ui/excel';
-import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
-import { SharedListsService } from '$services/business/shared-lists.svelte';
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte';
+import { formatN } from '#libs/helpers.ts';
+import { SharedListsService } from '#services/business/shared-lists.svelte.ts';
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts';
 import {
   createEmptyProviderSupplyRow,
   normalizeProviderSupplyRows,
   ProductSupplyService,
   type IProductSupplyProviderRow,
-} from '$routes/logistics/purchase-management/supply-management.svelte';
+} from '#routes/logistics/purchase-management/supply-management.svelte.ts';
 import {
   depreciationTerms,
   SUPPLY_PRODUCT_STATUS,
@@ -170,7 +171,7 @@ import {
 
   const onSave = async (isDelete?: boolean) => {
     if ((supplyForm.Name?.length || 0) < 2) {
-      Notify.failure(tr("Name must be at least 2 characters.|El nombre debe tener al menos 2 caracteres."));
+      notifyFailure(tr("Name must be at least 2 characters.|El nombre debe tener al menos 2 caracteres."));
       return;
     }
     // Soft-delete: backend evicts records with ss=0 from the active list on next sync.
@@ -178,15 +179,15 @@ import {
     // Strip empty rows so the backend only persists meaningful provider entries.
     supplyForm.ProviderSupply = normalizeProviderSupplyRows(supplyForm.ProviderSupply || []);
 
-    Loading.standard(tr("Saving supply...|Guardando insumo..."));
+    showLoading(tr("Saving supply...|Guardando insumo..."));
     try {
       await doPostSupplies([supplyForm]);
     } catch (error) {
-      Notify.failure(error as string);
-      Loading.remove();
+      notifyFailure(error as string);
+      hideLoading();
       return;
     }
-    Loading.remove();
+    hideLoading();
     supplyForm = {} as ISupplyMaterial;
     ui.openSideLayer(0);
   };
@@ -246,13 +247,12 @@ import {
     id={1}
     onClose={() => { supplyForm = {} as ISupplyMaterial; }}
     onSave={() => { onSave(); }}
-    onDelete={supplyForm?.ID ? () => {
-      ConfirmWarn(
-        "Eliminar Insumo",
-        `¿Está seguro que desea eliminar "${supplyForm.Name}"?`,
-        "SI", "NO",
-        () => { onSave(true); },
-      );
+    onDelete={supplyForm?.ID ? async () => {
+      const confirmed = await confirmWarn({
+        title: "Eliminar Insumo",
+        message: `¿Está seguro que desea eliminar "${supplyForm.Name}"?`,
+      });
+      if (confirmed) { onSave(true); }
     } : undefined}
   >
     <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16" aria-label="Supply Material Form">

@@ -1,9 +1,10 @@
+import adapter from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, type AliasOptions, type ViteDevServer } from 'vite';
 import * as esbuild from 'esbuild';
 import type { BuildOptions } from 'esbuild';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createHash } from 'node:crypto';
@@ -11,8 +12,8 @@ import { svelteClassHasher, getCounterForKey, makeClassKey } from '../plugins.js
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// The shared service-worker source and all $-aliased modules live in the parent
-// frontend root, not in webpage/.
+// The shared service-worker source and the shared layers (#core, #libs, ...) live in the
+// parent frontend root, not in webpage/.
 const frontendDir = path.resolve(__dirname, '..');
 
 const isBuild = process.argv.includes('build');
@@ -38,52 +39,6 @@ const serviceWorkerConfig: BuildOptions = {
   platform: 'browser',
   packages: 'bundle',
   target: 'esnext',
-  plugins: [
-    {
-      name: 'alias',
-      setup(build) {
-        build.onResolve({ filter: /^\$/ }, (args) => {
-          const parts = args.path.split('/');
-          const alias = parts[0];
-          const rest = parts.slice(1).join('/');
-          const baseDir = {
-            '$core': 'core',
-            '$ecommerce': 'webpage',
-            '$routes': 'routes',
-            '$domain': 'domain-components',
-            '$components': 'packages/genix-ui',
-            '$services': 'services',
-            '$libs': 'libs',
-          }[alias];
-          if (!baseDir) return null;
-
-          const possiblePaths: string[] = [];
-          if (alias === '$core') {
-            possiblePaths.push(path.join(baseDir, 'lib', rest));
-            possiblePaths.push(path.join(baseDir, 'core', rest));
-            possiblePaths.push(path.join(baseDir, 'assets', rest));
-            possiblePaths.push(path.join(baseDir, rest));
-          } else if (alias === '$components') {
-            possiblePaths.push(path.join(baseDir, rest));
-            possiblePaths.push(path.join('webpage', 'components', rest));
-          } else {
-            possiblePaths.push(path.join(baseDir, rest));
-          }
-
-          for (const possiblePath of possiblePaths) {
-            const fullPath = path.resolve(frontendDir, possiblePath);
-            if (fs.existsSync(fullPath)) return { path: fullPath };
-            if (fs.existsSync(fullPath + '.ts')) return { path: fullPath + '.ts' };
-            if (fs.existsSync(fullPath + '.js')) return { path: fullPath + '.js' };
-            if (fs.existsSync(fullPath + '.svelte')) return { path: fullPath + '.svelte' };
-            if (fs.existsSync(path.join(fullPath, 'index.ts'))) return { path: path.join(fullPath, 'index.ts') };
-            if (fs.existsSync(path.join(fullPath, 'index.js'))) return { path: path.join(fullPath, 'index.js') };
-          }
-          return null;
-        });
-      },
-    },
-  ],
 };
 
 const serviceWorkerPlugin = () => ({
@@ -124,7 +79,6 @@ const isRendererBuild = !!process.env.VITE_RENDERER_BUILD;
 
 export default defineConfig({
   root: path.resolve(__dirname),
-  publicDir: './static',
   resolve: {
     alias: isRendererBuild
       ? {
@@ -132,6 +86,13 @@ export default defineConfig({
           'supports-color': path.resolve(__dirname, 'lib/supports-color-stub.js')
         }
       : {} as AliasOptions
+  },
+  environments: {
+    // The server chunks are only consumed by scripts/build-renderer.mjs, whose esbuild pass
+    // minifies the final render.mjs. Minifying them here first is harmful: rolldown can name a
+    // compiled snippet (a block-level `{function t(){}}`) like the component's props param,
+    // and esbuild hoists that block function over the param, so the props read as undefined.
+    ssr: { build: { minify: false } }
   },
   ssr: {
     // El build del renderer se empaqueta en un zip que corre sin node_modules (/tmp en el
@@ -171,7 +132,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         hashCharacters: 'base64',
-        // bundleStrategy 'split' (svelte.config.js) enables code-splitting, so we can
+        // bundleStrategy 'split' (sveltekit() options above) enables code-splitting, so we can
         // separate dependencies from app code: everything under node_modules goes into
         // a single 'vendor' chunk, the rest stays in app/route chunks.
         manualChunks(id) {
@@ -194,7 +155,64 @@ export default defineConfig({
     // (PLUGIN_TIMINGS ~82%). This storefront prerender imports no server-only modules,
     // so we drop the guard. If server-only code is ever added, restore it to catch leaks.
     (async () => {
-      const sk = await sveltekit();
+      const sk = await sveltekit({
+        preprocess: vitePreprocess(),
+        compilerOptions: {
+          cssHash: ({ hash, css, filename }) => {
+            // MUST be deterministic: SSR/prerender runs two separate build passes
+            // (server + client). The persisted keyed counter (../plugins.js) resolves the
+            // same key to the same name in both passes, so the prerendered HTML's scope
+            // class matches the bundled CSS. Dev keeps readable component-name hashes.
+            if (isBuild) {
+              return getCounterForKey(makeClassKey('s', filename, filename ? undefined : '#' + hash(css)));
+            }
+            if (!filename) {
+              return `svelte-${hash(css).substring(0, 8)}`;
+            }
+            const componentName = (filename.split(/[\\/]/).pop() || '')
+              .split('.')[0]
+              .replace(/^\+/, '')
+              .replace(/[^a-zA-Z0-9_-]/g, '_')
+              .replace(/^[0-9]/, '_$&');
+            return `${componentName || 'comp'}_${hash(css).substring(0, 8)}`;
+          }
+        },
+        adapter: adapter({
+          pages: 'build',
+          assets: 'build',
+          // Ningún build prerenderiza páginas: el renderer las emite bajo demanda en el
+          // Lambda y la vista embebida del builder es un SPA puro. Así que la salida es
+          // siempre el shell SPA en index.html.
+          fallback: 'index.html',
+          precompress: false,
+          strict: true
+        }),
+        paths: {
+          // El renderer sirve la tienda en la raíz del dominio de la company; dev/admin
+          // conservan la base /webpage-app del proxy en :3572.
+          base: isRendererBuild ? '' : '/webpage-app',
+          // Con rutas relativas SvelteKit emite './_app/…' en la raíz y '../_app/…' en
+          // una página anidada, así que el prefijo dependería de la profundidad de cada
+          // página. El Lambda reescribe ese prefijo al CDN de la company con UNA regla,
+          // así que necesita que sea siempre el mismo: '/_app/…'.
+          relative: !isRendererBuild
+        },
+        // El proyecto no usa src/, así que el hook y env.ts viven en la raíz de la app. Los
+        // alias de ruta son los subpath imports "#…" de package.json.
+        files: {
+          src: '.',
+          assets: 'static',
+          hooks: { server: 'hooks.server' },
+          routes: 'routes',
+          appTemplate: 'app.html'
+        },
+        output: {
+          // 'split' enables code-splitting so vendor (node_modules) and app code land
+          // in separate chunks (see manualChunks below). 'single' would
+          // reject manualChunks outright (codeSplitting:false).
+          bundleStrategy: 'split'
+        }
+      });
       const arr = Array.isArray(sk) ? sk : [sk];
       return arr.filter((p) => p && (p as any).name !== 'vite-plugin-sveltekit-guard');
     })(),

@@ -1,10 +1,10 @@
 <script lang="ts">
-import Input from '$components/form/Input.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import Button from '$components/buttons/Button.svelte';
-import T from '$components/misc/T.svelte';
+import Input from '#components/form/Input.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import Button from '#components/buttons/Button.svelte';
+import T from '#components/misc/T.svelte';
 import CompanyFlagsPanel from './CompanyFlagsPanel.svelte';
-import { CountryCitiesService } from '$services/business/country-cities.svelte';
+import { CountryCitiesService } from '#services/business/country-cities.svelte.ts';
 import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas.svelte"
 
   const { service }: { service: EmpresaParametrosService } = $props()

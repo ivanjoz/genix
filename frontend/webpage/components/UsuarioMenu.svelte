@@ -1,10 +1,10 @@
 <script lang="ts">
   import { layerOpenedState } from "./store.svelte";
-  import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
-  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+  import ButtonLayer from '#components/buttons/ButtonLayer.svelte';
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
   import s1 from "./styles.module.css"
-  import { security } from '$libs/ui-runtime.svelte';
-  import type { IUser } from '$core/types/common';
+  import { security } from '#libs/ui-runtime.svelte.ts';
+  import type { IUser } from '#core/types/common.ts';
 
   export interface IProps {
     id?: number;

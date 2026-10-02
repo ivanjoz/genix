@@ -1,8 +1,8 @@
 <script lang="ts">
-import Input from '$components/form/Input.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import Checkbox from '$components/form/Checkbox.svelte'
-import type { ISite } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
+import Input from '#components/form/Input.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import Checkbox from '#components/form/Checkbox.svelte'
+import type { ISite } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import { cajaTipos, cajaMonedaTipos, type ICashBank } from './cajas.svelte'
 
 let {

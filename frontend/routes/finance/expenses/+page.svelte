@@ -1,5 +1,5 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte'
+import Page from '#domain/Page.svelte'
 import { useUI } from '@genix/ui'
 import ExpensesRegister from './ExpensesRegister.svelte'
 import ExpensesSchedule from './ExpensesSchedule.svelte'

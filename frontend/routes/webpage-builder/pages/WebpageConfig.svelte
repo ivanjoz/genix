@@ -1,15 +1,15 @@
 <script lang="ts">
-import Button from '$components/buttons/Button.svelte';
-import Input from '$components/form/Input.svelte';
-import { tr } from '$core/store.svelte';
-import { Loading, Notify } from '$libs/helpers';
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import Button from '#components/buttons/Button.svelte';
+import Input from '#components/form/Input.svelte';
+import { tr } from '#core/store.svelte.ts';
 import {
   getWebsiteConfig,
   postWebsiteDomain,
   postWebsiteSeo,
   type IWebsiteConfig,
-} from '$services/webpage/pages.svelte';
-import { PUBLIC_ZONE_NAME } from '$env/static/public';
+} from '#services/webpage/pages.svelte.ts';
+import { PUBLIC_ZONE_NAME } from '$app/env/public';
 import { onMount } from 'svelte';
 
   // All storefront config (domain + SEO metatags) lives in parameters group 10.
@@ -30,10 +30,10 @@ import { onMount } from 'svelte';
   const saveDomain = async () => {
     const subdomain = domainForm.subdomain.trim().toLowerCase();
     if (!subdomain) {
-      Notify.failure(tr('Enter a domain.|Ingrese un dominio.'));
+      notifyFailure(tr('Enter a domain.|Ingrese un dominio.'));
       return;
     }
-    Loading.standard(tr('Saving domain and publishing the store...|Guardando dominio y publicando la tienda...'));
+    showLoading(tr('Saving domain and publishing the store...|Guardando dominio y publicando la tienda...'));
     try {
       const result = await postWebsiteDomain(`${subdomain}${domainSuffix}`);
       // Keep the editable value limited to the tenant label.
@@ -42,25 +42,25 @@ import { onMount } from 'svelte';
         subdomain: result?.domain?.slice(0, -domainSuffix.length) || subdomain,
       };
     } catch (error) {
-      Notify.failure(error as string);
-      Loading.remove();
+      notifyFailure(error as string);
+      hideLoading();
       return;
     }
-    Loading.remove();
+    hideLoading();
   };
 
   const saveSeo = async () => {
-    Loading.standard(tr('Saving SEO...|Guardando SEO...'));
+    showLoading(tr('Saving SEO...|Guardando SEO...'));
     try {
       // Send only the SEO keys; the domain has its own endpoint.
       const { domain: _domain, ...seo } = config;
       await postWebsiteSeo(seo);
     } catch (error) {
-      Notify.failure(error as string);
-      Loading.remove();
+      notifyFailure(error as string);
+      hideLoading();
       return;
     }
-    Loading.remove();
+    hideLoading();
   };
 </script>
 

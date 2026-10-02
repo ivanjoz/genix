@@ -25,9 +25,9 @@ let registry = null;   // Map<string key, number>
 let maxCounter = 55;   // preserve the previous starting base
 let dirty = false;
 
-// Block reservation. plugins.js is imported as SEPARATE module instances within a
-// single build — svelte.config.js (cssHash, 's:' keys) gets one, vite.config.ts
-// (CSS modules 'm:' + svelteClassHasher 'h:' keys) gets another. Module-level state
+// Block reservation. plugins.js can be imported as SEPARATE module instances within a
+// single build — formerly svelte.config.js (cssHash, 's:' keys) got one and vite.config.ts
+// (CSS modules 'm:' + svelteClassHasher 'h:' keys) another. Module-level state
 // is NOT shared across ESM instances, so two instances counting from the same base
 // would hand DIFFERENT keys the SAME number (e.g. s:SideMenu|85 and h:close-button|85
 // both -> 'ax', producing a broken `.ax.ax` selector). The only shared medium is the

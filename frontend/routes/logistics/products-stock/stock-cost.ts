@@ -1,4 +1,4 @@
-import { StockMovementType } from '$core/stock-movement-type'
+import { StockMovementType } from '#core/stock-movement-type.ts'
 
 // The company's manual-stock policy (backend/company_flags.toml). The backend enforces both on
 // every adjustment; the page checks them first so the user sees which product broke the rule.

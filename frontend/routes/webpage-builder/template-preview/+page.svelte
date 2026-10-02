@@ -8,10 +8,10 @@
   // data-render-state hook let the agent wait for and target each artifact.
   import { page } from '$app/state';
   import { sectionTemplates } from '../templates';
-  import { parseHTML } from '$ecommerce/html-ast/parse-html';
-  import { generatePaletteStyles } from '$ecommerce/renderer/token-resolver';
-  import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-  import HtmlSection from '$ecommerce/renderer/HtmlSection.svelte';
+  import { parseHTML } from '#ecommerce/html-ast/parse-html.ts';
+  import { generatePaletteStyles } from '#ecommerce/renderer/token-resolver.ts';
+  import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
+  import HtmlSection from '#ecommerce/renderer/HtmlSection.svelte';
 
   // The template id from the query string (?id=html-hero-banner-v1). Defensive: strip
   // surrounding quotes so both ?id=foo and ?id="foo" resolve to the same template.

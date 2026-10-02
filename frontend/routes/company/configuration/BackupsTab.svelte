@@ -1,41 +1,40 @@
 <script lang="ts">
-import type { ITableColumn } from '$components/vTable/types';
-import VTable from '$components/vTable/VTable.svelte';
-import { ConfirmWarn, formatTime } from '$libs/helpers';
-import Button from '$components/buttons/Button.svelte';
-import { formatN } from '$libs/helpers';
-import { tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-  import pkg from 'notiflix'
-const { Loading } = pkg;
+import { confirmWarn, hideLoading, showLoading } from '@genix/ui/notify';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import VTable from '#components/vTable/VTable.svelte';
+import { formatTime } from '#libs/helpers.ts';
+import Button from '#components/buttons/Button.svelte';
+import { formatN } from '#libs/helpers.ts';
+import { tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
   import { BackupsService, createBackup, restoreBackup, type IBackup } from "./backups.svelte";
 import { sendServiceMessage } from '@genix/ui/service-worker';
-import { Env } from '$core/env';
+import { Env } from '#core/env.ts';
 
   const backupsService = new BackupsService()
 
   let backupSelected = $state(null as IBackup | null)
 
   const generarBackup = async () => {
-    Loading.standard(tr("Generating Backup...|Generando Backup..."))
+    showLoading(tr("Generating Backup...|Generando Backup..."))
     try {
       await createBackup()
       backupsService.refreshBackups()
     } catch (error) {
       // Error already handled by POST function
     }
-    Loading.remove()
+    hideLoading()
   }
 
   const restaurar = async (name: string) => {
-    Loading.standard(tr("Restoring Backup...|Restaurando Backup..."))
+    showLoading(tr("Restoring Backup...|Restaurando Backup..."))
     try {
       await restoreBackup(name)
       await sendServiceMessage(26, {})
     } catch (error) {
       // Error already handled by POST function
     }
-    Loading.remove()
+    hideLoading()
   }
 
   const downloadBackup = (backup: IBackup) => {
@@ -78,9 +77,9 @@ import { Env } from '$core/env';
     <div class="flex items-center justify-between mb-6" aria-label="Backups toolbar with generate and upload buttons">
       <div class="h2 ff-bold">Backups</div>
       <div class="flex items-center">
-        <Button color="green" icon="icon-[fa--plus]" label="Generates a new database backup snapshot." css="mr-8" onClick={() => {
-          ConfirmWarn(tr("Generate Backup|Generar Backup"), tr("Do you want to generate the backup now?|¿Desea generar el backup ahora?"), "YES|SI", "NO",
-            () => { generarBackup() })
+        <Button color="green" icon="icon-[fa--plus]" label="Generates a new database backup snapshot." css="mr-8" onClick={async () => {
+          const confirmed = await confirmWarn({ title: tr("Generate Backup|Generar Backup"), message: tr("Do you want to generate the backup now?|¿Desea generar el backup ahora?") })
+          if (confirmed) { generarBackup() }
         }} />
         <Button color="blue" icon="icon-[fa--upload]" label="Opens dialog to upload an existing backup file." />
       </div>
@@ -122,10 +121,10 @@ import { Env } from '$core/env';
             onClick={() => downloadBackup(backupSelected!)} />
         </div>
         <div class="flex justify-center w-full mt-16">
-          <Button color="blue" name="Restore|Restaurar" icon="icon-[fa--database]" label="Restores the database from the selected backup." onClick={() => {
-            ConfirmWarn(tr("Restore Backup|Restaurar Backup"),
-              tr(`Restore the backup from ${formatTime(backupSelected!.upd, "Y-m-d h:n")}|Restaurar el backup realizado el ${formatTime(backupSelected!.upd, "Y-m-d h:n")}`),
-              "YES|SI", "NO", () => { restaurar(backupSelected!.Name) })
+          <Button color="blue" name="Restore|Restaurar" icon="icon-[fa--database]" label="Restores the database from the selected backup." onClick={async () => {
+            const confirmed = await confirmWarn({ title: tr("Restore Backup|Restaurar Backup"),
+              message: tr(`Restore the backup from ${formatTime(backupSelected!.upd, "Y-m-d h:n")}|Restaurar el backup realizado el ${formatTime(backupSelected!.upd, "Y-m-d h:n")}`) })
+            if (confirmed) { restaurar(backupSelected!.Name) }
           }} />
         </div>
       {/if}

@@ -1,10 +1,10 @@
 <script lang="ts">
-	import { formatN, parseSVG } from "$libs/helpers";
-	import iconCartSvg from "$libs/assets/icon_cart.svg?raw";
-	import iconCancelSvg from "$libs/assets/icon_cancel.svg?raw";
+	import { formatN, parseSVG } from "#libs/helpers.ts";
+	import iconCartSvg from "#libs/assets/icon_cart.svg?raw";
+	import iconCancelSvg from "#libs/assets/icon_cancel.svg?raw";
 	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-	import { Ecommerce } from "$ecommerce/stores/globals.svelte";
-	import ProductCard from "$ecommerce/components/ProductCard.svelte";
+	import { Ecommerce } from "#ecommerce/stores/globals.svelte.ts";
+	import ProductCard from "#ecommerce/components/ProductCard.svelte";
 
 	let isOpen = $state(false);
 

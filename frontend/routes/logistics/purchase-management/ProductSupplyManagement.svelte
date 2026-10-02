@@ -1,23 +1,24 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifySuccess, notifyWarning, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Input from '$components/form/Input.svelte'
-import Layer from '$components/layers/Layer.svelte'
+import Input from '#components/form/Input.svelte'
+import Layer from '#components/layers/Layer.svelte'
 import { ChartCanvas } from '@genix/ui/charts'
-import CardsList from '$components/vTable/CardsList.svelte'
-import TableGrid from '$components/vTable/TableGrid.svelte'
-import type { ICardCell, ITableColumn } from '$components/vTable/types'
-import { Core, tr } from '$core/store.svelte'
-import T from '$components/misc/T.svelte'
+import CardsList from '#components/vTable/CardsList.svelte'
+import TableGrid from '#components/vTable/TableGrid.svelte'
+import type { ICardCell, ITableColumn } from '#components/vTable/types.ts'
+import { Core, tr } from '#core/store.svelte.ts'
+import T from '#components/misc/T.svelte'
 import { DateHelper } from '@genix/ui/utilities'
-import { formatN, formatTime, Loading, Notify } from '$libs/helpers'
-import FilterInput from '$components/form/FilterInput.svelte'
-import Button from '$components/buttons/Button.svelte'
-import Modal from '$components/layers/Modal.svelte'
-import VTable from '$components/vTable/VTable.svelte'
+import { formatN, formatTime } from '#libs/helpers.ts'
+import FilterInput from '#components/form/FilterInput.svelte'
+import Button from '#components/buttons/Button.svelte'
+import Modal from '#components/layers/Modal.svelte'
+import VTable from '#components/vTable/VTable.svelte'
 import { onDestroy, onMount, untrack } from 'svelte'
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
-import { ProductsService } from '$services/production/products.svelte'
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
+import { ProductsService } from '#services/production/products.svelte.ts'
 import {
   AlmacenMovimientosGroupedService,
   createEmptyProviderSupplyRow,
@@ -341,11 +342,11 @@ import {
 
   async function saveProductSupply() {
     if (!productSupplyForm.ProductID) {
-      Notify.failure(tr('Please select a valid product.|Debe seleccionar un producto válido.'))
+      notifyFailure(tr('Please select a valid product.|Debe seleccionar un producto válido.'))
       return
     }
 
-    Loading.standard(tr('Saving supply configuration...|Guardando abastecimiento...'))
+    showLoading(tr('Saving supply configuration...|Guardando abastecimiento...'))
 
     try {
       const [savedProductSupply] = await postProductSupply([productSupplyForm])
@@ -367,11 +368,11 @@ import {
       productSupplyService.fetchOnline()
 
       ui.openSideLayer(0)
-      Notify.success(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
+      notifySuccess(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
     } catch (saveError) {
-      Notify.failure(String(saveError))
+      notifyFailure(String(saveError))
     } finally {
-      Loading.remove()
+      hideLoading()
     }
   }
 
@@ -394,7 +395,7 @@ import {
   const providerNamesByID = $derived(new Map(providers.records.map((providerRecord) => [providerRecord.ID, providerRecord.Name])))
 
   async function exportSupplyExcel() {
-    Loading.standard(tr('Generating Excel file...|Generando archivo Excel...'))
+    showLoading(tr('Generating Excel file...|Generando archivo Excel...'))
     try {
       // Export what the page is showing, so a filtered search exports just that subset.
       const excelRows = buildSupplyExcelRows(
@@ -404,12 +405,12 @@ import {
         groupedMovementsService.productoCurrentStock,
       )
       await exportSupplyToExcel(supplyExportColumns, excelRows)
-      Notify.success(tr('Excel generated successfully.|Excel generado correctamente.'))
+      notifySuccess(tr('Excel generated successfully.|Excel generado correctamente.'))
     } catch (exportError) {
       console.error('[supply-export] failed:', exportError)
-      Notify.failure(`${tr('Could not export the file:|No se pudo exportar el archivo:')} ${exportError}`)
+      notifyFailure(`${tr('Could not export the file:|No se pudo exportar el archivo:')} ${exportError}`)
     } finally {
-      Loading.remove()
+      hideLoading()
     }
   }
 
@@ -447,12 +448,12 @@ import {
       importExcelErrors = importResult.errors
 
       if (importResult.rows.length === 0 && importResult.errors.length === 0) {
-        Notify.warning(tr('No changes detected in the file.|No se detectaron cambios en el archivo.'))
+        notifyWarning(tr('No changes detected in the file.|No se detectaron cambios en el archivo.'))
       }
     } catch (importError) {
       console.error('[supply-import] failed:', importError)
       importExcelErrors = [`${tr('Error processing the file:|Error procesando el archivo:')} ${importError}`]
-      Notify.failure(`${tr('Could not process the Excel:|No se pudo procesar el Excel:')} ${importError}`)
+      notifyFailure(`${tr('Could not process the Excel:|No se pudo procesar el Excel:')} ${importError}`)
     } finally {
       isImportExcelProcessing = false
     }
@@ -460,15 +461,15 @@ import {
 
   async function saveImportSupply() {
     if (importExcelErrors.length > 0) {
-      Notify.failure(tr('Fix import errors before saving.|Corrige los errores de importación antes de guardar.'))
+      notifyFailure(tr('Fix import errors before saving.|Corrige los errores de importación antes de guardar.'))
       return
     }
     if (importExcelRowsPreview.length === 0) {
-      Notify.failure(tr('No rows with changes to import.|No hay filas con cambios para importar.'))
+      notifyFailure(tr('No rows with changes to import.|No hay filas con cambios para importar.'))
       return
     }
 
-    Loading.standard(tr('Saving supply import...|Guardando importación de abastecimiento...'))
+    showLoading(tr('Saving supply import...|Guardando importación de abastecimiento...'))
     try {
       const totalBatches = Math.ceil(importExcelRowsPreview.length / IMPORT_SAVE_BATCH_SIZE)
       for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -476,19 +477,19 @@ import {
           batchIndex * IMPORT_SAVE_BATCH_SIZE,
           (batchIndex + 1) * IMPORT_SAVE_BATCH_SIZE,
         )
-        Loading.change(`${tr('Sending|Enviando')} ${batchIndex + 1}/${totalBatches}...`)
+        showLoading(`${tr('Sending|Enviando')} ${batchIndex + 1}/${totalBatches}...`)
         await postProductSupply(batch)
       }
 
       productSupplyService.fetchOnline()
       importExcelRowsPreview = []
       ui.closeModal(IMPORT_SUPPLY_MODAL_ID)
-      Notify.success(tr('Import completed successfully.|Importación completada correctamente.'))
+      notifySuccess(tr('Import completed successfully.|Importación completada correctamente.'))
     } catch (saveError) {
       console.error('[supply-import] save failed:', saveError)
-      Notify.failure(`${tr('Could not complete the import:|No se pudo completar la importación:')} ${saveError}`)
+      notifyFailure(`${tr('Could not complete the import:|No se pudo completar la importación:')} ${saveError}`)
     } finally {
-      Loading.remove()
+      hideLoading()
     }
   }
 

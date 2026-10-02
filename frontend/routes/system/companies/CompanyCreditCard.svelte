@@ -1,9 +1,9 @@
 <script lang="ts">
   import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
-  import Button from '$components/buttons/Button.svelte';
-  import Card from '$components/cards/Card.svelte';
-  import T from '$components/misc/T.svelte';
-  import { formatTime, numberToK } from '$libs/helpers';
+  import Button from '#components/buttons/Button.svelte';
+  import Card from '#components/cards/Card.svelte';
+  import T from '#components/misc/T.svelte';
+  import { formatTime, numberToK } from '#libs/helpers.ts';
   import CompanyCreditMeters from './CompanyCreditMeters.svelte';
   import type { ICompanyCreditBudgetMeter, ICompanyCreditSummaryRanked } from './company-credit-usage.model';
 

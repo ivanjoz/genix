@@ -1,38 +1,39 @@
 <script lang="ts">
+  import { confirmWarn, hideLoading, notifyFailure, notifySuccess, notifyWarning, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Button from '$components/buttons/Button.svelte';
-import FilterInput from '$components/form/FilterInput.svelte';
-import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
-import ImageUploader from '$components/files/ImageUploader.svelte';
-import Image from '$components/files/Image.svelte';
-import Input from '$components/form/Input.svelte';
-import Layer from '$components/layers/Layer.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-import SearchCard from '$components/cards/SearchCard.svelte'; 
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import { Core, tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-import Page from '$domain/Page.svelte';
-import { ConfirmWarn, formatN, Loading, Notify } from '$libs/helpers';
-import { POST, genixUiRuntime } from '$libs/ui-runtime.svelte';
+import Button from '#components/buttons/Button.svelte';
+import FilterInput from '#components/form/FilterInput.svelte';
+import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
+import ImageUploader from '#components/files/ImageUploader.svelte';
+import Image from '#components/files/Image.svelte';
+import Input from '#components/form/Input.svelte';
+import Layer from '#components/layers/Layer.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+import SearchCard from '#components/cards/SearchCard.svelte'; 
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import { Core, tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import Page from '#domain/Page.svelte';
+import { formatN } from '#libs/helpers.ts';
+import { POST, genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
 import type { ExcelTableColumn } from '@genix/ui/excel';
 import type { Component } from 'svelte';
 import Atributos from './Attributes.svelte';
 import CategoriasMarcas from './CategoriesBrands.svelte';
 import { exportProductosToExcel, processProductosImportFile } from './products.excel';
-import { productoMonedaOptions, productoUnidadOptions } from '$core/products-lists';
-import { SharedListsService } from '$services/business/shared-lists.svelte';
+import { productoMonedaOptions, productoUnidadOptions } from '#core/products-lists.ts';
+import { SharedListsService } from '#services/business/shared-lists.svelte.ts';
 import {
     ProductsService,
     productImageName,
     mainProductImage,
     type IProduct,
     type IProductoImage
-} from "$services/production/products.svelte";
-    import TableGrid from '$components/vTable/TableGrid.svelte';
+} from "#services/production/products.svelte.ts";
+    import TableGrid from '#components/vTable/TableGrid.svelte';
 
   let filterText = $state("");
   const productos = new ProductsService(true);
@@ -301,15 +302,15 @@ import {
   });
 
   const exportProductosExcel = async () => {
-    Loading.standard(tr("Generating Excel file...|Generando archivo Excel..."));
+    showLoading(tr("Generating Excel file...|Generando archivo Excel..."));
     try {
       await exportProductosToExcel(productoColumns, productos.records);
-      Loading.remove();
-      Notify.success(tr("Excel generated successfully.|Excel generado correctamente."));
+      hideLoading();
+      notifySuccess(tr("Excel generated successfully.|Excel generado correctamente."));
     } catch (error) {
       console.error("Error exportando productos:", error);
-      Loading.remove();
-      Notify.failure(`No se pudo exportar el archivo: ${error}`);
+      hideLoading();
+      notifyFailure(`No se pudo exportar el archivo: ${error}`);
     }
   };
 
@@ -339,7 +340,7 @@ import {
       const importResult = await processProductosImportFile(productoImportColumns, file, listas, productos);
 
       if(!importResult.rows){
-     		Notify.warning(tr("No new records detected to save.|No se detectaron registros nuevos a guardar."))
+     		notifyWarning(tr("No new records detected to save.|No se detectaron registros nuevos a guardar."))
       }
       
       importExcelRowsPreview = importResult.rows;
@@ -355,7 +356,7 @@ import {
     } catch (error) {
       console.error("[productos-import] import failed:", error);
       importExcelErrors = [`Error procesando el archivo: ${error}`];
-      Notify.failure(`No se pudo procesar el Excel: ${error}`);
+      notifyFailure(`No se pudo procesar el Excel: ${error}`);
     } finally {
       isImportExcelProcessing = false;
     }
@@ -363,22 +364,22 @@ import {
 
   const saveImportProductos = async () => {
     if (importExcelErrors.length > 0) {
-      Notify.failure(tr("Fix import errors before saving.|Corrige los errores de importación antes de guardar."));
+      notifyFailure(tr("Fix import errors before saving.|Corrige los errores de importación antes de guardar."));
       return;
     }
     if (importExcelRowsPreview.length === 0) {
-      Notify.failure(tr("No valid rows to import.|No hay filas válidas para importar."));
+      notifyFailure(tr("No valid rows to import.|No hay filas válidas para importar."));
       return;
     }
 
     try {
-      Loading.standard(tr("Saving product import...|Guardando importación de productos..."));
+      showLoading(tr("Saving product import...|Guardando importación de productos..."));
       const pendingSharedListRecords = listas.getTempRecords().length;
       let tempIDToNewID = new Map<number, number>();
 
       // Persist temporary categorías/marcas and get TempID -> ID mappings.
       if (pendingSharedListRecords > 0) {
-        Loading.change(`Creando categorías/marcas nuevas (${pendingSharedListRecords})...`);
+        showLoading(`Creando categorías/marcas nuevas (${pendingSharedListRecords})...`);
         tempIDToNewID = await listas.syncTempRecords();
       }
 
@@ -419,20 +420,20 @@ import {
       const totalBatches = Math.ceil(productosToSave.length / BATCH_SIZE);
       for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
         const batch = productosToSave.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
-        Loading.change(`Enviando ${batchIndex + 1}/${totalBatches}...`);
+        showLoading(`Enviando ${batchIndex + 1}/${totalBatches}...`);
         await doPostProductos(batch);
       }
       for(const e of productos.records){ delete e._updatedFields }
-      Loading.remove();
+      hideLoading();
       
-      Notify.success(tr("Import completed successfully.|Importación completada correctamente."));
+      notifySuccess(tr("Import completed successfully.|Importación completada correctamente."));
       importExcelRowsPreview = [];
       ui.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
       productoForm = {} as IProduct
     } catch (error) {
       console.error("[productos-import] save import failed:", error);
-      Notify.failure(`No se pudo completar la importación: ${error}`);
-      Loading.remove();
+      notifyFailure(`No se pudo completar la importación: ${error}`);
+      hideLoading();
     }
   };
 
@@ -466,7 +467,7 @@ import {
 
   const onSave = async (isDelete?: boolean) => {
     if ((productoForm.Name?.length || 0) < 4) {
-      Notify.failure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."));
+      notifyFailure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."));
       return;
     }
 
@@ -478,16 +479,16 @@ import {
     const isNewProduct = !productoForm.ID;
 
     // Save the product FIRST: it carries the optimistic ImageMain/ImageIDs and obtains its real ID.
-    Loading.standard(tr("Saving product...|Guardando producto..."));
+    showLoading(tr("Saving product...|Guardando producto..."));
     try {
     	await doPostProductos([productoForm]);
     } catch (error) {
-      Notify.failure(error as string);
-      Loading.remove();
+      notifyFailure(error as string);
+      hideLoading();
       return;
     }
     if (!isDelete) {
-      Loading.change(tr("Saving images...|Guardando imágenes..."));
+      showLoading(tr("Saving images...|Guardando imágenes..."));
       // New product: confirm the picked main image now that ProductID exists (its ✓ was hidden).
       // ImageUploader reserves the id, adds it to ImageIDs and uploads in the background.
       if (isNewProduct && pendingMainImageConfirm && productoForm._imageSource?.base64) {
@@ -497,7 +498,7 @@ import {
       await flushPendingProductImages();
     }
     pendingMainImageConfirm = undefined;
-    Loading.remove();
+    hideLoading();
     productoForm = {} as IProduct
     ui.openSideLayer(0);
   };
@@ -509,7 +510,7 @@ import {
   const deleteProductoImage = async (ImageToDelete: number) => {
  		console.debug("Eliminando imagen::", ImageToDelete)
 
-    Loading.standard(tr("Deleting image...|Eliminando Imagen..."));
+    showLoading(tr("Deleting image...|Eliminando Imagen..."));
     try {
       await POST({
         data: { ProductID: productoForm.ID, ImageToDelete },
@@ -517,11 +518,11 @@ import {
         refreshRoutes: ["products"],
       });
     } catch (error) {
-      Notify.failure(`Error al eliminar imagen: ${error}`);
-      Loading.remove();
+      notifyFailure(`Error al eliminar imagen: ${error}`);
+      hideLoading();
       return;
     }
-    Loading.remove();
+    hideLoading();
     // Drop the imageID from the parallel arrays and repoint the main image if needed.
     const index = (productoForm.ImageIDs || []).indexOf(ImageToDelete);
     if (index >= 0) {
@@ -628,16 +629,12 @@ import {
     onSave={() => {
       onSave();
     }}
-    onDelete={() => {
-      ConfirmWarn(
-        "Eliminar Producto",
-        `¿Está seguro que desea eliminar "${productoForm.Name}"?`,
-        "SI",
-        "NO",
-        () => {
-          onSave(true);
-        },
-      );
+    onDelete={async () => {
+      const confirmed = await confirmWarn({
+        title: "Eliminar Producto",
+        message: `¿Está seguro que desea eliminar "${productoForm.Name}"?`,
+      });
+      if (confirmed) { onSave(true); }
     }}
     options={[
       [1, "Info|Información", ["Info", ""]],
@@ -902,16 +899,12 @@ import {
             css="w-full h-170"
             src={image.n}
             alt={image.d || productoForm.Name}
-            onRemove={() => {
-              ConfirmWarn(
-                "ELIMINAR IMAGEN",
-                `Eliminar la imagen ${image.d ? `"${image.d}"` : "seleccionada"}`,
-                "SI",
-                "NO",
-                () => {
-                  deleteProductoImage(image.id as number);
-                },
-              );
+            onRemove={async () => {
+              const confirmed = await confirmWarn({
+                title: "ELIMINAR IMAGEN",
+                message: `Eliminar la imagen ${image.d ? `"${image.d}"` : "seleccionada"}`,
+              });
+              if (confirmed) { deleteProductoImage(image.id as number); }
             }}
           />
         {/each}

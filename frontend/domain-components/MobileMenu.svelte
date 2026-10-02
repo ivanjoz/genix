@@ -1,7 +1,7 @@
 <script lang="ts">
-  import LoginForm from '$components/form/LoginForm.svelte';
-  import MobileLayerVertical from '$components/layers/MobileLayerVertical.svelte';
-  import { mainMenuOptions, suscribeUrlFlag } from '$core/store.svelte';
+  import LoginForm from '#components/form/LoginForm.svelte';
+  import MobileLayerVertical from '#components/layers/MobileLayerVertical.svelte';
+  import { mainMenuOptions, suscribeUrlFlag } from '#core/store.svelte.ts';
   import {
     MobileMenu,
     useUI,
@@ -37,6 +37,6 @@
   />
 </div>
 
-<MobileLayerVertical title="Iniciar Sesión" id={1}>
+<MobileLayerVertical title="Iniciar Sesión">
   <LoginForm />
 </MobileLayerVertical>

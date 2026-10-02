@@ -1,9 +1,9 @@
 <script lang="ts">
-  import SquareBarSized from '$components/misc/SquareBarSized.svelte'
-  import VirtualCards from '$components/misc/VirtualCards.svelte'
+  import SquareBarSized from '#components/misc/SquareBarSized.svelte'
+  import VirtualCards from '#components/misc/VirtualCards.svelte'
   import { DateHelper } from '@genix/ui/utilities'
-  import { formatN, formatTime } from '$libs/helpers'
-  import type { IProduct } from '$services/production/products.svelte'
+  import { formatN, formatTime } from '#libs/helpers.ts'
+  import type { IProduct } from '#services/production/products.svelte.ts'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
   // Money only, and no metric selector. A quantity mode here summed across every product in

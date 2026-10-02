@@ -1,10 +1,10 @@
 <script lang="ts">
-import DateInput from '$components/form/DateInput.svelte'
-import Info from '$components/misc/Info.svelte'
-import Input from '$components/form/Input.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import T from '$components/misc/T.svelte'
-import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import Info from '#components/misc/Info.svelte'
+import Input from '#components/form/Input.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import T from '#components/misc/T.svelte'
+import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
 import type { IAssetForm } from './assets'
 
 // One form, two shells: the create Layer and the edit Modal in +page.svelte both render this.

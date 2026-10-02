@@ -1,14 +1,14 @@
 <script lang="ts">
-import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-import { generatePaletteStyles } from '$ecommerce/renderer/token-resolver';
+import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
+import { generatePaletteStyles } from '#ecommerce/renderer/token-resolver.ts';
 import { editorStore } from '../stores/editor.svelte';
 import { liveCSS } from '../stores/live-css.svelte';
-import { parseHTML } from '$ecommerce/html-ast/parse-html';
+import { parseHTML } from '#ecommerce/html-ast/parse-html.ts';
   import SectionEditorLayer from './SectionEditorLayer.svelte';
   import BuilderSectionRender from './BuilderSectionRender.svelte';
   import MobilePreviewFrame from './MobilePreviewFrame.svelte';
 
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
   interface Props {
     elements?: SectionData[];

@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 import type { IInvoiceSeries } from './invoice-series';
 
 // Only what the series form shows. Declared here rather than imported from the

@@ -1,7 +1,7 @@
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
-import type { IProfile, IUser } from '$core/types/common';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import type { IProfile, IUser } from '#core/types/common.ts';
 import { fromAccesoGrants, type ISubAccesoOption } from './users-profiles';
-export { postUser, postOwnUser } from '$services/services/users.svelte';
+export { postUser, postOwnUser } from '#services/services/users.svelte.ts';
 
 export type { IProfile, IUser };
 export type { ISubAccesoOption } from './users-profiles';

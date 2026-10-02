@@ -1,16 +1,14 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
-  import Input from '$components/form/Input.svelte';
-  import Modal from '$components/layers/Modal.svelte';
-  import Page from '$domain/Page.svelte';
-  import { Notify } from '$libs/helpers';
-  import { tr } from '$core/store.svelte';
-  import pkg from 'notiflix';
+  import Input from '#components/form/Input.svelte';
+  import Modal from '#components/layers/Modal.svelte';
+  import Page from '#domain/Page.svelte';
+  import { tr } from '#core/store.svelte.ts';
   import CompanyCards from './CompanyCards.svelte';
   import CompanyCreditBudget from './CompanyCreditBudget.svelte';
   import { EmpresasService, postEmpresa, type ICompany } from './empresas.svelte';
 
-  const { Loading } = pkg;
   const ui = useUI();
   const empresasService = new EmpresasService();
 
@@ -31,16 +29,16 @@
     const form = empresaForm;
 
     if ((form.Name?.length || 0) < 3) {
-      Notify.failure(tr('Company name must be at least 3 characters.|El nombre de la empresa debe tener al menos 3 caracteres.'));
+      notifyFailure(tr('Company name must be at least 3 characters.|El nombre de la empresa debe tener al menos 3 caracteres.'));
       return;
     }
     if ((form.RUC?.length || 0) < 8) {
-      Notify.failure(tr('RUC must be at least 8 characters.|El RUC debe tener al menos 8 caracteres.'));
+      notifyFailure(tr('RUC must be at least 8 characters.|El RUC debe tener al menos 8 caracteres.'));
       return;
     }
     if (isDelete) form.ss = 0;
 
-    Loading.standard(tr('Saving Company...|Guardando Empresa...'));
+    showLoading(tr('Saving Company...|Guardando Empresa...'));
     try {
       const result = await postEmpresa(form);
       if (isDelete) {
@@ -51,11 +49,11 @@
       }
       companyRefreshVersion += 1;
       ui.closeModal(1);
-      Notify.success(tr('Company saved successfully|Empresa guardada correctamente'));
+      notifySuccess(tr('Company saved successfully|Empresa guardada correctamente'));
     } catch (error) {
-      Notify.failure(error as string);
+      notifyFailure(error as string);
     } finally {
-      Loading.remove();
+      hideLoading();
     }
   }
 </script>

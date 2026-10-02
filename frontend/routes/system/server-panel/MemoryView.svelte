@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { browser } from '$app/environment';
-  import TableStream from '$components/vTable/TableStream.svelte';
-  import type { ITableColumn } from '$components/vTable/types';
-  import { Env } from '$core/env';
-  import { security } from '$libs/ui-runtime.svelte';
+  import { browser } from '$app/env';
+  import TableStream from '#components/vTable/TableStream.svelte';
+  import type { ITableColumn } from '#components/vTable/types.ts';
+  import { Env } from '#core/env.ts';
+  import { security } from '#libs/ui-runtime.svelte.ts';
   import { onDestroy, onMount } from 'svelte';
 
   interface MemoryPackagesTableRow {

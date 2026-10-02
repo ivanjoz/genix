@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { StockMovementType } from '$core/stock-movement-type'
+import { StockMovementType } from '#core/stock-movement-type.ts'
 import { findManualStockRefusal, manualStockChangeType, type IManualStockChange } from './stock-cost'
 
 const change = (previousQuantity: number, nextQuantity: number, unitCost = 0): IManualStockChange =>

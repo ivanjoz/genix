@@ -1,4 +1,4 @@
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { ProductSearch } from "./product-search";
 
 let sharedProductSearchInstance: ProductSearch | null = null;

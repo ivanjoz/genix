@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Env } from '$core/env';
+  import { Env } from '#core/env.ts';
 
   interface Props {
     amount: number;

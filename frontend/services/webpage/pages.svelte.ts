@@ -1,7 +1,7 @@
-import { fileToImage, GET, GetHandler, POST } from '$libs/ui-runtime.svelte';
-import { Env } from '$core/env';
-import { tr } from '$core/store.svelte';
-import { addProcess, updateProcess } from '$core/notifications.svelte';
+import { fileToImage, GET, GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import { Env } from '#core/env.ts';
+import { tr } from '#core/store.svelte.ts';
+import { addProcess, updateProcess } from '#core/notifications.svelte.ts';
 
 // One storefront page. ID is reused as the PageID of the builder content.
 // Status: 0 removed, 1 active, 2 published. IDs 10-14 are injected system pages

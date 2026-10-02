@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/ui-runtime.svelte'
+import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 
 export const WEEKS_PER_YEAR = 52
 

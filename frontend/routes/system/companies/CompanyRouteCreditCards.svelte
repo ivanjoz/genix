@@ -1,6 +1,6 @@
 <script lang="ts">
-  import T from '$components/misc/T.svelte';
-  import { formatN } from '$libs/helpers';
+  import T from '#components/misc/T.svelte';
+  import { formatN } from '#libs/helpers.ts';
   import { splitCompanyCreditRoute, usagePercent, type ICompanyCreditRoute } from './company-credit-usage.model';
 
   let {

@@ -104,7 +104,7 @@ frontend/routes/<domain>/<feature>/
 
 ```text
 libs/  styles/          Generic, non-business utilities and CSS
-packages/genix-ui/      Shared UI component library ($components) — git submodule
+packages/genix-ui/      Shared UI component library (#components) — git submodule
 core/                   Cross-cutting code that DOES hold business logic
 services/               API connectors (skill: `delta-cache-api`)
 domain-components/      Reusable domain widgets
@@ -141,6 +141,11 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - **NEVER use `time.Now()` for a persisted date.** Use `core.Now()`, `core.SUnixTime()` or `core.FechaUnix()` — they read the **effective clock**, which `GENIX_HISTORICAL_UNIX` / `core.SetHistoricalUnix()` can freeze. ORM is also affected.
 
 ### Frontend
+- SvelteKit 3. Shared layers are imported through the `#…` subpath imports declared in
+  `frontend/package.json` (`#components`, `#core`, `#libs`, `#services`, `#domain`, `#ecommerce`, `#routes`),
+  always with the file extension: `import { Core } from '#core/store.svelte.ts'`. No `$…` aliases.
+- Toasts, the loading overlay and confirms come from `@genix/ui/notify` (`notifyFailure`, `showLoading`,
+  `await confirmWarn({ title, message })`). Notiflix is gone.
 - Prefer using Tailwind over css class
 - Tailwind `--spacing` is **1px**, so `h-4` is 4px
 - Avoid text size below 14px

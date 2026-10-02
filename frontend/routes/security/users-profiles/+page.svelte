@@ -1,6 +1,6 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
-import { security } from '$libs/ui-runtime.svelte';
+import Page from '#domain/Page.svelte';
+import { security } from '#libs/ui-runtime.svelte.ts';
 import { useUI } from '@genix/ui';
 import { onMount } from 'svelte';
 import ProfilesTab from './ProfilesTab.svelte';

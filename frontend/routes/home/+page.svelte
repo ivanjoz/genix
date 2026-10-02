@@ -1,5 +1,5 @@
 <script>
-import Page from '$domain/Page.svelte';
+import Page from '#domain/Page.svelte';
 
 
 

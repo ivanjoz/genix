@@ -1,18 +1,19 @@
 <script lang="ts">
-	import { agentModes } from '$core/agent/agent.svelte';
-import Button from '$components/buttons/Button.svelte';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Input from '$components/form/Input.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
+	import { confirmWarn, hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+	import { agentModes } from '#core/agent/agent.svelte.ts';
+import Button from '#components/buttons/Button.svelte';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Input from '#components/form/Input.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
 import { goto } from '$app/navigation';
-import { tr } from '$core/store.svelte';
-import Page from '$domain/Page.svelte';
-import { ConfirmWarn, formatTime, Loading, Notify } from '$libs/helpers';
+import { tr } from '#core/store.svelte.ts';
+import Page from '#domain/Page.svelte';
+import { formatTime } from '#libs/helpers.ts';
 import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte';
-import { LAST_SYSTEM_PAGE_ID, WebpagesService, showcaseImageSrc, type IWebpage } from '$services/webpage/pages.svelte';
+import { LAST_SYSTEM_PAGE_ID, WebpagesService, showcaseImageSrc, type IWebpage } from '#services/webpage/pages.svelte.ts';
 import WebpageConfig from './WebpageConfig.svelte';
-    import T from '$components/misc/T.svelte';
+    import T from '#components/misc/T.svelte';
 import { useUI } from '@genix/ui';
 
   const ui = useUI();
@@ -73,24 +74,24 @@ import { useUI } from '@genix/ui';
 
   const savePage = async (isDelete?: boolean) => {
     if ((form.Name || '').trim().length < 3) {
-      Notify.failure(tr('Name must be at least 3 characters.|El nombre debe tener al menos 3 caracteres.'));
+      notifyFailure(tr('Name must be at least 3 characters.|El nombre debe tener al menos 3 caracteres.'));
       return;
     }
     if (!isDelete && (!form.Route || !form.Route.startsWith('/') || form.Route === '/')) {
-      Notify.failure(tr('Route must start with "/" and cannot be the root.|La ruta debe iniciar con "/" y no puede ser la raíz.'));
+      notifyFailure(tr('Route must start with "/" and cannot be the root.|La ruta debe iniciar con "/" y no puede ser la raíz.'));
       return;
     }
     if (isDelete) form.ss = 0;
 
-    Loading.standard(tr('Saving page...|Guardando página...'));
+    showLoading(tr('Saving page...|Guardando página...'));
     try {
       await pages.postAndSync([form]);
     } catch (error) {
-      Notify.failure(error as string);
-      Loading.remove();
+      notifyFailure(error as string);
+      hideLoading();
       return;
     }
-    Loading.remove();
+    hideLoading();
     form = {} as IWebpage;
     ui.closeModal(PAGE_FORM_MODAL_ID);
   };
@@ -170,12 +171,12 @@ import { useUI } from '@genix/ui';
     <Modal title="PAGE|PÁGINA" id={PAGE_FORM_MODAL_ID} size={5}
       onClose={() => { form = {} as IWebpage; ui.closeModal(PAGE_FORM_MODAL_ID); }}
       onSave={() => savePage()}
-      onDelete={form.ID > 0 ? () => {
-        ConfirmWarn(
-          tr('Delete Page|Eliminar Página'),
-          tr(`Delete "${form.Name}"?|¿Eliminar "${form.Name}"?`),
-          'SI', 'NO', () => savePage(true),
-        );
+      onDelete={form.ID > 0 ? async () => {
+        const confirmed = await confirmWarn({
+          title: tr('Delete Page|Eliminar Página'),
+          message: tr(`Delete "${form.Name}"?|¿Eliminar "${form.Name}"?`),
+        });
+        if (confirmed) { savePage(true); }
       } : undefined}
     >
       <div class="grid grid-cols-12 gap-10 p-6" aria-label="Page form: name, route, status">

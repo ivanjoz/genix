@@ -1,7 +1,7 @@
 <script lang="ts">
-  import T from '$components/misc/T.svelte';
-  import { tr } from '$core/store.svelte';
-  import { formatN, numberToK } from '$libs/helpers';
+  import T from '#components/misc/T.svelte';
+  import { tr } from '#core/store.svelte.ts';
+  import { formatN, numberToK } from '#libs/helpers.ts';
   import { creditMeterFillPercent, type ICompanyCreditBudgetMeter } from './company-credit-usage.model';
 
   let { budget }: { budget?: ICompanyCreditBudgetMeter } = $props();

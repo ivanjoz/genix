@@ -19,8 +19,8 @@
 
 <script lang="ts">
 	import { resolveTokens } from './token-resolver';
-	import { astComponentRegistry } from '$ecommerce/html-ast/component-registry';
-	import { TEXT_TAG } from '$ecommerce/html-ast/parse-html';
+	import { astComponentRegistry } from '#ecommerce/html-ast/component-registry.ts';
+	import { TEXT_TAG } from '#ecommerce/html-ast/parse-html.ts';
 
 	interface Props {
 		nodes: ComponentAST | ComponentAST[];

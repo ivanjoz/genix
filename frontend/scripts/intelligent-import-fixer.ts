@@ -38,7 +38,6 @@ const EXCLUDED_IMPORTS = new Set([
   '$app/forms',
   'svelte-i18n',
   'axios',
-  'notiflix',
   '@humanspeak/svelte-virtual-list'
 ]);
 

@@ -1,16 +1,17 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Input from '$components/form/Input.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import Modules from '$core/modules';
-import { Core, tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-import { arrayToMapN, Loading, Notify } from '$libs/helpers';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
+import Input from '#components/form/Input.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import Modules from '#core/modules.ts';
+import { Core, tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import { arrayToMapN } from '#libs/helpers.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
 import AccesoCard from './AccessCard.svelte';
 import {
   type IAccessGroupCatalogEntry,
@@ -102,7 +103,7 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
     const form = perfilForm
     if (!form.Name) {
-      Notify.failure(tr("Missing required properties to add the profile.|Faltan propiedades para agregar el perfil."))
+      notifyFailure(tr("Missing required properties to add the profile.|Faltan propiedades para agregar el perfil."))
       return
     }
 
@@ -119,7 +120,7 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
       form.Modulos = [...modulosIDSet]
     }
 
-    Loading.standard(tr("Updating Profile...|Actualizando Perfil..."))
+    showLoading(tr("Updating Profile...|Actualizando Perfil..."))
 
     try {
       const result = await postPerfil(form)
@@ -129,11 +130,11 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
 
       perfilForm = {} as IProfile
       ui.closeModal(2)
-      Notify.success(tr("Profile saved successfully|Perfil guardado correctamente"))
+      notifySuccess(tr("Profile saved successfully|Perfil guardado correctamente"))
     } catch (error) {
-      Notify.failure(error as string)
+      notifyFailure(error as string)
     }
-    Loading.remove()
+    hideLoading()
   }
 
   const columns: ITableColumn<IProfile>[] = [

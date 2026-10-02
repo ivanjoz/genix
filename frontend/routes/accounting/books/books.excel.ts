@@ -1,13 +1,13 @@
 import { downloadExcel, type ExcelTableColumn } from '@genix/ui/excel'
-import { formatTime } from '$libs/helpers'
-import { tr } from '$core/store.svelte'
-import { docTypeName, sunatDocCode } from '$core/sunat-doc-type'
+import { formatTime } from '#libs/helpers.ts'
+import { tr } from '#core/store.svelte.ts'
+import { docTypeName, sunatDocCode } from '#core/sunat-doc-type.ts'
 import {
   bookRowModifiedDocument, bookRowNumber, bookStateLabels, periodLabel,
   type ISalesBookRow,
 } from './books'
 import type { IPurchaseBookRow } from './books.purchases'
-import { purchaseDocTypeName } from '$core/purchase-document'
+import { purchaseDocTypeName } from '#core/purchase-document.ts'
 
 // The sheet is the book, column for column, in SUNAT's own field order.
 //

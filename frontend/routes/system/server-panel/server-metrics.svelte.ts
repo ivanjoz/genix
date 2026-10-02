@@ -1,4 +1,4 @@
-import { GetHandler } from '$libs/ui-runtime.svelte'
+import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 import {
 	SERVER_METRIC_FIELDS,
 	WINDOW_HOURS,

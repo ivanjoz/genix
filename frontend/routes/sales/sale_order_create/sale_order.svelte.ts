@@ -1,18 +1,18 @@
-import { POST } from '$libs/ui-runtime.svelte';
-import { type IProduct } from '$services/production/products.svelte';
-import { type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
-import { type IClientProvider } from '$services/crm/client-provider.svelte';
-import { type IInvoiceSeries } from '$routes/company/configuration/invoice-series';
-import { tr } from '$core/store.svelte';
-import { Loading, Notify } from '$libs/helpers';
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import { POST } from '#libs/ui-runtime.svelte.ts';
+import { type IProduct } from '#services/production/products.svelte.ts';
+import { type IProductStock, type IProductStockDetail } from '#routes/logistics/products-stock/stock-movement.ts';
+import { type IClientProvider } from '#services/crm/client-provider.svelte.ts';
+import { type IInvoiceSeries } from '#routes/company/configuration/invoice-series.ts';
+import { tr } from '#core/store.svelte.ts';
 import { validateCustomerIdentity } from './sale_order';
 import {
   CURRENCY_PEN, CURRENCY_USD, EXCHANGE_RATE_MAX_AGE_DAYS, convertUnitPrice, effectiveExchangeRate,
   normalizeCurrency,
-} from '$routes/finance/exchange-rate/exchange-rate';
+} from '#routes/finance/exchange-rate/exchange-rate.ts';
 import {
   type Quantity, addQuantity, formatQuantity, packQuantityLine, quantityAmount, totalSubUnits,
-} from '$core/quantity';
+} from '#core/quantity.ts';
 
 export interface ProductoVenta {
   key: string
@@ -264,17 +264,17 @@ export class SaleOrderState {
     Promise<PostedSaleOrder | undefined> {
 
     if (this.ventaProductos.length === 0) {
-      Notify.failure("El carrito está vacío.")
+      notifyFailure("El carrito está vacío.")
       return undefined
     }
 
     if (this.form.WarehouseID === 0) {
-      Notify.failure("Seleccione un almacén.")
+      notifyFailure("Seleccione un almacén.")
       return undefined
     }
 
     if (this.exchangeRateProblem) {
-      Notify.failure(tr(this.exchangeRateProblem))
+      notifyFailure(tr(this.exchangeRateProblem))
       return undefined
     }
 
@@ -287,7 +287,7 @@ export class SaleOrderState {
         this.form.ClientInfo?.RegistryNumber || selectedClient?.RegistryNumber || "")
 
       if (identityProblem) {
-        Notify.failure(tr(identityProblem))
+        notifyFailure(tr(identityProblem))
         return undefined
       }
     }
@@ -302,7 +302,7 @@ export class SaleOrderState {
       this.form.PaymentDueDate = 0
     }
 
-    Loading.standard("Procesando venta...")
+    showLoading("Procesando venta...")
 
     // Prepare detail slices
     this.form.DetailProductsIDs = []
@@ -382,7 +382,7 @@ export class SaleOrderState {
     } catch (error) {
       console.error("Error posting sale order:", error)
     } finally {
-      Loading.remove()
+      hideLoading()
     }
 
     return undefined

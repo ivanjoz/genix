@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import ImageUploader, { type ImageSource } from '$components/files/ImageUploader.svelte';
-import Input from '$components/form/Input.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import { tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-import { Loading, Notify } from '$libs/helpers';
-import { type ISharedListRecord, type SharedListsService } from "$services/business/shared-lists.svelte";
+import ImageUploader, { type ImageSource } from '#components/files/ImageUploader.svelte';
+import Input from '#components/form/Input.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import { tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import { type ISharedListRecord, type SharedListsService } from "#services/business/shared-lists.svelte.ts";
 
   const {
     listas, origin, filterText = ""
@@ -42,11 +42,11 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
     console.log("form a enviar 1::",$state.snapshot(form), isDelete)
 
     if((form.Name||"").length < 4 || !form.ListID){
-      Notify.failure(tr("Name must be at least 4 characters.|Debe colocar un nombre de al menos 4 caracteres."))
+      notifyFailure(tr("Name must be at least 4 characters.|Debe colocar un nombre de al menos 4 caracteres."))
       return
     }
 
-    Loading.standard(tr("Saving category...|Guardando categoría..."))
+    showLoading(tr("Saving category...|Guardando categoría..."))
     form.Images = form.Images || []
     form.ss = isDelete ? 0 : 1
 
@@ -54,25 +54,25 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
       for (const imageIndex of imageSlots) {
         const confirmImage = pendingImageConfirms.get(imageIndex)
         if (confirmImage) {
-          Loading.change(tr(`Saving Image ${imageIndex + 1}|Guardando Imagen ${imageIndex + 1}`))
+          showLoading(tr(`Saving Image ${imageIndex + 1}|Guardando Imagen ${imageIndex + 1}`))
           await confirmImage()
         }
       }
     }
 
     console.log("form a enviar 2::",$state.snapshot(form))
-    Loading.change(tr("Saving category...|Guardando categoría..."))
+    showLoading(tr("Saving category...|Guardando categoría..."))
 
     try {
       await listas.postAndSync([form])
     } catch (error) {
-      Notify.failure(error as string)
-      Loading.remove()
+      notifyFailure(error as string)
+      hideLoading()
       return
     }
     
     if(!(form.ID > 0)){
-   		Notify.failure(tr("ID was not assigned|No se asignó el ID"))
+   		notifyFailure(tr("ID was not assigned|No se asignó el ID"))
      	return
     }
 
@@ -90,7 +90,7 @@ import { type ISharedListRecord, type SharedListsService } from "$services/busin
     listas.ListaRecordsMap = new Map(listas.ListaRecordsMap)
     pendingImageConfirms.clear()
     ui.closeAllModals()
-    Loading.remove()
+    hideLoading()
   }
 
   export const newRecord = () => {

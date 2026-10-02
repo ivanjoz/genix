@@ -4,14 +4,14 @@
  * today; extend as more ecommerce components get built.
  */
 import type { Component } from 'svelte';
-import ProductsByCategory from '$ecommerce/ecommerce-components/ProductsByCategory.svelte';
-import ProductGrid from '$ecommerce/ecommerce-components/ProductGrid.svelte';
-import CategoryDescription from '$ecommerce/ecommerce-components/ecommerce-attributes/CategoryDescription.svelte';
-import ProductCard from '$ecommerce/components/ProductCard.svelte';
-import ImageEffect from '$ecommerce/components/ImageEffect.svelte';
-import EcommerceSlider from '$ecommerce/components/EcommerceSlider.svelte';
-import EcommerceTabs from '$ecommerce/components/EcommerceTabs.svelte';
-import Icon from '$ecommerce/components/Icon.svelte';
+import ProductsByCategory from '#ecommerce/ecommerce-components/ProductsByCategory.svelte';
+import ProductGrid from '#ecommerce/ecommerce-components/ProductGrid.svelte';
+import CategoryDescription from '#ecommerce/ecommerce-components/ecommerce-attributes/CategoryDescription.svelte';
+import ProductCard from '#ecommerce/components/ProductCard.svelte';
+import ImageEffect from '#ecommerce/components/ImageEffect.svelte';
+import EcommerceSlider from '#ecommerce/components/EcommerceSlider.svelte';
+import EcommerceTabs from '#ecommerce/components/EcommerceTabs.svelte';
+import Icon from '#ecommerce/components/Icon.svelte';
 
 export const astComponentRegistry: Record<string, Component<any>> = {
 	ProductsByCategory,

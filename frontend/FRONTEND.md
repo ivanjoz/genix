@@ -119,21 +119,26 @@ Strict rules prevent circular dependencies and ensure the `ecommerce` app remain
 ---
 
 ## Path Aliases
-Aliases are configured in `svelte.config.js` and `tsconfig.json`.
-- `$core`: `./core`
-- `$libs`: `./libs`
-- `$components`: `./packages/genix-ui`
-- `$domain`: `./domain-components` (Admin Only)
-- `$services`: `./services`
-- `$ecommerce`: `./ecommerce`
-- `$routes`: `./routes` (Admin Only)
+SvelteKit 3 subpath imports, declared in `package.json` `imports` (and in `webpage/package.json` for
+the store). Always write the file extension: `#core/store.svelte.ts`, `#components/form/Input.svelte`.
+- `#core`: `./core`
+- `#libs`: `./libs`
+- `#components`: `./packages/genix-ui`
+- `#domain`: `./domain-components` (Admin Only)
+- `#services`: `./services`
+- `#ecommerce`: `./webpage`
+- `#routes`: `./routes` (Admin Only; `webpage/routes` inside the store)
+
+TypeScript rejects the store's `../` targets, so `tsconfig.json` and `webpage/tsconfig.json` also map
+the five shared layers in `paths`. The SvelteKit options (adapter, `files`, `cssHash`) live in each
+app's `vite.config.ts`; there is no `svelte.config.js`.
 
 ---
 
 ## Agent Guidance: Common Tasks
 
-- **Adding an Admin Page**: Create a file in the appropriate module directory within `routes/` (e.g., `routes/configuracion/`, `routes/negocio/`, `routes/comercial/`, etc.). Use `$domain` for layout and `$components` for forms.
-- **Adding a Store Page**: Create a file in `ecommerce/routes/`. Only use `$components`, `$core`, and `$services`.
+- **Adding an Admin Page**: Create a file in the appropriate module directory within `routes/` (e.g., `routes/configuracion/`, `routes/negocio/`, `routes/comercial/`, etc.). Use `#domain` for layout and `#components` for forms.
+- **Adding a Store Page**: Create a file in `ecommerce/routes/`. Only use `#components`, `#core`, and `#services`.
 - **Modifying Global Logic**: Edit `core/store.svelte.ts` or `core/modules.ts`.
 - **Fixing Styles**: Most components use local CSS modules (`[name].module.css`). Check `app.css` for global Tailwind variables.
 
@@ -150,4 +155,4 @@ Aliases are configured in `svelte.config.js` and `tsconfig.json`.
 
 ### Best Practices
 - **Atomic UI**: Keep root-level source folders in `packages/genix-ui` generic and reusable.
-- **Hydration**: Use `browser` checks from `$app/environment` when accessing `localStorage` or `window`.
+- **Hydration**: Use `browser` checks from `$app/env` when accessing `localStorage` or `window`.

@@ -1,14 +1,15 @@
 <script lang="ts">
-import Layer from '$components/layers/Layer.svelte'
-import VTable from '$components/vTable/VTable.svelte'
-import type { ITableColumn } from '$components/vTable/types'
-import Button from '$components/buttons/Button.svelte'
-import FilterInput from '$components/form/FilterInput.svelte'
-import Input from '$components/form/Input.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import DateInput from '$components/form/DateInput.svelte'
-import { Core, tr } from '$core/store.svelte'
-import { Loading, Notify, formatN, formatTime } from '$libs/helpers'
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import Layer from '#components/layers/Layer.svelte'
+import VTable from '#components/vTable/VTable.svelte'
+import type { ITableColumn } from '#components/vTable/types.ts'
+import Button from '#components/buttons/Button.svelte'
+import FilterInput from '#components/form/FilterInput.svelte'
+import Input from '#components/form/Input.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import { Core, tr } from '#core/store.svelte.ts'
+import { formatN, formatTime } from '#libs/helpers.ts'
 import { useUI } from '@genix/ui'
 import {
   ExpensesScheduledService,
@@ -70,17 +71,17 @@ const openSchedule = async (schedule: IExpenseScheduled) => {
 
 const saveSchedule = async () => {
   if ((form.Amount || 0) <= 0) {
-    Notify.failure(tr("The amount must be greater than 0.|El monto debe ser mayor a 0."))
+    notifyFailure(tr("The amount must be greater than 0.|El monto debe ser mayor a 0."))
     return
   }
   if (!form.StartDate) {
-    Notify.failure(tr("Select a start date.|Seleccione una fecha de inicio."))
+    notifyFailure(tr("Select a start date.|Seleccione una fecha de inicio."))
     return
   }
   // Pack the cadence dropdown + day field into the CDD Frequency code.
   form.Frequency = packFrequency(cadenceForm.cadence, cadenceForm.day)
 
-  Loading.standard(tr("Saving schedule...|Guardando programación..."))
+  showLoading(tr("Saving schedule...|Guardando programación..."))
   try {
     const saved = await postExpenseScheduled(form)
     if (form.ID) {
@@ -95,9 +96,9 @@ const saveSchedule = async () => {
     if (ui.state.deviceType === 3) setTimeout(() => { form = {} as IExpenseScheduled; periods = [] }, 300)
     else { form = {} as IExpenseScheduled; periods = [] }
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 

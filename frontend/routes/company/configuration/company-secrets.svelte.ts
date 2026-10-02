@@ -1,4 +1,4 @@
-import { GET, POST } from '$libs/ui-runtime.svelte';
+import { GET, POST } from '#libs/ui-runtime.svelte.ts';
 import type { ICompanySecrets, ICompanySecretsForm } from './company-secrets';
 
 // Read uncached, unlike the rest of this page. A stale certificate state is the one

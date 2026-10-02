@@ -1,9 +1,9 @@
 <script lang="ts">
 import { useUI } from '@genix/ui';
-import { formatN } from '$libs/helpers';
-import Card from '$components/cards/Card.svelte';
+import { formatN } from '#libs/helpers.ts';
+import Card from '#components/cards/Card.svelte';
   import { type ProductoVenta, type VentaProducto } from "./sale_order.svelte";
-  import { type Quantity, formatQuantity, hasSubUnit, totalSubUnits } from '$core/quantity';
+  import { type Quantity, formatQuantity, hasSubUnit, totalSubUnits } from '#core/quantity.ts';
   const ui = useUI();
 
   interface Props {

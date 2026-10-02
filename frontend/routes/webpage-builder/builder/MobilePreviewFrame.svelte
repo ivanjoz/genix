@@ -6,7 +6,7 @@ import MobileCanvas from './MobileCanvas.svelte';
 // the mobile cart button in Header) live here. It's imported only by the storefront
 // +layout, never by the builder route, so the cloned sheets below don't include it.
 // `?inline` gives us the processed CSS text to inject straight into the iframe.
-import storeCss from '$ecommerce/routes/store.css?inline';
+import storeCss from '#ecommerce/routes/store.css?inline';
 
   interface Props {
     // Palette CSS vars, forwarded into the mounted iframe tree (kept reactive below).

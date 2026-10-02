@@ -5,10 +5,10 @@
 // json tags). Internal registry types stay lowercase.
 
 import { goto } from "$app/navigation";
-import { Core } from "$core/store.svelte";
-import { security } from "$libs/ui-runtime.svelte";
+import { Core } from "#core/store.svelte.ts";
+import { security } from "#libs/ui-runtime.svelte.ts";
 import { tick } from "svelte";
-import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "$components/agent/registry";
+import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "#components/agent/registry.ts";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
 import { agentModes, type AgentContextScope } from "./agent.svelte";
 

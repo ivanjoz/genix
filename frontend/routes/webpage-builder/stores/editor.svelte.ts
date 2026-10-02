@@ -1,8 +1,8 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
-import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
-import { schema as htmlSectionSchema } from '$ecommerce/renderer/HtmlSection.svelte';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
+import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
+import { schema as htmlSectionSchema } from '#ecommerce/renderer/HtmlSection.svelte';
 import { sectionTemplates } from '../templates';
-import { parseHTML } from '$ecommerce/html-ast/parse-html';
+import { parseHTML } from '#ecommerce/html-ast/parse-html.ts';
 
 // The builder's neutral starting palette (a slate ramp). A page with no saved
 // palette starts from this; the agent grows it as it introduces new colors. Returns

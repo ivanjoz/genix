@@ -4,15 +4,15 @@
 // progress, and a badge shows how many. Clicking it lists every row (in-progress
 // processes pinned to the top); sendUserNotification pops it open with only the
 // recent rows and a link to the rest.
-import ButtonLayer from '$components/buttons/ButtonLayer.svelte'
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
-import { tr } from '$core/store.svelte'
-import { formatTime } from '$libs/helpers'
+import ButtonLayer from '#components/buttons/ButtonLayer.svelte'
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+import { tr } from '#core/store.svelte.ts'
+import { formatTime } from '#libs/helpers.ts'
 import {
   notifications, notificationsLayer, hydrateNotifications, inProgressProcessCount,
   NOTIFICATIONS_TAB_MESSAGES, NOTIFICATIONS_TAB_INFORMATION,
-} from '$core/notifications.svelte'
-import { sortNotificationRows, selectVisibleNotifications, notificationAppearance } from '$core/notifications'
+} from '#core/notifications.svelte.ts'
+import { sortNotificationRows, selectVisibleNotifications, notificationAppearance } from '#core/notifications.ts'
 
 // Load persisted rows once so the list survives reloads.
 hydrateNotifications()

@@ -7,9 +7,9 @@
 // into "_", which is why the search text is split on "_" rather than " ".
 
 import { normalizeStringN, wordInclude } from '@genix/ui/utilities';
-import { security } from '$libs/ui-runtime.svelte';
-import { Core } from '$core/store.svelte';
-import type { IMenuRecord } from '$core/types/modules';
+import { security } from '#libs/ui-runtime.svelte.ts';
+import { Core } from '#core/store.svelte.ts';
+import type { IMenuRecord } from '#core/types/modules.ts';
 
 export interface MenuSearchOption {
   name: string; // bilingual "English|Spanish", resolved with tr() at render time

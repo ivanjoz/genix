@@ -1,7 +1,7 @@
 <script lang="ts">
-import Input from '$components/form/Input.svelte';
-import Button from '$components/buttons/Button.svelte';
-import T from '$components/misc/T.svelte';
+import Input from '#components/form/Input.svelte';
+import Button from '#components/buttons/Button.svelte';
+import T from '#components/misc/T.svelte';
   import type { IWarehouse, IWarehouseLayout } from "./branches-warehouses.svelte"
 
   interface Props {

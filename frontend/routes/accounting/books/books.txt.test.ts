@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DOC_TYPE_BOLETA, DOC_TYPE_CREDIT_NOTE, DOC_TYPE_FACTURA } from '$core/sunat-doc-type'
+import { DOC_TYPE_BOLETA, DOC_TYPE_CREDIT_NOTE, DOC_TYPE_FACTURA } from '#core/sunat-doc-type.ts'
 import { BOOK_STATE_ACTIVE, BOOK_STATE_PENDING, SINGLE_DAY_PERIOD, type ISalesBookRow } from './books'
 import {
   buildSalesBookFile, buildSalesBookRecord, salesBookExportBlockers, salesBookFileName,

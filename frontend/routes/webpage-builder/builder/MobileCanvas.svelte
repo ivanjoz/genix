@@ -1,9 +1,9 @@
 <script lang="ts">
 import { editorStore } from '../stores/editor.svelte';
 import BuilderSectionRender from './BuilderSectionRender.svelte';
-import Header from '$ecommerce/components/Header.svelte';
+import Header from '#ecommerce/components/Header.svelte';
 import { provideUi } from '@genix/ui';
-import { genixUiRuntime } from '$libs/ui-runtime.svelte';
+import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
 
   interface Props {
     // Palette CSS custom properties, forwarded reactively from the parent so a

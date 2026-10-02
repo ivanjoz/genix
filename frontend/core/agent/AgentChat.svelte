@@ -38,7 +38,7 @@
   } from './chat_history.idb';
   import { agentModes, type AgentSectionsPayload } from './agent.svelte';
   import { highlightWords, searchMenuOptions, type MenuSearchOption } from './menu_search';
-  import { Core, tr } from '$core/store.svelte';
+  import { Core, tr } from '#core/store.svelte.ts';
 
   // --- Wire types (mirror backend/agent/chat_ws.go) ---------------------------
 

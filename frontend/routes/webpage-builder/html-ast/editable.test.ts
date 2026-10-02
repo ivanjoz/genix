@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 // parseHTML is the render-side authoring parser (stays in the webpage app); the
 // templates and `editable` helpers are editor-only and live here in the builder.
-import { parseHTML } from '$ecommerce/html-ast/parse-html';
+import { parseHTML } from '#ecommerce/html-ast/parse-html.ts';
 import { collectRoleNodes, groupSiblings } from './editable';
 import { HeroBanner } from '../templates/hero/hero-banner';
 import { CategoryShowcase } from '../templates/products/category-showcase';

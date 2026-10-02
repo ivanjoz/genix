@@ -1,16 +1,15 @@
 <script lang="ts">
-import { fetchOnCourse } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-import { Agent } from '$components/agent/registry';
-import AgentChat from '$core/agent/AgentChat.svelte';
-import { security } from '$libs/ui-runtime.svelte';
-import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
-import HeaderConfig from '$domain/HeaderConfig.svelte';
-import HeaderRequestLogsModal from '$domain/HeaderRequestLogsModal.svelte';
-import NotificationsButton from '$domain/NotificationsButton.svelte';
+import { fetchOnCourse } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import { Agent } from '#components/agent/registry.ts';
+import AgentChat from '#core/agent/AgentChat.svelte';
+import { security } from '#libs/ui-runtime.svelte.ts';
+import ButtonLayer from '#components/buttons/ButtonLayer.svelte';
+import HeaderConfig from '#domain/HeaderConfig.svelte';
+import HeaderRequestLogsModal from '#domain/HeaderRequestLogsModal.svelte';
+import NotificationsButton from '#domain/NotificationsButton.svelte';
+import ReloadPageButton from '#domain/ReloadPageButton.svelte';
 import { useUI } from '@genix/ui';
-import { markPageServicesForRefresh } from '@genix/ui/runtime';
-import { Env } from '$core/env';
 
 	// Props
 	const {
@@ -44,7 +43,6 @@ import { Env } from '$core/env';
 	// State
 	let showSettings = $state(false);
 	let uiTheme = $state<'light' | 'dark'>('light');
-	let isReloading = $state(false);
 
 	// Functions
 	function toggleSettings() {
@@ -57,20 +55,6 @@ import { Env } from '$core/env';
 		document.body.classList.add(theme);
 		localStorage.setItem('ui-color', theme);
 		showSettings = false;
-	}
-
-	// Reloading by itself would replay the same cached responses, so the routes this page read are
-	// flagged in the service worker first: the reload then re-fetches them from the server.
-	async function handleReload() {
-		isReloading = true;
-		try {
-			const markedRoutes = await markPageServicesForRefresh(Env.getPathname());
-			console.log('[AppHeader] Routes marked for a forced fetch:', markedRoutes);
-		} catch (error) {
-			// A failed mark only means the reload reads the cache, which is the old behavior.
-			console.warn('[AppHeader] Could not mark the page routes for refresh.', error);
-		}
-		window.location.reload();
 	}
 
 	// Initialize theme from localStorage
@@ -104,7 +88,7 @@ import { Env } from '$core/env';
 			aria-label="Toggle menu"
 			onclick={() => { ui.state.mobileMenuOpen = !ui.state.mobileMenuOpen }}
 		>
-			<span class="text-white text-2xl">☰</span>
+			<i class="text-white text-2xl icon-[fa--bars]"></i>
 		</button>
 	{/if}
 
@@ -152,11 +136,13 @@ import { Env } from '$core/env';
 			</div>
 		{/if}
 
-		<!-- Notifications & running processes — always present. -->
+		<!-- Notifications & running processes — always present. On mobile it is the only button:
+		     settings and reload move to the side menu footer (SideMenu.svelte). -->
 		<NotificationsButton />
 
-		<!-- Settings Dropdown -->
-		<div class="relative">
+		<!-- Settings Dropdown. A Tailwind class on ButtonLayer's wrapper loses to its scoped
+		     display, hence this div. -->
+		<div class="relative hidden md:flex">
 			<!-- Bind the floating settings layer state so nested actions can close it explicitly. -->
 			<ButtonLayer layerClass="md:w-640 md:h-460 px-8 py-6"
 				bind:isOpen={ui.state.headerSettingsOpen}
@@ -172,17 +158,7 @@ import { Env } from '$core/env';
 			</ButtonLayer>
 		</div>
 
-		<!-- Reload Button -->
-		<button
-			class="hidden md:flex w-40 h-40 rounded-full bg-white/10 hover:bg-white/20
-				items-center justify-center transition-colors shadow-sm
-				{isReloading ? 'animate-spin' : ''}"
-			onclick={handleReload}
-			aria-label="Reload"
-			disabled={isReloading}
-		>
-			<span class="text-white text-lg icon-[fa--refresh]"></span>
-		</button>
+		<ReloadPageButton css="hidden md:flex bg-white/10 hover:bg-white/20" iconCss="text-white" />
 	</div>
 </header>
 
@@ -209,19 +185,6 @@ import { Env } from '$core/env';
 		._1.useTopMinimalMenu {
 			margin-left: var(--menu-max-width);
 		}
-	}
-
-	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	.animate-spin {
-		animation: spin 1s linear infinite;
 	}
 
 	/* LOADING: absolute so it sits in the reserved gap to the left of the

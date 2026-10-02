@@ -1,6 +1,6 @@
-import { GetHandler } from '$libs/ui-runtime.svelte';
-import { Env } from '$core/env';
-import type { ImageSource } from '$components/files/ImageUploader.svelte';
+import { GetHandler } from '#libs/ui-runtime.svelte.ts';
+import { Env } from '#core/env.ts';
+import type { ImageSource } from '#components/files/ImageUploader.svelte';
 
 export interface IProductProperty {
   id: number, nm: string, ss: number

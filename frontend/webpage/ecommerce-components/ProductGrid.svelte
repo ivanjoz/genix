@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { getProductEcommerceData, type IProduct, type ProductCatalog } from '$ecommerce/services/products.svelte';
-	import ProductCard from '$ecommerce/components/ProductCard.svelte';
+	import { getProductEcommerceData, type IProduct, type ProductCatalog } from '#ecommerce/services/products.svelte.ts';
+	import ProductCard from '#ecommerce/components/ProductCard.svelte';
 
 	export interface IProductGrid {
 		css?: string;

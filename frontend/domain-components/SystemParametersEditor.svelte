@@ -1,12 +1,12 @@
 <script lang="ts">
-import { systemParameters } from '$services/system-paremeters';
-import { SystemParametersService, saveSystemParameters, type ISystemParameter } from '$services/services/system-parameters.svelte';
+import { hideLoading, showLoading } from '@genix/ui/notify';
+import { systemParameters } from '#services/system-paremeters.ts';
+import { SystemParametersService, saveSystemParameters, type ISystemParameter } from '#services/services/system-parameters.svelte.ts';
 
-import { Loading } from '$libs/helpers';
-    import SearchCard from '$components/cards/SearchCard.svelte';
-    import Checkbox from '$components/form/Checkbox.svelte';
+    import SearchCard from '#components/cards/SearchCard.svelte';
+    import Checkbox from '#components/form/Checkbox.svelte';
     import { untrack } from 'svelte';
-    import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
+    import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
 
 	const service = new SystemParametersService();
 
@@ -39,7 +39,7 @@ import { Loading } from '$libs/helpers';
 	});
 
 	async function save() {
-		Loading.standard("Guardando...");
+		showLoading("Guardando...");
 		const toSave = Object.values(form);
 
 		try {
@@ -47,7 +47,7 @@ import { Loading } from '$libs/helpers';
 		} catch (e) {
 			console.error("Error saving parameters", e);
 		} finally {
-			Loading.remove();
+			hideLoading();
 		}
 	}
 </script>

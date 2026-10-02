@@ -1,20 +1,21 @@
 <script lang="ts">
+  import { notifyFailure, notifySuccess } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import DateInput from '$components/form/DateInput.svelte'
-import Input from '$components/form/Input.svelte'
-import Layer from '$components/layers/Layer.svelte'
-import LayerStatic from '$components/layers/LayerStatic.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import FilterInput from '$components/form/FilterInput.svelte'
-import Button from '$components/buttons/Button.svelte'
-import TableGrid from '$components/vTable/TableGrid.svelte'
-import type { ITableColumn } from '$components/vTable/types'
-import { Core, tr } from '$core/store.svelte'
-import T from '$components/misc/T.svelte'
-import { formatN, formatTime, Notify } from '$libs/helpers'
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
-import { ProductsService } from '$services/production/products.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import Input from '#components/form/Input.svelte'
+import Layer from '#components/layers/Layer.svelte'
+import LayerStatic from '#components/layers/LayerStatic.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import FilterInput from '#components/form/FilterInput.svelte'
+import Button from '#components/buttons/Button.svelte'
+import TableGrid from '#components/vTable/TableGrid.svelte'
+import type { ITableColumn } from '#components/vTable/types.ts'
+import { Core, tr } from '#core/store.svelte.ts'
+import T from '#components/misc/T.svelte'
+import { formatN, formatTime } from '#libs/helpers.ts'
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
+import { ProductsService } from '#services/production/products.svelte.ts'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 import {
   postPurchaseOrderEntry,
@@ -218,15 +219,15 @@ let isSaving = $state(false)
 const handleSave = async () => {
   if (isSaving) return
   if (!selectedOrderID) {
-    Notify.failure(tr('Please select a Purchase Order.|Seleccione una Órden de Compra.'))
+    notifyFailure(tr('Please select a Purchase Order.|Seleccione una Órden de Compra.'))
     return
   }
   if (!warehouseID) {
-    Notify.failure(tr('Please select the destination Warehouse.|Seleccione el Almacén destino.'))
+    notifyFailure(tr('Please select the destination Warehouse.|Seleccione el Almacén destino.'))
     return
   }
   if (entries.length === 0) {
-    Notify.failure(tr('No products to enter.|No hay productos para ingresar.'))
+    notifyFailure(tr('No products to enter.|No hay productos para ingresar.'))
     return
   }
 
@@ -253,7 +254,7 @@ const handleSave = async () => {
   }
 
   if (items.length === 0) {
-    Notify.failure(tr('No valid items to enter.|No hay items válidos para ingresar.'))
+    notifyFailure(tr('No valid items to enter.|No hay items válidos para ingresar.'))
     return
   }
 
@@ -264,7 +265,7 @@ const handleSave = async () => {
       WarehouseID: warehouseID,
       Items: items,
     })
-    Notify.success(tr('Purchase order entered successfully.|Órden de compra ingresada correctamente.'))
+    notifySuccess(tr('Purchase order entered successfully.|Órden de compra ingresada correctamente.'))
     // Reset local state — the saved OC is no longer Confirmada, so it disappears from the picker.
     selectedOrderID = 0
     entries = []
@@ -272,7 +273,7 @@ const handleSave = async () => {
     warehouseID = 0
     cardFilterText = ''
   } catch (error) {
-    Notify.failure(String(error || 'Error al guardar el ingreso.'))
+    notifyFailure(String(error || 'Error al guardar el ingreso.'))
   } finally {
     isSaving = false
   }
@@ -356,7 +357,7 @@ const serialColumns: ITableColumn<{ serial: string, quantity: number }>[] = [
       const wasEmpty = !row.serial
       // Reject duplicates: another row in the draft already owns this serial. Clear and warn.
       if (next && serialDraft.some(s => s !== row && s.serial.trim() === next)) {
-        Notify.failure(`El serial "${next}" ya fue ingresado.`)
+        notifyFailure(`El serial "${next}" ya fue ingresado.`)
         row.serial = ''
         serialDraft = [...serialDraft]
         return

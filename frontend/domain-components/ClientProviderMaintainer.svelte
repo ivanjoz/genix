@@ -1,22 +1,23 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-  import Layer from '$components/layers/Layer.svelte'
-  import Input from '$components/form/Input.svelte'
-  import SearchSelect from '$components/form/SearchSelect.svelte'
-  import VTable from '$components/vTable/VTable.svelte'
-  import type { ITableColumn } from '$components/vTable/types'
-  import { Core, tr } from '$core/store.svelte'
-  import T from '$components/misc/T.svelte'
-  import Page from '$domain/Page.svelte'
-  import { Loading, Notify, formatTime } from '$libs/helpers'
-  import FilterInput from '$components/form/FilterInput.svelte'
-  import Button from '$components/buttons/Button.svelte'
-  import { CountryCitiesService } from '$services/business/country-cities.svelte'
-  import { IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '$services/crm/identity-doc'
+  import Layer from '#components/layers/Layer.svelte'
+  import Input from '#components/form/Input.svelte'
+  import SearchSelect from '#components/form/SearchSelect.svelte'
+  import VTable from '#components/vTable/VTable.svelte'
+  import type { ITableColumn } from '#components/vTable/types.ts'
+  import { Core, tr } from '#core/store.svelte.ts'
+  import T from '#components/misc/T.svelte'
+  import Page from '#domain/Page.svelte'
+  import { formatTime } from '#libs/helpers.ts'
+  import FilterInput from '#components/form/FilterInput.svelte'
+  import Button from '#components/buttons/Button.svelte'
+  import { CountryCitiesService } from '#services/business/country-cities.svelte.ts'
+  import { IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '#services/crm/identity-doc.ts'
   import {
     ClientProviderService, PersonType, postClientProviders, type IClientProvider,
-  } from '$services/crm/client-provider.svelte'
+  } from '#services/crm/client-provider.svelte.ts'
 
   interface IClientProvidersViewProps {
     clientProviderType: number
@@ -104,27 +105,27 @@
 
     const singularLabel = tr(layerTitleSingular).toLowerCase()
     if (!clientProviderForm.Name) {
-      Notify.failure(tr(`Please enter the name of the ${singularLabel}.|Debe ingresar el nombre del ${singularLabel}.`))
+      notifyFailure(tr(`Please enter the name of the ${singularLabel}.|Debe ingresar el nombre del ${singularLabel}.`))
       return
     }
     if (!clientProviderForm.Email || !clientProviderForm.Email.includes('@')) {
-      Notify.failure(tr('Please enter a valid email.|Debe ingresar un email válido.'))
+      notifyFailure(tr('Please enter a valid email.|Debe ingresar un email válido.'))
       return
     }
     if (!clientProviderForm.CountryID || clientProviderForm.CountryID <= 0) {
-      Notify.failure(tr('Please enter a valid Country.|Debe ingresar un CountryID válido.'))
+      notifyFailure(tr('Please enter a valid Country.|Debe ingresar un CountryID válido.'))
       return
     }
     if (!clientProviderForm.CityID || !String(clientProviderForm.CityID).trim()) {
-      Notify.failure(tr('Please enter a valid City.|Debe ingresar un CityID válido.'))
+      notifyFailure(tr('Please enter a valid City.|Debe ingresar un CityID válido.'))
       return
     }
     if (clientProviderForm.PersonType === PersonType.COMPANY && !/^\d{7,12}$/.test(clientProviderForm.RegistryNumber || '')) {
-      Notify.failure(tr('For companies, Registry Number must be 7–12 digits.|Para empresa, el RegistryNumber debe tener entre 7 y 12 dígitos.'))
+      notifyFailure(tr('For companies, Registry Number must be 7–12 digits.|Para empresa, el RegistryNumber debe tener entre 7 y 12 dígitos.'))
       return
     }
 
-    Loading.standard(tr(`Saving ${singularLabel}...|Guardando ${singularLabel}...`))
+    showLoading(tr(`Saving ${singularLabel}...|Guardando ${singularLabel}...`))
     console.log('[ClientesProveedoresView] saveClientProvider payload', {
       clientProviderType,
       clientProviderFormSnapshot: $state.snapshot(clientProviderForm),
@@ -162,15 +163,15 @@
 
       ui.openSideLayer(0)
       resetEntityForm()
-      Notify.success(tr(`${tr(layerTitleSingular)} saved successfully.|${tr(layerTitleSingular)} guardado correctamente.`))
+      notifySuccess(tr(`${tr(layerTitleSingular)} saved successfully.|${tr(layerTitleSingular)} guardado correctamente.`))
     } catch (saveError) {
       console.warn('[ClientesProveedoresView] saveClientProvider error', {
         clientProviderType,
         saveError,
       })
-      Notify.failure(String(saveError))
+      notifyFailure(String(saveError))
     } finally {
-      Loading.remove()
+      hideLoading()
     }
   }
 

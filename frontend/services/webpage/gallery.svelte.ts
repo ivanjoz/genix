@@ -1,5 +1,5 @@
-import { Env } from '$core/env';
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
+import { Env } from '#core/env.ts';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 
 export interface IGalleryImage {
   ID: number;

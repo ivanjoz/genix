@@ -47,4 +47,4 @@
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
 }
-@source "../../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,runtime,vTable}/**/*.svelte";
+@source "../../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,notify,runtime,vTable}/**/*.svelte";

@@ -1,12 +1,12 @@
 <script lang="ts">
   import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts'
-  import CheckboxOptions from '$components/form/CheckboxOptions.svelte'
-  import HighlightText from '$components/misc/HighlightText.svelte'
-  import VirtualCards from '$components/misc/VirtualCards.svelte'
+  import CheckboxOptions from '#components/form/CheckboxOptions.svelte'
+  import HighlightText from '#components/misc/HighlightText.svelte'
+  import VirtualCards from '#components/misc/VirtualCards.svelte'
   import { DateHelper } from '@genix/ui/utilities'
-  import { formatN, formatTime, wordInclude } from '$libs/helpers'
-  import FilterInput from '$components/form/FilterInput.svelte'
-  import type { IProduct } from '$services/production/products.svelte'
+  import { formatN, formatTime, wordInclude } from '#libs/helpers.ts'
+  import FilterInput from '#components/form/FilterInput.svelte'
+  import type { IProduct } from '#services/production/products.svelte.ts'
   import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
 
   type TChartMetricMode = 'amount' | 'quantity'

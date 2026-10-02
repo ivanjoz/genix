@@ -1,18 +1,19 @@
 <script lang="ts">
-import Button from '$components/buttons/Button.svelte'
-import Checkbox from '$components/form/Checkbox.svelte'
-import DateInput from '$components/form/DateInput.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import Layer from '$components/layers/Layer.svelte'
-import T from '$components/misc/T.svelte'
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
-import VTable from '$components/vTable/VTable.svelte'
+import { notifyFailure } from '@genix/ui/notify';
+import Button from '#components/buttons/Button.svelte'
+import Checkbox from '#components/form/Checkbox.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import Layer from '#components/layers/Layer.svelte'
+import T from '#components/misc/T.svelte'
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+import VTable from '#components/vTable/VTable.svelte'
 import type { ExcelTableColumn } from '@genix/ui/excel'
-import Page from '$domain/Page.svelte'
-import { tr } from '$core/store.svelte'
-import { sendUserNotification } from '$core/notifications.svelte'
-import { formatN, formatTime, Notify } from '$libs/helpers'
-import { docTypeName } from '$core/sunat-doc-type'
+import Page from '#domain/Page.svelte'
+import { tr } from '#core/store.svelte.ts'
+import { sendUserNotification } from '#core/notifications.svelte.ts'
+import { formatN, formatTime } from '#libs/helpers.ts'
+import { docTypeName } from '#core/sunat-doc-type.ts'
 import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte'
 import {
   bookOptions, bookRowDocument, bookRowModifiedDocument, bookStateCss, bookStateLabels,
@@ -32,7 +33,7 @@ import {
 } from './books.purchases'
 import { downloadPurchasesBookTxt, purchasesBookFileName } from './books.purchases.txt'
 import { exportPurchasesBookToExcel } from './books.excel'
-import { purchaseDocTypeName } from '$core/purchase-document'
+import { purchaseDocTypeName } from '#core/purchase-document.ts'
 
 const salesBook = makeSalesBookService()
 const purchasesBook = makePurchasesBookService()
@@ -92,11 +93,11 @@ const bookRowCount = $derived(isPurchases ? purchases.rows.length : rows.length)
 
 async function loadBook() {
   if (selection.book !== BOOK_SALES && selection.book !== BOOK_PURCHASES) {
-    Notify.failure(tr("This book is not available yet.|Este libro aún no está disponible."))
+    notifyFailure(tr("This book is not available yet.|Este libro aún no está disponible."))
     return
   }
   if (!isWholeMonth && !selection.date) {
-    Notify.failure(tr("Pick a month or a date.|Elige un mes o una fecha."))
+    notifyFailure(tr("Pick a month or a date.|Elige un mes o una fecha."))
     return
   }
   const book = isPurchases ? purchasesBook : salesBook
@@ -121,7 +122,7 @@ function notifyExportBlockers() {
 
 async function exportBook() {
   if (bookRowCount === 0) {
-    Notify.failure(tr("There is nothing to export.|No hay nada que exportar."))
+    notifyFailure(tr("There is nothing to export.|No hay nada que exportar."))
     return
   }
   if (isPurchases) {
@@ -153,7 +154,7 @@ const txtFileName = $derived(
 
 function exportBookTxt() {
   if (exportBlockers.length > 0) {
-    Notify.failure(tr(exportBlockers[0]))
+    notifyFailure(tr(exportBlockers[0]))
     return
   }
   if (isPurchases) {

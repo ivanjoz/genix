@@ -1,3 +1,30 @@
+## SvelteKit 3: the choices the migration left open
+
+**Context** — Moving to Kit 3 (as berryapps did) forced a few calls berryapps never faced: genix has
+`$env/static/public` variables, a second Kit app (the storefront) that imports layers outside its own
+folder, and an SSR renderer that re-bundles Kit's server output with esbuild.
+
+**Decision**
+- `files.src: '.'` in both apps, and a root `env.ts` declaring the four `PUBLIC_*` vars with
+  `defineEnvVars` as `public` + `static` (inlined at build, the old `$env/static/public` behavior).
+  `webpage/env.ts` re-exports it. Importers read `$app/env/public`.
+- The storefront's `package.json` `imports` point `#core`, `#libs`, `#components`, `#services` and
+  `#domain` at `../` targets. Vite resolves them; TypeScript does not (Node's rule), so both tsconfigs
+  repeat those five in `paths`. `#ecommerce` and `#routes` stay per-package: `#routes` means
+  `webpage/routes` inside the store, `routes/` in the admin app, as `$routes` did.
+- `environments.ssr.build.minify: false` in `webpage/vite.config.ts`. With Svelte 5.57, rolldown named
+  a compiled snippet (a block-level `{function t(){}}` in `Input.svelte`) like the component's props
+  param, and esbuild (0.25 and 0.28) hoists that block function over the param, so the renderer's
+  smoke render failed with HTTP 500. esbuild still minifies the final `render.mjs`.
+- The esbuild `$`-alias resolver of both service-worker builds was deleted: the worker sources import
+  no alias. The dead `$domain/libs/blurhash?raw` declaration in `globals.d.ts` went too.
+- TypeScript 6 (Kit 3 peers on `^6`), same as berryapps.
+
+**Rationale** — Each is the smallest change that builds, type-checks to the pre-migration baseline and
+passes the renderer smoke render. Costs: the five shared-layer mappings live in three places
+(two tsconfigs + the store's `package.json`); `files` is deprecated in Kit 3, so a future major may
+force a `src/` layout; the SSR chunks are larger before esbuild minifies them.
+
 ## HMR is off in dev: a save must leave the open page untouched (supersedes the entry below)
 
 **Context** — With Svelte HMR on, saving a `.svelte` file did *not* reload the page (verified on the

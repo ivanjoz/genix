@@ -1,26 +1,27 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifyWarning, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Checkbox from '$components/form/Checkbox.svelte';
-import Layer from '$components/layers/Layer.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import LoadingBar from '$components/misc/LoadingBar.svelte';
-import TableGrid from '$components/vTable/TableGrid.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { Core, tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
+import Layer from '#components/layers/Layer.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import LoadingBar from '#components/misc/LoadingBar.svelte';
+import TableGrid from '#components/vTable/TableGrid.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import { Core, tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
 import { getStaticRecordsByID } from '@genix/ui/cache';
-import { formatN, Loading, Notify } from '$libs/helpers';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
+import { formatN } from '#libs/helpers.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
 import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
-import { ProductsService } from '$services/production/products.svelte';
+import { ProductsService } from '#services/production/products.svelte.ts';
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte';
-import { EmpresaParametrosService } from '$routes/company/configuration/empresas.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import { manualStockDecreaseTypes, manualStockIncreaseTypes } from '$core/stock-movement-type';
+import { EmpresaParametrosService } from '#routes/company/configuration/empresas.svelte.ts';
+import Modal from '#components/layers/Modal.svelte';
+import { manualStockDecreaseTypes, manualStockIncreaseTypes } from '#core/stock-movement-type.ts';
 import {
     COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND,
     COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST,
@@ -426,7 +427,7 @@ const validateSerialNumberUnique = (
     && (stockDetail.SerialNumber || '') === checkSerialNumber
     && getLotIdentity(stockDetail) === checkLotIdentity,
   )
-  if (duplicate) { Notify.warning(tr('The Batch + Serial combination already exists.|La combinación Lote + Serial ya existe.')) }
+  if (duplicate) { notifyWarning(tr('The Batch + Serial combination already exists.|La combinación Lote + Serial ya existe.')) }
   return !duplicate
 }
 
@@ -437,7 +438,7 @@ const validateLotUnique = (stockDetailRecord: IProductStockDetailRow, checkLotCo
     stockDetail !== stockDetailRecord
     && (stockDetail.LotCode || '') === checkLotCode,
   )
-  if (duplicate) { Notify.warning(tr('The Batch already exists.|El Lote ya existe.')) }
+  if (duplicate) { notifyWarning(tr('The Batch already exists.|El Lote ya existe.')) }
   return !duplicate
 }
 
@@ -785,7 +786,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
 const onChangeAlmacen = async () => {
   if (!stockFilters.warehouseID) { return }
 
-  Loading.standard()
+  showLoading()
   try {
     const result = await getWarehouseProductStock(stockFilters.warehouseID)
     newSerialNumberRowsByProductStockID.clear()
@@ -794,7 +795,7 @@ const onChangeAlmacen = async () => {
     almacenStock = result || []
     almacenStockGetted = result || []
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -812,7 +813,7 @@ const openSaveSummary = () => {
 
       const detailKey = [productStockRecord.ID, getLotIdentity(stockDetail), stockDetail.SerialNumber || ''].join('_')
       if (seenDetailKeys.has(detailKey)) {
-        Notify.failure(tr('There are duplicate entries (same Batch + Serial). Please review before saving.|Hay detalles duplicados (mismo Lote + Serial). Verifica antes de guardar.'))
+        notifyFailure(tr('There are duplicate entries (same Batch + Serial). Please review before saving.|Hay detalles duplicados (mismo Lote + Serial). Verifica antes de guardar.'))
         return
       }
       seenDetailKeys.add(detailKey)
@@ -876,7 +877,7 @@ const openSaveSummary = () => {
   }
 
   if (recordsForUpdate.length === 0) {
-    Notify.failure(tr('No records to update.|No hay registros a actualizar.'))
+    notifyFailure(tr('No records to update.|No hay registros a actualizar.'))
     return
   }
 
@@ -889,13 +890,13 @@ const confirmSave = async () => {
   const { records, changes } = pendingSave
   const refusal = findManualStockRefusal(changes, blockManualInbound, requireManualCost, saveReasons.increaseType)
   if (refusal) {
-    Notify.failure(`${refusal.productName}: ` + (refusal.reason === 'inbound-blocked'
+    notifyFailure(`${refusal.productName}: ` + (refusal.reason === 'inbound-blocked'
       ? tr('stock can only increase through a purchase order or as opening stock.|el stock solo puede aumentar mediante una orden de compra o como saldo inicial.')
       : tr('enter the purchase cost of the stock being added.|ingrese el costo de compra del stock que ingresa.')))
     return
   }
 
-  Loading.standard('Enviando registros...')
+  showLoading('Enviando registros...')
   try {
     await postProductosStock(records.map((record, changeIndex) => ({
       ...record,
@@ -941,7 +942,7 @@ const confirmSave = async () => {
 
     rerenderHandler?.()
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 

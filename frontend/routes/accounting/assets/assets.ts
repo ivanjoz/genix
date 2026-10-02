@@ -1,7 +1,7 @@
 // Pure asset accounting. No Svelte, no fetch — unit-testable in isolation.
 // Mirrors backend/accounting/types/asset.go and backend/accounting/depreciation.go.
 
-import type { IPurchaseDocument } from '$core/purchase-document'
+import type { IPurchaseDocument } from '#core/purchase-document.ts'
 
 // The document columns are the supplier's comprobante (the Registro de Compras row), with this
 // row's share of the amounts. Its currency is CurrencyType and its total must equal PurchaseAmount.

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { useUI } from '@genix/ui'
-import Page from '$domain/Page.svelte'
+import Page from '#domain/Page.svelte'
 import PurchaseOrderCreate from './PurchaseOrderCreate.svelte'
 import PurchaseOrderReport from './PurchaseOrderReport.svelte'
 

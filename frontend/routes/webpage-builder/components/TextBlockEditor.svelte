@@ -45,8 +45,8 @@
   key, or focus handoff silently breaks (Svelte logs `state_proxy_equality_mismatch`).
 -->
 <script lang="ts">
-  import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
-  import Icon from '$ecommerce/components/Icon.svelte';
+  import type { ComponentAST, ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
+  import Icon from '#ecommerce/components/Icon.svelte';
   import IconPicker from './IconPicker.svelte';
   import type { IconSetId } from './icon-sets';
   import { editorStore } from '../stores/editor.svelte';

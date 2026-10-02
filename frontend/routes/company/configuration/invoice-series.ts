@@ -7,7 +7,7 @@
 // The document-type catalog is in $core/sunat-doc-type: the books and the till read it too,
 // and a route folder is the wrong place for something three features share.
 
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, DOC_TYPES } from '$core/sunat-doc-type'
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, DOC_TYPES } from '#core/sunat-doc-type.ts'
 
 export interface IInvoiceSeries {
   SeriesID: number

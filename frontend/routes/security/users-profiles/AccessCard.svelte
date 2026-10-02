@@ -1,7 +1,7 @@
 <script lang="ts">
-import { arrayToMapN } from '$libs/helpers';
+import { arrayToMapN } from '#libs/helpers.ts';
 import { useUI } from '@genix/ui';
-import Checkbox from '$components/form/Checkbox.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
   import { accesoAcciones, type IAccess, type IProfile } from "./users-profiles.svelte"
   import { isSubAccesoChecked, toggleSubAcceso } from "./users-profiles"
   const ui = useUI()

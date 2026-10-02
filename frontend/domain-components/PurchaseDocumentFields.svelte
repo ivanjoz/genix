@@ -1,14 +1,14 @@
 <script lang="ts">
-import DateInput from '$components/form/DateInput.svelte'
-import Input from '$components/form/Input.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import T from '$components/misc/T.svelte'
-import { tr } from '$core/store.svelte'
-import { formatN } from '$libs/helpers'
+import DateInput from '#components/form/DateInput.svelte'
+import Input from '#components/form/Input.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import T from '#components/misc/T.svelte'
+import { tr } from '#core/store.svelte.ts'
+import { formatN } from '#libs/helpers.ts'
 import {
   PURCHASE_DOC_TYPES, purchaseDocTypeCreditsTax, purchaseDocumentTotal, splitPurchaseTotal,
   type IPurchaseDocument,
-} from '$core/purchase-document'
+} from '#core/purchase-document.ts'
 
 // The supplier's comprobante on a purchase order, an expense or a fixed asset — the Registro de
 // Compras row. The three forms render this block; the backend validates it with one rule set

@@ -5,8 +5,8 @@ import {
   saleDocumentNumber, saleDocumentTitle, saleSeriesID, wrapText, type TicketContext,
 } from './sale_ticket'
 import type { SaleHistoryLine, SaleHistoryRow } from './sale_history.idb'
-import type { IInvoiceSeries } from '$routes/company/configuration/invoice-series'
-import type { IProduct } from '$services/production/products.svelte'
+import type { IInvoiceSeries } from '#routes/company/configuration/invoice-series.ts'
+import type { IProduct } from '#services/production/products.svelte.ts'
 
 const BOLETA_SERIES: IInvoiceSeries = {
   SeriesID: 1, DocType: 3, SeriesCode: "B001", SiteID: 0, IsDefault: 1, ss: 1,

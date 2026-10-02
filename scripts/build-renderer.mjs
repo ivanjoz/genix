@@ -42,7 +42,7 @@ const stageDir = resolve(outDir, 'package');
 const zipPath = resolve(outDir, 'webpage-renderer.zip');
 
 // El SSR emite las URLs de assets contra la raíz del sitio (paths.relative=false en
-// svelte.config.js); el Lambda cambia este prefijo por el del CDN de cada company.
+// webpage/vite.config.ts); el Lambda cambia este prefijo por el del CDN de cada company.
 const ASSET_PATH_PREFIX = '/_app/';
 
 const fail = (message) => {

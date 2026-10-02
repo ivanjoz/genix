@@ -1,20 +1,21 @@
 <script lang="ts">
-import Input from '$components/form/Input.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import Layer from '$components/layers/Layer.svelte';
-import Page from '$domain/Page.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { Loading, Notify, formatTime } from '$libs/helpers';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
-import { Core, tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import Input from '#components/form/Input.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import Layer from '#components/layers/Layer.svelte';
+import Page from '#domain/Page.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import { formatTime } from '#libs/helpers.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
+import { Core, tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
 import AlmacenLayoutEditor from './WarehouseLayoutEditor.svelte';
 import { useUI } from '@genix/ui';
 
-import { CountryCitiesService } from '$services/business/country-cities.svelte';
+import { CountryCitiesService } from '#services/business/country-cities.svelte.ts';
 import {
     WarehousesService,
     postSite,
@@ -37,18 +38,18 @@ import {
   const saveSede = async (isDelete?: boolean) => {
     const form = sedeForm
     if((form.Name?.length||0) < 4 || (form.Address?.length||0) < 4){
-      Notify.failure(tr("Name and address must be at least 4 characters.|El nombre y la dirección deben tener al menos 4 caracteres."))
+      notifyFailure(tr("Name and address must be at least 4 characters.|El nombre y la dirección deben tener al menos 4 caracteres."))
       return
     }
 
     console.log("guardando sede::", form)
 
-    Loading.standard(tr("Creating/Updating Branch...|Creando /Actualizando Sede..."))
+    showLoading(tr("Creating/Updating Branch...|Creando /Actualizando Sede..."))
     try {
       var result = await postSite(form)
     } catch (error) {
-      Notify.failure(error as string)
-      Loading.remove()
+      notifyFailure(error as string)
+      hideLoading()
       return
     }
 
@@ -65,16 +66,16 @@ import {
 
     almacenesService.Sedes = sedes_
     ui.closeModal(1)
-    Loading.remove()
+    hideLoading()
   }
 
   const saveAlmacen = async (isDelete?: boolean) => {
     const form = almacenForm
     if((form.Name?.length||0) < 4){
-      Notify.failure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."))
+      notifyFailure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."))
       return
     } else if(!form.SiteID){
-      Notify.failure(tr("Please select a branch.|Debe seleccionar una sede."))
+      notifyFailure(tr("Please select a branch.|Debe seleccionar una sede."))
       return
     }
 
@@ -95,12 +96,12 @@ import {
 
     console.log("guardando almacen::", form)
 
-    Loading.standard(tr("Creating/Updating Warehouse...|Creando /Actualizando Almacén..."))
+    showLoading(tr("Creating/Updating Warehouse...|Creando /Actualizando Almacén..."))
     try {
       var result = await postWarehouse(form)
     } catch (error) {
-      Notify.failure(error as string)
-      Loading.remove()
+      notifyFailure(error as string)
+      hideLoading()
       return
     }
 
@@ -118,7 +119,7 @@ import {
     almacenesService.Almacenes = almacenes_
     ui.closeModal(2)
     ui.openSideLayer(0)
-    Loading.remove()
+    hideLoading()
   }
 
   const sedesColumns: ITableColumn<ISite>[] = [

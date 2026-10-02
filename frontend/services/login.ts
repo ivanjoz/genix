@@ -1,6 +1,6 @@
-import { GET, POST, security } from '$libs/ui-runtime.svelte';
-import type { IUser, ILoginResult } from '$core/types/common';
-import { Env } from '$core/env';
+import { GET, POST, security } from '#libs/ui-runtime.svelte.ts';
+import type { IUser, ILoginResult } from '#core/types/common.ts';
+import { Env } from '#core/env.ts';
 import { getStaticRecordsByID } from '@genix/ui/cache';
 
 export interface ILogin {

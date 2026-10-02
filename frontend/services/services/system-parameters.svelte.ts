@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 
 export interface ISystemParameter {
 	ID: number;

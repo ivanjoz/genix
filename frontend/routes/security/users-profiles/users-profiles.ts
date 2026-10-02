@@ -6,8 +6,8 @@
 // packed exactly once, in the backend, when a user's effective grants are computed
 // (backend/core/accesos-blob.go). See RATIONALE.md.
 
-import Modules from '$core/modules'
-import type { IAccesoGrant, IProfile, IUser } from '$core/types/common'
+import Modules from '#core/modules.ts'
+import type { IAccesoGrant, IProfile, IUser } from '#core/types/common.ts'
 import {
   normalizeAccessFrontendRoutes,
   type IAccessGroupCatalogEntry,

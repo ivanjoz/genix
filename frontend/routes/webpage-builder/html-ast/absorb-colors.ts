@@ -1,4 +1,4 @@
-import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
+import type { ComponentAST } from '#ecommerce/renderer/renderer-types.ts';
 
 // The agent introduces a NEW color (one not in the palette) as a Tailwind arbitrary
 // value with a hex, e.g. `bg-[#aabbcc]`, `text-[#abc]`, `hover:border-[#112233]`.

@@ -1,11 +1,11 @@
 <script lang="ts" generics="T extends ISaleOrderTableRecord">
-  import HighlightText from '$components/misc/HighlightText.svelte';
-  import InlineButton from '$components/buttons/InlineButton.svelte';
-  import VTable from '$components/vTable/VTable.svelte';
-  import type { ITableColumn } from '$components/vTable/types';
-  import { formatN, formatTime, wordInclude } from '$libs/helpers';
-  import { unpackQuantityLine } from '$core/quantity';
-  import { CURRENCY_USD } from '$routes/finance/exchange-rate/exchange-rate';
+  import HighlightText from '#components/misc/HighlightText.svelte';
+  import InlineButton from '#components/buttons/InlineButton.svelte';
+  import VTable from '#components/vTable/VTable.svelte';
+  import type { ITableColumn } from '#components/vTable/types.ts';
+  import { formatN, formatTime, wordInclude } from '#libs/helpers.ts';
+  import { unpackQuantityLine } from '#core/quantity.ts';
+  import { CURRENCY_USD } from '#routes/finance/exchange-rate/exchange-rate.ts';
 
   interface IProductLookupRecord {
     Name?: string;

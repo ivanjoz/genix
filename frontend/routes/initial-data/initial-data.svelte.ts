@@ -1,4 +1,4 @@
-import { POST } from '$libs/ui-runtime.svelte';
+import { POST } from '#libs/ui-runtime.svelte.ts';
 
 export interface IInitialData {
   SiteID: number

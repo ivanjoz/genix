@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getContext, type Snippet } from 'svelte';
-  import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
-  import { slideSync } from '$ecommerce/stores/slide-sync.svelte';
-  import { EC_BUILDER_MODE } from '$ecommerce/renderer/builder-context';
+  import type { ComponentAST } from '#ecommerce/renderer/renderer-types.ts';
+  import { slideSync } from '#ecommerce/stores/slide-sync.svelte.ts';
+  import { EC_BUILDER_MODE } from '#ecommerce/renderer/builder-context.ts';
 
   interface Props {
     /**

@@ -1,7 +1,7 @@
-import { Env } from '$core/env'
-import { GetHandler, POST, buildHeaders } from '$libs/ui-runtime.svelte'
-import { Notify } from '$libs/helpers'
-import { tr } from '$core/store.svelte'
+import { notifyFailure } from '@genix/ui/notify';
+import { Env } from '#core/env.ts'
+import { GetHandler, POST, buildHeaders } from '#libs/ui-runtime.svelte.ts'
+import { tr } from '#core/store.svelte.ts'
 import type { IInvoiceDocument } from './invoicing'
 
 export type { IInvoiceDocument }
@@ -60,7 +60,7 @@ export async function downloadInvoiceArtifact(
     headers: buildHeaders('json', 'invoice-xml'),
   })
   if (!response.ok) {
-    Notify.failure(tr("The file could not be downloaded.|No se pudo descargar el archivo."))
+    notifyFailure(tr("The file could not be downloaded.|No se pudo descargar el archivo."))
     return
   }
 

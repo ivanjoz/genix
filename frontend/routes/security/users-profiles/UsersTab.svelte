@@ -1,20 +1,18 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Input from '$components/form/Input.svelte';
-import LabelCell from '$components/form/LabelCell.svelte';
-import Layer from '$components/layers/Layer.svelte';
+import Input from '#components/form/Input.svelte';
+import LabelCell from '#components/form/LabelCell.svelte';
+import Layer from '#components/layers/Layer.svelte';
 import UserProfilesAccessSelector from './UserProfilesAccessSelector.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { Notify } from '$libs/helpers';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-import { tr } from '$core/store.svelte';
-import { formatTime } from '$libs/helpers';
-  import pkg from 'notiflix'
-const { Loading } = pkg
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+import { tr } from '#core/store.svelte.ts';
+import { formatTime } from '#libs/helpers.ts';
   import type { IAccessGroupCatalogEntry, IAccessListCatalogEntry } from "./access-list-catalog"
   import { UsuariosService, PerfilesService, postUser, type IUser } from "./users-profiles.svelte"
   import AccessGroupBars from "./AccessGroupBars.svelte"
@@ -93,7 +91,7 @@ const { Loading } = pkg
     const form = usuarioForm
 
     if ((form.User?.length || 0) < 4 || (form.FirstName?.length || 0) < 4) {
-      Notify.failure(tr("Username and first name must be at least 4 characters.|El usuario y el nombre deben tener al menos 4 caracteres."))
+      notifyFailure(tr("Username and first name must be at least 4 characters.|El usuario y el nombre deben tener al menos 4 caracteres."))
       return
     }
 
@@ -108,12 +106,12 @@ const { Loading } = pkg
         err = tr("Passwords do not match.|Los password no coinciden.")
       }
       if (err) {
-        Notify.failure(err)
+        notifyFailure(err)
         return
       }
     }
 
-    Loading.standard(tr("Creating/Updating User...|Creando/Actualizando Usuario..."))
+    showLoading(tr("Creating/Updating User...|Creando/Actualizando Usuario..."))
     console.log("saveUsuario payload::", { isDelete: !!isDelete, form: $state.snapshot(form) })
     try {
       const result = await postUser(form)
@@ -133,9 +131,9 @@ const { Loading } = pkg
       resetUsuarioForm()
     } catch (error) {
       console.warn("saveUsuario error::", error)
-      Notify.failure(error as string)
+      notifyFailure(error as string)
     }
-    Loading.remove()
+    hideLoading()
   }
 
   const columns: ITableColumn<IUser>[] = [

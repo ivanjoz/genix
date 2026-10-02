@@ -1,6 +1,6 @@
-import { building } from '$app/environment';
-import { Env } from '$core/env';
-import type { Handle } from '@sveltejs/kit';
+import { building } from '$app/env';
+import { Env } from '#core/env.ts';
+import type { Handle } from '@sveltejs/kit/hooks';
 
 // El Lambda de render pide cada página como '/<ruta>?cid=<companyID>&pid=<pageID>'.
 //

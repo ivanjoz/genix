@@ -1,6 +1,6 @@
 import { getFechaUnix } from '@genix/ui/utilities'
-import { decodeFromBase62 } from '$libs/helpers'
-import { GetHandler, POST } from '$libs/ui-runtime.svelte'
+import { decodeFromBase62 } from '#libs/helpers.ts'
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
 import type { IProductStock } from '../products-stock/stock-movement'
 
 export interface IProductSupplyProviderRow {

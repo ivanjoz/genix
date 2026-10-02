@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Card from '$components/cards/Card.svelte';
-  import { formatN } from '$libs/helpers';
+  import Card from '#components/cards/Card.svelte';
+  import { formatN } from '#libs/helpers.ts';
   import type { ICreditUsageDay } from './company-credit-usage.model';
   import { buildCompanyCreditCalendar, COMPANY_CREDIT_WEEKDAY_LABELS } from './company-credit-calendar';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { IClientProviderSnapshot } from '$services/crm/client-provider.svelte'
-import { purchaseDocumentTotal, splitPurchaseTotal } from '$core/purchase-document'
+import type { IClientProviderSnapshot } from '#services/crm/client-provider.svelte.ts'
+import { purchaseDocumentTotal, splitPurchaseTotal } from '#core/purchase-document.ts'
 import { SINGLE_DAY_PERIOD } from './books'
 import {
   buildPurchasesBook, purchasesBookExportBlockers, sumPurchasesBook, PURCHASE_SOURCE_ASSET,

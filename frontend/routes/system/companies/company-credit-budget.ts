@@ -1,4 +1,4 @@
-import { GET, POST } from '$libs/ui-runtime.svelte';
+import { GET, POST } from '#libs/ui-runtime.svelte.ts';
 
 export type CompanyCreditBudgetOperation = 'set-daily' | 'set-current' | 'increase-current';
 

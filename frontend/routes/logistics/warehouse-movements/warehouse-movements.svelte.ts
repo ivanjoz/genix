@@ -1,5 +1,5 @@
-import { GETWithGroupCache } from '$libs/ui-runtime.svelte';
-import { Notify } from '$libs/helpers';
+import { notifyFailure } from '@genix/ui/notify';
+import { GETWithGroupCache } from '#libs/ui-runtime.svelte.ts';
 import type { IProductStockLot } from '../products-stock/stock-movement';
 
 interface IQueryAlmacenMovimientos {
@@ -71,7 +71,7 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
   try {
     result = await GETWithGroupCache<IWarehouseProductMovement>(route, uriParams)
   } catch (error) {
-    Notify.failure(String(error || 'Hubo un error al obtener los movimientos del almacén'))
+    notifyFailure(String(error || 'Hubo un error al obtener los movimientos del almacén'))
     throw error
   }
 

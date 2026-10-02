@@ -1,5 +1,5 @@
-import { GetHandler, GET, POST, PUT } from '$libs/ui-runtime.svelte'
-import type { IPurchaseDocument } from '$core/purchase-document'
+import { GetHandler, GET, POST, PUT } from '#libs/ui-runtime.svelte.ts'
+import type { IPurchaseDocument } from '#core/purchase-document.ts'
 import { AssetStatus, type IAsset, type IAssetForm, type IDepreciationEntry } from './assets'
 
 export type { IAsset, IAssetForm, IDepreciationEntry }

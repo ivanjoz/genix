@@ -1,5 +1,5 @@
-import { Notify } from '$libs/helpers';
-import { GetHandler, POST } from '$libs/ui-runtime.svelte';
+import { notifyFailure } from '@genix/ui/notify';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 
 export interface ISaleOrderTopProduct {
 	ProductID: number;
@@ -110,7 +110,7 @@ export class SaleOrdersService extends GetHandler {
 		} else if (group === SaleOrderGroup.PENDIENTE_DE_PAGO || group === SaleOrderGroup.PENDIENTE_DE_ENTREGA) {
 			this.route += `?pending-status=${group}`
 		} else {
-			Notify.failure("El grupo seleccionado es incorrecto")
+			notifyFailure("El grupo seleccionado es incorrecto")
 			return
 		}
 

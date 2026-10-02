@@ -1,8 +1,8 @@
 <script lang="ts">
-import Button from '$components/buttons/Button.svelte';
-import Checkbox from '$components/form/Checkbox.svelte';
-import Input from '$components/form/Input.svelte';
-import T from '$components/misc/T.svelte';
+import Button from '#components/buttons/Button.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
+import Input from '#components/form/Input.svelte';
+import T from '#components/misc/T.svelte';
 import { companyFlagsCatalog, toggleCompanyFlag } from './company-flags';
 import { saveCompanyParameters, type EmpresaParametrosService } from './empresas.svelte';
 

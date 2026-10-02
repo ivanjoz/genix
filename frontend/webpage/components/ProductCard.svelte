@@ -1,13 +1,13 @@
 <script lang="ts">
-	import { formatN } from "$libs/helpers";
+	import { formatN } from "#libs/helpers.ts";
 	import {
 		getRecordWithCache,
 		type IMinimalRecord,
 		type IRecordRef,
 	} from "@genix/ui/cache";
 	import { untrack } from "svelte";
-	import type { IProduct } from "$ecommerce/services/products.svelte";
-	import ImageHash from "$components/files/Imagehash.svelte";
+	import type { IProduct } from "#ecommerce/services/products.svelte.ts";
+	import ImageHash from "#components/files/Imagehash.svelte";
 	import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
 	type ProductCardMode = "vertical" | "horizontal";

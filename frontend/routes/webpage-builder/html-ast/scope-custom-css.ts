@@ -1,5 +1,5 @@
-import type { ComponentAST } from '$ecommerce/renderer/renderer-types';
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { ComponentAST } from '#ecommerce/renderer/renderer-types.ts';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * Scope agent-authored custom CSS to page-unique minified classes.

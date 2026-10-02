@@ -1,9 +1,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
-  import SearchDualCard from '$components/cards/SearchDualCard.svelte';
+  import SearchDualCard from '#components/cards/SearchDualCard.svelte';
   import AccessCard from './AccessCard.svelte';
-  import Checkbox from '$components/form/Checkbox.svelte';
-  import T from '$components/misc/T.svelte';
+  import Checkbox from '#components/form/Checkbox.svelte';
+  import T from '#components/misc/T.svelte';
   import { accesoAcciones } from './users-profiles.svelte';
   import type { IAccessGroupCatalogEntry, IAccessListCatalogEntry } from './access-list-catalog';
   import type { IAccess, IProfile, IUser } from './users-profiles.svelte';

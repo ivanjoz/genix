@@ -5,8 +5,8 @@
 // 42-80 are left out together with their pipes, so the record stops at 37.
 // See ../docs/SUNAT-RCE-Diario-annexes-summary.md §1.2 for the file name and §1.4 for the fields.
 
-import { sunatDocCode } from '$core/sunat-doc-type'
-import { downloadTextFile } from '$libs/helpers'
+import { sunatDocCode } from '#core/sunat-doc-type.ts'
+import { downloadTextFile } from '#libs/helpers.ts'
 import type { IPurchaseBookRow, IPurchasesBookIssuer } from './books.purchases'
 import { sunatAmount, sunatDate, sunatText } from './books.utils'
 

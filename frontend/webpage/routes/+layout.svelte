@@ -1,18 +1,19 @@
 <script lang="ts">
   // @render 'svelte';
   import { onMount } from "svelte";
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import "./store.css";
   import "./tailwind.css";
   // Shared typography (Open Sans desktop / Inter mobile) — imported last so its
   // ≤749px remap wins the cascade. Same file the admin/builder uses.
   import "../../styles/fonts.css";
 
-  import { preloadProductSearch } from "$core/product-search/product-search-runtime";
-  import { getProductEcommerceData } from '$ecommerce/services/products.svelte';
-  import FloatingCart from "$ecommerce/components/FloatingCart.svelte";
+  import { preloadProductSearch } from "#core/product-search/product-search-runtime.ts";
+  import { getProductEcommerceData } from '#ecommerce/services/products.svelte.ts';
+  import FloatingCart from "#ecommerce/components/FloatingCart.svelte";
   import { provideUi } from '@genix/ui';
-  import { genixUiRuntime } from '$libs/ui-runtime.svelte';
+  import { NotifyHost } from '@genix/ui/notify';
+  import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
   let { children } = $props();
   provideUi(genixUiRuntime);
 
@@ -33,4 +34,6 @@
      baked into the prerendered HTML (it would flash empty/stale before hydration). -->
 {#if browser}
   <FloatingCart />
+  <!-- genix-ui raises session and request errors through notify. -->
+  <NotifyHost />
 {/if}

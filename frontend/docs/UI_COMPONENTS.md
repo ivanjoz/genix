@@ -135,7 +135,7 @@ Use `Core.openModal(id)` to open and `closeModal(id)` to close.
 **Example:**
 ```svelte
 <script>
-  import { Core } from "$core/store.svelte"
+  import { Core } from "#core/store.svelte.ts"
   let view = $state(1)
   let layerView = $state(1)
 </script>
@@ -544,8 +544,8 @@ Lightweight virtualized data grid for large datasets. Use this when you need a s
 **Example:**
 ```svelte
 <script lang="ts">
-  import TableGrid from '$components/vTable/TableGrid.svelte';
-  import type { TableGridColumn } from '$components/vTable/tableGridTypes';
+  import TableGrid from '#components/vTable/TableGrid.svelte';
+  import type { TableGridColumn } from '#components/vTable/tableGridTypes.ts';
 
   interface RowRecord {
     id: string;
@@ -619,7 +619,7 @@ Virtualized cards container for dashboards or catalogs where each row renders mu
 **Example:**
 ```svelte
 <script lang="ts">
-  import VirtualCards from '$components/VirtualCards.svelte';
+  import VirtualCards from '#components/VirtualCards.svelte';
 
   interface ProductCard {
     id: number;

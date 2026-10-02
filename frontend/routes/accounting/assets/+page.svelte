@@ -1,23 +1,24 @@
 <script lang="ts">
+import { confirmWarn, hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
 import { useUI } from '@genix/ui'
-import Button from '$components/buttons/Button.svelte'
-import Checkbox from '$components/form/Checkbox.svelte'
-import DateInput from '$components/form/DateInput.svelte'
-import FilterInput from '$components/form/FilterInput.svelte'
-import Info from '$components/misc/Info.svelte'
-import Input from '$components/form/Input.svelte'
-import LabelCell from '$components/form/LabelCell.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import Layer from '$components/layers/Layer.svelte'
-import Modal from '$components/layers/Modal.svelte'
-import T from '$components/misc/T.svelte'
-import VTable from '$components/vTable/VTable.svelte'
+import Button from '#components/buttons/Button.svelte'
+import Checkbox from '#components/form/Checkbox.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import FilterInput from '#components/form/FilterInput.svelte'
+import Info from '#components/misc/Info.svelte'
+import Input from '#components/form/Input.svelte'
+import LabelCell from '#components/form/LabelCell.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import Layer from '#components/layers/Layer.svelte'
+import Modal from '#components/layers/Modal.svelte'
+import T from '#components/misc/T.svelte'
+import VTable from '#components/vTable/VTable.svelte'
 import type { ExcelTableColumn } from '@genix/ui/excel'
-import Page from '$domain/Page.svelte'
-import { tr } from '$core/store.svelte'
-import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers'
+import Page from '#domain/Page.svelte'
+import { tr } from '#core/store.svelte.ts'
+import { formatN, formatTime } from '#libs/helpers.ts'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
 import { SupplyMaterialService } from '../../production/supplies-materials/supply-material.svelte'
 import AssetForm from './AssetForm.svelte'
 import {
@@ -76,7 +77,7 @@ $effect(() => {
   runAssetDepreciation()
     .then(result => {
       if (result?.PostedEntries > 0) {
-        Notify.success(tr(
+        notifySuccess(tr(
           `Posted ${result.PostedEntries} depreciation entries.|Se registraron ${result.PostedEntries} asientos de depreciación.`,
         ))
         assets.fetch()
@@ -162,31 +163,31 @@ const openAcquisitionLayer = () => {
 
 const onAcquire = async () => {
   if (!acquisitionForm.ProductID) {
-    Notify.failure(tr("Select the supply this asset is.|Seleccione el insumo que corresponde al activo."))
+    notifyFailure(tr("Select the supply this asset is.|Seleccione el insumo que corresponde al activo."))
     return
   }
   if (!acquisitionForm.WarehouseID) {
-    Notify.failure(tr("Select a warehouse.|Seleccione un almacén."))
+    notifyFailure(tr("Select a warehouse.|Seleccione un almacén."))
     return
   }
   if (!acquisitionForm.AcquisitionValue) {
-    Notify.failure(tr("The asset value must be greater than 0.|El valor del activo debe ser mayor a 0."))
+    notifyFailure(tr("The asset value must be greater than 0.|El valor del activo debe ser mayor a 0."))
     return
   }
 
   const serialNumbers = (serialsInput.text || "")
     .split("\n").map(serial => serial.trim()).filter(Boolean)
 
-  Loading.standard(tr("Registering asset...|Registrando activo..."))
+  showLoading(tr("Registering asset...|Registrando activo..."))
   try {
     const { SerialNumber, ...acquisitionFields } = acquisitionForm
     await postAssetAcquisition({ ...acquisitionFields, SerialNumbers: serialNumbers })
   } catch (error) {
-    Notify.failure(error as string)
-    Loading.remove()
+    notifyFailure(error as string)
+    hideLoading()
     return
   }
-  Loading.remove()
+  hideLoading()
   await assets.fetch()
   ui.openSideLayer(0)
 }
@@ -198,7 +199,7 @@ const openDepreciationLayer = async (asset: IAsset) => {
   try {
     depreciationEntries = await getAssetDepreciation(asset.ID)
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   }
 }
 
@@ -216,15 +217,15 @@ const openPaymentModal = () => {
 const registerAssetPayment = async () => {
   if (!selectedAsset) return
   if ((paymentForm.Amount || 0) <= 0) {
-    Notify.failure(tr("Enter a payment amount greater than 0.|Ingrese un monto de pago mayor a 0."))
+    notifyFailure(tr("Enter a payment amount greater than 0.|Ingrese un monto de pago mayor a 0."))
     return
   }
   if (!paymentForm.CashBankID) {
-    Notify.failure(tr("Select the source register.|Seleccione la caja de origen."))
+    notifyFailure(tr("Select the source register.|Seleccione la caja de origen."))
     return
   }
 
-  Loading.standard(tr("Registering payment...|Registrando pago..."))
+  showLoading(tr("Registering payment...|Registrando pago..."))
   try {
     const updated = await postAssetPayment({ ...paymentForm, AssetID: selectedAsset.ID })
     selectedAsset = { ...selectedAsset, ...updated }
@@ -232,9 +233,9 @@ const registerAssetPayment = async () => {
     // Only on success: a failed post keeps the dialog open with the input intact.
     ui.closeModal(PAYMENT_MODAL_ID)
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -249,15 +250,15 @@ const openAssetEditModal = () => {
 const saveAssetEdit = async () => {
   if (!selectedAsset) return
   if (!editForm.AcquisitionValue) {
-    Notify.failure(tr("The book value must be greater than 0.|El valor en libros debe ser mayor a 0."))
+    notifyFailure(tr("The book value must be greater than 0.|El valor en libros debe ser mayor a 0."))
     return
   }
   if (!editForm.AcquisitionDate) {
-    Notify.failure(tr("Enter the acquisition date.|Ingrese la fecha de adquisición."))
+    notifyFailure(tr("Enter the acquisition date.|Ingrese la fecha de adquisición."))
     return
   }
 
-  Loading.standard(tr("Saving changes...|Guardando cambios..."))
+  showLoading(tr("Saving changes...|Guardando cambios..."))
   try {
     const { ProductID, WarehouseID, SupplierID, Quantity, ...editFields } = editForm
     const updated = await putAssetEdit({
@@ -275,36 +276,34 @@ const saveAssetEdit = async () => {
     // Only on success: a rejected edit keeps the dialog open with the input intact.
     ui.closeModal(EDIT_MODAL_ID)
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
-const onDispose = () => {
+const onDispose = async () => {
   if (!selectedAsset) return
   const asset = selectedAsset
-  ConfirmWarn(
-    tr("Dispose Asset|Dar de Baja"),
-    tr(
+  const confirmed = await confirmWarn({
+    title: tr("Dispose Asset|Dar de Baja"),
+    message: tr(
       `Dispose "${assetUnitLabel(asset)}"? It leaves the warehouse and stops depreciating.`
       + `|¿Dar de baja "${assetUnitLabel(asset)}"? Sale del almacén y deja de depreciarse.`,
     ),
-    "SI", "NO",
-    async () => {
-      Loading.standard(tr("Disposing...|Dando de baja..."))
-      try {
-        await putAssetDisposal({ AssetID: asset.ID, DisposalDate: 0 })
-      } catch (error) {
-        Notify.failure(error as string)
-        Loading.remove()
-        return
-      }
-      Loading.remove()
-      await assets.fetch()
-      ui.openSideLayer(0)
-    },
-  )
+  })
+  if (!confirmed) return
+  showLoading(tr("Disposing...|Dando de baja..."))
+  try {
+    await putAssetDisposal({ AssetID: asset.ID, DisposalDate: 0 })
+  } catch (error) {
+    notifyFailure(error)
+    hideLoading()
+    return
+  }
+  hideLoading()
+  await assets.fetch()
+  ui.openSideLayer(0)
 }
 </script>
 

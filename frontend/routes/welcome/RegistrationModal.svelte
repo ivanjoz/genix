@@ -1,14 +1,15 @@
 <script lang="ts">
+  import { notifyFailure, notifySuccess } from '@genix/ui/notify';
   import { onDestroy, untrack } from 'svelte';
-  import Input from '$components/form/Input.svelte';
-  import Modal from '$components/layers/Modal.svelte';
-  import T from '$components/misc/T.svelte';
-  import { Env } from '$core/env';
-  import { tr } from '$core/store.svelte';
-  import { formatTime, Notify } from '$libs/helpers';
-  import { extractError, security } from '$libs/ui-runtime.svelte';
-  import { makeCipherKey } from '$services/login';
-  import { createSignUpCompany, requestSignUpCode, verifySignUpCode } from '$services/signup';
+  import Input from '#components/form/Input.svelte';
+  import Modal from '#components/layers/Modal.svelte';
+  import T from '#components/misc/T.svelte';
+  import { Env } from '#core/env.ts';
+  import { tr } from '#core/store.svelte.ts';
+  import { formatTime } from '#libs/helpers.ts';
+  import { extractError, security } from '#libs/ui-runtime.svelte.ts';
+  import { makeCipherKey } from '#services/login.ts';
+  import { createSignUpCompany, requestSignUpCode, verifySignUpCode } from '#services/signup.ts';
   import InitialDataForm from '../initial-data/InitialDataForm.svelte';
 
   interface Props {
@@ -92,7 +93,7 @@
       lastSentAt = result.SentAt;
       startRetryCountdown(result.RetryAfterSeconds);
 
-      if (result.Sent) Notify.success(tr('Registration email sent.|Correo de registro enviado.'));
+      if (result.Sent) notifySuccess(tr('Registration email sent.|Correo de registro enviado.'));
       console.info('[Registration] Sign-up request ready:', { requestID, sent: result.Sent });
     } catch (error) {
       // Rejects with the raw response, so String(error) would print "[object Object]".
@@ -126,15 +127,15 @@
 
   const submitCompany = async () => {
     if (companyForm.CompanyName.trim().length < 5) {
-      Notify.failure(tr('The company name must be at least 5 characters.|El nombre de la empresa debe tener al menos 5 caracteres.'));
+      notifyFailure(tr('The company name must be at least 5 characters.|El nombre de la empresa debe tener al menos 5 caracteres.'));
       return;
     }
     if (companyForm.AdminPassword.length < 6) {
-      Notify.failure(tr('The password must be at least 6 characters.|La contraseña debe tener al menos 6 caracteres.'));
+      notifyFailure(tr('The password must be at least 6 characters.|La contraseña debe tener al menos 6 caracteres.'));
       return;
     }
     if (companyForm.AdminPassword !== companyForm.AdminPasswordRepeat) {
-      Notify.failure(tr('The passwords do not match.|Las contraseñas no coinciden.'));
+      notifyFailure(tr('The passwords do not match.|Las contraseñas no coinciden.'));
       return;
     }
 
@@ -166,7 +167,7 @@
       // Server failures already raised their own toast on the way out of the http layer; only the
       // errors thrown right here carry a message that nobody has shown yet.
       console.error('[Registration] Company creation failed:', error);
-      if (error instanceof Error) Notify.failure(error.message);
+      if (error instanceof Error) notifyFailure(error.message);
     }
     isBusy = false;
   };

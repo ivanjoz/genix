@@ -1,50 +1,29 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
+	"extends": "$app/tsconfig",
 	"compilerOptions": {
-		"allowJs": true,
-		"checkJs": true,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "bundler",
+		// Storefront files are checked here too, and their package.json (webpage/) points these
+		// layers at "../" targets, which TypeScript rejects. Same targets as the "imports" here.
 		"paths": {
-			"$domain": ["./domain-components"],
-			"$domain/*": ["./domain-components/*"],
-			"$ecommerce": ["./webpage"],
-			"$ecommerce/*": ["./webpage/*"],
-			"$stores": ["./webpage/stores"],
-			"$ecommerce/stores/*": ["./webpage/stores/*"],
-			"$routes": ["./routes"],
-			"$routes/*": ["./routes/*"],
-			"$components": ["./packages/genix-ui"],
-			"$components/*": ["./packages/genix-ui/*"],
-			"$core": ["./core"],
-			"$core/*": ["./core/*"],
-			"$services": ["./services"],
-			"$services/*": ["./services/*"],
-			"$libs": ["./libs"],
-			"$libs/*": ["./libs/*"]
+			"#components/*": ["./packages/genix-ui/*"],
+			"#core/*": ["./core/*"],
+			"#libs/*": ["./libs/*"],
+			"#services/*": ["./services/*"],
+			"#domain/*": ["./domain-components/*"]
 		}
 	},
 	"include": [
-		".svelte-kit/ambient.d.ts",
-		".svelte-kit/non-ambient.d.ts",
 		".svelte-kit/types/**/$types.d.ts",
+		"app.d.ts",
+		"globals.d.ts",
 		"routes/**/*",
-		"pkg-components/**/*",
-		"pkg-core/**/*",
-		"pkg-services/**/*",
-		"pkg-ui/**/*"
-, "core/products-lists.ts"	],
+		"core/**/*",
+		"libs/**/*",
+		"services/**/*",
+		"domain-components/**/*"
+	],
 	// Bun test files (`bun:test`) are run by `bun test`, not svelte-check; exclude
 	// them so the type checker doesn't choke on the missing `bun:test` module.
 	"exclude": ["**/*.test.ts"]
-	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
-	//
-	// To make changes to top-level options such as include and exclude, we recommend extending
-	// the generated config; see https://svelte.dev/docs/kit/configuration#typescript
 }

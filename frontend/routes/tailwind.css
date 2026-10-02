@@ -114,6 +114,10 @@ body {
 	--modal-zindex: 260;
 	--layer-zindex: 101;
 	--portal-zindex: 201;
+	/* genix-ui notify: above everything, toasts on top so errors show while loading */
+	--loading-zindex: 400;
+	--confirm-zindex: 410;
+	--toast-zindex: 420;
 }
 
 .fs15 {
@@ -218,4 +222,4 @@ body.dark {
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
 }
-@source "../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,runtime,vTable}/**/*.svelte";
+@source "../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,notify,runtime,vTable}/**/*.svelte";

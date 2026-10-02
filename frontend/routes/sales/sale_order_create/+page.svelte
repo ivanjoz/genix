@@ -1,40 +1,41 @@
 <script lang="ts">
-import Input from '$components/form/Input.svelte';
-import LayerStatic from '$components/layers/LayerStatic.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import VirtualCards from '$components/misc/VirtualCards.svelte';
-import Label from '$components/misc/Label.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import Page from '$domain/Page.svelte';
-import { Loading, formatN, wordInclude } from '$libs/helpers';
-import Button from '$components/buttons/Button.svelte';
+import { hideLoading, showLoading } from '@genix/ui/notify';
+import Input from '#components/form/Input.svelte';
+import LayerStatic from '#components/layers/LayerStatic.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import VirtualCards from '#components/misc/VirtualCards.svelte';
+import Label from '#components/misc/Label.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import Page from '#domain/Page.svelte';
+import { formatN, wordInclude } from '#libs/helpers.ts';
+import Button from '#components/buttons/Button.svelte';
 
-import CheckboxOptions from '$components/form/CheckboxOptions.svelte';
-import SystemParametersEditor from '$domain/SystemParametersEditor.svelte';
-import { CajasService, type ICashBank } from '$routes/finance/cash-banks/cajas.svelte';
-import { getWarehouseProductStock, type IProductStock, type IProductStockDetail } from '$routes/logistics/products-stock/stock-movement';
-import { TILL_IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '$services/crm/identity-doc';
+import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
+import SystemParametersEditor from '#domain/SystemParametersEditor.svelte';
+import { CajasService, type ICashBank } from '#routes/finance/cash-banks/cajas.svelte.ts';
+import { getWarehouseProductStock, type IProductStock, type IProductStockDetail } from '#routes/logistics/products-stock/stock-movement.ts';
+import { TILL_IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '#services/crm/identity-doc.ts';
 import {
   ClientProviderService, ClientProviderType, type IClientProvider,
-} from '$services/crm/client-provider.svelte';
-import { ProductsService } from '$services/production/products.svelte';
-import { SharedListsService } from "$services/business/shared-lists.svelte";
-import { SystemParametersService } from '$services/services/system-parameters.svelte';
+} from '#services/crm/client-provider.svelte.ts';
+import { ProductsService } from '#services/production/products.svelte.ts';
+import { SharedListsService } from "#services/business/shared-lists.svelte.ts";
+import { SystemParametersService } from '#services/services/system-parameters.svelte.ts';
 import { untrack } from 'svelte';
 import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte';
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '$core/sunat-doc-type';
-import { tr } from '$core/store.svelte';
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '#core/sunat-doc-type.ts';
+import { tr } from '#core/store.svelte.ts';
 import type { IWarehouse } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 import ProductoVentaCard from './SaleProductCard.svelte';
-import { type Quantity, addQuantity, formatQuantity, quantityDivisorOf, totalSubUnits } from '$core/quantity';
+import { type Quantity, addQuantity, formatQuantity, quantityDivisorOf, totalSubUnits } from '#core/quantity.ts';
 import type { ProductoVenta, VentaProducto } from "./sale_order.svelte";
 import { useUI } from '@genix/ui';
 import { SaleOrderState, SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY } from "./sale_order.svelte";
-import DateInput from '$components/form/DateInput.svelte';
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-import { security } from '$libs/ui-runtime.svelte';
+import DateInput from '#components/form/DateInput.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+import { security } from '#libs/ui-runtime.svelte.ts';
 import SaleHistoryCards from './SaleHistoryCards.svelte';
 import SaleTicketModal from './SaleTicketModal.svelte';
 import { SaleHistoryState } from './sale_history.svelte';
@@ -42,11 +43,11 @@ import { buildSaleHistoryRow } from './sale_history';
 import type { SaleHistoryRow } from './sale_history.idb';
 import type { TicketContext } from './sale_ticket';
 import { exchangeRateSpread } from './sale_order';
-import { BcrpDefaultRates, ExchangeRatesService } from '$routes/finance/exchange-rate/exchange-rate.svelte';
+import { BcrpDefaultRates, ExchangeRatesService } from '#routes/finance/exchange-rate/exchange-rate.svelte.ts';
 import {
   CURRENCY_PEN, CURRENCY_USD, EXCHANGE_RATE_MAX_AGE_DAYS, EXCHANGE_RATE_SCALE, currencySymbol,
   calendarMonthKeys, latestSellRate, normalizeCurrency,
-} from '$routes/finance/exchange-rate/exchange-rate';
+} from '#routes/finance/exchange-rate/exchange-rate.ts';
 
   // Helpers
   const formatMo = (n: number) => formatN(n / 100, 2);
@@ -229,11 +230,11 @@ import {
   });
 
   async function loadStock(almacenID: number) {
-    Loading.standard("Cargando stock...");
+    showLoading("Cargando stock...");
     productosStock = await getWarehouseProductStock(almacenID);
     console.log("productosStock:", productosStock)
     parseProductos();
-    Loading.remove();
+    hideLoading();
   }
   
   function parseProductos() {

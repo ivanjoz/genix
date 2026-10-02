@@ -1,12 +1,12 @@
 <script lang="ts">
-  import ImageUploader from '$components/files/ImageUploader.svelte';
-  import Image from '$components/files/Image.svelte';
-  import FilterInput from '$components/form/FilterInput.svelte';
-  import T from '$components/misc/T.svelte';
-  import Page from '$domain/Page.svelte';
-  import { ConfirmWarn, Loading, Notify } from '$libs/helpers';
-  import { tr } from '$core/store.svelte';
-  import { GalleryImagesService, type IGalleryImage } from '$services/webpage/gallery.svelte';
+  import { confirmWarn, hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+  import ImageUploader from '#components/files/ImageUploader.svelte';
+  import Image from '#components/files/Image.svelte';
+  import FilterInput from '#components/form/FilterInput.svelte';
+  import T from '#components/misc/T.svelte';
+  import Page from '#domain/Page.svelte';
+  import { tr } from '#core/store.svelte.ts';
+  import { GalleryImagesService, type IGalleryImage } from '#services/webpage/gallery.svelte.ts';
 
   const galleryImages = new GalleryImagesService(true);
   let filterText = $state('');
@@ -18,24 +18,21 @@
       : galleryImages.records,
   );
 
-  const removeImage = (image: IGalleryImage) => {
-    ConfirmWarn(
-      tr('DELETE IMAGE|ELIMINAR IMAGEN'),
-      tr('Delete the selected gallery image?|¿Eliminar la imagen seleccionada?'),
-      'SI',
-      'NO',
-      async () => {
-        Loading.standard(tr('Deleting image...|Eliminando imagen...'));
-        try {
-          await galleryImages.remove(image.ImageID);
-        } catch (error) {
-          Notify.failure(tr('Could not delete the image.|No se pudo eliminar la imagen.'));
-          console.error('[gallery] delete failed', { imageID: image.ImageID, error });
-        } finally {
-          Loading.remove();
-        }
-      },
-    );
+  const removeImage = async (image: IGalleryImage) => {
+    const confirmed = await confirmWarn({
+      title: tr('DELETE IMAGE|ELIMINAR IMAGEN'),
+      message: tr('Delete the selected gallery image?|¿Eliminar la imagen seleccionada?'),
+    });
+    if (!confirmed) { return; }
+    showLoading(tr('Deleting image...|Eliminando imagen...'));
+    try {
+      await galleryImages.remove(image.ImageID);
+    } catch (error) {
+      notifyFailure(tr('Could not delete the image.|No se pudo eliminar la imagen.'));
+      console.error('[gallery] delete failed', { imageID: image.ImageID, error });
+    } finally {
+      hideLoading();
+    }
   };
 </script>
 

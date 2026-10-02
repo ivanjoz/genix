@@ -1,5 +1,5 @@
-import { POST } from '$libs/ui-runtime.svelte';
-import type { IUser } from '$core/types/common';
+import { POST } from '#libs/ui-runtime.svelte.ts';
+import type { IUser } from '#core/types/common.ts';
 
 export const postUser = (data: IUser) => {
   return POST({

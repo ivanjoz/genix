@@ -1,9 +1,9 @@
 <script lang="ts">
-import MobileMenu from '$domain/MobileMenu.svelte';
-import Header from '$ecommerce/components/Header.svelte';
-import EcommerceRenderer from '$ecommerce/renderer/EcommerceRenderer.svelte';
-import type { SectionData } from '$ecommerce/renderer/section-types';
-import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+import MobileMenu from '#domain/MobileMenu.svelte';
+import Header from '#ecommerce/components/Header.svelte';
+import EcommerceRenderer from '#ecommerce/renderer/EcommerceRenderer.svelte';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
+import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
 
   let { data } = $props();
 

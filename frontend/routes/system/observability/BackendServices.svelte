@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { browser } from '$app/environment';
+  import { browser } from '$app/env';
   import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
-  import Button from '$components/buttons/Button.svelte';
-  import FilterInput from '$components/form/FilterInput.svelte';
-  import T from '$components/misc/T.svelte';
-  import { formatTime } from '$libs/helpers';
+  import Button from '#components/buttons/Button.svelte';
+  import FilterInput from '#components/form/FilterInput.svelte';
+  import T from '#components/misc/T.svelte';
+  import { formatTime } from '#libs/helpers.ts';
   import { onDestroy, onMount } from 'svelte';
   import {
     buildObservabilityCards,

@@ -1,5 +1,5 @@
-import { GETWithGroupCache } from '$libs/ui-runtime.svelte';
-import { Notify } from '$libs/helpers';
+import { notifyFailure } from '@genix/ui/notify';
+import { GETWithGroupCache } from '#libs/ui-runtime.svelte.ts';
 
 export interface ISaleOrder {
 	ID: number;
@@ -64,7 +64,7 @@ export const querySaleOrderReport = async (filters: ISaleOrderReportForm): Promi
 	try {
 		result = await GETWithGroupCache<ISaleOrder>(route, uriParams);
 	} catch (error) {
-		Notify.failure(String(error || 'No se pudo consultar el reporte de ventas.'));
+		notifyFailure(String(error || 'No se pudo consultar el reporte de ventas.'));
 		throw error;
 	}
 

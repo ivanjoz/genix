@@ -1,3 +1,5 @@
+import adapter from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, type ViteDevServer } from 'vite';
@@ -43,69 +45,6 @@ const serviceWorkerConfig: BuildOptions = {
   platform: 'browser',
   packages: 'bundle' as const,
   target: 'esnext',
-  plugins: [
-    {
-      name: 'alias',
-      setup(build) {
-        build.onResolve({ filter: /^\$/ }, args => {
-          const parts = args.path.split('/');
-          const alias = parts[0];
-          const rest = parts.slice(1).join('/');
-          const baseDir = {
-    '$core': 'core',
-    '$ecommerce': 'webpage',
-    '$routes': 'routes',
-    '$domain': 'domain-components',
-    '$components': 'packages/genix-ui',
-    '$services': 'services',
-    '$libs': 'libs'
-  }[alias];
-
-          if (!baseDir) return null;
-
-          // For $core and $components, try multiple subdirectories
-          let possiblePaths: string[] = [];
-          if (alias === '$core') {
-            possiblePaths.push(path.join(baseDir, 'lib', rest));
-            possiblePaths.push(path.join(baseDir, 'core', rest));
-            possiblePaths.push(path.join(baseDir, 'assets', rest));
-            possiblePaths.push(path.join(baseDir, rest));
-          } else if (alias === '$components') {
-            possiblePaths.push(path.join(baseDir, rest));
-            // $components also resolves the webpage app's local components dir.
-            possiblePaths.push(path.join('webpage', 'components', rest));
-          } else {
-            possiblePaths.push(path.join(baseDir, rest));
-          }
-
-          // Try each possible path until we find one that exists
-          for (const possiblePath of possiblePaths) {
-            let fullPath = path.resolve(__dirname, possiblePath);
-            if (fs.existsSync(fullPath)) {
-              return { path: fullPath };
-            }
-            if (fs.existsSync(fullPath + '.ts')) {
-              return { path: fullPath + '.ts' };
-            }
-            if (fs.existsSync(fullPath + '.js')) {
-              return { path: fullPath + '.js' };
-            }
-            if (fs.existsSync(fullPath + '.svelte')) {
-              return { path: fullPath + '.svelte' };
-            }
-            if (fs.existsSync(path.join(fullPath, 'index.ts'))) {
-              return { path: path.join(fullPath, 'index.ts') };
-            }
-            if (fs.existsSync(path.join(fullPath, 'index.js'))) {
-              return { path: path.join(fullPath, 'index.js') };
-            }
-          }
-
-          return null;
-        });
-      },
-    },
-  ],
 }
 
 const serviceWorkerPlugin = () => ({
@@ -172,7 +111,6 @@ const serviceWorkerPlugin = () => ({
 
 export default defineConfig({
   root: path.resolve(__dirname),
-  publicDir: 'static',
   define: {
     'global': 'globalThis'
   },
@@ -226,7 +164,40 @@ export default defineConfig({
     plugins: () => [tailwindcss()],
   },
   plugins: [
-    sveltekit(),
+    sveltekit({
+      preprocess: vitePreprocess(),
+      compilerOptions: {
+        cssHash: ({ hash, css, filename }) => {
+          if (isBuild) {
+            // Deterministic keyed name; keyed by file (or css hash when filename
+            // is absent) so both prerender passes resolve the same scope class.
+            return getCounterForKey(makeClassKey('s', filename, filename ? undefined : '#' + hash(css)));
+          }
+          if (!filename) {
+            return `svelte-${hash(css).substring(0, 8)}`;
+          }
+          // Readable dev scope class: the sanitized component name plus the css hash.
+          const componentName = (filename.split(/[\\/]/).pop() || '')
+            .split('.')[0]
+            .replace(/^\+/, '')
+            .replace(/[^a-zA-Z0-9_-]/g, '_')
+            .replace(/^[0-9]/, '_$&');
+          return `${componentName || 'comp'}_${hash(css).substring(0, 8)}`;
+        }
+      },
+      // Static adapter in SPA mode: every route falls back to index.html.
+      adapter: adapter({
+        pages: 'build',
+        assets: 'build',
+        fallback: 'index.html',
+        precompress: false,
+        strict: true
+      }),
+      // No src/ folder: the app's folders (and the env.ts entry) sit at the frontend root.
+      // Path aliases are the "#…" subpath imports in package.json.
+      files: { src: '.', assets: 'static', routes: 'routes', appTemplate: 'app.html' },
+      prerender: { handleHttpError: 'warn' }
+    }),
     isBuild && svelteClassHasher(),
     tailwindcss(),
     serviceWorkerPlugin()

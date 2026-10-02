@@ -1,19 +1,19 @@
 <script lang="ts">
+  import { confirmWarn, hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-  import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
-  import Layer from '$components/layers/Layer.svelte'
-  import VTable from '$components/vTable/VTable.svelte'
-  import type { ITableColumn } from '$components/vTable/types'
-  import Button from '$components/buttons/Button.svelte'
-  import FilterInput from '$components/form/FilterInput.svelte'
-  import Input from '$components/form/Input.svelte'
-  import SearchSelect from '$components/form/SearchSelect.svelte'
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+  import Layer from '#components/layers/Layer.svelte'
+  import VTable from '#components/vTable/VTable.svelte'
+  import type { ITableColumn } from '#components/vTable/types.ts'
+  import Button from '#components/buttons/Button.svelte'
+  import FilterInput from '#components/form/FilterInput.svelte'
+  import Input from '#components/form/Input.svelte'
+  import SearchSelect from '#components/form/SearchSelect.svelte'
   import { CellSimpleChart } from '@genix/ui/charts'
-  import T from '$components/misc/T.svelte'
-  import { Core, tr } from '$core/store.svelte'
-  import { Loading, Notify, ConfirmWarn } from '$libs/helpers'
-  import { ProductsService, type IProduct } from '$services/production/products.svelte'
+  import T from '#components/misc/T.svelte'
+  import { Core, tr } from '#core/store.svelte.ts'
+  import { ProductsService, type IProduct } from '#services/production/products.svelte.ts'
   import {
     SalesPlanningService,
     SeasonalityCurveService,
@@ -81,7 +81,7 @@
 
   const savePlan = async () => {
     if ((planForm.BaseQuantity || 0) < 0) {
-      Notify.failure(tr('Base quantity cannot be negative|La cantidad base no puede ser negativa'))
+      notifyFailure(tr('Base quantity cannot be negative|La cantidad base no puede ser negativa'))
       return
     }
     // Persist only the weeks the owner actually filled; empty weeks fall back to the base.
@@ -89,9 +89,9 @@
       .filter((w) => (w.value || 0) > 0)
       .map((w) => ({ Week: w.Week, Quantity: w.value as number }))
 
-    Loading.standard(tr('Saving|Guardando') + '...')
+    showLoading(tr('Saving|Guardando') + '...')
     await planning.postAndSync([planForm])
-    Loading.remove()
+    hideLoading()
     ui.openSideLayer(0)
   }
 
@@ -113,7 +113,7 @@
 
   const saveCurve = async () => {
     if ((curveForm.Name || '').trim().length < 2) {
-      Notify.failure(tr('The curve needs a name|La curva necesita un nombre'))
+      notifyFailure(tr('The curve needs a name|La curva necesita un nombre'))
       return
     }
     // Sparse storage: keep only filled weeks; gaps inherit the previous filled week on read.
@@ -122,29 +122,26 @@
       .map((w) => ({ Week: w.Week, Percent: w.value as number }))
 
     if (curveForm.Curve.length === 0) {
-      Notify.failure(tr('Fill at least one week|Complete al menos una semana'))
+      notifyFailure(tr('Fill at least one week|Complete al menos una semana'))
       return
     }
 
-    Loading.standard(tr('Saving|Guardando') + '...')
+    showLoading(tr('Saving|Guardando') + '...')
     await curves.postAndSync([curveForm])
-    Loading.remove()
+    hideLoading()
     ui.openSideLayer(0)
   }
 
-  const deleteCurve = () => {
-    ConfirmWarn(
-      tr('Delete curve|Eliminar curva'),
-      tr('Are you sure you want to delete|¿Está seguro que desea eliminar') + ` "${curveForm.Name}"?`,
-      tr('YES|SI'),
-      tr('NO|NO'),
-      async () => {
-        Loading.standard(tr('Deleting|Eliminando') + '...')
-        await curves.postAndSync([{ ...curveForm, ss: 0 }])
-        Loading.remove()
-        ui.openSideLayer(0)
-      },
-    )
+  const deleteCurve = async () => {
+    const confirmed = await confirmWarn({
+      title: tr('Delete curve|Eliminar curva'),
+      message: tr('Are you sure you want to delete|¿Está seguro que desea eliminar') + ` "${curveForm.Name}"?`,
+    })
+    if (!confirmed) { return }
+    showLoading(tr('Deleting|Eliminando') + '...')
+    await curves.postAndSync([{ ...curveForm, ss: 0 }])
+    hideLoading()
+    ui.openSideLayer(0)
   }
 
   /* Resolved (forward-filled) preview of the curve being edited. */

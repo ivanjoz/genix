@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { browser } from "$app/environment";
+  import { browser } from "$app/env";
   import { useUI } from '@genix/ui';
-  import CartMenu from '$ecommerce/components/CartMenu.svelte';
-  import SearchBar from '$ecommerce/components/SearchBar.svelte';
-  import UsuarioMenu from '$ecommerce/components/UsuarioMenu.svelte';
+  import CartMenu from '#ecommerce/components/CartMenu.svelte';
+  import SearchBar from '#ecommerce/components/SearchBar.svelte';
+  import UsuarioMenu from '#ecommerce/components/UsuarioMenu.svelte';
   import { onMount } from "svelte";
   import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
   const ui = useUI();

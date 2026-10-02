@@ -1,17 +1,18 @@
 <script lang="ts">
-  import DateInput from '$components/form/DateInput.svelte';
-  import SearchSelect from '$components/form/SearchSelect.svelte';
-  import Page from '$domain/Page.svelte';
-  import { formatTime, Loading } from '$libs/helpers';
-  import { ProductsService } from '$services/production/products.svelte';
-  import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte';
+  import { hideLoading, showLoading } from '@genix/ui/notify';
+  import DateInput from '#components/form/DateInput.svelte';
+  import SearchSelect from '#components/form/SearchSelect.svelte';
+  import Page from '#domain/Page.svelte';
+  import { formatTime } from '#libs/helpers.ts';
+  import { ProductsService } from '#services/production/products.svelte.ts';
+  import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts';
   import SaleOrdersTable from '../SaleOrdersTable.svelte';
   import { querySaleOrderReport, saleOrderStatusOptions, type ISaleOrder } from './sale_order_report.svelte';
-    import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
-  import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
-  import FilterInput from '$components/form/FilterInput.svelte';
-  import { tr } from '$core/store.svelte';
-  import T from '$components/misc/T.svelte';
+    import ButtonLayer from '#components/buttons/ButtonLayer.svelte';
+  import KeyValueStrip from '#components/misc/KeyValueStrip.svelte';
+  import FilterInput from '#components/form/FilterInput.svelte';
+  import { tr } from '#core/store.svelte.ts';
+  import T from '#components/misc/T.svelte';
 
   const productosService = new ProductsService(true);
   const clientesService = new ClientProviderService(ClientProviderType.CLIENT, true);
@@ -45,13 +46,13 @@
   async function consultarReporteVentas() {
     console.debug('[reporte_ventas] querying report with filters', $state.snapshot(reportForm));
 
-    Loading.standard(tr('Querying sales...|Consultando ventas...'));
+    showLoading(tr('Querying sales...|Consultando ventas...'));
     try {
       saleOrders = await querySaleOrderReport(reportForm);
     } catch (error) {
       console.error('[reporte_ventas] query error', error);
     } finally {
-      Loading.remove();
+      hideLoading();
     }
   }
 

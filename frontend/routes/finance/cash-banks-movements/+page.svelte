@@ -1,13 +1,14 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import DateInput from '$components/form/DateInput.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import RecordByIDText from '$components/misc/RecordByIDText.svelte';
-import { Loading, formatTime, throttle, Notify } from '$libs/helpers';
-import { formatN } from '$libs/helpers';
-import { tr } from '$core/store.svelte';
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import Page from '#domain/Page.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import DateInput from '#components/form/DateInput.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import RecordByIDText from '#components/misc/RecordByIDText.svelte';
+import { formatTime, throttle } from '#libs/helpers.ts';
+import { formatN } from '#libs/helpers.ts';
+import { tr } from '#core/store.svelte.ts';
   import { untrack } from "svelte"
   import {
     CajasService,
@@ -41,20 +42,20 @@ import { tr } from '$core/store.svelte';
 
   const consultarRegistros = async () => {
     if (!form.CajaID || !form.dateInicio || !form.dateFin) {
-      Notify.failure(tr("Please select a cash register and a date range.|Debe seleccionar una caja y un rango de dates."))
+      notifyFailure(tr("Please select a cash register and a date range.|Debe seleccionar una caja y un rango de dates."))
       return
     }
 
-    Loading.standard(tr("Querying records...|Consultando registros..."))
+    showLoading(tr("Querying records...|Consultando registros..."))
     let result: ICashBankMovement[]
     try {
       result = await getCajaMovimientos(form)
     } catch (error) {
-      Loading.remove()
+      hideLoading()
       return
     }
 
-    Loading.remove()
+    hideLoading()
     cajaMovimientos = result || []
     console.log("movimientos obtenidos: ", result)
   }

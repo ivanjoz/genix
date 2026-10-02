@@ -8,8 +8,8 @@
 // 34-40 SUNAT completes from the proposal and 41-57 are free use, so the record stops at 33.
 // See ./PLAN.md §1.2 for the whole table and §1.3 for the file name.
 
-import { DOC_TYPE_CREDIT_NOTE, sunatDocCode } from '$core/sunat-doc-type'
-import { downloadTextFile } from '$libs/helpers'
+import { DOC_TYPE_CREDIT_NOTE, sunatDocCode } from '#core/sunat-doc-type.ts'
+import { downloadTextFile } from '#libs/helpers.ts'
 import { countPendingRows, isWholeMonthPeriod, type ISalesBookRow } from './books'
 import { sunatAmount, sunatDate, sunatText } from './books.utils'
 

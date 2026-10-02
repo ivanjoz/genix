@@ -1,16 +1,16 @@
 <script lang="ts">
   import { useUI } from '@genix/ui';
   const ui = useUI();
-import Input from '$components/form/Input.svelte';
-import Button from '$components/buttons/Button.svelte';
-import ColorPicker from '$components/form/ColorPicker.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import { tr } from '$core/store.svelte';
-import { formatN } from '$libs/helpers';
-import { productoAtributos, type IProduct, type IProductPresentation } from "$services/production/products.svelte";
-    import type { ITableColumn } from '$components/vTable/types';
+import Input from '#components/form/Input.svelte';
+import Button from '#components/buttons/Button.svelte';
+import ColorPicker from '#components/form/ColorPicker.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import { tr } from '#core/store.svelte.ts';
+import { formatN } from '#libs/helpers.ts';
+import { productoAtributos, type IProduct, type IProductPresentation } from "#services/production/products.svelte.ts";
+    import type { ITableColumn } from '#components/vTable/types.ts';
 
   const produtcoAtributosMap = new Map(productoAtributos.map(e => [e.id, e]))
 

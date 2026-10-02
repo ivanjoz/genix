@@ -1,6 +1,6 @@
 <script lang="ts">
-  import ButtonLayer from "$components/buttons/ButtonLayer.svelte";
-  import ProductSearchLayer from "$ecommerce/components/ProductSearchLayer.svelte";
+  import ButtonLayer from "#components/buttons/ButtonLayer.svelte";
+  import ProductSearchLayer from "#ecommerce/components/ProductSearchLayer.svelte";
 
   // Keep query text local to the search bar so the layer can react on each keystroke.
   let queryText = $state("");

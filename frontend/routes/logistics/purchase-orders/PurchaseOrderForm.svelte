@@ -1,9 +1,9 @@
 <script lang="ts">
-import DateInput from '$components/form/DateInput.svelte'
-import Input from '$components/form/Input.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import type { IClientProvider } from '$services/crm/client-provider.svelte'
-import type { IWarehouse } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import Input from '#components/form/Input.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import type { IClientProvider } from '#services/crm/client-provider.svelte.ts'
+import type { IWarehouse } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import type { IPurchaseOrder } from './purchase_order.svelte'
 
 // Reusable header form for a purchase order. Used by both the creation flow (Información tab)

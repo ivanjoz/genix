@@ -1,29 +1,30 @@
 <script lang="ts">
-import ButtonLayer from '$components/buttons/ButtonLayer.svelte'
-import DateInput from '$components/form/DateInput.svelte'
-import Input from '$components/form/Input.svelte'
-import Layer from '$components/layers/Layer.svelte'
-import Modal from '$components/layers/Modal.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import FilterInput from '$components/form/FilterInput.svelte'
-import KeyValueStrip from '$components/misc/KeyValueStrip.svelte'
-import LabelText from '$components/form/LabelText.svelte'
-import VTable from '$components/vTable/VTable.svelte'
-import type { ITableColumn } from '$components/vTable/types'
-import { Core, tr } from '$core/store.svelte'
-import T from '$components/misc/T.svelte'
-import { ConfirmWarn, formatN, formatTime, Loading, Notify } from '$libs/helpers'
+import { confirmWarn, hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
+import ButtonLayer from '#components/buttons/ButtonLayer.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import Input from '#components/form/Input.svelte'
+import Layer from '#components/layers/Layer.svelte'
+import Modal from '#components/layers/Modal.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import FilterInput from '#components/form/FilterInput.svelte'
+import KeyValueStrip from '#components/misc/KeyValueStrip.svelte'
+import LabelText from '#components/form/LabelText.svelte'
+import VTable from '#components/vTable/VTable.svelte'
+import type { ITableColumn } from '#components/vTable/types.ts'
+import { Core, tr } from '#core/store.svelte.ts'
+import T from '#components/misc/T.svelte'
+import { formatN, formatTime } from '#libs/helpers.ts'
 import { saveRouteRecord, setRouteRecordQueryParam } from '@genix/ui/cache'
-import { CajasService } from '$routes/finance/cash-banks/cajas.svelte'
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
-import { ProductsService, type IProduct } from '$services/production/products.svelte'
-import { WarehousesService } from '$routes/business/branches-warehouses/branches-warehouses.svelte'
+import { CajasService } from '#routes/finance/cash-banks/cajas.svelte.ts'
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
+import { ProductsService, type IProduct } from '#services/production/products.svelte.ts'
+import { WarehousesService } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import { onDestroy } from 'svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
-import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
+import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
 import {
   PURCHASE_DOC_TYPE_INVOICE, purchaseDocTypeName, splitPurchaseTotal, type IPurchaseDocument,
-} from '$core/purchase-document'
+} from '#core/purchase-document.ts'
 import { useUI } from '@genix/ui'
 import {
   PurchaseOrderAction,
@@ -99,7 +100,7 @@ interface IPurchaseOrderDetailRow {
 }
 
 const consultarReporte = async () => {
-  Loading.standard(tr('Querying purchase orders...|Consultando órdenes de compra...'))
+  showLoading(tr('Querying purchase orders...|Consultando órdenes de compra...'))
   try {
     reportRecords = await queryPurchaseOrders(reportForm)
     isReportMode = true
@@ -107,7 +108,7 @@ const consultarReporte = async () => {
   } catch (error) {
     console.error('[purchase-orders-report] query error', error)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -208,7 +209,7 @@ onDestroy(() => {
 const openEditPurchaseOrderModal = () => {
   if (!selectedPurchaseOrder) { return }
   if (!PurchaseOrderEditableStatuses.includes(selectedPurchaseOrder.ss || 0)) {
-    Notify.failure(tr('Only Pending or Confirmed orders can be edited.|Solo se pueden editar órdenes en estado Pendiente o Confirmada.'))
+    notifyFailure(tr('Only Pending or Confirmed orders can be edited.|Solo se pueden editar órdenes en estado Pendiente o Confirmada.'))
     return
   }
   
@@ -219,10 +220,10 @@ const openEditPurchaseOrderModal = () => {
 // Persists the edited fields via PUT action=2; backend re-validates state and ignores protected fields.
 const saveEditPurchaseOrder = async () => {
   if ((editForm.ID||0) <= 0) { return }
-  Loading.standard(tr('Updating purchase order...|Actualizando orden de compra...'))
+  showLoading(tr('Updating purchase order...|Actualizando orden de compra...'))
   const selectedRecord = visibleRecords.find(x => x.ID === selectedPurchaseOrder?.ID)
   if(!selectedRecord){
- 		Notify.failure("No se encontró el registro seleccionado. (¿?)")
+ 		notifyFailure("No se encontró el registro seleccionado. (¿?)")
   }
   
   try {
@@ -230,13 +231,13 @@ const saveEditPurchaseOrder = async () => {
     await updatePurchaseOrder(editForm.ID||0, PurchaseOrderAction.EDIT, editForm)
     Object.assign(selectedRecord as IPurchaseOrder, editForm)
     
-    Notify.success(`La orden Nº ${editForm.ID} fue actualizada.`)
+    notifySuccess(`La orden Nº ${editForm.ID} fue actualizada.`)
     ui.closeModal(EDIT_PURCHASE_ORDER_MODAL_ID)
     rowRerender?.()
   } catch (error) {
     console.error('[purchase-orders-report] edit error', error)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -245,7 +246,7 @@ const saveEditPurchaseOrder = async () => {
 const openDocumentPurchaseOrderModal = () => {
   if (!selectedPurchaseOrder) { return }
   if (selectedPurchaseOrder.ss === PurchaseOrderStatus.CANCELED) {
-    Notify.failure(tr('An annulled order has no comprobante.|Una orden anulada no tiene comprobante.'))
+    notifyFailure(tr('An annulled order has no comprobante.|Una orden anulada no tiene comprobante.'))
     return
   }
   const { DocType, DocSeries, DocNumber, DocIssueDate, TaxableAmount, TaxAmount, UntaxedAmount,
@@ -269,7 +270,7 @@ const openDocumentPurchaseOrderModal = () => {
 const saveDocumentPurchaseOrder = async () => {
   if (!selectedPurchaseOrder) { return }
   const orderID = selectedPurchaseOrder.ID
-  Loading.standard(tr('Saving comprobante...|Guardando comprobante...'))
+  showLoading(tr('Saving comprobante...|Guardando comprobante...'))
   try {
     const updated = await updatePurchaseOrder(orderID, PurchaseOrderAction.DOCUMENT, documentForm)
     Object.assign(selectedPurchaseOrder, updated)
@@ -280,7 +281,7 @@ const saveDocumentPurchaseOrder = async () => {
   } catch (error) {
     console.error('[purchase-orders-report] document error', { orderID, error })
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -298,12 +299,12 @@ const payCashBanks = $derived(cajasService.Cajas.filter((caja) =>
 const openPayPurchaseOrderModal = () => {
   if (!selectedPurchaseOrder) { return }
   if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.CONFIRMED && selectedPurchaseOrder.ss !== PurchaseOrderStatus.FULFILLED) {
-    Notify.failure(tr('Only Confirmed or Fulfilled orders can be paid.|Solo se pueden pagar órdenes Confirmadas o Cumplidas.'))
+    notifyFailure(tr('Only Confirmed or Fulfilled orders can be paid.|Solo se pueden pagar órdenes Confirmadas o Cumplidas.'))
     return
   }
   const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
   if (remainingDebt <= 0) {
-    Notify.failure(tr('The order has no pending debt.|La orden no tiene deuda pendiente.'))
+    notifyFailure(tr('The order has no pending debt.|La orden no tiene deuda pendiente.'))
     return
   }
 
@@ -319,21 +320,21 @@ const openPayPurchaseOrderModal = () => {
 const submitPurchaseOrderPayment = async () => {
   if (!selectedPurchaseOrder) { return }
   if (payForm.CashBankID <= 0) {
-    Notify.failure(tr('Please select a cash register.|Seleccione una caja.'))
+    notifyFailure(tr('Please select a cash register.|Seleccione una caja.'))
     return
   }
   const remainingDebt = selectedPurchaseOrder.DebtAmount || 0
   if (payForm.Amount <= 0) {
-    Notify.failure(tr('Please enter an amount greater than 0.|Ingrese un monto mayor a 0.'))
+    notifyFailure(tr('Please enter an amount greater than 0.|Ingrese un monto mayor a 0.'))
     return
   }
   if (payForm.Amount > remainingDebt) {
-    Notify.failure(tr('Amount exceeds the pending debt.|El monto excede la deuda pendiente.'))
+    notifyFailure(tr('Amount exceeds the pending debt.|El monto excede la deuda pendiente.'))
     return
   }
 
   const orderID = selectedPurchaseOrder.ID
-  Loading.standard(tr('Registering payment...|Registrando pago...'))
+  showLoading(tr('Registering payment...|Registrando pago...'))
   try {
     const updated = await updatePurchaseOrder(orderID, PurchaseOrderAction.PAY, {
       CashBankID: payForm.CashBankID,
@@ -346,12 +347,12 @@ const submitPurchaseOrderPayment = async () => {
     if (selectedRecord) { selectedRecord.DebtAmount = newDebt }
 
     rowRerender?.()
-    Notify.success(`Pago de ${formatN(payForm.Amount / 100, 2)} registrado en la orden Nº ${orderID}.`)
+    notifySuccess(`Pago de ${formatN(payForm.Amount / 100, 2)} registrado en la orden Nº ${orderID}.`)
     ui.closeModal(PAY_PURCHASE_ORDER_MODAL_ID)
   } catch (error) {
     console.error('[purchase-orders-report] pay error', { orderID, error })
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -387,62 +388,59 @@ const generarCopiaPurchaseOrder = async () => {
     console.debug('[generar-copia] switched to "Órdenes" tab')
   } catch (error) {
     console.error('[generar-copia] error', { orderID, error })
-    Notify.failure('No se pudo generar la copia de la orden.')
+    notifyFailure('No se pudo generar la copia de la orden.')
   }
 }
 
 // Annuls the selected order (Pendiente/Confirmada -> Cancelada). Asks for confirmation first
 // because the operation flips the order to status=0 (CANCELED) and is not reversible from the UI.
-const annulSelectedPurchaseOrder = () => {
+const annulSelectedPurchaseOrder = async () => {
   if (!selectedPurchaseOrder) { return }
   if (!PurchaseOrderEditableStatuses.includes(selectedPurchaseOrder.ss || 0)) {
-    Notify.failure(tr('Only Pending or Confirmed orders can be cancelled.|Solo se pueden anular órdenes en estado Pendiente o Confirmada.'))
+    notifyFailure(tr('Only Pending or Confirmed orders can be cancelled.|Solo se pueden anular órdenes en estado Pendiente o Confirmada.'))
     return
   }
   const orderID = selectedPurchaseOrder.ID
-  ConfirmWarn(
-    'Anular Órden de Compra',
-    `¿Desea anular la órden de compra Nº ${orderID}?`,
-    'SI',
-    'NO',
-    async () => {
-      Loading.standard(tr('Cancelling purchase order...|Anulando orden de compra...'))
-      try {
-        await updatePurchaseOrder(orderID, PurchaseOrderAction.ANNUL)
-        const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
-        if (selectedRecord) { selectedRecord.ss = PurchaseOrderStatus.CANCELED }
-        if (selectedPurchaseOrder) { selectedPurchaseOrder.ss = PurchaseOrderStatus.CANCELED }
-        rowRerender?.()
-        Notify.success(`La orden Nº ${orderID} fue anulada.`)
-      } catch (error) {
-        console.error('[purchase-orders-report] annul error', { orderID, error })
-      } finally {
-        Loading.remove()
-      }
-    },
-  )
+  const confirmed = await confirmWarn({
+    title: 'Anular Órden de Compra',
+    message: `¿Desea anular la órden de compra Nº ${orderID}?`,
+  })
+  if (!confirmed) { return }
+  showLoading(tr('Cancelling purchase order...|Anulando orden de compra...'))
+  try {
+    await updatePurchaseOrder(orderID, PurchaseOrderAction.ANNUL)
+    const selectedRecord = visibleRecords.find((r) => r.ID === orderID)
+    if (selectedRecord) { selectedRecord.ss = PurchaseOrderStatus.CANCELED }
+    if (selectedPurchaseOrder) { selectedPurchaseOrder.ss = PurchaseOrderStatus.CANCELED }
+    rowRerender?.()
+    notifySuccess(`La orden Nº ${orderID} fue anulada.`)
+  } catch (error) {
+    console.error('[purchase-orders-report] annul error', { orderID, error })
+  } finally {
+    hideLoading()
+  }
 }
 
 // Confirms the selected order (Pendiente -> Cumplida); backend rejects the call if the state is not Pending.
 const confirmSelectedPurchaseOrder = async () => {
   if (!selectedPurchaseOrder) { return }
   if (selectedPurchaseOrder.ss !== PurchaseOrderStatus.PENDING) {
-    Notify.failure(tr('Only Pending orders can be confirmed.|Solo se pueden confirmar órdenes en estado Pendiente.'))
+    notifyFailure(tr('Only Pending orders can be confirmed.|Solo se pueden confirmar órdenes en estado Pendiente.'))
     return
   }
   const orderID = selectedPurchaseOrder.ID
-  Loading.standard(tr('Confirming purchase order...|Confirmando orden de compra...'))
+  showLoading(tr('Confirming purchase order...|Confirmando orden de compra...'))
   try {
     await updatePurchaseOrder(orderID, PurchaseOrderAction.CONFIRM)
     const selectedRecord = visibleRecords.find(x => x.ID === selectedPurchaseOrder?.ID)
     if(selectedRecord){ selectedRecord.ss = PurchaseOrderStatus.CONFIRMED }
     
     rowRerender?.()
-    Notify.success(`La orden Nº ${orderID} fue confirmada.`)
+    notifySuccess(`La orden Nº ${orderID} fue confirmada.`)
   } catch (error) {
     console.error('[purchase-orders-report] confirm error', { orderID, error })
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 

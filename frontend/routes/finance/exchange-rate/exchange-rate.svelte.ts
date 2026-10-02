@@ -1,5 +1,5 @@
 import { getBcrpRateRange } from '@ivanjoz/public-business-data'
-import { GetHandler } from '$libs/ui-runtime.svelte'
+import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 import {
 	calendarDateRange,
 	groupPublishedRatesByMonth,

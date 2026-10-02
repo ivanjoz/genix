@@ -9,12 +9,12 @@
 // Field numbers in the comments are Anexo 11 of RS 112-2021. See ./PLAN.md §2.2 and
 // ../docs/SUNAT-RCE-Diario-annexes-summary.md §1.4.
 
-import { sunatIdentityDocCode } from '$services/crm/identity-doc'
-import type { IClientProviderSnapshot } from '$services/crm/client-provider.svelte'
+import { sunatIdentityDocCode } from '#services/crm/identity-doc.ts'
+import type { IClientProviderSnapshot } from '#services/crm/client-provider.svelte.ts'
 import {
   PURCHASE_DOC_TYPE_NONE, PURCHASE_DOC_TYPE_UTILITY_BILL, purchaseDocumentTotal,
   type IPurchaseDocument,
-} from '$core/purchase-document'
+} from '#core/purchase-document.ts'
 import { isWholeMonthPeriod } from './books'
 
 // Where a row came from. Mirrors PurchaseSource* in backend/accounting/purchases_book_api.go.

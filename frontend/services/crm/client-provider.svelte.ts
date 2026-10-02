@@ -1,5 +1,5 @@
 import { getRecordsByID } from '@genix/ui/cache'
-import { GetHandler, POST } from '$libs/ui-runtime.svelte'
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
 
 export const ClientProviderType = {
   CLIENT: 1,

@@ -1,9 +1,9 @@
 <script lang="ts">
-import { GET } from '$libs/ui-runtime.svelte';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
-import { ImageAssetsService } from '$services/business/image-assets.svelte';
-import { Loading, Notify } from '$libs/helpers';
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import { GET } from '#libs/ui-runtime.svelte.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
+import { ImageAssetsService } from '#services/business/image-assets.svelte.ts';
 
 // One text-search hit: the API returns only the image id and its GenixSearch
 // weight; the thumbnail URL is resolved from the image-assets delta cache.
@@ -23,11 +23,11 @@ let lastQuery = $state("")
 const runSearch = async () => {
   const trimmedQuery = query.trim()
   if (trimmedQuery.length < 2) {
-    Notify.failure("Ingresa al menos 2 caracteres para buscar.")
+    notifyFailure("Ingresa al menos 2 caracteres para buscar.")
     return
   }
 
-  Loading.standard("Buscando…")
+  showLoading("Buscando…")
   const startedAt = performance.now()
   try {
     // GET.image-asset-text-search returns the top ids + weights ordered by relevance.
@@ -39,7 +39,7 @@ const runSearch = async () => {
     elapsedMs = Math.round(performance.now() - startedAt)
     lastQuery = trimmedQuery
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 

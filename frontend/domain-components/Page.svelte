@@ -1,8 +1,8 @@
 <script lang="ts">
-import { security } from '$libs/ui-runtime.svelte';
+import { security } from '#libs/ui-runtime.svelte.ts';
 import { onDestroy, onMount, untrack } from "svelte";
-import { Core } from '$core/store.svelte';
-import { browser, Env, LocalStorage } from '$core/env';
+import { Core } from '#core/store.svelte.ts';
+import { browser, Env, LocalStorage } from '#core/env.ts';
 import { checksumBase64_6 } from '@genix/ui/utilities';
 import { useUI } from '@genix/ui';
 

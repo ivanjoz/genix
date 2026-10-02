@@ -1,10 +1,11 @@
 <script lang="ts">
-  import Button from '$components/buttons/Button.svelte';
-  import T from '$components/misc/T.svelte';
-  import TableGrid from '$components/vTable/TableGrid.svelte';
-  import type { ITableColumn } from '$components/vTable/types';
-  import { tr } from '$core/store.svelte';
-  import { formatN, formatTime, Notify } from '$libs/helpers';
+  import { notifyFailure, notifySuccess } from '@genix/ui/notify';
+  import Button from '#components/buttons/Button.svelte';
+  import T from '#components/misc/T.svelte';
+  import TableGrid from '#components/vTable/TableGrid.svelte';
+  import type { ITableColumn } from '#components/vTable/types.ts';
+  import { tr } from '#core/store.svelte.ts';
+  import { formatN, formatTime } from '#libs/helpers.ts';
   import { untrack } from 'svelte';
   import {
     getCompanyCreditBudget,
@@ -102,7 +103,7 @@
   const editCell = (row: BudgetRow, field: 'CPU' | 'Inference', value: string | number, rerender: () => void) => {
     const credits = typeof value === 'number' ? value : parseFloat(value || '0');
     if (!Number.isSafeInteger(credits) || credits < 0) {
-      Notify.failure(tr('Credits must be non-negative whole numbers.|Los créditos deben ser números enteros no negativos.'));
+      notifyFailure(tr('Credits must be non-negative whole numbers.|Los créditos deben ser números enteros no negativos.'));
       rerender();
       return;
     }
@@ -129,7 +130,7 @@
     try {
       const nextBudget = await mutateCompanyCreditBudget(companyID, operations);
       applyBudget(nextBudget);
-      Notify.success(tr('Credit budget updated.|Presupuesto de créditos actualizado.'));
+      notifySuccess(tr('Credit budget updated.|Presupuesto de créditos actualizado.'));
       console.debug('[company-credit-budget] mutation completed', {
         companyID,
         currentCPU: nextBudget.CurrentCPU,
@@ -137,7 +138,7 @@
       });
     } catch (requestError: any) {
       const message = errorText(requestError);
-      Notify.failure(message);
+      notifyFailure(message);
       console.error('[company-credit-budget] mutation failed', { companyID, operations, error: message });
       // A lost mutation reply is ambiguous, so always re-read durable state before another action.
       await loadBudget(companyID);

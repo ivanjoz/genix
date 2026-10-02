@@ -1,21 +1,22 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
   import { useUI } from '@genix/ui';
   const ui = useUI();
-	import Input from "$components/form/Input.svelte";
-	import LayerStatic from "$components/layers/LayerStatic.svelte";
-	import Modal from "$components/layers/Modal.svelte";
-	import OptionsStrip from "$components/navigation/OptionsStrip.svelte";
-	import Page from "$domain/Page.svelte";
-	import SearchSelect from "$components/form/SearchSelect.svelte";
-	import VTable from "$components/vTable/VTable.svelte";
-	import type { ITableColumn } from "$components/vTable/types";
-	import RecordByIDText from "$components/misc/RecordByIDText.svelte";
-	import { Loading, Notify, formatTime } from "$libs/helpers";
-	import FilterInput from "$components/form/FilterInput.svelte";
-	import Button from "$components/buttons/Button.svelte";
-	import { Core, tr } from "$core/store.svelte";
-	import T from "$components/misc/T.svelte";
-	import { formatN } from "$libs/helpers";
+	import Input from "#components/form/Input.svelte";
+	import LayerStatic from "#components/layers/LayerStatic.svelte";
+	import Modal from "#components/layers/Modal.svelte";
+	import OptionsStrip from "#components/navigation/OptionsStrip.svelte";
+	import Page from "#domain/Page.svelte";
+	import SearchSelect from "#components/form/SearchSelect.svelte";
+	import VTable from "#components/vTable/VTable.svelte";
+	import type { ITableColumn } from "#components/vTable/types.ts";
+	import RecordByIDText from "#components/misc/RecordByIDText.svelte";
+	import { formatTime } from "#libs/helpers.ts";
+	import FilterInput from "#components/form/FilterInput.svelte";
+	import Button from "#components/buttons/Button.svelte";
+	import { Core, tr } from "#core/store.svelte.ts";
+	import T from "#components/misc/T.svelte";
+	import { formatN } from "#libs/helpers.ts";
 	import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte";
 	import CajaForm from "./CajaForm.svelte";
 	import {
@@ -104,21 +105,21 @@
 	const saveCaja = async () => {
 		const caja = cajaForm;
 		if (!caja.Name || !caja.Type || !caja.SiteID) {
-			Notify.failure(
+			notifyFailure(
 				tr(
 					"Name, Type, and Branch are required.|Los inputs Nombre, Tipo y Sede son obligatorios",
 				),
 			);
 			return;
 		}
-		Loading.standard(tr("Saving cash register...|Guardando caja..."));
+		showLoading(tr("Saving cash register...|Guardando caja..."));
 		try {
 			var result = await postCaja(caja);
 		} catch (error) {
 			console.warn(error);
 			return;
 		}
-		Loading.remove();
+		hideLoading();
 
 		caja.CurrentAmount = caja.CurrentAmount || 0;
 
@@ -141,11 +142,11 @@
 			form.AccountCode = 0;
 		}
 		if (cuadreAccountOptions.length > 1 && !form.AccountCode) {
-			Notify.failure(tr("Select the account for the difference.|Seleccione la cuenta contable de la diferencia."));
+			notifyFailure(tr("Select the account for the difference.|Seleccione la cuenta contable de la diferencia."));
 			return;
 		}
 
-		Loading.standard(tr("Saving cash register...|Guardando caja..."));
+		showLoading(tr("Saving cash register...|Guardando caja..."));
 		let recordSaved: ICashReconciliation & { NeedUpdateSaldo: number };
 		try {
 			recordSaved = await postCajaCuadre(form);
@@ -153,7 +154,7 @@
 			console.warn(error);
 			return;
 		}
-		Loading.remove();
+		hideLoading();
 		const caja = cajas.CajasMap.get(form.CashBankID);
 		if (!caja) return;
 
@@ -176,7 +177,7 @@
 	const saveCajaMovimiento = async () => {
 		const form = cajaMovimientoForm;
 		if (!form.Type || !form.Amount) {
-			Notify.failure(
+			notifyFailure(
 				tr(
 					"Please select an amount and a type.|Se necesita seleccionar un monto y un tipo.",
 				),
@@ -184,10 +185,10 @@
 			return;
 		}
 		if (movimientoAccountOptions.length > 1 && !form.AccountCode) {
-			Notify.failure(tr("Select the account for the movement.|Seleccione la cuenta contable del movimiento."));
+			notifyFailure(tr("Select the account for the movement.|Seleccione la cuenta contable del movimiento."));
 			return;
 		}
-		Loading.standard(tr("Saving Movement...|Guardando Movimiento..."));
+		showLoading(tr("Saving Movement...|Guardando Movimiento..."));
 		let movimientoSaved: ICashBankMovement;
 		try {
 			movimientoSaved = await postCajaMovimiento(form);
@@ -195,7 +196,7 @@
 			console.warn(error);
 			return;
 		}
-		Loading.remove();
+		hideLoading();
 
 		const caja = cajas.CajasMap.get(form.CashBankID);
 		if (!caja) return;
@@ -242,7 +243,7 @@
 					cajaMovimientos = result;
 				})
 				.catch((error) => {
-					Notify.failure(error as string);
+					notifyFailure(error as string);
 				})
 				.finally(() => {
 					isLoadingMovimientos = false;
@@ -260,7 +261,7 @@
 				})
 				.catch((error) => {
 					console.log("Error:", error);
-					Notify.failure(error as string);
+					notifyFailure(error as string);
 				})
 				.finally(() => {
 					isLoadingCuadres = false;

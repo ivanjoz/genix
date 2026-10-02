@@ -1,6 +1,6 @@
 <script lang="ts">
-	import Popover from '$components/misc/Popover.svelte';
-	import '$components/misc/popover.css';
+	import Popover from '#components/misc/Popover.svelte';
+	import '#components/misc/popover.css';
 
 	let button1: HTMLElement | null = $state(null);
 	let button2: HTMLElement | null = $state(null);

@@ -1,14 +1,14 @@
 <script lang="ts">
+  import { notifyFailure } from '@genix/ui/notify';
   import { onMount } from 'svelte';
-  import { browser } from '$app/environment';
+  import { browser } from '$app/env';
   import { useUI } from '@genix/ui';
-  import Input from '$components/form/Input.svelte';
-  import T from '$components/misc/T.svelte';
-  import { Core, setLanguaje, tr } from '$core/store.svelte';
-  import { Env, lastLoginCompanyIDStorageKey } from '$core/env';
-  import { Notify } from '$libs/helpers';
-  import { security } from '$libs/ui-runtime.svelte';
-  import { getPublicCompanyName, sendUserLogin, type ILogin } from '$services/login';
+  import Input from '#components/form/Input.svelte';
+  import T from '#components/misc/T.svelte';
+  import { Core, setLanguaje, tr } from '#core/store.svelte.ts';
+  import { Env, lastLoginCompanyIDStorageKey } from '#core/env.ts';
+  import { security } from '#libs/ui-runtime.svelte.ts';
+  import { getPublicCompanyName, sendUserLogin, type ILogin } from '#services/login.ts';
   import RegistrationModal from './RegistrationModal.svelte';
   import { featureSections } from './features';
 
@@ -156,7 +156,7 @@
     if (isLoginLoading) return;
 
     if (loginForm.User.trim().length < 4 || loginForm.Password.length < 4 || !isValidCompanyID(loginForm.CompanyID)) {
-      Notify.failure(tr('Please provide a valid username, password, and company ID.|Debe proporcionar un usuario, una contraseña y un ID de empresa válidos.'));
+      notifyFailure(tr('Please provide a valid username, password, and company ID.|Debe proporcionar un usuario, una contraseña y un ID de empresa válidos.'));
       return;
     }
 

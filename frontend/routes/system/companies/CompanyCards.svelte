@@ -1,11 +1,11 @@
 <script lang="ts">
   import { useUI } from '@genix/ui';
   import { getStaticRecordsByID } from '@genix/ui/cache';
-  import Button from '$components/buttons/Button.svelte';
-  import FilterInput from '$components/form/FilterInput.svelte';
-  import Layer from '$components/layers/Layer.svelte';
-  import T from '$components/misc/T.svelte';
-  import { formatN, formatTime } from '$libs/helpers';
+  import Button from '#components/buttons/Button.svelte';
+  import FilterInput from '#components/form/FilterInput.svelte';
+  import Layer from '#components/layers/Layer.svelte';
+  import T from '#components/misc/T.svelte';
+  import { formatN, formatTime } from '#libs/helpers.ts';
   import { onDestroy, onMount, untrack } from 'svelte';
   import CompanyCreditCalendar from './CompanyCreditCalendar.svelte';
   import CompanyCreditCard from './CompanyCreditCard.svelte';

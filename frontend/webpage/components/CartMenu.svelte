@@ -8,20 +8,20 @@
 	const { id = 0, isMobile = false, css = "" }: IProps = $props();
 
 	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
-	import angleSvg from "$components/assets/angle.svg?raw";
-import { parseSVG } from '$libs/helpers';
+	import angleSvg from "#components/assets/angle.svg?raw";
+import { parseSVG } from '#libs/helpers.ts';
 	import s1 from "./styles.module.css";
-	import ArrowSteps from "$components/navigation/ArrowSteps.svelte";
-	import { Globals } from "$ecommerce/stores/globals.svelte";
-	import Input from "$components/form/Input.svelte";
-	import CiudadesSelector from "$ecommerce/components/CiudadesSelector.svelte";
-	import ProductCard from "$ecommerce/components/ProductCard.svelte";
+	import ArrowSteps from "#components/navigation/ArrowSteps.svelte";
+	import { Globals } from "#ecommerce/stores/globals.svelte.ts";
+	import Input from "#components/form/Input.svelte";
+	import CiudadesSelector from "#ecommerce/components/CiudadesSelector.svelte";
+	import ProductCard from "#ecommerce/components/ProductCard.svelte";
 	import { useUI } from '@genix/ui';
-	import { Ecommerce } from "$ecommerce/stores/globals.svelte";
+	import { Ecommerce } from "#ecommerce/stores/globals.svelte.ts";
 
-	import ButtonLayer from "$components/buttons/ButtonLayer.svelte";
+	import ButtonLayer from "#components/buttons/ButtonLayer.svelte";
 
-	import { Env } from "$core/env";
+	import { Env } from "#core/env.ts";
 
 	import CulqiCheckout from "./CulqiCheckout.svelte";
 	const ui = useUI();

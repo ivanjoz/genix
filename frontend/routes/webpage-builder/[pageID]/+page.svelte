@@ -4,15 +4,15 @@
   // The bare /webpage-builder route redirects here (see ../+page.ts).
   import { page } from '$app/state';
   import EcommerceBuilder from '../builder/EcommerceBuilder.svelte';
-  import type { SectionData } from '$ecommerce/renderer/section-types';
-  import { getPageContent, setCurrentPageID } from '$services/ecommerce/page-content.svelte';
+  import type { SectionData } from '#ecommerce/renderer/section-types.ts';
+  import { getPageContent, setCurrentPageID } from '#services/ecommerce/page-content.svelte.ts';
   import { editorStore } from '../stores/editor.svelte';
-  import Header from '$ecommerce/components/Header.svelte';
-  import Page from '$domain/Page.svelte';
-  import T from '$components/misc/T.svelte';
-  import { agentModes, type IAgentMode, type AgentSectionsPayload, type AgentContextScope, type AgentLiveContext } from '$core/agent/agent.svelte';
-  import { serializeAst } from '$ecommerce/html-ast/serialize-html';
-  import { parseHTML } from '$ecommerce/html-ast/parse-html';
+  import Header from '#ecommerce/components/Header.svelte';
+  import Page from '#domain/Page.svelte';
+  import T from '#components/misc/T.svelte';
+  import { agentModes, type IAgentMode, type AgentSectionsPayload, type AgentContextScope, type AgentLiveContext } from '#core/agent/agent.svelte.ts';
+  import { serializeAst } from '#ecommerce/html-ast/serialize-html.ts';
+  import { parseHTML } from '#ecommerce/html-ast/parse-html.ts';
   import { absorbColors } from '../html-ast/absorb-colors';
   import { scopeCustomCss, nextGlobalId } from '../html-ast/scope-custom-css';
 

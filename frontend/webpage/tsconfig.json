@@ -1,9 +1,20 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "$app/tsconfig",
   "compilerOptions": {
-    "types": ["vite/client"]
+    "sourceMap": true,
+    "strict": true,
+    "types": ["$app/types", "vite/client"],
+    // TypeScript rejects the "../" targets of package.json "imports" (Node's rule; Vite allows
+    // them), so the shared layers outside webpage/ are mapped here too.
+    "paths": {
+      "#components/*": ["../packages/genix-ui/*"],
+      "#core/*": ["../core/*"],
+      "#libs/*": ["../libs/*"],
+      "#services/*": ["../services/*"],
+      "#domain/*": ["../domain-components/*"]
+    }
   },
-  "include": ["**/*.d.ts", "**/*.ts", "**/*.js", "**/*.svelte", "../globals.d.ts"],
+  "include": [".svelte-kit/types/**/$types.d.ts", "**/*.d.ts", "**/*.ts", "**/*.js", "**/*.svelte", "../globals.d.ts"],
   // Salidas de build: typecheckear los bundles minificados agota la memoria de svelte-check.
-  "exclude": ["node_modules", "build", "build-renderer", "static/sw.js", "cloudflare"]
+  "exclude": ["node_modules", "build", "build-renderer", "static/sw.js", "cloudflare", "**/*.test.ts"]
 }

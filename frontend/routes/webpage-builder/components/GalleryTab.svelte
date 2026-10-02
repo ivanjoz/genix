@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import T from '$components/misc/T.svelte';
-  import { ImageAssetsService } from '$services/business/image-assets.svelte';
+  import T from '#components/misc/T.svelte';
+  import { ImageAssetsService } from '#services/business/image-assets.svelte.ts';
 
   const imageAssets = new ImageAssetsService();
   let isLoading = $state(true);

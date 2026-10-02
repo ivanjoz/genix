@@ -1,5 +1,5 @@
-import { Env } from '$core/env';
-import { getStoreWebpageFromCDN } from '$services/ecommerce/page-content.svelte';
+import { Env } from '#core/env.ts';
+import { getStoreWebpageFromCDN } from '#services/ecommerce/page-content.svelte.ts';
 
 export async function load() {
   // El snapshot publicado (live/pages/<companyID>-<pageID>.json) lo escribe

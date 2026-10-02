@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Page from '$domain/Page.svelte'
-  import T from '$components/misc/T.svelte'
+  import Page from '#domain/Page.svelte'
+  import T from '#components/misc/T.svelte'
   import { useUI } from '@genix/ui'
   import SalesPlanningMantainer from './SalesPlanningMantainer.svelte'
   const ui = useUI()

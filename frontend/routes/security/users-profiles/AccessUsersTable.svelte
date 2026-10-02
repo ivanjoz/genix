@@ -1,8 +1,8 @@
 <script lang="ts">
-  import TableGrid from '$components/vTable/TableGrid.svelte'
-  import type { ITableColumn } from '$components/vTable/types'
-  import FilterInput from '$components/form/FilterInput.svelte'
-  import Layer from '$components/layers/Layer.svelte'
+  import TableGrid from '#components/vTable/TableGrid.svelte'
+  import type { ITableColumn } from '#components/vTable/types.ts'
+  import FilterInput from '#components/form/FilterInput.svelte'
+  import Layer from '#components/layers/Layer.svelte'
   import { useUI } from '@genix/ui'
   import type { IAccessGroupCatalogEntry, IAccessListCatalogEntry } from "./access-list-catalog"
   import AccessGroupBars from "./AccessGroupBars.svelte"

@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
   import { onMount, untrack } from 'svelte'
-  import Page from '$domain/Page.svelte'
-  import TableGrid from '$components/vTable/TableGrid.svelte'
-  import type { ITableColumn } from '$components/vTable/types'
-  import Button from '$components/buttons/Button.svelte'
-  import T from '$components/misc/T.svelte'
-  import { tr } from '$core/store.svelte'
-  import { Loading, Notify, formatN } from '$libs/helpers'
+  import Page from '#domain/Page.svelte'
+  import TableGrid from '#components/vTable/TableGrid.svelte'
+  import type { ITableColumn } from '#components/vTable/types.ts'
+  import Button from '#components/buttons/Button.svelte'
+  import T from '#components/misc/T.svelte'
+  import { tr } from '#core/store.svelte.ts'
+  import { formatN } from '#libs/helpers.ts'
   import { BcrpDefaultRates, ExchangeRatesService } from './exchange-rate.svelte'
   import {
     buildCalendarRows,
@@ -129,16 +130,16 @@
   const saveEditedMonths = async () => {
     const recordsToSave = dirtyDraftsToRecords(monthDrafts)
     if (recordsToSave.length === 0) {
-      Notify.failure(tr('There are no changes to save|No hay cambios por guardar'))
+      notifyFailure(tr('There are no changes to save|No hay cambios por guardar'))
       return
     }
 
-    Loading.standard(tr('Saving|Guardando') + '...')
+    showLoading(tr('Saving|Guardando') + '...')
     await exchangeRates.postAndSync(recordsToSave)
-    Loading.remove()
+    hideLoading()
 
     for (const draft of monthDrafts) draft.isDirty = false
-    Notify.success(tr('Exchange rates saved|Tipos de cambio guardados'))
+    notifySuccess(tr('Exchange rates saved|Tipos de cambio guardados'))
   }
 </script>
 

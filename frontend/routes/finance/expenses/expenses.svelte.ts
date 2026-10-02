@@ -1,7 +1,7 @@
-import { GetHandler, POST, GET } from '$libs/ui-runtime.svelte'
-import type { IPurchaseDocument } from '$core/purchase-document'
-import { Notify } from '$libs/helpers'
-import { tr } from '$core/store.svelte'
+import { notifyFailure } from '@genix/ui/notify';
+import { GetHandler, POST, GET } from '#libs/ui-runtime.svelte.ts'
+import type { IPurchaseDocument } from '#core/purchase-document.ts'
+import { tr } from '#core/store.svelte.ts'
 
 // IExpense / IExpenseScheduled mirror the Go structs in backend/finance/types/expenses.go.
 // Expense.Type says what the money became, which is what keeps a purchase off the P&L when
@@ -241,7 +241,7 @@ export const getSchedulePeriods = async (scheduleID: number): Promise<IExpense[]
     const result = await GET({ route: `expense-schedule-periods?scheduleID=${scheduleID}` })
     return result.Periods || []
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
     throw error
   }
 }

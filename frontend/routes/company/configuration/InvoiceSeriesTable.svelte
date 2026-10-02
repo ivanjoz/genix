@@ -1,17 +1,17 @@
 <script lang="ts">
-import Button from '$components/buttons/Button.svelte';
-import Checkbox from '$components/form/Checkbox.svelte';
-import Input from '$components/form/Input.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import Modal from '$components/layers/Modal.svelte';
-import T from '$components/misc/T.svelte';
-import TableGrid from '$components/vTable/TableGrid.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { tr } from '$core/store.svelte';
+import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
+import Button from '#components/buttons/Button.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
+import Input from '#components/form/Input.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import T from '#components/misc/T.svelte';
+import TableGrid from '#components/vTable/TableGrid.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import { tr } from '#core/store.svelte.ts';
 import { useUI } from '@genix/ui';
-import { Loading, Notify } from '$libs/helpers';
 import { InvoiceSeriesSitesService, postInvoiceSeries } from './invoice-series.svelte';
-import { DOC_TYPES, docTypeName } from '$core/sunat-doc-type';
+import { DOC_TYPES, docTypeName } from '#core/sunat-doc-type.ts';
 import { makeSeries, validateSeries, type IInvoiceSeries } from './invoice-series';
 import type { ICompany } from './empresas.svelte';
 
@@ -57,7 +57,7 @@ import type { ICompany } from './empresas.svelte';
   // the whole set, which replaces what this page holds.
   const saveSeries = async () => {
     if (!seriesForm.DocType || !seriesForm.SeriesCode) {
-      Notify.failure(tr("Complete the document type and the series code.|Complete el tipo de comprobante y el código de serie."))
+      notifyFailure(tr("Complete the document type and the series code.|Complete el tipo de comprobante y el código de serie."))
       return
     }
 
@@ -71,34 +71,34 @@ import type { ICompany } from './empresas.svelte';
     // the same set again, because it is the one that has to be right.
     const problem = validateSeries(candidate)
     if (problem) {
-      Notify.failure(tr(problem))
+      notifyFailure(tr(problem))
       return
     }
 
     isSaving = true
-    Loading.standard(tr("Saving...|Guardando..."))
+    showLoading(tr("Saving...|Guardando..."))
     try {
       const payload = isNew ? candidate[candidate.length - 1] : { ...seriesForm }
       company.InvoiceSeries = await postInvoiceSeries(payload)
-      Notify.success(tr("Series saved|Serie guardada"))
+      notifySuccess(tr("Series saved|Serie guardada"))
       ui.closeModal(SERIES_MODAL_ID)
     } catch (error) {
       // Reported by POST.
     }
-    Loading.remove()
+    hideLoading()
     isSaving = false
   }
 
   const makeDefault = async (series: IInvoiceSeries) => {
     if (series.IsDefault === 1) return
 
-    Loading.standard(tr("Saving...|Guardando..."))
+    showLoading(tr("Saving...|Guardando..."))
     try {
       company.InvoiceSeries = await postInvoiceSeries({ ...series, IsDefault: 1 })
     } catch (error) {
       // Reported by POST.
     }
-    Loading.remove()
+    hideLoading()
   }
 
   const columns: ITableColumn<IInvoiceSeries>[] = [

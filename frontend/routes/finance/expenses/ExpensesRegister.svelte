@@ -1,19 +1,20 @@
 <script lang="ts">
-import Layer from '$components/layers/Layer.svelte'
-import VTable from '$components/vTable/VTable.svelte'
-import RecordByIDText from '$components/misc/RecordByIDText.svelte'
-import type { ITableColumn } from '$components/vTable/types'
-import Button from '$components/buttons/Button.svelte'
-import FilterInput from '$components/form/FilterInput.svelte'
-import Input from '$components/form/Input.svelte'
-import SearchSelect from '$components/form/SearchSelect.svelte'
-import DateInput from '$components/form/DateInput.svelte'
-import Checkbox from '$components/form/Checkbox.svelte'
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte'
-import LoadingBar from '$components/misc/LoadingBar.svelte'
+import { hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify';
+import Layer from '#components/layers/Layer.svelte'
+import VTable from '#components/vTable/VTable.svelte'
+import RecordByIDText from '#components/misc/RecordByIDText.svelte'
+import type { ITableColumn } from '#components/vTable/types.ts'
+import Button from '#components/buttons/Button.svelte'
+import FilterInput from '#components/form/FilterInput.svelte'
+import Input from '#components/form/Input.svelte'
+import SearchSelect from '#components/form/SearchSelect.svelte'
+import DateInput from '#components/form/DateInput.svelte'
+import Checkbox from '#components/form/Checkbox.svelte'
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+import LoadingBar from '#components/misc/LoadingBar.svelte'
 import { onMount, untrack } from 'svelte'
-import { Core, tr } from '$core/store.svelte'
-import { Loading, Notify, formatN, formatTime } from '$libs/helpers'
+import { Core, tr } from '#core/store.svelte.ts'
+import { formatN, formatTime } from '#libs/helpers.ts'
 import { useUI } from '@genix/ui'
 import { CajasService, getCashBankMovementByID, type ICashBankMovement } from '../cash-banks/cajas.svelte'
 import {
@@ -33,8 +34,8 @@ import {
   type IInventoryExpense,
 } from './expenses.svelte'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
-import PurchaseDocumentFields from '$domain/PurchaseDocumentFields.svelte'
-import { ClientProviderService, ClientProviderType } from '$services/crm/client-provider.svelte'
+import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
 import {
   SupplyMaterialService, type ISupplyMaterial,
 } from '../../production/supplies-materials/supply-material.svelte'
@@ -188,10 +189,10 @@ const openExpense = (expense: IExpense) => {
 // Save the expense detail fields (create or edit). Payment state (PaidAmount, ss) is server-maintained.
 const saveExpense = async () => {
   if ((form.Amount || 0) <= 0) {
-    Notify.failure(tr("The amount must be greater than 0.|El monto debe ser mayor a 0."))
+    notifyFailure(tr("The amount must be greater than 0.|El monto debe ser mayor a 0."))
     return
   }
-  Loading.standard(tr("Saving expense...|Guardando gasto..."))
+  showLoading(tr("Saving expense...|Guardando gasto..."))
   try {
     const saved = await postExpense(form)
     // Merge the server-set fields (ID, ss, Created) onto the edited form for the row.
@@ -204,9 +205,9 @@ const saveExpense = async () => {
     // when it belongs to the active tab, or drop it if it doesn't.
     applyExpenseToList(savedRow)
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -215,23 +216,23 @@ const saveExpense = async () => {
 const saveInventoryExpense = async () => {
   const typedSupplyName = (newSupplyName.text || "").trim()
   if (!inventoryForm.ProductID && !typedSupplyName) {
-    Notify.failure(tr("Select a supply or type a new one.|Seleccione un insumo o escriba uno nuevo."))
+    notifyFailure(tr("Select a supply or type a new one.|Seleccione un insumo o escriba uno nuevo."))
     return
   }
   if (!inventoryForm.WarehouseID) {
-    Notify.failure(tr("Select a warehouse.|Seleccione un almacén."))
+    notifyFailure(tr("Select a warehouse.|Seleccione un almacén."))
     return
   }
   if ((inventoryForm.Quantity || 0) <= 0) {
-    Notify.failure(tr("The quantity must be greater than 0.|La cantidad debe ser mayor a 0."))
+    notifyFailure(tr("The quantity must be greater than 0.|La cantidad debe ser mayor a 0."))
     return
   }
   if ((inventoryForm.UnitPrice || 0) <= 0) {
-    Notify.failure(tr("The unit price must be greater than 0.|El precio unitario debe ser mayor a 0."))
+    notifyFailure(tr("The unit price must be greater than 0.|El precio unitario debe ser mayor a 0."))
     return
   }
 
-  Loading.standard(tr("Saving expense...|Guardando gasto..."))
+  showLoading(tr("Saving expense...|Guardando gasto..."))
   try {
     let productID = inventoryForm.ProductID
     if (!productID) {
@@ -255,9 +256,9 @@ const saveInventoryExpense = async () => {
     else form = {} as IExpense
     applyExpenseToList(saved)
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 
@@ -273,16 +274,16 @@ const saveHandler = $derived(
 // Record a payment against the open expense via POST.expense-payment.
 const registerPayment = async () => {
   if ((paymentForm.Amount || 0) <= 0) {
-    Notify.failure(tr("Enter a payment amount greater than 0.|Ingrese un monto de pago mayor a 0."))
+    notifyFailure(tr("Enter a payment amount greater than 0.|Ingrese un monto de pago mayor a 0."))
     return
   }
   if (!paymentForm.CashBankID) {
-    Notify.failure(tr("Select a source cash register.|Seleccione una caja de origen."))
+    notifyFailure(tr("Select a source cash register.|Seleccione una caja de origen."))
     return
   }
   // The payment cannot exceed the outstanding balance (also enforced on the backend).
   if (paymentForm.Amount > pendingAmount) {
-    Notify.failure(tr("The payment amount cannot exceed the pending amount.|El monto del pago no puede ser mayor al monto pendiente."))
+    notifyFailure(tr("The payment amount cannot exceed the pending amount.|El monto del pago no puede ser mayor al monto pendiente."))
     return
   }
   // The backend authoritatively enforces the register currency match and computes the
@@ -295,21 +296,21 @@ const registerPayment = async () => {
     IsFullyPaid: !!paymentForm.IsFullyPaid,
   }
 
-  Loading.standard(tr("Recording payment...|Registrando pago..."))
+  showLoading(tr("Recording payment...|Registrando pago..."))
   try {
     const result = await postExpensePayment(payload)
     // Reflect the server-updated paid amount / lifecycle status in the open form. `upd` must
     // advance too so the payments cache (keyed by it) invalidates and re-fetches below.
     form = { ...form, PaidAmount: result.PaidAmount, ss: result.ss, upd: result.upd }
     paymentForm = { ExpenseID: form.ID, IsFullyPaid: false } as IExpensePayment
-    Notify.success(tr("Payment recorded.|Pago registrado."))
+    notifySuccess(tr("Payment recorded.|Pago registrado."))
     // Patch the table locally from the result (ID + new status): a fully-paid row leaves
     // the Pend. Pago tab, joins Pagados, etc. — no extra server fetch.
     applyExpenseToList({ ...form, ID: result.ID, ss: result.ss, PaidAmount: result.PaidAmount })
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 

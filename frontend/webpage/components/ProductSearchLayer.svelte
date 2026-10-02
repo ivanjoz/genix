@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Env } from "$core/env";
-  import { GET } from "$libs/ui-runtime.svelte";
-  import { preloadProductSearch } from "$core/product-search/product-search-runtime";
-  import type { ProductSearch } from "$core/product-search/product-search";
+  import { Env } from "#core/env.ts";
+  import { GET } from "#libs/ui-runtime.svelte.ts";
+  import { preloadProductSearch } from "#core/product-search/product-search-runtime.ts";
+  import type { ProductSearch } from "#core/product-search/product-search.ts";
   import ProductCard from "./ProductCard.svelte";
-  import type { ProductSearchHit } from "$core/product-search/types";
-  import { getProductEcommerceData, type ProductCatalog, type IProduct } from "$ecommerce/services/products.svelte";
+  import type { ProductSearchHit } from "#core/product-search/types.ts";
+  import { getProductEcommerceData, type ProductCatalog, type IProduct } from "#ecommerce/services/products.svelte.ts";
 
   interface ProductSearchLayerProps {
     queryText?: string;

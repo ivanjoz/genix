@@ -1,6 +1,6 @@
-import { GetHandler, GETWithGroupCache, POST, PUT } from '$libs/ui-runtime.svelte'
-import { Notify } from '$libs/helpers'
-import type { IPurchaseDocument } from '$core/purchase-document'
+import { notifyFailure } from '@genix/ui/notify';
+import { GetHandler, GETWithGroupCache, POST, PUT } from '#libs/ui-runtime.svelte.ts'
+import type { IPurchaseDocument } from '#core/purchase-document.ts'
 
 // Backend status codes for purchase orders.
 export const PurchaseOrderStatus = {
@@ -167,7 +167,7 @@ export const queryPurchaseOrders = async (filters: IPurchaseOrderReportForm): Pr
   try {
     result = await GETWithGroupCache<IPurchaseOrder>(route, uriParams)
   } catch (error) {
-    Notify.failure(String(error || 'No se pudo consultar el reporte de órdenes de compra.'))
+    notifyFailure(String(error || 'No se pudo consultar el reporte de órdenes de compra.'))
     throw error
   }
 

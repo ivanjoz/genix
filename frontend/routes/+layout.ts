@@ -15,6 +15,6 @@ export const load = async ({ url }: { url: URL }) => {
 	const devLoginTarget = url.searchParams.get('devlogin')
 	if (!devLoginTarget) { return }
 
-	const { applyDevLogin } = await import('$services/login')
+	const { applyDevLogin } = await import('#services/login.ts')
 	await applyDevLogin(devLoginTarget)
 }

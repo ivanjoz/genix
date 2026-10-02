@@ -1,14 +1,14 @@
 <script lang="ts">
   import { useUI } from '@genix/ui';
   const ui = useUI();
-  import Modal from '$components/layers/Modal.svelte';
-  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
-  import ImageUploader from '$components/files/ImageUploader.svelte';
-  import FilterInput from '$components/form/FilterInput.svelte';
-  import SearchSelect from '$components/form/SearchSelect.svelte';
-  import { tr } from '$core/store.svelte';
-  import { GalleryImagesService } from '$services/webpage/gallery.svelte';
-  import { ImageAssetsService } from '$services/business/image-assets.svelte';
+  import Modal from '#components/layers/Modal.svelte';
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+  import ImageUploader from '#components/files/ImageUploader.svelte';
+  import FilterInput from '#components/form/FilterInput.svelte';
+  import SearchSelect from '#components/form/SearchSelect.svelte';
+  import { tr } from '#core/store.svelte.ts';
+  import { GalleryImagesService } from '#services/webpage/gallery.svelte.ts';
+  import { ImageAssetsService } from '#services/business/image-assets.svelte.ts';
 
   interface Props {
     /** Numeric id the host opens via ui.openModal() to show this picker. */

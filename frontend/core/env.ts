@@ -2,9 +2,9 @@ declare global {
   var _isLocal: boolean;
 }
 
-import { browser } from '$app/environment';
+import { browser } from '$app/env';
 import { goto } from '$app/navigation';
-import { PUBLIC_ENDPOINTS, PUBLIC_LOCAL_API_PORT, PUBLIC_TAILSCALE_HOST } from '$env/static/public';
+import { PUBLIC_ENDPOINTS, PUBLIC_LOCAL_API_PORT, PUBLIC_TAILSCALE_HOST } from '$app/env/public';
 export { browser };
 
 export const IsClient = () => {

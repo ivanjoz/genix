@@ -1,5 +1,5 @@
-import { Notify } from '$libs/helpers';
-import { GET, GetHandler, POST } from '$libs/ui-runtime.svelte';
+import { notifyFailure } from '@genix/ui/notify';
+import { GET, GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 
 export const makeStockID = (e: Pick<IProductStock, 'WarehouseID' | 'ProductID' | 'PresentationID'>): number =>
   // Mirrors backend/logistics/types/stock_movement_apply.go::PackProductStockID (bit shifts 46/16/2).
@@ -134,7 +134,7 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
       productStockDetailCount: records.reduce((detailCount, productStockRecord) => detailCount + productStockRecord.StockDetails.length, 0),
     })
   } catch (error) {
-    Notify.failure(error as string)
+    notifyFailure(error as string)
   }
   return records
 }

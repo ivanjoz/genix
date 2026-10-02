@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ChartCanvas, type ChartCanvasSeries } from '@genix/ui/charts';
-  import T from '$components/misc/T.svelte';
-  import { formatN } from '$libs/helpers';
+  import T from '#components/misc/T.svelte';
+  import { formatN } from '#libs/helpers.ts';
   import {
     companyUserDisplayName,
     packCompanyUserLabelID,

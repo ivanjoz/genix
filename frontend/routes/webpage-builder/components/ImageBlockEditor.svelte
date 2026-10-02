@@ -1,10 +1,10 @@
 <script lang="ts">
   import { useUI } from '@genix/ui';
   const ui = useUI();
-  import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
+  import type { ComponentAST, ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
 
   import type { Snippet } from 'svelte';
-  import { tr } from '$core/store.svelte';
+  import { tr } from '#core/store.svelte.ts';
   import ImagePickerModal from './ImagePickerModal.svelte';
 
   interface Props {

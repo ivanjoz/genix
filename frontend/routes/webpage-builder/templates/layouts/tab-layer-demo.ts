@@ -1,4 +1,4 @@
-import type { SectionData } from '$ecommerce/renderer/section-types';
+import type { SectionData } from '#ecommerce/renderer/section-types.ts';
 
 /**
  * HTML-based tabbed layer. Demonstrates the `<TabbedLayer>` custom component: each of its

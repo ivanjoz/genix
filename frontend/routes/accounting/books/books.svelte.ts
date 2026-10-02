@@ -1,9 +1,9 @@
-import { extractError, GET } from '$libs/ui-runtime.svelte'
-import { Loading, Notify } from '$libs/helpers'
-import { tr } from '$core/store.svelte'
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import { extractError, GET } from '#libs/ui-runtime.svelte.ts'
+import { tr } from '#core/store.svelte.ts'
 import {
   getClientProviderSnapshots, type IClientProviderSnapshot,
-} from '$services/crm/client-provider.svelte'
+} from '#services/crm/client-provider.svelte.ts'
 import type { ISalesBookResponse } from './books'
 import type { IPurchasesBookResponse } from './books.purchases'
 
@@ -35,7 +35,7 @@ export class BookService<TResponse extends { Period: string }> {
 
     const route = period ? `${this.route}?period=${period}` : `${this.route}?date=${unixDay}`
     this.isLoading = true
-    Loading.standard(tr("Reading the book...|Leyendo el libro..."))
+    showLoading(tr("Reading the book...|Leyendo el libro..."))
     try {
       const response = await GET({ route }) as TResponse
       this.response = response
@@ -48,12 +48,12 @@ export class BookService<TResponse extends { Period: string }> {
     } catch (error) {
       this.reset()
       // The rejection is the raw response, so String() on it says "[object Object]".
-      Notify.failure(
+      notifyFailure(
         extractError(error) || tr("The book could not be read.|No se pudo leer el libro."),
       )
     } finally {
       this.isLoading = false
-      Loading.remove()
+      hideLoading()
     }
   }
 

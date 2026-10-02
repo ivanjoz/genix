@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { ColorPalette } from '$ecommerce/renderer/renderer-types';
+  import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
   import { editorStore } from '../stores/editor.svelte';
-  import { TEXT_TAG } from '$ecommerce/html-ast/parse-html';
+  import { TEXT_TAG } from '#ecommerce/html-ast/parse-html.ts';
   import ImageBlockEditor from './ImageBlockEditor.svelte';
 
   // Active palette backs the swatch shortcuts (free hex is still allowed).

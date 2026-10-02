@@ -1,27 +1,28 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
-import { tr } from '$core/store.svelte';
-import T from '$components/misc/T.svelte';
-import SearchSelect from '$components/form/SearchSelect.svelte';
-import DateInput from '$components/form/DateInput.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import { Loading, formatTime, highlString } from '$libs/helpers';
-import { formatQuantity, quantityDivisorOf, totalSubUnits } from '$core/quantity';
-import ButtonLayer from '$components/buttons/ButtonLayer.svelte';
-import FilterInput from '$components/form/FilterInput.svelte';
-import KeyValueStrip from '$components/misc/KeyValueStrip.svelte';
-import Input from '$components/form/Input.svelte';
+import { hideLoading, showLoading } from '@genix/ui/notify';
+import Page from '#domain/Page.svelte';
+import { tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import DateInput from '#components/form/DateInput.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import { formatTime, highlString } from '#libs/helpers.ts';
+import { formatQuantity, quantityDivisorOf, totalSubUnits } from '#core/quantity.ts';
+import ButtonLayer from '#components/buttons/ButtonLayer.svelte';
+import FilterInput from '#components/form/FilterInput.svelte';
+import KeyValueStrip from '#components/misc/KeyValueStrip.svelte';
+import Input from '#components/form/Input.svelte';
 import { getStaticRecordsByID } from '@genix/ui/cache';
 import { SvelteMap } from 'svelte/reactivity';
   import { WarehousesService } from "../../business/branches-warehouses/branches-warehouses.svelte"
-  import { ProductsService } from '$services/production/products.svelte'
+  import { ProductsService } from '#services/production/products.svelte.ts'
   import { UsuariosService } from "../../security/users-profiles/users-profiles.svelte"
   import {
     queryAlmacenMovimientos,
     type IWarehouseProductMovement, type IProductStockLot
   } from "./warehouse-movements.svelte"
-  import { stockMovementTypes } from '$core/stock-movement-type'
+  import { stockMovementTypes } from '#core/stock-movement-type.ts'
     import { untrack } from "svelte";
 
   const almacenes = new WarehousesService()
@@ -67,7 +68,7 @@ import { SvelteMap } from 'svelte/reactivity';
       return
     }
 
-    Loading.standard(tr("Querying records...|Consultando registros..."))
+    showLoading(tr("Querying records...|Consultando registros..."))
     try {
       const movimientos = await queryAlmacenMovimientos(form)
 
@@ -92,7 +93,7 @@ import { SvelteMap } from 'svelte/reactivity';
     } catch (error) {
       console.error("[almacen-movimientos] query error", error)
     } finally {
-      Loading.remove()
+      hideLoading()
     }
   }
 

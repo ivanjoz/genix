@@ -1,11 +1,11 @@
 <script lang="ts">
-import { GET } from '$libs/ui-runtime.svelte';
-import VTable from '$components/vTable/VTable.svelte';
-import type { ITableColumn } from '$components/vTable/types';
-import FilterInput from '$components/form/FilterInput.svelte';
-import Button from '$components/buttons/Button.svelte';
-import RecordByIDText from '$components/misc/RecordByIDText.svelte';
-import { Loading, Notify } from '$libs/helpers';
+import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import { GET } from '#libs/ui-runtime.svelte.ts';
+import VTable from '#components/vTable/VTable.svelte';
+import type { ITableColumn } from '#components/vTable/types.ts';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Button from '#components/buttons/Button.svelte';
+import RecordByIDText from '#components/misc/RecordByIDText.svelte';
 
 // One text-search hit: only the product id and its GenixSearch weight come
 // back from the API; the name is resolved per-row from the by-id cache.
@@ -22,11 +22,11 @@ let lastQuery = $state("")
 const runSearch = async () => {
   const trimmedQuery = query.trim()
   if (trimmedQuery.length < 2) {
-    Notify.failure("Ingresa al menos 2 caracteres para buscar.")
+    notifyFailure("Ingresa al menos 2 caracteres para buscar.")
     return
   }
 
-  Loading.standard("Buscando…")
+  showLoading("Buscando…")
   const startedAt = performance.now()
   try {
     // GET.product-text-search returns ids + weights ordered by relevance.
@@ -38,7 +38,7 @@ const runSearch = async () => {
     elapsedMs = Math.round(performance.now() - startedAt)
     lastQuery = trimmedQuery
   } finally {
-    Loading.remove()
+    hideLoading()
   }
 }
 

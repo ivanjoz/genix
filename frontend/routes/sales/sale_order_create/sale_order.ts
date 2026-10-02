@@ -6,9 +6,9 @@
 // backend can trust it. The stamp is permanent (the series lives in the last two
 // digits of the sale id), so a sale that gets this wrong can never be invoiced.
 
-import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '$core/sunat-doc-type'
-import { getCompanyFlagValue, type ICompanyFlagValue } from '$routes/company/configuration/company-flags'
-import { EXCHANGE_RATE_SCALE } from '$routes/finance/exchange-rate/exchange-rate'
+import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA } from '#core/sunat-doc-type.ts'
+import { getCompanyFlagValue, type ICompanyFlagValue } from '#routes/company/configuration/company-flags.ts'
+import { EXCHANGE_RATE_SCALE } from '#routes/finance/exchange-rate/exchange-rate.ts'
 
 // Cents. SUNAT requires the buyer to be named on a boleta from 700 soles up.
 export const BOLETA_IDENTIFIED_FROM = 70000

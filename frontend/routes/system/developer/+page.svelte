@@ -1,6 +1,6 @@
 <script lang="ts">
-import Page from '$domain/Page.svelte';
-import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+import Page from '#domain/Page.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
 import TestTextIndexes from './TestTextIndexes.svelte';
 import TestStockImages from './TestStockImages.svelte';
 import { useUI } from '@genix/ui';
@@ -39,7 +39,7 @@ let containerCss = $state('')
     <!-- Imported on demand: the showroom drags in every component of the package —
          5k-row tables, canvas charts, the RoosterJS editor — and this route is in the
          menu, so a static import would load all of it for the Testing section too. -->
-    {#await import('$components/showroom/Showroom.svelte') then showroomModule}
+    {#await import('#components/showroom/Showroom.svelte') then showroomModule}
       <showroomModule.default onSurfaceChange={(surfaceCss) => { containerCss = surfaceCss }} />
     {/await}
   {/if}

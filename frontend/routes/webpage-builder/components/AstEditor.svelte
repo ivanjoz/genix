@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { ComponentAST, ColorPalette } from '$ecommerce/renderer/renderer-types';
+  import type { ComponentAST, ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
   import {
     isTextRun, isImageNode, isLinkNode,
     childrenAsUnits, unitChildren, unitLabel, unitNoun, humanizeLabel,
     groupSiblings,
   } from '../html-ast/editable';
-  import { slideSync } from '$ecommerce/stores/slide-sync.svelte';
-  import OptionsStrip from '$components/navigation/OptionsStrip.svelte';
+  import { slideSync } from '#ecommerce/stores/slide-sync.svelte.ts';
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
   import TextBlockEditor from './TextBlockEditor.svelte';
   import ImageBlockEditor from './ImageBlockEditor.svelte';
 

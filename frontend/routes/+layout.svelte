@@ -1,21 +1,21 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
+	import { notifyFailure, NotifyHost } from '@genix/ui/notify';
+	import { browser } from '$app/env';
 	import { navigating, page } from '$app/state';
-	import TopLayerDatePicker from '$components/layers/TopLayerDatePicker.svelte';
-	import TopLayerSelector from '$components/layers/TopLayerSelector.svelte';
-	import { Env } from '$core/env';
-	import Modules, { SAAS_COMPANY_ID, isSaaSOnlyRoute } from '$core/modules';
-	import { security } from '$libs/ui-runtime.svelte';
-	import { Core, getDeviceType, tr } from '$core/store.svelte';
-	import AppHeader from '$domain/AppHeader.svelte';
-	import favicon from '$libs/assets/favicon.svg?raw';
-	import PageLoading from '$domain/PageLoading.svelte';
-	import SideMenu from '$domain/SideMenu.svelte';
-	import { Notify } from '$libs/helpers';
+	import TopLayerDatePicker from '#components/layers/TopLayerDatePicker.svelte';
+	import TopLayerSelector from '#components/layers/TopLayerSelector.svelte';
+	import { Env } from '#core/env.ts';
+	import Modules, { SAAS_COMPANY_ID, isSaaSOnlyRoute } from '#core/modules.ts';
+	import { security } from '#libs/ui-runtime.svelte.ts';
+	import { Core, getDeviceType, tr } from '#core/store.svelte.ts';
+	import AppHeader from '#domain/AppHeader.svelte';
+	import favicon from '#libs/assets/favicon.svg?raw';
+	import PageLoading from '#domain/PageLoading.svelte';
+	import SideMenu from '#domain/SideMenu.svelte';
 	import { doInitServiceWorker } from '@genix/ui/service-worker';
 	import { onMount } from 'svelte';
 	import { provideUi } from '@genix/ui';
-	import { genixUiRuntime } from '$libs/ui-runtime.svelte';
+	import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
 	import './app.css';
 	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './security/users-profiles/access-list-catalog';
 	import './tailwind.css';
@@ -60,7 +60,7 @@
 		} catch (error) {
 			accessCatalogFailed = true
 			console.error('[access-list] Failed to load access catalog', error)
-			Notify.failure(tr('Unable to load access permissions.|No se pudieron cargar los permisos de acceso.'))
+			notifyFailure(tr('Unable to load access permissions.|No se pudieron cargar los permisos de acceso.'))
 		} finally {
 			accessCatalogLoading = false
 		}
@@ -106,12 +106,12 @@
 		lastDeniedRoute = currentPath
 
 		if (deniedBySaaSPolicy) {
-			Notify.failure(tr(`${currentPath} is only available to the platform administrator.|${currentPath} sólo está disponible para la company administradora de la plataforma.`))
+			notifyFailure(tr(`${currentPath} is only available to the platform administrator.|${currentPath} sólo está disponible para la company administradora de la plataforma.`))
 		} else {
 			const accessNames = getAccessEntriesForRoute(currentPath)
 				.map((accessEntry) => accessEntry.name)
 				.join(', ')
-			Notify.failure(tr(`You don't have access "${accessNames}" to visit ${currentPath}|No posee el acceso "${accessNames}" para acceder a ${currentPath}`))
+			notifyFailure(tr(`You don't have access "${accessNames}" to visit ${currentPath}|No posee el acceso "${accessNames}" para acceder a ${currentPath}`))
 		}
 		Env.navigate('/')
 	})
@@ -141,6 +141,9 @@
 		<PageLoading path={navigating.to?.url.pathname ?? ''} />
 	{/if}
 {/if}
+
+<!-- Outside the branches: the welcome/login page needs toasts and the loading overlay too. -->
+<NotifyHost />
 
 <!-- Main Content -->
 {#if (Core.isLoading === 0 || !showLayout /* ??? */) && !redirectsToLogin && (accessCatalogReady || !showLayout)}

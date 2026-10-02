@@ -1,4 +1,4 @@
-import { GET } from '$libs/ui-runtime.svelte';
+import { GET } from '#libs/ui-runtime.svelte.ts';
 
 export interface ICreditUsageDay {
 	Day: number;

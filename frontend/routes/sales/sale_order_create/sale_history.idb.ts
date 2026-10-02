@@ -12,8 +12,8 @@
 // and the two prices the sale was actually made at.
 
 import Dexie from 'dexie'
-import { Env } from '$core/env'
-import type { Quantity } from '$core/quantity'
+import { Env } from '#core/env.ts'
+import type { Quantity } from '#core/quantity.ts'
 
 const LOG_PREFIX = '[sale-history:idb]'
 const SALE_HISTORY_DB_PREFIX = 'sale_history'
