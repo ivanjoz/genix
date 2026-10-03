@@ -4,6 +4,7 @@ import (
 	"app/business/types"
 	"app/core"
 	"app/db"
+	production "app/production/types"
 	"encoding/json"
 	"fmt"
 
@@ -177,9 +178,25 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
+	// Read before the write, to tell which brands are being renamed.
+	previousBrandNames, err := getBrandNamesByID(req.User.CompanyID, records)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+
 	// Persist as batch upsert; ORM autoincrements IDs still <= 0.
 	if err = db.Insert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
+	}
+
+	renamedBrandNames := map[int32]string{}
+	for _, record := range records {
+		if previousName, found := previousBrandNames[record.ID]; found && previousName != record.Name {
+			renamedBrandNames[record.ID] = record.Name
+		}
+	}
+	if err := propagateBrandRenames(req.User.CompanyID, renamedBrandNames); err != nil {
+		return req.MakeErr(err)
 	}
 
 	// Complete TempID -> NewID mapping with final IDs after persistence.
@@ -204,4 +221,68 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(newIDs)
+}
+
+// getBrandNamesByID reads the stored names of the brands in records that already exist.
+func getBrandNamesByID(companyID int32, records []types.SharedListRecord) (map[int32]string, error) {
+	brandIDs := core.SliceSet[int32]{}
+	for _, record := range records {
+		if record.ListID == ecommerceSharedListBrandID && record.ID > 0 {
+			brandIDs.Add(record.ID)
+		}
+	}
+	if brandIDs.IsEmpty() {
+		return map[int32]string{}, nil
+	}
+
+	brands := []types.SharedListRecord{}
+	query := db.Query(&brands)
+	query.Select(query.ID, query.Name).
+		CompanyID.Equals(companyID).ID.In(brandIDs.Values...)
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al obtener las marcas a actualizar: %w", err)
+	}
+
+	namesByID := make(map[int32]string, len(brands))
+	for _, brand := range brands {
+		namesByID[brand.ID] = brand.Name
+	}
+	return namesByID, nil
+}
+
+// propagateBrandRenames copies a renamed brand's name to Product.BrandName, the column the product
+// text index reads, so a search by the new brand name finds its products.
+//
+// Products have no index on BrandID, so this filters the company's partition. A rename is rare
+// and the partition is one company's catalog.
+func propagateBrandRenames(companyID int32, namesByBrandID map[int32]string) error {
+	if len(namesByBrandID) == 0 {
+		return nil
+	}
+	brandIDs := make([]int32, 0, len(namesByBrandID))
+	for brandID := range namesByBrandID {
+		brandIDs = append(brandIDs, brandID)
+	}
+
+	products := []production.Product{}
+	query := db.Query(&products)
+	query.Select(query.ID, query.BrandID).
+		CompanyID.Equals(companyID).BrandID.In(brandIDs...).AllowFilter()
+	if err := query.Exec(); err != nil {
+		return fmt.Errorf("error al obtener los productos de las marcas renombradas: %w", err)
+	}
+	if len(products) == 0 {
+		return nil
+	}
+
+	for i := range products {
+		products[i].CompanyID = companyID
+		products[i].BrandName = namesByBrandID[products[i].BrandID]
+	}
+	table := db.TableOf[production.Product]()
+	if err := db.Update(&products, table.BrandName); err != nil {
+		return fmt.Errorf("error al actualizar la marca de los productos: %w", err)
+	}
+	core.Log("PostSharedLists:: marca renombrada en", len(products), "productos")
+	return nil
 }

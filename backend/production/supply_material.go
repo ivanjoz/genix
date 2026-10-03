@@ -131,6 +131,15 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
+	// The merge writes BrandName, the brand half of the product text index.
+	brandNamesByID, brandError := getProductBrandNames(req.User.CompanyID, supplyProducts)
+	if brandError != nil {
+		return req.MakeErr(brandError)
+	}
+	for recordIndex := range supplyProducts {
+		supplyProducts[recordIndex].BrandName = brandNamesByID[supplyProducts[recordIndex].BrandID]
+	}
+
 	productTable := db.TableOf[types.Product]()
 	// Merge resolves insert vs. update per key. The excluded columns are the storefront and
 	// stock-derived ones a supply never sets — leaving them out stops a save from blanking

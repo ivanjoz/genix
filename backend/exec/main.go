@@ -34,6 +34,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-deploy-cloudflare-worker":        DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":          DeployCompanyWebpage,
 	"fn-sync-image-assets":               SyncImageAssetsHandler,
+	"fn-reindex-text":                    ReindexTextSearch,
 	"fn-emit-cpe":                        invoicing.EmitHandler,
 	"fn-sunat-beta-setup":                SetupSunatBeta,
 	"fn-emit-invoice":                    EmitInvoice,
