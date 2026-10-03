@@ -7,21 +7,22 @@ toolchain go1.27.0
 require (
 	github.com/amenzhinsky/go-memexec v0.7.1 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.1 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.4 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.15.2 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.2 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.2 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.6 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.1 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.3.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.11.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.3.2 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.11.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.17.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.20.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.23.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.28.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.10.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.38.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
@@ -29,6 +30,7 @@ require (
 	github.com/gocql/gocql v1.6.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
+	github.com/ivanjoz/genix-search/genix-s3 v0.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -48,14 +50,14 @@ require (
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/aws/aws-lambda-go v1.52.0
-	github.com/aws/aws-sdk-go-v2 v1.25.2
-	github.com/aws/aws-sdk-go-v2/config v1.27.4
+	github.com/aws/aws-sdk-go-v2 v1.47.1
+	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.26.2
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.16.1
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.51.1
-	github.com/aws/smithy-go v1.20.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
+	github.com/aws/smithy-go v1.28.2
 	github.com/bytedance/sonic v1.15.0
 	github.com/fatih/color v1.19.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
@@ -63,6 +65,8 @@ require (
 	github.com/ivanjoz/facturago v0.0.0
 	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0
+	github.com/ivanjoz/genix-orm/search/daemon v0.0.0
+	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
 	github.com/ivanjoz/minijson v0.1.0
 	github.com/klauspost/compress v1.18.6
@@ -109,3 +113,11 @@ replace google.golang.org/protobuf => ./thirdparty/protobuf
 replace github.com/ivanjoz/genix-orm => ./genix-orm
 
 replace github.com/ivanjoz/genix-orm/db => ./genix-orm/db
+
+// The text search backends, each its own module so the app only links the ones it imports.
+replace github.com/ivanjoz/genix-orm/search/daemon => ./genix-orm/search/daemon
+
+replace github.com/ivanjoz/genix-orm/search/genixs3 => ./genix-orm/search/genixs3
+
+// genix-s3 is not published yet: it compiles from the genix-search checkout beside the genix one.
+replace github.com/ivanjoz/genix-search/genix-s3 => ../../genix-search/genix-s3

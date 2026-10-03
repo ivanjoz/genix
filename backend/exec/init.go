@@ -14,18 +14,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ivanjoz/genix-orm/scylla"
-	"github.com/ivanjoz/genix-orm/scylla/text_search"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 )
 
-// configureTextSearchGenixSearch resolves the GenixSearch endpoint
-// from credentials (falling back to 127.0.0.1:14446) and pushes it
-// into the text_search package. GENIXSEARCH_PASSWORD must be set in
-// prod or writes will fail at handshake; we log a warning when it's
-// missing.
 // reserveSeededAutoincrementIDs moves an autoincrement counter past the IDs written by hand below.
 //
 // The ORM only reserves counter values for records whose key is still 0 (insert-update.go:278),
@@ -43,16 +36,6 @@ func reserveSeededAutoincrementIDs(partitionValue any, tableName string, seededC
 		panic("No se pudo reservar el rango de IDs sembrados de " + counterName + ". " + err.Error())
 	}
 	core.Log("Se reservó el rango de IDs sembrados:", counterName, "x", seededCount)
-}
-
-func configureTextSearchGenixSearch() {
-	host, port := core.ParseGenixSearchURL(core.Env.GENIXSEARCH_URL)
-	password := strings.TrimSpace(core.Env.GENIXSEARCH_PASSWORD)
-	if password == "" && core.Env.IS_PROD {
-		core.Log("text_search: GENIXSEARCH_PASSWORD empty in prod; writes will fail at handshake")
-	}
-	text_search.Configure(host, port, password)
-	db.SetTextSearchBackend(text_search.NewBackend())
 }
 
 // seedCompanyOperatingRecords gives each seeded company the Site, Warehouse and CashBank it needs
@@ -145,11 +128,8 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	// that is safe exactly here and nowhere else.
 	db.BypassFarewardSequences()
 
-	// Wire the GenixSearch endpoint before any seed write hits a
-	// table with TextSearch. The text_search package can't
-	// import core (cycle: core -> core/types -> db -> text_search), so
-	// the resolved config is pushed in here.
-	configureTextSearchGenixSearch()
+	// Install the text search backend before any seed write hits a table with TextSearch.
+	core.ConfigureTextSearch()
 
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
 	if err := scylla.Init(); err != nil {

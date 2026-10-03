@@ -21,8 +21,9 @@ import (
 //   - "scheme://host:port/path" (path is ignored)
 //   - ""                       → 127.0.0.1:14446
 //
-// The scheme is informational only; the text_search client always opens
-// a raw TCP socket. A bare host with no port keeps the default port.
+// The scheme is informational only; the daemon client always opens a raw
+// TCP socket. A bare host with no port keeps the default port. The s3 and
+// s3express schemes never get here: they select genix-s3 instead.
 func ParseGenixSearchURL(raw string) (string, int) {
 	const (
 		defaultHost = "127.0.0.1"
@@ -173,12 +174,11 @@ type EnvStruct struct {
 	// is the default when DEFAULT_MODEL is blank. Consumed by
 	// backend/agent/llm, which turns each entry into its own request knobs.
 	MODELS []ModelEntry
-	// GenixSearch — lexical search backend reached over TCP. The
-	// daemon is installed by scripts/configure/configure_db.py, which writes both
-	// search.url and search.password into config.toml. GENIXSEARCH_URL
-	// is the full endpoint (e.g. "https://host:14446" or "host:14446")
-	// — only the host and port are used; the scheme is ignored. Falls
-	// back to 127.0.0.1:14446 when empty.
+	// Text search backend, from search.url and search.password in config.toml. An
+	// "s3express://bucket/prefix" or "s3://bucket/prefix" URL selects genix-s3; anything else is
+	// the GenixSearch daemon over TCP, installed by scripts/configure/configure_db.py
+	// (e.g. "https://host:14446" or "host:14446": only the host and port are used), falling
+	// back to 127.0.0.1:14446 when empty. See ConfigureTextSearch.
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
 	// Qdrant stores user-documentation dense and lexical vectors. The same
