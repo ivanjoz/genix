@@ -38,10 +38,9 @@ func FindImageCandidates(keywords string, limit int) ([]AgentImageCandidate, err
 	assets := []ImageAsset{}
 	keywords = strings.TrimSpace(keywords)
 	if len(keywords) >= 2 {
-		// Image assets share one group partition and have no Status column, so
-		// they index into status group 0. SearchText hydrates `assets` ordered
-		// by relevance (best match first).
-		if _, err := db.SearchText[ImageAsset](&assets, ImageAssetCategoryGroupID, keywords, 0, limit); err != nil {
+		// Image assets share one group partition. SearchText hydrates `assets`
+		// ordered by relevance (best match first).
+		if _, err := db.SearchText[ImageAsset](&assets, ImageAssetCategoryGroupID, keywords, limit, 0); err != nil {
 			return nil, err
 		}
 	}

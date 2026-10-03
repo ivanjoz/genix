@@ -52,6 +52,7 @@ func configureTextSearchGenixSearch() {
 		core.Log("text_search: GENIXSEARCH_PASSWORD empty in prod; writes will fail at handshake")
 	}
 	text_search.Configure(host, port, password)
+	db.SetTextSearchBackend(text_search.NewBackend())
 }
 
 // seedCompanyOperatingRecords gives each seeded company the Site, Warehouse and CashBank it needs
@@ -145,7 +146,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	db.BypassFarewardSequences()
 
 	// Wire the GenixSearch endpoint before any seed write hits a
-	// TextSearchColumn-backed table. The text_search package can't
+	// table with TextSearch. The text_search package can't
 	// import core (cycle: core -> core/types -> db -> text_search), so
 	// the resolved config is pushed in here.
 	configureTextSearchGenixSearch()

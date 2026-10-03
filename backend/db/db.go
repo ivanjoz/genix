@@ -25,7 +25,8 @@ type (
 	IDUpdatedVersion    = orm.IDUpdatedVersion
 	ColumnInfo          = orm.ColumnInfo
 	IColInfo            = orm.IColInfo
-	IDWeight            = orm.IDWeight
+	TextHit             = orm.TextHit
+	TextSearch          = orm.TextSearch
 	GroupIndexCache     = orm.GroupIndexCache
 	KeyParser           = orm.KeyParser
 	FixedValues         = orm.FixedValues
@@ -185,18 +186,21 @@ func Merge[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor
 
 // ─── Text search ───────────────────────────────────────────────────────────────
 
-// SearchTextIDs returns matching record IDs ranked by weight.
+// SetTextSearchBackend installs the engine that holds every table's text index.
+var SetTextSearchBackend = orm.SetTextSearchBackend
+
+// SearchTextIDs returns the active records of one partition that match query, best first.
 func SearchTextIDs[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
-	partition int32, query string, statusGroup int8, limit int,
-) ([]IDWeight, error) {
-	return orm.SearchTextIDs[RecordT, TableT, D](partition, query, statusGroup, limit)
+	partition int32, query string, limit, offset int,
+) ([]TextHit, error) {
+	return orm.SearchTextIDs[RecordT, TableT, D](partition, query, limit, offset)
 }
 
-// SearchText fills refSlice with the matching records and returns their weights.
+// SearchText fills refSlice with the matching records, in the order of the returned hits.
 func SearchText[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
-	refSlice *[]RecordT, partition int32, query string, statusGroup int8, limit int,
-) ([]IDWeight, error) {
-	return orm.SearchText[RecordT, TableT, D](refSlice, partition, query, statusGroup, limit)
+	refSlice *[]RecordT, partition int32, query string, limit, offset int,
+) ([]TextHit, error) {
+	return orm.SearchText[RecordT, TableT, D](refSlice, partition, query, limit, offset)
 }
 
 // ─── Table compilation and helpers ─────────────────────────────────────────────

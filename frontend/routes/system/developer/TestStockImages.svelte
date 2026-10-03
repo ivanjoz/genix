@@ -5,11 +5,13 @@ import FilterInput from '#components/form/FilterInput.svelte';
 import Button from '#components/buttons/Button.svelte';
 import { ImageAssetsService } from '#services/business/image-assets.svelte.ts';
 
-// One text-search hit: the API returns only the image id and its GenixSearch
-// weight; the thumbnail URL is resolved from the image-assets delta cache.
+// One text-search hit: the API returns only the image id, its score and how
+// many query words it matched; the thumbnail URL is resolved from the
+// image-assets delta cache.
 interface IImageSearchHit {
   id: number
-  w: number
+  s: number
+  c?: number
 }
 
 // Image asset cache holds CategoryID + categories, needed to build thumbnail URLs.
@@ -30,7 +32,7 @@ const runSearch = async () => {
   showLoading("Buscando…")
   const startedAt = performance.now()
   try {
-    // GET.image-asset-text-search returns the top ids + weights ordered by relevance.
+    // GET.image-asset-text-search returns the top ids + scores ordered by relevance.
     const result = await GET({
       route: `image-asset-text-search?q=${encodeURIComponent(trimmedQuery)}&limit=10`,
       errorMessage: "Error en la búsqueda de imágenes.",
@@ -76,7 +78,7 @@ const thumbnailURL = (imageID: number): string => {
               #{hit.id}
             </div>
           {/if}
-          <span class="mt-6 fs14 text-slate-500 ff-mono">w: {hit.w}</span>
+          <span class="mt-6 fs14 text-slate-500 ff-mono">s: {hit.s}</span>
         </div>
       {/each}
     </div>

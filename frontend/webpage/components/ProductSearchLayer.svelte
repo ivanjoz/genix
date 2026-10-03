@@ -151,7 +151,7 @@
       liveSearchErrorMessage = "";
     });
     GET({ route: `p-product-text-search?q=${encodeURIComponent(requestedQueryText)}&limit=${maxResults}` })
-      .then((matches: Array<{ id: number; w: number }>) => {
+      .then((matches: Array<{ id: number; s: number }>) => {
         // Drop stale responses if the query advanced while this request was in flight.
         if (untrack(() => throttledQueryText) !== requestedQueryText) return;
         liveSearchProductIDs = (matches ?? []).map((match) => match.id).filter((id) => id > 0);

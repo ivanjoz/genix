@@ -99,9 +99,9 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 		limit = 50
 	}
 
-	// Active products live in status group 1. Return only ids + weights (no
-	// record bodies) — the client resolves names from its by-id cache.
-	matches, err := db.SearchTextIDs[types.Product](companyID, query, 1, limit)
+	// Only active products are indexed. Return only ids + scores (no record
+	// bodies) — the client resolves names from its by-id cache.
+	matches, err := db.SearchTextIDs[types.Product](companyID, query, limit, 0)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de texto de productos:", err)
 	}
@@ -155,7 +155,7 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 	for i := range productos {
-		productos[i].BrandName_ = brandNamesByID[productos[i].BrandID]
+		productos[i].BrandName = brandNamesByID[productos[i].BrandID]
 	}
 
 	// Group existing records by NameHash so we can check active collisions and reuse inactive IDs.

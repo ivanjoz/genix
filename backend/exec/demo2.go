@@ -218,7 +218,7 @@ func Test51(args *core.ExecArgs) core.FuncResponse {
 
 	controller := makeDBController[production.Product]()
 
-	controller.FlushTextSearchIndex(1)
+	controller.ReindexTextSearch(1)
 
 	// controller := makeDBController[webpageTypes.Webpage]()
 	//	controller.RecalcVirtualColumns(1)

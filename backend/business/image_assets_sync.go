@@ -273,7 +273,7 @@ func parseImageAssetList(categoryName, content string) (map[int32]imageAssetList
 
 // buildImageAssetRecords merges the Spanish and English localized lists into image rows
 // above storedMaxID. Spanish keywords feed the frontend bigram search; English keywords
-// feed the Sonic TextSearchColumn the AI agent searches against.
+// feed the TextSearch index the AI agent searches against.
 func buildImageAssetRecords(
 	categorySummary imageAssetCategorySummary,
 	categoryID int16,

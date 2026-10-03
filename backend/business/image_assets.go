@@ -108,9 +108,8 @@ func GetImageAssetTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 		limit = 10
 	}
 
-	// Image assets share the single group partition and carry no Status column,
-	// so they index into status group 0.
-	matches, err := db.SearchTextIDs[types.ImageAsset](types.ImageAssetCategoryGroupID, query, 0, limit)
+	// Image assets share the single group partition.
+	matches, err := db.SearchTextIDs[types.ImageAsset](types.ImageAssetCategoryGroupID, query, limit, 0)
 	if err != nil {
 		return req.MakeErr("Error en la búsqueda de imágenes:", err)
 	}

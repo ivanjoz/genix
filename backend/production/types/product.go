@@ -96,16 +96,9 @@ type Product struct {
 	/* concatenated with CompanyID to be indexed */
 	CategoriesWithStock []int32 `json:",omitempty"`
 	UpdatedVersion      int32   `json:"upv,omitempty"`
-	/* extra */
-	BrandName_ string `json:",omitempty"`
-}
-
-func (e *Product) GetTextSearchIndex() string {
-	name := e.Name
-	if len(e.BrandName_) > 0 {
-		name += " " + e.BrandName_
-	}
-	return name
+	// BrandName copies the brand's name so the text index can read it from the table: a reindex
+	// only sees stored columns. PostProducts fills it from BrandID.
+	BrandName string `json:",omitempty"`
 }
 
 type ProductTable struct {
@@ -117,7 +110,8 @@ type ProductTable struct {
 	ContentHTML         db.Col[*ProductTable, string]
 	CategoryIDs         db.ColSlice[*ProductTable, int32] `db:"category_ids"`
 	BrandID             db.Col[*ProductTable, int32]
-	Params              db.ColSlice[*ProductTable, int8] `db:"params_ids"`
+	BrandName           db.Col[*ProductTable, string]
+	Params             db.ColSlice[*ProductTable, int8] `db:"params_ids"`
 	Price               db.Col[*ProductTable, int32]
 	CurrencyID          db.Col[*ProductTable, int16]
 	UnitID              db.Col[*ProductTable, int16]
@@ -169,7 +163,8 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		ID:                 22,
 		Name:               "products",
 		Partition:          e.CompanyID,
-		TextSearchColumn:   e.Name,
+		// Only active products (Status != 0) are searchable.
+		TextSearch:         &db.TextSearch{Columns: db.Cols(e.Name, e.BrandName), Status: e.Status},
 		SaveUpdatedVersion: true,
 		// Label lookups resolve name + SKU + price/brand without shipping the whole product row.
 		GenericRecord: db.GenericRecordSchema{

@@ -14,7 +14,7 @@ type ImageAsset struct {
 	CategoryID         int16    `json:",omitempty" db:"category_id"`
 	Description        string   `json:",omitempty"`            // English description (IMAGES_LIST.md).
 	SpanishDescription string   `json:",omitempty"`            // Spanish description (IMAGES_LIST.ES.md).
-	Keywords           string   `json:",omitempty"`            // Deduplicated English words; feeds the TextSearchColumn AI search.
+	Keywords           string   `json:",omitempty"`            // Deduplicated English words; feeds the TextSearch AI search.
 	SpanishKeywords    []string `json:",omitempty" db:",list"` // Spanish object list; feeds the bigram local search.
 	Bigrams            []int8   `json:",omitempty" db:",list"` // Encoded from the Spanish keywords for frontend local search.
 	Ratio              float32  `json:",omitempty"`            // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
@@ -42,9 +42,10 @@ func (e ImageAssetTable) GetSchema() db.TableSchema {
 		ID:        16,
 		Name:      "image_assets",
 		Partition: e.GroupID,
-		// Keywords holds the deduplicated English text indexed by the Sonic AI search.
-		TextSearchColumn: e.Keywords,
-		Keys:             db.Cols(e.ID),
+		// Keywords holds the deduplicated English text the AI search queries. No status
+		// column: every image is searchable.
+		TextSearch: &db.TextSearch{Columns: db.Cols(e.Keywords)},
+		Keys:       db.Cols(e.ID),
 		Indexes: []db.Index{
 			// Keyless: this sync filters nothing but its watermark. Read with Delta(upv).
 			{Type: db.TypeDelta},

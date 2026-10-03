@@ -7,11 +7,13 @@ import FilterInput from '#components/form/FilterInput.svelte';
 import Button from '#components/buttons/Button.svelte';
 import RecordByIDText from '#components/misc/RecordByIDText.svelte';
 
-// One text-search hit: only the product id and its GenixSearch weight come
-// back from the API; the name is resolved per-row from the by-id cache.
+// One text-search hit: only the product id, its score and how many query
+// words it matched come back from the API; the name is resolved per-row from
+// the by-id cache.
 interface ITextSearchHit {
   id: number
-  w: number
+  s: number
+  c?: number
 }
 
 let query = $state("")
@@ -29,7 +31,7 @@ const runSearch = async () => {
   showLoading("Buscando…")
   const startedAt = performance.now()
   try {
-    // GET.product-text-search returns ids + weights ordered by relevance.
+    // GET.product-text-search returns ids + scores ordered by relevance.
     const result = await GET({
       route: `p-product-text-search?q=${encodeURIComponent(trimmedQuery)}&limit=100`,
       errorMessage: "Error en la búsqueda de texto.",
@@ -60,11 +62,11 @@ const columns: ITableColumn<ITextSearchHit>[] = [
     mobile: { order: 2, css: "col-span-24" },
   },
   {
-    header: "Weight",
+    header: "Score",
     headerCss: "w-140",
     css: "text-center ff-mono",
-    getValue: (row) => row.w,
-    mobile: { order: 3, css: "col-span-16", labelLeft: "Weight:", contentCss: "ff-mono" },
+    getValue: (row) => row.s,
+    mobile: { order: 3, css: "col-span-16", labelLeft: "Score:", contentCss: "ff-mono" },
   },
 ]
 </script>

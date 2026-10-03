@@ -263,10 +263,10 @@ func OnPanic(panicMessage interface{}) {
 }
 
 // configureTextSearchGenixSearch resolves the GenixSearch endpoint
-// from credentials (falling back to 127.0.0.1:14446) and pushes it
-// into the text_search package. GENIXSEARCH_PASSWORD must be set in
-// prod or writes will fail at handshake; we log a warning when it's
-// missing.
+// from credentials (falling back to 127.0.0.1:14446), pushes it into
+// the text_search package and installs the daemon as the ORM's text
+// search backend. GENIXSEARCH_PASSWORD must be set in prod or writes
+// will fail at handshake; we log a warning when it's missing.
 func configureTextSearchGenixSearch() {
 	host, port := core.ParseGenixSearchURL(core.Env.GENIXSEARCH_URL)
 	password := strings.TrimSpace(core.Env.GENIXSEARCH_PASSWORD)
@@ -274,6 +274,7 @@ func configureTextSearchGenixSearch() {
 		core.Log("text_search: GENIXSEARCH_PASSWORD empty in prod; writes will fail at handshake")
 	}
 	text_search.Configure(host, port, password)
+	db.SetTextSearchBackend(text_search.NewBackend())
 }
 
 // resolveServerPort picks the listen address for the standalone HTTP server. The SERVER_PORT
@@ -355,7 +356,7 @@ func main() {
 	}
 	serverPort := resolveServerPort()
 	// Wire the GenixSearch endpoint before any DB write that might
-	// touch a TextSearchColumn-backed table. The text_search package
+	// touch a table with TextSearch. The text_search package
 	// can't import core (cycle: core -> core/types -> db ->
 	// text_search), so the resolved config is pushed in from here.
 	configureTextSearchGenixSearch()
