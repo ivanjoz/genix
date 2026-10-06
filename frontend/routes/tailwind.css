@@ -8,7 +8,11 @@
      - `ec-custom` (agent-authored raw CSS, scoped to .x{n}) sits LAST, so its
        declarations win over utilities on the same element. */
 @layer theme, base, components, ec-runtime, utilities, ec-runtime-media, ec-custom;
+/* Everything genix-ui needs to render (Tailwind theme, the custom properties its components read,
+   element resets, button and text classes) lives in genix-ui's own tailwind.css; this file holds
+   only the app's look. Typography lives in styles/fonts.css, imported by +layout.svelte. */
 @import 'tailwindcss';
+@import '../packages/genix-ui/tailwind.css';
 @plugin "@iconify/tailwind4" {
 	prefix: "icon";
 	scale: 1;
@@ -20,53 +24,8 @@
 @source not "../webpage/build-renderer";
 @source not "../**/*.md";
 
-/* Custom Tailwind Configuration */
-@theme {
-	--breakpoint-2xl: 1539px;
-	--breakpoint-xl: 1379px;
-	--breakpoint-lg: 1139px;
-	--breakpoint-md: 749px;
-	--spacing: 1px;
-	--font-size-xs: var(--text-xs);
-	--font-size-sm: var(--text-sm);
-	--font-size-base: 16px;
-	--font-size-lg: 18px;
-	--font-size-xl: 20px;
-	--font-size-2xl: 22px;
-	--leading-tight: 1.2;
-	--font-weight-semibold: 600;
-}
-
-@layer utilities {
-	/* Override Tailwind core utility output for `.font-semibold`. */
-	.font-semibold {
-		font-weight: normal;
-		font-family: 'semibold';
-	}
-	.font-bold {
-		font-weight: normal;
-		font-family: 'bold';
-	}
-}
-
-/* CSS Variables */
 :root {
-	/* Colors */
-	--primary: #4042a3;
-	--secondary: #eeefff;
-	--gray1: #2b2b2e;
-
-	/* Font Sizes */
-	--text-sm: 15px;
-	--text-xs: 14px;
 	--fs1: 16px;
-	--fs2: 15px;
-	--fs3: 14px;
-}
-
-/* Base Styles */
-* {
-	box-sizing: border-box;
 }
 
 body {
@@ -78,46 +37,46 @@ body {
 	font-size: var(--fs1);
 	background-color: #e9eef1;
 	transition: background-color 0.3s ease;
-	--page-padding: 10px;
-	--page-width: calc(100vw - var(--menu-min-width) - 20px);
-	--header-height: 48px;
-	--title-bar-height: 40px;
-	--title-bar-lg-height: 42px;
-	--title-bar-xl-height: 44px;
-	--menu-box-height: 46px;
-	--menu-opt-height: 36px;
-	--row-height: 34px;
-	--pad-1: 12px;
-	--pad-2: 14px;
-	--pad-3: 16px;
-	--menu-max-width: 240px;
-	--menu-min-width: 70px;
-	--input-height: 42px;
-	--input-border-color: #d0d4e7;
-	--light-blue-1: #edeff5;
 	--store-editor-collapsed-width: 280px;
+}
 
-	/*colors*/
-	--white: #ffffff;
-	--purple-2: #3b2e9d;
-	--purple-3: #6459a4;
-	--purple-6: #5424bc;
-	--gray-purple-1: #bcb7e7;
-	--gray-purple-2: #c3c5df;
-	--light-blue-1: #edeff6;
-	--input-color-bottom: rgba(109, 92, 150, 0.329);
-	--color-11: #9d9ef0;
-	--font-mono: mono;
+body.dark {
+	color: #f3f2f6;
+	background-color: #27262a;
+}
 
-	/* z-indexes */
-	/* Above AppHeader (z-250), below SideMenu and the TopLayer pickers (300) */
-	--modal-zindex: 260;
-	--layer-zindex: 101;
-	--portal-zindex: 201;
-	/* genix-ui notify: above everything, toasts on top so errors show while loading */
-	--loading-zindex: 400;
-	--confirm-zindex: 410;
-	--toast-zindex: 420;
+@media only screen and (min-width: 680px) {
+	::-webkit-scrollbar {
+		width: 0.75rem;
+		height: 0.75rem;
+	}
+
+	::-webkit-scrollbar-track {
+		background-color: #e6edf4;
+		border-radius: 4px;
+	}
+
+	::-webkit-scrollbar-thumb {
+		background-color: #b2b6e8;
+		border-radius: 8px;
+		min-height: 2rem;
+		background-image: linear-gradient(45deg,
+				rgba(255, 255, 255, 0.2) 25%,
+				transparent 25%,
+				transparent 50%,
+				rgba(255, 255, 255, 0.2) 50%,
+				rgba(255, 255, 255, 0.2) 75%,
+				transparent 75%,
+				transparent);
+	}
+
+	body.dark ::-webkit-scrollbar {
+		background-color: #8a8cad;
+	}
+
+	body.dark ::-webkit-scrollbar-track {
+		background-color: #121213;
+	}
 }
 
 .fs15 {
@@ -128,85 +87,23 @@ body {
 	font-size: 14px;
 }
 
-.lh-10 {
-	line-height: 1;
+.c-steel {
+	color: #475262;
 }
 
-/* Dark Mode */
-body.dark {
-	color: #f3f2f6;
-	background-color: #27262a;
+.bg-purple-light {
+	background-color: #f0edff;
 }
 
-/* Headings. Inside @layer base so that Tailwind's utilities — which live in
-   @layer utilities — win over this reset. Unlayered, `margin: 0` beat every
-   `mt-*`/`mx-auto` on a heading, silently: `mx-auto` on an <h2> did nothing. */
-@layer base {
-	h1,
-	h2,
-	h3,
-	h4,
-	h5,
-	h6 {
-		margin: 0;
-		font-family: bold;
-	}
-
-	/* Same reason: unlayered, `color: inherit` beat every `text-*` utility on an <a>. */
-	a {
-		text-decoration: none;
-		color: inherit;
-	}
+.b-color-green {
+	color: #149b78;
+	background-color: #c9fff1;
+	box-shadow: #007646 0px 1px 4px -1px;
 }
 
-.h3,
-.h2 {
-	font-family: bold;
-}
-
-.h3 {
-	font-size: 18px;
-}
-
-.h2 {
-	font-size: 20px;
-}
-
-/* Agent pulse overlay: radar-style ping rendered over the element an agent
-   invocation is targeting. Injected from frontend/core/agent/commands.ts. */
-.__agent-pulse {
-	position: fixed;
-	pointer-events: none;
-	width: 56px;
-	height: 56px;
-	margin: -28px 0 0 -28px;
-	border: 2px solid #ff3b30;
-	border-radius: 50%;
-	box-sizing: border-box;
-	z-index: 2147483647;
-	opacity: 0;
-	animation: __agent-pulse-fade 800ms ease-out forwards;
-}
-.__agent-pulse::before,
-.__agent-pulse::after {
-	content: "";
-	position: absolute;
-	inset: -2px;
-	border: 2px solid #ff3b30;
-	border-radius: 50%;
-	box-sizing: border-box;
-	opacity: 0;
-}
-.__agent-pulse::before { animation: __agent-pulse-wave 800ms ease-out forwards; }
-.__agent-pulse::after  { animation: __agent-pulse-wave 800ms ease-out 180ms forwards; }
-@keyframes __agent-pulse-fade {
-	0%, 70% { opacity: 1; }
-	100%    { opacity: 0; }
-}
-@keyframes __agent-pulse-wave {
-	0%   { transform: scale(1); opacity: 1; }
-	70%  { opacity: 0.2; }
-	100% { transform: scale(2); opacity: 0; }
+.b-color-green:hover {
+	color: #ffffff;
+	background-color: #21b28d;
 }
 
 .icon--supermarket-cart {
@@ -222,4 +119,3 @@ body.dark {
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
 }
-@source "../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,notify,runtime,vTable}/**/*.svelte";

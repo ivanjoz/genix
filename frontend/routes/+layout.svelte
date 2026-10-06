@@ -16,7 +16,6 @@
 	import { onMount } from 'svelte';
 	import { provideUi } from '@genix/ui';
 	import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
-	import './app.css';
 	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './security/users-profiles/access-list-catalog';
 	import './tailwind.css';
 	// Shared typography (Open Sans desktop / Inter mobile) — imported last so its

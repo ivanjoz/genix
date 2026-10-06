@@ -11,6 +11,7 @@ import { tick } from "svelte";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "#components/agent/registry.ts";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
 import { agentModes, type AgentContextScope } from "./agent.svelte";
+import "./agent-pulse.css";
 
 export { releaseScreenStream };
 
@@ -102,7 +103,7 @@ const waitForPageContentReady = async () => {
 // Visual radar-style ping anchored at the center of the targeted component
 // every time the agent invokes a write method. Purely cosmetic: helps the
 // human watching the page see which element the agent is acting on. The CSS
-// for `.__agent-pulse` and its keyframes lives in routes/tailwind.css.
+// for `.__agent-pulse` and its keyframes lives in agent-pulse.css.
 
 const PULSE_CLASS = "__agent-pulse";
 const PULSE_LIFETIME_MS = 900;

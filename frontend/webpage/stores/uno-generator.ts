@@ -11,7 +11,7 @@ import type { ComponentAST } from '../renderer/renderer-types';
  * demand (no global MutationObserver): collect the class strings we already
  * track in state, and ask the generator for their CSS.
  *
- * The theme MIRRORS the build `@theme` in routes/tailwind.css so a class renders
+ * The theme MIRRORS the build `@theme` in packages/genix-ui/tailwind.css so a class renders
  * identically whether it came from source (build engine) or runtime (here):
  *   - `--spacing: 1px`  -> `p-4` = 4px
  *   - custom breakpoints md/lg/xl/2xl
