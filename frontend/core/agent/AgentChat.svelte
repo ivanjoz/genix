@@ -113,6 +113,7 @@
   let hostElement: HTMLElement | undefined = $state();
   let textareaElement: HTMLTextAreaElement | undefined = $state();
   let scrollElement: HTMLDivElement | undefined = $state();
+  let menuGridHeight = $state(0);
   let historyLoaded = false;
   let nextHeaderStatusID = 1;
   let interactionRestoreTimer: ReturnType<typeof setTimeout> | undefined;
@@ -590,8 +591,13 @@
           {/each}
         </div>
       {/if}
+      <div class="relative">
       {#if menuMatches.length > 0}
-        <div class="_menuGrid grid grid-cols-3 gap-8 px-12 py-10">
+        <!-- Overlays the top of the history instead of pushing it down, so typing
+             a query never shifts or resizes the panel. -->
+        <div bind:offsetHeight={menuGridHeight}
+          class="_menuGrid absolute top-0 left-0 right-0 z-10 grid grid-cols-3 gap-8 px-12 py-10 bg-white"
+        >
           {#each menuMatches as option (option.route)}
             <button type="button" class="_menuCard flex items-center gap-6 px-6 py-6 text-left"
               onclick={() => openMenuOption(option)}
@@ -608,8 +614,10 @@
           {/each}
         </div>
       {/if}
+      <!-- The panel grows only when the history area is shorter than the overlay. -->
       <div bind:this={scrollElement}
-        class="_scroll max-h-[60vh] min-h-[260px] overflow-y-auto px-12 py-10 flex flex-col gap-8"
+        class="_scroll max-h-[60vh] overflow-y-auto px-12 py-10 flex flex-col gap-8"
+        style:min-height="max(260px, {menuMatches.length > 0 ? menuGridHeight : 0}px)"
       >
         {#if messages.length === 0}
           <div class="text-center text-gray-400 text-sm py-20">
@@ -649,6 +657,7 @@
             </div>
           </div>
         {/if}
+      </div>
       </div>
       {/if}
     </div>
@@ -729,6 +738,7 @@
   }
   ._menuGrid {
     border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 6px 12px -6px rgb(15 23 42 / 18%);
   }
   ._menuCard {
     border: 1px solid #d9d8f5;

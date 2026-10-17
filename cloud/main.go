@@ -306,7 +306,7 @@ func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
 	fmt.Println("Leyendo y comprimiendo el archivo de configuración seleccionado...")
 
 	configText := string(StripTomlComments(configFileBytes))
-	configBase64 := BytesToBase64(CompressZstd(&configText), true)
+	configBase64 := ConfigBase64.EncodeToString(CompressZstd(&configText))
 
 	// UpdateFunctionConfiguration reemplaza el entorno completo, no lo fusiona: toda variable
 	// que define la plantilla debe repetirse aquí o se borra de la Lambda desplegada.

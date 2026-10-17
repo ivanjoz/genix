@@ -141,24 +141,8 @@ func DecompressZstd(content *[]byte) string {
 	return string(decompressed)
 }
 
-func MakeB64UrlEncode(contentString string) string {
-	contentString = strings.ReplaceAll(contentString, "/", "_")
-	contentString = strings.ReplaceAll(contentString, "+", "-")
-	contentString = strings.ReplaceAll(contentString, "=", "~")
-	return contentString
-}
-
-func MakeB64UrlDecode(contentString string) string {
-	contentString = strings.ReplaceAll(contentString, "_", "/")
-	contentString = strings.ReplaceAll(contentString, "-", "+")
-	contentString = strings.ReplaceAll(contentString, "~", "=")
-	return contentString
-}
-
-func BytesToBase64(source []byte, useUrlEncoded ...bool) string {
-	contentString := base64.StdEncoding.EncodeToString(source)
-	if len(useUrlEncoded) == 1 && useUrlEncoded[0] {
-		contentString = MakeB64UrlEncode(contentString)
-	}
-	return contentString
-}
+// ConfigBase64 is genix-orm's sortable base64 (utils.Base64: "-0-9A-Z_a-z", unpadded), which is
+// what backend/core/security.go decodes CONFIG with. The alphabet is copied because this module
+// does not depend on genix-orm; scripts/deployer/lambda_env.go repeats it for the same reason.
+var ConfigBase64 = base64.NewEncoding("-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz").
+	WithPadding(base64.NoPadding)
