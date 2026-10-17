@@ -9,21 +9,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// ImageAssetSearchRecord is the minimal delta payload consumed by frontend search. UpdatedVersion
-// travels with it because the client watermarks this route on "upv", not on the timestamp.
+// ImageAssetSearchRecord is the minimal delta payload consumed by frontend search. Version and
+// Metadata travel with it because the client follows this route's delta log.
 type ImageAssetSearchRecord struct {
-	ID             int32  `json:",omitempty"`
-	CategoryID     int16  `json:",omitempty"`
-	Bigrams        string `json:",omitempty"`
-	Updated        int32  `json:"upd,omitempty"`
-	UpdatedVersion int32  `json:"upv,omitempty"`
+	ID         int32   `json:",omitempty"`
+	CategoryID int16   `json:",omitempty"`
+	Bigrams    string  `json:",omitempty"`
+	Updated    int32   `json:"upd,omitempty"`
+	Version    int16   `json:"ver,omitempty"`
+	Metadata   *string `json:"mdt,omitempty"`
 }
 
 type ImageAssetCategoryRecord struct {
-	ID             int16  `json:",omitempty"`
-	Name           string `json:",omitempty"`
-	Updated        int32  `json:"upd,omitempty"`
-	UpdatedVersion int32  `json:"upv,omitempty"`
+	ID       int16   `json:",omitempty"`
+	Name     string  `json:",omitempty"`
+	Updated  int32   `json:"upd,omitempty"`
+	Version  int16   `json:"ver,omitempty"`
+	Metadata *string `json:"mdt,omitempty"`
 }
 
 type ImageAssetsResult struct {
@@ -32,24 +34,21 @@ type ImageAssetsResult struct {
 }
 
 func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
-	// Each table advances its own "updated_version" sequence, so the two response keys carry
-	// independent watermarks; the frontend sends one query param per key, named after it.
-	imagesUpdatedSince := req.GetQueryInt("images")
-	categoriesUpdatedSince := req.GetQueryInt("categories")
+	// Each table has its own delta log, so the two response keys carry independent cursors; the
+	// frontend sends one query param per key, named after it.
 	result := ImageAssetsResult{
 		Images:     []ImageAssetSearchRecord{},
 		Categories: []ImageAssetCategoryRecord{},
 	}
 
-	core.Log("[image-assets] delta query started; images=", imagesUpdatedSince, " categories=", categoriesUpdatedSince)
 	queryGroup := errgroup.Group{}
 	queryGroup.Go(func() error {
 		storedAssets := []types.ImageAsset{}
 		query := db.Query(&storedAssets)
-		// Image assets have no status, so Delta() constrains nothing but the watermark.
-		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated, query.UpdatedVersion).
+		// Keyless delta index: image assets have no status to filter.
+		query.Select(query.ID, query.CategoryID, query.Bigrams, query.Updated, query.Version).
 			GroupID.Equals(types.ImageAssetCategoryGroupID).
-			Delta(imagesUpdatedSince)
+			Delta(req.GetDeltaCursor("images"))
 		if err := query.Exec(); err != nil {
 			return err
 		}
@@ -57,11 +56,12 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 		result.Images = make([]ImageAssetSearchRecord, len(storedAssets))
 		for recordIndex, storedAsset := range storedAssets {
 			result.Images[recordIndex] = ImageAssetSearchRecord{
-				ID:             storedAsset.ID,
-				CategoryID:     storedAsset.CategoryID,
-				Bigrams:        encodeImageAssetBigrams(storedAsset.Bigrams),
-				Updated:        storedAsset.Updated,
-				UpdatedVersion: storedAsset.UpdatedVersion,
+				ID:         storedAsset.ID,
+				CategoryID: storedAsset.CategoryID,
+				Bigrams:    encodeImageAssetBigrams(storedAsset.Bigrams),
+				Updated:    storedAsset.Updated,
+				Version:    storedAsset.Version,
+				Metadata:   storedAsset.Metadata,
 			}
 		}
 		return nil
@@ -69,9 +69,9 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	queryGroup.Go(func() error {
 		storedCategories := []types.ImageAssetCategory{}
 		query := db.Query(&storedCategories)
-		query.Select(query.ID, query.Name, query.Updated, query.UpdatedVersion).
+		query.Select(query.ID, query.Name, query.Updated, query.Version).
 			GroupID.Equals(types.ImageAssetCategoryGroupID).
-			Delta(categoriesUpdatedSince)
+			Delta(req.GetDeltaCursor("categories"))
 		if err := query.Exec(); err != nil {
 			return err
 		}
@@ -79,20 +79,19 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 		result.Categories = make([]ImageAssetCategoryRecord, len(storedCategories))
 		for recordIndex, storedCategory := range storedCategories {
 			result.Categories[recordIndex] = ImageAssetCategoryRecord{
-				ID:             storedCategory.ID,
-				Name:           storedCategory.Name,
-				Updated:        storedCategory.Updated,
-				UpdatedVersion: storedCategory.UpdatedVersion,
+				ID:       storedCategory.ID,
+				Name:     storedCategory.Name,
+				Updated:  storedCategory.Updated,
+				Version:  storedCategory.Version,
+				Metadata: storedCategory.Metadata,
 			}
 		}
 		return nil
 	})
 
 	if err := queryGroup.Wait(); err != nil {
-		core.Log("[image-assets] delta query failed; images=", imagesUpdatedSince, " categories=", categoriesUpdatedSince, " error=", err)
 		return req.MakeErr("Error al obtener los recursos de imágenes.", err)
 	}
-	core.Log("[image-assets] delta query completed; images=", len(result.Images), " categories=", len(result.Categories))
 	return core.MakeResponse(req, &result)
 }
 

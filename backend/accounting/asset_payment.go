@@ -107,8 +107,6 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 
 	assetTable := db.TableOf[types.Asset]()
 	assetRecords := []types.Asset{asset}
-	// Status is written even though a payment never changes it: it shares the delta view's
-	// composite key with UpdatedVersion, so the ORM requires the pair be updated together.
 	if updateError := db.Update(&assetRecords,
 		assetTable.PaidAmount, assetTable.PaymentStatus, assetTable.Status,
 		assetTable.Updated, assetTable.UpdatedBy,

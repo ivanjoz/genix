@@ -110,21 +110,6 @@ func TestObservabilityEstimatesOnlyMeteredMethods(t *testing.T) {
 	}
 }
 
-func TestObservabilityOverlapIDsForceAbsoluteReplacement(t *testing.T) {
-	firstFrame := unixToObservabilityTimeFrame(1_800_000_000)
-	frames, err := makeObservabilityFrames(firstFrame, firstFrame+1, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	watermark := frames[1].ID
-	idsToRemove := makeObservabilityFrameIDsToRemove(watermark, firstFrame, frames)
-	for _, frame := range frames {
-		if !slices.Contains(idsToRemove, frame.ID) {
-			t.Fatalf("resent frame %d was not marked for replacement: %v", frame.ID, idsToRemove)
-		}
-	}
-}
-
 func TestObservabilityRoutesHaveValidCacheIDs(t *testing.T) {
 	routes := makeObservabilityRoutes()
 	if len(routes) != len(core.APIRouteNames) {

@@ -108,13 +108,12 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// New test
-	fmt.Println("\n--- Test 21: AlmacenProducto. Using delta index: db.Cols(e.WarehouseID, e.Status) ---")
+	fmt.Println("\n--- Test 21: AlmacenProducto. Using delta listing view: db.Cols(e.WarehouseID, e.Status) ---")
 	productos21 := []logistics.ProductStock{}
 	q21 := db.Query(&productos21)
-	// Pinning WarehouseID + Status leaves the packed view's trailing updated_version slot as the range,
-	// which is the only shape that reaches [warehouse_id, status, updated_version].
+	// Pinning WarehouseID + Status reads the delta index's packed listing view exactly.
 	err = q21.CompanyID.Equals(1).
-		WarehouseID.Equals(1).Status.Equals(1).UpdatedVersion.GreaterEqual(1000).
+		WarehouseID.Equals(1).Status.Equals(1).
 		Limit(5).Exec()
 
 	if err != nil {

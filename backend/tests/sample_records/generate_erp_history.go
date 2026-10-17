@@ -578,7 +578,6 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, part
 	// Read the IDs back instead of trusting the payload: the handler may have matched existing rows.
 	listRequest := generator.makeRequest("GET.client-provider", map[string]string{
 		"type": strconv.Itoa(int(partyType)),
-		"upv":  "0",
 	}, "")
 	storedParties := []crmTypes.ClientProvider{}
 	if err := decodeResponse(crm.GetClientProviders(&listRequest), &storedParties); err != nil {
@@ -678,7 +677,12 @@ func (generator *erpHistoryGenerator) reloadWarehouseLedger(warehouseID int32) e
 		"warehouse-id": strconv.Itoa(int(warehouseID)),
 		"updated":      "0",
 	}, "")
-	stockResult := logistics.GetProductsStockResult{}
+	// The details travel as []any (they end with the replace Metadata); decode them typed. The
+	// Metadata records decode as zero-Status rows, which the loops below skip.
+	stockResult := struct {
+		ProductStock       []logisticsTypes.ProductStock
+		ProductStockDetail []logisticsTypes.ProductStockDetail
+	}{}
 	if err := decodeResponse(logistics.GetWarehouseProductStock(&request), &stockResult); err != nil {
 		return err
 	}
@@ -925,7 +929,7 @@ func (generator *erpHistoryGenerator) payPurchaseOrder(dayStart time.Time, order
 }
 
 func (generator *erpHistoryGenerator) readCashBankBalance() (int32, error) {
-	request := generator.makeRequest("GET.cash-banks", map[string]string{"upv": "0"}, "")
+	request := generator.makeRequest("GET.cash-banks", map[string]string{}, "")
 	// The handler answers with a map keyed "Cajas", so it decodes as a map and not as a struct.
 	cashBanksByKey := map[string][]financeTypes.CashBank{}
 	if err := decodeResponse(finance.GetCashBanks(&request), &cashBanksByKey); err != nil {

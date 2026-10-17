@@ -8,14 +8,10 @@ import (
 	"encoding/json"
 )
 
-// GetSupplyMaterials returns the supply catalog using the delta-cache protocol. The status
-// slot is pinned to 2, so a first sync (upv=0) returns supplies only, and later syncs also
-// carry rows that left the bucket (deleted, or converted to a product) so the client evicts them.
+// GetSupplyMaterials returns the supply catalog using the delta-cache protocol. A first sync
+// lists supplies (status 2) only; later syncs read the log, which names every status, so a row
+// converted to a product comes back with ss=1 and the client filters it out of the supply list.
 func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	supplyRecords := []types.Product{}
 	supplyQuery := db.Query(&supplyRecords).CompanyID.Equals(req.User.CompanyID)
 
@@ -24,9 +20,9 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 		supplyQuery.ID, supplyQuery.Name, supplyQuery.Description, supplyQuery.SKU,
 		supplyQuery.BrandID, supplyQuery.Price, supplyQuery.CurrencyID, supplyQuery.UnitID,
 		supplyQuery.DepreciationMonths, supplyQuery.Status, supplyQuery.Updated,
-		supplyQuery.UpdatedVersion,
+		supplyQuery.Version,
 	)
-	supplyQuery.Delta(updatedSince, int64(types.ProductStatusSupply))
+	supplyQuery.Delta(req.GetDeltaCursor(), types.ProductStatusSupply)
 
 	if queryError := supplyQuery.Exec(); queryError != nil {
 		core.Log("GetSupplyMaterials query error:", queryError)

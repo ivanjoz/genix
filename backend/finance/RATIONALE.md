@@ -1,3 +1,11 @@
+## The expense tabs share one delta read
+**Context** — Each tab used one query per status plus eviction scans per complementary status. The
+delta log is one per company, and it names every status.
+**Decision** — `GetExpenses` runs one `Delta(cursor, statuses...)` with `OrderDesc` and the 2000 cap;
+a record whose status is not the tab's goes to `records_IDsToRemove`.
+**Rationale** — Fewer reads and no per-status eviction scans. Cost: the "Todos" first sync caps the
+`status IN (1, 2)` listing in view order (status, then ID) instead of by most recent `Updated`.
+
 ## A manual Cobro picks one of five accounts
 
 **Context** — Type 7 "Cobro" is the only manual inflow, and it must post against a PCGE account. The

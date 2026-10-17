@@ -170,8 +170,13 @@ The script automatically applies the following JSON tagging rules to all generat
 - **Default**: `json:",omitempty"` (no explicit field names).
 - **Special Case: Updated**: `json:"upd,omitempty"`
 - **Special Case: Status**: `json:"ss,omitempty"`
-- **Special Case: UpdatedVersion**: `json:"upv,omitempty"` — required on tables synced
-  incrementally, on the record *and* the table struct. See `backend/docs/ORM_DATABASE_QUERY.md` §3.1.
+- **Special Case: Version**: `json:"ver,omitempty"` — `Version int16`, required on tables with a
+  `db.TypeDelta` index, on the record *and* the table struct.
+- **Special Case: Metadata**: `json:"mdt,omitempty"` — `Metadata *string`, required on the record
+  (never the table struct) of tables with a `db.TypeDelta` index.
+
+`CacheByIDs: true` tables need `Updated int32` (`upd`) on both structs. See
+`backend/docs/ORM_DATABASE_QUERY.md` §3.1.
 
 This ensures consistency across the API and reduces payload size for critical synchronization fields.
 

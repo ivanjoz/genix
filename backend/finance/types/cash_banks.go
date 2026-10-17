@@ -15,12 +15,14 @@ type CashBank struct {
 	ReconciliationAmount int32
 	CurrentAmount        int32
 	// General properties
-	Status         int8  `json:"ss,omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	Status  int8  `json:"ss,omitempty"`
+	Updated int32 `json:"upd,omitempty"`
+	Version int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Created   int32   `json:",omitempty"`
+	CreatedBy int32   `json:",omitempty"`
 }
 
 type CashBankTable struct {
@@ -37,7 +39,7 @@ type CashBankTable struct {
 	CurrentAmount        db.Col[*CashBankTable, int32]
 	Status               db.Col[*CashBankTable, int8]
 	Updated              db.Col[*CashBankTable, int32]
-	UpdatedVersion       db.Col[*CashBankTable, int32]
+	Version              db.Col[*CashBankTable, int16]
 	UpdatedBy            db.Col[*CashBankTable, int32]
 	Created              db.Col[*CashBankTable, int32]
 	CreatedBy            db.Col[*CashBankTable, int32]

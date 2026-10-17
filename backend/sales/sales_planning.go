@@ -8,16 +8,12 @@ import (
 )
 
 func GetSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	records := []types.SalesPlanning{}
 
 	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
 	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
 	query := db.Query(&records)
-	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener la planificación de ventas:", err)
@@ -71,14 +67,12 @@ func PostSalesPlanning(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetSeasonalityCurve(req *core.HandlerArgs) core.HandlerResponse {
-	updatedSince := req.GetUpVersion()
-
 	records := []types.SeasonalityCurve{}
 
 	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
 	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
 	query := db.Query(&records)
-	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las curvas de estacionalidad:", err)

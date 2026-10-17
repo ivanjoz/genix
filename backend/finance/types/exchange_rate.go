@@ -35,9 +35,11 @@ type ExchangeRate struct {
 	DetailSellRate []int32 `json:",omitempty" db:",list"`
 	Status         int8    `json:"ss,omitempty"`
 	Updated        int32   `json:"upd,omitempty"`
-	UpdatedVersion int32   `json:"upv,omitempty"`
-	UpdatedBy      int32   `json:",omitempty"`
-	Created        int32   `json:",omitempty"`
+	Version        int16   `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Created   int32   `json:",omitempty"`
 }
 
 type ExchangeRateTable struct {
@@ -48,7 +50,7 @@ type ExchangeRateTable struct {
 	DetailSellRate db.Col[*ExchangeRateTable, []int32]
 	Status         db.Col[*ExchangeRateTable, int8]
 	Updated        db.Col[*ExchangeRateTable, int32]
-	UpdatedVersion db.Col[*ExchangeRateTable, int32]
+	Version        db.Col[*ExchangeRateTable, int16]
 	UpdatedBy      db.Col[*ExchangeRateTable, int32]
 	Created        db.Col[*ExchangeRateTable, int32]
 }

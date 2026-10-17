@@ -22,7 +22,7 @@ func GetParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los parámetros.", err)
 	}
 
-	return core.MakeResponse(req, &records)
+	return req.MakeResponse(core.WithDeltaReplace(records))
 }
 
 func PostParametros(req *core.HandlerArgs) core.HandlerResponse {

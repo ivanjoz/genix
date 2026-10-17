@@ -40,7 +40,7 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	core.Log("Perfiles obtenidos:: ", len(records))
 	core.Print(records)
 
-	return core.MakeResponse(req, &records)
+	return req.MakeResponse(core.WithDeltaReplace(records))
 }
 
 func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {

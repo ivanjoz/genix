@@ -13,7 +13,7 @@ It also documents the cloud ORM used by `app/cloud`, which mirrors the same mode
 - Insert/update batch helpers
 - Schema declaration in Go (`TableSchema`)
 - Packed indexes, views, hash indexes, and smart key strategies
-- Optional per-record cache-version selective fetch (`QueryCachedIDs`)
+- Delta-log list sync (`Delta`) and slot-tick by-IDs fetch (`QueryCachedIDs`)
 
 ---
 
@@ -31,24 +31,27 @@ type Product struct {
     EmpresaID int32    `db:"empresa_id"`
     ID        int64    `db:"id"`
     Nombre    string   `db:"nombre"`
-    Status    int8     `db:"status"`
-    Updated   int64    `db:"updated"`
+    Status    int8     `json:"ss,omitempty"`
     Tags      []string `db:"tags"`
-    // Required on any table that is synced incrementally. See §3.1.
-    UpdatedVersion int32 `json:"upv,omitempty"`
+    // Required by CacheByIDs. See §3.1.
+    Updated int32 `json:"upd,omitempty"`
+    // Required by a db.TypeDelta index. See §3.1.
+    Version int16 `json:"ver,omitempty"`
+    // Not a column: set only on the log records a Delta() read appends.
+    Metadata *string `json:"mdt,omitempty"`
 }
 
 // Purpose: Table struct exposes typed fluent query fields.
 // Rationale: Compile-time safety for query operators and schema references.
 type ProductTable struct {
     db.TableStruct[ProductTable, Product]
-    EmpresaID db.Col[ProductTable, int32]
-    ID        db.Col[ProductTable, int64]
-    Nombre    db.Col[ProductTable, string]
-    Status    db.Col[ProductTable, int8]
-    Updated   db.Col[ProductTable, int64]
-    Tags      db.ColSlice[ProductTable, string]
-    UpdatedVersion db.Col[ProductTable, int32]
+    EmpresaID db.Col[*ProductTable, int32]
+    ID        db.Col[*ProductTable, int64]
+    Nombre    db.Col[*ProductTable, string]
+    Status    db.Col[*ProductTable, int8]
+    Tags      db.ColSlice[*ProductTable, string]
+    Updated   db.Col[*ProductTable, int32]
+    Version   db.Col[*ProductTable, int16]
 }
 ```
 
@@ -57,7 +60,7 @@ type ProductTable struct {
 - Field names must match between record and table structs.
 - Column name is inferred from `db` tag or snake_case field name.
 - Partition/key columns are defined in `GetSchema()` (not by tag alone).
-- For cached delta APIs, record must expose `ID`, the partition field, and `UpdatedVersion int32` with the json tag `upv`.
+- Cached APIs need the managed fields of §3.1: `Updated` for `CacheByIDs`, `Version` + `Metadata` for `db.TypeDelta`.
 
 ---
 
@@ -74,38 +77,37 @@ func (e ProductTable) GetSchema() db.TableSchema {
         Partition: e.EmpresaID,
         Keys:      db.Cols(e.ID),
 
-        // Optional: enable the by-IDs slot-version cache.
-        SaveUpdatedVersion: true,
+        // Optional: enable the by-IDs slot cache (§8).
+        CacheByIDs: true,
     }
 }
 ```
 
-### 3.1 `TableSchema.ID` and `updated_version`
+### 3.1 `TableSchema.ID` and the managed cache columns
 
-Every table declares an `ID` in `1..16383`, unique across the project. It is packed into the
-partition key of `cache_updated_version` alongside the tenant, so reusing or changing one silently
-repoints a table's cached slot versions. `scripts` `check_tables` enforces presence, range and
-uniqueness statically; the ORM panics at table-compile time as a backstop. ORM-internal tables claim
-IDs from the top of the range (`sequences` holds `16383`).
+Every table declares an `ID` in `1..16383`, unique across the project. It names the table's cache
+files in the file store (slot files and delta logs), so reusing or changing one silently repoints
+them. `scripts` `check_tables` enforces presence, range and uniqueness statically; the ORM panics at
+table-compile time as a backstop. ORM-internal tables claim IDs from the top of the range
+(`sequences` holds `16383`).
 
-`updated_version` is a managed column, like `created` and `updated`: the ORM assigns it on every
-write from a per-partition sequence — the same counter call that hands out autoincrement IDs. Unlike
-a timestamp it is strictly increasing and never collides, which is what makes both caches exact.
+The ORM stamps `updated` (SUnixTime) on every write. Each cache protocol needs a managed field to
+reach the client, so the ORM panics unless both structs declare it:
 
-A table must expose it to the client when it declares `SaveUpdatedVersion: true` **or** a
-`db.TypeDelta` index; the ORM panics otherwise. Exposing it means both structs:
+| Opt-in | Record struct | Table struct |
+|---|---|---|
+| `CacheByIDs: true` | ``Updated int32 `json:"upd,omitempty"` `` | `Updated db.Col[*XTable, int32]` |
+| a `db.TypeDelta` index | ``Version int16 `json:"ver,omitempty"` `` | `Version db.Col[*XTable, int16]` |
+| a `db.TypeDelta` index | ``Metadata *string `json:"mdt,omitempty"` `` | — (never a column) |
 
-```go
-// record struct — the json tag is the frontend contract
-UpdatedVersion int32 `json:"upv,omitempty"`
-// table struct — without this the column is DB-only and never selected
-UpdatedVersion db.Col[ProductTable, int32]
-```
+- `Version` counts the record's writes (1 on insert, +1 per write, back to 1 after 32767). The ORM
+  reads the stored version before each write, so only a table with a delta index pays for it. The
+  log carries it, and the client skips a logged write whose version it already holds.
+- `Metadata` is set only on the log records `Delta()` appends to its result (§6.1).
+- A by-IDs read overwrites `Updated` with the slot tick the client must send back (§8).
 
-The field name snake-cases to `updated_version`, so no `db` tag is needed. Tables without a
-`SaveUpdatedVersion`, `db.TypeDelta`, or declared `UpdatedVersion` field omit it automatically,
-saving the counter read. To also omit the default DB-only `created` and `updated` timestamp
-columns, set `DisableDefaultColumns: true` in `GetSchema()`.
+To omit the default DB-only `created` and `updated` timestamp columns on a table without
+`CacheByIDs`, set `DisableDefaultColumns: true` in `GetSchema()`.
 
 ---
 
@@ -141,8 +143,8 @@ larger list is never an error — only more round trips. 0 falls back to the
 // Purpose: Insert many rows in one call.
 // Rationale: ORM batches writes for better throughput.
 rows := []Product{
-    {EmpresaID: 1, ID: 101, Nombre: "A", Status: 1, Updated: time.Now().Unix()},
-    {EmpresaID: 1, ID: 102, Nombre: "B", Status: 1, Updated: time.Now().Unix()},
+    {EmpresaID: 1, ID: 101, Nombre: "A", Status: 1, Updated: core.SUnixTime()},
+    {EmpresaID: 1, ID: 102, Nombre: "B", Status: 1, Updated: core.SUnixTime()},
 }
 err := db.Insert(&rows)
 ```
@@ -166,7 +168,7 @@ err := db.InsertOne(rows[0])
 // Purpose: Update only explicit fields.
 // Rationale: Prevents accidental full-row overwrite.
 q := db.Table[Product]()
-row := Product{EmpresaID: 1, ID: 101, Nombre: "A+", Status: 2, Updated: time.Now().Unix()}
+row := Product{EmpresaID: 1, ID: 101, Nombre: "A+", Status: 2, Updated: core.SUnixTime()}
 err := db.Update(&[]Product{row}, q.Nombre, q.Status, q.Updated)
 ```
 
@@ -326,40 +328,38 @@ q.Tags.Contains("featured")
 
 ### 6.1 Delta reads (`Delta`)
 
-`Delta` replaces the hand-written watermark branch a delta-cache handler used to carry. It requires
-a `db.TypeDelta` index (§7.5b).
+`Delta` turns a query into a delta-cache read over a `db.TypeDelta` index's change log (§7.5b).
 
 ```go
-// Purpose: Read everything the client has not seen since its watermark.
-// Rationale: One call covers both halves of the sync and routes to the packed delta view.
+// Purpose: Read everything the client has not applied of the log yet.
+// Rationale: One call covers the first sync and every later one.
 query.Select().
     CompanyID.Equals(req.User.CompanyID).
     Type.Equals(int8(requestedType)).
-    Delta(updatedSince, 1)
+    Delta(req.GetDeltaCursor(), int8(1))
 ```
 
-- `updatedSince` is an `updated_version`, not a timestamp — the client's highest received value.
-- `updatedSince > 0` → `updated_version >= updatedSince+1`, fanned out over **every** declared value
-  of the filter column, so rows that flipped to an inactive value still reach the client for eviction.
-- `updatedSince == 0` → a first sync: the filter column is pinned to the arguments and the whole
-  version slot is scanned (versions start at 1, so nothing is excluded).
-- **The filter column is inferred, never named**: it is `Keys[0]` of the first `db.TypeDelta` index —
-  usually `Status`, but any low-cardinality column works.
-- Pass no value to constrain nothing but the watermark.
-- The variadic is `...int64`. Untyped literals (`Delta(w, 1)`) are fine; a *typed* `int8` constant
-  needs `int64(…)`.
-- Position in the chain does not matter.
-- It panics on a declaration bug — no `TypeDelta` index, no `FixedValues` for the filter column, or
-  several `TypeDelta` indexes disagreeing on `Keys[0]`. The message names the fix.
+- The cursor (`db.DeltaCursor`) is what the client holds of the log: `<bucket>.<bytes>` pairs, per
+  10-minute log file still open, how many bytes it applied. `req.GetDeltaCursor(responseKey...)`
+  parses it from the query param named after the response key (`up` for a bare-array response).
+- **Empty cursor** → a first sync: lists the index's view, the sync-filter column pinned to the
+  values passed.
+- **Cursor** → reads the log files past it and returns the logged records in **any** status, so
+  records that left the filter (soft-deleted) reach the clients still caching them.
+- **Cursor older than the log** (7 days, or a day of files behind) → a *replace*: a first sync
+  flagged so the client drops what the response doesn't bring.
+- The result always ends with `Metadata` records — one per log file that moved, ID = −bucket, `mdt` =
+  the file in Safe85 — which the client keeps as its next cursor. A handler that post-filters the
+  result must keep them (`record.Metadata != nil`).
+- **The sync-filter column is inferred, never named**: it is the index's last Key. The values are
+  `...any`, so typed constants (`int8(1)`, `types.ProductStatusActive`) are fine. Pass none for a
+  keyless index, or to list without a filter.
+- The index is picked from the predicates already set: the one whose pinned Keys (all but the last)
+  each have an equality. Call `Delta` last.
 
-The bound is exact: because `updated_version` is a sequence rather than a timestamp, two writes in
-the same second are distinguishable and the boundary rows are not re-sent on every poll.
-
-**Known limitation.** Versions are reserved before the write commits, so two overlapping writers can
-commit out of order: writer A reserves 100, writer B reserves 101 and commits first, a client polls
-and stores watermark 101, then A commits. A's rows are never delivered until they are written again.
-The window is the few milliseconds between two concurrent writes on the same tenant and table. This
-is accepted, not fixed.
+A cached route that cannot use `Delta` (no integer key, or a listing the log can't serve, such as a
+status-0 tab) answers `core.WithDeltaReplace(records)`: the whole list plus one replace `Metadata`
+record (`db.DeltaReplaceMetadata()`).
 
 ---
 
@@ -490,14 +490,13 @@ Indexes: []db.Index{
 
 ### 7.5b Delta Views (`db.TypeDelta`)
 
-Use for any table the frontend syncs incrementally. One declaration replaces the
-`[Filter, Updated]` + `[Filter, Status]` view pair the delta pattern used to need, and pairs with
-`query.Delta()` (§4.7).
+Use for any table the frontend syncs as a list. Every write appends `(log ID, Version, deleted)` to a
+change-log file in the file store — one per partition, pinned value and 10-minute bucket — which
+`query.Delta()` reads past the client's cursor (§6.1).
 
 ```go
-// Purpose: Serve both halves of a delta-cache sync from one packed view.
-// Rationale: The declared value ranges size each bit slot, so the engine — not the developer —
-// decides whether the packed column fits an int.
+// Purpose: Log every write so Delta() can answer a sync from the log.
+// Rationale: Type is pinned (one log per type, as the route asks for one); Status is the sync filter.
 func (t ClientProviderTable) GetSchema() db.TableSchema {
     return db.TableSchema{
         ID:        1,
@@ -509,43 +508,29 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
             {Col: t.Type, Min: 1, Max: 2},
         },
         Indexes: []db.Index{
-            // updated_version is appended implicitly. Keys[0] is the column Delta() filters on.
-            {Type: db.TypeDelta, Keys: db.Cols(t.Status, t.Type)},
+            {Type: db.TypeDelta, Keys: db.Cols(t.Type, t.Status)},
         },
     }
 }
 ```
 
 Rules:
-- Every declared key needs a `FixedValues` entry (`Values` list, or `Min`/`Max`). That range sizes
-  its bit slot (`bits.Len(max)`); the schema panics without one.
-- Do **not** list `UpdatedVersion` — it is implicit and takes the trailing slot.
-- No `.Size()` or `.Int32()` needed. Both remain as escape hatches; a forced `.Int32()` that
-  cannot hold the declared ranges panics.
-- The packed column is `int` when the key slots plus the 27-bit `updated_version` slot fit 32 bits
-  (all key ranges together: at most 32 combinations), else `bigint` with a 34-bit version slot.
-  Key order does not change the fit. 27 bits cap the table at 2^27 (~134M) write calls per
-  partition; a write past that fails loudly instead of overflowing the packed key.
-- **`Keys[0]` decides the fit** — it is the most significant slot. `[Status{0,1}, Type{1,2}]` reaches
-  `1_2_99999999` → `int`; reversed it reaches `2_1_99999999` → `bigint`. Declare the most tightly
-  bounded column first. When `bigint` is chosen the compiler logs which order would have fit.
-- `Keys[0]` is also `Delta()`'s filter column, so the two roles are coupled. If they conflict, put
-  the filter column first and accept `bigint`.
-- Writing a row outside its declared range panics rather than corrupting the packed key.
+- The table needs an **integer partition** and **exactly one integer key** — the log ID. A table with
+  a string or composite key cannot have a `TypeDelta` index; give it a `TypeView` and answer its
+  route with `core.WithDeltaReplace(records)` instead.
+- The record and table structs must declare `Version` (and the record `Metadata`) — §3.1.
+- **The last Key is the sync filter** (usually `Status`): a first sync lists the view filtered on it.
+  **Earlier Keys are pinned**: each value has its own log folder, and `Delta()` needs an equality on
+  each. Keyless `{Type: db.TypeDelta}` keeps one log per partition with no sync filter.
+- A write whose status column (named `status`) is 0 is logged as a soft delete; so is a hard delete,
+  or a pinned value that changed (the record leaves that folder's log).
+- The ORM compiles the Keys into the listing view a first sync reads: a simple `TypeView` for one
+  key, a packed view for several, none for a keyless index.
+- For a packed view, `FixedValues` (`Values` list, or `Min`/`Max`) size each key's bit slot; at most
+  one key may go without, and it absorbs the remaining bits. The column is `int` when the slots fit,
+  else `bigint`. `.Size()` / `.Int32()` remain as escape hatches. Writing a row outside its declared
+  range panics rather than corrupting the packed key.
 - `Partition` may relocate the view partition, same as `TypeView`.
-
-A delta view doubles as an ordinary index, because a packed base-10 key is prefix-searchable:
-
-| Query | Plan |
-|---|---|
-| `Status = 1` | range over the whole `Status = 1` block |
-| `Status = 1 AND Type = 2` | narrower range inside it |
-| `Status IN (0,1)` | one range per value |
-| `Status = 1 AND Type = 2 AND Updated > W` | the full delta shape |
-
-A gap is refused rather than silently dropped: `Type = 2` without `Status` cannot be one range, so
-the view declines and the planner looks elsewhere. Partial prefixes rank below a local index, so
-`Status = 1 AND RegistryNumber = 'X'` uses the `registry_number` index instead.
 
 ### 7.6 Composite-Bucket Indexes
 
@@ -573,25 +558,33 @@ Rules:
 
 ---
 
-## 8. Cache-Version Delta Queries
+## 8. By-IDs Cache (`CacheByIDs` + `QueryCachedIDs`)
 
-If `SaveUpdatedVersion` is enabled in schema, you can fetch only changed records.
+With `CacheByIDs: true`, every write raises its record's slot (`uint8(ID)`, 256 per partition) in a
+per-partition slot file in the file store, holding the year tick of the slot's last write. A by-IDs
+read sends the ticks the client holds and gets back only the records whose slot moved past them.
 
 ```go
-// Purpose: Return only rows whose server cache-version changed.
-// Rationale: Reduces payload for sync endpoints with client-side caches.
-changed := []Product{}
-cached := []db.IDUpdatedVersion{
-    {PartitionID: 1, ID: 101, UpdatedVersion: 5},
-    {PartitionID: 1, ID: 102, UpdatedVersion: 2},
+// Purpose: Return only the requested records whose slot moved since the client's tick.
+// Rationale: Revalidating a cached record costs one slot-file GET, not a row read.
+cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID) // decodes ?cc=
+if err != nil {
+    return req.MakeErr(err)
 }
-err := db.QueryCachedIDs(&changed, cached)
+partitions, err := db.QueryCachedIDs[types.Product](cachedIDsRequest) // []db.CachedPartition[E]{p, r}
+if err != nil {
+    return req.MakeErr("Error al obtener los productos.", err)
+}
+return req.MakeResponse(core.HideCachedPartitions(partitions))
 ```
 
 Requirements:
-- `SaveUpdatedVersion: true` in `GetSchema()`
-- one partition field and one key field resolvable by ORM
-- response model includes cache-version output field (`uint8`) if you expose it to client
+- `CacheByIDs: true` in `GetSchema()`, a single integer key, and the `Updated` field of §3.1.
+- Genix clients send every ID under partition 0; `GetCachedIDsRequest` substitutes the company and
+  refuses any other partition, and `HideCachedPartitions` puts the 0 back on the response.
+- Each returned record's `Updated` is overwritten with the slot tick the client sends back next time.
+- A static lookup (the record never changes for its ID) uses `req.GetStaticRequestIDs()` on the same
+  `cc` param, ignores ticks, and answers `core.StaticCachedPartition(records)`.
 
 ### 8.1 Generic By-ID Reads (`QueryCachedGenericByIDs`)
 
@@ -613,18 +606,18 @@ GenericRecord: db.GenericRecordSchema{
   optional integers of any width.
 - `ID` and `Status` are **not** declared — they are always the table's single key column and its
   `status` column, resolved automatically.
-- `GenericRecord` **requires** `SaveUpdatedVersion: true` (panics at table build otherwise), which is
+- `GenericRecord` **requires** `CacheByIDs: true` (panics at table build otherwise), which is
   also what guarantees the key is a single integer column.
 
 Query it by name:
 
 ```go
-records, err := db.QueryCachedGenericByIDs("products", cachedIDs)
-// -> []db.GenericRecord{{ID, Name, S1, S2, N1, N2, Status, UpdatedVersion}}
+partitions, err := db.QueryCachedGenericByIDs("products", cachedIDsRequest)
+// -> []db.CachedPartition[db.GenericRecord]; GenericRecord{ID, Name, S1, S2, N1, N2, Status, Updated}
 ```
 
-Slot-version filtering is identical to `QueryCachedIDs`: IDs whose client `upv` still matches the
-server are never read from the table.
+Slot filtering is identical to `QueryCachedIDs`: IDs whose slot did not move past the client's tick
+are never read from the table.
 
 Notes:
 - A table with no `GenericRecord` is **rejected** — the config is the exposure allowlist.
@@ -632,7 +625,7 @@ Notes:
   `./app.sh generate_controllers`.
 - Column lookup, the SELECT projection and the per-column scan/assign closures are precompiled once
   per table, so the read loop does no reflection or type switching per row.
-- HTTP route: `GET records-by-ids?table=<name>&ids=…&cc-ids=…&cc-ver=…` (authenticated only).
+- HTTP route: `GET records-by-ids?table=<name>&cc=…` (authenticated only).
 
 ---
 
@@ -661,7 +654,7 @@ err := db.Merge(
     &rows,
     db.Cols(q.Updated),
     func(prev, cur *Product) bool { return prev.Nombre != cur.Nombre || prev.Status != cur.Status },
-    func(r *Product) { r.Updated = time.Now().Unix() },
+    func(r *Product) { r.Updated = core.SUnixTime() },
 )
 ```
 
@@ -735,7 +728,7 @@ written, err := controller.UpdateRecordsJSON(payload, []string{"nombre"})
   edited and written straight back. Filters instead name **columns** (`company_id`, `nombre`);
   `ResolveColumn` also accepts the Go field name, so either spelling works.
 - Writes run through the ordinary `Insert` / `Update`, so autoincrement keys, `created`/`updated`,
-  `updated_version`, virtual columns, views and the text index all still apply.
+  `version`, the cache slot files and delta logs, virtual columns, views and the text index all still apply.
 - `FilterSpec.Value` is coerced to the column's Go type (`db.CoerceToColumn`). This is mandatory,
   not cosmetic: `encoding/json` decodes every number as `float64`, and the accessor engine's
   `ToInt64` returns 0 for a `float64` — an uncoerced `id` filter would silently become `id = 0`.
@@ -758,7 +751,7 @@ CLI: `cd backend && go run . fn-db '{"op":"describe","table":"products"}'` — s
 ## 13. Assigned Table IDs
 
 Every `GetSchema()` declares a unique `TableSchema.ID` (§3.1). New tables take the next free number;
-IDs are never reused or renumbered, because they are packed into `cache_updated_version`'s key.
+IDs are never reused or renumbered, because they name the table's cache files.
 `check_tables` fails the build on a duplicate or a missing one.
 
 | ID | Table | ID | Table |

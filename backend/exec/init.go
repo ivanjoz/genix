@@ -130,6 +130,8 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 
 	// Install the text search backend before any seed write hits a table with TextSearch.
 	core.ConfigureTextSearch()
+	// Seed writes to cached tables append the delta logs and raise the by-IDs slot files.
+	core.ConfigureFileStore()
 
 	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
 	if err := scylla.Init(); err != nil {

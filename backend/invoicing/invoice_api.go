@@ -19,11 +19,9 @@ import (
 // a first sync (watermark 0) returns only the states named here — asking for the
 // pending ones alone, as this did, hid every document the moment it was sent.
 func GetInvoices(req *core.HandlerArgs) core.HandlerResponse {
-	updatedVersion := req.GetUpVersion()
-
 	documents := []types.InvoiceDocument{}
 	query := db.Query(&documents)
-	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, types.AllInvoiceStates...)
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), core.ToAny(types.AllInvoiceStates)...)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los comprobantes:", err)

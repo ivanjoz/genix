@@ -267,7 +267,7 @@ describe('the daily consolidation of boletas declares a contiguous range', () =>
   // An identity is not one of SUNAT's criteria, so a sub-S/700 boleta that has one still folds.
   it('consolidates a boleta whose buyer happened to be identified', () => {
     const identities = new Map<number, IClientProviderSnapshot>([
-      [42, { ID: 42, Name: "JUAN PEREZ", RegistryNumber: "12345678", IdentityDocType: 1, CityID: "", upv: 1, ss: 1, upd: 0 }],
+      [42, { ID: 42, Name: "JUAN PEREZ", RegistryNumber: "12345678", IdentityDocType: 1, CityID: "", ss: 1, upd: 0 }],
     ])
     const rows = buildBook(
       [boleta(10, 5000, { ClientSnapshotID: 42 }), boleta(11, 6000)], identities,
@@ -303,7 +303,7 @@ describe('nota 3 — a comprobante SUNAT did not accept is anotado at zero', () 
 describe('the buyer is whatever the comprobante declared', () => {
   it('reads the pinned identity, converted to SUNAT characters', () => {
     const identities = new Map<number, IClientProviderSnapshot>([
-      [42, { ID: 42, Name: "ACME SAC", RegistryNumber: "20123456789", IdentityDocType: 6, CityID: "", upv: 1, ss: 1, upd: 0 }],
+      [42, { ID: 42, Name: "ACME SAC", RegistryNumber: "20123456789", IdentityDocType: 6, CityID: "", ss: 1, upd: 0 }],
     ])
     const rows = buildBook(
       [boleta(10, BOLETA_IDENTIFIED_FROM + 100, { ClientSnapshotID: 42 })], identities,

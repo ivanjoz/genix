@@ -656,9 +656,11 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	saleOrderIDRecords := req.ExtractUpdatedVersionValues()
-
-	saleOrderIDs := core.Map(saleOrderIDRecords, func(e db.IDUpdatedVersion) int64 { return e.ID })
+	// The sale order table has no by-IDs slots: every requested ID is read.
+	saleOrderIDs, err := req.GetStaticRequestIDs()
+	if err != nil {
+		return req.MakeErr(err)
+	}
 
 	saleOrders := []types.SaleOrder{}
 	query := db.Query(&saleOrders).CompanyID.Equals(req.User.CompanyID)
@@ -667,5 +669,5 @@ func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los productos.", err)
 	}
 
-	return core.MakeResponse(req, &saleOrders)
+	return req.MakeResponse(core.StaticCachedPartition(saleOrders))
 }

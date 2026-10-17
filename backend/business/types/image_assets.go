@@ -19,7 +19,9 @@ type ImageAsset struct {
 	Bigrams            []int8   `json:",omitempty" db:",list"` // Encoded from the Spanish keywords for frontend local search.
 	Ratio              float32  `json:",omitempty"`            // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
 	Updated            int32    `json:"upd,omitempty"`
-	UpdatedVersion     int32    `json:"upv,omitempty"`
+	Version            int16    `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata *string `json:"mdt,omitempty"`
 }
 
 type ImageAssetTable struct {
@@ -34,7 +36,7 @@ type ImageAssetTable struct {
 	Bigrams            db.ColSlice[*ImageAssetTable, int8]
 	Ratio              db.Col[*ImageAssetTable, float32]
 	Updated            db.Col[*ImageAssetTable, int32]
-	UpdatedVersion     db.Col[*ImageAssetTable, int32]
+	Version            db.Col[*ImageAssetTable, int16]
 }
 
 func (e ImageAssetTable) GetSchema() db.TableSchema {
@@ -47,7 +49,7 @@ func (e ImageAssetTable) GetSchema() db.TableSchema {
 		TextSearch: &db.TextSearch{Columns: db.Cols(e.Keywords)},
 		Keys:       db.Cols(e.ID),
 		Indexes: []db.Index{
-			// Keyless: this sync filters nothing but its watermark. Read with Delta(upv).
+			// Keyless: one log per partition and no sync filter. Read with Delta(cursor).
 			{Type: db.TypeDelta},
 		},
 	}

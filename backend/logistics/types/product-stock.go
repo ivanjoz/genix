@@ -41,12 +41,14 @@ type ProductStock struct {
 	AverageCost int32 `json:",omitempty"`
 	StockStatus int8  `json:",omitempty"`
 
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Status         int8  `json:"ss,omitempty"`
+	Created   int32 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
+	Updated   int32 `json:"upd,omitempty"`
+	Version   int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Status    int8    `json:"ss,omitempty"`
 }
 
 // Derive Status from the two live buckets (Quantity + DetailQuantity). The sub-unit halves
@@ -80,7 +82,7 @@ type ProductStockTable struct {
 	Created                   db.Col[*ProductStockTable, int32]
 	CreatedBy                 db.Col[*ProductStockTable, int32]
 	Updated                   db.Col[*ProductStockTable, int32]
-	UpdatedVersion            db.Col[*ProductStockTable, int32]
+	Version                   db.Col[*ProductStockTable, int16]
 	UpdatedBy                 db.Col[*ProductStockTable, int32]
 	Status                    db.Col[*ProductStockTable, int8]
 }
@@ -126,12 +128,11 @@ type ProductStockDetail struct {
 	SubQuantity    int32  `json:",omitempty"`
 	ExpirationDate int16  `json:",omitempty"`
 
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
-	Status         int8  `json:"ss,omitempty"`
+	Updated   int32 `json:"upd,omitempty"`
+	UpdatedBy int32 `json:",omitempty"`
+	Created   int32 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
+	Status    int8  `json:"ss,omitempty"`
 }
 
 type ProductStockDetailTable struct {
@@ -146,7 +147,6 @@ type ProductStockDetailTable struct {
 	SubQuantity    db.Col[*ProductStockDetailTable, int32]
 	ExpirationDate db.Col[*ProductStockDetailTable, int16]
 	Updated        db.Col[*ProductStockDetailTable, int32]
-	UpdatedVersion db.Col[*ProductStockDetailTable, int32]
 	UpdatedBy      db.Col[*ProductStockDetailTable, int32]
 	Created        db.Col[*ProductStockDetailTable, int32]
 	CreatedBy      db.Col[*ProductStockDetailTable, int32]
@@ -160,12 +160,10 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		// One detail row per stock-record + lot + serial.
 		Keys: db.Cols(e.ProductStockID, e.LotID, e.SerialNumber),
-		// Delta() enumerates its filter column, so every Status value must be declared.
-		FixedValues: []db.FixedValues{
-			{Col: e.Status, Values: []int64{0, 1}},
-		},
+		// A composite key, which a delta log can't name: the route answers one warehouse's active
+		// details whole, with the replace Metadata (core.WithDeltaReplace).
 		Indexes: []db.Index{
-			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.Size(17), e.Status)},
+			{Type: db.TypeView, Keys: db.Cols(e.WarehouseID, e.Status)},
 		},
 	}
 }

@@ -11,16 +11,10 @@ type ActionRegistered struct {
 }
 
 func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetUpdated("actionsScheduled")
-
-	if updated == 0 {
-		updated = core.SUnixTime() - int32((7*24*60*60)/2) // Last 7 days
-	}
-
+	// Last 7 days, whole every sync: there is no delta log for cron actions.
+	updatedSince := core.SUnixTime() - int32((7*24*60*60)/2)
 	cronActions := []core.CronAction{}
-	cronActionsQuery := db.Query(&cronActions).Updated.GreaterThan(updated)
-
-	core.Log("GetCronActionsScheduled query:", "updated", updated)
+	cronActionsQuery := db.Query(&cronActions).Updated.GreaterThan(updatedSince)
 
 	if err := cronActionsQuery.AllowFilter().Exec(); err != nil {
 		core.Log("GetCronActionsScheduled query error:", err)
@@ -36,7 +30,7 @@ func GetCronActionsScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	registeredActionHandlers := core.GetRegisteredActionHandlers(actionsIDs.Values...)
 
 	response := map[string]any{
-		"actionsScheduled":  cronActions,
+		"actionsScheduled":  core.WithDeltaReplace(cronActions),
 		"actionsRegistered": registeredActionHandlers,
 	}
 

@@ -4,12 +4,10 @@ import (
 	"app/core"
 	"app/db"
 	"app/sales/types"
-	"slices"
 )
 
 // GetSaleSummary returns day-level summaries reconstructed from per-product rows.
 func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetUpdated()
 	dateInicio := req.GetQueryInt16("date-inicio")
 	if dateInicio == 0 {
 		dateInicio = core.FechaUnix() - (8 * 7)
@@ -20,63 +18,24 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 		dateFin = core.FechaUnix()
 	}
 
-	// Debug trace to diagnose sync ranges and filters from clients.
-	core.Log("GetSaleSummary params:", "companyID", req.User.CompanyID, "updated", updated, "dateInicio", dateInicio, "dateFin", dateFin)
-
 	if dateInicio > 0 && dateFin > 0 && dateInicio > dateFin {
 		return req.MakeErr("La date de inicio no puede ser mayor que la date final.")
 	}
 
 	datesToInclude := []int16{}
-
-	if updated == 0 {
-		for i := dateInicio; i <= dateFin; i++ {
-			datesToInclude = append(datesToInclude, i)
-		}
-	} else {
-		// Delta sync resolves changed dates from sentinel rows stored at date=-1.
-		metadataRows := []types.ProductSaleSummary{}
-		query := db.Query(&metadataRows)
-		query.CompanyID.Equals(req.User.CompanyID).Date.Equals(-1).Updated.GreaterThan(updated)
-		if dateInicio > 0 && dateFin > 0 {
-			query.ProductID.Between(int32(dateInicio), int32(dateFin))
-		}
-		if err := query.AllowFilter().Exec(); err != nil {
-			core.Log("GetSaleSummary metadata query error:", err)
-			return req.MakeErr("Error al obtener el resumen de ventas.", err)
-		}
-
-		for _, metadataRow := range metadataRows {
-			date := int16(metadataRow.ProductID)
-			if date <= 0 {
-				continue
-			}
-			if !slices.Contains(datesToInclude, date) {
-				datesToInclude = append(datesToInclude, date)
-			}
-		}
-	}
-
-	if len(datesToInclude) == 0 {
-		return req.MakeResponse([]types.SaleSummary{})
+	for i := dateInicio; i <= dateFin; i++ {
+		datesToInclude = append(datesToInclude, i)
 	}
 
 	productRows := []types.ProductSaleSummary{}
 	query := db.Query(&productRows)
 	query.CompanyID.Equals(req.User.CompanyID).Date.In(datesToInclude...)
-
-	if updated > 0 {
-		query.Updated.GreaterEqual(updated).AllowFilter()
-	}
-
 	if err := query.Exec(); err != nil {
-		core.Log("GetSaleSummary query error:", err)
 		return req.MakeErr("Error al obtener el resumen de ventas.", err)
 	}
 
-	summaries := buildSaleSummariesFromProductRows(productRows)
-	core.Log("GetSaleSummary response count:", len(summaries))
-	return req.MakeResponse(summaries)
+	// No delta log: the whole range every sync, with the replace Metadata.
+	return req.MakeResponse(core.WithDeltaReplace(buildSaleSummariesFromProductRows(productRows)))
 }
 
 func buildSaleSummariesFromProductRows(productRows []types.ProductSaleSummary) []types.SaleSummary {

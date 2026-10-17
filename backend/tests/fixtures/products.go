@@ -25,19 +25,19 @@ func MakeProducts(count int) []production.Product {
 
 	for i := range count {
 		product := production.Product{
-			ID:             int32(i + 1),
-			Name:           fmt.Sprintf("Producto de prueba %d con nombre largo", i),
-			SKU:            fmt.Sprintf("SKU-%06d", i),
-			Price:          int32(1000 + i*7),
-			FinalPrice:     int32(900 + i*7),
-			CurrencyID:     1,
-			UnitID:         2,
-			Status:         1,
-			Updated:        int32(700000 + i),
-			UpdatedBy:      3,
-			UpdatedVersion: int32(i + 1),
-			CategoryIDs:    []int32{int32(i%12 + 1), int32(i%5 + 20)},
-			BrandID:        int32(i%40 + 1),
+			ID:          int32(i + 1),
+			Name:        fmt.Sprintf("Producto de prueba %d con nombre largo", i),
+			SKU:         fmt.Sprintf("SKU-%06d", i),
+			Price:       int32(1000 + i*7),
+			FinalPrice:  int32(900 + i*7),
+			CurrencyID:  1,
+			UnitID:      2,
+			Status:      1,
+			Updated:     int32(700000 + i),
+			UpdatedBy:   3,
+			Version:     int16(i + 1),
+			CategoryIDs: []int32{int32(i%12 + 1), int32(i%5 + 20)},
+			BrandID:     int32(i%40 + 1),
 		}
 
 		// Roughly a third of a real catalogue carries a description and rich content.

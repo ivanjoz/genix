@@ -9,6 +9,7 @@ package db
 
 import (
 	orm "github.com/ivanjoz/genix-orm/db"
+	"github.com/ivanjoz/genix-orm/db/cache"
 )
 
 // ─── Schema declaration ────────────────────────────────────────────────────────
@@ -22,7 +23,6 @@ type (
 	TableInfo           = orm.TableInfo
 	GenericRecordSchema = orm.GenericRecordSchema
 	GenericRecord       = orm.GenericRecord
-	IDUpdatedVersion    = orm.IDUpdatedVersion
 	ColumnInfo          = orm.ColumnInfo
 	IColInfo            = orm.IColInfo
 	TextHit             = orm.TextHit
@@ -35,8 +35,8 @@ type (
 type (
 	Col[TableT orm.TableHandle, ValueT any]     = orm.Col[TableT, ValueT]
 	ColSlice[TableT orm.TableHandle, ElemT any] = orm.ColSlice[TableT, ElemT]
-	RecordGroup[RecordT any]                               = orm.RecordGroup[RecordT]
-	Executor[TableT any, RecordT any]                      = orm.Executor[TableT, RecordT]
+	RecordGroup[RecordT any]                    = orm.RecordGroup[RecordT]
+	Executor[TableT any, RecordT any]           = orm.Executor[TableT, RecordT]
 )
 
 const (
@@ -108,13 +108,37 @@ func TableOf[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Execut
 	return orm.TableOf[RecordT, TableT, D]()
 }
 
-// QueryCachedIDs resolves records by ID, skipping any whose client slot version
-// still matches the server.
+// QueryCachedIDs returns, per partition, the requested records whose slot moved since
+// the tick the client holds.
 func QueryCachedIDs[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
-	refSlice *[]RecordT, cachedIDs []IDUpdatedVersion,
-) error {
-	return orm.QueryCachedIDs[RecordT, TableT, D](refSlice, cachedIDs)
+	request CachedIDsRequest,
+) ([]CachedPartition[RecordT], error) {
+	return orm.QueryCachedIDs[RecordT, TableT, D](request)
 }
+
+// ─── Client cache protocols (genix-orm/db/cache) ───────────────────────────────
+
+type (
+	// CachedIDsRequest is a decoded by-IDs request (the "cc" query parameter).
+	CachedIDsRequest = cache.CachedIDsRequest
+	// DeltaCursor is what a client holds of a delta log, passed to Delta().
+	DeltaCursor = cache.DeltaCursor
+)
+
+// CachedPartition is the by-IDs response: the records of one partition that moved.
+type CachedPartition[RecordT any] = cache.CachedPartition[RecordT]
+
+var (
+	// SetFileStore installs the file store holding the slot files and the delta logs.
+	SetFileStore = cache.SetFileStore
+	// DecodeCachedIDsRequest reads the "cc" query parameter of a by-IDs request.
+	DecodeCachedIDsRequest = cache.DecodeCachedIDsRequest
+	// ParseDeltaCursor reads a delta cursor query parameter.
+	ParseDeltaCursor = cache.ParseDeltaCursor
+	// DeltaReplaceMetadata is the Metadata of a route not backed by a delta log: one record
+	// carrying it makes the client replace its whole list with the response.
+	DeltaReplaceMetadata = cache.DeltaReplaceMetadata
+)
 
 // ─── Writes ────────────────────────────────────────────────────────────────────
 

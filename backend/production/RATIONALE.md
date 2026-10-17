@@ -2,6 +2,15 @@
 
 Design decisions for the product catalog and its supplies, newest first.
 
+## A product that became a supply leaves the catalog through `records_IDsToRemove`
+**Context** — Products and supplies share one table and one delta log keyed on Status, and the log
+names every status: a product turned into a supply (2) comes back as a live record.
+**Decision** — `GET.products` reads `Delta(cursor, 1)` once and moves every non-Metadata record whose
+Status is not 1 into `records_IDsToRemove`. `GET.supply-material` keeps a bare array: its client
+already keeps only `ss = 2`.
+**Rationale** — The two eviction scans the handler ran per status are gone; the log already says
+what moved.
+
 ## `ProductProperties.OptionsMap` is deleted rather than tagged `cb:"-"`
 
 **Context** — writing a product printed `Error colbin-encoding column: Properties`. The cause was

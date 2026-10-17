@@ -42,18 +42,13 @@ func sanitizeDbText(text string) string {
 	return strings.TrimSpace(dbTextSanitizer.Replace(text))
 }
 
-// GetProductsEcommerce returns the incremental delta of products, marcas and categorías changed
-// since the client's per-table watermark. Response keys (productos/marcas/categorias) are the same
-// names the client sends back as watermark query params on the next call (multi-table delta cache).
+// GetProductsEcommerce returns the active products, marcas and categorías whole, each response key
+// (productos/marcas/categorias) ending with the replace Metadata so the client drops what left.
 func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	companyID := core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id"))
 	if companyID <= 0 {
 		return req.MakeErr("Company inválida para obtener productos de ecommerce.")
 	}
-
-	productosWatermark := req.GetUpdated("productos")
-	marcasWatermark := req.GetUpdated("marcas")
-	categoriasWatermark := req.GetUpdated("categorias")
 
 	// Best-effort lazy rebuild: refresh the snapshot file when source data advanced past the last
 	// build. The client sets missingFile=1 when the CDN file was absent, which forces a rebuild
@@ -69,30 +64,20 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	categorias := []types.SharedListRecord{}
 	errGroup := errgroup.Group{}
 
-	// Products delta: keyed by Updated. Only the [company_id, updated] view supports a range scan
-	// with full-column projection (NameUpdated is a local index → ALLOW FILTERING). Using Updated
-	// also means price-only edits reach already-synced clients.
-	//
-	// The client sends both watermarks and this handler reads the timestamp half (GetUpdated), so
-	// projecting UpdatedVersion would only add bytes to a public payload that nobody reads.
 	errGroup.Go(func() error {
 		query := db.Query(&productos)
 		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
-			CompanyID.Equals(companyID)
-		if productosWatermark > 0 {
-			query.Updated.GreaterThan(productosWatermark)
-		} else {
-			query.Status.GreaterEqual(1)
-		}
+			CompanyID.Equals(companyID).
+			Status.GreaterEqual(1)
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener productos ecommerce: %v", err)
 		}
 		return nil
 	})
 
-	// Marcas + categorías deltas: shared-list rows keyed by Updated, split by ListID.
+	// Marcas + categorías: shared-list rows split by ListID.
 	errGroup.Go(func() error {
-		rows, err := querySharedListDelta(companyID, ecommerceSharedListBrandID, marcasWatermark)
+		rows, err := queryActiveSharedList(companyID, ecommerceSharedListBrandID)
 		if err != nil {
 			return err
 		}
@@ -100,7 +85,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 	errGroup.Go(func() error {
-		rows, err := querySharedListDelta(companyID, ecommerceSharedListCategoryID, categoriasWatermark)
+		rows, err := queryActiveSharedList(companyID, ecommerceSharedListCategoryID)
 		if err != nil {
 			return err
 		}
@@ -113,25 +98,20 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(map[string]any{
-		"productos":  &productos,
-		"marcas":     &marcas,
-		"categorias": &categorias,
+		"productos":  core.WithDeltaReplace(productos),
+		"marcas":     core.WithDeltaReplace(marcas),
+		"categorias": core.WithDeltaReplace(categorias),
 	})
 }
 
-// querySharedListDelta returns the delta for a single shared list (marca or categoría). On first
-// sync (watermark == 0) it returns active rows only; on delta it includes Status=0 evictions.
-func querySharedListDelta(companyID, listID, watermark int32) ([]types.SharedListRecord, error) {
+// queryActiveSharedList returns the active rows of a single shared list (marca or categoría).
+func queryActiveSharedList(companyID, listID int32) ([]types.SharedListRecord, error) {
 	records := []types.SharedListRecord{}
 	query := db.Query(&records)
 	query.Select(query.ID, query.Name, query.Updated, query.Status).
 		CompanyID.Equals(companyID).
-		ListID.Equals(listID)
-	if watermark > 0 {
-		query.Updated.GreaterThan(watermark)
-	} else {
-		query.Status.Equals(1)
-	}
+		ListID.Equals(listID).
+		Status.Equals(1)
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al obtener lista %d ecommerce: %v", listID, err)
 	}

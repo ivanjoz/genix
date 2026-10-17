@@ -11,19 +11,15 @@ import (
 )
 
 func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
-	// Each table advances its own "updated_version" sequence, so the two response keys carry
-	// independent watermarks; the frontend sends one query param per key, named after it.
-	warehousesUpdatedSince := req.GetUpVersion("Almacenes")
-	sitesUpdatedSince := req.GetUpVersion("Sedes")
-
+	// Each table has its own delta log, so the two response keys carry independent cursors; the
+	// frontend sends one query param per key, named after it.
 	almacenes := []types.Warehouse{}
 	errGroup := errgroup.Group{}
 
 	errGroup.Go(func() error {
 		query := db.Query(&almacenes)
-		// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
-		// can evict deleted ones from its cache.
-		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(warehousesUpdatedSince, 1)
+		// A first sync lists the active rows; later syncs read the log, whose deleted entries evict.
+		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("Almacenes"), 1)
 
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los almacenes: %v", err)
@@ -34,7 +30,7 @@ func GetLocationsWarehouses(req *core.HandlerArgs) core.HandlerResponse {
 	sedes := []types.Site{}
 	errGroup.Go(func() error {
 		query := db.Query(&sedes)
-		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(sitesUpdatedSince, 1)
+		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("Sedes"), 1)
 
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener los sedes: %v", err)
@@ -136,18 +132,12 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 
 func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 	paisID := req.GetQueryInt("pais-id")
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	paisCiudades := []types.CityLocation{}
 	query := db.Query(&paisCiudades)
-	// Cities have no status, so Delta() constrains nothing but the watermark.
+	// Keyless delta index: cities have no status to filter.
 	query.Select().
 		CountryID.Equals(int32(paisID)).
-		Delta(updatedSince)
-
-	query.AllowFilter()
+		Delta(req.GetDeltaCursor())
 	err := query.Exec()
 
 	if err != nil {

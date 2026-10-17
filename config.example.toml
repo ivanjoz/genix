@@ -296,6 +296,14 @@ openrouter_key   = ""
 url      = ""
 password = ""
 
+# ─── ORM file store ─────────────────────────────────────────────────────────
+# The delta logs and the by-IDs slot files. Required. An S3 Express bucket
+# ("<name>--<zone>--x-s3") appends natively; any other bucket appends with a
+# GET + conditional PUT. root prefixes every key.
+[file_store]
+bucket = ""
+root   = "orm/"
+
 # ─── SSE Bridge (fareward/) ─────────────────────────────────────────────
 # Relay que sostiene el stream del agente cuando el backend corre en Lambda, que no
 # puede mantener una conexión abierta. url igual a aws.lambda_url (o vacía) = sin

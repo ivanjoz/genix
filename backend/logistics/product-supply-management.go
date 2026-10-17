@@ -21,7 +21,7 @@ func GetProductSupply(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Log("GetProductSupply result_count:", len(productSupplyRecords))
-	return req.MakeResponse(productSupplyRecords)
+	return req.MakeResponse(core.WithDeltaReplace(productSupplyRecords))
 }
 
 // maxProductSupplyBulkRecords bounds one bulk write. The Excel import batches on the client, so a
@@ -152,7 +152,6 @@ type DateProductMovements struct {
 func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
 	movimientosFecha := req.GetQueryInt16("movimientos")
-	productosStockUpdated := req.GetQueryInt("productosStock")
 
 	movimientos := []types.WarehouseProductMovement{}
 
@@ -226,17 +225,18 @@ func GetAlmacenMovimientosGrouped(req *core.HandlerArgs) core.HandlerResponse {
 
 	psQuery := db.Query(&productosStockV2)
 	// No WarehouseID pinned, so Delta() routes to the [Status] delta index.
-	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.UpdatedVersion, psQuery.Quantity, psQuery.DetailQuantity).
+	psQuery.Select(psQuery.ID, psQuery.Updated, psQuery.Version, psQuery.Quantity, psQuery.DetailQuantity).
 		CompanyID.Equals(req.User.CompanyID).
-		Delta(productosStockUpdated, 1)
+		Delta(req.GetDeltaCursor("productosStock"), 1)
 
 	if err := psQuery.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los productos stock:", err)
 	}
 
+	// The grouped movements have no delta log: they answer whole, with the replace Metadata.
 	response := map[string]any{
 		"productosStock": &productosStockV2,
-		"movimientos":    &movimientosAgrupados,
+		"movimientos":    core.WithDeltaReplace(movimientosAgrupados),
 	}
 
 	return req.MakeResponse(response)

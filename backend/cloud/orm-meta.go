@@ -62,7 +62,7 @@ type TableMeta struct {
 
 // mirrorableIndexTypes are the index kinds that correspond to a real lookup structure in
 // the mirror. TypeInheritFromKey is a virtual range over a packed key and TypeDelta is
-// bound to the primary database's version counter; neither has a mirror equivalent.
+// bound to the primary database's delta log; neither has a mirror equivalent.
 var mirrorableIndexTypes = map[int8]bool{
 	db.TypeLocalIndex:  true,
 	db.TypeGlobalIndex: true,

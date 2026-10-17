@@ -38,7 +38,6 @@ export interface IClientProviderSnapshot {
   RegistryNumber: string
   IdentityDocType: number
   CityID: string
-  upv: number
   /** The table has no status column — nothing deletes a snapshot — so the backend sends none
    *  and the by-ids cache defaults it to 1. Declared because IMinimalRecord requires it. */
   ss: number

@@ -1,3 +1,13 @@
+## The Anuladas tab answers whole; the other tabs follow the delta log
+**Context** — Annulled is status 0, and the ORM's delta log reads a status-0 write as a delete.
+Every tab reads the same log, which names every status.
+**Decision** — The Anuladas tab (`order-status=0`) lists status 0 with the replace Metadata. The
+other tabs read `Delta()` with their statuses; an order whose status is not the tab's goes to
+`records_IDsToRemove`. The `date=-1` marker rows of the sale summary are no longer written: the route
+answers its whole date range, so nothing reads them.
+**Rationale** — The other tabs drop an annulled order through the deleted entry, which is right; only
+the tab that shows annulled orders cannot use the log.
+
 ## A payment must collect something, and the sale's TaxAmount is per line
 
 **Context** — With the server owning the debt, the payment rules and the tax split were open.

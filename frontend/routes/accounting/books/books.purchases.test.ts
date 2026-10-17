@@ -16,7 +16,7 @@ const issuer = { RUC: "20601000001", LegalName: "COMERCIAL GENIX S.A.C." }
 
 const supplier: IClientProviderSnapshot = {
   ID: 50, Name: "PROVEEDOR UNO S.A.C.", RegistryNumber: "20600000050", IdentityDocType: 6,
-  CityID: "", upv: 0, ss: 1, upd: 0,
+  CityID: "", ss: 1, upd: 0,
 }
 const identities = new Map([[supplier.ID, supplier]])
 

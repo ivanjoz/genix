@@ -15,15 +15,11 @@ import (
 // GetAssets returns the asset register using the delta-cache protocol. Depreciation is not
 // generated here — a list read does not write. The page calls PostAssetDepreciationRun first.
 func GetAssets(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	assets := []types.Asset{}
 	assetQuery := db.Query(&assets).CompanyID.Equals(req.User.CompanyID)
 	// Active, fully depreciated and disposed assets all stay on the register; only a removed
 	// row (status 0) leaves it, and the delta carries it so the client can evict it.
-	assetQuery.Delta(updatedSince,
+	assetQuery.Delta(req.GetDeltaCursor(),
 		int64(types.AssetStatusActive),
 		int64(types.AssetStatusFullyDepreciated),
 		int64(types.AssetStatusDisposed),

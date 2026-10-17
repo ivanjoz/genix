@@ -341,6 +341,8 @@ func main() {
 	serverPort := resolveServerPort()
 	// Install the text search backend before any DB write that might touch a table with TextSearch.
 	core.ConfigureTextSearch()
+	// The delta logs and the by-IDs slot files, written by every write to a cached table.
+	core.ConfigureFileStore()
 	// Print deployment path early so systemd logs show which cloned repo the
 	// binary will scan for route markdown and generated menu descriptions.
 	fmt.Println("GENIX_REPOSITORY_ROOT=", os.Getenv("GENIX_REPOSITORY_ROOT"))

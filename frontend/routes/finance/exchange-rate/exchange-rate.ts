@@ -42,7 +42,8 @@ export interface IExchangeRate {
   DetailSellRate: number[]
   ss: number
   upd: number
-  upv: number
+  ver: number
+  mdt: string
   UpdatedBy: number
   Created: number
   /* extra fields */

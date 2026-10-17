@@ -17,23 +17,25 @@ type Webpage struct {
 	// is handled separately; this column only stores the reference.
 	Image int32 `json:",omitempty"`
 	// Status: 0 removed, 1 active, 2 published.
-	Status         int8  `json:"ss,omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
+	Status  int8  `json:"ss,omitempty"`
+	Updated int32 `json:"upd,omitempty"`
+	Version int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
 }
 
 type WebpageTable struct {
 	db.TableStruct[WebpageTable, Webpage]
-	CompanyID      db.Col[*WebpageTable, int32]
-	ID             db.Col[*WebpageTable, int16]
-	Name           db.Col[*WebpageTable, string]
-	Route          db.Col[*WebpageTable, string]
-	Image          db.Col[*WebpageTable, int32]
-	Status         db.Col[*WebpageTable, int8]
-	Updated        db.Col[*WebpageTable, int32]
-	UpdatedVersion db.Col[*WebpageTable, int32]
-	UpdatedBy      db.Col[*WebpageTable, int32]
+	CompanyID db.Col[*WebpageTable, int32]
+	ID        db.Col[*WebpageTable, int16]
+	Name      db.Col[*WebpageTable, string]
+	Route     db.Col[*WebpageTable, string]
+	Image     db.Col[*WebpageTable, int32]
+	Status    db.Col[*WebpageTable, int8]
+	Updated   db.Col[*WebpageTable, int32]
+	Version   db.Col[*WebpageTable, int16]
+	UpdatedBy db.Col[*WebpageTable, int32]
 }
 
 func (e WebpageTable) GetSchema() db.TableSchema {

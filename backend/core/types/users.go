@@ -33,9 +33,6 @@ type User struct {
 	Updated   int32  `json:"upd,omitempty"`
 	UpdatedBy int32  `json:",omitempty"`
 	Status    int8   `json:"ss,omitempty"`
-	// UpdatedVersion is the write sequence number. By-IDs endpoints overwrite it with the record's
-	// slot version, which is what the client sends back to prove its copy is still current.
-	UpdatedVersion int32 `json:"upv,omitempty"`
 }
 
 type UserTable struct {
@@ -45,7 +42,7 @@ type UserTable struct {
 	User               db.Col[*UserTable, string]
 	LastName           db.Col[*UserTable, string]
 	FirstName          db.Col[*UserTable, string]
-	ProfileIDs         db.ColSlice[*UserTable, int32] `db:"profile_ids"`
+	ProfileIDs         db.ColSlice[*UserTable, int32]          `db:"profile_ids"`
 	AccesosGrants      db.Col[*UserTable, []AccesoGrantRecord] `db:"accesos_grants"`
 	AccesosComputed    db.Col[*UserTable, []byte]
 	AccesosSubComputed db.Col[*UserTable, []byte]
@@ -58,16 +55,15 @@ type UserTable struct {
 	Updated            db.Col[*UserTable, int32]
 	UpdatedBy          db.Col[*UserTable, int32]
 	Status             db.Col[*UserTable, int8]
-	UpdatedVersion     db.Col[*UserTable, int32]
 }
 
 func (usuarioTable UserTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                 35,
-		Name:               "users",
-		Partition:          usuarioTable.CompanyID,
-		UseSequences:       true,
-		SaveUpdatedVersion: true,
+		ID:           35,
+		Name:         "users",
+		Partition:    usuarioTable.CompanyID,
+		UseSequences: true,
+		CacheByIDs:   true,
 		// Users have no single display column, so the login handle is the label and the client
 		// composes the full name from S1/S2. Email and DocumentNumber stay out: a label doesn't need them.
 		GenericRecord: db.GenericRecordSchema{

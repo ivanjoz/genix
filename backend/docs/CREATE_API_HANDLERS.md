@@ -62,25 +62,49 @@ Understanding how a request flows through the system is vital for debugging and 
 
 ## 3. Synchronization & Cache Protocol
 
-The backend is architected to support high-performance mobile and web applications that maintain a local database (cache). Synchronization is watermarked on `upv` (`updated_version`), the record's write sequence number — **not** on a timestamp. Two writes can share a second; sequence values cannot, so the watermark is exact and boundary rows are not re-sent on every poll.
+The backend is architected to support high-performance mobile and web applications that maintain a local database (cache). Two protocols feed it; both keep their state in the ORM file store (`[file_store]` in `config.toml`, installed by `core.ConfigureFileStore()` at boot).
 
-### The Protocol Logic
-The frontend tracks its last successful sync time and sends it as a query parameter. The backend then filters records based on this timestamp:
+### Delta lists (`db.TypeDelta` + `.Delta()`)
+Every write to a table with a `db.TypeDelta` index appends an entry to a change log, one file per
+10-minute bucket. The client holds a **cursor** — `<bucket>.<bytes>` pairs, how much of each open log
+file it applied — and sends it in the query param named after the response key (`up` for a
+bare-array response, `records` for `{"records": [...]}`).
 
-1.  **Initial Load (`upv == 0`)**:
-    - The client has no local data.
-    - Return only "active" records (`Status >= 1`).
-    - This reduces the initial sync payload by excluding historical or deleted data.
+1.  **First sync (empty cursor)**: lists the index's view, filtered by the sync-filter values you pass (usually active `Status`).
+2.  **Later sync**: reads the log files past the cursor and returns every logged record in **any** status, so a soft-deleted (`status = 0`) record reaches the client and evicts it.
+3.  **Stale cursor** (older than the log keeps): answered as a *replace* — the whole listing, flagged so the client drops what the response doesn't bring.
 
-2.  **Incremental Sync (`upv > 0`)**:
-    - The client is asking for changes since the last sync.
-    - Return ALL records written after that version.
-    - **Crucial**: You must include records with `Status = 0` (deleted). This allows the frontend to remove these records from its local cache.
+Either way the result ends with `Metadata` records (ID = −bucket, `mdt` = the log file in Safe85),
+which the client keeps as its next cursor. Do not write this by hand:
 
-Do not write this branch by hand. Declare a `db.TypeDelta` index on the table and call
-`query.Delta(updatedVersion, 1)`: it emits both shapes, routes them to one packed view, and fans the
-incremental case out over every declared status so deletions reach the client. See
-`ORM_DATABASE_QUERY.md` §6.1 and §7.5b, or the `delta-cache-api` skill.
+```go
+query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
+```
+
+A cached route that is **not** backed by `.Delta()` (string/composite key, a status-0 listing)
+answers `req.MakeResponse(core.WithDeltaReplace(records))`: the whole list plus one replace
+`Metadata` record. See `ORM_DATABASE_QUERY.md` §6.1 and §7.5b, or the `delta-cache-api` skill.
+
+### By-IDs lookups (`CacheByIDs`)
+For "give me records [12, 87, 412]", a `CacheByIDs: true` table keeps a per-partition slot file with
+the year tick of each slot's last write. The client sends its IDs and held ticks in `?cc=` under
+partition 0; the server substitutes the company and returns only the records whose slot moved:
+
+```go
+cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+if err != nil {
+    return req.MakeErr(err)
+}
+partitions, err := db.QueryCachedIDs[types.ClientProvider](cachedIDsRequest)
+if err != nil {
+    return req.MakeErr("Error al obtener clientes/proveedores.", err)
+}
+return req.MakeResponse(core.HideCachedPartitions(partitions))
+```
+
+A static lookup (a record that never changes for its ID) reads the same param with
+`req.GetStaticRequestIDs()` and answers `req.MakeResponse(core.StaticCachedPartition(records))`.
+See `ORM_DATABASE_QUERY.md` §8, or the `fetch-record-by-id-api` skill.
 
 ### Sunix Timestamps
 The system uses a custom compact timestamp format called `Sunix`.
@@ -141,20 +165,20 @@ To improve performance when a handler needs to return multiple independent datas
 
 ```go
 func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
-    updatedVersion := req.GetQueryInt("upv")
     almacenes := []s.Almacen{}
     sedes := []s.Sede{}
     eg := errgroup.Group{}
 
+    // A multi-table response carries one cursor per response key.
     eg.Go(func() error {
         q := db.Query(&almacenes)
-        q.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
+        q.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("Almacenes"), 1)
         return q.Exec()
     })
 
     eg.Go(func() error {
         q := db.Query(&sedes)
-        q.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
+        q.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("Sedes"), 1)
         return q.Exec()
     })
 
@@ -280,26 +304,23 @@ func PostBatch(req *core.HandlerArgs) core.HandlerResponse {
 ### Example: GetProductos (Standard GET with Sync)
 ```go
 func GetProductos(req *core.HandlerArgs) core.HandlerResponse {
-	// 1. The client sends the highest updated_version it already holds
-	updatedVersion := req.GetQueryInt("upv")
-
-	// 2. Initialize slice
+	// 1. Initialize slice
 	productos := []s.Producto{}
 	
-	// 3. Build and execute query
+	// 2. Build and execute query
 	query := db.Query(&productos)
 	
 	// Exclude large or calculated fields to keep payload small
 	query.Exclude(query.Stock, query.StockStatus)
-	// Delta() keeps only active rows on a first sync and every status afterwards, so the
-	// frontend can evict deleted ones from its cache.
-	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedVersion, 1)
+	// A first sync lists the active rows; later syncs read the delta log past the client's cursor,
+	// in every status, so the frontend can evict deleted ones from its cache.
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
 	
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los productos:", err)
 	}
 	
-	// 4. Log results for monitoring
+	// 3. Log results for monitoring
 	core.Log("Productos obtenidos::", len(productos))
 	
 	return core.MakeResponse(req, &productos)
@@ -421,8 +442,10 @@ it is persisted or sent over the fareward wire.
 - **EXCEPTIONS**:
     - `Updated` MUST use `json:"upd,omitempty"`.
     - `Status` MUST use `json:"ss,omitempty"`.
-    - `UpdatedVersion` MUST use `json:"upv,omitempty"`, and is required on every table with a
-      `db.TypeDelta` index or `SaveUpdatedVersion: true`.
+    - `Version` MUST use `json:"ver,omitempty"`, and `Metadata *string` MUST use
+      `json:"mdt,omitempty"`; both are required on the record of every table with a `db.TypeDelta`
+      index (`Version` also as a table-struct column, `Metadata` never).
+    - `Updated int32` (`upd`) is required, record and table struct, on every `CacheByIDs: true` table.
 
 ### colbin Tagging Rules
 - Only for a struct that is **persisted as a blob column** or crosses the fareward wire.
@@ -450,7 +473,7 @@ type Entity struct {
 
 - [ ] Every GET query includes the `CompanyID` filter.
 - [ ] Every POST operation assigns `CompanyID` from `req.User`.
-- [ ] Delta reads go through `.Delta(req.GetQueryInt("upv"), 1)` against a `db.TypeDelta` index, not a hand-written `updated > 0` branch.
+- [ ] Delta reads go through `.Delta(req.GetDeltaCursor(), 1)` against a `db.TypeDelta` index, not a hand-written `updated > 0` branch. A cached route without one answers `core.WithDeltaReplace(records)`.
 - [ ] New records (`ID <= 0`) rely on the ORM to auto-assign the ID during `db.Insert` via the schema's `Autoincrement(N)`. Read back `records[i].ID` after insert when you need the assigned values.
 - [ ] Sensitive fields are protected using `db.UpdateExclude`.
 - [ ] Structs are properly tagged with JSON keys, plus one-based `cb` ids if they are persisted as a blob column.

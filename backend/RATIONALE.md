@@ -1,3 +1,33 @@
+## The ORM file store is a new S3 Express bucket
+**Context** — D7 named "the genix-s3 bucket", which config.toml does not have. You asked me to create
+a new one.
+**Decision** — `genix-orm--use1-az4--x-s3` (S3 Express One Zone, us-east-1, use1-az4), root `orm/`,
+installed at boot by `core.ConfigureFileStore` from `[file_store]`. The boot panics without it.
+**Rationale** — An Express bucket appends natively; a general purpose one costs a GET + PUT of the
+whole log file per append. Cost: the `serverlessCloud` Lambda role has `s3:*` but not
+`s3express:CreateSession`, so it needs that grant before the Lambda can write.
+
+## By-IDs requests name the company as partition 0
+**Context** — genix-ui sends every by-IDs ID under a partition; genix clients send 0, and the
+partition of every CacheByIDs table is the company.
+**Decision** — `req.GetCachedIDsRequest(companyID)` replaces partition 0 with the token's company
+(`p-products-ids` takes `?cmp=` first) and refuses any other partition; `core.HideCachedPartitions`
+puts 0 back in the response. Static lookups (lots, sale orders, company names/users, request errors)
+read the same `cc` with `req.GetStaticRequestIDs` and answer `[{r}]` through `core.StaticCachedPartition`.
+**Rationale** — The tenant never comes from the client. Static routes answer every ID, as before.
+
+## Cached routes without a delta log answer `core.WithDeltaReplace`
+**Context** — D6: a `useCache` route not backed by `.Delta()` must send the replace Metadata.
+**Decision** — `core.WithDeltaReplace(records) []any` appends one `{mdt}` record; minijson encodes the
+mixed slice. Response structs whose field carries it became `[]any`. The old timestamp watermarks
+(server metrics, observability, credit usage, cron actions, sale summary, ecommerce catalog, users,
+profiles, companies) are gone: those routes answer their whole window, and their `_IDsToRemove`
+eviction helpers were deleted. `gallery_images` and `warehouse_product_stock_detail` have a string or
+composite key, which a delta log cannot name: their `TypeDelta` became a `TypeView` and their routes
+answer the active list with the replace Metadata.
+**Rationale** — One helper instead of a `Metadata` field on every response struct. Cost: those
+routes resend everything on each sync.
+
 ## Which base64 moved to utils.Base64, and which did not
 
 **Context** — colbin v0.6 / genix-orm `main`: one sortable base64 (`utils.Base64`) for everything we

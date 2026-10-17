@@ -99,68 +99,77 @@ func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db
 	return records
 }
 
-// ExtractUpdatedVersionValues reads a by-IDs request: "ids" are records the client does not hold
-// at all, while "cc-ids"/"cc-ver" carry the ones it does, each with the slot version it was last
-// validated against. A version of 0 means "unknown", which never matches and always forces a read.
-func (req *HandlerArgs) ExtractUpdatedVersionValues() []db.IDUpdatedVersion {
-	idsStr := req.GetQuery("ids")
-	cachedIDsStr := req.GetQuery("cc-ids")
-	slotVersionsStr := req.GetQuery("cc-ver")
-	companyID := Coalesce(req.GetQueryInt("cmp"), req.User.CompanyID)
-
-	if companyID == 0 {
-		// Invalid company scope means the cache query cannot be resolved safely.
-		Log("error al extraer versiones de cache: no se envio Company-ID")
-		return []db.IDUpdatedVersion{}
+// GetCachedIDsRequest decodes the by-IDs request in ?cc=. The partition is the tenant, so it is never
+// the client's: genix clients send every ID under partition 0, and companyID (the token's, or the
+// storefront's on a public route) takes its place. Any other partition is refused.
+func (req *HandlerArgs) GetCachedIDsRequest(companyID int32) (db.CachedIDsRequest, error) {
+	if companyID <= 0 {
+		return db.CachedIDsRequest{}, fmt.Errorf("the by-IDs request has no company")
 	}
-
-	ids := parseConcatenatedInts(idsStr)
-	cachedIDs := parseConcatenatedInts(cachedIDsStr)
-	// Slot versions are a fixed-width u16 array so they stay aligned with cc-ids: the compact
-	// encoder buckets by magnitude, which would reorder a mixed-width version list.
-	slotVersions := parseConcatenatedUint16s(slotVersionsStr)
-
-	records := []db.IDUpdatedVersion{}
-
-	for _, id := range ids {
-		records = append(records, db.IDUpdatedVersion{ID: id, UpdatedVersion: 0, PartitionID: companyID})
-	}
-
-	for i, id := range cachedIDs {
-		version := uint16(0)
-		if i < len(slotVersions) {
-			version = slotVersions[i]
-		}
-		records = append(records, db.IDUpdatedVersion{ID: id, UpdatedVersion: version, PartitionID: companyID})
-	}
-
-	Log("records extracted:", len(records))
-	return records
-}
-
-// ExtractIDs decodes global/public by-ID requests that do not require a tenant partition.
-func (req *HandlerArgs) ExtractIDs() []int64 {
-	return parseConcatenatedInts(req.GetQuery("ids"))
-}
-
-// parseConcatenatedUint16s decodes one utils.Base64-encoded little-endian u16 array. Unlike
-// parseConcatenatedInts it has no magnitude buckets, so element order is exactly what the client
-// sent — which is what keeps cc-ver aligned with cc-ids.
-func parseConcatenatedUint16s(encodedValues string) []uint16 {
-	if encodedValues == "" {
-		return nil
-	}
-	data, err := utils.Base64.DecodeString(encodedValues)
+	request, err := db.DecodeCachedIDsRequest(req.GetQuery("cc"))
 	if err != nil {
-		Log("error al decodificar cc-ver:", err)
-		return nil
+		return db.CachedIDsRequest{}, fmt.Errorf("invalid by-IDs request (cc): %w", err)
 	}
+	if len(request.IDs) == 0 {
+		return db.CachedIDsRequest{}, fmt.Errorf("the by-IDs request names no IDs")
+	}
+	for i := range request.IDs {
+		if request.IDs[i].Partition != 0 {
+			return db.CachedIDsRequest{}, fmt.Errorf("the by-IDs request must send its IDs under partition 0, got %d", request.IDs[i].Partition)
+		}
+		request.IDs[i].Partition = int64(companyID)
+	}
+	return request, nil
+}
 
-	values := make([]uint16, 0, len(data)/2)
-	for i := 0; i+1 < len(data); i += 2 {
-		values = append(values, binary.LittleEndian.Uint16(data[i:]))
+// HideCachedPartitions puts back the partition 0 the client asked under: the company is the server's.
+func HideCachedPartitions[E any](partitions []db.CachedPartition[E]) []db.CachedPartition[E] {
+	for i := range partitions {
+		partitions[i].Partition = 0
 	}
-	return values
+	return partitions
+}
+
+// deltaReplaceRecord is the one Metadata record a route not backed by a delta log appends.
+type deltaReplaceRecord struct {
+	Metadata string `json:"mdt"`
+}
+
+// WithDeltaReplace is the response of a cached route that is not backed by a delta log: its whole
+// list plus a replace Metadata record, so the client drops every held record the list doesn't bring
+// (a deleted one, or one that left the list).
+func WithDeltaReplace[E any](records []E) []any {
+	response := make([]any, 0, len(records)+1)
+	for _, record := range records {
+		response = append(response, record)
+	}
+	return append(response, deltaReplaceRecord{Metadata: db.DeltaReplaceMetadata()})
+}
+
+// GetStaticRequestIDs reads the IDs of a by-IDs request (?cc=) sent to a static lookup route: one
+// whose record never changes for an ID, so the ticks the client holds don't matter and it answers
+// every ID. genix clients send them under partition 0.
+func (req *HandlerArgs) GetStaticRequestIDs() ([]int64, error) {
+	request, err := db.DecodeCachedIDsRequest(req.GetQuery("cc"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid by-IDs request (cc): %w", err)
+	}
+	ids := make([]int64, 0, len(request.IDs))
+	for _, cachedID := range request.IDs {
+		if cachedID.Partition != 0 {
+			return nil, fmt.Errorf("the by-IDs request must send its IDs under partition 0, got %d", cachedID.Partition)
+		}
+		ids = append(ids, cachedID.ID)
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("the by-IDs request names no IDs")
+	}
+	return ids, nil
+}
+
+// StaticCachedPartition is the by-IDs response of a static lookup route: every record, in partition 0.
+func StaticCachedPartition[E any](records []E) []db.CachedPartition[E] {
+	return []db.CachedPartition[E]{{Records: records}}
 }
 
 func parseConcatenatedInts(s string) []int64 {

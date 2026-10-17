@@ -19,7 +19,6 @@ const (
 	observabilityFiveMinuteSeconds = int64(300)
 	observabilityFiveMinutePrefix  = int32(100_000_000)
 	observabilityPlatformCompanyID = int32(0)
-	observabilityMaxEvictedFrames  = int32(600)
 	observabilityRoutesVersion     = int32(1)
 )
 
@@ -50,9 +49,10 @@ type ObservabilityRoute struct {
 }
 
 type ObservabilityResponse struct {
-	Frames            []ObservabilityFrame
-	FramesIDsToRemove []int32              `json:"Frames_IDsToRemove,omitempty"`
-	Routes            []ObservabilityRoute `json:",omitempty"`
+	// The window's frames whole, ending with the replace Metadata (core.WithDeltaReplace): a frame
+	// that fell out of the window leaves the client's cache.
+	Frames []any
+	Routes []ObservabilityRoute `json:",omitempty"`
 }
 
 type observabilityRouteAccumulator struct {
@@ -60,27 +60,17 @@ type observabilityRouteAccumulator struct {
 	errorCounts map[int32]uint64
 }
 
-// GetObservability returns absolute five-minute records. Delta refreshes deliberately overlap the
-// previous/current frames because both source rows can still change after their first appearance.
+// GetObservability returns absolute five-minute records for the whole window on every sync.
 func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 	windowHours := observabilityDefaultHours
 	if requestedHours := req.GetQueryInt("hours"); requestedHours > 0 {
 		windowHours = min(requestedHours, observabilityMaxHours)
 	}
 
-	watermark := core.Coalesce(req.GetUpdated("Frames"), req.GetUpdated())
 	nowUnix := time.Now().UTC().Unix()
 	currentTimeFrame := unixToObservabilityTimeFrame(nowUnix)
-	windowFrameCount := windowHours * 12
-	firstWindowFrame := currentTimeFrame - windowFrameCount + 1
-	firstQueryFrame := firstWindowFrame
-	if watermark > 0 {
-		watermarkFrame := unixToObservabilityTimeFrame(core.SunixToUnix(watermark))
-		firstQueryFrame = max(firstWindowFrame, watermarkFrame-1)
-	}
+	firstQueryFrame := currentTimeFrame - windowHours*12 + 1
 
-	core.Log("observability query started::", " hours::", windowHours, " watermark::", watermark,
-		" first_frame::", firstQueryFrame, " current_frame::", currentTimeFrame)
 	creditRows, logRows := []coreTypes.CreditUsageCompany{}, []coreTypes.UserLog{}
 	queries := errgroup.Group{}
 	queries.Go(func() error {
@@ -107,20 +97,10 @@ func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 			" log_rows::", len(logRows), " err::", err)
 		return req.MakeErr("No se pudo interpretar la información de observabilidad.", err)
 	}
-	response := ObservabilityResponse{
-		Frames:            frames,
-		FramesIDsToRemove: makeObservabilityFrameIDsToRemove(watermark, firstWindowFrame, frames),
-	}
-	// Routes is an independent cold collection. A partial cache write may already have a Frames
-	// watermark while lacking route metadata, so never infer one collection's state from the other.
-	if req.GetUpdated("Routes") < observabilityRoutesVersion {
-		response.Routes = makeObservabilityRoutes()
-	}
-
-	core.Log("observability query completed::", " hours::", windowHours, " watermark::", watermark,
-		" credit_rows::", len(creditRows), " log_rows::", len(logRows), " frames::", len(frames),
-		" removed_or_replaced::", len(response.FramesIDsToRemove))
-	return req.MakeResponse(response)
+	return req.MakeResponse(ObservabilityResponse{
+		Frames: core.WithDeltaReplace(frames),
+		Routes: makeObservabilityRoutes(),
+	})
 }
 
 func readObservabilityLogs(firstTimeFrame, lastTimeFrame int32) ([]coreTypes.UserLog, error) {
@@ -311,32 +291,6 @@ func unixToObservabilityTimeFrame(unixSeconds int64) int32 {
 
 func observabilityTimeFrameToUnix(timeFrame int32) int64 {
 	return int64(timeFrame-observabilityFiveMinutePrefix) * observabilityFiveMinuteSeconds
-}
-
-func makeObservabilityFrameIDsToRemove(
-	watermark int32,
-	firstLiveFrame int32,
-	returnedFrames []ObservabilityFrame,
-) []int32 {
-	if watermark <= 0 {
-		return nil
-	}
-
-	// Removing returned IDs forces the delta cache to apply mutable absolute frames even though
-	// their frame-derived `upd` is unchanged; the same response immediately reinserts them.
-	idsToRemove := make([]int32, 0, len(returnedFrames)+48)
-	for _, frame := range returnedFrames {
-		idsToRemove = append(idsToRemove, frame.ID)
-	}
-
-	watermarkFrame := unixToObservabilityTimeFrame(core.SunixToUnix(watermark))
-	firstCachedFrame := watermarkFrame - observabilityMaxHours*12 + 1
-	firstEvictedFrame := max(firstCachedFrame, firstLiveFrame-observabilityMaxEvictedFrames)
-	for timeFrame := firstEvictedFrame; timeFrame < firstLiveFrame; timeFrame++ {
-		idsToRemove = append(idsToRemove, core.UnixToSunix(observabilityTimeFrameToUnix(timeFrame)))
-	}
-	slices.Sort(idsToRemove)
-	return slices.Compact(idsToRemove)
 }
 
 func makeObservabilityRoutes() []ObservabilityRoute {

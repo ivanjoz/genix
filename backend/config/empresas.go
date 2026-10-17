@@ -64,7 +64,7 @@ func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Log("Empresas obtenidas:: ", len(records))
-	return core.MakeResponse(req, &records)
+	return req.MakeResponse(core.WithDeltaReplace(records))
 }
 
 // getCompaniesUpdatedSince keeps global company reads consistent across administrative reports.
@@ -106,9 +106,9 @@ type publicCompanyName struct {
 
 // GetPublicCompanyNamesByIDs serves immutable cache rows for the pre-login company selector.
 func GetPublicCompanyNamesByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	companyIDs := req.ExtractIDs()
-	if len(companyIDs) == 0 {
-		return req.MakeErr("No se enviaron ids de empresas.")
+	companyIDs, err := req.GetStaticRequestIDs()
+	if err != nil {
+		return req.MakeErr(err)
 	}
 
 	companyNames := make([]publicCompanyName, 0, len(companyIDs))
@@ -130,8 +130,7 @@ func GetPublicCompanyNamesByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		companyNames = append(companyNames, publicCompanyName{ID: record.ID, Name: record.Name})
 	}
 
-	core.Log("Nombres públicos de empresas obtenidos::", len(companyNames))
-	return req.MakeResponse(companyNames)
+	return req.MakeResponse(core.StaticCachedPartition(companyNames))
 }
 
 // La autorización la resuelve mainHandler con el catálogo: "GET.company-parametros" está mapeado a
@@ -146,7 +145,7 @@ func GetEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	records := []types.Company{*record}
-	return core.MakeResponse(req, &records)
+	return req.MakeResponse(core.WithDeltaReplace(records))
 }
 
 func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {

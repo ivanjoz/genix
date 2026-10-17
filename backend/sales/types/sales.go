@@ -56,13 +56,15 @@ type SaleOrder struct {
 	// ExchangeRate is the effective rate × 1000 the lines were converted with, spread
 	// included — what a report needs to restate a USD sale in PEN. A USD sale always has one;
 	// a PEN sale only when it sold a USD-priced product.
-	ExchangeRate   int32 `json:",omitempty"`
-	ClientID       int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdateCounter  int32 `json:"upc,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
+	ExchangeRate  int32 `json:",omitempty"`
+	ClientID      int32 `json:",omitempty"`
+	Created       int32 `json:",omitempty"`
+	Updated       int32 `json:"upd,omitempty"`
+	UpdateCounter int32 `json:"upc,omitempty"`
+	Version       int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status            int8  `json:"ss,omitempty"`
 	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
@@ -145,7 +147,7 @@ type SaleOrderTable struct {
 	ClientID                   db.Col[*SaleOrderTable, int32]
 	Updated                    db.Col[*SaleOrderTable, int32]
 	UpdateCounter              db.Col[*SaleOrderTable, int32]
-	UpdatedVersion             db.Col[*SaleOrderTable, int32]
+	Version                    db.Col[*SaleOrderTable, int16]
 	UpdatedBy                  db.Col[*SaleOrderTable, int32]
 	Status                     db.Col[*SaleOrderTable, int8]
 	LastPaymentTime            db.Col[*SaleOrderTable, int32]
@@ -194,8 +196,6 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				Keys:          db.Cols(e.Date, e.DetailProductsIDs),
 				UseIndexGroup: true,
 			},
-			// The status tabs pin Status themselves and take only the watermark from Delta(upv), so
-			// this replaces the [Status, UpdateCounter] view the delta read used to use.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}

@@ -53,7 +53,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// The endpoint is reachable by URL at any time, so it re-reads what already exists and only
-	// inserts what is missing. Delta(0, 1) is the first-sync form: it pins Status to 1.
+	// inserts what is missing: the active rows only.
 	sites := []types.Site{}
 	warehouses := []types.Warehouse{}
 	cashBanks := []finance.CashBank{}
@@ -62,17 +62,17 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 
 	errGroup.Go(func() error {
 		query := db.Query(&sites)
-		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(0, 1)
+		query.Select().CompanyID.Equals(req.User.CompanyID).Status.Equals(1)
 		return query.Exec()
 	})
 	errGroup.Go(func() error {
 		query := db.Query(&warehouses)
-		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(0, 1)
+		query.Select().CompanyID.Equals(req.User.CompanyID).Status.Equals(1)
 		return query.Exec()
 	})
 	errGroup.Go(func() error {
 		query := db.Query(&cashBanks)
-		query.Select().CompanyID.Equals(req.User.CompanyID).Delta(0, 1)
+		query.Select().CompanyID.Equals(req.User.CompanyID).Status.Equals(1)
 		return query.Exec()
 	})
 

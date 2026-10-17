@@ -458,14 +458,6 @@ func applyChangesToSaleSumary(companyID int32, date int16, changes []ProductSumm
 		summaryRows = append(summaryRows, currentRow)
 	}
 
-	// Persist one sentinel row per date so clients can query date=-1 and discover which day buckets changed.
-	summaryRows = append(summaryRows, types.ProductSaleSummary{
-		CompanyID: companyID,
-		Date:      -1,
-		ProductID: int32(date),
-		Updated:   summaryUpdated,
-	})
-
 	core.Log("applyChangesToSaleSumary saving rows", "companyID", companyID, "date", date, "rows", len(summaryRows), "replaceCurrentValues", replaceCurrentValues)
 	if err := db.Insert(&summaryRows); err != nil {
 		return core.Err("error saving sale summary rows:", err)

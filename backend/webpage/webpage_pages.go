@@ -23,15 +23,11 @@ var systemRoutes = []string{"/", "/about", "/store", "/product", "/cart"}
 // The fixed system pages are injected by the frontend, not here, so they always
 // exist without depending on a server round-trip.
 func GetWebpages(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	pages := []types.Webpage{}
 	query := db.Query(&pages).CompanyID.Equals(req.User.CompanyID)
 	// A first sync returns active + published only; a delta sync also returns Status=0 rows so the
 	// client can evict them.
-	query.Delta(updatedSince, 1, 2)
+	query.Delta(req.GetDeltaCursor(), 1, 2)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las páginas web:", err)
 	}

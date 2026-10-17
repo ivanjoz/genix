@@ -191,20 +191,17 @@ func receivePurchaseOrder(
 }
 
 func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
 	statusParam := int8(req.GetQueryInt("status"))
 
 	if statusParam == 0 {
 		statusParam = types.PurchaseOrderStatusPending
 	}
 
-	// Delta() reproduces exactly what this handler used to fan out by hand: the requested status only
-	// on a first sync, every declared status afterwards so the client can evict rows that moved.
+	// A first sync lists the requested status only; later syncs read the log, which names every
+	// status (a canceled order, status 0, is logged as deleted and leaves every tab).
 	records := []types.PurchaseOrder{}
 	query := db.Query(&records)
-	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, int64(statusParam))
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), statusParam)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener órdenes de compra:", err)

@@ -41,11 +41,13 @@ type ClientProvider struct {
 	CountryID  int16  `json:",omitempty"`
 	CityID     string `json:",omitempty"`
 	Created    int32  `json:",omitempty"`
-	CreatedBy        int32  `json:",omitempty"`
-	Status           int8   `json:"ss,omitempty"`
-	Updated          int32  `json:"upd,omitempty"`
-	UpdatedVersion   int32  `json:"upv,omitempty"`
-	UpdatedBy        int32  `json:",omitempty"`
+	CreatedBy  int32  `json:",omitempty"`
+	Status     int8   `json:"ss,omitempty"`
+	Updated    int32  `json:"upd,omitempty"`
+	Version    int16  `json:"ver,omitempty"`
+	UpdatedBy  int32  `json:",omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata *string `json:"mdt,omitempty"`
 }
 
 type ClientProviderTable struct {
@@ -67,7 +69,7 @@ type ClientProviderTable struct {
 	Status           db.Col[*ClientProviderTable, int8]
 	Updated          db.Col[*ClientProviderTable, int32]
 	UpdatedBy        db.Col[*ClientProviderTable, int32]
-	UpdatedVersion   db.Col[*ClientProviderTable, int32]
+	Version          db.Col[*ClientProviderTable, int16]
 }
 
 func (e *ClientProvider) SelfParse() {
@@ -76,17 +78,16 @@ func (e *ClientProvider) SelfParse() {
 
 func (t ClientProviderTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                 1,
-		Name:               "client_provider",
-		Partition:          t.CompanyID,
-		SaveUpdatedVersion: true,
+		ID:         1,
+		Name:       "client_provider",
+		Partition:  t.CompanyID,
+		CacheByIDs: true,
 		// RegistryNumber (RUC/DNI) disambiguates homonyms; Type separates clients from providers.
 		GenericRecord: db.GenericRecordSchema{
 			Name: t.Name, S1: t.RegistryNumber, N1: t.Type,
 		},
 		Keys: db.Cols(t.ID.Autoincrement(0)),
-		// Declared ranges let the delta index size its packed key: Status and Type need one digit
-		// each, which leaves the implicit Updated slot inside a 4-byte column.
+		// Declared ranges let the delta index size its packed listing view.
 		FixedValues: []db.FixedValues{
 			{Col: t.Status, Values: []int64{0, 1}},
 			{Col: t.Type, Min: 1, Max: 2},
@@ -94,10 +95,9 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.RegistryNumber)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.NameRegistryHash)},
-			// One packed view serves both halves of the sync. Keys[0] is the column Delta() infers as
-			// its filter: a first sync pins Status to the active value, a delta sync fans out over both
-			// so the client can evict rows that were deleted.
-			{Type: db.TypeDelta, Keys: db.Cols(t.Status, t.Type)},
+			// Type is pinned (one log per type, as the route asks for one); Status, the last key,
+			// is the sync filter a first sync lists.
+			{Type: db.TypeDelta, Keys: db.Cols(t.Type, t.Status)},
 		},
 	}
 }

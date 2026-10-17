@@ -81,9 +81,11 @@ type companyCreditBudgetMeter struct {
 	Status            int8  `json:"ss"`
 }
 
+// Days and Budgets answer whole every sync, ending with the replace Metadata
+// (core.WithDeltaReplace): a day that fell out of the window leaves the client's cache.
 type companyCreditReport struct {
-	Days    []companyCreditDay
-	Budgets []companyCreditBudgetMeter
+	Days    []any
+	Budgets []any
 	Routes  []creditRouteName `json:",omitempty"`
 }
 
@@ -111,11 +113,10 @@ type companyCreditUserDay struct {
 	Status    int8  `json:"ss"`
 }
 
-// Company and Users are independent delta collections, each with its own watermark, so the client
-// can hold one without implying anything about the other.
+// Company and Users answer whole every sync, ending with the replace Metadata.
 type companyCreditUsage struct {
-	Company []companyCreditCompanyDay
-	Users   []companyCreditUserDay
+	Company []any
+	Users   []any
 	Routes  []creditRouteName `json:",omitempty"`
 }
 
@@ -126,11 +127,6 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 	queryStartedAt := time.Now()
 	lastFrame := currentDailyTimeFrame()
 	firstFrame := lastFrame - companyCreditUsageDays + 1
-	// The watermark is itself a time frame, so it narrows the read directly. `>=` rather than `>`
-	// because the client's highest frame is today's, and today's row is still being written.
-	if watermark := creditUsageWatermark(req, "Days"); watermark > firstFrame {
-		firstFrame = min(watermark, lastFrame)
-	}
 
 	// The view is partitioned by frame, and a partition key takes IN rather than a range.
 	frames := make([]int32, 0, lastFrame-firstFrame+1)
@@ -149,7 +145,7 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se pudo obtener el uso de créditos por empresa.", err)
 	}
 
-	report := companyCreditReport{Days: make([]companyCreditDay, 0, len(rows))}
+	days := make([]companyCreditDay, 0, len(rows))
 	for _, row := range rows {
 		// Company id zero is the platform-wide observability aggregate, written into this table by
 		// the same daemon. It is not a tenant and must never reach the company ranking.
@@ -163,7 +159,7 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No se pudo interpretar el uso de créditos por empresa.", err)
 		}
 		day := int16(row.TimeFrame - dailyTimeFramePrefix)
-		report.Days = append(report.Days, companyCreditDay{
+		days = append(days, companyCreditDay{
 			ID:        row.CompanyID*companyCreditDayIDFactor + int32(day),
 			CompanyID: row.CompanyID, Day: day, CPU: totals.CPU, Inference: totals.Inference,
 			Updated: row.TimeFrame, Status: 1,
@@ -174,9 +170,9 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 		core.Log("company credit budgets read failed::", " err::", budgetError)
 		return req.MakeErr("No se pudo obtener el presupuesto de créditos de las empresas.", budgetError)
 	}
-	report.Budgets = make([]companyCreditBudgetMeter, 0, len(budgets))
+	budgetMeters := make([]companyCreditBudgetMeter, 0, len(budgets))
 	for _, budget := range budgets {
-		report.Budgets = append(report.Budgets, companyCreditBudgetMeter{
+		budgetMeters = append(budgetMeters, companyCreditBudgetMeter{
 			ID:                      budget.CompanyID,
 			DailyCPU:                budget.DailyCPU,
 			DailyInference:          budget.DailyInference,
@@ -194,13 +190,14 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 			Status:                  1,
 		})
 	}
-	if req.GetUpdated("Routes") < companyCreditRoutesVersion {
-		report.Routes = makeCreditRouteNames()
-	}
 	core.Log("company credit report completed::", " first_frame::", firstFrame, " last_frame::", lastFrame,
-		" rows::", len(rows), " days::", len(report.Days), " budgets::", len(report.Budgets),
+		" rows::", len(rows), " days::", len(days), " budgets::", len(budgetMeters),
 		" elapsed::", time.Since(queryStartedAt))
-	return req.MakeResponse(report)
+	return req.MakeResponse(companyCreditReport{
+		Days:    core.WithDeltaReplace(days),
+		Budgets: core.WithDeltaReplace(budgetMeters),
+		Routes:  makeCreditRouteNames(),
+	})
 }
 
 // GetCompanyCreditUsage returns one company's thirty days for every user in a single read. It
@@ -214,9 +211,6 @@ func GetCompanyCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	lastFrame := currentDailyTimeFrame()
 	firstFrame := lastFrame - companyCreditUsageDays + 1
-	if watermark := creditUsageWatermark(req, "Days"); watermark > firstFrame {
-		firstFrame = min(watermark, lastFrame)
-	}
 
 	// Two reads, both native to their table and run together: the company series is the base key of
 	// credit_usage_company, and the user series is one clustering range on credit_usage_user. The
@@ -238,10 +232,8 @@ func GetCompanyCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se pudo obtener el uso de créditos de la empresa.", err)
 	}
 
-	usage := companyCreditUsage{
-		Company: make([]companyCreditCompanyDay, 0, len(companyRows)),
-		Users:   make([]companyCreditUserDay, 0, len(userRows)),
-	}
+	companyDays := make([]companyCreditCompanyDay, 0, len(companyRows))
+	userDays := make([]companyCreditUserDay, 0, len(userRows))
 	for _, row := range companyRows {
 		// Only this table carries the per-route split, which is what the API breakdown reads.
 		routeTotals := map[int16]creditUsageTotals{}
@@ -253,7 +245,7 @@ func GetCompanyCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		// The day alone identifies a row here, and a UnixDay is always positive.
 		day := int16(row.TimeFrame - dailyTimeFramePrefix)
-		usage.Company = append(usage.Company, companyCreditCompanyDay{
+		companyDays = append(companyDays, companyCreditCompanyDay{
 			ID: int32(day), Day: day, CPU: totals.CPU, Inference: totals.Inference,
 			Routes: makeCreditUsageRoutes(routeTotals), Updated: row.TimeFrame, Status: 1,
 		})
@@ -266,32 +258,32 @@ func GetCompanyCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No se pudo interpretar el uso de créditos por usuario.", err)
 		}
 		day := int16(row.TimeFrame - dailyTimeFramePrefix)
-		usage.Users = append(usage.Users, companyCreditUserDay{
+		userDays = append(userDays, companyCreditUserDay{
 			ID:     row.UserID*companyCreditDayIDFactor + int32(day),
 			UserID: row.UserID, Day: day, CPU: totals.CPU, Inference: totals.Inference,
 			Updated: row.TimeFrame, Status: 1,
 		})
 	}
-	if req.GetUpdated("Routes") < companyCreditRoutesVersion {
-		usage.Routes = makeCreditRouteNames()
-	}
 
 	core.Log("company credit usage completed::", " company::", companyID, " first_frame::", firstFrame,
-		" last_frame::", lastFrame, " company_days::", len(usage.Company), " user_days::", len(usage.Users),
+		" last_frame::", lastFrame, " company_days::", len(companyDays), " user_days::", len(userDays),
 		" elapsed::", time.Since(queryStartedAt))
-	return req.MakeResponse(usage)
+	return req.MakeResponse(companyCreditUsage{
+		Company: core.WithDeltaReplace(companyDays),
+		Users:   core.WithDeltaReplace(userDays),
+		Routes:  makeCreditRouteNames(),
+	})
 }
 
 // GetCompanyUsersByIDs resolves user display labels across companies for the operator panel.
 //
-// The versioned by-IDs path cannot serve this: mainHandler strips a client-sent "cmp" on private
-// routes, so its partition always resolves to the caller's own company. Packing the company into
-// the requested id is what lets one route answer for every tenant, and the ids stay inside int32 so
-// the client's compact id encoder can carry them.
+// A static lookup, not the users' by-IDs cache: that one resolves its partition to the caller's own
+// company. Packing the company into the requested id is what lets one route answer for every
+// tenant, and the ids stay inside int32.
 func GetCompanyUsersByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	packedIDs := req.ExtractIDs()
-	if len(packedIDs) == 0 {
-		return req.MakeErr("No se enviaron ids de usuarios.")
+	packedIDs, err := req.GetStaticRequestIDs()
+	if err != nil {
+		return req.MakeErr(err)
 	}
 
 	// Split the packed ids back into one user list per company, which is what turns an arbitrary
@@ -343,8 +335,7 @@ func GetCompanyUsersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	for _, companyLabels := range labelsByCompany {
 		labels = append(labels, companyLabels...)
 	}
-	core.Log("company user labels completed::", " companies::", len(companyIDs), " labels::", len(labels))
-	return req.MakeResponse(labels)
+	return req.MakeResponse(core.StaticCachedPartition(labels))
 }
 
 // companyUserLabel is what a card renders and nothing more. ID is the packed (company, user) pair
@@ -354,12 +345,6 @@ type companyUserLabel struct {
 	User      string
 	FirstName string
 	LastName  string
-}
-
-// creditUsageWatermark reads the delta bound, accepting either the collection-named parameter the
-// multi-collection cache sends or the plain one a single-collection client would.
-func creditUsageWatermark(req *core.HandlerArgs, collection string) int32 {
-	return core.Coalesce(req.GetUpdated(collection), req.GetUpdated())
 }
 
 func makeCreditRouteNames() []creditRouteName {

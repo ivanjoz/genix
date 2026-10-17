@@ -126,5 +126,5 @@ func GetBackups(args *core.HandlerArgs) core.HandlerResponse {
 		})
 	}
 
-	return args.MakeResponse(files)
+	return args.MakeResponse(core.WithDeltaReplace(files))
 }

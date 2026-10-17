@@ -10,71 +10,31 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-
-	"golang.org/x/sync/errgroup"
 )
 
 func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
+	loggedProducts := []types.Product{}
+	query := db.Query(&loggedProducts).CompanyID.Equals(req.User.CompanyID)
+	query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
+	// A first sync lists the active products; later syncs read the log, which evicts deleted ones.
+	query.Delta(req.GetDeltaCursor("records"), types.ProductStatusActive)
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener los productos:", err)
+	}
 
+	// The catalog is Status=1 and nothing else, but the log names every status: a product that
+	// became a supply/material (2) comes back as a live record. It must go as an id to drop, never
+	// as a body: a supply carries a purchase Price and no FinalPrice, and every screen that reads
+	// this cache treats what it finds there as sellable.
 	productos := []types.Product{}
-	// The catalog is Status=1 and nothing else. A deleted row (0) and a supply/material (2) live
-	// in the same table, so a delta still has to mention them — but as ids to drop, never as
-	// record bodies: a supply carries a purchase Price and no FinalPrice, and every screen that
-	// reads this cache treats what it finds there as sellable.
-	evictedStatuses := []int8{types.ProductStatusInactive, types.ProductStatusSupply}
-	evictedIDsByStatus := make([][]int32, len(evictedStatuses))
-	errGroup := errgroup.Group{}
-
-	errGroup.Go(func() error {
-		query := db.Query(&productos).CompanyID.Equals(req.User.CompanyID)
-
-		query.Exclude(query.Stock, query.StockStatus, query.CompanyID, query.Created, query.CreatedBy, query.NameHash)
-
-		// Pinning Status leaves the delta index's every key bound, so Delta() only adds the
-		// watermark and the read stays inside the active bucket on a first sync and a delta alike.
-		query.Status.Equals(types.ProductStatusActive)
-		query.Delta(updatedSince)
-
-		if err := query.Exec(); err != nil {
-			return fmt.Errorf("error al obtener los productos: %v", err)
-		}
-		return nil
-	})
-
-	// A first sync has no cached rows to evict, so the eviction scans are pure delta work.
-	if updatedSince > 0 {
-		for statusIndex, evictedStatus := range evictedStatuses {
-			errGroup.Go(func() error {
-				query := db.Query(&[]types.Product{}).CompanyID.Equals(req.User.CompanyID)
-				query.Select(query.ID)
-				query.Status.Equals(evictedStatus)
-				query.Delta(updatedSince)
-
-				// Only the ids matter, so every decoded row is discarded as it is scanned.
-				return query.ExecScan(func(record *types.Product) bool {
-					evictedIDsByStatus[statusIndex] = append(evictedIDsByStatus[statusIndex], record.ID)
-					return true
-				})
-			})
-		}
-	}
-
-	if err := errGroup.Wait(); err != nil {
-		return req.MakeErr(err)
-	}
-
 	evictedProductIDs := []int32{}
-	for _, evictedIDs := range evictedIDsByStatus {
-		evictedProductIDs = append(evictedProductIDs, evictedIDs...)
+	for _, product := range loggedProducts {
+		if product.Metadata == nil && product.Status != types.ProductStatusActive {
+			evictedProductIDs = append(evictedProductIDs, product.ID)
+			continue
+		}
+		productos = append(productos, product)
 	}
-
-	// The watermark the client sent, next to what it bought: upv=0 means the client asked for a
-	// first sync, so a 10k-row answer is the request being obeyed, not the delta failing.
-	core.Log("GET.products:: upv recibido::", updatedSince, "| registros devueltos::", len(productos),
-		"| ids a evictar::", len(evictedProductIDs))
 
 	response := map[string]any{
 		"records":             &productos,
@@ -110,19 +70,17 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	cachedIDs := req.ExtractUpdatedVersionValues()
-
-	if len(cachedIDs) == 0 {
-		return req.MakeErr("No se enviaron ids a buscar.")
+	// Public route (p- prefix): the storefront names its company in ?cmp=, the app falls back to
+	// the token's. Either is fine: the catalog is public.
+	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cmp"), req.User.CompanyID))
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	productos := []types.Product{}
-	err := db.QueryCachedIDs(&productos, cachedIDs)
+	partitions, err := db.QueryCachedIDs[types.Product](cachedIDsRequest)
 	if err != nil {
 		return req.MakeErr("Error al obtener los productos.", err)
 	}
-
-	return core.MakeResponse(req, &productos)
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 func PostProducts(req *core.HandlerArgs) core.HandlerResponse {

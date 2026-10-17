@@ -24,9 +24,11 @@ type SalesPlanning struct {
 	WeeklyQuantity     []SalesPlanningWeek `json:",omitempty"`
 	Status             int8                `json:"ss,omitempty"`
 	Updated            int32               `json:"upd,omitempty"`
-	UpdatedVersion     int32               `json:"upv,omitempty"`
-	UpdatedBy          int32               `json:",omitempty"`
-	Created            int32               `json:",omitempty"`
+	Version            int16               `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Created   int32   `json:",omitempty"`
 }
 
 type SalesPlanningTable struct {
@@ -39,7 +41,7 @@ type SalesPlanningTable struct {
 	WeeklyQuantity     db.Col[*SalesPlanningTable, []SalesPlanningWeek]
 	Status             db.Col[*SalesPlanningTable, int8]
 	Updated            db.Col[*SalesPlanningTable, int32]
-	UpdatedVersion     db.Col[*SalesPlanningTable, int32]
+	Version            db.Col[*SalesPlanningTable, int16]
 	UpdatedBy          db.Col[*SalesPlanningTable, int32]
 	Created            db.Col[*SalesPlanningTable, int32]
 }
@@ -73,29 +75,31 @@ type SeasonalityCurveWeek struct {
 // assigned to many products.
 type SeasonalityCurve struct {
 	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
-	CompanyID      int32                  `json:",omitempty"`
-	ID             int32                  `json:",omitempty"`
-	TempID         int32                  `json:",omitempty"`
-	Name           string                 `json:",omitempty"`
-	Curve          []SeasonalityCurveWeek `json:",omitempty"`
-	Status         int8                   `json:"ss,omitempty"`
-	Updated        int32                  `json:"upd,omitempty"`
-	UpdatedVersion int32                  `json:"upv,omitempty"`
-	UpdatedBy      int32                  `json:",omitempty"`
-	Created        int32                  `json:",omitempty"`
+	CompanyID int32                  `json:",omitempty"`
+	ID        int32                  `json:",omitempty"`
+	TempID    int32                  `json:",omitempty"`
+	Name      string                 `json:",omitempty"`
+	Curve     []SeasonalityCurveWeek `json:",omitempty"`
+	Status    int8                   `json:"ss,omitempty"`
+	Updated   int32                  `json:"upd,omitempty"`
+	Version   int16                  `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Created   int32   `json:",omitempty"`
 }
 
 type SeasonalityCurveTable struct {
 	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
-	CompanyID      db.Col[*SeasonalityCurveTable, int32]
-	ID             db.Col[*SeasonalityCurveTable, int32]
-	Name           db.Col[*SeasonalityCurveTable, string]
-	Curve          db.Col[*SeasonalityCurveTable, []SeasonalityCurveWeek]
-	Status         db.Col[*SeasonalityCurveTable, int8]
-	Updated        db.Col[*SeasonalityCurveTable, int32]
-	UpdatedVersion db.Col[*SeasonalityCurveTable, int32]
-	UpdatedBy      db.Col[*SeasonalityCurveTable, int32]
-	Created        db.Col[*SeasonalityCurveTable, int32]
+	CompanyID db.Col[*SeasonalityCurveTable, int32]
+	ID        db.Col[*SeasonalityCurveTable, int32]
+	Name      db.Col[*SeasonalityCurveTable, string]
+	Curve     db.Col[*SeasonalityCurveTable, []SeasonalityCurveWeek]
+	Status    db.Col[*SeasonalityCurveTable, int8]
+	Updated   db.Col[*SeasonalityCurveTable, int32]
+	Version   db.Col[*SeasonalityCurveTable, int16]
+	UpdatedBy db.Col[*SeasonalityCurveTable, int32]
+	Created   db.Col[*SeasonalityCurveTable, int32]
 }
 
 func (e SeasonalityCurveTable) GetSchema() db.TableSchema {

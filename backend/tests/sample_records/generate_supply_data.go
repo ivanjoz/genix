@@ -264,7 +264,6 @@ func (generator *supplyDataGenerator) seedProviders() error {
 func (generator *supplyDataGenerator) loadExistingProviders() error {
 	request := generator.makeRequest("GET.client-provider", map[string]string{
 		"type": strconv.Itoa(int(crmTypes.ClientProviderTypeProvider)),
-		"upv":  "0",
 	}, "")
 
 	storedProviders := []crmTypes.ClientProvider{}

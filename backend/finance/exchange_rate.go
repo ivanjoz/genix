@@ -9,16 +9,12 @@ import (
 )
 
 func GetExchangeRates(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	records := []types.ExchangeRate{}
 
 	// Delta() keeps only active rows on a first sync and every status afterwards, so the client
 	// can evict the months that were deleted.
 	query := db.Query(&records)
-	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los tipos de cambio:", err)

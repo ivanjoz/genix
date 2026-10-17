@@ -5,10 +5,8 @@ import (
 	"app/db"
 	"app/finance/types"
 	"encoding/json"
-	"sort"
+	"slices"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // expensesQueryLimit caps the "Todos" and "Pagados" tabs; "Pend. Pago" stays uncapped.
@@ -47,110 +45,45 @@ func daysInMonth(year int, month time.Month) int {
 
 // --- GET / POST: one-time and per-period expenses ---------------------------------
 
-// expensesComplementStatuses returns the ss values that have LEFT the given tab, so a
-// delta sync can evict rows that no longer belong to it (mirrors GetSaleOrders).
-//   - status 1 (Pend. Pago): evict paid (2) and removed (0)
-//   - status 2 (Pagados):    evict pending (1) and removed (0)
-//   - status 0 (Todos):      evict only removed (0)
-func expensesComplementStatuses(statusFilter int8) []int8 {
-	switch statusFilter {
-	case 1:
-		return []int8{2, 0}
-	case 2:
-		return []int8{1, 0}
-	default:
-		return []int8{0}
-	}
-}
-
 // GetExpenses serves one status tab per request via the "status" query param
-// (0 = Todos, 1 = Pend. Pago, 2 = Pagados) and supports delta sync via "upv".
-// Each tab is its own delta-cache query; rows that change status are evicted through
-// "records_IDsToRemove" (same strategy as GetSaleOrders).
+// (0 = Todos, 1 = Pend. Pago, 2 = Pagados) with the delta-cache protocol. Every tab reads the
+// same log, which names every status: a row that moved to another tab comes back as a live
+// record and is evicted from this one through "records_IDsToRemove".
 func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	statusFilter := int8(req.GetQueryInt("status"))
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-	queryGroup := errgroup.Group{}
 
-	// Map the tab's status code to the concrete ss values to fetch.
-	var statusToQuery []int8
+	// Map the tab's status code to the concrete ss values a first sync lists.
+	var statusToQuery []any
 	switch statusFilter {
 	case 0:
-		statusToQuery = []int8{1, 2} // Todos = all live
+		statusToQuery = []any{int8(1), int8(2)} // Todos = all live
 	case 1:
-		statusToQuery = []int8{1}
+		statusToQuery = []any{int8(1)}
 	case 2:
-		statusToQuery = []int8{2}
+		statusToQuery = []any{int8(2)}
 	default:
 		return req.MakeErr("El status del gasto es incorrecto.")
 	}
 
-	// Todos / Pagados are capped; Pend. Pago stays uncapped.
-	limit := int32(0)
+	loggedExpenses := []types.Expense{}
+	query := db.Query(&loggedExpenses).OrderDesc()
+	// Todos / Pagados cap their first sync; Pend. Pago stays uncapped.
 	if statusFilter != 1 {
-		limit = expensesQueryLimit
+		query.Limit(expensesQueryLimit)
 	}
-
-	expensesByStatus := make([][]types.Expense, len(statusToQuery))
-	for resultIndex, currentStatus := range statusToQuery {
-		queryGroup.Go(func() error {
-			query := db.Query(&expensesByStatus[resultIndex]).OrderDesc()
-			if limit > 0 {
-				query.Limit(limit)
-			}
-			// Delta() with no filter values adds the exact watermark bound and nothing else, leaving
-			// this query pinned to the one status the tab asked for.
-			query.CompanyID.Equals(req.User.CompanyID).
-				Status.Equals(currentStatus).
-				Delta(updatedSince)
-			return query.Exec()
-		})
-	}
-
-	// On delta syncs only, collect the IDs of rows that left this tab so the client cache drops them.
-	statusToRemove := expensesComplementStatuses(statusFilter)
-	expensesToRemoveIDsGroups := make([][]int32, len(statusToRemove))
-	if updatedSince > 0 {
-		for resultIndex, currentStatus := range statusToRemove {
-			queryGroup.Go(func() error {
-				idsToSave := &expensesToRemoveIDsGroups[resultIndex]
-
-				query := db.Query(&[]types.Expense{})
-				query.Select(query.ID)
-				query.CompanyID.Equals(req.User.CompanyID).
-					Status.Equals(currentStatus).
-					Delta(updatedSince)
-
-				return query.ExecScan(func(record *types.Expense) bool {
-					*idsToSave = append(*idsToSave, record.ID)
-					// Only the ID is needed; skip storing the decoded row.
-					return true
-				})
-			})
-		}
-	}
-
-	if err := queryGroup.Wait(); err != nil {
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("records"), statusToQuery...)
+	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los gastos:", err)
 	}
 
 	records := []types.Expense{}
-	for _, expensesByCurrentStatus := range expensesByStatus {
-		records = append(records, expensesByCurrentStatus...)
-	}
-
-	// Todos merges two status partitions, so cap the combined set to the most-recently
-	// updated `limit` rows (each partition is already capped, but their sum is not).
-	if limit > 0 && int32(len(records)) > limit {
-		sort.Slice(records, func(i, j int) bool { return records[i].Updated > records[j].Updated })
-		records = records[:limit]
-	}
-
 	expensesToRemoveIDs := []int32{}
-	for _, idsToRemove := range expensesToRemoveIDsGroups {
-		expensesToRemoveIDs = append(expensesToRemoveIDs, idsToRemove...)
+	for _, expense := range loggedExpenses {
+		if expense.Metadata == nil && !slices.Contains(statusToQuery, any(expense.Status)) {
+			expensesToRemoveIDs = append(expensesToRemoveIDs, expense.ID)
+			continue
+		}
+		records = append(records, expense)
 	}
 
 	response := map[string]any{
@@ -261,16 +194,12 @@ func savePaidExpenseDocument(req *core.HandlerArgs, stored types.Expense, body t
 // --- GET / POST: recurring schedules ----------------------------------------------
 
 func GetExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	records := []types.ExpenseScheduled{}
 
 	// Delta() keeps only active rows on a first sync and fans out over both statuses afterwards, so
 	// the client can evict deleted ones — it replaces the per-status loop this handler used to run.
 	query := db.Query(&records)
-	query.CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los gastos programados:", err)

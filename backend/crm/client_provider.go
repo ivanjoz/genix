@@ -8,26 +8,20 @@ import (
 )
 
 func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
 	requestedClientProviderType := req.GetQueryInt("type")
 
-	// Type is required so the query hits the packed delta view.
+	// Type is required: it is the delta index's pinned key, one log per type.
 	if requestedClientProviderType != int32(types.ClientProviderTypeClient) && requestedClientProviderType != int32(types.ClientProviderTypeProvider) {
 		return req.MakeErr("Debe enviar type=1 (cliente) o type=2 (proveedor).")
 	}
 
-	core.Log("GetClientProviders params:", "empresa_id=", req.User.CompanyID, "type=", requestedClientProviderType, "upv_since=", updatedSince)
-
 	clientProviders := []types.ClientProvider{}
 	clientProvidersQuery := db.Query(&clientProviders)
-	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend can
-	// evict deleted ones from its cache.
+	// A first sync lists the active rows; later syncs read the log, whose deleted entries evict.
 	clientProvidersQuery.Select().
 		CompanyID.Equals(req.User.CompanyID).
 		Type.Equals(int8(requestedClientProviderType)).
-		Delta(updatedSince, 1)
+		Delta(req.GetDeltaCursor(), int8(1))
 
 	if queryExecutionError := clientProvidersQuery.Exec(); queryExecutionError != nil {
 		core.Log("GetClientProviders query error:", queryExecutionError)
@@ -39,22 +33,16 @@ func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetClientProvidersByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	clientProviderCachedIDs := req.ExtractUpdatedVersionValues()
-	if len(clientProviderCachedIDs) == 0 {
-		return req.MakeErr("No se enviaron ids a buscar.")
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	core.Log("GetClientProvidersByIDs cached_ids_count:", len(clientProviderCachedIDs))
-
-	clientProviders := []types.ClientProvider{}
-	// Query only stale or missing cached rows, using the slot versions the frontend sent back.
-	if queryError := db.QueryCachedIDs(&clientProviders, clientProviderCachedIDs); queryError != nil {
-		core.Log("GetClientProvidersByIDs query error:", queryError)
-		return req.MakeErr("Error al obtener clientes/proveedores.", queryError)
+	// Only the records whose slot moved past the tick the client holds come back.
+	partitions, err := db.QueryCachedIDs[types.ClientProvider](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener clientes/proveedores.", err)
 	}
-
-	core.Log("GetClientProvidersByIDs result_count:", len(clientProviders))
-	return req.MakeResponse(clientProviders)
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 func PostClientProviders(req *core.HandlerArgs) core.HandlerResponse {

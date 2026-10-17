@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/packages"
@@ -193,19 +192,18 @@ func CheckTables() {
 	}
 }
 
-// maxTableID mirrors db.MaxTableID: TableSchema.ID occupies the low 14 bits of the packed
-// partition_table_id key of cache_updated_version.
+// maxTableID mirrors db.MaxTableID: TableSchema.ID names the table's cache files.
 const maxTableID = 1<<14 - 1
 
 // tableSchemaDeclaration is the subset of a GetSchema() literal these checks reason about. It is
 // read from the AST rather than by running the code, so a bad declaration is caught before the
 // ORM's own compile-time panic ever fires.
 type tableSchemaDeclaration struct {
-	tableName          string
-	id                 int64
-	hasID              bool
-	saveUpdatedVersion bool
-	hasDeltaIndex      bool
+	tableName     string
+	id            int64
+	hasID         bool
+	cacheByIDs    bool
+	hasDeltaIndex bool
 }
 
 // readTableSchemaDeclaration returns the table struct a GetSchema() method belongs to, plus what
@@ -255,8 +253,8 @@ func readTableSchemaDeclaration(pkg *packages.Package, funcDecl *ast.FuncDecl) (
 			}
 		case "Name":
 			schema.tableName = constantString(pkg, keyValue.Value)
-		case "SaveUpdatedVersion":
-			schema.saveUpdatedVersion = constantBool(pkg, keyValue.Value)
+		case "CacheByIDs":
+			schema.cacheByIDs = constantBool(pkg, keyValue.Value)
 		case "Indexes":
 			schema.hasDeltaIndex = declaresDeltaIndex(keyValue.Value)
 		}
@@ -325,8 +323,8 @@ func constantBool(pkg *packages.Package, expr ast.Expr) bool {
 }
 
 // checkTableSchemas enforces the declaration rules the ORM would otherwise only discover at
-// runtime: every table owns a unique ID, and any table synced incrementally exposes its write
-// sequence number to the client.
+// runtime: every table owns a unique ID, and every cached table exposes the managed fields its
+// cache protocol hands to the client.
 func checkTableSchemas(
 	baseToTable map[*types.TypeName]*types.TypeName,
 	schemasByTable map[*types.TypeName]tableSchemaDeclaration,
@@ -361,44 +359,43 @@ func checkTableSchemas(
 			}
 		}
 
-		// The by-IDs cache compares slot versions and a delta sync watermarks on the write sequence,
-		// so both need "updated_version" to reach the client as the "upv" field.
-		if schema.saveUpdatedVersion || schema.hasDeltaIndex {
-			if !hasUpdatedVersionField(structFieldTypes[base], structFieldTags[base]) {
-				fmt.Printf("Error: Table '%s' is synced incrementally but its record struct '%s' does not declare "+
-					"the field 'UpdatedVersion int32' with the json tag 'upv,omitempty'.\n", reportedName, base.Name())
-			}
-			if _, declared := structFieldTypes[table]["UpdatedVersion"]; !declared {
-				fmt.Printf("Error: Table '%s' is synced incrementally but its table struct '%s' does not declare "+
-					"the 'UpdatedVersion' column.\n", reportedName, table.Name())
+		baseFieldTypes, baseFieldTags := structFieldTypes[base], structFieldTags[base]
+		tableFieldTypes := structFieldTypes[table]
+
+		// The by-IDs cache returns each record's slot tick in its Updated.
+		if schema.cacheByIDs {
+			checkRecordField(reportedName, base, baseFieldTypes, baseFieldTags, "Updated", "int32", "upd", "CacheByIDs")
+			if _, declared := tableFieldTypes["Updated"]; !declared {
+				fmt.Printf("Error: Table '%s' declares CacheByIDs but its table struct '%s' does not declare "+
+					"the 'Updated' column.\n", reportedName, table.Name())
 			}
 		}
 
-		// The slot version replaced the old per-record cache version outright.
-		for fieldName, tag := range structFieldTags[base] {
-			if fieldName == "CacheVersion" || jsonTagName(tag) == "ccv" {
-				fmt.Printf("Error: Record '%s' still declares the removed cache-version field '%s'. Use "+
-					"'UpdatedVersion' with the json tag 'upv' instead.\n", base.Name(), fieldName)
+		// A delta log carries each write's Version, and Delta() appends its Metadata records to the
+		// result. Metadata only travels in responses, so it must never become a column.
+		if schema.hasDeltaIndex {
+			checkRecordField(reportedName, base, baseFieldTypes, baseFieldTags, "Version", "int16", "ver", "a TypeDelta index")
+			checkRecordField(reportedName, base, baseFieldTypes, baseFieldTags, "Metadata", "*string", "mdt", "a TypeDelta index")
+			if _, declared := tableFieldTypes["Version"]; !declared {
+				fmt.Printf("Error: Table '%s' has a TypeDelta index but its table struct '%s' does not declare "+
+					"the 'Version' column.\n", reportedName, table.Name())
+			}
+			if _, declared := tableFieldTypes["Metadata"]; declared {
+				fmt.Printf("Error: Table '%s' has a TypeDelta index and its table struct '%s' declares a "+
+					"'Metadata' column. Metadata belongs only to the record struct.\n", reportedName, table.Name())
 			}
 		}
 	}
 }
 
-func hasUpdatedVersionField(fieldTypes map[string]types.Type, fieldTags map[string]string) bool {
-	fieldType, declared := fieldTypes["UpdatedVersion"]
-	if !declared {
-		return false
+// checkRecordField reports a record struct that lacks fieldName with the exact Go type and json tag
+// "<jsonName>,omitempty" the cache protocol named by requiredBy expects.
+func checkRecordField(reportedName string, base *types.TypeName, fieldTypes map[string]types.Type,
+	fieldTags map[string]string, fieldName, goType, jsonName, requiredBy string) {
+	fieldType, declared := fieldTypes[fieldName]
+	if declared && fieldType.String() == goType && reflect.StructTag(fieldTags[fieldName]).Get("json") == jsonName+",omitempty" {
+		return
 	}
-	if basic, isBasic := fieldType.Underlying().(*types.Basic); !isBasic || basic.Kind() != types.Int32 {
-		return false
-	}
-	return jsonTagName(fieldTags["UpdatedVersion"]) == "upv"
-}
-
-func jsonTagName(rawTag string) string {
-	jsonTag := reflect.StructTag(rawTag).Get("json")
-	if jsonTag == "" {
-		return ""
-	}
-	return strings.TrimSpace(strings.Split(jsonTag, ",")[0])
+	fmt.Printf("Error: Table '%s' declares %s but its record struct '%s' does not declare the field "+
+		"'%s %s' with the json tag '%s,omitempty'.\n", reportedName, requiredBy, base.Name(), fieldName, goType, jsonName)
 }

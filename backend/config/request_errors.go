@@ -24,18 +24,18 @@ type requestErrorByID struct {
 // GetRequestErrorsByIDs preserves every code-line row under its hash so rare collisions cannot
 // overwrite one another in the frontend's static by-ID cache.
 func GetRequestErrorsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	cachedIDs := req.ExtractUpdatedVersionValues()
-	if len(cachedIDs) == 0 {
-		return req.MakeErr("No se enviaron IDs de errores para buscar.")
+	staticIDs, err := req.GetStaticRequestIDs()
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if len(cachedIDs) > requestErrorIDsLimit {
+	if len(staticIDs) > requestErrorIDsLimit {
 		return req.MakeErr("Se enviaron demasiados IDs de errores.")
 	}
 
-	requestedIDs := make([]int32, 0, len(cachedIDs))
-	for _, cachedID := range cachedIDs {
-		if cachedID.ID > 0 && cachedID.ID <= int64(^uint32(0)>>1) {
-			requestedIDs = append(requestedIDs, int32(cachedID.ID))
+	requestedIDs := make([]int32, 0, len(staticIDs))
+	for _, id := range staticIDs {
+		if id > 0 && id <= int64(^uint32(0)>>1) {
+			requestedIDs = append(requestedIDs, int32(id))
 		}
 	}
 	slices.Sort(requestedIDs)
@@ -51,9 +51,7 @@ func GetRequestErrorsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se pudieron obtener los errores solicitados.", err)
 	}
 
-	result := makeRequestErrorsByID(requestedIDs, rows)
-	core.Log("request errors by IDs query completed::", " ids::", len(requestedIDs), " rows::", len(rows))
-	return req.MakeResponse(result)
+	return req.MakeResponse(core.StaticCachedPartition(makeRequestErrorsByID(requestedIDs, rows)))
 }
 
 func makeRequestErrorsByID(requestedIDs []int32, rows []coreTypes.RequestError) []requestErrorByID {

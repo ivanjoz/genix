@@ -148,12 +148,14 @@ type InvoiceDocument struct {
 	LastError  string `json:",omitempty"`
 
 	Status int8 `json:"ss,omitempty"`
-	// UpdatedVersion drives the delta list: State moves several times after the
+	// Version drives the delta list: State moves several times after the
 	// row is written and the frontend syncs on those transitions.
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	Updated int32 `json:"upd,omitempty"`
+	Version int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	Created   int32   `json:",omitempty"`
+	CreatedBy int32   `json:",omitempty"`
 }
 
 // SeriesID is the series this document was issued under, read off the tail of the
@@ -209,17 +211,17 @@ type InvoiceDocumentTable struct {
 	LastError        db.Col[*InvoiceDocumentTable, string]
 	Status           db.Col[*InvoiceDocumentTable, int8]
 	Updated          db.Col[*InvoiceDocumentTable, int32]
-	UpdatedVersion   db.Col[*InvoiceDocumentTable, int32]
+	Version          db.Col[*InvoiceDocumentTable, int16]
 	Created          db.Col[*InvoiceDocumentTable, int32]
 	CreatedBy        db.Col[*InvoiceDocumentTable, int32]
 }
 
 func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                 42,
-		Name:               "invoice_document",
-		Partition:          e.CompanyID,
-		SaveUpdatedVersion: true,
+		ID:         42,
+		Name:       "invoice_document",
+		Partition:  e.CompanyID,
+		CacheByIDs: true,
 		// A plain key. The id is built by the caller from the sale and the series,
 		// so there is nothing for the ORM to allocate or pack — and no autoincrement
 		// declaration that could be spelled wrong.

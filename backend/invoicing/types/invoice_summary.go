@@ -51,12 +51,14 @@ type InvoiceSummary struct {
 	RetryCount int8   `json:",omitempty"`
 	LastError  string `json:",omitempty"`
 
-	Status         int8  `json:"ss,omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	Status  int8  `json:"ss,omitempty"`
+	Updated int32 `json:"upd,omitempty"`
+	Version int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Created   int32   `json:",omitempty"`
+	CreatedBy int32   `json:",omitempty"`
 }
 
 type InvoiceSummaryTable struct {
@@ -80,7 +82,7 @@ type InvoiceSummaryTable struct {
 	LastError        db.Col[*InvoiceSummaryTable, string]
 	Status           db.Col[*InvoiceSummaryTable, int8]
 	Updated          db.Col[*InvoiceSummaryTable, int32]
-	UpdatedVersion   db.Col[*InvoiceSummaryTable, int32]
+	Version          db.Col[*InvoiceSummaryTable, int16]
 	UpdatedBy        db.Col[*InvoiceSummaryTable, int32]
 	Created          db.Col[*InvoiceSummaryTable, int32]
 	CreatedBy        db.Col[*InvoiceSummaryTable, int32]
@@ -88,11 +90,11 @@ type InvoiceSummaryTable struct {
 
 func (e InvoiceSummaryTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                 54,
-		Name:               "invoice_summary",
-		Partition:          e.CompanyID,
-		Keys:               db.Cols(e.ID),
-		SaveUpdatedVersion: true,
+		ID:         54,
+		Name:       "invoice_summary",
+		Partition:  e.CompanyID,
+		Keys:       db.Cols(e.ID),
+		CacheByIDs: true,
 		// A clean sequence: the ### of RC-YYYYMMDD-### counts the batches of the
 		// day, so random digits would make no sense there either.
 		KeyIntPacking:     db.Cols(e.IssueDate.Size(15), e.Autoincrement(0)),

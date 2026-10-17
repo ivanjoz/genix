@@ -56,12 +56,14 @@ type PurchaseOrder struct {
 	DifferenceValue int32  `json:",omitempty"`
 	Notes           string `json:",omitempty"`
 
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Status         int8  `json:"ss,omitempty"`
+	Created   int32 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
+	Updated   int32 `json:"upd,omitempty"`
+	Version   int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Status    int8    `json:"ss,omitempty"`
 }
 
 type PurchaseOrderTable struct {
@@ -96,7 +98,7 @@ type PurchaseOrderTable struct {
 	Created                      db.Col[*PurchaseOrderTable, int32]
 	CreatedBy                    db.Col[*PurchaseOrderTable, int32]
 	Updated                      db.Col[*PurchaseOrderTable, int32]
-	UpdatedVersion               db.Col[*PurchaseOrderTable, int32]
+	Version                      db.Col[*PurchaseOrderTable, int16]
 	UpdatedBy                    db.Col[*PurchaseOrderTable, int32]
 	Status                       db.Col[*PurchaseOrderTable, int8]
 }

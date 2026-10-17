@@ -46,11 +46,10 @@ type ClientProviderSnapshot struct {
 
 	Created   int32 `json:",omitempty"`
 	CreatedBy int32 `json:",omitempty"`
-	// Updated and UpdatedVersion never move after the insert — nothing updates a snapshot.
-	// They are here because SaveUpdatedVersion is what QueryCachedIDs requires, and reading
-	// snapshots by id through the by-IDs cache is the whole access pattern of this table.
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
+	// Updated never moves after the insert — nothing updates a snapshot. It is here because
+	// CacheByIDs requires it, and reading snapshots by id through the by-IDs cache is the whole
+	// access pattern of this table.
+	Updated int32 `json:"upd,omitempty"`
 }
 
 type ClientProviderSnapshotTable struct {
@@ -65,7 +64,6 @@ type ClientProviderSnapshotTable struct {
 	Created         db.Col[*ClientProviderSnapshotTable, int32]
 	CreatedBy       db.Col[*ClientProviderSnapshotTable, int32]
 	Updated         db.Col[*ClientProviderSnapshotTable, int32]
-	UpdatedVersion  db.Col[*ClientProviderSnapshotTable, int32]
 }
 
 func (e *ClientProviderSnapshot) SelfParse() {
@@ -88,8 +86,8 @@ func (t ClientProviderSnapshotTable) GetSchema() db.TableSchema {
 		// Documents reach a snapshot by id and nothing else, so the by-IDs cache is the
 		// only read path the frontend needs. No delta index: an immutable table has no
 		// changes to stream and no deletions to evict.
-		SaveUpdatedVersion: true,
-		Keys:               db.Cols(t.ID.Autoincrement(0)),
+		CacheByIDs: true,
+		Keys:       db.Cols(t.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(t.Hash)},
 		},

@@ -16,17 +16,13 @@ import (
 // The rows carry no Status column — there is nothing to delete — and the cache reads a missing
 // "ss" as active, so none is invented here.
 func GetClientProviderSnapshotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	snapshotCachedIDs := req.ExtractUpdatedVersionValues()
-	if len(snapshotCachedIDs) == 0 {
-		return req.MakeErr("No se enviaron ids a buscar.")
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	snapshots := []types.ClientProviderSnapshot{}
-	if queryError := db.QueryCachedIDs(&snapshots, snapshotCachedIDs); queryError != nil {
-		core.Log("GetClientProviderSnapshotsByIDs query error:", queryError)
-		return req.MakeErr("Error al obtener las identidades de cliente/proveedor.", queryError)
+	partitions, err := db.QueryCachedIDs[types.ClientProviderSnapshot](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener las identidades de cliente/proveedor.", err)
 	}
-
-	core.Log("GetClientProviderSnapshotsByIDs result_count:", len(snapshots))
-	return req.MakeResponse(snapshots)
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }

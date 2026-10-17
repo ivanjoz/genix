@@ -8,15 +8,11 @@ import (
 )
 
 func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
-	// Delta syncs are watermarked by "upv", the write sequence number, not by a timestamp: two
-	// writes in the same second are distinguishable, so nothing is re-sent and nothing is skipped.
-	updatedSince := req.GetUpVersion()
-
 	cajas := []types.CashBank{}
 	query := db.Query(&cajas)
 	// Delta() keeps only active rows on a first sync and every status afterwards, so the frontend
 	// can evict deleted ones from its cache.
-	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(updatedSince, 1)
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las cajas:", err)
@@ -252,7 +248,6 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	q1 := db.TableOf[types.CashBank]()
-	// Status is part of the delta-view key and must be written with the managed UpdatedVersion.
 	if err := db.Update(&[]types.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
 		core.Log("Error ScyllaDB updating cashBank: ", err)
 		return req.MakeErr("Error al actualizar la cashBank:", err)

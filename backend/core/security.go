@@ -182,6 +182,10 @@ type EnvStruct struct {
 	// back to 127.0.0.1:14446 when empty. See ConfigureTextSearch.
 	GENIXSEARCH_URL      string
 	GENIXSEARCH_PASSWORD string
+	// The ORM's file store ([file_store]): the by-IDs slot files and the delta logs. See
+	// ConfigureFileStore.
+	FILE_STORE_BUCKET string
+	FILE_STORE_ROOT   string
 	// Qdrant stores user-documentation dense and lexical vectors. The same
 	// INTERNAL_APIKEY used by deployment protects its gRPC endpoint.
 	QDRANT_HOST       string
@@ -362,6 +366,11 @@ type fileConfig struct {
 		Password string `toml:"password"`
 	} `toml:"search"`
 
+	FileStore struct {
+		Bucket string `toml:"bucket"`
+		Root   string `toml:"root"`
+	} `toml:"file_store"`
+
 	Qdrant struct {
 		Host       string `toml:"host"`
 		HTTPPort   int    `toml:"http_port"`
@@ -534,6 +543,8 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 
 	env.GENIXSEARCH_URL = file.Search.URL
 	env.GENIXSEARCH_PASSWORD = file.Search.Password
+	env.FILE_STORE_BUCKET = file.FileStore.Bucket
+	env.FILE_STORE_ROOT = file.FileStore.Root
 
 	env.QDRANT_HOST = strings.TrimSpace(file.Qdrant.Host)
 	if env.QDRANT_HOST == "" && !file.Qdrant.Public {

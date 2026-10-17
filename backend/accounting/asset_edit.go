@@ -298,8 +298,6 @@ func rewriteAssetDepreciation(req *core.HandlerArgs, asset *types.Asset) error {
 	}
 	if len(entriesToUpdate) > 0 {
 		expenseTable := db.TableOf[finance.Expense]()
-		// Status is written on every row, changed or not: it shares the delta view's composite
-		// key with UpdatedVersion, so the ORM requires the pair be updated together.
 		if updateError := db.Update(&entriesToUpdate,
 			expenseTable.Date, expenseTable.Amount, expenseTable.Status,
 			expenseTable.Updated, expenseTable.UpdatedBy,

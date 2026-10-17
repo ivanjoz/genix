@@ -191,7 +191,7 @@ func (generator *supplyDataGenerator) seedSupplyMaterials() error {
 }
 
 func (generator *supplyDataGenerator) countSupplyMaterials() (int, error) {
-	request := generator.makeRequest("GET.supply-material", map[string]string{"upv": "0"}, "")
+	request := generator.makeRequest("GET.supply-material", map[string]string{}, "")
 	supplyRecords := []productionTypes.Product{}
 	if err := decodeResponse(production.GetSupplyMaterials(&request), &supplyRecords); err != nil {
 		return 0, err
@@ -208,7 +208,7 @@ func (generator *supplyDataGenerator) countSupplyMaterials() (int, error) {
 
 // productIDBySKU indexes the supply catalog so the asset seeds can name their material by SKU.
 func (generator *supplyDataGenerator) productIDBySKU() (map[string]int32, error) {
-	request := generator.makeRequest("GET.supply-material", map[string]string{"upv": "0"}, "")
+	request := generator.makeRequest("GET.supply-material", map[string]string{}, "")
 	supplyRecords := []productionTypes.Product{}
 	if err := decodeResponse(production.GetSupplyMaterials(&request), &supplyRecords); err != nil {
 		return nil, err
@@ -326,12 +326,19 @@ func (generator *supplyDataGenerator) seedAssets() error {
 }
 
 func (generator *supplyDataGenerator) countAssets() (int, error) {
-	request := generator.makeRequest("GET.assets", map[string]string{"upv": "0"}, "")
+	request := generator.makeRequest("GET.assets", map[string]string{}, "")
 	assets := []accountingTypes.Asset{}
 	if err := decodeResponse(accounting.GetAssets(&request), &assets); err != nil {
 		return 0, err
 	}
-	return len(assets), nil
+	// The delta response ends with its log's Metadata records, which are not assets.
+	assetCount := 0
+	for _, asset := range assets {
+		if asset.Metadata == nil {
+			assetCount++
+		}
+	}
+	return assetCount, nil
 }
 
 // payAssets settles the purchased assets in three groups, so the Activos page shows every payment

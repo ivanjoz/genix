@@ -157,16 +157,15 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 // GetProductStockLotsByIDs resolves ProductStockLot rows by ID.
-// Static-lookup endpoint: no cache-version protocol, just `ids`. The frontend treats the response
-// as immutable-per-ID so cached rows are never revalidated (see getStaticRecordsByID on the client).
+// Static-lookup endpoint: the frontend treats the response as immutable-per-ID so cached rows are
+// never revalidated (see getStaticRecordsByID on the client).
 func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	lotIDRecords := req.ExtractUpdatedVersionValues()
-	if len(lotIDRecords) == 0 {
-		return req.MakeErr("No se enviaron ids de lotes.")
+	requestedIDs, err := req.GetStaticRequestIDs()
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	// ProductStockLot.ID is int32; cache-version values come in as int64.
-	lotIDs := core.Map(lotIDRecords, func(e db.IDUpdatedVersion) int32 { return int32(e.ID) })
+	// ProductStockLot.ID is int32; the request decodes int64.
+	lotIDs := core.Map(requestedIDs, func(id int64) int32 { return int32(id) })
 
 	lots := []types.ProductStockLot{}
 	query := db.Query(&lots)
@@ -174,7 +173,7 @@ func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los lotes.", err)
 	}
 
-	return core.MakeResponse(req, &lots)
+	return req.MakeResponse(core.StaticCachedPartition(lots))
 }
 
 func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
@@ -284,43 +283,40 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 type GetProductsStockResult struct {
-	ProductStock       []types.ProductStock
-	ProductStockDetail []types.ProductStockDetail
+	ProductStock []types.ProductStock
+	// The details answer whole, with the replace Metadata: their composite key has no delta log.
+	ProductStockDetail []any
 }
 
 func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
-	// Returns V2 stock rows + their detail rows + the lot catalog.
-	// `updated` enables delta-cache fetches via the `upd` field on stocks/details.
 	warehouseID := int32(req.GetQueryInt("warehouse-id"))
-	// Each table advances its own "updated_version" sequence, so the two response keys carry
-	// independent watermarks; the frontend sends one query param per key, named after it.
-	productStockUpdatedSince := req.GetUpVersion("ProductStock")
-	productStockDetailUpdatedSince := req.GetUpVersion("ProductStockDetail")
-
 	result := GetProductsStockResult{}
-
 	eg := errgroup.Group{}
 
 	eg.Go(func() error {
 		// Pinning WarehouseID routes Delta() to the [WarehouseID, Status] delta index and leaves
-		// Status as the sync filter: active only on a first sync, both values afterwards.
+		// Status as the sync filter a first sync lists.
 		query := db.Query(&result.ProductStock)
 		query.Select().
 			CompanyID.Equals(req.User.CompanyID).
 			WarehouseID.Equals(warehouseID).
-			Delta(productStockUpdatedSince, 1)
+			Delta(req.GetDeltaCursor("ProductStock"), 1)
 
 		return query.Exec()
 	})
 
 	eg.Go(func() error {
-		query := db.Query(&result.ProductStockDetail)
+		details := []types.ProductStockDetail{}
+		query := db.Query(&details)
 		query.Select().
 			CompanyID.Equals(req.User.CompanyID).
 			WarehouseID.Equals(warehouseID).
-			Delta(productStockDetailUpdatedSince, 1)
-
-		return query.Exec()
+			Status.Equals(1)
+		if err := query.Exec(); err != nil {
+			return err
+		}
+		result.ProductStockDetail = core.WithDeltaReplace(details)
+		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
@@ -331,14 +327,12 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductsStock(req *core.HandlerArgs) core.HandlerResponse {
-	updatedSince := req.GetUpVersion()
-
 	productsStock := []types.ProductStock{}
 	// No WarehouseID pinned here, so Delta() routes to the [Status] delta index instead.
 	query := db.Query(&productsStock)
 	query.Select().
 		CompanyID.Equals(req.User.CompanyID).
-		Delta(updatedSince, 1)
+		Delta(req.GetDeltaCursor(), 1)
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Arror al obtener los productos stock::", err)

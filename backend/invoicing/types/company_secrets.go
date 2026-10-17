@@ -55,12 +55,11 @@ type CompanySecrets struct {
 
 	Environment int8 `json:",omitempty"`
 
-	Status         int8  `json:"ss,omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	Status    int8  `json:"ss,omitempty"`
+	Updated   int32 `json:"upd,omitempty"`
+	UpdatedBy int32 `json:",omitempty"`
+	Created   int32 `json:",omitempty"`
+	CreatedBy int32 `json:",omitempty"`
 }
 
 type CompanySecretsTable struct {
@@ -82,7 +81,6 @@ type CompanySecretsTable struct {
 	Environment     db.Col[*CompanySecretsTable, int8]
 	Status          db.Col[*CompanySecretsTable, int8]
 	Updated         db.Col[*CompanySecretsTable, int32]
-	UpdatedVersion  db.Col[*CompanySecretsTable, int32]
 	UpdatedBy       db.Col[*CompanySecretsTable, int32]
 	Created         db.Col[*CompanySecretsTable, int32]
 	CreatedBy       db.Col[*CompanySecretsTable, int32]
@@ -90,11 +88,11 @@ type CompanySecretsTable struct {
 
 func (e CompanySecretsTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                 26,
-		Name:               "company_secrets",
-		Partition:          e.CompanyID,
-		Keys:               db.Cols(e.ID.Autoincrement(0)),
-		SaveUpdatedVersion: true,
+		ID:         26,
+		Name:       "company_secrets",
+		Partition:  e.CompanyID,
+		Keys:       db.Cols(e.ID.Autoincrement(0)),
+		CacheByIDs: true,
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Values: []int64{0, 1}},
 		},

@@ -160,9 +160,8 @@ func backfillClientIdentities(
 			clientsToUpdate = append(clientsToUpdate, clients[index])
 		}
 		clientTable := db.TableOf[crm.ClientProvider]()
-		// Status and Type are rewritten with the values just read: the delta view is keyed on
-		// (status, type, updated_version) and the ORM refuses a partial update that bumps the
-		// watermark without them, because the view row would land in the wrong bucket.
+		// Type and Status are rewritten with the values just read: the delta index's packed listing
+		// view is keyed on both, and the ORM refuses a partial update of one without the other.
 		if updateError := db.Update(&clientsToUpdate,
 			clientTable.IdentityDocType, clientTable.SnapshotID,
 			clientTable.Status, clientTable.Type); updateError != nil {

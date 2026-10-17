@@ -16,15 +16,10 @@ const (
 	// and a per-slot record would repeat fourteen JSON key names 2880 times.
 	serverMetricsSlotsPerHour   = 3600 / coreTypes.ServerMetricSlotSeconds
 	serverMetricsSecondsPerHour = int64(3600)
-	// Widest window the route will serve, and therefore the furthest back a client's cache can
-	// reach. The eviction range is measured from it, so it must not be raised without raising that.
+	// Widest window the route will serve.
 	serverMetricsMaxWindowHours     = int64(24)
 	serverMetricsDefaultWindowHours = int64(4)
-	// A client returning after a very long absence would otherwise be handed an unbounded list of
-	// dead bucket IDs. Beyond the cap a few orphan buckets survive in IndexedDB until the next
-	// `ver` bump — bounded garbage, which is better than an unbounded response.
-	serverMetricsMaxEvictedBuckets = 400
-	serverMetricsSlotsPerDay       = int64(coreTypes.SlotsPerDay)
+	serverMetricsSlotsPerDay        = int64(coreTypes.SlotsPerDay)
 )
 
 // ServerMetricsHour is one hour of samples as parallel arrays, which is what makes the delta cheap:
@@ -60,15 +55,10 @@ type ServerMetricsHour struct {
 	Status  int8  `json:"ss"`
 }
 
-// ServerMetricsResponse is an object rather than the bare array the records alone would form, purely
-// so Hours_IDsToRemove has somewhere to live: a bare array normalizes to the cache's `_default` key,
-// which has no room for the eviction channel. The cost is that the watermark comes back as `?Hours=`,
-// named after this field, instead of `?upd=`.
+// ServerMetricsResponse carries the window's hour buckets whole, ending with the replace Metadata
+// (core.WithDeltaReplace): a bucket that fell out of the window leaves the client's cache.
 type ServerMetricsResponse struct {
-	Hours []ServerMetricsHour
-	// Buckets that have fallen out of the window. The cache deletes these persisted rows before
-	// applying the delta, so a bare list of ints evicts a whole day for a couple hundred bytes.
-	HoursIDsToRemove []int32 `json:"Hours_IDsToRemove,omitempty"`
+	Hours []any
 }
 
 // GetServerMetrics serves the Server Panel charts from the rows fareward writes every five
@@ -80,41 +70,17 @@ func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
 		windowHours = min(requestedHours, serverMetricsMaxWindowHours)
 	}
 
-	// `Hours` is the watermark named after this response's field; `up` is the trailing
-	// single-watermark param the cache also sends. Either one answers the same question.
-	watermarkSlot := int64(core.Coalesce(req.GetUpdated("Hours"), req.GetUpdated()))
-
 	// The real clock, not core.Now(): fareward writes these rows with the real clock and has no
 	// historical-clock override, so a frozen backend clock would query a day nothing ever wrote.
 	nowUnixSeconds := time.Now().UTC().Unix()
 	newestSlot := nowUnixSeconds / coreTypes.ServerMetricSlotSeconds
 	firstLiveBucket := nowUnixSeconds/serverMetricsSecondsPerHour - windowHours + 1
-	// The watermark wins whenever it is inside the window: that is what turns a refresh into three
-	// slots instead of the whole four hours.
-	firstSlotWanted := max(firstLiveBucket*serverMetricsSlotsPerHour, watermarkSlot+1)
 
-	response := ServerMetricsResponse{
-		Hours:            []ServerMetricsHour{},
-		HoursIDsToRemove: makeEvictedBucketIDs(watermarkSlot, firstLiveBucket, nowUnixSeconds),
-	}
-	if firstSlotWanted > newestSlot {
-		// Nothing new since the client's watermark. Evictions may still be pending, so the response
-		// is returned rather than short-circuited to empty.
-		return req.MakeResponse(response)
-	}
-
-	rows, err := readServerMetricRows(firstSlotWanted, newestSlot)
+	rows, err := readServerMetricRows(firstLiveBucket*serverMetricsSlotsPerHour, newestSlot)
 	if err != nil {
-		core.Log("server metrics query failed::", " first_slot::", firstSlotWanted,
-			" newest_slot::", newestSlot, " err::", err)
 		return req.MakeErr("No se pudieron obtener las métricas del servidor.", err)
 	}
-
-	response.Hours = groupServerMetricsByHour(rows)
-	core.Log("server metrics query completed::", " window_hours::", windowHours,
-		" watermark::", watermarkSlot, " rows::", len(rows), " buckets::", len(response.Hours),
-		" evicted::", len(response.HoursIDsToRemove))
-	return req.MakeResponse(response)
+	return req.MakeResponse(ServerMetricsResponse{Hours: core.WithDeltaReplace(groupServerMetricsByHour(rows))})
 }
 
 // readServerMetricRows slices the requested absolute-slot range out of the table. The range is
@@ -189,33 +155,4 @@ func groupServerMetricsByHour(rows []coreTypes.ServerMetric) []ServerMetricsHour
 	}
 
 	return buckets
-}
-
-// makeEvictedBucketIDs lists the buckets the client still holds that have fallen out of the window.
-//
-// It fires only when the client's watermark sits in an earlier hour than the current one, so a
-// refresh inside the same hour evicts nothing and the steady-state response stays at a few slots.
-// The range starts a full max-window before the client's newest bucket because that is the furthest
-// back its cache can reach — anything older than that it never had.
-func makeEvictedBucketIDs(watermarkSlot, firstLiveBucket, nowUnixSeconds int64) []int32 {
-	if watermarkSlot <= 0 {
-		// A cold client has an empty cache: there is nothing of its own to evict.
-		return nil
-	}
-
-	clientNewestBucket := watermarkSlot / serverMetricsSlotsPerHour
-	if clientNewestBucket >= nowUnixSeconds/serverMetricsSecondsPerHour {
-		return nil
-	}
-
-	firstEvictedBucket := clientNewestBucket - serverMetricsMaxWindowHours
-	if firstLiveBucket-firstEvictedBucket > serverMetricsMaxEvictedBuckets {
-		firstEvictedBucket = firstLiveBucket - serverMetricsMaxEvictedBuckets
-	}
-
-	evictedBucketIDs := []int32{}
-	for bucketID := firstEvictedBucket; bucketID < firstLiveBucket; bucketID++ {
-		evictedBucketIDs = append(evictedBucketIDs, int32(bucketID))
-	}
-	return evictedBucketIDs
 }

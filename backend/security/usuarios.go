@@ -133,29 +133,21 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
 
-	core.Log("Usuarios obtenidos:: ", len(records))
-
-	return core.MakeResponse(req, &records)
+	// No delta log: the whole active list every sync, so a deactivated user leaves the cache.
+	return req.MakeResponse(core.WithDeltaReplace(records))
 }
 
 func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	// Parse IDs + cache versions sent by the client to resolve only changed records.
-	cachedIDs := req.ExtractUpdatedVersionValues()
-
-	if len(cachedIDs) == 0 {
-		return req.MakeErr("No se enviaron ids a buscar.")
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	core.Log("buscando usuarios ids::", len(cachedIDs), "|", cachedIDs)
-
-	usuarios := []coreTypes.User{}
-	// QueryCachedIDs checks cache version and only fetches stale/missing records from ScyllaDB.
-	queryError := db.QueryCachedIDs(&usuarios, cachedIDs)
-	if queryError != nil {
-		return req.MakeErr("Error al obtener los usuarios.", queryError)
+	// Only the records whose slot moved past the tick the client holds come back.
+	partitions, err := db.QueryCachedIDs[coreTypes.User](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
-
-	return core.MakeResponse(req, &usuarios)
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {

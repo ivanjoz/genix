@@ -11,29 +11,31 @@ type Warehouse struct {
 	Description string
 	Layout      []WarehouseLayout
 	// General properties
-	Status         int8   `json:"ss,omitempty" db:"status"`
-	Updated        int32  `json:"upd,omitempty" db:"updated"`
-	UpdatedVersion int32  `json:"upv,omitempty"`
-	UpdatedBy      int32  `json:",omitempty" db:"updated_by"`
-	Created        int32  `json:",omitempty" db:"created"`
-	CreatedBy      int32  `json:",omitempty" db:"created_by"`
-	City           string `json:",omitempty"`
+	Status  int8  `json:"ss,omitempty" db:"status"`
+	Updated int32 `json:"upd,omitempty" db:"updated"`
+	Version int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty" db:"updated_by"`
+	Created   int32   `json:",omitempty" db:"created"`
+	CreatedBy int32   `json:",omitempty" db:"created_by"`
+	City      string  `json:",omitempty"`
 }
 
 type WarehouseTable struct {
 	db.TableStruct[WarehouseTable, Warehouse]
-	CompanyID      db.Col[*WarehouseTable, int32]
-	ID             db.Col[*WarehouseTable, int32]
-	SiteID         db.Col[*WarehouseTable, int32]
-	Name           db.Col[*WarehouseTable, string]
-	Description    db.Col[*WarehouseTable, string]
-	Layout         db.Col[*WarehouseTable, []WarehouseLayout]
-	Status         db.Col[*WarehouseTable, int8]
-	Updated        db.Col[*WarehouseTable, int32]
-	UpdatedVersion db.Col[*WarehouseTable, int32]
-	UpdatedBy      db.Col[*WarehouseTable, int32]
-	Created        db.Col[*WarehouseTable, int32]
-	CreatedBy      db.Col[*WarehouseTable, int32]
+	CompanyID   db.Col[*WarehouseTable, int32]
+	ID          db.Col[*WarehouseTable, int32]
+	SiteID      db.Col[*WarehouseTable, int32]
+	Name        db.Col[*WarehouseTable, string]
+	Description db.Col[*WarehouseTable, string]
+	Layout      db.Col[*WarehouseTable, []WarehouseLayout]
+	Status      db.Col[*WarehouseTable, int8]
+	Updated     db.Col[*WarehouseTable, int32]
+	Version     db.Col[*WarehouseTable, int16]
+	UpdatedBy   db.Col[*WarehouseTable, int32]
+	Created     db.Col[*WarehouseTable, int32]
+	CreatedBy   db.Col[*WarehouseTable, int32]
 }
 
 func (e WarehouseTable) GetSchema() db.TableSchema {
@@ -69,35 +71,37 @@ type WarehouseLayoutBlock struct {
 
 type Site struct {
 	db.TableStruct[SiteTable, Site]
-	CompanyID      int32  `db:"empresa_id,pk"`
-	ID             int32  `db:"id,pk"`
-	Name           string `db:"nombre"`
-	Description    string `db:"descripcion"`
-	Address        string `db:"direccion"`
-	CityID         int32  `db:"pais_ciudad_id"`
-	City           string `json:",omitempty" db:"-"`
-	Status         int8   `json:"ss,omitempty" db:"status"`
-	Updated        int32  `json:"upd,omitempty" db:"updated"`
-	UpdatedVersion int32  `json:"upv,omitempty"`
-	UpdatedBy      int32  `json:",omitempty" db:"updated_by"`
-	Created        int32  `json:",omitempty" db:"created"`
-	CreatedBy      int32  `json:",omitempty" db:"created_by"`
+	CompanyID   int32  `db:"empresa_id,pk"`
+	ID          int32  `db:"id,pk"`
+	Name        string `db:"nombre"`
+	Description string `db:"descripcion"`
+	Address     string `db:"direccion"`
+	CityID      int32  `db:"pais_ciudad_id"`
+	City        string `json:",omitempty" db:"-"`
+	Status      int8   `json:"ss,omitempty" db:"status"`
+	Updated     int32  `json:"upd,omitempty" db:"updated"`
+	Version     int16  `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty" db:"updated_by"`
+	Created   int32   `json:",omitempty" db:"created"`
+	CreatedBy int32   `json:",omitempty" db:"created_by"`
 }
 
 type SiteTable struct {
 	db.TableStruct[SiteTable, Site]
-	CompanyID      db.Col[*SiteTable, int32]
-	ID             db.Col[*SiteTable, int32]
-	Name           db.Col[*SiteTable, string]
-	Description    db.Col[*SiteTable, string]
-	Address        db.Col[*SiteTable, string]
-	CityID         db.Col[*SiteTable, int32] `db:"pais_ciudad_id"`
-	Status         db.Col[*SiteTable, int8]
-	Updated        db.Col[*SiteTable, int32]
-	UpdatedVersion db.Col[*SiteTable, int32]
-	UpdatedBy      db.Col[*SiteTable, int32]
-	Created        db.Col[*SiteTable, int32]
-	CreatedBy      db.Col[*SiteTable, int32]
+	CompanyID   db.Col[*SiteTable, int32]
+	ID          db.Col[*SiteTable, int32]
+	Name        db.Col[*SiteTable, string]
+	Description db.Col[*SiteTable, string]
+	Address     db.Col[*SiteTable, string]
+	CityID      db.Col[*SiteTable, int32] `db:"pais_ciudad_id"`
+	Status      db.Col[*SiteTable, int8]
+	Updated     db.Col[*SiteTable, int32]
+	Version     db.Col[*SiteTable, int16]
+	UpdatedBy   db.Col[*SiteTable, int32]
+	Created     db.Col[*SiteTable, int32]
+	CreatedBy   db.Col[*SiteTable, int32]
 }
 
 func (e SiteTable) GetSchema() db.TableSchema {

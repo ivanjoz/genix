@@ -83,12 +83,14 @@ type Asset struct {
 	LastDepreciationDate    int16 `json:",omitempty"`
 	DisposalDate            int16 `json:",omitempty"` // 0 = still held.
 
-	Status         int8  `json:"ss,omitempty"`
-	Updated        int32 `json:"upd,omitempty"`
-	UpdatedVersion int32 `json:"upv,omitempty"`
-	UpdatedBy      int32 `json:",omitempty"`
-	Created        int32 `json:",omitempty"`
-	CreatedBy      int32 `json:",omitempty"`
+	Status  int8  `json:"ss,omitempty"`
+	Updated int32 `json:"upd,omitempty"`
+	Version int16 `json:"ver,omitempty"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata  *string `json:"mdt,omitempty"`
+	UpdatedBy int32   `json:",omitempty"`
+	Created   int32   `json:",omitempty"`
+	CreatedBy int32   `json:",omitempty"`
 }
 
 type AssetTable struct {
@@ -125,7 +127,7 @@ type AssetTable struct {
 	DisposalDate            db.Col[*AssetTable, int16]
 	Status                  db.Col[*AssetTable, int8]
 	Updated                 db.Col[*AssetTable, int32]
-	UpdatedVersion          db.Col[*AssetTable, int32]
+	Version                 db.Col[*AssetTable, int16]
 	UpdatedBy               db.Col[*AssetTable, int32]
 	Created                 db.Col[*AssetTable, int32]
 	CreatedBy               db.Col[*AssetTable, int32]
@@ -133,11 +135,11 @@ type AssetTable struct {
 
 func (e AssetTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:                 52,
-		Name:               "accounting_asset",
-		Partition:          e.CompanyID,
-		SaveUpdatedVersion: true,
-		Keys:               db.Cols(e.ID.Autoincrement(0)),
+		ID:         52,
+		Name:       "accounting_asset",
+		Partition:  e.CompanyID,
+		CacheByIDs: true,
+		Keys:       db.Cols(e.ID.Autoincrement(0)),
 		// Delta() enumerates its filter column, so every Status value must be declared.
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Min: 0, Max: 3},
