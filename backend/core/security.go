@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/ivanjoz/genix-orm/utils"
 	"io"
 	"log"
 	"net"
@@ -111,11 +112,11 @@ type EnvStruct struct {
 	// default, and it does nothing under IS_SERVERLESS — a Lambda invocation is already alone.
 	DISABLE_API_CONCURRENCY_LOCAL bool
 	DB_DISABLE_SSL                bool
-	DB_PORT            int32
-	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
-	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
-	USUARIO_ID         int32
-	ADMIN_PASSWORD     string
+	DB_PORT                       int32
+	MAX_CLUSTERING_KEY            int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
+	SERVER_PORT                   int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
+	USUARIO_ID                    int32
+	ADMIN_PASSWORD                string
 	// SECRET_PHRASE signs what users hold: session tokens (usuario-accesos.go) and password
 	// hashes. It never authenticates one Genix process to another — that is INTERNAL_APIKEY.
 	SECRET_PHRASE string
@@ -640,8 +641,10 @@ func PopulateVariables() {
 		if len(configJsonBase64) == 0 {
 			panic("No se encontraron las variables de entorno.")
 		}
-		configJsonBase64 = MakeB64UrlDecode(configJsonBase64)
-		baseBytes := Base64ToBytes(configJsonBase64)
+		baseBytes, err := utils.Base64.DecodeString(configJsonBase64)
+		if err != nil {
+			panic("La variable CONFIG no es base64 válido: " + err.Error())
+		}
 		variablesBytes = []byte(DecompressZstd(&baseBytes))
 	}
 

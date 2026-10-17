@@ -403,12 +403,7 @@ func Test25(args *core.ExecArgs) core.FuncResponse {
 	TestGeneric(&obj)
 	TestInterface(&obj)
 
-	num := int64(1111)
-	base62encode := core.EncodeToBase62(num)
-	fmt.Println("Base62 encoded:", base62encode)
-	fmt.Println("Base62 decoded:", core.DecodeFromBase62(base62encode))
-
-	key := core.Concat62(123987, 12387, 23, "dasd11")
+	key := core.ConcatBase64(123987, 12387, 23, "dasd11")
 	fmt.Println(key)
 
 	return core.FuncResponse{}

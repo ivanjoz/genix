@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/binary"
+	"github.com/ivanjoz/genix-orm/utils"
 	"strings"
 	"sync"
 
@@ -291,7 +292,7 @@ func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 		return &user
 	}
 
-	tokenBytes := Base64ToBytes(MakeB64UrlDecode(tokenBase64))
+	tokenBytes, _ := utils.Base64.DecodeString(tokenBase64)
 	if len(tokenBytes) < 8 {
 		user.Error = "El token de inicio de sesión es inválido."
 		return &user

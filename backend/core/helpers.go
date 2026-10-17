@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ivanjoz/genix-orm/utils"
 	"hash/fnv"
 	"io"
 	"math"
@@ -420,12 +421,8 @@ func Base64ToBytes(content string) []byte {
 	return contentBytes
 }
 
-func BytesToBase64(source []byte, useUrlEncoded ...bool) string {
-	contentString := base64.StdEncoding.EncodeToString(source)
-	if len(useUrlEncoded) == 1 && useUrlEncoded[0] {
-		contentString = MakeB64UrlEncode(contentString)
-	}
-	return contentString
+func BytesToBase64(source []byte) string {
+	return base64.StdEncoding.EncodeToString(source)
 }
 
 func Base64ToStruct[T any](base64Str *string, target *T) error {
@@ -1035,8 +1032,7 @@ func FnvHashStringBase(input string, isBase64 bool, intSize int, strSize ...int)
 	}
 
 	if isBase64 {
-		hashString = base64.StdEncoding.EncodeToString(hashBytes)
-		hashString = MakeB64UrlEncode(hashString)
+		hashString = utils.Base64.EncodeToString(hashBytes)
 	} else {
 		hashString = base32.StdEncoding.EncodeToString(hashBytes)
 	}
@@ -1422,20 +1418,6 @@ func GetHoursMinutes() string {
 	return ""
 }
 
-func MakeB64UrlEncode(contentString string) string {
-	contentString = strings.ReplaceAll(contentString, "/", "_")
-	contentString = strings.ReplaceAll(contentString, "+", "-")
-	contentString = strings.ReplaceAll(contentString, "=", "~")
-	return contentString
-}
-
-func MakeB64UrlDecode(contentString string) string {
-	contentString = strings.ReplaceAll(contentString, "_", "/")
-	contentString = strings.ReplaceAll(contentString, "-", "+")
-	contentString = strings.ReplaceAll(contentString, "~", "=")
-	return contentString
-}
-
 // MakeCipherKey repeats SECRET_PHRASE up to the 32 bytes AES-256 needs. An empty phrase returns
 // empty instead of looping: appending "" can never reach 32, so the old loop spun forever, turning
 // a missing secret_phrase into a hung goroutine with no error and no log.
@@ -1556,75 +1538,25 @@ func GobEncode(records any) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func Concat62(values ...any) string {
+// ConcatBase64 joins values with "_", integers as utils.EncodeUintBase64 digits.
+func ConcatBase64(values ...any) string {
 	valuesStrings := []string{}
 	for _, va := range values {
 		str := ""
 		if v, ok := va.(int32); ok {
-			str = EncodeToBase62(int64(v))
+			str = utils.EncodeUintBase64(uint64(v))
 		} else if v, ok := va.(int64); ok {
-			str = EncodeToBase62(int64(v))
+			str = utils.EncodeUintBase64(uint64(v))
 		} else if v, ok := va.(int); ok {
-			str = EncodeToBase62(int64(v))
+			str = utils.EncodeUintBase64(uint64(v))
 		} else if v, ok := va.(int16); ok {
-			str = EncodeToBase62(int64(v))
+			str = utils.EncodeUintBase64(uint64(v))
 		} else {
 			str = fmt.Sprintf("%v", v)
 		}
 		valuesStrings = append(valuesStrings, str)
 	}
 	return strings.Join(valuesStrings, "_")
-}
-
-// characters used for conversion
-const base32Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-// Encode encodes an int64 to a base62 encoded string.
-func EncodeToBase62(number int64) string {
-	return encodeToBase62(uint64(number))
-}
-
-// Decode decodes a base62 encoded string to an int64.
-func DecodeFromBase62(token string) int64 {
-	return int64(decodeFromBase62(token))
-}
-
-// EncodeUint64 encodes a uint64 to a base62 encoded string.
-func encodeToBase62(number uint64) string {
-	if number == 0 {
-		return string(base32Alphabet[0])
-	}
-
-	chars := make([]byte, 0)
-
-	length := uint64(len(base32Alphabet))
-
-	for number > 0 {
-		result := number / length
-		remainder := number % length
-		chars = append(chars, base32Alphabet[remainder])
-		number = result
-	}
-
-	for i, j := 0, len(chars)-1; i < j; i, j = i+1, j-1 {
-		chars[i], chars[j] = chars[j], chars[i]
-	}
-
-	return string(chars)
-}
-
-// DecodeUint64 decodes a base62 encoded string to an uint64.
-func decodeFromBase62(token string) uint64 {
-	// Decode incrementally to avoid float math and repeated exponentiation.
-	number := uint64(0)
-	baseLength := uint64(len(base32Alphabet))
-
-	for currentIndex := 0; currentIndex < len(token); currentIndex++ {
-		digitValue := uint64(strings.IndexByte(base32Alphabet, token[currentIndex]))
-		number = number*baseLength + digitValue
-	}
-
-	return number
 }
 
 func ConcatInt64(num1, num2 int64) int64 {

@@ -3,10 +3,10 @@ package core
 import "testing"
 
 // Pins the cc-ver wire format against the frontend's concatenateUint16s (see parsers.test.ts):
-// one fixed-width little-endian u16 array, base64url, no padding, no magnitude buckets.
+// one fixed-width little-endian u16 array, utils.Base64, no padding, no magnitude buckets.
 func TestParseConcatenatedUint16sKeepsClientOrder(t *testing.T) {
 	// concatenateUint16s([7, 40000, 3, 65535, 0, 255, 256])
-	const encoded = "BwBAnAMA__8AAP8AAAE"
+	const encoded = "0k0-b-B-zzw--Ew---3"
 
 	decoded := parseConcatenatedUint16s(encoded)
 	expected := []uint16{7, 40000, 3, 65535, 0, 255, 256}

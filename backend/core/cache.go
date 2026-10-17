@@ -2,9 +2,9 @@ package core
 
 import (
 	"app/db"
-	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"github.com/ivanjoz/genix-orm/utils"
 	"strings"
 )
 
@@ -143,14 +143,14 @@ func (req *HandlerArgs) ExtractIDs() []int64 {
 	return parseConcatenatedInts(req.GetQuery("ids"))
 }
 
-// parseConcatenatedUint16s decodes one base64url-encoded little-endian u16 array. Unlike
+// parseConcatenatedUint16s decodes one utils.Base64-encoded little-endian u16 array. Unlike
 // parseConcatenatedInts it has no magnitude buckets, so element order is exactly what the client
 // sent — which is what keeps cc-ver aligned with cc-ids.
 func parseConcatenatedUint16s(encodedValues string) []uint16 {
 	if encodedValues == "" {
 		return nil
 	}
-	data, err := base64.RawURLEncoding.DecodeString(encodedValues)
+	data, err := utils.Base64.DecodeString(encodedValues)
 	if err != nil {
 		Log("error al decodificar cc-ver:", err)
 		return nil
@@ -174,7 +174,7 @@ func parseConcatenatedInts(s string) []int64 {
 		if part == "" {
 			continue
 		}
-		data, err := base64.RawURLEncoding.DecodeString(part)
+		data, err := utils.Base64.DecodeString(part)
 		if err != nil {
 			continue
 		}

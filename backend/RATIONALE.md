@@ -1,3 +1,20 @@
+## Which base64 moved to utils.Base64, and which did not
+
+**Context** — colbin v0.6 / genix-orm `main`: one sortable base64 (`utils.Base64`) for everything we
+encode ourselves. The plan named the access blobs and the cache parameters; the rest was left open.
+
+**Decision** — Also moved: the `UserToken` (fareward v0.2.1 decodes it in that alphabet), the
+`CONFIG` Lambda variable (`scripts/deployer` carries a copy of the alphabet, since that module does
+not depend on genix-orm) and `FnvHashString64` (password hashes, now unpadded). `MakeB64UrlEncode` /
+`MakeB64UrlDecode` are deleted and `BytesToBase64` is plain standard base64. `Concat62` became
+`ConcatBase64` on `utils.EncodeUintBase64`. Left on `base64.RawURLEncoding`: the agent channel
+token (`agent/channel.go`, mirrored in fareward and `frontend/core/agent/channel.ts`) and the
+`cloud/` file names. `UserInfo` stays standard base64: genix-ui decrypts it with `atob`.
+
+**Rationale** — The channel token and the file names were not in scope and change no contract with
+genix-ui; moving them is a separate cross-repo change. Stored password hashes change form, which
+the keyspace wipe covers.
+
 ## The company flags travel in the cached company config blob
 
 **Context** — A sale that converts currencies needs the company's spread (flag 7). `sales` could

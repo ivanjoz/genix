@@ -6,6 +6,7 @@ import (
 	coreTypes "app/core/types"
 	"app/db"
 	"encoding/json"
+	"github.com/ivanjoz/genix-orm/utils"
 	"time"
 
 	"github.com/ivanjoz/colbin"
@@ -155,10 +156,10 @@ func MakeUsuarioResponse(user coreTypes.User, cipherKey string) (map[string]any,
 
 	response := map[string]any{
 		"UserID":             user.ID,
-		"UserToken":          core.BytesToBase64(usuarioTokenBytes, true),
+		"UserToken":          utils.Base64.EncodeToString(usuarioTokenBytes),
 		"TokenExpTime":       time.Now().Unix() + (4 * 60 * 40),
-		"AccesosComputed":    core.BytesToBase64(accesosBlob, true),
-		"AccesosSubComputed": core.BytesToBase64(accesosSubBlob, true),
+		"AccesosComputed":    utils.Base64.EncodeToString(accesosBlob),
+		"AccesosSubComputed": utils.Base64.EncodeToString(accesosSubBlob),
 		"CompanyID":          user.CompanyID,
 	}
 

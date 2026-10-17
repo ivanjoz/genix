@@ -21,10 +21,11 @@ const (
 	lambdaResponseStreaming = "1"
 )
 
-// El CONFIG viaja zstd + base64 url-safe: es exactamente lo que MakeB64UrlDecode +
-// DecompressZstd deshacen en backend/core/security.go, donde el payload descomprimido
-// se parsea como TOML.
-var urlSafeBase64Replacer = strings.NewReplacer("/", "_", "+", "-", "=", "~")
+// CONFIG travels zstd + genix-orm's sortable base64 (utils.Base64: "-0-9A-Z_a-z", unpadded),
+// which is what backend/core/security.go decodes before DecompressZstd and parses as TOML.
+// The alphabet is copied because this module does not depend on genix-orm.
+var configBase64 = base64.NewEncoding("-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz").
+	WithPadding(base64.NoPadding)
 
 type lambdaConfig struct {
 	AppName string `toml:"app_name"`
@@ -184,7 +185,7 @@ func compressToUrlSafeBase64(content []byte) (string, error) {
 	if len(compressed) == 0 {
 		return "", fmt.Errorf("no se pudo comprimir el archivo de configuración")
 	}
-	return urlSafeBase64Replacer.Replace(base64.StdEncoding.EncodeToString(compressed)), nil
+	return configBase64.EncodeToString(compressed), nil
 }
 
 // applyLambdaEnvironment salta las Lambdas inexistentes (el stack puede no tener la _2 ni el

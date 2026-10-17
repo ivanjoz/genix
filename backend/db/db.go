@@ -229,9 +229,6 @@ var (
 	// MakeKeyConcat joins values into the deterministic string a KeyConcatenated
 	// column stores.
 	MakeKeyConcat = orm.MakeKeyConcat
-	// EncodeToBase62 / DecodeFromBase62 are the token encoding used inside keys.
-	EncodeToBase62   = orm.EncodeToBase62
-	DecodeFromBase62 = orm.DecodeFromBase62
 	// GetAutoincrementID reserves consecutive IDs for an arbitrary counter key.
 	GetAutoincrementID = orm.GetAutoincrementID
 	// QueryCachedGenericByIDs resolves IDs to the flat GenericRecord shape for any
