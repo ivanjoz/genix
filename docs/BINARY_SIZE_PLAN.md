@@ -1,8 +1,8 @@
 # Binary Size — Plan
 
-Status: **Phases 0, 1 and 2 are implemented and verified. Phase 3 is partially implemented (write
-path and row scan done, outer read path outstanding). Phase 4 was built, measured negative and
-reverted. Phase 5 was rejected on inspection — it breaks two live API routes.**
+Status: **Phases 0, 1, 2 and 3 are implemented and verified (Phase 3's outer read path, Merge,
+grouped read and controller landed on 2026-10-23, see Phase 3 below). Phase 4 was built, measured
+negative and reverted. Phase 5 was rejected on inspection — it breaks two live API routes.**
 
 Implemented: **44,236,960 → 29,819,040, −14,417,920 (−32.6%)**. What landed: `backend/thirdparty/{protobuf,gocql}` (see its `README.md` and
 `RATIONALE.md`), the two `replace` directives in `backend/go.mod`, and the shipping build tags in
@@ -112,13 +112,21 @@ Phase 3 so far: **32,178,336 → 29,819,040, −2,359,296.** `executeInsertUpdat
 across 108 stencils to 3,633 bytes in 2 symbols. Design decisions are in
 `backend/genix-orm/scylla/RATIONALE.md`.
 
-**Still generic, and the remaining ~1.5 MB of Phase 3** — the outer read path, which allocates and
-merges intermediate `[]T` slices and so needs the real element type: `executeBoundSelectQueries`
-(196,951), `selectRecordsByPartitionIDs` (222,210), `execIndexGroupQuery` (218,700), `Merge`
-(218,104), `preloadExistingRecordsBySingleKey` (179,561), `QueryCachedIDs` (165,913),
-`db.InitStructTable` (168,152), `CsvToRecords`. Erasing these needs the sink to build new
-destination slices at runtime (`reflect.MakeSlice`), which is a different and slower shape than
-`recordSink` — worth doing, but not a continuation of the same edit.
+**Phase 3, second part (2026-10-23): 33,357,984 → 28,901,536, −4,456,448 (−13.4%)** on the tree of
+that date. Build as in Phase 0, with `-tags lambda.norpc,grpcnotrace`. What was erased:
+- The outer read path: select, delta, by-IDs and text search.
+- `Merge` and its preload.
+- `InsertUpdateInclude` / `Exclude`.
+- The grouped read.
+- Every `ScyllaController` method.
+- `getOrCompileScyllaTable` and `db.InitStructTable`.
+
+Most of it did not need `reflect.MakeSlice`. Intermediates are collected as `[]unsafe.Pointer`
+through `recordSink.collectInto`. Only bodies that must build a slice of their own use a
+reflect-built `[]T`. Those are Merge's and InsertUpdate*'s insert/update split, plus the
+controller's JSON, colbin and reload paths. Design and verification are in
+`backend/genix-orm/scylla/RATIONALE.md`. The scylla package's generic code fell from 3,184,728 to
+roughly 1.1 MB. What remains is the `Col` methods and the per-table shims (under ~800 bytes each).
 
 Verified on the implemented tree: `go build ./...` and `go vet ./...` clean on `backend`, `cloud` and
 `scripts`; `genix-orm` and `genix-orm/db` module tests pass; `accounting`, `libs`, `finance`, `exec`
