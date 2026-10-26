@@ -126,7 +126,7 @@ import {
     {
       header: "ID",
       headerCss: "w-32",
-      css: "text-center text-purple-600 px-6",
+      css: "text-center text-purple-fg px-6",
       getValue: e => e.ID,
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" }
     },
@@ -174,7 +174,7 @@ import {
     {
       header: "ID",
       headerCss: "w-32",
-      css: "text-center text-purple-600 px-6",
+      css: "text-center text-purple-fg px-6",
       getValue: e => e.ID,
       mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" }
     },
@@ -302,10 +302,10 @@ import {
                 <div class="flex items-center">
                   <div class="ff-bold h3">{record.Layout.length}</div>
                   <i class="icon-[fa--folder]"></i>
-                  <div class="mr-4 ml-4 h6 text-slate-500">X</div>
+                  <div class="mr-4 ml-4 h6 text-fg-muted">X</div>
                   <div class="ff-bold h3">{avgCols.toFixed(0)}</div>
                   <i class="icon-[fa--th-large]"></i>
-                  <div class="mr-4 ml-4 h6 text-slate-500">X</div>
+                  <div class="mr-4 ml-4 h6 text-fg-muted">X</div>
                   <div class="ff-bold h3">{avgRows.toFixed(0)}</div>
                   <i class="icon-[fa--cube]"></i>
                 </div>

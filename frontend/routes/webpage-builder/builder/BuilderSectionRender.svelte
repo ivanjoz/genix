@@ -113,7 +113,7 @@ setContext(EC_BUILDER_MODE, true);
         {...section.Attributes}
       />
     {:else}
-      <div class="p-20 bg-slate-100 text-slate-400 text-center border-2 border-dashed border-slate-200">
+      <div class="p-20 bg-surface-muted text-fg-subtle text-center border-2 border-dashed border-line">
         Unsupported section type "{section.Type}".
       </div>
     {/if}

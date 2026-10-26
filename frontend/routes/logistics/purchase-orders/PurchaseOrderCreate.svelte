@@ -252,9 +252,9 @@ const cartColumns: ITableColumn<PurchaseOrderItem>[] = [
     render: (item) => {
       // Resolve sku/name from the presentation ref when available, otherwise fall back to the product.
       const sku = ((item.presentation?.sk || item.product.SKU) || '').trim()
-      const skuHtml = sku ? `<span class="text-[11px] font-mono text-gray-400 ml-4">${sku}</span>` : ''
+      const skuHtml = sku ? `<span class="text-[11px] font-mono text-fg-subtle ml-4">${sku}</span>` : ''
       if (!item.presentation) { return `${item.product.Name}${skuHtml}` }
-      return `${item.product.Name} <span class="text-blue-600 font-bold">(${item.presentation.nm})</span>${skuHtml}`
+      return `${item.product.Name} <span class="text-blue-fg font-bold">(${item.presentation.nm})</span>${skuHtml}`
     },
     mobile: { order: 1, css: 'col-span-20' },
   },
@@ -459,35 +459,35 @@ const formatDateOrDash = (value: string | number) => {
   </div>
 
   <LayerStatic
-    css="w-[50%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
+    css="w-[50%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
     mobileLayerTitle="Detalle de Compra"
     useMobileLayerVertical={124}
   >
     {#if orderState.errorMessage}
-      <div class="bg-red-50 m-8 text-red-600 p-12 text-sm font-medium border-b border-red-100">
+      <div class="bg-red-bg m-8 text-red-fg p-12 text-sm font-medium border-b border-red-border">
         {orderState.errorMessage}
       </div>
     {/if}
 
-    <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50" aria-label="Purchase order totals and save action bar">
+    <div class="px-10 py-8 border-b border-line-soft flex items-center justify-between bg-surface-soft/50" aria-label="Purchase order totals and save action bar">
       <div class="grow mr-16">
-        <div class="hidden font-bold mb-2 -mt-2 text-gray-800 mb-4 items-center justify-between md:flex">
+        <div class="hidden font-bold mb-2 -mt-2 text-fg mb-4 items-center justify-between md:flex">
           <span>Nueva Órden de Compra</span>
         </div>
         <div class="flex items-center gap-6">
-          <div class="bg-gray-100 flex flex-1 p-6 rounded-md items-center gap-6 max-w-200">
-            <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase">
+          <div class="bg-surface-muted flex flex-1 p-6 rounded-md items-center gap-6 max-w-200">
+            <div class="text-[10px] leading-[1] text-fg-muted font-bold tracking-wider uppercase">
               <div>Sub</div>
               <div>Total</div>
             </div>
-            <div class="leading-[1] text-gray-800 text-[16px] ml-auto">
+            <div class="leading-[1] text-fg text-[16px] ml-auto">
               {formatMo(orderState.subtotalAmount)}
             </div>
           </div>
 
-          <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 max-w-200">
-            <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Total</div>
-            <div class="leading-[1] text-blue-700 font-bold text-[22px] ml-auto">
+          <div class="bg-blue-bg items-center flex flex-1 p-6 rounded-md gap-6 max-w-200">
+            <div class="text-[10px] text-blue-fg uppercase font-bold tracking-wider">Total</div>
+            <div class="leading-[1] text-blue-fg font-bold text-[22px] ml-auto">
               {formatMo(orderState.form.TotalAmount)}
             </div>
           </div>
@@ -563,7 +563,7 @@ const formatDateOrDash = (value: string | number) => {
           emptyMessage="Sin productos"
         />
         {#if orderState.items.length === 0}
-          <div class="flex flex-col items-center justify-center h-192 text-gray-300 gap-8">
+          <div class="flex flex-col items-center justify-center h-192 text-fg-subtle gap-8">
             <i class="icon--supermarket-cart text-4xl"></i>
             <span class="text-sm">Órden de Compra Vacía</span>
           </div>

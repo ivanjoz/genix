@@ -224,18 +224,18 @@
 
 <div class="flex flex-col gap-12">
   <div class="flex flex-wrap items-center justify-between gap-12">
-    <div class="flex flex-wrap items-center gap-10 text-[13px] text-slate-700">
-      <span class="font-bold text-slate-900"><T text={`Last ${WINDOW_HOURS} hours|Últimas ${WINDOW_HOURS} horas`} /></span>
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">
+    <div class="flex flex-wrap items-center gap-10 text-[13px] text-fg-soft">
+      <span class="font-bold text-fg"><T text={`Last ${WINDOW_HOURS} hours|Últimas ${WINDOW_HOURS} horas`} /></span>
+      <span class="rounded-full border border-line-strong bg-surface-soft px-10 py-2 text-[12px] font-semibold text-fg">
         DISK: {formatMetricValue(diskPercent, '%', 1)}
       </span>
-      <span class="text-slate-600">
+      <span class="text-fg-soft">
         <T text="updated|actualizado" />: {lastRefreshAt ? lastRefreshAt.toLocaleTimeString() : '--'}
       </span>
     </div>
 
     <button
-      class="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-10 py-6 text-[12px] text-slate-900 hover:bg-slate-200 disabled:opacity-50"
+      class="cursor-pointer rounded-lg border border-line-strong bg-surface-soft px-10 py-6 text-[12px] text-fg hover:bg-surface-strong disabled:opacity-50"
       disabled={isRefreshing}
       onclick={() => refreshMetrics()}
     >
@@ -244,26 +244,26 @@
   </div>
 
   {#if refreshError}
-    <div class="rounded-lg border border-red-200 bg-red-100 px-10 py-8 text-[12px] text-red-900">{refreshError}</div>
+    <div class="rounded-lg border border-red-border bg-red-bg-strong px-10 py-8 text-[12px] text-red-fg">{refreshError}</div>
   {/if}
 
   {#if !hasSamples}
-    <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-[13px] text-slate-600">
+    <div class="rounded-[10px] border border-line bg-surface-soft px-14 py-24 text-center text-[13px] text-fg-soft">
       <T text="No samples in this window. Check that fareward is running on this host.|Sin muestras en esta ventana. Verifica que fareward esté corriendo en este host." />
     </div>
   {/if}
 
   <div class="grid grid-cols-1 gap-14 xl:grid-cols-2">
     {#each chartDefinitions as chartDefinition (chartDefinition.id)}
-      <div class="rounded-[10px] border border-slate-200 bg-white p-12">
+      <div class="rounded-[10px] border border-line bg-surface p-12">
         <div class="mb-8 flex flex-wrap items-baseline justify-between gap-10">
-          <div class="text-[14px] font-bold text-slate-900"><T text={chartDefinition.title} /></div>
+          <div class="text-[14px] font-bold text-fg"><T text={chartDefinition.title} /></div>
           <div class="flex flex-wrap items-center gap-12">
             {#each chartDefinition.series as seriesDefinition (seriesDefinition.field)}
-              <div class="flex items-center gap-6 text-[12px] text-slate-700">
+              <div class="flex items-center gap-6 text-[12px] text-fg-soft">
                 <span class="inline-block h-8 w-8 rounded-full" style={`background:${seriesDefinition.color}`}></span>
                 <span>{tr(seriesDefinition.name)}</span>
-                <span class="ff-mono text-slate-900">
+                <span class="ff-mono text-fg">
                   {formatMetricValue(metricsSeries.latest[seriesDefinition.field], seriesDefinition.unit, seriesDefinition.decimals)}
                 </span>
               </div>

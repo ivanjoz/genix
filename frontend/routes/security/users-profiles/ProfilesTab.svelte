@@ -214,12 +214,12 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
 	        </div>
 	      </div>
       {:else}
-	      <div class="mb-8 px-12 py-8 bg-red-100 border border-red-400 text-red-700 rounded w-fit">
+	      <div class="mb-8 px-12 py-8 bg-red-bg-strong border border-red-border text-red-fg rounded w-fit">
 	        <T text="Select a profile to edit its access permissions.|Debe seleccionar un perfil para editar sus accesos." />
 	      </div>
       {/if}
       {#if accessListLoadError}
-        <div class="mb-8 px-12 py-8 bg-amber-100 border border-amber-400 text-amber-700 rounded w-fit">
+        <div class="mb-8 px-12 py-8 bg-amber-bg-strong border border-amber-border text-amber-fg rounded w-fit">
           {accessListLoadError}
         </div>
       {/if}
@@ -269,6 +269,6 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
 
 <style>
   ._access-group-title {
-    color: #5f6dff;
+    color: var(--accent-fg);
   }
 </style>

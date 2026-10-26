@@ -52,11 +52,11 @@ import { SystemParametersService, saveSystemParameters, type ISystemParameter } 
 	}
 </script>
 
-<div class="p-24 space-y-24 max-w-600 bg-white rounded-xl shadow-sm border border-gray-100">
-	<div class="flex items-center justify-between mb-24 pb-16 border-b border-gray-100">
+<div class="p-24 space-y-24 max-w-600 bg-surface rounded-xl shadow-sm border border-line-soft">
+	<div class="flex items-center justify-between mb-24 pb-16 border-b border-line-soft">
 		<div>
-			<h2 class="text-xl font-bold text-gray-800">Configuración de Ventas</h2>
-			<p class="text-sm text-gray-500 mt-2">Personaliza el comportamiento del módulo de ventas</p>
+			<h2 class="text-xl font-bold text-fg">Configuración de Ventas</h2>
+			<p class="text-sm text-fg-muted mt-2">Personaliza el comportamiento del módulo de ventas</p>
 		</div>
 		<button class="bx-blue py-10 px-20 flex items-center gap-8 shadow-sm hover:shadow-md transition-all" onclick={save}>
 			<span>Guardar</span>
@@ -67,7 +67,7 @@ import { SystemParametersService, saveSystemParameters, type ISystemParameter } 
 	<div class="space-y-20">
 		{#each systemParameters as param}
 			{#if form[param.id]}
-				<div class="bg-gray-50/50 p-20 rounded-xl border border-gray-100 hover:border-blue-100 transition-colors group">
+				<div class="bg-surface-soft/50 p-20 rounded-xl border border-line-soft hover:border-blue-border transition-colors group">
 					<div class="pl-4">
 						{#if param.type === 'multiselect'}
 							<div class="mb-4">{param.name}</div>
@@ -83,7 +83,7 @@ import { SystemParametersService, saveSystemParameters, type ISystemParameter } 
 								label={param.name}
 								bind:saveOn={form[param.id]}
 								save="Value"
-								css="py-8 font-bold text-gray-700"
+								css="py-8 font-bold text-fg-soft"
 							/>
 						{/if}
 					</div>

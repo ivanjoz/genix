@@ -115,14 +115,14 @@ import {
   const getUpdatedFieldCellCss = (record: IProduct, fieldKey: string): string | undefined => {
     // Highlight imported cells that differ from the current persisted product value.
     if (!record._updatedFields?.includes(fieldKey)) return undefined;
-    return "bg-purple-100";
+    return "bg-purple-bg-strong";
   };
 
   const makeProductColumns = (isImport = false): ExcelTableColumn<IProduct>[] => [
     {
       header: "ID", 
       field: 'ID', width: "40px",
-      css: "c-blue text-center",
+      css: "text-blue-fg text-center",
       headerCss: "w-48", headerInnerCss: "min-w-42",
       getValue: (e) => e.ID || "",
       render: e => e.ID ? String(e.ID) : `<i class="icon-[fa--refresh]"></i>`,
@@ -146,7 +146,7 @@ import {
     {
       header: "Categories|Categorías", useLineClamp: true,
       highlight: true, width: "160px",
-      renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-[fa--refresh] -ml-4 text-purple-400"></i>`,
+      renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-[fa--refresh] -ml-4 text-purple-solid"></i>`,
       getValue: (e) => {
         // Keep import preview readable by showing original labels from Excel.
         if (isImport && (e._categoriasNames || "").trim().length > 0) {
@@ -171,7 +171,7 @@ import {
             const nombre = listas.get(id)?.Name || `Categoría-${id}`;
             nombres.push(nombre);
           }
-          return `<div style="font-size: 0.85rem; color: #666;">${nombres.join(", ") || "Sin categorías"}</div>`;
+          return `<div style="font-size: 0.85rem; color: var(--fg-muted);">${nombres.join(", ") || "Sin categorías"}</div>`;
         },
       },
     },
@@ -249,7 +249,7 @@ import {
         css: "col-span-24",
         labelTop: "Sub-unidades",
         render: (e) => {
-          if (!e.SbuUnit) return "<span style='color: #999;'>-</span>";
+          if (!e.SbuUnit) return "<span style='color: var(--fg-subtle);'>-</span>";
           return `<div style="font-size: 0.9rem;">${e.SbuQuantity} x ${e.SbuUnit}</div>`;
         },
       },
@@ -257,7 +257,7 @@ import {
     {
       header: "Brand|Marca", width: "160px",
       hidden: !isImport,
-      renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-[fa--refresh] text-purple-500"></i>`,
+      renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-[fa--refresh] text-purple-fg"></i>`,
       getValue: (e) => e._marcaNombre || listas.get(e.BrandID)?.Name || "",
       setCellCss: (record) => getUpdatedFieldCellCss(record, "BrandID"),
       excel: { type: "string", importField: "_marcaNombre" },
@@ -859,7 +859,7 @@ import {
       {#if HtmlEditorComponent}
         <HtmlEditorComponent saveOn={productoForm} save="ContentHTML" css="mt-12" />
       {:else}
-        <div class="mt-12 p-12 text-sm text-slate-500">Cargando editor...</div>
+        <div class="mt-12 p-12 text-sm text-fg-muted">Cargando editor...</div>
       {/if}
     {/if}
     {#if layerView === 3}
@@ -887,7 +887,7 @@ import {
             onUploaded={addProductImage}
           />
         {:else}
-          <div class="col-span-2 md:col-span-4 p-12 text-sm text-slate-500">
+          <div class="col-span-2 md:col-span-4 p-12 text-sm text-fg-muted">
             {tr("Save the product to be able to upload more images.|Guarde el producto para poder cargar más imágenes")}
           </div>
         {/if}
@@ -929,7 +929,7 @@ import {
     saveIcon="icon-[fa--upload]"
   >
     <div class="">
-      <div class="border border-slate-200 rounded-md overflow-hidden h-[58vh] min-h-[260px]">
+      <div class="border border-line rounded-md overflow-hidden h-[58vh] min-h-[260px]">
         <!-- VTable virtualizes against its own scroll container, so it needs a concrete height -->
         <TableGrid columns={productoImportColumns} css="h-full" height="100%"
           data={importExcelRowsPreview} rowHeight={46}

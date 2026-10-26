@@ -43,10 +43,10 @@ export const bookStateLabels: Record<number, string> = {
 }
 
 export const bookStateCss: Record<number, string> = {
-  [BOOK_STATE_ACTIVE]: "text-green-600",
-  [BOOK_STATE_VOIDED]: "text-gray-500",
-  [BOOK_STATE_REJECTED]: "text-red-600",
-  [BOOK_STATE_PENDING]: "text-amber-600",
+  [BOOK_STATE_ACTIVE]: "text-green-fg",
+  [BOOK_STATE_VOIDED]: "text-fg-muted",
+  [BOOK_STATE_REJECTED]: "text-red-fg",
+  [BOOK_STATE_PENDING]: "text-amber-fg",
 }
 
 // ISalesBookDocument is what the backend sends: the comprobante as numbers, with the two ids

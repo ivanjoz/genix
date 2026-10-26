@@ -383,7 +383,7 @@
           return detailLineRecord.productBaseName;
         }
 
-        return `${detailLineRecord.productBaseName}<span class="text-blue-600 text-sm ff-bold"> (${detailLineRecord.presentationName})</span>`;
+        return `${detailLineRecord.productBaseName}<span class="text-blue-fg text-sm ff-bold"> (${detailLineRecord.presentationName})</span>`;
       },
       mobile: { order: 1, css: 'col-span-24' },
     },
@@ -649,7 +649,7 @@
     </div>
      <Layer type="content">
        {#if isQueryingSaleOrders}
-         <div class="p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
+         <div class="p-8 min-h-240 w-full fx-c rounded-md bg-surface-soft">
            <LoadingBar label={tr("Loading orders...|Cargando pedidos...")} />
          </div>
        {:else}
@@ -687,7 +687,7 @@
       {#if selectedSaleOrder && canAnnulSaleOrders && !isSaleOrderAnnulled(selectedSaleOrder)}
      	<div class="flex items-center">
 	       <button
-	         class="w-30 h-30 text-sm rounded-full bg-red-100 text-red-700 fx-c"
+	         class="w-30 h-30 text-sm rounded-full bg-red-bg-strong text-red-fg fx-c"
 	         type="button"
 	         title={tr("Annul order|Anular pedido")}
 	         aria-label="Annul this sale order"
@@ -704,15 +704,15 @@
       <div class="flex flex-col gap-10 mt-8" aria-label="Sale order detail panel with status, amounts, products, and action buttons">
         <div class="grid grid-cols-24 gap-x-8 gap-y-8 text-13 md:text-14" aria-label="Sale order summary: status, total, and debt">
           <div class="col-span-8">
-            <div class="text-gray-500"><T text="Status|Estado" /></div>
+            <div class="text-fg-muted"><T text="Status|Estado" /></div>
             <div>{getSaleOrderStatusName(selectedSaleOrder)}</div>
           </div>
           <div class="col-span-8">
-            <div class="text-gray-500">Total</div>
+            <div class="text-fg-muted">Total</div>
             <div class="ff-mono">{currencySymbol(selectedSaleOrder.CurrencyType)} {formatN(selectedSaleOrder.TotalAmount / 100, 2)}</div>
           </div>
           <div class="col-span-8">
-            <div class="text-gray-500"><T text="Debt|Deuda" /></div>
+            <div class="text-fg-muted"><T text="Debt|Deuda" /></div>
             <div class="ff-mono">{currencySymbol(selectedSaleOrder.CurrencyType)} {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
           </div>
         </div>
@@ -725,11 +725,11 @@
 
         <div class="grid grid-cols-2 gap-8 mt-4" aria-label="Sale order actions: payment and delivery">
           {#if isPostingSaleOrderAction}
-            <div class="col-span-2 p-12 bg-gray-100 min-h-64 w-full rounded-md fx-c">
+            <div class="col-span-2 p-12 bg-surface-muted min-h-64 w-full rounded-md fx-c">
               <LoadingBar label={getActionInProgressLabel(saleOrderActionInProgress)} />
             </div>
           {:else if isSaleOrderAnnulled(selectedSaleOrder)}
-            <div class="col-span-2 p-10 bg-red-50 w-full rounded-md text-13 leading-20 text-gray-700"
+            <div class="col-span-2 p-10 bg-red-bg w-full rounded-md text-13 leading-20 text-fg-soft"
               aria-label="Annulment details: date, user and reason">
               <span class="ff-bold text-xs color-label mr-2"><T text="Annulled on:|Anulada el:" /></span> {formatActionTime(selectedSaleOrder.upd)}.<br>
               <span class="ff-bold text-xs color-label mr-2"><T text="User:|Usuario:" /></span>
@@ -737,7 +737,7 @@
               <span class="ff-bold text-xs color-label mr-2"><T text="Reason:|Motivo:" /></span> {selectedSaleOrder.AnnulReason || '-'}
             </div>
           {:else if isAnnulFormOpen}
-            <div class="col-span-2 p-10 bg-red-50 w-full rounded-md" aria-label="Annul order form with refund cash register and reason">
+            <div class="col-span-2 p-10 bg-red-bg w-full rounded-md" aria-label="Annul order form with refund cash register and reason">
               {#if saleOrderWasPaid(selectedSaleOrder)}
                 <SearchSelect
                   bind:saveOn={saleOrderAnnulForm}
@@ -754,7 +754,7 @@
                 <span class="text-xs color-label ff-bold"><T text="Reason|Motivo" /></span>
                 <textarea
                   bind:value={saleOrderAnnulForm.Reason}
-                  class="w-full h-56 px-8 py-6 text-13 rounded-md border border-gray-300"
+                  class="w-full h-56 px-8 py-6 text-13 rounded-md border border-line-strong"
                   maxlength="200"
                   aria-label="Reason for annulling this sale order"
                   placeholder={tr('Why is this order annulled?|¿Por qué se anula este pedido?')}
@@ -778,7 +778,7 @@
               </div>
             </div>
           {:else}
-            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md" aria-label="Payment action panel with cash register selector">
+            <div class="p-10 bg-surface-muted min-h-64 w-full rounded-md" aria-label="Payment action panel with cash register selector">
               {#if canPaySaleOrder(selectedSaleOrder)}
                 <SearchSelect
                   bind:saveOn={saleOrderPaymentForm}
@@ -801,7 +801,7 @@
                   <span class="mr-12"><T text="Pay|Pagar" /></span>
                 </button>
               {:else}
-                <div class="text-13 leading-20 text-gray-700">
+                <div class="text-13 leading-20 text-fg-soft">
                   <span class="ff-bold text-xs color-label mr-2"><T text="Paid on:|Pagado el:" /></span> {formatActionTime(selectedSaleOrder.LastPaymentTime)}.<br>
                   <span class="ff-bold text-xs color-label mr-2"><T text="At:|En:" /></span> {getCajaName(selectedSaleOrder.LastPaymentCajaID)}.<br>
                   <span class="ff-bold text-xs color-label mr-2"><T text="User:|Usuario:" /></span>
@@ -809,7 +809,7 @@
                 </div>
               {/if}
             </div>
-            <div class="p-10 bg-gray-100 min-h-64 w-full rounded-md flex flex-col justify-between" aria-label="Delivery action panel with warehouse selector">
+            <div class="p-10 bg-surface-muted min-h-64 w-full rounded-md flex flex-col justify-between" aria-label="Delivery action panel with warehouse selector">
               {#if canDeliverSaleOrder(selectedSaleOrder)}
                 <SearchSelect
                   bind:saveOn={saleOrderDeliveryForm}
@@ -835,7 +835,7 @@
                   </button>
                 </div>
               {:else}
-                <div class="text-13 leading-20 text-gray-700">
+                <div class="text-13 leading-20 text-fg-soft">
                   <span class="ff-bold text-xs color-label"><T text="Delivered on|Entregado el" /></span> {formatActionTime(selectedSaleOrder.DeliveryTime)}.<br>
                   <span class="ff-bold text-xs color-label"><T text="At|En" /></span> {getAlmacenName(selectedSaleOrder.WarehouseID)}.<br>
                   <RecordByIDText apiRoute="users-ids" recordID={selectedSaleOrder.DeliveryUser} placeholder="-" />.

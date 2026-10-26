@@ -27,13 +27,13 @@ export interface IAccess {
 
 export const accesoAcciones = [
   { id: 1, name: "Visualizar", short: "VER",
-    icon: "icon-[mdi--eye]", color: "#00c07d", color2: "#49c99c" },
+    icon: "icon-[mdi--eye]", color: "var(--green-solid)", color2: "color-mix(in oklab, var(--green-solid) 80%, var(--surface))" },
   { id: 2, name: "Crear", short: "CREAR",
-    icon: "icon-[fa--pencil]", color: "#0080f9" },
+    icon: "icon-[fa--pencil]", color: "var(--blue-solid)" },
   { id: 3, name: "Editar", short: "EDITAR",
-    icon: "icon-[fa--pencil]", color: "#0f6bff" },
+    icon: "icon-[fa--pencil]", color: "var(--blue-solid)" },
   { id: 4, name: "Todo", short: "TODO",
-    icon: "icon-[fa--shield]", color: "#af12eb", color2: "#d35eff" },
+    icon: "icon-[fa--shield]", color: "var(--purple-solid)", color2: "color-mix(in oklab, var(--purple-solid) 80%, var(--surface))" },
 ]
 
 export class UsuariosService extends GetHandler {

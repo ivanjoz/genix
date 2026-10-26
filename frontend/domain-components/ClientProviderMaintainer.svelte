@@ -179,7 +179,7 @@
     {
       header: 'ID',
       headerCss: 'w-64',
-      css: 'text-center text-purple-600',
+      css: 'text-center text-purple-fg',
       getValue: (clientProviderRecord) => clientProviderRecord.ID,
       mobile: { order: 1, css: 'col-span-6 ff-bold', icon: '[fa--tag]' },
     },
@@ -251,7 +251,7 @@
         <FilterInput bind:value={filterText} placeholder="Search by name, email or registry|Buscar por nombre, email o registro"
           css="mr-16 w-320 max-w-full" />
         <div class="flex items-center">
-          <div class="h6 ff-bold pr-8 text-slate-500">
+          <div class="h6 ff-bold pr-8 text-fg-muted">
             {filteredClientProviders.length} <T text="records|registros" />
           </div>
           <Button color="green" icon="icon-[fa--plus]" name="New|Nuevo" hideNameOnMobile

@@ -22,7 +22,7 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
     service.empresa.FlagValues.find(slot => slot.ID === flagID)!
 </script>
 
-<section class="rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
+<section class="rounded-[12px] border border-line bg-surface p-16 shadow-sm"
   aria-label="Company flags table: each row turns one business rule on for this company">
   <div class="flex items-center gap-10 mb-4">
     <div class="h3 ff-bold flex-1 min-w-0"><T text="Company Flags|Flags de la Empresa" /></div>
@@ -32,7 +32,7 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
       label="Saves the checked flags on the company."
       onClick={() => saveCompanyParameters(service.empresa)} />
   </div>
-  <div class="text-slate-500 mb-14">
+  <div class="text-fg-muted mb-14">
     <T text="A checked flag turns its rule on for the whole company; a flag with a field takes the value that rule uses.|Un flag marcado activa su regla para toda la empresa; un flag con campo toma el valor que esa regla usa." />
   </div>
 
@@ -40,11 +40,11 @@ import { saveCompanyParameters, type EmpresaParametrosService } from './empresas
     <tbody>
       {#each companyFlagsCatalog as section (section.label)}
         <tr>
-          <th class="text-left ff-bold text-slate-600 bg-slate-100 px-10 py-6
-            border-y border-slate-200"><T text={section.label} /></th>
+          <th class="text-left ff-bold text-fg-soft bg-surface-muted px-10 py-6
+            border-y border-line"><T text={section.label} /></th>
         </tr>
         {#each section.flags as flag (flag.id)}
-          <tr class="border-b border-slate-100">
+          <tr class="border-b border-line-soft">
             <!-- One control per row rather than a box in one cell and inert text in the next: the
                  Checkbox already lays its box and its label out as two columns, and keeping them
                  in one control means the name is a click target and announces once. -->

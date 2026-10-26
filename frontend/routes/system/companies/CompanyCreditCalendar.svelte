@@ -17,7 +17,7 @@
   const weeks = $derived(buildCompanyCreditCalendar(days));
 </script>
 
-<div class="overflow-x-auto rounded-[9px] border border-slate-200 bg-white">
+<div class="overflow-x-auto rounded-[9px] border border-line bg-surface">
   <!-- Row wrappers use display:contents so every divider belongs to the same 8-column grid. -->
   <div
     class="grid w-full min-w-390 md:min-w-700"
@@ -26,12 +26,12 @@
     aria-label="30-day company credit calendar"
   >
     <div class="contents" role="row">
-      <div class="flex h-38 items-center justify-center border-b border-r border-slate-200 bg-slate-50 text-slate-600" role="columnheader">
+      <div class="flex h-38 items-center justify-center border-b border-r border-line bg-surface-soft text-fg-soft" role="columnheader">
         Mes
       </div>
       {#each COMPANY_CREDIT_WEEKDAY_LABELS as weekday, weekdayIndex}
         <div
-          class="flex h-38 items-center justify-center border-b border-slate-200 bg-slate-50 text-slate-600 ff-bold"
+          class="flex h-38 items-center justify-center border-b border-line bg-surface-soft text-fg-soft ff-bold"
           class:border-r={weekdayIndex < COMPANY_CREDIT_WEEKDAY_LABELS.length - 1}
           role="columnheader"
         >
@@ -43,7 +43,7 @@
     {#each weeks as week, weekIndex (week.mondayUnixDay)}
       <div class="contents" role="row">
         <div
-          class="flex h-54 items-center justify-center border-r border-slate-200 bg-slate-50 text-slate-600 ff-bold"
+          class="flex h-54 items-center justify-center border-r border-line bg-surface-soft text-fg-soft ff-bold"
           class:border-b={weekIndex < weeks.length - 1}
           role="rowheader"
         >
@@ -51,7 +51,7 @@
         </div>
         {#each week.days as cell, weekdayIndex (cell.unixDay)}
           <div
-            class="h-54 border-slate-200"
+            class="h-54 border-line"
             class:border-r={weekdayIndex < week.days.length - 1}
             class:border-b={weekIndex < weeks.length - 1}
             role="cell"
@@ -59,10 +59,10 @@
             {#if cell.usage}
               <Card
                 label={`Open API credit detail for day ${cell.dayOfMonth}|Abrir detalle de créditos API del día ${cell.dayOfMonth}`}
-                css={`relative h-full overflow-hidden transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400 ${selectedDay === cell.unixDay ? 'bg-violet-50' : ''}`}
+                css={`relative h-full overflow-hidden transition-colors hover:bg-surface-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-purple-border ${selectedDay === cell.unixDay ? 'bg-purple-bg' : ''}`}
                 onClick={() => { if (cell.usage) onSelect(cell.usage); }}
               >
-                <div class="absolute inset-x-0 top-0 h-16 text-center text-[14px] leading-[16px] text-slate-700 ff-bold">
+                <div class="absolute inset-x-0 top-0 h-16 text-center text-[14px] leading-[16px] text-fg-soft ff-bold">
                   {cell.dayOfMonth}
                 </div>
                 <div
@@ -85,7 +85,7 @@
                 </div>
               </Card>
             {:else}
-              <div class="h-full bg-slate-50/50"></div>
+              <div class="h-full bg-surface-soft/50"></div>
             {/if}
           </div>
         {/each}

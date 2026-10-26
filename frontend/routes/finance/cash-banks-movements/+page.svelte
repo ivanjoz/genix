@@ -80,7 +80,7 @@ import { tr } from '#core/store.svelte.ts';
       headerCss: "w-120",
       css: "ff-mono text-right px-6",
       render: e => {
-        const cssClass = e.Amount < 0 ? "text-red-500" : ""
+        const cssClass = e.Amount < 0 ? "text-red-fg" : ""
         return `<span class="${cssClass}">${formatN(e.Amount / 100, 2)}</span>`
       },
       mobile: { order: 3, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" }
@@ -149,11 +149,11 @@ import { tr } from '#core/store.svelte.ts';
       </button>
     </div>
     <div class="flex items-center w-full relative md:mr-16 md:w-224 md:ml-auto">
-      <div class="absolute left-12 text-gray-400">
+      <div class="absolute left-12 text-fg-subtle">
         <i class="icon-[fa--search]"></i>
       </div>
       <input
-        class="w-full pl-36 pr-12 py-8 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        class="w-full pl-36 pr-12 py-8 border border-line-strong rounded-md focus:outline-none focus:ring-2 focus:ring-accent-solid"
         autocomplete="off"
         type="text"
         placeholder={tr("Search...|Buscar...")}

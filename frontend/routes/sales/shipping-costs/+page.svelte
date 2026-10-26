@@ -359,7 +359,7 @@
 
 <Page title="Delivery Costs|Costos de Delivery">
   <div class="flex h-full gap-20">
-    <div class="flex-1 min-w-0 h-[calc(100vh-var(--header-height)-20px)] bg-gray-100 rounded-md border border-gray-200 p-8 flex flex-col min-h-0">
+    <div class="flex-1 min-w-0 h-[calc(100vh-var(--header-height)-20px)] bg-surface-muted rounded-md border border-line p-8 flex flex-col min-h-0">
       <div class="mb-8 flex items-center gap-8 w-full justify-between shrink-0" aria-label="Shipping costs toolbar with filter and save">
         <FilterInput
           bind:value={filterText}
@@ -376,28 +376,28 @@
           {#each filteredDepartamentos as departamento (departamento.ID)}
             <button
               type="button"
-              class="text-left min-h-72 px-10 py-8 rounded-md border bg-white hover:border-slate-500 {selectedDepartamento?.ID === departamento.ID ? 'border-violet-400 bg-violet-50 shadow-[inset_0_0_3px_#9987c8]' : 'border-gray-200 text-gray-700'}"
+              class="text-left min-h-72 px-10 py-8 rounded-md border bg-surface hover:border-line-strong {selectedDepartamento?.ID === departamento.ID ? 'border-purple-border bg-purple-bg shadow-[inset_0_0_3px_var(--purple-border)]' : 'border-line text-fg-soft'}"
               onclick={() => selectDepartamento(departamento)}
             >
               <div class="flex items-center gap-8">
                 <div class="ff-semibold leading-[1.1] truncate">{departamento.Name}</div>
-                <div class="rounded bg-blue-50 px-8 py-3 text-xs leading-[1.0] text-blue-700 font-mono">
+                <div class="rounded bg-blue-bg px-8 py-3 text-xs leading-[1.0] text-blue-fg font-mono">
                   {formatDeliveryCost(getDeliveryCost(departamento.ID, 'Fijo'))}
                 </div>
               </div>
               <div class="mt-8 grid grid-cols-2 gap-12 leading-[1.1]">
                 <div>
-                  <div class="uppercase text-[12px] text-gray-500"><T text="Province|Provincia" /></div>
-                  <div class="text-[13px] mt-2 font-mono text-gray-800">{getProvinciaCostRange(departamento, 'Fijo')}</div>
+                  <div class="uppercase text-[12px] text-fg-muted"><T text="Province|Provincia" /></div>
+                  <div class="text-[13px] mt-2 font-mono text-fg">{getProvinciaCostRange(departamento, 'Fijo')}</div>
                 </div>
                 <div>
-                  <div class="uppercase text-[12px] text-gray-500"><T text="District|Distrito" /></div>
-                  <div class="text-[13px] mt-2 font-mono text-gray-800">{getDistritoCostRange(departamento, 'Fijo')}</div>
+                  <div class="uppercase text-[12px] text-fg-muted"><T text="District|Distrito" /></div>
+                  <div class="text-[13px] mt-2 font-mono text-fg">{getDistritoCostRange(departamento, 'Fijo')}</div>
                 </div>
               </div>
             </button>
           {:else}
-            <div class="col-span-2 rounded-md border border-gray-200 bg-white p-12 text-[14px] text-gray-400">
+            <div class="col-span-2 rounded-md border border-line bg-surface p-12 text-[14px] text-fg-subtle">
               <T text="No departments|Sin departamentos" />
             </div>
           {/each}
@@ -406,20 +406,20 @@
     </div>
 
     <LayerStatic
-      css="w-[50%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
+      css="w-[50%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
       mobileLayerTitle="Zone Details|Detalle de Zona"
       useMobileLayerVertical={120}
     >
-      <div class="px-12 py-10 border-b border-gray-100 bg-gray-50/50">
+      <div class="px-12 py-10 border-b border-line-soft bg-surface-soft/50">
         <div class="hidden md:block">
-          <div class="text-[15px] font-bold text-gray-800">
+          <div class="text-[15px] font-bold text-fg">
             <T text="Delivery Costs|Costos de Delivery" />
           </div>
         </div>
         <div class="mt-6 grid grid-cols-[minmax(160px,1fr)_110px_110px] gap-8" aria-label="Departamento delivery cost form with flat and per-kg rates">
-          <div class="bg-gray-100 rounded-md p-8">
-            <div class="text-[10px] uppercase text-gray-500"><T text="Department|Departamento" /></div>
-            <div class="text-[15px] text-gray-800 truncate">{selectedDepartamento?.Name || tr('Select|Seleccione')}</div>
+          <div class="bg-surface-muted rounded-md p-8">
+            <div class="text-[10px] uppercase text-fg-muted"><T text="Department|Departamento" /></div>
+            <div class="text-[15px] text-fg truncate">{selectedDepartamento?.Name || tr('Select|Seleccione')}</div>
           </div>
           <Input
             bind:saveOn={departamentoCostForm}
@@ -427,8 +427,8 @@
             label="Fixed|Fijo"
             type="number"
             disabled={!selectedDepartamento}
-            css="bg-blue-50 rounded-md"
-            inputCss="text-[15px] text-blue-700 font-bold"
+            css="bg-blue-bg rounded-md"
+            inputCss="text-[15px] text-blue-fg font-bold"
             onChange={updateDepartamentoCost}
           />
           <Input
@@ -437,8 +437,8 @@
             label="Per Kg|Por Kg"
             type="number"
             disabled={!selectedDepartamento}
-            css="bg-cyan-50 rounded-md"
-            inputCss="text-[15px] text-cyan-700 font-bold"
+            css="bg-teal-bg rounded-md"
+            inputCss="text-[15px] text-teal-fg font-bold"
             onChange={updateDepartamentoCost}
           />
         </div>
@@ -458,7 +458,7 @@
             rowCss="text-[14px]"
           />
         {:else}
-          <div class="h-full flex flex-col items-center justify-center text-gray-300 gap-8">
+          <div class="h-full flex flex-col items-center justify-center text-fg-subtle gap-8">
             <i class="icon-[fa--map-marker] text-4xl"></i>
             <span class="text-[14px]"><T text="Select a department|Seleccione un departamento" /></span>
           </div>

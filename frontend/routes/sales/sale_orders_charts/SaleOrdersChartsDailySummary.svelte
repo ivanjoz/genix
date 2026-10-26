@@ -213,8 +213,8 @@
   }
 
   const getVariationColorClass = (variationValue: number | null) => {
-    if (variationValue === null || variationValue === undefined) { return 'text-slate-400' }
-    return variationValue >= 0 ? 'text-green-600' : 'text-red-500'
+    if (variationValue === null || variationValue === undefined) { return 'text-fg-subtle' }
+    return variationValue >= 0 ? 'text-green-fg' : 'text-red-fg'
   }
 
   const getVariationIconClass = (variationValue: number | null) => {
@@ -224,16 +224,16 @@
 </script>
 
 <div class="mb-12 flex flex-wrap items-center gap-10">
-  <div class="ml-auto flex items-center gap-12 text-[13px] text-slate-600">
+  <div class="ml-auto flex items-center gap-12 text-[13px] text-fg-soft">
     <div>{dailySummaryCards.length} días</div>
     <div>Top 10 productos</div>
   </div>
 </div>
 
 {#if saleSummaryRecords.length === 0}
-  <div class="text-gray-500">No hay registros de ventas para mostrar.</div>
+  <div class="text-fg-muted">No hay registros de ventas para mostrar.</div>
 {:else if dailySummaryCards.length === 0}
-  <div class="text-gray-500">No se encontraron días con ventas en los últimos 45 días.</div>
+  <div class="text-fg-muted">No se encontraron días con ventas en los últimos 45 días.</div>
 {:else}
   <div class="sale-orders-daily-cards-shell h-[calc(100vh-var(--header-height)-124px)] min-h-[320px] overflow-hidden">
     <VirtualCards
@@ -244,11 +244,11 @@
       bufferSize={4}
     >
       {#snippet children(dailySummaryCard, _cardIndex)}
-        <div class="rounded-[12px] border border-slate-200 bg-white p-8 md:p-14 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+        <div class="rounded-[12px] border border-line bg-surface p-8 md:p-14 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
           <div class="mb-16 flex items-start gap-14">
             <div class="flex w-90 md:w-110 shrink-0">
               <div class="flex flex-col gap-10">
-                <div class="text-[20px] ff-bold leading-none text-slate-900">
+                <div class="text-[20px] ff-bold leading-none text-fg">
                   {String(formatTime(dailySummaryCard.dateUnix, 'M-d') || '')}
                 </div>
                 <div class={`flex ff-mono items-center text-[15px] leading-none ${getVariationColorClass(dailySummaryCard.variationAgainstLast7DaysAvg)}`}>
@@ -263,52 +263,52 @@
             </div>
 
             <div class="grid h-94 w-full grid-cols-3 items-end gap-10">
-              <SquareBarSized useStripedLines="#F0F0F0"
+              <SquareBarSized useStripedLines="var(--line-soft)"
                 label="Received|Ingresado"
                 value={formatMetricValue(dailySummaryCard.paidMetricValue)}
                 size={dailySummaryCard.paidRatio}
-                backgroundColor="#93c5fd"
-                background="linear-gradient(32deg, rgb(178 244 255) 0%, rgb(127 205 251) 99%)"
+                backgroundColor="var(--blue-border)"
+                background="linear-gradient(32deg, var(--blue-bg-strong) 0%, var(--blue-border) 99%)"
               />
 
               <SquareBarSized
                 label="Receivable|Por Cobrar"
                 value={formatMetricValue(dailySummaryCard.unpaidMetricValue)}
                 size={dailySummaryCard.unpaidRatio}
-                backgroundColor="#fdd1cd"
-                background="linear-gradient(32deg, #ffe5e5 0%, #ffb5b5 99%)"
+                backgroundColor="var(--red-bg-strong)"
+                background="linear-gradient(32deg, var(--red-bg-strong) 0%, var(--red-border) 99%)"
               />
 
-              <SquareBarSized useStripedLines="#F0F0F0"
+              <SquareBarSized useStripedLines="var(--line-soft)"
                 label="Delivered|Entregado"
                 value={`${formatN(dailySummaryCard.deliveredRatio * 100, 0)}%`}
                 sublabel={`${formatN(dailySummaryCard.deliveredAmount / 100, 2)} / ${formatN(dailySummaryCard.totalDeliverableAmount / 100, 2)}`}
                 size={dailySummaryCard.deliveredRatio}
-                backgroundColor="#d9e7bf"
-                background="linear-gradient(32deg, #d1fdd5 0%, #94ed9c 99%)"
+                backgroundColor="var(--green-bg-strong)"
+                background="linear-gradient(32deg, var(--green-bg-strong) 0%, var(--green-border) 99%)"
               />
             </div>
           </div>
 
           <div class="flex flex-col gap-4">
             {#if dailySummaryCard.topProducts.length === 0}
-              <div class="py-24 text-[14px] text-slate-500">
+              <div class="py-24 text-[14px] text-fg-muted">
                 Sin Ventas
               </div>
             {:else}
               {#each dailySummaryCard.topProducts as topProductSummary (topProductSummary.productID)}
                 <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-10">
-                  <div class="relative h-28 overflow-hidden rounded-[4px] bg-[#f6f0fc]">
+                  <div class="relative h-28 overflow-hidden rounded-[4px] bg-purple-bg">
                     <div
                       class="absolute inset-y-0 left-0 bar-bg"
                       style={`width:${getTopProductWidthPercent(topProductSummary.metricValue, dailySummaryCard.topMetricMaxValue)}%`}
                     ></div>
-                    <div class="relative z-[1] line-clamp-1 px-12 pt-6 text-xs leading-[1.2] text-slate-900">
+                    <div class="relative z-[1] line-clamp-1 px-12 pt-6 text-xs leading-[1.2] text-fg">
                       {topProductSummary.productName}
                     </div>
                   </div>
 
-                  <div class="w-70 text-right text-[14px] leading-none ff-mono text-slate-900">
+                  <div class="w-70 text-right text-[14px] leading-none ff-mono text-fg">
                     {formatMetricValue(topProductSummary.metricValue)}
                   </div>
                 </div>
@@ -329,6 +329,6 @@
     padding-bottom: 12px;
   }
   .bar-bg {
- 		background: linear-gradient(352deg, rgb(241 205 255) 0%, rgb(240 225 255) 99%);
+ 		background: linear-gradient(352deg, var(--purple-border) 0%, var(--purple-bg-strong) 99%);
   }
 </style>

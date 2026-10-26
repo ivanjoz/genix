@@ -251,7 +251,7 @@
       {
         header: 'ID',
         getValue: saleOrder => saleOrder.ID,
-        css: 'ff-mono fs15 text-right',
+        css: 'ff-mono text-[15px] text-right',
         headerCss: 'w-52',
         mobile: { order: 3, css: 'col-span-10 ff-semibold text-sm justify-self-end' }
       },
@@ -347,35 +347,35 @@
       {@const topProductsCards = getTopProductsCards(saleOrder)}
       <div class="md:flex w-full min-w-0">
         {#if topProductsCards.length === 0}
-          <div class="px-8 py-6 text-gray-400">-</div>
+          <div class="px-8 py-6 text-fg-subtle">-</div>
         {:else if isMobile}
           <div class="w-full px-8 py-4">
             <!-- Mobile keeps one compact line per product so each order card stays readable while preserving product priority. -->
             {#each rankedProducts.slice(0, 3) as topProductCard (topProductCard.productID)}
-              <div class="truncate text-sm leading-[1.15] text-slate-800">
-                <span class="ff-mono text-slate-900">{topProductCard.totalQuantity}x</span>
+              <div class="truncate text-sm leading-[1.15] text-fg">
+                <span class="ff-mono text-fg">{topProductCard.totalQuantity}x</span>
                 {' '}
                 <HighlightText text={topProductCard.productName} words={normalizedSearchTerms} />
               </div>
             {/each}
             {#if rankedProducts.length > 3}
-              <div class="mt-2 text-xs text-slate-500 -mb-12">({rankedProducts.length - 3} more...)</div>
+              <div class="mt-2 text-xs text-fg-muted -mb-12">({rankedProducts.length - 3} more...)</div>
             {/if}
           </div>
         {:else}
           {#each topProductsCards as topProductCard, productIndex (topProductCard.productID)}
             <div
-              class={`min-w-0 flex items-center shrink-0 basis-[25%] px-10 ${productIndex < topProductsCards.length - 1 ? 'border-r border-slate-200' : ''}`}
+              class={`min-w-0 flex items-center shrink-0 basis-[25%] px-10 ${productIndex < topProductsCards.length - 1 ? 'border-r border-line' : ''}`}
             >
               <!-- Group quantity and amount to preserve the original scan order inside each card. -->
               <div class="mr-4 min-w-48 flex flex-col items-end justify-center">
-                <div class="text-sm ff-mono leading-[1] mb-1 text-slate-900">{topProductCard.totalQuantity}x</div>
-                <div class="ff-bold text-sm leading-[1] text-blue-600">
+                <div class="text-sm ff-mono leading-[1] mb-1 text-fg">{topProductCard.totalQuantity}x</div>
+                <div class="ff-bold text-sm leading-[1] text-blue-fg">
                   {formatN(topProductCard.totalAmount / 100, 2)}
                 </div>
               </div>
               <!-- Clamp product names so the table row keeps a stable height. -->
-              <div class="line-clamp-2 text-sm leading-[1.15] text-slate-800">
+              <div class="line-clamp-2 text-sm leading-[1.15] text-fg">
                 <HighlightText text={topProductCard.productName} words={normalizedSearchTerms} />
               </div>
             </div>

@@ -108,14 +108,14 @@ import { Env } from '#core/env.ts';
     <div class="mb-6 h2 ff-bold">Restore</div>
     <div class="_1 w-full rounded-[8px] min-h-160 py-12 px-16">
       {#if !backupSelected}
-        <div class="w-full text-red-500 ff-bold flex-wrap box-error-ms mt-16">
+        <div class="w-full text-red-fg ff-bold flex-wrap box-error-ms mt-16">
           <T text="Select a Backup|Seleccione un Backup" />
         </div>
       {:else}
         <div class="flex w-full justify-between">
           <div>
             <div class="w-full flex-wrap ff-semibold">{backupSelected.Name}</div>
-            <div class="text-gray-600 mt-4">{formatN(backupSelected.Size / 1000 / 1000, 2)} mb</div>
+            <div class="text-fg-soft mt-4">{formatN(backupSelected.Size / 1000 / 1000, 2)} mb</div>
           </div>
           <Button color="purple" icon="icon-[fa--download]" label="Downloads the selected backup file."
             onClick={() => downloadBackup(backupSelected!)} />
@@ -134,7 +134,7 @@ import { Env } from '#core/env.ts';
 
 <style>
   ._1 {
-    background-color: white;
+    background-color: var(--surface);
     box-shadow: rgba(99, 99, 99, 0.2) 0px 2px 8px 0px;
   }
 </style>

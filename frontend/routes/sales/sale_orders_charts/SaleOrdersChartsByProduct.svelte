@@ -208,21 +208,21 @@
     type="single"
   />
   <FilterInput bind:value={filterText} css="mr-auto w-200" />
-  <div class="flex items-center gap-12 text-[13px] text-slate-600">
+  <div class="flex items-center gap-12 text-[13px] text-fg-soft">
     <div>{filteredProductChartCards.length} productos</div>
     <div>{TOTAL_DAYS_TO_RENDER} días</div>
   </div>
 </div>
 
 {#if saleSummaryRecords.length === 0}
-  <div class="text-gray-500">No hay registros de ventas para mostrar.</div>
+  <div class="text-fg-muted">No hay registros de ventas para mostrar.</div>
 {:else if filteredProductChartCards.length === 0}
-  <div class="text-gray-500">No se encontraron productos con ventas en los últimos 45 días.</div>
+  <div class="text-fg-muted">No se encontraron productos con ventas en los últimos 45 días.</div>
 {:else}
   <div class="flex w-full">
     <div class="mb-8 ml-auto mt-[-6px] flex flex-wrap items-center gap-12">
       {#each chartLegendSeries as chartLegendItem (chartLegendItem.name)}
-        <div class="flex items-center gap-8 text-[13px] text-slate-600">
+        <div class="flex items-center gap-8 text-[13px] text-fg-soft">
           {#if chartLegendItem.type === 'line'}
             <i class="icon-[fa--tag]"></i>
           {:else}
@@ -245,28 +245,28 @@
       bufferSize={4}
     >
       {#snippet children(productChartCard, _cardIndex)}
-        <div class="rounded-[12px] border border-slate-200 bg-white p-8 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
+        <div class="rounded-[12px] border border-line bg-surface p-8 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
           <div class="mb-8">
-            <div class="line-clamp-2 font-semibold leading-[1.2] text-slate-800">
+            <div class="line-clamp-2 font-semibold leading-[1.2] text-fg">
               <HighlightText text={productChartCard.productName} words={filterWords} />
             </div>
           </div>
 
-          <div class="mb-8 flex flex-wrap items-center gap-8 rounded-[10px] bg-slate-50 px-8 py-6 text-[14px] leading-none">
+          <div class="mb-8 flex flex-wrap items-center gap-8 rounded-[10px] bg-surface-soft px-8 py-6 text-[14px] leading-none">
             {#if productChartCard.totalPaidMetricValue > 0}
-              <div class="flex items-center gap-6 text-slate-800">
+              <div class="flex items-center gap-6 text-fg">
                 <div class="h-10 w-10 rounded-[3px] bg-[#3b82f6]"></div>
                 <div>{formatMetricValue(productChartCard.totalPaidMetricValue)}</div>
               </div>
             {/if}
             {#if productChartCard.totalUnpaidMetricValue > 0}
-              <div class="flex items-center gap-6 text-slate-800">
+              <div class="flex items-center gap-6 text-fg">
                 <div class="h-10 w-10 rounded-[3px] bg-[#ef4444]"></div>
                 <div>{formatMetricValue(productChartCard.totalUnpaidMetricValue)}</div>
               </div>
             {/if}
-            <div class="flex items-center gap-6 text-slate-800">
-              <i class="icon-[fa--tag] text-slate-600"></i>
+            <div class="flex items-center gap-6 text-fg">
+              <i class="icon-[fa--tag] text-fg-soft"></i>
               <div>
                 {productChartCard.priceReference ? `S/ ${formatN(productChartCard.priceReference, 2)}` : 'Sin precio'}
               </div>

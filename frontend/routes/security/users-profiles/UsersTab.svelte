@@ -358,11 +358,11 @@ import { formatTime } from '#libs/helpers.ts';
   }
 
   ._usuario-info-name {
-    color: #304256;
+    color: var(--fg-soft);
   }
 
   ._usuario-info-login {
-    color: #7762ba;
+    color: var(--accent-fg);
     line-height: 16px;
   }
 

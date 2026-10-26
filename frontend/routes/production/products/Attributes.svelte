@@ -134,7 +134,7 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "#se
     <div class="col-span-12">
       <ColorPicker label="Color|Color" saveOn={presentacionForm} save="cl"/>
     </div>
-    <div class="mt-12 col-span-24 fs15">
+    <div class="mt-12 col-span-24 text-[15px]">
       <i class="icon-[fa--exclamation-triangle]"></i> La información se guardará cuando se guarde el producto.
     </div>
   </div>
@@ -142,6 +142,6 @@ import { productoAtributos, type IProduct, type IProductPresentation } from "#se
 
 <style>
   ._1 {
-    border: 1px solid rgba(0, 0, 0, 0.7);
+    border: 1px solid var(--line-strong);
   }
 </style>

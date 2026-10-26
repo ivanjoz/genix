@@ -444,7 +444,7 @@ import {
       align: 'right',
       headerStyle: { width: '55px' },
       headerInnerCss: cartHeaderCss,
-      css: 'text-blue-600 font-bold text-sm',
+      css: 'text-blue-fg font-bold text-sm',
       getValue: (item) => formatQuantity(item.cantidad, item.subDivisor, item.producto?.SbuUnit),
     },
     {
@@ -452,12 +452,12 @@ import {
       header: 'PRODUCTO',
       align: 'left',
       headerInnerCss: cartHeaderCss,
-      css: 'text-sm text-gray-800 py-4',
+      css: 'text-sm text-fg py-4',
       getValue: (item) => item.displayName,
       // Serialized items carry their picked series as chips under the name.
       render: (item) => {
         const serialChips = [...(item.serialNumbers?.entries() || [])].map(([serialNumber, qty]) =>
-          `<span class="text-[10px] bg-white border border-gray-200 px-6 rounded text-gray-600">Serie ${serialNumber} <span class="font-bold text-gray-800">x${qty}</span></span>`);
+          `<span class="text-[10px] bg-surface border border-line px-6 rounded text-fg-soft">Serie ${serialNumber} <span class="font-bold text-fg">x${qty}</span></span>`);
         if (serialChips.length === 0) { return item.displayName }
         return `<div>${item.displayName}</div><div class="flex flex-wrap gap-4 mt-2">${serialChips.join("")}</div>`;
       },
@@ -468,7 +468,7 @@ import {
       align: 'right',
       headerStyle: { width: '80px' },
       headerInnerCss: cartHeaderCss,
-      css: 'font-mono text-sm font-bold text-gray-700',
+      css: 'font-mono text-sm font-bold text-fg-soft',
       getValue: (item) => formatMo(ventasState.lineAmount(item)),
     },
   ];
@@ -478,7 +478,7 @@ import {
 
 {#snippet cartRowRemoveButton(item: VentaProducto)}
   <Button icon="icon-[fa--trash]"
-    css="mr-6 flex h-24 w-24 items-center justify-center rounded-full bg-red-500 text-[12px] text-white shadow-sm hover:bg-red-600"
+    css="mr-6 flex h-24 w-24 items-center justify-center rounded-full bg-red-solid text-[12px] text-white shadow-sm hover:bg-red-solid"
     onClick={() => ventasState.removeProducto(item.key)}
     label="Removes this product from the current sale order cart."
   />
@@ -516,7 +516,7 @@ import {
                <input
                  bind:this={searchInput}
                  type="text"
-                 class="w-full px-12 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                 class="w-full px-12 py-8 bg-surface-soft border border-line rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-solid/20 focus:border-blue-solid transition-all"
                  placeholder="PRODUCTO..."
                  value={ventasState.filterText}
                  oninput={(e) => filterProductos(e.currentTarget.value)}
@@ -525,7 +525,7 @@ import {
             <div class="w-1/2 md:w-200">
                <input
                  type="text"
-                 class="w-full px-12 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                 class="w-full px-12 py-8 bg-surface-soft border border-line rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-solid/20 focus:border-blue-solid transition-all"
                  placeholder="Serie..."
                  value={ventasState.filterSerialNumber}
                  oninput={(e) => filterSerialNumbers(e.currentTarget.value)}
@@ -573,7 +573,7 @@ import {
            shell by exactly that much, and the moment a modal locks `html`'s scrolling the overflow
            surfaces as a body scrollbar. -->
       <LayerStatic
-        css="w-[40%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height)-4px)] shadow-lg md:-m-10"
+        css="w-[40%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height)-4px)] shadow-lg md:-m-10"
         mobileLayerTitle="Venta"
         useMobileLayerVertical={124}
       >
@@ -593,32 +593,32 @@ import {
       {#if saleLayerView === SALE_LAYER_CART}
         <!-- Error Message -->
         {#if ventasState.ventaErrorMessage}
-          <div class="bg-red-50 m-8 text-red-600 p-12 text-sm font-medium border-b border-red-100 animate-in slide-in-from-top-2"
+          <div class="bg-red-bg m-8 text-red-fg p-12 text-sm font-medium border-b border-red-border animate-in slide-in-from-top-2"
           >
             {ventasState.ventaErrorMessage}
           </div>
         {/if}
         <!-- Header -->
-        <div class="px-10 py-8 border-b border-gray-100 flex items-center justify-between bg-gray-50/50"
+        <div class="px-10 py-8 border-b border-line-soft flex items-center justify-between bg-surface-soft/50"
           aria-label="Sale order totals and save action bar"
         >
        	<div class="mr-16">
           <div class="flex items-center gap-6">
-            <div class="bg-gray-100 flex flex-1 p-6 rounded-md items-center gap-6 min-h-36 md:min-w-170">
-                <div class="text-[10px] leading-[1] text-gray-500 font-bold tracking-wider uppercase mr-8">
+            <div class="bg-surface-muted flex flex-1 p-6 rounded-md items-center gap-6 min-h-36 md:min-w-170">
+                <div class="text-[10px] leading-[1] text-fg-muted font-bold tracking-wider uppercase mr-8">
                   <div>Sub</div>
                   <div>Total</div>
                 </div>
-                <div class="leading-[1] text-gray-800 text-[16px] ml-auto">
-                    <span class="text-[14px] text-gray-500 mr-2">{currencySymbol(ventasState.form.CurrencyType)}</span>
+                <div class="leading-[1] text-fg text-[16px] ml-auto">
+                    <span class="text-[14px] text-fg-muted mr-2">{currencySymbol(ventasState.form.CurrencyType)}</span>
                     {formatMo(ventasState.form.TotalAmount - ventasState.form.TaxAmount)}
                 </div>
             </div>
 
-            <div class="bg-blue-50 items-center flex flex-1 p-6 rounded-md gap-6 min-h-36 md:min-w-170">
-                <div class="text-[10px] text-blue-600 uppercase font-bold tracking-wider mr-8">Total</div>
-                <div class="leading-[1] text-blue-700 font-bold text-[22px] ml-auto">
-                    <span class="text-[14px] text-blue-600 mr-2">{currencySymbol(ventasState.form.CurrencyType)}</span>
+            <div class="bg-blue-bg items-center flex flex-1 p-6 rounded-md gap-6 min-h-36 md:min-w-170">
+                <div class="text-[10px] text-blue-fg uppercase font-bold tracking-wider mr-8">Total</div>
+                <div class="leading-[1] text-blue-fg font-bold text-[22px] ml-auto">
+                    <span class="text-[14px] text-blue-fg mr-2">{currencySymbol(ventasState.form.CurrencyType)}</span>
                     {formatMo(ventasState.form.TotalAmount)}
                 </div>
             </div>
@@ -658,8 +658,8 @@ import {
 			            </div>
 			          {/snippet}
 			          {#if paymentCashBank}
-			            <div class="col-span-7 flex h-full flex-col justify-center whitespace-nowrap rounded-[6px] bg-[#f1f2fd] px-8 py-2 text-center leading-[1]">
-			              <span class="mb-2 text-[14px] text-[var(--input-label-color,#6d5dad)]">{tr('Currency|Moneda')}:</span>
+			            <div class="col-span-7 flex h-full flex-col justify-center whitespace-nowrap rounded-[6px] bg-accent-bg px-8 py-2 text-center leading-[1]">
+			              <span class="mb-2 text-[14px] text-label">{tr('Currency|Moneda')}:</span>
 			              {#if paymentCashBank.CurrencyType === 2}
 			                <span>{tr('Dollars|Dólares')} <span class="text-[14px]">{exchangeRateTag}</span></span>
 			              {:else}
@@ -686,13 +686,13 @@ import {
 	        	{/if}
 	        </div>
 	        {#if ventasState.exchangeRateProblem}
-	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
+	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-border bg-amber-bg px-8 py-6 text-sm text-amber-fg">
 	            <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
 	            <span>{tr(ventasState.exchangeRateProblem)}</span>
 	          </div>
 	        {/if}
 	        {#if missingCashBankWarning}
-	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-200 bg-amber-50 px-8 py-6 text-sm text-amber-700">
+	          <div class="mt-6 flex items-center gap-6 rounded-md border border-amber-border bg-amber-bg px-8 py-6 text-sm text-amber-fg">
 	            <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
 	            <span>Necesitas registrar una caja para aceptar pagos.</span>
 	          </div>

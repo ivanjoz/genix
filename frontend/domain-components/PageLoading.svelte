@@ -22,7 +22,7 @@ const pathSuffix = $derived(path ? ` ${path}` : '')
     <div class="_2 size-64 rounded-[14px] flex items-center justify-center">
       <img src="/images/genix_logo4.svg" alt="Genix" class="size-40" />
     </div>
-    <h2 class="text-gray-600 text-center px-16 break-all">
+    <h2 class="text-fg-soft text-center px-16 break-all">
       <T text={`Loading${pathSuffix}...|Cargando${pathSuffix}...`} />
     </h2>
   </div>
@@ -35,7 +35,7 @@ const pathSuffix = $derived(path ? ` ${path}` : '')
     left: var(--menu-min-width);
     right: 0;
     bottom: 0;
-    background-color: #e9eef1;
+    background-color: var(--page);
     display: flex;
     align-items: center;
     justify-content: center;

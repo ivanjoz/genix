@@ -212,7 +212,7 @@
   size={9}
   title="Create your company|Cree su empresa"
   hideTitle={true}
-  css="!min-h-0 h-640 max-h-[86vh] outline-2 outline-solid outline-[#878dffa8]"
+  css="!min-h-0 h-640 max-h-[86vh] outline-2 outline-solid outline-accent-border"
   bodyCss="!p-0 flex flex-col"
 >
   <!-- grid-rows-1 makes the single row fill the fixed height, so the image column and the step
@@ -236,9 +236,9 @@
           <li class="flex items-center gap-12">
             <span
               class="flex size-28 shrink-0 items-center justify-center rounded-full text-sm {currentStep > step.number
-                ? 'bg-emerald-500 text-white'
+                ? 'bg-green-solid text-white'
                 : currentStep === step.number
-                  ? 'bg-indigo-500 text-white'
+                  ? 'bg-accent-solid text-white'
                   : 'border border-white/30 text-white/60'}"
             >
               {#if currentStep > step.number}
@@ -257,19 +257,19 @@
 
     <!-- The steps differ a lot in height, so the taller ones scroll here rather than resizing the dialog. -->
     <section class="min-h-0 overflow-y-auto p-20 md:p-28">
-      <p class="mb-14 pr-44 text-xl font-bold leading-tight text-slate-900 md:hidden">
+      <p class="mb-14 pr-44 text-xl font-bold leading-tight text-fg md:hidden">
         <T text="Create your company|Cree su empresa" />
       </p>
       <div class="mb-18 flex items-center gap-8 md:hidden" aria-label={tr('Progress|Progreso')}>
         {#each steps as step}
-          <span class="h-4 grow rounded-full {currentStep >= step.number ? 'bg-indigo-600' : 'bg-slate-200'}"></span>
+          <span class="h-4 grow rounded-full {currentStep >= step.number ? 'bg-accent-solid' : 'bg-surface-strong'}"></span>
         {/each}
       </div>
 
       {#if isVerifyingLink}
         <div class="flex min-h-260 flex-col items-center justify-center gap-14 text-center">
-          <i class="icon-[fa--refresh] animate-spin text-3xl text-indigo-600" aria-hidden="true"></i>
-          <p class="text-lg font-semibold text-slate-900" aria-live="polite">
+          <i class="icon-[fa--refresh] animate-spin text-3xl text-accent-fg" aria-hidden="true"></i>
+          <p class="text-lg font-semibold text-fg" aria-live="polite">
             <T text="Verifying registration…|Verificando registro…" />
           </p>
         </div>
@@ -290,19 +290,19 @@
 
           </div>
 
-          <p class="mb-8 text-lg font-semibold text-slate-900">
+          <p class="mb-8 text-lg font-semibold text-fg">
             <T text="Verify your email address|Verifique su correo electrónico" />
           </p>
           {#if verificationError}
             <p
-              class="mb-16 flex items-start gap-10 rounded-[8px] border border-amber-300 bg-amber-50 px-12 py-10 leading-[1.45] text-amber-800"
+              class="mb-16 flex items-start gap-10 rounded-[8px] border border-amber-border bg-amber-bg px-12 py-10 leading-[1.45] text-amber-fg"
               role="alert"
             >
               <i class="icon-[fa--exclamation-triangle] mt-2 shrink-0" aria-hidden="true"></i>
               <span>{verificationError}</span>
             </p>
           {/if}
-          <p class="mb-20 leading-[1.55] text-slate-600">
+          <p class="mb-20 leading-[1.55] text-fg-soft">
             <T text="We will send you a registration email. Click the link in that email, or copy its 8-digit code here, to continue.|Le enviaremos un correo de registro. Para continuar, haga clic en el enlace del correo o copie aquí su código de 8 dígitos." />
           </p>
 
@@ -319,14 +319,14 @@
             <!-- Once the code is out the address is settled, so it reads as a plain confirmation
                  line instead of a greyed-out input that still looks editable. Skipped when the
                  visitor came from the email link, which carries the code but not the address. -->
-            <p class="flex items-center justify-center gap-8 py-4 text-center text-base font-bold text-slate-500">
+            <p class="flex items-center justify-center gap-8 py-4 text-center text-base font-bold text-fg-muted">
               <i class="icon-[fa--envelope-o] shrink-0" aria-hidden="true"></i>
               {emailForm.Email.trim()}
             </p>
           {/if}
 
           {#if cooldownNotice}
-            <p class="mt-10 rounded-[8px] bg-amber-50 px-12 py-10 text-sm leading-[1.45] text-amber-800" aria-live="polite">
+            <p class="mt-10 rounded-[8px] bg-amber-bg px-12 py-10 text-sm leading-[1.45] text-amber-fg" aria-live="polite">
               {cooldownNotice}
             </p>
           {/if}
@@ -346,7 +346,7 @@
 
           <button
             type="submit"
-            class="mt-20 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+            class="mt-20 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-accent-solid px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-accent-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent-solid disabled:cursor-not-allowed disabled:bg-line-strong disabled:shadow-none"
             disabled={isBusy || (!isCodeStage && !isValidEmail)}
           >
             <i class={isBusy ? 'icon-[fa--refresh] animate-spin' : 'icon-[fa--paper-plane-o]'} aria-hidden="true"></i>
@@ -359,7 +359,7 @@
             <div class="mt-10 flex items-center justify-between gap-12 text-sm">
               <button
                 type="button"
-                class="text-indigo-700 hover:underline disabled:text-slate-400 disabled:no-underline"
+                class="text-accent-fg hover:underline disabled:text-fg-subtle disabled:no-underline"
                 disabled={isBusy || retrySeconds > 0}
                 onclick={() => { void sendRegistrationEmail(); }}
               >
@@ -367,7 +367,7 @@
               </button>
               <button
                 type="button"
-                class="text-indigo-700 hover:underline disabled:text-slate-400"
+                class="text-accent-fg hover:underline disabled:text-fg-subtle"
                 disabled={isBusy}
                 onclick={() => {
                   clearInterval(retryTimer);
@@ -386,10 +386,10 @@
           aria-label={tr('Company information form|Formulario de datos de la empresa')}
           onsubmit={(event) => { event.preventDefault(); void submitCompany(); }}
         >
-          <p class="mb-8 text-lg font-semibold text-slate-900">
+          <p class="mb-8 text-lg font-semibold text-fg">
             <T text="Company information|Datos de la empresa" />
           </p>
-          <p class="mb-16 text-[15px] leading-[1.55] text-slate-600">
+          <p class="mb-16 text-[15px] leading-[1.55] text-fg-soft">
             <T text="These details create your company and its administrator account.|Con estos datos se crean su empresa y su cuenta de administrador." />
           </p>
 
@@ -405,10 +405,10 @@
             />
           </div>
 
-          <p class="mb-6 mt-24 border-t border-slate-200 pt-18 text-lg font-semibold text-slate-900">
+          <p class="mb-6 mt-24 border-t border-line pt-18 text-lg font-semibold text-fg">
             <T text='User "admin" details|Datos del usuario "admin"' />
           </p>
-          <p class="mb-16 text-[15px] leading-[1.55] text-slate-600">
+          <p class="mb-16 text-[15px] leading-[1.55] text-fg-soft">
             <T text="This account administers the company. Its username is always admin; the name is only for display and can be filled in later.|Esta cuenta administra la empresa. Su usuario siempre es admin; el nombre es solo para mostrar y puede completarlo después." />
           </p>
 
@@ -429,7 +429,7 @@
 
           <button
             type="submit"
-            class="mt-20 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+            class="mt-20 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-accent-solid px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-accent-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent-solid disabled:cursor-not-allowed disabled:bg-line-strong disabled:shadow-none"
             disabled={isBusy}
           >
             <i class={isBusy ? 'icon-[fa--refresh] animate-spin' : 'icon-[fa--building-o]'} aria-hidden="true"></i>
@@ -438,10 +438,10 @@
         </form>
 
       {:else}
-        <p class="mb-8 text-lg font-semibold text-slate-900">
+        <p class="mb-8 text-lg font-semibold text-fg">
           <T text="Initial data|Datos iniciales" />
         </p>
-        <p class="mb-20 leading-[1.55] text-slate-600">
+        <p class="mb-20 leading-[1.55] text-fg-soft">
           <T text="Your company needs a branch, a warehouse and a cash register to start operating. You can accept the suggested names.|Su empresa necesita una sede, un almacén y una caja para poder operar. Puede aceptar los nombres sugeridos." />
         </p>
         <InitialDataForm onSaved={() => Env.navigate('/')} />

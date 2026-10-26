@@ -93,9 +93,9 @@
   </div>
 
   {#if galleryImages.isReady > 0 && galleryImages.records.length === 0}
-    <p class="p-20 text-center c-steel"><T text="Upload your first gallery image.|Sube tu primera imagen a la galería." /></p>
+    <p class="p-20 text-center text-fg-soft"><T text="Upload your first gallery image.|Sube tu primera imagen a la galería." /></p>
   {:else if filterText && filteredImages.length === 0}
-    <p class="p-20 text-center c-steel"><T text="No images match that name.|No hay imágenes con ese nombre." /></p>
+    <p class="p-20 text-center text-fg-soft"><T text="No images match that name.|No hay imágenes con ese nombre." /></p>
   {/if}
 </Page>
 
@@ -109,15 +109,15 @@
 
   .gallery-card {
     overflow: hidden;
-    border: 1px solid rgba(100, 116, 139, 0.22);
+    border: 1px solid color-mix(in oklab, var(--fg-muted) 22%, transparent);
     border-radius: 10px;
-    background: white;
+    background: var(--surface);
     box-shadow: rgba(15, 23, 42, 0.08) 0 2px 5px;
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
   }
 
   .gallery-card:hover {
-    border-color: rgba(79, 70, 229, 0.28);
+    border-color: color-mix(in oklab, var(--accent-solid) 28%, transparent);
     box-shadow: rgba(15, 23, 42, 0.16) 0 8px 20px -6px;
     transform: translateY(-2px);
   }
@@ -127,7 +127,7 @@
     aspect-ratio: 4 / 3;
     border: 0;
     border-radius: 0;
-    background: #f8fafc;
+    background: var(--surface-soft);
   }
 
   .gallery-card-footer {
@@ -136,14 +136,14 @@
     gap: 8px;
     min-height: 38px;
     padding: 7px 9px;
-    border-top: 1px solid rgba(100, 116, 139, 0.14);
+    border-top: 1px solid color-mix(in oklab, var(--fg-muted) 14%, transparent);
   }
 
   .gallery-card-footer p {
     min-width: 0;
     margin: 0;
     overflow: hidden;
-    color: #475569;
+    color: var(--fg-soft);
     line-height: 18px;
     text-overflow: ellipsis;
     white-space: nowrap;

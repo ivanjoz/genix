@@ -245,14 +245,14 @@
     gap: 16px;
     width: 100%;
     height: 100%;
-    color: #475569;
+    color: var(--fg-soft);
     font-size: 15px;
   }
   .loader-spinner {
     width: 38px;
     height: 38px;
-    border: 4px solid #e2e8f0;
-    border-top-color: #64748b;
+    border: 4px solid var(--line);
+    border-top-color: var(--fg-muted);
     border-radius: 50%;
     animation: builder-loader-spin 0.8s linear infinite;
   }

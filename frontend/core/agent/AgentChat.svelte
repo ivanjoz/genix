@@ -563,12 +563,12 @@
 
   {#if isOpen}
     <div class="_panel absolute left-0 right-0 top-[calc(100%+4px)] z-300
-      bg-white rounded-b-2xl rounded-t-none shadow-2xl border border-gray-200 overflow-hidden"
+      bg-surface rounded-b-2xl rounded-t-none shadow-2xl border border-line overflow-hidden"
       class:_panelCollapsed={isInteractionPanelCollapsed}
     >
       {#if isInteractionPanelCollapsed}
         <!-- Keep the driven page visible while retaining a clear activity cue. -->
-        <div class="min-h-30 flex items-center px-12 text-xs text-red-600" role="status" aria-live="polite">
+        <div class="min-h-30 flex items-center px-12 text-xs text-red-fg" role="status" aria-live="polite">
           Interactuando con la pantalla...
         </div>
       {:else}
@@ -581,7 +581,7 @@
           {#each agentModes.all as mode (mode.ID)}
             {@const isActive = mode.ID === agentModes.activeID}
             <button type="button"
-              class="_modeBtn flex items-center gap-4 px-10 py-4 text-xs text-black"
+              class="_modeBtn flex items-center gap-4 px-10 py-4 text-xs text-fg"
               class:_modeActive={isActive}
               onclick={() => agentModes.select(mode.ID)}
             >
@@ -596,16 +596,16 @@
         <!-- Overlays the top of the history instead of pushing it down, so typing
              a query never shifts or resizes the panel. -->
         <div bind:offsetHeight={menuGridHeight}
-          class="_menuGrid absolute top-0 left-0 right-0 z-10 grid grid-cols-3 gap-8 px-12 py-10 bg-white"
+          class="_menuGrid absolute top-0 left-0 right-0 z-10 grid grid-cols-3 gap-8 px-12 py-10 bg-surface"
         >
           {#each menuMatches as option (option.route)}
             <button type="button" class="_menuCard flex items-center gap-6 px-6 py-6 text-left"
               onclick={() => openMenuOption(option)}
             >
-              <span class="_menuIcon shrink-0 flex ml-2 text-[16px] items-center justify-center text-indigo-500">
+              <span class="_menuIcon shrink-0 flex ml-2 text-[16px] items-center justify-center text-accent-fg">
                 <span class={option.icon}></span>
               </span>
-              <span class="_menuName text-xs leading-tight text-gray-700">
+              <span class="_menuName text-xs leading-tight text-fg-soft">
                 {#each highlString(tr(option.name, Core.languaje), menuHighlights) as w}
                   <span class={w.highl ? '_highl' : ''}>{w.text}</span>
                 {/each}
@@ -620,14 +620,14 @@
         style:min-height="max(260px, {menuMatches.length > 0 ? menuGridHeight : 0}px)"
       >
         {#if messages.length === 0}
-          <div class="text-center text-gray-400 text-sm py-20">
+          <div class="text-center text-fg-subtle text-sm py-20">
             Empieza una conversación con el agente.
           </div>
         {:else}
           {#each messages as msg (msg.id ?? msg.timestamp)}
             {#if msg.role === AGENT_ROLE_STATUS}
               <div class="_status px-4 text-xs leading-snug
-                {msg.statusKind === 'error' ? 'text-red-600 not-italic' : 'text-gray-400 italic'}">
+                {msg.statusKind === 'error' ? 'text-red-fg not-italic' : 'text-fg-subtle italic'}">
                 {msg.statusKind === 'error' ? '⚠' : '·'} {msg.message}
               </div>
             {:else}
@@ -635,8 +635,8 @@
               <div class="_row flex {isUser ? 'justify-end' : 'justify-start'}">
                 <div class="_bubble max-w-[80%] px-10 py-8 rounded-2xl text-sm leading-snug
                   {isUser
-                    ? 'bg-indigo-600 text-white rounded-br-md'
-                    : '_markdown bg-gray-100 text-gray-800 rounded-bl-md'}"
+                    ? 'bg-accent-solid text-white rounded-br-md'
+                    : '_markdown bg-surface-muted text-fg rounded-bl-md'}"
                 >
                   {#if isUser}
                     <span class="whitespace-pre-wrap">{msg.message}</span>
@@ -651,8 +651,8 @@
         {/if}
         {#if isBusy}
           <div class="_row flex justify-start">
-            <div class="_bubble px-10 py-8 rounded-2xl text-sm bg-gray-100 text-gray-500 italic flex items-center gap-6">
-              <span class="_dot inline-block w-6 h-6 rounded-full bg-indigo-400 animate-pulse"></span>
+            <div class="_bubble px-10 py-8 rounded-2xl text-sm bg-surface-muted text-fg-muted italic flex items-center gap-6">
+              <span class="_dot inline-block w-6 h-6 rounded-full bg-accent-solid animate-pulse"></span>
               {statusLabel || 'Pensando…'}
             </div>
           </div>
@@ -737,19 +737,19 @@
     animation: spin 700ms linear infinite;
   }
   ._menuGrid {
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--line);
     box-shadow: 0 6px 12px -6px rgb(15 23 42 / 18%);
   }
   ._menuCard {
-    border: 1px solid #d9d8f5;
+    border: 1px solid color-mix(in oklab, var(--accent-border) 50%, var(--surface));
     border-radius: 8px;
-    background: #f7f7fd;
+    background: var(--accent-bg);
     min-height: 42px;
     transition: background-color 0.15s ease, border-color 0.15s ease;
   }
   ._menuCard:hover {
-    background: #ecebfa;
-    border-color: #938ff8;
+    background: var(--accent-bg-strong);
+    border-color: var(--accent-border);
   }
   /* Fixed box so every card's text starts at the same offset — the icon glyphs
      have different intrinsic widths. The mask lives on the inner span so it
@@ -766,18 +766,18 @@
     overflow: hidden;
   }
   ._highl {
-    color: rgb(196, 71, 71);
+    color: var(--red-fg);
     text-decoration: underline;
   }
   ._panel {
-  	border: 1px solid #6868ea;
+  	border: 1px solid var(--accent-solid);
   	/* No top border so the mode bar sits flush against the search pill, with no
   	   light line between them. */
   	border-top: 0;
   }
   ._panelCollapsed {
-    background: rgb(255 255 255 / 82%);
-    border-color: rgb(239 68 68 / 45%);
+    background: color-mix(in oklab, var(--surface) 82%, transparent);
+    border-color: color-mix(in oklab, var(--red-solid) 45%, transparent);
     backdrop-filter: blur(8px);
     box-shadow: 0 8px 24px rgb(15 23 42 / 12%);
   }
@@ -809,7 +809,7 @@
   ._markdown :global(code) {
     padding: 1px 4px;
     border-radius: 4px;
-    background: rgb(15 23 42 / 8%);
+    background: color-mix(in oklab, var(--fg) 8%, transparent);
   }
   ._markdown :global(pre) {
     margin: 8px 0;
@@ -817,19 +817,19 @@
     overflow-wrap: anywhere;
     white-space: pre-wrap;
     border-radius: 6px;
-    background: rgb(15 23 42 / 8%);
+    background: color-mix(in oklab, var(--fg) 8%, transparent);
   }
   ._markdown :global(pre code) {
     padding: 0;
     background: transparent;
   }
   ._markdown :global(a) {
-    color: #4f46e5;
+    color: var(--accent-fg);
     text-decoration: underline;
   }
   /* Mode bar: a light lavender strip between the search pill and the white chat. */
   ._modeBar {
-  	background: #e7e6f7;
+  	background: var(--accent-bg-strong);
   }
   /* Mode bar buttons: dimmed when inactive; the active one is an opaque tab with
      a purple underline (margin-bottom pulls it onto the bar's bottom edge). */
@@ -842,7 +842,7 @@
   }
   ._modeActive {
     opacity: 1;
-    border-bottom: 2px solid #938ff8;
+    border-bottom: 2px solid var(--accent-border);
     border-radius: 0;
     padding-bottom: 6px;
     margin-bottom: -2px;

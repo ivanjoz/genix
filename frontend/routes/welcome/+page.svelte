@@ -54,7 +54,7 @@
     {
       status: 'Available now|Disponible ahora',
       icon: 'icon-[fa--check]',
-      accent: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      accent: 'bg-green-bg text-green-fg border-green-border',
       items: [
         'Core ERP workflows and point of sale|Flujos ERP principales y punto de venta',
         'Inventory, purchasing, and warehouse control|Inventario, compras y control de almacenes',
@@ -65,7 +65,7 @@
     {
       status: 'In progress|En progreso',
       icon: 'icon-[fa--refresh]',
-      accent: 'bg-amber-50 text-amber-700 border-amber-200',
+      accent: 'bg-amber-bg text-amber-fg border-amber-border',
       items: [
         'Projected cash-flow report|Reporte de flujo de caja proyectado',
         'Weekly sales summary|Resumen semanal de ventas',
@@ -76,7 +76,7 @@
     {
       status: 'Next|Próximo',
       icon: 'icon-[fa--arrow-right]',
-      accent: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      accent: 'bg-accent-bg text-accent-fg border-accent-border',
       items: [
         'E-commerce order persistence|Persistencia de pedidos e-commerce',
         'Storefront customer accounts and order history|Cuentas de clientes e historial de pedidos',
@@ -240,7 +240,7 @@
   </svg>
 {/snippet}
 
-<div class="min-h-screen bg-slate-50 text-slate-900 selection:bg-indigo-200 selection:text-indigo-950">
+<div class="min-h-screen bg-surface-soft text-fg selection:bg-accent-bg-strong selection:text-accent-fg">
   <header class="fixed inset-x-0 top-0 z-50">
     <nav
       class="border-b border-white/15 bg-slate-950/60 px-14 py-10 shadow-[0_8px_32px_rgba(15,23,42,0.18)] backdrop-blur-2xl md:px-24"
@@ -248,7 +248,7 @@
     >
       <div class="mx-auto flex max-w-1320 items-center justify-between gap-12">
         <button
-          class="flex shrink-0 items-center focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-indigo-600"
+          class="flex shrink-0 items-center focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-accent-solid"
           aria-label={tr('Go to the welcome section|Ir a la sección de bienvenida')}
           onclick={() => navigateToSection('home')}
         >
@@ -269,12 +269,12 @@
         <div class="flex items-center gap-6">
           <div class="flex rounded-[10px] border border-white/20 bg-white/10 p-3" aria-label={tr('Language|Idioma')}>
             <button
-              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 1 ? 'bg-indigo-600 text-white' : 'text-white/65 hover:text-white'}"
+              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 1 ? 'bg-accent-solid text-white' : 'text-white/65 hover:text-white'}"
               aria-pressed={Core.languaje === 1}
               onclick={() => setLanguaje(1)}
             >ES</button>
             <button
-              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 2 ? 'bg-indigo-600 text-white' : 'text-white/65 hover:text-white'}"
+              class="rounded-[7px] px-8 py-5 text-xs transition {Core.languaje === 2 ? 'bg-accent-solid text-white' : 'text-white/65 hover:text-white'}"
               aria-pressed={Core.languaje === 2}
               onclick={() => setLanguaje(2)}
             >EN</button>
@@ -297,7 +297,7 @@
           </a>
           {#if developerMode}
             <button
-              class="hidden h-38 items-center rounded-[10px] bg-indigo-600 px-16 text-sm text-white shadow-md shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 md:flex"
+              class="hidden h-38 items-center rounded-[10px] bg-accent-solid px-16 text-sm text-white shadow-md shadow-indigo-900/15 transition hover:bg-accent-solid focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent-solid md:flex"
               onclick={openRegistration}
             >
               <T text="Register|Regístrese" />
@@ -330,7 +330,7 @@
               <T text="Sign in|Ingresar" />
             </button>
             {#if developerMode}
-              <button class="rounded-[10px] bg-indigo-600 px-12 py-10 text-white" onclick={openRegistration}>
+              <button class="rounded-[10px] bg-accent-solid px-12 py-10 text-white" onclick={openRegistration}>
                 <T text="Register|Regístrese" />
               </button>
             {/if}
@@ -358,7 +358,7 @@
       />
       <div class="absolute inset-0 -z-20 bg-linear-to-r from-slate-950/95 via-slate-950/68 to-slate-950/45"></div>
       <div class="absolute inset-0 -z-20 bg-linear-to-b from-slate-950/35 via-transparent to-slate-950/60"></div>
-      <div class="absolute -left-80 top-80 -z-10 size-320 rounded-full bg-violet-500/20 blur-3xl"></div>
+      <div class="absolute -left-80 top-80 -z-10 size-320 rounded-full bg-purple-solid/20 blur-3xl"></div>
 
       <div class="mx-auto grid min-h-screen max-w-1440 items-center gap-38 px-20 pb-58 pt-106 md:px-42 md:pb-72 md:pt-118 lg:grid-cols-[minmax(0,650px)_minmax(360px,420px)] lg:justify-between lg:gap-40">
         <div class="max-w-650 text-white">
@@ -375,7 +375,7 @@
             {#if developerMode}
               <div class="mt-28 flex flex-col gap-10 sm:flex-row">
                 <button
-                  class="flex h-46 items-center justify-center gap-8 rounded-[11px] bg-white px-20 text-indigo-800 shadow-lg transition hover:-translate-y-1 hover:bg-indigo-50 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-white"
+                  class="flex h-46 items-center justify-center gap-8 rounded-[11px] bg-surface px-20 text-accent-fg shadow-lg transition hover:-translate-y-1 hover:bg-accent-bg focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-white"
                   onclick={openRegistration}
                 >
                   <span class="font-semibold"><T text="Register|Regístrese" /></span>
@@ -390,7 +390,7 @@
               </div>
             {:else}
               <div
-                class="mt-28 flex max-w-600 items-start gap-10 rounded-[14px] border border-violet-300/45 bg-slate-900/82 px-16 py-14 text-sm leading-[1.55] text-[#ffeed6] shadow-lg shadow-slate-950/40 backdrop-blur"
+                class="mt-28 flex max-w-600 items-start gap-10 rounded-[14px] border border-purple-border/45 bg-slate-900/82 px-16 py-14 text-sm leading-[1.55] text-[#ffeed6] shadow-lg shadow-slate-950/40 backdrop-blur"
                 role="status"
               >
                 <span class="w-4 shrink-0 self-stretch rounded-[2px] bg-[#ffeed6]" aria-hidden="true"></span>
@@ -447,7 +447,7 @@
               <Input required={true} label="Password|Contraseña" saveOn={loginForm} save="Password" type="password" css="welcome-login-field" inputCss="text-base" disabled={isLoginLoading} />
               <button
                 type="submit"
-                class="mt-4 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-indigo-700 focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:opacity-60"
+                class="mt-4 flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-accent-solid px-18 text-white shadow-lg shadow-indigo-900/15 transition hover:bg-accent-solid focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-accent-solid disabled:cursor-not-allowed disabled:opacity-60"
                 aria-label={tr('Submit login credentials|Enviar credenciales de acceso')}
                 aria-busy={isLoginLoading}
                 disabled={isLoginLoading}
@@ -467,27 +467,27 @@
 
     <section class="px-16 py-72 md:px-28 md:py-96" aria-labelledby="what-is-genix">
       <div class="mx-auto max-w-1320 text-center">
-        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Your business, under control|Su negocio bajo control" /></p>
-        <h2 id="what-is-genix" class="ff-display mx-auto mt-12 max-w-760 text-3xl font-bold leading-tight text-slate-950 md:text-4xl">
+        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-accent-fg"><T text="Your business, under control|Su negocio bajo control" /></p>
+        <h2 id="what-is-genix" class="ff-display mx-auto mt-12 max-w-760 text-3xl font-bold leading-tight text-fg md:text-4xl">
           <T text="Your business under control, a few clicks away.|El control de su empresa a pocos clicks." />
         </h2>
-        <p class="mx-auto mt-16 max-w-760 text-lg leading-[1.6] text-slate-600">
+        <p class="mx-auto mt-16 max-w-760 text-lg leading-[1.6] text-fg-soft">
           <T text="Stop chasing your own information across notebooks, spreadsheets, and chats. What happened at the counter, in the warehouse, and in the cash register is one click away, up to date and in one place.|Deje de perseguir su propia información entre cuadernos, hojas de cálculo y conversaciones. Lo que pasó en el mostrador, el almacén y la caja está a un click, al día y en un solo lugar." />
         </p>
 
         <div class="mt-42 grid gap-14 md:grid-cols-3">
           {#each platformHighlights as platformHighlight}
-            <article class="rounded-[18px] border border-slate-200 bg-white p-24 text-left shadow-sm">
-              <i class="{platformHighlight.icon} text-2xl text-indigo-600" aria-hidden="true"></i>
+            <article class="rounded-[18px] border border-line bg-surface p-24 text-left shadow-sm">
+              <i class="{platformHighlight.icon} text-2xl text-accent-fg" aria-hidden="true"></i>
               <h3 class="mt-16 text-xl font-semibold"><T text={platformHighlight.title} /></h3>
               {#if platformHighlight.description}
-                <p class="mt-8 leading-[1.55] text-slate-600"><T text={platformHighlight.description} /></p>
+                <p class="mt-8 leading-[1.55] text-fg-soft"><T text={platformHighlight.description} /></p>
               {:else}
                 <ul class="mt-12 grid gap-9">
                   {#each platformHighlight.points as highlightPoint}
-                    <li class="flex gap-9 leading-[1.5] {highlightPoint.pending ? 'text-slate-500' : 'text-slate-600'}">
+                    <li class="flex gap-9 leading-[1.5] {highlightPoint.pending ? 'text-fg-muted' : 'text-fg-soft'}">
                       <i
-                        class="{highlightPoint.pending ? 'icon-[fa--clock-o] text-amber-500' : 'icon-[fa--check] text-indigo-600'} mt-5 shrink-0"
+                        class="{highlightPoint.pending ? 'icon-[fa--clock-o] text-amber-fg' : 'icon-[fa--check] text-accent-fg'} mt-5 shrink-0"
                         aria-hidden="true"
                       ></i>
                       <span>
@@ -504,21 +504,21 @@
       </div>
     </section>
 
-    <section id="features" class="scroll-mt-110 bg-white" aria-labelledby="features-title">
+    <section id="features" class="scroll-mt-110 bg-surface" aria-labelledby="features-title">
       <div class="mx-auto max-w-1320 px-16 pb-40 pt-72 md:px-28 md:pb-48 md:pt-96">
         <div class="max-w-760">
-          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-600"><T text="Capabilities|Funcionalidades" /></p>
+          <p class="text-sm font-semibold uppercase tracking-[0.18em] text-accent-fg"><T text="Capabilities|Funcionalidades" /></p>
           <h2 id="features-title" class="ff-display mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Everything your business needs, in one system.|Todo lo que su negocio necesita, en un solo sistema." /></h2>
-          <p class="mt-14 text-lg leading-[1.6] text-slate-600"><T text="Genix covers the daily life of a small business — selling, buying, producing, and controlling stock and cash — and grows with you into planning, accounting, and online sales.|Genix cubre el día a día de una micro o pequeña empresa: vender, comprar, producir, controlar el stock y la caja, y crece con usted hacia la planificación, la contabilidad y la venta en línea." /></p>
+          <p class="mt-14 text-lg leading-[1.6] text-fg-soft"><T text="Genix covers the daily life of a small business — selling, buying, producing, and controlling stock and cash — and grows with you into planning, accounting, and online sales.|Genix cubre el día a día de una micro o pequeña empresa: vender, comprar, producir, controlar el stock y la caja, y crece con usted hacia la planificación, la contabilidad y la venta en línea." /></p>
           <!-- The product is unfinished on purpose and says so: the legend explains both marks before
                the first list, so a planned item is never read as something that already works. -->
-          <p class="mt-12 leading-[1.55] text-slate-600"><T text="We are building it in the open. Each capability below carries its own mark.|Estamos construyendo el producto a la vista. Cada funcionalidad de abajo lleva su propia marca." /></p>
+          <p class="mt-12 leading-[1.55] text-fg-soft"><T text="We are building it in the open. Each capability below carries its own mark.|Estamos construyendo el producto a la vista. Cada funcionalidad de abajo lleva su propia marca." /></p>
           <div class="mt-16 flex flex-wrap gap-x-20 gap-y-10 text-sm">
-            <span class="flex items-center gap-8 rounded-full border border-slate-200 bg-slate-50 px-12 py-6 text-slate-700">
-              <i class="icon-[fa--check] text-indigo-600" aria-hidden="true"></i><T text="Available today|Disponible hoy" />
+            <span class="flex items-center gap-8 rounded-full border border-line bg-surface-soft px-12 py-6 text-fg-soft">
+              <i class="icon-[fa--check] text-accent-fg" aria-hidden="true"></i><T text="Available today|Disponible hoy" />
             </span>
-            <span class="flex items-center gap-8 rounded-full border border-slate-200 bg-slate-50 px-12 py-6 text-slate-700">
-              <i class="icon-[fa--clock-o] text-amber-500" aria-hidden="true"></i><T text="Coming soon|Próximamente" />
+            <span class="flex items-center gap-8 rounded-full border border-line bg-surface-soft px-12 py-6 text-fg-soft">
+              <i class="icon-[fa--clock-o] text-amber-fg" aria-hidden="true"></i><T text="Coming soon|Próximamente" />
             </span>
           </div>
         </div>
@@ -527,7 +527,7 @@
       {#each featureSections as featureSection, sectionIndex}
         <article
           id={featureSection.id}
-          class="scroll-mt-110 border-t border-slate-200 px-16 py-44 md:px-28 md:py-60 {sectionIndex % 2 === 0 ? 'bg-slate-50' : 'bg-white'}"
+          class="scroll-mt-110 border-t border-line px-16 py-44 md:px-28 md:py-60 {sectionIndex % 2 === 0 ? 'bg-surface-soft' : 'bg-surface'}"
           aria-labelledby="{featureSection.id}-title"
         >
           <!-- The illustration alternates sides, so the column template flips with it: moving the
@@ -548,22 +548,22 @@
             />
             <div>
               <div class="flex items-center gap-12">
-                <div class="flex size-44 shrink-0 items-center justify-center rounded-[12px] bg-indigo-100 text-indigo-700">
+                <div class="flex size-44 shrink-0 items-center justify-center rounded-[12px] bg-accent-bg-strong text-accent-fg">
                   <i class="{featureSection.icon} text-xl" aria-hidden="true"></i>
                 </div>
-                <h3 id="{featureSection.id}-title" class="text-2xl font-semibold text-slate-950"><T text={featureSection.title} /></h3>
+                <h3 id="{featureSection.id}-title" class="text-2xl font-semibold text-fg"><T text={featureSection.title} /></h3>
               </div>
-              <p class="mt-14 leading-[1.6] text-slate-600"><T text={featureSection.lead} /></p>
+              <p class="mt-14 leading-[1.6] text-fg-soft"><T text={featureSection.lead} /></p>
               <ul class="mt-20 grid gap-11 sm:grid-cols-2 sm:gap-x-20">
                 {#each featureSection.available as availableFeature}
-                  <li class="flex gap-9 leading-[1.5] text-slate-700">
-                    <i class="icon-[fa--check] mt-5 shrink-0 text-indigo-600" aria-hidden="true"></i>
+                  <li class="flex gap-9 leading-[1.5] text-fg-soft">
+                    <i class="icon-[fa--check] mt-5 shrink-0 text-accent-fg" aria-hidden="true"></i>
                     <span><span class="sr-only">{tr('Available today|Disponible hoy')}: </span><T text={availableFeature} /></span>
                   </li>
                 {/each}
                 {#each featureSection.pending as pendingFeature}
-                  <li class="flex gap-9 leading-[1.5] text-slate-500">
-                    <i class="icon-[fa--clock-o] mt-5 shrink-0 text-amber-500" aria-hidden="true"></i>
+                  <li class="flex gap-9 leading-[1.5] text-fg-muted">
+                    <i class="icon-[fa--clock-o] mt-5 shrink-0 text-amber-fg" aria-hidden="true"></i>
                     <span><span class="sr-only">{tr('Coming soon|Próximamente')}: </span><T text={pendingFeature} /></span>
                   </li>
                 {/each}
@@ -576,7 +576,7 @@
     <section id="contact" class="scroll-mt-110 px-16 pb-80 pt-24 md:px-28 md:pb-100 md:pt-40" aria-labelledby="contact-title">
       <div class="mx-auto grid max-w-1320 overflow-hidden rounded-[26px] bg-indigo-950 shadow-2xl shadow-indigo-950/15 lg:grid-cols-[0.85fr_1.15fr]">
         <div class="relative overflow-hidden px-24 py-40 text-white md:px-40 md:py-54">
-          <div class="absolute -bottom-120 -left-80 size-300 rounded-full bg-violet-500/25 blur-3xl"></div>
+          <div class="absolute -bottom-120 -left-80 size-300 rounded-full bg-purple-solid/25 blur-3xl"></div>
           <div class="relative">
             <p class="text-sm font-semibold uppercase tracking-[0.18em] text-indigo-200"><T text="Contact|Contacto" /></p>
             <h2 id="contact-title" class="ff-display mt-12 text-3xl font-bold leading-tight md:text-4xl"><T text="Tell us what your business needs.|Cuéntenos qué necesita su empresa." /></h2>
@@ -590,7 +590,7 @@
         </div>
 
         <form
-          class="grid grid-cols-24 gap-10 bg-white p-20 md:p-36"
+          class="grid grid-cols-24 gap-10 bg-surface p-20 md:p-36"
           aria-label={tr('Contact form|Formulario de contacto')}
           onsubmit={(event) => event.preventDefault()}
         >
@@ -601,31 +601,31 @@
           <div class="col-span-24 mt-4">
             <button
               type="submit"
-              class="flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-indigo-600 px-18 text-white disabled:cursor-not-allowed disabled:bg-slate-300 md:w-auto"
+              class="flex h-44 w-full items-center justify-center gap-8 rounded-[10px] bg-accent-solid px-18 text-white disabled:cursor-not-allowed disabled:bg-line-strong md:w-auto"
               disabled={true}
               aria-label={tr('Send contact message|Enviar mensaje de contacto')}
             >
               <i class="icon-[fa--paper-plane-o]" aria-hidden="true"></i>
               <span class="font-semibold"><T text="Send message|Enviar mensaje" /></span>
             </button>
-            <p class="mt-9 text-sm text-slate-500"><T text="Contact delivery will be enabled after its destination is configured.|El envío de contacto se habilitará cuando se configure su destino." /></p>
+            <p class="mt-9 text-sm text-fg-muted"><T text="Contact delivery will be enabled after its destination is configured.|El envío de contacto se habilitará cuando se configure su destino." /></p>
           </div>
         </form>
       </div>
     </section>
   </main>
 
-  <footer class="border-t border-slate-200 bg-white px-16 py-28 md:px-28">
-    <div class="mx-auto flex max-w-1320 flex-col items-center justify-between gap-18 text-center text-sm text-slate-500 md:flex-row md:text-left">
+  <footer class="border-t border-line bg-surface px-16 py-28 md:px-28">
+    <div class="mx-auto flex max-w-1320 flex-col items-center justify-between gap-18 text-center text-sm text-fg-muted md:flex-row md:text-left">
       <div class="flex items-center gap-12">
         <img class="h-32 w-100 object-contain" src="/images/genix_logo.svg" alt="Genix" />
         <span><T text="Open-source ERP + e-commerce for small businesses.|ERP + comercio electrónico de código abierto para pequeñas empresas." /></span>
       </div>
       <div class="flex flex-wrap items-center justify-center gap-16">
-        <button class="hover:text-indigo-700" onclick={() => navigateToSection('features')}><T text="Features|Funcionalidades" /></button>
-        <button class="hover:text-indigo-700" onclick={() => navigateToSection('roadmap')}><T text="Roadmap|Roadmap" /></button>
+        <button class="hover:text-accent-fg" onclick={() => navigateToSection('features')}><T text="Features|Funcionalidades" /></button>
+        <button class="hover:text-accent-fg" onclick={() => navigateToSection('roadmap')}><T text="Roadmap|Roadmap" /></button>
         <!-- Storyset's free license requires this credit; dropping it needs their paid license. -->
-        <a class="hover:text-indigo-700" href="https://storyset.com/" target="_blank" rel="noopener noreferrer">Illustrations by Storyset</a>
+        <a class="hover:text-accent-fg" href="https://storyset.com/" target="_blank" rel="noopener noreferrer">Illustrations by Storyset</a>
         <span>GPL v3</span>
       </div>
     </div>

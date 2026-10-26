@@ -16,7 +16,7 @@
     <SalesPlanningMantainer />
   {/if}
   {#if ui.state.pageOptionSelected === 2}
-    <div class="flex items-center justify-center h-200 c-gray-500">
+    <div class="flex items-center justify-center h-200 text-fg-muted">
       <T text="Coming soon|Próximamente" />
     </div>
   {/if}

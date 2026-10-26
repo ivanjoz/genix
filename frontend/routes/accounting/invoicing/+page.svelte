@@ -53,7 +53,7 @@ const invoiceColumns: ExcelTableColumn<IInvoiceDocument>[] = [
   {
     header: "Document|Comprobante",
     highlight: true,
-    css: "c-blue",
+    css: "text-blue-fg",
     headerCss: "w-120",
     getValue: (document) => invoiceNumber(document, seriesCodeOf(document)),
     mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--file-text-o]" },
@@ -126,7 +126,7 @@ async function sendSelectedDocument() {
       bind:value={idFilterText}
     />
     {#if pendingCount > 0}
-      <div class="col-span-12 md:ml-auto text-sm text-amber-700 flex items-center gap-6">
+      <div class="col-span-12 md:ml-auto text-sm text-amber-fg flex items-center gap-6">
         <i class="icon-[fa--clock-o] shrink-0"></i>
         <T text={`${pendingCount} pending to send|${pendingCount} pendientes de envío`} />
       </div>

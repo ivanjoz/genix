@@ -138,14 +138,14 @@
     aspect-ratio: 4 / 3;
     padding: 0;
     overflow: hidden;
-    border: 1px solid rgba(100, 116, 139, 0.25);
+    border: 1px solid color-mix(in oklab, var(--fg-muted) 25%, transparent);
     border-radius: 8px;
-    background: #f1f5f9;
+    background: var(--surface-muted);
     cursor: pointer;
     transition: border-color 0.15s, transform 0.15s;
   }
   .picker-card:hover {
-    border-color: #6366f1;
+    border-color: var(--accent-solid);
     transform: translateY(-2px);
   }
   .picker-card img {

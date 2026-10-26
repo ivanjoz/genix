@@ -419,7 +419,7 @@ You are a model that can do function calling with the following functions<start_
     <div class="generated-text">
       <h3>Generated Response:</h3>
       <div class="text-box">{generatedText}</div>
-      <small style="display: block; margin-top: 8px; color: #666;">
+      <small style="display: block; margin-top: 8px; color: var(--fg-muted);">
         Generation time: {inferenceTime.toFixed(2)}ms
       </small>
     </div>
@@ -451,7 +451,7 @@ You are a model that can do function calling with the following functions<start_
 
 <style>
   .container {
-    background: white;
+    background: var(--surface);
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.1);
     max-width: 800px;
@@ -461,41 +461,41 @@ You are a model that can do function calling with the following functions<start_
   }
 
   h1 {
-    color: #333;
+    color: var(--fg);
     margin-bottom: 10px;
     font-size: 28px;
   }
 
   .subtitle {
-    color: #666;
+    color: var(--fg-muted);
     margin-bottom: 30px;
     font-size: 14px;
   }
 
   .backend-info {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
     padding: 10px;
     border-radius: 6px;
     margin-bottom: 20px;
     font-size: 13px;
-    color: #856404;
+    color: var(--amber-fg);
   }
 
   .backend-info.webgpu {
-    background: #d4edda;
-    border-color: #28a745;
-    color: #155724;
+    background: var(--green-bg);
+    border-color: var(--green-border);
+    color: var(--green-fg);
   }
 
   .warning-box {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
+    background: var(--amber-bg);
+    border: 1px solid var(--amber-border);
     padding: 12px;
     border-radius: 6px;
     margin-bottom: 20px;
     font-size: 13px;
-    color: #856404;
+    color: var(--amber-fg);
     line-height: 1.5;
   }
 
@@ -509,35 +509,38 @@ You are a model that can do function calling with the following functions<start_
   select {
     width: 100%;
     padding: 10px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--line);
     border-radius: 8px;
     font-size: 14px;
-    background: white;
+    background: var(--surface);
+    color: var(--fg);
   }
 
   select:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--accent-solid);
   }
 
   .input-group input {
     width: 100%;
     padding: 10px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--line);
     border-radius: 8px;
     font-size: 14px;
+    background: var(--surface);
+    color: var(--fg);
   }
 
   .input-group input:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--accent-solid);
   }
 
   .hint {
     display: block;
     margin-top: 5px;
     font-size: 11px;
-    color: #888;
+    color: var(--fg-subtle);
     line-height: 1.4;
   }
 
@@ -548,7 +551,7 @@ You are a model that can do function calling with the following functions<start_
   .config-group {
     margin-bottom: 20px;
     padding: 10px;
-    background: #f0f2f5;
+    background: var(--surface-muted);
     border-radius: 8px;
   }
 
@@ -558,7 +561,7 @@ You are a model that can do function calling with the following functions<start_
     gap: 10px;
     font-size: 14px;
     cursor: pointer;
-    color: #444;
+    color: var(--fg-soft);
   }
 
   .checkbox-container input {
@@ -568,14 +571,16 @@ You are a model that can do function calling with the following functions<start_
   label {
     display: block;
     margin-bottom: 8px;
-    color: #555;
+    color: var(--fg-soft);
     font-weight: 500;
   }
 
   textarea {
     width: 100%;
     padding: 12px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--line);
+    background: var(--surface);
+    color: var(--fg);
     border-radius: 8px;
     font-size: 16px;
     font-family: inherit;
@@ -585,7 +590,7 @@ You are a model that can do function calling with the following functions<start_
 
   textarea:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--accent-solid);
   }
 
   .button-group {
@@ -621,22 +626,22 @@ You are a model that can do function calling with the following functions<start_
   }
 
   .clear-btn {
-    background: #f5f5f5;
-    color: #666;
+    background: var(--surface-muted);
+    color: var(--fg-muted);
   }
 
   .clear-btn:hover {
-    background: #e0e0e0;
+    background: var(--surface-strong);
   }
 
   .template-btn {
-    background: #e3f2fd;
-    color: #1976d2;
-    border: 1px solid #bbdefb;
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+    border: 1px solid var(--blue-border);
   }
 
   .template-btn:hover {
-    background: #bbdefb;
+    background: var(--blue-bg-strong);
   }
 
   .status {
@@ -647,75 +652,75 @@ You are a model that can do function calling with the following functions<start_
   }
 
   .status.info {
-    background: #e3f2fd;
-    color: #1976d2;
-    border-left: 4px solid #1976d2;
+    background: var(--blue-bg);
+    color: var(--blue-fg);
+    border-left: 4px solid var(--blue-solid);
   }
 
   .status.success {
-    background: #e8f5e9;
-    color: #388e3c;
-    border-left: 4px solid #388e3c;
+    background: var(--green-bg);
+    color: var(--green-fg);
+    border-left: 4px solid var(--green-solid);
   }
 
   .status.error {
-    background: #ffebee;
-    color: #c62828;
-    border-left: 4px solid #c62828;
+    background: var(--red-bg);
+    color: var(--red-fg);
+    border-left: 4px solid var(--red-solid);
   }
 
   .generated-text {
-    background: #f3e5f5;
+    background: var(--purple-bg);
     padding: 20px;
     border-radius: 12px;
     margin-bottom: 20px;
-    border: 1px solid #ce93d8;
+    border: 1px solid var(--purple-border);
   }
 
   .generated-text h3 {
     margin-top: 0;
     font-size: 16px;
-    color: #7b1fa2;
+    color: var(--purple-fg);
   }
 
   .text-box {
-    background: white;
+    background: var(--surface);
     padding: 15px;
     border-radius: 8px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 18px;
-    color: #333;
-    border-left: 4px solid #9c27b0;
+    color: var(--fg);
+    border-left: 4px solid var(--purple-solid);
   }
 
   .results {
-    background: #f8f9fa;
+    background: var(--surface-soft);
     border-radius: 8px;
     padding: 20px;
   }
 
   .results h3 {
-    color: #333;
+    color: var(--fg);
     margin-bottom: 15px;
     font-size: 18px;
   }
 
   .result-item {
-    background: white;
+    background: var(--surface);
     padding: 15px;
     border-radius: 6px;
     margin-bottom: 10px;
-    border-left: 3px solid #667eea;
+    border-left: 3px solid var(--accent-solid);
   }
 
   .result-label {
     font-weight: 600;
-    color: #555;
+    color: var(--fg-soft);
     margin-bottom: 5px;
   }
 
   .result-value {
-    color: #333;
+    color: var(--fg);
     font-family: 'Courier New', monospace;
     font-size: 13px;
     word-break: break-all;

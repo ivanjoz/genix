@@ -102,8 +102,8 @@
       placeholder="Route or error|Ruta o error"
       bind:value={filterText}
     />
-    <div class="flex flex-wrap items-center gap-8 text-[14px] text-slate-600">
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-9 py-4 text-slate-800">
+    <div class="flex flex-wrap items-center gap-8 text-[14px] text-fg-soft">
+      <span class="rounded-full border border-line-strong bg-surface-soft px-9 py-4 text-fg">
         <T text={`Last ${OBSERVABILITY_WINDOW_HOURS} hours|Últimas ${OBSERVABILITY_WINDOW_HOURS} horas`} />
       </span>
       <span><T text="Requests are estimated from credits|Solicitudes estimadas desde créditos" /></span>
@@ -120,21 +120,21 @@
   </div>
 
   {#if refreshError}
-    <div class="rounded-[8px] border border-red-200 bg-red-50 px-10 py-8 text-[14px] text-red-800">
+    <div class="rounded-[8px] border border-red-border bg-red-bg px-10 py-8 text-[14px] text-red-fg">
       {refreshError}
     </div>
   {/if}
 
   {#if isRefreshing && observabilityService.isReady === 0}
-    <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-[14px] text-slate-600">
+    <div class="rounded-[10px] border border-line bg-surface-soft px-14 py-24 text-center text-[14px] text-fg-soft">
       <T text="Loading observability data...|Cargando datos de observabilidad..." />
     </div>
   {:else if cards.length === 0}
-    <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-[14px] text-slate-600">
+    <div class="rounded-[10px] border border-line bg-surface-soft px-14 py-24 text-center text-[14px] text-fg-soft">
       <T text="No API usage or errors were recorded in this window.|No se registró uso de API ni errores en esta ventana." />
     </div>
   {:else if visibleCards.length === 0}
-    <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-[14px] text-slate-600">
+    <div class="rounded-[10px] border border-line bg-surface-soft px-14 py-24 text-center text-[14px] text-fg-soft">
       <T text="No routes match this filter.|Ninguna ruta coincide con este filtro." />
     </div>
   {/if}
@@ -142,24 +142,24 @@
   <div class="grid grid-cols-1 gap-12 xl:grid-cols-2 2xl:grid-cols-3">
     {#each visibleCards as card (card.RouteID)}
       {@const errorPreviews = buildObservabilityErrorPreviews(card, observabilityService.errorRecords)}
-      <article class="min-w-0 rounded-[10px] border border-slate-200 bg-white p-12 shadow-sm">
+      <article class="min-w-0 rounded-[10px] border border-line bg-surface p-12 shadow-sm">
         <div class="mb-8 flex min-w-0 items-start gap-8">
           <span class="shrink-0 rounded-[5px] bg-slate-900 px-7 py-3 ff-mono text-[14px] text-white">
             {card.Method || 'API'}
           </span>
-          <div class="min-w-0 flex-1 break-words font-bold text-slate-900">{card.Path}</div>
-          <span class="shrink-0 ff-mono text-[14px] text-slate-500">#{card.RouteID}</span>
+          <div class="min-w-0 flex-1 break-words font-bold text-fg">{card.Path}</div>
+          <span class="shrink-0 ff-mono text-[14px] text-fg-muted">#{card.RouteID}</span>
         </div>
 
-        <div class="mb-8 flex flex-wrap items-center gap-x-12 gap-y-5 text-[14px] text-slate-700">
+        <div class="mb-8 flex flex-wrap items-center gap-x-12 gap-y-5 text-[14px] text-fg-soft">
           {#if card.IsMetered}
             <span>~{card.EstimatedRequests.toLocaleString()} <T text="requests|solicitudes" /></span>
           {:else}
-            <span class="rounded-full bg-amber-100 px-7 py-3 text-amber-800"><T text="Unmetered|Sin medición" /></span>
+            <span class="rounded-full bg-amber-bg-strong px-7 py-3 text-amber-fg"><T text="Unmetered|Sin medición" /></span>
           {/if}
           <span>{card.CPU.toLocaleString()} CPU cr.</span>
           {#if card.Inference > 0}<span>{card.Inference.toLocaleString()} AI cr.</span>{/if}
-          <span class="text-red-700">{card.FailedRequests.toLocaleString()} <T text="failed|fallidas" /></span>
+          <span class="text-red-fg">{card.FailedRequests.toLocaleString()} <T text="failed|fallidas" /></span>
           {#if card.ErrorOccurrences !== card.FailedRequests}
             <span>{card.ErrorOccurrences.toLocaleString()} <T text="errors|errores" /></span>
           {/if}
@@ -177,18 +177,18 @@
         />
 
         {#if errorPreviews.length > 0}
-          <div class="mt-8 flex flex-col gap-5 border-t border-slate-100 pt-7">
+          <div class="mt-8 flex flex-col gap-5 border-t border-line-soft pt-7">
             {#each errorPreviews as preview (preview.ID)}
               {#if preview.Entries.length > 0}
                 {#each preview.Entries as entry (entry.CodeLine)}
-                  <div class="text-[14px] leading-[1.35] text-red-700">
+                  <div class="text-[14px] leading-[1.35] text-red-fg">
                     <span class="font-bold">{preview.Count}×</span>
                     {entry.Text}
-                    <span class="text-purple-600">[{entry.CodeLine}]</span>
+                    <span class="text-purple-fg">[{entry.CodeLine}]</span>
                   </div>
                 {/each}
               {:else}
-                <div class="text-[14px] text-red-700">{preview.Count}× <T text="Error preview unavailable|Vista previa no disponible" /> [#{preview.ID}]</div>
+                <div class="text-[14px] text-red-fg">{preview.Count}× <T text="Error preview unavailable|Vista previa no disponible" /> [#{preview.ID}]</div>
               {/if}
             {/each}
           </div>

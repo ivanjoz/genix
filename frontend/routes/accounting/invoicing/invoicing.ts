@@ -54,13 +54,13 @@ export const invoiceStateLabels: Record<number, string> = {
 // Green is "SUNAT has it", red is "it will never be accepted as it stands", amber
 // is "still on its way". The operator reads this column before anything else.
 export const invoiceStateCss: Record<number, string> = {
-  [INVOICE_VOIDED]: "text-gray-500",
-  [INVOICE_PENDING]: "text-amber-600",
-  [INVOICE_QUEUED]: "text-blue-600",
-  [INVOICE_ACCEPTED]: "text-green-600",
-  [INVOICE_OBSERVED]: "text-green-700",
-  [INVOICE_REJECTED]: "text-red-600",
-  [INVOICE_EXCEPTION]: "text-red-600",
+  [INVOICE_VOIDED]: "text-fg-muted",
+  [INVOICE_PENDING]: "text-amber-fg",
+  [INVOICE_QUEUED]: "text-blue-fg",
+  [INVOICE_ACCEPTED]: "text-green-fg",
+  [INVOICE_OBSERVED]: "text-green-fg",
+  [INVOICE_REJECTED]: "text-red-fg",
+  [INVOICE_EXCEPTION]: "text-red-fg",
 }
 
 // SUNAT has it, whatever it thought of it.

@@ -55,7 +55,7 @@
 		{
 			header: "ID",
 			headerCss: "w-32",
-			css: "text-center text-purple-600 px-6",
+			css: "text-center text-purple-fg px-6",
 			getValue: (e) => e.ID,
 			mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" },
 		},
@@ -68,7 +68,7 @@
 				const tipoName = cajaTipos.find((x) => x.id === e.Type)?.name || "-";
 				return `<div class="leading-tight">
           <div class="ff-bold leading-[1.1] h3">${e.Name}</div>
-          <div class="fs15 text-slate-500">${tipoName}</div>
+          <div class="text-[15px] text-fg-muted">${tipoName}</div>
         </div>`;
 			},
 		},
@@ -90,7 +90,7 @@
 				const date = formatTime(e.ReconciliationDate, "d-M h:n");
 				return `<div class="leading-tight text-right">
           <div class="ff-mono text-[0.875rem]">${saldo}</div>
-          <div class="text-[0.875rem] text-slate-500">${date}</div>
+          <div class="text-[0.875rem] text-fg-muted">${date}</div>
         </div>`;
 			},
 		},
@@ -314,7 +314,7 @@
 			/>
 		</div>
 		<LayerStatic
-			css="w-[64%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10 overflow-hidden"
+			css="w-[64%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10 overflow-hidden"
 			mobileLayerTitle="Cash Register Detail|Detalle de Caja"
 		>
 			<div class="px-12 pt-12">
@@ -335,12 +335,12 @@
 				{#if layerView === 1}
 					{#if isLoadingMovimientos}
 						<div class="flex justify-center items-center py-40">
-							<div class="text-slate-400">
+							<div class="text-fg-subtle">
 								<T text="Loading...|Cargando..." />
 							</div>
 						</div>
 					{:else if !cajaForm.ID}
-						<div class="bg-red-100 text-red-700 p-8 mt-8 rounded">
+						<div class="bg-red-bg-strong text-red-fg p-8 mt-8 rounded">
 							<T text="Select a Cash Register|Seleccione una Caja" />
 						</div>
 					{:else}
@@ -391,7 +391,7 @@
 									css: "ff-mono text-right px-6",
 									render: (e) => {
 										const monto = formatN(e.Amount / 100, 2);
-										const color = e.Amount < 0 ? "text-red-600" : "";
+										const color = e.Amount < 0 ? "text-red-fg" : "";
 										return `<span class="${color}">${monto}</span>`;
 									},
 									mobile: { order: 3, css: "col-span-12", labelLeft: "Monto:", contentCss: "ff-mono ff-bold" },
@@ -433,12 +433,12 @@
 				{#if layerView === 2}
 					{#if isLoadingCuadres}
 						<div class="flex justify-center items-center py-40">
-							<div class="text-slate-400">
+							<div class="text-fg-subtle">
 								<T text="Loading...|Cargando..." />
 							</div>
 						</div>
 					{:else if !cajaForm.ID}
-						<div class="bg-red-100 text-red-700 p-8 mt-8 rounded">
+						<div class="bg-red-bg-strong text-red-fg p-8 mt-8 rounded">
 							<T text="Select a Cash Register|Seleccione una Caja" />
 						</div>
 					{:else}
@@ -510,7 +510,7 @@
 				{/if}
 				{#if layerView === 3}
 					{#if !cajaForm.ID}
-						<div class="bg-red-100 text-red-700 p-8 mt-8 rounded">
+						<div class="bg-red-bg-strong text-red-fg p-8 mt-8 rounded">
 							<T text="Select a Cash Register|Seleccione una Caja" />
 						</div>
 					{:else}
@@ -561,11 +561,11 @@
 		>
 			<div class="w-260 mr-16">
 				<div class="w-full mb-12">
-					<div class="text-sm mb-4 text-slate-600">
+					<div class="text-sm mb-4 text-fg-soft">
 						<T text="System Balance|Saldo Sistema" />
 					</div>
 					<div
-						class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded"
+						class="text-[1.1rem] ff-mono text-center bg-surface-muted py-8 rounded"
 					>
 						{formatN((cajaForm.CurrentAmount || 0) / 100, 2)}
 					</div>
@@ -586,15 +586,15 @@
 				/>
 				<div class="mb-12"></div>
 				<div class="w-full">
-					<div class="text-sm mb-4 text-slate-600">Diferencia</div>
+					<div class="text-sm mb-4 text-fg-soft">Diferencia</div>
 					<div
-						class="text-[1.1rem] min-h-32 ff-mono text-center bg-slate-100 py-8 rounded"
+						class="text-[1.1rem] min-h-32 ff-mono text-center bg-surface-muted py-8 rounded"
 					>
 						{#if cajaCuadreForm.ActualAmount}
 							{@const diff =
 								(cajaCuadreForm.ActualAmount || 0) - cajaForm.CurrentAmount}
 							{#if diff}
-								<span class={diff > 0 ? "text-blue-600" : "text-red-600"}>
+								<span class={diff > 0 ? "text-blue-fg" : "text-red-fg"}>
 									{formatN(diff / 100, 2)}
 								</span>
 							{/if}
@@ -626,7 +626,7 @@
 				/>
 			</div>
 			{#if cajaCuadreForm._error}
-				<div class="col-span-24 text-red-600 ff-bold">
+				<div class="col-span-24 text-red-fg ff-bold">
 					<i class="icon-[fa--exclamation-triangle]"></i>{cajaCuadreForm._error}
 				</div>
 			{/if}
@@ -708,21 +708,21 @@
 			/>
 			<div class="col-span-24 md:col-span-12"></div>
 			<div class="col-span-24 md:col-span-12">
-				<div class="text-sm mb-4 text-slate-600">Saldo Inicial</div>
+				<div class="text-sm mb-4 text-fg-soft">Saldo Inicial</div>
 				<div
-					class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded"
+					class="text-[1.1rem] ff-mono text-center bg-surface-muted py-8 rounded"
 				>
 					{formatN(cajaForm.CurrentAmount / 100, 2)}
 				</div>
 			</div>
 			<div class="col-span-24 md:col-span-12">
-				<div class="text-sm mb-4 text-slate-600">Saldo Final</div>
+				<div class="text-sm mb-4 text-fg-soft">Saldo Final</div>
 				<div
-					class="text-[1.1rem] ff-mono text-center bg-slate-100 py-8 rounded"
+					class="text-[1.1rem] ff-mono text-center bg-surface-muted py-8 rounded"
 				>
 					{#if cajaMovimientoForm.FinalAmount !== undefined}
 						{@const saldo = cajaMovimientoForm.FinalAmount}
-						<span class={saldo >= 0 ? "" : "text-red-600"}>
+						<span class={saldo >= 0 ? "" : "text-red-fg"}>
 							{formatN(saldo / 100, 2)}
 						</span>
 					{/if}

@@ -78,7 +78,7 @@ const columns: ITableColumn<ITextSearchHit>[] = [
       label="Runs the product text search against the GenixSearch index."
       onClick={runSearch} />
     {#if lastQuery}
-      <span class="ml-auto fs14 text-slate-500">
+      <span class="ml-auto text-[14px] text-fg-muted">
         {hits.length} resultados para "{lastQuery}" · {elapsedMs} ms
       </span>
     {/if}

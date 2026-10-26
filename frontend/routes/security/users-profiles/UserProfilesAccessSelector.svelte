@@ -281,24 +281,24 @@
         {@const selectedProfileRecord = getProfileRecord(Number(selectedAccessOrProfile.id))}
         {@const selectedProfileAccessSummary = summarizeProfileAccesses(selectedProfileRecord)}
         <div class="_selected-profile-card">
-          <div class="_selected-profile-name text-[15px] ff-semibold text-sky-700">
+          <div class="_selected-profile-name text-[15px] ff-semibold text-blue-fg">
             {selectedProfileRecord?.Name || ''}
           </div>
           {#if selectedProfileAccessSummary.readableAccessNames.length > 0}
             <div class="_selected-profile-row">
-              <i class="icon-[mdi--eye] _selected-profile-icon pt-2 text-blue-600"></i>
+              <i class="icon-[mdi--eye] _selected-profile-icon pt-2 text-blue-fg"></i>
               <span class="text-sm">{selectedProfileAccessSummary.readableAccessNames.join(', ')}</span>
             </div>
           {/if}
           {#if selectedProfileAccessSummary.editableAccessNames.length > 0}
             <div class="_selected-profile-row">
-              <i class="icon-[fa--pencil] _selected-profile-icon _selected-profile-icon-edit pt-2 text-red-600"></i>
+              <i class="icon-[fa--pencil] _selected-profile-icon _selected-profile-icon-edit pt-2 text-red-fg"></i>
               <span class="text-sm">{selectedProfileAccessSummary.editableAccessNames.join(', ')}</span>
             </div>
           {/if}
           {#if selectedProfileAccessSummary.subAccessLabels.length > 0}
             <div class="_selected-profile-row">
-              <i class="icon-[fa--shield] _selected-profile-icon pt-2 text-purple-600"></i>
+              <i class="icon-[fa--shield] _selected-profile-icon pt-2 text-purple-fg"></i>
               <span class="text-sm">{selectedProfileAccessSummary.subAccessLabels.join(', ')}</span>
             </div>
           {/if}
@@ -309,7 +309,7 @@
           {@render grantedAccessCard(grantedAcceso)}
         {:else}
           <div class="_selected-access-orphan">
-            <i class={`${accesoAccionesMap.get(4)?.icon} text-red-600`}></i>
+            <i class={`${accesoAccionesMap.get(4)?.icon} text-red-fg`}></i>
             <span class="text-sm">Acceso {selectedAccessOrProfile.id}</span>
           </div>
         {/if}
@@ -348,7 +348,7 @@
   {/if}
 
   {#if accessCatalogLoadError}
-    <div class="col-span-24 px-10 py-8 bg-amber-100 border border-amber-400 text-amber-700 rounded">
+    <div class="col-span-24 px-10 py-8 bg-amber-bg-strong border border-amber-border text-amber-fg rounded">
       {accessCatalogLoadError}
     </div>
   {/if}
@@ -369,7 +369,7 @@
   :global(._container ._chip-right),
   :global(._container ._chip-right:hover) {
     align-items: stretch;
-    background-color: white;
+    background-color: var(--surface);
     border: 0;
     border-radius: 0;
     box-shadow: 0 1px 2px rgba(64, 69, 85, 0.22);
@@ -387,7 +387,7 @@
   }
 
   :global(._container ._chip-right:hover) {
-    outline-color: #c9cee0;
+    outline-color: var(--line-strong);
   }
 
   /* SearchDualCard wraps the snippet in its own span; collapsing it keeps the card one element. */
@@ -408,20 +408,20 @@
   }
 
   ._sub-accesos-title {
-    color: var(--input-label-color, #6d5dad);
+    color: var(--label);
   }
 
   /* No min-width: the card is sized by its grid column, and a floor wider than the column is what
      would push the second card onto its own row. */
   ._sub-accesos-card {
-    background-color: white;
+    background-color: var(--surface);
     box-shadow: 0 1px 2px rgba(64, 69, 85, 0.22);
     min-width: 0;
   }
 
   ._sub-accesos-card-name {
-    background-color: #f4f2fd;
-    color: #20243b;
+    background-color: var(--accent-bg);
+    color: var(--fg);
     line-height: 19px;
     padding: 4px 10px;
   }
@@ -432,7 +432,7 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 4px 14px;
-    color: #4b4f66;
+    color: var(--fg-soft);
     line-height: 1.15;
     padding: 6px 10px 7px;
   }
@@ -467,17 +467,17 @@
   }
 
   ._granted-name {
-    color: #20243b;
+    color: var(--fg);
     line-height: 19px;
   }
 
   ._granted-route {
-    color: #6b7280;
+    color: var(--fg-muted);
     line-height: 17px;
   }
 
   ._selected-profile-card {
-    color: #404555;
+    color: var(--fg-soft);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -522,7 +522,7 @@
 
   ._selected-access-orphan {
     align-items: center;
-    color: #404555;
+    color: var(--fg-soft);
     display: flex;
     gap: 6px;
     padding: 6px 8px;

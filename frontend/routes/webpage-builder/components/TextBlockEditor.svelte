@@ -524,7 +524,7 @@
 
   // Every font-size utility — named scale (text-lg), numeric (text-40), or arbitrary size
   // (text-[18px]/rem/em) — with any variant prefix (md:text-xl). Matched so setting a size
-  // strips ALL of them. Deliberately NOT matching colors (text-slate-500, text-[#fff]) or
+  // strips ALL of them. Deliberately NOT matching colors (text-fg-muted, text-[#fff]) or
   // keywords (text-center), which start differently / aren't sizes.
   const FONT_SIZE_RE = /^(?:[\w-]+:)*text-(?:xs|sm|base|lg|xl|[2-9]xl|\[[\d.]+(?:px|rem|em)\]|\d+)$/;
   const OUR_FONT_RE = /^text-\[(\d+)px\]$/;

@@ -317,9 +317,9 @@ const registerPayment = async () => {
 // Status chip derived from the lifecycle (ss) + paid amount: ss=2 paid, partial when
 // something has been paid, otherwise unpaid.
 const statusChip = (e: IExpense) => {
-  if (e.ss === 2) return { label: tr("Paid|Pagado"), color: "bg-green-100 text-green-700" }
-  if ((e.PaidAmount || 0) > 0) return { label: tr("Partial|Parcial"), color: "bg-amber-100 text-amber-700" }
-  return { label: tr("Unpaid|Sin pagar"), color: "bg-red-100 text-red-700" }
+  if (e.ss === 2) return { label: tr("Paid|Pagado"), color: "bg-green-bg-strong text-green-fg" }
+  if ((e.PaidAmount || 0) > 0) return { label: tr("Partial|Parcial"), color: "bg-amber-bg-strong text-amber-fg" }
+  return { label: tr("Unpaid|Sin pagar"), color: "bg-red-bg-strong text-red-fg" }
 }
 
 const filteredExpenses = $derived.by(() => {
@@ -329,7 +329,7 @@ const filteredExpenses = $derived.by(() => {
 })
 
 const columns: ITableColumn<IExpense>[] = [
-  { header: "ID", headerCss: "w-32", css: "text-center text-purple-600 px-6", getValue: e => e.ID,
+  { header: "ID", headerCss: "w-32", css: "text-center text-purple-fg px-6", getValue: e => e.ID,
     mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" } },
   {
     header: "Registered|Registro", headerCss: "w-106", css: "whitespace-nowrap px-6 ff-mono text-sm",
@@ -437,7 +437,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
 
 <Layer type="content">
   {#if isLoading}
-    <div class="p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
+    <div class="p-8 min-h-240 w-full fx-c rounded-md bg-surface-soft">
       <LoadingBar label={tr("Loading expenses...|Cargando gastos...")} />
     </div>
   {:else}
@@ -470,7 +470,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
   {#if layerView === 1}
     {#if isPaid}
       <!-- A fully-paid expense is locked from edits; surface why the fields are read-only. -->
-      <div class="col-span-24 mt-12 mb-2 px-10 py-6 rounded bg-green-50 text-green-700 text-sm">
+      <div class="col-span-24 mt-12 mb-2 px-10 py-6 rounded bg-green-bg text-green-fg text-sm">
         {tr("This expense is fully paid: only its comprobante can still be registered.|Este gasto está pagado: sólo se puede registrar su comprobante.")}
       </div>
     {/if}
@@ -515,8 +515,8 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
       <SearchSelect bind:saveOn={inventoryForm} save="CurrencyType" css="col-span-24 md:col-span-9"
         label="Currency|Moneda" keyId="id" keyName="name" options={currencyOptions} required={true} />
 
-      <div class="col-span-24 bg-slate-100 rounded py-8 text-center">
-        <div class="text-sm text-slate-600">{tr("Total|Total")}</div>
+      <div class="col-span-24 bg-surface-muted rounded py-8 text-center">
+        <div class="text-sm text-fg-soft">{tr("Total|Total")}</div>
         <div class="ff-mono ff-bold">
           {formatN(((inventoryForm.Quantity || 0) * (inventoryForm.UnitPrice || 0)) / 100, 2)}
         </div>
@@ -540,16 +540,16 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
     <div class="grid grid-cols-24 gap-10 mt-12">
       <!-- Current payment state summary -->
       <div class="col-span-24 grid grid-cols-3 gap-10 mb-4">
-        <div class="bg-slate-100 rounded py-8 text-center">
-          <div class="text-sm text-slate-600">{tr("Amount|Monto")}</div>
+        <div class="bg-surface-muted rounded py-8 text-center">
+          <div class="text-sm text-fg-soft">{tr("Amount|Monto")}</div>
           <div class="ff-mono ff-bold">{formatN((form.Amount || 0) / 100, 2)}</div>
         </div>
-        <div class="bg-slate-100 rounded py-8 text-center">
-          <div class="text-sm text-slate-600">{tr("Paid|Pagado")}</div>
+        <div class="bg-surface-muted rounded py-8 text-center">
+          <div class="text-sm text-fg-soft">{tr("Paid|Pagado")}</div>
           <div class="ff-mono ff-bold">{formatN((form.PaidAmount || 0) / 100, 2)}</div>
         </div>
-        <div class="bg-slate-100 rounded py-8 text-center">
-          <div class="text-sm text-slate-600">{tr("Pending|Pendiente")}</div>
+        <div class="bg-surface-muted rounded py-8 text-center">
+          <div class="text-sm text-fg-soft">{tr("Pending|Pendiente")}</div>
           <div class="ff-mono ff-bold">{formatN(Math.max(0, (form.Amount || 0) - (form.PaidAmount || 0)) / 100, 2)}</div>
         </div>
       </div>
@@ -575,7 +575,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
         {#if (form.PaidAmount || 0) > 0}
           <!-- Partially-paid expense: list the payments made so far below the form. -->
           <div class="col-span-24 mt-10">
-            <div class="text-sm text-slate-600 ff-bold mb-4">{tr("Payments made|Pagos realizados")}</div>
+            <div class="text-sm text-fg-soft ff-bold mb-4">{tr("Payments made|Pagos realizados")}</div>
             {@render paymentsTable()}
           </div>
         {/if}

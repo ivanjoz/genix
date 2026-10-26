@@ -76,7 +76,7 @@ export const buildSupplyExcelRows = (
 }
 
 const updatedFieldCss = (row: ISupplyExcelRow, fieldKey: string): string | undefined => {
-  return row._updatedFields?.includes(fieldKey) ? 'bg-purple-100' : undefined
+  return row._updatedFields?.includes(fieldKey) ? 'bg-purple-bg-strong' : undefined
 }
 
 // makeSupplyExcelColumns drives export, import and the preview table from one definition, so the

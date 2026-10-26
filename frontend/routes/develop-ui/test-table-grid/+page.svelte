@@ -132,11 +132,11 @@
 <Page title="TableGrid Demo">
   <div class="mb-10 flex flex-wrap items-center gap-8">
     <Button color="red" name="Remove First Row" onClick={removeFirstRow} />
-    <div class="text-[13px] text-slate-600">
+    <div class="text-[13px] text-fg-soft">
       Records: <strong>{demoRows.length.toLocaleString()}</strong>
     </div>
     {#if selectedRecord}
-      <div class="text-[13px] text-slate-700">
+      <div class="text-[13px] text-fg-soft">
         Selected: <strong>{selectedRecord.fullName}</strong> ({selectedRecord.id})
       </div>
     {/if}
@@ -173,17 +173,17 @@
   }
 
   .status-active {
-    color: #166534;
-    background: #dcfce7;
+    color: var(--green-fg);
+    background: var(--green-bg-strong);
   }
 
   .status-blocked {
-    color: #991b1b;
-    background: #fee2e2;
+    color: var(--red-fg);
+    background: var(--red-bg-strong);
   }
 
   .status-pending {
-    color: #92400e;
-    background: #fef3c7;
+    color: var(--amber-fg);
+    background: var(--amber-bg-strong);
   }
 </style>

@@ -184,16 +184,16 @@ import Checkbox from '#components/form/Checkbox.svelte';
     flex-wrap: wrap;
     gap: 4px 14px;
     padding: 5px 8px 3px 9px;
-    border: 1px solid #d9dce8;
+    border: 1px solid var(--line);
     border-top: none;
-    background: #fcfbff;
-    color: #4b4f66;
+    background: var(--surface-soft);
+    color: var(--fg-soft);
     line-height: 1.15;
   }
 
   .acceso-card {
     position: relative;
-    background-color: white;
+    background-color: var(--surface);
     cursor: pointer;
     display: flex;
     flex-direction: column;
@@ -203,7 +203,7 @@ import Checkbox from '#components/form/Checkbox.svelte';
        anything wider than that plus a normal gutter read as dead space on an ungranted card. */
     padding: 6px 8px 6px 9px;
     line-height: 1.15;
-    border: 1px solid #d9dce8;
+    border: 1px solid var(--line);
     user-select: none;
   }
 
@@ -219,12 +219,12 @@ import Checkbox from '#components/form/Checkbox.svelte';
   }
 
   .acceso-card:hover {
-    outline: 1px solid #9ca3af;
+    outline: 1px solid var(--line-strong);
     outline-offset: 0;
   }
 
   .acceso-card.is-selected {
-    background: #f8f6ff;
+    background: var(--accent-bg);
   }
 
   .acceso-card .content-wrap {
@@ -241,12 +241,12 @@ import Checkbox from '#components/form/Checkbox.svelte';
   }
 
   .acceso-card .title-text {
-    color: #20243b;
+    color: var(--fg);
   }
 
   .acceso-card .route-text {
     margin-top: 2px;
-    color: #6b7280;
+    color: var(--fg-muted);
     overflow-wrap: anywhere;
     line-height: 1.15;
   }
@@ -283,13 +283,13 @@ import Checkbox from '#components/form/Checkbox.svelte';
     pointer-events: none;
     padding-left: 10px;
     border-radius: 10px;
-    background-color: white;
-    box-shadow: -10px 0 10px -4px white;
+    background-color: var(--surface);
+    box-shadow: -10px 0 10px -4px var(--surface);
   }
 
   .acceso-card.is-selected:not(.mobile) .acciones-ac2 {
-    background-color: #f8f6ff;
-    box-shadow: -10px 0 10px -4px #f8f6ff;
+    background-color: var(--accent-bg);
+    box-shadow: -10px 0 10px -4px var(--accent-bg);
   }
 
   .acceso-card:not(.mobile):hover .acciones-ac2 {
@@ -344,16 +344,16 @@ import Checkbox from '#components/form/Checkbox.svelte';
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: #eae8f9;
+    background-color: var(--accent-bg-strong);
     border-radius: 10px;
-    color: rgb(82, 77, 124);
-    border: 1px solid #eae8f9;
+    color: var(--accent-fg);
+    border: 1px solid var(--accent-bg-strong);
     user-select: none;
     font-size: 13px;
   }
 
   .acciones-ac2 > div:hover {
-    border-color: black;
+    border-color: var(--fg);
   }
 
   /* Mobile specific styles */

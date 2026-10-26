@@ -171,7 +171,7 @@
   }
 
   // 5-band light green→red scale: low weeks are green, peak weeks are red.
-  const seasonalityColorScale = ['#4ade80', '#a3e635', '#fde047', '#fb923c', '#f87171']
+  const seasonalityColorScale = ['var(--green-border)', 'color-mix(in oklab, var(--green-border) 50%, var(--yellow-border))', 'var(--yellow-border)', 'var(--orange-border)', 'var(--red-border)']
 
   // Per-product weekly quantity: the seasonality multiplier times the week's explicit quantity
   // (or the base when that week wasn't filled). Length/color come from a scale built over these
@@ -425,13 +425,13 @@
     />
   </div>
 
-  <div class="mt-16 mb-6 c-gray-600 text-13">
+  <div class="mt-16 mb-6 text-fg-muted text-13">
     <T text="Weekly quantity (leave empty to use the base)|Cantidad por semana (vacío = usa la base)" />
   </div>
   <div class="flex flex-col gap-6">
     {#each monthGroups as group (group.month)}
       <div class="flex items-start gap-8">
-        <div class="w-36 pt-8 shrink-0 ff-mono c-gray-700 text-14">
+        <div class="w-36 pt-8 shrink-0 ff-mono text-fg-muted text-14">
           {tr(group.monthLabel)}
         </div>
         <div class="flex-1 grid grid-cols-3 sm:grid-cols-5 gap-4">
@@ -467,13 +467,13 @@
     />
   </div>
 
-  <div class="mt-16 mb-6 c-gray-600 text-13">
+  <div class="mt-16 mb-6 text-fg-muted text-13">
     <T text="Weekly percentage (100 = no change, 150 = +50%). Empty weeks inherit the previous filled week.|Porcentaje por semana (100 = sin cambio, 150 = +50%). Las semanas vacías heredan la anterior." />
   </div>
   <div class="flex flex-col gap-6">
     {#each monthGroups as group (group.month)}
       <div class="flex items-start gap-8">
-        <div class="w-54 pt-6 shrink-0 ff-bold c-gray-600 text-13 ff-mono">
+        <div class="w-54 pt-6 shrink-0 ff-bold text-fg-muted text-13 ff-mono">
           {tr(group.monthLabel)}
         </div>
         <div class="flex-1 grid grid-cols-3 sm:grid-cols-5 gap-4">
@@ -505,8 +505,8 @@
     justify-content: center;
     width: 26px;
     border-radius: 5px 0 0 5px;
-    background-color: #ececef;
-    color: #696994;
+    background-color: var(--surface-strong);
+    color: var(--fg-muted);
     font-size: 14px;
     font-family: 'mono', monospace;
     pointer-events: none;

@@ -6,7 +6,7 @@
 
   // Driven by the showroom's own surface toggle, so the flip covers the whole
   // #page-container rather than just the component's box.
-  let containerCss = $state('bg-white');
+  let containerCss = $state('bg-surface');
 </script>
 
 <Page title="UI Showroom" {containerCss}>

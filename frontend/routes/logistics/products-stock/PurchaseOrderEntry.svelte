@@ -427,7 +427,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
         {#snippet optionRenderer(o: typeof purchaseOrderOptions[number], _words: string[])}
           <div class="flex flex-col min-w-0 w-full">
             <div class="truncate"><b>OC #{o.ID}</b> — {o.ProviderName}</div>
-            <div class="text-xs text-gray-500 truncate">
+            <div class="text-xs text-fg-muted truncate">
               {o.Date ? formatTime(o.Date, 'Y-m-d') : ''} — S/. {formatN((o.TotalAmount || 0) / 100, 2)}
             </div>
           </div>
@@ -443,7 +443,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
 
     {#if !selectedOrderID}
       <!-- Empty state: nothing selected yet. -->
-      <div class="bg-red-50 text-red-600 text-center font-medium py-16 px-12 rounded-md border border-red-100">
+      <div class="bg-red-bg text-red-fg text-center font-medium py-16 px-12 rounded-md border border-red-border">
         Seleccione una Órden de Compra
       </div>
     {:else}
@@ -451,22 +451,22 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
       <div class="flex flex-col gap-6 overflow-y-auto pr-4" style="max-height: calc(100vh - var(--header-height) - 160px);" aria-label="Product cards from the selected purchase order">
         {#each filteredOrderProductCards as card (card.key)}
           {@const added = addedQuantityByCardKey.get(card.key) || 0}
-          <button type="button" class="text-left bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-md px-12 py-8 flex items-center gap-12 transition-colors"
+          <button type="button" class="text-left bg-surface-soft hover:bg-blue-bg border border-line rounded-md px-12 py-8 flex items-center gap-12 transition-colors"
             onclick={() => handleProductCardClick(card.productID, card.presentationID)}
           >
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-semibold text-gray-800 truncate">{card.name}</div>
+              <div class="text-sm font-semibold text-fg truncate">{card.name}</div>
               {#if card.sku}
-                <div class="text-xs text-gray-500 mt-2">SKU: {card.sku}</div>
+                <div class="text-xs text-fg-muted mt-2">SKU: {card.sku}</div>
               {/if}
             </div>
-            <div class="text-xs text-gray-500 shrink-0 text-right leading-[1.2]">
+            <div class="text-xs text-fg-muted shrink-0 text-right leading-[1.2]">
               <div>Ingresado:</div>
-              <div class="text-gray-800 font-semibold">{added} / {card.ordered}</div>
+              <div class="text-fg font-semibold">{added} / {card.ordered}</div>
             </div>
           </button>
         {:else}
-          <div class="text-sm text-gray-400 text-center py-12">
+          <div class="text-sm text-fg-subtle text-center py-12">
             {orderProductCards.length === 0 ? 'La órden no tiene productos.' : 'Sin coincidencias.'}
           </div>
         {/each}
@@ -476,12 +476,12 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
 
   <!-- Right column: order header + warehouse selector + grouped entries table. -->
   <LayerStatic
-    css="w-[50%] min-w-350 bg-white border-l border-gray-200 flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
+    css="w-[50%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
     mobileLayerTitle="Ingreso de OC"
     useMobileLayerVertical={124}
   >
-    <div class="px-12 py-10 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 gap-12" aria-label="Purchase order entry header with warehouse selector and save button">
-      <div class="font-bold text-gray-800 text-lg">
+    <div class="px-12 py-10 border-b border-line-soft flex items-center justify-between bg-surface-soft/50 gap-12" aria-label="Purchase order entry header with warehouse selector and save button">
+      <div class="font-bold text-fg text-lg">
         {selectedOrder ? `Orden #${selectedOrder.ID}` : '—'}
       </div>
       <div class="w-200">
@@ -502,7 +502,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
 
     <div class="flex-1 min-h-0 px-12 py-8">
       {#if !selectedOrderID}
-        <div class="text-sm text-gray-400 text-center py-24">Seleccione una órden para iniciar el ingreso.</div>
+        <div class="text-sm text-fg-subtle text-center py-24">Seleccione una órden para iniciar el ingreso.</div>
       {:else}
         <TableGrid columns={entryColumns} data={tableRows}
           height="calc(100vh - var(--header-height) - 160px)"
@@ -515,7 +515,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
         >
           {#snippet rowRenderer(row, _rowIndex)}
             {#if row.kind === 'lot-header'}
-              <div class="px-12 w-full h-full flex items-center text-blue-600 bg-blue-50 font-semibold text-sm border-b-1 pt-2 border-b-blue-200">
+              <div class="px-12 w-full h-full flex items-center text-blue-fg bg-blue-bg font-semibold text-sm border-b-1 pt-2 border-b-blue-border">
                 {row.lotCode ? `LOTE ${row.lotCode}` : 'SIN LOTE'}
               </div>
             {/if}
@@ -531,11 +531,11 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
               {:else if colDef.id === 'serial'}
                 {@const total = totalSerialCountForEntry(row)}
                 <div class="w-full flex items-center justify-end gap-6">
-                  <span class={total === 0 ? 'text-gray-400' : 'text-gray-800 font-semibold'}>
+                  <span class={total === 0 ? 'text-fg-subtle' : 'text-fg font-semibold'}>
                     {total === 0 ? '-' : total}
                   </span>
                   <button type="button"
-                    class="w-26 h-26 rounded-full b-color-green flex items-center justify-center text-xs"
+                    class="w-26 h-26 rounded-full text-green-fg bg-green-bg shadow-sm hover:bg-green-solid hover:text-on-solid flex items-center justify-center text-xs"
                     onclick={() => openSerialModal(row)}
                     title="Editar seriales"
                     aria-label="Edit serial numbers for this entry"

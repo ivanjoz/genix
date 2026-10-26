@@ -477,7 +477,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
     render: (stockDetail) => {
       if (!stockDetail.SerialNumber) { return { css: 'text-xs c-red', text: 'NUEVO SERIAL...' } }
-      if (stockDetail._isNew) { return { css: 'text-blue-800', text: stockDetail.SerialNumber } }
+      if (stockDetail._isNew) { return { css: 'text-blue-fg', text: stockDetail.SerialNumber } }
       return stockDetail.SerialNumber
     },
     mobile: { order: 1, css: 'col-span-24', labelTop: 'Serial' },
@@ -500,7 +500,7 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
     },
     render: (stockDetail) => {
       const lotDisplay = getLotDisplay(stockDetail)
-      if (stockDetail._isNew && lotDisplay) { return { css: 'text-blue-800', text: lotDisplay } }
+      if (stockDetail._isNew && lotDisplay) { return { css: 'text-blue-fg', text: lotDisplay } }
       return lotDisplay
     },
     mobile: { order: 2, css: 'col-span-12', labelTop: 'Batch|Lote' },
@@ -522,11 +522,11 @@ const serialNumberColumns: ITableColumn<IProductStockDetailRow>[] = [
           children: [
             { text: String(stockDetail._cantidadPrev > 0 ? stockDetail._cantidadPrev : 0) },
             { text: '→', css: 'ml-2 mr-2' },
-            { text: stockDetail.Quantity, css: 'text-red-500' },
+            { text: stockDetail.Quantity, css: 'text-red-fg' },
           ],
         }
       }
-      return { css: `text-right ${stockDetail._isNew ? 'text-blue-800' : ''}`.trim(), text: stockDetail.Quantity || '' }
+      return { css: `text-right ${stockDetail._isNew ? 'text-blue-fg' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
     mobile: { order: 3, css: 'col-span-12', labelTop: 'Qty.|Cant.' },
   },
@@ -551,7 +551,7 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
     render: (stockDetail) => {
       if (!hasLotAssignment(stockDetail)) { return { css: 'text-xs c-red', text: 'NUEVO LOTE...' } }
       const lotDisplay = getLotDisplay(stockDetail)
-      if (stockDetail._isNew) { return { css: 'text-blue-800', text: lotDisplay } }
+      if (stockDetail._isNew) { return { css: 'text-blue-fg', text: lotDisplay } }
       return lotDisplay
     },
     mobile: { order: 1, css: 'col-span-12', labelTop: 'Batch|Lote' },
@@ -573,11 +573,11 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
           children: [
             { text: String(stockDetail._cantidadPrev > 0 ? stockDetail._cantidadPrev : 0) },
             { text: '→', css: 'ml-2 mr-2' },
-            { text: stockDetail.Quantity, css: 'text-red-500' },
+            { text: stockDetail.Quantity, css: 'text-red-fg' },
           ],
         }
       }
-      return { css: `text-right ${stockDetail._isNew ? 'text-blue-800' : ''}`.trim(), text: stockDetail.Quantity || '' }
+      return { css: `text-right ${stockDetail._isNew ? 'text-blue-fg' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
     mobile: { order: 2, css: 'col-span-12', labelTop: 'Qty.|Cant.' },
   },
@@ -635,7 +635,7 @@ const unitCostColumn: ITableColumn<IProductoStockDisplay> = {
       return { css: 'text-right', text: formatN(productStockDisplay.base._unitCost / 100, 2) }
     }
     if (requireManualCost && rowAddsStock(productStockDisplay)) {
-      return { css: 'text-right text-red-500', text: tr('Required|Requerido') }
+      return { css: 'text-right text-red-fg', text: tr('Required|Requerido') }
     }
     return ''
   },
@@ -674,7 +674,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     	order: 3, 
      	css: 'col-span-12', 
      	labelLeft: "Seriales",
-      contentCss: "flex items-center justify-end pr-4 bg-purple-light",
+      contentCss: "flex items-center justify-end pr-4 bg-purple-bg",
     },
     showEditIcon: true,
     onCellClick: (productStockDisplay, index, rerender) => openDetailLayer('serial', productStockDisplay, rerender),
@@ -686,7 +686,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
           children: [
             { text: String(productStockDisplay.serialNumbersCount) },
             { text: '→', css: 'ml-2 mr-2' },
-            { text: productStockDisplay.serialNumbersCountNew, css: 'text-red-500' },
+            { text: productStockDisplay.serialNumbersCountNew, css: 'text-red-fg' },
           ],
         }
       }
@@ -723,7 +723,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
           children: [
             { text: String(productStockDisplay.stockSimple) },
             { text: '→', css: 'ml-2 mr-2' },
-            { text: productStockDisplay.stockSimpleNew, css: 'text-red-500' },
+            { text: productStockDisplay.stockSimpleNew, css: 'text-red-fg' },
           ],
         }
       }
@@ -737,7 +737,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
           css: 'flex items-center justify-end',
           children: [
             { text: productStockDisplay.stockSimpleNew || '0' },
-            { text: `+${looseSubUnits}${subUnitName ? ' ' + subUnitName : ''}`, css: 'ml-4 text-purple-600 text-[11px]' },
+            { text: `+${looseSubUnits}${subUnitName ? ' ' + subUnitName : ''}`, css: 'ml-4 text-purple-fg text-[11px]' },
           ],
         }
       }
@@ -751,7 +751,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     	order: 5, 
      	css: 'col-span-12', 
      	labelLeft: "Loteado",
-      contentCss: "flex items-center justify-end bg-purple-light pr-4",
+      contentCss: "flex items-center justify-end bg-purple-bg pr-4",
     },
     onCellClick: (productStockDisplay, index, rerender) => openDetailLayer('lot', productStockDisplay, rerender),
     getValue: (productStockDisplay) => {
@@ -766,7 +766,7 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
           children: [
             { text: String(productStockDisplay.stockLoteado) },
             { text: '→', css: 'ml-2 mr-2' },
-            { text: productStockDisplay.stockLoteadoNew, css: 'text-red-500' },
+            { text: productStockDisplay.stockLoteadoNew, css: 'text-red-fg' },
           ],
         }
       }
@@ -1035,7 +1035,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   </div>
 
   {#if !stockFilters.warehouseID}
-    <div class="col-span-24 text-red-500"><i class="icon-[fa--exclamation-triangle]"></i>Debe seleccionar un almacén.</div>
+    <div class="col-span-24 text-red-fg"><i class="icon-[fa--exclamation-triangle]"></i>Debe seleccionar un almacén.</div>
   {:else}
     <FilterInput bind:value={stockFilterText}
       css="col-span-12 md:col-span-4 md:order-1 min-w-0 w-full md:w-180" />
@@ -1045,12 +1045,12 @@ let rerenderHandler: ((() => void) | undefined) = undefined
 </div>
 
 {#if blockManualInbound}
-  <div class="mb-8 flex items-center gap-6 text-orange-700">
+  <div class="mb-8 flex items-center gap-6 text-orange-fg">
     <i class="icon-[fa--info-circle] shrink-0"></i>
     <T text="Stock can only increase through a purchase order (Ingreso OC), or here as opening stock with its cost. Decreases are still allowed.|El stock solo puede aumentar mediante una orden de compra (Ingreso OC), o aquí como saldo inicial con su costo. Las disminuciones aún se permiten." />
   </div>
 {:else if requireManualCost}
-  <div class="mb-8 flex items-center gap-6 text-orange-700">
+  <div class="mb-8 flex items-center gap-6 text-orange-fg">
     <i class="icon-[fa--info-circle] shrink-0"></i>
     <T text="Every stock increase needs its unit purchase cost, in soles.|Todo aumento de stock necesita su costo unitario de compra, en soles." />
   </div>
@@ -1074,7 +1074,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   }}
 >
   {#if isSerialNumberLayerLoadingLots}
-    <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
+    <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-surface-soft">
       <LoadingBar label={tr("Loading Batches...|Cargando Lotes...")} />
     </div>
   {:else}
@@ -1092,7 +1092,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   }}
 >
   {#if isLotLayerLoadingLots}
-    <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-gray-50">
+    <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-surface-soft">
       <LoadingBar label={tr("Loading Batches...|Cargando Lotes...")} />
     </div>
   {:else}
@@ -1125,7 +1125,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   </div>
   <table class="w-full text-sm" aria-label="Summary of the stock changes being saved">
     <thead>
-      <tr class="border-b border-gray-200 text-gray-500">
+      <tr class="border-b border-line text-fg-muted">
         <th class="text-left py-4"><T text="Product|Producto" /></th>
         <th class="text-left py-4"><T text="Batch / Serial|Lote / Serie" /></th>
         <th class="text-right py-4"><T text="Before|Antes" /></th>
@@ -1137,12 +1137,12 @@ let rerenderHandler: ((() => void) | undefined) = undefined
     <tbody>
       {#each pendingSave.changes as change}
         {@const quantityChange = change.nextQuantity - change.previousQuantity}
-        <tr class="border-b border-gray-100">
+        <tr class="border-b border-line-soft">
           <td class="py-4">{change.productName}</td>
-          <td class="py-4 text-gray-600">{change.detailName}</td>
+          <td class="py-4 text-fg-soft">{change.detailName}</td>
           <td class="py-4 text-right ff-mono">{formatN(change.previousQuantity)}</td>
           <td class="py-4 text-right ff-mono">{formatN(change.nextQuantity)}</td>
-          <td class="py-4 text-right ff-mono {quantityChange > 0 ? 'text-green-700' : quantityChange < 0 ? 'text-red-600' : ''}">
+          <td class="py-4 text-right ff-mono {quantityChange > 0 ? 'text-green-fg' : quantityChange < 0 ? 'text-red-fg' : ''}">
             {quantityChange > 0 ? '+' : ''}{formatN(quantityChange)}
           </td>
           <td class="py-4 text-right ff-mono">

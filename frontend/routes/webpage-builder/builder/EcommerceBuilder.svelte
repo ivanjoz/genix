@@ -199,7 +199,7 @@ import type { SectionData } from '#ecommerce/renderer/section-types.ts';
     position: relative;
     display: flex;
     min-height: calc(100vh - var(--header-height));
-    background: #f8fafc;
+    background: var(--surface-soft);
   }
 
   .builder-canvas {
@@ -223,27 +223,27 @@ import type { SectionData } from '#ecommerce/renderer/section-types.ts';
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 4px dashed #e2e8f0;
+    border: 4px dashed var(--line);
     margin: 40px;
     border-radius: 24px;
   }
 
   .empty-content {
     text-align: center;
-    color: #94a3b8;
+    color: var(--fg-subtle);
   }
 
   .empty-content h3 {
     font-size: 24px;
-    color: #64748b;
+    color: var(--fg-muted);
     margin-bottom: 8px;
   }
 
   .drop-placeholder {
     height: 48px;
     margin: 8px 0;
-    border: 2px dashed #3b82f6;
-    background: rgba(59, 130, 246, 0.1);
+    border: 2px dashed var(--blue-solid);
+    background: color-mix(in oklab, var(--blue-solid) 10%, transparent);
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -256,7 +256,7 @@ import type { SectionData } from '#ecommerce/renderer/section-types.ts';
     display: flex;
     align-items: center;
     gap: 12px;
-    color: #3b82f6;
+    color: var(--blue-solid);
     font-size: 14px;
     font-weight: 600;
   }

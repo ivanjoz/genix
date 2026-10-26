@@ -26,7 +26,7 @@ const selection = $derived(
 
 // Every shade of a card (background, border, icon, title) derives from this accent.
 const accentByColor = {
-  blue: '#1f6fd6', green: '#1f9a4f', yellow: '#c18a06', red: '#d64545',
+  blue: 'var(--blue-solid)', green: 'var(--green-solid)', yellow: 'var(--yellow-solid)', red: 'var(--red-solid)',
 }
 
 const iconClassByName = {
@@ -60,11 +60,11 @@ const iconClassByName = {
   />
 
   {#if notificationsLayer.selectedTab === NOTIFICATIONS_TAB_INFORMATION}
-    <div class="px-12 py-16 c-gray h5 text-center">
+    <div class="px-12 py-16 text-fg-muted h5 text-center">
       {tr('No information|Sin información')}
     </div>
   {:else if selection.visibleRows.length === 0}
-    <div class="px-12 py-16 c-gray h5 text-center">
+    <div class="px-12 py-16 text-fg-muted h5 text-center">
       {tr('No notifications|Sin notificaciones')}
     </div>
   {:else}
@@ -81,10 +81,10 @@ const iconClassByName = {
         <div class="flex-1 min-w-0">
           <div class="flex items-start justify-between gap-8">
             <div class="nf-title h5 ff-bold min-w-0 break-words">{row.title}</div>
-            <div class="text-sm ff-mono c-gray shrink-0">{formatTime(row.createdAt, 'M-d h:n')}</div>
+            <div class="text-sm ff-mono text-fg-muted shrink-0">{formatTime(row.createdAt, 'M-d h:n')}</div>
           </div>
           {#if row.subtitle}
-            <div class="text-sm ff-bold c-gray">{row.subtitle}</div>
+            <div class="text-sm ff-bold text-fg-muted">{row.subtitle}</div>
           {/if}
           {#if row.message}
             <div class="text-sm nf-text whitespace-pre-line">{row.message}</div>
@@ -145,7 +145,7 @@ const iconClassByName = {
     height: 16px;
     padding: 0 4px;
     border-radius: 9999px;
-    background-color: #e75c5c;
+    background-color: var(--red-solid);
     color: white;
     font-family: 'bold';
     line-height: 16px;
@@ -154,17 +154,13 @@ const iconClassByName = {
 
   /* Card tinted by its color scheme (--nf-accent, set inline per row). */
   .nf-card {
-    background-color: color-mix(in srgb, var(--nf-accent) 7%, white);
-    border: 1px solid color-mix(in srgb, var(--nf-accent) 28%, white);
+    background-color: color-mix(in oklab, var(--nf-accent) 8%, var(--surface));
+    border: 1px solid color-mix(in oklab, var(--nf-accent) 30%, var(--surface));
     border-radius: 8px;
     margin-bottom: 6px;
   }
   .nf-card:last-of-type {
     margin-bottom: 0;
-  }
-  :global(.dark) .nf-card {
-    background-color: color-mix(in srgb, var(--nf-accent) 14%, transparent);
-    border-color: color-mix(in srgb, var(--nf-accent) 40%, transparent);
   }
   .nf-icon, .nf-title {
     color: var(--nf-accent);
@@ -183,12 +179,12 @@ const iconClassByName = {
   }
 
   .nf-more {
-    color: #4343ad;
+    color: var(--accent-fg);
     border-radius: 6px;
     cursor: pointer;
   }
   .nf-more:hover {
-    background-color: rgba(67, 67, 173, 0.08);
+    background-color: var(--accent-bg);
   }
 
   /* Per-row spinner for in-progress processes. */

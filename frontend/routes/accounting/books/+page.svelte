@@ -170,7 +170,7 @@ const salesColumns: ExcelTableColumn<ISalesBookRow>[] = [
   {
     header: "Comprobante|Comprobante",
     highlight: true,
-    css: "c-blue",
+    css: "text-blue-fg",
     headerCss: "w-150",
     getValue: (row) => bookRowDocument(row),
     mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--file-text-o]" },
@@ -241,7 +241,7 @@ const purchaseColumns: ExcelTableColumn<IPurchaseBookRow>[] = [
   {
     header: "Comprobante|Comprobante",
     highlight: true,
-    css: "c-blue",
+    css: "text-blue-fg",
     headerCss: "w-150",
     getValue: (row) => purchaseRowDocument(row),
     mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--file-text-o]" },
@@ -307,7 +307,7 @@ const undocumentedColumns: ExcelTableColumn<IUndocumentedPurchase>[] = [
   {
     header: "Source|Origen",
     highlight: true,
-    css: "c-blue",
+    css: "text-blue-fg",
     headerCss: "w-170",
     getValue: (purchase) => `${tr(purchaseSourceLabels[purchase.Source])} ${purchase.SourceID}`,
     mobile: { order: 1, css: "col-span-12 ff-bold", icon: "[fa--exclamation-triangle]" },
@@ -342,7 +342,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
   {
     header: "Sale|Venta",
     highlight: true,
-    css: "c-blue",
+    css: "text-blue-fg",
     getValue: (sale) => String(sale.ID),
     mobile: { order: 1, css: "col-span-12 ff-bold" },
   },
@@ -388,7 +388,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
       <div class="col-span-12 md:ml-auto text-sm flex items-center gap-6">
         <T text="Period|Periodo" />
         <span class="ff-mono font-semibold">{shownPeriod}</span>
-        <span class="text-gray-500">{periodLabel(shownPeriod)}</span>
+        <span class="text-fg-muted">{periodLabel(shownPeriod)}</span>
       </div>
     {/if}
   </div>
@@ -414,7 +414,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
     </div>
 
     {#if txtFileName}
-      <div class="mb-8 text-sm text-gray-600 flex items-center gap-6">
+      <div class="mb-8 text-sm text-fg-soft flex items-center gap-6">
         <i class="icon-[fa--file-text-o] shrink-0"></i>
         <T text="Replacement file|Archivo de reemplazo" />
         <span class="ff-mono">{txtFileName}</span>
@@ -425,12 +425,12 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
       {#if salesView === 1}
         <VTable columns={salesColumns} data={rows} mobileCardCss="mb-2" />
       {:else}
-        <div class="text-sm text-gray-600 mb-8">
+        <div class="text-sm text-fg-soft mb-8">
           <T text="Not part of the book — the Registro de Ventas registers comprobantes. Shown so the period can be reviewed.|No forman parte del libro — el Registro de Ventas registra comprobantes. Se muestran para revisar el periodo." />
         </div>
         <VTable columns={uninvoicedColumns} data={uninvoiced} mobileCardCss="mb-2" />
         {#if uninvoiced.length > 0}
-          <div class="mt-8 px-8 py-8 bg-gray-50 rounded text-sm">
+          <div class="mt-8 px-8 py-8 bg-surface-soft rounded text-sm">
             <T text="Total|Total" />: <span class="font-semibold">{formatN(uninvoicedTotal / 100, 2)}</span>
           </div>
         {/if}
@@ -439,7 +439,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
   {:else if isPurchases}
     <div class="flex flex-wrap items-center gap-16 mb-8">
       <div class="flex items-center gap-6">
-        <i class="icon-[fa--exclamation-triangle] text-amber-500 shrink-0"></i>
+        <i class="icon-[fa--exclamation-triangle] text-amber-fg shrink-0"></i>
         <Checkbox saveOn={purchasesView} save="showUndocumented"
           label={tr(`Purchases without comprobante (${purchases.undocumented.length})|Compras sin comprobante (${purchases.undocumented.length})`)} />
       </div>
@@ -454,7 +454,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
     </div>
 
     {#if txtFileName}
-      <div class="mb-8 text-sm text-gray-600 flex items-center gap-6">
+      <div class="mb-8 text-sm text-fg-soft flex items-center gap-6">
         <i class="icon-[fa--file-text-o] shrink-0"></i>
         <T text="Replacement file|Archivo de reemplazo" />
         <span class="ff-mono">{txtFileName}</span>
@@ -464,7 +464,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
     <Layer type="content">
       <VTable columns={purchaseColumns} data={purchases.rows} mobileCardCss="mb-2" />
       {#if purchasesView.showUndocumented}
-        <div class="mt-16 mb-8 text-sm text-amber-700 flex items-center gap-6">
+        <div class="mt-16 mb-8 text-sm text-amber-fg flex items-center gap-6">
           <i class="icon-[fa--exclamation-triangle] shrink-0"></i>
           <T text="Not part of the book — these purchases have no supplier comprobante, so they give no crédito fiscal. Register it on the purchase to book it.|No forman parte del libro — estas compras no tienen comprobante del proveedor, así que no dan crédito fiscal. Regístralo en la compra para anotarla." />
         </div>
@@ -473,7 +473,7 @@ const uninvoicedColumns: ExcelTableColumn<IUninvoicedSale>[] = [
     </Layer>
   {:else}
     <Layer type="content">
-      <div class="py-40 text-center text-gray-500">
+      <div class="py-40 text-center text-fg-muted">
         <T text="This book is not built yet.|Este libro aún no está construido." />
       </div>
     </Layer>

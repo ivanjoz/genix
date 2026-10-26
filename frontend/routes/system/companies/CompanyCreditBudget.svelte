@@ -182,7 +182,7 @@
   });
 </script>
 
-<section class="col-span-24 mt-4 rounded-[10px] border border-slate-200 bg-slate-50 p-10" aria-label="Company credit budget">
+<section class="col-span-24 mt-4 rounded-[10px] border border-line bg-surface-soft p-10" aria-label="Company credit budget">
   <div class="flex flex-wrap items-center gap-8">
     <div class="text-[16px] ff-bold"><T text="Credit budget|Presupuesto de créditos" /></div>
     <Button
@@ -196,9 +196,9 @@
   </div>
 
   {#if loadError}
-    <div class="mt-8 rounded-[8px] border border-red-200 bg-red-50 p-8 text-red-800">{loadError}</div>
+    <div class="mt-8 rounded-[8px] border border-red-border bg-red-bg p-8 text-red-fg">{loadError}</div>
   {:else if isLoading || !budget}
-    <div class="mt-8 rounded-[8px] border border-slate-200 bg-white p-12 text-center text-slate-600">
+    <div class="mt-8 rounded-[8px] border border-line bg-surface p-12 text-center text-fg-soft">
       <T text="Loading credit budget...|Cargando presupuesto de créditos..." />
     </div>
   {:else}
@@ -206,7 +206,7 @@
       <div class="w-[420px] max-w-full grow-0">
         <TableGrid {columns} data={rows} height="160px" rowHeight={32} />
       </div>
-      <div class="flex-1 min-w-[190px] text-[12px] text-slate-600">
+      <div class="flex-1 min-w-[190px] text-[12px] text-fg-soft">
         <div>
           <T text="User daily allowance is 50% of the company allowance.|El límite diario por usuario es el 50% del límite de la empresa." />
         </div>
@@ -219,7 +219,7 @@
           <span class="ff-bold ff-mono">{formatN(budget.MonthInferenceUsed) || '0'}</span>
         </div>
         {#if budget.Updated}
-          <div class="mt-4 text-slate-500">
+          <div class="mt-4 text-fg-muted">
             <T text="Updated|Actualizado" />: {formatTime(budget.Updated, 'd-M-Y h:n')}
           </div>
         {/if}
@@ -227,7 +227,7 @@
     </div>
 
     {#if !budget.IsCurrentMonth}
-      <div class="mt-8 rounded-[8px] border border-amber-300 bg-amber-50 p-8 text-amber-900">
+      <div class="mt-8 rounded-[8px] border border-amber-border bg-amber-bg p-8 text-amber-fg">
         <T text="No budget is active for the current month. APIs remain blocked until the required daily allowance and current budget are set.|No hay presupuesto activo para el mes actual. Las APIs permanecen bloqueadas hasta establecer el límite diario requerido y el presupuesto actual." />
       </div>
     {/if}

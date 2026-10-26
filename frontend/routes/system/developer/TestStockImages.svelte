@@ -60,7 +60,7 @@ const thumbnailURL = (imageID: number): string => {
       label="Runs the image asset text search against the GenixSearch index."
       onClick={runSearch} />
     {#if lastQuery}
-      <span class="ml-auto fs14 text-slate-500">
+      <span class="ml-auto text-[14px] text-fg-muted">
         {hits.length} resultados para "{lastQuery}" · {elapsedMs} ms
       </span>
     {/if}
@@ -69,20 +69,20 @@ const thumbnailURL = (imageID: number): string => {
   {#if hits.length > 0}
     <div class="flex flex-wrap gap-12" aria-label="Top image results">
       {#each hits as hit (hit.id)}
-        <div class="flex flex-col items-center w-160 p-8 bd-1 br-8 bg-white">
+        <div class="flex flex-col items-center w-160 p-8 bd-1 br-8 bg-surface">
           {#if thumbnailURL(hit.id)}
             <img src={thumbnailURL(hit.id)} alt={`Imagen ${hit.id}`}
               class="w-144 h-144 object-cover br-6" loading="lazy" />
           {:else}
-            <div class="w-144 h-144 br-6 bg-slate-100 flex items-center justify-center text-slate-400 fs14">
+            <div class="w-144 h-144 br-6 bg-surface-muted flex items-center justify-center text-fg-subtle text-[14px]">
               #{hit.id}
             </div>
           {/if}
-          <span class="mt-6 fs14 text-slate-500 ff-mono">s: {hit.s}</span>
+          <span class="mt-6 text-[14px] text-fg-muted ff-mono">s: {hit.s}</span>
         </div>
       {/each}
     </div>
   {:else if lastQuery}
-    <div class="p-16 text-center text-slate-500">No se encontraron imágenes.</div>
+    <div class="p-16 text-center text-fg-muted">No se encontraron imágenes.</div>
   {/if}
 </div>

@@ -47,13 +47,13 @@ import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
 <style>
   .mobile-canvas {
     min-height: 100vh;
-    background: #f8fafc;
+    background: var(--surface-soft);
   }
 
   .empty-canvas {
     padding: 80px 24px;
     text-align: center;
-    color: #94a3b8;
+    color: var(--fg-subtle);
     font-size: 16px;
   }
 </style>

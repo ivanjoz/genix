@@ -134,43 +134,43 @@
 
 <div class="flex flex-col gap-12">
   <div class="flex flex-wrap items-center justify-between gap-12">
-    <div class="flex flex-wrap items-center gap-10 text-[13px] text-slate-700">
-      <span class={["inline-block h-10 w-10 rounded-full", memoryRefreshError ? "bg-red-600" : "bg-green-600"].join(' ')}></span>
-      <span class="font-bold text-slate-900">{memoryRefreshError ? 'Disconnected' : 'Connected'}</span>
-      <span class="text-slate-600">updated: {memoryLastSyncTimestamp ? memoryLastSyncTimestamp.toLocaleTimeString() : '-'}</span>
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">Heap in-use: {memoryHeapInuse}</span>
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">Heap objects: {memoryHeapObjects}</span>
-      <span class="rounded-full border border-slate-300 bg-slate-50 px-10 py-2 text-[12px] font-semibold text-slate-900">Backend RSS: {memoryBackendRSS}</span>
+    <div class="flex flex-wrap items-center gap-10 text-[13px] text-fg-soft">
+      <span class={["inline-block h-10 w-10 rounded-full", memoryRefreshError ? "bg-red-solid" : "bg-green-solid"].join(' ')}></span>
+      <span class="font-bold text-fg">{memoryRefreshError ? 'Disconnected' : 'Connected'}</span>
+      <span class="text-fg-soft">updated: {memoryLastSyncTimestamp ? memoryLastSyncTimestamp.toLocaleTimeString() : '-'}</span>
+      <span class="rounded-full border border-line-strong bg-surface-soft px-10 py-2 text-[12px] font-semibold text-fg">Heap in-use: {memoryHeapInuse}</span>
+      <span class="rounded-full border border-line-strong bg-surface-soft px-10 py-2 text-[12px] font-semibold text-fg">Heap objects: {memoryHeapObjects}</span>
+      <span class="rounded-full border border-line-strong bg-surface-soft px-10 py-2 text-[12px] font-semibold text-fg">Backend RSS: {memoryBackendRSS}</span>
     </div>
 
     <div class="flex gap-8">
-      <button class="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-10 py-6 text-[12px] text-slate-900 hover:bg-slate-200" onclick={clearMemoryPanels}>Clear</button>
-      <button class="cursor-pointer rounded-lg border border-slate-300 bg-slate-50 px-10 py-6 text-[12px] text-slate-900 hover:bg-slate-200" onclick={() => refreshMemoryPackages()}>Refresh</button>
+      <button class="cursor-pointer rounded-lg border border-line-strong bg-surface-soft px-10 py-6 text-[12px] text-fg hover:bg-surface-strong" onclick={clearMemoryPanels}>Clear</button>
+      <button class="cursor-pointer rounded-lg border border-line-strong bg-surface-soft px-10 py-6 text-[12px] text-fg hover:bg-surface-strong" onclick={() => refreshMemoryPackages()}>Refresh</button>
     </div>
   </div>
 
   {#if memoryRefreshError}
-    <div class="rounded-lg border border-red-200 bg-red-100 px-10 py-8 text-[12px] text-red-900">{memoryRefreshError}</div>
+    <div class="rounded-lg border border-red-border bg-red-bg-strong px-10 py-8 text-[12px] text-red-fg">{memoryRefreshError}</div>
   {/if}
 
   <TableStream
     bind:this={memoryTableRef}
     columns={memoryPackagesColumns}
-    tableCss="text-sm text-slate-900"
+    tableCss="text-sm text-fg"
     maxRecords={maxMemoryRows}
     maxHeight="430px"
     emptyMessage={memoryRefreshInProgress ? 'Refreshing memory report...' : 'Waiting for memory data...'}
   />
 
   <div class="overflow-hidden rounded-[10px] border border-slate-900">
-    <div class="border-b border-slate-900 bg-slate-900 px-12 py-9 text-[12px] font-bold uppercase tracking-[0.08em] text-slate-300">Memory Warnings</div>
-    <div class="h-220 overflow-y-auto bg-slate-950 px-10 py-10 font-mono text-[12px] leading-[1.45] text-slate-300">
+    <div class="border-b border-slate-900 bg-slate-900 px-12 py-9 text-[12px] font-bold uppercase tracking-[0.08em] text-fg-subtle">Memory Warnings</div>
+    <div class="h-220 overflow-y-auto bg-slate-950 px-10 py-10 font-mono text-[12px] leading-[1.45] text-fg-subtle">
       {#if memoryWarnings.length === 0}
-        <div class="text-slate-500">No warnings.</div>
+        <div class="text-fg-muted">No warnings.</div>
       {:else}
         {#each memoryWarnings as warningText, warningIndex (`${warningText}-${warningIndex}`)}
           <div class="mb-2 flex gap-8 whitespace-pre-wrap break-words">
-            <span class="shrink-0 text-slate-500">[warn]</span>
+            <span class="shrink-0 text-fg-muted">[warn]</span>
             <span class="text-amber-200">{warningText}</span>
           </div>
         {/each}

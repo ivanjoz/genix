@@ -32,17 +32,17 @@
     {#each users as user (user.UserID)}
       {@const label = labelOf(user.UserID)}
       {@const displayName = companyUserDisplayName(label, user.UserID)}
-      <div class="min-w-0 rounded-[6px] border border-slate-200 bg-white p-8" role="listitem">
+      <div class="min-w-0 rounded-[6px] border border-line bg-surface p-8" role="listitem">
         <div class="flex min-w-0 items-center gap-6">
-          <span class="min-w-0 truncate ff-bold text-slate-900">{displayName}</span>
-          <span class="ml-auto shrink-0 ff-mono text-slate-500">#{user.UserID}</span>
+          <span class="min-w-0 truncate ff-bold text-fg">{displayName}</span>
+          <span class="ml-auto shrink-0 ff-mono text-fg-muted">#{user.UserID}</span>
         </div>
         {#if label?.User && label.User !== displayName}
-          <div class="truncate text-slate-500">@{label.User}</div>
+          <div class="truncate text-fg-muted">@{label.User}</div>
         {/if}
         <div class="mt-4 flex min-w-0 items-center gap-8 ff-mono">
-          <span class="flex min-w-0 items-center gap-4"><i class="h-8 w-8 shrink-0 bg-emerald-500"></i>{formatN(user.CPU)} CPU</span>
-          <span class="flex min-w-0 items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-500"></i>{formatN(user.Inference)} <T text="AI|IA" /></span>
+          <span class="flex min-w-0 items-center gap-4"><i class="h-8 w-8 shrink-0 bg-green-solid"></i>{formatN(user.CPU)} CPU</span>
+          <span class="flex min-w-0 items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-solid"></i>{formatN(user.Inference)} <T text="AI|IA" /></span>
         </div>
         <div class="mt-4 overflow-hidden">
           <!-- Thirty paired columns preserve the daily pattern without making the compact card taller. -->
@@ -60,7 +60,7 @@
     {/each}
   </div>
 {:else}
-  <div class="rounded-[8px] border border-slate-200 bg-slate-50 p-14 text-center text-slate-600">
+  <div class="rounded-[8px] border border-line bg-surface-soft p-14 text-center text-fg-soft">
     <T text="No users were found for this company.|No se encontraron usuarios para esta empresa." />
   </div>
 {/if}

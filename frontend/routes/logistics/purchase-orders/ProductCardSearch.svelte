@@ -180,7 +180,7 @@ import { formatN, wordInclude } from '#libs/helpers.ts'
   const highlightHtml = (text: string, search: string) => {
     if (!search || !text) { return text }
     const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return text.replace(new RegExp(`(${escaped})`, 'gi'), '<span class="bg-yellow-200 text-black font-bold">$1</span>')
+    return text.replace(new RegExp(`(${escaped})`, 'gi'), '<span class="bg-yellow-bg-strong text-fg font-bold">$1</span>')
   }
 </script>
 
@@ -188,7 +188,7 @@ import { formatN, wordInclude } from '#libs/helpers.ts'
   <div class="mb-12 flex gap-6 md:gap-12">
     <div class={displayProviderFilter ? 'w-[60%] md:flex-1' : 'w-full md:flex-1'}>
       <input type="text"
-        class="w-full px-12 py-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+        class="w-full px-12 py-8 bg-surface-soft border border-line rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-solid/20 focus:border-blue-solid transition-all"
         placeholder={searchPlaceholder}
         value={filterText}
         oninput={(ev) => { filterText = ev.currentTarget.value }}
@@ -228,15 +228,15 @@ import { formatN, wordInclude } from '#libs/helpers.ts'
         {@const stock = stockMap?.get(card.productID) || 0}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="relative min-h-58 px-8 py-4 border border-transparent rounded-lg bg-white hover:border-gray-200 hover:shadow-sm cursor-pointer group"
+        <div class="relative min-h-58 px-8 py-4 border border-transparent rounded-lg bg-surface hover:border-line hover:shadow-sm cursor-pointer group"
           onclick={() => onSelect(card, 1)}
         >
           {#if inCart > 0}
             <!-- Idle: blue count badge. Card hover swaps to the red cancel badge via group-hover (pure CSS). -->
-            <div class="absolute -right-4 -top-4 z-20 flex h-22 min-w-22 items-center justify-center rounded-full bg-blue-600 px-6 text-[11px] font-bold text-white shadow group-hover:hidden">
+            <div class="absolute -right-4 -top-4 z-20 flex h-22 min-w-22 items-center justify-center rounded-full bg-blue-solid px-6 text-[11px] font-bold text-white shadow group-hover:hidden">
               {inCart}
             </div>
-            <button class="absolute -right-4 -top-4 z-20 hidden h-22 min-w-22 items-center justify-center rounded-full bg-red-600 text-white shadow group-hover:flex hover:bg-red-700"
+            <button class="absolute -right-4 -top-4 z-20 hidden h-22 min-w-22 items-center justify-center rounded-full bg-red-solid text-white shadow group-hover:flex hover:bg-red-solid"
               title="Quitar del carrito"
               aria-label="Remove {card.displayName} from cart"
               onclick={(ev) => { ev.stopPropagation(); onRemove?.(card) }}
@@ -246,25 +246,25 @@ import { formatN, wordInclude } from '#libs/helpers.ts'
           {/if}
           <div class="flex flex-col gap-2">
             <div class="flex items-center gap-8">
-              <div class="flex items-center gap-8 pr-20 leading-tight text-gray-700 md:pr-0">
+              <div class="flex items-center gap-8 pr-20 leading-tight text-fg-soft md:pr-0">
                 <span>{@html highlightHtml(card.productName, filterText)}</span>
                 {#if card.presentationName}
-                  <span class="text-blue-600 font-bold">({@html highlightHtml(card.presentationName, filterText)})</span>
+                  <span class="text-blue-fg font-bold">({@html highlightHtml(card.presentationName, filterText)})</span>
                 {/if}
               </div>
-              <div class="h-[1px] bg-gray-200 grow group-hover:bg-gray-300 transition-colors"></div>
+              <div class="h-[1px] bg-surface-strong grow group-hover:bg-line-strong transition-colors"></div>
             </div>
 
             <div class="flex items-center gap-8 mt-2">
               <div class="flex items-center gap-6 leading-none">
-                <span class={'font-mono min-w-36 text-xs ' + (stock > 0 ? 'text-gray-700' : 'text-red-500')}>
+                <span class={'font-mono min-w-36 text-xs ' + (stock > 0 ? 'text-fg-soft' : 'text-red-fg')}>
                   {stock}
                 </span>
                 {#if card.sku}
-                  <span class="text-xs font-mono text-gray-400">{@html highlightHtml(card.sku, filterText)}</span>
+                  <span class="text-xs font-mono text-fg-subtle">{@html highlightHtml(card.sku, filterText)}</span>
                 {/if}
               </div>
-              <div class="font-mono ml-auto text-sm font-medium text-gray-700 text-right whitespace-nowrap">
+              <div class="font-mono ml-auto text-sm font-medium text-fg-soft text-right whitespace-nowrap">
                 {card.priceLabel || '—'}
               </div>
             </div>

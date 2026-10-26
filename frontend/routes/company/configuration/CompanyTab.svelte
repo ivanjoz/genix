@@ -16,7 +16,7 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
 </script>
 
 <div class="grid grid-cols-24 gap-14 items-start">
-  <section class="col-span-24 lg:col-span-12 rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
+  <section class="col-span-24 lg:col-span-12 rounded-[12px] border border-line bg-surface p-16 shadow-sm"
     aria-label="Company parameters form with name, RUC, legal address and contact fields">
     <!-- Save sits inside this panel, not above the page: the series alongside it save
          through their own endpoint, so a button at the top would claim to write both. -->

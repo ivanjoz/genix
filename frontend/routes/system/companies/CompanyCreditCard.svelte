@@ -30,11 +30,11 @@
 
 <Card
   label={`Open 30-day credit usage for ${company.Company}|Abrir uso de créditos de 30 días de ${company.Company}`}
-  css="group relative flex h-full min-h-200 flex-col rounded-[12px] border border-slate-200 bg-white p-14 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2"
+  css="group relative flex h-full min-h-200 flex-col rounded-[12px] border border-line bg-surface p-14 shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-border focus-visible:ring-offset-2"
   onClick={onOpen}
 >
   <div class="min-w-0 pr-96 md:pr-42">
-    <div class="truncate text-[18px] ff-bold text-slate-900">{company.Company}</div>
+    <div class="truncate text-[18px] ff-bold text-fg">{company.Company}</div>
   </div>
 
   <div class="absolute right-12 top-12 z-10 flex h-32 items-center justify-end gap-8">
@@ -42,7 +42,7 @@
          The keyboard reveal is :focus-visible, not :focus-within: clicking the card focuses its
          own tabindex div and clicking the pencil focuses the button, so focus-within left the
          swap latched after every click, long after the pointer had gone. -->
-    <span class="ff-mono text-slate-500 transition-opacity md:group-hover:opacity-0 md:group-focus-visible:opacity-0 md:group-has-[:focus-visible]:opacity-0">
+    <span class="ff-mono text-fg-muted transition-opacity md:group-hover:opacity-0 md:group-focus-visible:opacity-0 md:group-has-[:focus-visible]:opacity-0">
       #{company.CompanyID}
     </span>
     {#if onEdit}
@@ -63,13 +63,13 @@
          nombre y el resto vacío, y la leyenda ya vivía pegada a la derecha de esta. -->
     <div class="mb-12 flex min-w-0 items-center justify-between gap-8">
       {#if administratorName}
-        <span class="truncate ff-bold text-blue-700">{administratorName}</span>
+        <span class="truncate ff-bold text-blue-fg">{administratorName}</span>
       {:else}
-        <span class="truncate text-slate-500"><T text="Administrator unavailable|Administrador no disponible" /></span>
+        <span class="truncate text-fg-muted"><T text="Administrator unavailable|Administrador no disponible" /></span>
       {/if}
       <div class="flex shrink-0 items-center gap-8 ff-mono -mb-8">
-        <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-emerald-500"></i>{numberToK(company.CPU)} CPU</span>
-        <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-500"></i>{numberToK(company.Inference)} <T text="AI|IA" /></span>
+        <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-green-solid"></i>{numberToK(company.CPU)} CPU</span>
+        <span class="flex items-center gap-4"><i class="h-8 w-8 shrink-0 bg-purple-solid"></i>{numberToK(company.Inference)} <T text="AI|IA" /></span>
       </div>
     </div>
     <ChartCanvas
@@ -83,7 +83,7 @@
       showBottomBaseline={true}
       yAxisStepSize={100}
       height={92}
-      style="background-color:#f4f4f4;outline:6px solid #f4f4f4"
+      style="background-color:var(--surface-muted);outline:6px solid var(--surface-muted)"
       showTooltip={true}
     />
     <div class="mt-8">

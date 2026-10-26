@@ -82,21 +82,21 @@
 <style>
   .preview-root {
     min-height: 100vh;
-    background: #f8fafc;
-    color: #0f172a;
+    background: var(--page);
+    color: var(--fg);
     font-family: ui-sans-serif, system-ui, sans-serif;
   }
   .preview-header {
     padding: 24px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--line);
   }
   .preview-title { font-size: 22px; font-weight: 700; }
-  .preview-id { margin-top: 4px; color: #64748b; font-size: 13px; }
-  .preview-desc { margin-top: 8px; color: #475569; font-size: 14px; max-width: 720px; }
+  .preview-id { margin-top: 4px; color: var(--fg-muted); font-size: 13px; }
+  .preview-desc { margin-top: 8px; color: var(--fg-soft); font-size: 14px; max-width: 720px; }
   .preview-block { padding: 24px; }
   .preview-block-title {
     margin-bottom: 12px;
-    color: #94a3b8;
+    color: var(--fg-subtle);
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -104,7 +104,7 @@
   }
   /* The live block gets no inner styling — the template owns its full appearance. */
   .preview-live {
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--line);
     border-radius: 8px;
     overflow: hidden;
     background: #fff;
@@ -117,10 +117,10 @@
     flex-direction: column;
     justify-content: center;
     overflow: hidden;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--line);
     border-radius: 8px;
     background: #fff;
   }
-  .preview-message { padding: 24px; color: #475569; font-size: 14px; }
-  code { background: #e2e8f0; border-radius: 4px; padding: 1px 5px; font-size: 0.92em; }
+  .preview-message { padding: 24px; color: var(--fg-soft); font-size: 14px; }
+  code { background: var(--surface-strong); border-radius: 4px; padding: 1px 5px; font-size: 0.92em; }
 </style>

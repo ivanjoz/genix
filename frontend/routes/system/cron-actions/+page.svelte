@@ -94,7 +94,7 @@ const columns: ITableColumn<ICronActionTableRow>[] = [
     render: (row) => `
       <div class="leading-tight py-4">
         <div class="ff-semibold">${row.InvocationCount||0}</div>
-        <div class="ff-mono fs14 text-slate-500">${row.ID}</div>
+        <div class="ff-mono text-[14px] text-fg-muted">${row.ID}</div>
       </div>
     `,
     mobile: { order: 6, css: "col-span-12", labelLeft: "Invoc.:" },

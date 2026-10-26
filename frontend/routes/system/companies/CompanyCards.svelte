@@ -198,11 +198,11 @@
   </div>
 
   {#if reportError}
-    <div class="rounded-[8px] border border-red-200 bg-red-50 px-10 py-8 text-red-800">{reportError}</div>
+    <div class="rounded-[8px] border border-red-border bg-red-bg px-10 py-8 text-red-fg">{reportError}</div>
   {/if}
 
   {#if rankedCompanies.length === 0}
-    <div class="rounded-[10px] border border-slate-200 bg-slate-50 px-14 py-24 text-center text-slate-600">
+    <div class="rounded-[10px] border border-line bg-surface-soft px-14 py-24 text-center text-fg-soft">
       {#if summaries.length === 0}
         <T text="Loading companies and credit usage...|Cargando empresas y uso de créditos..." />
       {:else}
@@ -244,12 +244,12 @@
     {#if selectedCompany && layerView === 1}
       <div class="flex flex-col gap-14 text-[14px]">
         <div class="grid grid-cols-2 gap-10">
-          <div class="rounded-[8px] bg-emerald-50 p-10">
-            <div class="text-slate-600">CPU 30d</div>
+          <div class="rounded-[8px] bg-green-bg p-10">
+            <div class="text-fg-soft">CPU 30d</div>
             <div class="mt-4 text-[18px] ff-bold ff-mono">{formatN(selectedCompany.CPU)}</div>
           </div>
-          <div class="rounded-[8px] bg-purple-50 p-10">
-            <div class="text-slate-600"><T text="AI 30d|IA 30d" /></div>
+          <div class="rounded-[8px] bg-purple-bg p-10">
+            <div class="text-fg-soft"><T text="AI 30d|IA 30d" /></div>
             <div class="mt-4 text-[18px] ff-bold ff-mono">{formatN(selectedCompany.Inference)}</div>
           </div>
         </div>
@@ -263,11 +263,11 @@
     {:else if selectedCompany && layerView === 2}
       <div class="flex flex-col gap-12 text-[14px]">
         {#if !detailDay || !selectedDetail}
-          <div class="rounded-[8px] border border-slate-200 bg-slate-50 p-14 text-center text-slate-600">
+          <div class="rounded-[8px] border border-line bg-surface-soft p-14 text-center text-fg-soft">
             <T text="This company has no usage days yet.|Esta empresa aún no tiene días de uso." />
           </div>
         {:else}
-          <div class="flex flex-wrap items-center gap-12 rounded-[8px] bg-slate-50 p-10">
+          <div class="flex flex-wrap items-center gap-12 rounded-[8px] bg-surface-soft p-10">
             <span class="ff-bold">{formatTime(detailDay.Day, 'd-M-Y')}</span>
             <span>{formatN(selectedDetail.CPU)} CPU cr.</span>
             <span>{formatN(selectedDetail.Inference)} <T text="AI cr.|cr. IA" /></span>

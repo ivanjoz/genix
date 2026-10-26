@@ -8,7 +8,7 @@ import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
 import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
 import TableGrid from '#components/vTable/TableGrid.svelte';
 import { security } from '#libs/ui-runtime.svelte.ts';
-import { Core, setLanguaje, type ILanguaje } from '#core/store.svelte.ts';
+import { Core, setLanguaje, setTheme, tr, type ILanguaje, type ITheme } from '#core/store.svelte.ts';
 import { BROWSER_PREFERENCE_STORAGE_KEYS, Env } from '#core/env.ts';
 import type { ICacheDebugRow } from '@genix/ui/cache';
 import type { ITableColumn } from '#components/vTable/types.ts';
@@ -44,6 +44,10 @@ import { useUI } from '@genix/ui';
   const languajeOptions = [
     { id: 1, name: "Español" }, { id: 2, name: "English" }
   ]
+  // 1 = light, 2 = dark (see Core.theme). Derived so the names follow the language.
+  const themeOptions = $derived([
+    { id: 1, name: tr('Light|Claro') }, { id: 2, name: tr('Dark|Oscuro') },
+  ])
   let selected = $state(1)
   const ui = useUI()
   const agentModelsService = new AgentModelsService()
@@ -211,7 +215,7 @@ import { useUI } from '@genix/ui';
       header: 'API',
       width: 'minmax(0, 1fr)',
       getValue: (cacheRow) => cacheRow.baseRoute,
-      css: 'px-6 text-[15px] text-slate-700',
+      css: 'px-6 text-[15px] text-fg-soft',
       headerCss: 'px-6 py-6 text-[15px]',
     },
     {
@@ -220,7 +224,7 @@ import { useUI } from '@genix/ui';
       width: '78px',
       align: 'right',
       getValue: (cacheRow) => formatN(cacheRow.recordsCount),
-      css: 'px-6 text-[15px] text-slate-600',
+      css: 'px-6 text-[15px] text-fg-soft',
       headerCss: 'px-6 py-6 text-[15px]',
     },
     {
@@ -229,7 +233,7 @@ import { useUI } from '@genix/ui';
       width: '66px',
       align: 'right',
       getValue: (cacheRow) => formatN(cacheRow.sizeLabel,2),
-      css: 'px-6 text-[15px] text-slate-600',
+      css: 'px-6 text-[15px] text-fg-soft',
       headerCss: 'px-6 py-6 text-[15px]',
     },
   ]
@@ -407,9 +411,9 @@ import { useUI } from '@genix/ui';
   </div>
 {/if}
 {#if selected === 2}
-  <div class="mb-10 rounded-[8px] border border-slate-200 bg-slate-50/70 p-8">
+  <div class="mb-10 rounded-[8px] border border-line bg-surface-soft/70 p-8">
     <div class="mb-6 flex items-center gap-8">
-      <div class="ff-semibold text-[14px] text-slate-700">Créditos · 15 días</div>
+      <div class="ff-semibold text-[14px] text-fg-soft">Créditos · 15 días</div>
       <div class="ml-auto">
         <CheckboxOptions
           options={creditUsageScopeOptions}
@@ -422,7 +426,7 @@ import { useUI } from '@genix/ui';
         />
       </div>
       <button
-        class="flex h-32 w-32 shrink-0 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[14px] text-slate-500 shadow-sm hover:bg-slate-200 disabled:opacity-50"
+        class="flex h-32 w-32 shrink-0 items-center justify-center rounded-full border border-line-strong bg-surface-muted text-[14px] text-fg-muted shadow-sm hover:bg-surface-strong disabled:opacity-50"
         aria-label="Actualizar uso de créditos"
         disabled={creditUsageLoading}
         onclick={() => { loadCreditUsage(true) }}
@@ -432,31 +436,31 @@ import { useUI } from '@genix/ui';
     </div>
 
     {#if creditUsageError}
-      <div class="flex h-116 items-center justify-center text-[14px] text-red-500">{creditUsageError}</div>
+      <div class="flex h-116 items-center justify-center text-[14px] text-red-fg">{creditUsageError}</div>
     {:else if !selectedCreditUsage || !todayCreditUsage}
-      <div class="flex h-116 items-center justify-center text-[14px] text-slate-500">
+      <div class="flex h-116 items-center justify-center text-[14px] text-fg-muted">
         {creditUsageLoading ? 'Cargando uso de créditos…' : 'Sin datos de créditos.'}
       </div>
     {:else}
       <div class="mb-6 grid grid-cols-2 gap-10">
         <div>
-          <div class="mb-3 flex items-center text-[12px] text-slate-600">
-            <span class="ff-bold text-[14px] text-[#4874f5]">CPU hoy</span>
+          <div class="mb-3 flex items-center text-[12px] text-fg-soft">
+            <span class="ff-bold text-[14px] text-blue-solid">CPU hoy</span>
             <span class="ml-auto ff-mono">{formatN(todayCreditUsage.CPU)} / {formatN(selectedCreditUsage.CPUDailyLimit)}</span>
           </div>
-          <div class="h-5 overflow-hidden rounded-full bg-slate-200">
-            <div class="h-full rounded-full bg-[#4874f5]"
+          <div class="h-5 overflow-hidden rounded-full bg-surface-strong">
+            <div class="h-full rounded-full bg-blue-solid"
               style={`width:${creditUsagePercent(todayCreditUsage.CPU, selectedCreditUsage.CPUDailyLimit)}%`}
             ></div>
           </div>
         </div>
         <div>
-          <div class="mb-3 flex items-center text-[12px] text-slate-600">
-            <span class="ff-bold text-[14px] text-[#8b5cf6]">Inferencia hoy</span>
+          <div class="mb-3 flex items-center text-[12px] text-fg-soft">
+            <span class="ff-bold text-[14px] text-purple-solid">Inferencia hoy</span>
             <span class="ml-auto ff-mono">{formatN(todayCreditUsage.Inference)} / {formatN(selectedCreditUsage.InferenceDailyLimit)}</span>
           </div>
-          <div class="h-5 overflow-hidden rounded-full bg-slate-200">
-            <div class="h-full rounded-full bg-[#8b5cf6]"
+          <div class="h-5 overflow-hidden rounded-full bg-surface-strong">
+            <div class="h-full rounded-full bg-purple-solid"
               style={`width:${creditUsagePercent(todayCreditUsage.Inference, selectedCreditUsage.InferenceDailyLimit)}%`}
             ></div>
           </div>
@@ -492,7 +496,7 @@ import { useUI } from '@genix/ui';
     {/if}
   </div>
   <div class="w-full mt-2">
-    <div class="ff-semibold text-[15px] text-slate-600 mb-6">Idioma / Language</div>
+    <div class="ff-semibold text-[15px] text-fg-soft mb-6">Idioma / Language</div>
     <CheckboxOptions
       options={languajeOptions}
       keyId="id"
@@ -502,6 +506,17 @@ import { useUI } from '@genix/ui';
       saveOn={Core}
       save="languaje"
       onChange={(ids) => setLanguaje((Number(ids[0]) === 2 ? 2 : 1) as ILanguaje)}
+    />
+    <div class="ff-semibold text-[15px] text-fg-soft mb-6 mt-14">{tr('Theme|Tema')}</div>
+    <CheckboxOptions
+      options={themeOptions}
+      keyId="id"
+      keyName="name"
+      type="single"
+      useButtons={true}
+      saveOn={Core}
+      save="theme"
+      onChange={(ids) => setTheme((Number(ids[0]) === 2 ? 2 : 1) as ITheme)}
     />
   </div>
   <div class="mt-14 flex w-full">
@@ -538,7 +553,7 @@ import { useUI } from '@genix/ui';
 {/if}
 {#if selected === 3}
   <div class="w-full flex items-center mb-12 mt-[-2px] gap-8">
-    <div class="mr-auto text-[15px] text-slate-500">
+    <div class="mr-auto text-[15px] text-fg-muted">
       Cache local agrupado por ruta base.
     </div>
     <button class="bx-blue min-w-44 px-10 md:px-14" aria-label="Recargar cache local"
@@ -564,7 +579,7 @@ import { useUI } from '@genix/ui';
     rowHeight={32}
     bufferSize={16}
     css="w-full"
-    headerCss="bg-slate-50"
+    headerCss="bg-surface-soft"
     rowCss="text-[15px]"
     emptyMessage={cacheDataLoading ? 'Leyendo cache local...' : 'No hay datos de cache para este entorno.'}
     getRowId={getCacheGridRowID}

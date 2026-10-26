@@ -92,8 +92,8 @@
           class:scale-125={accesoAccion?.icon.includes("mdi--eye")}
           style:color={accesoAccion?.color} title={accesoAccion?.name}></i>
         <div class="min-w-0 leading-[1.15]">
-          <div class="text-[16px] ff-semibold text-[#20243b] truncate">{accessUserRow.accesoName}</div>
-          <div class="text-[15px] text-gray-500">{accessUserRow.groupName}</div>
+          <div class="text-[16px] ff-semibold text-fg truncate">{accessUserRow.accesoName}</div>
+          <div class="text-[15px] text-fg-muted">{accessUserRow.groupName}</div>
         </div>
       </div>
     {:else}
@@ -103,8 +103,8 @@
         {#each accessUserRow.usuarios as accessUsuario (accessUsuario.usuarioID)}
           <!-- Fixed width, not max-width: equal cards line up in columns down the table. -->
           <div class="shrink-0 flex items-center justify-center w-128 min-h-30 px-8 text-[14px]
-            text-center bg-white rounded-[4px]" title={accessUsuario.usuarioName}
-            style="border: 1px solid #939bd0; box-shadow: rgb(71 71 144 / 31%) 0px 2px 2px -1px;">
+            text-center bg-surface rounded-[4px]" title={accessUsuario.usuarioName}
+            style="border: 1px solid var(--accent-border); box-shadow: rgb(71 71 144 / 31%) 0px 2px 2px -1px;">
             <!-- Two lines then ellipsis so a long name does not stretch the card past its
                  neighbours, on the inner span because the card itself is a flex box.
                  whitespace-normal: the grid cell is nowrap, so without it the name never wraps. -->
@@ -122,7 +122,7 @@
 {#snippet accessLayerHeading()}
   <div class="leading-[1.3]">
     <div class="h2">{selectedAccessRow?.accesoName}</div>
-    <div class="text-[14px] text-gray-500 ml-2">
+    <div class="text-[14px] text-fg-muted ml-2">
       {selectedAccessRow?.groupName} · {selectedAccesoAccion?.name}
     </div>
   </div>
@@ -147,9 +147,9 @@
       {#if usuario}
         <!-- The whole entry opens the user: the bars are what this access looks like in context,
              and the next question after "who holds it" is always "what else do they hold". -->
-        <button class="w-full text-left px-8 py-6 mb-6 rounded-[4px] bg-white hover:bg-[#f5f4ff]"
-          style="border: 1px solid #dfe1ee;" onclick={() => onUsuarioSelect(usuario)}>
-          <div class="text-[15px] ff-semibold text-[#20243b] mb-4">{accessUsuario.usuarioName}</div>
+        <button class="w-full text-left px-8 py-6 mb-6 rounded-[4px] bg-surface hover:bg-accent-bg"
+          style="border: 1px solid var(--line);" onclick={() => onUsuarioSelect(usuario)}>
+          <div class="text-[15px] ff-semibold text-fg mb-4">{accessUsuario.usuarioName}</div>
           <AccessGroupBars {usuario} {perfilesByID} {accessCatalogEntries} {accessGroupEntries} />
         </button>
       {/if}

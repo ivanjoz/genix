@@ -8,9 +8,11 @@
      - `ec-custom` (agent-authored raw CSS, scoped to .x{n}) sits LAST, so its
        declarations win over utilities on the same element. */
 @layer theme, base, components, ec-runtime, utilities, ec-runtime-media, ec-custom;
-/* Everything genix-ui needs to render (Tailwind theme, the custom properties its components read,
-   element resets, button and text classes) lives in genix-ui's own tailwind.css; this file holds
-   only the app's look. Typography lives in styles/fonts.css, imported by +layout.svelte. */
+/* Everything genix-ui needs to render (Tailwind theme, the color tokens and their `body.dark`
+   values, element resets, button and text classes) lives in genix-ui's own tailwind.css; this file
+   holds only the app's look, and paints it with those tokens so the theme toggle (setTheme in
+   core/store.svelte.ts) restyles it. Typography lives in styles/fonts.css, imported by
+   +layout.svelte. */
 @import 'tailwindcss';
 @import '../packages/genix-ui/tailwind.css';
 @plugin "@iconify/tailwind4" {
@@ -24,25 +26,16 @@
 @source not "../webpage/build-renderer";
 @source not "../**/*.md";
 
-:root {
-	--fs1: 16px;
-}
-
 body {
 	margin: 0;
 	font-family: main, 'Inter', system-ui, -apple-system, sans-serif;
 	overflow-x: hidden;
 	height: 100%;
-	color: #2c2b2e;
-	font-size: var(--fs1);
-	background-color: #e9eef1;
+	color: var(--fg);
+	font-size: 16px;
+	background-color: var(--page);
 	transition: background-color 0.3s ease;
 	--store-editor-collapsed-width: 280px;
-}
-
-body.dark {
-	color: #f3f2f6;
-	background-color: #27262a;
 }
 
 @media only screen and (min-width: 680px) {
@@ -52,12 +45,12 @@ body.dark {
 	}
 
 	::-webkit-scrollbar-track {
-		background-color: #e6edf4;
+		background-color: var(--surface-muted);
 		border-radius: 4px;
 	}
 
 	::-webkit-scrollbar-thumb {
-		background-color: #b2b6e8;
+		background-color: var(--accent-border);
 		border-radius: 8px;
 		min-height: 2rem;
 		background-image: linear-gradient(45deg,
@@ -69,41 +62,6 @@ body.dark {
 				transparent 75%,
 				transparent);
 	}
-
-	body.dark ::-webkit-scrollbar {
-		background-color: #8a8cad;
-	}
-
-	body.dark ::-webkit-scrollbar-track {
-		background-color: #121213;
-	}
-}
-
-.fs15 {
-	font-size: 15px;
-}
-
-.fs14 {
-	font-size: 14px;
-}
-
-.c-steel {
-	color: #475262;
-}
-
-.bg-purple-light {
-	background-color: #f0edff;
-}
-
-.b-color-green {
-	color: #149b78;
-	background-color: #c9fff1;
-	box-shadow: #007646 0px 1px 4px -1px;
-}
-
-.b-color-green:hover {
-	color: #ffffff;
-	background-color: #21b28d;
 }
 
 .icon--supermarket-cart {

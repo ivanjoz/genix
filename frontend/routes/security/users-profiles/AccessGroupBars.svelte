@@ -58,7 +58,7 @@
   }
 
   ._bar-name {
-    color: #6b7280;
+    color: var(--fg-muted);
     line-height: 15px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -70,8 +70,8 @@
 	  display: flex;
 	  height: 18px;
 	  overflow: hidden;
-	  border-bottom: 1px solid #00000000;
-	  background-color: #8080801a;
+	  border-bottom: 1px solid transparent;
+	  background-color: var(--surface-muted);
   }
 
   ._bar-segment {
@@ -83,7 +83,7 @@
   }
 
   ._bar-icon {
-    color: #00000099;
+    color: var(--on-solid);
     flex: 0 0 auto;
     height: 12px;
     width: 12px;

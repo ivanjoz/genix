@@ -138,7 +138,7 @@ import { useUI } from '@genix/ui';
               {#if showcaseImageSrc(page)}
                 <img class="w-full h-full object-cover" src={showcaseImageSrc(page)} alt={page.Name} loading="lazy" />
               {:else}
-                <i class="icon-[fa--image] fs28 c-steel op-50"></i>
+                <i class="icon-[fa--image] fs28 text-fg-soft op-50"></i>
               {/if}
             </div>
 
@@ -153,14 +153,14 @@ import { useUI } from '@genix/ui';
             <div class="px-12 py-10">
               <div class="flex items-center justify-between mb-4">
                 <div class="fs17 ff-semibold"><T text={page.Name}/></div>
-                <span class="fs12 px-6 py-1 rounded-full {page.ss === 2 ? 'bg-green-100 c-green' : 'bg-blue-100 c-blue'}">
+                <span class="fs12 px-6 py-1 rounded-full {page.ss === 2 ? 'bg-green-bg-strong c-green' : 'bg-blue-bg-strong text-blue-fg'}">
                   {statusLabel(page.ss)}
                 </span>
               </div>
-              <div class="fs14 c-blue mb-6">{page.Route}</div>
+              <div class="text-[14px] text-blue-fg mb-6">{page.Route}</div>
               <div class="flex">
-	              <div class="fs13 c-steel">{updatedByName(page) || '—'}</div>
-								<div class="text-sm c-steel ml-auto">{page.upd ? formatTime(page.upd, 'M-d h:m') : '—'}</div>
+	              <div class="fs13 text-fg-soft">{updatedByName(page) || '—'}</div>
+								<div class="text-sm text-fg-soft ml-auto">{page.upd ? formatTime(page.upd, 'M-d h:m') : '—'}</div>
               </div>
             </div>
           </div>
@@ -206,7 +206,7 @@ import { useUI } from '@genix/ui';
   ._1 {
     position: relative;
     overflow: hidden;
-    background-color: rgb(255, 255, 255);
+    background-color: var(--surface);
     border-radius: 8px;
     box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 6px -1px, rgba(0, 0, 0, 0.06) 0px 2px 4px -1px;
     transition: box-shadow 0.15s ease, transform 0.15s ease;
@@ -220,7 +220,7 @@ import { useUI } from '@genix/ui';
   ._thumb {
     height: 160px;
     overflow: hidden;
-    background: linear-gradient(135deg, #eef2f7, #e2e8f0);
+    background: linear-gradient(135deg, var(--surface-muted), var(--surface-strong));
     border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
   /* Crop the showcase screenshot to the thumbnail box, anchored to the top so the
@@ -240,15 +240,15 @@ import { useUI } from '@genix/ui';
     width: 30px;
     height: 30px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.95);
+    background: color-mix(in oklab, var(--surface) 95%, transparent);
     box-shadow: rgba(0, 0, 0, 0.15) 0px 2px 5px;
-    color: #334155;
+    color: var(--fg-soft);
     opacity: 0;
     transition: opacity 0.15s ease, background 0.15s ease;
   }
   ._1:hover ._pencil,
   ._1:focus-within ._pencil { opacity: 1; }
-  ._pencil:hover { background: #fff; color: #2563eb; }
+  ._pencil:hover { background: var(--surface); color: var(--blue-solid); }
 
   /* System pages: only their metadata is read-only (the card body), so dim the
      body affordance slightly — the pencil still works to edit page content. */

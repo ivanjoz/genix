@@ -155,15 +155,15 @@ import { type ITableColumn } from '#components/vTable/types.ts';
 <Page title="Test Table">
   <div class="header-section">
     <h2>VTable Component - Snippet-based cellRenderer Demo</h2>
-    <p class="text-sm text-gray-600 mt-2">
+    <p class="text-sm text-fg-soft mt-2">
       Testing with {data.length.toLocaleString()} rows - Svelte 5 + Custom Virtualizer
     </p>
-    <p class="text-sm text-blue-600 mt-1">
+    <p class="text-sm text-blue-fg mt-1">
       Using <strong>cellRendererSnippet</strong> to render actual Svelte components
       in cells!
     </p>
 
-    <p class="text-sm text-gray-500 mt-2">
+    <p class="text-sm text-fg-muted mt-2">
       💡 <strong>Tip:</strong> Click any row to update it. Try the Edit/Delete buttons
       in the Actions column!
     </p>
@@ -196,12 +196,12 @@ import { type ITableColumn } from '#components/vTable/types.ts';
     )}
       <!-- Edad > 50 - red with fire emoji -->
       {#if col.header === 'Edad' && record.edad > 50}
-        <span style="color: #ef4444; font-weight: 600;">{value} 🔥</span>
+        <span style="color: var(--red-solid); font-weight: 600;">{value} 🔥</span>
 
         <!-- Updated apellidos - yellow highlight -->
       {:else if record._updated && col.header === 'Apellidos'}
         <span
-          style="background-color: #fef3c7; padding: 0.125rem 0.25rem; border-radius: 3px;"
+          style="background-color: var(--amber-bg-strong); padding: 0.125rem 0.25rem; border-radius: 3px;"
         >
           {value}
         </span>
@@ -248,23 +248,23 @@ import { type ITableColumn } from '#components/vTable/types.ts';
     font-size: 1.5rem;
     font-weight: 600;
     margin: 0;
-    color: #1a202c;
+    color: var(--fg);
   }
 
   .text-sm {
     font-size: 0.875rem;
   }
 
-  .text-gray-600 {
-    color: #6c757d;
+  .text-fg-soft {
+    color: var(--fg-muted);
   }
 
-  .text-blue-600 {
-    color: #2563eb;
+  .text-blue-fg {
+    color: var(--blue-fg);
   }
 
-  .text-gray-500 {
-    color: #6c757d;
+  .text-fg-muted {
+    color: var(--fg-muted);
   }
 
   .mt-1 {
@@ -277,10 +277,10 @@ import { type ITableColumn } from '#components/vTable/types.ts';
 
   .selected-info {
     padding: 0.75rem 1rem;
-    background-color: #e7f3ff;
-    border-left: 4px solid #3b82f6;
+    background-color: var(--blue-bg);
+    border-left: 4px solid var(--blue-solid);
     border-radius: 4px;
-    color: #1e40af;
+    color: var(--blue-fg);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -288,7 +288,7 @@ import { type ITableColumn } from '#components/vTable/types.ts';
 
   .updated-badge {
     padding: 0.25rem 0.5rem;
-    background-color: #22c55e;
+    background-color: var(--green-solid);
     color: white;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -297,14 +297,14 @@ import { type ITableColumn } from '#components/vTable/types.ts';
 
   /* Custom styling for VTable columns */
   :global(.updated-indicator) {
-    color: #dc3545;
+    color: var(--red-solid);
     font-size: 1rem;
     margin-right: 0.25rem;
   }
 
   :global(.id-column) {
     font-weight: 600;
-    color: #4042a3;
+    color: var(--primary);
   }
 
   :global(.nombre-column) {
@@ -316,7 +316,7 @@ import { type ITableColumn } from '#components/vTable/types.ts';
   }
 
   :global(.header-group) {
-    background-color: #e9ecef !important;
+    background-color: var(--surface-strong) !important;
     font-weight: 700;
   }
 
@@ -326,7 +326,7 @@ import { type ITableColumn } from '#components/vTable/types.ts';
 
   :global(.btn-action) {
     padding: 0.25rem 0.5rem;
-    background-color: #4042a3;
+    background-color: var(--primary);
     color: white;
     border: none;
     border-radius: 4px;
@@ -336,7 +336,7 @@ import { type ITableColumn } from '#components/vTable/types.ts';
   }
 
   :global(.btn-action:hover) {
-    background-color: #2f3280;
+    background-color: color-mix(in oklab, var(--primary) 80%, black);
   }
 
   /* New snippet-based action buttons */
@@ -350,7 +350,7 @@ import { type ITableColumn } from '#components/vTable/types.ts';
   :global(.btn-small) {
     padding: 0.25rem 0.5rem;
     border: none;
-    background: #f3f4f6;
+    background: var(--surface-muted);
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.875rem;
@@ -361,7 +361,7 @@ import { type ITableColumn } from '#components/vTable/types.ts';
   }
 
   :global(.btn-small:hover) {
-    background: #e5e7eb;
+    background: var(--surface-strong);
     transform: scale(1.05);
   }
 
@@ -370,12 +370,12 @@ import { type ITableColumn } from '#components/vTable/types.ts';
   }
 
   :global(.btn-edit:hover) {
-    background: #dbeafe;
-    color: #1e40af;
+    background: var(--blue-bg-strong);
+    color: var(--blue-fg);
   }
 
   :global(.btn-delete:hover) {
-    background: #fee2e2;
-    color: #dc2626;
+    background: var(--red-bg-strong);
+    color: var(--red-fg);
   }
 </style>

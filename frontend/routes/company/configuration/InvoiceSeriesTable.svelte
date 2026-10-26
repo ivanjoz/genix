@@ -110,7 +110,7 @@ import type { ICompany } from './empresas.svelte';
       id: 'docType', header: 'Type|Tipo', width: 'minmax(90px, 1fr)',
       render: (series) => series.ss === 1
         ? tr(docTypeName(series.DocType))
-        : `${tr(docTypeName(series.DocType))} <span class="text-red-600 ff-bold text-[14px]">${tr("inactive|inactiva")}</span>`,
+        : `${tr(docTypeName(series.DocType))} <span class="text-red-fg ff-bold text-[14px]">${tr("inactive|inactiva")}</span>`,
     },
     {
       id: 'seriesCode', header: 'Series|Serie', width: '72px', css: 'ff-mono ff-bold',
@@ -124,8 +124,8 @@ import type { ICompany } from './empresas.svelte';
       id: 'isDefault', header: 'Default|Predet.', width: '74px', align: 'center',
       showHoverEffect: true,
       render: (series) => series.IsDefault === 1
-        ? `<i class="icon-[fa--check] text-green-600"></i>`
-        : `<span class="text-slate-300">—</span>`,
+        ? `<i class="icon-[fa--check] text-green-fg"></i>`
+        : `<span class="text-fg-subtle">—</span>`,
       onCellClick: (series) => { void makeDefault(series) },
     },
     // No delete here: it lives in the dialog, so a destructive action is never one
@@ -137,12 +137,12 @@ import type { ICompany } from './empresas.svelte';
   ]
 </script>
 
-<section class="rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
+<section class="rounded-[12px] border border-line bg-surface p-16 shadow-sm"
   aria-label="Electronic invoicing series maintainer">
   <div class="flex items-start gap-10 mb-12">
     <div class="flex-1 min-w-0">
       <div class="h3 ff-bold mb-4"><T text="Invoicing Series|Series de Facturación" /></div>
-      <div class="text-[13px] text-slate-500">
+      <div class="text-[13px] text-fg-muted">
         <T text="Each series saves on its own, not with the company parameters. The number on the left identifies the series internally, not the SUNAT code.|Cada serie se guarda por su cuenta, no con los parámetros de la empresa. El número de la izquierda identifica la serie internamente, no el código SUNAT." />
       </div>
     </div>
@@ -154,7 +154,7 @@ import type { ICompany } from './empresas.svelte';
   </div>
 
   {#if allSeries.length === 0}
-    <div class="rounded-[8px] border border-dashed border-slate-300 p-14 text-center text-slate-500">
+    <div class="rounded-[8px] border border-dashed border-line-strong p-14 text-center text-fg-muted">
       <T text="No series yet. A sale cannot be invoiced until the company has one.|Aún no hay series. No se puede facturar una venta hasta que la empresa tenga una." />
     </div>
   {:else}
@@ -180,7 +180,7 @@ import type { ICompany } from './empresas.svelte';
       bind:saveOn={seriesForm} />
     <Checkbox css="col-span-24" label="Active|Activa" save="ss" useNumber={true}
       bind:saveOn={seriesForm} />
-    <div class="col-span-24 text-[13px] text-slate-500">
+    <div class="col-span-24 text-[13px] text-fg-muted">
       <T text="A series code has 4 characters and starts with F for invoices or B for receipts. A note carries the prefix of the document it corrects. Leave the branch empty to issue from the legal address.|El código de serie tiene 4 caracteres y empieza con F para facturas o B para boletas. Una nota lleva el prefijo del documento que corrige. Deje la sede vacía para emitir desde la dirección legal." />
     </div>
   </div>

@@ -135,7 +135,7 @@ import { type ISharedListRecord, type SharedListsService } from "#services/busin
         }}>
         <div class="min-h-70 _2 mb-2"></div>
         <div class="fs17 ff-semibold">{e.Name}</div>
-        <div class="fs15">{e.Description}</div>
+        <div class="text-[15px]">{e.Description}</div>
       </div>
     {/each}
   </div>
@@ -201,7 +201,7 @@ import { type ISharedListRecord, type SharedListsService } from "#services/busin
   }
 
   ._1 {
-    background-color: rgb(255, 255, 255);
+    background-color: var(--surface);
     border-radius: 8px;
     box-shadow: rgba(0, 0, 0, 0.1) 0px 4px 6px -1px, rgba(0, 0, 0, 0.06) 0px 2px 4px -1px;
   }
@@ -210,6 +210,6 @@ import { type ISharedListRecord, type SharedListsService } from "#services/busin
   }
 
   ._2 {
-    background-color: rgb(235, 233, 245);
+    background-color: var(--surface-strong);
   }
 </style>

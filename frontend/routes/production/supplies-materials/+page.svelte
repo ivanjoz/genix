@@ -57,7 +57,7 @@ import {
     {
       header: "ID",
       field: "ID",
-      css: "c-blue text-center",
+      css: "text-blue-fg text-center",
       headerCss: "w-40", headerInnerCss: "min-w-36",
       getValue: (record) => record.ID || "",
       render: (record) => record.ID ? String(record.ID) : `<i class="icon-[fa--refresh]"></i>`,

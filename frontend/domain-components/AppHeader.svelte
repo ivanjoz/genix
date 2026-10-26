@@ -39,32 +39,6 @@ import { useUI } from '@genix/ui';
 			},
 		});
 	});
-
-	// State
-	let showSettings = $state(false);
-	let uiTheme = $state<'light' | 'dark'>('light');
-
-	// Functions
-	function toggleSettings() {
-		showSettings = !showSettings;
-	}
-
-	function toggleTheme(theme: 'light' | 'dark') {
-		uiTheme = theme;
-		document.body.classList.remove('light', 'dark');
-		document.body.classList.add(theme);
-		localStorage.setItem('ui-color', theme);
-		showSettings = false;
-	}
-
-	// Initialize theme from localStorage
-	$effect(() => {
-		const savedTheme = localStorage.getItem('ui-color') || 'light';
-		if (savedTheme === 'dark' || savedTheme === 'light') {
-			uiTheme = savedTheme;
-			document.body.classList.add(savedTheme);
-		}
-	});
 </script>
 
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700
@@ -163,18 +137,6 @@ import { useUI } from '@genix/ui';
 </header>
 
 <HeaderRequestLogsModal />
-
-<!-- Click outside to close settings -->
-{#if showSettings}
-	<div
-		class="fixed inset-0 z-30"
-		onclick={() => (showSettings = false)}
-		onkeydown={(e) => e.key === 'Escape' && (showSettings = false)}
-		role="button"
-		tabindex="0"
-		aria-label="Close settings"
-	></div>
-{/if}
 
 <style>
 	._1 {

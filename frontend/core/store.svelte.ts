@@ -38,11 +38,29 @@ export const setLanguaje = (languaje: ILanguaje) => {
   if(browser){ localStorage.setItem(LANGUAJE_STORAGE_KEY, String(languaje)) }
 }
 
+// 1 = light, 2 = dark. Dark is the `dark` class on <body>: genix-ui's color tokens switch on it.
+// app.html applies the stored theme before the first paint; THEME_STORAGE_KEY is repeated there.
+export type ITheme = 1 | 2
+const THEME_STORAGE_KEY = "genix_theme"
+
+const getStoredTheme = (): ITheme => {
+  if(!browser){ return 1 }
+  return localStorage.getItem(THEME_STORAGE_KEY) === "2" ? 2 : 1
+}
+
+export const setTheme = (theme: ITheme) => {
+  Core.theme = theme
+  if(!browser){ return }
+  localStorage.setItem(THEME_STORAGE_KEY, String(theme))
+  document.body.classList.toggle("dark", theme === 2)
+}
+
 export const Core = $state({
   module: { menus: [] as IMenuRecord[] } as IModule,
   openSearchLayer: 0 as number,
 	// 1 = Spanish, 2 = English
   languaje: getStoredLanguaje() as ILanguaje,
+  theme: getStoredTheme(),
   isLoading: 1,
   openLayers: [] as number[],
   // Ecommerce state moved from pkg-store

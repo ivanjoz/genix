@@ -126,10 +126,10 @@ async function download(artifact: "xml" | "cdr") {
       {/if}
     </div>
     {#each invoiceDocument.SunatNotes || [] as note}
-      <div class="text-sm text-amber-700 mt-4">{note}</div>
+      <div class="text-sm text-amber-fg mt-4">{note}</div>
     {/each}
     {#if invoiceDocument.LastError}
-      <div class="text-sm text-red-600 mt-4">{invoiceDocument.LastError}</div>
+      <div class="text-sm text-red-fg mt-4">{invoiceDocument.LastError}</div>
     {/if}
   </div>
 {/if}
@@ -138,7 +138,7 @@ async function download(artifact: "xml" | "cdr") {
   <div class="h4 mb-6"><T text="Sale|Venta" /> #{invoiceSaleOrderID(invoiceDocument)}</div>
 
   {#if saleOrderMissing}
-    <div class="text-sm c-gray">
+    <div class="text-sm text-fg-muted">
       <T text="The sale is annulled or no longer available.|La venta está anulada o ya no está disponible." />
     </div>
   {:else if saleOrder}
@@ -149,8 +149,8 @@ async function download(artifact: "xml" | "cdr") {
         value={formatN(saleOrder.TotalAmount / 100, 2)} />
     </div>
     {#each saleLines as line (line.productID)}
-      <div class="flex items-center gap-8 py-4 border-b border-gray-100 text-sm">
-        <span class="c-blue ff-bold">{line.quantityLabel}</span>
+      <div class="flex items-center gap-8 py-4 border-b border-line-soft text-sm">
+        <span class="text-blue-fg ff-bold">{line.quantityLabel}</span>
         <span class="flex-1 truncate">{line.name}</span>
         <span>{formatN(line.amount / 100, 2)}</span>
       </div>

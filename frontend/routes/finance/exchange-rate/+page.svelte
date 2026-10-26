@@ -145,7 +145,7 @@
 
 <Page title="Exchange Rate|Tipo de Cambio">
   <div class="flex flex-wrap items-center gap-10 mb-8">
-    <div class="c-gray-500 text-[14px]">
+    <div class="text-fg-muted text-[14px]">
       <T text="USD to PEN, 3 decimals|Dólar a Soles, 3 decimales" />
     </div>
     <div class="flex items-center gap-8 text-[14px]">
@@ -195,32 +195,32 @@
     align-items: center;
     padding-left: 10px;
     letter-spacing: 0.04em;
-    color: #4b4b6b;
-    border-bottom: 2px solid #9c91df;
-    border-left: 1px solid #b4b4d0;
+    color: var(--fg-soft);
+    border-bottom: 2px solid var(--accent-border);
+    border-left: 1px solid var(--line-strong);
   }
 
   /* The day number opens each weekday group, so its left edge is the group separator. */
   :global(._day-cell) {
-    border-left: 1px solid #b4b4d0;
+    border-left: 1px solid var(--line-strong);
   }
 
   /* Only the slots that carry a day are painted: the ones spilling into the neighbouring
      month stay blank, which is what marks where the month starts and ends. */
   :global(._day-filled) {
-    background-color: #e0ddef;
-    color: #2c2b37;
+    background-color: var(--surface-strong);
+    color: var(--fg);
   }
 
   /* The two origins a rate can have. Nothing else separates them — the default is not stored
      and the loaded one carries no mark — so the colour is the whole distinction. */
   ._rate-bcrp,
   :global(._rate-bcrp) {
-    color: #6b6b7a;
+    color: var(--fg-muted);
   }
 
   ._rate-own,
   :global(._rate-own) {
-    color: #4160bb;
+    color: var(--blue-fg);
   }
 </style>

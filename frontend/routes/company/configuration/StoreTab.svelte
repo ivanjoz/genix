@@ -11,19 +11,19 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
   <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the online store configuration." onClick={() => saveCompanyParameters(service.empresa)} />
 </div>
 <div class="grid grid-cols-24 gap-14">
-  <section class="col-span-24 rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
+  <section class="col-span-24 rounded-[12px] border border-line bg-surface p-16 shadow-sm"
     aria-label="Culqi payment gateway credentials for the online store, split into test and live environments">
     <div class="h3 ff-bold mb-4"><T text="Culqi Configuration|Configuración Culqi" /></div>
-    <div class="text-[14px] text-slate-500 mb-14">
+    <div class="text-[14px] text-fg-muted mb-14">
       <T text="Payment gateway credentials used by the online store checkout.|Credenciales de la pasarela de pago que usa el checkout de la tienda." />
     </div>
 
     <div class="grid grid-cols-24 gap-14">
       <!-- Test and live credentials are separated because using one where the other belongs is the
            failure this page exists to prevent: live keys in a test checkout charge real cards. -->
-      <div class="col-span-24 lg:col-span-12 rounded-[10px] border border-amber-200 bg-amber-50/40 p-14">
+      <div class="col-span-24 lg:col-span-12 rounded-[10px] border border-amber-border bg-amber-bg/40 p-14">
         <div class="flex items-center gap-8 mb-12">
-          <span class="rounded-[6px] bg-amber-100 text-amber-800 px-8 py-2 text-[13px] ff-bold">
+          <span class="rounded-[6px] bg-amber-bg-strong text-amber-fg px-8 py-2 text-[13px] ff-bold">
             <T text="TEST|PRUEBAS" />
           </span>
           <span class="text-[16px] ff-bold"><T text="Culqi Test|Culqi Pruebas" /></span>
@@ -36,9 +36,9 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
         </div>
       </div>
 
-      <div class="col-span-24 lg:col-span-12 rounded-[10px] border border-emerald-200 bg-emerald-50/40 p-14">
+      <div class="col-span-24 lg:col-span-12 rounded-[10px] border border-green-border bg-green-bg/40 p-14">
         <div class="flex items-center gap-8 mb-12">
-          <span class="rounded-[6px] bg-emerald-100 text-emerald-800 px-8 py-2 text-[13px] ff-bold">
+          <span class="rounded-[6px] bg-green-bg-strong text-green-fg px-8 py-2 text-[13px] ff-bold">
             <T text="LIVE|PRODUCCIÓN" />
           </span>
           <span class="text-[16px] ff-bold"><T text="Culqi Live|Culqi Live" /></span>
@@ -53,9 +53,9 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
 
       <!-- One RSA pair, not one per environment: the company record stores a single key, so it sits
            outside both boxes instead of being duplicated into each. -->
-      <div class="col-span-24 rounded-[10px] border border-slate-200 p-14">
+      <div class="col-span-24 rounded-[10px] border border-line p-14">
         <div class="text-[16px] ff-bold mb-4"><T text="RSA Encryption|Encriptación RSA" /></div>
-        <div class="text-[14px] text-slate-500 mb-12">
+        <div class="text-[14px] text-fg-muted mb-12">
           <T text="Optional. Only needed when card data is sent encrypted.|Opcional. Sólo se necesita cuando los datos de la tarjeta se envían encriptados." />
         </div>
         <!-- The id sits on its own row: a field bottom-aligns in its grid cell by design

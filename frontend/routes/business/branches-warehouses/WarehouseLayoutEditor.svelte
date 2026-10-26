@@ -39,7 +39,7 @@ import T from '#components/misc/T.svelte';
 
   <div class="overflow-auto px-4" style="max-height: calc(100% - 60px)">
     {#if layouts.length === 0}
-      <div class="bg-red-100 text-red-700 p-8 rounded">
+      <div class="bg-red-bg-strong text-red-fg p-8 rounded">
         <T text="No storage sections in this warehouse. Add one by pressing (+)|No hay espacios en al almacén. Agregue uno pulsando en (+)" />
       </div>
     {/if}
@@ -49,18 +49,18 @@ import T from '#components/misc/T.svelte';
       {@const heads = Array.from({ length: layout.ColCant || 1 }, (_, i) => String(i + 1))}
       {@const rows = Array.from({ length: layout.RowCant || 1 }, (_, i) => String(i + 1))}
 
-      <div class="_1 bg-white rounded-lg shadow-sm p-8 mb-12" aria-label="Storage area layout: {layout.Name || `Section ${idx + 1}`}">
+      <div class="_1 bg-surface rounded-lg shadow-sm p-8 mb-12" aria-label="Storage area layout: {layout.Name || `Section ${idx + 1}`}">
         <div class="w-full flex items-start justify-between gap-8 px-8 py-8">
           <div class="flex flex-wrap items-center gap-y-4">
             <Input bind:saveOn={layouts[idx]} save="Name"
               css="w-full md:w-220 mr-12" inputCss="text-sm" required={true}
             />
-            <span class="ff-bold text-slate-600"><T text="Rows|Filas" /></span>
+            <span class="ff-bold text-fg-soft"><T text="Rows|Filas" /></span>
             <Input bind:saveOn={layouts[idx]} save="RowCant"
               css="w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
             />
-            <span class="ff-bold text-slate-600"><T text="Levels|Niveles" /></span>
+            <span class="ff-bold text-fg-soft"><T text="Levels|Niveles" /></span>
             <Input bind:saveOn={layouts[idx]} save="ColCant"
               css="w-60 mx-4" inputCss="text-sm" type="number"
               onChange={updateLayout}
@@ -109,7 +109,7 @@ import T from '#components/misc/T.svelte';
 
 <style>
   ._1 {
-    background-color: var(--light-blue-1);
+    background-color: var(--blue-bg);
     border-radius: 5px;
     box-shadow: #5f7187a8 0 1px 3px -1px;
     min-height: 50px;

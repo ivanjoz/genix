@@ -469,9 +469,9 @@ const reporteColumns: ITableColumn<IPurchaseOrder>[] = [
       const status = r.ss || 0
       const name = purchaseOrderStatusOptions.find((s) => s.ID === status)?.Name || '—'
       const palette =
-        status === PurchaseOrderStatus.FULFILLED ? 'bg-green-50 text-green-700 border-green-200' :
-        status === PurchaseOrderStatus.PENDING ? 'bg-amber-50 text-amber-700 border-amber-200' :
-        'bg-red-50 text-red-600 border-red-200'
+        status === PurchaseOrderStatus.FULFILLED ? 'bg-green-bg text-green-fg border-green-border' :
+        status === PurchaseOrderStatus.PENDING ? 'bg-amber-bg text-amber-fg border-amber-border' :
+        'bg-red-bg text-red-fg border-red-border'
       return `<span class="inline-block px-8 py-2 rounded-md border ${palette} text-xs font-medium">${name}</span>`
     },
     mobile: { order: 2, css: 'col-span-18', contentCss: 'flex justify-end' },
@@ -694,17 +694,17 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
     actionsButton={{ name: "Acciones", icon: "icon-[fa--bars]", css: "" }}
     actions={[
     	{ id: 1,
-     		name: "Confirmar", icon: "icon-[fa--check] text-green-500",
+     		name: "Confirmar", icon: "icon-[fa--check] text-green-fg",
        	label: "Confirms and approves the selected purchase order.",
        	handler: () => { void confirmSelectedPurchaseOrder() }
      	},
      	{ id: 5,
-    		name: "Editar", icon: "icon-[fa--pencil] text-blue-500",
+    		name: "Editar", icon: "icon-[fa--pencil] text-blue-fg",
        	label: "Opens the modal to edit the selected purchase order.",
        	handler: () => { openEditPurchaseOrderModal() }
      	},
      	{ id: 6,
-    		name: "Comprobante", icon: "icon-[fa--file-text-o] text-blue-500",
+    		name: "Comprobante", icon: "icon-[fa--file-text-o] text-blue-fg",
        	label: "Registers the supplier's comprobante for the Registro de Compras.",
        	handler: () => { openDocumentPurchaseOrderModal() }
      	},
@@ -775,12 +775,12 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
           />
         </div>
 
-        <div class="text-13 text-gray-600">
+        <div class="text-13 text-fg-soft">
           {selectedPurchaseOrder.Notes || 'Sin notas.'}
         </div>
 
         {#if isDetailLayerLoading}
-          <div class="min-h-120 rounded-md bg-gray-50 fx-c text-gray-500">
+          <div class="min-h-120 rounded-md bg-surface-soft fx-c text-fg-muted">
             Sincronizando productos del detalle...
           </div>
         {/if}
@@ -800,10 +800,10 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
                 <!-- items-baseline aligns the differently-sized texts on their text baseline (presentation is regular size, SKU is text-xs). -->
                 <div class="flex items-baseline gap-6">
                   {#if detailRow.presentationName}
-                    <span class="text-blue-600 ff-bold text-sm">{detailRow.presentationName}</span>
+                    <span class="text-blue-fg ff-bold text-sm">{detailRow.presentationName}</span>
                   {/if}
                   {#if detailRow.sku}
-                    <span class="text-gray-400 ff-mono text-xs">{detailRow.sku}</span>
+                    <span class="text-fg-subtle ff-mono text-xs">{detailRow.sku}</span>
                   {/if}
                 </div>
               {/if}
@@ -879,9 +879,9 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
       />
       <!-- Gray box mirrors the visual weight of the Input next to it; recalculates as the user types Monto.
            The remaining amount turns red while it is still > 0 to highlight that the debt is not fully covered. -->
-      <div class="col-span-1 flex items-center justify-between gap-8 px-12 py-8 bg-gray-100 border border-gray-200 rounded-md text-13 text-gray-700">
+      <div class="col-span-1 flex items-center justify-between gap-8 px-12 py-8 bg-surface-muted border border-line rounded-md text-13 text-fg-soft">
         <span>Deuda pendiente</span>
-        <span class={`ff-mono ff-bold ${remainingDebtAfterPayment > 0 ? 'text-red-600' : 'text-gray-700'}`}>
+        <span class={`ff-mono ff-bold ${remainingDebtAfterPayment > 0 ? 'text-red-fg' : 'text-fg-soft'}`}>
           {formatN(remainingDebtAfterPayment / 100, 2)}
         </span>
       </div>

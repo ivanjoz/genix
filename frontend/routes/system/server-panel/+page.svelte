@@ -24,7 +24,7 @@ let selectedPanelView = $state<ServerPanelViewID>('dashboard');
       onSelect={(nextPanelView) => {
         selectedPanelView = nextPanelView.id as ServerPanelViewID;
       }}
-      css="border-b border-slate-200"
+      css="border-b border-line"
     />
 
     {#if selectedPanelView === 'dashboard'}

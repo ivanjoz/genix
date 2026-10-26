@@ -65,13 +65,13 @@
     {#snippet footer()}
       <div class="flex items-center justify-end gap-10">
         <ButtonLayer layerClass="px-8 py-6"
-          buttonClass="w-40 h-40 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors shadow-sm"
+          buttonClass="w-40 h-40 rounded-full bg-surface-muted hover:bg-surface-strong flex items-center justify-center transition-colors shadow-sm"
           contentCss="px-4 pb-8"
           label="Opens application settings and configuration panel.">
-          {#snippet button()}<i class="text-gray-700 text-lg icon-[fa--cog]"></i>{/snippet}
+          {#snippet button()}<i class="text-fg-soft text-lg icon-[fa--cog]"></i>{/snippet}
           <HeaderConfig />
         </ButtonLayer>
-        <ReloadPageButton css="flex bg-gray-100 hover:bg-gray-200" iconCss="text-gray-700" />
+        <ReloadPageButton css="flex bg-surface-muted hover:bg-surface-strong" iconCss="text-fg-soft" />
       </div>
     {/snippet}
   </SideMenu>

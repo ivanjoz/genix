@@ -1,3 +1,26 @@
+## Dark mode: tokens everywhere, with a few deliberate literals
+
+**Context** — The app painted itself with hardcoded hex values and Tailwind palette classes, so only
+genix-ui's own components followed `body.dark`. Copying berryapps' toggle was settled; what to do with
+each leftover color was not.
+
+**Decision**
+- App code paints with genix-ui's tokens (`bg-surface`, `text-fg-muted`, `border-line`,
+  `bg-red-bg`...). A one-off script mapped palette classes by role (`slate-200` → `line`,
+  `slate-500` → `fg-muted`, `indigo-600` → `accent-*`, `red-50` → `red-bg`...), then each leftover literal
+  was resolved by hand. `routes/tailwind.css` keeps only body, scrollbar and the cart icon.
+- Left literal on purpose: the app header, the side menu, the landing hero and registration side panel,
+  the webpage-builder's dark editor panel and its block editors (storefront content colors), chart
+  series colors passed to canvas charts, receipts/print markup, and black-alpha shadows.
+- `core/agent/screenshot.ts` captures with the current `--page` color instead of white.
+- The unused `c-steel`, `c-gray*`, `c-blue`, `fs14`, `fs15`, `bg-purple-light`, `b-color-green` classes became
+  Tailwind utilities; `WarehouseLayoutEditor` now uses `--blue-bg` where it referenced an undefined variable.
+
+**Rationale** — Token classes follow the toggle with no `dark:` variants, and the dark values live in one
+file. The literals kept are either dark in both themes by design or user/storefront content, where
+re-theming would change what the customer publishes. Cost: canvas chart series (e.g. the black price line
+in `ProductSupplyManagement`) are low-contrast on dark cards until `ChartCanvas` accepts CSS variables.
+
 ## SvelteKit 3: the choices the migration left open
 
 **Context** — Moving to Kit 3 (as berryapps did) forced a few calls berryapps never faced: genix has

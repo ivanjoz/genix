@@ -54,7 +54,7 @@
 				productsByIdMap={productosService.recordsMap}
 			/>
 		{:else if view === 3}
-			<div class="text-gray-500"><T text="Weekly summary pending.|Resumen Semanal pendiente." /></div>
+			<div class="text-fg-muted"><T text="Weekly summary pending.|Resumen Semanal pendiente." /></div>
 		{/if}
 		</div>
 	</div>

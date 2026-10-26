@@ -522,7 +522,7 @@ import {
 	      <Button color="blue" icon="icon-[fa--upload]" css="h-32 px-10" hideNameOnMobile
 	        label="Opens the Excel import dialog to update the supply configuration in bulk."
 	        name="Import|Importar" onClick={openImportSupplyModal} />
-	      <div class="h6 ff-bold pr-8 text-slate-500">
+	      <div class="h6 ff-bold pr-8 text-fg-muted">
 	        {filteredProductSupplyRows.length} registros
 	      </div>
 	    </div>
@@ -545,7 +545,7 @@ import {
             <div class="flex flex-col gap-2 py-4">
               <div class="px-10"><T text={columnDefinition.header}/></div>
               <div class="min-w-0" style={`width:${ventasPixelMetrics.ventasColumnWidthPx}px`}>
-                <div class="grid items-center text-[11px] text-slate-500" style={`padding-left:${yAxisWidthPx - 4}px;grid-template-columns:repeat(${salesHeaderLabels.length}, ${ventasPixelMetrics.ventasBarWidthPx * 3}px)`}>
+                <div class="grid items-center text-[11px] text-fg-muted" style={`padding-left:${yAxisWidthPx - 4}px;grid-template-columns:repeat(${salesHeaderLabels.length}, ${ventasPixelMetrics.ventasBarWidthPx * 3}px)`}>
                   {#each salesHeaderLabels as salesHeaderLabel (salesHeaderLabel.dateUnix)}
                     <div class="overflow-hidden text-right text-ellipsis whitespace-nowrap leading-[1.1]">
 	                    <div>{salesHeaderLabel.day}</div>
@@ -601,11 +601,11 @@ import {
             {@const maxComparableStock = Math.max(currentStock, minimunStock, 1)}
             {@const currentStockBarWidth = (currentStock / maxComparableStock) * 100}
             {@const minimunStockBarWidth = (minimunStock / maxComparableStock) * 100}
-            {@const minimunStockBarCss = minimunStock > currentStock ? 'bg-red-200' : 'bg-blue-200'}
+            {@const minimunStockBarCss = minimunStock > currentStock ? 'bg-red-bg-strong' : 'bg-blue-bg-strong'}
             <div class="flex flex-col gap-2 py-4">
               <!-- Render each stock metric inside its own light bar so the value stays readable above the fill. -->
               <div class="relative h-18 overflow-hidden rounded-sm">
-                <div class="absolute inset-y-1 left-0 rounded-sm bg-green-200" style={`width:${currentStockBarWidth}%`}></div>
+                <div class="absolute inset-y-1 left-0 rounded-sm bg-green-bg-strong" style={`width:${currentStockBarWidth}%`}></div>
                 <div class="relative z-1 flex h-full items-center justify-end pr-3">
                   <div class="ff-mono text-sm leading-none">{currentStock || '-'}</div>
                 </div>
@@ -628,7 +628,7 @@ import {
                   <div class="min-w-0 flex-1 whitespace-normal break-words">
                     {providerName}
                   </div>
-                  <div class="flex shrink-0 items-center gap-8 whitespace-nowrap text-slate-600">
+                  <div class="flex shrink-0 items-center gap-8 whitespace-nowrap text-fg-soft">
                     <div class="flex items-center gap-4">
                       <span>{providerSupplyRow.Price ? `s/ ${formatN((providerSupplyRow.Price || 0) / 100, 2)}` : '-'}</span>
                     </div>
@@ -718,12 +718,12 @@ import {
   saveIcon="icon-[fa--upload]"
 >
   <div class="mb-6 flex items-center justify-between px-4">
-    <div class="h6 text-slate-500">
+    <div class="h6 text-fg-muted">
       <!-- Only rows whose configuration differs from the platform reach the preview. -->
       <T text="Rows with changes|Filas con cambios" />: {importExcelRowsPreview.length}
     </div>
   </div>
-  <div class="overflow-hidden rounded-md border border-slate-200 h-[58vh] min-h-[260px]">
+  <div class="overflow-hidden rounded-md border border-line h-[58vh] min-h-[260px]">
     <VTable columns={supplyPreviewColumns} css="h-full" maxHeight="58vh"
       data={importExcelRowsPreview} estimateSize={40}
       emptyMessage={isImportExcelProcessing

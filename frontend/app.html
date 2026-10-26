@@ -57,6 +57,10 @@
 		</script>
 	</head>
 	<body data-sveltekit-preload-data="hover">
+		<!-- The stored theme (core/store.svelte.ts, setTheme) before the first paint: no light flash. -->
+		<script>
+			if (localStorage.getItem('genix_theme') === '2') document.body.classList.add('dark');
+		</script>
 		<div style="display: contents">%sveltekit.body%</div>
 	</body>
 </html>

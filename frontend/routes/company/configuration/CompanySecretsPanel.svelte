@@ -98,12 +98,12 @@ import {
   }
 </script>
 
-<section class="rounded-[12px] border border-slate-200 bg-white p-16 shadow-sm"
+<section class="rounded-[12px] border border-line bg-surface p-16 shadow-sm"
   aria-label="SUNAT credentials: SOL user, environment and digital certificate">
   <div class="flex items-start gap-10 mb-12">
     <div class="flex-1 min-w-0">
       <div class="h3 ff-bold mb-4"><T text="SUNAT Credentials|Credenciales SUNAT" /></div>
-      <div class="text-[13px] text-slate-500">
+      <div class="text-[13px] text-fg-muted">
         <T text="The certificate is stored encrypted and is never returned. Uploading a new one retires the previous certificate instead of replacing it.|El certificado se guarda cifrado y nunca se devuelve. Cargar uno nuevo retira el anterior en vez de reemplazarlo." />
       </div>
     </div>
@@ -118,25 +118,25 @@ import {
     {@const isExpired = daysLeft < 0}
     {@const isExpiring = !isExpired && daysLeft <= EXPIRY_WARNING_DAYS}
     <div class="rounded-[8px] border p-12 mb-14 {isExpired
-      ? 'border-red-300 bg-red-50'
-      : isExpiring ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}">
+      ? 'border-red-border bg-red-bg'
+      : isExpiring ? 'border-amber-border bg-amber-bg' : 'border-line bg-surface-soft'}">
       <div class="flex flex-wrap items-baseline gap-x-14 gap-y-4">
         <span class="text-[14px] ff-bold">RUC {current.CertRUC || "—"}</span>
-        <span class="text-[14px] text-slate-600">
+        <span class="text-[14px] text-fg-soft">
           <T text="Valid until|Vigente hasta" /> {formatTime(current.CertValidTo, "d-M-Y")}
         </span>
         {#if isExpired}
-          <span class="text-[14px] ff-bold text-red-600"><T text="EXPIRED|VENCIDO" /></span>
+          <span class="text-[14px] ff-bold text-red-fg"><T text="EXPIRED|VENCIDO" /></span>
         {:else if isExpiring}
-          <span class="text-[14px] ff-bold text-amber-700">
+          <span class="text-[14px] ff-bold text-amber-fg">
             {daysLeft} <T text="days left|días restantes" />
           </span>
         {/if}
       </div>
-      <div class="text-[13px] text-slate-500 mt-4 truncate">{current.CertSubject}</div>
+      <div class="text-[13px] text-fg-muted mt-4 truncate">{current.CertSubject}</div>
     </div>
   {:else}
-    <div class="rounded-[8px] border border-dashed border-slate-300 p-12 mb-14 text-center text-slate-500">
+    <div class="rounded-[8px] border border-dashed border-line-strong p-12 mb-14 text-center text-fg-muted">
       <T text="No certificate loaded. A sale cannot be invoiced until the company has one.|Sin certificado cargado. No se puede facturar una venta hasta que la empresa tenga uno." />
     </div>
   {/if}
@@ -168,7 +168,7 @@ import {
         }} />
     </div>
 
-    <div class="col-span-24 text-[13px] text-slate-500">
+    <div class="col-span-24 text-[13px] text-fg-muted">
       <T text="Beta issues against SUNAT's test environment: the documents are valid for testing and have no tax effect.|Beta emite contra el ambiente de pruebas de SUNAT: los comprobantes sirven para probar y no tienen efecto tributario." />
     </div>
 
@@ -180,12 +180,12 @@ import {
   </div>
 
   {#if retired.length > 0}
-    <div class="mt-14 border-t border-slate-200 pt-10">
-      <div class="text-[13px] ff-bold text-slate-500 mb-4">
+    <div class="mt-14 border-t border-line pt-10">
+      <div class="text-[13px] ff-bold text-fg-muted mb-4">
         <T text="Retired certificates|Certificados retirados" />
       </div>
       {#each retired as retiredSecret (retiredSecret.ID)}
-        <div class="text-[13px] text-slate-500">
+        <div class="text-[13px] text-fg-muted">
           RUC {retiredSecret.CertRUC || "—"} ·
           {formatTime(retiredSecret.CertValidFrom, "d-M-Y")} →
           {formatTime(retiredSecret.CertValidTo, "d-M-Y")}

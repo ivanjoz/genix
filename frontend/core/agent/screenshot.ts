@@ -166,7 +166,8 @@ export const captureDomScreenshot = async (): Promise<ScreenshotResult> => {
     const dataUrl = await domToPng(root, {
       width,
       height,
-      backgroundColor: "#ffffff",
+      // Transparent areas take the active theme's page color, so dark-mode captures keep readable text.
+      backgroundColor: getComputedStyle(document.body).getPropertyValue("--page").trim(),
     });
     const base64 = dataUrl.split(",")[1] || "";
     return { MIME: "image/png", Base64: base64, Width: width, Height: height };

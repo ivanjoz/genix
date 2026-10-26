@@ -121,10 +121,10 @@ $effect(() => {
     <div class="col-span-24 flex flex-wrap items-center gap-12 text-sm">
       <div>
         <T text="Document total|Total del comprobante" />:
-        <span class="ff-mono font-semibold {isTotalMismatch ? 'text-red-600' : ''}">{formatN(documentTotal / 100, 2)}</span>
+        <span class="ff-mono font-semibold {isTotalMismatch ? 'text-red-fg' : ''}">{formatN(documentTotal / 100, 2)}</span>
       </div>
       {#if isTotalMismatch}
-        <span class="text-red-600">
+        <span class="text-red-fg">
           <T text="Must equal|Debe ser igual a" /> {formatN(expectedTotal / 100, 2)}
         </span>
       {/if}

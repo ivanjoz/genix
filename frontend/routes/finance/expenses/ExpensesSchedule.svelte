@@ -109,7 +109,7 @@ const filteredSchedules = $derived.by(() => {
 })
 
 const columns: ITableColumn<IExpenseScheduled>[] = [
-  { header: "ID", headerCss: "w-32", css: "text-center text-purple-600 px-6", getValue: e => e.ID,
+  { header: "ID", headerCss: "w-32", css: "text-center text-purple-fg px-6", getValue: e => e.ID,
     mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" } },
   { header: "Name|Nombre", css: "px-6", getValue: e => e.Name,
     mobile: { order: 2, css: "col-span-18", render: e => `<strong>${e.Name || ''}</strong>` } },
@@ -211,7 +211,7 @@ const periodColumns: ITableColumn<IExpense>[] = [
   {#if layerView === 2}
     <div class="mt-12">
       {#if periods.length === 0}
-        <div class="text-slate-500 py-16 text-center">{tr("No periods generated yet.|Aún no hay periodos generados.")}</div>
+        <div class="text-fg-muted py-16 text-center">{tr("No periods generated yet.|Aún no hay periodos generados.")}</div>
       {:else}
         <VTable css="w-full" maxHeight="calc(80vh - 16rem)" columns={periodColumns} data={periods} />
       {/if}

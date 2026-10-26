@@ -37,7 +37,7 @@ import Card from '#components/cards/Card.svelte';
     const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
     return parts.map((part, i) =>
       part.toLowerCase() === highlight.toLowerCase()
-        ? `<span class="bg-yellow-200 text-black font-bold">${part}</span>`
+        ? `<span class="bg-yellow-bg-strong text-fg font-bold">${part}</span>`
         : part
     ).join('');
   };
@@ -85,7 +85,7 @@ import Card from '#components/cards/Card.svelte';
     if (!productoStock.presentationName) return productName
 
     const highlightedPresentationName = highlightText(productoStock.presentationName, filterText)
-    return `${productName} <span class="text-blue-600 font-bold">(${highlightedPresentationName})</span>`
+    return `${productName} <span class="text-blue-fg font-bold">(${highlightedPresentationName})</span>`
   })
 
   // Helper for quantities
@@ -110,9 +110,9 @@ import Card from '#components/cards/Card.svelte';
     let cn = "relative px-8 py-4 border border-transparent rounded-lg "
     if(isSelected){
       // Keep mobile selection quiet while restoring the stronger desktop ring from md and up.
-      cn += "bg-white shadow-sm border-gray-200 md:ring-2 md:ring-blue-500 md:ring-inset md:shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
+      cn += "bg-surface shadow-sm border-line md:ring-2 md:ring-blue-solid md:ring-inset md:shadow-[inset_0_0_12px_rgba(59,130,246,0.1)]"
     } else {
-      cn += "bg-white shadow-[0_1px_3px_0_rgb(50_54_70_/_10%)] hover:border-gray-200 hover:shadow-sm"
+      cn += "bg-surface shadow-[0_1px_3px_0_rgb(50_54_70_/_10%)] hover:border-line hover:shadow-sm"
     }
     return cn
   })
@@ -128,7 +128,7 @@ import Card from '#components/cards/Card.svelte';
 
 <div class={css}>
   {#if mobileSelectedCount > 0}
-    <div class="absolute -right-4 -top-4 z-20 flex h-28 min-w-28 items-center justify-center rounded-full bg-red-600 px-6 text-[12px] font-bold text-white shadow-[0_6px_14px_rgba(220,38,38,0.35)] md:hidden">
+    <div class="absolute -right-4 -top-4 z-20 flex h-28 min-w-28 items-center justify-center rounded-full bg-red-solid px-6 text-[12px] font-bold text-white shadow-[0_6px_14px_rgba(220,38,38,0.35)] md:hidden">
       {mobileSelectedCount}
     </div>
   {/if}
@@ -138,17 +138,17 @@ import Card from '#components/cards/Card.svelte';
   >
     <!-- Header: Name + Line -->
     <div class="flex items-center gap-8">
-       <div class="flex items-center gap-8 pr-20 leading-tight text-gray-700 md:pr-0">
+       <div class="flex items-center gap-8 pr-20 leading-tight text-fg-soft md:pr-0">
           <span>{@html highlightedDisplayName}</span>
           {#if productHasSubUnit}
-             <span class="text-gray-300">|</span>
-             <span class="text-purple-600 font-bold text-xs">x{productoStock.subDivisor} {productoStock.producto.SbuUnit}</span>
+             <span class="text-fg-subtle">|</span>
+             <span class="text-purple-fg font-bold text-xs">x{productoStock.subDivisor} {productoStock.producto.SbuUnit}</span>
           {/if}
           {#if hasSerialNumbers}
-             <span class="text-xs font-bold text-purple-600 bg-purple-50 px-4 py-1 rounded">(Serie)</span>
+             <span class="text-xs font-bold text-purple-fg bg-purple-bg px-4 py-1 rounded">(Serie)</span>
           {/if}
        </div>
-       <div class="h-[1px] bg-gray-200 grow group-hover:bg-gray-300 transition-colors"></div>
+       <div class="h-[1px] bg-surface-strong grow group-hover:bg-line-strong transition-colors"></div>
     </div>
 
     <!-- Body: Grid -->
@@ -170,14 +170,14 @@ import Card from '#components/cards/Card.svelte';
                   {/each}
                </div>
             {:else}
-              <div class={"flex w-50 shrink-0 flex-col items-center justify-center rounded bg-gray-50 py-2 leading-none md:hidden" + (hasCriticalStock ? " text-red-500" : " text-gray-600")}>
-                  <span class="text-[13px] text-gray-500">Stock</span>
+              <div class={"flex w-50 shrink-0 flex-col items-center justify-center rounded bg-surface-soft py-2 leading-none md:hidden" + (hasCriticalStock ? " text-red-fg" : " text-fg-soft")}>
+                  <span class="text-[13px] text-fg-muted">Stock</span>
                   <span class="font-mono ff-bold">{remainingLabel}</span>
               </div>
               <div class="z-10 flex flex-1 flex-wrap justify-center gap-4 md:flex-none md:opacity-0 md:duration-200 md:group-hover:opacity-100">
                   {#each quickQuantities as cantidad}
                      <button
-                       class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-gray-100 text-xs font-bold text-gray-500 transition-colors hover:bg-blue-100 hover:text-blue-600 md:w-32 md:min-w-0"
+                       class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-surface-muted text-xs font-bold text-fg-muted transition-colors hover:bg-blue-bg-strong hover:text-blue-fg md:w-32 md:min-w-0"
                        aria-label="Add {cantidad} units to cart"
                        onclick={(e) => {
                            e.stopPropagation()
@@ -189,7 +189,7 @@ import Card from '#components/cards/Card.svelte';
                   {/each}
                   {#each quickSubQuantities as subCantidad}
                      <button
-                       class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-purple-50 text-xs font-bold text-purple-600 transition-colors hover:bg-purple-100 md:w-32 md:min-w-0"
+                       class="flex h-30 w-[56px] min-w-[14%] items-center justify-center rounded bg-purple-bg text-xs font-bold text-purple-fg transition-colors hover:bg-purple-bg-strong md:w-32 md:min-w-0"
                        aria-label="Add {subCantidad} {productoStock.producto.SbuUnit} to cart"
                        onclick={(e) => {
                            e.stopPropagation()
@@ -208,17 +208,17 @@ import Card from '#components/cards/Card.svelte';
 
         <!-- Col 3: Stock -->
         {#if !hasSerialNumbers}
-          <div class={"absolute bottom-0 left-0 text-right text-sm text-gray-500 group-hover:invisible" + (hasCriticalStock ? " text-red-500 font-bold" : "")}>
+          <div class={"absolute bottom-0 left-0 text-right text-sm text-fg-muted group-hover:invisible" + (hasCriticalStock ? " text-red-fg font-bold" : "")}>
             <div class="hidden w-50 font-mono md:block">
                 {remainingLabel}
             </div>
           </div>
         {/if}
         <!-- Col 4: Price -->
-        <div class="font-mono ml-auto text-sm font-medium text-gray-700 text-right w-80">
+        <div class="font-mono ml-auto text-sm font-medium text-fg-soft text-right w-80">
             {formatN(toSaleCurrency(price)/100, 2)}
             {#if productHasSubUnit && subUnitPrice > 0}
-              <div class="text-[11px] text-purple-600">
+              <div class="text-[11px] text-purple-fg">
                 {formatN(toSaleCurrency(subUnitPrice)/100, 2)} / {productoStock.producto.SbuUnit}
               </div>
             {/if}
@@ -230,18 +230,18 @@ import Card from '#components/cards/Card.svelte';
 
 <style>
   .serial-number-button {
-    color: #285bf1;
+    color: var(--blue-fg);
     border-radius: 7px;
     padding: 5px 8px 4px 8px;
-    background-color: #f6f6f6;
-    border-bottom: 1px solid #b7b9d3;
+    background-color: var(--surface-muted);
+    border-bottom: 1px solid var(--line-strong);
     line-height: 1;
     font-size: 14px;
     font-family: mono;
   }
   .serial-number-button:hover {
-    background-color: #5e84f7;
-    border-bottom: 1px solid #5e84f7;
-    color: white;
+    background-color: var(--blue-solid);
+    border-bottom: 1px solid var(--blue-solid);
+    color: var(--on-solid);
   }
 </style>

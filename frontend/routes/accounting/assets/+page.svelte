@@ -90,7 +90,7 @@ const assetColumns: ExcelTableColumn<IAsset>[] = [
   {
     header: "ID",
     field: "ID",
-    css: "c-blue text-center",
+    css: "text-blue-fg text-center",
     headerCss: "w-40", headerInnerCss: "min-w-36",
     getValue: (asset) => asset.ID || "",
     mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--cube]" },
@@ -390,27 +390,27 @@ const onDispose = async () => {
            than in the expense register; only depreciation reaches that table. -->
       <div class="mt-16" aria-label="Asset purchase and payment">
         {#if (selectedAsset.PurchaseAmount || 0) === 0}
-          <div class="c-gray">
+          <div class="text-fg-muted">
             <T text="Donated or contributed — nothing was owed for this asset.|Donado o aportado: no se adeuda nada por este activo." />
           </div>
         {:else}
           <div class="grid grid-cols-3 gap-10">
-            <div class="bg-slate-100 rounded py-8 text-center">
-              <div class="text-sm text-slate-600"><T text="Purchase|Compra" /></div>
+            <div class="bg-surface-muted rounded py-8 text-center">
+              <div class="text-sm text-fg-soft"><T text="Purchase|Compra" /></div>
               <div class="ff-mono ff-bold">{formatN(selectedAsset.PurchaseAmount / 100, 2)}</div>
             </div>
-            <div class="bg-slate-100 rounded py-8 text-center">
-              <div class="text-sm text-slate-600"><T text="Paid|Pagado" /></div>
+            <div class="bg-surface-muted rounded py-8 text-center">
+              <div class="text-sm text-fg-soft"><T text="Paid|Pagado" /></div>
               <div class="ff-mono ff-bold">{formatN((selectedAsset.PaidAmount || 0) / 100, 2)}</div>
             </div>
-            <div class="bg-slate-100 rounded py-8 text-center">
-              <div class="text-sm text-slate-600"><T text="Owed|Adeudado" /></div>
+            <div class="bg-surface-muted rounded py-8 text-center">
+              <div class="text-sm text-fg-soft"><T text="Owed|Adeudado" /></div>
               <div class="ff-mono ff-bold">{formatN(assetPendingAmount(selectedAsset) / 100, 2)}</div>
             </div>
           </div>
 
           {#if !canPayAsset(selectedAsset)}
-            <div class="c-gray mt-10"><T text="Fully paid.|Pagado completamente." /></div>
+            <div class="text-fg-muted mt-10"><T text="Fully paid.|Pagado completamente." /></div>
           {/if}
         {/if}
       </div>
@@ -445,14 +445,14 @@ const onDispose = async () => {
       <div class="mt-16" aria-label="Depreciation entries">
         <div class="h4 ff-bold mb-8"><T text="Depreciation Ledger|Asientos de Depreciación" /></div>
         {#if depreciationEntries.length === 0}
-          <div class="c-gray"><T text="No entries posted yet.|Aún no hay asientos registrados." /></div>
+          <div class="text-fg-muted"><T text="No entries posted yet.|Aún no hay asientos registrados." /></div>
         {:else}
           <div class="flex flex-col gap-4">
             {#each depreciationSchedule(depreciationEntries, selectedAsset.DepreciationMonths) as period (period.entry.ID)}
               <div class="flex justify-between border-b py-6">
                 <div><T text={period.label} /></div>
                 <div class="flex gap-16">
-                  <div class="c-gray">{formatTime(period.entry.Date, "d-m-Y")}</div>
+                  <div class="text-fg-muted">{formatTime(period.entry.Date, "d-m-Y")}</div>
                   <div class="ff-bold">{formatN(period.entry.Amount / 100, 2)}</div>
                 </div>
               </div>

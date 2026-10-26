@@ -102,9 +102,9 @@ import { SvelteMap } from 'svelte/reactivity';
     const name = almacenes.AlmacenesMap.get(almacenID)?.Name || `Almacen-${almacenID}`
     return `<div class="flex items-center">
       <div class="mr-8">${name}</div>
-      <div class="ff-mono text-blue-600">(</div>
+      <div class="ff-mono text-blue-fg">(</div>
       <div class="ff-mono">${cant}</div>
-      <div class="ff-mono text-blue-600">)</div>
+      <div class="ff-mono text-blue-fg">)</div>
     </div>`
   }
 
@@ -127,7 +127,7 @@ import { SvelteMap } from 'svelte/reactivity';
         let html = ""
         for (const seg of segments) {
           if (seg.highl) {
-            html += `<span class="bg-yellow-200">${seg.text}</span>`
+            html += `<span class="bg-yellow-bg-strong">${seg.text}</span>`
           } else {
             html += seg.text
           }
@@ -139,14 +139,14 @@ import { SvelteMap } from 'svelte/reactivity';
     {
       header: "Batch|Lote",
       headerCss: "w-100",
-      css: "text-purple-600 text-center px-6",
+      css: "text-purple-fg text-center px-6",
       getValue: e => getLotName(e.LotID),
       mobile: { order: 4, css: "col-span-12", labelLeft: "Lote:", if: e => !!e.LotID }
     },
     {
       header: "SKU",
       headerCss: "w-100",
-      css: "text-purple-600 text-center px-6",
+      css: "text-purple-fg text-center px-6",
       getValue: e => e.SerialNumber || "-",
       mobile: { order: 5, css: "col-span-12", labelLeft: "SKU:", if: e => !!e.SerialNumber }
     },
@@ -173,7 +173,7 @@ import { SvelteMap } from 'svelte/reactivity';
           { units: e.Quantity || 0, sub: e.SubQuantity || 0 },
           quantityDivisorOf(e.SubDivisor),
           productos.recordsMap.get(e.ProductID || 0)?.SbuUnit)
-        return `<div class="flex justify-end ${movedSubUnits < 0 ? 'text-red-500' : 'text-blue-600'}">
+        return `<div class="flex justify-end ${movedSubUnits < 0 ? 'text-red-fg' : 'text-blue-fg'}">
           ${label}
         </div>`
       },
@@ -206,7 +206,7 @@ import { SvelteMap } from 'svelte/reactivity';
         let html = ""
         for (const seg of segments) {
           if (seg.highl) {
-            html += `<span class="bg-yellow-200">${seg.text}</span>`
+            html += `<span class="bg-yellow-bg-strong">${seg.text}</span>`
           } else {
             html += seg.text
           }
