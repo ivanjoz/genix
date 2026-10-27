@@ -109,14 +109,13 @@ type SaleSummaryFrame struct {
 // ToSaleSummaryFrames is what the sale adds to its day summary, from its current state alone: an
 // annulled sale adds nothing, an undelivered one keeps its quantities pending and an unpaid one its
 // amount as debt. The frame subtracts what the sale added before each write, so no write has to
-// undo anything by hand.
-func (e *SaleOrder) ToSaleSummaryFrames() []SaleSummaryFrame {
+// undo anything by hand. It appends to lines, which a rebuild reuses from sale to sale.
+func (e *SaleOrder) ToSaleSummaryFrames(lines []SaleSummaryFrame) []SaleSummaryFrame {
 	if e.Status == OrderStatusAnnulled {
-		return nil
+		return lines
 	}
 	isDeliveryPending := e.Status == OrderStatusPending || e.Status == OrderStatusPaid
 	isPaymentPending := e.Status == OrderStatusPending || e.Status == OrderStatusDelivered
-	lines := make([]SaleSummaryFrame, 0, len(e.DetailProductsIDs))
 	for lineIndex, productID := range e.DetailProductsIDs {
 		packedQuantity := core.GetIndex(e.DetailQuantities, lineIndex)
 		if productID <= 0 || packedQuantity <= 0 {

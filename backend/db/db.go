@@ -246,10 +246,11 @@ func QueryFrame[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Exe
 	return orm.QueryFrame[RecordT, TableT, D](partition, frameName)
 }
 
-// ToFrames declares a DataFrame by a method of the record (DataFrame.ToFrames): it returns the
-// record's lines as structs whose fields are tagged frame:"key", frame:"row" or frame:"sum". It must
-// be pure: it is called on the record before and after each write.
-func ToFrames[R any, F any](method func(*R) []F) *dataframe.Projection {
+// ToFrames declares a DataFrame by a method of the record (DataFrame.ToFrames): it appends the
+// record's lines to the slice it is given and returns it, as structs whose fields are tagged
+// frame:"key", frame:"row" or frame:"sum". It must be pure: it is called on the record before and
+// after each write. A rebuild hands it one reused buffer, so it must not keep the slice.
+func ToFrames[R any, F any](method func(*R, []F) []F) *dataframe.Projection {
 	return orm.ToFrames(method)
 }
 

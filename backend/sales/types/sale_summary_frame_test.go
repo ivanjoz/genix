@@ -43,7 +43,7 @@ func TestToSaleSummaryFramesFollowsTheStatus(t *testing.T) {
 		OrderStatusAnnulled:  nil,
 	} {
 		sale.Status = status
-		if got := sale.ToSaleSummaryFrames(); !reflect.DeepEqual(got, want) {
+		if got := sale.ToSaleSummaryFrames(nil); !reflect.DeepEqual(got, want) {
 			t.Errorf("status %v:\n got %+v\nwant %+v", status, got, want)
 		}
 	}
