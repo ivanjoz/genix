@@ -17,13 +17,13 @@ import (
 // PostCompanySecretsBody is the credential upload. The certificate arrives as
 // base64 because it is a binary file coming through a JSON form.
 type PostCompanySecretsBody struct {
-	ID             int32  `json:"ID"`
-	Name           string `json:"Name"`
-	SolUser        string `json:"SolUser"`
-	SolPassword    string `json:"SolPassword"`
-	CertificateB64 string `json:"Certificate"`
-	CertPassword   string `json:"CertPassword"`
-	Environment    int8   `json:"Environment"`
+	ID             int32  `json:"ID" cb:"ID,1"`
+	Name           string `json:"Name" cb:"Name,2"`
+	SolUser        string `json:"SolUser" cb:"SolUser,3"`
+	SolPassword    string `json:"SolPassword" cb:"SolPassword,4"`
+	CertificateB64 string `json:"Certificate" cb:"Certificate,5"`
+	CertPassword   string `json:"CertPassword" cb:"CertPassword,6"`
+	Environment    int8   `json:"Environment" cb:"Environment,7"`
 }
 
 // CompanySecretsView is what a caller may see: everything except the secrets.
@@ -32,18 +32,18 @@ type PostCompanySecretsBody struct {
 // not even to the company that owns them. What a form needs is whose certificate
 // it is and when it stops working, which is all here.
 type CompanySecretsView struct {
-	ID            int32  `json:"ID"`
-	Name          string `json:"Name"`
-	SolUser       string `json:"SolUser"`
-	Environment   int8   `json:"Environment"`
-	CertSubject   string `json:"CertSubject"`
-	CertIssuer    string `json:"CertIssuer"`
-	CertRUC       string `json:"CertRUC"`
-	CertValidFrom int32  `json:"CertValidFrom"`
-	CertValidTo   int32  `json:"CertValidTo"`
-	HasCert       bool   `json:"HasCert"`
-	Status        int8   `json:"ss"`
-	Updated       int32  `json:"upd"`
+	ID            int32  `json:"ID" cb:"ID,1"`
+	Name          string `json:"Name" cb:"Name,2"`
+	SolUser       string `json:"SolUser" cb:"SolUser,3"`
+	Environment   int8   `json:"Environment" cb:"Environment,4"`
+	CertSubject   string `json:"CertSubject" cb:"CertSubject,5"`
+	CertIssuer    string `json:"CertIssuer" cb:"CertIssuer,6"`
+	CertRUC       string `json:"CertRUC" cb:"CertRUC,7"`
+	CertValidFrom int32  `json:"CertValidFrom" cb:"CertValidFrom,8"`
+	CertValidTo   int32  `json:"CertValidTo" cb:"CertValidTo,9"`
+	HasCert       bool   `json:"HasCert" cb:"HasCert,10"`
+	Status        int8   `json:"ss" cb:"ss,11"`
+	Updated       int32  `json:"upd" cb:"upd,12"`
 }
 
 // GetCompanySecrets lists the company's SUNAT credentials, without the secrets.

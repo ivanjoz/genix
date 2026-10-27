@@ -6,8 +6,8 @@ import (
 
 // SalesPlanningWeek is one week of the planned quantity for a product.
 type SalesPlanningWeek struct {
-	Week     int16 `json:",omitempty"`
-	Quantity int16 `json:",omitempty"`
+	Week     int16 `json:",omitempty" cb:"Week,1"`
+	Quantity int16 `json:",omitempty" cb:"Quantity,2"`
 }
 
 // SalesPlanning holds the sales projection assumptions/output for a product:
@@ -15,20 +15,20 @@ type SalesPlanningWeek struct {
 // per-week planned quantities.
 type SalesPlanning struct {
 	db.TableStruct[SalesPlanningTable, SalesPlanning]
-	CompanyID          int32               `json:",omitempty"`
-	ID                 int32               `json:",omitempty"`
-	TempID             int32               `json:",omitempty"`
-	ProductID          int32               `json:",omitempty"`
-	BaseQuantity       int32               `json:",omitempty"`
-	SeasonalityCurveID int32               `json:",omitempty"`
-	WeeklyQuantity     []SalesPlanningWeek `json:",omitempty"`
-	Status             int8                `json:"ss,omitempty"`
-	Updated            int32               `json:"upd,omitempty"`
-	Version            int16               `json:"ver,omitempty"`
+	CompanyID          int32               `json:",omitempty" cb:"CompanyID,1"`
+	ID                 int32               `json:",omitempty" cb:"ID,2"`
+	TempID             int32               `json:",omitempty" cb:"TempID,3"`
+	ProductID          int32               `json:",omitempty" cb:"ProductID,4"`
+	BaseQuantity       int32               `json:",omitempty" cb:"BaseQuantity,5"`
+	SeasonalityCurveID int32               `json:",omitempty" cb:"SeasonalityCurveID,6"`
+	WeeklyQuantity     []SalesPlanningWeek `json:",omitempty" cb:"WeeklyQuantity,7"`
+	Status             int8                `json:"ss,omitempty" cb:"ss,8"`
+	Updated            int32               `json:"upd,omitempty" cb:"upd,9"`
+	Version            int16               `json:"ver,omitempty" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Created   int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,11"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,12"`
+	Created   int32   `json:",omitempty" cb:"Created,13"`
 }
 
 type SalesPlanningTable struct {
@@ -67,26 +67,26 @@ func (e SalesPlanningTable) GetSchema() db.TableSchema {
 // Percent is stored as the multiplier * 1000 (3 decimal digits as an integer):
 // e.g. 0.500 -> 500, 1.000 -> 1000, 2.000 -> 2000.
 type SeasonalityCurveWeek struct {
-	Week    int16 `json:",omitempty"`
-	Percent int16 `json:",omitempty"`
+	Week    int16 `json:",omitempty" cb:"Week,1"`
+	Percent int16 `json:",omitempty" cb:"Percent,2"`
 }
 
 // SeasonalityCurve is a reusable per-week multiplier table that can be
 // assigned to many products.
 type SeasonalityCurve struct {
 	db.TableStruct[SeasonalityCurveTable, SeasonalityCurve]
-	CompanyID int32                  `json:",omitempty"`
-	ID        int32                  `json:",omitempty"`
-	TempID    int32                  `json:",omitempty"`
-	Name      string                 `json:",omitempty"`
-	Curve     []SeasonalityCurveWeek `json:",omitempty"`
-	Status    int8                   `json:"ss,omitempty"`
-	Updated   int32                  `json:"upd,omitempty"`
-	Version   int16                  `json:"ver,omitempty"`
+	CompanyID int32                  `json:",omitempty" cb:"CompanyID,1"`
+	ID        int32                  `json:",omitempty" cb:"ID,2"`
+	TempID    int32                  `json:",omitempty" cb:"TempID,3"`
+	Name      string                 `json:",omitempty" cb:"Name,4"`
+	Curve     []SeasonalityCurveWeek `json:",omitempty" cb:"Curve,5"`
+	Status    int8                   `json:"ss,omitempty" cb:"ss,6"`
+	Updated   int32                  `json:"upd,omitempty" cb:"upd,7"`
+	Version   int16                  `json:"ver,omitempty" cb:"ver,8"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Created   int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,9"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,10"`
+	Created   int32   `json:",omitempty" cb:"Created,11"`
 }
 
 type SeasonalityCurveTable struct {

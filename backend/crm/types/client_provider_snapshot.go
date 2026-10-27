@@ -26,8 +26,8 @@ import (
 
 type ClientProviderSnapshot struct {
 	db.TableStruct[ClientProviderSnapshotTable, ClientProviderSnapshot]
-	CompanyID int32 `json:",omitempty"`
-	ID        int32 `json:",omitempty"`
+	CompanyID int32 `json:",omitempty" cb:"CompanyID,1"`
+	ID        int32 `json:",omitempty" cb:"ID,2"`
 	// Hash addresses the row: every identity column below, hashed together. It is what an
 	// insert looks up first, so an identity the company already holds is reused.
 	//
@@ -36,20 +36,20 @@ type ClientProviderSnapshot struct {
 	// quarter of the time, and a collision here would print another company's RUC on a
 	// filed book. Callers still compare the fields before adopting a candidate, so even a
 	// collision costs an extra row and never a wrong identity.
-	Hash int64 `json:",omitempty"`
+	Hash int64 `json:",omitempty" cb:"Hash,3"`
 	// The values are hashed raw, not normalized: the snapshot must read back exactly what
 	// was stored, so "Jane" and "JANE" are two identities rather than one.
-	Name            string `json:",omitempty"`
-	RegistryNumber  string `json:",omitempty"`
-	IdentityDocType int8   `json:",omitempty"`
-	CityID          string `json:",omitempty"`
+	Name            string `json:",omitempty" cb:"Name,4"`
+	RegistryNumber  string `json:",omitempty" cb:"RegistryNumber,5"`
+	IdentityDocType int8   `json:",omitempty" cb:"IdentityDocType,6"`
+	CityID          string `json:",omitempty" cb:"CityID,7"`
 
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
+	Created   int32 `json:",omitempty" cb:"Created,8"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,9"`
 	// Updated never moves after the insert — nothing updates a snapshot. It is here because
 	// CacheByIDs requires it, and reading snapshots by id through the by-IDs cache is the whole
 	// access pattern of this table.
-	Updated int32 `json:"upd,omitempty"`
+	Updated int32 `json:"upd,omitempty" cb:"upd,10"`
 }
 
 type ClientProviderSnapshotTable struct {

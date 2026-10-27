@@ -98,9 +98,9 @@ func DoSaveBackup(args *core.ExecArgs) core.FuncResponse {
 }
 
 type BackupFile struct {
-	Name    string
-	Size    int32
-	Created int64 `json:"upd"`
+	Name    string `cb:"Name,1"`
+	Size    int32  `cb:"Size,2"`
+	Created int64  `json:"upd" cb:"upd,3"`
 }
 
 func GetBackups(args *core.HandlerArgs) core.HandlerResponse {

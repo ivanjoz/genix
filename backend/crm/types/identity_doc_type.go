@@ -45,10 +45,10 @@ const (
 // field puts the picker inside the input, where "Carné de extranjería" eats the number it is
 // qualifying. Only the entries whose name does not fit carry one.
 type IdentityDocOption struct {
-	ID    int8   `json:",omitempty"`
-	Code  string `json:",omitempty"` // SUNAT Anexo 1
-	Name  string `json:",omitempty"`
-	Label string `json:",omitempty"`
+	ID    int8   `json:",omitempty" cb:"ID,1"`
+	Code  string `json:",omitempty" cb:"Code,2"` // SUNAT Anexo 1
+	Name  string `json:",omitempty" cb:"Name,3"`
+	Label string `json:",omitempty" cb:"Label,4"`
 }
 
 // IdentityDocOptions is the whole catalog: what the save path validates against, what

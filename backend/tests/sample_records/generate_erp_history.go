@@ -17,7 +17,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/ivanjoz/minijson"
 	mrand "math/rand"
 	"os"
 	"path/filepath"
@@ -1308,8 +1307,7 @@ func (generator *erpHistoryGenerator) makeRequest(route string, query map[string
 	}
 }
 
-// decodeResponse reads a handler body. Responses are encoded with minijson — the compact
-// [keys, content] format the frontend decodes — so encoding/json cannot parse them.
+// decodeResponse reads a handler body. The generator sends no Accept header, so the body is plain JSON.
 func decodeResponse[T any](response core.HandlerResponse, target *T) error {
 	if response.StatusCode != 200 {
 		return core.Err(response.Error)
@@ -1317,7 +1315,7 @@ func decodeResponse[T any](response core.HandlerResponse, target *T) error {
 	if response.Body == nil {
 		return core.Err("la respuesta del handler vino vacía")
 	}
-	return minijson.Unmarshal(*response.Body, target)
+	return json.Unmarshal(*response.Body, target)
 }
 
 // isStockShortageError matches the message validateSaleStock builds when a line outruns its bucket.

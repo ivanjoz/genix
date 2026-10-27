@@ -21,12 +21,12 @@ import (
 // AssetAcquisitionPayload: that is what the columns hold, and dividing a stored total by Quantity
 // would not round-trip for a lot of three.
 type AssetEditPayload struct {
-	AssetID          int32  `json:",omitempty"`
-	SerialNumber     string `json:",omitempty"`
-	AcquisitionDate  int16  `json:",omitempty"`
-	DueDate          int16  `json:",omitempty"`
-	AcquisitionValue int32  `json:",omitempty"`
-	PurchaseAmount   int32  `json:",omitempty"`
+	AssetID          int32  `json:",omitempty" cb:"AssetID,1"`
+	SerialNumber     string `json:",omitempty" cb:"SerialNumber,2"`
+	AcquisitionDate  int16  `json:",omitempty" cb:"AcquisitionDate,3"`
+	DueDate          int16  `json:",omitempty" cb:"DueDate,4"`
+	AcquisitionValue int32  `json:",omitempty" cb:"AcquisitionValue,5"`
+	PurchaseAmount   int32  `json:",omitempty" cb:"PurchaseAmount,6"`
 	// The supplier's comprobante, with this row's totals. Its currency stays the asset's.
 	finance.PurchaseDocument
 }

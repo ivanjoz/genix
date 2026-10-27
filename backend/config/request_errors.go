@@ -11,14 +11,14 @@ import (
 const requestErrorIDsLimit = 500
 
 type requestErrorEntry struct {
-	CodeLine string
-	Text     string
-	Updated  int32 `json:"upd,omitempty"`
+	CodeLine string `cb:"CodeLine,1"`
+	Text     string `cb:"Text,2"`
+	Updated  int32  `json:"upd,omitempty" cb:"upd,3"`
 }
 
 type requestErrorByID struct {
-	ID      int32 `json:"ID"`
-	Entries []requestErrorEntry
+	ID      int32               `json:"ID" cb:"ID,1"`
+	Entries []requestErrorEntry `cb:"Entries,2"`
 }
 
 // GetRequestErrorsByIDs preserves every code-line row under its hash so rare collisions cannot

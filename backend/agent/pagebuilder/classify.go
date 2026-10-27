@@ -24,27 +24,27 @@ var classifyReasoning = subagentNoReasoning
 // request is interpretable, the overall scope, and the per-dimension policy that
 // the verifier enforces. Missing fields default to the safest value (keep).
 type editClassification struct {
-	Relevant bool   `json:"relevant"`
-	Reason   string `json:"reason"`
-	Scope    string `json:"scope"` // tweak | extend | rewrite
-	Text     string `json:"text"`
-	Images   string `json:"images"`
-	Icons    string `json:"icons"`
+	Relevant bool   `json:"relevant" cb:"relevant,1"`
+	Reason   string `json:"reason" cb:"reason,2"`
+	Scope    string `json:"scope" cb:"scope,3"` // tweak | extend | rewrite
+	Text     string `json:"text" cb:"text,4"`
+	Images   string `json:"images" cb:"images,5"`
+	Icons    string `json:"icons" cb:"icons,6"`
 }
 
 // pageClassification is the classifier verdict for ModeBuildPage: which sections
 // the request targets, so the verifier can require every other section to come
 // back unchanged.
 type pageClassification struct {
-	Relevant         bool   `json:"relevant"`
-	Reason           string `json:"reason"`
-	Operation        string `json:"operation"` // partial | rewrite
-	ModifySectionIDs []int  `json:"modifySectionIds"`
-	RemoveSectionIDs []int  `json:"removeSectionIds"`
-	AddSections      bool   `json:"addSections"`
-	AddSectionCount  int    `json:"addSectionCount"`
-	ReorderSections  bool   `json:"reorderSections"`
-	ExpectedOrder    []int  `json:"expectedSectionOrder"`
+	Relevant         bool   `json:"relevant" cb:"relevant,1"`
+	Reason           string `json:"reason" cb:"reason,2"`
+	Operation        string `json:"operation" cb:"operation,3"` // partial | rewrite
+	ModifySectionIDs []int  `json:"modifySectionIds" cb:"modifySectionIds,4"`
+	RemoveSectionIDs []int  `json:"removeSectionIds" cb:"removeSectionIds,5"`
+	AddSections      bool   `json:"addSections" cb:"addSections,6"`
+	AddSectionCount  int    `json:"addSectionCount" cb:"addSectionCount,7"`
+	ReorderSections  bool   `json:"reorderSections" cb:"reorderSections,8"`
+	ExpectedOrder    []int  `json:"expectedSectionOrder" cb:"expectedSectionOrder,9"`
 }
 
 // notInterpretableReply is pushed to the user (in Spanish) and the turn aborts

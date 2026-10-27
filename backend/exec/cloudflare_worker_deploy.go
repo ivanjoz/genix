@@ -24,10 +24,10 @@ const (
 var hostnameLabelPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type cloudflareResponse[T any] struct {
-	Result   T     `json:"result"`
-	Success  bool  `json:"success"`
-	Errors   []any `json:"errors"`
-	Messages []any `json:"messages"`
+	Result   T     `json:"result" cb:"result,1"`
+	Success  bool  `json:"success" cb:"success,2"`
+	Errors   []any `json:"errors" cb:"errors,3"`
+	Messages []any `json:"messages" cb:"messages,4"`
 }
 
 // cloudflareAPIError carries the HTTP status plus Cloudflare's own error payload so a
@@ -84,17 +84,17 @@ func maskCloudflareAccount(requestPath string) string {
 }
 
 type cloudflareZone struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   string `json:"id" cb:"id,1"`
+	Name string `json:"name" cb:"name,2"`
 }
 
 type cloudflareWorkerDomain struct {
-	ID          string `json:"id"`
-	Environment string `json:"environment"`
-	Hostname    string `json:"hostname"`
-	Service     string `json:"service"`
-	ZoneID      string `json:"zone_id"`
-	ZoneName    string `json:"zone_name"`
+	ID          string `json:"id" cb:"id,1"`
+	Environment string `json:"environment" cb:"environment,2"`
+	Hostname    string `json:"hostname" cb:"hostname,3"`
+	Service     string `json:"service" cb:"service,4"`
+	ZoneID      string `json:"zone_id" cb:"zone_id,5"`
+	ZoneName    string `json:"zone_name" cb:"zone_name,6"`
 }
 
 func DeployCloudflareWorkerHandler(_ *core.ExecArgs) core.FuncResponse {

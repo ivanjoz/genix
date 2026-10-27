@@ -26,20 +26,20 @@ import (
 // SeriesID is not a field: it is the tail of the document id, the same way the invoicing page
 // reads it.
 type SalesBookDocument struct {
-	ID               int64 `json:",omitempty"`
-	IssueDate        int16 `json:",omitempty"`
-	Correlativo      int32 `json:",omitempty"`
-	ClientSnapshotID int32 `json:",omitempty"`
-	Currency         int8  `json:",omitempty"`
+	ID               int64 `json:",omitempty" cb:"ID,1"`
+	IssueDate        int16 `json:",omitempty" cb:"IssueDate,2"`
+	Correlativo      int32 `json:",omitempty" cb:"Correlativo,3"`
+	ClientSnapshotID int32 `json:",omitempty" cb:"ClientSnapshotID,4"`
+	Currency         int8  `json:",omitempty" cb:"Currency,5"`
 
-	TaxableAmount    int64 `json:",omitempty"`
-	TaxAmount        int64 `json:",omitempty"`
-	ExemptAmount     int64 `json:",omitempty"`
-	UnaffectedAmount int64 `json:",omitempty"`
-	TotalAmount      int64 `json:",omitempty"`
+	TaxableAmount    int64 `json:",omitempty" cb:"TaxableAmount,6"`
+	TaxAmount        int64 `json:",omitempty" cb:"TaxAmount,7"`
+	ExemptAmount     int64 `json:",omitempty" cb:"ExemptAmount,8"`
+	UnaffectedAmount int64 `json:",omitempty" cb:"UnaffectedAmount,9"`
+	TotalAmount      int64 `json:",omitempty" cb:"TotalAmount,10"`
 
-	AffectedDocID int64 `json:",omitempty"`
-	State         int8  `json:",omitempty"`
+	AffectedDocID int64 `json:",omitempty" cb:"AffectedDocID,11"`
+	State         int8  `json:",omitempty" cb:"State,12"`
 }
 
 // UninvoicedSale is a sale of the period that no comprobante was ever issued for.
@@ -48,24 +48,24 @@ type SalesBookDocument struct {
 // shows it in its own block. It is here because the question "what did we sell that we never
 // invoiced?" is the one thing a month-end review cannot answer from the book itself.
 type UninvoicedSale struct {
-	ID          int64 `json:",omitempty"`
-	Date        int16 `json:",omitempty"`
-	TotalAmount int32 `json:",omitempty"`
-	TaxAmount   int32 `json:",omitempty"`
-	Status      int8  `json:"ss,omitempty"`
+	ID          int64 `json:",omitempty" cb:"ID,1"`
+	Date        int16 `json:",omitempty" cb:"Date,2"`
+	TotalAmount int32 `json:",omitempty" cb:"TotalAmount,3"`
+	TaxAmount   int32 `json:",omitempty" cb:"TaxAmount,4"`
+	Status      int8  `json:"ss,omitempty" cb:"ss,5"`
 }
 
 type SalesBookResponse struct {
-	Period   string `json:",omitempty"`
-	FirstDay int16  `json:",omitempty"`
-	LastDay  int16  `json:",omitempty"`
+	Period   string `json:",omitempty" cb:"Period,1"`
+	FirstDay int16  `json:",omitempty" cb:"FirstDay,2"`
+	LastDay  int16  `json:",omitempty" cb:"LastDay,3"`
 
-	Documents []SalesBookDocument `json:",omitempty"`
+	Documents []SalesBookDocument `json:",omitempty" cb:"Documents,4"`
 	// AffectedDocuments are the comprobantes this period's notes correct and that the period
 	// does not already contain — a note very often corrects an earlier month. They are sent
 	// apart from Documents because they are not rows of this book; the page joins them.
-	AffectedDocuments []SalesBookDocument `json:",omitempty"`
-	UninvoicedSales   []UninvoicedSale    `json:",omitempty"`
+	AffectedDocuments []SalesBookDocument `json:",omitempty" cb:"AffectedDocuments,5"`
+	UninvoicedSales   []UninvoicedSale    `json:",omitempty" cb:"UninvoicedSales,6"`
 }
 
 // GetSalesBook reads a whole period, or the single day inside one.

@@ -3,22 +3,22 @@ package types
 import "app/db"
 
 type ProductSupplyProviderRow struct {
-	ProviderID   int32 `json:",omitempty"`
-	Capacity     int32 `json:",omitempty"`
-	DeliveryTime int16 `json:",omitempty"`
-	Price        int32 `json:",omitempty"`
+	ProviderID   int32 `json:",omitempty" cb:"ProviderID,1"`
+	Capacity     int32 `json:",omitempty" cb:"Capacity,2"`
+	DeliveryTime int16 `json:",omitempty" cb:"DeliveryTime,3"`
+	Price        int32 `json:",omitempty" cb:"Price,4"`
 }
 
 type ProductSupply struct {
 	db.TableStruct[ProductSupplyTable, ProductSupply]
-	CompanyID            int32                      `json:",omitempty"`
-	ProductID            int32                      `json:",omitempty"`
-	MinimunStock         int32                      `json:",omitempty"`
-	SalesPerDayEstimated int32                      `json:",omitempty"`
-	ProviderSupply       []ProductSupplyProviderRow `json:",omitempty"`
-	Status               int8                       `json:"ss,omitempty"`
-	Updated              int32                      `json:"upd,omitempty"`
-	UpdatedBy            int32                      `json:",omitempty"`
+	CompanyID            int32                      `json:",omitempty" cb:"CompanyID,1"`
+	ProductID            int32                      `json:",omitempty" cb:"ProductID,2"`
+	MinimunStock         int32                      `json:",omitempty" cb:"MinimunStock,3"`
+	SalesPerDayEstimated int32                      `json:",omitempty" cb:"SalesPerDayEstimated,4"`
+	ProviderSupply       []ProductSupplyProviderRow `json:",omitempty" cb:"ProviderSupply,5"`
+	Status               int8                       `json:"ss,omitempty" cb:"ss,6"`
+	Updated              int32                      `json:"upd,omitempty" cb:"upd,7"`
+	UpdatedBy            int32                      `json:",omitempty" cb:"UpdatedBy,8"`
 }
 
 type ProductSupplyTable struct {

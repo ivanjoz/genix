@@ -8,19 +8,19 @@ import (
 )
 
 type GoHeapPackageUsage struct {
-	PackageName string  `json:"package_name"`
-	InuseBytes  uint64  `json:"inuse_bytes"`
-	InuseMiB    float64 `json:"inuse_mib"`
-	Percent     float64 `json:"percent"`
+	PackageName string  `json:"package_name" cb:"package_name,1"`
+	InuseBytes  uint64  `json:"inuse_bytes" cb:"inuse_bytes,2"`
+	InuseMiB    float64 `json:"inuse_mib" cb:"inuse_mib,3"`
+	Percent     float64 `json:"percent" cb:"percent,4"`
 }
 
 type GoHeapPackageReport struct {
-	TimestampUnix    int64                `json:"timestamp_unix"`
-	PackageLimit     int                  `json:"package_limit"`
-	GoHeapInuseBytes uint64               `json:"go_heap_inuse_bytes"`
-	GoHeapObjects    uint64               `json:"go_heap_objects"`
-	BackendRSSBytes  uint64               `json:"backend_rss_bytes"`
-	TopPackages      []GoHeapPackageUsage `json:"top_packages"`
+	TimestampUnix    int64                `json:"timestamp_unix" cb:"timestamp_unix,1"`
+	PackageLimit     int                  `json:"package_limit" cb:"package_limit,2"`
+	GoHeapInuseBytes uint64               `json:"go_heap_inuse_bytes" cb:"go_heap_inuse_bytes,3"`
+	GoHeapObjects    uint64               `json:"go_heap_objects" cb:"go_heap_objects,4"`
+	BackendRSSBytes  uint64               `json:"backend_rss_bytes" cb:"backend_rss_bytes,5"`
+	TopPackages      []GoHeapPackageUsage `json:"top_packages" cb:"top_packages,6"`
 }
 
 func CollectGoHeapPackageReport(requestedPackageLimit int) (GoHeapPackageReport, []string) {

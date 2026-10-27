@@ -8,28 +8,28 @@ import (
 const ToolCatalogVersion = 1
 
 type ToolSearchRequest struct {
-	Query              string             `json:"query"`
-	Domain             string             `json:"domain,omitempty"`
-	Operation          Operation          `json:"operation"`
-	DeliveryPreference DeliveryPreference `json:"delivery_preference"`
-	ResultLimit        int                `json:"result_limit,omitempty"`
+	Query              string             `json:"query" cb:"query,1"`
+	Domain             string             `json:"domain,omitempty" cb:"domain,2"`
+	Operation          Operation          `json:"operation" cb:"operation,3"`
+	DeliveryPreference DeliveryPreference `json:"delivery_preference" cb:"delivery_preference,4"`
+	ResultLimit        int                `json:"result_limit,omitempty" cb:"result_limit,5"`
 }
 
 type ToolDescriptor struct {
-	Name              string    `json:"name"`
-	Description       string    `json:"description"`
-	Domain            string    `json:"domain"`
-	Operation         Operation `json:"operation"`
-	OutputType        string    `json:"output_type"`
-	RequiredArguments []string  `json:"required_arguments"`
-	OptionalArguments []string  `json:"optional_arguments"`
-	ReadOnly          bool      `json:"read_only"`
+	Name              string    `json:"name" cb:"name,1"`
+	Description       string    `json:"description" cb:"description,2"`
+	Domain            string    `json:"domain" cb:"domain,3"`
+	Operation         Operation `json:"operation" cb:"operation,4"`
+	OutputType        string    `json:"output_type" cb:"output_type,5"`
+	RequiredArguments []string  `json:"required_arguments" cb:"required_arguments,6"`
+	OptionalArguments []string  `json:"optional_arguments" cb:"optional_arguments,7"`
+	ReadOnly          bool      `json:"read_only" cb:"read_only,8"`
 }
 
 type ToolSearchResult struct {
-	Status         string           `json:"status"`
-	CatalogVersion int              `json:"catalog_version"`
-	Tools          []ToolDescriptor `json:"tools"`
+	Status         string           `json:"status" cb:"status,1"`
+	CatalogVersion int              `json:"catalog_version" cb:"catalog_version,2"`
+	Tools          []ToolDescriptor `json:"tools" cb:"tools,3"`
 }
 
 type ToolCatalog struct {

@@ -28,31 +28,31 @@ const (
 type ServerMetricsHour struct {
 	// Hours since the unix epoch. Monotonic, so it is both the cache key and the bucket's identity,
 	// and the wall-clock hour is recoverable by multiplying back.
-	BucketID int32 `json:"ID"`
+	BucketID int32 `json:"ID" cb:"ID,1"`
 	// Offset of each sample inside the hour, 0..719, positioning every other array. Offsets rather
 	// than slot-of-day so the value stays three digits across 2880 of them.
-	SlotsInHour []int16
+	SlotsInHour []int16 `cb:"SlotsInHour,2"`
 
-	CpuPercent  []int16
-	MemPercent  []int16
-	DiskPercent []int16
-	NetRxRate   []int16
-	NetTxRate   []int16
+	CpuPercent  []int16 `cb:"CpuPercent,3"`
+	MemPercent  []int16 `cb:"MemPercent,4"`
+	DiskPercent []int16 `cb:"DiskPercent,5"`
+	NetRxRate   []int16 `cb:"NetRxRate,6"`
+	NetTxRate   []int16 `cb:"NetTxRate,7"`
 
-	BackendMemMb       []int16
-	BackendCpuPercent  []int16
-	FarewardMemMb      []int16
-	FarewardCpuPercent []int16
-	SearchMemMb        []int16
-	SearchCpuPercent   []int16
-	ScyllaMemMb        []int16
-	ScyllaCpuPercent   []int16
+	BackendMemMb       []int16 `cb:"BackendMemMb,8"`
+	BackendCpuPercent  []int16 `cb:"BackendCpuPercent,9"`
+	FarewardMemMb      []int16 `cb:"FarewardMemMb,10"`
+	FarewardCpuPercent []int16 `cb:"FarewardCpuPercent,11"`
+	SearchMemMb        []int16 `cb:"SearchMemMb,12"`
+	SearchCpuPercent   []int16 `cb:"SearchCpuPercent,13"`
+	ScyllaMemMb        []int16 `cb:"ScyllaMemMb,14"`
+	ScyllaCpuPercent   []int16 `cb:"ScyllaCpuPercent,15"`
 
 	// Absolute slot (unix seconds / 5) of the newest sample here. This is the delta watermark: the
 	// client keeps the maximum across records and sends it back, and the handler returns strictly
 	// newer slots. Never omitempty — a zero watermark would silently mean "cold load" forever.
-	Updated int32 `json:"upd"`
-	Status  int8  `json:"ss"`
+	Updated int32 `json:"upd" cb:"upd,16"`
+	Status  int8  `json:"ss" cb:"ss,17"`
 }
 
 // ServerMetricsResponse carries the window's hour buckets whole, ending with the replace Metadata

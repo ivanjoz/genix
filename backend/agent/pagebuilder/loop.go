@@ -88,16 +88,16 @@ func boolPtr(b bool) *bool { return &b }
 // one for edit-section; the whole ordered list replaces the page for
 // build-page), so no id is needed.
 type SectionEdit struct {
-	HTML string `json:"html"`
+	HTML string `json:"html" cb:"html,1"`
 	// CSS is optional raw CSS the agent authored for this section (gradients,
 	// clip-path, keyframes…), using its own class names applied in HTML. The
 	// frontend scopes it to page-unique `.x{n}` classes. Empty for most sections.
-	CSS string `json:"css"`
+	CSS string `json:"css" cb:"css,2"`
 	// SourceID maps a returned section back to its "=== SECTION N ===" number in
 	// the build-page context, so the content gate can require unchanged sections
 	// to come back verbatim. 0 = a brand-new section. Build-page only; the
 	// frontend applies sections positionally and ignores this field.
-	SourceID int `json:"sourceId"`
+	SourceID int `json:"sourceId" cb:"sourceId,3"`
 }
 
 // Sink is the subset of the chat session the webpage loop needs to push events

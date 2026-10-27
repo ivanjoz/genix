@@ -34,23 +34,23 @@ const (
 // the daily row is rewritten in place all day under a fixed key, so the client resends its highest
 // frame and the handler answers with `>=` — today refreshed, plus any day that has since started.
 type companyCreditDay struct {
-	ID        int32
-	CompanyID int32
-	Day       int16
-	CPU       uint64
-	Inference uint64
-	Updated   int32 `json:"upd"`
-	Status    int8  `json:"ss"`
+	ID        int32  `cb:"ID,1"`
+	CompanyID int32  `cb:"CompanyID,2"`
+	Day       int16  `cb:"Day,3"`
+	CPU       uint64 `cb:"CPU,4"`
+	Inference uint64 `cb:"Inference,5"`
+	Updated   int32  `json:"upd" cb:"upd,6"`
+	Status    int8   `json:"ss" cb:"ss,7"`
 }
 
 // creditRouteName is the id -> name catalog the cards need to label a route. It is an independent
 // delta collection carrying its own version, exactly as observability's Routes does, so a client
 // that already holds it never receives it again.
 type creditRouteName struct {
-	ID      int16
-	Route   string
-	Updated int32 `json:"upd"`
-	Status  int8  `json:"ss"`
+	ID      int16  `cb:"ID,1"`
+	Route   string `cb:"Route,2"`
+	Updated int32  `json:"upd" cb:"upd,3"`
+	Status  int8   `json:"ss" cb:"ss,4"`
 }
 
 // companyCreditBudgetMeter is one company's entitlement and what is left of it, in both windows the
@@ -61,63 +61,63 @@ type creditRouteName struct {
 // so a delta that withheld them would leave a stale meter on screen. It is one short row per
 // company, which is the same trade `Days` already makes for today's row.
 type companyCreditBudgetMeter struct {
-	ID                      int32
-	DailyCPU                int64
-	DailyInference          int64
-	DailyRemainingCPU       uint64
-	DailyRemainingInference uint64
-	MonthlyCPUCeiling       int64
-	MonthlyInferenceCeiling int64
-	RemainingCPU            uint64
-	RemainingInference      uint64
+	ID                      int32  `cb:"ID,1"`
+	DailyCPU                int64  `cb:"DailyCPU,2"`
+	DailyInference          int64  `cb:"DailyInference,3"`
+	DailyRemainingCPU       uint64 `cb:"DailyRemainingCPU,4"`
+	DailyRemainingInference uint64 `cb:"DailyRemainingInference,5"`
+	MonthlyCPUCeiling       int64  `cb:"MonthlyCPUCeiling,6"`
+	MonthlyInferenceCeiling int64  `cb:"MonthlyInferenceCeiling,7"`
+	RemainingCPU            uint64 `cb:"RemainingCPU,8"`
+	RemainingInference      uint64 `cb:"RemainingInference,9"`
 	// El pool diario de lecturas y lo que queda de él. Una company con estas dos cifras separadas de
 	// las de arriba es una que puede estar sirviendo GET con la cuota agotada, que es lo único que
 	// explica tráfico después de un rechazo.
-	ExtraCPU          int64
-	DayExtraCPUUsed   uint64
-	ExtraRemainingCPU uint64
-	IsCurrentMonth    bool
-	Updated           int32 `json:"upd"`
-	Status            int8  `json:"ss"`
+	ExtraCPU          int64  `cb:"ExtraCPU,10"`
+	DayExtraCPUUsed   uint64 `cb:"DayExtraCPUUsed,11"`
+	ExtraRemainingCPU uint64 `cb:"ExtraRemainingCPU,12"`
+	IsCurrentMonth    bool   `cb:"IsCurrentMonth,13"`
+	Updated           int32  `json:"upd" cb:"upd,14"`
+	Status            int8   `json:"ss" cb:"ss,15"`
 }
 
 // Days and Budgets answer whole every sync, ending with the replace Metadata
 // (core.WithDeltaReplace): a day that fell out of the window leaves the client's cache.
 type companyCreditReport struct {
-	Days    []any
-	Budgets []any
-	Routes  []creditRouteName `json:",omitempty"`
+	Days    []any             `cb:"Days,1"`
+	Budgets []any             `cb:"Budgets,2"`
+	Routes  []creditRouteName `json:",omitempty" cb:"Routes,3"`
 }
 
 // companyCreditCompanyDay is the company's own total for one day, with the per-route split the API
 // breakdown reads. Only this table carries routes: the same breakdown per user would multiply the
 // payload by the headcount for a view nothing renders.
 type companyCreditCompanyDay struct {
-	ID        int32
-	Day       int16
-	CPU       uint64
-	Inference uint64
-	Routes    []creditUsageRoute `json:",omitempty"`
-	Updated   int32              `json:"upd"`
-	Status    int8               `json:"ss"`
+	ID        int32              `cb:"ID,1"`
+	Day       int16              `cb:"Day,2"`
+	CPU       uint64             `cb:"CPU,3"`
+	Inference uint64             `cb:"Inference,4"`
+	Routes    []creditUsageRoute `json:",omitempty" cb:"Routes,5"`
+	Updated   int32              `json:"upd" cb:"upd,6"`
+	Status    int8               `json:"ss" cb:"ss,7"`
 }
 
 // companyCreditUserDay is one user's total for one day. Totals only, no route split.
 type companyCreditUserDay struct {
-	ID        int32
-	UserID    int32
-	Day       int16
-	CPU       uint64
-	Inference uint64
-	Updated   int32 `json:"upd"`
-	Status    int8  `json:"ss"`
+	ID        int32  `cb:"ID,1"`
+	UserID    int32  `cb:"UserID,2"`
+	Day       int16  `cb:"Day,3"`
+	CPU       uint64 `cb:"CPU,4"`
+	Inference uint64 `cb:"Inference,5"`
+	Updated   int32  `json:"upd" cb:"upd,6"`
+	Status    int8   `json:"ss" cb:"ss,7"`
 }
 
 // Company and Users answer whole every sync, ending with the replace Metadata.
 type companyCreditUsage struct {
-	Company []any
-	Users   []any
-	Routes  []creditRouteName `json:",omitempty"`
+	Company []any             `cb:"Company,1"`
+	Users   []any             `cb:"Users,2"`
+	Routes  []creditRouteName `json:",omitempty" cb:"Routes,3"`
 }
 
 // GetCompanyCreditUsageReport streams the platform's daily company aggregates. It ranks nothing and

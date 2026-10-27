@@ -38,23 +38,23 @@ func GetAssets(req *core.HandlerArgs) core.HandlerResponse {
 // per serial number when the units are tracked individually, or a single grouped row when
 // they are not. Whether serials were entered is what decides the granularity.
 type AssetAcquisitionPayload struct {
-	ProductID     int32    `json:",omitempty"`
-	SerialNumbers []string `json:",omitempty"`
+	ProductID     int32    `json:",omitempty" cb:"ProductID,1"`
+	SerialNumbers []string `json:",omitempty" cb:"SerialNumbers,2"`
 	// Used only when SerialNumbers is empty — the size of the grouped acquisition lot.
-	Quantity        int32  `json:",omitempty"`
-	WarehouseID     int32  `json:",omitempty"`
-	AcquisitionDate int16  `json:",omitempty"`
-	Name            string `json:",omitempty"`
-	Description     string `json:",omitempty"`
-	SupplierID      int32  `json:",omitempty"`
+	Quantity        int32  `json:",omitempty" cb:"Quantity,3"`
+	WarehouseID     int32  `json:",omitempty" cb:"WarehouseID,4"`
+	AcquisitionDate int16  `json:",omitempty" cb:"AcquisitionDate,5"`
+	Name            string `json:",omitempty" cb:"Name,6"`
+	Description     string `json:",omitempty" cb:"Description,7"`
+	SupplierID      int32  `json:",omitempty" cb:"SupplierID,8"`
 	// Book value per unit, in cents. This is what depreciates.
-	AcquisitionValue int32 `json:",omitempty"`
+	AcquisitionValue int32 `json:",omitempty" cb:"AcquisitionValue,9"`
 	// Cash owed per unit, in cents. 0 means the asset was donated or contributed: nothing is
 	// owed and nothing is payable, but the asset still has a value and still depreciates.
-	PurchaseAmount int32 `json:",omitempty"`
-	DueDate        int16 `json:",omitempty"`
+	PurchaseAmount int32 `json:",omitempty" cb:"PurchaseAmount,10"`
+	DueDate        int16 `json:",omitempty" cb:"DueDate,11"`
 	// Overrides the product's own term. 0 inherits it.
-	DepreciationMonths int16 `json:",omitempty"`
+	DepreciationMonths int16 `json:",omitempty" cb:"DepreciationMonths,12"`
 	// The supplier's comprobante, flattened into the body. Its amounts are per unit, like
 	// PurchaseAmount, and its CurrencyType is the asset's.
 	finance.PurchaseDocument
@@ -213,9 +213,9 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 
 // AssetDisposalPayload retires an asset from the register and takes its units out of stock.
 type AssetDisposalPayload struct {
-	AssetID      int32  `json:",omitempty"`
-	DisposalDate int16  `json:",omitempty"`
-	Notes        string `json:",omitempty"`
+	AssetID      int32  `json:",omitempty" cb:"AssetID,1"`
+	DisposalDate int16  `json:",omitempty" cb:"DisposalDate,2"`
+	Notes        string `json:",omitempty" cb:"Notes,3"`
 }
 
 // PutAssetDisposal disposes an asset: it stops depreciating, leaves the warehouse, and stays
@@ -276,8 +276,8 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 // AssetTransferPayload moves an asset between warehouses. The accounting identity does not
 // change — that is exactly why Asset has its own ID rather than being keyed by the stock row.
 type AssetTransferPayload struct {
-	AssetID           int32 `json:",omitempty"`
-	TargetWarehouseID int32 `json:",omitempty"`
+	AssetID           int32 `json:",omitempty" cb:"AssetID,1"`
+	TargetWarehouseID int32 `json:",omitempty" cb:"TargetWarehouseID,2"`
 }
 
 func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {

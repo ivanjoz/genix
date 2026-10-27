@@ -236,20 +236,20 @@ func MakeReqLogParams() ReqLog {
 }
 
 type ReqLog struct {
-	SK           string   `json:"sk"`
-	UserID       int32    `json:"u"`
-	Device       string   `json:"d"`
-	IP           string   `json:"i"`
-	Accion       int32    `json:"a"`
-	TimeElapsed  int      `json:"t"`
-	PathName     string   `json:"p"`
-	TimeZone     int32    `json:"z"`
-	Languages    string   `json:"l"`
-	HardwareInfo string   `json:"h"`
-	ApiUrl       string   `json:"api"`
-	Type         uint8    `json:"x"`
-	Created      string   `json:"crd"`
-	Logs         []string `json:"logs"`
+	SK           string   `json:"sk" cb:"sk,1"`
+	UserID       int32    `json:"u" cb:"u,2"`
+	Device       string   `json:"d" cb:"d,3"`
+	IP           string   `json:"i" cb:"i,4"`
+	Accion       int32    `json:"a" cb:"a,5"`
+	TimeElapsed  int      `json:"t" cb:"t,6"`
+	PathName     string   `json:"p" cb:"p,7"`
+	TimeZone     int32    `json:"z" cb:"z,8"`
+	Languages    string   `json:"l" cb:"l,9"`
+	HardwareInfo string   `json:"h" cb:"h,10"`
+	ApiUrl       string   `json:"api" cb:"api,11"`
+	Type         uint8    `json:"x" cb:"x,12"`
+	Created      string   `json:"crd" cb:"crd,13"`
+	Logs         []string `json:"logs" cb:"logs,14"`
 }
 
 var StartTime int64 = 0

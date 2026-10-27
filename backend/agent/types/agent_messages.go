@@ -15,18 +15,18 @@ import (
 // stores page HTML, builder state, retrieved documentation, or screenshots.
 type AgentMessage struct {
 	db.TableStruct[AgentMessageTable, AgentMessage]
-	CompanyUserID   int64  `db:"company_user_id,pk"`
-	SessionID       int64  `db:"session_id,pk"`
-	Timestamp       int64  `db:"timestamp,pk"`
-	CompanyID       int32  `json:",omitempty" db:"company_id"`
-	UserID          int32  `json:",omitempty" db:"user_id"`
-	Role            int8   `json:",omitempty" db:"role"`
-	Message         string `json:",omitempty" db:"message"`
-	AttachedContent string `json:",omitempty" db:"attached_content"`
-	Summary         string `json:",omitempty" db:"summary"`
-	TokensUsed      int32  `json:",omitempty" db:"tokens_used"`
-	Status          int8   `json:"ss" db:"status"`
-	Updated         int32  `json:"upd" db:"updated"`
+	CompanyUserID   int64  `db:"company_user_id,pk" cb:"CompanyUserID,1"`
+	SessionID       int64  `db:"session_id,pk" cb:"SessionID,2"`
+	Timestamp       int64  `db:"timestamp,pk" cb:"Timestamp,3"`
+	CompanyID       int32  `json:",omitempty" db:"company_id" cb:"CompanyID,4"`
+	UserID          int32  `json:",omitempty" db:"user_id" cb:"UserID,5"`
+	Role            int8   `json:",omitempty" db:"role" cb:"Role,6"`
+	Message         string `json:",omitempty" db:"message" cb:"Message,7"`
+	AttachedContent string `json:",omitempty" db:"attached_content" cb:"AttachedContent,8"`
+	Summary         string `json:",omitempty" db:"summary" cb:"Summary,9"`
+	TokensUsed      int32  `json:",omitempty" db:"tokens_used" cb:"TokensUsed,10"`
+	Status          int8   `json:"ss" db:"status" cb:"ss,11"`
+	Updated         int32  `json:"upd" db:"updated" cb:"upd,12"`
 }
 
 // PrepareCloudSync derives the synthetic partition key so callers fill only

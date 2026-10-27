@@ -15,17 +15,17 @@ import (
 // This lives in accounting rather than finance because it needs both sides, and logistics
 // already imports finance for cash movements — the reverse edge would be a cycle.
 type InventoryExpensePayload struct {
-	Name        string `json:",omitempty"`
-	Description string `json:",omitempty"`
-	CategoryID  int8   `json:",omitempty"`
-	SupplierID  int32  `json:",omitempty"`
-	Date        int16  `json:",omitempty"`
-	DueDate     int16  `json:",omitempty"`
-	ProductID   int32  `json:",omitempty"`
-	WarehouseID int32  `json:",omitempty"`
-	Quantity    int32  `json:",omitempty"`
+	Name        string `json:",omitempty" cb:"Name,1"`
+	Description string `json:",omitempty" cb:"Description,2"`
+	CategoryID  int8   `json:",omitempty" cb:"CategoryID,3"`
+	SupplierID  int32  `json:",omitempty" cb:"SupplierID,4"`
+	Date        int16  `json:",omitempty" cb:"Date,5"`
+	DueDate     int16  `json:",omitempty" cb:"DueDate,6"`
+	ProductID   int32  `json:",omitempty" cb:"ProductID,7"`
+	WarehouseID int32  `json:",omitempty" cb:"WarehouseID,8"`
+	Quantity    int32  `json:",omitempty" cb:"Quantity,9"`
 	// Unit price in cents. The expense total is this times the quantity.
-	UnitPrice int32 `json:",omitempty"`
+	UnitPrice int32 `json:",omitempty" cb:"UnitPrice,10"`
 	// The supplier's comprobante, flattened into the body. Its CurrencyType is the expense's.
 	finance.PurchaseDocument
 }

@@ -36,6 +36,8 @@ import {
   setSelectedAgentModelHash,
 } from '#core/agent/models.svelte.ts';
 import { useUI } from '@genix/ui';
+import { isColbinDisabled, setColbinDisabled } from '@genix/ui/http';
+import Checkbox from '#components/form/Checkbox.svelte';
 
   const options = [
     { id: 1, name: "Usuario" }, { id: 2, name: "Config." }, { id: 3, name: "Data" }
@@ -49,6 +51,8 @@ import { useUI } from '@genix/ui';
     { id: 1, name: tr('Light|Claro') }, { id: 2, name: tr('Dark|Oscuro') },
   ])
   let selected = $state(1)
+  // Veto over colbin responses: when set, requests stop announcing it and the backend answers plain JSON.
+  let serializationDisabled = $state(isColbinDisabled())
   const ui = useUI()
   const agentModelsService = new AgentModelsService()
   const canSelectAgentModel = Env.getCompanyID() === 1
@@ -497,16 +501,26 @@ import { useUI } from '@genix/ui';
   </div>
   <div class="w-full mt-2">
     <div class="ff-semibold text-[15px] text-fg-soft mb-6">Idioma / Language</div>
-    <CheckboxOptions
-      options={languajeOptions}
-      keyId="id"
-      keyName="name"
-      type="single"
-      useButtons={true}
-      saveOn={Core}
-      save="languaje"
-      onChange={(ids) => setLanguaje((Number(ids[0]) === 2 ? 2 : 1) as ILanguaje)}
-    />
+    <div class="flex items-center justify-between gap-16">
+      <CheckboxOptions
+        options={languajeOptions}
+        keyId="id"
+        keyName="name"
+        type="single"
+        useButtons={true}
+        saveOn={Core}
+        save="languaje"
+        onChange={(ids) => setLanguaje((Number(ids[0]) === 2 ? 2 : 1) as ILanguaje)}
+      />
+      <Checkbox
+        label="Disable Service Serialization|Desactivar Service Serialization"
+        checked={serializationDisabled}
+        onToggle={(isChecked) => {
+          serializationDisabled = isChecked
+          setColbinDisabled(isChecked)
+        }}
+      />
+    </div>
     <div class="ff-semibold text-[15px] text-fg-soft mb-6 mt-14">{tr('Theme|Tema')}</div>
     <CheckboxOptions
       options={themeOptions}

@@ -17,46 +17,46 @@ const (
 )
 
 type FeatureSearchRequest struct {
-	Query       string    `json:"query"`
-	Domain      string    `json:"domain,omitempty"`
-	Operation   Operation `json:"operation"`
-	ResultLimit int       `json:"result_limit,omitempty"`
+	Query       string    `json:"query" cb:"query,1"`
+	Domain      string    `json:"domain,omitempty" cb:"domain,2"`
+	Operation   Operation `json:"operation" cb:"operation,3"`
+	ResultLimit int       `json:"result_limit,omitempty" cb:"result_limit,4"`
 }
 
 type AccessibleFeature struct {
-	Group       string `json:"group,omitempty"`
-	Name        string `json:"name"`
-	Route       string `json:"route"`
-	Description string `json:"description,omitempty"`
+	Group       string `json:"group,omitempty" cb:"group,1"`
+	Name        string `json:"name" cb:"name,2"`
+	Route       string `json:"route" cb:"route,3"`
+	Description string `json:"description,omitempty" cb:"description,4"`
 }
 
 type RouteCandidate struct {
-	Route       string  `json:"route"`
-	PageName    string  `json:"page_name"`
-	Description string  `json:"description,omitempty"`
-	MatchedBy   string  `json:"matched_by"`
-	Score       float32 `json:"score"`
+	Route       string  `json:"route" cb:"route,1"`
+	PageName    string  `json:"page_name" cb:"page_name,2"`
+	Description string  `json:"description,omitempty" cb:"description,3"`
+	MatchedBy   string  `json:"matched_by" cb:"matched_by,4"`
+	Score       float32 `json:"score" cb:"score,5"`
 }
 
 type DocumentationPassage struct {
-	CitationID   string `json:"citation_id"`
-	Route        string `json:"route"`
-	PageTitle    string `json:"page_title"`
-	SectionTitle string `json:"section_title"`
-	Content      string `json:"content"`
+	CitationID   string `json:"citation_id" cb:"citation_id,1"`
+	Route        string `json:"route" cb:"route,2"`
+	PageTitle    string `json:"page_title" cb:"page_title,3"`
+	SectionTitle string `json:"section_title" cb:"section_title,4"`
+	Content      string `json:"content" cb:"content,5"`
 }
 
 type FeatureSearchDiagnostics struct {
-	DocumentationStatus  string `json:"documentation_status"`
-	DocumentationMatches int    `json:"documentation_matches"`
-	MenuMatches          int    `json:"menu_matches"`
+	DocumentationStatus  string `json:"documentation_status" cb:"documentation_status,1"`
+	DocumentationMatches int    `json:"documentation_matches" cb:"documentation_matches,2"`
+	MenuMatches          int    `json:"menu_matches" cb:"menu_matches,3"`
 }
 
 type FeatureSearchResult struct {
-	Status      string                   `json:"status"`
-	Routes      []RouteCandidate         `json:"routes"`
-	Passages    []DocumentationPassage   `json:"passages"`
-	Diagnostics FeatureSearchDiagnostics `json:"diagnostics"`
+	Status      string                   `json:"status" cb:"status,1"`
+	Routes      []RouteCandidate         `json:"routes" cb:"routes,2"`
+	Passages    []DocumentationPassage   `json:"passages" cb:"passages,3"`
+	Diagnostics FeatureSearchDiagnostics `json:"diagnostics" cb:"diagnostics,4"`
 }
 
 type DocumentationSearcher interface {

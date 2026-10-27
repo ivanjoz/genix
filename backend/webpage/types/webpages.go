@@ -9,20 +9,20 @@ import "app/db"
 // pages autoincrement from 15.
 type Webpage struct {
 	db.TableStruct[WebpageTable, Webpage]
-	CompanyID int32  `json:",omitempty"`
-	ID        int16  `json:",omitempty"`
-	Name      string `json:",omitempty"`
-	Route     string `json:",omitempty"`
+	CompanyID int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID        int16  `json:",omitempty" cb:"ID,2"`
+	Name      string `json:",omitempty" cb:"Name,3"`
+	Route     string `json:",omitempty" cb:"Route,4"`
 	// Image is the numeric ID of the page's thumbnail image. Image upload/resolution
 	// is handled separately; this column only stores the reference.
-	Image int32 `json:",omitempty"`
+	Image int32 `json:",omitempty" cb:"Image,5"`
 	// Status: 0 removed, 1 active, 2 published.
-	Status  int8  `json:"ss,omitempty"`
-	Updated int32 `json:"upd,omitempty"`
-	Version int16 `json:"ver,omitempty"`
+	Status  int8  `json:"ss,omitempty" cb:"ss,6"`
+	Updated int32 `json:"upd,omitempty" cb:"upd,7"`
+	Version int16 `json:"ver,omitempty" cb:"ver,8"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,9"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,10"`
 }
 
 type WebpageTable struct {

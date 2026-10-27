@@ -28,38 +28,38 @@ const (
 // the old one to Status 0, which keeps the documents signed with it auditable.
 type CompanySecrets struct {
 	db.TableStruct[CompanySecretsTable, CompanySecrets]
-	CompanyID int32  `json:",omitempty"`
-	ID        int32  `json:",omitempty"`
-	Type      int8   `json:",omitempty"`
-	Name      string `json:",omitempty"`
+	CompanyID int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID        int32  `json:",omitempty" cb:"ID,2"`
+	Type      int8   `json:",omitempty" cb:"Type,3"`
+	Name      string `json:",omitempty" cb:"Name,4"`
 
 	// SolUser is the secondary SOL user. It travels in clear because on its own
 	// it authenticates nothing.
-	SolUser string `json:",omitempty"`
+	SolUser string `json:",omitempty" cb:"SolUser,5"`
 
 	// Encrypted with core.Encrypt before they reach the database, and excluded
 	// from every response: no endpoint returns key material, not even to the
 	// company that owns it.
-	SolPasswordEnc  []byte `json:"-"`
-	CertificateEnc  []byte `json:"-"`
-	CertPasswordEnc []byte `json:"-"`
+	SolPasswordEnc  []byte `json:"-" cb:"-"`
+	CertificateEnc  []byte `json:"-" cb:"-"`
+	CertPasswordEnc []byte `json:"-" cb:"-"`
 
 	// Read out of the certificate when it is uploaded, so the UI can show whose
 	// it is and warn before it expires without decrypting anything.
-	CertSubject   string `json:",omitempty"`
-	CertIssuer    string `json:",omitempty"`
-	CertSerial    string `json:",omitempty"`
-	CertRUC       string `json:",omitempty" db:"cert_ruc"`
-	CertValidFrom int32  `json:",omitempty"`
-	CertValidTo   int32  `json:",omitempty"`
+	CertSubject   string `json:",omitempty" cb:"CertSubject,6"`
+	CertIssuer    string `json:",omitempty" cb:"CertIssuer,7"`
+	CertSerial    string `json:",omitempty" cb:"CertSerial,8"`
+	CertRUC       string `json:",omitempty" db:"cert_ruc" cb:"CertRUC,9"`
+	CertValidFrom int32  `json:",omitempty" cb:"CertValidFrom,10"`
+	CertValidTo   int32  `json:",omitempty" cb:"CertValidTo,11"`
 
-	Environment int8 `json:",omitempty"`
+	Environment int8 `json:",omitempty" cb:"Environment,12"`
 
-	Status    int8  `json:"ss,omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
+	Status    int8  `json:"ss,omitempty" cb:"ss,13"`
+	Updated   int32 `json:"upd,omitempty" cb:"upd,14"`
+	UpdatedBy int32 `json:",omitempty" cb:"UpdatedBy,15"`
+	Created   int32 `json:",omitempty" cb:"Created,16"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,17"`
 }
 
 type CompanySecretsTable struct {

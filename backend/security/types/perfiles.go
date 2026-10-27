@@ -7,17 +7,17 @@ import (
 
 type Profile struct {
 	db.TableStruct[ProfileTable, Profile]
-	CompanyID   int32   `db:"empresa_id,pk"`
-	ID          int32   `db:"id,pk"`
-	Name        string  `db:"nombre"`
-	Description string  `db:"descripcion"`
-	Modules     []int16 `db:"modulos_ids"`
+	CompanyID   int32   `db:"empresa_id,pk" cb:"CompanyID,1"`
+	ID          int32   `db:"id,pk" cb:"ID,2"`
+	Name        string  `db:"nombre" cb:"Name,3"`
+	Description string  `db:"descripcion" cb:"Description,4"`
+	Modules     []int16 `db:"modulos_ids" cb:"Modules,5"`
 	// AccesosGrants is what the profile grants: one record per access, carrying its level and its
 	// sub-accesses. Exactly the shape a user's direct grants take, which is what lets one editor
 	// and one merge serve both.
-	AccesosGrants []coreTypes.AccesoGrantRecord `db:"accesos_grants"`
-	Status        int8                          `json:"ss" db:"status"`
-	Updated       int32                         `json:"upd" db:"updated"`
+	AccesosGrants []coreTypes.AccesoGrantRecord `db:"accesos_grants" cb:"AccesosGrants,6"`
+	Status        int8                          `json:"ss" db:"status" cb:"ss,7"`
+	Updated       int32                         `json:"upd" db:"updated" cb:"upd,8"`
 }
 
 type ProfileTable struct {

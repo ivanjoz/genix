@@ -10,19 +10,19 @@ import (
 )
 
 type WarehouseStockMin struct {
-	WarehouseID int32 `json:"a"`
-	Quantity    int32 `json:"c"`
+	WarehouseID int32 `json:"a" cb:"a,1"`
+	Quantity    int32 `json:"c" cb:"c,2"`
 }
 
 type ProductPresentation struct {
-	ID              int16  `ms:"i" json:"id,omitempty"`
-	AtributoID      int16  `ms:"a" json:"at,omitempty"`
-	Name            string `ms:"n" json:"nm,omitempty"`
-	Color           string `ms:"c" json:"cl,omitempty"`
-	Price           int32  `ms:"p" json:"pc,omitempty"`
-	PriceDifference int32  `ms:"d" json:"pd,omitempty"`
-	SKU             string `ms:"sk" json:"sk,omitempty"`
-	Status          int8   `ms:"s" json:"ss,omitempty"`
+	ID              int16  `ms:"i" json:"id,omitempty" cb:"id,1"`
+	AtributoID      int16  `ms:"a" json:"at,omitempty" cb:"at,2"`
+	Name            string `ms:"n" json:"nm,omitempty" cb:"nm,3"`
+	Color           string `ms:"c" json:"cl,omitempty" cb:"cl,4"`
+	Price           int32  `ms:"p" json:"pc,omitempty" cb:"pc,5"`
+	PriceDifference int32  `ms:"d" json:"pd,omitempty" cb:"pd,6"`
+	SKU             string `ms:"sk" json:"sk,omitempty" cb:"sk,7"`
+	Status          int8   `ms:"s" json:"ss,omitempty" cb:"ss,8"`
 }
 
 // Product.Status is the row's role in the catalog, and it is enumerated in the delta view's
@@ -41,66 +41,66 @@ const (
 
 type Product struct {
 	db.TableStruct[ProductTable, Product]
-	CompanyID   int32   `json:",omitempty"`
-	ID          int32   `db:"id,pk"`
-	TempID      int32   `json:",omitempty"`
-	Name        string  `db:"nombre"`
-	Description string  `json:",omitempty"`
-	ContentHTML string  `json:",omitempty"`
-	CategoryIDs []int32 `json:",omitempty" db:"category_ids"`
-	BrandID     int32   `json:",omitempty"`
-	Params      []int8  `json:",omitempty"`
-	Price       int32   `json:",omitempty"`
-	CurrencyID  int16   `json:",omitempty"`
-	UnitID      int16   `json:",omitempty"`
-	Discount    float32 `json:",omitempty"`
-	FinalPrice  int32   `json:",omitempty"`
-	Weight      float32 `json:",omitempty"`
-	Volume      float32 `json:",omitempty"`
+	CompanyID   int32   `json:",omitempty" cb:"CompanyID,1"`
+	ID          int32   `db:"id,pk" cb:"ID,2"`
+	TempID      int32   `json:",omitempty" cb:"TempID,3"`
+	Name        string  `db:"nombre" cb:"Name,4"`
+	Description string  `json:",omitempty" cb:"Description,5"`
+	ContentHTML string  `json:",omitempty" cb:"ContentHTML,6"`
+	CategoryIDs []int32 `json:",omitempty" db:"category_ids" cb:"CategoryIDs,7"`
+	BrandID     int32   `json:",omitempty" cb:"BrandID,8"`
+	Params      []int8  `json:",omitempty" cb:"Params,9"`
+	Price       int32   `json:",omitempty" cb:"Price,10"`
+	CurrencyID  int16   `json:",omitempty" cb:"CurrencyID,11"`
+	UnitID      int16   `json:",omitempty" cb:"UnitID,12"`
+	Discount    float32 `json:",omitempty" cb:"Discount,13"`
+	FinalPrice  int32   `json:",omitempty" cb:"FinalPrice,14"`
+	Weight      float32 `json:",omitempty" cb:"Weight,15"`
+	Volume      float32 `json:",omitempty" cb:"Volume,16"`
 	// Sub-unit: the divisor of the (Units, Sub) quantity pair. SbuQuantity is how many
 	// sub-units make one whole unit — 1000 for a kilogram sold by the gram, 6 for a box sold
 	// by the candy. 0 or 1 means the product has no sub-unit. It may only ever be refined to
 	// a multiple (see core.IsQuantityDivisorRefinement): coarsening would round away real
 	// stock, since 9/12 is 4.5 sixths. int16 to match SubDivisor on the stock and movement
 	// rows, so one concept has one type.
-	SbuQuantity   int16   `json:",omitempty"`
-	SbuUnit       string  `json:",omitempty"`
-	SbuPrice      int32   `json:",omitempty"`
-	SbuDiscount   float32 `json:",omitempty"`
-	SbuFinalPrice int32   `json:",omitempty"`
-	SKU           string  `json:",omitempty"`
-	NameHash      int32   `json:",omitempty"`
+	SbuQuantity   int16   `json:",omitempty" cb:"SbuQuantity,17"`
+	SbuUnit       string  `json:",omitempty" cb:"SbuUnit,18"`
+	SbuPrice      int32   `json:",omitempty" cb:"SbuPrice,19"`
+	SbuDiscount   float32 `json:",omitempty" cb:"SbuDiscount,20"`
+	SbuFinalPrice int32   `json:",omitempty" cb:"SbuFinalPrice,21"`
+	SKU           string  `json:",omitempty" cb:"SKU,22"`
+	NameHash      int32   `json:",omitempty" cb:"NameHash,23"`
 	// Straight-line depreciation term for supplies that are fixed assets (Status=2).
 	// 0 = not depreciable. Copied onto accounting.Asset at acquisition so later catalog
 	// edits never rewrite the schedule of an asset already in service.
-	DepreciationMonths int16 `json:",omitempty"`
+	DepreciationMonths int16 `json:",omitempty" cb:"DepreciationMonths,24"`
 
-	Properties    []ProductProperties   `json:",omitempty"`
-	Presentations []ProductPresentation `json:",omitempty"`
+	Properties    []ProductProperties   `json:",omitempty" cb:"Properties,25"`
+	Presentations []ProductPresentation `json:",omitempty" cb:"Presentations,26"`
 	// Image storage: ImageMain is the imageID of the primary image (defaults to the
 	// first uploaded). ImageIDs holds every imageID; ImageDescriptions is parallel to it.
 	// Each imageID encodes its own resolution config in the last digit (autoincrement*10 + configDigit).
-	ImageMain         int32               `json:",omitempty"`
-	ImageIDs          []int32             `json:",omitempty"`
-	ImageDescriptions []string            `json:",omitempty"`
-	Stock             []WarehouseStockMin `json:",omitempty"`
-	ReservedStock     []WarehouseStockMin `json:",omitempty"`
-	StockStatus       int8                `json:",omitempty"`
-	NameUpdated       int32               `json:",omitempty"`
+	ImageMain         int32               `json:",omitempty" cb:"ImageMain,27"`
+	ImageIDs          []int32             `json:",omitempty" cb:"ImageIDs,28"`
+	ImageDescriptions []string            `json:",omitempty" cb:"ImageDescriptions,29"`
+	Stock             []WarehouseStockMin `json:",omitempty" cb:"Stock,30"`
+	ReservedStock     []WarehouseStockMin `json:",omitempty" cb:"ReservedStock,31"`
+	StockStatus       int8                `json:",omitempty" cb:"StockStatus,32"`
+	NameUpdated       int32               `json:",omitempty" cb:"NameUpdated,33"`
 	// General properties
-	Status    int8  `json:"ss,omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
+	Status    int8  `json:"ss,omitempty" cb:"ss,34"`
+	Updated   int32 `json:"upd,omitempty" cb:"upd,35"`
+	UpdatedBy int32 `json:",omitempty" cb:"UpdatedBy,36"`
+	Created   int32 `json:",omitempty" cb:"Created,37"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,38"`
 	/* concatenated with CompanyID to be indexed */
-	CategoriesWithStock []int32 `json:",omitempty"`
-	Version             int16   `json:"ver,omitempty"`
+	CategoriesWithStock []int32 `json:",omitempty" cb:"CategoriesWithStock,39"`
+	Version             int16   `json:"ver,omitempty" cb:"ver,40"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata *string `json:"mdt,omitempty"`
+	Metadata *string `json:"mdt,omitempty" cb:"mdt,41"`
 	// BrandName copies the brand's name so the text index can read it from the table: a reindex
 	// only sees stored columns. PostProducts fills it from BrandID.
-	BrandName string `json:",omitempty"`
+	BrandName string `json:",omitempty" cb:"BrandName,42"`
 }
 
 type ProductTable struct {
@@ -194,9 +194,9 @@ func (e ProductTable) GetSchema() db.TableSchema {
 }
 
 type ProductProperty struct {
-	ID     int16  `json:"id,omitempty" ms:"i"`
-	Name   string `json:"nm,omitempty" ms:"n"`
-	Status int8   `json:"ss,omitempty" ms:"s"`
+	ID     int16  `json:"id,omitempty" ms:"i" cb:"id,1"`
+	Name   string `json:"nm,omitempty" ms:"n" cb:"nm,2"`
+	Status int8   `json:"ss,omitempty" ms:"s" cb:"ss,3"`
 }
 
 type ProductProperties struct {

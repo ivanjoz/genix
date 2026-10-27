@@ -1,9 +1,9 @@
 package discovery
 
 type Bundle struct {
-	Plan                    Plan                `json:"plan"`
-	DocumentationNavigation FeatureSearchResult `json:"documentation_navigation"`
-	AgentTools              ToolSearchResult    `json:"agent_tools"`
+	Plan                    Plan                `json:"plan" cb:"plan,1"`
+	DocumentationNavigation FeatureSearchResult `json:"documentation_navigation" cb:"documentation_navigation,2"`
+	AgentTools              ToolSearchResult    `json:"agent_tools" cb:"agent_tools,3"`
 }
 
 func EmptyFeatureResult() FeatureSearchResult {

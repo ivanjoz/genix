@@ -16,39 +16,39 @@ import (
 // whole-unit inflows), which is what lets movements accumulate with a plain +.
 type ProductStock struct {
 	db.TableStruct[ProductStockTable, ProductStock]
-	ID                int64
-	CompanyID         int32 `json:",omitempty"`
-	WarehouseID       int32 `json:",omitempty"`
-	ProductID         int32 `json:",omitempty"`
-	PresentationID    int16 `json:",omitempty"`
-	Quantity          int32 `json:",omitempty"`
-	SubQuantity       int32 `json:",omitempty"`
-	DetailQuantity    int32 `json:",omitempty"`
-	DetailSubQuantity int32 `json:",omitempty"`
+	ID                int64 `cb:"ID,1"`
+	CompanyID         int32 `json:",omitempty" cb:"CompanyID,2"`
+	WarehouseID       int32 `json:",omitempty" cb:"WarehouseID,3"`
+	ProductID         int32 `json:",omitempty" cb:"ProductID,4"`
+	PresentationID    int16 `json:",omitempty" cb:"PresentationID,5"`
+	Quantity          int32 `json:",omitempty" cb:"Quantity,6"`
+	SubQuantity       int32 `json:",omitempty" cb:"SubQuantity,7"`
+	DetailQuantity    int32 `json:",omitempty" cb:"DetailQuantity,8"`
+	DetailSubQuantity int32 `json:",omitempty" cb:"DetailSubQuantity,9"`
 	// SubDivisor is the divisor every SubQuantity on this row (and on its detail rows, which
 	// are the same product) is expressed in. Kept here rather than read from the product so a
 	// divisor refinement converts this row on the fly instead of rewriting history.
-	SubDivisor                int16   `json:",omitempty"`
-	DetailComputedDate        int16   `json:",omitempty"`
-	DetailComputedQuantity    int32   `json:",omitempty"`
-	DetailComputedSubQuantity int32   `json:",omitempty"`
-	LastPricesPrice           []int32 `json:",omitempty"`
-	LastPricesQuantity        []int32 `json:",omitempty"`
+	SubDivisor                int16   `json:",omitempty" cb:"SubDivisor,10"`
+	DetailComputedDate        int16   `json:",omitempty" cb:"DetailComputedDate,11"`
+	DetailComputedQuantity    int32   `json:",omitempty" cb:"DetailComputedQuantity,12"`
+	DetailComputedSubQuantity int32   `json:",omitempty" cb:"DetailComputedSubQuantity,13"`
+	LastPricesPrice           []int32 `json:",omitempty" cb:"LastPricesPrice,14"`
+	LastPricesQuantity        []int32 `json:",omitempty" cb:"LastPricesQuantity,15"`
 	// AverageCost is the moving weighted average cost of one whole unit, in PEN cents, net of
 	// recoverable IGV. ApplyMovimientos moves it on every costed inflow; outflows and uncosted
 	// inflows leave it as it is. It is an operational figure: a purchase whose comprobante is
 	// registered after the goods arrive does not restate it — the accounting valuation does.
-	AverageCost int32 `json:",omitempty"`
-	StockStatus int8  `json:",omitempty"`
+	AverageCost int32 `json:",omitempty" cb:"AverageCost,16"`
+	StockStatus int8  `json:",omitempty" cb:"StockStatus,17"`
 
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Updated   int32 `json:"upd,omitempty"`
-	Version   int16 `json:"ver,omitempty"`
+	Created   int32 `json:",omitempty" cb:"Created,18"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,19"`
+	Updated   int32 `json:"upd,omitempty" cb:"upd,20"`
+	Version   int16 `json:"ver,omitempty" cb:"ver,21"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Status    int8    `json:"ss,omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,22"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,23"`
+	Status    int8    `json:"ss,omitempty" cb:"ss,24"`
 }
 
 // Derive Status from the two live buckets (Quantity + DetailQuantity). The sub-unit halves
@@ -118,21 +118,21 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 // distinct (warehouse-product-presentation, lot, serial) combination.
 type ProductStockDetail struct {
 	db.TableStruct[ProductStockDetailTable, ProductStockDetail]
-	CompanyID      int32  `json:",omitempty"`
-	ProductStockID int64  `json:",omitempty"`
-	LotID          int32  `json:",omitempty"`
-	SerialNumber   string `json:",omitempty"`
-	WarehouseID    int32  `json:",omitempty"`
-	ProductID      int32  `json:",omitempty"`
-	Quantity       int32  `json:",omitempty"`
-	SubQuantity    int32  `json:",omitempty"`
-	ExpirationDate int16  `json:",omitempty"`
+	CompanyID      int32  `json:",omitempty" cb:"CompanyID,1"`
+	ProductStockID int64  `json:",omitempty" cb:"ProductStockID,2"`
+	LotID          int32  `json:",omitempty" cb:"LotID,3"`
+	SerialNumber   string `json:",omitempty" cb:"SerialNumber,4"`
+	WarehouseID    int32  `json:",omitempty" cb:"WarehouseID,5"`
+	ProductID      int32  `json:",omitempty" cb:"ProductID,6"`
+	Quantity       int32  `json:",omitempty" cb:"Quantity,7"`
+	SubQuantity    int32  `json:",omitempty" cb:"SubQuantity,8"`
+	ExpirationDate int16  `json:",omitempty" cb:"ExpirationDate,9"`
 
-	Updated   int32 `json:"upd,omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Status    int8  `json:"ss,omitempty"`
+	Updated   int32 `json:"upd,omitempty" cb:"upd,10"`
+	UpdatedBy int32 `json:",omitempty" cb:"UpdatedBy,11"`
+	Created   int32 `json:",omitempty" cb:"Created,12"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,13"`
+	Status    int8  `json:"ss,omitempty" cb:"ss,14"`
 }
 
 type ProductStockDetailTable struct {
@@ -171,18 +171,18 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 // ProductStockLot is a dedupe-able lot catalog. Hash = (Date, SupplierID, Name).
 type ProductStockLot struct {
 	db.TableStruct[ProductStockLotTable, ProductStockLot]
-	CompanyID        int32  `json:",omitempty"`
-	ID               int32  `json:",omitempty"`
-	Date             int16  `json:",omitempty"`
-	Name             string `json:",omitempty"`
-	SupplierID       int32  `json:",omitempty"`
-	DeliveryNoteID   int32  `json:",omitempty"`
-	DeliveryNoteCode string `json:",omitempty"`
-	Hash             string `json:",omitempty"`
+	CompanyID        int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID               int32  `json:",omitempty" cb:"ID,2"`
+	Date             int16  `json:",omitempty" cb:"Date,3"`
+	Name             string `json:",omitempty" cb:"Name,4"`
+	SupplierID       int32  `json:",omitempty" cb:"SupplierID,5"`
+	DeliveryNoteID   int32  `json:",omitempty" cb:"DeliveryNoteID,6"`
+	DeliveryNoteCode string `json:",omitempty" cb:"DeliveryNoteCode,7"`
+	Hash             string `json:",omitempty" cb:"Hash,8"`
 
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Status    int8  `json:"ss,omitempty"`
+	Created   int32 `json:",omitempty" cb:"Created,9"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,10"`
+	Status    int8  `json:"ss,omitempty" cb:"ss,11"`
 }
 
 func (e *ProductStockLot) SelfParse() {
@@ -221,19 +221,19 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 // DeliveryOrderNote is modeled but not wired up yet.
 type DeliveryOrderNote struct {
 	db.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
-	CompanyID   int32  `json:",omitempty"`
-	ID          int32  `json:",omitempty"`
-	Date        int16  `json:",omitempty"`
-	Code        string `json:",omitempty"`
-	SupplierID  int32  `json:",omitempty"`
-	Description string `json:",omitempty"`
-	Hash        string `json:",omitempty"`
+	CompanyID   int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID          int32  `json:",omitempty" cb:"ID,2"`
+	Date        int16  `json:",omitempty" cb:"Date,3"`
+	Code        string `json:",omitempty" cb:"Code,4"`
+	SupplierID  int32  `json:",omitempty" cb:"SupplierID,5"`
+	Description string `json:",omitempty" cb:"Description,6"`
+	Hash        string `json:",omitempty" cb:"Hash,7"`
 
-	Created   int32 `json:",omitempty"`
-	CreatedBy int32 `json:",omitempty"`
-	Updated   int32 `json:",omitempty"`
-	UpdatedBy int32 `json:",omitempty"`
-	Status    int8  `json:"ss,omitempty"`
+	Created   int32 `json:",omitempty" cb:"Created,8"`
+	CreatedBy int32 `json:",omitempty" cb:"CreatedBy,9"`
+	Updated   int32 `json:",omitempty" cb:"Updated,10"`
+	UpdatedBy int32 `json:",omitempty" cb:"UpdatedBy,11"`
+	Status    int8  `json:"ss,omitempty" cb:"ss,12"`
 }
 
 type DeliveryOrderNoteTable struct {

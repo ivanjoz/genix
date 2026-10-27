@@ -24,7 +24,7 @@ type LambdaExecOutput struct {
 }
 
 type ExecLambdaInput struct {
-	ExecArgs core.ExecArgs `json:"fn_exec"`
+	ExecArgs core.ExecArgs `json:"fn_exec" cb:"fn_exec,1"`
 }
 
 func ExecLambda(args core.ExecArgs) LambdaExecOutput {

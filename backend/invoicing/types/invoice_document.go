@@ -96,66 +96,66 @@ func SalePrefix(id int64) int64 {
 // the one whose id is the sale's.
 type InvoiceDocument struct {
 	db.TableStruct[InvoiceDocumentTable, InvoiceDocument]
-	CompanyID int32 `json:",omitempty"`
+	CompanyID int32 `json:",omitempty" cb:"CompanyID,1"`
 	// ID is the sale's id with the series in its last two digits. Set by the
 	// caller, not the ORM — see DocumentIDForSale.
-	ID int64 `json:",omitempty"`
+	ID int64 `json:",omitempty" cb:"ID,2"`
 
 	// Correlativo is the document number within its series, reserved from the
 	// series counter when the row is written.
-	Correlativo int32 `json:",omitempty"`
+	Correlativo int32 `json:",omitempty" cb:"Correlativo,3"`
 
-	IssueDate int16 `json:",omitempty"`
-	IssueTime int32 `json:",omitempty"`
+	IssueDate int16 `json:",omitempty" cb:"IssueDate,4"`
+	IssueTime int32 `json:",omitempty" cb:"IssueTime,5"`
 
 	// ClientSnapshotID freezes who was billed, in crm.ClientProviderSnapshot. Everything
 	// else about the sale is read back from the sale, but the customer cannot be: renaming
 	// a client in CRM would rewrite the name this document already printed, and the
 	// Registro de Ventas has to read the same name five years from now.
-	ClientSnapshotID int32 `json:",omitempty"`
+	ClientSnapshotID int32 `json:",omitempty" cb:"ClientSnapshotID,6"`
 
-	Currency int8 `json:",omitempty"`
+	Currency int8 `json:",omitempty" cb:"Currency,7"`
 
 	// Amounts in cents. They aggregate the lines, so they are 64 bits. Kept even
 	// though the lines are not: every list and report reads these, and joining to
 	// the sale for each row would be the wrong trade.
-	TotalAmount      int64 `json:",omitempty"`
-	TaxAmount        int64 `json:",omitempty"`
-	TaxableAmount    int64 `json:",omitempty"`
-	ExemptAmount     int64 `json:",omitempty"`
-	UnaffectedAmount int64 `json:",omitempty"`
-	FreeAmount       int64 `json:",omitempty"`
+	TotalAmount      int64 `json:",omitempty" cb:"TotalAmount,8"`
+	TaxAmount        int64 `json:",omitempty" cb:"TaxAmount,9"`
+	TaxableAmount    int64 `json:",omitempty" cb:"TaxableAmount,10"`
+	ExemptAmount     int64 `json:",omitempty" cb:"ExemptAmount,11"`
+	UnaffectedAmount int64 `json:",omitempty" cb:"UnaffectedAmount,12"`
+	FreeAmount       int64 `json:",omitempty" cb:"FreeAmount,13"`
 
 	// Notes only: what this document corrects, and why. AffectedDocID is also how a
 	// note reaches its sale — the document it corrects is the one whose id is the
 	// sale's.
-	AffectedDocID  int64  `json:",omitempty"`
-	NoteReasonCode string `json:",omitempty"`
-	NoteReason     string `json:",omitempty"`
+	AffectedDocID  int64  `json:",omitempty" cb:"AffectedDocID,14"`
+	NoteReasonCode string `json:",omitempty" cb:"NoteReasonCode,15"`
+	NoteReason     string `json:",omitempty" cb:"NoteReason,16"`
 
-	State     int8   `json:",omitempty"`
-	SunatCode string `json:",omitempty"`
+	State     int8   `json:",omitempty" cb:"State,17"`
+	SunatCode string `json:",omitempty" cb:"SunatCode,18"`
 	// SunatNotes are the CDR's observations. Unlike the description, which is
 	// derivable from the code, these exist nowhere but in the CDR.
-	SunatNotes       []string `json:",omitempty" db:",list"`
-	Ticket           string   `json:",omitempty"`
-	InvoiceSummaryID int64    `json:",omitempty"`
+	SunatNotes       []string `json:",omitempty" db:",list" cb:"SunatNotes,19"`
+	Ticket           string   `json:",omitempty" cb:"Ticket,20"`
+	InvoiceSummaryID int64    `json:",omitempty" cb:"InvoiceSummaryID,21"`
 	// DigestValue is SUNAT's hash of the document. It is the last field of the
 	// QR code, so it has to survive as long as the document does.
-	DigestValue string `json:",omitempty"`
+	DigestValue string `json:",omitempty" cb:"DigestValue,22"`
 
-	RetryCount int8   `json:",omitempty"`
-	LastError  string `json:",omitempty"`
+	RetryCount int8   `json:",omitempty" cb:"RetryCount,23"`
+	LastError  string `json:",omitempty" cb:"LastError,24"`
 
-	Status int8 `json:"ss,omitempty"`
+	Status int8 `json:"ss,omitempty" cb:"ss,25"`
 	// Version drives the delta list: State moves several times after the
 	// row is written and the frontend syncs on those transitions.
-	Updated int32 `json:"upd,omitempty"`
-	Version int16 `json:"ver,omitempty"`
+	Updated int32 `json:"upd,omitempty" cb:"upd,26"`
+	Version int16 `json:"ver,omitempty" cb:"ver,27"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	Created   int32   `json:",omitempty"`
-	CreatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,28"`
+	Created   int32   `json:",omitempty" cb:"Created,29"`
+	CreatedBy int32   `json:",omitempty" cb:"CreatedBy,30"`
 }
 
 // SeriesID is the series this document was issued under, read off the tail of the

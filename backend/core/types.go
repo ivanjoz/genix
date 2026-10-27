@@ -37,11 +37,11 @@ func (e *ExecArgs) AddMessage(message string) {
 }
 
 type FuncResponse struct {
-	ElapsedTime int    `json:",omitempty"`
-	Message     string `json:",omitempty"`
-	Error       string `json:",omitempty"`
-	Content     map[string]any
-	ContentJson string `json:",omitempty"`
+	ElapsedTime int            `json:",omitempty" cb:"ElapsedTime,1"`
+	Message     string         `json:",omitempty" cb:"Message,2"`
+	Error       string         `json:",omitempty" cb:"Error,3"`
+	Content     map[string]any `cb:"Content,4"`
+	ContentJson string         `json:",omitempty" cb:"ContentJson,5"`
 }
 
 type AppRouterType map[string]func(args *HandlerArgs) HandlerResponse

@@ -21,33 +21,33 @@ const (
 
 type ClientProvider struct {
 	db.TableStruct[ClientProviderTable, ClientProvider]
-	CompanyID        int32  `json:",omitempty"`
-	ID               int32  `json:",omitempty"`
-	Type             int8   `json:",omitempty"`
-	Name             string `json:",omitempty"`
-	RegistryNumber   string `json:",omitempty"`
-	NameRegistryHash int64  `json:",omitempty"`
+	CompanyID        int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID               int32  `json:",omitempty" cb:"ID,2"`
+	Type             int8   `json:",omitempty" cb:"Type,3"`
+	Name             string `json:",omitempty" cb:"Name,4"`
+	RegistryNumber   string `json:",omitempty" cb:"RegistryNumber,5"`
+	NameRegistryHash int64  `json:",omitempty" cb:"NameRegistryHash,6"`
 	// IdentityDocType is SUNAT's tipo de documento de identidad, as the numeric id of an
 	// IdentityDocOptions entry — see identity_doc_type.go. It cannot be inferred from
 	// RegistryNumber: a carné de extranjería, a pasaporte and a PTP are all "not 8 and not
 	// 11 digits", which is why the till offers a picker. 0 means nothing was declared.
-	IdentityDocType int8 `json:",omitempty"`
+	IdentityDocType int8 `json:",omitempty" cb:"IdentityDocType,7"`
 	// SnapshotID is the identity this row currently presents, in client_provider_snapshot.
 	// A document copies it when it is issued and never reads it again, which is what keeps
 	// a filed book from moving when the name here is corrected.
-	SnapshotID int32  `json:",omitempty"`
-	PersonType int8   `json:",omitempty"`
-	Email      string `json:",omitempty"`
-	CountryID  int16  `json:",omitempty"`
-	CityID     string `json:",omitempty"`
-	Created    int32  `json:",omitempty"`
-	CreatedBy  int32  `json:",omitempty"`
-	Status     int8   `json:"ss,omitempty"`
-	Updated    int32  `json:"upd,omitempty"`
-	Version    int16  `json:"ver,omitempty"`
-	UpdatedBy  int32  `json:",omitempty"`
+	SnapshotID int32  `json:",omitempty" cb:"SnapshotID,8"`
+	PersonType int8   `json:",omitempty" cb:"PersonType,9"`
+	Email      string `json:",omitempty" cb:"Email,10"`
+	CountryID  int16  `json:",omitempty" cb:"CountryID,11"`
+	CityID     string `json:",omitempty" cb:"CityID,12"`
+	Created    int32  `json:",omitempty" cb:"Created,13"`
+	CreatedBy  int32  `json:",omitempty" cb:"CreatedBy,14"`
+	Status     int8   `json:"ss,omitempty" cb:"ss,15"`
+	Updated    int32  `json:"upd,omitempty" cb:"upd,16"`
+	Version    int16  `json:"ver,omitempty" cb:"ver,17"`
+	UpdatedBy  int32  `json:",omitempty" cb:"UpdatedBy,18"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata *string `json:"mdt,omitempty"`
+	Metadata *string `json:"mdt,omitempty" cb:"mdt,19"`
 }
 
 type ClientProviderTable struct {

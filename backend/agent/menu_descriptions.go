@@ -13,9 +13,9 @@ import (
 )
 
 type menuDescriptionFileEntry struct {
-	Route              string `json:"route"`
-	Description        string `json:"description"`
-	DescriptionSpanish string `json:"descriptionSpanish,omitempty"`
+	Route              string `json:"route" cb:"route,1"`
+	Description        string `json:"description" cb:"description,2"`
+	DescriptionSpanish string `json:"descriptionSpanish,omitempty" cb:"descriptionSpanish,3"`
 }
 
 func AttachMenuDescriptions(menuGroups []AgentMenuGroup) error {

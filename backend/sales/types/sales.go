@@ -10,83 +10,83 @@ import (
 // no column for it — and is turned into a ClientProvider row, which (with its snapshot) is the only
 // place these fields are stored.
 type SaleOrderClientInfo struct {
-	Name           string `json:",omitempty"`
-	RegistryNumber string `json:",omitempty"`
+	Name           string `json:",omitempty" cb:"Name,1"`
+	RegistryNumber string `json:",omitempty" cb:"RegistryNumber,2"`
 	// IdentityDocType is the SUNAT document type the till picked (crm.IdentityDoc*). 0 leaves
 	// SaveClientProviders to derive it from the number's shape.
-	IdentityDocType int8 `json:",omitempty"`
-	OnlyInsert      bool `json:",omitempty"`
+	IdentityDocType int8 `json:",omitempty" cb:"IdentityDocType,3"`
+	OnlyInsert      bool `json:",omitempty" cb:"OnlyInsert,4"`
 }
 
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	CompanyID   int32 `json:",omitempty"`
-	Date        int16 `json:",omitempty"`
-	WarehouseID int32 `json:",omitempty"`
-	ID          int64
+	CompanyID   int32 `json:",omitempty" cb:"CompanyID,1"`
+	Date        int16 `json:",omitempty" cb:"Date,2"`
+	WarehouseID int32 `json:",omitempty" cb:"WarehouseID,3"`
+	ID          int64 `cb:"ID,4"`
 
 	//Table: Following slices must be same size
-	DetailProductsIDs []int32 `json:",omitempty" db:",list"`
+	DetailProductsIDs []int32 `json:",omitempty" db:",list" cb:"DetailProductsIDs,5"`
 	// DetailPrices is the price of one whole unit; DetailSubPrices the price of one sub-unit.
 	// Both are needed per line and neither is derivable from the other: selling loose is
 	// deliberately not proportional (four candies from a 5000-cent box of six is not 3333).
 	// A summary reprocess has to reconstruct what was charged, not what the product costs now.
-	DetailPrices    []int32 `json:",omitempty" db:",list"`
-	DetailSubPrices []int32 `json:",omitempty" db:",list"`
+	DetailPrices    []int32 `json:",omitempty" db:",list" cb:"DetailPrices,6"`
+	DetailSubPrices []int32 `json:",omitempty" db:",list" cb:"DetailSubPrices,7"`
 	// DetailQuantities is the packed line quantity: Units*core.QuantityLineScale + Sub, so
 	// 1001 at divisor 6 is one box plus one candy. A sale order is a document — it is never
 	// accumulated and never SUM()-ed — so it packs both halves into one column, where the
 	// stock and ledger tables keep them separate. core.UnpackQuantityLine splits it.
-	DetailQuantities []int32 `json:",omitempty" db:",list"`
+	DetailQuantities []int32 `json:",omitempty" db:",list" cb:"DetailQuantities,8"`
 	// DetailSubDivisor is the divisor each line's packed sub-unit part is expressed in,
 	// recorded per line so a later refinement of the product never restates a past sale.
-	DetailSubDivisor           []int16  `json:",omitempty" db:",list"`
-	DetailProductSkus          []string `json:",omitempty" db:",list"`
-	DetailProductLotIDs        []int32  `json:",omitempty" db:",list"`
-	DetailProductPresentations []int16  `json:",omitempty" db:",list"`
+	DetailSubDivisor           []int16  `json:",omitempty" db:",list" cb:"DetailSubDivisor,9"`
+	DetailProductSkus          []string `json:",omitempty" db:",list" cb:"DetailProductSkus,10"`
+	DetailProductLotIDs        []int32  `json:",omitempty" db:",list" cb:"DetailProductLotIDs,11"`
+	DetailProductPresentations []int16  `json:",omitempty" db:",list" cb:"DetailProductPresentations,12"`
 
 	// DetailPrices, DetailSubPrices and the three amounts below are all in the sale's
 	// currency: a USD sale stores dollars, converted per unit from the catalog on creation.
-	TotalAmount int32 `json:",omitempty"`
-	TaxAmount   int32 `json:",omitempty"`
-	DebtAmount  int32 `json:",omitempty"`
+	TotalAmount int32 `json:",omitempty" cb:"TotalAmount,13"`
+	TaxAmount   int32 `json:",omitempty" cb:"TaxAmount,14"`
+	DebtAmount  int32 `json:",omitempty" cb:"DebtAmount,15"`
 	// CurrencyType is the sale's currency: 1 = PEN, 2 = USD (the cash-bank codes). A paid
 	// sale takes its cash-bank's currency; an unpaid one takes what the till picked.
-	CurrencyType int8 `json:",omitempty"`
+	CurrencyType int8 `json:",omitempty" cb:"CurrencyType,16"`
 	// ExchangeRate is the effective rate × 1000 the lines were converted with, spread
 	// included — what a report needs to restate a USD sale in PEN. A USD sale always has one;
 	// a PEN sale only when it sold a USD-priced product.
-	ExchangeRate  int32 `json:",omitempty"`
-	ClientID      int32 `json:",omitempty"`
-	Created       int32 `json:",omitempty"`
-	Updated       int32 `json:"upd,omitempty"`
-	UpdateCounter int32 `json:"upc,omitempty"`
-	Version       int16 `json:"ver,omitempty"`
+	ExchangeRate  int32 `json:",omitempty" cb:"ExchangeRate,17"`
+	ClientID      int32 `json:",omitempty" cb:"ClientID,18"`
+	Created       int32 `json:",omitempty" cb:"Created,19"`
+	Updated       int32 `json:"upd,omitempty" cb:"upd,20"`
+	UpdateCounter int32 `json:"upc,omitempty" cb:"upc,21"`
+	Version       int16 `json:"ver,omitempty" cb:"ver,22"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,23"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,24"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
-	Status            int8  `json:"ss,omitempty"`
-	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_"`
+	Status            int8  `json:"ss,omitempty" cb:"ss,25"`
+	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_" cb:"LastPaymentCajaID,26"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
-	ActionsIncluded []int8 `json:",omitempty"`
+	ActionsIncluded []int8 `json:",omitempty" cb:"ActionsIncluded,27"`
 	// Audit trail fields for payment and delivery actions.
-	LastPaymentTime int32                `json:",omitempty"`
-	LastPaymentUser int32                `json:",omitempty"`
-	DeliveryTime    int32                `json:",omitempty"`
-	DeliveryUser    int32                `json:",omitempty"`
-	ClientInfo      *SaleOrderClientInfo `json:",omitempty"`
+	LastPaymentTime int32                `json:",omitempty" cb:"LastPaymentTime,28"`
+	LastPaymentUser int32                `json:",omitempty" cb:"LastPaymentUser,29"`
+	DeliveryTime    int32                `json:",omitempty" cb:"DeliveryTime,30"`
+	DeliveryUser    int32                `json:",omitempty" cb:"DeliveryUser,31"`
+	ClientInfo      *SaleOrderClientInfo `json:",omitempty" cb:"ClientInfo,32"`
 	// IssueSeriesID names the invoicing series this sale will be issued under. It
 	// is a request field, not a column: it is folded into the last two digits of
 	// the id on creation, and read back with SeriesID(). Zero when the till does
 	// not say.
-	IssueSeriesID  int8  `json:",omitempty"`
-	PaymentDueDate int16 `json:",omitempty" db:"payment_due_date"`
+	IssueSeriesID  int8  `json:",omitempty" cb:"IssueSeriesID,33"`
+	PaymentDueDate int16 `json:",omitempty" db:"payment_due_date" cb:"PaymentDueDate,34"`
 	// AnnulReason is why the sale was annulled, required by the annul endpoint. There is no
 	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
 	// already the "when and by whom" and a second pair could only drift from them.
-	AnnulReason string `json:",omitempty"`
+	AnnulReason string `json:",omitempty" cb:"AnnulReason,35"`
 }
 
 // SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day, one row

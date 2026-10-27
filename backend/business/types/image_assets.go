@@ -9,19 +9,19 @@ const ImageConfigDigitFull = 7
 
 type ImageAsset struct {
 	db.TableStruct[ImageAssetTable, ImageAsset]
-	GroupID            int32    `json:"-"`
-	ID                 int32    `json:",omitempty"`
-	CategoryID         int16    `json:",omitempty" db:"category_id"`
-	Description        string   `json:",omitempty"`            // English description (IMAGES_LIST.md).
-	SpanishDescription string   `json:",omitempty"`            // Spanish description (IMAGES_LIST.ES.md).
-	Keywords           string   `json:",omitempty"`            // Deduplicated English words; feeds the TextSearch AI search.
-	SpanishKeywords    []string `json:",omitempty" db:",list"` // Spanish object list; feeds the bigram local search.
-	Bigrams            []int8   `json:",omitempty" db:",list"` // Encoded from the Spanish keywords for frontend local search.
-	Ratio              float32  `json:",omitempty"`            // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
-	Updated            int32    `json:"upd,omitempty"`
-	Version            int16    `json:"ver,omitempty"`
+	GroupID            int32    `json:"-" cb:"-"`
+	ID                 int32    `json:",omitempty" cb:"ID,1"`
+	CategoryID         int16    `json:",omitempty" db:"category_id" cb:"CategoryID,2"`
+	Description        string   `json:",omitempty" cb:"Description,3"`                // English description (IMAGES_LIST.md).
+	SpanishDescription string   `json:",omitempty" cb:"SpanishDescription,4"`         // Spanish description (IMAGES_LIST.ES.md).
+	Keywords           string   `json:",omitempty" cb:"Keywords,5"`                   // Deduplicated English words; feeds the TextSearch AI search.
+	SpanishKeywords    []string `json:",omitempty" db:",list" cb:"SpanishKeywords,6"` // Spanish object list; feeds the bigram local search.
+	Bigrams            []int8   `json:",omitempty" db:",list" cb:"Bigrams,7"`         // Encoded from the Spanish keywords for frontend local search.
+	Ratio              float32  `json:",omitempty" cb:"Ratio,8"`                      // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
+	Updated            int32    `json:"upd,omitempty" cb:"upd,9"`
+	Version            int16    `json:"ver,omitempty" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata *string `json:"mdt,omitempty"`
+	Metadata *string `json:"mdt,omitempty" cb:"mdt,11"`
 }
 
 type ImageAssetTable struct {

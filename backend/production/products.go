@@ -70,9 +70,9 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	// Public route (p- prefix): the storefront names its company in ?cmp=, the app falls back to
-	// the token's. Either is fine: the catalog is public.
-	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cmp"), req.User.CompanyID))
+	// Public route (p- prefix): no token is parsed, so the company comes from the query the app and the
+	// storefront both append (?company-id=). Either is fine: the catalog is public.
+	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id")))
 	if err != nil {
 		return req.MakeErr(err)
 	}

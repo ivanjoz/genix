@@ -61,54 +61,54 @@ const (
 )
 
 type SearchDecision struct {
-	Needed bool   `json:"needed"`
-	Query  string `json:"query"`
+	Needed bool   `json:"needed" cb:"needed,1"`
+	Query  string `json:"query" cb:"query,2"`
 }
 
 type SearchPlan struct {
-	DocumentationNavigation SearchDecision `json:"documentation_navigation"`
-	AgentTools              SearchDecision `json:"agent_tools"`
+	DocumentationNavigation SearchDecision `json:"documentation_navigation" cb:"documentation_navigation,1"`
+	AgentTools              SearchDecision `json:"agent_tools" cb:"agent_tools,2"`
 }
 
 type EntityHint struct {
-	Type string `json:"type"`
-	Name string `json:"name,omitempty"`
+	Type string `json:"type" cb:"type,1"`
+	Name string `json:"name,omitempty" cb:"name,2"`
 }
 
 type BuilderDecision struct {
-	Operation              routing.BuilderOperation    `json:"operation"`
-	ContextScope           routing.BuilderContextScope `json:"context_scope"`
-	TargetSectionType      string                      `json:"target_section_type,omitempty"`
-	TargetSectionReference string                      `json:"target_section_reference,omitempty"`
-	RequiresLiveState      bool                        `json:"requires_live_state"`
+	Operation              routing.BuilderOperation    `json:"operation" cb:"operation,1"`
+	ContextScope           routing.BuilderContextScope `json:"context_scope" cb:"context_scope,2"`
+	TargetSectionType      string                      `json:"target_section_type,omitempty" cb:"target_section_type,3"`
+	TargetSectionReference string                      `json:"target_section_reference,omitempty" cb:"target_section_reference,4"`
+	RequiresLiveState      bool                        `json:"requires_live_state" cb:"requires_live_state,5"`
 }
 
 type PlannerInput struct {
-	Schema         int                     `json:"schema"`
-	CurrentMessage string                  `json:"current_message"`
-	CompletedTurns []routing.CompletedTurn `json:"completed_turns,omitempty"`
-	Surface        routing.SurfaceContext  `json:"surface"`
-	Route          string                  `json:"route,omitempty"`
-	ActiveModeID   int                     `json:"active_mode_id"`
-	AppLanguage    routing.Language        `json:"app_language"`
+	Schema         int                     `json:"schema" cb:"schema,1"`
+	CurrentMessage string                  `json:"current_message" cb:"current_message,2"`
+	CompletedTurns []routing.CompletedTurn `json:"completed_turns,omitempty" cb:"completed_turns,3"`
+	Surface        routing.SurfaceContext  `json:"surface" cb:"surface,4"`
+	Route          string                  `json:"route,omitempty" cb:"route,5"`
+	ActiveModeID   int                     `json:"active_mode_id" cb:"active_mode_id,6"`
+	AppLanguage    routing.Language        `json:"app_language" cb:"app_language,7"`
 }
 
 type Plan struct {
-	Schema                int                `json:"schema"`
-	Language              routing.Language   `json:"language"`
-	ResponseLanguage      routing.Language   `json:"response_language"`
-	Scope                 Scope              `json:"scope"`
-	Goal                  Goal               `json:"goal"`
-	Operation             Operation          `json:"operation"`
-	Domain                string             `json:"domain"`
-	Entities              []EntityHint       `json:"entities"`
-	DeliveryPreference    DeliveryPreference `json:"delivery_preference"`
-	RelatedTurnOffsets    []int              `json:"related_turn_offsets"`
-	StandaloneRequest     string             `json:"standalone_request"`
-	Searches              SearchPlan         `json:"searches"`
-	Builder               BuilderDecision    `json:"builder"`
-	NeedsClarification    bool               `json:"needs_clarification"`
-	ClarificationQuestion string             `json:"clarification_question"`
+	Schema                int                `json:"schema" cb:"schema,1"`
+	Language              routing.Language   `json:"language" cb:"language,2"`
+	ResponseLanguage      routing.Language   `json:"response_language" cb:"response_language,3"`
+	Scope                 Scope              `json:"scope" cb:"scope,4"`
+	Goal                  Goal               `json:"goal" cb:"goal,5"`
+	Operation             Operation          `json:"operation" cb:"operation,6"`
+	Domain                string             `json:"domain" cb:"domain,7"`
+	Entities              []EntityHint       `json:"entities" cb:"entities,8"`
+	DeliveryPreference    DeliveryPreference `json:"delivery_preference" cb:"delivery_preference,9"`
+	RelatedTurnOffsets    []int              `json:"related_turn_offsets" cb:"related_turn_offsets,10"`
+	StandaloneRequest     string             `json:"standalone_request" cb:"standalone_request,11"`
+	Searches              SearchPlan         `json:"searches" cb:"searches,12"`
+	Builder               BuilderDecision    `json:"builder" cb:"builder,13"`
+	NeedsClarification    bool               `json:"needs_clarification" cb:"needs_clarification,14"`
+	ClarificationQuestion string             `json:"clarification_question" cb:"clarification_question,15"`
 }
 
 func (input PlannerInput) Validate() error {

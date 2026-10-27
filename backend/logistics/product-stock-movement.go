@@ -22,23 +22,23 @@ import (
 //   - LotID == 0 + LotCode → resolve / create a lot via Hash(today, SupplierID, LotCode).
 //     SupplierID is optional here (manual adjustments have no supplier context).
 type PostStockAdjustItem struct {
-	WarehouseID    int32  `json:",omitempty"`
-	ProductID      int32  `json:",omitempty"`
-	PresentationID int16  `json:",omitempty"`
-	Quantity       int32  `json:",omitempty"`
-	SubQuantity    int32  `json:",omitempty"`
-	SerialNumber   string `json:",omitempty"`
-	LotID          int32  `json:",omitempty"`
-	LotCode        string `json:",omitempty"`
-	SupplierID     int32  `json:",omitempty"`
+	WarehouseID    int32  `json:",omitempty" cb:"WarehouseID,1"`
+	ProductID      int32  `json:",omitempty" cb:"ProductID,2"`
+	PresentationID int16  `json:",omitempty" cb:"PresentationID,3"`
+	Quantity       int32  `json:",omitempty" cb:"Quantity,4"`
+	SubQuantity    int32  `json:",omitempty" cb:"SubQuantity,5"`
+	SerialNumber   string `json:",omitempty" cb:"SerialNumber,6"`
+	LotID          int32  `json:",omitempty" cb:"LotID,7"`
+	LotCode        string `json:",omitempty" cb:"LotCode,8"`
+	SupplierID     int32  `json:",omitempty" cb:"SupplierID,9"`
 	// UnitCost is the purchase cost of one unit of the stock this adjustment adds, in PEN cents,
 	// taken as typed: a manual entry has no comprobante, so there is no IGV to recover from it.
 	// Only an increase reads it. A purchase-order reception ignores it and costs from the order.
-	UnitCost int32 `json:",omitempty"`
+	UnitCost int32 `json:",omitempty" cb:"UnitCost,10"`
 	// Type is the reason the user chose for the change, one of manualStockAdjustmentTypes. The
 	// page picks it per direction (one for the increases, one for the decreases); the engine
 	// refuses it if the delta turns out to go the other way.
-	Type types.StockMovementType `json:",omitempty"`
+	Type types.StockMovementType `json:",omitempty" cb:"Type,11"`
 }
 
 // manualStockAdjustmentTypes are the reasons a user may give a manual stock change. Every other

@@ -56,30 +56,30 @@ type SearchOptions struct {
 
 // DocumentationResult gives the answering agent evidence and an exact navigation target.
 type DocumentationResult struct {
-	PointID           string   `json:"point_id"`
-	CitationID        string   `json:"citation_id"`
-	DocumentID        string   `json:"document_id"`
-	Route             string   `json:"route"`
-	Module            string   `json:"module"`
-	PageTitle         string   `json:"page_title"`
-	SectionID         string   `json:"section_id"`
-	SectionTitle      string   `json:"section_title"`
-	SectionType       string   `json:"section_type"`
-	Content           string   `json:"content"`
-	ContextHeader     string   `json:"context_header"`
-	Keywords          []string `json:"keywords,omitempty"`
-	Status            string   `json:"status"`
-	Visibility        string   `json:"visibility"`
-	DocumentationPath string   `json:"documentation_path"`
-	DocumentationHash string   `json:"documentation_hash"`
-	ContentHash       string   `json:"content_hash"`
-	SourceHashDigest  string   `json:"source_hash_digest"`
-	PartIndex         int      `json:"part_index"`
-	PartCount         int      `json:"part_count"`
-	PreviousPointID   string   `json:"previous_point_id,omitempty"`
-	NextPointID       string   `json:"next_point_id,omitempty"`
-	IndexedAt         int64    `json:"indexed_at"`
-	Score             float32  `json:"score"`
+	PointID           string   `json:"point_id" cb:"point_id,1"`
+	CitationID        string   `json:"citation_id" cb:"citation_id,2"`
+	DocumentID        string   `json:"document_id" cb:"document_id,3"`
+	Route             string   `json:"route" cb:"route,4"`
+	Module            string   `json:"module" cb:"module,5"`
+	PageTitle         string   `json:"page_title" cb:"page_title,6"`
+	SectionID         string   `json:"section_id" cb:"section_id,7"`
+	SectionTitle      string   `json:"section_title" cb:"section_title,8"`
+	SectionType       string   `json:"section_type" cb:"section_type,9"`
+	Content           string   `json:"content" cb:"content,10"`
+	ContextHeader     string   `json:"context_header" cb:"context_header,11"`
+	Keywords          []string `json:"keywords,omitempty" cb:"keywords,12"`
+	Status            string   `json:"status" cb:"status,13"`
+	Visibility        string   `json:"visibility" cb:"visibility,14"`
+	DocumentationPath string   `json:"documentation_path" cb:"documentation_path,15"`
+	DocumentationHash string   `json:"documentation_hash" cb:"documentation_hash,16"`
+	ContentHash       string   `json:"content_hash" cb:"content_hash,17"`
+	SourceHashDigest  string   `json:"source_hash_digest" cb:"source_hash_digest,18"`
+	PartIndex         int      `json:"part_index" cb:"part_index,19"`
+	PartCount         int      `json:"part_count" cb:"part_count,20"`
+	PreviousPointID   string   `json:"previous_point_id,omitempty" cb:"previous_point_id,21"`
+	NextPointID       string   `json:"next_point_id,omitempty" cb:"next_point_id,22"`
+	IndexedAt         int64    `json:"indexed_at" cb:"indexed_at,23"`
+	Score             float32  `json:"score" cb:"score,24"`
 }
 
 // QueryEmbedder applies the model-specific retrieval instruction to one user question.

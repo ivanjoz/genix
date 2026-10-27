@@ -49,21 +49,21 @@ type Client struct {
 }
 
 type embeddingRequest struct {
-	Model          string   `json:"model"`
-	Input          []string `json:"input"`
-	Dimensions     int      `json:"dimensions"`
-	EncodingFormat string   `json:"encoding_format"`
+	Model          string   `json:"model" cb:"model,1"`
+	Input          []string `json:"input" cb:"input,2"`
+	Dimensions     int      `json:"dimensions" cb:"dimensions,3"`
+	EncodingFormat string   `json:"encoding_format" cb:"encoding_format,4"`
 }
 
 type embeddingResponse struct {
 	Data []struct {
 		Index     int       `json:"index"`
 		Embedding []float32 `json:"embedding"`
-	} `json:"data"`
+	} `json:"data" cb:"data,1"`
 	Usage struct {
 		PromptTokens int `json:"prompt_tokens"`
 		TotalTokens  int `json:"total_tokens"`
-	} `json:"usage"`
+	} `json:"usage" cb:"usage,2"`
 }
 
 func NewClient(config ClientConfig) (*Client, error) {

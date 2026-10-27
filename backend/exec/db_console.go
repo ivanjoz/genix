@@ -33,42 +33,42 @@ const (
 )
 
 type dbConsoleRequest struct {
-	Op    string `json:"op"`
-	Table string `json:"table"`
+	Op    string `json:"op" cb:"op,1"`
+	Table string `json:"table" cb:"table,2"`
 
-	Filters     []db.FilterSpec `json:"filters"`
-	Columns     []string        `json:"columns"`
-	Limit       int32           `json:"limit"`
-	AllowFilter bool            `json:"allow_filter"`
-	OrderDesc   bool            `json:"order_desc"`
+	Filters     []db.FilterSpec `json:"filters" cb:"filters,3"`
+	Columns     []string        `json:"columns" cb:"columns,4"`
+	Limit       int32           `json:"limit" cb:"limit,5"`
+	AllowFilter bool            `json:"allow_filter" cb:"allow_filter,6"`
+	OrderDesc   bool            `json:"order_desc" cb:"order_desc,7"`
 
-	Records        json.RawMessage `json:"records"`
-	UpdateColumns  []string        `json:"update_columns"`
-	ExcludeColumns []string        `json:"exclude_columns"`
+	Records        json.RawMessage `json:"records" cb:"records,8"`
+	UpdateColumns  []string        `json:"update_columns" cb:"update_columns,9"`
+	ExcludeColumns []string        `json:"exclude_columns" cb:"exclude_columns,10"`
 	// Apply is the write gate. config.toml normally points at a shared database, so an insert or
 	// an update is validated and reported but never executed until it is explicitly set.
-	Apply bool `json:"apply"`
+	Apply bool `json:"apply" cb:"apply,11"`
 
-	Out string `json:"out"`
+	Out string `json:"out" cb:"out,12"`
 }
 
 type dbConsoleResult struct {
-	Op      string `json:"op"`
-	Table   string `json:"table,omitempty"`
-	Count   int    `json:"count"`
-	Applied bool   `json:"applied,omitempty"`
+	Op      string `json:"op" cb:"op,1"`
+	Table   string `json:"table,omitempty" cb:"table,2"`
+	Count   int    `json:"count" cb:"count,3"`
+	Applied bool   `json:"applied,omitempty" cb:"applied,4"`
 	// LimitReached warns that the read stopped at the limit, so Count is a floor and not a total.
-	LimitReached bool                 `json:"limit_reached,omitempty"`
-	Tables       []dbTableSummary     `json:"tables,omitempty"`
-	Schema       *db.TableDescription `json:"schema,omitempty"`
-	Records      json.RawMessage      `json:"records,omitempty"`
+	LimitReached bool                 `json:"limit_reached,omitempty" cb:"limit_reached,5"`
+	Tables       []dbTableSummary     `json:"tables,omitempty" cb:"tables,6"`
+	Schema       *db.TableDescription `json:"schema,omitempty" cb:"schema,7"`
+	Records      json.RawMessage      `json:"records,omitempty" cb:"records,8"`
 }
 
 type dbTableSummary struct {
-	Name      string   `json:"name"`
-	ID        int16    `json:"id"`
-	Partition string   `json:"partition,omitempty"`
-	Keys      []string `json:"keys,omitempty"`
+	Name      string   `json:"name" cb:"name,1"`
+	ID        int16    `json:"id" cb:"id,2"`
+	Partition string   `json:"partition,omitempty" cb:"partition,3"`
+	Keys      []string `json:"keys,omitempty" cb:"keys,4"`
 }
 
 // registerControllersOnce keeps the whole table set out of process startup: compiling 40-odd

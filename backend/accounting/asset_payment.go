@@ -10,11 +10,11 @@ import (
 
 // AssetPaymentPayload settles part or all of an asset's acquisition.
 type AssetPaymentPayload struct {
-	AssetID     int32 `json:",omitempty"`
-	CashBankID  int32 `json:",omitempty"`
-	Amount      int32 `json:",omitempty"` // Positive payment amount, in cents.
-	Date        int16 `json:",omitempty"`
-	IsFullyPaid bool  `json:",omitempty"` // Forces settled status (write-off case).
+	AssetID     int32 `json:",omitempty" cb:"AssetID,1"`
+	CashBankID  int32 `json:",omitempty" cb:"CashBankID,2"`
+	Amount      int32 `json:",omitempty" cb:"Amount,3"` // Positive payment amount, in cents.
+	Date        int16 `json:",omitempty" cb:"Date,4"`
+	IsFullyPaid bool  `json:",omitempty" cb:"IsFullyPaid,5"` // Forces settled status (write-off case).
 }
 
 // PostAssetPayment records a payment against an asset. The asset is not an expense, so this

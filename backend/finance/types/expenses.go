@@ -6,25 +6,25 @@ import "app/db"
 // default amount; per-period payment state lives in the generated Expense rows.
 type ExpenseScheduled struct {
 	db.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
-	CompanyID    int32  `json:",omitempty"`
-	ID           int32  `json:",omitempty"`
-	Name         string `json:",omitempty"`
-	Description  string `json:",omitempty"`
-	CategoryID   int8   `json:",omitempty"` // Static expense category (code-defined list).
-	SupplierID   int32  `json:",omitempty"` // Optional — who is paid.
-	CurrencyType int8   `json:",omitempty"` // 1 = PEN, 2 = USD.
-	Amount       int32  `json:",omitempty"` // Default expected amount per period, in cents.
-	Frequency    int16  `json:",omitempty"` // Packed cadence code CDD: cadence*100 + day.
-	StartDate    int16  `json:",omitempty"` // UnixDay the schedule begins; anchors the month for N-monthly/yearly.
-	EndDate      int16  `json:",omitempty"` // UnixDay the schedule stops (0 = open-ended).
-	Status       int8   `json:"ss,omitempty"`
-	Updated      int32  `json:"upd,omitempty"`
-	Version      int16  `json:"ver,omitempty"`
+	CompanyID    int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID           int32  `json:",omitempty" cb:"ID,2"`
+	Name         string `json:",omitempty" cb:"Name,3"`
+	Description  string `json:",omitempty" cb:"Description,4"`
+	CategoryID   int8   `json:",omitempty" cb:"CategoryID,5"`   // Static expense category (code-defined list).
+	SupplierID   int32  `json:",omitempty" cb:"SupplierID,6"`   // Optional — who is paid.
+	CurrencyType int8   `json:",omitempty" cb:"CurrencyType,7"` // 1 = PEN, 2 = USD.
+	Amount       int32  `json:",omitempty" cb:"Amount,8"`       // Default expected amount per period, in cents.
+	Frequency    int16  `json:",omitempty" cb:"Frequency,9"`    // Packed cadence code CDD: cadence*100 + day.
+	StartDate    int16  `json:",omitempty" cb:"StartDate,10"`   // UnixDay the schedule begins; anchors the month for N-monthly/yearly.
+	EndDate      int16  `json:",omitempty" cb:"EndDate,11"`     // UnixDay the schedule stops (0 = open-ended).
+	Status       int8   `json:"ss,omitempty" cb:"ss,12"`
+	Updated      int32  `json:"upd,omitempty" cb:"upd,13"`
+	Version      int16  `json:"ver,omitempty" cb:"ver,14"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Created   int32   `json:",omitempty"`
-	CreatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,15"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,16"`
+	Created   int32   `json:",omitempty" cb:"Created,17"`
+	CreatedBy int32   `json:",omitempty" cb:"CreatedBy,18"`
 }
 
 type ExpenseScheduledTable struct {
@@ -87,46 +87,46 @@ const ExpenseStatusPosted int8 = 3
 // amount plus payment state.
 type Expense struct {
 	db.TableStruct[ExpenseTable, Expense]
-	CompanyID          int32  `json:",omitempty"`
-	ID                 int32  `json:",omitempty"`
-	ExpenseScheduledID int32  `json:",omitempty"` // 0 = one-time; otherwise → ExpenseScheduled.ID.
-	PeriodDate         int16  `json:",omitempty"` // UnixDay identifying the period (dedupes period generation).
-	Name               string `json:",omitempty"`
-	Description        string `json:",omitempty"`
-	Type               int8   `json:",omitempty"` // ExpenseType* — what the money became.
-	CategoryID         int8   `json:",omitempty"`
-	SupplierID         int32  `json:",omitempty"`
-	AssetID            int32  `json:",omitempty"` // Type 4 → the accounting.Asset being depreciated.
-	ProductID          int32  `json:",omitempty"` // Type 2 → the supply purchased.
+	CompanyID          int32  `json:",omitempty" cb:"CompanyID,1"`
+	ID                 int32  `json:",omitempty" cb:"ID,2"`
+	ExpenseScheduledID int32  `json:",omitempty" cb:"ExpenseScheduledID,3"` // 0 = one-time; otherwise → ExpenseScheduled.ID.
+	PeriodDate         int16  `json:",omitempty" cb:"PeriodDate,4"`         // UnixDay identifying the period (dedupes period generation).
+	Name               string `json:",omitempty" cb:"Name,5"`
+	Description        string `json:",omitempty" cb:"Description,6"`
+	Type               int8   `json:",omitempty" cb:"Type,7"` // ExpenseType* — what the money became.
+	CategoryID         int8   `json:",omitempty" cb:"CategoryID,8"`
+	SupplierID         int32  `json:",omitempty" cb:"SupplierID,9"`
+	AssetID            int32  `json:",omitempty" cb:"AssetID,10"`   // Type 4 → the accounting.Asset being depreciated.
+	ProductID          int32  `json:",omitempty" cb:"ProductID,11"` // Type 2 → the supply purchased.
 	// Type 2 only: where the units landed and how many. Stored so the expense says what it
 	// bought without having to reconstruct it from the movement ledger.
-	WarehouseID  int32 `json:",omitempty"`
-	Quantity     int32 `json:",omitempty"`
-	CurrencyType int8  `json:",omitempty"` // 1 = PEN, 2 = USD.
-	Date         int16 `json:",omitempty"` // UnixDay the expense was incurred.
-	DueDate      int16 `json:",omitempty"` // UnixDay payment is due.
-	Amount       int32 `json:",omitempty"` // Total owed for this expense/period, in cents.
+	WarehouseID  int32 `json:",omitempty" cb:"WarehouseID,12"`
+	Quantity     int32 `json:",omitempty" cb:"Quantity,13"`
+	CurrencyType int8  `json:",omitempty" cb:"CurrencyType,14"` // 1 = PEN, 2 = USD.
+	Date         int16 `json:",omitempty" cb:"Date,15"`         // UnixDay the expense was incurred.
+	DueDate      int16 `json:",omitempty" cb:"DueDate,16"`      // UnixDay payment is due.
+	Amount       int32 `json:",omitempty" cb:"Amount,17"`       // Total owed for this expense/period, in cents.
 	// The supplier's comprobante — the Registro de Compras row. See PurchaseDocument; the
 	// document's currency is CurrencyType, and its total must equal Amount.
-	ProviderSnapshotID int32  `json:",omitempty"` // Frozen supplier identity (RCE fields 12-14).
-	DocType            int8   `json:",omitempty"`
-	DocSeries          string `json:",omitempty"`
-	DocNumber          int64  `json:",omitempty"`
-	DocIssueDate       int16  `json:",omitempty"`
-	TaxableAmount      int32  `json:",omitempty"`
-	TaxAmount          int32  `json:",omitempty"`
-	UntaxedAmount      int32  `json:",omitempty"`
-	OtherAmount        int32  `json:",omitempty"`
-	ExchangeRate       int32  `json:",omitempty"`
-	PaidAmount         int32  `json:",omitempty"`   // Positive running sum of payments applied (server-maintained).
-	Status             int8   `json:"ss,omitempty"` // 0 removed · 1 pending · 2 fully paid · 3 posted (non-cash).
-	Updated            int32  `json:"upd,omitempty"`
-	Version            int16  `json:"ver,omitempty"`
+	ProviderSnapshotID int32  `json:",omitempty" cb:"ProviderSnapshotID,18"` // Frozen supplier identity (RCE fields 12-14).
+	DocType            int8   `json:",omitempty" cb:"DocType,19"`
+	DocSeries          string `json:",omitempty" cb:"DocSeries,20"`
+	DocNumber          int64  `json:",omitempty" cb:"DocNumber,21"`
+	DocIssueDate       int16  `json:",omitempty" cb:"DocIssueDate,22"`
+	TaxableAmount      int32  `json:",omitempty" cb:"TaxableAmount,23"`
+	TaxAmount          int32  `json:",omitempty" cb:"TaxAmount,24"`
+	UntaxedAmount      int32  `json:",omitempty" cb:"UntaxedAmount,25"`
+	OtherAmount        int32  `json:",omitempty" cb:"OtherAmount,26"`
+	ExchangeRate       int32  `json:",omitempty" cb:"ExchangeRate,27"`
+	PaidAmount         int32  `json:",omitempty" cb:"PaidAmount,28"` // Positive running sum of payments applied (server-maintained).
+	Status             int8   `json:"ss,omitempty" cb:"ss,29"`       // 0 removed · 1 pending · 2 fully paid · 3 posted (non-cash).
+	Updated            int32  `json:"upd,omitempty" cb:"upd,30"`
+	Version            int16  `json:"ver,omitempty" cb:"ver,31"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Created   int32   `json:",omitempty"`
-	CreatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,32"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,33"`
+	Created   int32   `json:",omitempty" cb:"Created,34"`
+	CreatedBy int32   `json:",omitempty" cb:"CreatedBy,35"`
 }
 
 type ExpenseTable struct {

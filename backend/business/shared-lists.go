@@ -44,9 +44,10 @@ func GetSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	response := map[string]*[]types.SharedListRecord{}
+	// colbin does not carry pointer-to-slice map values, so the response holds plain slices.
+	response := map[string][]types.SharedListRecord{}
 	for id, registros := range listaRegistrosMap {
-		response[fmt.Sprintf("id_%v", id)] = registros
+		response[fmt.Sprintf("id_%v", id)] = *registros
 
 		core.Log("Listas Compartidas Registros::", id, "|", len(*registros))
 	}

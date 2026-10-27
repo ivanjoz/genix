@@ -60,20 +60,20 @@ const (
 )
 
 type AgentComponentInfo struct {
-	ID      int
-	Type    string
-	Label   string
-	Methods []string
+	ID      int      `cb:"ID,1"`
+	Type    string   `cb:"Type,2"`
+	Label   string   `cb:"Label,3"`
+	Methods []string `cb:"Methods,4"`
 	// Options is the inline option list for a Select handle whose total option
 	// count is small enough to embed directly in the HTML snapshot (currently
 	// ≤12). Frontend probes via getOptions(13) and only attaches when the
 	// list is exhaustive. nil/empty for every other handle type.
-	Options []AgentOption `json:",omitempty"`
+	Options []AgentOption `json:",omitempty" cb:"Options,5"`
 }
 
 type PageContent struct {
-	Components []AgentComponentInfo `json:",omitempty"`
-	HTML       string
+	Components []AgentComponentInfo `json:",omitempty" cb:"Components,1"`
+	HTML       string               `cb:"HTML,2"`
 }
 
 type AgentOption struct {
@@ -104,17 +104,17 @@ type InvokeBatchPayload struct {
 }
 
 type InvokeBatchResult struct {
-	Results []InvocationResult
-	Page    *PageContent `json:",omitempty"`
+	Results []InvocationResult `cb:"Results,1"`
+	Page    *PageContent       `json:",omitempty" cb:"Page,2"`
 }
 
 // InvocationResult is one entry in the reply array for the batched
 // `agent.invoke` command. Also reused as the HTTP-level result element so
 // external callers see the same shape the WS protocol uses.
 type InvocationResult struct {
-	OK    bool
-	Value json.RawMessage `json:",omitempty"`
-	Error string          `json:",omitempty"`
+	OK    bool            `cb:"OK,1"`
+	Value json.RawMessage `json:",omitempty" cb:"Value,2"`
+	Error string          `json:",omitempty" cb:"Error,3"`
 }
 
 type AgentListFilter struct {
@@ -125,9 +125,9 @@ type AgentListFilter struct {
 // AgentMenuOption is one entry inside a side-menu group. Route is the SPA
 // path the agent passes to the `navigate` action.
 type AgentMenuOption struct {
-	Name        string
-	Route       string
-	Description string `json:",omitempty"`
+	Name        string `cb:"Name,1"`
+	Route       string `cb:"Route,2"`
+	Description string `json:",omitempty" cb:"Description,3"`
 }
 
 // AgentMenuGroup is a side-menu section (CONFIGURACIÓN, NEGOCIO, …) with the
@@ -145,8 +145,8 @@ type NavigatePayload struct {
 }
 
 type NavigateResult struct {
-	Route string
-	Page  *PageContent `json:",omitempty"`
+	Route string       `cb:"Route,1"`
+	Page  *PageContent `json:",omitempty" cb:"Page,2"`
 }
 
 type AgentContextPayload struct {
@@ -154,10 +154,10 @@ type AgentContextPayload struct {
 }
 
 type AgentContextResult struct {
-	SurfaceKind       string
-	PageID            string
-	Route             string
-	Scope             string
-	SelectedSectionID string `json:",omitempty"`
-	Content           string
+	SurfaceKind       string `cb:"SurfaceKind,1"`
+	PageID            string `cb:"PageID,2"`
+	Route             string `cb:"Route,3"`
+	Scope             string `cb:"Scope,4"`
+	SelectedSectionID string `json:",omitempty" cb:"SelectedSectionID,5"`
+	Content           string `cb:"Content,6"`
 }

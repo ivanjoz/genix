@@ -22,19 +22,19 @@ const MaxSeriesID = int8(99)
 // the code is a label hanging off the id, nothing more.
 type InvoiceSeries struct {
 	// SeriesID is 1..99, and is what a document id carries in its last two digits.
-	SeriesID int8 `json:",omitempty"`
+	SeriesID int8 `json:",omitempty" cb:"SeriesID,1"`
 	// DocType is SUNAT catalog 01: 1 factura, 3 boleta, 7 credit note, 8 debit note.
-	DocType int8 `json:",omitempty"`
+	DocType int8 `json:",omitempty" cb:"DocType,2"`
 	// SeriesCode is what SUNAT sees, e.g. F001.
-	SeriesCode string `json:",omitempty"`
+	SeriesCode string `json:",omitempty" cb:"SeriesCode,3"`
 	// SiteID is the establishment issuing under this series. The code SUNAT
 	// assigned to the site travels in the XML, so a company with several branches
 	// keeps one series per branch.
-	SiteID int32 `json:",omitempty"`
+	SiteID int32 `json:",omitempty" cb:"SiteID,4"`
 	// IsDefault marks the series used when the caller names none for a document
 	// type. At most one per type.
-	IsDefault int8 `json:",omitempty"`
-	Status    int8 `json:"ss,omitempty"`
+	IsDefault int8 `json:",omitempty" cb:"IsDefault,5"`
+	Status    int8 `json:"ss,omitempty" cb:"ss,6"`
 }
 
 // DefaultInvoiceSeries is the set every new company starts with.

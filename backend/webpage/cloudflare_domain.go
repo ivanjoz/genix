@@ -20,25 +20,25 @@ const (
 )
 
 type cloudflareResponse[T any] struct {
-	Result  T     `json:"result"`
-	Success bool  `json:"success"`
-	Errors  []any `json:"errors"`
+	Result  T     `json:"result" cb:"result,1"`
+	Success bool  `json:"success" cb:"success,2"`
+	Errors  []any `json:"errors" cb:"errors,3"`
 }
 
 type cloudflareZone struct {
-	ID string `json:"id"`
+	ID string `json:"id" cb:"id,1"`
 }
 
 type cloudflareDNSRecord struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID   string `json:"id" cb:"id,1"`
+	Name string `json:"name" cb:"name,2"`
+	Type string `json:"type" cb:"type,3"`
 }
 
 type cloudflareWorkerDomain struct {
-	ID       string `json:"id"`
-	Hostname string `json:"hostname"`
-	Service  string `json:"service"`
+	ID       string `json:"id" cb:"id,1"`
+	Hostname string `json:"hostname" cb:"hostname,2"`
+	Service  string `json:"service" cb:"service,3"`
 }
 
 // provisionStorefrontDomain rejects occupied names and attaches available names to the Worker.

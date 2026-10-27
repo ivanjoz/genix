@@ -6,7 +6,7 @@ import (
 	"compress/gzip"
 	"encoding/base64"
 	"encoding/binary"
-	"github.com/ivanjoz/minijson"
+	"github.com/ivanjoz/colbin"
 	// "encoding/json"
 	"errors"
 	"fmt"
@@ -37,8 +37,11 @@ type HandlerArgs struct {
 	Authorization string
 	ReqParams     string
 	Encoding      string
-	User          *UsuarioToken
-	StartTime     int64
+	// Accept is the client's Accept header, which decides the response's serialization (see
+	// WantsColbin). Per request, like Encoding.
+	Accept    string
+	User      *UsuarioToken
+	StartTime int64
 	// RequestID identifies this request in user_logs and in the log line, so a row read out of
 	// ScyllaDB leads straight back to the entry that carries the full message. Per request and
 	// never read from a global: in server mode one process serves many at once, and the Env mirror
@@ -242,7 +245,7 @@ func MakeErrStreamingFinal(statusCode int32, message string) *events.LambdaFunct
 }
 
 type ErrorMsg struct {
-	Error string `json:"error"`
+	Error string `json:"error" cb:"error,1"`
 }
 
 func MakeErrRespFinal(statusCode int32, body string) *events.APIGatewayV2HTTPResponse {
@@ -579,21 +582,27 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 		Route:      req.Route,
 	}
 
-	// A string response is already the payload. Everything else goes through the compact
-	// [keys, content] encoder that the frontend's unmarshal() expects — one path for every
-	// size, so a large response can never silently fall back to a different wire format.
+	// A string response is already the payload.
 	if fmt.Sprintf("%T", *new(T)) == "string" {
 		body := []byte(fmt.Sprintf("%v", *respStruct))
 		response.Body = &body
 		return response
 	}
 
-	marshal := minijson.Marshal
-	if req.WantsRawJSON() {
-		marshal = sonic.Marshal
+	// colbin/JSON (self-describing: the schema travels inside the message) for the client that
+	// announced it in Accept; plain JSON for everyone else.
+	if req.WantsColbin() {
+		colbinBytes, err := colbin.MarshalSelfDescribing(*respStruct)
+		if err != nil {
+			return req.MakeErr("No se pudo serializar respuesta en colbin:", err)
+		}
+		response.Body = &colbinBytes
+		response.IsBinary = true
+		response.Headers["Content-Type"] = ColbinMediaType
+		return response
 	}
 
-	bodyBytes, err := marshal(respStruct)
+	bodyBytes, err := sonic.Marshal(respStruct)
 	if err != nil {
 		return req.MakeErr("No se pudo serializar respuesta:", err)
 	}
@@ -605,20 +614,18 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	return response
 }
 
-// WantsRawJSON reports whether ?raw=1 asked for the response as ordinary JSON instead of
-// the compact [keys, content] encoding.
+// ColbinMediaType is how a client announces in Accept that it decodes colbin, and how the
+// response describes itself in Content-Type. It is the standard negotiation rather than an X-*
+// header because Accept is CORS-safelisted: no preflight, no AllowHeaders to touch.
+const ColbinMediaType = "application/vnd.colbin"
+
+// WantsColbin reports whether this request is answered in colbin.
 //
-// The compact format drops the bytes of repeating every field name on every row, but it
-// costs a decoder: reading a response by hand — curl, a log, a test — means aligning values
-// against the keys header, and that header's field order is derived from the content, so it
-// varies between two responses of the same route. raw=1 exists for those callers. It changes
-// only how the same struct is written, never which fields it carries, so it can be left on
-// in any environment.
-//
-// The frontend never sends it: unmarshal() only reads the compact form.
-func (req *HandlerArgs) WantsRawJSON() bool {
-	raw := req.Query["raw"]
-	return len(raw) > 0 && raw != "0"
+// The match is on the whole media type, never a wildcard: curl and most SDKs send
+// `Accept: */*`, which means "whatever you have", not "I can decode colbin". A client that sends
+// no Accept (mobile, webhooks, curl) keeps getting plain JSON.
+func (req *HandlerArgs) WantsColbin() bool {
+	return strings.Contains(req.Accept, ColbinMediaType)
 }
 
 func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {
@@ -800,18 +807,18 @@ func SendServerComment(args *HandlerArgs, commentBody string) error {
 
 // TODO: deprecar después
 type MergedRoute struct {
-	Id       int32             `json:"id"`
-	FuncPath string            `json:"funcPath"`
-	Route    string            `json:"route"`
-	Query    map[string]string `json:"query"`
+	Id       int32             `json:"id" cb:"id,1"`
+	FuncPath string            `json:"funcPath" cb:"funcPath,2"`
+	Route    string            `json:"route" cb:"route,3"`
+	Query    map[string]string `json:"query" cb:"query,4"`
 }
 
 type MergedResponse struct {
-	Route      string `json:"route"`
-	Id         int32  `json:"id"`
-	Body       string `json:"body"`
-	StatusCode int32  `json:"statusCode"`
-	Message    string `json:"message"`
+	Route      string `json:"route" cb:"route,1"`
+	Id         int32  `json:"id" cb:"id,2"`
+	Body       string `json:"body" cb:"body,3"`
+	StatusCode int32  `json:"statusCode" cb:"statusCode,4"`
+	Message    string `json:"message" cb:"message,5"`
 }
 
 func ParseMergedUri(query map[string]string) []MergedRoute {

@@ -10,8 +10,8 @@ import (
 // its SEO metatags (Config) plus its content sections (Sections, with the
 // section-1 whole-page CSS). Consumed by the prerender build and deployed storefronts.
 type WebpagePublicResult struct {
-	Config   map[string]string            `json:"Config"`
-	Sections []types.EcommercePageContent `json:"Sections"`
+	Config   map[string]string            `json:"Config" cb:"Config,1"`
+	Sections []types.EcommercePageContent `json:"Sections" cb:"Sections,2"`
 }
 
 // GetWebpagePublic is the single public (no-auth, "p-" prefix) read for a storefront

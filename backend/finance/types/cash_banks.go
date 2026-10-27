@@ -4,25 +4,25 @@ import "app/db"
 
 type CashBank struct {
 	db.TableStruct[CashBankTable, CashBank]
-	CompanyID            int32
-	ID                   int32
-	Type                 int32
-	SiteID               int32
-	Name                 string
-	Description          string
-	CurrencyType         int8
-	ReconciliationDate   int32
-	ReconciliationAmount int32
-	CurrentAmount        int32
+	CompanyID            int32  `cb:"CompanyID,1"`
+	ID                   int32  `cb:"ID,2"`
+	Type                 int32  `cb:"Type,3"`
+	SiteID               int32  `cb:"SiteID,4"`
+	Name                 string `cb:"Name,5"`
+	Description          string `cb:"Description,6"`
+	CurrencyType         int8   `cb:"CurrencyType,7"`
+	ReconciliationDate   int32  `cb:"ReconciliationDate,8"`
+	ReconciliationAmount int32  `cb:"ReconciliationAmount,9"`
+	CurrentAmount        int32  `cb:"CurrentAmount,10"`
 	// General properties
-	Status  int8  `json:"ss,omitempty"`
-	Updated int32 `json:"upd,omitempty"`
-	Version int16 `json:"ver,omitempty"`
+	Status  int8  `json:"ss,omitempty" cb:"ss,11"`
+	Updated int32 `json:"upd,omitempty" cb:"upd,12"`
+	Version int16 `json:"ver,omitempty" cb:"ver,13"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Created   int32   `json:",omitempty"`
-	CreatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,14"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,15"`
+	Created   int32   `json:",omitempty" cb:"Created,16"`
+	CreatedBy int32   `json:",omitempty" cb:"CreatedBy,17"`
 }
 
 type CashBankTable struct {
@@ -93,22 +93,22 @@ const (
 
 type CashBankMovement struct {
 	db.TableStruct[CashBankMovementTable, CashBankMovement]
-	CompanyID     int32 `json:",omitempty"`
-	ID            int64
-	CashBankID    int32
-	CashBankRefID int32
-	DocumentID    int64 `json:",omitempty"` // Sale Order ID / ExpenseID
-	ReferenceID   int32 `json:",omitempty"` //
-	Date          int16
-	Type          CashMovementType `json:",omitempty"`
+	CompanyID     int32            `json:",omitempty" cb:"CompanyID,1"`
+	ID            int64            `cb:"ID,2"`
+	CashBankID    int32            `cb:"CashBankID,3"`
+	CashBankRefID int32            `cb:"CashBankRefID,4"`
+	DocumentID    int64            `json:",omitempty" cb:"DocumentID,5"`  // Sale Order ID / ExpenseID
+	ReferenceID   int32            `json:",omitempty" cb:"ReferenceID,6"` //
+	Date          int16            `cb:"Date,7"`
+	Type          CashMovementType `json:",omitempty" cb:"Type,8"`
 	// AccountCode is the PCGE account on the other side of the cash, for the types the user
 	// classifies (see CashMovementAccountOptions). 0 for every other type: its counter-account
 	// follows from the type and the document it pays.
-	AccountCode int16 `json:",omitempty"`
-	FinalAmount int32
-	Amount      int32
-	Created     int32 `json:",omitempty"`
-	CreatedBy   int32 `json:",omitempty"`
+	AccountCode int16 `json:",omitempty" cb:"AccountCode,9"`
+	FinalAmount int32 `cb:"FinalAmount,10"`
+	Amount      int32 `cb:"Amount,11"`
+	Created     int32 `json:",omitempty" cb:"Created,12"`
+	CreatedBy   int32 `json:",omitempty" cb:"CreatedBy,13"`
 }
 
 type CashBankMovementTable struct {
@@ -149,16 +149,16 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 
 type CashReconciliation struct {
 	db.TableStruct[CashReconciliationTable, CashReconciliation]
-	CompanyID        int32 `json:",omitempty"`
-	ID               int64 `json:",omitempty"`
-	CashBankID       int32 `json:",omitempty"`
-	Type             int8  `json:",omitempty"`
-	MovementID       int64 `json:",omitempty"`
-	SystemAmount     int32 `json:",omitempty"`
-	ActualAmount     int32 `json:",omitempty"`
-	DifferenceAmount int32 `json:",omitempty"`
-	Created          int32 `json:",omitempty"`
-	CreatedBy        int32 `json:",omitempty"`
+	CompanyID        int32 `json:",omitempty" cb:"CompanyID,1"`
+	ID               int64 `json:",omitempty" cb:"ID,2"`
+	CashBankID       int32 `json:",omitempty" cb:"CashBankID,3"`
+	Type             int8  `json:",omitempty" cb:"Type,4"`
+	MovementID       int64 `json:",omitempty" cb:"MovementID,5"`
+	SystemAmount     int32 `json:",omitempty" cb:"SystemAmount,6"`
+	ActualAmount     int32 `json:",omitempty" cb:"ActualAmount,7"`
+	DifferenceAmount int32 `json:",omitempty" cb:"DifferenceAmount,8"`
+	Created          int32 `json:",omitempty" cb:"Created,9"`
+	CreatedBy        int32 `json:",omitempty" cb:"CreatedBy,10"`
 }
 
 type CashReconciliationTable struct {

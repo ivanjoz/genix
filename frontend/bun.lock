@@ -68,6 +68,7 @@
         "@tiptap/starter-kit": "^3.31.4",
         "axios": "^1.13.2",
         "chartist": "^2.0.0",
+        "colbin": "0.8.2",
         "date-fns": "^4.1.0",
         "dexie": "^4.2.0",
         "dompurify": "^3.4.2",
@@ -537,6 +538,8 @@
     "chokidar": ["chokidar@4.0.3", "", { "dependencies": { "readdirp": "^4.0.1" } }, "sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA=="],
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
+
+    "colbin": ["colbin@0.8.2", "", {}, "sha512-me/qc1KtpWYN25nOfuViNzWQOd9wjEVM/rUFw/1iqe+t2+4eToEcw45Bzh/mXz4NFRacFJtZSa0hFvTeOk59fQ=="],
 
     "colord": ["colord@2.9.3", "", {}, "sha512-jeC1axXpnb0/2nn/Y1LPuLdgXBLH7aDcHu4KEKfqw3CUhX7ZpfBSlPKyqXE6btIgEzfWtrX3/tyBCaCvXvMkOw=="],
 

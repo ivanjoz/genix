@@ -12,25 +12,25 @@ import (
 // ImageAssetSearchRecord is the minimal delta payload consumed by frontend search. Version and
 // Metadata travel with it because the client follows this route's delta log.
 type ImageAssetSearchRecord struct {
-	ID         int32   `json:",omitempty"`
-	CategoryID int16   `json:",omitempty"`
-	Bigrams    string  `json:",omitempty"`
-	Updated    int32   `json:"upd,omitempty"`
-	Version    int16   `json:"ver,omitempty"`
-	Metadata   *string `json:"mdt,omitempty"`
+	ID         int32   `json:",omitempty" cb:"ID,1"`
+	CategoryID int16   `json:",omitempty" cb:"CategoryID,2"`
+	Bigrams    string  `json:",omitempty" cb:"Bigrams,3"`
+	Updated    int32   `json:"upd,omitempty" cb:"upd,4"`
+	Version    int16   `json:"ver,omitempty" cb:"ver,5"`
+	Metadata   *string `json:"mdt,omitempty" cb:"mdt,6"`
 }
 
 type ImageAssetCategoryRecord struct {
-	ID       int16   `json:",omitempty"`
-	Name     string  `json:",omitempty"`
-	Updated  int32   `json:"upd,omitempty"`
-	Version  int16   `json:"ver,omitempty"`
-	Metadata *string `json:"mdt,omitempty"`
+	ID       int16   `json:",omitempty" cb:"ID,1"`
+	Name     string  `json:",omitempty" cb:"Name,2"`
+	Updated  int32   `json:"upd,omitempty" cb:"upd,3"`
+	Version  int16   `json:"ver,omitempty" cb:"ver,4"`
+	Metadata *string `json:"mdt,omitempty" cb:"mdt,5"`
 }
 
 type ImageAssetsResult struct {
-	Images     []ImageAssetSearchRecord   `json:"images"`
-	Categories []ImageAssetCategoryRecord `json:"categories"`
+	Images     []ImageAssetSearchRecord   `json:"images" cb:"images,1"`
+	Categories []ImageAssetCategoryRecord `json:"categories" cb:"categories,2"`
 }
 
 func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {

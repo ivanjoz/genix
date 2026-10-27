@@ -176,9 +176,9 @@ const (
 // ContentPolicy is the per-dimension verdict for a single section (mode 3, or a
 // modified section in mode 2). Each field is one of the Policy* constants.
 type ContentPolicy struct {
-	Text   string `json:"text"`
-	Images string `json:"images"`
-	Icons  string `json:"icons"`
+	Text   string `json:"text" cb:"text,1"`
+	Images string `json:"images" cb:"images,2"`
+	Icons  string `json:"icons" cb:"icons,3"`
 }
 
 // VerifySectionContent compares old vs new content under the policy and returns

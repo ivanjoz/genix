@@ -43,8 +43,8 @@ var embeddedCompanyFlags = &companyFlagsCatalog{}
 // scaled by the flag's declared decimals, which is why nothing but the catalog may interpret it —
 // GetCompanyFlagValue is how a rule reads it back as the number that was typed.
 type CompanyFlagValue struct {
-	ID    int16 `json:",omitempty"`
-	Value int32 `json:",omitempty"`
+	ID    int16 `json:",omitempty" cb:"ID,1"`
+	Value int32 `json:",omitempty" cb:"Value,2"`
 }
 
 // LoadEmbeddedCompanyFlags parses the catalog the main package embeds. Called once at startup.

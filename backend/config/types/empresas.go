@@ -10,38 +10,38 @@ type TAGS struct{}
 
 type Company struct {
 	db.TableStruct[CompanyTable, Company]
-	ID                int32  `db:"id,pk"`
-	Name              string `json:",omitempty"`
-	LegalName         string `json:",omitempty"`
-	RUC               string `json:",omitempty" db:"ruc"`
-	Email             string `json:",omitempty" db:"email"`
-	NotificationEmail string `json:",omitempty"`
-	Phone             string `json:",omitempty"`
-	Representative    string `json:",omitempty"`
-	Address           string `json:",omitempty"`
+	ID                int32  `db:"id,pk" cb:"ID,1"`
+	Name              string `json:",omitempty" cb:"Name,2"`
+	LegalName         string `json:",omitempty" cb:"LegalName,3"`
+	RUC               string `json:",omitempty" db:"ruc" cb:"RUC,4"`
+	Email             string `json:",omitempty" db:"email" cb:"Email,5"`
+	NotificationEmail string `json:",omitempty" cb:"NotificationEmail,6"`
+	Phone             string `json:",omitempty" cb:"Phone,7"`
+	Representative    string `json:",omitempty" cb:"Representative,8"`
+	Address           string `json:",omitempty" cb:"Address,9"`
 	// CityID is the district the fiscal address sits in, and it is the INEI ubigeo
 	// itself: the catalog is keyed by the code, so 150101 is Lima / Lima / Lima.
 	// SUNAT reads it off every document the company issues, which is why this is a
 	// picked district and not the free-text city it replaced.
-	CityID        int32       `json:",omitempty"`
-	FormApiKey    string      `json:",omitempty" db:"form_api_key"`
-	EmailVerified int8        `json:",omitempty"`
-	PhoneVerified int8        `json:",omitempty"`
-	CulqiConfig   CulqiConfig `json:",omitempty" db:"culqui_config"`
+	CityID        int32       `json:",omitempty" cb:"CityID,10"`
+	FormApiKey    string      `json:",omitempty" db:"form_api_key" cb:"FormApiKey,11"`
+	EmailVerified int8        `json:",omitempty" cb:"EmailVerified,12"`
+	PhoneVerified int8        `json:",omitempty" cb:"PhoneVerified,13"`
+	CulqiConfig   CulqiConfig `json:",omitempty" db:"culqui_config" cb:"CulqiConfig,14"`
 	// InvoiceSeries are the SUNAT series this company issues under. Inline rather
 	// than a table of their own: there are at most 99, every emission needs one,
 	// and reading the company already brings them along.
-	InvoiceSeries []invoicing.InvoiceSeries `json:",omitempty"`
+	InvoiceSeries []invoicing.InvoiceSeries `json:",omitempty" cb:"InvoiceSeries,15"`
 	// Flags are the ids the company has checked in company_flags.toml, and only those:
 	// an unchecked flag is absent, never stored as a zero. One flat list because the
 	// catalog's ids are unique across its sections. core.HasCompanyFlag reads it.
-	Flags []int16 `json:",omitempty"`
+	Flags []int16 `json:",omitempty" cb:"Flags,16"`
 	// FlagValues carries the flags the catalog declares with a `type`: those hold a number
 	// instead of an on/off, so their id never appears in Flags. The value is already scaled
 	// by the flag's decimals — core.GetCompanyFlagValue unscales it back.
-	FlagValues []core.CompanyFlagValue `json:",omitempty"`
-	Updated    int32                   `json:"upd" db:"updated"`
-	Status     int8                    `json:"ss" db:"status"`
+	FlagValues []core.CompanyFlagValue `json:",omitempty" cb:"FlagValues,17"`
+	Updated    int32                   `json:"upd" db:"updated" cb:"upd,18"`
+	Status     int8                    `json:"ss" db:"status" cb:"ss,19"`
 }
 
 type CompanyTable struct {
@@ -86,18 +86,18 @@ func (e CompanyTable) GetSchema() db.TableSchema {
 }
 
 type CulqiConfig struct {
-	RsaKey     string `json:",omitempty"`
-	RsaKeyID   string `json:",omitempty"`
-	KeyLive    string `json:",omitempty"`
-	PubKeyLive string `json:",omitempty"`
-	KeyDev     string `json:",omitempty"`
-	PubKeyDev  string `json:",omitempty"`
+	RsaKey     string `json:",omitempty" cb:"RsaKey,1"`
+	RsaKeyID   string `json:",omitempty" cb:"RsaKeyID,2"`
+	KeyLive    string `json:",omitempty" cb:"KeyLive,3"`
+	PubKeyLive string `json:",omitempty" cb:"PubKeyLive,4"`
+	KeyDev     string `json:",omitempty" cb:"KeyDev,5"`
+	PubKeyDev  string `json:",omitempty" cb:"PubKeyDev,6"`
 }
 
 type CompanyPub struct {
-	ID            int32  `json:"id"`
-	Name          string `json:",omitempty"`
-	CulqiRsaKey   string `json:",omitempty"`
-	CulqiRsaKeyID string `json:",omitempty"`
-	CulqiLlave    string `json:",omitempty"`
+	ID            int32  `json:"id" cb:"id,1"`
+	Name          string `json:",omitempty" cb:"Name,2"`
+	CulqiRsaKey   string `json:",omitempty" cb:"CulqiRsaKey,3"`
+	CulqiRsaKeyID string `json:",omitempty" cb:"CulqiRsaKeyID,4"`
+	CulqiLlave    string `json:",omitempty" cb:"CulqiLlave,5"`
 }

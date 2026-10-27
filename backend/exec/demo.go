@@ -108,49 +108,49 @@ func Test17(args *core.ExecArgs) core.FuncResponse {
 }
 
 type DemoStruct1 struct {
-	Hola  string  `json:"a,omitempty" ms:"h"`
-	Value float32 `json:"b,omitempty" ms:"v"`
-	Hola2 int     `json:"c,omitempty" ms:"c"`
+	Hola  string  `json:"a,omitempty" ms:"h" cb:"a,1"`
+	Value float32 `json:"b,omitempty" ms:"v" cb:"b,2"`
+	Hola2 int     `json:"c,omitempty" ms:"c" cb:"c,3"`
 }
 
 type DemoStruct2 struct {
-	Hola   string  `json:"a" ms:"h"`
-	Value  float32 `json:"b" ms:"v"`
-	Value2 float32 `json:"c" ms:"v2"`
+	Hola   string  `json:"a" ms:"h" cb:"a,1"`
+	Value  float32 `json:"b" ms:"v" cb:"b,2"`
+	Value2 float32 `json:"c" ms:"v2" cb:"c,3"`
 }
 
 type DemoStruct3 struct {
-	Nombre string `json:"nombre1" msgpack:"1,omitempty"`
-	Demo   int32  `json:"demo" msgpack:"2,omitempty"`
+	Nombre string `json:"nombre1" msgpack:"1,omitempty" cb:"nombre1,1"`
+	Demo   int32  `json:"demo" msgpack:"2,omitempty" cb:"demo,2"`
 }
 
 type DemoStruct5 struct {
 	config.TAGS `table:"demo_structs"`
-	CompanyID   int32         `json:"companyID,omitempty" db:"company_id,pk"`
-	ID          int32         `json:"id,omitempty" db:"id,pk"`
-	Edad        int32         `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre      string        `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras    []string      `json:"palabras,omitempty" db:"palabras"`
-	Peso        float32       `json:"peso,omitempty" db:"peso"`
-	Peso64      float64       `json:"peso64,omitempty" db:"peso_64"`
-	Rangos      []int32       `json:"rangos,omitempty" db:"rangos"`
-	Smallint    int16         `db:"small_int,zx2"`
-	Struct1     DemoStruct1   `json:"struct_1,omitempty" db:"struct_1"`
-	Struct2     DemoStruct3   `json:"struct_2,omitempty" db:"struct_2"`
-	Struct3     []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3"`
+	CompanyID   int32         `json:"companyID,omitempty" db:"company_id,pk" cb:"companyID,1"`
+	ID          int32         `json:"id,omitempty" db:"id,pk" cb:"id,2"`
+	Edad        int32         `json:"edad,omitempty" db:"edad,zx1,zx2" cb:"edad,3"`
+	Nombre      string        `json:"nombre,omitempty" db:"nombre,zx1" cb:"nombre,4"`
+	Palabras    []string      `json:"palabras,omitempty" db:"palabras" cb:"palabras,5"`
+	Peso        float32       `json:"peso,omitempty" db:"peso" cb:"peso,6"`
+	Peso64      float64       `json:"peso64,omitempty" db:"peso_64" cb:"peso64,7"`
+	Rangos      []int32       `json:"rangos,omitempty" db:"rangos" cb:"rangos,8"`
+	Smallint    int16         `db:"small_int,zx2" cb:"Smallint,9"`
+	Struct1     DemoStruct1   `json:"struct_1,omitempty" db:"struct_1" cb:"struct_1,10"`
+	Struct2     DemoStruct3   `json:"struct_2,omitempty" db:"struct_2" cb:"struct_2,11"`
+	Struct3     []DemoStruct1 `json:"struct_3,omitempty" db:"struct_3" cb:"struct_3,12"`
 }
 
 type DemoStruct4 struct {
 	config.TAGS `table:"demo_structs"`
-	CompanyID   int32    `json:"companyID,omitempty" db:"company_id,pk"`
-	ID          int32    `json:"id,omitempty" db:"id,pk"`
-	Edad        int32    `json:"edad,omitempty" db:"edad,zx1,zx2"`
-	Nombre      string   `json:"nombre,omitempty" db:"nombre,zx1"`
-	Palabras    []string `json:"palabras,omitempty" db:"palabras"`
-	Rangos      []int32  `json:"rangos,omitempty" db:"rangos"`
-	Smallint    int16    `json:"small_int,omitempty" db:"small_int,zx2"`
-	Peso        float32  `json:"peso,omitempty" db:"peso"`
-	Peso64      float64  `json:"peso64,omitempty" db:"peso_64"`
+	CompanyID   int32    `json:"companyID,omitempty" db:"company_id,pk" cb:"companyID,1"`
+	ID          int32    `json:"id,omitempty" db:"id,pk" cb:"id,2"`
+	Edad        int32    `json:"edad,omitempty" db:"edad,zx1,zx2" cb:"edad,3"`
+	Nombre      string   `json:"nombre,omitempty" db:"nombre,zx1" cb:"nombre,4"`
+	Palabras    []string `json:"palabras,omitempty" db:"palabras" cb:"palabras,5"`
+	Rangos      []int32  `json:"rangos,omitempty" db:"rangos" cb:"rangos,6"`
+	Smallint    int16    `json:"small_int,omitempty" db:"small_int,zx2" cb:"small_int,7"`
+	Peso        float32  `json:"peso,omitempty" db:"peso" cb:"peso,8"`
+	Peso64      float64  `json:"peso64,omitempty" db:"peso_64" cb:"peso64,9"`
 }
 
 func Test18(args *core.ExecArgs) core.FuncResponse {

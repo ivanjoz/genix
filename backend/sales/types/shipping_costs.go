@@ -4,19 +4,19 @@ import "app/db"
 
 type ShippingCost struct {
 	db.TableStruct[ShippingCostTable, ShippingCost]
-	CompanyID int32   `json:",omitempty"`
-	CityID    int32   `json:",omitempty"`
-	FlatCost  float64 `json:",omitempty"`
-	CostPerKg float64 `json:",omitempty"`
-	Updated   int32   `json:"upd,omitempty"`
-	Version   int16   `json:"ver,omitempty"`
+	CompanyID int32   `json:",omitempty" cb:"CompanyID,1"`
+	CityID    int32   `json:",omitempty" cb:"CityID,2"`
+	FlatCost  float64 `json:",omitempty" cb:"FlatCost,3"`
+	CostPerKg float64 `json:",omitempty" cb:"CostPerKg,4"`
+	Updated   int32   `json:"upd,omitempty" cb:"upd,5"`
+	Version   int16   `json:"ver,omitempty" cb:"ver,6"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty"`
-	UpdatedBy int32   `json:",omitempty"`
-	Created   int32   `json:",omitempty"`
-	CreatedBy int32   `json:",omitempty"`
+	Metadata  *string `json:"mdt,omitempty" cb:"mdt,7"`
+	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,8"`
+	Created   int32   `json:",omitempty" cb:"Created,9"`
+	CreatedBy int32   `json:",omitempty" cb:"CreatedBy,10"`
 	// HasUpdated is request-only so the frontend can send a sparse batch without creating a DB column.
-	HasUpdated bool `db:"-" json:"hasUpdated,omitempty"`
+	HasUpdated bool `db:"-" json:"hasUpdated,omitempty" cb:"hasUpdated,11"`
 }
 
 type ShippingCostTable struct {

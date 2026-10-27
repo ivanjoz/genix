@@ -14,24 +14,24 @@ import (
 
 // d1Request maps the payload required by Cloudflare D1 HTTP API.
 type d1Request struct {
-	SQL    string        `json:"sql"`
-	Params []interface{} `json:"params,omitempty"`
+	SQL    string        `json:"sql" cb:"sql,1"`
+	Params []interface{} `json:"params,omitempty" cb:"params,2"`
 }
 
 // d1Response maps the response format from Cloudflare D1 HTTP API.
 type d1Response struct {
-	Result  []d1Result `json:"result"`
-	Success bool       `json:"success"`
+	Result  []d1Result `json:"result" cb:"result,1"`
+	Success bool       `json:"success" cb:"success,2"`
 	Errors  []struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
-	} `json:"errors"`
+	} `json:"errors" cb:"errors,3"`
 }
 
 type d1Result struct {
-	Results []map[string]interface{} `json:"results"`
-	Success bool                     `json:"success"`
-	Error   string                   `json:"error"`
+	Results []map[string]interface{} `json:"results" cb:"results,1"`
+	Success bool                     `json:"success" cb:"success,2"`
+	Error   string                   `json:"error" cb:"error,3"`
 }
 
 func slicesContains(values []string, expected string) bool {

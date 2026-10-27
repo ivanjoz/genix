@@ -25,8 +25,8 @@ var spanishExampleQuestions = []string{
 }
 
 type searchOutput struct {
-	Question string                          `json:"question"`
-	Results  []knowledge.DocumentationResult `json:"results"`
+	Question string                          `json:"question" cb:"question,1"`
+	Results  []knowledge.DocumentationResult `json:"results" cb:"results,2"`
 }
 
 func main() {

@@ -9,30 +9,30 @@ import (
 // the movement targets a ProductStockDetail row or the plain ProductStockV2.Quantity bucket.
 type WarehouseProductMovement struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
-	CompanyID int32 `json:",omitempty"`
+	CompanyID int32 `json:",omitempty" cb:"CompanyID,1"`
 	// ID packs Date(15 bits)+WarehouseID(17 bits)+Autoincrement(8 random bits) into an int64.
-	ID                   int64
-	SerialNumber         string `json:",omitempty"`
-	LotID                int32  `json:",omitempty"`
-	WarehouseID          int32  `json:",omitempty"`
-	WarehouseRefID       int32  `json:",omitempty"`
-	WarehouseRefQuantity int32  `json:",omitempty"`
-	Date                 int16  `json:",omitempty"`
-	DocumentID           int64  `json:",omitempty"`
-	ProductID            int32  `json:",omitempty"`
-	PresentationID       int16  `json:",omitempty"`
-	Quantity             int32  `json:",omitempty"`
-	WarehouseQuantity    int32  `json:",omitempty"`
-	SubQuantity          int32  `json:",omitempty"`
+	ID                   int64  `cb:"ID,2"`
+	SerialNumber         string `json:",omitempty" cb:"SerialNumber,3"`
+	LotID                int32  `json:",omitempty" cb:"LotID,4"`
+	WarehouseID          int32  `json:",omitempty" cb:"WarehouseID,5"`
+	WarehouseRefID       int32  `json:",omitempty" cb:"WarehouseRefID,6"`
+	WarehouseRefQuantity int32  `json:",omitempty" cb:"WarehouseRefQuantity,7"`
+	Date                 int16  `json:",omitempty" cb:"Date,8"`
+	DocumentID           int64  `json:",omitempty" cb:"DocumentID,9"`
+	ProductID            int32  `json:",omitempty" cb:"ProductID,10"`
+	PresentationID       int16  `json:",omitempty" cb:"PresentationID,11"`
+	Quantity             int32  `json:",omitempty" cb:"Quantity,12"`
+	WarehouseQuantity    int32  `json:",omitempty" cb:"WarehouseQuantity,13"`
+	SubQuantity          int32  `json:",omitempty" cb:"SubQuantity,14"`
 	// SubDivisor is the divisor SubQuantity was recorded in. It must live on the ledger row
 	// itself: RecalcProductStockByMovements replays the whole history, and without it a
 	// SUM(SubQuantity) spanning a divisor refinement would add sixths to twelfths.
-	SubDivisor    int16             `json:",omitempty"`
-	MonetaryValue int32             `json:",omitempty"`
-	Type          StockMovementType `json:",omitempty"`
-	Created       int32             `json:",omitempty"`
-	CreatedBy     int32             `json:",omitempty"`
-	UpdateCounter int32             `json:",omitempty"`
+	SubDivisor    int16             `json:",omitempty" cb:"SubDivisor,15"`
+	MonetaryValue int32             `json:",omitempty" cb:"MonetaryValue,16"`
+	Type          StockMovementType `json:",omitempty" cb:"Type,17"`
+	Created       int32             `json:",omitempty" cb:"Created,18"`
+	CreatedBy     int32             `json:",omitempty" cb:"CreatedBy,19"`
+	UpdateCounter int32             `json:",omitempty" cb:"UpdateCounter,20"`
 }
 
 type WarehouseProductMovementTable struct {

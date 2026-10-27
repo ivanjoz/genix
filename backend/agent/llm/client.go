@@ -115,37 +115,37 @@ func apiKeyForProvider(provider string) string {
 // ToolCallID is set on `role: "tool"` messages to link the result back to
 // the originating call.
 type Message struct {
-	Role       string     `json:"role"` // "system" | "user" | "assistant" | "tool"
-	Content    string     `json:"content,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role       string     `json:"role" cb:"role,1"` // "system" | "user" | "assistant" | "tool"
+	Content    string     `json:"content,omitempty" cb:"content,2"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty" cb:"tool_calls,3"`
+	ToolCallID string     `json:"tool_call_id,omitempty" cb:"tool_call_id,4"`
 }
 
 // Tool declares one callable function to the model. Parameters is a
 // JSON-Schema object the model uses to shape the call's Arguments string.
 type Tool struct {
-	Type     string       `json:"type"` // always "function"
-	Function ToolFunction `json:"function"`
+	Type     string       `json:"type" cb:"type,1"` // always "function"
+	Function ToolFunction `json:"function" cb:"function,2"`
 }
 
 type ToolFunction struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Parameters  map[string]any `json:"parameters,omitempty"`
+	Name        string         `json:"name" cb:"name,1"`
+	Description string         `json:"description,omitempty" cb:"description,2"`
+	Parameters  map[string]any `json:"parameters,omitempty" cb:"parameters,3"`
 }
 
 // ToolCall is the assistant's request to invoke one tool. Arguments stays
 // as a JSON-encoded string (per OpenAI's contract) — the loop unmarshals it
 // into the per-tool param struct when dispatching.
 type ToolCall struct {
-	ID       string           `json:"id"`
-	Type     string           `json:"type"` // always "function"
-	Function ToolCallFunction `json:"function"`
+	ID       string           `json:"id" cb:"id,1"`
+	Type     string           `json:"type" cb:"type,2"` // always "function"
+	Function ToolCallFunction `json:"function" cb:"function,3"`
 }
 
 type ToolCallFunction struct {
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
+	Name      string `json:"name" cb:"name,1"`
+	Arguments string `json:"arguments" cb:"arguments,2"`
 }
 
 // ChatRequest is the body posted to /chat/completions. Only the fields the
@@ -153,32 +153,32 @@ type ToolCallFunction struct {
 // provider-specific fields are filled in by Chat() from Reasoning; callers set
 // Reasoning (or nothing) and stay provider-agnostic.
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Tools    []Tool    `json:"tools,omitempty"`
+	Model    string    `json:"model" cb:"model,1"`
+	Messages []Message `json:"messages" cb:"messages,2"`
+	Tools    []Tool    `json:"tools,omitempty" cb:"tools,3"`
 	// ToolChoice accepts OpenAI's "auto" | "none". Earlier tests found at least
 	// one OpenRouter upstream answering HTTP 404 to "required", and no configured
 	// model has been validated for it — keep using "auto" and let the system
 	// prompt discipline the model into ending the turn via the `finish` tool.
-	ToolChoice  string   `json:"tool_choice,omitempty"`
-	Temperature *float32 `json:"temperature,omitempty"`
+	ToolChoice  string   `json:"tool_choice,omitempty" cb:"tool_choice,4"`
+	Temperature *float32 `json:"temperature,omitempty" cb:"temperature,5"`
 	// MaxTokens bounds mechanical subagents such as the discovery planner.
 	// Zero leaves the provider default unchanged for existing agent loops.
-	MaxTokens int `json:"max_tokens,omitempty"`
+	MaxTokens int `json:"max_tokens,omitempty" cb:"max_tokens,6"`
 	// Reasoning is the provider-agnostic thinking budget callers set. Chat()
 	// translates it: sent as-is to OpenRouter, collapsed into ReasoningEffort
 	// for Meta. Nil = don't constrain the budget.
-	Reasoning *ReasoningOptions `json:"reasoning,omitempty"`
+	Reasoning *ReasoningOptions `json:"reasoning,omitempty" cb:"reasoning,7"`
 	// ReasoningEffort is Meta's flat thinking-budget field
 	// ("minimal"|"low"|"medium"|"high"|"xhigh"). Derived from Reasoning by
 	// Chat(); a caller that sets it directly wins, but then it only has an
 	// effect when the selected model uses Meta.
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	ReasoningEffort string `json:"reasoning_effort,omitempty" cb:"reasoning_effort,8"`
 	// Routing pins or biases OpenRouter's upstream selection for the chosen
 	// model (e.g. `deepinfra/fp8`) when latency or quantization matters. See
 	// https://openrouter.ai/docs/features/provider-routing. Dropped on Meta,
 	// which serves its own models and has no routing concept.
-	Routing *OpenRouterRouting `json:"provider,omitempty"`
+	Routing *OpenRouterRouting `json:"provider,omitempty" cb:"provider,9"`
 }
 
 // OpenRouterRouting mirrors the subset of OpenRouter's `provider` parameter we
@@ -190,9 +190,9 @@ type ChatRequest struct {
 // AllowFallbacks=false pins routing to exactly one — for when a specific
 // quantization or region is required. Nil → let OpenRouter pick.
 type OpenRouterRouting struct {
-	Order          []string `json:"order,omitempty"`
-	Sort           string   `json:"sort,omitempty"`
-	AllowFallbacks *bool    `json:"allow_fallbacks,omitempty"`
+	Order          []string `json:"order,omitempty" cb:"order,1"`
+	Sort           string   `json:"sort,omitempty" cb:"sort,2"`
+	AllowFallbacks *bool    `json:"allow_fallbacks,omitempty" cb:"allow_fallbacks,3"`
 }
 
 // ReasoningOptions is the internal representation of a thinking budget. It
@@ -204,31 +204,31 @@ type OpenRouterRouting struct {
 // iterations. On Meta only `Effort` and `Enabled` survive the translation (see
 // metaReasoningEffort).
 type ReasoningOptions struct {
-	Effort    string `json:"effort,omitempty"`
-	MaxTokens int    `json:"max_tokens,omitempty"`
-	Exclude   bool   `json:"exclude,omitempty"`
-	Enabled   *bool  `json:"enabled,omitempty"`
+	Effort    string `json:"effort,omitempty" cb:"effort,1"`
+	MaxTokens int    `json:"max_tokens,omitempty" cb:"max_tokens,2"`
+	Exclude   bool   `json:"exclude,omitempty" cb:"exclude,3"`
+	Enabled   *bool  `json:"enabled,omitempty" cb:"enabled,4"`
 }
 
 // ChatResponse is the /chat/completions reply. The loop only ever looks at
 // Choices[0] and Usage, but we keep the full list in case multi-choice
 // sampling becomes useful later. Both providers return this shape.
 type ChatResponse struct {
-	ID      string   `json:"id"`
-	Choices []Choice `json:"choices"`
-	Usage   Usage    `json:"usage"`
+	ID      string   `json:"id" cb:"id,1"`
+	Choices []Choice `json:"choices" cb:"choices,2"`
+	Usage   Usage    `json:"usage" cb:"usage,3"`
 }
 
 type Choice struct {
-	Index        int     `json:"index"`
-	Message      Message `json:"message"`
-	FinishReason string  `json:"finish_reason"`
+	Index        int     `json:"index" cb:"index,1"`
+	Message      Message `json:"message" cb:"message,2"`
+	FinishReason string  `json:"finish_reason" cb:"finish_reason,3"`
 }
 
 type Usage struct {
-	PromptTokens     int32 `json:"prompt_tokens"`
-	CompletionTokens int32 `json:"completion_tokens"`
-	TotalTokens      int32 `json:"total_tokens"`
+	PromptTokens     int32 `json:"prompt_tokens" cb:"prompt_tokens,1"`
+	CompletionTokens int32 `json:"completion_tokens" cb:"completion_tokens,2"`
+	TotalTokens      int32 `json:"total_tokens" cb:"total_tokens,3"`
 }
 
 // Client holds the resolved provider, API key, default model, and reusable

@@ -1,3 +1,12 @@
+## colbin is announced by every request except axios uploads; the toggle is a veto
+**Context** — The backend now answers colbin only when `Accept` says the client decodes it.
+**Decision** — `buildHeaders` (genix-ui/http) adds `Accept: application/vnd.colbin, application/json`
+unless the Config toggle "Disable Service Serialization" (localStorage `genix:colbin-disabled`) is
+set. The service worker decodes with the headers the page built, since it has no localStorage.
+`POST_XMLHR` passes `announceColbin=false`: axios would parse the binary body as text.
+**Rationale** — A veto can only fall back to plain JSON. Decoding is chosen by Content-Type, never
+by payload shape; the minijson default transform is gone, so a plain JSON body is never re-decoded.
+
 ## Dark mode: tokens everywhere, with a few deliberate literals
 
 **Context** — The app painted itself with hardcoded hex values and Tailwind palette classes, so only

@@ -6,33 +6,33 @@ import (
 
 type User struct {
 	db.TableStruct[UserTable, User]
-	CompanyID  int32   `json:",omitempty"`
-	ID         int32   `json:",omitempty"`
-	User       string  `json:",omitempty"`
-	LastName   string  `json:",omitempty"`
-	FirstName  string  `json:",omitempty"`
-	ProfileIDs []int32 `json:",omitempty"`
+	CompanyID  int32   `json:",omitempty" cb:"CompanyID,1"`
+	ID         int32   `json:",omitempty" cb:"ID,2"`
+	User       string  `json:",omitempty" cb:"User,3"`
+	LastName   string  `json:",omitempty" cb:"LastName,4"`
+	FirstName  string  `json:",omitempty" cb:"FirstName,5"`
+	ProfileIDs []int32 `json:",omitempty" cb:"ProfileIDs,6"`
 	// AccesosGrants are the accesses granted to this user directly, on top of their profiles.
 	// Same shape a profile stores, so both are edited and merged by the same code.
-	AccesosGrants []AccesoGrantRecord `json:",omitempty"`
+	AccesosGrants []AccesoGrantRecord `json:",omitempty" cb:"AccesosGrants,7"`
 	// The two grant blobs, encoded by core.EncodeAccesosGrants and read byte for byte by
 	// fareward and by genix-ui. Which blob an access lands in is itself the "has sub-accesses"
 	// flag: accesos_computed is fixed-stride grant words, accesos_sub_computed appends each
 	// grant's sub bytes. See core/accesos-blob.go.
-	AccesosComputed    []byte `json:",omitempty"`
-	AccesosSubComputed []byte `json:",omitempty"`
-	Email              string `json:",omitempty"`
-	JobTitle           string `json:",omitempty"`
-	DocumentNumber     string `json:",omitempty"`
-	PasswordHash       string `json:",omitempty"`
+	AccesosComputed    []byte `json:",omitempty" cb:"AccesosComputed,8"`
+	AccesosSubComputed []byte `json:",omitempty" cb:"AccesosSubComputed,9"`
+	Email              string `json:",omitempty" cb:"Email,10"`
+	JobTitle           string `json:",omitempty" cb:"JobTitle,11"`
+	DocumentNumber     string `json:",omitempty" cb:"DocumentNumber,12"`
+	PasswordHash       string `json:",omitempty" cb:"PasswordHash,13"`
 	// Password is write-only input from the client. It is absent from UserTable, which is
 	// what keeps it out of every database: the column set comes from the table struct.
-	Password  string `json:",omitempty"`
-	Created   int32  `json:",omitempty"`
-	CreatedBy int32  `json:",omitempty"`
-	Updated   int32  `json:"upd,omitempty"`
-	UpdatedBy int32  `json:",omitempty"`
-	Status    int8   `json:"ss,omitempty"`
+	Password  string `json:",omitempty" cb:"Password,14"`
+	Created   int32  `json:",omitempty" cb:"Created,15"`
+	CreatedBy int32  `json:",omitempty" cb:"CreatedBy,16"`
+	Updated   int32  `json:"upd,omitempty" cb:"upd,17"`
+	UpdatedBy int32  `json:",omitempty" cb:"UpdatedBy,18"`
+	Status    int8   `json:"ss,omitempty" cb:"ss,19"`
 }
 
 type UserTable struct {

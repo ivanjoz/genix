@@ -158,6 +158,8 @@ func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
 	// coloca algunas variables de entorno que pueden ser utilizadas por otros handlers
 	args.Authorization = core.MapGetKeys(args.Headers, "Authorization", "authorization")
 	args.Encoding = core.MapGetKeys(args.Headers, "Accept-Encoding", "accept-encoding")
+	// Header names arrive lowercase with API Gateway's payload format 2.0, so both spellings.
+	args.Accept = core.MapGetKeys(args.Headers, "Accept", "accept")
 
 	// Minted before anything else can fail, so even a request rejected at the token check carries
 	// an identity into its user_logs row. Lives on args, which is exact in both runtimes; the Env
@@ -632,7 +634,7 @@ func clearEnvVariables() {
 }
 
 type ExecLambdaInput struct {
-	ExecArgs core.ExecArgs `json:"fn_exec"`
+	ExecArgs core.ExecArgs `json:"fn_exec" cb:"fn_exec,1"`
 }
 
 func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {

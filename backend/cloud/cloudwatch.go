@@ -149,32 +149,32 @@ func QueryLogsInsights(args QueryLogsArgs) ([]CloudLogRecord, error) {
 }
 
 type LogRecordMessage1 struct {
-	Type    string        `json:"g"`
-	Accion  int16         `json:"a"`
-	Message []interface{} `json:"m"`
+	Type    string        `json:"g" cb:"g,1"`
+	Accion  int16         `json:"a" cb:"a,2"`
+	Message []interface{} `json:"m" cb:"m,3"`
 }
 
 type LogRecordInner1 struct {
-	Type      string        `json:"g"`
-	Ip        string        `json:"i"`
-	Params    string        `json:"p"`
-	Device    interface{}   `json:"d"`
-	UsuarioID int           `json:"u"`
-	Accion    int16         `json:"a"`
-	FilialID  int16         `json:"f"`
-	Message   []interface{} `json:"m"`
+	Type      string        `json:"g" cb:"g,1"`
+	Ip        string        `json:"i" cb:"i,2"`
+	Params    string        `json:"p" cb:"p,3"`
+	Device    interface{}   `json:"d" cb:"d,4"`
+	UsuarioID int           `json:"u" cb:"u,5"`
+	Accion    int16         `json:"a" cb:"a,6"`
+	FilialID  int16         `json:"f" cb:"f,7"`
+	Message   []interface{} `json:"m" cb:"m,8"`
 }
 
 type LogRecord1 struct {
-	Nro       int                 `json:"n"`
-	Time      int64               `json:"t"`
-	RequestId string              `json:"r"`
-	Ip        string              `json:"i"`
-	Params    string              `json:"p"`
-	Device    interface{}         `json:"d"`
-	UsuarioID int                 `json:"u"`
-	FilialID  int16               `json:"f"`
-	Logs      []LogRecordMessage1 `json:"m"`
+	Nro       int                 `json:"n" cb:"n,1"`
+	Time      int64               `json:"t" cb:"t,2"`
+	RequestId string              `json:"r" cb:"r,3"`
+	Ip        string              `json:"i" cb:"i,4"`
+	Params    string              `json:"p" cb:"p,5"`
+	Device    interface{}         `json:"d" cb:"d,6"`
+	UsuarioID int                 `json:"u" cb:"u,7"`
+	FilialID  int16               `json:"f" cb:"f,8"`
+	Logs      []LogRecordMessage1 `json:"m" cb:"m,9"`
 }
 
 func QueryLogsParsed(args QueryLogsArgs) ([]*LogRecord1, error) {

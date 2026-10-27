@@ -4,14 +4,14 @@ import "app/db"
 
 type ImageAssetCategory struct {
 	db.TableStruct[ImageAssetCategoryTable, ImageAssetCategory]
-	GroupID int32  `json:"-"`
-	ID      int16  `json:",omitempty"`
-	Name    string `json:",omitempty"`
-	Updated int32  `json:"upd,omitempty"`
-	Version int16  `json:"ver,omitempty"`
+	GroupID int32  `json:"-" cb:"-"`
+	ID      int16  `json:",omitempty" cb:"ID,1"`
+	Name    string `json:",omitempty" cb:"Name,2"`
+	Updated int32  `json:"upd,omitempty" cb:"upd,3"`
+	Version int16  `json:"ver,omitempty" cb:"ver,4"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata *string `json:"mdt,omitempty"`
-	MaxID    int32   `json:"-" db:"max_id"`
+	Metadata *string `json:"mdt,omitempty" cb:"mdt,5"`
+	MaxID    int32   `json:"-" db:"max_id" cb:"-"`
 }
 
 type ImageAssetCategoryTable struct {

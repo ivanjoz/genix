@@ -132,7 +132,7 @@ func HideCachedPartitions[E any](partitions []db.CachedPartition[E]) []db.Cached
 
 // deltaReplaceRecord is the one Metadata record a route not backed by a delta log appends.
 type deltaReplaceRecord struct {
-	Metadata string `json:"mdt"`
+	Metadata string `json:"mdt" cb:"mdt,1"`
 }
 
 // WithDeltaReplace is the response of a cached route that is not backed by a delta log: its whole
