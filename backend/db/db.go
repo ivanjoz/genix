@@ -8,6 +8,7 @@
 package db
 
 import (
+	"github.com/ivanjoz/genix-orm/dataframe"
 	orm "github.com/ivanjoz/genix-orm/db"
 	"github.com/ivanjoz/genix-orm/db/cache"
 )
@@ -30,6 +31,7 @@ type (
 	GroupIndexCache     = orm.GroupIndexCache
 	KeyParser           = orm.KeyParser
 	FixedValues         = orm.FixedValues
+	DataFrame           = orm.DataFrame
 )
 
 type (
@@ -225,6 +227,29 @@ func SearchText[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Exe
 	refSlice *[]RecordT, partition int32, query string, limit, offset int,
 ) ([]TextHit, error) {
 	return orm.SearchText[RecordT, TableT, D](refSlice, partition, query, limit, offset)
+}
+
+// ─── DataFrames (genix-orm/dataframe) ──────────────────────────────────────────
+
+type (
+	// FrameRow is one row of a DataFrame file: Key holds the frame's Keys and Rows columns.
+	FrameRow[RecordT any] = orm.FrameRow[RecordT]
+	// FrameQuery selects the files of one partition of a DataFrame.
+	FrameQuery[TableT any, RecordT any] = orm.FrameQuery[TableT, RecordT]
+)
+
+// QueryFrame reads the rows of one partition of a DataFrame, as of its last run unless Fresh.
+func QueryFrame[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	partition int32, frameName string,
+) *FrameQuery[TableT, RecordT] {
+	return orm.QueryFrame[RecordT, TableT, D](partition, frameName)
+}
+
+// ToFrames declares a DataFrame by a method of the record (DataFrame.ToFrames): it returns the
+// record's lines as structs whose fields are tagged frame:"key", frame:"row" or frame:"sum". It must
+// be pure: it is called on the record before and after each write.
+func ToFrames[R any, F any](method func(*R) []F) *dataframe.Projection {
+	return orm.ToFrames(method)
 }
 
 // ─── Table compilation and helpers ─────────────────────────────────────────────

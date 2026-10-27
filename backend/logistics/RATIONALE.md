@@ -2,6 +2,19 @@
 
 Design decisions for supplies, stock and purchase orders, newest first.
 
+## PackProductStockID follows the ORM's bottom-aligned packing; detail rows were re-keyed
+**Context** — `PackProductStockID` packed `warehouse<<46 | product<<16 | presentation<<2` (top-aligned),
+but `db.PackSlotValues` packs the 17/30/14-bit slots from the bottom: `<<44 | <<14 | <<0`. Stock rows
+get the ORM's ID on insert, so every preload by the mirrored ID missed (`ApplyMovements` treated stock
+as new, the sale check read 0 available) and detail rows were keyed under IDs no stock row has. The
+frontend `makeStockID` carried the same wrong shifts.
+**Decision** — Fixed the shifts in both mirrors and in the sale shortage message's decoding;
+`TestPackProductStockIDMatchesTheOrmPacking` compares against `orm.PackSlotValues`. On the dev DB the
+89 `warehouse_product_stock_detail` rows (company 1, all from the ERP-history generator's first day)
+were re-inserted under the corrected `ProductStockID` and the originals set to `ss=0`.
+**Rationale** — Matching the ORM changes no stored stock ID; changing the ORM would re-key every
+table. The ORM has no delete, so the stale detail rows stay as inactive rows rather than being removed.
+
 ## The movement type is validated on the delta, and asset moves may go both ways
 
 **Context** — `ApplyMovimientos` no longer guesses the type from the sign; the writer names it. A

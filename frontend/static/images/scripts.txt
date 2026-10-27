@@ -1,1 +1,3 @@
-magick input.jpg -resize 16x16 -blur 0x8 -quality 10 -strip placeholder.avif
+version https://git-lfs.github.com/spec/v1
+oid sha256:0df97e7a762b4f1e6b5bb75f63d48cb17ba2b054ef782acf2dc964d865b67397
+size 77

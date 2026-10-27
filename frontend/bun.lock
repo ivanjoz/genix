@@ -57,7 +57,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@humanspeak/svelte-virtual-list": "^0.3.5",
-        "@ivanjoz/minijson": "github:ivanjoz/minijson#v0.1.0",
+        "@ivanjoz/minijson": "github:ivanjoz/minijson#v0.3.2",
         "@jsquash/avif": "^2.1.1",
         "@tiptap/core": "^3.31.4",
         "@tiptap/extension-table": "^3.31.4",
@@ -236,7 +236,7 @@
 
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.34.5", "", { "os": "win32", "cpu": "x64" }, "sha512-+29YMsqY2/9eFEiW93eqWnuLcWcufowXewwSNIT6UwZdUUCrM3oFjMWH/Z6/TMmb4hlFenmfAVbpWeup2jryCw=="],
 
-    "@ivanjoz/minijson": ["@ivanjoz/minijson@github:ivanjoz/minijson#f3aa796", {}, "ivanjoz-minijson-f3aa796", "sha512-7HMkCtOTldVblUyCOxsJqhnt26gUrUZrpOzi4VHppzLZcnCa0n3oyt8EG6IBgRynQ03TYIAChyop0FIBKXhkmQ=="],
+    "@ivanjoz/minijson": ["@ivanjoz/minijson@github:ivanjoz/minijson#ba74173", {}, "ivanjoz-minijson-ba74173", "sha512-v312ullJsMSeyj8SYifdFxbtOt14WMu/yB7Dp+DlDBAG4e9XPHQtT79MEWO8S1lrb4P9wH0hStuY17qn7/zcbA=="],
 
     "@ivanjoz/public-business-data": ["@ivanjoz/public-business-data@github:ivanjoz/public-business-data#3dcab38", {}, "ivanjoz-public-business-data-3dcab38", "sha512-6nTdFm37/93udsUOxtYdQ24J+tC/7Qwgubud1w6BZdw/NR++Q8sE2O6Iy61u6qyzFchvu2UZFtqJZacReDVxwg=="],
 

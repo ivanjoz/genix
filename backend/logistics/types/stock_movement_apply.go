@@ -36,10 +36,10 @@ func getApplyMovimientosCompanyLock(companyID int32) *sync.Mutex {
 // PackProductStockID mirrors the ORM's KeyIntPacking for ProductStockV2 so the
 // application can compute the packed key for lookups/detail wiring without
 // round-tripping through inserts.
-// Schema: WarehouseID.Size(17) + ProductID.Size(30) + PresentationID.Size(14), packed from the
-// top of the 63-bit KeyIntPacking budget, so 2 low bits stay unused.
+// Schema: WarehouseID.Size(17) + ProductID.Size(30) + PresentationID.Size(14). The ORM packs the
+// slots from the bottom (db.PackSlotValues), so the 2 unused bits of the 63-bit budget sit on top.
 func PackProductStockID(warehouseID int32, productID int32, presentationID int16) int64 {
-	return int64(warehouseID)<<46 | int64(productID)<<16 | int64(presentationID)<<2
+	return int64(warehouseID)<<44 | int64(productID)<<14 | int64(presentationID)
 }
 
 const maxProductStockLastPrices = 8

@@ -1,3 +1,18 @@
+## GET.sale-summary answers raw frame files; action 2 stays a no-op
+**Context** — The sale summary moved to the `sale-summary` DataFrame of `sale_order`;
+`product_sale_summary` and its write path are gone. The route must answer the genix-ui frame cache
+request (`f`, `from`, `to`, `g`, `h`), and the "Reprocesar Resumen de Ventas" action (id 2) was
+already a handler returning nothing, its `SaleOrderReprocess` wired to no caller but demo `fn045`.
+**Decision** — The route refuses any `f` but `sale-summary`, a bad range and more than 400 days (the
+engine's limit, with a Spanish message), and answers `ExecChanged` bytes through the new
+`core.MakeBinaryResponse` (`application/octet-stream`, `IsBinary`: base64'd on the buffered Lambda
+path even uncompressed). `SaleOrderReprocess`, demos `fn044`/`fn045`
+and the summary tests were deleted; the action 2 registration was kept as the no-op it was, since
+removing it could orphan scheduled actions. The first build needs no step: `fn-materialize-frames`
+builds a frame that has no generation yet.
+**Rationale** — A reprocess now means a frame rebuild (`RebuildDataFramesPartition`), but wiring
+action 2 to it needs the company id from its params, which its contract never defined.
+
 ## The Anuladas tab answers whole; the other tabs follow the delta log
 **Context** — Annulled is status 0, and the ORM's delta log reads a status-0 write as a delete.
 Every tab reads the same log, which names every status.

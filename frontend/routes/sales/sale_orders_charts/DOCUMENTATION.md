@@ -38,9 +38,12 @@ records already loaded into the browser.
 - The page reads a **daily sale summary (resumen diario de ventas)**: one row per calendar day per
   company with, for every product sold that day, the quantity sold, the quantity still pending
   delivery, the total invoiced amount, and the amount still unpaid (debt/`por cobrar`). Genix
-  builds this summary incrementally from each sale order's create, payment, and delivery events
-  (it is not recomputed from scratch every time the page opens), so the numbers shown here should
-  match the totals a sale order accumulates over its lifecycle on **Sales Management**.
+  derives what each sale order adds to its day from the order's current status alone: an
+  undelivered order counts its quantities as pending, an unpaid one counts its amount as debt,
+  and an annulled order adds nothing — so the numbers shown here match the sale orders as they
+  stand on **Sales Management**. Amounts are in soles: a USD sale is converted with its own
+  exchange rate. Quantities sold in sub-units (for example sixths of a unit) are counted as
+  fractions of a unit.
 - **Amount (Monto)** vs. **Quantity (Cantidad)** is a single toggle — **Por Monto Facturado** /
   **Por Cantidad** — shared by both chart views on this page: switching it in one view keeps the
   same selection when the user moves to the other view.
@@ -48,12 +51,9 @@ records already loaded into the browser.
   split into its paid portion and its still-unpaid (debt) portion; **Delivered/Entregado** always
   refers to the quantity portion of a line whose delivery has completed vs. the quantity still
   pending. In quantity mode, "received" is read as delivered quantity, not payment.
-- Sale-summary data currently loaded in the browser typically spans roughly the last 8 weeks (56
-  days): the backend endpoint that feeds this page defaults an initial sync to `today − 56 days`
-  through `today` when no other date range is given, and the page's own incremental sync
-  afterwards only requests changes since the last sync, not a fixed historical window. In
-  practice, an old sale order that is paid or delivered today can still surface here as a change
-  for its original (older) date, so the exact oldest date present can vary by company.
+- The page always loads the **last 8 weeks (56 days), today included**. The browser keeps each
+  day it has loaded and, every time the page opens, receives only the days whose sales changed
+  since then; a sale order paid, delivered or annulled today updates the day it was sold on.
 
 <!-- DOC-ID: capability.by-product -->
 ## Compare products (Vista Por Producto)
@@ -99,10 +99,9 @@ Purely a read: no record is created, updated, or changed by viewing or filtering
 
 ### Limitations (Limitaciones)
 
-- There is no manual refresh button on this page; because the underlying sale-summary service is
-  configured with a shorter cache lifetime specifically for chart pages, the numbers refresh
-  automatically fairly often rather than needing a user action, but the page cannot force an
-  immediate refresh on demand.
+- There is no manual refresh button on this page: the numbers are brought up to date each time
+  the page is opened, and do not change while it stays open. Reopen the page to see a sale order
+  created or changed meanwhile.
 - The same message, **"No se encontraron productos con ventas en los últimos 45 días."**, appears
   both when there is genuinely no sales data in the window and when the search box simply matches
   no product name — there is no separate "no results for your search" message.
@@ -136,8 +135,7 @@ shared with the By Product view) is offered here; there is no product search box
 
 No form input is required; the list renders automatically from the same sale-summary records used
 by the By Product view. Unlike that view, this list is not fixed at 45 days: it spans every day
-from the oldest date present in the currently loaded records through today, so its length depends
-on how much sale-summary history the browser has already synced.
+from the oldest day with sales in the loaded 8 weeks through today.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
@@ -206,8 +204,8 @@ Purely a read: no record is created, updated, or changed by viewing this chart.
   browser does not currently contain that product ID.
 - **The price line on a product card looks wrong or outdated:** it always reflects the product's
   current price, not the price actually charged on past sales.
-- **Numbers look slightly out of date:** this page has no manual refresh action; it relies on its
-  own short-lived automatic cache to catch up, and syncing can be delayed by a few seconds/minutes.
+- **Numbers look slightly out of date:** the page loads the numbers when it opens and does not
+  refresh them while open; reopen the page to include the sale orders changed since.
 
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
@@ -238,15 +236,19 @@ files:
     supports: [page-purpose, concepts, capability.by-product, capability.daily-summary, rules]
   - path: frontend/routes/sales/sale_orders_charts/sale_orders_charts.svelte.ts
     role: frontend-service
-    hash: sha256:ca2e3a83f32537b7745b925f476e01f4508b18a4e7f3e0ae136d14a4801d7cd7
+    hash: sha256:630af68ee4fd21e5fb74f3ba18947b96b77def4437e7eb66218696f4c4c8f324
     supports: [concepts, rules, troubleshooting]
+  - path: frontend/routes/sales/sale_orders_charts/sale_orders_charts.ts
+    role: business-logic
+    hash: sha256:69528bf319a688a005d334e70eb235394258be58b29f580d31bc2882f2abad0d
+    supports: [concepts]
   - path: frontend/routes/sales/sale_orders_charts/SaleOrdersChartsByProduct.svelte
     role: user-interface
-    hash: sha256:fd3d3649ce8b8d46097c16e8886e47a18c8d1391c741fac9102733b8ff2e1f97
+    hash: sha256:2002af889a3d94b5d7bac69db98bc66263fed1e1afc39d31d08641358ed69990
     supports: [capability.by-product, troubleshooting]
   - path: frontend/routes/sales/sale_orders_charts/SaleOrdersChartsDailySummary.svelte
     role: user-interface
-    hash: sha256:66e23ca883a86fa735ccf8c627adb2e0051dbd3e8e804045e0bfa79301a201cc
+    hash: sha256:f3b819dec994ededc53a0367b491a5287111b6327639f18e747f542c32cc84fe
     supports: [capability.daily-summary, troubleshooting]
   - path: frontend/services/production/products.svelte.ts
     role: shared-domain
@@ -258,15 +260,11 @@ files:
     supports: [capability.by-product]
   - path: backend/sales/sale_summary_status.go
     role: backend-handler
-    hash: sha256:f34d5ff257ca7daca70f3561a62bf545e49be28c458d7fd3385fdb437f6a09ee
+    hash: sha256:ca7ce7b8bbf1e653681a7c25a0a78a0bc176cce2804014a96cb7d555050ad4a1
     supports: [concepts, rules]
-  - path: backend/sales/sale_summary.go
-    role: business-logic
-    hash: sha256:6009c242673ce18ffeff7b157154789b459f4c3b55f97be881aec0fbbc718c5d
-    supports: [concepts]
   - path: backend/sales/types/sales.go
     role: data-model
-    hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc
+    hash: sha256:50ba37c7ef8ebae3a31d7bceca29c44a3389151a8d56106ea9224e621b5df9d6
     supports: [concepts, capability.by-product, capability.daily-summary]
   - path: backend/sales/main.go
     role: backend-handler

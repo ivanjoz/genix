@@ -110,6 +110,7 @@ export const {
   buildHeaders,
   GET,
   GETWithGroupCache,
+  GETFrameFiles,
   POST,
   PUT,
   POST_XMLHR,

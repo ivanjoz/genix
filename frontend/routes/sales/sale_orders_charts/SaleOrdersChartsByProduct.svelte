@@ -7,7 +7,7 @@
   import { formatN, formatTime, wordInclude } from '#libs/helpers.ts'
   import FilterInput from '#components/form/FilterInput.svelte'
   import type { IProduct } from '#services/production/products.svelte.ts'
-  import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
+  import type { ISaleSummaryRecord } from './sale_orders_charts.ts'
 
   type TChartMetricMode = 'amount' | 'quantity'
 

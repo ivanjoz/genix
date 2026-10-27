@@ -2,6 +2,23 @@
 
 Design decisions for the one-off scripts, newest first.
 
+## A restore rebuilds the company's DataFrame files of every restored table
+**Context** — A restore deletes the company's partition with a raw `DELETE` before inserting the
+backup. The inserts reach the DataFrame log, the deletes don't, so the frames would keep counting
+records the backup doesn't have.
+**Decision** — After the restore loop, `RestoreBackup` calls `RebuildDataFramesPartition` on every
+restored table (a no-op on a table without frames). A failure is logged, not returned: the records
+are restored either way.
+**Rationale** — It scans only the restored company. Until the rebuild succeeds (re-run it, or
+`RebuildDataFrames`) that company's frames are off.
+
+## `fn-materialize-frames` does not stop at the first failing table
+**Context** — `fn-reindex-text` panics on the first table that fails. A scheduled run every 10
+minutes would then leave every later table stale while one table is broken.
+**Decision** — It runs every table and panics at the end with the errors joined.
+**Rationale** — One broken frame doesn't hold back the others. The schedule itself (cron or
+EventBridge) is not set up yet.
+
 ## `identity_doc_type` was migrated in the database by hand, not by the ORM
 
 **Context** — the column existed as `text` from before it became `int8` in Go, so the backfill

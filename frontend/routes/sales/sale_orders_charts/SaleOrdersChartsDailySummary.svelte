@@ -4,7 +4,7 @@
   import { DateHelper } from '@genix/ui/utilities'
   import { formatN, formatTime } from '#libs/helpers.ts'
   import type { IProduct } from '#services/production/products.svelte.ts'
-  import type { ISaleSummaryRecord } from './sale_orders_charts.svelte'
+  import type { ISaleSummaryRecord } from './sale_orders_charts.ts'
 
   // Money only, and no metric selector. A quantity mode here summed across every product in
   // a day, adding kilograms of one product to pieces of another — a figure with no unit.

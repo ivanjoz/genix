@@ -1,3 +1,3 @@
-# allow crawling everything by default
-User-agent: *
-Disallow:
+version https://git-lfs.github.com/spec/v1
+oid sha256:b033243267bcbdab84cb01e940811d6d77a894d78f0470faaf0eb43f8e4efcc9
+size 63

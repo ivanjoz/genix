@@ -137,23 +137,29 @@ func MakeResponseFinal(handlerResponse *HandlerResponse) *events.APIGatewayV2HTT
 	// base64'd. EncodeToString is the one copy that has to escape — it produces the string the
 	// Lambda runtime serializes — which is why the compressor's buffer can go back to the pool
 	// immediately after.
-	encodeCompressedBody := func(compressed []byte) {
+	encodeBase64Body := func(compressed []byte) {
 		response.Body = base64.StdEncoding.EncodeToString(compressed)
 		response.IsBase64Encoded = true
 	}
 
 	// zstd first, gzip as the compatibility fallback. isMaxLen forces compression even when the
 	// client advertised nothing, because a payload that large cannot go out uncompressed.
-	if handlerResponse.DisableCompression {
+	isCompressed := !handlerResponse.DisableCompression && (isMaxLen ||
+		strings.Contains(handlerResponse.Encoding, "zstd") || strings.Contains(handlerResponse.Encoding, "gzip"))
+	if handlerResponse.IsBinary && !isCompressed {
+		// An uncompressed binary body must be base64'd too: as a plain string API Gateway would
+		// corrupt every byte that is not valid UTF-8.
+		encodeBase64Body(body)
+	} else if handlerResponse.DisableCompression {
 		// Preserve raw payloads for endpoints that require an unencoded response.
 		response.Body = string(body)
 	} else if strings.Contains(handlerResponse.Encoding, "zstd") {
 		Log("Enviando respuesta comprimida con zstd")
-		CompressZstdPooled(body, encodeCompressedBody)
+		CompressZstdPooled(body, encodeBase64Body)
 		response.Headers["Content-Encoding"] = "zstd"
 	} else if isMaxLen || strings.Contains(handlerResponse.Encoding, "gzip") {
 		Log("Enviando respuesta comprimida con gzip")
-		if err := CompressGzipPooled(body, encodeCompressedBody); err != nil {
+		if err := CompressGzipPooled(body, encodeBase64Body); err != nil {
 			panic("Error al momento de comprimir la respuesta con gzip: " + err.Error())
 		}
 		response.Headers["Content-Encoding"] = "gzip"
@@ -485,6 +491,8 @@ type HandlerResponse struct {
 	Route              string
 	StreamHandled      bool
 	DisableCompression bool
+	// IsBinary: the body is raw bytes, not text (MakeBinaryResponse).
+	IsBinary bool
 }
 
 type MainResponse struct {
@@ -623,6 +631,18 @@ func (req *HandlerArgs) MakeResponsePlain(body *[]byte) HandlerResponse {
 	}
 
 	return response
+}
+
+// MakeBinaryResponse answers raw bytes (application/octet-stream), as a DataFrame route's
+// ExecChanged body. IsBinary keeps them intact where the transport carries the body as a string.
+func (req *HandlerArgs) MakeBinaryResponse(body []byte) HandlerResponse {
+	return HandlerResponse{
+		Body:       &body,
+		StatusCode: http.StatusOK,
+		Headers:    map[string]string{"Content-Type": "application/octet-stream"},
+		Route:      req.Route,
+		IsBinary:   true,
+	}
 }
 
 func SendLocalResponse(args HandlerArgs, response HandlerResponse) {

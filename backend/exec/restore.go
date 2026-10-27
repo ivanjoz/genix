@@ -161,6 +161,14 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 	// Counters are not realigned with the restored rows — see ResetCounters.
 	ResetCounters(req.User.CompanyID)
 
+	// The restore deleted the partition's rows outside the write path, which no DataFrame log
+	// records: the company's frame files are computed again from what was restored.
+	for tableName := range partitionDeletedTables {
+		if err := controllersMap[tableName].RebuildDataFramesPartition(req.User.CompanyID); err != nil {
+			core.Log("RestoreBackup DataFrames rebuild failed | table:", tableName, "|", err)
+		}
+	}
+
 	core.Log(
 		"RestoreBackup summary | backup:", body.Name,
 		"| processed_entries:", processedEntriesCount,

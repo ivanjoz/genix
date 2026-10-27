@@ -315,15 +315,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		saleActions = append(saleActions, 3)
 	}
 
-	// Scheduled last so the closure reads the final saleActions built by the blocks above.
-	eg.Go(func() error {
-		if err := updateSaleSummaryForChange(sale, saleActions...); err != nil {
-			core.Log("Error actualizando resumen de ventas:", err)
-			return core.Err("Error al actualizar el resumen de ventas:", err)
-		}
-		return nil
-	})
-
 	if err := eg.Wait(); err != nil {
 		return req.MakeErr(err)
 	}
@@ -629,16 +620,16 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		}
 
 		if core.CompareQuantities(available, requested, comparisonDivisor) < 0 {
-			// Decompose the packed stock ID for a human-readable error.
-			warehouseDigits := key.stockID / 1e14
-			productDigits := (key.stockID / 1e5) % 1e9
-			presentationDigits := (key.stockID / 10) % 1e4
+			// Decompose the packed stock ID (see logistics.PackProductStockID) for a human-readable error.
+			warehouseID := key.stockID >> 44
+			productID := (key.stockID >> 14) & (1<<30 - 1)
+			presentationID := key.stockID & (1<<14 - 1)
 			metadata := []string{
-				fmt.Sprintf("Almacén: %v", warehouseDigits),
-				fmt.Sprintf("Producto: %v", productDigits),
+				fmt.Sprintf("Almacén: %v", warehouseID),
+				fmt.Sprintf("Producto: %v", productID),
 			}
-			if presentationDigits > 0 {
-				metadata = append(metadata, fmt.Sprintf("Presentación: %v", presentationDigits))
+			if presentationID > 0 {
+				metadata = append(metadata, fmt.Sprintf("Presentación: %v", presentationID))
 			}
 			if key.serialNumber != "" {
 				metadata = append(metadata, fmt.Sprintf("SKU: %v", key.serialNumber))

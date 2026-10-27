@@ -2,6 +2,15 @@
 
 Design decisions for the sample-data generators, newest first.
 
+## minijson decodes into a typed mirror by JSON field name (v0.3.2)
+**Context** — `reloadWarehouseLedger` decodes `GET.productos-stock`, whose `ProductStockDetail` field is
+`[]any`, into a local struct where that field is typed. minijson took field types from the payload's
+source type, so the typed mirror panicked in `reflect.Set`.
+**Decision** — In minijson, when the destination struct differs from the encoded one, fields are matched
+by JSON name and decoded with the destination's types; values with no matching field are skipped.
+**Rationale** — Keeps the generator decoding through the same wire format the frontend reads instead of
+adding a typed endpoint; the extra cost is one name map per destination type per decode.
+
 ## The asset seeds are guarded by a count, and each row produces exactly one asset
 
 **Context** — the request was 100 supplies with a count guard, and 100 assets split 50 bought / 50

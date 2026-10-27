@@ -65,7 +65,6 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[logisticsTypes.PurchaseOrder](),
 		makeDBController[logisticsTypes.WarehouseProductMovement](),
 		makeDBController[productionTypes.Product](),
-		makeDBController[salesTypes.ProductSaleSummary](),
 		makeDBController[salesTypes.SaleOrder](),
 		makeDBController[salesTypes.SalesPlanning](),
 		makeDBController[salesTypes.SeasonalityCurve](),
@@ -124,7 +123,6 @@ func init() {
 	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[productionTypes.Product]() })
-	db.RegisterTableFactory("product_sale_summary", func() db.Table { return db.MakeTable[salesTypes.ProductSaleSummary]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })
 	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
 	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })

@@ -3,7 +3,27 @@ package types
 import (
 	"app/core"
 	"testing"
+
+	orm "github.com/ivanjoz/genix-orm/db"
 )
+
+// PackProductStockID must produce the exact ID the ORM writes for warehouse_product_stock, or every
+// preload by ID misses the stored row. Slot bits mirror ProductStockTable's KeyIntPacking.
+func TestPackProductStockIDMatchesTheOrmPacking(t *testing.T) {
+	stockSlotBits := []int64{17, 30, 14}
+	cases := [][3]int64{{1, 160, 0}, {2, 10017, 3}, {131071, 1<<30 - 1, 1<<14 - 1}}
+	for _, components := range cases {
+		ormPackedID := int64(orm.PackSlotValues(components[:], stockSlotBits))
+		packedID := PackProductStockID(int32(components[0]), int32(components[1]), int16(components[2]))
+		if packedID != ormPackedID {
+			t.Fatalf("components %v: PackProductStockID %v, ORM %v", components, packedID, ormPackedID)
+		}
+	}
+	// A real row written by the ORM: warehouse 1, product 160, no presentation.
+	if packedID := PackProductStockID(1, 160, 0); packedID != 17592188665856 {
+		t.Fatalf("PackProductStockID(1, 160, 0) = %v, stored row ID is 17592188665856", packedID)
+	}
+}
 
 // A stock row's DetailSubQuantity is the absolute sum of its detail rows, so refining the
 // row without refining every detail under it would leave the sum adding sixths to twelfths.

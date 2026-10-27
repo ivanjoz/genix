@@ -89,6 +89,62 @@ type SaleOrder struct {
 	AnnulReason string `json:",omitempty"`
 }
 
+// SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day, one row
+// per product and sub-unit divisor. Amounts are in soles; quantities are the split pair, never the
+// packed document form, because a row adds many sales (1004 + 1004 is not 2008).
+type SaleSummaryFrame struct {
+	Date      int16 `frame:"key"`
+	ProductID int32 `frame:"row"`
+	// SubDivisor is its own row, so a product refined mid-day keeps sixths and twelfths apart: the
+	// reader converts them, the frame never mixes them.
+	SubDivisor    int16 `frame:"row"`
+	AmountPEN     int32 `frame:"sum"`
+	DebtAmountPEN int32 `frame:"sum"`
+	SoldUnits     int32 `frame:"sum"`
+	SoldSub       int32 `frame:"sum"`
+	PendingUnits  int32 `frame:"sum"`
+	PendingSub    int32 `frame:"sum"`
+}
+
+// ToSaleSummaryFrames is what the sale adds to its day summary, from its current state alone: an
+// annulled sale adds nothing, an undelivered one keeps its quantities pending and an unpaid one its
+// amount as debt. The frame subtracts what the sale added before each write, so no write has to
+// undo anything by hand.
+func (e *SaleOrder) ToSaleSummaryFrames() []SaleSummaryFrame {
+	if e.Status == OrderStatusAnnulled {
+		return nil
+	}
+	isDeliveryPending := e.Status == OrderStatusPending || e.Status == OrderStatusPaid
+	isPaymentPending := e.Status == OrderStatusPending || e.Status == OrderStatusDelivered
+	lines := make([]SaleSummaryFrame, 0, len(e.DetailProductsIDs))
+	for lineIndex, productID := range e.DetailProductsIDs {
+		packedQuantity := core.GetIndex(e.DetailQuantities, lineIndex)
+		if productID <= 0 || packedQuantity <= 0 {
+			continue
+		}
+		quantity := core.UnpackQuantityLine(packedQuantity)
+		subDivisor := core.GetIndex(e.DetailSubDivisor, lineIndex)
+		if subDivisor <= 0 {
+			subDivisor = core.QuantityDivisorNone
+		}
+		// Sub-units are charged at their own price, so the line total is exact, not prorated.
+		line := SaleSummaryFrame{
+			Date: e.Date, ProductID: productID, SubDivisor: subDivisor,
+			AmountPEN: e.AmountInPEN(core.QuantityAmount(quantity,
+				core.GetIndex(e.DetailPrices, lineIndex), core.GetIndex(e.DetailSubPrices, lineIndex))),
+			SoldUnits: quantity.Units, SoldSub: quantity.Sub,
+		}
+		if isDeliveryPending {
+			line.PendingUnits, line.PendingSub = quantity.Units, quantity.Sub
+		}
+		if isPaymentPending {
+			line.DebtAmountPEN = line.AmountPEN
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
 // AmountInPEN restates an amount of this sale in soles, with the rate the sale was converted
 // with — a USD sale always carries one. The sale summaries and the S/ 700 boleta rule are
 // both in soles whatever the sale was charged in.
@@ -198,76 +254,13 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
-	}
-}
-
-// SaleSummary is the day-level response shape of GET.sale-summary. It is not persisted:
-// buildSaleSummariesFromProductRows assembles it at read time from ProductSaleSummary rows.
-type SaleSummary struct {
-	CompanyID int32 `json:",omitempty"`
-	Date      int16 `json:",omitempty"`
-	// Products are sent columnar: every slice is aligned by index with ProductIDs.
-	ProductIDs []int32 `json:",omitempty"`
-	// Quantity/SubQuantity are the split pair: a summary is accumulated across sales, so it
-	// cannot use the packed document form (1004 + 1004 would be 2008, not 3002).
-	Quantity                   []int32 `json:",omitempty"`
-	QuantityPendingDelivery    []int32 `json:",omitempty"`
-	SubQuantity                []int16 `json:",omitempty"`
-	SubQuantityPendingDelivery []int16 `json:",omitempty"`
-	SubDivisor                 []int16 `json:",omitempty"`
-	TotalAmount                []int32 `json:",omitempty"`
-	TotalDebtAmount            []int32 `json:",omitempty"`
-	Updated                    int32   `json:"upd,omitempty"`
-}
-
-/* Sale summary 2 */
-// SaleOrderProductStats is packed by libs.SerializeInt30Struct, which stores every field in
-// at most 30 bits and saturates silently past that.
-//
-// Unlike the ledger and stock rows, this one keeps its pairs **normalized**: it is updated
-// by a Go-side read-modify-write, not by a Scylla SUM(), so carrying on every write costs
-// nothing. That is what bounds the Sub* fields — a normalized Sub is always below the
-// divisor, and the divisor tops out at core.MaxQuantityDivisor (1000) — so they are int16.
-type SaleOrderProductStats struct {
-	Quantity int32 `cb:"1"`
-	// Bounded by Quantity, so it carries the same width. Only the Sub* halves are bounded by
-	// the divisor and can narrow.
-	QuantityPendingDelivery    int32 `cb:"2"`
-	SubQuantity                int16 `cb:"3"`
-	SubQuantityPendingDelivery int16 `cb:"4"`
-	// SubDivisor the two Sub* fields are counted in. One per (date, product) row: a
-	// refinement mid-day would otherwise have the row adding sixths to twelfths.
-	SubDivisor      int16 `cb:"5"`
-	TotalAmount     int32 `cb:"6"`
-	TotalDebtAmount int32 `cb:"7"`
-}
-
-type ProductSaleSummary struct {
-	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
-	CompanyID int32  `json:",omitempty"`
-	Date      int16  `json:",omitempty"`
-	ProductID int32  `json:",omitempty"`
-	Updated   int32  `json:",omitempty"`
-	Stats     []byte `json:",omitempty"`
-}
-
-type ProductSaleSummaryTable struct {
-	db.TableStruct[ProductSaleSummaryTable, ProductSaleSummary]
-	CompanyID db.Col[*ProductSaleSummaryTable, int32]
-	Date      db.Col[*ProductSaleSummaryTable, int16]
-	ProductID db.Col[*ProductSaleSummaryTable, int32]
-	Stats     db.Col[*ProductSaleSummaryTable, []byte]
-	Updated   db.Col[*ProductSaleSummaryTable, int32]
-}
-
-func (e ProductSaleSummaryTable) GetSchema() db.TableSchema {
-	return db.TableSchema{
-		ID:        19,
-		Name:      "product_sale_summary",
-		Partition: e.CompanyID,
-		Keys:      db.Cols(e.Date, e.ProductID),
-
-		DisableDefaultColumns: true,
+		DataFrames: []db.DataFrame{{
+			// The day/product sales summary of /sales/sale_orders_charts. Most products have no
+			// sub-units and most sales are settled, so the zero sums mask drops the Sub and
+			// pending/debt columns of a day that has none.
+			Name: "sale-summary", Version: 1, UseZeroSumsMask: true,
+			ToFrames: db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
+		}},
 	}
 }
 

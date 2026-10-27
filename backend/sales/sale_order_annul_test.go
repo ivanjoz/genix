@@ -3,7 +3,6 @@ package sales
 import (
 	finance "app/finance/types"
 	logistics "app/logistics/types"
-	"app/sales/types"
 	"testing"
 )
 
@@ -144,88 +143,5 @@ func TestNetStockReturnsTreatsDivisorZeroAsOne(t *testing.T) {
 	}
 	if returns := netStockReturns(movements, 1); len(returns) != 0 {
 		t.Fatalf("expected divisor 0 and 1 to net against each other, got %+v", returns)
-	}
-}
-
-// Whatever the summary added when the sale was created is exactly what the annulment has to take
-// off, at every status the sale can be annulled from.
-func TestAnnulmentSummaryChangeCancelsTheCreationChange(t *testing.T) {
-	sale := types.SaleOrder{
-		CompanyID:         1,
-		Date:              20000,
-		DetailProductsIDs: []int32{77, 78},
-		// Packed lines: 3002 is three units plus two sub-units at divisor 6; 2000 is two whole.
-		DetailQuantities: []int32{3002, 2000},
-		DetailPrices:     []int32{500, 1200},
-		DetailSubPrices:  []int32{100, 0},
-		DetailSubDivisor: []int16{6, 1},
-	}
-
-	for _, status := range []int8{types.OrderStatusPending, types.OrderStatusPaid,
-		types.OrderStatusDelivered, types.OrderStatusCompleted} {
-
-		sale.Status = status
-		actions := summaryActionsOfStatus(status)
-		created := MakeSummaryChangeFromOSaleOrder(sale, actions...)
-		annulled := negateSummaryChanges(MakeSummaryChangeFromOSaleOrder(sale, actions...))
-
-		if len(created) == 0 || len(created) != len(annulled) {
-			t.Fatalf("status %v: expected matching change sets, got %v and %v",
-				status, len(created), len(annulled))
-		}
-
-		// MakeSummaryChangeFromOSaleOrder drains a map, so the two slices are not in the same
-		// order and have to be paired by product.
-		annulledByProduct := map[int32]ProductSummaryChange{}
-		for _, annulledChange := range annulled {
-			annulledByProduct[annulledChange.productID] = annulledChange
-		}
-
-		for index, createdChange := range created {
-			annulledChange, found := annulledByProduct[createdChange.productID]
-			if !found {
-				t.Fatalf("status %v: product %v is missing from the annulment",
-					status, createdChange.productID)
-			}
-			sumOf := func(created, annulled int32) int32 { return created + annulled }
-			if sumOf(createdChange.Quantity, annulledChange.Quantity) != 0 ||
-				sumOf(int32(createdChange.SubQuantity), int32(annulledChange.SubQuantity)) != 0 ||
-				sumOf(createdChange.QuantityPendingDelivery, annulledChange.QuantityPendingDelivery) != 0 ||
-				sumOf(int32(createdChange.SubQuantityPendingDelivery), int32(annulledChange.SubQuantityPendingDelivery)) != 0 ||
-				sumOf(createdChange.TotalAmount, annulledChange.TotalAmount) != 0 ||
-				sumOf(createdChange.TotalDebtAmount, annulledChange.TotalDebtAmount) != 0 {
-				t.Fatalf("status %v: change %v does not cancel: %+v vs %+v",
-					status, index, createdChange, annulledChange)
-			}
-			// The divisor is the unit the counters are expressed in, not a counter: negating it
-			// would make the change unmergeable with the stored row.
-			if annulledChange.SubDivisor != createdChange.SubDivisor {
-				t.Fatalf("status %v: the divisor must survive negation, got %v",
-					status, annulledChange.SubDivisor)
-			}
-		}
-	}
-}
-
-// Status is the only surviving record of what happened to a sale, so the annulment reads the
-// actions back out of it.
-func TestSummaryActionsOfStatus(t *testing.T) {
-	checks := map[int8][]int8{
-		types.OrderStatusPending:   {1},
-		types.OrderStatusPaid:      {1, 2},
-		types.OrderStatusDelivered: {1, 3},
-		types.OrderStatusCompleted: {1, 2, 3},
-	}
-
-	for status, expected := range checks {
-		actions := summaryActionsOfStatus(status)
-		if len(actions) != len(expected) {
-			t.Fatalf("status %v: expected actions %v, got %v", status, expected, actions)
-		}
-		for index, expectedAction := range expected {
-			if actions[index] != expectedAction {
-				t.Fatalf("status %v: expected actions %v, got %v", status, expected, actions)
-			}
-		}
 	}
 }

@@ -5,9 +5,7 @@ import (
 	// sales "app/sales/types"
 	"app/core"
 	"app/db"
-	"app/libs"
 	production "app/production/types"
-	"app/sales"
 	salesTypes "app/sales/types"
 	"fmt"
 )
@@ -169,35 +167,6 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		panic(err)
 	}
-
-	return core.FuncResponse{}
-}
-
-func Test44(args *core.ExecArgs) core.FuncResponse {
-
-	s1 := salesTypes.SaleOrderProductStats{
-		Quantity:                123,
-		QuantityPendingDelivery: 12332,
-		TotalAmount:             338829,
-		TotalDebtAmount:         78954,
-	}
-
-	core.Print(s1)
-
-	bytes1 := libs.SerializeInt30Struct(s1)
-	core.Log("struct bytes:", bytes1)
-
-	decodedStruct := salesTypes.SaleOrderProductStats{}
-	libs.DeserializeInt30Struct(bytes1, &decodedStruct)
-
-	core.Print(decodedStruct)
-
-	return core.FuncResponse{}
-}
-
-func Test45(args *core.ExecArgs) core.FuncResponse {
-
-	sales.SaleOrderReprocess(1, 0)
 
 	return core.FuncResponse{}
 }

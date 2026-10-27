@@ -165,16 +165,6 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	// Sequenced after the two ledgers rather than beside them, because it is the one reversal
-	// that cannot be netted: the summary keeps per-day totals, not per-sale rows, so nothing
-	// records that this sale was already taken out of them. Running it only once the reversals
-	// that CAN be retried have succeeded is what keeps a failed annulment from subtracting the
-	// sale from the day twice. The counters clamp at zero, so the residual window — a failure
-	// between here and the status write below — can under-count a day but never invent stock.
-	if err := annulSaleSummary(sale); err != nil {
-		return req.MakeErr("Error al actualizar el resumen de ventas:", err)
-	}
-
 	sale.Status = types.OrderStatusAnnulled
 	sale.AnnulReason = annulReason
 	sale.Updated = core.SUnixTime()

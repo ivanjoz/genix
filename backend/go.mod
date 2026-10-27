@@ -61,15 +61,16 @@ require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/fatih/color v1.19.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
-	github.com/ivanjoz/colbin v0.6.2
+	github.com/ivanjoz/colbin v0.8.0
 	github.com/ivanjoz/facturago v0.0.0
 	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0
+	github.com/ivanjoz/genix-orm/dataframe v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
 	github.com/ivanjoz/genix-orm/search/daemon v0.0.0
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0
 	github.com/ivanjoz/genix-orm/utils v0.0.0
-	github.com/ivanjoz/minijson v0.1.0
+	github.com/ivanjoz/minijson v0.3.2
 	github.com/klauspost/compress v1.18.6
 	github.com/kr/pretty v0.3.1
 	github.com/martinlindhe/base36 v1.1.1
@@ -124,3 +125,5 @@ replace github.com/ivanjoz/genix-orm/search/genixs3 => ./genix-orm/search/genixs
 replace github.com/ivanjoz/genix-search/genix-s3 => ../../genix-search/genix-s3
 
 replace github.com/ivanjoz/genix-orm/utils => ./genix-orm/utils
+
+replace github.com/ivanjoz/genix-orm/dataframe => ./genix-orm/dataframe
