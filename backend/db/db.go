@@ -32,6 +32,7 @@ type (
 	KeyParser           = orm.KeyParser
 	FixedValues         = orm.FixedValues
 	DataFrame           = orm.DataFrame
+	CompactOn           = orm.CompactOn
 )
 
 type (
@@ -238,7 +239,7 @@ type (
 	FrameQuery[TableT any, RecordT any] = orm.FrameQuery[TableT, RecordT]
 )
 
-// QueryFrame reads the rows of one partition of a DataFrame, as of its last run unless Fresh.
+// QueryFrame reads the rows of one partition of a DataFrame, as of its last compaction unless Fresh.
 func QueryFrame[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
 	partition int32, frameName string,
 ) *FrameQuery[TableT, RecordT] {

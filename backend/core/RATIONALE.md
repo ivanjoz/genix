@@ -2,13 +2,13 @@
 
 Design decisions, newest first.
 
-## The DataFrame lock is fareward's 15 s try-lock, installed with the file store
-**Context** — A frame run can hold its lock for minutes (`dataframe` asks for 5), but
-`fareward.AcquireLock` has a fixed 15 s lease and the daemon clamps any lease to its
-`lock.max_lease_ms` (60 s by default). A longer lease needed a new export in the fareward repo.
-**Decision** — `acquireDataFrameLock` calls `AcquireLock(ActionMaterializeDataFrame, fnv64(frame
-folder), 0)` and ignores the requested lease. `ConfigureFileStore` installs it, so every entry
-point that can run a frame has it.
-**Rationale** — The lock only spares duplicate work. The frame's state file and files are written
-conditioned on their ETags, so a second run that starts after the lease lapses fails its writes
-instead of corrupting a file. Runs normally finish well within 15 s. No change in fareward.
+## The DataFrame lock is a queuing fareward lock through a new AcquireLockWithOptions
+**Context** — A read that finds a DataFrame partition due must wait up to 40 s for the compaction
+under way, but `fareward.AcquireLock` fixes a 5 s wait and a 15 s lease.
+**Decision** — fareward's Go client exports `AcquireLockWithOptions(ctx, action, identifier,
+LockOptions)`. `acquireDataFrameLock` calls it with `ActionCompactDataFrame` (renamed from
+`ActionMaterializeDataFrame`, same number 6), keyed on fnv64 of the frame partition's folder, the
+wait and lease the ORM asks for (40 s each; the daemon clamps leases to 60 s) and at most 16
+waiters per key. Past 16 a read is refused the lock and answers from the log, which stays correct.
+**Rationale** — The daemon's own queue does the waiting: no polling of a lock timestamp. Costs one
+exported function in the fareward repo, which must be pushed there.

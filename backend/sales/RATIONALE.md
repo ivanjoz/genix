@@ -8,8 +8,8 @@ engine's limit, with a Spanish message), and answers `ExecChanged` bytes through
 `core.MakeBinaryResponse` (`application/octet-stream`, `IsBinary`: base64'd on the buffered Lambda
 path even uncompressed). `SaleOrderReprocess`, demos `fn044`/`fn045`
 and the summary tests were deleted; the action 2 registration was kept as the no-op it was, since
-removing it could orphan scheduled actions. The first build needs no step: `fn-materialize-frames`
-builds a frame that has no generation yet.
+removing it could orphan scheduled actions. The first build needs no step: the first read of each
+company builds its files.
 **Rationale** — A reprocess now means a frame rebuild (`RebuildDataFramesPartition`), but wiring
 action 2 to it needs the company id from its params, which its contract never defined.
 

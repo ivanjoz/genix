@@ -257,9 +257,11 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		DataFrames: []db.DataFrame{{
 			// The day/product sales summary of /sales/sale_orders_charts. Most products have no
 			// sub-units and most sales are settled, so the zero sums mask drops the Sub and
-			// pending/debt columns of a day that has none.
+			// pending/debt columns of a day that has none. A read compacts the company's files
+			// once 100 sales changed or an hour passed since the last compaction.
 			Name: "sale-summary", Version: 1, UseZeroSumsMask: true,
-			ToFrames: db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
+			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
+			ToFrames:  db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
 		}},
 	}
 }

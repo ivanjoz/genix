@@ -9,15 +9,15 @@ records the backup doesn't have.
 **Decision** — After the restore loop, `RestoreBackup` calls `RebuildDataFramesPartition` on every
 restored table (a no-op on a table without frames). A failure is logged, not returned: the records
 are restored either way.
-**Rationale** — It scans only the restored company. Until the rebuild succeeds (re-run it, or
-`RebuildDataFrames`) that company's frames are off.
+**Rationale** — It scans only the restored company. Until the rebuild succeeds (re-run the restore)
+that company's frames are off.
 
-## `fn-materialize-frames` does not stop at the first failing table
-**Context** — `fn-reindex-text` panics on the first table that fails. A scheduled run every 10
-minutes would then leave every later table stale while one table is broken.
-**Decision** — It runs every table and panics at the end with the errors joined.
-**Rationale** — One broken frame doesn't hold back the others. The schedule itself (cron or
-EventBridge) is not set up yet.
+## `fn-compact-frames` refuses to run without a company, and does not stop at the first failing table
+**Context** — The manual compaction is per company (p1). `fn-reindex-text` panics on the first table
+that fails, which would leave every later table uncompacted while one table is broken.
+**Decision** — It panics when p1 is missing, runs every table and panics at the end with the errors
+joined.
+**Rationale** — One broken frame doesn't hold back the others.
 
 ## `identity_doc_type` was migrated in the database by hand, not by the ORM
 

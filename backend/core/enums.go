@@ -33,8 +33,9 @@ const (
 	// saves would each start from the same list and the later one would drop the other's series.
 	// Keyed on the company.
 	ActionSaveInvoiceSeries LockAction = 5
-	// ActionMaterializeDataFrame keeps one run at a time on a DataFrame (genix-orm/dataframe), so two
-	// schedules don't rewrite the same files. Keyed on a hash of the frame's folder. The frame's state
-	// and files are written conditioned on their ETags, so a lost lock costs duplicate work only.
-	ActionMaterializeDataFrame LockAction = 6
+	// ActionCompactDataFrame keeps one compaction at a time on a DataFrame partition
+	// (genix-orm/dataframe): the reads of other Lambdas that find it due queue behind it and then read
+	// its files. Keyed on a hash of the frame's folder and the company. The frame's state and files are
+	// written conditioned on their ETags, so a lost lock costs duplicate work only.
+	ActionCompactDataFrame LockAction = 6
 )
