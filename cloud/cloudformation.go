@@ -239,6 +239,7 @@ func PrintStackOutputsAndSyncConfig(ctx context.Context, client *cloudformation.
 		return
 	}
 	SyncLambdaUrlInConfig(backendUrl)
+	SyncAgentUrlInConfig(backendUrl, outputs["AgentUrl"])
 }
 
 // Reemplazo de texto y no re-serialización: el archivo se mantiene a mano y sus comentarios
@@ -290,4 +291,70 @@ func SyncLambdaUrlInConfig(deployedLambdaUrl string) {
 		fmt.Println("  AVISO: el valor anterior era un dominio propio, no una Function URL.")
 		fmt.Println("         Reapunta ese dominio a la nueva URL, o restaura el valor anterior.")
 	}
+}
+
+// Matches the route line of an [[endpoints]] entry, and its optional agent line.
+var (
+	endpointRouteLinePattern = regexp.MustCompile(`^\s*route\s*=\s*"([^"]*)"`)
+	endpointAgentLinePattern = regexp.MustCompile(`^(\s*agent\s*=\s*")([^"]*)(")`)
+)
+
+// SyncAgentUrlInConfig writes the agent Lambda's Function URL into the [[endpoints]] entry whose
+// route is the deployed backend, so the frontend (genix.un.pe) sends agent-* routes to it. Text
+// replacement for the same reason as SyncLambdaUrlInConfig. An entry whose route is a custom
+// domain is not guessed: the URL is printed for the operator.
+func SyncAgentUrlInConfig(backendUrl, agentUrl string) {
+	if len(agentUrl) == 0 {
+		fmt.Println("\nEl stack no devolvió AgentUrl; [[endpoints]].agent no se modificó.")
+		return
+	}
+	configPath := GetConfigPath()
+	configBytes, err := ReadFile(configPath)
+	if err != nil {
+		fmt.Println("\nNo se pudo leer "+configPath+" para actualizar [[endpoints]].agent: ", err)
+		return
+	}
+
+	lines := strings.Split(string(configBytes), "\n")
+	routeLineIndex := -1
+	insideEndpoint := false
+	for index, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmedLine, "[") {
+			insideEndpoint = trimmedLine == "[[endpoints]]"
+			continue
+		}
+		if match := endpointRouteLinePattern.FindStringSubmatch(line); insideEndpoint && match != nil && match[1] == backendUrl {
+			routeLineIndex = index
+			break
+		}
+	}
+	if routeLineIndex < 0 {
+		fmt.Println("\nNingún [[endpoints]] tiene route = " + backendUrl + "; agrega a mano agent = \"" + agentUrl + "\".")
+		return
+	}
+
+	// The agent line, when present, sits in the same block: up to the next section header.
+	for index := routeLineIndex + 1; index < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[index]), "["); index++ {
+		if match := endpointAgentLinePattern.FindStringSubmatch(lines[index]); match != nil {
+			if match[2] == agentUrl {
+				fmt.Println("\n[[endpoints]].agent ya apuntaba al agente desplegado: " + agentUrl)
+				return
+			}
+			lines[index] = endpointAgentLinePattern.ReplaceAllString(lines[index], "${1}"+agentUrl+"${3}")
+			writeConfigLines(configPath, lines, agentUrl)
+			return
+		}
+	}
+	lines = append(lines[:routeLineIndex+1], append([]string{"agent   = \"" + agentUrl + "\""}, lines[routeLineIndex+1:]...)...)
+	writeConfigLines(configPath, lines, agentUrl)
+}
+
+func writeConfigLines(configPath string, lines []string, agentUrl string) {
+	if err := os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0644); err != nil {
+		fmt.Println("\nNo se pudo escribir "+configPath+": ", err)
+		return
+	}
+	fmt.Println("\n[[endpoints]].agent actualizado en " + configPath + ": " + agentUrl)
+	fmt.Println("  Para genix.un.pe: publica el frontend de nuevo (set-github-frontend-vars) para que el build lo lea.")
 }

@@ -455,7 +455,8 @@ Outputs:
   BackendHeavyUrl:
     Description: Public Function URL of the high-memory backend Lambda
     Value: !GetAtt BackendHeavyFunctionUrl.FunctionUrl
-  # Goes into config.toml by hand as [[endpoints]].agent: the frontend sends the agent routes there.
+  # SyncAgentUrlInConfig writes it into the [[endpoints]] entry of the backend as `agent`: the
+  # frontend sends the agent routes there.
   AgentUrl:
     Description: Public Function URL of the agent Lambda (genix/agent)
     Value: !GetAtt AgentFunctionUrl.FunctionUrl

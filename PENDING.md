@@ -13,8 +13,9 @@ explains it.
   - "¿cuánto vendí este mes por producto?" answers with a ranked table and a chart;
   - an ambiguous product name pauses with choices, and the pick resumes from the checkpoint
     without repeating a model call.
-- **Deploy the agent Lambda** (`cloud accion=4`, deployer action 15) and point
-  `[[endpoints]].agent` at its Function URL.
+- **Publish the frontend** so genix.un.pe's build reads `[[endpoints]].agent` (the agent Lambda
+  `genix-3-agent` is deployed and its URL is in `config.toml`; run `set-github-frontend-vars`, then
+  the frontend deploy).
 - **Expire the checkpoints:** a 1-day S3 lifecycle rule on the `agent-checkpoints/` prefix of the
   `[file_store]` bucket (`agent/harness/checkpoint.go`).
 - **Golden questions** (`agent/salestools/testdata/golden.jsonl`): grow from 12 to 30–50, add
