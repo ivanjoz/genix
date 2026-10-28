@@ -4,22 +4,22 @@ import "app/db"
 
 type Warehouse struct {
 	db.TableStruct[WarehouseTable, Warehouse]
-	CompanyID   int32             `cb:"CompanyID,1"`
-	ID          int32             `cb:"ID,2"`
-	SiteID      int32             `cb:"SiteID,3"`
-	Name        string            `cb:"Name,4"`
-	Description string            `cb:"Description,5"`
-	Layout      []WarehouseLayout `cb:"Layout,6"`
+	CompanyID   int32             `cb:"1"`
+	ID          int32             `cb:"2"`
+	SiteID      int32             `cb:"3"`
+	Name        string            `cb:"4"`
+	Description string            `cb:"5"`
+	Layout      []WarehouseLayout `cb:"6"`
 	// General properties
-	Status  int8  `json:"ss" db:"status" cb:"ss,7"`
-	Updated int32 `json:"upd" db:"updated" cb:"upd,8"`
+	Status  int8  `json:"ss" cb:"ss,7"`
+	Updated int32 `json:"upd" cb:"upd,8"`
 	Version int16 `json:"ver" cb:"ver,9"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,10"`
-	UpdatedBy int32   `db:"updated_by" cb:"UpdatedBy,11"`
-	Created   int32   `db:"created" cb:"Created,12"`
-	CreatedBy int32   `db:"created_by" cb:"CreatedBy,13"`
-	City      string  `cb:"City,14"`
+	UpdatedBy int32   `cb:"11"`
+	Created   int32   `cb:"12"`
+	CreatedBy int32   `cb:"13"`
+	City      string  `cb:"14"`
 }
 
 type WarehouseTable struct {
@@ -71,21 +71,21 @@ type WarehouseLayoutBlock struct {
 
 type Site struct {
 	db.TableStruct[SiteTable, Site]
-	CompanyID   int32  `db:"empresa_id,pk" cb:"CompanyID,1"`
-	ID          int32  `db:"id,pk" cb:"ID,2"`
-	Name        string `db:"nombre" cb:"Name,3"`
-	Description string `db:"descripcion" cb:"Description,4"`
-	Address     string `db:"direccion" cb:"Address,5"`
-	CityID      int32  `db:"pais_ciudad_id" cb:"CityID,6"`
-	City        string `db:"-" cb:"City,7"`
-	Status      int8   `json:"ss" db:"status" cb:"ss,8"`
-	Updated     int32  `json:"upd" db:"updated" cb:"upd,9"`
+	CompanyID   int32  `db:"empresa_id,pk" cb:"1"`
+	ID          int32  `db:",pk" cb:"2"`
+	Name        string `db:"nombre" cb:"3"`
+	Description string `db:"descripcion" cb:"4"`
+	Address     string `db:"direccion" cb:"5"`
+	CityID      int32  `db:"pais_ciudad_id" cb:"6"`
+	City        string `db:"-" cb:"7"`
+	Status      int8   `json:"ss" cb:"ss,8"`
+	Updated     int32  `json:"upd" cb:"upd,9"`
 	Version     int16  `json:"ver" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,11"`
-	UpdatedBy int32   `db:"updated_by" cb:"UpdatedBy,12"`
-	Created   int32   `db:"created" cb:"Created,13"`
-	CreatedBy int32   `db:"created_by" cb:"CreatedBy,14"`
+	UpdatedBy int32   `cb:"12"`
+	Created   int32   `cb:"13"`
+	CreatedBy int32   `cb:"14"`
 }
 
 type SiteTable struct {

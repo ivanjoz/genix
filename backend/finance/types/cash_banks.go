@@ -4,25 +4,25 @@ import "app/db"
 
 type CashBank struct {
 	db.TableStruct[CashBankTable, CashBank]
-	CompanyID            int32  `cb:"CompanyID,1"`
-	ID                   int32  `cb:"ID,2"`
-	Type                 int32  `cb:"Type,3"`
-	SiteID               int32  `cb:"SiteID,4"`
-	Name                 string `cb:"Name,5"`
-	Description          string `cb:"Description,6"`
-	CurrencyType         int8   `cb:"CurrencyType,7"`
-	ReconciliationDate   int32  `cb:"ReconciliationDate,8"`
-	ReconciliationAmount int32  `cb:"ReconciliationAmount,9"`
-	CurrentAmount        int32  `cb:"CurrentAmount,10"`
+	CompanyID            int32  `cb:"1"`
+	ID                   int32  `cb:"2"`
+	Type                 int32  `cb:"3"`
+	SiteID               int32  `cb:"4"`
+	Name                 string `cb:"5"`
+	Description          string `cb:"6"`
+	CurrencyType         int8   `cb:"7"`
+	ReconciliationDate   int32  `cb:"8"`
+	ReconciliationAmount int32  `cb:"9"`
+	CurrentAmount        int32  `cb:"10"`
 	// General properties
 	Status  int8  `json:"ss" cb:"ss,11"`
 	Updated int32 `json:"upd" cb:"upd,12"`
 	Version int16 `json:"ver" cb:"ver,13"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,14"`
-	UpdatedBy int32   `cb:"UpdatedBy,15"`
-	Created   int32   `cb:"Created,16"`
-	CreatedBy int32   `cb:"CreatedBy,17"`
+	UpdatedBy int32   `cb:"15"`
+	Created   int32   `cb:"16"`
+	CreatedBy int32   `cb:"17"`
 }
 
 type CashBankTable struct {
@@ -93,22 +93,22 @@ const (
 
 type CashBankMovement struct {
 	db.TableStruct[CashBankMovementTable, CashBankMovement]
-	CompanyID     int32            `cb:"CompanyID,1"`
-	ID            int64            `cb:"ID,2"`
-	CashBankID    int32            `cb:"CashBankID,3"`
-	CashBankRefID int32            `cb:"CashBankRefID,4"`
-	DocumentID    int64            `cb:"DocumentID,5"`  // Sale Order ID / ExpenseID
-	ReferenceID   int32            `cb:"ReferenceID,6"` //
-	Date          int16            `cb:"Date,7"`
-	Type          CashMovementType `cb:"Type,8"`
+	CompanyID     int32            `cb:"1"`
+	ID            int64            `cb:"2"`
+	CashBankID    int32            `cb:"3"`
+	CashBankRefID int32            `cb:"4"`
+	DocumentID    int64            `cb:"5"` // Sale Order ID / ExpenseID
+	ReferenceID   int32            `cb:"6"` //
+	Date          int16            `cb:"7"`
+	Type          CashMovementType `cb:"8"`
 	// AccountCode is the PCGE account on the other side of the cash, for the types the user
 	// classifies (see CashMovementAccountOptions). 0 for every other type: its counter-account
 	// follows from the type and the document it pays.
-	AccountCode int16 `cb:"AccountCode,9"`
-	FinalAmount int32 `cb:"FinalAmount,10"`
-	Amount      int32 `cb:"Amount,11"`
-	Created     int32 `cb:"Created,12"`
-	CreatedBy   int32 `cb:"CreatedBy,13"`
+	AccountCode int16 `cb:"9"`
+	FinalAmount int32 `cb:"10"`
+	Amount      int32 `cb:"11"`
+	Created     int32 `cb:"12"`
+	CreatedBy   int32 `cb:"13"`
 }
 
 type CashBankMovementTable struct {
@@ -149,16 +149,16 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 
 type CashReconciliation struct {
 	db.TableStruct[CashReconciliationTable, CashReconciliation]
-	CompanyID        int32 `cb:"CompanyID,1"`
-	ID               int64 `cb:"ID,2"`
-	CashBankID       int32 `cb:"CashBankID,3"`
-	Type             int8  `cb:"Type,4"`
-	MovementID       int64 `cb:"MovementID,5"`
-	SystemAmount     int32 `cb:"SystemAmount,6"`
-	ActualAmount     int32 `cb:"ActualAmount,7"`
-	DifferenceAmount int32 `cb:"DifferenceAmount,8"`
-	Created          int32 `cb:"Created,9"`
-	CreatedBy        int32 `cb:"CreatedBy,10"`
+	CompanyID        int32 `cb:"1"`
+	ID               int64 `cb:"2"`
+	CashBankID       int32 `cb:"3"`
+	Type             int8  `cb:"4"`
+	MovementID       int64 `cb:"5"`
+	SystemAmount     int32 `cb:"6"`
+	ActualAmount     int32 `cb:"7"`
+	DifferenceAmount int32 `cb:"8"`
+	Created          int32 `cb:"9"`
+	CreatedBy        int32 `cb:"10"`
 }
 
 type CashReconciliationTable struct {

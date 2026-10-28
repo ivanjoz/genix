@@ -15,18 +15,18 @@ import (
 // stores page HTML, builder state, retrieved documentation, or screenshots.
 type AgentMessage struct {
 	db.TableStruct[AgentMessageTable, AgentMessage]
-	CompanyUserID   int64  `db:"company_user_id,pk" cb:"CompanyUserID,1"`
-	SessionID       int64  `db:"session_id,pk" cb:"SessionID,2"`
-	Timestamp       int64  `db:"timestamp,pk" cb:"Timestamp,3"`
-	CompanyID       int32  `db:"company_id" cb:"CompanyID,4"`
-	UserID          int32  `db:"user_id" cb:"UserID,5"`
-	Role            int8   `db:"role" cb:"Role,6"`
-	Message         string `db:"message" cb:"Message,7"`
-	AttachedContent string `db:"attached_content" cb:"AttachedContent,8"`
-	Summary         string `db:"summary" cb:"Summary,9"`
-	TokensUsed      int32  `db:"tokens_used" cb:"TokensUsed,10"`
-	Status          int8   `json:"ss" db:"status" cb:"ss,11"`
-	Updated         int32  `json:"upd" db:"updated" cb:"upd,12"`
+	CompanyUserID   int64  `db:",pk" cb:"1"`
+	SessionID       int64  `db:",pk" cb:"2"`
+	Timestamp       int64  `db:",pk" cb:"3"`
+	CompanyID       int32  `cb:"4"`
+	UserID          int32  `cb:"5"`
+	Role            int8   `cb:"6"`
+	Message         string `cb:"7"`
+	AttachedContent string `cb:"8"`
+	Summary         string `cb:"9"`
+	TokensUsed      int32  `cb:"10"`
+	Status          int8   `json:"ss" cb:"ss,11"`
+	Updated         int32  `json:"upd" cb:"upd,12"`
 }
 
 // PrepareCloudSync derives the synthetic partition key so callers fill only

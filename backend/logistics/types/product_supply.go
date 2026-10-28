@@ -3,22 +3,22 @@ package types
 import "app/db"
 
 type ProductSupplyProviderRow struct {
-	ProviderID   int32 `cb:"ProviderID,1"`
-	Capacity     int32 `cb:"Capacity,2"`
-	DeliveryTime int16 `cb:"DeliveryTime,3"`
-	Price        int32 `cb:"Price,4"`
+	ProviderID   int32 `cb:"1"`
+	Capacity     int32 `cb:"2"`
+	DeliveryTime int16 `cb:"3"`
+	Price        int32 `cb:"4"`
 }
 
 type ProductSupply struct {
 	db.TableStruct[ProductSupplyTable, ProductSupply]
-	CompanyID            int32                      `cb:"CompanyID,1"`
-	ProductID            int32                      `cb:"ProductID,2"`
-	MinimunStock         int32                      `cb:"MinimunStock,3"`
-	SalesPerDayEstimated int32                      `cb:"SalesPerDayEstimated,4"`
-	ProviderSupply       []ProductSupplyProviderRow `cb:"ProviderSupply,5"`
+	CompanyID            int32                      `cb:"1"`
+	ProductID            int32                      `cb:"2"`
+	MinimunStock         int32                      `cb:"3"`
+	SalesPerDayEstimated int32                      `cb:"4"`
+	ProviderSupply       []ProductSupplyProviderRow `cb:"5"`
 	Status               int8                       `json:"ss" cb:"ss,6"`
 	Updated              int32                      `json:"upd" cb:"upd,7"`
-	UpdatedBy            int32                      `cb:"UpdatedBy,8"`
+	UpdatedBy            int32                      `cb:"8"`
 }
 
 type ProductSupplyTable struct {

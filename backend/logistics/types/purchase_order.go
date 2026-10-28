@@ -16,53 +16,53 @@ const (
 
 type PurchaseOrder struct {
 	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
-	ID         int32 `cb:"ID,1"`
-	CompanyID  int32 `cb:"CompanyID,2"`
-	ProviderID int32 `cb:"ProviderID,3"`
+	ID         int32 `cb:"1"`
+	CompanyID  int32 `cb:"2"`
+	ProviderID int32 `cb:"3"`
 	// ProviderSnapshotID freezes the supplier's name and RUC as of this purchase, in
 	// crm.ClientProviderSnapshot. The Registro de Compras prints them (fields 10-12 of PLE
 	// 8.3) and a filed book may not move when the supplier is later renamed.
-	ProviderSnapshotID int32 `cb:"ProviderSnapshotID,4"`
-	WarehouseID        int32 `cb:"WarehouseID,5"`
-	Date               int16 `cb:"Date,6"`
-	Week               int16 `cb:"Week,7"`
-	DeliveryDate       int16 `cb:"DeliveryDate,8"`
-	PaymentDate        int16 `cb:"PaymentDate,9"`
+	ProviderSnapshotID int32 `cb:"4"`
+	WarehouseID        int32 `cb:"5"`
+	Date               int16 `cb:"6"`
+	Week               int16 `cb:"7"`
+	DeliveryDate       int16 `cb:"8"`
+	PaymentDate        int16 `cb:"9"`
 	// Parallel arrays in the same order — one row per line. Supplies and materials are
 	// Product rows with Status=2, so they are ordinary product lines here and move stock
 	// through the same reception path as anything else.
-	DetailProductIDs             []int32 `cb:"DetailProductIDs,10"`
-	DetailProductQuantity        []int32 `cb:"DetailProductQuantity,11"`
-	DetailProductPrice           []int32 `cb:"DetailProductPrice,12"`
-	DetailProductPresentationIDs []int32 `cb:"DetailProductPresentationIDs,13"`
-	TotalAmount                  int32   `cb:"TotalAmount,14"`
-	DebtAmount                   int32   `cb:"DebtAmount,15"`
+	DetailProductIDs             []int32 `cb:"10"`
+	DetailProductQuantity        []int32 `cb:"11"`
+	DetailProductPrice           []int32 `cb:"12"`
+	DetailProductPresentationIDs []int32 `cb:"13"`
+	TotalAmount                  int32   `cb:"14"`
+	DebtAmount                   int32   `cb:"15"`
 	// The supplier's comprobante — the Registro de Compras row. See finance.PurchaseDocument.
 	// Registered with its own action, because the invoice usually arrives after the order and
 	// often after the goods. Its total is the invoice's, which may differ from TotalAmount.
-	DocType       int8   `cb:"DocType,16"`
-	DocSeries     string `cb:"DocSeries,17"`
-	DocNumber     int64  `cb:"DocNumber,18"`
-	DocIssueDate  int16  `cb:"DocIssueDate,19"`
-	TaxableAmount int32  `cb:"TaxableAmount,20"`
-	TaxAmount     int32  `cb:"TaxAmount,21"`
-	UntaxedAmount int32  `cb:"UntaxedAmount,22"`
-	OtherAmount   int32  `cb:"OtherAmount,23"`
-	CurrencyType  int8   `cb:"CurrencyType,24"`
-	ExchangeRate  int32  `cb:"ExchangeRate,25"`
+	DocType       int8   `cb:"16"`
+	DocSeries     string `cb:"17"`
+	DocNumber     int64  `cb:"18"`
+	DocIssueDate  int16  `cb:"19"`
+	TaxableAmount int32  `cb:"20"`
+	TaxAmount     int32  `cb:"21"`
+	UntaxedAmount int32  `cb:"22"`
+	OtherAmount   int32  `cb:"23"`
+	CurrencyType  int8   `cb:"24"`
+	ExchangeRate  int32  `cb:"25"`
 	// DifferenceValue is the signed money gap between what was ordered and what arrived.
 	// There is no DifferenceQuantity companion: it summed quantities across product lines,
 	// so it added kilograms to screws and had no unit. Money is the figure that sums.
-	DifferenceValue int32  `cb:"DifferenceValue,26"`
-	Notes           string `cb:"Notes,27"`
+	DifferenceValue int32  `cb:"26"`
+	Notes           string `cb:"27"`
 
-	Created   int32 `cb:"Created,28"`
-	CreatedBy int32 `cb:"CreatedBy,29"`
+	Created   int32 `cb:"28"`
+	CreatedBy int32 `cb:"29"`
 	Updated   int32 `json:"upd" cb:"upd,30"`
 	Version   int16 `json:"ver" cb:"ver,31"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,32"`
-	UpdatedBy int32   `cb:"UpdatedBy,33"`
+	UpdatedBy int32   `cb:"33"`
 	Status    int8    `json:"ss" cb:"ss,34"`
 }
 

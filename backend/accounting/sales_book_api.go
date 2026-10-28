@@ -26,20 +26,20 @@ import (
 // SeriesID is not a field: it is the tail of the document id, the same way the invoicing page
 // reads it.
 type SalesBookDocument struct {
-	ID               int64 `cb:"ID,1"`
-	IssueDate        int16 `cb:"IssueDate,2"`
-	Correlativo      int32 `cb:"Correlativo,3"`
-	ClientSnapshotID int32 `cb:"ClientSnapshotID,4"`
-	Currency         int8  `cb:"Currency,5"`
+	ID               int64 `cb:"1"`
+	IssueDate        int16 `cb:"2"`
+	Correlativo      int32 `cb:"3"`
+	ClientSnapshotID int32 `cb:"4"`
+	Currency         int8  `cb:"5"`
 
-	TaxableAmount    int64 `cb:"TaxableAmount,6"`
-	TaxAmount        int64 `cb:"TaxAmount,7"`
-	ExemptAmount     int64 `cb:"ExemptAmount,8"`
-	UnaffectedAmount int64 `cb:"UnaffectedAmount,9"`
-	TotalAmount      int64 `cb:"TotalAmount,10"`
+	TaxableAmount    int64 `cb:"6"`
+	TaxAmount        int64 `cb:"7"`
+	ExemptAmount     int64 `cb:"8"`
+	UnaffectedAmount int64 `cb:"9"`
+	TotalAmount      int64 `cb:"10"`
 
-	AffectedDocID int64 `cb:"AffectedDocID,11"`
-	State         int8  `cb:"State,12"`
+	AffectedDocID int64 `cb:"11"`
+	State         int8  `cb:"12"`
 }
 
 // UninvoicedSale is a sale of the period that no comprobante was ever issued for.
@@ -48,24 +48,24 @@ type SalesBookDocument struct {
 // shows it in its own block. It is here because the question "what did we sell that we never
 // invoiced?" is the one thing a month-end review cannot answer from the book itself.
 type UninvoicedSale struct {
-	ID          int64 `cb:"ID,1"`
-	Date        int16 `cb:"Date,2"`
-	TotalAmount int32 `cb:"TotalAmount,3"`
-	TaxAmount   int32 `cb:"TaxAmount,4"`
+	ID          int64 `cb:"1"`
+	Date        int16 `cb:"2"`
+	TotalAmount int32 `cb:"3"`
+	TaxAmount   int32 `cb:"4"`
 	Status      int8  `json:"ss" cb:"ss,5"`
 }
 
 type SalesBookResponse struct {
-	Period   string `cb:"Period,1"`
-	FirstDay int16  `cb:"FirstDay,2"`
-	LastDay  int16  `cb:"LastDay,3"`
+	Period   string `cb:"1"`
+	FirstDay int16  `cb:"2"`
+	LastDay  int16  `cb:"3"`
 
-	Documents []SalesBookDocument `cb:"Documents,4"`
+	Documents []SalesBookDocument `cb:"4"`
 	// AffectedDocuments are the comprobantes this period's notes correct and that the period
 	// does not already contain — a note very often corrects an earlier month. They are sent
 	// apart from Documents because they are not rows of this book; the page joins them.
-	AffectedDocuments []SalesBookDocument `cb:"AffectedDocuments,5"`
-	UninvoicedSales   []UninvoicedSale    `cb:"UninvoicedSales,6"`
+	AffectedDocuments []SalesBookDocument `cb:"5"`
+	UninvoicedSales   []UninvoicedSale    `cb:"6"`
 }
 
 // GetSalesBook reads a whole period, or the single day inside one.

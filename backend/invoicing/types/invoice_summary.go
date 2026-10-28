@@ -24,41 +24,41 @@ const (
 // and a shared counter leaves harmless gaps instead of costing a key column.
 type InvoiceSummary struct {
 	db.TableStruct[InvoiceSummaryTable, InvoiceSummary]
-	CompanyID int32 `cb:"CompanyID,1"`
-	ID        int64 `cb:"ID,2"`
+	CompanyID int32 `cb:"1"`
+	ID        int64 `cb:"2"`
 
-	Type int8 `cb:"Type,3"`
+	Type int8 `cb:"3"`
 	// ReferenceDate is the day whose documents are being reported or cancelled.
-	ReferenceDate int16 `cb:"ReferenceDate,4"`
+	ReferenceDate int16 `cb:"4"`
 	// IssueDate is the day the batch is sent, and what the identifier is built
 	// from. Using the reference date instead is SUNAT rejection 2346.
-	IssueDate int16  `cb:"IssueDate,5"`
-	Sequence  int16  `cb:"Sequence,6"`
-	XmlName   string `db:"xml_name" cb:"XmlName,7"`
+	IssueDate int16  `cb:"5"`
+	Sequence  int16  `cb:"6"`
+	XmlName   string `cb:"7"`
 
 	// DocumentIDs are the invoice_document rows this batch reports.
-	DocumentIDs []int64 `db:",list" cb:"DocumentIDs,8"`
+	DocumentIDs []int64 `db:",list" cb:"8"`
 
-	Ticket           string   `cb:"Ticket,9"`
-	State            int8     `cb:"State,10"`
-	SunatCode        string   `cb:"SunatCode,11"`
-	SunatDescription string   `cb:"SunatDescription,12"`
-	SunatNotes       []string `db:",list" cb:"SunatNotes,13"`
+	Ticket           string   `cb:"9"`
+	State            int8     `cb:"10"`
+	SunatCode        string   `cb:"11"`
+	SunatDescription string   `cb:"12"`
+	SunatNotes       []string `db:",list" cb:"13"`
 
-	XmlPath string `db:"xml_path" cb:"XmlPath,14"`
-	CdrPath string `db:"cdr_path" cb:"CdrPath,15"`
+	XmlPath string `cb:"14"`
+	CdrPath string `cb:"15"`
 
-	RetryCount int8   `cb:"RetryCount,16"`
-	LastError  string `cb:"LastError,17"`
+	RetryCount int8   `cb:"16"`
+	LastError  string `cb:"17"`
 
 	Status  int8  `json:"ss" cb:"ss,18"`
 	Updated int32 `json:"upd" cb:"upd,19"`
 	Version int16 `json:"ver" cb:"ver,20"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,21"`
-	UpdatedBy int32   `cb:"UpdatedBy,22"`
-	Created   int32   `cb:"Created,23"`
-	CreatedBy int32   `cb:"CreatedBy,24"`
+	UpdatedBy int32   `cb:"22"`
+	Created   int32   `cb:"23"`
+	CreatedBy int32   `cb:"24"`
 }
 
 type InvoiceSummaryTable struct {
@@ -69,15 +69,15 @@ type InvoiceSummaryTable struct {
 	ReferenceDate    db.Col[*InvoiceSummaryTable, int16]
 	IssueDate        db.Col[*InvoiceSummaryTable, int16]
 	Sequence         db.Col[*InvoiceSummaryTable, int16]
-	XmlName          db.Col[*InvoiceSummaryTable, string] `db:"xml_name"`
+	XmlName          db.Col[*InvoiceSummaryTable, string]
 	DocumentIDs      db.ColSlice[*InvoiceSummaryTable, int64]
 	Ticket           db.Col[*InvoiceSummaryTable, string]
 	State            db.Col[*InvoiceSummaryTable, int8]
 	SunatCode        db.Col[*InvoiceSummaryTable, string]
 	SunatDescription db.Col[*InvoiceSummaryTable, string]
 	SunatNotes       db.ColSlice[*InvoiceSummaryTable, string]
-	XmlPath          db.Col[*InvoiceSummaryTable, string] `db:"xml_path"`
-	CdrPath          db.Col[*InvoiceSummaryTable, string] `db:"cdr_path"`
+	XmlPath          db.Col[*InvoiceSummaryTable, string]
+	CdrPath          db.Col[*InvoiceSummaryTable, string]
 	RetryCount       db.Col[*InvoiceSummaryTable, int8]
 	LastError        db.Col[*InvoiceSummaryTable, string]
 	Status           db.Col[*InvoiceSummaryTable, int8]

@@ -10,34 +10,34 @@ import (
 // no column for it — and is turned into a ClientProvider row, which (with its snapshot) is the only
 // place these fields are stored.
 type SaleOrderClientInfo struct {
-	Name           string `cb:"Name,1"`
-	RegistryNumber string `cb:"RegistryNumber,2"`
+	Name           string `cb:"1"`
+	RegistryNumber string `cb:"2"`
 	// IdentityDocType is the SUNAT document type the till picked (crm.IdentityDoc*). 0 leaves
 	// SaveClientProviders to derive it from the number's shape.
-	IdentityDocType int8 `cb:"IdentityDocType,3"`
-	OnlyInsert      bool `cb:"OnlyInsert,4"`
+	IdentityDocType int8 `cb:"3"`
+	OnlyInsert      bool `cb:"4"`
 }
 
 // SaleOrderLine is one product line of a sale.
 type SaleOrderLine struct {
-	ProductID int32 `cb:"ProductID,1"`
+	ProductID int32 `cb:"1"`
 	// Price is the price of one whole unit; SubPrice the price of one sub-unit. Both are needed
 	// per line and neither is derivable from the other: selling loose is deliberately not
 	// proportional (four candies from a 5000-cent box of six is not 3333). A summary reprocess
 	// has to reconstruct what was charged, not what the product costs now.
-	Price    int32 `cb:"Price,2"`
-	SubPrice int32 `cb:"SubPrice,3"`
+	Price    int32 `cb:"2"`
+	SubPrice int32 `cb:"3"`
 	// Quantity is packed: Units*core.QuantityLineScale + Sub, so 1001 at divisor 6 is one box
 	// plus one candy. A sale order is a document — it is never accumulated and never SUM()-ed —
 	// so it packs both halves into one value, where the stock and ledger tables keep them
 	// separate. core.UnpackQuantityLine splits it.
-	Quantity int32 `cb:"Quantity,4"`
+	Quantity int32 `cb:"4"`
 	// SubDivisor is the divisor the packed sub-unit part is expressed in, recorded per line so a
 	// later refinement of the product never restates a past sale.
-	SubDivisor     int16  `cb:"SubDivisor,5"`
-	Sku            string `cb:"Sku,6"`
-	LotID          int32  `cb:"LotID,7"`
-	PresentationID int16  `cb:"PresentationID,8"`
+	SubDivisor     int16  `cb:"5"`
+	Sku            string `cb:"6"`
+	LotID          int32  `cb:"7"`
+	PresentationID int16  `cb:"8"`
 }
 
 // DetailProductIDs is the product of every line, in line order. It feeds the computed column of
@@ -52,57 +52,57 @@ func (e *SaleOrder) DetailProductIDs() []int32 {
 
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	CompanyID   int32 `cb:"CompanyID,1"`
-	Date        int16 `cb:"Date,2"`
-	WarehouseID int32 `cb:"WarehouseID,3"`
-	ID          int64 `cb:"ID,4"`
+	CompanyID   int32 `cb:"1"`
+	Date        int16 `cb:"2"`
+	WarehouseID int32 `cb:"3"`
+	ID          int64 `cb:"4"`
 
 	// Lines is stored as one colbin blob. Its product IDs are indexed through the computed
 	// DetailProductIDs column, so they are not stored a second time.
-	Lines []SaleOrderLine `cb:"Lines,5"`
+	Lines []SaleOrderLine `cb:"5"`
 
 	// The line prices and the three amounts below are all in the sale's currency: a USD sale
 	// stores dollars, converted per unit from the catalog on creation.
-	TotalAmount int32 `cb:"TotalAmount,13"`
-	TaxAmount   int32 `cb:"TaxAmount,14"`
-	DebtAmount  int32 `cb:"DebtAmount,15"`
+	TotalAmount int32 `cb:"13"`
+	TaxAmount   int32 `cb:"14"`
+	DebtAmount  int32 `cb:"15"`
 	// CurrencyType is the sale's currency: 1 = PEN, 2 = USD (the cash-bank codes). A paid
 	// sale takes its cash-bank's currency; an unpaid one takes what the till picked.
-	CurrencyType int8 `cb:"CurrencyType,16"`
+	CurrencyType int8 `cb:"16"`
 	// ExchangeRate is the effective rate × 1000 the lines were converted with, spread
 	// included — what a report needs to restate a USD sale in PEN. A USD sale always has one;
 	// a PEN sale only when it sold a USD-priced product.
-	ExchangeRate  int32 `cb:"ExchangeRate,17"`
-	ClientID      int32 `cb:"ClientID,18"`
-	Created       int32 `cb:"Created,19"`
+	ExchangeRate  int32 `cb:"17"`
+	ClientID      int32 `cb:"18"`
+	Created       int32 `cb:"19"`
 	Updated       int32 `json:"upd" cb:"upd,20"`
 	UpdateCounter int32 `json:"upc" cb:"upc,21"`
 	Version       int16 `json:"ver" cb:"ver,22"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,23"`
-	UpdatedBy int32   `cb:"UpdatedBy,24"`
+	UpdatedBy int32   `cb:"24"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
 	Status            int8  `json:"ss" cb:"ss,25"`
-	LastPaymentCajaID int32 `db:"caja_id_" cb:"LastPaymentCajaID,26"`
+	LastPaymentCajaID int32 `cb:"26"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
-	ActionsIncluded []int8 `cb:"ActionsIncluded,27"`
+	ActionsIncluded []int8 `cb:"27"`
 	// Audit trail fields for payment and delivery actions.
-	LastPaymentTime int32                `cb:"LastPaymentTime,28"`
-	LastPaymentUser int32                `cb:"LastPaymentUser,29"`
-	DeliveryTime    int32                `cb:"DeliveryTime,30"`
-	DeliveryUser    int32                `cb:"DeliveryUser,31"`
-	ClientInfo      *SaleOrderClientInfo `cb:"ClientInfo,32"`
+	LastPaymentTime int32                `cb:"28"`
+	LastPaymentUser int32                `cb:"29"`
+	DeliveryTime    int32                `cb:"30"`
+	DeliveryUser    int32                `cb:"31"`
+	ClientInfo      *SaleOrderClientInfo `cb:"32"`
 	// IssueSeriesID names the invoicing series this sale will be issued under. It
 	// is a request field, not a column: it is folded into the last two digits of
 	// the id on creation, and read back with SeriesID(). Zero when the till does
 	// not say.
-	IssueSeriesID  int8  `cb:"IssueSeriesID,33"`
-	PaymentDueDate int16 `db:"payment_due_date" cb:"PaymentDueDate,34"`
+	IssueSeriesID  int8  `cb:"33"`
+	PaymentDueDate int16 `cb:"34"`
 	// AnnulReason is why the sale was annulled, required by the annul endpoint. There is no
 	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
 	// already the "when and by whom" and a second pair could only drift from them.
-	AnnulReason string `cb:"AnnulReason,35"`
+	AnnulReason string `cb:"35"`
 }
 
 // SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day, one row

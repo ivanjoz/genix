@@ -16,38 +16,38 @@ import (
 // whole-unit inflows), which is what lets movements accumulate with a plain +.
 type ProductStock struct {
 	db.TableStruct[ProductStockTable, ProductStock]
-	ID                int64 `cb:"ID,1"`
-	CompanyID         int32 `cb:"CompanyID,2"`
-	WarehouseID       int32 `cb:"WarehouseID,3"`
-	ProductID         int32 `cb:"ProductID,4"`
-	PresentationID    int16 `cb:"PresentationID,5"`
-	Quantity          int32 `cb:"Quantity,6"`
-	SubQuantity       int32 `cb:"SubQuantity,7"`
-	DetailQuantity    int32 `cb:"DetailQuantity,8"`
-	DetailSubQuantity int32 `cb:"DetailSubQuantity,9"`
+	ID                int64 `cb:"1"`
+	CompanyID         int32 `cb:"2"`
+	WarehouseID       int32 `cb:"3"`
+	ProductID         int32 `cb:"4"`
+	PresentationID    int16 `cb:"5"`
+	Quantity          int32 `cb:"6"`
+	SubQuantity       int32 `cb:"7"`
+	DetailQuantity    int32 `cb:"8"`
+	DetailSubQuantity int32 `cb:"9"`
 	// SubDivisor is the divisor every SubQuantity on this row (and on its detail rows, which
 	// are the same product) is expressed in. Kept here rather than read from the product so a
 	// divisor refinement converts this row on the fly instead of rewriting history.
-	SubDivisor                int16   `cb:"SubDivisor,10"`
-	DetailComputedDate        int16   `cb:"DetailComputedDate,11"`
-	DetailComputedQuantity    int32   `cb:"DetailComputedQuantity,12"`
-	DetailComputedSubQuantity int32   `cb:"DetailComputedSubQuantity,13"`
-	LastPricesPrice           []int32 `cb:"LastPricesPrice,14"`
-	LastPricesQuantity        []int32 `cb:"LastPricesQuantity,15"`
+	SubDivisor                int16   `cb:"10"`
+	DetailComputedDate        int16   `cb:"11"`
+	DetailComputedQuantity    int32   `cb:"12"`
+	DetailComputedSubQuantity int32   `cb:"13"`
+	LastPricesPrice           []int32 `cb:"14"`
+	LastPricesQuantity        []int32 `cb:"15"`
 	// AverageCost is the moving weighted average cost of one whole unit, in PEN cents, net of
 	// recoverable IGV. ApplyMovimientos moves it on every costed inflow; outflows and uncosted
 	// inflows leave it as it is. It is an operational figure: a purchase whose comprobante is
 	// registered after the goods arrive does not restate it — the accounting valuation does.
-	AverageCost int32 `cb:"AverageCost,16"`
-	StockStatus int8  `cb:"StockStatus,17"`
+	AverageCost int32 `cb:"16"`
+	StockStatus int8  `cb:"17"`
 
-	Created   int32 `cb:"Created,18"`
-	CreatedBy int32 `cb:"CreatedBy,19"`
+	Created   int32 `cb:"18"`
+	CreatedBy int32 `cb:"19"`
 	Updated   int32 `json:"upd" cb:"upd,20"`
 	Version   int16 `json:"ver" cb:"ver,21"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,22"`
-	UpdatedBy int32   `cb:"UpdatedBy,23"`
+	UpdatedBy int32   `cb:"23"`
 	Status    int8    `json:"ss" cb:"ss,24"`
 }
 
@@ -118,20 +118,20 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 // distinct (warehouse-product-presentation, lot, serial) combination.
 type ProductStockDetail struct {
 	db.TableStruct[ProductStockDetailTable, ProductStockDetail]
-	CompanyID      int32  `cb:"CompanyID,1"`
-	ProductStockID int64  `cb:"ProductStockID,2"`
-	LotID          int32  `cb:"LotID,3"`
-	SerialNumber   string `cb:"SerialNumber,4"`
-	WarehouseID    int32  `cb:"WarehouseID,5"`
-	ProductID      int32  `cb:"ProductID,6"`
-	Quantity       int32  `cb:"Quantity,7"`
-	SubQuantity    int32  `cb:"SubQuantity,8"`
-	ExpirationDate int16  `cb:"ExpirationDate,9"`
+	CompanyID      int32  `cb:"1"`
+	ProductStockID int64  `cb:"2"`
+	LotID          int32  `cb:"3"`
+	SerialNumber   string `cb:"4"`
+	WarehouseID    int32  `cb:"5"`
+	ProductID      int32  `cb:"6"`
+	Quantity       int32  `cb:"7"`
+	SubQuantity    int32  `cb:"8"`
+	ExpirationDate int16  `cb:"9"`
 
 	Updated   int32 `json:"upd" cb:"upd,10"`
-	UpdatedBy int32 `cb:"UpdatedBy,11"`
-	Created   int32 `cb:"Created,12"`
-	CreatedBy int32 `cb:"CreatedBy,13"`
+	UpdatedBy int32 `cb:"11"`
+	Created   int32 `cb:"12"`
+	CreatedBy int32 `cb:"13"`
 	Status    int8  `json:"ss" cb:"ss,14"`
 }
 
@@ -171,17 +171,17 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 // ProductStockLot is a dedupe-able lot catalog. Hash = (Date, SupplierID, Name).
 type ProductStockLot struct {
 	db.TableStruct[ProductStockLotTable, ProductStockLot]
-	CompanyID        int32  `cb:"CompanyID,1"`
-	ID               int32  `cb:"ID,2"`
-	Date             int16  `cb:"Date,3"`
-	Name             string `cb:"Name,4"`
-	SupplierID       int32  `cb:"SupplierID,5"`
-	DeliveryNoteID   int32  `cb:"DeliveryNoteID,6"`
-	DeliveryNoteCode string `cb:"DeliveryNoteCode,7"`
-	Hash             string `cb:"Hash,8"`
+	CompanyID        int32  `cb:"1"`
+	ID               int32  `cb:"2"`
+	Date             int16  `cb:"3"`
+	Name             string `cb:"4"`
+	SupplierID       int32  `cb:"5"`
+	DeliveryNoteID   int32  `cb:"6"`
+	DeliveryNoteCode string `cb:"7"`
+	Hash             string `cb:"8"`
 
-	Created   int32 `cb:"Created,9"`
-	CreatedBy int32 `cb:"CreatedBy,10"`
+	Created   int32 `cb:"9"`
+	CreatedBy int32 `cb:"10"`
 	Status    int8  `json:"ss" cb:"ss,11"`
 }
 
@@ -221,18 +221,18 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 // DeliveryOrderNote is modeled but not wired up yet.
 type DeliveryOrderNote struct {
 	db.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
-	CompanyID   int32  `cb:"CompanyID,1"`
-	ID          int32  `cb:"ID,2"`
-	Date        int16  `cb:"Date,3"`
-	Code        string `cb:"Code,4"`
-	SupplierID  int32  `cb:"SupplierID,5"`
-	Description string `cb:"Description,6"`
-	Hash        string `cb:"Hash,7"`
+	CompanyID   int32  `cb:"1"`
+	ID          int32  `cb:"2"`
+	Date        int16  `cb:"3"`
+	Code        string `cb:"4"`
+	SupplierID  int32  `cb:"5"`
+	Description string `cb:"6"`
+	Hash        string `cb:"7"`
 
-	Created   int32 `cb:"Created,8"`
-	CreatedBy int32 `cb:"CreatedBy,9"`
-	Updated   int32 `cb:"Updated,10"`
-	UpdatedBy int32 `cb:"UpdatedBy,11"`
+	Created   int32 `cb:"8"`
+	CreatedBy int32 `cb:"9"`
+	Updated   int32 `cb:"10"`
+	UpdatedBy int32 `cb:"11"`
 	Status    int8  `json:"ss" cb:"ss,12"`
 }
 

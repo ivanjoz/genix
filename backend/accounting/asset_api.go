@@ -38,23 +38,23 @@ func GetAssets(req *core.HandlerArgs) core.HandlerResponse {
 // per serial number when the units are tracked individually, or a single grouped row when
 // they are not. Whether serials were entered is what decides the granularity.
 type AssetAcquisitionPayload struct {
-	ProductID     int32    `cb:"ProductID,1"`
-	SerialNumbers []string `cb:"SerialNumbers,2"`
+	ProductID     int32    `cb:"1"`
+	SerialNumbers []string `cb:"2"`
 	// Used only when SerialNumbers is empty — the size of the grouped acquisition lot.
-	Quantity        int32  `cb:"Quantity,3"`
-	WarehouseID     int32  `cb:"WarehouseID,4"`
-	AcquisitionDate int16  `cb:"AcquisitionDate,5"`
-	Name            string `cb:"Name,6"`
-	Description     string `cb:"Description,7"`
-	SupplierID      int32  `cb:"SupplierID,8"`
+	Quantity        int32  `cb:"3"`
+	WarehouseID     int32  `cb:"4"`
+	AcquisitionDate int16  `cb:"5"`
+	Name            string `cb:"6"`
+	Description     string `cb:"7"`
+	SupplierID      int32  `cb:"8"`
 	// Book value per unit, in cents. This is what depreciates.
-	AcquisitionValue int32 `cb:"AcquisitionValue,9"`
+	AcquisitionValue int32 `cb:"9"`
 	// Cash owed per unit, in cents. 0 means the asset was donated or contributed: nothing is
 	// owed and nothing is payable, but the asset still has a value and still depreciates.
-	PurchaseAmount int32 `cb:"PurchaseAmount,10"`
-	DueDate        int16 `cb:"DueDate,11"`
+	PurchaseAmount int32 `cb:"10"`
+	DueDate        int16 `cb:"11"`
 	// Overrides the product's own term. 0 inherits it.
-	DepreciationMonths int16 `cb:"DepreciationMonths,12"`
+	DepreciationMonths int16 `cb:"12"`
 	// The supplier's comprobante, flattened into the body. Its amounts are per unit, like
 	// PurchaseAmount, and its CurrencyType is the asset's.
 	finance.PurchaseDocument
@@ -213,9 +213,9 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 
 // AssetDisposalPayload retires an asset from the register and takes its units out of stock.
 type AssetDisposalPayload struct {
-	AssetID      int32  `cb:"AssetID,1"`
-	DisposalDate int16  `cb:"DisposalDate,2"`
-	Notes        string `cb:"Notes,3"`
+	AssetID      int32  `cb:"1"`
+	DisposalDate int16  `cb:"2"`
+	Notes        string `cb:"3"`
 }
 
 // PutAssetDisposal disposes an asset: it stops depreciating, leaves the warehouse, and stays
@@ -276,8 +276,8 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 // AssetTransferPayload moves an asset between warehouses. The accounting identity does not
 // change — that is exactly why Asset has its own ID rather than being keyed by the stock row.
 type AssetTransferPayload struct {
-	AssetID           int32 `cb:"AssetID,1"`
-	TargetWarehouseID int32 `cb:"TargetWarehouseID,2"`
+	AssetID           int32 `cb:"1"`
+	TargetWarehouseID int32 `cb:"2"`
 }
 
 func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {

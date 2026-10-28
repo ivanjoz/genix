@@ -6,25 +6,25 @@ import "app/db"
 // default amount; per-period payment state lives in the generated Expense rows.
 type ExpenseScheduled struct {
 	db.TableStruct[ExpenseScheduledTable, ExpenseScheduled]
-	CompanyID    int32  `cb:"CompanyID,1"`
-	ID           int32  `cb:"ID,2"`
-	Name         string `cb:"Name,3"`
-	Description  string `cb:"Description,4"`
-	CategoryID   int8   `cb:"CategoryID,5"`   // Static expense category (code-defined list).
-	SupplierID   int32  `cb:"SupplierID,6"`   // Optional — who is paid.
-	CurrencyType int8   `cb:"CurrencyType,7"` // 1 = PEN, 2 = USD.
-	Amount       int32  `cb:"Amount,8"`       // Default expected amount per period, in cents.
-	Frequency    int16  `cb:"Frequency,9"`    // Packed cadence code CDD: cadence*100 + day.
-	StartDate    int16  `cb:"StartDate,10"`   // UnixDay the schedule begins; anchors the month for N-monthly/yearly.
-	EndDate      int16  `cb:"EndDate,11"`     // UnixDay the schedule stops (0 = open-ended).
+	CompanyID    int32  `cb:"1"`
+	ID           int32  `cb:"2"`
+	Name         string `cb:"3"`
+	Description  string `cb:"4"`
+	CategoryID   int8   `cb:"5"`  // Static expense category (code-defined list).
+	SupplierID   int32  `cb:"6"`  // Optional — who is paid.
+	CurrencyType int8   `cb:"7"`  // 1 = PEN, 2 = USD.
+	Amount       int32  `cb:"8"`  // Default expected amount per period, in cents.
+	Frequency    int16  `cb:"9"`  // Packed cadence code CDD: cadence*100 + day.
+	StartDate    int16  `cb:"10"` // UnixDay the schedule begins; anchors the month for N-monthly/yearly.
+	EndDate      int16  `cb:"11"` // UnixDay the schedule stops (0 = open-ended).
 	Status       int8   `json:"ss" cb:"ss,12"`
 	Updated      int32  `json:"upd" cb:"upd,13"`
 	Version      int16  `json:"ver" cb:"ver,14"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,15"`
-	UpdatedBy int32   `cb:"UpdatedBy,16"`
-	Created   int32   `cb:"Created,17"`
-	CreatedBy int32   `cb:"CreatedBy,18"`
+	UpdatedBy int32   `cb:"16"`
+	Created   int32   `cb:"17"`
+	CreatedBy int32   `cb:"18"`
 }
 
 type ExpenseScheduledTable struct {
@@ -87,46 +87,46 @@ const ExpenseStatusPosted int8 = 3
 // amount plus payment state.
 type Expense struct {
 	db.TableStruct[ExpenseTable, Expense]
-	CompanyID          int32  `cb:"CompanyID,1"`
-	ID                 int32  `cb:"ID,2"`
-	ExpenseScheduledID int32  `cb:"ExpenseScheduledID,3"` // 0 = one-time; otherwise → ExpenseScheduled.ID.
-	PeriodDate         int16  `cb:"PeriodDate,4"`         // UnixDay identifying the period (dedupes period generation).
-	Name               string `cb:"Name,5"`
-	Description        string `cb:"Description,6"`
-	Type               int8   `cb:"Type,7"` // ExpenseType* — what the money became.
-	CategoryID         int8   `cb:"CategoryID,8"`
-	SupplierID         int32  `cb:"SupplierID,9"`
-	AssetID            int32  `cb:"AssetID,10"`   // Type 4 → the accounting.Asset being depreciated.
-	ProductID          int32  `cb:"ProductID,11"` // Type 2 → the supply purchased.
+	CompanyID          int32  `cb:"1"`
+	ID                 int32  `cb:"2"`
+	ExpenseScheduledID int32  `cb:"3"` // 0 = one-time; otherwise → ExpenseScheduled.ID.
+	PeriodDate         int16  `cb:"4"` // UnixDay identifying the period (dedupes period generation).
+	Name               string `cb:"5"`
+	Description        string `cb:"6"`
+	Type               int8   `cb:"7"` // ExpenseType* — what the money became.
+	CategoryID         int8   `cb:"8"`
+	SupplierID         int32  `cb:"9"`
+	AssetID            int32  `cb:"10"` // Type 4 → the accounting.Asset being depreciated.
+	ProductID          int32  `cb:"11"` // Type 2 → the supply purchased.
 	// Type 2 only: where the units landed and how many. Stored so the expense says what it
 	// bought without having to reconstruct it from the movement ledger.
-	WarehouseID  int32 `cb:"WarehouseID,12"`
-	Quantity     int32 `cb:"Quantity,13"`
-	CurrencyType int8  `cb:"CurrencyType,14"` // 1 = PEN, 2 = USD.
-	Date         int16 `cb:"Date,15"`         // UnixDay the expense was incurred.
-	DueDate      int16 `cb:"DueDate,16"`      // UnixDay payment is due.
-	Amount       int32 `cb:"Amount,17"`       // Total owed for this expense/period, in cents.
+	WarehouseID  int32 `cb:"12"`
+	Quantity     int32 `cb:"13"`
+	CurrencyType int8  `cb:"14"` // 1 = PEN, 2 = USD.
+	Date         int16 `cb:"15"` // UnixDay the expense was incurred.
+	DueDate      int16 `cb:"16"` // UnixDay payment is due.
+	Amount       int32 `cb:"17"` // Total owed for this expense/period, in cents.
 	// The supplier's comprobante — the Registro de Compras row. See PurchaseDocument; the
 	// document's currency is CurrencyType, and its total must equal Amount.
-	ProviderSnapshotID int32  `cb:"ProviderSnapshotID,18"` // Frozen supplier identity (RCE fields 12-14).
-	DocType            int8   `cb:"DocType,19"`
-	DocSeries          string `cb:"DocSeries,20"`
-	DocNumber          int64  `cb:"DocNumber,21"`
-	DocIssueDate       int16  `cb:"DocIssueDate,22"`
-	TaxableAmount      int32  `cb:"TaxableAmount,23"`
-	TaxAmount          int32  `cb:"TaxAmount,24"`
-	UntaxedAmount      int32  `cb:"UntaxedAmount,25"`
-	OtherAmount        int32  `cb:"OtherAmount,26"`
-	ExchangeRate       int32  `cb:"ExchangeRate,27"`
-	PaidAmount         int32  `cb:"PaidAmount,28"`   // Positive running sum of payments applied (server-maintained).
+	ProviderSnapshotID int32  `cb:"18"` // Frozen supplier identity (RCE fields 12-14).
+	DocType            int8   `cb:"19"`
+	DocSeries          string `cb:"20"`
+	DocNumber          int64  `cb:"21"`
+	DocIssueDate       int16  `cb:"22"`
+	TaxableAmount      int32  `cb:"23"`
+	TaxAmount          int32  `cb:"24"`
+	UntaxedAmount      int32  `cb:"25"`
+	OtherAmount        int32  `cb:"26"`
+	ExchangeRate       int32  `cb:"27"`
+	PaidAmount         int32  `cb:"28"`              // Positive running sum of payments applied (server-maintained).
 	Status             int8   `json:"ss" cb:"ss,29"` // 0 removed · 1 pending · 2 fully paid · 3 posted (non-cash).
 	Updated            int32  `json:"upd" cb:"upd,30"`
 	Version            int16  `json:"ver" cb:"ver,31"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,32"`
-	UpdatedBy int32   `cb:"UpdatedBy,33"`
-	Created   int32   `cb:"Created,34"`
-	CreatedBy int32   `cb:"CreatedBy,35"`
+	UpdatedBy int32   `cb:"33"`
+	Created   int32   `cb:"34"`
+	CreatedBy int32   `cb:"35"`
 }
 
 type ExpenseTable struct {

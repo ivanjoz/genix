@@ -36,14 +36,14 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 
 type DemoStruct4 struct {
 	types.TAGS `table:"demo_structs"`
-	CompanyID  int32    `json:"companyID" db:"company_id,pk" cb:"companyID,1"`
-	ID         int32    `json:"id" db:"id,pk" cb:"id,2"`
-	Edad       int32    `json:"edad" db:"edad,zx1,zx2" cb:"edad,3"`
-	Nombre     string   `json:"nombre" db:"nombre,zx1" cb:"nombre,4"`
-	Palabras   []string `json:"palabras" db:"palabras" cb:"palabras,5"`
-	Rangos     []int32  `json:"rangos" db:"rangos" cb:"rangos,6"`
+	CompanyID  int32    `json:"companyID" db:",pk" cb:"companyID,1"`
+	ID         int32    `json:"id" db:",pk" cb:"id,2"`
+	Edad       int32    `json:"edad" db:",zx1,zx2" cb:"edad,3"`
+	Nombre     string   `json:"nombre" db:",zx1" cb:"nombre,4"`
+	Palabras   []string `json:"palabras" cb:"palabras,5"`
+	Rangos     []int32  `json:"rangos" cb:"rangos,6"`
 	Smallint   int16    `json:"small_int" db:"small_int,zx2" cb:"small_int,7"`
-	Peso       float32  `json:"peso" db:"peso" cb:"peso,8"`
+	Peso       float32  `json:"peso" cb:"peso,8"`
 	Peso64     float64  `json:"peso64" db:"peso_64" cb:"peso64,9"`
 }
 

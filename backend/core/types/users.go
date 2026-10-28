@@ -6,32 +6,32 @@ import (
 
 type User struct {
 	db.TableStruct[UserTable, User]
-	CompanyID  int32   `cb:"CompanyID,1"`
-	ID         int32   `cb:"ID,2"`
-	User       string  `cb:"User,3"`
-	LastName   string  `cb:"LastName,4"`
-	FirstName  string  `cb:"FirstName,5"`
-	ProfileIDs []int32 `cb:"ProfileIDs,6"`
+	CompanyID  int32   `cb:"1"`
+	ID         int32   `cb:"2"`
+	User       string  `cb:"3"`
+	LastName   string  `cb:"4"`
+	FirstName  string  `cb:"5"`
+	ProfileIDs []int32 `cb:"6"`
 	// AccesosGrants are the accesses granted to this user directly, on top of their profiles.
 	// Same shape a profile stores, so both are edited and merged by the same code.
-	AccesosGrants []AccesoGrantRecord `cb:"AccesosGrants,7"`
+	AccesosGrants []AccesoGrantRecord `cb:"7"`
 	// The two grant blobs, encoded by core.EncodeAccesosGrants and read byte for byte by
 	// fareward and by genix-ui. Which blob an access lands in is itself the "has sub-accesses"
 	// flag: accesos_computed is fixed-stride grant words, accesos_sub_computed appends each
 	// grant's sub bytes. See core/accesos-blob.go.
-	AccesosComputed    []byte `cb:"AccesosComputed,8"`
-	AccesosSubComputed []byte `cb:"AccesosSubComputed,9"`
-	Email              string `cb:"Email,10"`
-	JobTitle           string `cb:"JobTitle,11"`
-	DocumentNumber     string `cb:"DocumentNumber,12"`
-	PasswordHash       string `cb:"PasswordHash,13"`
+	AccesosComputed    []byte `cb:"8"`
+	AccesosSubComputed []byte `cb:"9"`
+	Email              string `cb:"10"`
+	JobTitle           string `cb:"11"`
+	DocumentNumber     string `cb:"12"`
+	PasswordHash       string `cb:"13"`
 	// Password is write-only input from the client. It is absent from UserTable, which is
 	// what keeps it out of every database: the column set comes from the table struct.
-	Password  string `cb:"Password,14"`
-	Created   int32  `cb:"Created,15"`
-	CreatedBy int32  `cb:"CreatedBy,16"`
+	Password  string `cb:"14"`
+	Created   int32  `cb:"15"`
+	CreatedBy int32  `cb:"16"`
 	Updated   int32  `json:"upd" cb:"upd,17"`
-	UpdatedBy int32  `cb:"UpdatedBy,18"`
+	UpdatedBy int32  `cb:"18"`
 	Status    int8   `json:"ss" cb:"ss,19"`
 }
 
@@ -42,8 +42,8 @@ type UserTable struct {
 	User               db.Col[*UserTable, string]
 	LastName           db.Col[*UserTable, string]
 	FirstName          db.Col[*UserTable, string]
-	ProfileIDs         db.ColSlice[*UserTable, int32]          `db:"profile_ids"`
-	AccesosGrants      db.Col[*UserTable, []AccesoGrantRecord] `db:"accesos_grants"`
+	ProfileIDs         db.ColSlice[*UserTable, int32]
+	AccesosGrants      db.Col[*UserTable, []AccesoGrantRecord]
 	AccesosComputed    db.Col[*UserTable, []byte]
 	AccesosSubComputed db.Col[*UserTable, []byte]
 	Email              db.Col[*UserTable, string]

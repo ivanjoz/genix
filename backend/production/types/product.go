@@ -41,66 +41,66 @@ const (
 
 type Product struct {
 	db.TableStruct[ProductTable, Product]
-	CompanyID   int32   `cb:"CompanyID,1"`
-	ID          int32   `db:"id,pk" cb:"ID,2"`
-	TempID      int32   `cb:"TempID,3"`
-	Name        string  `db:"nombre" cb:"Name,4"`
-	Description string  `cb:"Description,5"`
-	ContentHTML string  `cb:"ContentHTML,6"`
-	CategoryIDs []int32 `db:"category_ids" cb:"CategoryIDs,7"`
-	BrandID     int32   `cb:"BrandID,8"`
-	Params      []int8  `cb:"Params,9"`
-	Price       int32   `cb:"Price,10"`
-	CurrencyID  int16   `cb:"CurrencyID,11"`
-	UnitID      int16   `cb:"UnitID,12"`
-	Discount    float32 `cb:"Discount,13"`
-	FinalPrice  int32   `cb:"FinalPrice,14"`
-	Weight      float32 `cb:"Weight,15"`
-	Volume      float32 `cb:"Volume,16"`
+	CompanyID   int32   `cb:"1"`
+	ID          int32   `db:",pk" cb:"2"`
+	TempID      int32   `cb:"3"`
+	Name        string  `db:"nombre" cb:"4"`
+	Description string  `cb:"5"`
+	ContentHTML string  `cb:"6"`
+	CategoryIDs []int32 `cb:"7"`
+	BrandID     int32   `cb:"8"`
+	Params      []int8  `cb:"9"`
+	Price       int32   `cb:"10"`
+	CurrencyID  int16   `cb:"11"`
+	UnitID      int16   `cb:"12"`
+	Discount    float32 `cb:"13"`
+	FinalPrice  int32   `cb:"14"`
+	Weight      float32 `cb:"15"`
+	Volume      float32 `cb:"16"`
 	// Sub-unit: the divisor of the (Units, Sub) quantity pair. SbuQuantity is how many
 	// sub-units make one whole unit — 1000 for a kilogram sold by the gram, 6 for a box sold
 	// by the candy. 0 or 1 means the product has no sub-unit. It may only ever be refined to
 	// a multiple (see core.IsQuantityDivisorRefinement): coarsening would round away real
 	// stock, since 9/12 is 4.5 sixths. int16 to match SubDivisor on the stock and movement
 	// rows, so one concept has one type.
-	SbuQuantity   int16   `cb:"SbuQuantity,17"`
-	SbuUnit       string  `cb:"SbuUnit,18"`
-	SbuPrice      int32   `cb:"SbuPrice,19"`
-	SbuDiscount   float32 `cb:"SbuDiscount,20"`
-	SbuFinalPrice int32   `cb:"SbuFinalPrice,21"`
-	SKU           string  `cb:"SKU,22"`
-	NameHash      int32   `cb:"NameHash,23"`
+	SbuQuantity   int16   `cb:"17"`
+	SbuUnit       string  `cb:"18"`
+	SbuPrice      int32   `cb:"19"`
+	SbuDiscount   float32 `cb:"20"`
+	SbuFinalPrice int32   `cb:"21"`
+	SKU           string  `cb:"22"`
+	NameHash      int32   `cb:"23"`
 	// Straight-line depreciation term for supplies that are fixed assets (Status=2).
 	// 0 = not depreciable. Copied onto accounting.Asset at acquisition so later catalog
 	// edits never rewrite the schedule of an asset already in service.
-	DepreciationMonths int16 `cb:"DepreciationMonths,24"`
+	DepreciationMonths int16 `cb:"24"`
 
-	Properties    []ProductProperties   `cb:"Properties,25"`
-	Presentations []ProductPresentation `cb:"Presentations,26"`
+	Properties    []ProductProperties   `cb:"25"`
+	Presentations []ProductPresentation `cb:"26"`
 	// Image storage: ImageMain is the imageID of the primary image (defaults to the
 	// first uploaded). ImageIDs holds every imageID; ImageDescriptions is parallel to it.
 	// Each imageID encodes its own resolution config in the last digit (autoincrement*10 + configDigit).
-	ImageMain         int32               `cb:"ImageMain,27"`
-	ImageIDs          []int32             `cb:"ImageIDs,28"`
-	ImageDescriptions []string            `cb:"ImageDescriptions,29"`
-	Stock             []WarehouseStockMin `cb:"Stock,30"`
-	ReservedStock     []WarehouseStockMin `cb:"ReservedStock,31"`
-	StockStatus       int8                `cb:"StockStatus,32"`
-	NameUpdated       int32               `cb:"NameUpdated,33"`
+	ImageMain         int32               `cb:"27"`
+	ImageIDs          []int32             `cb:"28"`
+	ImageDescriptions []string            `cb:"29"`
+	Stock             []WarehouseStockMin `cb:"30"`
+	ReservedStock     []WarehouseStockMin `cb:"31"`
+	StockStatus       int8                `cb:"32"`
+	NameUpdated       int32               `cb:"33"`
 	// General properties
 	Status    int8  `json:"ss" cb:"ss,34"`
 	Updated   int32 `json:"upd" cb:"upd,35"`
-	UpdatedBy int32 `cb:"UpdatedBy,36"`
-	Created   int32 `cb:"Created,37"`
-	CreatedBy int32 `cb:"CreatedBy,38"`
+	UpdatedBy int32 `cb:"36"`
+	Created   int32 `cb:"37"`
+	CreatedBy int32 `cb:"38"`
 	/* concatenated with CompanyID to be indexed */
-	CategoriesWithStock []int32 `cb:"CategoriesWithStock,39"`
+	CategoriesWithStock []int32 `cb:"39"`
 	Version             int16   `json:"ver" cb:"ver,40"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,41"`
 	// BrandName copies the brand's name so the text index can read it from the table: a reindex
 	// only sees stored columns. PostProducts fills it from BrandID.
-	BrandName string `cb:"BrandName,42"`
+	BrandName string `cb:"42"`
 }
 
 type ProductTable struct {
@@ -110,7 +110,7 @@ type ProductTable struct {
 	Name                db.Col[*ProductTable, string]
 	Description         db.Col[*ProductTable, string]
 	ContentHTML         db.Col[*ProductTable, string]
-	CategoryIDs         db.ColSlice[*ProductTable, int32] `db:"category_ids"`
+	CategoryIDs         db.ColSlice[*ProductTable, int32]
 	BrandID             db.Col[*ProductTable, int32]
 	BrandName           db.Col[*ProductTable, string]
 	Params              db.ColSlice[*ProductTable, int8] `db:"params_ids"`

@@ -98,8 +98,8 @@ func DoSaveBackup(args *core.ExecArgs) core.FuncResponse {
 }
 
 type BackupFile struct {
-	Name    string `cb:"Name,1"`
-	Size    int32  `cb:"Size,2"`
+	Name    string `cb:"1"`
+	Size    int32  `cb:"2"`
 	Created int64  `json:"upd" cb:"upd,3"`
 }
 

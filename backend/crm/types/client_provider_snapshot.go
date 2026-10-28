@@ -26,8 +26,8 @@ import (
 
 type ClientProviderSnapshot struct {
 	db.TableStruct[ClientProviderSnapshotTable, ClientProviderSnapshot]
-	CompanyID int32 `cb:"CompanyID,1"`
-	ID        int32 `cb:"ID,2"`
+	CompanyID int32 `cb:"1"`
+	ID        int32 `cb:"2"`
 	// Hash addresses the row: every identity column below, hashed together. It is what an
 	// insert looks up first, so an identity the company already holds is reused.
 	//
@@ -36,16 +36,16 @@ type ClientProviderSnapshot struct {
 	// quarter of the time, and a collision here would print another company's RUC on a
 	// filed book. Callers still compare the fields before adopting a candidate, so even a
 	// collision costs an extra row and never a wrong identity.
-	Hash int64 `cb:"Hash,3"`
+	Hash int64 `cb:"3"`
 	// The values are hashed raw, not normalized: the snapshot must read back exactly what
 	// was stored, so "Jane" and "JANE" are two identities rather than one.
-	Name            string `cb:"Name,4"`
-	RegistryNumber  string `cb:"RegistryNumber,5"`
-	IdentityDocType int8   `cb:"IdentityDocType,6"`
-	CityID          string `cb:"CityID,7"`
+	Name            string `cb:"4"`
+	RegistryNumber  string `cb:"5"`
+	IdentityDocType int8   `cb:"6"`
+	CityID          string `cb:"7"`
 
-	Created   int32 `cb:"Created,8"`
-	CreatedBy int32 `cb:"CreatedBy,9"`
+	Created   int32 `cb:"8"`
+	CreatedBy int32 `cb:"9"`
 	// Updated never moves after the insert — nothing updates a snapshot. It is here because
 	// CacheByIDs requires it, and reading snapshots by id through the by-IDs cache is the whole
 	// access pattern of this table.

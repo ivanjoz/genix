@@ -7,11 +7,11 @@ import (
 
 type CityLocation struct {
 	db.TableStruct[CityLocationTable, CityLocation]
-	ID        int32  `cb:"ID,1"`
-	CountryID int32  `cb:"CountryID,2"`
-	Name      string ` cb:"Name,3"`
-	ParentID  int32  ` cb:"ParentID,4"`
-	Hierarchy int8   `cb:"Hierarchy,5"`
+	ID        int32  `cb:"1"`
+	CountryID int32  `cb:"2"`
+	Name      string `cb:"3"`
+	ParentID  int32  `cb:"4"`
+	Hierarchy int8   `cb:"5"`
 	Updated   int32  `json:"upd" cb:"upd,6"`
 	Version   int16  `json:"ver" cb:"ver,7"`
 	// Metadata is set only on the delta log records a Delta() read appends.
@@ -47,20 +47,20 @@ func (e CityLocationTable) GetSchema() db.TableSchema {
 
 type SharedListRecord struct {
 	db.TableStruct[SharedListRecordTable, SharedListRecord]
-	CompanyID   int32    `cb:"CompanyID,1"`
-	ID          int32    `cb:"ID,2"`
-	ListID      int32    `cb:"ListID,3"`
-	Name        string   `cb:"Name,4"`
-	Images      []string `cb:"Images,5"`
-	Description string   `cb:"Description,6"`
-	NameHash    int32    `cb:"NameHash,7"`
+	CompanyID   int32    `cb:"1"`
+	ID          int32    `cb:"2"`
+	ListID      int32    `cb:"3"`
+	Name        string   `cb:"4"`
+	Images      []string `cb:"5"`
+	Description string   `cb:"6"`
+	NameHash    int32    `cb:"7"`
 	// General properties
 	Status  int8  `json:"ss" cb:"ss,8"`
 	Updated int32 `json:"upd" cb:"upd,9"`
 	Version int16 `json:"ver" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,11"`
-	UpdatedBy int32   `cb:"UpdatedBy,12"`
+	UpdatedBy int32   `cb:"12"`
 }
 
 type SharedListRecordTable struct {

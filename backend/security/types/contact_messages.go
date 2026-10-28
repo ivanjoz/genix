@@ -10,23 +10,23 @@ type ContactMessage struct {
 	db.TableStruct[ContactMessageTable, ContactMessage]
 	// WeekCode is core.MakeSemanaFromFechaUnix(...).Code: year*100 + isoWeek - 200000.
 	// 2026-W32 => 2632.
-	WeekCode int32 `cb:"WeekCode,1"`
+	WeekCode int32 `cb:"1"`
 	// IP is core.ClientIPKey of the sender: the IPv4 value, or the IPv6 /63 prefix for addresses
 	// where a single customer owns a whole block. It leads the clustering key rather than sitting
 	// in an index because the one query this table serves on the hot path is "how many messages
 	// has this IP sent inside the window", and as a key that is a partition slice instead of an
 	// index lookup that would load every message the address ever sent this week.
-	IP int64 `cb:"IP,2"`
+	IP int64 `cb:"2"`
 	// Created is SUnixTime (1 unit = 2 seconds) and is what the rate-limit window ranges over.
-	Created int32 `cb:"Created,3"`
+	Created int32 `cb:"3"`
 	// ID is a global sequence, last in the key so two messages the same IP sends inside one
 	// 2-second tick stay distinct rows. It is never returned to the caller nor carried in a link,
 	// so unlike a sign-up request it needs no random tail to stop the table being walked.
-	ID      int64  `cb:"ID,4"`
-	Name    string `cb:"Name,5"`
-	Email   string `cb:"Email,6"`
-	Company string `cb:"Company,7"`
-	Message string `cb:"Message,8"`
+	ID      int64  `cb:"4"`
+	Name    string `cb:"5"`
+	Email   string `cb:"6"`
+	Company string `cb:"7"`
+	Message string `cb:"8"`
 	Updated int32  `json:"upd" cb:"upd,9"`
 	// 1 = stored and notified · 2 = stored but the notification email failed. The row is written
 	// before the mail is sent, so a broken SMTP costs the notification and never the message.

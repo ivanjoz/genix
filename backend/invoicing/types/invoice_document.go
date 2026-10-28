@@ -96,56 +96,56 @@ func SalePrefix(id int64) int64 {
 // the one whose id is the sale's.
 type InvoiceDocument struct {
 	db.TableStruct[InvoiceDocumentTable, InvoiceDocument]
-	CompanyID int32 `cb:"CompanyID,1"`
+	CompanyID int32 `cb:"1"`
 	// ID is the sale's id with the series in its last two digits. Set by the
 	// caller, not the ORM — see DocumentIDForSale.
-	ID int64 `cb:"ID,2"`
+	ID int64 `cb:"2"`
 
 	// Correlativo is the document number within its series, reserved from the
 	// series counter when the row is written.
-	Correlativo int32 `cb:"Correlativo,3"`
+	Correlativo int32 `cb:"3"`
 
-	IssueDate int16 `cb:"IssueDate,4"`
-	IssueTime int32 `cb:"IssueTime,5"`
+	IssueDate int16 `cb:"4"`
+	IssueTime int32 `cb:"5"`
 
 	// ClientSnapshotID freezes who was billed, in crm.ClientProviderSnapshot. Everything
 	// else about the sale is read back from the sale, but the customer cannot be: renaming
 	// a client in CRM would rewrite the name this document already printed, and the
 	// Registro de Ventas has to read the same name five years from now.
-	ClientSnapshotID int32 `cb:"ClientSnapshotID,6"`
+	ClientSnapshotID int32 `cb:"6"`
 
-	Currency int8 `cb:"Currency,7"`
+	Currency int8 `cb:"7"`
 
 	// Amounts in cents. They aggregate the lines, so they are 64 bits. Kept even
 	// though the lines are not: every list and report reads these, and joining to
 	// the sale for each row would be the wrong trade.
-	TotalAmount      int64 `cb:"TotalAmount,8"`
-	TaxAmount        int64 `cb:"TaxAmount,9"`
-	TaxableAmount    int64 `cb:"TaxableAmount,10"`
-	ExemptAmount     int64 `cb:"ExemptAmount,11"`
-	UnaffectedAmount int64 `cb:"UnaffectedAmount,12"`
-	FreeAmount       int64 `cb:"FreeAmount,13"`
+	TotalAmount      int64 `cb:"8"`
+	TaxAmount        int64 `cb:"9"`
+	TaxableAmount    int64 `cb:"10"`
+	ExemptAmount     int64 `cb:"11"`
+	UnaffectedAmount int64 `cb:"12"`
+	FreeAmount       int64 `cb:"13"`
 
 	// Notes only: what this document corrects, and why. AffectedDocID is also how a
 	// note reaches its sale — the document it corrects is the one whose id is the
 	// sale's.
-	AffectedDocID  int64  `cb:"AffectedDocID,14"`
-	NoteReasonCode string `cb:"NoteReasonCode,15"`
-	NoteReason     string `cb:"NoteReason,16"`
+	AffectedDocID  int64  `cb:"14"`
+	NoteReasonCode string `cb:"15"`
+	NoteReason     string `cb:"16"`
 
-	State     int8   `cb:"State,17"`
-	SunatCode string `cb:"SunatCode,18"`
+	State     int8   `cb:"17"`
+	SunatCode string `cb:"18"`
 	// SunatNotes are the CDR's observations. Unlike the description, which is
 	// derivable from the code, these exist nowhere but in the CDR.
-	SunatNotes       []string `db:",list" cb:"SunatNotes,19"`
-	Ticket           string   `cb:"Ticket,20"`
-	InvoiceSummaryID int64    `cb:"InvoiceSummaryID,21"`
+	SunatNotes       []string `db:",list" cb:"19"`
+	Ticket           string   `cb:"20"`
+	InvoiceSummaryID int64    `cb:"21"`
 	// DigestValue is SUNAT's hash of the document. It is the last field of the
 	// QR code, so it has to survive as long as the document does.
-	DigestValue string `cb:"DigestValue,22"`
+	DigestValue string `cb:"22"`
 
-	RetryCount int8   `cb:"RetryCount,23"`
-	LastError  string `cb:"LastError,24"`
+	RetryCount int8   `cb:"23"`
+	LastError  string `cb:"24"`
 
 	Status int8 `json:"ss" cb:"ss,25"`
 	// Version drives the delta list: State moves several times after the
@@ -154,8 +154,8 @@ type InvoiceDocument struct {
 	Version int16 `json:"ver" cb:"ver,27"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,28"`
-	Created   int32   `cb:"Created,29"`
-	CreatedBy int32   `cb:"CreatedBy,30"`
+	Created   int32   `cb:"29"`
+	CreatedBy int32   `cb:"30"`
 }
 
 // SeriesID is the series this document was issued under, read off the tail of the

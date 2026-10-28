@@ -34,16 +34,16 @@ type ObservabilityRouteDetail struct {
 }
 
 type ObservabilityFrame struct {
-	ID        int32                      `json:"ID" cb:"ID,1"`
-	TimeFrame int32                      `cb:"TimeFrame,2"`
-	Details   []ObservabilityRouteDetail `cb:"Details,3"`
+	ID        int32                      `json:"ID" cb:"1"`
+	TimeFrame int32                      `cb:"2"`
+	Details   []ObservabilityRouteDetail `cb:"3"`
 	Updated   int32                      `json:"upd" cb:"upd,4"`
 	Status    int8                       `json:"ss" cb:"ss,5"`
 }
 
 type ObservabilityRoute struct {
-	ID      int16  `json:"ID" cb:"ID,1"`
-	Route   string `cb:"Route,2"`
+	ID      int16  `json:"ID" cb:"1"`
+	Route   string `cb:"2"`
 	Updated int32  `json:"upd" cb:"upd,3"`
 	Status  int8   `json:"ss" cb:"ss,4"`
 }
@@ -51,8 +51,8 @@ type ObservabilityRoute struct {
 type ObservabilityResponse struct {
 	// The window's frames whole, ending with the replace Metadata (core.WithDeltaReplace): a frame
 	// that fell out of the window leaves the client's cache.
-	Frames []any                `cb:"Frames,1"`
-	Routes []ObservabilityRoute `cb:"Routes,2"`
+	Frames []any                `cb:"1"`
+	Routes []ObservabilityRoute `cb:"2"`
 }
 
 type observabilityRouteAccumulator struct {

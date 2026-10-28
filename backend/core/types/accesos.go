@@ -44,5 +44,5 @@ type AccesoGrantRecord struct {
 	// SubAccesos are the granted sub-access ids. Id 1 is "Todos" and satisfies every check on the
 	// access; it is synthesized rather than declared, so no catalog lists it. Empty is the normal
 	// case — most accesses declare no sub-access at all.
-	SubAccesos SubAccesoIDs `cb:"3" `
+	SubAccesos SubAccesoIDs `cb:"3"`
 }

@@ -36,61 +36,61 @@ const (
 // pointer back at the stock row and WarehouseID as a mutable mirror of where it is now.
 type Asset struct {
 	db.TableStruct[AssetTable, Asset]
-	CompanyID int32 `cb:"CompanyID,1"`
-	ID        int32 `cb:"ID,2"`
+	CompanyID int32 `cb:"1"`
+	ID        int32 `cb:"2"`
 	// The supply this instantiates: a Product row with Status = 2 and DepreciationMonths > 0.
-	ProductID int32 `cb:"ProductID,3"`
+	ProductID int32 `cb:"3"`
 	// Empty when the acquisition is tracked as a group rather than per unit. Whether a serial
 	// was entered is what decides granularity: one Asset per unit, or one per acquisition lot.
-	SerialNumber string `cb:"SerialNumber,4"`
-	Quantity     int32  `cb:"Quantity,5"` // 1 when serial-tracked; N for a grouped lot.
-	WarehouseID  int32  `cb:"WarehouseID,6"`
-	Name         string `cb:"Name,7"`
-	Description  string `cb:"Description,8"`
-	SupplierID   int32  `cb:"SupplierID,9"`
+	SerialNumber string `cb:"4"`
+	Quantity     int32  `cb:"5"` // 1 when serial-tracked; N for a grouped lot.
+	WarehouseID  int32  `cb:"6"`
+	Name         string `cb:"7"`
+	Description  string `cb:"8"`
+	SupplierID   int32  `cb:"9"`
 	// The acquisition's own money, kept here rather than in an Expense row. 0 = donated:
 	// nothing was owed, and PaymentStatus stays AssetPaymentNone.
-	PurchaseAmount int32 `cb:"PurchaseAmount,10"`
-	PaidAmount     int32 `cb:"PaidAmount,11"` // Server-maintained sum of payments applied.
+	PurchaseAmount int32 `cb:"10"`
+	PaidAmount     int32 `cb:"11"` // Server-maintained sum of payments applied.
 	// The supplier's comprobante — the Registro de Compras row. See finance.PurchaseDocument.
 	// The amounts are this row's share: an acquisition split into one row per serial splits
 	// its factura the same way, and the book sums the rows back by document. The document's
 	// currency is CurrencyType, and its total must equal PurchaseAmount.
-	ProviderSnapshotID int32  `cb:"ProviderSnapshotID,12"` // Frozen supplier identity (RCE fields 12-14).
-	DocType            int8   `cb:"DocType,13"`
-	DocSeries          string `cb:"DocSeries,14"`
-	DocNumber          int64  `cb:"DocNumber,15"`
-	DocIssueDate       int16  `cb:"DocIssueDate,16"`
-	TaxableAmount      int32  `cb:"TaxableAmount,17"`
-	TaxAmount          int32  `cb:"TaxAmount,18"`
-	UntaxedAmount      int32  `cb:"UntaxedAmount,19"`
-	OtherAmount        int32  `cb:"OtherAmount,20"`
-	ExchangeRate       int32  `cb:"ExchangeRate,21"`
-	PaymentStatus      int8   `cb:"PaymentStatus,22"`
-	DueDate            int16  `cb:"DueDate,23"`
+	ProviderSnapshotID int32  `cb:"12"` // Frozen supplier identity (RCE fields 12-14).
+	DocType            int8   `cb:"13"`
+	DocSeries          string `cb:"14"`
+	DocNumber          int64  `cb:"15"`
+	DocIssueDate       int16  `cb:"16"`
+	TaxableAmount      int32  `cb:"17"`
+	TaxAmount          int32  `cb:"18"`
+	UntaxedAmount      int32  `cb:"19"`
+	OtherAmount        int32  `cb:"20"`
+	ExchangeRate       int32  `cb:"21"`
+	PaymentStatus      int8   `cb:"22"`
+	DueDate            int16  `cb:"23"`
 	// The real acquisition date, which is not Created: a donated or backdated asset is
 	// registered long after it was acquired, and the schedule has to run from the latter.
-	AcquisitionDate int16 `cb:"AcquisitionDate,24"`
+	AcquisitionDate int16 `cb:"24"`
 	// Book value at acquisition, in cents. Independent of what was paid.
-	AcquisitionValue int32 `cb:"AcquisitionValue,25"`
+	AcquisitionValue int32 `cb:"25"`
 	// Copied from the Product at acquisition, so editing the catalog later never rewrites
 	// the schedule of an asset already in service.
-	DepreciationMonths int16 `cb:"DepreciationMonths,26"`
-	CurrencyType       int8  `cb:"CurrencyType,27"` // 1 = PEN, 2 = USD.
+	DepreciationMonths int16 `cb:"26"`
+	CurrencyType       int8  `cb:"27"` // 1 = PEN, 2 = USD.
 	// Server-maintained running sum, and the UnixDay of the last period generated — which is
 	// what makes lazy generation idempotent.
-	AccumulatedDepreciation int32 `cb:"AccumulatedDepreciation,28"`
-	LastDepreciationDate    int16 `cb:"LastDepreciationDate,29"`
-	DisposalDate            int16 `cb:"DisposalDate,30"` // 0 = still held.
+	AccumulatedDepreciation int32 `cb:"28"`
+	LastDepreciationDate    int16 `cb:"29"`
+	DisposalDate            int16 `cb:"30"` // 0 = still held.
 
 	Status  int8  `json:"ss" cb:"ss,31"`
 	Updated int32 `json:"upd" cb:"upd,32"`
 	Version int16 `json:"ver" cb:"ver,33"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,34"`
-	UpdatedBy int32   `cb:"UpdatedBy,35"`
-	Created   int32   `cb:"Created,36"`
-	CreatedBy int32   `cb:"CreatedBy,37"`
+	UpdatedBy int32   `cb:"35"`
+	Created   int32   `cb:"36"`
+	CreatedBy int32   `cb:"37"`
 }
 
 type AssetTable struct {

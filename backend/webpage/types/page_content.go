@@ -67,30 +67,30 @@ type ContentFields struct {
 // frontend rename; nested frontend-owned trees (Ast/Content) are strict typed
 // structs. The ORM stores the whole struct as a colbin blob.
 type SectionContent struct {
-	Type       string            `cb:"Type,1"`
-	Ast        []AstNode         `cb:"Ast,2"`
-	Content    *ContentFields    `cb:"Content,3"`
-	Css        map[string]string `cb:"Css,4"`
-	Attributes map[string]any    `cb:"Attributes,5"`
+	Type       string            `cb:"1"`
+	Ast        []AstNode         `cb:"2"`
+	Content    *ContentFields    `cb:"3"`
+	Css        map[string]string `cb:"4"`
+	Attributes map[string]any    `cb:"5"`
 	// PageCss is the section's pre-generated runtime Tailwind CSS (the UnoCSS
 	// output for its tokens, wrapped in @layer ec-runtime). The builder generates
 	// it on save so the storefront concatenates the stored stylesheets instead of
 	// running the UnoCSS engine at view time. It rides in the content blob so it is
 	// covered by the section hash.
-	PageCss string `cb:"PageCss,6"`
+	PageCss string `cb:"6"`
 	// Svgs deduplicates the inline SVG bodies of icons picked in the builder, keyed by
 	// sprite id `icon--<set>-<name>`. The frontend renders one <symbol> per entry and each
 	// Icon AST node references it via <use href="#id">, so each body is stored exactly once.
-	Svgs map[string]string `cb:"Svgs,7"`
+	Svgs map[string]string `cb:"7"`
 	// Palette is the page's growable color list (hex colors, referenced 1-based as
 	// var(--color-N)). Page-global, so it rides on section 1 only — same convention as
 	// the whole-page Css. The builder grows it as the agent introduces new colors.
-	Palette []string `cb:"Palette,8"`
+	Palette []string `cb:"8"`
 	// CustomCss is the agent-authored raw CSS for this section, already scoped to
 	// page-unique `.x{n}` classes by the builder. It rides in the content blob (so
 	// it round-trips into the editor) and is also folded into the whole-page Css
 	// column on save so the storefront serves it without regenerating.
-	CustomCss string `cb:"CustomCss,9"`
+	CustomCss string `cb:"9"`
 }
 
 // EcommercePageContent stores one builder section, addressed by its page and its
@@ -99,21 +99,21 @@ type SectionContent struct {
 // positions are soft-deleted (Status=0) since the ORM has no hard delete.
 type EcommercePageContent struct {
 	db.TableStruct[EcommercePageContentTable, EcommercePageContent]
-	CompanyID int32          `cb:"CompanyID,1"`
-	PageID    int16          `cb:"PageID,2"`
-	SectionID int16          `cb:"SectionID,3"`
-	Route     string         `cb:"Route,4"`
-	Content   SectionContent `cb:"Content,5"`
+	CompanyID int32          `cb:"1"`
+	PageID    int16          `cb:"2"`
+	SectionID int16          `cb:"3"`
+	Route     string         `cb:"4"`
+	Content   SectionContent `cb:"5"`
 	// Css holds the whole-page pre-generated runtime Tailwind CSS (the UnoCSS output
 	// for every section's tokens). It is stored only on section 1 so the storefront
 	// serves a single stylesheet from a plain column — no colbin decode of Content
 	// needed. The builder ships it inside section 1's SectionContent.PageCss on save;
 	// the handler moves it here and clears PageCss to avoid storing two copies.
-	Css       string `cb:"Css,6"`
-	Hash      int64  `cb:"Hash,7"`
+	Css       string `cb:"6"`
+	Hash      int64  `cb:"7"`
 	Status    int8   `json:"ss" cb:"ss,8"`
 	Updated   int32  `json:"upd" cb:"upd,9"`
-	UpdatedBy int32  `cb:"UpdatedBy,10"`
+	UpdatedBy int32  `cb:"10"`
 }
 
 type EcommercePageContentTable struct {

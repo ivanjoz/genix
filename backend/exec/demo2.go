@@ -18,17 +18,17 @@ type InnerStruct struct {
 
 type DemoStruct struct {
 	db.TableStruct[DemoStructTable, DemoStruct]
-	CompanyID   int32       `db:"empresa_id,pk" cb:"CompanyID,1"`
-	ID          int32       `db:"id,pk" cb:"ID,2"`
-	ListID      int32       `db:"lista_id,view,view.1,view.2" cb:"ListID,3"`
-	Name        string      `db:"nombre" cb:"Name,4"`
-	Images      []string    `db:"images" cb:"Images,5"`
-	Description string      `db:"descripcion" cb:"Description,6"`
-	DemoColumn  InnerStruct `cb:"DemoColumn,7"`
+	CompanyID   int32       `db:"empresa_id,pk" cb:"1"`
+	ID          int32       `db:",pk" cb:"2"`
+	ListID      int32       `db:"lista_id,view,view.1,view.2" cb:"3"`
+	Name        string      `db:"nombre" cb:"4"`
+	Images      []string    `cb:"5"`
+	Description string      `db:"descripcion" cb:"6"`
+	DemoColumn  InnerStruct `cb:"7"`
 	// General properties
-	Status    int8  `json:"ss" db:"status,view.1" cb:"ss,8"`
-	Updated   int64 `json:"upd" db:"updated,view.2" cb:"upd,9"`
-	UpdatedBy int32 `db:"updated_by" cb:"UpdatedBy,10"`
+	Status    int8  `json:"ss" db:",view.1" cb:"ss,8"`
+	Updated   int64 `json:"upd" db:",view.2" cb:"upd,9"`
+	UpdatedBy int32 `cb:"10"`
 }
 
 type DemoStructTable struct {

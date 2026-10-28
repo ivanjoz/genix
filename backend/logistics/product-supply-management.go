@@ -141,11 +141,11 @@ func validateProductSupplyProductIDs(companyID int32, productIDs []int32) error 
 /* GET: WAREHOUSE MOVIMIENTOS GROUPED */
 
 type DateProductMovements struct {
-	Date               int16   `cb:"Date,1"`
-	DetailProductsIDs  []int32 `cb:"DetailProductsIDs,2"`
-	DetailInflows      []int32 `cb:"DetailInflows,3"`
-	DetailOutflows     []int32 `cb:"DetailOutflows,4"`
-	DetailMinimumStock []int32 `cb:"DetailMinimumStock,5"`
+	Date               int16   `cb:"1"`
+	DetailProductsIDs  []int32 `cb:"2"`
+	DetailInflows      []int32 `cb:"3"`
+	DetailOutflows     []int32 `cb:"4"`
+	DetailMinimumStock []int32 `cb:"5"`
 	Updated            int16   `json:"upd" cb:"upd,6"`
 }
 

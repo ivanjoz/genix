@@ -10,14 +10,14 @@ const ImageConfigDigitFull = 7
 type ImageAsset struct {
 	db.TableStruct[ImageAssetTable, ImageAsset]
 	GroupID            int32    `json:"-" cb:"-"`
-	ID                 int32    `cb:"ID,1"`
-	CategoryID         int16    `db:"category_id" cb:"CategoryID,2"`
-	Description        string   `cb:"Description,3"`                // English description (IMAGES_LIST.md).
-	SpanishDescription string   `cb:"SpanishDescription,4"`         // Spanish description (IMAGES_LIST.ES.md).
-	Keywords           string   `cb:"Keywords,5"`                   // Deduplicated English words; feeds the TextSearch AI search.
-	SpanishKeywords    []string `db:",list" cb:"SpanishKeywords,6"` // Spanish object list; feeds the bigram local search.
-	Bigrams            []int8   `db:",list" cb:"Bigrams,7"`         // Encoded from the Spanish keywords for frontend local search.
-	Ratio              float32  `cb:"Ratio,8"`                      // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
+	ID                 int32    `cb:"1"`
+	CategoryID         int16    `cb:"2"`
+	Description        string   `cb:"3"`            // English description (IMAGES_LIST.md).
+	SpanishDescription string   `cb:"4"`            // Spanish description (IMAGES_LIST.ES.md).
+	Keywords           string   `cb:"5"`            // Deduplicated English words; feeds the TextSearch AI search.
+	SpanishKeywords    []string `db:",list" cb:"6"` // Spanish object list; feeds the bigram local search.
+	Bigrams            []int8   `db:",list" cb:"7"` // Encoded from the Spanish keywords for frontend local search.
+	Ratio              float32  `cb:"8"`            // Aspect ratio = width/height (1.0=1:1, 1.777=16:9, 0.75=3:4). 0 ⇒ unknown, treated as 1:1 by find_image.
 	Updated            int32    `json:"upd" cb:"upd,9"`
 	Version            int16    `json:"ver" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.

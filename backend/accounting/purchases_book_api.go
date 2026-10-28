@@ -33,22 +33,22 @@ const (
 // PurchaseBookDocument is one purchase as the book reads it. The document columns are
 // finance.PurchaseDocument, identical on the three source tables.
 type PurchaseBookDocument struct {
-	Source             int8   `cb:"Source,1"`
-	SourceID           int32  `cb:"SourceID,2"`
-	Name               string `cb:"Name,3"` // What was bought, for the review list.
-	ProviderID         int32  `cb:"ProviderID,4"`
-	ProviderSnapshotID int32  `cb:"ProviderSnapshotID,5"`
-	DueDate            int16  `cb:"DueDate,6"` // Field 6, for a recibo de servicios públicos.
+	Source             int8   `cb:"1"`
+	SourceID           int32  `cb:"2"`
+	Name               string `cb:"3"` // What was bought, for the review list.
+	ProviderID         int32  `cb:"4"`
+	ProviderSnapshotID int32  `cb:"5"`
+	DueDate            int16  `cb:"6"` // Field 6, for a recibo de servicios públicos.
 	// The record's own total. For a purchase without a comprobante it is the only amount there is.
-	RecordAmount int32 `cb:"RecordAmount,7"`
+	RecordAmount int32 `cb:"7"`
 	finance.PurchaseDocument
 }
 
 type PurchasesBookResponse struct {
-	Period    string                 `cb:"Period,1"`
-	FirstDay  int16                  `cb:"FirstDay,2"`
-	LastDay   int16                  `cb:"LastDay,3"`
-	Documents []PurchaseBookDocument `cb:"Documents,4"`
+	Period    string                 `cb:"1"`
+	FirstDay  int16                  `cb:"2"`
+	LastDay   int16                  `cb:"3"`
+	Documents []PurchaseBookDocument `cb:"4"`
 }
 
 // GetPurchasesBook reads a whole period, or the single day inside one.

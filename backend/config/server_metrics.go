@@ -31,22 +31,22 @@ type ServerMetricsHour struct {
 	BucketID int32 `json:"ID" cb:"ID,1"`
 	// Offset of each sample inside the hour, 0..719, positioning every other array. Offsets rather
 	// than slot-of-day so the value stays three digits across 2880 of them.
-	SlotsInHour []int16 `cb:"SlotsInHour,2"`
+	SlotsInHour []int16 `cb:"2"`
 
-	CpuPercent  []int16 `cb:"CpuPercent,3"`
-	MemPercent  []int16 `cb:"MemPercent,4"`
-	DiskPercent []int16 `cb:"DiskPercent,5"`
-	NetRxRate   []int16 `cb:"NetRxRate,6"`
-	NetTxRate   []int16 `cb:"NetTxRate,7"`
+	CpuPercent  []int16 `cb:"3"`
+	MemPercent  []int16 `cb:"4"`
+	DiskPercent []int16 `cb:"5"`
+	NetRxRate   []int16 `cb:"6"`
+	NetTxRate   []int16 `cb:"7"`
 
-	BackendMemMb       []int16 `cb:"BackendMemMb,8"`
-	BackendCpuPercent  []int16 `cb:"BackendCpuPercent,9"`
-	FarewardMemMb      []int16 `cb:"FarewardMemMb,10"`
-	FarewardCpuPercent []int16 `cb:"FarewardCpuPercent,11"`
-	SearchMemMb        []int16 `cb:"SearchMemMb,12"`
-	SearchCpuPercent   []int16 `cb:"SearchCpuPercent,13"`
-	ScyllaMemMb        []int16 `cb:"ScyllaMemMb,14"`
-	ScyllaCpuPercent   []int16 `cb:"ScyllaCpuPercent,15"`
+	BackendMemMb       []int16 `cb:"8"`
+	BackendCpuPercent  []int16 `cb:"9"`
+	FarewardMemMb      []int16 `cb:"10"`
+	FarewardCpuPercent []int16 `cb:"11"`
+	SearchMemMb        []int16 `cb:"12"`
+	SearchCpuPercent   []int16 `cb:"13"`
+	ScyllaMemMb        []int16 `cb:"14"`
+	ScyllaCpuPercent   []int16 `cb:"15"`
 
 	// Absolute slot (unix seconds / 5) of the newest sample here. This is the delta watermark: the
 	// client keeps the maximum across records and sends it back, and the handler returns strictly

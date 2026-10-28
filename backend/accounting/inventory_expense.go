@@ -15,17 +15,17 @@ import (
 // This lives in accounting rather than finance because it needs both sides, and logistics
 // already imports finance for cash movements — the reverse edge would be a cycle.
 type InventoryExpensePayload struct {
-	Name        string `cb:"Name,1"`
-	Description string `cb:"Description,2"`
-	CategoryID  int8   `cb:"CategoryID,3"`
-	SupplierID  int32  `cb:"SupplierID,4"`
-	Date        int16  `cb:"Date,5"`
-	DueDate     int16  `cb:"DueDate,6"`
-	ProductID   int32  `cb:"ProductID,7"`
-	WarehouseID int32  `cb:"WarehouseID,8"`
-	Quantity    int32  `cb:"Quantity,9"`
+	Name        string `cb:"1"`
+	Description string `cb:"2"`
+	CategoryID  int8   `cb:"3"`
+	SupplierID  int32  `cb:"4"`
+	Date        int16  `cb:"5"`
+	DueDate     int16  `cb:"6"`
+	ProductID   int32  `cb:"7"`
+	WarehouseID int32  `cb:"8"`
+	Quantity    int32  `cb:"9"`
 	// Unit price in cents. The expense total is this times the quantity.
-	UnitPrice int32 `cb:"UnitPrice,10"`
+	UnitPrice int32 `cb:"10"`
 	// The supplier's comprobante, flattened into the body. Its CurrencyType is the expense's.
 	finance.PurchaseDocument
 }

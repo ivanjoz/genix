@@ -37,17 +37,17 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 // live on Product plus the replenishment config that lives on ProductSupply. Both are saved
 // in one call because the user sees a single record.
 type SupplyMaterialPayload struct {
-	ID                 int32                                `cb:"ID,1"`
-	Name               string                               `cb:"Name,2"`
-	Description        string                               `cb:"Description,3"`
-	SKU                string                               `cb:"SKU,4"`
-	BrandID            int32                                `cb:"BrandID,5"`
-	Price              int32                                `cb:"Price,6"`
-	CurrencyID         int16                                `cb:"CurrencyID,7"`
-	UnitID             int16                                `cb:"UnitID,8"`
-	DepreciationMonths int16                                `cb:"DepreciationMonths,9"`
-	MinimunStock       int32                                `cb:"MinimunStock,10"`
-	ProviderSupply     []logistics.ProductSupplyProviderRow `cb:"ProviderSupply,11"`
+	ID                 int32                                `cb:"1"`
+	Name               string                               `cb:"2"`
+	Description        string                               `cb:"3"`
+	SKU                string                               `cb:"4"`
+	BrandID            int32                                `cb:"5"`
+	Price              int32                                `cb:"6"`
+	CurrencyID         int16                                `cb:"7"`
+	UnitID             int16                                `cb:"8"`
+	DepreciationMonths int16                                `cb:"9"`
+	MinimunStock       int32                                `cb:"10"`
+	ProviderSupply     []logistics.ProductSupplyProviderRow `cb:"11"`
 	// Only 0 is honoured, as the soft-delete tombstone. Anything else saves as a supply;
 	// a client cannot promote its own row into the product catalog.
 	Status int8 `json:"ss" cb:"ss,12"`
@@ -57,8 +57,8 @@ type SupplyMaterialPayload struct {
 // each input record, the resolved server ID paired with the client-sent (possibly negative,
 // temporary) ID so optimistic local rows can be reconciled.
 type supplyMaterialIDMapping struct {
-	ID     int32 `cb:"ID,1"`
-	TempID int32 `cb:"TempID,2"`
+	ID     int32 `cb:"1"`
+	TempID int32 `cb:"2"`
 }
 
 // PostSupplyMaterial upserts a batch of supplies as Product rows with Status = 2, then writes

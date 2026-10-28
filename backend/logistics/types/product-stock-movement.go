@@ -9,30 +9,30 @@ import (
 // the movement targets a ProductStockDetail row or the plain ProductStockV2.Quantity bucket.
 type WarehouseProductMovement struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
-	CompanyID int32 `cb:"CompanyID,1"`
+	CompanyID int32 `cb:"1"`
 	// ID packs Date(15 bits)+WarehouseID(17 bits)+Autoincrement(8 random bits) into an int64.
-	ID                   int64  `cb:"ID,2"`
-	SerialNumber         string `cb:"SerialNumber,3"`
-	LotID                int32  `cb:"LotID,4"`
-	WarehouseID          int32  `cb:"WarehouseID,5"`
-	WarehouseRefID       int32  `cb:"WarehouseRefID,6"`
-	WarehouseRefQuantity int32  `cb:"WarehouseRefQuantity,7"`
-	Date                 int16  `cb:"Date,8"`
-	DocumentID           int64  `cb:"DocumentID,9"`
-	ProductID            int32  `cb:"ProductID,10"`
-	PresentationID       int16  `cb:"PresentationID,11"`
-	Quantity             int32  `cb:"Quantity,12"`
-	WarehouseQuantity    int32  `cb:"WarehouseQuantity,13"`
-	SubQuantity          int32  `cb:"SubQuantity,14"`
+	ID                   int64  `cb:"2"`
+	SerialNumber         string `cb:"3"`
+	LotID                int32  `cb:"4"`
+	WarehouseID          int32  `cb:"5"`
+	WarehouseRefID       int32  `cb:"6"`
+	WarehouseRefQuantity int32  `cb:"7"`
+	Date                 int16  `cb:"8"`
+	DocumentID           int64  `cb:"9"`
+	ProductID            int32  `cb:"10"`
+	PresentationID       int16  `cb:"11"`
+	Quantity             int32  `cb:"12"`
+	WarehouseQuantity    int32  `cb:"13"`
+	SubQuantity          int32  `cb:"14"`
 	// SubDivisor is the divisor SubQuantity was recorded in. It must live on the ledger row
 	// itself: RecalcProductStockByMovements replays the whole history, and without it a
 	// SUM(SubQuantity) spanning a divisor refinement would add sixths to twelfths.
-	SubDivisor    int16             `cb:"SubDivisor,15"`
-	MonetaryValue int32             `cb:"MonetaryValue,16"`
-	Type          StockMovementType `cb:"Type,17"`
-	Created       int32             `cb:"Created,18"`
-	CreatedBy     int32             `cb:"CreatedBy,19"`
-	UpdateCounter int32             `cb:"UpdateCounter,20"`
+	SubDivisor    int16             `cb:"15"`
+	MonetaryValue int32             `cb:"16"`
+	Type          StockMovementType `cb:"17"`
+	Created       int32             `cb:"18"`
+	CreatedBy     int32             `cb:"19"`
+	UpdateCounter int32             `cb:"20"`
 }
 
 type WarehouseProductMovementTable struct {

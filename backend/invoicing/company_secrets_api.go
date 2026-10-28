@@ -17,13 +17,13 @@ import (
 // PostCompanySecretsBody is the credential upload. The certificate arrives as
 // base64 because it is a binary file coming through a JSON form.
 type PostCompanySecretsBody struct {
-	ID             int32  `json:"ID" cb:"ID,1"`
-	Name           string `json:"Name" cb:"Name,2"`
-	SolUser        string `json:"SolUser" cb:"SolUser,3"`
-	SolPassword    string `json:"SolPassword" cb:"SolPassword,4"`
+	ID             int32  `json:"ID" cb:"1"`
+	Name           string `json:"Name" cb:"2"`
+	SolUser        string `json:"SolUser" cb:"3"`
+	SolPassword    string `json:"SolPassword" cb:"4"`
 	CertificateB64 string `json:"Certificate" cb:"Certificate,5"`
-	CertPassword   string `json:"CertPassword" cb:"CertPassword,6"`
-	Environment    int8   `json:"Environment" cb:"Environment,7"`
+	CertPassword   string `json:"CertPassword" cb:"6"`
+	Environment    int8   `json:"Environment" cb:"7"`
 }
 
 // CompanySecretsView is what a caller may see: everything except the secrets.
@@ -32,16 +32,16 @@ type PostCompanySecretsBody struct {
 // not even to the company that owns them. What a form needs is whose certificate
 // it is and when it stops working, which is all here.
 type CompanySecretsView struct {
-	ID            int32  `json:"ID" cb:"ID,1"`
-	Name          string `json:"Name" cb:"Name,2"`
-	SolUser       string `json:"SolUser" cb:"SolUser,3"`
-	Environment   int8   `json:"Environment" cb:"Environment,4"`
-	CertSubject   string `json:"CertSubject" cb:"CertSubject,5"`
-	CertIssuer    string `json:"CertIssuer" cb:"CertIssuer,6"`
-	CertRUC       string `json:"CertRUC" cb:"CertRUC,7"`
-	CertValidFrom int32  `json:"CertValidFrom" cb:"CertValidFrom,8"`
-	CertValidTo   int32  `json:"CertValidTo" cb:"CertValidTo,9"`
-	HasCert       bool   `json:"HasCert" cb:"HasCert,10"`
+	ID            int32  `json:"ID" cb:"1"`
+	Name          string `json:"Name" cb:"2"`
+	SolUser       string `json:"SolUser" cb:"3"`
+	Environment   int8   `json:"Environment" cb:"4"`
+	CertSubject   string `json:"CertSubject" cb:"5"`
+	CertIssuer    string `json:"CertIssuer" cb:"6"`
+	CertRUC       string `json:"CertRUC" cb:"7"`
+	CertValidFrom int32  `json:"CertValidFrom" cb:"8"`
+	CertValidTo   int32  `json:"CertValidTo" cb:"9"`
+	HasCert       bool   `json:"HasCert" cb:"10"`
 	Status        int8   `json:"ss" cb:"ss,11"`
 	Updated       int32  `json:"upd" cb:"upd,12"`
 }
