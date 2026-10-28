@@ -22,8 +22,8 @@ const imageAssetsPublicBaseURL = "https://ivanjoz.github.io/genix-assets/images/
 type AgentImageCandidate struct {
 	ID          int32   `json:"ID" cb:"ID,1"`
 	URL         string  `json:"url" cb:"url,2"`
-	Description string  `json:"description,omitempty" cb:"description,3"`
-	Ratio       float32 `json:"ratio,omitempty" cb:"ratio,4"` // width/height; 0 ⇒ unknown (treat as 1:1)
+	Description string  `json:"description" cb:"description,3"`
+	Ratio       float32 `json:"ratio" cb:"ratio,4"` // width/height; 0 ⇒ unknown (treat as 1:1)
 }
 
 // FindImageCandidates returns image options for the page-builder agent. It runs

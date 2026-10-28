@@ -27,19 +27,19 @@ const (
 // 12th stores 12 numbers, not 31.
 type ExchangeRate struct {
 	db.TableStruct[ExchangeRateTable, ExchangeRate]
-	CompanyID int32 `json:",omitempty" cb:"CompanyID,1"`
+	CompanyID int32 `cb:"CompanyID,1"`
 	// ID is the month in YYMM form: 2601 is January 2026. One row per month means the month
 	// itself is the identity, so nothing is autoincremented here.
-	ID             int16   `json:",omitempty" cb:"ID,2"`
-	DetailBuyRate  []int32 `json:",omitempty" db:",list" cb:"DetailBuyRate,3"`
-	DetailSellRate []int32 `json:",omitempty" db:",list" cb:"DetailSellRate,4"`
-	Status         int8    `json:"ss,omitempty" cb:"ss,5"`
-	Updated        int32   `json:"upd,omitempty" cb:"upd,6"`
-	Version        int16   `json:"ver,omitempty" cb:"ver,7"`
+	ID             int16   `cb:"ID,2"`
+	DetailBuyRate  []int32 `db:",list" cb:"DetailBuyRate,3"`
+	DetailSellRate []int32 `db:",list" cb:"DetailSellRate,4"`
+	Status         int8    `json:"ss" cb:"ss,5"`
+	Updated        int32   `json:"upd" cb:"upd,6"`
+	Version        int16   `json:"ver" cb:"ver,7"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,8"`
-	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,9"`
-	Created   int32   `json:",omitempty" cb:"Created,10"`
+	Metadata  *string `json:"mdt" cb:"mdt,8"`
+	UpdatedBy int32   `cb:"UpdatedBy,9"`
+	Created   int32   `cb:"Created,10"`
 }
 
 type ExchangeRateTable struct {

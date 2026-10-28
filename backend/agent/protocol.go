@@ -68,11 +68,11 @@ type AgentComponentInfo struct {
 	// count is small enough to embed directly in the HTML snapshot (currently
 	// ≤12). Frontend probes via getOptions(13) and only attaches when the
 	// list is exhaustive. nil/empty for every other handle type.
-	Options []AgentOption `json:",omitempty" cb:"Options,5"`
+	Options []AgentOption `cb:"Options,5"`
 }
 
 type PageContent struct {
-	Components []AgentComponentInfo `json:",omitempty" cb:"Components,1"`
+	Components []AgentComponentInfo `cb:"Components,1"`
 	HTML       string               `cb:"HTML,2"`
 }
 
@@ -105,7 +105,7 @@ type InvokeBatchPayload struct {
 
 type InvokeBatchResult struct {
 	Results []InvocationResult `cb:"Results,1"`
-	Page    *PageContent       `json:",omitempty" cb:"Page,2"`
+	Page    *PageContent       `cb:"Page,2"`
 }
 
 // InvocationResult is one entry in the reply array for the batched
@@ -113,8 +113,8 @@ type InvokeBatchResult struct {
 // external callers see the same shape the WS protocol uses.
 type InvocationResult struct {
 	OK    bool            `cb:"OK,1"`
-	Value json.RawMessage `json:",omitempty" cb:"Value,2"`
-	Error string          `json:",omitempty" cb:"Error,3"`
+	Value json.RawMessage `cb:"Value,2"`
+	Error string          `cb:"Error,3"`
 }
 
 type AgentListFilter struct {
@@ -127,7 +127,7 @@ type AgentListFilter struct {
 type AgentMenuOption struct {
 	Name        string `cb:"Name,1"`
 	Route       string `cb:"Route,2"`
-	Description string `json:",omitempty" cb:"Description,3"`
+	Description string `cb:"Description,3"`
 }
 
 // AgentMenuGroup is a side-menu section (CONFIGURACIÓN, NEGOCIO, …) with the
@@ -146,7 +146,7 @@ type NavigatePayload struct {
 
 type NavigateResult struct {
 	Route string       `cb:"Route,1"`
-	Page  *PageContent `json:",omitempty" cb:"Page,2"`
+	Page  *PageContent `cb:"Page,2"`
 }
 
 type AgentContextPayload struct {
@@ -158,6 +158,6 @@ type AgentContextResult struct {
 	PageID            string `cb:"PageID,2"`
 	Route             string `cb:"Route,3"`
 	Scope             string `cb:"Scope,4"`
-	SelectedSectionID string `json:",omitempty" cb:"SelectedSectionID,5"`
+	SelectedSectionID string `cb:"SelectedSectionID,5"`
 	Content           string `cb:"Content,6"`
 }

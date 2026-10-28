@@ -2,6 +2,11 @@
 
 Design decisions, newest first.
 
+## sonic runs from a fork that makes every field `omitempty` except pointers to numbers
+**Context** — Every json tag in the project carried `omitempty`. Neither sonic nor `encoding/json/v2` has a global switch for it, and sonic 1.15.0 silently fell back to `encoding/json` on Go 1.27 (1.15.5 fixes that).
+**Decision** — `go.mod` replaces `bytedance/sonic` with `github.com/ivanjoz/sonic` (branch `omitempty-default`, based on v1.15.5), which adds `sonic.SetOmitEmptyDefault`. `core/json_defaults.go` turns it on in `init()`. Every field is omitted when empty except `*int..`, `*uint..` and `*float..`: nil is `null`, a pointer to 0 is `0`. `*string`, `*bool`, `*slice`, `*map` and `*struct` are omitted when nil (`*bool` was not named in the request; it follows the "only *number is exempt" rule). A non-nil `*string` pointing to `""` is still sent. There is no opt-out tag. All `omitempty` tags were removed from the repo. The table generator and `check_tables` no longer expect `,omitempty` on `upd`/`ver`/`mdt`.
+**Rationale** — The flag has to be set before the first encode because sonic caches compiled encoders per type, and `core` is the package everyone imports. It only reaches sonic: code that calls `encoding/json` directly now emits zero values and empty slices. Costs: a fork to rebase on each sonic release, and DynamoDB/SQLite JSON columns no longer store zero values (they read back as zero, so nothing changes on load).
+
 ## Every struct that carries `json` tags got `cb:"<json name>,<n>"` on every field
 **Context** — colbin reads only `cb` tags and names a schema field by its Go name, but the
 frontend reads the `json` names (`upd`, `ss`, …). Untagged, the self-describing message would

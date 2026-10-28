@@ -116,9 +116,9 @@ func apiKeyForProvider(provider string) string {
 // the originating call.
 type Message struct {
 	Role       string     `json:"role" cb:"role,1"` // "system" | "user" | "assistant" | "tool"
-	Content    string     `json:"content,omitempty" cb:"content,2"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty" cb:"tool_calls,3"`
-	ToolCallID string     `json:"tool_call_id,omitempty" cb:"tool_call_id,4"`
+	Content    string     `json:"content" cb:"content,2"`
+	ToolCalls  []ToolCall `json:"tool_calls" cb:"tool_calls,3"`
+	ToolCallID string     `json:"tool_call_id" cb:"tool_call_id,4"`
 }
 
 // Tool declares one callable function to the model. Parameters is a
@@ -130,8 +130,8 @@ type Tool struct {
 
 type ToolFunction struct {
 	Name        string         `json:"name" cb:"name,1"`
-	Description string         `json:"description,omitempty" cb:"description,2"`
-	Parameters  map[string]any `json:"parameters,omitempty" cb:"parameters,3"`
+	Description string         `json:"description" cb:"description,2"`
+	Parameters  map[string]any `json:"parameters" cb:"parameters,3"`
 }
 
 // ToolCall is the assistant's request to invoke one tool. Arguments stays
@@ -155,30 +155,30 @@ type ToolCallFunction struct {
 type ChatRequest struct {
 	Model    string    `json:"model" cb:"model,1"`
 	Messages []Message `json:"messages" cb:"messages,2"`
-	Tools    []Tool    `json:"tools,omitempty" cb:"tools,3"`
+	Tools    []Tool    `json:"tools" cb:"tools,3"`
 	// ToolChoice accepts OpenAI's "auto" | "none". Earlier tests found at least
 	// one OpenRouter upstream answering HTTP 404 to "required", and no configured
 	// model has been validated for it — keep using "auto" and let the system
 	// prompt discipline the model into ending the turn via the `finish` tool.
-	ToolChoice  string   `json:"tool_choice,omitempty" cb:"tool_choice,4"`
-	Temperature *float32 `json:"temperature,omitempty" cb:"temperature,5"`
+	ToolChoice  string   `json:"tool_choice" cb:"tool_choice,4"`
+	Temperature *float32 `json:"temperature" cb:"temperature,5"`
 	// MaxTokens bounds mechanical subagents such as the discovery planner.
 	// Zero leaves the provider default unchanged for existing agent loops.
-	MaxTokens int `json:"max_tokens,omitempty" cb:"max_tokens,6"`
+	MaxTokens int `json:"max_tokens" cb:"max_tokens,6"`
 	// Reasoning is the provider-agnostic thinking budget callers set. Chat()
 	// translates it: sent as-is to OpenRouter, collapsed into ReasoningEffort
 	// for Meta. Nil = don't constrain the budget.
-	Reasoning *ReasoningOptions `json:"reasoning,omitempty" cb:"reasoning,7"`
+	Reasoning *ReasoningOptions `json:"reasoning" cb:"reasoning,7"`
 	// ReasoningEffort is Meta's flat thinking-budget field
 	// ("minimal"|"low"|"medium"|"high"|"xhigh"). Derived from Reasoning by
 	// Chat(); a caller that sets it directly wins, but then it only has an
 	// effect when the selected model uses Meta.
-	ReasoningEffort string `json:"reasoning_effort,omitempty" cb:"reasoning_effort,8"`
+	ReasoningEffort string `json:"reasoning_effort" cb:"reasoning_effort,8"`
 	// Routing pins or biases OpenRouter's upstream selection for the chosen
 	// model (e.g. `deepinfra/fp8`) when latency or quantization matters. See
 	// https://openrouter.ai/docs/features/provider-routing. Dropped on Meta,
 	// which serves its own models and has no routing concept.
-	Routing *OpenRouterRouting `json:"provider,omitempty" cb:"provider,9"`
+	Routing *OpenRouterRouting `json:"provider" cb:"provider,9"`
 }
 
 // OpenRouterRouting mirrors the subset of OpenRouter's `provider` parameter we
@@ -190,9 +190,9 @@ type ChatRequest struct {
 // AllowFallbacks=false pins routing to exactly one — for when a specific
 // quantization or region is required. Nil → let OpenRouter pick.
 type OpenRouterRouting struct {
-	Order          []string `json:"order,omitempty" cb:"order,1"`
-	Sort           string   `json:"sort,omitempty" cb:"sort,2"`
-	AllowFallbacks *bool    `json:"allow_fallbacks,omitempty" cb:"allow_fallbacks,3"`
+	Order          []string `json:"order" cb:"order,1"`
+	Sort           string   `json:"sort" cb:"sort,2"`
+	AllowFallbacks *bool    `json:"allow_fallbacks" cb:"allow_fallbacks,3"`
 }
 
 // ReasoningOptions is the internal representation of a thinking budget. It
@@ -204,10 +204,10 @@ type OpenRouterRouting struct {
 // iterations. On Meta only `Effort` and `Enabled` survive the translation (see
 // metaReasoningEffort).
 type ReasoningOptions struct {
-	Effort    string `json:"effort,omitempty" cb:"effort,1"`
-	MaxTokens int    `json:"max_tokens,omitempty" cb:"max_tokens,2"`
-	Exclude   bool   `json:"exclude,omitempty" cb:"exclude,3"`
-	Enabled   *bool  `json:"enabled,omitempty" cb:"enabled,4"`
+	Effort    string `json:"effort" cb:"effort,1"`
+	MaxTokens int    `json:"max_tokens" cb:"max_tokens,2"`
+	Exclude   bool   `json:"exclude" cb:"exclude,3"`
+	Enabled   *bool  `json:"enabled" cb:"enabled,4"`
 }
 
 // ChatResponse is the /chat/completions reply. The loop only ever looks at

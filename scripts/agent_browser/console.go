@@ -24,8 +24,8 @@ type consoleRecord struct {
 	Level  string `json:"Level"`
 	Source string `json:"Source"`
 	Text   string `json:"Text"`
-	URL    string `json:"URL,omitempty"`
-	Line   int    `json:"Line,omitempty"`
+	URL    string `json:"URL"`
+	Line   int    `json:"Line"`
 }
 
 // severityRank orders levels so `-level warning` can mean "warning and worse".

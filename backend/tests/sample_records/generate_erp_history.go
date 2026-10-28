@@ -1105,8 +1105,8 @@ func (generator *erpHistoryGenerator) createSaleWithRetry(saleTime time.Time, is
 			// reservation — the units stay available for the following sales.
 			if !isUndelivered {
 				for bucketIndex, bucket := range reservedBuckets {
-					// DetailQuantities is packed; the reservation is counted in whole units.
-					bucket.remaining -= core.UnpackQuantityLine(salePayload.DetailQuantities[bucketIndex]).Units
+					// The line quantity is packed; the reservation is counted in whole units.
+					bucket.remaining -= core.UnpackQuantityLine(salePayload.Lines[bucketIndex].Quantity).Units
 				}
 			}
 			return nil
@@ -1164,14 +1164,16 @@ func (generator *erpHistoryGenerator) makeSalePayload(warehouseID int32, isUnpai
 
 		salePrice := generator.salePriceByProduct[productID]
 
-		salePayload.DetailProductsIDs = append(salePayload.DetailProductsIDs, productID)
-		// Sale-order lines are packed (Units*QuantityLineScale + Sub); the seeder emits whole
-		// units only, so the sub-unit half is zero.
-		salePayload.DetailQuantities = append(salePayload.DetailQuantities, quantity*core.QuantityLineScale)
-		salePayload.DetailPrices = append(salePayload.DetailPrices, salePrice)
-		salePayload.DetailProductPresentations = append(salePayload.DetailProductPresentations, bucket.presentationID)
-		salePayload.DetailProductLotIDs = append(salePayload.DetailProductLotIDs, bucket.lotID)
-		salePayload.DetailProductSkus = append(salePayload.DetailProductSkus, bucket.serialNumber)
+		salePayload.Lines = append(salePayload.Lines, salesTypes.SaleOrderLine{
+			ProductID: productID,
+			// Sale-order lines are packed (Units*QuantityLineScale + Sub); the seeder emits whole
+			// units only, so the sub-unit half is zero.
+			Quantity:       quantity * core.QuantityLineScale,
+			Price:          salePrice,
+			PresentationID: bucket.presentationID,
+			LotID:          bucket.lotID,
+			Sku:            bucket.serialNumber,
+		})
 		salePayload.TotalAmount += salePrice * quantity
 		reservedBuckets = append(reservedBuckets, bucket)
 	}

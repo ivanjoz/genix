@@ -13,7 +13,7 @@ export const isSaleDelivered = (status: number): boolean => status === 3 || stat
 // The prices come from the sale the backend returned, not from the catalog: the server converts
 // them into the sale's currency, so a USD sale's lines are dollars the catalog never held.
 export const buildSaleHistoryLine = (soldProduct: VentaProducto, sale: ISaleOrder): SaleHistoryLine => {
-  const lineIndex = sale.DetailProductsIDs.indexOf(soldProduct.productoID)
+  const saleLine = sale.Lines.find((line) => line.ProductID === soldProduct.productoID)
   return {
     productID: soldProduct.productoID,
     presentationID: soldProduct.presentationID,
@@ -21,8 +21,8 @@ export const buildSaleHistoryLine = (soldProduct: VentaProducto, sale: ISaleOrde
     // objects are reactive proxies, and IndexedDB refuses to structured-clone one.
     quantity: { units: soldProduct.cantidad.units, sub: soldProduct.cantidad.sub },
     subDivisor: soldProduct.subDivisor,
-    unitPrice: sale.DetailPrices[lineIndex] || 0,
-    subUnitPrice: sale.DetailSubPrices?.[lineIndex] || 0,
+    unitPrice: saleLine?.Price || 0,
+    subUnitPrice: saleLine?.SubPrice || 0,
     // The cart keeps serials as serial → quantity; the ticket lists each one once and only
     // says "x2" when the same serial covers more than one item.
     serialNumbers: [...(soldProduct.serialNumbers?.entries() || [])]

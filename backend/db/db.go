@@ -33,6 +33,7 @@ type (
 	FixedValues         = orm.FixedValues
 	DataFrame           = orm.DataFrame
 	CompactOn           = orm.CompactOn
+	ComputedCol         = orm.ComputedCol
 )
 
 type (
@@ -252,6 +253,12 @@ func QueryFrame[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Exe
 // after each write. A rebuild hands it one reused buffer, so it must not keep the slice.
 func ToFrames[R any, F any](method func(*R, []F) []F) *dataframe.Projection {
 	return orm.ToFrames(method)
+}
+
+// Compute binds a computed column (TableSchema.Computed) to a record method:
+// db.Compute((*SaleOrder).DetailProductIDs). It must be pure: it is called on every write.
+func Compute[RecordT any, ValueT any](method func(*RecordT) ValueT) *orm.ComputedValue {
+	return orm.Compute(method)
 }
 
 // ─── Table compilation and helpers ─────────────────────────────────────────────

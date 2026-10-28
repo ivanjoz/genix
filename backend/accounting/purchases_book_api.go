@@ -33,22 +33,22 @@ const (
 // PurchaseBookDocument is one purchase as the book reads it. The document columns are
 // finance.PurchaseDocument, identical on the three source tables.
 type PurchaseBookDocument struct {
-	Source             int8   `json:",omitempty" cb:"Source,1"`
-	SourceID           int32  `json:",omitempty" cb:"SourceID,2"`
-	Name               string `json:",omitempty" cb:"Name,3"` // What was bought, for the review list.
-	ProviderID         int32  `json:",omitempty" cb:"ProviderID,4"`
-	ProviderSnapshotID int32  `json:",omitempty" cb:"ProviderSnapshotID,5"`
-	DueDate            int16  `json:",omitempty" cb:"DueDate,6"` // Field 6, for a recibo de servicios públicos.
+	Source             int8   `cb:"Source,1"`
+	SourceID           int32  `cb:"SourceID,2"`
+	Name               string `cb:"Name,3"` // What was bought, for the review list.
+	ProviderID         int32  `cb:"ProviderID,4"`
+	ProviderSnapshotID int32  `cb:"ProviderSnapshotID,5"`
+	DueDate            int16  `cb:"DueDate,6"` // Field 6, for a recibo de servicios públicos.
 	// The record's own total. For a purchase without a comprobante it is the only amount there is.
-	RecordAmount int32 `json:",omitempty" cb:"RecordAmount,7"`
+	RecordAmount int32 `cb:"RecordAmount,7"`
 	finance.PurchaseDocument
 }
 
 type PurchasesBookResponse struct {
-	Period    string                 `json:",omitempty" cb:"Period,1"`
-	FirstDay  int16                  `json:",omitempty" cb:"FirstDay,2"`
-	LastDay   int16                  `json:",omitempty" cb:"LastDay,3"`
-	Documents []PurchaseBookDocument `json:",omitempty" cb:"Documents,4"`
+	Period    string                 `cb:"Period,1"`
+	FirstDay  int16                  `cb:"FirstDay,2"`
+	LastDay   int16                  `cb:"LastDay,3"`
+	Documents []PurchaseBookDocument `cb:"Documents,4"`
 }
 
 // GetPurchasesBook reads a whole period, or the single day inside one.

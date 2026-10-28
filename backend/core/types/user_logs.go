@@ -12,15 +12,15 @@ import "app/db"
 // window, and the expensive detail lives where it is already being paid for.
 type UserLog struct {
 	db.TableStruct[UserLogTable, UserLog]
-	Date                 int16   `json:",omitempty" cb:"Date,1"`
-	RequestID            int64   `json:",omitempty" cb:"RequestID,2"`
-	CompanyID            int32   `json:",omitempty" cb:"CompanyID,3"`
-	UserID               int32   `json:",omitempty" cb:"UserID,4"`
-	RouteID              int16   `json:",omitempty" cb:"RouteID,5"`
-	FrameRouteCompanyAgg int64   `json:",omitempty" cb:"FrameRouteCompanyAgg,6"`
-	ElapsedMs            int16   `json:",omitempty" cb:"ElapsedMs,7"`
-	ErrorCount           int8    `json:",omitempty" cb:"ErrorCount,8"`
-	ErrorIDs             []int32 `json:",omitempty" db:",list" cb:"ErrorIDs,9"`
+	Date                 int16   `cb:"Date,1"`
+	RequestID            int64   `cb:"RequestID,2"`
+	CompanyID            int32   `cb:"CompanyID,3"`
+	UserID               int32   `cb:"UserID,4"`
+	RouteID              int16   `cb:"RouteID,5"`
+	FrameRouteCompanyAgg int64   `cb:"FrameRouteCompanyAgg,6"`
+	ElapsedMs            int16   `cb:"ElapsedMs,7"`
+	ErrorCount           int8    `cb:"ErrorCount,8"`
+	ErrorIDs             []int32 `db:",list" cb:"ErrorIDs,9"`
 }
 
 type UserLogTable struct {

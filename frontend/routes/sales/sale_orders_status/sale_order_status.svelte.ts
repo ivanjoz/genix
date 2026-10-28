@@ -1,5 +1,6 @@
 import { notifyFailure } from '@genix/ui/notify';
 import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.svelte.ts';
 
 export interface ISaleOrderTopProduct {
 	ProductID: number;
@@ -11,14 +12,7 @@ export interface ISaleOrder {
     CompanyID: number;
     Date: number;
     WarehouseID: number;
-    DetailProductsIDs: number[];
-    DetailPrices: number[];
-    // Packed: units * 1000 + sub. Unpack with $core/quantity before displaying.
-    DetailQuantities: number[];
-    DetailSubDivisor?: number[];
-    DetailSubPrices?: number[];
-    DetailProductSkus: string[];
-    DetailProductPresentations: number[];
+    Lines?: ISaleOrderLine[];
     TotalAmount: number;
     TaxAmount: number;
     DebtAmount: number;
@@ -84,7 +78,9 @@ export class SaleOrdersService extends GetHandler {
   route = "sale-orders"
   // Route now depends on group; bump version to avoid mixing old cached queries.
   // v11 stopped filtering out ss=0, so a v10 cache would hide the Anuladas tab's own records.
-  useCache = { min: 0.1, ver: 11 }
+  // v12: the parallel Detail* arrays became `Lines`, and the migration kept `upd`, so only a
+  // version bump drops the old-shape rows.
+  useCache = { min: 0.1, ver: 12 }
 
 	records: ISaleOrder[] = $state([])
 

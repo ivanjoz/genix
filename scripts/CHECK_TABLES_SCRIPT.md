@@ -10,7 +10,7 @@ The script ensures that for every data model, its corresponding "base" struct an
 
 1.  **Naming Convention**: For a base struct named `MyType`, the corresponding table struct must be named `MyTypeTable`.
 
-2.  **Field Consistency**: Every field defined in the table struct must also exist in the base struct.
+2.  **Field Consistency**: Every field defined in the table struct must also exist in the base struct, except a column named by a `Computed` entry's `Col` in `GetSchema()`: it reads a record method and has no record field.
 
 3.  **Type Mapping Rules**: It enforces the correct usage of `db.Col` and `db.ColSlice` based on the field's type in the base struct:
     *   **Non-Slice Fields**: Must use `db.Col[TableType, FieldType]`.
@@ -24,9 +24,9 @@ The script ensures that for every data model, its corresponding "base" struct an
 
 5.  **Cache contract** (`backend/docs/ORM_DATABASE_QUERY.md` §3.1):
     *   `CacheByIDs: true` → the record struct declares `Updated int32` with the json tag
-        `upd,omitempty`, and the table struct an `Updated` column.
+        `upd`, and the table struct an `Updated` column.
     *   a `db.TypeDelta` index → the record struct declares `Version int16` with the json tag
-        `ver,omitempty` and `Metadata *string` with the json tag `mdt,omitempty`; the table struct
+        `ver` and `Metadata *string` with the json tag `mdt`; the table struct
         declares a `Version` column and **no** `Metadata` column.
 
 If any of these rules are violated, the script prints a detailed error message, specifying the structs and field where the inconsistency occurred.

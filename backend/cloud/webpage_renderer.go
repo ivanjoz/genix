@@ -28,7 +28,7 @@ type WebpageRenderRequest struct {
 	Pages     []WebpageRenderPage `json:"pages" cb:"pages,3"`
 	// ForceAssets vuelve a subir los js/css aunque la company ya tenga publicada esa
 	// versión del renderer (útil si se borraron del CDN a mano).
-	ForceAssets bool `json:"forceAssets,omitempty" cb:"forceAssets,4"`
+	ForceAssets bool `json:"forceAssets" cb:"forceAssets,4"`
 }
 
 type WebpageRenderResult struct {

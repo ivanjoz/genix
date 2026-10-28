@@ -15,7 +15,7 @@ import (
 // d1Request maps the payload required by Cloudflare D1 HTTP API.
 type d1Request struct {
 	SQL    string        `json:"sql" cb:"sql,1"`
-	Params []interface{} `json:"params,omitempty" cb:"params,2"`
+	Params []interface{} `json:"params" cb:"params,2"`
 }
 
 // d1Response maps the response format from Cloudflare D1 HTTP API.

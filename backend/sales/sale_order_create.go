@@ -88,13 +88,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 		}
 	} else {
-		// Create rule: detail slices must keep one-to-one cardinality.
-		if len(sale.DetailProductsIDs) != len(sale.DetailPrices) || len(sale.DetailProductsIDs) != len(sale.DetailQuantities) {
-			return req.MakeErr("El registro posee propiedades incorrectas.")
-		}
-
-		for _, value := range slices.Concat(sale.DetailProductsIDs, sale.DetailQuantities, sale.DetailPrices) {
-			if value == 0 {
+		// Create rule: every line names a product and a quantity. Its prices come from the catalog.
+		for _, line := range sale.Lines {
+			if line.ProductID <= 0 || line.Quantity <= 0 {
 				return req.MakeErr("Hay un valor incorrecto.")
 			}
 		}
@@ -188,7 +184,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Se requiere WarehouseID para procesar la entrega.")
 		}
 
-		if len(sale.DetailProductsIDs) == 0 {
+		if len(sale.Lines) == 0 {
 			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
 		}
 	}
@@ -266,32 +262,28 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ActionsIncluded, 3) {
-		core.Log("Incluyendo movimientos internos...", len(sale.DetailProductsIDs))
+		core.Log("Incluyendo movimientos internos...", len(sale.Lines))
 
 		movimientosInternos := []logistics.InternalMovement{}
-		for i, productID := range sale.DetailProductsIDs {
-			if i >= len(sale.DetailQuantities) {
-				break
-			}
-			packedQuantity := sale.DetailQuantities[i]
-			if packedQuantity == 0 {
+		for _, line := range sale.Lines {
+			if line.Quantity == 0 {
 				continue
 			}
 
 			// The order line is packed; the ledger keeps the halves apart so it can accumulate
 			// and be SUM()-ed. This is the single conversion point between the two forms.
-			lineQuantity := core.UnpackQuantityLine(packedQuantity).Negate() // Salida de almacén
-			lineDivisor := core.GetIndex(sale.DetailSubDivisor, i)
+			lineQuantity := core.UnpackQuantityLine(line.Quantity).Negate() // Salida de almacén
+			lineDivisor := line.SubDivisor
 			if lineDivisor <= 0 {
 				lineDivisor = core.QuantityDivisorNone
 			}
 
 			movimientosInternos = append(movimientosInternos, logistics.InternalMovement{
 				WarehouseID:    sale.WarehouseID,
-				ProductID:      productID,
-				PresentationID: core.GetIndex(sale.DetailProductPresentations, i),
-				SerialNumber:   core.GetIndex(sale.DetailProductSkus, i),
-				LotID:          core.GetIndex(sale.DetailProductLotIDs, i),
+				ProductID:      line.ProductID,
+				PresentationID: line.PresentationID,
+				SerialNumber:   line.Sku,
+				LotID:          line.LotID,
 				DocumentID:     sale.ID,
 				Type:           logistics.StockMovementTypeSaleDelivery,
 				Quantity:       lineQuantity.Units,
@@ -355,12 +347,12 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 // validateSaleOrderLines resolves each line against the product catalog: the sub-unit
 // divisor, whether a sub-unit part is even allowed, and the prices. PostSaleOrder is the
-// only place that loads products, and without it DetailPrices and TotalAmount arrive
+// only place that loads products, and without it the line prices and TotalAmount arrive
 // straight off the request body unchecked — a client could book a sale at any price.
 func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error {
 	productIDs := core.SliceSet[int32]{}
-	for _, productID := range sale.DetailProductsIDs {
-		productIDs.AddIf(productID)
+	for _, line := range sale.Lines {
+		productIDs.AddIf(line.ProductID)
 	}
 	if productIDs.IsEmpty() {
 		return nil
@@ -396,16 +388,14 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 		sale.ExchangeRate = exchangeRate
 	}
 
-	sale.DetailSubDivisor = make([]int16, len(sale.DetailProductsIDs))
-	sale.DetailSubPrices = make([]int32, len(sale.DetailProductsIDs))
-
-	for lineIndex, productID := range sale.DetailProductsIDs {
-		product, found := productByID[productID]
+	for lineIndex := range sale.Lines {
+		line := &sale.Lines[lineIndex]
+		product, found := productByID[line.ProductID]
 		if !found {
-			return core.Err(fmt.Sprintf("El producto %v de la venta no existe.", productID))
+			return core.Err(fmt.Sprintf("El producto %v de la venta no existe.", line.ProductID))
 		}
 
-		lineQuantity := core.UnpackQuantityLine(sale.DetailQuantities[lineIndex])
+		lineQuantity := core.UnpackQuantityLine(line.Quantity)
 		productDivisor := product.SbuQuantity
 		if productDivisor <= 0 {
 			productDivisor = core.QuantityDivisorNone
@@ -433,19 +423,17 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 
 		// Prices come from the catalog, never from the request, restated in the sale's currency.
 		productCurrency := normalizeCurrency(int8(product.CurrencyID))
-		sale.DetailPrices[lineIndex] = finance.ConvertUnitPrice(
+		line.Price = finance.ConvertUnitPrice(
 			product.FinalPrice, productCurrency, sale.CurrencyType, sale.ExchangeRate)
-		sale.DetailSubPrices[lineIndex] = finance.ConvertUnitPrice(
+		line.SubPrice = finance.ConvertUnitPrice(
 			product.SbuFinalPrice, productCurrency, sale.CurrencyType, sale.ExchangeRate)
-		sale.DetailSubDivisor[lineIndex] = productDivisor
+		line.SubDivisor = productDivisor
 	}
 
 	// Recompute the order total from the resolved lines for the same reason.
 	totalAmount := int32(0)
-	for lineIndex := range sale.DetailProductsIDs {
-		totalAmount += core.QuantityAmount(
-			core.UnpackQuantityLine(sale.DetailQuantities[lineIndex]),
-			sale.DetailPrices[lineIndex], sale.DetailSubPrices[lineIndex])
+	for _, line := range sale.Lines {
+		totalAmount += core.QuantityAmount(core.UnpackQuantityLine(line.Quantity), line.Price, line.SubPrice)
 	}
 	sale.TotalAmount = totalAmount
 	sale.TaxAmount = invoicing.SaleOrderTaxAmount(sale)
@@ -518,21 +506,19 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	}
 	requestedByKey := map[lineKey]core.Quantity{}
 	divisorByKey := map[lineKey]int16{}
-	for index, productID := range sale.DetailProductsIDs {
-		packedQuantity := core.GetIndex(sale.DetailQuantities, index)
-		if packedQuantity == 0 {
+	for _, line := range sale.Lines {
+		if line.Quantity == 0 {
 			continue
 		}
-		quantity := core.UnpackQuantityLine(packedQuantity)
-		lineDivisor := core.GetIndex(sale.DetailSubDivisor, index)
+		quantity := core.UnpackQuantityLine(line.Quantity)
+		lineDivisor := line.SubDivisor
 		if lineDivisor <= 0 {
 			lineDivisor = core.QuantityDivisorNone
 		}
-		presentationID := core.GetIndex(sale.DetailProductPresentations, index)
 		key := lineKey{
-			stockID:      logistics.PackProductStockID(sale.WarehouseID, productID, presentationID),
-			lotID:        core.GetIndex(sale.DetailProductLotIDs, index),
-			serialNumber: core.GetIndex(sale.DetailProductSkus, index),
+			stockID:      logistics.PackProductStockID(sale.WarehouseID, line.ProductID, line.PresentationID),
+			lotID:        line.LotID,
+			serialNumber: line.Sku,
 		}
 		requestedByKey[key] = requestedByKey[key].Add(quantity)
 		divisorByKey[key] = lineDivisor

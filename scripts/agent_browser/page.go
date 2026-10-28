@@ -43,10 +43,10 @@ type agentResponse struct {
 }
 
 type agentAction struct {
-	ID                string `json:",omitempty"`
+	ID                string
 	Method            string
-	Args              []any `json:",omitempty"`
-	ReturnPageContent bool  `json:",omitempty"`
+	Args              []any
+	ReturnPageContent bool
 }
 
 func newFlagSet(name string) *flag.FlagSet { return flag.NewFlagSet(name, flag.ExitOnError) }

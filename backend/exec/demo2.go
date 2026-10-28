@@ -11,9 +11,9 @@ import (
 )
 
 type InnerStruct struct {
-	Greeting  string  `json:"a,omitempty" ms:"h" cb:"a,1"`
-	Value     float32 `json:"b,omitempty" ms:"v" cb:"b,2"`
-	Greeting2 int     `json:"c,omitempty" ms:"c" cb:"c,3"`
+	Greeting  string  `json:"a" ms:"h" cb:"a,1"`
+	Value     float32 `json:"b" ms:"v" cb:"b,2"`
+	Greeting2 int     `json:"c" ms:"c" cb:"c,3"`
 }
 
 type DemoStruct struct {
@@ -21,14 +21,14 @@ type DemoStruct struct {
 	CompanyID   int32       `db:"empresa_id,pk" cb:"CompanyID,1"`
 	ID          int32       `db:"id,pk" cb:"ID,2"`
 	ListID      int32       `db:"lista_id,view,view.1,view.2" cb:"ListID,3"`
-	Name        string      `json:",omitempty" db:"nombre" cb:"Name,4"`
-	Images      []string    `json:",omitempty" db:"images" cb:"Images,5"`
-	Description string      `json:",omitempty" db:"descripcion" cb:"Description,6"`
+	Name        string      `db:"nombre" cb:"Name,4"`
+	Images      []string    `db:"images" cb:"Images,5"`
+	Description string      `db:"descripcion" cb:"Description,6"`
 	DemoColumn  InnerStruct `cb:"DemoColumn,7"`
 	// General properties
-	Status    int8  `json:"ss,omitempty" db:"status,view.1" cb:"ss,8"`
-	Updated   int64 `json:"upd,omitempty" db:"updated,view.2" cb:"upd,9"`
-	UpdatedBy int32 `json:",omitempty" db:"updated_by" cb:"UpdatedBy,10"`
+	Status    int8  `json:"ss" db:"status,view.1" cb:"ss,8"`
+	Updated   int64 `json:"upd" db:"updated,view.2" cb:"upd,9"`
+	UpdatedBy int32 `db:"updated_by" cb:"UpdatedBy,10"`
 }
 
 type DemoStructTable struct {

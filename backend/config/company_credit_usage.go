@@ -86,7 +86,7 @@ type companyCreditBudgetMeter struct {
 type companyCreditReport struct {
 	Days    []any             `cb:"Days,1"`
 	Budgets []any             `cb:"Budgets,2"`
-	Routes  []creditRouteName `json:",omitempty" cb:"Routes,3"`
+	Routes  []creditRouteName `cb:"Routes,3"`
 }
 
 // companyCreditCompanyDay is the company's own total for one day, with the per-route split the API
@@ -97,7 +97,7 @@ type companyCreditCompanyDay struct {
 	Day       int16              `cb:"Day,2"`
 	CPU       uint64             `cb:"CPU,3"`
 	Inference uint64             `cb:"Inference,4"`
-	Routes    []creditUsageRoute `json:",omitempty" cb:"Routes,5"`
+	Routes    []creditUsageRoute `cb:"Routes,5"`
 	Updated   int32              `json:"upd" cb:"upd,6"`
 	Status    int8               `json:"ss" cb:"ss,7"`
 }
@@ -117,7 +117,7 @@ type companyCreditUserDay struct {
 type companyCreditUsage struct {
 	Company []any             `cb:"Company,1"`
 	Users   []any             `cb:"Users,2"`
-	Routes  []creditRouteName `json:",omitempty" cb:"Routes,3"`
+	Routes  []creditRouteName `cb:"Routes,3"`
 }
 
 // GetCompanyCreditUsageReport streams the platform's daily company aggregates. It ranks nothing and

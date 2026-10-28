@@ -54,21 +54,21 @@ type dbConsoleRequest struct {
 
 type dbConsoleResult struct {
 	Op      string `json:"op" cb:"op,1"`
-	Table   string `json:"table,omitempty" cb:"table,2"`
+	Table   string `json:"table" cb:"table,2"`
 	Count   int    `json:"count" cb:"count,3"`
-	Applied bool   `json:"applied,omitempty" cb:"applied,4"`
+	Applied bool   `json:"applied" cb:"applied,4"`
 	// LimitReached warns that the read stopped at the limit, so Count is a floor and not a total.
-	LimitReached bool                 `json:"limit_reached,omitempty" cb:"limit_reached,5"`
-	Tables       []dbTableSummary     `json:"tables,omitempty" cb:"tables,6"`
-	Schema       *db.TableDescription `json:"schema,omitempty" cb:"schema,7"`
-	Records      json.RawMessage      `json:"records,omitempty" cb:"records,8"`
+	LimitReached bool                 `json:"limit_reached" cb:"limit_reached,5"`
+	Tables       []dbTableSummary     `json:"tables" cb:"tables,6"`
+	Schema       *db.TableDescription `json:"schema" cb:"schema,7"`
+	Records      json.RawMessage      `json:"records" cb:"records,8"`
 }
 
 type dbTableSummary struct {
 	Name      string   `json:"name" cb:"name,1"`
 	ID        int16    `json:"id" cb:"id,2"`
-	Partition string   `json:"partition,omitempty" cb:"partition,3"`
-	Keys      []string `json:"keys,omitempty" cb:"keys,4"`
+	Partition string   `json:"partition" cb:"partition,3"`
+	Keys      []string `json:"keys" cb:"keys,4"`
 }
 
 // registerControllersOnce keeps the whole table set out of process startup: compiling 40-odd

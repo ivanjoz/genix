@@ -13,7 +13,7 @@ const requestErrorIDsLimit = 500
 type requestErrorEntry struct {
 	CodeLine string `cb:"CodeLine,1"`
 	Text     string `cb:"Text,2"`
-	Updated  int32  `json:"upd,omitempty" cb:"upd,3"`
+	Updated  int32  `json:"upd" cb:"upd,3"`
 }
 
 type requestErrorByID struct {

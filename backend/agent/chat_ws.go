@@ -25,7 +25,7 @@ import (
 // tags. `Type` discriminates the union; `Payload` is decoded per-type.
 type chatEnvelope struct {
 	Type    string          `json:"Type" cb:"Type,1"`
-	Payload json.RawMessage `json:"Payload,omitempty" cb:"Payload,2"`
+	Payload json.RawMessage `json:"Payload" cb:"Payload,2"`
 }
 
 // Chat message Types. All are server→browser: the user's message rides the

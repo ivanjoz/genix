@@ -8,22 +8,22 @@ import (
 
 type ExecArgs struct {
 	LambdaName    string `json:"-" cb:"-"`
-	FuncToExec    string `json:"fn,omitempty" cb:"-"`
-	InvokeType    string `json:"invokeType,omitempty" cb:"-"`
-	Param1        int64  `json:"p1,omitempty"`
-	Param2        int64  `json:"p2,omitempty"`
-	Param3        int64  `json:"p3,omitempty"`
-	Param4        int64  `json:"p4,omitempty"`
-	Param5        string `json:"p5,omitempty"`
-	Param6        string `json:"p6,omitempty"`
-	Message       string `json:"ms,omitempty" cb:"-"`
+	FuncToExec    string `json:"fn" cb:"-"`
+	InvokeType    string `json:"invokeType" cb:"-"`
+	Param1        int64  `json:"p1"`
+	Param2        int64  `json:"p2"`
+	Param3        int64  `json:"p3"`
+	Param4        int64  `json:"p4"`
+	Param5        string `json:"p5"`
+	Param6        string `json:"p6"`
+	Message       string `json:"ms" cb:"-"`
 	InvokeAsEvent bool   `json:"-" cb:"-"`
 	ParseResponse bool   `json:"-" cb:"-"`
 	// Output, not input: whatever the running process reported through AddMessage. Skipped by
 	// colbin because the cron executor persists these in the row's own Messages column, and keeping
 	// them out of the Params blob prevents the two copies from ever disagreeing. The json tag stays
 	// so the messages still survive a Lambda invoke round trip.
-	ProcessMessages []string `json:"msg,omitempty" cb:"-"`
+	ProcessMessages []string `json:"msg" cb:"-"`
 }
 
 func (e *ExecArgs) MakeErr(messages ...any) FuncResponse {
@@ -37,11 +37,11 @@ func (e *ExecArgs) AddMessage(message string) {
 }
 
 type FuncResponse struct {
-	ElapsedTime int            `json:",omitempty" cb:"ElapsedTime,1"`
-	Message     string         `json:",omitempty" cb:"Message,2"`
-	Error       string         `json:",omitempty" cb:"Error,3"`
+	ElapsedTime int            `cb:"ElapsedTime,1"`
+	Message     string         `cb:"Message,2"`
+	Error       string         `cb:"Error,3"`
 	Content     map[string]any `cb:"Content,4"`
-	ContentJson string         `json:",omitempty" cb:"ContentJson,5"`
+	ContentJson string         `cb:"ContentJson,5"`
 }
 
 type AppRouterType map[string]func(args *HandlerArgs) HandlerResponse

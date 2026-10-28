@@ -126,11 +126,8 @@
         uniqueClientIDs.add(clientID);
       }
 
-      const detailProductIDs = saleOrder.DetailProductsIDs || [];
-      for (const rawProductID of detailProductIDs) {
-        const productID = Number(rawProductID || 0);
-        if (!Number.isFinite(productID) || productID <= 0) continue;
-        uniqueProductIDs.add(productID);
+      for (const line of saleOrder.Lines || []) {
+        if (line.ProductID > 0) uniqueProductIDs.add(line.ProductID);
       }
     }
     const productIDs = Array.from(uniqueProductIDs);
@@ -240,7 +237,7 @@
 
   function saleOrderHasSelectedProduct(saleOrder: ISaleOrder, selectedProductID: number): boolean {
     if (!selectedProductID) { return true; }
-    return (saleOrder.DetailProductsIDs || []).some((productID) => Number(productID || 0) === selectedProductID);
+    return (saleOrder.Lines || []).some((line) => line.ProductID === selectedProductID);
   }
 
   function getProductPresentationName(productID: number, presentationID: number): string {
@@ -261,47 +258,28 @@
   }
 
   function getSaleOrderDetailLines(saleOrder: ISaleOrder): ISaleOrderDetailLine[] {
-    // Normalize arrays because old/partial records may omit one or more detail fields.
-    const detailProductIDs = saleOrder.DetailProductsIDs || [];
-    const detailPrices = saleOrder.DetailPrices || [];
-    const detailQuantities = saleOrder.DetailQuantities || [];
-    const detailSubPrices = saleOrder.DetailSubPrices || [];
-    const detailProductSkus = saleOrder.DetailProductSkus || [];
-    const detailProductPresentations = saleOrder.DetailProductPresentations || [];
-
-    // Build row-safe detail lines by using the shortest common detail length.
-    const detailCount = Math.min(
-      detailProductIDs.length,
-      detailPrices.length,
-      detailQuantities.length
-    );
-
-    const saleOrderDetailLines: ISaleOrderDetailLine[] = [];
-    for (let detailPosition = 0; detailPosition < detailCount; detailPosition += 1) {
-      const productID = detailProductIDs[detailPosition] || 0;
-      const unitPrice = detailPrices[detailPosition] || 0;
-      const quantity = unpackQuantityLine(detailQuantities[detailPosition] || 0);
+    // Zero-valued line fields are omitted on the wire, so every read defaults them.
+    return (saleOrder.Lines || []).map((line, detailPosition) => {
+      const productID = line.ProductID || 0;
+      const unitPrice = line.Price || 0;
+      const quantity = unpackQuantityLine(line.Quantity || 0);
       const subDivisor = quantityDivisorOf(productosService.recordsMap.get(productID)?.SbuQuantity);
       const subUnitName = productosService.recordsMap.get(productID)?.SbuUnit;
-      const sku = detailProductSkus[detailPosition] || '';
-      const presentationID = detailProductPresentations[detailPosition] || 0;
+      const presentationID = line.PresentationID || 0;
 
-      saleOrderDetailLines.push({
+      return {
         detailPosition,
         productID,
         productBaseName: productosService.recordsMap.get(productID)?.Name || `Producto #${productID}`,
         productName: getSaleOrderDetailProductName(productID, presentationID),
         presentationName: getProductPresentationName(productID, presentationID),
-        sku,
+        sku: line.Sku || '',
         quantity,
         quantityLabel: formatQuantity(quantity, subDivisor, subUnitName),
         unitPrice,
-        subtotalAmount: quantityAmount(
-          quantity, unitPrice, detailSubPrices[detailPosition] || 0),
-      });
-    }
-
-    return saleOrderDetailLines;
+        subtotalAmount: quantityAmount(quantity, unitPrice, line.SubPrice || 0),
+      };
+    });
   }
 
   function canPaySaleOrder(saleOrder: ISaleOrder): boolean {

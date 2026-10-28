@@ -11,13 +11,13 @@ import (
 // unpaid amounts stay as debt, an annulled sale adds nothing (the frame takes back what it added).
 func TestToSaleSummaryFramesFollowsTheStatus(t *testing.T) {
 	sale := SaleOrder{
-		Date:              20000,
-		DetailProductsIDs: []int32{77, 78, 0},
+		Date: 20000,
 		// 3002: three units and two sixths; 2000: two whole units without a divisor.
-		DetailQuantities: []int32{3002, 2000, 1000},
-		DetailPrices:     []int32{500, 1200, 900},
-		DetailSubPrices:  []int32{100, 0, 0},
-		DetailSubDivisor: []int16{6, 0, 0},
+		Lines: []SaleOrderLine{
+			{ProductID: 77, Quantity: 3002, Price: 500, SubPrice: 100, SubDivisor: 6},
+			{ProductID: 78, Quantity: 2000, Price: 1200},
+			{ProductID: 0, Quantity: 1000, Price: 900},
+		},
 	}
 	settledLines := []SaleSummaryFrame{
 		{Date: 20000, ProductID: 77, SubDivisor: 6, AmountPEN: 1700, SoldUnits: 3, SoldSub: 2},
@@ -49,7 +49,32 @@ func TestToSaleSummaryFramesFollowsTheStatus(t *testing.T) {
 	}
 }
 
-// The "sale-summary" declaration compiles with the table: a bad frame struct panics here.
+// The client/product frame is the summary's lines, each with the sale's client: the two frames never
+// disagree on what a sale adds.
+func TestToSaleClientProductFramesAreTheSummaryLinesOfTheClient(t *testing.T) {
+	sale := SaleOrder{
+		Date: 20000, ClientID: 41, Status: OrderStatusPending,
+		Lines: []SaleOrderLine{
+			{ProductID: 77, Quantity: 3002, Price: 500, SubPrice: 100, SubDivisor: 6},
+			{ProductID: 78, Quantity: 2000, Price: 1200},
+		},
+	}
+	summaryLines := sale.ToSaleSummaryFrames(nil)
+	clientLines := sale.ToSaleClientProductFrames(nil)
+	if len(clientLines) != len(summaryLines) || len(clientLines) != 2 {
+		t.Fatalf("%d client lines for %d summary lines", len(clientLines), len(summaryLines))
+	}
+	for i, summary := range summaryLines {
+		want := SaleClientProductFrame{Date: summary.Date, ClientID: 41, ProductID: summary.ProductID,
+			SubDivisor: summary.SubDivisor, AmountPEN: summary.AmountPEN, DebtAmountPEN: summary.DebtAmountPEN,
+			SoldUnits: summary.SoldUnits, SoldSub: summary.SoldSub, PendingUnits: summary.PendingUnits, PendingSub: summary.PendingSub}
+		if clientLines[i] != want {
+			t.Errorf("line %d:\n got %+v\nwant %+v", i, clientLines[i], want)
+		}
+	}
+}
+
+// The sale_order DataFrame declarations compile with the table: a bad frame struct panics here.
 func TestSaleOrderTableCompilesTheSaleSummaryFrame(t *testing.T) {
 	if columnCount := len(db.MakeTable[SaleOrder]().GetColumns()); columnCount == 0 {
 		t.Fatal("sale_order compiled without columns")

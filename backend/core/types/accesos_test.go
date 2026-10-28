@@ -21,7 +21,7 @@ func TestAccesoGrantJSONRoundTrip(t *testing.T) {
 		t.Fatalf("marshal failed: %v", err)
 	}
 
-	const expectedJSON = `[{"AccesoID":10,"Nivel":4,"SubAccesos":[2,3]},{"AccesoID":3,"Nivel":1}]`
+	const expectedJSON = `[{"AccesoID":10,"Nivel":4,"SubAccesos":[2,3]},{"AccesoID":3,"Nivel":1,"SubAccesos":[]}]`
 	if string(encodedJSON) != expectedJSON {
 		t.Fatalf("json is %s, expected %s", encodedJSON, expectedJSON)
 	}
@@ -30,7 +30,7 @@ func TestAccesoGrantJSONRoundTrip(t *testing.T) {
 	if err := json.Unmarshal(encodedJSON, &decodedGrants); err != nil {
 		t.Fatalf("unmarshal failed: %v", err)
 	}
-	if len(decodedGrants) != 2 || decodedGrants[0].SubAccesos[1] != 3 || decodedGrants[1].SubAccesos != nil {
+	if len(decodedGrants) != 2 || decodedGrants[0].SubAccesos[1] != 3 || len(decodedGrants[1].SubAccesos) != 0 {
 		t.Fatalf("round trip lost data: %+v", decodedGrants)
 	}
 }

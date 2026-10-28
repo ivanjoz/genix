@@ -7,15 +7,15 @@ import (
 
 type CityLocation struct {
 	db.TableStruct[CityLocationTable, CityLocation]
-	ID        int32  `json:",omitempty" cb:"ID,1"`
-	CountryID int32  `json:",omitempty" cb:"CountryID,2"`
+	ID        int32  `cb:"ID,1"`
+	CountryID int32  `cb:"CountryID,2"`
 	Name      string ` cb:"Name,3"`
 	ParentID  int32  ` cb:"ParentID,4"`
-	Hierarchy int8   `json:",omitempty" cb:"Hierarchy,5"`
-	Updated   int32  `json:"upd,omitempty" cb:"upd,6"`
-	Version   int16  `json:"ver,omitempty" cb:"ver,7"`
+	Hierarchy int8   `cb:"Hierarchy,5"`
+	Updated   int32  `json:"upd" cb:"upd,6"`
+	Version   int16  `json:"ver" cb:"ver,7"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata   *string       `json:"mdt,omitempty" cb:"mdt,8"`
+	Metadata   *string       `json:"mdt" cb:"mdt,8"`
 	Department *CityLocation `json:"-" cb:"-"`
 	Province   *CityLocation `json:"-" cb:"-"`
 	District   *CityLocation `json:"-" cb:"-"`
@@ -47,20 +47,20 @@ func (e CityLocationTable) GetSchema() db.TableSchema {
 
 type SharedListRecord struct {
 	db.TableStruct[SharedListRecordTable, SharedListRecord]
-	CompanyID   int32    `json:",omitempty" cb:"CompanyID,1"`
+	CompanyID   int32    `cb:"CompanyID,1"`
 	ID          int32    `cb:"ID,2"`
-	ListID      int32    `json:",omitempty" cb:"ListID,3"`
-	Name        string   `json:",omitempty" cb:"Name,4"`
-	Images      []string `json:",omitempty" cb:"Images,5"`
-	Description string   `json:",omitempty" cb:"Description,6"`
-	NameHash    int32    `json:",omitempty" cb:"NameHash,7"`
+	ListID      int32    `cb:"ListID,3"`
+	Name        string   `cb:"Name,4"`
+	Images      []string `cb:"Images,5"`
+	Description string   `cb:"Description,6"`
+	NameHash    int32    `cb:"NameHash,7"`
 	// General properties
-	Status  int8  `json:"ss,omitempty" cb:"ss,8"`
-	Updated int32 `json:"upd,omitempty" cb:"upd,9"`
-	Version int16 `json:"ver,omitempty" cb:"ver,10"`
+	Status  int8  `json:"ss" cb:"ss,8"`
+	Updated int32 `json:"upd" cb:"upd,9"`
+	Version int16 `json:"ver" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,11"`
-	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,12"`
+	Metadata  *string `json:"mdt" cb:"mdt,11"`
+	UpdatedBy int32   `cb:"UpdatedBy,12"`
 }
 
 type SharedListRecordTable struct {

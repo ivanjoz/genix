@@ -136,6 +136,10 @@ func CheckTables() {
 			}
 
 			baseFieldType, ok := baseFieldTypes[fieldName]
+			// A TableSchema.Computed column reads a record method, so it has no record field.
+			if !ok && schemasByTable[table].computedColumns[fieldName] {
+				continue
+			}
 			if !ok {
 				fmt.Printf("Error: Field '%s' from table struct '%s' does not exist in base struct '%s'\n", fieldName, table.Name(), base.Name())
 				continue
@@ -204,6 +208,8 @@ type tableSchemaDeclaration struct {
 	hasID         bool
 	cacheByIDs    bool
 	hasDeltaIndex bool
+	// computedColumns are the table-struct fields named by a Computed entry's Col.
+	computedColumns map[string]bool
 }
 
 // readTableSchemaDeclaration returns the table struct a GetSchema() method belongs to, plus what
@@ -257,6 +263,8 @@ func readTableSchemaDeclaration(pkg *packages.Package, funcDecl *ast.FuncDecl) (
 			schema.cacheByIDs = constantBool(pkg, keyValue.Value)
 		case "Indexes":
 			schema.hasDeltaIndex = declaresDeltaIndex(keyValue.Value)
+		case "Computed":
+			schema.computedColumns = declaredComputedColumns(keyValue.Value)
 		}
 	}
 
@@ -299,6 +307,26 @@ func declaresDeltaIndex(indexesValue ast.Expr) bool {
 		return true
 	})
 	return found
+}
+
+// declaredComputedColumns returns the field names a Computed literal binds: the selector of every
+// `Col: e.Field` entry.
+func declaredComputedColumns(computedValue ast.Expr) map[string]bool {
+	fieldNames := map[string]bool{}
+	ast.Inspect(computedValue, func(node ast.Node) bool {
+		keyValue, isKeyValue := node.(*ast.KeyValueExpr)
+		if !isKeyValue {
+			return true
+		}
+		if key, isIdent := keyValue.Key.(*ast.Ident); !isIdent || key.Name != "Col" {
+			return true
+		}
+		if selector, isSelector := keyValue.Value.(*ast.SelectorExpr); isSelector {
+			fieldNames[selector.Sel.Name] = true
+		}
+		return true
+	})
+	return fieldNames
 }
 
 func constantInt(pkg *packages.Package, expr ast.Expr) (int64, bool) {
@@ -389,13 +417,13 @@ func checkTableSchemas(
 }
 
 // checkRecordField reports a record struct that lacks fieldName with the exact Go type and json tag
-// "<jsonName>,omitempty" the cache protocol named by requiredBy expects.
+// "<jsonName>" the cache protocol named by requiredBy expects.
 func checkRecordField(reportedName string, base *types.TypeName, fieldTypes map[string]types.Type,
 	fieldTags map[string]string, fieldName, goType, jsonName, requiredBy string) {
 	fieldType, declared := fieldTypes[fieldName]
-	if declared && fieldType.String() == goType && reflect.StructTag(fieldTags[fieldName]).Get("json") == jsonName+",omitempty" {
+	if declared && fieldType.String() == goType && reflect.StructTag(fieldTags[fieldName]).Get("json") == jsonName {
 		return
 	}
 	fmt.Printf("Error: Table '%s' declares %s but its record struct '%s' does not declare the field "+
-		"'%s %s' with the json tag '%s,omitempty'.\n", reportedName, requiredBy, base.Name(), fieldName, goType, jsonName)
+		"'%s %s' with the json tag '%s'.\n", reportedName, requiredBy, base.Name(), fieldName, goType, jsonName)
 }

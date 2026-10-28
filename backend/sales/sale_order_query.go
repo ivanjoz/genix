@@ -42,11 +42,11 @@ func SaleOrderQuery(req *core.HandlerArgs) core.HandlerResponse {
 
 	switch {
 	case clientID > 0 && productID > 0:
-		// Uses the most specific raw group: Date + ClientID + DetailProductsIDs.
-		query.ClientID.Equals(clientID).DetailProductsIDs.Contains(productID)
+		// Uses the most specific raw group: Date + ClientID + DetailProductIDs.
+		query.ClientID.Equals(clientID).DetailProductIDs.Contains(productID)
 	case productID > 0:
-		// Uses the raw group: Date + DetailProductsIDs.
-		query.DetailProductsIDs.Contains(productID)
+		// Uses the raw group: Date + DetailProductIDs.
+		query.DetailProductIDs.Contains(productID)
 	case clientID > 0:
 		// Uses the raw group: Date + ClientID.
 		query.ClientID.Equals(clientID)

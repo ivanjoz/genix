@@ -24,41 +24,41 @@ const (
 // and a shared counter leaves harmless gaps instead of costing a key column.
 type InvoiceSummary struct {
 	db.TableStruct[InvoiceSummaryTable, InvoiceSummary]
-	CompanyID int32 `json:",omitempty" cb:"CompanyID,1"`
-	ID        int64 `json:",omitempty" cb:"ID,2"`
+	CompanyID int32 `cb:"CompanyID,1"`
+	ID        int64 `cb:"ID,2"`
 
-	Type int8 `json:",omitempty" cb:"Type,3"`
+	Type int8 `cb:"Type,3"`
 	// ReferenceDate is the day whose documents are being reported or cancelled.
-	ReferenceDate int16 `json:",omitempty" cb:"ReferenceDate,4"`
+	ReferenceDate int16 `cb:"ReferenceDate,4"`
 	// IssueDate is the day the batch is sent, and what the identifier is built
 	// from. Using the reference date instead is SUNAT rejection 2346.
-	IssueDate int16  `json:",omitempty" cb:"IssueDate,5"`
-	Sequence  int16  `json:",omitempty" cb:"Sequence,6"`
-	XmlName   string `json:",omitempty" db:"xml_name" cb:"XmlName,7"`
+	IssueDate int16  `cb:"IssueDate,5"`
+	Sequence  int16  `cb:"Sequence,6"`
+	XmlName   string `db:"xml_name" cb:"XmlName,7"`
 
 	// DocumentIDs are the invoice_document rows this batch reports.
-	DocumentIDs []int64 `json:",omitempty" db:",list" cb:"DocumentIDs,8"`
+	DocumentIDs []int64 `db:",list" cb:"DocumentIDs,8"`
 
-	Ticket           string   `json:",omitempty" cb:"Ticket,9"`
-	State            int8     `json:",omitempty" cb:"State,10"`
-	SunatCode        string   `json:",omitempty" cb:"SunatCode,11"`
-	SunatDescription string   `json:",omitempty" cb:"SunatDescription,12"`
-	SunatNotes       []string `json:",omitempty" db:",list" cb:"SunatNotes,13"`
+	Ticket           string   `cb:"Ticket,9"`
+	State            int8     `cb:"State,10"`
+	SunatCode        string   `cb:"SunatCode,11"`
+	SunatDescription string   `cb:"SunatDescription,12"`
+	SunatNotes       []string `db:",list" cb:"SunatNotes,13"`
 
-	XmlPath string `json:",omitempty" db:"xml_path" cb:"XmlPath,14"`
-	CdrPath string `json:",omitempty" db:"cdr_path" cb:"CdrPath,15"`
+	XmlPath string `db:"xml_path" cb:"XmlPath,14"`
+	CdrPath string `db:"cdr_path" cb:"CdrPath,15"`
 
-	RetryCount int8   `json:",omitempty" cb:"RetryCount,16"`
-	LastError  string `json:",omitempty" cb:"LastError,17"`
+	RetryCount int8   `cb:"RetryCount,16"`
+	LastError  string `cb:"LastError,17"`
 
-	Status  int8  `json:"ss,omitempty" cb:"ss,18"`
-	Updated int32 `json:"upd,omitempty" cb:"upd,19"`
-	Version int16 `json:"ver,omitempty" cb:"ver,20"`
+	Status  int8  `json:"ss" cb:"ss,18"`
+	Updated int32 `json:"upd" cb:"upd,19"`
+	Version int16 `json:"ver" cb:"ver,20"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,21"`
-	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,22"`
-	Created   int32   `json:",omitempty" cb:"Created,23"`
-	CreatedBy int32   `json:",omitempty" cb:"CreatedBy,24"`
+	Metadata  *string `json:"mdt" cb:"mdt,21"`
+	UpdatedBy int32   `cb:"UpdatedBy,22"`
+	Created   int32   `cb:"Created,23"`
+	CreatedBy int32   `cb:"CreatedBy,24"`
 }
 
 type InvoiceSummaryTable struct {

@@ -21,7 +21,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	query.IncludeCachedGroup(12340001, 1001)
 	query.IncludeCachedGroup(12340002, 1002)
 
-	query.CompanyID.Equals(1).DetailProductsIDs.Contains(3372).Date.Between(20500, 20558)
+	query.CompanyID.Equals(1).DetailProductIDs.Contains(3372).Date.Between(20500, 20558)
 
 	if err := query.Exec(); err != nil {
 		fmt.Println("Error in Test 6:", err)
@@ -51,7 +51,7 @@ func TestSelects(args *core.ExecArgs) core.FuncResponse {
 	recordSalesOrders := []sales.SaleOrder{}
 	q6 := db.Query(&recordSalesOrders)
 	err = q6.CompanyID.Equals(1).
-		DetailProductsIDs.Contains(3372).
+		DetailProductIDs.Contains(3372).
 		Date.Between(20530, 20540). //.AllowFilter().
 		Exec()
 

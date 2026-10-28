@@ -11,15 +11,15 @@ type Warehouse struct {
 	Description string            `cb:"Description,5"`
 	Layout      []WarehouseLayout `cb:"Layout,6"`
 	// General properties
-	Status  int8  `json:"ss,omitempty" db:"status" cb:"ss,7"`
-	Updated int32 `json:"upd,omitempty" db:"updated" cb:"upd,8"`
-	Version int16 `json:"ver,omitempty" cb:"ver,9"`
+	Status  int8  `json:"ss" db:"status" cb:"ss,7"`
+	Updated int32 `json:"upd" db:"updated" cb:"upd,8"`
+	Version int16 `json:"ver" cb:"ver,9"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,10"`
-	UpdatedBy int32   `json:",omitempty" db:"updated_by" cb:"UpdatedBy,11"`
-	Created   int32   `json:",omitempty" db:"created" cb:"Created,12"`
-	CreatedBy int32   `json:",omitempty" db:"created_by" cb:"CreatedBy,13"`
-	City      string  `json:",omitempty" cb:"City,14"`
+	Metadata  *string `json:"mdt" cb:"mdt,10"`
+	UpdatedBy int32   `db:"updated_by" cb:"UpdatedBy,11"`
+	Created   int32   `db:"created" cb:"Created,12"`
+	CreatedBy int32   `db:"created_by" cb:"CreatedBy,13"`
+	City      string  `cb:"City,14"`
 }
 
 type WarehouseTable struct {
@@ -56,11 +56,11 @@ func (e WarehouseTable) GetSchema() db.TableSchema {
 }
 
 type WarehouseLayout struct {
-	ID      int16                  `ms:"i" json:"id,omitempty" cb:"id,1"`
-	Name    string                 `ms:"n" json:"nm,omitempty" cb:"nm,2"`
-	RowCant int8                   `ms:"r" json:"rc,omitempty" cb:"rc,3"`
-	ColCant int8                   `ms:"c" json:"cc,omitempty" cb:"cc,4"`
-	Bloques []WarehouseLayoutBlock `ms:"b" json:"bl,omitempty" cb:"bl,5"`
+	ID      int16                  `ms:"i" json:"id" cb:"id,1"`
+	Name    string                 `ms:"n" json:"nm" cb:"nm,2"`
+	RowCant int8                   `ms:"r" json:"rc" cb:"rc,3"`
+	ColCant int8                   `ms:"c" json:"cc" cb:"cc,4"`
+	Bloques []WarehouseLayoutBlock `ms:"b" json:"bl" cb:"bl,5"`
 }
 
 type WarehouseLayoutBlock struct {
@@ -77,15 +77,15 @@ type Site struct {
 	Description string `db:"descripcion" cb:"Description,4"`
 	Address     string `db:"direccion" cb:"Address,5"`
 	CityID      int32  `db:"pais_ciudad_id" cb:"CityID,6"`
-	City        string `json:",omitempty" db:"-" cb:"City,7"`
-	Status      int8   `json:"ss,omitempty" db:"status" cb:"ss,8"`
-	Updated     int32  `json:"upd,omitempty" db:"updated" cb:"upd,9"`
-	Version     int16  `json:"ver,omitempty" cb:"ver,10"`
+	City        string `db:"-" cb:"City,7"`
+	Status      int8   `json:"ss" db:"status" cb:"ss,8"`
+	Updated     int32  `json:"upd" db:"updated" cb:"upd,9"`
+	Version     int16  `json:"ver" cb:"ver,10"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,11"`
-	UpdatedBy int32   `json:",omitempty" db:"updated_by" cb:"UpdatedBy,12"`
-	Created   int32   `json:",omitempty" db:"created" cb:"Created,13"`
-	CreatedBy int32   `json:",omitempty" db:"created_by" cb:"CreatedBy,14"`
+	Metadata  *string `json:"mdt" cb:"mdt,11"`
+	UpdatedBy int32   `db:"updated_by" cb:"UpdatedBy,12"`
+	Created   int32   `db:"created" cb:"Created,13"`
+	CreatedBy int32   `db:"created_by" cb:"CreatedBy,14"`
 }
 
 type SiteTable struct {

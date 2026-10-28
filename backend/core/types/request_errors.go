@@ -16,10 +16,10 @@ import (
 // any user_logs row whose ErrorIDs contain this ID.
 type RequestError struct {
 	db.TableStruct[RequestErrorTable, RequestError]
-	ID       int32  `json:",omitempty" cb:"ID,1"`
-	CodeLine string `json:",omitempty" cb:"CodeLine,2"`
-	Text     string `json:",omitempty" cb:"Text,3"`
-	Updated  int32  `json:"upd,omitempty" cb:"upd,4"`
+	ID       int32  `cb:"ID,1"`
+	CodeLine string `cb:"CodeLine,2"`
+	Text     string `cb:"Text,3"`
+	Updated  int32  `json:"upd" cb:"upd,4"`
 }
 
 type RequestErrorTable struct {

@@ -1,14 +1,13 @@
 import { notifyFailure } from '@genix/ui/notify';
 import { GETWithGroupCache } from '#libs/ui-runtime.svelte.ts';
+import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.svelte.ts';
 
 export interface ISaleOrder {
 	ID: number;
 	ClientID: number;
 	Date: number;
 	Created: number;
-	DetailProductsIDs: number[];
-	DetailPrices: number[];
-	DetailQuantities: number[];
+	Lines?: ISaleOrderLine[];
 	TotalAmount: number;
 	DebtAmount: number;
 	ss: number;

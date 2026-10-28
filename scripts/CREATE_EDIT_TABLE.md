@@ -167,12 +167,12 @@ Both commands use `go/format` to ensure generated or modified code follows Go fo
 ### JSON Tagging Conventions
 
 The script automatically applies the following JSON tagging rules to all generated fields:
-- **Default**: `json:",omitempty"` (no explicit field names).
-- **Special Case: Updated**: `json:"upd,omitempty"`
-- **Special Case: Status**: `json:"ss,omitempty"`
-- **Special Case: Version**: `json:"ver,omitempty"` — `Version int16`, required on tables with a
+- **Default**: no json tag (the field name is the JSON key).
+- **Special Case: Updated**: `json:"upd"`
+- **Special Case: Status**: `json:"ss"`
+- **Special Case: Version**: `json:"ver"` — `Version int16`, required on tables with a
   `db.TypeDelta` index, on the record *and* the table struct.
-- **Special Case: Metadata**: `json:"mdt,omitempty"` — `Metadata *string`, required on the record
+- **Special Case: Metadata**: `json:"mdt"` — `Metadata *string`, required on the record
   (never the table struct) of tables with a `db.TypeDelta` index.
 
 `CacheByIDs: true` tables need `Updated int32` (`upd`) on both structs. See

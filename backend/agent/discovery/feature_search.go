@@ -18,22 +18,22 @@ const (
 
 type FeatureSearchRequest struct {
 	Query       string    `json:"query" cb:"query,1"`
-	Domain      string    `json:"domain,omitempty" cb:"domain,2"`
+	Domain      string    `json:"domain" cb:"domain,2"`
 	Operation   Operation `json:"operation" cb:"operation,3"`
-	ResultLimit int       `json:"result_limit,omitempty" cb:"result_limit,4"`
+	ResultLimit int       `json:"result_limit" cb:"result_limit,4"`
 }
 
 type AccessibleFeature struct {
-	Group       string `json:"group,omitempty" cb:"group,1"`
+	Group       string `json:"group" cb:"group,1"`
 	Name        string `json:"name" cb:"name,2"`
 	Route       string `json:"route" cb:"route,3"`
-	Description string `json:"description,omitempty" cb:"description,4"`
+	Description string `json:"description" cb:"description,4"`
 }
 
 type RouteCandidate struct {
 	Route       string  `json:"route" cb:"route,1"`
 	PageName    string  `json:"page_name" cb:"page_name,2"`
-	Description string  `json:"description,omitempty" cb:"description,3"`
+	Description string  `json:"description" cb:"description,3"`
 	MatchedBy   string  `json:"matched_by" cb:"matched_by,4"`
 	Score       float32 `json:"score" cb:"score,5"`
 }

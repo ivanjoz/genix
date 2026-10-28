@@ -18,13 +18,13 @@ type AgentMessage struct {
 	CompanyUserID   int64  `db:"company_user_id,pk" cb:"CompanyUserID,1"`
 	SessionID       int64  `db:"session_id,pk" cb:"SessionID,2"`
 	Timestamp       int64  `db:"timestamp,pk" cb:"Timestamp,3"`
-	CompanyID       int32  `json:",omitempty" db:"company_id" cb:"CompanyID,4"`
-	UserID          int32  `json:",omitempty" db:"user_id" cb:"UserID,5"`
-	Role            int8   `json:",omitempty" db:"role" cb:"Role,6"`
-	Message         string `json:",omitempty" db:"message" cb:"Message,7"`
-	AttachedContent string `json:",omitempty" db:"attached_content" cb:"AttachedContent,8"`
-	Summary         string `json:",omitempty" db:"summary" cb:"Summary,9"`
-	TokensUsed      int32  `json:",omitempty" db:"tokens_used" cb:"TokensUsed,10"`
+	CompanyID       int32  `db:"company_id" cb:"CompanyID,4"`
+	UserID          int32  `db:"user_id" cb:"UserID,5"`
+	Role            int8   `db:"role" cb:"Role,6"`
+	Message         string `db:"message" cb:"Message,7"`
+	AttachedContent string `db:"attached_content" cb:"AttachedContent,8"`
+	Summary         string `db:"summary" cb:"Summary,9"`
+	TokensUsed      int32  `db:"tokens_used" cb:"TokensUsed,10"`
 	Status          int8   `json:"ss" db:"status" cb:"ss,11"`
 	Updated         int32  `json:"upd" db:"updated" cb:"upd,12"`
 }

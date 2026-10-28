@@ -24,10 +24,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.5.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
-	github.com/gocql/gocql v1.6.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/ivanjoz/genix-search/genix-s3 v0.0.0 // indirect
@@ -60,6 +59,7 @@ require (
 	github.com/aws/smithy-go v1.28.2
 	github.com/bytedance/sonic v1.15.0
 	github.com/fatih/color v1.19.0
+	github.com/gocql/gocql v1.6.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
 	github.com/ivanjoz/colbin v0.8.2
 	github.com/ivanjoz/facturago v0.0.0
@@ -127,3 +127,5 @@ replace github.com/ivanjoz/genix-search/genix-s3 => ../../genix-search/genix-s3
 replace github.com/ivanjoz/genix-orm/utils => ./genix-orm/utils
 
 replace github.com/ivanjoz/genix-orm/dataframe => ./genix-orm/dataframe
+
+replace github.com/bytedance/sonic => github.com/ivanjoz/sonic v1.15.6-0.20261028001949-a834f9c878ac

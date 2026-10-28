@@ -9,8 +9,8 @@ import (
 
 type colbinProbeRow struct {
 	ID      int32  `json:"ID" cb:"ID,1"`
-	Updated int32  `json:"upd,omitempty" cb:"upd,2"`
-	Name    string `json:"Name,omitempty" cb:"Name,3"`
+	Updated int32  `json:"upd" cb:"upd,2"`
+	Name    string `json:"Name" cb:"Name,3"`
 	Hidden  string `json:"-" cb:"-"`
 }
 

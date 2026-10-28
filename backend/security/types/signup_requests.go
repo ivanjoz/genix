@@ -11,33 +11,33 @@ type SignUpRequest struct {
 	db.TableStruct[SignUpRequestTable, SignUpRequest]
 	// WeekCode is core.MakeSemanaFromFechaUnix(...).Code: year*100 + isoWeek - 200000.
 	// 2026-W32 => 2632.
-	WeekCode int32 `json:",omitempty" cb:"WeekCode,1"`
+	WeekCode int32 `cb:"WeekCode,1"`
 	// ID is a global sequence*10^6 + 6 random digits. The random tail stops anyone from walking the
 	// table by guessing consecutive IDs. It carries no partition: a request lives 2 hours, so a
 	// lookup by bare ID just searches the current and previous week.
-	ID    int64  `json:",omitempty" cb:"ID,2"`
-	Email string `json:",omitempty" cb:"Email,3"`
+	ID    int64  `cb:"ID,2"`
+	Email string `cb:"Email,3"`
 	// Code is the 8-digit verification code delivered in the email body and in the link.
-	Code string `json:",omitempty" cb:"Code,4"`
+	Code string `cb:"Code,4"`
 	// Attempts counts failed code checks. These endpoints are public and therefore skip the
 	// platform rate limiter, so this counter is what stops a brute-force sweep of the code.
-	Attempts int8 `json:",omitempty" cb:"Attempts,5"`
+	Attempts int8 `cb:"Attempts,5"`
 	// CompanyID and UserID are filled once step 2 creates them, so a registration interrupted
 	// before "Initial Data" can be resumed instead of started over.
-	CompanyID int32 `json:",omitempty" cb:"CompanyID,6"`
-	UserID    int32 `json:",omitempty" cb:"UserID,7"`
+	CompanyID int32 `cb:"CompanyID,6"`
+	UserID    int32 `cb:"UserID,7"`
 	// Created anchors the 2-hour expiry; LastSent anchors the short resend cooldown. They are
 	// separate columns because Updated also moves on failed code attempts, which must not extend
 	// the window before the user is allowed to ask for the email again.
-	Created  int32 `json:",omitempty" cb:"Created,8"`
-	LastSent int32 `json:",omitempty" cb:"LastSent,9"`
-	Updated  int32 `json:"upd,omitempty" cb:"upd,10"`
+	Created  int32 `cb:"Created,8"`
+	LastSent int32 `cb:"LastSent,9"`
+	Updated  int32 `json:"upd" cb:"upd,10"`
 	// 1 = email sent · 2 = email verified · 3 = company created · 0 = cancelled or attempts spent
-	Status int8 `json:"ss,omitempty" cb:"ss,11"`
+	Status int8 `json:"ss" cb:"ss,11"`
 	// IP is core.ClientIPKey of the caller: the IPv4 value, or the IPv6 /63 prefix for addresses
 	// where a single customer owns a whole block. It is the subject of the "N distinct emails per
 	// window" limit, which is the only brake that survives an attacker owning many mailboxes.
-	IP int64 `json:",omitempty" cb:"IP,12"`
+	IP int64 `cb:"IP,12"`
 }
 
 type SignUpRequestTable struct {

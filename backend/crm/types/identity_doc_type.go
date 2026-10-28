@@ -12,7 +12,7 @@
 //   - The id is the SUNAT digit wherever SUNAT uses a digit (1, 4, 6, 7), and continues
 //     through the hex values for "A".."F" (10..15). For the four types that cover nearly
 //     every real row, a raw DB dump still reads as the code it prints.
-//   - 0 means *not declared*, so `json:",omitempty"` drops it and DeriveIdentityDocType can
+//   - 0 means *not declared*, so drops it and DeriveIdentityDocType can
 //     key on it. SUNAT's own code "0" therefore cannot be id 0 — it takes 9, the one free
 //     slot below the hex range. It is the single id that does not read as its own code,
 //     which is what TestIdentityDocCodesMatchFacturago exists to keep honest.
@@ -45,10 +45,10 @@ const (
 // field puts the picker inside the input, where "Carné de extranjería" eats the number it is
 // qualifying. Only the entries whose name does not fit carry one.
 type IdentityDocOption struct {
-	ID    int8   `json:",omitempty" cb:"ID,1"`
-	Code  string `json:",omitempty" cb:"Code,2"` // SUNAT Anexo 1
-	Name  string `json:",omitempty" cb:"Name,3"`
-	Label string `json:",omitempty" cb:"Label,4"`
+	ID    int8   `cb:"ID,1"`
+	Code  string `cb:"Code,2"` // SUNAT Anexo 1
+	Name  string `cb:"Name,3"`
+	Label string `cb:"Label,4"`
 }
 
 // IdentityDocOptions is the whole catalog: what the save path validates against, what

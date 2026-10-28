@@ -46,7 +46,7 @@ $effect(() => {
   getRecordByID<ISaleOrder>("sale-order-by-ids", saleOrderID).then(record => {
     if (!record) { saleOrderMissing = true; return }
     saleOrder = record
-    loadProductNames(record.DetailProductsIDs || [])
+    loadProductNames((record.Lines || []).map(line => line.ProductID))
   })
 })
 
@@ -61,15 +61,13 @@ async function loadProductNames(productIDs: number[]) {
   productNames = resolvedNames
 }
 
-const saleLines = $derived((saleOrder?.DetailProductsIDs || []).map((productID, index) => {
-  const quantity = unpackQuantityLine(saleOrder?.DetailQuantities?.[index] || 0)
-  const unitPrice = saleOrder?.DetailPrices?.[index] || 0
-  const subUnitPrice = saleOrder?.DetailSubPrices?.[index] || 0
+const saleLines = $derived((saleOrder?.Lines || []).map(line => {
+  const quantity = unpackQuantityLine(line.Quantity || 0)
   return {
-    productID,
-    name: productNames.get(productID) || `#${productID}`,
-    quantityLabel: formatQuantity(quantity, saleOrder?.DetailSubDivisor?.[index] || 1),
-    amount: quantityAmount(quantity, unitPrice, subUnitPrice),
+    productID: line.ProductID,
+    name: productNames.get(line.ProductID) || `#${line.ProductID}`,
+    quantityLabel: formatQuantity(quantity, line.SubDivisor || 1),
+    amount: quantityAmount(quantity, line.Price || 0, line.SubPrice || 0),
   }
 }))
 

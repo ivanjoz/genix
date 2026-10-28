@@ -72,23 +72,23 @@ type SearchPlan struct {
 
 type EntityHint struct {
 	Type string `json:"type" cb:"type,1"`
-	Name string `json:"name,omitempty" cb:"name,2"`
+	Name string `json:"name" cb:"name,2"`
 }
 
 type BuilderDecision struct {
 	Operation              routing.BuilderOperation    `json:"operation" cb:"operation,1"`
 	ContextScope           routing.BuilderContextScope `json:"context_scope" cb:"context_scope,2"`
-	TargetSectionType      string                      `json:"target_section_type,omitempty" cb:"target_section_type,3"`
-	TargetSectionReference string                      `json:"target_section_reference,omitempty" cb:"target_section_reference,4"`
+	TargetSectionType      string                      `json:"target_section_type" cb:"target_section_type,3"`
+	TargetSectionReference string                      `json:"target_section_reference" cb:"target_section_reference,4"`
 	RequiresLiveState      bool                        `json:"requires_live_state" cb:"requires_live_state,5"`
 }
 
 type PlannerInput struct {
 	Schema         int                     `json:"schema" cb:"schema,1"`
 	CurrentMessage string                  `json:"current_message" cb:"current_message,2"`
-	CompletedTurns []routing.CompletedTurn `json:"completed_turns,omitempty" cb:"completed_turns,3"`
+	CompletedTurns []routing.CompletedTurn `json:"completed_turns" cb:"completed_turns,3"`
 	Surface        routing.SurfaceContext  `json:"surface" cb:"surface,4"`
-	Route          string                  `json:"route,omitempty" cb:"route,5"`
+	Route          string                  `json:"route" cb:"route,5"`
 	ActiveModeID   int                     `json:"active_mode_id" cb:"active_mode_id,6"`
 	AppLanguage    routing.Language        `json:"app_language" cb:"app_language,7"`
 }

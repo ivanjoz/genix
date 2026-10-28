@@ -30,10 +30,10 @@ const (
 // physical count needs it, because a shortage and a surplus are the same type with opposite
 // meaning.
 type CashMovementAccountOption struct {
-	MovementType CashMovementType `json:",omitempty" cb:"MovementType,1"`
-	Direction    int8             `json:",omitempty" cb:"Direction,2"`
-	AccountCode  int16            `json:",omitempty" cb:"AccountCode,3"`
-	Name         string           `json:",omitempty" cb:"Name,4"`
+	MovementType CashMovementType `cb:"MovementType,1"`
+	Direction    int8             `cb:"Direction,2"`
+	AccountCode  int16            `cb:"AccountCode,3"`
+	Name         string           `cb:"Name,4"`
 }
 
 // CashMovementAccountOptions is what the backend validates against and — via the //CATALOG:

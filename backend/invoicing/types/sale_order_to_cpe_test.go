@@ -28,11 +28,8 @@ func TestBuildLinesSplitsASubUnitSale(t *testing.T) {
 	}
 
 	order := &sales.SaleOrder{
-		DetailProductsIDs: []int32{101},
-		DetailQuantities:  []int32{packed},
-		DetailPrices:      []int32{5000}, // a box
-		DetailSubPrices:   []int32{850},  // one candy
-		DetailSubDivisor:  []int16{6},
+		// Price is a box, SubPrice one candy.
+		Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: packed, Price: 5000, SubPrice: 850, SubDivisor: 6}},
 	}
 
 	lines, lineProductIDs, err := buildLines(order, candyBoxProducts())
@@ -75,11 +72,10 @@ func TestBuildLinesSplitsASubUnitSale(t *testing.T) {
 // total: splitting 5000+3400 at once could round a cent away from what the comprobante declares.
 func TestSaleOrderTaxAmountMatchesTheDocumentLines(t *testing.T) {
 	order := &sales.SaleOrder{
-		DetailProductsIDs: []int32{101, 101},
-		DetailQuantities:  []int32{1004, 3000},
-		DetailPrices:      []int32{5000, 1999},
-		DetailSubPrices:   []int32{850, 0},
-		DetailSubDivisor:  []int16{6, 6},
+		Lines: []sales.SaleOrderLine{
+			{ProductID: 101, Quantity: 1004, Price: 5000, SubPrice: 850, SubDivisor: 6},
+			{ProductID: 101, Quantity: 3000, Price: 1999, SubDivisor: 6},
+		},
 	}
 	lines, _, err := buildLines(order, candyBoxProducts())
 	if err != nil {
@@ -105,10 +101,7 @@ func TestBuildLinesKeepsWholeUnitSalesAsOneLine(t *testing.T) {
 	}
 
 	order := &sales.SaleOrder{
-		DetailProductsIDs: []int32{101},
-		DetailQuantities:  []int32{packed},
-		DetailPrices:      []int32{5000},
-		DetailSubDivisor:  []int16{core.QuantityDivisorNone},
+		Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: packed, Price: 5000, SubDivisor: core.QuantityDivisorNone}},
 	}
 
 	lines, _, err := buildLines(order, candyBoxProducts())
@@ -132,11 +125,7 @@ func TestBuildLinesEmitsOnlyTheSubUnitLineWhenNoWholeUnitsSold(t *testing.T) {
 	}
 
 	order := &sales.SaleOrder{
-		DetailProductsIDs: []int32{101},
-		DetailQuantities:  []int32{packed},
-		DetailPrices:      []int32{5000},
-		DetailSubPrices:   []int32{850},
-		DetailSubDivisor:  []int16{6},
+		Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: packed, Price: 5000, SubPrice: 850, SubDivisor: 6}},
 	}
 
 	lines, _, err := buildLines(order, candyBoxProducts())

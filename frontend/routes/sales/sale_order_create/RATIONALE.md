@@ -19,7 +19,7 @@ Showing 0.00 rather than the catalog price avoids displaying soles in a dollar s
 **Context** — `buildSaleHistoryLine` copied `FinalPrice` from the catalog. For a USD sale that is a
 soles price next to a dollar total, and the ticket would print it.
 
-**Decision** — Line prices come from `DetailPrices` / `DetailSubPrices` of the sale `POST` returns,
+**Decision** — Line prices come from `Lines[].Price` / `Lines[].SubPrice` of the sale `POST` returns,
 and rows carry `currencyType`. The IndexedDB version goes to 2, and its upgrade stamps existing rows
 as PEN.
 

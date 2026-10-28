@@ -1,3 +1,43 @@
+## Sale lines were migrated once with raw CQL; the migration is gone
+**Context** — A one-off `fn-migrate-sale-order-lines` had to read the eight old `detail_*` columns,
+which the record no longer maps. An ORM update of `Lines` would have read the stored row in its new
+shape (no lines yet) and logged every line to the DataFrames as new, counting them twice.
+**Decision** — It read the old columns and wrote the `lines` blob with raw CQL (1773 sales, 9797
+lines), then ran `RecalcVirtualColumns` and `RecalcGroupIndexHashes`. The old columns, the old
+`zz_igs_*_detail_products_ids` columns and their indexes were dropped afterwards, and the function
+was deleted because it can no longer run.
+**Rationale** — The frames were not rebuilt: the fareward lock was unreachable. A sale adds the same
+lines to them as before, and a History reads them from the stored row, which now has them. `Updated`
+did not move, so clients do not re-sync the rows on their own.
+
+## The computed product column is detail_product_ids, which renames its index groups
+**Context** — The index groups hash the computed `DetailProductIDs`. Their hidden columns and IDs are
+derived from the source column names.
+**Decision** — The column follows the singular `Detail*IDs` convention, so the groups become
+`zz_igs_date_detail_product_ids` and `zz_igs_date_client_id_detail_product_ids`, with new group IDs.
+The migration fills them.
+**Rationale** — Keeping the old name would need a `db` tag that disagrees with the field name. The
+rows are reprocessed anyway, and clients that cached a group under the old ID fetch it again once.
+
+## Sale creation checks each line's product and quantity only
+**Context** — The create rule checked that the parallel arrays had the same length and that no
+product, quantity or price was zero. A list of lines cannot be misaligned, and
+`validateSaleOrderLines` overwrites the prices from the catalog.
+**Decision** — Every line needs `ProductID > 0` and `Quantity > 0`. A price the client sends is not
+checked, because it is replaced anyway.
+**Rationale** — The price check only ever rejected a value that was about to be discarded.
+
+## sale-client-product keeps SubDivisor as a row and the day as its only key
+**Context** — The frame asked for is company-day : client + product, for queries by client.
+**Decision** — Rows are ClientID, ProductID and SubDivisor, with sale-summary's six sums; its lines
+come from the same `eachSummaryLine` as sale-summary's. The key is the day alone, so a query by
+client reads the day files of the range and keeps that client's rows. `GET sale-summary` reads it
+with `f=sale-client-product`.
+**Rationale** — Without SubDivisor a row would add sixths and twelfths of one product into one
+`SoldSub`. Day and ClientID as Keys would make a file per client and day, so a client's query
+would name its files directly, but a day of many clients would become many tiny files; the
+requested layout keeps one file per day.
+
 ## GET.sale-summary answers raw frame files; action 2 stays a no-op
 **Context** — The sale summary moved to the `sale-summary` DataFrame of `sale_order`;
 `product_sale_summary` and its write path are gone. The route must answer the genix-ui frame cache

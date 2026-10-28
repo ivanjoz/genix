@@ -67,7 +67,7 @@ type DocumentationResult struct {
 	SectionType       string   `json:"section_type" cb:"section_type,9"`
 	Content           string   `json:"content" cb:"content,10"`
 	ContextHeader     string   `json:"context_header" cb:"context_header,11"`
-	Keywords          []string `json:"keywords,omitempty" cb:"keywords,12"`
+	Keywords          []string `json:"keywords" cb:"keywords,12"`
 	Status            string   `json:"status" cb:"status,13"`
 	Visibility        string   `json:"visibility" cb:"visibility,14"`
 	DocumentationPath string   `json:"documentation_path" cb:"documentation_path,15"`
@@ -76,8 +76,8 @@ type DocumentationResult struct {
 	SourceHashDigest  string   `json:"source_hash_digest" cb:"source_hash_digest,18"`
 	PartIndex         int      `json:"part_index" cb:"part_index,19"`
 	PartCount         int      `json:"part_count" cb:"part_count,20"`
-	PreviousPointID   string   `json:"previous_point_id,omitempty" cb:"previous_point_id,21"`
-	NextPointID       string   `json:"next_point_id,omitempty" cb:"next_point_id,22"`
+	PreviousPointID   string   `json:"previous_point_id" cb:"previous_point_id,21"`
+	NextPointID       string   `json:"next_point_id" cb:"next_point_id,22"`
 	IndexedAt         int64    `json:"indexed_at" cb:"indexed_at,23"`
 	Score             float32  `json:"score" cb:"score,24"`
 }

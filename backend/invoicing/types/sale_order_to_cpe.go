@@ -59,7 +59,7 @@ func SaleOrderToDocument(
 	pinnedClientSnapshotID int32,
 ) (*model.Document, int32, error) {
 
-	if len(order.DetailProductsIDs) == 0 {
+	if len(order.Lines) == 0 {
 		return nil, 0, errors.New("la venta no tiene productos")
 	}
 
@@ -68,7 +68,7 @@ func SaleOrderToDocument(
 	if err != nil {
 		return nil, 0, err
 	}
-	products, err := loadProductDescriptions(companyID, order.DetailProductsIDs)
+	products, err := loadProductDescriptions(companyID, order.DetailProductIDs())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -196,21 +196,21 @@ const (
 	AnonymousBuyerName = "CLIENTES VARIOS"
 )
 
-// buildLines turns the sale's parallel detail arrays into document lines.
+// buildLines turns the sale's lines into document lines.
 //
 // A sale line is packed (Units*QuantityLineScale + Sub) and its two halves were charged at
 // different prices, so a line holding both becomes **two** document lines: whole units at
-// DetailPrices, sub-units at DetailSubPrices. That keeps every emitted quantity a whole
+// Price, sub-units at SubPrice. That keeps every emitted quantity a whole
 // count — no fraction of a box ever reaches the XML — which matters because facturago
 // scales quantities by 1e6 and a sixth of a unit is not representable there. It also
 // matches what SUNAT wants: four candies invoice as four, not as 0.667 of a box.
 // It takes the product descriptions rather than loading them, so the splitting rule can be
 // tested without a database.
 func buildLines(order *sales.SaleOrder, products map[int32]production.Product) ([]model.Line, []int32, error) {
-	lines := make([]model.Line, 0, len(order.DetailProductsIDs))
-	lineProductIDs := make([]int32, 0, len(order.DetailProductsIDs))
+	lines := make([]model.Line, 0, len(order.Lines))
+	lineProductIDs := make([]int32, 0, len(order.Lines))
 
-	appendLine := func(productID int32, description string, quantity int32, grossUnit int32, index int) {
+	appendLine := func(saleLine sales.SaleOrderLine, description string, quantity int32, grossUnit int32) {
 		if quantity <= 0 || grossUnit <= 0 {
 			return
 		}
@@ -219,7 +219,7 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 		gross := int64(quantity) * int64(grossUnit)
 		net, tax := splitGrossAmount(gross)
 		lines = append(lines, model.Line{
-			ProductCode: core.GetIndex(order.DetailProductSkus, index),
+			ProductCode: saleLine.Sku,
 			Description: description,
 			Quantity:    model.Units(int(quantity)),
 			UnitCode:    model.DefaultUnitCode,
@@ -228,28 +228,27 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 			Value:       model.Cents(net),
 			IGV:         model.Cents(tax),
 		})
-		lineProductIDs = append(lineProductIDs, productID)
+		lineProductIDs = append(lineProductIDs, saleLine.ProductID)
 	}
 
-	for index, productID := range order.DetailProductsIDs {
-		lineQuantity := core.UnpackQuantityLine(core.GetIndex(order.DetailQuantities, index))
+	for _, saleLine := range order.Lines {
+		lineQuantity := core.UnpackQuantityLine(saleLine.Quantity)
 
-		description := products[productID].Name
+		description := products[saleLine.ProductID].Name
 		if description == "" {
-			description = fmt.Sprintf("PRODUCTO %v", productID)
+			description = fmt.Sprintf("PRODUCTO %v", saleLine.ProductID)
 		}
 
-		appendLine(productID, description, lineQuantity.Units, core.GetIndex(order.DetailPrices, index), index)
+		appendLine(saleLine, description, lineQuantity.Units, saleLine.Price)
 
 		if lineQuantity.Sub > 0 {
 			// The sub-unit name is carried in the description because SUNAT's unit-of-measure
 			// catalog (03) has no entry this free-text field maps to.
 			subDescription := description
-			if subUnit := products[productID].SbuUnit; subUnit != "" {
+			if subUnit := products[saleLine.ProductID].SbuUnit; subUnit != "" {
 				subDescription = fmt.Sprintf("%s (%s)", description, subUnit)
 			}
-			appendLine(productID, subDescription, lineQuantity.Sub,
-				core.GetIndex(order.DetailSubPrices, index), index)
+			appendLine(saleLine, subDescription, lineQuantity.Sub, saleLine.SubPrice)
 		}
 	}
 
@@ -271,10 +270,10 @@ func SaleOrderTaxAmount(order *sales.SaleOrder) int32 {
 		_, tax := splitGrossAmount(int64(quantity) * int64(grossUnit))
 		taxAmount += tax
 	}
-	for index := range order.DetailProductsIDs {
-		lineQuantity := core.UnpackQuantityLine(core.GetIndex(order.DetailQuantities, index))
-		addLinePart(lineQuantity.Units, core.GetIndex(order.DetailPrices, index))
-		addLinePart(lineQuantity.Sub, core.GetIndex(order.DetailSubPrices, index))
+	for _, saleLine := range order.Lines {
+		lineQuantity := core.UnpackQuantityLine(saleLine.Quantity)
+		addLinePart(lineQuantity.Units, saleLine.Price)
+		addLinePart(lineQuantity.Sub, saleLine.SubPrice)
 	}
 	return int32(taxAmount)
 }

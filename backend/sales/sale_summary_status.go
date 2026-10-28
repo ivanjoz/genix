@@ -4,16 +4,22 @@ import (
 	"app/core"
 	"app/db"
 	"app/sales/types"
+	"slices"
 )
 
 // saleSummaryMaxDays bounds one read of the "sale-summary" frame: a file per day, one GET each
 // (dataframe.MaxFirstKeys).
 const saleSummaryMaxDays = 400
 
-// GetSaleSummary answers the "sale-summary" DataFrame files of a day range (from/to, UnixDay) that
+// saleFrameNames are the sale_order DataFrames the browser may read: the day/product summary and
+// the day/client/product detail.
+var saleFrameNames = []string{"sale-summary", "sale-client-product"}
+
+// GetSaleSummary answers the files of a sale DataFrame (f) over a day range (from/to, UnixDay) that
 // the browser does not hold current (g/h: its generation and held files, genix-ui FRAME_CACHE.md).
 func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
-	if frameName := req.Query["f"]; frameName != "sale-summary" {
+	frameName := req.Query["f"]
+	if !slices.Contains(saleFrameNames, frameName) {
 		return req.MakeErr("El reporte solicitado no existe:", frameName)
 	}
 	fromDate, toDate := req.GetQueryInt16("from"), req.GetQueryInt16("to")
@@ -25,7 +31,7 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	saleOrderTable := db.TableOf[types.SaleOrder]()
-	body, err := db.QueryFrame[types.SaleOrder](req.User.CompanyID, "sale-summary").
+	body, err := db.QueryFrame[types.SaleOrder](req.User.CompanyID, frameName).
 		Between(saleOrderTable.Date, int64(fromDate), int64(toDate)).
 		ExecChanged(req.Query["g"], req.Query["h"])
 	if err != nil {

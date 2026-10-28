@@ -52,7 +52,7 @@ type ObservabilityResponse struct {
 	// The window's frames whole, ending with the replace Metadata (core.WithDeltaReplace): a frame
 	// that fell out of the window leaves the client's cache.
 	Frames []any                `cb:"Frames,1"`
-	Routes []ObservabilityRoute `json:",omitempty" cb:"Routes,2"`
+	Routes []ObservabilityRoute `cb:"Routes,2"`
 }
 
 type observabilityRouteAccumulator struct {

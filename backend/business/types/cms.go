@@ -6,10 +6,10 @@ type GalleryImage struct {
 	db.TableStruct[GalleryImageTable, GalleryImage]
 	CompanyID   int32  `db:"empresa_id,pk" cb:"CompanyID,1"`
 	Image       string `db:"image,pk" cb:"Image,2"`
-	ImageID     int32  `json:",omitempty" db:"image_id" cb:"ImageID,3"`
+	ImageID     int32  `db:"image_id" cb:"ImageID,3"`
 	Description string `db:"description" cb:"Description,4"`
-	Status      int8   `json:"ss,omitempty" db:"status" cb:"ss,5"`
-	Updated     int32  `json:"upd,omitempty" db:"updated" cb:"upd,6"`
+	Status      int8   `json:"ss" db:"status" cb:"ss,5"`
+	Updated     int32  `json:"upd" db:"updated" cb:"upd,6"`
 }
 
 type GalleryImageTable struct {

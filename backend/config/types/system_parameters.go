@@ -4,16 +4,16 @@ import "app/db"
 
 type SystemParameters struct {
 	db.TableStruct[SystemParametersTable, SystemParameters]
-	ID        int32   `json:",omitempty" db:"parameter_id,pk" cb:"ID,1"`
-	ValueText string  `json:",omitempty" db:"value_text" cb:"ValueText,2"`
-	ValueInts []int32 `json:",omitempty" db:"value_ints" cb:"ValueInts,3"`
-	Value     int32   `json:",omitempty" db:"value" cb:"Value,4"`
-	CompanyID int32   `json:",omitempty" db:"empresa_id" cb:"CompanyID,5"`
+	ID        int32   `db:"parameter_id,pk" cb:"ID,1"`
+	ValueText string  `db:"value_text" cb:"ValueText,2"`
+	ValueInts []int32 `db:"value_ints" cb:"ValueInts,3"`
+	Value     int32   `db:"value" cb:"Value,4"`
+	CompanyID int32   `db:"empresa_id" cb:"CompanyID,5"`
 	Updated   int32   `json:"upd," db:"updated" cb:"upd,6"`
-	Version   int16   `json:"ver,omitempty" cb:"ver,7"`
+	Version   int16   `json:"ver" cb:"ver,7"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,8"`
-	UpdatedBy int32   `json:",omitempty" db:"updated_by" cb:"UpdatedBy,9"`
+	Metadata  *string `json:"mdt" cb:"mdt,8"`
+	UpdatedBy int32   `db:"updated_by" cb:"UpdatedBy,9"`
 }
 
 type SystemParametersTable struct {

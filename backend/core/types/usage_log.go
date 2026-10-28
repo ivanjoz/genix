@@ -4,17 +4,17 @@ import "app/db"
 
 type UsageLog struct {
 	db.TableStruct[UsageLogTable, UsageLog]
-	CompanyID              int32   `json:",omitempty" cb:"CompanyID,1"`
-	ID                     int32   `json:",omitempty" cb:"ID,2"`
-	GetBandwith            int32   `json:",omitempty" cb:"GetBandwith,3"`
-	PostBandwith           int32   `json:",omitempty" cb:"PostBandwith,4"`
-	GetCpuTimeUsage        int32   `json:",omitempty" cb:"GetCpuTimeUsage,5"`
-	PostCpuTimeUsage       int32   `json:",omitempty" cb:"PostCpuTimeUsage,6"`
-	DetailUserID           []int32 `json:",omitempty" db:",list" cb:"DetailUserID,7"`
-	DetailGetBandwith      []int32 `json:",omitempty" db:",list" cb:"DetailGetBandwith,8"`
-	DetailPostBandwith     []int32 `json:",omitempty" db:",list" cb:"DetailPostBandwith,9"`
-	DetailGetCpuTimeUsage  []int32 `json:",omitempty" db:",list" cb:"DetailGetCpuTimeUsage,10"`
-	DetailPostCpuTimeUsage []int32 `json:",omitempty" db:",list" cb:"DetailPostCpuTimeUsage,11"`
+	CompanyID              int32   `cb:"CompanyID,1"`
+	ID                     int32   `cb:"ID,2"`
+	GetBandwith            int32   `cb:"GetBandwith,3"`
+	PostBandwith           int32   `cb:"PostBandwith,4"`
+	GetCpuTimeUsage        int32   `cb:"GetCpuTimeUsage,5"`
+	PostCpuTimeUsage       int32   `cb:"PostCpuTimeUsage,6"`
+	DetailUserID           []int32 `db:",list" cb:"DetailUserID,7"`
+	DetailGetBandwith      []int32 `db:",list" cb:"DetailGetBandwith,8"`
+	DetailPostBandwith     []int32 `db:",list" cb:"DetailPostBandwith,9"`
+	DetailGetCpuTimeUsage  []int32 `db:",list" cb:"DetailGetCpuTimeUsage,10"`
+	DetailPostCpuTimeUsage []int32 `db:",list" cb:"DetailPostCpuTimeUsage,11"`
 }
 
 type UsageLogTable struct {

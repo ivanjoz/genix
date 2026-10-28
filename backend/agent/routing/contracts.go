@@ -51,18 +51,18 @@ type CompletedTurn struct {
 	Offset           int    `json:"offset" cb:"offset,1"`
 	UserMessage      string `json:"user_message" cb:"user_message,2"`
 	AssistantMessage string `json:"assistant_message" cb:"assistant_message,3"`
-	ActionSummary    string `json:"action_summary,omitempty" cb:"action_summary,4"`
-	Route            string `json:"route,omitempty" cb:"route,5"`
+	ActionSummary    string `json:"action_summary" cb:"action_summary,4"`
+	Route            string `json:"route" cb:"route,5"`
 }
 
 // SurfaceContext is compact routing metadata supplied by the active frontend page.
 type SurfaceContext struct {
 	Kind                SurfaceKind           `json:"kind" cb:"kind,1"`
-	Route               string                `json:"route,omitempty" cb:"route,2"`
-	PageID              string                `json:"page_id,omitempty" cb:"page_id,3"`
-	ActiveAgentMode     string                `json:"active_agent_mode,omitempty" cb:"active_agent_mode,4"`
+	Route               string                `json:"route" cb:"route,2"`
+	PageID              string                `json:"page_id" cb:"page_id,3"`
+	ActiveAgentMode     string                `json:"active_agent_mode" cb:"active_agent_mode,4"`
 	HasSelectedSection  bool                  `json:"has_selected_section" cb:"has_selected_section,5"`
-	SelectedSectionID   string                `json:"selected_section_id,omitempty" cb:"selected_section_id,6"`
-	SelectedSectionType string                `json:"selected_section_type,omitempty" cb:"selected_section_type,7"`
-	AvailableContexts   []BuilderContextScope `json:"available_contexts,omitempty" cb:"available_contexts,8"`
+	SelectedSectionID   string                `json:"selected_section_id" cb:"selected_section_id,6"`
+	SelectedSectionType string                `json:"selected_section_type" cb:"selected_section_type,7"`
+	AvailableContexts   []BuilderContextScope `json:"available_contexts" cb:"available_contexts,8"`
 }

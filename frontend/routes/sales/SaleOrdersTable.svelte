@@ -6,6 +6,7 @@
   import { formatN, formatTime, wordInclude } from '#libs/helpers.ts';
   import { unpackQuantityLine } from '#core/quantity.ts';
   import { CURRENCY_USD } from '#routes/finance/exchange-rate/exchange-rate.ts';
+  import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.svelte.ts';
 
   interface IProductLookupRecord {
     Name?: string;
@@ -19,9 +20,7 @@
     ID: number;
     ClientID?: number;
     Created: number;
-    DetailProductsIDs?: number[];
-    DetailPrices?: number[];
-    DetailQuantities?: number[];
+    Lines?: ISaleOrderLine[];
     TotalAmount?: number;
     DebtAmount?: number;
     CurrencyType?: number;
@@ -110,8 +109,8 @@
       clientID: Number(saleOrder.ClientID || 0),
       productIDs: Array.from(
         new Set(
-          (saleOrder.DetailProductsIDs || [])
-            .map((rawProductID) => Number(rawProductID || 0))
+          (saleOrder.Lines || [])
+            .map((line) => line.ProductID || 0)
             .filter((productID) => Number.isFinite(productID) && productID > 0)
         )
       ),
@@ -183,26 +182,16 @@
   }
 
   function getRankedProducts(saleOrder: T): ITopProductCard[] {
-    const detailCount = Math.min(
-      saleOrder.DetailProductsIDs?.length || 0,
-      saleOrder.DetailPrices?.length || 0,
-      saleOrder.DetailQuantities?.length || 0,
-    );
-    if (detailCount <= 0) {
-      return [];
-    }
-
     const aggregatedProductTotals = new Map<number, { totalAmount: number; totalQuantity: number }>();
 
-    // Aggregate once from detail arrays so both pages render the same ranking and quantities.
-    for (let detailIndex = 0; detailIndex < detailCount; detailIndex += 1) {
-      const productID = saleOrder.DetailProductsIDs?.[detailIndex] || 0;
-      const unitPrice = saleOrder.DetailPrices?.[detailIndex] || 0;
+    // Aggregate once from the sale lines so both pages render the same ranking and quantities.
+    for (const line of saleOrder.Lines || []) {
+      const productID = line.ProductID || 0;
       // Lines are packed (units * 1000 + sub); the ranking counts whole units, since a
       // ranking that mixed loose sub-units across products would have no unit.
-      const packedQuantity = saleOrder.DetailQuantities?.[detailIndex] || 0;
+      const packedQuantity = line.Quantity || 0;
       const quantity = unpackQuantityLine(packedQuantity).units;
-      const lineAmount = unitPrice * quantity;
+      const lineAmount = (line.Price || 0) * quantity;
       if (!productID || packedQuantity <= 0 || lineAmount <= 0) {
         continue;
       }

@@ -23,34 +23,34 @@ type ServerMetric struct {
 	db.TableStruct[ServerMetricTable, ServerMetric]
 	// Unix day, and the partition: one day of samples is one partition, so the TTL expires it
 	// whole.
-	Date int16 `json:",omitempty" cb:"Date,1"`
+	Date int16 `cb:"Date,1"`
 	// secondsIntoDay / 5, so 0..17279. Zero-based like FrameOfDay in user_logs.go.
-	Slot int16 `json:",omitempty" cb:"Slot,2"`
+	Slot int16 `cb:"Slot,2"`
 	// Host-wide. Percentages are hundredths: 23.45% is 2345.
-	CpuPercent  int16 `json:",omitempty" cb:"CpuPercent,3"`
-	MemPercent  int16 `json:",omitempty" cb:"MemPercent,4"`
-	DiskPercent int16 `json:",omitempty" cb:"DiskPercent,5"`
+	CpuPercent  int16 `cb:"CpuPercent,3"`
+	MemPercent  int16 `cb:"MemPercent,4"`
+	DiskPercent int16 `cb:"DiskPercent,5"`
 	// Network rates in 5 KB/s units, so an int16 reaches 163 MB/s while still resolving the
 	// single-digit KB/s an idle box shows.
-	NetRxRate int16 `json:",omitempty" cb:"NetRxRate,6"`
-	NetTxRate int16 `json:",omitempty" cb:"NetTxRate,7"`
+	NetRxRate int16 `cb:"NetRxRate,6"`
+	NetTxRate int16 `cb:"NetTxRate,7"`
 	// Per-service memory in megabytes (saturating at the int16 ceiling, 32 GB) and CPU as a
 	// percentage of the WHOLE machine, so a Scylla pinning eight of eight cores reads 100.00% and
 	// not the top-style 800% that would not fit here.
-	BackendMemMb      int16 `json:",omitempty" cb:"BackendMemMb,8"`
-	BackendCpuPercent int16 `json:",omitempty" cb:"BackendCpuPercent,9"`
+	BackendMemMb      int16 `cb:"BackendMemMb,8"`
+	BackendCpuPercent int16 `cb:"BackendCpuPercent,9"`
 	// These carry no column tag, so the ORM derives fareward_mem_mb / fareward_cpu_percent from
 	// the field name — the exact column names the daemon's INSERT lists, and the JSON keys the
 	// Server Panel reads. They were server_utils_* until the fareward rename, which makes this a
 	// schema change and not only a rename: the ORM adds missing columns and never drops them, so a
 	// deployed table gains this pair and keeps the old one until its rows expire under the TTL.
 	// Nothing back-fills, so windows sampled before the deploy read as not-measured here.
-	FarewardMemMb      int16 `json:",omitempty" cb:"FarewardMemMb,10"`
-	FarewardCpuPercent int16 `json:",omitempty" cb:"FarewardCpuPercent,11"`
-	SearchMemMb        int16 `json:",omitempty" cb:"SearchMemMb,12"`
-	SearchCpuPercent   int16 `json:",omitempty" cb:"SearchCpuPercent,13"`
-	ScyllaMemMb        int16 `json:",omitempty" cb:"ScyllaMemMb,14"`
-	ScyllaCpuPercent   int16 `json:",omitempty" cb:"ScyllaCpuPercent,15"`
+	FarewardMemMb      int16 `cb:"FarewardMemMb,10"`
+	FarewardCpuPercent int16 `cb:"FarewardCpuPercent,11"`
+	SearchMemMb        int16 `cb:"SearchMemMb,12"`
+	SearchCpuPercent   int16 `cb:"SearchCpuPercent,13"`
+	ScyllaMemMb        int16 `cb:"ScyllaMemMb,14"`
+	ScyllaCpuPercent   int16 `cb:"ScyllaCpuPercent,15"`
 }
 
 type ServerMetricTable struct {

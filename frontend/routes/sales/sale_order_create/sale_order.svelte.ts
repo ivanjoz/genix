@@ -45,23 +45,30 @@ export interface VentaProducto {
   producto?: IProduct // Helper reference
 }
 
-//STRUCT:comercial.SaleOrder
+// One product line of a sale. Fields at their zero value are omitted on the wire, so a read
+// must treat a missing field as 0 / "".
+//STRUCT:sales.SaleOrderLine
+export interface ISaleOrderLine {
+  ProductID: number
+  // Both in the sale's currency: one whole unit, one sub-unit. The server resolves them from
+  // the catalog; SubPrice only travels back.
+  Price: number
+  SubPrice?: number
+  // Packed: units * 1000 + sub. The server re-resolves the divisor and both prices from the
+  // catalog, so what travels here is the quantity, not the pricing.
+  Quantity: number
+  SubDivisor: number
+  Sku?: string
+  LotID?: number
+  PresentationID?: number
+}
+
+//STRUCT:sales.SaleOrder
 export interface ISaleOrder {
   Date: number
   WarehouseID: number
   ID: number
-  DetailProductsIDs: number[]
-  // Both in the sale's currency. The server resolves them from the catalog; DetailSubPrices
-  // only travels back.
-  DetailPrices: number[]
-  DetailSubPrices?: number[]
-  // Packed: units * 1000 + sub. The server re-resolves the divisor and both prices from the
-  // catalog, so what travels here is the quantity, not the pricing.
-  DetailQuantities: number[]
-  DetailSubDivisor: number[]
-  DetailProductSkus: string[]
-  DetailProductLotIDs: number[]
-  DetailProductPresentations: number[]
+  Lines: ISaleOrderLine[]
   TotalAmount: number
   TaxAmount: number
   DebtAmount: number
@@ -113,8 +120,7 @@ export class SaleOrderState {
     ID: 0, CompanyID: 0, WarehouseID: 0, LastPaymentCajaID: 0, ClientID: 0, // No payment caja until one is loaded/picked.
     Date: 0, TotalAmount: 0, TaxAmount: 0, DebtAmount: 0, CurrencyType: CURRENCY_PEN, ExchangeRate: 0,
     ActionsIncluded: [SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY],
-    DetailProductsIDs: [], DetailPrices: [], DetailQuantities: [], DetailSubDivisor: [],
-    DetailProductSkus: [], DetailProductLotIDs: [], DetailProductPresentations: [],
+    Lines: [],
     Created: 0, upd: 0, upc: 0, UpdatedBy: 0, ss: 0,
     LastPaymentTime: 0, LastPaymentUser: 0, DeliveryTime: 0, DeliveryUser: 0,
     PaymentDueDate: 0, IssueSeriesID: 0, ClientInfo: undefined, Name: "", RegistryNumber: "",
@@ -304,26 +310,21 @@ export class SaleOrderState {
 
     showLoading("Procesando venta...")
 
-    // Prepare detail slices
-    this.form.DetailProductsIDs = []
-    this.form.DetailPrices = []
-    this.form.DetailQuantities = []
-    this.form.DetailSubDivisor = []
-		this.form.DetailProductSkus = []
-    this.form.DetailProductPresentations = []
-
+    this.form.Lines = []
     const pushLine = (vp: VentaProducto, quantity: Quantity, serialNumber: string) => {
-      this.form.DetailProductsIDs.push(vp.productoID)
-      // Sent for the operator's reference only; the server overwrites both prices from the
-      // catalog before anything is stored.
-      this.form.DetailPrices.push(vp.producto ? this.priceInSaleCurrency(vp.producto.FinalPrice, vp.producto) : 0)
-      this.form.DetailQuantities.push(packQuantityLine(quantity, vp.subDivisor))
-      this.form.DetailSubDivisor.push(vp.subDivisor)
-      this.form.DetailProductSkus.push(serialNumber)
-      this.form.DetailProductPresentations.push(vp.presentationID)
+      this.form.Lines.push({
+        ProductID: vp.productoID,
+        // Sent for the operator's reference only; the server overwrites both prices from the
+        // catalog before anything is stored.
+        Price: vp.producto ? this.priceInSaleCurrency(vp.producto.FinalPrice, vp.producto) : 0,
+        Quantity: packQuantityLine(quantity, vp.subDivisor),
+        SubDivisor: vp.subDivisor,
+        Sku: serialNumber,
+        PresentationID: vp.presentationID,
+      })
     }
 
-    // Flatten cart into order details, keeping the backend's legacy field name for serial numbers.
+    // Flatten the cart into sale lines; a serial number travels as the line's Sku.
     for (const vp of this.ventaProductos) {
       let totalSerialQty = 0
       if (vp.serialNumbers && vp.serialNumbers.size > 0) {

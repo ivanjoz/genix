@@ -108,7 +108,7 @@ func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 	// The sale was created under series 1, which is the series it is issued in —
 	// so the document is keyed by the sale itself. Its id reads as correlativo 55,
 	// random 03, series 01.
-	order := &sales.SaleOrder{ID: 550301, ClientID: 7, DetailProductsIDs: []int32{101}}
+	order := &sales.SaleOrder{ID: 550301, ClientID: 7, Lines: []sales.SaleOrderLine{{ProductID: 101}}}
 	row := rowFromDocument(1, 1, order, testSeries(), original, 42)
 
 	// The buyer is pinned, not looked up again: this is what stops a filed book moving.

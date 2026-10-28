@@ -10,83 +10,99 @@ import (
 // no column for it — and is turned into a ClientProvider row, which (with its snapshot) is the only
 // place these fields are stored.
 type SaleOrderClientInfo struct {
-	Name           string `json:",omitempty" cb:"Name,1"`
-	RegistryNumber string `json:",omitempty" cb:"RegistryNumber,2"`
+	Name           string `cb:"Name,1"`
+	RegistryNumber string `cb:"RegistryNumber,2"`
 	// IdentityDocType is the SUNAT document type the till picked (crm.IdentityDoc*). 0 leaves
 	// SaveClientProviders to derive it from the number's shape.
-	IdentityDocType int8 `json:",omitempty" cb:"IdentityDocType,3"`
-	OnlyInsert      bool `json:",omitempty" cb:"OnlyInsert,4"`
+	IdentityDocType int8 `cb:"IdentityDocType,3"`
+	OnlyInsert      bool `cb:"OnlyInsert,4"`
+}
+
+// SaleOrderLine is one product line of a sale.
+type SaleOrderLine struct {
+	ProductID int32 `cb:"ProductID,1"`
+	// Price is the price of one whole unit; SubPrice the price of one sub-unit. Both are needed
+	// per line and neither is derivable from the other: selling loose is deliberately not
+	// proportional (four candies from a 5000-cent box of six is not 3333). A summary reprocess
+	// has to reconstruct what was charged, not what the product costs now.
+	Price    int32 `cb:"Price,2"`
+	SubPrice int32 `cb:"SubPrice,3"`
+	// Quantity is packed: Units*core.QuantityLineScale + Sub, so 1001 at divisor 6 is one box
+	// plus one candy. A sale order is a document — it is never accumulated and never SUM()-ed —
+	// so it packs both halves into one value, where the stock and ledger tables keep them
+	// separate. core.UnpackQuantityLine splits it.
+	Quantity int32 `cb:"Quantity,4"`
+	// SubDivisor is the divisor the packed sub-unit part is expressed in, recorded per line so a
+	// later refinement of the product never restates a past sale.
+	SubDivisor     int16  `cb:"SubDivisor,5"`
+	Sku            string `cb:"Sku,6"`
+	LotID          int32  `cb:"LotID,7"`
+	PresentationID int16  `cb:"PresentationID,8"`
+}
+
+// DetailProductIDs is the product of every line, in line order. It feeds the computed column of
+// the same name, which the product index groups hash.
+func (e *SaleOrder) DetailProductIDs() []int32 {
+	productIDs := make([]int32, 0, len(e.Lines))
+	for _, line := range e.Lines {
+		productIDs = append(productIDs, line.ProductID)
+	}
+	return productIDs
 }
 
 type SaleOrder struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	CompanyID   int32 `json:",omitempty" cb:"CompanyID,1"`
-	Date        int16 `json:",omitempty" cb:"Date,2"`
-	WarehouseID int32 `json:",omitempty" cb:"WarehouseID,3"`
+	CompanyID   int32 `cb:"CompanyID,1"`
+	Date        int16 `cb:"Date,2"`
+	WarehouseID int32 `cb:"WarehouseID,3"`
 	ID          int64 `cb:"ID,4"`
 
-	//Table: Following slices must be same size
-	DetailProductsIDs []int32 `json:",omitempty" db:",list" cb:"DetailProductsIDs,5"`
-	// DetailPrices is the price of one whole unit; DetailSubPrices the price of one sub-unit.
-	// Both are needed per line and neither is derivable from the other: selling loose is
-	// deliberately not proportional (four candies from a 5000-cent box of six is not 3333).
-	// A summary reprocess has to reconstruct what was charged, not what the product costs now.
-	DetailPrices    []int32 `json:",omitempty" db:",list" cb:"DetailPrices,6"`
-	DetailSubPrices []int32 `json:",omitempty" db:",list" cb:"DetailSubPrices,7"`
-	// DetailQuantities is the packed line quantity: Units*core.QuantityLineScale + Sub, so
-	// 1001 at divisor 6 is one box plus one candy. A sale order is a document — it is never
-	// accumulated and never SUM()-ed — so it packs both halves into one column, where the
-	// stock and ledger tables keep them separate. core.UnpackQuantityLine splits it.
-	DetailQuantities []int32 `json:",omitempty" db:",list" cb:"DetailQuantities,8"`
-	// DetailSubDivisor is the divisor each line's packed sub-unit part is expressed in,
-	// recorded per line so a later refinement of the product never restates a past sale.
-	DetailSubDivisor           []int16  `json:",omitempty" db:",list" cb:"DetailSubDivisor,9"`
-	DetailProductSkus          []string `json:",omitempty" db:",list" cb:"DetailProductSkus,10"`
-	DetailProductLotIDs        []int32  `json:",omitempty" db:",list" cb:"DetailProductLotIDs,11"`
-	DetailProductPresentations []int16  `json:",omitempty" db:",list" cb:"DetailProductPresentations,12"`
+	// Lines is stored as one colbin blob. Its product IDs are indexed through the computed
+	// DetailProductIDs column, so they are not stored a second time.
+	Lines []SaleOrderLine `cb:"Lines,5"`
 
-	// DetailPrices, DetailSubPrices and the three amounts below are all in the sale's
-	// currency: a USD sale stores dollars, converted per unit from the catalog on creation.
-	TotalAmount int32 `json:",omitempty" cb:"TotalAmount,13"`
-	TaxAmount   int32 `json:",omitempty" cb:"TaxAmount,14"`
-	DebtAmount  int32 `json:",omitempty" cb:"DebtAmount,15"`
+	// The line prices and the three amounts below are all in the sale's currency: a USD sale
+	// stores dollars, converted per unit from the catalog on creation.
+	TotalAmount int32 `cb:"TotalAmount,13"`
+	TaxAmount   int32 `cb:"TaxAmount,14"`
+	DebtAmount  int32 `cb:"DebtAmount,15"`
 	// CurrencyType is the sale's currency: 1 = PEN, 2 = USD (the cash-bank codes). A paid
 	// sale takes its cash-bank's currency; an unpaid one takes what the till picked.
-	CurrencyType int8 `json:",omitempty" cb:"CurrencyType,16"`
+	CurrencyType int8 `cb:"CurrencyType,16"`
 	// ExchangeRate is the effective rate × 1000 the lines were converted with, spread
 	// included — what a report needs to restate a USD sale in PEN. A USD sale always has one;
 	// a PEN sale only when it sold a USD-priced product.
-	ExchangeRate  int32 `json:",omitempty" cb:"ExchangeRate,17"`
-	ClientID      int32 `json:",omitempty" cb:"ClientID,18"`
-	Created       int32 `json:",omitempty" cb:"Created,19"`
-	Updated       int32 `json:"upd,omitempty" cb:"upd,20"`
-	UpdateCounter int32 `json:"upc,omitempty" cb:"upc,21"`
-	Version       int16 `json:"ver,omitempty" cb:"ver,22"`
+	ExchangeRate  int32 `cb:"ExchangeRate,17"`
+	ClientID      int32 `cb:"ClientID,18"`
+	Created       int32 `cb:"Created,19"`
+	Updated       int32 `json:"upd" cb:"upd,20"`
+	UpdateCounter int32 `json:"upc" cb:"upc,21"`
+	Version       int16 `json:"ver" cb:"ver,22"`
 	// Metadata is set only on the delta log records a Delta() read appends.
-	Metadata  *string `json:"mdt,omitempty" cb:"mdt,23"`
-	UpdatedBy int32   `json:",omitempty" cb:"UpdatedBy,24"`
+	Metadata  *string `json:"mdt" cb:"mdt,23"`
+	UpdatedBy int32   `cb:"UpdatedBy,24"`
 	// 0 = Anulado, 1 = Generado, 2 = Pagado, 3 = Entregado, 4 = Pagado + Entregado
-	Status            int8  `json:"ss,omitempty" cb:"ss,25"`
-	LastPaymentCajaID int32 `json:",omitempty" db:"caja_id_" cb:"LastPaymentCajaID,26"`
+	Status            int8  `json:"ss" cb:"ss,25"`
+	LastPaymentCajaID int32 `db:"caja_id_" cb:"LastPaymentCajaID,26"`
 	// If contains 2 = the payment is done
 	// If contains 3 = the delivery of the product is done
-	ActionsIncluded []int8 `json:",omitempty" cb:"ActionsIncluded,27"`
+	ActionsIncluded []int8 `cb:"ActionsIncluded,27"`
 	// Audit trail fields for payment and delivery actions.
-	LastPaymentTime int32                `json:",omitempty" cb:"LastPaymentTime,28"`
-	LastPaymentUser int32                `json:",omitempty" cb:"LastPaymentUser,29"`
-	DeliveryTime    int32                `json:",omitempty" cb:"DeliveryTime,30"`
-	DeliveryUser    int32                `json:",omitempty" cb:"DeliveryUser,31"`
-	ClientInfo      *SaleOrderClientInfo `json:",omitempty" cb:"ClientInfo,32"`
+	LastPaymentTime int32                `cb:"LastPaymentTime,28"`
+	LastPaymentUser int32                `cb:"LastPaymentUser,29"`
+	DeliveryTime    int32                `cb:"DeliveryTime,30"`
+	DeliveryUser    int32                `cb:"DeliveryUser,31"`
+	ClientInfo      *SaleOrderClientInfo `cb:"ClientInfo,32"`
 	// IssueSeriesID names the invoicing series this sale will be issued under. It
 	// is a request field, not a column: it is folded into the last two digits of
 	// the id on creation, and read back with SeriesID(). Zero when the till does
 	// not say.
-	IssueSeriesID  int8  `json:",omitempty" cb:"IssueSeriesID,33"`
-	PaymentDueDate int16 `json:",omitempty" db:"payment_due_date" cb:"PaymentDueDate,34"`
+	IssueSeriesID  int8  `cb:"IssueSeriesID,33"`
+	PaymentDueDate int16 `db:"payment_due_date" cb:"PaymentDueDate,34"`
 	// AnnulReason is why the sale was annulled, required by the annul endpoint. There is no
 	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
 	// already the "when and by whom" and a second pair could only drift from them.
-	AnnulReason string `json:",omitempty" cb:"AnnulReason,35"`
+	AnnulReason string `cb:"AnnulReason,35"`
 }
 
 // SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day, one row
@@ -106,31 +122,65 @@ type SaleSummaryFrame struct {
 	PendingSub    int32 `frame:"sum"`
 }
 
-// ToSaleSummaryFrames is what the sale adds to its day summary, from its current state alone: an
-// annulled sale adds nothing, an undelivered one keeps its quantities pending and an unpaid one its
-// amount as debt. The frame subtracts what the sale added before each write, so no write has to
-// undo anything by hand. It appends to lines, which a rebuild reuses from sale to sale.
+// SaleClientProductFrame is one sale line as the "sale-client-product" DataFrame sums it: one file
+// per day, one row per client, product and sub-unit divisor, for the queries by client. ClientID 0
+// is the sales without a client. The sums are SaleSummaryFrame's.
+type SaleClientProductFrame struct {
+	Date int16 `frame:"key"`
+	// ClientID leads the rows: each client is written once in a file, its products under it.
+	ClientID      int32 `frame:"row"`
+	ProductID     int32 `frame:"row"`
+	SubDivisor    int16 `frame:"row"`
+	AmountPEN     int32 `frame:"sum"`
+	DebtAmountPEN int32 `frame:"sum"`
+	SoldUnits     int32 `frame:"sum"`
+	SoldSub       int32 `frame:"sum"`
+	PendingUnits  int32 `frame:"sum"`
+	PendingSub    int32 `frame:"sum"`
+}
+
+// ToSaleSummaryFrames is what the sale adds to its day summary. It appends to lines, which a rebuild
+// reuses from sale to sale.
 func (e *SaleOrder) ToSaleSummaryFrames(lines []SaleSummaryFrame) []SaleSummaryFrame {
+	e.eachSummaryLine(func(line SaleSummaryFrame) { lines = append(lines, line) })
+	return lines
+}
+
+// ToSaleClientProductFrames is ToSaleSummaryFrames with the sale's client in every line.
+func (e *SaleOrder) ToSaleClientProductFrames(lines []SaleClientProductFrame) []SaleClientProductFrame {
+	e.eachSummaryLine(func(line SaleSummaryFrame) {
+		lines = append(lines, SaleClientProductFrame{
+			Date: line.Date, ClientID: e.ClientID, ProductID: line.ProductID, SubDivisor: line.SubDivisor,
+			AmountPEN: line.AmountPEN, DebtAmountPEN: line.DebtAmountPEN, SoldUnits: line.SoldUnits,
+			SoldSub: line.SoldSub, PendingUnits: line.PendingUnits, PendingSub: line.PendingSub,
+		})
+	})
+	return lines
+}
+
+// eachSummaryLine is what the sale adds to the sale DataFrames, line by line, from its current state
+// alone: an annulled sale adds nothing, an undelivered one keeps its quantities pending and an unpaid
+// one its amount as debt. A frame subtracts what the sale added before each write, so no write has to
+// undo anything by hand. Both frames read it, so they never disagree on a line.
+func (e *SaleOrder) eachSummaryLine(onLine func(line SaleSummaryFrame)) {
 	if e.Status == OrderStatusAnnulled {
-		return lines
+		return
 	}
 	isDeliveryPending := e.Status == OrderStatusPending || e.Status == OrderStatusPaid
 	isPaymentPending := e.Status == OrderStatusPending || e.Status == OrderStatusDelivered
-	for lineIndex, productID := range e.DetailProductsIDs {
-		packedQuantity := core.GetIndex(e.DetailQuantities, lineIndex)
-		if productID <= 0 || packedQuantity <= 0 {
+	for _, saleLine := range e.Lines {
+		if saleLine.ProductID <= 0 || saleLine.Quantity <= 0 {
 			continue
 		}
-		quantity := core.UnpackQuantityLine(packedQuantity)
-		subDivisor := core.GetIndex(e.DetailSubDivisor, lineIndex)
+		quantity := core.UnpackQuantityLine(saleLine.Quantity)
+		subDivisor := saleLine.SubDivisor
 		if subDivisor <= 0 {
 			subDivisor = core.QuantityDivisorNone
 		}
 		// Sub-units are charged at their own price, so the line total is exact, not prorated.
 		line := SaleSummaryFrame{
-			Date: e.Date, ProductID: productID, SubDivisor: subDivisor,
-			AmountPEN: e.AmountInPEN(core.QuantityAmount(quantity,
-				core.GetIndex(e.DetailPrices, lineIndex), core.GetIndex(e.DetailSubPrices, lineIndex))),
+			Date: e.Date, ProductID: saleLine.ProductID, SubDivisor: subDivisor,
+			AmountPEN: e.AmountInPEN(core.QuantityAmount(quantity, saleLine.Price, saleLine.SubPrice)),
 			SoldUnits: quantity.Units, SoldSub: quantity.Sub,
 		}
 		if isDeliveryPending {
@@ -139,9 +189,8 @@ func (e *SaleOrder) ToSaleSummaryFrames(lines []SaleSummaryFrame) []SaleSummaryF
 		if isPaymentPending {
 			line.DebtAmountPEN = line.AmountPEN
 		}
-		lines = append(lines, line)
+		onLine(line)
 	}
-	return lines
 }
 
 // AmountInPEN restates an amount of this sale in soles, with the rate the sale was converted
@@ -180,37 +229,32 @@ func (e *SaleOrder) AddStatus(orderState int8) error {
 
 type SaleOrderTable struct {
 	db.TableStruct[SaleOrderTable, SaleOrder]
-	CompanyID                  db.Col[*SaleOrderTable, int32]
-	ID                         db.Col[*SaleOrderTable, int64]
-	Date                       db.Col[*SaleOrderTable, int16]
-	WarehouseID                db.Col[*SaleOrderTable, int32]
-	LastPaymentCajaID          db.Col[*SaleOrderTable, int32]
-	DetailProductsIDs          db.Col[*SaleOrderTable, []int32]
-	DetailPrices               db.Col[*SaleOrderTable, []int32]
-	DetailSubPrices            db.Col[*SaleOrderTable, []int32]
-	DetailQuantities           db.Col[*SaleOrderTable, []int32]
-	DetailSubDivisor           db.Col[*SaleOrderTable, []int16]
-	DetailProductSkus          db.Col[*SaleOrderTable, []string]
-	DetailProductLotIDs        db.Col[*SaleOrderTable, []int32]
-	DetailProductPresentations db.Col[*SaleOrderTable, []int16]
-	TotalAmount                db.Col[*SaleOrderTable, int32]
-	TaxAmount                  db.Col[*SaleOrderTable, int32]
-	DebtAmount                 db.Col[*SaleOrderTable, int32]
-	CurrencyType               db.Col[*SaleOrderTable, int8]
-	ExchangeRate               db.Col[*SaleOrderTable, int32]
-	Created                    db.Col[*SaleOrderTable, int32]
-	ClientID                   db.Col[*SaleOrderTable, int32]
-	Updated                    db.Col[*SaleOrderTable, int32]
-	UpdateCounter              db.Col[*SaleOrderTable, int32]
-	Version                    db.Col[*SaleOrderTable, int16]
-	UpdatedBy                  db.Col[*SaleOrderTable, int32]
-	Status                     db.Col[*SaleOrderTable, int8]
-	LastPaymentTime            db.Col[*SaleOrderTable, int32]
-	LastPaymentUser            db.Col[*SaleOrderTable, int32]
-	DeliveryTime               db.Col[*SaleOrderTable, int32]
-	DeliveryUser               db.Col[*SaleOrderTable, int32]
-	PaymentDueDate             db.Col[*SaleOrderTable, int16]
-	AnnulReason                db.Col[*SaleOrderTable, string]
+	CompanyID         db.Col[*SaleOrderTable, int32]
+	ID                db.Col[*SaleOrderTable, int64]
+	Date              db.Col[*SaleOrderTable, int16]
+	WarehouseID       db.Col[*SaleOrderTable, int32]
+	LastPaymentCajaID db.Col[*SaleOrderTable, int32]
+	Lines             db.Col[*SaleOrderTable, []SaleOrderLine]
+	// DetailProductIDs has no field in SaleOrder: GetSchema computes it from Lines.
+	DetailProductIDs db.Col[*SaleOrderTable, []int32]
+	TotalAmount      db.Col[*SaleOrderTable, int32]
+	TaxAmount        db.Col[*SaleOrderTable, int32]
+	DebtAmount       db.Col[*SaleOrderTable, int32]
+	CurrencyType     db.Col[*SaleOrderTable, int8]
+	ExchangeRate     db.Col[*SaleOrderTable, int32]
+	Created          db.Col[*SaleOrderTable, int32]
+	ClientID         db.Col[*SaleOrderTable, int32]
+	Updated          db.Col[*SaleOrderTable, int32]
+	UpdateCounter    db.Col[*SaleOrderTable, int32]
+	Version          db.Col[*SaleOrderTable, int16]
+	UpdatedBy        db.Col[*SaleOrderTable, int32]
+	Status           db.Col[*SaleOrderTable, int8]
+	LastPaymentTime  db.Col[*SaleOrderTable, int32]
+	LastPaymentUser  db.Col[*SaleOrderTable, int32]
+	DeliveryTime     db.Col[*SaleOrderTable, int32]
+	DeliveryUser     db.Col[*SaleOrderTable, int32]
+	PaymentDueDate   db.Col[*SaleOrderTable, int16]
+	AnnulReason      db.Col[*SaleOrderTable, string]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -225,6 +269,10 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		// Sizes the Status slot of the delta index.
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Min: 0, Max: 4},
+		},
+		// Only the product index groups below read it, from the record in memory.
+		Computed: []db.ComputedCol{
+			{Col: e.DetailProductIDs, From: db.Cols(e.Lines), Value: db.Compute((*SaleOrder).DetailProductIDs)},
 		},
 		Indexes: []db.Index{
 			{
@@ -244,11 +292,11 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          db.Cols(e.Date, e.ClientID, e.DetailProductsIDs),
+				Keys:          db.Cols(e.Date, e.ClientID, e.DetailProductIDs),
 				UseIndexGroup: true,
 			},
 			{
-				Keys:          db.Cols(e.Date, e.DetailProductsIDs),
+				Keys:          db.Cols(e.Date, e.DetailProductIDs),
 				UseIndexGroup: true,
 			},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
@@ -261,6 +309,12 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			Name: "sale-summary", Version: 1, UseZeroSumsMask: true,
 			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
 			ToFrames:  db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
+		}, {
+			// The day/client/product detail, for the queries by client: its files are larger than
+			// sale-summary's (one row per client and product), so that one stays for the day totals.
+			Name: "sale-client-product", Version: 1, UseZeroSumsMask: true,
+			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
+			ToFrames:  db.ToFrames((*SaleOrder).ToSaleClientProductFrames),
 		}},
 	}
 }

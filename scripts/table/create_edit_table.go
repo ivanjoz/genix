@@ -178,14 +178,14 @@ func buildFieldString(name, typeName string, isKey, isSlice bool, sliceEType str
 		dbTag = fmt.Sprintf(`db:"%s,pk"`, snakeName)
 	}
 
-	jsonTag := `json:",omitempty"`
+	jsonTag := ""
 	if name == "Updated" {
-		jsonTag = `json:"upd,omitempty"`
+		jsonTag = `json:"upd"`
 	} else if name == "Status" {
-		jsonTag = `json:"ss,omitempty"`
+		jsonTag = `json:"ss"`
 	}
 
-	return fmt.Sprintf("\t%s %s `"+jsonTag+" "+dbTag+"`\n", name, typeName)
+	return fmt.Sprintf("\t%s %s `"+strings.TrimSpace(jsonTag+" "+dbTag)+"`\n", name, typeName)
 }
 
 func buildTableFieldString(name, typeName string, isSlice bool, sliceEType, tableCamelName string) string {
@@ -337,15 +337,15 @@ func findTableFile(dir, tableName string) (string, error) {
 func buildBaseFieldAST(field Field) *ast.Field {
 	snakeName := toSnakeCase(field.Name)
 
-	jsonTag := `json:",omitempty"`
+	jsonTag := ""
 	dbTag := fmt.Sprintf(`db:"%s"`, snakeName)
 	if field.IsKey {
 		dbTag = fmt.Sprintf(`db:"%s,pk"`, snakeName)
 	}
 	if field.Name == "Updated" {
-		jsonTag = `json:"upd,omitempty"`
+		jsonTag = `json:"upd"`
 	} else if field.Name == "Status" {
-		jsonTag = `json:"ss,omitempty"`
+		jsonTag = `json:"ss"`
 	}
 
 	var fieldType ast.Expr
@@ -360,7 +360,7 @@ func buildBaseFieldAST(field Field) *ast.Field {
 	return &ast.Field{
 		Names: []*ast.Ident{ast.NewIdent(field.Name)},
 		Type:  fieldType,
-		Tag:   &ast.BasicLit{Kind: token.STRING, Value: "`" + jsonTag + " " + dbTag + "`"},
+		Tag:   &ast.BasicLit{Kind: token.STRING, Value: "`" + strings.TrimSpace(jsonTag+" "+dbTag) + "`"},
 	}
 }
 
