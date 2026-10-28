@@ -35,6 +35,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-sync-image-assets":               SyncImageAssetsHandler,
 	"fn-reindex-text":                    ReindexTextSearch,
 	"fn-compact-frames":                  CompactDataFrames,
+	"fn-frame-sql":                       FrameSQLConsole,
 	"fn-emit-cpe":                        invoicing.EmitHandler,
 	"fn-sunat-beta-setup":                SetupSunatBeta,
 	"fn-emit-invoice":                    EmitInvoice,

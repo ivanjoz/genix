@@ -2,6 +2,16 @@
 
 Design decisions for the one-off scripts, newest first.
 
+## `fn-frame-sql` declares the sale frames itself, and resolves no names
+**Context** — Phase 1 of `backend/agent/PLAN_EINO_FRAMESQL.md` needed one FrameSQL statement run
+against a real company's sale frames, before the datasets of Phase 2 exist.
+**Decision** — `fn-frame-sql <companyID> <frame> <statement>` declares both sale frames with their
+version-1 sums, `sub_divisor` hidden. `PERIOD()` takes `D-a..D-b` (days back from `core.FechaUnix()`);
+quoted record names are not resolved.
+**Rationale** — It is a console for checking statements by hand. When Phase 2 declares the datasets
+in `sales/types`, this command reads them from there and its own declaration goes. Until then its
+frames copy what Phase 2 will own.
+
 ## A restore rebuilds the company's DataFrame files of every restored table
 **Context** — A restore deletes the company's partition with a raw `DELETE` before inserting the
 backup. The inserts reach the DataFrame log, the deletes don't, so the frames would keep counting

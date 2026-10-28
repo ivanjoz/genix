@@ -125,11 +125,12 @@ agent/                                    own go.mod (module genix-agent), repla
 1. Restore `dataframe/framesql/*` and `DATA_FRAMES_SQL.md` from `edb2a3b^` in the genix-orm
    submodule.
 2. Port it to the current module (section 2).
-3. Add `db.ReadFrameRows(tableName, partition, frameName, selection, isFresh)` (D1). It returns
-   `[]dataframe.Row` and `*dataframe.Frame` from the scylla executor's compiled
-   `dataframe.Table`.
-4. `backend/db/frame_sql.go`: the `db.SQL*` aliases plus `db.NewFrameSource(...)`, which always
-   reads fresh (D7).
+3. **Done, differently from planned (D1).** The ORM read is `FrameQuery.ExecRows()` plus
+   `FrameRequest.Selection`, behind a typed `db.FrameSource[RecordT](partition, frameName)` that
+   always reads fresh (D7). A non-generic `ReadFrameRows(tableName, …)` would have needed a table
+   registry the ORM doesn't have (genix-orm `dataframe/RATIONALE.md`).
+4. **Done.** `backend/db/frame_sql.go` holds the `db.SQL*` aliases and `db.FrameSource`.
+   `fn-frame-sql` is the console for running a statement by hand.
 5. Tests:
    - The restored parse/plan/engine tests, ported.
    - One engine test with 3 Rows columns (client, product, divisor).
