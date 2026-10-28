@@ -64,6 +64,10 @@ type DeployParams struct {
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
 const compilePath = "/cloud/main-compiled"
 
+// The agent (genix/agent) is its own module and its own Lambda, built from agent/cmd/server.
+const s3AgentCompiledPath = "gerp-artifacts/agent-compiled.zip"
+const agentCompilePath = "/cloud/agent-compiled"
+
 // BuildTags are required on every shipping backend build, not optional size tuning.
 //
 //   - lambda.norpc  drops aws-lambda-go's legacy local-RPC entry path, and with it net/rpc.
@@ -109,6 +113,7 @@ func main() {
 		"1": true,
 		"2": true,
 		"3": true,
+		"4": true,
 	}
 	for _, arg := range os.Args {
 		if validArgs[arg] {
@@ -181,20 +186,28 @@ func main() {
 		params.Cloudflare.Bucket = params.AppName + "-files"
 	}
 
+	backendLambdaName, backendHeavyLambdaName := params.AppName+"-backend", params.AppName+"-backend_2"
+	agentLambdaName := params.AppName + "-agent"
+
 	if w1 == "1" {
 		CompileBackendToS3(params, false)
-		DeployLambda(params, 0)
-		CompileBackendToS3(params, false)
-		DeployLambda(params, 2)
+		DeployLambda(params, backendLambdaName, compilePath)
+		DeployLambda(params, backendHeavyLambdaName, compilePath)
 		// El código y su CONFIG viajan juntos: publicar sólo el binario deja a la Lambda leyendo
 		// una configuración de un formato anterior, y una sección renombrada o nueva queda
 		// silenciosamente ausente hasta que alguien recuerda la acción 2. Así pasó con [fareward],
 		// que sin su sección cae a 127.0.0.1 y ninguna petición puede tomar un lock.
-		UpdateEnviromentVariables(params, 0)
-		UpdateEnviromentVariables(params, 2)
+		UpdateEnviromentVariables(params, backendLambdaName)
+		UpdateEnviromentVariables(params, backendHeavyLambdaName)
 	} else if w1 == "2" {
-		UpdateEnviromentVariables(params, 0)
-		UpdateEnviromentVariables(params, 2)
+		UpdateEnviromentVariables(params, backendLambdaName)
+		UpdateEnviromentVariables(params, backendHeavyLambdaName)
+		UpdateEnviromentVariables(params, agentLambdaName)
+	} else if w1 == "4" {
+		// The agent ships on its own: code and CONFIG together, like the backend in action 1.
+		CompileAgentToS3(params, false)
+		DeployLambda(params, agentLambdaName, agentCompilePath)
+		UpdateEnviromentVariables(params, agentLambdaName)
 	} else if w1 == "3" {
 		DeployIfraestructure(params)
 	} else {
@@ -207,17 +220,26 @@ func main() {
 
 // Compila el código Backend y lo envía a S3
 func CompileBackendToS3(params DeployParams, sendToS3 bool) {
+	compileLambdaToS3(params, "/backend/", ".", compilePath, params.S3CompiledPath, sendToS3)
+}
 
-	compiledPath := GetBaseWD() + compilePath
+// CompileAgentToS3 builds the agent's Lambda (agent/cmd/server, module genix-agent).
+func CompileAgentToS3(params DeployParams, sendToS3 bool) {
+	compileLambdaToS3(params, "/agent/", "./cmd/server", agentCompilePath, s3AgentCompiledPath, sendToS3)
+}
+
+func compileLambdaToS3(params DeployParams, moduleDir, buildTarget, compileTarget, s3Key string, sendToS3 bool) {
+
+	compiledPath := GetBaseWD() + compileTarget
 	// BuildTags must match every other shipping build path (scripts/deploy_vps.go). They drop
 	// net/rpc and x/net/trace, each of which disables the linker's dead-method elimination for
 	// the whole binary. See docs/BINARY_SIZE_PLAN.md.
-	command := `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 /usr/local/go/bin/go build -tags ` + BuildTags + ` -ldflags '-s -w' -o %v`
+	command := `GOOS=linux GOARCH=arm64 CGO_ENABLED=0 /usr/local/go/bin/go build -tags ` + BuildTags + ` -ldflags '-s -w' -o %v %v`
 
-	command = fmt.Sprintf(command, compiledPath)
+	command = fmt.Sprintf(command, compiledPath, buildTarget)
 	fmt.Println("Compilando con:: ", command)
 	cmd := exec.Command("bash", "-c", command)
-	cmd.Dir = GetBaseWD() + "/backend/"
+	cmd.Dir = GetBaseWD() + moduleDir
 
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -238,7 +260,7 @@ func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 		s3Args := FileToS3Args{
 			Bucket:        params.AWS.DeploymentBucket,
 			LocalFilePath: compiledZipPath,
-			FilePath:      params.S3CompiledPath,
+			FilePath:      s3Key,
 		}
 
 		fmt.Println("Enviando compilado a S3: ", s3Args.Bucket+" | "+s3Args.FilePath)
@@ -247,14 +269,9 @@ func CompileBackendToS3(params DeployParams, sendToS3 bool) {
 }
 
 // Despliega el código compilado de la Lambda
-func DeployLambda(params DeployParams, lambdaNro uint8) {
+func DeployLambda(params DeployParams, lambdaName, compileTarget string) {
 
-	lambdaName := params.AppName + "-backend"
-	if lambdaNro == 2 {
-		lambdaName += "_2"
-	}
-
-	zipFile, err := ReadFile(GetBaseWD() + compilePath + ".zip")
+	zipFile, err := ReadFile(GetBaseWD() + compileTarget + ".zip")
 
 	if err != nil {
 		panic("Error al leer el compilado.zip: " + err.Error())
@@ -281,12 +298,7 @@ func DeployLambda(params DeployParams, lambdaNro uint8) {
 }
 
 // Actualiza las variables de entorno de la Lambda
-func UpdateEnviromentVariables(params DeployParams, lambdaNro uint8) {
-
-	lambdaName := params.AppName + "-backend"
-	if lambdaNro == 2 {
-		lambdaName += "_2"
-	}
+func UpdateEnviromentVariables(params DeployParams, lambdaName string) {
 
 	fmt.Println("Actulizando variables de entorno...")
 	configValues := map[string]any{}
@@ -366,6 +378,7 @@ func DeployIfraestructure(params DeployParams) {
 	}
 
 	CompileBackendToS3(params, true)
+	CompileAgentToS3(params, true)
 	CompileRendererToS3(params)
 
 	fmt.Println("Desplegando infraestructura con CloudFormation...")
@@ -376,7 +389,8 @@ func DeployIfraestructure(params DeployParams) {
 	// en panic al arrancar (PopulateVariables lo exige cuando APP_CODE está seteado).
 	// Reinyectarlo aquí deja los secretos fuera de la plantilla, donde serían visibles en la
 	// consola de CloudFormation.
-	UpdateEnviromentVariables(params, 0)
-	UpdateEnviromentVariables(params, 2)
+	UpdateEnviromentVariables(params, params.AppName+"-backend")
+	UpdateEnviromentVariables(params, params.AppName+"-backend_2")
+	UpdateEnviromentVariables(params, params.AppName+"-agent")
 	UpdateRendererEnviromentVariables(params)
 }

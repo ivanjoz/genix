@@ -115,6 +115,7 @@ type EnvStruct struct {
 	DB_PORT                       int32
 	MAX_CLUSTERING_KEY            int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
 	SERVER_PORT                   int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
+	AGENT_PORT                    int32 // Listen port of the standalone agent server (genix/agent); 0 uses 3590
 	USUARIO_ID                    int32
 	ADMIN_PASSWORD                string
 	// SECRET_PHRASE signs what users hold: session tokens (usuario-accesos.go) and password
@@ -173,7 +174,7 @@ type EnvStruct struct {
 	// MODELS is the agent's model registry, straight from the [[models]] array table.
 	// File order is meaningful: it is the order of the model picker and its first entry
 	// is the default when DEFAULT_MODEL is blank. Consumed by
-	// backend/agent/llm, which turns each entry into its own request knobs.
+	// agent/llm, which turns each entry into its own request knobs.
 	MODELS []ModelEntry
 	// Text search backend, from search.url and search.password in config.toml. An
 	// "s3express://bucket/prefix" or "s3://bucket/prefix" URL selects genix-s3; anything else is
@@ -340,6 +341,7 @@ type fileConfig struct {
 		ClassifierProvider string `toml:"classifier_provider"`
 		MetaKey            string `toml:"meta_key"`
 		OpenRouterKey      string `toml:"openrouter_key"`
+		Port               int32  `toml:"port"`
 	} `toml:"agent"`
 
 	RateLimit struct {
@@ -528,6 +530,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	}
 	env.META_KEY = file.Agent.MetaKey
 	env.OPENROUTER_KEY = file.Agent.OpenRouterKey
+	env.AGENT_PORT = file.Agent.Port
 	env.MODELS = file.Models
 	// env.IS_DEV_ARG, not a config field: PopulateVariables sets it before this runs, precisely so
 	// that which daemon a process dials cannot be changed by editing a file.

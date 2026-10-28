@@ -24,7 +24,7 @@ import (
 	"app/agent_browser/browser"
 )
 
-// Mirrors backend/agent/protocol.go — only the fields this CLI prints.
+// Mirrors agent/protocol.go — only the fields this CLI prints.
 type agentComponent struct {
 	ID      int
 	Type    string
@@ -59,14 +59,14 @@ func readAllLimited(body io.Reader) (string, error) {
 
 // postAgentActions runs a batch through the backend and returns the post-action page snapshot.
 // An empty batch is the documented "what does the page look like now?" call.
-func postAgentActions(ctx context.Context, backendURL string, actions []agentAction) (agentResponse, error) {
+func postAgentActions(ctx context.Context, agentURL string, actions []agentAction) (agentResponse, error) {
 	result := agentResponse{}
 	body, err := json.Marshal(map[string]any{"Actions": actions})
 	if err != nil {
 		return result, err
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, backendURL+"/agent", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, agentURL+"/agent", bytes.NewReader(body))
 	if err != nil {
 		return result, err
 	}
@@ -74,7 +74,7 @@ func postAgentActions(ctx context.Context, backendURL string, actions []agentAct
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return result, fmt.Errorf("no se pudo contactar al backend en %s: %w", backendURL, err)
+		return result, fmt.Errorf("no se pudo contactar al backend en %s: %w", agentURL, err)
 	}
 	defer response.Body.Close()
 
@@ -115,7 +115,7 @@ func agentBrowserGoto(args []string) error {
 
 	// ReturnPageContent makes the browser wait for the route change and the DOM to settle before
 	// answering, so the snapshot below belongs to the new page and not the old one.
-	response, err := postAgentActions(ctx, state.BackendURL, []agentAction{
+	response, err := postAgentActions(ctx, state.AgentURL, []agentAction{
 		{Method: "navigate", Args: []any{args[0]}, ReturnPageContent: true},
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func agentBrowserHTML(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err := postAgentActions(ctx, state.BackendURL, []agentAction{})
+	response, err := postAgentActions(ctx, state.AgentURL, []agentAction{})
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func agentBrowserAct(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	response, err := postAgentActions(ctx, state.BackendURL, actions)
+	response, err := postAgentActions(ctx, state.AgentURL, actions)
 	if err != nil {
 		return err
 	}
@@ -336,13 +336,13 @@ func agentBrowserCompare(args []string) error {
 
 	// The in-page render is fetched through the backend so it goes down the same path the product
 	// agent uses; the handler writes the PNG and answers with its location.
-	if inPagePath, err := fetchInPageScreenshot(ctx, state.BackendURL); err != nil {
+	if inPagePath, err := fetchInPageScreenshot(ctx, state.AgentURL); err != nil {
 		fmt.Printf("in-page    falló: %v\n", err)
 	} else {
 		fmt.Printf("in-page    %s  ← lo que modern-screenshot produce\n", inPagePath)
 	}
 
-	response, err := postAgentActions(ctx, state.BackendURL, []agentAction{})
+	response, err := postAgentActions(ctx, state.AgentURL, []agentAction{})
 	if err != nil {
 		return err
 	}
@@ -356,8 +356,8 @@ func agentBrowserCompare(args []string) error {
 
 // fetchInPageScreenshot triggers the app's own DOM renderer through GET /agent?get=screenshot and
 // returns the path the backend wrote.
-func fetchInPageScreenshot(ctx context.Context, backendURL string) (string, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, backendURL+"/agent?get=screenshot", nil)
+func fetchInPageScreenshot(ctx context.Context, agentURL string) (string, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, agentURL+"/agent?get=screenshot", nil)
 	if err != nil {
 		return "", err
 	}

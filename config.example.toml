@@ -287,6 +287,8 @@ classifier_provider = ""
 classifier_model = ""
 meta_key         = ""
 openrouter_key   = ""
+# Port of the agent server (genix/agent) when it runs outside Lambda. 0/omitted = 3590.
+port             = 3590
 
 # ─── GenixSearch ────────────────────────────────────────────────────────────
 # Los escribe 'scripts/configure/configure_db.py search' con la IP alcanzable del host.
@@ -333,7 +335,10 @@ only_save = false
 [[endpoints]]
 name    = "Principal"
 route   = "https://mi-backend.example.com/"
-# Vacío/omitido = este backend sirve /agent/stream; otro dominio = fareward bridge.
+# The agent is its own process (genix/agent, its own Lambda): p-agent-turn, agent-models and,
+# without a bridge, /agent/stream. Empty/omitted = this endpoint offers no assistant.
+agent   = "https://mi-agente.example.com/"
+# Empty/omitted = the agent serves /agent/stream itself; another domain = fareward bridge.
 bridge  = "https://mi-bridge.example.com/"
 cdn_url = "https://mi-cdn.example.com/"
 

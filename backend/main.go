@@ -1,7 +1,6 @@
 package main
 
 import (
-	"app/agent"
 	"app/business"
 	"app/core"
 	"app/db"
@@ -153,17 +152,17 @@ func LambdaStreamingHandler(_ context.Context, request *events.APIGatewayV2HTTPR
 // is taken for the whole request, so the log of one API is never interleaved with another's.
 var serializedAPIRequests sync.Mutex
 
-// shouldSerializeRequest keeps the queue away from the two shapes that would turn it into a hang.
+// shouldSerializeRequest keeps the queue away from the shape that would turn it into a hang.
 //
-// A `-stream` route (SSE) holds its connection until the client goes away, and an agent turn waits
-// on an LLM: either one would own the lock for minutes while every other request piles up behind
-// it. They are also the two shapes whose logs are already self-contained, which is what the flag
-// is for. Everything else — the delta syncs a page load fires in parallel — queues.
+// A `-stream` route (SSE) holds its connection until the client goes away: it would own the lock
+// for minutes while every other request piles up behind it. It is also the shape whose logs are
+// already self-contained, which is what the flag is for. Everything else — the delta syncs a page
+// load fires in parallel — queues.
 func shouldSerializeRequest(routePath string) bool {
 	if !core.Env.DISABLE_API_CONCURRENCY_LOCAL {
 		return false
 	}
-	return !strings.HasSuffix(routePath, "-stream") && !strings.HasSuffix(routePath, "agent-turn")
+	return !strings.HasSuffix(routePath, "-stream")
 }
 
 func LocalHandler(w http.ResponseWriter, request *http.Request) {
@@ -396,10 +395,6 @@ func main() {
 	}
 	db.SetDebugLogging(dbLogLevel)
 
-	// Create project-local tmp/promps once so per-call prompt writes can skip
-	// the parent-dir check. Local-only; no-op in serverless/prod.
-	agent.InitPromptLog()
-
 	// Revisa si lo que se requiere es ejecutar una función
 	if len(invokeFun) != 0 {
 		fmt.Println("Invocando función...")
@@ -451,26 +446,9 @@ func main() {
 			AllowCredentials: false,
 		})
 
-		// SSE+POST channel so the backend can drive the browser as an agent.
-		// /agent/stream is the tab's permanent event stream (chat events AND page
-		// commands); /agent/in carries every browser→backend message (command
-		// replies and unsolicited events). The turn itself is not here: it is a
-		// plain API route (POST p-agent-turn, agent/turn.go) so that the exact
-		// same client code works against Lambda, where the stream lives on the
-		// SSE bridge (fareward/) instead of this process.
+		// The agent's stream and routes (/agent/*, p-agent-turn) are not served here: they live in
+		// their own process, genix/agent.
 		mux := http.NewServeMux()
-		// The browser connects to these cross-origin (app served from the dev
-		// proxy, backend on another port), so unlike the old WS upgrade they need
-		// CORS headers. No method prefix on the patterns: that lets the CORS
-		// middleware answer the JSON POST's preflight OPTIONS on /agent/in too.
-		mux.Handle("/agent/stream", corsMiddleware.Handler(http.HandlerFunc(agent.HandleStream)))
-		mux.Handle("/agent/in", corsMiddleware.Handler(http.HandlerFunc(agent.HandleIn)))
-		// HTTP entrypoint for external LLM agents (Claude Code / Gemini): batch
-		// actions in, post-action page snapshot out. Requires the tab's
-		// /agent/stream to be open.
-		mux.HandleFunc("POST /agent", agent.HandleAgentHTTP)
-		// GET /agent serves read-only side-channel queries (currently `?get=menu`).
-		mux.HandleFunc("GET /agent", agent.HandleAgentGet)
 		mux.Handle("/", corsMiddleware.Handler(http.HandlerFunc(LocalHandler)))
 
 		// Inicia el servidor con timeouts (previene slowloris y mejora resiliencia).

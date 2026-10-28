@@ -63,6 +63,14 @@ var deployActions = []deployAction{
 		return runCommand(context, "cloud", context.goBinary, "run", ".", "accion=1")
 	}},
 
+	// The agent (genix/agent) is its own Lambda: code and CONFIG, apart from the backend's.
+	{id: 15, group: groupPublish, label: "Agent (AWS Cloud)", run: func(context deployContext) error {
+		if err := generateRouteIDs(context); err != nil {
+			return err
+		}
+		return runCommand(context, "cloud", context.goBinary, "run", ".", "accion=4")
+	}},
+
 	{id: 3, group: groupPublish, label: "Backend (VPS)", run: func(context deployContext) error {
 		if err := generateRouteIDs(context); err != nil {
 			return err
@@ -136,7 +144,7 @@ var deployActions = []deployAction{
 // executionOrder no es el orden del menú: la infraestructura (9) va antes que las tablas
 // porque CloudFormation es dueño de la tabla DynamoDB que fn-init necesita. Es exactamente
 // el orden en el que deploy.sh evaluaba sus bloques.
-var executionOrder = []int{14, 1, 8, 2, 3, 4, 9, 5, 6, 10, 7, 11, 13, 12}
+var executionOrder = []int{14, 1, 8, 2, 15, 3, 4, 9, 5, 6, 10, 7, 11, 13, 12}
 
 // generateRouteIDs corre antes de compilar el backend para que ninguna ruta llegue a producción
 // sin número: sin él, una ruta nueva escribiría user_logs con route_id 0 hasta que alguien se

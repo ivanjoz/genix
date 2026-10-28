@@ -17,11 +17,16 @@ Imports flow one way. A package may import its own layer and anything below it.
 | **L1 Core** | `core`, `core/types` | L0 |
 | **L2 Contracts** | `<module>/types` | L0, L1, other `<module>/types` — **and nothing else, ever** |
 | **L3 Infra** | `cloud` | L0–L2 |
-| **L4 Module bodies** | `accounting`, `agent`, `business`, `config`, `crm`, `finance`, `invoicing`, `logistics`, `production`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |
+| **L4 Module bodies** | `accounting`, `business`, `config`, `crm`, `finance`, `invoicing`, `logistics`, `production`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |
 | **L5 Composition roots** | root `main`, `exec`, `tests/*`, `scripts` | anything |
 
-A module's own subpackages (`agent/llm`, `agent/pagebuilder`) are internal to it and may be
-imported freely from within the same module.
+A module's own subpackages are internal to it and may be imported freely from within the same
+module.
+
+**The agent** is not in the backend: it is its own Go module at the repository root
+(`genix/agent`, module `genix-agent`, `replace app => ../backend`) and its own binary and Lambda.
+It imports the backend in place under the same rule as a module body — L0–L2 only, never a module
+body — and the checker lists its packages next to the backend's.
 
 ## Why L2 is the load-bearing rule
 

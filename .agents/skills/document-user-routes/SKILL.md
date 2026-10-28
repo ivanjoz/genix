@@ -10,7 +10,7 @@ Write one `DOCUMENTATION.md` beside each eligible `frontend/routes/**/+page.svel
 
 ## Read the contract first
 
-Read `../../../backend/agent/PLAN_ROUTE_DOCUMENTATION.md` completely before examining or
+Read `../../../agent/PLAN_ROUTE_DOCUMENTATION.md` completely before examining or
 editing a route. It is authoritative for eligibility, evidence, language, provenance, stable
 IDs, maintenance behavior, and validation.
 
@@ -20,7 +20,7 @@ examples when wording or granularity is unclear:
 - `../../../frontend/routes/finance/cash-banks/DOCUMENTATION.md`
 - `../../../frontend/routes/logistics/purchase-orders/DOCUMENTATION.md`
 
-Read `../../../backend/agent/PLAN_DOCUMENTATION_RAG.md` only when changing chunk construction,
+Read `../../../agent/PLAN_DOCUMENTATION_RAG.md` only when changing chunk construction,
 index payloads, retrieval, or ingestion—not for an ordinary route documentation task.
 
 ## Scope the work

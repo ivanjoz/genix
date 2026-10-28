@@ -2,7 +2,6 @@ package main
 
 import (
 	"app/accounting"
-	"app/agent"
 	"app/business"
 	"app/config"
 	"app/core"
@@ -25,9 +24,9 @@ import (
 	"time"
 )
 
-// Agrupa los handlers de los módulos en uns solo map
+// Agrupa los handlers de los módulos en uns solo map. The agent is not here: it is its own
+// binary and Lambda (genix/agent), so this one never links the LLM stack.
 var appHandlersModules = []core.AppRouterType{
-	agent.ModuleHandlers,
 	exec.ModuleHandlers,
 	sales.ModuleHandlers,
 	config.ModuleHandlers,

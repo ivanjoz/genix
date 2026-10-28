@@ -20,14 +20,14 @@ func TestToSaleSummaryFramesFollowsTheStatus(t *testing.T) {
 		},
 	}
 	settledLines := []SaleSummaryFrame{
-		{Date: 20000, ProductID: 77, SubDivisor: 6, AmountPEN: 1700, SoldUnits: 3, SoldSub: 2},
-		{Date: 20000, ProductID: 78, SubDivisor: core.QuantityDivisorNone, AmountPEN: 2400, SoldUnits: 2},
+		{Date: 20000, ProductID: 77, SubDivisor: 6, AmountPEN: 1700, SoldUnits: 3, SoldSub: 2, SoldQuantity: 3 + 2.0/6},
+		{Date: 20000, ProductID: 78, SubDivisor: core.QuantityDivisorNone, AmountPEN: 2400, SoldUnits: 2, SoldQuantity: 2},
 	}
 	withPending := func(lines []SaleSummaryFrame, isDeliveryPending, isPaymentPending bool) []SaleSummaryFrame {
 		lines = append([]SaleSummaryFrame(nil), lines...)
 		for i := range lines {
 			if isDeliveryPending {
-				lines[i].PendingUnits, lines[i].PendingSub = lines[i].SoldUnits, lines[i].SoldSub
+				lines[i].PendingUnits, lines[i].PendingSub, lines[i].PendingQuantity = lines[i].SoldUnits, lines[i].SoldSub, lines[i].SoldQuantity
 			}
 			if isPaymentPending {
 				lines[i].DebtAmountPEN = lines[i].AmountPEN
@@ -67,7 +67,8 @@ func TestToSaleClientProductFramesAreTheSummaryLinesOfTheClient(t *testing.T) {
 	for i, summary := range summaryLines {
 		want := SaleClientProductFrame{Date: summary.Date, ClientID: 41, ProductID: summary.ProductID,
 			SubDivisor: summary.SubDivisor, AmountPEN: summary.AmountPEN, DebtAmountPEN: summary.DebtAmountPEN,
-			SoldUnits: summary.SoldUnits, SoldSub: summary.SoldSub, PendingUnits: summary.PendingUnits, PendingSub: summary.PendingSub}
+			SoldUnits: summary.SoldUnits, SoldSub: summary.SoldSub, PendingUnits: summary.PendingUnits, PendingSub: summary.PendingSub,
+			SoldQuantity: summary.SoldQuantity, PendingQuantity: summary.PendingQuantity}
 		if clientLines[i] != want {
 			t.Errorf("line %d:\n got %+v\nwant %+v", i, clientLines[i], want)
 		}

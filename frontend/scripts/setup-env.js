@@ -25,6 +25,8 @@ export const setupEnv = () => {
         `PUBLIC_ZONE_NAME=${config.frontend?.zone_name || ''}`,
         // Mirror the backend's configured standalone port for the local endpoint selector.
         `PUBLIC_LOCAL_API_PORT=${config.server?.port || 3589}`,
+        // Same for the agent process (genix/agent), which the "Local" endpoint reaches on its own port.
+        `PUBLIC_LOCAL_AGENT_PORT=${config.agent?.port || 3590}`,
         `PUBLIC_TAILSCALE_HOST=${tailscaleHost}`,
         `PUBLIC_ENDPOINTS=${serializedPublicEndpoints}`
       ].join('\n') + '\n';

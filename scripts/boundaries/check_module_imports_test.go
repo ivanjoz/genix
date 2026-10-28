@@ -11,7 +11,7 @@ func TestViolationRejectsModuleToModuleImports(t *testing.T) {
 		{"app/sales", "app/business"},
 		{"app/sales", "app/finance"},
 		{"app/sales", "app/logistics"},
-		{"app/agent/pagebuilder", "app/business"},
+		{"genix-agent/pagebuilder", "app/business"},
 	}
 	for _, edge := range illegal {
 		if reason := violation(edge[0], edge[1]); reason == "" {
@@ -25,6 +25,9 @@ func TestViolationAllowsTheLegalEdges(t *testing.T) {
 		// every module may reach any */types, core, db and libs
 		{"app/accounting", "app/finance/types"},
 		{"app/sales", "app/business/types"},
+		// the agent is its own module (genix-agent) and reaches the backend like any module body
+		{"genix-agent/pagebuilder", "app/business/types"},
+		{"genix-agent", "app/core"},
 		{"app/invoicing", "app/sales/types"},
 		{"app/finance", "app/core"},
 		{"app/logistics", "app/db"},
@@ -32,8 +35,7 @@ func TestViolationAllowsTheLegalEdges(t *testing.T) {
 		// infrastructure is below the modules
 		{"app/business", "app/cloud"},
 		// a module's own subpackages are internal to it
-		{"app/agent", "app/agent/llm"},
-		{"app/agent/discovery", "app/agent/knowledge"},
+		{"app/finance", "app/finance/reports"},
 		{"app/finance", "app/finance/types"},
 		// composition roots wire everything together — that is their job
 		{"app/exec", "app/sales"},
@@ -63,7 +65,6 @@ func TestViolationKeepsTypesPackagesLeaf(t *testing.T) {
 
 func TestModuleOf(t *testing.T) {
 	cases := map[string]string{
-		"app/agent/pagebuilder": "app/agent",
 		"app/finance/types":     "app/finance",
 		"app/finance":           "app/finance",
 		"main":                  "main",

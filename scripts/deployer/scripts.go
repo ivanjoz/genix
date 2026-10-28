@@ -88,19 +88,19 @@ var deployScripts = []scriptEntry{
 	{key: "index_documentation", group: scriptGroupGenerators, label: "Validar / Indexar Documentación RAG",
 		argumentsHint: "-mode validate|index [-dry-run] [-qdrant-host HOST] [-document PATH]",
 		run: func(context deployContext, arguments []string) error {
-			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/documentation-index"}, arguments...)...)
+			return runCommand(context, "agent", context.goBinary, append([]string{"run", "./cmd/documentation-index"}, arguments...)...)
 		}},
 
 	{key: "search_documentation", group: scriptGroupGenerators, label: "Buscar Documentación RAG",
 		argumentsHint: "-question TEXTO|-examples [-limit N] [-qdrant-host HOST]",
 		run: func(context deployContext, arguments []string) error {
-			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/documentation-search"}, arguments...)...)
+			return runCommand(context, "agent", context.goBinary, append([]string{"run", "./cmd/documentation-search"}, arguments...)...)
 		}},
 
 	{key: "plan_agent_discovery", group: scriptGroupGenerators, label: "Evaluar Descubrimiento del Agente",
 		argumentsHint: "-question TEXTO [-surface KIND] [-route PATH] [-language es|en] [-selected-section ID]",
 		run: func(context deployContext, arguments []string) error {
-			return runCommand(context, "backend", context.goBinary, append([]string{"run", "./agent/cmd/discovery-eval"}, arguments...)...)
+			return runCommand(context, "agent", context.goBinary, append([]string{"run", "./cmd/discovery-eval"}, arguments...)...)
 		}},
 }
 

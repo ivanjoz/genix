@@ -19,7 +19,7 @@ folder-plus-root-doc layout as `deployer/` + `DEPLOYER.md`.
 
 ## Why it exists
 
-`backend/agent/` already exposes everything an agent needs: `POST /agent` runs component actions
+`agent/` already exposes everything an agent needs: `POST /agent` runs component actions
 and returns the page's agentic HTML plus its component registry, `GET /agent?get=menu` lists
 routes, `GET /agent?get=screenshot` renders the DOM. All of it depended on two things only a human
 could supply — a browser tab somebody opened, and a session somebody logged into.

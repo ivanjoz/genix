@@ -3,7 +3,6 @@ package exec
 
 import (
 	accountingTypes "app/accounting/types"
-	agentTypes "app/agent/types"
 	businessTypes "app/business/types"
 	configTypes "app/config/types"
 	"app/core"
@@ -23,7 +22,6 @@ func MakeScyllaControllers() []db.Controller {
 	return []db.Controller{
 		makeDBController[DemoStruct](),
 		makeDBController[accountingTypes.Asset](),
-		makeDBController[agentTypes.AgentMessage](),
 		makeDBController[businessTypes.CityLocation](),
 		makeDBController[businessTypes.GalleryImage](),
 		makeDBController[businessTypes.ImageAsset](),
@@ -37,6 +35,7 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[core.Cache](),
 		makeDBController[core.CronAction](),
 		makeDBController[core.GlobalCache](),
+		makeDBController[coreTypes.AgentMessage](),
 		makeDBController[coreTypes.CompanyCreditBudget](),
 		makeDBController[coreTypes.CreditHistory](),
 		makeDBController[coreTypes.CreditUsageCompany](),
@@ -81,7 +80,6 @@ func MakeScyllaControllers() []db.Controller {
 func init() {
 	db.RegisterTableFactory("zz_demo_struct", func() db.Table { return db.MakeTable[DemoStruct]() })
 	db.RegisterTableFactory("accounting_asset", func() db.Table { return db.MakeTable[accountingTypes.Asset]() })
-	db.RegisterTableFactory("agent_messages", func() db.Table { return db.MakeTable[agentTypes.AgentMessage]() })
 	db.RegisterTableFactory("city_locations", func() db.Table { return db.MakeTable[businessTypes.CityLocation]() })
 	db.RegisterTableFactory("gallery_images", func() db.Table { return db.MakeTable[businessTypes.GalleryImage]() })
 	db.RegisterTableFactory("image_assets", func() db.Table { return db.MakeTable[businessTypes.ImageAsset]() })
@@ -95,6 +93,7 @@ func init() {
 	db.RegisterTableFactory("cache", func() db.Table { return db.MakeTable[core.Cache]() })
 	db.RegisterTableFactory("cron_actions", func() db.Table { return db.MakeTable[core.CronAction]() })
 	db.RegisterTableFactory("cache_global", func() db.Table { return db.MakeTable[core.GlobalCache]() })
+	db.RegisterTableFactory("agent_messages", func() db.Table { return db.MakeTable[coreTypes.AgentMessage]() })
 	db.RegisterTableFactory("company_credit_budget", func() db.Table { return db.MakeTable[coreTypes.CompanyCreditBudget]() })
 	db.RegisterTableFactory("credit_history", func() db.Table { return db.MakeTable[coreTypes.CreditHistory]() })
 	db.RegisterTableFactory("credit_usage_company", func() db.Table { return db.MakeTable[coreTypes.CreditUsageCompany]() })

@@ -47,7 +47,7 @@ export type AgentSurfaceProvider = () => AgentSurfaceContext
 export type AgentLiveContextProvider = (scope: AgentContextScope) => AgentLiveContext
 
 // Payload the backend's page-builder loop sends down the stream (agentSections,
-// mirrors backend/agent/chat_ws.go ChatAgentSections). The page applies it back
+// mirrors agent/chat_ws.go ChatAgentSections). The page applies it back
 // into its own model via the registered AgentSectionsApplier.
 export interface AgentSectionsPayload {
 	ModeID: number

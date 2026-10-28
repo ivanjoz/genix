@@ -1,8 +1,13 @@
 package exec
 
 import (
+	config "app/config/types"
 	"app/core"
+	"app/db"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/ivanjoz/genix-orm/scylla"
 )
@@ -25,6 +30,40 @@ func CompactDataFrames(args *core.ExecArgs) core.FuncResponse {
 	}
 	if err := errors.Join(tableErrors...); err != nil {
 		panic("Error al compactar los DataFrames: " + err.Error())
+	}
+	return core.FuncResponse{}
+}
+
+// RebuildSaleFrames (fn-rebuild-sale-frames [companyID]) builds the sale_order DataFrames again from
+// the sales, for every company or the one given. Run it after a frame's Version changes, so no user
+// read pays the rebuild. A company that fails does not stop the others.
+func RebuildSaleFrames(args *core.ExecArgs) core.FuncResponse {
+	onlyCompanyID, _ := strconv.ParseInt(strings.TrimSpace(args.Message), 10, 32)
+	companies := []config.Company{}
+	companyQuery := db.Query(&companies)
+	companyQuery.Status.GreaterEqual(0).AllowFilter()
+	if err := companyQuery.Exec(); err != nil {
+		return args.MakeErr("no se pudieron obtener las empresas:", err)
+	}
+	var saleOrderController db.Controller
+	for _, controller := range MakeScyllaControllers() {
+		if controller.GetTableName() == "sale_order" {
+			saleOrderController = controller
+		}
+	}
+	var companyErrors []error
+	for _, company := range companies {
+		if onlyCompanyID > 0 && int64(company.ID) != onlyCompanyID {
+			continue
+		}
+		if err := saleOrderController.RebuildDataFramesPartition(company.ID); err != nil {
+			companyErrors = append(companyErrors, fmt.Errorf("company %d: %w", company.ID, err))
+			continue
+		}
+		core.Log("sale frames rebuilt, company::", company.ID)
+	}
+	if err := errors.Join(companyErrors...); err != nil {
+		return args.MakeErr("Error al reconstruir los DataFrames de ventas:", err)
 	}
 	return core.FuncResponse{}
 }

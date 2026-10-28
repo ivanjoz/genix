@@ -6,6 +6,7 @@
 
 import Dexie from 'dexie'
 import { Env } from '#core/env.ts'
+import type { AgentChart, AgentTable } from './agent-answer'
 
 const LOG_PREFIX = '[agent-chat:idb]'
 const AGENT_CHAT_DB_PREFIX = 'agent_chat'
@@ -40,6 +41,18 @@ export interface AgentChatRow {
   // Pending = waiting for the backend's agentReply (used to render a spinner
   // next to the optimistic user row). Cleared once the row is finalized.
   pending?: boolean
+  // The sales tool's result (agent-answer.ts). Kept only here: the model reads the summary.
+  tables?: AgentTable[]
+  charts?: AgentChart[]
+  // A paused turn's question: the chat offers its choices (or "continue") while it is the last row.
+  pause?: AgentTurnPause
+}
+
+// AgentTurnPause mirrors agent.ChatTurnPause: what the next turn sends back as Resume.
+export interface AgentTurnPause {
+  CheckPointID: string
+  InterruptID?: string
+  Choices?: Array<{ ID: string, Label: string }>
 }
 
 class AgentChatDatabase extends Dexie {

@@ -34,7 +34,7 @@ import (
 )
 
 // Everything lands in the OS temp dir, next to the screenshot the backend already writes there
-// (backend/agent/http.go:writeScreenshot).
+// (agent/http.go:writeScreenshot).
 var (
 	statePath      = filepath.Join(os.TempDir(), "genix-agent-browser.json")
 	consoleLogPath = filepath.Join(os.TempDir(), "genix-agent-console.jsonl")
@@ -45,13 +45,13 @@ var (
 
 // browserState is what a short-lived subcommand needs to find the browser `start` launched.
 type browserState struct {
-	ChromePID  int
-	DebugPort  int
-	AppURL     string
-	BackendURL string
-	CompanyID  int
-	UserID     int
-	StartedAt  string
+	ChromePID int
+	DebugPort int
+	AppURL    string
+	AgentURL  string
+	CompanyID int
+	UserID    int
+	StartedAt string
 }
 
 func readBrowserState() (browserState, error) {
@@ -74,11 +74,11 @@ func writeBrowserState(state browserState) error {
 	return os.WriteFile(statePath, raw, 0o600)
 }
 
-// defaultBackendURL resolves where the local backend listens by reading the same config.toml the
-// backend itself reads. Hardcoding a port would break on every machine whose config differs from
-// the author's — the documented 3589 is only the fallback when `server.port` is 0 or absent.
-func defaultBackendURL() string {
-	const fallbackPort = 3589
+// defaultAgentURL resolves where the local agent server (genix/agent) listens by reading the same
+// config.toml it reads. Hardcoding a port would break on every machine whose config differs from
+// the author's — the documented 3590 is only the fallback when `agent.port` is 0 or absent.
+func defaultAgentURL() string {
+	const fallbackPort = 3590
 
 	root, err := os.Getwd()
 	if err != nil {
@@ -89,12 +89,12 @@ func defaultBackendURL() string {
 		configPath := filepath.Join(root, "config.toml")
 		if raw, err := os.ReadFile(configPath); err == nil {
 			var config struct {
-				Server struct {
+				Agent struct {
 					Port int `toml:"port"`
-				} `toml:"server"`
+				} `toml:"agent"`
 			}
-			if toml.Unmarshal(raw, &config) == nil && config.Server.Port > 0 {
-				return fmt.Sprintf("http://localhost:%d", config.Server.Port)
+			if toml.Unmarshal(raw, &config) == nil && config.Agent.Port > 0 {
+				return fmt.Sprintf("http://localhost:%d", config.Agent.Port)
 			}
 			break
 		}
@@ -163,7 +163,7 @@ func main() {
 func printAgentBrowserUsage() {
 	fmt.Println(`agent_browser — headless dev browser for the agentic API
 
-  start [-company 1] [-user 1] [-route /] [-app URL] [-backend URL]
+  start [-company 1] [-user 1] [-route /] [-app URL] [-agent URL]
         [-width 1440] [-height 900] [-port 9222] [-headed] [-chrome PATH]
                             launch Chrome, log in, hold it open (run in background)
   stop                      kill the browser and drop its state
@@ -183,7 +183,7 @@ func agentBrowserStart(args []string) error {
 	userID := flags.Int("user", 1, "UserID de la sesión")
 	route := flags.String("route", "/", "ruta inicial de la app")
 	appURL := flags.String("app", "http://localhost:3570", "origen del frontend en desarrollo")
-	backendURL := flags.String("backend", defaultBackendURL(), "origen del backend (por defecto, server.port de config.toml)")
+	agentURL := flags.String("agent", defaultAgentURL(), "origin of the agent server (default: agent.port in config.toml)")
 	width := flags.Int("width", 1440, "ancho de la ventana")
 	height := flags.Int("height", 900, "alto de la ventana")
 	debugPort := flags.Int("port", 9222, "puerto de depuración de chrome")
@@ -243,13 +243,13 @@ func agentBrowserStart(args []string) error {
 	fmt.Printf("url        %s\n", startURL)
 
 	state := browserState{
-		ChromePID:  chrome.Process.Pid,
-		DebugPort:  *debugPort,
-		AppURL:     *appURL,
-		BackendURL: *backendURL,
-		CompanyID:  *companyID,
-		UserID:     *userID,
-		StartedAt:  time.Now().Format(time.RFC3339),
+		ChromePID: chrome.Process.Pid,
+		DebugPort: *debugPort,
+		AppURL:    *appURL,
+		AgentURL:  *agentURL,
+		CompanyID: *companyID,
+		UserID:    *userID,
+		StartedAt: time.Now().Format(time.RFC3339),
 	}
 	if err := writeBrowserState(state); err != nil {
 		return err
@@ -297,11 +297,11 @@ func agentBrowserStart(args []string) error {
 	// page's boot errors are exactly what we must not miss.
 	go collectConsoleEvents(events, consoleLog)
 
-	if err := waitForRegisteredTab(ctx, *backendURL, 40*time.Second); err != nil {
+	if err := waitForRegisteredTab(ctx, *agentURL, 40*time.Second); err != nil {
 		fmt.Fprintln(os.Stderr, "aviso:", err)
 		fmt.Fprintf(os.Stderr, "revisa %s para ver por qué la página no llegó a registrarse\n", consoleLogPath)
 	} else {
-		fmt.Printf("tab        registrada en el backend — el agente ya puede usar POST %s/agent\n", *backendURL)
+		fmt.Printf("tab        registrada en el backend — el agente ya puede usar POST %s/agent\n", *agentURL)
 	}
 	fmt.Printf("console    %s\n", consoleLogPath)
 	fmt.Println("listo. Ctrl-C (o `agent_browser stop`) para cerrar.")
@@ -315,11 +315,11 @@ func agentBrowserStart(args []string) error {
 // waitForRegisteredTab blocks until the backend can reach the tab. GET /agent?get=menu answers 503
 // while no browser holds an SSE stream, which makes it the readiness probe for the whole chain:
 // page loaded → session minted → stream opened → tab registered.
-func waitForRegisteredTab(ctx context.Context, backendURL string, timeout time.Duration) error {
+func waitForRegisteredTab(ctx context.Context, agentURL string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	lastStatus := 0
 	for {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, backendURL+"/agent?get=menu", nil)
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, agentURL+"/agent?get=menu", nil)
 		if err != nil {
 			return err
 		}
@@ -370,7 +370,7 @@ func agentBrowserStatus() error {
 		fmt.Printf("url        no disponible: %v\n", err)
 	}
 
-	if err := waitForRegisteredTab(ctx, state.BackendURL, time.Second); err != nil {
+	if err := waitForRegisteredTab(ctx, state.AgentURL, time.Second); err != nil {
 		fmt.Printf("tab        NO registrada en el backend: %v\n", err)
 	} else {
 		fmt.Println("tab        registrada en el backend")

@@ -115,8 +115,11 @@ routes/                 Leaves — features consume everything above
 
 ```
 backend/          Go API. Domain packages: sales, production, crm, logistics, finance,
-                  invoicing, business, security, agent, webpage. core/ = shared helpers,
+                  invoicing, business, security, webpage. core/ = shared helpers,
                   db/ = the ONLY ORM entry point, exec/ = entrypoints, tests/, docs/
+agent/            The LLM agent: its own Go module (genix-agent) and binary/Lambda
+                  (cmd/server). Imports the backend in place (replace app => ../backend),
+                  core, db and */types only. Port [agent].port (3590)
 backend/genix-orm/     git submodule (github.com/ivanjoz/genix-orm) — separate repo
 backend/facturago/     git submodule (github.com/ivanjoz/facturago) — separate repo,
                        public: SUNAT electronic invoicing, names no consumer

@@ -28,7 +28,7 @@ func FrameSQLConsole(args *core.ExecArgs) core.FuncResponse {
 	if err != nil {
 		return core.FuncResponse{Error: "the company ID is not a number: " + parts[0]}
 	}
-	result, err := db.PrepareFrameSQL(parts[1], parts[2], saleFrameSQLFrames(int32(companyID)), db.SQLOptions{})
+	result, err := db.PrepareFrameSQL(parts[1], parts[2], sales.SaleFrameSQLFrames(int32(companyID)), db.SQLOptions{})
 	if err == nil {
 		var statementResult db.SQLResult
 		statementResult, err = result.Run(db.SQLResolvers{Period: daysBackPeriod})
@@ -40,29 +40,6 @@ func FrameSQLConsole(args *core.ExecArgs) core.FuncResponse {
 		return core.FuncResponse{Error: err.Error()}
 	}
 	return core.FuncResponse{}
-}
-
-// saleFrameSQLFrames are the sale frames as FrameSQL reads them (version 1 of their sums).
-func saleFrameSQLFrames(companyID int32) []db.SQLFrame {
-	dateColumn := db.SQLColumn{Name: "date", Label: "Date", Kind: db.SQLDay}
-	productColumn := db.SQLColumn{Name: "product_id", Label: "Product", Kind: db.SQLRef, Collection: "products"}
-	clientColumn := db.SQLColumn{Name: "client_id", Label: "Client", Kind: db.SQLRef, Collection: "clients"}
-	divisorColumn := db.SQLColumn{Name: "sub_divisor", Hidden: true}
-	sums := []db.SQLColumn{
-		{Name: "amount", Label: "Amount", Kind: db.SQLCents},
-		{Name: "debt_amount", Label: "Debt", Kind: db.SQLCents},
-		{Name: "sold_units", Label: "Sold units"},
-		{Name: "sold_sub", Label: "Sold sub-units"},
-		{Name: "pending_units", Label: "Pending units"},
-		{Name: "pending_sub", Label: "Pending sub-units"},
-	}
-	return []db.SQLFrame{{
-		Name: "sale-summary", Keys: []db.SQLColumn{dateColumn}, Rows: []db.SQLColumn{productColumn, divisorColumn}, Sums: sums,
-		Source: db.FrameSource[sales.SaleOrder](companyID, "sale-summary"),
-	}, {
-		Name: "sale-client-product", Keys: []db.SQLColumn{dateColumn}, Rows: []db.SQLColumn{clientColumn, productColumn, divisorColumn}, Sums: sums,
-		Source: db.FrameSource[sales.SaleOrder](companyID, "sale-client-product"),
-	}}
 }
 
 // daysBackPeriod reads "D-a..D-b" (or "D") as the days a and b back from today.

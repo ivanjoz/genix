@@ -120,6 +120,12 @@ type SaleSummaryFrame struct {
 	SoldSub       int32 `frame:"sum"`
 	PendingUnits  int32 `frame:"sum"`
 	PendingSub    int32 `frame:"sum"`
+	// SoldQuantity and PendingQuantity are the same quantities in whole units with their fraction
+	// (units + sub / divisor), so rows of different divisors add up: what FrameSQL reads, where the
+	// split pairs and the divisor stay hidden (sale_frames_sql.go). They go last, so the readers of the
+	// split pairs keep their sums' positions.
+	SoldQuantity    float64 `frame:"sum"`
+	PendingQuantity float64 `frame:"sum"`
 }
 
 // SaleClientProductFrame is one sale line as the "sale-client-product" DataFrame sums it: one file
@@ -131,12 +137,14 @@ type SaleClientProductFrame struct {
 	ClientID      int32 `frame:"row"`
 	ProductID     int32 `frame:"row"`
 	SubDivisor    int16 `frame:"row"`
-	AmountPEN     int32 `frame:"sum"`
-	DebtAmountPEN int32 `frame:"sum"`
-	SoldUnits     int32 `frame:"sum"`
-	SoldSub       int32 `frame:"sum"`
-	PendingUnits  int32 `frame:"sum"`
-	PendingSub    int32 `frame:"sum"`
+	AmountPEN       int32   `frame:"sum"`
+	DebtAmountPEN   int32   `frame:"sum"`
+	SoldUnits       int32   `frame:"sum"`
+	SoldSub         int32   `frame:"sum"`
+	PendingUnits    int32   `frame:"sum"`
+	PendingSub      int32   `frame:"sum"`
+	SoldQuantity    float64 `frame:"sum"`
+	PendingQuantity float64 `frame:"sum"`
 }
 
 // ToSaleSummaryFrames is what the sale adds to its day summary. It appends to lines, which a rebuild
@@ -153,6 +161,7 @@ func (e *SaleOrder) ToSaleClientProductFrames(lines []SaleClientProductFrame) []
 			Date: line.Date, ClientID: e.ClientID, ProductID: line.ProductID, SubDivisor: line.SubDivisor,
 			AmountPEN: line.AmountPEN, DebtAmountPEN: line.DebtAmountPEN, SoldUnits: line.SoldUnits,
 			SoldSub: line.SoldSub, PendingUnits: line.PendingUnits, PendingSub: line.PendingSub,
+			SoldQuantity: line.SoldQuantity, PendingQuantity: line.PendingQuantity,
 		})
 	})
 	return lines
@@ -182,9 +191,10 @@ func (e *SaleOrder) eachSummaryLine(onLine func(line SaleSummaryFrame)) {
 			Date: e.Date, ProductID: saleLine.ProductID, SubDivisor: subDivisor,
 			AmountPEN: e.AmountInPEN(core.QuantityAmount(quantity, saleLine.Price, saleLine.SubPrice)),
 			SoldUnits: quantity.Units, SoldSub: quantity.Sub,
+			SoldQuantity: float64(quantity.Units) + float64(quantity.Sub)/float64(subDivisor),
 		}
 		if isDeliveryPending {
-			line.PendingUnits, line.PendingSub = quantity.Units, quantity.Sub
+			line.PendingUnits, line.PendingSub, line.PendingQuantity = quantity.Units, quantity.Sub, line.SoldQuantity
 		}
 		if isPaymentPending {
 			line.DebtAmountPEN = line.AmountPEN
@@ -305,14 +315,15 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			// The day/product sales summary of /sales/sale_orders_charts. Most products have no
 			// sub-units and most sales are settled, so the zero sums mask drops the Sub and
 			// pending/debt columns of a day that has none. A read compacts the company's files
-			// once 100 sales changed or an hour passed since the last compaction.
-			Name: "sale-summary", Version: 1, UseZeroSumsMask: true,
+			// once 100 sales changed or an hour passed since the last compaction. Version 2 added the
+			// SoldQuantity and PendingQuantity sums.
+			Name: "sale-summary", Version: 2, UseZeroSumsMask: true,
 			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
 			ToFrames:  db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
 		}, {
 			// The day/client/product detail, for the queries by client: its files are larger than
 			// sale-summary's (one row per client and product), so that one stays for the day totals.
-			Name: "sale-client-product", Version: 1, UseZeroSumsMask: true,
+			Name: "sale-client-product", Version: 2, UseZeroSumsMask: true,
 			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
 			ToFrames:  db.ToFrames((*SaleOrder).ToSaleClientProductFrames),
 		}},

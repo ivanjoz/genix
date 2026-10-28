@@ -21,6 +21,9 @@ Parameters:
   CompiledS3Key:
     Type: String
     Description: Key of the compiled backend .zip inside DeploymentBucket.
+  AgentCompiledS3Key:
+    Type: String
+    Description: Key of the compiled agent .zip (genix/agent) inside DeploymentBucket.
   LambdaIamRole:
     Type: String
     Description: ARN of a pre-existing execution role. The stack creates no IAM resources.
@@ -264,6 +267,62 @@ Resources:
       LogGroupName: !Sub "/aws/lambda/${NamePrefix}-backend_2"
       RetentionInDays: 30
 
+  # ------------------------------------------------------------------- agent
+
+  # The agent (genix/agent) is its own binary, so the backend never links the LLM stack. A turn
+  # answers {Ok:true} and everything else travels on the SSE bridge, so its Function URL is
+  # BUFFERED and the Go handler never reads LAMBDA_RESPONSE_STREAMING. CONFIG is re-injected after
+  # each stack update, as for the backend. Timeout stays above the 4-minute turnTimeout.
+  AgentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${NamePrefix}-agent"
+      Runtime: provided.al2023
+      Handler: bootstrap
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 300
+      Role: !Ref LambdaIamRole
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: !Ref AgentCompiledS3Key
+      Environment:
+        Variables:
+          APP_CODE: !Ref AppCode
+
+  AgentFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt AgentFunction.Arn
+      AuthType: NONE
+      InvokeMode: BUFFERED
+      Cors:
+        AllowOrigins: ["*"]
+        AllowHeaders: ["*"]
+        AllowMethods: [GET, POST]
+
+  AgentFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunctionUrl
+      FunctionName: !GetAtt AgentFunction.Arn
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+
+  AgentFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt AgentFunction.Arn
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+
+  AgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${NamePrefix}-agent"
+      RetentionInDays: 30
+
   # ------------------------------------------------------- webpage renderer
 
   # SSR de las webpages de company. Es Node y no Go porque el servidor de SvelteKit es
@@ -396,6 +455,10 @@ Outputs:
   BackendHeavyUrl:
     Description: Public Function URL of the high-memory backend Lambda
     Value: !GetAtt BackendHeavyFunctionUrl.FunctionUrl
+  # Goes into config.toml by hand as [[endpoints]].agent: the frontend sends the agent routes there.
+  AgentUrl:
+    Description: Public Function URL of the agent Lambda (genix/agent)
+    Value: !GetAtt AgentFunctionUrl.FunctionUrl
   FrontendDistributionDomain:
     Condition: UseCloudFront
     Description: CloudFront domain serving the frontend

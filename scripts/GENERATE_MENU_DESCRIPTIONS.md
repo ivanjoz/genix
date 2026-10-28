@@ -31,7 +31,7 @@ description_es: >-
 
 Use a folded block scalar (`>-`) so the text may contain colons and apostrophes without quoting.
 These fields sit above the first `<!-- DOC-ID: -->` marker's territory, so they never reach the RAG
-index: `backend/agent/ragdocs` builds chunks only from DOC-ID sections and the six identity fields.
+index: `agent/ragdocs` builds chunks only from DOC-ID sections and the six identity fields.
 
 ## Validation
 

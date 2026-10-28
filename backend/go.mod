@@ -6,13 +6,11 @@ toolchain go1.27.0
 
 require (
 	github.com/amenzhinsky/go-memexec v0.7.1 // indirect
-	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.1 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.5 // indirect
@@ -40,14 +38,15 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	google.golang.org/grpc v1.82.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/aws/aws-lambda-go v1.52.0
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
@@ -83,15 +82,11 @@ require (
 	github.com/rs/cors v1.8.2
 	github.com/viant/xunsafe v0.11.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	github.com/x448/float16 v0.8.4
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
-	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
-	golang.org/x/text v0.41.0
 	google.golang.org/protobuf v1.36.12
-	gopkg.in/yaml.v3 v3.0.1
 )
 
 // gocql is genix-orm's dependency, so the fork lives in that repo (genix-orm/thirdparty/gocql,

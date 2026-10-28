@@ -40,6 +40,7 @@ func DeployCloudFormation(params DeployParams) {
 		makeStackParameter("FrontendBucketName", params.FrontendBucket),
 		makeStackParameter("DeploymentBucket", params.AWS.DeploymentBucket),
 		makeStackParameter("CompiledS3Key", params.S3CompiledPath),
+		makeStackParameter("AgentCompiledS3Key", s3AgentCompiledPath),
 		makeStackParameter("LambdaIamRole", params.AWS.LambdaIAMRole),
 		makeStackParameter("AppCode", appCodeEnvValue),
 		makeStackParameter("RendererS3Key", rendererS3Path),

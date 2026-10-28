@@ -87,7 +87,7 @@ func updateLambdaEnvironmentVariables(context deployContext) error {
 	backendEnvironment := map[string]map[string]string{"Variables": backendVariables}
 
 	someLambdaFailed := false
-	for _, lambdaName := range []string{config.AppName + "-backend", config.AppName + "-backend_2"} {
+	for _, lambdaName := range []string{config.AppName + "-backend", config.AppName + "-backend_2", config.AppName + "-agent"} {
 		if err := applyLambdaEnvironment(config, lambdaName, backendEnvironment); err != nil {
 			fmt.Fprintf(os.Stderr, "❌ %v\n", err)
 			someLambdaFailed = true

@@ -5,6 +5,10 @@ const FILENAME = require("path").basename(process.argv[1] || "start.js")
 const FRONTEND_SCRIPT = "npm run dev"
 // Sin -v: el listado de paquetes no aporta y ensucia el log en cada reinicio.
 const BACKEND_GO_SCRIPT = "go run . dev"
+// The agent is its own module (agent/, genix-agent) and its own process. The nodemon module is a
+// singleton (the backend already owns it), so the agent runs under the nodemon CLI instead. It
+// watches the backend packages it imports in place, so a change in core or a */types restarts it.
+const AGENT_GO_SCRIPT = `"${require("path").join(__dirname, "node_modules", ".bin", "nodemon")}" --quiet -e go --delay 200ms --signal SIGTERM --watch . --watch ../backend/core --watch ../backend/db --watch ../backend/sales/types --exec "go run ./cmd/server dev"`
 const RATE_LIMITER_SCRIPT = "cargo run"
 const ENVIROMENT_VARIABLES = "dev1"
 const FRONTEND_PROXY_PORT = Number.parseInt(process.env.GENIX_PROXY_PORT || "3572", 10)
@@ -79,6 +83,8 @@ const rateLimiterPath = path.join(__dirname, 'fareward')
 
 // Backend
 const backendGoPath = path.join(__dirname, 'backend')
+// Agent (genix/agent)
+const agentGoPath = path.join(__dirname, 'agent')
 
 // `go mod download`, NOT `go mod tidy`. Tidy walks the test imports of every dependency, and
 // grpc/status's own tests import google.golang.org/protobuf/{testing/protocmp,reflect/protodesc}:
@@ -89,6 +95,7 @@ const backendGoPath = path.join(__dirname, 'backend')
 // cache, turning a ~5s warm build into ~36s.
 console.log("Instalando los paquetes de Go (si no lo están)...")
 execSync('go mod download', { stdio: "inherit", shell: true, cwd: backendGoPath })
+execSync('go mod download', { stdio: "inherit", shell: true, cwd: agentGoPath })
 
 // Tailscale. serve_tailscale = true en config.toml expone el frontend de desarrollo en la IP
 // del tailnet para poder abrir la app desde otra máquina. El backend (:3589), fareward
@@ -112,13 +119,16 @@ const readServeTailscaleFlag = () => {
 
 // El puerto del backend sale de [server].port, no de una constante: aquí vale 14010, y una
 // URL impresa con el 3589 por defecto mandaría a la otra máquina a un puerto cerrado.
-const readBackendPort = () => {
-  const afterSectionHeader = readConfigText().split(/^\s*\[server\]\s*$/m)[1]
-  if (!afterSectionHeader) { return '3589' }
+// Same for the agent server, from [agent].port.
+const readSectionPort = (sectionName, defaultPort) => {
+  const afterSectionHeader = readConfigText().split(new RegExp(`^\\s*\\[${sectionName}\\]\\s*$`, 'm'))[1]
+  if (!afterSectionHeader) { return defaultPort }
   const portMatch = afterSectionHeader.split(/^\s*\[/m)[0].match(/^\s*port\s*=\s*(\d+)/m)
   const parsedPort = portMatch ? Number.parseInt(portMatch[1], 10) : 0
-  return parsedPort > 0 ? String(parsedPort) : '3589'
+  return parsedPort > 0 ? String(parsedPort) : defaultPort
 }
+const readBackendPort = () => readSectionPort('server', '3589')
+const readAgentPort = () => readSectionPort('agent', '3590')
 
 // La IP la da el propio tailscale: preguntarle es a la vez el chequeo de "está instalado" y
 // el de "está conectado", que es lo que importa. Un binario presente pero sin IP asignada no
@@ -199,13 +209,14 @@ const runScripts = () => {
   }
   */
   console.log("Executing processes...")
-  console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${MAGENTA_BAR}${MAGENTA_BAR} Rate limiter (Rust)`)
+  console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${CYAN_BAR}${CYAN_BAR} Agent (Go)   ${MAGENTA_BAR}${MAGENTA_BAR} Rate limiter (Rust)`)
 
   // Run all scripts in parallel
   runScript(FRONTEND_SCRIPT, YELLOW_BAR, frontendPath, {
     GENIX_TAILSCALE_HOST: tailscaleHost
   })
   startBackendGo()
+  runScript(AGENT_GO_SCRIPT, CYAN_BAR, agentGoPath)
   runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, rateLimiterPath, {
     RUST_LOG: process.env.RUST_LOG || "fareward=debug"
   })
@@ -308,6 +319,6 @@ const killPortIfInUse = (port) => {
 
 // Kill necessary ports before starting.
 // Clear the selected proxy port so launcher variants do not retain stale processes.
-[3570, 3571, FRONTEND_PROXY_PORT, 3588, 3589, 14013].forEach(killPortIfInUse)
+[3570, 3571, FRONTEND_PROXY_PORT, 3588, 3589, Number(readAgentPort()), 14013].forEach(killPortIfInUse)
 // Run scripts
 runScripts()

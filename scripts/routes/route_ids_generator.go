@@ -55,9 +55,18 @@ func main() {
 		exitWith(err)
 	}
 
+	// The agent (genix/agent) is its own binary but charges its turn on the same credit route IDs,
+	// so its ModuleHandlers are numbered in the same file.
 	declaredRoutes, err := scanModuleHandlerRoutes(filepath.Join(projectRoot, "backend"))
 	if err != nil {
 		exitWith(err)
+	}
+	agentRoutes, err := scanModuleHandlerRoutes(filepath.Join(projectRoot, "agent"))
+	if err != nil {
+		exitWith(err)
+	}
+	for route := range agentRoutes {
+		declaredRoutes[route] = true
 	}
 	if len(declaredRoutes) == 0 {
 		exitWith(fmt.Errorf("no routes found: every ModuleHandlers map is empty or the scan is broken"))

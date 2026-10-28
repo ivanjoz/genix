@@ -114,10 +114,10 @@ func TestSummarizeActionResultKeepsVoidResultsShort(t *testing.T) {
 	}
 }
 
-// The mint endpoint and the CLI are useless against the wrong port, and this machine's backend
-// listens on 14010 — the documented 3589 is only the fallback.
-func TestDefaultBackendURLReadsConfiguredPort(t *testing.T) {
-	url := defaultBackendURL()
+// The CLI is useless against the wrong port, so the agent server's port comes from config.toml —
+// the documented 3590 is only the fallback.
+func TestDefaultAgentURLReadsConfiguredPort(t *testing.T) {
+	url := defaultAgentURL()
 	if !strings.HasPrefix(url, "http://localhost:") {
 		t.Fatalf("URL con formato inesperado: %q", url)
 	}

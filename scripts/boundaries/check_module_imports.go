@@ -27,7 +27,7 @@ var (
 
 	// L4: module bodies. These are the packages the rule is about.
 	moduleBodies = map[string]bool{
-		"app/accounting": true, "app/agent": true, "app/business": true,
+		"app/accounting": true, "app/business": true,
 		"app/config": true, "app/crm": true, "app/finance": true,
 		"app/invoicing": true, "app/logistics": true, "app/production": true,
 		"app/sales": true, "app/security": true, "app/webpage": true,
@@ -134,27 +134,30 @@ func allImports(pkg goPackage) []string {
 	return append(append([]string{}, pkg.Imports...), pkg.TestImports...)
 }
 
+// loadBackendPackages lists the backend's packages and the agent's (genix-agent, its own module at
+// the repository root): the agent imports the backend in place, so it is held to the same rule.
 func loadBackendPackages() ([]goPackage, error) {
-	backendDir := "backend"
-	if _, err := os.Stat(backendDir); os.IsNotExist(err) {
-		backendDir = "../backend"
-	}
-	cmd := exec.Command("go", "list", "-json", "./...")
-	cmd.Dir = backendDir
-	cmd.Stderr = os.Stderr
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("go list failed in %s: %w", backendDir, err)
-	}
-
 	packages := []goPackage{}
-	decoder := json.NewDecoder(strings.NewReader(string(output)))
-	for decoder.More() {
-		pkg := goPackage{}
-		if err := decoder.Decode(&pkg); err != nil {
-			return nil, fmt.Errorf("decode go list output: %w", err)
+	for _, moduleDir := range []string{"backend", "agent"} {
+		if _, err := os.Stat(moduleDir); os.IsNotExist(err) {
+			moduleDir = "../" + moduleDir
 		}
-		packages = append(packages, pkg)
+		cmd := exec.Command("go", "list", "-json", "./...")
+		cmd.Dir = moduleDir
+		cmd.Stderr = os.Stderr
+		output, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("go list failed in %s: %w", moduleDir, err)
+		}
+
+		decoder := json.NewDecoder(strings.NewReader(string(output)))
+		for decoder.More() {
+			pkg := goPackage{}
+			if err := decoder.Decode(&pkg); err != nil {
+				return nil, fmt.Errorf("decode go list output: %w", err)
+			}
+			packages = append(packages, pkg)
+		}
 	}
 	return packages, nil
 }

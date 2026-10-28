@@ -135,6 +135,9 @@ type CachedPartition[RecordT any] = cache.CachedPartition[RecordT]
 var (
 	// SetFileStore installs the file store holding the slot files and the delta logs.
 	SetFileStore = cache.SetFileStore
+	// FileStore is the installed store. The agent keeps its turn checkpoints in it, under its own
+	// prefix, so it needs no S3 client of its own.
+	FileStore = cache.FileStore
 	// DecodeCachedIDsRequest reads the "cc" query parameter of a by-IDs request.
 	DecodeCachedIDsRequest = cache.DecodeCachedIDsRequest
 	// ParseDeltaCursor reads a delta cursor query parameter.

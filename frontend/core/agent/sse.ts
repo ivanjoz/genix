@@ -7,9 +7,9 @@
 // stream, not in its response.
 //
 // The stream has two possible hosts, and the client code is identical against
-// either: the backend itself (`/agent/stream` + `/agent/in`) when it runs
-// locally or on the VPS, or the SSE bridge (`/sse` + `/in`, see fareward/)
-// when the backend runs in Lambda and cannot hold a connection open. Env
+// either: the agent process itself (genix/agent: `/agent/stream` + `/agent/in`)
+// when it runs locally or on the VPS, or the SSE bridge (`/sse` + `/in`, see
+// fareward/) when the agent runs in Lambda and cannot hold a connection open. Env
 // resolves which one applies (AGENT_STREAM_BASE).
 //
 // The stream is lazy: nothing connects on app boot. It opens the first time the
@@ -42,12 +42,13 @@ const agentLog = (level: "info" | "warn", message: string, detail?: unknown) => 
 
 // agentStreamEndpoint resolves where the stream and the inbound POST live for
 // the currently selected API endpoint. The bridge exposes them at its root; the
-// backend serves them under /agent/. Env.AGENT_STREAM_BASE already applied the
-// selection rule, so a differing base is exactly what identifies the bridge.
+// agent process (genix/agent) serves them under /agent/. Env.AGENT_STREAM_BASE
+// already applied the selection rule, so a base other than the agent's own host
+// is exactly what identifies the bridge.
 const agentStreamEndpoint = () => {
   const streamBase = String(Env.AGENT_STREAM_BASE || "").replace(/\/+$/, "");
-  const selectedApiBase = String(Env.selectedApiEndpointRoute || "").replace(/\/+$/, "");
-  const usesBridge = !!streamBase && streamBase !== selectedApiBase;
+  const selectedAgentBase = String(Env.selectedAgentRoute || "").replace(/\/+$/, "");
+  const usesBridge = !!streamBase && streamBase !== selectedAgentBase;
   return {
     streamUrl: `${streamBase}${usesBridge ? "/sse" : "/agent/stream"}`,
     inboundUrl: `${streamBase}${usesBridge ? "/in" : "/agent/in"}`,
@@ -380,6 +381,10 @@ export const stopAgentStream = () => {
 
 // --- Turn ---------------------------------------------------------------------
 
+// AgentTurnRejectedError means the backend was reached and refused the turn; its message is
+// already user-facing. Any other failure from runAgentTurn is a connectivity problem.
+export class AgentTurnRejectedError extends Error {}
+
 // runAgentTurn is the chat widget's send path. The turn is a plain POST that
 // resolves when the backend finishes; replies, status and errors arrive
 // meanwhile through subscribeAgentChat. Builder content is fetched later through
@@ -391,6 +396,9 @@ export const runAgentTurn = async (
   modeID: number,
   surface: import('./agent.svelte').AgentSurfaceContext,
   appLanguage: 'es' | 'en',
+  // resume answers a paused turn: the same turn continues from its checkpoint. Answer is the picked
+  // choice's ID, empty to continue a turn the clock paused; message is what the user sees they sent.
+  resume?: { CheckPointID: string, InterruptID: string, Answer: string },
 ): Promise<void> => {
   // Lazy start: the stream opens here on the first turn if the chat panel
   // didn't already open it, and the handshake guarantees the backend can push
@@ -409,6 +417,7 @@ export const runAgentTurn = async (
     // Sent per-turn rather than once at connect, so navigating by hand between
     // turns is reflected without a reconnect.
     Path: window.location.pathname || "",
+    Resume: resume,
   };
   agentLog("info", "turn start", { channel: body.Channel, modeID, modelHash, bytes: message.length, surface: surface.kind });
 
@@ -420,7 +429,11 @@ export const runAgentTurn = async (
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     agentLog("warn", "turn rejected", { status: response.status, detail });
-    throw new Error(`agent turn failed (${response.status})`);
+    // The backend answers refusals (credit limit, lock busy, ...) with {"error": "<user message>"};
+    // surface it so the chat can show the real reason instead of a generic connection failure.
+    let serverMessage = "";
+    try { serverMessage = JSON.parse(detail)?.error || ""; } catch { /* body was not JSON */ }
+    throw new AgentTurnRejectedError(serverMessage || `agent turn failed (${response.status})`);
   }
   agentLog("info", "turn finished");
 };

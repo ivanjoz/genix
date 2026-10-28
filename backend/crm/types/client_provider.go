@@ -87,6 +87,9 @@ func (t ClientProviderTable) GetSchema() db.TableSchema {
 			Name: t.Name, S1: t.RegistryNumber, N1: t.Type,
 		},
 		Keys: db.Cols(t.ID.Autoincrement(0)),
+		// Clients and providers share the index: a search by name or RUC/DNI keeps the hits of its
+		// Type itself (the agent's client names, ResolveRecords). Only active rows are searchable.
+		TextSearch: &db.TextSearch{Columns: db.Cols(t.Name, t.RegistryNumber), Status: t.Status},
 		// Declared ranges let the delta index size its packed listing view.
 		FixedValues: []db.FixedValues{
 			{Col: t.Status, Values: []int64{0, 1}},

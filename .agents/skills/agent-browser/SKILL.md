@@ -27,8 +27,9 @@ Development only. The session it mints is gated on the backend's `dev` launch ar
 
 ## Prerequisites
 
-The dev stack must already be up (`start.js` — backend + `vite dev` on 3570). `agent_browser`
-reads `server.port` from `config.toml` to find the backend, so no flag is needed on any machine.
+The dev stack must already be up (`start.js` — backend, agent server + `vite dev` on 3570).
+`agent_browser` reads `agent.port` from `config.toml` to find the agent server (genix/agent), so no
+flag is needed on any machine.
 
 ## The loop
 
@@ -87,7 +88,7 @@ Composite ids address children — `"11:100"` is row 100 of table 11; for `setVa
 `getOptions` the backend rewrites the call to the table's `*Child` variant automatically, so you
 always pass the bare verb.
 
-Full contract: [`backend/agent/HTTP_API.md`](../../../backend/agent/HTTP_API.md) and
+Full contract: [`agent/HTTP_API.md`](../../../agent/HTTP_API.md) and
 [`frontend/packages/genix-ui/docs/AGENTIC_COMPONENTS.md`](../../../frontend/packages/genix-ui/docs/AGENTIC_COMPONENTS.md).
 
 ## Gotchas

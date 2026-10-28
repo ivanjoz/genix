@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 interface FrontendEndpoint {
 	name: string
 	route: string
+	agent: string
 	bridge: string
 	cdn_url: string
 }
@@ -48,13 +49,18 @@ const requireFrontendEndpoints = (configValue: unknown): FrontendEndpoint[] => {
 		}
 		const endpointRecord = endpointValue as Record<string, unknown>
 		const endpointRoute = requireHttpUrl(endpointRecord.route, `endpoints[${endpointIndex}].route`)
+		// The agent is its own deployment (genix/agent); an endpoint without one offers no assistant.
+		const agentRoute = endpointRecord.agent
+			? requireHttpUrl(endpointRecord.agent, `endpoints[${endpointIndex}].agent`)
+			: ''
 		return {
 			name: requireNonEmptyString(endpointRecord.name, `endpoints[${endpointIndex}].name`),
 			route: endpointRoute,
-			// A backend without an external bridge serves the agent stream itself.
+			agent: agentRoute,
+			// An agent without an external bridge serves its stream itself.
 			bridge: endpointRecord.bridge
 				? requireHttpUrl(endpointRecord.bridge, `endpoints[${endpointIndex}].bridge`)
-				: endpointRoute,
+				: agentRoute,
 			cdn_url: requireHttpUrl(endpointRecord.cdn_url, `endpoints[${endpointIndex}].cdn_url`),
 		}
 	})

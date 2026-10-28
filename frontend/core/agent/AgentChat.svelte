@@ -20,6 +20,7 @@
   import DOMPurify from 'dompurify';
   import { Marked } from 'marked';
   import {
+    AgentTurnRejectedError,
     ensureAgentStream,
     getAgentTabID,
     runAgentTurn,
@@ -35,17 +36,23 @@
     loadAgentChatHistory,
     updateAgentChatMessage,
     type AgentChatRow,
+    type AgentTurnPause,
   } from './chat_history.idb';
+  import AgentAnswer from './AgentAnswer.svelte';
+  import type { AgentChart, AgentTable } from './agent-answer';
   import { agentModes, type AgentSectionsPayload } from './agent.svelte';
   import { highlightWords, searchMenuOptions, type MenuSearchOption } from './menu_search';
   import { Core, tr } from '#core/store.svelte.ts';
 
-  // --- Wire types (mirror backend/agent/chat_ws.go) ---------------------------
+  // --- Wire types (mirror agent/chat_ws.go) ---------------------------
 
   interface AgentReplyPayload {
     Message: string;
     Summary: string;
     Timestamp: number;
+    Pause?: AgentTurnPause;
+    Tables?: AgentTable[];
+    Charts?: AgentChart[];
   }
 
   interface AgentErrorPayload {
@@ -246,6 +253,9 @@
           message: payload.Message,
           summary: payload.Summary,
           timestamp: payload.Timestamp || Date.now(),
+          tables: payload.Tables,
+          charts: payload.Charts,
+          pause: payload.Pause,
         };
         const id = await appendAgentChatMessage(row);
         if (id) { row.id = id; }
@@ -374,6 +384,18 @@
   const sendMessage = async () => {
     const text = inputText.trim();
     if (!text || isBusy) { return; }
+    inputText = '';
+    await sendTurn(text);
+  };
+
+  // answerPause resumes the paused turn of the last reply with a choice, or continues a turn the
+  // clock paused. The label is the user's message, the choice's ID the answer the backend checks.
+  const answerPause = async (pause: AgentTurnPause, answerID: string, label: string) => {
+    if (isBusy) { return; }
+    await sendTurn(label, { CheckPointID: pause.CheckPointID, InterruptID: pause.InterruptID || '', Answer: answerID });
+  };
+
+  const sendTurn = async (text: string, resume?: { CheckPointID: string, InterruptID: string, Answer: string }) => {
     const tab = getAgentTabID();
     const optimistic: AgentChatRow = {
       tabID: tab,
@@ -385,7 +407,6 @@
     const id = await appendAgentChatMessage(optimistic);
     if (id) { optimistic.id = id; }
     messages = [...messages, optimistic];
-    inputText = '';
     isBusy = true;
     finishPageInteraction();
     pushHeaderStatus('Pensando...');
@@ -398,13 +419,15 @@
     try {
       // Resolves when the backend finishes the turn. The reply itself already
       // arrived through handleChatEvent — this is just the lifetime.
-	  await runAgentTurn(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, surface, Core.languaje === 2 ? 'en' : 'es');
+	  await runAgentTurn(text, getSelectedAgentModelHash(), optimistic.timestamp ?? Date.now(), agentModes.active.ID, surface, Core.languaje === 2 ? 'en' : 'es', resume);
     } catch (turnError) {
       chatLog('warn', 'turn failed', { error: String(turnError) });
       messages = [...messages, {
         tabID: tab,
         role: AGENT_ROLE_AGENT,
-        message: '⚠ No se pudo conectar con el agente.',
+        message: turnError instanceof AgentTurnRejectedError
+          ? `⚠ ${turnError.message}`
+          : '⚠ No se pudo conectar con el agente.',
         timestamp: Date.now(),
       }];
     } finally {
@@ -644,8 +667,22 @@
                     {@html renderAgentMarkdown(msg.message)}
                   {/if}
                   {#if msg.pending}<span class="opacity-60 ml-4">…</span>{/if}
+                  {#if msg.tables?.length || msg.charts?.length}
+                    <AgentAnswer tables={msg.tables} charts={msg.charts} />
+                  {/if}
                 </div>
               </div>
+              <!-- Only the last reply's question can still be answered: a later message started another turn. -->
+              {#if msg.pause && msg === messages[messages.length - 1] && !isBusy}
+                {@const pause = msg.pause}
+                <div class="flex flex-wrap gap-6 pl-4">
+                  {#each pause.Choices?.length ? pause.Choices : [{ ID: '', Label: Core.languaje === 2 ? 'Continue' : 'Continuar' }] as choice (choice.ID)}
+                    <button type="button" class="_choice px-10 py-4 rounded-full text-sm border border-accent-solid text-fg"
+                      onclick={() => void answerPause(pause, choice.ID, choice.Label)}
+                    >{choice.Label}</button>
+                  {/each}
+                </div>
+              {/if}
             {/if}
           {/each}
         {/if}
@@ -872,6 +909,10 @@
     to {
       transform: rotate(360deg);
     }
+  }
+  ._choice:hover {
+    background-color: var(--color-accent-solid, #3b82f6);
+    color: white;
   }
   @media (max-width: 900px) {
     ._inputStatus {

@@ -6,6 +6,7 @@ import { defineEnvVars } from '@sveltejs/kit/env';
 export const variables = defineEnvVars({
 	PUBLIC_ZONE_NAME: { public: true, static: true, description: 'DNS zone the company storefront subdomains live under.' },
 	PUBLIC_LOCAL_API_PORT: { public: true, static: true, description: 'Port of the local backend, for the "Local" endpoint.' },
+	PUBLIC_LOCAL_AGENT_PORT: { public: true, static: true, description: 'Port of the local agent server (genix/agent), for the "Local" endpoint.' },
 	PUBLIC_TAILSCALE_HOST: { public: true, static: true, description: 'Tailnet address a dev page may be served at. Empty = localhost only.' },
 	PUBLIC_ENDPOINTS: { public: true, static: true, description: 'JSON array of the API endpoints from config.toml.' },
 });
