@@ -45,6 +45,12 @@ func (e CityLocationTable) GetSchema() db.TableSchema {
 	}
 }
 
+// Shared-list IDs tell product categories from brands inside the one shared-list table.
+const (
+	SharedListCategoryID = int32(1)
+	SharedListBrandID    = int32(2)
+)
+
 type SharedListRecord struct {
 	db.TableStruct[SharedListRecordTable, SharedListRecord]
 	CompanyID   int32    `cb:"1"`

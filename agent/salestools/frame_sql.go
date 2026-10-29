@@ -67,6 +67,11 @@ var saleDatasets = map[string]struct{ title, description string }{
 		"One row per product sold on a day: the amount sold, what is still unpaid, and the units sold and still undelivered. Cancelled sales are left out."},
 	"sale-client-product": {"Sales per day, client and product",
 		"One row per client and product on a day, with the same sums as sale_summary. Use it only to group or filter by client; sales without a client have client_id 0."},
+	// The category views repeat a product's sales under each of its categories (framesql.View).
+	"sale-category": {"Sales per day, product and category",
+		"sale_summary with each row repeated under every category of its product (category_id 0: no category). Use it only to group or filter by category: a product in two categories counts in both, so the categories add up to more than the total sales; take totals from sale_summary."},
+	"sale-client-category": {"Sales per day, client, product and category",
+		"sale_client_product with each row repeated under every category of its product (category_id 0: no category). Use it only to group or filter by client and category together; the categories add up to more than the total sales."},
 }
 
 // frameSQLGrammar is the language as the model needs it (the parser's errors teach the rest).
@@ -74,10 +79,10 @@ const frameSQLGrammar = `SELECT item, ... WHERE condition AND ... [GROUP BY ...]
 - No FROM: the statement reads the dataset argument.
 - An item is named after its column: SUM(amount) and AVG(amount) are amount, COUNT(*) is count, WEEK(date) is week, MONTH(date) is month; name any other expression with AS (SUM(amount) / COUNT(*) AS ticket). SORT BY, the table and the chart use these names; two items of one name need AS on one.
 - WHERE must bound date: date IN PERIOD("<period>"), at most 400 days.
-- product_id and client_id take = value or IN (value, ...). Write a record's name in quotes exactly as the user wrote it, never shortened or widened to find similar records (product_id IN ("name 1", "name 2")): the tool looks it up and asks the user when it is ambiguous.
+- product_id, client_id and category_id take = value or IN (value, ...). Write a record's name in quotes exactly as the user wrote it, never shortened or widened to find similar records (product_id IN ("name 1", "name 2")): the tool looks it up and asks the user when it is ambiguous.
 - Names and periods go in double quotes: an apostrophe inside needs nothing ("O'Brien"), a double quote is written twice ("Pantalla 24""").
 - SUM(col) adds a summed column. COUNT(*) counts the dataset's rows in each group (with a day key, the days a product has sales), never sales or units. AVG(col) is SUM(col) / COUNT(*). + - * / combine them. No MIN, MAX, HAVING, OR, joins or subqueries.
-- GROUP BY date, product_id, client_id, WEEK(date) (its Monday) or MONTH(date) (its 1st). A SELECT column that is not an aggregate must be in GROUP BY.
+- GROUP BY date, product_id, client_id, category_id, WEEK(date) (its Monday) or MONTH(date) (its 1st). A SELECT column that is not an aggregate must be in GROUP BY.
 - Money is in cents and the answer formats it: never divide it by 100. Quantities are units with their fraction.
 - LIMIT at most 400. Without SORT BY, rows come by group ascending.
 `
@@ -94,7 +99,7 @@ func (frameSQLTool FrameSQLTool) Info(context.Context) (*schema.ToolInfo, error)
 	frames := saleFrames(frameSQLTool.CompanyID)
 	datasetNames := []any{}
 	var notation strings.Builder
-	notation.WriteString("One SQL statement over the dataset, without FROM, that totals, ranks or averages its values by day, week, month, product or client.\n")
+	notation.WriteString("One SQL statement over the dataset, without FROM, that totals, ranks or averages its values by day, week, month, product, client or product category.\n")
 	notation.WriteString("The datasets hold sums per day and row; a row whose sums are all 0 is not stored.\n")
 	for _, frame := range frames {
 		dataset := saleDatasets[frame.Name]
@@ -137,7 +142,7 @@ func (frameSQLTool FrameSQLTool) Info(context.Context) (*schema.ToolInfo, error)
 	return &schema.ToolInfo{
 		Name: ToolName,
 		Desc: "Answers a question about sales with one SQL statement over the sale datasets: totals, rankings, averages and trends " +
-			"per day, week, month, product or client, shown as a table, a chart or both. Its answer ends the turn: call it alone, " +
+			"per day, week, month, product, client or product category, shown as a table, a chart or both. Its answer ends the turn: call it alone, " +
 			"after nothing else, when the user asks for sales figures.",
 		ParamsOneOf: schema.NewParamsOneOfByJSONSchema(parameters),
 	}, nil

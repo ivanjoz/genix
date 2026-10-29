@@ -207,9 +207,9 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	// Register affected marcas/categorías lists for a products .db rebuild (ecommerce snapshot).
 	for _, listID := range uniqueIncomingListIDs {
 		cacheGroup := int16(0)
-		if listID == ecommerceSharedListBrandID {
+		if listID == types.SharedListBrandID {
 			cacheGroup = types.CacheGroupBrands
-		} else if listID == ecommerceSharedListCategoryID {
+		} else if listID == types.SharedListCategoryID {
 			cacheGroup = types.CacheGroupCategories
 		}
 		if cacheGroup == 0 {
@@ -227,7 +227,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 func getBrandNamesByID(companyID int32, records []types.SharedListRecord) (map[int32]string, error) {
 	brandIDs := core.SliceSet[int32]{}
 	for _, record := range records {
-		if record.ListID == ecommerceSharedListBrandID && record.ID > 0 {
+		if record.ListID == types.SharedListBrandID && record.ID > 0 {
 			brandIDs.Add(record.ID)
 		}
 	}

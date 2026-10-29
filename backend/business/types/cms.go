@@ -4,7 +4,7 @@ import "app/db"
 
 type GalleryImage struct {
 	db.TableStruct[GalleryImageTable, GalleryImage]
-	CompanyID   int32  `db:"empresa_id,pk" cb:"1"`
+	CompanyID   int32  `db:",pk" cb:"1"`
 	Image       string `db:",pk" cb:"2"`
 	ImageID     int32  `cb:"3"`
 	Description string `cb:"4"`

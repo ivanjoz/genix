@@ -230,14 +230,18 @@ func (s *AgentSession) searchDocumentationNavigation(ctx context.Context, plan d
 		return unavailableFeatureResult()
 	}
 	features := accessibleFeatures(menu)
+	// A nil *Retriever stored in the interface is not a nil interface: the search would call its
+	// method and panic, so the interface is only set when the retriever exists.
+	var documentationSearcher discovery.DocumentationSearcher
 	retriever, retrievalError := getDocumentationRetriever()
 	if retrievalError != nil {
 		core.Log("agent.discovery features documentation_unavailable tab::", shortTabID(s.TabID), " err::", retrievalError)
-		retriever = nil
+	} else {
+		documentationSearcher = retriever
 	}
 	result := discovery.SearchDocumentationNavigation(ctx, discovery.FeatureSearchRequest{
 		Query: plan.Searches.DocumentationNavigation.Query, Domain: plan.Domain, Operation: plan.Operation, ResultLimit: 6,
-	}, features, retriever)
+	}, features, documentationSearcher)
 	core.Log("agent.discovery features tab::", shortTabID(s.TabID), " elapsed::", time.Since(startedAt).Round(time.Millisecond),
 		" routes::", len(result.Routes), " passages::", len(result.Passages), " status::", result.Status,
 		" documentation_status::", result.Diagnostics.DocumentationStatus)
@@ -321,7 +325,7 @@ Execution rules:
 - Never save or send without a separate explicit user confirmation. The original create request authorizes opening and filling the form, not saving it.
 - For update/delete, inspect the matching page before acting and preserve confirmation rules.
 - Explicit inline wording may use an exposed data tool. A neutral report request prefers an existing report page.
-- Sales figures asked in the chat (totals, rankings, averages, trends by day, product or client) come from sales_frame_sql. Its answer is the reply and ends the turn: call it alone, never with finish.
+- Sales figures asked in the chat (totals, rankings, averages, trends by day, product, client or product category) come from sales_frame_sql. Its answer is the reply and ends the turn: call it alone, never with finish.
 - An empty agent-tools result is successful discovery, not proof that a UI feature is unavailable.
 - Never claim records were queried, summarized, or charted without a real tool result or verified visible page data.
 - If evidence is insufficient, ask one focused clarification. Always finish exactly once.

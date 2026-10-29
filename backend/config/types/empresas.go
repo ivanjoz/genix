@@ -27,7 +27,7 @@ type Company struct {
 	FormApiKey    string      `cb:"11"`
 	EmailVerified int8        `cb:"12"`
 	PhoneVerified int8        `cb:"13"`
-	CulqiConfig   CulqiConfig `db:"culqui_config" cb:"14"`
+	CulqiConfig   CulqiConfig `cb:"14"`
 	// InvoiceSeries are the SUNAT series this company issues under. Inline rather
 	// than a table of their own: there are at most 99, every emission needs one,
 	// and reading the company already brings them along.

@@ -7,11 +7,11 @@ import (
 
 type Profile struct {
 	db.TableStruct[ProfileTable, Profile]
-	CompanyID   int32   `db:"empresa_id,pk" cb:"1"`
+	CompanyID   int32   `db:",pk" cb:"1"`
 	ID          int32   `db:",pk" cb:"2"`
-	Name        string  `db:"nombre" cb:"3"`
-	Description string  `db:"descripcion" cb:"4"`
-	Modules     []int16 `db:"modulos_ids" cb:"5"`
+	Name        string  `cb:"3"`
+	Description string  `cb:"4"`
+	Modules     []int16 `cb:"5"`
 	// AccesosGrants is what the profile grants: one record per access, carrying its level and its
 	// sub-accesses. Exactly the shape a user's direct grants take, which is what lets one editor
 	// and one merge serve both.
@@ -26,7 +26,7 @@ type ProfileTable struct {
 	CompanyID   db.Col[*ProfileTable, int32]
 	Name        db.Col[*ProfileTable, string]
 	Description db.Col[*ProfileTable, string]
-	Modules     db.ColSlice[*ProfileTable, int16] `db:"modulos_ids"`
+	Modules     db.ColSlice[*ProfileTable, int16]
 
 	AccesosGrants db.Col[*ProfileTable, []coreTypes.AccesoGrantRecord]
 	Status        db.Col[*ProfileTable, int8]

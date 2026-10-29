@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
+	business "app/business/types"
 	crm "app/crm/types"
 	"app/db"
 	production "app/production/types"
@@ -48,8 +49,9 @@ type recordCollection struct {
 }
 
 var recordCollections = map[string]recordCollection{
-	sales.FrameSQLCollectionProducts: {noun: "product|producto", search: searchProducts, namesByID: productNamesByID},
-	sales.FrameSQLCollectionClients:  {noun: "client|cliente", search: searchClients, namesByID: clientNamesByID},
+	sales.FrameSQLCollectionProducts:   {noun: "product|producto", search: searchProducts, namesByID: productNamesByID},
+	sales.FrameSQLCollectionClients:    {noun: "client|cliente", search: searchClients, namesByID: clientNamesByID},
+	sales.FrameSQLCollectionCategories: {noun: "category|categoría", search: searchCategories, namesByID: categoryNamesByID},
 }
 
 func searchProducts(companyID int32, name string) ([]recordMatch, error) {
@@ -78,6 +80,36 @@ func searchClients(companyID int32, name string) ([]recordMatch, error) {
 		}
 	}
 	return matches, nil
+}
+
+// searchCategories offers every active product category: they have no text search, and a company has
+// few, so classifyMatches picks among them all.
+func searchCategories(companyID int32, _ string) ([]recordMatch, error) {
+	categories := []business.SharedListRecord{}
+	query := db.Query(&categories)
+	query.Select(query.ID, query.Name).CompanyID.Equals(companyID).ListID.Equals(business.SharedListCategoryID).Status.Equals(1)
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("read the product categories: %w", err)
+	}
+	matches := make([]recordMatch, len(categories))
+	for i, category := range categories {
+		matches[i] = recordMatch{ID: category.ID, Name: category.Name}
+	}
+	return matches, nil
+}
+
+func categoryNamesByID(companyID int32, ids []int32) (map[int32]string, error) {
+	categories := []business.SharedListRecord{}
+	query := db.Query(&categories)
+	query.Select(query.ID, query.Name).CompanyID.Equals(companyID).ID.In(ids...)
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("read category names: %w", err)
+	}
+	names := make(map[int32]string, len(categories))
+	for _, category := range categories {
+		names[category.ID] = category.Name
+	}
+	return names, nil
 }
 
 func productNamesByID(companyID int32, ids []int32) (map[int32]string, error) {

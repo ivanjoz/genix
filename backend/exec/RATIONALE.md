@@ -2,15 +2,27 @@
 
 Design decisions for the one-off scripts, newest first.
 
-## `fn-frame-sql` declares the sale frames itself, and resolves no names
-**Context** — Phase 1 of `backend/agent/PLAN_EINO_FRAMESQL.md` needed one FrameSQL statement run
-against a real company's sale frames, before the datasets of Phase 2 exist.
-**Decision** — `fn-frame-sql <companyID> <frame> <statement>` declares both sale frames with their
-version-1 sums, `sub_divisor` hidden. `PERIOD()` takes `D-a..D-b` (days back from `core.FechaUnix()`);
-quoted record names are not resolved.
-**Rationale** — It is a console for checking statements by hand. When Phase 2 declares the datasets
-in `sales/types`, this command reads them from there and its own declaration goes. Until then its
-frames copy what Phase 2 will own.
+## `fn-frame-sql` resolves no names, and its periods are days back from today
+**Context** — A statement the agent wrote has to be checkable by hand against a real company's sale
+frames, without the agent.
+**Decision** — `fn-frame-sql <companyID> <frame> <statement>` runs on `sales.SaleFrameSQLFrames`, the
+same frames the agent reads. `PERIOD()` takes `D-a..D-b` (days back from `core.FechaUnix()`), not the
+agent's full period notation; quoted record names are not resolved.
+**Rationale** — It is a console, not the agent: anything beyond running the statement would copy the
+agent's resolvers. Write record IDs instead of names.
+
+## `fn-rename-columns` renames in place and drops the old columns, instead of copying into a new table
+**Context** — Removing the `db:"nombre"`-style tags changes the derived column names of seven tables
+(`profiles`, `products`, `sites`, `system_parameters`, `companies`, `gallery_images`, `sale_order`). CQL can only
+`RENAME` primary-key columns; every other column has to be added, filled and dropped.
+**Decision** — Key columns are renamed with `ALTER TABLE … RENAME`. Other columns are added under the
+new name, copied row by row, then the old column is dropped. The table's materialized views and
+indexes are dropped first (they block both operations) and `fn-homologate` recreates them. Report
+only unless `apply`; state-based, so a re-run resumes.
+**Rationale** — No row leaves the table, so there is no window where data exists only in a file. The
+cost is that the old column is gone as soon as its copy finishes, and the tables' views are missing
+until `fn-homologate` runs. It was not run against a database (none reachable here): only the
+planning logic is tested.
 
 ## A restore rebuilds the company's DataFrame files of every restored table
 **Context** — A restore deletes the company's partition with a raw `DELETE` before inserting the

@@ -23,6 +23,10 @@ type (
 	SQLResultColumn = framesql.ResultColumn
 	// SQLStatement is a statement bound to its frame, before its names are looked up and its rows read.
 	SQLStatement = framesql.Statement
+	// SQLDictionary is what a view (SQLView) joins to its base frame: a whole frame read, many to many.
+	SQLDictionary = framesql.Dictionary
+	// SQLSelection is the files one frame read takes: SQLDictionary.Selection.
+	SQLSelection = dataframe.Selection
 )
 
 const (
@@ -41,6 +45,8 @@ var (
 	PrepareFrameSQL = framesql.Prepare
 	// FramePeriodStarts lists the days, weeks or months a range of days touches (a result column's Period).
 	FramePeriodStarts = framesql.PeriodStarts
+	// SQLView declares a frame over a base frame's read with one more Rows column from a dictionary.
+	SQLView = framesql.View
 	// ErrFrameNotBuilt: the frame is being rebuilt after a change of shape and can't be read yet.
 	ErrFrameNotBuilt = dataframe.ErrFrameNotBuilt
 )

@@ -35,11 +35,14 @@ export const AGENT_CHART_COLORS = ['#3b82f6', '#f97316', '#14b8a6', '#eab308', '
 // A line reads better than bars on a long date axis.
 const LINE_ABOVE_DATE_POINTS = 31
 
-// formatAgentDate turns "2026-09-28" into "28/09/2026" without a Date: the day is a calendar day,
-// and parsing it would shift it by the browser's offset.
+const MONTH_ABBREVIATIONS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC']
+
+// formatAgentDate turns "2026-09-28" into "SEP-28": month and day only, the year is left out. No
+// Date: the day is a calendar day, and parsing it would shift it by the browser's offset.
 export const formatAgentDate = (isoDate: string): string => {
   const [year, month, day] = isoDate.split('-')
-  return day && month && year ? `${day}/${month}/${year}` : isoDate
+  const monthAbbreviation = MONTH_ABBREVIATIONS[Number(month) - 1]
+  return year && monthAbbreviation && day ? `${monthAbbreviation}-${day}` : isoDate
 }
 
 // formatAgentCell is one cell as text: '—' for no value, money with 2 decimals, ratios under 1
@@ -50,6 +53,15 @@ export const formatAgentCell = (value: string | number | null | undefined, forma
   if (format === 'money') return formatN(value, 2)
   if (Number.isInteger(value)) return formatN(value)
   return formatN(value, Math.abs(value) < 1 ? 4 : 2)
+}
+
+// formatAgentChartValue is a chart's axis tick or tooltip value. Unlike a table cell, money shows
+// cents only when the value has them: axis ticks are round numbers, and "4,000.00" on every tick
+// widens the axis without saying more.
+export const formatAgentChartValue = (value: number, format: 'number' | 'money'): string => {
+  const hasCents = Math.abs(value - Math.round(value)) >= 0.005
+  if (format === 'money') return formatN(value, hasCents ? 2 : 0)
+  return formatN(value, -1)
 }
 
 // inlineBarPercents is each row's bar length: its size over the column's largest (negatives by size).

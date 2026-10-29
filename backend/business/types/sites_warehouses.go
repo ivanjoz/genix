@@ -71,12 +71,12 @@ type WarehouseLayoutBlock struct {
 
 type Site struct {
 	db.TableStruct[SiteTable, Site]
-	CompanyID   int32  `db:"empresa_id,pk" cb:"1"`
+	CompanyID   int32  `db:",pk" cb:"1"`
 	ID          int32  `db:",pk" cb:"2"`
-	Name        string `db:"nombre" cb:"3"`
-	Description string `db:"descripcion" cb:"4"`
-	Address     string `db:"direccion" cb:"5"`
-	CityID      int32  `db:"pais_ciudad_id" cb:"6"`
+	Name        string `cb:"3"`
+	Description string `cb:"4"`
+	Address     string `cb:"5"`
+	CityID      int32  `cb:"6"`
 	City        string `db:"-" cb:"7"`
 	Status      int8   `json:"ss" cb:"ss,8"`
 	Updated     int32  `json:"upd" cb:"upd,9"`
@@ -95,7 +95,7 @@ type SiteTable struct {
 	Name        db.Col[*SiteTable, string]
 	Description db.Col[*SiteTable, string]
 	Address     db.Col[*SiteTable, string]
-	CityID      db.Col[*SiteTable, int32] `db:"pais_ciudad_id"`
+	CityID      db.Col[*SiteTable, int32]
 	Status      db.Col[*SiteTable, int8]
 	Updated     db.Col[*SiteTable, int32]
 	Version     db.Col[*SiteTable, int16]

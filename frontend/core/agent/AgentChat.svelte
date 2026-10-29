@@ -656,7 +656,9 @@
             {:else}
               {@const isUser = msg.role === AGENT_ROLE_USER}
               <div class="_row flex {isUser ? 'justify-end' : 'justify-start'}">
-                <div class="_bubble max-w-[80%] px-10 py-8 rounded-2xl text-sm leading-snug
+                <!-- A reply with charts or tables is wider than a text bubble: they need the width more than text does. -->
+                <div class="_bubble px-10 py-8 rounded-2xl text-sm leading-snug
+                  {msg.tables?.length || msg.charts?.length ? 'w-[calc(94%-24px)]' : 'max-w-[80%]'}
                   {isUser
                     ? 'bg-accent-solid text-white rounded-br-md'
                     : '_markdown bg-surface-muted text-fg rounded-bl-md'}"
@@ -911,7 +913,7 @@
     }
   }
   ._choice:hover {
-    background-color: var(--color-accent-solid, #3b82f6);
+    background-color: var(--accent-solid);
     color: white;
   }
   @media (max-width: 900px) {

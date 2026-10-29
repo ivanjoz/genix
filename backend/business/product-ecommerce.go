@@ -18,10 +18,6 @@ import (
 // delta caches, then calls GetProductsEcommerce for the incremental delta since its watermark.
 
 const (
-	// Shared-list IDs distinguish categorías from marcas inside the single shared-list table.
-	ecommerceSharedListCategoryID = int32(1)
-	ecommerceSharedListBrandID    = int32(2)
-
 	// core.Cache key holding the watermarks observed the last time the .db file was built.
 	productsDbBuiltCacheKey = "products_db_built"
 
@@ -77,7 +73,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 
 	// Marcas + categorías: shared-list rows split by ListID.
 	errGroup.Go(func() error {
-		rows, err := queryActiveSharedList(companyID, ecommerceSharedListBrandID)
+		rows, err := queryActiveSharedList(companyID, types.SharedListBrandID)
 		if err != nil {
 			return err
 		}
@@ -85,7 +81,7 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 	errGroup.Go(func() error {
-		rows, err := queryActiveSharedList(companyID, ecommerceSharedListCategoryID)
+		rows, err := queryActiveSharedList(companyID, types.SharedListCategoryID)
 		if err != nil {
 			return err
 		}
@@ -143,7 +139,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 		query := db.Query(&sharedRows)
 		query.Select(query.ID, query.Name, query.ListID, query.Updated, query.Status).
 			CompanyID.Equals(companyID).
-			ListID.In(ecommerceSharedListCategoryID, ecommerceSharedListBrandID).
+			ListID.In(types.SharedListCategoryID, types.SharedListBrandID).
 			Status.GreaterThan(0).
 			AllowFilter()
 		if execErr := query.Exec(); execErr != nil {
@@ -210,12 +206,12 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 	}
 	for index := range sharedRows {
 		row := &sharedRows[index]
-		if row.ListID == ecommerceSharedListBrandID {
+		if row.ListID == types.SharedListBrandID {
 			if row.Updated > marcasWm {
 				marcasWm = row.Updated
 			}
 			writeSharedRow(&marcasBuilder, row)
-		} else if row.ListID == ecommerceSharedListCategoryID {
+		} else if row.ListID == types.SharedListCategoryID {
 			if row.Updated > categoriasWm {
 				categoriasWm = row.Updated
 			}

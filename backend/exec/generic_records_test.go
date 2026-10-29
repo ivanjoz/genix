@@ -15,8 +15,7 @@ func TestGenericRecordSchemasResolveThroughTheNameRegistry(t *testing.T) {
 		tableName          string
 		expectedProjection string
 	}{
-		// products.Name is stored in the legacy "nombre" column — the plan resolves real column names.
-		{"products", "id, nombre, sku, final_price, brand_id, status"},
+		{"products", "id, name, sku, final_price, brand_id, status"},
 		{"client_provider", "id, name, registry_number, type, status"},
 		{"users", "id, user, first_name, last_name, status"},
 	}

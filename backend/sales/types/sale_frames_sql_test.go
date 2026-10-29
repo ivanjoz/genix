@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"testing"
 
 	"app/db"
+	production "app/production/types"
 
 	"github.com/ivanjoz/genix-orm/dataframe"
 )
@@ -29,6 +31,46 @@ func TestSaleFrameSQLFramesMatchTheFrameStructs(t *testing.T) {
 		if len(frame.Keys) != counts["key"] || len(frame.Rows) != counts["row"] || len(frame.Sums) != counts["sum"] {
 			t.Errorf("%s declares %d/%d/%d keys/rows/sums, its struct has %v", frame.Name, len(frame.Keys), len(frame.Rows), len(frame.Sums), counts)
 		}
+	}
+	// The category views name the dictionary's rows "category_id", "product_id": ProductCategoryFrame's
+	// row fields, in that order.
+	categoryRowFields := []string{}
+	categoryFrameType := reflect.TypeOf(production.ProductCategoryFrame{})
+	for i := range categoryFrameType.NumField() {
+		if categoryFrameType.Field(i).Tag.Get("frame") == "row" {
+			categoryRowFields = append(categoryRowFields, categoryFrameType.Field(i).Name)
+		}
+	}
+	if !slices.Equal(categoryRowFields, []string{"CategoryID", "ProductID"}) {
+		t.Errorf("ProductCategoryFrame rows are %v: update the productCategories dictionary's Rows", categoryRowFields)
+	}
+}
+
+// The category views fan a sale out under each category of its product: grouped by category each total
+// is exact, and a product without a category is category 0.
+func TestSaleCategoryViewSumsEachCategory(t *testing.T) {
+	frames := SaleFrameSQLFrames(1)
+	summaryRows := []dataframe.Row{
+		{Keys: []int64{20000}, RowValues: []int64{77, 0}, Sums: []int64{1000, 0, 0, 0, 0, 0, 0, 0}},
+		{Keys: []int64{20000}, RowValues: []int64{78, 0}, Sums: []int64{300, 0, 0, 0, 0, 0, 0, 0}},
+	}
+	categoryRows := []dataframe.Row{{Keys: []int64{0}, RowValues: []int64{3, 77}}, {Keys: []int64{0}, RowValues: []int64{5, 77}}}
+	frames[0].Source = func(dataframe.Selection) ([]dataframe.Row, error) { return summaryRows, nil }
+	categoryView := db.SQLView("sale-category", frames[0], db.SQLDictionary{
+		Rows: []string{"category_id", "product_id"}, On: "product_id", Column: frames[2].Rows[1],
+		Source: func(dataframe.Selection) ([]dataframe.Row, error) { return categoryRows, nil },
+	})
+	result, err := db.PrepareFrameSQL("sale_category", "SELECT category_id, SUM(amount) WHERE date = 20000 GROUP BY category_id",
+		[]db.SQLFrame{categoryView}, db.SQLOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer, err := result.Run(db.SQLResolvers{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(answer.Columns[0].Values, answer.Columns[1].Values); got != "[0 3 5] [300 1000 1000]" {
+		t.Errorf("sale_category by category = %s", got)
 	}
 }
 

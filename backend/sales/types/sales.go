@@ -134,9 +134,9 @@ type SaleSummaryFrame struct {
 type SaleClientProductFrame struct {
 	Date int16 `frame:"key"`
 	// ClientID leads the rows: each client is written once in a file, its products under it.
-	ClientID      int32 `frame:"row"`
-	ProductID     int32 `frame:"row"`
-	SubDivisor    int16 `frame:"row"`
+	ClientID        int32   `frame:"row"`
+	ProductID       int32   `frame:"row"`
+	SubDivisor      int16   `frame:"row"`
 	AmountPEN       int32   `frame:"sum"`
 	DebtAmountPEN   int32   `frame:"sum"`
 	SoldUnits       int32   `frame:"sum"`
@@ -317,15 +317,19 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			// pending/debt columns of a day that has none. A read compacts the company's files
 			// once 100 sales changed or an hour passed since the last compaction. Version 2 added the
 			// SoldQuantity and PendingQuantity sums.
-			Name: "sale-summary", Version: 2, UseZeroSumsMask: true,
-			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
-			ToFrames:  db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
+			Name:            "sale-summary",
+			Version:         2,
+			UseZeroSumsMask: true,
+			CompactOn:       db.CompactOn{Records: 100, Seconds: 3600},
+			ToFrames:        db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
 		}, {
 			// The day/client/product detail, for the queries by client: its files are larger than
 			// sale-summary's (one row per client and product), so that one stays for the day totals.
-			Name: "sale-client-product", Version: 2, UseZeroSumsMask: true,
-			CompactOn: db.CompactOn{Records: 100, Seconds: 3600},
-			ToFrames:  db.ToFrames((*SaleOrder).ToSaleClientProductFrames),
+			Name:            "sale-client-product",
+			Version:         2,
+			UseZeroSumsMask: true,
+			CompactOn:       db.CompactOn{Records: 100, Seconds: 3600},
+			ToFrames:        db.ToFrames((*SaleOrder).ToSaleClientProductFrames),
 		}},
 	}
 }

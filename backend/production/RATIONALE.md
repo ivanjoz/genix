@@ -2,6 +2,16 @@
 
 Design decisions for the product catalog and its supplies, newest first.
 
+## `product-categories` DataFrame: one file per company through a constant key
+**Context** — A frame needs 1 to 3 Keys, and the category ⇒ products map is meant to be one file per
+company, which the partition (CompanyID) already gives.
+**Decision** — `ProductCategoryFrame.FileBucket` is a Key that is always 0; Rows are CategoryID then
+ProductID; no Sums, `Count: true`. Supplies (Status 2) are in the frame like products. A category
+listed twice on one product is not deduplicated (its row counts 2).
+**Rationale** — It needs no genix-orm change (allowing 0 Keys would touch the compiler, file keys and
+reads); the cost is a `/0` in the file path and a filter `FileBucket = 0` on every read. Company 1:
+10,010 products, 10,871 rows, 155 categories, 4,406 bytes on the wire.
+
 ## A product that became a supply leaves the catalog through `records_IDsToRemove`
 **Context** — Products and supplies share one table and one delta log keyed on Status, and the log
 names every status: a product turned into a supply (2) comes back as a live record.

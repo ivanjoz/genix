@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { formatAgentCell, inlineBarPercents, planAgentChart } from './agent-answer'
+import { formatAgentCell, formatAgentChartValue, inlineBarPercents, planAgentChart } from './agent-answer'
 
 describe('agent answer', () => {
   it('formats cells by their column format', () => {
-    expect(formatAgentCell('2026-09-28', 'date')).toBe('28/09/2026')
+    expect(formatAgentCell('2026-09-28', 'date')).toBe('SEP-28')
     expect(formatAgentCell(1234.5, 'money')).toBe('1,234.50')
     expect(formatAgentCell(1234, 'number')).toBe('1,234')
     expect(formatAgentCell(0.12345, 'number')).toBe('0.1235')
     expect(formatAgentCell(null, 'money')).toBe('—')
+  })
+
+  it('shows chart money cents only when the value has them', () => {
+    expect(formatAgentChartValue(4000, 'money')).toBe('4,000')
+    expect(formatAgentChartValue(3075.5, 'money')).toBe('3,075.50')
+    expect(formatAgentChartValue(1234.001, 'money')).toBe('1,234')
+    expect(formatAgentChartValue(2500, 'number')).toBe('2,500')
   })
 
   it('sizes inline bars against the largest value', () => {
@@ -24,7 +31,7 @@ describe('agent answer', () => {
       ],
     })
     expect(plans.map((plan) => plan.type)).toEqual(['line', 'line'])
-    expect(plans[0].labels[0]).toBe('01/09/2026')
+    expect(plans[0].labels[0]).toBe('SEP-01')
     expect(plans[0].format).toBe('money')
     expect(plans[1].series[0].color).not.toBe(plans[0].series[0].color)
   })

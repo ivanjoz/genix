@@ -4,11 +4,11 @@ import "app/db"
 
 type SystemParameters struct {
 	db.TableStruct[SystemParametersTable, SystemParameters]
-	ID        int32   `db:"parameter_id,pk" cb:"1"`
+	ID        int32   `db:",pk" cb:"1"`
 	ValueText string  `cb:"2"`
 	ValueInts []int32 `cb:"3"`
 	Value     int32   `cb:"4"`
-	CompanyID int32   `db:"empresa_id" cb:"5"`
+	CompanyID int32   `cb:"5"`
 	Updated   int32   `json:"upd," cb:"upd,6"`
 	Version   int16   `json:"ver" cb:"ver,7"`
 	// Metadata is set only on the delta log records a Delta() read appends.

@@ -44,7 +44,7 @@ type Product struct {
 	CompanyID   int32   `cb:"1"`
 	ID          int32   `db:",pk" cb:"2"`
 	TempID      int32   `cb:"3"`
-	Name        string  `db:"nombre" cb:"4"`
+	Name        string  `cb:"4"`
 	Description string  `cb:"5"`
 	ContentHTML string  `cb:"6"`
 	CategoryIDs []int32 `cb:"7"`
@@ -113,7 +113,7 @@ type ProductTable struct {
 	CategoryIDs         db.ColSlice[*ProductTable, int32]
 	BrandID             db.Col[*ProductTable, int32]
 	BrandName           db.Col[*ProductTable, string]
-	Params              db.ColSlice[*ProductTable, int8] `db:"params_ids"`
+	Params              db.ColSlice[*ProductTable, int8]
 	Price               db.Col[*ProductTable, int32]
 	CurrencyID          db.Col[*ProductTable, int16]
 	UnitID              db.Col[*ProductTable, int16]
@@ -156,6 +156,24 @@ func (e *Product) FillCategoriesWithStock() {
 	}
 }
 
+// ProductCategoryFrame is one (category, product) pair of the "product-categories" DataFrame: per
+// company, the products of each category. It only groups: the frame's Count is what keeps a row
+// alive, always 1 per pair.
+type ProductCategoryFrame struct {
+	// FileBucket is always 0: a frame needs a Key, and the whole company fits in one file.
+	FileBucket int8  `frame:"key"`
+	CategoryID int32 `frame:"row"`
+	ProductID  int32 `frame:"row"`
+}
+
+// ToProductCategoryFrames puts the product under each of its categories, deleted products included.
+func (e *Product) ToProductCategoryFrames(lines []ProductCategoryFrame) []ProductCategoryFrame {
+	for _, categoryID := range e.CategoryIDs {
+		lines = append(lines, ProductCategoryFrame{CategoryID: categoryID, ProductID: e.ID})
+	}
+	return lines
+}
+
 func (e *Product) SelfParse() {
 	e.NameHash = core.BasicHashInt(core.NormalizeString(&e.Name))
 }
@@ -190,6 +208,13 @@ func (e ProductTable) GetSchema() db.TableSchema {
 			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
+		DataFrames: []db.DataFrame{{
+			// Version 2 includes the deleted products.
+			Name:     "product-categories",
+			Version:  2,
+			Count:    true,
+			ToFrames: db.ToFrames((*Product).ToProductCategoryFrames),
+		}},
 	}
 }
 

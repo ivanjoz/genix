@@ -2,6 +2,16 @@
 
 Design decisions for the agent (genix/agent, module `genix-agent`), newest first.
 
+## Category names are matched against every active category
+**Context** — `category_id` (the `sale-category` views) is a record column, so a name in quotes must
+resolve. Categories are `shared_list_records` (ListID 1) and have no text search.
+**Decision** — `searchCategories` reads every active category of the company and lets
+`classifyMatches` pick, as with the text-search hits of products and clients. `SharedListCategoryID`
+and `SharedListBrandID` moved from `business/product-ecommerce.go` to `business/types` so the agent can
+use them.
+**Rationale** — A company has tens of categories, so one read beats adding a text-search index. The
+options of an ambiguous question come in the table's order, not ranked by a search.
+
 ## The golden questions check statements, not answers
 **Context** — The plan asked for 30–50 golden questions with expected results on a seeded company.
 No model or seeded data was available while building.

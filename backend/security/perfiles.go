@@ -27,10 +27,10 @@ func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		err = profileQuery.AllowFilter().Exec()
 	} else if updated > 0 {
-		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).
+		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
 			Where("updated").GreaterEqual(updated).Exec()
 	} else {
-		err = cloud.Select(&records).Where("empresa_id").Equals(req.User.CompanyID).
+		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
 			Where("status").Equals(1).Where("updated").GreaterEqual(updated).Exec()
 	}
 	if err != nil {

@@ -1,9 +1,8 @@
 <script lang="ts">
   // The sales tool's charts, then its tables, under the agent's message (agent-answer.ts lays them out).
   import { Chart } from '@genix/ui/charts';
-  import { formatN } from '#libs/helpers.ts';
   import {
-    formatAgentCell, inlineBarPercents, planAgentChart,
+    formatAgentCell, formatAgentChartValue, inlineBarPercents, planAgentChart,
     type AgentChart, type AgentTable,
   } from './agent-answer';
 
@@ -20,9 +19,7 @@
 {#each charts as chart, chartIndex (chartIndex)}
   {#each planAgentChart(chart) as plan, planIndex (planIndex)}
     <div class="mt-8 bg-surface rounded-lg p-6">
-      <Chart type={plan.type} series={plan.series} labels={plan.labels} height={planIndex === 0 ? 200 : 140}
-        labelEvery={Math.max(1, Math.ceil(plan.labels.length / 8))}
-        formatValue={(value) => formatN(value, plan.format === 'money' ? 2 : -1)}
+      <Chart type={plan.type} series={plan.series} labels={plan.labels} height={planIndex === 0 ? 200 : 140}        formatValue={(value) => formatAgentChartValue(value, plan.format)}
       />
     </div>
   {/each}
@@ -65,6 +62,6 @@
 
 <style>
   ._agent-answer-row:hover {
-    background-color: var(--color-surface-muted, #00000010);
+    background-color: var(--surface-muted);
   }
 </style>
