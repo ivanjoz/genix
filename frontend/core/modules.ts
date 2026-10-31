@@ -1,180 +1,135 @@
-import type { IMenuRecord } from '#core/types/modules.ts';
+// Modules are virtual: db/pages.toml declares every page once, and db/modules.toml arranges those
+// pages into modules and menu groups, regardless of the route folders. A page may be listed in
+// several modules. Pure rules only, no Svelte and no session: core/modules.svelte.ts loads the two
+// files and binds these rules to the logged-in session.
+
+import { parseTomlTables, splitCatalogRoutes } from '#libs/toml-tables.utils.ts'
+
+export interface IPage {
+  // With the leading "/": the TOML omits it, the router needs it.
+  route: string
+  name: string
+  icon?: string
+  description?: string
+  // Planned but not built: listed disabled, never a module's entry page.
+  pending?: boolean
+}
+
+export interface IMenuGroup {
+  // Position in its module, from 1. Only the side menu's open/closed state uses it.
+  id: number
+  name: string
+  minName?: string
+  pages: IPage[]
+}
 
 export interface IModule {
-  name: string
-  id: number
   code: string
-  menus: IMenuRecord[]
+  name: string
+  icon: string
+  saasOnly: boolean
+  menus: IMenuGroup[]
 }
 
-export const AdminModule: IModule = {
-  name: "Administration|Administración",
-  id: 1,
-  code: "admin",
-  menus: [
-    { name: "My Company|Mi Empresa", minName: "EMP", id: 1, icon: "icon-[fa--sitemap]",
-      options: [
-				{
-					name: "Configuration|Configuración", route: "/company/configuration", icon: "icon-[fa--cog]",
-					descripcion: "Edita los datos de tu empresa, pasarela de pago, envío de correos. Genera y descarga backups."
-        },
-        { name: "Sites & Warehouses|Sedes & Almacenes", route: "/business/branches-warehouses",
-					icon: "icon-[fa--home]",
-					descripcion: "Crea sedes y almacenes. Crea los layouts de tus almacenes."
-        },
-				{
-					name: "Users & Profiles|Usuarios & Perfiles", route: "/security/users-profiles",
-					descripcion: "Gestiona usuarios, crea perfiles y asígnales accesos.",
-          icon: "icon-[fa--user-secret]",
-				},
-      ]
-    },
-    { name: "System|System", minName: "SYS", id: 9, icon: "icon-[fa--cogs]",
-      options: [
-				{
-					name: "Companies|Empresas", route: "/system/companies", icon: "icon-[fa--building]",
-					onlySaaS: true,
-				},
-				{
-					name: "Server Panel|Server Panel", route: "/system/server-panel", icon: "icon-[fa--server]",
-					onlySaaS: true,
-				},
-				{
-					name: "Observability|Observabilidad", route: "/system/observability", icon: "icon-[fa--bar-chart]",
-					onlySaaS: true,
-				},
-				{
-					name: "Cron Actions|Acciones Cron", route: "/system/cron-actions", icon: "icon-[fa--clock-o]",
-					onlySaaS: true,
-				},
-				{
-					name: "Developer|Developer", route: "/system/developer", icon: "icon-[fa--flask]",
-					onlySaaS: true,
-				},
-      ]
-    },
-    { name: "Production|Producción", minName: "PRD",  id: 10, icon: "icon-[fa--cubes]",
-      options: [
-				{
-					name: "Products|Productos", route: "/production/products",
-					descripcion: "Crea productos y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones de tus productos.",
-          icon: "icon-[fa--cube]"
-				},
-				{ name: "Supplies & Materials|Insumos & Materiales", route: "/production/supplies-materials",
-					descripcion: "Registra los insumos y materiales que consume tu producción, con sus proveedores y stock mínimo.",
-					icon: "icon-[fa--flask]"
-				},
-      ]
-    },
-    { name: "Commercial|Comercial", minName: "Com",  id: 3, icon: "icon-[fa--tasks]",
-      options: [
-        { name: "Point of Sale|Punto de Venta", route: "/sales/sale_order_create",
-          icon: "icon-[fa--bolt]"
-				},
-				{ name: "Sales Management|Gestión Ventas", route: "/sales/sale_orders_status",
-          icon: "icon-[fa--bolt]"
-				},
-				{ name: "Sales Charts|Gráficos Ventas", route: "/sales/sale_orders_charts",
-          icon: "icon-[fa--bar-chart]"
-				},
-				{ name: "Sales Report|Reporte Ventas", route: "/sales/sales-report",
-          icon: "icon-[fa--bar-chart]"
-				},
-				{ name: "Shipping Costs|Costos de Envio", route: "/sales/shipping-costs",
-          icon: "icon-[fa--bolt]"
-        },
-				{ name: "Sales Planning|Proyección Ventas", route: "/sales/sale_planning",
-          icon: "icon-[fa--bar-chart]"
-        },
-      ]
-		},
-    { name: "Clients (CRM)|Clientes (CRM)", minName: "CRM",  id: 11, icon: "icon-[fa--users]",
-      options: [
-				{ name: "Customers|Clientes", route: "/crm/customers",
-					descripcion: "Registra tus clientes con RUC o DNI y consulta su historial de compras.",
-          icon: "icon-[fa--user]"
-        },
-      ]
-    },
-		{ name: "Logistics|Logística", minName: "LOG",  id: 4, icon: "icon-[fa--tasks]",
-      options: [
-	      { name: "Stock Changes|Cambios Stock", route: "/logistics/products-stock",
-	        icon: "icon-[fa--bar-chart]"
-	      },
-	      { name: "Purchase Management|Gestión de Compras", route: "/logistics/purchase-management",
-	        icon: "icon--supermarket-cart"
-	      },
-	      { name: "Movements Report|Rep. Movimientos", route: "/logistics/warehouse-movements",
-	        icon: "icon-[fa--truck]"
-				},
-		    { name: "Purchase Orders|Órdenes Compra", route: "/logistics/purchase-orders",
-		      icon: "icon-[fa--truck]"
-		    },
-		    { name: "Suppliers|Proveedores", route: "/logistics/suppliers",
-		      icon: "icon-[fa--truck]"
-		    },
-      ]
-    },
-		{ name: "Finances|Finanzas", minName: "FIN",  id: 5, icon: "icon-[fa--tasks]",
-      options: [
-	      { name: "Cash & Banks|Cajas & Bancos", route: "/finance/cash-banks",
-	        icon: "icon-[fa--briefcase]"
-	      },
-	      { name: "Cash Movements|Cajas Movimientos", route: "/finance/cash-banks-movements",
-	        icon: "icon-[fa--exchange]"
-				},
-		    { name: "Expenses|Gastos", route: "/finance/expenses",
-		      icon: "icon-[fa--exchange]"
-				},
-		    { name: "Accounts Management|Gestión de Cuentas", route: "/finance/gestion-cuentas",
-		      icon: "icon-[fa--exchange]"
-		    },
-		    { name: "Cash Flow|Flujo de Caja", route: "/finance/flujo-de-caja",
-		      icon: "icon-[fa--exchange]"
-				},
-		    { name: "Exchange Rate|Tipo de Cambio", route: "/finance/exchange-rate",
-		      icon: "icon-[fa--money]"
-				},
-      ]
-    },
-    { name: "Website|Tienda /Web", minName: "WEB",  id: 7, icon: "icon-[fa--th-large]",
-      options: [
-        { name: "Pages|Páginas", route: "/webpage-builder/pages"
-        },
-        { name: "Gallery|Galería", route: "/webpage-builder/gallery"
-        },
-      ]
-    },
-    { name: "Accounting|Contabilidad", minName: "CNT",  id: 8, icon: "icon-[fa--tasks]",
-      options: [
-        { name: "Invoicing|Facturación", route: "/accounting/invoicing"
-        },
-        { name: "Books|Libros", route: "/accounting/books", icon: "icon-[fa--book]"
-        },
-        { name: "Consolidation & Accounts|Consolidado & Cuentas", route: "/accounting/accounts-consolidation"
-        },
-        { name: "Financial Statements|Estados Financieros",
-				},
-				{ name: "Balance|Balance",
-				},
-				{ name: "Assets|Activos", route: "/accounting/assets"
-        },
-      ]
-    },
-  ]
+export interface IModuleNavigationMemory {
+  // Module of the last page visited: a shared page stays in it, and "/" keeps showing its menu.
+  lastModuleCode: string
+  // Last page visited in each module, by module code: going A → B → A lands back on A's page.
+  lastRouteByModule: Record<string, string>
 }
 
-// El módulo SYSTEM administra la plataforma entera (empresas, servidor, crons), no un tenant:
-// sólo la company dueña del SaaS lo ve. El backend repite la restricción por endpoint.
+export interface IModuleEntry {
+  module: IModule
+  entryRoute: string
+}
+
+// The SYSTEM module administers the whole platform (companies, server, crons), not a tenant: only
+// the company that owns the SaaS sees it. The backend repeats the restriction per endpoint.
 export const SAAS_COMPANY_ID = 1
 
-const saasOnlyRoutes = new Set(
-  AdminModule.menus.flatMap(menu =>
-    (menu.options || []).filter(option => option.onlySaaS && option.route).map(option => option.route!)
-  )
-)
+// Builds the modules from the two catalogs. A module route missing from pages.toml throws: the menu
+// would otherwise drop it silently.
+export function parseModuleCatalogs(pagesTomlContent: string, modulesTomlContent: string): IModule[] {
+  const pageRecords = parseTomlTables(pagesTomlContent, ['pages'], 'pages-catalog').pages
+  const pagesByRoute = new Map<string, IPage>()
+  for (const pageRecord of pageRecords) {
+    const route = `/${splitCatalogRoutes(pageRecord.route as string)[0] || ''}`
+    if (pagesByRoute.has(route)) { throw new Error(`pages.toml declares "${route}" twice`) }
+    pagesByRoute.set(route, {
+      route,
+      name: pageRecord.name as string,
+      icon: pageRecord.icon as string | undefined,
+      description: pageRecord.description as string | undefined,
+      pending: pageRecord.pending === true,
+    })
+  }
 
-export const isSaaSOnlyRoute = (route: string) => saasOnlyRoutes.has(route)
+  const moduleRecords = parseTomlTables(modulesTomlContent, ['modules', 'modules.menus'], 'modules-catalog').modules
+  return moduleRecords.map((moduleRecord) => ({
+    code: moduleRecord.code as string,
+    name: moduleRecord.name as string,
+    icon: moduleRecord.icon as string,
+    saasOnly: moduleRecord.saas_only === true,
+    menus: ((moduleRecord.menus || []) as Record<string, unknown>[]).map((menuRecord, menuIndex) => ({
+      id: menuIndex + 1,
+      name: menuRecord.name as string,
+      minName: menuRecord.min_name as string | undefined,
+      pages: splitCatalogRoutes(menuRecord.routes as string).map((route) => {
+        const menuPage = pagesByRoute.get(`/${route}`)
+        if (!menuPage) { throw new Error(`modules.toml: module "${moduleRecord.code}" lists "${route}", which pages.toml does not declare`) }
+        return menuPage
+      }),
+    })),
+  }))
+}
 
-const Modules: IModule[] = [AdminModule]
-export default Modules
+const isPathUnder = (pathname: string, basePath: string) => pathname === basePath || pathname.startsWith(`${basePath}/`)
+
+const listModulePages = (module: IModule) => module.menus.flatMap((menuGroup) => menuGroup.pages)
+
+// Routes of the saas_only modules: blocked for every other company, even through a typed URL.
+export function isSaaSOnlyRoute(modules: IModule[], pathname: string): boolean {
+  return modules.some((module) => module.saasOnly && listModulePages(module).some((modulePage) => isPathUnder(pathname, modulePage.route)))
+}
+
+// A module opens on the page last visited in it while that page is still one of its built pages and
+// the session can open it; otherwise on its first such page. Undefined when there is none: the
+// session cannot enter the module.
+export function getModuleEntryRoute(
+  module: IModule, navigationMemory: IModuleNavigationMemory, canOpenRoute: (route: string) => boolean,
+): string | undefined {
+  const openableRoutes = listModulePages(module)
+    .filter((modulePage) => !modulePage.pending && canOpenRoute(modulePage.route))
+    .map((modulePage) => modulePage.route)
+  const lastRoute = navigationMemory.lastRouteByModule[module.code]
+  return openableRoutes.includes(lastRoute) ? lastRoute : openableRoutes[0]
+}
+
+// The modules a session can enter: those with at least one page it can open.
+export function getAccessibleModuleEntries(
+  modules: IModule[], navigationMemory: IModuleNavigationMemory, canOpenRoute: (route: string) => boolean,
+): IModuleEntry[] {
+  return modules
+    .map((module) => ({ module, entryRoute: getModuleEntryRoute(module, navigationMemory, canOpenRoute) }))
+    .filter((moduleEntry): moduleEntry is IModuleEntry => !!moduleEntry.entryRoute)
+}
+
+// The module a page belongs to. A page shared by several modules stays in the one the user came
+// from (lastModuleCode) when that one lists it; otherwise it goes to the first module listing it.
+// Undefined for a page no module lists (e.g. "/").
+export function findModuleOfPath(
+  modules: IModule[], pathname: string, lastModuleCode: string,
+): IModule | undefined {
+  const listingModules = modules.filter((module) => listModulePages(module).some((modulePage) => isPathUnder(pathname, modulePage.route)))
+  return listingModules.find((module) => module.code === lastModuleCode) || listingModules[0]
+}
+
+// The module whose menu the side menu shows: the page's module; on a page no module lists, the
+// last module visited, else the first one.
+export function getMenuModule(
+  modules: IModule[], pathname: string, lastModuleCode: string,
+): IModule | undefined {
+  return findModuleOfPath(modules, pathname, lastModuleCode)
+    || modules.find((module) => module.code === lastModuleCode)
+    || modules[0]
+}

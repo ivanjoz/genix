@@ -25,6 +25,23 @@ export const BROWSER_PREFERENCE_STORAGE_KEYS = [
   selectedApiEndpointStorageKey,
   lastLoginCompanyIDStorageKey,
 ];
+
+export const logout = () => {
+  // Wiping localStorage wholesale is deliberate — it is the only way to be sure no cached
+  // tenant data outlives the session — so the few keys that are browser preferences rather
+  // than session state are carried across the clear instead of being spared from it.
+  const preservedPreferences = BROWSER_PREFERENCE_STORAGE_KEYS
+    .map((storageKey) => [storageKey, localStorage.getItem(storageKey)] as const)
+    .filter(([, storedValue]) => storedValue !== null);
+
+  localStorage.clear();
+  sessionStorage.clear();
+
+  for (const [storageKey, storedValue] of preservedPreferences) {
+    localStorage.setItem(storageKey, storedValue as string);
+  }
+  window.location.href = '/welcome';
+}
 // Keep the browser's local endpoint aligned with [server].port in config.toml.
 const parsedLocalApiPort = Number(PUBLIC_LOCAL_API_PORT)
 const localApiPort = Number.isInteger(parsedLocalApiPort) && parsedLocalApiPort > 0 && parsedLocalApiPort < 65536

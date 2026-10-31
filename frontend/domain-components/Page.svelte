@@ -5,24 +5,65 @@ import { Core } from '#core/store.svelte.ts';
 import { browser, Env, LocalStorage } from '#core/env.ts';
 import { checksumBase64_6 } from '@genix/ui/utilities';
 import { useUI } from '@genix/ui';
+import LoadingBar from '#components/misc/LoadingBar.svelte';
+import { pageHeader } from '#domain/page-header.svelte.ts';
+import type { Snippet } from 'svelte';
 
   const headerMenuSelectedStorageKey = "headerMenuSelected"
 
   type TPageOption = {id: number, name: string}
 
-  let { children, title, options, containerCss, useTopMinimalMenu, fixedFullHeight }: {
+  // The header slot shows one thing: `header`, else the `options` (tabs, or the search box), else
+  // the title with its back button and subtitle. So `showBackButton` / `subtitle` draw nothing on
+  // a page with `options`.
+  let {
+    children, title, options, containerCss, useTopMinimalMenu, fixedFullHeight,
+    header, isLoading = false, useMenuSearchBox = false, selectedOption, onSelectOption,
+    showBackButton = false, onBack, subtitle, background,
+  }: {
     children: any,
     title: string,
     containerCss?: string,
     useTopMinimalMenu?: boolean,
     fixedFullHeight?: boolean
     options?: TPageOption[]
+    // Replaces the header's title / tabs with the page's own content.
+    header?: Snippet
+    // While the first load of the data the page draws runs, a loader takes the place of the content,
+    // so nothing shows as 0 or empty that is only waiting for its answer.
+    isLoading?: boolean
+    // Draws `options` as a search box in place of the title instead of tabs, so the list has no
+    // length limit (a project picker...). The page owns the selection: `selectedOption` /
+    // `onSelectOption`, not ui.state.pageOptionSelected.
+    useMenuSearchBox?: boolean
+    selectedOption?: number
+    onSelectOption?: (optionID: number) => void
+    showBackButton?: boolean
+    // What the back button does; by default a browser "back" step.
+    onBack?: () => void
+    // A second line under the title.
+    subtitle?: string
+    // "white" paints the page on the surface color (a board of cards) instead of the gray background.
+    background?: 'white'
   } = $props();
   const ui = useUI()
 
   const isLogged = $derived(security.checkIsLogin() === 2)
   let hasRestoredPageOptionSelection = $state(false)
-  const pageOptions = $derived(options || [])
+  // A search box's options are the page's, never header tabs.
+  const pageOptions = $derived(useMenuSearchBox ? [] : (options || []))
+
+  // What the page adds to the header around its title. Cleared only while it is still ours: the next
+  // route's Page may have mounted first.
+  $effect(() => {
+    const headerContent = {
+      content: header, subtitle,
+      onBack: showBackButton ? (onBack || (() => history.back())) : undefined,
+      menuSearchBox: useMenuSearchBox ? { options: options || [], selectedOption, onSelectOption } : undefined,
+    }
+    untrack(() => { pageHeader.current = headerContent })
+    return () => { if (pageHeader.current === headerContent) { pageHeader.current = {} } }
+  })
 
   const getRouteOptionHash = (pathname: string): string => checksumBase64_6(pathname || "/")
   
@@ -60,9 +101,14 @@ import { useUI } from '@genix/ui';
     untrack(() => {
       Env.useTopMinimalMenu = useTopMinimalMenu || false
       ui.state.useTopMinimalMenu = useTopMinimalMenu || false
-      ui.state.pageTitle = title || ""
       ui.state.pageOptions = pageOptions
     })
+  })
+
+  // The title follows the page's view (a list, then one of its records), so it is tracked.
+  $effect(() => {
+    const pageTitle = title || ""
+    untrack(() => { ui.state.pageTitle = pageTitle })
   })
 
   $effect(() => {
@@ -98,11 +144,17 @@ import { useUI } from '@genix/ui';
 
 </script>
 
-<div id="page-container" class="_1 px-10 pt-10 {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
+<div id="page-container" class="_1 px-10 pt-10 {background === 'white' ? 'bg-surface' : ''} {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
 	class:fixed-full-height={fixedFullHeight}
 >
   {#if Core.isLoading === 0 && isLogged}
-    {@render children()}
+    {#if isLoading}
+      <div class="max-w-420 mx-auto pt-60" role="status" aria-label="Loading data">
+        <LoadingBar label="Loading...|Cargando..." />
+      </div>
+    {:else}
+      {@render children()}
+    {/if}
   {/if}
   {#if Core.isLoading > 0}
     <div class="p-16"><h2>Cargando...</h2></div>

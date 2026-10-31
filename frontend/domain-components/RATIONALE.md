@@ -2,6 +2,13 @@
 
 Design decisions for the app shell widgets. Newest first.
 
+## Settings panel remembers its last tab in localStorage
+**Context** — `HeaderConfig` remounts every time the gear opens it, so the selected tab reset on each open.
+**Decision** — The last tab is saved under `header-config-selected-tab`; with nothing stored the panel
+opens on Config. (now the first tab). The key is not in `BROWSER_PREFERENCE_STORAGE_KEYS`, so logout resets it.
+**Rationale** — localStorage also survives a page reload, unlike module-level state. Resetting on logout
+costs nothing for a tab choice and keeps the preserved-keys list to session-critical preferences.
+
 ## Mobile header: only the info button; settings and reload in the drawer footer (from berryapps)
 **Context** — Ported from berryapps: below 749px the header keeps only the info button, and settings and
 reload move to genix-ui's new `SideMenu` `footer` snippet. berryapps puts its logo in that footer

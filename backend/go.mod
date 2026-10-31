@@ -60,7 +60,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/gocql/gocql v1.6.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
-	github.com/ivanjoz/colbin v0.8.2
+	github.com/ivanjoz/colbin v0.9.0
 	github.com/ivanjoz/facturago v0.0.0
 	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0

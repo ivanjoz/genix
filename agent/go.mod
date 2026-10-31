@@ -56,7 +56,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	github.com/ivanjoz/colbin v0.8.2 // indirect
+	github.com/ivanjoz/colbin v0.9.0 // indirect
 	github.com/ivanjoz/genix-orm/dataframe v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/db v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/search/daemon v0.0.0 // indirect

@@ -57,6 +57,6 @@ sub_accesses_names = ["Anular venta", "Aplicar descuento"]
 
   it('rejects an unquoted scalar', () => {
     expect(() => parseAccessCatalogForTest('[[access]]\nname = Punto de Venta\n'))
-      .toThrow(/integers, quoted strings or arrays/)
+      .toThrow(/integers, booleans, quoted strings or arrays/)
   })
 })

@@ -307,6 +307,33 @@ func SaveFileToR2(args SaveFileArgs) error {
 	return nil
 }
 
+// DeleteFile removes an object (Path + "/" + Name) from the store selected by CDN_PROVIDER. Deleting
+// a missing object is not an error on either provider.
+func DeleteFile(args SaveFileArgs) error {
+	args = resolveStorageBucket(args)
+	key := args.Path + "/" + args.Name
+	if !useR2() {
+		client := s3.NewFromConfig(core.GetAwsConfig())
+		_, err := client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{Bucket: &args.Bucket, Key: &key})
+		return err
+	}
+	req, err := http.NewRequest("DELETE", r2ObjectURL(args.Bucket, key), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+core.Env.CLOUDFLARE_TOKEN)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusMultipleChoices && resp.StatusCode != http.StatusNotFound {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("R2 delete failed (HTTP %d): %s", resp.StatusCode, string(responseBody))
+	}
+	return nil
+}
+
 // FileExists checks whether an object exists in the object store selected by CDN_PROVIDER.
 // Returns (false, nil) for a confirmed not-found; (false, err) for transport errors.
 func FileExists(args SaveFileArgs) (bool, error) {

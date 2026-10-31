@@ -1,0 +1,272 @@
+# Page catalog: every page the side menu can list, defined once. db/modules.toml arranges these
+# pages into modules by route; a page listed in several modules is still declared here only once.
+#
+# RULES
+#   - `route`: the page's URL path, NO leading "/". It is the key modules.toml refers to.
+#   - `name`: "English|Spanish", like every other UI text.
+#   - `icon`: an Iconify class. Optional.
+#   - `description`: what the page is for, in one sentence. Optional.
+#   - `pending = true`: the page is planned but not built yet. The menu shows it disabled and it
+#     never counts as a module's entry page.
+#   - Access is not declared here: backend/access.toml decides who can open each route.
+#
+# FORMAT: single-line values only. No indentation.
+
+# Mi Empresa
+
+[[pages]]
+route = "company/configuration"
+name = "Configuration|Configuración"
+icon = "icon-[fa--cog]"
+description = "Edita los datos de tu empresa, pasarela de pago, envío de correos. Genera y descarga backups."
+
+[[pages]]
+route = "business/branches-warehouses"
+name = "Sites & Warehouses|Sedes & Almacenes"
+icon = "icon-[fa--home]"
+description = "Crea sedes y almacenes. Crea los layouts de tus almacenes."
+
+[[pages]]
+route = "security/users-profiles"
+name = "Users & Profiles|Usuarios & Perfiles"
+icon = "icon-[fa--user-secret]"
+description = "Gestiona usuarios, crea perfiles y asígnales accesos."
+
+# Sales
+
+[[pages]]
+route = "sales/sale_order_create"
+name = "Point of Sale|Punto de Venta"
+icon = "icon-[fa--bolt]"
+
+[[pages]]
+route = "sales/sale_orders_status"
+name = "Sales Management|Gestión Ventas"
+icon = "icon-[fa--bolt]"
+
+[[pages]]
+route = "sales/sale_orders_charts"
+name = "Sales Charts|Gráficos Ventas"
+icon = "icon-[fa--bar-chart]"
+
+[[pages]]
+route = "sales/sales-report"
+name = "Sales Report|Reporte Ventas"
+icon = "icon-[fa--bar-chart]"
+
+[[pages]]
+route = "sales/shipping-costs"
+name = "Shipping Costs|Costos de Envio"
+icon = "icon-[fa--bolt]"
+
+[[pages]]
+route = "sales/sale_planning"
+name = "Sales Planning|Proyección Ventas"
+icon = "icon-[fa--bar-chart]"
+
+# Website
+
+[[pages]]
+route = "webpage-builder/pages"
+name = "Pages|Páginas"
+icon = "icon-[fa--file-text-o]"
+
+[[pages]]
+route = "webpage-builder/gallery"
+name = "Gallery|Galería"
+icon = "icon-[fa--picture-o]"
+
+# CRM
+
+[[pages]]
+route = "crm/customers"
+name = "Customers|Clientes"
+icon = "icon-[fa--user]"
+description = "Registra tus clientes con RUC o DNI y consulta su historial de compras."
+
+# Production
+
+[[pages]]
+route = "production/products"
+name = "Products|Productos"
+icon = "icon-[fa--cube]"
+description = "Crea productos y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones de tus productos."
+
+[[pages]]
+route = "production/supplies-materials"
+name = "Supplies & Materials|Insumos & Materiales"
+icon = "icon-[fa--flask]"
+description = "Registra los insumos y materiales que consume tu producción, con sus proveedores y stock mínimo."
+
+# Logistics
+
+[[pages]]
+route = "logistics/products-stock"
+name = "Stock Changes|Cambios Stock"
+icon = "icon-[fa--bar-chart]"
+
+[[pages]]
+route = "logistics/warehouse-movements"
+name = "Movements Report|Rep. Movimientos"
+icon = "icon-[fa--truck]"
+
+[[pages]]
+route = "logistics/purchase-management"
+name = "Purchase Management|Gestión de Compras"
+icon = "icon-[fa--shopping-basket]"
+
+[[pages]]
+route = "logistics/purchase-orders"
+name = "Purchase Orders|Órdenes Compra"
+icon = "icon-[fa--truck]"
+
+[[pages]]
+route = "logistics/suppliers"
+name = "Suppliers|Proveedores"
+icon = "icon-[fa--truck]"
+
+# Finance
+
+[[pages]]
+route = "finance/cash-banks"
+name = "Cash & Banks|Cajas & Bancos"
+icon = "icon-[fa--briefcase]"
+
+[[pages]]
+route = "finance/cash-banks-movements"
+name = "Cash Movements|Cajas Movimientos"
+icon = "icon-[fa--exchange]"
+
+[[pages]]
+route = "finance/exchange-rate"
+name = "Exchange Rate|Tipo de Cambio"
+icon = "icon-[fa--money]"
+
+[[pages]]
+route = "finance/cash-flow"
+name = "Cash Flow|Flujo de Caja"
+icon = "icon-[fa--exchange]"
+pending = true
+
+[[pages]]
+route = "finance/expenses"
+name = "Expenses|Gastos"
+icon = "icon-[fa--exchange]"
+
+[[pages]]
+route = "finance/accounts-management"
+name = "Accounts Management|Gestión de Cuentas"
+icon = "icon-[fa--exchange]"
+pending = true
+
+# Accounting
+
+[[pages]]
+route = "accounting/invoicing"
+name = "Invoicing|Facturación"
+icon = "icon-[fa--file-text]"
+
+[[pages]]
+route = "accounting/books"
+name = "Books|Libros"
+icon = "icon-[fa--book]"
+
+[[pages]]
+route = "accounting/accounts-consolidation"
+name = "Consolidation & Accounts|Consolidado & Cuentas"
+icon = "icon-[fa--list-alt]"
+
+[[pages]]
+route = "accounting/assets"
+name = "Assets|Activos"
+icon = "icon-[fa--building-o]"
+
+[[pages]]
+route = "accounting/financial-statements"
+name = "Financial Statements|Estados Financieros"
+icon = "icon-[fa--line-chart]"
+pending = true
+
+[[pages]]
+route = "accounting/balance"
+name = "Balance|Balance"
+icon = "icon-[fa--balance-scale]"
+pending = true
+
+# Projects
+
+[[pages]]
+route = "projects/project-list"
+name = "Projects|Proyectos"
+icon = "icon-[fa--folder-open-o]"
+description = "Crea proyectos ágiles, su equipo y sus épicas."
+
+[[pages]]
+route = "projects/backlog"
+name = "Backlog|Backlog"
+icon = "icon-[fa--list-ul]"
+description = "Ordena las historias de un proyecto por épica y prioridad."
+
+[[pages]]
+route = "projects/sprints"
+name = "Sprints|Sprints"
+icon = "icon-[fa--columns]"
+description = "Planifica sprints y mueve las historias en su tablero."
+
+[[pages]]
+route = "projects/documents"
+name = "Documents|Documentos"
+icon = "icon-[fa--file-text-o]"
+description = "Los archivos de un proyecto y de sus historias."
+
+[[pages]]
+route = "projects/reports/gantt"
+name = "Gantt|Gantt"
+icon = "icon-[fa--tasks]"
+
+[[pages]]
+route = "projects/reports/calendar"
+name = "Calendar|Calendario"
+icon = "icon-[fa--calendar]"
+
+[[pages]]
+route = "projects/reports/sprints"
+name = "Sprint burndown|Burndown de sprints"
+icon = "icon-[fa--line-chart]"
+
+[[pages]]
+route = "projects/reports/by-person"
+name = "By person|Por persona"
+icon = "icon-[fa--user]"
+
+# System
+
+[[pages]]
+route = "system/companies"
+name = "Companies|Empresas"
+icon = "icon-[fa--building]"
+
+[[pages]]
+route = "system/server-panel"
+name = "Server Panel|Server Panel"
+icon = "icon-[fa--server]"
+
+[[pages]]
+route = "system/observability"
+name = "Observability|Observabilidad"
+icon = "icon-[fa--bar-chart]"
+
+[[pages]]
+route = "system/cron-actions"
+name = "Cron Actions|Acciones Cron"
+icon = "icon-[fa--clock-o]"
+
+[[pages]]
+route = "system/developer"
+name = "Developer|Developer"
+icon = "icon-[fa--flask]"
+
+[[pages]]
+route = "develop-ui/showroom"
+name = "UI Showroom|UI Showroom"
+icon = "icon-[fa--paint-brush]"

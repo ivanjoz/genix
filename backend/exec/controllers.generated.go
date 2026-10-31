@@ -13,6 +13,7 @@ import (
 	invoicingTypes "app/invoicing/types"
 	logisticsTypes "app/logistics/types"
 	productionTypes "app/production/types"
+	projectsTypes "app/projects/types"
 	salesTypes "app/sales/types"
 	securityTypes "app/security/types"
 	webpageTypes "app/webpage/types"
@@ -64,6 +65,14 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[logisticsTypes.PurchaseOrder](),
 		makeDBController[logisticsTypes.WarehouseProductMovement](),
 		makeDBController[productionTypes.Product](),
+		makeDBController[projectsTypes.Document](),
+		makeDBController[projectsTypes.Epic](),
+		makeDBController[projectsTypes.Project](),
+		makeDBController[projectsTypes.Sprint](),
+		makeDBController[projectsTypes.Story](),
+		makeDBController[projectsTypes.StoryActivity](),
+		makeDBController[projectsTypes.StoryAssignee](),
+		makeDBController[projectsTypes.StoryDetail](),
 		makeDBController[salesTypes.SaleOrder](),
 		makeDBController[salesTypes.SalesPlanning](),
 		makeDBController[salesTypes.SeasonalityCurve](),
@@ -122,6 +131,14 @@ func init() {
 	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[productionTypes.Product]() })
+	db.RegisterTableFactory("projects_document", func() db.Table { return db.MakeTable[projectsTypes.Document]() })
+	db.RegisterTableFactory("projects_epic", func() db.Table { return db.MakeTable[projectsTypes.Epic]() })
+	db.RegisterTableFactory("projects_project", func() db.Table { return db.MakeTable[projectsTypes.Project]() })
+	db.RegisterTableFactory("projects_sprint", func() db.Table { return db.MakeTable[projectsTypes.Sprint]() })
+	db.RegisterTableFactory("projects_story", func() db.Table { return db.MakeTable[projectsTypes.Story]() })
+	db.RegisterTableFactory("projects_story_activity", func() db.Table { return db.MakeTable[projectsTypes.StoryActivity]() })
+	db.RegisterTableFactory("projects_story_assignee", func() db.Table { return db.MakeTable[projectsTypes.StoryAssignee]() })
+	db.RegisterTableFactory("projects_story_detail", func() db.Table { return db.MakeTable[projectsTypes.StoryDetail]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })
 	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
 	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })

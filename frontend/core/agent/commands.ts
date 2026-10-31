@@ -5,8 +5,7 @@
 // json tags). Internal registry types stay lowercase.
 
 import { goto } from "$app/navigation";
-import { Core } from "#core/store.svelte.ts";
-import { security } from "#libs/ui-runtime.svelte.ts";
+import { Modules, canOpenRoute } from "#core/modules.svelte.ts";
 import { tick } from "svelte";
 import { Agent, agentHandles, type AgentHandle, type AgentListFilter, type AgentMethodName } from "#components/agent/registry.ts";
 import { captureDomScreenshot, captureScreenshot, releaseScreenStream } from "./screenshot";
@@ -26,6 +25,7 @@ export interface WsMessage {
 interface MenuOption {
   Name: string;
   Route: string;
+  Description: string;
 }
 
 interface MenuGroup {
@@ -200,21 +200,23 @@ const invokeBatch = async (payload: InvokeBatchPayload | InvokePayload[] | undef
   return { Results: results, Page: await Agent.getPageContent() };
 };
 
-// getMenu mirrors the side-menu the user sees: the same access filter as
-// SideMenu.svelte, dropping options the user can't reach.
+// getMenu lists every page the user can open, across all the modules of
+// db/modules.toml and not only the one the side menu shows: the agent navigates
+// the whole app. A page shared by several modules is listed once, under its
+// first group; pending pages are left out.
 const getMenu = (): MenuGroup[] => {
-  const menus = Core.module?.menus || [];
-  return menus
-    .map((menu) => ({
-      ID: menu.id || 0,
-      Name: menu.name,
-      Options: (menu.options || [])
-        .filter((option) => {
-          const route = String(option.route || "").trim();
-          if (!route) { return false; }
-          return security.canAccessRoute(option.route);
-        })
-        .map((option) => ({ Name: option.name, Route: option.route || "" })),
+  const listedRoutes = new Set<string>();
+  return Modules
+    .flatMap((module) => module.menus)
+    .map((menuGroup, groupIndex) => ({
+      ID: groupIndex + 1,
+      Name: menuGroup.name,
+      Options: menuGroup.pages
+        .filter((menuPage) => !menuPage.pending && !listedRoutes.has(menuPage.route) && canOpenRoute(menuPage.route))
+        .map((menuPage) => {
+          listedRoutes.add(menuPage.route);
+          return { Name: menuPage.name, Route: menuPage.route, Description: menuPage.description || "" };
+        }),
     }))
     .filter((group) => group.Options.length > 0);
 };

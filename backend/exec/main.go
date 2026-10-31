@@ -25,6 +25,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-recalc-stock":                    RecalcStock,
 	"fn-generate-erp-history":            GenerateErpHistory,
 	"fn-generate-supply-data":            GenerateSupplyData,
+	"fn-generate-projects-flow":          GenerateProjectsFlow,
 	"fn-backfill-observability-credits":  BackfillObservabilityCredits,
 	"fn-backfill-identity-snapshots":     BackfillIdentitySnapshots,
 	"fn-backfill-cash-movement-accounts": BackfillCashMovementAccounts,

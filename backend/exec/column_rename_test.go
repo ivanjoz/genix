@@ -9,7 +9,7 @@ import (
 // goFieldByNewColumn names the Go field each migrated column belongs to, so the plan cannot drift
 // from what the ORM derives once the tags are gone.
 var goFieldByNewColumn = map[string]string{
-	"company_id": "CompanyID", "name": "Name", "description": "Description", "modules": "Modules",
+	"company_id": "CompanyID", "name": "Name", "description": "Description",
 	"params": "Params", "address": "Address", "city_id": "CityID", "id": "ID", "culqi_config": "CulqiConfig", "last_payment_caja_id": "LastPaymentCajaID",
 	"counter_account_code": "CounterAccountCode",
 }

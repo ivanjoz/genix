@@ -126,7 +126,21 @@ export const {
 
 // Genix services keep a zero-argument base class while the package receives host policy explicitly.
 export class GetHandler<T extends GetHandlerRecord = any> extends ReusableGetHandler<T> {
+  // hasFetched flips once the first fetch() ends (answered or failed). Until then the lists are
+  // empty because nothing arrived yet, not because there is nothing: a page waits for it before
+  // drawing counters or "no records".
+  hasFetched = $state(false)
+  get isFirstLoading(): boolean { return !this.hasFetched }
+
   constructor() {
     super(genixUiRuntime.getHandlerRuntime)
+  }
+
+  async fetch(): Promise<void> {
+    try {
+      await super.fetch()
+    } finally {
+      this.hasFetched = true
+    }
   }
 }

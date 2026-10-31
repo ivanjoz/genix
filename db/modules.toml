@@ -1,0 +1,132 @@
+# Module organization: how the pages of db/pages.toml are arranged into the modules of the module
+# selector and the menu groups of the side menu. Modules are virtual: they do not follow the route
+# folders, and one page may be listed in several modules for convenience.
+#
+# RULES
+#   - `code`: permanent identifier, remembered in the browser (last module, last page per module).
+#   - `name`: "English|Spanish". `icon`: Iconify class shown on the module selector.
+#   - `saas_only = true`: only the company that runs the SaaS sees the module, and its pages are
+#     blocked for every other company even through a typed URL. The backend repeats the restriction.
+#   - `[[modules.menus]]` belongs to the closest `[[modules]]` above it: order in the file is what
+#     links them, not indentation.
+#   - `routes`: comma-separated, NO leading "/", each one declared in db/pages.toml. Menu order is
+#     the order written here.
+#   - A module shows up only for users who can open at least one of its pages (backend/access.toml).
+#
+# FORMAT: single-line values only. No indentation. Modules are listed in selector order.
+
+[[modules]]
+code = "commercial"
+name = "Commercial|Comercial"
+icon = "icon-[fa--shopping-cart]"
+
+[[modules.menus]]
+name = "Sales|Ventas"
+min_name = "VEN"
+routes = "sales/sale_order_create, sales/sale_orders_status, sales/sale_planning, sales/shipping-costs"
+
+[[modules.menus]]
+name = "Reports|Reportes"
+min_name = "REP"
+routes = "sales/sale_orders_charts, sales/sales-report"
+
+[[modules.menus]]
+name = "Catalog|Catálogo"
+min_name = "CAT"
+routes = "production/products, crm/customers"
+
+[[modules.menus]]
+name = "Store / Web|Tienda / Web"
+min_name = "WEB"
+routes = "webpage-builder/pages, webpage-builder/gallery"
+
+[[modules.menus]]
+name = "Invoicing|Facturación"
+min_name = "FAC"
+routes = "accounting/invoicing"
+
+[[modules]]
+code = "operations"
+name = "Operations|Operaciones"
+icon = "icon-[fa--cubes]"
+
+[[modules.menus]]
+name = "My Company|Mi Empresa"
+min_name = "EMP"
+routes = "company/configuration, business/branches-warehouses, security/users-profiles"
+
+[[modules.menus]]
+name = "Production|Producción"
+min_name = "PRD"
+routes = "production/products, production/supplies-materials"
+
+[[modules.menus]]
+name = "Warehouse|Almacén"
+min_name = "ALM"
+routes = "logistics/products-stock, logistics/warehouse-movements"
+
+[[modules.menus]]
+name = "Purchasing|Compras"
+min_name = "COM"
+routes = "logistics/purchase-management, logistics/purchase-orders, logistics/suppliers"
+
+[[modules]]
+code = "finance"
+name = "Finance & Accounting|Finanzas y Contabilidad"
+icon = "icon-[fa--money]"
+
+[[modules.menus]]
+name = "Treasury|Tesorería"
+min_name = "TES"
+routes = "finance/cash-banks, finance/cash-banks-movements, finance/exchange-rate, finance/cash-flow"
+
+[[modules.menus]]
+name = "Expenses|Gastos"
+min_name = "GAS"
+routes = "finance/expenses, finance/accounts-management, logistics/suppliers"
+
+[[modules.menus]]
+name = "Accounting|Contabilidad"
+min_name = "CNT"
+routes = "accounting/invoicing, accounting/books, accounting/accounts-consolidation, accounting/assets, accounting/financial-statements, accounting/balance"
+
+[[modules]]
+code = "crm"
+name = "CRM|CRM"
+icon = "icon-[fa--users]"
+
+[[modules.menus]]
+name = "Customers|Clientes"
+min_name = "CLI"
+routes = "crm/customers"
+
+[[modules]]
+code = "projects"
+name = "Projects|Proyectos"
+icon = "icon-[fa--lightbulb-o]"
+
+[[modules.menus]]
+name = "Projects|Proyectos"
+min_name = "PRO"
+routes = "projects/project-list, projects/backlog, projects/sprints, projects/documents"
+
+[[modules.menus]]
+name = "Reports|Reportes"
+min_name = "REP"
+routes = "projects/reports/gantt, projects/reports/calendar, projects/reports/sprints, projects/reports/by-person"
+
+[[modules]]
+code = "system"
+name = "System|System"
+icon = "icon-[fa--cogs]"
+saas_only = true
+
+[[modules.menus]]
+name = "Platform|Plataforma"
+min_name = "PLA"
+routes = "system/companies, system/server-panel, system/observability, system/cron-actions"
+
+[[modules.menus]]
+name = "Development|Desarrollo"
+min_name = "DEV"
+routes = "system/developer, develop-ui/showroom"

@@ -5,7 +5,7 @@
 	import TopLayerDatePicker from '#components/layers/TopLayerDatePicker.svelte';
 	import TopLayerSelector from '#components/layers/TopLayerSelector.svelte';
 	import { Env } from '#core/env.ts';
-	import Modules, { SAAS_COMPANY_ID, isSaaSOnlyRoute } from '#core/modules.ts';
+	import { isSaaSRouteDenied, rememberModulePage } from '#core/modules.svelte.ts';
 	import { security } from '#libs/ui-runtime.svelte.ts';
 	import { Core, getDeviceType, tr } from '#core/store.svelte.ts';
 	import AppHeader from '#domain/AppHeader.svelte';
@@ -13,7 +13,7 @@
 	import PageLoading from '#domain/PageLoading.svelte';
 	import SideMenu from '#domain/SideMenu.svelte';
 	import { doInitServiceWorker } from '@genix/ui/service-worker';
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { provideUi } from '@genix/ui';
 	import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
 	import { fetchAccessListCatalog, getAccessEntriesForRoute } from './security/users-profiles/access-list-catalog';
@@ -76,8 +76,6 @@
 	})
 
 	$effect(() => {
-		Core.module = Modules[0]
-
 		window.addEventListener('resize', () => {
 			const newDeviceType = getDeviceType()
 			if (newDeviceType !== ui.state.deviceType) { ui.state.deviceType = newDeviceType }
@@ -93,11 +91,13 @@
 		if (!browser || redirectsToLogin || !accessCatalogReady) { return }
 
 		const currentPath = page.url.pathname
-		// Las rutas del módulo SYSTEM no están en el catálogo de accesos: su permiso es el tenant
-		// mismo, así que se bloquean aunque el usuario escriba la URL a mano.
-		const deniedBySaaSPolicy = isSaaSOnlyRoute(currentPath) && Env.getCompanyID() !== SAAS_COMPANY_ID
+		// Las rutas del módulo SYSTEM (saas_only en db/modules.toml) dependen del tenant mismo, así que
+		// se bloquean aunque el usuario escriba la URL a mano.
+		const deniedBySaaSPolicy = isSaaSRouteDenied(currentPath)
 		if (!deniedBySaaSPolicy && security.canAccessRoute(currentPath)) {
 			lastDeniedRoute = ''
+			// The opened page becomes its module's remembered page (module selector, shared pages).
+			untrack(() => rememberModulePage(currentPath))
 			return
 		}
 

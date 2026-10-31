@@ -1,5 +1,4 @@
 import { goto } from '$app/navigation';
-import type { IMenuRecord, IModule } from '#core/types/modules.ts';
 import { SvelteMap } from 'svelte/reactivity';
 import { Env, browser } from './env';
 
@@ -56,7 +55,6 @@ export const setTheme = (theme: ITheme) => {
 }
 
 export const Core = $state({
-  module: { menus: [] as IMenuRecord[] } as IModule,
   openSearchLayer: 0 as number,
 	// 1 = Spanish, 2 = English
   languaje: getStoredLanguaje() as ILanguaje,

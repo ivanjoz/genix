@@ -115,6 +115,8 @@ github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed/go.mod h1:tMW
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ivanjoz/colbin v0.8.2 h1:csBKTTH6Y9AqWMy/RiOP1rUsnWZtvOBoXHtY5o0UctY=
 github.com/ivanjoz/colbin v0.8.2/go.mod h1:l7eNG5MdstOAVGgbNeQrIiq7Hl/Ue9N8ZiUoun7eUMY=
+github.com/ivanjoz/colbin v0.9.0 h1:PDnK+JoQ4p5vtH1Hal7SmA3N0w5eO83itDd8514C3bs=
+github.com/ivanjoz/colbin v0.9.0/go.mod h1:l7eNG5MdstOAVGgbNeQrIiq7Hl/Ue9N8ZiUoun7eUMY=
 github.com/ivanjoz/sonic v1.15.6-0.20261028001949-a834f9c878ac h1:e6IjpypX924mOW/UHBBJ1qLahZzPQuriOUg7/hQ7asA=
 github.com/ivanjoz/sonic v1.15.6-0.20261028001949-a834f9c878ac/go.mod h1:nn7CoK5W+LKbl22XGJrXg6SwzaFAcVs89miqzkqDwOU=
 github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=

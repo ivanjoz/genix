@@ -4,7 +4,10 @@ import T from '#components/misc/T.svelte';
 import { Agent } from '#components/agent/registry.ts';
 import AgentChat from '#core/agent/AgentChat.svelte';
 import { security } from '#libs/ui-runtime.svelte.ts';
+import Button from '#components/buttons/Button.svelte';
 import ButtonLayer from '#components/buttons/ButtonLayer.svelte';
+import ButtonSelect from '#components/form/ButtonSelect.svelte';
+import { pageHeader } from '#domain/page-header.svelte.ts';
 import HeaderConfig from '#domain/HeaderConfig.svelte';
 import HeaderRequestLogsModal from '#domain/HeaderRequestLogsModal.svelte';
 import NotificationsButton from '#domain/NotificationsButton.svelte';
@@ -69,9 +72,19 @@ import { useUI } from '@genix/ui';
 	<!-- Title — reserve a stable slot so the agent pill's position doesn't
 	     jump as tabs come and go. -->
 	<div class="flex items-center min-w-[200px] shrink-0"
-		data-id={ui.state.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
+		data-id={!pageHeader.current.content && ui.state.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
 	>
-		{#if ui.state.pageOptions?.length > 0}
+		<!-- Page's header props (domain-components/page-header.svelte.ts): its own content, or its
+		     options drawn as a search box, take the place of the title / tabs. -->
+		{#if pageHeader.current.content}
+			{@render pageHeader.current.content()}
+		{:else if pageHeader.current.menuSearchBox}
+			{@const menuSearchBox = pageHeader.current.menuSearchBox}
+			<!-- Until an option is chosen the box shows the page title. -->
+			<ButtonSelect options={menuSearchBox.options} keyId="id" keyName="name" selected={menuSearchBox.selectedOption}
+				label={ui.state.pageTitle} placeholder={ui.state.pageTitle} color="on-solid" css="w-full md:w-360" layerCss="w-full md:w-466"
+				onChange={(pageOption) => menuSearchBox.onSelectOption?.(pageOption.id)} />
+		{:else if ui.state.pageOptions?.length > 0}
 			{#each ui.state.pageOptions as opt }
 			{@const selected = ui.state.pageOptionSelected == opt.id}
 				<button class="_2" class:_3={selected} aria-label={opt.name}
@@ -83,8 +96,21 @@ import { useUI } from '@genix/ui';
 				</button>
 			{/each}
 		{:else}
-			<div class="h1 text-white text-lg font-semibold tracking-wide truncate">
-				<T text={ui.state.pageTitle} />
+			<div class="flex items-center gap-10 min-w-0">
+				{#if pageHeader.current.onBack}
+					<Button icon="icon-[fa--arrow-left]" label="Goes back.|Regresa."
+						css="w-40 h-40 shrink-0 flex items-center justify-center rounded-full text-white bg-white/10 hover:bg-white/20 cursor-pointer"
+						onClick={pageHeader.current.onBack} />
+				{/if}
+				<!-- With a subtitle the two lines sit 3px higher to look centered in the bar. -->
+				<div class="min-w-0 leading-tight {pageHeader.current.subtitle ? '-mt-3' : ''}">
+					<div class="h1 text-white text-lg font-semibold tracking-wide truncate">
+						<T text={ui.state.pageTitle} />
+					</div>
+					{#if pageHeader.current.subtitle}
+						<div class="text-[14px] text-white opacity-80 truncate"><T text={pageHeader.current.subtitle} /></div>
+					{/if}
+				</div>
 			</div>
 		{/if}
 	</div>

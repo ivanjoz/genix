@@ -37,7 +37,6 @@ export interface IProfile {
   Name: string;
   Description?: string;
   AccesosGrants: IAccesoGrant[];
-  Modulos: number[];
   // Editable form shape, stripped before the POST: accesoID -> nivel, and accesoID -> sub-access
   // ids. One nivel, not a list — every consumer collapses to the highest one anyway.
   accesosMap: Map<number, number>;

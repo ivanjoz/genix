@@ -9,7 +9,6 @@
   import type { IAccess, IProfile, IUser } from './users-profiles.svelte';
   import {
     buildAccesosCatalog,
-    buildRouteCatalogIndex,
     buildSubAccesoOptions,
     fromAccesoGrants,
     isSubAccesoChecked,
@@ -44,8 +43,7 @@
     css = ''
   }: IUserProfilesAccessSelectorProps = $props();
 
-  const routeCatalogIndex = buildRouteCatalogIndex();
-  const accesosCatalog = $derived(buildAccesosCatalog(accessCatalogEntries, routeCatalogIndex));
+  const accesosCatalog = $derived(buildAccesosCatalog(accessCatalogEntries));
 
   // AccessCard edits a profile's two maps. A user stores the very same AccesosGrants list, so the
   // layer edits through a profile-shaped object and re-derives the list on every change — one

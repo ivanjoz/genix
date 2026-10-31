@@ -54,6 +54,9 @@ func main() {
 	case "generate_supply_data":
 		runBackendExec("fn-generate-supply-data", os.Args[2:]...)
 
+	case "generate_projects_flow":
+		runBackendExec("fn-generate-projects-flow", os.Args[2:]...)
+
 	case "backfill_observability_credits":
 		runBackendExec("fn-backfill-observability-credits", os.Args[2:]...)
 

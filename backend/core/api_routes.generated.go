@@ -61,6 +61,16 @@ var APIRouteIDs = map[string]int16{
 	"GET.product-supply":               33,
 	"GET.products":                     34,
 	"GET.products-stock":               35,
+	"GET.projects-assigned-stories":    142,
+	"GET.projects-documents":           157,
+	"GET.projects-epics":               143,
+	"GET.projects-projects":            144,
+	"GET.projects-sprints":             145,
+	"GET.projects-stories":             146,
+	"GET.projects-stories-ids":         147,
+	"GET.projects-story-activity":      154,
+	"GET.projects-story-detail":        148,
+	"GET.projects-team-candidates":     149,
 	"GET.purchase-order-ids":           140,
 	"GET.purchase-orders":              36,
 	"GET.purchase-orders-query":        37,
@@ -127,6 +137,17 @@ var APIRouteIDs = map[string]int16{
 	"POST.product-supply":              82,
 	"POST.productos-stock":             83,
 	"POST.products":                    84,
+	"POST.projects-attachment-upload":  155,
+	"POST.projects-documents":          158,
+	"POST.projects-epics":              150,
+	"POST.projects-projects":           151,
+	"POST.projects-sprint-close":       159,
+	"POST.projects-sprint-move":        160,
+	"POST.projects-sprint-start":       161,
+	"POST.projects-sprints":            162,
+	"POST.projects-stories":            152,
+	"POST.projects-stories-rank":       153,
+	"POST.projects-story-comments":     156,
 	"POST.purchase-order-entry":        85,
 	"POST.purchase-orders":             86,
 	"POST.sale-order":                  87,
@@ -167,7 +188,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 141
+const MaxAPIRouteID int16 = 162
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

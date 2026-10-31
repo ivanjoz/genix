@@ -59,6 +59,10 @@ name = "Producción"
 id = 10
 name = "Clientes (CRM)"
 
+[[groups]]
+id = 11
+name = "Proyectos"
+
 [[access]]
 id = 1
 name = "Configuración"
@@ -366,3 +370,11 @@ group = 7
 levels = 14
 frontend_routes = "accounting/accounts-consolidation"
 backend_apis = "GET.accounting-operations,PUT.accounting-classification,GET.assets,GET.purchase-order-ids,GET.expense-ids"
+
+[[access]]
+id = 39
+name = "Proyectos"
+group = 11
+levels = 14
+frontend_routes = "projects"
+backend_apis = "GET.projects-projects,POST.projects-projects,GET.projects-team-candidates,GET.projects-epics,POST.projects-epics,GET.projects-stories,GET.projects-stories-ids,GET.projects-assigned-stories,POST.projects-stories,POST.projects-stories-rank,GET.projects-story-detail,GET.projects-story-activity,POST.projects-story-comments,POST.projects-attachment-upload,GET.projects-sprints,GET.projects-documents,POST.projects-documents,POST.projects-sprints,POST.projects-sprint-start,POST.projects-sprint-move,POST.projects-sprint-close"

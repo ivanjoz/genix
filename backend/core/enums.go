@@ -38,4 +38,9 @@ const (
 	// its files. Keyed on a hash of the frame's folder and the company. The frame's state and files are
 	// written conditioned on their ETags, so a lost lock costs duplicate work only.
 	ActionCompactDataFrame LockAction = 6
+	// ActionProjectWrite serializes the writes of one agile project (app/projects): a story, its
+	// sprint boards and the project's counters are read, changed and rewritten whole, so two
+	// concurrent writers would each start from the same state and the later one would drop the
+	// other's change. Keyed on the company and the project (projectLockIdentifier).
+	ActionProjectWrite LockAction = 7
 )

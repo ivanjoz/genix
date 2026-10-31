@@ -1,3 +1,35 @@
+## Virtual modules from db/pages.toml + db/modules.toml: open points settled while building it
+**Context** — The menu moved from `core/modules.ts` to two TOML files, with five modules, the module
+selector, shared pages that stay in the module the user came from, pending pages shown disabled, and
+the profile's `Modules` field deleted. Building it left these points open.
+**Decision** —
+- The four placeholders got English kebab-case routes for their future pages: `finance/cash-flow`,
+  `finance/accounts-management`, `accounting/financial-statements`, `accounting/balance` (the old
+  `/finance/gestion-cuentas` and `/finance/flujo-de-caja` were never built). The test fails if a
+  pending page's folder exists, or if a built page's folder does not.
+- Pages without an icon got one; `develop-ui/showroom` (in no menu before) is in System › Desarrollo.
+- SaaS-only means any route listed in a `saas_only` module. `isSaaSRouteDenied` replaces the
+  per-option `onlySaaS` flag in both the layout gate and the menu filter.
+- The agent's `getMenu` and the search bar's menu lookup cover every module, not only the one the
+  side menu shows. A shared page is listed once. `getMenu` now also sends the page `description`
+  (the Go side already had the field).
+- The profile editor groups accesses by their `access.toml` group only; the module filter
+  (`moduleSelected`, never set by any control) and `routeCatalogIndex` are gone.
+- The TOML parser moved to `libs/toml-tables.utils.ts`, now with booleans and dotted child sections
+  (`[[modules.menus]]`); `access-list-catalog.ts` uses it too.
+- `logout` moved from `HeaderConfig.svelte` to `core/env.ts`, so the module selector's "Salir" uses
+  the same one. It also wipes the module memory (`genix_module_navigation`), on purpose: the next
+  user may be someone else.
+- On desktop, the selector takes the logo's place at the top of the side menu, as in Berryapps; the
+  Genix logo moved to the mobile drawer's footer.
+- `Profile.Modules` was removed from the Go struct and from the `fn-rename-columns` plan
+  (`modulos_ids → modules`). The ORM's homologation does not drop columns, so the Scylla column
+  stays in the table, unused.
+**Rationale** — Each one is the smallest change that keeps a single source of truth (the TOML files)
+with no runtime fallback. Cost: the orphan Scylla column needs a manual `ALTER TABLE profiles DROP`
+if it should go. The agent now sees pages from modules the user is not in, which is what
+"navigate anywhere" needs.
+
 ## sendUserNotification: popup window, color vs. icon, and the v2 row shape
 **Context** — The header layer needed a message API and a "recent only" popup, which left some
 behavior open: whether icon and color are one choice, what "last 5 seconds" is measured against

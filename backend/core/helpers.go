@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/md5"
+	crand "crypto/rand"
 	"crypto/tls"
 	"encoding/base32"
 	"encoding/base64"
@@ -1524,6 +1525,34 @@ func MakeRandomBase36String(length int) string {
 		bytes[i] = base36Chars[mrand.Intn(ln)]
 	}
 	return string(bytes)
+}
+
+// MakeSecureRandomBase36String is MakeRandomBase36String from crypto/rand: for what must not be
+// guessed, like the token that keeps a public file's link private. 256 is not a multiple of 36, so
+// each character carries a few percent of bias: a fraction of a bit over 16 characters' 82.
+func MakeSecureRandomBase36String(length int) string {
+	randomBytes := make([]byte, length)
+	_, _ = crand.Read(randomBytes)
+	for byteIndex, randomByte := range randomBytes {
+		randomBytes[byteIndex] = base36Chars[int(randomByte)%len(base36Chars)]
+	}
+	return string(randomBytes)
+}
+
+var unsafeFileNameCharacters = regexp.MustCompile(`[^0-9A-Za-z._-]+`)
+
+// SafeFileName keeps the characters an object key and a URL take as they are, at most 100 (the end,
+// which holds the extension): "notes (v1).txt" → "notes-v1.txt".
+func SafeFileName(fileName string) string {
+	cleanFileName := strings.Trim(unsafeFileNameCharacters.ReplaceAllString(fileName, "-"), "-.")
+	cleanFileName = strings.ReplaceAll(cleanFileName, "-.", ".")
+	if len(cleanFileName) > 100 {
+		cleanFileName = cleanFileName[len(cleanFileName)-100:]
+	}
+	if cleanFileName == "" {
+		cleanFileName = "file"
+	}
+	return cleanFileName
 }
 
 func GobEncode(records any) ([]byte, error) {

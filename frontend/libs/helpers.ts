@@ -8,6 +8,39 @@ export const throttle = (func: (() => void), delay: number) => {
   }, delay)
 }
 
+// Today as a UnixDay of the browser's local calendar date, what DateInput saves.
+export const todayUnixDay = (now = new Date()): number =>
+  Math.floor(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86400000)
+
+const MONTH_NAMES = ['January|Enero', 'February|Febrero', 'March|Marzo', 'April|Abril', 'May|Mayo', 'June|Junio',
+  'July|Julio', 'August|Agosto', 'September|Septiembre', 'October|Octubre', 'November|Noviembre', 'December|Diciembre']
+
+// The genix-ui Calendar names a month by a yymm code: 2610 = October 2026.
+export const calendarMonthCodeOfDay = (unixDay: number): number => {
+  const date = new Date(unixDay * 86400000)
+  return (date.getUTCFullYear() - 2000) * 100 + date.getUTCMonth() + 1
+}
+
+// shiftCalendarMonthCode moves a yymm code by whole months, across years: 2612 + 1 → 2701.
+export const shiftCalendarMonthCode = (monthCode: number, monthsDelta: number): number => {
+  const monthsSince2000 = Math.floor(monthCode / 100) * 12 + (monthCode % 100) - 1 + monthsDelta
+  return Math.floor(monthsSince2000 / 12) * 100 + (monthsSince2000 % 12) + 1
+}
+
+// calendarMonthCodeName: a yymm code as "October 2026|Octubre 2026".
+export const calendarMonthCodeName = (monthCode: number): string => {
+  const year = 2000 + Math.floor(monthCode / 100)
+  const [englishName, spanishName] = MONTH_NAMES[(monthCode % 100) - 1].split('|')
+  return `${englishName} ${year}|${spanishName} ${year}`
+}
+
+// A byte count as "500 B", "2 KB" or "3.5 MB".
+export const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) { return `${bytes} B` }
+  if (bytes < 1024 * 1024) { return `${Math.round(bytes / 1024)} KB` }
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 export const highlString = (
   phrase: string, words: string[]
 ): { text: string, highl?: boolean, isEnd?: boolean }[] => {

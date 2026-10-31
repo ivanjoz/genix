@@ -9,7 +9,7 @@ import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
 import TableGrid from '#components/vTable/TableGrid.svelte';
 import { security } from '#libs/ui-runtime.svelte.ts';
 import { Core, setLanguaje, setTheme, tr, type ILanguaje, type ITheme } from '#core/store.svelte.ts';
-import { BROWSER_PREFERENCE_STORAGE_KEYS, Env } from '#core/env.ts';
+import { Env, logout } from '#core/env.ts';
 import type { ICacheDebugRow } from '@genix/ui/cache';
 import type { ITableColumn } from '#components/vTable/types.ts';
 import {
@@ -40,8 +40,10 @@ import { isColbinDisabled, setColbinDisabled } from '@genix/ui/http';
 import Checkbox from '#components/form/Checkbox.svelte';
 
   const options = [
-    { id: 1, name: "Usuario" }, { id: 2, name: "Config." }, { id: 3, name: "Data" }
+    { id: 2, name: "Config." }, { id: 1, name: "Usuario" }, { id: 3, name: "Data" }
   ]
+  // The panel remounts every time the header gear opens it, so the last tab lives in localStorage.
+  const selectedTabStorageKey = 'header-config-selected-tab'
   // 1 = Spanish, 2 = English (see Core.languaje)
   const languajeOptions = [
     { id: 1, name: "Español" }, { id: 2, name: "English" }
@@ -50,7 +52,7 @@ import Checkbox from '#components/form/Checkbox.svelte';
   const themeOptions = $derived([
     { id: 1, name: tr('Light|Claro') }, { id: 2, name: tr('Dark|Oscuro') },
   ])
-  let selected = $state(1)
+  let selected = $state(Number(browser && localStorage.getItem(selectedTabStorageKey)) || 2)
   // Veto over colbin responses: when set, requests stop announcing it and the backend answers plain JSON.
   let serializationDisabled = $state(isColbinDisabled())
   const ui = useUI()
@@ -133,23 +135,6 @@ import Checkbox from '#components/form/Checkbox.svelte';
 	const creditUsagePercent = (usedCredits: number, limitCredits: number) => {
 		if (limitCredits <= 0) { return 0 }
 		return Math.min(100, Math.max(0, (usedCredits / limitCredits) * 100))
-	}
-
-	function handleLogout() {
-		// Wiping localStorage wholesale is deliberate — it is the only way to be sure no cached
-		// tenant data outlives the session — so the few keys that are browser preferences rather
-		// than session state are carried across the clear instead of being spared from it.
-		const preservedPreferences = BROWSER_PREFERENCE_STORAGE_KEYS
-			.map((storageKey) => [storageKey, localStorage.getItem(storageKey)] as const)
-			.filter(([, storedValue]) => storedValue !== null);
-
-		localStorage.clear();
-		sessionStorage.clear();
-
-		for (const [storageKey, storedValue] of preservedPreferences) {
-			localStorage.setItem(storageKey, storedValue as string);
-		}
-		window.location.href = '/welcome';
 	}
 
   let userInfo = $state(security.getUserInfo())
@@ -367,7 +352,10 @@ import Checkbox from '#components/form/Checkbox.svelte';
 
 <div class="flex items-center mb-10">
   <OptionsStrip options={options} keyId="id" keyName="name"
-    selected={selected} onSelect={e => selected = e.id}
+    selected={selected} onSelect={e => {
+      selected = e.id
+      localStorage.setItem(selectedTabStorageKey, String(e.id))
+    }}
   />
 </div>
 {#if selected === 1}
@@ -379,7 +367,7 @@ import Checkbox from '#components/form/Checkbox.svelte';
       <i class="icon-[fa--floppy-o]"></i>
     </button>
     <button class="bx-orange" aria-label="Salir"
-      onclick={handleLogout}
+      onclick={logout}
     >
       <i class="icon-[fa--sign-out]"></i>
       <span>Salir</span>

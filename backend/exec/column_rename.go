@@ -40,7 +40,7 @@ type tableColumnRenames struct {
 // Go field (see TestColumnRenamesMatchSnakeCase), so the typed ORM finds the data after the swap.
 var columnRenamePlan = []tableColumnRenames{
 	{Table: "profiles", Renames: []columnRename{
-		{"empresa_id", "company_id"}, {"nombre", "name"}, {"descripcion", "description"}, {"modulos_ids", "modules"},
+		{"empresa_id", "company_id"}, {"nombre", "name"}, {"descripcion", "description"},
 	}},
 	{Table: "products", Renames: []columnRename{
 		{"nombre", "name"}, {"params_ids", "params"},

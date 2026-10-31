@@ -139,7 +139,8 @@ app's `vite.config.ts`; there is no `svelte.config.js`.
 
 - **Adding an Admin Page**: Create a file in the appropriate module directory within `routes/` (e.g., `routes/configuracion/`, `routes/negocio/`, `routes/comercial/`, etc.). Use `#domain` for layout and `#components` for forms.
 - **Adding a Store Page**: Create a file in `ecommerce/routes/`. Only use `#components`, `#core`, and `#services`.
-- **Modifying Global Logic**: Edit `core/store.svelte.ts` or `core/modules.ts`.
+- **Adding a page to the menu**: Declare it in `db/pages.toml`, then list its route under one or more modules in `db/modules.toml` (modules are virtual: they do not follow the route folders). `core/modules.test.ts` checks both files against the route folders.
+- **Modifying Global Logic**: Edit `core/store.svelte.ts`.
 - **Fixing Styles**: Most components use local CSS modules (`[name].module.css`). The Tailwind theme, the global custom properties and the shared button/text classes live in `packages/genix-ui/tailwind.css`. App-only global styles live in `routes/tailwind.css`.
 
 ---

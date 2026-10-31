@@ -30,7 +30,7 @@ var (
 		"app/accounting": true, "app/business": true,
 		"app/config": true, "app/crm": true, "app/finance": true,
 		"app/invoicing": true, "app/logistics": true, "app/production": true,
-		"app/sales": true, "app/security": true, "app/webpage": true,
+		"app/projects": true, "app/sales": true, "app/security": true, "app/webpage": true,
 	}
 
 	// L5: composition roots. These wire the modules together and may import anything.

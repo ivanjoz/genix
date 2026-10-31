@@ -6,10 +6,8 @@ import Input from '#components/form/Input.svelte';
 import Modal from '#components/layers/Modal.svelte';
 import VTable from '#components/vTable/VTable.svelte';
 import type { ITableColumn } from '#components/vTable/types.ts';
-import Modules from '#core/modules.ts';
-import { Core, tr } from '#core/store.svelte.ts';
+import { tr } from '#core/store.svelte.ts';
 import T from '#components/misc/T.svelte';
-import { arrayToMapN } from '#libs/helpers.ts';
 import FilterInput from '#components/form/FilterInput.svelte';
 import Button from '#components/buttons/Button.svelte';
 import AccesoCard from './AccessCard.svelte';
@@ -23,7 +21,7 @@ import {
     type IAccess,
     type IProfile
 } from "./users-profiles.svelte";
-import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './users-profiles';
+import { buildAccesosCatalog, toAccesoGrants } from './users-profiles';
 
   // Services and catalog live in +page.svelte so both tabs share one copy of the profiles.
   let { perfilesService, accessGroups, accessListEntries, accessListLoadError = "" }: {
@@ -33,71 +31,27 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
     accessListLoadError?: string
   } = $props()
 
-  const modulesMap = arrayToMapN(Modules, 'id')
-  const routeCatalogIndex = buildRouteCatalogIndex()
-
   let perfilForm = $state({} as IProfile)
-  let moduleSelected = $state(0)
   let filterText = $state("")
 
-  const accessGroupNameByID = $derived.by(() => {
-    const accessGroupMap = new Map<number, string>()
-    for (const accessGroupRecord of accessGroups) {
-      accessGroupMap.set(accessGroupRecord.id, accessGroupRecord.name)
-    }
-    return accessGroupMap
-  })
+  const accesosCatalog = $derived(buildAccesosCatalog(accessListEntries))
 
-  const accesosCatalog = $derived(buildAccesosCatalog(accessListEntries, routeCatalogIndex))
-
+  // Accesses grouped by their access.toml group, in group-id order.
   const accesosGrouped = $derived.by(() => {
-    const gruposMap: Map<string, IAccess[]> = new Map()
-    const moduleSelectedID = moduleSelected
-
+    const accesosByGroupID = new Map<number, IAccess[]>()
     for (const accessRecord of accesosCatalog) {
-      const routeMeta = routeCatalogIndex.get((accessRecord.descripcion || "").replace(/^\//, ""))
-      const moduleIDs = accessRecord.modulosIDs.length > 0
-        ? accessRecord.modulosIDs
-        : routeMeta ? [routeMeta.moduleID] : [Modules[0].id]
-      const groupID = accessRecord.grupo || routeMeta?.groupID || 0
-
-      for (const moduleID of moduleIDs) {
-        if (moduleSelectedID && moduleSelectedID !== moduleID) { continue }
-        const groupKey = [moduleID, groupID].join("_")
-        if (!gruposMap.has(groupKey)) { gruposMap.set(groupKey, []) }
-        gruposMap.get(groupKey)!.push(accessRecord)
-        break
-      }
+      const groupAccesos = accesosByGroupID.get(accessRecord.grupo) || []
+      groupAccesos.push(accessRecord)
+      accesosByGroupID.set(accessRecord.grupo, groupAccesos)
     }
 
-    const accesosGrouped_: {
-      moduleID: number
-      group: number
-      accesos: IAccess[]
-      groupName: string
-      moduleName: string
-    }[] = []
-
-    for (let [key, accesosGroup] of gruposMap) {
-      const [moduleID, group] = key.split("_").map(x => parseInt(x))
-      accesosGrouped_.push({
-        moduleID,
-        group,
-        accesos: accesosGroup,
-        groupName: accessGroupNameByID.get(group)
-          || routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.groupName
-          || tr("No group|Sin grupo"),
-        moduleName: moduleSelectedID ? "" : routeCatalogIndex.get((accesosGroup[0]?.descripcion || "").replace(/^\//, ""))?.moduleName
-          || modulesMap.get(moduleID)?.name || tr("No module|Sin módulo")
-      })
-    }
-
-    return accesosGrouped_.sort((leftGroup, rightGroup) => {
-      if (leftGroup.moduleID !== rightGroup.moduleID) {
-        return leftGroup.moduleID - rightGroup.moduleID
-      }
-      return leftGroup.group - rightGroup.group
-    })
+    const accessGroupNameByID = new Map(accessGroups.map(accessGroup => [accessGroup.id, accessGroup.name]))
+    return [...accesosByGroupID]
+      .sort(([leftGroupID], [rightGroupID]) => leftGroupID - rightGroupID)
+      .map(([groupID, accesos]) => ({
+        accesos,
+        groupName: accessGroupNameByID.get(groupID) || tr("No group|Sin grupo"),
+      }))
   })
 
   async function savePerfil(onDelete?: boolean, isAccesos?: boolean) {
@@ -111,13 +65,6 @@ import { buildAccesosCatalog, buildRouteCatalogIndex, toAccesoGrants } from './u
       // toAccesoGrants drops any sub-access whose parent access the operator cleared during this
       // same edit, so a leftover tick cannot reach the backend and be rejected there.
       form.AccesosGrants = toAccesoGrants(form.accesosMap, form.subAccesosMap)
-
-      const accesosFiltered = accesosCatalog.filter(x => form.accesosMap.has(x.id))
-      const modulosIDSet: Set<number> = new Set()
-      for (let e of accesosFiltered) {
-        for (let md of e.modulosIDs) { modulosIDSet.add(md) }
-      }
-      form.Modulos = [...modulosIDSet]
     }
 
     showLoading(tr("Updating Profile...|Actualizando Perfil..."))

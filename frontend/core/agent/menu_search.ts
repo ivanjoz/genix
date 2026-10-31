@@ -7,9 +7,8 @@
 // into "_", which is why the search text is split on "_" rather than " ".
 
 import { normalizeStringN, wordInclude } from '@genix/ui/utilities';
-import { security } from '#libs/ui-runtime.svelte.ts';
-import { Core } from '#core/store.svelte.ts';
-import type { IMenuRecord } from '#core/types/modules.ts';
+import { Modules, canOpenRoute } from '#core/modules.svelte.ts';
+import type { IPage } from '#core/modules.ts';
 
 export interface MenuSearchOption {
   name: string; // bilingual "English|Spanish", resolved with tr() at render time
@@ -22,30 +21,23 @@ const MAX_RESULTS = 6;
 const MAX_WORDS = 3;
 const FALLBACK_ICON = 'icon-[fa--bolt]';
 
-// The index is rebuilt only when the menu array identity changes (module switch
-// or login), so the per-option normalization happens once, not per keystroke.
-let indexedMenus: IMenuRecord[] | undefined;
-let indexedOptions: MenuSearchOption[] = [];
+// Searches every page of every module (db/modules.toml), not only the module
+// the side menu shows. A page shared by several modules is indexed once.
+// Built once per page load: the normalization happens once, not per keystroke.
+let indexedPages: (IPage & { nameNorm: string })[] | undefined;
 
-const buildIndex = (menus: IMenuRecord[]): MenuSearchOption[] => {
-  const options: MenuSearchOption[] = [];
-  for (const menu of menus) {
-    for (const option of menu.options || []) {
-      const route = String(option.route || '').trim();
-      // Same access filter as the side menu: never surface an unreachable page.
-      if (!route || !security.canAccessRoute(route)) { continue; }
-      options.push({
-        name: option.name,
-        route,
-        icon: option.icon || FALLBACK_ICON,
-        // Both language halves are indexed, so "sales" finds "Punto de Venta"
-        // too. The pipe becomes a space first; normalizeStringN would otherwise
-        // drop it and weld the two halves into one bogus word.
-        nameNorm: normalizeStringN(String(option.name || '').replace('|', ' ')),
-      });
-    }
+const buildIndex = () => {
+  const pagesByRoute = new Map<string, IPage>();
+  for (const menuPage of Modules.flatMap((module) => module.menus.flatMap((menuGroup) => menuGroup.pages))) {
+    if (!menuPage.pending) { pagesByRoute.set(menuPage.route, menuPage); }
   }
-  return options;
+  return [...pagesByRoute.values()].map((menuPage) => ({
+    ...menuPage,
+    // Both language halves are indexed, so "sales" finds "Punto de Venta"
+    // too. The pipe becomes a space first; normalizeStringN would otherwise
+    // drop it and weld the two halves into one bogus word.
+    nameNorm: normalizeStringN(menuPage.name.replace('|', ' ')),
+  }));
 };
 
 // searchWords returns the normalized words used for matching, or [] when the
@@ -60,16 +52,13 @@ export const searchMenuOptions = (text: string): MenuSearchOption[] => {
   const words = searchWords(text);
   if (words.length === 0) { return []; }
 
-  const menus = Core.module?.menus || [];
-  if (menus !== indexedMenus) {
-    indexedMenus = menus;
-    indexedOptions = buildIndex(menus);
-  }
+  indexedPages ||= buildIndex();
 
   const results: MenuSearchOption[] = [];
-  for (const option of indexedOptions) {
-    if (!wordInclude(option.nameNorm, words)) { continue; }
-    results.push(option);
+  for (const indexedPage of indexedPages) {
+    // Same access filter as the side menu, checked per search: the session can change.
+    if (!wordInclude(indexedPage.nameNorm, words) || !canOpenRoute(indexedPage.route)) { continue; }
+    results.push({ name: indexedPage.name, route: indexedPage.route, icon: indexedPage.icon || FALLBACK_ICON, nameNorm: indexedPage.nameNorm });
     if (results.length === MAX_RESULTS) { break; }
   }
   return results;

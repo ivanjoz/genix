@@ -19,6 +19,8 @@
 	prefix: "icon";
 	scale: 1;
 }
+/* The menu's icon classes live in db/pages.toml and db/modules.toml, outside the scanned tree. */
+@source "../../db/*.toml";
 @source not "../.svelte-kit";
 @source not "../build";
 @source not "../webpage/.svelte-kit";

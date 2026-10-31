@@ -20,7 +20,6 @@ export interface IAccess {
   // The sub-access flags this access offers, "Todos" first. Empty for most accesses.
   subAccesos: ISubAccesoOption[]
   grupo: number
-  modulosIDs: number[]
   ss: number
   upd: number
 }

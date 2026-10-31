@@ -1,0 +1,190 @@
+{
+  "People": [
+    { "User": "lucia.fernandez", "FirstName": "Lucía", "LastName": "Fernández", "JobTitle": "Jefa de proyectos" },
+    { "User": "carlos.mendoza", "FirstName": "Carlos", "LastName": "Mendoza", "JobTitle": "Desarrollador backend" },
+    { "User": "rosa.huaman", "FirstName": "Rosa", "LastName": "Huamán", "JobTitle": "Desarrolladora frontend" },
+    { "User": "diego.salazar", "FirstName": "Diego", "LastName": "Salazar", "JobTitle": "Analista de calidad" }
+  ],
+  "Comments": [
+    "Revisé el alcance con el área usuaria y está confirmado.",
+    "Dejo avanzada la primera parte, mañana termino las validaciones.",
+    "¿Podemos revisar juntos el caso de error? No me queda claro qué mensaje mostrar.",
+    "Ya está en el ambiente de pruebas, pueden validarlo.",
+    "Encontré un detalle con los decimales, lo corrijo antes de pasar a revisión.",
+    "Probado en Chrome y Firefox, todo conforme.",
+    "El cliente pidió agregar un filtro por fecha, lo dejo como historia aparte.",
+    "Adjunto la evidencia de las pruebas."
+  ],
+  "StopReasons": [
+    "Esperando las credenciales del ambiente de pruebas del proveedor.",
+    "Falta la definición del área contable sobre el redondeo.",
+    "Bloqueado por la caída del servicio de correo.",
+    "Pendiente la aprobación del diseño por parte del cliente."
+  ],
+  "SprintGoals": [
+    "Dejar operativo el flujo principal para la primera demo.",
+    "Cerrar las validaciones y los mensajes de error.",
+    "Integrar con los servicios externos y estabilizar.",
+    "Pulir la experiencia de usuario y corregir los defectos reportados.",
+    "Preparar la salida a producción."
+  ],
+  "Projects": [
+    {
+      "Name": "Portal de autoatención para clientes",
+      "Description": "Portal web donde los clientes consultan sus pedidos, descargan comprobantes y registran reclamos sin llamar a la central.",
+      "Color": "blue",
+      "Epics": [
+        {
+          "Name": "Acceso y cuentas",
+          "Color": "purple",
+          "Stories": [
+            { "Title": "Registro de cliente con número de documento", "Summary": "El cliente crea su cuenta validando su DNI o RUC contra la base de clientes.", "Type": 1, "Priority": 3, "Hours": 8, "Checklist": ["Valida DNI de 8 dígitos y RUC de 11", "Rechaza documentos que no son clientes", "Envía correo de bienvenida"] },
+            { "Title": "Inicio de sesión con correo y contraseña", "Summary": "Login con bloqueo temporal tras cinco intentos fallidos.", "Type": 1, "Priority": 4, "Hours": 6, "Checklist": ["Bloqueo de 15 minutos tras 5 intentos", "Mensaje genérico ante credenciales inválidas"] },
+            { "Title": "Recuperar contraseña por correo", "Summary": "Enlace de un solo uso con vencimiento de 30 minutos.", "Type": 1, "Priority": 3, "Hours": 5, "Checklist": ["El enlace vence a los 30 minutos", "El enlace no se puede reutilizar"] },
+            { "Title": "Editar datos de contacto", "Summary": "El cliente actualiza teléfono, correo y dirección de entrega.", "Type": 1, "Priority": 2, "Hours": 4, "Checklist": ["Valida el formato del correo", "Registra la fecha del último cambio"] },
+            { "Title": "El botón Ingresar no responde en Safari", "Summary": "En Safari 17 el formulario no se envía al presionar Enter.", "Type": 2, "Priority": 3, "Hours": 2, "Checklist": ["Reproducir en Safari 17", "Probar en iOS"] },
+            { "Title": "Configurar el envío de correos transaccionales", "Summary": "Dominio verificado y plantillas base para los correos del portal.", "Type": 3, "Priority": 2, "Hours": 3, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Pedidos",
+          "Color": "green",
+          "Stories": [
+            { "Title": "Listado de pedidos con su estado", "Summary": "El cliente ve sus pedidos de los últimos 12 meses con estado y fecha de entrega.", "Type": 1, "Priority": 4, "Hours": 8, "Checklist": ["Pagina de 20 en 20", "Muestra el estado con color", "Ordena por fecha descendente"] },
+            { "Title": "Detalle del pedido con sus productos", "Summary": "Cantidades, precios, descuentos y total del pedido.", "Type": 1, "Priority": 3, "Hours": 6, "Checklist": ["Muestra el descuento por línea", "Cuadra el total con el comprobante"] },
+            { "Title": "Seguimiento del despacho", "Summary": "Línea de tiempo del pedido desde la confirmación hasta la entrega.", "Type": 1, "Priority": 3, "Hours": 10, "Checklist": ["Muestra la hora de cada etapa", "Indica el transportista"] },
+            { "Title": "Repetir un pedido anterior", "Summary": "Crea un carrito nuevo con los productos de un pedido anterior que sigan disponibles.", "Type": 1, "Priority": 2, "Hours": 7, "Checklist": ["Omite productos descontinuados", "Avisa los cambios de precio"] },
+            { "Title": "El total no considera el descuento por volumen", "Summary": "En pedidos de más de 50 unidades el total del portal difiere del comprobante.", "Type": 2, "Priority": 4, "Hours": 3, "Checklist": ["Caso de 60 unidades cuadra", "Caso de 49 unidades no aplica descuento"] },
+            { "Title": "Exponer el servicio de pedidos por cliente", "Summary": "Endpoint paginado para el portal, con caché de 5 minutos.", "Type": 3, "Priority": 3, "Hours": 5, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Comprobantes y pagos",
+          "Color": "amber",
+          "Stories": [
+            { "Title": "Descargar factura y boleta en PDF", "Summary": "El cliente descarga el PDF y el XML de cada comprobante electrónico.", "Type": 1, "Priority": 4, "Hours": 6, "Checklist": ["Descarga el PDF", "Descarga el XML firmado", "Muestra el estado ante SUNAT"] },
+            { "Title": "Estado de cuenta del cliente", "Summary": "Saldo pendiente, documentos vencidos y por vencer.", "Type": 1, "Priority": 3, "Hours": 8, "Checklist": ["Separa vencidos y por vencer", "Exporta a Excel"] },
+            { "Title": "Pagar en línea con tarjeta", "Summary": "Pago de documentos pendientes con la pasarela de pagos.", "Type": 1, "Priority": 3, "Hours": 12, "Checklist": ["Registra el pago en caja", "Envía la constancia por correo", "Maneja el pago rechazado"] },
+            { "Title": "Notas de crédito asociadas a la factura", "Summary": "En el detalle de la factura se listan sus notas de crédito.", "Type": 1, "Priority": 2, "Hours": 4, "Checklist": [] },
+            { "Title": "El PDF sale sin el logo de la empresa", "Summary": "Los comprobantes descargados desde el portal no muestran el logo.", "Type": 2, "Priority": 2, "Hours": 2, "Checklist": ["Probar con logo PNG y SVG"] },
+            { "Title": "Conciliar los pagos de la pasarela", "Summary": "Proceso diario que cruza los abonos de la pasarela con los pagos registrados.", "Type": 3, "Priority": 3, "Hours": 6, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Reclamos",
+          "Color": "red",
+          "Stories": [
+            { "Title": "Registrar un reclamo sobre un pedido", "Summary": "Formulario con motivo, descripción y fotos del producto.", "Type": 1, "Priority": 3, "Hours": 8, "Checklist": ["Hasta 5 fotos", "Genera un número de reclamo", "Notifica al área de calidad"] },
+            { "Title": "Libro de reclamaciones virtual", "Summary": "Hoja de reclamación según la normativa de INDECOPI, con respuesta en 15 días.", "Type": 1, "Priority": 4, "Hours": 10, "Checklist": ["Campos obligatorios según la norma", "Constancia en PDF al cliente", "Alerta a los 10 días sin respuesta"] },
+            { "Title": "Seguimiento del reclamo", "Summary": "El cliente ve el estado y las respuestas de su reclamo.", "Type": 1, "Priority": 2, "Hours": 5, "Checklist": [] },
+            { "Title": "Encuesta de satisfacción al cerrar el reclamo", "Summary": "Una pregunta de 1 a 5 y un comentario opcional.", "Type": 1, "Priority": 1, "Hours": 3, "Checklist": [] },
+            { "Title": "Las fotos mayores a 3 MB no se suben", "Summary": "El formulario de reclamo falla sin mensaje con fotos grandes.", "Type": 2, "Priority": 3, "Hours": 2, "Checklist": ["Mostrar el límite de tamaño", "Comprimir antes de subir"] },
+            { "Title": "Reporte semanal de reclamos por motivo", "Summary": "Correo automático al área de calidad cada lunes.", "Type": 3, "Priority": 1, "Hours": 4, "Checklist": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "App de ventas en campo",
+      "Description": "Aplicación móvil para que los vendedores tomen pedidos en ruta, también sin conexión, y consulten el stock y el crédito del cliente.",
+      "Color": "teal",
+      "Epics": [
+        {
+          "Name": "Rutas y visitas",
+          "Color": "teal",
+          "Stories": [
+            { "Title": "Ruta del día del vendedor", "Summary": "Lista de clientes a visitar ordenada por cercanía.", "Type": 1, "Priority": 4, "Hours": 8, "Checklist": ["Ordena por distancia", "Marca los clientes visitados"] },
+            { "Title": "Registrar visita con ubicación", "Summary": "Marca de llegada con GPS y motivo si no hubo venta.", "Type": 1, "Priority": 3, "Hours": 6, "Checklist": ["Guarda latitud y longitud", "Motivo obligatorio sin venta"] },
+            { "Title": "Mapa de clientes de la zona", "Summary": "Mapa con los clientes y su último pedido.", "Type": 1, "Priority": 2, "Hours": 7, "Checklist": [] },
+            { "Title": "Reprogramar una visita", "Summary": "El vendedor mueve la visita a otro día de la semana.", "Type": 1, "Priority": 2, "Hours": 4, "Checklist": [] },
+            { "Title": "La ubicación se registra en cero en Android 14", "Summary": "Sin permiso de ubicación precisa la visita se guarda con coordenadas 0,0.", "Type": 2, "Priority": 4, "Hours": 3, "Checklist": ["Pedir el permiso de ubicación precisa", "No guardar coordenadas 0,0"] },
+            { "Title": "Cargar las rutas desde el sistema comercial", "Summary": "Importación nocturna de las rutas asignadas a cada vendedor.", "Type": 3, "Priority": 3, "Hours": 5, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Toma de pedidos",
+          "Color": "green",
+          "Stories": [
+            { "Title": "Tomar un pedido sin conexión", "Summary": "El pedido se guarda en el equipo y se envía al recuperar la señal.", "Type": 1, "Priority": 4, "Hours": 13, "Checklist": ["Guarda el pedido localmente", "Reintenta el envío", "Evita pedidos duplicados"] },
+            { "Title": "Catálogo con precios por lista", "Summary": "Precios según la lista asignada al cliente.", "Type": 1, "Priority": 3, "Hours": 8, "Checklist": ["Respeta la lista del cliente", "Muestra precio con IGV"] },
+            { "Title": "Aplicar promociones vigentes", "Summary": "Bonificaciones y descuentos por volumen al armar el pedido.", "Type": 1, "Priority": 3, "Hours": 10, "Checklist": ["Bonificación 10+1", "Descuento escalonado"] },
+            { "Title": "Firma del cliente en pantalla", "Summary": "El cliente firma la conformidad del pedido.", "Type": 1, "Priority": 1, "Hours": 5, "Checklist": [] },
+            { "Title": "Se duplican pedidos al reconectar", "Summary": "Si la señal se corta durante el envío el pedido llega dos veces.", "Type": 2, "Priority": 4, "Hours": 4, "Checklist": ["Clave de idempotencia por pedido"] },
+            { "Title": "Sincronizar el catálogo de productos", "Summary": "Descarga incremental del catálogo y sus imágenes.", "Type": 3, "Priority": 3, "Hours": 6, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Stock y crédito",
+          "Color": "amber",
+          "Stories": [
+            { "Title": "Consultar stock por almacén", "Summary": "Stock disponible del almacén que atiende la zona.", "Type": 1, "Priority": 3, "Hours": 5, "Checklist": ["Descuenta lo reservado", "Muestra la hora de actualización"] },
+            { "Title": "Línea de crédito del cliente", "Summary": "Crédito disponible y documentos vencidos antes de vender.", "Type": 1, "Priority": 4, "Hours": 6, "Checklist": ["Bloquea la venta con deuda vencida", "Permite la venta al contado"] },
+            { "Title": "Reservar stock al confirmar el pedido", "Summary": "La reserva dura hasta el despacho o 48 horas.", "Type": 1, "Priority": 3, "Hours": 8, "Checklist": [] },
+            { "Title": "El stock no descuenta los pedidos sin enviar", "Summary": "El vendedor ofrece stock que ya comprometió en pedidos sin conexión.", "Type": 2, "Priority": 3, "Hours": 3, "Checklist": [] },
+            { "Title": "Servicio de crédito en tiempo real", "Summary": "Consulta al sistema de cobranzas con caché de 10 minutos.", "Type": 3, "Priority": 2, "Hours": 5, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Indicadores del vendedor",
+          "Color": "purple",
+          "Stories": [
+            { "Title": "Avance de la cuota del mes", "Summary": "Ventas del mes frente a la cuota, por línea de producto.", "Type": 1, "Priority": 2, "Hours": 6, "Checklist": [] },
+            { "Title": "Ranking de vendedores de la zona", "Summary": "Posición del vendedor en su zona, actualizada cada día.", "Type": 1, "Priority": 1, "Hours": 4, "Checklist": [] },
+            { "Title": "Clientes sin compra en 30 días", "Summary": "Lista de clientes inactivos para priorizar visitas.", "Type": 1, "Priority": 2, "Hours": 5, "Checklist": [] },
+            { "Title": "Calcular las comisiones del mes", "Summary": "Proceso de cierre que calcula la comisión de cada vendedor.", "Type": 3, "Priority": 2, "Hours": 8, "Checklist": [] }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Migración de facturación electrónica",
+      "Description": "Reemplazo del proveedor de facturación electrónica por la emisión directa a SUNAT, sin cortar la operación de las tiendas.",
+      "Color": "red",
+      "Epics": [
+        {
+          "Name": "Emisión de comprobantes",
+          "Color": "red",
+          "Stories": [
+            { "Title": "Emitir facturas directamente a SUNAT", "Summary": "Firma del XML y envío al servicio de SUNAT con su constancia.", "Type": 1, "Priority": 4, "Hours": 13, "Checklist": ["Firma con el certificado digital", "Guarda la constancia CDR", "Reintenta ante errores de red"] },
+            { "Title": "Emitir boletas y resumen diario", "Summary": "Las boletas se envían en el resumen diario del día siguiente.", "Type": 1, "Priority": 4, "Hours": 10, "Checklist": ["Arma el resumen por fecha", "Consulta el ticket del resumen"] },
+            { "Title": "Notas de crédito y débito", "Summary": "Emisión vinculada al comprobante de origen con su motivo.", "Type": 1, "Priority": 3, "Hours": 8, "Checklist": [] },
+            { "Title": "Comunicación de baja", "Summary": "Anulación de comprobantes dentro del plazo permitido.", "Type": 1, "Priority": 2, "Hours": 5, "Checklist": [] },
+            { "Title": "El redondeo del IGV difiere en un céntimo", "Summary": "Con varias líneas el IGV total no coincide con la suma por línea.", "Type": 2, "Priority": 4, "Hours": 3, "Checklist": ["Caso de 7 líneas con decimales", "Validar con el validador de SUNAT"] },
+            { "Title": "Renovar el certificado digital", "Summary": "Instalar el nuevo certificado y probar la firma.", "Type": 3, "Priority": 3, "Hours": 2, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Migración de datos",
+          "Color": "gray",
+          "Stories": [
+            { "Title": "Importar el histórico de comprobantes", "Summary": "Cinco años de comprobantes del proveedor anterior, con sus PDF.", "Type": 3, "Priority": 3, "Hours": 12, "Checklist": ["Cuadra la cantidad por mes", "Conserva la numeración"] },
+            { "Title": "Continuar las series y correlativos", "Summary": "Las series siguen la numeración del proveedor anterior sin saltos.", "Type": 1, "Priority": 4, "Hours": 4, "Checklist": [] },
+            { "Title": "Validar los totales migrados", "Summary": "Reporte que compara los totales por mes entre ambos sistemas.", "Type": 3, "Priority": 3, "Hours": 6, "Checklist": [] },
+            { "Title": "Faltan comprobantes de diciembre de 2023", "Summary": "La importación omitió los documentos con fecha de fin de año.", "Type": 2, "Priority": 3, "Hours": 3, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Tiendas",
+          "Color": "blue",
+          "Stories": [
+            { "Title": "Imprimir el comprobante en ticketera", "Summary": "Formato de 80 mm con el código QR exigido.", "Type": 1, "Priority": 4, "Hours": 6, "Checklist": ["Incluye el código QR", "Funciona con las ticketeras Epson"] },
+            { "Title": "Emitir en contingencia sin internet", "Summary": "Comprobantes de contingencia que se informan al volver la conexión.", "Type": 1, "Priority": 3, "Hours": 10, "Checklist": [] },
+            { "Title": "Enviar el comprobante por WhatsApp", "Summary": "El cajero envía el enlace del comprobante al celular del cliente.", "Type": 1, "Priority": 1, "Hours": 4, "Checklist": [] },
+            { "Title": "Capacitar a los cajeros de Lima", "Summary": "Sesiones de una hora por turno en las tiendas de Lima.", "Type": 3, "Priority": 2, "Hours": 8, "Checklist": [] },
+            { "Title": "La ticketera corta el QR", "Summary": "En algunos modelos el código QR sale incompleto.", "Type": 2, "Priority": 3, "Hours": 2, "Checklist": [] }
+          ]
+        },
+        {
+          "Name": "Monitoreo",
+          "Color": "purple",
+          "Stories": [
+            { "Title": "Tablero de comprobantes rechazados", "Summary": "Lista de rechazos con su código de error y acción sugerida.", "Type": 1, "Priority": 3, "Hours": 6, "Checklist": [] },
+            { "Title": "Alerta de resúmenes sin respuesta", "Summary": "Correo al equipo si un resumen sigue en proceso después de 2 horas.", "Type": 1, "Priority": 3, "Hours": 4, "Checklist": [] },
+            { "Title": "Reporte de emisión por tienda", "Summary": "Cantidad y monto emitido por tienda y por día.", "Type": 1, "Priority": 2, "Hours": 5, "Checklist": [] },
+            { "Title": "Registrar los tiempos de respuesta de SUNAT", "Summary": "Métrica para detectar la lentitud del servicio.", "Type": 3, "Priority": 1, "Hours": 3, "Checklist": [] }
+          ]
+        }
+      ]
+    }
+  ]
+}

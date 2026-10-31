@@ -1,4 +1,5 @@
 import accessCatalogTomlContent from '../../../../backend/access.toml?raw';
+import { parseTomlTables, splitCatalogRoutes } from '#libs/toml-tables.utils.ts';
 
 export interface IAccessGroupCatalogEntry {
   id: number
@@ -26,72 +27,12 @@ export interface IAccessListCatalogPayload {
 let accessListCatalog: IAccessListCatalogPayload | null = null
 const accessEntriesByRoute = new Map<string, IAccessListCatalogEntry[]>()
 
-type CatalogRecord = Record<string, string | number | (string | number)[]>
-
-// Parse only the controlled access-catalog TOML shape: arrays of tables holding scalar or
-// single-line-array fields. Hand-written rather than pulled from a library because the catalog is
-// imported as text and must not drag a parser into the bundle.
 function parseAccessCatalog(tomlContent: string): IAccessListCatalogPayload {
-  const parsedCatalog: IAccessListCatalogPayload = { groups: [], access: [] }
-  let activeRecord: CatalogRecord | null = null
-
-  for (const [lineIndex, sourceLine] of tomlContent.split(/\r?\n/).entries()) {
-    const trimmedLine = sourceLine.trim()
-    if (!trimmedLine || trimmedLine.startsWith('#')) { continue }
-
-    // `[[name]]` is unambiguous, so a record needs no indentation tracking to delimit it.
-    const sectionMatch = /^\[\[([a-z_]+)\]\]$/.exec(trimmedLine)
-    if (sectionMatch) {
-      const sectionName = sectionMatch[1] as keyof IAccessListCatalogPayload
-      if (!(sectionName in parsedCatalog)) {
-        throw new Error(`Unsupported access-catalog section "${sectionName}" at line ${lineIndex + 1}`)
-      }
-      activeRecord = {}
-      ;(parsedCatalog[sectionName] as unknown as CatalogRecord[]).push(activeRecord)
-      continue
-    }
-
-    const fieldMatch = /^([a-z_]+)\s*=\s*(.*)$/.exec(trimmedLine)
-    if (!fieldMatch) {
-      throw new Error(`Unsupported access-catalog TOML at line ${lineIndex + 1}: ${trimmedLine}`)
-    }
-    if (!activeRecord) {
-      throw new Error(`Access-catalog field found before a [[section]] at line ${lineIndex + 1}`)
-    }
-
-    const [, fieldName, rawValue] = fieldMatch
-    activeRecord[fieldName] = parseCatalogValue(rawValue, lineIndex + 1)
-  }
-
-  return parsedCatalog
-}
-
-// A single-line TOML array of integers or double-quoted strings is already valid JSON, so the whole
-// value parser is one JSON.parse plus the two TOML-only spellings it would choke on.
-function parseCatalogValue(rawValue: string, lineNumber: number): string | number | (string | number)[] {
-  if (rawValue.startsWith('[')) {
-    if (!rawValue.endsWith(']')) {
-      throw new Error(`Access-catalog arrays must fit on one line (line ${lineNumber})`)
-    }
-    if (/,\s*\]$/.test(rawValue)) {
-      throw new Error(`Access-catalog arrays must not carry a trailing comma (line ${lineNumber})`)
-    }
-    return JSON.parse(rawValue)
-  }
-  if (rawValue.startsWith('"')) { return JSON.parse(rawValue) }
-  if (/^-?\d+$/.test(rawValue)) { return Number(rawValue) }
-  throw new Error(`Access-catalog values must be integers, quoted strings or arrays (line ${lineNumber})`)
+  return parseTomlTables(tomlContent, ['groups', 'access'], 'access-catalog') as unknown as IAccessListCatalogPayload
 }
 
 // Split the catalog's compact comma list once so every consumer uses the same routes.
-export function normalizeAccessFrontendRoutes(frontendRoutes: string | string[] | undefined | null): string[] {
-  const rawRoutes = Array.isArray(frontendRoutes) ? frontendRoutes : [frontendRoutes || ""]
-
-  return rawRoutes
-    .flatMap((routeValue) => String(routeValue || "").split(','))
-    .map((routeValue) => routeValue.trim().replace(/^\//, ""))
-    .filter((routeValue) => routeValue.length > 0)
-}
+export const normalizeAccessFrontendRoutes = splitCatalogRoutes
 
 function indexAccessEntries(payload: IAccessListCatalogPayload): void {
   accessEntriesByRoute.clear()

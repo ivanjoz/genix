@@ -6,7 +6,6 @@
 // packed exactly once, in the backend, when a user's effective grants are computed
 // (backend/core/accesos-blob.go). See RATIONALE.md.
 
-import Modules from '#core/modules.ts'
 import type { IAccesoGrant, IProfile, IUser } from '#core/types/common.ts'
 import {
   normalizeAccessFrontendRoutes,
@@ -265,43 +264,12 @@ export function decodeAccessLevels(accessLevelMask: number): number[] {
     .filter(levelValue => levelValue > 0)
 }
 
-// Every menu option's route, mapped to the module and group it belongs to. The access catalog only
-// names a route, so this is what turns it into the module/group an access is filed under.
-export function buildRouteCatalogIndex() {
-  const routeCatalogIndex = new Map<string, {
-    moduleID: number
-    moduleName: string
-    groupID: number
-    groupName: string
-  }>()
-
-  for (const moduleRecord of Modules) {
-    for (const menuRecord of moduleRecord.menus) {
-      for (const menuOption of menuRecord.options || []) {
-        const normalizedRoute = (menuOption.route || "").replace(/^\//, "")
-        if (!normalizedRoute) { continue }
-        routeCatalogIndex.set(normalizedRoute, {
-          moduleID: moduleRecord.id,
-          moduleName: moduleRecord.name,
-          groupID: menuRecord.id || 0,
-          groupName: menuRecord.name
-        })
-      }
-    }
-  }
-
-  return routeCatalogIndex
-}
-
 // buildAccesosCatalog turns the parsed TOML entries into the IAccess shape AccessCard renders.
 // Shared by the profiles tab and the user layer so both offer exactly the same accesses and levels.
-export function buildAccesosCatalog(
-  accessListEntries: IAccessListCatalogEntry[],
-  routeCatalogIndex: ReturnType<typeof buildRouteCatalogIndex>,
-): IAccess[] {
+// Accesses are filed under their access.toml group: modules (db/modules.toml) are navigation only.
+export function buildAccesosCatalog(accessListEntries: IAccessListCatalogEntry[]): IAccess[] {
   const catalogAccesos = accessListEntries.map((accessListEntry) => {
     const normalizedRoute = normalizeAccessFrontendRoutes(accessListEntry.frontend_routes)[0] || ""
-    const routeMeta = routeCatalogIndex.get(normalizedRoute)
     const catalogActions = decodeAccessLevels(accessListEntry.levels)
 
     return {
@@ -312,8 +280,7 @@ export function buildAccesosCatalog(
       // An access with no declared level is still viewable, otherwise it could never be granted.
       acciones: catalogActions.length > 0 ? catalogActions : [1],
       subAccesos: buildSubAccesoOptions(accessListEntry.sub_accesses_ids, accessListEntry.sub_accesses_names),
-      grupo: accessListEntry.group || routeMeta?.groupID || 0,
-      modulosIDs: routeMeta ? [routeMeta.moduleID] : [],
+      grupo: accessListEntry.group || 0,
       ss: 1,
       upd: 0
     }

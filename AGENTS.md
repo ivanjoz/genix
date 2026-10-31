@@ -16,22 +16,6 @@ The human has all the context and is available. Two modes decide what you do wit
 **In both modes:**
 - Once the approach is settled, carry out the mechanical steps without asking permission for each one. Always report what you found and what you changed.
 
-- **Record YOUR decisions in `RATIONALE.md`** — the ones the human does not already know about. It goes in the feature folder it affects, next to the code it explains. Append newest first; create the file if it doesn't exist. Three headings, concise — no essays:
-
-  ```markdown
-  ## <short title of the decision>
-  **Context** — the problem, and what constraint made it a decision at all.
-  **Decision** — what was chosen and implemented.
-  **Rationale** — why this over the alternative, and what it costs.
-  ```
-
-  **WRITE** an assumption you resolved without asking, or a choice the request left
-  open that you settled on your own. **One test: would this be news to the human?** Apply it per decision, not per task.
-
-  **DO NOT WRITE** anything they specified or approved, or anything they already acknowledge. Do not record your own corrections — only the decision that stands.
-
-  **This is the review surface.** The human reads it before committing, so a decision of yours missing from it ships unreviewed. This is for developers; `DOCUMENTATION.md` is support-facing and is not a substitute.
-
 - Report honestly. If a build fails or you skipped part of the scope, say so plainly with the output.
 
 - **Language: always English.** The user is bilingual and may write in Spanish — reply in English regardless. Write everything in English: code, identifiers, comments, commit messages and `.md` docs.
@@ -90,7 +74,6 @@ frontend/routes/<domain>/<feature>/
   feature.ts              Pure business logic — no Svelte, no fetch. Unit-testable in isolation
   feature.utils.ts        Generic helpers with NO business logic
   feature.test.ts         Vitest
-  RATIONALE.md            Design decisions for this feature (see section 1)
   DOCUMENTATION.md        Support-agent indexing of user workflows, NOT developer docs
                           (skill: `document-user-routes`)
 ```
@@ -162,4 +145,5 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - **NEVER trust the client.** Validate required fields and data consistency, and return a descriptive error on every failed validation.
 - **A module body may never import another module body.** Only `core`, `db`, `libs`, `cloud` and any `*/types` cross module lines. Shared logic goes in `<module>/types`. See `backend/docs/MODULE_BOUNDARIES.md`.
 - **Import `<module>/types` under the module's name**, not a `<module>Types` alias: `finance "app/finance/types"` → `finance.CashBank`. Inside the owning module, drop the alias and use `types.CashBank`. `core/types` stays `coreTypes` because `app/core` owns `core`.
-- Parallel-array `Detail*` columns use **singular** field names; only the `IDs` suffix stays plural. `DetailProductIDs`, `DetailProductQuantity` (not `Quantities`), `DetailProductPrice` (not `Prices`), `DetailSupplyIDs`, `DetailSupplyQuantity`. Applies to Go structs and their frontend interface mirrors.
+- Dont add unnecesary JSON tags. The only standard tags (Field as Tag): Status as "ss", Updated as "upd", Version as "ver", Metadata as "mdt".
+- Colbin inherits JSON tags, dont repeat, just add a column number like  cb:"8".

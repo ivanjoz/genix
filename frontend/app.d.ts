@@ -5,7 +5,10 @@ declare global {
 		// interface Error {}
 		// interface Locals {}
 		// interface PageData {}
-		// interface PageState {}
+		interface PageState {
+			// libs/back-steps.svelte.ts: how many back steps the current history entry has open.
+			backStepDepth?: number
+		}
 		// interface Platform {}
 	}
 }
