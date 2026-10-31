@@ -358,3 +358,11 @@ group = 7
 levels = 14
 frontend_routes = "accounting/books"
 backend_apis = "GET.sales-book,GET.purchases-book,GET.client-provider-snapshot-ids"
+
+[[access]]
+id = 38
+name = "Consolidado & Cuentas"
+group = 7
+levels = 14
+frontend_routes = "accounting/accounts-consolidation"
+backend_apis = "GET.accounting-operations,PUT.accounting-classification,GET.assets,GET.purchase-order-ids,GET.expense-ids"

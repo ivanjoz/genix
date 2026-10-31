@@ -67,12 +67,13 @@ func VoidPendingDocumentForSale(companyID int32, saleOrderID int64) (*InvoiceDoc
 	document.State = InvoiceVoided
 	document.Status = 0
 	document.Updated = core.SUnixTime()
+	document.StampPeriod()
 
 	table := db.TableOf[InvoiceDocument]()
 	rows := &[]InvoiceDocument{*document}
-	// State travels with the delta view's key, which the ORM requires to be
-	// written together with Status and Updated.
-	if err := db.Update(rows, table.State, table.Status, table.Updated); err != nil {
+	// State travels with the delta views' keys, which the ORM requires to be
+	// written together with Status, Updated and Period.
+	if err := db.Update(rows, table.State, table.Status, table.Updated, table.Period); err != nil {
 		return nil, fmt.Errorf("no se pudo anular el comprobante de la venta: %w", err)
 	}
 	return nil, nil

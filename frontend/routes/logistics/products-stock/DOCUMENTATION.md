@@ -94,12 +94,17 @@ increases in the save and once for all the decreases:
 The summary's **Guardar** posts the changes. To save two increases with different reasons, save
 them separately.
 
-- **Cost (Costo)** is the unit purchase cost, in soles, of the stock the row adds. **Current cost
-  (Costo actual)** is the product's moving average in this warehouse.
-- **Saldo inicial always needs a cost**, whatever the company settings.
+- The grid groups its columns under **Unit Cost (Costo Unitario)** and **Stock**. Under Unit
+  Cost, **Consolidated (Consolidado)** is the product's moving average in this warehouse (stock
+  value over quantity), and **New (Nuevo)** is the unit purchase cost, in soles, of the stock the
+  row adds. Under Stock: **Simple**, **Loteado** (batches) and **Total**.
+- **A product with no Consolidated cost cannot gain stock without a New cost.** The cell shows a
+  red **Requerido** warning, and Guardar refuses to continue until it is filled. Decreases need
+  no cost. Genix refuses any uncosted entry into such a product, from any document (for example a
+  transfer from a warehouse where the product has no cost either).
+- **Saldo inicial always needs a cost**, even when the product has a Consolidated cost.
 - When the company blocks manual stock entries (only a purchase order may add stock), increases
   are refused unless their reason is **Saldo inicial**.
-- When the company requires a purchase cost, every increase needs its **Cost**.
 
 ### Result and side effects (Resultado y efectos)
 
@@ -123,7 +128,7 @@ total) is rejected for the whole request rather than partially applied.
 - `¿El ajuste registra entrada o salida?` Genix calcula automáticamente si el nuevo valor implica
   entrada o salida según la diferencia con el valor anterior; el motivo de cada una se elige en el
   resumen al guardar.
-- `¿Cómo cargo el inventario inicial?` Ingrese las cantidades y su **Costo**, y al guardar elija
+- `¿Cómo cargo el inventario inicial?` Ingrese las cantidades y su costo **Nuevo**, y al guardar elija
   **Saldo inicial** como motivo de los ingresos.
 - `¿Cómo registro una merma?` Baje la cantidad y al guardar elija **Merma** como motivo de las
   salidas.

@@ -1,8 +1,43 @@
 package types
 
 import (
+	"app/core"
 	"app/db"
 )
+
+// RestampReceptionAccounts rewrites the PurchaseAccountCode of the receptions of one purchase after
+// its account was reclassified: accountOfProduct is the account each received product now posts to.
+// receptionType is the reception's movement type (3 an order, 4 an inventory expense), since
+// DocumentID alone is shared between the registers.
+func RestampReceptionAccounts(
+	companyID int32, documentID int64, receptionType StockMovementType, accountOfProduct func(productID int32) int32,
+) error {
+	stored := []WarehouseProductMovement{}
+	query := db.Query(&stored)
+	query.Select(query.ID, query.Type, query.ProductID, query.PurchaseAccountCode).
+		CompanyID.Equals(companyID).DocumentID.Equals(documentID)
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al obtener los ingresos de la compra:", documentID, err)
+	}
+	changed := []WarehouseProductMovement{}
+	for _, movement := range stored {
+		accountCode := accountOfProduct(movement.ProductID)
+		if movement.Type != receptionType || movement.PurchaseAccountCode == accountCode {
+			continue
+		}
+		movement.CompanyID = companyID
+		movement.PurchaseAccountCode = accountCode
+		changed = append(changed, movement)
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	table := db.TableOf[WarehouseProductMovement]()
+	if err := db.Update(&changed, table.PurchaseAccountCode); err != nil {
+		return core.Err("Error al actualizar la cuenta de los ingresos de la compra:", documentID, err)
+	}
+	return nil
+}
 
 // WarehouseProductMovement is the append-only movement ledger.
 // LotID (0 = no lot) and SerialNumber (empty = no serial) together tell whether
@@ -33,6 +68,18 @@ type WarehouseProductMovement struct {
 	Created       int32             `cb:"18"`
 	CreatedBy     int32             `cb:"19"`
 	UpdateCounter int32             `cb:"20"`
+	// Period is the YYMM of Date (core.PeriodOfDay): the pinned key of the period delta index the
+	// accounting operations sync a month through.
+	Period int16 `cb:"21"`
+	// PurchaseAccountCode is the PCGE account the purchase behind a reception posted to, stamped
+	// when the reception is written: an order line's AccountCode, else 6011, on a purchase
+	// reception (3); the expense's AccountCode on a supplies purchase (4); 0 on every other type.
+	// The accounting operations post the reception to the stock / variation pair of this account
+	// without reading the purchase back.
+	PurchaseAccountCode int32 `cb:"22"`
+	Version             int16 `json:"ver" cb:"ver,23"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,24"`
 }
 
 type WarehouseProductMovementTable struct {
@@ -57,6 +104,9 @@ type WarehouseProductMovementTable struct {
 	CreatedBy            db.Col[*WarehouseProductMovementTable, int32]
 	Date                 db.Col[*WarehouseProductMovementTable, int16]
 	UpdateCounter        db.Col[*WarehouseProductMovementTable, int32]
+	Period               db.Col[*WarehouseProductMovementTable, int16]
+	PurchaseAccountCode  db.Col[*WarehouseProductMovementTable, int32]
+	Version              db.Col[*WarehouseProductMovementTable, int16]
 }
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
@@ -69,7 +119,16 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			e.Date.Size(15), e.WarehouseID.Size(17), e.Autoincrement(8),
 		),
 		AutoincrementPart: e.Date,
+		// Size the slots of the period delta index. Type leaves room for new movement types.
+		FixedValues: []db.FixedValues{
+			{Col: e.Period, Min: 0, Max: 9912},
+			{Col: e.Type, Min: 0, Max: 63},
+		},
 		Indexes: []db.Index{
+			// One log per accounting period: GET.accounting-operations syncs a month's receptions,
+			// deliveries and returns through it. Movements are never deleted, so Type is just the
+			// sync filter a first sync lists.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Type)},
 			{
 				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date), UseIndexGroup: true,
 			},
@@ -132,14 +191,22 @@ type InternalMovement struct {
 	SubQuantity     int32
 	SubDivisor      int16
 	// Price is the unit cost of an inflow, in PEN cents net of recoverable IGV. It is ignored on
-	// an outflow: stock leaves at the row's AverageCost, not at a price someone typed.
-	Price      int32
-	DocumentID int64
-	// The company's manual-stock policy (company flags 6 and 9). They are judged on the delta,
-	// which only the engine knows for a "set stock to X" movement, and inside its lock, so the
-	// check and the write see the same balance.
+	// an outflow: stock leaves at its share of the row's StockValue, not at a price someone typed.
+	// An inflow with no Price enters at the row's AverageCost.
+	Price int32
+	// InflowValue is the inflow's total value when the caller knows it exactly — a sale annulment
+	// returns the value its deliveries took out. It wins over Price: a unit price re-multiplied
+	// by the quantity would round, and the returned value would no longer cancel the delivered one.
+	InflowValue int32
+	DocumentID  int64
+	// PurchaseAccountCode is the account the purchase behind a reception posted to, written on the
+	// ledger row (WarehouseProductMovement.PurchaseAccountCode). Set by the reception's caller.
+	PurchaseAccountCode int32
+	// The manual-stock policy: company flag 6, and opening stock's cost. They are judged on the
+	// delta, which only the engine knows for a "set stock to X" movement, and inside its lock, so
+	// the check and the write see the same balance.
 	RejectInbound      bool // the company only lets stock in through a purchase order
-	RequireInboundCost bool // every inflow must carry a Price
+	RequireInboundCost bool // the inflow must carry a Price even if the row has an AverageCost
 
 	// transferPeerWarehouseID is set by expandStockTransfers on both legs of a transfer: the
 	// other warehouse, written to the ledger as WarehouseRefID.

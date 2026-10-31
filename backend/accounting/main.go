@@ -8,15 +8,17 @@ import "app/core"
 const depreciationCategoryID int8 = 6
 
 var ModuleHandlers = core.AppRouterType{
-	"GET.assets":                  GetAssets,
-	"POST.asset":                  PostAsset,
-	"PUT.asset":                   PutAssetEdit,
-	"PUT.asset-disposal":          PutAssetDisposal,
-	"PUT.asset-transfer":          PutAssetTransfer,
-	"POST.asset-depreciation-run": PostAssetDepreciationRun,
-	"GET.asset-depreciation":      GetAssetDepreciation,
-	"POST.asset-payment":          PostAssetPayment,
-	"POST.expense-inventory":      PostInventoryExpense,
-	"GET.sales-book":              GetSalesBook,
-	"GET.purchases-book":          GetPurchasesBook,
+	"GET.assets":                    GetAssets,
+	"POST.asset":                    PostAsset,
+	"PUT.asset":                     PutAssetEdit,
+	"PUT.asset-disposal":            PutAssetDisposal,
+	"PUT.asset-transfer":            PutAssetTransfer,
+	"POST.asset-depreciation-run":   PostAssetDepreciationRun,
+	"GET.asset-depreciation":        GetAssetDepreciation,
+	"POST.asset-payment":            PostAssetPayment,
+	"POST.expense-inventory":        PostInventoryExpense,
+	"GET.sales-book":                GetSalesBook,
+	"GET.purchases-book":            GetPurchasesBook,
+	"GET.accounting-operations":     GetAccountingOperations,
+	"PUT.accounting-classification": PutAccountingClassification,
 }

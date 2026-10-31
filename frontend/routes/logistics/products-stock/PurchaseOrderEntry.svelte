@@ -77,17 +77,14 @@ const selectedOrder = $derived<IPurchaseOrder | undefined>(
 const orderProductCards = $derived.by(() => {
   type Card = { key: string, productID: number, presentationID: number, ordered: number, name: string, sku: string, haystack: string }
   if (!selectedOrder) return [] as Card[]
-  const productIDs = selectedOrder.DetailProductIDs || []
-  const quantities = selectedOrder.DetailProductQuantity || []
-  const presentations = selectedOrder.DetailProductPresentationIDs || []
   const byKey = new Map<string, Card>()
-  for (let i = 0; i < productIDs.length; i++) {
-    const pid = productIDs[i]
-    const presID = presentations[i] || 0
+  for (const line of selectedOrder.Lines || []) {
+    const pid = line.ProductID
+    const presID = line.PresentationID || 0
     const key = cardKey(pid, presID)
     const existing = byKey.get(key)
     if (existing) {
-      existing.ordered += quantities[i] || 0
+      existing.ordered += line.Quantity || 0
       continue
     }
     const product = productos.recordsMap.get(pid)
@@ -99,7 +96,7 @@ const orderProductCards = $derived.by(() => {
       .filter(Boolean)
       .join(' ')
     const haystack = `${name} ${sku} ${presentationSkus}`.toLowerCase()
-    byKey.set(key, { key, productID: pid, presentationID: presID, ordered: quantities[i] || 0, name, sku, haystack })
+    byKey.set(key, { key, productID: pid, presentationID: presID, ordered: line.Quantity || 0, name, sku, haystack })
   }
   return Array.from(byKey.values())
 })

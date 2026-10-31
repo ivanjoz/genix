@@ -24,8 +24,8 @@ import Modal from '#components/layers/Modal.svelte';
 import { manualStockDecreaseTypes, manualStockIncreaseTypes } from '#core/stock-movement-type.ts';
 import {
     COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND,
-    COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST,
     findManualStockRefusal,
+    increaseNeedsUnitCost,
     isStockIncrease,
     manualStockChangeType,
     type IManualStockChange,
@@ -68,7 +68,6 @@ const productos = new ProductsService(true)
 const empresaParametros = new EmpresaParametrosService()
 
 const blockManualInbound = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND))
-const requireManualCost = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_REQUIRE_MANUAL_STOCK_COST))
 
 const STOCK_SAVE_SUMMARY_MODAL_ID = 21
 const increaseTypeOptions = manualStockIncreaseTypes.map((movementType) => ({ id: movementType.id, name: tr(movementType.name) }))
@@ -618,13 +617,20 @@ const rowAddsStock = (productStockDisplay: IProductoStockDisplay) => {
     || productStockDisplay.stockSerialNumbersNew > productStockDisplay.stockSerialNumbers
 }
 
+// An increase on a row with no consolidated cost cannot be saved until its New cost is typed.
+const rowLacksRequiredUnitCost = (productStockDisplay: IProductoStockDisplay) =>
+  !productStockDisplay.base._unitCost
+  && increaseNeedsUnitCost(productStockDisplay.base.AverageCost || 0, false)
+  && rowAddsStock(productStockDisplay)
+
 // One cost per product row: it prices every unit this save adds to the row, lots and serials included.
-const unitCostColumn: ITableColumn<IProductoStockDisplay> = {
-  header: 'Cost|Costo', css: 'justify-end px-6', inputCss: 'text-right',
+const newUnitCostColumn: ITableColumn<IProductoStockDisplay> = {
+  header: 'New|Nuevo', css: 'justify-end px-6', inputCss: 'text-right',
   headerCss: 'w-120',
-  mobile: { order: 8, css: 'col-span-12', labelLeft: 'Costo' },
+  mobile: { order: 8, css: 'col-span-12', labelLeft: 'Costo nuevo' },
   showEditIcon: true,
   cellInputType: 'number',
+  setCellCss: (productStockDisplay) => rowLacksRequiredUnitCost(productStockDisplay) ? 'bg-red-bg' : undefined,
   getValue: (productStockDisplay) => productStockDisplay.base._unitCost ? productStockDisplay.base._unitCost / 100 : '',
   onCellEdit: (productStockDisplay, value, rerender) => {
     productStockDisplay.base._unitCost = Math.round((parseFloat(String(value || '0')) || 0) * 100)
@@ -634,8 +640,14 @@ const unitCostColumn: ITableColumn<IProductoStockDisplay> = {
     if (productStockDisplay.base._unitCost) {
       return { css: 'text-right', text: formatN(productStockDisplay.base._unitCost / 100, 2) }
     }
-    if (requireManualCost && rowAddsStock(productStockDisplay)) {
-      return { css: 'text-right text-red-fg', text: tr('Required|Requerido') }
+    if (rowLacksRequiredUnitCost(productStockDisplay)) {
+      return {
+        css: 'flex items-center justify-end gap-4 text-red-fg',
+        children: [
+          { tagName: 'i', css: 'icon-[fa--exclamation-triangle]' },
+          { text: tr('Required|Requerido') },
+        ],
+      }
     }
     return ''
   },
@@ -694,92 +706,103 @@ const stockColumns: ITableColumn<IProductoStockDisplay>[] = [
     },
   },
   {
-    header: 'Current cost|Costo actual', css: 'justify-end text-right',
-    headerCss: 'w-120',
-    mobile: { order: 7, css: 'col-span-12 pr-4', labelLeft: 'Costo actual' },
-    getValue: (productStockDisplay) => productStockDisplay.base.AverageCost
-      ? formatN(productStockDisplay.base.AverageCost / 100, 2) : '',
-  },
-  unitCostColumn,
-  {
-    header: 'Simple Stock|Stock Simple', css: 'justify-end px-6', inputCss: 'text-right',
-    headerCss: 'w-150',
-    mobile: { order: 4, css: 'col-span-12', labelLeft: "Simple" },
-    showEditIcon: true,
-    cellInputType: 'number',
-    getValue: (productStockDisplay) => {
-      computeStockDisplay(productStockDisplay)
-      return productStockDisplay.stockSimpleNew
-    },
-    onCellEdit: (productStockDisplay, value, rerender) => {
-      productStockDisplay.computed = false
-      updateStockQuantity(productStockDisplay.base, parseInt(String(value || '0')))
-      rerender()
-    },
-    render: (productStockDisplay) => {
-      if (productStockDisplay.stockSimpleNew !== productStockDisplay.stockSimple) {
-        return {
-          css: 'flex items-center justify-end',
-          children: [
-            { text: String(productStockDisplay.stockSimple) },
-            { text: '→', css: 'ml-2 mr-2' },
-            { text: productStockDisplay.stockSimpleNew, css: 'text-red-fg' },
-          ],
-        }
-      }
-      // The loose sub-unit balance is shown but not editable here: this column sets whole
-      // units, and the adjustment posts the existing SubQuantity back unchanged so a
-      // whole-unit correction never wipes loose stock.
-      const looseSubUnits = productStockDisplay.base.SubQuantity || 0
-      if (looseSubUnits) {
-        const subUnitName = productos.recordsMap.get(productStockDisplay.base.ProductID)?.SbuUnit || ''
-        return {
-          css: 'flex items-center justify-end',
-          children: [
-            { text: productStockDisplay.stockSimpleNew || '0' },
-            { text: `+${looseSubUnits}${subUnitName ? ' ' + subUnitName : ''}`, css: 'ml-4 text-purple-fg text-[11px]' },
-          ],
-        }
-      }
-      return { css: 'text-right', text: productStockDisplay.stockSimpleNew || '' }
-    },
+    header: 'Unit Cost|Costo Unitario',
+    subcols: [
+      {
+        // The moving average: the stock's value over its quantity.
+        header: 'Consolidated|Consolidado', css: 'justify-end text-right',
+        headerCss: 'w-120',
+        mobile: { order: 7, css: 'col-span-12 pr-4', labelLeft: 'Costo consolidado' },
+        getValue: (productStockDisplay) => productStockDisplay.base.AverageCost
+          ? formatN(productStockDisplay.base.AverageCost / 100, 2) : '',
+      },
+      newUnitCostColumn,
+    ],
   },
   {
-    header: 'Batch Stock|Stock Loteado',
-    showEditIcon: true,
-    mobile: { 
-    	order: 5, 
-     	css: 'col-span-12', 
-     	labelLeft: "Loteado",
-      contentCss: "flex items-center justify-end bg-purple-bg pr-4",
-    },
-    onCellClick: (productStockDisplay, index, rerender) => openDetailLayer('lot', productStockDisplay, rerender),
-    getValue: (productStockDisplay) => {
-      computeStockDisplay(productStockDisplay)
-      return productStockDisplay.stockLoteadoNew
-    },
-    render: (productStockDisplay) => {
-      computeStockDisplay(productStockDisplay)
-      if (productStockDisplay.stockLoteadoNew !== productStockDisplay.stockLoteado) {
-        return {
-          css: 'flex justify-end items-center',
-          children: [
-            { text: String(productStockDisplay.stockLoteado) },
-            { text: '→', css: 'ml-2 mr-2' },
-            { text: productStockDisplay.stockLoteadoNew, css: 'text-red-fg' },
-          ],
-        }
-      }
-      return { css: 'text-right', text: productStockDisplay.stockLoteadoNew || '' }
-    },
-  },
-  {
-    header: 'Total Stock|Stock Total', css: 'justify-end text-right',
-    mobile: { order: 6, css: 'col-span-12 pr-4', labelLeft: "Total" },
-    getValue: (productStockDisplay) => {
-      computeStockDisplay(productStockDisplay)
-      return formatN(productStockDisplay.stockLoteadoNew + productStockDisplay.stockSimpleNew + productStockDisplay.stockSerialNumbersNew)
-    },
+    header: 'Stock',
+    subcols: [
+      {
+        header: 'Simple|Simple', css: 'justify-end px-6', inputCss: 'text-right',
+        headerCss: 'w-150',
+        mobile: { order: 4, css: 'col-span-12', labelLeft: "Simple" },
+        showEditIcon: true,
+        cellInputType: 'number',
+        getValue: (productStockDisplay) => {
+          computeStockDisplay(productStockDisplay)
+          return productStockDisplay.stockSimpleNew
+        },
+        onCellEdit: (productStockDisplay, value, rerender) => {
+          productStockDisplay.computed = false
+          updateStockQuantity(productStockDisplay.base, parseInt(String(value || '0')))
+          rerender()
+        },
+        render: (productStockDisplay) => {
+          if (productStockDisplay.stockSimpleNew !== productStockDisplay.stockSimple) {
+            return {
+              css: 'flex items-center justify-end',
+              children: [
+                { text: String(productStockDisplay.stockSimple) },
+                { text: '→', css: 'ml-2 mr-2' },
+                { text: productStockDisplay.stockSimpleNew, css: 'text-red-fg' },
+              ],
+            }
+          }
+          // The loose sub-unit balance is shown but not editable here: this column sets whole
+          // units, and the adjustment posts the existing SubQuantity back unchanged so a
+          // whole-unit correction never wipes loose stock.
+          const looseSubUnits = productStockDisplay.base.SubQuantity || 0
+          if (looseSubUnits) {
+            const subUnitName = productos.recordsMap.get(productStockDisplay.base.ProductID)?.SbuUnit || ''
+            return {
+              css: 'flex items-center justify-end',
+              children: [
+                { text: productStockDisplay.stockSimpleNew || '0' },
+                { text: `+${looseSubUnits}${subUnitName ? ' ' + subUnitName : ''}`, css: 'ml-4 text-purple-fg text-[11px]' },
+              ],
+            }
+          }
+          return { css: 'text-right', text: productStockDisplay.stockSimpleNew || '' }
+        },
+      },
+      {
+        header: 'Batched|Loteado',
+        showEditIcon: true,
+        mobile: { 
+        	order: 5, 
+         	css: 'col-span-12', 
+         	labelLeft: "Loteado",
+          contentCss: "flex items-center justify-end bg-purple-bg pr-4",
+        },
+        onCellClick: (productStockDisplay, index, rerender) => openDetailLayer('lot', productStockDisplay, rerender),
+        getValue: (productStockDisplay) => {
+          computeStockDisplay(productStockDisplay)
+          return productStockDisplay.stockLoteadoNew
+        },
+        render: (productStockDisplay) => {
+          computeStockDisplay(productStockDisplay)
+          if (productStockDisplay.stockLoteadoNew !== productStockDisplay.stockLoteado) {
+            return {
+              css: 'flex justify-end items-center',
+              children: [
+                { text: String(productStockDisplay.stockLoteado) },
+                { text: '→', css: 'ml-2 mr-2' },
+                { text: productStockDisplay.stockLoteadoNew, css: 'text-red-fg' },
+              ],
+            }
+          }
+          return { css: 'text-right', text: productStockDisplay.stockLoteadoNew || '' }
+        },
+      },
+      {
+        header: 'Total|Total', css: 'justify-end text-right',
+        mobile: { order: 6, css: 'col-span-12 pr-4', labelLeft: "Total" },
+        getValue: (productStockDisplay) => {
+          computeStockDisplay(productStockDisplay)
+          return formatN(productStockDisplay.stockLoteadoNew + productStockDisplay.stockSimpleNew + productStockDisplay.stockSerialNumbersNew)
+        },
+      },
+    ],
   },
 ]
 
@@ -826,6 +849,7 @@ const openSaveSummary = () => {
   for (const productStockRecord of almacenStock) {
     const productName = productos.recordsMap.get(productStockRecord.ProductID)?.Name || `Producto-${productStockRecord.ProductID}`
     const unitCost = productStockRecord._unitCost || 0
+    const averageCost = productStockRecord.AverageCost || 0
 
     if (productStockRecord._hasUpdated) {
       recordsForUpdate.push({
@@ -838,7 +862,7 @@ const openSaveSummary = () => {
         Type: 0,
       })
       stockChanges.push({
-        productName, unitCost, detailName: '',
+        productName, unitCost, averageCost, detailName: '',
         previousQuantity: getCantPrevia(productStockRecord),
         nextQuantity: productStockRecord.Quantity || 0,
       })
@@ -867,7 +891,7 @@ const openSaveSummary = () => {
         Type: 0,
       })
       stockChanges.push({
-        productName, unitCost,
+        productName, unitCost, averageCost,
         detailName: stockDetail.SerialNumber || getLotDisplay(stockDetail),
         // A new serial gets its quantity set directly, with no previous one recorded: it adds all of it.
         previousQuantity: stockDetail._isNew ? 0 : getCantPrevia(stockDetail),
@@ -881,6 +905,14 @@ const openSaveSummary = () => {
     return
   }
 
+  // No reason chosen in the summary can value stock that has no cost, so stop before opening it.
+  const changeMissingCost = stockChanges.find((change) =>
+    isStockIncrease(change) && !change.unitCost && increaseNeedsUnitCost(change.averageCost, false))
+  if (changeMissingCost) {
+    notifyFailure(`${changeMissingCost.productName}: ` + tr('it has no consolidated cost, enter the New unit cost of the stock being added.|no tiene costo consolidado, ingrese el costo unitario Nuevo del stock que ingresa.'))
+    return
+  }
+
   pendingSave = { records: recordsForUpdate, changes: stockChanges }
   saveReasons = { increaseType: increaseTypeOptions[0].id, decreaseType: decreaseTypeOptions[0].id }
   ui.openModal(STOCK_SAVE_SUMMARY_MODAL_ID)
@@ -888,7 +920,7 @@ const openSaveSummary = () => {
 
 const confirmSave = async () => {
   const { records, changes } = pendingSave
-  const refusal = findManualStockRefusal(changes, blockManualInbound, requireManualCost, saveReasons.increaseType)
+  const refusal = findManualStockRefusal(changes, blockManualInbound, saveReasons.increaseType)
   if (refusal) {
     notifyFailure(`${refusal.productName}: ` + (refusal.reason === 'inbound-blocked'
       ? tr('stock can only increase through a purchase order or as opening stock.|el stock solo puede aumentar mediante una orden de compra o como saldo inicial.')
@@ -1048,11 +1080,6 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   <div class="mb-8 flex items-center gap-6 text-orange-fg">
     <i class="icon-[fa--info-circle] shrink-0"></i>
     <T text="Stock can only increase through a purchase order (Ingreso OC), or here as opening stock with its cost. Decreases are still allowed.|El stock solo puede aumentar mediante una orden de compra (Ingreso OC), o aquí como saldo inicial con su costo. Las disminuciones aún se permiten." />
-  </div>
-{:else if requireManualCost}
-  <div class="mb-8 flex items-center gap-6 text-orange-fg">
-    <i class="icon-[fa--info-circle] shrink-0"></i>
-    <T text="Every stock increase needs its unit purchase cost, in soles.|Todo aumento de stock necesita su costo unitario de compra, en soles." />
   </div>
 {/if}
 

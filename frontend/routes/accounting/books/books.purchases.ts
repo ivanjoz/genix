@@ -37,6 +37,14 @@ export interface IPurchaseBookDocument extends IPurchaseDocument {
   ProviderSnapshotID: number
   DueDate: number
   RecordAmount: number
+  // Read by the accounting operations (accounts-consolidation), not by the book.
+  AccountCode?: number    // an expense's nature account
+  ExpenseType?: number    // ExpenseType* of an expense
+  ProductID?: number      // an inventory expense's supply
+  Lines?: { ProductID: number, Quantity: number, Price: number, AccountCode?: number }[] // an order's
+  AssetID?: number            // a depreciation entry's asset
+  Date?: number               // a depreciation entry's date (it has no comprobante)
+  SameDayCashBankID?: number  // the cash bank of the payment that settled it on its accounting date
 }
 
 export interface IPurchasesBookResponse {

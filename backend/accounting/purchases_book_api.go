@@ -41,7 +41,43 @@ type PurchaseBookDocument struct {
 	DueDate            int16  `cb:"6"` // Field 6, for a recibo de servicios públicos.
 	// The record's own total. For a purchase without a comprobante it is the only amount there is.
 	RecordAmount int32 `cb:"7"`
-	finance.PurchaseDocument
+	// What the accounting operations (Consolidado & Cuentas) post the purchase to. The book
+	// itself does not read them.
+	AccountCode int32                         `cb:"8"`  // an expense's nature account
+	ExpenseType int8                          `cb:"9"`  // finance.ExpenseType*
+	ProductID   int32                         `cb:"10"` // an inventory expense's supply
+	Lines       []logistics.PurchaseOrderLine `cb:"11"` // an order's lines, each with its account
+	// A depreciation entry (ExpenseType 4) has no comprobante: its asset and its own date.
+	AssetID int32 `cb:"12"`
+	Date    int16 `cb:"13"`
+	// The cash bank of the payment that settled it on its accounting date (finance.SameDaySettlement):
+	// the accounting operations infer that payment instead of reading it.
+	SameDayCashBankID int32 `cb:"14"`
+	// Carried through for GET.accounting-operations, which syncs orders and expenses by delta log.
+	Status   int8    `json:"ss" cb:"ss,15"`
+	Version  int16   `json:"ver" cb:"ver,16"`
+	Metadata *string `json:"mdt" cb:"mdt,17"`
+	// The comprobante (finance.PurchaseDocument), flat: colbin does not flatten an embedded
+	// struct, so embedding it sent these fields nested under "PurchaseDocument" to the browser.
+	DocType       int8   `cb:"18"`
+	DocSeries     string `cb:"19"`
+	DocNumber     int64  `cb:"20"`
+	DocIssueDate  int16  `cb:"21"`
+	TaxableAmount int32  `cb:"22"`
+	TaxAmount     int32  `cb:"23"`
+	UntaxedAmount int32  `cb:"24"`
+	OtherAmount   int32  `cb:"25"`
+	CurrencyType  int8   `cb:"26"`
+	ExchangeRate  int32  `cb:"27"`
+}
+
+// withPurchaseDocument copies a source's comprobante onto the row.
+func (document PurchaseBookDocument) withPurchaseDocument(purchase finance.PurchaseDocument) PurchaseBookDocument {
+	document.DocType, document.DocSeries, document.DocNumber = purchase.DocType, purchase.DocSeries, purchase.DocNumber
+	document.DocIssueDate, document.TaxableAmount, document.TaxAmount = purchase.DocIssueDate, purchase.TaxableAmount, purchase.TaxAmount
+	document.UntaxedAmount, document.OtherAmount = purchase.UntaxedAmount, purchase.OtherAmount
+	document.CurrencyType, document.ExchangeRate = purchase.CurrencyType, purchase.ExchangeRate
+	return document
 }
 
 type PurchasesBookResponse struct {
@@ -92,14 +128,20 @@ func loadPeriodOrders(companyID int32, firstDay, lastDay int16) ([]PurchaseBookD
 			if order.Status == logistics.PurchaseOrderStatusCanceled {
 				continue
 			}
-			documents = append(documents, PurchaseBookDocument{
-				Source: PurchaseSourceOrder, SourceID: order.ID, ProviderID: order.ProviderID,
-				ProviderSnapshotID: order.ProviderSnapshotID, DueDate: order.PaymentDate,
-				RecordAmount: order.TotalAmount, PurchaseDocument: order.PurchaseDocument(),
-			})
+			documents = append(documents, makeOrderBookDocument(order))
 		}
 	}
 	return documents, nil
+}
+
+func makeOrderBookDocument(order *logistics.PurchaseOrder) PurchaseBookDocument {
+	return PurchaseBookDocument{
+		Source: PurchaseSourceOrder, SourceID: order.ID, ProviderID: order.ProviderID,
+		ProviderSnapshotID: order.ProviderSnapshotID, DueDate: order.PaymentDate,
+		RecordAmount: order.TotalAmount, Lines: order.Lines,
+		SameDayCashBankID: order.SameDayCashBankID, Status: order.Status, Version: order.Version,
+		Metadata: order.Metadata,
+	}.withPurchaseDocument(order.PurchaseDocument())
 }
 
 // loadPeriodExpenses reads the expenses of the range. A removed expense never happened, and
@@ -119,15 +161,21 @@ func loadPeriodExpenses(companyID int32, firstDay, lastDay int16) ([]PurchaseBoo
 			if expense.Status == 0 || expense.Type == finance.ExpenseTypeDepreciation {
 				continue
 			}
-			documents = append(documents, PurchaseBookDocument{
-				Source: PurchaseSourceExpense, SourceID: expense.ID, Name: expense.Name,
-				ProviderID: expense.SupplierID, ProviderSnapshotID: expense.ProviderSnapshotID,
-				DueDate: expense.DueDate, RecordAmount: expense.Amount,
-				PurchaseDocument: expense.PurchaseDocument(),
-			})
+			documents = append(documents, makeExpenseBookDocument(expense))
 		}
 	}
 	return documents, nil
+}
+
+func makeExpenseBookDocument(expense *finance.Expense) PurchaseBookDocument {
+	return PurchaseBookDocument{
+		Source: PurchaseSourceExpense, SourceID: expense.ID, Name: expense.Name,
+		ProviderID: expense.SupplierID, ProviderSnapshotID: expense.ProviderSnapshotID,
+		DueDate: expense.DueDate, RecordAmount: expense.Amount, AccountCode: expense.AccountCode,
+		ExpenseType: expense.Type, ProductID: expense.ProductID,
+		AssetID: expense.AssetID, Date: expense.Date, SameDayCashBankID: expense.SameDayCashBankID,
+		Status: expense.Status, Version: expense.Version, Metadata: expense.Metadata,
+	}.withPurchaseDocument(expense.PurchaseDocument())
 }
 
 // loadPeriodAssets reads the fixed assets acquired in the range. A donated asset without a
@@ -152,8 +200,7 @@ func loadPeriodAssets(companyID int32, firstDay, lastDay int16) ([]PurchaseBookD
 				Source: PurchaseSourceAsset, SourceID: asset.ID, Name: asset.Name,
 				ProviderID: asset.SupplierID, ProviderSnapshotID: asset.ProviderSnapshotID,
 				DueDate: asset.DueDate, RecordAmount: asset.PurchaseAmount,
-				PurchaseDocument: asset.PurchaseDocument(),
-			})
+			}.withPurchaseDocument(asset.PurchaseDocument()))
 		}
 	}
 	return documents, nil

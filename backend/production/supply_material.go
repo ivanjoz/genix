@@ -1,6 +1,7 @@
 package production
 
 import (
+	accounting "app/accounting/types"
 	"app/core"
 	"app/db"
 	logistics "app/logistics/types"
@@ -19,7 +20,7 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 	supplyQuery.Select(
 		supplyQuery.ID, supplyQuery.Name, supplyQuery.Description, supplyQuery.SKU,
 		supplyQuery.BrandID, supplyQuery.Price, supplyQuery.CurrencyID, supplyQuery.UnitID,
-		supplyQuery.DepreciationMonths, supplyQuery.Status, supplyQuery.Updated,
+		supplyQuery.DepreciationMonths, supplyQuery.AccountCode, supplyQuery.Status, supplyQuery.Updated,
 		supplyQuery.Version,
 	)
 	supplyQuery.Delta(req.GetDeltaCursor(), types.ProductStatusSupply)
@@ -51,6 +52,8 @@ type SupplyMaterialPayload struct {
 	// Only 0 is honoured, as the soft-delete tombstone. Anything else saves as a supply;
 	// a client cannot promote its own row into the product catalog.
 	Status int8 `json:"ss" cb:"ss,12"`
+	// The supply's default PCGE account. 0 takes accounting.DefaultSupplyAccountCode.
+	AccountCode int32 `cb:"13"`
 }
 
 // supplyMaterialIDMapping is the shape the frontend GetHandler.postAndSync expects back: for
@@ -98,6 +101,13 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Los meses de depreciación deben estar entre 0 y 1200.")
 		}
 
+		if supplyPayload.AccountCode == 0 {
+			supplyPayload.AccountCode = accounting.DefaultSupplyAccountCode(supplyPayload.DepreciationMonths)
+		}
+		if accountError := accounting.ValidatePCGEAccount(accounting.PCGEKindSupply, supplyPayload.AccountCode); accountError != nil {
+			return req.MakeErr(accountError)
+		}
+
 		supplyPayload.ProviderSupply = logistics.SanitizeProviderSupplyRows(supplyPayload.ProviderSupply)
 		if validationError := logistics.ValidateProviderSupplyRows(req.User.CompanyID, supplyPayload.ProviderSupply); validationError != nil {
 			return req.MakeErr(validationError)
@@ -115,6 +125,7 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			CurrencyID:         supplyPayload.CurrencyID,
 			UnitID:             supplyPayload.UnitID,
 			DepreciationMonths: supplyPayload.DepreciationMonths,
+			AccountCode:        supplyPayload.AccountCode,
 			// Deleting is only meaningful for a row that already exists; a new record with no
 			// ss in the payload must not be born as a tombstone.
 			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), types.ProductStatusSupply),

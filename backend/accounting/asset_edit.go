@@ -27,6 +27,8 @@ type AssetEditPayload struct {
 	DueDate          int16  `cb:"4"`
 	AcquisitionValue int32  `cb:"5"`
 	PurchaseAmount   int32  `cb:"6"`
+	// The 33x the asset is booked under. Required: an asset is never left unclassified.
+	AccountCode int32 `cb:"7"`
 	// The supplier's comprobante, with this row's totals. Its currency stays the asset's.
 	finance.PurchaseDocument
 }
@@ -77,6 +79,12 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if payload.DueDate > 0 && payload.DueDate < payload.AcquisitionDate {
 		return req.MakeErr("El vencimiento del pago no puede ser anterior a la fecha de adquisición.")
+	}
+	if payload.AccountCode == 0 {
+		return req.MakeErr("Debe indicar la cuenta contable del activo.")
+	}
+	if accountError := types.ValidatePCGEAccount(types.PCGEKindAsset, payload.AccountCode); accountError != nil {
+		return req.MakeErr(accountError)
 	}
 
 	dueDate := core.If(payload.DueDate > 0, payload.DueDate, payload.AcquisitionDate)
@@ -141,6 +149,7 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 	asset.ProviderSnapshotID = providerSnapshotID
 	asset.AcquisitionValue = payload.AcquisitionValue
 	asset.PurchaseAmount = payload.PurchaseAmount
+	asset.AccountCode = payload.AccountCode
 	asset.PaymentStatus = ResolveAssetPaymentStatus(payload.PurchaseAmount, asset.PaidAmount)
 
 	if scheduleChanged {
@@ -155,6 +164,15 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 	asset.Updated = core.SUnixTime()
 	asset.UpdatedBy = req.User.ID
 
+	// The edit can move the accounting date or the purchase amount its payments settle.
+	sameDayCashBankID, restampError := finance.RestampDocumentPayments(req.User.CompanyID, int64(asset.ID),
+		[]finance.CashMovementType{finance.CashMovementTypeAssetPayment},
+		asset.AccountingDate(), asset.PurchaseAmount, finance.PCGEAssetPayables)
+	if restampError != nil {
+		return req.MakeErr(restampError)
+	}
+	asset.SameDayCashBankID = sameDayCashBankID
+
 	assetTable := db.TableOf[types.Asset]()
 	assetRecords := []types.Asset{asset}
 	if updateError := db.Update(&assetRecords,
@@ -164,7 +182,8 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 		assetTable.ProviderSnapshotID, assetTable.DocType, assetTable.DocSeries, assetTable.DocNumber,
 		assetTable.DocIssueDate, assetTable.TaxableAmount, assetTable.TaxAmount,
 		assetTable.UntaxedAmount, assetTable.OtherAmount, assetTable.ExchangeRate,
-		assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
+		assetTable.AccountCode, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
+		assetTable.SameDayCashBankID,
 	); updateError != nil {
 		return req.MakeErr("Error al actualizar el activo.", updateError)
 	}
@@ -291,6 +310,13 @@ func rewriteAssetDepreciation(req *core.HandlerArgs, asset *types.Asset) error {
 		entriesToUpdate = append(entriesToUpdate, entry)
 	}
 
+	// A depreciation row's period follows its Date, which the new schedule may have moved.
+	for index := range entriesToInsert {
+		entriesToInsert[index].StampPeriod()
+	}
+	for index := range entriesToUpdate {
+		entriesToUpdate[index].StampPeriod()
+	}
 	if len(entriesToInsert) > 0 {
 		if insertError := db.Insert(&entriesToInsert); insertError != nil {
 			return core.Err("Error al registrar los nuevos asientos de depreciación.", insertError)
@@ -300,7 +326,7 @@ func rewriteAssetDepreciation(req *core.HandlerArgs, asset *types.Asset) error {
 		expenseTable := db.TableOf[finance.Expense]()
 		if updateError := db.Update(&entriesToUpdate,
 			expenseTable.Date, expenseTable.Amount, expenseTable.Status,
-			expenseTable.Updated, expenseTable.UpdatedBy,
+			expenseTable.Updated, expenseTable.UpdatedBy, expenseTable.Period,
 		); updateError != nil {
 			return core.Err("Error al reescribir los asientos de depreciación.", updateError)
 		}

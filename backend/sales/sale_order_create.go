@@ -48,6 +48,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// client only says how much stays owed, and the amount collected is the drop from what the
 	// sale owed before — never the client's word on the total.
 	collectedAmount := int32(0)
+	// What the sale was paid before this request: 0 makes this payment its first one, the only kind
+	// that can settle it the same day (finance.IsSameDaySettlement).
+	paidBefore := int32(0)
 
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
@@ -76,6 +79,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			if sale.DebtAmount <= 0 {
 				return req.MakeErr("La venta no tiene deuda pendiente.")
 			}
+			paidBefore = sale.TotalAmount - sale.DebtAmount
 			collectedAmount, err = saleOrderCollectedAmount(sale.DebtAmount, saleRequest.DebtAmount)
 			if err != nil {
 				return req.MakeErr(err)
@@ -173,6 +177,15 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Se requiere LastPaymentCajaID para procesar el pago.")
 		}
 	}
+	// The collection is written today; when it alone pays the whole sale on the sale's day, the
+	// accounting operations infer it from the sale instead of downloading it.
+	paymentDate := core.FechaUnix()
+	isSameDayCollection := collectedAmount != 0 &&
+		finance.IsSameDaySettlement(sale.Date, sale.TotalAmount, paidBefore, paymentDate, collectedAmount)
+	if isSameDayCollection {
+		sale.SameDayCashBankID = sale.LastPaymentCajaID
+	}
+	sale.StampPeriod()
 
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ActionsIncluded, 3) {
@@ -240,10 +253,13 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		if collectedAmount != 0 {
 			movimiento := finance.InternalCashMovement{
-				CashBankID: sale.LastPaymentCajaID,
-				DocumentID: sale.ID,
-				Type:       finance.CashMovementTypeSaleCollection,
-				Amount:     collectedAmount,
+				CashBankID:         sale.LastPaymentCajaID,
+				DocumentID:         sale.ID,
+				Date:               paymentDate,
+				Type:               finance.CashMovementTypeSaleCollection,
+				CounterAccountCode: finance.PCGEReceivable,
+				Amount:             collectedAmount,
+				SameDayMovement:    int8(core.If(isSameDayCollection, 1, 0)),
 			}
 
 			eg.Go(func() error {
@@ -328,6 +344,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.DeliveryUser,
 			saleTable.ClientID,
 			saleTable.PaymentDueDate,
+			// The period delta index packs Period with Status: they are written together.
+			saleTable.Period,
+			saleTable.SameDayCashBankID,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la venta:", err)
 		}
@@ -633,18 +652,14 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	// The sale order table has no by-IDs slots: every requested ID is read.
-	saleOrderIDs, err := req.GetStaticRequestIDs()
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
-
-	saleOrders := []types.SaleOrder{}
-	query := db.Query(&saleOrders).CompanyID.Equals(req.User.CompanyID)
-
-	if err := query.ID.In(saleOrderIDs...).Exec(); err != nil {
-		return req.MakeErr("Error al obtener los productos.", err)
+	// Only the records whose slot moved past the tick the client holds come back.
+	partitions, err := db.QueryCachedIDs[types.SaleOrder](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener las ventas.", err)
 	}
-
-	return req.MakeResponse(core.StaticCachedPartition(saleOrders))
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }

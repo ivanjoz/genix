@@ -22,7 +22,7 @@ import { onMount, untrack } from 'svelte'
 import ProductCardSearch, { type IProductCard } from './ProductCardSearch.svelte'
 import PurchaseOrderForm from './PurchaseOrderForm.svelte'
     import { ProductSupplyService } from '#routes/logistics/purchase-management/supply-management.svelte.ts';
-import type { IPurchaseOrder } from './purchase_order.svelte';
+import type { IPurchaseOrder, IPurchaseOrderLine } from './purchase_order.svelte';
 import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
 import { PURCHASE_DOC_TYPE_INVOICE, splitPurchaseTotal, type IPurchaseDocument } from '#core/purchase-document.ts'
 import { getFechaUnix } from '@genix/ui/utilities'
@@ -46,11 +46,7 @@ interface IPurchaseOrderForm extends IPurchaseDocument {
   ProviderID: number
   WarehouseID: number
   TotalAmount: number
-  // Producto: parallel arrays in the same order — one row per product line.
-  DetailProductIDs: number[]
-  DetailProductPrice: number[]
-  DetailProductQuantity: number[]
-  DetailProductPresentationIDs: number[]
+  Lines: IPurchaseOrderLine[]
   Notes: string
   // Dates stored as UnixDay int16 (days since unix-epoch).
   DeliveryDate: number
@@ -74,10 +70,7 @@ class PurchaseOrderState {
     ProviderID: 0,
     WarehouseID: 0,
     TotalAmount: 0,
-    DetailProductIDs: [],
-    DetailProductPrice: [],
-    DetailProductQuantity: [],
-    DetailProductPresentationIDs: [],
+    Lines: [],
     Notes: '',
     DeliveryDate: 0,
     PaymentDate: 0,
@@ -195,11 +188,9 @@ class PurchaseOrderState {
       return false
     }
 
-    // Flatten cart items into parallel arrays matching the backend schema.
-    this.form.DetailProductIDs = this.items.map((item) => item.productID)
-    this.form.DetailProductPrice = this.items.map((item) => item.price)
-    this.form.DetailProductQuantity = this.items.map((item) => item.quantity)
-    this.form.DetailProductPresentationIDs = this.items.map((item) => item.presentationID)
+    this.form.Lines = this.items.map((item) => ({
+      ProductID: item.productID, Quantity: item.quantity, Price: item.price, PresentationID: item.presentationID,
+    }))
 
     const result = await POST({
       data: $state.snapshot(this.form), route: 'purchase-orders',
@@ -315,23 +306,20 @@ async function handleSave() {
   }
 }
 
-// Reconstructs cart items from a source IPurchaseOrder by joining its parallel detail
-// arrays against the products cache; products missing from cache are pulled via syncIDs.
+// Reconstructs cart items from a source IPurchaseOrder by joining its lines against the
+// products cache; products missing from cache are pulled via syncIDs.
 async function applyPurchaseOrderCopy(source: IPurchaseOrder) {
-  const detailProductIDs = (source.DetailProductIDs || []).map((id) => Number(id || 0))
-  const detailQuantities = source.DetailProductQuantity || []
-  const detailPrices = source.DetailProductPrice || []
-  const detailPresentationIDs = source.DetailProductPresentationIDs || []
-  /* 
+  const sourceLines = source.Lines || []
+  /*
   console.debug('[purchase-orders-create] applyCopy:start', {
     sourceID: source.ID,
-    detailCount: detailProductIDs.length,
+    detailCount: sourceLines.length,
     productsCacheSize: productosService.records.length,
   })
   */
 
   // Make sure every product in the copy is resolved before mapping cart rows.
-  const uniqueProductIDs = [...new Set(detailProductIDs.filter((id) => id > 0))]
+  const uniqueProductIDs = [...new Set(sourceLines.map((line) => line.ProductID).filter((id) => id > 0))]
   if (uniqueProductIDs.length > 0) {
     // console.debug('[purchase-orders-create] applyCopy:syncIDs', { uniqueProductIDs })
     await productosService.syncIDs(uniqueProductIDs)
@@ -351,9 +339,9 @@ async function applyPurchaseOrderCopy(source: IPurchaseOrder) {
   const skippedProductIDs: number[] = []
   const skippedPresentations: Array<{ productID: number, presentationID: number }> = []
   
-  for (let detailIndex = 0; detailIndex < detailProductIDs.length; detailIndex++) {
-    const productID = detailProductIDs[detailIndex]
-    const presentationID = Number(detailPresentationIDs[detailIndex] || 0)
+  for (const line of sourceLines) {
+    const productID = line.ProductID
+    const presentationID = line.PresentationID || 0
     const product = productosService.recordsMap.get(productID)
     if (!product) {
       skippedProductIDs.push(productID)
@@ -373,8 +361,8 @@ async function applyPurchaseOrderCopy(source: IPurchaseOrder) {
       key: `${productID}_${presentationID}`,
       productID,
       presentationID,
-      quantity: Number(detailQuantities[detailIndex] || 0),
-      price: Number(detailPrices[detailIndex] || 0),
+      quantity: line.Quantity || 0,
+      price: line.Price || 0,
       product,
       presentation,
     })

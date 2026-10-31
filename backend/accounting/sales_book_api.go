@@ -40,6 +40,9 @@ type SalesBookDocument struct {
 
 	AffectedDocID int64 `cb:"11"`
 	State         int8  `cb:"12"`
+	// Carried through for GET.accounting-operations, which syncs comprobantes by delta log.
+	Version  int16   `json:"ver" cb:"ver,13"`
+	Metadata *string `json:"mdt" cb:"mdt,14"`
 }
 
 // UninvoicedSale is a sale of the period that no comprobante was ever issued for.
@@ -193,6 +196,8 @@ func makeBookDocument(document *invoicing.InvoiceDocument) SalesBookDocument {
 		TotalAmount:      document.TotalAmount,
 		AffectedDocID:    document.AffectedDocID,
 		State:            document.State,
+		Version:          document.Version,
+		Metadata:         document.Metadata,
 	}
 }
 

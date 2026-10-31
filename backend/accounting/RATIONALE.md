@@ -1,7 +1,92 @@
 # RATIONALE — accounting
 
-Design decisions behind the asset register and depreciation, newest first.
-Full design in `PLAN.md`.
+Design decisions behind the asset register, depreciation and the PCGE chart, newest first.
+Full design in `PLAN.md`; the chart's plan is `frontend/routes/accounting/accounts-consolidation/PLAN.md`.
+
+## A record saved with AccountCode 0 gets the default on the server
+**Context** — The forms preselect the defaults, but other writers (the express PO entry, imports,
+the agent) send no account. The plan says 0 means "unclassified".
+**Decision** — Every writer resolves 0 to the default before saving (`ResolveSupplyAccount`,
+`ResolveAssetAccount`, the category default). Only Taxes/Other expenses stay 0.
+**Rationale** — The default is the same one the form would have proposed, so the result does not
+depend on which client wrote the record. Cost: the server cannot tell "user accepted the default"
+from "client sent nothing". The page can't show that difference.
+
+## A supply's default account is 3369 when it depreciates, else 6032
+**Context** — The plan named typical values but not the fallback for a supply saved without one.
+**Decision** — `DefaultSupplyAccountCode`: `DepreciationMonths > 0` → 3369 otros equipos diversos;
+otherwise 6032 materiales auxiliares, suministros y repuestos. The backfill uses the same rule.
+**Rationale** — The depreciation months already say whether the material is an asset. 6032 is the
+broadest stock account for consumables. A wrong guess is one selector change.
+
+## Editing an asset requires an account; creating one does not
+**Context** — Decision 8 says an asset with no account defaults to generic 33x.
+**Decision** — On acquisition, 0 resolves to the supply's account if it is an asset account, else
+3369. On edit the selector is required and validated as an asset account.
+**Rationale** — An existing asset was already resolved, so a 0 on edit can only mean the user
+cleared it. Rejecting that is safer than silently falling back to 3369.
+
+## The PCGE chart is transcribed from an audited dataset, and the plan's account codes were corrected against it
+
+**Context** — The chart is legal data. Writing ~550 codes and names from memory would put errors
+into PLE 5.4. Checking against the official list also showed that several codes in the plan were
+wrong: 7011 is *export* sales (local is 7012), 6911/6921 are export cost of sales (local
+6912/6922), 4651 is investments (an asset purchase is 4654), and depreciation is 3952x/6841x, not
+39x/681x. 6563 does not exist (656).
+**Decision** — `pcge_accounts.go` was generated once from `pcge-peru` (github.com/mat-l-dev/pcge-peru,
+`data/2019/entries.json`, 1 757 entries extracted from the MEF PDF), then curated: every 2/3-digit
+account, plus the 4/5-digit subaccounts of 104 121 141 201 211 333–336 395 401 411 421 465 469
+601 603 604 611 613 614 621 631 632 634–637 641 655 684 691 692 701–703 711 and 4011 4017 4018
+3952 6841. Names are official except the spacing typo in 6924. The generator script was not
+committed: the Go file is the source from now on, and `TestPCGEAccountsAreConsistent` enforces the
+rules. The plan's codes were fixed.
+**Rationale** — An extracted, checksummed dataset is far more reliable than recall, and keeping
+only the output avoids a second source of truth. Cost: the subaccount selection is mine. Anything
+missing is one row plus its parent losing `Postable`. Account 565's official name is 121
+characters, over PLE 5.4's limit of 100, so the 5.4 writer has to truncate it.
+
+## 501 Capital social is a leaf, and replaces 50 for capital contributions
+
+**Context** — The cash "capital contribution" option stored `50`, a 2-digit element. PLE posts at 3
+digits or more. 501's children (5011 Acciones / 5012 Participaciones) depend on the company's
+legal form, which the ERP does not record.
+**Decision** — 501's children are left out, so 501 is postable. `PCGECapital` is 501, and
+`fn-backfill-cash-movement-accounts` rewrites stored 50s to 501 (`retiredCashMovementAccounts`).
+**Rationale** — It is correct for every legal form. Cost: a company that wants 5011 vs 5012 needs
+those rows added.
+
+## The cash movement's account was renamed to CounterAccountCode to widen it
+
+**Context** — `CashBankMovement.AccountCode` was `int16` (Scylla `smallint`), which cannot hold
+5-digit codes such as 40111 (max 32767). CQL cannot `ALTER` a column's type, and the ORM only logs a
+type mismatch.
+**Decision** — The field became `CounterAccountCode int32`, so it gets a new `int` column.
+`fn-rename-columns` gained `columnTypeChanges`, which creates the new column with the new type and
+copies the old values in. The option field `CashMovementAccountOption.AccountCode` keeps its name.
+The request and TS fields of the movement follow the rename.
+**Rationale** — A rename is the only way to change a type, and the old comment already called it
+"the account on the other side of the cash". Cost: the migration drops and recreates the table's
+views and indexes (`fn-homologate`).
+
+## Which accounts each kind may pick
+
+**Context** — The plan's prefix list was a sketch ("60, 63, 65, 33" for supplies; "62–68, 40" for
+expenses).
+**Decision** — Supply: 602, 603, 604, 656, 33. Not 63: those are services, not goods. Expense: 62,
+63, 64, 651–654, 656, 658, 659, 67, 40. 655 (net cost of a disposal) and 68 (depreciation,
+provisions) are derived by the system. 66 (fair-value losses) is not an SME expense. Asset: 32,
+33, 34.
+**Rationale** — The user should not be able to post something the ledger derives on its own,
+which would count it twice. Cost: an unusual expense in 66 or 68 is not pickable.
+
+## finance repeats the cash-movement account codes instead of importing the chart
+
+**Context** — `accounting/types` imports `finance/types`, so finance cannot import the chart back.
+**Decision** — The `PCGE*` constants stay in `finance/types/cash_movement_account.go`, and
+`TestCashMovementAccountsAreInTheChart` (in accounting) fails if any of them is not a postable
+account of the chart.
+**Rationale** — No import cycle and no new shared package. The test removes the risk of the copy
+drifting.
 
 ## Editing an asset rewrites its depreciation ledger in place
 

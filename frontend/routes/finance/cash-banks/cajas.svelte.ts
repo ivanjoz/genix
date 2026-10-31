@@ -31,7 +31,7 @@ export interface ICashBankMovement {
   ReferenceID: number
   Date: number          // UnixDay the movement occurred.
   Type: number
-  AccountCode: number   // PCGE counter-account, only for the types in CASH_MOVEMENT_ACCOUNT_OPTIONS.
+  CounterAccountCode: number // PCGE counter-account, only for the types in CASH_MOVEMENT_ACCOUNT_OPTIONS.
   Amount: number        // Outflows are negative.
   FinalAmount: number
   Created: number
@@ -45,7 +45,7 @@ export interface ICashReconciliation {
   SystemAmount: number
   DifferenceAmount: number
   ActualAmount: number
-  AccountCode: number   // Sent with the request; the backend stores it on the movement.
+  CounterAccountCode: number // Sent with the request; the backend stores it on the movement.
   Created: number
   CreatedBy: number
   _error?: string
@@ -249,7 +249,7 @@ export const CASH_MOVEMENT_ACCOUNT_OPTIONS: ICashMovementAccountOption[] = [
   { movementType: 7, accountCode: 759, name: 'Other income|Otro ingreso' },
   { movementType: 7, accountCode: 142, name: 'Owner or shareholder repayment|Devolución del socio o accionista' },
   { movementType: 7, accountCode: 1419, name: 'Repayment by an employee|Devolución de un trabajador' },
-  { movementType: 7, accountCode: 50, name: 'Capital contribution|Aporte de capital' },
+  { movementType: 7, accountCode: 501, name: 'Capital contribution|Aporte de capital' },
   { movementType: 7, accountCode: 451, name: 'Loan received|Préstamo recibido' },
 ]
 

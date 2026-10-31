@@ -37,6 +37,15 @@ export const mainProductImage = (e: IProduct): IProductoImage | undefined => {
   return { id: e.ImageMain, n: productImageName(e.ImageMain), d: e.ImageDescriptions?.[index] || "" }
 }
 
+// Whether a product is bought or made, which decides its accounts. Mirrors Product.Origin.
+export const PRODUCT_ORIGIN_BOUGHT = 1
+
+//CATALOG:production.ProductOriginOptions
+export const PRODUCT_ORIGIN_OPTIONS: { id: number, name: string }[] = [
+  { id: 1, name: 'Bought (merchandise)|Comprado (mercadería)' },
+  { id: 2, name: 'Made by the company (finished good)|Fabricado (producto terminado)' },
+]
+
 //STRUCT:production.Product
 export interface IProduct {
   ID: number,
@@ -77,6 +86,8 @@ export interface IProduct {
   CreatedBy: number
   CategoriesWithStock: number[]
   ver: number
+  AccountCode: number  /* a supply's default PCGE account; 0 on a product */
+  Origin: number       /* 1 bought (merchandise) · 2 made (finished good); 0 on a supply */
   /* extra fields */
   Image?: IProductoImage
   AtributosIDs?: number[]

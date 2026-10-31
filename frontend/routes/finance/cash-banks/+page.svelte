@@ -138,10 +138,10 @@
 		const form = cajaCuadreForm;
 		form.SystemAmount = cajaForm.CurrentAmount;
 		// A choice made before the difference flipped sign belongs to the other side.
-		if (!cuadreAccountOptions.some((option) => option.accountCode === form.AccountCode)) {
-			form.AccountCode = 0;
+		if (!cuadreAccountOptions.some((option) => option.accountCode === form.CounterAccountCode)) {
+			form.CounterAccountCode = 0;
 		}
-		if (cuadreAccountOptions.length > 1 && !form.AccountCode) {
+		if (cuadreAccountOptions.length > 1 && !form.CounterAccountCode) {
 			notifyFailure(tr("Select the account for the difference.|Seleccione la cuenta contable de la diferencia."));
 			return;
 		}
@@ -184,7 +184,7 @@
 			);
 			return;
 		}
-		if (movimientoAccountOptions.length > 1 && !form.AccountCode) {
+		if (movimientoAccountOptions.length > 1 && !form.CounterAccountCode) {
 			notifyFailure(tr("Select the account for the movement.|Seleccione la cuenta contable del movimiento."));
 			return;
 		}
@@ -604,7 +604,7 @@
 				{#if cuadreAccountOptions.length > 1}
 					<SearchSelect
 						bind:saveOn={cajaCuadreForm}
-						save="AccountCode"
+						save="CounterAccountCode"
 						css="w-full mt-12"
 						label="Accounting account|Cuenta contable"
 						keyId="accountCode"
@@ -657,14 +657,14 @@
 				required={true}
 				onChange={() => {
 					cajaMovimientoForm.CashBankRefID = 0;
-					cajaMovimientoForm.AccountCode = 0;
+					cajaMovimientoForm.CounterAccountCode = 0;
 					cajaMovimientoForm = { ...cajaMovimientoForm };
 				}}
 			/>
 			{#if movimientoAccountOptions.length > 1}
 				<SearchSelect
 					bind:saveOn={cajaMovimientoForm}
-					save="AccountCode"
+					save="CounterAccountCode"
 					css="col-span-24"
 					label="Accounting account|Cuenta contable"
 					keyId="accountCode"

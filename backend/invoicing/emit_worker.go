@@ -282,11 +282,13 @@ func stateFromSeverity(severity sunat.Severity) int8 {
 // with the delta view's key, which the ORM requires to be written together.
 func saveDocument(row *types.InvoiceDocument) {
 	row.Updated = core.SUnixTime()
+	// The period delta index packs Period with State: they are written together.
+	row.StampPeriod()
 	rows := &[]types.InvoiceDocument{*row}
 
 	table := db.TableOf[types.InvoiceDocument]()
 	err := db.Update(rows,
-		table.State, table.Status, table.Updated,
+		table.State, table.Status, table.Updated, table.Period,
 		table.SunatCode, table.SunatNotes, table.Ticket,
 		table.DigestValue, table.RetryCount, table.LastError,
 	)

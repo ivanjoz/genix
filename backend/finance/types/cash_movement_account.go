@@ -1,28 +1,55 @@
-// The PCGE counter-account of the cash movements a user classifies.
+// The PCGE counter-account of every cash movement, stored on CashBankMovement.CounterAccountCode.
 //
-// A sale collection, a supplier payment or an expense payment says why the money moved, so the
-// Libro Diario derives the other side of the entry from the type and its document. A withdrawal,
-// a loss and a physical count say nothing of the kind: the user picks the account when the
-// movement is created, and it is stored on CashBankMovement.AccountCode.
+// A withdrawal, a loss and a physical count say nothing of why the money moved: the user picks the
+// account when the movement is created. The payment of a document (a sale collection or refund, a
+// supplier, expense or asset payment) is stamped by the document's own process with the account
+// the document leaves open (DocumentPaymentAccounts), so the Libro Diario posts it without reading
+// the document back.
 
 package types
 
 import (
 	"app/core"
+	"slices"
 	"strconv"
 )
 
-// PCGE accounts the options below post against. Only the ones this file needs: the full chart
-// belongs to the Libro Diario.
+// PCGE accounts the options below post against. The chart itself is accounting.PCGEAccounts;
+// finance cannot import it (accounting/types imports finance/types), so the codes are repeated
+// here and TestCashMovementAccountsAreInTheChart keeps each one a postable account of it.
 const (
-	PCGEShareholdersReceivable int16 = 142  // Accionistas (o socios) — cuentas por cobrar
-	PCGEOtherStaffReceivables  int16 = 1419 // Otras cuentas por cobrar al personal
-	PCGEShareholdersPayable    int16 = 441  // Accionistas (o socios) — cuentas por pagar (dividendos)
-	PCGEOtherOperatingExpenses int16 = 659  // Otros gastos de gestión
-	PCGEOtherOperatingIncome   int16 = 759  // Otros ingresos de gestión
-	PCGECapital                int16 = 50   // Capital — aporte de los socios
-	PCGELoansReceived          int16 = 451  // Préstamos de instituciones financieras y otras entidades
+	PCGEShareholdersReceivable int32 = 142  // Accionistas (o socios) — cuentas por cobrar
+	PCGEOtherStaffReceivables  int32 = 1419 // Otras cuentas por cobrar al personal
+	PCGEShareholdersPayable    int32 = 441  // Accionistas (o socios) — cuentas por pagar (dividendos)
+	PCGEOtherOperatingExpenses int32 = 659  // Otros gastos de gestión
+	PCGEOtherOperatingIncome   int32 = 759  // Otros ingresos de gestión
+	PCGECapital                int32 = 501  // Capital social — aporte de los socios
+	PCGELoansReceived          int32 = 451  // Préstamos de instituciones financieras y otras entidades
+	PCGEReceivable             int32 = 1212 // Facturas por cobrar — emitidas en cartera
+	PCGESuppliers              int32 = 4212 // Facturas por pagar — emitidas
+	PCGEOtherPayables          int32 = 4699 // Otras cuentas por pagar diversas
+	PCGEAssetPayables          int32 = 4654 // Pasivos por compra de activo inmovilizado — PPE
+	PCGEMerchandisePurchase    int32 = 6011 // Compras — mercaderías
 )
+
+// DocumentPaymentAccounts are the counter-accounts the payment of a document may carry: the
+// receivable a sale leaves open, the payable a purchase or an asset does.
+var DocumentPaymentAccounts = map[CashMovementType][]int32{
+	CashMovementTypeSaleCollection:  {PCGEReceivable},
+	CashMovementTypeSaleRefund:      {PCGEReceivable},
+	CashMovementTypeSupplierPayment: {PCGESuppliers, PCGEOtherPayables},
+	CashMovementTypeExpensePayment:  {PCGESuppliers, PCGEOtherPayables},
+	CashMovementTypeAssetPayment:    {PCGEAssetPayables},
+}
+
+// PurchasePayableAccount is the payable a purchase leaves open: 4212 when the supplier's comprobante
+// is registered, 4699 when it is not. Its payments carry the same account.
+func PurchasePayableAccount(docType int8) int32 {
+	if docType != PurchaseDocTypeNone {
+		return PCGESuppliers
+	}
+	return PCGEOtherPayables
+}
 
 // CashMovementAccountOption is one account a movement type may post against.
 //
@@ -32,7 +59,7 @@ const (
 type CashMovementAccountOption struct {
 	MovementType CashMovementType `cb:"1"`
 	Direction    int8             `cb:"2"`
-	AccountCode  int16            `cb:"3"`
+	AccountCode  int32            `cb:"3"`
 	Name         string           `cb:"4"`
 }
 
@@ -100,10 +127,17 @@ func CashMovementAccountOptionsFor(movementType CashMovementType, amount int32) 
 	return matching
 }
 
-// ResolveCashMovementAccount validates the account the client chose and returns the one to
-// store. A type with a single option needs no choice, so 0 resolves to it; a type with none
-// stores 0 and refuses any account sent for it.
-func ResolveCashMovementAccount(movementType CashMovementType, amount int32, accountCode int16) (int16, error) {
+// ResolveCashMovementAccount validates the account the client chose, or the document's process
+// stamped, and returns the one to store. A document payment must carry one of its
+// DocumentPaymentAccounts. A type with a single option needs no choice, so 0 resolves to it; a type
+// with none stores 0 and refuses any account sent for it.
+func ResolveCashMovementAccount(movementType CashMovementType, amount int32, accountCode int32) (int32, error) {
+	if paymentAccounts, isDocumentPayment := DocumentPaymentAccounts[movementType]; isDocumentPayment {
+		if !slices.Contains(paymentAccounts, accountCode) {
+			return 0, core.Err("El pago de un documento debe llevar la cuenta que su documento deja abierta, se envió:", accountCode)
+		}
+		return accountCode, nil
+	}
 	options := CashMovementAccountOptionsFor(movementType, amount)
 	if len(options) == 0 {
 		if accountCode != 0 {

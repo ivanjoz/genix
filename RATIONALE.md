@@ -1,0 +1,4 @@
+## start.js mirrors service logs to hourly files in tmp/logs
+**Context** — The launcher's output only lived in the terminal, so an agent could not read it afterwards. Logs had to be kept for 8 hours only.
+**Decision** — Every line of frontend, backend, agent and fareward is also appended to `tmp/logs/<service>-YYYY-MM-DD_HH.log` (local time, `HH:MM:SS` prefix, ANSI codes stripped). Files whose mtime is older than 8h are deleted at startup and every 30 minutes.
+**Rationale** — `tmp/` is already gitignored. One file per service keeps an agent's `rg` scoped to the process it cares about; one file per hour lets retention delete whole files, so a launcher left running for days still drops old hours without rewriting a live file. Cost: a single hour can span two files only at the boundary, and retention granularity is one hour (a file lives until its last write is 8h old).

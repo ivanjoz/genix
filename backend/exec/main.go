@@ -28,6 +28,8 @@ var ExecHandlers = ExecRouterType{
 	"fn-backfill-observability-credits":  BackfillObservabilityCredits,
 	"fn-backfill-identity-snapshots":     BackfillIdentitySnapshots,
 	"fn-backfill-cash-movement-accounts": BackfillCashMovementAccounts,
+	"fn-backfill-account-codes":          BackfillAccountCodes,
+	"fn-backfill-accounting-delta":       BackfillAccountingDelta,
 	"fn-backfill-purchase-documents":     BackfillPurchaseDocuments, "fn-recompute-user-accesos": security.RecomputeUserAccesos,
 	"fn-reset-counters":           ResetCounterPart,
 	"fn-rename-columns":           RenameColumns,

@@ -151,6 +151,8 @@ export const AdminModule: IModule = {
         },
         { name: "Books|Libros", route: "/accounting/books", icon: "icon-[fa--book]"
         },
+        { name: "Consolidation & Accounts|Consolidado & Cuentas", route: "/accounting/accounts-consolidation"
+        },
         { name: "Financial Statements|Estados Financieros",
 				},
 				{ name: "Balance|Balance",

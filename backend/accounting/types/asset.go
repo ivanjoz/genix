@@ -91,6 +91,20 @@ type Asset struct {
 	UpdatedBy int32   `cb:"35"`
 	Created   int32   `cb:"36"`
 	CreatedBy int32   `cb:"37"`
+	// AccountCode is the 33x it is booked under, which also names its depreciation pair.
+	AccountCode int32 `cb:"38"`
+	// SameDayCashBankID is the cash bank of the one payment that settled the whole purchase on its
+	// AccountingDate; 0 when no payment did. See finance.SameDaySettlement.
+	SameDayCashBankID int32 `cb:"39"`
+}
+
+// AccountingDate is the day the acquisition is booked on: its comprobante's date, else the day
+// it was acquired.
+func (e *Asset) AccountingDate() int16 {
+	if e.DocIssueDate != 0 {
+		return e.DocIssueDate
+	}
+	return e.AcquisitionDate
 }
 
 type AssetTable struct {
@@ -131,6 +145,9 @@ type AssetTable struct {
 	UpdatedBy               db.Col[*AssetTable, int32]
 	Created                 db.Col[*AssetTable, int32]
 	CreatedBy               db.Col[*AssetTable, int32]
+	AccountCode             db.Col[*AssetTable, int32]
+	// SameDayCashBankID is the cash bank of the payment that settled the asset on its AccountingDate.
+	SameDayCashBankID db.Col[*AssetTable, int32]
 }
 
 func (e AssetTable) GetSchema() db.TableSchema {

@@ -103,6 +103,19 @@ type SaleOrder struct {
 	// AnnulledTime/AnnulledUser beside it: annulment is terminal, so Updated and UpdatedBy are
 	// already the "when and by whom" and a second pair could only drift from them.
 	AnnulReason string `cb:"35"`
+	// Period is the YYMM of Date (core.PeriodOfDay): the pinned key of the period delta index the
+	// accounting operations sync a month through. Set by StampPeriod on every write.
+	Period int16 `cb:"36"`
+	// SameDayCashBankID is the cash bank of the one collection that settled the whole sale on its
+	// Date; 0 when no collection did. The accounting operations infer that collection from the
+	// sale instead of downloading it — its movement carries SameDayMovement = 1. See
+	// finance.SameDaySettlement.
+	SameDayCashBankID int32 `cb:"37"`
+}
+
+// StampPeriod sets Period from the sale's accounting date, its Date.
+func (e *SaleOrder) StampPeriod() {
+	e.Period = core.PeriodOfDay(e.Date)
 }
 
 // SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day, one row
@@ -265,6 +278,9 @@ type SaleOrderTable struct {
 	DeliveryUser     db.Col[*SaleOrderTable, int32]
 	PaymentDueDate   db.Col[*SaleOrderTable, int16]
 	AnnulReason      db.Col[*SaleOrderTable, string]
+	Period           db.Col[*SaleOrderTable, int16]
+	// SameDayCashBankID is the cash bank of the collection that settled the sale on its Date.
+	SameDayCashBankID db.Col[*SaleOrderTable, int32]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -272,6 +288,8 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		ID:        25,
 		Name:      "sale_order",
 		Partition: e.CompanyID,
+		// A period's credit note reaches an older sale through the by-IDs cache.
+		CacheByIDs: true,
 		// A plain key. The id is built by MakeSaleOrderID, which packs the series'
 		// correlativo, two random digits and the series itself into it — a layout
 		// the ORM's autoincrement cannot express.
@@ -279,6 +297,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		// Sizes the Status slot of the delta index.
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Min: 0, Max: 4},
+			{Col: e.Period, Min: 0, Max: 9912},
 		},
 		// Only the product index groups below read it, from the record in memory.
 		Computed: []db.ComputedCol{
@@ -310,6 +329,8 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// One log per accounting period: GET.accounting-operations syncs a month through it.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
 		},
 		DataFrames: []db.DataFrame{{
 			// The day/product sales summary of /sales/sale_orders_charts. Most products have no

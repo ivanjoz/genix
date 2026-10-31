@@ -140,16 +140,11 @@ const resolveSku = (productRecord: IProduct | undefined, presentationID: number)
 }
 
 const buildDetailRows = (purchaseOrder: IPurchaseOrder): IPurchaseOrderDetailRow[] => {
-  const productIDs = purchaseOrder.DetailProductIDs || []
-  const quantities = purchaseOrder.DetailProductQuantity || []
-  const prices = purchaseOrder.DetailProductPrice || []
-  const presentationIDs = purchaseOrder.DetailProductPresentationIDs || []
-
-  return productIDs.map((rawProductID, detailPosition) => {
-    const productID = Number(rawProductID || 0)
-    const presentationID = Number(presentationIDs[detailPosition] || 0)
-    const quantity = Number(quantities[detailPosition] || 0)
-    const unitPrice = Number(prices[detailPosition] || 0)
+  return (purchaseOrder.Lines || []).map((line, detailPosition) => {
+    const productID = line.ProductID
+    const presentationID = line.PresentationID || 0
+    const quantity = line.Quantity || 0
+    const unitPrice = line.Price || 0
     const productRecord = productosService.recordsMap.get(productID)
     const productName = productRecord?.Name || `Producto #${productID}`
 
@@ -173,7 +168,7 @@ const openPurchaseOrderDetailLayer = async (purchaseOrder: IPurchaseOrder) => {
   isDetailLayerLoading = true
   ui.openSideLayer(21)
 
-  const productIDs = [...new Set((purchaseOrder.DetailProductIDs || []).map((productID) => Number(productID || 0)).filter((productID) => productID > 0))]
+  const productIDs = [...new Set((purchaseOrder.Lines || []).map((line) => line.ProductID).filter((productID) => productID > 0))]
   console.debug('[purchase-orders-report] detail layer open', {
     purchaseOrderID: purchaseOrder.ID,
     productIDsCount: productIDs.length,
@@ -373,7 +368,7 @@ const generarCopiaPurchaseOrder = async () => {
     await saveRouteRecord(routeDataKey, snapshot)
     console.debug('[generar-copia] saved to IDB', {
       routeDataKey,
-      detailCount: snapshot.DetailProductIDs?.length || 0,
+      detailCount: snapshot.Lines?.length || 0,
     })
 
     ui.openSideLayer(0)

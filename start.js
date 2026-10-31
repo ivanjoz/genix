@@ -171,9 +171,48 @@ const CYAN_BAR = "\x1b[46m \x1b[0m"
 const YELLOW_BAR = "\x1b[43m \x1b[0m"
 const MAGENTA_BAR = "\x1b[45m \x1b[0m"
 
+// Service logs are mirrored to tmp/logs/<service>-YYYY-MM-DD_HH.log so an agent can read them
+// later. One file per service per hour: retention then works by deleting whole files, and a
+// launcher left running for days still drops its old hours. Files are plain text (no ANSI).
+const LOGS_DIR = path.join(__dirname, 'tmp', 'logs')
+const LOG_RETENTION_MS = 8 * 60 * 60 * 1000
+const ANSI_ESCAPE_REGEX = /\x1b\[[0-9;?]*[A-Za-z]/g
+fs.mkdirSync(LOGS_DIR, { recursive: true })
+
+const deleteExpiredLogFiles = () => {
+  const oldestAllowedMs = Date.now() - LOG_RETENTION_MS
+  for (const fileName of fs.readdirSync(LOGS_DIR)) {
+    const filePath = path.join(LOGS_DIR, fileName)
+    try {
+      if (fs.statSync(filePath).mtimeMs < oldestAllowedMs) { fs.unlinkSync(filePath) }
+    } catch (error) {
+      // The file may have been removed in between; nothing to do.
+    }
+  }
+}
+deleteExpiredLogFiles()
+setInterval(deleteExpiredLogFiles, 30 * 60 * 1000).unref()
+
+const padTwo = (value) => String(value).padStart(2, "0")
+// Open stream per service, reopened when the hour (and so the file name) changes.
+const logStreamByService = {}
+const writeServiceLogFile = (serviceName, line) => {
+  const now = new Date()
+  const hourFileName = `${serviceName}-${now.getFullYear()}-${padTwo(now.getMonth() + 1)}-${padTwo(now.getDate())}_${padTwo(now.getHours())}.log`
+  let serviceStream = logStreamByService[serviceName]
+  if (!serviceStream || serviceStream.fileName !== hourFileName) {
+    if (serviceStream) { serviceStream.stream.end() }
+    serviceStream = { fileName: hourFileName, stream: fs.createWriteStream(path.join(LOGS_DIR, hourFileName), { flags: "a" }) }
+    logStreamByService[serviceName] = serviceStream
+  }
+  const timeLabel = `${padTwo(now.getHours())}:${padTwo(now.getMinutes())}:${padTwo(now.getSeconds())}`
+  serviceStream.stream.write(`${timeLabel} ${line.replace(ANSI_ESCAPE_REGEX, "")}\n`)
+}
+
 const backendLog = (data) => {
   for(const line of (data||"").split("\n").filter(x => x.trim().length > 0)){
     process.stdout.write(`${BLUE_BAR} ${line}\n`);
+    writeServiceLogFile("backend", line)
   }
 }
 
@@ -190,6 +229,7 @@ const startBackendGo = () => {
   })
   .on("restart", () => {
     console.log("\n♻️ Restarting Go server...");
+    writeServiceLogFile("backend", "♻️ Restarting Go server...")
   })
   .on("readable", function () {
     // Read Nodemon's stdout and stderr streams
@@ -212,12 +252,12 @@ const runScripts = () => {
   console.log(`${YELLOW_BAR}${YELLOW_BAR} Frontend   ${BLUE_BAR}${BLUE_BAR} Backend (Go)   ${CYAN_BAR}${CYAN_BAR} Agent (Go)   ${MAGENTA_BAR}${MAGENTA_BAR} Rate limiter (Rust)`)
 
   // Run all scripts in parallel
-  runScript(FRONTEND_SCRIPT, YELLOW_BAR, frontendPath, {
+  runScript(FRONTEND_SCRIPT, YELLOW_BAR, "frontend", frontendPath, {
     GENIX_TAILSCALE_HOST: tailscaleHost
   })
   startBackendGo()
-  runScript(AGENT_GO_SCRIPT, CYAN_BAR, agentGoPath)
-  runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, rateLimiterPath, {
+  runScript(AGENT_GO_SCRIPT, CYAN_BAR, "agent", agentGoPath)
+  runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, "fareward", rateLimiterPath, {
     RUST_LOG: process.env.RUST_LOG || "fareward=debug"
   })
 
@@ -232,7 +272,7 @@ const runScripts = () => {
 // Function to run a script and capture output.
 // workingDirectory se pasa por la opción cwd de spawn en vez de anteponer un `cd`: así no hay
 // que citar rutas con espacios ni duplicar el comando por plataforma.
-const runScript = (script, name, workingDirectory, environment = {}) => {
+const runScript = (script, consoleBar, serviceName, workingDirectory, environment = {}) => {
   console.log("Ejecutando script:", script, "::", workingDirectory)
 
   const scriptProcess = isWindows ?
@@ -247,16 +287,17 @@ const runScript = (script, name, workingDirectory, environment = {}) => {
       env: { ...process.env, ...environment }
     });
 
-  const logdata = (prefix, data) => {
+  const logdata = (data) => {
     const lines = data.toString().split("\n").filter(x => x)
     for (const line of lines) {
-      console.log(`${prefix} ${line}`);
+      console.log(`${consoleBar} ${line}`);
+      writeServiceLogFile(serviceName, line)
     }
   }
 
-  scriptProcess.stdout.on("data", (data) => logdata(name, data))
-  scriptProcess.stderr.on("data", (data) => logdata(name, data))
-  scriptProcess.on("exit", (code) => logdata(name, `Exited with code ${code}`))
+  scriptProcess.stdout.on("data", logdata)
+  scriptProcess.stderr.on("data", logdata)
+  scriptProcess.on("exit", (code) => logdata(`Exited with code ${code}`))
 }
 
 // Function to check if a port is in use

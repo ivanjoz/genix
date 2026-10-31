@@ -14,6 +14,8 @@ import { productoMonedaOptions } from '#core/products-lists.ts';
 import { Core, tr } from '#core/store.svelte.ts';
 import T from '#components/misc/T.svelte';
 import Page from '#domain/Page.svelte';
+import PCGEAccountSelect from '#domain/PCGEAccountSelect.svelte';
+import { PCGE_KIND_SUPPLY, pcgeAccountLabel } from '#core/pcge.ts';
 import type { ExcelTableColumn } from '@genix/ui/excel';
 import { formatN } from '#libs/helpers.ts';
 import { SharedListsService } from '#services/business/shared-lists.svelte.ts';
@@ -85,6 +87,11 @@ import {
       header: "Type|Tipo",
       getValue: (record) => record.DepreciationMonths > 0 ? tr("Asset|Activo") : tr("Consumable|Consumible"),
       mobile: { order: 6, css: "col-span-12", labelLeft: "Tipo:" },
+    },
+    {
+      header: "Account|Cuenta",
+      getValue: (record) => record.AccountCode ? pcgeAccountLabel(record.AccountCode) : "",
+      mobile: { order: 7, css: "col-span-24", labelLeft: "Cuenta:" },
     },
     {
       header: "Price|Precio",
@@ -304,6 +311,10 @@ import {
         keyName="name"
         options={depreciationOptions}
       />
+      <!-- The default every purchase line of this supply proposes. Left empty, the server
+           picks equipment (3369) when it depreciates, else suministros (6032). -->
+      <PCGEAccountSelect saveOn={supplyForm} save="AccountCode" css="col-span-24 md:col-span-12"
+        kind={PCGE_KIND_SUPPLY} label="Default account|Cuenta contable por defecto" />
       <Input label="Description|Descripción"
         saveOn={supplyForm}
         css="col-span-24"

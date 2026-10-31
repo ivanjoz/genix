@@ -65,6 +65,7 @@ export interface IAssetEdit extends IPurchaseDocument {
   DueDate: number
   AcquisitionValue: number
   PurchaseAmount: number
+  AccountCode: number  // Required: an asset is never left unclassified.
 }
 
 export const putAssetEdit = (data: IAssetEdit): Promise<IAsset> => {

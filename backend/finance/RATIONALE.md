@@ -1,3 +1,42 @@
+## An annulled sale settles nothing: its collection is restamped against a zero total
+**Context** — Every annulment must unflag the sale's collection, and `RestampDocumentPayments`
+decides from the document total.
+**Decision** — `PostSaleOrderAnnul` and the backfill pass total 0 for an annulled sale, so no
+payment can match it and `SameDayCashBankID` goes to 0.
+**Rationale** — Reuses the one rule instead of a special "clear" path.
+
+## Expense PaidAmount sums only expense payments (type 9)
+**Context** — `PostExpensePayment` summed every movement with the expense's DocumentID; DocumentID
+is shared across registers (a sale, an order and an expense can carry the same number).
+**Decision** — The sum filters `Type == CashMovementTypeExpensePayment`.
+**Rationale** — A bug found while wiring the same-day decision, which reads the amount paid before.
+
+## Payments stamp their counter-account at write time; officialness of a purchase payment is 4212
+**Context** — The period page no longer reads the document a payment pays.
+**Decision** — Types 6/8/9/10/11 store 1212, 4212/4699 or 4654 when written, restamped when the
+document's DocType changes; `ResolveCashMovementAccount` requires them to be in
+`DocumentPaymentAccounts`. The classification flow restamps reception `PurchaseAccountCode` when an
+order line's or inventory expense's account changes (`RestampReceptionAccounts`).
+**Rationale** — A movement is self-contained; costs a restamp on the few edits that change it.
+
+## Delta FixedValues: cash Type 0–31, stock movement Type 0–63
+**Context** — TypeDelta sizes its packed slots from FixedValues.
+**Decision** — Ranges with headroom over today's 11 cash and ~10 stock movement types.
+**Rationale** — A new type must not need a slot resize (a full rewrite of the view).
+
+## An expense schedule carries its own account
+**Context** — The plan put `AccountCode` on `Expense` only. Periods are generated from the schedule,
+so without it on the schedule every period would come out with the bare category default.
+**Decision** — `ExpenseScheduled.AccountCode` (column 19), picked on the schedule form and copied
+to each generated period. Generated periods also now set `Type: ExpenseTypeSimple` explicitly.
+**Rationale** — One choice on the schedule classifies every period it generates. Cost: one column.
+
+## A paid expense can still be reclassified
+**Context** — A paid expense locks its amounts and its comprobante, so the payment stays consistent.
+**Decision** — `savePaidExpenseDocument` also writes `AccountCode`.
+**Rationale** — The account changes no amount and no payment. Classification happens after the fact
+on the Consolidado page, and most expenses are already paid by then.
+
 ## The expense tabs share one delta read
 **Context** — Each tab used one query per status plus eviction scans per complementary status. The
 delta log is one per company, and it names every status.

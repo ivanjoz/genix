@@ -14,6 +14,28 @@ const (
 	PurchaseOrderStatusFulfilled int8 = 4
 )
 
+// PurchaseOrderLine is one product line of a purchase order. Price is the gross price of one
+// unit, in the order's currency.
+type PurchaseOrderLine struct {
+	ProductID      int32 `cb:"1"`
+	Quantity       int32 `cb:"2"`
+	Price          int32 `cb:"3"`
+	PresentationID int16 `cb:"4"`
+	// AccountCode is the PCGE account a supply line posts to, copied from the supply's default
+	// and editable per line. 0 on a product line: merchandise always posts to 6011.
+	AccountCode int32 `cb:"5"`
+}
+
+// DetailProductIDs is the product of every line, in line order. It feeds the computed column of
+// the same name, which the product index groups hash.
+func (e *PurchaseOrder) DetailProductIDs() []int32 {
+	productIDs := make([]int32, 0, len(e.Lines))
+	for _, line := range e.Lines {
+		productIDs = append(productIDs, line.ProductID)
+	}
+	return productIDs
+}
+
 type PurchaseOrder struct {
 	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
 	ID         int32 `cb:"1"`
@@ -28,15 +50,12 @@ type PurchaseOrder struct {
 	Week               int16 `cb:"7"`
 	DeliveryDate       int16 `cb:"8"`
 	PaymentDate        int16 `cb:"9"`
-	// Parallel arrays in the same order — one row per line. Supplies and materials are
-	// Product rows with Status=2, so they are ordinary product lines here and move stock
-	// through the same reception path as anything else.
-	DetailProductIDs             []int32 `cb:"10"`
-	DetailProductQuantity        []int32 `cb:"11"`
-	DetailProductPrice           []int32 `cb:"12"`
-	DetailProductPresentationIDs []int32 `cb:"13"`
-	TotalAmount                  int32   `cb:"14"`
-	DebtAmount                   int32   `cb:"15"`
+	// Lines is stored as one colbin blob. Supplies and materials are Product rows with Status=2,
+	// so they are ordinary product lines here and move stock through the same reception path as
+	// anything else. Its product IDs are indexed through the computed DetailProductIDs column.
+	Lines       []PurchaseOrderLine `cb:"10"`
+	TotalAmount int32               `cb:"14"`
+	DebtAmount  int32               `cb:"15"`
 	// The supplier's comprobante — the Registro de Compras row. See finance.PurchaseDocument.
 	// Registered with its own action, because the invoice usually arrives after the order and
 	// often after the goods. Its total is the invoice's, which may differ from TotalAmount.
@@ -64,43 +83,68 @@ type PurchaseOrder struct {
 	Metadata  *string `json:"mdt" cb:"mdt,32"`
 	UpdatedBy int32   `cb:"33"`
 	Status    int8    `json:"ss" cb:"ss,34"`
+	// Period is the YYMM of DocIssueDate (core.PeriodOfDay): the pinned key of the period delta
+	// index the accounting operations sync a month through. Set by StampPeriod on every write.
+	Period int16 `cb:"35"`
+	// SameDayCashBankID is the cash bank of the one supplier payment that settled the whole order
+	// on its DocIssueDate; 0 when no payment did. See finance.SameDaySettlement.
+	SameDayCashBankID int32 `cb:"36"`
+}
+
+// ReceptionAccountOf is the account a received product posts to: its supply line's account, else
+// merchandise 6011 (a product line carries none). It is stamped on the reception's movements.
+func (e *PurchaseOrder) ReceptionAccountOf(productID int32) int32 {
+	for _, line := range e.Lines {
+		if line.ProductID == productID && line.AccountCode != 0 {
+			return line.AccountCode
+		}
+	}
+	return finance.PCGEMerchandisePurchase
+}
+
+// StampPeriod sets Period from the order's accounting date, its DocIssueDate (the order's own
+// date when it has no comprobante, see finance.NormalizePurchaseDocument).
+func (e *PurchaseOrder) StampPeriod() {
+	e.Period = core.PeriodOfDay(e.DocIssueDate)
 }
 
 type PurchaseOrderTable struct {
 	db.TableStruct[PurchaseOrderTable, PurchaseOrder]
-	CompanyID                    db.Col[*PurchaseOrderTable, int32]
-	ID                           db.Col[*PurchaseOrderTable, int32]
-	ProviderID                   db.Col[*PurchaseOrderTable, int32]
-	ProviderSnapshotID           db.Col[*PurchaseOrderTable, int32]
-	WarehouseID                  db.Col[*PurchaseOrderTable, int32]
-	Date                         db.Col[*PurchaseOrderTable, int16]
-	Week                         db.Col[*PurchaseOrderTable, int16]
-	DeliveryDate                 db.Col[*PurchaseOrderTable, int16]
-	PaymentDate                  db.Col[*PurchaseOrderTable, int16]
-	DetailProductIDs             db.Col[*PurchaseOrderTable, []int32]
-	DetailProductQuantity        db.Col[*PurchaseOrderTable, []int32]
-	DetailProductPrice           db.Col[*PurchaseOrderTable, []int32]
-	DetailProductPresentationIDs db.Col[*PurchaseOrderTable, []int32]
-	TotalAmount                  db.Col[*PurchaseOrderTable, int32]
-	DebtAmount                   db.Col[*PurchaseOrderTable, int32]
-	DocType                      db.Col[*PurchaseOrderTable, int8]
-	DocSeries                    db.Col[*PurchaseOrderTable, string]
-	DocNumber                    db.Col[*PurchaseOrderTable, int64]
-	DocIssueDate                 db.Col[*PurchaseOrderTable, int16]
-	TaxableAmount                db.Col[*PurchaseOrderTable, int32]
-	TaxAmount                    db.Col[*PurchaseOrderTable, int32]
-	UntaxedAmount                db.Col[*PurchaseOrderTable, int32]
-	OtherAmount                  db.Col[*PurchaseOrderTable, int32]
-	CurrencyType                 db.Col[*PurchaseOrderTable, int8]
-	ExchangeRate                 db.Col[*PurchaseOrderTable, int32]
-	DifferenceValue              db.Col[*PurchaseOrderTable, int32]
-	Notes                        db.Col[*PurchaseOrderTable, string]
-	Created                      db.Col[*PurchaseOrderTable, int32]
-	CreatedBy                    db.Col[*PurchaseOrderTable, int32]
-	Updated                      db.Col[*PurchaseOrderTable, int32]
-	Version                      db.Col[*PurchaseOrderTable, int16]
-	UpdatedBy                    db.Col[*PurchaseOrderTable, int32]
-	Status                       db.Col[*PurchaseOrderTable, int8]
+	CompanyID          db.Col[*PurchaseOrderTable, int32]
+	ID                 db.Col[*PurchaseOrderTable, int32]
+	ProviderID         db.Col[*PurchaseOrderTable, int32]
+	ProviderSnapshotID db.Col[*PurchaseOrderTable, int32]
+	WarehouseID        db.Col[*PurchaseOrderTable, int32]
+	Date               db.Col[*PurchaseOrderTable, int16]
+	Week               db.Col[*PurchaseOrderTable, int16]
+	DeliveryDate       db.Col[*PurchaseOrderTable, int16]
+	PaymentDate        db.Col[*PurchaseOrderTable, int16]
+	Lines              db.Col[*PurchaseOrderTable, []PurchaseOrderLine]
+	// DetailProductIDs has no field in PurchaseOrder: GetSchema computes it from Lines.
+	DetailProductIDs db.Col[*PurchaseOrderTable, []int32]
+	TotalAmount      db.Col[*PurchaseOrderTable, int32]
+	DebtAmount       db.Col[*PurchaseOrderTable, int32]
+	DocType          db.Col[*PurchaseOrderTable, int8]
+	DocSeries        db.Col[*PurchaseOrderTable, string]
+	DocNumber        db.Col[*PurchaseOrderTable, int64]
+	DocIssueDate     db.Col[*PurchaseOrderTable, int16]
+	TaxableAmount    db.Col[*PurchaseOrderTable, int32]
+	TaxAmount        db.Col[*PurchaseOrderTable, int32]
+	UntaxedAmount    db.Col[*PurchaseOrderTable, int32]
+	OtherAmount      db.Col[*PurchaseOrderTable, int32]
+	CurrencyType     db.Col[*PurchaseOrderTable, int8]
+	ExchangeRate     db.Col[*PurchaseOrderTable, int32]
+	DifferenceValue  db.Col[*PurchaseOrderTable, int32]
+	Notes            db.Col[*PurchaseOrderTable, string]
+	Created          db.Col[*PurchaseOrderTable, int32]
+	CreatedBy        db.Col[*PurchaseOrderTable, int32]
+	Updated          db.Col[*PurchaseOrderTable, int32]
+	Version          db.Col[*PurchaseOrderTable, int16]
+	UpdatedBy        db.Col[*PurchaseOrderTable, int32]
+	Status           db.Col[*PurchaseOrderTable, int8]
+	Period           db.Col[*PurchaseOrderTable, int16]
+	// SameDayCashBankID is the cash bank of the payment that settled the order on its DocIssueDate.
+	SameDayCashBankID db.Col[*PurchaseOrderTable, int32]
 }
 
 func (e PurchaseOrderTable) GetSchema() db.TableSchema {
@@ -109,7 +153,9 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 		Name:             "purchase_order",
 		Partition:        e.CompanyID,
 		UseListAsDefault: true,
-		Keys:             db.Cols(e.ID.Autoincrement(0)),
+		// A period's reception of an older order reaches it through the by-IDs cache.
+		CacheByIDs: true,
+		Keys:       db.Cols(e.ID.Autoincrement(0)),
 		// Delta() enumerates its filter column, so every Status value must be declared. Listing them
 		// rather than a 0..4 range keeps the delta fan-out at four values instead of five.
 		FixedValues: []db.FixedValues{
@@ -117,9 +163,16 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 				int64(PurchaseOrderStatusCanceled), int64(PurchaseOrderStatusPending),
 				int64(PurchaseOrderStatusConfirmed), int64(PurchaseOrderStatusFulfilled),
 			}},
+			{Col: e.Period, Min: 0, Max: 9912},
+		},
+		// Only the product index groups below read it, from the record in memory.
+		Computed: []db.ComputedCol{
+			{Col: e.DetailProductIDs, From: db.Cols(e.Lines), Value: db.Compute((*PurchaseOrder).DetailProductIDs)},
 		},
 		Indexes: []db.Index{
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// One log per accounting period: GET.accounting-operations syncs a month through it.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
 			{
 				Keys:          db.Cols(e.Week),
 				UseIndexGroup: true,

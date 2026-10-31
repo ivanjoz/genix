@@ -209,6 +209,12 @@ import { useUI } from '@genix/ui';
     padding-top: 2px;
     opacity: 0.7;
     line-height: 1.1;
+    cursor: pointer;
+    text-underline-offset: 4px;
+	}
+	._2:not(._3):hover {
+		text-decoration: underline;
+		opacity: 0.9;
 	}
 	._2._3 {
 		background-color: rgba(0, 0, 0, 0.2);
@@ -216,6 +222,10 @@ import { useUI } from '@genix/ui';
     border-bottom-color: #00000080;
     font-family: semibold;
     opacity: 1;
+	}
+	/* The dark translucent underline disappears against the dark page below the header. */
+	:global(body.dark) ._2._3 {
+		border-bottom-color: #db952d;
 	}
 
 	/* LOADING BAR */

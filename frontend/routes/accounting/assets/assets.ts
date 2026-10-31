@@ -27,6 +27,8 @@ export interface IAsset extends IPurchaseDocument {
   AccumulatedDepreciation: number
   LastDepreciationDate: number
   DisposalDate: number
+  AccountCode: number  // The 33x it is booked under; names its depreciation pair.
+  SameDayCashBankID?: number  // The cash bank of the payment that settled it on its accounting date.
   ss: number
   upd: number
 }
@@ -108,6 +110,7 @@ export interface IAssetForm extends IPurchaseDocument {
   DueDate: number
   AcquisitionValue: number
   PurchaseAmount: number
+  AccountCode: number
 }
 
 // Seeds the edit form from the asset row. The money is the row's *total*, not a per-unit
@@ -124,6 +127,7 @@ export const assetEditForm = (asset: IAsset): IAssetForm => ({
   DueDate: asset.DueDate,
   AcquisitionValue: asset.AcquisitionValue,
   PurchaseAmount: asset.PurchaseAmount || 0,
+  AccountCode: asset.AccountCode || 0,
   DocType: asset.DocType || 0,
   DocSeries: asset.DocSeries || "",
   DocNumber: asset.DocNumber || 0,

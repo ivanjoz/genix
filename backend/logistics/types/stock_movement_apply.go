@@ -12,7 +12,9 @@ package types
 import (
 	"app/core"
 	"app/db"
+	"cmp"
 	"fmt"
+	"slices"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -152,7 +154,8 @@ func refineStockDivisor(stock *ProductStock, details []*ProductStockDetail,
 // expandStockTransfers turns every movement that names a DestWarehouseID into its two ledger
 // rows: the outflow at the origin and the inflow at the destination, each naming the other
 // warehouse. Two rows, like a cash transfer, so each warehouse's history and Kardex come from its
-// own movements. The inflow's cost is left for ApplyMovimientos, which knows the origin's average.
+// own movements. The inflow's value is left for ApplyMovimientos: it is what the outflow leg took
+// out of the origin, known only inside the lock.
 func expandStockTransfers(movements []InternalMovement) ([]InternalMovement, error) {
 	expanded := make([]InternalMovement, 0, len(movements))
 	for _, movement := range movements {
@@ -171,12 +174,12 @@ func expandStockTransfers(movements []InternalMovement) ([]InternalMovement, err
 		}
 
 		outflow := movement
-		outflow.DestWarehouseID, outflow.Price = 0, 0
+		outflow.DestWarehouseID, outflow.Price, outflow.InflowValue = 0, 0, 0
 		outflow.Quantity, outflow.SubQuantity = -movement.Quantity, -movement.SubQuantity
 		outflow.transferPeerWarehouseID = movement.DestWarehouseID
 
 		inflow := movement
-		inflow.WarehouseID, inflow.DestWarehouseID, inflow.Price = movement.DestWarehouseID, 0, 0
+		inflow.WarehouseID, inflow.DestWarehouseID, inflow.Price, inflow.InflowValue = movement.DestWarehouseID, 0, 0, 0
 		inflow.transferPeerWarehouseID = movement.WarehouseID
 
 		expanded = append(expanded, outflow, inflow)
@@ -369,6 +372,9 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 	// averages its cost against. DetailQuantity is only re-summed after the loop, so it cannot
 	// be read mid-batch; this map is seeded from the loaded row and carries every delta since.
 	balanceByStockID := map[int64]core.Quantity{}
+	// The value the last transfer outflow leg took out; expandStockTransfers puts its inflow leg
+	// right after it.
+	transferOutflowValue := int32(0)
 	for i, mov := range activeMovements {
 		stockID := stockIDByMovement[i]
 		stock := stockByID[stockID]
@@ -420,6 +426,9 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			Date:           dateUnix,
 			Created:        updatedTime,
 			CreatedBy:      userID,
+			Period:         core.PeriodOfDay(dateUnix),
+			// What a reception posts to, stamped so the accounting operations never read the purchase.
+			PurchaseAccountCode: mov.PurchaseAccountCode,
 		}
 
 		if mov.HasDetail() {
@@ -484,13 +493,22 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 		movement.Type = mov.Type
 		movement.WarehouseRefID = mov.transferPeerWarehouseID
 
-		if isInflow && mov.transferPeerWarehouseID > 0 {
-			// A transfer's inflow is costed at what the units left the origin with: the origin's
-			// average, which its own outflow leg, processed just before, did not move.
-			originStockID := PackProductStockID(mov.transferPeerWarehouseID, mov.ProductID, mov.PresentationID)
-			if originStock := stockByID[originStockID]; originStock != nil {
-				mov.Price = originStock.AverageCost
+		balanceSubUnits := balanceBefore.TotalSubUnits(effectiveDivisor)
+		deltaSubUnits := delta.TotalSubUnits(effectiveDivisor)
+
+		if !isInflow {
+			// An outflow leaves at its share of the row's value; the average does not move.
+			movement.MonetaryValue = StockOutflowValue(stock.StockValue, balanceSubUnits, -deltaSubUnits)
+			stock.StockValue -= int64(movement.MonetaryValue)
+			if mov.transferPeerWarehouseID > 0 {
+				transferOutflowValue = movement.MonetaryValue
 			}
+		}
+
+		if isInflow && mov.transferPeerWarehouseID > 0 {
+			// A transfer's inflow enters with exactly the value its outflow leg, expanded right
+			// before it, took out of the origin: moving goods between warehouses creates no value.
+			mov.InflowValue = transferOutflowValue
 		}
 
 		if isInflow && mov.RejectInbound {
@@ -502,20 +520,34 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 			return core.Err(fmt.Sprintf(
 				"El producto %v necesita el costo de compra del stock que ingresa.", mov.ProductID))
 		}
+		// Stock is never let in without a value: with no exact value and no Price, an inflow is
+		// valued at the row's average, so a row that has none cannot take one. This holds for every
+		// document, not only manual adjustments; a transfer of uncosted stock is refused here too.
+		if isInflow && mov.InflowValue <= 0 && mov.Price <= 0 && stock.AverageCost <= 0 {
+			return core.Err(fmt.Sprintf(
+				"El producto %v no tiene costo unitario consolidado: el stock que ingresa necesita su costo unitario.",
+				mov.ProductID))
+		}
 
-		if isInflow && mov.Price > 0 {
-			appendProductStockLastPrice(stock, movement.Quantity, mov.Price)
-			// Persist the unit price on the ledger as total line value for later reports.
-			// The sub-unit part is prorated: the ledger carries only a purchase price, with
-			// no separate sub-unit price to charge against.
-			lineValue, valueErr := core.QuantityValueAtUnitPrice(delta, effectiveDivisor, mov.Price)
-			if valueErr != nil {
-				return valueErr
+		if isInflow {
+			// The ledger carries the inflow's total value. The sub-unit part is prorated: there
+			// is only a unit price, with no separate sub-unit price to charge against.
+			lineValue := mov.InflowValue
+			if lineValue <= 0 {
+				// Only a real price enters the last-prices history; the average standing in for a
+				// missing one is not a price anybody paid.
+				if mov.Price > 0 {
+					appendProductStockLastPrice(stock, movement.Quantity, mov.Price)
+				}
+				unitPrice := core.If(mov.Price > 0, mov.Price, stock.AverageCost)
+				var valueErr error
+				if lineValue, valueErr = core.QuantityValueAtUnitPrice(delta, effectiveDivisor, unitPrice); valueErr != nil {
+					return valueErr
+				}
 			}
 			movement.MonetaryValue = lineValue
-			stock.AverageCost = NextMovingAverageCost(stock.AverageCost,
-				balanceBefore.TotalSubUnits(effectiveDivisor), delta.TotalSubUnits(effectiveDivisor),
-				lineValue, effectiveDivisor)
+			stock.StockValue, stock.AverageCost = StockAfterInflow(stock.StockValue, stock.AverageCost,
+				balanceSubUnits, deltaSubUnits, lineValue, effectiveDivisor)
 		}
 		balanceByStockID[stockID] = balanceBefore.Add(delta)
 		stock.Updated = updatedTime
@@ -606,7 +638,8 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 					stockTable.DetailQuantity, stockTable.DetailSubQuantity,
 					stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
 					stockTable.SubDivisor,
-					stockTable.LastPricesPrice, stockTable.LastPricesQuantity, stockTable.AverageCost,
+					stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
+					stockTable.AverageCost, stockTable.StockValue,
 					stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
 				),
 			); err != nil {
@@ -780,8 +813,8 @@ func RecalcProductStockByMovements(companyID int32) error {
 			stock.Quantity, stock.SubQuantity = 0, 0
 			stock.DetailQuantity, stock.DetailSubQuantity = 0, 0
 			stock.SubDivisor = 0
-			// The average is replayed from the costed inflows on the ledger, like the quantities.
-			stock.AverageCost = 0
+			// The value and the average are replayed from the ledger, like the quantities.
+			stock.AverageCost, stock.StockValue = 0, 0
 			stockByID[stock.ID] = stock
 		}
 	}
@@ -811,6 +844,16 @@ func RecalcProductStockByMovements(companyID int32) error {
 	// average cost needs the units held before each inflow, and DetailQuantity is only rolled up
 	// after the scan.
 	balanceByStockID := map[int64]core.Quantity{}
+	// What each sale still has out of each stock row, keyed (DocumentID, stockID), so a return the
+	// ledger holds at 0 re-enters at the value its deliveries took, as PostSaleOrderAnnul does live.
+	type saleDeliveredOut struct {
+		quantity core.Quantity
+		divisor  int16
+		value    int64
+	}
+	saleOutByKey := map[[2]int64]*saleDeliveredOut{}
+	// Movements whose MonetaryValue the replay filled in, written back after the scan.
+	restampedMovements := []WarehouseProductMovement{}
 	accumulate := func(warehouseID int32, quantity core.Quantity, movementDivisor int16,
 		movement *WarehouseProductMovement) error {
 
@@ -853,12 +896,63 @@ func RecalcProductStockByMovements(companyID int32) error {
 			}
 		}
 
-		// Same rule as ApplyMovimientos: only a costed inflow moves the average.
+		// Same rule as ApplyMovimientos. A recorded value is a fact and is kept; only a movement
+		// the ledger holds at 0 — every outflow and uncosted inflow written before StockValue
+		// existed — is valued here and restamped.
 		balanceBefore := balanceByStockID[stockID]
-		if movement.MonetaryValue > 0 && !quantity.IsZero() && !quantity.IsNegative(stock.SubDivisor) {
-			stock.AverageCost = NextMovingAverageCost(stock.AverageCost,
-				balanceBefore.TotalSubUnits(stock.SubDivisor), quantity.TotalSubUnits(stock.SubDivisor),
-				movement.MonetaryValue, stock.SubDivisor)
+		balanceSubUnits := balanceBefore.TotalSubUnits(stock.SubDivisor)
+		movedSubUnits := quantity.TotalSubUnits(stock.SubDivisor)
+		recordedValue := movement.MonetaryValue
+		isSaleMovement := movement.Type == StockMovementTypeSaleDelivery ||
+			movement.Type == StockMovementTypeSaleAnnulmentReturn
+		var saleOut *saleDeliveredOut
+		if isSaleMovement {
+			saleKey := [2]int64{movement.DocumentID, stockID}
+			if saleOut = saleOutByKey[saleKey]; saleOut == nil {
+				saleOut = &saleDeliveredOut{divisor: stock.SubDivisor}
+				saleOutByKey[saleKey] = saleOut
+			}
+			if saleOut.divisor != stock.SubDivisor {
+				// The row's divisor only gets finer, so the conversion is exact.
+				converted, err := saleOut.quantity.ConvertToDivisor(saleOut.divisor, stock.SubDivisor)
+				if err != nil {
+					return err
+				}
+				saleOut.quantity, saleOut.divisor = converted, stock.SubDivisor
+			}
+		}
+
+		if movedSubUnits < 0 {
+			if movement.MonetaryValue <= 0 {
+				movement.MonetaryValue = StockOutflowValue(stock.StockValue, balanceSubUnits, -movedSubUnits)
+			}
+			stock.StockValue -= int64(movement.MonetaryValue)
+		} else if movedSubUnits > 0 {
+			if movement.MonetaryValue <= 0 && movement.Type == StockMovementTypeSaleAnnulmentReturn {
+				// A return re-enters at the value its sale's deliveries took out of this row.
+				movement.MonetaryValue = StockOutflowValue(saleOut.value,
+					saleOut.quantity.TotalSubUnits(stock.SubDivisor), movedSubUnits)
+			}
+			if movement.MonetaryValue <= 0 {
+				// Any other uncosted inflow enters at the running average.
+				value, err := core.QuantityValueAtUnitPrice(quantity, stock.SubDivisor, stock.AverageCost)
+				if err != nil {
+					return err
+				}
+				movement.MonetaryValue = value
+			}
+			stock.StockValue, stock.AverageCost = StockAfterInflow(stock.StockValue, stock.AverageCost,
+				balanceSubUnits, movedSubUnits, movement.MonetaryValue, stock.SubDivisor)
+		}
+		if movement.MonetaryValue != recordedValue {
+			movement.Period = core.PeriodOfDay(movement.Date)
+			restampedMovements = append(restampedMovements, *movement)
+		}
+		if isSaleMovement {
+			// Deliveries are negative on the ledger; what is still out is their negation.
+			saleOut.quantity = saleOut.quantity.Add(quantity.Negate())
+			saleOut.value += int64(core.If(movement.Type == StockMovementTypeSaleDelivery,
+				movement.MonetaryValue, -movement.MonetaryValue))
 		}
 		balanceByStockID[stockID] = balanceBefore.Add(quantity)
 
@@ -887,26 +981,41 @@ func RecalcProductStockByMovements(companyID int32) error {
 		return nil
 	}
 
-	query := db.Query(&[]WarehouseProductMovement{})
+	// The value of an outflow depends on what the row held when it left, so the replay must run in
+	// the order the movements happened. The ledger key (Date, WarehouseID, autoincrement) is not
+	// that order within a day, so the rows are sorted by Created. Inside one Created second an
+	// inflow goes first: the live engine never lets a row go negative, so that is the order that
+	// could have happened.
+	movements := []WarehouseProductMovement{}
+	query := db.Query(&movements)
 	query.CompanyID.Equals(companyID)
-	var accumulateError error
-	if err := query.ExecScan(func(movement *WarehouseProductMovement) bool {
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al obtener movimientos:", err)
+	}
+	isOutflow := func(movement *WarehouseProductMovement) bool {
+		return movement.Quantity < 0 || (movement.Quantity == 0 && movement.SubQuantity < 0)
+	}
+	slices.SortStableFunc(movements, func(a, b WarehouseProductMovement) int {
+		if a.Created != b.Created {
+			return cmp.Compare(a.Created, b.Created)
+		}
+		if aOut, bOut := isOutflow(&a), isOutflow(&b); aOut != bOut {
+			return core.If(aOut, 1, -1)
+		}
+		return cmp.Compare(a.ID, b.ID)
+	})
+	for i := range movements {
+		movement := &movements[i]
 		movementDivisor := movement.SubDivisor
 		if movementDivisor <= 0 {
 			movementDivisor = core.QuantityDivisorNone
 		}
 		moved := core.Quantity{Units: movement.Quantity, Sub: movement.SubQuantity}
-		if accumulateError = accumulate(movement.WarehouseID, moved, movementDivisor, movement); accumulateError != nil {
-			return false
-		}
 		// A transfer is two rows, one per warehouse (expandStockTransfers), so each row only
 		// accumulates on its own warehouse; WarehouseRefID just names the other side.
-		return true
-	}); err != nil {
-		return core.Err("Error al escanear movimientos:", err)
-	}
-	if accumulateError != nil {
-		return accumulateError
+		if err := accumulate(movement.WarehouseID, moved, movementDivisor, movement); err != nil {
+			return err
+		}
 	}
 
 	// Roll up DetailQuantity onto each stock once every movement is accumulated. Every detail
@@ -938,7 +1047,20 @@ func RecalcProductStockByMovements(companyID int32) error {
 		details = append(details, *detail)
 	}
 
-	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details))
+	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details),
+		"restamped movements", len(restampedMovements))
+
+	if len(restampedMovements) > 0 {
+		movementTable := db.TableOf[WarehouseProductMovement]()
+		// The (date, product, type, sub_divisor) view and the period delta index need their key
+		// columns written with any update; the movements were read whole, so they carry their stored
+		// values, and Period was stamped from Date above.
+		if err := db.Update(&restampedMovements, movementTable.MonetaryValue,
+			movementTable.Date, movementTable.ProductID, movementTable.Type, movementTable.SubDivisor,
+			movementTable.Period); err != nil {
+			return core.Err("Error al guardar el valor de los movimientos:", err)
+		}
+	}
 
 	if len(stocks) > 0 {
 		stockTable := db.TableOf[ProductStock]()
@@ -947,8 +1069,9 @@ func RecalcProductStockByMovements(companyID int32) error {
 			db.Cols(
 				stockTable.Quantity, stockTable.SubQuantity,
 				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
-				stockTable.SubDivisor, stockTable.AverageCost,
-				stockTable.Updated, stockTable.Status,
+				stockTable.SubDivisor, stockTable.AverageCost, stockTable.StockValue,
+				// WarehouseID is the (warehouse_id, status) view's other key column.
+				stockTable.Updated, stockTable.Status, stockTable.WarehouseID,
 			),
 		); err != nil {
 			return core.Err("Error al guardar stock V2 recalculado:", err)
@@ -961,7 +1084,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 			func(e *ProductStockDetail) bool { return e.Created > 0 },
 			db.Cols(
 				detailTable.Quantity, detailTable.SubQuantity,
-				detailTable.Updated, detailTable.Status,
+				detailTable.Updated, detailTable.Status, detailTable.WarehouseID,
 			),
 		); err != nil {
 			return core.Err("Error al guardar detalle de stock recalculado:", err)

@@ -71,6 +71,7 @@ func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
 // be read is a document nobody can send, because every send rebuilds it from the
 // sale.
 func SaveNewDocument(document *InvoiceDocument) error {
+	document.StampPeriod()
 	rows := &[]InvoiceDocument{*document}
 	if err := db.Insert(rows); err != nil {
 		return fmt.Errorf("error al guardar el comprobante: %w", err)

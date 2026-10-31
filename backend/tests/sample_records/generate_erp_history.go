@@ -816,9 +816,9 @@ func (generator *erpHistoryGenerator) runPurchaseOrder(dayStart time.Time, purch
 		}
 		quantityByProduct[productID] = quantity
 
-		orderPayload.DetailProductIDs = append(orderPayload.DetailProductIDs, productID)
-		orderPayload.DetailProductQuantity = append(orderPayload.DetailProductQuantity, quantity)
-		orderPayload.DetailProductPrice = append(orderPayload.DetailProductPrice, generator.costPriceByProduct[productID])
+		orderPayload.Lines = append(orderPayload.Lines, logisticsTypes.PurchaseOrderLine{
+			ProductID: productID, Quantity: quantity, Price: generator.costPriceByProduct[productID],
+		})
 		orderPayload.TotalAmount += quantity * generator.costPriceByProduct[productID]
 	}
 
@@ -946,11 +946,11 @@ func (generator *erpHistoryGenerator) readCashBankBalance() (int32, error) {
 // FinalAmount - Amount matches the stored balance, so it is sent pre-computed like the frontend does.
 func (generator *erpHistoryGenerator) injectCash(at time.Time, currentBalance int32, amountToInject int32) error {
 	payloadBytes, err := json.Marshal(financeTypes.CashBankMovement{
-		CashBankID:  generator.cashBankID,
-		Type:        7,
-		AccountCode: financeTypes.PCGECapital,
-		Amount:      amountToInject,
-		FinalAmount: currentBalance + amountToInject,
+		CashBankID:         generator.cashBankID,
+		Type:               7,
+		CounterAccountCode: financeTypes.PCGECapital,
+		Amount:             amountToInject,
+		FinalAmount:        currentBalance + amountToInject,
 	})
 	if err != nil {
 		return err
@@ -1348,9 +1348,9 @@ func (generator *erpHistoryGenerator) previewPayloads(args *core.ExecArgs) core.
 			serializedCount++
 			quantity = 3
 		}
-		orderPayload.DetailProductIDs = append(orderPayload.DetailProductIDs, productID)
-		orderPayload.DetailProductQuantity = append(orderPayload.DetailProductQuantity, quantity)
-		orderPayload.DetailProductPrice = append(orderPayload.DetailProductPrice, generator.costPriceByProduct[productID])
+		orderPayload.Lines = append(orderPayload.Lines, logisticsTypes.PurchaseOrderLine{
+			ProductID: productID, Quantity: quantity, Price: generator.costPriceByProduct[productID],
+		})
 		orderPayload.TotalAmount += quantity * generator.costPriceByProduct[productID]
 	}
 

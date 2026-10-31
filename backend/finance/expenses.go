@@ -1,9 +1,11 @@
 package finance
 
 import (
+	accounting "app/accounting/types"
 	"app/core"
 	"app/db"
 	"app/finance/types"
+	production "app/production/types"
 	"encoding/json"
 	"slices"
 	"time"
@@ -11,13 +13,6 @@ import (
 
 // expensesQueryLimit caps the "Todos" and "Pagados" tabs; "Pend. Pago" stays uncapped.
 const expensesQueryLimit int32 = 2000
-
-// expenseCategoryIDs is the static, code-defined category set (mirrored on the
-// frontend as `expenseCategories`). Used only to validate incoming CategoryID.
-var expenseCategoryIDs = map[int8]bool{
-	1: true, 2: true, 3: true, 4: true, 5: true,
-	6: true, 7: true, 8: true, 9: true, 10: true,
-}
 
 // validateExpenseCommon checks the fields shared by Expense and ExpenseScheduled.
 func validateExpenseCommon(amount int32, currencyType, categoryID int8) error {
@@ -27,10 +22,36 @@ func validateExpenseCommon(amount int32, currencyType, categoryID int8) error {
 	if currencyType != 1 && currencyType != 2 {
 		return core.Err("Moneda inválida (debe ser 1=PEN o 2=USD).")
 	}
-	if !expenseCategoryIDs[categoryID] {
+	if _, categoryExists := types.FindExpenseCategory(categoryID); !categoryExists {
 		return core.Err("Categoría de gasto inválida.")
 	}
 	return nil
+}
+
+// resolveExpenseAccount returns the PCGE account to store on an expense: the one the user picked,
+// or the default when they picked none. A simple expense defaults to its category's account and
+// must use an expense account. An inventory expense bought a supply, so it defaults to the
+// supply's own account and must use a supply account.
+func resolveExpenseAccount(companyID int32, expense types.Expense) (int32, error) {
+	if expense.Type == types.ExpenseTypeInventory {
+		supplyAccountCode := int32(0)
+		if expense.AccountCode == 0 {
+			supplies := []production.Product{}
+			supplyQuery := db.Query(&supplies)
+			supplyQuery.Select(supplyQuery.ID, supplyQuery.AccountCode).
+				CompanyID.Equals(companyID).ID.Equals(expense.ProductID)
+			if queryError := supplyQuery.Exec(); queryError != nil {
+				return 0, core.Err("Error al obtener la cuenta contable del insumo.", queryError)
+			}
+			if len(supplies) > 0 {
+				supplyAccountCode = supplies[0].AccountCode
+			}
+		}
+		return accounting.ResolveSupplyAccount(expense.AccountCode, supplyAccountCode)
+	}
+	category, _ := types.FindExpenseCategory(expense.CategoryID)
+	accountCode := core.If(expense.AccountCode == 0, category.DefaultAccountCode, expense.AccountCode)
+	return accountCode, accounting.ValidatePCGEAccount(accounting.PCGEKindExpense, accountCode)
 }
 
 // unixDayToUTC / utcToUnixDay round-trip a UnixDay (int16) through a UTC date so the
@@ -119,15 +140,22 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	if err := body.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
 		return req.MakeErr(err)
 	}
+	accountCode, err := resolveExpenseAccount(req.User.CompanyID, body)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	body.AccountCode = accountCode
 
 	nowTime := core.SUnixTime()
 	body.CompanyID = req.User.CompanyID
 	body.Status = core.If(body.Status == 0, int8(1), body.Status)
 	body.Updated = nowTime
 	body.UpdatedBy = req.User.ID
+	body.StampPeriod()
+	// Only a payment decides it (PostExpensePayment), never the client.
+	body.SameDayCashBankID = 0
 
 	records := &[]types.Expense{body}
-	var err error
 	if body.ID <= 0 {
 		// New record: ORM assigns the autoincrement ID in-place.
 		body.Created = nowTime
@@ -147,8 +175,8 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No se encontró el gasto.")
 		}
 		if existing[0].Status == 2 {
-			// Except for its comprobante: the bill often arrives after the payment, and without it
-			// the purchase never reaches the Registro de Compras. Everything else stays as paid.
+			// Except for its comprobante and its account: the bill often arrives after the payment,
+			// and classifying it says nothing about the money. Everything else stays as paid.
 			return savePaidExpenseDocument(req, existing[0], body)
 		}
 		if existing[0].Status == types.ExpenseStatusPosted {
@@ -158,6 +186,12 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		// PostExpensePayment) instead of the client's. Status shares a composite view index with
 		// Updated, so it must be written together — only PaidAmount/Created/CreatedBy are excluded.
 		(*records)[0].Status = existing[0].Status
+		// The edit can move the accounting date, the total or the comprobante its payments clear.
+		sameDayCashBankID, restampErr := restampExpensePayments(req.User.CompanyID, &(*records)[0])
+		if restampErr != nil {
+			return req.MakeErr(restampErr)
+		}
+		(*records)[0].SameDayCashBankID = sameDayCashBankID
 		q := db.TableOf[types.Expense]()
 		err = db.UpdateExclude(records, q.PaidAmount, q.Created, q.CreatedBy)
 	}
@@ -167,28 +201,59 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse((*records)[0])
 }
 
-// savePaidExpenseDocument writes only the supplier and the comprobante of a paid expense,
-// validated against the amount that was actually paid.
+// savePaidExpenseDocument writes only the supplier, the comprobante and the account of a paid
+// expense, the comprobante validated against the amount that was actually paid. The account was
+// already resolved by the caller.
 func savePaidExpenseDocument(req *core.HandlerArgs, stored types.Expense, body types.Expense) core.HandlerResponse {
 	document := body.PurchaseDocument()
 	document.CurrencyType = stored.CurrencyType
 	stored.SupplierID = body.SupplierID
+	stored.AccountCode = body.AccountCode
 	stored.SetPurchaseDocument(document)
 	if err := stored.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
 		return req.MakeErr(err)
 	}
 	stored.Updated = core.SUnixTime()
 	stored.UpdatedBy = req.User.ID
+	// The comprobante moves the accounting date and decides the payable its payments clear.
+	stored.StampPeriod()
+	sameDayCashBankID, restampErr := restampExpensePayments(req.User.CompanyID, &stored)
+	if restampErr != nil {
+		return req.MakeErr(restampErr)
+	}
+	stored.SameDayCashBankID = sameDayCashBankID
 
 	q := db.TableOf[types.Expense]()
 	if err := db.Update(&[]types.Expense{stored},
 		q.SupplierID, q.ProviderSnapshotID, q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate,
 		q.TaxableAmount, q.TaxAmount, q.UntaxedAmount, q.OtherAmount, q.ExchangeRate,
-		q.Updated, q.UpdatedBy, q.Status,
+		q.AccountCode, q.Updated, q.UpdatedBy, q.Status, q.Period, q.SameDayCashBankID,
 	); err != nil {
 		return req.MakeErr("Error al guardar el comprobante del gasto:", err)
 	}
 	return req.MakeResponse(stored)
+}
+
+// restampExpensePayments re-applies the same-day rule and the payable to the expense's payments
+// after an edit, and returns the cash bank of its same-day payment (0 when none).
+func restampExpensePayments(companyID int32, expense *types.Expense) (int32, error) {
+	return types.RestampDocumentPayments(companyID, int64(expense.ID),
+		[]types.CashMovementType{types.CashMovementTypeExpensePayment},
+		expense.AccountingDate(), expense.Amount, types.PurchasePayableAccount(expense.DocType))
+}
+
+// GetExpensesByIDs serves the by-IDs cache: the accounting operations read through it the older
+// inventory expenses a period's supplies receptions name.
+func GetExpensesByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	partitions, err := db.QueryCachedIDs[types.Expense](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener los gastos.", err)
+	}
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 // --- GET / POST: recurring schedules ----------------------------------------------
@@ -217,6 +282,14 @@ func PostExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	if err := validateExpenseCommon(body.Amount, body.CurrencyType, body.CategoryID); err != nil {
 		return req.MakeErr(err)
 	}
+	// A schedule only generates simple expenses, so its account is an expense account.
+	accountCode, err := resolveExpenseAccount(req.User.CompanyID, types.Expense{
+		Type: types.ExpenseTypeSimple, CategoryID: body.CategoryID, AccountCode: body.AccountCode,
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	body.AccountCode = accountCode
 	// Frequency is the packed cadence code CDD: cadence (1..6) * 100 + day.
 	cadence, day := body.Frequency/100, body.Frequency%100
 	if cadence < 1 || cadence > 6 {
@@ -240,7 +313,6 @@ func PostExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	body.UpdatedBy = req.User.ID
 
 	records := &[]types.ExpenseScheduled{body}
-	var err error
 	if body.ID <= 0 {
 		body.Created = nowTime
 		body.CreatedBy = req.User.ID
@@ -357,7 +429,9 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 			PeriodDate:         periodDate,
 			Name:               schedule.Name,
 			Description:        schedule.Description,
+			Type:               types.ExpenseTypeSimple,
 			CategoryID:         schedule.CategoryID,
+			AccountCode:        schedule.AccountCode,
 			SupplierID:         schedule.SupplierID,
 			CurrencyType:       schedule.CurrencyType,
 			Date:               periodDate,
@@ -374,6 +448,9 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(newPeriods) > 0 {
+		for index := range newPeriods {
+			newPeriods[index].StampPeriod()
+		}
 		if err := db.Insert(&newPeriods); err != nil {
 			return req.MakeErr("Error al generar los periodos del gasto:", err)
 		}
@@ -447,21 +524,29 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// 4. Record the outflow movement (auto-updates the cash-bank balance). FinalAmount is left
-	//    at 0 so ApplyCajaMovimientos computes it from the current balance authoritatively.
+	//    at 0 so ApplyCajaMovimientos computes it from the current balance authoritatively. When it
+	//    alone pays the whole expense on its accounting date, the accounting operations infer it
+	//    from the expense instead of downloading it.
+	paymentDate := core.If(body.Date != 0, body.Date, core.FechaUnix())
+	isSameDayPayment := types.IsSameDaySettlement(expense.AccountingDate(), expense.Amount,
+		expense.PaidAmount, paymentDate, body.Amount)
 	movement := types.InternalCashMovement{
-		CashBankID:  body.CashBankID,
-		DocumentID:  int64(expense.ID),
-		ReferenceID: expense.ExpenseScheduledID,
-		Date:        body.Date,
-		Type:        types.CashMovementTypeExpensePayment,
-		Amount:      movementAmount,
-		FinalAmount: 0,
+		CashBankID:         body.CashBankID,
+		DocumentID:         int64(expense.ID),
+		ReferenceID:        expense.ExpenseScheduledID,
+		Date:               paymentDate,
+		Type:               types.CashMovementTypeExpensePayment,
+		CounterAccountCode: types.PurchasePayableAccount(expense.DocType),
+		Amount:             movementAmount,
+		FinalAmount:        0,
+		SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
 	}
 	if err := types.ApplyCashBankMovement(req, []types.InternalCashMovement{movement}); err != nil {
 		return req.MakeErr(err)
 	}
 
-	// 5. Recompute PaidAmount = Σ |movement.Amount| over this expense's movements.
+	// 5. Recompute PaidAmount = Σ |movement.Amount| over this expense's payments. Type filters out
+	//    the other registers' movements, since DocumentID alone is shared with them.
 	movements := []types.CashBankMovement{}
 	mq := db.Query(&movements)
 	mq.Select().CompanyID.Equals(req.User.CompanyID).DocumentID.Equals(int64(expense.ID))
@@ -470,6 +555,9 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	var paidAmount int32
 	for _, m := range movements {
+		if m.Type != types.CashMovementTypeExpensePayment {
+			continue
+		}
 		paidAmount += core.If(m.Amount < 0, -m.Amount, m.Amount)
 	}
 
@@ -483,9 +571,15 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	expense.Updated = core.SUnixTime()
 	expense.UpdatedBy = req.User.ID
+	if isSameDayPayment {
+		expense.SameDayCashBankID = body.CashBankID
+	}
+	expense.StampPeriod()
 
 	q := db.TableOf[types.Expense]()
-	if err := db.Update(&[]types.Expense{expense}, q.PaidAmount, q.Status, q.Updated, q.UpdatedBy); err != nil {
+	if err := db.Update(&[]types.Expense{expense},
+		q.PaidAmount, q.Status, q.Updated, q.UpdatedBy, q.Period, q.SameDayCashBankID,
+	); err != nil {
 		return req.MakeErr("Error al actualizar el gasto:", err)
 	}
 

@@ -7,8 +7,8 @@ func TestResolveCashMovementAccount(t *testing.T) {
 		name         string
 		movementType CashMovementType
 		amount       int32
-		accountCode  int16
-		wantCode     int16
+		accountCode  int32
+		wantCode     int32
 		wantErr      bool
 	}{
 		{"withdrawal with a valid choice", CashMovementTypeWithdrawal, -500, PCGEShareholdersPayable, PCGEShareholdersPayable, false},
@@ -18,8 +18,12 @@ func TestResolveCashMovementAccount(t *testing.T) {
 		{"count surplus resolves its only option", CashMovementTypePhysicalCount, 300, 0, PCGEOtherOperatingIncome, false},
 		{"count surplus refuses a shortage account", CashMovementTypePhysicalCount, 300, PCGEOtherOperatingExpenses, 0, true},
 		{"count without difference stores nothing", CashMovementTypePhysicalCount, 0, 0, 0, false},
-		{"unclassified type stores nothing", CashMovementTypeSaleCollection, 900, 0, 0, false},
-		{"unclassified type refuses an account", CashMovementTypeSaleCollection, 900, PCGEOtherOperatingIncome, 0, true},
+		{"unclassified type stores nothing", CashMovementTypeTransfer, -900, 0, 0, false},
+		{"unclassified type refuses an account", CashMovementTypeTransfer, -900, PCGEOtherOperatingIncome, 0, true},
+		{"sale collection carries the receivable", CashMovementTypeSaleCollection, 900, PCGEReceivable, PCGEReceivable, false},
+		{"sale collection without its account", CashMovementTypeSaleCollection, 900, 0, 0, true},
+		{"supplier payment of an undocumented order", CashMovementTypeSupplierPayment, -900, PCGEOtherPayables, PCGEOtherPayables, false},
+		{"asset payment refuses a supplier account", CashMovementTypeAssetPayment, -900, PCGESuppliers, 0, true},
 		{"manual collection needs its account", CashMovementTypeCollection, 900, 0, 0, true},
 		{"manual collection as a capital contribution", CashMovementTypeCollection, 900, PCGECapital, PCGECapital, false},
 	}

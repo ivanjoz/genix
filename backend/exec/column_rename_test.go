@@ -11,6 +11,7 @@ import (
 var goFieldByNewColumn = map[string]string{
 	"company_id": "CompanyID", "name": "Name", "description": "Description", "modules": "Modules",
 	"params": "Params", "address": "Address", "city_id": "CityID", "id": "ID", "culqi_config": "CulqiConfig", "last_payment_caja_id": "LastPaymentCajaID",
+	"counter_account_code": "CounterAccountCode",
 }
 
 func TestColumnRenamesMatchSnakeCase(t *testing.T) {
@@ -43,5 +44,13 @@ func TestPlanTableRenames(t *testing.T) {
 	}
 	if _, planError = planTableRenames("sites", map[string]liveColumn{}, renames); planError == nil {
 		t.Error("a table with neither column must be refused")
+	}
+
+	// A retyped rename creates the new column with the new type, not the old one's.
+	retypedSteps, _ := planTableRenames("cash_bank_movements",
+		map[string]liveColumn{"account_code": {"regular", "smallint"}},
+		[]columnRename{{"account_code", "counter_account_code"}})
+	if retypedSteps[0].Type != "int" {
+		t.Errorf("counter_account_code is created as %q, want int", retypedSteps[0].Type)
 	}
 }

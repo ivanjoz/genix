@@ -67,7 +67,7 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMove
 
 		// Validated here rather than in each handler, so no writer can store a classified type
 		// without its counter-account — the Libro Diario would have no other side to post.
-		accountCode, accountErr := ResolveCashMovementAccount(m.Type, m.Amount, m.AccountCode)
+		accountCode, accountErr := ResolveCashMovementAccount(m.Type, m.Amount, m.CounterAccountCode)
 		if accountErr != nil {
 			return accountErr
 		}
@@ -89,19 +89,21 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMove
 		}
 
 		record := CashBankMovement{
-			ID:            core.SUnixTimeUUIDConcatID(m.CashBankID, core.SUnixTimeUUID()),
-			CompanyID:     req.User.CompanyID,
-			CashBankID:    m.CashBankID,
-			CashBankRefID: m.CashBankRefID,
-			DocumentID:    m.DocumentID,
-			ReferenceID:   m.ReferenceID,
-			Date:          movementDate,
-			Type:          m.Type,
-			AccountCode:   accountCode,
-			Amount:        m.Amount,
-			FinalAmount:   m.FinalAmount,
-			Created:       nowTime,
-			CreatedBy:     req.User.ID,
+			ID:                 core.SUnixTimeUUIDConcatID(m.CashBankID, core.SUnixTimeUUID()),
+			CompanyID:          req.User.CompanyID,
+			CashBankID:         m.CashBankID,
+			CashBankRefID:      m.CashBankRefID,
+			DocumentID:         m.DocumentID,
+			ReferenceID:        m.ReferenceID,
+			Date:               movementDate,
+			Type:               m.Type,
+			CounterAccountCode: accountCode,
+			Amount:             m.Amount,
+			FinalAmount:        m.FinalAmount,
+			Created:            nowTime,
+			CreatedBy:          req.User.ID,
+			Period:             core.PeriodOfDay(movementDate),
+			SameDayMovement:    m.SameDayMovement,
 		}
 
 		records = append(records, record)

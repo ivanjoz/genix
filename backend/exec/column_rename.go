@@ -55,6 +55,15 @@ var columnRenamePlan = []tableColumnRenames{
 	{Table: "companies", Renames: []columnRename{{"culqui_config", "culqi_config"}}},
 	{Table: "sale_order", Renames: []columnRename{{"caja_id_", "last_payment_caja_id"}}},
 	{Table: "gallery_images", Renames: []columnRename{{"empresa_id", "company_id"}}},
+	// Widened from smallint: 5-digit PCGE codes (40111, 60111) overflow it.
+	{Table: "cash_bank_movements", Renames: []columnRename{{"account_code", "counter_account_code"}}},
+}
+
+// columnTypeChanges retypes a renamed column as it is copied, keyed "table.new_name". CQL cannot
+// ALTER a column's type, so renaming is the only way to widen one: the new column is created with
+// this type and the old values are written into it.
+var columnTypeChanges = map[string]string{
+	"cash_bank_movements.counter_account_code": "int",
 }
 
 type liveColumn struct {
@@ -78,7 +87,11 @@ func planTableRenames(table string, liveColumns map[string]liveColumn, renames [
 		_, hasNew := liveColumns[rename.NewName]
 		switch {
 		case hasOld:
-			steps = append(steps, renameStep{rename, oldColumn.Kind != "regular", oldColumn.Type, true})
+			newType := oldColumn.Type
+			if changedType, isRetyped := columnTypeChanges[table+"."+rename.NewName]; isRetyped {
+				newType = changedType
+			}
+			steps = append(steps, renameStep{rename, oldColumn.Kind != "regular", newType, true})
 		case hasNew:
 			steps = append(steps, renameStep{columnRename: rename})
 		default:

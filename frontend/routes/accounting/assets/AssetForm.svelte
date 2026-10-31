@@ -5,6 +5,8 @@ import Input from '#components/form/Input.svelte'
 import SearchSelect from '#components/form/SearchSelect.svelte'
 import T from '#components/misc/T.svelte'
 import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
+import PCGEAccountSelect from '#domain/PCGEAccountSelect.svelte'
+import { isPCGEAccountAllowed, PCGE_KIND_ASSET } from '#core/pcge.ts'
 import type { IAssetForm } from './assets'
 
 // One form, two shells: the create Layer and the edit Modal in +page.svelte both render this.
@@ -16,7 +18,7 @@ interface Props {
   // Create only. Serials are typed one per line, and their presence is what makes the
   // acquisition per-unit. Held in an object because Input writes through saveOn/save.
   serialsInput?: { text: string }
-  supplyOptions: { ID: number, Name: string }[]
+  supplyOptions: { ID: number, Name: string, AccountCode?: number }[]
   warehouseOptions: { ID: number, Name: string }[]
   providerOptions: { ID: number, Name: string }[]
   currencyOptions: { id: number, name: string }[]
@@ -47,6 +49,12 @@ const bookValueLabel = $derived(isEdit
     keyName="Name"
     disabled={isEdit}
     options={supplyOptions}
+    onChange={(supply) => {
+      // The material's own account is proposed when it is an asset account. Otherwise the field
+      // stays empty and the server books it as generic equipment (3369).
+      const supplyAccountCode = supply?.AccountCode || 0
+      form.AccountCode = isPCGEAccountAllowed(PCGE_KIND_ASSET, supplyAccountCode) ? supplyAccountCode : 0
+    }}
   />
   <SearchSelect label="Warehouse|Almacén"
     saveOn={form}
@@ -65,6 +73,8 @@ const bookValueLabel = $derived(isEdit
       </a>
     </Info>
   {/if}
+  <PCGEAccountSelect saveOn={form} save="AccountCode" css="col-span-24 md:col-span-14"
+    kind={PCGE_KIND_ASSET} required={isEdit} />
   <DateInput label="Acquisition Date|Fecha de Adquisición"
     saveOn={form}
     css="col-span-24 md:col-span-10"

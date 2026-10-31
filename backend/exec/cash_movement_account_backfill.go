@@ -1,4 +1,7 @@
-// Backfilling CashBankMovement.AccountCode on the movements written before the column existed.
+// Backfilling CashBankMovement.CounterAccountCode on the movements written before the column
+// existed, and moving the ones stored under a retired code (retiredCashMovementAccounts).
+//
+// Run it after fn-rename-columns has copied account_code into counter_account_code.
 //
 // Withdrawals, losses and physical counts now carry the PCGE account the user classified them
 // under, and the Libro Diario posts the other side of the cash against it. Every row written
@@ -24,6 +27,11 @@ import (
 	"fmt"
 )
 
+// retiredCashMovementAccounts rewrites codes an option used to store and the chart no longer
+// accepts. 50 Capital is a 2-digit element, and PLE posts at 3 digits or more, so a capital
+// contribution moved to 501 Capital social.
+var retiredCashMovementAccounts = map[int32]int32{50: 501}
+
 type cashMovementAccountBackfillReport struct {
 	companies          int
 	accountsPending    int
@@ -37,7 +45,7 @@ type cashMovementAccountBackfillReport struct {
 // fn-backfill-cash-movement-accounts [apply] [companyID]
 //
 // It reports without writing unless `apply` is given. Re-running is safe: it only touches rows
-// whose AccountCode is still 0.
+// whose CounterAccountCode is still 0 or retired.
 func BackfillCashMovementAccounts(args *core.ExecArgs) core.FuncResponse {
 	shouldWrite, onlyCompanyID := parseIdentityBackfillArguments(args.Message)
 
@@ -93,7 +101,12 @@ func backfillCompanyCashMovementAccounts(
 		if movement.Date == 0 {
 			report.undatedMovements++
 		}
-		if movement.AccountCode != 0 {
+		if replacementCode, isRetired := retiredCashMovementAccounts[movement.CounterAccountCode]; isRetired {
+			movement.CounterAccountCode = replacementCode
+			movementsToUpdate = append(movementsToUpdate, movement)
+			continue
+		}
+		if movement.CounterAccountCode != 0 {
 			continue
 		}
 		if movement.Type == finance.CashMovementTypeUnspecified {
@@ -105,7 +118,7 @@ func backfillCompanyCashMovementAccounts(
 		if len(options) == 0 {
 			continue
 		}
-		movement.AccountCode = options[0].AccountCode
+		movement.CounterAccountCode = options[0].AccountCode
 		movementsToUpdate = append(movementsToUpdate, movement)
 	}
 	report.accountsPending += len(movementsToUpdate)
@@ -114,7 +127,7 @@ func backfillCompanyCashMovementAccounts(
 		return nil
 	}
 	movementTable := db.TableOf[finance.CashBankMovement]()
-	if updateError := db.Update(&movementsToUpdate, movementTable.AccountCode); updateError != nil {
+	if updateError := db.Update(&movementsToUpdate, movementTable.CounterAccountCode); updateError != nil {
 		return core.Err("Error al actualizar los movimientos de caja de la empresa", companyID, updateError)
 	}
 	report.movementsWritten += len(movementsToUpdate)

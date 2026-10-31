@@ -55,6 +55,8 @@ type AssetAcquisitionPayload struct {
 	DueDate        int16 `cb:"11"`
 	// Overrides the product's own term. 0 inherits it.
 	DepreciationMonths int16 `cb:"12"`
+	// The 33x the asset is booked under. 0 takes the supply's account, or generic equipment.
+	AccountCode int32 `cb:"13"`
 	// The supplier's comprobante, flattened into the body. Its amounts are per unit, like
 	// PurchaseAmount, and its CurrencyType is the asset's.
 	finance.PurchaseDocument
@@ -75,6 +77,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 	supplyQuery := db.Query(&supplyProducts)
 	supplyQuery.Select(
 		supplyQuery.ID, supplyQuery.Name, supplyQuery.DepreciationMonths, supplyQuery.Status,
+		supplyQuery.AccountCode,
 	).CompanyID.Equals(req.User.CompanyID).ID.Equals(payload.ProductID)
 
 	if queryError := supplyQuery.Exec(); queryError != nil {
@@ -93,6 +96,10 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 	)
 	if depreciationMonths <= 0 {
 		return req.MakeErr("El insumo no tiene un esquema de depreciación configurado.")
+	}
+	accountCode, accountError := types.ResolveAssetAccount(payload.AccountCode, supplyProduct.AccountCode)
+	if accountError != nil {
+		return req.MakeErr(accountError)
 	}
 
 	// 2. Serials decide the granularity: one asset per serial, otherwise one grouped row.
@@ -161,6 +168,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 			AcquisitionValue:   payload.AcquisitionValue * quantity,
 			DepreciationMonths: depreciationMonths,
 			CurrencyType:       payload.CurrencyType,
+			AccountCode:        accountCode,
 			Status:             types.AssetStatusActive,
 			Updated:            currentTimestamp,
 			UpdatedBy:          req.User.ID,

@@ -18,6 +18,9 @@ export interface ISupplyMaterial {
   // Straight-line depreciation term. > 0 makes this supply a fixed asset, and the
   // Activos page can then acquire instances of it.
   DepreciationMonths: number
+  // Default PCGE account of a purchase of this supply. Left empty, the server picks equipment
+  // (3369) when it depreciates, else suministros (6032).
+  AccountCode: number
   // Merged from product_supply for the form; not part of the Product row itself.
   MinimunStock: number
   ProviderSupply: IProductSupplyProviderRow[]

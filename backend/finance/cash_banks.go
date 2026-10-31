@@ -181,7 +181,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	// the movement, not on the reconciliation.
 	body := struct {
 		types.CashReconciliation
-		AccountCode int16
+		CounterAccountCode int32
 	}{}
 	err := json.Unmarshal([]byte(*req.Body), &body)
 	if err != nil {
@@ -213,7 +213,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	// The sign is the server's own difference, not the client's, so a shortage can never be
 	// filed as a surplus.
 	accountCode, err := types.ResolveCashMovementAccount(
-		types.CashMovementTypePhysicalCount, record.DifferenceAmount, body.AccountCode)
+		types.CashMovementTypePhysicalCount, record.DifferenceAmount, body.CounterAccountCode)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -232,13 +232,14 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 		CashBankID: record.CashBankID,
 		// The Libro Diario reads movements by period, so a count without a date would never
 		// reach it.
-		Date:        core.FechaUnix(),
-		Type:        types.CashMovementTypePhysicalCount,
-		AccountCode: accountCode,
-		FinalAmount: record.ActualAmount,
-		Amount:      record.DifferenceAmount,
-		Created:     nowTime,
-		CreatedBy:   req.User.ID,
+		Date:               core.FechaUnix(),
+		Type:               types.CashMovementTypePhysicalCount,
+		CounterAccountCode: accountCode,
+		FinalAmount:        record.ActualAmount,
+		Amount:             record.DifferenceAmount,
+		Created:            nowTime,
+		CreatedBy:          req.User.ID,
+		Period:             core.PeriodOfDay(core.FechaUnix()),
 	}
 
 	// Insert records using db2
@@ -308,11 +309,11 @@ func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {
 		// Only a transfer names a counterpart register.
 		record.CashBankRefID = 0
 		movements = append(movements, types.InternalCashMovement{
-			CashBankID:  record.CashBankID,
-			Type:        record.Type,
-			AccountCode: record.AccountCode,
-			Amount:      record.Amount,
-			FinalAmount: record.FinalAmount,
+			CashBankID:         record.CashBankID,
+			Type:               record.Type,
+			CounterAccountCode: record.CounterAccountCode,
+			Amount:             record.Amount,
+			FinalAmount:        record.FinalAmount,
 		})
 	}
 

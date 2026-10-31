@@ -101,6 +101,31 @@ type Product struct {
 	// BrandName copies the brand's name so the text index can read it from the table: a reindex
 	// only sees stored columns. PostProducts fills it from BrandID.
 	BrandName string `cb:"42"`
+	// AccountCode is a supply's default PCGE account (Status = 2): what a purchase line or an
+	// inventory expense of it posts to unless that line says otherwise. Copied onto the line, so
+	// changing it never rewrites past purchases. 0 on a product: its accounts follow from Origin.
+	AccountCode int32 `cb:"43"`
+	// Origin is whether a product (Status = 1) is bought or made, which decides its accounts:
+	// mercaderías (2011 / 7012 / 6912) or productos terminados (2111 / 7022 / 6922). 0 on a supply.
+	Origin int8 `cb:"44"`
+}
+
+// Product.Origin values.
+const (
+	ProductOriginBought int8 = 1 // Merchandise, bought to resell.
+	ProductOriginMade   int8 = 2 // A finished good the company produces. Never on a purchase order.
+)
+
+type ProductOriginOption struct {
+	ID   int8   `cb:"1"`
+	Name string `cb:"2"`
+}
+
+// ProductOriginOptions is what the product form offers, via the //CATALOG: marker in
+// frontend/services/production/products.svelte.ts.
+var ProductOriginOptions = []ProductOriginOption{
+	{ID: ProductOriginBought, Name: "Bought (merchandise)|Comprado (mercadería)"},
+	{ID: ProductOriginMade, Name: "Made by the company (finished good)|Fabricado (producto terminado)"},
 }
 
 type ProductTable struct {
@@ -145,6 +170,8 @@ type ProductTable struct {
 	CreatedBy           db.Col[*ProductTable, int32]
 	CategoriesWithStock db.ColSlice[*ProductTable, int32]
 	Version             db.Col[*ProductTable, int16]
+	AccountCode         db.Col[*ProductTable, int32]
+	Origin              db.Col[*ProductTable, int8]
 }
 
 func (e *Product) FillCategoriesWithStock() {

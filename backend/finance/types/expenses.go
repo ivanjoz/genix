@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/core"
+	"app/db"
+)
 
 // ExpenseScheduled is the recurring template. It only describes the cadence and the
 // default amount; per-period payment state lives in the generated Expense rows.
@@ -25,6 +28,8 @@ type ExpenseScheduled struct {
 	UpdatedBy int32   `cb:"16"`
 	Created   int32   `cb:"17"`
 	CreatedBy int32   `cb:"18"`
+	// AccountCode is the PCGE account every generated period is classified under.
+	AccountCode int32 `cb:"19"`
 }
 
 type ExpenseScheduledTable struct {
@@ -46,6 +51,7 @@ type ExpenseScheduledTable struct {
 	UpdatedBy    db.Col[*ExpenseScheduledTable, int32]
 	Created      db.Col[*ExpenseScheduledTable, int32]
 	CreatedBy    db.Col[*ExpenseScheduledTable, int32]
+	AccountCode  db.Col[*ExpenseScheduledTable, int32]
 }
 
 func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
@@ -127,6 +133,31 @@ type Expense struct {
 	UpdatedBy int32   `cb:"33"`
 	Created   int32   `cb:"34"`
 	CreatedBy int32   `cb:"35"`
+	// AccountCode is the PCGE account the expense is classified under: an expense account for a
+	// simple expense, the supply's account for an inventory one. 0 on depreciation (Type 4),
+	// whose accounts follow from the asset, and on a simple expense nobody classified yet.
+	AccountCode int32 `cb:"36"`
+	// Period is the YYMM of AccountingDate (core.PeriodOfDay): the pinned key of the period delta
+	// index the accounting operations sync a month through. Set by StampPeriod on every write.
+	Period int16 `cb:"37"`
+	// SameDayCashBankID is the cash bank of the one payment that settled the whole expense on its
+	// AccountingDate; 0 when no payment did. See SameDaySettlement.
+	SameDayCashBankID int32 `cb:"38"`
+}
+
+// AccountingDate is the day the expense is booked on: a depreciation row (no comprobante, no
+// DocIssueDate) on its Date, any other expense on its DocIssueDate, which is its own Date when it
+// has no comprobante (NormalizePurchaseDocument).
+func (e *Expense) AccountingDate() int16 {
+	if e.Type == ExpenseTypeDepreciation || e.DocIssueDate == 0 {
+		return e.Date
+	}
+	return e.DocIssueDate
+}
+
+// StampPeriod sets Period from AccountingDate.
+func (e *Expense) StampPeriod() {
+	e.Period = core.PeriodOfDay(e.AccountingDate())
 }
 
 type ExpenseTable struct {
@@ -165,6 +196,10 @@ type ExpenseTable struct {
 	UpdatedBy          db.Col[*ExpenseTable, int32]
 	Created            db.Col[*ExpenseTable, int32]
 	CreatedBy          db.Col[*ExpenseTable, int32]
+	AccountCode        db.Col[*ExpenseTable, int32]
+	Period             db.Col[*ExpenseTable, int16]
+	// SameDayCashBankID is the cash bank of the payment that settled the expense on its AccountingDate.
+	SameDayCashBankID db.Col[*ExpenseTable, int32]
 }
 
 func (e ExpenseTable) GetSchema() db.TableSchema {
@@ -173,10 +208,13 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 		Name:         "expenses",
 		Partition:    e.CompanyID,
 		UseSequences: true,
-		Keys:         db.Cols(e.ID.Autoincrement(0)),
+		// A period's supplies reception of an older expense reaches it through the by-IDs cache.
+		CacheByIDs: true,
+		Keys:       db.Cols(e.ID.Autoincrement(0)),
 		// Sizes the Status slot of the delta index. 3 = posted non-cash (depreciation).
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Min: 0, Max: 3},
+			{Col: e.Period, Min: 0, Max: 9912},
 		},
 		Indexes: []db.Index{
 			// Fetch all periods belonging to a schedule (lazy generation + period listing).
@@ -185,6 +223,8 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.AssetID)},
 			// Status is the sync filter: a first sync lists the statuses the handler asks for.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// One log per accounting period: GET.accounting-operations syncs a month through it.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
 			// The Registro de Compras reads a period of documents, one indexed read per day.
 			{Keys: db.Cols(e.DocIssueDate), UseIndexGroup: true},
 		},

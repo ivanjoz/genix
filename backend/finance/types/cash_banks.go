@@ -101,31 +101,45 @@ type CashBankMovement struct {
 	ReferenceID   int32            `cb:"6"` //
 	Date          int16            `cb:"7"`
 	Type          CashMovementType `cb:"8"`
-	// AccountCode is the PCGE account on the other side of the cash, for the types the user
-	// classifies (see CashMovementAccountOptions). 0 for every other type: its counter-account
-	// follows from the type and the document it pays.
-	AccountCode int16 `cb:"9"`
-	FinalAmount int32 `cb:"10"`
-	Amount      int32 `cb:"11"`
-	Created     int32 `cb:"12"`
-	CreatedBy   int32 `cb:"13"`
+	// CounterAccountCode is the PCGE account on the other side of the cash, for the types the
+	// user classifies (see CashMovementAccountOptions). 0 for every other type: its
+	// counter-account follows from the type and the document it pays.
+	CounterAccountCode int32 `cb:"9"`
+	FinalAmount        int32 `cb:"10"`
+	Amount             int32 `cb:"11"`
+	Created            int32 `cb:"12"`
+	CreatedBy          int32 `cb:"13"`
+	// Period is the YYMM of Date (core.PeriodOfDay): the pinned key of the period delta index the
+	// accounting operations sync a month through.
+	Period int16 `cb:"14"`
+	// SameDayMovement is 1 when this movement alone settled its whole document on the document's
+	// accounting date, at the cash bank the document records (SameDaySettlement); the document
+	// mirrors it in its SameDayCashBankID. A pinned key of the period delta index, so the accounting
+	// operations never download these rows: they infer them from the document.
+	SameDayMovement int8  `cb:"15"`
+	Version         int16 `json:"ver" cb:"ver,16"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,17"`
 }
 
 type CashBankMovementTable struct {
 	db.TableStruct[CashBankMovementTable, CashBankMovement]
-	CompanyID     db.Col[*CashBankMovementTable, int32]
-	ID            db.Col[*CashBankMovementTable, int64]
-	CashBankID    db.Col[*CashBankMovementTable, int32]
-	CashBankRefID db.Col[*CashBankMovementTable, int32]
-	DocumentID    db.Col[*CashBankMovementTable, int64]
-	ReferenceID   db.Col[*CashBankMovementTable, int32]
-	Date          db.Col[*CashBankMovementTable, int16]
-	Type          db.Col[*CashBankMovementTable, CashMovementType]
-	AccountCode   db.Col[*CashBankMovementTable, int16]
-	FinalAmount   db.Col[*CashBankMovementTable, int32]
-	Amount        db.Col[*CashBankMovementTable, int32]
-	Created       db.Col[*CashBankMovementTable, int32]
-	CreatedBy     db.Col[*CashBankMovementTable, int32]
+	CompanyID          db.Col[*CashBankMovementTable, int32]
+	ID                 db.Col[*CashBankMovementTable, int64]
+	CashBankID         db.Col[*CashBankMovementTable, int32]
+	CashBankRefID      db.Col[*CashBankMovementTable, int32]
+	DocumentID         db.Col[*CashBankMovementTable, int64]
+	ReferenceID        db.Col[*CashBankMovementTable, int32]
+	Date               db.Col[*CashBankMovementTable, int16]
+	Type               db.Col[*CashBankMovementTable, CashMovementType]
+	CounterAccountCode db.Col[*CashBankMovementTable, int32]
+	FinalAmount        db.Col[*CashBankMovementTable, int32]
+	Amount             db.Col[*CashBankMovementTable, int32]
+	Created            db.Col[*CashBankMovementTable, int32]
+	CreatedBy          db.Col[*CashBankMovementTable, int32]
+	Period             db.Col[*CashBankMovementTable, int16]
+	SameDayMovement    db.Col[*CashBankMovementTable, int8]
+	Version            db.Col[*CashBankMovementTable, int16]
 }
 
 func (e CashBankMovementTable) GetSchema() db.TableSchema {
@@ -139,10 +153,20 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 			e.CashBankID.Size(17), e.Date.Size(15), e.Autoincrement(8),
 		),
 		AutoincrementPart: e.Date,
+		// Size the slots of the period delta index. Type leaves room for new movement types.
+		FixedValues: []db.FixedValues{
+			{Col: e.Period, Min: 0, Max: 9912},
+			{Col: e.SameDayMovement, Values: []int64{0, 1}},
+			{Col: e.Type, Min: 0, Max: 31},
+		},
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ReferenceID)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.CreatedBy)},
+			// One log per accounting period and SameDayMovement value: GET.accounting-operations
+			// syncs a month's SameDayMovement = 0 log only. Movements are never deleted, so Type is
+			// just the sync filter a first sync lists.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.SameDayMovement, e.Type)},
 		},
 	}
 }
@@ -194,9 +218,14 @@ type InternalCashMovement struct {
 	ReferenceID   int32 // Optional: e.g. the originating ExpenseScheduled.ID for expense payments.
 	Date          int16 // Optional: movement date; falls back to the request's effective date if 0.
 	Type          CashMovementType
-	AccountCode   int16 // Required only for the types in CashMovementAccountOptions.
-	Amount        int32
-	FinalAmount   int32 // Optional: calculated if 0
+	// Required for the types in CashMovementAccountOptions and for a document's payment
+	// (DocumentPaymentAccounts).
+	CounterAccountCode int32
+	Amount             int32
+	FinalAmount        int32 // Optional: calculated if 0
+	// SameDayMovement is 1 when the document's process decided this payment alone settles it on its
+	// accounting date (SameDaySettlement).
+	SameDayMovement int8
 }
 
 type SaleProduct struct {

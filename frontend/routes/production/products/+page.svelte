@@ -30,6 +30,8 @@ import {
     ProductsService,
     productImageName,
     mainProductImage,
+    PRODUCT_ORIGIN_BOUGHT,
+    PRODUCT_ORIGIN_OPTIONS,
     type IProduct,
     type IProductoImage
 } from "#services/production/products.svelte.ts";
@@ -585,7 +587,7 @@ import {
         } else if (view === 3) {
           MarcasLayer?.newRecord();
         } else {
-       		productoForm = { ss: 1 } as IProduct
+       		productoForm = { ss: 1, Origin: PRODUCT_ORIGIN_BOUGHT } as IProduct
           ui.openSideLayer(1);
         }
       }}
@@ -772,6 +774,17 @@ import {
           keyId="ID"
           keyName="Name"
           options={listas.ListaRecordsMap.get(2) || []}
+        />
+        <!-- Bought or made decides the product's accounts: mercaderías or productos terminados.
+             Left empty, the server saves it as bought. -->
+        <SearchSelect
+          label="Origin|Origen"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-10 mb-2"
+          save="Origin"
+          keyId="id"
+          keyName="name"
+          options={PRODUCT_ORIGIN_OPTIONS.map((origin) => ({ id: origin.id, name: tr(origin.name) }))}
         />
         <div class="col-span-24 md:col-span-14">
           <CheckboxOptions

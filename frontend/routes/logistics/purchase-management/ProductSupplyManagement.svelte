@@ -510,7 +510,7 @@ import {
 
 </script>
 
-<div class="flex w-full" bind:this={pageContentElement}>
+<div class="w-full" bind:this={pageContentElement}>
   <Layer type="content">
 	  <div class="mb-6 flex items-center justify-between p-1" aria-label="Product supply management toolbar with search filter">
 	    <FilterInput bind:value={supplyFilterText} placeholder="Buscar producto o proveedor"

@@ -110,6 +110,19 @@ func TestNetStockReturnsSkipsWhatWasNeverDeliveredOrAlreadyReturned(t *testing.T
 	}
 }
 
+// The goods come back at the value they left with, net of earlier returns, so the sale's cost
+// (deliveries minus returns) settles at exactly 0 — not re-priced at today's average.
+func TestNetStockReturnsCarryTheValueStillOut(t *testing.T) {
+	movements := []logistics.WarehouseProductMovement{
+		{Type: 8, WarehouseID: 3, ProductID: 77, SubDivisor: 1, Quantity: -3, MonetaryValue: 1000},
+		{Type: 9, WarehouseID: 3, ProductID: 77, SubDivisor: 1, Quantity: 1, MonetaryValue: 333},
+	}
+	returns := netStockReturns(movements, 1)
+	if len(returns) != 1 || returns[0].Quantity != 2 || returns[0].InflowValue != 667 {
+		t.Fatalf("expected 2 units back worth 667, got %+v", returns)
+	}
+}
+
 // Each lot and serial is its own physical place: returning them merged would put stock back
 // where it never was.
 func TestNetStockReturnsKeepsLotsAndSerialsApart(t *testing.T) {

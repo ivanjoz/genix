@@ -48,11 +48,8 @@ var manualStockAdjustmentTypes = []types.StockMovementType{
 	types.StockMovementTypeManualExit, types.StockMovementTypeShrinkage, types.StockMovementTypeInternalConsumption,
 }
 
-// The company flags that govern manual stock adjustments (backend/company_flags.toml).
-const (
-	companyFlagBlockManualStockInbound = int16(6) // stock only enters through a purchase order
-	companyFlagRequireManualStockCost  = int16(9) // a manual increase must carry its UnitCost
-)
+// The company flag that governs manual stock adjustments (backend/company_flags.toml).
+const companyFlagBlockManualStockInbound = int16(6) // stock only enters through a purchase order
 
 // loadProductSubDivisors reads the current sub-unit divisor of every product an adjustment
 // touches. A product with no sub-unit maps to core.QuantityDivisorNone.
@@ -99,14 +96,14 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	// The page enforces these too, but only the engine knows whether a "set stock to X" item is
-	// an increase, so the flags travel on each movement and are judged there.
+	// The page enforces this too, but only the engine knows whether a "set stock to X" item is
+	// an increase, so the flag travels on each movement and is judged there. So is the cost an
+	// increase needs when its row has no AverageCost.
 	companyConfig, err := cloud.LoadCompanyConfig(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr("Error al leer la configuración de la empresa:", err)
 	}
 	rejectManualInbound := core.HasCompanyFlag(companyConfig.Company.Flags, companyFlagBlockManualStockInbound)
-	requireManualCost := core.HasCompanyFlag(companyConfig.Company.Flags, companyFlagRequireManualStockCost)
 
 	movimientos := make([]types.InternalMovement, 0, len(items))
 	for _, item := range items {
@@ -120,7 +117,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(fmt.Sprintf("Seleccione el motivo del cambio de stock del producto %v.", item.ProductID))
 		}
 		// Opening stock is how a company onboards, so flag 6 does not block it; and every
-		// valuation starts from it, so it always carries its cost, flag 9 or not.
+		// valuation starts from it, so it always carries its cost, average or not.
 		isOpeningStock := item.Type == types.StockMovementTypeOpeningStock
 		subDivisor := subDivisorByProductID[item.ProductID]
 		if item.SubQuantity != 0 && subDivisor <= core.QuantityDivisorNone {
@@ -145,7 +142,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 			Price:       item.UnitCost,
 
 			RejectInbound:      rejectManualInbound && !isOpeningStock,
-			RequireInboundCost: requireManualCost || isOpeningStock,
+			RequireInboundCost: isOpeningStock,
 		})
 	}
 

@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/core"
+	"app/db"
+)
 
 // Document types, SUNAT catalog 01, stored as the numeric part of the code.
 const (
@@ -156,6 +159,14 @@ type InvoiceDocument struct {
 	Metadata  *string `json:"mdt" cb:"mdt,28"`
 	Created   int32   `cb:"29"`
 	CreatedBy int32   `cb:"30"`
+	// Period is the YYMM of IssueDate (core.PeriodOfDay): the pinned key of the period delta index
+	// the accounting operations sync a month through. Set by StampPeriod on every write.
+	Period int16 `cb:"31"`
+}
+
+// StampPeriod sets Period from the document's accounting date, its IssueDate.
+func (e *InvoiceDocument) StampPeriod() {
+	e.Period = core.PeriodOfDay(e.IssueDate)
 }
 
 // SeriesID is the series this document was issued under, read off the tail of the
@@ -214,6 +225,7 @@ type InvoiceDocumentTable struct {
 	Version          db.Col[*InvoiceDocumentTable, int16]
 	Created          db.Col[*InvoiceDocumentTable, int32]
 	CreatedBy        db.Col[*InvoiceDocumentTable, int32]
+	Period           db.Col[*InvoiceDocumentTable, int16]
 }
 
 func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
@@ -228,6 +240,7 @@ func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 		Keys: db.Cols(e.ID),
 		FixedValues: []db.FixedValues{
 			{Col: e.State, Min: 0, Max: 6},
+			{Col: e.Period, Min: 0, Max: 9912},
 		},
 		// No index on the series: it lives in the tail of the id rather than in a
 		// column, so there is nothing to index. Filtering a list by series happens
@@ -241,6 +254,8 @@ func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 			// The CQL index it declares is the same one a local index declares.
 			{Keys: db.Cols(e.IssueDate), UseIndexGroup: true},
 			{Type: db.TypeDelta, Keys: db.Cols(e.State)},
+			// One log per accounting period: GET.accounting-operations syncs a month through it.
+			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.State)},
 		},
 	}
 }

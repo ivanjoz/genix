@@ -35,11 +35,17 @@ type ProductStock struct {
 	LastPricesPrice           []int32 `cb:"14"`
 	LastPricesQuantity        []int32 `cb:"15"`
 	// AverageCost is the moving weighted average cost of one whole unit, in PEN cents, net of
-	// recoverable IGV. ApplyMovimientos moves it on every costed inflow; outflows and uncosted
-	// inflows leave it as it is. It is an operational figure: a purchase whose comprobante is
-	// registered after the goods arrive does not restate it — the accounting valuation does.
+	// recoverable IGV: StockValue over the units held, rounded, recomputed on every inflow.
+	// Outflows leave it as it is, and an emptied row keeps it as the last known cost, which values
+	// a priceless inflow into that row. It is an operational figure: a purchase whose comprobante
+	// is registered after the goods arrive does not restate it.
 	AverageCost int32 `cb:"16"`
 	StockStatus int8  `cb:"17"`
+	// StockValue is the value of everything on the row (free bucket plus details), PEN cents, net
+	// of recoverable IGV. Outflows are costed from it, not from the rounded AverageCost, and the
+	// outflow that empties the row takes all of it, so the row reaches value 0 with its units.
+	// int64: a row's total is not bounded by a unit price.
+	StockValue int64 `cb:"25"`
 
 	Created   int32 `cb:"18"`
 	CreatedBy int32 `cb:"19"`
@@ -79,6 +85,7 @@ type ProductStockTable struct {
 	LastPricesQuantity        db.ColSlice[*ProductStockTable, int32]
 	AverageCost               db.Col[*ProductStockTable, int32]
 	StockStatus               db.Col[*ProductStockTable, int8]
+	StockValue                db.Col[*ProductStockTable, int64]
 	Created                   db.Col[*ProductStockTable, int32]
 	CreatedBy                 db.Col[*ProductStockTable, int32]
 	Updated                   db.Col[*ProductStockTable, int32]

@@ -34,6 +34,16 @@ func FechaUnix() int16 {
 	return TimeToFechaUnix(Now())
 }
 
+// PeriodOfDay is the accounting period of a UnixDay as YYMM (Oct 2026 → 2610), 0 for no date. It is
+// the value of every Period column: the pinned key that scopes a table's delta log to one month.
+func PeriodOfDay(unixDay int16) int16 {
+	if unixDay <= 0 {
+		return 0
+	}
+	date := time.Unix(int64(unixDay)*86400, 0).UTC()
+	return int16((date.Year()%100)*100 + int(date.Month()))
+}
+
 // LogHistoricalClockIfActive announces a frozen clock at startup. An override changes the date
 // of every record the process writes, so it must never be silent.
 func LogHistoricalClockIfActive() {

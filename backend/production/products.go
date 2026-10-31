@@ -101,6 +101,13 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		// Preserve incoming ID so frontend can map TempID -> ID after merge/upsert.
 		e.TempID = e.ID
 		e.CompanyID = req.User.CompanyID
+		// A product is bought unless the form says it is made; its accounts follow from Origin,
+		// so it never carries an account of its own (that column is a supply's default).
+		e.Origin = core.If(e.Origin == 0, types.ProductOriginBought, e.Origin)
+		if e.Origin != types.ProductOriginBought && e.Origin != types.ProductOriginMade {
+			return req.MakeErr(fmt.Sprintf(`El origen del producto "%s" es inválido.`, e.Name))
+		}
+		e.AccountCode = 0
 		e.SelfParse()
 		if previousProduct, duplicate := nameHashToName[e.NameHash]; duplicate {
 			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Name, e.Name))

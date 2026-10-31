@@ -2,6 +2,78 @@
 
 Design decisions for supplies, stock and purchase orders, newest first.
 
+## An exact inflow value travels as `InflowValue`, not as a unit `Price`
+**Context** — A sale annulment must return the value its deliveries took out (`SALE_COST_PLAN`
+§3.1), and the plan said to pass it as `Price = value ÷ quantity`. But the engine multiplies a price
+back by the quantity and rounds, so 6.67 for 2 units would come back as 3.34 × 2 = 6.68.
+**Decision** — `InternalMovement.InflowValue` holds an inflow's total value when the caller knows it
+exactly. It wins over `Price`. `netStockReturns` sets it per bucket (Σ type 8 − Σ type 9 values), and
+the engine sets it on a transfer's inflow leg. With `InflowValue` 0, a return is valued at the row's
+average, like any priceless inflow: it is refused if the row has no average.
+**Rationale** — The sale's cost (deliveries − returns) has to net to exactly 0 on annulment. The
+cost is one more field on `InternalMovement`.
+
+## The replay keeps recorded values and fills only the zeros, sorted by `Created`
+**Context** — `RecalcProductStockByMovements` backfills `StockValue` and each outflow's
+`MonetaryValue`. An outflow's value depends on what the row held when it left. The ledger key
+(Date, WarehouseID, autoincrement) is not chronological within a day.
+**Decision** — The replay loads the company's whole ledger and sorts it by `Created`. Inside the
+same `Created` second an inflow goes first, because the live engine never lets a row go negative.
+Then ID breaks ties. A `MonetaryValue > 0` is a fact and is kept; only rows at 0 are valued and
+written back. Returns at 0 are valued from what their sale (`DocumentID`) still has out of that row;
+other inflows at 0 are valued at the running average.
+**Rationale** — Recomputing every value would let a second run silently rewrite costs that were
+computed live, under the lock, in the true order. The cost: the whole ledger is held in memory once
+(it was streamed before), and old transfers keep their inflow at the origin's rounded average, a
+few cents off their outflow leg.
+
+## Oversold history holds no value
+**Context** — A replay of old data can see a row go negative (oversold before the
+negative-stock check existed, or because the sorted order differs from the live order).
+`StockAfterInflow` has to say what the next inflow is worth.
+**Decision** — An outflow from a row with no units or no value is valued at 0. An inflow into a
+negative balance covers the oversold units first, at its own cost. Only the units left over keep
+value, and the average becomes the inflow's own cost.
+**Rationale** — It is the same "restart at the inflow's cost" rule `NextMovingAverageCost` had. Live
+writes cannot reach this case: the engine rejects negative balances.
+
+## Every inflow adds value; the ledger's `MonetaryValue` stays `int32`
+**Context** — Manual increases and annulment returns with no price used to add units without
+value. With `StockValue` that would leave units on the row worth nothing.
+**Decision** — A priceless inflow is valued at the row's `AverageCost` and stamped on the ledger.
+That price is not appended to `LastPricesPrice`, which keeps real purchase prices only.
+`MonetaryValue` was left as `int32`.
+**Rationale** — The row's total needs `int64`, but one movement worth more than ~21.4 million PEN
+is not a realistic case, and widening the ledger column was out of scope.
+
+## Purchase order lines get their account on the server; the form has no selector yet
+**Context** — The plan put an account selector on each supply line of the PO form. But the cart is
+fed by `ProductsService`, and its route drops supplies (ss=2). No supply line can reach that form
+today.
+**Decision** — `resolvePurchaseLineAccounts` stamps a supply line with its supply's default (or a
+valid account the client sent) and a product line with 0. A made product (`Origin = 2`) is rejected.
+The UI selector is left out until supplies can be added to a PO from the frontend.
+**Rationale** — A selector that can never render is dead code. The backend rule is the part that
+holds for any writer. The per-line selector is still owed when supplies join the PO cart.
+
+## Purchase order lines were migrated once; the migration is gone
+**Context** — `PurchaseOrder` moved from four parallel `detail_*` list columns to `Lines
+[]PurchaseOrderLine`, one colbin blob, like `SaleOrder`. The record no longer maps the old columns.
+**Decision** — A one-off `fn-migrate-purchase-order-lines` read the old columns with raw CQL, wrote
+`Lines` through `db.Update` (which rewrites the product index-group hashes and publishes their
+freshness counters) and dropped the four columns: 28 orders, 1400 lines, company 1. The old rows are
+in `backend/tmp/purchase-order-lines.json`. The function was deleted because it can no longer run.
+`Updated` did not move; the purchase-orders cache version moved to 4 instead.
+**Rationale** — `purchase_order` has no DataFrames, so unlike the sale migration the ORM write was
+safe. The computed column keeps the name `detail_product_ids`, so the `zz_igs_*_detail_product_ids`
+groups and their IDs are unchanged and no client cache key moves.
+
+## PurchaseOrderLine.PresentationID is int16
+**Context** — The old `DetailProductPresentationIDs` was `[]int32`, but every consumer
+(`PostStockAdjustItem`, `InternalMovement`, `SaleOrderLine`) already holds a presentation as int16.
+**Decision** — The line stores it as int16, and `receivePurchaseOrder` keys its order stats on int16.
+**Rationale** — The int32 only forced casts; no stored presentation exceeds int16.
+
 ## PackProductStockID follows the ORM's bottom-aligned packing; detail rows were re-keyed
 **Context** — `PackProductStockID` packed `warehouse<<46 | product<<16 | presentation<<2` (top-aligned),
 but `db.PackSlotValues` packs the 17/30/14-bit slots from the bottom: `<<44 | <<14 | <<0`. Stock rows
@@ -28,27 +100,17 @@ transfer screen exists.
 The cost: a user whose screen was stale, who types 12 over a stock that has meanwhile become 13,
 gets "un movimiento Entrada manual no puede disminuir el stock" and must reload.
 
-## A transfer's inflow is priced at the origin's average, not at a typed price
+## A transfer's inflow enters with the value its outflow leg took out
 
 **Context** — A stock transfer is now two ledger rows (`expandStockTransfers`), and the receiving
-warehouse has its own moving average that the inflow feeds.
-**Decision** — Both legs drop any `Price` the caller sent; inside the lock the inflow takes the origin
-row's `AverageCost` at that moment. A transfer cannot set stock ("set to X") and must move a positive
-quantity between two different warehouses.
-**Rationale** — Moving goods between warehouses creates no value, so the destination must receive
-them at what they cost the origin. The cost: an origin with no average (0) delivers uncosted stock,
-which leaves the destination's average unchanged.
-
-## An uncosted inflow leaves the average cost where it was
-
-**Context** — `ProductStock.AverageCost` moves on every costed inflow. Receptions of an order in
-dollars with no rate, sale-annulment returns and manual increases with no cost (flag 9 off)
-all bring units in with no price.
-**Decision** — They add units to the balance but do not move the average: the next costed inflow
-averages against the units held, uncosted ones included, at the current average.
-**Rationale** — Averaging them in at zero would drag the cost down for every later sale; leaving
-them out keeps the figure a real purchase cost. The cost: those units are silently valued at the
-running average, which is the gap the plan's `INV-001` diagnostic exists to show.
+warehouse has its own value and average that the inflow feeds.
+**Decision** — Both legs drop any `Price` the caller sent. Inside the lock the outflow leg is valued
+from the origin's `StockValue`, and the inflow leg, right after it, sets `InflowValue` to that exact
+value. A transfer cannot set stock ("set to X") and must move a positive quantity between two
+different warehouses.
+**Rationale** — Moving goods between warehouses creates no value. Re-pricing the inflow at the
+origin's rounded average would move cents between warehouses. The cost: an origin with no value
+sends uncosted stock, which enters at the destination's average, or is refused if it has none.
 
 ## AverageCost is written at movement time and is not restated later
 
@@ -110,7 +172,7 @@ The cost: a failed express entry leaves an annulled order in the report instead 
 
 **Context** — The create handler stored the client's `TotalAmount` as is. The comprobante sent with
 a new order is now checked against it, and `DebtAmount` starts from it.
-**Decision** — The handler sums `DetailProductPrice × DetailProductQuantity` and overwrites
+**Decision** — The handler sums `Price × Quantity` over `Lines` and overwrites
 `TotalAmount` before anything reads it.
 **Rationale** — A client total would let the debt and the comprobante agree with each other and
 disagree with the lines. The frontend computes the same sum, so nothing changes for it.

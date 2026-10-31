@@ -9,6 +9,7 @@ package core
 // annotated "retired", because rows already written still name it and handing that number to a
 // different route would rewrite what those rows mean.
 var APIRouteIDs = map[string]int16{
+	"GET.accounting-operations":        138,
 	"GET.agent-models":                 1,
 	"GET.asset-depreciation":           114,
 	"GET.assets":                       115,
@@ -34,6 +35,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.ecommerce-page-content":       13,
 	"GET.empresas":                     14,
 	"GET.exchange-rates":               135,
+	"GET.expense-ids":                  139,
 	"GET.expense-schedule-periods":     15,
 	"GET.expenses":                     16,
 	"GET.expenses-scheduled":           17,
@@ -59,6 +61,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.product-supply":               33,
 	"GET.products":                     34,
 	"GET.products-stock":               35,
+	"GET.purchase-order-ids":           140,
 	"GET.purchase-orders":              36,
 	"GET.purchase-orders-query":        37,
 	"GET.purchases-book":               137,
@@ -142,6 +145,7 @@ var APIRouteIDs = map[string]int16{
 	"POST.webpage-showcase-image":      99,
 	"POST.website-domain":              100,
 	"POST.website-seo":                 101,
+	"PUT.accounting-classification":    141,
 	"PUT.asset":                        131,
 	"PUT.asset-disposal":               127,
 	"PUT.asset-transfer":               128,
@@ -163,7 +167,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 137
+const MaxAPIRouteID int16 = 141
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

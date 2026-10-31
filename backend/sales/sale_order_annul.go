@@ -132,10 +132,11 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		refundMovements = append(refundMovements, finance.InternalCashMovement{
-			CashBankID: annulRequest.RefundCashBankID,
-			DocumentID: sale.ID,
-			Type:       finance.CashMovementTypeSaleRefund,
-			Amount:     -refundAmount,
+			CashBankID:         annulRequest.RefundCashBankID,
+			DocumentID:         sale.ID,
+			Type:               finance.CashMovementTypeSaleRefund,
+			CounterAccountCode: finance.PCGEReceivable,
+			Amount:             -refundAmount,
 		})
 	}
 
@@ -165,10 +166,22 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
+	// An annulled sale leaves the accounting operations' cache, so a collection they inferred from it
+	// must become a movement they download, like its refund: the two cancel in 101 and 1212. A zero
+	// total is what says the annulled sale settles nothing.
+	sameDayCashBankID, restampErr := finance.RestampDocumentPayments(req.User.CompanyID, sale.ID,
+		[]finance.CashMovementType{finance.CashMovementTypeSaleCollection, finance.CashMovementTypeSaleRefund},
+		sale.Date, 0, finance.PCGEReceivable)
+	if restampErr != nil {
+		return req.MakeErr(restampErr)
+	}
+
 	sale.Status = types.OrderStatusAnnulled
 	sale.AnnulReason = annulReason
 	sale.Updated = core.SUnixTime()
 	sale.UpdatedBy = req.User.ID
+	sale.SameDayCashBankID = sameDayCashBankID
+	sale.StampPeriod()
 
 	saleTable := db.TableOf[types.SaleOrder]()
 	salesToUpdate := []types.SaleOrder{sale}
@@ -177,6 +190,9 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		saleTable.AnnulReason,
 		saleTable.Updated,
 		saleTable.UpdatedBy,
+		// The period delta index packs Period with Status: they are written together.
+		saleTable.Period,
+		saleTable.SameDayCashBankID,
 	); err != nil {
 		return req.MakeErr("Error al anular la venta:", err)
 	}
@@ -203,7 +219,8 @@ func readSaleOrderReversal(companyID int32, saleOrderID int64) (int32, []logisti
 	eg.Go(func() error {
 		query := db.Query(&stockMovements)
 		query.Select(query.Type, query.WarehouseID, query.ProductID, query.PresentationID,
-			query.LotID, query.SerialNumber, query.Quantity, query.SubQuantity, query.SubDivisor).
+			query.LotID, query.SerialNumber, query.Quantity, query.SubQuantity, query.SubDivisor,
+			query.MonetaryValue).
 			CompanyID.Equals(companyID).
 			DocumentID.Equals(saleOrderID)
 		if err := query.Exec(); err != nil {
@@ -257,6 +274,9 @@ func netStockReturns(stockMovements []logistics.WarehouseProductMovement,
 	}
 
 	deliveredByBucket := map[stockBucket]core.Quantity{}
+	// The value still out per bucket: what the deliveries took minus what returns brought back.
+	// MonetaryValue is positive on both sides, so the type decides the sign.
+	deliveredValueByBucket := map[stockBucket]int32{}
 	bucketOrder := []stockBucket{}
 
 	for _, stockMovement := range stockMovements {
@@ -284,6 +304,9 @@ func netStockReturns(stockMovements []logistics.WarehouseProductMovement,
 		}
 		deliveredByBucket[bucket] = deliveredByBucket[bucket].Add(
 			core.Quantity{Units: stockMovement.Quantity, Sub: stockMovement.SubQuantity})
+		deliveredValueByBucket[bucket] += core.If(
+			stockMovement.Type == logistics.StockMovementTypeSaleDelivery,
+			stockMovement.MonetaryValue, -stockMovement.MonetaryValue)
 	}
 
 	stockReturns := []logistics.InternalMovement{}
@@ -307,6 +330,10 @@ func netStockReturns(stockMovements []logistics.WarehouseProductMovement,
 			SubDivisor:     bucket.subDivisor,
 			Quantity:       returnQuantity.Units,
 			SubQuantity:    returnQuantity.Sub,
+			// The goods come back at the value they left with, not re-priced at today's average,
+			// so the sale's cost (deliveries minus returns) nets to exactly 0. An uncosted delivery
+			// has no value to return; the engine then values the return at the row's average.
+			InflowValue: max(deliveredValueByBucket[bucket], 0),
 			// The reversal has to carry the sale it undoes, or the next annulment of this sale
 			// could not find it and would return the stock a second time.
 			DocumentID: saleOrderID,

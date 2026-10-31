@@ -58,15 +58,21 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// The movement is an outflow, so its amount is negative. FinalAmount stays 0 so the cash
-	// side computes the resulting balance authoritatively.
+	// side computes the resulting balance authoritatively. When it alone pays the whole purchase on
+	// its accounting date, the accounting operations infer it from the asset instead.
+	paymentDate := core.If(payload.Date != 0, payload.Date, core.FechaUnix())
+	isSameDayPayment := finance.IsSameDaySettlement(asset.AccountingDate(), asset.PurchaseAmount,
+		asset.PaidAmount, paymentDate, payload.Amount)
 	movement := finance.InternalCashMovement{
-		CashBankID:  payload.CashBankID,
-		DocumentID:  int64(asset.ID),
-		ReferenceID: asset.ProductID,
-		Date:        payload.Date,
-		Type:        finance.CashMovementTypeAssetPayment,
-		Amount:      -payload.Amount,
-		FinalAmount: 0,
+		CashBankID:         payload.CashBankID,
+		DocumentID:         int64(asset.ID),
+		ReferenceID:        asset.ProductID,
+		Date:               paymentDate,
+		Type:               finance.CashMovementTypeAssetPayment,
+		CounterAccountCode: finance.PCGEAssetPayables,
+		Amount:             -payload.Amount,
+		FinalAmount:        0,
+		SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
 	}
 	if movementError := finance.ApplyCashBankMovement(
 		req, []finance.InternalCashMovement{movement},
@@ -104,12 +110,15 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 	)
 	asset.Updated = core.SUnixTime()
 	asset.UpdatedBy = req.User.ID
+	if isSameDayPayment {
+		asset.SameDayCashBankID = payload.CashBankID
+	}
 
 	assetTable := db.TableOf[types.Asset]()
 	assetRecords := []types.Asset{asset}
 	if updateError := db.Update(&assetRecords,
 		assetTable.PaidAmount, assetTable.PaymentStatus, assetTable.Status,
-		assetTable.Updated, assetTable.UpdatedBy,
+		assetTable.Updated, assetTable.UpdatedBy, assetTable.SameDayCashBankID,
 	); updateError != nil {
 		return req.MakeErr("Error al actualizar el pago del activo.", updateError)
 	}

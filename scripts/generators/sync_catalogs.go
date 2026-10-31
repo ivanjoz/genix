@@ -231,6 +231,10 @@ func catalogValueText(expression ast.Expr, constants map[string]string) (string,
 	case *ast.BasicLit:
 		return goLiteralToTypeScript(value.Value), true
 	case *ast.Ident:
+		// true and false parse as identifiers, not literals, and read the same in TypeScript.
+		if value.Name == "true" || value.Name == "false" {
+			return value.Name, true
+		}
 		constantValue, isKnown := constants[value.Name]
 		if !isKnown {
 			return "", false

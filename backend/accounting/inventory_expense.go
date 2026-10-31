@@ -1,6 +1,7 @@
 package accounting
 
 import (
+	"app/accounting/types"
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
@@ -26,6 +27,8 @@ type InventoryExpensePayload struct {
 	Quantity    int32  `cb:"9"`
 	// Unit price in cents. The expense total is this times the quantity.
 	UnitPrice int32 `cb:"10"`
+	// The PCGE account of the purchase. 0 takes the supply's own default.
+	AccountCode int32 `cb:"11"`
 	// The supplier's comprobante, flattened into the body. Its CurrencyType is the expense's.
 	finance.PurchaseDocument
 }
@@ -62,7 +65,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	// which has its own reception flow with lots and differences.
 	supplyProducts := []production.Product{}
 	supplyQuery := db.Query(&supplyProducts)
-	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Status).
+	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Status, supplyQuery.AccountCode).
 		CompanyID.Equals(req.User.CompanyID).ID.Equals(payload.ProductID)
 
 	if queryError := supplyQuery.Exec(); queryError != nil {
@@ -74,6 +77,10 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	if supplyProducts[0].Status != production.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
 	}
+	accountCode, accountError := types.ResolveSupplyAccount(payload.AccountCode, supplyProducts[0].AccountCode)
+	if accountError != nil {
+		return req.MakeErr(accountError)
+	}
 
 	currentTimestamp := core.SUnixTime()
 	expenseDate := core.If(payload.Date > 0, payload.Date, core.FechaUnix())
@@ -83,6 +90,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		Name:         payload.Name,
 		Description:  payload.Description,
 		Type:         finance.ExpenseTypeInventory,
+		AccountCode:  accountCode,
 		CategoryID:   core.If(payload.CategoryID > 0, payload.CategoryID, int8(4)),
 		SupplierID:   payload.SupplierID,
 		ProductID:    payload.ProductID,
@@ -103,6 +111,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	if documentError := inventoryExpense.ApplyPurchaseDocument(req.User.CompanyID); documentError != nil {
 		return req.MakeErr(documentError)
 	}
+	inventoryExpense.StampPeriod()
 
 	expenseRecords := []finance.Expense{inventoryExpense}
 	if insertError := db.Insert(&expenseRecords); insertError != nil {
@@ -118,8 +127,9 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		SupplierID:  payload.SupplierID,
 		Quantity:    payload.Quantity,
 		// Costed like a purchase-order reception: soles, net of the IGV the comprobante recovers.
-		Price:      expenseRecords[0].PurchaseDocument().InventoryUnitCost(payload.UnitPrice),
-		DocumentID: int64(expenseRecords[0].ID),
+		Price:               expenseRecords[0].PurchaseDocument().InventoryUnitCost(payload.UnitPrice),
+		DocumentID:          int64(expenseRecords[0].ID),
+		PurchaseAccountCode: accountCode,
 	}
 	if movementError := logistics.ApplyMovimientos(
 		req, []logistics.InternalMovement{inboundMovement},

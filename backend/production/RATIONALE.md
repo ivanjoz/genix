@@ -2,6 +2,15 @@
 
 Design decisions for the product catalog and its supplies, newest first.
 
+## A product's AccountCode is always 0; Origin defaults to bought
+**Context** — `Product.AccountCode` (a supply's default account) and `Product.Origin` (bought / made)
+share the table that holds both products and supplies.
+**Decision** — `PostProducts` forces `AccountCode = 0` and saves an `Origin` of 0 as bought (1).
+Any other value than 1 or 2 is rejected. The options are the Go catalog `ProductOriginOptions`,
+synced to `PRODUCT_ORIGIN_OPTIONS`.
+**Rationale** — A product's accounts follow from its origin. A stray account on a product row would
+be a second, contradictory source. Bought is the default because nothing is produced in Genix yet.
+
 ## `product-categories` DataFrame: one file per company through a constant key
 **Context** — A frame needs 1 to 3 Keys, and the category ⇒ products map is meant to be one file per
 company, which the partition (CompanyID) already gives.

@@ -82,6 +82,9 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 	// The ledger entries go first: if the asset update fails afterwards the watermark stays
 	// behind and the next run re-posts them, which is visible. The reverse order would
 	// advance the watermark past periods that were never written, losing them silently.
+	for index := range depreciationEntries {
+		depreciationEntries[index].StampPeriod()
+	}
 	if insertError := db.Insert(&depreciationEntries); insertError != nil {
 		return req.MakeErr("Error al registrar los asientos de depreciación.", insertError)
 	}

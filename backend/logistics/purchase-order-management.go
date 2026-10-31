@@ -1,14 +1,15 @@
 package logistics
 
 import (
+	accounting "app/accounting/types"
 	"app/core"
 	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	"app/logistics/types"
+	production "app/production/types"
 	"encoding/json"
 	"fmt"
-	"slices"
 )
 
 const (
@@ -81,9 +82,10 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 	if err := receivePurchaseOrder(req, &order, payload.WarehouseID, payload.Items); err != nil {
 		return req.MakeErr(err)
 	}
+	order.StampPeriod()
 	q := db.TableOf[types.PurchaseOrder]()
 	if err := db.Update(&[]types.PurchaseOrder{order},
-		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy,
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period,
 	); err != nil {
 		return req.MakeErr("Error al actualizar la orden de compra.", err)
 	}
@@ -102,12 +104,10 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 func receivePurchaseOrder(
 	req *core.HandlerArgs, order *types.PurchaseOrder, warehouseID int32, items []PostStockAdjustItem,
 ) error {
-	// Indexar el detalle pedido por (ProductID, PresentationID). El ORM almacena la
-	// presentación como int32 pero MovimientoInterno la maneja como int16; usamos int32
-	// para la clave a fin de no perder información si una OC contiene presentaciones > int16.
+	// Indexar el detalle pedido por (ProductID, PresentationID).
 	type orderKey struct {
 		ProductID      int32
-		PresentationID int32
+		PresentationID int16
 	}
 
 	// Un único stats por clave: ordered/received se suman, price se conserva en su primera
@@ -127,20 +127,16 @@ func receivePurchaseOrder(
 		return statsByKey[key]
 	}
 
-	for i, productID := range order.DetailProductIDs {
-		key := orderKey{ProductID: productID}
-		if i < len(order.DetailProductPresentationIDs) {
-			key.PresentationID = order.DetailProductPresentationIDs[i]
-		}
-		s := getStats(key)
-		s.ordered += core.GetIndex(order.DetailProductQuantity, i)
+	for _, line := range order.Lines {
+		s := getStats(orderKey{ProductID: line.ProductID, PresentationID: line.PresentationID})
+		s.ordered += line.Quantity
 		if s.price == 0 {
-			s.price = core.GetIndex(order.DetailProductPrice, i)
+			s.price = line.Price
 		}
 	}
 
 	for _, item := range items {
-		getStats(orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}).received += item.Quantity
+		getStats(orderKey{ProductID: item.ProductID, PresentationID: item.PresentationID}).received += item.Quantity
 	}
 
 	// Diferencia firmada en dinero: positiva = sobreentrega, negativa = subentrega.
@@ -163,7 +159,7 @@ func receivePurchaseOrder(
 	orderDocument := order.PurchaseDocument()
 	movimientos := make([]types.InternalMovement, 0, len(items))
 	for _, item := range items {
-		key := orderKey{ProductID: item.ProductID, PresentationID: int32(item.PresentationID)}
+		key := orderKey{ProductID: item.ProductID, PresentationID: item.PresentationID}
 		movimientos = append(movimientos, types.InternalMovement{
 			Type:           types.StockMovementTypePurchaseReception,
 			DocumentID:     int64(order.ID),
@@ -177,6 +173,8 @@ func receivePurchaseOrder(
 			Quantity:       item.Quantity,
 			SubQuantity:    item.SubQuantity,
 			Price:          orderDocument.InventoryUnitCost(getStats(key).price),
+			// What the reception posts to, so the accounting operations never read the order back.
+			PurchaseAccountCode: order.ReceptionAccountOf(item.ProductID),
 		})
 	}
 	if err := types.ApplyMovimientos(req, movimientos); err != nil {
@@ -210,6 +208,20 @@ func GetPurchaseOrders(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(records)
 }
 
+// GetPurchaseOrdersByIDs serves the by-IDs cache: the accounting operations read through it the
+// older orders a period's receptions name.
+func GetPurchaseOrdersByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	partitions, err := db.QueryCachedIDs[types.PurchaseOrder](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener las órdenes de compra.", err)
+	}
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
+}
+
 func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	record := types.PurchaseOrder{}
 	if err := json.Unmarshal([]byte(*req.Body), &record); err != nil {
@@ -232,27 +244,22 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Supplies are Product rows with Status=2, so they arrive as ordinary product lines.
-	productLineCount := len(record.DetailProductIDs)
-	if productLineCount == 0 {
+	if len(record.Lines) == 0 {
 		return req.MakeErr("Debe agregar al menos un producto o insumo.")
 	}
-	if len(record.DetailProductQuantity) != productLineCount || len(record.DetailProductPrice) != productLineCount {
-		return req.MakeErr("Los detalles de productos de la orden son inconsistentes.")
-	}
-	if len(record.DetailProductPresentationIDs) > 0 && len(record.DetailProductPresentationIDs) != productLineCount {
-		return req.MakeErr("Inconsistencia en el detalle de Presentaciones IDs.")
-	}
-	if slices.Contains(record.DetailProductIDs, 0) {
-		return req.MakeErr("Hay una línea con ID = 0")
-	}
-	if slices.Contains(record.DetailProductQuantity, 0) {
-		return req.MakeErr("Hay una línea con cantidad = 0")
-	}
-
 	// The total is the lines', never the client's: the debt and the comprobante check read it.
 	record.TotalAmount = 0
-	for lineIndex := range productLineCount {
-		record.TotalAmount += record.DetailProductPrice[lineIndex] * record.DetailProductQuantity[lineIndex]
+	for _, line := range record.Lines {
+		if line.ProductID <= 0 {
+			return req.MakeErr("Hay una línea con ID = 0")
+		}
+		if line.Quantity == 0 {
+			return req.MakeErr("Hay una línea con cantidad = 0")
+		}
+		record.TotalAmount += line.Price * line.Quantity
+	}
+	if err := resolvePurchaseLineAccounts(req.User.CompanyID, record.Lines); err != nil {
+		return req.MakeErr(err)
 	}
 
 	now := core.SUnixTime()
@@ -301,9 +308,12 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			// cambia por PurchaseOrderActionDocument.
 			curr.ProviderSnapshotID = prev.ProviderSnapshotID
 			curr.SetPurchaseDocument(prev.PurchaseDocument())
+			// Only a payment or a comprobante change decides it (PurchaseOrderActionPay / Document).
+			curr.SameDayCashBankID = prev.SameDayCashBankID
 			curr.Status = types.PurchaseOrderStatusPending
 			curr.Updated = now
 			curr.UpdatedBy = req.User.ID
+			curr.StampPeriod()
 			return true
 		},
 		func(curr *types.PurchaseOrder) {
@@ -313,6 +323,7 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			curr.UpdatedBy = req.User.ID
 			curr.Date = todayFecha
 			curr.Week = currentSemana.Code
+			curr.StampPeriod()
 		},
 	); err != nil {
 		return req.MakeErr("Error al guardar la orden de compra.", err)
@@ -324,12 +335,10 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// Se recibe exactamente lo pedido, sin lote ni serie: quien necesite registrarlos usa el
 	// ingreso normal. Los movimientos necesitan el ID de la orden, por eso se inserta antes.
 	order := &records[0]
-	entryItems := make([]PostStockAdjustItem, productLineCount)
-	for lineIndex := range productLineCount {
+	entryItems := make([]PostStockAdjustItem, len(order.Lines))
+	for lineIndex, line := range order.Lines {
 		entryItems[lineIndex] = PostStockAdjustItem{
-			ProductID:      order.DetailProductIDs[lineIndex],
-			PresentationID: int16(core.GetIndex(order.DetailProductPresentationIDs, lineIndex)),
-			Quantity:       order.DetailProductQuantity[lineIndex],
+			ProductID: line.ProductID, PresentationID: line.PresentationID, Quantity: line.Quantity,
 		}
 	}
 	q := db.TableOf[types.PurchaseOrder]()
@@ -338,17 +347,62 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// compra pendiente que nadie pidió.
 		order.Status = types.PurchaseOrderStatusCanceled
 		order.Updated = core.SUnixTime()
-		if annulErr := db.Update(&[]types.PurchaseOrder{*order}, q.Status, q.Updated); annulErr != nil {
+		if annulErr := db.Update(&[]types.PurchaseOrder{*order}, q.Status, q.Updated, q.Period); annulErr != nil {
 			core.Log("Error al anular la orden express", order.ID, annulErr)
 		}
 		return req.MakeErr(fmt.Sprintf("No se pudo ingresar la mercadería; la orden Nº %v quedó anulada.", order.ID), err)
 	}
 	if err := db.Update(&[]types.PurchaseOrder{*order},
-		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy,
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period,
 	); err != nil {
 		return req.MakeErr("Error al actualizar la orden de compra.", err)
 	}
 	return req.MakeResponse(*order)
+}
+
+// resolvePurchaseLineAccounts stamps the PCGE account on every line, from what each line buys:
+//   - a supply posts to the account picked on the line, else the supply's default;
+//   - a bought product is merchandise, whose account (6011) follows from its origin, so the line
+//     carries none;
+//   - a made product is a finished good the company produces, and cannot be purchased.
+func resolvePurchaseLineAccounts(companyID int32, lines []types.PurchaseOrderLine) error {
+	productIDs := core.SliceSet[int32]{}
+	for _, line := range lines {
+		productIDs.Add(line.ProductID)
+	}
+	catalogRows := []production.Product{}
+	catalogQuery := db.Query(&catalogRows)
+	catalogQuery.Select(catalogQuery.ID, catalogQuery.Name, catalogQuery.Status, catalogQuery.Origin,
+		catalogQuery.AccountCode).
+		CompanyID.Equals(companyID).ID.In(productIDs.Values...)
+	if err := catalogQuery.Exec(); err != nil {
+		return core.Err("Error al obtener los productos de la orden.", err)
+	}
+	catalogByID := make(map[int32]production.Product, len(catalogRows))
+	for _, catalogRow := range catalogRows {
+		catalogByID[catalogRow.ID] = catalogRow
+	}
+
+	for lineIndex := range lines {
+		line := &lines[lineIndex]
+		catalogRow, found := catalogByID[line.ProductID]
+		if !found {
+			return core.Err("No se encontró el producto de la línea:", line.ProductID)
+		}
+		if catalogRow.Status != production.ProductStatusSupply {
+			if catalogRow.Origin == production.ProductOriginMade {
+				return core.Err(fmt.Sprintf(`"%s" es un producto fabricado por la empresa y no se compra.`, catalogRow.Name))
+			}
+			line.AccountCode = 0
+			continue
+		}
+		accountCode, err := accounting.ResolveSupplyAccount(line.AccountCode, catalogRow.AccountCode)
+		if err != nil {
+			return core.Err(fmt.Sprintf(`Insumo "%s": %v`, catalogRow.Name, err))
+		}
+		line.AccountCode = accountCode
+	}
+	return nil
 }
 
 func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
@@ -374,6 +428,8 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	orderCurrent := existing[0]
+	// Every action writes Status, which the period delta index packs with Period.
+	orderCurrent.StampPeriod()
 	now := core.SUnixTime()
 	q := db.TableOf[types.PurchaseOrder]()
 
@@ -387,7 +443,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy, q.Period); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -415,7 +471,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.UpdatedBy = req.User.ID
 
 		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
-			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.Notes, q.Updated, q.UpdatedBy, q.Status,
+			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.Notes, q.Updated, q.UpdatedBy, q.Status, q.Period,
 		); err != nil {
 			return req.MakeErr("Error al actualizar la orden de compra.", err)
 		}
@@ -457,12 +513,21 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(fmt.Sprintf("La caja \"%v\" no está en la moneda de la orden de compra.", cashBank.Name))
 		}
 
+		// When this payment alone pays the whole order on its comprobante's day, the accounting
+		// operations infer it from the order instead of downloading it.
+		paymentDate := core.FechaUnix()
+		isSameDayPayment := finance.IsSameDaySettlement(orderCurrent.DocIssueDate, orderCurrent.TotalAmount,
+			orderCurrent.TotalAmount-orderCurrent.DebtAmount, paymentDate, payload.Amount)
+
 		// El pago sale de la cashBank: Amount negativo para que ApplyCajaMovimientos descuente del saldo.
 		movimiento := finance.InternalCashMovement{
-			CashBankID: payload.CashBankID,
-			DocumentID: int64(orderCurrent.ID),
-			Type:       finance.CashMovementTypeSupplierPayment,
-			Amount:     -payload.Amount,
+			CashBankID:         payload.CashBankID,
+			DocumentID:         int64(orderCurrent.ID),
+			Date:               paymentDate,
+			Type:               finance.CashMovementTypeSupplierPayment,
+			CounterAccountCode: finance.PurchasePayableAccount(orderCurrent.DocType),
+			Amount:             -payload.Amount,
+			SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
 		}
 		if err := finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{movimiento}); err != nil {
 			return req.MakeErr("Error al registrar el movimiento de cashBank:", err)
@@ -471,8 +536,13 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.DebtAmount -= payload.Amount
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
+		if isSameDayPayment {
+			orderCurrent.SameDayCashBankID = payload.CashBankID
+		}
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.DebtAmount, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
+			q.Status, q.DebtAmount, q.Updated, q.UpdatedBy, q.Period, q.SameDayCashBankID,
+		); err != nil {
 			return req.MakeErr("Error al actualizar la deuda de la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -488,7 +558,7 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy); err != nil {
+		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy, q.Period); err != nil {
 			return req.MakeErr("Error al anular la orden de compra.", err)
 		}
 		return req.MakeResponse(orderCurrent)
@@ -507,11 +577,21 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
+		// The comprobante moves the order's accounting date and decides the payable its payments
+		// clear (4212 / 4699), so they are re-stamped against it.
+		orderCurrent.StampPeriod()
+		sameDayCashBankID, restampErr := finance.RestampDocumentPayments(req.User.CompanyID, int64(orderCurrent.ID),
+			[]finance.CashMovementType{finance.CashMovementTypeSupplierPayment},
+			orderCurrent.DocIssueDate, orderCurrent.TotalAmount, finance.PurchasePayableAccount(orderCurrent.DocType))
+		if restampErr != nil {
+			return req.MakeErr(restampErr)
+		}
+		orderCurrent.SameDayCashBankID = sameDayCashBankID
 
 		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
 			q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate, q.TaxableAmount, q.TaxAmount,
 			q.UntaxedAmount, q.OtherAmount, q.CurrencyType, q.ExchangeRate,
-			q.Updated, q.UpdatedBy, q.Status,
+			q.Updated, q.UpdatedBy, q.Status, q.Period, q.SameDayCashBankID,
 		); err != nil {
 			return req.MakeErr("Error al registrar el comprobante de la orden de compra.", err)
 		}

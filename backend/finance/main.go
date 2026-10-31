@@ -12,6 +12,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.cash-banks-movement":       PostCashBankMovement,
 	// Expenses module
 	"GET.expenses":                 GetExpenses,
+	"GET.expense-ids":              GetExpensesByIDs,
 	"POST.expenses":                PostExpenses,
 	"GET.expenses-scheduled":       GetExpensesScheduled,
 	"POST.expenses-scheduled":      PostExpensesScheduled,

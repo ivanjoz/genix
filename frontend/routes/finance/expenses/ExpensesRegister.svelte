@@ -29,12 +29,15 @@ import {
   ExpenseType,
   expenseTypeLabels,
   localizeOptions,
+  applyCategoryAccount,
   type IExpense,
   type IExpensePayment,
   type IInventoryExpense,
 } from './expenses.svelte'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
+import PCGEAccountSelect from '#domain/PCGEAccountSelect.svelte'
+import { PCGE_KIND_EXPENSE, PCGE_KIND_SUPPLY } from '#core/pcge.ts'
 import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
 import {
   SupplyMaterialService, type ISupplyMaterial,
@@ -169,7 +172,7 @@ const newExpense = () => {
   inventoryForm = {
     Name: "", Description: "", CategoryID: 4, SupplierID: 0, CurrencyType: 1,
     Date: todayUnixDay, DueDate: todayUnixDay,
-    ProductID: 0, WarehouseID: 0, Quantity: 1, UnitPrice: 0,
+    ProductID: 0, WarehouseID: 0, Quantity: 1, UnitPrice: 0, AccountCode: 0,
   } as IInventoryExpense
   newSupplyName = { text: "" }
   paymentForm = {} as IExpensePayment
@@ -471,13 +474,17 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
     {#if isPaid}
       <!-- A fully-paid expense is locked from edits; surface why the fields are read-only. -->
       <div class="col-span-24 mt-12 mb-2 px-10 py-6 rounded bg-green-bg text-green-fg text-sm">
-        {tr("This expense is fully paid: only its comprobante can still be registered.|Este gasto está pagado: sólo se puede registrar su comprobante.")}
+        {tr("This expense is fully paid: only its comprobante and its account can still be changed.|Este gasto está pagado: sólo se puede registrar su comprobante y su cuenta contable.")}
       </div>
     {/if}
     <div class="grid grid-cols-24 gap-10 mt-12">
       <Input bind:saveOn={form} save="Name" css="col-span-24 md:col-span-14" label="Name|Nombre" required={true} disabled={isPaid} />
       <SearchSelect bind:saveOn={form} save="CategoryID" css="col-span-24 md:col-span-10"
-        label="Category|Categoría" keyId="id" keyName="name" options={categoryOptions} required={true} disabled={isPaid} />
+        label="Category|Categoría" keyId="id" keyName="name" options={categoryOptions} required={true} disabled={isPaid}
+        onChange={() => applyCategoryAccount(form)} />
+      <!-- An inventory expense bought a supply, so it takes a supply account instead. -->
+      <PCGEAccountSelect saveOn={form} save="AccountCode" css="col-span-24"
+        kind={form.Type === ExpenseType.INVENTORY ? PCGE_KIND_SUPPLY : PCGE_KIND_EXPENSE} />
       <Input bind:saveOn={form} save="Description" css="col-span-24" label="Description|Descripción" disabled={isPaid} />
       <SearchSelect bind:saveOn={form} save="CurrencyType" css="col-span-24 md:col-span-8"
         label="Currency|Moneda" keyId="id" keyName="name" options={currencyOptions} required={true} disabled={isPaid} />
@@ -498,7 +505,8 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
          Type-2 expense and an inbound movement together. -->
     <div class="grid grid-cols-24 gap-10 mt-12">
       <SearchSelect bind:saveOn={inventoryForm} save="ProductID" css="col-span-24 md:col-span-14"
-        label="Supply / Material|Insumo o Material" keyId="ID" keyName="Name" options={supplies.records || []} />
+        label="Supply / Material|Insumo o Material" keyId="ID" keyName="Name" options={supplies.records || []}
+        onChange={(supply) => { inventoryForm.AccountCode = supply?.AccountCode || 0 }} />
       <SearchSelect bind:saveOn={inventoryForm} save="WarehouseID" css="col-span-24 md:col-span-10"
         label="Warehouse|Almacén" keyId="ID" keyName="Name" options={warehouses.Almacenes || []} required={true} />
 
@@ -507,6 +515,8 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
         <Input bind:saveOn={newSupplyName} save="text" css="col-span-24"
           label="…or create a new supply|…o crear un insumo nuevo" />
       {/if}
+      <!-- Proposed from the supply's own account; left empty, the server applies that default. -->
+      <PCGEAccountSelect saveOn={inventoryForm} save="AccountCode" css="col-span-24" kind={PCGE_KIND_SUPPLY} />
 
       <Input bind:saveOn={inventoryForm} save="Quantity" type="number"
         inputCss="ff-mono text-center" css="col-span-12 md:col-span-6" label="Quantity|Cantidad" required={true} />

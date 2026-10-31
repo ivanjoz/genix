@@ -124,6 +124,42 @@ func LatestSellRate(companyID int32, today int16, maxAgeDays int16) (int32, erro
 		"Regístrelo en Finanzas > Tipo de cambio.", maxAgeDays)
 }
 
+// SellRatesByDay returns the sell rate (× 1000) of every day from firstDay to lastDay, index 0
+// being firstDay. Each day reads like LatestSellRate on that day: a day without a rate (a
+// weekend, a holiday) takes the last one within ExchangeRateMaxAgeDays; 0 when there is none.
+func SellRatesByDay(companyID int32, firstDay int16, lastDay int16) ([]int32, error) {
+	oldestDay := firstDay - ExchangeRateMaxAgeDays
+	monthKeys := core.SliceSet[int16]{}
+	bcrpYears := core.SliceSet[int]{}
+	for day := oldestDay; day <= lastDay; day++ {
+		monthKeys.Add(exchangeRateMonthKeyOfDay(day))
+		bcrpYears.Add(unixDayToUTCDate(day).Year())
+	}
+
+	records := []ExchangeRate{}
+	query := db.Query(&records)
+	query.Select(query.ID, query.DetailSellRate, query.Status).
+		CompanyID.Equals(companyID).
+		ID.In(monthKeys.Values...)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener el tipo de cambio:", err)
+	}
+	companySellRatesByMonthKey := map[int16][]int32{}
+	for _, record := range records {
+		if record.Status > 0 {
+			companySellRatesByMonthKey[record.ID] = record.DetailSellRate
+		}
+	}
+	bcrpSellRateByDay := bcrpSellRatesByDay(bcrpYears.Values...)
+
+	sellRates := make([]int32, 0, lastDay-firstDay+1)
+	for day := firstDay; day <= lastDay; day++ {
+		sellRates = append(sellRates, latestSellRateInWindow(
+			companySellRatesByMonthKey, bcrpSellRateByDay, day, day-ExchangeRateMaxAgeDays))
+	}
+	return sellRates, nil
+}
+
 // latestSellRateInWindow walks back from today to oldestDay and returns the first day's sell
 // rate — the company's when it loaded one, BCRP's otherwise — or 0 when the whole window is empty.
 func latestSellRateInWindow(companySellRatesByMonthKey map[int16][]int32,

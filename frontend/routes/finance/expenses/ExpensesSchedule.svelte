@@ -19,12 +19,15 @@ import {
   expenseCadences,
   currencyTypes,
   localizeOptions,
+  applyCategoryAccount,
   packFrequency,
   unpackFrequency,
   frequencySummary,
   type IExpenseScheduled,
   type IExpense,
 } from './expenses.svelte'
+import PCGEAccountSelect from '#domain/PCGEAccountSelect.svelte'
+import { PCGE_KIND_EXPENSE } from '#core/pcge.ts'
 
 const schedules = new ExpensesScheduledService(true)
 const ui = useUI()
@@ -50,6 +53,7 @@ let periods = $state([] as IExpense[])
 
 const newSchedule = () => {
   form = { ss: 1, CurrencyType: 1, CategoryID: 1 } as IExpenseScheduled
+  applyCategoryAccount(form)
   cadenceForm = { cadence: 2, day: 1 }
   periods = []
   layerView = 1
@@ -183,13 +187,16 @@ const periodColumns: ITableColumn<IExpense>[] = [
     <div class="grid grid-cols-24 gap-10 mt-12">
       <Input bind:saveOn={form} save="Name" css="col-span-24 md:col-span-14" label="Name|Nombre" required={true} />
       <SearchSelect bind:saveOn={form} save="CategoryID" css="col-span-24 md:col-span-10"
-        label="Category|Categoría" keyId="id" keyName="name" options={categoryOptions} required={true} />
+        label="Category|Categoría" keyId="id" keyName="name" options={categoryOptions} required={true}
+        onChange={() => { applyCategoryAccount(form) }} />
       <Input bind:saveOn={form} save="Description" css="col-span-24" label="Description|Descripción" />
       <SearchSelect bind:saveOn={form} save="CurrencyType" css="col-span-24 md:col-span-8"
         label="Currency|Moneda" keyId="id" keyName="name" options={currencyOptions} required={true} />
       <Input bind:saveOn={form} save="Amount" type="number" baseDecimals={2}
         inputCss="ff-mono text-right" css="col-span-24 md:col-span-8" label="Amount|Monto" required={true} />
-      <div class="col-span-24 md:col-span-8"></div>
+      <!-- Every period the schedule generates is booked to this account. -->
+      <PCGEAccountSelect saveOn={form} save="AccountCode" css="col-span-24 md:col-span-8"
+        kind={PCGE_KIND_EXPENSE} />
 
       <!-- Cadence dropdown + day combine into the packed Frequency code on save. -->
       <SearchSelect bind:saveOn={cadenceForm} save="cadence" css="col-span-24 md:col-span-12"

@@ -42,6 +42,7 @@ export interface IExpense extends IPurchaseDocument {
   DueDate: number
   Amount: number
   PaidAmount: number
+  AccountCode: number  // PCGE account: expense account (simple) or the supply's (inventory). 0 = unclassified.
   Created: number  // SUnixTime the expense was registered.
   ss: number  // Payment lifecycle: 0 removed · 1 created/pending · 2 fully paid.
   upd: number
@@ -58,25 +59,40 @@ export interface IExpenseScheduled {
   Frequency: number
   StartDate: number
   EndDate: number
+  AccountCode: number  // PCGE account every generated period is classified under.
   ss: number
   upd: number
 }
 
-// --- Static, code-defined lists (mirror backend/finance/expenses.go §2.0) ----------
+// --- Static, code-defined lists ---------------------------------------------------
 
-// Bilingual labels resolved through tr() at render time (see localizeOptions).
-export const expenseCategories = [
-  { id: 1, label: "Rent|Alquiler" },
-  { id: 2, label: "Utilities|Servicios" },
-  { id: 3, label: "Payroll|Planilla" },
-  { id: 4, label: "Supplies|Insumos" },
-  { id: 5, label: "Taxes|Impuestos" },
-  { id: 6, label: "Maintenance|Mantenimiento" },
-  { id: 7, label: "Transport|Transporte" },
-  { id: 8, label: "Marketing|Marketing" },
-  { id: 9, label: "Professional services|Servicios profesionales" },
-  { id: 10, label: "Other|Otros" },
+export interface IExpenseCategoryOption {
+  id: number
+  label: string  // bilingual, resolved through tr() at render time (see localizeOptions)
+  // The PCGE account the form preselects for the category. Absent where no single account is right.
+  defaultAccountCode?: number
+}
+
+//CATALOG:finance.ExpenseCategoryOptions
+export const expenseCategories: IExpenseCategoryOption[] = [
+  { id: 1, label: 'Rent|Alquiler', defaultAccountCode: 6352 },
+  { id: 2, label: 'Utilities|Servicios', defaultAccountCode: 6361 },
+  { id: 3, label: 'Payroll|Planilla', defaultAccountCode: 6211 },
+  { id: 4, label: 'Supplies|Insumos', defaultAccountCode: 656 },
+  { id: 5, label: 'Taxes|Impuestos' },
+  { id: 6, label: 'Maintenance|Mantenimiento', defaultAccountCode: 6343 },
+  { id: 7, label: 'Transport|Transporte', defaultAccountCode: 6311 },
+  { id: 8, label: 'Marketing|Marketing', defaultAccountCode: 6371 },
+  { id: 9, label: 'Professional services|Servicios profesionales', defaultAccountCode: 6329 },
+  { id: 10, label: 'Other|Otros' },
 ]
+
+// Picking a category proposes its PCGE account, which the user can still change. A category with
+// no single right account (Taxes, Other) clears it, so the expense is saved unclassified rather
+// than under the previous category's account.
+export const applyCategoryAccount = (target: { CategoryID: number, AccountCode: number }) => {
+  target.AccountCode = expenseCategories.find(c => c.id === target.CategoryID)?.defaultAccountCode || 0
+}
 
 export const currencyTypes = [
   { id: 1, label: "PEN" },
@@ -203,6 +219,7 @@ export interface IInventoryExpense extends IPurchaseDocument {
   WarehouseID: number
   Quantity: number
   UnitPrice: number
+  AccountCode: number  // 0 takes the supply's default.
 }
 
 export const postInventoryExpense = (data: IInventoryExpense): Promise<IExpense> => {
