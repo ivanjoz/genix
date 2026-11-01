@@ -26,6 +26,7 @@ require (
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/ivanjoz/genix-search/genix-s3 v0.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
@@ -34,15 +35,11 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
-	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
@@ -77,16 +74,13 @@ require (
 	github.com/mileusna/useragent v1.3.3
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/pelletier/go-toml/v2 v2.4.3
-	github.com/qdrant/go-client v1.19.0
 	github.com/rodaine/table v1.1.0
 	github.com/rs/cors v1.8.2
 	github.com/viant/xunsafe v0.11.0
-	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/xhit/go-simple-mail/v2 v2.16.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.22.0
-	google.golang.org/protobuf v1.36.12
 )
 
 // gocql is genix-orm's dependency, so the fork lives in that repo (genix-orm/thirdparty/gocql,
@@ -103,9 +97,6 @@ replace github.com/ivanjoz/facturago => ./facturago
 // resolving the client from the module proxy would let a backend compile against a client whose
 // `fareward:vN` no longer matches the daemon checked out beside it.
 replace github.com/ivanjoz/fareward/go => ../fareward/go
-
-// Forked to restore the linker's dead-method elimination; see thirdparty/README.md.
-replace google.golang.org/protobuf => ./thirdparty/protobuf
 
 replace github.com/ivanjoz/genix-orm => ./genix-orm
 

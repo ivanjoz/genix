@@ -6,10 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 	"time"
-
-	"github.com/qdrant/go-client/qdrant"
 )
 
 const (
@@ -134,44 +133,31 @@ func (store *Store) HybridSearch(ctx context.Context, userQuestion string, dense
 	}
 
 	searchFilter := documentationSearchFilter(options)
-	request := &qdrant.QueryPoints{
-		CollectionName: store.config.Collection,
-		Prefetch: []*qdrant.PrefetchQuery{
+	request := hybridQueryRequest{
+		Prefetch: []prefetchQuery{
+			{Query: denseVector, Using: DenseVectorName, Filter: searchFilter, Limit: options.CandidateLimit},
 			{
-				Query:  qdrant.NewQueryDense(denseVector),
-				Using:  qdrant.PtrOf(DenseVectorName),
+				Query:  bm25Document{Text: normalizedQuestion, Model: bm25Model, Options: bm25DocumentOptions},
+				Using:  LexicalVectorName,
 				Filter: searchFilter,
-				Limit:  qdrant.PtrOf(options.CandidateLimit),
-			},
-			{
-				Query: qdrant.NewQueryDocument(&qdrant.Document{
-					Text:  normalizedQuestion,
-					Model: "qdrant/bm25",
-					Options: qdrant.NewValueMap(map[string]any{
-						"language":      "none",
-						"tokenizer":     "multilingual",
-						"ascii_folding": true,
-					}),
-				}),
-				Using:  qdrant.PtrOf(LexicalVectorName),
-				Filter: searchFilter,
-				Limit:  qdrant.PtrOf(options.CandidateLimit),
+				Limit:  options.CandidateLimit,
 			},
 		},
-		Query:       qdrant.NewQueryFusion(qdrant.Fusion_RRF),
-		Limit:       qdrant.PtrOf(options.ResultLimit),
-		WithPayload: qdrant.NewWithPayloadInclude(searchPayloadFields...),
-		WithVectors: qdrant.NewWithVectors(false),
+		Query:       fusionQuery{Fusion: "rrf"},
+		Limit:       options.ResultLimit,
+		WithPayload: searchPayloadFields,
 	}
 
 	startedAt := time.Now()
-	points, err := store.client.Query(ctx, request)
-	if err != nil {
+	queryResult := struct {
+		Points []scoredPoint `json:"points"`
+	}{}
+	if err := store.callQdrant(ctx, http.MethodPost, "/points/query", request, &queryResult); err != nil {
 		return nil, fmt.Errorf("hybrid documentation query: %w", err)
 	}
-	results := make([]DocumentationResult, 0, len(points))
-	pointIDs := make([]string, 0, len(points))
-	for _, point := range points {
+	results := make([]DocumentationResult, 0, len(queryResult.Points))
+	pointIDs := make([]string, 0, len(queryResult.Points))
+	for _, point := range queryResult.Points {
 		result := documentationResult(point)
 		results = append(results, result)
 		pointIDs = append(pointIDs, result.PointID)
@@ -218,74 +204,107 @@ func normalizeSearchOptions(options *SearchOptions) error {
 	return nil
 }
 
-func documentationSearchFilter(options SearchOptions) *qdrant.Filter {
-	conditions := []*qdrant.Condition{
-		qdrant.NewMatchKeyword("status", "implemented"),
-		qdrant.NewMatchBool("documentation_current", true),
+func documentationSearchFilter(options SearchOptions) pointFilter {
+	conditions := []fieldCondition{
+		{Key: "status", Match: matchCondition{Value: "implemented"}},
+		{Key: "documentation_current", Match: matchCondition{Value: true}},
 	}
 	if options.Route != "" {
-		conditions = append(conditions, qdrant.NewMatchKeyword("route", options.Route))
+		conditions = append(conditions, fieldCondition{Key: "route", Match: matchCondition{Value: options.Route}})
 	}
 	if len(options.AllowedRoutes) > 0 {
-		conditions = append(conditions, qdrant.NewMatchKeywords("route", options.AllowedRoutes...))
+		conditions = append(conditions, fieldCondition{Key: "route", Match: matchCondition{Any: options.AllowedRoutes}})
 	}
 	if options.Module != "" {
-		conditions = append(conditions, qdrant.NewMatchKeyword("module", options.Module))
+		conditions = append(conditions, fieldCondition{Key: "module", Match: matchCondition{Value: options.Module}})
 	}
 	if options.Visibility != "" {
-		conditions = append(conditions, qdrant.NewMatchKeyword("visibility", options.Visibility))
+		conditions = append(conditions, fieldCondition{Key: "visibility", Match: matchCondition{Value: options.Visibility}})
 	}
-	return &qdrant.Filter{Must: conditions}
+	return pointFilter{Must: conditions}
 }
 
-func documentationResult(point *qdrant.ScoredPoint) DocumentationResult {
-	payload := point.GetPayload()
-	partIndex := payloadInteger(payload, "part_index")
-	partCount := payloadInteger(payload, "part_count")
-	documentID := payloadString(payload, "document_id")
-	sectionID := payloadString(payload, "section_id")
-	citationID := documentID + "#" + sectionID
-	if partCount > 1 {
-		citationID = fmt.Sprintf("%s:part-%d", citationID, partIndex+1)
+func documentationResult(point scoredPoint) DocumentationResult {
+	payload := point.Payload
+	citationID := payload.DocumentID + "#" + payload.SectionID
+	if payload.PartCount > 1 {
+		citationID = fmt.Sprintf("%s:part-%d", citationID, payload.PartIndex+1)
 	}
 	return DocumentationResult{
-		PointID:           point.GetId().GetUuid(),
+		PointID:           point.ID,
 		CitationID:        citationID,
-		DocumentID:        documentID,
-		Route:             payloadString(payload, "route"),
-		Module:            payloadString(payload, "module"),
-		PageTitle:         payloadString(payload, "title"),
-		SectionID:         sectionID,
-		SectionTitle:      payloadString(payload, "section_title"),
-		SectionType:       payloadString(payload, "section_type"),
-		Content:           payloadString(payload, "content"),
-		ContextHeader:     payloadString(payload, "context_header"),
-		Keywords:          payloadStrings(payload, "keywords"),
-		Status:            payloadString(payload, "status"),
-		Visibility:        payloadString(payload, "visibility"),
-		DocumentationPath: payloadString(payload, "documentation_path"),
-		DocumentationHash: payloadString(payload, "documentation_hash"),
-		ContentHash:       payloadString(payload, "content_hash"),
-		SourceHashDigest:  payloadString(payload, "source_hash_digest"),
-		PartIndex:         partIndex,
-		PartCount:         partCount,
-		PreviousPointID:   payloadString(payload, "previous_point_id"),
-		NextPointID:       payloadString(payload, "next_point_id"),
-		IndexedAt:         int64(payloadInteger(payload, "indexed_at")),
-		Score:             point.GetScore(),
+		DocumentID:        payload.DocumentID,
+		Route:             payload.Route,
+		Module:            payload.Module,
+		PageTitle:         payload.Title,
+		SectionID:         payload.SectionID,
+		SectionTitle:      payload.SectionTitle,
+		SectionType:       payload.SectionType,
+		Content:           payload.Content,
+		ContextHeader:     payload.ContextHeader,
+		Keywords:          payload.Keywords,
+		Status:            payload.Status,
+		Visibility:        payload.Visibility,
+		DocumentationPath: payload.DocumentationPath,
+		DocumentationHash: payload.DocumentationHash,
+		ContentHash:       payload.ContentHash,
+		SourceHashDigest:  payload.SourceHashDigest,
+		PartIndex:         payload.PartIndex,
+		PartCount:         payload.PartCount,
+		PreviousPointID:   payload.PreviousPointID,
+		NextPointID:       payload.NextPointID,
+		IndexedAt:         payload.IndexedAt,
+		Score:             point.Score,
 	}
 }
 
-func payloadStrings(payload map[string]*qdrant.Value, key string) []string {
-	list := payload[key].GetListValue()
-	if list == nil {
-		return nil
-	}
-	values := make([]string, 0, len(list.GetValues()))
-	for _, value := range list.GetValues() {
-		if text := value.GetStringValue(); text != "" {
-			values = append(values, text)
-		}
-	}
-	return values
+// prefetchQuery.Query is a dense vector ([]float32) or a bm25Document for server-side inference.
+type prefetchQuery struct {
+	Query  any         `json:"query"`
+	Using  string      `json:"using"`
+	Filter pointFilter `json:"filter"`
+	Limit  uint64      `json:"limit"`
+}
+
+type fusionQuery struct {
+	Fusion string `json:"fusion"`
+}
+
+type hybridQueryRequest struct {
+	Prefetch    []prefetchQuery `json:"prefetch"`
+	Query       fusionQuery     `json:"query"`
+	Limit       uint64          `json:"limit"`
+	WithPayload []string        `json:"with_payload"`
+	WithVector  bool            `json:"with_vector"`
+}
+
+// documentationPayload mirrors searchPayloadFields as written by the ragdocs indexer.
+type documentationPayload struct {
+	DocumentID        string   `json:"document_id"`
+	Route             string   `json:"route"`
+	Module            string   `json:"module"`
+	Title             string   `json:"title"`
+	SectionID         string   `json:"section_id"`
+	SectionTitle      string   `json:"section_title"`
+	SectionType       string   `json:"section_type"`
+	Content           string   `json:"content"`
+	ContextHeader     string   `json:"context_header"`
+	Keywords          []string `json:"keywords"`
+	Status            string   `json:"status"`
+	Visibility        string   `json:"visibility"`
+	DocumentationPath string   `json:"documentation_path"`
+	DocumentationHash string   `json:"documentation_hash"`
+	ContentHash       string   `json:"content_hash"`
+	SourceHashDigest  string   `json:"source_hash_digest"`
+	PartIndex         int      `json:"part_index"`
+	PartCount         int      `json:"part_count"`
+	PreviousPointID   string   `json:"previous_point_id"`
+	NextPointID       string   `json:"next_point_id"`
+	IndexedAt         int64    `json:"indexed_at"`
+}
+
+type scoredPoint struct {
+	ID      string               `json:"id"`
+	Score   float32              `json:"score"`
+	Payload documentationPayload `json:"payload"`
 }

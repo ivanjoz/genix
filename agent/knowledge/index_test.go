@@ -2,12 +2,12 @@ package knowledge
 
 import (
 	"context"
+	"net/http"
 	"testing"
 )
 
 func TestUpsertDocumentationPointUsesDenseAndServerBM25(t *testing.T) {
-	fakeClient := &fakeCollectionClient{}
-	store := Store{client: fakeClient, config: QdrantConfig{Collection: "docs_v1"}}
+	store, fake := newFakeQdrantStore(t, QdrantConfig{Collection: "docs_v1"}, nil)
 
 	err := store.UpsertDocumentationPoints(context.Background(), []IndexPoint{{
 		ID:          "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b",
@@ -18,32 +18,59 @@ func TestUpsertDocumentationPointUsesDenseAndServerBM25(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fakeClient.upsertRequest == nil || !fakeClient.upsertRequest.GetWait() {
-		t.Fatal("expected synchronous upsert request")
+	// wait=true makes the upsert synchronous.
+	point := jsonPath(fake.lastRequest(t, http.MethodPut, "/points?wait=true").body, "points", 0)
+	if jsonPath(point, "id") != "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b" || jsonPath(point, "payload", "document_id") != "finance.cash-banks" {
+		t.Fatalf("unexpected point: %+v", point)
 	}
-	point := fakeClient.upsertRequest.GetPoints()[0]
-	vectors := point.GetVectors().GetVectors().GetVectors()
-	if len(vectors[DenseVectorName].GetDense().GetData()) != 3 {
+	if denseVector, _ := jsonPath(point, "vector", DenseVectorName).([]any); len(denseVector) != 3 {
 		t.Fatal("dense vector was not included")
 	}
-	lexicalDocument := vectors[LexicalVectorName].GetDocument()
-	if lexicalDocument.GetModel() != "qdrant/bm25" || lexicalDocument.GetText() != "cuadre de caja" {
+	lexicalDocument := jsonPath(point, "vector", LexicalVectorName)
+	if jsonPath(lexicalDocument, "model") != "qdrant/bm25" || jsonPath(lexicalDocument, "text") != "cuadre de caja" {
 		t.Fatalf("unexpected lexical document: %+v", lexicalDocument)
 	}
-	if lexicalDocument.GetOptions()["language"].GetStringValue() != "none" ||
-		lexicalDocument.GetOptions()["tokenizer"].GetStringValue() != "multilingual" {
-		t.Fatalf("unexpected BM25 options: %+v", lexicalDocument.GetOptions())
+	if jsonPath(lexicalDocument, "options", "language") != "none" || jsonPath(lexicalDocument, "options", "tokenizer") != "multilingual" {
+		t.Fatalf("unexpected BM25 options: %+v", jsonPath(lexicalDocument, "options"))
 	}
 }
 
 func TestReplacePayloadDoesNotSendVectors(t *testing.T) {
-	fakeClient := &fakeCollectionClient{}
-	store := Store{client: fakeClient, config: QdrantConfig{Collection: "docs_v1"}}
+	store, fake := newFakeQdrantStore(t, QdrantConfig{Collection: "docs_v1"}, nil)
 
 	if err := store.ReplacePointPayload(context.Background(), "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b", map[string]any{"content_hash": "sha256:test"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(fakeClient.payloadRequests) != 1 || !fakeClient.payloadRequests[0].GetWait() {
-		t.Fatal("expected one synchronous payload-only request")
+	if len(fake.requests) != 1 {
+		t.Fatalf("expected one payload-only request, got %+v", fake.requests)
+	}
+	// PUT (not POST) is the overwrite, and wait=true makes it synchronous.
+	body := fake.lastRequest(t, http.MethodPut, "/points/payload?wait=true").body
+	if jsonPath(body, "points", 0) != "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b" || jsonPath(body, "payload", "content_hash") != "sha256:test" || body["vector"] != nil {
+		t.Fatalf("unexpected payload request: %+v", body)
+	}
+}
+
+func TestListDocumentPointsDecodesPayloadOnlyScroll(t *testing.T) {
+	store, fake := newFakeQdrantStore(t, QdrantConfig{Collection: "docs_v1"}, map[string]any{
+		"POST /points/scroll": map[string]any{
+			"points": []any{map[string]any{
+				"id":      "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b",
+				"payload": map[string]any{"content_hash": "sha256:content", "document_chunk_count": 4},
+			}},
+			"next_page_offset": nil,
+		},
+	})
+
+	points, err := store.ListDocumentPoints(context.Background(), "frontend/routes/finance/cash-banks/DOCUMENTATION.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 1 || points[0].ID != "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b" || points[0].ContentHash != "sha256:content" || points[0].DocumentChunkCount != 4 {
+		t.Fatalf("unexpected points: %+v", points)
+	}
+	body := fake.lastRequest(t, http.MethodPost, "/points/scroll").body
+	if jsonPath(body, "filter", "must", 0, "key") != "documentation_path" || body["with_vector"] != false {
+		t.Fatalf("unexpected scroll request: %+v", body)
 	}
 }

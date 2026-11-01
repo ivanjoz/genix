@@ -86,12 +86,8 @@ const backendGoPath = path.join(__dirname, 'backend')
 // Agent (genix/agent)
 const agentGoPath = path.join(__dirname, 'agent')
 
-// `go mod download`, NOT `go mod tidy`. Tidy walks the test imports of every dependency, and
-// grpc/status's own tests import google.golang.org/protobuf/{testing/protocmp,reflect/protodesc}:
-// two packages the trimmed protobuf fork in backend/thirdparty/ deliberately does not carry, so
-// tidy fails here by construction (see backend/thirdparty/README.md). `go mod download` only
-// fetches the modules go.mod already requires and never rewrites go.mod/go.sum, which also removes
-// the reason the old stamp file existed -- tidy rewrote those files and invalidated the Go build
+// `go mod download`, NOT `go mod tidy`. `go mod download` only fetches the modules go.mod already
+// requires and never rewrites go.mod/go.sum; tidy rewrote those files and invalidated the Go build
 // cache, turning a ~5s warm build into ~36s.
 console.log("Instalando los paquetes de Go (si no lo están)...")
 execSync('go mod download', { stdio: "inherit", shell: true, cwd: backendGoPath })

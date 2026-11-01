@@ -71,14 +71,14 @@ const agentCompilePath = "/cloud/agent-compiled"
 // BuildTags are required on every shipping backend build, not optional size tuning.
 //
 //   - lambda.norpc  drops aws-lambda-go's legacy local-RPC entry path, and with it net/rpc.
-//   - grpcnotrace   drops golang.org/x/net/trace from grpc, and with it html/template.
 //
-// Both packages call reflect.Value.MethodByName with a runtime string, which sets the linker's
+// net/rpc calls reflect.Value.MethodByName with a runtime string, which sets the linker's
 // program-global reflectSeen flag. While it is set, every exported method of every reachable type
-// is retained and the ORM's generic instantiations alone cost ~11 MB. The flag is boolean, so
-// these tags do nothing on their own -- they only pay off together with the thirdparty/ forks.
-// scripts/deploy_vps.go carries the same list. See docs/BINARY_SIZE_PLAN.md.
-const BuildTags = "lambda.norpc,grpcnotrace"
+// is retained and the ORM's generic instantiations alone cost ~11 MB. The flag is boolean, so a
+// single other package doing the same erases the saving.
+// scripts/deploy_vps.go and the release workflow carry the same list; build_tags_test.go keeps them
+// in sync. See docs/BINARY_SIZE_PLAN.md.
+const BuildTags = "lambda.norpc"
 
 // El backend deduce IS_PROD con strings.Contains(APP_CODE, "_prd"), con guion bajo
 // (backend/core/security.go). Un guion normal apagaría el modo producción en silencio, así

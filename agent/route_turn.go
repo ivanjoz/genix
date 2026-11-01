@@ -61,7 +61,6 @@ func getDocumentationRetriever() (*knowledge.Retriever, error) {
 		}
 		if err := qdrantStore.ValidateExistingCollection(context.Background()); err != nil {
 			documentationRetrieverErr = err
-			_ = qdrantStore.Close()
 			return
 		}
 		documentationRetriever, documentationRetrieverErr = knowledge.NewRetriever(embeddingClient, qdrantStore)

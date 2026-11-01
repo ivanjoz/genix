@@ -11,8 +11,8 @@ func TestRAGConfigDefaults(t *testing.T) {
 	if configuredEnv.QDRANT_HOST != "127.0.0.1" {
 		t.Fatalf("QDRANT_HOST = %q, want loopback for a private default", configuredEnv.QDRANT_HOST)
 	}
-	if configuredEnv.QDRANT_GRPC_PORT != defaultQdrantGRPCPort {
-		t.Fatalf("QDRANT_GRPC_PORT = %d, want %d", configuredEnv.QDRANT_GRPC_PORT, defaultQdrantGRPCPort)
+	if configuredEnv.QDRANT_HTTP_PORT != defaultQdrantHTTPPort {
+		t.Fatalf("QDRANT_HTTP_PORT = %d, want %d", configuredEnv.QDRANT_HTTP_PORT, defaultQdrantHTTPPort)
 	}
 	if configuredEnv.QDRANT_COLLECTION != defaultQdrantCollection {
 		t.Fatalf("QDRANT_COLLECTION = %q, want %q", configuredEnv.QDRANT_COLLECTION, defaultQdrantCollection)

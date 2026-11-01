@@ -13,8 +13,8 @@ require (
 	github.com/eino-contrib/jsonschema v1.0.3
 	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0
+	github.com/ivanjoz/genix-orm/dataframe v0.0.0
 	github.com/ivanjoz/genix-orm/utils v0.0.0
-	github.com/qdrant/go-client v1.19.0
 	github.com/rs/cors v1.8.2
 	golang.org/x/net v0.57.0
 	golang.org/x/text v0.41.0
@@ -57,7 +57,6 @@ require (
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/ivanjoz/colbin v0.9.0 // indirect
-	github.com/ivanjoz/genix-orm/dataframe v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/db v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/search/daemon v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0 // indirect
@@ -87,8 +86,6 @@ require (
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/viant/xunsafe v0.11.0 // indirect
-	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
-	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xhit/go-simple-mail/v2 v2.16.0 // indirect
 	github.com/yargevad/filepathx v1.0.0 // indirect
@@ -97,9 +94,6 @@ require (
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
-	google.golang.org/grpc v1.82.1 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
@@ -113,8 +107,6 @@ replace github.com/gocql/gocql v1.6.0 => ../backend/genix-orm/thirdparty/gocql
 replace github.com/ivanjoz/facturago => ../backend/facturago
 
 replace github.com/ivanjoz/fareward/go => ../fareward/go
-
-replace google.golang.org/protobuf => ../backend/thirdparty/protobuf
 
 replace github.com/ivanjoz/genix-orm => ../backend/genix-orm
 

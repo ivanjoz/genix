@@ -113,15 +113,9 @@ type DemoStruct1 struct {
 	Hola2 int     `json:"c" ms:"c" cb:"c,3"`
 }
 
-type DemoStruct2 struct {
-	Hola   string  `json:"a" ms:"h" cb:"a,1"`
-	Value  float32 `json:"b" ms:"v" cb:"b,2"`
-	Value2 float32 `json:"c" ms:"v2" cb:"c,3"`
-}
-
 type DemoStruct3 struct {
-	Nombre string `json:"nombre1" msgpack:"1,omitempty" cb:"nombre1,1"`
-	Demo   int32  `json:"demo" msgpack:"2,omitempty" cb:"demo,2"`
+	Nombre string `json:"nombre1" cb:"nombre1,1"`
+	Demo   int32  `json:"demo" cb:"demo,2"`
 }
 
 type DemoStruct5 struct {
@@ -235,15 +229,6 @@ func Test20(args *core.ExecArgs) core.FuncResponse {
 	enc.Encode(demo1)
 	core.Log("Bytes encoding .gob:", len(buffer1.Bytes()), " | ", buffer1.String())
 
-	encoded1, _ := core.MsgPEncode(&demo1)
-	core.Log("Bytes encoding .msgpack:", len(encoded1), " | ", string(encoded1))
-
-	demo2 := []DemoStruct2{}
-	err := core.MsgPDecode(encoded1, &demo2)
-	if err != nil {
-		panic(err)
-	}
-	core.Print(demo2)
 	/*
 		encoded, _ := binary.Marshal(&demo1)
 		core.Log("Bytes encoding .binary:", len(encoded), " | ", string(encoded))

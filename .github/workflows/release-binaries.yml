@@ -58,13 +58,12 @@ jobs:
         working-directory: backend
         env:
           CGO_ENABLED: '0'
-          # Required on every shipping build, not optional size tuning: lambda.norpc drops net/rpc
-          # and grpcnotrace drops x/net/trace with html/template. Each calls
-          # reflect.Value.MethodByName with a runtime string, which sets the linker's global
-          # reflectSeen flag and retains every exported method of every reachable type. The flag is
-          # boolean, so omitting either tag costs ~12 MB even with backend/thirdparty/ in place.
-          # cloud/main.go and scripts/deploy_vps.go carry the same list; a test keeps them in sync.
-          BACKEND_BUILD_TAGS: lambda.norpc,grpcnotrace
+          # Required on every shipping build, not optional size tuning: lambda.norpc drops net/rpc,
+          # which calls reflect.Value.MethodByName with a runtime string. That sets the linker's
+          # global reflectSeen flag and retains every exported method of every reachable type (~12 MB).
+          # cloud/main.go and scripts/deploy_vps.go carry the same value; cloud/build_tags_test.go
+          # keeps them in sync.
+          BACKEND_BUILD_TAGS: lambda.norpc
         run: |
           # Tag and commit identify a release reproducibly without embedding the runner clock.
           release_identity="${GITHUB_REF_NAME}-${GITHUB_SHA:0:12}"

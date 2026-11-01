@@ -17,12 +17,12 @@ import (
 // ExecStart= and PathChanged=, so "bin" only needs to be set for servers configured by hand.
 const defaultRemoteBinaryPath = "/usr/local/bin/genix/genix_app"
 
-// backendBuildTags are required on every shipping backend build, not optional size tuning: both
-// tags drop a package that calls reflect.Value.MethodByName with a runtime string, which sets the
-// linker's program-global reflectSeen flag and retains every exported method of every reachable
-// type. The flag is boolean, so these tags do nothing without the backend/thirdparty/ forks.
-// cloud/main.go carries the same list as BuildTags. See docs/BINARY_SIZE_PLAN.md.
-const backendBuildTags = "lambda.norpc,grpcnotrace"
+// backendBuildTags are required on every shipping backend build, not optional size tuning:
+// lambda.norpc drops net/rpc, which calls reflect.Value.MethodByName with a runtime string. That
+// sets the linker's program-global reflectSeen flag and retains every exported method of every
+// reachable type. cloud/main.go carries the same value as BuildTags; cloud/build_tags_test.go keeps
+// them in sync. See docs/BINARY_SIZE_PLAN.md.
+const backendBuildTags = "lambda.norpc"
 
 type ServerCredentials struct {
 	Host             string `toml:"host"`

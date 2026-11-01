@@ -64,7 +64,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer qdrantStore.Close()
 	if err := qdrantStore.ValidateExistingCollection(context.Background()); err != nil {
 		return err
 	}

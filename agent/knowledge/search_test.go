@@ -2,10 +2,9 @@ package knowledge
 
 import (
 	"context"
+	"net/http"
 	"reflect"
 	"testing"
-
-	"github.com/qdrant/go-client/qdrant"
 )
 
 type fakeQueryEmbedder struct {
@@ -58,7 +57,7 @@ func TestRetrieverEmbedsAndSearchesOriginalSpanishQuestion(t *testing.T) {
 
 func TestHybridSearchBuildsDenseBM25RRFRequestAndDecodesNavigation(t *testing.T) {
 	pointID := "243fbf6f-0777-5f99-9d7a-dbbabc3ab32b"
-	payload := qdrant.NewValueMap(map[string]any{
+	payload := map[string]any{
 		"document_id":        "finance.cash-banks",
 		"route":              "/finance/cash-banks",
 		"module":             "Finance",
@@ -80,11 +79,12 @@ func TestHybridSearchBuildsDenseBM25RRFRequestAndDecodesNavigation(t *testing.T)
 		"previous_point_id":  "",
 		"next_point_id":      "",
 		"indexed_at":         int64(123),
+	}
+	store, fake := newFakeQdrantStore(t, QdrantConfig{Collection: "docs_v1", Dimensions: 3}, map[string]any{
+		"POST /points/query": map[string]any{"points": []any{map[string]any{
+			"id": pointID, "version": 1, "score": 0.75, "payload": payload,
+		}}},
 	})
-	fakeClient := &fakeCollectionClient{queryResults: []*qdrant.ScoredPoint{{
-		Id: qdrant.NewIDUUID(pointID), Payload: payload, Score: 0.75,
-	}}}
-	store := Store{client: fakeClient, config: QdrantConfig{Collection: "docs_v1", Dimensions: 3}}
 	question := "¿Dónde hago el arqueo de caja?"
 
 	results, err := store.HybridSearch(context.Background(), question, []float32{0.1, 0.2, 0.3}, SearchOptions{
@@ -96,26 +96,30 @@ func TestHybridSearchBuildsDenseBM25RRFRequestAndDecodesNavigation(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := fakeClient.queryRequest
-	if request == nil || len(request.GetPrefetch()) != 2 {
+	request := fake.lastRequest(t, http.MethodPost, "/points/query").body
+	if prefetches, _ := request["prefetch"].([]any); len(prefetches) != 2 {
 		t.Fatalf("expected dense and lexical prefetches: %+v", request)
 	}
-	if _, ok := request.GetQuery().GetVariant().(*qdrant.Query_Fusion); !ok || request.GetQuery().GetFusion() != qdrant.Fusion_RRF {
-		t.Fatalf("expected native RRF query: %+v", request.GetQuery())
+	if jsonPath(request, "query", "fusion") != "rrf" {
+		t.Fatalf("expected native RRF query: %+v", request["query"])
 	}
-	densePrefetch := request.GetPrefetch()[0]
-	if densePrefetch.GetUsing() != DenseVectorName || !reflect.DeepEqual(densePrefetch.GetQuery().GetNearest().GetDense().GetData(), []float32{0.1, 0.2, 0.3}) {
+	densePrefetch := jsonPath(request, "prefetch", 0)
+	if jsonPath(densePrefetch, "using") != DenseVectorName || !reflect.DeepEqual(jsonPath(densePrefetch, "query"), []any{0.1, 0.2, 0.3}) {
 		t.Fatalf("unexpected dense prefetch: %+v", densePrefetch)
 	}
-	lexicalPrefetch := request.GetPrefetch()[1]
-	lexicalDocument := lexicalPrefetch.GetQuery().GetNearest().GetDocument()
-	if lexicalPrefetch.GetUsing() != LexicalVectorName || lexicalDocument.GetText() != question || lexicalDocument.GetModel() != "qdrant/bm25" {
+	lexicalPrefetch := jsonPath(request, "prefetch", 1)
+	if jsonPath(lexicalPrefetch, "using") != LexicalVectorName || jsonPath(lexicalPrefetch, "query", "text") != question ||
+		jsonPath(lexicalPrefetch, "query", "model") != "qdrant/bm25" {
 		t.Fatalf("unexpected lexical prefetch: %+v", lexicalPrefetch)
 	}
-	if len(densePrefetch.GetFilter().GetMust()) != 4 || densePrefetch.GetFilter() != lexicalPrefetch.GetFilter() {
-		t.Fatalf("prefetch filters differ or are incomplete: %+v", densePrefetch.GetFilter())
+	denseFilter := jsonPath(densePrefetch, "filter", "must")
+	if filterConditions, _ := denseFilter.([]any); len(filterConditions) != 4 || !reflect.DeepEqual(denseFilter, jsonPath(lexicalPrefetch, "filter", "must")) {
+		t.Fatalf("prefetch filters differ or are incomplete: %+v", denseFilter)
 	}
-	if request.GetLimit() != 6 || request.GetWithVectors().GetEnable() {
+	if jsonPath(densePrefetch, "filter", "must", 1, "match", "value") != true {
+		t.Fatalf("documentation_current filter must send an explicit true: %+v", denseFilter)
+	}
+	if request["limit"] != 6.0 || request["with_vector"] != false {
 		t.Fatalf("unexpected result request: %+v", request)
 	}
 
@@ -132,9 +136,9 @@ func TestHybridSearchBuildsDenseBM25RRFRequestAndDecodesNavigation(t *testing.T)
 }
 
 func TestHybridSearchRejectsWrongEmbeddingDimension(t *testing.T) {
-	store := Store{client: &fakeCollectionClient{}, config: QdrantConfig{Collection: "docs_v1", Dimensions: 4096}}
+	store, fake := newFakeQdrantStore(t, QdrantConfig{Collection: "docs_v1", Dimensions: 4096}, nil)
 	_, err := store.HybridSearch(context.Background(), "¿Cómo creo una caja?", []float32{0.1}, SearchOptions{})
-	if err == nil {
+	if err == nil || len(fake.requests) != 0 {
 		t.Fatal("wrong query embedding dimensions must fail before Qdrant")
 	}
 }
@@ -148,10 +152,10 @@ func TestDocumentationSearchFilterUsesAllowedRouteMatchAny(t *testing.T) {
 		t.Fatalf("allowed routes were not normalized: %+v", options.AllowedRoutes)
 	}
 	filter := documentationSearchFilter(options)
-	if len(filter.GetMust()) != 3 {
+	if len(filter.Must) != 3 {
 		t.Fatalf("expected status, current, and route filters: %+v", filter)
 	}
-	keywords := filter.GetMust()[2].GetField().GetMatch().GetKeywords().GetStrings()
+	keywords := filter.Must[2].Match.Any
 	if !reflect.DeepEqual(keywords, options.AllowedRoutes) {
 		t.Fatalf("unexpected route match-any values: %+v", keywords)
 	}

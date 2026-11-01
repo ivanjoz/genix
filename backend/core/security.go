@@ -188,11 +188,10 @@ type EnvStruct struct {
 	FILE_STORE_BUCKET string
 	FILE_STORE_ROOT   string
 	// Qdrant stores user-documentation dense and lexical vectors. The same
-	// INTERNAL_APIKEY used by deployment protects its gRPC endpoint.
+	// INTERNAL_APIKEY used by deployment protects its REST endpoint.
 	QDRANT_HOST       string
 	QDRANT_HTTP_PORT  int
-	QDRANT_GRPC_PORT  int
-	QDRANT_PUBLIC     bool
+	QDRANT_PUBLIC    bool
 	QDRANT_USE_TLS    bool
 	QDRANT_COLLECTION string
 	// Embeddings are independent from the chat model provider. The first RAG
@@ -376,8 +375,7 @@ type fileConfig struct {
 	Qdrant struct {
 		Host       string `toml:"host"`
 		HTTPPort   int    `toml:"http_port"`
-		GRPCPort   int    `toml:"grpc_port"`
-		Public     bool   `toml:"public"`
+		Public    bool   `toml:"public"`
 		UseTLS     bool   `toml:"use_tls"`
 		Collection string `toml:"collection"`
 	} `toml:"qdrant"`
@@ -417,7 +415,6 @@ const defaultFarewardPort = 14013
 
 const (
 	defaultQdrantHTTPPort      = 14014
-	defaultQdrantGRPCPort      = 14015
 	defaultQdrantCollection    = "genix_user_documentation_v1"
 	defaultEmbeddingProvider   = "openrouter"
 	defaultEmbeddingDimensions = 4096
@@ -556,10 +553,6 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.QDRANT_HTTP_PORT = file.Qdrant.HTTPPort
 	if env.QDRANT_HTTP_PORT <= 0 {
 		env.QDRANT_HTTP_PORT = defaultQdrantHTTPPort
-	}
-	env.QDRANT_GRPC_PORT = file.Qdrant.GRPCPort
-	if env.QDRANT_GRPC_PORT <= 0 {
-		env.QDRANT_GRPC_PORT = defaultQdrantGRPCPort
 	}
 	env.QDRANT_PUBLIC = file.Qdrant.Public
 	env.QDRANT_USE_TLS = file.Qdrant.UseTLS
