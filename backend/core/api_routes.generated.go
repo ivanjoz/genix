@@ -9,6 +9,7 @@ package core
 // annotated "retired", because rows already written still name it and handing that number to a
 // different route would rewrite what those rows mean.
 var APIRouteIDs = map[string]int16{
+	"GET.accounting-cash-balances":     163,
 	"GET.accounting-operations":        138,
 	"GET.agent-models":                 1,
 	"GET.asset-depreciation":           114,
@@ -188,7 +189,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 162
+const MaxAPIRouteID int16 = 163
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

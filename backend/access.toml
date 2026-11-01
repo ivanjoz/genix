@@ -328,8 +328,8 @@ id = 23
 name = "Estados Financieros"
 group = 7
 levels = 14
-frontend_routes = ""
-backend_apis = ""
+frontend_routes = "accounting/financial-statements"
+backend_apis = "GET.accounting-operations,GET.accounting-cash-balances,GET.assets,GET.purchase-order-ids,GET.expense-ids"
 
 [[access]]
 id = 24

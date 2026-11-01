@@ -185,7 +185,6 @@ icon = "icon-[fa--building-o]"
 route = "accounting/financial-statements"
 name = "Financial Statements|Estados Financieros"
 icon = "icon-[fa--line-chart]"
-pending = true
 
 [[pages]]
 route = "accounting/balance"

@@ -8,17 +8,9 @@ import SelectBox from '#components/form/SelectBox.svelte'
 import T from '#components/misc/T.svelte'
 import Page from '#domain/Page.svelte'
 import { formatN } from '#libs/helpers.ts'
-import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte'
-import { CajasService } from '../../finance/cash-banks/cajas.svelte'
-import { BcrpDefaultRates, ExchangeRatesService } from '../../finance/exchange-rate/exchange-rate.svelte'
-import { EXCHANGE_RATE_MAX_AGE_DAYS, latestSellRate, toMonthKey } from '../../finance/exchange-rate/exchange-rate'
-import { AssetsService } from '../assets/assets.svelte'
 import { buildPeriodOptions, periodCode, SINGLE_DAY_PERIOD } from '../books/books'
-import {
-  buildAccountingOperations, periodBounds, STATUS_VIEW_ALL, statusViewOptions, summarizeOperations,
-  type IAccountingSources,
-} from './accounts-consolidation'
-import { AccountingOperationsService } from './accounts-consolidation.svelte'
+import { STATUS_VIEW_ALL, statusViewOptions, summarizeOperations } from './accounts-consolidation'
+import { AccountingPeriodReader } from './accounts-consolidation.svelte'
 import ChartOfAccounts from './ChartOfAccounts.svelte'
 import JournalTable from './JournalTable.svelte'
 import OperationsTable from './OperationsTable.svelte'
@@ -26,9 +18,7 @@ import OperationsTable from './OperationsTable.svelte'
 // Shell: one period, read once, shown three ways — the operations to classify, the Diario de
 // gestión, and the period's balance per account. Every tab reads the same built operations.
 const ui = useUI()
-const operationsService = new AccountingOperationsService()
-// The series (and so the document type) of a comprobante live on the company record.
-const companyParameters = new EmpresaParametrosService()
+const periodReader = new AccountingPeriodReader()
 
 const pageOptions = [
   { id: 1, name: "Operations|Movimientos" },
@@ -44,45 +34,9 @@ let selection = $state({ period: periodCode(today.getFullYear(), today.getMonth(
 // the search text, shared by Movimientos and the Diario.
 let operationsFilter = $state({ statusView: STATUS_VIEW_ALL, filterText: "" })
 
-// The company-wide sets the period's entries read, each through its own delta cache.
-const assetsService = new AssetsService(true)
-const cashBanksService = new CajasService()
-const exchangeRatesService = new ExchangeRatesService(true)
-const bcrpRates = new BcrpDefaultRates()
+const summary = $derived(summarizeOperations(periodReader.operations))
 
-const seriesByID = $derived(new Map(
-  (companyParameters.empresa.InvoiceSeries || []).map(series => [series.SeriesID, series]),
-))
-const sources = $derived.by((): IAccountingSources | null => {
-  const response = operationsService.response
-  if (!response) { return null }
-  const { firstDay, lastDay } = periodBounds(operationsService.loadedPeriod)
-  return {
-    ...response, FirstDay: firstDay, LastDay: lastDay,
-    ReferencedSales: operationsService.referencedSales,
-    ReferencedPurchases: operationsService.referencedPurchases,
-    Products: operationsService.products,
-    Assets: assetsService.records,
-    CashBanks: cashBanksService.Cajas,
-    // The rate a USD amount of each day is restated at — the same rule the sale applies.
-    SellRates: Array.from({ length: lastDay - firstDay + 1 }, (_, dayIndex) => latestSellRate(
-      exchangeRatesService.records, bcrpRates.ratesByMonthKey, firstDay + dayIndex, EXCHANGE_RATE_MAX_AGE_DAYS)),
-  }
-})
-const operations = $derived(sources ? buildAccountingOperations(sources, { seriesByID }) : [])
-const summary = $derived(summarizeOperations(operations))
-
-// The BCRP fallback rates of the period's month and the one before it (a rate may be a week old).
-const readPeriod = (period: string) => {
-  const { firstDay } = periodBounds(period)
-  const firstDate = new Date(firstDay * 86_400_000)
-  const monthKey = toMonthKey(firstDate.getUTCFullYear(), firstDate.getUTCMonth())
-  const previousDate = new Date((firstDay - 1) * 86_400_000)
-  bcrpRates.load([monthKey, toMonthKey(previousDate.getUTCFullYear(), previousDate.getUTCMonth())])
-  operationsService.fetch(period)
-}
-
-onMount(() => { readPeriod(selection.period) })
+onMount(() => { periodReader.read(selection.period) })
 </script>
 
 <Page title="Consolidation & Accounts|Consolidado & Cuentas" options={pageOptions}>
@@ -90,7 +44,7 @@ onMount(() => { readPeriod(selection.period) })
     <SearchSelect label="Period|Periodo" css="w-190" keyId="ID" keyName="Name"
       options={periodOptions} saveOn={selection} save="period" />
     <Button name="Read|Consultar" color="blue" icon="icon-[fa--search]"
-      onClick={() => readPeriod(selection.period)} />
+      onClick={() => periodReader.read(selection.period)} />
     {#if ui.state.pageOptionSelected === 1}
       <SelectBox label="Show|Mostrar" css="w-190 ml-8" keyId="ID" keyName="Name"
         options={statusViewOptions} saveOn={operationsFilter} save="statusView" />
@@ -100,7 +54,7 @@ onMount(() => { readPeriod(selection.period) })
     {/if}
   </div>
 
-  {#if operationsService.response}
+  {#if periodReader.operationsService.response}
     <!-- How accounting-aligned the period is, by count and by amount (PLAN.md §6). -->
     <div class="flex flex-wrap items-center gap-x-20 gap-y-4 mb-8 text-sm" aria-label="Period classification status">
       <div class="text-green-fg">
@@ -125,13 +79,14 @@ onMount(() => { readPeriod(selection.period) })
   {/if}
 
   {#if ui.state.pageOptionSelected === 1}
-    <OperationsTable {operationsService} {sources} {operations}
+    <OperationsTable operationsService={periodReader.operationsService} sources={periodReader.sources}
+      operations={periodReader.operations}
       statusView={operationsFilter.statusView} filterText={operationsFilter.filterText} />
   {/if}
   {#if ui.state.pageOptionSelected === 2}
-    <JournalTable {operations} filterText={operationsFilter.filterText} />
+    <JournalTable operations={periodReader.operations} filterText={operationsFilter.filterText} />
   {/if}
   {#if ui.state.pageOptionSelected === 3}
-    <ChartOfAccounts {operations} />
+    <ChartOfAccounts operations={periodReader.operations} />
   {/if}
 </Page>

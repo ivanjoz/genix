@@ -4,11 +4,16 @@ import { extractError, GET, PUT } from '#libs/ui-runtime.svelte.ts'
 import { tr } from '#core/store.svelte.ts'
 import {
   cajaMovimientoTipos, cashMovementAccountOptions,
+  CajasService,
 } from '../../finance/cash-banks/cajas.svelte'
+import { EmpresaParametrosService } from '../../company/configuration/empresas.svelte'
+import { BcrpDefaultRates, ExchangeRatesService } from '../../finance/exchange-rate/exchange-rate.svelte'
+import { EXCHANGE_RATE_MAX_AGE_DAYS, latestSellRate, toMonthKey } from '../../finance/exchange-rate/exchange-rate'
+import { AssetsService } from '../assets/assets.svelte'
 import { PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocument } from '../books/books.purchases'
 import {
-  operationProductIDs, operationSaleOf, referencedPurchaseOf, referencedRecordIDs,
-  type IAccountingOperationsResponse, type IClassificationTarget, type IOperationProduct, type IOperationSale,
+  buildAccountingOperations, operationProductIDs, operationSaleOf, periodBounds, referencedPurchaseOf, referencedRecordIDs,
+  type IAccountingOperationsResponse, type IAccountingSources, type IClassificationTarget, type IOperationProduct, type IOperationSale,
   type IProductRecord, type IPurchaseRecord, type ISaleOrderRecord,
 } from './accounts-consolidation'
 
@@ -62,6 +67,55 @@ export class AccountingOperationsService {
     } finally {
       hideLoading()
     }
+  }
+}
+
+// AccountingPeriodReader reads one period and builds its operations: the period's records, plus
+// the company-wide sets the entries read (each through its own delta cache). Consolidado & Cuentas
+// and the Estados Financieros read a period the same way, so both show the same entries.
+export class AccountingPeriodReader {
+  operationsService = new AccountingOperationsService()
+  // The series (and so the document type) of a comprobante live on the company record.
+  companyParameters = new EmpresaParametrosService()
+  assetsService = new AssetsService(true)
+  cashBanksService = new CajasService()
+  exchangeRatesService = new ExchangeRatesService(true)
+  bcrpRates = new BcrpDefaultRates()
+
+  seriesByID = $derived(new Map(
+    (this.companyParameters.empresa.InvoiceSeries || []).map(series => [series.SeriesID, series]),
+  ))
+  sources = $derived.by((): IAccountingSources | null => {
+    const response = this.operationsService.response
+    if (!response) { return null }
+    const { firstDay, lastDay } = periodBounds(this.operationsService.loadedPeriod)
+    return {
+      ...response, FirstDay: firstDay, LastDay: lastDay,
+      ReferencedSales: this.operationsService.referencedSales,
+      ReferencedPurchases: this.operationsService.referencedPurchases,
+      Products: this.operationsService.products,
+      Assets: this.assetsService.records,
+      CashBanks: this.cashBanksService.Cajas,
+      // The rate a USD amount of each day is restated at — the same rule the sale applies.
+      SellRates: Array.from({ length: lastDay - firstDay + 1 }, (_, dayIndex) => this.sellRateOf(firstDay + dayIndex)),
+    }
+  })
+  operations = $derived(this.sources ? buildAccountingOperations(this.sources, { seriesByID: this.seriesByID }) : [])
+
+  // The official sell rate (× 1000) of a day, the company's own else BCRP's, up to a week old.
+  sellRateOf(day: number): number {
+    return latestSellRate(this.exchangeRatesService.records, this.bcrpRates.ratesByMonthKey, day, EXCHANGE_RATE_MAX_AGE_DAYS)
+  }
+
+  // read loads the BCRP fallback rates of the period's month and the one before it (a rate may be
+  // a week old), and the period's records.
+  read(period: string): Promise<void> {
+    const { firstDay } = periodBounds(period)
+    const firstDate = new Date(firstDay * 86_400_000)
+    const monthKey = toMonthKey(firstDate.getUTCFullYear(), firstDate.getUTCMonth())
+    const previousDate = new Date((firstDay - 1) * 86_400_000)
+    this.bcrpRates.load([monthKey, toMonthKey(previousDate.getUTCFullYear(), previousDate.getUTCMonth())])
+    return this.operationsService.fetch(period)
   }
 }
 
