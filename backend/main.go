@@ -1,3 +1,5 @@
+//go:build !js
+
 package main
 
 import (
@@ -59,11 +61,10 @@ func runScheduledCronTick(tickBody string) int {
 	return executedActionsCount
 }
 
-// runLambdaRequest is the request path shared by both invoke modes. It stops at
-// core.MainResponse, which carries whichever of the two AWS response shapes prepareResponse
-// built, so the only difference between the buffered and streaming entrypoints is which field
-// they unwrap.
-func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) core.MainResponse {
+// runLambdaRequest is the request path shared by both invoke modes. It stops at the finished
+// core.HandlerResponse, so the only difference between the buffered and streaming entrypoints is
+// which AWS shape they render it into.
+func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) *core.HandlerResponse {
 	clearEnvVariables()
 
 	core.Env.REQ_IP = request.RequestContext.HTTP.SourceIP
@@ -76,24 +77,14 @@ func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) core.MainResponse
 		funcResponse := ExecFuncHandler(request.Body)
 		bodyBytes := []byte(core.ToJsonNoErr(funcResponse))
 		core.Log("*Body response::" + core.StrCut(string(bodyBytes), 400))
-		handlerResponse := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
-
-		if core.Env.LAMBDA_RESPONSE_STREAMING {
-			return core.MainResponse{LambdaStreamingResponse: core.MakeStreamingResponseFinal(&handlerResponse)}
-		}
-		return core.MainResponse{LambdaResponse: core.MakeResponseFinal(&handlerResponse)}
+		return &core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
 	}
 
 	// Tick programado de EventBridge. No hay ruta HTTP detrás, así que no puede seguir al
 	// mainHandler: sin Authorization moriría en CheckUser.
 	if strings.HasPrefix(request.Body, scheduledCronTickPrefix) {
 		bodyBytes := []byte(core.ToJsonNoErr(map[string]int{"executed": runScheduledCronTick(request.Body)}))
-		handlerResponse := core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
-
-		if core.Env.LAMBDA_RESPONSE_STREAMING {
-			return core.MainResponse{LambdaStreamingResponse: core.MakeStreamingResponseFinal(&handlerResponse)}
-		}
-		return core.MainResponse{LambdaResponse: core.MakeResponseFinal(&handlerResponse)}
+		return &core.HandlerResponse{Body: &bodyBytes, Headers: map[string]string{}}
 	}
 
 	route := request.RequestContext.HTTP.Path
@@ -128,7 +119,7 @@ func LambdaHandler(_ context.Context, request *events.APIGatewayV2HTTPRequest) (
 		}
 	}()
 
-	return runLambdaRequest(request).LambdaResponse, nil
+	return core.MakeLambdaResponse(runLambdaRequest(request)), nil
 }
 
 // LambdaStreamingHandler serves a Function URL deployed with InvokeMode RESPONSE_STREAM. The
@@ -145,7 +136,7 @@ func LambdaStreamingHandler(_ context.Context, request *events.APIGatewayV2HTTPR
 		}
 	}()
 
-	return runLambdaRequest(request).LambdaStreamingResponse, nil
+	return core.MakeLambdaStreamingResponse(runLambdaRequest(request)), nil
 }
 
 // serializedAPIRequests is the queue behind config.toml's disable_api_concurrency_local. The lock

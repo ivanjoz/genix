@@ -6,7 +6,6 @@ import (
 	"app/config"
 	"app/core"
 	"app/crm"
-	"app/exec"
 	"app/finance"
 	"app/invoicing"
 	"app/logistics"
@@ -17,7 +16,6 @@ import (
 	"app/webpage"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"runtime/debug"
 	"slices"
@@ -26,9 +24,9 @@ import (
 )
 
 // Agrupa los handlers de los módulos en uns solo map. The agent is not here: it is its own
-// binary and Lambda (genix/agent), so this one never links the LLM stack.
+// binary and Lambda (genix/agent), so this one never links the LLM stack. Neither is exec: its
+// handlers drive ScyllaDB directly, so main_exec.go appends them in the server build only.
 var appHandlersModules = []core.AppRouterType{
-	exec.ModuleHandlers,
 	sales.ModuleHandlers,
 	config.ModuleHandlers,
 	webpage.ModuleHandlers,
@@ -126,7 +124,9 @@ var selfServiceRoutes = map[string]bool{
 	"POST.user-self": true,
 }
 
-func mainHandler(args *core.HandlerArgs) (response core.MainResponse) {
+// mainHandler returns the finished response for the caller's transport to send, or nil when it was
+// already written to args.ResponseWriter (the local HTTP server). See prepareResponse.
+func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 	requestStartedAt := time.Now().UnixMilli()
 	setResponseMetadata := func(handlerResponse *core.HandlerResponse) {
 		if handlerResponse == nil {
@@ -634,48 +634,11 @@ func clearEnvVariables() {
 	core.Env.LOGS_FULL = false
 }
 
-type ExecLambdaInput struct {
-	ExecArgs core.ExecArgs `json:"fn_exec" cb:"fn_exec,1"`
-}
-
-func ExecFuncHandler(lambdaInput string) (response core.FuncResponse) {
-	defer func() {
-		if r := recover(); r != nil {
-			errStr := fmt.Sprintf("Internal Server Error (Panic in ExecFuncHandler): %v", r)
-			core.Logx(5, errStr)
-			core.Log(string(debug.Stack()))
-			response = core.FuncResponse{Error: errStr}
-		}
-	}()
-	core.Env.LOGS_ONLY_SAVE = true
-
-	input := ExecLambdaInput{}
-	err := json.Unmarshal([]byte(lambdaInput), &input)
-	if err != nil {
-		return core.FuncResponse{
-			Error: "no se pudieron interpretar los argumentos recibidos: " + core.StrCut(lambdaInput, 200),
-		}
-	}
-
-	args := input.ExecArgs
-	core.Log("func to exec:: ", core.StrCut(lambdaInput, 200))
-
-	// Función a ejecutarse con nombre específico
-	if len(args.FuncToExec) > 0 {
-		for key := range exec.ExecHandlers {
-			if args.FuncToExec == key {
-				core.Log("invocando funcion:: ", args.FuncToExec)
-				return exec.ExecHandlers[key](&args)
-			}
-		}
-		core.Log("No se encontró la función e ejecutar::", args.FuncToExec)
-	}
-	return core.FuncResponse{}
-}
-
-func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerResponse) core.MainResponse {
-	response := core.MainResponse{}
-
+// prepareResponse is transport-neutral: the local HTTP server's response is written here, and every
+// other transport gets the HandlerResponse back to render itself — the Lambda entrypoints in main.go
+// convert it with core.MakeLambdaResponse / MakeLambdaStreamingResponse. That keeps the router free
+// of AWS types, so the browser build can link it.
+func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerResponse) *core.HandlerResponse {
 	// Emitted here and nowhere else: this is the one funnel every response passes through, panics
 	// and token rejections included, and it runs in both runtimes. It is deliberately ahead of the
 	// branches below, two of which return early — a streamed response is still a request that
@@ -690,54 +653,12 @@ func prepareResponse(args *core.HandlerArgs, handlerResponse *core.HandlerRespon
 	if !core.Env.IS_SERVERLESS {
 		// Stream handlers (SSE) write directly to ResponseWriter and must bypass normal compression flow.
 		if handlerResponse.StreamHandled {
-			return response
+			return nil
 		}
-		// core.Print(handlerResponse)
 		core.SendLocalResponse(*args, *handlerResponse)
-		return response
+		return nil
 	}
-
-	hasError := len(handlerResponse.Error) > 0
-	statusCode := int32(400)
-	if handlerResponse.StatusCode != 0 {
-		statusCode = int32(handlerResponse.StatusCode)
-	}
-
-	// Under RESPONSE_STREAM the body leaves as raw bytes behind a JSON prelude, so it is a
-	// different response type entirely rather than a variation of the buffered one.
-	if core.Env.LAMBDA_RESPONSE_STREAMING {
-		if hasError {
-			response.LambdaStreamingResponse = core.MakeErrStreamingFinal(statusCode, handlerResponse.Error)
-			for headerName, headerValue := range handlerResponse.Headers {
-				response.LambdaStreamingResponse.Headers[headerName] = headerValue
-			}
-			response.LambdaStreamingResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
-				handlerResponse.PreSerializeMs,
-				time.Now().UnixMilli()-handlerResponse.RequestStart,
-			)
-		} else {
-			response.LambdaStreamingResponse = core.MakeStreamingResponseFinal(handlerResponse)
-		}
-		return response
-	}
-
-	if hasError {
-		response.LambdaResponse = core.MakeErrRespFinal(statusCode, handlerResponse.Error)
-		if response.LambdaResponse.Headers == nil {
-			response.LambdaResponse.Headers = map[string]string{}
-		}
-		for headerName, headerValue := range handlerResponse.Headers {
-			response.LambdaResponse.Headers[headerName] = headerValue
-		}
-		response.LambdaResponse.Headers["Access-Control-Expose-Headers"] = "X-Metadata, X-Rate-Limit-Code"
-		response.LambdaResponse.Headers["X-Metadata"] = fmt.Sprintf("%d,%d",
-			handlerResponse.PreSerializeMs,
-			time.Now().UnixMilli()-handlerResponse.RequestStart,
-		)
-	} else {
-		response.LambdaResponse = core.MakeResponseFinal(handlerResponse)
-	}
-	return response
+	return handlerResponse
 }
 
 func ExecFunc(

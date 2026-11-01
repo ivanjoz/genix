@@ -4,13 +4,21 @@
 // Nothing in this file names a database. Every declaration is either an alias to
 // genix-orm/db (the driver-agnostic layer) or a thin generic wrapper over it —
 // wrappers exist only because Go cannot alias a generic function. The driver is
-// chosen in driver.go, which is the one file to edit to switch databases.
+// chosen per build target in driver_scylla.go (server) and driver_js.go (browser).
 package db
 
 import (
 	"github.com/ivanjoz/genix-orm/dataframe"
 	orm "github.com/ivanjoz/genix-orm/db"
 	"github.com/ivanjoz/genix-orm/db/cache"
+)
+
+// Schema and Record are the constraints every wrapper in db.go is written against.
+// Record does not name a driver: it takes the executor as a parameter, which Go
+// infers from the record type. That is what keeps db.go driver-free.
+type (
+	Schema[TableT any]                     = orm.TableSchemaInterface[TableT]
+	Record[TableT any, RecordT any, D any] = orm.RecordWithExecutor[TableT, RecordT, D]
 )
 
 // ─── Schema declaration ────────────────────────────────────────────────────────

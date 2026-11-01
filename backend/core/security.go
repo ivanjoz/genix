@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"github.com/ivanjoz/genix-orm/utils"
 	"io"
@@ -11,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	aws_sdk "github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -191,7 +188,7 @@ type EnvStruct struct {
 	// INTERNAL_APIKEY used by deployment protects its REST endpoint.
 	QDRANT_HOST       string
 	QDRANT_HTTP_PORT  int
-	QDRANT_PUBLIC    bool
+	QDRANT_PUBLIC     bool
 	QDRANT_USE_TLS    bool
 	QDRANT_COLLECTION string
 	// Embeddings are independent from the chat model provider. The first RAG
@@ -375,7 +372,7 @@ type fileConfig struct {
 	Qdrant struct {
 		Host       string `toml:"host"`
 		HTTPPort   int    `toml:"http_port"`
-		Public    bool   `toml:"public"`
+		Public     bool   `toml:"public"`
 		UseTLS     bool   `toml:"use_tls"`
 		Collection string `toml:"collection"`
 	} `toml:"qdrant"`
@@ -789,27 +786,3 @@ func IsRunningInLambda() bool {
 }
 
 var REQ_PATHS = []string{}
-
-func GetAwsConfig() aws_sdk.Config {
-	var cfg aws_sdk.Config
-	var err error
-
-	setConfig := func(lo *config.LoadOptions) error {
-		lo.Region = Env.AWS_REGION
-		return nil
-	}
-
-	accessKeyEnv := os.Getenv("AWS_ACCESS_KEY_ID")
-	if len(accessKeyEnv) > 0 {
-		Log("Generando AWS Config con ACCESS_KEY en Región:", Env.AWS_REGION)
-		cfg, err = config.LoadDefaultConfig(context.TODO(), setConfig)
-	} else {
-		Log("Generando AWS Config con profile:", Env.AWS_PROFILE, "|", Env.AWS_REGION)
-		cfg, err = config.LoadDefaultConfig(
-			context.TODO(), config.WithSharedConfigProfile(Env.AWS_PROFILE), setConfig)
-	}
-	if err != nil {
-		panic(Concat(" ", "No se pudo obtener la configuración de AWS.", err))
-	}
-	return cfg
-}

@@ -1,3 +1,5 @@
+//go:build !js
+
 package cloud
 
 import (
@@ -19,27 +21,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	smithy "github.com/aws/smithy-go"
 )
-
-type SaveFileArgs struct {
-	Account       uint8
-	Bucket        string
-	LocalFilePath string
-	FileContent   []byte
-	Name          string
-	Path          string
-	Prefix        string
-	StartAfter    string
-	ContentType   string
-	CacheControl  string
-	MaxKeys       int32
-}
-
-// FileInfo keeps object metadata independent from the storage provider.
-type FileInfo struct {
-	Key          string
-	Size         int64
-	LastModified time.Time
-}
 
 // useR2 selects the object store independently from the cloud data mirror.
 func useR2() bool {
@@ -250,17 +231,6 @@ func listFilesFromR2(args SaveFileArgs) ([]FileInfo, error) {
 	return files, nil
 }
 
-type ImageArgs struct {
-	Order       int32
-	Content     string /* Base64 webp image */
-	Folder      string
-	Name        string
-	Description string
-	Resolutions map[uint16]string
-	Type        string
-	Resolution  int8
-}
-
 func SaveFileToR2(args SaveFileArgs) error {
 	key := args.Path + "/" + args.Name
 	url := r2ObjectURL(args.Bucket, key)
@@ -392,39 +362,4 @@ func fileExistsR2(args SaveFileArgs) (bool, error) {
 	}
 	respBytes, _ := io.ReadAll(resp.Body)
 	return false, fmt.Errorf("R2 verify failed (HTTP %d): %s", resp.StatusCode, string(respBytes))
-}
-
-func SaveImage(image ImageArgs) (string, error) {
-
-	fmt.Println("args.Folder:", image.Folder)
-
-	if strings.Contains(image.Content[0:40], "base64,") {
-		image.Content = strings.Split(image.Content, "base64,")[1]
-	}
-
-	imageBytes := core.Base64ToBytes(image.Content)
-
-	// Resolution 6 (x6) is the base image, stored without a suffix; lower resolutions
-	// (x4, x2) keep the "-x<resolution>" suffix so the frontend can derive their names.
-	objectName := fmt.Sprintf("%v.%v", image.Name, image.Type)
-	if image.Resolution != 6 {
-		objectName = fmt.Sprintf("%v-x%v.%v", image.Name, image.Resolution, image.Type)
-	}
-
-	args := SaveFileArgs{
-		Path:        image.Folder,
-		FileContent: imageBytes,
-		ContentType: fmt.Sprintf("image/%v", image.Type),
-		Name:        objectName,
-	}
-
-	var err error
-	if useR2() {
-		args.Bucket = core.Env.CLOUDFLARE_BUCKET
-		err = SaveFileToR2(args)
-	} else {
-		args.Bucket = core.Env.S3_BUCKET
-		err = SaveFile(args)
-	}
-	return args.Name, err
 }
