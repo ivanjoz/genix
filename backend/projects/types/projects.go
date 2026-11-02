@@ -121,13 +121,17 @@ type EpicTable struct {
 // project at a time (GET.projects-epics?project-id=).
 func (e EpicTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:          58,
-		Name:        "projects_epic",
-		Partition:   e.CompanyID,
+		ID:                58,
+		Name:              "projects_epic",
+		Partition:         e.CompanyID,
 		Keys:              db.Cols(e.ID),
 		KeyIntPacking:     db.Cols(e.ProjectID.Size(63-projectSequenceBits), e.Autoincrement(0)),
 		AutoincrementPart: e.ProjectID,
-		FixedValues: []db.FixedValues{{Col: e.Status, Values: statusValues}},
-		Indexes:     []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)}},
+		FixedValues:       []db.FixedValues{{Col: e.Status, Values: statusValues}},
+		Indexes: []db.Index{
+			{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)},
+			// Plain reads filter by it; the TypeDelta view serves Delta() only.
+			{Type: db.TypeView, Keys: db.Cols(e.ProjectID, e.Status)},
+		},
 	}
 }

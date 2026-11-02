@@ -254,6 +254,8 @@ func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 			// The CQL index it declares is the same one a local index declares.
 			{Keys: db.Cols(e.IssueDate), UseIndexGroup: true},
 			{Type: db.TypeDelta, Keys: db.Cols(e.State)},
+			// Plain reads filter by it; the TypeDelta view serves Delta() only.
+			{Type: db.TypeView, Keys: db.Cols(e.State)},
 			// One log per accounting period: GET.accounting-operations syncs a month through it.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.State)},
 		},

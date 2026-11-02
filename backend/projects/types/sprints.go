@@ -70,13 +70,16 @@ type SprintTable struct {
 // never lose a move. The delta index pinned on ProjectID syncs the browser cache per project.
 func (e SprintTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:          63,
-		Name:        "projects_sprint",
-		Partition:   e.CompanyID,
+		ID:                63,
+		Name:              "projects_sprint",
+		Partition:         e.CompanyID,
 		Keys:              db.Cols(e.ID),
 		KeyIntPacking:     db.Cols(e.ProjectID.Size(63-projectSequenceBits), e.Autoincrement(0)),
 		AutoincrementPart: e.ProjectID,
-		FixedValues: []db.FixedValues{{Col: e.Status, Values: statusValues}},
-		Indexes:     []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)}},
+		FixedValues:       []db.FixedValues{{Col: e.Status, Values: statusValues}},
+		Indexes: []db.Index{
+			{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)},
+			// Plain reads filter by it; the TypeDelta view serves Delta() only.
+			{Type: db.TypeView, Keys: db.Cols(e.ProjectID, e.Status)}},
 	}
 }

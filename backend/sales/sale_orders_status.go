@@ -34,9 +34,8 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El order status es incorrecto.")
 	}
 
-	// Status 0 is "annulled", and the delta log reads a status-0 write as a delete: the other tabs
-	// drop an annulled order through it, but the Anuladas tab would never receive one. That tab
-	// answers its whole list with the replace Metadata instead.
+	// Status 0 is "annulled". The Anuladas tab answers its whole list with the replace Metadata on
+	// every sync; the other tabs drop an annulled order because its status left their filter values.
 	if slices.Equal(orderStatusToQuery, []int8{types.OrderStatusAnnulled}) {
 		annulledOrders := []types.SaleOrder{}
 		query := db.Query(&annulledOrders).Limit(saleOrdersQueryLimit).OrderDesc()

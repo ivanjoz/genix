@@ -133,24 +133,22 @@ func QueryCachedIDs[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D
 type (
 	// CachedIDsRequest is a decoded by-IDs request (the "cc" query parameter).
 	CachedIDsRequest = cache.CachedIDsRequest
-	// DeltaCursor is what a client holds of a delta log, passed to Delta().
-	DeltaCursor = cache.DeltaCursor
 )
 
 // CachedPartition is the by-IDs response: the records of one partition that moved.
 type CachedPartition[RecordT any] = cache.CachedPartition[RecordT]
 
 var (
-	// SetFileStore installs the file store holding the slot files and the delta logs.
+	// SetFileStore installs the file store holding the by-IDs slot files.
 	SetFileStore = cache.SetFileStore
 	// FileStore is the installed store. The agent keeps its turn checkpoints in it, under its own
 	// prefix, so it needs no S3 client of its own.
 	FileStore = cache.FileStore
 	// DecodeCachedIDsRequest reads the "cc" query parameter of a by-IDs request.
 	DecodeCachedIDsRequest = cache.DecodeCachedIDsRequest
-	// ParseDeltaCursor reads a delta cursor query parameter.
-	ParseDeltaCursor = cache.ParseDeltaCursor
-	// DeltaReplaceMetadata is the Metadata of a route not backed by a delta log: one record
+	// ParseDeltaCursor reads a delta cursor query parameter: the highest Updated the client holds.
+	ParseDeltaCursor = cache.ParseDeltaWindowCursor
+	// DeltaReplaceMetadata is the Metadata of a route not backed by a TypeDelta index: one record
 	// carrying it makes the client replace its whole list with the response.
 	DeltaReplaceMetadata = cache.DeltaReplaceMetadata
 )

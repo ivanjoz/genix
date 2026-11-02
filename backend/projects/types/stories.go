@@ -125,7 +125,10 @@ func (e StoryTable) GetSchema() db.TableSchema {
 		UseListAsDefault:  true,
 		CacheByIDs:        true,
 		FixedValues:       []db.FixedValues{{Col: e.Status, Values: statusValues}},
-		Indexes:           []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)}},
+		Indexes: []db.Index{
+			{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)},
+			// Plain reads filter by it; the TypeDelta view serves Delta() only.
+			{Type: db.TypeView, Keys: db.Cols(e.ProjectID, e.Status)}},
 	}
 }
 
@@ -287,13 +290,13 @@ type StoryActivityTable struct {
 // pinned on StoryID syncs the browser cache per story (GET.projects-story-activity).
 func (e StoryActivityTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:          62,
-		Name:        "projects_story_activity",
-		Partition:   e.CompanyID,
+		ID:                62,
+		Name:              "projects_story_activity",
+		Partition:         e.CompanyID,
 		Keys:              db.Cols(e.ID),
 		KeyIntPacking:     db.Cols(e.ProjectID.Size(63-projectSequenceBits), e.Autoincrement(0)),
 		AutoincrementPart: e.ProjectID,
-		FixedValues: []db.FixedValues{{Col: e.Status, Values: statusValues}},
-		Indexes:     []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.StoryID, e.Status)}},
+		FixedValues:       []db.FixedValues{{Col: e.Status, Values: statusValues}},
+		Indexes:           []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.StoryID, e.Status)}},
 	}
 }

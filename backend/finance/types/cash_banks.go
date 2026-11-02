@@ -58,6 +58,8 @@ func (e CashBankTable) GetSchema() db.TableSchema {
 		},
 		Indexes: []db.Index{
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// Plain reads filter by it; the TypeDelta view serves Delta() only.
+			{Type: db.TypeView, Keys: db.Cols(e.Status)},
 		},
 	}
 }
