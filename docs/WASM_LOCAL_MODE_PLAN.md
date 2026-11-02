@@ -206,13 +206,12 @@ modules are disabled.
 ## Phase 1 decisions
 
 - **D1 — tagged.** `cloud/cloudwatch.go` (no caller anywhere) is kept behind `!js`.
-- **D2 — one interface for both builds: approved, shape still open.** Phase 1 found that
-  `cloud.SaveFile`/`GetFile`/`ListFiles`/`DeleteFile` and the ORM's `utils.FileStore` are **different
-  stores**: `cloud.*` writes public CDN objects (S3_BUCKET or R2) with `ContentType` and `CacheControl`,
-  per-call buckets, and `FileInfo{Size, LastModified}` listings; `utils.FileStore` has none of that.
-  Routing one through the other would drop the CDN headers. Phase 1 therefore only split the files
-  (shared types in `cloud/files.go`, S3/R2 in `cloud/s3.go`, `!js`); the browser side
-  (`cloud/files_js.go`) fails loudly until the interface is settled.
+- **D2 — done (phase 2).** `cloud.ObjectStore` (`cloud/files.go`) is the public object store:
+  `s3ObjectStore` (one S3 client per process, no longer one per call) and `r2ObjectStore` in
+  `cloud/s3.go`, picked from providers.cdn on first use; `indexedDBObjectStore` in
+  `cloud/files_js.go`, installed by the browser entry point with `cloud.SetObjectStore`. It stays
+  separate from the ORM's `utils.FileStore` (no content type, cache headers or buckets there); in the
+  browser both are IndexedDB object stores holding Blobs.
 - **D3 — colbin only** in the browser build. `core/json_defaults.go` is `!js`.
 - **D4 — excluded.** `cloud/orm-sqlite.go` is `!js`; the browser build has no cloud data mirror.
 - **D5 — done.** `core.MainResponse` is gone. `mainHandler`/`prepareResponse` return the finished

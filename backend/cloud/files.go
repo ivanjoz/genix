@@ -1,13 +1,58 @@
-// The public object store's arguments and results, shared by both builds: s3.go implements the
-// store on S3 / R2 for the server, files_js.go for the browser.
 package cloud
 
 import (
 	"app/core"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
+
+// ObjectStore is the public object store: the files the CDN serves or the backend keeps as
+// artifacts (product images, webpage JSON, company config, invoice XML, backups). It is not the
+// ORM's internal file store (utils.FileStore), which has no content type, cache headers or buckets.
+//
+// Implementations: S3 and R2 for the server (s3.go), IndexedDB for the browser (files_js.go). An
+// object's key is always Path + "/" + Name.
+type ObjectStore interface {
+	PutObject(args SaveFileArgs) error
+	GetObject(args SaveFileArgs) ([]byte, error)
+	ListObjects(args SaveFileArgs) ([]FileInfo, error)
+	// DeleteObject treats a missing object as deleted.
+	DeleteObject(args SaveFileArgs) error
+	// ObjectExists returns (false, nil) for a confirmed not-found and (false, err) for a failure.
+	ObjectExists(args SaveFileArgs) (bool, error)
+}
+
+var (
+	objectStore         ObjectStore
+	objectStoreSelected sync.Once
+)
+
+// SetObjectStore installs the object store explicitly. The browser entry point does it at boot; the
+// server leaves it to defaultObjectStore, which reads providers.cdn.
+func SetObjectStore(store ObjectStore) { objectStore = store }
+
+// currentObjectStore is the installed store, or the build's default chosen on first use — after
+// config.toml has been read, which is why it is not chosen at package init.
+func currentObjectStore() ObjectStore {
+	objectStoreSelected.Do(func() {
+		if objectStore == nil {
+			objectStore = defaultObjectStore()
+		}
+	})
+	return objectStore
+}
+
+func SaveFile(args SaveFileArgs) error { return currentObjectStore().PutObject(args) }
+
+func GetFile(args SaveFileArgs) ([]byte, error) { return currentObjectStore().GetObject(args) }
+
+func ListFiles(args SaveFileArgs) ([]FileInfo, error) { return currentObjectStore().ListObjects(args) }
+
+func DeleteFile(args SaveFileArgs) error { return currentObjectStore().DeleteObject(args) }
+
+func FileExists(args SaveFileArgs) (bool, error) { return currentObjectStore().ObjectExists(args) }
 
 type SaveFileArgs struct {
 	Account       uint8
