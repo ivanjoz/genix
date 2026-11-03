@@ -152,8 +152,8 @@ export const frequencySummary = (frequency: number): string => {
 // --- Delta-cached list services -----------------------------------------------------
 
 // One status tab per instance. The status code is embedded in `route` (?status=<code>)
-// so each tab keeps a separate delta-cache key; rows that change status are evicted by
-// the backend's `records_IDsToRemove` flag (see GetExpenses / GetSaleOrders).
+// so each tab keeps a separate delta-cache key; rows that change status come back as removed
+// IDs in the delta window Metadata (see GetExpenses).
 export class ExpensesService extends GetHandler<IExpense> {
   route = "expenses"
   keyID = "ID"

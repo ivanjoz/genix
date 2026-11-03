@@ -4,7 +4,6 @@ import (
 	"app/core"
 	"app/db"
 	"app/sales/types"
-	"slices"
 )
 
 var pendingStatusToStatus = map[int8][]int8{
@@ -34,47 +33,17 @@ func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El order status es incorrecto.")
 	}
 
-	// Status 0 is "annulled". The Anuladas tab answers its whole list with the replace Metadata on
-	// every sync; the other tabs drop an annulled order because its status left their filter values.
-	if slices.Equal(orderStatusToQuery, []int8{types.OrderStatusAnnulled}) {
-		annulledOrders := []types.SaleOrder{}
-		query := db.Query(&annulledOrders).Limit(saleOrdersQueryLimit).OrderDesc()
-		query.Exclude(query.CompanyID)
-		query.CompanyID.Equals(req.User.CompanyID).Status.Equals(types.OrderStatusAnnulled)
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener los registros de ventas:", err)
-		}
-		response := map[string]any{"records": core.WithDeltaReplace(annulledOrders)}
-		return req.MakeResponse(&response)
-	}
-
-	syncFilterStatuses := make([]any, len(orderStatusToQuery))
-	for i, status := range orderStatusToQuery {
-		syncFilterStatuses[i] = status
-	}
-	loggedOrders := []types.SaleOrder{}
-	query := db.Query(&loggedOrders).Limit(saleOrdersQueryLimit).OrderDesc()
+	// Status is the delta index's pinned key, so the read covers exactly this tab's statuses (the
+	// Anuladas tab pins 0 like any other value): an order that moved to another tab comes back as a
+	// removed ID in the window Metadata, never as a record here.
+	saleOrders := []types.SaleOrder{}
+	query := db.Query(&saleOrders).Limit(saleOrdersQueryLimit).OrderDesc()
 	query.Exclude(query.CompanyID)
-	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("records"), syncFilterStatuses...)
+	query.CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("records"), core.ToAny(orderStatusToQuery)...)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los registros de ventas:", err)
 	}
 
-	// Every tab reads the same log, which names every status: an order that moved to another tab
-	// comes back as a live record, and the client is told to drop it from this one.
-	saleOrders := []types.SaleOrder{}
-	saleOrdersToRemoveIDs := []int64{}
-	for _, saleOrder := range loggedOrders {
-		if saleOrder.Metadata == nil && !slices.Contains(orderStatusToQuery, saleOrder.Status) {
-			saleOrdersToRemoveIDs = append(saleOrdersToRemoveIDs, saleOrder.ID)
-			continue
-		}
-		saleOrders = append(saleOrders, saleOrder)
-	}
-
-	response := map[string]any{
-		"records":             &saleOrders,
-		"records_IDsToRemove": &saleOrdersToRemoveIDs,
-	}
+	response := map[string]any{"records": &saleOrders}
 	return req.MakeResponse(&response)
 }

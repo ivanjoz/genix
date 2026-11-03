@@ -80,15 +80,15 @@ export class SaleOrdersService extends GetHandler {
   // v11 stopped filtering out ss=0, so a v10 cache would hide the Anuladas tab's own records.
   // v12: the parallel Detail* arrays became `Lines`, and the migration kept `upd`, so only a
   // version bump drops the old-shape rows.
-  useCache = { min: 0.1, ver: 12 }
+  // v13: Anuladas joined the delta window protocol (it was a replace on every sync).
+  useCache = { min: 0.1, ver: 13 }
 
 	records: ISaleOrder[] = $state([])
 
 	handler(result: ISaleOrdersResult): void {
 		console.log("ISaleOrdersResult", result)
-		// No status filter here: the backend pins the status this group asked for and sends
-		// records_IDsToRemove for everything that left it. Dropping ss=0 would empty the
-		// Anuladas tab, which is the one group whose records are all ss=0.
+		// No status filter here: the backend reads only this group's statuses (Anuladas pins ss=0)
+		// and the window Metadata removes every order that left them.
 		const records = [...(result?.records || [])]
 		records.sort((a,b) => a.Created > b.Created ? -1 : 1)
 

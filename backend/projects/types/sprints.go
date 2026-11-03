@@ -77,9 +77,7 @@ func (e SprintTable) GetSchema() db.TableSchema {
 		KeyIntPacking:     db.Cols(e.ProjectID.Size(63-projectSequenceBits), e.Autoincrement(0)),
 		AutoincrementPart: e.ProjectID,
 		FixedValues:       []db.FixedValues{{Col: e.Status, Values: statusValues}},
-		Indexes: []db.Index{
-			{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)},
-			// Plain reads filter by it; the TypeDelta view serves Delta() only.
-			{Type: db.TypeView, Keys: db.Cols(e.ProjectID, e.Status)}},
+		// The delta view also serves the plain reads by ProjectID and Status; a read without Status fans out over its FixedValues.
+		Indexes: []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.ProjectID, e.Status)}},
 	}
 }

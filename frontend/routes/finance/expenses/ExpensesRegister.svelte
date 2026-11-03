@@ -125,7 +125,7 @@ $effect(() => {
 })
 
 // Each tab is its own server-side delta query (?status=<code>); switching tabs spins up
-// a fresh service so the cache key (and its IDsToRemove eviction) stays per-status.
+// a fresh service so the cache key (and its removed-ID eviction) stays per-status.
 let queryRequestID = 0
 const queryExpenses = async (status: number) => {
   const requestID = ++queryRequestID

@@ -245,7 +245,7 @@ Following `backend/docs/CREATE_API_HANDLERS.md`. Register in
 
 | Router key                     | Handler                | Purpose |
 | ------------------------------ | ---------------------- | ------- |
-| `GET.expenses`                 | `GetExpenses`          | Per-status delta-cache list of `Expense`. One status tab per request via `?status=` (`0` Todos / `1` Pend. Pago / `2` Pagados) + `updated` watermark. Mirrors `GetSaleOrders`: rows that change status are evicted client-side via `records_IDsToRemove`. Todos/Pagados capped at 2000; Pend. Pago uncapped. |
+| `GET.expenses`                 | `GetExpenses`          | Per-status delta-cache list of `Expense`. One status tab per request via `?status=` (`0` Todos / `1` Pend. Pago / `2` Pagados) + `upd` cursor (delta window protocol). Mirrors `GetSaleOrders`: rows that change status come back as removed IDs in the window Metadata. Todos/Pagados capped at 2000; Pend. Pago uncapped. |
 | `POST.expenses`                | `PostExpenses`         | Create/update one-time or per-period expenses. |
 | `GET.expenses-scheduled`       | `GetExpensesScheduled` | Delta-cache list of `ExpenseScheduled`. |
 | `POST.expenses-scheduled`      | `PostExpensesScheduled`| Create/update a schedule. Does **not** pre-generate periods. |

@@ -7,7 +7,6 @@ import (
 	"app/finance/types"
 	production "app/production/types"
 	"encoding/json"
-	"slices"
 	"time"
 )
 
@@ -67,9 +66,9 @@ func daysInMonth(year int, month time.Month) int {
 // --- GET / POST: one-time and per-period expenses ---------------------------------
 
 // GetExpenses serves one status tab per request via the "status" query param
-// (0 = Todos, 1 = Pend. Pago, 2 = Pagados) with the delta-cache protocol. Every tab reads the
-// same log, which names every status: a row that moved to another tab comes back as a live
-// record and is evicted from this one through "records_IDsToRemove".
+// (0 = Todos, 1 = Pend. Pago, 2 = Pagados) with the delta-cache protocol. Status is the delta
+// index's pinned key, so the read covers exactly the tab's statuses: a row that moved to another
+// tab comes back as a removed ID in the window Metadata.
 func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	statusFilter := int8(req.GetQueryInt("status"))
 
@@ -86,8 +85,8 @@ func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("El status del gasto es incorrecto.")
 	}
 
-	loggedExpenses := []types.Expense{}
-	query := db.Query(&loggedExpenses).OrderDesc()
+	expenses := []types.Expense{}
+	query := db.Query(&expenses).OrderDesc()
 	// Todos / Pagados cap their first sync; Pend. Pago stays uncapped.
 	if statusFilter != 1 {
 		query.Limit(expensesQueryLimit)
@@ -97,20 +96,7 @@ func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los gastos:", err)
 	}
 
-	records := []types.Expense{}
-	expensesToRemoveIDs := []int32{}
-	for _, expense := range loggedExpenses {
-		if expense.Metadata == nil && !slices.Contains(statusToQuery, any(expense.Status)) {
-			expensesToRemoveIDs = append(expensesToRemoveIDs, expense.ID)
-			continue
-		}
-		records = append(records, expense)
-	}
-
-	response := map[string]any{
-		"records":             &records,
-		"records_IDsToRemove": &expensesToRemoveIDs,
-	}
+	response := map[string]any{"records": &expenses}
 	return req.MakeResponse(&response)
 }
 

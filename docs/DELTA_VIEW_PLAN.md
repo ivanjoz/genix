@@ -1,6 +1,6 @@
-# Delta sync on a slim view, with a client-checked window hash (Scylla driver)
+# Delta sync on a full-record view, with a client-checked window hash (Scylla driver)
 
-Status: **implemented, not committed, not deployed** (ORM, backend, genix-ui). Supersedes, for the
+Status: **implemented, not deployed** (ORM, backend, genix-ui). Supersedes, for the
 Scylla driver only, the S3 delta log (`genix-orm/db/cache/delta_log.go`, the former
 `genix-orm/scylla/delta_log.go`). The DynamoDB driver (berryapps) keeps the S3 log unchanged, and
 genix-ui keeps speaking it. §10 lists where the implementation departs from this plan.
@@ -16,19 +16,21 @@ genix-ui keeps speaking it. §10 lists where the implementation departs from thi
 
 | Topic | Decision |
 |---|---|
-| Change source | A materialized view per `TypeDelta`: `ID`, `updated`, `version`, `status`, keyed by the partition + pinned `Cols` + `updated` |
-| Read | The view returns IDs only; the records are then read from the base table by ID |
+| Change source | A materialized view per `TypeDelta` holding every stored column, keyed by the partition + pinned `Cols` + `updated` |
+| Read | The records come straight from the view: no by-ID read. The planner also serves plain reads on the pinned keys from it |
 | Replace threshold | More than **100** changed IDs → send the whole partition. Configurable per index |
 | Margin | **10 s**: rows with `updated ≥ C − 10s` are always resent |
 | Hash window | **15 min**: `[C − 15min, C − 10s)` |
 | Who compares | **The client.** The server returns its hash; the client compares after excluding the returned IDs, and on a mismatch re-requests as a first sync |
-| Status filter vs hash | Both sides hash only rows whose sync-filter value is in `syncFilterValues`; the server sends the field and the values |
+| Status vs hash | Status is a pinned key like any other: the server reads and hashes only the call's prefixes and sends the last key's field and values; the client hashes its held records with one of them |
 | Hard deletes | Not allowed on `TypeDelta` tables |
 | Pinned columns | May change. A change writes one row to `<table>__delta_moves` under the **old** prefix; a sync of that prefix returns the ID as a removal (§3a) |
 | Dynamo | Unchanged (S3 log) |
 
-**Pinned columns** are every `Keys` entry of a `TypeDelta` index but the last, which is the sync
-filter (`scylla/index_delta_view.go:162`). Real moves today: `AssigneeID` (story reassignment),
+**Pinned columns** are every `Keys` entry of a `TypeDelta` index, the last one included
+(`[status][updated]`, as `3115775^:scylla/index_delta_view.go` did). `Delta()`'s values name the
+last key's prefixes; a key with no equality and no value fans out over its `FixedValues`, one
+parallel read per value. A status change is a move like any other. Real moves today, besides status: `AssigneeID` (story reassignment),
 `Period` (expenses and purchase orders, when the comprobante moves the accounting date),
 `SameDayMovement` (cash movements, `RestampDocumentPayments`).
 
@@ -38,14 +40,14 @@ filter (`scylla/index_delta_view.go:162`). Real moves today: `AssigneeID` (story
 plain integer. The S3 cursor always contains dots, so the two never collide. No param = first sync.
 
 **Server.**
-1. Read the view slice of the pinned prefix with `updated ≥ C − 15min` (ID, updated, version, status).
-2. `changed` = rows with `updated ≥ C − 10s`.
-3. `len(changed) > threshold`, or first sync → **replace**: list every ID of the prefix from the view
-   (filtered by `syncFilterValues`), read them by ID in pages.
-4. Otherwise read `changed` by ID (`key IN`, LocalQuorum) and return every status.
-5. `serverHash` = hash of `(ID, version)` over the slice rows with `updated` in `[C − 15min, C − 10s)`
-   and sync-filter value in `syncFilterValues`.
-6. Append one Metadata record (below).
+1. Per prefix, in parallel: read the changed records, `updated ≥ C − 10s`, whole from the view, with
+   `LIMIT threshold + 1`; read the moves since `C − 15min` with the same limit.
+2. More than the threshold of either, summed across prefixes, or a first sync → **replace**: each
+   prefix read with `LIMIT <Limit>`, merged newest first and cut at `Limit`.
+3. Otherwise the changed records are the answer.
+4. `serverHash` = hash of `(ID, version)` over the prefixes' view rows with `updated` in
+   `[C − 15min, C − 10s)` (a slim read of ID, updated, version).
+5. Append one Metadata record (below).
 
 ### 3a. Moves
 
@@ -159,19 +161,22 @@ caches are wiped (bump the route `ver`).
 
 - **View key.** Scylla allows one non-key base column in a view's key (checked live), so the view is
   `PRIMARY KEY ((part), zz_dlt_<pinned>, id)` `DESC`, where the virtual bigint packs the pinned
-  slots over 31 bits of `updated`; keyless: `((part), updated, id)`. Name `<table>__dlt_<keys>_view`.
-  Every write rewrites the packed column, from the stored pinned values a partial update omits.
-- **Not in the planner.** The delta views serve `Delta()` only. The 10 plain queries that used the
-  old listing views now go through an explicit `TypeView` with the same keys, declared in projects
-  (project, epic, story, sprint), business (sites, warehouses), finance (cash banks), sales,
-  accounting (assets) and invoicing (documents). `TypeView` regained `FixedValues` slot sizing so
-  those views keep a range layout (`planFixedValueViewSlots`).
+  slots over 31 bits of `updated`; keyless: `updated` alone (`zz_dlt_updated`). Name
+  `<table>__dlt_<keys>_view`. Every write rewrites the packed column, from the stored pinned values a
+  partial update omits.
+- **Full records, in the planner.** The view holds every stored column, so `Delta()` reads records
+  from it and never by ID. It is a planner range view on `[part, keys…, updated]`, a key without an
+  equality fanning out over its `FixedValues`; no `ALLOW FILTERING`. Epics, stories and sprints
+  (`ProjectID`) and the 7 tables reading by Status (or State) dropped their explicit `TypeView`.
+- **Every key pinned.** An intermediate version treated the last key as a filter outside the packed
+  key (whole-prefix reads, records returned in every status, a client "leaving by filter" rule, a
+  replace on every sync of the Anuladas tab). Restored to the original layout: the last key is a
+  slot too, `Delta()`'s values are prefixes read in parallel (`resolveDeltaPrefixes`), and a status
+  change is a move. `GetSaleOrders`/`GetExpenses` dropped their `records_IDsToRemove` post-filter.
 - **Removed IDs travel in the Metadata**, not as `<key>_IDsToRemove`: one more field after the
   filter values, `[removed count uvarint][ID delta uvarint] × count`, ascending.
-- **Leaving by filter.** Changed records come back in every status; genix-ui removes a returned
-  record whose filter value is not in the call's values (soft delete, annulment).
 - **Limit.** A replace keeps the newest `updated` first, up to the query's `Limit`. A `Select`
-  projection is honoured on the by-ID read.
+  projection is honoured on the view reads.
 - **Vectors.** genix-ui is its own repo, so `delta-window.wire.test.ts` copies the vectors of
   `delta_window_vectors.json` (generated by an independent Python implementation) instead of
   loading the file.

@@ -329,8 +329,6 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				UseIndexGroup: true,
 			},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
-			// Plain reads filter by it; the TypeDelta view serves Delta() only.
-			{Type: db.TypeView, Keys: db.Cols(e.Status)},
 			// One log per accounting period: GET.accounting-operations syncs a month through it.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
 		},

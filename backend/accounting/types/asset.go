@@ -163,8 +163,6 @@ func (e AssetTable) GetSchema() db.TableSchema {
 		},
 		Indexes: []db.Index{
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
-			// Plain reads filter by it; the TypeDelta view serves Delta() only.
-			{Type: db.TypeView, Keys: db.Cols(e.Status)},
 			// "Which assets exist for this supply?" — the Activos list groups by catalog row.
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ProductID)},
 			// Serial lookup, for resolving an asset from the stock detail row it shadows.
