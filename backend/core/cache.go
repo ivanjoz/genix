@@ -75,25 +75,26 @@ func GetCacheByKeys(companyID int32, cacheKeys ...string) ([]Cache, error) {
 func ExtractGroupIndexCacheValues(req *HandlerArgs) ([]db.GroupIndexCache, error) {
 
 	groupHashes := parseConcatenatedInts(req.GetQuery("cc-gh"))
-	updateCounters := parseConcatenatedInts(req.GetQuery("cc-upc"))
+	lastWrites := parseConcatenatedInts(req.GetQuery("cc-lw"))
 
-	records := makeGroupIndexCacheValues(groupHashes, updateCounters)
+	records := makeGroupIndexCacheValues(groupHashes, lastWrites)
 
 	// Log("records extracted:", len(records))
 	return records, nil
 }
 
-func makeGroupIndexCacheValues(groupHashes []int64, updateCounters []int64) []db.GroupIndexCache {
+// makeGroupIndexCacheValues pairs each group hash the client holds with the LastWrite it holds it at.
+func makeGroupIndexCacheValues(groupHashes []int64, lastWrites []int64) []db.GroupIndexCache {
 	records := make([]db.GroupIndexCache, 0, len(groupHashes))
 	for index, encodedGroupHash := range groupHashes {
-		if index >= len(updateCounters) {
+		if index >= len(lastWrites) {
 			continue
 		}
 
 		// Frontend sends signed int32 hashes through uint32 packing because the compact encoder is unsigned.
 		records = append(records, db.GroupIndexCache{
-			GroupHash:     int32(uint32(encodedGroupHash)),
-			UpdateCounter: int32(updateCounters[index]),
+			GroupHash: int32(uint32(encodedGroupHash)),
+			LastWrite: int32(lastWrites[index]),
 		})
 	}
 	return records

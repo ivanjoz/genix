@@ -172,11 +172,11 @@ func (e HandlerArgs) GetQueryInt(key string) int32 {
 // A multi-table route sends one param per response key instead ("ProductStock", "Sedes").
 const DeltaCursorParamOfDefaultKey = "up"
 
-// GetDeltaCursor reads the highest Updated the client holds of a delta route. An absent or malformed
-// param is 0, which Delta() answers as a first sync.
+// GetDeltaCursor reads the cursor the client holds of a delta route. An absent or malformed param
+// is the zero cursor, which Delta() answers as a first sync.
 //
 // responseKey names the param for a multi-table route; omit it for the single-array param.
-func (e HandlerArgs) GetDeltaCursor(responseKey ...string) int32 {
+func (e HandlerArgs) GetDeltaCursor(responseKey ...string) db.DeltaCursor {
 	paramName := DeltaCursorParamOfDefaultKey
 	if len(responseKey) > 0 && responseKey[0] != "" {
 		paramName = responseKey[0]

@@ -42,7 +42,7 @@ func GetPurchaseOrdersQuery(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID.Equals(req.User.CompanyID)
 
 	for _, cacheGroup := range cacheGroupHashes {
-		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.UpdateCounter)
+		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.LastWrite)
 	}
 
 	// Week is the single BETWEEN required by QueryIndexGroup; remaining equality filters

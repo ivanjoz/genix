@@ -67,7 +67,6 @@ type WarehouseProductMovement struct {
 	Type          StockMovementType `cb:"17"`
 	Created       int32             `cb:"18"`
 	CreatedBy     int32             `cb:"19"`
-	UpdateCounter int32             `cb:"20"`
 	// Period is the YYMM of Date (core.PeriodOfDay): the pinned key of the period delta index the
 	// accounting operations sync a month through.
 	Period int16 `cb:"21"`
@@ -103,7 +102,6 @@ type WarehouseProductMovementTable struct {
 	MonetaryValue        db.Col[*WarehouseProductMovementTable, int32]
 	CreatedBy            db.Col[*WarehouseProductMovementTable, int32]
 	Date                 db.Col[*WarehouseProductMovementTable, int16]
-	UpdateCounter        db.Col[*WarehouseProductMovementTable, int32]
 	Period               db.Col[*WarehouseProductMovementTable, int16]
 	PurchaseAccountCode  db.Col[*WarehouseProductMovementTable, int32]
 	Version              db.Col[*WarehouseProductMovementTable, int16]
@@ -130,28 +128,28 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			// sync filter a first sync lists.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Type)},
 			{
-				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date), UseIndexGroup: true,
+				Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.Date),
 			},
 			{
-				Type: db.TypeInheritFromKey, Keys: db.Cols(e.Date, e.WarehouseID), UseIndexGroup: true,
+				Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.Date, e.WarehouseID),
 			},
 			{
 				Type: db.TypeLocalIndex, Keys: db.Cols(e.SerialNumber),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.LotID), UseIndexGroup: true,
+				Type: db.TypeCacheGroup, Keys: db.Cols(e.LotID),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID), UseIndexGroup: true,
+				Type: db.TypeCacheGroup, Keys: db.Cols(e.DocumentID),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.Type), UseIndexGroup: true,
+				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.Type),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.Type, e.WarehouseID), UseIndexGroup: true,
+				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.Type, e.WarehouseID),
 			},
 			{
-				Type: db.TypeLocalIndex, Keys: db.Cols(e.Date, e.ProductID), UseIndexGroup: true,
+				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.ProductID),
 			},
 			// Backs the grouped movement report. SubDivisor joins the key so a SUM(SubQuantity)
 			// spanning a divisor refinement never adds sixths to twelfths; the caller folds the

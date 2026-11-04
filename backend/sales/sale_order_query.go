@@ -33,7 +33,7 @@ func SaleOrderQuery(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID.Equals(req.User.CompanyID)
 
 	for _, cacheGroup := range saleOrderCacheGroupHashes {
-		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.UpdateCounter)
+		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.LastWrite)
 	}
 
 	// Keep Date as the only BETWEEN predicate because QueryIndexGroup requires exactly one range

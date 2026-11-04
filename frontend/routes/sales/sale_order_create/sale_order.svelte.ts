@@ -79,7 +79,6 @@ export interface ISaleOrder {
   ClientID: number
   Created: number
   upd: number
-  upc: number
   UpdatedBy: number
   ss: number
   LastPaymentCajaID: number
@@ -121,7 +120,7 @@ export class SaleOrderState {
     Date: 0, TotalAmount: 0, TaxAmount: 0, DebtAmount: 0, CurrencyType: CURRENCY_PEN, ExchangeRate: 0,
     ActionsIncluded: [SALE_ACTION_PAYMENT, SALE_ACTION_DELIVERY],
     Lines: [],
-    Created: 0, upd: 0, upc: 0, UpdatedBy: 0, ss: 0,
+    Created: 0, upd: 0, UpdatedBy: 0, ss: 0,
     LastPaymentTime: 0, LastPaymentUser: 0, DeliveryTime: 0, DeliveryUser: 0,
     PaymentDueDate: 0, IssueSeriesID: 0, ClientInfo: undefined, Name: "", RegistryNumber: "",
     montoRecibido: 0, montoVuelto: 0

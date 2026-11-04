@@ -168,7 +168,7 @@ func (e AssetTable) GetSchema() db.TableSchema {
 			// Serial lookup, for resolving an asset from the stock detail row it shadows.
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.SerialNumber)},
 			// The Registro de Compras reads a period of documents, one indexed read per day.
-			{Keys: db.Cols(e.DocIssueDate), UseIndexGroup: true},
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
 	}
 }

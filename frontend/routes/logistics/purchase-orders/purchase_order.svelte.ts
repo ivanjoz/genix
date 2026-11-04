@@ -112,7 +112,7 @@ export interface IPurchaseOrderGroupRecord {
   id: number
   igVal: number[]
   records: IPurchaseOrder[]
-  upc: number
+  lw: number
 }
 
 export interface IPurchaseOrderReportForm {

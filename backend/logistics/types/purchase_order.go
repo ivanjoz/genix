@@ -174,27 +174,27 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 			// One log per accounting period: GET.accounting-operations syncs a month through it.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
 			{
-				Keys:          db.Cols(e.Week),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Week),
 			},
 			{
-				Keys:          db.Cols(e.Week, e.DetailProductIDs),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Week, e.DetailProductIDs),
 			},
 			{
-				Keys:          db.Cols(e.Week, e.Status, e.DetailProductIDs),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Week, e.Status, e.DetailProductIDs),
 			},
 			{
-				Keys:          db.Cols(e.Week, e.ProviderID),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Week, e.ProviderID),
 			},
 			{
-				Keys:          db.Cols(e.Week, e.Status, e.ProviderID),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Week, e.Status, e.ProviderID),
 			},
 			// The Registro de Compras reads a period of documents, one indexed read per day.
-			{Keys: db.Cols(e.DocIssueDate), UseIndexGroup: true},
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
 	}
 }

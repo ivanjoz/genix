@@ -226,7 +226,7 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 			// One log per accounting period: GET.accounting-operations syncs a month through it.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
 			// The Registro de Compras reads a period of documents, one indexed read per day.
-			{Keys: db.Cols(e.DocIssueDate), UseIndexGroup: true},
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
 	}
 }

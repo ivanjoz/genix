@@ -3,7 +3,8 @@
 Status: **implemented, not deployed** (ORM, backend, genix-ui). Supersedes, for the
 Scylla driver only, the S3 delta log (`genix-orm/db/cache/delta_log.go`, the former
 `genix-orm/scylla/delta_log.go`). The DynamoDB driver (berryapps) keeps the S3 log unchanged, and
-genix-ui keeps speaking it. §10 lists where the implementation departs from this plan.
+genix-ui keeps speaking it. §10 lists where the implementation departs from this plan. §11 adds
+replace snapshots in the ORM file store.
 
 ## 1. Why
 
@@ -188,3 +189,65 @@ caches are wiped (bump the route `ver`).
   rows. Cost: one moves row per pinned-value change, kept forever (rare, a few bytes each).
 - **Pending:** wipe and reseed the keyspace (old views and the old delta-log S3 prefix are not
   dropped by deploy), bump the route `ver`, delete the `delta-log/` prefix.
+
+## 11. Replace snapshots
+
+Status: **implemented in genix-orm, not deployed**. Scylla driver only.
+
+**Why.** A replace (a first sync: another browser, a new user, a hash mismatch; or more than the
+threshold changed) reads every record of its prefixes from the database. Those records are in the
+server's memory anyway, so it keeps them in a file and answers the next replace of the same prefix
+from the file plus what changed since. Writing the file costs one PUT and **no extra database
+read**.
+
+**Decisions.**
+
+| Topic | Decision |
+|---|---|
+| Who merges | The server. The client receives an ordinary replace; genix-ui does not change |
+| Granularity | One file per pinned prefix: `Delta(1,2)` and `Delta(1)` share status 1's file |
+| Store | The ORM file store (`[file_store]`, the S3 Express One Zone bucket `genix-orm--use1-az4--x-s3`), key `orm/delta-snapshot/<table>/<partition>/<index tag>/<prefix values joined by _ \| all>.l<limit>.cb` |
+| Who writes | **Only a full read of the view.** A merged snapshot is served, never stored |
+| Projection | A read with `Select()` neither reads nor writes snapshots |
+| Struct change | The file names the record type's colbin schema (FNV-64 of it); another schema is a miss. No migration |
+| `cb:"-"` | A record type with a stored `cb:"-"` field never uses snapshots (the file would serve it zeroed) |
+
+**File.** `[schema fingerprint u64 LE][cursor uvarint][colbin of []Record, newest first]`. The
+cursor is the highest `updated` among the records, what a client holding them would send. An empty
+prefix is not stored: it has no cursor, and reading it again costs nothing.
+
+**Serving a prefix of a replace** (`readDeltaPrefixReplace`, `serveDeltaSnapshot`):
+
+1. GET the file. Not found, another schema, or undecodable → read the view (step 5). A store error
+   reads the view and writes nothing.
+2. Run the window protocol from the file's cursor `S`, as a client holding it would: the changed
+   records `updated ≥ S − 10s` and the moves since `S − 15min` (each `LIMIT threshold + 1`), then
+   the slim window rows `[S − 15min, S − 10s)`. More than the threshold of either → step 5.
+3. The server computes the client's side of the hash over the file's records
+   (`cache.DeltaHeldWindowHash`), leaving out the changed and removed IDs. A mismatch with the view's
+   hash → step 5.
+4. Merge: the file's records, minus the removed IDs, with the changed records replacing theirs; sorted
+   newest first and cut at `Limit`. A file cut at `Limit` that dropped below it after the merge → step
+   5 (the older records that should fill the cut are not in the file). Served; **nothing is written**.
+5. Read the prefix from the view, as before, and write the file with `PutFileIfMatch` on the ETag
+   read in step 1 (`""` when there was none). If another request wrote it first, skip the write: its
+   file is as good.
+
+**Why only the database writes a file.** The hash only checks the 15 minutes before the cursor. A miss
+it can't see — a late write older than the window, a move row lost to a crash (§3a's known gap) —
+would be copied into every snapshot built from a merge. Built from the database, a bad file lives
+until the next full read. Only data read from the database is ever written to the store. The cost is
+bounded: a file ages until more than the threshold changed since it, so a merge reads at most
+`threshold + 1` changed rows and `threshold + 1` moves per prefix, and the replace past that
+threshold refreshes the file.
+
+**Cost of a hit**, per prefix: one S3 Express GET, at most `threshold + 1` changed rows, at most
+`threshold + 1` move rows, and the slim window rows, instead of the whole prefix.
+
+**Code.** `genix-orm/db/cache/delta_snapshot.go` (key, file codec, held hash; driver-agnostic),
+`genix-orm/scylla/delta_snapshot.go` (serve, merge, write), called from `execDelta`'s replace branch.
+Tests: `delta_snapshot_test.go` in both packages, and `TestDeltaSnapshotServesTheNextReplace` on a
+live node (`GENIX_ORM_SCYLLA_TEST`).
+
+**Optional.** An S3 lifecycle rule expiring `orm/delta-snapshot/` after 30 days would clean the files
+of prefixes nobody syncs. Not configured.

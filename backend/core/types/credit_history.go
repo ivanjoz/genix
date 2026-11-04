@@ -54,7 +54,7 @@ func (e CreditHistoryTable) GetSchema() db.TableSchema {
 		DisableDefaultColumns: true,
 		Indexes: []db.Index{
 			// Free prefix scan over the packed key: "the grants between these two days".
-			{Type: db.TypeInheritFromKey, Keys: db.Cols(e.Day), UseIndexGroup: true},
+			{Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.Day)},
 		},
 	}
 }

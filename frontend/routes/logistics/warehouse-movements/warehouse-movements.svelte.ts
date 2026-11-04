@@ -38,14 +38,13 @@ export interface IWarehouseProductMovement {
   Type?: number
   Created?: number
   CreatedBy?: number
-  upc?: number
 }
 
 export interface IWarehouseProductMovementGroupRecord {
   id: number
   igVal: number[]
   records: IWarehouseProductMovement[]
-  upc: number
+  lw: number
 }
 
 export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): Promise<IWarehouseProductMovement[]> => {

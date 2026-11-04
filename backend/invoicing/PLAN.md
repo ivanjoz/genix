@@ -486,7 +486,7 @@ never reached the signing step is rebuilt from its row.
 FixedValues: []db.FixedValues{{Col: e.State, Min: 0, Max: 6}},
 Indexes: []db.Index{
     // Free: range scan over the packed-key prefix. Lists a whole series.
-    {Type: db.TypeInheritFromKey, Keys: db.Cols(e.DocTypeSeries), UseIndexGroup: true},
+    {Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.DocTypeSeries), CacheGroup: true},
     {Type: db.TypeLocalIndex, Keys: db.Cols(e.IssueDate)},
     {Type: db.TypeLocalIndex, Keys: db.Cols(e.SaleOrderID)}, // "was this sale invoiced?"
     {Type: db.TypeDelta, Keys: db.Cols(e.State)},            // frontend incremental sync

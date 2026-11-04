@@ -252,7 +252,7 @@ func (e InvoiceDocumentTable) GetSchema() db.TableSchema {
 			// month at a time, and Scylla only takes equality on a secondary index — a BETWEEN
 			// on one is refused outright. The group is what fans a range out into per-day reads.
 			// The CQL index it declares is the same one a local index declares.
-			{Keys: db.Cols(e.IssueDate), UseIndexGroup: true},
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.IssueDate)},
 			{Type: db.TypeDelta, Keys: db.Cols(e.State)},
 			// One log per accounting period: GET.accounting-operations syncs a month through it.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.State)},

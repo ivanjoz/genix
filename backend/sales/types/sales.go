@@ -72,12 +72,11 @@ type SaleOrder struct {
 	// ExchangeRate is the effective rate × 1000 the lines were converted with, spread
 	// included — what a report needs to restate a USD sale in PEN. A USD sale always has one;
 	// a PEN sale only when it sold a USD-priced product.
-	ExchangeRate  int32 `cb:"17"`
-	ClientID      int32 `cb:"18"`
-	Created       int32 `cb:"19"`
-	Updated       int32 `json:"upd" cb:"upd,20"`
-	UpdateCounter int32 `json:"upc" cb:"upc,21"`
-	Version       int16 `json:"ver" cb:"ver,22"`
+	ExchangeRate int32 `cb:"17"`
+	ClientID     int32 `cb:"18"`
+	Created      int32 `cb:"19"`
+	Updated      int32 `json:"upd" cb:"upd,20"`
+	Version      int16 `json:"ver" cb:"ver,22"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata  *string `json:"mdt" cb:"mdt,23"`
 	UpdatedBy int32   `cb:"24"`
@@ -268,7 +267,6 @@ type SaleOrderTable struct {
 	Created          db.Col[*SaleOrderTable, int32]
 	ClientID         db.Col[*SaleOrderTable, int32]
 	Updated          db.Col[*SaleOrderTable, int32]
-	UpdateCounter    db.Col[*SaleOrderTable, int32]
 	Version          db.Col[*SaleOrderTable, int16]
 	UpdatedBy        db.Col[*SaleOrderTable, int32]
 	Status           db.Col[*SaleOrderTable, int8]
@@ -309,24 +307,24 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 				Keys: db.Cols(e.Updated),
 			},
 			{
-				Keys:          db.Cols(e.Date),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroupS3,
+				Keys: db.Cols(e.Date),
 			},
 			{
-				Keys:          db.Cols(e.Date, e.Status),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroupS3,
+				Keys: db.Cols(e.Date, e.Status),
 			},
 			{
-				Keys:          db.Cols(e.Date, e.ClientID),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroupS3,
+				Keys: db.Cols(e.Date, e.ClientID),
 			},
 			{
-				Keys:          db.Cols(e.Date, e.ClientID, e.DetailProductIDs),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Date, e.ClientID, e.DetailProductIDs),
 			},
 			{
-				Keys:          db.Cols(e.Date, e.DetailProductIDs),
-				UseIndexGroup: true,
+				Type: db.TypeCacheGroup,
+				Keys: db.Cols(e.Date, e.DetailProductIDs),
 			},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 			// One log per accounting period: GET.accounting-operations syncs a month through it.

@@ -17,7 +17,7 @@ export interface ISaleOrderGroupRecord {
 	id: number;
 	igVal: number[];
 	records: ISaleOrder[];
-	upc: number;
+	lw: number;
 }
 
 export interface ISaleOrderReportForm {

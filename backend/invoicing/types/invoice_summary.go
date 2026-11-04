@@ -104,7 +104,7 @@ func (e InvoiceSummaryTable) GetSchema() db.TableSchema {
 			{Col: e.Status, Values: []int64{0, 1}},
 		},
 		Indexes: []db.Index{
-			{Type: db.TypeInheritFromKey, Keys: db.Cols(e.IssueDate), UseIndexGroup: true},
+			{Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.IssueDate)},
 			// A ticket has to be findable on its own: the cron that polls for a
 			// verdict starts from the ticket, not from the batch.
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Ticket)},

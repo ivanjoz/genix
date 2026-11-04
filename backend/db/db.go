@@ -52,12 +52,14 @@ type (
 )
 
 const (
-	TypeGlobalIndex    = orm.TypeGlobalIndex
-	TypeLocalIndex     = orm.TypeLocalIndex
-	TypeInheritFromKey = orm.TypeInheritFromKey
-	TypeView           = orm.TypeView
-	TypeViewTable      = orm.TypeViewTable
-	TypeDelta          = orm.TypeDelta
+	TypeGlobalIndex       = orm.TypeGlobalIndex
+	TypeLocalIndex        = orm.TypeLocalIndex
+	TypeCacheGroupFromKey = orm.TypeCacheGroupFromKey
+	TypeView              = orm.TypeView
+	TypeViewTable         = orm.TypeViewTable
+	TypeDelta             = orm.TypeDelta
+	TypeCacheGroup        = orm.TypeCacheGroup
+	TypeCacheGroupS3      = orm.TypeCacheGroupS3
 )
 
 // Cols returns columns as the slice required by schema declarations.
@@ -133,6 +135,9 @@ func QueryCachedIDs[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D
 type (
 	// CachedIDsRequest is a decoded by-IDs request (the "cc" query parameter).
 	CachedIDsRequest = cache.CachedIDsRequest
+	// DeltaCursor is what a client holds of one delta response key: "C.V", or "C.V.r" to resend
+	// the unsettled slice (genix-orm db/cache delta_window.go).
+	DeltaCursor = cache.DeltaWindowCursor
 )
 
 // CachedPartition is the by-IDs response: the records of one partition that moved.
@@ -146,7 +151,7 @@ var (
 	FileStore = cache.FileStore
 	// DecodeCachedIDsRequest reads the "cc" query parameter of a by-IDs request.
 	DecodeCachedIDsRequest = cache.DecodeCachedIDsRequest
-	// ParseDeltaCursor reads a delta cursor query parameter: the highest Updated the client holds.
+	// ParseDeltaCursor reads a delta cursor query parameter.
 	ParseDeltaCursor = cache.ParseDeltaWindowCursor
 	// DeltaReplaceMetadata is the Metadata of a route not backed by a TypeDelta index: one record
 	// carrying it makes the client replace its whole list with the response.

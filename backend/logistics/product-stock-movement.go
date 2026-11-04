@@ -249,7 +249,7 @@ func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID.Equals(req.User.CompanyID)
 
 	for _, cacheGroup := range cacheGroupHashes {
-		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.UpdateCounter)
+		query.IncludeCachedGroup(cacheGroup.GroupHash, cacheGroup.LastWrite)
 	}
 
 	// Date is the single BETWEEN required by QueryIndexGroup; the most specific
