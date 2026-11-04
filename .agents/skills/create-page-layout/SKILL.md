@@ -6,7 +6,7 @@ version: 0.1.0
 
 # Create a Page (Layout & Navigation)
 
-Pages live at `frontend/routes/<module>/<feature>/+page.svelte`. Large sub-forms go in sibling `.svelte` files in the same folder; the service goes in `<feature>.svelte.ts` (see `delta-cache-api` / `fetch-record-by-id-api` skills — this skill only **instantiates** services).
+Pages live at `frontend/routes/<module>/<feature>/+page.svelte`. Large sub-forms go in sibling `.svelte` files in the same folder; the service goes in `<feature>.svelte.ts` (see `delta-cache-api` / `by-ids-cache-api` skills — this skill only **instantiates** services).
 
 ## Register the page in the sidebar menu (REQUIRED)
 

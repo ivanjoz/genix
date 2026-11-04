@@ -1,284 +1,246 @@
 ---
 name: delta-cache-api
-description: Build backend Go handlers and frontend services for delta/incremental cache APIs — so the frontend only fetches records changed since the last sync, using GetHandler or GET.
-version: 0.1.0
+description: Builds an API that keeps one or more tables or pre-filtered subsets per endpoint in sync in the browser, each downloading only the records that changed since its last sync. Used for data a page shows on load, without the user running a query — any list with fixed filters.
+version: 0.2.0
 ---
 
 # Delta Cache API
 
-The delta cache minimizes traffic by sending only records changed since the client's last sync. The frontend stores a watermark per response key — the max `UpdatedVersion` and the max `Updated` of the records it holds — and resends both on the next request. The backend returns records newer than the watermark, plus rows flipped to `Status=0` so the client can evict them.
+The browser keeps a list in IndexedDB and sends a cursor `C.V` ("I hold up to C, my last sync
+started at V"). The server answers what changed since C, the IDs that left the list, and a hash
+of the unsettled slice. The first sync, or a sync behind by more than 100 changes, is a **replace**
+(the whole list). You never handle cursors, hashes or metadata yourself: `Delta()` and `GetHandler`
+do. The protocol is explained for people in `backend/genix-orm/db/cache/DELTA_CACHE.USER.md`.
 
-## Core concepts
-
-- **`UpdatedVersion`** — the write sequence number of a table with a `db.TypeDelta` index, strictly increasing and unique per write. The watermark of choice. JSON tag: `json:"upv,omitempty"`.
-- **`Updated`** — integer Unix timestamp on every record. The watermark for tables with no delta index. JSON tag: `json:"upd,omitempty"`.
-- **`Status`** — `int8`. Active (`>= 1`) or inactive (`0`). Initial fetch returns only active; delta fetch returns all statuses so the client can evict `ss=0` rows. JSON tag: `json:"ss,omitempty"`.
-- **Watermark** — one query param per response key, carrying **both** values as `"<upv>.<upd>"`: `?up=21.394157968` for a bare-array route, `?ProductStock=5.394161574` for a multi-table one. The client always sends both; the handler reads the half its table is keyed on with `req.GetUpVersion()` or `req.GetUpdated()` (pass the response key on a multi-table route). Never read a watermark with `GetQueryInt` — the dot makes it 0.
-- **First-sync vs delta** — branch on whether the half you read is `> 0`.
-
----
-
-## 1. Backend — single-table handler
-
-```go
-// Table with a delta index: Delta() keeps only active rows on a first sync and every status
-// afterwards, so the client can evict what was deleted.
-func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
-    updatedSince := req.GetUpVersion()
-
-    records := []types.Product{}
-    query := db.Query(&records).CompanyID.Equals(req.User.CompanyID)
-    query.Delta(updatedSince, 1)
-
-    if err := query.Exec(); err != nil {
-        return req.MakeErr("error al obtener los productos:", err)
-    }
-    return core.MakeResponse(req, &records)
-}
-
-// Table with no delta index: the timestamp half, and the status branch written by hand.
-func GetSaleSummaryStatus(req *core.HandlerArgs) core.HandlerResponse {
-    updated := req.GetUpdated()
-
-    records := []types.SaleSummary{}
-    query := db.Query(&records).CompanyID.Equals(req.User.CompanyID)
-
-    if updated > 0 {
-        query.Updated.GreaterThan(updated) // delta: include Status=0 rows
-    } else {
-        query.Status.GreaterEqual(1)       // initial: active only
-    }
-
-    if err := query.Exec(); err != nil {
-        return req.MakeErr("error al obtener los resúmenes:", err)
-    }
-    return core.MakeResponse(req, &records)
-}
-```
-
-Variations seen in the codebase:
-- Parameterized route (`?type=X`) — apply the extra filter before the delta branch (see `backend/negocio/client_provider.go`).
-- No status filter at all on initial — e.g. `system_parameters.go` returns every row.
-- Sentinel rows — `sale_summary_status.go` stores metadata at `Fecha=-1` and reconstructs dates from the delta. Use only when the natural row count would be too high to stream.
-
----
-
-## 2. Backend — multi-table handler
-
-Return a struct with one slice per table. **Query-param name = struct field name** (the frontend reads the key from the response shape).
-
-```go
-type GetProductosStockResult struct {
-    ProductStock       []ProductStockV2
-    ProductStockDetail []ProductStockDetail
-}
-
-func GetProductosStock(req *core.HandlerArgs) core.HandlerResponse {
-    productStockUpdated       := req.GetUpVersion("ProductStock")
-    productStockDetailUpdated := req.GetUpVersion("ProductStockDetail")
-
-    statuses := []int8{1}
-    if productStockUpdated > 0 || productStockDetailUpdated > 0 {
-        statuses = []int8{0, 1}
-    }
-    // ... errgroup: query each table per status bucket, ---
-    name: delta-cache-api
-    description: Design and implement backend Go handlers and frontend TypeScript services (or one-off `GET` calls) for delta/incremental cache APIs. Covers watermark semantics, `Updated`/`Status` field conventions, `TypeView` index strategies, composite `keysIDs`, columnar-merge, and the multi-table response shape — so the frontend only fetches records changed since the last sync.
-    version: 0.1.0
-    ---filter Updated.GreaterEqual(<updated>)
-    return req.MakeResponse(result)
-}
-```
-
-Query each status bucket separately so the `[Partition, Status, Updated]` view is used (see index strategies below). Real example: `backend/logistica/product-stock-movement.go:174`.
-
----
-
-## 3. DB index strategies
-
-`Updated` queries must hit a `TypeView` index. Several shapes are valid — pick the one that matches your filter:
-
-| Query shape | Index keys |
+| Need | Skill |
 |---|---|
-| `Updated > X` only | `[Updated]` |
-| `Status=S AND Updated > X` | `[Status, Updated]` or two separate views `[Status]` + `[Updated]` |
-| `Filter=F AND Updated > X` | `[Filter, Updated]` (e.g. `[Type, Updated]`, `[ListaID, Updated]`) |
-| `Partition AND Status AND Updated > X` | `[PartitionCol, Status, Updated]` |
+| Data a page shows on load: a **list with fixed filters** kept in sync | this one |
+| Resolve **records by ID** (a label next to an ID) | `by-ids-cache-api` |
+| A **report with user-chosen filters**, read as groups of records | `cache-groups-api` |
+| Debug a sync mismatch, change the protocol | `delta-cache-index-internals` |
+
+Scylla only implements this protocol (Dynamo has an older delta-log variant, the browser `idb` build none).
+
+---
+
+## 1. Schema
 
 ```go
-Indexes: []scylla.Index{
-    {Type: scylla.TypeView, Keys: []scylla.Coln{e.Updated}, KeepPart: true},
-    {Type: scylla.TypeView, Keys: []scylla.Coln{e.Type, e.Updated.Size(31)}, KeepPart: true},
-    {Type: scylla.TypeView, Keys: []scylla.Coln{e.WarehouseID, e.Status.Size(4), e.Updated.Size(31)}, KeepPart: true},
-},
-```
+// backend/production/types/product.go
+type Product struct {
+	db.TableStruct[ProductTable, Product]
+	CompanyID int32
+	ID        int32
+	// ...
+	Status   int8    `json:"ss" cb:"ss,34"`
+	Updated  int32   `json:"upd" cb:"upd,35"`
+	Version  int16   `json:"ver" cb:"ver,40"`
+	// Metadata is set only on the metadata record a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,41"`
+}
 
-- `Updated` should be the **last** key when combined with filter columns.
-- `Size(N)` gives every key after the first an `N`-bit slot; the first key takes the bits left. It is a range cap: a value at or past 2^N panics on write. An int32 `Updated` needs `Size(31)`. `.Int32()` packs into an `int` instead of a `bigint`, so it only fits when all the slots add up to 32 bits or fewer.
-- `KeepPart: true` keeps partition scoping in the view.
-- Two narrow views (`[Status]` + `[Updated]`) are fine if the access pattern never ANDs them (e.g. `productos.go`).
-
----
-
-## 4. Frontend — `GetHandler` subclass (typical case)
-
-Use `GetHandler` for list-style data owned by a screen/service. `fetch()` loads from IndexedDB first (instant), then delta-syncs from the server and merges.
-
-```typescript
-export class ProductosService extends GetHandler<IProducto> {
-    route = "productos"
-    routeByID = "p-productos-ids"           // optional: refetch specific IDs
-    useCache = { min: 5, ver: 9 }           // TTL min; bump ver to invalidate
-    inferRemoveFromStatus = true            // drop records where ss===0
-    prependOnSave = true
-
-    constructor(init: boolean = false) {
-        super()
-        if (init) this.fetch()
-    }
-
-    handler(result: IProducto[]): void {
-        this.records = []; this.recordsMap = new Map()
-        this.addSavedRecords(...result)
-    }
+func (e ProductTable) GetSchema() db.TableSchema {
+	return db.TableSchema{
+		Name:      "products",
+		Partition: e.CompanyID,
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// Delta() enumerates the values of each pinned Key: declare every Status value.
+		FixedValues: []db.FixedValues{{Col: e.Status, Values: []int64{0, 1, 2}}},
+		Indexes: []db.Index{
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+		},
+	}
 }
 ```
 
-Use in a view:
+- **Record fields:** `Status int8 "ss"`, `Updated int32 "upd"`, `Version int16 "ver"`,
+  `Metadata *string "mdt"` (record struct only). The table struct declares `Updated` and `Version`
+  as `db.Col`. The ORM stamps `Updated`/`Version` on every write — never set them by hand.
+- **Exactly one integer key** (the ID) and an **integer partition**. A composite-key table cannot
+  have a `TypeDelta`: send it whole with `core.WithDeltaReplace(records)` (section 3).
+- **Keys = prefixes.** Each combination of Key values is one slice the sync covers. The **last**
+  Key takes the values passed to `Delta(cursor, values...)`; every other Key must be pinned by a
+  query equality or a `FixedValues` list (fan-out capped at 8).
+  - `Keys: db.Cols(e.Status)` → "active products" = `Delta(cursor, 1)`.
+  - `Keys: db.Cols(t.Type, t.Status)` → `Type.Equals(…)` in the query + `Delta(cursor, int8(1))`
+    (`crm/types/client_provider.go`).
+  - `Keys: db.Cols(e.WarehouseID.Size(17), e.Status)` → width from `.Size(n)` or the
+    `FixedValues` max; at most one Key may have neither (`logistics/types/product-stock.go`).
+  - `{Type: db.TypeDelta}` with no Keys → the whole partition, `Delta(cursor)`.
+- Several `TypeDelta` on one table are fine if their Keys differ; the query picks the one whose
+  Keys all resolve.
+- `Index.DeltaReplaceThreshold` overrides the 100-change replace threshold (no table sets it).
+- **Never hard-delete** a TypeDelta record: set `Status = 0`. A soft-delete reaches the browser as a
+  removed ID; a hard delete is never heard of.
 
-```svelte
-<script lang="ts">
-  const productos = new ProductosService(true) // true → fetch on mount
-</script>
-{#each productos.records as producto (producto.ID)}
-  <div>{producto.Nombre}</div>
-{/each}
-```
-
-### Parameterized routes — one cache collection per query-param set
-
-Delta snapshots are keyed by **route + query string**, so `productos?type=1` and `productos?type=2` are two independent collections (distinct IndexedDB snapshots, independent watermarks). Build the route in the constructor to scope the instance:
-
-```typescript
-export class ClientProviderService extends GetHandler<IClientProvider> {
-    route = ""
-    routeByID = "client-provider-ids"
-    useCache = { min: 5, ver: 1 }
-
-    constructor(clientProviderType: number = 0, init: boolean = false) {
-        super()
-        this.route = `client-provider?type=${clientProviderType}`
-        if (init) this.fetch()
-    }
-
-    handler(result: IClientProvider[]): void {
-        this.records = (result || []).filter(r => (r.ss || 0) > 0)
-        this.recordsMap = new Map(this.records.map(r => [r.ID, r]))
-    }
-}
-
-// View:
-const clients   = new ClientProviderService(ClientProviderType.CLIENT,   true)
-const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
-```
-
-When a mutation can affect multiple scoped caches (e.g. saving records that straddle `type=1` and `type=2`), pass `refreshRoutes` to `POST` so both snapshots revalidate — see `clientes-proveedores.svelte.ts`.
+Startup panics name the missing piece (no `Updated`/`Version`, non-integer key or partition, two
+indexes with the same Keys, Keys that don't fit beside `updated`). See `create-database-tables`
+for the general schema rules.
 
 ---
 
-## 5. Frontend — direct `GET` helper (one-off / multi-table)
+## 2. Handler — single table
 
-When you don't need a persistent service class (e.g. the screen just needs the rows once, or the shape is a multi-table struct consumed immediately), call `GET` with cache options directly:
+```go
+// backend/crm/client_provider.go
+func GetClientProviders(req *core.HandlerArgs) core.HandlerResponse {
+	requestedType := req.GetQueryInt("type")
+	if requestedType != int32(types.ClientProviderTypeClient) && requestedType != int32(types.ClientProviderTypeProvider) {
+		return req.MakeErr("Debe enviar type=1 (cliente) o type=2 (proveedor).")
+	}
 
-```typescript
-// frontend/routes/logistica/products-stock/stock-movement.ts
-const response = await GET({
-    route: `productos-stock?almacen-id=${almacenID}`,
-    useCache: { min: 0.2, ver: 8 },
-    keysIDs: { ProductStockDetail: ["ProductStockID", "LotID", "SerialNumber"] },
+	clientProviders := []types.ClientProvider{}
+	query := db.Query(&clientProviders)
+	query.Select().
+		CompanyID.Equals(req.User.CompanyID). // partition equality is required
+		Type.Equals(int8(requestedType)).     // pins the first Key
+		Delta(req.GetDeltaCursor(), int8(1))  // last Key (Status) = 1. Call Delta() LAST.
+
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener clientes/proveedores:", err)
+	}
+	return req.MakeResponse(clientProviders)
+}
+```
+
+- `req.GetDeltaCursor()` reads `?up=`; an absent or malformed value is the zero cursor = first sync.
+  Never parse the cursor yourself.
+- `Exec()` **appends one metadata record** (ID −1, `Metadata` set) to the slice. Return the slice
+  as is. If you post-filter or map the records, keep that record and its `ID`, `Version`,
+  `Metadata` (`production/products.go` keeps `product.Metadata == nil &&` in its filter).
+- Inactive records never need a post-filter: a record that leaves the prefix (status change,
+  soft delete) arrives as a removed ID.
+- `Select()` with no columns is a full read. `Select(cols…)`/`Exclude(…)` is a projection: the ORM
+  force-adds partition, ID, `updated`, `version` and pinned Keys, but **disables the S3 snapshot**,
+  so every replace reads Scylla.
+
+Register as usual: `"GET.client-provider": GetClientProviders` in the module's `ModuleHandlers`.
+
+## 3. Handler — several tables in one response
+
+One cursor **per response key**, read with `req.GetDeltaCursor("<key>")`. The key name must equal
+the response field / map key — the frontend sends one query param per key.
+
+```go
+// backend/business/locations-warehouses.go
+almacenes, sedes := []types.Warehouse{}, []types.Site{}
+errGroup := errgroup.Group{}
+errGroup.Go(func() error {
+	query := db.Query(&almacenes)
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("Almacenes"), 1)
+	return query.Exec()
 })
-// response.ProductStock, response.ProductStockDetail ...
+errGroup.Go(func() error {
+	query := db.Query(&sedes)
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor("Sedes"), 1)
+	return query.Exec()
+})
+if err := errGroup.Wait(); err != nil {
+	return req.MakeErr(err)
+}
+return core.MakeResponse(req, &map[string]any{"Sedes": sedes, "Almacenes": almacenes})
 ```
 
-The cache layer still stores per-response-key watermarks and sends them back as query params on the next request — same behavior as `GetHandler`.
+- A struct response works the same (`logistics/product-stock-movement.go`, `GetProductsStockResult`).
+- A table with **no** TypeDelta in the same response: `core.WithDeltaReplace(records)` — the browser
+  replaces that list on every sync.
+- **Projected DTOs** (`accounting/accounting_operations_api.go`): the DTO must carry `upd`, `ver`,
+  `mdt` and the ID under the **same JSON names the table record uses**, or the browser's slice hash
+  never matches and every sync near a write costs an extra `.r` round trip.
 
 ---
 
-## 6. `keyID` vs `keysIDs` — records without a single `ID` field
+## 4. Frontend — `GetHandler` service
 
-The cache needs a stable key per record to merge deltas. Configure it by shape:
+```ts
+// frontend/services/production/products.svelte.ts
+import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 
-| Field | Value | Meaning |
-|---|---|---|
-| `keyID: "ID"` | default | Each record keyed by `record.ID` |
-| `keyID: "ProductID"` | single name | Keyed by another single field |
-| `keyID: ["A", "B"]` | array | Composite key — cache stores `"cmp:" + JSON.stringify([record.A, record.B])` |
-| `keysIDs: { Detail: ["StockID","LotID","SerialNumber"] }` | per response key | Multi-table: override the key-building per response array |
+export class ProductsService extends GetHandler<IProduct> {
+  route = "products"
+  routeByID = "p-products-ids"     // optional: by-IDs route used by syncIDs()
+  useCache = { min: 1, ver: 13 }   // min = TTL in minutes; bump ver to wipe the route's cache
+  inferRemoveFromStatus = true     // hide ss=0 in memory (removed IDs already evict)
+  prependOnSave = true
 
-The composite form is a **list of field names to pack**, not a single field holding an array. `getRequiredRecordID` in `frontend/libs/cache/delta-cache.fetch.ts` reads each field from the record and JSON-stringifies the tuple.
+  // products answers { records, records_IDsToRemove }; a bare-array route receives the array.
+  handler(result: { records?: IProduct[] }): void {
+    const products = result?.records || []
+    this.records = []
+    this.recordsMap = new Map()
+    this.addSavedRecords(...products)
+  }
 
-Real examples:
-- `keyID: "Fecha"` — `sale_orders_charts.svelte.ts`
-- `keyID: "ProductID"` — `supply-management.svelte.ts`
-- `keysIDs: { actionsScheduled: ["UnixMinutesFrame","ID"] }` — `cron-actions.svelte.ts`
-- `keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }` — `stock-movement.ts`
-
----
-
-## 7. Columnar merge (parallel-array fields)
-
-If a record holds parallel arrays (e.g. `ProductIDs: [1,2]`, `Quantity: [10,20]`) and deltas should merge element-wise rather than replace the whole record, set:
-
-```typescript
-columnarIDField = "ProductIDs"
-combineColumnarValuesOnFields = ["Quantity", "TotalAmount", "TotalDebtAmount"]
+  constructor(init = false) {
+    super()
+    if (init) this.fetch()   // IndexedDB first (instant), then the delta sync
+  }
+}
 ```
 
-On merge the cache aligns by `ProductIDs` position, updating matching indices and appending new ones. See `sale_orders_charts.svelte.ts`.
+- `fetch()` paints from IndexedDB, then syncs. `fetchOnline()` forces the network.
+- **Parameterized routes**: the route string (with its query) is the cache key, so
+  `client-provider?type=1` and `?type=2` are independent lists. Build it in the constructor
+  (`frontend/services/crm/client-provider.svelte.ts`).
+- **Multi-table**: `handler(result)` receives `{ Sedes, Almacenes }`; cursors are stored per key
+  automatically (`routes/business/branches-warehouses/branches-warehouses.svelte.ts`).
+- After a save that affects other cached routes, pass `refreshRoutes: ["locations-warehouses"]`
+  to `POST`.
+
+## 5. Frontend — one-off `GET`
+
+```ts
+// frontend/routes/logistics/products-stock/stock-movement.ts
+import { GET } from '#libs/ui-runtime.svelte.ts'
+
+const response = await GET({
+  route: `productos-stock?almacen-id=${almacenID}`,
+  useCache: { min: 0.2, ver: 8 },
+  keysIDs: { ProductStockDetail: ["ProductStockID", "LotID", "SerialNumber"] },
+})
+```
+
+`GET` forwards `route, useCache, keyID, keysIDs, cacheMode, columnarIDField,
+combineColumnarValuesOnFields` — not `conversion`, `fileRoute` or `partition`.
+
+## 6. Record keys
+
+| Option | Meaning |
+|---|---|
+| default | keyed by `record.ID` |
+| `keyID: "ProductID"` | another single field |
+| `keyID: ["A", "B"]` | composite: stored as `cmp:` + `JSON.stringify([A, B])` |
+| `keysIDs: { Detail: [...] }` | per response key (multi-table) |
+
+The **last** field of a composite key is the server ID used for removed IDs and the slice hash.
+Columnar merge (parallel arrays merged element-wise): `columnarIDField` +
+`combineColumnarValuesOnFields`.
 
 ---
 
-## 8. Configuration reference
-
-| Property | Type | Purpose |
-|---|---|---|
-| `route` | `string` | API endpoint (may include fixed query params) |
-| `routeByID` | `string` | Endpoint for fetching a specific set of IDs |
-| `useCache` | `{ min, ver }` | TTL (minutes) and cache schema version |
-| `keyID` | `string \| string[]` | Record key field(s); default `"ID"` |
-| `keysIDs` | `Record<string, string \| string[]>` | Per-response-key overrides (multi-table) |
-| `inferRemoveFromStatus` | `boolean` | Auto-evict records where `ss === 0` |
-| `prependOnSave` | `boolean` | New saves at the top of `records` |
-| `columnarIDField` | `string` | Parallel-array ID field for columnar merge |
-| `combineColumnarValuesOnFields` | `string[]` | Array fields to merge element-wise |
-| `headers` | `Record<string,string>` | Extra HTTP headers |
-
----
-
-## 9. Checklist
+## 7. Checklist
 
 **Backend**
-- [ ] `Updated int32 \`json:"upd,omitempty"\`` and `Status int8 \`json:"ss,omitempty"\`` on the record struct, plus `UpdatedVersion int32 \`json:"upv,omitempty"\`` when the table declares a `db.TypeDelta` index
-- [ ] `TypeView` index that matches the query shape (Updated last when composite)
-- [ ] Handler reads the watermark with `req.GetUpVersion()` / `req.GetUpdated()`, passing the response key on a multi-table route — never `GetQueryInt`
-- [ ] `> 0` → filter by the watermark, include inactive rows; else filter by `Status >= 1` (`query.Delta()` does both)
-- [ ] Multi-table: response struct field names match the expected query-param names
+- [ ] Record has `ss`, `upd`, `ver`, `mdt`; table struct has `Updated` and `Version` cols
+- [ ] One integer key, integer partition; `FixedValues` for every pinned Key without `.Size(n)`
+- [ ] `{Type: db.TypeDelta, Keys: …}` whose last Key is what `Delta(cursor, values…)` receives
+- [ ] Handler: partition equality, other Keys pinned, `Delta(req.GetDeltaCursor(…), …)` called last
+- [ ] Return the slice untouched (or keep the ID −1 metadata record when filtering)
+- [ ] Multi-table: `GetDeltaCursor("<Key>")` names = response keys
+- [ ] Soft-delete only (`ss = 0`)
 
 **Frontend**
-- [ ] `useCache = { min, ver }` set; bump `ver` to force a full refresh after schema changes
-- [ ] `keyID`/`keysIDs` set when the record has no `ID` or uses composite keys
-- [ ] `inferRemoveFromStatus = true` if the list view should drop inactive rows
-- [ ] For one-off fetches, use `GET({ route, useCache, keysIDs })` instead of a service class (multi-table responses work with either — `GetHandler` subclasses can consume multi-table shapes in `handler()`)
-
----
+- [ ] `GetHandler` subclass (or `GET`) with `useCache = { min, ver }`; bump `ver` after a shape change
+- [ ] `keyID` / `keysIDs` when the record key isn't `ID`
+- [ ] `refreshRoutes` on saves that touch other cached routes
 
 ## Real examples
 
 | Pattern | Backend | Frontend |
 |---|---|---|
-| Single table, `ID` key | `negocio/productos.go` | `productos.svelte.ts` |
-| Parameterized filter | `negocio/client_provider.go` | `clientes-proveedores.svelte.ts` |
-| Multi-table via `GetHandler` | `negocio/sedes-almacenes.go` | `sedes-almacenes.svelte.ts` |
-| Multi-table via `GET` + composite key | `logistica/product-stock-movement.go` | `products-stock/stock-movement.ts` |
-| Columnar merge | `comercial/sale_summary_status.go` | `sale_orders_charts.svelte.ts` |
-| Sentinel-row delta | `comercial/sale_summary_status.go` | — |
+| Single table, `Status` key | `backend/production/products.go` | `frontend/services/production/products.svelte.ts` |
+| Two Keys (Type pinned by equality) | `backend/crm/client_provider.go` | `frontend/services/crm/client-provider.svelte.ts` |
+| Multi-table map response | `backend/business/locations-warehouses.go` | `frontend/routes/business/branches-warehouses/branches-warehouses.svelte.ts` |
+| Multi-table struct + `WithDeltaReplace` | `backend/logistics/product-stock-movement.go` | `frontend/routes/logistics/products-stock/stock-movement.ts` |
+| Six tables, projected DTOs | `backend/accounting/accounting_operations_api.go` | `frontend/routes/accounting/accounts-consolidation/accounts-consolidation.svelte.ts` |
+| Dynamic response keys | `backend/business/shared-lists.go` | — |
