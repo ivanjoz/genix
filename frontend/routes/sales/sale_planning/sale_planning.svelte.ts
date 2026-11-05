@@ -9,16 +9,18 @@ export interface ISalesPlanningWeek {
 
 //STRUCT:sales.SalesPlanning
 export interface ISalesPlanning {
-	ID: number
-	TempID?: number
-	ProductID: number
-	BaseQuantity: number
-	SeasonalityCurveID: number
-	WeeklyQuantity: ISalesPlanningWeek[]
-	ss: number
-	upd?: number
-	UpdatedBy?: number
-	Created?: number
+  ID: number
+  TempID: number
+  ProductID: number
+  BaseQuantity: number
+  SeasonalityCurveID: number
+  WeeklyQuantity: ISalesPlanningWeek[]
+  ss: number
+  upd: number
+  ver: number
+  mdt: string
+  UpdatedBy: number
+  Created: number
 }
 
 export interface ISeasonalityCurveWeek {
@@ -29,14 +31,16 @@ export interface ISeasonalityCurveWeek {
 
 //STRUCT:sales.SeasonalityCurve
 export interface ISeasonalityCurve {
-	ID: number
-	TempID?: number
-	Name: string
-	Curve: ISeasonalityCurveWeek[]
-	ss: number
-	upd?: number
-	UpdatedBy?: number
-	Created?: number
+  ID: number
+  TempID: number
+  Name: string
+  Curve: ISeasonalityCurveWeek[]
+  ss: number
+  upd: number
+  ver: number
+  mdt: string
+  UpdatedBy: number
+  Created: number
 }
 
 export class SalesPlanningService extends GetHandler<ISalesPlanning> {

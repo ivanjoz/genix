@@ -224,7 +224,9 @@ export const cajaMovimientoTipos = [
   { id: 8, name: "Cobro (Venta)", group: 3 },
   { id: 9, name: "Pago Gasto", group: 3, isNegative: true },
   { id: 10, name: "Pago Activo", group: 3, isNegative: true },
-  { id: 11, name: "Devolución (Anulación Venta)", group: 3, isNegative: true }
+  { id: 11, name: "Devolución (Anulación Venta)", group: 3, isNegative: true },
+  { id: 12, name: "Pago Planilla", group: 3, isNegative: true },
+  { id: 13, name: "Pago Aportes Planilla", group: 3, isNegative: true },
 ]
 
 export interface ICashMovementAccountOption {

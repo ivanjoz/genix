@@ -156,4 +156,11 @@ func TestCashMovementAccountsAreInTheChart(t *testing.T) {
 				option.Name, option.AccountCode)
 		}
 	}
+	for movementType, accountCodes := range finance.DocumentPaymentAccounts {
+		for _, accountCode := range accountCodes {
+			if account, exists := FindPCGEAccount(accountCode); !exists || !account.Postable {
+				t.Errorf("payments of type %d post to %d, which is not a postable account of the chart", movementType, accountCode)
+			}
+		}
+	}
 }

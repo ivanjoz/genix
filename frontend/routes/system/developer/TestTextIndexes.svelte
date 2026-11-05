@@ -75,7 +75,7 @@ const columns: ITableColumn<ITextSearchHit>[] = [
   <div class="flex items-center gap-12 mb-8" aria-label="Text search tester toolbar">
     <FilterInput bind:value={query} css="w-320" placeholder="Buscar producto por nombre…" />
     <Button color="blue" name="Buscar" icon="icon-[fa--search]"
-      label="Runs the product text search against the GenixSearch index."
+      label="Runs the product text search against the genix-s3 text index."
       onClick={runSearch} />
     {#if lastQuery}
       <span class="ml-auto text-[14px] text-fg-muted">

@@ -42,17 +42,17 @@ class SetConfigValuesTest(unittest.TestCase):
 
     def test_adding_key_to_existing_section_stays_inside_it(self):
         config_path = self.write_config(
-            "[search]\n"
-            "url = \"127.0.0.1:14446\"\n"
+            "[qdrant]\n"
+            "host = \"127.0.0.1\"\n"
             "\n"
             "[logs]\n"
             "full = false\n"
         )
 
-        self.toml_config.set_config_values(config_path, {"search.password": "secret"})
+        self.toml_config.set_config_values(config_path, {"qdrant.password": "secret"})
 
         parsed = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        self.assertEqual(parsed["search"]["password"], "secret")
+        self.assertEqual(parsed["qdrant"]["password"], "secret")
         self.assertNotIn("password", parsed["logs"])
 
     def test_adding_new_section_does_not_contaminate_trailing_array_table(self):
@@ -64,10 +64,10 @@ class SetConfigValuesTest(unittest.TestCase):
             "host = \"127.0.0.1\"\n"
         )
 
-        self.toml_config.set_config_values(config_path, {"search.url": "127.0.0.1:14446"})
+        self.toml_config.set_config_values(config_path, {"qdrant.host": "127.0.0.1"})
 
         parsed = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        self.assertEqual(parsed["search"]["url"], "127.0.0.1:14446")
+        self.assertEqual(parsed["qdrant"]["host"], "127.0.0.1")
         self.assertEqual(list(parsed["servers"][0].keys()), ["host"])
 
     def test_values_with_quotes_and_backslashes_survive_round_trip(self):

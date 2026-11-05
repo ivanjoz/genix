@@ -14,6 +14,8 @@ cd backend && go run . fn-generate-supply-data --dry-run  # invocación directa
 
 | Paso | Ruta oficial usada |
 |---|---|
+| Missing categories and brands from `products.xlsx` | `POST.shared-lists` |
+| Products from `products.xlsx` that do not exist yet, in batches of 500 | `POST.products` |
 | 100 proveedores desde `supply_providers.json` | `POST.client-provider` |
 | Abastecimiento de 2000 productos, en lotes de 500 | `POST.product-supply` |
 | 100 insumos y materiales desde `supply_materials.psv` | `POST.supply-material` |
@@ -25,6 +27,30 @@ cd backend && go run . fn-generate-supply-data --dry-run  # invocación directa
 Los archivos están en `backend/tests/sample_records/`. Cada llamada arma el JSON que la ruta espera
 y ejecuta el handler de producción, así que todas las validaciones se aplican igual que desde el
 frontend.
+
+## Product catalog (`products.xlsx`)
+
+The first step on every run. `products.xlsx` is an export from the Productos page: 10,010 products,
+155 categories and 2,248 brands. It is stored with **Git LFS**, so run `git lfs pull` first. Without
+it the embedded file is the LFS pointer, and the script stops with that message.
+
+The import does what the page's Excel import does
+(`frontend/routes/production/products/products.excel.ts`):
+
+- Categories are the comma-separated names in `Categorías`. A name like "Aceite, vinagre y sal"
+  becomes two categories, the same split the page applies.
+- Category and brand names match the existing ones by `NameHash` (normalized name). Only the
+  missing ones are created, with temporary negative IDs that the `POST.shared-lists` response
+  maps to real IDs.
+- Prices are decimals in the workbook and are saved as cents.
+- **It only creates.** A product whose name is already an active product is skipped and left
+  untouched. Reruns are idempotent.
+- The `ID`, `Unidad`, `Moneda` and `Sub Unidades` columns are not supported (the workbook leaves
+  them empty). A row that fills one of them stops the import.
+
+The code is in `import_products_excel.go`, behind `//go:build !lambda.norpc`. Every shipping build
+uses that tag, so excelize and the workbook never reach the Lambda/VPS binary. In those builds the
+script fails with a clear error.
 
 ## Insumos y activos
 
@@ -87,6 +113,8 @@ más barata que la otra.
 
 | Parte | Por qué no se duplica |
 |---|---|
+| Products | skipped when an active product with the same name exists |
+| Categories / brands | only names that do not exist yet are created |
 | Proveedores | `POST.client-provider` deduplica por `RegistryNumber` |
 | Abastecimiento | `product_supply` está indexada por `ProductID` y se escribe con `db.Merge` |
 | Insumos | se cuentan primero; si ya hay 100 o más, no se generan |
@@ -118,7 +146,7 @@ humo válida).
 
 ## Requisitos
 
-- Company 1, usuario 1 y al menos `--products` productos activos en el catálogo.
+- Company 1, usuario 1. The catalog comes from `products.xlsx` (`git lfs pull`).
 - Un almacén activo y una caja activa (se toman los de menor ID). La moneda de los activos es la de
   esa caja, porque `POST.asset-payment` rechaza un pago cuya moneda no coincida con la de la caja.
 - Los proveedores se siembran solos; no hace falta crearlos antes.

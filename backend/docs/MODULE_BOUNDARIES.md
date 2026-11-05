@@ -17,7 +17,7 @@ Imports flow one way. A package may import its own layer and anything below it.
 | **L1 Core** | `core`, `core/types` | L0 |
 | **L2 Contracts** | `<module>/types` | L0, L1, other `<module>/types` — **and nothing else, ever** |
 | **L3 Infra** | `cloud` | L0–L2 |
-| **L4 Module bodies** | `accounting`, `business`, `config`, `crm`, `finance`, `invoicing`, `logistics`, `production`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |
+| **L4 Module bodies** | `accounting`, `business`, `config`, `crm`, `finance`, `hr`, `invoicing`, `logistics`, `production`, `projects`, `sales`, `security`, `webpage` | L0–L3, plus their own subpackages |
 | **L5 Composition roots** | root `main`, `exec`, `tests/*`, `scripts` | anything |
 
 A module's own subpackages are internal to it and may be imported freely from within the same

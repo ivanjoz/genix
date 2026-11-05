@@ -1,7 +1,8 @@
 # webpage-renderer
 
 Renderizador de las tiendas (webpages de company). Descarga el artefacto SSR, prerenderiza las
-páginas de **una** company y publica el resultado en Cloudflare R2.
+páginas de **una** company y publica el resultado: el HTML en **S3** (lo sirve CloudFront en
+`<tienda>.un.pe`) y los js/css en **Cloudflare R2** (los sirve `frontend.cdn_url`).
 
 Vive en la raíz del repo y no dentro de `frontend/` porque no es parte de la app: es un proceso
 independiente que la app de SvelteKit no importa nunca, y el backend lo ejecuta directamente.
@@ -60,15 +61,18 @@ Respuesta: `{ "buildId": "...", "pages": 2, "assets": 4, "bytes": 259 }`.
 Con `cli.mjs`, **stdout es solo esa respuesta** y los logs van a stderr — el backend deserializa
 stdout tal cual, sin filtrar líneas.
 
-## Qué se escribe en R2
+## Qué se escribe y dónde
 
-| Qué | Clave | Cache-Control |
-|---|---|---|
-| HTML por página | `websites-html/<hostname>/<ruta>/index.html` | `public, max-age=60` |
-| js/css | `websites/<companyID>/_app/…` | `immutable` (llevan hash de contenido) |
-| `favicon.ico` | `websites-html/<hostname>/favicon.ico` | `max-age=86400` |
-| `sw.js` | `websites-html/<hostname>/sw.js` | `max-age=0, must-revalidate` |
-| marcador | `websites/<companyID>/.renderer-build` | `no-store` |
+| Qué | Dónde | Clave | Cache-Control |
+|---|---|---|---|
+| HTML por página | S3 (`storefront.bucket`) | `websites-html/<hostname>/<ruta>/index.html` | `public, max-age=60` |
+| `favicon.ico` | S3 | `websites-html/<hostname>/favicon.ico` | `max-age=86400` |
+| `sw.js` | S3 | `websites-html/<hostname>/sw.js` | `max-age=0, must-revalidate` |
+| js/css | R2 (`cloudflare.bucket`) | `websites/<companyID>/_app/…` | `immutable` (llevan hash de contenido) |
+| marcador | R2 | `websites/<companyID>/.renderer-build` | `no-store` |
+
+El PUT a S3 se firma con SigV4 a mano (`signS3Request`), sin SDK, por la misma razón que el lector
+de ZIP. Un test lo comprueba contra el vector oficial de AWS.
 
 `sw.js` va bajo el hostname y no bajo el CDN porque un service worker **tiene que ser
 same-origin**. Y no puede cachearse: es lo que gobierna las actualizaciones del sitio. Por colgar
@@ -96,21 +100,28 @@ modo de fallo natural es terminar en verde.
 El marcador guarda el `buildId` publicado: si coincide, los assets no se resuben y editar una
 página cuesta solo los PUT del HTML. `forceAssets: true` lo ignora.
 
-Quien sirve todo esto es el Worker `frontend/webpage/cloudflare/serve-worker.js`, que resuelve
-`<hostname>/<ruta>` a la misma clave que escribe el handler. Los dos comparten el prefijo
-`websites-html`, así que **cambiar `HTML_KEY_ROOT` obliga a cambiarlo en ambos**.
+El HTML lo sirve la distribución de CloudFront de `cloud/storefront.yml` (stack
+`<app_name>-storefront`, acción 5 de `cloud`), con un certificado comodín `*.un.pe`. Su CloudFront
+Function resuelve `<hostname>/<ruta>` a la misma clave que escribe el handler. Los dos comparten el
+prefijo `websites-html`, así que **cambiar `HTML_KEY_ROOT` obliga a cambiarlo en ambos**. Cada
+tienda es un alias A/AAAA en Route 53 hacia esa distribución
+(`backend/webpage/route53_domain.go`).
 
 ## Variables de entorno
 
-Las cinco son obligatorias y el handler aborta si falta alguna:
+Todas son obligatorias y el handler aborta si falta alguna:
 
-`RENDERER_ZIP_URL`, `FRONTEND_CDN`, `CLOUDFLARE_ACCOUNT`, `CLOUDFLARE_TOKEN`, `CLOUDFLARE_BUCKET`.
+`RENDERER_ZIP_URL`, `FRONTEND_CDN`, `CLOUDFLARE_ACCOUNT`, `CLOUDFLARE_TOKEN`, `CLOUDFLARE_BUCKET`,
+`STOREFRONT_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+(`AWS_SESSION_TOKEN` si las credenciales son temporales).
 
-En Lambda las inyecta `UpdateRendererEnviromentVariables` (`cloud/webpage-renderer.go`) tras cada
-deploy. En local las pasa el backend desde `core.Env`.
+En Lambda las de AWS las pone el runtime (rol de la función; `cloud/storefront.yml` le da
+`s3:PutObject` sobre el bucket) y el resto las inyecta `UpdateRendererEnviromentVariables`
+(`cloud/webpage-renderer.go`). En local las pasa el backend desde `core.Env`, con las credenciales
+de AWS ya resueltas por el SDK (profile o rol).
 
-`CLOUDFLARE_API_BASE` es opcional y solo existe para los tests: redirige la API de R2 a un
-servidor local.
+`CLOUDFLARE_API_BASE` y `STOREFRONT_S3_ENDPOINT` son opcionales y solo existen para los tests:
+redirigen R2 y S3 a un servidor local.
 
 ## Tests
 
@@ -132,32 +143,24 @@ Dos cosas que hay que tener en cuenta al añadir casos:
 
 ## Pendientes conocidos
 
-Ninguno rompe el camino feliz. Están aquí porque los cuatro fallan **en silencio**: el backend
-responde que publicó, y el problema aparece más tarde y en otro sitio.
+Ninguno rompe el camino feliz. Están aquí porque fallan **en silencio**: el backend responde que
+publicó, y el problema aparece más tarde y en otro sitio.
 
-### El Worker no se despliega solo
+### La función de ruteo vive en la plantilla
 
-`serve-worker.js` se sube únicamente con `fn-deploy-cloudflare-worker` (`./deploy.sh 10`, o el
-`6`, que además hace tablas y datos iniciales). Guardar un dominio **no** lo despliega: registra el
-hostname, sube el HTML y nada más.
-
-Así que al cambiar `serve-worker.js` hay que desplegarlo a mano. Si se olvida, las tiendas
-devuelven 404 mientras el backend informa de una publicación correcta —el render y la subida sí
-funcionaron—, y el 404 parece del renderer cuando en realidad el Worker está sirviendo una versión
-vieja que busca otras claves.
-
-Agregar o cambiar un dominio **no** requiere desplegar nada: el Worker es uno solo, común a todas
-las tiendas, y resuelve el hostname en cada request. El alta y la baja del Custom Domain las hace
-el propio handler (`provisionStorefrontDomain` / `removeStorefrontDomain`).
+La CloudFront Function que traduce `<hostname>/<ruta>` a la clave está inline en
+`cloud/storefront.yml` y solo cambia con la acción 5. Si el handler cambia la forma de las claves y
+la función no, las tiendas devuelven 404 mientras el backend informa de una publicación correcta.
+Agregar o cambiar un dominio **no** requiere desplegar nada: el alias de Route 53 lo crea y borra
+el backend (`provisionStorefrontDomain` / `removeStorefrontDomain`) y el certificado es comodín.
 
 Un GET al hostname después de publicar convertiría esto en un error explícito.
 
-### El nombre del Worker está declarado dos veces
+### Código de Cloudflare Workers sin uso
 
-`genix-storefront` aparece en `backend/exec/cloudflare_worker_deploy.go` y en
-`backend/webpage/cloudflare_domain.go`. Hoy coinciden. Si divergen, los dominios se adjuntan a un
-Worker distinto del que se despliega, con el mismo 404 del punto anterior y ninguna pista de por
-qué. Es una constante compartida y debería estar definida una sola vez.
+`frontend/webpage/cloudflare/serve-worker.js` y `fn-deploy-cloudflare-worker`
+(`backend/exec/cloudflare_worker_deploy.go`) servían el HTML desde R2 antes de S3 + CloudFront.
+Ya no se usan y se pueden borrar; R2 sigue siendo el origen de los js/css.
 
 ### Una página sin snapshot se publica vacía
 

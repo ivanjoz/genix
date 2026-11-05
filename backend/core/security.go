@@ -13,45 +13,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// ParseGenixSearchURL accepts the GENIXSEARCH_URL credential in any of:
-//   - "host:port"
-//   - "scheme://host:port"     (scheme is ignored)
-//   - "scheme://host:port/path" (path is ignored)
-//   - ""                       → 127.0.0.1:14446
-//
-// The scheme is informational only; the daemon client always opens a raw
-// TCP socket. A bare host with no port keeps the default port. The s3 and
-// s3express schemes never get here: they select genix-s3 instead.
-func ParseGenixSearchURL(raw string) (string, int) {
-	const (
-		defaultHost = "127.0.0.1"
-		defaultPort = 14446
-	)
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return defaultHost, defaultPort
-	}
-	if i := strings.Index(raw, "://"); i >= 0 {
-		raw = raw[i+3:]
-	}
-	if i := strings.IndexAny(raw, "/?"); i >= 0 {
-		raw = raw[:i]
-	}
-	host, portStr, splitErr := net.SplitHostPort(raw)
-	if splitErr != nil {
-		// No port component — keep the raw token as host.
-		return raw, defaultPort
-	}
-	port := defaultPort
-	if n, err := strconv.Atoi(portStr); err == nil && n > 0 {
-		port = n
-	}
-	if host == "" {
-		host = defaultHost
-	}
-	return host, port
-}
-
 type EnvStruct struct {
 	IS_PROD bool
 	// IS_DEV_ARG is true when the process was launched as `go run . dev`, which only start.js does.
@@ -138,6 +99,12 @@ type EnvStruct struct {
 	CLOUDFLARE_DATABASE_ID string
 	FRONTEND_CDN           string
 	ZONE_NAME              string
+	// Storefronts (<tienda>.ZONE_NAME): the HTML lives in STOREFRONT_BUCKET (S3) behind the CloudFront
+	// distribution STOREFRONT_DISTRIBUTION_DOMAIN, and each hostname is an alias record in the Route 53
+	// zone STOREFRONT_HOSTED_ZONE_ID. js/css/images stay on FRONTEND_CDN. See cloud/storefront.yml.
+	STOREFRONT_HOSTED_ZONE_ID      string
+	STOREFRONT_DISTRIBUTION_DOMAIN string
+	STOREFRONT_BUCKET              string
 	// APP_URL is the public origin of the Genix web app ("https://app.example.com", no trailing
 	// slash). Only the sign-up email needs it, to build the verification link. It is read from
 	// config and never from the request, so a caller cannot make our SMTP mail out a link that
@@ -173,15 +140,8 @@ type EnvStruct struct {
 	// is the default when DEFAULT_MODEL is blank. Consumed by
 	// agent/llm, which turns each entry into its own request knobs.
 	MODELS []ModelEntry
-	// Text search backend, from search.url and search.password in config.toml. An
-	// "s3express://bucket/prefix" or "s3://bucket/prefix" URL selects genix-s3; anything else is
-	// the GenixSearch daemon over TCP, installed by scripts/configure/configure_db.py
-	// (e.g. "https://host:14446" or "host:14446": only the host and port are used), falling
-	// back to 127.0.0.1:14446 when empty. See ConfigureTextSearch.
-	GENIXSEARCH_URL      string
-	GENIXSEARCH_PASSWORD string
-	// The ORM's file store ([file_store]): the by-IDs slot files and the delta logs. See
-	// ConfigureFileStore.
+	// The ORM's file store ([file_store]): the by-IDs slot files, the delta logs and, under
+	// <root>search/, the genix-s3 text index. See ConfigureFileStore and ConfigureTextSearch.
 	FILE_STORE_BUCKET string
 	FILE_STORE_ROOT   string
 	// Qdrant stores user-documentation dense and lexical vectors. The same
@@ -323,6 +283,13 @@ type fileConfig struct {
 		WebpageRendererURL string `toml:"webpage_renderer_url"`
 	} `toml:"frontend"`
 
+	// Written by `cloud` action 5 from the outputs of the <app_name>-storefront stack.
+	Storefront struct {
+		HostedZoneID       string `toml:"hosted_zone_id"`
+		DistributionDomain string `toml:"distribution_domain"`
+		Bucket             string `toml:"bucket"`
+	} `toml:"storefront"`
+
 	SMTP struct {
 		Host     string `toml:"host"`
 		Port     int32  `toml:"port"`
@@ -358,11 +325,6 @@ type fileConfig struct {
 		MaxMessagesPerIP int32  `toml:"max_messages_per_ip"`
 		WindowMinutes    int32  `toml:"window_minutes"`
 	} `toml:"contact"`
-
-	Search struct {
-		URL      string `toml:"url"`
-		Password string `toml:"password"`
-	} `toml:"search"`
 
 	FileStore struct {
 		Bucket string `toml:"bucket"`
@@ -507,6 +469,10 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.ZONE_NAME = file.Frontend.ZoneName
 	env.WEBPAGE_RENDERER_URL = file.Frontend.WebpageRendererURL
 
+	env.STOREFRONT_HOSTED_ZONE_ID = strings.TrimSpace(file.Storefront.HostedZoneID)
+	env.STOREFRONT_DISTRIBUTION_DOMAIN = strings.TrimSpace(file.Storefront.DistributionDomain)
+	env.STOREFRONT_BUCKET = strings.TrimSpace(file.Storefront.Bucket)
+
 	env.SMTP_HOST = file.SMTP.Host
 	env.SMTP_PORT = file.SMTP.Port
 	env.SMTP_EMAIL = file.SMTP.Email
@@ -538,8 +504,6 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.CONTACT_MAX_MESSAGES_PER_IP = file.Contact.MaxMessagesPerIP
 	env.CONTACT_WINDOW_MINUTES = file.Contact.WindowMinutes
 
-	env.GENIXSEARCH_URL = file.Search.URL
-	env.GENIXSEARCH_PASSWORD = file.Search.Password
 	env.FILE_STORE_BUCKET = file.FileStore.Bucket
 	env.FILE_STORE_ROOT = file.FileStore.Root
 

@@ -47,10 +47,22 @@ recepción 10:00, ventas 11:00→20:00 hora local) y lo devuelve a 0 al terminar
 |---|---|
 | 2 órdenes de compra (una por almacén), 50 productos c/u | `POST.purchase-orders` |
 | Confirmación | `PUT.purchase-orders?action=1` |
+| Supplier factura: one series per supplier, increasing number, base + 18% IGV | `PUT.purchase-orders?action=5` |
 | Inyección de efectivo si la caja no alcanza (tipo 7) | `POST.cash-banks-movement` |
 | Pago al proveedor (tipo 6) | `PUT.purchase-orders?action=3` |
 | Recepción: 15 productos con lote, 10 con serie (1 línea por unidad), 25 libres | `POST.purchase-order-entry` |
 | 100–150 ventas de 3 a 8 productos | `POST.sale-order` |
+
+Each sale is issued under the company's default series:
+- 1 in 8 goes to a company client with a RUC as a **factura**;
+- the rest are **boletas**, and one of S/ 700 or more gets a client with a DNI.
+
+`F001`/`B001` are created if the company has no default series. The `invoice_document` is written
+with the sale; nothing is sent to SUNAT.
+
+The day is now a list of steps (`historyDayStep`), shared with `fn-generate-expenses` and
+`fn-generate-demo-data` (see `GENERATE_DEMO_DATA.md`). The state file version is 2: a state from
+before this change is refused, use `--reset`.
 
 Cada llamada arma el JSON exacto que la ruta espera y ejecuta el handler de producción, así que
 todas las validaciones y efectos de negocio se aplican igual que desde el frontend.

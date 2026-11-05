@@ -48,5 +48,20 @@
   { "name": "William Peralta", "personType": 1 },
   { "name": "Ximena Orellana", "personType": 1 },
   { "name": "Yahir Escobar", "personType": 1 },
-  { "name": "Zoe Figueroa", "personType": 1 }
+  { "name": "Zoe Figueroa", "personType": 1 },
+  { "name": "Restaurante El Buen Sabor S.A.C.", "personType": 2, "registryNumber": "20605712001", "countryId": 604, "cityId": "150122" },
+  { "name": "Cafetería Aroma Andino E.I.R.L.", "personType": 2, "registryNumber": "20605712002", "countryId": 604, "cityId": "150131" },
+  { "name": "Hostal Los Portales S.A.C.", "personType": 2, "registryNumber": "20605712003", "countryId": 604, "cityId": "150104" },
+  { "name": "Clínica Dental Sonrisa Feliz S.A.C.", "personType": 2, "registryNumber": "20605712004", "countryId": 604, "cityId": "150140" },
+  { "name": "Colegio Santa Rosa de Lima S.A.C.", "personType": 2, "registryNumber": "20605712005", "countryId": 604, "cityId": "150136" },
+  { "name": "Constructora Horizonte S.A.C.", "personType": 2, "registryNumber": "20605712006", "countryId": 604, "cityId": "150114" },
+  { "name": "Estudio Jurídico Paredes & Asociados S.Civil de R.L.", "personType": 2, "registryNumber": "20605712007", "countryId": 604, "cityId": "150131" },
+  { "name": "Gimnasio Power Fit S.A.C.", "personType": 2, "registryNumber": "20605712008", "countryId": 604, "cityId": "150141" },
+  { "name": "Pollería La Brasa Dorada E.I.R.L.", "personType": 2, "registryNumber": "20605712009", "countryId": 604, "cityId": "150133" },
+  { "name": "Lavandería Express Lima S.A.C.", "personType": 2, "registryNumber": "20605712010", "countryId": 604, "cityId": "150116" },
+  { "name": "Panadería San Antonio S.A.C.", "personType": 2, "registryNumber": "20605712011", "countryId": 604, "cityId": "150122" },
+  { "name": "Agencia de Viajes Rumbo Sur S.A.C.", "personType": 2, "registryNumber": "20605712012", "countryId": 604, "cityId": "150101" },
+  { "name": "Consultora Andina de Proyectos S.A.C.", "personType": 2, "registryNumber": "20605712013", "countryId": 604, "cityId": "150130" },
+  { "name": "Veterinaria Patitas S.A.C.", "personType": 2, "registryNumber": "20605712014", "countryId": 604, "cityId": "150140" },
+  { "name": "Taller Mecánico Los Andes E.I.R.L.", "personType": 2, "registryNumber": "20605712015", "countryId": 604, "cityId": "150103" }
 ]

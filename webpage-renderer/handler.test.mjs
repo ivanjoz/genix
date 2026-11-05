@@ -106,14 +106,17 @@ function buildArtifact({ buildId = 'build-1', renderModule = RENDER_MODULE_OK } 
 
 const ACCOUNT = 'test-account';
 const BUCKET = 'test-bucket';
+const S3_BUCKET = 'test-storefront';
 
+// Un solo mapa para R2 y S3, indexado por clave: las claves no se pisan (websites/ vs
+// websites-html/) y cada objeto recuerda en qué almacén cayó (`store`).
 async function startFakeCloudflare() {
 	const objects = new Map();
 	let zipBuffer = buildArtifact();
 	let zipEtag = '"etag-1"';
 	let zipRequests = 0;
 	let respond304 = false;
-	let failPuts = false;
+	const failingStores = new Set();
 
 	const server = createServer((request, response) => {
 		const url = new URL(request.url, 'http://127.0.0.1');
@@ -131,25 +134,29 @@ async function startFakeCloudflare() {
 			return;
 		}
 
-		const objectsPrefix = `/accounts/${ACCOUNT}/r2/buckets/${BUCKET}/objects/`;
-		if (!url.pathname.startsWith(objectsPrefix)) {
+		const r2Prefix = `/accounts/${ACCOUNT}/r2/buckets/${BUCKET}/objects/`;
+		const s3Prefix = `/${S3_BUCKET}/`;
+		const store = url.pathname.startsWith(r2Prefix) ? 'r2' : url.pathname.startsWith(s3Prefix) ? 's3' : null;
+		if (!store) {
 			response.writeHead(404).end('ruta inesperada');
 			return;
 		}
-		const key = decodeURIComponent(url.pathname.slice(objectsPrefix.length));
+		const key = decodeURIComponent(url.pathname.slice((store === 'r2' ? r2Prefix : s3Prefix).length));
 
 		if (request.method === 'PUT') {
 			const chunks = [];
 			request.on('data', (chunk) => chunks.push(chunk));
 			request.on('end', () => {
-				if (failPuts) {
+				if (failingStores.has(store)) {
 					response.writeHead(403).end('{"success":false}');
 					return;
 				}
 				objects.set(key, {
+					store,
 					body: Buffer.concat(chunks),
 					contentType: request.headers['content-type'],
-					cacheControl: request.headers['cache-control']
+					cacheControl: request.headers['cache-control'],
+					authorization: request.headers.authorization || ''
 				});
 				response.writeHead(200, { 'content-type': 'application/json' }).end('{"success":true}');
 			});
@@ -181,8 +188,8 @@ async function startFakeCloudflare() {
 		enable304() {
 			respond304 = true;
 		},
-		rejectPuts() {
-			failPuts = true;
+		rejectPuts(store) {
+			failingStores.add(store);
 		},
 		async close() {
 			await new Promise((resolve) => server.close(resolve));
@@ -202,6 +209,12 @@ async function loadHandler(cloudflare) {
 	process.env.CLOUDFLARE_TOKEN = 'token-de-prueba';
 	process.env.CLOUDFLARE_BUCKET = BUCKET;
 	process.env.CLOUDFLARE_API_BASE = cloudflare.baseUrl;
+	process.env.STOREFRONT_BUCKET = S3_BUCKET;
+	process.env.STOREFRONT_S3_ENDPOINT = cloudflare.baseUrl;
+	process.env.AWS_REGION = 'us-east-1';
+	process.env.AWS_ACCESS_KEY_ID = 'AKIDPRUEBA';
+	process.env.AWS_SECRET_ACCESS_KEY = 'secreto-de-prueba';
+	delete process.env.AWS_SESSION_TOKEN;
 	return import(`./handler.mjs?instance=${++moduleCounter}`);
 }
 
@@ -383,15 +396,17 @@ test('rechaza eventos inválidos antes de tocar la red', async () => {
 	expect(cloudflare.zipRequests).toBe(0);
 });
 
-test('exige las cinco variables de entorno', async () => {
+test('exige las variables de entorno de R2 y de S3', async () => {
 	const { handler } = await setup();
-	const saved = process.env.CLOUDFLARE_BUCKET;
-	delete process.env.CLOUDFLARE_BUCKET;
 
-	try {
-		await expect(handler.render(BASE_EVENT)).rejects.toThrow(/CLOUDFLARE_BUCKET/);
-	} finally {
-		process.env.CLOUDFLARE_BUCKET = saved;
+	for (const variableName of ['CLOUDFLARE_BUCKET', 'STOREFRONT_BUCKET', 'AWS_SECRET_ACCESS_KEY']) {
+		const saved = process.env[variableName];
+		delete process.env[variableName];
+		try {
+			await expect(handler.render(BASE_EVENT)).rejects.toThrow(new RegExp(variableName));
+		} finally {
+			process.env[variableName] = saved;
+		}
 	}
 });
 
@@ -409,10 +424,62 @@ test('propaga un fallo de R2 en vez de darlo por bueno', async () => {
 	const { cloudflare, handler } = await setup();
 	// Desde el servidor y no cambiando process.env: el bucket y el token se capturan en
 	// constantes al cargar el módulo, así que tocarlos en caliente no tendría ningún efecto.
-	cloudflare.rejectPuts();
+	cloudflare.rejectPuts('r2');
 
 	await expect(handler.render(BASE_EVENT)).rejects.toThrow(/R2 PUT/);
-	expect(cloudflare.objects.size).toBe(0);
+	expect([...cloudflare.objects.values()].some((object) => object.store === 'r2')).toBe(false);
+});
+
+test('propaga un fallo de S3 en vez de darlo por bueno', async () => {
+	const { cloudflare, handler } = await setup();
+	cloudflare.rejectPuts('s3');
+
+	await expect(handler.render(BASE_EVENT)).rejects.toThrow(/S3 PUT/);
+	expect(cloudflare.objects.has('websites-html/tienda.un.pe/index.html')).toBe(false);
+});
+
+// --- Destinos: HTML a S3, assets a R2 ---------------------------------------------
+
+test('el HTML y los site files van a S3 firmados; los assets y el marcador a R2', async () => {
+	const { cloudflare, handler } = await setup();
+	await handler.render(BASE_EVENT);
+
+	for (const key of [
+		'websites-html/tienda.un.pe/index.html',
+		'websites-html/tienda.un.pe/about/index.html',
+		'websites-html/tienda.un.pe/sw.js',
+		'websites-html/tienda.un.pe/favicon.ico'
+	]) {
+		const object = cloudflare.objects.get(key);
+		expect(object.store).toBe('s3');
+		expect(object.authorization).toStartWith('AWS4-HMAC-SHA256 Credential=AKIDPRUEBA/');
+	}
+	expect(cloudflare.objects.get('websites/7/_app/immutable/entry.js').store).toBe('r2');
+	expect(cloudflare.objects.get('websites/7/.renderer-build').store).toBe('r2');
+});
+
+// Vector oficial de AWS ("PUT Object", Signature Version 4, header-based auth): si la firma
+// cambia, S3 rechaza todos los PUT con 403.
+test('signS3Request reproduce el vector de ejemplo de AWS', async () => {
+	const { handler } = await setup();
+	const payload = Buffer.from('Welcome to Amazon S3.', 'utf8');
+
+	const headers = handler.signS3Request({
+		method: 'PUT',
+		url: new URL(`https://examplebucket.s3.amazonaws.com/${handler.encodeS3Key('test$file.text')}`),
+		payload,
+		headers: { date: 'Fri, 24 May 2013 00:00:00 GMT', 'x-amz-storage-class': 'REDUCED_REDUNDANCY' },
+		credentials: { accessKeyId: 'AKIAIOSFODNN7EXAMPLE', secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY' },
+		region: 'us-east-1',
+		now: new Date('2013-05-24T00:00:00Z')
+	});
+
+	expect(headers['x-amz-content-sha256']).toBe('44ce7dd67c959e0d3524ffac1771dfbba87d2b6b4b4e99e42034a8b803f8b072');
+	expect(headers.authorization).toBe(
+		'AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, ' +
+			'SignedHeaders=date;host;x-amz-content-sha256;x-amz-date;x-amz-storage-class, ' +
+			'Signature=98ad721746da40c64f1a55b78f14c238d841ea1380cd77a1b5971af0ece108bd'
+	);
 });
 
 // --- Funciones puras --------------------------------------------------------------

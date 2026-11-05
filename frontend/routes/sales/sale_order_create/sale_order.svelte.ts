@@ -50,17 +50,13 @@ export interface VentaProducto {
 //STRUCT:sales.SaleOrderLine
 export interface ISaleOrderLine {
   ProductID: number
-  // Both in the sale's currency: one whole unit, one sub-unit. The server resolves them from
-  // the catalog; SubPrice only travels back.
   Price: number
-  SubPrice?: number
-  // Packed: units * 1000 + sub. The server re-resolves the divisor and both prices from the
-  // catalog, so what travels here is the quantity, not the pricing.
+  SubPrice: number
   Quantity: number
   SubDivisor: number
-  Sku?: string
-  LotID?: number
-  PresentationID?: number
+  Sku: string
+  LotID: number
+  PresentationID: number
 }
 
 //STRUCT:sales.SaleOrder
@@ -72,13 +68,13 @@ export interface ISaleOrder {
   TotalAmount: number
   TaxAmount: number
   DebtAmount: number
-  // 1 PEN, 2 USD. Paid: the payment cash-bank's currency. Unpaid: what the till picked.
   CurrencyType: number
-  // The effective rate × 1000 the server converted the lines with. Only travels back.
   ExchangeRate: number
   ClientID: number
   Created: number
   upd: number
+  ver: number
+  mdt: string
   UpdatedBy: number
   ss: number
   LastPaymentCajaID: number
@@ -87,11 +83,12 @@ export interface ISaleOrder {
   LastPaymentUser: number
   DeliveryTime: number
   DeliveryUser: number
-  PaymentDueDate: number
-  // The invoicing series the sale will be issued under. The backend folds it into the last two
-  // digits of the sale id, so it is only read on creation. 0 = the till named no series.
-  IssueSeriesID: number
   ClientInfo: any
+  IssueSeriesID: number
+  PaymentDueDate: number
+  AnnulReason: string
+  Period: number
+  SameDayCashBankID: number
   /* extra fields */
   CompanyID: number
   Name: string

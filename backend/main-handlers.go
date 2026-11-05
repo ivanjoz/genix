@@ -7,6 +7,7 @@ import (
 	"app/core"
 	"app/crm"
 	"app/finance"
+	"app/hr"
 	"app/invoicing"
 	"app/logistics"
 	"app/production"
@@ -39,6 +40,7 @@ var appHandlersModules = []core.AppRouterType{
 	crm.ModuleHandlers,
 	security.ModuleHandlers,
 	projects.ModuleHandlers,
+	hr.ModuleHandlers,
 }
 
 var appHandlers = core.AppRouterType{}
@@ -100,6 +102,8 @@ var saasOnlyRoutes = map[string]bool{
 	"GET.request-errors-by-ids":       true,
 	"GET.system-memory-packages":      true,
 	"GET.cron-actions-scheduled":      true,
+	"POST.hr-legal-parameters":        true,
+	"POST.hr-afp-rates":               true,
 }
 
 // Rutas exentas del cobro y del límite de créditos: son las que se usan para *ver o corregir* el
@@ -516,6 +520,22 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 	// El daemon devuelve los sub-accesos por SLOT, porque no conoce access.toml y no sabe a qué
 	// acceso corresponde cada uno. La traducción a IDs vive aquí, del lado que sí lo embebe.
 	args.User.SubAccesos = mapGrantedSubAccesos(accessGrant, decision.accessInfos)
+
+	// El user 1 salta el gate (resolveRouteAccess devuelve decisión vacía porque sus blobs en
+	// ScyllaDB están vacíos y el daemon lo negaría), así que el mapa de arriba queda vacío y
+	// todo chequeo HasSubAcceso lo negaría. Se le sintetiza "Todos" en los accesos de la ruta,
+	// espejo de buildBootstrapAdminAccesos en login.go, que sí lo hace para el frontend.
+	if args.User.ID == 1 && len(accessInfos) > 0 {
+		synthesized := make(map[int32]uint16, len(accessInfos))
+		for _, accessInfo := range accessInfos {
+			if accessInfo.SubAccesosMask != 0 {
+				synthesized[accessInfo.ID] = 1 << (core.SubAccesoTodosID - 1)
+			} else {
+				synthesized[accessInfo.ID] = 0
+			}
+		}
+		args.User.SubAccesos = synthesized
+	}
 
 	core.Log("fareward aceptó::", " method::", args.Method, " company::", args.User.CompanyID,
 		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,

@@ -7,19 +7,12 @@
 ScyllaDB: ajusta sysconfig/scylla.yaml, abre el puerto CQL, recupera el
 superusuario si hace falta y crea el keyspace de DB_NAME.
 
-GenixSearch: descarga el binario musl estatico publicado en los releases de
-GitHub (sin toolchain ni glibc en el host), lo verifica contra el SHA256SUMS
-del release, escribe /etc/genixsearch/genixsearch.cfg y la unit de systemd, y
-guarda search.url / search.password en config.toml para que el
-backend Go los lea desde core.Env.
-
-Qdrant: misma idea con el release musl de qdrant/qdrant, configurado por
-variables QDRANT__* en un EnvironmentFile. Los puertos salen de [qdrant] y la
+Qdrant: descarga el release musl estatico de qdrant/qdrant (sin toolchain ni
+glibc en el host), configurado por variables QDRANT__* en un EnvironmentFile. Los puertos salen de [qdrant] y la
 api key es internal_apikey, la misma que ya usa el backend proceso-a-proceso.
 """
 
 import argparse
-import hashlib
 import os
 import shutil
 import subprocess
@@ -28,8 +21,6 @@ import tempfile
 import time
 import socket
 import re
-import secrets
-import string
 import sys
 import json
 import tomllib
@@ -64,7 +55,6 @@ AUTH_RECOVERY_VERIFY_TIMEOUT_SECONDS = 60
 
 EXECUTION_MODE_ALL = "all"
 EXECUTION_MODE_SCYLLA = "scylla"
-EXECUTION_MODE_SEARCH = "search"
 EXECUTION_MODE_QDRANT = "qdrant"
 
 # Los alias numericos replican la convencion de configure_server.py.
@@ -74,10 +64,7 @@ EXECUTION_MODE_BY_ARGUMENT = {
     "2": EXECUTION_MODE_SCYLLA,
     "scylla": EXECUTION_MODE_SCYLLA,
     "db": EXECUTION_MODE_SCYLLA,
-    "3": EXECUTION_MODE_SEARCH,
-    "search": EXECUTION_MODE_SEARCH,
-    "genixsearch": EXECUTION_MODE_SEARCH,
-    "4": EXECUTION_MODE_QDRANT,
+    "3": EXECUTION_MODE_QDRANT,
     "qdrant": EXECUTION_MODE_QDRANT,
     "vector": EXECUTION_MODE_QDRANT,
 }
@@ -789,64 +776,10 @@ def configure_scylladb(credentials_data, broadcast_ip_address, detected_network_
     print(f"    - Access via {detected_network_provider}: cqlsh {broadcast_ip_address} {configured_database_port} -u cassandra -p '{configured_database_password}'")
 
 # ---------------------------------------------------------------------------
-# GenixSearch
+# Service install helpers (release download, system user, hardened unit)
 # ---------------------------------------------------------------------------
 
-GENIXSEARCH_SERVICE_NAME = "genixsearch"
-GENIXSEARCH_BINARY_PATH = Path("/usr/local/bin") / GENIXSEARCH_SERVICE_NAME
-GENIXSEARCH_CONFIG_DIRECTORY = Path("/etc") / GENIXSEARCH_SERVICE_NAME
-GENIXSEARCH_CONFIG_FILE = GENIXSEARCH_CONFIG_DIRECTORY / f"{GENIXSEARCH_SERVICE_NAME}.cfg"
-GENIXSEARCH_DATA_DIRECTORY = Path("/var/lib") / GENIXSEARCH_SERVICE_NAME
-GENIXSEARCH_KV_DIRECTORY = GENIXSEARCH_DATA_DIRECTORY / "store" / "kv"
-GENIXSEARCH_RELEASE_REPOSITORY = "ivanjoz/genix-search"
-
-# Debe coincidir con el default de core.ParseGenixSearchURL en backend/core/security.go.
-DEFAULT_GENIXSEARCH_PORT = 14446
-GENIXSEARCH_PASSWORD_LENGTH = 64
-GENIXSEARCH_PASSWORD_ALPHABET = string.ascii_lowercase + string.digits
 NOLOGIN_SHELL_CANDIDATES = ("/usr/sbin/nologin", "/sbin/nologin", "/usr/bin/false", "/bin/false")
-
-# Sufijos de los assets que publica genix-search/scripts/release_binaries.sh.
-# Solo hay builds musl para estas dos arquitecturas.
-GENIXSEARCH_ASSET_SUFFIX_BY_MACHINE = {
-    "x86_64": "x86_64-linux-musl",
-    "amd64": "x86_64-linux-musl",
-    "aarch64": "aarch64-linux-musl",
-    "arm64": "aarch64-linux-musl",
-}
-GENIXSEARCH_NEOVERSE_N1_ASSET_SUFFIX = "aarch64-linux-musl-neoverse-n1"
-# MIDR_EL1 part 0xd0c = Arm Neoverse N1, el core del Ampere Altra (Oracle "Ampere A1").
-NEOVERSE_N1_CPU_PART = "0xd0c"
-
-def is_neoverse_n1_cpu():
-    try:
-        cpuinfo_content = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return False
-
-    return any(
-        cpuinfo_line.split(":", 1)[1].strip().lower() == NEOVERSE_N1_CPU_PART
-        for cpuinfo_line in cpuinfo_content.splitlines()
-        if cpuinfo_line.lower().startswith("cpu part") and ":" in cpuinfo_line
-    )
-
-def detect_genixsearch_asset_suffix():
-    """Resolves the published asset for this machine, or aborts if there is none."""
-    machine_architecture = os.uname().machine
-    asset_suffix = GENIXSEARCH_ASSET_SUFFIX_BY_MACHINE.get(machine_architecture)
-    if asset_suffix is None:
-        print(f"[!] Architecture '{machine_architecture}' is not compatible with GenixSearch.")
-        print(f"    Published static builds: {', '.join(sorted(set(GENIXSEARCH_ASSET_SUFFIX_BY_MACHINE.values())))}")
-        sys.exit(1)
-
-    # El build para Neoverse N1 usa el mismo target musl pero con -Ctarget-cpu, asi que
-    # solo aplica cuando el host es realmente un Ampere Altra.
-    if asset_suffix == "aarch64-linux-musl" and is_neoverse_n1_cpu():
-        print("[*] Detected an Arm Neoverse N1 (Ampere Altra) CPU.")
-        return GENIXSEARCH_NEOVERSE_N1_ASSET_SUFFIX
-
-    print(f"[*] Detected architecture '{machine_architecture}' -> asset {asset_suffix}")
-    return asset_suffix
 
 def http_get_bytes(request_url, timeout_seconds=60.0):
     # GitHub rechaza las peticiones sin User-Agent.
@@ -872,65 +805,6 @@ def resolve_latest_release_tag(release_repository):
 
     print(f"[*] Latest published release: {release_tag}")
     return release_tag
-
-def verify_release_checksum(release_base_url, archive_name, archive_digest):
-    """Compares the downloaded asset against the release manifest.
-
-    Un asset corrupto o sustituido de otro modo solo se nota cuando el servicio no
-    arranca, asi que se valida antes de instalarlo.
-    """
-    checksums_content = http_get_bytes(f"{release_base_url}/SHA256SUMS").decode("utf-8", errors="replace")
-    expected_digest = None
-    for checksum_line in checksums_content.splitlines():
-        checksum_parts = checksum_line.split()
-        if len(checksum_parts) == 2 and checksum_parts[1] == archive_name:
-            expected_digest = checksum_parts[0]
-            break
-
-    if expected_digest is None:
-        print(f"[!] SHA256SUMS has no entry for {archive_name}.")
-        sys.exit(1)
-
-    if expected_digest != archive_digest:
-        print(f"[!] Checksum mismatch for {archive_name}: expected {expected_digest}, got {archive_digest}")
-        sys.exit(1)
-
-    print("[*] Checksum verified against the release SHA256SUMS.")
-
-def download_genixsearch_release(release_version, download_directory):
-    """Downloads and unpacks the static musl release. Returns (binary, reference config)."""
-    asset_suffix = detect_genixsearch_asset_suffix()
-    if release_version in (None, "", "latest"):
-        release_version = resolve_latest_release_tag(GENIXSEARCH_RELEASE_REPOSITORY)
-    if not release_version.startswith("v"):
-        release_version = f"v{release_version}"
-
-    archive_stem = f"{GENIXSEARCH_SERVICE_NAME}-{release_version}-{asset_suffix}"
-    archive_name = f"{archive_stem}.tar.gz"
-    release_base_url = f"https://github.com/{GENIXSEARCH_RELEASE_REPOSITORY}/releases/download/{release_version}"
-
-    print(f"[*] Downloading {release_base_url}/{archive_name}")
-    archive_payload = http_get_bytes(f"{release_base_url}/{archive_name}")
-    archive_path = download_directory / archive_name
-    archive_path.write_bytes(archive_payload)
-
-    verify_release_checksum(release_base_url, archive_name, hashlib.sha256(archive_payload).hexdigest())
-
-    with tarfile.open(archive_path, "r:gz") as release_archive:
-        try:
-            # Python 3.12+ rechaza miembros inseguros; las versiones anteriores no
-            # conocen el parametro, de ahi el fallback.
-            release_archive.extractall(download_directory, filter="data")
-        except TypeError:
-            release_archive.extractall(download_directory)
-
-    downloaded_binary_path = download_directory / archive_stem / GENIXSEARCH_SERVICE_NAME
-    if not downloaded_binary_path.is_file():
-        print(f"[!] {archive_name} did not contain {archive_stem}/{GENIXSEARCH_SERVICE_NAME}")
-        sys.exit(1)
-    downloaded_binary_path.chmod(0o755)
-
-    return downloaded_binary_path, download_directory / archive_stem / f"{GENIXSEARCH_SERVICE_NAME}.cfg"
 
 def ensure_service_system_user(service_name, service_home_directory):
     """Crea el usuario/grupo de sistema sin login bajo el que corre el daemon."""
@@ -1029,85 +903,6 @@ WantedBy=multi-user.target
     unit_file_path.write_text(unit_content, encoding="utf-8")
     unit_file_path.chmod(0o644)
 
-CONFIG_SECTION_PATTERN = re.compile(r"^\s*\[([^\]]+)\]")
-CONFIG_KEY_PATTERN = re.compile(r"^(\s*)([A-Za-z0-9_.\-]+)(\s*=\s*)(.*)$")
-
-def apply_config_overrides(reference_config_content, config_overrides):
-    """Replaces `(section, key) -> TOML value` in the reference cfg shipped by the release.
-
-    Se parte del cfg del release en vez de una plantilla propia para heredar cualquier
-    clave nueva que agregue GenixSearch; solo se sobrescriben las cuatro que dependen
-    del host. Si una clave esperada no aparece, se aborta: seguir dejaria el servicio
-    escuchando o guardando datos donde no corresponde.
-    """
-    rewritten_lines = []
-    current_section_name = ""
-    applied_override_keys = set()
-
-    for config_line in reference_config_content.splitlines():
-        section_match = CONFIG_SECTION_PATTERN.match(config_line)
-        if section_match:
-            current_section_name = section_match.group(1).strip()
-            rewritten_lines.append(config_line)
-            continue
-
-        key_match = CONFIG_KEY_PATTERN.match(config_line)
-        override_key = (current_section_name, key_match.group(2)) if key_match else None
-        if override_key in config_overrides:
-            line_indent, config_key, key_separator, _ = key_match.groups()
-            rewritten_lines.append(f"{line_indent}{config_key}{key_separator}{config_overrides[override_key]}")
-            applied_override_keys.add(override_key)
-            continue
-
-        rewritten_lines.append(config_line)
-
-    missing_override_keys = set(config_overrides) - applied_override_keys
-    if missing_override_keys:
-        print(f"[!] The reference genixsearch.cfg has no entry for: {sorted(missing_override_keys)}")
-        sys.exit(1)
-
-    return "\n".join(rewritten_lines) + "\n"
-
-def write_genixsearch_config(reference_config_path, genixsearch_password, genixsearch_port):
-    if not reference_config_path.is_file():
-        print(f"[!] Reference genixsearch.cfg not found at {reference_config_path}")
-        sys.exit(1)
-
-    # json.dumps produce un string entre comillas con escapes compatibles con TOML.
-    config_overrides = {
-        ("server", "log_level"): json.dumps("info"),
-        ("channel", "inet"): json.dumps(f"0.0.0.0:{genixsearch_port}"),
-        ("channel", "auth_password"): json.dumps(genixsearch_password),
-        ("store.kv", "path"): json.dumps(f"{GENIXSEARCH_KV_DIRECTORY}/"),
-    }
-    config_content = apply_config_overrides(
-        reference_config_path.read_text(encoding="utf-8"), config_overrides
-    )
-
-    print(f"[*] Writing {GENIXSEARCH_CONFIG_FILE} (0640 root:{GENIXSEARCH_SERVICE_NAME})")
-    GENIXSEARCH_CONFIG_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    GENIXSEARCH_CONFIG_FILE.write_text(
-        "# Written by scripts/configure/configure_db.py. Replaced on every run.\n" + config_content,
-        encoding="utf-8",
-    )
-    GENIXSEARCH_CONFIG_FILE.chmod(0o640)
-    shutil.chown(GENIXSEARCH_CONFIG_FILE, user="root", group=GENIXSEARCH_SERVICE_NAME)
-
-def write_genixsearch_unit(genixsearch_port):
-    write_hardened_service_unit(
-        GENIXSEARCH_SERVICE_NAME,
-        "GenixSearch — compact, lossy, ranked search backend",
-        GENIXSEARCH_DATA_DIRECTORY,
-        f"{GENIXSEARCH_BINARY_PATH} --config {GENIXSEARCH_CONFIG_FILE}",
-        GENIXSEARCH_DATA_DIRECTORY,
-        needs_privileged_port=genixsearch_port < 1024,
-        extra_service_lines=(
-            "# El KV store se vacia de forma sincrona con SIGTERM; hay que darle margen.",
-            "KillSignal=SIGTERM",
-            "TimeoutStopSec=120s",
-        ),
-    )
-
 def restore_selinux_context(target_paths):
     """Relabels the installed files when SELinux is enforcing (Fedora, RHEL, ...)."""
     if which("selinuxenabled") is None or which("restorecon") is None:
@@ -1135,134 +930,6 @@ def wait_for_service_active(service_name, timeout_seconds=15):
             return False
         time.sleep(0.5)
     return False
-
-def resolve_genixsearch_port(credentials_data):
-    """Takes the port from GENIXSEARCH_URL when it carries one, else the backend default.
-
-    Acepta las mismas formas que core.ParseGenixSearchURL: 'host:port',
-    'scheme://host:port' y con path/query al final. Un host sin puerto (incluido
-    un IPv6 sin corchetes) cae al default.
-    """
-    configured_search_url = str(get_config_value(credentials_data, "search.url") or "").strip()
-    if "://" in configured_search_url:
-        configured_search_url = configured_search_url.split("://", 1)[1]
-    configured_search_url = re.split(r"[/?]", configured_search_url, maxsplit=1)[0]
-
-    # Solo el ultimo ':' separa el puerto, y un IPv6 sin corchetes tiene varios.
-    host_part, separator, port_part = configured_search_url.rpartition(":")
-    if not separator or not port_part.isdigit() or (":" in host_part and not host_part.endswith("]")):
-        return DEFAULT_GENIXSEARCH_PORT
-
-    parsed_port = int(port_part)
-    if not (1 <= parsed_port <= 65535):
-        print(f"[!] search.url has an invalid port: {configured_search_url}")
-        sys.exit(1)
-    return parsed_port
-
-def resolve_genixsearch_endpoint(credentials_data, broadcast_ip_address):
-    """Returns (url, port, was_url_generated) for the search endpoint.
-
-    Un search.url ya configurado gana siempre y no se toca: es la direccion por
-    la que el backend entra de verdad (IP publica, dominio o tunel) y el script no
-    puede deducirla. La IP que detecta este host suele ser la privada de la VPC, que
-    desde Lambda no resuelve a nada.
-    """
-    genixsearch_port = resolve_genixsearch_port(credentials_data)
-    configured_search_url = str(get_config_value(credentials_data, "search.url") or "").strip()
-
-    if configured_search_url:
-        print(f"[*] Reusing search.url from config.toml: {configured_search_url}")
-        return configured_search_url, genixsearch_port, False
-
-    generated_search_url = f"{broadcast_ip_address}:{genixsearch_port}"
-    print(f"[*] No search.url in config.toml. Using the detected address: {generated_search_url}")
-
-    # Una IP privada solo sirve si el backend vive en la misma red; conviene avisarlo
-    # aqui y no cuando el handshake falle en produccion.
-    with contextlib.suppress(ValueError):
-        if ipaddress.ip_address(broadcast_ip_address).is_private and not is_tailnet_ip(broadcast_ip_address):
-            print(f"[!] {broadcast_ip_address} is a private address. A backend outside this network")
-            print("    will not reach it: set search.url in config.toml to the public")
-            print("    host or domain and re-run.")
-
-    return generated_search_url, genixsearch_port, True
-
-def resolve_genixsearch_password(credentials_data):
-    """Reuses search.password from config.toml, or generates one."""
-    existing_password = get_config_value(credentials_data, "search.password")
-    if isinstance(existing_password, str) and existing_password.strip():
-        print("[*] Reusing search.password from config.toml.")
-        return existing_password.strip(), False
-
-    print("[*] No search.password in config.toml. Generating one.")
-    generated_password = "".join(
-        secrets.choice(GENIXSEARCH_PASSWORD_ALPHABET) for _ in range(GENIXSEARCH_PASSWORD_LENGTH)
-    )
-    return generated_password, True
-
-def configure_genixsearch(credentials_data, broadcast_ip_address, release_version, local_binary_path):
-    genixsearch_url, genixsearch_port, was_url_generated = resolve_genixsearch_endpoint(
-        credentials_data, broadcast_ip_address
-    )
-    genixsearch_password, was_password_generated = resolve_genixsearch_password(credentials_data)
-
-    with tempfile.TemporaryDirectory(prefix="genixsearch-release-") as download_directory_name:
-        download_directory = Path(download_directory_name)
-        if local_binary_path:
-            source_binary_path = Path(local_binary_path).resolve()
-            if not source_binary_path.is_file():
-                print(f"[!] --binary does not exist: {source_binary_path}")
-                sys.exit(1)
-            # Sin release descargado no hay cfg de referencia; se usa el del repo hermano si existe.
-            reference_config_path = PROJECT_ROOT_DIRECTORY.parent / "genix-search" / f"{GENIXSEARCH_SERVICE_NAME}.cfg"
-        else:
-            source_binary_path, reference_config_path = download_genixsearch_release(release_version, download_directory)
-
-        ensure_service_system_user(GENIXSEARCH_SERVICE_NAME, GENIXSEARCH_DATA_DIRECTORY)
-        prepare_service_directories(
-            GENIXSEARCH_SERVICE_NAME,
-            [GENIXSEARCH_DATA_DIRECTORY, GENIXSEARCH_DATA_DIRECTORY / "store", GENIXSEARCH_KV_DIRECTORY],
-        )
-        install_service_binary(source_binary_path, GENIXSEARCH_BINARY_PATH)
-        write_genixsearch_config(reference_config_path, genixsearch_password, genixsearch_port)
-
-    write_genixsearch_unit(genixsearch_port)
-    restore_selinux_context([GENIXSEARCH_BINARY_PATH, GENIXSEARCH_CONFIG_DIRECTORY, GENIXSEARCH_DATA_DIRECTORY])
-    ensure_tcp_port_open(genixsearch_port, "GenixSearch")
-
-    installed_version_result = run_capture_command([str(GENIXSEARCH_BINARY_PATH), "--version"], quiet=True)
-    print(f"[*] Installed binary reports: {(installed_version_result.stdout or installed_version_result.stderr).strip()}")
-
-    run_command("systemctl daemon-reload")
-    run_command(f"systemctl enable {GENIXSEARCH_SERVICE_NAME}.service")
-    run_command(f"systemctl restart {GENIXSEARCH_SERVICE_NAME}.service")
-
-    if not wait_for_service_active(GENIXSEARCH_SERVICE_NAME):
-        print(f"[!] {GENIXSEARCH_SERVICE_NAME}.service did not stay active.")
-        print_service_failure_debug(GENIXSEARCH_SERVICE_NAME)
-        sys.exit(1)
-
-    # Solo se escriben los valores que el script genero: los que ya estaban en
-    # config.toml son una decision del operador y sobrescribirlos rompe el backend.
-    credentials_updates = {}
-    if was_url_generated:
-        credentials_updates["search.url"] = genixsearch_url
-    if was_password_generated:
-        credentials_updates["search.password"] = genixsearch_password
-
-    if credentials_updates:
-        save_project_credentials(credentials_updates)
-    else:
-        print("[*] config.toml already had search.url and search.password. Left untouched.")
-
-    print("\n[+] GenixSearch Installation Complete!")
-    print(f"    - binary:  {GENIXSEARCH_BINARY_PATH}")
-    print(f"    - config:  {GENIXSEARCH_CONFIG_FILE}")
-    print(f"    - state:   {GENIXSEARCH_DATA_DIRECTORY}")
-    print(f"    - listen:  0.0.0.0:{genixsearch_port}")
-    print(f"    - GENIXSEARCH_URL:      {genixsearch_url}")
-    print(f"    - GENIXSEARCH_PASSWORD: {genixsearch_password}")
-    print(f"    - systemctl status {GENIXSEARCH_SERVICE_NAME}")
 
 # ---------------------------------------------------------------------------
 # Qdrant
@@ -1314,7 +981,7 @@ def download_qdrant_release(release_version, download_directory):
     )
 
     print(f"[*] Downloading {archive_url}")
-    # A diferencia de genix-search, los releases de Qdrant no publican un SHA256SUMS, asi
+    # Los releases de Qdrant no publican un SHA256SUMS, asi
     # que aqui no hay checksum contra el que validar: la unica garantia es el TLS de GitHub.
     archive_path = download_directory / archive_name
     archive_path.write_bytes(http_get_bytes(archive_url, timeout_seconds=300.0))
@@ -1385,9 +1052,9 @@ def resolve_qdrant_settings(credentials_data):
 def resolve_qdrant_host(credentials_data, broadcast_ip_address):
     """Devuelve (host, se_genero) para la direccion por la que se alcanza Qdrant.
 
-    Igual que search.url: un valor ya presente es una decision del operador y no se toca,
-    porque la direccion real (IP publica, dominio o tunel) no se deduce desde el host. A
-    diferencia de search no lleva puerto: los puertos ya estan en [qdrant], como en [db].
+    Un valor ya presente es una decision del operador y no se toca, porque la direccion
+    real (IP publica, dominio o tunel) no se deduce desde el host. No lleva puerto: los
+    puertos ya estan en [qdrant], como en [db].
     """
     configured_host = str(get_config_value(credentials_data, "qdrant.host") or "").strip()
     if configured_host:
@@ -1519,34 +1186,24 @@ def configure_qdrant(credentials_data, broadcast_ip_address, release_version):
 def parse_command_arguments():
     argument_parser = argparse.ArgumentParser(
         prog="configure_db.py",
-        description="Configures ScyllaDB and installs GenixSearch and Qdrant on this host.",
+        description="Configures ScyllaDB and installs Qdrant on this host.",
     )
     argument_parser.add_argument(
         "mode",
         nargs="?",
         default=EXECUTION_MODE_ALL,
-        help="all|1 (default), scylla|2, search|3, qdrant|4",
-    )
-    argument_parser.add_argument(
-        "--release-version",
-        default="latest",
-        help="GenixSearch release tag to install, e.g. v0.1.0 (default: latest)",
+        help="all|1 (default), scylla|2, qdrant|3",
     )
     argument_parser.add_argument(
         "--qdrant-version",
         default="latest",
         help="Qdrant release tag to install, e.g. v1.19.0 (default: latest)",
     )
-    argument_parser.add_argument(
-        "--binary",
-        default=None,
-        help="install this local genixsearch binary instead of downloading the release",
-    )
     parsed_arguments = argument_parser.parse_args()
 
     execution_mode = EXECUTION_MODE_BY_ARGUMENT.get(parsed_arguments.mode.strip().lower())
     if execution_mode is None:
-        argument_parser.error(f"Unknown mode: {parsed_arguments.mode}. Use all, scylla, search or qdrant.")
+        argument_parser.error(f"Unknown mode: {parsed_arguments.mode}. Use all, scylla or qdrant.")
 
     parsed_arguments.mode = execution_mode
     return parsed_arguments
@@ -1566,14 +1223,6 @@ def main():
 
     if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_SCYLLA):
         configure_scylladb(credentials_data, broadcast_ip_address, detected_network_provider)
-
-    if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_SEARCH):
-        configure_genixsearch(
-            credentials_data,
-            broadcast_ip_address,
-            command_arguments.release_version,
-            command_arguments.binary,
-        )
 
     if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_QDRANT):
         configure_qdrant(credentials_data, broadcast_ip_address, command_arguments.qdrant_version)

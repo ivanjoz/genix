@@ -74,3 +74,4 @@ frontend/webpage/static/sw.js.map
 
 # SvelteKit genera esto en la raíz cuando se corre svelte fuera de frontend/.
 /.svelte-kit
+plan/

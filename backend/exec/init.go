@@ -161,6 +161,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 			RUC:           "11000000000",
 			InvoiceSeries: invoicingTypes.DefaultInvoiceSeries(),
 			Updated:       seedTimestamp,
+			Created:       seedTimestamp,
 		},
 		{
 			ID:            2,
@@ -169,6 +170,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 			RUC:           "12000000000",
 			InvoiceSeries: invoicingTypes.DefaultInvoiceSeries(),
 			Updated:       seedTimestamp,
+			Created:       seedTimestamp,
 		},
 	}
 	usuarios := []coreTypes.User{

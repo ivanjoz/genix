@@ -29,7 +29,7 @@ Genix is a multi-tenant SaaS ERP that can also run as a single local binary for 
 | Frontend | **SvelteKit 2 / Svelte 5**, TailwindCSS v4, Bun |
 | Storefront delivery | Static SSR/prerender → **Cloudflare** (custom domains) |
 | AI | **OpenRouter** (OpenAI-compatible), curated model registry |
-| Text search | **GenixSearch** daemon (Spanish bigram encoder) |
+| Text search | **genix-s3** — index in the S3 Express One Zone file-store bucket (Spanish bigram encoder) |
 
 The frontend is a monorepo with a strict dependency hierarchy (`libs` → `ui-components` → `core` → `services` → `domain-components`), and an independent, lightweight **storefront** app that never imports admin/business code.
 
@@ -98,7 +98,7 @@ A section-based website/storefront builder (`frontend/routes/webpage-builder/`) 
 See [below](#hybrid-architecture-lambda-or-single-binary).
 
 ### Text search
-A Spanish bigram word encoder ported to Go (`backend/libs/text-search/`) that produces byte-identical index keys to the external GenixSearch daemon, plus a TCP driver and ORM integration (`backend/genix-orm/scylla/text_search/`): a table with a `TextSearchColumn` gets relevance-ranked search that returns IDs without a Scylla read.
+A Spanish bigram word encoder ported to Go (`backend/libs/text-search/`) and the ORM's genix-s3 backend (`backend/genix-orm/search/genixs3/`), which keeps the index in the `[file_store]` bucket under `<root>search/` — no search server to run. A table with a `TextSearchColumn` gets relevance-ranked search that returns IDs without a Scylla read.
 
 ---
 
@@ -146,7 +146,7 @@ Legend: ✅ done · 🟡 partial / in progress · ⬜ not started
 - ✅ Multi-tenancy by `empresa_id` partitioning + tenant-scoped auth
 - ✅ Independent providers via `providers.backend` (DynamoDB / D1) and `providers.cdn` (S3 / R2)
 - 🟡 Vendor-free provider (`local` / `none`): ScyllaDB-only, no data mirror, self-hosted object storage
-- ✅ Text search (GenixSearch bigram encoder + ORM integration)
+- ✅ Text search (bigram encoder + genix-s3 ORM backend)
 - ✅ Full per-tenant data backup, download & restore
 - ✅ Security: users, access profiles, YAML access-control
 - ✅ Bilingual UI (EN | ES) i18n across production routes

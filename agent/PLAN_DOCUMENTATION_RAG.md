@@ -382,7 +382,7 @@ Before committing to server-side `qdrant/bm25` document inference:
 If the deployed binary does not provide that inference contract, choose explicitly:
 
 - Generate compatible sparse vectors client-side and send them to Qdrant; or
-- Use the existing GenixSearch service for ranked lexical candidates and fuse its ranks
+- Use the existing genix-s3 text index for ranked lexical candidates and fuse its ranks
   with Qdrant dense results in Go.
 
 Do not call a payload full-text filter “BM25.” It can enforce exact token/phrase conditions,

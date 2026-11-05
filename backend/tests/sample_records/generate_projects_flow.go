@@ -203,7 +203,7 @@ func GenerateProjectsFlow(args *core.ExecArgs) core.FuncResponse {
 }
 
 func parseProjectsFlowArgs(message string) (projectsFlowConfig, error) {
-	config := projectsFlowConfig{projectsCount: 2, sprintsCount: 4, storiesCount: 20, sprintDays: 14, randomSeed: time.Now().UnixNano()}
+	config := projectsFlowConfig{projectsCount: 2, sprintsCount: 4, storiesCount: 20, sprintDays: 14, randomSeed: sampleDataSeed}
 	for _, argument := range strings.Fields(message) {
 		name, rawValue, hasValue := strings.Cut(strings.TrimPrefix(argument, "--"), "=")
 		if !hasValue {

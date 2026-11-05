@@ -58,7 +58,6 @@ require (
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/ivanjoz/colbin v0.9.0 // indirect
 	github.com/ivanjoz/genix-orm/db v0.0.0 // indirect
-	github.com/ivanjoz/genix-orm/search/daemon v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0 // indirect
 	github.com/ivanjoz/genix-search/genix-s3 v0.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -111,8 +110,6 @@ replace github.com/ivanjoz/fareward/go => ../fareward/go
 replace github.com/ivanjoz/genix-orm => ../backend/genix-orm
 
 replace github.com/ivanjoz/genix-orm/db => ../backend/genix-orm/db
-
-replace github.com/ivanjoz/genix-orm/search/daemon => ../backend/genix-orm/search/daemon
 
 replace github.com/ivanjoz/genix-orm/search/genixs3 => ../backend/genix-orm/search/genixs3
 

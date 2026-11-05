@@ -43,7 +43,7 @@ func DeployCompanyWebpage(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr(renderError)
 	}
 
-	if provisionError := provisionStorefrontDomain(hostname); provisionError != nil {
+	if provisionError := webpage.ProvisionStorefrontDomain(hostname); provisionError != nil {
 		return args.MakeErr(provisionError)
 	}
 

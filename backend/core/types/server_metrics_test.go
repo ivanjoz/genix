@@ -22,8 +22,6 @@ func TestServerMetricsColumnsMatchTheRustWriter(t *testing.T) {
 		"backend_cpu_percent",
 		"fareward_mem_mb",
 		"fareward_cpu_percent",
-		"search_mem_mb",
-		"search_cpu_percent",
 		"scylla_mem_mb",
 		"scylla_cpu_percent",
 	}

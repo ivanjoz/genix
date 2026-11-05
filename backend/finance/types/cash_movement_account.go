@@ -30,6 +30,15 @@ const (
 	PCGEOtherPayables          int32 = 4699 // Otras cuentas por pagar diversas
 	PCGEAssetPayables          int32 = 4654 // Pasivos por compra de activo inmovilizado — PPE
 	PCGEMerchandisePurchase    int32 = 6011 // Compras — mercaderías
+	// Payroll (plan/HR_PAYROLL_PLAN.md §5.2).
+	PCGEStaffLoans        int32 = 1411  // Préstamos al personal
+	PCGEStaffAdvances     int32 = 1412  // Adelanto de remuneraciones
+	PCGEEssaludPayable    int32 = 4031  // ESSALUD
+	PCGEOnpPayable        int32 = 4032  // ONP
+	PCGEIncomeTax5ta      int32 = 40173 // Renta de quinta categoría
+	PCGESalariesPayable   int32 = 4111  // Sueldos y salarios por pagar
+	PCGEAfpPayable        int32 = 417   // Administradoras de fondos de pensiones
+	PCGEOtherStaffPayable int32 = 419   // Otras remuneraciones por pagar (retenciones judiciales)
 )
 
 // DocumentPaymentAccounts are the counter-accounts the payment of a document may carry: the
@@ -40,6 +49,9 @@ var DocumentPaymentAccounts = map[CashMovementType][]int32{
 	CashMovementTypeSupplierPayment: {PCGESuppliers, PCGEOtherPayables},
 	CashMovementTypeExpensePayment:  {PCGESuppliers, PCGEOtherPayables},
 	CashMovementTypeAssetPayment:    {PCGEAssetPayables},
+	CashMovementTypePayrollPayment:  {PCGESalariesPayable, PCGEStaffAdvances, PCGEStaffLoans},
+	CashMovementTypePayrollContributions: {PCGEEssaludPayable, PCGEOnpPayable, PCGEIncomeTax5ta, PCGEAfpPayable,
+		PCGEOtherStaffPayable},
 }
 
 // PurchasePayableAccount is the payable a purchase leaves open: 4212 when the supplier's comprobante

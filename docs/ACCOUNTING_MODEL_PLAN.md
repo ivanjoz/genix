@@ -538,7 +538,6 @@ Severity shown as *level 1 / level 2*: `–` not shown, `P` provisional, `B` blo
 | ACC-009 | Collections exceed the receivable, or payments exceed the payable | – | B | Fix the payment or the document |
 | ACC-010 | Annulled sale whose comprobante has no credit note or baja | – | B | Issue the credit note |
 | ACC-011 | Disposed asset with no disposal value | – | P | Enter the sale value (0 if scrapped) |
-| ACC-012 | Payroll paid as a plain expense (no withholdings, no EsSalud) | – | info | Use a manual payroll entry |
 
 ### 5.3 How reports show them
 
@@ -625,7 +624,7 @@ One pure function per source kind: `Post<Source>(fact, settings, rates) → ([]J
 | 8 | OC reception, no comprobante yet | reception date | 6011 · 2011 | 4211 · 6111 | provisional cost, `INV-002` |
 |   | … comprobante arrives | `DocIssueDate` | 4211 · 40111 · (6011 difference) | 4212 | settles 4211 |
 | 9 | Supplier payment (type 6) | movement date | 4212 | 101/1041 | needs bug 3 fixed |
-| 10 | Simple expense | `Date` | 6x (category → account) · 40111 | 4212 | Taxes → 40111/4017/641 by chosen tax; Payroll → `ACC-012` |
+| 10 | Simple expense | `Date` | 6x (category → account) · 40111 | 4212 | Taxes → 40111/4017/641 by chosen tax. Salaries are not expenses: they come from payroll (`plan/HR_PAYROLL_PLAN.md` §5) |
 | 11 | Expense payment (type 9) | movement date | 4212 | 101/1041 | |
 | 12 | Inventory expense (supplies) | `Date` | 603 net · 40111 · 25 | 4212 · 613 | same shape as 7 |
 | 13 | Supplies consumption — perpetual (stock type 13) | movement date | 656 | 25 | |

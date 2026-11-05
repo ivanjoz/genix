@@ -1,0 +1,16 @@
+[
+  { "name": "Inmobiliaria San Felipe S.A.C.", "personType": 2, "registryNumber": "20604511201", "countryId": 604, "cityId": "150101" },
+  { "name": "Inversiones Inmobiliarias Surquillo S.A.C.", "personType": 2, "registryNumber": "20604511202", "countryId": 604, "cityId": "150141" },
+  { "name": "Luz del Sur S.A.A.", "personType": 2, "registryNumber": "20604511203", "countryId": 604, "cityId": "150140" },
+  { "name": "Sedapal S.A.", "personType": 2, "registryNumber": "20604511204", "countryId": 604, "cityId": "150101" },
+  { "name": "Telefónica del Perú S.A.A.", "personType": 2, "registryNumber": "20604511205", "countryId": 604, "cityId": "150131" },
+  { "name": "América Móvil Perú S.A.C.", "personType": 2, "registryNumber": "20604511206", "countryId": 604, "cityId": "150131" },
+  { "name": "Quispe Huamán Rosa Elena", "personType": 1, "registryNumber": "10457812301", "countryId": 604, "cityId": "150122" },
+  { "name": "Prosegur Perú S.A.", "personType": 2, "registryNumber": "20604511208", "countryId": 604, "cityId": "150131" },
+  { "name": "Servicios Generales Limpia Max S.A.C.", "personType": 2, "registryNumber": "20604511209", "countryId": 604, "cityId": "150115" },
+  { "name": "Agencia Creativa Impulsa S.A.C.", "personType": 2, "registryNumber": "20604511210", "countryId": 604, "cityId": "150122" },
+  { "name": "Transportes Rápidos del Sur E.I.R.L.", "personType": 2, "registryNumber": "20604511211", "countryId": 604, "cityId": "150133" },
+  { "name": "Frío Industrial Técnico S.A.C.", "personType": 2, "registryNumber": "20604511212", "countryId": 604, "cityId": "150103" },
+  { "name": "Distribuidora de Empaques y Limpieza Lima S.A.C.", "personType": 2, "registryNumber": "20604511213", "countryId": 604, "cityId": "150135" },
+  { "name": "Soluciones POS Cloud S.A.C.", "personType": 2, "registryNumber": "20604511214", "countryId": 604, "cityId": "150131" }
+]

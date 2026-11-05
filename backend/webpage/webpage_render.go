@@ -17,12 +17,13 @@ const (
 	lastSystemWebpageID = int16(14)
 )
 
-// RenderCompanyWebpage renderiza y publica en Cloudflare todas las páginas prerenderizadas de una
-// company sobre hostname. Es SÍNCRONA: quien la llama espera a que termine.
+// RenderCompanyWebpage renderiza y publica todas las páginas prerenderizadas de una company sobre
+// hostname: el HTML a S3 (lo sirve CloudFront) y los js/css a R2 (FRONTEND_CDN). Es SÍNCRONA:
+// quien la llama espera a que termine.
 //
 // Vive aquí y no en el CLI de deploy porque hay dos llamadores que no pueden divergir: el deploy
-// manual y el guardado de dominio. El HTML en R2 está indexado por hostname, así que un hostname
-// sin render no sirve nada —el Worker no tiene fallback de SPA— y publicar es parte de cambiar el
+// manual y el guardado de dominio. El HTML en S3 está indexado por hostname, así que un hostname
+// sin render no sirve nada —CloudFront no tiene fallback de SPA— y publicar es parte de cambiar el
 // dominio, no un paso posterior opcional.
 //
 // No configura el CORS del bucket a propósito: es una regla a nivel de bucket, se fija una sola vez

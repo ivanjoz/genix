@@ -43,6 +43,10 @@ type lambdaConfig struct {
 		Token   string `toml:"token"`
 		Bucket  string `toml:"bucket"`
 	} `toml:"cloudflare"`
+	// Bucket S3 del HTML de las tiendas, escrito por `cloud` acción 5 (cloud/storefront.yml).
+	Storefront struct {
+		Bucket string `toml:"bucket"`
+	} `toml:"storefront"`
 }
 
 // updateLambdaEnvironmentVariables es el equivalente a 'cloud accion=2' pero con AWS CLI, sin
@@ -121,6 +125,8 @@ func updateLambdaEnvironmentVariables(context deployContext) error {
 			"CLOUDFLARE_ACCOUNT": config.Cloudflare.Account,
 			"CLOUDFLARE_TOKEN":   config.Cloudflare.Token,
 			"CLOUDFLARE_BUCKET":  cloudflareBucket,
+			// AWS_REGION y las credenciales las pone el runtime de Lambda.
+			"STOREFRONT_BUCKET": config.Storefront.Bucket,
 		}}
 
 		if err := applyLambdaEnvironment(config, config.AppName+"-webpage-renderer", rendererEnvironment); err != nil {

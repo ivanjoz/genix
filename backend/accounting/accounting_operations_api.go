@@ -20,6 +20,7 @@ import (
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
+	hr "app/hr/types"
 	invoicing "app/invoicing/types"
 	logistics "app/logistics/types"
 	sales "app/sales/types"
@@ -79,6 +80,33 @@ type OperationCashMovement struct {
 	Metadata           *string                  `json:"mdt" cb:"mdt,10"`
 }
 
+// OperationPayslipLine is one posting line of a payslip, with the accounts stamped at calculation
+// (plan/HR_PAYROLL_PLAN.md §5): accounting never reads the payroll concepts.
+type OperationPayslipLine struct {
+	Kind               int8  `cb:"1"`
+	AccountCode        int32 `cb:"2"`
+	PayableAccountCode int32 `cb:"3"`
+	Amount             int32 `cb:"4"`
+	// The part of a benefit charged to its provision (or, for profit sharing, to 413) instead of
+	// AccountCode.
+	ProvisionAccountCode int32 `cb:"5"`
+	ProvisionedAmount    int32 `cb:"6"`
+	// OutsideNetPay: an earning owed to PayableAccountCode, not to the net pay (the CTS deposit).
+	OutsideNetPay bool `cb:"7"`
+}
+
+// OperationPayslip is a closed or paid payslip: its earnings, deductions, employer contributions
+// and provisions post on the last day of its period (H1–H3); its net pay is owed on 4111.
+type OperationPayslip struct {
+	ID       int32                  `cb:"1"`
+	Period   int16                  `cb:"2"`
+	Lines    []OperationPayslipLine `cb:"3"`
+	NetPay   int32                  `cb:"4"`
+	Status   int8                   `json:"ss" cb:"ss,5"`
+	Version  int16                  `json:"ver" cb:"ver,6"`
+	Metadata *string                `json:"mdt" cb:"mdt,7"`
+}
+
 // AccountingOperationsResponse is one key per period delta log. Each key travels its own cursor
 // (?<Key>=…), so the browser merges each key on its own.
 type AccountingOperationsResponse struct {
@@ -89,6 +117,8 @@ type AccountingOperationsResponse struct {
 	Expenses       []PurchaseBookDocument   `cb:"4"`
 	StockMovements []OperationStockMovement `cb:"5"`
 	CashMovements  []OperationCashMovement  `cb:"6"`
+	// Only closed and paid payslips: a reopened one leaves the slice as a removed ID.
+	Payslips []OperationPayslip `cb:"7"`
 }
 
 // What a first sync lists of each log. An annulled sale, a canceled order and a removed expense
@@ -107,7 +137,8 @@ var (
 		finance.CashMovementTypeTransfer, finance.CashMovementTypeWithdrawal, finance.CashMovementTypeLoss,
 		finance.CashMovementTypeSupplierPayment, finance.CashMovementTypeCollection,
 		finance.CashMovementTypeSaleCollection, finance.CashMovementTypeExpensePayment,
-		finance.CashMovementTypeAssetPayment, finance.CashMovementTypeSaleRefund}
+		finance.CashMovementTypeAssetPayment, finance.CashMovementTypeSaleRefund,
+		finance.CashMovementTypePayrollPayment, finance.CashMovementTypePayrollContributions}
 )
 
 // GetAccountingOperations reads a whole period. Unlike the books, never a single day: the
@@ -209,13 +240,34 @@ func GetAccountingOperations(req *core.HandlerArgs) core.HandlerResponse {
 		})
 		return nil
 	})
+	readGroup.Go(func() error {
+		payslips := []hr.Payslip{}
+		query := db.Query(&payslips)
+		query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).
+			Delta(req.GetDeltaCursor("Payslips"), hr.PayrollStatusClosed, hr.PayrollStatusPaid)
+		if queryError := query.Exec(); queryError != nil {
+			return core.Err("Error al obtener las boletas del periodo.", queryError)
+		}
+		response.Payslips = projectRecords(payslips, func(payslip hr.Payslip) OperationPayslip {
+			operationPayslip := OperationPayslip{ID: payslip.ID, Period: payslip.Period,
+				NetPay: payslip.NetPay, Status: payslip.Status, Version: payslip.Version, Metadata: payslip.Metadata}
+			for _, line := range payslip.Lines {
+				operationPayslip.Lines = append(operationPayslip.Lines, OperationPayslipLine{Kind: line.Kind,
+					AccountCode: line.AccountCode, PayableAccountCode: line.PayableAccountCode, Amount: line.Amount,
+					ProvisionAccountCode: line.ProvisionAccountCode, ProvisionedAmount: line.ProvisionedAmount,
+					OutsideNetPay: line.OutsideNetPay})
+			}
+			return operationPayslip
+		})
+		return nil
+	})
 	if readError := readGroup.Wait(); readError != nil {
 		return req.MakeErr(readError.Error())
 	}
 
 	core.Log("GetAccountingOperations period:", period, "documents:", len(response.SalesDocuments),
 		"sales:", len(response.Sales), "orders:", len(response.PurchaseOrders), "expenses:", len(response.Expenses),
-		"stock:", len(response.StockMovements), "cash:", len(response.CashMovements))
+		"stock:", len(response.StockMovements), "cash:", len(response.CashMovements), "payslips:", len(response.Payslips))
 	return req.MakeResponse(response)
 }
 

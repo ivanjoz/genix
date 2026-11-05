@@ -10,7 +10,7 @@ The selection combines component digits with exactly one binary-source digit:
 
 | Digit | Selection |
 | --- | --- |
-| `1` | Database host: ScyllaDB, GenixSearch and Qdrant |
+| `1` | Database host: ScyllaDB and Qdrant |
 | `2` | Backend service and/or its Nginx proxy |
 | `3` | Fareward service and SSE bridge proxy |
 | `7` | Compile selected Genix services from source |
@@ -37,7 +37,7 @@ latest asset takes precedence over an older installed binary. Option `7` require
 corresponding source tree and never falls back to a binary.
 
 The `7`/`8` choice applies only to Backend and Fareward. Database configuration already owns
-the package/release strategy for ScyllaDB, GenixSearch and Qdrant, so the selected digit is ignored
+the package/release strategy for ScyllaDB and Qdrant, so the selected digit is ignored
 when component `1` runs.
 
 Detailed component behavior:

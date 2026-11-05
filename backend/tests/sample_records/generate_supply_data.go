@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
@@ -54,6 +53,16 @@ func makeSupplyDataDefaults() supplyDataConfig {
 	}
 }
 
+// productsImportStats reports the products.xlsx import (import_products_excel.go). Declared here
+// because the shipping stub returns it too.
+type productsImportStats struct {
+	WorkbookRows    int
+	Created         int
+	SkippedExisting int
+	NewCategories   int
+	NewBrands       int
+}
+
 type supplyDataGenerator struct {
 	random    *mrand.Rand
 	config    supplyDataConfig
@@ -75,7 +84,7 @@ func GenerateSupplyData(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	generator := supplyDataGenerator{
-		random: mrand.New(mrand.NewSource(time.Now().UnixNano())),
+		random: mrand.New(mrand.NewSource(sampleDataSeed)),
 		config: config,
 		userToken: core.UsuarioToken{
 			CompanyID: supplyCompanyID,
@@ -85,6 +94,12 @@ func GenerateSupplyData(args *core.ExecArgs) core.FuncResponse {
 
 	core.Log("GenerateSupplyData:: config", "products", config.productsCount,
 		"providersPerProduct", config.providersPerProduct, "dryRun", config.dryRun)
+
+	// The catalog comes first: every later step configures products that must already exist.
+	productsImport, err := generator.importProductsWorkbook()
+	if err != nil {
+		return args.MakeErr("No se pudieron importar los productos de products.xlsx:", err)
+	}
 
 	if err := generator.seedProviders(); err != nil {
 		return args.MakeErr("No se pudieron sembrar los proveedores:", err)
@@ -102,9 +117,10 @@ func GenerateSupplyData(args *core.ExecArgs) core.FuncResponse {
 		return core.FuncResponse{
 			Message: "Dry run: no se escribió nada.",
 			Content: map[string]any{
-				"providers":     len(generator.providerIDs),
-				"supplyRecords": len(supplyRecords),
-				"preview":       supplyRecords[:previewCount],
+				"productsImport": productsImport,
+				"providers":      len(generator.providerIDs),
+				"supplyRecords":  len(supplyRecords),
+				"preview":        supplyRecords[:previewCount],
 			},
 		}
 	}
@@ -135,6 +151,7 @@ func GenerateSupplyData(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{
 		Message: "Datos de abastecimiento generados correctamente.",
 		Content: map[string]any{
+			"productsImport":  productsImport,
 			"providers":       len(generator.providerIDs),
 			"supplyRecords":   len(supplyRecords),
 			"supplyMaterials": supplyMaterialsTotal,

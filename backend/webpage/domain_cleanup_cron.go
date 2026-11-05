@@ -16,19 +16,19 @@ const (
 func init() {
 	core.RegisterActionHandler(
 		previousDomainCleanupActionID,
-		"Borrar dominio anterior en Cloudflare",
+		"Borrar dominio anterior en Route 53",
 		RemovePreviousDomainHandler,
 	)
 }
 
-// schedulePreviousDomainCleanup enqueues the Cloudflare cleanup of a hostname the company just
+// schedulePreviousDomainCleanup enqueues the Route 53 cleanup of a hostname the company just
 // stopped using. One-shot, not recurring: the row must run once and never re-enqueue itself.
 //
 // The hostname travels in Param5, which also feeds the cron row ID hash, so two hostnames released
 // within the same frame get a row each instead of deduplicating into one and leaking the other.
 func schedulePreviousDomainCleanup(companyID int32, previousDomain string) {
 	defer func() {
-		// ScheduleCronAction panics on a database error. Losing the cleanup leaks a Cloudflare
+		// ScheduleCronAction panics on a database error. Losing the cleanup leaks a Route 53
 		// record, which is worth a log line but not worth failing a save that already succeeded.
 		if recoveredValue := recover(); recoveredValue != nil {
 			core.Log("Error programando el borrado del dominio anterior::", previousDomain, recoveredValue)
@@ -44,9 +44,9 @@ func schedulePreviousDomainCleanup(companyID int32, previousDomain string) {
 	core.Log("Borrado del dominio anterior programado::", previousDomain)
 }
 
-// RemovePreviousDomainHandler drops a released hostname from the storefront Worker and from the
-// zone's DNS records. Returning an error leaves the row pending so the executor retries it, which is
-// the point of doing this out of band: a Cloudflare outage delays the cleanup instead of failing the
+// RemovePreviousDomainHandler drops a released hostname's storefront alias from the Route 53 zone.
+// Returning an error leaves the row pending so the executor retries it, which is
+// the point of doing this out of band: a Route 53 error delays the cleanup instead of failing the
 // domain save that triggered it.
 func RemovePreviousDomainHandler(args *core.ExecArgs) core.FuncResponse {
 	previousDomain := strings.TrimSpace(args.Param5)

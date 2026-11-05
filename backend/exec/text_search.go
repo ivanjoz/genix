@@ -10,7 +10,7 @@ import (
 // TextSearch from its stored records, in every partition that has some, or only in company p1 when
 // it is set. Searches keep working while it runs and writes that land meanwhile are kept.
 //
-// Run it after pointing search.url at another backend (the new one starts empty), or after a
+// Run it after pointing [file_store] at another bucket or root (the new index starts empty), or after a
 // deploy changes what a table indexes, like the BrandName column products gained.
 func ReindexTextSearch(args *core.ExecArgs) core.FuncResponse {
 	scylla.MakeScyllaConnection(makeConnParams())

@@ -41,6 +41,22 @@ var APIRouteIDs = map[string]int16{
 	"GET.expenses":                     16,
 	"GET.expenses-scheduled":           17,
 	"GET.gallery-images":               18,
+	"GET.hr-contracts":                 164,
+	"GET.hr-dependents":                165,
+	"GET.hr-employee-concepts":         174,
+	"GET.hr-employee-records":          199,
+	"GET.hr-employees":                 166,
+	"GET.hr-employees-ids":             167,
+	"GET.hr-legal-parameters":          175,
+	"GET.hr-loans":                     176, // retired
+	"GET.hr-org":                       168,
+	"GET.hr-pay-advances":              177, // retired
+	"GET.hr-payroll-config":            178,
+	"GET.hr-payslips":                  179,
+	"GET.hr-payslips-employee":         180,
+	"GET.hr-payslips-ids":              181,
+	"GET.hr-period-inputs":             182, // retired
+	"GET.hr-time-off":                  196, // retired
 	"GET.image-asset-text-search":      19,
 	"GET.image-assets":                 20,
 	"GET.image-id-counter":             21,
@@ -121,6 +137,27 @@ var APIRouteIDs = map[string]int16{
 	"POST.expenses":                    69,
 	"POST.expenses-scheduled":          70,
 	"POST.gallery-image":               71,
+	"POST.hr-afp-rates":                183,
+	"POST.hr-concepts":                 184,
+	"POST.hr-contracts":                169,
+	"POST.hr-departments":              170,
+	"POST.hr-dependents":               171,
+	"POST.hr-employee-concepts":        185,
+	"POST.hr-employee-records":         200,
+	"POST.hr-employees":                172,
+	"POST.hr-legal-parameters":         186,
+	"POST.hr-loans":                    187,
+	"POST.hr-pay-advances":             188,
+	"POST.hr-payroll-calculate":        189,
+	"POST.hr-payroll-close":            190,
+	"POST.hr-payroll-contributions":    195,
+	"POST.hr-payroll-ensure":           198,
+	"POST.hr-payroll-paid":             191,
+	"POST.hr-payroll-reopen":           192,
+	"POST.hr-payroll-runs":             193,
+	"POST.hr-period-inputs":            194, // retired
+	"POST.hr-positions":                173,
+	"POST.hr-time-off":                 197, // retired
 	"POST.initial-data":                72,
 	"POST.invoice":                     124, // retired
 	"POST.invoice-retry":               125,
@@ -189,7 +226,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 163
+const MaxAPIRouteID int16 = 200
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

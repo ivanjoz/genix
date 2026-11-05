@@ -102,6 +102,8 @@ func runWebpageRendererLocally(request WebpageRenderRequest) (WebpageRenderResul
 		"CLOUDFLARE_ACCOUNT":   core.Env.CLOUDFLARE_ACCOUNT,
 		"CLOUDFLARE_TOKEN":     core.Env.CLOUDFLARE_TOKEN,
 		"CLOUDFLARE_BUCKET":    core.Env.CLOUDFLARE_BUCKET,
+		"STOREFRONT_BUCKET":    core.Env.STOREFRONT_BUCKET,
+		"AWS_REGION":           core.Env.AWS_REGION,
 	} {
 		// El handler valida lo mismo y aborta, pero desde aquí el mensaje dice qué falta en
 		// config.toml en vez de aparecer como un fallo del proceso de Node.
@@ -119,6 +121,14 @@ func runWebpageRendererLocally(request WebpageRenderRequest) (WebpageRenderResul
 	commandContext, cancelCommand := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancelCommand()
 
+	// El HTML va a S3 y el handler firma con SigV4 a partir de credenciales en el entorno, como en
+	// Lambda. Aquí vienen de un profile o de un rol, que node no sabe leer, así que se resuelven con
+	// el SDK y se le pasan ya listas.
+	awsCredentials, credentialsError := core.GetAwsConfig().Credentials.Retrieve(commandContext)
+	if credentialsError != nil {
+		return result, fmt.Errorf("no se pudieron obtener credenciales de AWS para el renderer: %w", credentialsError)
+	}
+
 	command := exec.CommandContext(commandContext, "node", rendererPath)
 	command.Stdin = bytes.NewReader(payload)
 	// Se hereda el entorno y se añaden las variables encima: node necesita PATH y HOME, y una
@@ -129,6 +139,11 @@ func runWebpageRendererLocally(request WebpageRenderRequest) (WebpageRenderResul
 		"CLOUDFLARE_ACCOUNT="+core.Env.CLOUDFLARE_ACCOUNT,
 		"CLOUDFLARE_TOKEN="+core.Env.CLOUDFLARE_TOKEN,
 		"CLOUDFLARE_BUCKET="+core.Env.CLOUDFLARE_BUCKET,
+		"STOREFRONT_BUCKET="+core.Env.STOREFRONT_BUCKET,
+		"AWS_REGION="+core.Env.AWS_REGION,
+		"AWS_ACCESS_KEY_ID="+awsCredentials.AccessKeyID,
+		"AWS_SECRET_ACCESS_KEY="+awsCredentials.SecretAccessKey,
+		"AWS_SESSION_TOKEN="+awsCredentials.SessionToken,
 	)
 
 	standardOutput := bytes.Buffer{}

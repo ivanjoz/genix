@@ -77,7 +77,7 @@ export interface IExpenseCategoryOption {
 export const expenseCategories: IExpenseCategoryOption[] = [
   { id: 1, label: 'Rent|Alquiler', defaultAccountCode: 6352 },
   { id: 2, label: 'Utilities|Servicios', defaultAccountCode: 6361 },
-  { id: 3, label: 'Payroll|Planilla', defaultAccountCode: 6211 },
+  { id: 3, label: 'Staff insurance|Seguros del personal', defaultAccountCode: 6274 },
   { id: 4, label: 'Supplies|Insumos', defaultAccountCode: 656 },
   { id: 5, label: 'Taxes|Impuestos' },
   { id: 6, label: 'Maintenance|Mantenimiento', defaultAccountCode: 6343 },

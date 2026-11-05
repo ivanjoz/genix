@@ -35,7 +35,8 @@ export class AccountingOperationsService {
     try {
       const response = await GET({
         route: `accounting-operations?period=${period}`,
-        useCache: { min: 0, ver: 2 },
+        // ver 4: payslip lines carry the provision they settle.
+        useCache: { min: 0, ver: 4 },
         // A purchase document is keyed by the order's or the expense's own ID.
         keysIDs: { PurchaseOrders: "SourceID", Expenses: "SourceID" },
       }) as IAccountingOperationsResponse

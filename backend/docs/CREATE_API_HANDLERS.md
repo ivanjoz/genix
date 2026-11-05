@@ -104,7 +104,7 @@ return req.MakeResponse(core.HideCachedPartitions(partitions))
 
 A static lookup (a record that never changes for its ID) reads the same param with
 `req.GetStaticRequestIDs()` and answers `req.MakeResponse(core.StaticCachedPartition(records))`.
-See `ORM_DATABASE_QUERY.md` §8, or the `fetch-record-by-id-api` skill.
+See `ORM_DATABASE_QUERY.md` §8, or the `by-ids-cache-api` skill.
 
 ### Sunix Timestamps
 The system uses a custom compact timestamp format called `Sunix`.

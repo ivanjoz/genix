@@ -58,7 +58,17 @@ type DeployParams struct {
 		// WebpageRendererURL is the webpage-renderer.zip artifact published by CI.
 		// Empty = derived from AppURL in rendererZipUrl.
 		WebpageRendererURL string `toml:"webpage_renderer_url"`
+		// ZoneName es la zona de las tiendas (<tienda>.ZoneName). La usa la acción 5.
+		ZoneName string `toml:"zone_name"`
 	} `toml:"frontend"`
+
+	// Storefront lo escribe la acción 5 con los outputs del stack <app_name>-storefront, salvo
+	// HostedZoneID, que se fija a mano: es la zona de Route 53 de frontend.zone_name.
+	Storefront struct {
+		HostedZoneID       string `toml:"hosted_zone_id"`
+		DistributionDomain string `toml:"distribution_domain"`
+		Bucket             string `toml:"bucket"`
+	} `toml:"storefront"`
 }
 
 const s3CompiledPath = "gerp-artifacts/lambda-compiled.zip"
@@ -114,6 +124,7 @@ func main() {
 		"2": true,
 		"3": true,
 		"4": true,
+		"5": true,
 	}
 	for _, arg := range os.Args {
 		if validArgs[arg] {
@@ -134,7 +145,7 @@ func main() {
 
 	// If still no valid argument found, prompt for interactive input
 	if len(w1) == 0 {
-		fmt.Println("Selecciona acción: [1] Publicar Código [2] Actualizar Variables [3] Deplegar Infraestructura")
+		fmt.Println("Selecciona acción: [1] Publicar Código [2] Actualizar Variables [3] Deplegar Infraestructura [4] Publicar Agente [5] Infraestructura de Tiendas")
 
 		_, err := fmt.Scanln(&w1)
 		if err != nil {
@@ -210,6 +221,8 @@ func main() {
 		UpdateEnviromentVariables(params, agentLambdaName)
 	} else if w1 == "3" {
 		DeployIfraestructure(params)
+	} else if w1 == "5" {
+		DeployStorefront(params)
 	} else {
 		fmt.Println("No se reconoció la opción seleccionada.")
 	}

@@ -44,6 +44,37 @@ func PeriodOfDay(unixDay int16) int16 {
 	return int16((date.Year()%100)*100 + int(date.Month()))
 }
 
+// PeriodFirstDay is the UnixDay of the first day of a YYMM period (2610 → 2026-10-01).
+func PeriodFirstDay(period int16) int16 {
+	firstDay := time.Date(2000+int(period/100), time.Month(period%100), 1, 0, 0, 0, 0, time.UTC)
+	return int16(firstDay.Unix() / 86400)
+}
+
+// PeriodLastDay is the UnixDay of the last day of a YYMM period (2602 → 2026-02-28).
+func PeriodLastDay(period int16) int16 {
+	return PeriodFirstDay(NextPeriod(period)) - 1
+}
+
+// NextPeriod is the YYMM after period (2612 → 2701).
+func NextPeriod(period int16) int16 {
+	if period%100 == 12 {
+		return period - 11 + 100
+	}
+	return period + 1
+}
+
+// AddPeriods moves a YYMM period by a number of months, back with a negative count
+// (2603 − 12 → 2503).
+func AddPeriods(period int16, months int) int16 {
+	monthsSinceYearZero := int(period/100)*12 + int(period%100) - 1 + months
+	return int16(monthsSinceYearZero/12*100 + monthsSinceYearZero%12 + 1)
+}
+
+// SUnixTimeToUnixDay is the UnixDay of an SUnixTime (seconds since 2001-09-09, halved).
+func SUnixTimeToUnixDay(sUnixTime int32) int16 {
+	return int16((int64(sUnixTime)*2 + 1e9) / 86400)
+}
+
 // LogHistoricalClockIfActive announces a frozen clock at startup. An override changes the date
 // of every record the process writes, so it must never be silent.
 func LogHistoricalClockIfActive() {

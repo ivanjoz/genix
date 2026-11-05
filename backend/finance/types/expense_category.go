@@ -19,7 +19,7 @@ type ExpenseCategoryOption struct {
 var ExpenseCategoryOptions = []ExpenseCategoryOption{
 	{ID: 1, Label: "Rent|Alquiler", DefaultAccountCode: 6352},                                 // Alquileres — edificaciones
 	{ID: 2, Label: "Utilities|Servicios", DefaultAccountCode: 6361},                           // Energía eléctrica
-	{ID: 3, Label: "Payroll|Planilla", DefaultAccountCode: 6211},                              // Sueldos y salarios
+	{ID: 3, Label: "Staff insurance|Seguros del personal", DefaultAccountCode: 6274},          // Seguro de vida (Vida Ley); SCTR 6273, EPS 6275. Salaries come from payroll (app/hr)
 	{ID: 4, Label: "Supplies|Insumos", DefaultAccountCode: 656},                               // Suministros
 	{ID: 5, Label: "Taxes|Impuestos"},                                                         // 40111 or 64x: the user decides
 	{ID: 6, Label: "Maintenance|Mantenimiento", DefaultAccountCode: 6343},                     // Mantenimiento — propiedad, planta y equipo

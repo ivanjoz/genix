@@ -64,13 +64,6 @@
       ]
     },
     {
-      id: 'search', title: 'GenixSearch', sharedAxisMaxValue: CPU_AXIS_MAX,
-      series: [
-        { field: 'SearchCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
-        { field: 'SearchMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
-      ]
-    },
-    {
       id: 'fareward', title: 'Fareward', sharedAxisMaxValue: CPU_AXIS_MAX,
       series: [
         { field: 'FarewardCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },

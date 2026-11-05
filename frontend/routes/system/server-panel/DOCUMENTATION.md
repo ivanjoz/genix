@@ -7,12 +7,12 @@ status: implemented
 visibility: saas
 description_en: >-
   Machine-level health monitoring, SaaS only. Dashboard view charts the last four hours of host
-  and per-service (Backend, ScyllaDB, GenixSearch, Fareward) CPU, memory, and network; Memory
+  and per-service (Backend, ScyllaDB, Fareward) CPU, memory, and network; Memory
   view inspects the backend process's live heap usage by Go package.
 description_es: >-
   Monitoreo de salud a nivel de máquina, exclusivo SaaS. Vista Dashboard grafica las últimas cuatro
-  horas de CPU, memoria y red del host y de cada servicio (Backend, ScyllaDB, GenixSearch, Server
-  Utils); vista Memory inspecta en vivo el uso de heap del proceso backend por paquete de Go.
+  horas de CPU, memoria y red del host y de cada servicio (Backend, ScyllaDB,
+  Fareward); vista Memory inspecta en vivo el uso de heap del proceso backend por paquete de Go.
 ---
 
 # Server Panel (Panel de Servidor)
@@ -42,7 +42,7 @@ that is **Companies (Empresas)**.
   average and not a single point sample), so a one-second spike is never smoothed away. Rows are
   kept for 30 days by default (`ttl_days`, `fareward` config) before the database expires them.
 - **Host vs. per-service metrics**: the Host chart is the whole machine's CPU/memory. Backend,
-  ScyllaDB, GenixSearch, and Fareward each get their own CPU-percent-of-whole-machine and
+  ScyllaDB, and Fareward each get their own CPU-percent-of-whole-machine and
   memory-in-MB, read from that unit's own Linux cgroup (`memory.stat`, `cpu.stat`), located by
   searching `/sys/fs/cgroup` for the unit rather than assuming a fixed path.
 - **Unmeasured vs. zero (`Sin medición` vs. `0`)**: a service metric is a sentinel "not measured"
@@ -66,13 +66,13 @@ that is **Companies (Empresas)**.
 
 ### User intention (Intención del usuario)
 
-See whether the host or any Genix service (Backend, ScyllaDB, GenixSearch, Fareward) is under
+See whether the host or any Genix service (Backend, ScyllaDB, Fareward) is under
 unusual CPU, memory, or network load over the last few hours, to diagnose slowness or a crash.
 
 ### Where to find it (Dónde encontrarlo)
 
-`/system/server-panel`, **Dashboard** tab (selected by default). Six cards: **Host: CPU & Memory
-(Host: CPU y Memoria)**, **Backend Service**, **ScyllaDB**, **GenixSearch**, **Fareward**, and
+`/system/server-panel`, **Dashboard** tab (selected by default). Five cards: **Host: CPU & Memory
+(Host: CPU y Memoria)**, **Backend Service**, **ScyllaDB**, **Fareward**, and
 **Network (Red)**. Each service card overlays its CPU line (blue, `%`) and memory line (red, MB) on
 one chart. Use **Refresh (Actualizar)** for an immediate reload.
 

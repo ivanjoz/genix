@@ -222,7 +222,6 @@ network_interface = ""    # vacío = la primera interfaz que no sea lo
 # sus dos columnas en -1.
 backend_unit      = "genix.service"
 fareward_unit = "fareward.service"
-search_unit       = "genixsearch.service"
 scylla_unit       = "scylla-server.service"
 
 # ─── Registro público de empresas ──────────────────────────────────────────
@@ -269,6 +268,15 @@ zone_name = ""
 # webpage-renderer.zip artifact published by CI. Empty = derived from app_url.
 webpage_renderer_url = ""
 
+# ─── Tiendas (<tienda>.zone_name) ───────────────────────────────────────────
+# HTML en S3 + CloudFront, un alias en Route 53 por tienda (cloud/storefront.yml).
+# hosted_zone_id va a mano (zona de Route 53 de zone_name); distribution_domain y bucket los
+# escribe `cloud` acción 5. Los js/css e imágenes siguen en cdn_url.
+[storefront]
+hosted_zone_id      = ""
+distribution_domain = ""
+bucket              = ""
+
 # ─── SMTP ───────────────────────────────────────────────────────────────────
 [smtp]
 host     = "email-smtp.us-east-1.amazonaws.com"
@@ -290,16 +298,9 @@ openrouter_key   = ""
 # Port of the agent server (genix/agent) when it runs outside Lambda. 0/omitted = 3590.
 port             = 3590
 
-# ─── GenixSearch ────────────────────────────────────────────────────────────
-# Los escribe 'scripts/configure/configure_db.py search' con la IP alcanzable del host.
-# url admite "host:puerto" o "esquema://host:puerto" (el esquema se ignora).
-# Vacío = 127.0.0.1:14446.
-[search]
-url      = ""
-password = ""
-
 # ─── ORM file store ─────────────────────────────────────────────────────────
-# The delta logs and the by-IDs slot files. Required. An S3 Express bucket
+# The delta logs, the by-IDs slot files and, under <root>search/, the genix-s3
+# text search index. The project's only bucket. Required. An S3 Express bucket
 # ("<name>--<zone>--x-s3") appends natively; any other bucket appends with a
 # GET + conditional PUT. root prefixes every key.
 [file_store]

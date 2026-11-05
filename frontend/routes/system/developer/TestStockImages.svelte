@@ -57,7 +57,7 @@ const thumbnailURL = (imageID: number): string => {
   <div class="flex items-center gap-12 mb-8" aria-label="Stock image search tester toolbar">
     <FilterInput bind:value={query} css="w-320" placeholder="Buscar imagen por palabras…" />
     <Button color="blue" name="Buscar" icon="icon-[fa--search]"
-      label="Runs the image asset text search against the GenixSearch index."
+      label="Runs the image asset text search against the genix-s3 text index."
       onClick={runSearch} />
     {#if lastQuery}
       <span class="ml-auto text-[14px] text-fg-muted">

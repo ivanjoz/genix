@@ -15,13 +15,12 @@ export type ServerMetricField =
 	| 'CpuPercent' | 'MemPercent' | 'DiskPercent' | 'NetRxRate' | 'NetTxRate'
 	| 'BackendMemMb' | 'BackendCpuPercent'
 	| 'FarewardMemMb' | 'FarewardCpuPercent'
-	| 'SearchMemMb' | 'SearchCpuPercent'
 	| 'ScyllaMemMb' | 'ScyllaCpuPercent'
 
 export const SERVER_METRIC_FIELDS: ServerMetricField[] = [
 	'CpuPercent', 'MemPercent', 'DiskPercent', 'NetRxRate', 'NetTxRate',
 	'BackendMemMb', 'BackendCpuPercent', 'FarewardMemMb', 'FarewardCpuPercent',
-	'SearchMemMb', 'SearchCpuPercent', 'ScyllaMemMb', 'ScyllaCpuPercent',
+	'ScyllaMemMb', 'ScyllaCpuPercent',
 ]
 
 // How each stored int16 becomes the number a chart shows. Percentages are hundredths (2345 is
@@ -31,7 +30,6 @@ const METRIC_DISPLAY_SCALE: Record<ServerMetricField, number> = {
 	NetRxRate: 5, NetTxRate: 5,
 	BackendMemMb: 1, BackendCpuPercent: 0.01,
 	FarewardMemMb: 1, FarewardCpuPercent: 0.01,
-	SearchMemMb: 1, SearchCpuPercent: 0.01,
 	ScyllaMemMb: 1, ScyllaCpuPercent: 0.01,
 }
 

@@ -81,6 +81,22 @@ export interface IOperationCashMovement {
   CashBankRefID: number
 }
 
+// A closed or paid payslip with the accounts stamped on each line at calculation (Kind: 1 earning,
+// 2 deduction, 3 employer contribution, 4 provision — backend/hr/types/legal_concepts.go).
+export interface IOperationPayslip {
+  ID: number
+  Period: number
+  // ProvisionedAmount: the part of a benefit (gratificación, CTS, vacation pay) charged to the
+  // provision it accrued (ProvisionAccountCode 4114 / 415 / 4115) instead of AccountCode.
+  // OutsideNetPay: an earning owed to its PayableAccountCode, not through the net pay (the CTS deposit).
+  Lines?: {
+    Kind: number, AccountCode: number, PayableAccountCode: number, Amount: number
+    ProvisionAccountCode?: number, ProvisionedAmount?: number, OutsideNetPay?: boolean
+  }[]
+  NetPay: number
+  ss: number
+}
+
 // The period's delta keys, as GET.accounting-operations sends them.
 export interface IAccountingOperationsResponse {
   SalesDocuments: ISalesBookDocument[]
@@ -89,6 +105,7 @@ export interface IAccountingOperationsResponse {
   Expenses: IPurchaseBookDocument[]   // depreciation included (ExpenseType 4)
   StockMovements: IOperationStockMovement[]
   CashMovements: IOperationCashMovement[]   // the payments settled same-day are not among them
+  Payslips?: IOperationPayslip[]            // closed and paid only
 }
 
 // Everything the builder reads: the period's keys, what they name outside the period (by-IDs
@@ -191,6 +208,8 @@ export const OPERATION_DEPRECIATION = 7
 export const OPERATION_DISPOSAL = 8
 export const OPERATION_CASH = 9
 export const OPERATION_COST_OF_SALES = 10
+export const OPERATION_PAYROLL = 11
+export const OPERATION_PAYROLL_PROVISION = 12
 
 export const operationKindLabels: Record<number, string> = {
   [OPERATION_SALE]: "Sale|Venta",
@@ -203,6 +222,8 @@ export const operationKindLabels: Record<number, string> = {
   [OPERATION_DISPOSAL]: "Asset disposal|Baja de activo",
   [OPERATION_CASH]: "Cash movement|Movimiento de caja",
   [OPERATION_COST_OF_SALES]: "Cost of sales|Costo de ventas",
+  [OPERATION_PAYROLL]: "Payroll|Planilla",
+  [OPERATION_PAYROLL_PROVISION]: "Payroll provisions|Provisiones de planilla",
 }
 
 // ./PLAN.md §6.
@@ -274,6 +295,8 @@ const CASH_SALE_COLLECTION = 8
 const CASH_EXPENSE_PAYMENT = 9
 const CASH_ASSET_PAYMENT = 10
 const CASH_SALE_REFUND = 11
+const CASH_PAYROLL_PAYMENT = 12
+const CASH_PAYROLL_CONTRIBUTIONS = 13
 
 const PROBLEM_MISSING_RATE = "A dollar amount has no exchange rate.|Un monto en dólares no tiene tipo de cambio."
 const PROBLEM_UNBALANCED = "Debit and credit do not match.|El Debe y el Haber no cuadran."
@@ -566,6 +589,12 @@ export function buildAccountingOperations(
         isOfficial = counterAccountCode === ACCOUNT_SUPPLIERS
         break
       }
+      // Payroll pays a payable its payslips left open (4111, 1412, 1411, 40x, 417, 419).
+      case CASH_PAYROLL_PAYMENT:
+      case CASH_PAYROLL_CONTRIBUTIONS: {
+        isNature = false
+        break
+      }
       case CASH_ASSET_PAYMENT: {
         const asset = assetsByID.get(movement.DocumentID)
         isNature = false
@@ -582,7 +611,52 @@ export function buildAccountingOperations(
     ], [rate ? "" : PROBLEM_MISSING_RATE]))
   }
 
+  // Payroll, on the last day of the period, from the accounts each payslip line stamped
+  // (plan/HR_PAYROLL_PLAN.md §5.1). H1 + H2: Dr 62x per earning and the employer's 627x ·
+  // Cr the deductions' payables (ONP 4032, AFP 417, 5ta 40173, advances 1412, loans 1411…), the
+  // employer's 4031 and the net pay owed on 4111. H3: the provisions, Dr 62x · Cr 41x.
+  for (const payslip of sources.Payslips || []) {
+    const { payrollLines, provisionLines } = payslipJournalLines(payslip)
+    const base = { SourceID: payslip.ID, Date: sources.LastDay, DocumentLabel: "", InOfficialBook: true }
+    operations.push(finishOperation({ ...base, Key: `PL-${payslip.ID}`, Kind: OPERATION_PAYROLL,
+      Description: "Payslip|Boleta de pago" }, payrollLines, []))
+    if (provisionLines.length) {
+      operations.push(finishOperation({ ...base, Key: `PP-${payslip.ID}`, Kind: OPERATION_PAYROLL_PROVISION,
+        Description: "Payroll provisions|Provisiones de planilla" }, provisionLines, []))
+    }
+  }
+
   return operations.sort((first, second) => first.Date - second.Date || first.Key.localeCompare(second.Key))
+}
+
+const PAYSLIP_LINE_EARNING = 1
+const PAYSLIP_LINE_DEDUCTION = 2
+const PAYSLIP_LINE_PROVISION = 4
+const ACCOUNT_SALARIES_PAYABLE = 4111 // Sueldos y salarios por pagar
+
+// payslipJournalLines splits a payslip into its payroll entry and its provisions entry. Every
+// line is posted as stamped: a missing account leaves the line unclassified, never guessed.
+export function payslipJournalLines(payslip: IOperationPayslip) {
+  const payrollLines: IJournalLine[] = []
+  const provisionLines: IJournalLine[] = []
+  for (const line of payslip.Lines || []) {
+    if (line.Kind === PAYSLIP_LINE_EARNING) {
+      // A benefit settles its provision first (H4/H5); only the excess is this period's expense.
+      const provisioned = line.ProvisionAccountCode ? line.ProvisionedAmount || 0 : 0
+      if (provisioned) payrollLines.push(postLine(line.ProvisionAccountCode!, provisioned))
+      if (line.Amount > provisioned) payrollLines.push(postLine(line.AccountCode, line.Amount - provisioned))
+      // Not in the net pay: the whole amount stays owed on its payable until it is deposited.
+      if (line.OutsideNetPay) payrollLines.push(postLine(line.PayableAccountCode, -line.Amount))
+    } else if (line.Kind === PAYSLIP_LINE_DEDUCTION) {
+      payrollLines.push(postLine(line.PayableAccountCode, -line.Amount))
+    } else {
+      // An employer contribution or a provision: Dr its expense · Cr who is owed it.
+      const target = line.Kind === PAYSLIP_LINE_PROVISION ? provisionLines : payrollLines
+      target.push(postLine(line.AccountCode, line.Amount), postLine(line.PayableAccountCode, -line.Amount))
+    }
+  }
+  payrollLines.push(postLine(ACCOUNT_SALARIES_PAYABLE, -payslip.NetPay))
+  return { payrollLines, provisionLines }
 }
 
 // saleLines is a sale's entry: Dr 1212 · Cr 7012 / 7022 · Cr 40111. The revenue is split by the

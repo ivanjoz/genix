@@ -43,8 +43,6 @@ type ServerMetricsHour struct {
 	BackendCpuPercent  []int16 `cb:"9"`
 	FarewardMemMb      []int16 `cb:"10"`
 	FarewardCpuPercent []int16 `cb:"11"`
-	SearchMemMb        []int16 `cb:"12"`
-	SearchCpuPercent   []int16 `cb:"13"`
 	ScyllaMemMb        []int16 `cb:"14"`
 	ScyllaCpuPercent   []int16 `cb:"15"`
 
@@ -144,8 +142,6 @@ func groupServerMetricsByHour(rows []coreTypes.ServerMetric) []ServerMetricsHour
 		bucket.BackendCpuPercent = append(bucket.BackendCpuPercent, row.BackendCpuPercent)
 		bucket.FarewardMemMb = append(bucket.FarewardMemMb, row.FarewardMemMb)
 		bucket.FarewardCpuPercent = append(bucket.FarewardCpuPercent, row.FarewardCpuPercent)
-		bucket.SearchMemMb = append(bucket.SearchMemMb, row.SearchMemMb)
-		bucket.SearchCpuPercent = append(bucket.SearchCpuPercent, row.SearchCpuPercent)
 		bucket.ScyllaMemMb = append(bucket.ScyllaMemMb, row.ScyllaMemMb)
 		bucket.ScyllaCpuPercent = append(bucket.ScyllaCpuPercent, row.ScyllaCpuPercent)
 

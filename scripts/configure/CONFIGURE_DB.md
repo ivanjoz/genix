@@ -1,10 +1,11 @@
 # Configuración de los motores de datos (`configure_db.py`)
 
-Un solo script deja listo el host de datos: **ScyllaDB** (base de datos principal),
-**GenixSearch** (búsqueda léxica) y **Qdrant** (base vectorial). Los tres suelen vivir en
-la misma VPS, separados del backend, que corre en Lambda o en otro servidor.
+Un solo script deja listo el host de datos: **ScyllaDB** (base de datos principal) y
+**Qdrant** (base vectorial). Ambos suelen vivir en la misma VPS, separados del backend,
+que corre en Lambda o en otro servidor. La búsqueda de texto no necesita host: genix-s3
+guarda el índice en el bucket de `[file_store]` (ver `backend/core/text_search.go`).
 
-El entrypoint público configura los tres motores. El dígito `7` o `8` es obligatorio por la
+El entrypoint público configura los dos motores. El dígito `7` o `8` es obligatorio por la
 gramática unificada, pero no cambia cómo este instalador obtiene los paquetes de datos:
 
 ```bash
@@ -15,11 +16,10 @@ Para diagnosticar un solo motor se puede invocar directamente el instalador inte
 
 ```bash
 sudo python3 scripts/configure/configure_db.py scylla
-sudo python3 scripts/configure/configure_db.py search
 sudo python3 scripts/configure/configure_db.py qdrant
 ```
 
-Los alias numéricos `1`/`2`/`3`/`4` equivalen a `all`/`scylla`/`search`/`qdrant`. El
+Los alias numéricos `1`/`2`/`3` equivalen a `all`/`scylla`/`qdrant`. El
 script debe correr como `root` y lee `config.toml` de la raíz del repositorio.
 
 ---
@@ -47,68 +47,22 @@ puerto TCP efímero en `127.0.0.1` (el `cqlsh` empaquetado para Ubuntu no acepta
 
 ---
 
-## GenixSearch (`search`)
-
-Instala el daemon desde los **paquetes estáticos** que publica
-[`ivanjoz/genix-search`](https://github.com/ivanjoz/genix-search/releases): son builds
-musl, así que el host no necesita toolchain ni una glibc concreta.
-
-| Paso | Detalle |
-| ---- | ------- |
-| Arquitectura | Elige el asset según `uname -m`: `x86_64-linux-musl` o `aarch64-linux-musl`, y la variante `-neoverse-n1` cuando el CPU es un Ampere Altra (MIDR part `0xd0c`). **Cualquier otra arquitectura aborta**: no hay build publicado. |
-| Descarga | Baja el `.tar.gz` del release (`--release-version`, default el último) y lo verifica contra el `SHA256SUMS` del propio release. Un mismatch aborta. |
-| Binario | `/usr/local/bin/genixsearch`, instalado con `install(1)` para reemplazar el inodo: un servicio en ejecución sigue con su binario viejo hasta reiniciarse. |
-| Usuario | Usuario y grupo de sistema `genixsearch`, sin login. |
-| Estado | `/var/lib/genixsearch/store/kv` (0750), del usuario del servicio. |
-| Config | `/etc/genixsearch/genixsearch.cfg` (0640 `root:genixsearch`). Se parte del `.cfg` de referencia que trae el release y solo se sobrescriben `server.log_level`, `channel.inet`, `channel.auth_password` y `store.kv.path`; así se heredan las claves nuevas que agregue GenixSearch. |
-| Bind | `0.0.0.0:<puerto>` y el puerto abierto en el firewall, porque el backend en Lambda entra desde fuera del host. |
-| systemd | `genixsearch.service`, endurecida (`ProtectSystem=strict`, `NoNewPrivileges`, `SystemCallFilter=@system-service`, …), habilitada al boot. El script espera a que la unit quede `active` y vuelca el journal si se cae. |
-
-### Credenciales que escribe
-
-El script **solo escribe en `config.toml` los valores que faltaban**. Un valor ya
-presente es una decisión del operador y no se toca:
-
-- `search.url` — si ya tiene valor, se reutiliza tal cual. El script **no puede
-  deducir** la dirección por la que el backend entra de verdad (IP pública, dominio o
-  túnel): la IP que detecta el host suele ser la privada de la VPC, que desde Lambda no
-  resuelve a nada. Solo cuando está vacía escribe la IP detectada, y avisa si es privada.
-- `search.password` — se reutiliza la existente; si no hay, genera una de 64
-  caracteres (minúsculas + dígitos) y la escribe.
-
-El backend Go las lee como `core.Env.GENIXSEARCH_URL` / `core.Env.GENIXSEARCH_PASSWORD`
-(`backend/core/security.go`), pobladas desde `search.url` / `search.password` de
-`config.toml`. El puerto sale de `search.url` si ya trae uno; si no,
-usa `14446`, el mismo default de `core.ParseGenixSearchURL`. Es decir: el puerto en el
-que escucha el servicio se controla poniendo el puerto en `search.url`.
-
-El archivo se reescribe con indentación de 4 espacios y se le devuelve la propiedad al
-usuario que invocó `sudo`.
-
-### Flags
-
-- `--release-version v0.1.0` — fija el tag en vez de tomar el último release.
-- `--binary ./genixsearch` — instala un binario local en vez de descargar. Toma el
-  `.cfg` de referencia del repo hermano `../genix-search/genixsearch.cfg`.
-
----
-
 ## Qdrant (`qdrant`)
 
 Instala la base vectorial desde los **releases musl** de
-[`qdrant/qdrant`](https://github.com/qdrant/qdrant/releases), igual de estáticos que los
-de GenixSearch.
+[`qdrant/qdrant`](https://github.com/qdrant/qdrant/releases): builds estáticos, así que
+el host no necesita toolchain ni una glibc concreta.
 
 | Paso | Detalle |
 | ---- | ------- |
 | Arquitectura | `x86_64-unknown-linux-musl` o `aarch64-unknown-linux-musl` según `uname -m`. Cualquier otra aborta: no hay build publicado. |
-| Descarga | El `.tar.gz` del release (`--qdrant-version`, default el último resuelto por la API de GitHub). **Sin checksum**: a diferencia de genix-search, los releases de Qdrant no publican `SHA256SUMS`; la única garantía es el TLS de github.com. |
+| Descarga | El `.tar.gz` del release (`--qdrant-version`, default el último resuelto por la API de GitHub). **Sin checksum**: los releases de Qdrant no publican `SHA256SUMS`; la única garantía es el TLS de github.com. |
 | Binario | `/usr/local/bin/qdrant`, instalado con `install(1)`. El tarball contiene sólo el binario. |
 | Usuario | Usuario y grupo de sistema `qdrant`, sin login. |
 | Estado | `/var/lib/qdrant/storage` y `/var/lib/qdrant/snapshots` (0750), del usuario del servicio. |
 | Config | `/etc/qdrant/qdrant.env` (0640 `root:qdrant`), leído por `EnvironmentFile=`. **No hay `config.yaml`**: el release no trae ninguno, Qdrant arranca con sus defaults compilados (lo avisa por log) y las `QDRANT__*` del env file pisan lo que importa. Va en un archivo aparte y no en `Environment=` dentro de la unit porque la unit es 0644 y la api key no puede ser legible por todos. |
 | Bind | `0.0.0.0` cuando `qdrant.public = true` (y abre los dos puertos en el firewall); `127.0.0.1` y sin tocar el firewall cuando es `false`. |
-| systemd | `qdrant.service`, con el mismo bloque de endurecimiento que GenixSearch, habilitada al boot. |
+| systemd | `qdrant.service`, endurecida (`ProtectSystem=strict`, `NoNewPrivileges`, `SystemCallFilter=@system-service`, …), habilitada al boot. |
 | Verificación | Espera a que la unit quede `active` y además sondea `GET /readyz`, que Qdrant deja fuera del api key justo para esto. `is-active` sólo dice que el proceso vive; el sondeo confirma que sirve en el puerto configurado. |
 
 ### Claves de `[qdrant]`
@@ -124,7 +78,7 @@ public    = true
 - `http_port` / `grpc_port` — Qdrant expone REST y gRPC en **dos puertos distintos**
   (defaults propios: 6333 y 6334). El SDK Go oficial habla gRPC. Si son iguales, aborta.
 - `public` — decide el bind y si se abren los puertos, igual que en `[fareward]`.
-- `host` — misma regla que `search.url`: si ya tiene valor no se toca, porque la
+- `host` — si ya tiene valor no se toca, porque la
   dirección por la que el backend entra de verdad (IP pública, dominio o túnel) no se
   deduce desde el host. Sólo cuando está vacío escribe la IP detectada, y avisa si es
   privada. **No lleva puerto** — los puertos ya están arriba, como en `[db]`.
@@ -186,5 +140,4 @@ un servicio instalado pero inalcanzable es el síntoma más caro de diagnosticar
 Todos los modos publican la misma dirección: el script prefiere la IP de la tailnet
 (Tailscale o Headscale, detectada por la CLI o por los rangos `100.64.0.0/10` y
 `fd7a:115c:a1e0::/48` en las interfaces) y cae a la IP interna de la VPC si no hay
-túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla, a `search.url` y a
-`qdrant.host`.
+túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla y a `qdrant.host`.

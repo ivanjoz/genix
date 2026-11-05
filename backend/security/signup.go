@@ -498,6 +498,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 		// selling and four for the notes that correct each family.
 		InvoiceSeries: invoicing.DefaultInvoiceSeries(),
 		Updated:       nowTime,
+		Created:       nowTime,
 		Status:        1,
 	}}
 	if err := db.Insert(&newCompanies); err != nil {

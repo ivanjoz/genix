@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Genix - tiendas <tienda>.ZONE_NAME (HTML en S3 detrás de CloudFront, DNS en Route 53)
+
+# Desplegado por cloud/storefront.go (acción 5) como stack <app_name>-storefront, separado del
+# stack principal: se puede crear y actualizar sin recompilar ni redesplegar las Lambdas.
+#
+# Qué sirve: SOLO el HTML de las tiendas (+ sw.js y favicon, que tienen que ser same-origin). Los
+# js/css y las imágenes siguen en R2 detrás de frontend.cdn_url; el renderer escribe sus URLs
+# absolutas dentro del HTML.
+#
+# Tiene que vivir en us-east-1: CloudFront solo acepta certificados de ACM de esa región.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Description: app_name de config.toml.
+  ZoneName:
+    Type: String
+    Description: frontend.zone_name de config.toml (p. ej. un.pe).
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+    Description: storefront.hosted_zone_id; ACM crea aquí el registro de validación.
+  LambdaRoleName:
+    Type: String
+    Description: >-
+      Nombre (no ARN) del rol de las Lambdas (aws.lambda_iam_role). Recibe los permisos para
+      escribir el HTML y gestionar los alias de las tiendas.
+
+Resources:
+  # Comodín de un nivel: cubre <tienda>.ZONE_NAME, que es justo lo que acepta
+  # normalizeStorefrontDomain (backend/webpage/webpage_config.go).
+  StorefrontCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub "*.${ZoneName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Sub "*.${ZoneName}"
+          HostedZoneId: !Ref HostedZoneId
+
+  # Se regenera entero con un render, pero se retiene igual que el frontend: borrar el stack no
+  # debe tumbar todas las tiendas.
+  StorefrontBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "${NamePrefix}-storefront-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  StorefrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${NamePrefix}-storefront"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  # s3:ListBucket a propósito: sin él una ruta sin HTML publicado responde 403 en vez de 404.
+  StorefrontBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StorefrontBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: [s3:GetObject, s3:ListBucket]
+            Resource:
+              - !GetAtt StorefrontBucket.Arn
+              - !Sub "${StorefrontBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${StorefrontDistribution}"
+
+  # Reemplaza a frontend/webpage/cloudflare/serve-worker.js: <host>/<ruta> → la clave que escribe
+  # webpage-renderer/handler.mjs. Una navegación es <ruta>/index.html; un archivo (sw.js,
+  # favicon.ico) se reconoce porque su último segmento lleva extensión. El host viaja dentro de la
+  # URI reescrita, así que la clave de caché ya separa a las tiendas sin reenviar Host a S3.
+  StorefrontRouterFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${NamePrefix}-storefront-router"
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Resuelve host + ruta a websites-html/<host>/...
+        Runtime: cloudfront-js-2.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var host = request.headers.host.value.toLowerCase();
+          var path = request.uri.replace(/\/+$/, '');
+          var lastSegment = path.split('/').pop() || '';
+          var isFile = lastSegment.indexOf('.') >= 0;
+          request.uri = '/websites-html/' + host + (isFile ? path : path + '/index.html');
+          return request;
+        }
+
+  StorefrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "Tiendas ${NamePrefix} (*.${ZoneName})"
+        Enabled: true
+        Aliases:
+          - !Sub "*.${ZoneName}"
+        ViewerCertificate:
+          AcmCertificateArn: !Ref StorefrontCertificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Origins:
+          - Id: storefront-s3
+            DomainName: !GetAtt StorefrontBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt StorefrontOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+        DefaultCacheBehavior:
+          TargetOriginId: storefront-s3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          Compress: true
+          # AWS managed CachingOptimized: respeta el Cache-Control que fija el renderer
+          # (HTML 60 s, sw.js sin caché, favicon 1 día).
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt StorefrontRouterFunction.FunctionMetadata.FunctionARN
+        # Un 404 no se cachea más de 10 s: una tienda recién publicada no debe quedar en 404.
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 404
+            ErrorCachingMinTTL: 10
+
+  # Lo que el backend y el renderer necesitan del stack. El stack principal no crea IAM; este sí,
+  # porque sus permisos solo tienen sentido junto a estos recursos y se van con ellos.
+  StorefrontLambdaPolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Ref LambdaRoleName
+      PolicyName: !Sub "${NamePrefix}-storefront"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: StorefrontHtml
+            Effect: Allow
+            Action: [s3:PutObject, s3:GetObject, s3:DeleteObject]
+            Resource: !Sub "${StorefrontBucket.Arn}/*"
+          - Sid: StorefrontDns
+            Effect: Allow
+            Action: [route53:ChangeResourceRecordSets, route53:ListResourceRecordSets]
+            Resource: !Sub "arn:aws:route53:::hostedzone/${HostedZoneId}"
+
+Outputs:
+  # cloud/storefront.go escribe los tres en la sección [storefront] de config.toml.
+  DistributionDomain:
+    Description: Destino de los alias de las tiendas
+    Value: !GetAtt StorefrontDistribution.DomainName
+  DistributionId:
+    Value: !Ref StorefrontDistribution
+  BucketName:
+    Value: !Ref StorefrontBucket
+  CertificateArn:
+    Value: !Ref StorefrontCertificate

@@ -9,14 +9,15 @@ require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.1 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.4 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.9 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.9 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.70.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.10.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
@@ -34,25 +35,31 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/richardlehane/mscfb v1.0.4 // indirect
+	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/tiendc/go-deepcopy v1.7.1 // indirect
 	github.com/toorop/go-dkim v0.0.0-20201103131630-e1cd1a0a5208 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/xuri/efp v0.0.1 // indirect
+	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
 require (
 	github.com/aws/aws-lambda-go v1.52.0
-	github.com/aws/aws-sdk-go-v2 v1.47.1
+	github.com/aws/aws-sdk-go-v2 v1.47.6
 	github.com/aws/aws-sdk-go-v2/config v1.33.6
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.26.2
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.16.1
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
-	github.com/aws/smithy-go v1.28.2
+	github.com/aws/smithy-go v1.28.8
 	github.com/bytedance/sonic v1.15.0
 	github.com/fatih/color v1.19.0
 	github.com/gocql/gocql v1.6.0
@@ -63,7 +70,6 @@ require (
 	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/ivanjoz/genix-orm/dataframe v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
-	github.com/ivanjoz/genix-orm/search/daemon v0.0.0
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0
 	github.com/ivanjoz/genix-orm/utils v0.0.0
 	github.com/ivanjoz/minijson v0.3.2
@@ -78,6 +84,7 @@ require (
 	github.com/rs/cors v1.8.2
 	github.com/viant/xunsafe v0.11.0
 	github.com/xhit/go-simple-mail/v2 v2.16.0
+	github.com/xuri/excelize/v2 v2.10.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 	golang.org/x/sync v0.22.0
@@ -102,9 +109,7 @@ replace github.com/ivanjoz/genix-orm => ./genix-orm
 
 replace github.com/ivanjoz/genix-orm/db => ./genix-orm/db
 
-// The text search backends, each its own module so the app only links the ones it imports.
-replace github.com/ivanjoz/genix-orm/search/daemon => ./genix-orm/search/daemon
-
+// The text search backend, its own module so the app links only the one it imports.
 replace github.com/ivanjoz/genix-orm/search/genixs3 => ./genix-orm/search/genixs3
 
 // genix-s3 is not published yet: it compiles from the genix-search checkout beside the genix one.

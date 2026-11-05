@@ -28,7 +28,7 @@ var (
 	// L4: module bodies. These are the packages the rule is about.
 	moduleBodies = map[string]bool{
 		"app/accounting": true, "app/business": true,
-		"app/config": true, "app/crm": true, "app/finance": true,
+		"app/config": true, "app/crm": true, "app/finance": true, "app/hr": true,
 		"app/invoicing": true, "app/logistics": true, "app/production": true,
 		"app/projects": true, "app/sales": true, "app/security": true, "app/webpage": true,
 	}

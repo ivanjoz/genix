@@ -47,8 +47,6 @@ type ServerMetric struct {
 	// Nothing back-fills, so windows sampled before the deploy read as not-measured here.
 	FarewardMemMb      int16 `cb:"10"`
 	FarewardCpuPercent int16 `cb:"11"`
-	SearchMemMb        int16 `cb:"12"`
-	SearchCpuPercent   int16 `cb:"13"`
 	ScyllaMemMb        int16 `cb:"14"`
 	ScyllaCpuPercent   int16 `cb:"15"`
 }
@@ -67,8 +65,6 @@ type ServerMetricTable struct {
 	// See the record above: renaming these two is a Scylla schema change, not just a rename.
 	FarewardMemMb      db.Col[*ServerMetricTable, int16]
 	FarewardCpuPercent db.Col[*ServerMetricTable, int16]
-	SearchMemMb        db.Col[*ServerMetricTable, int16]
-	SearchCpuPercent   db.Col[*ServerMetricTable, int16]
 	ScyllaMemMb        db.Col[*ServerMetricTable, int16]
 	ScyllaCpuPercent   db.Col[*ServerMetricTable, int16]
 }

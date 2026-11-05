@@ -2,6 +2,7 @@ package sample_records
 
 import (
 	businessTypes "app/business/types"
+	"app/cloud"
 	"app/core"
 	coreTypes "app/core/types"
 	"app/crm"
@@ -9,6 +10,8 @@ import (
 	"app/db"
 	"app/finance"
 	financeTypes "app/finance/types"
+	"app/invoicing"
+	invoicingTypes "app/invoicing/types"
 	"app/logistics"
 	logisticsTypes "app/logistics/types"
 	production "app/production/types"
@@ -17,6 +20,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"math"
 	mrand "math/rand"
 	"os"
 	"path/filepath"
@@ -39,11 +43,14 @@ const (
 	erpCompanyID        int32 = 1
 	erpUserID           int32 = 1
 	erpStateFileName          = "genix_erp_history_state.json"
-	erpStateVersion           = 1
+	erpStateVersion           = 2
 	erpLotCodePrefix          = "L"
 	erpSerialPrefix           = "SN"
 	erpCashTopUpPadding int32 = 100000 // extra cents injected on top of the shortfall, so one
 	// injection covers several orders instead of one per purchase.
+	// sampleDataSeed is the default random seed of every generator in this package: a wiped database
+	// refilled with the same arguments gets the same data back. --seed=N draws another one.
+	sampleDataSeed int64 = 20260101
 )
 
 //go:embed erp_history_providers.json
@@ -79,9 +86,13 @@ type erpHistoryConfig struct {
 	unpaidMax             int
 	undeliveredMin        int
 	undeliveredMax        int
-	warehouseIDs          []int32
-	reset                 bool
-	dryRun                bool
+	// Annulments need the demo's evening step, so the standalone history keeps them at 0.
+	annulMin     int
+	annulMax     int
+	warehouseIDs []int32
+	seed         int64
+	reset        bool
+	dryRun       bool
 }
 
 func makeErpHistoryDefaults() erpHistoryConfig {
@@ -100,6 +111,7 @@ func makeErpHistoryDefaults() erpHistoryConfig {
 		undeliveredMin:        5,
 		undeliveredMax:        20,
 		warehouseIDs:          []int32{1, 2},
+		seed:                  sampleDataSeed,
 	}
 }
 
@@ -138,11 +150,32 @@ type erpHistoryStats struct {
 	PurchaseOrders   int
 	ReceivedUnits    int32
 	SalesCreated     int
+	SalesInvoiced    int
 	SalesUnpaid      int
 	SalesUndelivered int
+	SalesAnnulled    int
 	CashInjections   int
 	CashInjected     int32
 	StockRetries     int
+	Expenses         int
+	ExpensePayments  int
+	TillTransfers    int
+	Reconciliations  int
+}
+
+// periodTaxTotals accumulates what the month's IGV and income-tax prepayment are computed from,
+// so the tax expenses booked the next month match the sales and purchases actually generated.
+type periodTaxTotals struct {
+	SalesGross     int64
+	PurchaseTaxIGV int64
+}
+
+// historyDayStep is one block of a simulated day. The day runs its steps in order and checkpoints
+// after each one, so a resumed day skips the blocks it already finished; a step with many writes
+// keeps its own finer checkpoint inside the state.
+type historyDayStep struct {
+	name string
+	run  func(dayStart time.Time) error
 }
 
 // erpHistoryState is the resume point, rewritten after every purchase order and after every
@@ -160,16 +193,38 @@ type erpHistoryState struct {
 
 	// Day in progress and how far into it the run got.
 	UnixDay                 int16
+	CompletedDaySteps       int
 	CompletedPurchaseOrders int
 	// The day's sales plan is drawn once and stored, so a resumed day keeps the exact
-	// unpaid/undelivered counts that were promised when it started.
+	// unpaid/undelivered/annulled counts that were promised when it started.
 	SalesPlanCount        int
 	SalesUnpaidFlags      []bool
 	SalesUndeliveredFlags []bool
+	SalesAnnulFlags       []bool
 	CompletedSales        int
+	// Sales flagged for annulment, voided by the evening step once the day's selling is done.
+	PendingAnnulments []pendingAnnulment
+
+	// Expenses (generate_expenses.go): the day's plan, drawn once like the sales plan, and the
+	// payments booked for a later day.
+	ExpensePlan            []plannedExpense
+	ExpensePlanDrawn       bool
+	CompletedExpenses      int
+	PendingExpensePayments []pendingExpensePayment
+	// Next comprobante number per expense template, so a supplier's numbers keep increasing.
+	NextDocNumberByKey map[string]int64
+	TaxTotalsByPeriod  map[int16]*periodTaxTotals
+
+	// fn-generate-demo-data's one-time setup (catalog, supplies, assets, projects).
+	DemoSetupDone bool
 
 	Stats            erpHistoryStats
 	AffectedUnixDays []int16
+}
+
+type pendingAnnulment struct {
+	SaleID     int64
+	CashBankID int32
 }
 
 type erpHistoryGenerator struct {
@@ -177,10 +232,30 @@ type erpHistoryGenerator struct {
 	realNow time.Time
 	config  erpHistoryConfig
 
-	userToken   core.UsuarioToken
-	cashBankID  int32
+	userToken core.UsuarioToken
+	// Each entry point sets its own state file and its own day steps over the same machinery.
+	stateFileName string
+	daySteps      []historyDayStep
+
+	// Standalone runs resolve one cash register and use it for everything; the demo splits them:
+	// one till per warehouse collects the sales, the bank pays suppliers and expenses.
+	cashBankID         int32
+	purchaseCashBankID int32
+	expenseCashBankID  int32
+	tillByWarehouse    map[int32]int32
+	bankCashBankID     int32
+
 	providerIDs []int32
-	clientIDs   []int32
+	// Clients split by what document a sale to them can carry: a RUC takes a factura, a DNI lets
+	// a boleta of S/ 700 or more name its buyer, and the rest buy anonymously.
+	clientIDs            []int32
+	businessClientIDs    []int32
+	dniClientIDs         []int32
+	facturaSeriesID      int8
+	boletaSeriesID       int8
+	expenseSupplierByRUC map[string]int32
+	expenseScheduleByKey map[string]int32
+	expenseSupplies      []production.Product
 
 	productPool        []int32
 	productNameByID    map[int32]string
@@ -196,25 +271,12 @@ type erpHistoryGenerator struct {
 
 // GenerateErpHistory is the entry point behind `fn-generate-erp-history`.
 func GenerateErpHistory(args *core.ExecArgs) core.FuncResponse {
-	config, configError := parseErpHistoryArgs(args.Message)
+	config, configError := parseHistoryArgs(args.Message, makeErpHistoryDefaults())
 	if configError != nil {
 		return args.MakeErr("Argumentos inválidos:", configError)
 	}
 
-	generator := erpHistoryGenerator{
-		random:  mrand.New(mrand.NewSource(time.Now().UnixNano())),
-		realNow: time.Now(),
-		config:  config,
-		userToken: core.UsuarioToken{
-			CompanyID: erpCompanyID,
-			ID:        erpUserID,
-		},
-		productNameByID:    map[int32]string{},
-		salePriceByProduct: map[int32]int32{},
-		costPriceByProduct: map[int32]int32{},
-		bucketsByWarehouse: map[int32]map[int32][]*stockBucket{},
-	}
-
+	generator := newHistoryGenerator(config, erpStateFileName)
 	// The clock is process-wide: leaving it frozen would date every later write in this process,
 	// including anything the deferred cron goroutines do.
 	defer core.SetHistoricalUnix(0)
@@ -230,40 +292,21 @@ func GenerateErpHistory(args *core.ExecArgs) core.FuncResponse {
 	if err := generator.validateContext(); err != nil {
 		return args.MakeErr("No se pudo validar el contexto:", err)
 	}
-	if err := generator.seedProvidersAndClients(); err != nil {
-		return args.MakeErr("No se pudieron sembrar proveedores/clientes:", err)
-	}
-	if err := generator.loadProductPool(); err != nil {
-		return args.MakeErr("No se pudo armar el pool de productos:", err)
-	}
-	for _, warehouseID := range config.warehouseIDs {
-		if err := generator.reloadWarehouseLedger(warehouseID); err != nil {
-			return args.MakeErr("No se pudo cargar el stock del almacén", warehouseID, ":", err)
-		}
+	if err := generator.prepareErpCatalog(); err != nil {
+		return args.MakeErr(err)
 	}
 
 	if config.dryRun {
 		return generator.previewPayloads(args)
 	}
 
-	historicalDates, err := generator.resolvePendingDates()
+	generator.daySteps = []historyDayStep{
+		{name: "purchase-orders", run: generator.runPurchaseOrdersStep},
+		{name: "sales", run: generator.runDailySales},
+	}
+	historicalDates, err := generator.runDayLoop()
 	if err != nil {
-		return args.MakeErr("No se pudo resolver el rango de días:", err)
-	}
-
-	for _, targetUnixDay := range historicalDates {
-		if err := generator.startDay(targetUnixDay); err != nil {
-			return args.MakeErr("No se pudo guardar el estado:", err)
-		}
-		if err := generator.runOneDay(targetUnixDay); err != nil {
-			return args.MakeErr("Error en el día", targetUnixDay, ":", err)
-		}
-	}
-
-	// The state file only exists to resume; a finished run must not leave one behind or the next
-	// invocation would think it is resuming.
-	if err := os.Remove(generator.statePath); err != nil && !os.IsNotExist(err) {
-		return args.MakeErr("No se pudo limpiar el estado:", err)
+		return args.MakeErr(err)
 	}
 
 	core.Log("GenerateErpHistory:: terminado", "OCs", generator.state.Stats.PurchaseOrders,
@@ -272,19 +315,73 @@ func GenerateErpHistory(args *core.ExecArgs) core.FuncResponse {
 	return core.FuncResponse{
 		Message: "Historial ERP generado correctamente.",
 		Content: map[string]any{
-			"days":             len(historicalDates),
-			"purchaseOrders":   generator.state.Stats.PurchaseOrders,
-			"receivedUnits":    generator.state.Stats.ReceivedUnits,
-			"sales":            generator.state.Stats.SalesCreated,
-			"salesUnpaid":      generator.state.Stats.SalesUnpaid,
-			"salesUndelivered": generator.state.Stats.SalesUndelivered,
-			"cashInjections":   generator.state.Stats.CashInjections,
-			"cashInjected":     generator.state.Stats.CashInjected,
-			"stockRetries":     generator.state.Stats.StockRetries,
+			"days":  len(historicalDates),
+			"stats": generator.state.Stats,
 			// Sale summaries are rebuilt by cron action 2, which does not run in this process.
 			"unixDaysToReprocess": generator.state.AffectedUnixDays,
 		},
 	}
+}
+
+func newHistoryGenerator(config erpHistoryConfig, stateFileName string) *erpHistoryGenerator {
+	return &erpHistoryGenerator{
+		// Reproducible for an uninterrupted run; a resumed one restarts the sequence where it resumes.
+		random:  mrand.New(mrand.NewSource(config.seed)),
+		realNow: time.Now(),
+		config:  config,
+		userToken: core.UsuarioToken{
+			CompanyID: erpCompanyID,
+			ID:        erpUserID,
+		},
+		stateFileName:      stateFileName,
+		tillByWarehouse:    map[int32]int32{},
+		productNameByID:    map[int32]string{},
+		salePriceByProduct: map[int32]int32{},
+		costPriceByProduct: map[int32]int32{},
+		bucketsByWarehouse: map[int32]map[int32][]*stockBucket{},
+	}
+}
+
+// prepareErpCatalog is everything purchases and sales need before the first day: the parties,
+// the invoice series the sales are issued under, the product pool and the stock ledger.
+func (generator *erpHistoryGenerator) prepareErpCatalog() error {
+	if err := generator.seedProvidersAndClients(); err != nil {
+		return core.Err("No se pudieron sembrar proveedores/clientes:", err)
+	}
+	if err := generator.resolveInvoiceSeries(); err != nil {
+		return core.Err("No se pudieron resolver las series de facturación:", err)
+	}
+	if err := generator.loadProductPool(); err != nil {
+		return core.Err("No se pudo armar el pool de productos:", err)
+	}
+	for _, warehouseID := range generator.config.warehouseIDs {
+		if err := generator.reloadWarehouseLedger(warehouseID); err != nil {
+			return core.Err("No se pudo cargar el stock del almacén", warehouseID, ":", err)
+		}
+	}
+	return nil
+}
+
+// runDayLoop walks the pending days with the entry point's steps and removes the state file once
+// the range is complete: a finished run must not leave one behind, or the next invocation would
+// think it is resuming.
+func (generator *erpHistoryGenerator) runDayLoop() ([]int16, error) {
+	historicalDates, err := generator.resolvePendingDates()
+	if err != nil {
+		return nil, core.Err("No se pudo resolver el rango de días:", err)
+	}
+	for _, targetUnixDay := range historicalDates {
+		if err := generator.startDay(targetUnixDay); err != nil {
+			return nil, core.Err("No se pudo guardar el estado:", err)
+		}
+		if err := generator.runOneDay(targetUnixDay); err != nil {
+			return nil, core.Err("Error en el día", targetUnixDay, ":", err)
+		}
+	}
+	if err := os.Remove(generator.statePath); err != nil && !os.IsNotExist(err) {
+		return nil, core.Err("No se pudo limpiar el estado:", err)
+	}
+	return historicalDates, nil
 }
 
 // ─── Resume state ──────────────────────────────────────────────────────────────
@@ -296,26 +393,35 @@ func (config erpHistoryConfig) planSignature() string {
 	return fmt.Sprint(config.days, config.productPoolSize, config.purchaseOrderProducts,
 		config.lotProducts, config.serialProducts, config.salesMin, config.salesMax,
 		config.saleLinesMin, config.saleLinesMax, config.unpaidMin, config.unpaidMax,
-		config.undeliveredMin, config.undeliveredMax, config.warehouseIDs)
+		config.undeliveredMin, config.undeliveredMax, config.annulMin, config.annulMax, config.warehouseIDs, config.seed)
+}
+
+func newHistoryState(configSignature string) erpHistoryState {
+	return erpHistoryState{
+		Version:            erpStateVersion,
+		ConfigSignature:    configSignature,
+		NextDocNumberByKey: map[string]int64{},
+		TaxTotalsByPeriod:  map[int16]*periodTaxTotals{},
+	}
 }
 
 // loadState restores an interrupted run. A state written under different arguments is refused
 // instead of merged: resuming a 15-day plan into a 4-day one would silently produce neither.
 func (generator *erpHistoryGenerator) loadState() error {
-	generator.statePath = filepath.Join(core.ProjectTmpDir(), erpStateFileName)
+	generator.statePath = filepath.Join(core.ProjectTmpDir(), generator.stateFileName)
 	configSignature := generator.config.planSignature()
 
 	if generator.config.reset {
 		if err := os.Remove(generator.statePath); err != nil && !os.IsNotExist(err) {
 			return err
 		}
-		generator.state = erpHistoryState{Version: erpStateVersion, ConfigSignature: configSignature}
+		generator.state = newHistoryState(configSignature)
 		return nil
 	}
 
 	stateBytes, readError := os.ReadFile(generator.statePath)
 	if os.IsNotExist(readError) {
-		generator.state = erpHistoryState{Version: erpStateVersion, ConfigSignature: configSignature}
+		generator.state = newHistoryState(configSignature)
 		return nil
 	}
 	if readError != nil {
@@ -362,19 +468,24 @@ func (generator *erpHistoryGenerator) startDay(targetUnixDay int16) error {
 		return nil
 	}
 	generator.state.UnixDay = targetUnixDay
+	generator.state.CompletedDaySteps = 0
 	generator.state.CompletedPurchaseOrders = 0
 	generator.state.SalesPlanCount = 0
 	generator.state.SalesUnpaidFlags = nil
 	generator.state.SalesUndeliveredFlags = nil
+	generator.state.SalesAnnulFlags = nil
 	generator.state.CompletedSales = 0
+	generator.state.ExpensePlan = nil
+	generator.state.ExpensePlanDrawn = false
+	generator.state.CompletedExpenses = 0
 	return generator.saveState()
 }
 
 // ─── Arguments ─────────────────────────────────────────────────────────────────
 
-func parseErpHistoryArgs(message string) (erpHistoryConfig, error) {
-	config := makeErpHistoryDefaults()
-
+// parseHistoryArgs applies the flags over the entry point's own defaults, so the history, the
+// expenses and the demo share one argument surface.
+func parseHistoryArgs(message string, config erpHistoryConfig) (erpHistoryConfig, error) {
 	for _, argument := range strings.Fields(message) {
 		name, rawValue, hasValue := strings.Cut(strings.TrimPrefix(argument, "--"), "=")
 
@@ -405,6 +516,8 @@ func parseErpHistoryArgs(message string) (erpHistoryConfig, error) {
 			return config, core.Err("el argumento", argument, "no es un número")
 		}
 		switch name {
+		case "seed":
+			config.seed = int64(parsedValue)
 		case "days":
 			config.days = parsedValue
 		case "products":
@@ -431,6 +544,10 @@ func parseErpHistoryArgs(message string) (erpHistoryConfig, error) {
 			config.undeliveredMin = parsedValue
 		case "undelivered-max":
 			config.undeliveredMax = parsedValue
+		case "annul-min":
+			config.annulMin = parsedValue
+		case "annul-max":
+			config.annulMax = parsedValue
 		default:
 			return config, core.Err("argumento desconocido:", argument)
 		}
@@ -450,7 +567,8 @@ func parseErpHistoryArgs(message string) (erpHistoryConfig, error) {
 		return config, core.Err("--sales-min/--sales-max inconsistentes")
 	case config.saleLinesMin < 1 || config.saleLinesMin > config.saleLinesMax:
 		return config, core.Err("--sale-lines-min/--sale-lines-max inconsistentes")
-	case config.unpaidMin > config.unpaidMax || config.undeliveredMin > config.undeliveredMax:
+	case config.unpaidMin > config.unpaidMax || config.undeliveredMin > config.undeliveredMax ||
+		config.annulMin > config.annulMax || config.annulMax > config.salesMin:
 		return config, core.Err("los rangos de impagas/no entregadas son inconsistentes")
 	case config.unpaidMax > config.salesMin || config.undeliveredMax > config.salesMin:
 		return config, core.Err("impagas/no entregadas no pueden superar al mínimo de ventas del día")
@@ -510,6 +628,11 @@ func (generator *erpHistoryGenerator) validateContext() error {
 		return int(leftCashBank.ID - rightCashBank.ID)
 	})
 	generator.cashBankID = cashBanks[0].ID
+	generator.purchaseCashBankID = generator.cashBankID
+	generator.expenseCashBankID = generator.cashBankID
+	for _, warehouseID := range generator.config.warehouseIDs {
+		generator.tillByWarehouse[warehouseID] = generator.cashBankID
+	}
 
 	core.Log("GenerateErpHistory:: contexto validado", "caja", generator.cashBankID,
 		"almacenes", generator.config.warehouseIDs)
@@ -528,24 +651,42 @@ func (generator *erpHistoryGenerator) seedProvidersAndClients() error {
 		return core.Err("error al leer el JSON de clientes:", err)
 	}
 
-	providerIDs, err := generator.saveAndLoadParties(providerSeeds, crmTypes.ClientProviderTypeProvider)
+	providers, err := generator.saveAndLoadParties(providerSeeds, crmTypes.ClientProviderTypeProvider)
 	if err != nil {
 		return err
 	}
-	generator.providerIDs = providerIDs
+	generator.providerIDs = []int32{}
+	for _, provider := range providers {
+		generator.providerIDs = append(generator.providerIDs, provider.ID)
+	}
 
-	clientIDs, err := generator.saveAndLoadParties(clientSeeds, crmTypes.ClientProviderTypeClient)
+	clients, err := generator.saveAndLoadParties(clientSeeds, crmTypes.ClientProviderTypeClient)
 	if err != nil {
 		return err
 	}
-	generator.clientIDs = clientIDs
+	generator.clientIDs, generator.businessClientIDs, generator.dniClientIDs = []int32{}, []int32{}, []int32{}
+	for _, client := range clients {
+		// An 11-digit RUC is a company buying with a factura; everyone else buys with a boleta.
+		switch len(client.RegistryNumber) {
+		case 11:
+			generator.businessClientIDs = append(generator.businessClientIDs, client.ID)
+		case 8:
+			generator.dniClientIDs = append(generator.dniClientIDs, client.ID)
+			generator.clientIDs = append(generator.clientIDs, client.ID)
+		default:
+			generator.clientIDs = append(generator.clientIDs, client.ID)
+		}
+	}
 
 	core.Log("GenerateErpHistory:: terceros listos", "proveedores", len(generator.providerIDs),
-		"clientes", len(generator.clientIDs))
+		"clientes", len(generator.clientIDs), "empresas", len(generator.businessClientIDs))
 	return nil
 }
 
-func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, partyType int8) ([]int32, error) {
+// saveAndLoadParties writes the seeds and returns the stored rows they resolved to. Only the seeds'
+// own rows come back: other scripts seed parties of the same type (supply providers, expense
+// suppliers), and a grocery purchase order must not land on the electricity company.
+func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, partyType int8) ([]crmTypes.ClientProvider, error) {
 	if len(seeds) == 0 {
 		return nil, core.Err("la lista de terceros a sembrar está vacía")
 	}
@@ -583,16 +724,20 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, part
 		return nil, err
 	}
 
-	partyIDs := []int32{}
+	seedNames := core.SliceSet[string]{}
+	for _, seed := range payload {
+		seedNames.Add(seed.Name)
+	}
+	seededParties := []crmTypes.ClientProvider{}
 	for _, party := range storedParties {
-		if party.ID > 0 && party.Status != 0 && party.Type == partyType {
-			partyIDs = append(partyIDs, party.ID)
+		if party.ID > 0 && party.Status != 0 && party.Type == partyType && seedNames.Include(party.Name) {
+			seededParties = append(seededParties, party)
 		}
 	}
-	if len(partyIDs) == 0 {
+	if len(seededParties) == 0 {
 		return nil, core.Err("no se pudo resolver ningún tercero de tipo", partyType)
 	}
-	return partyIDs, nil
+	return seededParties, nil
 }
 
 // loadProductPool fixes the working catalog once: the same products are reused every simulated
@@ -765,6 +910,28 @@ func (generator *erpHistoryGenerator) runOneDay(targetUnixDay int16) error {
 	dayStart := generator.dayStartTime(targetUnixDay)
 	core.Log("GenerateErpHistory:: día", targetUnixDay, dayStart.Format("2006-01-02"))
 
+	for stepIndex, dayStep := range generator.daySteps {
+		// Finished before the interruption; its own fine-grained checkpoint already moved on.
+		if stepIndex < generator.state.CompletedDaySteps {
+			continue
+		}
+		if err := dayStep.run(dayStart); err != nil {
+			return core.Err("paso", dayStep.name, ":", err)
+		}
+		generator.state.CompletedDaySteps = stepIndex + 1
+		if err := generator.saveState(); err != nil {
+			return err
+		}
+	}
+
+	if !slices.Contains(generator.state.AffectedUnixDays, targetUnixDay) {
+		generator.state.AffectedUnixDays = append(generator.state.AffectedUnixDays, targetUnixDay)
+	}
+	return generator.saveState()
+}
+
+// runPurchaseOrdersStep buys one order per warehouse and re-reads the stock they received.
+func (generator *erpHistoryGenerator) runPurchaseOrdersStep(dayStart time.Time) error {
 	for purchaseOrderIndex, warehouseID := range generator.config.warehouseIDs {
 		// Already written before the interruption; replaying it would duplicate the order.
 		if purchaseOrderIndex < generator.state.CompletedPurchaseOrders {
@@ -785,15 +952,7 @@ func (generator *erpHistoryGenerator) runOneDay(targetUnixDay int16) error {
 			return core.Err("no se pudo recargar el stock del almacén", warehouseID, ":", err)
 		}
 	}
-
-	if err := generator.runDailySales(dayStart); err != nil {
-		return err
-	}
-
-	if !slices.Contains(generator.state.AffectedUnixDays, targetUnixDay) {
-		generator.state.AffectedUnixDays = append(generator.state.AffectedUnixDays, targetUnixDay)
-	}
-	return generator.saveState()
+	return nil
 }
 
 // runPurchaseOrder walks one order through its full lifecycle: create → confirm → pay → receive.
@@ -829,6 +988,12 @@ func (generator *erpHistoryGenerator) runPurchaseOrder(dayStart time.Time, purch
 
 	if err := generator.confirmPurchaseOrder(dayStart.Add(8*time.Hour+orderSlot+time.Minute), createdOrder.ID); err != nil {
 		return core.Err("error al confirmar la orden de compra:", err)
+	}
+
+	// The supplier's factura arrives with the goods and is booked before paying, so the payment
+	// clears the invoices payable (4212) instead of an undocumented payable.
+	if err := generator.registerPurchaseOrderDocument(dayStart.Add(8*time.Hour+orderSlot+90*time.Second), createdOrder); err != nil {
+		return core.Err("error al registrar la factura de la orden de compra:", err)
 	}
 
 	if createdOrder.DebtAmount > 0 {
@@ -895,22 +1060,41 @@ func (generator *erpHistoryGenerator) confirmPurchaseOrder(at time.Time, orderID
 	return nil
 }
 
-// payPurchaseOrder tops the cash register up first when the balance cannot cover the invoice:
-// ApplyCashBankMovement does not stop a negative balance, so keeping it solvent is on the caller.
-func (generator *erpHistoryGenerator) payPurchaseOrder(dayStart time.Time, orderSlot time.Duration, orderID int32, amountToPay int32) error {
-	currentBalance, err := generator.readCashBankBalance()
+// registerPurchaseOrderDocument books the supplier's factura (PUT.purchase-orders action 5): one
+// series per supplier and an increasing number, the order total split into base and 18% IGV.
+func (generator *erpHistoryGenerator) registerPurchaseOrderDocument(at time.Time, order logisticsTypes.PurchaseOrder) error {
+	issueDay := core.TimeToFechaUnix(at)
+	documentKey := fmt.Sprint("po-", order.ProviderID)
+	document := makePurchaseDocument(financeTypes.PurchaseDocTypeFactura,
+		fmt.Sprintf("F%03d", order.ProviderID%1000), generator.nextDocNumber(documentKey), issueDay, order.TotalAmount)
+
+	patch := logisticsTypes.PurchaseOrder{}
+	patch.SetPurchaseDocument(document)
+	bodyBytes, err := json.Marshal(patch)
 	if err != nil {
 		return err
 	}
-	if currentBalance < amountToPay {
-		injectedAmount := amountToPay - currentBalance + erpCashTopUpPadding
-		if err := generator.injectCash(dayStart.Add(7*time.Hour+orderSlot), currentBalance, injectedAmount); err != nil {
-			return err
-		}
+	core.SetHistoricalUnix(at.Unix())
+	request := generator.makeRequest("PUT.purchase-orders", map[string]string{
+		"action": strconv.Itoa(logistics.PurchaseOrderActionDocument),
+		"id":     strconv.Itoa(int(order.ID)),
+	}, string(bodyBytes))
+	if response := logistics.PutPurchaseOrder(&request); response.StatusCode != 200 {
+		return core.Err(response.Error)
+	}
+	generator.addPurchaseTax(issueDay, document.TaxAmount)
+	return nil
+}
+
+// payPurchaseOrder tops the cash register up first when the balance cannot cover the invoice:
+// ApplyCashBankMovement does not stop a negative balance, so keeping it solvent is on the caller.
+func (generator *erpHistoryGenerator) payPurchaseOrder(dayStart time.Time, orderSlot time.Duration, orderID int32, amountToPay int32) error {
+	if err := generator.ensureCashBalance(generator.purchaseCashBankID, amountToPay, dayStart.Add(7*time.Hour+orderSlot)); err != nil {
+		return err
 	}
 
 	payloadBytes, err := json.Marshal(map[string]any{
-		"CashBankID": generator.cashBankID,
+		"CashBankID": generator.purchaseCashBankID,
 		"Amount":     amountToPay,
 	})
 	if err != nil {
@@ -927,39 +1111,58 @@ func (generator *erpHistoryGenerator) payPurchaseOrder(dayStart time.Time, order
 	return nil
 }
 
-func (generator *erpHistoryGenerator) readCashBankBalance() (int32, error) {
-	request := generator.makeRequest("GET.cash-banks", map[string]string{}, "")
-	// The handler answers with a map keyed "Cajas", so it decodes as a map and not as a struct.
-	cashBanksByKey := map[string][]financeTypes.CashBank{}
-	if err := decodeResponse(finance.GetCashBanks(&request), &cashBanksByKey); err != nil {
-		return 0, err
+// ensureCashBalance tops a cash register up with a capital contribution when it cannot cover an
+// outflow: the payment handlers refuse to leave a register negative.
+func (generator *erpHistoryGenerator) ensureCashBalance(cashBankID int32, amountToPay int32, at time.Time) error {
+	currentBalance, err := generator.readCashBankBalance(cashBankID)
+	if err != nil {
+		return err
 	}
-	for _, cashBank := range cashBanksByKey["Cajas"] {
-		if cashBank.ID == generator.cashBankID {
-			return cashBank.CurrentAmount, nil
-		}
+	if currentBalance >= amountToPay {
+		return nil
 	}
-	return 0, core.Err("no se encontró la caja", generator.cashBankID)
+	return generator.injectCash(cashBankID, at, currentBalance, amountToPay-currentBalance+erpCashTopUpPadding)
 }
 
-// injectCash registers a type 7 ("Cobro") movement. The handler rejects the write unless
-// FinalAmount - Amount matches the stored balance, so it is sent pre-computed like the frontend does.
-func (generator *erpHistoryGenerator) injectCash(at time.Time, currentBalance int32, amountToInject int32) error {
-	payloadBytes, err := json.Marshal(financeTypes.CashBankMovement{
-		CashBankID:         generator.cashBankID,
-		Type:               7,
-		CounterAccountCode: financeTypes.PCGECapital,
-		Amount:             amountToInject,
-		FinalAmount:        currentBalance + amountToInject,
-	})
+// readCashBankBalance reads the balance from the base row, the same one POST.cash-banks-movement
+// validates FinalAmount - Amount against. The GET.cash-banks delta list can answer a stale balance
+// right after a backdated movement, which made the next movement fail its balance check.
+func (generator *erpHistoryGenerator) readCashBankBalance(cashBankID int32) (int32, error) {
+	cashBank, err := financeTypes.GetCaja(erpCompanyID, cashBankID)
+	return cashBank.CurrentAmount, err
+}
+
+// postManualCashMovement sends a movement through POST.cash-banks-movement. The handler answers a
+// stale balance with a 200 carrying NeedUpdateSaldo instead of an error, so that body is checked.
+func (generator *erpHistoryGenerator) postManualCashMovement(at time.Time, movement financeTypes.CashBankMovement) error {
+	payloadBytes, err := json.Marshal(movement)
 	if err != nil {
 		return err
 	}
 	core.SetHistoricalUnix(at.Unix())
 	request := generator.makeRequest("POST.cash-banks-movement", nil, string(payloadBytes))
-	response := finance.PostCashBankMovement(&request)
-	if response.StatusCode != 200 {
-		return core.Err(response.Error)
+	responseBody := map[string]any{}
+	if err := decodeResponse(finance.PostCashBankMovement(&request), &responseBody); err != nil {
+		return err
+	}
+	if storedBalance, isStale := responseBody["NeedUpdateSaldo"]; isStale {
+		return core.Err("el saldo de la caja", movement.CashBankID, "no coincide; saldo guardado:", storedBalance)
+	}
+	return nil
+}
+
+// injectCash registers a type 7 ("Cobro") movement as a capital contribution. The handler rejects
+// the write unless FinalAmount - Amount matches the stored balance, so it is sent pre-computed like
+// the frontend does.
+func (generator *erpHistoryGenerator) injectCash(cashBankID int32, at time.Time, currentBalance int32, amountToInject int32) error {
+	if err := generator.postManualCashMovement(at, financeTypes.CashBankMovement{
+		CashBankID:         cashBankID,
+		Type:               financeTypes.CashMovementTypeCollection,
+		CounterAccountCode: financeTypes.PCGECapital,
+		Amount:             amountToInject,
+		FinalAmount:        currentBalance + amountToInject,
+	}); err != nil {
+		return err
 	}
 
 	generator.state.Stats.CashInjections++
@@ -1042,6 +1245,8 @@ func (generator *erpHistoryGenerator) runDailySales(dayStart time.Time) error {
 			generator.randomInRange(generator.config.unpaidMin, generator.config.unpaidMax))
 		generator.state.SalesUndeliveredFlags = generator.makeFlagPlan(salesCount,
 			generator.randomInRange(generator.config.undeliveredMin, generator.config.undeliveredMax))
+		generator.state.SalesAnnulFlags = generator.makeFlagPlan(salesCount,
+			generator.randomInRange(generator.config.annulMin, generator.config.annulMax))
 		if err := generator.saveState(); err != nil {
 			return err
 		}
@@ -1056,10 +1261,20 @@ func (generator *erpHistoryGenerator) runDailySales(dayStart time.Time) error {
 		isUndelivered := generator.state.SalesUndeliveredFlags[saleIndex]
 
 		saleTime := dayStart.Add(11*time.Hour + time.Duration(saleIndex)*saleInterval)
-		if err := generator.createSaleWithRetry(saleTime, isUnpaid, isUndelivered); err != nil {
+		createdSale, err := generator.createSaleWithRetry(saleTime, isUnpaid, isUndelivered)
+		if err != nil {
 			return err
 		}
 
+		// The month's taxes are computed from what was actually sold.
+		generator.periodTaxTotals(core.TimeToFechaUnix(saleTime)).SalesGross += int64(createdSale.TotalAmount)
+		if createdSale.IssueSeriesID > 0 {
+			generator.state.Stats.SalesInvoiced++
+		}
+		if generator.state.SalesAnnulFlags[saleIndex] {
+			generator.state.PendingAnnulments = append(generator.state.PendingAnnulments,
+				pendingAnnulment{SaleID: createdSale.ID, CashBankID: createdSale.LastPaymentCajaID})
+		}
 		generator.state.Stats.SalesCreated++
 		if isUnpaid {
 			generator.state.Stats.SalesUnpaid++
@@ -1082,7 +1297,7 @@ func (generator *erpHistoryGenerator) runDailySales(dayStart time.Time) error {
 
 // createSaleWithRetry rebuilds the sale from freshly reloaded stock when the handler rejects it
 // for insufficient stock, which is the only failure the ledger can drift into.
-func (generator *erpHistoryGenerator) createSaleWithRetry(saleTime time.Time, isUnpaid bool, isUndelivered bool) error {
+func (generator *erpHistoryGenerator) createSaleWithRetry(saleTime time.Time, isUnpaid bool, isUndelivered bool) (salesTypes.SaleOrder, error) {
 	const maxStockRetries = 3
 
 	for attempt := 0; ; attempt++ {
@@ -1090,16 +1305,16 @@ func (generator *erpHistoryGenerator) createSaleWithRetry(saleTime time.Time, is
 		salePayload, reservedBuckets, err := generator.makeSalePayload(warehouseID, isUnpaid, isUndelivered)
 		if err != nil {
 			if attempt >= maxStockRetries {
-				return err
+				return salesTypes.SaleOrder{}, err
 			}
 			generator.state.Stats.StockRetries++
 			if reloadError := generator.reloadWarehouseLedger(warehouseID); reloadError != nil {
-				return reloadError
+				return salesTypes.SaleOrder{}, reloadError
 			}
 			continue
 		}
 
-		createError := generator.postSaleOrder(saleTime, salePayload)
+		createdSale, createError := generator.postSaleOrder(saleTime, salePayload)
 		if createError == nil {
 			// Only a delivered sale leaves the warehouse, so undelivered ones must not consume the
 			// reservation — the units stay available for the following sales.
@@ -1109,16 +1324,16 @@ func (generator *erpHistoryGenerator) createSaleWithRetry(saleTime time.Time, is
 					bucket.remaining -= core.UnpackQuantityLine(salePayload.Lines[bucketIndex].Quantity).Units
 				}
 			}
-			return nil
+			return createdSale, nil
 		}
 		if !isStockShortageError(createError) || attempt >= maxStockRetries {
-			return createError
+			return salesTypes.SaleOrder{}, createError
 		}
 
 		generator.state.Stats.StockRetries++
 		core.Log("GenerateErpHistory:: stock insuficiente, recargando ledger", createError.Error())
 		if reloadError := generator.reloadWarehouseLedger(warehouseID); reloadError != nil {
-			return reloadError
+			return salesTypes.SaleOrder{}, reloadError
 		}
 	}
 }
@@ -1142,7 +1357,7 @@ func (generator *erpHistoryGenerator) makeSalePayload(warehouseID int32, isUnpai
 
 	salePayload := salesTypes.SaleOrder{
 		WarehouseID:       warehouseID,
-		LastPaymentCajaID: generator.cashBankID,
+		LastPaymentCajaID: generator.tillByWarehouse[warehouseID],
 		CurrencyType:      financeTypes.CurrencyPEN,
 	}
 	reservedBuckets := []*stockBucket{}
@@ -1192,25 +1407,111 @@ func (generator *erpHistoryGenerator) makeSalePayload(warehouseID int32, isUnpai
 		salePayload.ActionsIncluded = append(salePayload.ActionsIncluded, 3)
 	}
 
-	// Half the sales are attributed to a client and half stay anonymous, as a counter sale would.
-	if generator.random.Intn(2) == 0 && len(generator.clientIDs) > 0 {
-		salePayload.ClientID = generator.clientIDs[generator.random.Intn(len(generator.clientIDs))]
-	}
-
+	generator.assignSaleBuyerAndDocument(&salePayload)
 	return salePayload, reservedBuckets, nil
 }
 
-func (generator *erpHistoryGenerator) postSaleOrder(saleTime time.Time, payload salesTypes.SaleOrder) error {
+// assignSaleBuyerAndDocument decides who buys and what the sale is issued as. One sale in eight
+// goes to a company and carries a factura (it needs the buyer's RUC); the rest are boletas, half
+// of them to a known client. A boleta of S/ 700 or more must name its buyer, so a big anonymous
+// one is given a client with a DNI.
+func (generator *erpHistoryGenerator) assignSaleBuyerAndDocument(salePayload *salesTypes.SaleOrder) {
+	isBusinessSale := generator.facturaSeriesID > 0 && len(generator.businessClientIDs) > 0 && generator.random.Intn(8) == 0
+	if isBusinessSale {
+		salePayload.ClientID = generator.businessClientIDs[generator.random.Intn(len(generator.businessClientIDs))]
+		salePayload.IssueSeriesID = generator.facturaSeriesID
+		return
+	}
+
+	if generator.random.Intn(2) == 0 && len(generator.clientIDs) > 0 {
+		salePayload.ClientID = generator.clientIDs[generator.random.Intn(len(generator.clientIDs))]
+	}
+	salePayload.IssueSeriesID = generator.boletaSeriesID
+	needsIdentifiedBuyer := salePayload.TotalAmount >= invoicingTypes.BoletaIdentifiedFrom
+	if needsIdentifiedBuyer && !slices.Contains(generator.dniClientIDs, salePayload.ClientID) && len(generator.dniClientIDs) > 0 {
+		salePayload.ClientID = generator.dniClientIDs[generator.random.Intn(len(generator.dniClientIDs))]
+	}
+}
+
+func (generator *erpHistoryGenerator) postSaleOrder(saleTime time.Time, payload salesTypes.SaleOrder) (salesTypes.SaleOrder, error) {
 	bodyBytes, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return salesTypes.SaleOrder{}, err
 	}
 	core.SetHistoricalUnix(saleTime.Unix())
 	request := generator.makeRequest("POST.sale-order", nil, string(bodyBytes))
-	if response := sales.PostSaleOrder(&request); response.StatusCode != 200 {
-		return core.Err(response.Error)
+	createdSale := salesTypes.SaleOrder{}
+	if err := decodeResponse(sales.PostSaleOrder(&request), &createdSale); err != nil {
+		return salesTypes.SaleOrder{}, err
 	}
-	return nil
+	return createdSale, nil
+}
+
+// resolveInvoiceSeries finds the company's active default factura and boleta series, creating the
+// missing ones (F001 / B001) through POST.invoice-series. Sales are issued under them, which writes
+// their invoice_document; nothing is sent to SUNAT here.
+func (generator *erpHistoryGenerator) resolveInvoiceSeries() error {
+	findDefaults := func(allSeries []invoicingTypes.InvoiceSeries) (int8, int8) {
+		facturaSeriesID, boletaSeriesID := int8(0), int8(0)
+		for _, series := range allSeries {
+			if series.Status != 1 || series.IsDefault != 1 {
+				continue
+			}
+			switch series.DocType {
+			case invoicingTypes.DocTypeFactura:
+				facturaSeriesID = series.SeriesID
+			case invoicingTypes.DocTypeBoleta:
+				boletaSeriesID = series.SeriesID
+			}
+		}
+		return facturaSeriesID, boletaSeriesID
+	}
+
+	storedSeries, err := invoicing.LoadCompanySeries(erpCompanyID)
+	if err != nil {
+		return err
+	}
+	facturaSeriesID, boletaSeriesID := findDefaults(storedSeries)
+	for _, missingSeries := range []invoicingTypes.InvoiceSeries{
+		{DocType: invoicingTypes.DocTypeFactura, SeriesCode: "F001", IsDefault: 1},
+		{DocType: invoicingTypes.DocTypeBoleta, SeriesCode: "B001", IsDefault: 1},
+	} {
+		isMissing := (missingSeries.DocType == invoicingTypes.DocTypeFactura && facturaSeriesID == 0) ||
+			(missingSeries.DocType == invoicingTypes.DocTypeBoleta && boletaSeriesID == 0)
+		if !isMissing {
+			continue
+		}
+		bodyBytes, err := json.Marshal(missingSeries)
+		if err != nil {
+			return err
+		}
+		request := generator.makeRequest("POST.invoice-series", nil, string(bodyBytes))
+		savedSeries := map[string][]invoicingTypes.InvoiceSeries{}
+		if err := decodeResponse(invoicing.PostInvoiceSeries(&request), &savedSeries); err != nil {
+			return err
+		}
+		facturaSeriesID, boletaSeriesID = findDefaults(savedSeries["InvoiceSeries"])
+	}
+	if facturaSeriesID == 0 || boletaSeriesID == 0 {
+		return core.Err("la empresa no tiene una serie activa por defecto de factura y de boleta")
+	}
+
+	// The sale handler reads the series from the cached company config, which may lag a fresh
+	// write; wait until both are visible there rather than failing the first sales.
+	for attempt := 0; attempt < 30; attempt++ {
+		companyConfig, err := cloud.LoadCompanyConfig(erpCompanyID)
+		if err != nil {
+			return err
+		}
+		if invoicingTypes.FindSeries(companyConfig.Sunat.Series, facturaSeriesID) != nil &&
+			invoicingTypes.FindSeries(companyConfig.Sunat.Series, boletaSeriesID) != nil {
+			generator.facturaSeriesID, generator.boletaSeriesID = facturaSeriesID, boletaSeriesID
+			core.Log("GenerateErpHistory:: series de facturación", "factura", facturaSeriesID, "boleta", boletaSeriesID)
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return core.Err("las series de facturación no aparecen en la configuración de la empresa")
 }
 
 // ─── Dates, checkpoint and helpers ─────────────────────────────────────────────
@@ -1259,6 +1560,47 @@ func (generator *erpHistoryGenerator) pickDistinctFromPool(count int) []int32 {
 		count = len(shuffledPool)
 	}
 	return shuffledPool[:count]
+}
+
+// makePurchaseDocument builds a supplier comprobante for a gross total. A document with tax credit
+// (factura, ticket, utility bill) splits it into base and 18% IGV; a boleta or fee receipt carries
+// it whole as untaxed; no document returns the empty shape.
+func makePurchaseDocument(docType int8, series string, number int64, issueDay int16, total int32) financeTypes.PurchaseDocument {
+	document := financeTypes.PurchaseDocument{DocType: docType, CurrencyType: financeTypes.CurrencyPEN}
+	if docType == financeTypes.PurchaseDocTypeNone {
+		return document
+	}
+	document.DocSeries, document.DocNumber, document.DocIssueDate = series, number, issueDay
+	switch docType {
+	case financeTypes.PurchaseDocTypeFactura, financeTypes.PurchaseDocTypeTicket, financeTypes.PurchaseDocTypeUtilityBill:
+		document.TaxableAmount = int32(math.Round(float64(total) / 1.18))
+		document.TaxAmount = total - document.TaxableAmount
+	default:
+		document.UntaxedAmount = total
+	}
+	return document
+}
+
+// nextDocNumber hands out a supplier's comprobante numbers in order. The first one starts at a
+// random point, as a supplier's invoice numbering would.
+func (generator *erpHistoryGenerator) nextDocNumber(documentKey string) int64 {
+	if generator.state.NextDocNumberByKey[documentKey] == 0 {
+		generator.state.NextDocNumberByKey[documentKey] = int64(1000 + generator.random.Intn(90000))
+	}
+	generator.state.NextDocNumberByKey[documentKey]++
+	return generator.state.NextDocNumberByKey[documentKey]
+}
+
+func (generator *erpHistoryGenerator) periodTaxTotals(unixDay int16) *periodTaxTotals {
+	period := core.PeriodOfDay(unixDay)
+	if generator.state.TaxTotalsByPeriod[period] == nil {
+		generator.state.TaxTotalsByPeriod[period] = &periodTaxTotals{}
+	}
+	return generator.state.TaxTotalsByPeriod[period]
+}
+
+func (generator *erpHistoryGenerator) addPurchaseTax(issueDay int16, taxAmount int32) {
+	generator.periodTaxTotals(issueDay).PurchaseTaxIGV += int64(taxAmount)
 }
 
 // makeFlagPlan marks exactly flaggedCount of totalCount positions, in random order.

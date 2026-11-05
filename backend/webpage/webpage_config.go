@@ -15,13 +15,13 @@ const (
 	// domainChangeCooldownTicks is 20 minutes in the project's 2-second SUnixTime units.
 	domainChangeCooldownTicks = int32(20 * 60 / 2)
 	// La cuenta de desarrollo del proyecto, exenta del cooldown. El cooldown protege de gastar
-	// las cuotas de Cloudflare a base de registrar y soltar hostnames, pero probar ese mismo
+	// cambios de Route 53 a base de registrar y soltar hostnames, pero probar ese mismo
 	// camino es lo que se hace desde esta cuenta, y esperar 20 minutos por intento lo impide.
 	domainCooldownBypassCompanyID = int32(1)
 	domainCooldownBypassUserID    = int32(1)
 	// domainParameterKey holds the company's active storefront hostname.
 	domainParameterKey = "domain"
-	// previousDomainParameterKey marks a hostname that is pending release in Cloudflare. It is
+	// previousDomainParameterKey marks a hostname that is pending release in Route 53. It is
 	// written when the domain changes and cleared once the release is queued, so the cleanup
 	// survives a failed render and the retry that follows it.
 	previousDomainParameterKey = "domain_previous"
@@ -107,24 +107,24 @@ func PostWebsiteSeo(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(map[string]bool{"saved": true})
 }
 
-// PostWebsiteDomain reserva el hostname en Cloudflare, lo guarda, y publica la tienda sobre él
+// PostWebsiteDomain reserva el hostname en Route 53, lo guarda, y publica la tienda sobre él
 // antes de responder.
 //
-// El render es SÍNCRONO y bloquea la respuesta a propósito. El HTML en R2 está indexado por
-// hostname y el Worker no tiene fallback de SPA, así que un dominio recién registrado resuelve y
+// El render es SÍNCRONO y bloquea la respuesta a propósito. El HTML en S3 está indexado por
+// hostname y CloudFront no tiene fallback de SPA, así que un dominio recién registrado resuelve y
 // devuelve 404 en todas sus rutas hasta que alguien lo renderiza: dejarlo para después significaba
 // tener la tienda caída —no degradada— durante esa ventana. El usuario espera unos segundos con el
 // spinner que ya muestra WebpageConfig.svelte y no hay ningún estado intermedio roto.
 //
 // El orden importa y es el que hace segura la falla: se guarda, se renderiza, y solo si el render
-// funcionó se libera el dominio anterior. Si el render falla, el hostname viejo sigue vivo en
-// Cloudflare sirviendo su HTML, así que la tienda sigue en pie mientras se reintenta.
+// funcionó se libera el dominio anterior. Si el render falla, el hostname viejo conserva su alias
+// en Route 53 y su HTML en S3, así que la tienda sigue en pie mientras se reintenta.
 // canBypassDomainCooldown identifica a la cuenta de desarrollo del proyecto, la única que puede
 // cambiar de dominio sin esperar. Se compara contra el token ya verificado, no contra nada que
 // venga en el body, así que no es algo que un cliente pueda afirmar de sí mismo.
 //
 // Lo único que se salta es la espera: el hostname sigue pasando por la validación de formato y
-// por la reserva en Cloudflare, que es donde se rechaza un nombre ocupado.
+// por la reserva en Route 53, que es donde se rechaza un nombre ocupado.
 func canBypassDomainCooldown(user *core.UsuarioToken) bool {
 	return user != nil &&
 		user.CompanyID == domainCooldownBypassCompanyID &&
@@ -162,7 +162,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	core.Log("Verificando dominio Cloudflare::", domain)
+	core.Log("Verificando dominio Route 53::", domain)
 	if provisionError := provisionStorefrontDomain(domain, !isDomainChange); provisionError != nil {
 		return req.MakeErr("No se pudo registrar el dominio:", provisionError)
 	}
@@ -184,7 +184,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 		if currentDomain != nil {
 			// El dominio saliente se guarda en su propia fila para que la limpieza sobreviva a un
 			// render fallido: en el reintento el guardado ya no es un cambio y currentDomain apunta
-			// al nuevo, así que sin esto el anterior se perdería y quedaría huérfano en Cloudflare.
+			// al nuevo, así que sin esto el anterior se perdería y quedaría huérfano en Route 53.
 			parametersToSave = append(parametersToSave, config.Parameters{
 				CompanyID: req.User.CompanyID,
 				Group:     webpageConfigGroup,
@@ -221,6 +221,12 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 	})
 }
 
+// ProvisionStorefrontDomain registra hostname para las tiendas, aceptando que ya lo esté. Es la
+// entrada del deploy manual (fn-deploy-company-webpage), que republica un dominio ya guardado.
+func ProvisionStorefrontDomain(hostname string) error {
+	return provisionStorefrontDomain(hostname, true)
+}
+
 // getCompanyDomain returns the single upserted domain row and its last-change timestamp.
 func getCompanyDomain(companyID int32) (*config.Parameters, error) {
 	return getCompanyWebpageParameter(companyID, domainParameterKey)
@@ -242,12 +248,12 @@ func getCompanyWebpageParameter(companyID int32, key string) (*config.Parameters
 	return &parameters[0], nil
 }
 
-// releasePreviousDomain programa la limpieza en Cloudflare del dominio que la company dejó de usar y
+// releasePreviousDomain programa la limpieza en Route 53 del dominio que la company dejó de usar y
 // borra la marca, de modo que se ejecute exactamente una vez.
 //
 // Solo se llama después de un render correcto: mientras el hostname nuevo no sirva contenido, el
 // viejo es lo único que mantiene la tienda en pie. No devuelve error a propósito —el dominio ya está
-// guardado y publicado, y un fallo aquí solo deja un registro huérfano en Cloudflare, que no es
+// guardado y publicado, y un fallo aquí solo deja un registro huérfano en Route 53, que no es
 // motivo para que el usuario vea fallar la operación.
 func releasePreviousDomain(companyID int32, currentDomain string, userID int32) {
 	previousDomain, readError := getCompanyWebpageParameter(companyID, previousDomainParameterKey)
@@ -285,7 +291,8 @@ func clearPreviousDomainMark(companyID int32, userID int32) {
 	}
 }
 
-// normalizeStorefrontDomain accepts only direct subdomains of the configured Cloudflare zone.
+// normalizeStorefrontDomain accepts only direct subdomains of the configured storefront zone: the
+// wildcard certificate *.ZONE_NAME covers exactly one label.
 func normalizeStorefrontDomain(rawDomain string) (string, error) {
 	domain := strings.ToLower(strings.TrimSpace(rawDomain))
 	domain = strings.TrimPrefix(domain, "https://")

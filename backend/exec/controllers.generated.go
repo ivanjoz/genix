@@ -10,6 +10,7 @@ import (
 	crmTypes "app/crm/types"
 	"app/db"
 	financeTypes "app/finance/types"
+	hrTypes "app/hr/types"
 	invoicingTypes "app/invoicing/types"
 	logisticsTypes "app/logistics/types"
 	productionTypes "app/production/types"
@@ -54,6 +55,18 @@ func MakeScyllaControllers() []db.Controller {
 		makeDBController[financeTypes.ExchangeRate](),
 		makeDBController[financeTypes.Expense](),
 		makeDBController[financeTypes.ExpenseScheduled](),
+		makeDBController[hrTypes.AfpRate](),
+		makeDBController[hrTypes.Concept](),
+		makeDBController[hrTypes.Contract](),
+		makeDBController[hrTypes.Department](),
+		makeDBController[hrTypes.Dependent](),
+		makeDBController[hrTypes.Employee](),
+		makeDBController[hrTypes.EmployeeConcept](),
+		makeDBController[hrTypes.EmployeeRecord](),
+		makeDBController[hrTypes.LegalParameter](),
+		makeDBController[hrTypes.PayrollRun](),
+		makeDBController[hrTypes.Payslip](),
+		makeDBController[hrTypes.Position](),
 		makeDBController[invoicingTypes.CompanySecrets](),
 		makeDBController[invoicingTypes.InvoiceDocument](),
 		makeDBController[invoicingTypes.InvoiceSummary](),
@@ -120,6 +133,18 @@ func init() {
 	db.RegisterTableFactory("exchange_rates", func() db.Table { return db.MakeTable[financeTypes.ExchangeRate]() })
 	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[financeTypes.Expense]() })
 	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
+	db.RegisterTableFactory("hr_afp_rates", func() db.Table { return db.MakeTable[hrTypes.AfpRate]() })
+	db.RegisterTableFactory("hr_concepts", func() db.Table { return db.MakeTable[hrTypes.Concept]() })
+	db.RegisterTableFactory("hr_contracts", func() db.Table { return db.MakeTable[hrTypes.Contract]() })
+	db.RegisterTableFactory("hr_departments", func() db.Table { return db.MakeTable[hrTypes.Department]() })
+	db.RegisterTableFactory("hr_employee_dependents", func() db.Table { return db.MakeTable[hrTypes.Dependent]() })
+	db.RegisterTableFactory("hr_employees", func() db.Table { return db.MakeTable[hrTypes.Employee]() })
+	db.RegisterTableFactory("hr_employee_concepts", func() db.Table { return db.MakeTable[hrTypes.EmployeeConcept]() })
+	db.RegisterTableFactory("hr_employee_records", func() db.Table { return db.MakeTable[hrTypes.EmployeeRecord]() })
+	db.RegisterTableFactory("hr_legal_parameters", func() db.Table { return db.MakeTable[hrTypes.LegalParameter]() })
+	db.RegisterTableFactory("hr_payroll_runs", func() db.Table { return db.MakeTable[hrTypes.PayrollRun]() })
+	db.RegisterTableFactory("hr_payslips", func() db.Table { return db.MakeTable[hrTypes.Payslip]() })
+	db.RegisterTableFactory("hr_positions", func() db.Table { return db.MakeTable[hrTypes.Position]() })
 	db.RegisterTableFactory("company_secrets", func() db.Table { return db.MakeTable[invoicingTypes.CompanySecrets]() })
 	db.RegisterTableFactory("invoice_document", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceDocument]() })
 	db.RegisterTableFactory("invoice_summary", func() db.Table { return db.MakeTable[invoicingTypes.InvoiceSummary]() })

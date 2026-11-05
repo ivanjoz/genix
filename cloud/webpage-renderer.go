@@ -98,6 +98,12 @@ func UpdateRendererEnviromentVariables(params DeployParams) {
 		"CLOUDFLARE_ACCOUNT": params.Cloudflare.Account,
 		"CLOUDFLARE_TOKEN":   params.Cloudflare.Token,
 		"CLOUDFLARE_BUCKET":  params.Cloudflare.Bucket,
+		// El HTML va a S3. AWS_REGION y las credenciales las pone el runtime de Lambda (rol de la
+		// función, con los permisos que le da cloud/storefront.yml).
+		"STOREFRONT_BUCKET": params.Storefront.Bucket,
+	}
+	if strings.TrimSpace(params.Storefront.Bucket) == "" {
+		fmt.Println("⚠️  storefront.bucket vacío: el renderer no podrá publicar HTML hasta correr la acción 5.")
 	}
 
 	awsConfig, _ := MakeAwsConfig(params.AWS.Profile, params.AWS.Region)

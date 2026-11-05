@@ -95,7 +95,7 @@ func GetImageAssets(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &result)
 }
 
-// GetImageAssetTextSearch runs the Sonic GenixSearch index over image asset Keywords
+// GetImageAssetTextSearch runs the genix-s3 text index over image asset Keywords
 // (English) and returns the top ids + relevance weights ordered by score.
 func GetImageAssetTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 	query := req.GetQuery("q")

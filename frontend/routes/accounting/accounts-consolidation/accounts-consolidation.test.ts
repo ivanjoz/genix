@@ -410,3 +410,69 @@ describe('what the period reads outside itself', () => {
     expect(periodBounds("202602")).toEqual({ firstDay: 20485, lastDay: 20512 })
   })
 })
+
+describe('payroll', () => {
+  // S/ 2,000 salary + S/ 150 movilidad (625); ONP 13 % and a S/ 300 advance; EsSalud 9 %; CTS provision.
+  const payslip = {
+    ID: 9, Period: 2609, NetPay: 159000, ss: 2,
+    Lines: [
+      { Kind: 1, AccountCode: 6211, PayableAccountCode: 0, Amount: 200000 },
+      { Kind: 1, AccountCode: 625, PayableAccountCode: 0, Amount: 15000 },
+      { Kind: 2, AccountCode: 0, PayableAccountCode: 4032, Amount: 26000 },
+      { Kind: 2, AccountCode: 0, PayableAccountCode: 1412, Amount: 30000 },
+      { Kind: 3, AccountCode: 6271, PayableAccountCode: 4031, Amount: 18000 },
+      { Kind: 4, AccountCode: 629, PayableAccountCode: 415, Amount: 19444 },
+    ],
+  }
+
+  it('posts the payslip and its provisions as two balanced entries on the last day', () => {
+    const operations = buildAccountingOperations(makeResponse({ Payslips: [payslip] }), context)
+    expect(operations.map(operation => operation.Key)).toEqual(['PL-9', 'PP-9'])
+    for (const operation of operations) {
+      expect(operation.Date).toBe(FIRST_DAY + 29)
+      expect(operation.Status).toBe(OPERATION_STATUS_CLASSIFIED)
+      const debit = operation.Lines.reduce((total, line) => total + line.Debit, 0)
+      const credit = operation.Lines.reduce((total, line) => total + line.Credit, 0)
+      expect(debit).toBe(credit)
+    }
+    const payroll = operations[0].Lines
+    expect(payroll.find(line => line.AccountCode === 4111)?.Credit).toBe(159000)
+    expect(payroll.find(line => line.AccountCode === 1412)?.Credit).toBe(30000)
+    expect(payroll.find(line => line.AccountCode === 6271)?.Debit).toBe(18000)
+  })
+
+  it('charges a gratificación to its provision first and only the excess to 6214', () => {
+    const gratificacion = {
+      ID: 10, Period: 2607, NetPay: 223450, ss: 2,
+      Lines: [
+        { Kind: 1, AccountCode: 6214, PayableAccountCode: 0, Amount: 205000, ProvisionAccountCode: 4114, ProvisionedAmount: 205000 },
+        { Kind: 1, AccountCode: 6214, PayableAccountCode: 0, Amount: 18450, ProvisionAccountCode: 4114, ProvisionedAmount: 11000 },
+      ],
+    }
+    const [operation] = buildAccountingOperations(makeResponse({ Payslips: [gratificacion] }), context)
+    const debitOf = (accountCode: number) => operation.Lines
+      .filter(line => line.AccountCode === accountCode).reduce((total, line) => total + line.Debit, 0)
+    expect([debitOf(4114), debitOf(6214)]).toEqual([216000, 7450])
+    expect(operation.Lines.find(line => line.AccountCode === 4111)?.Credit).toBe(223450)
+  })
+
+  it('keeps a CTS deposit owed on 415 and out of the net pay', () => {
+    // Salary S/ 2,000 and a CTS of S/ 1,000 charged half to its provision: the net pay is the salary only.
+    const month = {
+      ID: 11, Period: 2605, NetPay: 200000, ss: 2,
+      Lines: [
+        { Kind: 1, AccountCode: 6211, PayableAccountCode: 0, Amount: 200000 },
+        { Kind: 1, AccountCode: 629, PayableAccountCode: 415, Amount: 100000, ProvisionAccountCode: 415,
+          ProvisionedAmount: 50000, OutsideNetPay: true },
+      ],
+    }
+    const [operation] = buildAccountingOperations(makeResponse({ Payslips: [month] }), context)
+    const debit = operation.Lines.reduce((total, line) => total + line.Debit, 0)
+    const credit = operation.Lines.reduce((total, line) => total + line.Credit, 0)
+    expect(debit).toBe(credit)
+    expect(operation.Lines.find(line => line.AccountCode === 4111)?.Credit).toBe(200000)
+    const onAccount415 = operation.Lines.filter(line => line.AccountCode === 415)
+    expect([onAccount415.reduce((total, line) => total + line.Debit, 0), onAccount415.reduce((total, line) => total + line.Credit, 0)])
+      .toEqual([50000, 100000])
+  })
+})

@@ -42,6 +42,9 @@ type Company struct {
 	FlagValues []core.CompanyFlagValue `cb:"17"`
 	Updated    int32                   `json:"upd" cb:"upd,18"`
 	Status     int8                    `json:"ss" cb:"ss,19"`
+	// Created is the SUnixTime the company registered in the system: the payroll lists months from
+	// a year before it.
+	Created int32 `cb:"20"`
 }
 
 type CompanyTable struct {
@@ -65,6 +68,7 @@ type CompanyTable struct {
 	FlagValues        db.Col[*CompanyTable, []core.CompanyFlagValue]
 	Updated           db.Col[*CompanyTable, int32]
 	Status            db.Col[*CompanyTable, int8]
+	Created           db.Col[*CompanyTable, int32]
 }
 
 func (e CompanyTable) GetSchema() db.TableSchema {

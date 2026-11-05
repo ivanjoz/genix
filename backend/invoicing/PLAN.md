@@ -565,7 +565,7 @@ burns a number.
 | `POST.company-secrets-test` | Smoke test: `GetStatusCDR` for a non-existent document. Confirms SOL credentials without issuing anything. |
 | `GET.invoice-series` / `POST.invoice-series` | Series per document type and site. |
 | `GET.invoices` | Listing with delta (`upv`) and filters by date, series, state. |
-| `GET.invoice-by-ids` | Detail by IDs (`fetch-record-by-id-api` pattern). |
+| `GET.invoice-by-ids` | Detail by IDs (`by-ids-cache-api` pattern). |
 | `GET.invoice-xml` | Downloads the signed XML or the CDR from S3. |
 | `POST.invoice` | Issues from a `SaleOrder`. Returns the document in pending state. |
 | `POST.invoice-retry` | Re-queues a document in exception state, same correlativo. |

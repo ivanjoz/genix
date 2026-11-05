@@ -3,9 +3,12 @@
 // Descarga el artefacto que publica CI (webpage-renderer.zip: el servidor SSR de la
 // tienda + sus assets), renderiza las páginas de UNA company y publica el resultado:
 //   assets js/css  →  R2  websites/<companyID>/_app/…        (inmutables, copia propia
-//                                                             de la company)
-//   HTML por página →  R2  websites-html/<hostname>/…/index.html
-//   sw.js/favicon  →  R2  websites-html/<hostname>/…         (deben ser same-origin)
+//                                                             de la company; los sirve FRONTEND_CDN)
+//   HTML por página →  S3  websites-html/<hostname>/…/index.html
+//   sw.js/favicon  →  S3  websites-html/<hostname>/…         (deben ser same-origin)
+//
+// El HTML lo sirve CloudFront en <hostname> (cloud/storefront.yml); su CloudFront Function traduce
+// <hostname>/<ruta> a la misma clave que se escribe aquí.
 //
 // Evento: { companyID, hostname, pages: [{ id, path }], forceAssets? }
 // Respuesta: { buildId, pages, assets, bytes }
@@ -19,6 +22,7 @@
 // así que este módulo no puede asumir el entorno de AWS en ningún punto.
 
 import { inflateRawSync } from 'node:zlib';
+import { createHash, createHmac } from 'node:crypto';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -31,9 +35,27 @@ const CLOUDFLARE_BUCKET = process.env.CLOUDFLARE_BUCKET || '';
 // Redirigible para poder ejercitar el handler completo contra un R2 simulado.
 const CLOUDFLARE_API_BASE = process.env.CLOUDFLARE_API_BASE || 'https://api.cloudflare.com/client/v4';
 
-// Prefijo en R2 del HTML servido por el Worker de la tienda. Debe coincidir con el que
-// lee frontend/webpage/cloudflare/serve-worker.js.
+// Bucket S3 del HTML de las tiendas. Las credenciales son las estándar de AWS: en Lambda las pone
+// el runtime (rol de la función) y fuera de ella las pasa el backend ya resueltas.
+const STOREFRONT_BUCKET = process.env.STOREFRONT_BUCKET || '';
+const AWS_REGION = process.env.AWS_REGION || '';
+// Redirigible para los tests: con un endpoint propio se usa path-style (<endpoint>/<bucket>/<key>).
+const STOREFRONT_S3_ENDPOINT = (process.env.STOREFRONT_S3_ENDPOINT || '').replace(/\/+$/, '');
+
+// Prefijo del HTML de las tiendas en el bucket. Debe coincidir con el que antepone la
+// CloudFront Function de cloud/storefront.yml.
 const HTML_KEY_ROOT = 'websites-html';
+const REQUIRED_ENVIRONMENT = [
+	'RENDERER_ZIP_URL',
+	'FRONTEND_CDN',
+	'CLOUDFLARE_ACCOUNT',
+	'CLOUDFLARE_TOKEN',
+	'CLOUDFLARE_BUCKET',
+	'STOREFRONT_BUCKET',
+	'AWS_REGION',
+	'AWS_ACCESS_KEY_ID',
+	'AWS_SECRET_ACCESS_KEY'
+];
 const UPLOAD_CONCURRENCY = 4;
 
 // El artefacto descomprimido sobrevive entre invocaciones calientes; una nueva versión
@@ -48,7 +70,7 @@ export async function render(event) {
 	if (companyID <= 0) throw new Error('companyID inválido');
 	if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(hostname)) throw new Error(`hostname inválido: ${hostname}`);
 	if (pages.length === 0) throw new Error('no se recibió ninguna página para renderizar');
-	for (const missing of ['RENDERER_ZIP_URL', 'FRONTEND_CDN', 'CLOUDFLARE_ACCOUNT', 'CLOUDFLARE_TOKEN', 'CLOUDFLARE_BUCKET']) {
+	for (const missing of REQUIRED_ENVIRONMENT) {
 		if (!process.env[missing]) throw new Error(`falta la variable de entorno ${missing}`);
 	}
 
@@ -83,7 +105,7 @@ export async function render(event) {
 
 		const html = applyHtmlRewrites(rendered.html, renderer.manifest, assetBase);
 		const key = `${htmlKeyPrefix}${path === '/' ? '' : path}/index.html`;
-		await putObject(key, Buffer.from(html, 'utf8'), 'text/html; charset=utf-8', 'public, max-age=60');
+		await putSiteObject(key, Buffer.from(html, 'utf8'), 'text/html; charset=utf-8', 'public, max-age=60');
 		bytes += Buffer.byteLength(html);
 		console.log(`[renderer] page=${path} id=${pageID} → ${key} (${html.length} bytes)`);
 	}
@@ -91,7 +113,7 @@ export async function render(event) {
 	return { buildId: renderer.manifest.buildId, pages: pages.length, assets: uploadedAssets, bytes };
 }
 
-// El Worker sirve una navegación como <host>/<ruta>/index.html, así que la ruta se
+// CloudFront sirve una navegación como <host>/<ruta>/index.html, así que la ruta se
 // normaliza a la misma forma con la que se construye la clave.
 export function normalizePagePath(rawPath) {
 	const path = String(rawPath || '/').trim();
@@ -278,6 +300,8 @@ async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, assetBase,
 		...renderer.siteFiles.map((file) => ({
 			key: `${htmlKeyPrefix}/${file.name}`,
 			data: file.data,
+			// Van con el HTML, al origen del sitio (S3), no al CDN.
+			put: putSiteObject,
 			// El service worker NO puede cachearse: es lo que gobierna las actualizaciones.
 			cacheControl: file.name === 'sw.js' ? 'public, max-age=0, must-revalidate' : 'public, max-age=86400'
 		})),
@@ -288,7 +312,9 @@ async function publishAssets(renderer, assetKeyPrefix, htmlKeyPrefix, assetBase,
 		await Promise.all(
 			uploads
 				.slice(index, index + UPLOAD_CONCURRENCY)
-				.map((upload) => putObject(upload.key, upload.data, contentTypeFor(upload.key), upload.cacheControl))
+				.map((upload) =>
+					(upload.put || putObject)(upload.key, upload.data, contentTypeFor(upload.key), upload.cacheControl)
+				)
 		);
 	}
 
@@ -364,6 +390,93 @@ async function putObject(key, data, contentType, cacheControl) {
 	if (!response.ok) {
 		throw new Error(`R2 PUT ${key} → HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
 	}
+}
+
+// --- S3 (HTML de las tiendas) ---------------------------------------------------
+//
+// PUT firmado con SigV4 a mano, por la misma razón que el lector de ZIP: sin dependencias npm.
+// En Lambda el SDK viene en el runtime, pero fuera de ella (cli.mjs en el VPS) no.
+
+async function putSiteObject(key, data, contentType, cacheControl) {
+	const url = STOREFRONT_S3_ENDPOINT
+		? new URL(`${STOREFRONT_S3_ENDPOINT}/${STOREFRONT_BUCKET}/${encodeS3Key(key)}`)
+		: new URL(`https://${STOREFRONT_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${encodeS3Key(key)}`);
+	const headers = signS3Request({
+		method: 'PUT',
+		url,
+		payload: data,
+		headers: { 'content-type': contentType, 'cache-control': cacheControl },
+		credentials: {
+			// Se leen en cada llamada y no al cargar el módulo: en Lambda el runtime las rota.
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+			sessionToken: process.env.AWS_SESSION_TOKEN || ''
+		},
+		region: AWS_REGION,
+		now: new Date()
+	});
+	const response = await fetch(url, { method: 'PUT', headers, body: data });
+	if (!response.ok) {
+		throw new Error(`S3 PUT ${key} → HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+	}
+}
+
+// S3 codifica cada segmento de la ruta una sola vez y deja las barras. encodeURIComponent no toca
+// !'()*, que SigV4 sí exige codificados.
+export function encodeS3Key(key) {
+	return key
+		.split('/')
+		.map((segment) =>
+			encodeURIComponent(segment).replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+		)
+		.join('/');
+}
+
+// Devuelve las cabeceras a enviar, con Authorization. Se firman host, x-amz-* y las que lleguen
+// en `headers`, así que lo que se firma es exactamente lo que viaja.
+export function signS3Request({ method, url, payload, headers, credentials, region, now }) {
+	const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+	const dateStamp = amzDate.slice(0, 8);
+	const payloadHash = createHash('sha256').update(payload).digest('hex');
+
+	const signedHeaders = {
+		...Object.fromEntries(Object.entries(headers).map(([name, value]) => [name.toLowerCase(), String(value).trim()])),
+		host: url.host,
+		'x-amz-content-sha256': payloadHash,
+		'x-amz-date': amzDate
+	};
+	if (credentials.sessionToken) signedHeaders['x-amz-security-token'] = credentials.sessionToken;
+
+	const headerNames = Object.keys(signedHeaders).sort();
+	const canonicalRequest = [
+		method,
+		url.pathname,
+		// Sin query string: el PUT de un objeto no lleva ninguna.
+		'',
+		headerNames.map((name) => `${name}:${signedHeaders[name]}\n`).join(''),
+		headerNames.join(';'),
+		payloadHash
+	].join('\n');
+
+	const scope = `${dateStamp}/${region}/s3/aws4_request`;
+	const stringToSign = [
+		'AWS4-HMAC-SHA256',
+		amzDate,
+		scope,
+		createHash('sha256').update(canonicalRequest).digest('hex')
+	].join('\n');
+
+	const hmac = (key, value) => createHmac('sha256', key).update(value).digest();
+	const signingKey = hmac(hmac(hmac(hmac(`AWS4${credentials.secretAccessKey}`, dateStamp), region), 's3'), 'aws4_request');
+	const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+
+	const { host, ...headersToSend } = signedHeaders;
+	return {
+		...headersToSend,
+		authorization:
+			`AWS4-HMAC-SHA256 Credential=${credentials.accessKeyId}/${scope}, ` +
+			`SignedHeaders=${headerNames.join(';')}, Signature=${signature}`
+	};
 }
 
 async function getObjectText(key) {

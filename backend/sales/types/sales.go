@@ -303,10 +303,6 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		},
 		Indexes: []db.Index{
 			{
-				Type: db.TypeLocalIndex,
-				Keys: db.Cols(e.Updated),
-			},
-			{
 				Type: db.TypeCacheGroupS3,
 				Keys: db.Cols(e.Date),
 			},

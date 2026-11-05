@@ -89,6 +89,13 @@ const (
 	// two to decide what is still owed back, and a retry that could not tell them apart would
 	// refund a second time.
 	CashMovementTypeSaleRefund CashMovementType = 11
+	// CashMovementTypePayrollPayment pays the staff (app/hr): a run's net pay (4111), a weekly
+	// advance (1412) or a loan disbursement (1411). DocumentID is the run, advance or loan; the
+	// counter-account tells which.
+	CashMovementTypePayrollPayment CashMovementType = 12
+	// CashMovementTypePayrollContributions pays what a payroll withheld or owes to third parties:
+	// EsSalud, ONP, 5ta, the AFPs, a judicial withholding. DocumentID is the run.
+	CashMovementTypePayrollContributions CashMovementType = 13
 )
 
 type CashBankMovement struct {
@@ -120,6 +127,9 @@ type CashBankMovement struct {
 	Version         int16 `json:"ver" cb:"ver,16"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,17"`
+	// Updated is the ORM-stamped write tick: the period delta index packs it into its key and a
+	// Delta() read hands it to the client as the cursor.
+	Updated int32 `json:"upd" cb:"upd,18"`
 }
 
 type CashBankMovementTable struct {
@@ -140,6 +150,7 @@ type CashBankMovementTable struct {
 	Period             db.Col[*CashBankMovementTable, int16]
 	SameDayMovement    db.Col[*CashBankMovementTable, int8]
 	Version            db.Col[*CashBankMovementTable, int16]
+	Updated            db.Col[*CashBankMovementTable, int32]
 }
 
 func (e CashBankMovementTable) GetSchema() db.TableSchema {

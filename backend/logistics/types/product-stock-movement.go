@@ -79,6 +79,9 @@ type WarehouseProductMovement struct {
 	Version             int16 `json:"ver" cb:"ver,23"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,24"`
+	// Updated is the ORM-stamped write tick: the period delta index packs it into its key and a
+	// Delta() read hands it to the client as the cursor.
+	Updated int32 `json:"upd" cb:"upd,25"`
 }
 
 type WarehouseProductMovementTable struct {
@@ -105,6 +108,7 @@ type WarehouseProductMovementTable struct {
 	Period               db.Col[*WarehouseProductMovementTable, int16]
 	PurchaseAccountCode  db.Col[*WarehouseProductMovementTable, int32]
 	Version              db.Col[*WarehouseProductMovementTable, int16]
+	Updated              db.Col[*WarehouseProductMovementTable, int32]
 }
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
