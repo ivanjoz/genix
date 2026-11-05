@@ -19,7 +19,7 @@ import type { Snippet } from 'svelte';
   let {
     children, title, options, containerCss, useTopMinimalMenu, fixedFullHeight,
     header, isLoading = false, useMenuSearchBox = false, selectedOption, onSelectOption,
-    showBackButton = false, onBack, subtitle, background,
+    showBackButton = false, onBack, subtitle, background, noPadding = false,
   }: {
     children: any,
     title: string,
@@ -45,6 +45,8 @@ import type { Snippet } from 'svelte';
     subtitle?: string
     // "white" paints the page on the surface color (a board of cards) instead of the gray background.
     background?: 'white'
+    // Drops the page padding, so the content reaches the side menu and the header edge to edge.
+    noPadding?: boolean
   } = $props();
   const ui = useUI()
 
@@ -144,7 +146,7 @@ import type { Snippet } from 'svelte';
 
 </script>
 
-<div id="page-container" class="_1 px-10 pt-10 {background === 'white' ? 'bg-surface' : ''} {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
+<div id="page-container" class="_1 {noPadding ? '' : 'px-10 pt-10'} {background === 'white' ? 'bg-surface' : ''} {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
 	class:fixed-full-height={fixedFullHeight}
 >
   {#if Core.isLoading === 0 && isLogged}

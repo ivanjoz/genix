@@ -32,6 +32,38 @@ name = "Users & Profiles|Usuarios & Perfiles"
 icon = "icon-[fa--user-secret]"
 description = "Gestiona usuarios, crea perfiles y asígnales accesos."
 
+# Human Resources (RRHH)
+
+[[pages]]
+route = "hr/departments-positions"
+name = "Departments & Positions|Áreas y Cargos"
+icon = "icon-[fa--sitemap]"
+description = "Define las áreas y cargos de tu empresa, con su jefe y función de costo, y muestra el organigrama."
+
+[[pages]]
+route = "hr/employees"
+name = "Employees|Personal"
+icon = "icon-[fa--id-card]"
+description = "Registra a tus trabajadores con su área y cargo, sus contratos y derechohabientes."
+
+[[pages]]
+route = "hr/payroll"
+name = "Payroll|Planilla"
+icon = "icon-[fa--calculator]"
+description = "Calcula la planilla mensual con sus novedades, pagos semanales y préstamos; la cierra y emite las boletas."
+
+[[pages]]
+route = "hr/time-off"
+name = "Time Off|Vacaciones y Licencias"
+icon = "icon-[fa--calendar-check-o]"
+description = "Registra vacaciones, descansos médicos y licencias que la planilla paga o descuenta, y muestra el saldo de vacaciones de cada trabajador."
+
+[[pages]]
+route = "hr/hr-settings"
+name = "HR Settings|Configuración RRHH"
+icon = "icon-[fa--sliders]"
+description = "Define los conceptos de planilla de la empresa con su tratamiento y cuenta contable, y muestra los valores legales vigentes."
+
 # Sales
 
 [[pages]]
@@ -259,6 +291,12 @@ icon = "icon-[fa--bar-chart]"
 route = "system/cron-actions"
 name = "Cron Actions|Acciones Cron"
 icon = "icon-[fa--clock-o]"
+
+[[pages]]
+route = "system/hr-legal-parameters"
+name = "Labor Parameters|Parámetros Laborales"
+icon = "icon-[fa--balance-scale]"
+description = "Mantiene la RMV, la UIT, las tasas de EsSalud y ONP y las tasas mensuales de las AFP que usan todas las planillas."
 
 [[pages]]
 route = "system/developer"

@@ -51,11 +51,6 @@ name = "Operations|Operaciones"
 icon = "icon-[fa--cubes]"
 
 [[modules.menus]]
-name = "My Company|Mi Empresa"
-min_name = "EMP"
-routes = "company/configuration, business/branches-warehouses, security/users-profiles"
-
-[[modules.menus]]
 name = "Production|Producción"
 min_name = "PRD"
 routes = "production/products, production/supplies-materials"
@@ -116,6 +111,21 @@ min_name = "REP"
 routes = "projects/reports/gantt, projects/reports/calendar, projects/reports/sprints, projects/reports/by-person"
 
 [[modules]]
+code = "company"
+name = "Company|Empresa"
+icon = "icon-[fa--building]"
+
+[[modules.menus]]
+name = "My Company|Mi Empresa"
+min_name = "EMP"
+routes = "company/configuration, business/branches-warehouses, security/users-profiles"
+
+[[modules.menus]]
+name = "HR|RRHH"
+min_name = "RRH"
+routes = "hr/departments-positions, hr/employees, hr/payroll, hr/time-off, hr/hr-settings"
+
+[[modules]]
 code = "system"
 name = "System|System"
 icon = "icon-[fa--cogs]"
@@ -124,7 +134,7 @@ saas_only = true
 [[modules.menus]]
 name = "Platform|Plataforma"
 min_name = "PLA"
-routes = "system/companies, system/server-panel, system/observability, system/cron-actions"
+routes = "system/companies, system/server-panel, system/observability, system/cron-actions, system/hr-legal-parameters"
 
 [[modules.menus]]
 name = "Development|Desarrollo"

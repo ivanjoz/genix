@@ -63,6 +63,10 @@ name = "Clientes (CRM)"
 id = 11
 name = "Proyectos"
 
+[[groups]]
+id = 12
+name = "RRHH"
+
 [[access]]
 id = 1
 name = "Configuración"
@@ -378,3 +382,61 @@ group = 11
 levels = 14
 frontend_routes = "projects"
 backend_apis = "GET.projects-projects,POST.projects-projects,GET.projects-team-candidates,GET.projects-epics,POST.projects-epics,GET.projects-stories,GET.projects-stories-ids,GET.projects-assigned-stories,POST.projects-stories,POST.projects-stories-rank,GET.projects-story-detail,GET.projects-story-activity,POST.projects-story-comments,POST.projects-attachment-upload,GET.projects-sprints,GET.projects-documents,POST.projects-documents,POST.projects-sprints,POST.projects-sprint-start,POST.projects-sprint-move,POST.projects-sprint-close"
+
+# RRHH. Salary data is split from people data by ROUTE, not by sub-access: the delta and by-IDs
+# caches ship whole records, so a sub-access cannot hide a field a route already sent. Every route
+# that carries money (contracts, payslips, advances...) belongs to "Planilla".
+
+# Departments, positions and the org chart. It reads the employees to pick a department's manager,
+# count its active staff and draw the chart; GET.hr-org is also under "Personal", which shows them.
+[[access]]
+id = 45
+name = "Áreas y Cargos"
+group = 12
+levels = 14
+frontend_routes = "hr/departments-positions"
+backend_apis = "GET.hr-org,POST.hr-departments,POST.hr-positions,GET.hr-employees,GET.hr-employees-ids"
+
+[[access]]
+id = 40
+name = "Personal"
+group = 12
+levels = 14
+frontend_routes = "hr/employees"
+backend_apis = "GET.hr-org,GET.hr-employees,GET.hr-employees-ids,POST.hr-employees,GET.hr-dependents,POST.hr-dependents"
+
+[[access]]
+id = 41
+name = "Planilla"
+group = 12
+levels = 14
+frontend_routes = "hr/payroll"
+backend_apis = "GET.hr-contracts,POST.hr-contracts,GET.hr-payroll-config,GET.hr-employee-concepts,POST.hr-employee-concepts,GET.hr-employee-records,POST.hr-employee-records,POST.hr-loans,POST.hr-pay-advances,POST.hr-payroll-runs,POST.hr-payroll-calculate,POST.hr-payroll-ensure,POST.hr-payroll-close,POST.hr-payroll-reopen,POST.hr-payroll-paid,POST.hr-payroll-contributions,GET.hr-payslips,GET.hr-payslips-ids,GET.hr-payslips-employee"
+sub_accesses_ids = [2, 3, 4]
+sub_accesses_names = ["Calcular Planilla", "Cerrar Planilla", "Pagar Planilla"]
+
+[[access]]
+id = 42
+name = "Vacaciones y Licencias"
+group = 12
+levels = 14
+frontend_routes = "hr/time-off"
+backend_apis = "GET.hr-employee-records,POST.hr-employee-records,GET.hr-employees,GET.hr-employees-ids"
+
+[[access]]
+id = 43
+name = "Configuración RRHH"
+group = 12
+levels = 14
+frontend_routes = "hr/hr-settings"
+backend_apis = "GET.hr-payroll-config,POST.hr-concepts"
+
+# Legal payroll values shared by every company of a country; only the SaaS company writes them
+# (the routes are also in saasOnlyRoutes, main-handlers.go).
+[[access]]
+id = 44
+name = "Parámetros Laborales"
+group = 8
+levels = 14
+frontend_routes = "system/hr-legal-parameters"
+backend_apis = "POST.hr-legal-parameters,POST.hr-afp-rates"
