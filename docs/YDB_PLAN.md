@@ -815,6 +815,14 @@ partition). Redo with parameterized statements before drawing conclusions (Miles
 - No `autoincrement_ydb.go`: `ydbdriver`'s `init()` sets `db.GetAutoincrementID`, as `fdbdriver` does (§13).
 - `COUNT(*)` is `Uint64`; cast it for an `Int64` scan.
 
+### Done ahead of Step P (2026-11-06)
+These do not depend on the neutral compile entry point, so they landed while Step 2 waits:
+- `ddl.go` (+ golden tests, + `ddl_it_test.go` executing every generated statement on the container):
+  main table, side tables, `_sequences`, the Y19/Y20 settings, `ALTER INDEX … SET`, add column, and the
+  D5 / Y8 panics. Input is driver-owned `tableSpec`; Step 2's `index_mapping.go` fills it from `IndexSource`.
+- `sequences.go` (§12): `GetAutoincrementID`, `SetCounter`, `ListCounters` on `_sequences`, serializable
+  `DoTx`. Integration test: 32 writers × 10 reservations, 320 disjoint ranges.
+
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three
 tag sets (`db`, `core`, `exec` for ydb): all green. `ydbdriver` answers `errNotImplemented`; its
