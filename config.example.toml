@@ -101,6 +101,12 @@ max_clustering_key = 100
 # Socket unix del daemon fdbgate (genix-orm/fdb/container).
 socket = "/run/genix-fdb/fdbgate.sock"
 
+# ─── YDB (solo builds con `-tags ydb`, docs/YDB_PLAN.md) ────────────────────────
+[ydb]
+# Endpoint gRPC (host:puerto) y ruta de la base de datos del contenedor local-ydb.
+endpoint = "localhost:2136"
+database = "/local"
+
 # ─── Servidor propio (systemd + Nginx) ──────────────────────────────────────
 [server]
 # In full mode (nginx + backend on the same VPS) they connect through /run/genix/api.sock and

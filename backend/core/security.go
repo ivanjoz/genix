@@ -71,7 +71,10 @@ type EnvStruct struct {
 	DISABLE_API_CONCURRENCY_LOCAL bool
 	DB_DISABLE_SSL                bool
 	// FDB_SOCKET is the fdbgate daemon's unix socket, read only by a `-tags fdb` build.
-	FDB_SOCKET         string
+	FDB_SOCKET string
+	// YDB_ENDPOINT (host:port) and YDB_DATABASE (path) are read only by a `-tags ydb` build.
+	YDB_ENDPOINT       string
+	YDB_DATABASE       string
 	DB_PORT            int32
 	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
 	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
@@ -284,6 +287,12 @@ type fileConfig struct {
 	FDB struct {
 		Socket string `toml:"socket"`
 	} `toml:"fdb"`
+
+	// YDB is read only by a `-tags ydb` build (docs/YDB_PLAN.md).
+	YDB struct {
+		Endpoint string `toml:"endpoint"`
+		Database string `toml:"database"`
+	} `toml:"ydb"`
 
 	Server struct {
 		Port                  int32 `toml:"port"`
@@ -505,6 +514,8 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.DB_DISABLE_SSL = file.DB.DisableSSL
 	env.MAX_CLUSTERING_KEY = file.DB.MaxClusteringKey
 	env.FDB_SOCKET = file.FDB.Socket
+	env.YDB_ENDPOINT = file.YDB.Endpoint
+	env.YDB_DATABASE = file.YDB.Database
 
 	env.SERVER_PORT = file.Server.Port
 	env.SERVER_MAX_CONCURRENT_REQUESTS = file.Server.MaxConcurrentRequests

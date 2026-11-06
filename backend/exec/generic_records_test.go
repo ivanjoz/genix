@@ -1,4 +1,4 @@
-//go:build !fdb
+//go:build !fdb && !ydb
 
 package exec
 

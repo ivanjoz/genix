@@ -58,6 +58,8 @@ func Setup() {
 			Keyspace:         core.Env.DB_NAME,
 			MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
 			FDBSocket:        core.Env.FDB_SOCKET,
+			YDBEndpoint:      core.Env.YDB_ENDPOINT,
+			YDBDatabase:      core.Env.YDB_DATABASE,
 		})
 	})
 }

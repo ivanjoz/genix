@@ -25,10 +25,13 @@ require (
 	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
+	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -41,10 +44,15 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/xuri/efp v0.0.1 // indirect
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
+	github.com/ydb-platform/ydb-go-genproto v0.0.0-20260810122915-65bfd5c4b705 // indirect
+	github.com/ydb-platform/ydb-go-sdk/v3 v3.156.1 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/grpc v1.78.0 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
 
@@ -72,6 +80,7 @@ require (
 	github.com/ivanjoz/genix-orm/fdb v0.0.0
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0
 	github.com/ivanjoz/genix-orm/utils v0.0.0
+	github.com/ivanjoz/genix-orm/ydbdriver v0.0.0
 	github.com/ivanjoz/genix-search/genix-s3 v0.0.0
 	github.com/ivanjoz/minijson v0.3.2
 	github.com/klauspost/compress v1.18.6
@@ -123,3 +132,5 @@ replace github.com/ivanjoz/genix-orm/dataframe => ./genix-orm/dataframe
 replace github.com/bytedance/sonic => github.com/ivanjoz/sonic v1.15.6-0.20261028001949-a834f9c878ac
 
 replace github.com/ivanjoz/genix-orm/fdb => ./genix-orm/fdb
+
+replace github.com/ivanjoz/genix-orm/ydbdriver => ./genix-orm/ydbdriver

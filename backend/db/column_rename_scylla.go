@@ -1,4 +1,4 @@
-//go:build !js && !fdb
+//go:build !js && !fdb && !ydb
 
 // One-off migration for the columns that used to carry a `db:"..."` name the ORM would not have
 // derived on its own (Spanish names, `_ids` suffixes). Their tags were deleted so the column name

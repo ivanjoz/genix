@@ -16,6 +16,9 @@ type ConnectParams struct {
 	MaxClusteringKey int
 	// FDBSocket is the unix socket of the fdbgate daemon (fdb driver only).
 	FDBSocket string
+	// YDBEndpoint is the gRPC address (host:port) and YDBDatabase the database path (ydb driver only).
+	YDBEndpoint string
+	YDBDatabase string
 	// Scripting dials immediately and allows long queries, for the exec entry points that run
 	// maintenance work. The server leaves it false: it connects on first use with tighter timeouts.
 	Scripting bool

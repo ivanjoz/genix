@@ -1,4 +1,4 @@
-//go:build !js && !fdb
+//go:build !js && !fdb && !ydb
 
 package db
 
