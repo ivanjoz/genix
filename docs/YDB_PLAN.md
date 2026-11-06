@@ -11,8 +11,8 @@ FoundationDB driver (`docs/FOUNDATIONDB_PLAN.md`): same `db.Executor` contract, 
 declaration and no query in `backend/` changes.** The shared conformance suite proves that Scylla
 and YDB return the same results.
 
-**Status, 2026-11-06.** Steps 0 and 1 done (results in §18b). All design decisions are taken,
-D5 included. Step 2 waits on Step P (§4).
+**Status, 2026-11-06.** Steps 0, 1, P, 2 and 3 done (results in §18b). All design decisions are
+taken, D5 included. Next: Step 4 (writes, sequences, primary-key reads).
 
 ---
 
@@ -877,6 +877,54 @@ YDB Step 2 can start.
   homologation restores everything and a second finds nothing to do.
 - Deferred: `values.go` (the `List<Struct<…>>` param builder and row scanner) belongs with the
   first statement that binds records, Step 4.
+
+### Step 3 (2026-11-06) — conformance suite
+- `genix-orm/conformance`, its own module. The tests are written once against the neutral `db`
+  API. The build tag picks the driver: none for Scylla, `-tags fdb`, `-tags ydb`. Each driver file
+  (`driver_<name>_test.go`) supplies the `TableStruct` alias, `connectDriver`, `resetAndDeploy`
+  and `makeController`.
+- **Golden files instead of `.Via`.** Each driver installs process-wide codecs and column metadata
+  in `init`, so two drivers cannot share a binary. Each test records an ordered list of named
+  observations: records sorted by key, cache records plus Metadata text, counts, flags. Scylla
+  records them in `testdata/<Test>.golden.json` (`GENIX_CONFORMANCE_UPDATE=1`), and every other
+  run compares against them step by step. Reads re-run for up to 20 s until they match, so an
+  async index can catch up without a fixed sleep.
+- Each test starts from an empty keyspace, `genix_orm_conformance`:
+  - Scylla: `DROP KEYSPACE` + `Init` + `DeployScylla`;
+  - FDB: the new `fdbdriver.WipeKeyspace`;
+  - YDB: the new `ydbdriver.WipeKeyspace` + `Deploy`.
+
+  The managed clock is frozen through `db.SetHistoricalUnix` at a fixed instant, so stamps,
+  sequences and Metadata are the same on every run.
+- Tests:
+  - the seed tests (cache protocols, both delta-snapshot tests, the replace threshold,
+    controller paths, Merge, InsertUpdateInclude, QueryIndexGroup, text search);
+  - `TestAutoincrementKeys`: a packed key with a counter per `AutoincrementPart`, and a
+    `UseSequences` key;
+  - `TestIndexReads`: a global, local, global-slice and hash-view read, a descending read with a
+    limit, and the index entries after an update moves a record.
+
+  The recorded values were checked against the original Scylla tests' assertions; a throwaway
+  probe re-derived the expected Metadata strings.
+- **Accept:**
+  - Scylla matches its golden files on two consecutive runs (11 tests, ~11 s).
+  - `-tags ydb`: all 11 fail with `not implemented:` (wipe + deploy run, then the first write).
+- §15 rows not covered yet: `KeyConcatenated`, `SequenceColumn` / `CounterColumn`,
+  `GetAutoincrementID` / `ResetCounter`, `DisableDefaultColumns`, `TypeViewTable`, composite
+  buckets, `Computed`, `SelectGrouped`, DataFrames, wipe / counters / rename. Add each row's test
+  with the step that implements it.
+- **Found on Scylla — a correctness bug, not fixed.** A range on one column of a multi-column
+  hash `TypeView` (e.g. `Status.Equals(1).Date.Between(101, 103)` on a view over status, date) is
+  planned onto the view and read as a single hash. It returns nothing, or only the first value.
+  `hashSourceCapabilities` (`db/capabilities.go`) grants the range capability to hash views
+  although its comment reserves it for cache groups. The suite reads that view by equality only
+  until this is settled.
+- **Found on FDB** (`-tags fdb`): besides the "not implemented" failures, four wrong answers:
+  - delta snapshots are never stored;
+  - `QueryRecordsJSON` ignores `OrderDesc` / `Limit`, and returns the partition column outside
+    the projection;
+  - an empty list column reads back as `null` where Scylla gives `[]`;
+  - writes never reach the text-search backend.
 
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three

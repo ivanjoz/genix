@@ -767,6 +767,15 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
 - Gate with `GENIX_CONFORMANCE=1`; needs both containers.
 - **Accept:** green on Scylla vs Scylla (self-check), red on FDB with "not implemented" errors.
 
+**Status (2026-11-06): built** (results in `YDB_PLAN.md` §18b, Step 3). The drivers cannot share a
+binary, so the suite compares each one against golden files recorded on Scylla, not through
+`.Via`. On `-tags fdb` the acceptance is **not met**: besides the "not implemented" failures it
+finds four wrong answers:
+- delta snapshots are never stored;
+- `QueryRecordsJSON` ignores `OrderDesc` / `Limit`;
+- an empty list reads back as `null`, not `[]`;
+- writes never reach the text-search backend.
+
 ### Step 4 — Driver core (ask D1 first)
 - `FdbTable`, `CompileTable` for every table genix declares (it must not panic on any of them),
   the row codec, `Codec`, keys, managed columns, sequences (D3), §8 writes, §9 reads, every index
@@ -795,7 +804,8 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
   rows (> 100 KB fail), `SequenceColumn` / `CounterColumn`, GroupBy, the controller's backup /
   restore / recalc / reindex, `ResetCounter`, `RenameColumns`. The Step 2 extraction is not finished,
   so the FDB driver carries its own copies of delta prefix resolution and the compile (marked in code).
-- The conformance suite (Step 3) does not exist yet.
+- The conformance suite (Step 3) exists: `GENIX_CONFORMANCE=1 FDBGATE_SOCKET=… go test -tags fdb .`
+  in `genix-orm/conformance`.
 
 ### Step 5 — Cache protocols
 - Delta, delta snapshots, by-IDs, generic by-IDs, cache groups (three types), group snapshots.
