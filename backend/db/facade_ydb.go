@@ -23,9 +23,9 @@ func Connect(params ConnectParams) {
 	}
 }
 
-// Deploy creates the tables, indexes and side tables of every controller (docs/YDB_PLAN.md Step 2).
+// Deploy creates or homologates the tables, indexes and side tables of every controller.
 func Deploy(controllers ...Controller) error {
-	return errors.New("ydbdriver: Deploy is not implemented on YDB yet")
+	return ydbdriver.Deploy(controllers...)
 }
 
 // MakeController builds the controller of one table.

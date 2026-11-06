@@ -839,6 +839,45 @@ driver only renders `AccessPlan` steps. Write preparation (FDB plan §7.2) is sh
 written columns, and the partial-update refusals, which every driver enforces. Step P is done;
 YDB Step 2 can start.
 
+### Step 2 (2026-11-06) — compile, DDL, deploy
+- **D5 count:** all 73 genix tables compile, with at most **6** native indexes each (`purchase_order`,
+  `warehouse_product_movement`). No table comes near 20. Three sources need side tables, all cache
+  groups over a slice (`purchase_order` 1, `sale_order` 2). Y8 never fires: no slice index has order
+  columns.
+- `table.go`: `YdbTable{db.TableCore; path; mainTable; sideTables}`, compiled through
+  `CompileFromSchema`, `DescribeIndexes` and `FinalizeColumns`. `SequenceColumn` / `CounterColumn`
+  panic as not implemented, as on FDB.
+- `index_mapping.go`: one rule per source.
+  - A source keyed on a generated column (packed, hash, delta, scalar cache-group hash) gets
+    `ON (partition, column)`, or `ON (column)` for a global index. The column becomes a real
+    column: `Uint64` / `Uint32` for the packed layouts (unsigned, no sign flip), the hash's own
+    type otherwise.
+  - Any other source gets `ON (Columns)`.
+  - Views and TypeDelta add `COVER` (their projection, or every stored column, minus the index and
+    primary keys).
+  - A source keyed on a slice becomes `<table>__sx_<source>`: element Int32 for a group hash, the
+    slice's element type otherwise.
+  - TypeViewTable and composite bucketing **panic as not implemented**: genix declares neither,
+    and §8.4 does not settle their side-table shape. Ask before implementing them.
+- `deploy.go` (§8.6): creates missing tables, plus `ALTER INDEX … SET` per index. For an existing
+  table it:
+  - adds missing columns;
+  - fails on a changed type or primary key;
+  - resets lz4 and the Y20 settings (each index described at `indexImplTable`);
+  - adds missing indexes, drops and re-adds changed ones, and drops undeclared ones;
+  - reports extra columns and side tables, never dropping them.
+- `codec.go`: `ydbValueCodec`, colbin for slices; `int` maps to `Int64`.
+- **Accept:** `fn-homologate` (deploy only), run twice against the container, using a config copy
+  with a `[ydb]` section through `GENIX_CONFIG_FILE`. First run: `132 tables, 132 created`. Second
+  run: `0 created, 0 altered, 132 unchanged`. `fn-init` itself still stops at its seed writes,
+  which are Step 4.
+- Tests: a golden mapping test of one table with every genix index kind, golden ADD / DROP INDEX
+  statements, and `TestDeployHomologatesADriftedTable`. That test drops an index, changes a cover,
+  turns compression off, disables load splitting and adds a stray index, then checks that one
+  homologation restores everything and a second finds nothing to do.
+- Deferred: `values.go` (the `List<Struct<…>>` param builder and row scanner) belongs with the
+  first statement that binds records, Step 4.
+
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three
 tag sets (`db`, `core`, `exec` for ydb): all green. `ydbdriver` answers `errNotImplemented`; its
