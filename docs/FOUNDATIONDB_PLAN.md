@@ -676,11 +676,28 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
        code. Output was normalized for predicate order and `IN (?)` vs `= ?`, and was identical.
      - Suites green: `db` unit (6 new planner tests), Scylla unit plus `GENIX_ORM_SCYLLA_TEST`
        integration, FDB live, YDB unit.
-   - **3b — next:** the route selection in `compileSelectStatement` / `SelectStatement.Compute`.
-     It needs the capabilities and their matching, the FixedValues fan-out, and the
-     concatenated-key and int-packed key rewrites (into a `KeyRange` on the primary key). Then the
-     composite-bucket, delta-prefix and cache-group planning, then a `db` entry point that returns
-     an `AccessPlan` with the plan cache keyed by `computeSelectShapeHash`.
+   - **3b, first slice — done (2026-11-06).** These moved to `db`:
+     - `db/capabilities.go`: `QueryCapability` (its `Source` is now `*db.IndexSource`),
+       `TableCore.ComputeCapabilities`, `MatchQueryCapability`, `CapabilityOpForStatement` and
+       `TableCore.ApplyFixedValueFanout`.
+     - `db/key_rewrites.go`: `TableCore.BuildKeyConcatenatedStatements` and
+       `BuildKeyIntPackingStatements`.
+
+     Scylla maps the chosen source back to its `viewInfo` (`viewOfSource`). Route selection and
+     rendering stay in `compileSelectStatement` / `Compute` for now. Single-column and packed index
+     capabilities are now listed in declaration order (before: Go map order), so ties between
+     equal priorities no longer change between runs.
+     **Verification:** a route probe built a query per capability signature, plus variants (drop
+     the last predicate, add an extra column), for every genix table and 20 scylla fixtures. That
+     covers plain, view, concatenated-key, int-packed and composite routes. It compiled and bound
+     each one; old vs new output was identical. The 3a access probe was also identical, except
+     where the schema itself changed. Suites green: `db`, Scylla unit plus integration, FDB live,
+     YDB.
+   - **3b, rest — next:** the route selection itself (`compileSelectStatement`'s choice between
+     view / key-rewrite / composite / plain) as a `db` function returning an `AccessPlan`. Then
+     composite-bucket planning (`tryBuildCompositeBucketPlan`), delta-prefix planning and
+     cache-group planning (`select_grouped.go`). The plan cache, keyed by
+     `computeSelectShapeHash`, moves with them.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
   against the local Scylla; new unit tests in `db` cover `AccessPlan` building for: primary key, IN
   fan-out, packed prefix + range, FixedValues fan-out, delta prefixes, cache-group candidates, the
