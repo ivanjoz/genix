@@ -913,12 +913,17 @@ YDB Step 2 can start.
   `GetAutoincrementID` / `ResetCounter`, `DisableDefaultColumns`, `TypeViewTable`, composite
   buckets, `Computed`, `SelectGrouped`, DataFrames, wipe / counters / rename. Add each row's test
   with the step that implements it.
-- **Found on Scylla — a correctness bug, not fixed.** A range on one column of a multi-column
-  hash `TypeView` (e.g. `Status.Equals(1).Date.Between(101, 103)` on a view over status, date) is
-  planned onto the view and read as a single hash. It returns nothing, or only the first value.
-  `hashSourceCapabilities` (`db/capabilities.go`) grants the range capability to hash views
-  although its comment reserves it for cache groups. The suite reads that view by equality only
-  until this is settled.
+- **Found on Scylla, fixed (user's decision: enumerate hashes).** A range on one column of a
+  multi-column hash `TypeView` (e.g. `Status.Equals(1).Date.Between(101, 103)` on a view over
+  status, date) was planned onto the view but read as a single hash. It returned nothing, or only
+  the first value. `planHashViewSteps` (`db/access_plan.go`) now:
+  - enumerates a `BETWEEN` into one hash per value, each with the bound's own type;
+  - caps the combinations at `MaxHashViewHashes = 100`;
+  - refuses an open range (`>`, `<`), which has no finite value set, with an error instead of a
+    wrong answer.
+
+  No genix query ranges over a hash view's columns (the only one is `product_stock`'s
+  `(warehouse_id, status)`). `TestIndexReads` covers both cases.
 - **Found on FDB** (`-tags fdb`): besides the "not implemented" failures, four wrong answers:
   - delta snapshots are never stored;
   - `QueryRecordsJSON` ignores `OrderDesc` / `Limit`, and returns the partition column outside
