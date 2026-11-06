@@ -825,9 +825,10 @@ These do not depend on the neutral compile entry point, so they landed while Ste
 
 ### Step P progress (2026-11-06)
 Owned by the FDB plan (its Step 2, stage 2b; mechanism decided there: two-phase describe/materialize).
-`db` now describes view tables, TypeView (simple, hash, packed range) and TypeDelta. Still open:
-cache-group and composite-bucket registration, the table-level compile in `makeTable`, then the
-`AccessPlan` planner (stage 3) and write preparation. YDB Step 2 starts when those land.
+`db.DescribeIndexes` now describes every index kind (the index half of the compile is done; see the FDB
+plan §Step 2). Still open: the table-level compile in `makeTable` (columns, keys, managed columns,
+autoincrement, key packing), then the `AccessPlan` planner (stage 3) and write preparation. YDB Step 2
+starts when those land.
 
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three

@@ -600,16 +600,25 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
      function returns the **neutral** layout (unsigned packed value, int32 hash) and the driver
      re-encodes it (Scylla: `storeVirtualPacked`, top-bit flip). This is the pattern
      `describe_index.go` already used for local, global and packed indexes.
-   - **2b progress (2026-11-06).** Moved with the verification below: `DescribeViewTable`
-     (`db/describe_view_table.go`), `DescribeView` (`db/describe_view.go`; simple, hash and packed
-     range views), `DescribeDelta` (`db/describe_delta.go`). `IndexSource` gained `DeclaredColumns`,
+   - **2b progress (2026-11-06).** The index half of the compile is **done**: `db.DescribeIndexes`
+     (`db/describe_indexes.go`) is the schema-index dispatcher and returns the `IndexSource`s a driver
+     must materialize. It calls `DescribeViewTable`, `DescribeView` (simple, hash, packed range),
+     `DescribeDelta`, `DescribeIndexGroup` (+ the key-range group), the composite-bucket describe,
+     and the existing local, global and packed ones. Every `IndexSource` carries a `Kind`
+     (`SingleColumn`, `Packed`, `GroupHash`, `View`, `ViewTable`, `Delta`, `CompositeBucket`); Scylla's
+     `makeTable` index loop is `DescribeIndexes` + `registerMaterializedIndex` per source, and every
+     `compileSchema*` / `registerSchema*` wrapper is gone. `IndexSource` gained `DeclaredColumns`,
      `ProjectedColumns`, `SelectableColumns`, `PartitionColumn`, `KeepsBasePartition`,
-     `MaintenanceIDColumn`, `RebuildColumnNames`. Verification per stage: unit + `GENIX_ORM_SCYLLA_TEST`
-     integration green, and a temporary probe dumping every genix table's view CREATE scripts, expected
-     columns, virtual-column types and delta layouts from the old and the new code, normalized for
-     map order and the LZ4 work in progress: identical (68 views, 51 delta indexes).
-     **Left in 2b:** cache-group registration (`registerIndexGroup`, `registerInheritFromKeyIndexGroup`),
-     composite-bucket registration and the table-level fill in `makeTable` (`reflect.go`), then
+     `MaintenanceIDColumn`, `RebuildColumnNames`, `IndexGroup`. Verification per stage: unit +
+     `GENIX_ORM_SCYLLA_TEST` integration green, and a temporary probe dumping every genix table's view
+     CREATE scripts, expected columns, virtual-column types, delta layouts, groups, composite buckets,
+     index/view counts and flags from the old and the new code, normalized for map order and the LZ4
+     work in progress: identical (68 views, 51 delta indexes, 24 groups).
+     **Left in 2b:** the table-level fill in `makeTable` (`reflect.go`: columns, keys, managed audit
+     columns, autoincrement, `KeyIntPacking`, `KeyConcatenated`, sequences, text search, DataFrames
+     config) as a neutral `db` compile that `fdbdriver/compileTable` (today a copy) and `ydbdriver`
+     reuse. Scylla-only details stay behind small hooks: the `counter` DB type of a sequence column,
+     the quoted-literal value of a concatenated key, the default keyspace. Then
      `ScyllaTable.views/indexes` should read `TableCore.IndexSources`.
 3. **Planner + `AccessPlan`** (§7.1) and write preparation (§7.2) on top of stage 2.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
