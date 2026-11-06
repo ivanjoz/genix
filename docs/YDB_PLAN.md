@@ -66,7 +66,7 @@ D5 included. Step 2 waits on Step P (§4).
 | Y11 | Sequences (D3) | **YDB owns the sequences** under `-tags ydb`: table `_sequences(name Utf8, value Int64)`, range reservation in one serializable transaction. YDB `Serial` columns are not used |
 | Y12 | fareward (D2) | fareward gets a **YDB store** (Rust `ydb` crate 0.18.2, `ydb-platform/ydb-rs-sdk`) behind a Cargo feature. Step 8 |
 | Y13 | Step order | **FDB plan Step 2 (planner + compile extraction into `genix-orm/db`) is finished first.** No copies of planner or compile code inside `ydbdriver` |
-| Y14 | Planner | The shared `AccessPlan` (FDB plan §7.1) is rendered to YQL by `ydbdriver` |
+| Y14 | Planner | The shared `AccessPlan` (FDB plan §7.1: typed steps `Range` / `Points` / `Element`, decided 2026-11-06) is rendered to YQL by `ydbdriver`: `Range` → PK or `VIEW ix` range, `Points` → `IN` / `AS_TABLE` lookup join, `Element` → side-table range joined back on the PK |
 | Y15 | Cache protocols | Same wire protocols and settle windows. `DeltaWindowCursor.ReadTime` keeps coming from the ORM clock |
 | Y16 | Text search | Existing `db.TextSearchBackend` (search daemon). YDB's native full-text index is not used |
 | Y17 | Scope | VPS mode. Lambda, column (OLAP) tables, changefeeds, vector/full-text/JSON indexes: out of scope (§19) |

@@ -381,29 +381,59 @@ Move (renaming the package-local types to exported ones in `db`):
 | `select_grouped.go`: `buildIndexGroupSelectPlan`, `scoreIndexGroupCandidate`, `buildQueryIndexGroupHashes`, `resolveIndexGroupQueryValues`, `splitIndexGroupFetches` | cache-group planning |
 | `index_groups.go`: `computeIndexGroupHashes`, `buildIndexGroupHashValues`, `allocateIndexGroupID`, `collectIndexGroupMarks` (minus the stored-row read) | group hashes and marks |
 
-The planner's output becomes a driver-neutral **access plan**:
+The planner's output becomes a driver-neutral **access plan** made of **typed access steps**
+(decided with the user, 2026-11-06: option C of three — key spans only, a portable predicate
+list, typed steps). Spans alone cannot express a hash `IN` list or a collection `CONTAINS`; a
+predicate list would make every driver re-derive the range math. Today that logic lives inside the
+`viewInfo.getStatementPrepared` closures, which return CQL text; the planner moves it into `db` and
+the closures shrink to rendering.
 
 ```go
 // AccessPlan is what a query resolves to before any storage syntax exists.
 type AccessPlan struct {
-    Source        AccessSource      // PrimaryKey | Index(indexID) | DeltaIndex(deltaID) | GlobalIndex(indexID)
-    Spans         []KeySpan         // one contiguous span each; fan-out = several spans
-    PostFilter    []ColumnStatement // what the source cannot apply exactly
-    Limit         int32
-    Descending    bool
+    Source     *IndexSource      // nil = the table's primary key
+    Steps      []AccessStep      // fan-out = several steps; results are unioned (deduplicated when Source can repeat a row)
+    PostFilter []ColumnStatement // what the source cannot apply exactly (RequiresPostFilter, hash overfetch)
+    Limit      int32
+    Descending bool
 }
-// KeySpan is one contiguous span of a source: equality prefix, then an optional range on the next slot.
-type KeySpan struct {
-    Partition   any
-    EqualPrefix []any   // already packed / hashed / concatenated values, in source key order
-    From, To    any     // nil = open
+
+// AccessStep is one read against the source. Exactly one of Range / Points / Element is set.
+type AccessStep struct {
+    Partition any        // nil when the source has no partition (a global index)
+    Range     *KeyRange  // a contiguous span of the source key
+    Points    [][]any    // full source keys, values already packed / hashed / concatenated
+    Element   *ElementLookup
+}
+
+// KeyRange: an equality prefix on the leading key columns, then an optional bound on the next one.
+type KeyRange struct {
+    EqualPrefix                []any // already packed / hashed / concatenated, in source key order
+    From, To                   any   // nil = open
     FromInclusive, ToInclusive bool
+}
+
+// ElementLookup: rows whose slice column holds Value (a set CONTAINS, a fan-out view table, a
+// composite-bucket or slice cache-group hash).
+type ElementLookup struct {
+    Column string
+    Value  any
 }
 ```
 
-Scylla renders an `AccessPlan` to CQL `WHERE` clauses (its `boundWhereClause`). FDB renders it to
-tuple ranges. Keep the plan cache (`selectPlanCache`) in each driver, keyed by
-`computeSelectShapeHash`, which also moves.
+Values in a step are the **neutral** layout (`IndexSource` describes the column: unsigned packed
+values, `int32` hashes); each driver applies its own storage encoding while rendering (Scylla: the
+top-bit flip of `storeVirtualPacked`). Rendering per driver:
+
+| Step | Scylla (CQL) | FDB | YDB |
+|---|---|---|---|
+| `Range` | `col >= ? AND col <= ?` after the prefix equalities | one tuple range on the subspace | `WHERE` on the PK or `VIEW ix` range |
+| `Points` | `IN (…)`, chunked | point gets | `IN` / `AS_TABLE($keys)` lookup join |
+| `Element` | `CONTAINS ?` | index-entry prefix range | side-table range `element = $v`, joined back on the PK |
+
+Keep the plan cache (`selectPlanCache`) in each driver, keyed by `computeSelectShapeHash`, which also
+moves. A plan the planner refuses (a filter behind an unconstrained packed slot with no
+FixedValues) is `nil, error`, as `getStatementPrepared` returns `nil` today.
 
 ### 7.2 Write preparation
 
