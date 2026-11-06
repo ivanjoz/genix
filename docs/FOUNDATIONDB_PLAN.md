@@ -644,12 +644,16 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
      CREATE scripts, expected columns, virtual-column types, delta layouts, groups, composite buckets,
      index/view counts and flags from the old and the new code, normalized for map order and the LZ4
      work in progress: identical (68 views, 51 delta indexes, 24 groups).
-     **Left in 2b:** the table-level fill in `makeTable` (`reflect.go`: columns, keys, managed audit
-     columns, autoincrement, `KeyIntPacking`, `KeyConcatenated`, sequences, text search, DataFrames
-     config) as a neutral `db` compile that `fdbdriver/compileTable` (today a copy) and `ydbdriver`
-     reuse. Scylla-only details stay behind small hooks: the `counter` DB type of a sequence column,
-     the quoted-literal value of a concatenated key, the default keyspace. Then
-     `ScyllaTable.views/indexes` should read `TableCore.IndexSources`.
+     The table-level half is **done** too: `TableCore.CompileFromSchema` (`db/compile_table.go`:
+     columns, keys, managed audit columns, autoincrement, `KeyIntPacking`, `KeyConcatenated`) and
+     `TableCore.FinalizeColumns` are shared. Scylla's `makeTable` and `fdbdriver/compileTable` both call
+     them (the FDB copy is gone) and keep only their own details inline: Scylla's `counter` DB type of
+     a sequence column, the quoted-literal value of a concatenated key, and the default keyspace. The
+     same probe showed the old and new compile give identical results for all 1,400 columns. The FDB
+     live suite passes 5 of 5 runs. It had been failing because of a keyspace bug in the test, now
+     fixed with `TestMain`.
+     **Left in 2b (optional cleanup):** `ScyllaTable.views/indexes` should read `TableCore.IndexSources`
+     instead of keeping their own maps. This does not block stage 3.
 3. **Planner + `AccessPlan`** (§7.1) and write preparation (§7.2) on top of stage 2.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
   against the local Scylla; new unit tests in `db` cover `AccessPlan` building for: primary key, IN
