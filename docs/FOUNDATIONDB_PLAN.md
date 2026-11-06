@@ -725,7 +725,30 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
        new output was identical for both.
      - Suites green: `db`, Scylla unit plus integration, FDB live, YDB unit, and the backend
        builds (no tag, `fdb`, `ydb`).
-   - **Next: §7.2 write preparation**, then YDB Step 2.
+   - **§7.2 write preparation — done (2026-11-06).**
+     - `db/record_slice.go`: `RecordSlice`, moved from Scylla. FDB's own copy is gone.
+     - `db/write_prepare.go`: `ManagedUnixTime`, `StampManagedColumns` (returns `[]ManagedStamp`),
+       `CoerceManagedInteger`, `RunSelfParse`, `AssignAutoincrementKeys` (the driver passes its
+       counter allocator: Scylla `reserveCounter`, so the `ReserveCounterRange` hook still
+       applies; FDB `ReserveRange`), `SplitInsertAndUpdateRecords`, `InsertColumns`,
+       `AffectedColumnsFor{Insert,Include,Exclude}`, and `ResolveUpdateColumns`, which carries
+       the partial-update refusals.
+
+     Scylla keeps only statement building. `normalizeEmptyStringWriteValue` stays there too,
+     because storing `""` as NULL is a CQL binding rule.
+
+     FDB derives its written columns from `ResolveUpdateColumns` (stored columns only; a
+     computed column becomes its From columns). Decided with the user: **same contract**. FDB
+     now refuses the partial updates Scylla refuses, although its row merge would not need to,
+     so a write accepted on one driver is accepted on all. FDB also refuses an Update with no
+     columns now; before, it wrote every column.
+     **Verification:**
+     - Probe: old `resolveUpdateColumnsForWrite` vs `ResolveUpdateColumns` over every genix
+       table, covering single-column and per-source includes and excludes, with and without a
+       record: 4,324 cases, 290 of them refusals. Identical, including the panic messages.
+     - Suites green: `db`, Scylla unit plus integration, FDB live (plus a new test of the
+       written-column contract), YDB unit, and the backend builds and vet for the three tag sets.
+   - **Step 2 is complete.** Next: YDB Step 2.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
   against the local Scylla; new unit tests in `db` cover `AccessPlan` building for: primary key, IN
   fan-out, packed prefix + range, FixedValues fan-out, delta prefixes, cache-group candidates, the

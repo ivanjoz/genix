@@ -834,8 +834,10 @@ was refined with the user: a value list per prefix column, a separate `Filter`, 
 staying Scylla-only. Stage 3b is done too. Capabilities, key rewrites, route selection
 (`ChooseAccessRoute` / `BindAccessPlan`), composite buckets, delta planning (`PlanDeltaRead`) and
 cache-group planning (`PlanIndexGroupRead`, `IndexGroupFetchStep`) are all in `db`, so a YDB
-driver only renders `AccessPlan` steps. Still open: write preparation (FDB plan §7.2). YDB Step 2
-starts when it lands.
+driver only renders `AccessPlan` steps. Write preparation (FDB plan §7.2) is shared too
+(`db/write_prepare.go`, `db.RecordSlice`): managed stamps, autoincrement and key packing, the
+written columns, and the partial-update refusals, which every driver enforces. Step P is done;
+YDB Step 2 can start.
 
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three
