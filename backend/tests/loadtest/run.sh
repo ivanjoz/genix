@@ -13,6 +13,8 @@
 #
 # ARGS go to fn-load-test: --companies-per-stage=5 --stage-seconds=45 --max-companies=100
 #                          --catalog=2000 --cashiers=4 --think-ms=2000 --max-p99-ms=1000
+# TABLETS=false run ...    the keyspace on vnodes instead of tablets
+# TABLET_BALANCING=false run ...   no tablet migrations during the ramp
 set -euo pipefail
 
 COMMAND=${1:?usage: run.sh stack|run}
@@ -61,6 +63,7 @@ start_backend() {
 stop_processes() {
 	for pid in ${BACKEND_PID:-} ${FAREWARD_PID:-}; do kill "$pid" 2>/dev/null || true; done
 	wait 2>/dev/null || true
+	curl -sf -X POST "http://127.0.0.2:10000/storage_service/tablets/balancing?enabled=true" || true
 }
 
 case "$COMMAND" in
@@ -69,9 +72,10 @@ stack)
 	# on the two cores it shares with the backend and fareward, as on a 2-vCPU VPS.
 	# No container memory cap: seastar reserves memory beyond --memory and refuses to start under
 	# one; --memory alone bounds it.
+	# SCYLLA_SMP=1 compares one shard on the two shared cores.
 	podman run -d --name genix-load-scylla --network host \
 		docker.io/scylladb/scylla:latest \
-		--smp 2 --cpuset $STACK_CPUS --memory $SCYLLA_MEMORY --overprovisioned 1 --developer-mode 1 \
+		--smp ${SCYLLA_SMP:-2} --cpuset $STACK_CPUS --memory $SCYLLA_MEMORY --overprovisioned 1 --developer-mode 1 \
 		--listen-address 127.0.0.2 --rpc-address 127.0.0.2 --broadcast-rpc-address 127.0.0.2 \
 		--api-address 127.0.0.2 --prometheus-address 127.0.0.2 --seeds 127.0.0.2
 	until cql 'SELECT now() FROM system.local' >/dev/null 2>&1; do sleep 2; done
@@ -99,6 +103,12 @@ run)
 	until [ -z "$(podman logs --since 15s genix-load-scylla 2>&1 | grep -E 'Truncat|pre-drop' || true)" ]; do sleep 3; done
 	rm -rf "$ROOT/files"
 
+	# TABLETS=false compares vnodes: fn-init creates the keyspace only IF NOT EXISTS, so creating it
+	# here first, with tablets off, decides how every table is distributed across the shards.
+	if [ "${TABLETS:-true}" = false ]; then
+		live_log "creating $KEYSPACE with vnodes (tablets off)"
+		cql "CREATE KEYSPACE $KEYSPACE WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1} AND tablets = {'enabled': false}"
+	fi
 	live_log "creating $MAX_COMPANIES empty companies (fn-init)"
 	GENIX_CONFIG_FILE="$CONFIG" "$BINARY" fn-init --companies=$MAX_COMPANIES >"$ROOT/init.log" 2>&1
 	# A tablets keyspace creates every table with one tablet per shard and the balancer then merges
@@ -112,6 +122,13 @@ run)
 		else quiet_checks=0; fi
 		sleep 5
 	done
+
+	# TABLET_BALANCING=false stops the balancer for the ramp: on one node it only moves tablets
+	# between shards, and each move's barrier_and_drain stalls writes long enough to time them out.
+	if [ "${TABLET_BALANCING:-true}" = false ]; then
+		live_log "tablet balancing off for the ramp"
+		curl -sf -X POST "http://127.0.0.2:10000/storage_service/tablets/balancing?enabled=false"
+	fi
 
 	# fn-init creates the keyspace fareward connects to, so the daemon starts after it.
 	start_fareward

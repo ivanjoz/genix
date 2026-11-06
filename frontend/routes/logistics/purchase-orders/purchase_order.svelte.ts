@@ -184,8 +184,8 @@ export const queryPurchaseOrders = async (filters: IPurchaseOrderReportForm): Pr
     .filter((r) => (r.Date || 0) >= filters.dateInicio && (r.Date || 0) <= filters.dateFin)
 
   const statusFilter = filters.status || 0
-  // Client-side status filter covers the status-only case where the backend cannot narrow
-  // (no Week+Status grouped index exists).
+  // Client-side status filter covers the status-only and status + product cases, where the backend
+  // cannot narrow (no Week+Status nor Week+Status+DetailProductIDs grouped index exists).
   const finalRows = statusFilter > 0
     ? purchaseOrders.filter((r) => (r.ss || 0) === statusFilter)
     : purchaseOrders

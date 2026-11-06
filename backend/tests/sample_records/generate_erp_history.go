@@ -738,7 +738,7 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, part
 		"type": strconv.Itoa(int(partyType)),
 	}, "")
 	storedParties := []crmTypes.ClientProvider{}
-	if err := decodeResponse(crm.GetClientProviders(&listRequest), &storedParties); err != nil {
+	if err := decodeResponse(generator.send(listRequest, crm.GetClientProviders), &storedParties); err != nil {
 		return nil, err
 	}
 

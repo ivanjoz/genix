@@ -118,7 +118,7 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		KeyIntPacking: db.Cols(
-			e.Date.Size(15), e.WarehouseID.Size(17), e.Autoincrement(8),
+			e.Date.Size(16), e.WarehouseID.Size(16), e.Type.Size(6), e.Autoincrement(6),
 		),
 		AutoincrementPart: e.Date,
 		// Size the slots of the period delta index. Type leaves room for new movement types.
@@ -129,13 +129,21 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			// One log per accounting period: GET.accounting-operations syncs a month's receptions,
 			// deliveries and returns through it. Movements are never deleted, so Type is just the
-			// sync filter a first sync lists.
-			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Type)},
+			// sync filter a first sync lists. The view copies only what that accounting read projects
+			// (OperationStockMovement): every sale line writes a ledger row, and each copied column
+			// is paid again on that write.
+			{
+				Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Type),
+				Cols: db.Cols(e.Date, e.DocumentID, e.ProductID, e.MonetaryValue, e.PurchaseAccountCode),
+			},
 			{
 				Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.Date),
 			},
 			{
 				Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.Date, e.WarehouseID),
+			},
+			{
+				Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.Date, e.WarehouseID, e.Type),
 			},
 			{
 				Type: db.TypeLocalIndex, Keys: db.Cols(e.SerialNumber),
@@ -146,11 +154,10 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			{
 				Type: db.TypeCacheGroup, Keys: db.Cols(e.DocumentID),
 			},
+			// Type is not a prefix of the ID after Date: the group reads the (Date) range and filters
+			// Type in memory, so a sale writes nothing for it.
 			{
-				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.Type),
-			},
-			{
-				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.Type, e.WarehouseID),
+				Type: db.TypeCacheGroupNoIndex, Keys: db.Cols(e.Date, e.Type),
 			},
 			{
 				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.ProductID),

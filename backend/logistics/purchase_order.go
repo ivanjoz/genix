@@ -50,14 +50,12 @@ func GetPurchaseOrdersQuery(req *core.HandlerArgs) core.HandlerResponse {
 	query.Week.Between(weekStart, weekEnd)
 
 	switch {
-	case status > 0 && productID > 0:
-		// Uses the raw group: Week + Status + DetailProductIDs.
-		query.Status.Equals(status).DetailProductIDs.Contains(productID)
 	case status > 0 && providerID > 0:
 		// Uses the raw group: Week + Status + ProviderID.
 		query.Status.Equals(status).ProviderID.Equals(providerID)
 	case productID > 0:
-		// Uses the raw group: Week + DetailProductIDs.
+		// Uses the raw group: Week + DetailProductIDs, with or without a status: the status +
+		// product group was dropped for its write cost, and the client post-filters the status.
 		query.DetailProductIDs.Contains(productID)
 	case providerID > 0:
 		// Uses the raw group: Week + ProviderID.

@@ -60,6 +60,7 @@ const (
 	TypeDelta             = orm.TypeDelta
 	TypeCacheGroup        = orm.TypeCacheGroup
 	TypeCacheGroupS3      = orm.TypeCacheGroupS3
+	TypeCacheGroupNoIndex = orm.TypeCacheGroupNoIndex
 )
 
 // Cols returns columns as the slice required by schema declarations.

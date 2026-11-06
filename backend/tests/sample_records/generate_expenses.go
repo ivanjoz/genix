@@ -273,7 +273,7 @@ func (generator *erpHistoryGenerator) ensureExpenseSchedules() error {
 		}
 		createRequest := generator.makeRequest("POST.expenses-scheduled", nil, string(bodyBytes))
 		createdSchedule := financeTypes.ExpenseScheduled{}
-		if err := decodeResponse(finance.PostExpensesScheduled(&createRequest), &createdSchedule); err != nil {
+		if err := decodeResponse(generator.send(createRequest, finance.PostExpensesScheduled), &createdSchedule); err != nil {
 			return core.Err("no se pudo crear el gasto programado", template.name, ":", err)
 		}
 		generator.expenseScheduleByKey[template.key] = createdSchedule.ID

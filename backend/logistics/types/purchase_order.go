@@ -177,13 +177,12 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 				Type: db.TypeCacheGroup,
 				Keys: db.Cols(e.Week),
 			},
+			// No Week+Status+DetailProductIDs group: Status changes at every step of an order, and
+			// each change rewrites one entry per product (~1,200 index writes per order measured).
+			// A status + product query reads this group and the client filters the status.
 			{
 				Type: db.TypeCacheGroup,
 				Keys: db.Cols(e.Week, e.DetailProductIDs),
-			},
-			{
-				Type: db.TypeCacheGroup,
-				Keys: db.Cols(e.Week, e.Status, e.DetailProductIDs),
 			},
 			{
 				Type: db.TypeCacheGroup,
