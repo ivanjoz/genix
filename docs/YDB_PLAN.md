@@ -831,9 +831,11 @@ plan §Step 2). The table-level compile is shared as well (`TableCore.CompileFro
 `FinalizeColumns`), and Scylla and FDB both use it. `AccessPlan` stage 3a is done: the types and
 the per-source step planners are in `db/access_plan.go`, and Scylla only renders them. The shape
 was refined with the user: a value list per prefix column, a separate `Filter`, and GROUP BY
-staying Scylla-only. Still open: the route selection and the key rewrites (3b), composite, delta
-and cache-group planning, the `AccessPlan` entry point, and write preparation. YDB Step 2 starts
-when those land.
+staying Scylla-only. Stage 3b is done too. Capabilities, key rewrites, route selection
+(`ChooseAccessRoute` / `BindAccessPlan`), composite buckets, delta planning (`PlanDeltaRead`) and
+cache-group planning (`PlanIndexGroupRead`, `IndexGroupFetchStep`) are all in `db`, so a YDB
+driver only renders `AccessPlan` steps. Still open: write preparation (FDB plan §7.2). YDB Step 2
+starts when it lands.
 
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three

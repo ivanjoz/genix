@@ -693,11 +693,39 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
      each one; old vs new output was identical. The 3a access probe was also identical, except
      where the schema itself changed. Suites green: `db`, Scylla unit plus integration, FDB live,
      YDB.
-   - **3b, rest — next:** the route selection itself (`compileSelectStatement`'s choice between
-     view / key-rewrite / composite / plain) as a `db` function returning an `AccessPlan`. Then
-     composite-bucket planning (`tryBuildCompositeBucketPlan`), delta-prefix planning and
-     cache-group planning (`select_grouped.go`). The plan cache, keyed by
-     `computeSelectShapeHash`, moves with them.
+   - **3b, rest — done (2026-11-06).** Three slices, each verified old vs new with a probe:
+     - **Routes** (`db/access_route.go`). `TableCore.ChooseAccessRoute` picks primary key /
+       source / concatenated key / int-packed key / composite bucket / native index and returns
+       an `AccessRoute`: the statements it serves, keeps and post-filters, its fixed-value
+       fan-out, and whether results need deduplication. `TableCore.BindAccessPlan` turns a route
+       plus the query values into an `AccessPlan`; composite buckets are planned there
+       (`planCompositeBucketSteps`). Scylla's `compileSelectStatement` keeps only the CQL
+       (`renderAccessPlan`). Native GROUP BY stays a Scylla route. Removed from Scylla:
+       `tryBuildCompositeBucketPlan`, `canUseProjectedView`, `collectSelectStatements` (now
+       `TableInfo.SelectStatements()`), `pickStatementsByIndexes`.
+     - **Delta** (`db/delta_plan.go`). `TableCore.PlanDeltaRead` chooses the TypeDelta index and
+       its pinned prefixes. Both Scylla `execDelta` and FDB `selectDelta` use it, and both
+       drivers' own `resolveDeltaPrefixes` / `selectDeltaIndex` are gone. FDB's cap on fixed-value
+       fan-out drops from 16 to `db.MaxFixedValueFanoutQueries` (8), the same as Scylla's;
+       `maxDeltaPrefixReads` (16) now only bounds its read concurrency.
+     - **Cache groups** (`db/index_group_plan.go`). `TableCore.PlanIndexGroupRead` does the
+       validation, the group scoring and the hash fan-out. Also in `db`: `BaseGroupHashes`,
+       `SplitIndexGroupFetches`, `GroupPostFilterStatements` and `TableCore.IndexGroupFetchStep`
+       (one group's base-table read as an `AccessStep`). Scylla keeps the `__index_updated`
+       freshness CQL, the S3 snapshots and the concurrent fetch. The `TypeCacheGroupFromKey`
+       fetch is still bound as `[from, to)`, although `PackSlotPrefixBound(true)` is an inclusive
+       maximum. That is a pre-existing quirk, kept as it was: a record whose key is exactly the
+       block's last value would be missed.
+
+     The select-shape cache (`computeSelectShapeHash`) stays per driver, because it caches
+     rendered queries.
+     **Verification:**
+     - Route probe over every genix table plus the fixtures; group probe over every genix cache
+       group (37) and 13 fixture reads, including no-index groups and collection groups. Old vs
+       new output was identical for both.
+     - Suites green: `db`, Scylla unit plus integration, FDB live, YDB unit, and the backend
+       builds (no tag, `fdb`, `ydb`).
+   - **Next: §7.2 write preparation**, then YDB Step 2.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
   against the local Scylla; new unit tests in `db` cover `AccessPlan` building for: primary key, IN
   fan-out, packed prefix + range, FixedValues fan-out, delta prefixes, cache-group candidates, the
