@@ -594,6 +594,23 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
      `index_config.go`, `packed_indexes.go`, `view_tables.go`, the registration halves of
      `delta_view.go` / `index_groups.go`); its CQL closures capture compile-time locals at ~18
      sites, so the mechanism is a user decision. `QueryCapability` moves in stage 3.
+   - **2b mechanism decided (2026-11-06, user): two-phase.** `db` describes (`Describe*` methods on
+     `TableCore` fill neutral state and return an `IndexSource`); the driver materializes in a second
+     pass that reads the `IndexSource`, never captured compile-time locals. A virtual column's value
+     function returns the **neutral** layout (unsigned packed value, int32 hash) and the driver
+     re-encodes it (Scylla: `storeVirtualPacked`, top-bit flip). This is the pattern
+     `describe_index.go` already used for local, global and packed indexes.
+   - **2b progress (2026-11-06).** Moved with the verification below: `DescribeViewTable`
+     (`db/describe_view_table.go`), `DescribeView` (`db/describe_view.go`; simple, hash and packed
+     range views), `DescribeDelta` (`db/describe_delta.go`). `IndexSource` gained `DeclaredColumns`,
+     `ProjectedColumns`, `SelectableColumns`, `PartitionColumn`, `KeepsBasePartition`,
+     `MaintenanceIDColumn`, `RebuildColumnNames`. Verification per stage: unit + `GENIX_ORM_SCYLLA_TEST`
+     integration green, and a temporary probe dumping every genix table's view CREATE scripts, expected
+     columns, virtual-column types and delta layouts from the old and the new code, normalized for
+     map order and the LZ4 work in progress: identical (68 views, 51 delta indexes).
+     **Left in 2b:** cache-group registration (`registerIndexGroup`, `registerInheritFromKeyIndexGroup`),
+     composite-bucket registration and the table-level fill in `makeTable` (`reflect.go`), then
+     `ScyllaTable.views/indexes` should read `TableCore.IndexSources`.
 3. **Planner + `AccessPlan`** (§7.1) and write preparation (§7.2) on top of stage 2.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
   against the local Scylla; new unit tests in `db` cover `AccessPlan` building for: primary key, IN

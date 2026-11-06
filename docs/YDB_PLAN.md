@@ -823,6 +823,12 @@ These do not depend on the neutral compile entry point, so they landed while Ste
 - `sequences.go` (§12): `GetAutoincrementID`, `SetCounter`, `ListCounters` on `_sequences`, serializable
   `DoTx`. Integration test: 32 writers × 10 reservations, 320 disjoint ranges.
 
+### Step P progress (2026-11-06)
+Owned by the FDB plan (its Step 2, stage 2b; mechanism decided there: two-phase describe/materialize).
+`db` now describes view tables, TypeView (simple, hash, packed range) and TypeDelta. Still open:
+cache-group and composite-bucket registration, the table-level compile in `makeTable`, then the
+`AccessPlan` planner (stage 3) and write preparation. YDB Step 2 starts when those land.
+
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three
 tag sets (`db`, `core`, `exec` for ydb): all green. `ydbdriver` answers `errNotImplemented`; its
