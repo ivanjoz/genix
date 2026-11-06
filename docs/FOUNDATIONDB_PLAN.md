@@ -388,48 +388,55 @@ predicate list would make every driver re-derive the range math. Today that logi
 `viewInfo.getStatementPrepared` closures, which return CQL text; the planner moves it into `db` and
 the closures shrink to rendering.
 
+Refined with the user the same day, while implementing:
+- **A value list per prefix column.** `a IN (1,2) AND b IN (3,4) AND c >= ?` stays one step:
+  `EqualPrefix` holds one value list per leading key column, and the cartesian product is implied.
+  Scylla renders `IN` with today's chunking, so it sends the same number of queries. FDB and YDB
+  expand the lists into ranges or a lookup join. A full-key `Points` step is therefore a `KeyRange`
+  with no bound, and `Points` is gone.
+- **A separate `Filter`.** These are predicates the source key cannot serve but the server can
+  still apply (Scylla `ALLOW FILTERING`, a YQL `WHERE`). The driver may push them to the server or
+  apply them in memory. `PostFilter` stays "re-check in memory" (hash collisions, packed spill).
+- **Native GROUP BY stays Scylla-only**, outside `AccessPlan`. FDB and YDB refuse it with
+  `errNotImplemented` until a later step decides how to support it.
+
 ```go
-// AccessPlan is what a query resolves to before any storage syntax exists.
+// db/access_plan.go
 type AccessPlan struct {
     Source     *IndexSource      // nil = the table's primary key
-    Steps      []AccessStep      // fan-out = several steps; results are unioned (deduplicated when Source can repeat a row)
-    PostFilter []ColumnStatement // what the source cannot apply exactly (RequiresPostFilter, hash overfetch)
+    Steps      []AccessStep      // read independently, rows unioned (deduplicated when Source can repeat a row)
+    Filter     []ColumnStatement // not servable by the key; pushed to the server or applied in memory
+    PostFilter []ColumnStatement // must be re-checked in memory (RequiresPostFilter, hash overfetch)
     Limit      int32
     Descending bool
 }
 
-// AccessStep is one read against the source. Exactly one of Range / Points / Element is set.
-type AccessStep struct {
-    Partition any        // nil when the source has no partition (a global index)
-    Range     *KeyRange  // a contiguous span of the source key
-    Points    [][]any    // full source keys, values already packed / hashed / concatenated
-    Element   *ElementLookup
+type AccessStep struct { // exactly one is set
+    Range   *KeyRange
+    Element *ElementLookup
 }
 
-// KeyRange: an equality prefix on the leading key columns, then an optional bound on the next one.
 type KeyRange struct {
-    EqualPrefix                []any // already packed / hashed / concatenated, in source key order
-    From, To                   any   // nil = open
+    EqualPrefix                []KeyValues // partition first, then the leading key columns
+    BoundColumn                string      // "" = prefix only (point / prefix lookups)
+    From, To                   any         // nil = open on that side
     FromInclusive, ToInclusive bool
 }
 
-// ElementLookup: rows whose slice column holds Value (a set CONTAINS, a fan-out view table, a
-// composite-bucket or slice cache-group hash).
-type ElementLookup struct {
-    Column string
-    Value  any
-}
+type KeyValues struct { Column string; Values []any } // one value = equality, several = IN
+
+type ElementLookup struct { Column string; Value any } // a collection CONTAINS
 ```
 
 Values in a step are the **neutral** layout (`IndexSource` describes the column: unsigned packed
-values, `int32` hashes); each driver applies its own storage encoding while rendering (Scylla: the
-top-bit flip of `storeVirtualPacked`). Rendering per driver:
+values as `uint64`, `int32` hashes); each driver applies its own storage encoding while rendering
+(Scylla: the top-bit flip of `storeVirtualPacked`, in `encodeAccessValue`). Rendering per driver:
 
 | Step | Scylla (CQL) | FDB | YDB |
 |---|---|---|---|
-| `Range` | `col >= ? AND col <= ?` after the prefix equalities | one tuple range on the subspace | `WHERE` on the PK or `VIEW ix` range |
-| `Points` | `IN (…)`, chunked | point gets | `IN` / `AS_TABLE($keys)` lookup join |
+| `Range` | `=` / `IN (…)` per prefix column (chunked), then `>=`/`<=` on the bound | one tuple range per prefix combination | `WHERE` on the PK or `VIEW ix`; value lists via `IN` / `AS_TABLE($keys)` lookup join |
 | `Element` | `CONTAINS ?` | index-entry prefix range | side-table range `element = $v`, joined back on the PK |
+| `Filter` | ANDed into every step's `WHERE` | applied in memory | ANDed into the `WHERE` |
 
 Keep the plan cache (`selectPlanCache`) in each driver, keyed by `computeSelectShapeHash`, which also
 moves. A plan the planner refuses (a filter behind an unconstrained packed slot with no
@@ -655,6 +662,25 @@ tests green (unit + `GENIX_ORM_SCYLLA_TEST` integration):
      **Left in 2b (optional cleanup):** `ScyllaTable.views/indexes` should read `TableCore.IndexSources`
      instead of keeping their own maps. This does not block stage 3.
 3. **Planner + `AccessPlan`** (§7.1) and write preparation (§7.2) on top of stage 2.
+   - **3a — done (2026-11-06).** `db/access_plan.go` holds the types and `PlanSourceSteps`, the
+     per-source planners that replaced the six `getStatementPrepared` closures: simple view (6) and
+     view table (9) via `planKeyPrefixStep`, hash view (7), packed range and delta views (8),
+     packed index, and cache-group hash. Also there: `FindIndexGroupStatement` and
+     `ResolveIndexGroupQueryValues`, moved from Scylla. Scylla now only renders
+     (`scylla/access_render.go`: `viewInfo.prepareWhereClauses`, `renderAccessSteps`,
+     `encodeAccessValue`). A delta source now records its `PartitionColumn`.
+     **Verification:**
+     - A probe rendered every genix view (78 sources) and fixtures for packed indexes, view tables
+       and projected views. Each ran over the same set of query shapes (all-eq, IN per column,
+       skip per column, BETWEEN per column, one-sided bounds, CONTAINS), in the old and the new
+       code. Output was normalized for predicate order and `IN (?)` vs `= ?`, and was identical.
+     - Suites green: `db` unit (6 new planner tests), Scylla unit plus `GENIX_ORM_SCYLLA_TEST`
+       integration, FDB live, YDB unit.
+   - **3b — next:** the route selection in `compileSelectStatement` / `SelectStatement.Compute`.
+     It needs the capabilities and their matching, the FixedValues fan-out, and the
+     concatenated-key and int-packed key rewrites (into a `KeyRange` on the primary key). Then the
+     composite-bucket, delta-prefix and cache-group planning, then a `db` entry point that returns
+     an `AccessPlan` with the plan cache keyed by `computeSelectShapeHash`.
 - **Accept:** `go test ./...` in `genix-orm` (`db`, `scylla`) green, including the integration tests
   against the local Scylla; new unit tests in `db` cover `AccessPlan` building for: primary key, IN
   fan-out, packed prefix + range, FixedValues fan-out, delta prefixes, cache-group candidates, the

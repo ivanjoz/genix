@@ -489,7 +489,8 @@ windows of both protocols cover it, provided the measured lag fits (§16 Step 0,
 
 ## 10. Read algorithm (`read.go`)
 
-1. Shared planner (Step P) → `AccessPlan{Source, Spans, PostFilter, Limit, Descending}`. A query
+1. Shared planner (Step P) → `AccessPlan{Source, Steps, Filter, PostFilter, Limit, Descending}`
+   (FDB plan §7.1: `KeyRange` with a value list per prefix column, or `ElementLookup`). A query
    the planner refuses fails exactly as on Scylla.
 2. Render by source. Statement text is cached per `computeSelectShapeHash`; values are params.
 
@@ -827,8 +828,12 @@ These do not depend on the neutral compile entry point, so they landed while Ste
 Owned by the FDB plan (its Step 2, stage 2b; mechanism decided there: two-phase describe/materialize).
 `db.DescribeIndexes` now describes every index kind (the index half of the compile is done; see the FDB
 plan §Step 2). The table-level compile is shared as well (`TableCore.CompileFromSchema`,
-`FinalizeColumns`), and Scylla and FDB both use it. Still open: the `AccessPlan` planner (stage 3,
-option C) and write preparation. YDB Step 2 starts when those land.
+`FinalizeColumns`), and Scylla and FDB both use it. `AccessPlan` stage 3a is done: the types and
+the per-source step planners are in `db/access_plan.go`, and Scylla only renders them. The shape
+was refined with the user: a value list per prefix column, a separate `Filter`, and GROUP BY
+staying Scylla-only. Still open: the route selection and the key rewrites (3b), composite, delta
+and cache-group planning, the `AccessPlan` entry point, and write preparation. YDB Step 2 starts
+when those land.
 
 ### Step 1 (2026-11-06)
 `go build` with no tag, `-tags fdb`, `-tags ydb` and `GOOS=js GOARCH=wasm`, and `go vet` for the three
