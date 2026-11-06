@@ -1,12 +1,12 @@
 // Pure business logic of the payroll pages: periods, run states, and how a payslip reads on the
 // boleta. No Svelte, no fetch. The server calculates; nothing here computes pay.
 
-import type { IConcept, IPayrollRun, IPayslip, IPayslipLine } from '#services/hr/payroll.svelte.ts'
-import { LEGAL_CONCEPTS } from '#services/hr/hr-catalogs.ts'
+import type { IConcept, IPayrollRun, IPayslip } from '#services/hr/payroll.svelte.ts'
+import { LEGAL_CONCEPTS, LEGAL_CONCEPT_MAX_ID } from '#services/hr/hr-catalogs.ts'
 
 /** Mirrors backend/hr/types/payroll.go and legal_concepts.go. */
 export const PayrollStatus = { Deleted: 0, Open: 1, Closed: 2, Paid: 3 } as const
-export const ConceptKind = { Earning: 1, Deduction: 2, Employer: 3, Provision: 4 } as const
+export const ConceptKind = { Earning: 1, Deduction: 2, Employer: 3, Provision: 4, Record: 5 } as const
 
 /** Profit sharing rates by sector (DL 892), basis points. */
 export const PROFIT_SHARING_RATE_OPTIONS = [
@@ -38,6 +38,9 @@ const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Se
 export const formatPeriod = (period: number): string =>
   `${MONTH_NAMES[(period % 100) - 1] || '?'} ${2000 + Math.floor(period / 100)}`
 
+/** 2610 → "OCT": the month alone, where the year is shown elsewhere. */
+export const formatPeriodMonth = (period: number): string => (MONTH_NAMES[(period % 100) - 1] || '?').toUpperCase()
+
 /** The YYMM of a UnixDay. */
 export const periodOfDay = (unixDay: number): number => {
   const date = new Date(unixDay * 86400 * 1000)
@@ -46,6 +49,17 @@ export const periodOfDay = (unixDay: number): number => {
 
 export const nextPeriod = (period: number): number => (period % 100 === 12 ? period - 11 + 100 : period + 1)
 export const previousPeriod = (period: number): number => (period % 100 === 1 ? period + 11 - 100 : period - 1)
+
+/** The months a user can assign a concept or loan to: a year back to a year ahead of centerPeriod. */
+export const periodOptionsAround = (centerPeriod: number): { id: number, name: string }[] => {
+  let period = centerPeriod
+  for (let i = 0; i < 12; i++) period = previousPeriod(period)
+  return Array.from({ length: 25 }, () => {
+    const option = { id: period, name: formatPeriod(period) }
+    period = nextPeriod(period)
+    return option
+  })
+}
 
 /** UnixDay of the first and last day of a YYMM period. */
 export const periodFirstDay = (period: number): number =>
@@ -82,10 +96,11 @@ export const allowedTransitions = (run: IPayrollRun) => {
 
 const legalConceptsByID = new Map(LEGAL_CONCEPTS.map((concept) => [concept.id, concept]))
 
-/** The label of a payslip line: a legal concept from the catalog, or the company concept. */
-export const payslipLineName = (line: IPayslipLine, companyConcepts: Map<number, IConcept>): string => {
-  if (line.LegalConceptID > 0) return legalConceptsByID.get(line.LegalConceptID)?.name || `#${line.LegalConceptID}`
-  return companyConcepts.get(line.ConceptID)?.Name || `#${line.ConceptID}`
+/** The label of a concept (a payslip line, an employee record): a legal concept from the catalog
+ * (bilingual, pass it through tr) or the company concept. */
+export const conceptName = (conceptID: number, companyConcepts: Map<number, IConcept>): string => {
+  if (conceptID <= LEGAL_CONCEPT_MAX_ID) return legalConceptsByID.get(conceptID)?.name || `#${conceptID}`
+  return companyConcepts.get(conceptID)?.Name || `#${conceptID}`
 }
 
 /** The boleta's sections: earnings, worker deductions, employer contributions. Provisions are accounting only. */

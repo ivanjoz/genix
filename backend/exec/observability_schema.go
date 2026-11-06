@@ -3,8 +3,7 @@ package exec
 import (
 	"app/core"
 	coreTypes "app/core/types"
-
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 const observabilityUserLogsTable = "user_logs"
@@ -16,8 +15,8 @@ func RebuildObservabilityLogView(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("No se ha especificado db.name en config.toml.")
 	}
 
-	scylla.MakeScyllaConnection(makeConnParams())
-	controller := makeDBController[coreTypes.UserLog]()
+	db.Connect(makeConnParams())
+	controller := db.MakeController[coreTypes.UserLog]()
 	core.Log("observability view rebuild started::", " table::", observabilityUserLogsTable)
 	if err := controller.DeleteViewsAndIndexes(); err != nil {
 		core.Log("observability view rebuild drop failed::", " table::", observabilityUserLogsTable, " err::", err)
@@ -25,7 +24,9 @@ func RebuildObservabilityLogView(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// Deploying one controller recreates only the declared user_logs view and keeps the base rows.
-	scylla.DeployScylla(0, controller)
+	if err := db.Deploy(controller); err != nil {
+		return args.MakeErr(err)
+	}
 	message := "View de user_logs reconstruida para observabilidad."
 	core.Log("observability view rebuild completed::", " table::", observabilityUserLogsTable)
 	return core.FuncResponse{Message: message}

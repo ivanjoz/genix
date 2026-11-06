@@ -9,13 +9,39 @@ import tomllib
 from pathlib import Path
 
 
+# Per-host override next to config.toml: config.toml is pushed to every host as-is, this file holds
+# what only this host differs in. The Go backend (core/config_local.go) and fareward (config.rs)
+# apply it with the same rule. Writes (set_config_values) still go to config.toml.
+LOCAL_CONFIG_FILE_NAME = "config.local.toml"
+
+
+def merge_config_override(base_config, override_config):
+    """A table in both merges key by key; any other value (arrays of tables too) replaces it whole."""
+    for key, override_value in override_config.items():
+        base_value = base_config.get(key)
+        if isinstance(base_value, dict) and isinstance(override_value, dict):
+            merge_config_override(base_value, override_value)
+        else:
+            base_config[key] = override_value
+    return base_config
+
+
+def apply_local_config_override(config_data, config_path):
+    """config_data with config.local.toml (next to config_path) merged over it, when it exists."""
+    local_config_file = Path(config_path).with_name(LOCAL_CONFIG_FILE_NAME)
+    if not local_config_file.exists():
+        return config_data
+    with open(local_config_file, "rb") as local_config_handle:
+        return merge_config_override(config_data, tomllib.load(local_config_handle))
+
+
 def read_config(config_path):
-    """Devuelve el archivo parseado como dict anidado. {} si no existe."""
+    """Devuelve el archivo parseado como dict anidado, con config.local.toml aplicado. {} si no existe."""
     config_file = Path(config_path)
     if not config_file.exists():
         return {}
     with open(config_file, "rb") as config_handle:
-        return tomllib.load(config_handle)
+        return apply_local_config_override(tomllib.load(config_handle), config_file)
 
 
 def get_config_value(config_data, dotted_key, default=None):

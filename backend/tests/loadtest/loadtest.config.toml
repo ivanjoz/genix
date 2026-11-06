@@ -1,0 +1,90 @@
+# Load-test config: a VPS of 4 GB / 2 vCPU running ScyllaDB, fareward and the backend, driven by
+# fn-load-test. run.sh writes the copy it runs with, replacing __KEYSPACE__ and __ROOT__.
+# Throwaway secrets, seen only by these local processes.
+
+app_name        = "genix"
+environment     = "load"
+admin_email     = "load@example.com"
+admin_password  = "load_admin_password"
+secret_phrase   = "load_secret_phrase"
+internal_apikey = "load_internal_apikey"
+serve_tailscale = false
+disable_api_concurrency_local = false
+
+# Its own ports, beside the dev daemon (14013) and the bench one (24013).
+[fareward]
+host   = "127.0.0.1"
+port   = 34013
+public = false
+use_remote_dev_host = false
+
+[providers]
+backend = "none"
+cdn     = "aws"
+model   = "openrouter"
+
+# The load-test ScyllaDB listens on 127.0.0.2, so it keeps Scylla's default ports without clashing
+# with the bench container on 127.0.0.1. See run.sh.
+[db]
+host        = "127.0.0.2"
+port        = 9042
+name        = "__KEYSPACE__"
+user        = "cassandra"
+password    = "cassandra"
+disable_ssl = true
+max_clustering_key = 100
+
+[server]
+port = 34010
+
+# Quotas far past what a run spends: a 429 would measure the limiter's policy, not its cost.
+[rate_limit]
+flush_seconds         = 15
+frame_timeout_seconds = 30
+max_connections       = 1024
+shards                = 0
+max_inflight_per_connection = 64
+access_cache_seconds  = 600
+company_cpu_10s       = 2000000000
+company_inference_10s = 2000000000
+company_cpu_1h        = 2000000000
+company_inference_1h  = 2000000000
+user_daily_share_pct  = 100
+user_cpu_10s          = 2000000000
+user_inference_10s    = 2000000000
+user_cpu_1h           = 2000000000
+user_inference_1h     = 2000000000
+company_extra_credits_24h = 0
+
+[lock]
+max_keys          = 100000
+max_total_waiters = 4096
+max_lease_ms      = 60000
+
+[request_log]
+enabled          = true
+log_all_requests = false
+
+[server_metrics]
+enabled = false
+
+[aws]
+region  = "us-east-1"
+profile = "default"
+
+# VPS mode: every cache file on the local disk, nothing in S3.
+[file_store]
+bucket  = ""
+root    = "orm/"
+vps_dir = "__ROOT__/files"
+vps_snapshot_cache_mb = 256
+vps_snapshot_disk_mb  = 1024
+
+[sse_bridge]
+url  = ""
+port = 34012
+
+[logs]
+full      = false
+debug     = false
+only_save = false

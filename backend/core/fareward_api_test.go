@@ -88,7 +88,33 @@ func TestFarewardAddressDerivesTheHostFromPublic(t *testing.T) {
 	}
 	for _, check := range checks {
 		got := makeFarewardAddress(
-			check.host, check.port, check.public, check.isDevArg, check.useRemoteDevHost)
+			check.host, check.port, check.public, "", check.isDevArg, check.useRemoteDevHost, false)
+		if got != check.want {
+			t.Fatalf("%s: got %q; want %q", check.name, got, check.want)
+		}
+	}
+}
+
+func TestFarewardUnixSocketOnlyOnTheDaemonHost(t *testing.T) {
+	const socketPath = "/run/fareward/fareward.sock"
+	checks := []struct {
+		name             string
+		public           bool
+		isDevArg         bool
+		useRemoteDevHost bool
+		isServerless     bool
+		want             string
+	}{
+		{"private vps dials the socket", false, false, false, false, "unix:" + socketPath},
+		// public = true is what Lambda needs; a backend beside the daemon still takes the socket.
+		{"public vps dials the socket", true, false, false, false, "unix:" + socketPath},
+		{"lambda keeps tcp", true, false, false, true, "150.136.42.240:14013"},
+		{"dev opted into the remote daemon keeps tcp", true, true, true, false, "150.136.42.240:14013"},
+		{"dev on its own daemon dials the socket", true, true, false, false, "unix:" + socketPath},
+	}
+	for _, check := range checks {
+		got := makeFarewardAddress("150.136.42.240", 14013, check.public, socketPath,
+			check.isDevArg, check.useRemoteDevHost, check.isServerless)
 		if got != check.want {
 			t.Fatalf("%s: got %q; want %q", check.name, got, check.want)
 		}

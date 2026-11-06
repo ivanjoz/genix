@@ -8,7 +8,6 @@
   import SearchSelect from '#components/form/SearchSelect.svelte'
   import Layer from '#components/layers/Layer.svelte'
   import Modal from '#components/layers/Modal.svelte'
-  import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
   import VTable from '#components/vTable/VTable.svelte'
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
@@ -22,11 +21,8 @@
     type IContributionsPayment, type IPayrollEnsureResult, type IPayrollRun, type IPayslip, type PayrollConfigService,
     type PayrollTransition,
   } from '#services/hr/payroll.svelte.ts'
-  import { EmployeeRecordsYearService } from '#services/hr/employee-records.svelte.ts'
-  import { yearOfPeriod } from '#services/hr/employee-records.ts'
   import { CajasService } from '#routes/finance/cash-banks/cajas.svelte.ts'
   import PayslipBoleta from './PayslipBoleta.svelte'
-  import PeriodInputs from './PeriodInputs.svelte'
   import {
     CONTRIBUTION_ACCOUNTS, PROFIT_SHARING_RATE_OPTIONS, RUN_STATE_LABELS, allowedTransitions, formatCents, formatPeriod,
     payrollCashBankOptions, payrollMonths, periodOfDay, runContributionTotals, runState, runTotals, type IPayrollMonth,
@@ -52,10 +48,7 @@
   let selectedPeriod = $state(0)
   let payrollWindow = $state<IPayrollEnsureResult>()
   let isUpdating = $state(false)
-  let detailView = $state(1)
   let payslips = $state<PayslipsService>()
-  /** The employee records of the selected month's year: its novedades are filtered from it. */
-  let yearRecords = $state<EmployeeRecordsYearService>()
   let runForm = $state({} as IPayrollRun)
   let selectedPayslip = $state<IPayslip>()
   let isPrinting = $state(false)
@@ -78,13 +71,10 @@
     return employee ? employeeFullName(employee) : `#${employeeID}`
   }
 
-  // Each period (payslips) and year (records) is its own cached list, built when a month needs it.
+  // Each period's payslips are their own cached list, built when a month needs it.
   const selectMonth = (month: IPayrollMonth) => {
     if (payslips?.route !== `hr-payslips?period=${month.Period}`) {
       payslips = new PayslipsService(month.Period)
-    }
-    if (yearRecords?.route !== `hr-employee-records?year=${yearOfPeriod(month.Period)}`) {
-      yearRecords = new EmployeeRecordsYearService(yearOfPeriod(month.Period))
     }
     selectedPeriod = month.Period
   }
@@ -97,13 +87,14 @@
   })
 
   // updatePayroll asks the server to create the months with something to pay and to recalculate the
-  // open ones whose inputs changed, then reloads what the page shows.
+  // open ones whose inputs changed (records, loans, contracts... are edited on other pages, so
+  // opening this page is what brings the runs up to date), then reloads what the page shows.
   const updatePayroll = async () => {
     if (!canCalculate) return
     isUpdating = true
     try {
       payrollWindow = await postPayrollEnsure()
-      await Promise.all([config.fetch(), payslips?.fetch(), yearRecords?.fetch()])
+      await Promise.all([config.fetch(), payslips?.fetch()])
       if (payrollWindow.Skipped.length > 0) {
         notifyFailure(payrollWindow.Skipped.map((skipped) =>
           `${formatPeriod(skipped.Period)} · ${employeeName(skipped.EmployeeID)}: ${skipped.Message}`).join('\n'))
@@ -147,7 +138,7 @@
       const result = await postPayrollTransition(transition, selectedRun, payForm.CashBankID) as
         { Skipped?: { EmployeeID: number, Message: string }[] }
       ui.closeModal(PAY_MODAL_ID)
-      await Promise.all([config.fetch(), payslips?.fetch(), yearRecords?.fetch()])
+      await Promise.all([config.fetch(), payslips?.fetch()])
       if (result?.Skipped?.length) {
         notifyFailure(result.Skipped.map((skipped) => `${employeeName(skipped.EmployeeID)}: ${skipped.Message}`).join('\n'))
       }
@@ -285,8 +276,6 @@
       {/if}
 
       <div class="flex flex-wrap items-end gap-x-24 gap-y-8">
-        <OptionsStrip selected={detailView} options={[[1, 'Payslips|Boletas'], [2, 'Entries|Novedades']]}
-          onSelect={(option) => { detailView = option[0] as number }} />
         <div class="ml-auto flex flex-wrap gap-x-24 gap-y-4">
           {#each [
             ['Earnings|Ingresos', formatCents(totals.earnings)],
@@ -304,13 +293,10 @@
            layer is fixed and covers the table, so the table is not wrapped in a content Layer: that
            one shrinks and clips the table while the side layer is open. -->
       <div class="mt-10 min-h-0 flex-1 overflow-y-auto">
-        {#if detailView === 2 && yearRecords}
-          <PeriodInputs run={selectedRun} records={yearRecords} {employees} {config} onChanged={updatePayroll} />
-        {:else}
-          <VTable columns={payslipColumns} data={runPayslips} css="w-full" maxHeight="100%" selected={selectedPayslip?.ID}
-            isSelected={(payslip, id) => payslip.ID === id}
-            onRowClick={(payslip) => { selectedPayslip = payslip; ui.openSideLayer(PAYSLIP_LAYER_ID) }} />
-        {/if}
+        <VTable columns={payslipColumns} data={runPayslips} css="w-full" maxHeight="100%" selected={selectedPayslip?.ID}
+          isSelected={(payslip, id) => payslip.ID === id}
+          onRowClick={(payslip) => { selectedPayslip = payslip; ui.openSideLayer(PAYSLIP_LAYER_ID) }} />
+
       </div>
     </div>
   {/if}

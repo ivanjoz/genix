@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { IPayrollRun, IPayslip } from '#services/hr/payroll.svelte.ts'
 import {
-  allowedTransitions, formatCents, formatPeriod, nextPeriod, payrollMonths, payslipLineName, payslipSections,
+  allowedTransitions, formatCents, formatPeriod, nextPeriod, payrollMonths, conceptName, payslipSections,
   periodFirstDay, periodLastDay, periodOfDay, previousPeriod, runContributionTotals, runState, runTotals,
 } from './payroll.ts'
 
@@ -49,11 +49,11 @@ describe('run state', () => {
 describe('payslip', () => {
   const payslip = {
     Lines: [
-      { LegalConceptID: 1, ConceptID: 0, Kind: 1, Amount: 200000 },
-      { LegalConceptID: 0, ConceptID: 7, Kind: 1, Amount: 15000 },
-      { LegalConceptID: 23, ConceptID: 0, Kind: 2, Amount: 26000 },
-      { LegalConceptID: 40, ConceptID: 0, Kind: 3, Amount: 18000 },
-      { LegalConceptID: 52, ConceptID: 0, Kind: 4, Amount: 19444 },
+      { ConceptID: 1, Kind: 1, Amount: 200000 },
+      { ConceptID: 207, Kind: 1, Amount: 15000 },
+      { ConceptID: 14, Kind: 2, Amount: 26000 },
+      { ConceptID: 18, Kind: 3, Amount: 18000 },
+      { ConceptID: 21, Kind: 4, Amount: 19444 },
     ],
     TotalEarnings: 215000, TotalDeductions: 26000, NetPay: 189000, EmployerCost: 233000,
     Diagnostics: [{ Code: 'HR-003', Message: '', Blocking: true }],
@@ -65,9 +65,9 @@ describe('payslip', () => {
       .toEqual([2, 1, 1, 1])
   })
   it('names legal and company concepts', () => {
-    const concepts = new Map([[7, { Name: 'Movilidad' }]]) as any
-    expect(payslipLineName(payslip.Lines[0], concepts)).toContain('Remuneración básica')
-    expect(payslipLineName(payslip.Lines[1], concepts)).toBe('Movilidad')
+    const concepts = new Map([[207, { Name: 'Movilidad' }]]) as any
+    expect(conceptName(payslip.Lines[0].ConceptID, concepts)).toContain('Remuneración básica')
+    expect(conceptName(payslip.Lines[1].ConceptID, concepts)).toBe('Movilidad')
   })
   it('sums what the run owes to third parties by payable', () => {
     const withPayables = { ...payslip, Lines: [

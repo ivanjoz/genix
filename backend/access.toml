@@ -411,9 +411,18 @@ name = "Planilla"
 group = 12
 levels = 14
 frontend_routes = "hr/payroll"
-backend_apis = "GET.hr-contracts,POST.hr-contracts,GET.hr-payroll-config,GET.hr-employee-concepts,POST.hr-employee-concepts,GET.hr-employee-records,POST.hr-employee-records,POST.hr-loans,POST.hr-pay-advances,POST.hr-payroll-runs,POST.hr-payroll-calculate,POST.hr-payroll-ensure,POST.hr-payroll-close,POST.hr-payroll-reopen,POST.hr-payroll-paid,POST.hr-payroll-contributions,GET.hr-payslips,GET.hr-payslips-ids,GET.hr-payslips-employee"
+backend_apis = "GET.hr-contracts,POST.hr-contracts,GET.hr-payroll-config,GET.hr-employee-concepts,POST.hr-employee-concepts,GET.hr-employee-records,POST.hr-pay-advances,POST.hr-payroll-runs,POST.hr-payroll-calculate,POST.hr-payroll-ensure,POST.hr-payroll-close,POST.hr-payroll-reopen,POST.hr-payroll-paid,POST.hr-payroll-contributions,GET.hr-payslips,GET.hr-payslips-ids,GET.hr-payslips-employee"
 sub_accesses_ids = [2, 3, 4]
 sub_accesses_names = ["Calcular Planilla", "Cerrar Planilla", "Pagar Planilla"]
+
+# Novedades and loans of each employee: recording them does not grant calculating or closing the payroll.
+[[access]]
+id = 46
+name = "Registros Empleados"
+group = 12
+levels = 14
+frontend_routes = "hr/employee-records"
+backend_apis = "GET.hr-employees,GET.hr-employees-ids,GET.hr-payroll-config,GET.hr-employee-records,POST.hr-employee-records,POST.hr-loans"
 
 [[access]]
 id = 42

@@ -13,10 +13,10 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"github.com/ivanjoz/genix-orm/scylla"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // reserveSeededAutoincrementIDs moves an autoincrement counter past the IDs written by hand below.
@@ -133,11 +133,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	// Seed writes to cached tables append the delta logs and raise the by-IDs slot files.
 	core.ConfigureFileStore()
 
-	// Bootstrap ORM internal tables before any ScyllaDB seed writes depend on them.
-	if err := scylla.Init(); err != nil {
-		panic("Error al inicializar las tablas internas del ORM. " + err.Error())
-	}
-
+	// Deploy also creates the ORM's internal tables, before any seed write depends on them.
 	DeployDatabaseSchemas(args)
 
 	if err := cloud.Init[config.Company](); err != nil {
@@ -173,6 +169,24 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 			Created:       seedTimestamp,
 		},
 	}
+	// --companies=N (N > 2) adds companies 3..N with an admin each: the load test runs on eight.
+	if companiesArgument, hasCompanies := strings.CutPrefix(strings.TrimSpace(args.Message), "--companies="); hasCompanies {
+		companyCount, err := strconv.Atoi(companiesArgument)
+		if err != nil || companyCount < 2 {
+			panic("--companies debe ser un número >= 2: " + companiesArgument)
+		}
+		for companyID := int32(3); companyID <= int32(companyCount); companyID++ {
+			empresas = append(empresas, config.Company{
+				ID:            companyID,
+				Name:          fmt.Sprintf("Empresa %d", companyID),
+				LegalName:     fmt.Sprintf("Empresa %d S.A.C.", companyID),
+				RUC:           fmt.Sprintf("20%09d", companyID),
+				InvoiceSeries: invoicingTypes.DefaultInvoiceSeries(),
+				Updated:       seedTimestamp,
+				Created:       seedTimestamp,
+			})
+		}
+	}
 	usuarios := []coreTypes.User{
 		{
 			ID:           1,
@@ -196,6 +210,13 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 			Created:      seedTimestamp,
 			Updated:      seedTimestamp,
 		},
+	}
+
+	for _, extraCompany := range empresas[2:] {
+		usuarios = append(usuarios, coreTypes.User{
+			ID: 1, CompanyID: extraCompany.ID, User: "admin", FirstName: "admin", LastName: "root",
+			PasswordHash: passwordHash, Status: 1, Created: seedTimestamp, Updated: seedTimestamp,
+		})
 	}
 
 	// Seed companies in ScyllaDB first so the relational source of truth is ready.
@@ -356,13 +377,11 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 		panic("No se ha especificado el db.name en config.toml")
 	}
 
-	scylla.MakeScyllaConnection(makeConnParams())
+	db.Connect(makeConnParams())
 
-	if err := scylla.CreateKeyspaceIfNotExists(); err != nil {
-		panic(fmt.Sprintf("Error al crear el keyspace '%v': %v", core.Env.DB_NAME, err))
+	if err := db.Deploy(MakeScyllaControllers()...); err != nil {
+		panic(fmt.Sprintf("Error al desplegar el esquema del keyspace '%v': %v", core.Env.DB_NAME, err))
 	}
-
-	scylla.DeployScylla(0, MakeScyllaControllers()...)
 
 	return core.FuncResponse{}
 }
@@ -370,10 +389,15 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 // fn-recalc
 func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 
-	scylla.MakeScyllaConnection(makeConnParams())
+	db.Connect(makeConnParams())
 
-	scylla.QueryExec("DELETE FROM genix.almacen_producto where empresa_id = 1")
-	scylla.QueryExec("DELETE FROM genix.almacen_movimiento where empresa_id = 1")
+	// Stale: neither table has a declaration any more, so these deletes find nothing to remove.
+	// Kept as ported (the answer to D4 was "port"); delete once the user confirms.
+	for _, legacyTable := range []string{"almacen_producto", "almacen_movimiento"} {
+		if err := db.WipePartition(db.TableDescription{Name: legacyTable, Partition: "empresa_id"}, 1); err != nil {
+			core.Log("fn-recalc: wipe of", legacyTable, "failed:", err)
+		}
+	}
 
 	return core.FuncResponse{}
 }

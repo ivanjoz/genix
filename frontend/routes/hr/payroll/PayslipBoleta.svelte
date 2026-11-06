@@ -6,7 +6,7 @@
   import type { IEmployee } from '#services/hr/employees.svelte.ts'
   import { PENSION_SYSTEM_OPTIONS } from '#services/hr/hr-catalogs.ts'
   import type { IConcept, IPayrollRun, IPayslip, IPayslipLine } from '#services/hr/payroll.svelte.ts'
-  import { formatCents, formatPeriod, formatRate, payslipLineName, payslipSections } from './payroll.ts'
+  import { formatCents, formatPeriod, formatRate, conceptName, payslipSections } from './payroll.ts'
 
   // The boleta de pago, rendered as HTML and printed by the browser (plan §6.2). The same markup is
   // the on-screen preview and, through a body-level copy, the printed page.
@@ -49,7 +49,7 @@
             {#each section.lines as line}
               <tr>
                 <td>
-                  {tr(payslipLineName(line, concepts))}
+                  {tr(conceptName(line.ConceptID, concepts))}
                   {#if line.OutsideNetPay}
                     <span class="text-gray-500">({tr('deposited in the bank|depositada en el banco')})</span>
                   {/if}
@@ -68,7 +68,7 @@
       <div>
         <div class="ff-bold">{tr('Employer contributions|Aportes del empleador')}</div>
         {#each sections.employer as line}
-          <div>{tr(payslipLineName(line, concepts))} ({formatRate(line.Rate)}): {formatCents(line.Amount)}</div>
+          <div>{tr(conceptName(line.ConceptID, concepts))} ({formatRate(line.Rate)}): {formatCents(line.Amount)}</div>
         {/each}
       </div>
       <div class="ff-bold text-[16px]">{tr('Net pay|Neto a pagar')}: S/ {formatCents(payslip.NetPay)}</div>

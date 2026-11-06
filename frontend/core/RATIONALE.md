@@ -18,8 +18,10 @@ the profile's `Modules` field deleted. Building it left these points open.
 - The TOML parser moved to `libs/toml-tables.utils.ts`, now with booleans and dotted child sections
   (`[[modules.menus]]`); `access-list-catalog.ts` uses it too.
 - `logout` moved from `HeaderConfig.svelte` to `core/env.ts`, so the module selector's "Salir" uses
-  the same one. It also wipes the module memory (`genix_module_navigation`), on purpose: the next
-  user may be someone else.
+  the same one. The module memory (`genix_module_navigation`) survives logout, as one of
+  `BROWSER_PREFERENCE_STORAGE_KEYS`: users expect to come back to the module they left. It holds
+  only route codes, and every read filters it by the session's access, so a different next user
+  just lands on their first accessible module.
 - On desktop, the selector takes the logo's place at the top of the side menu, as in Berryapps; the
   Genix logo moved to the mobile drawer's footer.
 - `Profile.Modules` was removed from the Go struct and from the `fn-rename-columns` plan

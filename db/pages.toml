@@ -42,15 +42,21 @@ description = "Define las áreas y cargos de tu empresa, con su jefe y función 
 
 [[pages]]
 route = "hr/employees"
-name = "Employees|Personal"
+name = "Employees & Contracts|Empleados & Contratos"
 icon = "icon-[fa--id-card]"
-description = "Registra a tus trabajadores con su área y cargo, sus contratos y derechohabientes."
+description = "Registra a tus trabajadores con su área y cargo, sus contratos, derechohabientes y conceptos fijos."
+
+[[pages]]
+route = "hr/employee-records"
+name = "Employee Records|Registros Empleados"
+icon = "icon-[fa--list-alt]"
+description = "Registra lo que pasa con cada trabajador en el mes (horas extras, inasistencias, bonos y pagos extraordinarios) y sus préstamos."
 
 [[pages]]
 route = "hr/payroll"
 name = "Payroll|Planilla"
 icon = "icon-[fa--calculator]"
-description = "Calcula la planilla mensual con sus novedades, pagos semanales y préstamos; la cierra y emite las boletas."
+description = "Calcula la planilla mensual con los registros, pagos semanales y préstamos de cada trabajador; la cierra y emite las boletas."
 
 [[pages]]
 route = "hr/time-off"

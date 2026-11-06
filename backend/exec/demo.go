@@ -12,7 +12,6 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
-	"github.com/ivanjoz/genix-orm/scylla"
 	"os"
 	"os/exec"
 	"runtime"
@@ -545,8 +544,10 @@ func Test32(args *core.ExecArgs) core.FuncResponse {
 	*/
 	// Migrated to db2 - use makeDBController and scylla.DeployScylla
 	// scylla.DeployScylla(0, business.SharedListRecord{})
-	controller := makeDBController[business.SharedListRecord]()
-	scylla.DeployScylla(0, controller)
+	controller := db.MakeController[business.SharedListRecord]()
+	if err := db.Deploy(controller); err != nil {
+		return args.MakeErr(err)
+	}
 	return core.FuncResponse{}
 }
 
@@ -646,7 +647,7 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
-	scylla.MakeScyllaConnection(makeConnParams())
+	db.Connect(makeConnParams())
 	registros := []business.SharedListRecord{}
 
 	recordToInsert := business.SharedListRecord{
@@ -727,7 +728,7 @@ func Test40(args *core.ExecArgs) core.FuncResponse {
 	*/
 	// Migrated to db2 - use makeDBController and scylla.DeployScylla
 	// scylla.DeployScylla(0, business.SharedListRecord{})
-	controller := makeDBController[logistics.ProductStock]()
+	controller := db.MakeController[logistics.ProductStock]()
 	controller.RecalcVirtualColumns(1)
 	return core.FuncResponse{}
 }

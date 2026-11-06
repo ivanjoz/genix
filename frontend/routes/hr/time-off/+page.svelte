@@ -14,9 +14,9 @@
   import { formatTime, todayUnixDay } from '#libs/helpers.ts'
   import { employeeFullName } from '#routes/hr/employees/employees.ts'
   import { EmployeesService, type IEmployee } from '#services/hr/employees.svelte.ts'
-  import { TIME_OFF_TYPE_OPTIONS } from '#services/hr/hr-catalogs.ts'
+  import { ConceptGroup, LegalConcept, legalConceptsOfGroup } from '#services/hr/hr-catalogs.ts'
   import { EmployeeRecordsYearService, postEmployeeRecord } from '#services/hr/employee-records.svelte.ts'
-  import { RecordStatus, RecordType, type IEmployeeRecord } from '#services/hr/employee-records.ts'
+  import { RecordStatus, type IEmployeeRecord } from '#services/hr/employee-records.ts'
   import { balanceYears, vacationBalance, yearOfDay } from './time-off.ts'
 
   // Vacations and leaves. HR registers them already approved; the monthly payroll pays vacation
@@ -29,9 +29,9 @@
   const employees = new EmployeesService(true)
   const activeEmployees = $derived(employees.records.filter((employee) => employee.ss === 1))
   const employeeOptions = $derived(activeEmployees.map((employee) => ({ ID: employee.ID, Name: employeeFullName(employee) })))
-  const timeOffTypeOptions = TIME_OFF_TYPE_OPTIONS.map((option) => ({ ...option, name: tr(option.name) }))
+  const timeOffTypeOptions = legalConceptsOfGroup(ConceptGroup.TimeOff).map((concept) => ({ id: concept.id, name: tr(concept.name) }))
   const timeOffTypeNames = new Map(timeOffTypeOptions.map((option) => [option.id, option.name]))
-  const isTimeOff = (record: IEmployeeRecord) => timeOffTypeNames.has(record.Type)
+  const isTimeOff = (record: IEmployeeRecord) => timeOffTypeNames.has(record.ConceptID)
 
   // One cached list per year (every record type; this page keeps the time off), and the balance
   // needs every year back to the earliest hire.
@@ -76,7 +76,7 @@
   }
 
   const openNew = () => {
-    timeOffForm = { Type: RecordType.Vacation, FromDate: today, ToDate: today, ss: RecordStatus.Active } as IEmployeeRecord
+    timeOffForm = { ConceptID: LegalConcept.Vacation, FromDate: today, ToDate: today, ss: RecordStatus.Active } as IEmployeeRecord
     ui.openModal(TIME_OFF_MODAL_ID)
   }
 
@@ -84,7 +84,7 @@
 
   const timeOffColumns: ITableColumn<IEmployeeRecord>[] = [
     { header: 'Employee|Trabajador', css: 'px-6', highlight: true, getValue: (e) => employeeName(e.EmployeeID) },
-    { header: 'Type|Tipo', css: 'px-6', getValue: (e) => timeOffTypeNames.get(e.Type) || '' },
+    { header: 'Type|Tipo', css: 'px-6', getValue: (e) => timeOffTypeNames.get(e.ConceptID) || '' },
     { header: 'From|Desde', css: 'px-6', getValue: (e) => String(formatTime(e.FromDate, 'd-m-Y')) },
     { header: 'To|Hasta', css: 'px-6', getValue: (e) => String(formatTime(e.ToDate, 'd-m-Y')) },
     { header: 'Days|Días', css: 'px-6 text-center', getValue: (e) => e.Quantity },
@@ -131,7 +131,7 @@
   <div class="grid grid-cols-24 gap-10" aria-label="Time off form">
     <SearchSelect bind:saveOn={timeOffForm} save="EmployeeID" label="Employee|Trabajador" required={true}
       disabled={timeOffForm.ID > 0} options={employeeOptions} keyId="ID" keyName="Name" css="col-span-24" />
-    <SearchSelect bind:saveOn={timeOffForm} save="Type" label="Type|Tipo" required={true}
+    <SearchSelect bind:saveOn={timeOffForm} save="ConceptID" label="Type|Tipo" required={true}
       options={timeOffTypeOptions} keyId="id" keyName="name" css="col-span-24" />
     <DateInput bind:saveOn={timeOffForm} save="FromDate" label="From|Desde" required={true} css="col-span-24 md:col-span-12" />
     <DateInput bind:saveOn={timeOffForm} save="ToDate" label="To (included)|Hasta (incluido)" required={true} css="col-span-24 md:col-span-12" />

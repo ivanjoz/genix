@@ -1,3 +1,5 @@
+//go:build !fdb
+
 package exec
 
 import (

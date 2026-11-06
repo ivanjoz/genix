@@ -76,7 +76,7 @@ func PostConcept(req *core.HandlerArgs) core.HandlerResponse {
 	table := db.TableOf[types.Concept]()
 	if err := db.Update(&records, table.Name, table.Kind, table.PlameCode, table.IsRemunerative, table.AffectsEssalud,
 		table.AffectsPension, table.IncomeTax, table.ComputableForBenefits, table.ExpenseAccountCode,
-		table.PayableAccountCode, table.Status, table.UpdatedBy); err != nil {
+		table.PayableAccountCode, table.SeparatePayslip, table.Status, table.UpdatedBy); err != nil {
 		return req.MakeErr("Error al guardar el concepto:", err)
 	}
 	return req.MakeResponse(records[0])
@@ -113,6 +113,9 @@ func validateConcept(concept *types.Concept) error {
 		}
 		concept.PayableAccountCode = 0
 	case types.ConceptKindDeduction:
+		if concept.SeparatePayslip {
+			return fmt.Errorf("Solo un ingreso se puede pagar en una boleta aparte.")
+		}
 		if concept.PayableAccountCode == 0 {
 			return fmt.Errorf("Indique la cuenta por pagar del descuento (p.ej. 419 para retenciones judiciales).")
 		}

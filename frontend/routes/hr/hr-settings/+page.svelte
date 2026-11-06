@@ -11,7 +11,7 @@
   const legal = new LegalParametersService(true)
 
   const pageOptions = [
-    { id: 1, name: 'Payroll concepts|Conceptos de planilla' },
+    { id: 1, name: 'Concepts|Conceptos' },
     { id: 2, name: 'Legal values|Valores legales' },
   ]
 </script>

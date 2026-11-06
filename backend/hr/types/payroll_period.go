@@ -118,7 +118,7 @@ func CalculatePeriodPayslip(input PeriodPayslipInput) (Payslip, bool) {
 		piece, ok := CalculateSettlement(benefitInput())
 		keep(pieceSettlement, piece, ok)
 	}
-	if len(periodRecords(input.Records, period, isRecordType(RecordExtraordinaryPayment))) > 0 {
+	if len(separatePayslipRecords(input.Records, period, input.Concepts)) > 0 {
 		piece, ok := CalculateExtraordinaryPayment(benefitInput())
 		keep(pieceExtraordinary, piece, ok)
 	}

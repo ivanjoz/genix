@@ -173,7 +173,7 @@ func Test41(args *core.ExecArgs) core.FuncResponse {
 
 func Test46(args *core.ExecArgs) core.FuncResponse {
 
-	controller := makeDBController[salesTypes.SaleOrder]()
+	controller := db.MakeController[salesTypes.SaleOrder]()
 
 	err := controller.RecalcVirtualColumns(1)
 	if err != nil {
@@ -185,16 +185,16 @@ func Test46(args *core.ExecArgs) core.FuncResponse {
 
 func Test51(args *core.ExecArgs) core.FuncResponse {
 
-	controller := makeDBController[production.Product]()
+	controller := db.MakeController[production.Product]()
 
 	controller.ReindexTextSearch(1)
 
-	// controller := makeDBController[webpageTypes.Webpage]()
+	// controller := db.MakeController[webpageTypes.Webpage]()
 	//	controller.RecalcVirtualColumns(1)
 	// controller.DeleteViewsAndIndexes()
 	// controller.RecalcVirtualColumns(1)
 
-	//	controller2 := makeDBController[logisticsTypes.ProductStockV2]()
+	//	controller2 := db.MakeController[logisticsTypes.ProductStockV2]()
 	// controller2.DeleteViewsAndIndexes()
 
 	return core.FuncResponse{}

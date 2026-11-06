@@ -148,6 +148,8 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 	defer func() {
 		if r := recover(); r != nil {
 			errStr := fmt.Sprintf("Internal Server Error (Panic): %v", r)
+			// Recorded against the line that panicked, and on args so the VPS keeps it too.
+			args.Errors.RegisterAt(core.PanicCodeLine(), errStr)
 			core.Logx(5, errStr)
 			core.Log(string(debug.Stack()))
 
@@ -170,7 +172,12 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 	// an identity into its user_logs row. Lives on args, which is exact in both runtimes; the Env
 	// mirror that core.Log prints from is set further down, once the identity is known.
 	args.RequestID = core.MakeRequestID()
-	core.ResetRequestErrors()
+	// Each request collects its own failures; the shared heuristic accumulator only exists on
+	// Lambda, where one environment serves one request at a time.
+	args.Errors = &core.RequestErrors{}
+	if core.Env.IS_SERVERLESS {
+		core.ResetServerlessLogErrors()
+	}
 
 	// NOTE: The Lambda runtime processes one invocation at a time per execution environment,
 	// but local/VPS HTTP mode is concurrent. Avoid mutating global per-request state when local.
@@ -284,10 +291,15 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 		//
 		// La condición se lee de chargedMethodFor y no se reconstruye: es la misma función que
 		// decidió cobrar la base, así que las dos mitades del cargo no pueden discrepar.
+		//
+		// Never waited for on a VPS. Lambda still waits: a goroutine outliving the response is
+		// frozen with the sandbox, and the top-up could arrive late or be lost.
 		if !isPublicPath && chargedMethodFor(args.Method, funcPath) == "GET" &&
 			handlerResponse.Error == "" && !handlerResponse.StreamHandled {
-			if topUpResponse := chargeGetResponseTopUp(args, respLen); topUpResponse != nil {
-				handlerResponse = *topUpResponse
+			if core.Env.IS_SERVERLESS {
+				settleGetResponseTopUp(args.User.CompanyID, args.User.ID, args.RouteID, respLen)
+			} else {
+				go settleGetResponseTopUp(args.User.CompanyID, args.User.ID, args.RouteID, respLen)
 			}
 		}
 
@@ -466,24 +478,26 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		payloadBytes = len(*args.Body)
 	}
 
+	// VPS fast path: with the grant already cached and the subject in good standing, the request
+	// does not wait for fareward. The very same frame goes out in the background and its reply
+	// refreshes the cache or marks the subject synchronous (core/access_grant_cache.go).
+	if !core.Env.IS_SERVERLESS {
+		if cachedGrant, found := core.LookupAccessGrant(
+			args.User.CompanyID, args.User.ID, decision.requiredAccess); found {
+			go settleAccessAndCreditsInBackground(args.User.CompanyID, args.User.ID, args.RouteID,
+				chargedMethod, payloadBytes, decision.requiredAccess)
+			applyGrantedSubAccesos(args, cachedGrant, decision.accessInfos, accessInfos)
+			return nil
+		}
+	}
+
 	requestContext := context.Background()
 	if args.ReqContext != nil {
 		requestContext = args.ReqContext.Context()
 	}
 
-	var err error
-	var accessGrant *core.AccessGrant
-	cpuCredits := uint16(0)
-	if chargedMethod == "" {
-		accessGrant, err = core.ChargeAPIAccessOnly(
-			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, decision.requiredAccess)
-	} else {
-		// APICPUCredits(GET, 0) es exactamente la base, así que el mismo cálculo sirve para los dos.
-		cpuCredits, _ = core.APICPUCredits(chargedMethod, payloadBytes)
-		accessGrant, err = core.ChargeAPIUsage(
-			requestContext, args.User.CompanyID, args.User.ID, args.RouteID, chargedMethod,
-			payloadBytes, decision.requiredAccess)
-	}
+	accessGrant, err := chargeAccessAndCredits(requestContext, args.User.CompanyID, args.User.ID,
+		args.RouteID, chargedMethod, payloadBytes, decision.requiredAccess)
 
 	if err != nil {
 		core.Log("fareward rechazó::", " method::", args.Method, " company::", args.User.CompanyID,
@@ -500,12 +514,14 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		// sólo autoriza, y devuelve el grant real con los permisos igual de aplicados.
 		if core.TolerateCreditRefusal(args.User.CompanyID, err) {
 			core.Log("fareward: rechazo por crédito tolerado, reintentando sólo autorización::",
-				" user::", args.User.ID, " route::", args.RouteID, " cpu_credits::", cpuCredits)
+				" user::", args.User.ID, " route::", args.RouteID)
 			accessGrant, err = core.ChargeAPIAccessOnly(
 				requestContext, args.User.CompanyID, args.User.ID, args.RouteID, decision.requiredAccess)
 		}
 
 		if err != nil {
+			core.RecordAccessCheckOutcome(
+				args.User.CompanyID, args.User.ID, decision.requiredAccess, nil, err)
 			var response core.HandlerResponse
 			if core.IsAccessDeniedError(err) {
 				// Los nombres salen de aquí: el daemon no conoce access.toml.
@@ -517,17 +533,60 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		}
 	}
 
+	core.RecordAccessCheckOutcome(
+		args.User.CompanyID, args.User.ID, decision.requiredAccess, accessGrant, nil)
+	applyGrantedSubAccesos(args, accessGrant, decision.accessInfos, accessInfos)
+	return nil
+}
+
+// chargeAccessAndCredits sends the gate's single frame: the full charge plus the access check, or
+// only the access check for the credit-exempt routes (chargedMethod empty).
+func chargeAccessAndCredits(
+	requestContext context.Context, companyID, userID int32, routeID int16,
+	chargedMethod string, payloadBytes int, requiredAccess []uint16,
+) (*core.AccessGrant, error) {
+	if chargedMethod == "" {
+		return core.ChargeAPIAccessOnly(requestContext, companyID, userID, routeID, requiredAccess)
+	}
+	return core.ChargeAPIUsage(
+		requestContext, companyID, userID, routeID, chargedMethod, payloadBytes, requiredAccess)
+}
+
+// settleAccessAndCreditsInBackground is the fast path's deferred verdict: the same frame the
+// request skipped waiting for. Its outcome only affects the subject's NEXT requests — a refusal
+// marks them synchronous, a revoked access drops the cached grant.
+func settleAccessAndCreditsInBackground(
+	companyID, userID int32, routeID int16, chargedMethod string, payloadBytes int,
+	requiredAccess []uint16,
+) {
+	chargeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	accessGrant, err := chargeAccessAndCredits(
+		chargeContext, companyID, userID, routeID, chargedMethod, payloadBytes, requiredAccess)
+	if err != nil {
+		core.Log("fareward refused a request already served from the grant cache::",
+			" company::", companyID, " user::", userID, " route::", routeID, " err::", err)
+	}
+	core.RecordAccessCheckOutcome(companyID, userID, requiredAccess, accessGrant, err)
+}
+
+// applyGrantedSubAccesos sets the request's sub-accesses from a grant, whether it came from
+// fareward just now or from the grant cache.
+func applyGrantedSubAccesos(
+	args *core.HandlerArgs, accessGrant *core.AccessGrant,
+	requiredAccessInfos, routeAccessInfos []core.AccessInfo,
+) {
 	// El daemon devuelve los sub-accesos por SLOT, porque no conoce access.toml y no sabe a qué
 	// acceso corresponde cada uno. La traducción a IDs vive aquí, del lado que sí lo embebe.
-	args.User.SubAccesos = mapGrantedSubAccesos(accessGrant, decision.accessInfos)
+	args.User.SubAccesos = mapGrantedSubAccesos(accessGrant, requiredAccessInfos)
 
 	// El user 1 salta el gate (resolveRouteAccess devuelve decisión vacía porque sus blobs en
 	// ScyllaDB están vacíos y el daemon lo negaría), así que el mapa de arriba queda vacío y
 	// todo chequeo HasSubAcceso lo negaría. Se le sintetiza "Todos" en los accesos de la ruta,
 	// espejo de buildBootstrapAdminAccesos en login.go, que sí lo hace para el frontend.
-	if args.User.ID == 1 && len(accessInfos) > 0 {
-		synthesized := make(map[int32]uint16, len(accessInfos))
-		for _, accessInfo := range accessInfos {
+	if args.User.ID == 1 && len(routeAccessInfos) > 0 {
+		synthesized := make(map[int32]uint16, len(routeAccessInfos))
+		for _, accessInfo := range routeAccessInfos {
 			if accessInfo.SubAccesosMask != 0 {
 				synthesized[accessInfo.ID] = 1 << (core.SubAccesoTodosID - 1)
 			} else {
@@ -536,12 +595,6 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		}
 		args.User.SubAccesos = synthesized
 	}
-
-	core.Log("fareward aceptó::", " method::", args.Method, " company::", args.User.CompanyID,
-		" user::", args.User.ID, " route::", args.RouteID, " bytes::", payloadBytes,
-		" cpu_credits::", cpuCredits, " accesos::", len(decision.requiredAccess),
-		" sub_accesos::", len(args.User.SubAccesos))
-	return nil
 }
 
 // mapGrantedSubAccesos traduce los slots que fareward otorgó a los IDs de acceso que el gate pidió,
@@ -575,46 +628,37 @@ func mapGrantedSubAccesos(
 	return subAccesosByAccesoID
 }
 
-// chargeGetResponseTopUp cobra lo que la respuesta excedió sobre la base ya cobrada. Devuelve nil
-// cuando no excedió nada, que es el caso normal: una respuesta de hasta 8 KB cuesta exactamente la
-// base y no manda un segundo frame.
-func chargeGetResponseTopUp(args *core.HandlerArgs, responseBytes int) *core.HandlerResponse {
+// settleGetResponseTopUp cobra lo que la respuesta excedió sobre la base ya cobrada. No manda nada
+// cuando no excedió, que es el caso normal: una respuesta de hasta 8 KB cuesta exactamente la base.
+//
+// The response is already built and is never replaced: a refusal here only marks the subject
+// synchronous, so its next request waits for fareward's verdict — which refuses it anyway, since
+// the budget this top-up exhausted is the one that request would spend.
+func settleGetResponseTopUp(companyID, userID int32, routeID int16, responseBytes int) {
 	totalCredits, err := core.APICPUCredits("GET", responseBytes)
 	if err != nil {
 		core.Log("no se pudo calcular el excedente del GET::", err)
-		return nil
+		return
 	}
 	baseCredits, _ := core.APICPUBaseCredits("GET")
 	if totalCredits <= baseCredits {
-		return nil
+		return
 	}
 
-	requestContext := context.Background()
-	if args.ReqContext != nil {
-		requestContext = args.ReqContext.Context()
-	}
+	chargeContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	topUpCredits := totalCredits - baseCredits
 	// Eligible para los créditos extra, igual que la base que ya se cobró: es la segunda mitad del
 	// cargo de un GET, no un cargo distinto. Si la base salió del pool y la liquidación no pudiera,
 	// una respuesta grande sería lo único que el modo de sólo lectura no puede servir.
 	if err := core.ChargeAPICredits(
-		requestContext, args.User.CompanyID, args.User.ID, args.RouteID, topUpCredits, true,
+		chargeContext, companyID, userID, routeID, topUpCredits, true,
 	); err != nil {
-		core.Log("credit rate limiter rejected GET top-up::", " company::", args.User.CompanyID,
-			" user::", args.User.ID, " route::", args.RouteID, " bytes::", responseBytes,
+		core.Log("credit rate limiter rejected GET top-up::", " company::", companyID,
+			" user::", userID, " route::", routeID, " bytes::", responseBytes,
 			" credits::", topUpCredits, " err::", err)
-		// Aquí no hay grant que recuperar —la liquidación no lleva accesos, la autorización ya
-		// ocurrió al entrar— así que tolerar es sólo no convertir el rechazo en respuesta.
-		if core.TolerateCreditRefusal(args.User.CompanyID, err) {
-			return nil
-		}
-		response := args.MakeCreditRateLimitResponse(err)
-		return &response
+		core.RecordAccessCheckOutcome(companyID, userID, nil, nil, err)
 	}
-	core.Log("credit rate limiter accepted GET top-up::", " company::", args.User.CompanyID,
-		" user::", args.User.ID, " route::", args.RouteID, " bytes::", responseBytes,
-		" credits::", topUpCredits)
-	return nil
 }
 
 func registerLocalRequestUsage(args *core.HandlerArgs, handlerResponse *core.HandlerResponse, requestStartedAt int64) {

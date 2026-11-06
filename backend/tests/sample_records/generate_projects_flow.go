@@ -33,7 +33,6 @@ import (
 var projectsFlowCatalogJSON []byte
 
 const (
-	projectsFlowCompanyID int32 = 1
 	// projectsFlowCreatorID creates every project: the dev login's user, so the projects open as its admin.
 	projectsFlowCreatorID int32 = 1
 	// projectsFlowPassword is the password of the seeded people, to log in as them in dev.
@@ -246,7 +245,7 @@ func parseProjectsFlowArgs(message string) (projectsFlowConfig, error) {
 func (generator *projectsFlowGenerator) ensurePeople() error {
 	companyUsers := []coreTypes.User{}
 	query := db.Query(&companyUsers)
-	query.CompanyID.Equals(projectsFlowCompanyID)
+	query.CompanyID.Equals(sampleCompanyID)
 	if err := query.Exec(); err != nil {
 		return err
 	}
@@ -1168,7 +1167,7 @@ func (generator *projectsFlowGenerator) republishCompanyLogs(run *projectFlowRun
 	}
 	assigneeRows := []projectsTypes.StoryAssignee{}
 	query := db.Query(&assigneeRows)
-	query.CompanyID.Equals(projectsFlowCompanyID).StoryID.In(run.storyIDs...)
+	query.CompanyID.Equals(sampleCompanyID).StoryID.In(run.storyIDs...)
 	if err := query.Exec(); err != nil || len(assigneeRows) == 0 {
 		return err
 	}
@@ -1376,7 +1375,7 @@ func checkProjectInvariants(snapshot projectSnapshot) error {
 		}
 	}
 
-	projectFolder := fmt.Sprintf("projects/c%d/p%d/", projectsFlowCompanyID, projectID)
+	projectFolder := fmt.Sprintf("projects/c%d/p%d/", sampleCompanyID, projectID)
 	for _, document := range snapshot.documents {
 		if err := checkRecordID("el documento", document.ID, document.ProjectID); err != nil {
 			return err
@@ -1579,7 +1578,7 @@ func (generator *projectsFlowGenerator) call(actorID int32, route string, handle
 	method, _, _ := strings.Cut(route, ".")
 	request := core.HandlerArgs{
 		Body: &body, Query: query, Route: route, Method: method,
-		User: &core.UsuarioToken{CompanyID: projectsFlowCompanyID, ID: actorID},
+		User: &core.UsuarioToken{CompanyID: sampleCompanyID, ID: actorID},
 	}
 	response := handler(&request)
 	if response.StatusCode != 200 {

@@ -85,6 +85,7 @@ export const CONCEPT_KIND_OPTIONS: IHROption[] = [
   { id: 2, name: 'Deduction|Descuento' },
   { id: 3, name: 'Employer contribution|Aporte del empleador' },
   { id: 4, name: 'Provision|Provisión' },
+  { id: 5, name: 'Record|Registro' },
 ]
 
 //CATALOG:hr.IncomeTaxOptions
@@ -92,31 +93,6 @@ export const INCOME_TAX_OPTIONS: IHROption[] = [
   { id: 0, name: 'Not taxed|Inafecto' },
   { id: 1, name: 'Ordinary (projected)|Ordinaria (proyectada)' },
   { id: 2, name: 'Extraordinary|Extraordinaria' },
-]
-
-//CATALOG:hr.InputTypeOptions
-export const INPUT_TYPE_OPTIONS: IHROption[] = [
-  { id: 1, name: 'Unpaid absence (days)|Inasistencias (días)' },
-  { id: 2, name: 'Overtime 25% (hours)|Horas extras 25% (horas)' },
-  { id: 3, name: 'Overtime 35% (hours)|Horas extras 35% (horas)' },
-  { id: 4, name: 'Concept amount|Monto de concepto' },
-  { id: 5, name: 'Extraordinary payment|Pago extraordinario' },
-]
-
-//CATALOG:hr.TimeOffTypeOptions
-export const TIME_OFF_TYPE_OPTIONS: IHROption[] = [
-  { id: 30, code: '23', name: 'Vacation|Vacaciones' },
-  { id: 31, code: '20', name: 'Medical leave (paid by the company)|Descanso médico (pagado por la empresa)' },
-  { id: 32, code: '21', name: 'Medical leave (EsSalud subsidy)|Descanso médico (subsidio EsSalud)' },
-  { id: 33, code: '22', name: 'Maternity|Maternidad' },
-  { id: 34, code: '05', name: 'Unpaid leave|Licencia sin goce' },
-]
-
-//CATALOG:hr.AdvanceTypeOptions
-export const ADVANCE_TYPE_OPTIONS: IHROption[] = [
-  { id: 10, name: 'Weekly|Semanal' },
-  { id: 11, name: 'Biweekly|Quincenal' },
-  { id: 12, name: 'Other|Otro' },
 ]
 
 export interface ILegalParameterOption {
@@ -139,7 +115,20 @@ export const LEGAL_PARAMETER_OPTIONS: ILegalParameterOption[] = [
   { id: 9, name: 'Gratificación bonus with EPS|Bonificación extraordinaria con EPS', unit: 'bp' },
 ]
 
-/** A legal payroll concept and its treatment (plan §4.1). */
+/** IDs up to this one are legal concepts (LEGAL_CONCEPTS); company concepts start after it. */
+export const LEGAL_CONCEPT_MAX_ID = 200
+
+/** The legal concepts the code names, mirroring the Legal* constants of legal_concepts.go. */
+export const LegalConcept = {
+  Overtime25: 3, Overtime35: 4, Absence: 23,
+  AdvanceWeekly: 24, AdvanceBiweekly: 25, AdvanceOther: 26,
+  Loan: 27, LoanInstallment: 28, Vacation: 29,
+} as const
+
+/** The screen an employee record of a concept is registered on (ConceptGroup* in legal_concepts.go). */
+export const ConceptGroup = { Entry: 1, Advance: 2, Loan: 3, TimeOff: 4 } as const
+
+/** A legal concept and its treatment (plan §4.1): a payslip line, or a record the engine reads. */
 export interface ILegalConcept {
   id: number
   name: string
@@ -152,30 +141,49 @@ export interface ILegalConcept {
   computableForBenefits?: boolean
   expenseAccountCode?: number
   payableAccountCode?: number
+  /** ConceptGroup that registers it by hand; missing when only the engine adds it. */
+  group?: number
+  /** Time off: the SUNAT "tipo de suspensión" (PLAME table 21). Never sent. */
+  suspensionCode?: string
 }
+
+/** The legal concepts registered on one screen, e.g. the time off types. */
+export const legalConceptsOfGroup = (group: number): ILegalConcept[] =>
+  LEGAL_CONCEPTS.filter((concept) => concept.group === group)
 
 //CATALOG:hr.LegalConcepts
 export const LEGAL_CONCEPTS: ILegalConcept[] = [
   { id: 1, name: 'Basic salary|Remuneración básica', kind: 1, plameCode: '0121', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, computableForBenefits: true, expenseAccountCode: 6211 },
   { id: 2, name: 'Family allowance|Asignación familiar', kind: 1, plameCode: '0201', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, computableForBenefits: true, expenseAccountCode: 6211 },
-  { id: 3, name: 'Overtime 25%|Horas extras 25%', kind: 1, plameCode: '0105', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, computableForBenefits: true, expenseAccountCode: 6211 },
-  { id: 4, name: 'Overtime 35%|Horas extras 35%', kind: 1, plameCode: '0106', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, computableForBenefits: true, expenseAccountCode: 6211 },
+  { id: 3, name: 'Overtime 25%|Horas extras 25%', kind: 1, plameCode: '0105', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, computableForBenefits: true, expenseAccountCode: 6211, group: 1 },
+  { id: 4, name: 'Overtime 35%|Horas extras 35%', kind: 1, plameCode: '0106', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, computableForBenefits: true, expenseAccountCode: 6211, group: 1 },
   { id: 5, name: 'Vacation pay|Remuneración vacacional', kind: 1, plameCode: '0118', isRemunerative: true, affectsEssalud: true, affectsPension: true, incomeTax: 1, expenseAccountCode: 6215 },
   { id: 6, name: 'Gratificación|Gratificación', kind: 1, plameCode: '0406', isRemunerative: true, incomeTax: 1, expenseAccountCode: 6214 },
   { id: 7, name: 'Gratificación bonus (Ley 30334)|Bonificación extraordinaria (Ley 30334)', kind: 1, plameCode: '0312', incomeTax: 1, expenseAccountCode: 6214 },
   { id: 8, name: 'CTS|CTS', kind: 1, plameCode: '0904', expenseAccountCode: 629, payableAccountCode: 415 },
   { id: 9, name: 'Profit sharing|Participación en utilidades', kind: 1, plameCode: '0910', incomeTax: 2, expenseAccountCode: 622 },
   { id: 10, name: 'Dismissal indemnity|Indemnización por despido', kind: 1, plameCode: '0501', expenseAccountCode: 623 },
-  { id: 20, name: 'AFP fund contribution|Aporte obligatorio AFP', kind: 2, plameCode: '0608', payableAccountCode: 417 },
-  { id: 21, name: 'AFP insurance premium|Prima de seguro AFP', kind: 2, plameCode: '0606', payableAccountCode: 417 },
-  { id: 22, name: 'AFP commission|Comisión AFP', kind: 2, plameCode: '0601', payableAccountCode: 417 },
-  { id: 23, name: 'ONP|ONP (SNP)', kind: 2, plameCode: '0607', payableAccountCode: 4032 },
-  { id: 24, name: 'Income tax 5th category|Renta de quinta categoría', kind: 2, plameCode: '0605', payableAccountCode: 40173 },
-  { id: 25, name: 'Advances paid|Adelantos pagados', kind: 2, plameCode: '0701', payableAccountCode: 1412 },
-  { id: 26, name: 'Loan installment|Cuota de préstamo', kind: 2, plameCode: '0706', payableAccountCode: 1411 },
-  { id: 40, name: 'EsSalud|EsSalud', kind: 3, plameCode: '0804', expenseAccountCode: 6271, payableAccountCode: 4031 },
-  { id: 50, name: 'Gratificación provision|Provisión de gratificación', kind: 4, expenseAccountCode: 6214, payableAccountCode: 4114 },
-  { id: 51, name: 'Gratificación bonus provision|Provisión de bonificación extraordinaria', kind: 4, expenseAccountCode: 6214, payableAccountCode: 4114 },
-  { id: 52, name: 'CTS provision|Provisión de CTS', kind: 4, expenseAccountCode: 629, payableAccountCode: 415 },
-  { id: 53, name: 'Vacation provision|Provisión de vacaciones', kind: 4, expenseAccountCode: 6215, payableAccountCode: 4115 },
+  { id: 11, name: 'AFP fund contribution|Aporte obligatorio AFP', kind: 2, plameCode: '0608', payableAccountCode: 417 },
+  { id: 12, name: 'AFP insurance premium|Prima de seguro AFP', kind: 2, plameCode: '0606', payableAccountCode: 417 },
+  { id: 13, name: 'AFP commission|Comisión AFP', kind: 2, plameCode: '0601', payableAccountCode: 417 },
+  { id: 14, name: 'ONP|ONP (SNP)', kind: 2, plameCode: '0607', payableAccountCode: 4032 },
+  { id: 15, name: 'Income tax 5th category|Renta de quinta categoría', kind: 2, plameCode: '0605', payableAccountCode: 40173 },
+  { id: 16, name: 'Advances paid|Adelantos pagados', kind: 2, plameCode: '0701', payableAccountCode: 1412 },
+  { id: 17, name: 'Loan deduction|Descuento de préstamo', kind: 2, plameCode: '0706', payableAccountCode: 1411 },
+  { id: 18, name: 'EsSalud|EsSalud', kind: 3, plameCode: '0804', expenseAccountCode: 6271, payableAccountCode: 4031 },
+  { id: 19, name: 'Gratificación provision|Provisión de gratificación', kind: 4, expenseAccountCode: 6214, payableAccountCode: 4114 },
+  { id: 20, name: 'Gratificación bonus provision|Provisión de bonificación extraordinaria', kind: 4, expenseAccountCode: 6214, payableAccountCode: 4114 },
+  { id: 21, name: 'CTS provision|Provisión de CTS', kind: 4, expenseAccountCode: 629, payableAccountCode: 415 },
+  { id: 22, name: 'Vacation provision|Provisión de vacaciones', kind: 4, expenseAccountCode: 6215, payableAccountCode: 4115 },
+  { id: 23, name: 'Unpaid absence (days)|Inasistencia (días)', kind: 5, group: 1 },
+  { id: 24, name: 'Weekly advance|Adelanto semanal', kind: 5, group: 2 },
+  { id: 25, name: 'Biweekly advance|Adelanto quincenal', kind: 5, group: 2 },
+  { id: 26, name: 'Other advance|Adelanto otro', kind: 5, group: 2 },
+  { id: 27, name: 'Loan|Préstamo', kind: 5, group: 3 },
+  { id: 28, name: 'Loan installment|Cuota de préstamo', kind: 5, group: 3 },
+  { id: 29, name: 'Vacation|Vacaciones', kind: 5, group: 4, suspensionCode: '23' },
+  { id: 30, name: 'Medical leave (paid by the company)|Descanso médico (pagado por la empresa)', kind: 5, group: 4, suspensionCode: '20' },
+  { id: 31, name: 'Medical leave (EsSalud subsidy)|Descanso médico (subsidio EsSalud)', kind: 5, group: 4, suspensionCode: '21' },
+  { id: 32, name: 'Maternity|Maternidad', kind: 5, group: 4, suspensionCode: '22' },
+  { id: 33, name: 'Unpaid leave|Licencia sin goce', kind: 5, group: 4, suspensionCode: '05' },
 ]

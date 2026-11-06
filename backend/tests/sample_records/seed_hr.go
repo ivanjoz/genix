@@ -96,7 +96,7 @@ func (payroll *demoPayroll) runPayrollStep(dayStart time.Time) error {
 	case monthDay == 20:
 		err = payroll.registerResignation(day, random)
 	case monthDay == 25:
-		err = payroll.registerNovedades(day, random)
+		err = payroll.registerMonthRecords(day, random)
 	}
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (payroll *demoPayroll) setup(day int16) error {
 	if err != nil {
 		return err
 	}
-	if slices.ContainsFunc(records, func(record types.EmployeeRecord) bool { return record.Type == types.RecordLoan }) {
+	if slices.ContainsFunc(records, func(record types.EmployeeRecord) bool { return record.ConceptID == types.LegalLoan }) {
 		return nil
 	}
 	activeEmployees, err := activeEmployeesOn(day)
@@ -163,7 +163,7 @@ func (payroll *demoPayroll) setup(day int16) error {
 		return nil
 	}
 	// A personal loan recovered in three installments.
-	loan := types.EmployeeRecord{EmployeeID: activeEmployees[1].ID, Type: types.RecordLoan, Date: day, Amount: 90000,
+	loan := types.EmployeeRecord{EmployeeID: activeEmployees[1].ID, ConceptID: types.LegalLoan, Date: day, Amount: 90000,
 		Quantity: 3, Period: period, Note: "Préstamo personal", CashBankID: payroll.history.bankCashBankID}
 	if err := payroll.history.ensureCashBalance(loan.CashBankID, loan.Amount, payroll.at); err != nil {
 		return err
@@ -175,7 +175,7 @@ func (payroll *demoPayroll) setup(day int16) error {
 func (payroll *demoPayroll) ensureConcepts() error {
 	concepts := []types.Concept{}
 	query := db.Query(&concepts)
-	query.CompanyID.Equals(hrDataCompanyID)
+	query.CompanyID.Equals(sampleCompanyID)
 	if err := query.Exec(); err != nil {
 		return err
 	}
@@ -216,13 +216,13 @@ func (payroll *demoPayroll) bookVacations(day int16, random *mrand.Rand) error {
 	for range 2 {
 		employee := entitled[random.Intn(len(entitled))]
 		overlaps := slices.ContainsFunc(timeOff, func(leave types.EmployeeRecord) bool {
-			return types.IsTimeOffRecord(leave.Type) && leave.EmployeeID == employee.ID && leave.Status != types.StatusDeleted &&
+			return types.IsTimeOffRecord(leave.ConceptID) && leave.EmployeeID == employee.ID && leave.Status != types.StatusDeleted &&
 				leave.FromDate <= vacationStart+9 && vacationStart <= leave.ToDate
 		})
 		if overlaps || (employee.TerminationDate > 0 && employee.TerminationDate <= vacationStart+9) {
 			continue
 		}
-		vacation := types.EmployeeRecord{EmployeeID: employee.ID, Type: types.RecordVacation, FromDate: vacationStart,
+		vacation := types.EmployeeRecord{EmployeeID: employee.ID, ConceptID: types.LegalVacation, FromDate: vacationStart,
 			ToDate: vacationStart + 9, Note: "Vacaciones programadas"}
 		if err := callHRHandler("POST.hr-employee-records", hr.PostEmployeeRecord, nil, vacation, &vacation); err != nil {
 			return err
@@ -245,13 +245,13 @@ func (payroll *demoPayroll) payWeeklyAdvances(day int16) error {
 	advances := []types.EmployeeRecord{}
 	for _, employee := range activeEmployees[len(activeEmployees)-min(2, len(activeEmployees)):] {
 		alreadyPaid := slices.ContainsFunc(stored, func(advance types.EmployeeRecord) bool {
-			return types.IsAdvanceRecord(advance.Type) && advance.EmployeeID == employee.ID &&
+			return types.IsAdvanceRecord(advance.ConceptID) && advance.EmployeeID == employee.ID &&
 				advance.Status != types.StatusDeleted && advance.ToDate == day
 		})
 		if alreadyPaid || (employee.TerminationDate > 0 && employee.TerminationDate < day) {
 			continue
 		}
-		advances = append(advances, types.EmployeeRecord{EmployeeID: employee.ID, Type: types.RecordAdvanceWeekly, Amount: 25000,
+		advances = append(advances, types.EmployeeRecord{EmployeeID: employee.ID, ConceptID: types.LegalAdvanceWeekly, Amount: 25000,
 			FromDate: day - 6, ToDate: day, Date: day, CashBankID: payroll.history.bankCashBankID})
 	}
 	if len(advances) == 0 {
@@ -301,15 +301,15 @@ func (payroll *demoPayroll) registerResignation(day int16, random *mrand.Rand) e
 	return callHRHandler("POST.hr-employees", hr.PostEmployee, nil, leaver, nil)
 }
 
-// registerNovedades writes the month's overtime, absences and bonuses, unless it has some already.
-func (payroll *demoPayroll) registerNovedades(day int16, random *mrand.Rand) error {
+// registerMonthRecords writes the month's overtime, absences and bonuses, unless it has some already.
+func (payroll *demoPayroll) registerMonthRecords(day int16, random *mrand.Rand) error {
 	period := core.PeriodOfDay(day)
 	stored, err := loadSeedRecords()
 	if err != nil {
 		return err
 	}
 	if slices.ContainsFunc(stored, func(record types.EmployeeRecord) bool {
-		return types.IsPeriodInputRecord(record.Type) && record.Period == period
+		return types.IsEntryRecord(record.ConceptID) && record.Period == period
 	}) {
 		return nil
 	}
@@ -320,24 +320,25 @@ func (payroll *demoPayroll) registerNovedades(day int16, random *mrand.Rand) err
 	for _, employee := range activeEmployees {
 		inputs := []types.EmployeeRecord{}
 		if random.Intn(3) == 0 {
-			inputs = append(inputs, types.EmployeeRecord{Type: types.RecordOvertime25, Quantity: float32(2 + random.Intn(10))})
+			inputs = append(inputs, types.EmployeeRecord{ConceptID: types.LegalOvertime25, Quantity: float32(2 + random.Intn(10))})
 		}
 		if random.Intn(8) == 0 {
-			inputs = append(inputs, types.EmployeeRecord{Type: types.RecordOvertime35, Quantity: float32(1 + random.Intn(4))})
+			inputs = append(inputs, types.EmployeeRecord{ConceptID: types.LegalOvertime35, Quantity: float32(1 + random.Intn(4))})
 		}
 		if random.Intn(10) == 0 {
-			inputs = append(inputs, types.EmployeeRecord{Type: types.RecordAbsenceDays, Quantity: float32(1 + random.Intn(2))})
+			inputs = append(inputs, types.EmployeeRecord{ConceptID: types.LegalAbsence, Quantity: float32(1 + random.Intn(2))})
 		}
 		if random.Intn(6) == 0 {
-			inputs = append(inputs, types.EmployeeRecord{Type: types.RecordConceptAmount,
+			inputs = append(inputs, types.EmployeeRecord{
 				ConceptID: payroll.conceptID["Bono de productividad"], Amount: int32(10000 + random.Intn(20)*1000)})
 		}
 		if random.Intn(20) == 0 {
-			inputs = append(inputs, types.EmployeeRecord{Type: types.RecordConceptAmount,
+			inputs = append(inputs, types.EmployeeRecord{
 				ConceptID: payroll.conceptID["Bono extraordinario"], Amount: int32(50000 + random.Intn(10)*10000), Note: "Bono por campaña"})
 		}
 		for _, input := range inputs {
-			input.EmployeeID, input.Period = employee.ID, period
+			// Runs on the 25th: each record happened on some earlier day of the same month.
+			input.EmployeeID, input.Period, input.Date = employee.ID, period, day-int16(random.Intn(20))
 			if err := callHRHandler("POST.hr-employee-records", hr.PostEmployeeRecord, nil, input, nil); err != nil {
 				return err
 			}
@@ -353,14 +354,14 @@ func (payroll *demoPayroll) registerNovedades(day int16, random *mrand.Rand) err
 func (payroll *demoPayroll) settleRun(period int16, closeAndPay bool) error {
 	runs := []types.PayrollRun{}
 	runQuery := db.Query(&runs)
-	runQuery.CompanyID.Equals(hrDataCompanyID)
+	runQuery.CompanyID.Equals(sampleCompanyID)
 	if err := runQuery.Exec(); err != nil {
 		return err
 	}
 	runIndex := slices.IndexFunc(runs, func(run types.PayrollRun) bool {
 		return run.Period == period && run.Status != types.StatusDeleted
 	})
-	run := types.PayrollRun{CompanyID: hrDataCompanyID, Period: period, PayDate: core.PeriodLastDay(period),
+	run := types.PayrollRun{CompanyID: sampleCompanyID, Period: period, PayDate: core.PeriodLastDay(period),
 		Status: types.PayrollStatusOpen, Created: core.SUnixTime()}
 	if runIndex >= 0 {
 		run = runs[runIndex]
@@ -402,7 +403,7 @@ func (payroll *demoPayroll) settleRun(period int16, closeAndPay bool) error {
 func loadSeedEmployees() ([]types.Employee, error) {
 	employees := []types.Employee{}
 	query := db.Query(&employees)
-	query.CompanyID.Equals(hrDataCompanyID)
+	query.CompanyID.Equals(sampleCompanyID)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("no se pudo leer el personal:", err)
 	}
@@ -414,7 +415,7 @@ func loadSeedEmployees() ([]types.Employee, error) {
 func loadSeedRecords() ([]types.EmployeeRecord, error) {
 	records := []types.EmployeeRecord{}
 	query := db.Query(&records)
-	query.CompanyID.Equals(hrDataCompanyID)
+	query.CompanyID.Equals(sampleCompanyID)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("no se pudieron leer los registros del personal:", err)
 	}
@@ -500,7 +501,7 @@ func (generator *erpHistoryGenerator) rebalanceCashBank(cashBankID int32, openin
 	for range 2 {
 		movements := []financeTypes.CashBankMovement{}
 		query := db.Query(&movements)
-		query.CompanyID.Equals(erpCompanyID).CashBankID.Equals(cashBankID)
+		query.CompanyID.Equals(sampleCompanyID).CashBankID.Equals(cashBankID)
 		if err := query.Exec(); err != nil {
 			return rewritten, err
 		}

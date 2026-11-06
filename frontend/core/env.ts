@@ -17,13 +17,19 @@ const selectedApiEndpointStorageKey = "genixSelectedApiEndpointRoute";
 // Own key instead of the session's `genixCompanyID`: that one belongs to the session and is
 // wiped on logout, while the login form should still remember the last tenant of this browser.
 export const lastLoginCompanyIDStorageKey = "genixLastLoginCompanyID";
+// Last module and last page per module (core/modules.svelte.ts). It holds only route codes, no
+// tenant data, and every read filters it by what the session can open, so a different next user
+// simply falls back to their first accessible module.
+export const moduleNavigationStorageKey = "genix_module_navigation";
 
 // Preferences of the browser, not of the session: which server and which tenant the login form
-// starts on. A logout that wipes localStorage wholesale must put these back, otherwise every
-// sign-out sends the user back to endpoint #1 / company #1.
+// starts on, and which module the app reopens on. A logout that wipes localStorage wholesale must
+// put these back, otherwise every sign-out sends the user back to endpoint #1 / company #1 / the
+// first module.
 export const BROWSER_PREFERENCE_STORAGE_KEYS = [
   selectedApiEndpointStorageKey,
   lastLoginCompanyIDStorageKey,
+  moduleNavigationStorageKey,
 ];
 
 export const logout = () => {

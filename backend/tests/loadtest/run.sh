@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# Load test of the backend as a 4 GB / 2 vCPU VPS: ScyllaDB, fareward and the backend share CPUs
+# 0-1 and about 4 GB, and fn-load-test drives them from the other CPUs. Run from backend/.
+#
+#   tests/loadtest/run.sh stack        ScyllaDB container on 127.0.0.2 (once)
+#   tests/loadtest/run.sh run [ARGS]   fresh keyspace, empty companies, then the ramp
+#
+# Follow it from its first second:  tail -f tmp/loadtest/run/live.log
+#
+# There is no seeded history. fn-init creates the companies empty, and every stage a few of them
+# onboard through the server (staff, catalog, providers, first stock) and start selling, while the
+# ones before keep working.
+#
+# ARGS go to fn-load-test: --companies-per-stage=5 --stage-seconds=45 --max-companies=100
+#                          --catalog=2000 --cashiers=4 --think-ms=2000 --max-p99-ms=1000
+set -euo pipefail
+
+COMMAND=${1:?usage: run.sh stack|run}
+MAX_COMPANIES=100
+
+BACKEND_DIR=$(pwd)
+PROJECT_DIR=$(dirname "$BACKEND_DIR")
+ROOT="$PROJECT_DIR/tmp/loadtest/run"
+LIVE_LOG="$ROOT/live.log"
+CONFIG="$ROOT/loadtest.config.toml"
+BINARY="$PROJECT_DIR/tmp/loadtest/backend"
+FAREWARD="$PROJECT_DIR/fareward/target/release/fareward"
+KEYSPACE=genix_load
+STACK_CPUS=0,1
+LOAD_CPUS=2-$(($(nproc) - 1))
+
+# The VPS share of 4 GB: ScyllaDB 1.5 GB, backend 1.5 GB, fareward 256 MB.
+SCYLLA_MEMORY=1500M
+BACKEND_MEMORY=1536M
+FAREWARD_MEMORY=256M
+
+# live_log prints a setup step and appends it to the live log, beside the ramp's status lines.
+live_log() {
+	echo "$(date +%T) $*" | tee -a "$LIVE_LOG"
+}
+
+cql() {
+	podman exec genix-load-scylla cqlsh 127.0.0.2 --request-timeout=600 -e "$1"
+}
+
+start_fareward() {
+	# exec: $! is then fareward itself (systemd-run --scope and taskset exec in place).
+	(cd "$PROJECT_DIR/fareward" && GENIX_CONFIG_FILE="$CONFIG" exec systemd-run --user --scope --quiet \
+		-p MemoryMax=$FAREWARD_MEMORY taskset -c $STACK_CPUS "$FAREWARD" >"$ROOT/fareward.log" 2>&1) &
+	FAREWARD_PID=$!
+	sleep 2
+}
+
+start_backend() {
+	GENIX_CONFIG_FILE="$CONFIG" systemd-run --user --scope --quiet -p MemoryMax=$BACKEND_MEMORY \
+		taskset -c $STACK_CPUS "$BINARY" >"$ROOT/backend.log" 2>&1 &
+	BACKEND_PID=$!
+	until curl -s -o /dev/null "http://127.0.0.1:34010/api/p-hello"; do sleep 0.5; done
+}
+
+stop_processes() {
+	for pid in ${BACKEND_PID:-} ${FAREWARD_PID:-}; do kill "$pid" 2>/dev/null || true; done
+	wait 2>/dev/null || true
+}
+
+case "$COMMAND" in
+stack)
+	# Rootless podman has no cpuset controller here, so ScyllaDB pins itself (--cpuset): two shards
+	# on the two cores it shares with the backend and fareward, as on a 2-vCPU VPS.
+	# No container memory cap: seastar reserves memory beyond --memory and refuses to start under
+	# one; --memory alone bounds it.
+	podman run -d --name genix-load-scylla --network host \
+		docker.io/scylladb/scylla:latest \
+		--smp 2 --cpuset $STACK_CPUS --memory $SCYLLA_MEMORY --overprovisioned 1 --developer-mode 1 \
+		--listen-address 127.0.0.2 --rpc-address 127.0.0.2 --broadcast-rpc-address 127.0.0.2 \
+		--api-address 127.0.0.2 --prometheus-address 127.0.0.2 --seeds 127.0.0.2
+	until cql 'SELECT now() FROM system.local' >/dev/null 2>&1; do sleep 2; done
+	echo "genix-load-scylla is up on 127.0.0.2:9042"
+	;;
+
+run)
+	shift
+	mkdir -p "$ROOT"
+	: >"$LIVE_LOG"
+	echo "live log: tail -f $LIVE_LOG"
+	trap stop_processes EXIT
+
+	live_log "building the backend"
+	sed -e "s|__KEYSPACE__|$KEYSPACE|g" -e "s|__ROOT__|$ROOT|g" tests/loadtest/loadtest.config.toml >"$CONFIG"
+	go build -o "$BINARY" .
+
+	# Every run starts from empty companies. ScyllaDB snapshots each table it drops: a large keyspace
+	# can time the DROP out (it goes on in the background) or answer it before it is done, so retry
+	# until the keyspace is gone and then wait until it stops truncating.
+	live_log "dropping the previous keyspace"
+	until [ -z "$(cql "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name='$KEYSPACE'" | grep " $KEYSPACE\$" || true)" ]; do
+		cql "DROP KEYSPACE IF EXISTS $KEYSPACE" || sleep 5
+	done
+	until [ -z "$(podman logs --since 15s genix-load-scylla 2>&1 | grep -E 'Truncat|pre-drop' || true)" ]; do sleep 3; done
+	rm -rf "$ROOT/files"
+
+	live_log "creating $MAX_COMPANIES empty companies (fn-init)"
+	GENIX_CONFIG_FILE="$CONFIG" "$BINARY" fn-init --companies=$MAX_COMPANIES >"$ROOT/init.log" 2>&1
+	# A tablets keyspace creates every table with one tablet per shard and the balancer then merges
+	# them, one topology transition at a time; writes during that churn time out. Wait until there
+	# has been no transition for 15 seconds in a row.
+	live_log "waiting for the tablet balancer to settle"
+	quiet_checks=0
+	while [ $quiet_checks -lt 3 ]; do
+		if cql 'SELECT transition_state FROM system.topology' | grep -q ' null$'; then
+			quiet_checks=$((quiet_checks + 1))
+		else quiet_checks=0; fi
+		sleep 5
+	done
+
+	# fn-init creates the keyspace fareward connects to, so the daemon starts after it.
+	start_fareward
+	start_backend
+	# The container's own PID is its init; the database is the scylla process under it.
+	SCYLLA_PID=$(pgrep -f '^/usr/bin/scylla .*127\.0\.0\.2' | head -1)
+	live_log "server up; ramp starts (details: $ROOT/load.log)"
+
+	GENIX_CONFIG_FILE="$CONFIG" taskset -c "$LOAD_CPUS" "$BINARY" fn-load-test \
+		--server=http://127.0.0.1:34010 --max-companies=$MAX_COMPANIES --live="$LIVE_LOG" \
+		--pids=backend=$BACKEND_PID,fareward=$FAREWARD_PID,scylla=$SCYLLA_PID "$@" >"$ROOT/load.log" 2>&1
+	live_log "ramp finished; report at the end of $ROOT/load.log"
+	;;
+
+*)
+	echo "usage: run.sh stack|run" >&2
+	exit 1
+	;;
+esac

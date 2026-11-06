@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	fareward "github.com/ivanjoz/fareward/go"
-	"github.com/ivanjoz/genix-orm/scylla"
 	"io"
 	"log"
 	"net"
@@ -162,6 +161,20 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 		defer serializedAPIRequests.Unlock()
 	}
 
+	// A request slot before any work. An SSE route holds its connection for minutes and would pin
+	// a slot the whole time, so it is the one exception.
+	if !strings.HasSuffix(request.URL.Path, "-stream") {
+		releaseSlot, isAdmitted := core.AdmitRequest(request.Context())
+		if !isAdmitted {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"error":"El servidor está ocupado. Intente nuevamente."}`))
+			return
+		}
+		defer releaseSlot()
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			errStr := fmt.Sprintf("Internal Server Error (Panic in LocalHandler): %v", r)
@@ -187,9 +200,9 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 	}
 	body := string(bodyBytes)
 
+	// Per request, on args only: this server handles many requests at once, so the Env.REQ_IP
+	// global the Lambda path sets would be a data race here.
 	clientIP := core.ClientIPFromRequest(request)
-	// Also fed to the log record, which reads it from the package global.
-	core.Env.REQ_IP = clientIP
 
 	args := core.HandlerArgs{
 		Body:           &body,
@@ -325,6 +338,8 @@ func main() {
 	// and are told apart by the frame's opcode. The logger is pushed in because that package
 	// cannot import core (cycle), the same as the text search backends.
 	fareward.SetLogger(core.Log)
+	// Past the daemon's per-connection cap a frame is refused, not queued; the client queues at it.
+	fareward.SetMaxInflightPerConnection(int(core.Env.FAREWARD_MAX_INFLIGHT))
 	if err := core.ConfigureFareward(core.Env.FAREWARD_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
 		panic("invalid fareward configuration: " + err.Error())
 	}
@@ -350,13 +365,14 @@ func main() {
 
 	fmt.Printf("Starting DB connection. HOST %v:%v ..."+"\n", core.Env.DB_HOST, core.Env.DB_PORT)
 
-	scylla.SetScyllaConnection(scylla.ConnParams{
+	db.Connect(db.ConnectParams{
 		Host:             core.Env.DB_HOST,
 		Port:             int(core.Env.DB_PORT),
 		User:             core.Env.DB_USER,
 		Password:         core.Env.DB_PASSWORD,
 		Keyspace:         core.Env.DB_NAME,
 		MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
+		FDBSocket:        core.Env.FDB_SOCKET,
 	})
 
 	fmt.Println("DB connection started!")
@@ -418,6 +434,7 @@ func main() {
 
 	// Si se está desarrollando en local
 	if !core.Env.IS_SERVERLESS {
+		core.ConfigureServerAdmission()
 		exec.StartUsageLogFlushWorker()
 		if !core.Env.IS_DEV_ARG {
 			// Off the main goroutine on purpose: ScheduleCronAction panics when its query fails,
@@ -427,7 +444,8 @@ func main() {
 			go bootstrapCronSchedulers()
 		}
 
-		core.Log("Ejecutando en local. http://localhost" + serverPort)
+		// "*" forces the line out: outside dev mode core.Log prints only failures.
+		core.Log("*Ejecutando en local. http://localhost" + serverPort)
 
 		corsMiddleware := cors.New(cors.Options{
 			AllowedOrigins:   []string{"*"},
@@ -449,7 +467,9 @@ func main() {
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       30 * time.Second,
 			// Keep disabled to allow long-lived SSE streams (metrics and future real-time endpoints).
-			WriteTimeout:   0,
+			WriteTimeout: 0,
+			// Must outlive nginx's upstream keepalive_timeout (100s), so nginx is always the side
+			// that closes an idle pooled connection and never reuses one Go already dropped.
 			IdleTimeout:    120 * time.Second,
 			MaxHeaderBytes: 1 << 20, // 1 MiB
 			// Track active connections for operational metrics and SSE dashboards.
@@ -458,9 +478,33 @@ func main() {
 			},
 		}
 
-		// A deployed binary keeps binding every interface: nginx, the health check and the Function
-		// URL all reach it by a different address, and narrowing that is a deploy decision, not this
-		// one. Only a dev launch restricts itself. See resolveDevListenAddresses.
+		// On the VPS, nginx shares the host and reaches the backend through a Unix socket: no TCP
+		// handshake or port allocation per upstream connection, and no port open on the public IP.
+		// systemd sets SERVER_SOCKET and creates its directory (RuntimeDirectory=genix).
+		if serverSocketPath := strings.TrimSpace(os.Getenv("SERVER_SOCKET")); serverSocketPath != "" && !core.Env.IS_DEV_ARG {
+			// A socket file left by a crashed run makes Listen fail with "address already in use".
+			os.Remove(serverSocketPath)
+			socketListener, err := net.Listen("unix", serverSocketPath)
+			if err != nil {
+				core.Log("HTTP server error: no se pudo abrir el socket", serverSocketPath, "::", err)
+				return
+			}
+			// nginx workers run as another user and need write permission to connect. The socket
+			// is local-only, so world-writable exposes nothing beyond this host.
+			if err := os.Chmod(serverSocketPath, 0o666); err != nil {
+				core.Log("HTTP server error: no se pudo dar permisos al socket", serverSocketPath, "::", err)
+				return
+			}
+			core.Log("*Escuchando en unix:" + serverSocketPath)
+			if err := srv.Serve(socketListener); err != nil && err != http.ErrServerClosed {
+				core.Log("HTTP server error:", err)
+			}
+			return
+		}
+
+		// Without a socket (a split-host install) the binary binds every interface: nginx reaches it
+		// by a different address, and narrowing that is a deploy decision, not this one. Only a dev
+		// launch restricts itself. See resolveDevListenAddresses.
 		if !core.Env.IS_DEV_ARG {
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				core.Log("HTTP server error:", err)
@@ -479,7 +523,7 @@ func main() {
 				core.Log("No se pudo escuchar en", listenAddress, "::", err)
 				continue
 			}
-			core.Log("Escuchando en", listenAddress)
+			core.Log("*Escuchando en", listenAddress)
 			devListeners = append(devListeners, listener)
 		}
 		if len(devListeners) == 0 {

@@ -2,16 +2,20 @@ package exec
 
 import (
 	"app/core"
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
-func makeConnParams() scylla.ConnParams {
-	return scylla.ConnParams{
+// makeConnParams is the connection every exec entry point uses; Scripting dials immediately and
+// allows the long queries maintenance work runs.
+func makeConnParams() db.ConnectParams {
+	return db.ConnectParams{
 		Host:             core.Env.DB_HOST,
 		Port:             int(core.Env.DB_PORT),
 		User:             core.Env.DB_USER,
 		Password:         core.Env.DB_PASSWORD,
 		Keyspace:         core.Env.DB_NAME,
 		MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
+		FDBSocket:        core.Env.FDB_SOCKET,
+		Scripting:        true,
 	}
 }

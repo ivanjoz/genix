@@ -95,18 +95,26 @@ func CompletedYearsOn(birthDate, unixDay int16) int {
 }
 
 // periodRecords are the records of a period whose type matches.
-func periodRecords(records []EmployeeRecord, period int16, matches func(recordType int8) bool) []EmployeeRecord {
+func periodRecords(records []EmployeeRecord, period int16, matches func(conceptID int32) bool) []EmployeeRecord {
 	matching := []EmployeeRecord{}
 	for _, record := range records {
-		if record.Period == period && matches(record.Type) {
+		if record.Period == period && matches(record.ConceptID) {
 			matching = append(matching, record)
 		}
 	}
 	return matching
 }
 
-func isRecordType(recordType int8) func(int8) bool {
-	return func(other int8) bool { return other == recordType }
+func isRecordConcept(conceptID int32) func(int32) bool {
+	return func(other int32) bool { return other == conceptID }
+}
+
+// separatePayslipRecords are the period's records of company earnings paid on a payslip of their own
+// (extraordinary payments): the monthly payslip leaves them out.
+func separatePayslipRecords(records []EmployeeRecord, period int16, concepts map[int32]Concept) []EmployeeRecord {
+	return periodRecords(records, period, func(conceptID int32) bool {
+		return !IsLegalConcept(conceptID) && concepts[conceptID].SeparatePayslip
+	})
 }
 
 // payslipBuilder accumulates lines and diagnostics while the engine runs. legal and legalDay are
@@ -130,7 +138,7 @@ func (builder *payslipBuilder) legalValue(key int8) int64 {
 }
 
 // benefitProvisionAccount: the provision a benefit is paid against (plan §5.1 H3–H5).
-var benefitProvisionAccount = map[int16]int32{
+var benefitProvisionAccount = map[int32]int32{
 	LegalGratificacion: 4114,
 	LegalGratiBonus:    4114,
 	LegalCts:           415,
@@ -138,7 +146,7 @@ var benefitProvisionAccount = map[int16]int32{
 }
 
 // addBenefit adds a benefit line charged first to what is left of its provision.
-func (builder *payslipBuilder) addBenefit(conceptID int16, base, rate int64, quantity float32, amount int64) {
+func (builder *payslipBuilder) addBenefit(conceptID int32, base, rate int64, quantity float32, amount int64) {
 	if amount <= 0 {
 		return
 	}
@@ -235,12 +243,12 @@ func (payslip *Payslip) SumTotals() {
 	payslip.EmployerCost = int32(earnings + sumLines(payslip.Lines, ConceptKindEmployer))
 }
 
-func (builder *payslipBuilder) addLegal(conceptID int16, base, rate int64, quantity float32, amount int64) {
+func (builder *payslipBuilder) addLegal(conceptID int32, base, rate int64, quantity float32, amount int64) {
 	if amount <= 0 {
 		return
 	}
 	concept, _ := FindLegalConcept(conceptID)
-	builder.addLine(PayslipLine{LegalConceptID: conceptID}, concept.Treatment(), base, rate, quantity, amount)
+	builder.addLine(PayslipLine{ConceptID: conceptID}, concept.Treatment(), base, rate, quantity, amount)
 }
 
 func (builder *payslipBuilder) addCompany(concept Concept, amount int64) {
@@ -276,8 +284,8 @@ func (builder *payslipBuilder) earningsWhere(matches func(treatment ConceptTreat
 
 // lineTreatment is the treatment of the concept a line was calculated from.
 func lineTreatment(line PayslipLine, concepts map[int32]Concept) ConceptTreatment {
-	if line.LegalConceptID > 0 {
-		concept, _ := FindLegalConcept(line.LegalConceptID)
+	if IsLegalConcept(line.ConceptID) {
+		concept, _ := FindLegalConcept(line.ConceptID)
 		return concept.Treatment()
 	}
 	return concepts[line.ConceptID].Treatment()
@@ -312,28 +320,28 @@ func CalculateMonthlyPayslip(input MonthlyPayslipInput) (payslip Payslip, ok boo
 	// 1. Earnings. Vacation days are paid as vacation pay instead of salary; unpaid absences and
 	// unpaid or subsidized leave are not paid at all.
 	absenceDays, overtime25Hours, overtime35Hours := 0, float32(0), float32(0)
-	periodInputs := periodRecords(input.Records, input.Period, IsPeriodInputRecord)
+	periodInputs := periodRecords(input.Records, input.Period, IsEntryRecord)
 	for _, periodInput := range periodInputs {
-		switch periodInput.Type {
-		case RecordAbsenceDays:
+		switch periodInput.ConceptID {
+		case LegalAbsence:
 			absenceDays += int(periodInput.Quantity)
-		case RecordOvertime25:
+		case LegalOvertime25:
 			overtime25Hours += periodInput.Quantity
-		case RecordOvertime35:
+		case LegalOvertime35:
 			overtime35Hours += periodInput.Quantity
 		}
 	}
 	employedDays := EmployedDays(input.Employee, input.Period)
 	vacationDays := 0
 	for _, timeOff := range input.Records {
-		if !IsTimeOffRecord(timeOff.Type) {
+		if !IsTimeOffRecord(timeOff.ConceptID) {
 			continue
 		}
 		days := timeOff.DaysWithin(core.PeriodFirstDay(input.Period), employedUntil)
 		switch {
-		case timeOff.Type == RecordVacation:
+		case timeOff.ConceptID == LegalVacation:
 			vacationDays += days
-		case IsUnpaidTimeOff(timeOff.Type):
+		case IsUnpaidTimeOff(timeOff.ConceptID):
 			absenceDays += days
 		}
 	}
@@ -380,8 +388,9 @@ func CalculateMonthlyPayslip(input MonthlyPayslipInput) (payslip Payslip, ok boo
 			addCompanyAmount(recurring.ConceptID, int64(recurring.Amount))
 		}
 	}
+	// Company amounts of the month; the ones paid on a payslip of their own are not this payslip's.
 	for _, periodInput := range periodInputs {
-		if periodInput.Type == RecordConceptAmount {
+		if !IsLegalConcept(periodInput.ConceptID) && !input.Concepts[periodInput.ConceptID].SeparatePayslip {
 			addCompanyAmount(periodInput.ConceptID, int64(periodInput.Amount))
 		}
 	}
@@ -412,7 +421,7 @@ func CalculateMonthlyPayslip(input MonthlyPayslipInput) (payslip Payslip, ok boo
 	taxInput.FixedMonthly, taxInput.GratiBonusRate = salary+familyAllowance, gratiBonusRate
 	builder.addLegal(LegalIncomeTax5ta, ordinaryIncome+extraordinaryIncome, 0, 0, MonthlyIncomeTax(taxInput))
 
-	for _, installment := range periodRecords(input.Records, input.Period, isRecordType(RecordLoanInstallment)) {
+	for _, installment := range periodRecords(input.Records, input.Period, isRecordConcept(LegalLoanInstallment)) {
 		builder.addRecordDeduction(LegalLoanPayment, installment)
 	}
 	for _, deduction := range companyDeductions {
@@ -458,7 +467,7 @@ func newPayslipBuilder(employee Employee, period int16, legal LegalValues, legal
 
 // addRecordDeduction deducts a record's amount (an advance, a loan installment) and points the line
 // at it, so closing the run settles the record.
-func (builder *payslipBuilder) addRecordDeduction(conceptID int16, record EmployeeRecord) {
+func (builder *payslipBuilder) addRecordDeduction(conceptID int32, record EmployeeRecord) {
 	builder.addLegal(conceptID, 0, 0, 0, int64(record.Amount))
 	builder.payslip.Lines[len(builder.payslip.Lines)-1].SourceID = record.ID
 }
@@ -498,10 +507,10 @@ func buildIncomeTaxInput(period int16, history []Payslip, taxUnit int64) IncomeT
 			switch {
 			case line.Kind == ConceptKindEarning && line.IncomeTax != IncomeTaxNone:
 				taxInput.PriorIncome += int64(line.Amount)
-			case line.LegalConceptID == LegalIncomeTax5ta:
+			case line.ConceptID == LegalIncomeTax5ta:
 				taxInput.PriorWithheld[payslipMonth] += int64(line.Amount)
 			}
-			if line.LegalConceptID == LegalGratificacion {
+			if line.ConceptID == LegalGratificacion {
 				gratificacionPaid[payslipMonth] = true
 			}
 		}

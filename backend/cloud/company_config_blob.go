@@ -167,16 +167,7 @@ func CompactAndStoreCompanyConfig(companyID int32) (*config.CompanyConfig, error
 	// every reader down with object storage, and the till, which now validates a
 	// sale's series against this, is not something to stop for a cache miss. The
 	// next mutation or the next reader rewrites the object.
-	err = SaveFile(SaveFileArgs{
-		Name:        objectName,
-		Path:        companyConfigPath,
-		FileContent: sealed,
-		ContentType: "application/octet-stream",
-		// The blob changes whenever the company does, and every reader wants the
-		// current one — a cached copy at a CDN edge would serve retired credentials.
-		CacheControl: "no-store",
-	})
-	if err != nil {
+	if err := storeCompanyConfigBlob(objectName, sealed); err != nil {
 		core.Log("no se pudo guardar la configuración de la empresa", companyID, ":", err)
 	}
 
@@ -309,7 +300,7 @@ func LoadCompanyConfig(companyID int32) (*config.CompanyConfig, error) {
 	}
 	objectName := companyConfigObjectName(companyID)
 
-	sealed, err := GetFile(SaveFileArgs{Name: objectName, Path: companyConfigPath})
+	sealed, err := loadCompanyConfigBlob(objectName)
 	if err == nil && len(sealed) > 0 {
 		payload, openErr := openCompanyConfig(sealed, objectName)
 		if openErr == nil {

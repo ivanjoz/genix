@@ -163,21 +163,24 @@ func logLine(captureSkip int, force bool, args ...any) {
 
 	// Capture before the doLog gate below: whether a failure is worth printing and whether it is
 	// worth recording are different questions, and a suppressed log line is still a real error.
-	// Gated on Env so package-init logging, which belongs to no request, records nothing.
-	if envIsReady && captureSkip > 0 && (force || messageLooksLikeFailure(logMsg)) {
-		RegisterRequestErrorAt(CallerCodeLine(captureSkip), logMsg)
+	// Gated on Env so package-init logging, which belongs to no request, records nothing, and on
+	// Lambda because only there is "the current request" well defined (see serverlessLogErrors).
+	if envIsReady && Env.IS_SERVERLESS && captureSkip > 0 && (force || messageLooksLikeFailure(logMsg)) {
+		serverlessLogErrors.RegisterAt(CallerCodeLine(captureSkip), logMsg)
 	}
 
 	// Allow startup/package-init logging before Env is configured to avoid nil dereferences.
+	//
+	// The same rule on Lambda and on the VPS: only failures and lines forced with a leading "*"
+	// print, unless [logs].full (or a dev launch) asks for everything. The VPS used to print every
+	// line, which under load meant several stdout writes per request into journald.
 	if envIsReady {
-		doLog = Env.LOGS_FULL || !Env.IS_SERVERLESS
-		if Env.IS_SERVERLESS {
-			if len(logMsg) > 1 && logMsg[0:1] == "*" {
-				doLog = true
-				args[0] = fmt.Sprintf("%v", args[0])[1:]
-			} else if messageLooksLikeFailure(logMsg) {
-				doLog = true
-			}
+		doLog = Env.LOGS_FULL
+		if len(logMsg) > 1 && logMsg[0:1] == "*" {
+			doLog = true
+			args[0] = fmt.Sprintf("%v", args[0])[1:]
+		} else if messageLooksLikeFailure(logMsg) {
+			doLog = true
 		}
 	}
 

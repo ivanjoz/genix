@@ -6,11 +6,11 @@ This document explains the systemd-based strategy for automatically reloading th
 
 ## 🧩 Install Modes
 
-The backend host and the Nginx edge host are usually two different machines, so the script asks which side to configure:
+The normal install is **Full**: Nginx and the backend on the same VPS, connected through a Unix socket. Modes 2 and 3 split them across two machines over TCP.
 
 | Mode | Name | What it configures | config.toml keys used |
 | ---- | ---- | ------------------ | -------------------------- |
-| `1` | Full | systemd units + Nginx reverse proxy | `server.port`, `server.nginx_domain`, `server.nginx_process` |
+| `1` | Full | systemd units + Nginx reverse proxy over `unix:/run/genix/api.sock` | `server.nginx_domain` |
 | `2` | Only Systemd Service | systemd units, binary directory, runtime user | `server.port` |
 | `3` | Only Nginx Proxy | `/etc/nginx/conf.d/<server.nginx_domain>.conf` | `server.nginx_domain`, `server.nginx_process` |
 
@@ -57,13 +57,14 @@ Two things still fail the run instead of prompting:
 
 In **mode 2**, note that `genix.service` points `GENIX_CONFIG_FILE` at this path and the backend panics without it, so installing the units with no `config.toml` present prints a warning: the service is installed but will not start until the file is there.
 
-### Split-host wiring
+### Nginx → backend connection
 
 - `server.nginx_domain` (e.g. `genix-api-4.un.pe`) becomes `server_name`, the config file name, and the Let's Encrypt certificate directory that is looked up under `/etc/letsencrypt/live/`.
-- `server.nginx_process` (e.g. `100.64.0.2:14010`) becomes the `proxy_pass` upstream. A bare `host:port` is prefixed with `http://`; a value that already carries a scheme is used verbatim.
-- `server.port` (e.g. `14010`) is exported as `Environment=SERVER_PORT=` in `genix.service` and is the port the backend binds to. It must equal the port half of `server.nginx_process`.
+- The vhost declares an `upstream genix_backend_<domain>` block with `keepalive 64` and `keepalive_timeout 100s`, and plain requests send an empty `Connection` header. Together these keep a pool of reused connections to the backend instead of opening and closing one per request. The 100s stays below the backend's `IdleTimeout` (120s), so nginx always closes an idle connection first.
+- **Full mode:** the upstream is `unix:/run/genix/api.sock`. `genix.service` sets `RuntimeDirectory=genix` (systemd creates `/run/genix` and removes it on stop) and `Environment=SERVER_SOCKET=/run/genix/api.sock`. The backend then binds only that socket (mode `0666`, so the nginx workers can connect) and opens no TCP port. `server.port` and `server.nginx_process` are not used.
+- **Split host (modes 2 + 3):** `server.nginx_process` (e.g. `10.0.0.7:14010`) becomes the upstream `server`; a leading `http://`/`https://` moves to `proxy_pass`. `server.port` is exported as `Environment=SERVER_PORT=` and must equal the port half of `server.nginx_process`.
 
-The backend resolves its listen port as: `SERVER_PORT` env var → `server.port` in `config.toml` → `3589`.
+The backend picks its listener as: `SERVER_SOCKET` env var (Unix socket) → `SERVER_PORT` env var → `server.port` in `config.toml` → `3589`.
 
 ---
 
@@ -102,7 +103,10 @@ Group=ivanjoz
 WorkingDirectory=/usr/local/bin/genix
 Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml
 Environment=GENIX_REPOSITORY_ROOT=/home/ubuntu/genix
-Environment=SERVER_PORT=14010
+# Full mode. A split-host (mode 2) unit has Environment=SERVER_PORT=14010 instead of these three lines.
+RuntimeDirectory=genix
+RuntimeDirectoryMode=0755
+Environment=SERVER_SOCKET=/run/genix/api.sock
 ExecStart=/usr/local/bin/genix/genix_app
 Restart=always
 RestartSec=5

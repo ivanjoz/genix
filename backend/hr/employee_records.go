@@ -45,8 +45,9 @@ func GetEmployeeRecords(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &records)
 }
 
-// PostEmployeeRecord creates, edits or cancels (Status 0) a novedad or a time off, or moves a loan
-// installment to another month. Advances and loans have their own routes: they move cash.
+// PostEmployeeRecord creates, edits or cancels (Status 0) a Registros record (overtime, an absence, a
+// company concept amount) or a time off, or moves a loan installment to another month. Advances and
+// loans have their own routes: they move cash.
 func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 	request := types.EmployeeRecord{}
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
@@ -59,7 +60,7 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// The record is rebuilt from what the client may set: never its cash, loan or payslip links.
-	record := types.EmployeeRecord{CompanyID: companyID, EmployeeID: request.EmployeeID, Type: request.Type}
+	record := types.EmployeeRecord{CompanyID: companyID, EmployeeID: request.EmployeeID, ConceptID: request.ConceptID}
 	if request.ID > 0 {
 		stored, found := findRecord(companyRecords, request.ID)
 		if !found {
@@ -69,13 +70,13 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("El registro ya fue usado por una planilla cerrada.")
 		}
 		// Advances and loans move cash: they are voided on their own routes. An installment only moves.
-		isOwnScreen := types.IsPeriodInputRecord(stored.Type) || types.IsTimeOffRecord(stored.Type) ||
-			(stored.Type == types.RecordLoanInstallment && request.Status != types.StatusDeleted)
+		isOwnScreen := types.IsEntryRecord(stored.ConceptID) || types.IsTimeOffRecord(stored.ConceptID) ||
+			(stored.ConceptID == types.LegalLoanInstallment && request.Status != types.StatusDeleted)
 		if !isOwnScreen {
 			return req.MakeErr("Este registro se modifica desde su propia pantalla.")
 		}
-		if recordGroup(stored.Type) != recordGroup(request.Type) && request.Status != types.StatusDeleted {
-			return req.MakeErr("No se puede cambiar el registro a un tipo de otra pantalla.")
+		if recordGroup(stored.ConceptID) != recordGroup(request.ConceptID) && request.Status != types.StatusDeleted {
+			return req.MakeErr("No se puede cambiar el registro a un concepto de otra pantalla.")
 		}
 		// The months it touched before the change must still be open.
 		if err := ensureRecordPeriodsOpen(companyID, stored); err != nil {
@@ -85,7 +86,7 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 		if request.Status == types.StatusDeleted {
 			record.Status = types.StatusDeleted
 		} else {
-			record.Type = request.Type
+			record.ConceptID = request.ConceptID
 		}
 	}
 
@@ -93,17 +94,17 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 		record.Period, record.FromDate, record.ToDate, record.Note = request.Period, request.FromDate, request.ToDate, request.Note
 		var validationError error
 		switch {
-		case types.IsPeriodInputRecord(record.Type):
-			record.Quantity, record.Amount, record.ConceptID = request.Quantity, request.Amount, request.ConceptID
-			validationError = validatePeriodInput(companyID, &record)
-		case types.IsTimeOffRecord(record.Type):
+		case types.IsEntryRecord(record.ConceptID):
+			record.Date, record.Quantity, record.Amount = request.Date, request.Quantity, request.Amount
+			validationError = validateEntryRecord(companyID, &record)
+		case types.IsTimeOffRecord(record.ConceptID):
 			validationError = validateTimeOff(companyID, &record, companyRecords)
 			record.ApprovedBy = req.User.ID
-		case record.Type == types.RecordLoanInstallment && record.ID > 0:
+		case record.ConceptID == types.LegalLoanInstallment && record.ID > 0:
 			// Only its month moves; the amount and the loan stay.
 			validationError = validateInstallmentMove(record, companyRecords)
 		default:
-			validationError = fmt.Errorf("Este tipo de registro se registra desde su propia pantalla.")
+			validationError = fmt.Errorf("Este concepto se registra desde su propia pantalla.")
 		}
 		if validationError != nil {
 			return req.MakeErr(validationError)
@@ -125,57 +126,62 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeResponse(records[0])
 	}
 	table := db.TableOf[types.EmployeeRecord]()
-	if err := db.Update(&records, table.Type, table.Period, table.Year, table.FromDate, table.ToDate, table.Quantity,
-		table.Amount, table.ConceptID, table.Note, table.ApprovedBy, table.Status, table.UpdatedBy); err != nil {
+	if err := db.Update(&records, table.ConceptID, table.Period, table.Year, table.Date, table.FromDate, table.ToDate,
+		table.Quantity, table.Amount, table.Note, table.ApprovedBy, table.Status, table.UpdatedBy); err != nil {
 		return req.MakeErr("Error al guardar el registro:", err)
 	}
 	return req.MakeResponse(records[0])
 }
 
-// recordGroup is the screen a record type belongs to: a record never moves between screens.
-func recordGroup(recordType int8) string {
+// recordGroup is the screen a record's concept belongs to: a record never moves between screens.
+func recordGroup(conceptID int32) string {
 	switch {
-	case types.IsPeriodInputRecord(recordType):
-		return "period-input"
-	case types.IsTimeOffRecord(recordType):
+	case types.IsEntryRecord(conceptID):
+		return "entry"
+	case types.IsTimeOffRecord(conceptID):
 		return "time-off"
-	case types.IsAdvanceRecord(recordType):
+	case types.IsAdvanceRecord(conceptID):
 		return "advance"
 	}
-	return fmt.Sprint(recordType)
+	return fmt.Sprint(conceptID)
 }
 
-func validatePeriodInput(companyID int32, record *types.EmployeeRecord) error {
+// validateEntryRecord checks a Registros record: the day it happened, the payroll month that pays it
+// and its quantity (overtime hours, absence days) or amount (company concept).
+func validateEntryRecord(companyID int32, record *types.EmployeeRecord) error {
 	if _, err := loadEmployee(companyID, record.EmployeeID); err != nil {
 		return err
 	}
-	if record.Period <= 0 || types.PeriodMonth(record.Period) < 1 || types.PeriodMonth(record.Period) > 12 {
-		return fmt.Errorf("Indique el periodo de la novedad.")
+	if record.Date <= 0 {
+		return fmt.Errorf("Indique la fecha del registro.")
 	}
-	switch record.Type {
-	case types.RecordAbsenceDays:
+	if record.Period <= 0 || types.PeriodMonth(record.Period) < 1 || types.PeriodMonth(record.Period) > 12 {
+		return fmt.Errorf("Indique el mes de planilla del registro.")
+	}
+	// Date is the day it happened; Period the payroll month that pays it, which may be a later month
+	// (a late report) but always of the date's year.
+	if record.Period/100 != core.PeriodOfDay(record.Date)/100 {
+		return fmt.Errorf("El mes de planilla debe ser del mismo año que la fecha del registro.")
+	}
+	switch record.ConceptID {
+	case types.LegalAbsence:
 		if record.Quantity < 1 || record.Quantity > 31 || record.Quantity != float32(int(record.Quantity)) {
 			return fmt.Errorf("Los días de inasistencia deben ser un número entero entre 1 y 31.")
 		}
-	case types.RecordOvertime25, types.RecordOvertime35:
+		record.Amount = 0
+	case types.LegalOvertime25, types.LegalOvertime35:
 		if record.Quantity <= 0 || record.Quantity > 200 {
 			return fmt.Errorf("Las horas extras deben estar entre 0 y 200.")
 		}
-	case types.RecordConceptAmount, types.RecordExtraordinaryPayment:
-		concept, err := loadConcept(companyID, record.ConceptID)
-		if err != nil {
+		record.Amount = 0
+	default:
+		// IsEntryRecord let only company concepts through besides the legal ones above.
+		if _, err := loadConcept(companyID, record.ConceptID); err != nil {
 			return err
-		}
-		if record.Type == types.RecordExtraordinaryPayment && concept.Kind != types.ConceptKindEarning {
-			return fmt.Errorf("Un pago extraordinario debe ser un concepto de ingreso.")
 		}
 		if record.Amount <= 0 {
 			return fmt.Errorf("El monto debe ser mayor a cero.")
 		}
-	}
-	if record.Type != types.RecordConceptAmount && record.Type != types.RecordExtraordinaryPayment {
-		record.ConceptID, record.Amount = 0, 0
-	} else {
 		record.Quantity = 0
 	}
 	record.FromDate, record.ToDate = 0, 0
@@ -198,12 +204,12 @@ func validateTimeOff(companyID int32, record *types.EmployeeRecord, companyRecor
 	}
 	for _, other := range companyRecords {
 		isLive := other.Status == types.RecordStatusPending || other.Status == types.RecordStatusActive
-		if isLive && types.IsTimeOffRecord(other.Type) && other.ID != record.ID && other.EmployeeID == record.EmployeeID &&
+		if isLive && types.IsTimeOffRecord(other.ConceptID) && other.ID != record.ID && other.EmployeeID == record.EmployeeID &&
 			other.FromDate <= record.ToDate && record.FromDate <= other.ToDate {
 			return fmt.Errorf("Se cruza con otra ausencia registrada del trabajador.")
 		}
 	}
-	record.Amount, record.ConceptID = 0, 0
+	record.Amount = 0
 	return nil
 }
 
@@ -237,7 +243,7 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 
 	if len(advances) == 1 && advances[0].ID > 0 {
 		stored, found := findRecord(companyRecords, advances[0].ID)
-		if !found || !types.IsAdvanceRecord(stored.Type) {
+		if !found || !types.IsAdvanceRecord(stored.ConceptID) {
 			return req.MakeErr(fmt.Sprintf("El adelanto %d no existe.", advances[0].ID))
 		}
 		if advances[0].Status != types.StatusDeleted || stored.Status != types.RecordStatusActive {
@@ -280,7 +286,7 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 		if request.ID != 0 {
 			return req.MakeErr("Un adelanto registrado no se edita: anúlelo y regístrelo de nuevo.")
 		}
-		if !types.IsAdvanceRecord(request.Type) {
+		if !types.IsAdvanceRecord(request.ConceptID) {
 			return req.MakeErr("Seleccione el tipo de adelanto.")
 		}
 		if request.Amount <= 0 || request.Date <= 0 || request.FromDate <= 0 || request.ToDate < request.FromDate {
@@ -289,7 +295,7 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 		if request.CashBankID <= 0 {
 			return req.MakeErr("Seleccione la caja o cuenta de la que se paga el adelanto.")
 		}
-		advance := types.EmployeeRecord{CompanyID: companyID, EmployeeID: employee.ID, Type: request.Type, Date: request.Date,
+		advance := types.EmployeeRecord{CompanyID: companyID, EmployeeID: employee.ID, ConceptID: request.ConceptID, Date: request.Date,
 			FromDate: request.FromDate, ToDate: request.ToDate, Amount: request.Amount, CashBankID: request.CashBankID,
 			Note: request.Note, Status: types.RecordStatusActive, Created: core.SUnixTime(), CreatedBy: req.User.ID,
 			UpdatedBy: req.User.ID}
@@ -301,7 +307,7 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(fmt.Sprintf("%s no tiene un contrato vigente en las fechas del adelanto.", name))
 		}
 		for _, other := range append(slices.Clone(companyRecords), advances[:i]...) {
-			if types.IsAdvanceRecord(other.Type) && other.EmployeeID == advance.EmployeeID && other.Status != types.StatusDeleted &&
+			if types.IsAdvanceRecord(other.ConceptID) && other.EmployeeID == advance.EmployeeID && other.Status != types.StatusDeleted &&
 				other.FromDate <= advance.ToDate && advance.FromDate <= other.ToDate {
 				return req.MakeErr(fmt.Sprintf("%s ya tiene un adelanto que cubre esas fechas.", name))
 			}
@@ -352,7 +358,7 @@ func PostLoan(req *core.HandlerArgs) core.HandlerResponse {
 	if request.Period < core.PeriodOfDay(request.Date) || types.PeriodMonth(request.Period) < 1 || types.PeriodMonth(request.Period) > 12 {
 		return req.MakeErr("La primera cuota no puede ser anterior al mes del préstamo.")
 	}
-	loan := types.EmployeeRecord{CompanyID: companyID, EmployeeID: request.EmployeeID, Type: types.RecordLoan,
+	loan := types.EmployeeRecord{CompanyID: companyID, EmployeeID: request.EmployeeID, ConceptID: types.LegalLoan,
 		Period: request.Period, Date: request.Date, Amount: request.Amount, Quantity: request.Quantity,
 		CashBankID: request.CashBankID, Note: request.Note, Status: types.RecordStatusActive,
 		Created: core.SUnixTime(), CreatedBy: req.User.ID, UpdatedBy: req.User.ID}
@@ -390,7 +396,7 @@ func deleteLoan(req *core.HandlerArgs, loanID int32) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 	loan, found := findRecord(companyRecords, loanID)
-	if !found || loan.Type != types.RecordLoan {
+	if !found || loan.ConceptID != types.LegalLoan {
 		return req.MakeErr(fmt.Sprintf("El préstamo %d no existe.", loanID))
 	}
 	cancelled := []types.EmployeeRecord{loan}
@@ -437,7 +443,7 @@ func ensurePeriodOpen(companyID int32, period int16) error {
 // ensureRecordPeriodsOpen refuses a change to a record whose months are already paid: every month
 // a time off covers, the period of the rest.
 func ensureRecordPeriodsOpen(companyID int32, record types.EmployeeRecord) error {
-	if !types.IsTimeOffRecord(record.Type) {
+	if !types.IsTimeOffRecord(record.ConceptID) {
 		return ensurePeriodOpen(companyID, record.Period)
 	}
 	for period := core.PeriodOfDay(record.FromDate); period <= core.PeriodOfDay(record.ToDate); period = core.NextPeriod(period) {
@@ -470,7 +476,7 @@ func findRecord(records []types.EmployeeRecord, id int32) (types.EmployeeRecord,
 	return types.EmployeeRecord{}, false
 }
 
-// GetEmployeeConcepts syncs one employee's recurring concepts (?employee-id=).
+// GetEmployeeConcepts syncs one employee's fixed concepts (?employee-id=).
 func GetEmployeeConcepts(req *core.HandlerArgs) core.HandlerResponse {
 	employeeID := req.GetQueryInt("employee-id")
 	if employeeID <= 0 {

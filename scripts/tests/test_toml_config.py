@@ -24,6 +24,21 @@ class SetConfigValuesTest(unittest.TestCase):
         config_path.write_text(contents, encoding="utf-8")
         return config_path
 
+    def test_local_override_merges_tables_and_replaces_arrays(self):
+        config_path = self.write_config(
+            "[server]\nport = 14010\nnginx_domain = \"api.example.com\"\n"
+            "[[models]]\nid = \"base-a\"\n[[models]]\nid = \"base-b\"\n"
+        )
+        self.assertEqual(self.toml_config.read_config(config_path)["server"]["port"], 14010)
+
+        (Path(self.temp_dir.name) / "config.local.toml").write_text(
+            "[server]\nport = 15010\n[[models]]\nid = \"local-only\"\n", encoding="utf-8"
+        )
+        merged_config = self.toml_config.read_config(config_path)
+
+        self.assertEqual(merged_config["server"], {"port": 15010, "nginx_domain": "api.example.com"})
+        self.assertEqual(merged_config["models"], [{"id": "local-only"}])
+
     def test_replacing_existing_key_preserves_comments(self):
         config_path = self.write_config(
             "# comentario de archivo\n"

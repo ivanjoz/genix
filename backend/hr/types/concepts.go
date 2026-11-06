@@ -3,8 +3,9 @@ package types
 import "app/db"
 
 // Concept is a company-defined earning or deduction (a productivity bonus, movilidad, a judicial
-// withholding…) with the same treatment flags as the legal concepts (legal_concepts.go). It is paid
-// through recurring employee concepts or a period input; the payslip line stamps its flags and
+// withholding…) with the same treatment flags as the legal concepts (legal_concepts.go). Its ID is
+// above LegalConceptMaxID, so one ConceptID names a legal or a company concept anywhere. It is paid
+// through fixed employee concepts or an employee record; the payslip line stamps its flags and
 // accounts, so editing a concept never rewrites a closed month.
 type Concept struct {
 	db.TableStruct[ConceptTable, Concept]
@@ -28,6 +29,9 @@ type Concept struct {
 	UpdatedBy int32   `cb:"17"`
 	Created   int32   `cb:"18"`
 	CreatedBy int32   `cb:"19"`
+	// SeparatePayslip: an earning paid on a payslip of its own (an extraordinary payment), with its
+	// own pension, 5ta and EsSalud apart from the monthly salary's.
+	SeparatePayslip bool `cb:"20"`
 }
 
 type ConceptTable struct {
@@ -50,14 +54,16 @@ type ConceptTable struct {
 	UpdatedBy             db.Col[*ConceptTable, int32]
 	Created               db.Col[*ConceptTable, int32]
 	CreatedBy             db.Col[*ConceptTable, int32]
+	SeparatePayslip       db.Col[*ConceptTable, bool]
 }
 
 func (e ConceptTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:          74,
-		Name:        "hr_concepts",
-		Partition:   e.CompanyID,
-		Keys:        db.Cols(e.ID.Autoincrement(0)),
+		ID:        74,
+		Name:      "hr_concepts",
+		Partition: e.CompanyID,
+		// Company IDs start after the legal range: one ConceptID space for both.
+		Keys:        db.Cols(e.ID.AutoincrementFrom(int64(LegalConceptMaxID) + 1)),
 		FixedValues: []db.FixedValues{{Col: e.Status, Values: []int64{0, 1}}},
 		Indexes:     []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.Status)}},
 	}

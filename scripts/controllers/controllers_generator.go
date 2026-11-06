@@ -346,7 +346,7 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 	buffer.WriteString("func MakeScyllaControllers() []db.Controller {\n")
 	buffer.WriteString("\treturn []db.Controller{\n")
 	for _, entry := range entries {
-		fmt.Fprintf(&buffer, "\t\tmakeDBController[%s](),\n", qualifiedReference(entry, aliases))
+		fmt.Fprintf(&buffer, "\t\tdb.MakeController[%s](),\n", qualifiedReference(entry, aliases))
 	}
 	buffer.WriteString("\t}\n")
 	buffer.WriteString("}\n\n")

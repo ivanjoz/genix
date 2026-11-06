@@ -4,6 +4,7 @@ import (
 	"app/core"
 	"app/invoicing"
 	"app/security"
+	"app/tests/sample_records"
 )
 
 type ExecRouterType map[string]func(args *core.ExecArgs) core.FuncResponse
@@ -28,6 +29,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-generate-projects-flow":          GenerateProjectsFlow,
 	"fn-generate-expenses":               GenerateExpenses,
 	"fn-generate-demo-data":              GenerateDemoData,
+	"fn-load-test":                       sample_records.RunLoadTest,
 	"fn-seed-hr":                         SeedHR,
 	"fn-wipe-company-data":               WipeCompanyData,
 	"fn-seed-hr-legal-parameters":        SeedHRLegalParameters,

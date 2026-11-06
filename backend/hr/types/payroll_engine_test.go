@@ -34,10 +34,10 @@ func testLegalValues() LegalValues {
 	return NewLegalValues(parameters, afpRates)
 }
 
-func lineAmount(payslip Payslip, legalConceptID int16) int32 {
+func lineAmount(payslip Payslip, conceptID int32) int32 {
 	var total int32
 	for _, line := range payslip.Lines {
-		if line.LegalConceptID == legalConceptID {
+		if line.ConceptID == conceptID {
 			total += line.Amount
 		}
 	}
@@ -56,7 +56,7 @@ func TestMonthlyPayslipOnp(t *testing.T) {
 	if !ok || len(payslip.Diagnostics) > 0 {
 		t.Fatalf("unexpected result: ok=%v diagnostics=%v", ok, payslip.Diagnostics)
 	}
-	expected := map[int16]int32{
+	expected := map[int32]int32{
 		LegalBasicSalary:  200000,
 		LegalOnp:          26000, // 13 %
 		LegalIncomeTax5ta: 0,     // S/ 24,360 projected < 7 UIT
@@ -91,7 +91,7 @@ func TestMonthlyPayslipAfpWithFamilyAllowance(t *testing.T) {
 	if !ok || len(payslip.Diagnostics) > 0 {
 		t.Fatalf("unexpected result: ok=%v diagnostics=%v", ok, payslip.Diagnostics)
 	}
-	expected := map[int16]int32{
+	expected := map[int32]int32{
 		LegalFamilyAllowance: 12300, // 10 % of S/ 1,230
 		LegalAfpFund:         61230, // 10 % of 612,300
 		LegalAfpPremium:      8389,  // 1.37 %, under the RMA
@@ -116,7 +116,7 @@ func TestMonthlyPayslipDiagnostics(t *testing.T) {
 
 	// Hired on Oct 16: 16 days. Prima has no AFP rates for the period, and the advance exceeds the net.
 	payslip, _ := CalculateMonthlyPayslip(MonthlyPayslipInput{Period: 2610, Employee: employee,
-		Contracts: []Contract{contract}, Records: []EmployeeRecord{{ID: 4, Type: RecordAdvanceWeekly, Period: 2610, Amount: 200000}},
+		Contracts: []Contract{contract}, Records: []EmployeeRecord{{ID: 4, ConceptID: LegalAdvanceWeekly, Period: 2610, Amount: 200000}},
 		Legal: testLegalValues()})
 	if payslip.WorkedDays != 16 || lineAmount(payslip, LegalBasicSalary) != 160000 {
 		t.Errorf("days %d basic %d, want 16 and 160000", payslip.WorkedDays, lineAmount(payslip, LegalBasicSalary))
@@ -166,10 +166,10 @@ func TestMonthlyIncomeTax(t *testing.T) {
 
 func TestLoanInstallments(t *testing.T) {
 	// S/ 1,000 in 3 installments from Nov 2026: the last one absorbs the rounding.
-	installments := LoanInstallments(EmployeeRecord{ID: 8, EmployeeID: 2, Type: RecordLoan, Amount: 100000, Quantity: 3}, 2611)
+	installments := LoanInstallments(EmployeeRecord{ID: 8, EmployeeID: 2, ConceptID: LegalLoan, Amount: 100000, Quantity: 3}, 2611)
 	got := map[int16]int32{}
 	for _, installment := range installments {
-		if installment.LoanID != 8 || installment.Type != RecordLoanInstallment || installment.Status != RecordStatusActive {
+		if installment.LoanID != 8 || installment.ConceptID != LegalLoanInstallment || installment.Status != RecordStatusActive {
 			t.Errorf("installment %+v", installment)
 		}
 		got[installment.Period] = installment.Amount

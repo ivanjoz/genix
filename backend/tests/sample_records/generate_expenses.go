@@ -210,7 +210,7 @@ func (generator *erpHistoryGenerator) prepareExpenses() error {
 	supplies := []production.Product{}
 	supplyQuery := db.Query(&supplies)
 	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Price, supplyQuery.DepreciationMonths).
-		CompanyID.Equals(erpCompanyID).Status.Equals(production.ProductStatusSupply)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(production.ProductStatusSupply)
 	if err := supplyQuery.Exec(); err != nil {
 		return core.Err("error al consultar los insumos:", err)
 	}
@@ -236,7 +236,7 @@ func (generator *erpHistoryGenerator) prepareExpenses() error {
 func (generator *erpHistoryGenerator) ensureExpenseSchedules() error {
 	request := generator.makeRequest("GET.expenses-scheduled", nil, "")
 	storedSchedules := []financeTypes.ExpenseScheduled{}
-	if err := decodeResponse(finance.GetExpensesScheduled(&request), &storedSchedules); err != nil {
+	if err := decodeResponse(generator.send(request, finance.GetExpensesScheduled), &storedSchedules); err != nil {
 		return err
 	}
 	generator.expenseScheduleByKey = map[string]int32{}
@@ -464,7 +464,7 @@ func (generator *erpHistoryGenerator) billSchedulePeriod(template expenseTemplat
 	request := generator.makeRequest("GET.expense-schedule-periods",
 		map[string]string{"scheduleID": strconv.Itoa(int(scheduleID))}, "")
 	response := map[string][]financeTypes.Expense{}
-	if err := decodeResponse(finance.GetExpenseSchedulePeriods(&request), &response); err != nil {
+	if err := decodeResponse(generator.send(request, finance.GetExpenseSchedulePeriods), &response); err != nil {
 		return financeTypes.Expense{}, err
 	}
 	for _, period := range response["Periods"] {
@@ -506,7 +506,7 @@ func (generator *erpHistoryGenerator) postInventoryExpense(template expenseTempl
 	}
 	request := generator.makeRequest("POST.expense-inventory", nil, string(bodyBytes))
 	createdExpense := financeTypes.Expense{}
-	return createdExpense, decodeResponse(accounting.PostInventoryExpense(&request), &createdExpense)
+	return createdExpense, decodeResponse(generator.send(request, accounting.PostInventoryExpense), &createdExpense)
 }
 
 func (generator *erpHistoryGenerator) postExpense(expense financeTypes.Expense) (financeTypes.Expense, error) {
@@ -516,7 +516,7 @@ func (generator *erpHistoryGenerator) postExpense(expense financeTypes.Expense) 
 	}
 	request := generator.makeRequest("POST.expenses", nil, string(bodyBytes))
 	savedExpense := financeTypes.Expense{}
-	return savedExpense, decodeResponse(finance.PostExpenses(&request), &savedExpense)
+	return savedExpense, decodeResponse(generator.send(request, finance.PostExpenses), &savedExpense)
 }
 
 // payExpense pays from the expense cash register, topping it up first when it cannot cover it.
@@ -535,7 +535,7 @@ func (generator *erpHistoryGenerator) payExpense(expenseID int32, amount int32, 
 	}
 	core.SetHistoricalUnix(paidAt.Unix())
 	request := generator.makeRequest("POST.expense-payment", nil, string(bodyBytes))
-	if response := finance.PostExpensePayment(&request); response.StatusCode != 200 {
+	if response := generator.send(request, finance.PostExpensePayment); response.StatusCode != 200 {
 		return core.Err("no se pudo pagar el gasto", expenseID, ":", response.Error)
 	}
 	generator.state.Stats.ExpensePayments++

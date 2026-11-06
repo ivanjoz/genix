@@ -3,16 +3,13 @@ package exec
 import (
 	"app/cloud"
 	"app/core"
-	"app/core/filestore"
+	"app/db"
 	"context"
 	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 // fn-wipe-company-data empties the ERP data of one company so the sample generators can fill it
@@ -23,7 +20,7 @@ import (
 // Dry run by default: it prints what it would delete. Only --apply deletes. Per wiped table:
 //   - the company's partition of the base table (Scylla drops its materialized views itself);
 //   - its delta-moves rows and cache-group marks, its by-IDs slots and its text index;
-//   - its S3 delta and cache-group snapshots; its DataFrames are rebuilt empty;
+//   - its delta and cache-group snapshots in the file store; its DataFrames are rebuilt empty;
 //   - its autoincrement counters, back to 0, and the company's invoice correlativos (cpe_<id>_*).
 //
 // Then it seeds the site, warehouse 1 and cash register 1 fn-init would, and republishes the
@@ -64,8 +61,7 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 			return args.MakeErr("Argumento desconocido o inválido:", argument, "(--company=N, --only=prefijo, --apply)")
 		}
 	}
-	keyspace := core.Env.DB_NAME
-	session := scylla.MakeScyllaConnection(makeConnParams())
+	db.Connect(makeConnParams())
 
 	controllers := MakeScyllaControllers()
 	tables, kept := []wipeTable{}, []string{}
@@ -81,29 +77,20 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 			counter: regexp.MustCompile(fmt.Sprintf(`^x%d_%s_-?\d+$`, companyID, regexp.QuoteMeta(schema.Name)))})
 	}
 
-	// The ORM's side tables that exist in this keyspace.
-	existingTables := map[string]bool{}
-	tableIter := session.Query(`SELECT table_name FROM system_schema.tables WHERE keyspace_name = ?`, keyspace).Iter()
-	for tableName := ""; tableIter.Scan(&tableName); {
-		existingTables[tableName] = true
-	}
-	if err := tableIter.Close(); err != nil {
-		return args.MakeErr("No se pudieron listar las tablas:", err)
-	}
-
 	counters := []string{}
-	counterIter := session.Query(fmt.Sprintf(`SELECT name FROM %s.sequences`, keyspace)).Iter()
-	for counterName := ""; counterIter.Scan(&counterName); {
+	allCounters, counterListError := db.ListCounters()
+	if counterListError != nil {
+		return args.MakeErr("No se pudieron listar los contadores:", counterListError)
+	}
+	for _, counterName := range allCounters {
 		isInvoiceCorrelativo := onlyPrefix == "" && strings.HasPrefix(counterName, fmt.Sprintf("cpe_%d_", companyID))
 		if isInvoiceCorrelativo || slices.ContainsFunc(tables, func(table wipeTable) bool { return table.counter.MatchString(counterName) }) {
 			counters = append(counters, counterName)
 		}
 	}
-	if err := counterIter.Close(); err != nil {
-		return args.MakeErr("No se pudieron listar los contadores:", err)
-	}
 
-	fileStore := filestore.New(s3.NewFromConfig(core.GetAwsConfig()), core.Env.FILE_STORE_BUCKET, core.Env.FILE_STORE_ROOT)
+	// The store ConfigureFileStore installed: S3 on Lambda, the VPS disk otherwise.
+	fileStore := db.FileStore()
 	snapshotFiles := []string{}
 	for _, table := range tables {
 		for _, prefix := range []string{"delta-snapshot", "cache-group"} {
@@ -119,7 +106,7 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 	for _, table := range tables {
 		tableNames = append(tableNames, table.name)
 	}
-	summary := fmt.Sprintf("Empresa %d: %d tablas a vaciar, %d se conservan, %d contadores a 0, %d snapshots S3.\nVaciar: %s\nConservar: %s\nContadores: %s",
+	summary := fmt.Sprintf("Empresa %d: %d tablas a vaciar, %d se conservan, %d contadores a 0, %d snapshots.\nVaciar: %s\nConservar: %s\nContadores: %s",
 		companyID, len(tables), len(kept), len(counters), len(snapshotFiles),
 		strings.Join(tableNames, ", "), strings.Join(kept, ", "), strings.Join(counters, ", "))
 	if !apply {
@@ -127,33 +114,9 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	for _, table := range tables {
-		statements := []string{fmt.Sprintf(`DELETE FROM %s.%s WHERE %s = %d`, keyspace, table.name, table.column, companyID)}
-		if existingTables[table.name+"__index_updated"] {
-			statements = append(statements, fmt.Sprintf(`DELETE FROM %s.%s__index_updated WHERE partition_id = %d`, keyspace, table.name, companyID))
-		}
-		statements = append(statements, fmt.Sprintf(`DELETE FROM %s.cache_by_ids_slots WHERE table_id = %d AND partition_id = %d`,
-			keyspace, table.id, companyID))
-		// Delta moves are partitioned by (partition_id, index_tag, pinned_prefix): list the
-		// company's partitions, then delete each one.
-		if deltaTable := table.name + "__delta_moves"; existingTables[deltaTable] {
-			iter := session.Query(fmt.Sprintf(`SELECT DISTINCT partition_id, index_tag, pinned_prefix FROM %s.%s`, keyspace, deltaTable)).Iter()
-			// Typed as deltaMovesCreateScript declares them: gocql cannot scan a bigint into an any.
-			var partitionID, pinnedPrefix int64
-			var indexTag string
-			for iter.Scan(&partitionID, &indexTag, &pinnedPrefix) {
-				if partitionID == int64(companyID) {
-					statements = append(statements, fmt.Sprintf(`DELETE FROM %s.%s WHERE partition_id = %d AND index_tag = %s AND pinned_prefix = %s`,
-						keyspace, deltaTable, companyID, cqlLiteral(indexTag), cqlLiteral(pinnedPrefix)))
-				}
-			}
-			if err := iter.Close(); err != nil {
-				return args.MakeErr("No se pudo leer", deltaTable, ":", err)
-			}
-		}
-		for _, statement := range statements {
-			if err := scylla.QueryExec(statement); err != nil {
-				return args.MakeErr("Falló:", statement, ":", err)
-			}
+		description := db.TableDescription{Name: table.name, ID: table.id, Partition: table.column}
+		if err := db.WipePartition(description, companyID); err != nil {
+			return args.MakeErr("Falló el vaciado de", table.name, ":", err)
 		}
 	}
 	for _, controller := range controllers {
@@ -172,7 +135,7 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 		}
 	}
 	for _, counterName := range counters {
-		if _, err := scylla.SetCounterValue(keyspace, counterName, 0); err != nil {
+		if _, err := db.SetCounter(counterName, 0); err != nil {
 			return args.MakeErr("No se pudo reiniciar el contador", counterName, ":", err)
 		}
 	}
@@ -186,16 +149,4 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("No se pudo publicar la configuración de la empresa:", err)
 	}
 	return core.FuncResponse{Message: "DATOS BORRADOS\n" + summary}
-}
-
-// cqlLiteral writes a delta-moves key value back into a statement.
-func cqlLiteral(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return "'" + strings.ReplaceAll(typed, "'", "''") + "'"
-	case []byte:
-		return fmt.Sprintf("0x%x", typed)
-	default:
-		return fmt.Sprint(typed)
-	}
 }

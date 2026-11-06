@@ -5,6 +5,7 @@ import (
 	"context"
 	"math"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,10 +38,18 @@ type RequestError struct {
 	Text string
 }
 
-var (
-	requestErrorsMu sync.Mutex
-	requestErrors   []RequestError
-)
+// RequestErrors accumulates the failures of one request. It hangs off HandlerArgs (args.Errors),
+// so concurrent requests on the VPS each keep their own; the mutex covers a handler that fails from
+// several goroutines at once.
+type RequestErrors struct {
+	mu      sync.Mutex
+	entries []RequestError
+}
+
+// serverlessLogErrors is what Log and LogError capture by heuristic. Those calls do not know their
+// request, so they can only be attributed where one process serves one request at a time: Lambda.
+// On the VPS they print and are not recorded; MakeErr* and panics still are, through args.Errors.
+var serverlessLogErrors RequestErrors
 
 // CallerCodeLine names the source position of the code that should be blamed. Skip counts frames
 // above the caller: 0 is the line calling this function, 1 is its caller, and so on.
@@ -61,46 +70,71 @@ func CallerCodeLine(skip int) string {
 // Repeats of the same line collapse into the first one seen: a loop that fails ten thousand times
 // is one error at one place, and keeping the first text means the preview describes the failure
 // that started it rather than the last one before the cap.
-func RegisterRequestErrorAt(codeLine, message string) {
-	if codeLine == "" {
+//
+// A nil accumulator records nothing: a HandlerArgs built outside mainHandler has none.
+func (accumulator *RequestErrors) RegisterAt(codeLine, message string) {
+	if accumulator == nil || codeLine == "" {
 		return
 	}
 
-	requestErrorsMu.Lock()
-	defer requestErrorsMu.Unlock()
+	accumulator.mu.Lock()
+	defer accumulator.mu.Unlock()
 
-	if len(requestErrors) >= maxRequestErrors {
+	if len(accumulator.entries) >= maxRequestErrors {
 		return
 	}
-	for _, existing := range requestErrors {
+	for _, existing := range accumulator.entries {
 		if existing.Line == codeLine {
 			return
 		}
 	}
 
-	requestErrors = append(requestErrors, RequestError{
+	accumulator.entries = append(accumulator.entries, RequestError{
 		ID:   types.MakeRequestErrorID(codeLine),
 		Line: codeLine,
 		Text: truncateErrorText(message),
 	})
 }
 
-// ResetRequestErrors clears the accumulator at the start of a request.
-func ResetRequestErrors() {
-	requestErrorsMu.Lock()
-	requestErrors = nil
-	requestErrorsMu.Unlock()
+// Take drains what was collected. Draining rather than reading means a second call cannot send
+// the same errors twice, which matters because prepareResponse runs once per response but a panic
+// can produce a second one.
+func (accumulator *RequestErrors) Take() []RequestError {
+	if accumulator == nil {
+		return nil
+	}
+	accumulator.mu.Lock()
+	drained := accumulator.entries
+	accumulator.entries = nil
+	accumulator.mu.Unlock()
+	return drained
 }
 
-// TakeRequestErrors drains what this request collected. Draining rather than reading means a
-// second call cannot send the same errors twice, which matters because prepareResponse runs once
-// per response but a panic can produce a second one.
-func TakeRequestErrors() []RequestError {
-	requestErrorsMu.Lock()
-	drained := requestErrors
-	requestErrors = nil
-	requestErrorsMu.Unlock()
-	return drained
+// ResetServerlessLogErrors clears the Lambda heuristic accumulator at the start of a request.
+func ResetServerlessLogErrors() {
+	serverlessLogErrors.Take()
+}
+
+// PanicCodeLine names the line that panicked, for a deferred recover: the first frame after
+// runtime.gopanic. Empty when it cannot be found.
+func PanicCodeLine() string {
+	programCounters := make([]uintptr, 32)
+	frames := runtime.CallersFrames(programCounters[:runtime.Callers(2, programCounters)])
+	passedGopanic := false
+	for {
+		frame, hasMore := frames.Next()
+		if passedGopanic {
+			fileName := frame.File
+			if separator := strings.LastIndexByte(fileName, '/'); separator >= 0 {
+				fileName = fileName[separator+1:]
+			}
+			return fileName + ":" + strconv.Itoa(frame.Line)
+		}
+		passedGopanic = frame.Function == "runtime.gopanic"
+		if !hasMore {
+			return ""
+		}
+	}
 }
 
 // EmitRequestLog hands one finished request to fareward, and is the last thing that happens to
@@ -117,7 +151,17 @@ func TakeRequestErrors() []RequestError {
 // unreachable one is logged once and forgotten, and a request that has already produced its
 // response must never be affected by what happened to its log row.
 func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
-	captured := TakeRequestErrors()
+	captured := req.Errors.Take()
+	// On Lambda the heuristic captures of Log/LogError belong to this request too. Merged under the
+	// same rules: a line already reported is not repeated, and the cap still holds.
+	if Env != nil && Env.IS_SERVERLESS {
+		for _, logError := range serverlessLogErrors.Take() {
+			isRepeated := slices.ContainsFunc(captured, func(existing RequestError) bool { return existing.Line == logError.Line })
+			if !isRepeated && len(captured) < maxRequestErrors {
+				captured = append(captured, logError)
+			}
+		}
+	}
 	entries := make([]RequestLogEntry, 0, len(captured))
 	for _, requestError := range captured {
 		entries = append(entries, RequestLogEntry{
@@ -127,9 +171,8 @@ func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 		})
 	}
 
-	// After the drain and never before it: TakeRequestErrors is what clears the accumulator, so
-	// returning any earlier would leave this request's errors to be reported against whichever
-	// request drains next.
+	// After the drain and never before it: Take is what clears the accumulators, so returning any
+	// earlier would leave this request's errors to be reported by whatever drains next.
 	if len(entries) == 0 && (Env == nil || !Env.LOG_ALL_REQUESTS) {
 		return
 	}

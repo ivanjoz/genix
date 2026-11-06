@@ -149,6 +149,17 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		sale.ClientID = clientID
 	}
 
+	// A delivery holds the company's stock lock from this check until its movements are written.
+	// Checked outside it, two tills selling the last units at once both pass, and the second
+	// one's movement is refused after its sale was already saved as delivered. Inside it the check
+	// is the truth, so the movement cannot be refused for stock after the sale is written — and
+	// the sale's number is still reserved only once the sale is known to go through, leaving no
+	// gap in the series.
+	if slices.Contains(sale.ActionsIncluded, 3) {
+		unlockStock := logistics.LockCompanyStock(req.User.CompanyID)
+		defer unlockStock()
+	}
+
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
 		// Validate stock availability against the V2 split:
 		//  - line items without LotID AND without SerialNumber draw from ProductStockV2.Quantity
@@ -312,7 +323,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 		if len(movimientosInternos) > 0 {
 			eg.Go(func() error {
-				if err := logistics.ApplyMovimientos(req, movimientosInternos); err != nil {
+				if err := logistics.ApplyMovimientosHoldingStockLock(req, movimientosInternos); err != nil {
 					core.Log("Error al aplicar movimientos de almacén:", err)
 					return core.Err("Error al procesar la salida de almacén:", err)
 				}

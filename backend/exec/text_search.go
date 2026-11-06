@@ -2,8 +2,7 @@ package exec
 
 import (
 	"app/core"
-
-	"github.com/ivanjoz/genix-orm/scylla"
+	"app/db"
 )
 
 // ReindexTextSearch (fn-reindex-text) rebuilds the text index of every table that declares
@@ -13,7 +12,7 @@ import (
 // Run it after pointing [file_store] at another bucket or root (the new index starts empty), or after a
 // deploy changes what a table indexes, like the BrandName column products gained.
 func ReindexTextSearch(args *core.ExecArgs) core.FuncResponse {
-	scylla.MakeScyllaConnection(makeConnParams())
+	db.Connect(makeConnParams())
 
 	for _, controller := range MakeScyllaControllers() {
 		var err error

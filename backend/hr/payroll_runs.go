@@ -314,7 +314,7 @@ func settleRunRecords(run types.PayrollRun, payslips []types.Payslip, companyRec
 		switch {
 		case closing && record.Status == types.RecordStatusActive:
 			payslipID, netted := payslipByRecord[record.ID]
-			if !netted && types.IsPeriodInputRecord(record.Type) && record.Period == run.Period {
+			if !netted && types.IsEntryRecord(record.ConceptID) && record.Period == run.Period {
 				payslipID, netted = payslipByEmployee[record.EmployeeID]
 			}
 			if !netted {

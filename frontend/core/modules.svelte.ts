@@ -2,7 +2,7 @@
 // the logged-in session: which modules it can enter and which one the side menu shows.
 
 import { browser } from '$app/env';
-import { Env } from '#core/env.ts';
+import { Env, moduleNavigationStorageKey } from '#core/env.ts';
 import { security } from '#libs/ui-runtime.svelte.ts';
 import pagesTomlContent from '../../db/pages.toml?raw';
 import modulesTomlContent from '../../db/modules.toml?raw';
@@ -13,10 +13,8 @@ import {
 
 export const Modules = parseModuleCatalogs(pagesTomlContent, modulesTomlContent)
 
-const MODULE_NAVIGATION_STORAGE_KEY = 'genix_module_navigation'
-
 const getStoredModuleNavigation = (): IModuleNavigationMemory => {
-  const storedNavigation = browser ? localStorage.getItem(MODULE_NAVIGATION_STORAGE_KEY) : null
+  const storedNavigation = browser ? localStorage.getItem(moduleNavigationStorageKey) : null
   return storedNavigation ? JSON.parse(storedNavigation) : { lastModuleCode: '', lastRouteByModule: {} }
 }
 
@@ -40,5 +38,5 @@ export const rememberModulePage = (pathname: string) => {
   if (ModuleNavigation.lastModuleCode === pageModule.code && ModuleNavigation.lastRouteByModule[pageModule.code] === pathname) { return }
   ModuleNavigation.lastModuleCode = pageModule.code
   ModuleNavigation.lastRouteByModule[pageModule.code] = pathname
-  localStorage.setItem(MODULE_NAVIGATION_STORAGE_KEY, JSON.stringify(ModuleNavigation))
+  localStorage.setItem(moduleNavigationStorageKey, JSON.stringify(ModuleNavigation))
 }

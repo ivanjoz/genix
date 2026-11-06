@@ -27,8 +27,10 @@ import (
 // names. AcquireLock is the exception, and only because it has work to do on this side of the
 // seam — the LockAction namespace and the HandlerResponse mapping both live here.
 
+// Lock is a held lock: fareward's on Lambda, an in-process one on the VPS (local_locks.go).
+type Lock interface{ Release() }
+
 type (
-	Lock                = fareward.Lock
 	LockOptions         = fareward.LockOptions
 	CreditLimitExceeded = fareward.CreditLimitExceeded
 	AccessDenied        = fareward.AccessDenied
@@ -124,10 +126,30 @@ func (lockErr *LockError) Response(req *HandlerArgs) HandlerResponse {
 // interface would not if this ever returned a typed nil.
 func AcquireLock(
 	ctx context.Context, action LockAction, identifier int64, maxWaiters uint8,
-) (*Lock, *LockError) {
-	lock, err := fareward.AcquireLock(ctx, uint16(action), identifier, maxWaiters)
+) (Lock, *LockError) {
+	lock, err := AcquireLockWithOptions(ctx, action, identifier, LockOptions{
+		MaxWaiters: maxWaiters,
+		Wait:       fareward.DefaultLockWait,
+		Lease:      fareward.DefaultLockLease,
+	})
 	if err != nil {
 		return nil, &LockError{err: err}
+	}
+	return lock, nil
+}
+
+// AcquireLockWithOptions picks the lock service by runtime. Lambda needs the daemon to serialize
+// separate execution environments; the VPS server is a single process and locks in memory.
+func AcquireLockWithOptions(
+	ctx context.Context, action LockAction, identifier int64, options LockOptions,
+) (Lock, error) {
+	if !Env.IS_SERVERLESS {
+		return acquireLocalLock(ctx, uint16(action), identifier, options)
+	}
+	lock, err := fareward.AcquireLockWithOptions(ctx, uint16(action), identifier, options)
+	if err != nil {
+		// A typed nil inside the interface would compare non-nil at the call site.
+		return nil, err
 	}
 	return lock, nil
 }

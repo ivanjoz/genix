@@ -1,7 +1,8 @@
 // Pure business logic of the time-off page: the vacation balance, derived (never stored) from the
 // service time and the vacations taken, as the settlement calculates it on the server.
 
-import { RecordType, isLiveRecord, type IEmployeeRecord } from '#services/hr/employee-records.ts'
+import { isLiveRecord, type IEmployeeRecord } from '#services/hr/employee-records.ts'
+import { LegalConcept } from '#services/hr/hr-catalogs.ts'
 import { nextPeriod, periodFirstDay, periodLastDay, periodOfDay } from '#routes/hr/payroll/payroll.ts'
 
 const MONTH_DAYS = 30
@@ -36,7 +37,7 @@ export const serviceDays = (employee: IServiceDates, untilDay: number): number =
 export const vacationBalance = (employee: IServiceDates & { ID: number }, records: IEmployeeRecord[], today: number) => {
   const earned = Math.floor(serviceDays(employee, today) * ANNUAL_VACATION_DAYS / YEAR_DAYS * 10) / 10
   const taken = records
-    .filter((leave) => leave.EmployeeID === employee.ID && isLiveRecord(leave) && leave.Type === RecordType.Vacation)
+    .filter((leave) => leave.EmployeeID === employee.ID && isLiveRecord(leave) && leave.ConceptID === LegalConcept.Vacation)
     .reduce((total, leave) => total + leave.Quantity, 0)
   return { earned, taken, balance: Math.round((earned - taken) * 10) / 10 }
 }

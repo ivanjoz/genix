@@ -123,7 +123,7 @@ routes = "company/configuration, business/branches-warehouses, security/users-pr
 [[modules.menus]]
 name = "HR|RRHH"
 min_name = "RRH"
-routes = "hr/departments-positions, hr/employees, hr/payroll, hr/time-off, hr/hr-settings"
+routes = "hr/departments-positions, hr/employees, hr/employee-records, hr/payroll, hr/time-off, hr/hr-settings"
 
 [[modules]]
 code = "system"

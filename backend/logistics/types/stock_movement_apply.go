@@ -187,14 +187,29 @@ func expandStockTransfers(movements []InternalMovement) ([]InternalMovement, err
 	return expanded, nil
 }
 
+// LockCompanyStock takes the company's stock write lock, the one ApplyMovimientos takes, and returns
+// its release. A writer that checks stock and then commits something that depends on it — a sale
+// that must not be saved unless its delivery goes through — holds it across both, then writes the
+// movements with ApplyMovimientosHoldingStockLock. Inside the lock the check is the truth: every
+// stock write of this process waits on it.
+func LockCompanyStock(companyID int32) func() {
+	companyLock := getApplyMovimientosCompanyLock(companyID)
+	companyLock.Lock()
+	return companyLock.Unlock
+}
+
 func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) error {
+	core.Log("ApplyMovimientos esperando lock company:", req.User.CompanyID, "movimientos:", len(movimientos))
+	unlockStock := LockCompanyStock(req.User.CompanyID)
+	defer unlockStock()
+	return ApplyMovimientosHoldingStockLock(req, movimientos)
+}
+
+// ApplyMovimientosHoldingStockLock is ApplyMovimientos for a caller that already holds
+// LockCompanyStock: the lock is not reentrant.
+func ApplyMovimientosHoldingStockLock(req *core.HandlerArgs, movimientos []InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
-
-	companyLock := getApplyMovimientosCompanyLock(companyID)
-	core.Log("ApplyMovimientos esperando lock company:", companyID, "movimientos:", len(movimientos))
-	companyLock.Lock()
-	defer companyLock.Unlock()
 
 	movimientos, err := expandStockTransfers(movimientos)
 	if err != nil {

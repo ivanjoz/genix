@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	supplyCompanyID int32 = 1
-	supplyUserID    int32 = 1
+	supplyUserID int32 = 1
 	// One request per batch, under the handler's own 1000-record cap.
 	supplyPostBatchSize = 500
 )
@@ -37,7 +36,9 @@ type supplyDataConfig struct {
 	salesPerDayMax       int
 	supplyMaterialsCount int
 	assetsCount          int
-	dryRun               bool
+	// catalogProducts caps the products.xlsx import; 0 imports the whole workbook.
+	catalogProducts int
+	dryRun          bool
 }
 
 func makeSupplyDataDefaults() supplyDataConfig {
@@ -70,6 +71,17 @@ type supplyDataGenerator struct {
 
 	providerIDs []int32
 	products    []production.Product
+	// sendOverHTTP, when set, carries every request to a running server (the load test's onboarding).
+	sendOverHTTP func(core.HandlerArgs) core.HandlerResponse
+}
+
+// send runs one request through its production handler in this process, or over HTTP when the
+// load test set sendOverHTTP.
+func (generator *supplyDataGenerator) send(request core.HandlerArgs, handler func(*core.HandlerArgs) core.HandlerResponse) core.HandlerResponse {
+	if generator.sendOverHTTP != nil {
+		return generator.sendOverHTTP(request)
+	}
+	return handler(&request)
 }
 
 // GenerateSupplyData is the entry point behind `fn-generate-supply-data`. Unlike
@@ -87,7 +99,7 @@ func GenerateSupplyData(args *core.ExecArgs) core.FuncResponse {
 		random: mrand.New(mrand.NewSource(sampleDataSeed)),
 		config: config,
 		userToken: core.UsuarioToken{
-			CompanyID: supplyCompanyID,
+			CompanyID: sampleCompanyID,
 			ID:        supplyUserID,
 		},
 	}
@@ -259,7 +271,7 @@ func (generator *supplyDataGenerator) seedProviders() error {
 
 	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes))
 	savedProviders := []crmTypes.ClientProvider{}
-	if err := decodeResponse(crm.PostClientProviders(&request), &savedProviders); err != nil {
+	if err := decodeResponse(generator.send(request, crm.PostClientProviders), &savedProviders); err != nil {
 		return err
 	}
 
@@ -284,7 +296,7 @@ func (generator *supplyDataGenerator) loadExistingProviders() error {
 	}, "")
 
 	storedProviders := []crmTypes.ClientProvider{}
-	if err := decodeResponse(crm.GetClientProviders(&request), &storedProviders); err != nil {
+	if err := decodeResponse(generator.send(request, crm.GetClientProviders), &storedProviders); err != nil {
 		return err
 	}
 
@@ -310,7 +322,7 @@ func (generator *supplyDataGenerator) loadProducts() error {
 	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Name, productQuery.Price,
 		productQuery.FinalPrice, productQuery.Status).
-		CompanyID.Equals(supplyCompanyID).Status.Equals(1)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(1)
 
 	if err := productQuery.Exec(); err != nil {
 		return err
@@ -407,7 +419,7 @@ func (generator *supplyDataGenerator) postSupplyBatches(supplyRecords []logistic
 		}
 
 		request := generator.makeRequest("POST.product-supply", nil, string(bodyBytes))
-		if response := logistics.PostProductSupply(&request); response.StatusCode != 200 {
+		if response := generator.send(request, logistics.PostProductSupply); response.StatusCode != 200 {
 			return core.Err(response.Error)
 		}
 

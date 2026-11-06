@@ -14,6 +14,6 @@
   const contracts = security.checkAcceso(ACCESS_ID_PAYROLL) ? new ContractsService(true) : undefined
 </script>
 
-<Page title="Employees|Personal">
+<Page title="Employees & Contracts|Empleados & Contratos">
   <EmployeesTab {employees} {organization} {contracts} />
 </Page>

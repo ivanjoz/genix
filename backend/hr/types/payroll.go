@@ -89,13 +89,11 @@ func (e PayrollRunTable) GetSchema() db.TableSchema {
 
 // PayslipLine is one concept of a payslip, frozen at calculation: the treatment and accounts of the
 // concept are stamped, so the boleta, PLAME and the accounting never read the concept again.
-// Exactly one of LegalConceptID and ConceptID is set.
 type PayslipLine struct {
-	LegalConceptID int16 `cb:"1"`
-	ConceptID      int32 `cb:"2"` // company concept (hr_concepts)
-	Kind           int8  `cb:"3"`
-	Base           int32 `cb:"4"` // cents the rate applied to, when there is one
-	Rate           int32 `cb:"5"` // basis points
+	ConceptID int32 `cb:"2"` // legal (1..LegalConceptMaxID) or company concept (hr_concepts)
+	Kind      int8  `cb:"3"`
+	Base      int32 `cb:"4"` // cents the rate applied to, when there is one
+	Rate      int32 `cb:"5"` // basis points
 	// Quantity is days or hours, for the boleta (e.g. 2.5 overtime hours).
 	Quantity              float32 `cb:"6"`
 	Amount                int32   `cb:"7"` // cents, always positive; Kind says the sign

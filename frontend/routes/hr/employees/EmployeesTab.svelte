@@ -19,7 +19,7 @@
   import type { OrganizationService } from '#services/hr/organization.svelte.ts'
   import EmployeeContracts from './EmployeeContracts.svelte'
   import EmployeeDependents from './EmployeeDependents.svelte'
-  import EmployeePayItems from './EmployeePayItems.svelte'
+  import EmployeeFixedConcepts from './EmployeeFixedConcepts.svelte'
   import { EmployeeStatus, employeeFullName, hasFamilyAllowanceOn, isTerminated, makeEmptyEmployee } from './employees.ts'
 
   let { employees, organization, contracts }: {
@@ -35,7 +35,7 @@
   const VIEW_INFO = 1
   const VIEW_CONTRACTS = 3
   const VIEW_DEPENDENTS = 4
-  const VIEW_PAY_ITEMS = 5
+  const VIEW_FIXED_CONCEPTS = 5
 
   let filterText = $state('')
   let showTerminated = $state(false)
@@ -67,7 +67,7 @@
     const options: [number, string][] = [[VIEW_INFO, 'Information|Información']]
     if (employeeForm.ID > 0 && contracts) options.push([VIEW_CONTRACTS, 'Contracts|Contratos'])
     if (employeeForm.ID > 0) options.push([VIEW_DEPENDENTS, 'Dependents|Derechohabientes'])
-    if (employeeForm.ID > 0 && contracts) options.push([VIEW_PAY_ITEMS, 'Concepts & loans|Conceptos y préstamos'])
+    if (employeeForm.ID > 0 && contracts) options.push([VIEW_FIXED_CONCEPTS, 'Fixed concepts|Conceptos fijos'])
     return options
   })
 
@@ -160,7 +160,7 @@
     {columns}
     data={shownEmployees}
     css="w-full"
-    maxHeight="calc(80vh - 13rem)"
+    maxHeight="calc(100vh - 8rem - 16px)"
     {filterText}
     getFilterContent={(e) => [employeeFullName(e), e.DocumentNumber, e.Email].join(' ').toLowerCase()}
     selected={employeeForm?.ID}
@@ -222,9 +222,9 @@
     {#key employeeForm.ID}
       <EmployeeDependents employeeID={employeeForm.ID} {employees} />
     {/key}
-  {:else if layerView === VIEW_PAY_ITEMS && contracts}
+  {:else if layerView === VIEW_FIXED_CONCEPTS && contracts}
     {#key employeeForm.ID}
-      <EmployeePayItems employeeID={employeeForm.ID} />
+      <EmployeeFixedConcepts employeeID={employeeForm.ID} />
     {/key}
   {/if}
 </Layer>

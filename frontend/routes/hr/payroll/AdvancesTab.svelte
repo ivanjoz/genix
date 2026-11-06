@@ -14,9 +14,9 @@
   import type { EmployeesService } from '#services/hr/employees.svelte.ts'
   import { EmployeeRecordsYearService, postPayAdvances } from '#services/hr/employee-records.svelte.ts'
   import {
-    RecordStatus, RecordType, isLiveRecord, yearOfPeriod, type IEmployeeRecord,
+    RecordStatus, isLiveRecord, yearOfPeriod, type IEmployeeRecord,
   } from '#services/hr/employee-records.ts'
-  import { ADVANCE_TYPE_OPTIONS } from '#services/hr/hr-catalogs.ts'
+  import { ConceptGroup, LegalConcept, legalConceptsOfGroup } from '#services/hr/hr-catalogs.ts'
   import { CajasService } from '#routes/finance/cash-banks/cajas.svelte.ts'
   import {
     formatCents, formatPeriod, nextPeriod, payrollCashBankOptions, periodFirstDay, periodOfDay, previousPeriod,
@@ -29,7 +29,7 @@
 
   const ui = useUI()
   const ADVANCE_MODAL_ID = 33
-  const advanceTypeOptions = ADVANCE_TYPE_OPTIONS.map((option) => ({ ...option, name: tr(option.name) }))
+  const advanceTypeOptions = legalConceptsOfGroup(ConceptGroup.Advance).map((concept) => ({ id: concept.id, name: tr(concept.name) }))
   const advanceTypeNames = new Map(advanceTypeOptions.map((option) => [option.id, option.name]))
 
   const currentPeriod = periodOfDay(todayUnixDay())
@@ -49,7 +49,7 @@
   const employeeOptions = $derived(employees.records.filter((employee) => employee.ss === 1)
     .map((employee) => ({ ID: employee.ID, Name: employeeFullName(employee) })))
   const visibleAdvances = $derived(yearRecords.records.filter((record) =>
-    record.Period === selected.Period && advanceTypeNames.has(record.Type) && isLiveRecord(record)))
+    record.Period === selected.Period && advanceTypeNames.has(record.ConceptID) && isLiveRecord(record)))
 
   // A month of another year switches to that year's cached list.
   const selectPeriod = (period: number) => {
@@ -61,7 +61,7 @@
   const openNewAdvance = () => {
     const today = todayUnixDay()
     const coveredFrom = Math.max(today - 6, periodFirstDay(periodOfDay(today)))
-    advanceForm = { Type: RecordType.AdvanceWeekly, Date: today, FromDate: coveredFrom, ToDate: today,
+    advanceForm = { ConceptID: LegalConcept.AdvanceWeekly, Date: today, FromDate: coveredFrom, ToDate: today,
       ss: RecordStatus.Active } as IEmployeeRecord
     ui.openModal(ADVANCE_MODAL_ID)
   }
@@ -96,7 +96,7 @@
   const columns: ITableColumn<IEmployeeRecord>[] = [
     { header: 'Employee|Trabajador', css: 'px-6', highlight: true,
       getValue: (e) => employeeOptions.find((option) => option.ID === e.EmployeeID)?.Name || `#${e.EmployeeID}` },
-    { header: 'Type|Tipo', css: 'px-6', getValue: (e) => advanceTypeNames.get(e.Type) || '' },
+    { header: 'Type|Tipo', css: 'px-6', getValue: (e) => advanceTypeNames.get(e.ConceptID) || '' },
     { header: 'Covers|Cubre', css: 'px-6',
       getValue: (e) => `${formatTime(e.FromDate, 'd-m-Y')} → ${formatTime(e.ToDate, 'd-m-Y')}` },
     { header: 'Paid on|Pagado el', css: 'px-6', getValue: (e) => String(formatTime(e.Date, 'd-m-Y')) },
@@ -124,7 +124,7 @@
   <div class="grid grid-cols-24 gap-10" aria-label="Payment form">
     <SearchSelect bind:saveOn={advanceForm} save="EmployeeID" label="Employee|Trabajador" required={true}
       options={employeeOptions} keyId="ID" keyName="Name" css="col-span-24" />
-    <SearchSelect bind:saveOn={advanceForm} save="Type" label="Type|Tipo" required={true}
+    <SearchSelect bind:saveOn={advanceForm} save="ConceptID" label="Type|Tipo" required={true}
       options={advanceTypeOptions} keyId="id" keyName="name" css="col-span-24 md:col-span-12" />
     <Input bind:saveOn={advanceForm} save="Amount" type="number" baseDecimals={2} label="Amount (S/)|Monto (S/)"
       required={true} css="col-span-24 md:col-span-12" />

@@ -17,7 +17,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.9.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/route53 v1.70.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.10.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
@@ -29,7 +28,6 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	github.com/ivanjoz/genix-search/genix-s3 v0.0.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -58,20 +56,23 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.16.1
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/lambda v1.53.1
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.70.7
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
 	github.com/aws/smithy-go v1.28.8
 	github.com/bytedance/sonic v1.15.0
 	github.com/fatih/color v1.19.0
 	github.com/gocql/gocql v1.6.0
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
-	github.com/ivanjoz/colbin v0.9.0
+	github.com/ivanjoz/colbin v0.9.2
 	github.com/ivanjoz/facturago v0.0.0
 	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/ivanjoz/genix-orm/dataframe v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
+	github.com/ivanjoz/genix-orm/fdb v0.0.0
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0
 	github.com/ivanjoz/genix-orm/utils v0.0.0
+	github.com/ivanjoz/genix-search/genix-s3 v0.0.0
 	github.com/ivanjoz/minijson v0.3.2
 	github.com/klauspost/compress v1.18.6
 	github.com/kr/pretty v0.3.1
@@ -120,3 +121,5 @@ replace github.com/ivanjoz/genix-orm/utils => ./genix-orm/utils
 replace github.com/ivanjoz/genix-orm/dataframe => ./genix-orm/dataframe
 
 replace github.com/bytedance/sonic => github.com/ivanjoz/sonic v1.15.6-0.20261028001949-a834f9c878ac
+
+replace github.com/ivanjoz/genix-orm/fdb => ./genix-orm/fdb

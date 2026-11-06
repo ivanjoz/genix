@@ -70,12 +70,23 @@ type EnvStruct struct {
 	// default, and it does nothing under IS_SERVERLESS — a Lambda invocation is already alone.
 	DISABLE_API_CONCURRENCY_LOCAL bool
 	DB_DISABLE_SSL                bool
-	DB_PORT                       int32
-	MAX_CLUSTERING_KEY            int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
-	SERVER_PORT                   int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
-	AGENT_PORT                    int32 // Listen port of the standalone agent server (genix/agent); 0 uses 3590
-	USUARIO_ID                    int32
-	ADMIN_PASSWORD                string
+	// FDB_SOCKET is the fdbgate daemon's unix socket, read only by a `-tags fdb` build.
+	FDB_SOCKET         string
+	DB_PORT            int32
+	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
+	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
+	// SERVER_MAX_CONCURRENT_REQUESTS caps the requests the VPS server runs at once; the rest wait
+	// for a slot (see admission.go). 0 uses a default derived from GOMAXPROCS.
+	SERVER_MAX_CONCURRENT_REQUESTS int32
+	// SERVER_MEMORY_LIMIT_MB is the Go soft memory limit (GOMEMLIMIT) of the VPS server. 0 uses
+	// 70% of the machine's memory, or of the cgroup limit when there is one.
+	SERVER_MEMORY_LIMIT_MB int32
+	// FAREWARD_MAX_INFLIGHT mirrors [rate_limit].max_inflight_per_connection, the daemon's cap of
+	// frames in flight on one connection; the Go client queues past it instead of being refused.
+	FAREWARD_MAX_INFLIGHT int32
+	AGENT_PORT            int32 // Listen port of the standalone agent server (genix/agent); 0 uses 3590
+	USUARIO_ID            int32
+	ADMIN_PASSWORD        string
 	// SECRET_PHRASE signs what users hold: session tokens (usuario-accesos.go) and password
 	// hashes. It never authenticates one Genix process to another — that is INTERNAL_APIKEY.
 	SECRET_PHRASE string
@@ -140,10 +151,17 @@ type EnvStruct struct {
 	// is the default when DEFAULT_MODEL is blank. Consumed by
 	// agent/llm, which turns each entry into its own request knobs.
 	MODELS []ModelEntry
-	// The ORM's file store ([file_store]): the by-IDs slot files, the delta logs and, under
-	// <root>search/, the genix-s3 text index. See ConfigureFileStore and ConfigureTextSearch.
+	// The ORM's file store ([file_store]): the by-IDs slot files, the delta logs, the snapshots
+	// and the genix-s3 text index. See ConfigureFileStore and ConfigureTextSearch.
+	// Lambda keeps them in S3: bucket, under root.
 	FILE_STORE_BUCKET string
 	FILE_STORE_ROOT   string
+	// A VPS keeps them on its own disk, under vps_dir (default <project>/tmp/file-store).
+	FILE_STORE_VPS_DIR string
+	// The VPS snapshot cache, see ConfigureVPSSnapshotCache: vps_snapshot_cache_mb in memory
+	// (0 turns snapshots off), then vps_snapshot_disk_mb spilled under vps_dir (0 = memory only).
+	FILE_STORE_VPS_SNAPSHOT_CACHE_MB int64
+	FILE_STORE_VPS_SNAPSHOT_DISK_MB  int64
 	// Qdrant stores user-documentation dense and lexical vectors. The same
 	// INTERNAL_APIKEY used by deployment protects its REST endpoint.
 	QDRANT_HOST       string
@@ -241,6 +259,9 @@ type fileConfig struct {
 		// UseRemoteDevHost lets a developer dial the deployed daemon on purpose. Off by default,
 		// because on a dev machine the daemon that matches this checkout is the local one.
 		UseRemoteDevHost bool `toml:"use_remote_dev_host"`
+		// UnixSocket, when set, is served by the daemon next to its TCP port, and a non-Lambda
+		// process dials it instead of TCP. Only for a backend on the daemon's own host.
+		UnixSocket string `toml:"unix_socket"`
 	} `toml:"fareward"`
 
 	Providers struct {
@@ -259,8 +280,15 @@ type fileConfig struct {
 		MaxClusteringKey int32  `toml:"max_clustering_key"`
 	} `toml:"db"`
 
+	// FDB is read only by a `-tags fdb` build (docs/FOUNDATIONDB_PLAN.md).
+	FDB struct {
+		Socket string `toml:"socket"`
+	} `toml:"fdb"`
+
 	Server struct {
-		Port int32 `toml:"port"`
+		Port                  int32 `toml:"port"`
+		MaxConcurrentRequests int32 `toml:"max_concurrent_requests"`
+		MemoryLimitMB         int32 `toml:"memory_limit_mb"`
 	} `toml:"server"`
 
 	AWS struct {
@@ -313,6 +341,8 @@ type fileConfig struct {
 		// aplica nada. En Lambda, donde este archivo no existe, queda en 0 y el medidor esconde el
 		// tramo mientras el daemon lo sigue concediendo.
 		CompanyExtraCredits24h int64 `toml:"company_extra_credits_24h"`
+		// Read so the Go client can queue at the daemon's cap instead of being refused past it.
+		MaxInflightPerConnection int32 `toml:"max_inflight_per_connection"`
 	} `toml:"rate_limit"`
 
 	SignUp struct {
@@ -329,6 +359,10 @@ type fileConfig struct {
 	FileStore struct {
 		Bucket string `toml:"bucket"`
 		Root   string `toml:"root"`
+		// Pointers: an absent key takes the default, an explicit 0 turns the tier off.
+		VpsSnapshotCacheMB *int64 `toml:"vps_snapshot_cache_mb"`
+		VpsSnapshotDiskMB  *int64 `toml:"vps_snapshot_disk_mb"`
+		VpsDir             string `toml:"vps_dir"`
 	} `toml:"file_store"`
 
 	Qdrant struct {
@@ -392,9 +426,20 @@ const (
 // the one running beside it, not whatever build the server happens to have. Silently crossing
 // that boundary fails as a closed connection with no diagnosis on either side. Dialing the
 // deployed daemon from a dev machine stays possible, but it has to be asked for.
-func makeFarewardAddress(host string, port int, public, isDevArg, useRemoteDevHost bool) string {
+//
+// A configured unix socket wins whenever this process runs on the daemon's host: never under
+// Lambda (no shared filesystem, it needs TCP) and never when a dev machine opted into the remote
+// daemon. It skips the TCP/IP stack on every charge, lock and log frame.
+func makeFarewardAddress(
+	host string, port int, public bool, unixSocket string,
+	isDevArg, useRemoteDevHost, isServerless bool,
+) string {
 	if port <= 0 {
 		port = defaultFarewardPort
+	}
+	dialsRemoteDevHost := isDevArg && useRemoteDevHost && public
+	if unixSocket = strings.TrimSpace(unixSocket); unixSocket != "" && !isServerless && !dialsRemoteDevHost {
+		return "unix:" + unixSocket
 	}
 	if !public || (isDevArg && !useRemoteDevHost) {
 		return fmt.Sprintf("127.0.0.1:%d", port)
@@ -433,6 +478,13 @@ func farewardAddressUnusableInLambda(address string, isServerless bool) bool {
 	return strings.EqualFold(host, "localhost")
 }
 
+// The VPS snapshot cache defaults: a 10k-product snapshot is about 2 MB, so 256 MB holds about a
+// hundred company + endpoint snapshots next to ScyllaDB on a 4 GB server.
+const (
+	defaultVPSSnapshotCacheMB = 256
+	defaultVPSSnapshotDiskMB  = 1024
+)
+
 func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.APP_NAME = file.AppName
 	env.ENVIROMENT = file.Environment
@@ -452,8 +504,11 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.DB_PASSWORD = file.DB.Password
 	env.DB_DISABLE_SSL = file.DB.DisableSSL
 	env.MAX_CLUSTERING_KEY = file.DB.MaxClusteringKey
+	env.FDB_SOCKET = file.FDB.Socket
 
 	env.SERVER_PORT = file.Server.Port
+	env.SERVER_MAX_CONCURRENT_REQUESTS = file.Server.MaxConcurrentRequests
+	env.SERVER_MEMORY_LIMIT_MB = file.Server.MemoryLimitMB
 
 	env.AWS_REGION = file.AWS.Region
 	env.AWS_PROFILE = file.AWS.Profile
@@ -495,17 +550,27 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	// env.IS_DEV_ARG, not a config field: PopulateVariables sets it before this runs, precisely so
 	// that which daemon a process dials cannot be changed by editing a file.
 	env.FAREWARD_ADDRESS = makeFarewardAddress(
-		file.Fareward.Host, file.Fareward.Port, file.Fareward.Public,
-		env.IS_DEV_ARG, file.Fareward.UseRemoteDevHost)
+		file.Fareward.Host, file.Fareward.Port, file.Fareward.Public, file.Fareward.UnixSocket,
+		env.IS_DEV_ARG, file.Fareward.UseRemoteDevHost, IsRunningInLambda())
 	env.SIGNUP_MAX_EMAILS_PER_IP = file.SignUp.MaxEmailsPerIP
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
+	env.FAREWARD_MAX_INFLIGHT = file.RateLimit.MaxInflightPerConnection
 	env.CONTACT_EMAIL = strings.ToLower(strings.TrimSpace(file.Contact.Email))
 	env.CONTACT_MAX_MESSAGES_PER_IP = file.Contact.MaxMessagesPerIP
 	env.CONTACT_WINDOW_MINUTES = file.Contact.WindowMinutes
 
 	env.FILE_STORE_BUCKET = file.FileStore.Bucket
 	env.FILE_STORE_ROOT = file.FileStore.Root
+	env.FILE_STORE_VPS_SNAPSHOT_CACHE_MB = defaultVPSSnapshotCacheMB
+	if file.FileStore.VpsSnapshotCacheMB != nil {
+		env.FILE_STORE_VPS_SNAPSHOT_CACHE_MB = *file.FileStore.VpsSnapshotCacheMB
+	}
+	env.FILE_STORE_VPS_SNAPSHOT_DISK_MB = defaultVPSSnapshotDiskMB
+	if file.FileStore.VpsSnapshotDiskMB != nil {
+		env.FILE_STORE_VPS_SNAPSHOT_DISK_MB = *file.FileStore.VpsSnapshotDiskMB
+	}
+	env.FILE_STORE_VPS_DIR = strings.TrimSpace(file.FileStore.VpsDir)
 
 	env.QDRANT_HOST = strings.TrimSpace(file.Qdrant.Host)
 	if env.QDRANT_HOST == "" && !file.Qdrant.Public {
@@ -595,6 +660,7 @@ func PopulateVariables() {
 				continue
 			} else {
 				log.Printf("[core.config] config_file_selected path=%s", candidateConfigPath)
+				variablesBytes = applyLocalConfigOverride(variablesBytes, candidateConfigPath)
 				break
 			}
 		}

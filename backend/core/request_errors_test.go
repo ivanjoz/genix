@@ -3,20 +3,20 @@ package core
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
 )
 
-// Every test here needs Env to exist, because capture is gated on it so that package-init logging
-// records nothing.
-func withCaptureEnabled(t *testing.T) {
+// withCaptureEnabled gives the test an Env, which capture is gated on so that package-init logging
+// records nothing. isServerless decides whether Log/LogError capture at all: only Lambda knows
+// which request a bare Log call belongs to.
+func withCaptureEnabled(t *testing.T, isServerless bool) {
 	t.Helper()
 	previousEnv := Env
-	if Env == nil {
-		Env = &EnvStruct{}
-	}
-	ResetRequestErrors()
+	Env = &EnvStruct{IS_SERVERLESS: isServerless}
+	ResetServerlessLogErrors()
 	t.Cleanup(func() {
-		ResetRequestErrors()
+		ResetServerlessLogErrors()
 		Env = previousEnv
 	})
 }
@@ -25,14 +25,14 @@ func withCaptureEnabled(t *testing.T) {
 // caller's, not the line inside core that did the recording. Nothing else in the pipeline notices
 // when that slips — the row still writes, it just points at responses.go forever.
 func TestCaptureBlamesTheCallerNotCore(t *testing.T) {
-	withCaptureEnabled(t)
+	withCaptureEnabled(t, true)
 
-	args := &HandlerArgs{}
+	args := &HandlerArgs{Errors: &RequestErrors{}}
 	args.MakeErr("no se pudo obtener el registro")
 	LogError("fallo al sincronizar")
 	Log("Error:: la consulta no devolvió filas")
 
-	captured := TakeRequestErrors()
+	captured := append(args.Errors.Take(), serverlessLogErrors.Take()...)
 	if len(captured) != 3 {
 		t.Fatalf("expected three distinct code lines, got %d: %+v", len(captured), captured)
 	}
@@ -49,13 +49,52 @@ func TestCaptureBlamesTheCallerNotCore(t *testing.T) {
 // A message that says nothing about failing is not a failure, or every request would arrive
 // carrying four errors and the error count would stop meaning anything.
 func TestPlainLogRecordsNothing(t *testing.T) {
-	withCaptureEnabled(t)
+	withCaptureEnabled(t, true)
 
 	Log("Ejecutando Handler:: GET.almacenes")
 	Log("Finalizado Handler:: GET.almacenes | Len: 412")
 
-	if captured := TakeRequestErrors(); len(captured) != 0 {
+	if captured := serverlessLogErrors.Take(); len(captured) != 0 {
 		t.Fatalf("ordinary log lines were recorded as errors: %+v", captured)
+	}
+}
+
+// On the VPS a bare Log cannot know its request, so it must not write anywhere another request
+// could read it back: that shared accumulator is the race this replaced.
+func TestVPSLogErrorIsNotCapturedGlobally(t *testing.T) {
+	withCaptureEnabled(t, false)
+
+	LogError("fallo al sincronizar")
+	Log("Error:: la consulta no devolvió filas")
+
+	if captured := serverlessLogErrors.Take(); len(captured) != 0 {
+		t.Fatalf("a VPS log line reached the shared accumulator: %+v", captured)
+	}
+}
+
+// Two requests failing at the same time each report their own error and only their own.
+func TestConcurrentRequestsKeepTheirOwnErrors(t *testing.T) {
+	withCaptureEnabled(t, false)
+
+	firstRequest := &HandlerArgs{Route: "a", Errors: &RequestErrors{}}
+	secondRequest := &HandlerArgs{Route: "b", Errors: &RequestErrors{}}
+	var failing sync.WaitGroup
+	for _, request := range []*HandlerArgs{firstRequest, secondRequest} {
+		failing.Add(1)
+		go func() {
+			defer failing.Done()
+			for range 100 {
+				request.Errors.RegisterAt("route_"+request.Route+".go:1", "error")
+			}
+		}()
+	}
+	failing.Wait()
+
+	for _, request := range []*HandlerArgs{firstRequest, secondRequest} {
+		captured := request.Errors.Take()
+		if len(captured) != 1 || captured[0].Line != "route_"+request.Route+".go:1" {
+			t.Fatalf("request %s reported %+v", request.Route, captured)
+		}
 	}
 }
 
@@ -63,12 +102,12 @@ func TestPlainLogRecordsNothing(t *testing.T) {
 // through the heuristic, every handler failure would produce two entries: one at the handler and
 // one at responses.go.
 func TestMakeErrRecordsOneEntryNotTwo(t *testing.T) {
-	withCaptureEnabled(t)
+	withCaptureEnabled(t, true)
 
-	args := &HandlerArgs{}
+	args := &HandlerArgs{Errors: &RequestErrors{}}
 	args.MakeErr("algo falló")
 
-	captured := TakeRequestErrors()
+	captured := append(args.Errors.Take(), serverlessLogErrors.Take()...)
 	if len(captured) != 1 {
 		t.Fatalf("expected exactly one entry, got %d: %+v", len(captured), captured)
 	}
@@ -77,16 +116,30 @@ func TestMakeErrRecordsOneEntryNotTwo(t *testing.T) {
 	}
 }
 
+// A recovered panic is reported against the line that panicked, not against the recover.
+func TestPanicCodeLineNamesThePanickingLine(t *testing.T) {
+	var panicLine string
+	func() {
+		defer func() {
+			recover()
+			panicLine = PanicCodeLine()
+		}()
+		panic("boom") // the line PanicCodeLine must name
+	}()
+	if !strings.HasPrefix(panicLine, "request_errors_test.go:") {
+		t.Fatalf("blamed %q instead of this test file", panicLine)
+	}
+}
+
 // A loop that fails ten thousand times is one error at one place. Without the collapse it would
 // fill all four slots with the same line and hide the three other things that went wrong.
 func TestRepeatedLineCollapsesAndKeepsTheFirstText(t *testing.T) {
-	withCaptureEnabled(t)
-
+	accumulator := &RequestErrors{}
 	for attempt := 0; attempt < 50; attempt++ {
-		RegisterRequestErrorAt("stock.go:120", "error en el intento "+string(rune('a'+attempt%26)))
+		accumulator.RegisterAt("stock.go:120", "error en el intento "+string(rune('a'+attempt%26)))
 	}
 
-	captured := TakeRequestErrors()
+	captured := accumulator.Take()
 	if len(captured) != 1 {
 		t.Fatalf("expected one collapsed entry, got %d", len(captured))
 	}
@@ -96,13 +149,12 @@ func TestRepeatedLineCollapsesAndKeepsTheFirstText(t *testing.T) {
 }
 
 func TestCapIsFourDistinctLines(t *testing.T) {
-	withCaptureEnabled(t)
-
+	accumulator := &RequestErrors{}
 	for line := 100; line < 120; line++ {
-		RegisterRequestErrorAt("stock.go:"+string(rune('0'+line%10))+"x", "error")
+		accumulator.RegisterAt("stock.go:"+string(rune('0'+line%10))+"x", "error")
 	}
 
-	if captured := TakeRequestErrors(); len(captured) > maxRequestErrors {
+	if captured := accumulator.Take(); len(captured) > maxRequestErrors {
 		t.Fatalf("recorded %d entries, more than the cap of %d", len(captured), maxRequestErrors)
 	}
 }
@@ -110,13 +162,12 @@ func TestCapIsFourDistinctLines(t *testing.T) {
 // Draining matters because prepareResponse runs once per response, and a panic produces a second
 // one. Without it the panic's row would carry the errors of the response that already reported them.
 func TestTakeDrains(t *testing.T) {
-	withCaptureEnabled(t)
-
-	RegisterRequestErrorAt("stock.go:120", "error")
-	if len(TakeRequestErrors()) != 1 {
+	accumulator := &RequestErrors{}
+	accumulator.RegisterAt("stock.go:120", "error")
+	if len(accumulator.Take()) != 1 {
 		t.Fatal("the first take returned nothing")
 	}
-	if leftover := TakeRequestErrors(); len(leftover) != 0 {
+	if leftover := accumulator.Take(); len(leftover) != 0 {
 		t.Fatalf("the second take returned %d entries; the accumulator did not drain", len(leftover))
 	}
 }
@@ -133,9 +184,9 @@ func captureEmittedLogs(t *testing.T, logAllRequests bool) *[]RequestLogRecord {
 		emitted = append(emitted, record)
 		return nil
 	}
-	ResetRequestErrors()
+	ResetServerlessLogErrors()
 	t.Cleanup(func() {
-		ResetRequestErrors()
+		ResetServerlessLogErrors()
 		Env, SendRequestLog = previousEnv, previousSend
 	})
 	return &emitted
@@ -158,8 +209,9 @@ func TestErrorFreeRequestLeavesNoRow(t *testing.T) {
 func TestFailedRequestStillWritesItsRow(t *testing.T) {
 	emitted := captureEmittedLogs(t, false)
 
-	RegisterRequestErrorAt("stock.go:120", "error al leer el lote")
-	EmitRequestLog(&HandlerArgs{RouteID: 34}, 12)
+	args := &HandlerArgs{RouteID: 34, Errors: &RequestErrors{}}
+	args.Errors.RegisterAt("stock.go:120", "error al leer el lote")
+	EmitRequestLog(args, 12)
 
 	if len(*emitted) != 1 {
 		t.Fatalf("expected one row, got %d", len(*emitted))
@@ -167,7 +219,7 @@ func TestFailedRequestStillWritesItsRow(t *testing.T) {
 	if len((*emitted)[0].Errors) != 1 {
 		t.Fatalf("the row carried %d errors, not the one captured", len((*emitted)[0].Errors))
 	}
-	if leftover := TakeRequestErrors(); len(leftover) != 0 {
+	if leftover := args.Errors.Take(); len(leftover) != 0 {
 		t.Fatalf("%d errors survived the emit and would be blamed on the next request", len(leftover))
 	}
 }
@@ -193,7 +245,7 @@ func TestLogAllRequestsWidensToEveryRequest(t *testing.T) {
 func TestCreditRateLimitRejectionWritesItsRow(t *testing.T) {
 	emitted := captureEmittedLogs(t, false)
 
-	args := &HandlerArgs{RouteID: 34}
+	args := &HandlerArgs{RouteID: 34, Errors: &RequestErrors{}}
 	response := args.MakeCreditRateLimitResponse(&CreditLimitExceeded{Code: 3, Window: "1h", CPU: true})
 	if response.StatusCode != 429 {
 		t.Fatalf("a credit rejection answered %d, not 429", response.StatusCode)

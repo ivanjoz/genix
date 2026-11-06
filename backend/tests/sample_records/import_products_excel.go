@@ -60,7 +60,7 @@ func (generator *supplyDataGenerator) importProductsWorkbook() (productsImportSt
 	}
 	stats.WorkbookRows = len(workbookRows)
 
-	activeProductNameHashes, err := loadActiveProductNameHashes()
+	activeProductNameHashes, err := generator.loadActiveProductNameHashes()
 	if err != nil {
 		return stats, err
 	}
@@ -76,6 +76,9 @@ func (generator *supplyDataGenerator) importProductsWorkbook() (productsImportSt
 		}
 		activeProductNameHashes[nameHash] = true
 		newProductRows = append(newProductRows, workbookRow)
+	}
+	if catalogLimit := generator.config.catalogProducts; catalogLimit > 0 && len(newProductRows) > catalogLimit {
+		newProductRows = newProductRows[:catalogLimit]
 	}
 
 	sharedListIDByHash, err := generator.resolveSharedListNames(newProductRows, &stats)
@@ -117,7 +120,7 @@ func (generator *supplyDataGenerator) importProductsWorkbook() (productsImportSt
 			return stats, err
 		}
 		request := generator.makeRequest("POST.products", nil, string(bodyBytes))
-		if response := production.PostProducts(&request); response.StatusCode != 200 {
+		if response := generator.send(request, production.PostProducts); response.StatusCode != 200 {
 			return stats, core.Err(response.Error)
 		}
 		stats.Created += batchEnd - batchStart
@@ -222,11 +225,11 @@ func readProductsWorkbook() ([]productImportRow, error) {
 	return productRows, nil
 }
 
-func loadActiveProductNameHashes() (map[int32]bool, error) {
+func (generator *supplyDataGenerator) loadActiveProductNameHashes() (map[int32]bool, error) {
 	products := []productionTypes.Product{}
 	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.NameHash, productQuery.Status).
-		CompanyID.Equals(supplyCompanyID)
+		CompanyID.Equals(generator.userToken.CompanyID)
 	if err := productQuery.Exec(); err != nil {
 		return nil, core.Err("no se pudieron leer los productos existentes:", err)
 	}
@@ -249,7 +252,7 @@ func (generator *supplyDataGenerator) resolveSharedListNames(productRows []produ
 	existingRecords := []businessTypes.SharedListRecord{}
 	sharedListQuery := db.Query(&existingRecords)
 	sharedListQuery.Select(sharedListQuery.ID, sharedListQuery.NameHash, sharedListQuery.Status).
-		CompanyID.Equals(supplyCompanyID).
+		CompanyID.Equals(generator.userToken.CompanyID).
 		ListID.In(businessTypes.SharedListCategoryID, businessTypes.SharedListBrandID)
 	if err := sharedListQuery.Exec(); err != nil {
 		return nil, core.Err("no se pudieron leer las categorías/marcas existentes:", err)
@@ -303,7 +306,7 @@ func (generator *supplyDataGenerator) resolveSharedListNames(productRows []produ
 		}
 		request := generator.makeRequest("POST.shared-lists", nil, string(bodyBytes))
 		tempIDMappings := []businessTypes.NewIDToID{}
-		if err := decodeResponse(business.PostSharedLists(&request), &tempIDMappings); err != nil {
+		if err := decodeResponse(generator.send(request, business.PostSharedLists), &tempIDMappings); err != nil {
 			return nil, core.Err("no se pudieron crear las categorías/marcas:", err)
 		}
 		for _, tempIDMapping := range tempIDMappings {

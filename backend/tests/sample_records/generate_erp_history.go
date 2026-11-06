@@ -39,8 +39,12 @@ import (
 // register and the ORM's own created/updated columns all agree on the date. Every write goes
 // through the production handler with the exact JSON payload its route expects.
 
+// sampleCompanyID is the company every generator in this package writes. --company=N sets it for the
+// whole process, like the historical clock: one process seeds one company, and the load test runs
+// one process per company in parallel.
+var sampleCompanyID int32 = 1
+
 const (
-	erpCompanyID        int32 = 1
 	erpUserID           int32 = 1
 	erpStateFileName          = "genix_erp_history_state.json"
 	erpStateVersion           = 2
@@ -93,6 +97,8 @@ type erpHistoryConfig struct {
 	seed         int64
 	reset        bool
 	dryRun       bool
+	// isErpOnly (--erp-only) leaves out what the ERP flow doesn't read: the projects and the payroll.
+	isErpOnly bool
 }
 
 func makeErpHistoryDefaults() erpHistoryConfig {
@@ -233,6 +239,9 @@ type erpHistoryGenerator struct {
 	config  erpHistoryConfig
 
 	userToken core.UsuarioToken
+	// sendOverHTTP, when set, sends every request to a running server (load_flow.go) instead of
+	// calling the handler in this process. See send.
+	sendOverHTTP func(request core.HandlerArgs) core.HandlerResponse
 	// Each entry point sets its own state file and its own day steps over the same machinery.
 	stateFileName string
 	daySteps      []historyDayStep
@@ -330,7 +339,7 @@ func newHistoryGenerator(config erpHistoryConfig, stateFileName string) *erpHist
 		realNow: time.Now(),
 		config:  config,
 		userToken: core.UsuarioToken{
-			CompanyID: erpCompanyID,
+			CompanyID: sampleCompanyID,
 			ID:        erpUserID,
 		},
 		stateFileName:      stateFileName,
@@ -408,7 +417,13 @@ func newHistoryState(configSignature string) erpHistoryState {
 // loadState restores an interrupted run. A state written under different arguments is refused
 // instead of merged: resuming a 15-day plan into a 4-day one would silently produce neither.
 func (generator *erpHistoryGenerator) loadState() error {
-	generator.statePath = filepath.Join(core.ProjectTmpDir(), generator.stateFileName)
+	// One state file per company (the load test seeds several at once), kept beside the database's
+	// file store: a state belongs to one keyspace, and a reseed that wipes the store wipes it too.
+	stateDir := filepath.Join(core.VPSFileStoreDir(), "seed-state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		return err
+	}
+	generator.statePath = filepath.Join(stateDir, fmt.Sprintf("c%d_%s", generator.userToken.CompanyID, generator.stateFileName))
 	configSignature := generator.config.planSignature()
 
 	if generator.config.reset {
@@ -489,9 +504,10 @@ func parseHistoryArgs(message string, config erpHistoryConfig) (erpHistoryConfig
 	for _, argument := range strings.Fields(message) {
 		name, rawValue, hasValue := strings.Cut(strings.TrimPrefix(argument, "--"), "=")
 
-		if name == "reset" || name == "dry-run" {
+		if name == "reset" || name == "dry-run" || name == "erp-only" {
 			config.reset = config.reset || name == "reset"
 			config.dryRun = config.dryRun || name == "dry-run"
+			config.isErpOnly = config.isErpOnly || name == "erp-only"
 			continue
 		}
 		if !hasValue {
@@ -516,6 +532,8 @@ func parseHistoryArgs(message string, config erpHistoryConfig) (erpHistoryConfig
 			return config, core.Err("el argumento", argument, "no es un número")
 		}
 		switch name {
+		case "company":
+			sampleCompanyID = int32(parsedValue)
 		case "seed":
 			config.seed = int64(parsedValue)
 		case "days":
@@ -582,18 +600,18 @@ func (generator *erpHistoryGenerator) validateContext() error {
 	users := []coreTypes.User{}
 	userQuery := db.Query(&users)
 	userQuery.Select(userQuery.ID, userQuery.Status).
-		CompanyID.Equals(erpCompanyID).ID.Equals(erpUserID).Limit(1)
+		CompanyID.Equals(generator.userToken.CompanyID).ID.Equals(erpUserID).Limit(1)
 	if err := userQuery.Exec(); err != nil {
 		return core.Err("error al consultar el usuario:", err)
 	}
 	if len(users) == 0 {
-		return core.Err("no existe el usuario", erpUserID, "en la company", erpCompanyID)
+		return core.Err("no existe el usuario", erpUserID, "en la company", generator.userToken.CompanyID)
 	}
 
 	warehouses := []businessTypes.Warehouse{}
 	warehouseQuery := db.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.Status).
-		CompanyID.Equals(erpCompanyID).ID.In(generator.config.warehouseIDs...)
+		CompanyID.Equals(generator.userToken.CompanyID).ID.In(generator.config.warehouseIDs...)
 	if err := warehouseQuery.Exec(); err != nil {
 		return core.Err("error al consultar los almacenes:", err)
 	}
@@ -613,7 +631,7 @@ func (generator *erpHistoryGenerator) validateContext() error {
 	cashBanks := []financeTypes.CashBank{}
 	cashBankQuery := db.Query(&cashBanks)
 	cashBankQuery.Select(cashBankQuery.ID, cashBankQuery.Status, cashBankQuery.CurrencyType).
-		CompanyID.Equals(erpCompanyID).Status.Equals(1)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(1)
 	if err := cashBankQuery.Exec(); err != nil {
 		return core.Err("error al consultar las cajas:", err)
 	}
@@ -622,7 +640,7 @@ func (generator *erpHistoryGenerator) validateContext() error {
 		return cashBank.CurrencyType == financeTypes.CurrencyUSD
 	})
 	if len(cashBanks) == 0 {
-		return core.Err("no hay ninguna caja activa en soles en la company", erpCompanyID)
+		return core.Err("no hay ninguna caja activa en soles en la company", generator.userToken.CompanyID)
 	}
 	slices.SortFunc(cashBanks, func(leftCashBank, rightCashBank financeTypes.CashBank) int {
 		return int(leftCashBank.ID - rightCashBank.ID)
@@ -711,7 +729,7 @@ func (generator *erpHistoryGenerator) saveAndLoadParties(seeds []partySeed, part
 		return nil, err
 	}
 	request := generator.makeRequest("POST.client-provider", nil, string(bodyBytes))
-	if response := crm.PostClientProviders(&request); response.StatusCode != 200 {
+	if response := generator.send(request, crm.PostClientProviders); response.StatusCode != 200 {
 		return nil, core.Err(response.Error)
 	}
 
@@ -747,7 +765,7 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 	productQuery := db.Query(&products)
 	productQuery.Select(productQuery.ID, productQuery.Name, productQuery.Price,
 		productQuery.FinalPrice, productQuery.Status).
-		CompanyID.Equals(erpCompanyID).Status.Equals(1)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(1)
 	if err := productQuery.Exec(); err != nil {
 		return core.Err("error al consultar los productos:", err)
 	}
@@ -817,7 +835,7 @@ func (generator *erpHistoryGenerator) loadProductPool() error {
 // reloadWarehouseLedger rebuilds the in-memory view of one warehouse from the same endpoint the
 // frontend uses, so the generator reserves against exactly what the API reports.
 func (generator *erpHistoryGenerator) reloadWarehouseLedger(warehouseID int32) error {
-	request := generator.makeRequest("GET.productos-stock", map[string]string{
+	request := generator.makeRequest("GET.warehouse-product-stock", map[string]string{
 		"warehouse-id": strconv.Itoa(int(warehouseID)),
 		"updated":      "0",
 	}, "")
@@ -827,7 +845,7 @@ func (generator *erpHistoryGenerator) reloadWarehouseLedger(warehouseID int32) e
 		ProductStock       []logisticsTypes.ProductStock
 		ProductStockDetail []logisticsTypes.ProductStockDetail
 	}{}
-	if err := decodeResponse(logistics.GetWarehouseProductStock(&request), &stockResult); err != nil {
+	if err := decodeResponse(generator.send(request, logistics.GetWarehouseProductStock), &stockResult); err != nil {
 		return err
 	}
 
@@ -1039,7 +1057,7 @@ func (generator *erpHistoryGenerator) createPurchaseOrder(at time.Time, payload 
 	core.SetHistoricalUnix(at.Unix())
 	request := generator.makeRequest("POST.purchase-orders", nil, string(bodyBytes))
 	createdOrder := logisticsTypes.PurchaseOrder{}
-	if err := decodeResponse(logistics.PostPurchaseOrder(&request), &createdOrder); err != nil {
+	if err := decodeResponse(generator.send(request, logistics.PostPurchaseOrder), &createdOrder); err != nil {
 		return logisticsTypes.PurchaseOrder{}, err
 	}
 	if createdOrder.ID == 0 {
@@ -1054,7 +1072,7 @@ func (generator *erpHistoryGenerator) confirmPurchaseOrder(at time.Time, orderID
 		"action": strconv.Itoa(logistics.PurchaseOrderActionConfirm),
 		"id":     strconv.Itoa(int(orderID)),
 	}, "")
-	if response := logistics.PutPurchaseOrder(&request); response.StatusCode != 200 {
+	if response := generator.send(request, logistics.PutPurchaseOrder); response.StatusCode != 200 {
 		return core.Err(response.Error)
 	}
 	return nil
@@ -1079,7 +1097,7 @@ func (generator *erpHistoryGenerator) registerPurchaseOrderDocument(at time.Time
 		"action": strconv.Itoa(logistics.PurchaseOrderActionDocument),
 		"id":     strconv.Itoa(int(order.ID)),
 	}, string(bodyBytes))
-	if response := logistics.PutPurchaseOrder(&request); response.StatusCode != 200 {
+	if response := generator.send(request, logistics.PutPurchaseOrder); response.StatusCode != 200 {
 		return core.Err(response.Error)
 	}
 	generator.addPurchaseTax(issueDay, document.TaxAmount)
@@ -1105,7 +1123,7 @@ func (generator *erpHistoryGenerator) payPurchaseOrder(dayStart time.Time, order
 		"action": strconv.Itoa(logistics.PurchaseOrderActionPay),
 		"id":     strconv.Itoa(int(orderID)),
 	}, string(payloadBytes))
-	if response := logistics.PutPurchaseOrder(&request); response.StatusCode != 200 {
+	if response := generator.send(request, logistics.PutPurchaseOrder); response.StatusCode != 200 {
 		return core.Err(response.Error)
 	}
 	return nil
@@ -1128,7 +1146,7 @@ func (generator *erpHistoryGenerator) ensureCashBalance(cashBankID int32, amount
 // validates FinalAmount - Amount against. The GET.cash-banks delta list can answer a stale balance
 // right after a backdated movement, which made the next movement fail its balance check.
 func (generator *erpHistoryGenerator) readCashBankBalance(cashBankID int32) (int32, error) {
-	cashBank, err := financeTypes.GetCaja(erpCompanyID, cashBankID)
+	cashBank, err := financeTypes.GetCaja(generator.userToken.CompanyID, cashBankID)
 	return cashBank.CurrentAmount, err
 }
 
@@ -1142,7 +1160,7 @@ func (generator *erpHistoryGenerator) postManualCashMovement(at time.Time, movem
 	core.SetHistoricalUnix(at.Unix())
 	request := generator.makeRequest("POST.cash-banks-movement", nil, string(payloadBytes))
 	responseBody := map[string]any{}
-	if err := decodeResponse(finance.PostCashBankMovement(&request), &responseBody); err != nil {
+	if err := decodeResponse(generator.send(request, finance.PostCashBankMovement), &responseBody); err != nil {
 		return err
 	}
 	if storedBalance, isStale := responseBody["NeedUpdateSaldo"]; isStale {
@@ -1224,7 +1242,7 @@ func (generator *erpHistoryGenerator) receivePurchaseOrder(
 
 	core.SetHistoricalUnix(at.Unix())
 	request := generator.makeRequest("POST.purchase-order-entry", nil, string(payloadBytes))
-	if response := logistics.PostPurchaseOrderEntry(&request); response.StatusCode != 200 {
+	if response := generator.send(request, logistics.PostPurchaseOrderEntry); response.StatusCode != 200 {
 		return 0, core.Err(response.Error)
 	}
 	return receivedUnits, nil
@@ -1441,7 +1459,7 @@ func (generator *erpHistoryGenerator) postSaleOrder(saleTime time.Time, payload 
 	core.SetHistoricalUnix(saleTime.Unix())
 	request := generator.makeRequest("POST.sale-order", nil, string(bodyBytes))
 	createdSale := salesTypes.SaleOrder{}
-	if err := decodeResponse(sales.PostSaleOrder(&request), &createdSale); err != nil {
+	if err := decodeResponse(generator.send(request, sales.PostSaleOrder), &createdSale); err != nil {
 		return salesTypes.SaleOrder{}, err
 	}
 	return createdSale, nil
@@ -1467,7 +1485,7 @@ func (generator *erpHistoryGenerator) resolveInvoiceSeries() error {
 		return facturaSeriesID, boletaSeriesID
 	}
 
-	storedSeries, err := invoicing.LoadCompanySeries(erpCompanyID)
+	storedSeries, err := invoicing.LoadCompanySeries(generator.userToken.CompanyID)
 	if err != nil {
 		return err
 	}
@@ -1487,7 +1505,7 @@ func (generator *erpHistoryGenerator) resolveInvoiceSeries() error {
 		}
 		request := generator.makeRequest("POST.invoice-series", nil, string(bodyBytes))
 		savedSeries := map[string][]invoicingTypes.InvoiceSeries{}
-		if err := decodeResponse(invoicing.PostInvoiceSeries(&request), &savedSeries); err != nil {
+		if err := decodeResponse(generator.send(request, invoicing.PostInvoiceSeries), &savedSeries); err != nil {
 			return err
 		}
 		facturaSeriesID, boletaSeriesID = findDefaults(savedSeries["InvoiceSeries"])
@@ -1499,7 +1517,7 @@ func (generator *erpHistoryGenerator) resolveInvoiceSeries() error {
 	// The sale handler reads the series from the cached company config, which may lag a fresh
 	// write; wait until both are visible there rather than failing the first sales.
 	for attempt := 0; attempt < 30; attempt++ {
-		companyConfig, err := cloud.LoadCompanyConfig(erpCompanyID)
+		companyConfig, err := cloud.LoadCompanyConfig(generator.userToken.CompanyID)
 		if err != nil {
 			return err
 		}
@@ -1649,6 +1667,15 @@ func (generator *erpHistoryGenerator) makeRequest(route string, query map[string
 		Method: method,
 		User:   &generator.userToken,
 	}
+}
+
+// send runs one request through its production handler, in this process. The load test sets
+// sendOverHTTP instead, so the same flows reach a running server the way a browser's requests do.
+func (generator *erpHistoryGenerator) send(request core.HandlerArgs, handler func(*core.HandlerArgs) core.HandlerResponse) core.HandlerResponse {
+	if generator.sendOverHTTP != nil {
+		return generator.sendOverHTTP(request)
+	}
+	return handler(&request)
 }
 
 // decodeResponse reads a handler body. The generator sends no Accept header, so the body is plain JSON.

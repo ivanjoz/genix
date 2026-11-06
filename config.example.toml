@@ -1,5 +1,10 @@
 # Configuración de Genix. Copie este archivo a config.toml y complete los valores.
 # config.toml está en .gitignore: nunca se versiona.
+#
+# config.local.toml (optional, also gitignored) sits next to config.toml and overrides it for this
+# host only, so config.toml can be pushed to a server as-is. Tables merge key by key; any other
+# value — including a whole array of tables like [[models]] — replaces the config.toml value.
+# Read by the backend, the agent, fareward and scripts/configure. Never sent to Lambda.
 
 app_name       = "genix"
 environment    = ""
@@ -42,11 +47,17 @@ disable_api_concurrency_local = false
 # ("fareward:vN") y el daemon que corresponde a este checkout es el que corre al lado. Ponerlo en
 # true marca el daemon desplegado, que puede tener otro build u otro internal_apikey; el síntoma de
 # no coincidir es que el daemon cierra la conexión sin decir por qué.
+#
+# unix_socket: when set, the daemon ALSO listens on this Unix domain socket (the TCP port above
+# stays up, Lambda needs it), and a backend/agent that is not on Lambda dials the socket instead of
+# TCP. Set it only when the backend runs on the same host as fareward. The systemd unit creates
+# /run/fareward (RuntimeDirectory), so keep the socket inside it. Empty = TCP only.
 [fareward]
 host = "127.0.0.1"
 port = 14013
 public = false
 use_remote_dev_host = false
+unix_socket = ""
 
 # ─── Qdrant (base de datos vectorial) ───────────────────────────────────────
 # Lo instala 'scripts/configure/configure_db.py qdrant'. host vacío = lo escribe el script con la IP
@@ -85,12 +96,26 @@ disable_ssl = false
 # max_clustering_key_restrictions_per_query del nodo. 0 usa el default del ORM (100).
 max_clustering_key = 100
 
+# ─── FoundationDB (solo builds con `-tags fdb`, docs/FOUNDATIONDB_PLAN.md) ─────
+[fdb]
+# Socket unix del daemon fdbgate (genix-orm/fdb/container).
+socket = "/run/genix-fdb/fdbgate.sock"
+
 # ─── Servidor propio (systemd + Nginx) ──────────────────────────────────────
 [server]
-# port debe coincidir con la mitad de puerto de nginx_process. 0 usa 3589.
+# In full mode (nginx + backend on the same VPS) they connect through /run/genix/api.sock and
+# port/nginx_process are ignored. They only apply to a split-host install (configure modes 2 + 3),
+# where port must equal the port half of nginx_process. 0 uses 3589 (local dev).
 port          = 14010
 nginx_domain  = "api.example.com"
 nginx_process = "127.0.0.1:14010"
+# Admission control of the VPS server (Lambda ignores both). max_concurrent_requests is how many
+# requests run at once; the rest wait up to 2 s for a slot and then get 503 + Retry-After. 0 = 16 per
+# CPU, the point where the CPU saturates. memory_limit_mb is the Go soft memory limit (GOMEMLIMIT);
+# 0 = 70% of the memory available at startup — MemAvailable, so a ScyllaDB on the same host that
+# already reserved its --memory is discounted — or of the service's cgroup limit when lower.
+max_concurrent_requests = 0
+memory_limit_mb         = 0
 
 # ─── Credit rate limiter (fareward/) ───────────────────────────────────
 # Una de las dos mitades del proceso fareward; la otra es [sse_bridge].
@@ -104,6 +129,7 @@ shards                = 0      # 0 = logical CPU count
 # por socket el propio socket era el techo; al multiplexar ese freno desaparece, así que
 # hay que declararlo: sin él un cliente autenticado podría lanzar tareas y encolar
 # respuestas sin límite. Al superarlo se responde "no disponible", no se encola.
+# The Go backend reads this same key: its client queues at the cap instead of being refused.
 max_inflight_per_connection = 64
 # Cuánto viven en memoria los accesos de un user (users.accesos_computed) contra los que se autoriza
 # la trama 0x01. Es un respaldo, no el mecanismo: el backend manda 0x06 al reescribir la columna, así
@@ -299,13 +325,27 @@ openrouter_key   = ""
 port             = 3590
 
 # ─── ORM file store ─────────────────────────────────────────────────────────
-# The delta logs, the by-IDs slot files and, under <root>search/, the genix-s3
-# text search index. The project's only bucket. Required. An S3 Express bucket
-# ("<name>--<zone>--x-s3") appends natively; any other bucket appends with a
-# GET + conditional PUT. root prefixes every key.
+# The delta logs, the by-IDs slot files, the snapshots and the genix-s3 text
+# search index.
+#
+# Lambda keeps them in S3: bucket (required on Lambda), every key under root. An
+# S3 Express bucket ("<name>--<zone>--x-s3") appends natively; any other bucket
+# appends with a GET + conditional PUT.
+#
+# A VPS keeps them on its own disk, under vps_dir: orm/, snapshots/, search/.
+# Every process writing a VPS keyspace (backend, agent, fn-* scripts) must run on
+# that VPS. Default: <project>/tmp/file-store; on a VPS whose /tmp is a tmpfs,
+# point it at a real disk.
 [file_store]
 bucket = ""
 root   = "orm/"
+vps_dir = ""
+# VPS snapshot cache: the delta and cache-group snapshot files, which turn a
+# repeated first sync into a read of what changed since. Memory first; past it
+# the least recently used spill to vps_dir/snapshots/; past that they are
+# deleted. Lambda keeps them in S3.
+vps_snapshot_cache_mb = 256   # 0 = no snapshots (every first sync reads ScyllaDB)
+vps_snapshot_disk_mb  = 1024  # 0 = memory only
 
 # ─── SSE Bridge (fareward/) ─────────────────────────────────────────────
 # Relay que sostiene el stream del agente cuando el backend corre en Lambda, que no

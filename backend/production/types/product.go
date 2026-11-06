@@ -224,15 +224,11 @@ func (e ProductTable) GetSchema() db.TableSchema {
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Values: []int64{0, 1, 2}},
 		},
+		// Every index is a ScyllaDB materialized view (a local index too): each one adds a
+		// read-before-write and a view write to every product write, so only read paths get one.
 		Indexes: []db.Index{
-			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.CategoriesWithStock)},
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameUpdated)},
-			{Type: db.TypeView, Keys: db.Cols(e.NameHash), Cols: db.Cols(e.ID, e.Status)},
-			{Type: db.TypeView, Keys: db.Cols(e.StockStatus)},
-			// Still read by the ecommerce delta (product-ecommerce.go), which keeps its timestamp
-			// watermark because it also drives the prerendered .db snapshot.
-			{Type: db.TypeView, Keys: db.Cols(e.Status)},
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
+			// PostProducts' name-uniqueness check: CompanyID + NameHash.In(...).
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.NameHash)},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 		DataFrames: []db.DataFrame{{

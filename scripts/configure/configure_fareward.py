@@ -889,6 +889,11 @@ WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
 # under /etc/systemd/system is world-readable, and config.toml is not.
 Environment=GENIX_CONFIG_FILE={repository_config_path}
 Environment=SSE_BRIDGE_PORT={bridge_port}
+# Home of the optional fareward.unix_socket (e.g. /run/fareward/fareward.sock). systemd creates it
+# owned by the service user, writable under ProtectSystem=strict, and removes it on stop. 0755 so
+# the backend can traverse it; the socket itself is 0660.
+RuntimeDirectory=fareward
+RuntimeDirectoryMode=0755
 ExecStart={BINARY_PATH}
 Restart=always
 RestartSec=3

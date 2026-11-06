@@ -16,28 +16,58 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"runtime"
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
 )
 
-// Each pooled encoder is built with concurrency 1: a pooled encoder is only ever used by one
-// goroutine at a time, so the default GOMAXPROCS worker fan-out would allocate per-worker state
-// for nothing. Pooling rather than sharing one encoder also means concurrent requests on the
-// VPS never block each other, which they would with a single concurrency-1 encoder.
-var zstdEncoderPool = sync.Pool{
-	New: func() any {
-		encoder, err := zstd.NewWriter(nil,
-			zstd.WithEncoderConcurrency(1),
-			zstd.WithEncoderLevel(zstd.SpeedDefault),
-		)
-		if err != nil {
-			// Only reachable via a bad option constant, which is a programming error.
-			panic("no se pudo crear el encoder zstd: " + err.Error())
-		}
-		return encoder
-	},
+// zstdEncoderPool is a fixed set of encoders, not a sync.Pool. A sync.Pool is emptied by the GC,
+// and a first sync produces enough garbage to run the GC every request or two: under load every
+// response built a fresh encoder and its window. A channel keeps them alive. It holds one encoder
+// per P, which is the most that can be compressing at once without being descheduled; a burst past
+// that builds a temporary encoder rather than waiting, and the extra one is dropped on return.
+var zstdEncoderPool = make(chan *zstd.Encoder, runtime.GOMAXPROCS(0))
+
+// zstdWindowSize bounds what each encoder allocates for its history. The default for SpeedDefault
+// is 8 MB, while a response rarely passes 1-2 MB; a larger window than the input buys nothing.
+const zstdWindowSize = 1 << 20
+
+// Each encoder is built with concurrency 1: it is only ever used by one goroutine at a time, so
+// the default GOMAXPROCS worker fan-out would allocate per-worker state for nothing.
+func newZstdEncoder() *zstd.Encoder {
+	encoder, err := zstd.NewWriter(nil,
+		zstd.WithEncoderConcurrency(1),
+		zstd.WithEncoderLevel(zstd.SpeedDefault),
+		zstd.WithWindowSize(zstdWindowSize),
+	)
+	if err != nil {
+		// Only reachable via a bad option constant, which is a programming error.
+		panic("no se pudo crear el encoder zstd: " + err.Error())
+	}
+	return encoder
 }
+
+func takeZstdEncoder() *zstd.Encoder {
+	select {
+	case encoder := <-zstdEncoderPool:
+		return encoder
+	default:
+		return newZstdEncoder()
+	}
+}
+
+func returnZstdEncoder(encoder *zstd.Encoder) {
+	select {
+	case zstdEncoderPool <- encoder:
+	default: // the pool is full: this was a burst encoder
+	}
+}
+
+// MinCompressedBodyBytes is the size below which a VPS response goes out uncompressed. An
+// incremental delta sync answers a few hundred bytes: compressing it cost about a tenth of the
+// request's CPU for a body that barely shrinks.
+const MinCompressedBodyBytes = 1024
 
 var gzipWriterPool = sync.Pool{
 	New: func() any { return gzip.NewWriter(io.Discard) },
@@ -59,7 +89,7 @@ var gzipBufferPool = sync.Pool{
 // CompressZstdPooled compresses body and hands the bytes to consume. The slice is only valid
 // for the duration of the call — it points into a pooled buffer.
 func CompressZstdPooled(body []byte, consume func(compressed []byte)) {
-	encoder := zstdEncoderPool.Get().(*zstd.Encoder)
+	encoder := takeZstdEncoder()
 	buffer := zstdBufferPool.Get().(*[]byte)
 
 	compressed := encoder.EncodeAll(body, (*buffer)[:0])
@@ -68,7 +98,7 @@ func CompressZstdPooled(body []byte, consume func(compressed []byte)) {
 	// Hand back the grown buffer, not the stub we borrowed.
 	*buffer = compressed
 	zstdBufferPool.Put(buffer)
-	zstdEncoderPool.Put(encoder)
+	returnZstdEncoder(encoder)
 }
 
 // pooledBufferReadCloser streams compressed bytes out of a pooled buffer and returns that
@@ -99,11 +129,11 @@ func (p *pooledBufferReadCloser) Close() error {
 // CompressZstdReader compresses body and returns a reader over the result. The caller must
 // Close it to recycle the underlying buffer.
 func CompressZstdReader(body []byte) io.ReadCloser {
-	encoder := zstdEncoderPool.Get().(*zstd.Encoder)
+	encoder := takeZstdEncoder()
 	buffer := zstdBufferPool.Get().(*[]byte)
 
 	compressed := encoder.EncodeAll(body, (*buffer)[:0])
-	zstdEncoderPool.Put(encoder)
+	returnZstdEncoder(encoder)
 	*buffer = compressed
 
 	return &pooledBufferReadCloser{

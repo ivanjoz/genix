@@ -15,12 +15,12 @@ describe('vacation balance', () => {
   it('earns 30 days a year and subtracts the active and settled vacations only', () => {
     const employee = { ID: 1, HireDate: day(2025, 10, 1), TerminationDate: 0 }
     const records = [
-      { EmployeeID: 1, Type: 30, Quantity: 10, ss: 2 },
-      { EmployeeID: 1, Type: 30, Quantity: 4, ss: 3 },  // settled by a closed payslip
-      { EmployeeID: 1, Type: 30, Quantity: 5, ss: 0 },  // cancelled
-      { EmployeeID: 1, Type: 30, Quantity: 2, ss: 1 },  // pending approval
-      { EmployeeID: 1, Type: 31, Quantity: 3, ss: 2 },  // medical leave
-      { EmployeeID: 2, Type: 30, Quantity: 7, ss: 2 },  // someone else
+      { EmployeeID: 1, ConceptID: 29, Quantity: 10, ss: 2 },
+      { EmployeeID: 1, ConceptID: 29, Quantity: 4, ss: 3 },  // settled by a closed payslip
+      { EmployeeID: 1, ConceptID: 29, Quantity: 5, ss: 0 },  // cancelled
+      { EmployeeID: 1, ConceptID: 29, Quantity: 2, ss: 1 },  // pending approval
+      { EmployeeID: 1, ConceptID: 30, Quantity: 3, ss: 2 },  // medical leave
+      { EmployeeID: 2, ConceptID: 29, Quantity: 7, ss: 2 },  // someone else
     ] as IEmployeeRecord[]
     expect(vacationBalance(employee, records, day(2026, 10, 15))).toEqual({ earned: 31.2, taken: 14, balance: 17.2 })
   })

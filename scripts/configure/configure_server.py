@@ -15,7 +15,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from toml_config import get_config_value, set_config_values  # noqa: E402
+from toml_config import (  # noqa: E402
+    LOCAL_CONFIG_FILE_NAME,
+    apply_local_config_override,
+    get_config_value,
+    set_config_values,
+)
 
 SYSTEMD_DIRECTORY = Path("/etc/systemd/system")
 SERVICE_INSTALL_DIRECTORY = Path("/usr/local/bin/genix")
@@ -24,6 +29,10 @@ SERVICE_NAME = "genix.service"
 RESTART_SERVICE_NAME = "genix-restart.service"
 RESTART_PATH_NAME = "genix-restart.path"
 NGINX_CONFIGURATION_DIRECTORY = Path("/etc/nginx/conf.d")
+# In full mode nginx reaches the backend through this socket instead of loopback TCP. systemd
+# creates /run/genix (RuntimeDirectory=genix) and the backend binds the file inside it.
+SERVICE_RUNTIME_DIRECTORY_NAME = "genix"
+SERVICE_SOCKET_PATH = Path("/run") / SERVICE_RUNTIME_DIRECTORY_NAME / "api.sock"
 LETSENCRYPT_DIRECTORY = Path("/etc/letsencrypt/live")
 
 # sudo resets PATH to secure_path, which on most distributions excludes /usr/local/go/bin, so the
@@ -37,10 +46,10 @@ GO_BINARY_SEARCH_PATHS = [
 ]
 ELF_MAGIC_BYTES = b"\x7fELF"
 
-# The Nginx edge host and the backend host are usually two different machines: Nginx terminates
-# TLS for server.nginx_domain and forwards to server.nginx_process, while the backend host only
-# runs the systemd units and listens on server.port. Each install mode configures one side of
-# that pair.
+# Full mode is the normal install: Nginx terminates TLS/HTTP3 for server.nginx_domain and forwards
+# to the backend on the same host through a Unix socket (SERVICE_SOCKET_PATH). The systemd-only and
+# nginx-only modes split the pair across two machines: the backend listens on server.port and
+# Nginx forwards to server.nginx_process over TCP.
 EXECUTION_MODE_FULL = "full"
 EXECUTION_MODE_SYSTEMD = "systemd"
 EXECUTION_MODE_NGINX = "nginx"
@@ -167,9 +176,10 @@ def load_project_credentials(repository_config_path):
 
     try:
         parsed_credentials = tomllib.loads(config_content.decode("utf-8"))
+        parsed_credentials = apply_local_config_override(parsed_credentials, repository_config_path)
     except tomllib.TOMLDecodeError as parse_error:
         # Refuse to guess here: prompting would later overwrite a real but broken file.
-        fail_with_error(f"Could not parse config.toml: {parse_error}")
+        fail_with_error(f"Could not parse config.toml or {LOCAL_CONFIG_FILE_NAME}: {parse_error}")
 
     if not isinstance(parsed_credentials, dict):
         fail_with_error("config.toml must contain a table at the top level.")
@@ -314,12 +324,11 @@ def resolve_credential_value(project_credentials, dotted_key, prompt_text, valid
         print(f"[!] {validation_error}", file=sys.stderr)
 
 
-def extract_nginx_settings(project_credentials, local_server_port=None):
+def extract_nginx_settings(project_credentials, backend_is_local=False):
     """Resolve the Nginx side of the install.
 
-    local_server_port is set when this same host also runs the systemd service (full mode). In
-    that case the upstream is the local backend, so server.nginx_process is derived instead of
-    asked for; an explicit value in config.toml still wins, for the rare split-host full install.
+    backend_is_local is set when this same host also runs the systemd service (full mode). The
+    upstream is then always the backend's Unix socket, and server.nginx_process is not used.
     """
     nginx_domain, domain_was_prompted = resolve_credential_value(
         project_credentials,
@@ -329,37 +338,28 @@ def extract_nginx_settings(project_credentials, local_server_port=None):
     )
 
     process_was_prompted = False
-    nginx_process = None
-
-    if local_server_port is not None:
-        configured_process = get_config_value(project_credentials, "server.nginx_process")
-        if configured_process is not None:
-            nginx_process, validation_error = validate_nginx_process(str(configured_process))
-            if nginx_process is None:
-                print_debug(f"server.nginx_process in config.toml is unusable: {validation_error}")
-
-        if nginx_process is None:
-            nginx_process = f"127.0.0.1:{local_server_port}"
-            print_debug(
-                f"server.nginx_process not needed in full mode: forwarding to the local systemd "
-                f"service at {nginx_process}."
-            )
+    if backend_is_local:
+        upstream_scheme = "http"
+        upstream_server = f"unix:{SERVICE_SOCKET_PATH}"
+        print_debug("Full mode: forwarding to the local backend through its Unix socket.")
     else:
         nginx_process, process_was_prompted = resolve_credential_value(
             project_credentials,
             "server.nginx_process",
-            "Enter server.nginx_process, the backend host:port Nginx forwards to (e.g. 100.64.0.2:14010)",
+            "Enter server.nginx_process, the backend host:port Nginx forwards to (e.g. 10.0.0.7:14010)",
             validate_nginx_process,
         )
-
-    backend_proxy_url = nginx_process if "://" in nginx_process else f"http://{nginx_process}"
+        # The upstream{} block takes a bare address; the scheme moves to proxy_pass.
+        upstream_scheme, _, upstream_server = nginx_process.rpartition("://")
+        upstream_scheme = upstream_scheme or "http"
+        upstream_server = upstream_server.rstrip("/")
 
     print_debug(f"Nginx domain: {nginx_domain}")
-    print_debug(f"Nginx upstream: {backend_proxy_url}")
+    print_debug(f"Nginx upstream: {upstream_scheme}://{upstream_server}")
     return {
         "domain": nginx_domain,
-        "process": nginx_process,
-        "backend_proxy_url": backend_proxy_url,
+        "upstream_scheme": upstream_scheme,
+        "upstream_server": upstream_server,
         "prompted_values": {
             **({"server.nginx_domain": nginx_domain} if domain_was_prompted else {}),
             **({"server.nginx_process": nginx_process} if process_was_prompted else {}),
@@ -377,18 +377,6 @@ def extract_server_port(project_credentials):
 
     print_debug(f"Backend listen port: {server_port}")
     return server_port, {"server.port": server_port} if port_was_prompted else {}
-
-
-def warn_on_port_mismatch(server_port, nginx_settings):
-    if server_port is None or not nginx_settings:
-        return
-
-    upstream_port = nginx_settings["process"].rstrip("/").rpartition(":")[2]
-    if upstream_port.isdigit() and int(upstream_port) != server_port:
-        print_debug(
-            f"WARNING: server.port ({server_port}) does not match the port in server.nginx_process "
-            f"({upstream_port}). Nginx will proxy to a port the backend is not listening on."
-        )
 
 
 def persist_prompted_credentials(repository_config_path, prompted_values):
@@ -1003,15 +991,44 @@ def build_tls_directive_lines(endpoint_hostname, existing_nginx_configuration_co
     return []
 
 
+def build_backend_upstream_block(upstream_name, upstream_server):
+    # Without a keepalive pool nginx opens a new connection to the backend for every request and
+    # closes it after the response. The pool keeps up to 64 idle connections per worker for reuse.
+    # keepalive_timeout stays below the backend's IdleTimeout (120s) so nginx always closes first
+    # and never sends a request down a connection Go has already dropped.
+    #
+    # An empty Connection header (instead of "close") is what lets a pooled connection survive the
+    # request. A WebSocket handshake still sends "upgrade".
+    return f"""# Reused backend connections: see build_backend_upstream_block in configure_server.py.
+upstream {upstream_name} {{
+    server {upstream_server};
+    keepalive 64;
+    keepalive_timeout 100s;
+}}
+
+# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel; plain requests send an
+# empty Connection header so the upstream connection returns to the keepalive pool.
+map $http_upgrade $connection_upgrade {{
+    default upgrade;
+    "" "";
+}}
+"""
+
+
 def build_http3_nginx_configuration(
     endpoint_hostname,
-    backend_proxy_url,
+    upstream_scheme,
+    upstream_server,
     existing_nginx_configuration_contents="",
 ):
     tls_directive_lines = build_tls_directive_lines(
         endpoint_hostname,
         existing_nginx_configuration_contents,
     )
+    # Named after the domain so two backend vhosts on one host never declare the same upstream.
+    upstream_name = "genix_backend_" + re.sub(r"[^a-z0-9]", "_", endpoint_hostname)
+    upstream_block = build_backend_upstream_block(upstream_name, upstream_server)
+    backend_proxy_url = f"{upstream_scheme}://{upstream_name}"
 
     if tls_directive_lines:
         tls_directives = "\n".join(tls_directive_lines)
@@ -1021,12 +1038,7 @@ map $ssl_early_data $is_early_data {{
     default 0;
 }}
 
-# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel.
-map $http_upgrade $connection_upgrade {{
-    default upgrade;
-    "" close;
-}}
-
+{upstream_block}
 server {{
     # Standard TCP and HTTP/3 UDP listeners for TLS-enabled deployments.
     listen 443 quic reuseport;
@@ -1093,12 +1105,7 @@ server {{
     print_debug(
         f"No TLS certificates found for {endpoint_hostname}. Writing HTTP-only reverse proxy config."
     )
-    return f"""# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel.
-map $http_upgrade $connection_upgrade {{
-    default upgrade;
-    "" close;
-}}
-
+    return f"""{upstream_block}
 server {{
     # Fallback HTTP config used until TLS certificates are provisioned for this hostname.
     listen 80;
@@ -1155,7 +1162,8 @@ def configure_nginx_reverse_proxy(nginx_settings):
 
     nginx_configuration_contents = build_http3_nginx_configuration(
         endpoint_hostname,
-        nginx_settings["backend_proxy_url"],
+        nginx_settings["upstream_scheme"],
+        nginx_settings["upstream_server"],
         existing_nginx_configuration_contents or "",
     )
 
@@ -1174,7 +1182,19 @@ def configure_nginx_reverse_proxy(nginx_settings):
 
 
 def build_main_service_contents(runtime_username, repository_config_path, server_port):
+    """server_port None means full mode: the backend binds SERVICE_SOCKET_PATH instead of a port."""
     repository_root_path = repository_config_path.parent
+    if server_port is None:
+        # systemd creates /run/genix owned by the service user (also writable under
+        # ProtectSystem=strict) and removes it on stop, so no stale socket survives a restart.
+        listen_lines = f"""# Nginx on this host proxies to this socket (see SERVICE_SOCKET_PATH in configure_server.py).
+RuntimeDirectory={SERVICE_RUNTIME_DIRECTORY_NAME}
+RuntimeDirectoryMode=0755
+Environment=SERVER_SOCKET={SERVICE_SOCKET_PATH}"""
+    else:
+        listen_lines = f"""# SERVER_PORT comes from server.port in config.toml and must match the port half of
+# server.nginx_process, otherwise the Nginx host proxies to a port nothing is listening on.
+Environment=SERVER_PORT={server_port}"""
     return f"""[Unit]
 Description=Genix Backend Service
 After=network.target
@@ -1186,9 +1206,7 @@ Group={runtime_username}
 WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
 Environment=GENIX_CONFIG_FILE={repository_config_path}
 Environment=GENIX_REPOSITORY_ROOT={repository_root_path}
-# SERVER_PORT comes from server.port in config.toml and must match the port half of
-# server.nginx_process, otherwise the Nginx host proxies to a port nothing is listening on.
-Environment=SERVER_PORT={server_port}
+{listen_lines}
 ExecStart={SERVICE_BINARY_PATH}
 Restart=always
 RestartSec=5
@@ -1335,7 +1353,10 @@ def print_summary(
         print_debug(f"Runtime user: {runtime_username}")
         binary_size_in_bytes = SERVICE_BINARY_PATH.stat().st_size if SERVICE_BINARY_PATH.is_file() else 0
         print_debug(f"Binary path: {SERVICE_BINARY_PATH} ({binary_size_in_bytes / 1_048_576:.1f} MiB)")
-        print_debug(f"Backend listen port (server.port): {server_port}")
+        if server_port is None:
+            print_debug(f"Backend listen socket: {SERVICE_SOCKET_PATH}")
+        else:
+            print_debug(f"Backend listen port (server.port): {server_port}")
         print_debug(f"Main service unit: {SYSTEMD_DIRECTORY / SERVICE_NAME}")
         print_debug(f"Path watcher unit: {SYSTEMD_DIRECTORY / RESTART_PATH_NAME}")
         print_debug(f"Restart helper unit: {SYSTEMD_DIRECTORY / RESTART_SERVICE_NAME}")
@@ -1344,7 +1365,9 @@ def print_summary(
 
     if nginx_settings:
         print_debug(f"Nginx domain (server.nginx_domain): {nginx_settings['domain']}")
-        print_debug(f"Nginx upstream (server.nginx_process): {nginx_settings['backend_proxy_url']}")
+        print_debug(
+            f"Nginx upstream: {nginx_settings['upstream_scheme']}://{nginx_settings['upstream_server']}"
+        )
         print_debug(
             f"Nginx config file: {NGINX_CONFIGURATION_DIRECTORY / (nginx_settings['domain'] + '.conf')}"
         )
@@ -1371,15 +1394,17 @@ def main():
     server_port = None
     nginx_settings = None
 
-    if configure_systemd:
+    # Only a split-host backend listens on a TCP port; in full mode it binds the Unix socket.
+    if execution_mode == EXECUTION_MODE_SYSTEMD:
         server_port, prompted_server_port = extract_server_port(project_credentials)
         prompted_values.update(prompted_server_port)
 
     if configure_nginx:
-        nginx_settings = extract_nginx_settings(project_credentials, local_server_port=server_port)
+        nginx_settings = extract_nginx_settings(
+            project_credentials, backend_is_local=execution_mode == EXECUTION_MODE_FULL
+        )
         prompted_values.update(nginx_settings["prompted_values"])
 
-    warn_on_port_mismatch(server_port, nginx_settings)
     persist_prompted_credentials(repository_config_path, prompted_values)
 
     runtime_username = None

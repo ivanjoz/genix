@@ -26,11 +26,17 @@ class ConfigureServerNginxTemplateTest(unittest.TestCase):
 
         rendered_config = configure_server.build_http3_nginx_configuration(
             "genix-dev-api-2.un.pe",
-            "http://100.64.0.2:14010",
+            "http",
+            "unix:/run/genix/api.sock",
             existing_config,
         )
 
-        self.assertIn("proxy_pass http://100.64.0.2:14010;", rendered_config)
+        self.assertIn("upstream genix_backend_genix_dev_api_2_un_pe {", rendered_config)
+        self.assertIn("server unix:/run/genix/api.sock;", rendered_config)
+        self.assertIn("keepalive 64;", rendered_config)
+        self.assertIn("proxy_pass http://genix_backend_genix_dev_api_2_un_pe;", rendered_config)
+        # "close" would end every pooled upstream connection after one request.
+        self.assertNotIn('"" close;', rendered_config)
         self.assertIn("ssl_certificate /etc/letsencrypt/live/genix-dev-api-2.un.pe/fullchain.pem;", rendered_config)
         self.assertIn("ssl_certificate_key /etc/letsencrypt/live/genix-dev-api-2.un.pe/privkey.pem;", rendered_config)
         self.assertIn("listen 443 quic reuseport;", rendered_config)
@@ -50,7 +56,8 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
         )
 
         self.assertEqual(nginx_settings["domain"], "genix-api-4.un.pe")
-        self.assertEqual(nginx_settings["backend_proxy_url"], "http://100.64.0.2:14010")
+        self.assertEqual(nginx_settings["upstream_scheme"], "http")
+        self.assertEqual(nginx_settings["upstream_server"], "100.64.0.2:14010")
 
     def test_nginx_process_keeps_explicit_scheme(self):
         configure_server = load_configure_server_module()
@@ -59,7 +66,20 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
             {"server": {"nginx_domain": "genix-api-4.un.pe", "nginx_process": "https://10.0.0.7:8443"}}
         )
 
-        self.assertEqual(nginx_settings["backend_proxy_url"], "https://10.0.0.7:8443")
+        self.assertEqual(nginx_settings["upstream_scheme"], "https")
+        self.assertEqual(nginx_settings["upstream_server"], "10.0.0.7:8443")
+
+    def test_full_mode_forwards_to_the_unix_socket_and_ignores_nginx_process(self):
+        configure_server = load_configure_server_module()
+
+        with redirect_stdout(io.StringIO()):
+            nginx_settings = configure_server.extract_nginx_settings(
+                {"server": {"nginx_domain": "genix-api-4.un.pe", "nginx_process": "127.0.0.1:14010"}},
+                backend_is_local=True,
+            )
+
+        self.assertEqual(nginx_settings["upstream_server"], "unix:/run/genix/api.sock")
+        self.assertEqual(nginx_settings["prompted_values"], {})
 
     def test_server_port_is_read_from_credentials(self):
         configure_server = load_configure_server_module()
@@ -107,7 +127,7 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
                 {"server": {"nginx_domain": "genix-api-4.un.pe", "nginx_process": "100.64.0.2"}}
             )
 
-        self.assertEqual(nginx_settings["backend_proxy_url"], "http://100.64.0.2:14010")
+        self.assertEqual(nginx_settings["upstream_server"], "100.64.0.2:14010")
         self.assertEqual(nginx_settings["prompted_values"], {"server.nginx_process": "100.64.0.2:14010"})
 
     def test_missing_value_without_a_terminal_fails(self):
@@ -484,20 +504,6 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
                     self.assertRaises(SystemExit):
                 configure_server.compile_backend_binary(backend_directory, repository_root)
 
-    def test_port_mismatch_between_server_port_and_nginx_process_is_reported(self):
-        configure_server = load_configure_server_module()
-        nginx_settings = {"process": "100.64.0.2:14010"}
-
-        matching_output = io.StringIO()
-        with redirect_stdout(matching_output):
-            configure_server.warn_on_port_mismatch(14010, nginx_settings)
-        self.assertNotIn("WARNING", matching_output.getvalue())
-
-        mismatched_output = io.StringIO()
-        with redirect_stdout(mismatched_output):
-            configure_server.warn_on_port_mismatch(3589, nginx_settings)
-        self.assertIn("WARNING", mismatched_output.getvalue())
-
     def test_execution_modes_match_by_index_and_alias(self):
         configure_server = load_configure_server_module()
 
@@ -517,7 +523,21 @@ class ConfigureServerCredentialsTest(unittest.TestCase):
         )
 
         self.assertIn("Environment=SERVER_PORT=14010", unit_contents)
+        self.assertNotIn("SERVER_SOCKET", unit_contents)
         self.assertIn("Environment=GENIX_CONFIG_FILE=/home/ubuntu/genix/config.toml", unit_contents)
+
+    def test_full_mode_systemd_unit_binds_the_unix_socket(self):
+        configure_server = load_configure_server_module()
+
+        unit_contents = configure_server.build_main_service_contents(
+            "ubuntu",
+            Path("/home/ubuntu/genix/config.toml"),
+            None,
+        )
+
+        self.assertIn("RuntimeDirectory=genix", unit_contents)
+        self.assertIn("Environment=SERVER_SOCKET=/run/genix/api.sock", unit_contents)
+        self.assertNotIn("SERVER_PORT", unit_contents)
 
 
 if __name__ == "__main__":

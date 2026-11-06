@@ -41,7 +41,7 @@ func TestGratificacionAgainstProvision(t *testing.T) {
 	for period := int16(2601); period <= 2606; period++ {
 		lines := []PayslipLine{provisionLine(4114, 36000)}
 		if period <= 2603 {
-			lines = append(lines, PayslipLine{LegalConceptID: LegalOvertime25, Kind: ConceptKindEarning, ComputableForBenefits: true, Amount: 10000})
+			lines = append(lines, PayslipLine{ConceptID: LegalOvertime25, Kind: ConceptKindEarning, ComputableForBenefits: true, Amount: 10000})
 		}
 		history = append(history, monthlyPayslip(period, lines...))
 	}
@@ -87,7 +87,7 @@ func TestCtsWithGratificacionSixth(t *testing.T) {
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 1, 1)},
 		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))},
 		History: []Payslip{{Period: 2512, WorkedDays: 30, Status: PayrollStatusPaid,
-			Lines: []PayslipLine{{LegalConceptID: LegalGratificacion, Kind: ConceptKindEarning, Amount: 200000}}}},
+			Lines: []PayslipLine{{ConceptID: LegalGratificacion, Kind: ConceptKindEarning, Amount: 200000}}}},
 		Legal: testLegalValues(),
 	})
 	if !ok || lineAmount(payslip, LegalCts) != 116666 {
@@ -109,13 +109,13 @@ func TestSettlementOfADismissal(t *testing.T) {
 		Employee: Employee{ID: 1, HireDate: unixDay(2025, 10, 1), TerminationDate: unixDay(2026, 10, 15),
 			TerminationReason: TerminationDismissal},
 		Contracts: []Contract{onpContract(200000, unixDay(2025, 10, 1))},
-		Records:   []EmployeeRecord{{Type: RecordVacation, Quantity: 10}},
+		Records:   []EmployeeRecord{{ConceptID: LegalVacation, Quantity: 10}},
 		Legal:     testLegalValues(),
 	})
 	if !ok {
 		t.Fatalf("diagnostics %v", payslip.Diagnostics)
 	}
-	expected := map[int16]int32{
+	expected := map[int32]int32{
 		LegalGratificacion: 100000, // Jul–Sep: 2,000 × 3/6
 		LegalGratiBonus:    9000,
 		LegalCts:           91666,  // May–Sep 150 days + 15 of October: 2,000 × 165/360
@@ -139,7 +139,7 @@ func TestSettlementRecoversTheLoanBalance(t *testing.T) {
 		Run:       PayrollRun{Period: 2610},
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 10, 1), TerminationDate: unixDay(2026, 10, 31), TerminationReason: TerminationResignation},
 		Contracts: []Contract{onpContract(200000, unixDay(2025, 10, 1))},
-		Records:   LoanInstallments(EmployeeRecord{ID: 4, Type: RecordLoan, Amount: 90000, Quantity: 3}, 2609),
+		Records:   LoanInstallments(EmployeeRecord{ID: 4, ConceptID: LegalLoan, Amount: 90000, Quantity: 3}, 2609),
 		Legal:     testLegalValues(),
 	})
 	if lineAmount(payslip, LegalLoanPayment) != 30000 || lineAmount(payslip, LegalIndemnity) != 0 {
@@ -154,7 +154,7 @@ func TestMonthlyPayslipWithVacation(t *testing.T) {
 		Period:    2603,
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 1, 1), Status: StatusActive},
 		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))},
-		Records:   []EmployeeRecord{{Type: RecordVacation, FromDate: unixDay(2026, 3, 10), ToDate: unixDay(2026, 3, 19), Quantity: 10}},
+		Records:   []EmployeeRecord{{ConceptID: LegalVacation, FromDate: unixDay(2026, 3, 10), ToDate: unixDay(2026, 3, 19), Quantity: 10}},
 		History:   []Payslip{monthlyPayslip(2602, provisionLine(4115, 50000))},
 		Legal:     testLegalValues(),
 	})
@@ -163,7 +163,7 @@ func TestMonthlyPayslipWithVacation(t *testing.T) {
 			lineAmount(payslip, LegalVacationPay), payslip.WorkedDays)
 	}
 	for _, line := range payslip.Lines {
-		if line.LegalConceptID == LegalVacationPay && (line.ProvisionAccountCode != 4115 || line.ProvisionedAmount != 50000) {
+		if line.ConceptID == LegalVacationPay && (line.ProvisionAccountCode != 4115 || line.ProvisionedAmount != 50000) {
 			t.Errorf("vacation line %+v", line)
 		}
 	}

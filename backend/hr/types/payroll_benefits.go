@@ -125,21 +125,17 @@ func regularVariableEarnings(history []Payslip, periods []int16) int64 {
 	for _, period := range periods {
 		inReference[period] = true
 	}
-	type conceptKey struct {
-		legalConceptID int16
-		conceptID      int32
-	}
-	monthsReceived, totals := map[conceptKey]map[int16]bool{}, map[conceptKey]int64{}
+	monthsReceived, totals := map[int32]map[int16]bool{}, map[int32]int64{}
 	for _, payslip := range history {
 		if !inReference[payslip.Period] {
 			continue
 		}
 		for _, line := range payslip.Lines {
-			isFixed := line.LegalConceptID == LegalBasicSalary || line.LegalConceptID == LegalFamilyAllowance
+			isFixed := line.ConceptID == LegalBasicSalary || line.ConceptID == LegalFamilyAllowance
 			if line.Kind != ConceptKindEarning || !line.ComputableForBenefits || isFixed {
 				continue
 			}
-			key := conceptKey{line.LegalConceptID, line.ConceptID}
+			key := line.ConceptID
 			if monthsReceived[key] == nil {
 				monthsReceived[key] = map[int16]bool{}
 			}
@@ -168,7 +164,7 @@ func gratificacionReceived(history []Payslip, periods []int16) int64 {
 			continue
 		}
 		for _, line := range payslip.Lines {
-			if line.LegalConceptID == LegalGratificacion {
+			if line.ConceptID == LegalGratificacion {
 				total += int64(line.Amount)
 			}
 		}
@@ -322,7 +318,7 @@ func CalculateSettlement(input BenefitPayslipInput) (Payslip, bool) {
 	// The installments due after the termination month (whose own one the monthly payslip takes)
 	// are recovered here.
 	for _, installment := range input.Records {
-		if installment.Type == RecordLoanInstallment && installment.Period > terminationPeriod {
+		if installment.ConceptID == LegalLoanInstallment && installment.Period > terminationPeriod {
 			builder.addRecordDeduction(LegalLoanPayment, installment)
 		}
 	}
@@ -348,7 +344,7 @@ func CalculateSettlement(input BenefitPayslipInput) (Payslip, bool) {
 func VacationDaysTaken(records []EmployeeRecord) int {
 	days := 0
 	for _, leave := range records {
-		if leave.Type == RecordVacation {
+		if leave.ConceptID == LegalVacation {
 			days += int(leave.Quantity)
 		}
 	}
@@ -384,7 +380,7 @@ func CalculateExtraordinaryPayment(input BenefitPayslipInput) (Payslip, bool) {
 	if !ok {
 		return builder.payslip, false
 	}
-	for _, periodInput := range periodRecords(input.Records, input.Run.Period, isRecordType(RecordExtraordinaryPayment)) {
+	for _, periodInput := range separatePayslipRecords(input.Records, input.Run.Period, input.Concepts) {
 		concept, found := input.Concepts[periodInput.ConceptID]
 		if !found || concept.Status != StatusActive || concept.Kind != ConceptKindEarning {
 			builder.diagnose(DiagnosticUnknownConcept, true, "El concepto %d no existe o no es un ingreso.", periodInput.ConceptID)

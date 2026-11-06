@@ -1,7 +1,10 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/ivanjoz/colbin"
@@ -61,4 +64,33 @@ func TestMakeResponseColbinNilSlice(t *testing.T) {
 	}
 	text, err := colbin.ToJSON(nil, *response.Body)
 	t.Logf("nil slice renders %q err=%v", text, err)
+}
+
+// On the VPS a colbin body goes back to colbinBodyBuffers once written, and the next response
+// encoded into that buffer sends exactly what a fresh encode would.
+func TestColbinBodyBufferIsReusedAfterSend(t *testing.T) {
+	sendColbin := func(rows []colbinProbeRow) []byte {
+		recorder := httptest.NewRecorder()
+		var responseWriter http.ResponseWriter = recorder
+		args := HandlerArgs{Accept: ColbinMediaType, ResponseWriter: &responseWriter}
+		SendLocalResponse(args, MakeResponse(&args, &rows))
+		return recorder.Body.Bytes()
+	}
+	for len(colbinBodyBuffers) > 0 {
+		<-colbinBodyBuffers
+	}
+
+	sendColbin([]colbinProbeRow{{ID: 1, Name: "a longer first body that leaves room"}})
+	if len(colbinBodyBuffers) != 1 {
+		t.Fatalf("the sent body was not returned: %d buffers pooled", len(colbinBodyBuffers))
+	}
+	secondRows := []colbinProbeRow{{ID: 2, Updated: 5, Name: "b"}}
+	sent := sendColbin(secondRows)
+	expected, err := colbin.MarshalSelfDescribing(secondRows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(sent, expected) {
+		t.Fatalf("a reused buffer sent %x, want %x", sent, expected)
+	}
 }

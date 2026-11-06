@@ -15,6 +15,8 @@ import (
 // contesta y el TTL del daemon es el respaldo, de modo que un guardado correcto nunca se revierte
 // porque una pista de caché no llegó.
 func invalidateCachedUserAccess(req *core.HandlerArgs, companyID, userID int32) {
+	// This process's own grant cache first: it is what the request gate reads on a VPS.
+	core.DropCachedAccessGrants(companyID, userID)
 	requestContext := context.Background()
 	if req != nil && req.ReqContext != nil {
 		requestContext = req.ReqContext.Context()

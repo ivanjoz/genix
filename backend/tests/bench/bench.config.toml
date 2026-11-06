@@ -1,0 +1,96 @@
+# Benchmark-only config: a local ScyllaDB container and a second fareward instance, nothing shared
+# with the dev config.toml. Selected with GENIX_CONFIG_FILE by both the Go benchmarks and fareward.
+# Every secret here is a throwaway value that only these two local processes ever see.
+# See backend/tests/bench/README.md for how to start each piece.
+
+app_name        = "genix"
+environment     = "bench"
+admin_email     = "bench@example.com"
+admin_password  = "bench_admin_password"
+secret_phrase   = "bench_secret_phrase"
+internal_apikey = "bench_internal_apikey"
+serve_tailscale = false
+disable_api_concurrency_local = false
+
+# Its own port pair, so it never collides with the dev daemon on 14012/14013.
+[fareward]
+host   = "127.0.0.1"
+port   = 24013
+public = false
+use_remote_dev_host = false
+
+[providers]
+backend = "none"
+cdn     = "aws"
+model   = "openrouter"
+
+# Host networking, because the Rust driver in fareward dials the address the node advertises.
+# 29042 and not 19042: 19042 is Scylla's own default shard-aware port. See README.md.
+[db]
+host        = "127.0.0.1"
+port        = 29042
+name        = "genix_bench"
+user        = "cassandra"
+password    = "cassandra"
+disable_ssl = true
+max_clustering_key = 100
+
+[server]
+port = 24010
+
+# The quotas are raised far past anything a benchmark run can spend: a 429 would measure the
+# limiter's policy, not its cost. max_inflight_per_connection stays at the production value on
+# purpose — the backend multiplexes every request over one connection, so it is a real ceiling.
+[rate_limit]
+flush_seconds         = 15
+frame_timeout_seconds = 30
+max_connections       = 1024
+shards                = 0
+max_inflight_per_connection = 64
+access_cache_seconds  = 600
+company_cpu_10s       = 2000000000
+company_inference_10s = 2000000000
+company_cpu_1h        = 2000000000
+company_inference_1h  = 2000000000
+user_daily_share_pct  = 100
+user_cpu_10s          = 2000000000
+user_inference_10s    = 2000000000
+user_cpu_1h           = 2000000000
+user_inference_1h     = 2000000000
+company_extra_credits_24h = 0
+
+[lock]
+max_keys          = 100000
+max_total_waiters = 4096
+max_lease_ms      = 60000
+
+[request_log]
+enabled          = true
+log_all_requests = false
+
+# Off: the metrics collector samples the host, which the benchmark is already loading.
+[server_metrics]
+enabled = false
+
+[aws]
+region  = "us-east-1"
+profile = "default"
+
+# The Scylla driver touches the file store only for snapshots, which a VPS keeps in its local
+# snapshot cache: Setup() installs it over an in-memory store, so nothing reaches S3. The bucket name
+# is deliberately unusable so an unexpected S3 call fails loudly instead of reaching a real bucket.
+# Memory only, so each run starts cold; GENIX_BENCH_NO_SNAPSHOTS=1 turns the cache off.
+[file_store]
+bucket = "INVALID_BUCKET_genix_bench"
+root   = "bench/"
+vps_snapshot_cache_mb = 256
+vps_snapshot_disk_mb  = 0
+
+[sse_bridge]
+url  = ""
+port = 24012
+
+[logs]
+full      = false
+debug     = false
+only_save = false

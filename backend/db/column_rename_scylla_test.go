@@ -1,9 +1,11 @@
-package exec
+//go:build !js && !fdb
+
+package db
 
 import (
 	"testing"
 
-	"github.com/ivanjoz/genix-orm/db"
+	orm "github.com/ivanjoz/genix-orm/db"
 )
 
 // goFieldByNewColumn names the Go field each migrated column belongs to, so the plan cannot drift
@@ -21,7 +23,7 @@ func TestColumnRenamesMatchSnakeCase(t *testing.T) {
 			if !known {
 				t.Fatalf("%s.%s has no Go field in the test map", tablePlan.Table, rename.NewName)
 			}
-			if derived := db.ToSnakeCase(goField); derived != rename.NewName {
+			if derived := orm.ToSnakeCase(goField); derived != rename.NewName {
 				t.Errorf("%s: %s derives %q, plan says %q", tablePlan.Table, goField, derived, rename.NewName)
 			}
 		}

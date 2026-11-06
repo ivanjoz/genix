@@ -145,6 +145,9 @@ func GenerateDemoData(args *core.ExecArgs) core.FuncResponse {
 		{name: "payroll", run: payroll.runPayrollStep},
 		{name: "month-end", run: generator.runMonthEndStep},
 	}
+	if config.isErpOnly {
+		generator.daySteps = slices.DeleteFunc(generator.daySteps, func(step historyDayStep) bool { return step.name == "payroll" })
+	}
 	historicalDates, err := generator.runDayLoop()
 	if err != nil {
 		return args.MakeErr(err)
@@ -174,6 +177,9 @@ func (generator *erpHistoryGenerator) runDemoSetup() error {
 
 	// Projects are not part of the dated history; they run on their own simulated timeline.
 	core.SetHistoricalUnix(0)
+	if generator.config.isErpOnly {
+		return nil
+	}
 	if response := GenerateProjectsFlow(&core.ExecArgs{}); response.Error != "" {
 		return core.Err("fn-generate-projects-flow falló:", response.Error)
 	}
@@ -187,7 +193,7 @@ func (generator *erpHistoryGenerator) ensureDemoWarehouses() error {
 	warehouses := []businessTypes.Warehouse{}
 	warehouseQuery := db.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.SiteID, warehouseQuery.Status).
-		CompanyID.Equals(erpCompanyID)
+		CompanyID.Equals(generator.userToken.CompanyID)
 	if err := warehouseQuery.Exec(); err != nil {
 		return err
 	}
@@ -215,7 +221,7 @@ func (generator *erpHistoryGenerator) ensureDemoWarehouses() error {
 		}
 		request := generator.makeRequest("POST.warehouses", nil, string(bodyBytes))
 		createdWarehouse := businessTypes.Warehouse{}
-		if err := decodeResponse(business.PostWarehouse(&request), &createdWarehouse); err != nil {
+		if err := decodeResponse(generator.send(request, business.PostWarehouse), &createdWarehouse); err != nil {
 			return err
 		}
 		if createdWarehouse.ID != warehouseID {
@@ -233,7 +239,7 @@ func (generator *erpHistoryGenerator) ensureDemoCashAccounts() error {
 	cashBankQuery := db.Query(&cashBanks)
 	cashBankQuery.Select(cashBankQuery.ID, cashBankQuery.Name, cashBankQuery.Type,
 		cashBankQuery.CurrencyType, cashBankQuery.Status).
-		CompanyID.Equals(erpCompanyID).Status.Equals(1)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(1)
 	if err := cashBankQuery.Exec(); err != nil {
 		return err
 	}
@@ -247,7 +253,7 @@ func (generator *erpHistoryGenerator) ensureDemoCashAccounts() error {
 	warehouses := []businessTypes.Warehouse{}
 	warehouseQuery := db.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.SiteID).
-		CompanyID.Equals(erpCompanyID).ID.In(generator.config.warehouseIDs...)
+		CompanyID.Equals(generator.userToken.CompanyID).ID.In(generator.config.warehouseIDs...)
 	if err := warehouseQuery.Exec(); err != nil {
 		return err
 	}
@@ -268,7 +274,7 @@ func (generator *erpHistoryGenerator) ensureDemoCashAccounts() error {
 		}
 		request := generator.makeRequest("POST.cash-banks", nil, string(bodyBytes))
 		createdCashBank := financeTypes.CashBank{}
-		if err := decodeResponse(finance.PostCashBanks(&request), &createdCashBank); err != nil {
+		if err := decodeResponse(generator.send(request, finance.PostCashBanks), &createdCashBank); err != nil {
 			return 0, core.Err("no se pudo crear la caja", name, ":", err)
 		}
 		return createdCashBank.ID, nil
@@ -301,7 +307,7 @@ func (generator *erpHistoryGenerator) ensureDemoCashAccounts() error {
 func (generator *erpHistoryGenerator) ensureSalesPlanning() error {
 	existingPlanning := []salesTypes.SalesPlanning{}
 	planningQuery := db.Query(&existingPlanning)
-	planningQuery.Select(planningQuery.ID).CompanyID.Equals(erpCompanyID).Limit(1)
+	planningQuery.Select(planningQuery.ID).CompanyID.Equals(generator.userToken.CompanyID).Limit(1)
 	if err := planningQuery.Exec(); err != nil {
 		return err
 	}
@@ -331,7 +337,7 @@ func (generator *erpHistoryGenerator) ensureSalesPlanning() error {
 	}
 	request := generator.makeRequest("POST.seasonality-curve", nil, string(bodyBytes))
 	savedCurves := []salesTypes.SeasonalityCurve{}
-	if err := decodeResponse(sales.PostSeasonalityCurve(&request), &savedCurves); err != nil {
+	if err := decodeResponse(generator.send(request, sales.PostSeasonalityCurve), &savedCurves); err != nil {
 		return err
 	}
 
@@ -373,7 +379,7 @@ func (generator *erpHistoryGenerator) saveDemoShippingCosts() error {
 		return err
 	}
 	request := generator.makeRequest("POST.shipping-costs", nil, string(bodyBytes))
-	if response := sales.PostShippingCosts(&request); response.StatusCode != 200 {
+	if response := generator.send(request, sales.PostShippingCosts); response.StatusCode != 200 {
 		return core.Err(response.Error)
 	}
 	return nil
@@ -399,7 +405,7 @@ func (generator *erpHistoryGenerator) runAnnulmentsStep(dayStart time.Time) erro
 		annulToken := generator.userToken
 		annulToken.SubAccesos = map[int32]uint16{salesTypes.AccesoIDGestionVentas: 1 << (core.SubAccesoTodosID - 1)}
 		request.User = &annulToken
-		if response := sales.PostSaleOrderAnnul(&request); response.StatusCode != 200 {
+		if response := generator.send(request, sales.PostSaleOrderAnnul); response.StatusCode != 200 {
 			return core.Err("no se pudo anular la venta", annulment.SaleID, ":", response.Error)
 		}
 
@@ -485,7 +491,7 @@ func (generator *erpHistoryGenerator) runMonthEndStep(dayStart time.Time) error 
 		core.SetHistoricalUnix(countTime.Unix())
 		request := generator.makeRequest("POST.cash-banks-reconciliation", nil, string(bodyBytes))
 		responseBody := map[string]any{}
-		if err := decodeResponse(finance.PostCashReconciliation(&request), &responseBody); err != nil {
+		if err := decodeResponse(generator.send(request, finance.PostCashReconciliation), &responseBody); err != nil {
 			return core.Err("no se pudo cuadrar la caja", tillID, ":", err)
 		}
 		if storedBalance, isStale := responseBody["NeedUpdateSaldo"]; isStale {
@@ -497,7 +503,7 @@ func (generator *erpHistoryGenerator) runMonthEndStep(dayStart time.Time) error 
 
 	core.SetHistoricalUnix(countTime.Unix())
 	request := generator.makeRequest("POST.asset-depreciation-run", nil, "")
-	if response := accounting.PostAssetDepreciationRun(&request); response.StatusCode != 200 {
+	if response := generator.send(request, accounting.PostAssetDepreciationRun); response.StatusCode != 200 {
 		return core.Err("no se pudo correr la depreciación:", response.Error)
 	}
 	return nil

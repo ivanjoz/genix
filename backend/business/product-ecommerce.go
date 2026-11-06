@@ -64,7 +64,8 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		query := db.Query(&productos)
 		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
 			CompanyID.Equals(companyID).
-			Status.GreaterEqual(1)
+			// One company partition, filtered on Status: the table keeps no Status view.
+			Status.GreaterEqual(1).AllowFilter()
 		if err := query.Exec(); err != nil {
 			return fmt.Errorf("error al obtener productos ecommerce: %v", err)
 		}
@@ -129,7 +130,7 @@ func buildProductsDbFile(companyID int32) (productosWm, marcasWm, categoriasWm i
 		query := db.Query(&productos)
 		query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain, query.Updated, query.Status).
 			CompanyID.Equals(companyID).
-			Status.GreaterThan(0)
+			Status.GreaterThan(0).AllowFilter()
 		if execErr := query.Exec(); execErr != nil {
 			return fmt.Errorf("error al obtener productos para archivo: %w", execErr)
 		}

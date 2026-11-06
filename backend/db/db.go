@@ -146,6 +146,11 @@ type CachedPartition[RecordT any] = cache.CachedPartition[RecordT]
 var (
 	// SetFileStore installs the file store holding the by-IDs slot files.
 	SetFileStore = cache.SetFileStore
+	// SetRecordSnapshotsEnabled turns the delta and cache-group snapshot files on or off.
+	SetRecordSnapshotsEnabled = cache.SetRecordSnapshotsEnabled
+	// IsRecordSnapshotKey says a file store key is a snapshot (a droppable cache of a read), not a
+	// delta log or by-IDs file.
+	IsRecordSnapshotKey = cache.IsRecordSnapshotKey
 	// FileStore is the installed store. The agent keeps its turn checkpoints in it, under its own
 	// prefix, so it needs no S3 client of its own.
 	FileStore = cache.FileStore

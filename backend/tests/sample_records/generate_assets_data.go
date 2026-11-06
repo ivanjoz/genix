@@ -182,7 +182,7 @@ func (generator *supplyDataGenerator) seedSupplyMaterials() error {
 	}
 
 	request := generator.makeRequest("POST.supply-material", nil, string(bodyBytes))
-	if response := production.PostSupplyMaterial(&request); response.StatusCode != 200 {
+	if response := generator.send(request, production.PostSupplyMaterial); response.StatusCode != 200 {
 		return core.Err(response.Error)
 	}
 
@@ -193,7 +193,7 @@ func (generator *supplyDataGenerator) seedSupplyMaterials() error {
 func (generator *supplyDataGenerator) countSupplyMaterials() (int, error) {
 	request := generator.makeRequest("GET.supply-material", map[string]string{}, "")
 	supplyRecords := []productionTypes.Product{}
-	if err := decodeResponse(production.GetSupplyMaterials(&request), &supplyRecords); err != nil {
+	if err := decodeResponse(generator.send(request, production.GetSupplyMaterials), &supplyRecords); err != nil {
 		return 0, err
 	}
 
@@ -210,7 +210,7 @@ func (generator *supplyDataGenerator) countSupplyMaterials() (int, error) {
 func (generator *supplyDataGenerator) productIDBySKU() (map[string]int32, error) {
 	request := generator.makeRequest("GET.supply-material", map[string]string{}, "")
 	supplyRecords := []productionTypes.Product{}
-	if err := decodeResponse(production.GetSupplyMaterials(&request), &supplyRecords); err != nil {
+	if err := decodeResponse(generator.send(request, production.GetSupplyMaterials), &supplyRecords); err != nil {
 		return nil, err
 	}
 
@@ -310,7 +310,7 @@ func (generator *supplyDataGenerator) seedAssets() error {
 
 		request := generator.makeRequest("POST.asset", nil, string(bodyBytes))
 		assetsOfAcquisition := []accountingTypes.Asset{}
-		if err := decodeResponse(accounting.PostAsset(&request), &assetsOfAcquisition); err != nil {
+		if err := decodeResponse(generator.send(request, accounting.PostAsset), &assetsOfAcquisition); err != nil {
 			return core.Err("error al registrar el activo", seed.name, ":", err)
 		}
 		createdAssets = append(createdAssets, assetsOfAcquisition...)
@@ -328,7 +328,7 @@ func (generator *supplyDataGenerator) seedAssets() error {
 func (generator *supplyDataGenerator) countAssets() (int, error) {
 	request := generator.makeRequest("GET.assets", map[string]string{}, "")
 	assets := []accountingTypes.Asset{}
-	if err := decodeResponse(accounting.GetAssets(&request), &assets); err != nil {
+	if err := decodeResponse(generator.send(request, accounting.GetAssets), &assets); err != nil {
 		return 0, err
 	}
 	// The delta response ends with its log's Metadata records, which are not assets.
@@ -403,7 +403,7 @@ func (generator *supplyDataGenerator) payAssets(
 		}
 
 		request := generator.makeRequest("POST.asset-payment", nil, string(bodyBytes))
-		if response := accounting.PostAssetPayment(&request); response.StatusCode != 200 {
+		if response := generator.send(request, accounting.PostAssetPayment); response.StatusCode != 200 {
 			return core.Err("error al pagar el activo", payment.assetID, ":", response.Error)
 		}
 	}
@@ -434,7 +434,7 @@ func (generator *supplyDataGenerator) ensureCashBalance(cashBank financeTypes.Ca
 	}
 
 	request := generator.makeRequest("POST.cash-banks-movement", nil, string(bodyBytes))
-	if response := finance.PostCashBankMovement(&request); response.StatusCode != 200 {
+	if response := generator.send(request, finance.PostCashBankMovement); response.StatusCode != 200 {
 		return core.Err("error al inyectar efectivo:", response.Error)
 	}
 
@@ -448,7 +448,7 @@ func (generator *supplyDataGenerator) ensureCashBalance(cashBank financeTypes.Ca
 func (generator *supplyDataGenerator) runAssetDepreciation() error {
 	request := generator.makeRequest("POST.asset-depreciation-run", nil, "")
 	depreciationResult := map[string]int{}
-	if err := decodeResponse(accounting.PostAssetDepreciationRun(&request), &depreciationResult); err != nil {
+	if err := decodeResponse(generator.send(request, accounting.PostAssetDepreciationRun), &depreciationResult); err != nil {
 		return core.Err("error al correr la depreciación:", err)
 	}
 
@@ -463,7 +463,7 @@ func (generator *supplyDataGenerator) resolveWarehouseID() (int32, error) {
 	warehouses := []businessTypes.Warehouse{}
 	warehouseQuery := db.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.Status).
-		CompanyID.Equals(supplyCompanyID).Status.Equals(1)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(1)
 
 	if queryError := warehouseQuery.Exec(); queryError != nil {
 		return 0, core.Err("error al consultar los almacenes:", queryError)
@@ -485,7 +485,7 @@ func (generator *supplyDataGenerator) resolveCashBank() (financeTypes.CashBank, 
 	cashBankQuery := db.Query(&cashBanks)
 	cashBankQuery.Select(cashBankQuery.ID, cashBankQuery.Status, cashBankQuery.CurrencyType,
 		cashBankQuery.CurrentAmount).
-		CompanyID.Equals(supplyCompanyID).Status.Equals(1)
+		CompanyID.Equals(generator.userToken.CompanyID).Status.Equals(1)
 
 	if queryError := cashBankQuery.Exec(); queryError != nil {
 		return financeTypes.CashBank{}, core.Err("error al consultar las cajas:", queryError)

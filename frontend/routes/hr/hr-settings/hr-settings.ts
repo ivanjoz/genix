@@ -3,6 +3,7 @@
 
 import { PCGE_ACCOUNTS, pcgeAccountLabel } from '#core/pcge.ts'
 import { PLAME_CODE_OPTIONS } from '#services/hr/plame-codes.ts'
+import { LEGAL_CONCEPTS, LEGAL_CONCEPT_MAX_ID, type ILegalConcept } from '#services/hr/hr-catalogs.ts'
 import type { IConcept } from '#services/hr/payroll.svelte.ts'
 
 export const CONCEPT_KIND_EARNING = 1
@@ -34,7 +35,31 @@ export const normalizeConcept = (concept: IConcept): IConcept => {
   if (concept.Kind === CONCEPT_KIND_DEDUCTION || !concept.IsRemunerative) {
     concept = { ...concept, AffectsEssalud: false, AffectsPension: false, ComputableForBenefits: false }
   }
-  if (concept.Kind === CONCEPT_KIND_DEDUCTION) concept = { ...concept, IsRemunerative: false, IncomeTax: 0, ExpenseAccountCode: 0 }
+  // Only an earning can be paid on a payslip of its own.
+  if (concept.Kind === CONCEPT_KIND_DEDUCTION) concept = { ...concept, IsRemunerative: false, IncomeTax: 0, ExpenseAccountCode: 0, SeparatePayslip: false }
   else concept = { ...concept, PayableAccountCode: 0 }
   return concept
 }
+
+/** Legal concepts (IDs up to LEGAL_CONCEPT_MAX_ID) are fixed in code: they are shown, never edited. */
+export const isLegalConceptID = (conceptID: number): boolean => conceptID > 0 && conceptID <= LEGAL_CONCEPT_MAX_ID
+
+/** A legal concept in the company concept's shape, so both share one table. Its Name stays bilingual. */
+const legalConceptAsConcept = (concept: ILegalConcept): IConcept => ({
+  ID: concept.id, Name: concept.name, Kind: concept.kind, PlameCode: concept.plameCode || '',
+  IsRemunerative: !!concept.isRemunerative, AffectsEssalud: !!concept.affectsEssalud, AffectsPension: !!concept.affectsPension,
+  IncomeTax: concept.incomeTax || 0, ComputableForBenefits: !!concept.computableForBenefits,
+  ExpenseAccountCode: concept.expenseAccountCode || 0, PayableAccountCode: concept.payableAccountCode || 0,
+  SeparatePayslip: false, ss: 1, upd: 0,
+})
+
+/** Where a concept comes from: the legal ones fixed in code, or the company's own. */
+export const ConceptOrigin = { Legal: 1, Company: 2 } as const
+
+/** The concepts of the chosen origins (the toggle is required: at least one is always chosen). */
+export const conceptsOfOrigins = (concepts: IConcept[], origins: number[]): IConcept[] =>
+  concepts.filter((concept) => origins.includes(isLegalConceptID(concept.ID) ? ConceptOrigin.Legal : ConceptOrigin.Company))
+
+/** Every concept of the company in one list, by ID: the legal ones (1–200), then the company's own (201+). */
+export const allConcepts = (companyConcepts: IConcept[]): IConcept[] =>
+  [...LEGAL_CONCEPTS.map(legalConceptAsConcept), ...companyConcepts].sort((left, right) => left.ID - right.ID)

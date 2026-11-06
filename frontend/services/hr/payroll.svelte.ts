@@ -16,6 +16,8 @@ export interface IConcept {
   ComputableForBenefits: boolean
   ExpenseAccountCode: number
   PayableAccountCode: number
+  /** An earning paid on a payslip of its own (an extraordinary payment). */
+  SeparatePayslip: boolean
   ss: number
   upd: number
 }
@@ -43,7 +45,7 @@ export interface IPayrollRun {
 }
 
 export interface IPayslipLine {
-  LegalConceptID: number
+  /** A legal concept (up to LEGAL_CONCEPT_MAX_ID) or a company concept. */
   ConceptID: number
   Kind: number
   Base: number

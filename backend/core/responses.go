@@ -32,7 +32,10 @@ type HandlerArgs struct {
 	// ClientIP is the caller's address. Per request and never a global: in server mode one
 	// process serves many requests at once, so a package-level field would be a data race and
 	// would attribute one caller's address to another.
-	ClientIP      string
+	ClientIP string
+	// Errors collects this request's failures for user_logs (MakeErr*, panics). mainHandler sets
+	// it; a nil one records nothing.
+	Errors        *RequestErrors
 	Authorization string
 	ReqParams     string
 	Encoding      string
@@ -360,6 +363,8 @@ type HandlerResponse struct {
 	DisableCompression bool
 	// IsBinary: the body is raw bytes, not text (MakeBinaryResponse).
 	IsBinary bool
+	// bodyIsPooled: Body came from colbinBodyBuffers and goes back once SendLocalResponse wrote it.
+	bodyIsPooled bool
 }
 
 // Every handler failure in this backend funnels through these four, which is what makes them the
@@ -389,7 +394,7 @@ func (req *HandlerArgs) makeErrorResponse(message string, code int32, codeLine s
 
 	response.Error = message
 	response.Route = req.Route
-	RegisterRequestErrorAt(codeLine, message)
+	req.Errors.RegisterAt(codeLine, message)
 	// Deliberately not Log: the line above already recorded this failure against the handler, and
 	// the heuristic would record it a second time against this file.
 	logNoCapture("Req Error:: ", message)
@@ -447,11 +452,19 @@ func MakeResponse[T any](req *HandlerArgs, respStruct *T) HandlerResponse {
 	// colbin/JSON (self-describing: the schema travels inside the message) for the client that
 	// announced it in Accept; plain JSON for everyone else.
 	if req.WantsColbin() {
-		colbinBytes, err := colbin.MarshalSelfDescribing(*respStruct)
+		// On the VPS the body is written and dropped inside SendLocalResponse, so it is encoded
+		// into a reused buffer (response_buffers.go). On Lambda it outlives the handler.
+		isLambda := Env != nil && Env.IS_SERVERLESS
+		var bodyBuffer []byte
+		if !isLambda {
+			bodyBuffer = takeColbinBodyBuffer()
+		}
+		colbinBytes, err := colbin.AppendSelfDescribing(bodyBuffer, *respStruct)
 		if err != nil {
 			return req.MakeErr("No se pudo serializar respuesta en colbin:", err)
 		}
 		response.Body = &colbinBytes
+		response.bodyIsPooled = !isLambda
 		response.IsBinary = true
 		response.Headers["Content-Type"] = ColbinMediaType
 		return response
@@ -562,11 +575,17 @@ func SendLocalResponse(args HandlerArgs, response HandlerResponse) {
 		}
 	}
 
+	// Every branch below has finished with the body when it returns: Write copies into the
+	// connection's buffer, and the compressors only read it.
+	if response.bodyIsPooled && response.Body != nil {
+		defer returnColbinBodyBuffer(*response.Body)
+	}
+
 	// Envía respuesta ok: zstd first, gzip as the compatibility fallback.
 	if response.Body == nil {
 		Log("El body es nil!")
 		sendBody(nil, "")
-	} else if response.DisableCompression {
+	} else if response.DisableCompression || len(*response.Body) < MinCompressedBodyBytes {
 		// Write raw bytes without adding a Content-Encoding header.
 		sendBody(*response.Body, "")
 	} else if strings.Contains(args.Encoding, "zstd") {

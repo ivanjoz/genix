@@ -22,8 +22,7 @@ import (
 // validation.
 
 const (
-	hrDataCompanyID int32 = 1
-	hrDataActorID   int32 = 1
+	hrDataActorID int32 = 1
 	// minimumWageCents is the RMV from 2026-10-01 (S/ 1,230): no seeded salary goes below it.
 	minimumWageCents int32 = 123000
 )
@@ -338,7 +337,7 @@ func callHRHandler(route string, handler func(*core.HandlerArgs) core.HandlerRes
 		Body: &body, Query: query, Route: route, Method: method,
 		// The actor holds the payroll access (41) with its sub-accesses 2–4 (bit subID−1): calculate,
 		// close and pay, which the run handlers check.
-		User: &core.UsuarioToken{CompanyID: hrDataCompanyID, ID: hrDataActorID, SubAccesos: map[int32]uint16{41: 0b1110}},
+		User: &core.UsuarioToken{CompanyID: sampleCompanyID, ID: hrDataActorID, SubAccesos: map[int32]uint16{41: 0b1110}},
 	}
 	response := handler(&request)
 	if response.StatusCode != 200 {

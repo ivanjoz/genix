@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !js && !fdb
 
 package db
 
@@ -85,4 +85,9 @@ func reserveAutoincrementRange(_ string, counterName string, increment int) (int
 // as one step.
 func setAutoincrementValue(_ string, counterName string, value int64) (int64, error) {
 	return fareward.SetSequence(context.Background(), counterName, value)
+}
+
+// SetCounter moves a counter to an absolute value through the daemon and returns what it held.
+func SetCounter(counterName string, value int64) (int64, error) {
+	return setAutoincrementValue("", counterName, value)
 }

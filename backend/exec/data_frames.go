@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/ivanjoz/genix-orm/scylla"
 )
 
 // CompactDataFrames (fn-compact-frames) brings the DataFrames of every table of one company (p1) up to
@@ -20,7 +18,7 @@ func CompactDataFrames(args *core.ExecArgs) core.FuncResponse {
 	if args.Param1 <= 0 {
 		panic("fn-compact-frames necesita el ID de la empresa (p1).")
 	}
-	scylla.MakeScyllaConnection(makeConnParams())
+	db.Connect(makeConnParams())
 
 	var tableErrors []error
 	for _, controller := range MakeScyllaControllers() {

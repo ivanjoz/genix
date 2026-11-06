@@ -10,7 +10,14 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 )
+
+// productNameLookupConcurrency bounds the NameHash lookups one PostProducts runs at once: an import
+// of 500 products asks for 500 names.
+const productNameLookupConcurrency = 16
 
 func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 	loggedProducts := []types.Product{}
@@ -26,7 +33,8 @@ func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// became a supply/material (2) comes back as a live record. It must go as an id to drop, never
 	// as a body: a supply carries a purchase Price and no FinalPrice, and every screen that reads
 	// this cache treats what it finds there as sellable.
-	productos := []types.Product{}
+	// Filtered in place: a second slice copied every product of a first sync once more.
+	productos := loggedProducts[:0]
 	evictedProductIDs := []int32{}
 	for _, product := range loggedProducts {
 		if product.Metadata == nil && product.Status != types.ProductStatusActive {
@@ -124,25 +132,32 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Group existing records by NameHash so we can check active collisions and reuse inactive IDs.
+	// NameHash is a local index, and ScyllaDB answers an index only on an equality: one query per
+	// name, a few at a time.
 	existingProductsByHash := make(map[int32][]types.Product, len(nameHashToName))
-	nameHashesToValidate := make([]int32, 0, len(nameHashToName))
+	existingProductsMutex := sync.Mutex{}
+	nameLookups := errgroup.Group{}
+	nameLookups.SetLimit(productNameLookupConcurrency)
 	for nameHash := range nameHashToName {
-		nameHashesToValidate = append(nameHashesToValidate, nameHash)
+		nameLookups.Go(func() error {
+			productsWithName := []types.Product{}
+			query := db.Query(&productsWithName)
+			query.Select(query.NameHash, query.ID, query.Status).
+				CompanyID.Equals(req.User.CompanyID).
+				NameHash.Equals(nameHash)
+			if err := query.Exec(); err != nil {
+				return err
+			}
+			if len(productsWithName) > 0 {
+				existingProductsMutex.Lock()
+				existingProductsByHash[nameHash] = productsWithName
+				existingProductsMutex.Unlock()
+			}
+			return nil
+		})
 	}
-
-	existingProducts := []types.Product{}
-	query := db.Query(&existingProducts)
-	query.Select(query.NameHash, query.ID, query.Status).
-		CompanyID.Equals(req.User.CompanyID).
-		NameHash.In(nameHashesToValidate...)
-
-	if err := query.Exec(); err != nil {
+	if err := nameLookups.Wait(); err != nil {
 		return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
-	}
-
-	for _, existingProduct := range existingProducts {
-		existingProductsByHash[existingProduct.NameHash] = append(
-			existingProductsByHash[existingProduct.NameHash], existingProduct)
 	}
 
 	// Enforce name uniqueness across the database and reassign inactive IDs when needed.
