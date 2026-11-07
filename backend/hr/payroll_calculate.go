@@ -110,7 +110,7 @@ func PostPayrollEnsure(req *core.HandlerArgs) core.HandlerResponse {
 		if !exists {
 			run.Created, run.CreatedBy, run.UpdatedBy = core.SUnixTime(), req.User.ID, req.User.ID
 			created := []types.PayrollRun{run}
-			if err := db.Insert(&created); err != nil {
+			if err := db.Upsert(&created); err != nil {
 				return req.MakeErr("Error al guardar la planilla:", err)
 			}
 			run = created[0]

@@ -307,7 +307,7 @@ func saveBuiltWatermarks(companyID, productosWm, marcasWm, categoriasWm int32) e
 		Content:   fmt.Sprintf("%d,%d,%d", productosWm, marcasWm, categoriasWm),
 		Updated:   core.SUnixTime(),
 	}
-	if err := db.Insert(&[]core.Cache{row}); err != nil {
+	if err := db.Upsert(&[]core.Cache{row}); err != nil {
 		return fmt.Errorf("error al guardar watermarks de archivo productos (company=%d): %w", companyID, err)
 	}
 	return nil

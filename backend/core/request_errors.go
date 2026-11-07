@@ -202,6 +202,9 @@ func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 		Errors:    entries,
 	}
 
+	if Env.FAREWARD_BYPASS {
+		return
+	}
 	if err := SendRequestLog(context.Background(), record); err != nil {
 		// logNoCapture, not Log: this message says "error" and would otherwise register itself as
 		// a failure of the *next* request, which is the one whose accumulator is now open.

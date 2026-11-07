@@ -84,7 +84,7 @@ func BackfillObservabilityCredits(args *core.ExecArgs) core.FuncResponse {
 		return int(left.TimeFrame - right.TimeFrame)
 	})
 	if len(platformRows) > 0 {
-		if insertError := db.Insert(&platformRows); insertError != nil {
+		if insertError := db.Upsert(&platformRows); insertError != nil {
 			return args.MakeErr("no se pudieron escribir los agregados de plataforma:", insertError)
 		}
 	}

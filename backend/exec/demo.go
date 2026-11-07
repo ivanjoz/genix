@@ -49,7 +49,7 @@ func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
 		},
 	}
 
-	if err := db.Insert(&usuarios); err != nil {
+	if err := db.Upsert(&usuarios); err != nil {
 		core.Log("Error inserting user:", err)
 		panic(err)
 	}
@@ -664,7 +664,7 @@ func Test36(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Println("Insertando registro...")
 
-	err := db.Insert(&[]business.SharedListRecord{recordToInsert})
+	err := db.Upsert(&[]business.SharedListRecord{recordToInsert})
 	if err != nil {
 		fmt.Println("Error al insertar::", err)
 		panic(err)

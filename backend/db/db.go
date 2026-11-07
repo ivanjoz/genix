@@ -29,6 +29,8 @@ type (
 	Coln                = orm.Coln
 	TableHandle         = orm.TableHandle
 	ColumnStatement     = orm.ColumnStatement
+	// Transaction is the transaction a RunTransaction body writes through.
+	Transaction = orm.Transaction
 	TableInfo           = orm.TableInfo
 	GenericRecordSchema = orm.GenericRecordSchema
 	GenericRecord       = orm.GenericRecord
@@ -166,6 +168,8 @@ var (
 
 // ─── Writes ────────────────────────────────────────────────────────────────────
 
+// Insert writes new records: the caller promises none is stored under its keys. PostgreSQL and
+// MariaDB skip the read before writing and fail on a stored key; Scylla writes it as Upsert.
 func Insert[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
 	records *[]RecordT, columnsToExclude ...Coln,
 ) error {
@@ -178,10 +182,69 @@ func InsertOne[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Exec
 	return orm.InsertOne[RecordT, TableT, D](record, columnsToExclude...)
 }
 
+// Upsert writes records whether or not they are stored: a stored record is overwritten.
+func Upsert[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	records *[]RecordT, columnsToExclude ...Coln,
+) error {
+	return orm.Upsert[RecordT, TableT, D](records, columnsToExclude...)
+}
+
+func UpsertOne[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	record RecordT, columnsToExclude ...Coln,
+) error {
+	return orm.UpsertOne[RecordT, TableT, D](record, columnsToExclude...)
+}
+
 func Update[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
 	records *[]RecordT, columnsToInclude ...Coln,
 ) error {
 	return orm.Update[RecordT, TableT, D](records, columnsToInclude...)
+}
+
+// ─── Transactions ──────────────────────────────────────────────────────────────
+
+// RunTransaction runs body in one transaction on PostgreSQL and MariaDB: LockByKeys locks what it
+// reads, InsertIn and UpdateIn commit together. A deadlock reruns body, so body derives its writes from
+// its own reads. On Scylla each call runs on its own.
+func RunTransaction(body func(transaction *Transaction) error) error {
+	return orm.RunTransaction(body)
+}
+
+// LockByKeys replaces records (which carry their partition and keys) with their stored versions,
+// locked until the transaction ends. A record with nothing stored is dropped.
+func LockByKeys[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	transaction *Transaction, records *[]RecordT,
+) error {
+	return orm.LockByKeys[RecordT, TableT, D](transaction, records)
+}
+
+// InsertIn is Insert inside RunTransaction.
+func InsertIn[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	transaction *Transaction, records *[]RecordT, columnsToExclude ...Coln,
+) error {
+	return orm.InsertIn[RecordT, TableT, D](transaction, records, columnsToExclude...)
+}
+
+// UpdateIn is Update inside RunTransaction.
+func UpdateIn[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	transaction *Transaction, records *[]RecordT, columnsToInclude ...Coln,
+) error {
+	return orm.UpdateIn[RecordT, TableT, D](transaction, records, columnsToInclude...)
+}
+
+// UpsertIn is Upsert inside RunTransaction.
+func UpsertIn[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	transaction *Transaction, records *[]RecordT, columnsToExclude ...Coln,
+) error {
+	return orm.UpsertIn[RecordT, TableT, D](transaction, records, columnsToExclude...)
+}
+
+// InsertUpdateIncludeIn is InsertUpdateInclude inside RunTransaction.
+func InsertUpdateIncludeIn[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	transaction *Transaction, records *[]RecordT, isInsert func(record *RecordT) bool,
+	columnsToIncludeUpdate []Coln, columnsToExcludeInsert ...Coln,
+) error {
+	return orm.InsertUpdateIncludeIn[RecordT, TableT, D](transaction, records, isInsert, columnsToIncludeUpdate, columnsToExcludeInsert...)
 }
 
 func UpdateOne[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](

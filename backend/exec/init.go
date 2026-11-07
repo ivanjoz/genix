@@ -62,7 +62,7 @@ func seedCompanyOperatingRecords(companyIDs []int32, seedTimestamp int32) {
 			Created:   seedTimestamp,
 			Updated:   seedTimestamp,
 		}}
-		if err := db.Insert(&sites); err != nil {
+		if err := db.Upsert(&sites); err != nil {
 			panic(fmt.Sprintf("Error al crear la sede inicial de la empresa %v. %v", companyID, err))
 		}
 		siteID := sites[0].ID
@@ -75,7 +75,7 @@ func seedCompanyOperatingRecords(companyIDs []int32, seedTimestamp int32) {
 			Created:   seedTimestamp,
 			Updated:   seedTimestamp,
 		}}
-		if err := db.Insert(&warehouses); err != nil {
+		if err := db.Upsert(&warehouses); err != nil {
 			panic(fmt.Sprintf("Error al crear el almacén inicial de la empresa %v. %v", companyID, err))
 		}
 
@@ -90,7 +90,7 @@ func seedCompanyOperatingRecords(companyIDs []int32, seedTimestamp int32) {
 			Created:      seedTimestamp,
 			Updated:      seedTimestamp,
 		}}
-		if err := db.Insert(&cashBanks); err != nil {
+		if err := db.Upsert(&cashBanks); err != nil {
 			panic(fmt.Sprintf("Error al crear la caja inicial de la empresa %v. %v", companyID, err))
 		}
 
@@ -220,7 +220,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	}
 
 	// Seed companies in ScyllaDB first so the relational source of truth is ready.
-	if err := db.Insert(&empresas); err != nil {
+	if err := db.Upsert(&empresas); err != nil {
 		panic("Error al crear las empresas iniciales en ScyllaDB. " + err.Error())
 	}
 	if err := cloud.Insert(empresas); err != nil {
@@ -231,7 +231,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	core.Log("Se crearon/actualizaron las empresas iniciales en ScyllaDB y cloud.")
 
 	// Seed admin/system users in ScyllaDB so delta-cache and ID-based reads stay consistent.
-	if err := db.Insert(&usuarios); err != nil {
+	if err := db.Upsert(&usuarios); err != nil {
 		panic("Error al crear los usuarios iniciales en ScyllaDB. " + err.Error())
 	}
 	if err := cloud.Insert(usuarios); err != nil {
@@ -328,7 +328,7 @@ func ImportCiudades(args *core.ExecArgs) core.FuncResponse {
 	recordsImported := core.MapToSliceT(recordsMap)
 	// core.Log(recordsImported)
 
-	err = db.Insert(&recordsImported)
+	err = db.Upsert(&recordsImported)
 	if err != nil {
 		panic(err)
 	}

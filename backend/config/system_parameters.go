@@ -47,7 +47,7 @@ func PostSystemParameters(req *core.HandlerArgs) core.HandlerResponse {
 		e.UpdatedBy = req.User.ID
 	}
 
-	if err = db.Insert(&records); err != nil {
+	if err = db.Upsert(&records); err != nil {
 		return req.MakeErr("Error al insertar los registros", err)
 	}
 

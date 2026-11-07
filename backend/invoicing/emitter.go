@@ -33,7 +33,7 @@ func RebuildDocument(companyID int32, row *types.InvoiceDocument,
 		return nil, err
 	}
 
-	document, _, err := types.SaleOrderToDocument(companyID, order, series, row.ClientSnapshotID)
+	document, _, err := types.SaleOrderToDocument(companyID, order, series, row.ClientSnapshotID, nil)
 	if err != nil {
 		return nil, err
 	}

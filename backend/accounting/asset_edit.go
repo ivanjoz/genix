@@ -318,7 +318,7 @@ func rewriteAssetDepreciation(req *core.HandlerArgs, asset *types.Asset) error {
 		entriesToUpdate[index].StampPeriod()
 	}
 	if len(entriesToInsert) > 0 {
-		if insertError := db.Insert(&entriesToInsert); insertError != nil {
+		if insertError := db.Upsert(&entriesToInsert); insertError != nil {
 			return core.Err("Error al registrar los nuevos asientos de depreciación.", insertError)
 		}
 	}

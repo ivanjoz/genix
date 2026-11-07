@@ -107,6 +107,19 @@ socket = "/run/genix-fdb/fdbgate.sock"
 endpoint = "localhost:2136"
 database = "/local"
 
+# ─── OceanBase (solo builds con `-tags oceanbase`, docs/OCEANBASE_PLAN.md) ──────
+[oceanbase]
+# Servidor OceanBase en modo MySQL. El usuario incluye el tenant (usuario@tenant); la base de datos
+# es el keyspace de [db] name.
+host       = "100.64.0.4"
+port       = 2881
+user       = "root@test"
+password   = ""
+# Particiones KEY(company_id) por tabla; 1 = sin particionar. Cambiarlo exige volver a sembrar.
+partitions = 1
+# Conexiones máximas del pool; 0 usa 64.
+max_conns  = 0
+
 # ─── Servidor propio (systemd + Nginx) ──────────────────────────────────────
 [server]
 # In full mode (nginx + backend on the same VPS) they connect through /run/genix/api.sock and

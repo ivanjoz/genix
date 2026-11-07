@@ -64,7 +64,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 
 	body.Updated = core.SUnixTime()
 	perfilesToSave := []types.Profile{body}
-	if err = db.Insert(&perfilesToSave); err != nil {
+	if err = db.Upsert(&perfilesToSave); err != nil {
 		return req.MakeErr("Error al actualizar el profile en ScyllaDB: " + err.Error())
 	}
 

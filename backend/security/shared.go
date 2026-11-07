@@ -17,6 +17,9 @@ import (
 func invalidateCachedUserAccess(req *core.HandlerArgs, companyID, userID int32) {
 	// This process's own grant cache first: it is what the request gate reads on a VPS.
 	core.DropCachedAccessGrants(companyID, userID)
+	if core.Env.FAREWARD_BYPASS {
+		return
+	}
 	requestContext := context.Background()
 	if req != nil && req.ReqContext != nil {
 		requestContext = req.ReqContext.Context()

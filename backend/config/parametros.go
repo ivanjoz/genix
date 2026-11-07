@@ -42,7 +42,7 @@ func PostParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe enviar al menos 1 grupo, no mayor a 1 grupo")
 	}
 
-	if err = db.Insert(&records); err != nil {
+	if err = db.Upsert(&records); err != nil {
 		return req.MakeErr("Error al insertar los registros", err)
 	}
 

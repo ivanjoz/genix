@@ -77,7 +77,7 @@ func Test38(args *core.ExecArgs) core.FuncResponse {
 
 		// Insertarndo registros
 		fmt.Println("Insertando Registros...")
-		err := db.Insert(&[]DemoStruct{record})
+		err := db.Upsert(&[]DemoStruct{record})
 		if err != nil {
 			panic(err)
 		}

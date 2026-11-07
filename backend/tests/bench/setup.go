@@ -60,6 +60,12 @@ func Setup() {
 			FDBSocket:        core.Env.FDB_SOCKET,
 			YDBEndpoint:      core.Env.YDB_ENDPOINT,
 			YDBDatabase:      core.Env.YDB_DATABASE,
+			OceanBase: db.OceanBaseParams{
+				Host: core.Env.OCEANBASE_HOST, Port: core.Env.OCEANBASE_PORT,
+				User: core.Env.OCEANBASE_USER, Password: core.Env.OCEANBASE_PASSWORD,
+				Partitions: core.Env.OCEANBASE_PARTITIONS, MaxConns: core.Env.OCEANBASE_MAX_CONNS,
+				Engine: core.Env.OCEANBASE_ENGINE,
+			},
 		})
 	})
 }

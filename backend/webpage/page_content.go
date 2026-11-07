@@ -178,7 +178,7 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(sectionsToWrite) > 0 {
-		if err := db.Insert(&sectionsToWrite); err != nil {
+		if err := db.Upsert(&sectionsToWrite); err != nil {
 			return req.MakeErr("Error al guardar las secciones:", err)
 		}
 	}

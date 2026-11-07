@@ -340,8 +340,13 @@ func main() {
 	fareward.SetLogger(core.Log)
 	// Past the daemon's per-connection cap a frame is refused, not queued; the client queues at it.
 	fareward.SetMaxInflightPerConnection(int(core.Env.FAREWARD_MAX_INFLIGHT))
+	// The client dials on first use: under [fareward].bypass a ScyllaDB build still reserves its
+	// sequences there, an OceanBase build never dials it.
 	if err := core.ConfigureFareward(core.Env.FAREWARD_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
 		panic("invalid fareward configuration: " + err.Error())
+	}
+	if core.Env.FAREWARD_BYPASS {
+		core.Log("WARNING: [fareward].bypass is on: no credit charges, no access checks, no request log (load tests only)")
 	}
 	serverPort := resolveServerPort()
 	// Install the text search backend before any DB write that might touch a table with TextSearch.
@@ -375,6 +380,21 @@ func main() {
 		FDBSocket:        core.Env.FDB_SOCKET,
 		YDBEndpoint:      core.Env.YDB_ENDPOINT,
 		YDBDatabase:      core.Env.YDB_DATABASE,
+		OceanBase: db.OceanBaseParams{
+			Host: core.Env.OCEANBASE_HOST, Port: core.Env.OCEANBASE_PORT,
+			User: core.Env.OCEANBASE_USER, Password: core.Env.OCEANBASE_PASSWORD,
+			Partitions: core.Env.OCEANBASE_PARTITIONS, MaxConns: core.Env.OCEANBASE_MAX_CONNS,
+			Engine: core.Env.OCEANBASE_ENGINE,
+		},
+		Postgres: db.PostgresParams{
+			Host: core.Env.POSTGRES_HOST, Port: core.Env.POSTGRES_PORT,
+			User: core.Env.POSTGRES_USER, Password: core.Env.POSTGRES_PASSWORD,
+			Database: core.Env.POSTGRES_DATABASE, MaxConns: core.Env.POSTGRES_MAX_CONNS,
+		},
+		MariaDB: db.MariaDBParams{
+			Host: core.Env.MARIADB_HOST, Port: core.Env.MARIADB_PORT,
+			User: core.Env.MARIADB_USER, Password: core.Env.MARIADB_PASSWORD, MaxConns: core.Env.MARIADB_MAX_CONNS,
+		},
 	})
 
 	fmt.Println("DB connection started!")
@@ -436,6 +456,8 @@ func main() {
 
 	// Si se está desarrollando en local
 	if !core.Env.IS_SERVERLESS {
+		// The VPS server is one long-lived process: it may reserve table keys in blocks.
+		db.UseTableKeyBlocks()
 		core.ConfigureServerAdmission()
 		exec.StartUsageLogFlushWorker()
 		if !core.Env.IS_DEV_ARG {

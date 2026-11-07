@@ -1,4 +1,4 @@
-//go:build !js && !fdb && !ydb
+//go:build !js && !fdb && !ydb && !oceanbase && !postgres && !mariadb
 
 package db
 
@@ -131,3 +131,6 @@ func cqlLiteral(value any) string {
 // scyllaSession dials (or returns) the session for the raw-CQL helpers. MakeScyllaConnection hands
 // back the cached session when one exists, so this is cheap after the first call.
 func scyllaSession() *gocql.Session { return scylla.MakeScyllaConnection(lastScyllaParams) }
+
+// UseTableKeyBlocks does nothing here: only the OceanBase driver reserves table keys in blocks.
+func UseTableKeyBlocks() {}

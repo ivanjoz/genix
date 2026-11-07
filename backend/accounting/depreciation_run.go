@@ -85,7 +85,7 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 	for index := range depreciationEntries {
 		depreciationEntries[index].StampPeriod()
 	}
-	if insertError := db.Insert(&depreciationEntries); insertError != nil {
+	if insertError := db.Upsert(&depreciationEntries); insertError != nil {
 		return req.MakeErr("Error al registrar los asientos de depreciación.", insertError)
 	}
 

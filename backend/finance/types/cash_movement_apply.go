@@ -29,7 +29,23 @@ func GetCaja(companyID, cashBankID int32) (CashBank, error) {
 	return cajas[0], nil
 }
 
+// ApplyCashBankMovement writes the movements and the balances they leave in a transaction of their own.
 func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMovement) error {
+	if len(movimientos) == 0 {
+		return nil
+	}
+	// The balances are read locked and written with the movements in one transaction: two movements
+	// of one till at once apply one after the other, never one over the other. A deadlock reruns this
+	// body, which recomputes everything from what it reads.
+	return db.RunTransaction(func(transaction *db.Transaction) error {
+		return ApplyCashBankMovementIn(transaction, req, movimientos)
+	})
+}
+
+// ApplyCashBankMovementIn is ApplyCashBankMovement inside the caller's transaction, so the movements
+// commit with the document that caused them (a sale). It derives everything from what it reads in the
+// transaction, so a deadlock retry of the caller's body reruns it cleanly.
+func ApplyCashBankMovementIn(transaction *db.Transaction, req *core.HandlerArgs, movimientos []InternalCashMovement) error {
 	if len(movimientos) == 0 {
 		return nil
 	}
@@ -43,13 +59,21 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMove
 		cashBankIDs.Add(m.CashBankID)
 	}
 
-	cashBankMap := make(map[int32]CashBank)
+	cashBanks := make([]CashBank, 0, len(cashBankIDs.Values))
 	for _, id := range cashBankIDs.Values {
-		cashBank, err := GetCaja(req.User.CompanyID, id)
-		if err != nil {
-			return core.Err("Error al obtener la cashBank:", id, err)
+		cashBanks = append(cashBanks, CashBank{CompanyID: req.User.CompanyID, ID: id})
+	}
+	if err := db.LockByKeys(transaction, &cashBanks); err != nil {
+		return core.Err("Error al obtener las cajas:", err)
+	}
+	cashBankMap := make(map[int32]CashBank, len(cashBanks))
+	for _, cashBank := range cashBanks {
+		cashBankMap[cashBank.ID] = cashBank
+	}
+	for _, id := range cashBankIDs.Values {
+		if _, isFound := cashBankMap[id]; !isFound {
+			return core.Err("No se encontró la cashBank:", id)
 		}
-		cashBankMap[id] = cashBank
 	}
 
 	records := []CashBankMovement{}
@@ -115,18 +139,16 @@ func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMove
 		cashBankMap[m.CashBankID] = cashBank
 	}
 
-	if err := db.Insert(&records); err != nil {
+	// Each movement's ID is a fresh time-based UUID: nothing is stored under it.
+	if err := db.InsertIn(transaction, &records); err != nil {
 		return core.Err("Error al insertar movimientos de cashBank:", err)
 	}
-
 	for _, id := range cashBankIDs.Values {
 		cashBanksToUpdate = append(cashBanksToUpdate, cashBankMap[id])
 	}
-
 	q := db.TableOf[CashBank]()
-	if err := db.Update(&cashBanksToUpdate, q.Status, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
+	if err := db.UpdateIn(transaction, &cashBanksToUpdate, q.Status, q.CurrentAmount, q.Updated, q.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar saldo de las cajas:", err)
 	}
-
 	return nil
 }

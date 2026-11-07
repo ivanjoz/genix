@@ -115,7 +115,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 			CreatedBy: req.User.ID,
 		}}
 		// The ORM fills the autoincremented ID on the record itself during handlePreInsert.
-		if err := db.Insert(&newSites); err != nil {
+		if err := db.Upsert(&newSites); err != nil {
 			return req.MakeErr("Error al insertar la sede:", err)
 		}
 		siteID = newSites[0].ID
@@ -134,7 +134,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 			Created:   nowTime,
 			CreatedBy: req.User.ID,
 		}}
-		if err := db.Insert(&newWarehouses); err != nil {
+		if err := db.Upsert(&newWarehouses); err != nil {
 			return req.MakeErr("Error al insertar el almacén:", err)
 		}
 		warehouseID = newWarehouses[0].ID
@@ -156,7 +156,7 @@ func PostInitialData(req *core.HandlerArgs) core.HandlerResponse {
 			Created:      nowTime,
 			CreatedBy:    req.User.ID,
 		}}
-		if err := db.Insert(&newCashBanks); err != nil {
+		if err := db.Upsert(&newCashBanks); err != nil {
 			return req.MakeErr("Error al insertar la caja:", err)
 		}
 		cashBankID = newCashBanks[0].ID

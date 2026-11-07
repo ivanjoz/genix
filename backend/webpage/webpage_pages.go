@@ -116,7 +116,7 @@ func PostWebpage(req *core.HandlerArgs) core.HandlerResponse {
 		routeOwnerID[page.Route] = page.ID
 	}
 
-	if err := db.Insert(&incomingPages); err != nil {
+	if err := db.Upsert(&incomingPages); err != nil {
 		return req.MakeErr("Error al guardar las páginas:", err)
 	}
 

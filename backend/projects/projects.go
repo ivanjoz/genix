@@ -74,7 +74,7 @@ func createProject(req *core.HandlerArgs, project types.Project) core.HandlerRes
 	project.CompanyID, project.Status = req.User.CompanyID, types.StatusActive
 	project.CreatedBy, project.Created, project.UpdatedBy = req.User.ID, core.SUnixTime(), req.User.ID
 	projects := []types.Project{project}
-	if err := db.Insert(&projects); err != nil {
+	if err := db.Upsert(&projects); err != nil {
 		return req.MakeErr("Error al guardar el proyecto:", err)
 	}
 	return req.MakeResponse(projects[0])

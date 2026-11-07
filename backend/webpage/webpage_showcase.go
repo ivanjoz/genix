@@ -103,7 +103,7 @@ func PostWebpageShowcaseImage(req *core.HandlerArgs) core.HandlerResponse {
 	page.Updated = core.SUnixTime()
 	page.UpdatedBy = req.User.ID
 
-	if err := db.Insert(&[]types.Webpage{page}); err != nil {
+	if err := db.Upsert(&[]types.Webpage{page}); err != nil {
 		return req.MakeErr("Error al actualizar la página:", err)
 	}
 

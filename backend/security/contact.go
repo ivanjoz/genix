@@ -188,7 +188,7 @@ func PostContactMessage(req *core.HandlerArgs) core.HandlerResponse {
 	// row behind; here the row IS the message, and losing it to an SMTP hiccup would lose what the
 	// visitor wrote. Writing first also means a failed send still consumes the sender's budget,
 	// which is what stops a broken mail server from turning into an unmetered endpoint.
-	if err := db.Insert(&newMessages); err != nil {
+	if err := db.Upsert(&newMessages); err != nil {
 		return req.MakeErr("Error al registrar el mensaje de contacto.", err)
 	}
 	storedMessage := newMessages[0]

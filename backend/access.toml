@@ -169,7 +169,7 @@ name = "Punto de Venta"
 group = 3
 levels = 14
 frontend_routes = "sales/sale_order_create"
-backend_apis = "GET.company-parametros,POST.sale-order,POST.system-parameters"
+backend_apis = "GET.company-parametros,POST.sale-order,POST.system-parameters,POST.sale-order-v2,POST.sale-order-v3"
 sub_accesses_ids = [2, 3]
 sub_accesses_names = ["Recibir Pago", "Despachar Producto"]
 
@@ -179,7 +179,7 @@ name = "Gestión Ventas"
 group = 3
 levels = 14
 frontend_routes = "sales/sale_orders_status"
-backend_apis = "POST.sale-order,POST.sale-order-annul"
+backend_apis = "POST.sale-order,POST.sale-order-annul,POST.sale-order-v2,POST.sale-order-annul-v2,POST.sale-order-v3,POST.sale-order-annul-v3"
 sub_accesses_ids = [2]
 sub_accesses_names = ["Anular Venta"]
 

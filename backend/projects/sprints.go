@@ -152,7 +152,7 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(err)
 		}
 		newSprints := []types.Sprint{sprint}
-		if err := db.Insert(&newSprints); err != nil {
+		if err := db.Upsert(&newSprints); err != nil {
 			return req.MakeErr("Error al guardar el sprint:", err)
 		}
 		sprint = newSprints[0]

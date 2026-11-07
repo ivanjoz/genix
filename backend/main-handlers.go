@@ -464,6 +464,12 @@ func enforceAccessAndCredits(args *core.HandlerArgs, funcPath string) *core.Hand
 		return &response
 	}
 
+	// [fareward].bypass (load tests): every session holds every access of the route, nothing is charged.
+	if core.Env.FAREWARD_BYPASS {
+		grantEveryRouteAccess(args, accessInfos)
+		return nil
+	}
+
 	chargedMethod := chargedMethodFor(args.Method, funcPath)
 	// Sin créditos que cobrar ni accesos que verificar no hay nada que preguntar, y ese es el camino
 	// más transitado: un GET sin acceso mapeado no manda frame.
@@ -584,17 +590,26 @@ func applyGrantedSubAccesos(
 	// ScyllaDB están vacíos y el daemon lo negaría), así que el mapa de arriba queda vacío y
 	// todo chequeo HasSubAcceso lo negaría. Se le sintetiza "Todos" en los accesos de la ruta,
 	// espejo de buildBootstrapAdminAccesos en login.go, que sí lo hace para el frontend.
-	if args.User.ID == 1 && len(routeAccessInfos) > 0 {
-		synthesized := make(map[int32]uint16, len(routeAccessInfos))
-		for _, accessInfo := range routeAccessInfos {
-			if accessInfo.SubAccesosMask != 0 {
-				synthesized[accessInfo.ID] = 1 << (core.SubAccesoTodosID - 1)
-			} else {
-				synthesized[accessInfo.ID] = 0
-			}
-		}
-		args.User.SubAccesos = synthesized
+	if args.User.ID == 1 {
+		grantEveryRouteAccess(args, routeAccessInfos)
 	}
+}
+
+// grantEveryRouteAccess gives the session "Todos" on every access of the route: user 1, and every
+// session under [fareward].bypass.
+func grantEveryRouteAccess(args *core.HandlerArgs, routeAccessInfos []core.AccessInfo) {
+	if len(routeAccessInfos) == 0 {
+		return
+	}
+	synthesized := make(map[int32]uint16, len(routeAccessInfos))
+	for _, accessInfo := range routeAccessInfos {
+		if accessInfo.SubAccesosMask != 0 {
+			synthesized[accessInfo.ID] = 1 << (core.SubAccesoTodosID - 1)
+		} else {
+			synthesized[accessInfo.ID] = 0
+		}
+	}
+	args.User.SubAccesos = synthesized
 }
 
 // mapGrantedSubAccesos traduce los slots que fareward otorgó a los IDs de acceso que el gate pidió,
@@ -635,6 +650,9 @@ func mapGrantedSubAccesos(
 // synchronous, so its next request waits for fareward's verdict — which refuses it anyway, since
 // the budget this top-up exhausted is the one that request would spend.
 func settleGetResponseTopUp(companyID, userID int32, routeID int16, responseBytes int) {
+	if core.Env.FAREWARD_BYPASS {
+		return
+	}
 	totalCredits, err := core.APICPUCredits("GET", responseBytes)
 	if err != nil {
 		core.Log("no se pudo calcular el excedente del GET::", err)

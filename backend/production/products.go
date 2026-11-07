@@ -512,7 +512,7 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 
 	core.Print(product)
 
-	err = db.Insert(&[]types.Product{product})
+	err = db.Upsert(&[]types.Product{product})
 
 	if err != nil {
 		return req.MakeErr("Error al actualizar el product:", err)

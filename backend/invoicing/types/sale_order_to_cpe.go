@@ -54,9 +54,12 @@ func splitGrossAmount(gross int64) (net int64, tax int64) {
 // row already froze when it is being rebuilt for a send. A resend has to declare the same
 // buyer it declared the first time, whatever CRM says today, so the rebuild reads the pin
 // instead of resolving the customer again.
+//
+// saleProducts are the sale's products as the caller already loaded them (name and SbuUnit), or nil
+// to read them here: a resend rebuilds the document with nil.
 func SaleOrderToDocument(
 	companyID int32, order *sales.SaleOrder, series *InvoiceSeries,
-	pinnedClientSnapshotID int32,
+	pinnedClientSnapshotID int32, saleProducts map[int32]production.Product,
 ) (*model.Document, int32, error) {
 
 	if len(order.Lines) == 0 {
@@ -68,9 +71,11 @@ func SaleOrderToDocument(
 	if err != nil {
 		return nil, 0, err
 	}
-	products, err := loadProductDescriptions(companyID, order.DetailProductIDs())
-	if err != nil {
-		return nil, 0, err
+	products := saleProducts
+	if products == nil {
+		if products, err = loadProductDescriptions(companyID, order.DetailProductIDs()); err != nil {
+			return nil, 0, err
+		}
 	}
 	lines, _, err := buildLines(order, products)
 	if err != nil {

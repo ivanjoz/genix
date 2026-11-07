@@ -56,7 +56,7 @@ func PostGalleryImage(req *core.HandlerArgs) core.HandlerResponse {
 		Status:      1,
 		Updated:     core.SUnixTime(),
 	}
-	if err := db.Insert(&[]types.GalleryImage{galleryImage}); err != nil {
+	if err := db.Upsert(&[]types.GalleryImage{galleryImage}); err != nil {
 		return req.MakeErr("Error al guardar la imagen en BD.", err)
 	}
 
@@ -85,7 +85,7 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 	// Soft deletion keeps the delta cache able to evict the image on the next sync.
 	images[0].Status = 0
 	images[0].Updated = core.SUnixTime()
-	if err := db.Insert(&images); err != nil {
+	if err := db.Upsert(&images); err != nil {
 		return req.MakeErr("Error al eliminar la imagen:", err)
 	}
 

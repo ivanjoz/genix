@@ -367,7 +367,7 @@ func (payroll *demoPayroll) settleRun(period int16, closeAndPay bool) error {
 		run = runs[runIndex]
 	} else {
 		created := []types.PayrollRun{run}
-		if err := db.Insert(&created); err != nil {
+		if err := db.Upsert(&created); err != nil {
 			return err
 		}
 		run = created[0]

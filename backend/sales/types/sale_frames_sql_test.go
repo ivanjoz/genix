@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"app/db"
@@ -20,7 +21,9 @@ func TestSaleFrameSQLFramesMatchTheFrameStructs(t *testing.T) {
 		counts := map[string]int{}
 		structType := reflect.TypeOf(frameStruct)
 		for i := range structType.NumField() {
-			counts[structType.Field(i).Tag.Get("frame")]++
+			// frame:"<role>" or frame:"<role>,<packed-key bits>".
+			role, _, _ := strings.Cut(structType.Field(i).Tag.Get("frame"), ",")
+			counts[role]++
 		}
 		return counts
 	}
@@ -37,7 +40,7 @@ func TestSaleFrameSQLFramesMatchTheFrameStructs(t *testing.T) {
 	categoryRowFields := []string{}
 	categoryFrameType := reflect.TypeOf(production.ProductCategoryFrame{})
 	for i := range categoryFrameType.NumField() {
-		if categoryFrameType.Field(i).Tag.Get("frame") == "row" {
+		if role, _, _ := strings.Cut(categoryFrameType.Field(i).Tag.Get("frame"), ","); role == "row" {
 			categoryRowFields = append(categoryRowFields, categoryFrameType.Field(i).Name)
 		}
 	}

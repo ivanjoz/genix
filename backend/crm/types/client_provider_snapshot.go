@@ -152,7 +152,7 @@ func ResolveIdentitySnapshots(
 	if len(snapshotsToInsert) == 0 {
 		return resolvedIDs, nil
 	}
-	if err := db.Insert(&snapshotsToInsert); err != nil {
+	if err := db.Upsert(&snapshotsToInsert); err != nil {
 		return nil, core.Err("Error al guardar las identidades de cliente/proveedor.", err)
 	}
 

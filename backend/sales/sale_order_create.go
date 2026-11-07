@@ -43,6 +43,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// used to number its document. Nil when the till named none, and always nil on
 	// an update: the series is part of the sale id and cannot change.
 	var issueSeries *invoicing.InvoiceSeries
+	// The catalog rows of the sale's products, loaded once by validateSaleOrderLines: the document
+	// describes its lines from them instead of reading them again.
+	var saleProducts map[int32]production.Product
 
 	// What this request's payment action puts in the cash-bank. The server owns the debt: the
 	// client only says how much stays owed, and the amount collected is the drop from what the
@@ -113,7 +116,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// Resolve the divisor and the prices against the catalog rather than trusting what
 		// the client sent. This is the only place that loads products, and it is what stops
 		// a crafted request from booking a sale at an invented price.
-		if err := validateSaleOrderLines(req, &sale); err != nil {
+		var err error
+		if saleProducts, err = validateSaleOrderLines(req, &sale); err != nil {
 			return req.MakeErr(err)
 		}
 
@@ -214,15 +218,16 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	saleActions := []int8{}
+	// The comprobante a new sale is issued with, numbered by the id it is minted with.
+	var pendingDocument *invoicing.InvoiceDocument
 	if !isUpdate {
 		// The sale id carries the correlativo of its series, so minting it and
 		// reserving the comprobante's number are one act — and the document is
 		// validated before that number is spent, so a sale that cannot be invoiced
 		// is refused with nothing persisted and no gap left in the series.
-		var pendingDocument *invoicing.InvoiceDocument
 		if issueSeries != nil {
 			pendingDocument, err = invoicing.PrepareDocumentForSale(
-				req.User.CompanyID, req.User.ID, &sale, issueSeries)
+				req.User.CompanyID, req.User.ID, &sale, issueSeries, saleProducts)
 			if err != nil {
 				return req.MakeErr("No se pudo generar el comprobante de la venta:", err)
 			}
@@ -235,35 +240,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			}
 			sale.ID = saleID
 		}
-
-		sales := []types.SaleOrder{sale}
 		saleActions = append(saleActions, 1)
-
-		if err := db.Insert(&sales); err != nil {
-			return req.MakeErr("Error al registrar la venta:", err)
-		}
-
-		// Written after the sale, because every send rebuilds the document from it.
-		// This is the one step that can leave the two out of step: the sale is
-		// already committed and there is no transaction to undo it, so the failure
-		// is reported and logged rather than silently swallowed.
-		if pendingDocument != nil {
-			if docErr := invoicing.SaveNewDocument(pendingDocument); docErr != nil {
-				core.Log("VENTA SIN COMPROBANTE:: la venta", sale.ID,
-					"se registró pero su comprobante no pudo guardarse:", docErr)
-				return req.MakeErr("La venta se registró pero no se pudo guardar su comprobante:", docErr)
-			}
-			invoicing.ScheduleEmitPendingSweep(req.User.CompanyID)
-		}
 	}
 
-	eg := errgroup.Group{}
-
 	// 2 = Pago (Registro en CashBank)
+	cashMovements := []finance.InternalCashMovement{}
 	if slices.Contains(sale.ActionsIncluded, 2) {
-
 		if collectedAmount != 0 {
-			movimiento := finance.InternalCashMovement{
+			cashMovements = append(cashMovements, finance.InternalCashMovement{
 				CashBankID:         sale.LastPaymentCajaID,
 				DocumentID:         sale.ID,
 				Date:               paymentDate,
@@ -271,27 +255,16 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				CounterAccountCode: finance.PCGEReceivable,
 				Amount:             collectedAmount,
 				SameDayMovement:    int8(core.If(isSameDayCollection, 1, 0)),
-			}
-
-			eg.Go(func() error {
-				if err := finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{movimiento}); err != nil {
-					core.Log("Error al aplicar movimiento de cashBank:", err)
-					return core.Err("Error al registrar el movimiento de cashBank:", err)
-				}
-				return nil
 			})
 		}
-
 		if sale.DebtAmount == 0 {
 			saleActions = append(saleActions, 2)
 		}
 	}
 
 	// 3 = Entrega (Movimiento de Almacén)
+	stockMovements := []logistics.InternalMovement{}
 	if slices.Contains(sale.ActionsIncluded, 3) {
-		core.Log("Incluyendo movimientos internos...", len(sale.Lines))
-
-		movimientosInternos := []logistics.InternalMovement{}
 		for _, line := range sale.Lines {
 			if line.Quantity == 0 {
 				continue
@@ -305,7 +278,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				lineDivisor = core.QuantityDivisorNone
 			}
 
-			movimientosInternos = append(movimientosInternos, logistics.InternalMovement{
+			stockMovements = append(stockMovements, logistics.InternalMovement{
 				WarehouseID:    sale.WarehouseID,
 				ProductID:      line.ProductID,
 				PresentationID: line.PresentationID,
@@ -318,30 +291,41 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				SubDivisor:     lineDivisor,
 			})
 		}
-
-		core.Print(movimientosInternos)
-
-		if len(movimientosInternos) > 0 {
-			eg.Go(func() error {
-				if err := logistics.ApplyMovimientosHoldingStockLock(req, movimientosInternos); err != nil {
-					core.Log("Error al aplicar movimientos de almacén:", err)
-					return core.Err("Error al procesar la salida de almacén:", err)
-				}
-				return nil
-			})
-		}
-
 		saleActions = append(saleActions, 3)
 	}
 
-	if err := eg.Wait(); err != nil {
-		return req.MakeErr(err)
-	}
-
-	if isUpdate {
+	// Everything the sale writes commits at once: the sale (or its update), its comprobante, the
+	// collection with the till's balance, and the delivery with the stock it takes. Nothing can be
+	// left half written, and the database pays one commit for the whole sale. A deadlock reruns the
+	// body, and each step derives its writes from what it reads inside it.
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		if !isUpdate {
+			// The ID was just reserved from the series counter: nothing is stored under it.
+			sales := []types.SaleOrder{sale}
+			if err := db.InsertIn(transaction, &sales); err != nil {
+				return core.Err("Error al registrar la venta:", err)
+			}
+			// Every send rebuilds the document from the sale, which this transaction stores with it.
+			if pendingDocument != nil {
+				if err := invoicing.SaveNewDocument(transaction, pendingDocument); err != nil {
+					return core.Err("No se pudo guardar el comprobante de la venta:", err)
+				}
+			}
+		}
+		if err := finance.ApplyCashBankMovementIn(transaction, req, cashMovements); err != nil {
+			return core.Err("Error al registrar el movimiento de cashBank:", err)
+		}
+		if len(stockMovements) > 0 {
+			if err := logistics.ApplyMovimientosHoldingStockLockIn(transaction, req, stockMovements); err != nil {
+				return core.Err("Error al procesar la salida de almacén:", err)
+			}
+		}
+		if !isUpdate {
+			return nil
+		}
 		saleTable := db.TableOf[types.SaleOrder]()
 		salesToUpdate := []types.SaleOrder{sale}
-		if err := db.Update(&salesToUpdate,
+		if err := db.UpdateIn(transaction, &salesToUpdate,
 			// Keep composite view columns in sync: {Date, Updated} must be updated together.
 			saleTable.WarehouseID,
 			saleTable.LastPaymentCajaID,
@@ -359,8 +343,16 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			saleTable.Period,
 			saleTable.SameDayCashBankID,
 		); err != nil {
-			return req.MakeErr("Error al actualizar la venta:", err)
+			return core.Err("Error al actualizar la venta:", err)
 		}
+		return nil
+	})
+	if err != nil {
+		core.Log("Error al registrar la venta:", err)
+		return req.MakeErr(err)
+	}
+	if pendingDocument != nil {
+		invoicing.ScheduleEmitPendingSweep(req.User.CompanyID)
 	}
 
 	go func() {
@@ -379,23 +371,24 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 // divisor, whether a sub-unit part is even allowed, and the prices. PostSaleOrder is the
 // only place that loads products, and without it the line prices and TotalAmount arrive
 // straight off the request body unchecked — a client could book a sale at any price.
-func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error {
+func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[int32]production.Product, error) {
 	productIDs := core.SliceSet[int32]{}
 	for _, line := range sale.Lines {
 		productIDs.AddIf(line.ProductID)
 	}
 	if productIDs.IsEmpty() {
-		return nil
+		return nil, nil
 	}
 
+	// SbuUnit is not validated here: the sale's document labels its sub-unit lines with it.
 	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID).
+		query.CurrencyID, query.SbuUnit).
 		CompanyID.Equals(req.User.CompanyID).
 		ID.In(productIDs.Values...)
 	if err := query.Exec(); err != nil {
-		return core.Err("Error al obtener los productos de la venta:", err)
+		return nil, core.Err("Error al obtener los productos de la venta:", err)
 	}
 
 	// A USD sale always carries its rate, even when every product is already in dollars:
@@ -413,7 +406,7 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 	if needsExchangeRate {
 		exchangeRate, err := resolveSaleExchangeRate(req.User.CompanyID, sale.CurrencyType)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		sale.ExchangeRate = exchangeRate
 	}
@@ -422,7 +415,7 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 		line := &sale.Lines[lineIndex]
 		product, found := productByID[line.ProductID]
 		if !found {
-			return core.Err(fmt.Sprintf("El producto %v de la venta no existe.", line.ProductID))
+			return nil, core.Err(fmt.Sprintf("El producto %v de la venta no existe.", line.ProductID))
 		}
 
 		lineQuantity := core.UnpackQuantityLine(line.Quantity)
@@ -433,19 +426,19 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 
 		if lineQuantity.Sub > 0 {
 			if productDivisor <= core.QuantityDivisorNone {
-				return core.Err(fmt.Sprintf(
+				return nil, core.Err(fmt.Sprintf(
 					`El producto "%s" no tiene sub-unidad configurada, pero la venta envía %v sub-unidades.`,
 					product.Name, lineQuantity.Sub))
 			}
 			if product.SbuFinalPrice <= 0 {
-				return core.Err(fmt.Sprintf(
+				return nil, core.Err(fmt.Sprintf(
 					`El producto "%s" no tiene precio de sub-unidad; no se puede vender fraccionado.`,
 					product.Name))
 			}
 			// Packing normalizes, so a Sub at or past the divisor means the client packed a
 			// value the catalog cannot represent.
 			if lineQuantity.Sub >= int32(productDivisor) {
-				return core.Err(fmt.Sprintf(
+				return nil, core.Err(fmt.Sprintf(
 					`El producto "%s" admite hasta %v sub-unidades por unidad; la venta envía %v.`,
 					product.Name, productDivisor-1, lineQuantity.Sub))
 			}
@@ -467,7 +460,7 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) error 
 	}
 	sale.TotalAmount = totalAmount
 	sale.TaxAmount = invoicing.SaleOrderTaxAmount(sale)
-	return nil
+	return productByID, nil
 }
 
 // saleOrderCollectedAmount is what a payment collects when the sale owed pendingDebt and the

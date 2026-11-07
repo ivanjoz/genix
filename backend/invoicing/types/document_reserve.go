@@ -11,6 +11,7 @@ package types
 import (
 	"app/core"
 	"app/db"
+	production "app/production/types"
 	sales "app/sales/types"
 	"fmt"
 
@@ -30,11 +31,14 @@ import (
 // the sale's own creation, and the id was just minted, so nothing can be keyed on
 // it yet. A second document for the same sale would collide on the primary key,
 // which is the guarantee that matters.
+//
+// saleProducts are the catalog rows the sale was validated against (with SbuUnit): the document
+// describes its lines from them instead of reading the products again.
 func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
-	series *InvoiceSeries) (*InvoiceDocument, error) {
+	series *InvoiceSeries, saleProducts map[int32]production.Product) (*InvoiceDocument, error) {
 
 	// No pin yet — this is where the client's current identity gets frozen onto the row.
-	document, clientSnapshotID, err := SaleOrderToDocument(companyID, order, series, 0)
+	document, clientSnapshotID, err := SaleOrderToDocument(companyID, order, series, 0, saleProducts)
 	if err != nil {
 		return nil, err
 	}
@@ -65,15 +69,14 @@ func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
 	return &row, nil
 }
 
-// SaveNewDocument writes the reserved row.
-//
-// Called after the sale it bills has been inserted: a document whose sale cannot
-// be read is a document nobody can send, because every send rebuilds it from the
-// sale.
-func SaveNewDocument(document *InvoiceDocument) error {
+// SaveNewDocument writes the reserved row, in the transaction that inserts the sale
+// it bills: a document whose sale cannot be read is a document nobody can send,
+// because every send rebuilds it from the sale.
+func SaveNewDocument(transaction *db.Transaction, document *InvoiceDocument) error {
 	document.StampPeriod()
 	rows := &[]InvoiceDocument{*document}
-	if err := db.Insert(rows); err != nil {
+	// Its ID is the sale's, just reserved from the series counter: nothing is stored under it.
+	if err := db.InsertIn(transaction, rows); err != nil {
 		return fmt.Errorf("error al guardar el comprobante: %w", err)
 	}
 	*document = (*rows)[0]

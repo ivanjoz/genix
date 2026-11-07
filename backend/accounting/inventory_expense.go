@@ -114,7 +114,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	inventoryExpense.StampPeriod()
 
 	expenseRecords := []finance.Expense{inventoryExpense}
-	if insertError := db.Insert(&expenseRecords); insertError != nil {
+	if insertError := db.Upsert(&expenseRecords); insertError != nil {
 		return req.MakeErr("Error al registrar el gasto de inventario.", insertError)
 	}
 

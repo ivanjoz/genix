@@ -185,7 +185,7 @@ func PostCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 		record.Created = now
 		record.CreatedBy = req.User.ID
 		(*records)[0] = record
-		err = db.Insert(records)
+		err = db.Upsert(records)
 	} else {
 		// A save that does not upload a certificate must not blank the one this row
 		// already holds, so those columns are excluded rather than written as empty.

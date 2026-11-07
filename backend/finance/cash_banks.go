@@ -54,7 +54,7 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	cajas := &[]types.CashBank{body}
 
 	if isNewCashBank {
-		err = db.Insert(cajas)
+		err = db.Upsert(cajas)
 	} else {
 		// The balance and audit columns are never sent by the client, so they are excluded from the
 		// update: writing the zero values would wipe the reconciled amounts and the creation stamp.
@@ -243,7 +243,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Insert records using db2
-	if err := db.Insert(&[]types.CashReconciliation{record}); err != nil {
+	if err := db.Upsert(&[]types.CashReconciliation{record}); err != nil {
 		core.Log("Error ScyllaDB inserting cuadre: ", err)
 		return req.MakeErr("Error al registrar el cuadre:", err)
 	}
@@ -254,7 +254,7 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al actualizar la cashBank:", err)
 	}
 
-	if err := db.Insert(&[]types.CashBankMovement{movimiento}); err != nil {
+	if err := db.Upsert(&[]types.CashBankMovement{movimiento}); err != nil {
 		core.Log("Error ScyllaDB inserting movimiento: ", err)
 		return req.MakeErr("Error al registrar el movimiento:", err)
 	}

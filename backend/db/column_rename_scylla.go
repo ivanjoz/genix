@@ -1,4 +1,4 @@
-//go:build !js && !fdb && !ydb
+//go:build !js && !fdb && !ydb && !oceanbase && !postgres && !mariadb
 
 // One-off migration for the columns that used to carry a `db:"..."` name the ORM would not have
 // derived on its own (Spanish names, `_ids` suffixes). Their tags were deleted so the column name

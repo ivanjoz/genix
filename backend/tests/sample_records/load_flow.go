@@ -19,6 +19,13 @@
 // The ramp starts --companies-per-stage new companies every --stage-seconds, up to --max-companies —
 // the way a server grows, by tenants that each have a few tills — and stops at the first stage
 // whose sale p99 or error rate breaks the limits. --live=<file> gets a status line every 5 seconds.
+//
+// The database benchmarks (backend/tests/loadtest/):
+//   - --settle-later=N: each unpaid sale is paid, and each undelivered one delivered, N seconds later
+//     by the cashier who sold it: a status change per settlement.
+//   - --status-change-percent=P: P% of sales are unpaid and, drawn apart, P% undelivered.
+//   - --sales-only: the cashiers' sales and the back office that restocks them, without page syncs or
+//     the manager's reports, for tuning the database (tests/loadtest/bench_sales_oceanbase.sh).
 package sample_records
 
 import (
@@ -112,6 +119,16 @@ type loadTestConfig struct {
 	maxErrorPct    float64
 	// watchedPIDs are sampled for memory and CPU every second: name=pid.
 	watchedPIDs map[string]int
+	// settleDelay > 0 pays each unpaid sale and delivers each undelivered one that long after it was
+	// sold (--settle-later). 0 leaves them unsettled.
+	settleDelay time.Duration
+	// The share of sales sold unpaid and undelivered, each drawn on its own (--status-change-percent).
+	unpaidPercent      int
+	undeliveredPercent int
+	// salesOnly runs the cashiers' sales and the back office's restocking (--sales-only): no page
+	// syncs and no manager reports.
+	// The database-tuning benchmark, with --think-ms=0 to saturate it.
+	salesOnly bool
 }
 
 func parseLoadTestArgs(message string) (loadTestConfig, error) {
@@ -119,6 +136,7 @@ func parseLoadTestArgs(message string) (loadTestConfig, error) {
 		serverURL: "http://127.0.0.1:34010", companiesPerStage: 5, maxCompanies: 100,
 		cashiersPerCompany: 4, stageSeconds: 45, catalogProducts: 2000, thinkTime: 2 * time.Second,
 		maxSaleP99: time.Second, maxErrorPct: 1, watchedPIDs: map[string]int{},
+		unpaidPercent: unpaidSalePercent, undeliveredPercent: undeliveredSalePercent,
 	}
 	for _, argument := range strings.Fields(message) {
 		name, rawValue, _ := strings.Cut(strings.TrimPrefix(argument, "--"), "=")
@@ -148,6 +166,15 @@ func parseLoadTestArgs(message string) (loadTestConfig, error) {
 			config.maxSaleP99 = time.Duration(maxMs) * time.Millisecond
 		case "max-error-pct":
 			config.maxErrorPct, err = strconv.ParseFloat(rawValue, 64)
+		case "sales-only":
+			config.salesOnly = true
+		case "settle-later":
+			var settleSeconds int
+			settleSeconds, err = strconv.Atoi(rawValue)
+			config.settleDelay = time.Duration(settleSeconds) * time.Second
+		case "status-change-percent":
+			config.unpaidPercent, err = strconv.Atoi(rawValue)
+			config.undeliveredPercent = config.unpaidPercent
 		case "pids":
 			for _, namedPID := range strings.Split(rawValue, ",") {
 				processName, rawPID, _ := strings.Cut(namedPID, "=")
@@ -252,14 +279,8 @@ func RunLoadTest(args *core.ExecArgs) core.FuncResponse {
 // (equipment and the consumables its expenses buy), opens the
 // second store's warehouse and the tills, and buys the first stock for each warehouse.
 func onboardLoadCompany(companyID int32, client *loadTestClient, config loadTestConfig) (*loadCompany, error) {
-	// A company without a budget row has a daily allowance of zero, so the limiter would refuse its
-	// first request; far past what a run spends, so a 429 never measures the policy.
-	budgetContext, cancelBudget := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelBudget()
-	for _, budgetOperation := range []fareward.BudgetOperation{fareward.BudgetSetDaily, fareward.BudgetSetCurrent} {
-		if err := fareward.MutateCompanyCreditBudget(budgetContext, companyID, budgetOperation, 1<<40, 1<<40); err != nil {
-			return nil, core.Err("no se pudo fijar el presupuesto:", err)
-		}
+	if err := setLoadCompanyBudget(companyID); err != nil {
+		return nil, err
 	}
 
 	company, err := createLoadCompanyStaff(companyID, client, config.cashiersPerCompany)
@@ -358,12 +379,15 @@ func createLoadCompanyStaff(companyID int32, client *loadTestClient, cashierCoun
 
 // startCompanyPeople starts the company's back office, manager and cashiers.
 func startCompanyPeople(company *loadCompany, client *loadTestClient, config loadTestConfig, waitGroup *sync.WaitGroup, stop chan struct{}) {
+	// The back office stays under --sales-only: its purchase orders are what restocks the shelves.
 	waitGroup.Go(func() { runBackOffice(company, client, stop) })
-	waitGroup.Go(func() { runManager(company, client, stop) })
+	if !config.salesOnly {
+		waitGroup.Go(func() { runManager(company, client, stop) })
+	}
 	for cashierIndex := 1; cashierIndex <= config.cashiersPerCompany; cashierIndex++ {
 		cashierID := company.userIDByName[fmt.Sprintf("%s%02d", loadTestCashierPrefix, cashierIndex)]
 		startDelay := time.Duration(mrand.Int63n(int64(loadTestCashierStartSpan)))
-		waitGroup.Go(func() { runCashier(company, cashierID, client, config.thinkTime, startDelay, stop) })
+		waitGroup.Go(func() { runCashier(company, cashierID, client, config, startDelay, stop) })
 	}
 }
 
@@ -390,51 +414,101 @@ func (template *erpHistoryGenerator) cloneForPerson(userID int32, client *loadTe
 	return &person
 }
 
-// runCashier sells until the run stops: a sale, sometimes its annulment, the page reload every
-// salesPerPageReload sales, and a think time between sales.
-func runCashier(company *loadCompany, cashierID int32, client *loadTestClient, thinkTime, startDelay time.Duration, stop chan struct{}) {
+// runCashier sells until the run stops: the settlements that came due, a sale, sometimes its
+// annulment, the page reload every salesPerPageReload sales, and a think time between sales.
+func runCashier(company *loadCompany, cashierID int32, client *loadTestClient, config loadTestConfig, startDelay time.Duration, stop chan struct{}) {
 	cashier := company.template.cloneForPerson(cashierID, client)
 	authorization := client.authorizationFor(cashier.userToken)
 	// The cashier's browser already holds its lists from earlier in the day.
 	syncCursors := newDeltaSyncCursors(time.Now().Add(-time.Hour))
+	// Oldest first: every settlement waits the same delay, so they come due in the order queued.
+	pendingSettlements := []loadTestSettlement{}
 	if !sleepOrStop(startDelay, stop) {
 		return
 	}
 
 	for salesSinceReload := 0; ; salesSinceReload++ {
-		if salesSinceReload%salesPerPageReload == 0 {
+		if !config.salesOnly && salesSinceReload%salesPerPageReload == 0 {
 			isClearedCache := cashier.random.Intn(100) < firstSyncPercent
 			client.syncCashierPage(authorization, syncCursors, isClearedCache)
 		}
 
-		isUnpaid := cashier.random.Intn(100) < unpaidSalePercent
-		isUndelivered := cashier.random.Intn(100) < undeliveredSalePercent
+		dueCount := 0
+		for dueCount < len(pendingSettlements) && !time.Now().Before(pendingSettlements[dueCount].dueAt) {
+			cashier.settleLoadTestSale(client, authorization, pendingSettlements[dueCount])
+			dueCount++
+		}
+		pendingSettlements = pendingSettlements[dueCount:]
+
+		isUnpaid := cashier.random.Intn(100) < config.unpaidPercent
+		isUndelivered := cashier.random.Intn(100) < config.undeliveredPercent
 		createdSale, err := cashier.createSaleWithRetry(time.Now(), isUnpaid, isUndelivered)
 		if err == nil {
 			company.sales.Add(1)
-			if cashier.random.Intn(100) < annulledSalePercent {
-				cashier.annulLoadTestSale(createdSale)
+			isAnnulled := cashier.random.Intn(100) < annulledSalePercent && cashier.annulLoadTestSale(createdSale)
+			// An annulled sale is never settled; payment goes first when both are pending.
+			if config.settleDelay > 0 && !isAnnulled {
+				dueAt := time.Now().Add(config.settleDelay)
+				if isUnpaid {
+					pendingSettlements = append(pendingSettlements, loadTestSettlement{createdSale, loadTestSettlePayment, dueAt})
+				}
+				if isUndelivered {
+					pendingSettlements = append(pendingSettlements, loadTestSettlement{createdSale, loadTestSettleDelivery, dueAt})
+				}
 			}
 		}
 
-		thinkJitter := time.Duration(cashier.random.Int63n(int64(thinkTime) + 1))
-		if !sleepOrStop(thinkTime/2+thinkJitter, stop) {
+		thinkJitter := time.Duration(cashier.random.Int63n(int64(config.thinkTime) + 1))
+		if !sleepOrStop(config.thinkTime/2+thinkJitter, stop) {
 			return
 		}
 	}
 }
 
+// The ActionsIncluded of a settlement: 2 pays the sale, 3 delivers it.
+const (
+	loadTestSettlePayment  = int8(2)
+	loadTestSettleDelivery = int8(3)
+)
+
+// loadTestSettlement is a payment or a delivery the cashier owes a sale, due at dueAt.
+type loadTestSettlement struct {
+	sale   salesTypes.SaleOrder
+	action int8
+	dueAt  time.Time
+}
+
+// settleLoadTestSale pays the whole debt into the warehouse's till, or delivers from the sale's
+// warehouse, through the sale route's update. Recorded as settle:payment / settle:delivery, apart
+// from the sales.
+func (generator *erpHistoryGenerator) settleLoadTestSale(client *loadTestClient, authorization string, settlement loadTestSettlement) {
+	settlementRequest := map[string]any{
+		"ID": settlement.sale.ID, "ActionsIncluded": []int8{settlement.action},
+		"WarehouseID": settlement.sale.WarehouseID,
+	}
+	operation := "settle:delivery"
+	if settlement.action == loadTestSettlePayment {
+		operation = "settle:payment"
+		settlementRequest["DebtAmount"] = 0
+		settlementRequest["LastPaymentCajaID"] = generator.tillByWarehouse[settlement.sale.WarehouseID]
+	}
+	bodyBytes, _ := json.Marshal(settlementRequest)
+	client.post(authorization, operation, "sale-order", bodyBytes)
+}
+
 // annulLoadTestSale voids a sale the cashier just made, refunding it to the till it was paid into.
-func (generator *erpHistoryGenerator) annulLoadTestSale(sale salesTypes.SaleOrder) {
+// Reports whether it sent the annulment.
+func (generator *erpHistoryGenerator) annulLoadTestSale(sale salesTypes.SaleOrder) bool {
 	// An unpaid sale has nothing to refund, and the annulment needs the till the payment went to.
 	if sale.LastPaymentCajaID == 0 {
-		return
+		return false
 	}
 	bodyBytes, _ := json.Marshal(map[string]any{
 		"ID": sale.ID, "RefundCashBankID": sale.LastPaymentCajaID, "Reason": demoAnnulReasons[0],
 	})
 	request := generator.makeRequest("POST.sale-order-annul", nil, string(bodyBytes))
 	generator.sendOverHTTP(request)
+	return true
 }
 
 // runBackOffice books an expense (paid on the spot) every salesPerExpense company sales and a full
@@ -639,6 +713,15 @@ func (client *loadTestClient) get(authorization, operation, requestPath string) 
 	return err == nil && statusCode == http.StatusOK
 }
 
+// post sends a JSON POST recorded under operation, which need not be its route. Reports whether it
+// succeeded.
+func (client *loadTestClient) post(authorization, operation, routePath string, body []byte) bool {
+	httpRequest, _ := http.NewRequest(http.MethodPost, client.serverURL+"/api/"+routePath, bytes.NewReader(body))
+	httpRequest.Header.Set("Authorization", authorization)
+	statusCode, _, err := client.do(httpRequest, operation)
+	return err == nil && statusCode == http.StatusOK
+}
+
 var zstdDecoder, _ = zstd.NewReader(nil)
 
 // do runs one request and records it under operation. A stock shortage is the business refusing
@@ -784,4 +867,21 @@ func readProcessUsage(pid int) (int64, int64, error) {
 	userTicks, _ := strconv.ParseInt(statFields[11], 10, 64)
 	systemTicks, _ := strconv.ParseInt(statFields[12], 10, 64)
 	return rssBytes, userTicks + systemTicks, nil
+}
+
+// setLoadCompanyBudget gives the company a credit budget far past what a run spends, so a 429 never
+// measures the limiter's policy: without a budget row its daily allowance is zero. Under
+// [fareward].bypass the server charges nothing, so there is no budget to set.
+func setLoadCompanyBudget(companyID int32) error {
+	if core.Env.FAREWARD_BYPASS {
+		return nil
+	}
+	budgetContext, cancelBudget := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelBudget()
+	for _, budgetOperation := range []fareward.BudgetOperation{fareward.BudgetSetDaily, fareward.BudgetSetCurrent} {
+		if err := fareward.MutateCompanyCreditBudget(budgetContext, companyID, budgetOperation, 1<<40, 1<<40); err != nil {
+			return core.Err("no se pudo fijar el presupuesto:", err)
+		}
+	}
+	return nil
 }

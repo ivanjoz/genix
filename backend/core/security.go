@@ -73,8 +73,31 @@ type EnvStruct struct {
 	// FDB_SOCKET is the fdbgate daemon's unix socket, read only by a `-tags fdb` build.
 	FDB_SOCKET string
 	// YDB_ENDPOINT (host:port) and YDB_DATABASE (path) are read only by a `-tags ydb` build.
-	YDB_ENDPOINT       string
-	YDB_DATABASE       string
+	YDB_ENDPOINT string
+	YDB_DATABASE string
+	// OCEANBASE_* are read only by a `-tags oceanbase` build (docs/OCEANBASE_PLAN.md §13). The
+	// database is the keyspace (DB_NAME).
+	OCEANBASE_HOST       string
+	OCEANBASE_PORT       int
+	OCEANBASE_USER       string
+	OCEANBASE_PASSWORD   string
+	OCEANBASE_PARTITIONS int
+	OCEANBASE_MAX_CONNS  int
+	OCEANBASE_ENGINE     string
+	// POSTGRES_* are read only by a `-tags postgres` build (tests/loadtest/plan.md). The schema is
+	// the keyspace (DB_NAME).
+	POSTGRES_HOST      string
+	POSTGRES_PORT      int
+	POSTGRES_USER      string
+	POSTGRES_PASSWORD  string
+	POSTGRES_DATABASE  string
+	POSTGRES_MAX_CONNS int
+	// MARIADB_* are read only by a `-tags mariadb` build. The database is the keyspace (DB_NAME).
+	MARIADB_HOST       string
+	MARIADB_PORT       int
+	MARIADB_USER       string
+	MARIADB_PASSWORD   string
+	MARIADB_MAX_CONNS  int
 	DB_PORT            int32
 	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
 	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
@@ -180,6 +203,8 @@ type EnvStruct struct {
 	// FAREWARD_ADDRESS is the Rust raw-TCP endpoint: the credit limiter and the lock service
 	// share it, routed by the frame's opcode. One address for every operation the daemon serves.
 	FAREWARD_ADDRESS string
+	// FAREWARD_BYPASS is [fareward].bypass: the server never dials the daemon (load tests only).
+	FAREWARD_BYPASS bool
 	// Public registration is unauthenticated and skips the credit limiter, so the only platform
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
@@ -265,6 +290,9 @@ type fileConfig struct {
 		// UnixSocket, when set, is served by the daemon next to its TCP port, and a non-Lambda
 		// process dials it instead of TCP. Only for a backend on the daemon's own host.
 		UnixSocket string `toml:"unix_socket"`
+		// Bypass runs the server without the daemon: no credit charge, no access check (every
+		// session holds every access) and no request log. Load tests only; refused on Lambda.
+		Bypass bool `toml:"bypass"`
 	} `toml:"fareward"`
 
 	Providers struct {
@@ -293,6 +321,37 @@ type fileConfig struct {
 		Endpoint string `toml:"endpoint"`
 		Database string `toml:"database"`
 	} `toml:"ydb"`
+
+	// OceanBase is read only by a `-tags oceanbase` build (docs/OCEANBASE_PLAN.md).
+	OceanBase struct {
+		Host       string `toml:"host"`
+		Port       int    `toml:"port"`
+		User       string `toml:"user"`
+		Password   string `toml:"password"`
+		Partitions int    `toml:"partitions"`
+		MaxConns   int    `toml:"max_conns"`
+		// Engine "seekdb" runs on seekdb's subset: row tables, no TTL (obdriver.EngineSeekDB).
+		Engine string `toml:"engine"`
+	} `toml:"oceanbase"`
+
+	// Postgres is read only by a `-tags postgres` build (tests/loadtest/plan.md).
+	Postgres struct {
+		Host     string `toml:"host"`
+		Port     int    `toml:"port"`
+		User     string `toml:"user"`
+		Password string `toml:"password"`
+		Database string `toml:"database"`
+		MaxConns int    `toml:"max_conns"`
+	} `toml:"postgres"`
+
+	// MariaDB is read only by a `-tags mariadb` build.
+	MariaDB struct {
+		Host     string `toml:"host"`
+		Port     int    `toml:"port"`
+		User     string `toml:"user"`
+		Password string `toml:"password"`
+		MaxConns int    `toml:"max_conns"`
+	} `toml:"mariadb"`
 
 	Server struct {
 		Port                  int32 `toml:"port"`
@@ -516,6 +575,24 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.FDB_SOCKET = file.FDB.Socket
 	env.YDB_ENDPOINT = file.YDB.Endpoint
 	env.YDB_DATABASE = file.YDB.Database
+	env.OCEANBASE_HOST = file.OceanBase.Host
+	env.OCEANBASE_PORT = file.OceanBase.Port
+	env.OCEANBASE_USER = file.OceanBase.User
+	env.OCEANBASE_PASSWORD = file.OceanBase.Password
+	env.OCEANBASE_PARTITIONS = file.OceanBase.Partitions
+	env.OCEANBASE_MAX_CONNS = file.OceanBase.MaxConns
+	env.OCEANBASE_ENGINE = file.OceanBase.Engine
+	env.POSTGRES_HOST = file.Postgres.Host
+	env.POSTGRES_PORT = file.Postgres.Port
+	env.POSTGRES_USER = file.Postgres.User
+	env.POSTGRES_PASSWORD = file.Postgres.Password
+	env.POSTGRES_DATABASE = file.Postgres.Database
+	env.POSTGRES_MAX_CONNS = file.Postgres.MaxConns
+	env.MARIADB_HOST = file.MariaDB.Host
+	env.MARIADB_PORT = file.MariaDB.Port
+	env.MARIADB_USER = file.MariaDB.User
+	env.MARIADB_PASSWORD = file.MariaDB.Password
+	env.MARIADB_MAX_CONNS = file.MariaDB.MaxConns
 
 	env.SERVER_PORT = file.Server.Port
 	env.SERVER_MAX_CONCURRENT_REQUESTS = file.Server.MaxConcurrentRequests
@@ -567,6 +644,10 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
 	env.FAREWARD_MAX_INFLIGHT = file.RateLimit.MaxInflightPerConnection
+	env.FAREWARD_BYPASS = file.Fareward.Bypass
+	if env.FAREWARD_BYPASS && IsRunningInLambda() {
+		panic("[fareward].bypass turns off access checks: it is for load tests, never on Lambda")
+	}
 	env.CONTACT_EMAIL = strings.ToLower(strings.TrimSpace(file.Contact.Email))
 	env.CONTACT_MAX_MESSAGES_PER_IP = file.Contact.MaxMessagesPerIP
 	env.CONTACT_WINDOW_MINUTES = file.Contact.WindowMinutes

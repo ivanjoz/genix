@@ -254,7 +254,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	core.Print(body)
 
 	usuariosToSave := []coreTypes.User{body}
-	if err = db.Insert(&usuariosToSave); err != nil {
+	if err = db.Upsert(&usuariosToSave); err != nil {
 		return req.MakeErr("Error al actualizar el user (SQL): " + err.Error())
 	}
 

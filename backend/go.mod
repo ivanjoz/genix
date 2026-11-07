@@ -5,6 +5,7 @@ go 1.27
 toolchain go1.27.0
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/amenzhinsky/go-memexec v0.7.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.6 // indirect
@@ -24,12 +25,17 @@ require (
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic/loader v0.5.3 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
+	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/go-test/deep v1.1.0 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
+	github.com/ivanjoz/genix-orm/fdb v0.0.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/pgx/v5 v5.12.0 // indirect
+	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
@@ -77,7 +83,9 @@ require (
 	github.com/ivanjoz/genix-orm v0.0.0
 	github.com/ivanjoz/genix-orm/dataframe v0.0.0
 	github.com/ivanjoz/genix-orm/db v0.0.0
-	github.com/ivanjoz/genix-orm/fdb v0.0.0
+	github.com/ivanjoz/genix-orm/mariadbdriver v0.0.0
+	github.com/ivanjoz/genix-orm/obdriver v0.0.0
+	github.com/ivanjoz/genix-orm/pgdriver v0.0.0
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0
 	github.com/ivanjoz/genix-orm/utils v0.0.0
 	github.com/ivanjoz/genix-orm/ydbdriver v0.0.0
@@ -134,3 +142,9 @@ replace github.com/bytedance/sonic => github.com/ivanjoz/sonic v1.15.6-0.2026102
 replace github.com/ivanjoz/genix-orm/fdb => ./genix-orm/fdb
 
 replace github.com/ivanjoz/genix-orm/ydbdriver => ./genix-orm/ydbdriver
+
+replace github.com/ivanjoz/genix-orm/obdriver => ./genix-orm/obdriver
+
+replace github.com/ivanjoz/genix-orm/pgdriver => ./genix-orm/pgdriver
+
+replace github.com/ivanjoz/genix-orm/mariadbdriver => ./genix-orm/mariadbdriver

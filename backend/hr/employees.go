@@ -64,7 +64,7 @@ func PostEmployee(req *core.HandlerArgs) core.HandlerResponse {
 	records := []types.Employee{employee}
 	if employee.ID == 0 {
 		records[0].Created, records[0].CreatedBy = core.SUnixTime(), req.User.ID
-		if err := db.Insert(&records); err != nil {
+		if err := db.Upsert(&records); err != nil {
 			return req.MakeErr("Error al guardar el trabajador:", err)
 		}
 		return req.MakeResponse(records[0])
@@ -304,7 +304,7 @@ func PostDependent(req *core.HandlerArgs) core.HandlerResponse {
 	records := []types.Dependent{dependent}
 	if dependent.ID == 0 {
 		records[0].Created, records[0].CreatedBy = core.SUnixTime(), req.User.ID
-		if err := db.Insert(&records); err != nil {
+		if err := db.Upsert(&records); err != nil {
 			return req.MakeErr("Error al guardar el derechohabiente:", err)
 		}
 	} else {

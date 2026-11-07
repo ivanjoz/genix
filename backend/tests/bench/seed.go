@@ -102,7 +102,7 @@ func seedDataset(dataset Dataset) error {
 		}
 	}
 
-	if err := db.Insert(&[]coreTypes.User{{
+	if err := db.Upsert(&[]coreTypes.User{{
 		CompanyID: dataset.CompanyID, ID: BenchUserID, User: "bench", FirstName: "bench",
 		Status: 1, Created: core.SUnixTime(), Updated: core.SUnixTime(),
 	}}); err != nil {
@@ -117,7 +117,7 @@ func seedDataset(dataset Dataset) error {
 	if len(storedProducts) < dataset.Rows {
 		if err := insertInBatches(dataset.Rows, func(from, to int) error {
 			products := makeProducts(dataset.CompanyID, from, to)
-			return db.Insert(&products)
+			return db.Upsert(&products)
 		}); err != nil {
 			return fmt.Errorf("seeding products: %w", err)
 		}
@@ -131,7 +131,7 @@ func seedDataset(dataset Dataset) error {
 	if len(storedStock) < dataset.Rows {
 		if err := insertInBatches(dataset.Rows, func(from, to int) error {
 			stockRows := makeProductStock(dataset.CompanyID, from, to)
-			return db.Insert(&stockRows)
+			return db.Upsert(&stockRows)
 		}); err != nil {
 			return fmt.Errorf("seeding stock rows: %w", err)
 		}
@@ -145,7 +145,7 @@ func seedDataset(dataset Dataset) error {
 	if len(storedOrders) < dataset.Rows {
 		if err := insertInBatches(dataset.Rows, func(from, to int) error {
 			orders := makeSaleOrders(dataset.CompanyID, from, to)
-			return db.Insert(&orders)
+			return db.Upsert(&orders)
 		}); err != nil {
 			return fmt.Errorf("seeding sale orders: %w", err)
 		}

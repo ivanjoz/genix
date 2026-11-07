@@ -185,7 +185,7 @@ func PostSharedLists(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// Persist as batch upsert; ORM autoincrements IDs still <= 0.
-	if err = db.Insert(&records); err != nil {
+	if err = db.Upsert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el registro de lista compartida: " + err.Error())
 	}
 

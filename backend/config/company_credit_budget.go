@@ -178,7 +178,7 @@ func registerCreditHistory(
 		CPUCeiling:       current.MonthlyCPUCeiling,
 		InferenceCeiling: current.MonthlyInferenceCeiling,
 	}
-	if insertError := db.InsertOne(entry); insertError != nil {
+	if insertError := db.UpsertOne(entry); insertError != nil {
 		core.Log("credit history insert failed::", " company::", previous.CompanyID,
 			" operation::", operation.code, " cpu::", cpuMoved, " inference::", inferenceMoved,
 			" err::", insertError)

@@ -244,7 +244,7 @@ func SaveCacheGlobal(groupID int16, companyID int32, content []byte, updated int
 		return fmt.Errorf("groupID y companyID son requeridos para SaveCacheGlobal")
 	}
 	row := GlobalCache{GroupID: groupID, ID: companyID, Content: content, Updated: updated}
-	if err := db.Insert(&[]GlobalCache{row}); err != nil {
+	if err := db.Upsert(&[]GlobalCache{row}); err != nil {
 		return fmt.Errorf("error al guardar cache global (group=%d company=%d): %w", groupID, companyID, err)
 	}
 	return nil

@@ -1,4 +1,4 @@
-//go:build !fdb && !ydb
+//go:build !fdb && !ydb && !oceanbase && !postgres && !mariadb
 
 package exec
 

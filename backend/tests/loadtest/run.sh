@@ -15,6 +15,11 @@
 #                          --catalog=2000 --cashiers=4 --think-ms=2000 --max-p99-ms=1000
 # TABLETS=false run ...    the keyspace on vnodes instead of tablets
 # TABLET_BALANCING=false run ...   no tablet migrations during the ramp
+# FAREWARD_BYPASS=1 run ...        [fareward].bypass: no credit charge, access check or request log
+#                                  (fareward still serves the sequences)
+# SKIP_BUILD=1 run ...             use the binary already at tmp/loadtest/backend (a deployed layout,
+#                                  see deploy_scylla_homelab.sh)
+# STACK_CPUS, LOAD_CPUS, SCYLLA_SMP, SCYLLA_MEMORY, BACKEND_MEMORY override the VPS profile below.
 set -euo pipefail
 
 COMMAND=${1:?usage: run.sh stack|run}
@@ -28,12 +33,12 @@ CONFIG="$ROOT/loadtest.config.toml"
 BINARY="$PROJECT_DIR/tmp/loadtest/backend"
 FAREWARD="$PROJECT_DIR/fareward/target/release/fareward"
 KEYSPACE=genix_load
-STACK_CPUS=0,1
-LOAD_CPUS=2-$(($(nproc) - 1))
+STACK_CPUS=${STACK_CPUS:-0,1}
+LOAD_CPUS=${LOAD_CPUS:-2-$(($(nproc) - 1))}
 
 # The VPS share of 4 GB: ScyllaDB 1.5 GB, backend 1.5 GB, fareward 256 MB.
-SCYLLA_MEMORY=1500M
-BACKEND_MEMORY=1536M
+SCYLLA_MEMORY=${SCYLLA_MEMORY:-1500M}
+BACKEND_MEMORY=${BACKEND_MEMORY:-1536M}
 FAREWARD_MEMORY=256M
 
 # live_log prints a setup step and appends it to the live log, beside the ramp's status lines.
@@ -68,8 +73,8 @@ stop_processes() {
 
 case "$COMMAND" in
 stack)
-	# Rootless podman has no cpuset controller here, so ScyllaDB pins itself (--cpuset): two shards
-	# on the two cores it shares with the backend and fareward, as on a 2-vCPU VPS.
+	# Rootless podman has no cpuset controller here. --cpuset picks the two shards' CPUs, but with
+	# --overprovisioned seastar does not pin its threads, so `run` pins them with taskset.
 	# No container memory cap: seastar reserves memory beyond --memory and refuses to start under
 	# one; --memory alone bounds it.
 	# SCYLLA_SMP=1 compares one shard on the two shared cores.
@@ -91,7 +96,10 @@ run)
 
 	live_log "building the backend"
 	sed -e "s|__KEYSPACE__|$KEYSPACE|g" -e "s|__ROOT__|$ROOT|g" tests/loadtest/loadtest.config.toml >"$CONFIG"
-	go build -o "$BINARY" .
+	if [ "${FAREWARD_BYPASS:-0}" = 1 ]; then
+		sed -i 's|^use_remote_dev_host = false$|use_remote_dev_host = false\nbypass = true|' "$CONFIG"
+	fi
+	if [ "${SKIP_BUILD:-0}" != 1 ]; then go build -o "$BINARY" .; fi
 
 	# Every run starts from empty companies. ScyllaDB snapshots each table it drops: a large keyspace
 	# can time the DROP out (it goes on in the background) or answer it before it is done, so retry
@@ -135,6 +143,10 @@ run)
 	start_backend
 	# The container's own PID is its init; the database is the scylla process under it.
 	SCYLLA_PID=$(pgrep -f '^/usr/bin/scylla .*127\.0\.0\.2' | head -1)
+	# --overprovisioned turns off seastar's thread pinning, so --cpuset alone leaves every scylla
+	# thread free to run on any host CPU: the "2 vCPU" stack then had up to ~2 more cores than a VPS.
+	# Pin all its threads (reactors, syscall and timer threads) to the stack's CPUs from the host.
+	taskset -a -p -c $STACK_CPUS "$SCYLLA_PID" >/dev/null
 	live_log "server up; ramp starts (details: $ROOT/load.log)"
 
 	GENIX_CONFIG_FILE="$CONFIG" taskset -c "$LOAD_CPUS" "$BINARY" fn-load-test \

@@ -26,7 +26,7 @@ func FlushUsageLogs() {
 	}
 
 	core.Log("Saving usage logs:", len(usageLogsToSave))
-	if insertErr := db.Insert(&usageLogsToSave); insertErr != nil {
+	if insertErr := db.Upsert(&usageLogsToSave); insertErr != nil {
 		core.Log("Error saving usage logs:", insertErr.Error())
 		core.RestoreUsageLogs(usageLogsToSave)
 		return

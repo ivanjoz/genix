@@ -105,7 +105,7 @@ func savePayslips(companyID, runID int32, payslips []types.Payslip, userID int32
 		changedPayslips = append(changedPayslips, removed)
 	}
 	if len(newPayslips) > 0 {
-		if err := db.Insert(&newPayslips); err != nil {
+		if err := db.Upsert(&newPayslips); err != nil {
 			return fmt.Errorf("Error al guardar las boletas: %v", err)
 		}
 		// Hand the new IDs back to the caller's slice.

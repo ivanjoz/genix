@@ -144,11 +144,14 @@ type SaleSummaryFrame struct {
 // per day, one row per client, product and sub-unit divisor, for the queries by client. ClientID 0
 // is the sales without a client. The sums are SaleSummaryFrame's.
 type SaleClientProductFrame struct {
+	// The packed key (Date, ClientID, ProductID, SubDivisor) must fit 63 bits: the IDs are per-company
+	// sequences, so 20 bits hold ~1M clients and 17 bits ~131k products; 11 bits hold a divisor up to
+	// 2047 (1000 for grams, refined to 2000). A value past its width fails the write.
 	Date int16 `frame:"key"`
 	// ClientID leads the rows: each client is written once in a file, its products under it.
-	ClientID        int32   `frame:"row"`
-	ProductID       int32   `frame:"row"`
-	SubDivisor      int16   `frame:"row"`
+	ClientID        int32   `frame:"row,20"`
+	ProductID       int32   `frame:"row,17"`
+	SubDivisor      int16   `frame:"row,11"`
 	AmountPEN       int32   `frame:"sum"`
 	DebtAmountPEN   int32   `frame:"sum"`
 	SoldUnits       int32   `frame:"sum"`
@@ -316,7 +319,8 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			},
 			{
 				Type: db.TypeCacheGroup,
-				Keys: db.Cols(e.Date, e.ClientID, e.DetailProductIDs),
+				// The group's packed value takes 15 (Date) + 26 + 23 bits: up to ~67M clients, ~8M products.
+				Keys: db.Cols(e.Date, e.ClientID.Size(26), e.DetailProductIDs.Size(23)),
 			},
 			{
 				Type: db.TypeCacheGroup,

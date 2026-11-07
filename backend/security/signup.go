@@ -387,7 +387,7 @@ func PostSignUpRequest(req *core.HandlerArgs) core.HandlerResponse {
 		Updated:  nowTime,
 		Status:   signUpStatusSent,
 	}}
-	if err := db.Insert(&newRequests); err != nil {
+	if err := db.Upsert(&newRequests); err != nil {
 		return req.MakeErr("Error al registrar la solicitud de registro.", err)
 	}
 
@@ -501,7 +501,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 		Created:       nowTime,
 		Status:        1,
 	}}
-	if err := db.Insert(&newCompanies); err != nil {
+	if err := db.Upsert(&newCompanies); err != nil {
 		return req.MakeErr("Error al crear la empresa.", err)
 	}
 	newCompany := newCompanies[0]
@@ -530,7 +530,7 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 		Updated:      nowTime,
 		Status:       1,
 	}}
-	if err := db.Insert(&newUsers); err != nil {
+	if err := db.Upsert(&newUsers); err != nil {
 		return req.MakeErr("Error al crear el usuario administrador.", err)
 	}
 	newUser := newUsers[0]

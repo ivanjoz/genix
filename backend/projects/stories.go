@@ -80,7 +80,7 @@ func saveStoryAssignees(companyID int32, isNewStory bool, stories ...types.Story
 		assigneeRows[storyIndex].CompanyID = companyID
 	}
 	if isNewStory {
-		return db.Insert(&assigneeRows)
+		return db.Upsert(&assigneeRows)
 	}
 	assigneeTable := db.TableOf[types.StoryAssignee]()
 	return db.Update(&assigneeRows, assigneeTable.ProjectID, assigneeTable.AssigneeID, assigneeTable.Status)
@@ -134,7 +134,7 @@ func PostEpics(req *core.HandlerArgs) core.HandlerResponse {
 		editedEpics = append(editedEpics, epic)
 	}
 	if len(newEpics) > 0 {
-		if err := db.Insert(&newEpics); err != nil {
+		if err := db.Upsert(&newEpics); err != nil {
 			return req.MakeErr("Error al guardar las épicas:", err)
 		}
 	}
@@ -247,7 +247,7 @@ func PostStory(req *core.HandlerArgs) core.HandlerResponse {
 		story.AttachmentsCount = int16(len(attachments))
 		story.CreatedBy, story.Created, story.Status, story.UpdatedBy = req.User.ID, now, types.StatusActive, req.User.ID
 		stories := []types.Story{story}
-		if err := db.Insert(&stories); err != nil {
+		if err := db.Upsert(&stories); err != nil {
 			return req.MakeErr("Error al guardar la historia:", err)
 		}
 		story = stories[0]
@@ -291,7 +291,7 @@ func PostStory(req *core.HandlerArgs) core.HandlerResponse {
 
 	detail.CompanyID, detail.ProjectID, detail.StoryID, detail.Attachments = companyID, project.ID, story.ID, attachments
 	detail.Status, detail.UpdatedBy = types.StatusActive, req.User.ID
-	if err := db.Insert(&[]types.StoryDetail{detail}); err != nil {
+	if err := db.Upsert(&[]types.StoryDetail{detail}); err != nil {
 		return req.MakeErr("Se guardó la historia, pero no su detalle:", err)
 	}
 	deleteProjectFiles(removedAttachmentKeys)
@@ -313,7 +313,7 @@ func saveDocumentChanges(companyID int32, documents []types.Document) error {
 		}
 	}
 	if len(newDocuments) > 0 {
-		if err := db.Insert(&newDocuments); err != nil {
+		if err := db.Upsert(&newDocuments); err != nil {
 			return err
 		}
 	}
@@ -519,7 +519,7 @@ func PostStoryComment(req *core.HandlerArgs) core.HandlerResponse {
 		CompanyID: companyID, ProjectID: request.ProjectID, StoryID: request.StoryID, Kind: types.ActivityKindComment,
 		Text: commentText, Attachments: attachments, AuthorID: req.User.ID, Created: now, Status: types.StatusActive,
 	}}
-	if err := db.Insert(&comments); err != nil {
+	if err := db.Upsert(&comments); err != nil {
 		return req.MakeErr("Error al guardar el comentario:", err)
 	}
 	// The Documents page's copies of its files name the comment, so they go once it has its ID; the
@@ -546,7 +546,7 @@ func addStoryActivities(activities ...types.StoryActivity) {
 	for activityIndex := range activities {
 		activities[activityIndex].Status = types.StatusActive
 	}
-	if err := db.Insert(&activities); err != nil {
+	if err := db.Upsert(&activities); err != nil {
 		core.Log("Error al guardar la actividad de la historia", err)
 	}
 }

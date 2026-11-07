@@ -120,7 +120,7 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 	records := []types.EmployeeRecord{record}
 	if record.ID == 0 {
 		records[0].Created, records[0].CreatedBy = core.SUnixTime(), req.User.ID
-		if err := db.Insert(&records); err != nil {
+		if err := db.Upsert(&records); err != nil {
 			return req.MakeErr("Error al guardar el registro:", err)
 		}
 		return req.MakeResponse(records[0])
@@ -317,7 +317,7 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		advances[i] = advance
 	}
-	if err := db.Insert(&advances); err != nil {
+	if err := db.Upsert(&advances); err != nil {
 		return req.MakeErr("Error al guardar los adelantos:", err)
 	}
 	// Each payment leaves its account on its pay date: Dr 1412 · Cr 101/1041 (H14).
@@ -370,14 +370,14 @@ func PostLoan(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 	loans := []types.EmployeeRecord{loan}
-	if err := db.Insert(&loans); err != nil {
+	if err := db.Upsert(&loans); err != nil {
 		return req.MakeErr("Error al guardar el préstamo:", err)
 	}
 	for i := range installments {
 		installments[i].LoanID, installments[i].Created, installments[i].CreatedBy, installments[i].UpdatedBy =
 			loans[0].ID, loan.Created, req.User.ID, req.User.ID
 	}
-	if err := db.Insert(&installments); err != nil {
+	if err := db.Upsert(&installments); err != nil {
 		return req.MakeErr("Error al guardar las cuotas del préstamo:", err)
 	}
 	// The disbursement: Dr 1411 · Cr 101/1041 (H13).
@@ -526,7 +526,7 @@ func PostEmployeeConcept(req *core.HandlerArgs) core.HandlerResponse {
 	record.CompanyID, record.UpdatedBy = companyID, req.User.ID
 	records := []types.EmployeeConcept{record}
 	if record.ID == 0 {
-		if err := db.Insert(&records); err != nil {
+		if err := db.Upsert(&records); err != nil {
 			return req.MakeErr("Error al guardar el concepto fijo:", err)
 		}
 		return req.MakeResponse(records[0])

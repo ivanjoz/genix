@@ -99,7 +99,7 @@ func PostWebsiteSeo(req *core.HandlerArgs) core.HandlerResponse {
 		})
 	}
 
-	if err := db.Insert(&parameters); err != nil {
+	if err := db.Upsert(&parameters); err != nil {
 		return req.MakeErr("Error al guardar los metatags SEO:", err)
 	}
 
@@ -195,7 +195,7 @@ func PostWebsiteDomain(req *core.HandlerArgs) core.HandlerResponse {
 				UpdatedBy: req.User.ID,
 			})
 		}
-		if err := db.Insert(&parametersToSave); err != nil {
+		if err := db.Upsert(&parametersToSave); err != nil {
 			return req.MakeErr("Error al guardar el dominio:", err)
 		}
 		core.Log("Dominio del sitio guardado::", domain)
@@ -286,7 +286,7 @@ func clearPreviousDomainMark(companyID int32, userID int32) {
 		Updated:   core.SUnixTime(),
 		UpdatedBy: userID,
 	}}
-	if err := db.Insert(&clearedParameter); err != nil {
+	if err := db.Upsert(&clearedParameter); err != nil {
 		core.Log("Error borrando la marca del dominio anterior::", companyID, err)
 	}
 }

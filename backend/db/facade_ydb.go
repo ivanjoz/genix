@@ -54,3 +54,6 @@ func BypassFarewardSequences() {}
 func RenameColumns(apply bool) error {
 	return errors.New("fn-rename-columns is not implemented on YDB yet")
 }
+
+// UseTableKeyBlocks does nothing here: only the OceanBase driver reserves table keys in blocks.
+func UseTableKeyBlocks() {}

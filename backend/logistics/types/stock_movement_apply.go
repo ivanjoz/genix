@@ -202,12 +202,17 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 	core.Log("ApplyMovimientos esperando lock company:", req.User.CompanyID, "movimientos:", len(movimientos))
 	unlockStock := LockCompanyStock(req.User.CompanyID)
 	defer unlockStock()
-	return ApplyMovimientosHoldingStockLock(req, movimientos)
+	// The stock, detail and ledger rows commit together.
+	return db.RunTransaction(func(transaction *db.Transaction) error {
+		return ApplyMovimientosHoldingStockLockIn(transaction, req, movimientos)
+	})
 }
 
-// ApplyMovimientosHoldingStockLock is ApplyMovimientos for a caller that already holds
-// LockCompanyStock: the lock is not reentrant.
-func ApplyMovimientosHoldingStockLock(req *core.HandlerArgs, movimientos []InternalMovement) error {
+// ApplyMovimientosHoldingStockLockIn is ApplyMovimientos for a caller that already holds
+// LockCompanyStock (the lock is not reentrant), inside the caller's transaction, so the stock moves commit with the document that caused them (a sale's delivery).
+// The rows it reads are guarded by LockCompanyStock, not by row locks, and everything it writes is
+// derived from them: a deadlock retry of the caller's body reruns it cleanly.
+func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.HandlerArgs, movimientos []InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
 
@@ -637,56 +642,45 @@ func ApplyMovimientosHoldingStockLock(req *core.HandlerArgs, movimientos []Inter
 	core.Log("ApplyMovimientos writes:",
 		"stocks", len(stocks), "details", len(details), "movements", len(warehouseMovements))
 
-	// Three writes run in parallel — the stock, detail, and movement tables don't share state,
-	// so a failure in one doesn't affect the others' progress. InsertUpdateInclude routes each
-	// record to INSERT or UPDATE by the Created>0 predicate.
-	writeGroup := errgroup.Group{}
+	// One transaction runs on one connection, so the three writes go one after the other.
+	// InsertUpdateIncludeIn routes each record to INSERT or UPDATE by the Created>0 predicate.
 	if len(stocks) > 0 {
-		writeGroup.Go(func() error {
-			stockTable := db.TableOf[ProductStock]()
-			if err := db.InsertUpdateInclude(&stocks,
-				func(e *ProductStock) bool { return e.Created > 0 },
-				db.Cols(
-					// Keep the materialized view tuple consistent on updates.
-					stockTable.WarehouseID,
-					stockTable.Quantity, stockTable.SubQuantity,
-					stockTable.DetailQuantity, stockTable.DetailSubQuantity,
-					stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
-					stockTable.SubDivisor,
-					stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
-					stockTable.AverageCost, stockTable.StockValue,
-					stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
-				),
-			); err != nil {
-				return core.Err("Error al guardar stock V2:", err)
-			}
-			return nil
-		})
+		stockTable := db.TableOf[ProductStock]()
+		if err := db.InsertUpdateIncludeIn(transaction, &stocks,
+			func(e *ProductStock) bool { return e.Created > 0 },
+			db.Cols(
+				// Keep the materialized view tuple consistent on updates.
+				stockTable.WarehouseID,
+				stockTable.Quantity, stockTable.SubQuantity,
+				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+				stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
+				stockTable.SubDivisor,
+				stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
+				stockTable.AverageCost, stockTable.StockValue,
+				stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
+			),
+		); err != nil {
+			return core.Err("Error al guardar stock V2:", err)
+		}
 	}
 	if len(details) > 0 {
-		writeGroup.Go(func() error {
-			detailTable := db.TableOf[ProductStockDetail]()
-			if err := db.InsertUpdateInclude(&details,
-				func(e *ProductStockDetail) bool { return e.Created > 0 },
-				db.Cols(
-					// Keep the materialized view tuple consistent on updates.
-					detailTable.WarehouseID,
-					detailTable.Quantity, detailTable.SubQuantity,
-					detailTable.Updated, detailTable.UpdatedBy, detailTable.Status,
-				),
-			); err != nil {
-				return core.Err("Error al guardar detalle de stock:", err)
-			}
-			return nil
-		})
-	}
-	writeGroup.Go(func() error {
-		if err := db.Insert(&warehouseMovements); err != nil {
-			return core.Err("Error al guardar los movimientos:", err)
+		detailTable := db.TableOf[ProductStockDetail]()
+		if err := db.InsertUpdateIncludeIn(transaction, &details,
+			func(e *ProductStockDetail) bool { return e.Created > 0 },
+			db.Cols(
+				// Keep the materialized view tuple consistent on updates.
+				detailTable.WarehouseID,
+				detailTable.Quantity, detailTable.SubQuantity,
+				detailTable.Updated, detailTable.UpdatedBy, detailTable.Status,
+			),
+		); err != nil {
+			return core.Err("Error al guardar detalle de stock:", err)
 		}
-		return nil
-	})
-	return writeGroup.Wait()
+	}
+	if err := db.UpsertIn(transaction, &warehouseMovements); err != nil {
+		return core.Err("Error al guardar los movimientos:", err)
+	}
+	return nil
 }
 
 // resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements
@@ -766,7 +760,7 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*InternalMovem
 		insertedHashOrder = append(insertedHashOrder, hash)
 	}
 	if len(lotsToInsert) > 0 {
-		if err := db.Insert(&lotsToInsert); err != nil {
+		if err := db.Upsert(&lotsToInsert); err != nil {
 			return core.Err("Error al crear lotes:", err)
 		}
 		for i, hash := range insertedHashOrder {

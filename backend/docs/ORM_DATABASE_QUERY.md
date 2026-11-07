@@ -137,7 +137,14 @@ larger list is never an error — only more round trips. 0 falls back to the
 
 ## 5. CRUD Operations
 
-### 5.1 Insert
+### 5.1 Insert and Upsert
+
+- `db.Insert` / `db.InsertOne` write **new** records: the caller promises no record is stored under
+  their keys (an autoincrement key the ORM assigns, or an ID the handler just built). PostgreSQL and
+  MariaDB then skip the read they do before every other write, and a key that is already stored fails
+  the write instead of overwriting it. Scylla writes them as an upsert, without checking.
+- `db.Upsert` / `db.UpsertOne` write records whether or not they are stored: a stored record is
+  overwritten. Use it when the record may exist (a re-import, a row re-scheduled with the same ID).
 
 ```go
 // Purpose: Insert many rows in one call.
@@ -162,6 +169,11 @@ err := db.Insert(&rows, q.Updated)
 err := db.InsertOne(rows[0])
 ```
 
+```go
+// Purpose: Write rows that may already be stored (overwrites them).
+err := db.Upsert(&rows)
+```
+
 ### 5.2 Update
 
 ```go
@@ -182,6 +194,37 @@ err := db.UpdateExclude(&[]Product{row}, q.Updated)
 // Purpose: Update one row with explicit include list.
 // Rationale: Keeps single-row path consistent with bulk update semantics.
 err := db.UpdateOne(row, q.Nombre, q.Status)
+```
+
+### 5.2b Transactions (`RunTransaction`)
+
+Use it when a write depends on a value read just before it, such as a running balance. On
+PostgreSQL and MariaDB, the body runs in one database transaction:
+
+- `LockByKeys` reads records by partition and keys, row-locked until the transaction ends. A key
+  with nothing stored is dropped from the slice.
+- `InsertIn` and `UpdateIn` queue writes in the transaction, with the same semantics as `Insert`
+  and `Update`.
+- A body that returns an error rolls back everything it queued.
+- On a deadlock, the whole body runs again. Build every write from what the body reads inside it,
+  never from state captured outside.
+
+On a driver without transactions (Scylla, ...), the same body runs call by call: `LockByKeys` is a
+plain read, and each write stands alone.
+
+```go
+err := db.RunTransaction(func(transaction *db.Transaction) error {
+	tills := []CashBank{{CompanyID: companyID, ID: tillID}}
+	if err := db.LockByKeys(transaction, &tills); err != nil {
+		return err
+	}
+	tills[0].CurrentAmount += amount
+	if err := db.InsertIn(transaction, &movements); err != nil {
+		return err
+	}
+	q := db.TableOf[CashBank]()
+	return db.UpdateIn(transaction, &tills, q.CurrentAmount, q.Updated)
+})
 ```
 
 ### 5.3 Query / Select

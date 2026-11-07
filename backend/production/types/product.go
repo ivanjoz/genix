@@ -188,7 +188,8 @@ func (e *Product) FillCategoriesWithStock() {
 // alive, always 1 per pair.
 type ProductCategoryFrame struct {
 	// FileBucket is always 0: a frame needs a Key, and the whole company fits in one file.
-	FileBucket int8  `frame:"key"`
+	// One bit: the full 31-bit CategoryID and ProductID then fit the 63-bit packed key.
+	FileBucket int8  `frame:"key,1"`
 	CategoryID int32 `frame:"row"`
 	ProductID  int32 `frame:"row"`
 }

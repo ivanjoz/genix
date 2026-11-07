@@ -60,3 +60,6 @@ func BypassFarewardSequences() {}
 func RenameColumns(apply bool) error {
 	return errors.New("fn-rename-columns is a Scylla tool; it has no FoundationDB counterpart yet")
 }
+
+// UseTableKeyBlocks does nothing here: only the OceanBase driver reserves table keys in blocks.
+func UseTableKeyBlocks() {}

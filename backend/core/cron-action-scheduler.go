@@ -4,6 +4,7 @@ import (
 	"app/db"
 	"math"
 	mrand "math/rand"
+	"sync"
 	"time"
 )
 
@@ -132,6 +133,13 @@ func scheduleCronActionRow(action CronAction, frameLengthInMinutes int8, isRecur
 	action.Messages = nil
 	action.Params.ProcessMessages = nil
 
+	// A row this process already saw pending needs no read: its frame has not started (a call lands
+	// on the next boundary, and the executor only runs frames that started), so nothing ran it since.
+	pendingKey := pendingCronActionKey{unixMinutesFrame: action.UnixMinutesFrame, actionID: action.ID}
+	if isKnownPendingCronAction(pendingKey) {
+		return
+	}
+
 	existingActions := []CronAction{}
 	existingActionQuery := db.Query(&existingActions)
 	existingActionQuery.Select(existingActionQuery.ID, existingActionQuery.Status).
@@ -143,12 +151,47 @@ func scheduleCronActionRow(action CronAction, frameLengthInMinutes int8, isRecur
 	}
 	if len(existingActions) > 0 && existingActions[0].Status == statusCronActionPending {
 		Log("ScheduleCronAction skipped existing pending action:", "company_id", action.CompanyID, "action_id", action.ActionID, "cron_id", action.ID)
+		rememberPendingCronAction(pendingKey)
 		return
 	}
 
-	if err := db.InsertOne(action); err != nil {
+	if err := db.UpsertOne(action); err != nil {
 		panic(err)
 	}
+	rememberPendingCronAction(pendingKey)
+}
+
+// pendingCronActionKey names a cron row: its frame and its ID.
+type pendingCronActionKey struct {
+	unixMinutesFrame int32
+	actionID         int64
+}
+
+// knownPendingCronActions are the rows this process wrote or found pending, for frames that have not
+// started. A sale schedules the same two rows as every other sale of its frame: without it, each sale
+// reads cron_actions twice to learn they are already there.
+var (
+	knownPendingCronActions      = map[pendingCronActionKey]bool{}
+	knownPendingCronActionsMutex sync.Mutex
+)
+
+func isKnownPendingCronAction(key pendingCronActionKey) bool {
+	knownPendingCronActionsMutex.Lock()
+	defer knownPendingCronActionsMutex.Unlock()
+	return knownPendingCronActions[key]
+}
+
+// rememberPendingCronAction records a pending row, and forgets the rows of frames that started.
+func rememberPendingCronAction(key pendingCronActionKey) {
+	currentFrame := int32(time.Now().Unix() / fiveMinuteFrameLength)
+	knownPendingCronActionsMutex.Lock()
+	defer knownPendingCronActionsMutex.Unlock()
+	for knownKey := range knownPendingCronActions {
+		if knownKey.unixMinutesFrame <= currentFrame {
+			delete(knownPendingCronActions, knownKey)
+		}
+	}
+	knownPendingCronActions[key] = true
 }
 
 var lastUnixMinutesFrame = int32(0)

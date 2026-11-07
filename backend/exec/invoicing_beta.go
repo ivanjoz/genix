@@ -147,7 +147,7 @@ func storeBetaCredentials(companyID int32, certificate []byte) error {
 	if existing != nil {
 		return db.Update(records)
 	}
-	return db.Insert(records)
+	return db.Upsert(records)
 }
 
 // ensureBetaSeries gives the company one series per document type if it has none.
@@ -237,11 +237,13 @@ func EmitInvoice(args *core.ExecArgs) core.FuncResponse {
 			existing.Number(series.SeriesCode)))
 	}
 
-	document, err := invoicingTypes.PrepareDocumentForSale(companyID, 1, order, series)
+	document, err := invoicingTypes.PrepareDocumentForSale(companyID, 1, order, series, nil)
 	if err != nil {
 		return args.MakeErr(fmt.Sprintf("no se pudo reservar el correlativo: %v", err))
 	}
-	if err := invoicingTypes.SaveNewDocument(document); err != nil {
+	if err := db.RunTransaction(func(transaction *db.Transaction) error {
+		return invoicingTypes.SaveNewDocument(transaction, document)
+	}); err != nil {
 		return args.MakeErr(err.Error())
 	}
 	args.AddMessage(fmt.Sprintf("reservado %v (id %v)",

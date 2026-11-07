@@ -19,9 +19,51 @@ type ConnectParams struct {
 	// YDBEndpoint is the gRPC address (host:port) and YDBDatabase the database path (ydb driver only).
 	YDBEndpoint string
 	YDBDatabase string
+	// OceanBase is the MySQL-protocol server of the oceanbase driver; its database is Keyspace.
+	OceanBase OceanBaseParams
+	// Postgres is the server of the postgres driver; Keyspace is a schema in its Database.
+	Postgres PostgresParams
+	// MariaDB is the server of the mariadb driver; Keyspace is its database.
+	MariaDB MariaDBParams
 	// Scripting dials immediately and allows long queries, for the exec entry points that run
 	// maintenance work. The server leaves it false: it connects on first use with tighter timeouts.
 	Scripting bool
+}
+
+// OceanBaseParams is read only by a `-tags oceanbase` build (docs/OCEANBASE_PLAN.md §13). User carries
+// the tenant (`root@test`). Partitions is the KEY(company_id) partition count of every table, 1 for
+// none; MaxConns caps the connection pool, 0 for the driver default. Engine "seekdb" deploys seekdb's
+// subset (obdriver.EngineSeekDB).
+type OceanBaseParams struct {
+	Host       string
+	Port       int
+	User       string
+	Password   string
+	Partitions int
+	MaxConns   int
+	Engine     string
+}
+
+// PostgresParams is read only by a `-tags postgres` build, the sale-flow benchmarks
+// (tests/loadtest/plan.md). Database is the PostgreSQL database ("postgres" when empty); MaxConns caps
+// the connection pool, 0 for the driver default.
+type PostgresParams struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+	MaxConns int
+}
+
+// MariaDBParams is read only by a `-tags mariadb` build, the sale-flow benchmarks
+// (tests/loadtest/DATABASE_COMPARISON.md). MaxConns caps the connection pool, 0 for the driver default.
+type MariaDBParams struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	MaxConns int
 }
 
 // connectedKeyspace is what Connect last received; MakeController qualifies table names with it.

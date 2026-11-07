@@ -147,7 +147,7 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		body.Created = nowTime
 		body.CreatedBy = req.User.ID
 		(*records)[0] = body
-		err = db.Insert(records)
+		err = db.Upsert(records)
 	} else {
 		// Lock rule (server-authoritative, never trust the client): a fully-paid expense
 		// (Status == 2) cannot be edited. Load the current row to enforce it.
@@ -303,7 +303,7 @@ func PostExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 		body.Created = nowTime
 		body.CreatedBy = req.User.ID
 		(*records)[0] = body
-		err = db.Insert(records)
+		err = db.Upsert(records)
 	} else {
 		q := db.TableOf[types.ExpenseScheduled]()
 		err = db.UpdateExclude(records, q.Created, q.CreatedBy)
@@ -437,7 +437,7 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 		for index := range newPeriods {
 			newPeriods[index].StampPeriod()
 		}
-		if err := db.Insert(&newPeriods); err != nil {
+		if err := db.Upsert(&newPeriods); err != nil {
 			return req.MakeErr("Error al generar los periodos del gasto:", err)
 		}
 		periods = append(periods, newPeriods...)

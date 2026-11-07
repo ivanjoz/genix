@@ -123,7 +123,7 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 	body.CreatedBy = req.User.ID
 
 	records := []types.Site{body}
-	if err = db.Insert(&records); err != nil {
+	if err = db.Upsert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
 	}
 
@@ -177,7 +177,7 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 	body.CreatedBy = req.User.ID
 
 	almacenes := []types.Warehouse{body}
-	if err := db.Insert(&almacenes); err != nil {
+	if err := db.Upsert(&almacenes); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
 	}
 

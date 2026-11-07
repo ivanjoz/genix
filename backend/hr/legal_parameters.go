@@ -57,7 +57,7 @@ func PostLegalParameter(req *core.HandlerArgs) core.HandlerResponse {
 	parameter.CountryID, parameter.UpdatedBy = types.CountryIDPeru, req.User.ID
 	records := []types.LegalParameter{parameter}
 	if parameter.ID == 0 {
-		err = db.Insert(&records)
+		err = db.Upsert(&records)
 	} else {
 		table := db.TableOf[types.LegalParameter]()
 		err = db.Update(&records, table.Key, table.ValidFrom, table.Value, table.Status, table.UpdatedBy)
@@ -132,7 +132,7 @@ func PostAfpRates(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(newRates) > 0 {
-		if err := db.Insert(&newRates); err != nil {
+		if err := db.Upsert(&newRates); err != nil {
 			return req.MakeErr("Error al guardar las tasas de AFP:", err)
 		}
 	}

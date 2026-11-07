@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -105,12 +106,13 @@ func (e *FecSemana) MakeName() string {
 	return Concat("-", e.Year, s2)
 }
 
-var dateToSemana = map[int16]*FecSemana{}
+// dateToSemana caches the week of each day across concurrent requests (*FecSemana by int16 key).
+var dateToSemana sync.Map
 
 // Si dateUnix = 0 entonces se obtiene la semana actual
 func MakeSemanaFromFechaUnix(dateUnix int16, isMonday bool) *FecSemana {
-	if fecSemana, ok := dateToSemana[dateUnix]; ok {
-		return fecSemana
+	if cachedSemana, ok := dateToSemana.Load(dateUnix); ok {
+		return cachedSemana.(*FecSemana)
 	}
 	if dateUnix == 0 {
 		dateUnix = TimeToFechaUnix(Now())
@@ -143,7 +145,7 @@ func MakeSemanaFromFechaUnix(dateUnix int16, isMonday bool) *FecSemana {
 	}
 	fechSemana.Code = int16(fechSemana.Id - 200000)
 
-	dateToSemana[dateUnixBase] = &fechSemana
+	dateToSemana.Store(dateUnixBase, &fechSemana)
 	return &fechSemana
 }
 

@@ -124,7 +124,7 @@ func syncImageAssets(fetchText imageAssetTextFetcher) (ImageAssetSyncResult, err
 		core.Log("SyncImageAssets no new records:", "categories skipped", result.CategoriesSkipped)
 		return result, nil
 	}
-	if err := db.Insert(&recordsToInsert); err != nil {
+	if err := db.Upsert(&recordsToInsert); err != nil {
 		return result, fmt.Errorf("insert image assets: %w", err)
 	}
 	categoryTable := db.TableOf[types.ImageAssetCategory]()
@@ -172,7 +172,7 @@ func syncImageAssetCategories(categorySummaries []imageAssetCategorySummary) (ma
 	}
 
 	core.Log("SyncImageAssets inserting categories:", len(categoriesToInsert))
-	if err := db.Insert(&categoriesToInsert); err != nil {
+	if err := db.Upsert(&categoriesToInsert); err != nil {
 		return nil, 0, fmt.Errorf("insert image asset categories: %w", err)
 	}
 	for _, category := range categoriesToInsert {

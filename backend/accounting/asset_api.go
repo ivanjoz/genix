@@ -192,7 +192,7 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 		newAssets = append(newAssets, makeAsset("", unitCount))
 	}
 
-	if insertError := db.Insert(&newAssets); insertError != nil {
+	if insertError := db.Upsert(&newAssets); insertError != nil {
 		return req.MakeErr("Error al registrar el activo.", insertError)
 	}
 
