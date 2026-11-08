@@ -96,6 +96,18 @@ disable_ssl = false
 # max_clustering_key_restrictions_per_query del nodo. 0 usa el default del ORM (100).
 max_clustering_key = 100
 
+# ─── MariaDB (primary database; `-tags mariadb` builds, the VPS deploy default) ──
+# The database is db.name above. scripts/configure/configure_db.py mariadb installs the
+# server, writes its tuned config and creates this user.
+[mariadb]
+host      = "127.0.0.1"
+port      = 3306
+user      = "genix"
+password  = "my_strong_password"
+# Connections the backend pool holds. The server runs a thread pool of one thread per core,
+# so a small pool is enough: 16 on a 2-core VPS. 0 uses the ORM default (16).
+max_conns = 16
+
 # ─── FoundationDB (solo builds con `-tags fdb`, docs/FOUNDATIONDB_PLAN.md) ─────
 [fdb]
 # Socket unix del daemon fdbgate (genix-orm/fdb/container).

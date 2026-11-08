@@ -57,7 +57,6 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(body.User) < 4 || len(body.Password) < 5 || body.CompanyID == 0 {
-		core.Print(body)
 		return req.MakeErr("El user/password enviado no posee el formato correcto.")
 	}
 	// The CipherKey is validated by MakeUsuarioResponse, which is the only place that knows when an
@@ -84,7 +83,6 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	user := usuarios[0]
-	core.Print(user)
 
 	passwordHash := core.Env.SECRET_PHRASE + body.Password
 	passwordHash = core.FnvHashString64(passwordHash, -1, 20)

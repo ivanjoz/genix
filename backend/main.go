@@ -15,14 +15,18 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/kr/pretty"
 	"github.com/rs/cors"
 )
 
@@ -449,7 +453,8 @@ func main() {
 			core.Log("Exec function message::", funcResponse.Message)
 		}
 		if len(funcResponse.Content) > 0 {
-			core.Print(funcResponse.Content)
+			// The command's result is its output: printed whatever the log level.
+			pretty.Println(funcResponse.Content)
 		}
 		return
 	}
@@ -458,6 +463,11 @@ func main() {
 	if !core.Env.IS_SERVERLESS {
 		// The VPS server is one long-lived process: it may reserve table keys in blocks.
 		db.UseTableKeyBlocks()
+		// GENIX_CPU_PROFILE records the CPU profile the release build is optimized with (PGO):
+		// run a load test against this process, stop it, and save the file as backend/default.pgo.
+		if cpuProfilePath := strings.TrimSpace(os.Getenv("GENIX_CPU_PROFILE")); cpuProfilePath != "" {
+			startCPUProfileUntilSignal(cpuProfilePath)
+		}
 		core.ConfigureServerAdmission()
 		exec.StartUsageLogFlushWorker()
 		if !core.Env.IS_DEV_ARG {
@@ -583,4 +593,28 @@ func main() {
 			lambda.StartWithOptions(LambdaHandler, lambda.WithContext(ctx))
 		}
 	}
+}
+
+// startCPUProfileUntilSignal profiles the whole process until SIGINT or SIGTERM, then writes the
+// profile and exits. Only for profiling runs (GENIX_CPU_PROFILE): a profiled server does not shut
+// down gracefully.
+func startCPUProfileUntilSignal(cpuProfilePath string) {
+	profileFile, err := os.Create(cpuProfilePath)
+	if err != nil {
+		core.Log("CPU profile: no se pudo crear", cpuProfilePath, "::", err)
+		return
+	}
+	if err := pprof.StartCPUProfile(profileFile); err != nil {
+		core.Log("CPU profile: no se pudo iniciar ::", err)
+		return
+	}
+	core.Log("*CPU profile activo:", cpuProfilePath)
+	stopSignals := make(chan os.Signal, 1)
+	signal.Notify(stopSignals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-stopSignals
+		pprof.StopCPUProfile()
+		profileFile.Close()
+		os.Exit(0)
+	}()
 }

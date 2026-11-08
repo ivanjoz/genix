@@ -2,7 +2,10 @@
 """Configura los motores de datos que necesita el backend en un mismo host.
 
     sudo python3 scripts/configure.py 18                    # todos
-    sudo python3 scripts/configure/configure_db.py scylla   # diagnóstico de un motor
+    sudo python3 scripts/configure/configure_db.py mariadb  # un solo motor
+
+MariaDB (primary): installs mariadb-server, writes the tuned server config, creates the
+DB_NAME database and the [mariadb] user.
 
 ScyllaDB: ajusta sysconfig/scylla.yaml, abre el puerto CQL, recupera el
 superusuario si hace falta y crea el keyspace de DB_NAME.
@@ -56,18 +59,28 @@ AUTH_RECOVERY_VERIFY_TIMEOUT_SECONDS = 60
 EXECUTION_MODE_ALL = "all"
 EXECUTION_MODE_SCYLLA = "scylla"
 EXECUTION_MODE_QDRANT = "qdrant"
+EXECUTION_MODE_MARIADB = "mariadb"
 
-# Los alias numericos replican la convencion de configure_server.py.
+# Los alias numericos replican la convencion de configure_server.py. MariaDB is the primary
+# database ("db" and "all" install it); Scylla is no longer supported and only kept until its
+# removal.
 EXECUTION_MODE_BY_ARGUMENT = {
     "1": EXECUTION_MODE_ALL,
     "all": EXECUTION_MODE_ALL,
     "2": EXECUTION_MODE_SCYLLA,
     "scylla": EXECUTION_MODE_SCYLLA,
-    "db": EXECUTION_MODE_SCYLLA,
     "3": EXECUTION_MODE_QDRANT,
     "qdrant": EXECUTION_MODE_QDRANT,
     "vector": EXECUTION_MODE_QDRANT,
+    "4": EXECUTION_MODE_MARIADB,
+    "mariadb": EXECUTION_MODE_MARIADB,
+    "db": EXECUTION_MODE_MARIADB,
 }
+
+DEFAULT_MARIADB_PORT = 3306
+# Debian-family servers read conf.d snippets from here, RHEL-family from /etc/my.cnf.d.
+MARIADB_CONFIG_DIRECTORIES = (Path("/etc/mysql/mariadb.conf.d"), Path("/etc/my.cnf.d"))
+MARIADB_CONFIG_FILENAME = "90-genix.cnf"
 
 SYSTEMD_UNIT_DIRECTORY = Path("/etc/systemd/system")
 
@@ -1183,16 +1196,144 @@ def configure_qdrant(credentials_data, broadcast_ip_address, release_version):
     print("    - api key: internal_apikey from config.toml (header 'api-key')")
     print(f"    - systemctl status {QDRANT_SERVICE_NAME}")
 
+def read_total_memory_megabytes():
+    with open("/proc/meminfo") as meminfo_file:
+        for meminfo_line in meminfo_file:
+            if meminfo_line.startswith("MemTotal:"):
+                return int(meminfo_line.split()[1]) // 1024
+    print("[!] Could not read MemTotal from /proc/meminfo.")
+    sys.exit(1)
+
+def build_mariadb_server_configuration(database_port, bind_address, total_memory_megabytes, processing_units):
+    """The server the load tests measured (backend/tests/loadtest/run_postgres.sh, MARIADB_TUNING.md),
+    scaled to this host.
+
+    The buffer pool takes half the RAM: the backend (GOMEMLIMIT), nginx, fareward and the OS share the
+    rest. innodb_flush_log_at_trx_commit=2 writes the redo log at every commit but fsyncs it once a
+    second: a MariaDB crash loses nothing, an OS or VM crash loses up to ~1 s of commits (decided for
+    the VPS on 2026-11-07). There is no binary log, so no point-in-time recovery: backups only. The
+    thread pool runs statements on one thread per core instead of one per connection, which measured
+    15% less CPU per sale on 2 vCPUs.
+    """
+    buffer_pool_megabytes = max(256, total_memory_megabytes // 2)
+    return f"""# Written by scripts/configure/configure_db.py (mariadb mode). Edits are overwritten on the next run.
+[mariadb]
+port = {database_port}
+bind-address = {bind_address}
+skip-name-resolve = ON
+max-connections = 150
+# The ORM sends write statements of up to 8 MB, half of this.
+max-allowed-packet = 16M
+transaction-isolation = READ-COMMITTED
+
+innodb-buffer-pool-size = {buffer_pool_megabytes}M
+innodb-log-file-size = 512M
+innodb-flush-log-at-trx-commit = 2
+skip-log-bin
+
+thread-handling = pool-of-threads
+thread-pool-size = {processing_units}
+performance-schema = OFF
+"""
+
+def resolve_mariadb_settings(credentials_data):
+    """[mariadb] host/port/user/password and [db] name, the same keys the backend reads."""
+    database_name = get_config_value(credentials_data, "db.name", "genix")
+    database_port = int(get_config_value(credentials_data, "mariadb.port", DEFAULT_MARIADB_PORT))
+    database_host = str(get_config_value(credentials_data, "mariadb.host", "127.0.0.1"))
+    database_user = str(get_config_value(credentials_data, "mariadb.user", "genix"))
+    database_password = str(get_config_value(credentials_data, "mariadb.password", ""))
+    if not database_password:
+        print("[!] mariadb.password is empty in config.toml. Set it before running this mode.")
+        sys.exit(1)
+    if not re.fullmatch(r"[A-Za-z0-9_]+", database_name) or not re.fullmatch(r"[A-Za-z0-9_]+", database_user):
+        print("[!] db.name and mariadb.user may only hold letters, digits and underscores.")
+        sys.exit(1)
+    # A backend on this host reaches it on loopback; any other host means it must listen outside.
+    is_local = database_host in ("127.0.0.1", "localhost", "::1")
+    return database_name, database_port, database_user, database_password, is_local
+
+def install_mariadb_server_package():
+    if which("mariadbd") or which("mysqld"):
+        print("[*] MariaDB server is already installed.")
+        return
+    if which("dnf"):
+        run_command("dnf install -y mariadb-server")
+    elif which("apt-get"):
+        run_command("apt-get update")
+        run_command("DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-server")
+    else:
+        print("[!] Neither dnf nor apt-get is available: install mariadb-server by hand, then rerun.")
+        sys.exit(1)
+
+def resolve_mariadb_service_name():
+    for service_name in ("mariadb", "mysql", "mysqld"):
+        if run_capture_command(["systemctl", "cat", f"{service_name}.service"], quiet=True).returncode == 0:
+            return service_name
+    print("[!] No mariadb/mysql systemd service found after installing the package.")
+    sys.exit(1)
+
+def run_mariadb_root_statement(sql_statement):
+    """Runs a statement as root over the local socket (unix_socket auth, the packages' default)."""
+    statement_result = subprocess.run(["mariadb", "--protocol=socket", "-uroot", "-e", sql_statement],
+                                      capture_output=True, text=True)
+    if statement_result.returncode != 0:
+        print(f"[!] MariaDB statement failed: {statement_result.stderr.strip()}")
+        sys.exit(1)
+
+def configure_mariadb(credentials_data, broadcast_ip_address):
+    database_name, database_port, database_user, database_password, is_local = resolve_mariadb_settings(credentials_data)
+    bind_address = "127.0.0.1" if is_local else broadcast_ip_address
+    install_mariadb_server_package()
+
+    configuration_directory = next((directory for directory in MARIADB_CONFIG_DIRECTORIES if directory.is_dir()), None)
+    if configuration_directory is None:
+        print(f"[!] None of {[str(directory) for directory in MARIADB_CONFIG_DIRECTORIES]} exists.")
+        sys.exit(1)
+    configuration_path = configuration_directory / MARIADB_CONFIG_FILENAME
+    total_memory_megabytes = read_total_memory_megabytes()
+    configuration_path.write_text(build_mariadb_server_configuration(
+        database_port, bind_address, total_memory_megabytes, get_available_processing_units()))
+    os.chmod(configuration_path, 0o644)
+    print_file_debug_lines(str(configuration_path), [r".*"])
+
+    service_name = resolve_mariadb_service_name()
+    run_command("systemctl daemon-reload")
+    run_command(f"systemctl enable {service_name}.service")
+    run_command(f"systemctl restart {service_name}.service")
+    if not wait_for_service_active(service_name, timeout_seconds=60):
+        print_service_failure_debug(service_name)
+        sys.exit(1)
+
+    # The backend creates its own tables (and the ORM's side tables) in this database.
+    user_host = "localhost" if is_local else "%"
+    escaped_password = database_password.replace("\\", "\\\\").replace("'", "\\'")
+    run_mariadb_root_statement(
+        f"CREATE DATABASE IF NOT EXISTS `{database_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; "
+        f"CREATE USER IF NOT EXISTS '{database_user}'@'{user_host}' IDENTIFIED BY '{escaped_password}'; "
+        f"ALTER USER '{database_user}'@'{user_host}' IDENTIFIED BY '{escaped_password}'; "
+        f"GRANT ALL PRIVILEGES ON `{database_name}`.* TO '{database_user}'@'{user_host}';"
+    )
+    if not is_local:
+        ensure_tcp_port_open(database_port, "MariaDB")
+
+    print("\n[+] MariaDB configured!")
+    print(f"    - config:   {configuration_path}")
+    print(f"    - listen:   {bind_address}:{database_port}")
+    print(f"    - database: {database_name}, user '{database_user}'@'{user_host}'")
+    print(f"    - buffer pool: {max(256, total_memory_megabytes // 2)} MB of {total_memory_megabytes} MB RAM")
+    print(f"    - systemctl status {service_name}")
+
 def parse_command_arguments():
     argument_parser = argparse.ArgumentParser(
         prog="configure_db.py",
-        description="Configures ScyllaDB and installs Qdrant on this host.",
+        description="Configures MariaDB and installs Qdrant on this host (ScyllaDB on request).",
     )
     argument_parser.add_argument(
         "mode",
         nargs="?",
         default=EXECUTION_MODE_ALL,
-        help="all|1 (default), scylla|2, qdrant|3",
+        help="all|1 (default: mariadb + qdrant), scylla|2, qdrant|3, mariadb|db|4",
     )
     argument_parser.add_argument(
         "--qdrant-version",
@@ -1203,7 +1344,7 @@ def parse_command_arguments():
 
     execution_mode = EXECUTION_MODE_BY_ARGUMENT.get(parsed_arguments.mode.strip().lower())
     if execution_mode is None:
-        argument_parser.error(f"Unknown mode: {parsed_arguments.mode}. Use all, scylla or qdrant.")
+        argument_parser.error(f"Unknown mode: {parsed_arguments.mode}. Use all, mariadb, qdrant or scylla.")
 
     parsed_arguments.mode = execution_mode
     return parsed_arguments
@@ -1221,7 +1362,10 @@ def main():
     credentials_data = load_project_credentials()
     detected_network_provider, broadcast_ip_address = get_preferred_broadcast_ip()
 
-    if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_SCYLLA):
+    if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_MARIADB):
+        configure_mariadb(credentials_data, broadcast_ip_address)
+
+    if command_arguments.mode == EXECUTION_MODE_SCYLLA:
         configure_scylladb(credentials_data, broadcast_ip_address, detected_network_provider)
 
     if command_arguments.mode in (EXECUTION_MODE_ALL, EXECUTION_MODE_QDRANT):

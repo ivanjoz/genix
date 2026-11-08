@@ -40,8 +40,14 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-func Print(Struct any) {
-	pretty.Println(Struct)
+// Print pretty-prints a value for debugging, under the same rule as Log: only with [logs].full or a
+// dev launch. It used to print always, which on the VPS wrote request bodies into journald on every
+// call (login bodies included).
+func Print(value any) {
+	if Env != nil && !Env.LOGS_FULL {
+		return
+	}
+	pretty.Println(value)
 }
 
 func Logx(style int8, messageInColor string, params ...any) {

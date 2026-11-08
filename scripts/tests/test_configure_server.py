@@ -45,6 +45,14 @@ class ConfigureServerNginxTemplateTest(unittest.TestCase):
         self.assertIn("proxy_set_header Upgrade $http_upgrade;", rendered_config)
         self.assertIn("proxy_set_header Connection $connection_upgrade;", rendered_config)
         self.assertIn("proxy_read_timeout 3600s;", rendered_config)
+        # Early data is refused for anything but GET and HEAD, so a captured POST cannot be replayed.
+        self.assertIn('map "$ssl_early_data:$request_method" $reject_early_data_genix_dev_api_2_un_pe {', rendered_config)
+        self.assertIn('"~^1:(?!GET$|HEAD$)" 1;', rendered_config)
+        self.assertIn("if ($reject_early_data_genix_dev_api_2_un_pe) {", rendered_config)
+        self.assertIn("return 425;", rendered_config)
+        self.assertIn("proxy_buffers 16 32k;", rendered_config)
+        self.assertIn("proxy_max_temp_file_size 0;", rendered_config)
+        self.assertIn("quic_gso on;", rendered_config)
 
 
 class ConfigureServerCredentialsTest(unittest.TestCase):

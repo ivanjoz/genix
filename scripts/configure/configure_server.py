@@ -970,6 +970,21 @@ def extract_existing_certbot_tls_lines(existing_nginx_configuration_contents):
     return preserved_tls_lines
 
 
+def warn_when_certificate_is_not_ecdsa(endpoint_hostname):
+    """An ECDSA P-256 key makes each TLS/QUIC handshake several times cheaper than RSA 2048, which
+    matters on a 2-core ARM VPS. certbot records the key type in the renewal config."""
+    renewal_configuration_path = Path("/etc/letsencrypt/renewal") / f"{endpoint_hostname}.conf"
+    if not renewal_configuration_path.exists():
+        return
+    if re.search(r"^key_type\s*=\s*ecdsa", renewal_configuration_path.read_text(encoding="utf-8"), re.M):
+        return
+    print_debug(
+        f"The certificate of {endpoint_hostname} is RSA. Reissue it as ECDSA for cheaper handshakes: "
+        f"certbot certonly --nginx --key-type ecdsa --elliptic-curve secp256r1 --cert-name {endpoint_hostname} "
+        f"-d {endpoint_hostname} --force-renewal"
+    )
+
+
 def build_tls_directive_lines(endpoint_hostname, existing_nginx_configuration_contents):
     certificate_directory = LETSENCRYPT_DIRECTORY / endpoint_hostname
     certificate_fullchain_path = certificate_directory / "fullchain.pem"
@@ -983,6 +998,7 @@ def build_tls_directive_lines(endpoint_hostname, existing_nginx_configuration_co
 
     if certificate_fullchain_path.exists() and certificate_private_key_path.exists():
         print_debug(f"Detected TLS certificates for {endpoint_hostname} at {certificate_directory}")
+        warn_when_certificate_is_not_ecdsa(endpoint_hostname)
         return [
             f"    ssl_certificate {certificate_fullchain_path};",
             f"    ssl_certificate_key {certificate_private_key_path};",
@@ -1032,10 +1048,15 @@ def build_http3_nginx_configuration(
 
     if tls_directive_lines:
         tls_directives = "\n".join(tls_directive_lines)
-        return f"""# Map block to handle 0-RTT security (prevents replay attacks on POST/PUT)
-map $ssl_early_data $is_early_data {{
-    "~on" 1;
+        # A request sent as TLS 1.3 early data (0-RTT) can be replayed by anyone who captured it.
+        # GET and HEAD are safe to replay; any other method is answered 425 Too Early, which the
+        # browser retries by itself once the handshake completes. Named per domain, like the
+        # upstream, so two vhosts on one host never declare the same map variable.
+        reject_early_data_variable = "$reject_early_data_" + upstream_name.removeprefix("genix_backend_")
+        return f"""# 0-RTT replay protection: see build_http3_nginx_configuration in configure_server.py.
+map "$ssl_early_data:$request_method" {reject_early_data_variable} {{
     default 0;
+    "~^1:(?!GET$|HEAD$)" 1;
 }}
 
 {upstream_block}
@@ -1057,6 +1078,10 @@ server {{
     ssl_session_tickets on;
 
     add_header Alt-Svc 'h3=":443"; ma=86400';
+    # Generic segmentation offload: the kernel splits large QUIC sends, far fewer syscalls.
+    quic_gso on;
+    # Buffered access log: one write per 64 KB or 5 s instead of one per request.
+    access_log /var/log/nginx/{endpoint_hostname}.access.log combined buffer=64k flush=5s;
 
     location / {{
         # Handle browser preflight requests directly at the edge to reduce backend load.
@@ -1070,12 +1095,9 @@ server {{
             return 204;
         }}
 
-        if ($request_method != GET) {{
-            set $early_data_check "${{is_early_data}}";
+        if ({reject_early_data_variable}) {{
+            return 425;
         }}
-        #if ($early_data_check = "1") {{
-        #    return 425;
-        #}}
 
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -1096,8 +1118,12 @@ server {{
         # Agent WebSockets can sit idle while the user thinks between messages.
         proxy_read_timeout 3600s;
         proxy_buffering on;
+        # Report responses reach ~150 KB: 16 x 32 KB holds them in memory. With a temp file size of
+        # 0 a larger one streams to the client instead of being spooled to disk.
         proxy_buffer_size 16k;
-        proxy_buffers 4 16k;
+        proxy_buffers 16 32k;
+        proxy_busy_buffers_size 64k;
+        proxy_max_temp_file_size 0;
     }}
 }}
 """
@@ -1143,8 +1169,12 @@ server {{
         # Agent WebSockets can sit idle while the user thinks between messages.
         proxy_read_timeout 3600s;
         proxy_buffering on;
+        # Report responses reach ~150 KB: 16 x 32 KB holds them in memory. With a temp file size of
+        # 0 a larger one streams to the client instead of being spooled to disk.
         proxy_buffer_size 16k;
-        proxy_buffers 4 16k;
+        proxy_buffers 16 32k;
+        proxy_busy_buffers_size 64k;
+        proxy_max_temp_file_size 0;
     }}
 }}
 """

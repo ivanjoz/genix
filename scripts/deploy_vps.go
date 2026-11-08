@@ -24,6 +24,14 @@ const defaultRemoteBinaryPath = "/usr/local/bin/genix/genix_app"
 // them in sync. See docs/BINARY_SIZE_PLAN.md.
 const backendBuildTags = "lambda.norpc"
 
+// vpsDatabaseBuildTag selects the VPS backend's database driver: MariaDB is the primary database.
+// Without it the build would get the Scylla driver.
+const vpsDatabaseBuildTag = "mariadb"
+
+// arm64Generation targets ARMv8.2 (Ampere A1/Neoverse N1, Graviton2 and later): LSE atomics instead
+// of load/store-exclusive loops, which every mutex and channel uses.
+const arm64Generation = "v8.2"
+
 type ServerCredentials struct {
 	Host             string `toml:"host"`
 	User             string `toml:"user"`
@@ -204,9 +212,14 @@ func getOrCreateCompressedBinaryForArchitecture(
 	buildFlags := fmt.Sprintf("-s -w -X 'app/core.BuildDate=%s'", buildDate)
 
 	fmt.Printf("Compiling backend for linux/%s...\n", targetArchitecture)
-	buildBackendCommand := exec.Command("go", "build", "-tags", backendBuildTags, "-ldflags", buildFlags, "-o", localBinaryPath, ".")
+	// -pgo=auto (go build's default) optimizes with backend/default.pgo when it exists: the CPU
+	// profile of a load test (GENIX_CPU_PROFILE, see main.go).
+	buildBackendCommand := exec.Command("go", "build", "-tags", backendBuildTags+","+vpsDatabaseBuildTag, "-ldflags", buildFlags, "-o", localBinaryPath, ".")
 	buildBackendCommand.Dir = "../backend"
 	buildBackendCommand.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+targetArchitecture)
+	if targetArchitecture == "arm64" {
+		buildBackendCommand.Env = append(buildBackendCommand.Env, "GOARM64="+arm64Generation)
+	}
 	buildBackendCommand.Stdout = os.Stdout
 	buildBackendCommand.Stderr = os.Stderr
 

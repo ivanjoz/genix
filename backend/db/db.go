@@ -372,6 +372,9 @@ var (
 	MakeKeyConcat = orm.MakeKeyConcat
 	// GetAutoincrementID reserves consecutive IDs for an arbitrary counter key.
 	GetAutoincrementID = orm.GetAutoincrementID
+	// GetBlockAutoincrementID reserves from the server's block of the counter: one write per
+	// block, gaps on restart. Only for counters that may skip values.
+	GetBlockAutoincrementID = orm.GetBlockAutoincrementID
 	// QueryCachedGenericByIDs resolves IDs to the flat GenericRecord shape for any
 	// table that opted in through TableSchema.GenericRecord.
 	QueryCachedGenericByIDs = orm.QueryCachedGenericByIDs

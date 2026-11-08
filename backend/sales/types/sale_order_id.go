@@ -67,7 +67,14 @@ func MakeSaleOrderID(companyID int32, issueSeriesID int8) (int64, error) {
 		return 0, errors.New("la serie de la venta debe estar entre 0 y 99")
 	}
 
-	correlativo, err := db.GetAutoincrementID(IssueSeriesCounterName(companyID, issueSeriesID), 1)
+	// A comprobante series must be gapless (SUNAT), so it reserves exactly. Series 0 is never
+	// declared: its numbers come from the process's block of the counter, one write per block
+	// instead of one per sale, and a restart leaves a harmless gap.
+	reserveCorrelativo := db.GetAutoincrementID
+	if issueSeriesID == 0 {
+		reserveCorrelativo = db.GetBlockAutoincrementID
+	}
+	correlativo, err := reserveCorrelativo(IssueSeriesCounterName(companyID, issueSeriesID), 1)
 	if err != nil {
 		return 0, err
 	}
