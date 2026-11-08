@@ -166,11 +166,13 @@ func contractsOf(contracts []types.Contract, employeeID int32) []types.Contract 
 	return employeeContracts
 }
 
-func loadRun(companyID, runID int32) (types.PayrollRun, error) {
-	runs := []types.PayrollRun{}
-	query := db.Query(&runs)
-	query.CompanyID.Equals(companyID).ID.Equals(runID)
-	if err := query.Exec(); err != nil {
+// lockRunIn reads a run under its row lock. Every write of a run or of what it settles holds it, in
+// this order: employee, run(s), records, cash bank. So a close, a reopen, a payment, a
+// recalculation and a record edit of its month apply one after the other, each on what the
+// previous one left.
+func lockRunIn(transaction *db.Transaction, companyID, runID int32) (types.PayrollRun, error) {
+	runs := []types.PayrollRun{{CompanyID: companyID, ID: runID}}
+	if err := db.LockByKeys(transaction, &runs); err != nil {
 		return types.PayrollRun{}, fmt.Errorf("error al leer la planilla: %v", err)
 	}
 	if len(runs) == 0 || runs[0].Status == types.StatusDeleted {

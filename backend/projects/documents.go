@@ -31,33 +31,46 @@ func PostDocument(req *core.HandlerArgs) core.HandlerResponse {
 	if document.StoryID != 0 {
 		return req.MakeErr("Los archivos de una historia se editan en la historia.")
 	}
-	_, release, response, isDenied := openProjectWrite(req, document.ProjectID, types.ProjectRoleMember)
-	if isDenied {
-		return response
+	savedDocument := types.Document{}
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		savedDocument, err = saveProjectDocumentIn(transaction, req, document)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
-	defer release()
+	// The file goes once the record no longer names it: a failed write keeps both.
+	if savedDocument.Status == types.StatusDeleted {
+		deleteProjectFiles([]string{savedDocument.Key})
+	}
+	return req.MakeResponse(savedDocument)
+}
+
+// saveProjectDocumentIn adds or deletes a project's own document under the project's row lock.
+func saveProjectDocumentIn(transaction *db.Transaction, req *core.HandlerArgs, document types.Document) (types.Document, error) {
+	if _, err := lockProjectWriteIn(transaction, req, document.ProjectID, types.ProjectRoleMember); err != nil {
+		return types.Document{}, err
+	}
 	companyID := req.User.CompanyID
 
 	if document.Status == types.StatusDeleted {
-		storedDocuments := []types.Document{}
-		query := db.Query(&storedDocuments)
-		query.CompanyID.Equals(companyID).ID.Equals(document.ID)
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener el documento:", err)
+		storedDocuments := []types.Document{{CompanyID: companyID, ID: document.ID}}
+		if err := db.LockByKeys(transaction, &storedDocuments); err != nil {
+			return types.Document{}, core.Err("Error al obtener el documento:", err)
 		}
 		if len(storedDocuments) == 0 || storedDocuments[0].ProjectID != document.ProjectID || storedDocuments[0].Status != types.StatusActive {
-			return req.MakeErr("El documento no existe.")
+			return types.Document{}, core.Err("El documento no existe.")
 		}
 		deletedDocument := storedDocuments[0]
 		if deletedDocument.StoryID != 0 {
-			return req.MakeErr("Los archivos de una historia se editan en la historia.")
+			return types.Document{}, core.Err("Los archivos de una historia se editan en la historia.")
 		}
 		deletedDocument.Status, deletedDocument.UpdatedBy = types.StatusDeleted, req.User.ID
-		if err := saveDocumentChanges(companyID, []types.Document{deletedDocument}); err != nil {
-			return req.MakeErr("Error al eliminar el documento:", err)
+		if err := saveDocumentChangesIn(transaction, companyID, []types.Document{deletedDocument}); err != nil {
+			return types.Document{}, core.Err("Error al eliminar el documento:", err)
 		}
-		deleteProjectFiles([]string{deletedDocument.Key})
-		return req.MakeResponse(deletedDocument)
+		return deletedDocument, nil
 	}
 
 	// The same validation and stamping as a story's attachment.
@@ -65,11 +78,11 @@ func PostDocument(req *core.HandlerArgs) core.HandlerResponse {
 		Key: document.Key, Name: document.Name, ContentType: document.ContentType, Size: document.Size,
 	}}, req.User.ID, core.SUnixTime())
 	if err != nil {
-		return req.MakeErr(err)
+		return types.Document{}, err
 	}
 	newDocuments := []types.Document{documentOfAttachment(document.ProjectID, 0, 0, attachments[0], req.User.ID)}
-	if err := saveDocumentChanges(companyID, newDocuments); err != nil {
-		return req.MakeErr("Error al guardar el documento:", err)
+	if err := saveDocumentChangesIn(transaction, companyID, newDocuments); err != nil {
+		return types.Document{}, core.Err("Error al guardar el documento:", err)
 	}
-	return req.MakeResponse(newDocuments[0])
+	return newDocuments[0], nil
 }

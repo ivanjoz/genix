@@ -24,23 +24,12 @@ const (
 	// sale, so two clicks cannot produce two documents for it. Keyed on the sale,
 	// so unrelated sales never queue behind each other.
 	ActionInvoiceSaleOrder LockAction = 3
-	// ActionAnnulSaleOrder serializes annulling one sale. The annulment reads both ledgers to
-	// decide what to give back, so two concurrent clicks would each read a zero reversal and
-	// each write one — refunding twice. Keyed on the sale.
-	ActionAnnulSaleOrder LockAction = 4
-	// ActionSaveInvoiceSeries serializes editing a company's invoicing series. They travel inline
-	// on the company row, so saving one is a read-modify-write of the whole set: two concurrent
-	// saves would each start from the same list and the later one would drop the other's series.
-	// Keyed on the company.
-	ActionSaveInvoiceSeries LockAction = 5
+	// 4 is retired (ActionAnnulSaleOrder): the annulment locks the sale's row instead.
+	// 5 is retired (ActionSaveInvoiceSeries): the series save locks the company's row instead.
 	// ActionCompactDataFrame keeps one compaction at a time on a DataFrame partition
 	// (genix-orm/dataframe): the reads of other Lambdas that find it due queue behind it and then read
 	// its files. Keyed on a hash of the frame's folder and the company. The frame's state and files are
 	// written conditioned on their ETags, so a lost lock costs duplicate work only.
 	ActionCompactDataFrame LockAction = 6
-	// ActionProjectWrite serializes the writes of one agile project (app/projects): a story, its
-	// sprint boards and the project's counters are read, changed and rewritten whole, so two
-	// concurrent writers would each start from the same state and the later one would drop the
-	// other's change. Keyed on the company and the project (projectLockIdentifier).
-	ActionProjectWrite LockAction = 7
+	// 7 is retired (ActionProjectWrite): project writes lock the project's row instead.
 )

@@ -38,18 +38,41 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	body.Updated = core.SUnixTime()
-	empresasToSave := []types.Company{body}
-	if err = db.Upsert(&empresasToSave); err != nil {
-		return req.MakeErr("Error guardar la company en ScyllaDB.", err)
+	if body.ID == 0 {
+		empresasToSave := []types.Company{body}
+		if err = db.Insert(&empresasToSave); err != nil {
+			return req.MakeErr("Error guardar la company.", err)
+		}
+		body = empresasToSave[0]
+	} else if body, err = saveCompanyKeepingSeries(body); err != nil {
+		return req.MakeErr("Error guardar la company.", err)
 	}
-
-	body = empresasToSave[0]
 	if err = cloud.Insert([]types.Company{body}); err != nil {
 		return req.MakeErr("Error guardar la company en cloud.", err)
 	}
 
 	cloud.StoreCompanyConfigAsync(body.ID)
 	return req.MakeResponse(body)
+}
+
+// saveCompanyKeepingSeries writes an existing company whole, except its invoicing series: those
+// have their own endpoint (POST.invoice-series), so a company form's Save means what the user sees
+// on it, and a payload that omits the series or carries a stale copy cannot wipe one somebody added
+// meanwhile. The row is read under its lock, the one the series save takes, so the series kept are
+// the current ones.
+func saveCompanyKeepingSeries(record types.Company) (types.Company, error) {
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		stored := []types.Company{{ID: record.ID}}
+		if err := db.LockByKeys(transaction, &stored); err != nil {
+			return err
+		}
+		if len(stored) == 0 {
+			return fmt.Errorf("no se encontró la empresa %d", record.ID)
+		}
+		record.InvoiceSeries = stored[0].InvoiceSeries
+		return db.UpsertIn(transaction, &[]types.Company{record})
+	})
+	return record, err
 }
 
 func GetEmpresas(req *core.HandlerArgs) core.HandlerResponse {
@@ -161,18 +184,6 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC.")
 	}
 
-	// The invoicing series travel inline on this record but are NOT written here.
-	// They have their own endpoint (POST.invoice-series), so this form's Save means
-	// what the user sees on it — and a payload that omits the field, or carries a
-	// stale copy, cannot wipe series somebody added in the meantime.
-	stored, err := getCompanyByID(req.User.CompanyID)
-	if err != nil {
-		return req.MakeErr("Error al leer la company:", err)
-	}
-	if stored != nil {
-		record.InvoiceSeries = stored.InvoiceSeries
-	}
-
 	// The flags tab posts the whole company, so a payload can carry any id it likes: refuse the
 	// ones the catalog does not declare instead of storing a rule the browser cannot show back.
 	record.Flags, err = core.SanitizeCompanyFlags(record.Flags)
@@ -195,12 +206,9 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	record.Updated = core.SUnixTime()
-	empresasToSave := []types.Company{record}
-	if err = db.Upsert(&empresasToSave); err != nil {
-		return req.MakeErr("Error al guardar el registro de la company en ScyllaDB:", err)
+	if record, err = saveCompanyKeepingSeries(record); err != nil {
+		return req.MakeErr("Error al guardar el registro de la company:", err)
 	}
-
-	record = empresasToSave[0]
 	if err = cloud.Insert([]types.Company{record}); err != nil {
 		return req.MakeErr("Error al guardar el registro de la company en cloud:", err)
 	}

@@ -115,6 +115,21 @@ func encodeMergedAccesoGrants(grantsByAccesoID map[int32]*core.AccesoGrant) ([]b
 	return accesosBlob, accesosSubBlob, nil
 }
 
+// computeUserAccesos is a user's two access blobs, from both sources: their profiles, and the
+// accesses granted to them directly (AccesosGrants), which merge exactly like a profile's would
+// ("highest nivel wins, sub-accesses union"). Every writer of the blobs goes through it, so none
+// can leave the direct grants out.
+func computeUserAccesos(perfilesByID map[int32]types.Profile, user coreTypes.User) ([]byte, []byte, error) {
+	grantsByAccesoID, err := buildAccesosComputedFromPerfiles(perfilesByID, user.ProfileIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, grantRecord := range user.AccesosGrants {
+		addAccesoGrantToMerge(grantsByAccesoID, grantRecord)
+	}
+	return encodeMergedAccesoGrants(grantsByAccesoID)
+}
+
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	updated := req.GetQueryInt64("updated")
 
@@ -181,84 +196,84 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		body.User = "admin"
 	}
 	body.CompanyID = req.User.CompanyID
-
-	now := core.SUnixTime()
-	if body.ID == 0 {
-		body.Created = now
-		body.CreatedBy = req.User.ID
-		body.Status = 1
-	} else {
-		usuariosExistentes := []coreTypes.User{}
-		query := db.Query(&usuariosExistentes)
-		query.CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID).Limit(1)
-		if err = query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener el user a actualizar.", err)
-		}
-		if len(usuariosExistentes) == 0 {
-			return req.MakeErr("No se encontró el user a actualizar")
-		}
-
-		usuarioActual := usuariosExistentes[0]
-		body.PasswordHash = usuarioActual.PasswordHash
-		body.Created = usuarioActual.Created
-		body.CreatedBy = usuarioActual.CreatedBy
-		// "user-self" no exige acceso del catálogo (selfServiceRoutes en main-handlers.go), así que
-		// todo lo que determina permisos se restaura desde el registro guardado: de lo contrario
-		// cualquier usuario se auto-otorgaría accesos mandando ProfileIDs o AccesosGrants en el body.
-		if isUsuarioPropio {
-			body.ProfileIDs = usuarioActual.ProfileIDs
-			body.AccesosGrants = usuarioActual.AccesosGrants
-			body.User = usuarioActual.User
-			body.Status = usuarioActual.Status
-		}
-	}
-
-	if len(body.Password) >= 6 {
-		passwordConcat := core.Env.SECRET_PHRASE + body.Password
-		body.PasswordHash = core.FnvHashString64(passwordConcat, -1, 20)
-	}
-
 	// NEVER trust the client: the catalog decides which accesses and sub-accesses exist. Same check
 	// a profile gets — direct grants reach the same blobs, so they earn the same scrutiny.
 	if err = ValidateAccesoGrants(body.AccesosGrants); err != nil {
 		return req.MakeErr(err)
 	}
-
-	perfilesByID, err := getPerfilesMapByIDs(body.CompanyID, body.ProfileIDs)
-	if err != nil {
-		return req.MakeErr("Error al obtener los perfiles del user.", err)
+	// The hash is never the client's: a new password's, else the stored one (set below).
+	newPasswordHash := ""
+	if len(body.Password) >= 6 {
+		newPasswordHash = core.FnvHashString64(core.Env.SECRET_PHRASE+body.Password, -1, 20)
 	}
-
-	grantsByAccesoID, err := buildAccesosComputedFromPerfiles(perfilesByID, body.ProfileIDs)
-	if err != nil {
-		return req.MakeErr("Error al obtener los accesos del profile.", err)
-	}
-	// AccesosGrants are the accesses granted to this user directly, on top of their profiles. They
-	// merge exactly like a profile's would — same shape, same function — so the same "highest nivel
-	// wins, sub-accesses union" rule applies and there is no separate dedup step.
-	for _, grantRecord := range body.AccesosGrants {
-		addAccesoGrantToMerge(grantsByAccesoID, grantRecord)
-	}
-	accesosBlob, accesosSubBlob, err := encodeMergedAccesoGrants(grantsByAccesoID)
-	if err != nil {
-		return req.MakeErr("Error al codificar los accesos del user.", err)
-	}
-
 	body.Password = ""
-	body.AccesosComputed = accesosBlob
-	body.AccesosSubComputed = accesosSubBlob
-	body.Updated = now
-	body.UpdatedBy = req.User.ID
-	core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs,
-		"accesos bytes", len(body.AccesosComputed), "sub bytes", len(body.AccesosSubComputed))
-	core.Print(body)
+	body.PasswordHash = newPasswordHash
 
-	usuariosToSave := []coreTypes.User{body}
-	if err = db.Upsert(&usuariosToSave); err != nil {
-		return req.MakeErr("Error al actualizar el user (SQL): " + err.Error())
+	// An edit runs on the user read under its row lock, and reads the profiles after taking it: a
+	// profile save that recomputes this user holds the same lock, so neither overwrites the other's
+	// blobs with ones computed from a stale profile.
+	submitted := body
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		body = submitted
+		now := core.SUnixTime()
+		if body.ID == 0 {
+			body.Created = now
+			body.CreatedBy = req.User.ID
+			body.Status = 1
+		} else {
+			usuariosExistentes := []coreTypes.User{{CompanyID: req.User.CompanyID, ID: body.ID}}
+			if err := db.LockByKeys(transaction, &usuariosExistentes); err != nil {
+				return core.Err("Error al obtener el user a actualizar.", err)
+			}
+			if len(usuariosExistentes) == 0 {
+				return core.Err("No se encontró el user a actualizar")
+			}
+
+			usuarioActual := usuariosExistentes[0]
+			if newPasswordHash == "" {
+				body.PasswordHash = usuarioActual.PasswordHash
+			}
+			body.Created = usuarioActual.Created
+			body.CreatedBy = usuarioActual.CreatedBy
+			// "user-self" no exige acceso del catálogo (selfServiceRoutes en main-handlers.go), así que
+			// todo lo que determina permisos se restaura desde el registro guardado: de lo contrario
+			// cualquier usuario se auto-otorgaría accesos mandando ProfileIDs o AccesosGrants en el body.
+			if isUsuarioPropio {
+				body.ProfileIDs = usuarioActual.ProfileIDs
+				body.AccesosGrants = usuarioActual.AccesosGrants
+				body.User = usuarioActual.User
+				body.Status = usuarioActual.Status
+			}
+		}
+
+		perfilesByID, err := getPerfilesMapByIDs(body.CompanyID, body.ProfileIDs)
+		if err != nil {
+			return core.Err("Error al obtener los perfiles del user.", err)
+		}
+		body.AccesosComputed, body.AccesosSubComputed, err = computeUserAccesos(perfilesByID, body)
+		if err != nil {
+			return core.Err("Error al obtener los accesos del user.", err)
+		}
+		body.Updated = now
+		body.UpdatedBy = req.User.ID
+		core.Log("PostUsuarios:: user", body.ID, "perfiles", body.ProfileIDs,
+			"accesos bytes", len(body.AccesosComputed), "sub bytes", len(body.AccesosSubComputed))
+
+		usuariosToSave := []coreTypes.User{body}
+		if body.ID == 0 {
+			err = db.InsertIn(transaction, &usuariosToSave)
+		} else {
+			err = db.UpsertIn(transaction, &usuariosToSave)
+		}
+		if err != nil {
+			return core.Err("Error al actualizar el user (SQL):", err)
+		}
+		body = usuariosToSave[0]
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	body = usuariosToSave[0]
 	if err = cloud.Insert([]coreTypes.User{body}); err != nil {
 		return req.MakeErr("Error al actualizar el user (Cloud ORM): " + err.Error())
 	}

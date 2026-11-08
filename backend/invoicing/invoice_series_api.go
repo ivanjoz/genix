@@ -4,8 +4,8 @@ import (
 	"app/cloud"
 	"app/core"
 	"app/invoicing/types"
-	"context"
 	"encoding/json"
+	"errors"
 )
 
 // PostInvoiceSeries adds or edits one series.
@@ -24,61 +24,52 @@ func PostInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	companyID := req.User.CompanyID
+	submitted := body
 
-	// The set is read, changed and written back, so two saves have to be ordered
-	// or the later one drops whatever the earlier one added.
-	lock, lockErr := core.AcquireLock(context.Background(), core.ActionSaveInvoiceSeries, int64(companyID), 2)
-	if lockErr != nil {
-		return lockErr.Response(req)
-	}
-	defer lock.Release()
-
-	allSeries, err := LoadCompanySeries(companyID)
-	if err != nil {
-		return req.MakeErr(err.Error())
-	}
-
-	// A new series takes the next id and is active. Ids are never reused, because
-	// documents already issued resolve their series by this number.
-	//
-	// An existing one keeps whatever status the caller sent, which is the only way a
-	// series is retired — defaulting that to active here is what would make retiring
-	// impossible.
-	isNewSeries := body.SeriesID == 0
-	if isNewSeries {
-		body.SeriesID = types.NextSeriesID(allSeries)
-		body.Status = 1
-	}
-	if body.SeriesID > types.MaxSeriesID {
-		return req.MakeErr("La empresa ya no puede tener más series: el máximo es 99.")
-	}
-
-	// Editing replaces exactly one entry and leaves the other four alone. A caller
-	// naming an id that does not exist is not creating one: ids come from
-	// NextSeriesID, and honouring a client-chosen number would let a stale tab burn
-	// ids out of the 99 there are, or resurrect one it remembers.
-	replaced := false
-	for index := range allSeries {
-		if allSeries[index].SeriesID == body.SeriesID {
-			allSeries[index] = body
-			replaced = true
-			break
-		}
-	}
-	if !replaced && isNewSeries {
-		allSeries = append(allSeries, body)
-	} else if !replaced {
-		return req.MakeErr("La serie que se intenta editar ya no existe.")
-	}
-
-	// The default is a property of the set, so it is settled here rather than by the
-	// caller. Sending one series that claims the default would otherwise leave the
-	// previous holder claiming it too, and the set would fail validation.
-	types.ApplyDefaultSeries(allSeries, body.SeriesID)
-
-	// SaveCompanySeries validates the whole set: ids and active codes unique, one
+	// UpdateCompanySeries validates the whole set: ids and active codes unique, one
 	// default per document type, and the prefix SUNAT requires for the type.
-	if err := SaveCompanySeries(companyID, allSeries); err != nil {
+	allSeries, err := UpdateCompanySeries(companyID, func(allSeries []types.InvoiceSeries) ([]types.InvoiceSeries, error) {
+		body := submitted
+		// A new series takes the next id and is active. Ids are never reused, because
+		// documents already issued resolve their series by this number.
+		//
+		// An existing one keeps whatever status the caller sent, which is the only way a
+		// series is retired — defaulting that to active here is what would make retiring
+		// impossible.
+		isNewSeries := body.SeriesID == 0
+		if isNewSeries {
+			body.SeriesID = types.NextSeriesID(allSeries)
+			body.Status = 1
+		}
+		if body.SeriesID > types.MaxSeriesID {
+			return nil, errors.New("La empresa ya no puede tener más series: el máximo es 99.")
+		}
+
+		// Editing replaces exactly one entry and leaves the other four alone. A caller
+		// naming an id that does not exist is not creating one: ids come from
+		// NextSeriesID, and honouring a client-chosen number would let a stale tab burn
+		// ids out of the 99 there are, or resurrect one it remembers.
+		replaced := false
+		for index := range allSeries {
+			if allSeries[index].SeriesID == body.SeriesID {
+				allSeries[index] = body
+				replaced = true
+				break
+			}
+		}
+		if !replaced && isNewSeries {
+			allSeries = append(allSeries, body)
+		} else if !replaced {
+			return nil, errors.New("La serie que se intenta editar ya no existe.")
+		}
+
+		// The default is a property of the set, so it is settled here rather than by the
+		// caller. Sending one series that claims the default would otherwise leave the
+		// previous holder claiming it too, and the set would fail validation.
+		types.ApplyDefaultSeries(allSeries, body.SeriesID)
+		return allSeries, nil
+	})
+	if err != nil {
 		return req.MakeErr(err.Error())
 	}
 

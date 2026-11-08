@@ -218,7 +218,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 			return core.Err(fmt.Sprintf("Movimiento con Lote %q sin LotID para salida (product %v, almacén %v).",
 				mov.LotName, mov.ProductID, mov.WarehouseID))
 		}
-		// SupplierID == 0 is allowed for manual stock-adjustment lots; the dedup hash
+		// SupplierID == 0 is allowed for manual stock-adjustment lots; the lot's unique key
 		// becomes (today, 0, name) which stays consistent within the day.
 		activeMovements = append(activeMovements, mov)
 	}

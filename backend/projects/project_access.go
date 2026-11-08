@@ -1,7 +1,7 @@
 package projects
 
 import (
-	"context"
+	"errors"
 	"path"
 	"slices"
 
@@ -12,36 +12,36 @@ import (
 	"app/projects/types"
 )
 
-// projectLockWaiters is how many writes of one project may queue behind the running one: a burst of
-// board moves by the team, one request each.
-const projectLockWaiters = 8
+// projectAccessError is a refusal of the caller's role in the project: it is answered 403, where
+// every other error of a project write is a 400.
+type projectAccessError struct{ message string }
 
-// projectLockIdentifier keys the project lock. Project IDs are numbered per company, so the company
-// is part of the key.
-func projectLockIdentifier(companyID int32, projectID int32) int64 {
-	return int64(companyID)<<32 | int64(uint32(projectID))
+func (accessError projectAccessError) Error() string { return accessError.message }
+
+// makeProjectErr answers a project write's error, with the 403 of a role refusal.
+func makeProjectErr(req *core.HandlerArgs, err error) core.HandlerResponse {
+	if accessError, isAccessError := errors.AsType[projectAccessError](err); isAccessError {
+		return req.MakeErrCode(accessError.message, 403)
+	}
+	return req.MakeErr(err)
 }
 
-// openProjectWrite is the gate of every write inside a project: it takes the project's lock, then
-// loads the project and checks the caller's role. ProjectRoleMember lets any team member in,
-// ProjectRoleAdmin only its admins. Every read the write depends on happens after it, so the
-// records the handler rewrites cannot change under it. The caller defers release.
-func openProjectWrite(req *core.HandlerArgs, projectID int32, requiredRole int8) (types.Project, func(), core.HandlerResponse, bool) {
-	noRelease := func() {}
+// lockProjectWriteIn is the gate of every write inside a project: it locks the project's row in the
+// caller's transaction, then checks the caller's role on it. ProjectRoleMember lets any team member
+// in, ProjectRoleAdmin only its admins. Every read the write depends on happens after it, so the
+// records the handler rewrites cannot change under it: the lock is held until the transaction ends.
+func lockProjectWriteIn(transaction *db.Transaction, req *core.HandlerArgs, projectID int32, requiredRole int8) (types.Project, error) {
 	if projectID <= 0 {
-		return types.Project{}, noRelease, req.MakeErr("No se envió el proyecto."), true
+		return types.Project{}, core.Err("No se envió el proyecto.")
 	}
-	lock, lockErr := core.AcquireLock(context.Background(), core.ActionProjectWrite,
-		projectLockIdentifier(req.User.CompanyID, projectID), projectLockWaiters)
-	if lockErr != nil {
-		return types.Project{}, noRelease, lockErr.Response(req), true
+	lockedProjects := []types.Project{{CompanyID: req.User.CompanyID, ID: projectID}}
+	if err := db.LockByKeys(transaction, &lockedProjects); err != nil {
+		return types.Project{}, core.Err("Error al obtener el proyecto:", err)
 	}
-	project, response, isDenied := authorizeProjectWrite(req, projectID, requiredRole)
-	if isDenied {
-		lock.Release()
-		return types.Project{}, noRelease, response, true
+	if len(lockedProjects) == 0 {
+		return types.Project{}, core.Err("El proyecto no existe.")
 	}
-	return project, lock.Release, core.HandlerResponse{}, false
+	return lockedProjects[0], checkProjectWrite(lockedProjects[0], req.User.ID, requiredRole)
 }
 
 // authorizeProjectWrite loads an active, non-archived project and checks the caller's role in it,
@@ -51,20 +51,31 @@ func authorizeProjectWrite(req *core.HandlerArgs, projectID int32, requiredRole 
 	if err != nil {
 		return types.Project{}, req.MakeErr("Error al obtener el proyecto:", err), true
 	}
-	if project == nil || project.Status != types.StatusActive {
+	if project == nil {
 		return types.Project{}, req.MakeErr("El proyecto no existe."), true
 	}
-	if project.State == types.ProjectStateArchived {
-		return types.Project{}, req.MakeErr("El proyecto está archivado: es de solo lectura."), true
-	}
-	callerRole := projectRole(*project, req.User.ID)
-	if callerRole == 0 || callerRole < requiredRole {
-		if requiredRole == types.ProjectRoleAdmin {
-			return types.Project{}, req.MakeErrCode("Solo los administradores del proyecto pueden hacer esto.", 403), true
-		}
-		return types.Project{}, req.MakeErrCode("Solo el equipo del proyecto puede hacer esto.", 403), true
+	if err := checkProjectWrite(*project, req.User.ID, requiredRole); err != nil {
+		return types.Project{}, makeProjectErr(req, err), true
 	}
 	return *project, core.HandlerResponse{}, false
+}
+
+// checkProjectWrite refuses a write to a deleted or archived project, or by a user below requiredRole.
+func checkProjectWrite(project types.Project, userID int32, requiredRole int8) error {
+	if project.Status != types.StatusActive {
+		return core.Err("El proyecto no existe.")
+	}
+	if project.State == types.ProjectStateArchived {
+		return core.Err("El proyecto está archivado: es de solo lectura.")
+	}
+	callerRole := projectRole(project, userID)
+	if callerRole == 0 || callerRole < requiredRole {
+		if requiredRole == types.ProjectRoleAdmin {
+			return projectAccessError{"Solo los administradores del proyecto pueden hacer esto."}
+		}
+		return projectAccessError{"Solo el equipo del proyecto puede hacer esto."}
+	}
+	return nil
 }
 
 func loadProject(companyID int32, projectID int32) (*types.Project, error) {

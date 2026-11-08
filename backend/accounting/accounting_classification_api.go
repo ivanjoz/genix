@@ -16,6 +16,7 @@ import (
 	logistics "app/logistics/types"
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // The classifiable operation kinds. Same ids as OPERATION_* in accounts-consolidation.ts.
@@ -58,31 +59,58 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 		ids.Add(classification.ID)
 		idsByKind[classification.Kind] = ids
 	}
+	for kind := range idsByKind {
+		switch kind {
+		case ClassificationKindPurchaseOrder, ClassificationKindExpense, ClassificationKindAsset, ClassificationKindCash:
+		default:
+			return req.MakeErr(fmt.Sprintf("Las operaciones de tipo %v no se clasifican: sus cuentas son derivadas.", kind))
+		}
+	}
+
+	// The records are read under their row locks and written in the same transaction: a payment,
+	// an edit or a reception of one of them waits, so classifying never writes back a stale Lines
+	// or Status, and a bulk apply commits whole or not at all.
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		return classifyIn(transaction, req, classifications, idsByKind)
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	return req.MakeResponse(map[string]int{"Classified": len(classifications)})
+}
+
+// classifyIn locks the classified records (kind by kind, each in key order, so two runs never hold
+// each other's rows), applies every classification, then writes each table once.
+func classifyIn(transaction *db.Transaction, req *core.HandlerArgs, classifications []AccountClassification,
+	idsByKind map[int8]core.SliceSet[int64],
+) error {
 	companyID := req.User.CompanyID
 	now := core.SUnixTime()
 
 	orders, expenses, assets, cashMovements := []logistics.PurchaseOrder{}, []finance.Expense{}, []types.Asset{}, []finance.CashBankMovement{}
-	for kind, ids := range idsByKind {
-		var loadError error
-		switch kind {
-		case ClassificationKindPurchaseOrder:
-			query := db.Query(&orders)
-			loadError = query.Select().CompanyID.Equals(companyID).ID.In(toInt32IDs(ids.Values)...).Exec()
-		case ClassificationKindExpense:
-			query := db.Query(&expenses)
-			loadError = query.Select().CompanyID.Equals(companyID).ID.In(toInt32IDs(ids.Values)...).Exec()
-		case ClassificationKindAsset:
-			query := db.Query(&assets)
-			loadError = query.Select().CompanyID.Equals(companyID).ID.In(toInt32IDs(ids.Values)...).Exec()
-		case ClassificationKindCash:
-			query := db.Query(&cashMovements)
-			loadError = query.Select().CompanyID.Equals(companyID).ID.In(ids.Values...).Exec()
-		default:
-			return req.MakeErr(fmt.Sprintf("Las operaciones de tipo %v no se clasifican: sus cuentas son derivadas.", kind))
-		}
-		if loadError != nil {
-			return req.MakeErr("Error al obtener los registros a clasificar:", loadError)
-		}
+	for _, id := range sortedIDs(idsByKind[ClassificationKindPurchaseOrder]) {
+		orders = append(orders, logistics.PurchaseOrder{CompanyID: companyID, ID: int32(id)})
+	}
+	for _, id := range sortedIDs(idsByKind[ClassificationKindExpense]) {
+		expenses = append(expenses, finance.Expense{CompanyID: companyID, ID: int32(id)})
+	}
+	for _, id := range sortedIDs(idsByKind[ClassificationKindAsset]) {
+		assets = append(assets, types.Asset{CompanyID: companyID, ID: int32(id)})
+	}
+	for _, id := range sortedIDs(idsByKind[ClassificationKindCash]) {
+		cashMovements = append(cashMovements, finance.CashBankMovement{CompanyID: companyID, ID: id})
+	}
+	if lockError := db.LockByKeys(transaction, &orders); lockError != nil {
+		return core.Err("Error al obtener las órdenes de compra a clasificar:", lockError)
+	}
+	if lockError := db.LockByKeys(transaction, &expenses); lockError != nil {
+		return core.Err("Error al obtener los gastos a clasificar:", lockError)
+	}
+	if lockError := db.LockByKeys(transaction, &assets); lockError != nil {
+		return core.Err("Error al obtener los activos a clasificar:", lockError)
+	}
+	if lockError := db.LockByKeys(transaction, &cashMovements); lockError != nil {
+		return core.Err("Error al obtener los movimientos de caja a clasificar:", lockError)
 	}
 
 	orderByID := indexByID(orders, func(order *logistics.PurchaseOrder) int64 { return int64(order.ID) })
@@ -92,7 +120,7 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 
 	for _, classification := range classifications {
 		if validationError := applyClassification(classification, orderByID, expenseByID, assetByID, cashMovementByID); validationError != nil {
-			return req.MakeErr(validationError)
+			return validationError
 		}
 	}
 
@@ -102,15 +130,15 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 			orders[index].Updated, orders[index].UpdatedBy = now, req.User.ID
 		}
 		q := db.TableOf[logistics.PurchaseOrder]()
-		if writeError := db.Update(&orders, q.Lines, q.Updated, q.UpdatedBy); writeError != nil {
-			return req.MakeErr("Error al guardar las órdenes de compra:", writeError)
+		if writeError := db.UpdateIn(transaction, &orders, q.Lines, q.Updated, q.UpdatedBy); writeError != nil {
+			return core.Err("Error al guardar las órdenes de compra:", writeError)
 		}
 		// A reception posts to the stock pair of its line's account, stamped on the movement.
 		for index := range orders {
 			order := &orders[index]
-			if restampError := logistics.RestampReceptionAccounts(companyID, int64(order.ID),
+			if restampError := logistics.RestampReceptionAccountsIn(transaction, companyID, int64(order.ID),
 				logistics.StockMovementTypePurchaseReception, order.ReceptionAccountOf); restampError != nil {
-				return req.MakeErr(restampError)
+				return restampError
 			}
 		}
 	}
@@ -119,8 +147,8 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 			expenses[index].Updated, expenses[index].UpdatedBy = now, req.User.ID
 		}
 		q := db.TableOf[finance.Expense]()
-		if writeError := db.Update(&expenses, q.AccountCode, q.Updated, q.UpdatedBy); writeError != nil {
-			return req.MakeErr("Error al guardar los gastos:", writeError)
+		if writeError := db.UpdateIn(transaction, &expenses, q.AccountCode, q.Updated, q.UpdatedBy); writeError != nil {
+			return core.Err("Error al guardar los gastos:", writeError)
 		}
 		// An inventory expense's reception posts to the stock pair of its account.
 		for index := range expenses {
@@ -128,10 +156,10 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 			if expense.Type != finance.ExpenseTypeInventory {
 				continue
 			}
-			if restampError := logistics.RestampReceptionAccounts(companyID, int64(expense.ID),
+			if restampError := logistics.RestampReceptionAccountsIn(transaction, companyID, int64(expense.ID),
 				logistics.StockMovementTypeSuppliesPurchase,
 				func(int32) int32 { return expense.AccountCode }); restampError != nil {
-				return req.MakeErr(restampError)
+				return restampError
 			}
 		}
 	}
@@ -140,8 +168,8 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 			assets[index].Updated, assets[index].UpdatedBy = now, req.User.ID
 		}
 		q := db.TableOf[types.Asset]()
-		if writeError := db.Update(&assets, q.AccountCode, q.Updated, q.UpdatedBy); writeError != nil {
-			return req.MakeErr("Error al guardar los activos:", writeError)
+		if writeError := db.UpdateIn(transaction, &assets, q.AccountCode, q.Updated, q.UpdatedBy); writeError != nil {
+			return core.Err("Error al guardar los activos:", writeError)
 		}
 	}
 	if len(cashMovements) > 0 {
@@ -151,14 +179,21 @@ func PutAccountingClassification(req *core.HandlerArgs) core.HandlerResponse {
 			cashMovements[index].Period = core.PeriodOfDay(cashMovements[index].Date)
 		}
 		q := db.TableOf[finance.CashBankMovement]()
-		if writeError := db.Update(&cashMovements, q.Type, q.CounterAccountCode, q.Period, q.SameDayMovement); writeError != nil {
-			return req.MakeErr("Error al guardar los movimientos de caja:", writeError)
+		if writeError := db.UpdateIn(transaction, &cashMovements, q.Type, q.CounterAccountCode, q.Period, q.SameDayMovement); writeError != nil {
+			return core.Err("Error al guardar los movimientos de caja:", writeError)
 		}
 	}
 
 	core.Log("PutAccountingClassification:", len(classifications), "orders:", len(orders),
 		"expenses:", len(expenses), "assets:", len(assets), "cash:", len(cashMovements))
-	return req.MakeResponse(map[string]int{"Classified": len(classifications)})
+	return nil
+}
+
+// sortedIDs is the set's IDs in ascending order: the order rows are locked in.
+func sortedIDs(ids core.SliceSet[int64]) []int64 {
+	sorted := slices.Clone(ids.Values)
+	slices.Sort(sorted)
+	return sorted
 }
 
 // applyClassification validates one classification against its record and sets the account on it.
@@ -253,14 +288,6 @@ func applyClassification(
 		return core.Err(fmt.Sprintf("Las operaciones de tipo %v no se clasifican: sus cuentas son derivadas.", classification.Kind))
 	}
 	return nil
-}
-
-func toInt32IDs(ids []int64) []int32 {
-	converted := make([]int32, len(ids))
-	for index, id := range ids {
-		converted[index] = int32(id)
-	}
-	return converted
 }
 
 func indexByID[T any](records []T, idOf func(*T) int64) map[int64]*T {

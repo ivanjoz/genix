@@ -16,9 +16,10 @@ import (
 
 const currencyPEN = 1
 
-// recordPayrollCash writes one payroll cash movement. A negative amount is money out (a payment),
-// a positive one gives it back (a voided advance, a deleted loan).
-func recordPayrollCash(req *core.HandlerArgs, cashBankID int32, movementType finance.CashMovementType,
+// recordPayrollCashIn writes one payroll cash movement in the caller's transaction, so it commits
+// with the run or record that caused it. A negative amount is money out (a payment), a positive one
+// gives it back (a voided advance, a deleted loan).
+func recordPayrollCashIn(transaction *db.Transaction, req *core.HandlerArgs, cashBankID int32, movementType finance.CashMovementType,
 	documentID int32, counterAccountCode int32, date int16, amount int32) error {
 	cashBank, err := finance.GetCaja(req.User.CompanyID, cashBankID)
 	if err != nil {
@@ -27,7 +28,7 @@ func recordPayrollCash(req *core.HandlerArgs, cashBankID int32, movementType fin
 	if cashBank.CurrencyType != currencyPEN {
 		return fmt.Errorf("La planilla se paga en soles: elija una caja o cuenta en soles.")
 	}
-	return finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{{
+	return finance.ApplyCashBankMovementIn(transaction, req, []finance.InternalCashMovement{{
 		CashBankID: cashBankID, DocumentID: int64(documentID), Date: date, Type: movementType,
 		CounterAccountCode: counterAccountCode, Amount: amount,
 	}})
@@ -62,27 +63,31 @@ func PostPayrollContributions(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Indique el monto y la caja o cuenta de pago.")
 	}
 	companyID := req.User.CompanyID
-	run, err := loadRun(companyID, request.RunID)
-	if err != nil {
-		return req.MakeErr(err)
-	}
-	if run.Status < types.PayrollStatusClosed {
-		return req.MakeErr("Solo se pagan los aportes de una planilla cerrada.")
-	}
-
-	owed, err := runPayableBalance(companyID, run, request.AccountCode)
-	if err != nil {
-		return req.MakeErr(err)
-	}
-	if request.Amount > owed {
-		return req.MakeErr(fmt.Sprintf("El monto supera lo pendiente de la cuenta %d en esta planilla (S/ %d.%02d).",
-			request.AccountCode, owed/100, owed%100))
-	}
 	if request.Date == 0 {
 		request.Date = core.FechaUnix()
 	}
-	if err := recordPayrollCash(req, request.CashBankID, finance.CashMovementTypePayrollContributions, run.ID,
-		request.AccountCode, request.Date, -request.Amount); err != nil {
+	// Under the run's lock no other payment of it is written meanwhile, so what is owed is read
+	// from committed payments and two payments can never both fit the same balance.
+	var owed int32
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		run, err := lockRunIn(transaction, companyID, request.RunID)
+		if err != nil {
+			return err
+		}
+		if run.Status < types.PayrollStatusClosed {
+			return fmt.Errorf("Solo se pagan los aportes de una planilla cerrada.")
+		}
+		if owed, err = runPayableBalance(companyID, run, request.AccountCode); err != nil {
+			return err
+		}
+		if request.Amount > owed {
+			return fmt.Errorf("El monto supera lo pendiente de la cuenta %d en esta planilla (S/ %d.%02d).",
+				request.AccountCode, owed/100, owed%100)
+		}
+		return recordPayrollCashIn(transaction, req, request.CashBankID, finance.CashMovementTypePayrollContributions, run.ID,
+			request.AccountCode, request.Date, -request.Amount)
+	})
+	if err != nil {
 		return req.MakeErr(err)
 	}
 	return req.MakeResponse(map[string]any{"Pending": owed - request.Amount})

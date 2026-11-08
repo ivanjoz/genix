@@ -52,10 +52,11 @@ func FindBySaleOrder(companyID int32, saleOrderID int64) (*InvoiceDocument, erro
 // document stays spent — the series keeps a gap that SUNAT expects to be declared
 // through a comunicación de baja, which this system does not emit yet.
 //
-// The caller must hold the sale's ActionInvoiceSaleOrder lock: the sweep re-reads
-// the state inside that same lock, and that is what stops it from sending a
-// document while this is voiding it.
-func VoidPendingDocumentForSale(companyID int32, saleOrderID int64) (*InvoiceDocument, error) {
+// The caller must hold the sale's ActionInvoiceSaleOrder lock until its transaction
+// commits: the sweep re-reads the state inside that same lock, and that is what
+// stops it from sending a document while this is voiding it. The void commits with
+// the annulment, so a failed annulment leaves the document pending.
+func VoidPendingDocumentForSaleIn(transaction *db.Transaction, companyID int32, saleOrderID int64) (*InvoiceDocument, error) {
 	document, err := FindBySaleOrder(companyID, saleOrderID)
 	if err != nil || document == nil {
 		return nil, err
@@ -73,7 +74,7 @@ func VoidPendingDocumentForSale(companyID int32, saleOrderID int64) (*InvoiceDoc
 	rows := &[]InvoiceDocument{*document}
 	// State travels with the delta views' keys, which the ORM requires to be
 	// written together with Status, Updated and Period.
-	if err := db.Update(rows, table.State, table.Status, table.Updated, table.Period); err != nil {
+	if err := db.UpdateIn(transaction, rows, table.State, table.Status, table.Updated, table.Period); err != nil {
 		return nil, fmt.Errorf("no se pudo anular el comprobante de la venta: %w", err)
 	}
 	return nil, nil

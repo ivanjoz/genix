@@ -50,8 +50,11 @@ func IsSameDaySettlement(accountingDate int16, documentTotal, paidBefore int32, 
 // the movement types that pay this kind of document, since DocumentID alone is shared between the
 // registers. It writes only the movements that changed and returns the cash bank of the same-day
 // payment, 0 when none: the caller stores it in the document's SameDayCashBankID.
-func RestampDocumentPayments(
-	companyID int32, documentID int64, paymentTypes []CashMovementType,
+//
+// It runs in the transaction that locked the document, so no payment of it is written meanwhile.
+// It reads committed payments only: one the same transaction writes must already be stamped.
+func RestampDocumentPaymentsIn(
+	transaction *db.Transaction, companyID int32, documentID int64, paymentTypes []CashMovementType,
 	accountingDate int16, documentTotal int32, counterAccountCode int32,
 ) (int32, error) {
 	stored := []CashBankMovement{}
@@ -91,7 +94,7 @@ func RestampDocumentPayments(
 	}
 	// The period delta index packs Period, SameDayMovement and Type: they are written together.
 	table := db.TableOf[CashBankMovement]()
-	if err := db.Update(&changed, table.Period, table.SameDayMovement, table.Type, table.CounterAccountCode); err != nil {
+	if err := db.UpdateIn(transaction, &changed, table.Period, table.SameDayMovement, table.Type, table.CounterAccountCode); err != nil {
 		return 0, core.Err("Error al actualizar los pagos del documento:", documentID, err)
 	}
 	return sameDayCashBankID, nil

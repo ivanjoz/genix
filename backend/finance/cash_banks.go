@@ -193,17 +193,42 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan Parámetros: [CashBank-ID]")
 	}
 
-	cashBank, err := types.GetCaja(req.User.CompanyID, record.CashBankID)
+	// The till is locked from the balance check to the write: a movement landing in between would
+	// otherwise be erased by setting CurrentAmount to the counted amount. Under the lock it either
+	// committed before (and the check below asks the client to refresh) or waits for the count.
+	staleBalance := int32(0)
+	isBalanceStale := false
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		cashBanks := []types.CashBank{{CompanyID: req.User.CompanyID, ID: record.CashBankID}}
+		if err := db.LockByKeys(transaction, &cashBanks); err != nil {
+			return core.Err("Error al obtener la caja:", err)
+		}
+		if len(cashBanks) == 0 {
+			return core.Err("No se encontró la cashBank")
+		}
+		cashBank := cashBanks[0]
+		isBalanceStale = record.SystemAmount != cashBank.CurrentAmount
+		if isBalanceStale {
+			staleBalance = cashBank.CurrentAmount
+			return nil
+		}
+		return reconcileCashBankIn(transaction, req, &record, cashBank, body.CounterAccountCode, nowTime)
+	})
 	if err != nil {
 		return req.MakeErr(err)
 	}
-
-	if record.SystemAmount != cashBank.CurrentAmount {
-		re := map[string]any{"NeedUpdateSaldo": cashBank.CurrentAmount}
+	if isBalanceStale {
+		re := map[string]any{"NeedUpdateSaldo": staleBalance}
 		return req.MakeResponse(&re)
 	}
+	return req.MakeResponse(&record)
+}
 
-	// Save the reconciliation record
+// reconcileCashBankIn writes a physical count of the cash bank its caller locked: the reconciliation,
+// the difference movement and the counted balance.
+func reconcileCashBankIn(transaction *db.Transaction, req *core.HandlerArgs, record *types.CashReconciliation,
+	cashBank types.CashBank, counterAccountCode int32, nowTime int32,
+) error {
 	record.CompanyID = req.User.CompanyID
 	record.ID = core.SUnixTimeUUIDConcatID(record.CashBankID)
 	record.Created = nowTime
@@ -213,9 +238,9 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 	// The sign is the server's own difference, not the client's, so a shortage can never be
 	// filed as a surplus.
 	accountCode, err := types.ResolveCashMovementAccount(
-		types.CashMovementTypePhysicalCount, record.DifferenceAmount, body.CounterAccountCode)
+		types.CashMovementTypePhysicalCount, record.DifferenceAmount, counterAccountCode)
 	if err != nil {
-		return req.MakeErr(err)
+		return err
 	}
 
 	// Update the cash bank
@@ -242,24 +267,18 @@ func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
 		Period:             core.PeriodOfDay(core.FechaUnix()),
 	}
 
-	// Insert records using db2
-	if err := db.Upsert(&[]types.CashReconciliation{record}); err != nil {
-		core.Log("Error ScyllaDB inserting cuadre: ", err)
-		return req.MakeErr("Error al registrar el cuadre:", err)
+	// Both IDs are fresh time-based UUIDs: nothing is stored under them.
+	if err := db.InsertIn(transaction, &[]types.CashReconciliation{*record}); err != nil {
+		return core.Err("Error al registrar el cuadre:", err)
 	}
-
 	q1 := db.TableOf[types.CashBank]()
-	if err := db.Update(&[]types.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
-		core.Log("Error ScyllaDB updating cashBank: ", err)
-		return req.MakeErr("Error al actualizar la cashBank:", err)
+	if err := db.UpdateIn(transaction, &[]types.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
+		return core.Err("Error al actualizar la cashBank:", err)
 	}
-
-	if err := db.Upsert(&[]types.CashBankMovement{movimiento}); err != nil {
-		core.Log("Error ScyllaDB inserting movimiento: ", err)
-		return req.MakeErr("Error al registrar el movimiento:", err)
+	if err := db.InsertIn(transaction, &[]types.CashBankMovement{movimiento}); err != nil {
+		return core.Err("Error al registrar el movimiento:", err)
 	}
-
-	return req.MakeResponse(&record)
+	return nil
 }
 
 func PostCashBankMovement(req *core.HandlerArgs) core.HandlerResponse {

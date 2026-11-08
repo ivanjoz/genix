@@ -6,6 +6,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/production/types"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -180,99 +181,23 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	// Runs before db.Merge: the merge callback fires during the write, so a divisor rejected
-	// there would leave the other rows already persisted.
-	if err := validateProductSubUnitDivisors(req.User.CompanyID, productos); err != nil {
+	// The edited rows are locked and the whole payload commits together: the stored columns this
+	// form does not own (stock, images, creation) are copied from the locked row, so a sale or an
+	// image upload committing meanwhile is not overwritten, and a rejected divisor leaves no row
+	// of the batch persisted.
+	nowTime := core.SUnixTime()
+	core.Log("PostProductos payload:", len(productos))
+	savedProducts := []types.Product{}
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		// A rerun after a deadlock starts again from the payload, not from the IDs a failed
+		// attempt assigned.
+		savedProducts = slices.Clone(productos)
+		return saveProductsIn(transaction, req, savedProducts, nowTime)
+	})
+	if err != nil {
 		return req.MakeErr(err)
 	}
-
-	nowTime := core.SUnixTime()
-	core.Log("PostProductos merge payload:", len(productos))
-
-	buildPresentaciones := func(current *types.Product, incoming *types.Product) {
-		presentacionesMap := map[int16]types.ProductPresentation{}
-		presentacionesNameMap := map[string]types.ProductPresentation{}
-		presentacionMaxID := int16(0)
-
-		if current != nil {
-			for _, presentacionActual := range current.Presentations {
-				presentacionesNameMap[core.Concatn(presentacionActual.AtributoID, strings.ToLower(presentacionActual.Name))] = presentacionActual
-				if presentacionActual.ID > presentacionMaxID {
-					presentacionMaxID = presentacionActual.ID
-				}
-			}
-		}
-
-		for _, presentacionNueva := range incoming.Presentations {
-			presentacionName := core.Concatn(presentacionNueva.AtributoID, strings.ToLower(presentacionNueva.Name))
-			if current, ok := presentacionesNameMap[presentacionName]; ok && presentacionNueva.ID != 0 {
-				presentacionNueva.ID = current.ID
-			}
-			if presentacionNueva.ID <= 0 {
-				presentacionMaxID++
-				presentacionNueva.ID = presentacionMaxID
-			}
-			presentacionesMap[presentacionNueva.ID] = presentacionNueva
-		}
-
-		// Add the removed presentaciones with status = 0
-		for _, presentacionActual := range presentacionesNameMap {
-			if _, ok := presentacionesMap[presentacionActual.ID]; !ok {
-				presentacionActual.Status = 0
-				presentacionesMap[presentacionActual.ID] = presentacionActual
-			}
-		}
-
-		incoming.Presentations = core.MapToSliceT(presentacionesMap)
-	}
-
-	t := types.ProductTable{}
-	sunixTime := core.SUnixTime()
-
-	// Merge resolves insert/update per primary key and applies only required writes.
-	err = db.Merge(&productos,
-		db.Cols(t.Stock, t.ReservedStock, t.StockStatus, t.CategoriesWithStock, t.Created, t.CreatedBy, t.ImageMain, t.ImageIDs, t.ImageDescriptions),
-		func(prev, current *types.Product) bool {
-			current.CompanyID = req.User.CompanyID
-			current.Created = prev.Created
-			current.CreatedBy = prev.CreatedBy
-			current.Stock = prev.Stock
-			current.ReservedStock = prev.ReservedStock
-			current.StockStatus = prev.StockStatus
-			current.CategoriesWithStock = prev.CategoriesWithStock
-			current.ImageMain = prev.ImageMain
-			current.ImageIDs = prev.ImageIDs
-			current.ImageDescriptions = prev.ImageDescriptions
-			current.NameUpdated = prev.NameUpdated
-			buildPresentaciones(prev, current)
-
-			comparableCurrent := *current
-			comparableCurrent.TempID = prev.TempID
-			comparableCurrent.Updated = prev.Updated
-			comparableCurrent.UpdatedBy = prev.UpdatedBy
-
-			// NameUpdated es para el delta si se han actualizado los nombres
-			if current.Name != prev.Name || current.BrandID != prev.BrandID || !slices.Equal(current.CategoryIDs, prev.CategoryIDs) {
-				current.NameUpdated = sunixTime
-			}
-
-			current.Updated = nowTime
-			current.UpdatedBy = req.User.ID
-			return true
-		},
-		func(current *types.Product) {
-			current.CompanyID = req.User.CompanyID
-			current.Created = nowTime
-			current.CreatedBy = req.User.ID
-			current.Updated = nowTime
-			current.NameUpdated = sunixTime
-			current.Status = 1
-			buildPresentaciones(nil, current)
-		},
-	)
-	if err != nil {
-		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
-	}
+	productos = savedProducts
 
 	// Register the company for a products .db rebuild. Keyed on Updated (which advances on every
 	// product write, incl. price edits) so the snapshot self-heals on any change, matching the
@@ -286,6 +211,117 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(productos)
 }
 
+// saveProductsIn writes a PostProducts payload in the caller's transaction: existing products are
+// locked and rewritten keeping the columns other writers own, new ones are inserted.
+func saveProductsIn(transaction *db.Transaction, req *core.HandlerArgs, productos []types.Product, nowTime int32) error {
+	lockedProducts := []types.Product{}
+	for _, product := range productos {
+		if product.ID > 0 {
+			lockedProducts = append(lockedProducts, types.Product{CompanyID: req.User.CompanyID, ID: product.ID})
+		}
+	}
+	slices.SortFunc(lockedProducts, func(a, b types.Product) int { return cmp.Compare(a.ID, b.ID) })
+	if err := db.LockByKeys(transaction, &lockedProducts); err != nil {
+		return core.Err("Error al obtener los productos:", err)
+	}
+	storedByID := make(map[int32]types.Product, len(lockedProducts))
+	for _, stored := range lockedProducts {
+		storedByID[stored.ID] = stored
+	}
+
+	if err := validateProductSubUnitDivisors(productos, storedByID); err != nil {
+		return err
+	}
+
+	newProducts := []types.Product{}
+	newProductIndexes := []int{}
+	editedProducts := []types.Product{}
+	for i := range productos {
+		current := &productos[i]
+		current.CompanyID = req.User.CompanyID
+		current.Updated = nowTime
+		current.UpdatedBy = req.User.ID
+		if current.ID == 0 {
+			current.Created = nowTime
+			current.CreatedBy = req.User.ID
+			current.NameUpdated = nowTime
+			current.Status = 1
+			buildProductPresentations(nil, current)
+			newProducts = append(newProducts, *current)
+			newProductIndexes = append(newProductIndexes, i)
+			continue
+		}
+		stored, found := storedByID[current.ID]
+		if !found {
+			return core.Err(fmt.Sprintf(`El producto "%s" (ID=%v) no existe.`, current.Name, current.ID))
+		}
+		current.Created = stored.Created
+		current.CreatedBy = stored.CreatedBy
+		current.Stock = stored.Stock
+		current.ReservedStock = stored.ReservedStock
+		current.StockStatus = stored.StockStatus
+		current.CategoriesWithStock = stored.CategoriesWithStock
+		current.ImageMain = stored.ImageMain
+		current.ImageIDs = stored.ImageIDs
+		current.ImageDescriptions = stored.ImageDescriptions
+		current.NameUpdated = stored.NameUpdated
+		// NameUpdated drives the delta of the name-dependent caches.
+		if current.Name != stored.Name || current.BrandID != stored.BrandID || !slices.Equal(current.CategoryIDs, stored.CategoryIDs) {
+			current.NameUpdated = nowTime
+		}
+		buildProductPresentations(&stored, current)
+		editedProducts = append(editedProducts, *current)
+	}
+
+	if err := db.UpsertIn(transaction, &editedProducts); err != nil {
+		return core.Err("Error al actualizar los productos:", err)
+	}
+	if err := db.InsertIn(transaction, &newProducts); err != nil {
+		return core.Err("Error al crear los productos:", err)
+	}
+	// Hand the assigned IDs back: the response maps each TempID to its ID.
+	for newIndex, payloadIndex := range newProductIndexes {
+		productos[payloadIndex] = newProducts[newIndex]
+	}
+	return nil
+}
+
+// buildProductPresentations merges the incoming presentations into the stored ones: a presentation
+// keeps its ID by attribute and name, a new one takes the next ID, and one the payload dropped
+// stays stored with Status 0, since sales already reference it.
+func buildProductPresentations(stored *types.Product, incoming *types.Product) {
+	presentationsByID := map[int16]types.ProductPresentation{}
+	storedByName := map[string]types.ProductPresentation{}
+	maxPresentationID := int16(0)
+
+	if stored != nil {
+		for _, storedPresentation := range stored.Presentations {
+			storedByName[core.Concatn(storedPresentation.AtributoID, strings.ToLower(storedPresentation.Name))] = storedPresentation
+			maxPresentationID = max(maxPresentationID, storedPresentation.ID)
+		}
+	}
+
+	for _, incomingPresentation := range incoming.Presentations {
+		presentationName := core.Concatn(incomingPresentation.AtributoID, strings.ToLower(incomingPresentation.Name))
+		if storedPresentation, ok := storedByName[presentationName]; ok && incomingPresentation.ID != 0 {
+			incomingPresentation.ID = storedPresentation.ID
+		}
+		if incomingPresentation.ID <= 0 {
+			maxPresentationID++
+			incomingPresentation.ID = maxPresentationID
+		}
+		presentationsByID[incomingPresentation.ID] = incomingPresentation
+	}
+
+	for _, storedPresentation := range storedByName {
+		if _, ok := presentationsByID[storedPresentation.ID]; !ok {
+			storedPresentation.Status = 0
+			presentationsByID[storedPresentation.ID] = storedPresentation
+		}
+	}
+	incoming.Presentations = core.MapToSliceT(presentationsByID)
+}
+
 // validateProductSubUnitDivisors enforces the refinement-only rule on Product.SbuQuantity,
 // which is the divisor every stored SubQuantity for that product is expressed in.
 //
@@ -294,37 +330,17 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 // zero sixths, zero twelfths and zero thousandths are the same zero, so nothing is rewritten.
 // Afterwards the divisor may only move to a multiple: 6 -> 12 splits each sixth into two
 // twelfths exactly, while 12 -> 6 would turn 9/12 into 4.5 sixths and round away real stock.
-func validateProductSubUnitDivisors(companyID int32, productos []types.Product) error {
-	productIDsToCheck := core.SliceSet[int32]{}
+func validateProductSubUnitDivisors(productos []types.Product, storedByID map[int32]types.Product) error {
 	for i := range productos {
 		if err := validateSubUnitDivisorRange(&productos[i]); err != nil {
 			return err
 		}
-		if productos[i].ID > 0 {
-			productIDsToCheck.Add(productos[i].ID)
-		}
-	}
-	if productIDsToCheck.IsEmpty() {
-		return nil
-	}
-
-	existing := []types.Product{}
-	query := db.Query(&existing)
-	query.Select(query.ID, query.SbuQuantity).
-		CompanyID.Equals(companyID).
-		ID.In(productIDsToCheck.Values...)
-	if err := query.Exec(); err != nil {
-		return core.Err("Error al validar la sub-unidad de los productos:", err)
-	}
-
-	previousDivisorByID := make(map[int32]int16, len(existing))
-	for _, product := range existing {
-		previousDivisorByID[product.ID] = product.SbuQuantity
 	}
 
 	for i := range productos {
 		product := &productos[i]
-		previousDivisor, isUpdate := previousDivisorByID[product.ID]
+		stored, isUpdate := storedByID[product.ID]
+		previousDivisor := stored.SbuQuantity
 		// A divisor that was never set leaves every stored row at SubQuantity = 0, so any
 		// valid divisor is reachable without changing what a single number means.
 		if !isUpdate || previousDivisor <= core.QuantityDivisorNone {
@@ -430,37 +446,10 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se encontró el product con ID:", image.ProductID)
 	}
 
-	product := productos[0]
 	response := map[string]string{}
-	productChanged := false
-
-	if image.ImageToDelete > 0 {
-		productChanged = true
-		// Drop the imageID from the parallel ImageIDs/ImageDescriptions arrays.
-		imageIDs := []int32{}
-		imageDescriptions := []string{}
-		for index, id := range product.ImageIDs {
-			if id == image.ImageToDelete {
-				continue
-			}
-			imageIDs = append(imageIDs, id)
-			if index < len(product.ImageDescriptions) {
-				imageDescriptions = append(imageDescriptions, product.ImageDescriptions[index])
-			}
-		}
-		product.ImageIDs = imageIDs
-		product.ImageDescriptions = imageDescriptions
-		// Repoint the main image if the deleted one was primary.
-		if product.ImageMain == image.ImageToDelete {
-			product.ImageMain = 0
-			if len(imageIDs) > 0 {
-				product.ImageMain = imageIDs[0]
-			}
-		}
-	} else {
+	if image.ImageToDelete == 0 {
 		// imageID is reserved client-side (GET.image-id-counter); derive the base CDN name from it.
-		imageID := image.ImageID
-		baseName := fmt.Sprintf("%v_%v", req.User.CompanyID, imageID)
+		baseName := fmt.Sprintf("%v_%v", req.User.CompanyID, image.ImageID)
 
 		imageArgs := cloud.ImageArgs{
 			Content: image.Content, Folder: "img-productos", Name: baseName, Type: "avif",
@@ -488,37 +477,75 @@ func PostProductImage(req *core.HandlerArgs) core.HandlerResponse {
 				return req.MakeErr("Error al guardar la imagen:", err)
 			}
 		}
-
 		response["imageName"] = "img-productos/" + baseName
-		// Dedupe guard: the product may already reference this imageID (saved optimistically
-		// with the client-reserved ID before the bytes finished uploading). Only associate it
-		// when absent, so a retried upload can't double-append.
-		if !slices.Contains(product.ImageIDs, imageID) {
-			// Prepend the new image; it becomes the main image.
-			product.ImageIDs = append([]int32{imageID}, product.ImageIDs...)
-			product.ImageDescriptions = append([]string{image.Description}, product.ImageDescriptions...)
-			product.ImageMain = imageID
-			productChanged = true
+	}
+
+	// The image list is changed on the locked row and only its columns are written: a product
+	// form or a sale committing meanwhile keeps its own columns, and two uploads to one product
+	// both stay listed.
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		lockedProducts := []types.Product{{CompanyID: req.User.CompanyID, ID: image.ProductID}}
+		if err := db.LockByKeys(transaction, &lockedProducts); err != nil {
+			return core.Err("Error al obtener el producto:", err)
 		}
-	}
-
-	// Skip the product write when only the image bytes were (re)uploaded with no association change.
-	if !productChanged {
-		return req.MakeResponse(response)
-	}
-
-	product.Updated = core.SUnixTime()
-	product.UpdatedBy = req.User.ID
-
-	core.Print(product)
-
-	err = db.Upsert(&[]types.Product{product})
-
+		if len(lockedProducts) == 0 {
+			return core.Err("No se encontró el producto con ID:", image.ProductID)
+		}
+		product := lockedProducts[0]
+		// Skip the write when only the image bytes were (re)uploaded with no association change.
+		if !changeProductImages(&product, image) {
+			return nil
+		}
+		product.Updated = core.SUnixTime()
+		product.UpdatedBy = req.User.ID
+		table := db.TableOf[types.Product]()
+		return db.UpdateIn(transaction, &[]types.Product{product},
+			table.ImageIDs, table.ImageDescriptions, table.ImageMain, table.Updated, table.UpdatedBy)
+	})
 	if err != nil {
-		return req.MakeErr("Error al actualizar el product:", err)
+		return req.MakeErr("Error al actualizar el producto:", err)
 	}
-
 	return req.MakeResponse(response)
+}
+
+// changeProductImages applies an upload or a removal to the product's image list, and reports
+// whether the list changed.
+func changeProductImages(product *types.Product, image productoImage) bool {
+	if image.ImageToDelete > 0 {
+		// Drop the imageID from the parallel ImageIDs/ImageDescriptions arrays.
+		imageIDs := []int32{}
+		imageDescriptions := []string{}
+		for index, id := range product.ImageIDs {
+			if id == image.ImageToDelete {
+				continue
+			}
+			imageIDs = append(imageIDs, id)
+			if index < len(product.ImageDescriptions) {
+				imageDescriptions = append(imageDescriptions, product.ImageDescriptions[index])
+			}
+		}
+		product.ImageIDs = imageIDs
+		product.ImageDescriptions = imageDescriptions
+		// Repoint the main image if the deleted one was primary.
+		if product.ImageMain == image.ImageToDelete {
+			product.ImageMain = 0
+			if len(imageIDs) > 0 {
+				product.ImageMain = imageIDs[0]
+			}
+		}
+		return true
+	}
+	// Dedupe guard: the product may already reference this imageID (saved optimistically
+	// with the client-reserved ID before the bytes finished uploading). Only associate it
+	// when absent, so a retried upload can't double-append.
+	if slices.Contains(product.ImageIDs, image.ImageID) {
+		return false
+	}
+	// Prepend the new image; it becomes the main image.
+	product.ImageIDs = append([]int32{image.ImageID}, product.ImageIDs...)
+	product.ImageDescriptions = append([]string{image.Description}, product.ImageDescriptions...)
+	product.ImageMain = image.ImageID
+	return true
 }
 
 func PostProductCategoryImage(req *core.HandlerArgs) core.HandlerResponse {

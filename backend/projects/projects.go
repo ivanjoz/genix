@@ -38,25 +38,30 @@ func PostProject(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	storedProject, release, response, isDenied := openProjectWrite(req, project.ID, types.ProjectRoleAdmin)
-	if isDenied {
-		return response
-	}
-	defer release()
-	if response, isDenied := denyMembersWithoutAccess(req, newTeamMemberIDs(storedProject.Members, project.Members)); isDenied {
-		return response
-	}
-
-	storedProject.Name, storedProject.Description, storedProject.Color = project.Name, project.Description, project.Color
-	storedProject.StartDate, storedProject.EndDate = project.StartDate, project.EndDate
-	storedProject.State, storedProject.Members, storedProject.UpdatedBy = project.State, project.Members, req.User.ID
-	projectTable := db.TableOf[types.Project]()
-	err := db.Update(&[]types.Project{storedProject}, projectTable.Status, projectTable.Name, projectTable.Description, projectTable.Color,
-		projectTable.StartDate, projectTable.EndDate, projectTable.State, projectTable.Members, projectTable.UpdatedBy)
+	var savedProject types.Project
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		storedProject, err := lockProjectWriteIn(transaction, req, project.ID, types.ProjectRoleAdmin)
+		if err != nil {
+			return err
+		}
+		if err := checkMembersHaveAccess(req.User.CompanyID, newTeamMemberIDs(storedProject.Members, project.Members)); err != nil {
+			return err
+		}
+		storedProject.Name, storedProject.Description, storedProject.Color = project.Name, project.Description, project.Color
+		storedProject.StartDate, storedProject.EndDate = project.StartDate, project.EndDate
+		storedProject.State, storedProject.Members, storedProject.UpdatedBy = project.State, project.Members, req.User.ID
+		projectTable := db.TableOf[types.Project]()
+		if err := db.UpdateIn(transaction, &[]types.Project{storedProject}, projectTable.Status, projectTable.Name, projectTable.Description,
+			projectTable.Color, projectTable.StartDate, projectTable.EndDate, projectTable.State, projectTable.Members, projectTable.UpdatedBy); err != nil {
+			return core.Err("Error al guardar el proyecto:", err)
+		}
+		savedProject = storedProject
+		return nil
+	})
 	if err != nil {
-		return req.MakeErr("Error al guardar el proyecto:", err)
+		return makeProjectErr(req, err)
 	}
-	return req.MakeResponse(storedProject)
+	return req.MakeResponse(savedProject)
 }
 
 // createProject validates and stores a new project; its creator becomes an admin.
@@ -68,13 +73,13 @@ func createProject(req *core.HandlerArgs, project types.Project) core.HandlerRes
 	if err := normalizeProject(&project); err != nil {
 		return req.MakeErr(err)
 	}
-	if response, isDenied := denyMembersWithoutAccess(req, newTeamMemberIDs(nil, project.Members)); isDenied {
-		return response
+	if err := checkMembersHaveAccess(req.User.CompanyID, newTeamMemberIDs(nil, project.Members)); err != nil {
+		return req.MakeErr(err)
 	}
 	project.CompanyID, project.Status = req.User.CompanyID, types.StatusActive
 	project.CreatedBy, project.Created, project.UpdatedBy = req.User.ID, core.SUnixTime(), req.User.ID
 	projects := []types.Project{project}
-	if err := db.Upsert(&projects); err != nil {
+	if err := db.Insert(&projects); err != nil {
 		return req.MakeErr("Error al guardar el proyecto:", err)
 	}
 	return req.MakeResponse(projects[0])
@@ -91,19 +96,19 @@ func loadCompanyUsers(companyID int32, userIDs []int32) ([]coreTypes.User, error
 	return users, query.Exec()
 }
 
-// denyMembersWithoutAccess refuses a team change that adds a user who can't work in projects.
-func denyMembersWithoutAccess(req *core.HandlerArgs, addedUserIDs []int32) (core.HandlerResponse, bool) {
-	users, err := loadCompanyUsers(req.User.CompanyID, addedUserIDs)
+// checkMembersHaveAccess refuses a team change that adds a user who can't work in projects.
+func checkMembersHaveAccess(companyID int32, addedUserIDs []int32) error {
+	users, err := loadCompanyUsers(companyID, addedUserIDs)
 	if err != nil {
-		return req.MakeErr("Error al obtener los usuarios del equipo:", err), true
+		return core.Err("Error al obtener los usuarios del equipo:", err)
 	}
 	for _, userID := range addedUserIDs {
 		userIndex := slices.IndexFunc(users, func(user coreTypes.User) bool { return user.ID == userID })
 		if userIndex < 0 || !canWorkInProjects(users[userIndex]) {
-			return req.MakeErr(fmt.Sprintf("El usuario %d no tiene el acceso de escritura a Proyectos.", userID)), true
+			return core.Err(fmt.Sprintf("El usuario %d no tiene el acceso de escritura a Proyectos.", userID))
 		}
 	}
-	return core.HandlerResponse{}, false
+	return nil
 }
 
 type teamCandidate struct {

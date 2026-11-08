@@ -152,11 +152,16 @@ func storeBetaCredentials(companyID int32, certificate []byte) error {
 
 // ensureBetaSeries gives the company one series per document type if it has none.
 func ensureBetaSeries(companyID, siteID int32) (int, error) {
-	allSeries, err := invoicing.LoadCompanySeries(companyID)
-	if err != nil {
-		return 0, err
-	}
+	created := 0
+	_, err := invoicing.UpdateCompanySeries(companyID, func(allSeries []invoicingTypes.InvoiceSeries) ([]invoicingTypes.InvoiceSeries, error) {
+		created = 0
+		return addBetaSeries(allSeries, siteID, &created), nil
+	})
+	return created, err
+}
 
+// addBetaSeries appends a Factura and a Boleta series to a set that lacks them, counting them.
+func addBetaSeries(allSeries []invoicingTypes.InvoiceSeries, siteID int32, created *int) []invoicingTypes.InvoiceSeries {
 	wanted := []struct {
 		docType int8
 		code    string
@@ -165,7 +170,6 @@ func ensureBetaSeries(companyID, siteID int32) (int, error) {
 		{invoicingTypes.DocTypeBoleta, "B001"},
 	}
 
-	created := 0
 	for _, want := range wanted {
 		found := false
 		for index := range allSeries {
@@ -187,15 +191,9 @@ func ensureBetaSeries(companyID, siteID int32) (int, error) {
 			IsDefault:  1,
 			Status:     1,
 		})
-		created++
+		*created++
 	}
-	if created == 0 {
-		return 0, nil
-	}
-	if err := invoicing.SaveCompanySeries(companyID, allSeries); err != nil {
-		return 0, err
-	}
-	return created, nil
+	return allSeries
 }
 
 // EmitInvoice issues an electronic document for a sale, from the command line.

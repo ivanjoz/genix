@@ -85,19 +85,9 @@ func recomputeCompanyUserAccesos(companyID int32) (int, int, error) {
 	for userIndex := range users {
 		user := &users[userIndex]
 
-		grantsByAccesoID, buildErr := buildAccesosComputedFromPerfiles(perfilesByID, user.ProfileIDs)
-		if buildErr != nil {
-			return 0, 0, core.Err("user", user.ID, "::", buildErr)
-		}
-		// The same second source PostUsuarios merges. Leaving it out would silently strip every
-		// access granted to a user directly rather than through a profile.
-		for _, grantRecord := range user.AccesosGrants {
-			addAccesoGrantToMerge(grantsByAccesoID, grantRecord)
-		}
-
-		accesosBlob, accesosSubBlob, encodeErr := encodeMergedAccesoGrants(grantsByAccesoID)
-		if encodeErr != nil {
-			return 0, 0, core.Err("user", user.ID, "::", encodeErr)
+		accesosBlob, accesosSubBlob, computeErr := computeUserAccesos(perfilesByID, *user)
+		if computeErr != nil {
+			return 0, 0, core.Err("user", user.ID, "::", computeErr)
 		}
 		if bytes.Equal(user.AccesosComputed, accesosBlob) &&
 			bytes.Equal(user.AccesosSubComputed, accesosSubBlob) {

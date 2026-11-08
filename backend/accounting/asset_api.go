@@ -10,6 +10,7 @@ import (
 	production "app/production/types"
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // GetAssets returns the asset register using the delta-cache protocol. Depreciation is not
@@ -192,31 +193,40 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 		newAssets = append(newAssets, makeAsset("", unitCount))
 	}
 
-	if insertError := db.Upsert(&newAssets); insertError != nil {
-		return req.MakeErr("Error al registrar el activo.", insertError)
-	}
-
-	// 4. The asset's existence is its stock, so the units move in through the same engine as
-	//    anything else. A serial-tracked unit lands on its own ProductStockDetail row.
-	movements := make([]logistics.InternalMovement, len(newAssets))
-	for assetIndex := range newAssets {
-		movements[assetIndex] = logistics.InternalMovement{
-			Type:         logistics.StockMovementTypeAssetAcquisition,
-			ProductID:    payload.ProductID,
-			WarehouseID:  payload.WarehouseID,
-			SerialNumber: newAssets[assetIndex].SerialNumber,
-			SupplierID:   payload.SupplierID,
-			Quantity:     newAssets[assetIndex].Quantity,
-			Price:        payload.AcquisitionValue,
-			DocumentID:   int64(newAssets[assetIndex].ID),
+	// The assets and their stock commit together: a failed stock entry leaves no asset behind.
+	var savedAssets []types.Asset
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		savedAssets = slices.Clone(newAssets)
+		if insertError := db.InsertIn(transaction, &savedAssets); insertError != nil {
+			return core.Err("Error al registrar el activo.", insertError)
 		}
-	}
-	if movementError := logistics.ApplyMovimientos(req, movements); movementError != nil {
-		return req.MakeErr("Error al ingresar el activo al almacén.", movementError)
+
+		// 4. The asset's existence is its stock, so the units move in through the same engine as
+		//    anything else. A serial-tracked unit lands on its own ProductStockDetail row.
+		movements := make([]logistics.InternalMovement, len(savedAssets))
+		for assetIndex := range savedAssets {
+			movements[assetIndex] = logistics.InternalMovement{
+				Type:         logistics.StockMovementTypeAssetAcquisition,
+				ProductID:    payload.ProductID,
+				WarehouseID:  payload.WarehouseID,
+				SerialNumber: savedAssets[assetIndex].SerialNumber,
+				SupplierID:   payload.SupplierID,
+				Quantity:     savedAssets[assetIndex].Quantity,
+				Price:        payload.AcquisitionValue,
+				DocumentID:   int64(savedAssets[assetIndex].ID),
+			}
+		}
+		if movementError := logistics.ApplyMovimientosIn(transaction, req, movements); movementError != nil {
+			return core.Err("Error al ingresar el activo al almacén.", movementError)
+		}
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
 
-	core.Log("PostAsset created:", len(newAssets))
-	return req.MakeResponse(newAssets)
+	core.Log("PostAsset created:", len(savedAssets))
+	return req.MakeResponse(savedAssets)
 }
 
 // AssetDisposalPayload retires an asset from the register and takes its units out of stock.
@@ -237,48 +247,55 @@ func PutAssetDisposal(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe indicar el activo a dar de baja.")
 	}
 
-	asset, loadError := loadAsset(req.User.CompanyID, payload.AssetID)
-	if loadError != nil {
-		return req.MakeErr(loadError)
-	}
-	if asset.DisposalDate > 0 {
-		return req.MakeErr("El activo ya fue dado de baja.")
-	}
+	// Under the asset's row lock: a second disposal waits, then finds it disposed, so its units
+	// never leave the warehouse twice.
+	var asset types.Asset
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var loadError error
+		if asset, loadError = lockAssetIn(transaction, req.User.CompanyID, payload.AssetID); loadError != nil {
+			return loadError
+		}
+		if asset.DisposalDate > 0 {
+			return core.Err("El activo ya fue dado de baja.")
+		}
 
-	disposalDate := core.If(payload.DisposalDate > 0, payload.DisposalDate, core.FechaUnix())
-	if disposalDate < asset.AcquisitionDate {
-		return req.MakeErr("La fecha de baja no puede ser anterior a la fecha de adquisición.")
-	}
+		disposalDate := core.If(payload.DisposalDate > 0, payload.DisposalDate, core.FechaUnix())
+		if disposalDate < asset.AcquisitionDate {
+			return core.Err("La fecha de baja no puede ser anterior a la fecha de adquisición.")
+		}
 
-	// Take the units out of the warehouse through the ordinary movement path.
-	outboundMovement := logistics.InternalMovement{
-		Type:         logistics.StockMovementTypeAssetDisposal,
-		ProductID:    asset.ProductID,
-		WarehouseID:  asset.WarehouseID,
-		SerialNumber: asset.SerialNumber,
-		Quantity:     -asset.Quantity,
-		DocumentID:   int64(asset.ID),
-	}
-	if movementError := logistics.ApplyMovimientos(
-		req, []logistics.InternalMovement{outboundMovement},
-	); movementError != nil {
-		return req.MakeErr("Error al retirar el activo del almacén.", movementError)
-	}
+		// Take the units out of the warehouse through the ordinary movement path.
+		outboundMovement := logistics.InternalMovement{
+			Type:         logistics.StockMovementTypeAssetDisposal,
+			ProductID:    asset.ProductID,
+			WarehouseID:  asset.WarehouseID,
+			SerialNumber: asset.SerialNumber,
+			Quantity:     -asset.Quantity,
+			DocumentID:   int64(asset.ID),
+		}
+		if movementError := logistics.ApplyMovimientosIn(
+			transaction, req, []logistics.InternalMovement{outboundMovement},
+		); movementError != nil {
+			return core.Err("Error al retirar el activo del almacén.", movementError)
+		}
 
-	asset.DisposalDate = disposalDate
-	asset.Status = ResolveAssetStatus(&asset)
-	asset.Updated = core.SUnixTime()
-	asset.UpdatedBy = req.User.ID
+		asset.DisposalDate = disposalDate
+		asset.Status = ResolveAssetStatus(&asset)
+		asset.Updated = core.SUnixTime()
+		asset.UpdatedBy = req.User.ID
 
-	assetTable := db.TableOf[types.Asset]()
-	assetRecords := []types.Asset{asset}
-	if updateError := db.Update(&assetRecords,
-		assetTable.DisposalDate, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
-	); updateError != nil {
-		return req.MakeErr("Error al dar de baja el activo.", updateError)
+		assetTable := db.TableOf[types.Asset]()
+		if updateError := db.UpdateIn(transaction, &[]types.Asset{asset},
+			assetTable.DisposalDate, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
+		); updateError != nil {
+			return core.Err("Error al dar de baja el activo.", updateError)
+		}
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	return req.MakeResponse(assetRecords[0])
+	return req.MakeResponse(asset)
 }
 
 // AssetTransferPayload moves an asset between warehouses. The accounting identity does not
@@ -297,46 +314,53 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe indicar el activo y el almacén de destino.")
 	}
 
-	asset, loadError := loadAsset(req.User.CompanyID, payload.AssetID)
-	if loadError != nil {
-		return req.MakeErr(loadError)
-	}
-	if asset.DisposalDate > 0 {
-		return req.MakeErr("No se puede trasladar un activo dado de baja.")
-	}
-	if asset.WarehouseID == payload.TargetWarehouseID {
-		return req.MakeErr("El activo ya está en ese almacén.")
-	}
+	// Under the asset's row lock: two transfers apply one after the other, the second moving the
+	// units out of the warehouse the first moved them to.
+	var asset types.Asset
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var loadError error
+		if asset, loadError = lockAssetIn(transaction, req.User.CompanyID, payload.AssetID); loadError != nil {
+			return loadError
+		}
+		if asset.DisposalDate > 0 {
+			return core.Err("No se puede trasladar un activo dado de baja.")
+		}
+		if asset.WarehouseID == payload.TargetWarehouseID {
+			return core.Err("El activo ya está en ese almacén.")
+		}
 
-	transferMovement := logistics.InternalMovement{
-		Type:            logistics.StockMovementTypeAssetTransfer,
-		ProductID:       asset.ProductID,
-		WarehouseID:     asset.WarehouseID,
-		DestWarehouseID: payload.TargetWarehouseID,
-		SerialNumber:    asset.SerialNumber,
-		Quantity:        asset.Quantity,
-		DocumentID:      int64(asset.ID),
-	}
-	if movementError := logistics.ApplyMovimientos(
-		req, []logistics.InternalMovement{transferMovement},
-	); movementError != nil {
-		return req.MakeErr("Error al trasladar el activo.", movementError)
-	}
+		transferMovement := logistics.InternalMovement{
+			Type:            logistics.StockMovementTypeAssetTransfer,
+			ProductID:       asset.ProductID,
+			WarehouseID:     asset.WarehouseID,
+			DestWarehouseID: payload.TargetWarehouseID,
+			SerialNumber:    asset.SerialNumber,
+			Quantity:        asset.Quantity,
+			DocumentID:      int64(asset.ID),
+		}
+		if movementError := logistics.ApplyMovimientosIn(
+			transaction, req, []logistics.InternalMovement{transferMovement},
+		); movementError != nil {
+			return core.Err("Error al trasladar el activo.", movementError)
+		}
 
-	asset.WarehouseID = payload.TargetWarehouseID
-	asset.Updated = core.SUnixTime()
-	asset.UpdatedBy = req.User.ID
+		asset.WarehouseID = payload.TargetWarehouseID
+		asset.Updated = core.SUnixTime()
+		asset.UpdatedBy = req.User.ID
 
-	assetTable := db.TableOf[types.Asset]()
-	assetRecords := []types.Asset{asset}
-	// Status rides along for the delta view's composite key, as in PostAssetPayment.
-	if updateError := db.Update(&assetRecords,
-		assetTable.WarehouseID, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
-	); updateError != nil {
-		return req.MakeErr("Error al actualizar el activo.", updateError)
+		assetTable := db.TableOf[types.Asset]()
+		// Status rides along for the delta view's composite key, as in PostAssetPayment.
+		if updateError := db.UpdateIn(transaction, &[]types.Asset{asset},
+			assetTable.WarehouseID, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
+		); updateError != nil {
+			return core.Err("Error al actualizar el activo.", updateError)
+		}
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	return req.MakeResponse(assetRecords[0])
+	return req.MakeResponse(asset)
 }
 
 // normalizeAssetDocument validates an asset's comprobante against the amount it pays for. The
@@ -355,13 +379,12 @@ func normalizeAssetDocument(
 	return nil
 }
 
-func loadAsset(companyID, assetID int32) (types.Asset, error) {
-	assets := []types.Asset{}
-	assetQuery := db.Query(&assets)
-	assetQuery.Select().CompanyID.Equals(companyID).ID.Equals(assetID)
-
-	if queryError := assetQuery.Exec(); queryError != nil {
-		return types.Asset{}, core.Err("Error al obtener el activo.", queryError)
+// lockAssetIn reads the asset under its row lock: every write of an asset (payment, disposal,
+// transfer, edit, depreciation) holds it, so each one sees what the previous one left.
+func lockAssetIn(transaction *db.Transaction, companyID, assetID int32) (types.Asset, error) {
+	assets := []types.Asset{{CompanyID: companyID, ID: assetID}}
+	if lockError := db.LockByKeys(transaction, &assets); lockError != nil {
+		return types.Asset{}, core.Err("Error al obtener el activo.", lockError)
 	}
 	if len(assets) == 0 {
 		return types.Asset{}, core.Err("No se encontró el activo.")

@@ -5,6 +5,8 @@ import (
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
+	"cmp"
+	"slices"
 )
 
 // PostAssetDepreciationRun materializes every depreciation period that has come due and has
@@ -28,12 +30,53 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los activos.", queryError)
 	}
 
+	// The plain read only finds who is due, so a load with nothing due takes no lock. The due
+	// assets are then locked and everything is recomputed from the locked rows: two page loads at
+	// once post each period once, and an edit or payment of an asset never interleaves with it.
+	dueAssets := []types.Asset{}
+	for _, asset := range assets {
+		if len(PendingDepreciationPeriods(&asset, throughDate)) > 0 {
+			dueAssets = append(dueAssets, types.Asset{CompanyID: req.User.CompanyID, ID: asset.ID})
+		}
+	}
+	if len(dueAssets) == 0 {
+		core.Log("PostAssetDepreciationRun: nothing due")
+		return req.MakeResponse(map[string]any{"PostedEntries": 0, "UpdatedAssets": 0})
+	}
+	// Locked in key order, so two runs never hold each other's rows.
+	slices.SortFunc(dueAssets, func(left, right types.Asset) int { return cmp.Compare(left.ID, right.ID) })
+
+	var postedEntries, updatedAssets int
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		lockedAssets := slices.Clone(dueAssets)
+		if lockError := db.LockByKeys(transaction, &lockedAssets); lockError != nil {
+			return core.Err("Error al obtener los activos.", lockError)
+		}
+		var runError error
+		postedEntries, updatedAssets, runError = postDepreciationIn(transaction, req, lockedAssets, throughDate)
+		return runError
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	core.Log("PostAssetDepreciationRun posted:", postedEntries, "assets:", updatedAssets)
+	return req.MakeResponse(map[string]any{"PostedEntries": postedEntries, "UpdatedAssets": updatedAssets})
+}
+
+// postDepreciationIn posts every period due through throughDate of the assets its caller locked,
+// and advances their watermarks, in the caller's transaction.
+func postDepreciationIn(transaction *db.Transaction, req *core.HandlerArgs, assets []types.Asset, throughDate int16,
+) (int, int, error) {
 	currentTimestamp := core.SUnixTime()
 	depreciationEntries := []finance.Expense{}
 	assetsToUpdate := []types.Asset{}
 
 	for assetIndex := range assets {
 		asset := &assets[assetIndex]
+		// Re-checked on the locked row: an edit or a disposal may have landed since the plain read.
+		if asset.Status != types.AssetStatusActive {
+			continue
+		}
 		pendingPeriods := PendingDepreciationPeriods(asset, throughDate)
 		if len(pendingPeriods) == 0 {
 			continue
@@ -75,33 +118,25 @@ func PostAssetDepreciationRun(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	if len(depreciationEntries) == 0 {
-		core.Log("PostAssetDepreciationRun: nothing due")
-		return req.MakeResponse(map[string]any{"PostedEntries": 0, "UpdatedAssets": 0})
+		return 0, 0, nil
 	}
 
-	// The ledger entries go first: if the asset update fails afterwards the watermark stays
-	// behind and the next run re-posts them, which is visible. The reverse order would
-	// advance the watermark past periods that were never written, losing them silently.
+	// The entries and the watermarks commit together, so a period is never posted without the
+	// watermark moving past it, nor the reverse.
 	for index := range depreciationEntries {
 		depreciationEntries[index].StampPeriod()
 	}
-	if insertError := db.Upsert(&depreciationEntries); insertError != nil {
-		return req.MakeErr("Error al registrar los asientos de depreciación.", insertError)
+	if insertError := db.InsertIn(transaction, &depreciationEntries); insertError != nil {
+		return 0, 0, core.Err("Error al registrar los asientos de depreciación.", insertError)
 	}
-
 	assetTable := db.TableOf[types.Asset]()
-	if updateError := db.Update(&assetsToUpdate,
+	if updateError := db.UpdateIn(transaction, &assetsToUpdate,
 		assetTable.AccumulatedDepreciation, assetTable.LastDepreciationDate,
 		assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
 	); updateError != nil {
-		return req.MakeErr("Error al actualizar los activos depreciados.", updateError)
+		return 0, 0, core.Err("Error al actualizar los activos depreciados.", updateError)
 	}
-
-	core.Log("PostAssetDepreciationRun posted:", len(depreciationEntries), "assets:", len(assetsToUpdate))
-	return req.MakeResponse(map[string]any{
-		"PostedEntries": len(depreciationEntries),
-		"UpdatedAssets": len(assetsToUpdate),
-	})
+	return len(depreciationEntries), len(assetsToUpdate), nil
 }
 
 // GetAssetDepreciation returns one asset's posted depreciation ledger, for the schedule view.

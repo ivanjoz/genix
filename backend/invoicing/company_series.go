@@ -8,6 +8,7 @@ import (
 	"app/invoicing/types"
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // The series a company issues under travel inline on its record, so reading them
@@ -54,7 +55,11 @@ func LoadCompanySeries(companyID int32) ([]types.InvoiceSeries, error) {
 	return company.InvoiceSeries, nil
 }
 
-// SaveCompanySeries replaces the whole set of series on a company.
+// UpdateCompanySeries applies change to the company's whole set of series and saves the result,
+// under the company row's lock: the set is read, changed and written back, so two saves are
+// ordered and the later one starts from what the earlier one wrote. The company form takes the
+// same lock (PostEmpresaParametros), so neither drops the other's change. The row is read from the
+// database even with the cloud mirror on: every company writer writes it there.
 //
 // The set is validated as a whole because that is where the rules live: ids and
 // codes have to be unique across it, and only one series per document type can be
@@ -64,30 +69,44 @@ func LoadCompanySeries(companyID int32) ([]types.InvoiceSeries, error) {
 // the address and the Culqi keys from a copy read moments earlier, so a company
 // form saved in between would be silently undone — the two endpoints exist
 // precisely so that cannot happen, and a whole-row write would hand it back.
-func SaveCompanySeries(companyID int32, allSeries []types.InvoiceSeries) error {
-	company, err := loadCompanyRecord(companyID)
+func UpdateCompanySeries(
+	companyID int32, change func(allSeries []types.InvoiceSeries) ([]types.InvoiceSeries, error),
+) ([]types.InvoiceSeries, error) {
+	var saved config.Company
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		companies := []config.Company{{ID: companyID}}
+		if err := db.LockByKeys(transaction, &companies); err != nil {
+			return fmt.Errorf("error al leer la empresa: %w", err)
+		}
+		if len(companies) == 0 {
+			return errors.New("no se encontró la empresa")
+		}
+		saved = companies[0]
+		allSeries, err := change(slices.Clone(saved.InvoiceSeries))
+		if err != nil {
+			return err
+		}
+		if err := types.ValidateSeries(allSeries); err != nil {
+			return err
+		}
+		saved.InvoiceSeries = allSeries
+		saved.Updated = core.SUnixTime()
+		table := db.TableOf[config.Company]()
+		if err := db.UpdateIn(transaction, &[]config.Company{saved}, table.InvoiceSeries, table.Updated); err != nil {
+			return fmt.Errorf("error al guardar las series: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return err
-	}
-	if err := types.ValidateSeries(allSeries); err != nil {
-		return err
-	}
-
-	company.InvoiceSeries = allSeries
-	company.Updated = core.SUnixTime()
-	companies := &[]config.Company{*company}
-
-	table := db.TableOf[config.Company]()
-	if err := db.Update(companies, table.InvoiceSeries, table.Updated); err != nil {
-		return fmt.Errorf("error al guardar las series: %w", err)
+		return nil, err
 	}
 	// The mirror has no column-scoped write, so this one is whole-row. It is a read
 	// replica for reports rather than the record anything is decided from, and the
-	// copy being written was read inside the lock a moment earlier.
+	// copy being written is the one just committed.
 	if cloud.IsDataMirrorEnabled() {
-		if err := cloud.Insert([]config.Company{(*companies)[0]}); err != nil {
-			return fmt.Errorf("error al guardar las series en cloud: %w", err)
+		if err := cloud.Insert([]config.Company{saved}); err != nil {
+			return nil, fmt.Errorf("error al guardar las series en cloud: %w", err)
 		}
 	}
-	return nil
+	return saved.InvoiceSeries, nil
 }

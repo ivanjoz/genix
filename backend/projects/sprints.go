@@ -9,8 +9,10 @@ import (
 	"app/projects/types"
 )
 
-// Every sprint write runs under the project lock (openProjectWrite): the rules read the project's
-// sprints and stories, decide, and write, with no other writer in between.
+// Every sprint write runs in one transaction under the project's row lock (lockProjectWriteIn): the
+// rules read the project's sprints and stories, decide, and write, with no other writer in between.
+// Those reads see committed rows only, so a body that writes a sprint and then needs the project's
+// sprints passes them along with its write applied (withWrittenSprints) instead of reading again.
 
 // GetSprints is the delta of a project's sprints, with their stories' states.
 func GetSprints(req *core.HandlerArgs) core.HandlerResponse {
@@ -24,32 +26,42 @@ func GetSprints(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &sprints)
 }
 
-// updateSprints writes every field a sprint writer may change. ProjectID and Status go with any
+// updateSprintsIn writes every field a sprint writer may change. ProjectID and Status go with any
 // update: they are the delta index's keys.
-func updateSprints(sprints []types.Sprint) error {
+func updateSprintsIn(transaction *db.Transaction, sprints []types.Sprint) error {
 	sprintTable := db.TableOf[types.Sprint]()
-	return db.Update(&sprints, sprintTable.ProjectID, sprintTable.Status, sprintTable.Name, sprintTable.Goal,
+	return db.UpdateIn(transaction, &sprints, sprintTable.ProjectID, sprintTable.Status, sprintTable.Name, sprintTable.Goal,
 		sprintTable.StartDate, sprintTable.EndDate, sprintTable.State, sprintTable.Stories,
 		sprintTable.ClosedAt, sprintTable.ClosedBy, sprintTable.UpdatedBy)
 }
 
-// updateStoriesState writes a story's final state and the sprints that hold it.
-func updateStoriesState(stories []types.Story) error {
+// updateStoriesStateIn writes a story's final state and the sprints that hold it.
+func updateStoriesStateIn(transaction *db.Transaction, stories []types.Story) error {
 	storyTable := db.TableOf[types.Story]()
-	return db.Update(&stories, storyTable.ProjectID, storyTable.Status, storyTable.State, storyTable.StateDates,
+	return db.UpdateIn(transaction, &stories, storyTable.ProjectID, storyTable.Status, storyTable.State, storyTable.StateDates,
 		storyTable.LastSprintID, storyTable.SprintIDs, storyTable.UpdatedBy)
 }
 
-// syncStoriesFinalState rewrites the final state of the stories a sprint change touched, from the
-// sprints as stored now: every writer of a sprint calls it after its own write. The history entries
-// of a story that is gone are dropped. Runs under the project lock.
-func syncStoriesFinalState(companyID int32, projectID int32, storyIDs []int64, userID int32, activities []types.StoryActivity) error {
+// withWrittenSprints is the project's active sprints once writtenSprints are applied: each replaces
+// the stored one of its ID, and a deleted one drops out.
+func withWrittenSprints(projectSprints []types.Sprint, writtenSprints ...types.Sprint) []types.Sprint {
+	currentSprints := slices.Clone(projectSprints)
+	for _, writtenSprint := range writtenSprints {
+		currentSprints = slices.DeleteFunc(currentSprints, func(sprint types.Sprint) bool { return sprint.ID == writtenSprint.ID })
+		if writtenSprint.Status == types.StatusActive {
+			currentSprints = append(currentSprints, writtenSprint)
+		}
+	}
+	return currentSprints
+}
+
+// syncStoriesFinalStateIn rewrites the final state of the stories a sprint change touched, from
+// currentSprints: the project's sprints with the caller's own sprint writes applied. Every writer of
+// a sprint calls it after its write, and the activities it writes are the change's history. The
+// history entries of a story that is gone are dropped.
+func syncStoriesFinalStateIn(transaction *db.Transaction, companyID int32, projectID int32, currentSprints []types.Sprint, storyIDs []int64, userID int32, activities []types.StoryActivity) error {
 	if len(storyIDs) == 0 {
 		return nil
-	}
-	projectSprints, err := loadProjectSprints(companyID, projectID)
-	if err != nil {
-		return err
 	}
 	projectStories, err := loadProjectStories(companyID, projectID)
 	if err != nil {
@@ -67,18 +79,15 @@ func syncStoriesFinalState(companyID int32, projectID int32, storyIDs []int64, u
 			activities = slices.DeleteFunc(activities, func(activity types.StoryActivity) bool { return activity.StoryID == storyID })
 			continue
 		}
-		finalState, lastSprintID, sprintIDs := storyFinalState(storyID, projectSprints)
+		finalState, lastSprintID, sprintIDs := storyFinalState(storyID, currentSprints)
 		setStoryState(&story, finalState, today)
 		story.LastSprintID, story.SprintIDs, story.UpdatedBy = lastSprintID, sprintIDs, userID
 		syncedStories = append(syncedStories, story)
 	}
-	if len(syncedStories) > 0 {
-		if err := updateStoriesState(syncedStories); err != nil {
-			return err
-		}
+	if err := updateStoriesStateIn(transaction, syncedStories); err != nil {
+		return err
 	}
-	addStoryActivities(activities...)
-	return nil
+	return addStoryActivitiesIn(transaction, activities...)
 }
 
 type storyAssignee struct {
@@ -103,29 +112,42 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
+	var savedSprint types.Sprint
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		savedSprint, err = saveSprintIn(transaction, req, request)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
+	}
+	return req.MakeResponse(savedSprint)
+}
+
+// saveSprintIn creates, edits or deletes a sprint with its plan under the project's row lock.
+func saveSprintIn(transaction *db.Transaction, req *core.HandlerArgs, request sprintSaveRequest) (types.Sprint, error) {
 	sprint := request.Sprint
 	isDeletion := sprint.ID != 0 && sprint.Status == types.StatusDeleted
-	project, release, response, isDenied := openProjectWrite(req, sprint.ProjectID, types.ProjectRoleAdmin)
-	if isDenied {
-		return response
+	project, err := lockProjectWriteIn(transaction, req, sprint.ProjectID, types.ProjectRoleAdmin)
+	if err != nil {
+		return types.Sprint{}, err
 	}
-	defer release()
 	companyID := req.User.CompanyID
 
 	projectSprints, err := loadProjectSprints(companyID, project.ID)
 	if err != nil {
-		return req.MakeErr("Error al obtener los sprints:", err)
+		return types.Sprint{}, core.Err("Error al obtener los sprints:", err)
 	}
 	if !isDeletion {
 		if err := normalizeSprint(&sprint, projectSprints); err != nil {
-			return req.MakeErr(err)
+			return types.Sprint{}, err
 		}
 	}
 	storiesByID := map[int64]types.Story{}
 	if request.StoryIDs != nil || len(request.StoryAssignees) > 0 {
 		projectStories, err := loadProjectStories(companyID, project.ID)
 		if err != nil {
-			return req.MakeErr("Error al obtener las historias:", err)
+			return types.Sprint{}, core.Err("Error al obtener las historias:", err)
 		}
 		for _, story := range projectStories {
 			storiesByID[story.ID] = story
@@ -133,7 +155,7 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	for _, assignee := range request.StoryAssignees {
 		if _, storyExists := storiesByID[assignee.StoryID]; !storyExists || (assignee.AssigneeID != 0 && !isProjectMember(project, assignee.AssigneeID)) {
-			return req.MakeErr("El responsable debe ser parte del equipo del proyecto.")
+			return types.Sprint{}, core.Err("El responsable debe ser parte del equipo del proyecto.")
 		}
 	}
 	now := core.SUnixTime()
@@ -145,30 +167,33 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 		sprint.State, sprint.Stories, sprint.Status, sprint.UpdatedBy = types.SprintStatePlanned, nil, types.StatusActive, req.User.ID
 		if request.StoryIDs != nil {
 			if addedStoryIDs, removedStoryIDs, err = planSprintStories(&sprint, *request.StoryIDs, storiesByID, projectSprints, now); err != nil {
-				return req.MakeErr(err)
+				return types.Sprint{}, err
 			}
 		}
 		if stateChanges, err = planSprintStoryStates(&sprint, request.StoryStates, now); err != nil {
-			return req.MakeErr(err)
+			return types.Sprint{}, err
 		}
 		newSprints := []types.Sprint{sprint}
-		if err := db.Upsert(&newSprints); err != nil {
-			return req.MakeErr("Error al guardar el sprint:", err)
+		if err := db.InsertIn(transaction, &newSprints); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar el sprint:", err)
 		}
 		sprint = newSprints[0]
 	} else {
 		storedIndex := slices.IndexFunc(projectSprints, func(projectSprint types.Sprint) bool { return projectSprint.ID == sprint.ID })
 		if storedIndex < 0 {
-			return req.MakeErr("El sprint no existe.")
+			return types.Sprint{}, core.Err("El sprint no existe.")
 		}
 		stored := projectSprints[storedIndex]
+		// The rules change the sprint's stories in place: the copy must not share them with
+		// projectSprints, which stays the stored state until withWrittenSprints applies this write.
+		stored.Stories = slices.Clone(stored.Stories)
 		if !isSprintOpen(stored) {
-			return req.MakeErr("Un sprint cerrado no se puede modificar.")
+			return types.Sprint{}, core.Err("Un sprint cerrado no se puede modificar.")
 		}
 		stored.UpdatedBy = req.User.ID
 		if isDeletion {
 			if stored.State != types.SprintStatePlanned {
-				return req.MakeErr("Solo se puede eliminar un sprint planificado.")
+				return types.Sprint{}, core.Err("Solo se puede eliminar un sprint planificado.")
 			}
 			for _, sprintStory := range stored.Stories {
 				removedStoryIDs = append(removedStoryIDs, sprintStory.StoryID)
@@ -178,15 +203,15 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 			stored.Name, stored.Goal, stored.StartDate, stored.EndDate = sprint.Name, sprint.Goal, sprint.StartDate, sprint.EndDate
 			if request.StoryIDs != nil {
 				if addedStoryIDs, removedStoryIDs, err = planSprintStories(&stored, *request.StoryIDs, storiesByID, projectSprints, now); err != nil {
-					return req.MakeErr(err)
+					return types.Sprint{}, err
 				}
 			}
 			if stateChanges, err = planSprintStoryStates(&stored, request.StoryStates, now); err != nil {
-				return req.MakeErr(err)
+				return types.Sprint{}, err
 			}
 		}
-		if err := updateSprints([]types.Sprint{stored}); err != nil {
-			return req.MakeErr("Error al guardar el sprint:", err)
+		if err := updateSprintsIn(transaction, []types.Sprint{stored}); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar el sprint:", err)
 		}
 		sprint = stored
 	}
@@ -212,8 +237,9 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	// A story added and given a state is synced once.
 	slices.Sort(touchedStoryIDs)
-	if err := syncStoriesFinalState(companyID, project.ID, slices.Compact(touchedStoryIDs), req.User.ID, sprintActivities); err != nil {
-		return req.MakeErr("Se guardó el sprint, pero no el estado de sus historias:", err)
+	if err := syncStoriesFinalStateIn(transaction, companyID, project.ID, withWrittenSprints(projectSprints, sprint),
+		slices.Compact(touchedStoryIDs), req.User.ID, sprintActivities); err != nil {
+		return types.Sprint{}, core.Err("Error al guardar el estado de las historias del sprint:", err)
 	}
 
 	assigneeActivities := []types.StoryActivity{}
@@ -231,15 +257,17 @@ func PostSprint(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if len(reassignedStories) > 0 {
 		storyTable := db.TableOf[types.Story]()
-		if err := db.Update(&reassignedStories, storyTable.ProjectID, storyTable.Status, storyTable.AssigneeID, storyTable.UpdatedBy); err != nil {
-			return req.MakeErr("Se guardó el sprint, pero no sus responsables:", err)
+		if err := db.UpdateIn(transaction, &reassignedStories, storyTable.ProjectID, storyTable.Status, storyTable.AssigneeID, storyTable.UpdatedBy); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar los responsables del sprint:", err)
 		}
-		if err := saveStoryAssignees(companyID, false, reassignedStories...); err != nil {
-			return req.MakeErr("Se guardó el sprint, pero no la lista de sus responsables:", err)
+		if err := saveStoryAssigneesIn(transaction, companyID, false, reassignedStories...); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar la lista de los responsables:", err)
 		}
-		addStoryActivities(assigneeActivities...)
+		if err := addStoryActivitiesIn(transaction, assigneeActivities...); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar la actividad de las historias:", err)
+		}
 	}
-	return req.MakeResponse(sprint)
+	return sprint, nil
 }
 
 type sprintActionRequest struct {
@@ -253,27 +281,31 @@ func PostSprintStart(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	_, release, response, isDenied := openProjectWrite(req, request.ProjectID, types.ProjectRoleAdmin)
-	if isDenied {
-		return response
-	}
-	defer release()
-
-	projectSprints, err := loadProjectSprints(req.User.CompanyID, request.ProjectID)
+	var startedSprint types.Sprint
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		if _, err := lockProjectWriteIn(transaction, req, request.ProjectID, types.ProjectRoleAdmin); err != nil {
+			return err
+		}
+		projectSprints, err := loadProjectSprints(req.User.CompanyID, request.ProjectID)
+		if err != nil {
+			return core.Err("Error al obtener los sprints:", err)
+		}
+		sprintIndex := slices.IndexFunc(projectSprints, func(sprint types.Sprint) bool { return sprint.ID == request.SprintID })
+		if sprintIndex < 0 {
+			return core.Err("El sprint no existe.")
+		}
+		startedSprint = projectSprints[sprintIndex]
+		if err := startSprint(&startedSprint, projectSprints); err != nil {
+			return err
+		}
+		startedSprint.UpdatedBy = req.User.ID
+		if err := updateSprintsIn(transaction, []types.Sprint{startedSprint}); err != nil {
+			return core.Err("Error al iniciar el sprint:", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return req.MakeErr("Error al obtener los sprints:", err)
-	}
-	sprintIndex := slices.IndexFunc(projectSprints, func(sprint types.Sprint) bool { return sprint.ID == request.SprintID })
-	if sprintIndex < 0 {
-		return req.MakeErr("El sprint no existe.")
-	}
-	startedSprint := projectSprints[sprintIndex]
-	if err := startSprint(&startedSprint, projectSprints); err != nil {
-		return req.MakeErr(err)
-	}
-	startedSprint.UpdatedBy = req.User.ID
-	if err := updateSprints([]types.Sprint{startedSprint}); err != nil {
-		return req.MakeErr("Error al iniciar el sprint:", err)
+		return makeProjectErr(req, err)
 	}
 	return req.MakeResponse(startedSprint)
 }
@@ -289,8 +321,8 @@ type sprintMoveRequest struct {
 }
 
 // PostSprintMove moves a card of the active sprint's board (team members): to another column, and
-// between two cards of it. Moves are serialized by the project lock, so two people moving cards at
-// once both land, one after the other.
+// between two cards of it. Moves are serialized by the project's row lock, so two people moving
+// cards at once both land, one after the other.
 func PostSprintMove(req *core.HandlerArgs) core.HandlerResponse {
 	request := sprintMoveRequest{}
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
@@ -300,53 +332,67 @@ func PostSprintMove(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	_, release, response, isDenied := openProjectWrite(req, request.ProjectID, types.ProjectRoleMember)
-	if isDenied {
-		return response
+	var movedSprint types.Sprint
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		movedSprint, err = moveSprintCardIn(transaction, req, request, reason)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
-	defer release()
+	return req.MakeResponse(movedSprint)
+}
+
+// moveSprintCardIn moves a card of a sprint's board under the project's row lock.
+func moveSprintCardIn(transaction *db.Transaction, req *core.HandlerArgs, request sprintMoveRequest, reason string) (types.Sprint, error) {
+	if _, err := lockProjectWriteIn(transaction, req, request.ProjectID, types.ProjectRoleMember); err != nil {
+		return types.Sprint{}, err
+	}
 	companyID := req.User.CompanyID
 
 	projectSprints, err := loadProjectSprints(companyID, request.ProjectID)
 	if err != nil {
-		return req.MakeErr("Error al obtener los sprints:", err)
+		return types.Sprint{}, core.Err("Error al obtener los sprints:", err)
 	}
 	sprintIndex := slices.IndexFunc(projectSprints, func(sprint types.Sprint) bool { return sprint.ID == request.SprintID })
 	if sprintIndex < 0 {
-		return req.MakeErr("El sprint no existe.")
+		return types.Sprint{}, core.Err("El sprint no existe.")
 	}
 	story, err := loadProjectStory(companyID, request.ProjectID, request.StoryID)
 	if err != nil {
-		return req.MakeErr("Error al obtener la historia:", err)
+		return types.Sprint{}, core.Err("Error al obtener la historia:", err)
 	}
 	if story == nil {
-		return req.MakeErr("La historia no existe.")
+		return types.Sprint{}, core.Err("La historia no existe.")
 	}
 
 	now := core.SUnixTime()
 	movedSprint := projectSprints[sprintIndex]
 	fromState, err := moveSprintStory(&movedSprint, request.StoryID, request.State, request.PreviousStoryID, request.NextStoryID, now)
 	if err != nil {
-		return req.MakeErr(err)
+		return types.Sprint{}, err
 	}
 	movedSprint.UpdatedBy = req.User.ID
-	if err := updateSprints([]types.Sprint{movedSprint}); err != nil {
-		return req.MakeErr("Error al guardar el movimiento:", err)
+	if err := updateSprintsIn(transaction, []types.Sprint{movedSprint}); err != nil {
+		return types.Sprint{}, core.Err("Error al guardar el movimiento:", err)
 	}
 
 	// A reorder inside the column only writes the sprint.
 	if fromState != request.State {
 		setStoryState(story, storyStateAfterCardMove(*story, request.SprintID, request.State), core.FechaUnix())
 		story.UpdatedBy = req.User.ID
-		if err := updateStoriesState([]types.Story{*story}); err != nil {
-			return req.MakeErr("Se movió la tarjeta, pero no el estado de la historia:", err)
+		if err := updateStoriesStateIn(transaction, []types.Story{*story}); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar el estado de la historia:", err)
 		}
-		addStoryActivities(types.StoryActivity{
+		if err := addStoryActivitiesIn(transaction, types.StoryActivity{
 			CompanyID: companyID, ProjectID: request.ProjectID, StoryID: request.StoryID, Kind: types.ActivityKindStateChange, FromState: fromState,
 			ToState: request.State, SprintID: request.SprintID, Text: reason, AuthorID: req.User.ID, Created: now,
-		})
+		}); err != nil {
+			return types.Sprint{}, core.Err("Error al guardar la actividad de la historia:", err)
+		}
 	}
-	return req.MakeResponse(movedSprint)
+	return movedSprint, nil
 }
 
 type sprintCloseRequest struct {
@@ -356,34 +402,47 @@ type sprintCloseRequest struct {
 }
 
 // PostSprintClose closes the active sprint (admins). Its unfinished stories go on in the planned
-// sprints chosen for them, keeping their state, or back to the backlog. The planned sprints are
-// written first and skip what they already hold, so a close that failed half way can be retried.
+// sprints chosen for them, keeping their state, or back to the backlog. The whole close commits in
+// one transaction.
 func PostSprintClose(req *core.HandlerArgs) core.HandlerResponse {
 	request := sprintCloseRequest{}
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	_, release, response, isDenied := openProjectWrite(req, request.ProjectID, types.ProjectRoleAdmin)
-	if isDenied {
-		return response
+	var closedSprint types.Sprint
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		closedSprint, err = closeSprintIn(transaction, req, request)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
-	defer release()
+	return req.MakeResponse(closedSprint)
+}
+
+// closeSprintIn closes the active sprint and carries its unfinished stories, under the project's row
+// lock.
+func closeSprintIn(transaction *db.Transaction, req *core.HandlerArgs, request sprintCloseRequest) (types.Sprint, error) {
+	if _, err := lockProjectWriteIn(transaction, req, request.ProjectID, types.ProjectRoleAdmin); err != nil {
+		return types.Sprint{}, err
+	}
 	companyID := req.User.CompanyID
 
 	projectSprints, err := loadProjectSprints(companyID, request.ProjectID)
 	if err != nil {
-		return req.MakeErr("Error al obtener los sprints:", err)
+		return types.Sprint{}, core.Err("Error al obtener los sprints:", err)
 	}
 	closingIndex := slices.IndexFunc(projectSprints, func(sprint types.Sprint) bool { return sprint.ID == request.SprintID })
 	if closingIndex < 0 {
-		return req.MakeErr("El sprint no existe.")
+		return types.Sprint{}, core.Err("El sprint no existe.")
 	}
 	closingSprint := projectSprints[closingIndex]
 	closedSprint := closingSprint
 	closedSprint.Stories = slices.Clone(closingSprint.Stories)
 	now := core.SUnixTime()
 	if err := closeSprint(&closedSprint, request.CarryOvers, projectSprints, req.User.ID, now); err != nil {
-		return req.MakeErr(err)
+		return types.Sprint{}, err
 	}
 	closedSprint.UpdatedBy = req.User.ID
 
@@ -399,14 +458,16 @@ func PostSprintClose(req *core.HandlerArgs) core.HandlerResponse {
 		if !isTarget {
 			continue
 		}
+		projectSprint.Stories = slices.Clone(projectSprint.Stories)
 		if err := carryStoriesIntoSprint(&projectSprint, closingSprint, carriedStoryIDs, now); err != nil {
-			return req.MakeErr(err)
+			return types.Sprint{}, err
 		}
 		projectSprint.UpdatedBy = req.User.ID
 		targetSprints = append(targetSprints, projectSprint)
 	}
-	if err := updateSprints(append(targetSprints, closedSprint)); err != nil {
-		return req.MakeErr("Error al cerrar el sprint:", err)
+	writtenSprints := append(targetSprints, closedSprint)
+	if err := updateSprintsIn(transaction, writtenSprints); err != nil {
+		return types.Sprint{}, core.Err("Error al cerrar el sprint:", err)
 	}
 
 	carriedStoryIDs := []int64{}
@@ -418,8 +479,9 @@ func PostSprintClose(req *core.HandlerArgs) core.HandlerResponse {
 			SprintID: request.SprintID, ToSprintID: carryOver.ToSprintID, AuthorID: req.User.ID, Created: now,
 		})
 	}
-	if err := syncStoriesFinalState(companyID, request.ProjectID, carriedStoryIDs, req.User.ID, activities); err != nil {
-		return req.MakeErr("Se cerró el sprint, pero no el estado de sus historias:", err)
+	if err := syncStoriesFinalStateIn(transaction, companyID, request.ProjectID, withWrittenSprints(projectSprints, writtenSprints...),
+		carriedStoryIDs, req.User.ID, activities); err != nil {
+		return types.Sprint{}, core.Err("Error al guardar el estado de las historias del sprint:", err)
 	}
-	return req.MakeResponse(closedSprint)
+	return closedSprint, nil
 }

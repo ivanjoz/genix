@@ -53,41 +53,56 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
+	var saved types.EmployeeRecord
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		saved, err = saveEmployeeRecordIn(transaction, req, request)
+		return err
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	return req.MakeResponse(saved)
+}
+
+// saveEmployeeRecordIn validates and writes one record under the locks of its employee, of the runs
+// of every month it touches before and after the change, and of the record itself.
+func saveEmployeeRecordIn(transaction *db.Transaction, req *core.HandlerArgs, request types.EmployeeRecord) (types.EmployeeRecord, error) {
 	companyID := req.User.CompanyID
 	companyRecords, err := loadCompanyRecords(companyID)
 	if err != nil {
-		return req.MakeErr(err)
+		return types.EmployeeRecord{}, err
 	}
 
 	// The record is rebuilt from what the client may set: never its cash, loan or payslip links.
 	record := types.EmployeeRecord{CompanyID: companyID, EmployeeID: request.EmployeeID, ConceptID: request.ConceptID}
+	touchedPeriods := []int16{}
 	if request.ID > 0 {
 		stored, found := findRecord(companyRecords, request.ID)
 		if !found {
-			return req.MakeErr(fmt.Sprintf("El registro %d no existe.", request.ID))
-		}
-		if stored.Status == types.RecordStatusSettled {
-			return req.MakeErr("El registro ya fue usado por una planilla cerrada.")
+			return record, fmt.Errorf("El registro %d no existe.", request.ID)
 		}
 		// Advances and loans move cash: they are voided on their own routes. An installment only moves.
 		isOwnScreen := types.IsEntryRecord(stored.ConceptID) || types.IsTimeOffRecord(stored.ConceptID) ||
 			(stored.ConceptID == types.LegalLoanInstallment && request.Status != types.StatusDeleted)
 		if !isOwnScreen {
-			return req.MakeErr("Este registro se modifica desde su propia pantalla.")
+			return record, fmt.Errorf("Este registro se modifica desde su propia pantalla.")
 		}
 		if recordGroup(stored.ConceptID) != recordGroup(request.ConceptID) && request.Status != types.StatusDeleted {
-			return req.MakeErr("No se puede cambiar el registro a un concepto de otra pantalla.")
+			return record, fmt.Errorf("No se puede cambiar el registro a un concepto de otra pantalla.")
 		}
 		// The months it touched before the change must still be open.
-		if err := ensureRecordPeriodsOpen(companyID, stored); err != nil {
-			return req.MakeErr(err)
-		}
+		touchedPeriods = append(touchedPeriods, recordPeriods(stored)...)
 		record = stored
 		if request.Status == types.StatusDeleted {
 			record.Status = types.StatusDeleted
 		} else {
 			record.ConceptID = request.ConceptID
 		}
+	}
+	// The employee's lock comes first: the time off overlap check below reads his other records.
+	if _, err := lockEmployeeIn(transaction, companyID, record.EmployeeID); err != nil {
+		return record, err
 	}
 
 	if record.Status != types.StatusDeleted || record.ID == 0 {
@@ -107,30 +122,42 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 			validationError = fmt.Errorf("Este concepto se registra desde su propia pantalla.")
 		}
 		if validationError != nil {
-			return req.MakeErr(validationError)
+			return record, validationError
 		}
 		record.SelfParse()
-		if err := ensureRecordPeriodsOpen(companyID, record); err != nil {
-			return req.MakeErr(err)
-		}
+		touchedPeriods = append(touchedPeriods, recordPeriods(record)...)
 		record.Status = types.RecordStatusActive
+	}
+	if err := lockOpenPeriodsIn(transaction, companyID, touchedPeriods...); err != nil {
+		return record, err
 	}
 
 	record.UpdatedBy = req.User.ID
 	records := []types.EmployeeRecord{record}
 	if record.ID == 0 {
 		records[0].Created, records[0].CreatedBy = core.SUnixTime(), req.User.ID
-		if err := db.Upsert(&records); err != nil {
-			return req.MakeErr("Error al guardar el registro:", err)
+		if err := db.InsertIn(transaction, &records); err != nil {
+			return record, fmt.Errorf("Error al guardar el registro: %v", err)
 		}
-		return req.MakeResponse(records[0])
+		return records[0], nil
+	}
+	// Re-checked on the locked row: a close of its month may have settled it since the read.
+	lockedRecords, err := lockRecordsIn(transaction, companyID, []int32{record.ID})
+	if err != nil {
+		return record, err
+	}
+	if len(lockedRecords) == 0 || lockedRecords[0].Status == types.StatusDeleted {
+		return record, fmt.Errorf("El registro %d no existe.", record.ID)
+	}
+	if lockedRecords[0].Status == types.RecordStatusSettled {
+		return record, fmt.Errorf("El registro ya fue usado por una planilla cerrada.")
 	}
 	table := db.TableOf[types.EmployeeRecord]()
-	if err := db.Update(&records, table.ConceptID, table.Period, table.Year, table.Date, table.FromDate, table.ToDate,
+	if err := db.UpdateIn(transaction, &records, table.ConceptID, table.Period, table.Year, table.Date, table.FromDate, table.ToDate,
 		table.Quantity, table.Amount, table.Note, table.ApprovedBy, table.Status, table.UpdatedBy); err != nil {
-		return req.MakeErr("Error al guardar el registro:", err)
+		return record, fmt.Errorf("Error al guardar el registro: %v", err)
 	}
-	return req.MakeResponse(records[0])
+	return records[0], nil
 }
 
 // recordGroup is the screen a record's concept belongs to: a record never moves between screens.
@@ -235,37 +262,89 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 	if len(advances) == 0 {
 		return req.MakeErr("No se enviaron adelantos.")
 	}
+	var saved []types.EmployeeRecord
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		if len(advances) == 1 && advances[0].ID > 0 {
+			saved, err = voidAdvanceIn(transaction, req, advances[0])
+		} else {
+			saved, err = payAdvancesIn(transaction, req, slices.Clone(advances))
+		}
+		return err
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	return req.MakeResponse(saved)
+}
+
+// voidAdvanceIn voids one advance not settled yet and gives its money back, under the locks of its
+// employee, its month's run and the advance: a double void refunds once.
+func voidAdvanceIn(transaction *db.Transaction, req *core.HandlerArgs, request types.EmployeeRecord) ([]types.EmployeeRecord, error) {
 	companyID := req.User.CompanyID
 	companyRecords, err := loadCompanyRecords(companyID)
 	if err != nil {
-		return req.MakeErr(err)
+		return nil, err
 	}
-
-	if len(advances) == 1 && advances[0].ID > 0 {
-		stored, found := findRecord(companyRecords, advances[0].ID)
-		if !found || !types.IsAdvanceRecord(stored.ConceptID) {
-			return req.MakeErr(fmt.Sprintf("El adelanto %d no existe.", advances[0].ID))
-		}
-		if advances[0].Status != types.StatusDeleted || stored.Status != types.RecordStatusActive {
-			return req.MakeErr("Solo se puede anular un adelanto que aún no fue descontado en planilla.")
-		}
-		// The money comes back to the account that paid it.
-		if err := recordPayrollCash(req, stored.CashBankID, finance.CashMovementTypePayrollPayment, stored.ID,
-			finance.PCGEStaffAdvances, core.FechaUnix(), stored.Amount); err != nil {
-			return req.MakeErr(err)
-		}
-		stored.Status, stored.UpdatedBy = types.StatusDeleted, req.User.ID
-		records := []types.EmployeeRecord{stored}
-		table := db.TableOf[types.EmployeeRecord]()
-		if err := db.Update(&records, table.Status, table.UpdatedBy); err != nil {
-			return req.MakeErr("Error al anular el adelanto:", err)
-		}
-		return req.MakeResponse(records)
+	stored, found := findRecord(companyRecords, request.ID)
+	if !found || !types.IsAdvanceRecord(stored.ConceptID) {
+		return nil, fmt.Errorf("El adelanto %d no existe.", request.ID)
 	}
+	if _, err := lockEmployeeIn(transaction, companyID, stored.EmployeeID); err != nil {
+		return nil, err
+	}
+	if err := lockOpenPeriodsIn(transaction, companyID, stored.Period); err != nil {
+		return nil, err
+	}
+	lockedRecords, err := lockRecordsIn(transaction, companyID, []int32{stored.ID})
+	if err != nil {
+		return nil, err
+	}
+	if len(lockedRecords) == 0 {
+		return nil, fmt.Errorf("El adelanto %d no existe.", request.ID)
+	}
+	stored = lockedRecords[0]
+	if request.Status != types.StatusDeleted || stored.Status != types.RecordStatusActive {
+		return nil, fmt.Errorf("Solo se puede anular un adelanto que aún no fue descontado en planilla.")
+	}
+	// The money comes back to the account that paid it.
+	if err := recordPayrollCashIn(transaction, req, stored.CashBankID, finance.CashMovementTypePayrollPayment, stored.ID,
+		finance.PCGEStaffAdvances, core.FechaUnix(), stored.Amount); err != nil {
+		return nil, err
+	}
+	stored.Status, stored.UpdatedBy = types.StatusDeleted, req.User.ID
+	records := []types.EmployeeRecord{stored}
+	table := db.TableOf[types.EmployeeRecord]()
+	if err := db.UpdateIn(transaction, &records, table.Status, table.UpdatedBy); err != nil {
+		return nil, fmt.Errorf("Error al anular el adelanto: %v", err)
+	}
+	return records, nil
+}
 
+// payAdvancesIn registers new advances and pays them, under the locks of their employees (in key
+// order) and of their months' runs: the overlap check reads what every other payment of these
+// employees committed, so a double submit cannot pay the same days twice.
+func payAdvancesIn(transaction *db.Transaction, req *core.HandlerArgs, advances []types.EmployeeRecord) ([]types.EmployeeRecord, error) {
+	companyID := req.User.CompanyID
+	advanceEmployeeIDs := []int32{}
+	for _, advance := range advances {
+		if !slices.Contains(advanceEmployeeIDs, advance.EmployeeID) {
+			advanceEmployeeIDs = append(advanceEmployeeIDs, advance.EmployeeID)
+		}
+	}
+	slices.Sort(advanceEmployeeIDs)
+	for _, employeeID := range advanceEmployeeIDs {
+		if _, err := lockEmployeeIn(transaction, companyID, employeeID); err != nil {
+			return nil, err
+		}
+	}
+	companyRecords, err := loadCompanyRecords(companyID)
+	if err != nil {
+		return nil, err
+	}
 	employees, err := loadCompanyEmployees(companyID)
 	if err != nil {
-		return req.MakeErr(err)
+		return nil, err
 	}
 	employeesByID := map[int32]types.Employee{}
 	for _, employee := range employees {
@@ -273,27 +352,28 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	contracts, err := loadCompanyContracts(companyID)
 	if err != nil {
-		return req.MakeErr(err)
+		return nil, err
 	}
 
+	advancePeriods := []int16{}
 	for i := range advances {
 		request := advances[i]
 		employee, found := employeesByID[request.EmployeeID]
 		if !found || employee.Status == types.StatusDeleted {
-			return req.MakeErr(fmt.Sprintf("El trabajador %d no existe.", request.EmployeeID))
+			return nil, core.Err(fmt.Sprintf("El trabajador %d no existe.", request.EmployeeID))
 		}
 		name := employee.FirstName + " " + employee.LastName
 		if request.ID != 0 {
-			return req.MakeErr("Un adelanto registrado no se edita: anúlelo y regístrelo de nuevo.")
+			return nil, core.Err("Un adelanto registrado no se edita: anúlelo y regístrelo de nuevo.")
 		}
 		if !types.IsAdvanceRecord(request.ConceptID) {
-			return req.MakeErr("Seleccione el tipo de adelanto.")
+			return nil, core.Err("Seleccione el tipo de adelanto.")
 		}
 		if request.Amount <= 0 || request.Date <= 0 || request.FromDate <= 0 || request.ToDate < request.FromDate {
-			return req.MakeErr(fmt.Sprintf("%s: indique el monto, la fecha de pago y las fechas que cubre el adelanto.", name))
+			return nil, core.Err(fmt.Sprintf("%s: indique el monto, la fecha de pago y las fechas que cubre el adelanto.", name))
 		}
 		if request.CashBankID <= 0 {
-			return req.MakeErr("Seleccione la caja o cuenta de la que se paga el adelanto.")
+			return nil, core.Err("Seleccione la caja o cuenta de la que se paga el adelanto.")
 		}
 		advance := types.EmployeeRecord{CompanyID: companyID, EmployeeID: employee.ID, ConceptID: request.ConceptID, Date: request.Date,
 			FromDate: request.FromDate, ToDate: request.ToDate, Amount: request.Amount, CashBankID: request.CashBankID,
@@ -301,33 +381,34 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 			UpdatedBy: req.User.ID}
 		advance.SelfParse()
 		if core.PeriodOfDay(advance.FromDate) != advance.Period {
-			return req.MakeErr(fmt.Sprintf("%s: el adelanto debe cubrir días de un solo mes.", name))
+			return nil, core.Err(fmt.Sprintf("%s: el adelanto debe cubrir días de un solo mes.", name))
 		}
 		if _, found := types.FindContractInForce(contractsOf(contracts, employee.ID), advance.ToDate); !found {
-			return req.MakeErr(fmt.Sprintf("%s no tiene un contrato vigente en las fechas del adelanto.", name))
+			return nil, core.Err(fmt.Sprintf("%s no tiene un contrato vigente en las fechas del adelanto.", name))
 		}
 		for _, other := range append(slices.Clone(companyRecords), advances[:i]...) {
 			if types.IsAdvanceRecord(other.ConceptID) && other.EmployeeID == advance.EmployeeID && other.Status != types.StatusDeleted &&
 				other.FromDate <= advance.ToDate && advance.FromDate <= other.ToDate {
-				return req.MakeErr(fmt.Sprintf("%s ya tiene un adelanto que cubre esas fechas.", name))
+				return nil, core.Err(fmt.Sprintf("%s ya tiene un adelanto que cubre esas fechas.", name))
 			}
 		}
-		if err := ensurePeriodOpen(companyID, advance.Period); err != nil {
-			return req.MakeErr(err)
-		}
+		advancePeriods = append(advancePeriods, advance.Period)
 		advances[i] = advance
 	}
-	if err := db.Upsert(&advances); err != nil {
-		return req.MakeErr("Error al guardar los adelantos:", err)
+	if err := lockOpenPeriodsIn(transaction, companyID, advancePeriods...); err != nil {
+		return nil, err
+	}
+	if err := db.InsertIn(transaction, &advances); err != nil {
+		return nil, core.Err("Error al guardar los adelantos:", err)
 	}
 	// Each payment leaves its account on its pay date: Dr 1412 · Cr 101/1041 (H14).
 	for _, advance := range advances {
-		if err := recordPayrollCash(req, advance.CashBankID, finance.CashMovementTypePayrollPayment, advance.ID,
+		if err := recordPayrollCashIn(transaction, req, advance.CashBankID, finance.CashMovementTypePayrollPayment, advance.ID,
 			finance.PCGEStaffAdvances, advance.Date, -advance.Amount); err != nil {
-			return req.MakeErr(err)
+			return nil, err
 		}
 	}
-	return req.MakeResponse(advances)
+	return advances, nil
 }
 
 // PostLoan grants a loan with its installments, or deletes one (Status 0) none of whose
@@ -338,25 +419,40 @@ func PostLoan(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	companyID := req.User.CompanyID
-	if request.ID > 0 {
-		if request.Status != types.StatusDeleted {
-			return req.MakeErr("Un préstamo otorgado no se edita: elimínelo y regístrelo de nuevo.")
-		}
-		return deleteLoan(req, request.ID)
+	if request.ID > 0 && request.Status != types.StatusDeleted {
+		return req.MakeErr("Un préstamo otorgado no se edita: elimínelo y regístrelo de nuevo.")
 	}
-
-	if _, err := loadEmployee(companyID, request.EmployeeID); err != nil {
+	var saved []types.EmployeeRecord
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		if request.ID > 0 {
+			saved, err = deleteLoanIn(transaction, req, request.ID)
+		} else {
+			saved, err = grantLoanIn(transaction, req, request)
+		}
+		return err
+	})
+	if err != nil {
 		return req.MakeErr(err)
 	}
+	return req.MakeResponse(saved)
+}
+
+// grantLoanIn writes a loan, its installments and its disbursement together, under the locks of
+// its employee and of its installments' months' runs.
+func grantLoanIn(transaction *db.Transaction, req *core.HandlerArgs, request types.EmployeeRecord) ([]types.EmployeeRecord, error) {
+	companyID := req.User.CompanyID
+	if _, err := lockEmployeeIn(transaction, companyID, request.EmployeeID); err != nil {
+		return nil, err
+	}
 	if request.Amount <= 0 || request.Quantity < 1 || request.Quantity > 60 || request.Quantity != float32(int(request.Quantity)) {
-		return req.MakeErr("Indique el monto y entre 1 y 60 cuotas.")
+		return nil, fmt.Errorf("Indique el monto y entre 1 y 60 cuotas.")
 	}
 	if request.Date <= 0 || request.CashBankID <= 0 {
-		return req.MakeErr("Indique la fecha del préstamo y la caja o cuenta de la que se entrega.")
+		return nil, fmt.Errorf("Indique la fecha del préstamo y la caja o cuenta de la que se entrega.")
 	}
 	if request.Period < core.PeriodOfDay(request.Date) || types.PeriodMonth(request.Period) < 1 || types.PeriodMonth(request.Period) > 12 {
-		return req.MakeErr("La primera cuota no puede ser anterior al mes del préstamo.")
+		return nil, fmt.Errorf("La primera cuota no puede ser anterior al mes del préstamo.")
 	}
 	loan := types.EmployeeRecord{CompanyID: companyID, EmployeeID: request.EmployeeID, ConceptID: types.LegalLoan,
 		Period: request.Period, Date: request.Date, Amount: request.Amount, Quantity: request.Quantity,
@@ -364,94 +460,155 @@ func PostLoan(req *core.HandlerArgs) core.HandlerResponse {
 		Created: core.SUnixTime(), CreatedBy: req.User.ID, UpdatedBy: req.User.ID}
 	loan.SelfParse()
 	installments := types.LoanInstallments(loan, loan.Period)
+	installmentPeriods := []int16{}
 	for _, installment := range installments {
-		if err := ensurePeriodOpen(companyID, installment.Period); err != nil {
-			return req.MakeErr(err)
-		}
+		installmentPeriods = append(installmentPeriods, installment.Period)
+	}
+	if err := lockOpenPeriodsIn(transaction, companyID, installmentPeriods...); err != nil {
+		return nil, err
 	}
 	loans := []types.EmployeeRecord{loan}
-	if err := db.Upsert(&loans); err != nil {
-		return req.MakeErr("Error al guardar el préstamo:", err)
+	if err := db.InsertIn(transaction, &loans); err != nil {
+		return nil, fmt.Errorf("Error al guardar el préstamo: %v", err)
 	}
 	for i := range installments {
 		installments[i].LoanID, installments[i].Created, installments[i].CreatedBy, installments[i].UpdatedBy =
 			loans[0].ID, loan.Created, req.User.ID, req.User.ID
 	}
-	if err := db.Upsert(&installments); err != nil {
-		return req.MakeErr("Error al guardar las cuotas del préstamo:", err)
+	if err := db.InsertIn(transaction, &installments); err != nil {
+		return nil, fmt.Errorf("Error al guardar las cuotas del préstamo: %v", err)
 	}
 	// The disbursement: Dr 1411 · Cr 101/1041 (H13).
-	if err := recordPayrollCash(req, loan.CashBankID, finance.CashMovementTypePayrollPayment, loans[0].ID,
+	if err := recordPayrollCashIn(transaction, req, loan.CashBankID, finance.CashMovementTypePayrollPayment, loans[0].ID,
 		finance.PCGEStaffLoans, loan.Date, -loan.Amount); err != nil {
-		return req.MakeErr(err)
+		return nil, err
 	}
-	return req.MakeResponse(append(loans, installments...))
+	return append(loans, installments...), nil
 }
 
-// deleteLoan cancels a loan and its installments and gives the money back to the account it left.
-func deleteLoan(req *core.HandlerArgs, loanID int32) core.HandlerResponse {
+// deleteLoanIn cancels a loan and its installments and gives the money back to the account it left,
+// under the locks of its employee, its installments' months' runs and the records themselves: a
+// double delete refunds once, and a close cannot settle an installment the delete cancels.
+func deleteLoanIn(transaction *db.Transaction, req *core.HandlerArgs, loanID int32) ([]types.EmployeeRecord, error) {
 	companyID := req.User.CompanyID
 	companyRecords, err := loadCompanyRecords(companyID)
 	if err != nil {
-		return req.MakeErr(err)
+		return nil, err
 	}
 	loan, found := findRecord(companyRecords, loanID)
 	if !found || loan.ConceptID != types.LegalLoan {
-		return req.MakeErr(fmt.Sprintf("El préstamo %d no existe.", loanID))
+		return nil, fmt.Errorf("El préstamo %d no existe.", loanID)
 	}
-	cancelled := []types.EmployeeRecord{loan}
+	if _, err := lockEmployeeIn(transaction, companyID, loan.EmployeeID); err != nil {
+		return nil, err
+	}
+	recordIDs, installmentPeriods := []int32{loan.ID}, []int16{}
 	for _, installment := range companyRecords {
-		if installment.LoanID != loan.ID || installment.Status == types.StatusDeleted {
-			continue
+		if installment.LoanID == loan.ID {
+			recordIDs = append(recordIDs, installment.ID)
+			installmentPeriods = append(installmentPeriods, installment.Period)
 		}
-		if installment.Status == types.RecordStatusSettled {
-			return req.MakeErr("Ya se descontaron cuotas del préstamo: no se puede eliminar.")
-		}
-		if err := ensurePeriodOpen(companyID, installment.Period); err != nil {
-			return req.MakeErr(err)
-		}
-		cancelled = append(cancelled, installment)
 	}
-	if err := recordPayrollCash(req, loan.CashBankID, finance.CashMovementTypePayrollPayment, loan.ID,
+	if err := lockOpenPeriodsIn(transaction, companyID, installmentPeriods...); err != nil {
+		return nil, err
+	}
+	// Decided on the locked rows: a close or a first delete may have landed since the read.
+	lockedRecords, err := lockRecordsIn(transaction, companyID, recordIDs)
+	if err != nil {
+		return nil, err
+	}
+	cancelled := []types.EmployeeRecord{}
+	for _, record := range lockedRecords {
+		if record.ID == loan.ID {
+			if record.Status == types.StatusDeleted {
+				return nil, fmt.Errorf("El préstamo %d no existe.", loanID)
+			}
+			loan = record
+		} else if record.Status == types.StatusDeleted {
+			continue
+		} else if record.Status == types.RecordStatusSettled {
+			return nil, fmt.Errorf("Ya se descontaron cuotas del préstamo: no se puede eliminar.")
+		}
+		cancelled = append(cancelled, record)
+	}
+	if err := recordPayrollCashIn(transaction, req, loan.CashBankID, finance.CashMovementTypePayrollPayment, loan.ID,
 		finance.PCGEStaffLoans, core.FechaUnix(), loan.Amount); err != nil {
-		return req.MakeErr(err)
+		return nil, err
 	}
 	for i := range cancelled {
 		cancelled[i].Status, cancelled[i].UpdatedBy = types.StatusDeleted, req.User.ID
 	}
 	table := db.TableOf[types.EmployeeRecord]()
-	if err := db.Update(&cancelled, table.Status, table.UpdatedBy); err != nil {
-		return req.MakeErr("Error al eliminar el préstamo:", err)
+	if err := db.UpdateIn(transaction, &cancelled, table.Status, table.UpdatedBy); err != nil {
+		return nil, fmt.Errorf("Error al eliminar el préstamo: %v", err)
 	}
-	return req.MakeResponse(cancelled)
+	return cancelled, nil
 }
 
-// ensurePeriodOpen refuses changes to a period whose run is already closed.
-func ensurePeriodOpen(companyID int32, period int16) error {
+// lockOpenPeriodsIn locks the runs of the given months and refuses a change to one already closed.
+// Under those locks a close of the month waits for the change, or the change waits for the close
+// and is refused: a record is never changed under a payslip being frozen. A month with no run yet
+// has nothing to freeze; a run created later is calculated from what is committed.
+func lockOpenPeriodsIn(transaction *db.Transaction, companyID int32, periods ...int16) error {
 	runs, err := loadCompanyRuns(companyID)
 	if err != nil {
 		return err
 	}
+	periodRuns := []types.PayrollRun{}
 	for _, run := range runs {
-		if run.Period == period && run.Status >= types.PayrollStatusClosed {
-			return fmt.Errorf("La planilla del periodo %d ya está cerrada; reábrala para hacer cambios.", period)
+		if slices.Contains(periods, run.Period) && run.Status != types.StatusDeleted {
+			periodRuns = append(periodRuns, types.PayrollRun{CompanyID: companyID, ID: run.ID})
+		}
+	}
+	if err := db.LockByKeys(transaction, &periodRuns); err != nil {
+		return fmt.Errorf("error al leer las planillas: %v", err)
+	}
+	for _, run := range periodRuns {
+		if run.Status >= types.PayrollStatusClosed {
+			return fmt.Errorf("La planilla del periodo %d ya está cerrada; reábrala para hacer cambios.", run.Period)
 		}
 	}
 	return nil
 }
 
-// ensureRecordPeriodsOpen refuses a change to a record whose months are already paid: every month
-// a time off covers, the period of the rest.
-func ensureRecordPeriodsOpen(companyID int32, record types.EmployeeRecord) error {
+// recordPeriods is every month a record touches: every month a time off covers, the period of the
+// rest.
+func recordPeriods(record types.EmployeeRecord) []int16 {
 	if !types.IsTimeOffRecord(record.ConceptID) {
-		return ensurePeriodOpen(companyID, record.Period)
+		return []int16{record.Period}
 	}
+	periods := []int16{}
 	for period := core.PeriodOfDay(record.FromDate); period <= core.PeriodOfDay(record.ToDate); period = core.NextPeriod(period) {
-		if err := ensurePeriodOpen(companyID, period); err != nil {
-			return err
-		}
+		periods = append(periods, period)
 	}
-	return nil
+	return periods
+}
+
+// lockEmployeeIn reads an employee under its row lock: the first lock of a record write, so two
+// writes of one employee's records (overlapping advances, overlapping time off) apply one after
+// the other and each checks the overlaps against what the other committed.
+func lockEmployeeIn(transaction *db.Transaction, companyID, employeeID int32) (types.Employee, error) {
+	employees := []types.Employee{{CompanyID: companyID, ID: employeeID}}
+	if err := db.LockByKeys(transaction, &employees); err != nil {
+		return types.Employee{}, fmt.Errorf("error al leer el trabajador: %v", err)
+	}
+	if len(employees) == 0 || employees[0].Status == types.StatusDeleted {
+		return types.Employee{}, fmt.Errorf("el trabajador %d no existe", employeeID)
+	}
+	return employees[0], nil
+}
+
+// lockRecordsIn reads records under their row locks, in key order.
+func lockRecordsIn(transaction *db.Transaction, companyID int32, recordIDs []int32) ([]types.EmployeeRecord, error) {
+	slices.Sort(recordIDs)
+	records := make([]types.EmployeeRecord, len(recordIDs))
+	for index, recordID := range recordIDs {
+		records[index] = types.EmployeeRecord{CompanyID: companyID, ID: recordID}
+	}
+	if err := db.LockByKeys(transaction, &records); err != nil {
+		return nil, fmt.Errorf("error al leer los registros del personal: %v", err)
+	}
+	return records, nil
 }
 
 // loadCompanyRecords reads every record of the company, cancelled ones included: an SME's records

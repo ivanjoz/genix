@@ -141,89 +141,103 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	// Only a payment decides it (PostExpensePayment), never the client.
 	body.SameDayCashBankID = 0
 
-	records := &[]types.Expense{body}
 	if body.ID <= 0 {
 		// New record: ORM assigns the autoincrement ID in-place.
 		body.Created = nowTime
 		body.CreatedBy = req.User.ID
-		(*records)[0] = body
-		err = db.Upsert(records)
-	} else {
-		// Lock rule (server-authoritative, never trust the client): a fully-paid expense
-		// (Status == 2) cannot be edited. Load the current row to enforce it.
-		existing := []types.Expense{}
-		eq := db.Query(&existing)
-		eq.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ID)
-		if err := eq.Exec(); err != nil {
-			return req.MakeErr("Error al obtener el gasto:", err)
+		records := []types.Expense{body}
+		if err := db.Insert(&records); err != nil {
+			return req.MakeErr("Error al guardar el gasto:", err)
+		}
+		return req.MakeResponse(records[0])
+	}
+
+	// An edit runs on the expense read under its row lock, so a payment landing meanwhile is either
+	// fully before it (and seen) or waits for it: the edit never writes back a stale Status or
+	// PaidAmount.
+	var saved types.Expense
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		existing := []types.Expense{{CompanyID: req.User.CompanyID, ID: body.ID}}
+		if err := db.LockByKeys(transaction, &existing); err != nil {
+			return core.Err("Error al obtener el gasto:", err)
 		}
 		if len(existing) == 0 {
-			return req.MakeErr("No se encontró el gasto.")
+			return core.Err("No se encontró el gasto.")
 		}
-		if existing[0].Status == 2 {
-			// Except for its comprobante and its account: the bill often arrives after the payment,
-			// and classifying it says nothing about the money. Everything else stays as paid.
-			return savePaidExpenseDocument(req, existing[0], body)
+		stored := existing[0]
+		if stored.Status == 2 {
+			// A fully-paid expense cannot be edited, except for its comprobante and its account: the
+			// bill often arrives after the payment, and classifying it says nothing about the money.
+			saved = stored
+			return savePaidExpenseDocumentIn(transaction, req, &saved, body)
 		}
-		if existing[0].Status == types.ExpenseStatusPosted {
-			return req.MakeErr("No se puede editar un asiento de depreciación.")
+		if stored.Status == types.ExpenseStatusPosted {
+			return core.Err("No se puede editar un asiento de depreciación.")
 		}
-		// Keep payment state server-authoritative: write back the stored Status (set only by
-		// PostExpensePayment) instead of the client's. Status shares a composite view index with
-		// Updated, so it must be written together — only PaidAmount/Created/CreatedBy are excluded.
-		(*records)[0].Status = existing[0].Status
+		if body.Amount < stored.PaidAmount {
+			return core.Err("El monto no puede ser menor a lo ya pagado.")
+		}
+		// Payment state stays server-authoritative: Status and PaidAmount are set only by
+		// PostExpensePayment, and the creation stamps never change.
+		saved = body
+		saved.Status = stored.Status
+		saved.PaidAmount = stored.PaidAmount
+		saved.Created = stored.Created
+		saved.CreatedBy = stored.CreatedBy
 		// The edit can move the accounting date, the total or the comprobante its payments clear.
-		sameDayCashBankID, restampErr := restampExpensePayments(req.User.CompanyID, &(*records)[0])
+		sameDayCashBankID, restampErr := restampExpensePaymentsIn(transaction, req.User.CompanyID, &saved)
 		if restampErr != nil {
-			return req.MakeErr(restampErr)
+			return restampErr
 		}
-		(*records)[0].SameDayCashBankID = sameDayCashBankID
-		q := db.TableOf[types.Expense]()
-		err = db.UpdateExclude(records, q.PaidAmount, q.Created, q.CreatedBy)
-	}
+		saved.SameDayCashBankID = sameDayCashBankID
+		if err := db.UpsertIn(transaction, &[]types.Expense{saved}); err != nil {
+			return core.Err("Error al guardar el gasto:", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return req.MakeErr("Error al guardar el gasto:", err)
+		return req.MakeErr(err)
 	}
-	return req.MakeResponse((*records)[0])
+	return req.MakeResponse(saved)
 }
 
-// savePaidExpenseDocument writes only the supplier, the comprobante and the account of a paid
-// expense, the comprobante validated against the amount that was actually paid. The account was
-// already resolved by the caller.
-func savePaidExpenseDocument(req *core.HandlerArgs, stored types.Expense, body types.Expense) core.HandlerResponse {
+// savePaidExpenseDocumentIn writes only the supplier, the comprobante and the account of a paid
+// expense its caller locked, the comprobante validated against the amount that was actually paid.
+// The account was already resolved by the caller.
+func savePaidExpenseDocumentIn(transaction *db.Transaction, req *core.HandlerArgs, stored *types.Expense, body types.Expense) error {
 	document := body.PurchaseDocument()
 	document.CurrencyType = stored.CurrencyType
 	stored.SupplierID = body.SupplierID
 	stored.AccountCode = body.AccountCode
 	stored.SetPurchaseDocument(document)
 	if err := stored.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
-		return req.MakeErr(err)
+		return err
 	}
 	stored.Updated = core.SUnixTime()
 	stored.UpdatedBy = req.User.ID
 	// The comprobante moves the accounting date and decides the payable its payments clear.
 	stored.StampPeriod()
-	sameDayCashBankID, restampErr := restampExpensePayments(req.User.CompanyID, &stored)
+	sameDayCashBankID, restampErr := restampExpensePaymentsIn(transaction, req.User.CompanyID, stored)
 	if restampErr != nil {
-		return req.MakeErr(restampErr)
+		return restampErr
 	}
 	stored.SameDayCashBankID = sameDayCashBankID
 
 	q := db.TableOf[types.Expense]()
-	if err := db.Update(&[]types.Expense{stored},
+	if err := db.UpdateIn(transaction, &[]types.Expense{*stored},
 		q.SupplierID, q.ProviderSnapshotID, q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate,
 		q.TaxableAmount, q.TaxAmount, q.UntaxedAmount, q.OtherAmount, q.ExchangeRate,
 		q.AccountCode, q.Updated, q.UpdatedBy, q.Status, q.Period, q.SameDayCashBankID,
 	); err != nil {
-		return req.MakeErr("Error al guardar el comprobante del gasto:", err)
+		return core.Err("Error al guardar el comprobante del gasto:", err)
 	}
-	return req.MakeResponse(stored)
+	return nil
 }
 
-// restampExpensePayments re-applies the same-day rule and the payable to the expense's payments
+// restampExpensePaymentsIn re-applies the same-day rule and the payable to the expense's payments
 // after an edit, and returns the cash bank of its same-day payment (0 when none).
-func restampExpensePayments(companyID int32, expense *types.Expense) (int32, error) {
-	return types.RestampDocumentPayments(companyID, int64(expense.ID),
+func restampExpensePaymentsIn(transaction *db.Transaction, companyID int32, expense *types.Expense) (int32, error) {
+	return types.RestampDocumentPaymentsIn(transaction, companyID, int64(expense.ID),
 		[]types.CashMovementType{types.CashMovementTypeExpensePayment},
 		expense.AccountingDate(), expense.Amount, types.PurchasePayableAccount(expense.DocType))
 }
@@ -376,24 +390,39 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se envió el scheduleID.")
 	}
 
-	// 1. Load the schedule (multi-tenant scoped).
-	schedules := []types.ExpenseScheduled{}
-	sq := db.Query(&schedules)
-	sq.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(scheduleID)
-	if err := sq.Exec(); err != nil {
-		return req.MakeErr("Error al obtener el gasto programado:", err)
+	// The schedule's row lock serializes two loads of its periods: the second waits, then finds the
+	// periods the first one created, so a period is never materialized twice. (A unique index on
+	// (ExpenseScheduledID, PeriodDate) cannot do it: every one-time expense stores (0, 0).)
+	var periods []types.Expense
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		schedules := []types.ExpenseScheduled{{CompanyID: req.User.CompanyID, ID: scheduleID}}
+		if err := db.LockByKeys(transaction, &schedules); err != nil {
+			return core.Err("Error al obtener el gasto programado:", err)
+		}
+		if len(schedules) == 0 {
+			return core.Err("No se encontró el gasto programado.")
+		}
+		var periodsErr error
+		periods, periodsErr = materializeSchedulePeriodsIn(transaction, req, schedules[0])
+		return periodsErr
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if len(schedules) == 0 {
-		return req.MakeErr("No se encontró el gasto programado.")
-	}
-	schedule := schedules[0]
+	response := map[string]any{"Periods": periods}
+	return core.MakeResponse(req, &response)
+}
 
-	// 2. Load existing periods for this schedule (local index on ExpenseScheduledID).
+// materializeSchedulePeriodsIn returns every period of the schedule up to today, creating the
+// missing ones, under the schedule's lock its caller holds.
+func materializeSchedulePeriodsIn(transaction *db.Transaction, req *core.HandlerArgs, schedule types.ExpenseScheduled,
+) ([]types.Expense, error) {
+	// Load existing periods for this schedule (local index on ExpenseScheduledID).
 	periods := []types.Expense{}
 	pq := db.Query(&periods)
-	pq.Select().CompanyID.Equals(req.User.CompanyID).ExpenseScheduledID.Equals(scheduleID)
+	pq.Select().CompanyID.Equals(req.User.CompanyID).ExpenseScheduledID.Equals(schedule.ID)
 	if err := pq.Exec(); err != nil {
-		return req.MakeErr("Error al obtener los periodos del gasto:", err)
+		return nil, core.Err("Error al obtener los periodos del gasto:", err)
 	}
 
 	existing := core.SliceSet[int16]{}
@@ -401,7 +430,7 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 		existing.Add(p.PeriodDate)
 	}
 
-	// 3. Materialize any missing period up to today (deduped by PeriodDate).
+	// Materialize any missing period up to today (deduped by PeriodDate).
 	nowTime := core.SUnixTime()
 	today := core.FechaUnix()
 	newPeriods := []types.Expense{}
@@ -437,14 +466,12 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 		for index := range newPeriods {
 			newPeriods[index].StampPeriod()
 		}
-		if err := db.Upsert(&newPeriods); err != nil {
-			return req.MakeErr("Error al generar los periodos del gasto:", err)
+		if err := db.InsertIn(transaction, &newPeriods); err != nil {
+			return nil, core.Err("Error al generar los periodos del gasto:", err)
 		}
 		periods = append(periods, newPeriods...)
 	}
-
-	response := map[string]any{"Periods": periods}
-	return core.MakeResponse(req, &response)
+	return periods, nil
 }
 
 // --- Payment ----------------------------------------------------------------------
@@ -468,56 +495,88 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan parámetros: (ExpenseID o CashBankID).")
 	}
 
-	// 1. Load the expense being paid.
-	expenses := []types.Expense{}
-	eq := db.Query(&expenses)
-	eq.Select().CompanyID.Equals(req.User.CompanyID).ID.Equals(body.ExpenseID)
-	if err := eq.Exec(); err != nil {
-		return req.MakeErr("Error al obtener el gasto:", err)
+	// The expense and then the cash bank are locked, so the pending balance and the till's balance
+	// checked here are the ones the payment is written against: two payments of one expense apply
+	// one after the other, and the second sees what the first paid.
+	var expense types.Expense
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		expenses := []types.Expense{{CompanyID: req.User.CompanyID, ID: body.ExpenseID}}
+		if err := db.LockByKeys(transaction, &expenses); err != nil {
+			return core.Err("Error al obtener el gasto:", err)
+		}
+		if len(expenses) == 0 {
+			return core.Err("No se encontró el gasto.")
+		}
+		expense = expenses[0]
+		cashBanks := []types.CashBank{{CompanyID: req.User.CompanyID, ID: body.CashBankID}}
+		if err := db.LockByKeys(transaction, &cashBanks); err != nil {
+			return core.Err("Error al obtener la caja:", err)
+		}
+		if len(cashBanks) == 0 {
+			return core.Err("No se encontró la caja.")
+		}
+		return payExpenseIn(transaction, req, &expense, cashBanks[0], body.Amount, body.Date, body.IsFullyPaid)
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if len(expenses) == 0 {
-		return req.MakeErr("No se encontró el gasto.")
-	}
-	expense := expenses[0]
+	return req.MakeResponse(expense)
+}
 
+// payExpenseIn writes one payment of the expense from cashBank, both locked by the caller, and the
+// expense's new paid amount and status.
+func payExpenseIn(transaction *db.Transaction, req *core.HandlerArgs, expense *types.Expense,
+	cashBank types.CashBank, amount int32, date int16, isFullyPaid bool,
+) error {
 	// A depreciation entry moves no cash, so there is nothing to pay against it.
 	if expense.Status == types.ExpenseStatusPosted || expense.Type == types.ExpenseTypeDepreciation {
-		return req.MakeErr("Un asiento de depreciación no se paga.")
+		return core.Err("Un asiento de depreciación no se paga.")
 	}
 
 	// Reject a payment larger than the outstanding balance (server-authoritative). This also
 	// blocks any payment on an already fully-paid expense, whose pending balance is 0.
 	pendingAmount := expense.Amount - expense.PaidAmount
-	if body.Amount > pendingAmount {
-		return req.MakeErr("El monto del pago no puede ser mayor al monto pendiente.")
-	}
-
-	// 2. Load the source cash bank and enforce a matching currency.
-	cashBank, err := types.GetCaja(req.User.CompanyID, body.CashBankID)
-	if err != nil {
-		return req.MakeErr(err)
+	if amount > pendingAmount {
+		return core.Err("El monto del pago no puede ser mayor al monto pendiente.")
 	}
 	if cashBank.CurrencyType != expense.CurrencyType {
-		return req.MakeErr("La moneda de la caja no coincide con la del gasto.")
+		return core.Err("La moneda de la caja no coincide con la del gasto.")
 	}
 
-	// 3. The movement is an outflow, so its amount is negative. We don't validate the client's
-	//    expected balance; we only reject a payment that would drive the cash-bank balance
-	//    negative. The resulting balance is computed server-side by ApplyCajaMovimientos.
-	movementAmount := -body.Amount
+	// The movement is an outflow, so its amount is negative. We don't validate the client's
+	// expected balance; we only reject a payment that would drive the cash-bank balance
+	// negative. The resulting balance is computed server-side by ApplyCashBankMovementIn.
+	movementAmount := -amount
 	if cashBank.CurrentAmount+movementAmount < 0 {
-		return req.MakeErr("El saldo de la caja no puede quedar negativo.")
+		return core.Err("El saldo de la caja no puede quedar negativo.")
 	}
 
-	// 4. Record the outflow movement (auto-updates the cash-bank balance). FinalAmount is left
-	//    at 0 so ApplyCajaMovimientos computes it from the current balance authoritatively. When it
-	//    alone pays the whole expense on its accounting date, the accounting operations infer it
-	//    from the expense instead of downloading it.
-	paymentDate := core.If(body.Date != 0, body.Date, core.FechaUnix())
+	// PaidAmount = Σ |movement.Amount| over this expense's committed payments, plus this one: the
+	// read sees committed rows only, and under the expense's lock no other payment of it is written
+	// meanwhile. Type filters out the other registers' movements, since DocumentID alone is shared.
+	movements := []types.CashBankMovement{}
+	mq := db.Query(&movements)
+	mq.Select(mq.Type, mq.Amount).CompanyID.Equals(req.User.CompanyID).DocumentID.Equals(int64(expense.ID))
+	if err := mq.Exec(); err != nil {
+		return core.Err("Error al recalcular el monto pagado:", err)
+	}
+	paidAmount := amount
+	for _, m := range movements {
+		if m.Type != types.CashMovementTypeExpensePayment {
+			continue
+		}
+		paidAmount += core.If(m.Amount < 0, -m.Amount, m.Amount)
+	}
+
+	// Record the outflow movement (it updates the cash-bank balance). FinalAmount is left at 0 so
+	// ApplyCashBankMovementIn computes it from the locked balance. When it alone pays the whole
+	// expense on its accounting date, the accounting operations infer it from the expense instead
+	// of downloading it.
+	paymentDate := core.If(date != 0, date, core.FechaUnix())
 	isSameDayPayment := types.IsSameDaySettlement(expense.AccountingDate(), expense.Amount,
-		expense.PaidAmount, paymentDate, body.Amount)
+		expense.PaidAmount, paymentDate, amount)
 	movement := types.InternalCashMovement{
-		CashBankID:         body.CashBankID,
+		CashBankID:         cashBank.ID,
 		DocumentID:         int64(expense.ID),
 		ReferenceID:        expense.ExpenseScheduledID,
 		Date:               paymentDate,
@@ -527,30 +586,14 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 		FinalAmount:        0,
 		SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
 	}
-	if err := types.ApplyCashBankMovement(req, []types.InternalCashMovement{movement}); err != nil {
-		return req.MakeErr(err)
+	if err := types.ApplyCashBankMovementIn(transaction, req, []types.InternalCashMovement{movement}); err != nil {
+		return err
 	}
 
-	// 5. Recompute PaidAmount = Σ |movement.Amount| over this expense's payments. Type filters out
-	//    the other registers' movements, since DocumentID alone is shared with them.
-	movements := []types.CashBankMovement{}
-	mq := db.Query(&movements)
-	mq.Select().CompanyID.Equals(req.User.CompanyID).DocumentID.Equals(int64(expense.ID))
-	if err := mq.Exec(); err != nil {
-		return req.MakeErr("Error al recalcular el monto pagado:", err)
-	}
-	var paidAmount int32
-	for _, m := range movements {
-		if m.Type != types.CashMovementTypeExpensePayment {
-			continue
-		}
-		paidAmount += core.If(m.Amount < 0, -m.Amount, m.Amount)
-	}
-
-	// 6. Resolve the payment lifecycle on Status (honoring the "Is Fully Paid" write-off flag):
-	//    2 = fully paid, 1 = pending (unpaid/partial). This moves the row between status tabs.
+	// Resolve the payment lifecycle on Status (honoring the "Is Fully Paid" write-off flag):
+	// 2 = fully paid, 1 = pending (unpaid/partial). This moves the row between status tabs.
 	expense.PaidAmount = paidAmount
-	if body.IsFullyPaid || paidAmount >= expense.Amount {
+	if isFullyPaid || paidAmount >= expense.Amount {
 		expense.Status = 2
 	} else {
 		expense.Status = 1
@@ -558,16 +601,15 @@ func PostExpensePayment(req *core.HandlerArgs) core.HandlerResponse {
 	expense.Updated = core.SUnixTime()
 	expense.UpdatedBy = req.User.ID
 	if isSameDayPayment {
-		expense.SameDayCashBankID = body.CashBankID
+		expense.SameDayCashBankID = cashBank.ID
 	}
 	expense.StampPeriod()
 
 	q := db.TableOf[types.Expense]()
-	if err := db.Update(&[]types.Expense{expense},
+	if err := db.UpdateIn(transaction, &[]types.Expense{*expense},
 		q.PaidAmount, q.Status, q.Updated, q.UpdatedBy, q.Period, q.SameDayCashBankID,
 	); err != nil {
-		return req.MakeErr("Error al actualizar el gasto:", err)
+		return core.Err("Error al actualizar el gasto:", err)
 	}
-
-	return req.MakeResponse(expense)
+	return nil
 }

@@ -484,12 +484,56 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Ya existe una empresa registrada con este correo electrónico.")
 	}
 
+	// The company, its admin and the request's completion commit together, under the request's row
+	// lock: a double submit waits, then finds the request completed, so it never creates a second
+	// company. A failure leaves nothing behind and the request still verified, so it can be retried.
+	var newCompany config.Company
+	var newUser coreTypes.User
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		lockedRequests := []types.SignUpRequest{{WeekCode: request.WeekCode, ID: request.ID}}
+		if err := db.LockByKeys(transaction, &lockedRequests); err != nil {
+			return core.Err("Error al obtener la solicitud de registro:", err)
+		}
+		if len(lockedRequests) == 0 || lockedRequests[0].Status != signUpStatusVerified {
+			return core.Err("Esta solicitud de registro ya fue utilizada para crear una empresa.")
+		}
+		lockedRequest := lockedRequests[0]
+		var createErr error
+		newCompany, newUser, createErr = createSignUpCompanyIn(transaction, &lockedRequest, body.CompanyName, body.RUC,
+			body.Address, body.AdminFirstName, body.AdminLastName, body.AdminPassword)
+		return createErr
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	core.Log("PostSignUpCompany:: empresa creada", newCompany.ID, newCompany.Name, "admin", newUser.ID)
+	if cloud.IsDataMirrorEnabled() {
+		if err := cloud.Insert([]config.Company{newCompany}); err != nil {
+			return req.MakeErr("Error al guardar la empresa en el espejo cloud.", err)
+		}
+		if err := cloud.Insert([]coreTypes.User{newUser}); err != nil {
+			return req.MakeErr("Error al guardar el usuario en el espejo cloud.", err)
+		}
+	}
+	loginResponse, err := MakeUsuarioResponse(newUser, body.CipherKey)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	loginResponse["CompanyName"] = newCompany.Name
+	return req.MakeResponse(loginResponse)
+}
+
+// createSignUpCompanyIn writes a verified request's company, its admin user and the request's
+// completion, in the caller's transaction.
+func createSignUpCompanyIn(transaction *db.Transaction, request *types.SignUpRequest,
+	companyName, ruc, address, adminFirstName, adminLastName, adminPassword string,
+) (config.Company, coreTypes.User, error) {
 	nowTime := core.SUnixTime()
 	newCompanies := []config.Company{{
-		Name:      body.CompanyName,
-		LegalName: body.CompanyName,
-		RUC:       strings.TrimSpace(body.RUC),
-		Address:   strings.TrimSpace(body.Address),
+		Name:      companyName,
+		LegalName: companyName,
+		RUC:       strings.TrimSpace(ruc),
+		Address:   strings.TrimSpace(address),
 		Email:     request.Email,
 		// The address is proven at this point: the code only reached whoever controls the inbox.
 		EmailVerified: 1,
@@ -501,65 +545,40 @@ func PostSignUpCompany(req *core.HandlerArgs) core.HandlerResponse {
 		Created:       nowTime,
 		Status:        1,
 	}}
-	if err := db.Upsert(&newCompanies); err != nil {
-		return req.MakeErr("Error al crear la empresa.", err)
+	if err := db.InsertIn(transaction, &newCompanies); err != nil {
+		return config.Company{}, coreTypes.User{}, core.Err("Error al crear la empresa.", err)
 	}
 	newCompany := newCompanies[0]
-	core.Log("PostSignUpCompany:: empresa creada", newCompany.ID, newCompany.Name)
-
-	if cloud.IsDataMirrorEnabled() {
-		if err := cloud.Insert([]config.Company{newCompany}); err != nil {
-			return req.MakeErr("Error al guardar la empresa en el espejo cloud.", err)
-		}
-	}
 
 	// The ORM's sequence is partitioned by CompanyID, so the first user of a brand-new company
 	// gets ID 1 — which is the ID MakeUsuarioResponse grants every declared access to, and whose
 	// login is always "admin" (PostUsuario enforces the same rule on later edits).
 	// FirstName falls back to "admin" because it is optional here but required when the profile is
 	// saved from the users page, which would otherwise reject the record it just loaded.
-	passwordHash := core.FnvHashString64(core.Env.SECRET_PHRASE+body.AdminPassword, -1, 20)
 	newUsers := []coreTypes.User{{
 		CompanyID:    newCompany.ID,
 		User:         "admin",
-		FirstName:    core.If(len(body.AdminFirstName) > 0, body.AdminFirstName, "admin"),
-		LastName:     body.AdminLastName,
+		FirstName:    core.If(len(adminFirstName) > 0, adminFirstName, "admin"),
+		LastName:     adminLastName,
 		Email:        request.Email,
-		PasswordHash: passwordHash,
+		PasswordHash: core.FnvHashString64(core.Env.SECRET_PHRASE+adminPassword, -1, 20),
 		Created:      nowTime,
 		Updated:      nowTime,
 		Status:       1,
 	}}
-	if err := db.Upsert(&newUsers); err != nil {
-		return req.MakeErr("Error al crear el usuario administrador.", err)
+	if err := db.InsertIn(transaction, &newUsers); err != nil {
+		return config.Company{}, coreTypes.User{}, core.Err("Error al crear el usuario administrador.", err)
 	}
 	newUser := newUsers[0]
-	core.Log("PostSignUpCompany:: usuario administrador creado", newUser.ID, "en la empresa", newCompany.ID)
-
-	if cloud.IsDataMirrorEnabled() {
-		if err := cloud.Insert([]coreTypes.User{newUser}); err != nil {
-			return req.MakeErr("Error al guardar el usuario en el espejo cloud.", err)
-		}
-	}
 
 	request.Status = signUpStatusCompleted
 	request.CompanyID = newCompany.ID
 	request.UserID = newUser.ID
 	request.Updated = nowTime
 	requestTable := db.TableOf[types.SignUpRequest]()
-	if err := db.Update(&[]types.SignUpRequest{*request},
-		requestTable.Status, requestTable.CompanyID, requestTable.UserID,
-		requestTable.Updated); err != nil {
-		// The company already exists, so failing the whole call here would leave the caller unable
-		// to log in to something that was created. Log and continue.
-		core.Log("PostSignUpCompany:: no se pudo cerrar la solicitud", request.ID, err)
+	if err := db.UpdateIn(transaction, &[]types.SignUpRequest{*request},
+		requestTable.Status, requestTable.CompanyID, requestTable.UserID, requestTable.Updated); err != nil {
+		return config.Company{}, coreTypes.User{}, core.Err("Error al cerrar la solicitud de registro.", err)
 	}
-
-	loginResponse, err := MakeUsuarioResponse(newUser, body.CipherKey)
-	if err != nil {
-		return req.MakeErr(err)
-	}
-	loginResponse["CompanyName"] = newCompany.Name
-
-	return req.MakeResponse(loginResponse)
+	return newCompany, newUser, nil
 }

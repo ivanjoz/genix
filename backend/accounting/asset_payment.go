@@ -32,29 +32,69 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Faltan parámetros: (AssetID o CashBankID).")
 	}
 
-	asset, loadError := loadAsset(req.User.CompanyID, payload.AssetID)
-	if loadError != nil {
-		return req.MakeErr(loadError)
+	// The asset and then the cash bank are locked, so the pending balance and the till's balance
+	// checked here are the ones the payment is written against: a concurrent payment, edit or
+	// depreciation of the asset waits for this one and sees it.
+	var asset types.Asset
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var loadError error
+		if asset, loadError = lockAssetIn(transaction, req.User.CompanyID, payload.AssetID); loadError != nil {
+			return loadError
+		}
+		cashBanks := []finance.CashBank{{CompanyID: req.User.CompanyID, ID: payload.CashBankID}}
+		if lockError := db.LockByKeys(transaction, &cashBanks); lockError != nil {
+			return core.Err("Error al obtener la caja.", lockError)
+		}
+		if len(cashBanks) == 0 {
+			return core.Err("No se encontró la caja.")
+		}
+		return payAssetIn(transaction, req, &asset, cashBanks[0], payload)
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if asset.PurchaseAmount <= 0 {
-		return req.MakeErr("Este activo no fue comprado, no hay nada que pagar.")
-	}
+	core.Log("PostAssetPayment asset:", asset.ID, "paid:", asset.PaidAmount, "of:", asset.PurchaseAmount)
+	return req.MakeResponse(asset)
+}
 
+// payAssetIn writes one payment of the asset from cashBank, both locked by the caller, and the
+// asset's new paid amount and payment status.
+func payAssetIn(transaction *db.Transaction, req *core.HandlerArgs, asset *types.Asset,
+	cashBank finance.CashBank, payload AssetPaymentPayload,
+) error {
+	if asset.PurchaseAmount <= 0 {
+		return core.Err("Este activo no fue comprado, no hay nada que pagar.")
+	}
 	// Server-authoritative: this also blocks any payment on an already settled asset, whose
 	// pending balance is 0.
 	if payload.Amount > asset.PendingAmount() {
-		return req.MakeErr("El monto del pago no puede ser mayor al monto pendiente.")
-	}
-
-	cashBank, cashBankError := finance.GetCaja(req.User.CompanyID, payload.CashBankID)
-	if cashBankError != nil {
-		return req.MakeErr(cashBankError)
+		return core.Err("El monto del pago no puede ser mayor al monto pendiente.")
 	}
 	if cashBank.CurrencyType != asset.CurrencyType {
-		return req.MakeErr("La moneda de la caja no coincide con la del activo.")
+		return core.Err("La moneda de la caja no coincide con la del activo.")
 	}
 	if cashBank.CurrentAmount-payload.Amount < 0 {
-		return req.MakeErr("El saldo de la caja no puede quedar negativo.")
+		return core.Err("El saldo de la caja no puede quedar negativo.")
+	}
+
+	// PaidAmount is recomputed from the ledger rather than incremented, so it cannot drift: the
+	// committed payments, plus this one (the read sees committed rows only, and under the asset's
+	// lock no other payment of it is written meanwhile). Type filters out anything that is not an
+	// asset payment, since DocumentID alone is shared with the expense register.
+	movements := []finance.CashBankMovement{}
+	movementQuery := db.Query(&movements)
+	movementQuery.Select(movementQuery.Type, movementQuery.Amount).
+		CompanyID.Equals(req.User.CompanyID).
+		DocumentID.Equals(int64(asset.ID))
+	if queryError := movementQuery.Exec(); queryError != nil {
+		return core.Err("Error al recalcular el monto pagado.", queryError)
+	}
+	paidAmount := payload.Amount
+	for _, cashMovement := range movements {
+		if cashMovement.Type != finance.CashMovementTypeAssetPayment {
+			continue
+		}
+		paidAmount += core.If(cashMovement.Amount < 0, -cashMovement.Amount, cashMovement.Amount)
 	}
 
 	// The movement is an outflow, so its amount is negative. FinalAmount stays 0 so the cash
@@ -74,31 +114,10 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 		FinalAmount:        0,
 		SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
 	}
-	if movementError := finance.ApplyCashBankMovement(
-		req, []finance.InternalCashMovement{movement},
+	if movementError := finance.ApplyCashBankMovementIn(
+		transaction, req, []finance.InternalCashMovement{movement},
 	); movementError != nil {
-		return req.MakeErr(movementError)
-	}
-
-	// Recompute PaidAmount from the ledger rather than incrementing it, so a retry or a
-	// concurrent payment cannot drift the total. Type filters out anything that is not an
-	// asset payment, since DocumentID alone is shared with the expense register.
-	movements := []finance.CashBankMovement{}
-	movementQuery := db.Query(&movements)
-	movementQuery.Select().
-		CompanyID.Equals(req.User.CompanyID).
-		DocumentID.Equals(int64(asset.ID))
-
-	if queryError := movementQuery.Exec(); queryError != nil {
-		return req.MakeErr("Error al recalcular el monto pagado.", queryError)
-	}
-
-	paidAmount := int32(0)
-	for _, cashMovement := range movements {
-		if cashMovement.Type != finance.CashMovementTypeAssetPayment {
-			continue
-		}
-		paidAmount += core.If(cashMovement.Amount < 0, -cashMovement.Amount, cashMovement.Amount)
+		return movementError
 	}
 
 	asset.PaidAmount = paidAmount
@@ -115,14 +134,11 @@ func PostAssetPayment(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	assetTable := db.TableOf[types.Asset]()
-	assetRecords := []types.Asset{asset}
-	if updateError := db.Update(&assetRecords,
+	if updateError := db.UpdateIn(transaction, &[]types.Asset{*asset},
 		assetTable.PaidAmount, assetTable.PaymentStatus, assetTable.Status,
 		assetTable.Updated, assetTable.UpdatedBy, assetTable.SameDayCashBankID,
 	); updateError != nil {
-		return req.MakeErr("Error al actualizar el pago del activo.", updateError)
+		return core.Err("Error al actualizar el pago del activo.", updateError)
 	}
-
-	core.Log("PostAssetPayment asset:", asset.ID, "paid:", paidAmount, "of:", asset.PurchaseAmount)
-	return req.MakeResponse(assetRecords[0])
+	return nil
 }

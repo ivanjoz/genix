@@ -28,8 +28,7 @@ type saleOrderAnnulRequest struct {
 // takes the sale out of the day summary and marks it annulled.
 //
 // What to give back is read from the two ledgers rather than derived from Status, and every
-// reversal already recorded is netted out of the total. That is what makes the endpoint safe to
-// retry after a partial failure: a second call gives back what the first one did not.
+// reversal already recorded is netted out of the total, so a reversal is never given twice.
 func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 	annulRequest := saleOrderAnnulRequest{}
 	if err := json.Unmarshal([]byte(*req.Body), &annulRequest); err != nil {
@@ -52,151 +51,137 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No tiene permiso para anular ventas.")
 	}
 
-	// Both clicks would otherwise read a zero reversal and both write one, refunding twice.
-	// Keyed on the sale, so unrelated annulments never queue behind each other.
-	lock, lockErr := core.AcquireLock(context.Background(), core.ActionAnnulSaleOrder, annulRequest.ID, 2)
-	if lockErr != nil {
-		return lockErr.Response(req)
-	}
-	defer lock.Release()
-
-	saleOrders := []types.SaleOrder{}
-	saleQuery := db.Query(&saleOrders)
-	saleQuery.CompanyID.Equals(req.User.CompanyID).ID.Equals(annulRequest.ID).Limit(1)
-	if err := saleQuery.Exec(); err != nil {
-		return req.MakeErr("Error al obtener la venta a anular:", err)
-	}
-	if len(saleOrders) == 0 {
-		return req.MakeErr("No se encontró la venta a anular.")
-	}
-
-	sale := saleOrders[0]
-	if sale.Status == types.OrderStatusAnnulled {
-		return req.MakeErr("La venta ya está anulada.")
-	}
-
 	// Every sale issued under a series carries a document from birth, so what decides this is
 	// whether it was sent. One still waiting for the sweep is voided and never goes out; one that
 	// reached SUNAT cannot simply vanish, because SUNAT requires a credit note and this system
 	// does not emit them yet.
 	//
-	// Under the invoicing lock, which is the one the sweep takes before sending: without it the
-	// sweep could send the document a moment after this decided to void it.
+	// Under the invoicing lock, which is the one the sweep takes before sending, held until the
+	// annulment commits: without it the sweep could send the document a moment after this decided
+	// to void it, or right after a failed annulment rolled the void back.
 	invoiceLock, invoiceLockErr := core.AcquireLock(
-		context.Background(), core.ActionInvoiceSaleOrder, sale.ID, 2)
+		context.Background(), core.ActionInvoiceSaleOrder, annulRequest.ID, 2)
 	if invoiceLockErr != nil {
 		return invoiceLockErr.Response(req)
 	}
-	invoiceDocument, invoiceErr := invoicing.VoidPendingDocumentForSale(req.User.CompanyID, sale.ID)
-	invoiceLock.Release()
+	defer invoiceLock.Release()
 
-	if invoiceErr != nil {
-		return req.MakeErr("Error al verificar si la venta fue facturada:", invoiceErr)
-	}
-	if invoiceDocument != nil {
-		// The series code is not named here on purpose: it lives on the company
-		// record, and reaching it from this module would cross a module body. The
-		// series number and the correlativo identify the document well enough for
-		// somebody to go find it.
-		return req.MakeErr("La venta tiene un comprobante emitido (serie",
-			invoiceDocument.SeriesID(), "correlativo", invoiceDocument.Correlativo,
-			"); requiere una nota de crédito.")
-	}
-
-	// Read both ledgers before anything is written: the refund amount decides whether a cash bank
-	// is required at all, so demanding one on a sale that was never paid would be wrong.
-	refundAmount, stockReturns, ledgerErr := readSaleOrderReversal(req.User.CompanyID, sale.ID)
-	if ledgerErr != nil {
-		return req.MakeErr(ledgerErr)
-	}
-
-	refundMovements := []finance.InternalCashMovement{}
-	if refundAmount > 0 {
-		if annulRequest.RefundCashBankID == 0 {
-			return req.MakeErr("Se requiere la caja de la cual se devolverá el dinero.")
+	// One transaction under the sale's row lock: a second annulment waits on the row, then finds it
+	// annulled, so two clicks can never both read a zero reversal and both refund. Everything — the
+	// void, the refund, the stock return, the restamp and the status — commits or rolls back
+	// together, and a deadlock reruns the body from the reads.
+	var sale types.SaleOrder
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		saleOrders := []types.SaleOrder{{CompanyID: req.User.CompanyID, ID: annulRequest.ID}}
+		if err := db.LockByKeys(transaction, &saleOrders); err != nil {
+			return core.Err("Error al obtener la venta a anular:", err)
 		}
-		// GetCaja already rejects a cash bank of another company or one that does not exist;
-		// ApplyCashBankMovement checks no status, so an inactive one is refused here.
-		refundCashBank, cashBankErr := finance.GetCaja(req.User.CompanyID, annulRequest.RefundCashBankID)
-		if cashBankErr != nil {
-			return req.MakeErr("Error al obtener la caja de la devolución:", cashBankErr)
+		if len(saleOrders) == 0 {
+			return core.Err("No se encontró la venta a anular.")
 		}
-		if refundCashBank.Status == 0 {
-			return req.MakeErr("La caja seleccionada está inactiva.")
-		}
-		// The refund gives back the collected amount as it was booked: in the sale's currency.
-		saleCurrency := normalizeCurrency(sale.CurrencyType)
-		if refundCurrency := normalizeCurrency(refundCashBank.CurrencyType); refundCurrency != saleCurrency {
-			return req.MakeErr(fmt.Sprintf(`La venta está en %v pero la caja "%v" es en %v.`,
-				currencyName(saleCurrency), refundCashBank.Name, currencyName(refundCurrency)))
+		sale = saleOrders[0]
+		if sale.Status == types.OrderStatusAnnulled {
+			return core.Err("La venta ya está anulada.")
 		}
 
-		refundMovements = append(refundMovements, finance.InternalCashMovement{
-			CashBankID:         annulRequest.RefundCashBankID,
-			DocumentID:         sale.ID,
-			Type:               finance.CashMovementTypeSaleRefund,
-			CounterAccountCode: finance.PCGEReceivable,
-			Amount:             -refundAmount,
-		})
-	}
+		invoiceDocument, invoiceErr := invoicing.VoidPendingDocumentForSaleIn(transaction, req.User.CompanyID, sale.ID)
+		if invoiceErr != nil {
+			return core.Err("Error al verificar si la venta fue facturada:", invoiceErr)
+		}
+		if invoiceDocument != nil {
+			// The series code is not named here on purpose: it lives on the company
+			// record, and reaching it from this module would cross a module body. The
+			// series number and the correlativo identify the document well enough for
+			// somebody to go find it.
+			return core.Err("La venta tiene un comprobante emitido (serie",
+				invoiceDocument.SeriesID(), "correlativo", invoiceDocument.Correlativo,
+				"); requiere una nota de crédito.")
+		}
 
-	core.Log("PostSaleOrderAnnul reversing sale:", "saleID", sale.ID, "status", sale.Status,
-		"refundAmount", refundAmount, "stockReturns", len(stockReturns))
+		// Read both ledgers before anything is written: the refund amount decides whether a cash bank
+		// is required at all, so demanding one on a sale that was never paid would be wrong. Under the
+		// sale's lock no reversal of it is written meanwhile.
+		refundAmount, stockReturns, ledgerErr := readSaleOrderReversal(req.User.CompanyID, sale.ID)
+		if ledgerErr != nil {
+			return ledgerErr
+		}
 
-	// Money and stock first, and the status last: a failure here leaves the sale un-annulled and
-	// retryable, where the reverse order would leave a sale marked void with the money still taken.
-	eg := errgroup.Group{}
-	if len(refundMovements) > 0 {
-		eg.Go(func() error {
-			if err := finance.ApplyCashBankMovement(req, refundMovements); err != nil {
+		if refundAmount > 0 {
+			if annulRequest.RefundCashBankID == 0 {
+				return core.Err("Se requiere la caja de la cual se devolverá el dinero.")
+			}
+			// GetCaja already rejects a cash bank of another company or one that does not exist;
+			// ApplyCashBankMovementIn checks no status, so an inactive one is refused here.
+			refundCashBank, cashBankErr := finance.GetCaja(req.User.CompanyID, annulRequest.RefundCashBankID)
+			if cashBankErr != nil {
+				return core.Err("Error al obtener la caja de la devolución:", cashBankErr)
+			}
+			if refundCashBank.Status == 0 {
+				return core.Err("La caja seleccionada está inactiva.")
+			}
+			// The refund gives back the collected amount as it was booked: in the sale's currency.
+			saleCurrency := normalizeCurrency(sale.CurrencyType)
+			if refundCurrency := normalizeCurrency(refundCashBank.CurrencyType); refundCurrency != saleCurrency {
+				return core.Err(fmt.Sprintf(`La venta está en %v pero la caja "%v" es en %v.`,
+					currencyName(saleCurrency), refundCashBank.Name, currencyName(refundCurrency)))
+			}
+
+			// Written already final (no same-day flag, the receivable account), as the restamp below
+			// reads committed payments only.
+			refundMovements := []finance.InternalCashMovement{{
+				CashBankID:         annulRequest.RefundCashBankID,
+				DocumentID:         sale.ID,
+				Type:               finance.CashMovementTypeSaleRefund,
+				CounterAccountCode: finance.PCGEReceivable,
+				Amount:             -refundAmount,
+			}}
+			if err := finance.ApplyCashBankMovementIn(transaction, req, refundMovements); err != nil {
 				return core.Err("Error al registrar la devolución del dinero:", err)
 			}
-			return nil
-		})
-	}
-	if len(stockReturns) > 0 {
-		eg.Go(func() error {
-			if err := logistics.ApplyMovimientos(req, stockReturns); err != nil {
-				return core.Err("Error al reingresar los productos al almacén:", err)
-			}
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
+		}
+
+		core.Log("PostSaleOrderAnnul reversing sale:", "saleID", sale.ID, "status", sale.Status,
+			"refundAmount", refundAmount, "stockReturns", len(stockReturns))
+
+		if err := logistics.ApplyMovimientosIn(transaction, req, stockReturns); err != nil {
+			return core.Err("Error al reingresar los productos al almacén:", err)
+		}
+
+		// An annulled sale leaves the accounting operations' cache, so a collection they inferred from it
+		// must become a movement they download, like its refund: the two cancel in 101 and 1212. A zero
+		// total is what says the annulled sale settles nothing.
+		sameDayCashBankID, restampErr := finance.RestampDocumentPaymentsIn(transaction, req.User.CompanyID, sale.ID,
+			[]finance.CashMovementType{finance.CashMovementTypeSaleCollection, finance.CashMovementTypeSaleRefund},
+			sale.Date, 0, finance.PCGEReceivable)
+		if restampErr != nil {
+			return restampErr
+		}
+
+		sale.Status = types.OrderStatusAnnulled
+		sale.AnnulReason = annulReason
+		sale.Updated = core.SUnixTime()
+		sale.UpdatedBy = req.User.ID
+		sale.SameDayCashBankID = sameDayCashBankID
+		sale.StampPeriod()
+
+		saleTable := db.TableOf[types.SaleOrder]()
+		salesToUpdate := []types.SaleOrder{sale}
+		if err := db.UpdateIn(transaction, &salesToUpdate,
+			saleTable.Status,
+			saleTable.AnnulReason,
+			saleTable.Updated,
+			saleTable.UpdatedBy,
+			// The period delta index packs Period with Status: they are written together.
+			saleTable.Period,
+			saleTable.SameDayCashBankID,
+		); err != nil {
+			return core.Err("Error al anular la venta:", err)
+		}
+		return nil
+	})
+	if err != nil {
 		return req.MakeErr(err)
 	}
-
-	// An annulled sale leaves the accounting operations' cache, so a collection they inferred from it
-	// must become a movement they download, like its refund: the two cancel in 101 and 1212. A zero
-	// total is what says the annulled sale settles nothing.
-	sameDayCashBankID, restampErr := finance.RestampDocumentPayments(req.User.CompanyID, sale.ID,
-		[]finance.CashMovementType{finance.CashMovementTypeSaleCollection, finance.CashMovementTypeSaleRefund},
-		sale.Date, 0, finance.PCGEReceivable)
-	if restampErr != nil {
-		return req.MakeErr(restampErr)
-	}
-
-	sale.Status = types.OrderStatusAnnulled
-	sale.AnnulReason = annulReason
-	sale.Updated = core.SUnixTime()
-	sale.UpdatedBy = req.User.ID
-	sale.SameDayCashBankID = sameDayCashBankID
-	sale.StampPeriod()
-
-	saleTable := db.TableOf[types.SaleOrder]()
-	salesToUpdate := []types.SaleOrder{sale}
-	if err := db.Update(&salesToUpdate,
-		saleTable.Status,
-		saleTable.AnnulReason,
-		saleTable.Updated,
-		saleTable.UpdatedBy,
-		// The period delta index packs Period with Status: they are written together.
-		saleTable.Period,
-		saleTable.SameDayCashBankID,
-	); err != nil {
-		return req.MakeErr("Error al anular la venta:", err)
-	}
-
 	return req.MakeResponse(sale)
 }
 

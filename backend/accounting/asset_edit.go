@@ -49,42 +49,59 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe indicar el activo a editar.")
 	}
 
-	asset, loadError := loadAsset(req.User.CompanyID, payload.AssetID)
+	// Under the asset's row lock: a payment or a depreciation run of it waits for the edit, so the
+	// paid amount checked here and the ledger rewritten here are the ones the edit commits with.
+	var asset types.Asset
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var editError error
+		asset, editError = editAssetIn(transaction, req, payload)
+		return editError
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	return req.MakeResponse(asset)
+}
+
+// editAssetIn locks the asset and rewrites its acquisition data, its stock bucket, its depreciation
+// ledger and its payments' stamps, all in the caller's transaction.
+func editAssetIn(transaction *db.Transaction, req *core.HandlerArgs, payload AssetEditPayload) (types.Asset, error) {
+	asset, loadError := lockAssetIn(transaction, req.User.CompanyID, payload.AssetID)
 	if loadError != nil {
-		return req.MakeErr(loadError)
+		return types.Asset{}, loadError
 	}
 	if asset.Status == types.AssetStatusRemoved {
-		return req.MakeErr("El activo fue eliminado y no puede editarse.")
+		return types.Asset{}, core.Err("El activo fue eliminado y no puede editarse.")
 	}
 	if payload.AcquisitionValue <= 0 {
-		return req.MakeErr("El valor en libros debe ser mayor a 0.")
+		return types.Asset{}, core.Err("El valor en libros debe ser mayor a 0.")
 	}
 	if payload.PurchaseAmount < 0 {
-		return req.MakeErr("El monto de compra no puede ser negativo.")
+		return types.Asset{}, core.Err("El monto de compra no puede ser negativo.")
 	}
 	if payload.AcquisitionDate <= 0 {
-		return req.MakeErr("Debe indicar la fecha de adquisición.")
+		return types.Asset{}, core.Err("Debe indicar la fecha de adquisición.")
 	}
 	// The payment ledger is authoritative and this handler never touches it, so lowering the
 	// purchase amount below what was already paid would leave the asset over-paid with no record
 	// of why. Reversing cash is not something an asset edit gets to do implicitly.
 	if payload.PurchaseAmount < asset.PaidAmount {
-		return req.MakeErr(fmt.Sprintf(
+		return types.Asset{}, core.Err(fmt.Sprintf(
 			"El monto de compra no puede ser menor a lo ya pagado (%.2f). Revierta el pago antes de reducirlo.",
 			float64(asset.PaidAmount)/100,
 		))
 	}
 	if asset.DisposalDate > 0 && payload.AcquisitionDate > asset.DisposalDate {
-		return req.MakeErr("La fecha de adquisición no puede ser posterior a la fecha de baja.")
+		return types.Asset{}, core.Err("La fecha de adquisición no puede ser posterior a la fecha de baja.")
 	}
 	if payload.DueDate > 0 && payload.DueDate < payload.AcquisitionDate {
-		return req.MakeErr("El vencimiento del pago no puede ser anterior a la fecha de adquisición.")
+		return types.Asset{}, core.Err("El vencimiento del pago no puede ser anterior a la fecha de adquisición.")
 	}
 	if payload.AccountCode == 0 {
-		return req.MakeErr("Debe indicar la cuenta contable del activo.")
+		return types.Asset{}, core.Err("Debe indicar la cuenta contable del activo.")
 	}
 	if accountError := types.ValidatePCGEAccount(types.PCGEKindAsset, payload.AccountCode); accountError != nil {
-		return req.MakeErr(accountError)
+		return types.Asset{}, core.Err(accountError)
 	}
 
 	dueDate := core.If(payload.DueDate > 0, payload.DueDate, payload.AcquisitionDate)
@@ -93,22 +110,22 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 	if documentError := normalizeAssetDocument(
 		&document, asset.SupplierID, payload.AcquisitionDate, dueDate, payload.PurchaseAmount,
 	); documentError != nil {
-		return req.MakeErr(documentError)
+		return types.Asset{}, core.Err(documentError)
 	}
 	providerSnapshotID, snapshotError := crm.ProviderSnapshotID(req.User.CompanyID, asset.SupplierID)
 	if snapshotError != nil {
-		return req.MakeErr(snapshotError)
+		return types.Asset{}, core.Err(snapshotError)
 	}
 
 	serialChanged := payload.SerialNumber != asset.SerialNumber
 	if serialChanged {
 		if asset.DisposalDate > 0 {
-			return req.MakeErr("No se puede cambiar la serie de un activo dado de baja.")
+			return types.Asset{}, core.Err("No se puede cambiar la serie de un activo dado de baja.")
 		}
 		if serialError := checkSerialIsFree(
 			req.User.CompanyID, asset.ProductID, asset.ID, payload.SerialNumber,
 		); serialError != nil {
-			return req.MakeErr(serialError)
+			return types.Asset{}, core.Err(serialError)
 		}
 		// The serial is part of the ProductStockDetail key, so the units move rather than the
 		// row being relabelled: out of the old bucket, into the new one. An empty serial is the
@@ -133,8 +150,8 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 				DocumentID:   int64(asset.ID),
 			},
 		}
-		if movementError := logistics.ApplyMovimientos(req, serialMovements); movementError != nil {
-			return req.MakeErr("Error al mover el activo a la nueva serie.", movementError)
+		if movementError := logistics.ApplyMovimientosIn(transaction, req, serialMovements); movementError != nil {
+			return types.Asset{}, core.Err("Error al mover el activo a la nueva serie.", movementError)
 		}
 	}
 
@@ -153,8 +170,8 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 	asset.PaymentStatus = ResolveAssetPaymentStatus(payload.PurchaseAmount, asset.PaidAmount)
 
 	if scheduleChanged {
-		if rewriteError := rewriteAssetDepreciation(req, &asset); rewriteError != nil {
-			return req.MakeErr(rewriteError)
+		if rewriteError := rewriteAssetDepreciationIn(transaction, req, &asset); rewriteError != nil {
+			return types.Asset{}, core.Err(rewriteError)
 		}
 	}
 
@@ -165,17 +182,16 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 	asset.UpdatedBy = req.User.ID
 
 	// The edit can move the accounting date or the purchase amount its payments settle.
-	sameDayCashBankID, restampError := finance.RestampDocumentPayments(req.User.CompanyID, int64(asset.ID),
+	sameDayCashBankID, restampError := finance.RestampDocumentPaymentsIn(transaction, req.User.CompanyID, int64(asset.ID),
 		[]finance.CashMovementType{finance.CashMovementTypeAssetPayment},
 		asset.AccountingDate(), asset.PurchaseAmount, finance.PCGEAssetPayables)
 	if restampError != nil {
-		return req.MakeErr(restampError)
+		return types.Asset{}, core.Err(restampError)
 	}
 	asset.SameDayCashBankID = sameDayCashBankID
 
 	assetTable := db.TableOf[types.Asset]()
-	assetRecords := []types.Asset{asset}
-	if updateError := db.Update(&assetRecords,
+	if updateError := db.UpdateIn(transaction, &[]types.Asset{asset},
 		assetTable.SerialNumber, assetTable.AcquisitionDate, assetTable.DueDate,
 		assetTable.AcquisitionValue, assetTable.PurchaseAmount, assetTable.PaymentStatus,
 		assetTable.AccumulatedDepreciation, assetTable.LastDepreciationDate,
@@ -185,12 +201,12 @@ func PutAssetEdit(req *core.HandlerArgs) core.HandlerResponse {
 		assetTable.AccountCode, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
 		assetTable.SameDayCashBankID,
 	); updateError != nil {
-		return req.MakeErr("Error al actualizar el activo.", updateError)
+		return types.Asset{}, core.Err("Error al actualizar el activo.", updateError)
 	}
 
 	core.Log("PutAssetEdit asset:", asset.ID, "schedule_rewritten:", scheduleChanged,
 		"serial_moved:", serialChanged)
-	return req.MakeResponse(assetRecords[0])
+	return asset, nil
 }
 
 // checkSerialIsFree rejects a serial another live asset of the same material already carries.
@@ -219,7 +235,7 @@ func checkSerialIsFree(companyID, productID, assetID int32, serialNumber string)
 	return nil
 }
 
-// rewriteAssetDepreciation reconciles the posted ledger against the schedule the asset's *new*
+// rewriteAssetDepreciationIn reconciles the posted ledger against the schedule the asset's *new*
 // acquisition value and date produce, and sets the asset's accumulated total and watermark to
 // match. It mutates the asset but writes no asset row — the caller does that once.
 //
@@ -227,7 +243,7 @@ func checkSerialIsFree(companyID, productID, assetID int32, serialNumber string)
 // a wholesale rebuild would leave one dead row per period per edit in `expenses` forever; reusing
 // the rows keeps their IDs stable and shows the expense register an amount change instead of a
 // removal followed by an insert. Only the tail that no longer has a period is retired.
-func rewriteAssetDepreciation(req *core.HandlerArgs, asset *types.Asset) error {
+func rewriteAssetDepreciationIn(transaction *db.Transaction, req *core.HandlerArgs, asset *types.Asset) error {
 	postedEntries := []finance.Expense{}
 	entryQuery := db.Query(&postedEntries)
 	entryQuery.Select().
@@ -318,13 +334,13 @@ func rewriteAssetDepreciation(req *core.HandlerArgs, asset *types.Asset) error {
 		entriesToUpdate[index].StampPeriod()
 	}
 	if len(entriesToInsert) > 0 {
-		if insertError := db.Upsert(&entriesToInsert); insertError != nil {
+		if insertError := db.InsertIn(transaction, &entriesToInsert); insertError != nil {
 			return core.Err("Error al registrar los nuevos asientos de depreciación.", insertError)
 		}
 	}
 	if len(entriesToUpdate) > 0 {
 		expenseTable := db.TableOf[finance.Expense]()
-		if updateError := db.Update(&entriesToUpdate,
+		if updateError := db.UpdateIn(transaction, &entriesToUpdate,
 			expenseTable.Date, expenseTable.Amount, expenseTable.Status,
 			expenseTable.Updated, expenseTable.UpdatedBy, expenseTable.Period,
 		); updateError != nil {

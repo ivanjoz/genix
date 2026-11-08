@@ -67,10 +67,10 @@ func GetAssignedStories(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &assigneeRows)
 }
 
-// saveStoryAssignees moves written stories in the per-person index. Called only when a story is new
-// (its row is inserted, unassigned too, so every later change is an update) or its assignee or
+// saveStoryAssigneesIn moves written stories in the per-person index. Called only when a story is
+// new (its row is inserted, unassigned too, so every later change is an update) or its assignee or
 // status changed: every write appends to the delta log.
-func saveStoryAssignees(companyID int32, isNewStory bool, stories ...types.Story) error {
+func saveStoryAssigneesIn(transaction *db.Transaction, companyID int32, isNewStory bool, stories ...types.Story) error {
 	if len(stories) == 0 {
 		return nil
 	}
@@ -80,10 +80,10 @@ func saveStoryAssignees(companyID int32, isNewStory bool, stories ...types.Story
 		assigneeRows[storyIndex].CompanyID = companyID
 	}
 	if isNewStory {
-		return db.Upsert(&assigneeRows)
+		return db.UpsertIn(transaction, &assigneeRows)
 	}
 	assigneeTable := db.TableOf[types.StoryAssignee]()
-	return db.Update(&assigneeRows, assigneeTable.ProjectID, assigneeTable.AssigneeID, assigneeTable.Status)
+	return db.UpdateIn(transaction, &assigneeRows, assigneeTable.ProjectID, assigneeTable.AssigneeID, assigneeTable.Status)
 }
 
 // PostEpics saves the epics changed in the Epics tab of the project panel, all of one project: it
@@ -102,17 +102,28 @@ func PostEpics(req *core.HandlerArgs) core.HandlerResponse {
 	if hasDeletion {
 		requiredRole = types.ProjectRoleAdmin
 	}
-	_, release, response, isDenied := openProjectWrite(req, projectID, requiredRole)
-	if isDenied {
-		return response
+	savedEpics := []types.Epic{}
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		savedEpics, err = saveEpicsIn(transaction, req, projectID, requiredRole, epics)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
-	defer release()
+	return req.MakeResponse(savedEpics)
+}
 
+// saveEpicsIn writes PostEpics' changes under the project's row lock and answers the saved epics.
+func saveEpicsIn(transaction *db.Transaction, req *core.HandlerArgs, projectID int32, requiredRole int8, epics []types.Epic) ([]types.Epic, error) {
+	if _, err := lockProjectWriteIn(transaction, req, projectID, requiredRole); err != nil {
+		return nil, err
+	}
 	storedEpics := []types.Epic{}
 	storedQuery := db.Query(&storedEpics)
 	storedQuery.CompanyID.Equals(req.User.CompanyID).ProjectID.Equals(projectID).Status.Equals(types.StatusActive)
 	if err := storedQuery.Exec(); err != nil {
-		return req.MakeErr("Error al obtener las épicas:", err)
+		return nil, core.Err("Error al obtener las épicas:", err)
 	}
 
 	newEpics, editedEpics, deletedEpicIDs := []types.Epic{}, []types.Epic{}, []int64{}
@@ -124,7 +135,7 @@ func PostEpics(req *core.HandlerArgs) core.HandlerResponse {
 			continue
 		}
 		if !slices.ContainsFunc(storedEpics, func(storedEpic types.Epic) bool { return storedEpic.ID == epic.ID }) {
-			return req.MakeErr("La épica", epic.Name, "no existe.")
+			return nil, core.Err("La épica", epic.Name, "no existe.")
 		}
 		if epic.Status == types.StatusDeleted {
 			deletedEpicIDs = append(deletedEpicIDs, epic.ID)
@@ -133,25 +144,23 @@ func PostEpics(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		editedEpics = append(editedEpics, epic)
 	}
-	if len(newEpics) > 0 {
-		if err := db.Upsert(&newEpics); err != nil {
-			return req.MakeErr("Error al guardar las épicas:", err)
-		}
+	if err := db.InsertIn(transaction, &newEpics); err != nil {
+		return nil, core.Err("Error al guardar las épicas:", err)
 	}
 	if len(editedEpics) > 0 {
 		epicTable := db.TableOf[types.Epic]()
-		if err := db.Update(&editedEpics, epicTable.ProjectID, epicTable.Name, epicTable.Color, epicTable.Status, epicTable.UpdatedBy); err != nil {
-			return req.MakeErr("Error al guardar las épicas:", err)
+		if err := db.UpdateIn(transaction, &editedEpics, epicTable.ProjectID, epicTable.Name, epicTable.Color, epicTable.Status, epicTable.UpdatedBy); err != nil {
+			return nil, core.Err("Error al guardar las épicas:", err)
 		}
 	}
-	if err := clearStoriesEpic(req.User.CompanyID, projectID, deletedEpicIDs, req.User.ID); err != nil {
-		return req.MakeErr("Se eliminaron las épicas, pero no se pudieron actualizar sus historias:", err)
+	if err := clearStoriesEpicIn(transaction, req.User.CompanyID, projectID, deletedEpicIDs, req.User.ID); err != nil {
+		return nil, core.Err("Error al quitar las épicas eliminadas de sus historias:", err)
 	}
-	return req.MakeResponse(append(newEpics, editedEpics...))
+	return append(newEpics, editedEpics...), nil
 }
 
-// clearStoriesEpic takes deleted epics off their stories. Runs under the project lock.
-func clearStoriesEpic(companyID int32, projectID int32, deletedEpicIDs []int64, userID int32) error {
+// clearStoriesEpicIn takes deleted epics off their stories. Runs under the project's row lock.
+func clearStoriesEpicIn(transaction *db.Transaction, companyID int32, projectID int32, deletedEpicIDs []int64, userID int32) error {
 	if len(deletedEpicIDs) == 0 {
 		return nil
 	}
@@ -170,7 +179,7 @@ func clearStoriesEpic(companyID int32, projectID int32, deletedEpicIDs []int64, 
 		return nil
 	}
 	storyTable := db.TableOf[types.Story]()
-	return db.Update(&epiclessStories, storyTable.ProjectID, storyTable.Status, storyTable.EpicID, storyTable.UpdatedBy)
+	return db.UpdateIn(transaction, &epiclessStories, storyTable.ProjectID, storyTable.Status, storyTable.EpicID, storyTable.UpdatedBy)
 }
 
 type storyWithDetail struct {
@@ -186,47 +195,59 @@ func PostStory(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
 	story, detail := request.Story, request.Detail
-	companyID := req.User.CompanyID
-	if story.ID != 0 && story.Status == types.StatusDeleted {
-		_, release, response, isDenied := openProjectWrite(req, story.ProjectID, types.ProjectRoleAdmin)
-		if isDenied {
-			return response
+	var saved storyWithDetail
+	var removedAttachmentKeys []string
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		if story.ID != 0 && story.Status == types.StatusDeleted {
+			saved, err = deleteStoryIn(transaction, req, story.ProjectID, story.ID)
+			return err
 		}
-		defer release()
-		return deleteStory(req, story.ProjectID, story.ID)
+		saved, removedAttachmentKeys, err = saveStoryIn(transaction, req, story, detail)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
+	// The files go once the detail no longer names them: a failed write keeps both.
+	deleteProjectFiles(removedAttachmentKeys)
+	return req.MakeResponse(saved)
+}
 
-	project, release, response, isDenied := openProjectWrite(req, story.ProjectID, types.ProjectRoleMember)
-	if isDenied {
-		return response
+// saveStoryIn creates or edits a story with its detail under the project's row lock. It answers the
+// saved story and the keys of the files the detail dropped, deleted by the caller after commit.
+func saveStoryIn(transaction *db.Transaction, req *core.HandlerArgs, story types.Story, detail types.StoryDetail) (storyWithDetail, []string, error) {
+	companyID := req.User.CompanyID
+	project, err := lockProjectWriteIn(transaction, req, story.ProjectID, types.ProjectRoleMember)
+	if err != nil {
+		return storyWithDetail{}, nil, err
 	}
-	defer release()
 
 	activeEpicIDs, err := loadProjectEpicIDs(companyID, project.ID)
 	if err != nil {
-		return req.MakeErr("Error al obtener las épicas:", err)
+		return storyWithDetail{}, nil, core.Err("Error al obtener las épicas:", err)
 	}
 	if err := normalizeStory(&story, project, activeEpicIDs); err != nil {
-		return req.MakeErr(err)
+		return storyWithDetail{}, nil, err
 	}
 	if err := normalizeStoryDetail(&detail); err != nil {
-		return req.MakeErr(err)
+		return storyWithDetail{}, nil, err
 	}
 
 	var storedStory *types.Story
 	storedAttachments := []types.Attachment{}
 	if story.ID != 0 {
 		if storedStory, err = loadProjectStory(companyID, project.ID, story.ID); err != nil {
-			return req.MakeErr("Error al obtener la historia:", err)
+			return storyWithDetail{}, nil, core.Err("Error al obtener la historia:", err)
 		}
 		if storedStory == nil {
-			return req.MakeErr("La historia no existe.")
+			return storyWithDetail{}, nil, core.Err("La historia no existe.")
 		}
 		storedDetails := []types.StoryDetail{}
 		detailQuery := db.Query(&storedDetails)
 		detailQuery.CompanyID.Equals(companyID).StoryID.Equals(story.ID)
 		if err := detailQuery.Exec(); err != nil {
-			return req.MakeErr("Error al obtener el detalle de la historia:", err)
+			return storyWithDetail{}, nil, core.Err("Error al obtener el detalle de la historia:", err)
 		}
 		if len(storedDetails) > 0 {
 			storedAttachments = storedDetails[0].Attachments
@@ -235,7 +256,7 @@ func PostStory(req *core.HandlerArgs) core.HandlerResponse {
 	now := core.SUnixTime()
 	attachments, removedAttachmentKeys, err := mergeAttachments(companyID, project.ID, storedAttachments, detail.Attachments, req.User.ID, now)
 	if err != nil {
-		return req.MakeErr(err)
+		return storyWithDetail{}, nil, err
 	}
 
 	previousAssigneeID := int32(0)
@@ -247,8 +268,8 @@ func PostStory(req *core.HandlerArgs) core.HandlerResponse {
 		story.AttachmentsCount = int16(len(attachments))
 		story.CreatedBy, story.Created, story.Status, story.UpdatedBy = req.User.ID, now, types.StatusActive, req.User.ID
 		stories := []types.Story{story}
-		if err := db.Upsert(&stories); err != nil {
-			return req.MakeErr("Error al guardar la historia:", err)
+		if err := db.InsertIn(transaction, &stories); err != nil {
+			return storyWithDetail{}, nil, core.Err("Error al guardar la historia:", err)
 		}
 		story = stories[0]
 	} else {
@@ -257,52 +278,52 @@ func PostStory(req *core.HandlerArgs) core.HandlerResponse {
 		storedStory.Priority, storedStory.AssigneeID, storedStory.EstimatedHours = story.Priority, story.AssigneeID, story.EstimatedHours
 		storedStory.AttachmentsCount, storedStory.UpdatedBy = int16(len(attachments)), req.User.ID
 		storyTable := db.TableOf[types.Story]()
-		err := db.Update(&[]types.Story{*storedStory}, storyTable.ProjectID, storyTable.Status, storyTable.Type, storyTable.Title, storyTable.Summary, storyTable.EpicID,
+		err := db.UpdateIn(transaction, &[]types.Story{*storedStory}, storyTable.ProjectID, storyTable.Status, storyTable.Type, storyTable.Title, storyTable.Summary, storyTable.EpicID,
 			storyTable.Priority, storyTable.AssigneeID, storyTable.EstimatedHours, storyTable.AttachmentsCount, storyTable.UpdatedBy)
 		if err != nil {
-			return req.MakeErr("Error al guardar la historia:", err)
+			return storyWithDetail{}, nil, core.Err("Error al guardar la historia:", err)
 		}
 		story = *storedStory
 	}
 
 	// A new assignee leaves a history line and moves the story in the per-person index.
 	if story.AssigneeID != previousAssigneeID {
-		addStoryActivities(types.StoryActivity{
+		if err := addStoryActivitiesIn(transaction, types.StoryActivity{
 			CompanyID: companyID, ProjectID: project.ID, StoryID: story.ID, Kind: types.ActivityKindAssigneeChange,
 			AssigneeID: story.AssigneeID, AuthorID: req.User.ID, Created: now,
-		})
+		}); err != nil {
+			return storyWithDetail{}, nil, core.Err("Error al guardar la actividad de la historia:", err)
+		}
 	}
 	if storedStory == nil || story.AssigneeID != previousAssigneeID {
-		if err := saveStoryAssignees(companyID, storedStory == nil, story); err != nil {
-			return req.MakeErr("Se guardó la historia, pero no en la lista de su responsable:", err)
+		if err := saveStoryAssigneesIn(transaction, companyID, storedStory == nil, story); err != nil {
+			return storyWithDetail{}, nil, core.Err("Error al guardar la historia en la lista de su responsable:", err)
 		}
 	}
 
-	// The Documents page's copies go before the detail: if the detail then fails, saving again
-	// recomputes the same changes from the stored detail. Written after it, a failure would leave
-	// them out of step for good.
+	// The Documents page's copies of the files take their IDs first: the detail's attachments
+	// record them.
 	documentChanges := storyDocumentChanges(project.ID, story.ID, storedAttachments, attachments, req.User.ID)
 	if len(documentChanges) > 0 {
-		if err := saveDocumentChanges(companyID, documentChanges); err != nil {
-			return req.MakeErr("Se guardó la historia, pero no sus archivos:", err)
+		if err := saveDocumentChangesIn(transaction, companyID, documentChanges); err != nil {
+			return storyWithDetail{}, nil, core.Err("Error al guardar los archivos de la historia:", err)
 		}
 		linkAttachmentDocuments(attachments, documentChanges)
 	}
 
 	detail.CompanyID, detail.ProjectID, detail.StoryID, detail.Attachments = companyID, project.ID, story.ID, attachments
 	detail.Status, detail.UpdatedBy = types.StatusActive, req.User.ID
-	if err := db.Upsert(&[]types.StoryDetail{detail}); err != nil {
-		return req.MakeErr("Se guardó la historia, pero no su detalle:", err)
+	if err := db.UpsertIn(transaction, &[]types.StoryDetail{detail}); err != nil {
+		return storyWithDetail{}, nil, core.Err("Error al guardar el detalle de la historia:", err)
 	}
-	deleteProjectFiles(removedAttachmentKeys)
-	return req.MakeResponse(storyWithDetail{Story: story, Detail: detail})
+	return storyWithDetail{Story: story, Detail: detail}, removedAttachmentKeys, nil
 }
 
-// saveDocumentChanges writes the Documents page's rows of a story's files: new ones take their ID on
-// insert (read back by linkAttachmentDocuments), removed ones are soft-deleted. The inserts go through
-// db.Insert on the caller's own elements: InsertUpdateInclude writes copies, so the IDs it assigns
-// never reach the caller.
-func saveDocumentChanges(companyID int32, documents []types.Document) error {
+// saveDocumentChangesIn writes the Documents page's rows of a story's files: new ones take their ID
+// on insert (read back by linkAttachmentDocuments), removed ones are soft-deleted. The inserts write
+// a slice of their own and copy it back: InsertUpdateIncludeIn writes copies, so the IDs it assigns
+// would never reach the caller.
+func saveDocumentChangesIn(transaction *db.Transaction, companyID int32, documents []types.Document) error {
 	newDocuments, removedDocuments := []types.Document{}, []types.Document{}
 	for _, document := range documents {
 		document.CompanyID = companyID
@@ -312,14 +333,12 @@ func saveDocumentChanges(companyID int32, documents []types.Document) error {
 			removedDocuments = append(removedDocuments, document)
 		}
 	}
-	if len(newDocuments) > 0 {
-		if err := db.Upsert(&newDocuments); err != nil {
-			return err
-		}
+	if err := db.InsertIn(transaction, &newDocuments); err != nil {
+		return err
 	}
 	if len(removedDocuments) > 0 {
 		documentTable := db.TableOf[types.Document]()
-		if err := db.Update(&removedDocuments, documentTable.ProjectID, documentTable.Status, documentTable.UpdatedBy); err != nil {
+		if err := db.UpdateIn(transaction, &removedDocuments, documentTable.ProjectID, documentTable.Status, documentTable.UpdatedBy); err != nil {
 			return err
 		}
 	}
@@ -329,31 +348,34 @@ func saveDocumentChanges(companyID int32, documents []types.Document) error {
 	return nil
 }
 
-// deleteStory soft-deletes a story and takes it off the open sprints. Closed sprints keep it: they
-// are history. Its files stay, so the story can be restored. Runs under the project lock.
-func deleteStory(req *core.HandlerArgs, projectID int32, storyID int64) core.HandlerResponse {
+// deleteStoryIn soft-deletes a story and takes it off the open sprints, under the project's row lock
+// (admins). Closed sprints keep it: they are history. Its files stay, so the story can be restored.
+func deleteStoryIn(transaction *db.Transaction, req *core.HandlerArgs, projectID int32, storyID int64) (storyWithDetail, error) {
+	if _, err := lockProjectWriteIn(transaction, req, projectID, types.ProjectRoleAdmin); err != nil {
+		return storyWithDetail{}, err
+	}
 	companyID := req.User.CompanyID
 	story, err := loadProjectStory(companyID, projectID, storyID)
 	if err != nil {
-		return req.MakeErr("Error al obtener la historia:", err)
+		return storyWithDetail{}, core.Err("Error al obtener la historia:", err)
 	}
 	if story == nil {
-		return req.MakeErr("La historia no existe.")
+		return storyWithDetail{}, core.Err("La historia no existe.")
 	}
 	story.Status, story.UpdatedBy = types.StatusDeleted, req.User.ID
 	storyTable := db.TableOf[types.Story]()
-	if err := db.Update(&[]types.Story{*story}, storyTable.ProjectID, storyTable.Status, storyTable.UpdatedBy); err != nil {
-		return req.MakeErr("Error al eliminar la historia:", err)
+	if err := db.UpdateIn(transaction, &[]types.Story{*story}, storyTable.ProjectID, storyTable.Status, storyTable.UpdatedBy); err != nil {
+		return storyWithDetail{}, core.Err("Error al eliminar la historia:", err)
 	}
 	if story.AssigneeID != 0 {
-		if err := saveStoryAssignees(companyID, false, *story); err != nil {
-			return req.MakeErr("Se eliminó la historia, pero sigue en la lista de su responsable:", err)
+		if err := saveStoryAssigneesIn(transaction, companyID, false, *story); err != nil {
+			return storyWithDetail{}, core.Err("Error al quitar la historia de la lista de su responsable:", err)
 		}
 	}
 
 	projectSprints, err := loadProjectSprints(companyID, projectID)
 	if err != nil {
-		return req.MakeErr("Se eliminó la historia, pero no se pudieron leer los sprints:", err)
+		return storyWithDetail{}, core.Err("Error al obtener los sprints:", err)
 	}
 	changedSprints := []types.Sprint{}
 	for _, sprint := range projectSprints {
@@ -366,11 +388,11 @@ func deleteStory(req *core.HandlerArgs, projectID int32, storyID int64) core.Han
 	}
 	if len(changedSprints) > 0 {
 		sprintTable := db.TableOf[types.Sprint]()
-		if err := db.Update(&changedSprints, sprintTable.ProjectID, sprintTable.Status, sprintTable.Stories, sprintTable.UpdatedBy); err != nil {
-			return req.MakeErr("Se eliminó la historia, pero no se pudo quitar de sus sprints:", err)
+		if err := db.UpdateIn(transaction, &changedSprints, sprintTable.ProjectID, sprintTable.Status, sprintTable.Stories, sprintTable.UpdatedBy); err != nil {
+			return storyWithDetail{}, core.Err("Error al quitar la historia de sus sprints:", err)
 		}
 	}
-	return req.MakeResponse(storyWithDetail{Story: *story})
+	return storyWithDetail{Story: *story}, nil
 }
 
 type storyRankRequest struct {
@@ -388,20 +410,32 @@ func PostStoryRank(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	_, release, response, isDenied := openProjectWrite(req, request.ProjectID, types.ProjectRoleMember)
-	if isDenied {
-		return response
+	var movedStory types.Story
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		movedStory, err = rankStoryIn(transaction, req, request)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
-	defer release()
+	return req.MakeResponse(movedStory)
+}
+
+// rankStoryIn moves one story in the backlog under the project's row lock.
+func rankStoryIn(transaction *db.Transaction, req *core.HandlerArgs, request storyRankRequest) (types.Story, error) {
+	if _, err := lockProjectWriteIn(transaction, req, request.ProjectID, types.ProjectRoleMember); err != nil {
+		return types.Story{}, err
+	}
 	companyID := req.User.CompanyID
 
 	if request.EpicID != 0 {
 		activeEpicIDs, err := loadProjectEpicIDs(companyID, request.ProjectID)
 		if err != nil {
-			return req.MakeErr("Error al obtener las épicas:", err)
+			return types.Story{}, core.Err("Error al obtener las épicas:", err)
 		}
 		if !slices.Contains(activeEpicIDs, request.EpicID) {
-			return req.MakeErr("La épica no existe.")
+			return types.Story{}, core.Err("La épica no existe.")
 		}
 	}
 
@@ -416,7 +450,7 @@ func PostStoryRank(req *core.HandlerArgs) core.HandlerResponse {
 	storiesQuery := db.Query(&readStories)
 	storiesQuery.CompanyID.Equals(companyID).ID.In(readStoryIDs...)
 	if err := storiesQuery.Exec(); err != nil {
-		return req.MakeErr("Error al obtener las historias:", err)
+		return types.Story{}, core.Err("Error al obtener las historias:", err)
 	}
 
 	var movedStory *types.Story
@@ -438,15 +472,15 @@ func PostStoryRank(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 	if movedStory == nil || movedStory.Status != types.StatusActive {
-		return req.MakeErr("La historia no existe.")
+		return types.Story{}, core.Err("La historia no existe.")
 	}
 	movedStory.BacklogRank = rankBetween(previousRank, hasPrevious, nextRank, hasNext)
 	movedStory.EpicID, movedStory.UpdatedBy = request.EpicID, req.User.ID
 	storyTable := db.TableOf[types.Story]()
-	if err := db.Update(&[]types.Story{*movedStory}, storyTable.ProjectID, storyTable.Status, storyTable.BacklogRank, storyTable.EpicID, storyTable.UpdatedBy); err != nil {
-		return req.MakeErr("Error al mover la historia:", err)
+	if err := db.UpdateIn(transaction, &[]types.Story{*movedStory}, storyTable.ProjectID, storyTable.Status, storyTable.BacklogRank, storyTable.EpicID, storyTable.UpdatedBy); err != nil {
+		return types.Story{}, core.Err("Error al mover la historia:", err)
 	}
-	return req.MakeResponse(*movedStory)
+	return *movedStory, nil
 }
 
 // GetStoryDetail is one story's detail, a list of at most one record answered as a full replace: it
@@ -486,67 +520,74 @@ func PostStoryComment(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &request); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	_, release, response, isDenied := openProjectWrite(req, request.ProjectID, types.ProjectRoleMember)
-	if isDenied {
-		return response
+	var comment types.StoryActivity
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		var err error
+		comment, err = addStoryCommentIn(transaction, req, request)
+		return err
+	})
+	if err != nil {
+		return makeProjectErr(req, err)
 	}
-	defer release()
+	return req.MakeResponse(comment)
+}
+
+// addStoryCommentIn writes a comment, its files' documents and the story's comment count under the
+// project's row lock.
+func addStoryCommentIn(transaction *db.Transaction, req *core.HandlerArgs, request storyCommentRequest) (types.StoryActivity, error) {
+	if _, err := lockProjectWriteIn(transaction, req, request.ProjectID, types.ProjectRoleMember); err != nil {
+		return types.StoryActivity{}, err
+	}
 	companyID := req.User.CompanyID
 
 	now := core.SUnixTime()
 	attachments, _, err := mergeAttachments(companyID, request.ProjectID, nil, request.Attachments, req.User.ID, now)
 	if err != nil {
-		return req.MakeErr(err)
+		return types.StoryActivity{}, err
 	}
 	commentText, err := normalizeCommentText(request.Text, len(attachments))
 	if err != nil {
-		return req.MakeErr(err)
+		return types.StoryActivity{}, err
 	}
 	story, err := loadProjectStory(companyID, request.ProjectID, request.StoryID)
 	if err != nil {
-		return req.MakeErr("Error al obtener la historia:", err)
+		return types.StoryActivity{}, core.Err("Error al obtener la historia:", err)
 	}
 	if story == nil {
-		return req.MakeErr("La historia no existe.")
+		return types.StoryActivity{}, core.Err("La historia no existe.")
 	}
 	story.CommentsCount++
 	storyTable := db.TableOf[types.Story]()
-	if err := db.Update(&[]types.Story{*story}, storyTable.ProjectID, storyTable.Status, storyTable.CommentsCount); err != nil {
-		return req.MakeErr("Error al guardar el comentario:", err)
+	if err := db.UpdateIn(transaction, &[]types.Story{*story}, storyTable.ProjectID, storyTable.Status, storyTable.CommentsCount); err != nil {
+		return types.StoryActivity{}, core.Err("Error al guardar el comentario:", err)
 	}
 
 	comments := []types.StoryActivity{{
 		CompanyID: companyID, ProjectID: request.ProjectID, StoryID: request.StoryID, Kind: types.ActivityKindComment,
 		Text: commentText, Attachments: attachments, AuthorID: req.User.ID, Created: now, Status: types.StatusActive,
 	}}
-	if err := db.Upsert(&comments); err != nil {
-		return req.MakeErr("Error al guardar el comentario:", err)
+	if err := db.InsertIn(transaction, &comments); err != nil {
+		return types.StoryActivity{}, core.Err("Error al guardar el comentario:", err)
 	}
 	// The Documents page's copies of its files name the comment, so they go once it has its ID; the
 	// comment then records their IDs.
 	if documents := commentDocuments(comments[0], req.User.ID); len(documents) > 0 {
-		if err := saveDocumentChanges(companyID, documents); err != nil {
-			return req.MakeErr("Se guardó el comentario, pero no sus archivos:", err)
+		if err := saveDocumentChangesIn(transaction, companyID, documents); err != nil {
+			return types.StoryActivity{}, core.Err("Error al guardar los archivos del comentario:", err)
 		}
 		linkAttachmentDocuments(comments[0].Attachments, documents)
 		activityTable := db.TableOf[types.StoryActivity]()
-		if err := db.Update(&comments, activityTable.StoryID, activityTable.Status, activityTable.Attachments); err != nil {
-			return req.MakeErr("Se guardó el comentario, pero no el enlace a sus archivos:", err)
+		if err := db.UpdateIn(transaction, &comments, activityTable.StoryID, activityTable.Status, activityTable.Attachments); err != nil {
+			return types.StoryActivity{}, core.Err("Error al enlazar los archivos del comentario:", err)
 		}
 	}
-	return req.MakeResponse(comments[0])
+	return comments[0], nil
 }
 
-// addStoryActivities writes history entries. Best effort: the change they record is already saved,
-// so a failure is logged and never fails the request.
-func addStoryActivities(activities ...types.StoryActivity) {
-	if len(activities) == 0 {
-		return
-	}
+// addStoryActivitiesIn writes history entries, in the transaction of the change they record.
+func addStoryActivitiesIn(transaction *db.Transaction, activities ...types.StoryActivity) error {
 	for activityIndex := range activities {
 		activities[activityIndex].Status = types.StatusActive
 	}
-	if err := db.Upsert(&activities); err != nil {
-		core.Log("Error al guardar la actividad de la historia", err)
-	}
+	return db.InsertIn(transaction, &activities)
 }

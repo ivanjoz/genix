@@ -2,6 +2,8 @@ package security
 
 import (
 	"bytes"
+	"cmp"
+	"slices"
 
 	"app/cloud"
 	"app/core"
@@ -63,97 +65,102 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	body.Updated = core.SUnixTime()
-	perfilesToSave := []types.Profile{body}
-	if err = db.Upsert(&perfilesToSave); err != nil {
-		return req.MakeErr("Error al actualizar el profile en ScyllaDB: " + err.Error())
+	// The profile and the blobs of its users commit together. The users are locked before the
+	// profiles they hold are read, so a concurrent save of another of their profiles (or of the user
+	// itself) is either fully seen or waits: no user is left with blobs from a stale profile.
+	var usersWithChangedAccesos []coreTypes.User
+	submitted := body
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		perfilesToSave := []types.Profile{submitted}
+		if err := db.UpsertIn(transaction, &perfilesToSave); err != nil {
+			return core.Err("Error al actualizar el profile:", err)
+		}
+		body = perfilesToSave[0]
+		usersWithChangedAccesos = nil
+		if !isExistingPerfil {
+			return nil
+		}
+		var recomputeErr error
+		usersWithChangedAccesos, recomputeErr = recomputeProfileUsersIn(transaction, body)
+		return recomputeErr
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
 
-	body = perfilesToSave[0]
 	if err = cloud.Insert([]types.Profile{body}); err != nil {
 		return req.MakeErr("Error al actualizar el profile en cloud: " + err.Error())
 	}
+	// Uno por user y no el comodín de la company: esta lista es exactamente la de los blobs que
+	// cambiaron, así que tirar el caché de los demás sólo les costaría una lectura para volver a la
+	// misma respuesta.
+	for _, affectedUser := range usersWithChangedAccesos {
+		invalidateCachedUserAccess(req, affectedUser.CompanyID, affectedUser.ID)
+	}
+	return req.MakeResponse(body)
+}
 
-	if isExistingPerfil {
-		affectedUsers := []coreTypes.User{}
-		affectedUsersQuery := db.Query(&affectedUsers)
-		affectedUsersQuery.CompanyID.Equals(req.User.CompanyID).ProfileIDs.Contains(body.ID)
-		if err = affectedUsersQuery.AllowFilter().Exec(); err != nil {
-			return req.MakeErr("Error al obtener los usuarios afectados por el profile.", err)
-		}
-
-		core.Log("PostPerfiles:: usuarios afectados", len(affectedUsers), "profile", body.ID)
-
-		if len(affectedUsers) > 0 {
-			allAffectedProfileIDs := make([]int32, 0, len(affectedUsers)*2)
-			for _, affectedUser := range affectedUsers {
-				allAffectedProfileIDs = append(allAffectedProfileIDs, affectedUser.ProfileIDs...)
-			}
-
-			perfilesByID, perfilesErr := getPerfilesMapByIDs(req.User.CompanyID, allAffectedProfileIDs)
-			if perfilesErr != nil {
-				return req.MakeErr("Error al obtener los perfiles de los usuarios afectados.", perfilesErr)
-			}
-
-			// Keep the just-saved profile in-memory so recomputations use the new access list immediately.
-			perfilesByID[body.ID] = body
-
-			usersWithChangedAccesos := make([]coreTypes.User, 0, len(affectedUsers))
-
-			for userIndex := range affectedUsers {
-				affectedUser := &affectedUsers[userIndex]
-				grantsByAccesoID, accessErr := buildAccesosComputedFromPerfiles(perfilesByID, affectedUser.ProfileIDs)
-				if accessErr != nil {
-					return req.MakeErr("Error al recomputar los accesos del user afectado.", accessErr)
-				}
-				accesosBlob, accesosSubBlob, accessErr := encodeMergedAccesoGrants(grantsByAccesoID)
-				if accessErr != nil {
-					return req.MakeErr("Error al codificar los accesos del user afectado.", accessErr)
-				}
-
-				// Both columns decide "unchanged": a profile edit that only adds a sub-access
-				// leaves accesos_computed byte-identical, and comparing just that one would skip
-				// the write and leave the user with stale sub-accesses.
-				if bytes.Equal(affectedUser.AccesosComputed, accesosBlob) &&
-					bytes.Equal(affectedUser.AccesosSubComputed, accesosSubBlob) {
-					core.Log("PostPerfiles:: user sin cambios", affectedUser.ID)
-					continue
-				}
-
-				// Only persist the recomputed access payload for affected users.
-				affectedUser.AccesosComputed = accesosBlob
-				affectedUser.AccesosSubComputed = accesosSubBlob
-				core.Log("PostPerfiles:: user actualizado", affectedUser.ID,
-					"accesos bytes", len(accesosBlob), "sub bytes", len(accesosSubBlob))
-				usersWithChangedAccesos = append(usersWithChangedAccesos, *affectedUser)
-			}
-
-			if len(usersWithChangedAccesos) > 0 {
-				// Status rides along because the users table declares a composite view on
-				// (status, updated) and the ORM assigns updated on every write: naming only the
-				// blob columns fails with "requires the columns status, updated be updated
-				// together". The value is the one the read returned.
-				usuarioQuery := db.Query(&usersWithChangedAccesos)
-				if err = db.Update(&usersWithChangedAccesos,
-					usuarioQuery.AccesosComputed, usuarioQuery.AccesosSubComputed,
-					usuarioQuery.Status); err != nil {
-					return req.MakeErr("Error al actualizar usuarios afectados en ScyllaDB: " + err.Error())
-				}
-				// Uno por user y no el comodín de la company: esta lista es exactamente la de los
-				// blobs que cambiaron, así que tirar el caché de los demás sólo les costaría una
-				// lectura a ScyllaDB para volver a la misma respuesta.
-				for _, affectedUser := range usersWithChangedAccesos {
-					invalidateCachedUserAccess(req, affectedUser.CompanyID, affectedUser.ID)
-				}
-			}
-			/*
-				if err = cloud.Insert(affectedUsers); err != nil {
-					return req.MakeErr("Error al actualizar usuarios afectados en cloud: " + err.Error())
-				}
-			*/
-		}
+// recomputeProfileUsersIn locks the users holding the saved profile and rewrites the access blobs
+// that changed, from their profiles (the saved one as the transaction wrote it) and their direct
+// grants. It returns the users it rewrote.
+func recomputeProfileUsersIn(transaction *db.Transaction, savedProfile types.Profile) ([]coreTypes.User, error) {
+	affectedUsers := []coreTypes.User{}
+	affectedUsersQuery := db.Query(&affectedUsers)
+	affectedUsersQuery.Select(affectedUsersQuery.ID).
+		CompanyID.Equals(savedProfile.CompanyID).ProfileIDs.Contains(savedProfile.ID)
+	if err := affectedUsersQuery.AllowFilter().Exec(); err != nil {
+		return nil, core.Err("Error al obtener los usuarios afectados por el profile.", err)
+	}
+	core.Log("PostPerfiles:: usuarios afectados", len(affectedUsers), "profile", savedProfile.ID)
+	if len(affectedUsers) == 0 {
+		return nil, nil
+	}
+	lockedUsers := make([]coreTypes.User, len(affectedUsers))
+	for index, affectedUser := range affectedUsers {
+		lockedUsers[index] = coreTypes.User{CompanyID: savedProfile.CompanyID, ID: affectedUser.ID}
+	}
+	slices.SortFunc(lockedUsers, func(left, right coreTypes.User) int { return cmp.Compare(left.ID, right.ID) })
+	if err := db.LockByKeys(transaction, &lockedUsers); err != nil {
+		return nil, core.Err("Error al obtener los usuarios afectados por el profile.", err)
 	}
 
-	return req.MakeResponse(body)
+	allAffectedProfileIDs := make([]int32, 0, len(lockedUsers)*2)
+	for _, lockedUser := range lockedUsers {
+		allAffectedProfileIDs = append(allAffectedProfileIDs, lockedUser.ProfileIDs...)
+	}
+	perfilesByID, err := getPerfilesMapByIDs(savedProfile.CompanyID, allAffectedProfileIDs)
+	if err != nil {
+		return nil, core.Err("Error al obtener los perfiles de los usuarios afectados.", err)
+	}
+	// The read sees committed profiles only: the saved one is taken as this transaction wrote it.
+	perfilesByID[savedProfile.ID] = savedProfile
+
+	usersWithChangedAccesos := make([]coreTypes.User, 0, len(lockedUsers))
+	for _, lockedUser := range lockedUsers {
+		accesosBlob, accesosSubBlob, err := computeUserAccesos(perfilesByID, lockedUser)
+		if err != nil {
+			return nil, core.Err("Error al recomputar los accesos del user afectado.", err)
+		}
+		// Both columns decide "unchanged": a profile edit that only adds a sub-access leaves
+		// accesos_computed byte-identical, and comparing just that one would skip the write and
+		// leave the user with stale sub-accesses.
+		if bytes.Equal(lockedUser.AccesosComputed, accesosBlob) && bytes.Equal(lockedUser.AccesosSubComputed, accesosSubBlob) {
+			continue
+		}
+		lockedUser.AccesosComputed, lockedUser.AccesosSubComputed = accesosBlob, accesosSubBlob
+		usersWithChangedAccesos = append(usersWithChangedAccesos, lockedUser)
+	}
+	if len(usersWithChangedAccesos) == 0 {
+		return nil, nil
+	}
+	// Status rides along because the users table declares a composite view on (status, updated);
+	// its value is the one the locked read returned, so it is current.
+	usuarioQuery := db.Query(&usersWithChangedAccesos)
+	if err := db.UpdateIn(transaction, &usersWithChangedAccesos,
+		usuarioQuery.AccesosComputed, usuarioQuery.AccesosSubComputed, usuarioQuery.Status); err != nil {
+		return nil, core.Err("Error al actualizar usuarios afectados:", err)
+	}
+	return usersWithChangedAccesos, nil
 }
 
 // ValidateAccesoGrants checks stored grants against the embedded catalog. A profile and a user

@@ -83,7 +83,13 @@ func (e PayrollRunTable) GetSchema() db.TableSchema {
 		Partition:   e.CompanyID,
 		Keys:        db.Cols(e.ID.Autoincrement(0)),
 		FixedValues: []db.FixedValues{{Col: e.Status, Values: []int64{0, 1, 2, 3}}},
-		Indexes:     []db.Index{{Type: db.TypeDelta, Keys: db.Cols(e.Status)}},
+		Indexes: []db.Index{
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// One run per month: two page loads that both find a month without its run both try to
+			// create it, and the loser's insert fails here and reruns onto the winner's run. A run is
+			// never deleted, so the month stays taken.
+			{Type: db.TypeUniqueIndex, Keys: db.Cols(e.Period)},
+		},
 	}
 }
 

@@ -66,8 +66,8 @@ type SprintTable struct {
 	Version   db.Col[*SprintTable, int16]
 }
 
-// The board's moves rewrite this record under the project lock, so two people moving cards at once
-// never lose a move. The delta index pinned on ProjectID syncs the browser cache per project.
+// The board's moves rewrite this record under the project's row lock, so two people moving cards at
+// once never lose a move. The delta index pinned on ProjectID syncs the browser cache per project.
 func (e SprintTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
 		ID:                63,

@@ -56,20 +56,6 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron registros para ingresar.")
 	}
 
-	// Obtener la OC para validar estado y mapear precios pedidos.
-	existing := []types.PurchaseOrder{}
-	if err := db.Query(&existing).
-		CompanyID.Equals(req.User.CompanyID).
-		ID.Equals(payload.PurchaseOrderID).Limit(1).Exec(); err != nil {
-		return req.MakeErr("Error al obtener la orden de compra.", err)
-	}
-	if len(existing) == 0 {
-		return req.MakeErr("Orden de compra no encontrada.")
-	}
-	order := existing[0]
-	if order.Status != types.PurchaseOrderStatusConfirmed {
-		return req.MakeErr("La orden no está en estado Confirmada y no puede recibirse.")
-	}
 	for _, item := range payload.Items {
 		if item.ProductID == 0 {
 			return req.MakeErr("Hay un item sin ProductID.")
@@ -79,30 +65,42 @@ func PostPurchaseOrderEntry(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	if err := receivePurchaseOrder(req, &order, payload.WarehouseID, payload.Items); err != nil {
+	// The order is locked while its status is checked and the stock enters: a second reception
+	// waits on the row, then finds it Fulfilled, so the goods can never enter twice.
+	var order types.PurchaseOrder
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		orders := []types.PurchaseOrder{{CompanyID: req.User.CompanyID, ID: payload.PurchaseOrderID}}
+		if err := db.LockByKeys(transaction, &orders); err != nil {
+			return core.Err("Error al obtener la orden de compra.", err)
+		}
+		if len(orders) == 0 {
+			return core.Err("Orden de compra no encontrada.")
+		}
+		order = orders[0]
+		if order.Status != types.PurchaseOrderStatusConfirmed {
+			return core.Err("La orden no está en estado Confirmada y no puede recibirse.")
+		}
+		return receivePurchaseOrderIn(transaction, req, &order, payload.WarehouseID, payload.Items)
+	})
+	if err != nil {
 		return req.MakeErr(err)
-	}
-	order.StampPeriod()
-	q := db.TableOf[types.PurchaseOrder]()
-	if err := db.Update(&[]types.PurchaseOrder{order},
-		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period,
-	); err != nil {
-		return req.MakeErr("Error al actualizar la orden de compra.", err)
 	}
 	return req.MakeResponse(order)
 }
 
-// receivePurchaseOrder ingresa la mercadería de una orden al almacén:
+// receivePurchaseOrderIn ingresa la mercadería de una orden al almacén, dentro de la transacción
+// que bloqueó la orden:
 //  1. compara los productos recibidos vs. los pedidos en la OC y calcula
 //     DifferenceValue (Σ (recibido - pedido) * precio), firmado
 //     (negativo = subentrega, positivo = sobreentrega);
 //  2. llama a ApplyMovimientos para insertar el stock en el almacén;
-//  3. deja la OC en Status=Fulfilled con la diferencia calculada. Persistirla es del llamador.
+//  3. deja la OC en Status=Fulfilled con la diferencia calculada y la escribe.
 //
 // La diferencia se registra pero NO se rechaza: la OC se cumple aunque haya
 // mismatches, y los valores quedan asentados para reportería.
-func receivePurchaseOrder(
-	req *core.HandlerArgs, order *types.PurchaseOrder, warehouseID int32, items []PostStockAdjustItem,
+func receivePurchaseOrderIn(
+	transaction *db.Transaction, req *core.HandlerArgs, order *types.PurchaseOrder, warehouseID int32,
+	items []PostStockAdjustItem,
 ) error {
 	// Indexar el detalle pedido por (ProductID, PresentationID).
 	type orderKey struct {
@@ -177,7 +175,7 @@ func receivePurchaseOrder(
 			PurchaseAccountCode: order.ReceptionAccountOf(item.ProductID),
 		})
 	}
-	if err := types.ApplyMovimientos(req, movimientos); err != nil {
+	if err := types.ApplyMovimientosIn(transaction, req, movimientos); err != nil {
 		return err
 	}
 
@@ -185,6 +183,13 @@ func receivePurchaseOrder(
 	order.DifferenceValue = diffValue
 	order.Updated = core.SUnixTime()
 	order.UpdatedBy = req.User.ID
+	order.StampPeriod()
+	q := db.TableOf[types.PurchaseOrder]()
+	if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*order},
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period,
+	); err != nil {
+		return core.Err("Error al actualizar la orden de compra.", err)
+	}
 	return nil
 }
 
@@ -233,11 +238,13 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body.", err)
 	}
 
+	// This only creates. An existing order changes through PUT's actions, which check its status
+	// and keep its debt, payments and comprobante.
+	if record.ID != 0 {
+		return req.MakeErr("Una orden existente se modifica con su acción de edición, no se vuelve a enviar.")
+	}
 	if record.ProviderID <= 0 {
 		return req.MakeErr("Debe seleccionar un proveedor.")
-	}
-	if express.ExpressEntry && record.ID != 0 {
-		return req.MakeErr("El ingreso express sólo aplica a una orden nueva.")
 	}
 	if express.ExpressEntry && record.WarehouseID <= 0 {
 		return req.MakeErr("Debe seleccionar el almacén donde ingresa la mercadería.")
@@ -268,96 +275,62 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	record.CompanyID = req.User.CompanyID
 	record.Status = types.PurchaseOrderStatusPending
+	record.Created = now
+	record.CreatedBy = req.User.ID
 	record.Updated = now
 	record.UpdatedBy = req.User.ID
-	if record.ID == 0 {
-		record.Created = now
-		record.CreatedBy = req.User.ID
-		record.Date = todayFecha
-		record.Week = currentSemana.Code
-		// La deuda inicial corresponde al monto total: cada Pago la reduce hasta llegar a 0.
-		record.DebtAmount = record.TotalAmount
-		if express.ExpressEntry {
-			record.DeliveryDate = todayFecha
-		}
-
-		// Congela la identidad del proveedor al crear la orden: el Registro de Compras
-		// imprime su razón social y RUC tal como estaban en la compra, y renombrarlo
-		// después no puede reescribir un libro ya presentado.
-		snapshotID, err := crm.ProviderSnapshotID(req.User.CompanyID, record.ProviderID)
-		if err != nil {
-			return req.MakeErr(err)
-		}
-		record.ProviderSnapshotID = snapshotID
-		// El comprobante puede venir con la orden o registrarse después con su propia acción.
-		record.CurrencyType = core.If(record.CurrencyType == 0, finance.CurrencyPEN, record.CurrencyType)
-		if err := record.ApplyPurchaseDocument(); err != nil {
-			return req.MakeErr(err)
-		}
+	record.Date = todayFecha
+	record.Week = currentSemana.Code
+	// La deuda inicial corresponde al monto total: cada Pago la reduce hasta llegar a 0.
+	record.DebtAmount = record.TotalAmount
+	if express.ExpressEntry {
+		record.DeliveryDate = todayFecha
 	}
 
-	records := []types.PurchaseOrder{record}
-	if err := db.Merge(&records, nil,
-		func(prev, curr *types.PurchaseOrder) bool {
-			curr.CompanyID = req.User.CompanyID
-			curr.Created = prev.Created
-			curr.CreatedBy = prev.CreatedBy
-			curr.Date = prev.Date
-			curr.Week = prev.Week
-			// La identidad se congela una sola vez, al crear la orden, y el comprobante sólo
-			// cambia por PurchaseOrderActionDocument.
-			curr.ProviderSnapshotID = prev.ProviderSnapshotID
-			curr.SetPurchaseDocument(prev.PurchaseDocument())
-			// Only a payment or a comprobante change decides it (PurchaseOrderActionPay / Document).
-			curr.SameDayCashBankID = prev.SameDayCashBankID
-			curr.Status = types.PurchaseOrderStatusPending
-			curr.Updated = now
-			curr.UpdatedBy = req.User.ID
-			curr.StampPeriod()
-			return true
-		},
-		func(curr *types.PurchaseOrder) {
-			curr.CompanyID = req.User.CompanyID
-			curr.Status = types.PurchaseOrderStatusPending
-			curr.Updated = now
-			curr.UpdatedBy = req.User.ID
-			curr.Date = todayFecha
-			curr.Week = currentSemana.Code
-			curr.StampPeriod()
-		},
-	); err != nil {
-		return req.MakeErr("Error al guardar la orden de compra.", err)
+	// Congela la identidad del proveedor al crear la orden: el Registro de Compras
+	// imprime su razón social y RUC tal como estaban en la compra, y renombrarlo
+	// después no puede reescribir un libro ya presentado.
+	snapshotID, err := crm.ProviderSnapshotID(req.User.CompanyID, record.ProviderID)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if !express.ExpressEntry {
-		return req.MakeResponse(records[0])
+	record.ProviderSnapshotID = snapshotID
+	// El comprobante puede venir con la orden o registrarse después con su propia acción.
+	record.CurrencyType = core.If(record.CurrencyType == 0, finance.CurrencyPEN, record.CurrencyType)
+	if err := record.ApplyPurchaseDocument(); err != nil {
+		return req.MakeErr(err)
 	}
+	record.StampPeriod()
 
-	// Se recibe exactamente lo pedido, sin lote ni serie: quien necesite registrarlos usa el
-	// ingreso normal. Los movimientos necesitan el ID de la orden, por eso se inserta antes.
-	order := &records[0]
-	entryItems := make([]PostStockAdjustItem, len(order.Lines))
-	for lineIndex, line := range order.Lines {
-		entryItems[lineIndex] = PostStockAdjustItem{
-			ProductID: line.ProductID, PresentationID: line.PresentationID, Quantity: line.Quantity,
+	// An express order is inserted and received in one transaction: a failed reception leaves no
+	// order behind. The movements need the order's ID, which the insert assigns.
+	var order types.PurchaseOrder
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		orders := []types.PurchaseOrder{record}
+		if err := db.InsertIn(transaction, &orders); err != nil {
+			return core.Err("Error al guardar la orden de compra.", err)
 		}
-	}
-	q := db.TableOf[types.PurchaseOrder]()
-	if err := receivePurchaseOrder(req, order, order.WarehouseID, entryItems); err != nil {
-		// El ORM no borra registros: la orden se anula para que el ingreso fallido no deje una
-		// compra pendiente que nadie pidió.
-		order.Status = types.PurchaseOrderStatusCanceled
-		order.Updated = core.SUnixTime()
-		if annulErr := db.Update(&[]types.PurchaseOrder{*order}, q.Status, q.Updated, q.Period); annulErr != nil {
-			core.Log("Error al anular la orden express", order.ID, annulErr)
+		order = orders[0]
+		if !express.ExpressEntry {
+			return nil
 		}
-		return req.MakeErr(fmt.Sprintf("No se pudo ingresar la mercadería; la orden Nº %v quedó anulada.", order.ID), err)
+		// Se recibe exactamente lo pedido, sin lote ni serie: quien necesite registrarlos usa el
+		// ingreso normal.
+		entryItems := make([]PostStockAdjustItem, len(order.Lines))
+		for lineIndex, line := range order.Lines {
+			entryItems[lineIndex] = PostStockAdjustItem{
+				ProductID: line.ProductID, PresentationID: line.PresentationID, Quantity: line.Quantity,
+			}
+		}
+		if err := receivePurchaseOrderIn(transaction, req, &order, order.WarehouseID, entryItems); err != nil {
+			return core.Err("No se pudo ingresar la mercadería:", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if err := db.Update(&[]types.PurchaseOrder{*order},
-		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period,
-	); err != nil {
-		return req.MakeErr("Error al actualizar la orden de compra.", err)
-	}
-	return req.MakeResponse(*order)
+	return req.MakeResponse(order)
 }
 
 // resolvePurchaseLineAccounts stamps the PCGE account on every line, from what each line buys:
@@ -416,18 +389,31 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe especificar el parámetro 'id'.")
 	}
 
-	// Obtener la orden actual para validar su estado antes de modificarla
-	existing := []types.PurchaseOrder{}
-	if err := db.Query(&existing).
-		CompanyID.Equals(req.User.CompanyID).
-		ID.Equals(orderID).Limit(1).Exec(); err != nil {
-		return req.MakeErr("Error al obtener la orden de compra.", err)
+	// Every action runs on the order read under its row lock: two actions on one order apply one
+	// after the other, each checking the status the other left, so two payments can never both fit
+	// the same debt and an action never writes back a status another one already moved.
+	var orderCurrent types.PurchaseOrder
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		existing := []types.PurchaseOrder{{CompanyID: req.User.CompanyID, ID: orderID}}
+		if err := db.LockByKeys(transaction, &existing); err != nil {
+			return core.Err("Error al obtener la orden de compra.", err)
+		}
+		if len(existing) == 0 {
+			return core.Err("Orden de compra no encontrada.")
+		}
+		orderCurrent = existing[0]
+		return applyPurchaseOrderActionIn(transaction, req, action, &orderCurrent)
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	if len(existing) == 0 {
-		return req.MakeErr("Orden de compra no encontrada.")
-	}
+	return req.MakeResponse(orderCurrent)
+}
 
-	orderCurrent := existing[0]
+// applyPurchaseOrderActionIn applies one PUT action to the order its caller locked, and writes it.
+func applyPurchaseOrderActionIn(
+	transaction *db.Transaction, req *core.HandlerArgs, action int32, orderCurrent *types.PurchaseOrder,
+) error {
 	// Every action writes Status, which the period delta index packs with Period.
 	orderCurrent.StampPeriod()
 	now := core.SUnixTime()
@@ -437,30 +423,30 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 	case PurchaseOrderActionConfirm:
 		// Solo se puede confirmar si está en estado Pendiente (1)
 		if orderCurrent.Status != types.PurchaseOrderStatusPending {
-			return req.MakeErr("La orden no está en estado Pendiente y no puede confirmarse.")
+			return core.Err("La orden no está en estado Pendiente y no puede confirmarse.")
 		}
 		orderCurrent.Status = types.PurchaseOrderStatusConfirmed
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy, q.Period); err != nil {
-			return req.MakeErr("Error al actualizar la orden de compra.", err)
+		if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*orderCurrent}, q.Status, q.Updated, q.UpdatedBy, q.Period); err != nil {
+			return core.Err("Error al actualizar la orden de compra.", err)
 		}
-		return req.MakeResponse(orderCurrent)
+		return nil
 
 	case PurchaseOrderActionEdit:
 		// Solo se permite editar mientras la orden esté Pendiente (1) o Confirmada (2);
 		// los demás estados (Cancelada, Cumplida) son inmutables.
 		if orderCurrent.Status != types.PurchaseOrderStatusPending &&
 			orderCurrent.Status != types.PurchaseOrderStatusConfirmed {
-			return req.MakeErr("La orden no se puede editar en su estado actual.")
+			return core.Err("La orden no se puede editar en su estado actual.")
 		}
 
 		// Decodifica únicamente los campos editables; ProviderID, Status, productos y totales
 		// se preservan desde el registro existente para evitar modificaciones no autorizadas.
 		patch := types.PurchaseOrder{}
 		if err := json.Unmarshal([]byte(*req.Body), &patch); err != nil {
-			return req.MakeErr("Error al deserializar el body.", err)
+			return core.Err("Error al deserializar el body.", err)
 		}
 
 		orderCurrent.WarehouseID = patch.WarehouseID
@@ -470,12 +456,12 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
+		if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*orderCurrent},
 			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.Notes, q.Updated, q.UpdatedBy, q.Status, q.Period,
 		); err != nil {
-			return req.MakeErr("Error al actualizar la orden de compra.", err)
+			return core.Err("Error al actualizar la orden de compra.", err)
 		}
-		return req.MakeResponse(orderCurrent)
+		return nil
 
 	case PurchaseOrderActionPay:
 		// Se paga una orden Confirmada o Cumplida: al proveedor se le suele pagar después de
@@ -483,21 +469,21 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// primero por Confirmar (acción 1) y una Cancelada no se paga.
 		if orderCurrent.Status != types.PurchaseOrderStatusConfirmed &&
 			orderCurrent.Status != types.PurchaseOrderStatusFulfilled {
-			return req.MakeErr("La orden no está Confirmada ni Cumplida y no puede pagarse.")
+			return core.Err("La orden no está Confirmada ni Cumplida y no puede pagarse.")
 		}
 
 		payload := purchaseOrderPayPayload{}
 		if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
-			return req.MakeErr("Error al deserializar el body.", err)
+			return core.Err("Error al deserializar el body.", err)
 		}
 		if payload.CashBankID <= 0 {
-			return req.MakeErr("Debe seleccionar una cashBank para registrar el pago.")
+			return core.Err("Debe seleccionar una cashBank para registrar el pago.")
 		}
 		if payload.Amount <= 0 {
-			return req.MakeErr("El monto del pago debe ser mayor a 0.")
+			return core.Err("El monto del pago debe ser mayor a 0.")
 		}
 		if payload.Amount > orderCurrent.DebtAmount {
-			return req.MakeErr("El monto del pago excede la deuda pendiente de la orden.")
+			return core.Err("El monto del pago excede la deuda pendiente de la orden.")
 		}
 
 		// DebtAmount is in the order's currency and the cash movement subtracts it as is, so a
@@ -505,12 +491,12 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// the payment has to come from a register in the order's currency.
 		cashBank, err := finance.GetCaja(req.User.CompanyID, payload.CashBankID)
 		if err != nil {
-			return req.MakeErr(err)
+			return err
 		}
 		cashBankCurrency := core.Coalesce(cashBank.CurrencyType, finance.CurrencyPEN)
 		orderCurrency := core.Coalesce(orderCurrent.CurrencyType, finance.CurrencyPEN)
 		if cashBankCurrency != orderCurrency {
-			return req.MakeErr(fmt.Sprintf("La caja \"%v\" no está en la moneda de la orden de compra.", cashBank.Name))
+			return core.Err(fmt.Sprintf("La caja \"%v\" no está en la moneda de la orden de compra.", cashBank.Name))
 		}
 
 		// When this payment alone pays the whole order on its comprobante's day, the accounting
@@ -529,8 +515,8 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			Amount:             -payload.Amount,
 			SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
 		}
-		if err := finance.ApplyCashBankMovement(req, []finance.InternalCashMovement{movimiento}); err != nil {
-			return req.MakeErr("Error al registrar el movimiento de cashBank:", err)
+		if err := finance.ApplyCashBankMovementIn(transaction, req, []finance.InternalCashMovement{movimiento}); err != nil {
+			return core.Err("Error al registrar el movimiento de cashBank:", err)
 		}
 
 		orderCurrent.DebtAmount -= payload.Amount
@@ -540,64 +526,64 @@ func PutPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 			orderCurrent.SameDayCashBankID = payload.CashBankID
 		}
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
+		if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*orderCurrent},
 			q.Status, q.DebtAmount, q.Updated, q.UpdatedBy, q.Period, q.SameDayCashBankID,
 		); err != nil {
-			return req.MakeErr("Error al actualizar la deuda de la orden de compra.", err)
+			return core.Err("Error al actualizar la deuda de la orden de compra.", err)
 		}
-		return req.MakeResponse(orderCurrent)
+		return nil
 
 	case PurchaseOrderActionAnnul:
 		// Solo se permite anular órdenes en estado Pendiente o Confirmada; las ya Canceladas
 		// o Cumplidas son inmutables para preservar consistencia contable.
 		if orderCurrent.Status != types.PurchaseOrderStatusPending &&
 			orderCurrent.Status != types.PurchaseOrderStatusConfirmed {
-			return req.MakeErr("La orden no se puede anular en su estado actual.")
+			return core.Err("La orden no se puede anular en su estado actual.")
 		}
 		orderCurrent.Status = types.PurchaseOrderStatusCanceled
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent}, q.Status, q.Updated, q.UpdatedBy, q.Period); err != nil {
-			return req.MakeErr("Error al anular la orden de compra.", err)
+		if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*orderCurrent}, q.Status, q.Updated, q.UpdatedBy, q.Period); err != nil {
+			return core.Err("Error al anular la orden de compra.", err)
 		}
-		return req.MakeResponse(orderCurrent)
+		return nil
 
 	case PurchaseOrderActionDocument:
 		if orderCurrent.Status == types.PurchaseOrderStatusCanceled {
-			return req.MakeErr("Una orden anulada no se registra en el Registro de Compras.")
+			return core.Err("Una orden anulada no se registra en el Registro de Compras.")
 		}
 		patch := types.PurchaseOrder{}
 		if err := json.Unmarshal([]byte(*req.Body), &patch); err != nil {
-			return req.MakeErr("Error al deserializar el body.", err)
+			return core.Err("Error al deserializar el body.", err)
 		}
 		orderCurrent.SetPurchaseDocument(patch.PurchaseDocument())
 		if err := orderCurrent.ApplyPurchaseDocument(); err != nil {
-			return req.MakeErr(err)
+			return core.Err(err)
 		}
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
 		// The comprobante moves the order's accounting date and decides the payable its payments
 		// clear (4212 / 4699), so they are re-stamped against it.
 		orderCurrent.StampPeriod()
-		sameDayCashBankID, restampErr := finance.RestampDocumentPayments(req.User.CompanyID, int64(orderCurrent.ID),
+		sameDayCashBankID, restampErr := finance.RestampDocumentPaymentsIn(transaction, req.User.CompanyID, int64(orderCurrent.ID),
 			[]finance.CashMovementType{finance.CashMovementTypeSupplierPayment},
 			orderCurrent.DocIssueDate, orderCurrent.TotalAmount, finance.PurchasePayableAccount(orderCurrent.DocType))
 		if restampErr != nil {
-			return req.MakeErr(restampErr)
+			return core.Err(restampErr)
 		}
 		orderCurrent.SameDayCashBankID = sameDayCashBankID
 
-		if err := db.Update(&[]types.PurchaseOrder{orderCurrent},
+		if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*orderCurrent},
 			q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate, q.TaxableAmount, q.TaxAmount,
 			q.UntaxedAmount, q.OtherAmount, q.CurrencyType, q.ExchangeRate,
 			q.Updated, q.UpdatedBy, q.Status, q.Period, q.SameDayCashBankID,
 		); err != nil {
-			return req.MakeErr("Error al registrar el comprobante de la orden de compra.", err)
+			return core.Err("Error al registrar el comprobante de la orden de compra.", err)
 		}
-		return req.MakeResponse(orderCurrent)
+		return nil
 
 	default:
-		return req.MakeErr("Acción no válida.")
+		return core.Err("Acción no válida.")
 	}
 }

@@ -271,10 +271,6 @@ func PostDependent(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
 	companyID := req.User.CompanyID
-	employee, err := loadEmployee(companyID, dependent.EmployeeID)
-	if err != nil {
-		return req.MakeErr(err)
-	}
 	if !(dependent.Status == types.StatusDeleted && dependent.ID > 0) {
 		dependent.FirstName = strings.TrimSpace(dependent.FirstName)
 		dependent.LastName = strings.TrimSpace(dependent.LastName)
@@ -301,51 +297,65 @@ func PostDependent(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	dependent.CompanyID, dependent.UpdatedBy = companyID, req.User.ID
-	records := []types.Dependent{dependent}
-	if dependent.ID == 0 {
-		records[0].Created, records[0].CreatedBy = core.SUnixTime(), req.User.ID
-		if err := db.Upsert(&records); err != nil {
-			return req.MakeErr("Error al guardar el derechohabiente:", err)
+	// Under the employee's lock: two dependent saves of one employee recount his dependents one
+	// after the other, so neither summary misses the other's dependent.
+	var saved types.Dependent
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		employee, err := lockEmployeeIn(transaction, companyID, dependent.EmployeeID)
+		if err != nil {
+			return err
 		}
-	} else {
-		stored := []types.Dependent{}
-		query := db.Query(&stored)
-		query.CompanyID.Equals(companyID).ID.Equals(dependent.ID)
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Error al leer el derechohabiente:", err)
+		records := []types.Dependent{dependent}
+		if dependent.ID == 0 {
+			records[0].Created, records[0].CreatedBy = core.SUnixTime(), req.User.ID
+			if err := db.InsertIn(transaction, &records); err != nil {
+				return fmt.Errorf("Error al guardar el derechohabiente: %v", err)
+			}
+		} else {
+			stored := []types.Dependent{}
+			query := db.Query(&stored)
+			query.CompanyID.Equals(companyID).ID.Equals(dependent.ID)
+			if err := query.Exec(); err != nil {
+				return fmt.Errorf("Error al leer el derechohabiente: %v", err)
+			}
+			if len(stored) == 0 || stored[0].EmployeeID != dependent.EmployeeID {
+				return fmt.Errorf("El derechohabiente no existe para este trabajador.")
+			}
+			table := db.TableOf[types.Dependent]()
+			if err := db.UpdateIn(transaction, &records, table.EmployeeID, table.Relationship, table.IdentityDocType, table.DocumentNumber,
+				table.FirstName, table.LastName, table.SecondLastName, table.BirthDate, table.IsStudying,
+				table.ValidFrom, table.ValidTo, table.Status, table.UpdatedBy); err != nil {
+				return fmt.Errorf("Error al guardar el derechohabiente: %v", err)
+			}
 		}
-		if len(stored) == 0 || stored[0].EmployeeID != dependent.EmployeeID {
-			return req.MakeErr("El derechohabiente no existe para este trabajador.")
-		}
-		table := db.TableOf[types.Dependent]()
-		if err := db.Update(&records, table.EmployeeID, table.Relationship, table.IdentityDocType, table.DocumentNumber,
-			table.FirstName, table.LastName, table.SecondLastName, table.BirthDate, table.IsStudying,
-			table.ValidFrom, table.ValidTo, table.Status, table.UpdatedBy); err != nil {
-			return req.MakeErr("Error al guardar el derechohabiente:", err)
-		}
-	}
-	if err := saveDependentsSummary(employee, req.User.ID); err != nil {
+		saved = records[0]
+		return saveDependentsSummaryIn(transaction, employee, saved, req.User.ID)
+	})
+	if err != nil {
 		return req.MakeErr(err)
 	}
-	return req.MakeResponse(records[0])
+	return req.MakeResponse(saved)
 }
 
-// saveDependentsSummary rewrites the employee's dependents count and asignación familiar ranges
-// from all his dependents, so the payroll and the employee list never read the dependents.
-func saveDependentsSummary(employee types.Employee, userID int32) error {
+// saveDependentsSummaryIn rewrites the employee's dependents count and asignación familiar ranges
+// from all his dependents, so the payroll and the employee list never read the dependents. The read
+// sees committed dependents only, so savedDependent (written by this transaction) replaces its
+// stored version or joins the list.
+func saveDependentsSummaryIn(transaction *db.Transaction, employee types.Employee, savedDependent types.Dependent, userID int32) error {
 	dependents := []types.Dependent{}
 	query := db.Query(&dependents)
 	query.CompanyID.Equals(employee.CompanyID)
 	if err := query.Exec(); err != nil {
 		return fmt.Errorf("error al leer los derechohabientes: %v", err)
 	}
-	employee.SetDependentsSummary(slices.DeleteFunc(dependents, func(dependent types.Dependent) bool {
-		return dependent.EmployeeID != employee.ID
-	}))
+	dependents = slices.DeleteFunc(dependents, func(dependent types.Dependent) bool {
+		return dependent.EmployeeID != employee.ID || dependent.ID == savedDependent.ID
+	})
+	employee.SetDependentsSummary(append(dependents, savedDependent))
 	employee.UpdatedBy = userID
 	employees := []types.Employee{employee}
 	table := db.TableOf[types.Employee]()
-	if err := db.Update(&employees, table.DependentsCount, table.FamilyAllowance, table.UpdatedBy); err != nil {
+	if err := db.UpdateIn(transaction, &employees, table.DependentsCount, table.FamilyAllowance, table.UpdatedBy); err != nil {
 		return fmt.Errorf("error al actualizar el trabajador: %v", err)
 	}
 	return nil

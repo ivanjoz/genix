@@ -8,9 +8,11 @@ import (
 // RestampReceptionAccounts rewrites the PurchaseAccountCode of the receptions of one purchase after
 // its account was reclassified: accountOfProduct is the account each received product now posts to.
 // receptionType is the reception's movement type (3 an order, 4 an inventory expense), since
-// DocumentID alone is shared between the registers.
-func RestampReceptionAccounts(
-	companyID int32, documentID int64, receptionType StockMovementType, accountOfProduct func(productID int32) int32,
+// DocumentID alone is shared between the registers. It runs in the transaction that locked the
+// purchase, so no reception of it is written meanwhile.
+func RestampReceptionAccountsIn(
+	transaction *db.Transaction, companyID int32, documentID int64, receptionType StockMovementType,
+	accountOfProduct func(productID int32) int32,
 ) error {
 	stored := []WarehouseProductMovement{}
 	query := db.Query(&stored)
@@ -33,7 +35,7 @@ func RestampReceptionAccounts(
 		return nil
 	}
 	table := db.TableOf[WarehouseProductMovement]()
-	if err := db.Update(&changed, table.PurchaseAccountCode); err != nil {
+	if err := db.UpdateIn(transaction, &changed, table.PurchaseAccountCode); err != nil {
 		return core.Err("Error al actualizar la cuenta de los ingresos de la compra:", documentID, err)
 	}
 	return nil
