@@ -59,11 +59,11 @@ cloud provider's security list.
 
 They share only the process: the config load, the shutdown signal, and the tokio runtime.
 
-> **Deploy the backend tables first.** The rate limiter loads existing usage from ScyllaDB
+> **Deploy the backend tables first.** The rate limiter loads existing usage from MariaDB
 > before admitting anything and **exits** when it cannot — which also stops the bridge, since
-> it is one process. On a fresh host, run `cd scripts && go run . check_tables` (so
+> it is one process. On a fresh host, run the backend's `fn-homologate` (so
 > `credit_usage_company` and `credit_usage_user` exist) before enabling the unit, or the service
-> restart-loops with `unconfigured table credit_usage_company` in `journalctl`.
+> restart-loops with `Table 'genix.credit_usage_company' doesn't exist` in `journalctl`.
 
 Why Nginx must run on this machine: what it proxies is a permanent stream, and a second hop
 buys nothing. So there is no upstream to configure — the vhost always forwards to `127.0.0.1`.
@@ -85,7 +85,8 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 | `fareward.use_remote_dev_host` | no | Read by the **backend**, and only when it was launched with the `dev` argument: a dev machine dials `127.0.0.1` even with a public `host`, because the daemon that matches its checkout is the one running beside it. `true` dials `host` instead. |
 | `fareward.unix_socket` | no | Read by **both**. The daemon also listens on this Unix domain socket (mode `0660`; the TCP port stays up for Lambda), and a backend/agent not running on Lambda dials it instead of TCP. Use `/run/fareward/fareward.sock`: the unit's `RuntimeDirectory=fareward` creates that directory. Set it only when the backend shares the host with the daemon. |
 | `rate_limit.*` | filled in | Quota policy; see `fareward/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
-| `db.*` | yes | Where usage snapshots are persisted. |
+| `db.name`, `mariadb.host`/`user`/`password` | yes | The MariaDB database the backend's tables live in; `mariadb.port` defaults to 3306. Same keys the backend reads. |
+| `server_metrics.scylla_unit` | no | The database's systemd unit, sampled into the `scylla_*` columns. Defaults to `mariadb.service`. |
 
 - **The two secrets are never prompted for.** They are root-level keys that initial project
   setup already writes (like `admin_password`), and both must be **byte-identical to the
@@ -199,6 +200,6 @@ services.
 
 When the daemon does not come up, the script reads the journal and names the cause
 (`KNOWN_SERVICE_FAILURE_CAUSES`): a bind address that is not on this host, a port already taken,
-undeployed tables, a missing config key, or ScyllaDB refusing the connection. If none match it
+undeployed tables, a missing config key, MariaDB refusing the login, or MariaDB refusing the connection. If none match it
 says so rather than guessing — the daemon prints its reason and exits, so the last `Error:` line
 in the log above is the answer.

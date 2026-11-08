@@ -97,7 +97,7 @@ LEGACY_BINARY_PATH = SERVICE_INSTALL_DIRECTORY / "genix-server-utils"
 # default. The three drifting apart puts the daemon on one port and every caller on another.
 DEFAULT_BRIDGE_PORT = 14012
 DEFAULT_LISTEN_PORT = 14013
-# The daemon loads existing usage from ScyllaDB before it serves anything, so give it a moment
+# The daemon loads existing usage from MariaDB before it serves anything, so give it a moment
 # before deciding whether it stayed up.
 SERVICE_SETTLE_SECONDS = 3
 HEALTH_PROBE_TIMEOUT_SECONDS = 5
@@ -106,9 +106,9 @@ HEALTH_PROBE_TIMEOUT_SECONDS = 5
 # internal_apikey authenticates the backend's calls (and the rate limiter's TCP frames).
 REQUIRED_SECRET_NAMES = ("secret_phrase", "internal_apikey")
 
-# The daemon opens a ScyllaDB session before it serves anything, so these have no default either
-# and cannot be invented here.
-REQUIRED_DATABASE_SETTINGS = ("db.host", "db.port", "db.name", "db.user", "db.password")
+# The daemon opens a MariaDB pool before it serves anything, so these have no default either and
+# cannot be invented here. The same keys the backend reads; mariadb.port defaults to 3306.
+REQUIRED_DATABASE_SETTINGS = ("db.name", "mariadb.host", "mariadb.user", "mariadb.password")
 
 # Every way this daemon is known to refuse to start, matched against its journal. Ordered from the
 # most specific fragment to the most generic, because a line can contain more than one.
@@ -135,7 +135,12 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
     (
         "credit_usage",
         "the backend tables are not deployed, so the rate limiter exits rather than admit traffic "
-        "it cannot account for. Run 'cd scripts && go run . check_tables' and rerun this script.",
+        "it cannot account for. Run the backend's 'fn-homologate' and rerun this script.",
+    ),
+    (
+        "Access denied",
+        "MariaDB refused mariadb.user/mariadb.password. Run configure_db.py mariadb, which creates "
+        "that user, or fix the keys in config.toml.",
     ),
     (
         "missing required setting",
@@ -143,7 +148,7 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
     ),
     (
         "Connection refused",
-        "ScyllaDB did not answer at db.host/db.port. Check that it is up and reachable from here.",
+        "MariaDB did not answer at mariadb.host/mariadb.port. Check that it is up and reachable from here.",
     ),
 )
 
@@ -331,7 +336,7 @@ def verify_required_settings(project_credentials, repository_config_path):
         if not str(get_config_value(project_credentials, database_setting_name, "")).strip():
             fail_with_error(
                 f"{database_setting_name} is not set in {repository_config_path}. The daemon "
-                "loads existing credit usage from ScyllaDB before it serves anything and exits "
+                "loads existing credit usage from MariaDB before it serves anything and exits "
                 "when it cannot connect."
             )
 
@@ -874,10 +879,11 @@ def provide_binary(repository_root_path, runtime_user_entry, binary_source=BINAR
 def build_service_contents(runtime_username, repository_config_path, bridge_port):
     return f"""[Unit]
 Description=Genix Server Utilities (credit rate limiter + SSE bridge)
-# The rate limiter loads existing usage from ScyllaDB before admitting anything and exits when
+# The rate limiter loads existing usage from MariaDB before admitting anything and exits when
 # it cannot, which also stops the bridge: one process, shared fate. Deploy the backend tables
-# (so the credit_usage_* tables exist) before enabling this unit.
-After=network-online.target
+# (so the credit_usage_* tables exist) before enabling this unit. After= only orders the start
+# when MariaDB runs on this host; it is ignored when it does not.
+After=network-online.target mariadb.service
 Wants=network-online.target
 
 [Service]
@@ -899,7 +905,7 @@ Restart=always
 RestartSec=3
 
 # Without this the unit inherits systemd's default soft limit of 1024 open files, which is below
-# the daemon's own rate_limit.max_connections of 1024 — every SSE stream, the ScyllaDB session
+# the daemon's own rate_limit.max_connections of 1024 — every SSE stream, the MariaDB pool
 # and both listeners come out of the same budget, so it would hit EMFILE before reaching its
 # configured ceiling and start refusing connections it was told to accept.
 LimitNOFILE=65536
@@ -1042,7 +1048,7 @@ def verify_service_is_serving(bridge_port):
     """Confirm the daemon is actually up, not merely exec'd.
 
     `systemctl restart` succeeds as soon as the process starts, and this unit is Type=simple with
-    Restart=always: a daemon that exits immediately — which is exactly what it does when ScyllaDB
+    Restart=always: a daemon that exits immediately — which is exactly what it does when MariaDB
     is unreachable — looks identical to a healthy one at that point. So wait for it to settle,
     then ask it something only a working process can answer.
     """
@@ -1056,7 +1062,7 @@ def verify_service_is_serving(bridge_port):
         return
 
     # is-active only proves the process exists. /health proves the bridge half is listening and
-    # answering, which also means the rate limiter got past its ScyllaDB load.
+    # answering, which also means the rate limiter got past its MariaDB load.
     health_url = f"http://127.0.0.1:{bridge_port}/health"
     try:
         with urllib.request.urlopen(health_url, timeout=HEALTH_PROBE_TIMEOUT_SECONDS) as response:

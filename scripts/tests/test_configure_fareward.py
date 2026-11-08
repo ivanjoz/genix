@@ -219,7 +219,8 @@ class ConfigurationResolutionTest(unittest.TestCase):
         configure_fareward = load_configure_fareward_module()
         config_path = Path("/repo/config.toml")
         database_settings = {
-            "db": {"host": "10.0.1.65", "port": 14008, "name": "genix", "user": "u", "password": "p"}
+            "db": {"name": "genix"},
+            "mariadb": {"host": "127.0.0.1", "user": "u", "password": "p"},
         }
 
         with redirect_stdout(io.StringIO()):
@@ -241,7 +242,7 @@ class ConfigurationResolutionTest(unittest.TestCase):
                         {**incomplete_credentials, **database_settings}, config_path
                     )
 
-            # And so does a missing database setting: the daemon exits when it cannot reach Scylla.
+            # And so does a missing database setting: the daemon exits when it cannot reach MariaDB.
             with self.assertRaises(SystemExit):
                 configure_fareward.verify_required_settings(
                     {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678"}, config_path
@@ -251,7 +252,7 @@ class ConfigurationResolutionTest(unittest.TestCase):
         configure_fareward = load_configure_fareward_module()
 
         bind_failure_journal = (
-            "fareward[58290]: INFO scylla::cluster::worker: Node added to cluster\n"
+            "fareward[58290]: INFO fareward: starting\n"
             "fareward[58290]: Error: failed to bind 150.136.42.240:14013\n"
             "fareward[58290]:     Cannot assign requested address (os error 99)\n"
             "systemd[1]: fareward.service: Failed with result 'exit-code'.\n"
@@ -263,9 +264,9 @@ class ConfigurationResolutionTest(unittest.TestCase):
 
         # The undeployed-tables hypothesis is still reported — when the journal actually says so.
         self.assertIn(
-            "check_tables",
+            "fn-homologate",
             configure_fareward.diagnose_service_failure(
-                "fareward[1]: Error: unconfigured table credit_usage_company\n"
+                "fareward[1]: Error: Table 'genix.credit_usage_company' doesn't exist\n"
             ),
         )
 
@@ -346,7 +347,7 @@ class UnitAndBinaryTest(unittest.TestCase):
 
     def test_service_unit_raises_the_file_descriptor_limit(self):
         """systemd defaults the soft limit to 1024, which is below the daemon's own
-        max_connections of 1024 once the ScyllaDB session, both listeners and every open SSE
+        max_connections of 1024 once the MariaDB pool, both listeners and every open SSE
         stream are counted: it would hit EMFILE before its configured ceiling."""
         configure_fareward = load_configure_fareward_module()
 
