@@ -83,7 +83,7 @@ class CreditCeilingDefaultsTest(unittest.TestCase):
         written = self.written_ceilings({"company_cpu_short": 5000, "company_cpu_long": 90000})
         self.assertNotIn("rate_limit.company_cpu_short", written)
         self.assertNotIn("rate_limit.company_cpu_long", written)
-        self.assertEqual(written["rate_limit.user_cpu_short"], 400)
+        self.assertEqual(written["rate_limit.user_cpu_short"], 320)
 
     def test_a_missing_long_ceiling_is_raised_to_the_short_one(self):
         # A hand-tuned short ceiling above the example's long default must not produce the

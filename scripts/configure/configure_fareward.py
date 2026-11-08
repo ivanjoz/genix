@@ -157,7 +157,7 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
 RATE_LIMIT_CREDIT_DEFAULTS = {
     "company_cpu": (2000, 40000),
     "company_inference": (1000, 10000),
-    "user_cpu": (400, 20000),
+    "user_cpu": (320, 20000),
     "user_inference": (500, 5000),
 }
 RATE_LIMIT_WINDOW_SUFFIXES = ("short", "long")

@@ -207,7 +207,7 @@ company_inference_long   = 10000
 user_daily_share_pct   = 80
 
 # Per-user limits inside each company.
-user_cpu_short           = 400
+user_cpu_short           = 320
 user_inference_short     = 500
 user_cpu_long            = 20000
 user_inference_long      = 5000
