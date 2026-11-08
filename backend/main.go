@@ -207,13 +207,15 @@ func LocalHandler(w http.ResponseWriter, request *http.Request) {
 	// Per request, on args only: this server handles many requests at once, so the Env.REQ_IP
 	// global the Lambda path sets would be a data race here.
 	clientIP := core.ClientIPFromRequest(request)
+	// Counted so a stream handler, which writes here directly, still has a size to be charged by.
+	var responseWriter http.ResponseWriter = core.NewCountingResponseWriter(w)
 
 	args := core.HandlerArgs{
 		Body:           &body,
 		Method:         strings.ToUpper(request.Method),
 		Route:          request.URL.Path,
 		ClientIP:       clientIP,
-		ResponseWriter: &w,
+		ResponseWriter: &responseWriter,
 		ReqContext:     request,
 		StartTime:      time.Now().UnixMilli(),
 	}
@@ -361,6 +363,15 @@ func main() {
 	// binary will scan for route markdown and generated menu descriptions.
 	fmt.Println("GENIX_REPOSITORY_ROOT=", os.Getenv("GENIX_REPOSITORY_ROOT"))
 	makeAppHandlers()
+	// The edge enforces this process's own gate, so it gets the table this binary resolves. A failure
+	// leaves the daemon on the previous table, which may not match this binary: loud, not fatal.
+	if core.Env.FAREWARD_ROUTES_FILE != "" && !core.Env.IS_SERVERLESS {
+		if err := writeFarewardRouteFile(core.Env.FAREWARD_ROUTES_FILE, appHandlers); err != nil {
+			core.Log("ERROR: the fareward route table could not be written::", core.Env.FAREWARD_ROUTES_FILE, "::", err)
+		} else {
+			core.Log("fareward route table written::", core.Env.FAREWARD_ROUTES_FILE)
+		}
+	}
 	fmt.Println("Setting full logs...")
 	// os.Setenv("LOGS_FULL", "1")
 

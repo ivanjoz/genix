@@ -246,7 +246,16 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 		// lambda". Es a propósito —escanear rutas inexistentes deja de ser gratis, y el daemon lo
 		// imputa a la ruta 0, que el protocolo cobra deliberadamente— pero antes era gratis, porque
 		// el cargo vivía dentro de la rama en que el handler sí existe.
-		if limitResponse := enforceAccessAndCredits(args, funcPath); limitResponse != nil {
+		//
+		// Behind HAProxy the fareward agent already asked that question on the headers, before the
+		// body was read; edgeAdmission takes its verdict instead of charging the request twice.
+		if handled, edgeResponse := edgeAdmission(args, funcPath); handled {
+			if edgeResponse != nil {
+				handlerResponse = *edgeResponse
+				setResponseMetadata(&handlerResponse)
+				return prepareResponse(args, &handlerResponse)
+			}
+		} else if limitResponse := enforceAccessAndCredits(args, funcPath); limitResponse != nil {
 			handlerResponse = *limitResponse
 			setResponseMetadata(&handlerResponse)
 			return prepareResponse(args, &handlerResponse)
@@ -281,13 +290,17 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 		core.Log("Ejecutando Handler::", funcPath+formatDevQueryParams(args.Query))
 		handlerResponse = handlerFunc(args)
 		respLen := 0
-		if handlerResponse.Body != nil {
+		if handlerResponse.StreamHandled {
+			// The stream wrote its body itself and has ended by the time the handler returns.
+			respLen = args.StreamedBytes()
+		} else if handlerResponse.Body != nil {
 			respLen = len(*handlerResponse.Body)
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
 		// Liquidación del GET: sólo lo que excede el primer bloque, que para un GET significa sólo
 		// cuando la respuesta pasó de 8 KB. La mayoría no llega, así que la mayoría no manda un
-		// segundo frame. Un error o un stream no liquidan: esos bytes no se enviaron.
+		// segundo frame. Un error no liquida: esos bytes no se enviaron. Un stream sí, por los bytes
+		// que escribió hasta cerrarse (StreamedBytes), igual que si los hubiera devuelto de una vez.
 		//
 		// La condición se lee de chargedMethodFor y no se reconstruye: es la misma función que
 		// decidió cobrar la base, así que las dos mitades del cargo no pueden discrepar.
@@ -295,7 +308,7 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 		// Never waited for on a VPS. Lambda still waits: a goroutine outliving the response is
 		// frozen with the sandbox, and the top-up could arrive late or be lost.
 		if !isPublicPath && chargedMethodFor(args.Method, funcPath) == "GET" &&
-			handlerResponse.Error == "" && !handlerResponse.StreamHandled {
+			handlerResponse.Error == "" {
 			if core.Env.IS_SERVERLESS {
 				settleGetResponseTopUp(args.User.CompanyID, args.User.ID, args.RouteID, respLen)
 			} else {

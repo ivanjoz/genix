@@ -201,6 +201,12 @@ type EnvStruct struct {
 	FAREWARD_ADDRESS string
 	// FAREWARD_BYPASS is [fareward].bypass: the server never dials the daemon (load tests only).
 	FAREWARD_BYPASS bool
+	// FAREWARD_ROUTES_FILE is [fareward].routes_file: where the route policy table is written at
+	// startup for the edge agent. Empty writes nothing.
+	FAREWARD_ROUTES_FILE string
+	// FAREWARD_TRUST_EDGE is [fareward].trust_edge_headers: a request HAProxy's fareward agent
+	// already admitted (x-fareward-admitted) skips the gate's own frame. Never on Lambda.
+	FAREWARD_TRUST_EDGE bool
 	// Public registration is unauthenticated and skips the credit limiter, so the only platform
 	// brake is how many distinct emails one client IP may register within a window.
 	SIGNUP_MAX_EMAILS_PER_IP int32
@@ -289,6 +295,14 @@ type fileConfig struct {
 		// Bypass runs the server without the daemon: no credit charge, no access check (every
 		// session holds every access) and no request log. Load tests only; refused on Lambda.
 		Bypass bool `toml:"bypass"`
+		// RoutesFile, when set, is where this process writes the route policy table at startup:
+		// the file the fareward SPOE agent enforces at the HAProxy edge (fareward plan D1).
+		// The daemon reads this same key, so the two processes can never name two different files.
+		RoutesFile string `toml:"routes_file"`
+		// TrustEdgeHeaders lets this process take the verdict of the fareward SPOE agent from the
+		// x-fareward-* headers HAProxy sets, instead of asking the daemon again. Only for a backend
+		// that nothing but that HAProxy can reach: the headers are believed from a loopback peer.
+		TrustEdgeHeaders bool `toml:"trust_edge_headers"`
 	} `toml:"fareward"`
 
 	Providers struct {
@@ -632,6 +646,9 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
 	env.FAREWARD_MAX_INFLIGHT = file.RateLimit.MaxInflightPerConnection
 	env.FAREWARD_BYPASS = file.Fareward.Bypass
+	env.FAREWARD_ROUTES_FILE = strings.TrimSpace(file.Fareward.RoutesFile)
+	// A Lambda has no HAProxy in front of it and no loopback peer to believe.
+	env.FAREWARD_TRUST_EDGE = file.Fareward.TrustEdgeHeaders && !IsRunningInLambda()
 	if env.FAREWARD_BYPASS && IsRunningInLambda() {
 		panic("[fareward].bypass turns off access checks: it is for load tests, never on Lambda")
 	}
