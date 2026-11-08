@@ -161,10 +161,6 @@ RATE_LIMIT_CREDIT_DEFAULTS = {
     "user_inference": (500, 5000),
 }
 RATE_LIMIT_WINDOW_SUFFIXES = ("short", "long")
-# The names the short and long ceilings had before the window lengths were configurable. The
-# daemon still reads them (with a warning), and the new name wins when both are set — so writing
-# a default under the new name next to a hand-tuned old one would silently replace it.
-RATE_LIMIT_LEGACY_SUFFIXES = {"short": "10s", "long": "1h"}
 
 # An AWS function URL in sse_bridge.url means "no bridge" (the backend serves its own
 # /agent/stream), so it cannot be the hostname this vhost is built for.
@@ -354,9 +350,8 @@ def ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
     exiting with `missing required setting rate_limit.company_cpu_short` on every restart. They go
     into the file rather than the unit's Environment= so the operator can see and tune them.
 
-    Values already present are never touched, under their current name or the old one (_10s,
-    _1h): the daemon reads either. A missing window is filled with the example default raised to
-    the previous window's value, so completing a hand-tuned set cannot produce the decreasing
+    Values already present are never touched. A missing window is filled with the example default
+    raised to the previous window's value, so completing a hand-tuned set cannot produce the decreasing
     sequence the daemon rejects (short <= long).
     """
     missing_credit_limits = {}
@@ -365,15 +360,6 @@ def ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
         for window_suffix, default_value in zip(RATE_LIMIT_WINDOW_SUFFIXES, window_defaults):
             setting_name = f"rate_limit.{credit_scope_name}_{window_suffix}"
             configured_value = read_positive_integer_setting(project_credentials, setting_name)
-            legacy_suffix = RATE_LIMIT_LEGACY_SUFFIXES.get(window_suffix)
-            if configured_value is None and legacy_suffix is not None:
-                legacy_name = f"rate_limit.{credit_scope_name}_{legacy_suffix}"
-                configured_value = read_positive_integer_setting(project_credentials, legacy_name)
-                if configured_value is not None:
-                    print_debug(
-                        f"{legacy_name} is set: the daemon reads it as {setting_name}. "
-                        f"Rename it when convenient."
-                    )
             if configured_value is not None:
                 previous_window_value = configured_value
                 continue

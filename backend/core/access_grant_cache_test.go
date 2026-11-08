@@ -99,7 +99,7 @@ func TestDropCachedAccessGrantsByUserAndByCompany(t *testing.T) {
 		t.Fatal("user 4 grant must survive a single-user drop")
 	}
 
-	DropCachedAccessGrants(7, InvalidateAllCompanyUsers)
+	DropCachedAccessGrants(7, AllCompanyUsers)
 	if _, found := LookupAccessGrant(7, 4, requiredAccess); found {
 		t.Fatal("a company-wide drop must reach every user")
 	}

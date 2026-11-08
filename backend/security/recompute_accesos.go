@@ -44,7 +44,7 @@ func RecomputeUserAccesos(args *core.ExecArgs) core.FuncResponse {
 		// One wildcard per company rather than one frame per user: on the migration run every
 		// user changed, so naming them individually would be the same invalidation in N frames.
 		if companyUsersWritten > 0 {
-			pushUserGrants(nil, company.ID, core.InvalidateAllCompanyUsers)
+			pushUserGrants(nil, company.ID, core.AllCompanyUsers)
 		}
 		args.AddMessage(fmt.Sprintf("company %d: %d user(s) leídos, %d reescritos",
 			company.ID, companyUsersRead, companyUsersWritten))

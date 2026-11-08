@@ -49,8 +49,9 @@ type (
 )
 
 const (
-	// InvalidateAllCompanyUsers drops every cached user of a company instead of one.
-	InvalidateAllCompanyUsers = fareward.InvalidateAllCompanyUsers
+	// AllCompanyUsers, in place of a user ID, names every user of a company: a grants push or a
+	// grant-cache drop for the whole company. User IDs start at 1, so zero is free.
+	AllCompanyUsers int32 = 0
 
 	// MaxRequiredAccess bounds how many accesses one route may map to. The gate refuses to encode
 	// more, and TestEveryRouteFitsTheRequiredAccessSlots keeps access.toml inside it.
@@ -77,7 +78,6 @@ var (
 
 	ConfigureFareward = fareward.ConfigureFareward
 
-	InvalidateUserAccess        = fareward.InvalidateUserAccess
 	ChargeAPIUsage              = fareward.ChargeAPIUsage
 	ChargeAPICredits            = fareward.ChargeAPICredits
 	ChargeAPIAccessOnly         = fareward.ChargeAPIAccessOnly

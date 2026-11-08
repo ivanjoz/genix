@@ -32,8 +32,9 @@ For each active company:
    directly rather than through a profile.
 3. Encodes both blobs with `core.EncodeAccesosGrants` and writes only the users whose bytes changed,
    naming only those two columns in the `UPDATE`.
-4. Sends one `InvalidateUserAccess(companyID, InvalidateAllCompanyUsers)` per company that had
-   writes, so the daemon re-reads instead of serving its cache until the TTL expires.
+4. Pushes the grants of every company that had writes (`pushUserGrants` with
+   `core.AllCompanyUsers`), which also drops the daemon's cached grants of those users, so it does
+   not serve its cache until the TTL expires.
 
 User 1 is expected to come out unchanged with empty blobs: its grants are synthesized at login by
 `buildBootstrapAdminAccesos` and never stored, which is why `resolveRouteAccess` lets it bypass the

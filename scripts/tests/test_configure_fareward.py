@@ -79,10 +79,8 @@ class CreditCeilingDefaultsTest(unittest.TestCase):
         # The window lengths have a default in the daemon: never written.
         self.assertNotIn("rate_limit.long_window_minutes", written)
 
-    def test_a_ceiling_under_its_old_name_is_kept_and_not_overridden(self):
-        # The daemon prefers the new name when both exist, so writing a default under it would
-        # silently replace the hand-tuned old value.
-        written = self.written_ceilings({"company_cpu_10s": 5000, "company_cpu_1h": 90000})
+    def test_a_configured_ceiling_is_never_overridden(self):
+        written = self.written_ceilings({"company_cpu_short": 5000, "company_cpu_long": 90000})
         self.assertNotIn("rate_limit.company_cpu_short", written)
         self.assertNotIn("rate_limit.company_cpu_long", written)
         self.assertEqual(written["rate_limit.user_cpu_short"], 1000)

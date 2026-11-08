@@ -90,7 +90,7 @@ buys nothing. So there is no upstream to configure — the site always forwards 
 | `fareward.unix_socket` | no | Read by **both**. The daemon also listens on this Unix domain socket (mode `0660`; the TCP port stays up for Lambda), and a backend/agent not running on Lambda dials it instead of TCP. Use `/run/fareward/fareward.sock`: the unit's `RuntimeDirectory=fareward` creates that directory. Set it only when the backend shares the host with the daemon. |
 | `rate_limit.*` | filled in | Quota policy; see `fareward/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
 | `store.path` | no | The store directory. Defaults to `/var/lib/fareward/store`, inside the unit's `StateDirectory`. |
-| `server_metrics.scylla_unit` | no | The database's systemd unit, sampled into the `scylla_*` columns. Defaults to `mariadb.service`. |
+| `server_metrics.database_unit` | no | The database's systemd unit, sampled into the metrics' database columns. Defaults to `mariadb.service`. |
 
 - **The two secrets are never prompted for.** They are root-level keys that initial project
   setup already writes (like `admin_password`), and both must be **byte-identical to the
@@ -108,10 +108,7 @@ buys nothing. So there is no upstream to configure — the site always forwards 
 - **The credit ceilings are written, not demanded.** They are the one class of missing setting
   the script can fix: quotas are policy, not secrets, so a sane starting point exists — and the
   alternative is `missing required setting rate_limit.company_cpu_short` on every restart, three
-  seconds apart, forever. Values already present are left alone, under their current name
-  (`_short`, `_long`) or the old one (`_10s`, `_1h`), which the daemon still reads; writing a
-  default under the new name next to an old one would replace it, because the new name wins. A
-  missing window is filled with the example default raised to the previous window's value, so
+  seconds apart, forever. Values already present are left alone. A missing window is filled with the example default raised to the previous window's value, so
   completing a hand-tuned set cannot produce the decreasing sequence the daemon rejects
   (`short <= long`). There is no daily ceiling to write: the daily and monthly entitlements are
   per company, in the daemon's budget store. The window lengths (`short_window_seconds`, `long_window_minutes`)

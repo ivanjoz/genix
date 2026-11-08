@@ -39,7 +39,7 @@ type cachedAccessGrant struct {
 	storedAt time.Time
 }
 
-// accessSubject with userID == InvalidateAllCompanyUsers (0) is the whole company.
+// accessSubject with userID == AllCompanyUsers (0) is the whole company.
 type accessSubject struct {
 	companyID int32
 	userID    int32
@@ -67,7 +67,7 @@ func LookupAccessGrant(companyID, userID int32, requiredAccess []uint16) (*Acces
 	if _, isSynchronous := synchronousSubjects[accessSubject{companyID, userID}]; isSynchronous {
 		return nil, false
 	}
-	if _, isSynchronous := synchronousSubjects[accessSubject{companyID, InvalidateAllCompanyUsers}]; isSynchronous {
+	if _, isSynchronous := synchronousSubjects[accessSubject{companyID, AllCompanyUsers}]; isSynchronous {
 		return nil, false
 	}
 	if len(requiredAccess) == 0 {
@@ -91,7 +91,7 @@ func RecordAccessCheckOutcome(
 
 	if checkErr == nil {
 		delete(synchronousSubjects, accessSubject{companyID, userID})
-		delete(synchronousSubjects, accessSubject{companyID, InvalidateAllCompanyUsers})
+		delete(synchronousSubjects, accessSubject{companyID, AllCompanyUsers})
 		if len(requiredAccess) == 0 {
 			return
 		}
@@ -117,13 +117,13 @@ func RecordAccessCheckOutcome(
 	refusedSubject := accessSubject{companyID, userID}
 	var limitExceeded *CreditLimitExceeded
 	if errors.As(checkErr, &limitExceeded) && limitExceeded.Company {
-		refusedSubject.userID = InvalidateAllCompanyUsers
+		refusedSubject.userID = AllCompanyUsers
 	}
 	synchronousSubjects[refusedSubject] = struct{}{}
 }
 
 // DropCachedAccessGrants forgets a user's grants, or every grant of the company when userID is
-// InvalidateAllCompanyUsers. Called next to the fareward invalidation, on every access write.
+// AllCompanyUsers. Called next to the fareward grants push, on every access write.
 func DropCachedAccessGrants(companyID, userID int32) {
 	accessGrantCacheMu.Lock()
 	defer accessGrantCacheMu.Unlock()
@@ -132,7 +132,7 @@ func DropCachedAccessGrants(companyID, userID int32) {
 
 func dropCachedAccessGrantsLocked(companyID, userID int32) {
 	for key := range accessGrantCache {
-		if key.companyID == companyID && (userID == InvalidateAllCompanyUsers || key.userID == userID) {
+		if key.companyID == companyID && (userID == AllCompanyUsers || key.userID == userID) {
 			delete(accessGrantCache, key)
 		}
 	}

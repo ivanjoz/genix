@@ -39,7 +39,7 @@ func readUserGrants(companyID int32, userIDs ...int32) ([]core.UserGrants, error
 }
 
 // pushUserGrants sends one user's grants to fareward, or every user's of the company when userID is
-// core.InvalidateAllCompanyUsers. A user that no longer exists is sent as deleted, so fareward
+// core.AllCompanyUsers. A user that no longer exists is sent as deleted, so fareward
 // denies it instead of serving its last grants.
 //
 // Best effort, as the invalidation it replaces was: a save is never reverted because the push did
@@ -58,7 +58,7 @@ func pushUserGrants(req *core.HandlerArgs, companyID, userID int32) {
 
 	var grants []core.UserGrants
 	var err error
-	if userID == core.InvalidateAllCompanyUsers {
+	if userID == core.AllCompanyUsers {
 		grants, err = readUserGrants(companyID)
 	} else {
 		grants, err = readUserGrants(companyID, userID)
