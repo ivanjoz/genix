@@ -297,8 +297,8 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 			respLen = len(*handlerResponse.Body)
 		}
 		core.Log("Finalizado Handler::", funcPath, " | Len: ", respLen)
-		// Liquidación del GET: sólo lo que excede el primer bloque, que para un GET significa sólo
-		// cuando la respuesta pasó de 8 KB. La mayoría no llega, así que la mayoría no manda un
+		// Liquidación del GET: sólo lo que excede el primer bloque, que significa sólo cuando la
+		// respuesta pasó de 8 KB. La mayoría no llega, así que la mayoría no manda un
 		// segundo frame. Un error no liquida: esos bytes no se enviaron. Un stream sí, por los bytes
 		// que escribió hasta cerrarse (StreamedBytes), igual que si los hubiera devuelto de una vez.
 		//

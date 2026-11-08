@@ -172,11 +172,17 @@ shards                = 0      # 0 = logical CPU count
 # respuestas sin límite. Al superarlo se responde "no disponible", no se encola.
 # The Go backend reads this same key: its client queues at the cap instead of being refused.
 max_inflight_per_connection = 64
-# Cuánto viven en memoria los accesos de un user (users.accesos_computed) contra los que se autoriza
-# la trama 0x01. Es un respaldo, no el mecanismo: el backend manda 0x06 al reescribir la columna, así
-# que un acceso revocado deja de funcionar en el acto y esto sólo cubre una trama perdida o un
-# backend reiniciado.
+# Cuánto viven en memoria los accesos de un user contra los que se autoriza la trama 0x01. Es un
+# respaldo, no el mecanismo: el backend empuja los accesos (0x0A) al reescribirlos y eso descarta
+# los que estaban en caché, así que un acceso revocado deja de funcionar en el acto.
 access_cache_seconds  = 600
+
+# La tarifa de CPU por tamaño. Cada request paga su base (GET 2, POST/PUT 5), que cubre los primeros
+# 8 KB, y 1 crédito más por cada bloque empezado después: de la respuesta en un GET, del cuerpo en
+# un POST/PUT. La lee el backend Go, que cobra con ella y la escribe en el archivo de rutas del
+# agente SPOE. Opcionales; si faltan, 32 y 8. Con 32, un GET de 1 MB cuesta 2 + 32 = 34.
+get_block_kib          = 32
+post_block_kib         = 8
 
 # Las dos ventanas del rate limit: siempre dos. Opcionales; si faltan, 10 segundos y 60 minutos.
 # La corta es un token bucket: sus créditos se recargan de forma continua en estos segundos.
@@ -201,7 +207,7 @@ company_inference_long   = 10000
 user_daily_share_pct   = 80
 
 # Per-user limits inside each company.
-user_cpu_short           = 1000
+user_cpu_short           = 400
 user_inference_short     = 500
 user_cpu_long            = 20000
 user_inference_long      = 5000

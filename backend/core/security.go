@@ -401,6 +401,10 @@ type fileConfig struct {
 		CompanyExtraCredits24h int64 `toml:"company_extra_credits_24h"`
 		// Read so the Go client can queue at the daemon's cap instead of being refused past it.
 		MaxInflightPerConnection int32 `toml:"max_inflight_per_connection"`
+		// The CPU tariff's blocks, in KiB: one credit per started block of a GET's response or a
+		// POST/PUT's body past the free 8 KiB. Zero keeps the fareward client's default (32 and 8).
+		GetBlockKiB  int32 `toml:"get_block_kib"`
+		PostBlockKiB int32 `toml:"post_block_kib"`
 	} `toml:"rate_limit"`
 
 	SignUp struct {
@@ -626,6 +630,12 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.SIGNUP_WINDOW_MINUTES = file.SignUp.WindowMinutes
 	env.COMPANY_EXTRA_CREDITS_24H = file.RateLimit.CompanyExtraCredits24h
 	env.FAREWARD_MAX_INFLIGHT = file.RateLimit.MaxInflightPerConnection
+	// Here, so every process that charges (backend, agent, bench) gets the same tariff before its
+	// first charge and before the backend writes the route file that states it.
+	if err := ConfigureTariff(
+		int(file.RateLimit.GetBlockKiB), int(file.RateLimit.PostBlockKiB)); err != nil {
+		panic("[rate_limit] tariff: " + err.Error())
+	}
 	env.FAREWARD_BYPASS = file.Fareward.Bypass
 	env.FAREWARD_ROUTES_FILE = strings.TrimSpace(file.Fareward.RoutesFile)
 	// A Lambda has no HAProxy in front of it and no loopback peer to believe.

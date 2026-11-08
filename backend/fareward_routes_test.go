@@ -13,17 +13,21 @@ import (
 // The tariff the route file states must charge exactly what APICPUCredits charges, at every block
 // boundary: the agent computes a write's credits from these numbers alone.
 func TestFarewardRouteTariffMatchesAPICPUCredits(t *testing.T) {
-	for _, tariff := range farewardRouteTariff {
-		baseCredits, err := core.APICPUBaseCredits(tariff.method)
+	for _, tariff := range core.Tariff() {
+		baseCredits, err := core.APICPUBaseCredits(tariff.Method)
 		if err != nil {
-			t.Fatalf("%s: %v", tariff.method, err)
+			t.Fatalf("%s: %v", tariff.Method, err)
 		}
-		baseBytes, stepBytes := tariff.baseKiB*1024, tariff.stepKiB*1024
+		if baseCredits != tariff.BaseCredits {
+			t.Fatalf("%s: the route file states a base of %d, APICPUBaseCredits %d",
+				tariff.Method, tariff.BaseCredits, baseCredits)
+		}
+		baseBytes, stepBytes := tariff.BaseKiB*1024, tariff.StepKiB*1024
 		for _, size := range []int{0, 1, baseBytes - 1, baseBytes, baseBytes + 1,
 			baseBytes + stepBytes, baseBytes + stepBytes + 1, baseBytes + 7*stepBytes + 3} {
-			expected, err := core.APICPUCredits(tariff.method, size)
+			expected, err := core.APICPUCredits(tariff.Method, size)
 			if err != nil {
-				t.Fatalf("%s %d: %v", tariff.method, size, err)
+				t.Fatalf("%s %d: %v", tariff.Method, size, err)
 			}
 			steps := 0
 			if size > baseBytes {
@@ -31,7 +35,7 @@ func TestFarewardRouteTariffMatchesAPICPUCredits(t *testing.T) {
 			}
 			if got := int(baseCredits) + steps; got != int(expected) {
 				t.Fatalf("%s %d bytes: the route file charges %d, APICPUCredits %d",
-					tariff.method, size, got, expected)
+					tariff.Method, size, got, expected)
 			}
 		}
 	}

@@ -88,6 +88,8 @@ var (
 	IsCreditRateLimitError      = fareward.IsCreditRateLimitError
 	TolerateCreditRefusal       = fareward.TolerateCreditRefusal
 	APICPUCredits               = fareward.APICPUCredits
+	ConfigureTariff             = fareward.ConfigureTariff
+	Tariff                      = fareward.Tariff
 	InferenceCredits            = fareward.InferenceCredits
 	MutateCompanyCreditBudget   = fareward.MutateCompanyCreditBudget
 	// The reports: fareward is the source of truth for usage, budgets and server metrics, so the

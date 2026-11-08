@@ -1066,15 +1066,29 @@ def add_official_haproxy_repository():
     )
 
 
+def read_apt_candidate_haproxy_version():
+    """(major, minor) apt would install from the configured sources, (0, 0) when it has none."""
+    policy_output = run_command(["apt-cache", "policy", "haproxy"], allow_failure=True).stdout
+    candidate_match = re.search(r"Candidate:\s*(?:\d+:)?(\d+)\.(\d+)", policy_output)
+    if not candidate_match:
+        return (0, 0)
+    return int(candidate_match.group(1)), int(candidate_match.group(2))
+
+
 def ensure_haproxy_is_installed():
     """Install HAProxy (>= HAPROXY_MINIMUM_VERSION) and certbot when they are missing."""
     if shutil.which("apt-get"):
         installed_version = read_haproxy_version()
         if installed_version is None or installed_version < HAPROXY_MINIMUM_VERSION:
-            add_official_haproxy_repository()
             run_command(["apt-get", "update"])
-            run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
-                         f"haproxy={HAPROXY_REPOSITORY_BRANCH}.*"])
+            if read_apt_candidate_haproxy_version() >= HAPROXY_MINIMUM_VERSION:
+                # Ubuntu 26.04 already ships 3.2: the distribution's package is enough.
+                run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "haproxy"])
+            else:
+                add_official_haproxy_repository()
+                run_command(["apt-get", "update"])
+                run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
+                             f"haproxy={HAPROXY_REPOSITORY_BRANCH}.*"])
         if not shutil.which("certbot"):
             run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "certbot"])
     elif shutil.which("dnf"):
@@ -1191,6 +1205,18 @@ def certificate_is_renewed_through_haproxy(endpoint_hostname):
     )
 
 
+def install_certificate_deploy_hook(endpoint_hostname):
+    """Write certbot's deploy hook and, when the domain already has a certificate (an Nginx-era
+    one included), give HAProxy its .pem now, so the edge starts with TLS instead of serving plain
+    HTTP while the certificate is reissued."""
+    CERTIFICATE_DEPLOY_HOOK_PATH.write_text(build_certificate_deploy_hook(), encoding="utf-8")
+    os.chmod(CERTIFICATE_DEPLOY_HOOK_PATH, 0o755)
+    lineage_directory = LETSENCRYPT_DIRECTORY / endpoint_hostname
+    haproxy_certificate_path = HAPROXY_CERTIFICATES_DIRECTORY / f"{endpoint_hostname}.pem"
+    if (lineage_directory / "fullchain.pem").exists() and not haproxy_certificate_path.exists():
+        run_command(["env", f"RENEWED_LINEAGE={lineage_directory}", str(CERTIFICATE_DEPLOY_HOOK_PATH)])
+
+
 def ensure_certificate(endpoint_hostname):
     """Issue the domain's Let's Encrypt certificate and keep HAProxy's copy of it in place.
 
@@ -1199,9 +1225,6 @@ def ensure_certificate(endpoint_hostname):
     the deploy hook refreshes the .pem. ECDSA P-256: each TLS and QUIC handshake is several times
     cheaper than with RSA 2048. No email is registered: Let's Encrypt no longer sends expiry mail.
     """
-    CERTIFICATE_DEPLOY_HOOK_PATH.write_text(build_certificate_deploy_hook(), encoding="utf-8")
-    os.chmod(CERTIFICATE_DEPLOY_HOOK_PATH, 0o755)
-
     lineage_directory = LETSENCRYPT_DIRECTORY / endpoint_hostname
     if not certificate_is_renewed_through_haproxy(endpoint_hostname):
         certbot_arguments = [
@@ -1510,6 +1533,7 @@ def configure_haproxy_site(endpoint_hostname, process_group, site_files):
     open_web_ports()
     stop_nginx_if_running()
     HAPROXY_CERTIFICATES_DIRECTORY.mkdir(mode=0o700, parents=True, exist_ok=True)
+    install_certificate_deploy_hook(endpoint_hostname)
     apply_haproxy_configuration(process_group, site_files)
     ensure_certificate(endpoint_hostname)
     apply_haproxy_configuration(process_group, site_files)

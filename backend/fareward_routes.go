@@ -22,18 +22,6 @@ import (
 // rules. Written at startup, so a deploy of the backend updates the edge too; the daemon reloads
 // the file when it changes.
 
-// farewardRouteTariff is the size half of the tariff, global per method. It restates
-// fareward.APICPUCredits, which does not export its constants; TestFarewardRouteTariffMatchesAPICPUCredits
-// pins the two together at every block boundary.
-var farewardRouteTariff = []struct {
-	method           string
-	baseKiB, stepKiB int
-}{
-	{"GET", 8, 16},
-	{"POST", 8, 8},
-	{"PUT", 8, 8},
-}
-
 // farewardRoute is one [[route]] entry, as the gate resolves it for an ordinary user.
 type farewardRoute struct {
 	method, path string
@@ -112,9 +100,11 @@ func renderFarewardRouteFile(routes []farewardRoute) []byte {
 	// TolerateCreditRefusal's company: charged, but never locked out by its own budget.
 	fmt.Fprintf(&body, "operator_company_id = %d\n", fareward.OperatorCompanyID)
 
-	for _, tariff := range farewardRouteTariff {
+	// The size half of the tariff, global per method, exactly as APICPUCredits applies it: the
+	// blocks come from [rate_limit] through core.ConfigureTariff.
+	for _, tariff := range core.Tariff() {
 		fmt.Fprintf(&body, "\n[tariff.%s]\nbase_kib = %d\nstep_kib = %d\n",
-			tariff.method, tariff.baseKiB, tariff.stepKiB)
+			tariff.Method, tariff.BaseKiB, tariff.StepKiB)
 	}
 
 	for _, route := range routes {
