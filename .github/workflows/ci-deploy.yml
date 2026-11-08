@@ -74,6 +74,9 @@ jobs:
           # Puerto del backend standalone para la opción "Local" del selector de endpoint.
           # En CI no hay config.toml del que leer [server].port, así que se declara aquí.
           PUBLIC_LOCAL_API_PORT: ${{ vars.PUBLIC_LOCAL_API_PORT || '3589' }}
+          # Port of the local agent (genix/agent, [agent].port) for the same "Local" option. env.ts
+          # declares it, so a build without it fails with env_invalid.
+          PUBLIC_LOCAL_AGENT_PORT: ${{ vars.PUBLIC_LOCAL_AGENT_PORT || '3590' }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
           # Solo existe en desarrollo (lo resuelve start.js con `tailscale ip -4`). Vacío en CI,
           # pero core/env.ts lo importa de $env/static/public, así que tiene que estar declarado.
@@ -91,6 +94,7 @@ jobs:
           # Puerto del backend standalone para la opción "Local" del selector de endpoint.
           # En CI no hay config.toml del que leer [server].port, así que se declara aquí.
           PUBLIC_LOCAL_API_PORT: ${{ vars.PUBLIC_LOCAL_API_PORT || '3589' }}
+          PUBLIC_LOCAL_AGENT_PORT: ${{ vars.PUBLIC_LOCAL_AGENT_PORT || '3590' }}
           PUBLIC_ZONE_NAME: ${{ vars.PUBLIC_ZONE_NAME }}
           PUBLIC_TAILSCALE_HOST: ''
         run: |
