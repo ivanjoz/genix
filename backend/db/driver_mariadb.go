@@ -1,4 +1,4 @@
-//go:build !js && !fdb && !ydb && !oceanbase && !postgres
+//go:build !js && !oceanbase && !postgres
 
 package db
 
@@ -17,7 +17,7 @@ import (
 //	driver_postgres.go (postgres) ->  pgdriver.TableStruct:      PostgreSQL
 //	driver_js.go       (js)       ->  idb.TableStruct:           IndexedDB, the browser build
 //
-// (fdb, ydb and oceanbase are experimental builds with their own files.)
+// (oceanbase is an experimental build with its own files.)
 //
 // It has to be a type alias rather than a constructor function, because the driver
 // is a type argument of the embedded TableStruct — that is what keeps every query

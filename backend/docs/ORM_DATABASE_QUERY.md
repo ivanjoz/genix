@@ -205,7 +205,7 @@ PostgreSQL and MariaDB, the body runs in one database transaction:
 - On a deadlock, the whole body runs again. Build every write from what the body reads inside it,
   never from state captured outside.
 
-On a driver without transactions (fdb, ydb), the same body runs call by call: `LockByKeys` is a
+On a driver without transactions, the same body runs call by call: `LockByKeys` is a
 plain read, and each write stands alone.
 
 ```go

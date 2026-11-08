@@ -45,21 +45,6 @@ tier only: every run starts cold). `GENIX_BENCH_NO_SNAPSHOTS=1` turns it off, to
 read from ScyllaDB. The genix-s3 text search index is replaced by a no-op, because product writes
 would otherwise go to S3 — only the seeder writes.
 
-## The FoundationDB stack (`-tags fdb`)
-
-```sh
-# Image and container (fdbserver + the fdbgate daemon); the socket appears in /run/user/<uid>/genix-fdb
-podman build -t genix-fdb:8.0.0 -f genix-orm/fdb/container/Containerfile genix-orm/fdb
-podman run -d --name genix-bench-fdb --network host -e FDB_NETWORKING_MODE=host -e FDB_PORT=24500 \
-  -v /run/user/$(id -u)/genix-fdb:/run/genix-fdb:z genix-fdb:8.0.0 --memory 2GiB --cache-memory 1GiB
-```
-
-Point a copy of `bench.config.toml` at it with `[fdb] socket = "/run/user/<uid>/genix-fdb/fdbgate.sock"`
-(select it with `GENIX_CONFIG_FILE`) and add `-tags fdb` to every `go test` below. No `fn-init` is
-needed. fareward does not run against FDB yet: set `GENIX_BENCH_NO_FAREWARD=1`, which skips the
-credit budgets when seeding and limits you to the database-only benchmarks (stages, incremental,
-HandlerConcurrent). Results and setup of the first comparison: `docs/FOUNDATIONDB_PLAN.md` §14.
-
 ## Running
 
 ```sh

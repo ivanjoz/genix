@@ -1,4 +1,4 @@
-//go:build !js && !fdb && !ydb && !oceanbase
+//go:build !js && !oceanbase
 
 package types
 

@@ -66,11 +66,6 @@ type EnvStruct struct {
 	// time, so the log of a request is never cut in half by another one. Debug aid, off by
 	// default, and it does nothing under IS_SERVERLESS — a Lambda invocation is already alone.
 	DISABLE_API_CONCURRENCY_LOCAL bool
-	// FDB_SOCKET is the fdbgate daemon's unix socket, read only by a `-tags fdb` build.
-	FDB_SOCKET string
-	// YDB_ENDPOINT (host:port) and YDB_DATABASE (path) are read only by a `-tags ydb` build.
-	YDB_ENDPOINT string
-	YDB_DATABASE string
 	// OCEANBASE_* are read only by a `-tags oceanbase` build (docs/OCEANBASE_PLAN.md §13). The
 	// database is the keyspace (DB_NAME).
 	OCEANBASE_HOST       string
@@ -315,17 +310,6 @@ type fileConfig struct {
 	DB struct {
 		Name string `toml:"name"`
 	} `toml:"db"`
-
-	// FDB is read only by a `-tags fdb` build (docs/FOUNDATIONDB_PLAN.md).
-	FDB struct {
-		Socket string `toml:"socket"`
-	} `toml:"fdb"`
-
-	// YDB is read only by a `-tags ydb` build (docs/YDB_PLAN.md).
-	YDB struct {
-		Endpoint string `toml:"endpoint"`
-		Database string `toml:"database"`
-	} `toml:"ydb"`
 
 	// OceanBase is read only by a `-tags oceanbase` build (docs/OCEANBASE_PLAN.md).
 	OceanBase struct {
@@ -572,9 +556,6 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.MODEL_PROVIDER = file.Providers.Model
 
 	env.DB_NAME = file.DB.Name
-	env.FDB_SOCKET = file.FDB.Socket
-	env.YDB_ENDPOINT = file.YDB.Endpoint
-	env.YDB_DATABASE = file.YDB.Database
 	env.OCEANBASE_HOST = file.OceanBase.Host
 	env.OCEANBASE_PORT = file.OceanBase.Port
 	env.OCEANBASE_USER = file.OceanBase.User

@@ -110,17 +110,6 @@ public    = false
 # database shares their host (no loopback TCP per statement). Empty: TCP to host:port.
 socket    = ""
 
-# ─── FoundationDB (solo builds con `-tags fdb`, docs/FOUNDATIONDB_PLAN.md) ─────
-[fdb]
-# Socket unix del daemon fdbgate (genix-orm/fdb/container).
-socket = "/run/genix-fdb/fdbgate.sock"
-
-# ─── YDB (solo builds con `-tags ydb`, docs/YDB_PLAN.md) ────────────────────────
-[ydb]
-# Endpoint gRPC (host:puerto) y ruta de la base de datos del contenedor local-ydb.
-endpoint = "localhost:2136"
-database = "/local"
-
 # ─── OceanBase (solo builds con `-tags oceanbase`, docs/OCEANBASE_PLAN.md) ──────
 [oceanbase]
 # Servidor OceanBase en modo MySQL. El usuario incluye el tenant (usuario@tenant); la base de datos

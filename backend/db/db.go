@@ -208,7 +208,7 @@ func Update[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executo
 // reads, InsertIn and UpdateIn commit together. A deadlock or a duplicate key reruns body, so body
 // derives its writes from its own reads; a record that may not exist yet is created with InsertIn, so
 // the body that loses the race to create it reruns and finds it. On a driver without transactions
-// (fdb, ydb) each call runs on its own.
+// each call runs on its own.
 func RunTransaction(body func(transaction *Transaction) error) error {
 	return orm.RunTransaction(body)
 }

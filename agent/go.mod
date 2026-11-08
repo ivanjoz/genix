@@ -52,24 +52,20 @@ require (
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/ivanjoz/colbin v0.9.2 // indirect
 	github.com/ivanjoz/genix-orm v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/db v0.0.0 // indirect
-	github.com/ivanjoz/genix-orm/fdb v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/mariadbdriver v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/obdriver v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/pgdriver v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/search/genixs3 v0.0.0 // indirect
-	github.com/ivanjoz/genix-orm/ydbdriver v0.0.0 // indirect
 	github.com/ivanjoz/genix-search/genix-s3 v0.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.12.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.3 // indirect
-	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
@@ -98,16 +94,11 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/xhit/go-simple-mail/v2 v2.16.0 // indirect
 	github.com/yargevad/filepathx v1.0.0 // indirect
-	github.com/ydb-platform/ydb-go-genproto v0.0.0-20260810122915-65bfd5c4b705 // indirect
-	github.com/ydb-platform/ydb-go-sdk/v3 v3.156.1 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/grpc v1.78.0 // indirect
-	google.golang.org/protobuf v1.36.10 // indirect
 )
 
 // The backend is imported in place: core, db and the */types packages, never a module body.
@@ -140,9 +131,5 @@ replace github.com/bytedance/sonic => github.com/ivanjoz/sonic v1.15.6-0.2026102
 replace github.com/ivanjoz/genix-orm/mariadbdriver => ../backend/genix-orm/mariadbdriver
 
 replace github.com/ivanjoz/genix-orm/pgdriver => ../backend/genix-orm/pgdriver
-
-replace github.com/ivanjoz/genix-orm/fdb => ../backend/genix-orm/fdb
-
-replace github.com/ivanjoz/genix-orm/ydbdriver => ../backend/genix-orm/ydbdriver
 
 replace github.com/ivanjoz/genix-orm/obdriver => ../backend/genix-orm/obdriver

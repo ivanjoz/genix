@@ -1,4 +1,4 @@
-//go:build !js && !fdb && !ydb && !oceanbase && !postgres
+//go:build !js && !oceanbase && !postgres
 
 package db
 
