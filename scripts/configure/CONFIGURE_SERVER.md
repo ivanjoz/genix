@@ -66,6 +66,29 @@ In **mode 2**, note that `genix.service` points `GENIX_CONFIG_FILE` at this path
 
 The backend picks its listener as: `SERVER_SOCKET` env var (Unix socket) → `SERVER_PORT` env var → `server.port` in `config.toml` → `3589`.
 
+### What the Nginx step sets up (modes 1 and 3)
+
+In this order, each step idempotent:
+
+1. **Packages** — installs `nginx`, `certbot` and `python3-certbot-nginx` when missing (apt or dnf), and fails
+   unless `nginx -V` lists `http_v3_module` (nginx 1.25+; Ubuntu 26.04 ships 1.28).
+2. **Firewall** — TCP 80 (certificate challenges and renewals), TCP 443, and **UDP 443** for QUIC, through
+   `firewall_ports.py` (firewalld, ufw or plain iptables, whichever owns the host). The cloud provider's own
+   rules (OCI security list, AWS security group) are separate and must allow the same.
+3. **Kernel** — `/etc/sysctl.d/90-genix-network.conf`: BBR congestion control with the `fq` qdisc, applied now
+   and on boot (`/etc/modules-load.d/genix-network.conf` loads `tcp_bbr`). It changes TCP only — the HTTP/2
+   fallback — since QUIC runs its own congestion control inside nginx.
+4. **`/etc/nginx/nginx.conf`** — `worker_connections 4096`, `multi_accept on`, `worker_rlimit_nofile 16384`.
+   The distribution's 768 connections per worker is a few hundred users once each proxied request holds a
+   client and an upstream connection.
+5. **Certificate** — when `/etc/letsencrypt/live/<domain>` is missing: `certbot certonly --nginx` with an
+   **ECDSA P-256** key (handshakes several times cheaper than RSA 2048), HTTP-01, no email. The domain's DNS
+   must already point at the host. `certbot.timer` renews it.
+6. **The vhost** — HTTP/3 (`listen 443 quic`) plus TLS on TCP with `http2 on` for the first request, before
+   the browser reads `Alt-Svc` (sent with `always`, so errors advertise HTTP/3 too). TLS 1.3 with 0-RTT for
+   GET/HEAD only (anything else answers `425`), `quic_gso`, a buffered access log, and 16 × 32 KB proxy
+   buffers. Then `nginx -t` and a restart.
+
 ---
 
 ## 🚀 Strategy Overview
@@ -174,8 +197,9 @@ When `/usr/local/bin/genix/genix_app` is already deployed, it is left in place w
 In modes `1` and `2` the selected binary source is mandatory:
 
 1. **Option `7`: compile from source** — requires `<repo>/backend/go.mod` and `<repo>/backend/main.go`, then runs
-   `go build -ldflags "-s -w -X 'app/core.BuildDate=<now>'" -o <repo>/tmp/genix_app_linux_<arch> .`
-   in `backend/`, matching `scripts/deploy_vps.go` so both paths embed the same build metadata.
+   `go build -tags lambda.norpc,mariadb -ldflags "-s -w -X 'app/core.BuildDate=<now>'" -o <repo>/tmp/genix_app_linux_<arch> .`
+   in `backend/`, matching `scripts/deploy_vps.go` so both paths embed the same build metadata. Without
+   `mariadb` the binary would get the Scylla driver.
 2. **Option `8`: latest precompiled binary** — `scripts/configure.py` downloads
    `genix_app_linux_<arch>` and `SHA256SUMS`, verifies the asset, and places it in `<repo>/tmp/`.
    That verified artifact wins over an older installed binary. A candidate counts only if it is
@@ -208,6 +232,10 @@ replace github.com/ivanjoz/genix-orm/db => ./genix-orm/db
 ```
 
 Only the submodules the backend actually needs are initialised — `frontend/packages/genix-ui` is left alone on a backend host. `git` runs as the repository owner so it uses that account's SSH keys and does not trip git's "dubious ownership" check.
+
+One target is not a submodule: `genix-s3` compiles from `../../genix-search/genix-s3`, a checkout **beside**
+the repository. When it is missing, the script clones the public `https://github.com/ivanjoz/genix-search.git`
+there, as the repository owner (`SIBLING_REPOSITORY_REMOTES`).
 
 #### SSH falls back to HTTPS
 

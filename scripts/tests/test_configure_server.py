@@ -40,7 +40,8 @@ class ConfigureServerNginxTemplateTest(unittest.TestCase):
         self.assertIn("ssl_certificate /etc/letsencrypt/live/genix-dev-api-2.un.pe/fullchain.pem;", rendered_config)
         self.assertIn("ssl_certificate_key /etc/letsencrypt/live/genix-dev-api-2.un.pe/privkey.pem;", rendered_config)
         self.assertIn("listen 443 quic reuseport;", rendered_config)
-        self.assertIn("add_header Alt-Svc 'h3=\":443\"; ma=86400';", rendered_config)
+        self.assertIn("add_header Alt-Svc 'h3=\":443\"; ma=86400' always;", rendered_config)
+        self.assertIn("http2 on;", rendered_config)
         self.assertIn("proxy_http_version 1.1;", rendered_config)
         self.assertIn("proxy_set_header Upgrade $http_upgrade;", rendered_config)
         self.assertIn("proxy_set_header Connection $connection_upgrade;", rendered_config)
@@ -53,6 +54,23 @@ class ConfigureServerNginxTemplateTest(unittest.TestCase):
         self.assertIn("proxy_buffers 16 32k;", rendered_config)
         self.assertIn("proxy_max_temp_file_size 0;", rendered_config)
         self.assertIn("quic_gso on;", rendered_config)
+
+    def test_the_distribution_nginx_conf_gets_its_worker_limits_raised_once(self):
+        configure_server = load_configure_server_module()
+        # The head of Ubuntu's stock /etc/nginx/nginx.conf.
+        stock_configuration = (
+            "user www-data;\nworker_processes auto;\nworker_cpu_affinity auto;\npid /run/nginx.pid;\n\n"
+            "events {\n\tworker_connections 768;\n\t# multi_accept on;\n}\n\nhttp {\n\tsendfile on;\n}\n"
+        )
+
+        tuned_configuration = configure_server.tune_nginx_main_configuration(stock_configuration)
+
+        self.assertIn("\tworker_connections 4096;", tuned_configuration)
+        self.assertIn("\tmulti_accept on;", tuned_configuration)
+        self.assertNotIn("# multi_accept", tuned_configuration)
+        self.assertIn("worker_processes auto;\nworker_rlimit_nofile 16384;", tuned_configuration)
+        # A second run changes nothing, so the script does not reload nginx for no reason.
+        self.assertEqual(configure_server.tune_nginx_main_configuration(tuned_configuration), tuned_configuration)
 
 
 class ConfigureServerCredentialsTest(unittest.TestCase):

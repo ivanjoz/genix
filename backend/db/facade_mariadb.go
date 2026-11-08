@@ -22,6 +22,7 @@ func Connect(params ConnectParams) {
 		Password: params.MariaDB.Password,
 		Database: params.Keyspace,
 		MaxConns: params.MariaDB.MaxConns,
+		Socket:   params.MariaDB.Socket,
 	})
 	if params.Scripting {
 		if err := mariadbdriver.Ping(); err != nil {

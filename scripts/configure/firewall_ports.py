@@ -63,13 +63,13 @@ def run_capture_command(command_arguments, quiet=False):
     return command_result
 
 
-def ensure_firewalld_port_open(tcp_port):
+def ensure_firewalld_port_open(tcp_port, protocol="tcp"):
     firewalld_state_result = run_capture_command(["firewall-cmd", "--state"])
     if firewalld_state_result.returncode != 0 or "running" not in firewalld_state_result.stdout:
         print("[*] firewalld is not running.")
         return False
 
-    port_specification = f"{tcp_port}/tcp"
+    port_specification = f"{tcp_port}/{protocol}"
     query_port_result = run_capture_command(["firewall-cmd", "--query-port", port_specification])
     if query_port_result.returncode == 0 and "yes" in query_port_result.stdout.lower():
         print(f"[*] firewalld already allows {port_specification}.")
@@ -90,7 +90,7 @@ def ensure_firewalld_port_open(tcp_port):
     return verification_result.returncode == 0 and "yes" in verification_result.stdout.lower()
 
 
-def ensure_ufw_port_open(tcp_port):
+def ensure_ufw_port_open(tcp_port, protocol="tcp"):
     ufw_status_result = run_capture_command(["ufw", "status"])
     if ufw_status_result.returncode != 0:
         print("[*] ufw is not available or not active.")
@@ -101,15 +101,15 @@ def ensure_ufw_port_open(tcp_port):
         print("[*] ufw is installed but inactive.")
         return False
 
-    port_rule_pattern = rf'^{re.escape(str(tcp_port))}/tcp\s+allow\b'
+    port_rule_pattern = rf'^{re.escape(str(tcp_port))}/{protocol}\s+allow\b'
     if re.search(port_rule_pattern, ufw_status_result.stdout, flags=re.IGNORECASE | re.MULTILINE):
-        print(f"[*] ufw already allows {tcp_port}/tcp.")
+        print(f"[*] ufw already allows {tcp_port}/{protocol}.")
         return True
 
-    print(f"[*] Opening {tcp_port}/tcp with ufw.")
-    allow_port_result = run_capture_command(["ufw", "allow", f"{tcp_port}/tcp"])
+    print(f"[*] Opening {tcp_port}/{protocol} with ufw.")
+    allow_port_result = run_capture_command(["ufw", "allow", f"{tcp_port}/{protocol}"])
     if allow_port_result.returncode != 0:
-        print(f"[!] Failed to add ufw rule for {tcp_port}/tcp.")
+        print(f"[!] Failed to add ufw rule for {tcp_port}/{protocol}.")
         return False
 
     verification_result = run_capture_command(["ufw", "status"])
@@ -178,10 +178,10 @@ def read_iptables_input_chain():
     return chain_policy, list(enumerate(chain_rules, start=1))
 
 
-def find_iptables_accept_index(chain_rules, tcp_port):
-    """Index of the first rule that already accepts TCP traffic for this port."""
+def find_iptables_accept_index(chain_rules, tcp_port, protocol="tcp"):
+    """Index of the first rule that already accepts this protocol's traffic for this port."""
     for rule_index, rule_text in chain_rules:
-        if "-j ACCEPT" not in rule_text or "-p tcp" not in rule_text:
+        if "-j ACCEPT" not in rule_text or f"-p {protocol}" not in rule_text:
             continue
         ports_match = re.search(r"--dports?\s+(\S+)", rule_text)
         if ports_match and iptables_ports_cover(ports_match.group(1), tcp_port):
@@ -189,14 +189,17 @@ def find_iptables_accept_index(chain_rules, tcp_port):
     return None
 
 
-def find_iptables_blocking_index(chain_rules, tcp_port):
+def find_iptables_blocking_index(chain_rules, tcp_port, protocol="tcp"):
     """Index of the first REJECT/DROP that would swallow traffic to this port."""
     for rule_index, rule_text in chain_rules:
         target_match = re.search(r"-j\s+(\S+)", rule_text)
         if not target_match or target_match.group(1) not in IPTABLES_BLOCKING_TARGETS:
             continue
 
-        # Una regla de bloqueo acotada a otros puertos no nos afecta; la catch-all si.
+        # Una regla de bloqueo acotada a otro protocolo u otros puertos no nos afecta; la catch-all si.
+        protocol_match = re.search(r"-p\s+(\S+)", rule_text)
+        if protocol_match and protocol_match.group(1) != protocol:
+            continue
         ports_match = re.search(r"--dports?\s+(\S+)", rule_text)
         if ports_match and not iptables_ports_cover(ports_match.group(1), tcp_port):
             continue
@@ -222,38 +225,38 @@ def persist_iptables_rules():
     print("    Install iptables-persistent (Debian/Ubuntu) or iptables-services (RHEL).")
 
 
-def ensure_iptables_port_open(tcp_port):
+def ensure_iptables_port_open(tcp_port, protocol="tcp"):
     """Opens the port in a plain iptables setup, but only when it is really blocked."""
     input_chain = read_iptables_input_chain()
     if input_chain is None:
         return False
 
     chain_policy, chain_rules = input_chain
-    accept_index = find_iptables_accept_index(chain_rules, tcp_port)
-    blocking_index = find_iptables_blocking_index(chain_rules, tcp_port)
+    accept_index = find_iptables_accept_index(chain_rules, tcp_port, protocol)
+    blocking_index = find_iptables_blocking_index(chain_rules, tcp_port, protocol)
 
     # La primera regla que matchea gana, asi que un ACCEPT antes del bloqueo ya alcanza.
     if accept_index is not None and (blocking_index is None or accept_index < blocking_index):
-        print(f"[*] iptables already accepts TCP port {tcp_port} (rule {accept_index}).")
+        print(f"[*] iptables already accepts {protocol.upper()} port {tcp_port} (rule {accept_index}).")
         return True
 
     if blocking_index is None and chain_policy == "ACCEPT":
-        print(f"[*] iptables has no rule blocking TCP port {tcp_port} and the INPUT policy is ACCEPT.")
+        print(f"[*] iptables has no rule blocking {protocol.upper()} port {tcp_port} and the INPUT policy is ACCEPT.")
         return True
 
     # Se inserta justo antes del REJECT/DROP que lo estaba tapando; si lo que bloquea es
     # la policy de la cadena, va al final, que igual queda antes de la policy.
     insert_index = blocking_index if blocking_index is not None else len(chain_rules) + 1
     blocking_reason = f"rule {blocking_index}" if blocking_index is not None else f"INPUT policy {chain_policy}"
-    print(f"[*] TCP port {tcp_port} is blocked by {blocking_reason}. Inserting an ACCEPT at position {insert_index}.")
+    print(f"[*] {protocol.upper()} port {tcp_port} is blocked by {blocking_reason}. Inserting an ACCEPT at position {insert_index}.")
 
     insert_rule_result = run_capture_command([
         "iptables", "-I", "INPUT", str(insert_index),
-        "-p", "tcp", "--dport", str(tcp_port),
+        "-p", protocol, "--dport", str(tcp_port),
         "-m", "state", "--state", "NEW", "-j", "ACCEPT",
     ])
     if insert_rule_result.returncode != 0:
-        print(f"[!] Failed to insert the iptables rule for TCP port {tcp_port}.")
+        print(f"[!] Failed to insert the iptables rule for {protocol.upper()} port {tcp_port}.")
         return False
 
     # Se relee la cadena en vez de confiar en el exit code: confirma que la regla quedo
@@ -263,10 +266,10 @@ def ensure_iptables_port_open(tcp_port):
         return False
 
     verified_policy, verified_rules = verification_chain
-    verified_accept_index = find_iptables_accept_index(verified_rules, tcp_port)
-    verified_blocking_index = find_iptables_blocking_index(verified_rules, tcp_port)
+    verified_accept_index = find_iptables_accept_index(verified_rules, tcp_port, protocol)
+    verified_blocking_index = find_iptables_blocking_index(verified_rules, tcp_port, protocol)
     if verified_accept_index is None or (verified_blocking_index is not None and verified_accept_index > verified_blocking_index):
-        print(f"[!] The iptables rule for TCP port {tcp_port} did not take effect.")
+        print(f"[!] The iptables rule for {protocol.upper()} port {tcp_port} did not take effect.")
         return False
 
     persist_iptables_rules()
@@ -274,32 +277,43 @@ def ensure_iptables_port_open(tcp_port):
 
 
 def ensure_tcp_port_open(tcp_port, service_label=""):
-    """Open tcp_port inbound with whichever manager owns this host's firewall.
+    """Open a TCP port inbound. See ensure_port_open."""
+    return ensure_port_open(tcp_port, "tcp", service_label)
+
+
+def ensure_udp_port_open(udp_port, service_label=""):
+    """Open a UDP port inbound (QUIC / HTTP/3). See ensure_port_open."""
+    return ensure_port_open(udp_port, "udp", service_label)
+
+
+def ensure_port_open(port, protocol, service_label=""):
+    """Open port/protocol inbound with whichever manager owns this host's firewall.
 
     Returns True when a manager confirmed the port is open, False when none could. False is not
     necessarily fatal — a host with no filtering at all reports True through the iptables branch,
     so False means "there is filtering here and it was not opened", which every caller should at
     least print. Requires root; the probes fail harmlessly without it.
     """
+    described_port = f"{protocol.upper()} port {port}"
     described_service = f" ({service_label})" if service_label else ""
-    print(f"[*] Ensuring TCP port {tcp_port}{described_service} is open in the host firewall...")
+    print(f"[*] Ensuring {described_port}{described_service} is open in the host firewall...")
 
-    if which("firewall-cmd") is not None and ensure_firewalld_port_open(tcp_port):
-        print(f"[*] Firewall confirmed open for TCP port {tcp_port} via firewalld.")
+    if which("firewall-cmd") is not None and ensure_firewalld_port_open(port, protocol):
+        print(f"[*] Firewall confirmed open for {described_port} via firewalld.")
         return True
 
-    if which("ufw") is not None and ensure_ufw_port_open(tcp_port):
-        print(f"[*] Firewall confirmed open for TCP port {tcp_port} via ufw.")
+    if which("ufw") is not None and ensure_ufw_port_open(port, protocol):
+        print(f"[*] Firewall confirmed open for {described_port} via ufw.")
         return True
 
     # Ultimo recurso: iptables plano, que es lo que traen las imagenes de Oracle Cloud
     # (cadena INPUT terminada en REJECT icmp-host-prohibited, sin firewalld ni ufw).
-    if which("iptables") is not None and not is_firewall_frontend_active() and ensure_iptables_port_open(tcp_port):
-        print(f"[*] Firewall confirmed open for TCP port {tcp_port} via iptables.")
+    if which("iptables") is not None and not is_firewall_frontend_active() and ensure_iptables_port_open(port, protocol):
+        print(f"[*] Firewall confirmed open for {described_port} via iptables.")
         return True
 
     # Saltarse esto en silencio deja el servicio instalado pero inalcanzable, que es
     # justo el sintoma mas caro de diagnosticar.
-    print(f"[!] Could not confirm that TCP port {tcp_port} is open in the host firewall.")
+    print(f"[!] Could not confirm that {described_port} is open in the host firewall.")
     print("    If this host filters inbound traffic, open the port manually before using the service.")
     return False

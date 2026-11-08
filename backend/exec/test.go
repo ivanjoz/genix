@@ -32,6 +32,7 @@ func makeConnParams() db.ConnectParams {
 		MariaDB: db.MariaDBParams{
 			Host: core.Env.MARIADB_HOST, Port: core.Env.MARIADB_PORT,
 			User: core.Env.MARIADB_USER, Password: core.Env.MARIADB_PASSWORD, MaxConns: core.Env.MARIADB_MAX_CONNS,
+			Socket: core.Env.MARIADB_SOCKET,
 		},
 		Scripting: true,
 	}

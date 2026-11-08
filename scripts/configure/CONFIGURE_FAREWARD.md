@@ -86,6 +86,7 @@ buys nothing. So there is no upstream to configure — the vhost always forwards
 | `fareward.unix_socket` | no | Read by **both**. The daemon also listens on this Unix domain socket (mode `0660`; the TCP port stays up for Lambda), and a backend/agent not running on Lambda dials it instead of TCP. Use `/run/fareward/fareward.sock`: the unit's `RuntimeDirectory=fareward` creates that directory. Set it only when the backend shares the host with the daemon. |
 | `rate_limit.*` | filled in | Quota policy; see `fareward/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
 | `db.name`, `mariadb.host`/`user`/`password` | yes | The MariaDB database the backend's tables live in; `mariadb.port` defaults to 3306. Same keys the backend reads. |
+| `mariadb.socket` | no | The server's Unix socket (`/run/mysqld/mysqld.sock`), dialed instead of `host:port` when MariaDB shares the host. Read by the backend too. |
 | `server_metrics.scylla_unit` | no | The database's systemd unit, sampled into the `scylla_*` columns. Defaults to `mariadb.service`. |
 
 - **The two secrets are never prompted for.** They are root-level keys that initial project

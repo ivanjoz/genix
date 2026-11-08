@@ -1250,8 +1250,11 @@ def resolve_mariadb_settings(credentials_data):
         print("[!] db.name and mariadb.user may only hold letters, digits and underscores.")
         sys.exit(1)
     # A backend on this host reaches it on loopback; any other host means it must listen outside.
-    is_local = database_host in ("127.0.0.1", "localhost", "::1")
-    return database_name, database_port, database_user, database_password, is_local
+    # public = true (as in [fareward] and [qdrant]) also listens outside while this host's backend
+    # keeps dialing loopback, which is how a dev machine reaches the VPS database.
+    is_public = bool(get_config_value(credentials_data, "mariadb.public", False))
+    is_local = database_host in ("127.0.0.1", "localhost", "::1") and not is_public
+    return database_name, database_port, database_user, database_password, is_local, is_public
 
 def install_mariadb_server_package():
     if which("mariadbd") or which("mysqld"):
@@ -1282,8 +1285,12 @@ def run_mariadb_root_statement(sql_statement):
         sys.exit(1)
 
 def configure_mariadb(credentials_data, broadcast_ip_address):
-    database_name, database_port, database_user, database_password, is_local = resolve_mariadb_settings(credentials_data)
-    bind_address = "127.0.0.1" if is_local else broadcast_ip_address
+    database_name, database_port, database_user, database_password, is_local, is_public = (
+        resolve_mariadb_settings(credentials_data)
+    )
+    # Public listens on every interface: loopback for this host's backend, the VPC address the
+    # cloud NAT forwards the public IP to.
+    bind_address = "127.0.0.1" if is_local else "0.0.0.0" if is_public else broadcast_ip_address
     install_mariadb_server_package()
 
     configuration_directory = next((directory for directory in MARIADB_CONFIG_DIRECTORIES if directory.is_dir()), None)
@@ -1306,13 +1313,20 @@ def configure_mariadb(credentials_data, broadcast_ip_address):
         sys.exit(1)
 
     # The backend creates its own tables (and the ORM's side tables) in this database.
-    user_host = "localhost" if is_local else "%"
+    # With skip-name-resolve, 'localhost' only matches the Unix socket ([mariadb].socket) and TCP
+    # from loopback needs an account for the literal 127.0.0.1 or ::1. A public or remote server
+    # adds '%' for the other machines; the local accounts stay for this host's backend.
+    user_hosts = ("localhost", "127.0.0.1", "::1") + (() if is_local else ("%",))
     escaped_password = database_password.replace("\\", "\\\\").replace("'", "\\'")
-    run_mariadb_root_statement(
-        f"CREATE DATABASE IF NOT EXISTS `{database_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; "
+    user_statements = "".join(
         f"CREATE USER IF NOT EXISTS '{database_user}'@'{user_host}' IDENTIFIED BY '{escaped_password}'; "
         f"ALTER USER '{database_user}'@'{user_host}' IDENTIFIED BY '{escaped_password}'; "
-        f"GRANT ALL PRIVILEGES ON `{database_name}`.* TO '{database_user}'@'{user_host}';"
+        f"GRANT ALL PRIVILEGES ON `{database_name}`.* TO '{database_user}'@'{user_host}'; "
+        for user_host in user_hosts
+    )
+    run_mariadb_root_statement(
+        f"CREATE DATABASE IF NOT EXISTS `{database_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin; "
+        + user_statements
     )
     if not is_local:
         ensure_tcp_port_open(database_port, "MariaDB")
@@ -1320,7 +1334,7 @@ def configure_mariadb(credentials_data, broadcast_ip_address):
     print("\n[+] MariaDB configured!")
     print(f"    - config:   {configuration_path}")
     print(f"    - listen:   {bind_address}:{database_port}")
-    print(f"    - database: {database_name}, user '{database_user}'@'{user_host}'")
+    print(f"    - database: {database_name}, user '{database_user}'@{'/'.join(user_hosts)}")
     print(f"    - buffer pool: {max(256, total_memory_megabytes // 2)} MB of {total_memory_megabytes} MB RAM")
     print(f"    - systemctl status {service_name}")
 

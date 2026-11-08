@@ -107,6 +107,13 @@ password  = "my_strong_password"
 # Connections the backend pool holds. The server runs a thread pool of one thread per core,
 # so a small pool is enough: 16 on a 2-core VPS. 0 uses the ORM default (16).
 max_conns = 16
+# true: the server listens on every interface (0.0.0.0) with a '%' account and an open firewall
+# port, so another machine can connect while this host's backend keeps dialing `host`. Only read
+# by configure_db.py. false or absent: loopback only.
+public    = false
+# The server's Unix socket, read by the backend and fareward: dialed instead of host:port when the
+# database shares their host (no loopback TCP per statement). Empty: TCP to host:port.
+socket    = ""
 
 # ─── FoundationDB (solo builds con `-tags fdb`, docs/FOUNDATIONDB_PLAN.md) ─────
 [fdb]
@@ -414,12 +421,17 @@ agent   = "https://mi-agente.example.com/"
 bridge  = "https://mi-bridge.example.com/"
 cdn_url = "https://mi-cdn.example.com/"
 
-# Destinos del deploy a VPS (scripts/deploy_vps.go).
+# VPS targets of scripts/deploy_vps.go and scripts/configure_remote.py.
 [[servers]]
 host = "127.0.0.1"
 user = "ubuntu"
+key  = "~/.ssh/my_server.pem"
 bin  = "/usr/local/bin/genix/genix_app"
 arch = "arm64"
+# configure_remote.py only: the server's own config.toml (gitignored, e.g. config.<name>.toml),
+# uploaded as <repository>/config.toml. repository defaults to /home/<user>/genix.
+config     = "config.myserver.toml"
+repository = "/home/ubuntu/genix"
 
 # Modelos que puede usar el agente. El selector ofrece todos y el backend enruta cada
 # modelo al proveedor declarado en su entrada (cuya key debe estar configurada).

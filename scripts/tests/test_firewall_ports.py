@@ -86,6 +86,18 @@ class IptablesPlacementTest(unittest.TestCase):
         drop_chain = build_chain(["-A INPUT -j DROP"])
         self.assertEqual(firewall_ports.find_iptables_blocking_index(drop_chain, 14013), 1)
 
+    def test_udp_443_is_not_opened_by_the_tcp_443_rule(self):
+        """QUIC needs UDP 443: the TCP accept for HTTPS must not count for it."""
+        firewall_ports = load_firewall_ports_module()
+        chain = build_chain(self.ORACLE_CLOUD_CHAIN)
+
+        self.assertEqual(firewall_ports.find_iptables_accept_index(chain, 443, "tcp"), 8)
+        self.assertIsNone(firewall_ports.find_iptables_accept_index(chain, 443, "udp"))
+        self.assertEqual(firewall_ports.find_iptables_blocking_index(chain, 443, "udp"), 9)
+        # A REJECT scoped to TCP does not block UDP.
+        tcp_only_chain = build_chain(["-A INPUT -p tcp -j REJECT --reject-with tcp-reset"])
+        self.assertIsNone(firewall_ports.find_iptables_blocking_index(tcp_only_chain, 443, "udp"))
+
     def test_the_accept_is_inserted_ahead_of_the_reject_that_was_swallowing_the_port(self):
         firewall_ports = load_firewall_ports_module()
         inserted_commands = []

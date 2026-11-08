@@ -228,6 +228,27 @@ def resolve_bridge_is_needed():
     raise SystemExit("[!] Answer the SSE bridge question with y or n.")
 
 
+def deploy_database_schema():
+    """Create or migrate the backend's tables with the installed binary (fn-homologate).
+
+    Runs as the service's user, from its working directory and with its config, so the files it
+    writes belong to the service. Fareward exits at startup without its tables, and the backend's
+    cron fails until they exist, so this runs between the two and the backend restarts after.
+    """
+    service_unit_text = BACKEND_SERVICE_UNIT_PATH.read_text(encoding="utf-8")
+    unit_values = dict(re.findall(r"(?m)^(User|WorkingDirectory|ExecStart)=(.+)$", service_unit_text))
+    unit_environment = re.findall(r"(?m)^Environment=(GENIX_[A-Z_]+=.+)$", service_unit_text)
+    homologate_command = [
+        "sudo", "-u", unit_values["User"], "env", *unit_environment, unit_values["ExecStart"], "fn-homologate",
+    ]
+    print(f"[*] Running: {' '.join(homologate_command)}")
+    try:
+        subprocess.run(homologate_command, check=True, cwd=unit_values["WorkingDirectory"])
+    except subprocess.CalledProcessError as command_error:
+        raise SystemExit(f"[!] fn-homologate stopped with exit code {command_error.returncode}.") from None
+    subprocess.run(["systemctl", "restart", BACKEND_SERVICE_UNIT_PATH.name], check=False)
+
+
 def run_configurer(script_name, *arguments):
     """Run one installer and stop immediately when it cannot complete."""
     command_arguments = [sys.executable, str(CONFIGURE_DIRECTORY / script_name), *arguments]
@@ -249,6 +270,17 @@ def parse_command_arguments():
         nargs="?",
         help="combined menu digits, for example 238",
     )
+    argument_parser.add_argument(
+        "--backend-mode",
+        choices=("1", "2", "3"),
+        help="answer the Backend Service mode prompt: 1 full, 2 only systemd, 3 only nginx",
+    )
+    argument_parser.add_argument(
+        "--staged-binaries",
+        action="store_true",
+        help="with 8: install the binaries already in tmp/ (configure_remote.py uploads them there) "
+        "instead of downloading the latest release",
+    )
     return argument_parser.parse_args()
 
 
@@ -261,14 +293,20 @@ def main():
     raw_selection = command_arguments.selection or input("Selection: ")
     try:
         selected_components, binary_source = parse_selection(raw_selection)
-        backend_mode = resolve_backend_mode() if COMPONENT_BACKEND in selected_components else None
+        backend_mode = None
+        if COMPONENT_BACKEND in selected_components:
+            backend_mode = command_arguments.backend_mode or resolve_backend_mode()
     except ValueError as selection_error:
         raise SystemExit(f"[!] {selection_error}") from selection_error
 
     print(f"[*] Selected components: {', '.join(sorted(selected_components))}")
     print(f"[*] Binary source for Genix services: {binary_source}")
+    if command_arguments.staged_binaries and binary_source != "precompiled":
+        raise SystemExit("[!] --staged-binaries installs prebuilt binaries: select 8, not 7.")
 
-    if binary_source == "precompiled":
+    if command_arguments.staged_binaries:
+        print(f"[*] Installing the binaries staged in {DOWNLOAD_DIRECTORY}; nothing is downloaded.")
+    elif binary_source == "precompiled":
         try:
             download_selected_binaries(selected_components, backend_mode)
         except RuntimeError as download_error:
@@ -279,6 +317,9 @@ def main():
         run_configurer("configure_db.py")
     if COMPONENT_BACKEND in selected_components:
         run_configurer("configure_server.py", backend_mode, "--binary-source", binary_source)
+        # Modes 1 and 2 install the backend on this host: its tables come before fareward.
+        if backend_mode in {"1", "2"}:
+            deploy_database_schema()
     if COMPONENT_FAREWARD in selected_components:
         fareward_arguments = ["--binary-source", binary_source]
         # A self-hosted backend serves /agent/stream itself, so it needs the daemon's raw TCP

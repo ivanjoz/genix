@@ -93,11 +93,13 @@ type EnvStruct struct {
 	POSTGRES_DATABASE  string
 	POSTGRES_MAX_CONNS int
 	// MARIADB_* are read only by a `-tags mariadb` build. The database is the keyspace (DB_NAME).
-	MARIADB_HOST       string
-	MARIADB_PORT       int
-	MARIADB_USER       string
-	MARIADB_PASSWORD   string
-	MARIADB_MAX_CONNS  int
+	MARIADB_HOST      string
+	MARIADB_PORT      int
+	MARIADB_USER      string
+	MARIADB_PASSWORD  string
+	MARIADB_MAX_CONNS int
+	// MARIADB_SOCKET is [mariadb].socket: dialed instead of host:port when the database shares the host.
+	MARIADB_SOCKET     string
 	DB_PORT            int32
 	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
 	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
@@ -351,6 +353,7 @@ type fileConfig struct {
 		User     string `toml:"user"`
 		Password string `toml:"password"`
 		MaxConns int    `toml:"max_conns"`
+		Socket   string `toml:"socket"`
 	} `toml:"mariadb"`
 
 	Server struct {
@@ -593,6 +596,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.MARIADB_USER = file.MariaDB.User
 	env.MARIADB_PASSWORD = file.MariaDB.Password
 	env.MARIADB_MAX_CONNS = file.MariaDB.MaxConns
+	env.MARIADB_SOCKET = strings.TrimSpace(file.MariaDB.Socket)
 
 	env.SERVER_PORT = file.Server.Port
 	env.SERVER_MAX_CONCURRENT_REQUESTS = file.Server.MaxConcurrentRequests

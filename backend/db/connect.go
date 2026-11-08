@@ -58,12 +58,14 @@ type PostgresParams struct {
 
 // MariaDBParams is read only by a `-tags mariadb` build, the sale-flow benchmarks
 // (tests/loadtest/DATABASE_COMPARISON.md). MaxConns caps the connection pool, 0 for the driver default.
+// Socket, when set, is dialed instead of Host:Port.
 type MariaDBParams struct {
 	Host     string
 	Port     int
 	User     string
 	Password string
 	MaxConns int
+	Socket   string
 }
 
 // connectedKeyspace is what Connect last received; MakeController qualifies table names with it.

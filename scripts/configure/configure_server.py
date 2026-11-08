@@ -15,6 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from firewall_ports import ensure_tcp_port_open, ensure_udp_port_open  # noqa: E402
 from toml_config import (  # noqa: E402
     LOCAL_CONFIG_FILE_NAME,
     apply_local_config_override,
@@ -34,6 +35,17 @@ NGINX_CONFIGURATION_DIRECTORY = Path("/etc/nginx/conf.d")
 SERVICE_RUNTIME_DIRECTORY_NAME = "genix"
 SERVICE_SOCKET_PATH = Path("/run") / SERVICE_RUNTIME_DIRECTORY_NAME / "api.sock"
 LETSENCRYPT_DIRECTORY = Path("/etc/letsencrypt/live")
+NGINX_MAIN_CONFIGURATION_PATH = Path("/etc/nginx/nginx.conf")
+# Host-wide TCP settings for the clients nginx serves (see write_network_tuning).
+NETWORK_TUNING_SYSCTL_PATH = Path("/etc/sysctl.d/90-genix-network.conf")
+NETWORK_TUNING_MODULES_PATH = Path("/etc/modules-load.d/genix-network.conf")
+
+# Same tags as scripts/deploy_vps.go and the release workflow: lambda.norpc drops net/rpc (~12 MB of
+# retained methods) and mariadb selects the database driver. Without mariadb the build is Scylla's.
+BACKEND_BUILD_TAGS = "lambda.norpc,mariadb"
+
+# Repositories go.mod expects beside the genix checkout rather than inside it as submodules.
+SIBLING_REPOSITORY_REMOTES = {"genix-search": "https://github.com/ivanjoz/genix-search.git"}
 
 # sudo resets PATH to secure_path, which on most distributions excludes /usr/local/go/bin, so the
 # Go toolchain has to be looked for explicitly. GO_BINARY in the environment overrides all of this.
@@ -733,6 +745,26 @@ def initialise_git_submodule(
     )
 
 
+def clone_sibling_repository(missing_replace_directory, repository_root_path, unprivileged_username):
+    """Clone a repository that go.mod expects beside the genix checkout (not a submodule).
+
+    genix-s3 compiles from ../../genix-search/genix-s3 until it is published as a module, so a server
+    building from source needs that checkout next to the repository, cloned as its owner.
+    """
+    try:
+        sibling_name = missing_replace_directory.relative_to(repository_root_path.parent).parts[0]
+    except ValueError:
+        return
+    sibling_remote = SIBLING_REPOSITORY_REMOTES.get(sibling_name)
+    sibling_directory = repository_root_path.parent / sibling_name
+    if not sibling_remote or sibling_directory.exists():
+        return
+    print_debug(f"Cloning {sibling_remote} into {sibling_directory}, which go.mod expects there.")
+    run_command(build_unprivileged_command(
+        ["git", "clone", "--depth", "1", sibling_remote, str(sibling_directory)], unprivileged_username
+    ))
+
+
 def ensure_local_replace_directories(
     backend_source_directory, repository_root_path, unprivileged_username
 ):
@@ -753,6 +785,7 @@ def ensure_local_replace_directories(
         try:
             relative_replace_path = missing_replace_directory.relative_to(repository_root_path).as_posix()
         except ValueError:
+            clone_sibling_repository(missing_replace_directory, repository_root_path, unprivileged_username)
             continue
 
         # Initialise only the submodule the backend actually needs: a backend host has no use for
@@ -814,6 +847,8 @@ def compile_backend_binary(backend_source_directory, repository_root_path):
     build_command = [
         str(go_binary_path),
         "build",
+        "-tags",
+        BACKEND_BUILD_TAGS,
         "-ldflags",
         build_flags,
         "-o",
@@ -920,6 +955,17 @@ def provide_service_binary(
 
 
 def ensure_nginx_is_installed():
+    """Install nginx (with http_v3_module) and certbot's nginx plugin when they are missing."""
+    if not shutil.which("nginx") or not shutil.which("certbot"):
+        if shutil.which("apt-get"):
+            run_command(["apt-get", "update"])
+            run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
+                         "nginx", "certbot", "python3-certbot-nginx"])
+        elif shutil.which("dnf"):
+            run_command(["dnf", "install", "-y", "nginx", "certbot", "python3-certbot-nginx"])
+        else:
+            fail_with_error("Neither apt-get nor dnf is available: install nginx and certbot by hand.")
+
     nginx_binary_path = shutil.which("nginx")
     if not nginx_binary_path:
         fail_with_error("Nginx is not installed or not available in PATH.")
@@ -927,7 +973,85 @@ def ensure_nginx_is_installed():
     if not NGINX_CONFIGURATION_DIRECTORY.exists():
         fail_with_error(f"Nginx configuration directory not found: {NGINX_CONFIGURATION_DIRECTORY}")
 
+    nginx_build_flags = run_command(["nginx", "-V"]).stderr
+    if "http_v3_module" not in nginx_build_flags:
+        fail_with_error("This nginx was built without http_v3_module: HTTP/3 needs nginx 1.25 or later with it.")
     print_debug(f"Detected Nginx binary at {nginx_binary_path}")
+
+
+def ensure_certificate(endpoint_hostname):
+    """Issue the Let's Encrypt certificate for the domain when it has none.
+
+    HTTP-01 through the running nginx, so the domain's DNS must already point at this host and TCP 80
+    be reachable; certbot's timer renews it the same way. ECDSA P-256: each TLS and QUIC handshake
+    is several times cheaper than with RSA 2048. No email is registered: Let's Encrypt no longer
+    sends expiry mail, and the renewal timer is what keeps it valid.
+    """
+    if (LETSENCRYPT_DIRECTORY / endpoint_hostname / "fullchain.pem").exists():
+        return
+    run_command(["systemctl", "enable", "--now", "nginx"])
+    run_command([
+        "certbot", "certonly", "--nginx", "--non-interactive", "--agree-tos",
+        "--register-unsafely-without-email", "--key-type", "ecdsa", "--elliptic-curve", "secp256r1",
+        "--cert-name", endpoint_hostname, "-d", endpoint_hostname,
+    ])
+
+
+def open_web_ports():
+    """TCP 80 (HTTP-01 renewals), TCP 443 (TLS and the HTTP/2 fallback) and UDP 443 (QUIC)."""
+    ensure_tcp_port_open(80, "HTTP, certificate renewals")
+    ensure_tcp_port_open(443, "HTTPS")
+    ensure_udp_port_open(443, "HTTP/3 QUIC")
+
+
+def tune_nginx_main_configuration(nginx_configuration_text):
+    """The distribution's nginx.conf with the worker limits raised. Returns the new text.
+
+    Every proxied request holds two connections, the client's and the upstream's, and an HTTP/3 or
+    keepalive client keeps its own open between requests: Debian's 768 per worker is a few hundred
+    users. The file descriptor limit has to cover both halves of every connection. multi_accept
+    takes every pending connection on a wakeup instead of one.
+    """
+    tuned_text = re.sub(r"(?m)^\s*#?\s*worker_connections\s+\d+;", "\tworker_connections 4096;", nginx_configuration_text)
+    tuned_text = re.sub(r"(?m)^\s*#?\s*multi_accept\s+\w+;", "\tmulti_accept on;", tuned_text)
+    if "multi_accept" not in tuned_text:
+        tuned_text = re.sub(r"(?m)^(\s*worker_connections 4096;)", r"\1\n\tmulti_accept on;", tuned_text)
+    if not re.search(r"(?m)^\s*worker_rlimit_nofile\s", tuned_text):
+        tuned_text = re.sub(r"(?m)^(worker_processes\s+[^;]+;)", r"\1\nworker_rlimit_nofile 16384;", tuned_text, count=1)
+    return tuned_text
+
+
+def configure_nginx_main_configuration():
+    current_text = NGINX_MAIN_CONFIGURATION_PATH.read_text(encoding="utf-8")
+    tuned_text = tune_nginx_main_configuration(current_text)
+    if tuned_text == current_text:
+        print_debug(f"{NGINX_MAIN_CONFIGURATION_PATH} already tuned.")
+        return False
+    print_debug(f"Raising the worker limits in {NGINX_MAIN_CONFIGURATION_PATH}")
+    NGINX_MAIN_CONFIGURATION_PATH.write_text(tuned_text, encoding="utf-8")
+    return True
+
+
+def write_network_tuning():
+    """BBR congestion control with the fq qdisc it paces through.
+
+    It only changes TCP: the HTTP/2 fallback and TCP 80, which on lossy mobile links keep more
+    throughput than with cubic. QUIC runs its own congestion control inside nginx.
+    """
+    sysctl_text = (
+        "# Written by scripts/configure/configure_server.py (write_network_tuning).\n"
+        "net.core.default_qdisc = fq\n"
+        "net.ipv4.tcp_congestion_control = bbr\n"
+    )
+    existing_text = NETWORK_TUNING_SYSCTL_PATH.read_text(encoding="utf-8") if NETWORK_TUNING_SYSCTL_PATH.exists() else None
+    if existing_text == sysctl_text:
+        print_debug(f"{NETWORK_TUNING_SYSCTL_PATH} unchanged.")
+        return
+    # The module loads on boot before sysctl.d applies, and now for this run.
+    NETWORK_TUNING_MODULES_PATH.write_text("tcp_bbr\n", encoding="utf-8")
+    run_command(["modprobe", "tcp_bbr"], allow_failure=True)
+    NETWORK_TUNING_SYSCTL_PATH.write_text(sysctl_text, encoding="utf-8")
+    run_command(["sysctl", "--load", str(NETWORK_TUNING_SYSCTL_PATH)], allow_failure=True)
 
 
 def extract_existing_certbot_tls_lines(existing_nginx_configuration_contents):
@@ -1066,6 +1190,9 @@ server {{
     listen 443 ssl;
     listen [::]:443 quic reuseport;
     listen [::]:443 ssl;
+    # The first request reaches the TCP listener before the browser has read Alt-Svc: HTTP/2
+    # there instead of HTTP/1.1.
+    http2 on;
 
     server_name {endpoint_hostname};
 
@@ -1077,7 +1204,9 @@ server {{
     ssl_session_timeout 1d;
     ssl_session_tickets on;
 
-    add_header Alt-Svc 'h3=":443"; ma=86400';
+    # always: an error response must advertise HTTP/3 too, or a client that only got errors
+    # never switches.
+    add_header Alt-Svc 'h3=":443"; ma=86400' always;
     # Generic segmentation offload: the kernel splits large QUIC sends, far fewer syscalls.
     quic_gso on;
     # Buffered access log: one write per 64 KB or 5 s instead of one per request.
@@ -1181,9 +1310,15 @@ server {{
 
 
 def configure_nginx_reverse_proxy(nginx_settings):
-    ensure_nginx_is_installed()
-
     endpoint_hostname = nginx_settings["domain"]
+    ensure_nginx_is_installed()
+    # Ports first: the certificate's HTTP-01 challenge arrives on TCP 80.
+    open_web_ports()
+    write_network_tuning()
+    main_configuration_changed = configure_nginx_main_configuration()
+    # Issued before the vhost is written, so the vhost comes out as HTTP/3 on its first run.
+    ensure_certificate(endpoint_hostname)
+
     nginx_configuration_path = NGINX_CONFIGURATION_DIRECTORY / f"{endpoint_hostname}.conf"
 
     existing_nginx_configuration_contents = None
@@ -1197,7 +1332,7 @@ def configure_nginx_reverse_proxy(nginx_settings):
         existing_nginx_configuration_contents or "",
     )
 
-    if existing_nginx_configuration_contents == nginx_configuration_contents:
+    if existing_nginx_configuration_contents == nginx_configuration_contents and not main_configuration_changed:
         print_debug(f"Nginx configuration unchanged: {nginx_configuration_path}")
         return False
 

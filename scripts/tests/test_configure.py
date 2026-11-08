@@ -133,12 +133,14 @@ class ReleaseVerificationTest(unittest.TestCase):
 
 
 class DispatchTest(unittest.TestCase):
-    def test_238_downloads_then_runs_backend_before_fareward(self):
+    def test_238_downloads_then_runs_backend_schema_and_fareward_in_order(self):
         configure = load_configure_module()
         executed_configurers = []
 
         with mock.patch.object(
-            configure, "parse_command_arguments", return_value=SimpleNamespace(selection="238")
+            configure,
+            "parse_command_arguments",
+            return_value=SimpleNamespace(selection="238", backend_mode=None, staged_binaries=False),
         ), mock.patch.object(configure.os, "geteuid", return_value=0), mock.patch.object(
             configure, "input", create=True, return_value="2"
         ), mock.patch.object(configure, "download_selected_binaries") as download_mock, mock.patch.object(
@@ -147,14 +149,20 @@ class DispatchTest(unittest.TestCase):
             side_effect=lambda script_name, *arguments: executed_configurers.append(
                 (script_name, arguments)
             ),
+        ), mock.patch.object(
+            configure,
+            "deploy_database_schema",
+            side_effect=lambda: executed_configurers.append(("fn-homologate", ())),
         ), redirect_stdout(io.StringIO()):
             configure.main()
 
         download_mock.assert_called_once_with({"2", "3"}, "2")
+        # Fareward exits without its tables, so the schema goes between the backend and it.
         self.assertEqual(
             executed_configurers,
             [
                 ("configure_server.py", ("2", "--binary-source", "precompiled")),
+                ("fn-homologate", ()),
                 (
                     "configure_fareward.py",
                     ("--binary-source", "precompiled", "--service-only"),
@@ -177,7 +185,9 @@ class DispatchTest(unittest.TestCase):
             return typed_answer
 
         with mock.patch.object(
-            configure, "parse_command_arguments", return_value=SimpleNamespace(selection="37")
+            configure,
+            "parse_command_arguments",
+            return_value=SimpleNamespace(selection="37", backend_mode=None, staged_binaries=False),
         ), mock.patch.object(configure.os, "geteuid", return_value=0), mock.patch.object(
             configure, "input", create=True, side_effect=answer_prompt
         ), mock.patch.object(

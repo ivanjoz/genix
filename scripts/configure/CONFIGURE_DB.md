@@ -1,26 +1,52 @@
 # Configuración de los motores de datos (`configure_db.py`)
 
-Un solo script deja listo el host de datos: **ScyllaDB** (base de datos principal) y
-**Qdrant** (base vectorial). Ambos suelen vivir en la misma VPS, separados del backend,
-que corre en Lambda o en otro servidor. La búsqueda de texto no necesita host: genix-s3
-guarda el índice en el bucket de `[file_store]` (ver `backend/core/text_search.go`).
+One script prepares the data host: **MariaDB** (the primary database) and **Qdrant** (the
+vector database). Text search needs no host: genix-s3 keeps its index in the `[file_store]`
+bucket (see `backend/core/text_search.go`).
 
-El entrypoint público configura los dos motores. El dígito `7` o `8` es obligatorio por la
-gramática unificada, pero no cambia cómo este instalador obtiene los paquetes de datos:
+The public entrypoint configures both (`all`). The `7`/`8` digit is required by the unified
+grammar but does not change how this installer gets its packages:
 
 ```bash
 sudo python3 scripts/configure.py 18
 ```
 
-Para diagnosticar un solo motor se puede invocar directamente el instalador interno:
+One engine at a time, through the nested installer:
 
 ```bash
-sudo python3 scripts/configure/configure_db.py scylla
+sudo python3 scripts/configure/configure_db.py mariadb
 sudo python3 scripts/configure/configure_db.py qdrant
 ```
 
-Los alias numéricos `1`/`2`/`3` equivalen a `all`/`scylla`/`qdrant`. El
-script debe correr como `root` y lee `config.toml` de la raíz del repositorio.
+`all` installs MariaDB and Qdrant. ScyllaDB is no longer supported and only runs when named
+(`scylla`). The script must run as `root` and reads `config.toml` from the repository root.
+
+---
+
+## MariaDB (`mariadb`)
+
+| Step | Detail |
+| ---- | ------ |
+| Package | `mariadb-server` with apt or dnf, when no `mariadbd` is installed. |
+| Server config | `/etc/mysql/mariadb.conf.d/90-genix.cnf` (or the dnf equivalent), rewritten each run: `port = mariadb.port`, buffer pool at half the RAM, `innodb_flush_log_at_trx_commit = 2` (an OS crash loses up to ~1 s of commits), no binary log, a thread pool of one thread per core, `READ-COMMITTED`, `skip-name-resolve`, no performance schema. |
+| Bind | `127.0.0.1` when `mariadb.host` is loopback; `0.0.0.0` with `mariadb.public = true`; otherwise the tailnet/VPC address. |
+| Accounts | `mariadb.user` on `localhost` (the Unix socket), `127.0.0.1` and `::1`, plus `%` when public or remote: with `skip-name-resolve`, `localhost` does not match TCP from 127.0.0.1. All get every privilege on `db.name`, created `utf8mb4_bin`. |
+| Firewall | Opens `mariadb.port/tcp` only when the server listens outside loopback. |
+
+```toml
+[mariadb]
+host     = "127.0.0.1"                 # what this host's backend dials
+port     = 14016
+user     = "genix"
+password = "..."
+public   = true                        # also reachable from other machines
+socket   = "/run/mysqld/mysqld.sock"   # backend and fareward skip loopback TCP
+```
+
+The backend and fareward dial `socket` when it is set. On a 2-core Ampere A1, `SELECT 1` at 16
+connections ran ~35k queries/s over the socket against ~24.6k over loopback TCP.
+
+The tables are not created here: `configure.py` runs `fn-homologate` after installing the backend.
 
 ---
 
