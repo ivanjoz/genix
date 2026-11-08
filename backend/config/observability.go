@@ -75,10 +75,9 @@ func GetObservability(req *core.HandlerArgs) core.HandlerResponse {
 	queries := errgroup.Group{}
 	queries.Go(func() error {
 		// The platform aggregate is a company row under the reserved company id zero.
-		query := db.Query(&creditRows)
-		query.CompanyID.Equals(observabilityPlatformCompanyID).
-			TimeFrame.Between(firstQueryFrame, currentTimeFrame)
-		return query.Exec()
+		var err error
+		creditRows, err = readCompanyUsage(observabilityPlatformCompanyID, firstQueryFrame, currentTimeFrame)
+		return err
 	})
 	queries.Go(func() error {
 		var err error

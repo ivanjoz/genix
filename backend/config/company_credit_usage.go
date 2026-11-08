@@ -127,18 +127,10 @@ func GetCompanyCreditUsageReport(req *core.HandlerArgs) core.HandlerResponse {
 	lastFrame := currentDailyTimeFrame()
 	firstFrame := lastFrame - companyCreditUsageDays + 1
 
-	// The view is partitioned by frame, and a partition key takes IN rather than a range.
-	frames := make([]int32, 0, lastFrame-firstFrame+1)
-	for frame := firstFrame; frame <= lastFrame; frame++ {
-		frames = append(frames, frame)
-	}
-	rows := []coreTypes.CreditUsageCompany{}
-	query := db.Query(&rows)
-	// One partition per frame on the day-partitioned view, and that partition holds nothing but
-	// company rows: the cost of this report is the number of days requested, not the number of
-	// tenants, and not the platform's total user count either.
-	query.TimeFrame.In(frames...)
-	if err := query.Exec(); err != nil {
+	// One read from fareward: it seeks each company's days rather than scanning its five-minute
+	// rows, so the cost is the number of companies times the days requested.
+	rows, err := readEveryCompanyUsage(firstFrame, lastFrame)
+	if err != nil {
 		core.Log("company credit report failed::", " first_frame::", firstFrame,
 			" last_frame::", lastFrame, " err::", err)
 		return req.MakeErr("No se pudo obtener el uso de créditos por empresa.", err)
@@ -211,19 +203,20 @@ func GetCompanyCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 	lastFrame := currentDailyTimeFrame()
 	firstFrame := lastFrame - companyCreditUsageDays + 1
 
-	// Two reads, both native to their table and run together: the company series is the base key of
-	// credit_usage_company, and the user series is one clustering range on credit_usage_user. The
+	// Two reads from fareward, run together: the company series, and every user's series. The
 	// company does not need validating first: an id that does not exist simply has no rows.
 	companyRows := []coreTypes.CreditUsageCompany{}
 	userRows := []coreTypes.CreditUsageUser{}
 	queries := errgroup.Group{}
 	queries.Go(func() error {
-		query := db.Query(&companyRows)
-		return query.CompanyID.Equals(companyID).TimeFrame.Between(firstFrame, lastFrame).Exec()
+		var err error
+		companyRows, err = readCompanyUsage(companyID, firstFrame, lastFrame)
+		return err
 	})
 	queries.Go(func() error {
-		query := db.Query(&userRows)
-		return query.CompanyID.Equals(companyID).TimeFrame.Between(firstFrame, lastFrame).Exec()
+		var err error
+		userRows, err = readUserUsage(companyID, 0, firstFrame, lastFrame)
+		return err
 	})
 	if err := queries.Wait(); err != nil {
 		core.Log("company credit usage failed::", " company::", companyID,

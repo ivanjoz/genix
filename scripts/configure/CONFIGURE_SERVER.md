@@ -1,18 +1,18 @@
 # Genix Service Deployment & Auto-Reload Strategy
 
-This document explains the systemd-based strategy for automatically reloading the **Genix Backend Service** when its binary is updated, and the Nginx reverse proxy that fronts it. The setup script itself must be executed as `root`, but the application binary and the main service run as a non-root user.
+This document explains the systemd-based strategy for automatically reloading the **Genix Backend Service** when its binary is updated, and the HAProxy edge that fronts it. The setup script itself must be executed as `root`, but the application binary and the main service run as a non-root user.
 
 ---
 
 ## 🧩 Install Modes
 
-The normal install is **Full**: Nginx and the backend on the same VPS, connected through a Unix socket. Modes 2 and 3 split them across two machines over TCP.
+The normal install is **Full**: HAProxy and the backend on the same VPS, connected through a Unix socket, with the fareward SPOE agent in front of the backend when `[spoe].socket` is set. Modes 2 and 3 split them across two machines over TCP, without the agent.
 
 | Mode | Name | What it configures | config.toml keys used |
 | ---- | ---- | ------------------ | -------------------------- |
-| `1` | Full | systemd units + Nginx reverse proxy over `unix:/run/genix/api.sock` | `server.nginx_domain` |
+| `1` | Full | systemd units + HAProxy edge over `unix@/run/genix/api.sock`, SPOE optional | `server.domain`, `[spoe]`, `fareward.routes_file` |
 | `2` | Only Systemd Service | systemd units, binary directory, runtime user | `server.port` |
-| `3` | Only Nginx Proxy | `/etc/nginx/conf.d/<server.nginx_domain>.conf` | `server.nginx_domain`, `server.nginx_process` |
+| `3` | Only HAProxy edge | `/etc/haproxy/sites/<server.domain>.cfg` | `server.domain`, `server.upstream` |
 
 After selecting Backend with the unified entrypoint, answer this second prompt for the host role:
 
@@ -21,30 +21,30 @@ sudo python3 scripts/configure.py 28  # latest precompiled backend; then choose 
 sudo python3 scripts/configure.py 27  # compile backend source; then choose 1, 2 or 3
 ```
 
-Only the credentials the selected mode needs are validated, so the Nginx host does not need `server.port` and the backend host does not need `server.nginx_domain`.
+Only the credentials the selected mode needs are validated, so the edge host does not need `server.port` and the backend host does not need `server.domain`.
 
 ### Missing credentials are requested on the terminal
 
-`config.toml` is optional. When the file is absent — the usual case on an Nginx-only VPS that has no full clone — or when a key the selected mode needs is missing or malformed, the script asks for that value and re-asks until it validates:
+`config.toml` is optional. When the file is absent — the usual case on an edge-only VPS that has no full clone — or when a key the selected mode needs is missing or malformed, the script asks for that value and re-asks until it validates:
 
 ```
 [*] No config.toml at /home/ubuntu/genix/config.toml. Values will be requested.
-[*] server.nginx_domain is not set in config.toml.
-Enter server.nginx_domain, the public domain Nginx serves (e.g. genix-api-4.un.pe): bad domain
+[*] server.domain is not set in config.toml.
+Enter server.domain, the public domain HAProxy serves (e.g. genix-api-4.un.pe): bad domain
 [!] 'bad domain' is not a valid domain name (expected e.g. genix-api-4.un.pe).
-Enter server.nginx_domain, the public domain Nginx serves (e.g. genix-api-4.un.pe): genix-api-4.un.pe
+Enter server.domain, the public domain HAProxy serves (e.g. genix-api-4.un.pe): genix-api-4.un.pe
 ```
 
 Validation rules:
 
-- `server.nginx_domain` — a dotted hostname; lower-cased and stripped of a trailing dot.
-- `server.nginx_process` — `host:port`, optionally prefixed with `http://` or `https://`. The port is mandatory.
+- `server.domain` — a dotted hostname; lower-cased and stripped of a trailing dot.
+- `server.upstream` — `host:port`, optionally prefixed with `http://` or `https://`. The port is mandatory.
 - `server.port` — an integer in `1-65535`.
 
 After everything resolves, the script offers to write the typed-in values back so the next run is non-interactive:
 
 ```
-[*] These values were typed in and are not stored yet: server.nginx_domain=genix-api-4.un.pe, server.nginx_process=100.64.0.2:14010
+[*] These values were typed in and are not stored yet: server.domain=genix-api-4.un.pe, server.upstream=100.64.0.2:14010
 Save them to /home/ubuntu/genix/config.toml? [Y/n]:
 ```
 
@@ -57,37 +57,42 @@ Two things still fail the run instead of prompting:
 
 In **mode 2**, note that `genix.service` points `GENIX_CONFIG_FILE` at this path and the backend panics without it, so installing the units with no `config.toml` present prints a warning: the service is installed but will not start until the file is there.
 
-### Nginx → backend connection
+### HAProxy → backend connection
 
-- `server.nginx_domain` (e.g. `genix-api-4.un.pe`) becomes `server_name`, the config file name, and the Let's Encrypt certificate directory that is looked up under `/etc/letsencrypt/live/`.
-- The vhost declares an `upstream genix_backend_<domain>` block with `keepalive 64` and `keepalive_timeout 100s`, and plain requests send an empty `Connection` header. Together these keep a pool of reused connections to the backend instead of opening and closing one per request. The 100s stays below the backend's `IdleTimeout` (120s), so nginx always closes an idle connection first.
-- **Full mode:** the upstream is `unix:/run/genix/api.sock`. `genix.service` sets `RuntimeDirectory=genix` (systemd creates `/run/genix` and removes it on stop) and `Environment=SERVER_SOCKET=/run/genix/api.sock`. The backend then binds only that socket (mode `0666`, so the nginx workers can connect) and opens no TCP port. `server.port` and `server.nginx_process` are not used.
-- **Split host (modes 2 + 3):** `server.nginx_process` (e.g. `10.0.0.7:14010`) becomes the upstream `server`; a leading `http://`/`https://` moves to `proxy_pass`. `server.port` is exported as `Environment=SERVER_PORT=` and must equal the port half of `server.nginx_process`.
+- `server.domain` (e.g. `genix-api-4.un.pe`) names the site file `/etc/haproxy/sites/<domain>.cfg`, its backend `site_<domain>` (the shared frontend routes by `Host` to `site_<host>`), and the Let's Encrypt certificate.
+- **Full mode:** the backend server is `unix@/run/genix/api.sock`. `genix.service` sets `RuntimeDirectory=genix` (systemd creates `/run/genix` and removes it on stop) and `Environment=SERVER_SOCKET=/run/genix/api.sock`. The backend then binds only that socket (mode `0666`, so HAProxy can connect) and opens no TCP port. `server.port` and `server.upstream` are not used.
+- **Split host (modes 2 + 3):** `server.upstream` (e.g. `10.0.0.7:14010`) becomes the `server` line; an `https://` prefix adds `ssl verify none`. `server.port` is exported as `Environment=SERVER_PORT=` and must equal the port half of `server.upstream`.
+- HAProxy reuses backend connections by itself (`http-reuse safe`), so there is no keepalive pool to configure.
 
 The backend picks its listener as: `SERVER_SOCKET` env var (Unix socket) → `SERVER_PORT` env var → `server.port` in `config.toml` → `3589`.
 
-### What the Nginx step sets up (modes 1 and 3)
+### The fareward SPOE agent (mode 1 only)
+
+When `[spoe].socket` is set, HAProxy asks the fareward daemon about every API request on its headers, before reading the body, so a refused request costs no upload, no backend CPU and no buffer (design: `fareward/plans/plan.md`). Without it, the edge forwards everything and the backend gates each request itself, as on Lambda. Split hosts never get it: the backend trusts the agent's `x-fareward-*` headers only from a local peer.
+
+- **`[spoe].mode`** — `"shadow"` (default) logs the verdict in the access log (`journalctl -u haproxy`, the `{status|reason|error}` captures) and forwards everything; `"enforce"` answers 400/401/403/411/413/429/500 on the verdict and **503 when the agent does not answer** (fail closed). The fareward daemon reads the same key, so the two always agree; restart fareward after changing it. In enforce mode every answer with a verdict, refusals and the backend's own responses alike, carries `x-fareward-usage` (credits left, credits spent per window, reason code; `fareward/plans/plan.md` D10), and a 429 is an HTML page saying how many credits the window that refused had spent, how many requests were refused and how many seconds to wait, with the same figure in `Retry-After`.
+- **`[fareward].trust_edge_headers`** — written by the script, never by hand: `true` only in enforce mode. In enforce mode the agent has already charged an admitted request, so a backend that ignored the headers would charge it twice.
+- **`[fareward].routes_file`** — required; must be inside `/var/lib/genix`, the `StateDirectory=genix` the backend unit gets, the only place it may write under `ProtectSystem=strict`. The backend writes the route table there at startup and the agent refuses to start without it, so configure the backend before fareward.
+- The agent's socket is `0660` and owned by the service account. HAProxy drops every supplementary group when it drops root, so it runs with `group <runtime user>` in `global` instead of adding its user to that group.
+- The SPOE engine lives in the API's backend (`event on-backend-http-request`), not in the shared frontend, so the SSE bridge site never goes through it. Preflights (`OPTIONS`) are answered by the edge and skip the agent.
+
+### What the HAProxy step sets up (modes 1 and 3)
 
 In this order, each step idempotent:
 
-1. **Packages** — installs `nginx`, `certbot` and `python3-certbot-nginx` when missing (apt or dnf), and fails
-   unless `nginx -V` lists `http_v3_module` (nginx 1.25+; Ubuntu 26.04 ships 1.28).
+1. **Packages** — HAProxy **3.1 or later** (`mode spop` for the agent) and `certbot`. On apt hosts with an older or missing HAProxy, the official LTS repository is added first: `haproxy.debian.net` (`<codename>-backports-3.2`) on Debian, `ppa:vbernat/haproxy-3.2` on Ubuntu. On dnf hosts the distribution package is used, and the run fails if it is older than 3.1 (Fedora 44 ships 3.0).
 2. **Firewall** — TCP 80 (certificate challenges and renewals), TCP 443, and **UDP 443** for QUIC, through
    `firewall_ports.py` (firewalld, ufw or plain iptables, whichever owns the host). The cloud provider's own
    rules (OCI security list, AWS security group) are separate and must allow the same.
 3. **Kernel** — `/etc/sysctl.d/90-genix-network.conf`: BBR congestion control with the `fq` qdisc, applied now
    and on boot (`/etc/modules-load.d/genix-network.conf` loads `tcp_bbr`). It changes TCP only — the HTTP/2
-   fallback — since QUIC runs its own congestion control inside nginx.
-4. **`/etc/nginx/nginx.conf`** — `worker_connections 4096`, `multi_accept on`, `worker_rlimit_nofile 16384`.
-   The distribution's 768 connections per worker is a few hundred users once each proxied request holds a
-   client and an upstream connection.
-5. **Certificate** — when `/etc/letsencrypt/live/<domain>` is missing: `certbot certonly --nginx` with an
-   **ECDSA P-256** key (handshakes several times cheaper than RSA 2048), HTTP-01, no email. The domain's DNS
-   must already point at the host. `certbot.timer` renews it.
-6. **The vhost** — HTTP/3 (`listen 443 quic`) plus TLS on TCP with `http2 on` for the first request, before
-   the browser reads `Alt-Svc` (sent with `always`, so errors advertise HTTP/3 too). TLS 1.3 with 0-RTT for
-   GET/HEAD only (anything else answers `425`), `quic_gso`, a buffered access log, and 16 × 32 KB proxy
-   buffers. Then `nginx -t` and a restart.
+   fallback — since QUIC runs its own congestion control inside HAProxy.
+4. **Nginx** — if it is still running from an older install, it is stopped and disabled (not uninstalled; its files stay) so HAProxy can bind :80/:443.
+5. **Configuration, plain HTTP** — this domain's site file, then `/etc/haproxy/haproxy.cfg` regenerated as the shared head plus every file in `/etc/haproxy/sites/`. `haproxy -c` validates the whole file; a rejected one puts the previous files back and fails, so the other sites keep working. Then reload (or start).
+6. **Certificate** — `certbot certonly --standalone --http-01-address 127.0.0.1 --http-01-port 8888`: HAProxy forwards `/.well-known/acme-challenge/` to it, so issuing and renewing never stop the edge. **ECDSA P-256**, no email. The deploy hook `/usr/local/sbin/genix-haproxy-certificate` joins chain and key into `/etc/haproxy/certs/<domain>.pem` and reloads HAProxy; `certbot.timer` renews the same way. A certificate issued earlier through `certbot --nginx` is reissued once with `--force-renewal`, so its renewal stops depending on Nginx.
+7. **Configuration, TLS** — written again now that a certificate exists: `bind :443` (`h2,http/1.1`) and, when the build has QUIC, `quic4@:443` (`h3`) with `Alt-Svc`. TLS 1.3 only, 0-RTT accepted but anything other than GET/HEAD waits for the handshake (`wait-for-handshake`), plain HTTP redirected to HTTPS. An OpenSSL without the QUIC API (`+QUIC_OPENSSL_COMPAT` in `haproxy -vv`) gets `limited-quic` and no 0-RTT over QUIC; a build without QUIC gets no UDP listener and no `Alt-Svc`.
+
+The API site also answers browser preflights itself, deletes any client-sent `x-fareward-*` header, sets `X-Real-IP` (the backend reads the caller's address from it), refuses bodies over 50 MiB (`413`) and keeps idle WebSockets and `/agent/stream` open for an hour.
 
 ---
 
@@ -130,6 +135,9 @@ Environment=GENIX_REPOSITORY_ROOT=/home/ubuntu/genix
 RuntimeDirectory=genix
 RuntimeDirectoryMode=0755
 Environment=SERVER_SOCKET=/run/genix/api.sock
+# /var/lib/genix: where the backend writes [fareward].routes_file.
+StateDirectory=genix
+StateDirectoryMode=0755
 ExecStart=/usr/local/bin/genix/genix_app
 Restart=always
 RestartSec=5

@@ -26,7 +26,7 @@ class SetConfigValuesTest(unittest.TestCase):
 
     def test_local_override_merges_tables_and_replaces_arrays(self):
         config_path = self.write_config(
-            "[server]\nport = 14010\nnginx_domain = \"api.example.com\"\n"
+            "[server]\nport = 14010\ndomain = \"api.example.com\"\n"
             "[[models]]\nid = \"base-a\"\n[[models]]\nid = \"base-b\"\n"
         )
         self.assertEqual(self.toml_config.read_config(config_path)["server"]["port"], 14010)
@@ -36,7 +36,7 @@ class SetConfigValuesTest(unittest.TestCase):
         )
         merged_config = self.toml_config.read_config(config_path)
 
-        self.assertEqual(merged_config["server"], {"port": 15010, "nginx_domain": "api.example.com"})
+        self.assertEqual(merged_config["server"], {"port": 15010, "domain": "api.example.com"})
         self.assertEqual(merged_config["models"], [{"id": "local-only"}])
 
     def test_replacing_existing_key_preserves_comments(self):

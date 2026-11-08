@@ -105,7 +105,7 @@ proceso eso también deja el bridge sin arrancar.
 Si `sse_bridge.url` falta o es igual a `aws.lambda_url`, el chat del agente queda inoperativo en el
 endpoint Lambda; todo lo demás de la app funciona igual. En self-host no hace falta: ese proceso
 sirve su propio `/agent/stream`, y `scripts/configure.py 238` instala Fareward sin validar esa
-URL ni configurar su vhost de Nginx cuando se elige Backend mode `1` o `2`.
+URL ni configurar su sitio de HAProxy cuando se elige Backend mode `1` o `2`.
 
 ## Self-host Deployment + DynamoDB + S3
 
@@ -152,102 +152,17 @@ Follow the logs:
 
 journalctl -u genix.service -f
 
-### Configuración de Certbot y Nginx
-sudo snap install --classic certbot
+### Edge: HAProxy + certificate + fareward SPOE
 
-sudo ln -s /snap/bin/certbot /usr/bin/certbot
+The edge is installed by `scripts/configure/configure_server.py` (mode `1` full, or `3` edge-only),
+not by hand: HAProxy 3.2 from the official repository, the Let's Encrypt certificate through
+`certbot --standalone` behind HAProxy, HTTP/3, and, when `[spoe].socket` is set, the fareward SPOE
+agent that refuses requests on their headers before the body is read. Nginx is no longer used; an
+existing one is stopped and disabled by the script. Details:
+[`scripts/configure/CONFIGURE_SERVER.md`](scripts/configure/CONFIGURE_SERVER.md).
 
-sudo certbot --nginx -d genix-dev-api-1.un.pe
-
-Seguir los pasos para generación de certificado. No se asociará aún pero se crearán los archivos necesario. Saldrá un mensaje como este:
-
+```bash
+sudo python3 scripts/configure.py 28   # then choose Backend mode 1
+sudo haproxy -c -f /etc/haproxy/haproxy.cfg
+journalctl -u haproxy -f              # access log, with the fareward verdict {status|reason|error}
 ```
-Successfully received certificate.
-Certificate is saved at: /etc/letsencrypt/live/genix-dev-api-1.un.pe/fullchain.pem
-Key is saved at:         /etc/letsencrypt/live/genix-dev-api-1.un.pe/privkey.pem
-```
-
-Generar configuracion de nginx
-
-nano /etc/nginx/conf.d/genix-dev-api-1.un.pe.conf
-
-```
-# Map block to handle 0-RTT security (prevents replay attacks on POST/PUT)
-map $ssl_early_data $is_early_data {
-    "~on" 1;
-    default 0;
-}
-
-# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel.
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    "" close;
-}
-
-server {
-    # 1. Standard TCP and HTTP/3 UDP listeners
-    listen 443 quic reuseport;
-    listen 443 ssl;
-    listen [::]:443 quic reuseport;
-    listen [::]:443 ssl;
-
-    server_name genix-dev-api-1.un.pe;
-
-    # 2. SSL/TLS Settings (Pointed to Certbot paths)
-    ssl_certificate /etc/letsencrypt/live/genix-dev-api-1.un.pe/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/genix-dev-api-1.un.pe/privkey.pem;
-    
-    ssl_protocols TLSv1.3; # 0-RTT requires TLS 1.3
-    ssl_early_data on;     # The "Zero Round Trip" magic
-    
-    # 3. Session Optimization for returning users in Peru
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-    ssl_session_tickets on;
-
-    # 4. HTTP/3 Discovery Header
-    add_header Alt-Svc 'h3=":443"; ma=86400';
-
-    location / {
-        # 5. Security: Reject non-GET 0-RTT requests to prevent replay attacks
-        # If your Go backend doesn't handle the "Early-Data" header, 
-        # Nginx can block potentially dangerous early requests here.
-        if ($request_method != GET) {
-            set $early_data_check "${is_early_data}";
-        }
-        if ($early_data_check = "1") {
-            return 425; # "Too Early" - browser will retry automatically
-        }
-
-        # 6. Proxy Headers for Go Backend
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # Passes 0-RTT status so Go can see it
-        proxy_set_header Early-Data $ssl_early_data;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-
-        # 7. Reverse Proxy to Go
-        proxy_pass http://127.0.0.1:3589;
-
-        # 8. Timeouts optimized for trans-continental connections
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        # Agent WebSockets can sit idle while the user thinks between messages.
-        proxy_read_timeout 3600s;
-        
-        # Buffer settings for performance
-        proxy_buffering on;
-        proxy_buffer_size 16k;
-        proxy_buffers 4 16k;
-    }
-}
-```
-
-sudo nginx -t
-
-sudo systemctl restart nginx

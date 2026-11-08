@@ -339,12 +339,10 @@ func fillCompanyCreditUsageFromRows(
 	response *companyCreditBudgetResponse,
 	record coreTypes.CompanyCreditBudget,
 ) error {
-	rows := []coreTypes.CreditUsageCompany{}
 	currentFrame := currentDailyTimeFrame()
-	usageQuery := db.Query(&rows)
-	usageQuery.CompanyID.Equals(record.CompanyID).
-		TimeFrame.Between(dailyTimeFramePrefix+int32(record.BudgetMonthStartDay), currentFrame)
-	if err := usageQuery.Exec(); err != nil {
+	rows, err := readCompanyUsage(record.CompanyID,
+		dailyTimeFramePrefix+int32(record.BudgetMonthStartDay), currentFrame)
+	if err != nil {
 		return err
 	}
 	response.MonthCPUUsed, response.MonthInferenceUsed = 0, 0
@@ -374,8 +372,8 @@ func fillCompanyCreditUsageFromRows(
 // empresa no hay respaldo por sumas: serían tantos escaneos de mes como empresas, y una empresa que
 // nunca gastó un crédito los pagaría en cada refresco del panel para leer ceros.
 func getCompanyCreditBudgets() ([]companyCreditBudgetResponse, error) {
-	records := []coreTypes.CompanyCreditBudget{}
-	if err := db.Query(&records).Exec(); err != nil {
+	records, err := readCompanyBudgets(0)
+	if err != nil {
 		return nil, err
 	}
 	budgets := make([]companyCreditBudgetResponse, 0, len(records))
@@ -390,10 +388,8 @@ func getCompanyCreditBudgets() ([]companyCreditBudgetResponse, error) {
 }
 
 func getCompanyCreditBudgetRecord(companyID int32) (coreTypes.CompanyCreditBudget, error) {
-	records := []coreTypes.CompanyCreditBudget{}
-	query := db.Query(&records)
-	query.CompanyID.Equals(companyID).Limit(1)
-	if err := query.Exec(); err != nil {
+	records, err := readCompanyBudgets(companyID)
+	if err != nil {
 		return coreTypes.CompanyCreditBudget{}, err
 	}
 	record := coreTypes.CompanyCreditBudget{CompanyID: companyID}

@@ -710,7 +710,7 @@ def build_mariadb_server_configuration(database_port, bind_address, total_memory
     """The server the load tests measured (backend/tests/loadtest/run_postgres.sh, MARIADB_TUNING.md),
     scaled to this host.
 
-    The buffer pool takes half the RAM: the backend (GOMEMLIMIT), nginx, fareward and the OS share the
+    The buffer pool takes half the RAM: the backend (GOMEMLIMIT), HAProxy, fareward and the OS share the
     rest. innodb_flush_log_at_trx_commit=2 writes the redo log at every commit but fsyncs it once a
     second: a MariaDB crash loses nothing, an OS or VM crash loses up to ~1 s of commits (decided for
     the VPS on 2026-11-07). There is no binary log, so no point-in-time recovery: backups only. The
@@ -736,6 +736,11 @@ skip-log-bin
 thread-handling = pool-of-threads
 thread-pool-size = {processing_units}
 performance-schema = OFF
+
+# MyRocks keeps only the log tables (the ORM's TableSchema.Log: user_logs), compressed (Snappy), their
+# rows expired by TTL and written without its WAL. Write-mostly, so a small block cache; loose- so the
+# server still starts before the plugin is installed.
+loose-rocksdb-block-cache-size = 64M
 """
 
 def resolve_mariadb_settings(credentials_data):
@@ -771,6 +776,26 @@ def install_mariadb_server_package():
         print("[!] Neither dnf nor apt-get is available: install mariadb-server by hand, then rerun.")
         sys.exit(1)
 
+def install_mariadb_rocksdb_plugin():
+    """MyRocks, which the log tables need: the backend's deploy refuses to create them without it."""
+    if which("dnf"):
+        run_command("dnf install -y mariadb-rocksdb-engine")
+    elif which("apt-get"):
+        run_command("DEBIAN_FRONTEND=noninteractive apt-get install -y mariadb-plugin-rocksdb")
+    else:
+        print("[!] Neither dnf nor apt-get is available: install MariaDB's RocksDB plugin by hand, then rerun.")
+        sys.exit(1)
+
+def ensure_rocksdb_engine_loaded():
+    """The packages load the plugin from their own config snippet; INSTALL SONAME covers one that does not."""
+    engine_query = subprocess.run(
+        ["mariadb", "--protocol=socket", "-uroot", "-N", "-B", "-e",
+         "SELECT support FROM information_schema.engines WHERE engine = 'ROCKSDB'"],
+        capture_output=True, text=True)
+    if engine_query.stdout.strip() in ("YES", "DEFAULT"):
+        return
+    run_mariadb_root_statement("INSTALL SONAME 'ha_rocksdb'")
+
 def resolve_mariadb_service_name():
     for service_name in ("mariadb", "mysql", "mysqld"):
         if run_capture_command(["systemctl", "cat", f"{service_name}.service"], quiet=True).returncode == 0:
@@ -794,6 +819,7 @@ def configure_mariadb(credentials_data, broadcast_ip_address):
     # cloud NAT forwards the public IP to.
     bind_address = "127.0.0.1" if is_local else "0.0.0.0" if is_public else broadcast_ip_address
     install_mariadb_server_package()
+    install_mariadb_rocksdb_plugin()
 
     configuration_directory = next((directory for directory in MARIADB_CONFIG_DIRECTORIES if directory.is_dir()), None)
     if configuration_directory is None:
@@ -813,6 +839,8 @@ def configure_mariadb(credentials_data, broadcast_ip_address):
     if not wait_for_service_active(service_name, timeout_seconds=60):
         print_service_failure_debug(service_name)
         sys.exit(1)
+
+    ensure_rocksdb_engine_loaded()
 
     # The backend creates its own tables (and the ORM's side tables) in this database.
     # With skip-name-resolve, 'localhost' only matches the Unix socket ([mariadb].socket) and TCP

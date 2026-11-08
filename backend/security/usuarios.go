@@ -278,10 +278,10 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al actualizar el user (Cloud ORM): " + err.Error())
 	}
 
-	// fareward tiene los accesos de este user en memoria y acaban de cambiar. Sin esto seguiría
-	// autorizando con los viejos hasta que expire su TTL. No es fatal: el guardado ya está hecho y
-	// el TTL es el respaldo, así que un fallo se registra y no revierte nada.
-	invalidateCachedUserAccess(req, body.CompanyID, body.ID)
+	// fareward autoriza con los accesos que este proceso le envía: sin esto seguiría con los viejos.
+	// No es fatal: el guardado ya está hecho, y un envío perdido lo repara el próximo guardado o
+	// fn-sync-fareward-grants.
+	pushUserGrants(req, body.CompanyID, body.ID)
 
 	return req.MakeResponse(body)
 }

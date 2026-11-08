@@ -15,7 +15,7 @@ Unix socket, providers.backend, ...). `repository` is the checkout the scripts r
 first use, default /home/<user>/genix.
 
 The remote user needs passwordless sudo (Oracle and AWS images give it to their default user):
-configure.py installs packages and writes systemd units, nginx and firewall rules as root.
+configure.py installs packages and writes systemd units, HAProxy and firewall rules as root.
 """
 
 import argparse
@@ -146,7 +146,7 @@ def main():
     argument_parser.add_argument("--server", help="the [[servers]] host to configure (default: the only one)")
     argument_parser.add_argument(
         "--backend-mode", choices=("1", "2", "3"), default="1",
-        help="1 full (default), 2 only the systemd service, 3 only the nginx proxy",
+        help="1 full (default), 2 only the systemd service, 3 only the HAProxy edge",
     )
     command_arguments = argument_parser.parse_args()
 

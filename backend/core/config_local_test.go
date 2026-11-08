@@ -14,7 +14,7 @@ func TestLocalConfigOverrideMergesTablesAndReplacesArrays(t *testing.T) {
 	baseConfigBytes := []byte(`app_name = "genix"
 [server]
 port = 14010
-nginx_domain = "api.example.com"
+domain = "api.example.com"
 [file_store]
 bucket = "orm-bucket"
 vps_dir = "/var/lib/genix/files"

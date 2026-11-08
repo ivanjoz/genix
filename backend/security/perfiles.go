@@ -95,7 +95,7 @@ func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
 	// cambiaron, así que tirar el caché de los demás sólo les costaría una lectura para volver a la
 	// misma respuesta.
 	for _, affectedUser := range usersWithChangedAccesos {
-		invalidateCachedUserAccess(req, affectedUser.CompanyID, affectedUser.ID)
+		pushUserGrants(req, affectedUser.CompanyID, affectedUser.ID)
 	}
 	return req.MakeResponse(body)
 }

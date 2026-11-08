@@ -1,10 +1,11 @@
 package core
 
 import (
-	"context"
+	"app/core/types"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // withCaptureEnabled gives the test an Env, which capture is gated on so that package-init logging
@@ -172,22 +173,19 @@ func TestTakeDrains(t *testing.T) {
 	}
 }
 
-// captureEmittedLogs swaps the send seam so a test can see what EmitRequestLog decided, and pins
-// LOG_ALL_REQUESTS to a known value — the whole point of these tests is which requests reach the
-// daemon, and a nil Env or a leftover flag would make that answer meaningless.
-func captureEmittedLogs(t *testing.T, logAllRequests bool) *[]RequestLogRecord {
+// captureEmittedLogs swaps the write seam so a test can see what EmitRequestLog decided, and pins
+// LOG_ALL_REQUESTS to a known value — the whole point of these tests is which requests reach
+// user_logs, and a nil Env or a leftover flag would make that answer meaningless.
+func captureEmittedLogs(t *testing.T, logAllRequests bool) *[]requestLogEntry {
 	t.Helper()
-	previousEnv, previousSend := Env, SendRequestLog
+	previousEnv, previousWrite := Env, writeRequestLog
 	Env = &EnvStruct{LOG_ALL_REQUESTS: logAllRequests}
-	emitted := []RequestLogRecord{}
-	SendRequestLog = func(ctx context.Context, record RequestLogRecord) error {
-		emitted = append(emitted, record)
-		return nil
-	}
+	emitted := []requestLogEntry{}
+	writeRequestLog = func(entry requestLogEntry) { emitted = append(emitted, entry) }
 	ResetServerlessLogErrors()
 	t.Cleanup(func() {
 		ResetServerlessLogErrors()
-		Env, SendRequestLog = previousEnv, previousSend
+		Env, writeRequestLog = previousEnv, previousWrite
 	})
 	return &emitted
 }
@@ -216,8 +214,8 @@ func TestFailedRequestStillWritesItsRow(t *testing.T) {
 	if len(*emitted) != 1 {
 		t.Fatalf("expected one row, got %d", len(*emitted))
 	}
-	if len((*emitted)[0].Errors) != 1 {
-		t.Fatalf("the row carried %d errors, not the one captured", len((*emitted)[0].Errors))
+	if len((*emitted)[0].errors) != 1 {
+		t.Fatalf("the row carried %d errors, not the one captured", len((*emitted)[0].errors))
 	}
 	if leftover := args.Errors.Take(); len(leftover) != 0 {
 		t.Fatalf("%d errors survived the emit and would be blamed on the next request", len(leftover))
@@ -233,8 +231,8 @@ func TestLogAllRequestsWidensToEveryRequest(t *testing.T) {
 	if len(*emitted) != 1 {
 		t.Fatalf("expected one row with the switch on, got %d", len(*emitted))
 	}
-	if len((*emitted)[0].Errors) != 0 {
-		t.Fatalf("a successful request carried %d errors", len((*emitted)[0].Errors))
+	if len((*emitted)[0].errors) != 0 {
+		t.Fatalf("a successful request carried %d errors", len((*emitted)[0].errors))
 	}
 }
 
@@ -246,7 +244,7 @@ func TestCreditRateLimitRejectionWritesItsRow(t *testing.T) {
 	emitted := captureEmittedLogs(t, false)
 
 	args := &HandlerArgs{RouteID: 34, Errors: &RequestErrors{}}
-	response := args.MakeCreditRateLimitResponse(&CreditLimitExceeded{Code: 3, Window: "1h", CPU: true})
+	response := args.MakeCreditRateLimitResponse(&CreditLimitExceeded{Code: 3, Window: "long window", CPU: true})
 	if response.StatusCode != 429 {
 		t.Fatalf("a credit rejection answered %d, not 429", response.StatusCode)
 	}
@@ -255,7 +253,7 @@ func TestCreditRateLimitRejectionWritesItsRow(t *testing.T) {
 	if len(*emitted) != 1 {
 		t.Fatalf("the rejection left no row in user_logs")
 	}
-	if len((*emitted)[0].Errors) == 0 {
+	if len((*emitted)[0].errors) == 0 {
 		t.Fatal("the rejection's row carried no error entry")
 	}
 }
@@ -284,5 +282,54 @@ func TestTruncateErrorTextFlattensWhitespace(t *testing.T) {
 	flattened := truncateErrorText("primera línea\nsegunda\tlínea")
 	if strings.ContainsAny(flattened, "\n\t") {
 		t.Fatalf("newlines or tabs survived: %q", flattened)
+	}
+}
+
+// The row is what the errors dashboard reads: the packed key, and the error IDs in the order the
+// request failed them.
+func TestTheRowCarriesThePackedKeyAndTheErrorIDs(t *testing.T) {
+	emitted := captureEmittedLogs(t, false)
+
+	args := &HandlerArgs{RouteID: 34, RequestID: 99, User: &UsuarioToken{CompanyID: 7, ID: 42}, Errors: &RequestErrors{}}
+	args.Errors.RegisterAt("stock.go:120", "error al leer el lote")
+	args.Errors.RegisterAt("sales.go:8", "otro")
+	EmitRequestLog(args, 70_000)
+
+	row := (*emitted)[0].row
+	frame := uint8(row.FrameRouteCompanyAgg >> 40)
+	if row.FrameRouteCompanyAgg != types.MakeFrameRouteCompanyAgg(frame, 34, 7) || row.CompanyID != 7 || row.UserID != 42 || row.RequestID != 99 {
+		t.Fatalf("row %+v", row)
+	}
+	if row.ElapsedMs != 32767 || row.ErrorCount != 2 {
+		t.Fatalf("elapsed %d, %d errors", row.ElapsedMs, row.ErrorCount)
+	}
+	wantIDs := []int32{types.MakeRequestErrorID("stock.go:120"), types.MakeRequestErrorID("sales.go:8")}
+	if len(row.ErrorIDs) != 2 || row.ErrorIDs[0] != wantIDs[0] || row.ErrorIDs[1] != wantIDs[1] {
+		t.Fatalf("error ids %v, want %v", row.ErrorIDs, wantIDs)
+	}
+	if errorRows := (*emitted)[0].errors; errorRows[0].CodeLine != "stock.go:120" || errorRows[0].Updated == 0 {
+		t.Fatalf("error rows %+v", errorRows)
+	}
+}
+
+// A code line failing in a loop refreshes its request_errors row once per freshness window, and two
+// lines colliding on one ID are kept apart.
+func TestTheErrorGateWritesALineOncePerWindow(t *testing.T) {
+	gate := newRequestErrorGate(10*time.Minute, 2)
+	start := time.Unix(1_000_000, 0)
+	line := types.RequestError{ID: 5, CodeLine: "a.go:1"}
+	collision := types.RequestError{ID: 5, CodeLine: "b.go:2"}
+	if admitted := gate.admit([]types.RequestError{line, line, collision}, start); len(admitted) != 2 {
+		t.Fatalf("admitted %d", len(admitted))
+	}
+	if admitted := gate.admit([]types.RequestError{line}, start.Add(9*time.Minute)); len(admitted) != 0 {
+		t.Fatal("rewritten inside the window")
+	}
+	if admitted := gate.admit([]types.RequestError{line}, start.Add(11*time.Minute)); len(admitted) != 1 {
+		t.Fatal("not rewritten after the window")
+	}
+	gate.admit([]types.RequestError{{ID: 6, CodeLine: "c.go:3"}}, start.Add(12*time.Minute))
+	if len(gate.lastWritten) != 2 {
+		t.Fatalf("the gate holds %d lines past its capacity", len(gate.lastWritten))
 	}
 }

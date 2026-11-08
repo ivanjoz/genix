@@ -180,9 +180,9 @@ def download_selected_binaries(selected_components, backend_mode):
 def resolve_backend_mode():
     """Ask which side of the split backend deployment this host owns."""
     print("Backend Service mode:")
-    print("    [1] Full (systemd service + Nginx proxy)")
+    print("    [1] Full (systemd service + HAProxy edge)")
     print("    [2] Only Systemd Service")
-    print("    [3] Only Nginx Proxy")
+    print("    [3] Only HAProxy edge")
     selected_mode = input("Select the Backend Service mode: ").strip()
     if selected_mode not in {"1", "2", "3"}:
         raise ValueError("Backend Service mode must be 1, 2 or 3.")
@@ -273,7 +273,7 @@ def parse_command_arguments():
     argument_parser.add_argument(
         "--backend-mode",
         choices=("1", "2", "3"),
-        help="answer the Backend Service mode prompt: 1 full, 2 only systemd, 3 only nginx",
+        help="answer the Backend Service mode prompt: 1 full, 2 only systemd, 3 only the HAProxy edge",
     )
     argument_parser.add_argument(
         "--staged-binaries",

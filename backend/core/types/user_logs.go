@@ -2,8 +2,8 @@ package types
 
 import "app/db"
 
-// One row per finished request, written by fareward and never by this backend: the ORM owns
-// the schema, the daemon owns the writes.
+// One row per finished request that failed (or every request, under LOG_ALL_REQUESTS), written by
+// this backend itself (core/request_log_writer.go).
 //
 // What is here is what answers "which requests failed, on what route, for which company, when".
 // What is deliberately not here is the message and the stack — those stay in CloudWatch, findable
@@ -38,13 +38,15 @@ type UserLogTable struct {
 
 func (e UserLogTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		// Written externally in whole rows; no ORM-managed created/updated columns and no update
-		// counter, the same arrangement the credit_usage_* tables use.
+		// Written once in whole rows: no ORM-managed created/updated columns and no update counter.
 		ID:                    44,
 		Name:                  "user_logs",
 		Partition:             e.Date,
 		Keys:                  db.Cols(e.RequestID),
 		DisableDefaultColumns: true,
+		// A log: MyRocks, compressed, written without the write-ahead log, and every row dropped 30
+		// days after its write by the engine's TTL, so nothing here purges it.
+		Log: &db.LogStorage{RetentionDays: 30},
 		Indexes: []db.Index{
 			// The grouped index behind the errors dashboard. The frame leads the packed key, so
 			// one fifteen-minute slice of a day is a single contiguous clustering range and the
@@ -81,8 +83,7 @@ const (
 //	bits 39..24  routeID
 //	bits 23..0   companyID
 //
-// Mirrored byte for byte in fareward/src/reqlog/protocol.rs, which is the side that actually
-// writes it; the vectors in both test files pin the two implementations together.
+// The test vectors pin it: the dashboard's frame ranges depend on this exact layout.
 func MakeFrameRouteCompanyAgg(frame uint8, routeID int16, companyID int32) int64 {
 	return int64(frame)<<agLoggedFrameShift |
 		int64(uint16(routeID))<<agLoggedRouteShift |

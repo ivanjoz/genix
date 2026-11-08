@@ -24,13 +24,14 @@ type (
 // ─── Schema declaration ────────────────────────────────────────────────────────
 
 type (
-	TableSchema         = orm.TableSchema
-	Index               = orm.Index
-	Coln                = orm.Coln
-	TableHandle         = orm.TableHandle
-	ColumnStatement     = orm.ColumnStatement
+	TableSchema     = orm.TableSchema
+	Index           = orm.Index
+	LogStorage      = orm.LogStorage
+	Coln            = orm.Coln
+	TableHandle     = orm.TableHandle
+	ColumnStatement = orm.ColumnStatement
 	// Transaction is the transaction a RunTransaction body writes through.
-	Transaction = orm.Transaction
+	Transaction         = orm.Transaction
 	TableInfo           = orm.TableInfo
 	GenericRecordSchema = orm.GenericRecordSchema
 	GenericRecord       = orm.GenericRecord

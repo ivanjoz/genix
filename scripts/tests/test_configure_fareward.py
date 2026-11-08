@@ -27,109 +27,71 @@ def load_configure_fareward_module():
     return configure_fareward
 
 
-class BridgeNginxTemplateTest(unittest.TestCase):
-    def test_certificate_produces_an_http3_vhost_that_never_buffers(self):
+class BridgeHAProxySiteTest(unittest.TestCase):
+    def test_the_bridge_site_forwards_to_loopback_and_keeps_streams_open(self):
         configure_fareward = load_configure_fareward_module()
-        existing_config = (
-            "server {\n"
-            "    ssl_certificate /etc/letsencrypt/live/genix-sse.un.pe/fullchain.pem; # managed by Certbot\n"
-            "    ssl_certificate_key /etc/letsencrypt/live/genix-sse.un.pe/privkey.pem; # managed by Certbot\n"
-            "    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot\n"
-            "}\n"
-        )
 
-        with redirect_stdout(io.StringIO()):
-            rendered_config = configure_fareward.build_bridge_nginx_configuration(
-                "genix-sse.un.pe", 14012, existing_config
-            )
+        site_configuration = configure_fareward.build_bridge_site_configuration("genix-sse.un.pe", 14012)
 
-        self.assertIn("listen 443 quic reuseport;", rendered_config)
-        self.assertIn("add_header Alt-Svc 'h3=\":443\"; ma=86400' always;", rendered_config)
-        self.assertIn("ssl_certificate /etc/letsencrypt/live/genix-sse.un.pe/fullchain.pem;", rendered_config)
+        # Routed by the shared frontend's use_backend site_<host>.
+        self.assertIn("backend site_genix-sse.un.pe", site_configuration)
         # One host, one upstream: always the loopback address.
-        self.assertIn("proxy_pass http://127.0.0.1:14012;", rendered_config)
-        # The streaming settings are the reason this vhost exists.
-        self.assertIn("proxy_buffering off;", rendered_config)
-        self.assertIn("proxy_read_timeout 3600s;", rendered_config)
-        self.assertIn('proxy_set_header Connection "";', rendered_config)
-        self.assertIn("gzip off;", rendered_config)
-        # Certbot's options include would duplicate ssl_protocols, and CORS is the bridge's job.
-        self.assertNotIn("options-ssl-nginx.conf", rendered_config)
-        self.assertNotIn("add_header 'Access-Control-Allow-Origin'", rendered_config)
+        self.assertIn("server bridge 127.0.0.1:14012", site_configuration)
+        # An idle stream must survive between agent turns.
+        self.assertIn("timeout server 3600s", site_configuration)
+        # CORS is the bridge's job; buffering a response would stall the stream.
+        self.assertNotIn("Access-Control-Allow-Origin", site_configuration)
+        self.assertNotIn("http-buffer-request", site_configuration)
 
-    def test_reuseport_is_dropped_when_another_vhost_already_owns_it(self):
+    def test_the_bridge_site_goes_through_the_shared_edge(self):
         configure_fareward = load_configure_fareward_module()
 
-        with redirect_stdout(io.StringIO()):
-            rendered_config = configure_fareward.build_bridge_nginx_configuration(
-                "genix-sse.un.pe",
-                14012,
-                "ssl_certificate /c/fullchain.pem;\nssl_certificate_key /c/privkey.pem;\n",
-                reuseport_is_available=False,
-            )
+        with mock.patch.object(configure_fareward, "configure_haproxy_site") as configure_site_mock:
+            configure_fareward.configure_bridge_edge("genix-sse.un.pe", 14012, "ubuntu")
 
-        self.assertIn("listen 443 quic;", rendered_config)
-        self.assertNotIn("reuseport", rendered_config)
+        endpoint_hostname, process_group, site_files = configure_site_mock.call_args.args
+        self.assertEqual(endpoint_hostname, "genix-sse.un.pe")
+        # The same group configure_server.py gives HAProxy, so neither script flips it.
+        self.assertEqual(process_group, "ubuntu")
+        self.assertEqual(list(site_files), [Path("/etc/haproxy/sites/genix-sse.un.pe.cfg")])
 
-    def test_without_a_certificate_the_vhost_falls_back_to_plain_http(self):
+
+class CreditCeilingDefaultsTest(unittest.TestCase):
+    def written_ceilings(self, rate_limit_section):
         configure_fareward = load_configure_fareward_module()
+        project_credentials = {"rate_limit": rate_limit_section}
+        with mock.patch.object(configure_fareward, "set_config_values") as set_values_mock:
+            with redirect_stdout(io.StringIO()):
+                configure_fareward.ensure_rate_limit_credit_limits(project_credentials, "config.toml")
+        if not set_values_mock.called:
+            return {}
+        return set_values_mock.call_args.args[1]
 
-        with redirect_stdout(io.StringIO()):
-            rendered_config = configure_fareward.build_bridge_nginx_configuration(
-                "genix-sse.un.pe", 14012
-            )
+    def test_an_empty_section_gets_every_ceiling_under_the_short_and_long_names(self):
+        written = self.written_ceilings({})
+        self.assertEqual(written["rate_limit.company_cpu_short"], 2000)
+        self.assertEqual(written["rate_limit.company_cpu_long"], 40000)
+        self.assertEqual(written["rate_limit.user_inference_long"], 5000)
+        # Exactly the eight the daemon requires: no old names and no daily ceiling, which is per
+        # company in the budget store and never read from this file.
+        self.assertEqual(len(written), 8)
+        self.assertFalse(any(name.endswith(("_10s", "_1h", "_24h")) for name in written))
+        # The window lengths have a default in the daemon: never written.
+        self.assertNotIn("rate_limit.long_window_minutes", written)
 
-        self.assertIn("listen 80;", rendered_config)
-        self.assertNotIn("listen 443", rendered_config)
-        self.assertNotIn("ssl_certificate", rendered_config)
-        # Streaming still has to work over plain HTTP.
-        self.assertIn("proxy_buffering off;", rendered_config)
+    def test_a_ceiling_under_its_old_name_is_kept_and_not_overridden(self):
+        # The daemon prefers the new name when both exist, so writing a default under it would
+        # silently replace the hand-tuned old value.
+        written = self.written_ceilings({"company_cpu_10s": 5000, "company_cpu_1h": 90000})
+        self.assertNotIn("rate_limit.company_cpu_short", written)
+        self.assertNotIn("rate_limit.company_cpu_long", written)
+        self.assertEqual(written["rate_limit.user_cpu_short"], 1000)
 
-    def test_quic_is_omitted_when_nginx_cannot_speak_it(self):
-        """An Nginx without http_v3_module cannot parse `listen ... quic`, and nginx -t covers
-        the whole host, so emitting it would break every other site rather than this one."""
-        configure_fareward = load_configure_fareward_module()
-
-        with redirect_stdout(io.StringIO()):
-            rendered_config = configure_fareward.build_bridge_nginx_configuration(
-                "genix-sse.un.pe",
-                14012,
-                "ssl_certificate /c/fullchain.pem;\nssl_certificate_key /c/privkey.pem;\n",
-                http3_is_supported=False,
-            )
-
-        self.assertNotIn("quic", rendered_config)
-        # Advertising h3 without a QUIC listener points browsers at a port nothing answers on.
-        self.assertNotIn("Alt-Svc", rendered_config)
-        # TLS itself must still be configured.
-        self.assertIn("listen 443 ssl;", rendered_config)
-        self.assertIn("ssl_certificate /c/fullchain.pem;", rendered_config)
-        self.assertIn("proxy_pass http://127.0.0.1:14012;", rendered_config)
-
-    def test_reuseport_owner_is_found_in_any_nginx_configuration_file(self):
-        configure_fareward = load_configure_fareward_module()
-
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            configuration_directory = Path(temporary_directory) / "conf.d"
-            configuration_directory.mkdir()
-            configure_fareward.NGINX_CONFIGURATION_DIRECTORY = configuration_directory
-
-            own_configuration_path = configuration_directory / "genix-sse.un.pe.conf"
-            self.assertIsNone(configure_fareward.detect_reuseport_listener_owner(own_configuration_path))
-
-            backend_configuration_path = configuration_directory / "genix-api-4.un.pe.conf"
-            backend_configuration_path.write_text(
-                "server {\n    listen 443 quic reuseport;\n}\n", encoding="utf-8"
-            )
-            self.assertEqual(
-                configure_fareward.detect_reuseport_listener_owner(own_configuration_path),
-                backend_configuration_path,
-            )
-
-            # Our own file claiming reuseport is not a conflict with itself.
-            own_configuration_path.write_text("server {\n    listen 443 quic reuseport;\n}\n", encoding="utf-8")
-            backend_configuration_path.unlink()
-            self.assertIsNone(configure_fareward.detect_reuseport_listener_owner(own_configuration_path))
+    def test_a_missing_long_ceiling_is_raised_to_the_short_one(self):
+        # A hand-tuned short ceiling above the example's long default must not produce the
+        # decreasing pair the daemon refuses to start with.
+        written = self.written_ceilings({"company_cpu_short": 50000})
+        self.assertEqual(written["rate_limit.company_cpu_long"], 50000)
 
 
 class ConfigurationResolutionTest(unittest.TestCase):
@@ -172,11 +134,11 @@ class ConfigurationResolutionTest(unittest.TestCase):
                 configure_fareward.resolve_bridge_port({"sse_bridge": {"port": "15000"}}), 15000
             )
 
-            # A typo must stop the run: the Nginx upstream is built from this number.
+            # A typo must stop the run: the HAProxy backend is built from this number.
             with self.assertRaises(SystemExit):
                 configure_fareward.resolve_bridge_port({"sse_bridge": {"port": "0"}})
 
-    def test_service_only_mode_does_not_require_a_bridge_domain_or_nginx(self):
+    def test_service_only_mode_does_not_require_a_bridge_domain_or_an_edge(self):
         configure_fareward = load_configure_fareward_module()
         command_arguments = SimpleNamespace(binary_source="precompiled", service_only=True)
 
@@ -203,8 +165,8 @@ class ConfigurationResolutionTest(unittest.TestCase):
         ), mock.patch.object(
             configure_fareward, "install_systemd_service", return_value="homelab"
         ), mock.patch.object(
-            configure_fareward, "configure_bridge_nginx_vhost"
-        ) as configure_nginx_mock, mock.patch.object(
+            configure_fareward, "configure_bridge_edge"
+        ) as configure_edge_mock, mock.patch.object(
             configure_fareward, "open_listen_port_in_firewall"
         ), mock.patch.object(
             configure_fareward, "print_summary"
@@ -212,22 +174,18 @@ class ConfigurationResolutionTest(unittest.TestCase):
             configure_fareward.main()
 
         resolve_domain_mock.assert_not_called()
-        configure_nginx_mock.assert_not_called()
+        configure_edge_mock.assert_not_called()
         self.assertIsNone(print_summary_mock.call_args.args[2])
 
     def test_both_secrets_must_be_present_and_are_never_prompted_for(self):
         configure_fareward = load_configure_fareward_module()
         config_path = Path("/repo/config.toml")
-        database_settings = {
-            "db": {"name": "genix"},
-            "mariadb": {"host": "127.0.0.1", "user": "u", "password": "p"},
-        }
 
         with redirect_stdout(io.StringIO()):
-            # Everything present: passes without asking anything.
+            # Both secrets present: passes without asking anything, and without any database
+            # setting — the daemon reads no database.
             configure_fareward.verify_required_settings(
-                {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678", **database_settings},
-                config_path,
+                {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678"}, config_path
             )
 
             # Any secret missing or blank stops the run, naming the key.
@@ -239,14 +197,8 @@ class ConfigurationResolutionTest(unittest.TestCase):
             ):
                 with self.assertRaises(SystemExit):
                     configure_fareward.verify_required_settings(
-                        {**incomplete_credentials, **database_settings}, config_path
+                        incomplete_credentials, config_path
                     )
-
-            # And so does a missing database setting: the daemon exits when it cannot reach MariaDB.
-            with self.assertRaises(SystemExit):
-                configure_fareward.verify_required_settings(
-                    {"secret_phrase": "abcd1234", "internal_apikey": "efgh5678"}, config_path
-                )
 
     def test_the_failure_report_reads_the_real_cause_from_the_journal(self):
         configure_fareward = load_configure_fareward_module()
@@ -262,11 +214,11 @@ class ConfigurationResolutionTest(unittest.TestCase):
             configure_fareward.diagnose_service_failure(bind_failure_journal),
         )
 
-        # The undeployed-tables hypothesis is still reported — when the journal actually says so.
+        # A store that cannot be opened is reported — when the journal actually says so.
         self.assertIn(
-            "fn-homologate",
+            "StateDirectory",
             configure_fareward.diagnose_service_failure(
-                "fareward[1]: Error: Table 'genix.credit_usage_company' doesn't exist\n"
+                "fareward[1]: Error: cannot open the fareward store at /var/lib/fareward/store\n"
             ),
         )
 
@@ -347,7 +299,7 @@ class UnitAndBinaryTest(unittest.TestCase):
 
     def test_service_unit_raises_the_file_descriptor_limit(self):
         """systemd defaults the soft limit to 1024, which is below the daemon's own
-        max_connections of 1024 once the MariaDB pool, both listeners and every open SSE
+        max_connections of 1024 once the store's files, both listeners and every open SSE
         stream are counted: it would hit EMFILE before its configured ceiling."""
         configure_fareward = load_configure_fareward_module()
 
@@ -356,6 +308,18 @@ class UnitAndBinaryTest(unittest.TestCase):
         )
 
         self.assertIn("LimitNOFILE=65536", service_contents)
+
+    def test_service_unit_gives_the_store_a_writable_state_directory(self):
+        """ProtectSystem=strict leaves /var/lib read-only: without StateDirectory the daemon cannot
+        open its default store and exits at startup. It needs no database, so no MariaDB order."""
+        configure_fareward = load_configure_fareward_module()
+
+        service_contents = configure_fareward.build_service_contents(
+            "genix", Path("/repo/config.toml"), 14012
+        )
+
+        self.assertIn("StateDirectory=fareward", service_contents)
+        self.assertNotIn("mariadb", service_contents.lower())
 
     def test_restart_watcher_units_target_the_merged_service(self):
         configure_fareward = load_configure_fareward_module()

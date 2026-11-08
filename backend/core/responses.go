@@ -53,12 +53,13 @@ type HandlerArgs struct {
 	RouteID int16
 }
 
-// ClientIPFromRequest resolves the caller's address behind the project's own Nginx.
+// ClientIPFromRequest resolves the caller's address behind the project's own HAProxy edge.
 //
 // X-Forwarded-For is deliberately ignored: scripts/configure/configure_server.py sets it with
-// $proxy_add_x_forwarded_for, which *appends*, so a client that sends its own header lands first
-// in the list. Anything rate-limited by that value would be bypassable with one curl flag.
-// X-Real-IP is written from $remote_addr and cannot be forged through the proxy.
+// `option forwardfor`, which *appends*, so a client that sends its own header lands first in the
+// list. Anything rate-limited by that value would be bypassable with one curl flag.
+// X-Real-IP is overwritten from the peer address (`set-header x-real-ip %[src]`) and cannot be
+// forged through the proxy.
 func ClientIPFromRequest(request *http.Request) string {
 	if realIP := strings.TrimSpace(request.Header.Get("X-Real-IP")); realIP != "" {
 		return realIP

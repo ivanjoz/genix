@@ -7,6 +7,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/exec"
+	"app/security"
 	"context"
 	"fmt"
 	fareward "github.com/ivanjoz/fareward/go"
@@ -273,7 +274,7 @@ func OnPanic(panicMessage interface{}) {
 // resolveServerPort picks the listen address for the standalone HTTP server. The SERVER_PORT
 // environment variable wins (systemd sets it from config.toml via
 // scripts/configure/configure_server.py), then the server.port config value itself, then the 3589 default.
-// Nginx proxies to the port half of server.nginx_process, so the two must agree.
+// On a split host HAProxy proxies to the port half of server.upstream, so the two must agree.
 func resolveServerPort() string {
 	if envPort := strings.TrimSpace(os.Getenv("SERVER_PORT")); envPort != "" {
 		if parsedPort, err := strconv.Atoi(envPort); err == nil && parsedPort > 0 && parsedPort < 65536 {
@@ -294,7 +295,7 @@ var tailnetCGNATBlock = net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMas
 
 // resolveDevListenAddresses returns the addresses a dev backend binds, instead of every interface.
 //
-// A dev run holds the production database credentials and answers on a port with no nginx and no
+// A dev run holds the production database credentials and answers on a port with no edge proxy and no
 // firewall rule in front of it, so "all interfaces" hands it to the LAN and to anything forwarded
 // to this host — which is how VPN-appliance scanner traffic ends up in the request log. Loopback
 // serves the machine itself, and the tailnet address is what serve_tailscale needs for the browser
@@ -371,6 +372,22 @@ func main() {
 		} else {
 			core.Log("fareward route table written::", core.Env.FAREWARD_ROUTES_FILE)
 		}
+	}
+	// fareward authorizes from the grants this process pushes (it no longer reads the users table),
+	// so a VPS start sends them all: it seeds a new store and repairs any push that was lost. In
+	// the background, because the gate already answers from whatever the store holds. Lambda runs
+	// fn-sync-fareward-grants instead.
+	if !core.Env.FAREWARD_BYPASS && !core.Env.IS_SERVERLESS {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			companies, users, err := security.SyncAllFarewardGrants(ctx)
+			if err != nil {
+				core.Log("ERROR: no se pudieron sincronizar los accesos con fareward::", err)
+				return
+			}
+			core.Log("accesos sincronizados con fareward::", companies, "empresa(s),", users, "user(s)")
+		}()
 	}
 	fmt.Println("Setting full logs...")
 	// os.Setenv("LOGS_FULL", "1")
@@ -506,8 +523,9 @@ func main() {
 			ReadTimeout:       30 * time.Second,
 			// Keep disabled to allow long-lived SSE streams (metrics and future real-time endpoints).
 			WriteTimeout: 0,
-			// Must outlive nginx's upstream keepalive_timeout (100s), so nginx is always the side
-			// that closes an idle pooled connection and never reuses one Go already dropped.
+			// Long, so HAProxy (which purges its idle backend connections every pool-purge-delay,
+			// 5s by default) is normally the side that closes an idle pooled connection and does
+			// not reuse one Go already dropped.
 			IdleTimeout:    120 * time.Second,
 			MaxHeaderBytes: 1 << 20, // 1 MiB
 			// Track active connections for operational metrics and SSE dashboards.
@@ -516,7 +534,7 @@ func main() {
 			},
 		}
 
-		// On the VPS, nginx shares the host and reaches the backend through a Unix socket: no TCP
+		// On the VPS, HAProxy shares the host and reaches the backend through a Unix socket: no TCP
 		// handshake or port allocation per upstream connection, and no port open on the public IP.
 		// systemd sets SERVER_SOCKET and creates its directory (RuntimeDirectory=genix).
 		if serverSocketPath := strings.TrimSpace(os.Getenv("SERVER_SOCKET")); serverSocketPath != "" && !core.Env.IS_DEV_ARG {
@@ -527,7 +545,7 @@ func main() {
 				core.Log("HTTP server error: no se pudo abrir el socket", serverSocketPath, "::", err)
 				return
 			}
-			// nginx workers run as another user and need write permission to connect. The socket
+			// HAProxy runs as another user and needs write permission to connect. The socket
 			// is local-only, so world-writable exposes nothing beyond this host.
 			if err := os.Chmod(serverSocketPath, 0o666); err != nil {
 				core.Log("HTTP server error: no se pudo dar permisos al socket", serverSocketPath, "::", err)
@@ -540,7 +558,7 @@ func main() {
 			return
 		}
 
-		// Without a socket (a split-host install) the binary binds every interface: nginx reaches it
+		// Without a socket (a split-host install) the binary binds every interface: HAProxy reaches it
 		// by a different address, and narrowing that is a deploy decision, not this one. Only a dev
 		// launch restricts itself. See resolveDevListenAddresses.
 		if !core.Env.IS_DEV_ARG {

@@ -39,9 +39,13 @@ type (
 	// AccessGrant is what the daemon answered about this request: which required slots the caller
 	// holds, and each one's sub-access bytes still in wire form. The bytes stay opaque over there
 	// on purpose — the client holds no catalogue — so accesos-blob.go decodes them here.
-	AccessGrant      = fareward.AccessGrant
-	RequestLogRecord = fareward.RequestLogRecord
-	RequestLogEntry  = fareward.RequestLogError
+	AccessGrant     = fareward.AccessGrant
+	CompanyUsageRow = fareward.CompanyUsageRow
+	UserUsageRow    = fareward.UserUsageRow
+	CompanyBudget   = fareward.CompanyBudget
+	ServerMetricRow = fareward.ServerMetricRow
+	// UserGrants is what fareward keeps of a user: status and grant blobs (security/fareward_grants.go).
+	UserGrants = fareward.UserGrants
 )
 
 const (
@@ -73,7 +77,6 @@ var (
 
 	ConfigureFareward = fareward.ConfigureFareward
 
-	SendRequestLog              = fareward.SendRequestLog
 	InvalidateUserAccess        = fareward.InvalidateUserAccess
 	ChargeAPIUsage              = fareward.ChargeAPIUsage
 	ChargeAPICredits            = fareward.ChargeAPICredits
@@ -87,6 +90,15 @@ var (
 	APICPUCredits               = fareward.APICPUCredits
 	InferenceCredits            = fareward.InferenceCredits
 	MutateCompanyCreditBudget   = fareward.MutateCompanyCreditBudget
+	// The reports: fareward is the source of truth for usage, budgets and server metrics, so the
+	// panels read them from it rather than from tables of this database.
+	QueryCompanyUsage      = fareward.QueryCompanyUsage
+	QueryEveryCompanyUsage = fareward.QueryEveryCompanyUsage
+	QueryUserUsage         = fareward.QueryUserUsage
+	QueryCompanyBudgets    = fareward.QueryCompanyBudgets
+	QueryServerMetrics     = fareward.QueryServerMetrics
+	// The grants push: fareward no longer reads the users table, this process sends it the grants.
+	PutUserGrants = fareward.PutUserGrants
 )
 
 // LockError is every way AcquireLock can fail to hand back a lock. It exists so a handler can turn

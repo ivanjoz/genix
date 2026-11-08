@@ -2,7 +2,6 @@ package core
 
 import (
 	"app/core/types"
-	"context"
 	"math"
 	"runtime"
 	"slices"
@@ -13,8 +12,8 @@ import (
 	"unicode/utf8"
 )
 
-// The failures of the request currently being served, collected so prepareResponse can hand them
-// to fareward in one frame.
+// The failures of the request currently being served, collected so prepareResponse can write them
+// to user_logs in one row (request_log_writer.go).
 //
 // Only the code line and a preview travel. The full message and its stack are already going to
 // CloudWatch under this request's ID, and duplicating them into the database would buy nothing except
@@ -137,8 +136,8 @@ func PanicCodeLine() string {
 	}
 }
 
-// EmitRequestLog hands one finished request to fareward, and is the last thing that happens to
-// it. Everything it needs is already resolved: the identity from HandlerArgs, the failures from
+// EmitRequestLog hands one finished request to the request log writer, and is the last thing that
+// happens to it. Everything it needs is already resolved: the identity from HandlerArgs, the failures from
 // the accumulator, the elapsed time from the response.
 //
 // A request that failed nothing leaves no row unless LOG_ALL_REQUESTS says otherwise. user_logs
@@ -147,9 +146,8 @@ func PanicCodeLine() string {
 // are not a special case here: MakeCreditRateLimitResponse builds its 429 through MakeErrCode,
 // which captures, so a refused request arrives with an entry and passes the gate on its own.
 //
-// Nothing here can fail in a way the caller should care about. The daemon does not answer, an
-// unreachable one is logged once and forgotten, and a request that has already produced its
-// response must never be affected by what happened to its log row.
+// Nothing here can fail in a way the caller should care about: a request that has already produced
+// its response must never be affected by what happened to its log row.
 func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 	captured := req.Errors.Take()
 	// On Lambda the heuristic captures of Log/LogError belong to this request too. Merged under the
@@ -162,18 +160,9 @@ func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 			}
 		}
 	}
-	entries := make([]RequestLogEntry, 0, len(captured))
-	for _, requestError := range captured {
-		entries = append(entries, RequestLogEntry{
-			ID:   requestError.ID,
-			Line: requestError.Line,
-			Text: requestError.Text,
-		})
-	}
-
 	// After the drain and never before it: Take is what clears the accumulators, so returning any
 	// earlier would leave this request's errors to be reported by whatever drains next.
-	if len(entries) == 0 && (Env == nil || !Env.LOG_ALL_REQUESTS) {
+	if len(captured) == 0 && (Env == nil || !Env.LOG_ALL_REQUESTS) {
 		return
 	}
 
@@ -191,25 +180,28 @@ func EmitRequestLog(req *HandlerArgs, elapsedMs int64) {
 		elapsedMs = 0
 	}
 
-	record := RequestLogRecord{
-		Date:      int16(now.Unix() / 86_400),
-		RequestID: req.RequestID,
-		RouteID:   req.RouteID,
-		Frame:     types.FrameOfDay(now.Unix()),
-		CompanyID: companyID,
-		UserID:    userID,
-		ElapsedMs: int16(elapsedMs),
-		Errors:    entries,
+	row := types.UserLog{
+		Date:                 int16(now.Unix() / 86_400),
+		RequestID:            req.RequestID,
+		CompanyID:            companyID,
+		UserID:               userID,
+		RouteID:              req.RouteID,
+		FrameRouteCompanyAgg: types.MakeFrameRouteCompanyAgg(types.FrameOfDay(now.Unix()), req.RouteID, companyID),
+		ElapsedMs:            int16(elapsedMs),
+		ErrorCount:           int8(len(captured)),
 	}
-
-	if Env.FAREWARD_BYPASS {
+	errorRows := make([]types.RequestError, 0, len(captured))
+	for _, requestError := range captured {
+		row.ErrorIDs = append(row.ErrorIDs, requestError.ID)
+		errorRows = append(errorRows, types.RequestError{
+			ID: requestError.ID, CodeLine: requestError.Line, Text: requestError.Text, Updated: int32(now.Unix()),
+		})
+	}
+	// [fareward].bypass is the load-test mode: no request log either, as before.
+	if Env != nil && Env.FAREWARD_BYPASS {
 		return
 	}
-	if err := SendRequestLog(context.Background(), record); err != nil {
-		// logNoCapture, not Log: this message says "error" and would otherwise register itself as
-		// a failure of the *next* request, which is the one whose accumulator is now open.
-		logNoCapture("request log not sent::", err)
-	}
+	writeRequestLog(requestLogEntry{row: row, errors: errorRows})
 }
 
 // messageLooksLikeFailure is the heuristic half of error capture: most failures in this backend

@@ -338,7 +338,7 @@ in that degraded case, and the tolerated request itself goes uncounted.
 ## A dev backend binds loopback and the tailnet, not every interface
 
 **Context** — The dev backend listened on `*:14010`. It holds the production database credentials
-and has no nginx and no firewall rule in front of it, so every interface meant the LAN and anything
+and has no edge proxy and no firewall rule in front of it, so every interface meant the LAN and anything
 forwarded to this host as well. It showed up as bursts of rejected requests for routes the app does
 not serve — `/dana-na`, `/global-protect/prelogin.esp`, `/remote/login`, `/sslvpnclient`, the
 standard VPN-appliance scanner sweep — each one writing a row into the request log, which for a dev
@@ -351,7 +351,7 @@ inside 100.64.0.0/10, and a dev launch opens one `net.Listen` per address sharin
 **Rationale** — Those two addresses are exactly the reachability `serve_tailscale` needs: the machine
 itself, and a browser on another tailnet node. Matching on the CGNAT block rather than on an
 interface named `tailscale0` keeps it correct on macOS `utun` and on the userspace daemon. Narrowing
-the *deployed* listener is a deploy decision — nginx, the health check and the Function URL each
+the *deployed* listener is a deploy decision — HAProxy, the health check and the Function URL each
 arrive by a different address — so it is gated on `IS_DEV_ARG` rather than applied to both. A
 listener that fails to open is logged by address and skipped instead of being fatal: losing the
 tailnet address still leaves a working loopback backend. Verified live: `ss` shows `127.0.0.1:14010`

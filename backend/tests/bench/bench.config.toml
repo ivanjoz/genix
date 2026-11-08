@@ -48,15 +48,15 @@ max_connections       = 1024
 shards                = 0
 max_inflight_per_connection = 64
 access_cache_seconds  = 600
-company_cpu_10s       = 2000000000
-company_inference_10s = 2000000000
-company_cpu_1h        = 2000000000
-company_inference_1h  = 2000000000
+company_cpu_short       = 2000000000
+company_inference_short = 2000000000
+company_cpu_long        = 2000000000
+company_inference_long  = 2000000000
 user_daily_share_pct  = 100
-user_cpu_10s          = 2000000000
-user_inference_10s    = 2000000000
-user_cpu_1h           = 2000000000
-user_inference_1h     = 2000000000
+user_cpu_short          = 2000000000
+user_inference_short    = 2000000000
+user_cpu_long           = 2000000000
+user_inference_long     = 2000000000
 company_extra_credits_24h = 0
 
 [lock]

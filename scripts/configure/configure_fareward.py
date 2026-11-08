@@ -1,37 +1,39 @@
 #!/usr/bin/env python3
 
-"""Install fareward/ on this host: systemd units plus the Nginx vhost for its SSE bridge.
+"""Install fareward/ on this host: systemd units plus the HAProxy site for its SSE bridge.
 
 One Rust binary, fareward, over two transports:
 
   - A raw TCP port where the frame's opcode routes to the credit rate limiter or the lock
-    service. It is authenticated by HMAC but not encrypted, so it never gets an Nginx vhost.
+    service. It is authenticated by HMAC but not encrypted, so it never gets a public site.
     [fareward] public decides whether the daemon binds loopback or every interface: false
     when the backend runs on this same host, true when it runs elsewhere (Lambda, another VPS).
     When it is true this script also opens the port in the host firewall — a daemon bound to
     0.0.0.0 behind a REJECT rule looks healthy from here and times out from everywhere else.
-  - The SSE bridge, on an HTTP port that must be reachable by browsers. Nginx terminates TLS
+  - The SSE bridge, on an HTTP port that must be reachable by browsers. HAProxy terminates TLS
     for it on this very machine: what it proxies is a permanent stream, and a second hop buys
     nothing.
+  - The SPOE agent HAProxy asks before forwarding an API request ([spoe].socket). Its HAProxy
+    side belongs to the API site, which configure_server.py writes.
 
-Deliberately simpler than configure_server.py, which covers a backend host and an Nginx edge
-host that are usually two different machines. Here there is no upstream to configure — the
-vhost always forwards to 127.0.0.1.
+Deliberately simpler than configure_server.py, which covers a backend host and an edge host
+that may be two different machines. Here there is no upstream to configure — the bridge site
+always forwards to 127.0.0.1. Both scripts share the HAProxy edge helpers in configure_server.py,
+and each writes only its own site file.
 
 It asks for nothing. Values come from config.toml, and a missing one either fails with the key
-name or gets a documented default written into the file — never a prompt. Secrets and database
-settings fail (they must match what the backend uses); the credit ceilings are filled in, since
+name or gets a documented default written into the file — never a prompt. Secrets fail (they must
+match what the backend uses); the credit ceilings are filled in, since
 those are policy and a default beats a daemon that exits at startup on every restart.
 
-Nginx specifics: the vhost never buffers (a buffered text/event-stream is a stalled request),
-it adds no CORS headers (the bridge answers preflights itself — a duplicated
-Access-Control-Allow-Origin makes browsers reject the response), and it serves HTTP/3 whenever
-a certificate for the hostname exists.
+HAProxy specifics: it never buffers a response (a buffered text/event-stream is a stalled
+request), the bridge site adds no CORS headers (the bridge answers preflights itself — a
+duplicated Access-Control-Allow-Origin makes browsers reject the response), and it serves HTTP/3
+once the hostname's certificate exists, which this script issues.
 """
 
 import argparse
 import os
-import re
 import shutil
 import sys
 import time
@@ -43,17 +45,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from configure_server import (  # noqa: E402  (the sys.path line above must run first)
-    LETSENCRYPT_DIRECTORY,
-    NGINX_CONFIGURATION_DIRECTORY,
+    HAPROXY_SITES_DIRECTORY,
     SERVICE_INSTALL_DIRECTORY,
     SYSTEMD_DIRECTORY,
     build_unprivileged_command,
+    configure_haproxy_site,
     detect_repository_config_path,
     detect_runtime_username,
     detect_unprivileged_username,
     ensure_binary_directory,
-    ensure_nginx_is_installed,
-    extract_existing_certbot_tls_lines,
     fail_with_error,
     is_usable_executable,
     load_project_credentials,
@@ -62,7 +62,7 @@ from configure_server import (  # noqa: E402  (the sys.path line above must run 
     resolve_go_architecture,
     resolve_runtime_user,
     run_command,
-    validate_nginx_domain,
+    validate_domain,
     validate_server_port,
     write_unit_file,
 )
@@ -97,18 +97,14 @@ LEGACY_BINARY_PATH = SERVICE_INSTALL_DIRECTORY / "genix-server-utils"
 # default. The three drifting apart puts the daemon on one port and every caller on another.
 DEFAULT_BRIDGE_PORT = 14012
 DEFAULT_LISTEN_PORT = 14013
-# The daemon loads existing usage from MariaDB before it serves anything, so give it a moment
-# before deciding whether it stayed up.
+# The daemon loads existing usage from its own store before it serves anything, so give it a
+# moment before deciding whether it stayed up.
 SERVICE_SETTLE_SECONDS = 3
 HEALTH_PROBE_TIMEOUT_SECONDS = 5
 
 # Both are root-level keys in config.toml. secret_phrase verifies the browser's session token;
 # internal_apikey authenticates the backend's calls (and the rate limiter's TCP frames).
 REQUIRED_SECRET_NAMES = ("secret_phrase", "internal_apikey")
-
-# The daemon opens a MariaDB pool before it serves anything, so these have no default either and
-# cannot be invented here. The same keys the backend reads; mariadb.port defaults to 3306.
-REQUIRED_DATABASE_SETTINGS = ("db.name", "mariadb.host", "mariadb.user", "mariadb.password")
 
 # Every way this daemon is known to refuse to start, matched against its journal. Ordered from the
 # most specific fragment to the most generic, because a line can contain more than one.
@@ -133,46 +129,46 @@ KNOWN_SERVICE_FAILURE_CAUSES = (
         "often the pre-rename genix-server-utils service, or a copy started outside systemd.",
     ),
     (
-        "credit_usage",
-        "the backend tables are not deployed, so the rate limiter exits rather than admit traffic "
-        "it cannot account for. Run the backend's 'fn-homologate' and rerun this script.",
+        "the store directory",
+        "the daemon could not create its store directory ([store].path, default "
+        "/var/lib/fareward/store). The unit's StateDirectory=fareward creates it; check the path "
+        "and that the service user owns it.",
     ),
     (
-        "Access denied",
-        "MariaDB refused mariadb.user/mariadb.password. Run configure_db.py mariadb, which creates "
-        "that user, or fix the keys in config.toml.",
+        "fareward store",
+        "the daemon could not open its store directory ([store].path, default "
+        "/var/lib/fareward/store). The unit's StateDirectory=fareward creates it; check the path "
+        "and that the service user owns it.",
     ),
     (
         "missing required setting",
         "config.toml lacks a key the daemon has no default for. The log line names it.",
     ),
-    (
-        "Connection refused",
-        "MariaDB did not answer at mariadb.host/mariadb.port. Check that it is up and reachable from here.",
-    ),
 )
 
-# The twelve credit ceilings the daemon requires. Unlike every other [rate_limit] key they have
+# The eight credit ceilings the daemon requires. Unlike every other [rate_limit] key they have
 # no fallback in fareward/src/config.rs — a guessed quota is worse than none — so an absent
 # one makes the process exit at startup and systemd restart it every RestartSec forever. The
-# numbers mirror config.example.toml: (10s, 1h, 24h) per scope and credit kind.
+# numbers mirror config.example.toml: (short window, long window) per scope and credit kind.
+# There is no daily ceiling here: the daily and monthly entitlements are per company, in the
+# daemon's budget store, administered from the SaaS panel.
+# The window lengths themselves (short_window_seconds, long_window_minutes) do have a default in
+# the daemon (10 seconds and 60 minutes), so they are never written here.
 RATE_LIMIT_CREDIT_DEFAULTS = {
-    "company_cpu": (2000, 40000, 200000),
-    "company_inference": (1000, 10000, 20000),
-    "user_cpu": (1000, 20000, 100000),
-    "user_inference": (500, 5000, 10000),
+    "company_cpu": (2000, 40000),
+    "company_inference": (1000, 10000),
+    "user_cpu": (1000, 20000),
+    "user_inference": (500, 5000),
 }
-RATE_LIMIT_WINDOW_SUFFIXES = ("10s", "1h", "24h")
+RATE_LIMIT_WINDOW_SUFFIXES = ("short", "long")
+# The names the short and long ceilings had before the window lengths were configurable. The
+# daemon still reads them (with a warning), and the new name wins when both are set — so writing
+# a default under the new name next to a hand-tuned old one would silently replace it.
+RATE_LIMIT_LEGACY_SUFFIXES = {"short": "10s", "long": "1h"}
 
 # An AWS function URL in sse_bridge.url means "no bridge" (the backend serves its own
 # /agent/stream), so it cannot be the hostname this vhost is built for.
 LAMBDA_URL_HOST_SUFFIXES = (".on.aws", ".amazonaws.com")
-
-# reuseport may be set by exactly one server block per address:port. A second one anywhere in
-# the Nginx configuration fails `nginx -t` with "duplicate listen options", which is what would
-# happen when this host also serves the backend vhost written by configure_server.py.
-NGINX_LISTEN_REUSEPORT_PATTERN = re.compile(r"^\s*listen\s+[^;]*\breuseport\b", re.MULTILINE)
-
 
 def resolve_bridge_domain(project_credentials, repository_config_path):
     """Take the vhost hostname from sse_bridge.url. Never prompts: this key is not a secret.
@@ -194,7 +190,7 @@ def resolve_bridge_domain(project_credentials, repository_config_path):
             fail_with_error(f"sse_bridge.url has an unsupported scheme '{url_scheme}://': {configured_url}")
 
     candidate_host = candidate_value.split("/", 1)[0].partition(":")[0]
-    bridge_domain, domain_error = validate_nginx_domain(candidate_host)
+    bridge_domain, domain_error = validate_domain(candidate_host)
     if bridge_domain is None:
         fail_with_error(f"sse_bridge.url is unusable ({domain_error}): {configured_url}")
 
@@ -217,7 +213,7 @@ def resolve_bridge_port(project_credentials):
 
     bridge_port, validation_error = validate_server_port(str(configured_port))
     if bridge_port is None:
-        # Never fall back silently: the Nginx upstream is built from this number, so a typo
+        # Never fall back silently: the HAProxy backend is built from this number, so a typo
         # would produce a vhost proxying to a port nothing listens on.
         fail_with_error(f"sse_bridge.port in config.toml is unusable: {validation_error}")
 
@@ -320,8 +316,7 @@ def verify_required_settings(project_credentials, repository_config_path):
     """Fail early when a setting the process needs at startup is missing and cannot be defaulted.
 
     Not prompted for: the secrets are root-level keys written during initial project setup and
-    their values must match the backend byte for byte, and the database is already configured by
-    the time this host runs anything. Guessing either would install a service that fails at
+    their values must match the backend byte for byte. Guessing them would install a service that fails at
     runtime instead of failing visibly now — and because the unit is Restart=always, "fails at
     runtime" means a three-second crash loop nobody is watching.
     """
@@ -330,14 +325,6 @@ def verify_required_settings(project_credentials, repository_config_path):
             fail_with_error(
                 f"{secret_name} is not set in {repository_config_path}. It must hold the same "
                 "value the backend uses, otherwise every request is rejected at runtime."
-            )
-
-    for database_setting_name in REQUIRED_DATABASE_SETTINGS:
-        if not str(get_config_value(project_credentials, database_setting_name, "")).strip():
-            fail_with_error(
-                f"{database_setting_name} is not set in {repository_config_path}. The daemon "
-                "loads existing credit usage from MariaDB before it serves anything and exits "
-                "when it cannot connect."
             )
 
     print_debug(f"Found both required secrets: {', '.join(REQUIRED_SECRET_NAMES)}.")
@@ -364,12 +351,13 @@ def ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
 
     This is the one class of missing setting worth fixing instead of reporting: the values are
     policy, not secrets, so a sane starting point exists — and the alternative is the daemon
-    exiting with `missing required setting rate_limit.company_cpu_10s` on every restart. They go
+    exiting with `missing required setting rate_limit.company_cpu_short` on every restart. They go
     into the file rather than the unit's Environment= so the operator can see and tune them.
 
-    Values already present are never touched. A missing window is filled with the example default
-    raised to the previous window's value, so completing a hand-tuned set cannot produce the
-    decreasing sequence the daemon rejects (10s <= 1h <= 24h).
+    Values already present are never touched, under their current name or the old one (_10s,
+    _1h): the daemon reads either. A missing window is filled with the example default raised to
+    the previous window's value, so completing a hand-tuned set cannot produce the decreasing
+    sequence the daemon rejects (short <= long).
     """
     missing_credit_limits = {}
     for credit_scope_name, window_defaults in RATE_LIMIT_CREDIT_DEFAULTS.items():
@@ -377,6 +365,15 @@ def ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
         for window_suffix, default_value in zip(RATE_LIMIT_WINDOW_SUFFIXES, window_defaults):
             setting_name = f"rate_limit.{credit_scope_name}_{window_suffix}"
             configured_value = read_positive_integer_setting(project_credentials, setting_name)
+            legacy_suffix = RATE_LIMIT_LEGACY_SUFFIXES.get(window_suffix)
+            if configured_value is None and legacy_suffix is not None:
+                legacy_name = f"rate_limit.{credit_scope_name}_{legacy_suffix}"
+                configured_value = read_positive_integer_setting(project_credentials, legacy_name)
+                if configured_value is not None:
+                    print_debug(
+                        f"{legacy_name} is set: the daemon reads it as {setting_name}. "
+                        f"Rename it when convenient."
+                    )
             if configured_value is not None:
                 previous_window_value = configured_value
                 continue
@@ -396,274 +393,35 @@ def ensure_rate_limit_credit_limits(project_credentials, repository_config_path)
     set_config_values(repository_config_path, missing_credit_limits)
 
 
-def build_tls_directive_lines(bridge_domain, existing_nginx_configuration_contents):
-    """Return the ssl_* lines for this hostname, or an empty list when there is no certificate.
+def build_bridge_site_configuration(bridge_domain, bridge_port):
+    """The bridge's HAProxy site file: one backend forwarding the domain to the local bridge.
 
-    Certbot rewrites the vhost it manages, so its own directives win over the default paths: a
-    certificate stored somewhere else keeps working across reruns of this script.
+    HAProxy forwards response data as it arrives, so a text/event-stream is never held back and
+    there is nothing to turn off. No CORS here: the bridge answers preflights itself, and a
+    duplicated Access-Control-Allow-Origin is rejected by browsers. Early data on POST /in waits
+    for the handshake (the shared frontend's rule): it is not replay-safe.
     """
-    preserved_tls_lines = extract_existing_certbot_tls_lines(existing_nginx_configuration_contents)
-    has_certificate = any(line.strip().startswith("ssl_certificate ") for line in preserved_tls_lines)
-    has_certificate_key = any(line.strip().startswith("ssl_certificate_key ") for line in preserved_tls_lines)
-    if has_certificate and has_certificate_key:
-        return preserved_tls_lines
+    return f"""# Written by scripts/configure/configure_fareward.py (build_bridge_site_configuration).
+# The fareward SSE bridge at {bridge_domain}.
 
-    certificate_directory = LETSENCRYPT_DIRECTORY / bridge_domain
-    certificate_fullchain_path = certificate_directory / "fullchain.pem"
-    certificate_private_key_path = certificate_directory / "privkey.pem"
-    if certificate_fullchain_path.exists() and certificate_private_key_path.exists():
-        print_debug(f"Detected TLS certificates for {bridge_domain} at {certificate_directory}")
-        return [
-            f"    ssl_certificate {certificate_fullchain_path};",
-            f"    ssl_certificate_key {certificate_private_key_path};",
-        ]
-
-    return []
-
-
-def detect_reuseport_listener_owner(own_configuration_path):
-    """Find another Nginx file that already claims reuseport, so this vhost can drop it.
-
-    reuseport asks Nginx for a dedicated socket per worker on that address:port, and only the
-    first server block may request it. The backend vhost written by configure_server.py does.
-    """
-    candidate_configuration_paths = []
-    nginx_root_directory = NGINX_CONFIGURATION_DIRECTORY.parent
-    for configuration_glob in ("nginx.conf", "conf.d/*.conf", "sites-enabled/*"):
-        candidate_configuration_paths.extend(sorted(nginx_root_directory.glob(configuration_glob)))
-
-    for candidate_configuration_path in candidate_configuration_paths:
-        if not candidate_configuration_path.is_file():
-            continue
-        try:
-            if candidate_configuration_path.resolve() == own_configuration_path.resolve():
-                continue
-            configuration_contents = candidate_configuration_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-
-        if NGINX_LISTEN_REUSEPORT_PATTERN.search(configuration_contents):
-            return candidate_configuration_path
-
-    return None
-
-
-def nginx_supports_http3():
-    """Report whether this Nginx was built with QUIC.
-
-    `listen 443 quic` is a syntax error to a binary without http_v3_module, and because
-    `nginx -t` checks the whole configuration that one line would break every other site on the
-    host. HTTP/3 arrived in mainline 1.25, so distributions still shipping 1.24 or an older
-    stable build do not have it.
-    """
-    version_result = run_command(["nginx", "-V"], allow_failure=True)
-    if version_result.returncode != 0:
-        print_debug("Could not read 'nginx -V'; assuming no HTTP/3 support.")
-        return False
-
-    # -V writes its build flags to stderr.
-    build_flags = f"{version_result.stdout} {version_result.stderr}"
-    if "http_v3_module" in build_flags:
-        return True
-
-    print_debug(
-        "This Nginx was built without http_v3_module, so the vhost gets TLS over TCP only. "
-        "Install Nginx 1.25+ with HTTP/3 and rerun to enable QUIC."
-    )
-    return False
-
-
-def warn_if_http3_is_unreachable(nginx_configuration_contents):
-    """HTTP/3 fails silently when UDP is closed, so say so instead of letting it look fine.
-
-    Browsers reach the site over TCP and never report that the QUIC handshake was dropped, so a
-    firewall that only ever opened 443/tcp leaves HTTP/3 permanently unused with no symptom.
-    """
-    if "quic" not in nginx_configuration_contents:
-        return
-
-    firewall_state = run_command(["firewall-cmd", "--state"], allow_failure=True)
-    if firewall_state.returncode == 0 and firewall_state.stdout.strip() == "running":
-        open_ports = run_command(["firewall-cmd", "--list-ports"], allow_failure=True)
-        if "443/udp" not in open_ports.stdout:
-            print_debug(
-                "WARNING: HTTP/3 is configured but firewalld does not list 443/udp. Open it with: "
-                "firewall-cmd --permanent --add-port=443/udp && firewall-cmd --reload"
-            )
-        return
-
-    ufw_status = run_command(["ufw", "status"], allow_failure=True)
-    if ufw_status.returncode == 0 and "Status: active" in ufw_status.stdout:
-        if "443" not in ufw_status.stdout:
-            print_debug(
-                "WARNING: HTTP/3 is configured but ufw does not allow 443. Open it with: "
-                "ufw allow 443"
-            )
-        return
-
-    print_debug(
-        "HTTP/3 is configured. No local firewall is managing this host, so make sure UDP 443 is "
-        "open upstream too — a cloud security group that only allows TCP silently disables it."
-    )
-
-
-def build_bridge_nginx_configuration(
-    bridge_domain,
-    bridge_port,
-    existing_nginx_configuration_contents="",
-    reuseport_is_available=True,
-    http3_is_supported=True,
-):
-    """Render the vhost: HTTP/3 over TLS when a certificate exists, plain HTTP otherwise."""
-    tls_directive_lines = build_tls_directive_lines(bridge_domain, existing_nginx_configuration_contents)
-
-    # The settings that make the difference between a stream and a stalled request. Identical in
-    # both variants below, so they live in one string.
-    streaming_location_body = f"""        # The bridge always runs on this host: nothing is gained by proxying a permanent
-        # stream across a second machine.
-        proxy_pass http://127.0.0.1:{bridge_port};
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # HTTP/1.1 with an empty Connection header: the bridge speaks plain HTTP and there is
-        # no Upgrade handshake to tunnel, unlike the WebSocket-era backend vhost.
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-
-        # Without these three the events pile up in Nginx instead of reaching the browser.
-        proxy_buffering off;
-        proxy_cache off;
-        gzip off;
-
-        proxy_connect_timeout 10s;
-        proxy_send_timeout 3600s;
-        # An idle stream must survive between agent turns; the bridge keepalive is every 20s.
-        proxy_read_timeout 3600s;
-
-        proxy_pass_header Server;
-        server_tokens off;
-
-        # No CORS headers here on purpose: the bridge sets them and answers preflights itself,
-        # and a duplicated Access-Control-Allow-Origin is rejected by browsers."""
-
-    if tls_directive_lines:
-        tls_directives = "\n".join(tls_directive_lines)
-        quic_listen_options = " reuseport" if reuseport_is_available else ""
-        if not reuseport_is_available:
-            print_debug("Another Nginx vhost already owns reuseport on :443. Listening without it.")
-
-        # Emitting quic on an Nginx without http_v3_module is not a degraded vhost, it is a
-        # configuration the binary cannot parse — and `nginx -t` covers every site on the host.
-        if http3_is_supported:
-            listen_directives = (
-                f"    # HTTP/3 (QUIC) plus the TCP listener browsers use before they see Alt-Svc.\n"
-                f"    listen 443 quic{quic_listen_options};\n"
-                f"    listen 443 ssl;\n"
-                f"    listen [::]:443 quic{quic_listen_options};\n"
-                f"    listen [::]:443 ssl;"
-            )
-            alt_svc_directive = "\n    add_header Alt-Svc 'h3=\":443\"; ma=86400' always;\n"
-        else:
-            listen_directives = (
-                "    # TLS over TCP only: this Nginx was built without http_v3_module.\n"
-                "    listen 443 ssl;\n"
-                "    listen [::]:443 ssl;"
-            )
-            # Advertising h3 without a QUIC listener sends browsers to a port nothing answers on.
-            alt_svc_directive = ""
-
-        return f"""server {{
-{listen_directives}
-    http2 on;
-
-    server_name {bridge_domain};
-
-{tls_directives}
-
-    ssl_protocols TLSv1.3;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-    ssl_session_tickets on;
-    # ssl_early_data stays off: POST /in is not replay-safe and 0-RTT buys nothing for a
-    # connection that stays open for the whole session.
-{alt_svc_directive}
-    location / {{
-{streaming_location_body}
-    }}
-}}
-"""
-
-    print_debug(
-        f"No TLS certificates found for {bridge_domain}. Writing HTTP-only config "
-        "(run certbot, then this script again, to get HTTP/3)."
-    )
-    return f"""server {{
-    # Fallback used until TLS certificates are provisioned for this hostname.
-    listen 80;
-    listen [::]:80;
-
-    server_name {bridge_domain};
-
-    location / {{
-{streaming_location_body}
-    }}
-}}
+backend site_{bridge_domain}
+    # An idle stream must survive between agent turns; the bridge keepalive is every 20s.
+    timeout server 3600s
+    option forwardfor
+    http-request set-header x-real-ip %[src]
+    # The bridge always runs on this host: nothing is gained by proxying a permanent stream
+    # across a second machine.
+    server bridge 127.0.0.1:{bridge_port}
 """
 
 
-def configure_bridge_nginx_vhost(bridge_domain, bridge_port):
-    ensure_nginx_is_installed()
-
-    nginx_configuration_path = NGINX_CONFIGURATION_DIRECTORY / f"{bridge_domain}.conf"
-
-    existing_nginx_configuration_contents = None
-    if nginx_configuration_path.exists():
-        existing_nginx_configuration_contents = nginx_configuration_path.read_text(encoding="utf-8")
-
-    reuseport_owner_path = detect_reuseport_listener_owner(nginx_configuration_path)
-    if reuseport_owner_path:
-        print_debug(f"reuseport is already claimed by {reuseport_owner_path}")
-
-    nginx_configuration_contents = build_bridge_nginx_configuration(
+def configure_bridge_edge(bridge_domain, bridge_port, runtime_username):
+    site_file_path = HAPROXY_SITES_DIRECTORY / f"{bridge_domain}.cfg"
+    configure_haproxy_site(
         bridge_domain,
-        bridge_port,
-        existing_nginx_configuration_contents or "",
-        reuseport_is_available=reuseport_owner_path is None,
-        http3_is_supported=nginx_supports_http3(),
+        runtime_username,
+        {site_file_path: build_bridge_site_configuration(bridge_domain, bridge_port)},
     )
-
-    if existing_nginx_configuration_contents == nginx_configuration_contents:
-        print_debug(f"Nginx configuration unchanged: {nginx_configuration_path}")
-        return
-
-    print_debug(f"Writing Nginx vhost for the bridge: {nginx_configuration_path}")
-    nginx_configuration_path.write_text(nginx_configuration_contents, encoding="utf-8")
-    os.chmod(nginx_configuration_path, 0o644)
-
-    # `nginx -t` validates the whole configuration, not just this file, so a vhost it rejects
-    # would keep every other site on the host from reloading too. Put back what was there before
-    # failing, rather than leaving a landmine for the next unrelated reload.
-    validation_result = run_command(["nginx", "-t"], allow_failure=True)
-    if validation_result.returncode != 0:
-        if existing_nginx_configuration_contents is None:
-            nginx_configuration_path.unlink(missing_ok=True)
-            print_debug(f"Removed the rejected vhost: {nginx_configuration_path}")
-        else:
-            nginx_configuration_path.write_text(
-                existing_nginx_configuration_contents, encoding="utf-8"
-            )
-            print_debug(f"Restored the previous vhost: {nginx_configuration_path}")
-        fail_with_error(
-            "Nginx rejected the generated vhost (see the output above). The previous "
-            "configuration was put back, so the other sites on this host keep working."
-        )
-
-    run_command(["systemctl", "enable", "nginx"])
-    run_command(["systemctl", "restart", "nginx"])
-    warn_if_http3_is_unreachable(nginx_configuration_contents)
 
 
 def detect_source_directory(repository_root_path):
@@ -879,11 +637,10 @@ def provide_binary(repository_root_path, runtime_user_entry, binary_source=BINAR
 def build_service_contents(runtime_username, repository_config_path, bridge_port):
     return f"""[Unit]
 Description=Genix Server Utilities (credit rate limiter + SSE bridge)
-# The rate limiter loads existing usage from MariaDB before admitting anything and exits when
-# it cannot, which also stops the bridge: one process, shared fate. Deploy the backend tables
-# (so the credit_usage_* tables exist) before enabling this unit. After= only orders the start
-# when MariaDB runs on this host; it is ignored when it does not.
-After=network-online.target mariadb.service
+# The rate limiter loads existing usage from its own store (StateDirectory below) before admitting
+# anything and exits when it cannot, which also stops the bridge: one process, shared fate. It
+# needs no database: the backend pushes the grants and writes its own request log.
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -900,12 +657,17 @@ Environment=SSE_BRIDGE_PORT={bridge_port}
 # the backend can traverse it; the socket itself is 0660.
 RuntimeDirectory=fareward
 RuntimeDirectoryMode=0755
+# /var/lib/fareward: the default [store].path (/var/lib/fareward/store) lives here. systemd creates
+# it owned by the service user and keeps it writable under ProtectSystem=strict. It is the whole
+# state of the credit system, so it is what a backup copies.
+StateDirectory=fareward
+StateDirectoryMode=0700
 ExecStart={BINARY_PATH}
 Restart=always
 RestartSec=3
 
 # Without this the unit inherits systemd's default soft limit of 1024 open files, which is below
-# the daemon's own rate_limit.max_connections of 1024 — every SSE stream, the MariaDB pool
+# the daemon's own rate_limit.max_connections of 1024 — every SSE stream, the store's files
 # and both listeners come out of the same budget, so it would hit EMFILE before reaching its
 # configured ceiling and start refusing connections it was told to accept.
 LimitNOFILE=65536
@@ -1003,8 +765,7 @@ def start_service(systemd_configuration_changed, bridge_port):
 
     # The binary is installed before the watcher is (re)started, so that first change is never
     # seen by it. A service that cannot start must not fail the whole run: the units are already
-    # in place and journalctl has the reason (most often: the credit_usage_* tables are not
-    # deployed yet).
+    # in place and journalctl has the reason (most often: the store directory cannot be opened).
     service_start_result = run_command(["systemctl", "restart", SERVICE_NAME], allow_failure=True)
     if service_start_result.returncode != 0:
         report_service_failure("systemctl restart returned an error")
@@ -1048,8 +809,8 @@ def verify_service_is_serving(bridge_port):
     """Confirm the daemon is actually up, not merely exec'd.
 
     `systemctl restart` succeeds as soon as the process starts, and this unit is Type=simple with
-    Restart=always: a daemon that exits immediately — which is exactly what it does when MariaDB
-    is unreachable — looks identical to a healthy one at that point. So wait for it to settle,
+    Restart=always: a daemon that exits immediately — which is exactly what it does when its store
+    cannot be opened — looks identical to a healthy one at that point. So wait for it to settle,
     then ask it something only a working process can answer.
     """
     time.sleep(SERVICE_SETTLE_SECONDS)
@@ -1062,7 +823,7 @@ def verify_service_is_serving(bridge_port):
         return
 
     # is-active only proves the process exists. /health proves the bridge half is listening and
-    # answering, which also means the rate limiter got past its MariaDB load.
+    # answering, which also means the rate limiter got past loading its store.
     health_url = f"http://127.0.0.1:{bridge_port}/health"
     try:
         with urllib.request.urlopen(health_url, timeout=HEALTH_PROBE_TIMEOUT_SECONDS) as response:
@@ -1143,8 +904,8 @@ def print_summary(
         )
         return
 
-    print_debug(f"Nginx vhost: {NGINX_CONFIGURATION_DIRECTORY / (bridge_domain + '.conf')}")
-    print_debug(f"Through Nginx: curl -s https://{bridge_domain}/health")
+    print_debug(f"HAProxy site file: {HAPROXY_SITES_DIRECTORY / (bridge_domain + '.cfg')}")
+    print_debug(f"Through HAProxy: curl -s https://{bridge_domain}/health")
     print_debug(
         f"Reminder: sse_bridge.url (https://{bridge_domain}/) configures the backend, and the "
         "matching [[endpoints]].bridge configures the frontend selector."
@@ -1164,7 +925,7 @@ def parse_command_arguments():
     argument_parser.add_argument(
         "--service-only",
         action="store_true",
-        help="install the daemon without requiring sse_bridge.url or configuring its Nginx vhost",
+        help="install the daemon without requiring sse_bridge.url or configuring its HAProxy site",
     )
     return argument_parser.parse_args()
 
@@ -1192,7 +953,7 @@ def main():
         repository_config_path, bridge_port, command_arguments.binary_source
     )
     if bridge_domain is not None:
-        configure_bridge_nginx_vhost(bridge_domain, bridge_port)
+        configure_bridge_edge(bridge_domain, bridge_port, runtime_username)
     # After the service, so the rule is added for a port something is actually listening on.
     open_listen_port_in_firewall(listen_port, listen_is_public)
     print_summary(

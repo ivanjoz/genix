@@ -107,7 +107,7 @@ A Spanish bigram word encoder ported to Go (`backend/libs/text-search/`) and the
 The **same Go binary** runs three ways, selected at runtime — no separate builds:
 
 1. **AWS Lambda** — detected via `AWS_LAMBDA_FUNCTION_NAME` / `AWS_EXECUTION_ENV`; served through API Gateway v2. Config from a compressed `CONFIG` env var. Data on ScyllaDB (VPS/EC2) + DynamoDB + S3.
-2. **Standalone binary / self-host** — an `http.Server` on `:3589` (CORS, SSE, slowloris timeouts). Config from `config.toml`. Deployed as a `systemd` service behind Nginx (HTTP/3, TLS 1.3 0-RTT). See [`DEPLOYMENT.md`](DEPLOYMENT.md).
+2. **Standalone binary / self-host** — an `http.Server` on `:3589` (CORS, SSE, slowloris timeouts). Config from `config.toml`. Deployed as a `systemd` service behind HAProxy (HTTP/3, TLS 1.3 0-RTT), which can ask the fareward SPOE agent before forwarding. See [`DEPLOYMENT.md`](DEPLOYMENT.md).
 3. **Exec / function mode** — a `{"fn_exec": …}` body or `fn…` CLI arg runs a registered function (incl. a cron scheduler) instead of HTTP routing; cross-invocation calls transparently become `lambda.Invoke` in the cloud or a local HTTP POST when self-hosted.
 
 Both HTTP transports converge on a single `core.HandlerArgs` → `mainHandler` path, with module handler maps registered per domain (`sales`, `finance`, `logistics`, `business`, `security`, `webpage`, `agent`, …), token auth, and YAML-driven access control.
@@ -231,7 +231,7 @@ scripts/          Table-creation, validation & build utilities
 ## Documentation
 
 - [`AGENTS.md`](AGENTS.md) — operational protocol & project rules
-- [`DEPLOYMENT.md`](DEPLOYMENT.md) — Lambda & self-host (systemd + Nginx) deployment
+- [`DEPLOYMENT.md`](DEPLOYMENT.md) — Lambda & self-host (systemd + HAProxy) deployment
 - [`backend/genix-orm/scylla/ORM_INTERNALS.md`](backend/genix-orm/scylla/ORM_INTERNALS.md) · [`backend/docs/ORM_DATABASE_QUERY.md`](backend/docs/ORM_DATABASE_QUERY.md) — ORM deep dive
 - [`backend/docs/CREATE_API_HANDLERS.md`](backend/docs/CREATE_API_HANDLERS.md) — API handler guide
 - [`backend/libs/colbin/README.md`](backend/libs/colbin/README.md) — colbin wire format

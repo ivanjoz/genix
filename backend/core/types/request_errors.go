@@ -32,7 +32,7 @@ type RequestErrorTable struct {
 
 func (e RequestErrorTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		// Written externally, like user_logs and the credit_usage_* tables.
+		// Upserted by core/request_log_writer.go, at most once per code line every ten minutes.
 		ID:        45,
 		Name:      "request_errors",
 		Partition: e.ID,
@@ -47,10 +47,6 @@ func (e RequestErrorTable) GetSchema() db.TableSchema {
 // MakeRequestErrorID hashes a code line into the ID that user_logs rows reference. FNV-1a 32,
 // masked to stay positive because the column is a signed int32 and a negative ID reads as a bug
 // every time someone sees one.
-//
-// Mirrored in fareward/src/reqlog/protocol.rs — though the daemon only ever receives this
-// value, it never recomputes it, so the Go side is the sole authority on what a code line hashes
-// to. The Rust test vectors exist to catch the day that stops being true.
 func MakeRequestErrorID(codeLine string) int32 {
 	hash := fnv.New32a()
 	hash.Write([]byte(codeLine))

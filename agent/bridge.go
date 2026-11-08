@@ -58,11 +58,11 @@ func BridgeEnabled() bool {
 }
 
 // bridgeBaseURL supplies the scheme when sse_bridge.url is a bare host. The
-// deploy script only wants the hostname (it becomes Nginx's server_name), so a
+// deploy script only wants the hostname (it names the HAProxy site), so a
 // scheme-less value passes configuration unnoticed and then fails on every call
 // with "unsupported protocol scheme" — at request time, in Lambda, far from the
 // edit that caused it. Loopback means a bridge started by hand for a local test,
-// where there is no Nginx terminating TLS.
+// where there is no HAProxy terminating TLS.
 func bridgeBaseURL() string {
 	configuredURL := strings.TrimRight(strings.TrimSpace(core.Env.SSE_BRIDGE_URL), "/")
 	if len(configuredURL) == 0 || strings.Contains(configuredURL, "://") {

@@ -3,7 +3,6 @@ package config
 import (
 	"app/core"
 	coreTypes "app/core/types"
-	"app/db"
 	"cmp"
 	"encoding/binary"
 	"fmt"
@@ -90,9 +89,9 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		" user::", req.User.ID, " first_day::", firstUnixDay, " last_day::", currentUnixDay)
 	queries := errgroup.Group{}
 	queries.Go(func() error {
-		query := db.Query(&userRows)
-		query.CompanyID.Equals(req.User.CompanyID).UserID.Equals(req.User.ID).TimeFrame.Between(firstTimeFrame, lastTimeFrame)
-		return query.Exec()
+		var err error
+		userRows, err = readUserUsage(req.User.CompanyID, req.User.ID, firstTimeFrame, lastTimeFrame)
+		return err
 	})
 	queries.Go(func() error {
 		var budgetError error
@@ -100,10 +99,9 @@ func GetCreditUsage(req *core.HandlerArgs) core.HandlerResponse {
 		return budgetError
 	})
 	queries.Go(func() error {
-		// The company total has its own table now, so there is no user predicate to write.
-		query := db.Query(&companyRows)
-		query.CompanyID.Equals(req.User.CompanyID).TimeFrame.Between(firstTimeFrame, lastTimeFrame)
-		return query.Exec()
+		var err error
+		companyRows, err = readCompanyUsage(req.User.CompanyID, firstTimeFrame, lastTimeFrame)
+		return err
 	})
 	if err := queries.Wait(); err != nil {
 		core.Log("credit usage query failed::", " company::", req.User.CompanyID, " user::", req.User.ID, " err::", err)

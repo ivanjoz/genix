@@ -3,7 +3,6 @@ package config
 import (
 	"app/core"
 	coreTypes "app/core/types"
-	"app/db"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -97,9 +96,9 @@ func readServerMetricRows(firstSlot, lastSlot int64) ([]coreTypes.ServerMetric, 
 		toSlot := int16(min(lastSlot, firstSlotOfDay+serverMetricsSlotsPerDay-1) - firstSlotOfDay)
 
 		queries.Go(func() error {
-			query := db.Query(&rowsPerDay[dayOffset])
-			query.Date.Equals(int16(unixDay)).Slot.Between(fromSlot, toSlot)
-			return query.Exec()
+			var err error
+			rowsPerDay[dayOffset], err = readServerMetrics(int16(unixDay), fromSlot, int16(unixDay), toSlot)
+			return err
 		})
 	}
 	if err := queries.Wait(); err != nil {

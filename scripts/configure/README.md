@@ -11,14 +11,14 @@ The selection combines component digits with exactly one binary-source digit:
 | Digit | Selection |
 | --- | --- |
 | `1` | Database host: MariaDB and Qdrant |
-| `2` | Backend service and/or its Nginx proxy |
+| `2` | Backend service and/or its HAProxy edge |
 | `3` | Fareward service and SSE bridge proxy |
 | `7` | Compile selected Genix services from source |
 | `8` | Download selected Genix services from the latest public GitHub release |
 
 For example, `238` configures Backend and Fareward from precompiled binaries. The same
 selection can be passed non-interactively as `sudo python3 scripts/configure.py 238`; Backend
-asks whether this host owns systemd, Nginx, or both unless `--backend-mode 1|2|3` answers it.
+asks whether this host owns systemd, the HAProxy edge, or both unless `--backend-mode 1|2|3` answers it.
 `--staged-binaries` (with `8`) installs the binaries already in `tmp/` instead of downloading.
 
 The order is fixed: database, backend, then `fn-homologate` (the backend's tables, run with the
@@ -44,7 +44,7 @@ It does the same install on a `[[servers]]` VPS without logging in to it:
 4. Runs `sudo python3 scripts/configure.py <selection>8 --staged-binaries` there over SSH.
 
 The SSH user needs **passwordless sudo**, which the default `ubuntu`/`opc`/`ec2-user` of the
-Oracle and AWS images have: packages, systemd units, nginx and firewall rules are root's.
+Oracle and AWS images have: packages, systemd units, HAProxy and firewall rules are root's.
 
 ```toml
 [[servers]]
@@ -58,7 +58,7 @@ config = "config.oracle.toml"
 
 When Backend mode `1` or `2` places the backend systemd service on this host, Fareward is
 installed in VPS service-only mode: the backend serves `/agent/stream` itself, so
-`sse_bridge.url` is optional and no Fareward Nginx vhost is generated. A standalone Server
+`sse_bridge.url` is optional and no Fareward HAProxy site is generated. A standalone Server
 Utils selection (`38`) remains the Lambda companion mode and requires `sse_bridge.url` for its
 public SSE bridge.
 

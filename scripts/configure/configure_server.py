@@ -29,14 +29,38 @@ SERVICE_BINARY_PATH = SERVICE_INSTALL_DIRECTORY / "genix_app"
 SERVICE_NAME = "genix.service"
 RESTART_SERVICE_NAME = "genix-restart.service"
 RESTART_PATH_NAME = "genix-restart.path"
-NGINX_CONFIGURATION_DIRECTORY = Path("/etc/nginx/conf.d")
-# In full mode nginx reaches the backend through this socket instead of loopback TCP. systemd
+# In full mode HAProxy reaches the backend through this socket instead of loopback TCP. systemd
 # creates /run/genix (RuntimeDirectory=genix) and the backend binds the file inside it.
 SERVICE_RUNTIME_DIRECTORY_NAME = "genix"
 SERVICE_SOCKET_PATH = Path("/run") / SERVICE_RUNTIME_DIRECTORY_NAME / "api.sock"
+# StateDirectory=genix: the backend writes [fareward].routes_file here at startup, and under
+# ProtectSystem=strict it is the only place outside the install directory it may write.
+SERVICE_STATE_DIRECTORY = Path("/var/lib") / SERVICE_RUNTIME_DIRECTORY_NAME
 LETSENCRYPT_DIRECTORY = Path("/etc/letsencrypt/live")
-NGINX_MAIN_CONFIGURATION_PATH = Path("/etc/nginx/nginx.conf")
-# Host-wide TCP settings for the clients nginx serves (see write_network_tuning).
+LETSENCRYPT_RENEWAL_DIRECTORY = Path("/etc/letsencrypt/renewal")
+
+# HAProxy is the edge of every public domain on the host: the API (this script) and the SSE bridge
+# (configure_fareward.py). haproxy.cfg is regenerated as a shared head (global, defaults, the one
+# :80/:443 frontend) followed by every file in HAPROXY_SITES_DIRECTORY, one per domain, holding that
+# domain's backends. Each script writes only its own site file, so neither overwrites the other.
+HAPROXY_DIRECTORY = Path("/etc/haproxy")
+HAPROXY_CONFIGURATION_PATH = HAPROXY_DIRECTORY / "haproxy.cfg"
+HAPROXY_SITES_DIRECTORY = HAPROXY_DIRECTORY / "sites"
+HAPROXY_SPOE_DIRECTORY = HAPROXY_DIRECTORY / "spoe"
+# certbot's deploy hook writes <domain>.pem here (chain and key in one file, as HAProxy wants);
+# the :443 binds load the whole directory and pick the certificate by SNI.
+HAPROXY_CERTIFICATES_DIRECTORY = HAPROXY_DIRECTORY / "certs"
+CERTIFICATE_DEPLOY_HOOK_PATH = Path("/usr/local/sbin/genix-haproxy-certificate")
+# certbot --standalone answers HTTP-01 on this loopback port and HAProxy forwards
+# /.well-known/acme-challenge/ to it, so issuing and renewing never stop the edge.
+CERTBOT_HTTP01_PORT = 8888
+# The fareward SPOE agent needs `mode spop` (SPOP 2.0), which arrived in HAProxy 3.1. 3.2 is the LTS
+# branch the official Debian/Ubuntu repositories publish.
+HAPROXY_MINIMUM_VERSION = (3, 1)
+HAPROXY_REPOSITORY_BRANCH = "3.2"
+# Defense independent of the fareward agent: no API request body above 50 MiB, whatever the route.
+API_MAX_BODY_BYTES = 52_428_800
+# Host-wide TCP settings for the clients HAProxy serves (see write_network_tuning).
 NETWORK_TUNING_SYSCTL_PATH = Path("/etc/sysctl.d/90-genix-network.conf")
 NETWORK_TUNING_MODULES_PATH = Path("/etc/modules-load.d/genix-network.conf")
 
@@ -58,13 +82,14 @@ GO_BINARY_SEARCH_PATHS = [
 ]
 ELF_MAGIC_BYTES = b"\x7fELF"
 
-# Full mode is the normal install: Nginx terminates TLS/HTTP3 for server.nginx_domain and forwards
-# to the backend on the same host through a Unix socket (SERVICE_SOCKET_PATH). The systemd-only and
-# nginx-only modes split the pair across two machines: the backend listens on server.port and
-# Nginx forwards to server.nginx_process over TCP.
+# Full mode is the normal install: HAProxy terminates TLS/HTTP3 for server.domain and forwards to
+# the backend on the same host through a Unix socket (SERVICE_SOCKET_PATH), asking the fareward
+# SPOE agent first when [spoe].socket is set. The systemd-only and edge-only modes split the pair
+# across two machines: the backend listens on server.port, HAProxy forwards to server.upstream over
+# TCP, and there is no SPOE (the backend only trusts the agent's headers from a local peer).
 EXECUTION_MODE_FULL = "full"
 EXECUTION_MODE_SYSTEMD = "systemd"
-EXECUTION_MODE_NGINX = "nginx"
+EXECUTION_MODE_EDGE = "edge"
 BINARY_SOURCE_AUTO = "auto"
 BINARY_SOURCE_SOURCE = "source"
 BINARY_SOURCE_PRECOMPILED = "precompiled"
@@ -73,7 +98,7 @@ EXECUTION_MODE_OPTIONS = [
     {
         "index": 1,
         "mode": EXECUTION_MODE_FULL,
-        "label": "Full (systemd backend service + Nginx reverse proxy)",
+        "label": "Full (systemd backend service + HAProxy edge)",
         "aliases": {"full", "all", "both"},
     },
     {
@@ -84,18 +109,11 @@ EXECUTION_MODE_OPTIONS = [
     },
     {
         "index": 3,
-        "mode": EXECUTION_MODE_NGINX,
-        "label": "Only Nginx Proxy (edge host)",
-        "aliases": {"nginx", "proxy", "edge"},
+        "mode": EXECUTION_MODE_EDGE,
+        "label": "Only HAProxy edge (edge host)",
+        "aliases": {"edge", "proxy", "haproxy"},
     },
 ]
-
-CERTBOT_TLS_DIRECTIVES = {
-    "ssl_certificate",
-    "ssl_certificate_key",
-    "ssl_trusted_certificate",
-    "ssl_dhparam",
-}
 
 
 def print_debug(message_text):
@@ -175,7 +193,7 @@ def detect_repository_config_path():
 
 def load_project_credentials(repository_config_path):
     # A missing file is not fatal: every value this script needs can be typed in instead, which is
-    # what an Nginx-only host without a full clone of the repository normally does.
+    # what an edge-only host without a full clone of the repository normally does.
     if not repository_config_path.exists():
         print_debug(f"No config.toml at {repository_config_path}. Values will be requested.")
         return {}
@@ -230,7 +248,7 @@ def resolve_execution_mode(selected_value=None):
     if not sys.stdin.isatty():
         fail_with_error(
             "No install mode provided and no interactive terminal is available. "
-            "Pass 1 (full), 2 (systemd) or 3 (nginx)."
+            "Pass 1 (full), 2 (systemd) or 3 (edge)."
         )
 
     print_execution_mode_options()
@@ -245,9 +263,9 @@ def resolve_execution_mode(selected_value=None):
 def parse_command_arguments():
     """Keep the host mode separate from the requested binary provenance."""
     argument_parser = argparse.ArgumentParser(
-        description="Install the Genix backend systemd service and/or Nginx proxy."
+        description="Install the Genix backend systemd service and/or its HAProxy edge."
     )
-    argument_parser.add_argument("mode", nargs="?", help="1/full, 2/systemd or 3/nginx")
+    argument_parser.add_argument("mode", nargs="?", help="1/full, 2/systemd or 3/edge")
     argument_parser.add_argument(
         "--binary-source",
         choices=(BINARY_SOURCE_AUTO, BINARY_SOURCE_SOURCE, BINARY_SOURCE_PRECOMPILED),
@@ -257,7 +275,7 @@ def parse_command_arguments():
     return argument_parser.parse_args()
 
 
-def validate_nginx_domain(raw_value):
+def validate_domain(raw_value):
     domain_value = raw_value.strip().rstrip(".").lower()
     if not domain_value:
         return None, "The domain cannot be empty."
@@ -267,34 +285,34 @@ def validate_nginx_domain(raw_value):
     return domain_value, None
 
 
-def validate_nginx_process(raw_value):
-    # server.nginx_process is normally a bare "host:port" pointing at the backend host, but a full
+def validate_upstream(raw_value):
+    # server.upstream is normally a bare "host:port" pointing at the backend host, but a full
     # http:// or https:// upstream is accepted so an already-TLS backend can be reused as-is.
-    process_value = raw_value.strip()
-    if not process_value:
+    upstream_value = raw_value.strip()
+    if not upstream_value:
         return None, "The upstream cannot be empty."
 
-    if "://" in process_value:
-        upstream_scheme, _, host_and_port = process_value.partition("://")
+    if "://" in upstream_value:
+        upstream_scheme, _, host_and_port = upstream_value.partition("://")
         if upstream_scheme not in {"http", "https"}:
             return None, (
-                f"Unsupported scheme '{upstream_scheme}://' in '{process_value}'. "
+                f"Unsupported scheme '{upstream_scheme}://' in '{upstream_value}'. "
                 "Use http://, https:// or a bare host:port."
             )
     else:
-        host_and_port = process_value
+        host_and_port = upstream_value
 
     host_and_port = host_and_port.rstrip("/")
     if ":" not in host_and_port:
-        return None, f"'{process_value}' must include the backend port (expected e.g. 100.64.0.2:14010)."
+        return None, f"'{upstream_value}' must include the backend port (expected e.g. 100.64.0.2:14010)."
 
     upstream_host, _, upstream_port = host_and_port.rpartition(":")
     if not upstream_host:
-        return None, f"'{process_value}' is missing the backend host."
+        return None, f"'{upstream_value}' is missing the backend host."
     if not upstream_port.isdigit() or not 1 <= int(upstream_port) <= 65535:
-        return None, f"'{upstream_port}' is not a valid port in '{process_value}'."
+        return None, f"'{upstream_port}' is not a valid port in '{upstream_value}'."
 
-    return process_value, None
+    return upstream_value, None
 
 
 def validate_server_port(raw_value):
@@ -336,47 +354,99 @@ def resolve_credential_value(project_credentials, dotted_key, prompt_text, valid
         print(f"[!] {validation_error}", file=sys.stderr)
 
 
-def extract_nginx_settings(project_credentials, backend_is_local=False):
-    """Resolve the Nginx side of the install.
+def extract_edge_settings(project_credentials, backend_is_local=False):
+    """Resolve the HAProxy side of the install.
 
     backend_is_local is set when this same host also runs the systemd service (full mode). The
-    upstream is then always the backend's Unix socket, and server.nginx_process is not used.
+    upstream is then always the backend's Unix socket, and server.upstream is not used.
     """
-    nginx_domain, domain_was_prompted = resolve_credential_value(
+    edge_domain, domain_was_prompted = resolve_credential_value(
         project_credentials,
-        "server.nginx_domain",
-        "Enter server.nginx_domain, the public domain Nginx serves (e.g. genix-api-4.un.pe)",
-        validate_nginx_domain,
+        "server.domain",
+        "Enter server.domain, the public domain HAProxy serves (e.g. genix-api-4.un.pe)",
+        validate_domain,
     )
 
-    process_was_prompted = False
+    upstream_was_prompted = False
     if backend_is_local:
         upstream_scheme = "http"
-        upstream_server = f"unix:{SERVICE_SOCKET_PATH}"
+        upstream_server = f"unix@{SERVICE_SOCKET_PATH}"
         print_debug("Full mode: forwarding to the local backend through its Unix socket.")
     else:
-        nginx_process, process_was_prompted = resolve_credential_value(
+        configured_upstream, upstream_was_prompted = resolve_credential_value(
             project_credentials,
-            "server.nginx_process",
-            "Enter server.nginx_process, the backend host:port Nginx forwards to (e.g. 10.0.0.7:14010)",
-            validate_nginx_process,
+            "server.upstream",
+            "Enter server.upstream, the backend host:port HAProxy forwards to (e.g. 10.0.0.7:14010)",
+            validate_upstream,
         )
-        # The upstream{} block takes a bare address; the scheme moves to proxy_pass.
-        upstream_scheme, _, upstream_server = nginx_process.rpartition("://")
+        # The `server` line takes a bare address; https becomes its ssl option.
+        upstream_scheme, _, upstream_server = configured_upstream.rpartition("://")
         upstream_scheme = upstream_scheme or "http"
         upstream_server = upstream_server.rstrip("/")
 
-    print_debug(f"Nginx domain: {nginx_domain}")
-    print_debug(f"Nginx upstream: {upstream_scheme}://{upstream_server}")
+    print_debug(f"Edge domain: {edge_domain}")
+    print_debug(f"Edge upstream: {upstream_scheme}://{upstream_server}")
     return {
-        "domain": nginx_domain,
+        "domain": edge_domain,
         "upstream_scheme": upstream_scheme,
         "upstream_server": upstream_server,
         "prompted_values": {
-            **({"server.nginx_domain": nginx_domain} if domain_was_prompted else {}),
-            **({"server.nginx_process": nginx_process} if process_was_prompted else {}),
+            **({"server.domain": edge_domain} if domain_was_prompted else {}),
+            **({"server.upstream": configured_upstream} if upstream_was_prompted else {}),
         },
     }
+
+
+def resolve_spoe_settings(project_credentials):
+    """Read whether the API edge asks the fareward SPOE agent, and in which mode.
+
+    Returns None when [spoe].socket is unset: HAProxy then forwards without the filter and the
+    backend gates every request itself, as it does on Lambda. Only full mode calls this, because
+    the backend trusts the agent's x-fareward-* headers only from a local peer.
+
+    The agent and HAProxy must agree on the mode, and both follow [spoe].mode in config.toml:
+    "shadow" (the default) only logs the verdict, "enforce" refuses on it.
+    """
+    spoe_socket = str(get_config_value(project_credentials, "spoe.socket", "")).strip()
+    if not spoe_socket:
+        print_debug("[spoe].socket is not set: the API edge forwards without the fareward agent.")
+        return None
+
+    spoe_mode = str(get_config_value(project_credentials, "spoe.mode", "shadow")).strip()
+    if spoe_mode not in {"shadow", "enforce"}:
+        fail_with_error(f'[spoe].mode must be "shadow" or "enforce", not "{spoe_mode}".')
+
+    # The backend writes the route table at startup and the agent refuses to start without it.
+    # Under ProtectSystem=strict the backend can only write inside its StateDirectory.
+    routes_file = str(get_config_value(project_credentials, "fareward.routes_file", "")).strip()
+    if not routes_file:
+        fail_with_error(
+            f"[spoe].socket is set, so [fareward].routes_file must name the route table "
+            f'(e.g. "{SERVICE_STATE_DIRECTORY}/fareward-routes.toml").'
+        )
+    if Path(routes_file).parent != SERVICE_STATE_DIRECTORY:
+        fail_with_error(
+            f"[fareward].routes_file ({routes_file}) must be inside {SERVICE_STATE_DIRECTORY}: it is "
+            "the only directory the backend's systemd unit lets it write."
+        )
+
+    print_debug(f"fareward SPOE agent at {spoe_socket}, mode {spoe_mode}.")
+    return {"socket": spoe_socket, "enforce": spoe_mode == "enforce"}
+
+
+def sync_edge_trust_setting(project_credentials, repository_config_path, spoe_settings):
+    """Keep [fareward].trust_edge_headers equal to "HAProxy enforces the agent's verdict".
+
+    In enforce mode the agent has already charged an admitted request, so a backend that ignores
+    the edge headers charges it a second time. In shadow mode, or with no agent, the edge sends no
+    such headers and the backend must gate every request itself. It is not a preference, so it is
+    written without asking, before the service (re)starts and reads it.
+    """
+    trust_edge_headers = bool(spoe_settings and spoe_settings["enforce"])
+    if get_config_value(project_credentials, "fareward.trust_edge_headers", False) == trust_edge_headers:
+        return
+    print_debug(f"Setting [fareward].trust_edge_headers = {str(trust_edge_headers).lower()} to match the edge.")
+    set_config_values(repository_config_path, {"fareward.trust_edge_headers": trust_edge_headers})
 
 
 def extract_server_port(project_credentials):
@@ -954,47 +1024,105 @@ def provide_service_binary(
     install_service_binary(prebuilt_binary_path, runtime_user_entry)
 
 
-def ensure_nginx_is_installed():
-    """Install nginx (with http_v3_module) and certbot's nginx plugin when they are missing."""
-    if not shutil.which("nginx") or not shutil.which("certbot"):
-        if shutil.which("apt-get"):
+def read_haproxy_version():
+    """(major, minor) of the installed haproxy, or None when it is missing or unreadable."""
+    if not shutil.which("haproxy"):
+        return None
+    version_output = run_command(["haproxy", "-v"], allow_failure=True).stdout
+    version_match = re.search(r"version (\d+)\.(\d+)", version_output)
+    if not version_match:
+        return None
+    return int(version_match.group(1)), int(version_match.group(2))
+
+
+def add_official_haproxy_repository():
+    """Point apt at the official HAProxy LTS packages (haproxy.debian.net / the vbernat PPA).
+
+    The distributions' own packages are older than HAPROXY_MINIMUM_VERSION (Ubuntu 24.04 ships 2.8,
+    Debian 13 ships 3.0), and 3.1 is the first with the SPOP 2.0 the fareward agent speaks.
+    """
+    os_release = platform.freedesktop_os_release()
+    distribution_id = os_release.get("ID", "")
+    distribution_codename = os_release.get("VERSION_CODENAME", "")
+    if distribution_id == "ubuntu":
+        run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
+                     "--no-install-recommends", "software-properties-common"])
+        run_command(["add-apt-repository", "-y", f"ppa:vbernat/haproxy-{HAPROXY_REPOSITORY_BRANCH}"])
+        return
+    if distribution_id == "debian" and distribution_codename:
+        keyring_path = Path("/etc/apt/keyrings/haproxy-archive-keyring.gpg")
+        keyring_path.parent.mkdir(parents=True, exist_ok=True)
+        run_command(["curl", "-fsSL", "--output", str(keyring_path),
+                     "https://haproxy.debian.net/haproxy-archive-keyring.gpg"])
+        Path("/etc/apt/sources.list.d/haproxy.list").write_text(
+            f"deb [signed-by={keyring_path}] https://haproxy.debian.net "
+            f"{distribution_codename}-backports-{HAPROXY_REPOSITORY_BRANCH} main\n",
+            encoding="utf-8",
+        )
+        return
+    fail_with_error(
+        f"No official HAProxy {HAPROXY_REPOSITORY_BRANCH} repository is known for "
+        f"'{distribution_id} {distribution_codename}'. Install HAProxy {HAPROXY_REPOSITORY_BRANCH} by hand and rerun."
+    )
+
+
+def ensure_haproxy_is_installed():
+    """Install HAProxy (>= HAPROXY_MINIMUM_VERSION) and certbot when they are missing."""
+    if shutil.which("apt-get"):
+        installed_version = read_haproxy_version()
+        if installed_version is None or installed_version < HAPROXY_MINIMUM_VERSION:
+            add_official_haproxy_repository()
             run_command(["apt-get", "update"])
             run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
-                         "nginx", "certbot", "python3-certbot-nginx"])
-        elif shutil.which("dnf"):
-            run_command(["dnf", "install", "-y", "nginx", "certbot", "python3-certbot-nginx"])
-        else:
-            fail_with_error("Neither apt-get nor dnf is available: install nginx and certbot by hand.")
+                         f"haproxy={HAPROXY_REPOSITORY_BRANCH}.*"])
+        if not shutil.which("certbot"):
+            run_command(["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", "certbot"])
+    elif shutil.which("dnf"):
+        # No official repository for dnf: the distribution's package is used when it is new enough.
+        missing_packages = [package for package in ("haproxy", "certbot") if not shutil.which(package)]
+        if missing_packages:
+            run_command(["dnf", "install", "-y", *missing_packages])
+    else:
+        fail_with_error("Neither apt-get nor dnf is available: install HAProxy and certbot by hand.")
 
-    nginx_binary_path = shutil.which("nginx")
-    if not nginx_binary_path:
-        fail_with_error("Nginx is not installed or not available in PATH.")
+    installed_version = read_haproxy_version()
+    minimum_version_text = ".".join(map(str, HAPROXY_MINIMUM_VERSION))
+    if installed_version is None or installed_version < HAPROXY_MINIMUM_VERSION:
+        installed_version_text = ".".join(map(str, installed_version)) if installed_version else "none"
+        fail_with_error(
+            f"HAProxy {minimum_version_text}+ is required (SPOP 2.0 for the fareward agent); found "
+            f"{installed_version_text}. Install HAProxy {HAPROXY_REPOSITORY_BRANCH} and rerun."
+        )
+    if not shutil.which("certbot"):
+        fail_with_error("certbot is not installed or not available in PATH.")
+    print_debug(f"Detected HAProxy {'.'.join(map(str, installed_version))}")
 
-    if not NGINX_CONFIGURATION_DIRECTORY.exists():
-        fail_with_error(f"Nginx configuration directory not found: {NGINX_CONFIGURATION_DIRECTORY}")
 
-    nginx_build_flags = run_command(["nginx", "-V"]).stderr
-    if "http_v3_module" not in nginx_build_flags:
-        fail_with_error("This nginx was built without http_v3_module: HTTP/3 needs nginx 1.25 or later with it.")
-    print_debug(f"Detected Nginx binary at {nginx_binary_path}")
+def detect_haproxy_quic_support():
+    """'native', 'compat' or None, from the build's feature list.
 
-
-def ensure_certificate(endpoint_hostname):
-    """Issue the Let's Encrypt certificate for the domain when it has none.
-
-    HTTP-01 through the running nginx, so the domain's DNS must already point at this host and TCP 80
-    be reachable; certbot's timer renews it the same way. ECDSA P-256: each TLS and QUIC handshake
-    is several times cheaper than with RSA 2048. No email is registered: Let's Encrypt no longer
-    sends expiry mail, and the renewal timer is what keeps it valid.
+    'compat' is HAProxy linked against an OpenSSL without the QUIC API: QUIC then needs the
+    `limited-quic` global and cannot take 0-RTT. None means no QUIC at all, so no UDP listener and no
+    Alt-Svc: advertising h3 with nothing answering on UDP 443 would only slow browsers down.
     """
-    if (LETSENCRYPT_DIRECTORY / endpoint_hostname / "fullchain.pem").exists():
+    build_report = run_command(["haproxy", "-vv"], allow_failure=True).stdout
+    feature_line = next((line for line in build_report.splitlines() if line.startswith("Feature list")), "")
+    build_features = set(feature_line.split())
+    if "+QUIC" not in build_features:
+        print_debug("WARNING: this HAProxy was built without QUIC. The edge serves TLS over TCP only (no HTTP/3).")
+        return None
+    return "compat" if "+QUIC_OPENSSL_COMPAT" in build_features else "native"
+
+
+def stop_nginx_if_running():
+    """HAProxy replaces Nginx as the edge: an Nginx still holding :80/:443 keeps it from binding.
+
+    It is disabled, not uninstalled, and its configuration is left where it was.
+    """
+    if run_command(["systemctl", "is-active", "--quiet", "nginx"], allow_failure=True).returncode != 0:
         return
-    run_command(["systemctl", "enable", "--now", "nginx"])
-    run_command([
-        "certbot", "certonly", "--nginx", "--non-interactive", "--agree-tos",
-        "--register-unsafely-without-email", "--key-type", "ecdsa", "--elliptic-curve", "secp256r1",
-        "--cert-name", endpoint_hostname, "-d", endpoint_hostname,
-    ])
+    print_debug("Nginx is running and holds the web ports HAProxy needs. Stopping and disabling it.")
+    run_command(["systemctl", "disable", "--now", "nginx"])
 
 
 def open_web_ports():
@@ -1004,39 +1132,11 @@ def open_web_ports():
     ensure_udp_port_open(443, "HTTP/3 QUIC")
 
 
-def tune_nginx_main_configuration(nginx_configuration_text):
-    """The distribution's nginx.conf with the worker limits raised. Returns the new text.
-
-    Every proxied request holds two connections, the client's and the upstream's, and an HTTP/3 or
-    keepalive client keeps its own open between requests: Debian's 768 per worker is a few hundred
-    users. The file descriptor limit has to cover both halves of every connection. multi_accept
-    takes every pending connection on a wakeup instead of one.
-    """
-    tuned_text = re.sub(r"(?m)^\s*#?\s*worker_connections\s+\d+;", "\tworker_connections 4096;", nginx_configuration_text)
-    tuned_text = re.sub(r"(?m)^\s*#?\s*multi_accept\s+\w+;", "\tmulti_accept on;", tuned_text)
-    if "multi_accept" not in tuned_text:
-        tuned_text = re.sub(r"(?m)^(\s*worker_connections 4096;)", r"\1\n\tmulti_accept on;", tuned_text)
-    if not re.search(r"(?m)^\s*worker_rlimit_nofile\s", tuned_text):
-        tuned_text = re.sub(r"(?m)^(worker_processes\s+[^;]+;)", r"\1\nworker_rlimit_nofile 16384;", tuned_text, count=1)
-    return tuned_text
-
-
-def configure_nginx_main_configuration():
-    current_text = NGINX_MAIN_CONFIGURATION_PATH.read_text(encoding="utf-8")
-    tuned_text = tune_nginx_main_configuration(current_text)
-    if tuned_text == current_text:
-        print_debug(f"{NGINX_MAIN_CONFIGURATION_PATH} already tuned.")
-        return False
-    print_debug(f"Raising the worker limits in {NGINX_MAIN_CONFIGURATION_PATH}")
-    NGINX_MAIN_CONFIGURATION_PATH.write_text(tuned_text, encoding="utf-8")
-    return True
-
-
 def write_network_tuning():
     """BBR congestion control with the fq qdisc it paces through.
 
     It only changes TCP: the HTTP/2 fallback and TCP 80, which on lossy mobile links keep more
-    throughput than with cubic. QUIC runs its own congestion control inside nginx.
+    throughput than with cubic. QUIC runs its own congestion control inside HAProxy.
     """
     sysctl_text = (
         "# Written by scripts/configure/configure_server.py (write_network_tuning).\n"
@@ -1054,296 +1154,381 @@ def write_network_tuning():
     run_command(["sysctl", "--load", str(NETWORK_TUNING_SYSCTL_PATH)], allow_failure=True)
 
 
-def extract_existing_certbot_tls_lines(existing_nginx_configuration_contents):
-    preserved_tls_lines = []
-    seen_directives = set()
+def build_certificate_deploy_hook():
+    """The script certbot runs after issuing or renewing a certificate (--deploy-hook).
 
-    if not existing_nginx_configuration_contents:
-        return preserved_tls_lines
-
-    for raw_line in existing_nginx_configuration_contents.splitlines():
-        stripped_line = raw_line.strip()
-        if not stripped_line or stripped_line.startswith("#"):
-            continue
-
-        directive_match = re.match(r"^([A-Za-z0-9_]+)\s+(.+?);(?:\s*#.*)?$", stripped_line)
-        if not directive_match:
-            continue
-
-        directive_name = directive_match.group(1)
-        directive_value = directive_match.group(2)
-        # Only the certificate material is carried over. Certbot's
-        # options-ssl-nginx.conf include is deliberately dropped: it sets
-        # ssl_protocols / ssl_session_* itself and would collide with the TLS
-        # policy written below ("duplicate directive" on `nginx -t`).
-        if directive_name not in CERTBOT_TLS_DIRECTIVES:
-            continue
-
-        # Keep the first value per directive so repeated stale lines do not multiply.
-        directive_key = f"{directive_name}:{directive_value}"
-        if directive_key in seen_directives:
-            continue
-        seen_directives.add(directive_key)
-        preserved_tls_lines.append(f"    {stripped_line}")
-
-    if preserved_tls_lines:
-        print_debug("Preserving TLS directives from existing Nginx config:")
-        for preserved_tls_line in preserved_tls_lines:
-            print_debug(preserved_tls_line.strip())
-
-    return preserved_tls_lines
+    HAProxy reads the chain and the key from one file, so the hook joins them into
+    HAPROXY_CERTIFICATES_DIRECTORY/<domain>.pem and reloads. The rename keeps a reload that races
+    the hook from ever reading half a file.
+    """
+    return f"""#!/bin/sh
+# Written by scripts/configure/configure_server.py (build_certificate_deploy_hook).
+# certbot sets RENEWED_LINEAGE=/etc/letsencrypt/live/<domain>.
+set -eu
+domain=$(basename "$RENEWED_LINEAGE")
+umask 077
+mkdir -p {HAPROXY_CERTIFICATES_DIRECTORY}
+cat "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" > "{HAPROXY_CERTIFICATES_DIRECTORY}/$domain.pem.tmp"
+mv "{HAPROXY_CERTIFICATES_DIRECTORY}/$domain.pem.tmp" "{HAPROXY_CERTIFICATES_DIRECTORY}/$domain.pem"
+systemctl reload haproxy 2>/dev/null || true
+"""
 
 
-def warn_when_certificate_is_not_ecdsa(endpoint_hostname):
-    """An ECDSA P-256 key makes each TLS/QUIC handshake several times cheaper than RSA 2048, which
-    matters on a 2-core ARM VPS. certbot records the key type in the renewal config."""
-    renewal_configuration_path = Path("/etc/letsencrypt/renewal") / f"{endpoint_hostname}.conf"
+def certificate_is_renewed_through_haproxy(endpoint_hostname):
+    """Whether certbot's renewal config for the domain uses the standalone port HAProxy forwards to.
+
+    A certificate issued through `certbot --nginx` renews through Nginx, which is gone, so it has
+    to be issued again once through the standalone authenticator.
+    """
+    renewal_configuration_path = LETSENCRYPT_RENEWAL_DIRECTORY / f"{endpoint_hostname}.conf"
     if not renewal_configuration_path.exists():
-        return
-    if re.search(r"^key_type\s*=\s*ecdsa", renewal_configuration_path.read_text(encoding="utf-8"), re.M):
-        return
-    print_debug(
-        f"The certificate of {endpoint_hostname} is RSA. Reissue it as ECDSA for cheaper handshakes: "
-        f"certbot certonly --nginx --key-type ecdsa --elliptic-curve secp256r1 --cert-name {endpoint_hostname} "
-        f"-d {endpoint_hostname} --force-renewal"
+        return False
+    renewal_configuration = renewal_configuration_path.read_text(encoding="utf-8")
+    return (
+        re.search(r"^authenticator\s*=\s*standalone\s*$", renewal_configuration, re.M) is not None
+        and re.search(rf"^http01_port\s*=\s*{CERTBOT_HTTP01_PORT}\s*$", renewal_configuration, re.M) is not None
+        and str(CERTIFICATE_DEPLOY_HOOK_PATH) in renewal_configuration
     )
 
 
-def build_tls_directive_lines(endpoint_hostname, existing_nginx_configuration_contents):
-    certificate_directory = LETSENCRYPT_DIRECTORY / endpoint_hostname
-    certificate_fullchain_path = certificate_directory / "fullchain.pem"
-    certificate_private_key_path = certificate_directory / "privkey.pem"
+def ensure_certificate(endpoint_hostname):
+    """Issue the domain's Let's Encrypt certificate and keep HAProxy's copy of it in place.
 
-    preserved_tls_lines = extract_existing_certbot_tls_lines(existing_nginx_configuration_contents)
-    has_preserved_certificate = any(line.strip().startswith("ssl_certificate ") for line in preserved_tls_lines)
-    has_preserved_certificate_key = any(line.strip().startswith("ssl_certificate_key ") for line in preserved_tls_lines)
-    if has_preserved_certificate and has_preserved_certificate_key:
-        return preserved_tls_lines
+    HTTP-01 through HAProxy's :80, which forwards the challenge to certbot on CERTBOT_HTTP01_PORT,
+    so the domain's DNS must already point at this host. certbot's timer renews it the same way and
+    the deploy hook refreshes the .pem. ECDSA P-256: each TLS and QUIC handshake is several times
+    cheaper than with RSA 2048. No email is registered: Let's Encrypt no longer sends expiry mail.
+    """
+    CERTIFICATE_DEPLOY_HOOK_PATH.write_text(build_certificate_deploy_hook(), encoding="utf-8")
+    os.chmod(CERTIFICATE_DEPLOY_HOOK_PATH, 0o755)
 
-    if certificate_fullchain_path.exists() and certificate_private_key_path.exists():
-        print_debug(f"Detected TLS certificates for {endpoint_hostname} at {certificate_directory}")
-        warn_when_certificate_is_not_ecdsa(endpoint_hostname)
-        return [
-            f"    ssl_certificate {certificate_fullchain_path};",
-            f"    ssl_certificate_key {certificate_private_key_path};",
+    lineage_directory = LETSENCRYPT_DIRECTORY / endpoint_hostname
+    if not certificate_is_renewed_through_haproxy(endpoint_hostname):
+        certbot_arguments = [
+            "certbot", "certonly", "--standalone",
+            "--http-01-address", "127.0.0.1", "--http-01-port", str(CERTBOT_HTTP01_PORT),
+            "--non-interactive", "--agree-tos", "--register-unsafely-without-email",
+            "--key-type", "ecdsa", "--elliptic-curve", "secp256r1",
+            "--cert-name", endpoint_hostname, "-d", endpoint_hostname,
+            "--deploy-hook", str(CERTIFICATE_DEPLOY_HOOK_PATH),
         ]
+        if (lineage_directory / "fullchain.pem").exists():
+            # Issued through Nginx (or as RSA): reissue now so the renewal config switches over.
+            print_debug(f"Reissuing the certificate of {endpoint_hostname} so it renews through HAProxy.")
+            certbot_arguments.append("--force-renewal")
+        run_command(certbot_arguments)
 
-    return []
+    # The hook runs on issuance; this covers a host whose .pem was deleted since.
+    if not (HAPROXY_CERTIFICATES_DIRECTORY / f"{endpoint_hostname}.pem").exists():
+        run_command(["env", f"RENEWED_LINEAGE={lineage_directory}", str(CERTIFICATE_DEPLOY_HOOK_PATH)])
 
 
-def build_backend_upstream_block(upstream_name, upstream_server):
-    # Without a keepalive pool nginx opens a new connection to the backend for every request and
-    # closes it after the response. The pool keeps up to 64 idle connections per worker for reuse.
-    # keepalive_timeout stays below the backend's IdleTimeout (120s) so nginx always closes first
-    # and never sends a request down a connection Go has already dropped.
-    #
-    # An empty Connection header (instead of "close") is what lets a pooled connection survive the
-    # request. A WebSocket handshake still sends "upgrade".
-    return f"""# Reused backend connections: see build_backend_upstream_block in configure_server.py.
-upstream {upstream_name} {{
-    server {upstream_server};
-    keepalive 64;
-    keepalive_timeout 100s;
-}}
+def list_haproxy_certificates():
+    if not HAPROXY_CERTIFICATES_DIRECTORY.is_dir():
+        return []
+    return sorted(HAPROXY_CERTIFICATES_DIRECTORY.glob("*.pem"))
 
-# WebSocket upstreams require HTTP/1.1 plus an explicit Upgrade tunnel; plain requests send an
-# empty Connection header so the upstream connection returns to the keepalive pool.
-map $http_upgrade $connection_upgrade {{
-    default upgrade;
-    "" "";
-}}
+
+def build_haproxy_main_configuration(process_group, tls_is_available, quic_support):
+    """The shared head of haproxy.cfg: global, defaults and the single frontend for every domain.
+
+    Routing is by Host: `site_<domain>` is the backend each site file declares, and a Host no site
+    claims gets 404. The :443 binds exist only once a certificate does (`crt <directory>` refuses an
+    empty one); until then every site is plain HTTP, which is also how the first HTTP-01 challenge
+    gets answered.
+
+    process_group: the service account's group (the units run as Group=<runtime user>). HAProxy
+    drops every supplementary group when it drops root, so adding its user to that group does
+    nothing; running with it as the primary group is the only way to reach the fareward agent's
+    socket, which is 0660 and owned by the service account.
+    """
+    tls_binds = ""
+    https_redirect = ""
+    alt_svc_header = ""
+    limited_quic = ""
+    if tls_is_available:
+        certificate_options = f"ssl crt {HAPROXY_CERTIFICATES_DIRECTORY}/"
+        tls_binds = (
+            f"    bind :443 {certificate_options} alpn h2,http/1.1 allow-0rtt\n"
+            f"    bind [::]:443 v6only {certificate_options} alpn h2,http/1.1 allow-0rtt\n"
+        )
+        if quic_support:
+            # The OpenSSL compatibility layer cannot do 0-RTT over QUIC.
+            quic_early_data = " allow-0rtt" if quic_support == "native" else ""
+            tls_binds += (
+                f"    bind quic4@:443 {certificate_options} alpn h3{quic_early_data}\n"
+                f"    bind quic6@[::]:443 v6only {certificate_options} alpn h3{quic_early_data}\n"
+            )
+            # Also on errors: a client that only ever got errors would never switch to HTTP/3.
+            alt_svc_header = '    http-response set-header alt-svc "h3=\\":443\\"; ma=86400" if { ssl_fc }\n'
+            if quic_support == "compat":
+                limited_quic = "    limited-quic\n"
+        https_redirect = "    http-request redirect scheme https code 301 if !{ ssl_fc } !acme_challenge\n"
+
+    return f"""# Written by scripts/configure/configure_server.py (build_haproxy_main_configuration). Do not edit:
+# rerun configure_server.py or configure_fareward.py. Every file in {HAPROXY_SITES_DIRECTORY}/ is
+# appended below this head, one per public domain.
+
+global
+    # stdout under systemd lands in the journal: journalctl -u haproxy.
+    log stdout format raw local0
+    user haproxy
+    group {process_group}
+    ssl-default-bind-options ssl-min-ver TLSv1.3
+{limited_quic}
+defaults
+    mode http
+    log global
+    option httplog
+    timeout connect 5s
+    timeout client 60s
+    timeout server 60s
+    timeout http-request 10s
+    timeout http-keep-alive 10s
+    # A WebSocket after its Upgrade.
+    timeout tunnel 3600s
+
+frontend edge
+    bind :80
+    bind [::]:80 v6only
+{tls_binds}
+    # Slots 0-2 hold the fareward verdict (status, reason, error) for the access log. Only a
+    # frontend can declare them; the API site's backend fills them with `capture ... id N`.
+    declare capture request len 4
+    declare capture request len 16
+    declare capture request len 8
+
+    acl acme_challenge path_beg /.well-known/acme-challenge/
+{https_redirect}{alt_svc_header}    # TLS 1.3 early data can be replayed by anyone who captured it: GET and HEAD are safe to
+    # replay, anything else waits for the handshake to complete.
+    http-request wait-for-handshake if {{ ssl_fc_has_early }} !{{ method GET HEAD }}
+
+    use_backend acme_certbot if acme_challenge
+    use_backend site_%[req.hdr(host),host_only,lower]
+    default_backend unknown_site
+
+backend acme_certbot
+    # certbot --standalone, only listening while it issues or renews.
+    server certbot 127.0.0.1:{CERTBOT_HTTP01_PORT}
+
+backend unknown_site
+    # A Host no site file claims.
+    http-request deny deny_status 404
 """
 
 
-def build_http3_nginx_configuration(
-    endpoint_hostname,
-    upstream_scheme,
-    upstream_server,
-    existing_nginx_configuration_contents="",
-):
-    tls_directive_lines = build_tls_directive_lines(
-        endpoint_hostname,
-        existing_nginx_configuration_contents,
-    )
-    # Named after the domain so two backend vhosts on one host never declare the same upstream.
-    upstream_name = "genix_backend_" + re.sub(r"[^a-z0-9]", "_", endpoint_hostname)
-    upstream_block = build_backend_upstream_block(upstream_name, upstream_server)
-    backend_proxy_url = f"{upstream_scheme}://{upstream_name}"
+def build_api_spoe_configuration(endpoint_hostname):
+    """The SPOE engine file of the API site: what HAProxy sends the fareward agent, and when.
 
-    if tls_directive_lines:
-        tls_directives = "\n".join(tls_directive_lines)
-        # A request sent as TLS 1.3 early data (0-RTT) can be replayed by anyone who captured it.
-        # GET and HEAD are safe to replay; any other method is answered 425 Too Early, which the
-        # browser retries by itself once the handshake completes. Named per domain, like the
-        # upstream, so two vhosts on one host never declare the same map variable.
-        reject_early_data_variable = "$reject_early_data_" + upstream_name.removeprefix("genix_backend_")
-        return f"""# 0-RTT replay protection: see build_http3_nginx_configuration in configure_server.py.
-map "$ssl_early_data:$request_method" {reject_early_data_variable} {{
-    default 0;
-    "~^1:(?!GET$|HEAD$)" 1;
-}}
+    Asked once per request on the headers, before the body is read (nothing on this edge sets
+    `option http-buffer-request`). Preflights are answered by the edge and never reach the agent.
+    """
+    return f"""# Written by scripts/configure/configure_server.py (build_api_spoe_configuration).
+# The fareward SPOE agent for {endpoint_hostname}; see fareward/plans/plan.md.
 
-{upstream_block}
-server {{
-    # Standard TCP and HTTP/3 UDP listeners for TLS-enabled deployments.
-    listen 443 quic reuseport;
-    listen 443 ssl;
-    listen [::]:443 quic reuseport;
-    listen [::]:443 ssl;
-    # The first request reaches the TCP listener before the browser has read Alt-Svc: HTTP/2
-    # there instead of HTTP/1.1.
-    http2 on;
+[fareward]
+spoe-agent fareward-agent
+    messages     fareward-check
+    # The agent's variables arrive as txn.fw.<name>: status, reason, company, user, route, grant,
+    # and, in enforce mode, usage (plus window, spent, refused and retry on a credit refusal).
+    option       var-prefix      fw
+    # Any agent failure (down, timeout, protocol error) sets txn.fw.error.
+    option       set-on-error    error
+    # One local round trip. Phase 0 of the plan measures p99; set this just above it.
+    timeout      processing      50ms
+    use-backend  spoe_{endpoint_hostname}
 
-    server_name {endpoint_hostname};
-
-{tls_directives}
-
-    ssl_protocols TLSv1.3;
-    ssl_early_data on;
-    ssl_session_cache shared:SSL:10m;
-    ssl_session_timeout 1d;
-    ssl_session_tickets on;
-
-    # always: an error response must advertise HTTP/3 too, or a client that only got errors
-    # never switches.
-    add_header Alt-Svc 'h3=":443"; ma=86400' always;
-    # Generic segmentation offload: the kernel splits large QUIC sends, far fewer syscalls.
-    quic_gso on;
-    # Buffered access log: one write per 64 KB or 5 s instead of one per request.
-    access_log /var/log/nginx/{endpoint_hostname}.access.log combined buffer=64k flush=5s;
-
-    location / {{
-        # Handle browser preflight requests directly at the edge to reduce backend load.
-        if ($request_method = 'OPTIONS') {{
-            add_header 'Access-Control-Allow-Origin' $http_origin always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
-            add_header 'Access-Control-Max-Age' 86400 always;
-            add_header 'Content-Length' 0;
-            add_header 'Content-Type' 'text/plain; charset=utf-8';
-            return 204;
-        }}
-
-        if ({reject_early_data_variable}) {{
-            return 425;
-        }}
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Early-Data $ssl_early_data;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-
-        proxy_pass {backend_proxy_url};
-
-        proxy_pass_header Server;
-        server_tokens off;
-
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        # Agent WebSockets can sit idle while the user thinks between messages.
-        proxy_read_timeout 3600s;
-        proxy_buffering on;
-        # Report responses reach ~150 KB: 16 x 32 KB holds them in memory. With a temp file size of
-        # 0 a larger one streams to the client instead of being spooled to disk.
-        proxy_buffer_size 16k;
-        proxy_buffers 16 32k;
-        proxy_busy_buffers_size 64k;
-        proxy_max_temp_file_size 0;
-    }}
-}}
-"""
-
-    print_debug(
-        f"No TLS certificates found for {endpoint_hostname}. Writing HTTP-only reverse proxy config."
-    )
-    return f"""{upstream_block}
-server {{
-    # Fallback HTTP config used until TLS certificates are provisioned for this hostname.
-    listen 80;
-    listen [::]:80;
-
-    server_name {endpoint_hostname};
-
-    location / {{
-        # Handle browser preflight requests directly at the edge to reduce backend load.
-        if ($request_method = 'OPTIONS') {{
-            add_header 'Access-Control-Allow-Origin' $http_origin always;
-            add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-            add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type' always;
-            add_header 'Access-Control-Max-Age' 86400 always;
-            add_header 'Content-Length' 0;
-            add_header 'Content-Type' 'text/plain; charset=utf-8';
-            return 204;
-        }}
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-
-        proxy_pass {backend_proxy_url};
-
-        proxy_pass_header Server;
-        server_tokens off;
-
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        # Agent WebSockets can sit idle while the user thinks between messages.
-        proxy_read_timeout 3600s;
-        proxy_buffering on;
-        # Report responses reach ~150 KB: 16 x 32 KB holds them in memory. With a temp file size of
-        # 0 a larger one streams to the client instead of being spooled to disk.
-        proxy_buffer_size 16k;
-        proxy_buffers 16 32k;
-        proxy_busy_buffers_size 64k;
-        proxy_max_temp_file_size 0;
-    }}
-}}
+spoe-message fareward-check
+    # A missing header is sent as NULL: no Content-Length on a charged write is answered 411.
+    args method=method path=path auth=req.hdr(authorization) length=req.hdr(content-length)
+    event on-backend-http-request if !METH_OPTIONS
 """
 
 
-def configure_nginx_reverse_proxy(nginx_settings):
-    endpoint_hostname = nginx_settings["domain"]
-    ensure_nginx_is_installed()
-    # Ports first: the certificate's HTTP-01 challenge arrives on TCP 80.
-    open_web_ports()
-    write_network_tuning()
-    main_configuration_changed = configure_nginx_main_configuration()
-    # Issued before the vhost is written, so the vhost comes out as HTTP/3 on its first run.
-    ensure_certificate(endpoint_hostname)
+def build_api_site_configuration(endpoint_hostname, upstream_scheme, upstream_server, spoe_settings):
+    """The API's site file: its backend and, with the fareward agent, the agent's SPOP backend.
 
-    nginx_configuration_path = NGINX_CONFIGURATION_DIRECTORY / f"{endpoint_hostname}.conf"
+    spoe_settings is None (no agent: the backend gates every request itself) or
+    {"socket": path, "enforce": bool}. In shadow mode the verdict is only logged; in enforce mode a
+    refusal is answered here and an admitted request carries the agent's identity headers.
+    """
+    if upstream_server.startswith("unix@"):
+        server_line = f"    server genix {upstream_server}"
+    elif upstream_scheme == "https":
+        # Not verified, as with the Nginx proxy before it: the upstream is a private address.
+        server_line = f"    server genix {upstream_server} ssl verify none alpn http/1.1"
+    else:
+        server_line = f"    server genix {upstream_server}"
 
-    existing_nginx_configuration_contents = None
-    if nginx_configuration_path.exists():
-        existing_nginx_configuration_contents = nginx_configuration_path.read_text(encoding="utf-8")
+    spoe_rules = ""
+    spoe_backend = ""
+    if spoe_settings:
+        spoe_rules = f"""
+    # The fareward SPOE agent (fareward/plans/plan.md). Its verdict goes to the access log in both
+    # modes: shadow mode is compared against the backend's own decisions from these lines.
+    filter spoe engine fareward config {HAPROXY_SPOE_DIRECTORY}/{endpoint_hostname}.conf
+    http-request capture var(txn.fw.status) id 0
+    http-request capture var(txn.fw.reason) id 1
+    http-request capture var(txn.fw.error) id 2
+"""
+        if spoe_settings["enforce"]:
+            spoe_rules += """
+    # Enforce mode. Fail closed: an agent error, or no verdict at all, is a 503.
+    http-request deny deny_status 503 if { var(txn.fw.error) -m found }
+    http-request deny deny_status 503 unless { var(txn.fw.status) -m found }
+    # The backend's own statuses (fareward src/routes/table.rs and spoe/agent.rs). Every refusal
+    # from here on carries the client's usage header (fareward plan D10): the agent always sets
+    # txn.fw.usage in enforce mode, so the two 503s above, where it never answered, go without it.
+    http-request deny deny_status 400 hdr x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.status) -m int eq 400 }
+    http-request deny deny_status 401 hdr x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.status) -m int eq 401 }
+    http-request deny deny_status 403 hdr x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.status) -m int eq 403 }
+    # 411 has no built-in error page, so it is answered with an explicit body.
+    http-request return status 411 content-type "application/json" string "{\\"error\\":\\"Content-Length required\\"}" hdr x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.status) -m int eq 411 }
+    http-request deny deny_status 413 hdr x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.status) -m int eq 413 }
+    # 429 says what the client did and when to come back, and carries Retry-After (fareward plan
+    # D10, D11). The agent sets window, spent, refused and retry on every credit refusal; window is
+    # already worded from the configured window length.
+    http-request return status 429 content-type "text/html; charset=utf-8" lf-string "<!doctype html><html lang=\\"es\\"><head><meta charset=\\"utf-8\\"><title>429</title></head><body><h1>Demasiadas solicitudes</h1><p>Has consumido %[var(txn.fw.spent)] créditos %[var(txn.fw.window)], además de %[var(txn.fw.refused)] solicitud(es) rechazada(s).</p><p>¿Eres humano? Intenta nuevamente en %[var(txn.fw.retry)] segundos.</p></body></html>" hdr x-fareward-usage %[var(txn.fw.usage)] hdr retry-after %[var(txn.fw.retry)] if { var(txn.fw.status) -m int eq 429 }
+    http-request deny deny_status 500 hdr x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.status) -m int eq 500 }
+    # Anything else that is not "go on" fails closed.
+    http-request deny deny_status 503 hdr x-fareward-usage %[var(txn.fw.usage)] unless { var(txn.fw.status) -m int eq 0 }
+    # Admitted: who it is and that the gate already ran. The backend believes these only with
+    # [fareward].trust_edge_headers = true and from a local peer, and only because the client's
+    # copies were deleted above.
+    http-request set-header x-fareward-admitted 1
+    http-request set-header x-fareward-company %[var(txn.fw.company)]
+    http-request set-header x-fareward-user %[var(txn.fw.user)]
+    http-request set-header x-fareward-route %[var(txn.fw.route)]
+    http-request set-header x-fareward-grant %[var(txn.fw.grant),hex] if { var(txn.fw.grant) -m found }
+    # The client's usage header on what the backend answers; set-header replaces any the backend
+    # wrote. The figures are from before the GET top-up, charged after the response leaves.
+    http-response set-header x-fareward-usage %[var(txn.fw.usage)] if { var(txn.fw.usage) -m found }
+"""
+        spoe_backend = f"""
+backend spoe_{endpoint_hostname}
+    # SPOP 2.0 to the fareward agent ([spoe].socket in config.toml).
+    mode spop
+    timeout connect 1s
+    timeout server 30s
+    server fareward unix@{spoe_settings["socket"]}
+"""
 
-    nginx_configuration_contents = build_http3_nginx_configuration(
-        endpoint_hostname,
-        nginx_settings["upstream_scheme"],
-        nginx_settings["upstream_server"],
-        existing_nginx_configuration_contents or "",
+    return f"""# Written by scripts/configure/configure_server.py (build_api_site_configuration).
+# The Genix API at {endpoint_hostname}.
+
+backend site_{endpoint_hostname}
+    # Agent WebSockets and /agent/stream stay open while the user thinks between messages.
+    timeout server 3600s
+    option forwardfor
+    http-request deny deny_status 413 if {{ req.hdr_val(content-length) gt {API_MAX_BODY_BYTES} }}
+    # Browser preflights are answered here, before the backend or the fareward agent sees them.
+    http-request return status 204 hdr Access-Control-Allow-Origin "%[req.hdr(origin)]" hdr Access-Control-Allow-Methods "GET, POST, OPTIONS" hdr Access-Control-Allow-Headers "Authorization, Content-Type" hdr Access-Control-Max-Age 86400 if METH_OPTIONS
+    # The identity headers belong to the edge: a client sending them is lying.
+    http-request del-header x-fareward- -m beg
+    # The backend reads the caller's address from X-Real-IP (core.ClientIPFromRequest).
+    http-request set-header x-real-ip %[src]
+    http-request set-header x-forwarded-proto https if {{ ssl_fc }}
+{spoe_rules}
+{server_line}
+{spoe_backend}"""
+
+
+def write_file_if_changed(file_path, file_contents, file_mode=0o644):
+    """Write the file only when its contents differ. Returns the previous contents (None if absent)
+    and whether it changed, so a rejected configuration can be put back."""
+    previous_contents = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+    if previous_contents == file_contents:
+        return previous_contents, False
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(file_contents, encoding="utf-8")
+    os.chmod(file_path, file_mode)
+    return previous_contents, True
+
+
+def restore_file(file_path, previous_contents):
+    if previous_contents is None:
+        file_path.unlink(missing_ok=True)
+    else:
+        file_path.write_text(previous_contents, encoding="utf-8")
+
+
+def apply_haproxy_configuration(process_group, site_files):
+    """Write this run's site files, regenerate haproxy.cfg around every site, validate and reload.
+
+    site_files maps each path to its contents. `haproxy -c` covers every site on the host, so a
+    rejected file is put back before failing: the other sites keep reloading. Returns whether
+    anything changed.
+    """
+    previous_site_contents = {}
+    for site_file_path, site_file_contents in site_files.items():
+        previous_contents, site_file_changed = write_file_if_changed(site_file_path, site_file_contents)
+        if site_file_changed:
+            previous_site_contents[site_file_path] = previous_contents
+
+    main_configuration = build_haproxy_main_configuration(
+        process_group, bool(list_haproxy_certificates()), detect_haproxy_quic_support()
     )
-
-    if existing_nginx_configuration_contents == nginx_configuration_contents and not main_configuration_changed:
-        print_debug(f"Nginx configuration unchanged: {nginx_configuration_path}")
+    site_configurations = [
+        site_file_path.read_text(encoding="utf-8") for site_file_path in sorted(HAPROXY_SITES_DIRECTORY.glob("*.cfg"))
+    ]
+    full_configuration = "\n".join([main_configuration, *site_configurations])
+    previous_full_configuration, configuration_changed = write_file_if_changed(
+        HAPROXY_CONFIGURATION_PATH, full_configuration
+    )
+    if not configuration_changed and not previous_site_contents:
+        print_debug(f"HAProxy configuration unchanged: {HAPROXY_CONFIGURATION_PATH}")
         return False
 
-    print_debug(f"Writing Nginx reverse proxy config: {nginx_configuration_path}")
-    nginx_configuration_path.write_text(nginx_configuration_contents, encoding="utf-8")
-    os.chmod(nginx_configuration_path, 0o644)
+    validation_result = run_command(["haproxy", "-c", "-f", str(HAPROXY_CONFIGURATION_PATH)], allow_failure=True)
+    if validation_result.returncode != 0:
+        for site_file_path, previous_contents in previous_site_contents.items():
+            restore_file(site_file_path, previous_contents)
+        restore_file(HAPROXY_CONFIGURATION_PATH, previous_full_configuration)
+        fail_with_error(
+            "HAProxy rejected the generated configuration (see the output above). The previous "
+            "files were put back, so the other sites on this host keep working."
+        )
 
-    run_command(["nginx", "-t"])
-    run_command(["systemctl", "enable", "nginx"])
-    run_command(["systemctl", "restart", "nginx"])
+    print_debug(f"Wrote {HAPROXY_CONFIGURATION_PATH}")
+    run_command(["systemctl", "enable", "haproxy"])
+    # reload keeps established connections; a stopped HAProxy has nothing to reload.
+    if run_command(["systemctl", "is-active", "--quiet", "haproxy"], allow_failure=True).returncode == 0:
+        run_command(["systemctl", "reload", "haproxy"])
+    else:
+        run_command(["systemctl", "restart", "haproxy"])
     return True
+
+
+def configure_haproxy_site(endpoint_hostname, process_group, site_files):
+    """Put a domain behind the HAProxy edge: install, ports, its files, its certificate.
+
+    Written twice: plain HTTP first so :80 answers the HTTP-01 challenge, then again once the
+    certificate exists, which adds the :443 binds.
+    """
+    ensure_haproxy_is_installed()
+    # Ports first: the certificate's HTTP-01 challenge arrives on TCP 80.
+    open_web_ports()
+    stop_nginx_if_running()
+    HAPROXY_CERTIFICATES_DIRECTORY.mkdir(mode=0o700, parents=True, exist_ok=True)
+    apply_haproxy_configuration(process_group, site_files)
+    ensure_certificate(endpoint_hostname)
+    apply_haproxy_configuration(process_group, site_files)
+
+
+def configure_api_edge(edge_settings, spoe_settings, process_group):
+    endpoint_hostname = edge_settings["domain"]
+    write_network_tuning()
+    site_files = {
+        HAPROXY_SITES_DIRECTORY / f"{endpoint_hostname}.cfg": build_api_site_configuration(
+            endpoint_hostname, edge_settings["upstream_scheme"], edge_settings["upstream_server"], spoe_settings
+        ),
+    }
+    spoe_configuration_path = HAPROXY_SPOE_DIRECTORY / f"{endpoint_hostname}.conf"
+    if spoe_settings:
+        site_files[spoe_configuration_path] = build_api_spoe_configuration(endpoint_hostname)
+    else:
+        spoe_configuration_path.unlink(missing_ok=True)
+    configure_haproxy_site(endpoint_hostname, process_group, site_files)
 
 
 def build_main_service_contents(runtime_username, repository_config_path, server_port):
@@ -1352,13 +1537,13 @@ def build_main_service_contents(runtime_username, repository_config_path, server
     if server_port is None:
         # systemd creates /run/genix owned by the service user (also writable under
         # ProtectSystem=strict) and removes it on stop, so no stale socket survives a restart.
-        listen_lines = f"""# Nginx on this host proxies to this socket (see SERVICE_SOCKET_PATH in configure_server.py).
+        listen_lines = f"""# HAProxy on this host proxies to this socket (see SERVICE_SOCKET_PATH in configure_server.py).
 RuntimeDirectory={SERVICE_RUNTIME_DIRECTORY_NAME}
 RuntimeDirectoryMode=0755
 Environment=SERVER_SOCKET={SERVICE_SOCKET_PATH}"""
     else:
         listen_lines = f"""# SERVER_PORT comes from server.port in config.toml and must match the port half of
-# server.nginx_process, otherwise the Nginx host proxies to a port nothing is listening on.
+# server.upstream, otherwise the edge host proxies to a port nothing is listening on.
 Environment=SERVER_PORT={server_port}"""
     return f"""[Unit]
 Description=Genix Backend Service
@@ -1372,6 +1557,10 @@ WorkingDirectory={SERVICE_INSTALL_DIRECTORY}
 Environment=GENIX_CONFIG_FILE={repository_config_path}
 Environment=GENIX_REPOSITORY_ROOT={repository_root_path}
 {listen_lines}
+# /var/lib/genix, owned by the service user and writable under ProtectSystem=strict: the backend
+# writes [fareward].routes_file here at startup for the fareward SPOE agent.
+StateDirectory={SERVICE_RUNTIME_DIRECTORY_NAME}
+StateDirectoryMode=0755
 ExecStart={SERVICE_BINARY_PATH}
 Restart=always
 RestartSec=5
@@ -1501,7 +1690,8 @@ def print_summary(
     repository_config_path,
     runtime_username,
     server_port,
-    nginx_settings,
+    edge_settings,
+    spoe_settings,
 ):
     print_debug("Configuration completed.")
     print_debug(f"Install mode: {execution_mode}")
@@ -1528,19 +1718,20 @@ def print_summary(
         print_debug("Upload or replace the executable at the binary path to trigger an automatic restart.")
         print_debug("The service will also keep checking the install directory via its working directory.")
 
-    if nginx_settings:
-        print_debug(f"Nginx domain (server.nginx_domain): {nginx_settings['domain']}")
-        print_debug(
-            f"Nginx upstream: {nginx_settings['upstream_scheme']}://{nginx_settings['upstream_server']}"
-        )
-        print_debug(
-            f"Nginx config file: {NGINX_CONFIGURATION_DIRECTORY / (nginx_settings['domain'] + '.conf')}"
-        )
+    if edge_settings:
+        print_debug(f"Edge domain (server.domain): {edge_settings['domain']}")
+        print_debug(f"Edge upstream: {edge_settings['upstream_scheme']}://{edge_settings['upstream_server']}")
+        print_debug(f"HAProxy site file: {HAPROXY_SITES_DIRECTORY / (edge_settings['domain'] + '.cfg')}")
+        print_debug(f"HAProxy configuration: {HAPROXY_CONFIGURATION_PATH} (access log: journalctl -u haproxy)")
+        if spoe_settings:
+            spoe_mode = "enforce" if spoe_settings["enforce"] else "shadow"
+            print_debug(f"fareward SPOE agent: {spoe_settings['socket']} ({spoe_mode} mode)")
+            print_debug("Run configure_fareward.py on this host too: the agent lives in the fareward daemon.")
 
-    if execution_mode == EXECUTION_MODE_NGINX:
+    if execution_mode == EXECUTION_MODE_EDGE:
         print_debug("Run this script with mode 2 on the backend host so it listens on server.port.")
     if execution_mode == EXECUTION_MODE_SYSTEMD:
-        print_debug("Run this script with mode 3 on the Nginx host so server.nginx_domain forwards here.")
+        print_debug("Run this script with mode 3 on the edge host so server.domain forwards here.")
 
 
 def main():
@@ -1551,42 +1742,50 @@ def main():
     project_credentials = load_project_credentials(repository_config_path)
 
     configure_systemd = execution_mode in {EXECUTION_MODE_FULL, EXECUTION_MODE_SYSTEMD}
-    configure_nginx = execution_mode in {EXECUTION_MODE_FULL, EXECUTION_MODE_NGINX}
+    configure_edge = execution_mode in {EXECUTION_MODE_FULL, EXECUTION_MODE_EDGE}
 
     # Resolve every credential the selected mode needs before touching the system, so anything
     # missing is asked for up front instead of leaving half of the host configured.
     prompted_values = {}
     server_port = None
-    nginx_settings = None
+    edge_settings = None
+    spoe_settings = None
 
     # Only a split-host backend listens on a TCP port; in full mode it binds the Unix socket.
     if execution_mode == EXECUTION_MODE_SYSTEMD:
         server_port, prompted_server_port = extract_server_port(project_credentials)
         prompted_values.update(prompted_server_port)
 
-    if configure_nginx:
-        nginx_settings = extract_nginx_settings(
+    if configure_edge:
+        edge_settings = extract_edge_settings(
             project_credentials, backend_is_local=execution_mode == EXECUTION_MODE_FULL
         )
-        prompted_values.update(nginx_settings["prompted_values"])
+        prompted_values.update(edge_settings["prompted_values"])
+
+    # The agent's headers are only trusted from a local peer, so only full mode gets SPOE.
+    if execution_mode == EXECUTION_MODE_FULL:
+        spoe_settings = resolve_spoe_settings(project_credentials)
 
     persist_prompted_credentials(repository_config_path, prompted_values)
 
-    runtime_username = None
+    runtime_username = detect_runtime_username()
     if configure_systemd:
+        if repository_config_path.exists():
+            sync_edge_trust_setting(project_credentials, repository_config_path, spoe_settings)
         runtime_username = install_systemd_service(
             repository_config_path, server_port, command_arguments.binary_source
         )
 
-    if configure_nginx:
-        configure_nginx_reverse_proxy(nginx_settings)
+    if configure_edge:
+        configure_api_edge(edge_settings, spoe_settings, process_group=runtime_username)
 
     print_summary(
         execution_mode,
         repository_config_path,
-        runtime_username,
+        runtime_username if configure_systemd else None,
         server_port,
-        nginx_settings,
+        edge_settings,
+        spoe_settings,
     )
 
 

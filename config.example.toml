@@ -52,12 +52,30 @@ disable_api_concurrency_local = false
 # stays up, Lambda needs it), and a backend/agent that is not on Lambda dials the socket instead of
 # TCP. Set it only when the backend runs on the same host as fareward. The systemd unit creates
 # /run/fareward (RuntimeDirectory), so keep the socket inside it. Empty = TCP only.
+#
+# routes_file: the route policy table the backend writes at startup for the SPOE agent below
+# ([spoe]). Required when [spoe].socket is set, as "/var/lib/genix/fareward-routes.toml": the
+# backend's unit can only write in /var/lib/genix. Empty = not written.
+# trust_edge_headers: written by configure_server.py, true only when [spoe].mode = "enforce" (the
+# agent already charged the request); never set it by hand.
 [fareward]
 host = "127.0.0.1"
 port = 14013
 public = false
 use_remote_dev_host = false
 unix_socket = ""
+routes_file = ""
+trust_edge_headers = false
+
+# ─── fareward SPOE agent (HAProxy edge) ─────────────────────────────────────
+# HAProxy asks fareward on the request headers, before reading the body (fareward/plans/plan.md).
+# Only on a full-mode install (HAProxy, backend and fareward on one host). Empty socket = off: the
+# edge forwards everything and the backend gates every request itself.
+# mode: "shadow" only logs the verdict (journalctl -u haproxy), "enforce" refuses on it. HAProxy and
+# the daemon both follow this key; rerun configure_server.py and restart fareward after changing it.
+[spoe]
+socket = ""                    # e.g. "/run/fareward/spoe.sock"
+mode   = "shadow"
 
 # ─── Qdrant (base de datos vectorial) ───────────────────────────────────────
 # Lo instala 'scripts/configure/configure_db.py qdrant'. host vacío = lo escribe el script con la IP
@@ -123,14 +141,15 @@ partitions = 1
 # Conexiones máximas del pool; 0 usa 64.
 max_conns  = 0
 
-# ─── Servidor propio (systemd + Nginx) ──────────────────────────────────────
+# ─── Servidor propio (systemd + HAProxy) ────────────────────────────────────
 [server]
-# In full mode (nginx + backend on the same VPS) they connect through /run/genix/api.sock and
-# port/nginx_process are ignored. They only apply to a split-host install (configure modes 2 + 3),
-# where port must equal the port half of nginx_process. 0 uses 3589 (local dev).
-port          = 14010
-nginx_domain  = "api.example.com"
-nginx_process = "127.0.0.1:14010"
+# domain is the public API domain the HAProxy edge serves (scripts/configure/configure_server.py).
+# In full mode (HAProxy + backend on the same VPS) they connect through /run/genix/api.sock and
+# port/upstream are ignored. They only apply to a split-host install (configure modes 2 + 3),
+# where port must equal the port half of upstream. 0 uses 3589 (local dev).
+port     = 14010
+domain   = "api.example.com"
+upstream = "127.0.0.1:14010"
 # Admission control of the VPS server (Lambda ignores both). max_concurrent_requests is how many
 # requests run at once; the rest wait up to 2 s for a slot and then get 503 + Retry-After. 0 = 16 per
 # CPU, the point where the CPU saturates. memory_limit_mb is the Go soft memory limit (GOMEMLIMIT);
@@ -159,25 +178,35 @@ max_inflight_per_connection = 64
 # backend reiniciado.
 access_cache_seconds  = 600
 
-# Whole-company limits. CPU and inference credits are independent.
-company_cpu_10s        = 2000
-company_inference_10s  = 1000
-company_cpu_1h         = 40000
-company_inference_1h   = 10000
+# Las dos ventanas del rate limit: siempre dos. Opcionales; si faltan, 10 segundos y 60 minutos.
+# La corta es un token bucket: sus créditos se recargan de forma continua en estos segundos.
+short_window_seconds   = 10
+# La larga es una ventana fija de reloj (con 10: :00, :10, :20…), en tramos de 5 minutos: al
+# reiniciar se reconstruye sumando los registros de uso de 5 minutos. Máximo 1440 y más larga que la
+# corta. Los techos *_long de abajo son créditos POR ESTA ventana: al acortarla, bájalos.
+long_window_minutes    = 60
+
+# Whole-company limits, in credits per window. CPU and inference credits are independent.
+# Los nombres viejos (_10s, _1h) se siguen leyendo con un aviso en el log; si están los dos, gana el
+# nuevo.
+company_cpu_short        = 2000
+company_inference_short  = 1000
+company_cpu_long         = 40000
+company_inference_long   = 10000
 
 # Porcentaje del techo diario de la company que puede gastar UN solo usuario. El techo diario no está
 # en este archivo —sale de company_credit_budget, que administra el panel SaaS—, así que esto es una
 # fracción y no un número de créditos: un número fijo aquí significaría algo distinto para cada
 # tenant. Ausente = 100, y por debajo de 100 una company de un solo usuario (que son la mayoría) no
-# puede alcanzar el resto de su asignación diaria. Las ventanas de 10s y 1h de abajo siguen frenando
-# la ráfaga de un usuario suelto.
+# puede alcanzar el resto de su asignación diaria. Las ventanas corta y larga de abajo siguen
+# frenando la ráfaga de un usuario suelto.
 user_daily_share_pct   = 80
 
 # Per-user limits inside each company.
-user_cpu_10s           = 1000
-user_inference_10s     = 500
-user_cpu_1h            = 20000
-user_inference_1h      = 5000
+user_cpu_short           = 1000
+user_inference_short     = 500
+user_cpu_long            = 20000
+user_inference_long      = 5000
 
 # Créditos de CPU que una company puede gastar al día DESPUÉS de que su cuota normal la haya
 # rechazado, y sólo en requests de lectura (el router marca el frame; GET sí, POST/PUT no). Es el
@@ -187,7 +216,7 @@ user_inference_1h      = 5000
 # arriba —que son obligatorios y el daemon no arranca sin ellos— una asignación gratuita ausente es
 # simplemente ninguna asignación gratuita.
 #
-# Los tramos de ráfaga (10s y 1h) nunca se relajan con esto, y el consumo extra no toca el techo
+# Las ventanas de ráfaga (corta y larga) nunca se relajan con esto, y el consumo extra no toca el techo
 # mensual comprado: se contabiliza aparte, en company_credit_budget.day_extra_cpu_used.
 #
 # No hay claves *_24h aquí: el techo diario NO es política de este archivo, sale de la tabla

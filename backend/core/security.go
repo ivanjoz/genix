@@ -91,7 +91,7 @@ type EnvStruct struct {
 	MARIADB_MAX_CONNS int
 	// MARIADB_SOCKET is [mariadb].socket: dialed instead of host:port when the database shares the host.
 	MARIADB_SOCKET string
-	SERVER_PORT    int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
+	SERVER_PORT    int32 // Listen port of the standalone HTTP server; must match the port in server.upstream on a split host, 0 uses 3589
 	// SERVER_MAX_CONCURRENT_REQUESTS caps the requests the VPS server runs at once; the rest wait
 	// for a slot (see admission.go). 0 uses a default derived from GOMAXPROCS.
 	SERVER_MAX_CONCURRENT_REQUESTS int32
