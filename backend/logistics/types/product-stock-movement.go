@@ -212,8 +212,8 @@ type InternalMovement struct {
 	// ledger row (WarehouseProductMovement.PurchaseAccountCode). Set by the reception's caller.
 	PurchaseAccountCode int32
 	// The manual-stock policy: company flag 6, and opening stock's cost. They are judged on the
-	// delta, which only the engine knows for a "set stock to X" movement, and inside its lock, so
-	// the check and the write see the same balance.
+	// delta, which only the engine knows for a "set stock to X" movement, and against the stock row it
+	// locked, so the check and the write see the same balance.
 	RejectInbound      bool // the company only lets stock in through a purchase order
 	RequireInboundCost bool // the inflow must carry a Price even if the row has an AverageCost
 

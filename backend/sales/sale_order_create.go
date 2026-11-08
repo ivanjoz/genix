@@ -153,18 +153,13 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		sale.ClientID = clientID
 	}
 
-	// A delivery holds the company's stock lock from this check until its movements are written.
-	// Checked outside it, two tills selling the last units at once both pass, and the second
-	// one's movement is refused after its sale was already saved as delivered. Inside it the check
-	// is the truth, so the movement cannot be refused for stock after the sale is written — and
-	// the sale's number is still reserved only once the sale is known to go through, leaving no
-	// gap in the series.
-	if slices.Contains(sale.ActionsIncluded, 3) {
-		unlockStock := logistics.LockCompanyStock(req.User.CompanyID)
-		defer unlockStock()
-	}
-
 	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
+		// An early check, on a plain read and before the sale's number is reserved: almost every
+		// shortage is refused here, with nothing spent. It is not the final word. A delivery's
+		// movements re-check against the stock rows they lock inside the transaction below, so two
+		// tills selling the last units at once cannot both deliver; the loser fails there, after its
+		// number was reserved, which leaves a rare gap in the series (accepted, 2026-11-07).
+		//
 		// Validate stock availability against the V2 split:
 		//  - line items without LotID AND without SerialNumber draw from ProductStockV2.Quantity
 		//  - items with a LotID/SerialNumber draw from the matching ProductStockDetail row
@@ -316,7 +311,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			return core.Err("Error al registrar el movimiento de cashBank:", err)
 		}
 		if len(stockMovements) > 0 {
-			if err := logistics.ApplyMovimientosHoldingStockLockIn(transaction, req, stockMovements); err != nil {
+			if err := logistics.ApplyMovimientosIn(transaction, req, stockMovements); err != nil {
 				return core.Err("Error al procesar la salida de almacén:", err)
 			}
 		}

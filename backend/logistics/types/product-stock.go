@@ -175,7 +175,7 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 	}
 }
 
-// ProductStockLot is a dedupe-able lot catalog. Hash = (Date, SupplierID, Name).
+// ProductStockLot is the lot catalog: one lot per (Date, SupplierID, Name), a unique index.
 type ProductStockLot struct {
 	db.TableStruct[ProductStockLotTable, ProductStockLot]
 	CompanyID        int32  `cb:"1"`
@@ -185,15 +185,10 @@ type ProductStockLot struct {
 	SupplierID       int32  `cb:"5"`
 	DeliveryNoteID   int32  `cb:"6"`
 	DeliveryNoteCode string `cb:"7"`
-	Hash             string `cb:"8"`
 
 	Created   int32 `cb:"9"`
 	CreatedBy int32 `cb:"10"`
 	Status    int8  `json:"ss" cb:"ss,11"`
-}
-
-func (e *ProductStockLot) SelfParse() {
-	e.Hash = db.MakeKeyConcat(e.Date, e.SupplierID, e.Name)
 }
 
 type ProductStockLotTable struct {
@@ -205,7 +200,6 @@ type ProductStockLotTable struct {
 	SupplierID       db.Col[*ProductStockLotTable, int32]
 	DeliveryNoteID   db.Col[*ProductStockLotTable, int32]
 	DeliveryNoteCode db.Col[*ProductStockLotTable, string]
-	Hash             db.Col[*ProductStockLotTable, string]
 	Created          db.Col[*ProductStockLotTable, int32]
 	CreatedBy        db.Col[*ProductStockLotTable, int32]
 	Status           db.Col[*ProductStockLotTable, int8]
@@ -218,8 +212,9 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			// Hash index for dedup lookups when resolving LotID from (Date, SupplierID, Name).
-			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash)},
+			// One lot per (Date, SupplierID, Name): what a movement naming a lot resolves to. The database
+			// enforces it, so two receptions naming the same new lot at once cannot create it twice.
+			{Type: db.TypeUniqueIndex, Keys: db.Cols(e.Date, e.SupplierID, e.Name)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Name)},
 		},
 	}

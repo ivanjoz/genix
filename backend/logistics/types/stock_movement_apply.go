@@ -3,9 +3,16 @@
 // (see backend/docs/MODULE_BOUNDARIES.md). Living here is what lets them call it while importing
 // only `app/logistics/types`.
 //
-// ApplyMovimientos and RecalcProductStockByMovements share one per-company write lock and the
-// packed-key helper, which is why the recalc moved with the engine rather than staying behind and
-// forcing both to be exported.
+// Concurrency: every stock writer runs in a database transaction and locks the ProductStock rows it
+// touches (db.LockByKeys) before reading anything under them, so two writers of one row run one
+// after the other, in any process. A ProductStock row guards its ProductStockDetail rows: nothing
+// writes a detail without locking its stock row first. A row that does not exist yet cannot be
+// locked, so it is created with a plain INSERT: when two writers both create it, the loser's
+// transaction fails on the duplicate key and RunTransaction reruns it against the winner's row. Lots
+// follow the same rule through their unique (Date, SupplierID, Name) index.
+//
+// ApplyMovimientos and RecalcProductStockByMovements share the packed-key helper, which is why the
+// recalc moved with the engine rather than staying behind and forcing both to be exported.
 
 package types
 
@@ -15,25 +22,7 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"sync"
-
-	"golang.org/x/sync/errgroup"
 )
-
-var applyMovimientosLockByCompany = map[int32]*sync.Mutex{}
-var applyMovimientosLockMapMu sync.Mutex
-
-func getApplyMovimientosCompanyLock(companyID int32) *sync.Mutex {
-	// One mutex per company so stock writes for the same tenant stay serialized.
-	applyMovimientosLockMapMu.Lock()
-	companyLock := applyMovimientosLockByCompany[companyID]
-	if companyLock == nil {
-		companyLock = &sync.Mutex{}
-		applyMovimientosLockByCompany[companyID] = companyLock
-	}
-	applyMovimientosLockMapMu.Unlock()
-	return companyLock
-}
 
 // PackProductStockID mirrors the ORM's KeyIntPacking for ProductStockV2 so the
 // application can compute the packed key for lookups/detail wiring without
@@ -187,32 +176,20 @@ func expandStockTransfers(movements []InternalMovement) ([]InternalMovement, err
 	return expanded, nil
 }
 
-// LockCompanyStock takes the company's stock write lock, the one ApplyMovimientos takes, and returns
-// its release. A writer that checks stock and then commits something that depends on it — a sale
-// that must not be saved unless its delivery goes through — holds it across both, then writes the
-// movements with ApplyMovimientosHoldingStockLock. Inside the lock the check is the truth: every
-// stock write of this process waits on it.
-func LockCompanyStock(companyID int32) func() {
-	companyLock := getApplyMovimientosCompanyLock(companyID)
-	companyLock.Lock()
-	return companyLock.Unlock
-}
-
+// ApplyMovimientos writes the movements, the stock they leave and their ledger rows in a transaction
+// of their own.
 func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) error {
-	core.Log("ApplyMovimientos esperando lock company:", req.User.CompanyID, "movimientos:", len(movimientos))
-	unlockStock := LockCompanyStock(req.User.CompanyID)
-	defer unlockStock()
-	// The stock, detail and ledger rows commit together.
 	return db.RunTransaction(func(transaction *db.Transaction) error {
-		return ApplyMovimientosHoldingStockLockIn(transaction, req, movimientos)
+		return ApplyMovimientosIn(transaction, req, movimientos)
 	})
 }
 
-// ApplyMovimientosHoldingStockLockIn is ApplyMovimientos for a caller that already holds
-// LockCompanyStock (the lock is not reentrant), inside the caller's transaction, so the stock moves commit with the document that caused them (a sale's delivery).
-// The rows it reads are guarded by LockCompanyStock, not by row locks, and everything it writes is
-// derived from them: a deadlock retry of the caller's body reruns it cleanly.
-func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.HandlerArgs, movimientos []InternalMovement) error {
+// ApplyMovimientosIn is ApplyMovimientos inside the caller's transaction, so the stock moves commit
+// with the document that caused them (a sale's delivery). It locks the stock rows before reading
+// under them, and its negative-stock check runs on those locked rows: it is the final word on
+// whether the movements fit. Everything it writes derives from what it reads in the transaction, and
+// it never mutates movimientos, so a rerun of the caller's body (deadlock, duplicate key) runs it cleanly.
+func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movimientos []InternalMovement) error {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
 
@@ -250,7 +227,7 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 	}
 
 	// Resolve missing LotIDs for inbound lot-by-name movements.
-	if err := resolveLotIDsForMovements(req, activeMovements, core.FechaUnix()); err != nil {
+	if err := resolveLotIDsForMovements(transaction, req, activeMovements, core.FechaUnix()); err != nil {
 		return err
 	}
 
@@ -273,51 +250,45 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 		divisorByMovement[i] = movementDivisor
 	}
 
-	// Preload V2 rows and detail rows in parallel. Each goroutine owns its own map
-	// so no shared state is mutated concurrently.
-	// - V2 preload excludes Created/CreatedBy so loaded rows carry them as 0, flagging UPDATE at write time.
-	// - Detail preload also excludes Updated/UpdatedBy so untouched preloaded details stay at Updated==0
-	//   and get skipped by the write step.
+	// Lock the stock rows first: every read below them (their details) then sees the last committed
+	// state, and nobody else writes it until this transaction ends. In key order, so two writers of
+	// overlapping rows queue instead of deadlocking.
 	stockByID := map[int64]*ProductStock{}
+	lockedStocks := make([]ProductStock, 0, len(stockIDSet.Values))
+	slices.Sort(stockIDSet.Values)
+	for _, stockID := range stockIDSet.Values {
+		lockedStocks = append(lockedStocks, ProductStock{CompanyID: companyID, ID: stockID})
+	}
+	if err := db.LockByKeys(transaction, &lockedStocks); err != nil {
+		return core.Err("Error al obtener stock V2 previo:", err)
+	}
+	for i := range lockedStocks {
+		stockByID[lockedStocks[i].ID] = &lockedStocks[i]
+	}
+	// Rows this call creates: written with a plain INSERT, which fails (and reruns the transaction)
+	// if a concurrent writer created the same row first.
+	newStockIDs := core.SliceSet[int64]{}
+
+	// The detail preload excludes Created/CreatedBy (flagging UPDATE at write time) and
+	// Updated/UpdatedBy, so untouched preloaded details stay at Updated==0 and are skipped by the
+	// write step. The locked stock rows guard them, so a plain read is enough.
 	detailByKey := map[string]*ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
 	}
-
-	preloadGroup := errgroup.Group{}
-	preloadGroup.Go(func() error {
-		existing := []ProductStock{}
+	if !stockIDsWithDetails.IsEmpty() {
+		existing := []ProductStockDetail{}
 		q := db.Query(&existing)
-		q.Exclude(q.Created, q.CreatedBy).
+		q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).
 			CompanyID.Equals(companyID).
-			ID.In(stockIDSet.Values...)
+			ProductStockID.In(stockIDsWithDetails.Values...)
 		if err := q.Exec(); err != nil {
-			return core.Err("Error al obtener stock V2 previo:", err)
+			return core.Err("Error al obtener detalle de stock previo:", err)
 		}
 		for i := range existing {
-			stockByID[existing[i].ID] = &existing[i]
+			row := &existing[i]
+			detailByKey[detailKey(row.ProductStockID, row.LotID, row.SerialNumber)] = row
 		}
-		return nil
-	})
-	if !stockIDsWithDetails.IsEmpty() {
-		preloadGroup.Go(func() error {
-			existing := []ProductStockDetail{}
-			q := db.Query(&existing)
-			q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).
-				CompanyID.Equals(companyID).
-				ProductStockID.In(stockIDsWithDetails.Values...)
-			if err := q.Exec(); err != nil {
-				return core.Err("Error al obtener detalle de stock previo:", err)
-			}
-			for i := range existing {
-				row := &existing[i]
-				detailByKey[detailKey(row.ProductStockID, row.LotID, row.SerialNumber)] = row
-			}
-			return nil
-		})
-	}
-	if err := preloadGroup.Wait(); err != nil {
-		return err
 	}
 
 	updatedTime := core.SUnixTime()
@@ -399,7 +370,7 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 		stockID := stockIDByMovement[i]
 		stock := stockByID[stockID]
 		if stock == nil {
-			// New V2 row: stamp Created/CreatedBy so the partition step can flag it for insert.
+			newStockIDs.Add(stockID)
 			stock = &ProductStock{
 				ID:             stockID,
 				CompanyID:      companyID,
@@ -605,7 +576,8 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 
 	// Flatten to value slices. Validate non-negative balances at the same time.
 	// Untouched preloaded details (Updated==0) are skipped so InsertUpdateInclude only sees dirty rows.
-	stocks := make([]ProductStock, 0, len(stockByID))
+	newStocks := []ProductStock{}
+	lockedStocksToUpdate := []ProductStock{}
 	for _, stock := range stockByID {
 		// A plain Quantity < 0 test misses {0,-4}: four sub-units oversold, whose whole-unit
 		// field is exactly zero. Both buckets have to be judged as normalized values.
@@ -619,7 +591,11 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 				stock.WarehouseID, stock.ProductID, stock.PresentationID,
 				stock.Quantity, stock.SubQuantity, stock.DetailQuantity, stock.DetailSubQuantity, stockDivisor))
 		}
-		stocks = append(stocks, *stock)
+		if newStockIDs.Include(stock.ID) {
+			newStocks = append(newStocks, *stock)
+		} else {
+			lockedStocksToUpdate = append(lockedStocksToUpdate, *stock)
+		}
 	}
 	details := make([]ProductStockDetail, 0, len(detailByKey))
 	for _, detail := range detailByKey {
@@ -639,26 +615,27 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 		details = append(details, *detail)
 	}
 
-	core.Log("ApplyMovimientos writes:",
-		"stocks", len(stocks), "details", len(details), "movements", len(warehouseMovements))
+	core.Log("ApplyMovimientos writes:", "new stocks", len(newStocks), "updated stocks", len(lockedStocksToUpdate),
+		"details", len(details), "movements", len(warehouseMovements))
 
-	// One transaction runs on one connection, so the three writes go one after the other.
-	// InsertUpdateIncludeIn routes each record to INSERT or UPDATE by the Created>0 predicate.
-	if len(stocks) > 0 {
+	// One transaction runs on one connection, so the writes go one after the other.
+	if len(newStocks) > 0 {
+		if err := db.InsertIn(transaction, &newStocks); err != nil {
+			return core.Err("Error al crear stock V2:", err)
+		}
+	}
+	if len(lockedStocksToUpdate) > 0 {
 		stockTable := db.TableOf[ProductStock]()
-		if err := db.InsertUpdateIncludeIn(transaction, &stocks,
-			func(e *ProductStock) bool { return e.Created > 0 },
-			db.Cols(
-				// Keep the materialized view tuple consistent on updates.
-				stockTable.WarehouseID,
-				stockTable.Quantity, stockTable.SubQuantity,
-				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
-				stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
-				stockTable.SubDivisor,
-				stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
-				stockTable.AverageCost, stockTable.StockValue,
-				stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
-			),
+		if err := db.UpdateIn(transaction, &lockedStocksToUpdate,
+			// WarehouseID and Status are the delta index's pinned columns: written together.
+			stockTable.WarehouseID,
+			stockTable.Quantity, stockTable.SubQuantity,
+			stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+			stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
+			stockTable.SubDivisor,
+			stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
+			stockTable.AverageCost, stockTable.StockValue,
+			stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
 		); err != nil {
 			return core.Err("Error al guardar stock V2:", err)
 		}
@@ -683,98 +660,78 @@ func ApplyMovimientosHoldingStockLockIn(transaction *db.Transaction, req *core.H
 	return nil
 }
 
-// resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements
-// that only carry a LotName. It dedups by Hash(today, SupplierID, Name) against
-// ProductStockLot and creates any missing lot rows in one batch.
-func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*InternalMovement, lotDate int16) error {
-	// Group movements by hash so we only touch each unique (date, supplier, name) lot once.
-	type lotLookupKey struct {
-		hash       string
+// resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements that only carry a
+// LotName: the lot (lotDate, SupplierID, Name), created when missing. The lot's unique index is what
+// keeps it single: two transactions that both find it missing both insert it, the loser fails on the
+// duplicate key, and its rerun finds the winner's lot here.
+func resolveLotIDsForMovements(transaction *db.Transaction, req *core.HandlerArgs, movements []*InternalMovement, lotDate int16) error {
+	type lotNaturalKey struct {
 		supplierID int32
 		name       string
 	}
-	movementsByHash := map[string][]*InternalMovement{}
-	hashToKey := map[string]lotLookupKey{}
-
+	movementsByLotKey := map[lotNaturalKey][]*InternalMovement{}
+	supplierIDs := core.SliceSet[int32]{}
+	lotNames := core.SliceSet[string]{}
 	for _, mov := range movements {
 		if mov.LotID != 0 || mov.LotName == "" {
 			continue
 		}
-		hash := db.MakeKeyConcat(lotDate, mov.SupplierID, mov.LotName)
-		movementsByHash[hash] = append(movementsByHash[hash], mov)
-		hashToKey[hash] = lotLookupKey{hash: hash, supplierID: mov.SupplierID, name: mov.LotName}
+		lotKey := lotNaturalKey{supplierID: mov.SupplierID, name: mov.LotName}
+		movementsByLotKey[lotKey] = append(movementsByLotKey[lotKey], mov)
+		supplierIDs.Add(mov.SupplierID)
+		lotNames.Add(mov.LotName)
 	}
-	if len(movementsByHash) == 0 {
+	if len(movementsByLotKey) == 0 {
 		return nil
 	}
 
-	hashes := make([]string, 0, len(movementsByHash))
-	for hash := range movementsByHash {
-		hashes = append(hashes, hash)
-	}
-
-	// Look up existing lots by the dedup hash index, one hash per query and in parallel.
-	// Hash is a global index, so its capability signature carries no partition prefix and a
-	// CompanyID + Hash query cannot route through it: Scylla then sees a plain restriction on a
-	// non-key column, which it only accepts for a single value. Batching the hashes into one IN
-	// would need ALLOW FILTERING — a full partition scan of every lot the tenant ever created.
-	lotsByHashIndex := make([][]ProductStockLot, len(hashes))
-	lotLookupGroup := errgroup.Group{}
-	lotLookupGroup.SetLimit(8)
-
-	for hashIndex, hash := range hashes {
-		lotLookupGroup.Go(func() error {
-			query := db.Query(&lotsByHashIndex[hashIndex])
-			query.Select().
-				CompanyID.Equals(req.User.CompanyID).
-				Hash.Equals(hash)
-			return query.Exec()
-		})
-	}
-	if err := lotLookupGroup.Wait(); err != nil {
+	// One read through the unique index. The IN on both columns can return a pair nobody asked for
+	// (supplier A's name with supplier B), which the map lookup below never picks.
+	existingLots := []ProductStockLot{}
+	query := db.Query(&existingLots)
+	query.Select(query.ID, query.SupplierID, query.Name).
+		CompanyID.Equals(req.User.CompanyID).
+		Date.Equals(lotDate).
+		SupplierID.In(supplierIDs.Values...).
+		Name.In(lotNames.Values...)
+	if err := query.Exec(); err != nil {
 		return core.Err("Error al buscar lotes existentes:", err)
 	}
-
-	lotIDByHash := map[string]int32{}
-	for _, lotsForHash := range lotsByHashIndex {
-		for _, lot := range lotsForHash {
-			lotIDByHash[lot.Hash] = lot.ID
-		}
+	lotIDByKey := map[lotNaturalKey]int32{}
+	for _, lot := range existingLots {
+		lotIDByKey[lotNaturalKey{supplierID: lot.SupplierID, name: lot.Name}] = lot.ID
 	}
 
-	// Insert any missing lots in one batch. The ORM assigns autoincrement IDs in-place.
+	// The missing lots, as a plain INSERT: the ORM mints their autoincrement IDs in place.
 	lotsToInsert := []ProductStockLot{}
-	insertedHashOrder := []string{}
-	for hash, key := range hashToKey {
-		if _, found := lotIDByHash[hash]; found {
+	for lotKey := range movementsByLotKey {
+		if _, isFound := lotIDByKey[lotKey]; isFound {
 			continue
 		}
 		lotsToInsert = append(lotsToInsert, ProductStockLot{
 			CompanyID:  req.User.CompanyID,
 			Date:       lotDate,
-			Name:       key.name,
-			SupplierID: key.supplierID,
+			Name:       lotKey.name,
+			SupplierID: lotKey.supplierID,
 			Created:    core.SUnixTime(),
 			CreatedBy:  req.User.ID,
 		})
-		insertedHashOrder = append(insertedHashOrder, hash)
 	}
 	if len(lotsToInsert) > 0 {
-		if err := db.Upsert(&lotsToInsert); err != nil {
+		if err := db.InsertIn(transaction, &lotsToInsert); err != nil {
 			return core.Err("Error al crear lotes:", err)
 		}
-		for i, hash := range insertedHashOrder {
-			lotIDByHash[hash] = lotsToInsert[i].ID
+		for _, lot := range lotsToInsert {
+			lotIDByKey[lotNaturalKey{supplierID: lot.SupplierID, name: lot.Name}] = lot.ID
 		}
 	}
 
-	// Fan the resolved IDs back out to every movement that referenced them.
-	for hash, movs := range movementsByHash {
-		lotID := lotIDByHash[hash]
+	for lotKey, lotMovements := range movementsByLotKey {
+		lotID := lotIDByKey[lotKey]
 		if lotID == 0 {
-			return core.Err(fmt.Sprintf("No se pudo resolver el LotID para hash %v", hash))
+			return core.Err(fmt.Sprintf("No se pudo resolver el lote %q del proveedor %v.", lotKey.name, lotKey.supplierID))
 		}
-		for _, mov := range movs {
+		for _, mov := range lotMovements {
 			mov.LotID = lotID
 		}
 	}
@@ -786,18 +743,22 @@ func resolveLotIDsForMovements(req *core.HandlerArgs, movements []*InternalMovem
 // A movement with LotID==0 AND SerialNumber=="" contributes to V2.Quantity;
 // any other movement contributes to the matching ProductStockDetail row, whose
 // sum is mirrored into V2.DetailQuantity.
+//
+// It runs in one transaction that locks every stock row of the company: a live stock write waits
+// until the replay commits, so none lands between the ledger read and the write of its result.
 func RecalcProductStockByMovements(companyID int32) error {
-	companyLock := getApplyMovimientosCompanyLock(companyID)
+	return db.RunTransaction(func(transaction *db.Transaction) error {
+		return recalcProductStockIn(transaction, companyID)
+	})
+}
 
-	core.Log("RecalcProductStockByMovements esperando lock company:", companyID)
-	companyLock.Lock()
-	defer companyLock.Unlock()
-
+func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 	updatedTime := core.SUnixTime()
 
-	// Start by loading the persisted rows. Excluding Created+CreatedBy (and Updated/UpdatedBy on
-	// details) means any in-memory row still carrying Created==0 at the end of the pass was
-	// loaded from DB and must be persisted as an UPDATE; Created>0 flags INSERT.
+	// Start by locking the persisted stock rows, then reading their details. Rows the replay creates
+	// go in newStockIDs and are written with a plain INSERT. Details exclude Created+CreatedBy, so a
+	// detail still carrying Created==0 at the end was loaded from DB and is persisted as an UPDATE.
+	newStockIDs := core.SliceSet[int64]{}
 	stockByID := map[int64]*ProductStock{}
 	detailByKey := map[string]*ProductStockDetail{}
 	// Indexed by stock so a divisor refinement mid-replay can convert a row's whole detail
@@ -810,9 +771,16 @@ func RecalcProductStockByMovements(companyID int32) error {
 	{
 		existing := []ProductStock{}
 		q := db.Query(&existing)
-		q.Exclude(q.Created, q.CreatedBy).CompanyID.Equals(companyID)
+		q.Select(q.ID).CompanyID.Equals(companyID)
 		if err := q.Exec(); err != nil {
 			return core.Err("Error al obtener stock V2 previo:", err)
+		}
+		slices.SortFunc(existing, func(left, right ProductStock) int { return cmp.Compare(left.ID, right.ID) })
+		for i := range existing {
+			existing[i].CompanyID = companyID
+		}
+		if err := db.LockByKeys(transaction, &existing); err != nil {
+			return core.Err("Error al bloquear el stock V2:", err)
 		}
 		for i := range existing {
 			stock := &existing[i]
@@ -869,7 +837,8 @@ func RecalcProductStockByMovements(companyID int32) error {
 		stockID := PackProductStockID(warehouseID, movement.ProductID, movement.PresentationID)
 		stock := stockByID[stockID]
 		if stock == nil {
-			// Fresh V2 row (no historical record): Created stamps it as INSERT at write time.
+			// Fresh V2 row (no historical record).
+			newStockIDs.Add(stockID)
 			stock = &ProductStock{
 				ID:             stockID,
 				CompanyID:      companyID,
@@ -1045,43 +1014,49 @@ func RecalcProductStockByMovements(companyID int32) error {
 		stock.Updated = updatedTime
 	}
 
-	// Flatten and let InsertUpdateInclude route by the Created>0 marker: fresh rows go to INSERT,
-	// preloaded rows go to UPDATE (touching only the listed columns).
-	stocks := make([]ProductStock, 0, len(stockByID))
+	// Fresh stock rows go in as a plain INSERT, the locked ones as an UPDATE of the replayed columns.
+	// Details route by the Created>0 marker: fresh ones go to INSERT, preloaded ones to UPDATE.
+	newStocks, lockedStocksToUpdate := []ProductStock{}, []ProductStock{}
 	for _, stock := range stockByID {
-		stocks = append(stocks, *stock)
+		if newStockIDs.Include(stock.ID) {
+			newStocks = append(newStocks, *stock)
+		} else {
+			lockedStocksToUpdate = append(lockedStocksToUpdate, *stock)
+		}
 	}
 	details := make([]ProductStockDetail, 0, len(detailByKey))
 	for _, detail := range detailByKey {
 		details = append(details, *detail)
 	}
 
-	core.Log("RecalcProductStockByMovements writes:", "stocks", len(stocks), "details", len(details),
-		"restamped movements", len(restampedMovements))
+	core.Log("RecalcProductStockByMovements writes:", "new stocks", len(newStocks), "updated stocks", len(lockedStocksToUpdate),
+		"details", len(details), "restamped movements", len(restampedMovements))
 
 	if len(restampedMovements) > 0 {
 		movementTable := db.TableOf[WarehouseProductMovement]()
 		// The (date, product, type, sub_divisor) view and the period delta index need their key
 		// columns written with any update; the movements were read whole, so they carry their stored
 		// values, and Period was stamped from Date above.
-		if err := db.Update(&restampedMovements, movementTable.MonetaryValue,
+		if err := db.UpdateIn(transaction, &restampedMovements, movementTable.MonetaryValue,
 			movementTable.Date, movementTable.ProductID, movementTable.Type, movementTable.SubDivisor,
 			movementTable.Period); err != nil {
 			return core.Err("Error al guardar el valor de los movimientos:", err)
 		}
 	}
 
-	if len(stocks) > 0 {
+	if len(newStocks) > 0 {
+		if err := db.InsertIn(transaction, &newStocks); err != nil {
+			return core.Err("Error al crear stock V2 recalculado:", err)
+		}
+	}
+	if len(lockedStocksToUpdate) > 0 {
 		stockTable := db.TableOf[ProductStock]()
-		if err := db.InsertUpdateInclude(&stocks,
-			func(e *ProductStock) bool { return e.Created > 0 },
-			db.Cols(
-				stockTable.Quantity, stockTable.SubQuantity,
-				stockTable.DetailQuantity, stockTable.DetailSubQuantity,
-				stockTable.SubDivisor, stockTable.AverageCost, stockTable.StockValue,
-				// WarehouseID is the (warehouse_id, status) view's other key column.
-				stockTable.Updated, stockTable.Status, stockTable.WarehouseID,
-			),
+		if err := db.UpdateIn(transaction, &lockedStocksToUpdate,
+			stockTable.Quantity, stockTable.SubQuantity,
+			stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+			stockTable.SubDivisor, stockTable.AverageCost, stockTable.StockValue,
+			// WarehouseID and Status are the delta index's pinned columns: written together.
+			stockTable.Updated, stockTable.Status, stockTable.WarehouseID,
 		); err != nil {
 			return core.Err("Error al guardar stock V2 recalculado:", err)
 		}
@@ -1089,7 +1064,7 @@ func RecalcProductStockByMovements(companyID int32) error {
 
 	if len(details) > 0 {
 		detailTable := db.TableOf[ProductStockDetail]()
-		if err := db.InsertUpdateInclude(&details,
+		if err := db.InsertUpdateIncludeIn(transaction, &details,
 			func(e *ProductStockDetail) bool { return e.Created > 0 },
 			db.Cols(
 				detailTable.Quantity, detailTable.SubQuantity,

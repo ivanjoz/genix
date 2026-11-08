@@ -75,3 +75,6 @@ frontend/webpage/static/sw.js.map
 # SvelteKit genera esto en la raíz cuando se corre svelte fuera de frontend/.
 /.svelte-kit
 plan/
+
+# Output of the load-test measure_*.sh scripts (run from backend/).
+backend/measure/
