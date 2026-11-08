@@ -23,7 +23,7 @@ func HelloWorld(req *core.HandlerArgs) core.HandlerResponse {
 	`
 	body1 = strings.Replace(body1, "$1", core.BuildDate, -1)
 	body1 = strings.Replace(body1, "$2", core.Env.ENVIROMENT, -1)
-	body1 = strings.Replace(body1, "$3", core.Env.DB_HOST, -1)
+	body1 = strings.Replace(body1, "$3", core.Env.MARIADB_HOST, -1)
 	body1 = strings.Replace(body1, "$4", os.Getenv("APP_CODE"), -1)
 	body1 = strings.Replace(body1, "$5", strings.Join(os.Args, " | "), -1)
 

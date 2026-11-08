@@ -17,7 +17,7 @@ import (
 // to fareward in one frame.
 //
 // Only the code line and a preview travel. The full message and its stack are already going to
-// CloudWatch under this request's ID, and duplicating them into ScyllaDB would buy nothing except
+// CloudWatch under this request's ID, and duplicating them into the database would buy nothing except
 // a table that grows with traffic instead of with the codebase.
 
 const (

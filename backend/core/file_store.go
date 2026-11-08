@@ -20,7 +20,7 @@ import (
 // with a delta index or CacheByIDs can't be written without one.
 //
 // Lambda keeps the files in S3 ([file_store].bucket). A VPS keeps them on its own disk under
-// [file_store].vps_dir: the backend, ScyllaDB and every cache file live on the same machine, so every
+// [file_store].vps_dir: the backend, the database and every cache file live on the same machine, so every
 // process that writes a VPS keyspace must run on that VPS (the store locks across processes).
 //
 // The DataFrames keep their files in the same store, and their compactions take a fareward lock,

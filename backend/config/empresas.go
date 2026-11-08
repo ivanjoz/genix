@@ -62,14 +62,11 @@ func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
 // the current ones.
 func saveCompanyKeepingSeries(record types.Company) (types.Company, error) {
 	err := db.RunTransaction(func(transaction *db.Transaction) error {
-		stored := []types.Company{{ID: record.ID}}
-		if err := db.LockByKeys(transaction, &stored); err != nil {
+		stored, err := types.LockCompanyIn(transaction, record.ID)
+		if err != nil {
 			return err
 		}
-		if len(stored) == 0 {
-			return fmt.Errorf("no se encontró la empresa %d", record.ID)
-		}
-		record.InvoiceSeries = stored[0].InvoiceSeries
+		record.InvoiceSeries = stored.InvoiceSeries
 		return db.UpsertIn(transaction, &[]types.Company{record})
 	})
 	return record, err
@@ -96,7 +93,7 @@ func getCompaniesUpdatedSince(updated int64) ([]types.Company, error) {
 	if cloud.IsDataMirrorEnabled() {
 		return records, cloud.Select(&records).Where("updated").GreaterEqual(updated).Exec()
 	} else {
-		// Companies live in Scylla only when the optional cloud mirror is disabled.
+		// Companies live in the database only when the optional cloud mirror is disabled.
 		companyQuery := db.Query(&records)
 		companyQuery.Updated.GreaterEqual(int32(updated))
 		return records, companyQuery.AllowFilter().Exec()
@@ -110,7 +107,7 @@ func getCompanyByID(companyID int32) (*types.Company, error) {
 	if cloud.IsDataMirrorEnabled() {
 		record, err = cloud.GetByID(types.Company{ID: companyID})
 	} else {
-		// Resolve the company by its Scylla primary key in self-hosted mode.
+		// Resolve the company by its primary key in self-hosted mode.
 		records := []types.Company{}
 		companyQuery := db.Query(&records)
 		companyQuery.ID.Equals(companyID).Limit(1)

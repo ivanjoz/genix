@@ -18,7 +18,7 @@ import (
 // image assets, logs).
 //
 // Dry run by default: it prints what it would delete. Only --apply deletes. Per wiped table:
-//   - the company's partition of the base table (Scylla drops its materialized views itself);
+//   - the company's partition of the base table (its indexes go with the rows);
 //   - its delta-moves rows and cache-group marks, its by-IDs slots and its text index;
 //   - its delta and cache-group snapshots in the file store; its DataFrames are rebuilt empty;
 //   - its autoincrement counters, back to 0, and the company's invoice correlativos (cpe_<id>_*).
@@ -63,7 +63,7 @@ func WipeCompanyData(args *core.ExecArgs) core.FuncResponse {
 	}
 	db.Connect(makeConnParams())
 
-	controllers := MakeScyllaControllers()
+	controllers := MakeControllers()
 	tables, kept := []wipeTable{}, []string{}
 	for _, controller := range controllers {
 		schema := controller.DescribeTable()

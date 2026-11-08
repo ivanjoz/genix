@@ -9,7 +9,7 @@ import (
 	"github.com/ivanjoz/genix-orm/pgdriver"
 )
 
-// The driver-neutral facade on PostgreSQL: the same signatures as facade_scylla.go.
+// The driver-neutral facade on PostgreSQL: the same signatures as every other facade_*.go.
 
 // Connect records the server; the pool opens on first use. Scripting entry points ping the server
 // right away so a wrong address fails before any work. The keyspace is a PostgreSQL schema.

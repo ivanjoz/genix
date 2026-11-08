@@ -16,7 +16,7 @@ import (
 //
 // Without it a burst reaches the OOM killer instead of a queue. A first sync of a 50k catalog holds
 // ~110 MB of live heap while it runs, so a few dozen of them at once exhaust an 8 GB box that also
-// hosts ScyllaDB; an incremental sync holds a few KB but saturates the CPU at ~16 per core, past
+// hosts the database; an incremental sync holds a few KB but saturates the CPU at ~16 per core, past
 // which more concurrency only lengthens the queue inside the runtime. Lambda needs none of this:
 // one invocation runs per execution environment.
 
@@ -85,7 +85,7 @@ func AdmitRequest(ctx context.Context) (func(), bool) {
 }
 
 // startupMemoryBudgetBytes is what this process can count on: MemAvailable, not MemTotal, because
-// ScyllaDB on the same host reserves its whole --memory when it starts, and the cgroup limit when
+// a database on the same host reserves its memory (a buffer pool) when it starts, and the cgroup limit when
 // the service has one. Zero when neither can be read, which leaves the runtime default (no limit).
 func startupMemoryBudgetBytes() int64 {
 	budgetBytes := readMemAvailableBytes()

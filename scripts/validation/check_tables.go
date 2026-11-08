@@ -83,8 +83,7 @@ func CheckTables() {
 									// however many leading driver parameters the alias supplies.
 									pkgPath := named.Obj().Pkg().Path()
 									isTableStruct := named.Obj().Name() == "TableStruct" &&
-										(pkgPath == "github.com/ivanjoz/genix-orm/db" ||
-											pkgPath == "github.com/ivanjoz/genix-orm/scylla")
+										pkgPath == "github.com/ivanjoz/genix-orm/db"
 									if isTableStruct {
 										typeArgs := named.TypeArgs()
 										if argCount := typeArgs.Len(); argCount >= 2 {

@@ -33,9 +33,9 @@ BUILD_OUTPUT_DIRECTORY = PROJECT_ROOT_DIRECTORY / "tmp" / "remote"
 REPOSITORY_REMOTE = "https://github.com/ivanjoz/genix.git"
 
 COMPONENT_DIGITS = {"1", "2", "3"}
-# Same tags and CPU generation as scripts/deploy_vps.go (backendBuildTags + vpsDatabaseBuildTag,
-# arm64Generation): LSE atomics on Ampere A1 / Graviton2 and later.
-BACKEND_BUILD_TAGS = "lambda.norpc,mariadb"
+# Same tags and CPU generation as scripts/deploy_vps.go (backendBuildTags, arm64Generation): LSE
+# atomics on Ampere A1 / Graviton2 and later.
+BACKEND_BUILD_TAGS = "lambda.norpc"
 GOARM64_BY_ARCHITECTURE = {"arm64": "v8.2"}
 # fareward links glibc dynamically: target the oldest glibc of a supported server (Ubuntu 24.04).
 FAREWARD_TARGET_BY_ARCHITECTURE = {

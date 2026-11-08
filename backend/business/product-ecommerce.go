@@ -72,21 +72,19 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 		return nil
 	})
 
-	// Marcas + categorías: shared-list rows split by ListID.
+	// Marcas + categorías: one read of both shared lists, split by ListID.
 	errGroup.Go(func() error {
-		rows, err := queryActiveSharedList(companyID, types.SharedListBrandID)
+		rows, err := queryActiveSharedLists(companyID, types.SharedListBrandID, types.SharedListCategoryID)
 		if err != nil {
 			return err
 		}
-		marcas = rows
-		return nil
-	})
-	errGroup.Go(func() error {
-		rows, err := queryActiveSharedList(companyID, types.SharedListCategoryID)
-		if err != nil {
-			return err
+		for _, row := range rows {
+			if row.ListID == types.SharedListBrandID {
+				marcas = append(marcas, row)
+			} else {
+				categorias = append(categorias, row)
+			}
 		}
-		categorias = rows
 		return nil
 	})
 
@@ -101,16 +99,16 @@ func GetProductsEcommerce(req *core.HandlerArgs) core.HandlerResponse {
 	})
 }
 
-// queryActiveSharedList returns the active rows of a single shared list (marca or categoría).
-func queryActiveSharedList(companyID, listID int32) ([]types.SharedListRecord, error) {
+// queryActiveSharedLists returns the active rows of the given shared lists (marcas, categorías).
+func queryActiveSharedLists(companyID int32, listIDs ...int32) ([]types.SharedListRecord, error) {
 	records := []types.SharedListRecord{}
 	query := db.Query(&records)
-	query.Select(query.ID, query.Name, query.Updated, query.Status).
+	query.Select(query.ID, query.Name, query.ListID, query.Updated, query.Status).
 		CompanyID.Equals(companyID).
-		ListID.Equals(listID).
+		ListID.In(listIDs...).
 		Status.Equals(1)
 	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al obtener lista %d ecommerce: %v", listID, err)
+		return nil, fmt.Errorf("error al obtener las listas %v ecommerce: %v", listIDs, err)
 	}
 	return records, nil
 }

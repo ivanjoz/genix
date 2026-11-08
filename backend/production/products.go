@@ -3,6 +3,7 @@ package production
 import (
 	business "app/business/types"
 	"app/cloud"
+	config "app/config/types"
 	"app/core"
 	"app/db"
 	"app/production/types"
@@ -11,14 +12,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
-
-	"golang.org/x/sync/errgroup"
 )
-
-// productNameLookupConcurrency bounds the NameHash lookups one PostProducts runs at once: an import
-// of 500 products asks for 500 names.
-const productNameLookupConcurrency = 16
 
 func GetProducts(req *core.HandlerArgs) core.HandlerResponse {
 	loggedProducts := []types.Product{}
@@ -132,59 +126,10 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		productos[i].BrandName = brandNamesByID[productos[i].BrandID]
 	}
 
-	// Group existing records by NameHash so we can check active collisions and reuse inactive IDs.
-	// NameHash is a local index, and ScyllaDB answers an index only on an equality: one query per
-	// name, a few at a time.
-	existingProductsByHash := make(map[int32][]types.Product, len(nameHashToName))
-	existingProductsMutex := sync.Mutex{}
-	nameLookups := errgroup.Group{}
-	nameLookups.SetLimit(productNameLookupConcurrency)
-	for nameHash := range nameHashToName {
-		nameLookups.Go(func() error {
-			productsWithName := []types.Product{}
-			query := db.Query(&productsWithName)
-			query.Select(query.NameHash, query.ID, query.Status).
-				CompanyID.Equals(req.User.CompanyID).
-				NameHash.Equals(nameHash)
-			if err := query.Exec(); err != nil {
-				return err
-			}
-			if len(productsWithName) > 0 {
-				existingProductsMutex.Lock()
-				existingProductsByHash[nameHash] = productsWithName
-				existingProductsMutex.Unlock()
-			}
-			return nil
-		})
-	}
-	if err := nameLookups.Wait(); err != nil {
-		return req.MakeErr(fmt.Sprintf("Error al validar los nombres de productos: %v", err))
-	}
-
-	// Enforce name uniqueness across the database and reassign inactive IDs when needed.
-	for i := range productos {
-		currentProduct := &productos[i]
-		if existingProducts, found := existingProductsByHash[currentProduct.NameHash]; found {
-			for _, candidate := range existingProducts {
-				if candidate.Status > 0 && candidate.ID != currentProduct.ID {
-					return req.MakeErr(fmt.Sprintf(`Ya existe un product activo con el nombre "%s". ID=%v`, currentProduct.Name, candidate.ID))
-				}
-			}
-			if currentProduct.ID == 0 {
-				for _, candidate := range existingProducts {
-					if candidate.Status == 0 {
-						currentProduct.ID = candidate.ID
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// The edited rows are locked and the whole payload commits together: the stored columns this
-	// form does not own (stock, images, creation) are copied from the locked row, so a sale or an
-	// image upload committing meanwhile is not overwritten, and a rejected divisor leaves no row
-	// of the batch persisted.
+	// The company row is locked first, so name uniqueness is checked against every committed save,
+	// then the edited rows: the stored columns this form does not own (stock, images, creation) are
+	// copied from the locked row, so a sale or an image upload committing meanwhile is not
+	// overwritten, and a rejected divisor leaves no row of the batch persisted.
 	nowTime := core.SUnixTime()
 	core.Log("PostProductos payload:", len(productos))
 	savedProducts := []types.Product{}
@@ -214,6 +159,13 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 // saveProductsIn writes a PostProducts payload in the caller's transaction: existing products are
 // locked and rewritten keeping the columns other writers own, new ones are inserted.
 func saveProductsIn(transaction *db.Transaction, req *core.HandlerArgs, productos []types.Product, nowTime int32) error {
+	if _, err := config.LockCompanyIn(transaction, req.User.CompanyID); err != nil {
+		return err
+	}
+	if err := resolveProductNames(req.User.CompanyID, productos); err != nil {
+		return err
+	}
+
 	lockedProducts := []types.Product{}
 	for _, product := range productos {
 		if product.ID > 0 {
@@ -282,6 +234,50 @@ func saveProductsIn(transaction *db.Transaction, req *core.HandlerArgs, producto
 	// Hand the assigned IDs back: the response maps each TempID to its ID.
 	for newIndex, payloadIndex := range newProductIndexes {
 		productos[payloadIndex] = newProducts[newIndex]
+	}
+	return nil
+}
+
+// resolveProductNames refuses a name an active product of the company already has, and gives a new
+// product the ID of an inactive one with its name, so re-creating a deleted product revives it.
+// The reads are plain: the caller holds the company row's lock, which every product save takes, so
+// no other save can add a name between these reads and the commit.
+func resolveProductNames(companyID int32, productos []types.Product) error {
+	nameHashes := core.SliceSet[int32]{}
+	for _, product := range productos {
+		nameHashes.Add(product.NameHash)
+	}
+	productsWithNames := []types.Product{}
+	if !nameHashes.IsEmpty() {
+		query := db.Query(&productsWithNames)
+		query.Select(query.NameHash, query.ID, query.Status).
+			CompanyID.Equals(companyID).
+			NameHash.In(nameHashes.Values...)
+		if err := query.Exec(); err != nil {
+			return core.Err("Error al validar los nombres de productos:", err)
+		}
+	}
+	existingProductsByHash := make(map[int32][]types.Product, len(productsWithNames))
+	for _, product := range productsWithNames {
+		existingProductsByHash[product.NameHash] = append(existingProductsByHash[product.NameHash], product)
+	}
+
+	for i := range productos {
+		currentProduct := &productos[i]
+		existingProducts := existingProductsByHash[currentProduct.NameHash]
+		for _, candidate := range existingProducts {
+			if candidate.Status > 0 && candidate.ID != currentProduct.ID {
+				return core.Err(fmt.Sprintf(`Ya existe un producto activo con el nombre "%s". ID=%v`, currentProduct.Name, candidate.ID))
+			}
+		}
+		if currentProduct.ID == 0 {
+			for _, candidate := range existingProducts {
+				if candidate.Status == 0 {
+					currentProduct.ID = candidate.ID
+					break
+				}
+			}
+		}
 	}
 	return nil
 }

@@ -14,8 +14,8 @@ import (
 // one of them belongs behind //go:build !js (docs/WASM_LOCAL_MODE_PLAN.md, phase 1).
 var forbiddenBrowserPackages = []string{
 	"github.com/aws/",
-	"github.com/gocql/",
-	"github.com/ivanjoz/genix-orm/scylla",
+	"github.com/go-sql-driver/",
+	"github.com/ivanjoz/genix-orm/mariadbdriver",
 	"github.com/ivanjoz/genix-orm/dynamo",
 	"github.com/ivanjoz/genix-orm/search/genixs3",
 }

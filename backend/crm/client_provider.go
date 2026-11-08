@@ -1,6 +1,7 @@
 package crm
 
 import (
+	config "app/config/types"
 	"app/core"
 	"app/crm/types"
 	"app/db"
@@ -57,7 +58,14 @@ func PostClientProviders(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	core.Log("PostClientProviders payload_count:", len(clientProvidersPayload), "empresa_id=", req.User.CompanyID)
-	saveError := types.SaveClientProviders(&clientProvidersPayload, req.User.CompanyID, req.User.ID, false)
+	saveError := db.RunTransaction(func(transaction *db.Transaction) error {
+		if _, err := config.LockCompanyIn(transaction, req.User.CompanyID); err != nil {
+			return err
+		}
+		saved, err := types.SaveClientProvidersIn(transaction, clientProvidersPayload, req.User.CompanyID, req.User.ID, false)
+		clientProvidersPayload = core.If(err == nil, saved, clientProvidersPayload)
+		return err
+	})
 	if saveError != nil {
 		core.Log("PostClientProviders save error:", saveError)
 		return req.MakeErr("Error al guardar clientes/proveedores:", saveError)

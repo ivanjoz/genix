@@ -4,7 +4,7 @@ Regenerates `backend/exec/controllers.generated.go` by scanning the backend for 
 
 ## Why
 
-`MakeScyllaControllers()` is the single source of truth that `scylla.DeployScylla(...)` (invoked by `fn-homologate`) uses to create/migrate every ScyllaDB table. Hand-maintaining the list drifts as tables are added or removed — this script rebuilds it deterministically.
+`MakeControllers()` is the single source of truth that `scylla.DeployScylla(...)` (invoked by `fn-homologate`) uses to create/migrate every ScyllaDB table. Hand-maintaining the list drifts as tables are added or removed — this script rebuilds it deterministically.
 
 ## Usage
 

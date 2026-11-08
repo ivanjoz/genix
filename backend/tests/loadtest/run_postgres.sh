@@ -13,7 +13,7 @@
 # DB_KIND=yugabyte runs the same build against YugabyteDB's YSQL (PostgreSQL-compatible) instead: the
 # container genix-load-yugabyte on 127.0.0.3:5433, its tables in the colocated database "genix"
 # (`stack` starts it). DB_KIND=cockroach runs it against CockroachDB: genix-load-cockroach on
-# 127.0.0.1:26257, database defaultdb. DB_KIND=mariadb runs the -tags mariadb build
+# 127.0.0.1:26257, database defaultdb. DB_KIND=mariadb runs the untagged (MariaDB) build
 # (tmp/loadtest/backend-maria) against MariaDB: genix-load-mariadb on 127.0.0.1:3307, the keyspace
 # its own database. DB_KIND=myrocks runs that build against MariaDB with MyRocks (RocksDB) as the
 # default storage engine: genix-load-myrocks on 127.0.0.1:3308, from the image `stack` builds.
@@ -31,7 +31,8 @@ SCHEMA=genix_load
 DB_KIND=${DB_KIND:-postgres}
 BINARY="$PROJECT_DIR/tmp/loadtest/backend-pg" BUILD_TAG=postgres CONFIG_SECTION=postgres
 if [ "$DB_KIND" = mariadb ] || [ "$DB_KIND" = myrocks ]; then
-	BINARY="$PROJECT_DIR/tmp/loadtest/backend-maria" BUILD_TAG=mariadb CONFIG_SECTION=mariadb
+	# MariaDB is the untagged build.
+	BINARY="$PROJECT_DIR/tmp/loadtest/backend-maria" BUILD_TAG="" CONFIG_SECTION=mariadb
 fi
 STACK_CPUS=${STACK_CPUS:-0,1}
 LOAD_CPUS=${LOAD_CPUS:-2-$(($(nproc) - 1))}
@@ -187,7 +188,7 @@ run)
 	max_conns = ${POSTGRES_MAX_CONNS:-32}
 	EOF
 	if [ "${SKIP_BUILD:-0}" != 1 ]; then
-		live_log "building the backend (-tags $BUILD_TAG)"
+		live_log "building the backend (tags: ${BUILD_TAG:-none})"
 		go build -tags "$BUILD_TAG" -o "$BINARY" .
 	fi
 

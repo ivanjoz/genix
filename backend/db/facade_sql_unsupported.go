@@ -1,4 +1,4 @@
-//go:build !oceanbase && !postgres && !mariadb
+//go:build (js || fdb || ydb) && !oceanbase && !postgres
 
 package db
 

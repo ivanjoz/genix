@@ -9,7 +9,7 @@ import (
 	"github.com/ivanjoz/genix-orm/ydbdriver"
 )
 
-// The driver-neutral facade on YDB: the same signatures as facade_scylla.go.
+// The driver-neutral facade on YDB: the same signatures as every other facade_*.go.
 
 // Connect records the endpoint; the driver dials on first use. Scripting entry points ping the
 // server right away so a wrong endpoint fails before any work.

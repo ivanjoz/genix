@@ -22,7 +22,7 @@ import (
 )
 
 /*
-func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
+func TestDBConnection(args *core.ExecArgs) core.FuncResponse {
 	usuarios := []coreTypes.User{}
 	if err := core.DBSelect(&usuarios); err != nil {
 		panic(err)
@@ -35,7 +35,7 @@ func TestScyllaDBConnection(args *core.ExecArgs) core.FuncResponse {
 }
 */
 
-func TestScyllaDBInsert(args *core.ExecArgs) core.FuncResponse {
+func TestDBInsert(args *core.ExecArgs) core.FuncResponse {
 	// Autoincrement is handled automatically by the ORM via handlePreInsert
 	usuarios := []coreTypes.User{
 		{

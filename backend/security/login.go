@@ -198,7 +198,7 @@ func ReloadLogin(req *core.HandlerArgs) core.HandlerResponse {
 			ID:        req.User.ID,
 		})
 	} else {
-		// Reload the current login from Scylla when no cloud mirror is configured.
+		// Reload the current login from the database when no cloud mirror is configured.
 		users := []coreTypes.User{}
 		userQuery := db.Query(&users)
 		userQuery.CompanyID.Equals(req.User.CompanyID).ID.Equals(req.User.ID).Limit(1)

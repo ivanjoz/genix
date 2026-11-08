@@ -9,7 +9,7 @@ import (
 	"github.com/ivanjoz/genix-orm/fdbdriver"
 )
 
-// The driver-neutral facade on FoundationDB: the same signatures as facade_scylla.go.
+// The driver-neutral facade on FoundationDB: the same signatures as every other facade_*.go.
 
 // Connect records the fdbgate socket; the driver dials on first use. Scripting entry points ping
 // the daemon right away so a wrong socket fails before any work.
@@ -41,7 +41,7 @@ func MakeController[RecordT orm.TableBaseInterface[TableT, RecordT], TableT Sche
 func ListCounters() ([]string, error) { return fdbdriver.ListCounters() }
 
 // WipePartition deletes every key of one partition of a table: records, index entries and delta
-// moves. By-IDs slot files, text search, DataFrames and snapshots are not touched, as on Scylla.
+// moves. By-IDs slot files, text search, DataFrames and snapshots are not touched.
 func WipePartition(table TableDescription, partition int32) error {
 	return fdbdriver.WipePartition(table.Namespace, table.ID, int64(partition))
 }
@@ -55,10 +55,9 @@ func SetCounter(counterName string, value int64) (int64, error) {
 // BypassFarewardSequences does nothing here: fareward never owns the sequences of an fdb build.
 func BypassFarewardSequences() {}
 
-// RenameColumns has nothing to rename: a row keys its columns by a hash of the name, and the rename
-// tooling is Scylla's (column_rename_scylla.go).
+// RenameColumns has nothing to rename: a row keys its columns by a hash of the name.
 func RenameColumns(apply bool) error {
-	return errors.New("fn-rename-columns is a Scylla tool; it has no FoundationDB counterpart yet")
+	return errors.New("fn-rename-columns has no FoundationDB counterpart yet")
 }
 
 // UseTableKeyBlocks does nothing here: only the OceanBase driver reserves table keys in blocks.

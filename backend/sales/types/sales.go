@@ -306,15 +306,15 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		},
 		Indexes: []db.Index{
 			{
-				Type: db.TypeCacheGroupS3,
+				Type: db.TypeCacheGroup,
 				Keys: db.Cols(e.Date),
 			},
 			{
-				Type: db.TypeCacheGroupS3,
+				Type: db.TypeCacheGroup,
 				Keys: db.Cols(e.Date, e.Status),
 			},
 			{
-				Type: db.TypeCacheGroupS3,
+				Type: db.TypeCacheGroup,
 				Keys: db.Cols(e.Date, e.ClientID),
 			},
 			{

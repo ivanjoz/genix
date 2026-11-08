@@ -45,7 +45,7 @@ type HandlerArgs struct {
 	User      *UsuarioToken
 	StartTime int64
 	// RequestID identifies this request in user_logs and in the log line, so a row read out of
-	// ScyllaDB leads straight back to the entry that carries the full message. Per request and
+	// the database leads straight back to the entry that carries the full message. Per request and
 	// never read from a global: in server mode one process serves many at once, and the Env mirror
 	// that core.Log prints from is only accurate under Lambda, where invocations are serialized.
 	RequestID int64

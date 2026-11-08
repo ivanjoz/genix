@@ -9,7 +9,7 @@ import (
 	"github.com/ivanjoz/genix-orm/obdriver"
 )
 
-// The driver-neutral facade on OceanBase: the same signatures as facade_scylla.go.
+// The driver-neutral facade on OceanBase: the same signatures as every other facade_*.go.
 
 // Connect records the server; the pool opens on first use. Scripting entry points ping the server
 // right away so a wrong address fails before any work. The keyspace is the OceanBase database.

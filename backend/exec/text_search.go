@@ -14,7 +14,7 @@ import (
 func ReindexTextSearch(args *core.ExecArgs) core.FuncResponse {
 	db.Connect(makeConnParams())
 
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeControllers() {
 		var err error
 		if args.Param1 > 0 {
 			err = controller.ReindexTextSearch(int32(args.Param1))

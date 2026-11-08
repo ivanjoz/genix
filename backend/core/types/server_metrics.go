@@ -35,7 +35,7 @@ type ServerMetric struct {
 	NetRxRate int16 `cb:"6"`
 	NetTxRate int16 `cb:"7"`
 	// Per-service memory in megabytes (saturating at the int16 ceiling, 32 GB) and CPU as a
-	// percentage of the WHOLE machine, so a Scylla pinning eight of eight cores reads 100.00% and
+	// percentage of the WHOLE machine, so a database pinning eight of eight cores reads 100.00% and
 	// not the top-style 800% that would not fit here.
 	BackendMemMb      int16 `cb:"8"`
 	BackendCpuPercent int16 `cb:"9"`
@@ -62,7 +62,7 @@ type ServerMetricTable struct {
 	NetTxRate         db.Col[*ServerMetricTable, int16]
 	BackendMemMb      db.Col[*ServerMetricTable, int16]
 	BackendCpuPercent db.Col[*ServerMetricTable, int16]
-	// See the record above: renaming these two is a Scylla schema change, not just a rename.
+	// See the record above: renaming these two is a schema change, not just a rename.
 	FarewardMemMb      db.Col[*ServerMetricTable, int16]
 	FarewardCpuPercent db.Col[*ServerMetricTable, int16]
 	ScyllaMemMb        db.Col[*ServerMetricTable, int16]

@@ -4,7 +4,7 @@
 // Nothing in this file names a database. Every declaration is either an alias to
 // genix-orm/db (the driver-agnostic layer) or a thin generic wrapper over it —
 // wrappers exist only because Go cannot alias a generic function. The driver is
-// chosen per build target in driver_scylla.go (server) and driver_js.go (browser).
+// chosen per build target in driver_mariadb.go (server) and driver_js.go (browser).
 package db
 
 import (
@@ -170,7 +170,7 @@ var (
 // ─── Writes ────────────────────────────────────────────────────────────────────
 
 // Insert writes new records: the caller promises none is stored under its keys. PostgreSQL and
-// MariaDB skip the read before writing and fail on a stored key; Scylla writes it as Upsert.
+// MariaDB skip the read before writing and fail on a stored key.
 func Insert[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
 	records *[]RecordT, columnsToExclude ...Coln,
 ) error {
@@ -207,7 +207,8 @@ func Update[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executo
 // RunTransaction runs body in one transaction on PostgreSQL and MariaDB: LockByKeys locks what it
 // reads, InsertIn and UpdateIn commit together. A deadlock or a duplicate key reruns body, so body
 // derives its writes from its own reads; a record that may not exist yet is created with InsertIn, so
-// the body that loses the race to create it reruns and finds it. On Scylla each call runs on its own.
+// the body that loses the race to create it reruns and finds it. On a driver without transactions
+// (fdb, ydb) each call runs on its own.
 func RunTransaction(body func(transaction *Transaction) error) error {
 	return orm.RunTransaction(body)
 }

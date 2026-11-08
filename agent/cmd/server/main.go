@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"app/core"
+	"app/db"
 	"genix-agent"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	fareward "github.com/ivanjoz/fareward/go"
-	"github.com/ivanjoz/genix-orm/scylla"
 	"github.com/rs/cors"
 )
 
@@ -111,13 +111,14 @@ func main() {
 	}
 	core.ConfigureTextSearch()
 	core.ConfigureFileStore()
-	scylla.SetScyllaConnection(scylla.ConnParams{
-		Host:             core.Env.DB_HOST,
-		Port:             int(core.Env.DB_PORT),
-		User:             core.Env.DB_USER,
-		Password:         core.Env.DB_PASSWORD,
-		Keyspace:         core.Env.DB_NAME,
-		MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
+	// The same database as the backend: its [mariadb] server and db.name.
+	db.Connect(db.ConnectParams{
+		Keyspace: core.Env.DB_NAME,
+		MariaDB: db.MariaDBParams{
+			Host: core.Env.MARIADB_HOST, Port: core.Env.MARIADB_PORT,
+			User: core.Env.MARIADB_USER, Password: core.Env.MARIADB_PASSWORD, MaxConns: core.Env.MARIADB_MAX_CONNS,
+			Socket: core.Env.MARIADB_SOCKET,
+		},
 	})
 	agent.InitPromptLog()
 

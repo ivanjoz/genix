@@ -44,7 +44,7 @@ func RestoreBackup(req *core.HandlerArgs) core.HandlerResponse {
 	// Build the table registry once so restore logs can distinguish a bad TAR from a missing controller.
 	controllersMap := map[string]db.Controller{}
 	registeredTableNames := []string{}
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeControllers() {
 		tableName := controller.GetTableName()
 		controllersMap[tableName] = controller
 		registeredTableNames = append(registeredTableNames, tableName)
@@ -198,8 +198,8 @@ func CreateBackup(req *core.HandlerArgs) core.HandlerResponse {
 // restore into a fresh keyspace leaves every counter at zero while the restored rows
 // carry high ids, and the next insert then collides with one of them.
 //
-// TODO: implement it. genix-orm's resetCounterForTable (scylla/deploy.go) records what
-// a correct version needs: counter names built per AutoincrementPart instead of
+// TODO: implement it. the deleted Scylla driver's resetCounterForTable (genix-orm git history,
+// scylla/deploy.go) recorded what a correct version needs: counter names built per AutoincrementPart instead of
 // assuming 0, and a target derived from the counter rather than from the packed key,
 // which carries random digits and any KeyIntPacking columns. Beyond that, the ids this
 // project mints itself — sale orders and invoice correlativos, which call

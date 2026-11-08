@@ -145,28 +145,39 @@ func backfillClientIdentities(
 	report.clientsPending += len(pendingIndexes)
 
 	if len(pendingIndexes) > 0 && shouldWrite {
-		identities := make([]crm.ClientProviderSnapshot, len(pendingIndexes))
-		for position, index := range pendingIndexes {
-			identities[position] = clients[index].IdentitySnapshot()
-		}
-		snapshotIDs, snapshotError := crm.ResolveIdentitySnapshots(identities, companyID, backfillCreatedBy)
-		if snapshotError != nil {
-			return nil, snapshotError
-		}
+		// Under the company row's lock, like every client save (crm.SaveClientProvidersIn).
+		clientsToUpdate := []crm.ClientProvider{}
+		err := db.RunTransaction(func(transaction *db.Transaction) error {
+			if _, err := config.LockCompanyIn(transaction, companyID); err != nil {
+				return err
+			}
+			identities := make([]crm.ClientProviderSnapshot, len(pendingIndexes))
+			for position, index := range pendingIndexes {
+				identities[position] = clients[index].IdentitySnapshot()
+			}
+			snapshotIDs, snapshotError := crm.ResolveIdentitySnapshotsIn(transaction, identities, companyID, backfillCreatedBy)
+			if snapshotError != nil {
+				return snapshotError
+			}
 
-		clientsToUpdate := make([]crm.ClientProvider, 0, len(pendingIndexes))
-		for position, index := range pendingIndexes {
-			clients[index].SnapshotID = snapshotIDs[position]
-			clientsToUpdate = append(clientsToUpdate, clients[index])
+			clientsToUpdate = make([]crm.ClientProvider, 0, len(pendingIndexes))
+			for position, index := range pendingIndexes {
+				client := clients[index]
+				client.SnapshotID = snapshotIDs[position]
+				clientsToUpdate = append(clientsToUpdate, client)
+			}
+			clientTable := db.TableOf[crm.ClientProvider]()
+			// Type and Status are rewritten with the values just read: the delta index's packed listing
+			// view is keyed on both, and the ORM refuses a partial update of one without the other.
+			return db.UpdateIn(transaction, &clientsToUpdate,
+				clientTable.IdentityDocType, clientTable.SnapshotID,
+				clientTable.Status, clientTable.Type)
+		})
+		if err != nil {
+			return nil, core.Err("Error al actualizar los clientes/proveedores de la empresa", companyID, err)
 		}
-		clientTable := db.TableOf[crm.ClientProvider]()
-		// Type and Status are rewritten with the values just read: the delta index's packed listing
-		// view is keyed on both, and the ORM refuses a partial update of one without the other.
-		if updateError := db.Update(&clientsToUpdate,
-			clientTable.IdentityDocType, clientTable.SnapshotID,
-			clientTable.Status, clientTable.Type); updateError != nil {
-			return nil, core.Err("Error al actualizar los clientes/proveedores de la empresa",
-				companyID, updateError)
+		for position, index := range pendingIndexes {
+			clients[index].SnapshotID = clientsToUpdate[position].SnapshotID
 		}
 		report.clientsWritten += len(clientsToUpdate)
 	}

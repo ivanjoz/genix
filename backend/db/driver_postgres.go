@@ -10,7 +10,7 @@ import (
 )
 
 // The PostgreSQL build's database choice (`go build -tags postgres`): every table embeds the
-// pgdriver TableStruct. See driver_scylla.go for why this is a type alias and not a runtime switch.
+// pgdriver TableStruct. See driver_mariadb.go for why this is a type alias and not a runtime switch.
 // It exists for the sale-flow benchmarks (tests/loadtest/plan.md).
 type TableStruct[TableT Schema[TableT], RecordT orm.TableBaseInterface[TableT, RecordT]] = pgdriver.TableStruct[TableT, RecordT]
 

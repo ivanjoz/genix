@@ -314,7 +314,7 @@ func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 	}
 
 	// Los accesos ya no se cargan aquí. El gate los pide a fareward dentro del mismo frame que
-	// cobra la request, que es lo que le quita a Lambda una lectura a ScyllaDB en el camino de
+	// cobra la request, que es lo que le quita a Lambda una lectura a la base de datos en el camino de
 	// autorización: un entorno de ejecución nuevo empieza con la caché vacía y pagaba ese viaje
 	// antes de que el handler hiciera nada.
 	// NOTE: In local/VPS HTTP mode requests are concurrent; avoid mutating global user state.

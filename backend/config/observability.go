@@ -143,8 +143,8 @@ func makeObservabilityLogQuery(
 	fromKey, toKey int64,
 ) *coreTypes.UserLogTable {
 	query := db.Query(rows)
-	// Select only columns projected by the frame view; selecting the whole base record would make
-	// the ORM fall back to user_logs and Scylla would require ALLOW FILTERING.
+	// Select only the columns the frame view projects, so the ORM reads the view rather than the
+	// whole user_logs record.
 	query.Select(
 		query.Date,
 		query.RequestID,

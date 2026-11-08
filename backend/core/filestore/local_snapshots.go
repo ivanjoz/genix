@@ -5,11 +5,11 @@ package filestore
 // The ORM's snapshot files (delta and cache-group) hold a database read so the next first sync of
 // the same prefix starts from the file and reads only what changed since it. On Lambda they live in
 // S3, which is what a cold instance needs; a long-running server reads S3 at about the cost of
-// reading ScyllaDB, so it keeps them here instead: in memory up to a byte cap, the least recently
+// reading the database, so it keeps them here instead: in memory up to a byte cap, the least recently
 // used spilled to a local directory up to a second cap, and the oldest of those deleted.
 //
 // A snapshot is a cache, never the only copy of anything: the ORM validates every one it serves
-// against the database, and a missing file only means the next read goes to ScyllaDB. That is what
+// against the database, and a missing file only means the next read goes to the database. That is what
 // lets this store drop files freely, and lose the memory tier on a restart. Only snapshot keys may
 // come here — WithLocalSnapshots routes everything else (delta logs, by-IDs files) to the durable
 // store.

@@ -41,7 +41,6 @@ func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
 		Keys:      db.Cols(productSupplyTable.ProductID),
 		Indexes: []db.Index{
 			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Status)},
-			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Updated)},
 		},
 	}
 }

@@ -10,7 +10,7 @@ import (
 // invalidateCachedUserAccess le dice a fareward que vuelva a leer los accesos de un user, o de
 // toda una company cuando userID es core.InvalidateAllCompanyUsers.
 //
-// El daemon cachea users.accesos_computed para responder el gate de rutas sin ir a ScyllaDB, así que
+// El daemon cachea users.accesos_computed para responder el gate de rutas sin ir a la base de datos, así que
 // cualquier escritura de esa columna tiene que avisar. Best-effort a propósito: el frame no se
 // contesta y el TTL del daemon es el respaldo, de modo que un guardado correcto nunca se revierte
 // porque una pista de caché no llegó.

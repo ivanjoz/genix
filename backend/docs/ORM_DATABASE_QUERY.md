@@ -1,4 +1,4 @@
-# ScyllaDB ORM Query Guide (`db`)
+# ORM Query Guide (`db`, MariaDB)
 
 This guide explains how to model tables, define schema strategies, and execute queries with the Genix ORM from an application developer perspective.
 
@@ -114,24 +114,20 @@ To omit the default DB-only `created` and `updated` timestamp columns on a table
 ## 4. Connection Setup
 
 ```go
-// Purpose: Configure one Scylla session used by ORM operations.
-// Rationale: Keyspace and credentials are shared by query/insert/update flows.
-scylla.MakeScyllaConnection(scylla.ConnParams{
-    Host:             "localhost",
-    Port:             9042,
-    User:             "cassandra",
-    Password:         "cassandra",
-    Keyspace:         "genix",
-    MaxClusteringKey: 100,
+// Purpose: Connect the ORM once at startup (main.go, exec/test.go).
+// Rationale: Keyspace is the MariaDB database every table lives in ([db].name in config.toml).
+db.Connect(db.ConnectParams{
+    Keyspace: core.Env.DB_NAME,
+    MariaDB: db.MariaDBParams{
+        Host: core.Env.MARIADB_HOST, Port: core.Env.MARIADB_PORT,
+        User: core.Env.MARIADB_USER, Password: core.Env.MARIADB_PASSWORD,
+        MaxConns: core.Env.MARIADB_MAX_CONNS, Socket: core.Env.MARIADB_SOCKET,
+    },
 })
 ```
 
-`MaxClusteringKey` mirrors the node's `max_clustering_key_restrictions_per_query`
-(a server-wide setting in `scylla.yaml`, not per keyspace). The backend passes
-`db.max_clustering_key` from `config.toml` here; raise both together if you raise
-the server's. The ORM splits any wider `In()` fanout into several queries, so a
-larger list is never an error — only more round trips. 0 falls back to the
-`MAX_CLUSTERING_KEY` env var, then to 100.
+The untagged build is MariaDB; `-tags postgres` reads `Postgres` instead. A driver reads only the
+fields it understands.
 
 ---
 
@@ -142,7 +138,7 @@ larger list is never an error — only more round trips. 0 falls back to the
 - `db.Insert` / `db.InsertOne` write **new** records: the caller promises no record is stored under
   their keys (an autoincrement key the ORM assigns, or an ID the handler just built). PostgreSQL and
   MariaDB then skip the read they do before every other write, and a key that is already stored fails
-  the write instead of overwriting it. Scylla writes them as an upsert, without checking.
+  the write instead of overwriting it.
 - `db.Upsert` / `db.UpsertOne` write records whether or not they are stored: a stored record is
   overwritten. Use it when the record may exist (a re-import, a row re-scheduled with the same ID).
 
@@ -209,7 +205,7 @@ PostgreSQL and MariaDB, the body runs in one database transaction:
 - On a deadlock, the whole body runs again. Build every write from what the body reads inside it,
   never from state captured outside.
 
-On a driver without transactions (Scylla, ...), the same body runs call by call: `LockByKeys` is a
+On a driver without transactions (fdb, ydb), the same body runs call by call: `LockByKeys` is a
 plain read, and each write stands alone.
 
 ```go
@@ -280,7 +276,7 @@ Rules:
 - `LIMIT` still applies to raw DB rows before `ExecScan`.
 
 ```go
-// Purpose: Execute a real Scylla GROUP BY when the schema exposes a compatible key/view path.
+// Purpose: Execute a real SQL GROUP BY when the schema exposes a compatible key/view path.
 // Rationale: Packed views let the ORM group multiple logical columns through one physical grouped key.
 q := db.Query(&results)
 
@@ -292,7 +288,7 @@ err := q.
 ```
 
 Rules:
-- `GroupBy()` emits a real Scylla `GROUP BY`, unlike `ExecScan`.
+- `GroupBy()` emits a real SQL `GROUP BY`, unlike `ExecScan`.
 - `Avg()` requires a `float32` or `float64` destination field.
 - Multi-column `GroupBy()` requires a compatible packed view whose key columns match the grouped columns in order.
 
@@ -779,13 +775,13 @@ written, err := controller.UpdateRecordsJSON(payload, []string{"nombre"})
   through a key, index or view (`column|op` pairs; `=` equality, `~` range, `@` CONTAINS). Anything
   outside it needs `AllowFilter`.
 - The controller registry is populated by whoever owns the table list — in this project
-  `app/exec`, lazily, from `MakeScyllaControllers()`. It is deliberately not built at startup:
+  `app/exec`, lazily, from `MakeControllers()`. It is deliberately not built at startup:
   compiling 40-odd schemas is wasted work on a Lambda cold start.
 
 There is no generic delete, and no generic `GroupBy` / `Delta` / text search: those stay on the
 typed API.
 
-Implementation: `genix-orm/db/generic_access.go`, `genix-orm/scylla/controller_generic.go`.
+Implementation: `genix-orm/db/generic_access.go` and each driver's controller (e.g. `genix-orm/mariadbdriver/controller.go`).
 CLI: `cd backend && go run . fn-db '{"op":"describe","table":"products"}'` — see the
 `database-records` skill.
 

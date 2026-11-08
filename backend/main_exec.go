@@ -10,7 +10,7 @@ import (
 	"runtime/debug"
 )
 
-// exec is the server's admin package — backups, migrations, seeds — and it drives ScyllaDB
+// exec is the server's admin package — backups, migrations, seeds — and it drives the database
 // directly, so it is wired here, out of the browser build, instead of in main-handlers.go.
 func init() {
 	appHandlersModules = append(appHandlersModules, exec.ModuleHandlers)

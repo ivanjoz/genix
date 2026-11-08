@@ -38,9 +38,5 @@ func (usageLogTable UsageLogTable) GetSchema() db.TableSchema {
 		Name:      "usage_log",
 		Partition: usageLogTable.CompanyID,
 		Keys:      db.Cols(usageLogTable.ID),
-		Indexes: []db.Index{
-			// Partitioned by ID so a single log row is readable without knowing the company.
-			{Type: db.TypeView, Keys: db.Cols(usageLogTable.ID), Partition: usageLogTable.ID},
-		},
 	}
 }

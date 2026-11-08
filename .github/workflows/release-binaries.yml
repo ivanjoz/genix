@@ -64,9 +64,6 @@ jobs:
           # cloud/main.go and scripts/deploy_vps.go carry the same value; cloud/build_tags_test.go
           # keeps them in sync.
           BACKEND_BUILD_TAGS: lambda.norpc
-          # The released binaries are the VPS backend (scripts/configure.py 8), whose database is
-          # MariaDB: vpsDatabaseBuildTag in scripts/deploy_vps.go.
-          VPS_DATABASE_BUILD_TAG: mariadb
         run: |
           # Tag and commit identify a release reproducibly without embedding the runner clock.
           release_identity="${GITHUB_REF_NAME}-${GITHUB_SHA:0:12}"
@@ -75,7 +72,7 @@ jobs:
           for target_architecture in amd64 arm64; do
             echo "Building backend for linux/${target_architecture} (${release_identity})"
             GOOS=linux GOARCH="$target_architecture" \
-              go build -trimpath -tags "$BACKEND_BUILD_TAGS,$VPS_DATABASE_BUILD_TAG" \
+              go build -trimpath -tags "$BACKEND_BUILD_TAGS" \
               -ldflags="-s -w -X app/core.BuildDate=${release_identity}" \
               -o "../dist/genix_app_linux_${target_architecture}" .
           done

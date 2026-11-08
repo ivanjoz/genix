@@ -20,7 +20,7 @@ import (
 	webpageTypes "app/webpage/types"
 )
 
-func MakeScyllaControllers() []db.Controller {
+func MakeControllers() []db.Controller {
 	return []db.Controller{
 		db.MakeController[DemoStruct](),
 		db.MakeController[accountingTypes.Asset](),

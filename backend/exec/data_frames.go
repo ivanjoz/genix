@@ -21,7 +21,7 @@ func CompactDataFrames(args *core.ExecArgs) core.FuncResponse {
 	db.Connect(makeConnParams())
 
 	var tableErrors []error
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeControllers() {
 		if err := controller.CompactDataFrames(int32(args.Param1)); err != nil {
 			tableErrors = append(tableErrors, errors.New(controller.GetTableName()+": "+err.Error()))
 		}
@@ -44,7 +44,7 @@ func RebuildSaleFrames(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("no se pudieron obtener las empresas:", err)
 	}
 	var saleOrderController db.Controller
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeControllers() {
 		if controller.GetTableName() == "sale_order" {
 			saleOrderController = controller
 		}

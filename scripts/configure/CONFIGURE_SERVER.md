@@ -197,7 +197,7 @@ When `/usr/local/bin/genix/genix_app` is already deployed, it is left in place w
 In modes `1` and `2` the selected binary source is mandatory:
 
 1. **Option `7`: compile from source** — requires `<repo>/backend/go.mod` and `<repo>/backend/main.go`, then runs
-   `go build -tags lambda.norpc,mariadb -ldflags "-s -w -X 'app/core.BuildDate=<now>'" -o <repo>/tmp/genix_app_linux_<arch> .`
+   `go build -tags lambda.norpc -ldflags "-s -w -X 'app/core.BuildDate=<now>'" -o <repo>/tmp/genix_app_linux_<arch> .`
    in `backend/`, matching `scripts/deploy_vps.go` so both paths embed the same build metadata. Without
    `mariadb` the binary would get the Scylla driver.
 2. **Option `8`: latest precompiled binary** — `scripts/configure.py` downloads

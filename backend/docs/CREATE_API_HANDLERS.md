@@ -53,7 +53,7 @@ Understanding how a request flows through the system is vital for debugging and 
 2.  **Authentication Middleware**: The system first validates the session token. If valid, it populates `req.User` with the user's details and permissions.
 3.  **Decompression**: If the payload is compressed (e.g., using Zstd), the system decompresses it before passing it to the handler.
 4.  **Handler Execution**: The specific handler function is called with the populated `HandlerArgs`.
-5.  **Business Logic & DB**: The handler performs validation, interacts with the database (ScyllaDB), and processes assets (S3).
+5.  **Business Logic & DB**: The handler performs validation, interacts with the database (MariaDB), and processes assets (S3).
 6.  **Response Construction**: The handler returns a `HandlerResponse` via `MakeResponse` or `MakeErr`.
 7.  **Serialization**: The system serializes the response as JSON.
 8.  **Compression (Optional)**: If the client supports it, the response may be compressed before being sent back.
@@ -414,7 +414,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 **A**: Sunix timestamps are optimized for synchronization and primary key generation patterns, providing higher precision and better compatibility with our `SUnixTimeUUID` format.
 
 ### Q: How do I handle batch updates to unrelated tables?
-**A**: Use `errgroup` to execute the updates in parallel, and ensure each operation handles its own errors properly. Since ScyllaDB doesn't support cross-table transactions, verify the state manually if one fails.
+**A**: Write them in one `db.RunTransaction`: lock what the change depends on with `db.LockByKeys`, then `db.InsertIn`/`db.UpdateIn`/`db.UpsertIn` each table. They commit together, and a deadlock reruns the body (see `docs/ORM_DATABASE_QUERY.md`).
 
 ---
 

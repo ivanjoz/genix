@@ -32,7 +32,7 @@ var ormPackageSelector = ormPackage[strings.LastIndexByte(ormPackage, '/')+1:]
 
 // tableEntry describes one base struct (the X in db.TableStruct[XTable, X]) discovered
 // during the AST scan. PackagePath is the full import path (e.g. "app/logistica/types").
-// SchemaName is the Scylla table name read from XTable.GetSchema(), used to build the
+// SchemaName is the table name read from XTable.GetSchema(), used to build the
 // runtime name -> table registry that db.QueryCachedGenericByIDs resolves against.
 type tableEntry struct {
 	TypeName    string
@@ -106,7 +106,7 @@ func scanTableStructs(backendDir string) ([]tableEntry, error) {
 			name := entry.Name()
 			// Skip vendor / VCS / dependency trees plus the genix-orm submodule — it is a
 			// separate Go module, and its ORM-internal tables (Increment) are
-			// bootstrapped by the driver's Init() and must not appear in MakeScyllaControllers().
+			// bootstrapped by the driver's Init() and must not appear in MakeControllers().
 			if name == "vendor" || name == "node_modules" || name == ".git" {
 				return filepath.SkipDir
 			}
@@ -343,7 +343,7 @@ func renderControllersFile(entries []tableEntry, aliases map[string]string) ([]b
 		buffer.WriteString(")\n\n")
 	}
 
-	buffer.WriteString("func MakeScyllaControllers() []db.Controller {\n")
+	buffer.WriteString("func MakeControllers() []db.Controller {\n")
 	buffer.WriteString("\treturn []db.Controller{\n")
 	for _, entry := range entries {
 		fmt.Fprintf(&buffer, "\t\tdb.MakeController[%s](),\n", qualifiedReference(entry, aliases))

@@ -41,8 +41,8 @@ NETWORK_TUNING_SYSCTL_PATH = Path("/etc/sysctl.d/90-genix-network.conf")
 NETWORK_TUNING_MODULES_PATH = Path("/etc/modules-load.d/genix-network.conf")
 
 # Same tags as scripts/deploy_vps.go and the release workflow: lambda.norpc drops net/rpc (~12 MB of
-# retained methods) and mariadb selects the database driver. Without mariadb the build is Scylla's.
-BACKEND_BUILD_TAGS = "lambda.norpc,mariadb"
+# retained methods). The untagged database driver is MariaDB.
+BACKEND_BUILD_TAGS = "lambda.norpc"
 
 # Repositories go.mod expects beside the genix checkout rather than inside it as submodules.
 SIBLING_REPOSITORY_REMOTES = {"genix-search": "https://github.com/ivanjoz/genix-search.git"}

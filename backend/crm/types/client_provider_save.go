@@ -8,14 +8,27 @@ package types
 import (
 	"app/core"
 	"app/db"
+	"cmp"
 	"net/mail"
 	"regexp"
+	"slices"
 	"strings"
 )
 
 var companyRegistryNumberPattern = regexp.MustCompile(`^\d{7,12}$`)
 
-func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int32, userID int32, onlyInsert bool) error {
+// SaveClientProvidersIn validates and writes clients/providers in the caller's transaction, and
+// returns the saved rows with their IDs. A payload row matching a stored identity (registry number,
+// then name hash) takes that row's ID instead of inserting a duplicate; onlyInsert leaves those
+// stored rows untouched (the sale's buyer never edits a shared record).
+//
+// The caller must hold the company row's lock (config.Company): the identity lookups are plain
+// reads, and only that lock keeps two saves from both missing a name and inserting it twice. The
+// lock cannot be taken here, because config/types imports this package. The payload is not
+// mutated, so a deadlock rerun starts again from it.
+func SaveClientProvidersIn(transaction *db.Transaction, payload []ClientProvider, companyID int32, userID int32, onlyInsert bool) ([]ClientProvider, error) {
+	savedPayload := slices.Clone(payload)
+	clientProvidersPayload := &savedPayload
 	currentTimestamp := core.SUnixTime()
 	clientProviderRegistryNumbers := core.SliceSet[string]{}
 	clientProviderHashes := core.SliceSet[int64]{}
@@ -30,19 +43,19 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 		clientProvider.CityID = strings.TrimSpace(clientProvider.CityID)
 
 		if clientProvider.Type != ClientProviderTypeClient && clientProvider.Type != ClientProviderTypeProvider {
-			return core.Err("El registro en posición", clientProviderIndex, "tiene un Type inválido. Use 1 (cliente) o 2 (proveedor).")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene un Type inválido. Use 1 (cliente) o 2 (proveedor).")
 		}
 
 		if len(clientProvider.Name) == 0 {
-			return core.Err("El registro en posición", clientProviderIndex, "debe tener Name.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "debe tener Name.")
 		}
 
 		if clientProvider.PersonType != PersonTypeNatural && clientProvider.PersonType != PersonTypeCompany {
-			return core.Err("El registro en posición", clientProviderIndex, "tiene PersonType inválido. Use 1 (persona) o 2 (company).")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene PersonType inválido. Use 1 (persona) o 2 (company).")
 		}
 
 		if len(clientProvider.Email) > 0 && !isValidEmailAddress(clientProvider.Email) {
-			return core.Err("El registro en posición", clientProviderIndex, "tiene un Email inválido.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene un Email inválido.")
 		}
 
 		// A row with no declared document type falls back to the shape of its registry
@@ -51,22 +64,22 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 		if clientProvider.IdentityDocType == 0 {
 			clientProvider.IdentityDocType = DeriveIdentityDocType(clientProvider.RegistryNumber)
 		} else if !IsIdentityDocType(clientProvider.IdentityDocType) {
-			return core.Err("El registro en posición", clientProviderIndex,
+			return nil, core.Err("El registro en posición", clientProviderIndex,
 				"tiene un IdentityDocType inválido. Use uno de la tabla SUNAT (id=código):",
 				IdentityDocTypeNames())
 		}
 
 		if clientProvider.Type == ClientProviderTypeProvider && clientProvider.CountryID <= 0 {
-			return core.Err("El registro en posición", clientProviderIndex, "debe tener CountryID válido.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "debe tener CountryID válido.")
 		}
 
 		if clientProvider.Type == ClientProviderTypeProvider && len(clientProvider.CityID) == 0 {
-			return core.Err("El registro en posición", clientProviderIndex, "debe tener CityID válido.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "debe tener CityID válido.")
 		}
 
 		// Providers must keep a numeric registry number; natural clients can omit it completely.
 		if clientProvider.Type == ClientProviderTypeProvider && !companyRegistryNumberPattern.MatchString(clientProvider.RegistryNumber) {
-			return core.Err("El registro en posición", clientProviderIndex, "debe tener RegistryNumber numérico de 7 a 12 dígitos para proveedores.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "debe tener RegistryNumber numérico de 7 a 12 dígitos para proveedores.")
 		}
 
 		// Keep the deduplication hash server-owned so DB lookups and writes use the same identity rule.
@@ -81,12 +94,12 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 		clientProvider.UpdatedBy = userID
 
 		if clientProvider.RegistryNumber != "" && clientProviderRegistryNumbers.Include(clientProvider.RegistryNumber) {
-			return core.Err("El registro en posición", clientProviderIndex, "repite RegistryNumber dentro del payload.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "repite RegistryNumber dentro del payload.")
 		}
 		clientProviderRegistryNumbers.AddIf(clientProvider.RegistryNumber)
 
 		if clientProviderHashes.Include(clientProvider.NameRegistryHash) {
-			return core.Err("El registro en posición", clientProviderIndex, "repite NameRegistryHash dentro del payload.")
+			return nil, core.Err("El registro en posición", clientProviderIndex, "repite NameRegistryHash dentro del payload.")
 		}
 		clientProviderHashes.Add(clientProvider.NameRegistryHash)
 	}
@@ -100,7 +113,7 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 			RegistryNumber.In(clientProviderRegistryNumbers.Values...).Exec()
 
 		if err != nil {
-			return core.Err("Error al buscar clientes/proveedores por RegistryNumber.", err)
+			return nil, core.Err("Error al buscar clientes/proveedores por RegistryNumber.", err)
 		}
 	}
 
@@ -115,7 +128,7 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 			NameRegistryHash.In(clientProviderHashes.Values...).Exec()
 
 		if err != nil {
-			return core.Err("Error al buscar clientes/proveedores por NameRegistryHash.", err)
+			return nil, core.Err("Error al buscar clientes/proveedores por NameRegistryHash.", err)
 		}
 	}
 
@@ -145,27 +158,60 @@ func SaveClientProviders(clientProvidersPayload *[]ClientProvider, companyID int
 	for clientProviderIndex := range *clientProvidersPayload {
 		identities[clientProviderIndex] = (*clientProvidersPayload)[clientProviderIndex].IdentitySnapshot()
 	}
-	snapshotIDs, snapshotError := ResolveIdentitySnapshots(identities, companyID, userID)
+	snapshotIDs, snapshotError := ResolveIdentitySnapshotsIn(transaction, identities, companyID, userID)
 	if snapshotError != nil {
-		return snapshotError
+		return nil, snapshotError
 	}
 	for clientProviderIndex := range *clientProvidersPayload {
 		(*clientProvidersPayload)[clientProviderIndex].SnapshotID = snapshotIDs[clientProviderIndex]
 	}
 
-	core.Log("saveClientProviders merge start:", "payload_count=", len(*clientProvidersPayload))
-	clientProviderTable := db.TableOf[ClientProvider]()
-	if mergeError := db.Merge(clientProvidersPayload,
-		db.Cols(clientProviderTable.Created, clientProviderTable.CreatedBy),
-		func(_ *ClientProvider, currentClientProvider *ClientProvider) bool {
-			return !onlyInsert || currentClientProvider.ID <= 0
-		},
-		func(_ *ClientProvider) {},
-	); mergeError != nil {
-		return mergeError
+	// Rows with an ID are stored identities: read them under lock for the columns the payload
+	// does not own, and refuse an ID the company does not have.
+	storedClientProviders := []ClientProvider{}
+	for _, clientProvider := range *clientProvidersPayload {
+		if clientProvider.ID > 0 {
+			storedClientProviders = append(storedClientProviders, ClientProvider{CompanyID: companyID, ID: clientProvider.ID})
+		}
+	}
+	slices.SortFunc(storedClientProviders, func(a, b ClientProvider) int { return cmp.Compare(a.ID, b.ID) })
+	if err := db.LockByKeys(transaction, &storedClientProviders); err != nil {
+		return nil, core.Err("Error al obtener los clientes/proveedores.", err)
+	}
+	storedByID := core.SliceToMapE(storedClientProviders, func(e ClientProvider) int32 { return e.ID })
+
+	newClientProviders := []ClientProvider{}
+	newIndexes := []int{}
+	editedClientProviders := []ClientProvider{}
+	for clientProviderIndex := range *clientProvidersPayload {
+		clientProvider := &(*clientProvidersPayload)[clientProviderIndex]
+		if clientProvider.ID <= 0 {
+			newClientProviders = append(newClientProviders, *clientProvider)
+			newIndexes = append(newIndexes, clientProviderIndex)
+			continue
+		}
+		stored, found := storedByID[clientProvider.ID]
+		if !found {
+			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene un ID que no existe:", clientProvider.ID)
+		}
+		if onlyInsert {
+			continue
+		}
+		clientProvider.Created = stored.Created
+		clientProvider.CreatedBy = stored.CreatedBy
+		editedClientProviders = append(editedClientProviders, *clientProvider)
 	}
 
-	return nil
+	if err := db.UpsertIn(transaction, &editedClientProviders); err != nil {
+		return nil, core.Err("Error al actualizar clientes/proveedores.", err)
+	}
+	if err := db.InsertIn(transaction, &newClientProviders); err != nil {
+		return nil, core.Err("Error al crear clientes/proveedores.", err)
+	}
+	for newIndex, payloadIndex := range newIndexes {
+		(*clientProvidersPayload)[payloadIndex] = newClientProviders[newIndex]
+	}
+	return *clientProvidersPayload, nil
 }
 
 func isValidEmailAddress(emailAddress string) bool {

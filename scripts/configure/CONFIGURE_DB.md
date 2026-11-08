@@ -18,8 +18,8 @@ sudo python3 scripts/configure/configure_db.py mariadb
 sudo python3 scripts/configure/configure_db.py qdrant
 ```
 
-`all` installs MariaDB and Qdrant. ScyllaDB is no longer supported and only runs when named
-(`scylla`). The script must run as `root` and reads `config.toml` from the repository root.
+`all` installs MariaDB and Qdrant. ScyllaDB is no longer supported: its mode (`scylla`, `2`) was
+removed. The script must run as `root` and reads `config.toml` from the repository root.
 
 ---
 
@@ -47,29 +47,6 @@ The backend and fareward dial `socket` when it is set. On a 2-core Ampere A1, `S
 connections ran ~35k queries/s over the socket against ~24.6k over loopback TCP.
 
 The tables are not created here: `configure.py` runs `fn-homologate` after installing the backend.
-
----
-
-## ScyllaDB (`scylla`)
-
-| Paso | Detalle |
-| ---- | ------- |
-| `SCYLLA_ARGS` | Reescribe el env-file (`/etc/sysconfig/scylla-server` o `/etc/default/scylla-server`) con `--smp` acotado a los CPU disponibles, `-m 4G` y `--overprovisioned`. Limpia los flags que gestionó una corrida anterior. |
-| `scylla.yaml` | `listen_address=127.0.0.1`, `rpc_address=0.0.0.0`, `broadcast_rpc_address=<IP alcanzable>`, `native_transport_port=db.port` y `authenticator=PasswordAuthenticator`. |
-| Firewall | Abre `db.port/tcp` (ver [Firewall](#firewall) abajo). |
-| Superusuario | Prueba la password de `config.toml` y la default `cassandra`. Si ninguna entra, recupera el rol por el **maintenance socket** de Scylla (ver abajo) y luego la cambia a `db.password`. |
-| Keyspace | Crea `db.name` con `NetworkTopologyStrategy` y `replication_factor: 1` si no existe. |
-
-Claves usadas: `db.password`, `db.name`, `db.port`.
-
-### Recuperación del superusuario
-
-Scylla siembra el rol `cassandra` solo en el bootstrap inicial del cluster. Si el nodo
-arrancó por primera vez con `AllowAllAuthenticator`, activar `PasswordAuthenticator`
-después lo deja sin ningún rol con el que autenticarse. El script habilita entonces
-`maintenance_socket: workdir`, reinicia el servicio y publica ese socket unix como un
-puerto TCP efímero en `127.0.0.1` (el `cqlsh` empaquetado para Ubuntu no acepta
-`--maintenance-socket`), por donde crea o corrige el rol sin autenticación.
 
 ---
 
@@ -166,4 +143,4 @@ un servicio instalado pero inalcanzable es el síntoma más caro de diagnosticar
 Todos los modos publican la misma dirección: el script prefiere la IP de la tailnet
 (Tailscale o Headscale, detectada por la CLI o por los rangos `100.64.0.0/10` y
 `fd7a:115c:a1e0::/48` en las interfaces) y cae a la IP interna de la VPC si no hay
-túnel. Esa IP es la que va a `broadcast_rpc_address` de Scylla y a `qdrant.host`.
+túnel. Esa IP es la que va a `qdrant.host`.

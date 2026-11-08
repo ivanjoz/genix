@@ -303,8 +303,8 @@ The plan assumed `ScyllaController` was reachable only from CLI entrypoints. It 
 
 ```go
 "GET.backups":         GetBackups,
-"POST.backup-restore": RestoreBackup,   // -> MakeScyllaControllers() at exec/restore.go:47
-"POST.backup-create":  CreateBackup,    // -> SaveBackup -> MakeScyllaControllers() at exec/backup.go:24
+"POST.backup-restore": RestoreBackup,   // -> MakeControllers() at exec/restore.go:47
+"POST.backup-create":  CreateBackup,    // -> SaveBackup -> MakeControllers() at exec/backup.go:24
 ```
 
 Tagging the controllers out of the shipping binary would leave both write routes compiling,

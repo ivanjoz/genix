@@ -51,15 +51,10 @@ func Setup() {
 		core.ConfigureVPSSnapshotCache(utils.NewMemoryFileStore())
 
 		db.Connect(db.ConnectParams{
-			Host:             core.Env.DB_HOST,
-			Port:             int(core.Env.DB_PORT),
-			User:             core.Env.DB_USER,
-			Password:         core.Env.DB_PASSWORD,
-			Keyspace:         core.Env.DB_NAME,
-			MaxClusteringKey: int(core.Env.MAX_CLUSTERING_KEY),
-			FDBSocket:        core.Env.FDB_SOCKET,
-			YDBEndpoint:      core.Env.YDB_ENDPOINT,
-			YDBDatabase:      core.Env.YDB_DATABASE,
+			Keyspace:    core.Env.DB_NAME,
+			FDBSocket:   core.Env.FDB_SOCKET,
+			YDBEndpoint: core.Env.YDB_ENDPOINT,
+			YDBDatabase: core.Env.YDB_DATABASE,
 			OceanBase: db.OceanBaseParams{
 				Host: core.Env.OCEANBASE_HOST, Port: core.Env.OCEANBASE_PORT,
 				User: core.Env.OCEANBASE_USER, Password: core.Env.OCEANBASE_PASSWORD,

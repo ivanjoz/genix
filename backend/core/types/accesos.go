@@ -24,7 +24,7 @@ func (subAccesoIDs SubAccesoIDs) MarshalJSON() ([]byte, error) {
 
 // AccesoGrantRecord is one access exactly as an operator granted it. A profile and a user grant
 // access the same way, so both store a `[]AccesoGrantRecord` in their `accesos_grants` column —
-// a blob, serialized by colbin (genix-orm/scylla/converter.go).
+// a blob, serialized by colbin (each driver's codec, e.g. genix-orm/mariadbdriver/codec.go).
 //
 // It replaced three flat integer arrays with hand-rolled packing: `profiles.accesos`
 // (accesoID*10 + nivel), `profiles.sub_accesos` (accesoID*100 + subID) and

@@ -125,9 +125,9 @@ func resolveBookRange(req *core.HandlerArgs) (int16, int16, string, error) {
 
 // loadPeriodDocuments reads every comprobante issued inside the range.
 //
-// Through the index group and not a plain range: Scylla only takes equality on a secondary
-// index, so a BETWEEN on IssueDate is refused. The group turns the range into one indexed read
-// per day, which is also why a book is asked for a month and never for a year.
+// Through the index group, one indexed read per day: the group was built for Scylla, which refused
+// a BETWEEN on a secondary index. On MariaDB a plain range on IssueDate works; moving to it is a
+// follow-up (plan/MARIADB_REFACTOR_REVIEW.md §7). A book is asked for a month, never for a year.
 func loadPeriodDocuments(companyID int32, firstDay, lastDay int16) ([]SalesBookDocument, error) {
 	groups := []db.RecordGroup[invoicing.InvoiceDocument]{}
 	query := db.QueryIndexGroup(&groups).CompanyID.Equals(companyID)

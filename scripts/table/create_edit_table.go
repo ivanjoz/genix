@@ -129,7 +129,7 @@ func generateSourceCode(tableNameCamel, tableNameSnake string, userFields []Fiel
 
 	// --- Base Struct ---
 	sb.WriteString(fmt.Sprintf("type %s struct {\n", tableNameCamel))
-	sb.WriteString(fmt.Sprintf("\tscylla.TableStruct[%sTable, %s]\n", tableNameCamel, tableNameCamel))
+	sb.WriteString(fmt.Sprintf("\tdb.TableStruct[%sTable, %s]\n", tableNameCamel, tableNameCamel))
 	sb.WriteString(buildFieldString("EmpresaID", "int32", true, false, ""))
 	sb.WriteString(buildFieldString("Status", "int8", false, false, ""))
 	sb.WriteString(buildFieldString("Updated", "int64", false, false, ""))
@@ -141,7 +141,7 @@ func generateSourceCode(tableNameCamel, tableNameSnake string, userFields []Fiel
 
 	// --- Table Struct ---
 	sb.WriteString(fmt.Sprintf("type %sTable struct {\n", tableNameCamel))
-	sb.WriteString(fmt.Sprintf("\tscylla.TableStruct[%sTable, %s]\n", tableNameCamel, tableNameCamel))
+	sb.WriteString(fmt.Sprintf("\tdb.TableStruct[%sTable, %s]\n", tableNameCamel, tableNameCamel))
 	sb.WriteString(buildTableFieldString("EmpresaID", "int32", false, "", tableNameCamel))
 	sb.WriteString(buildTableFieldString("Status", "int8", false, "", tableNameCamel))
 	sb.WriteString(buildTableFieldString("Updated", "int64", false, "", tableNameCamel))

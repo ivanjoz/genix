@@ -15,8 +15,8 @@ import (
 // is one read of one row — it replaced a full scan of a series table on every
 // emission.
 //
-// The mirror branch below is not optional: companies live in Scylla only when the
-// cloud mirror is off. It is duplicated from `config` rather than shared because a
+// The mirror branch below is not optional: companies live in the database only when
+// the cloud mirror is off. It is duplicated from `config` rather than shared because a
 // module body may not import another module body, and a lookup that reaches for
 // `cloud` cannot live in `config/types` either — the cloud package's own tests
 // read Company, so that import would close a cycle.
@@ -74,14 +74,10 @@ func UpdateCompanySeries(
 ) ([]types.InvoiceSeries, error) {
 	var saved config.Company
 	err := db.RunTransaction(func(transaction *db.Transaction) error {
-		companies := []config.Company{{ID: companyID}}
-		if err := db.LockByKeys(transaction, &companies); err != nil {
-			return fmt.Errorf("error al leer la empresa: %w", err)
+		var err error
+		if saved, err = config.LockCompanyIn(transaction, companyID); err != nil {
+			return err
 		}
-		if len(companies) == 0 {
-			return errors.New("no se encontró la empresa")
-		}
-		saved = companies[0]
 		allSeries, err := change(slices.Clone(saved.InvoiceSeries))
 		if err != nil {
 			return err

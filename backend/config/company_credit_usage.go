@@ -5,7 +5,6 @@ import (
 	coreTypes "app/core/types"
 	"app/db"
 	"cmp"
-	"fmt"
 	"maps"
 	"slices"
 	"time"
@@ -286,8 +285,7 @@ func GetCompanyUsersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 
-	// Split the packed ids back into one user list per company, which is what turns an arbitrary
-	// client batch into one bounded query per tenant it actually asked about.
+	// Split the packed ids back into one user list per company.
 	userIDsByCompany := map[int32][]int32{}
 	for _, packedID := range packedIDs {
 		companyID := int32(packedID) / companyUserLabelIDFactor
@@ -301,39 +299,34 @@ func GetCompanyUsersByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("No se enviaron ids de usuarios válidos.")
 	}
 
+	// One read over every requested company and user ID. The two IN lists cross, so a row of a
+	// requested user ID under another requested company comes back too; only the asked pairs are kept.
 	companyIDs := slices.Sorted(maps.Keys(userIDsByCompany))
-	labelsByCompany := make([][]companyUserLabel, len(companyIDs))
-	queries := errgroup.Group{}
-	queries.SetLimit(8)
-	for companyIndex, companyID := range companyIDs {
-		queries.Go(func() error {
-			users := []coreTypes.User{}
-			query := db.Query(&users)
-			// Only the label columns: this endpoint must never widen into a user record.
-			query.Select(query.ID, query.User, query.FirstName, query.LastName).
-				CompanyID.Equals(companyID).ID.In(userIDsByCompany[companyID]...)
-			if err := query.Exec(); err != nil {
-				return fmt.Errorf("company %d user labels: %w", companyID, err)
-			}
-			labels := make([]companyUserLabel, 0, len(users))
-			for _, user := range users {
-				labels = append(labels, companyUserLabel{
-					ID:   companyID*companyUserLabelIDFactor + user.ID,
-					User: user.User, FirstName: user.FirstName, LastName: user.LastName,
-				})
-			}
-			labelsByCompany[companyIndex] = labels
-			return nil
-		})
+	allUserIDs := core.SliceSet[int32]{}
+	for _, userIDs := range userIDsByCompany {
+		for _, userID := range userIDs {
+			allUserIDs.Add(userID)
+		}
 	}
-	if err := queries.Wait(); err != nil {
+	users := []coreTypes.User{}
+	query := db.Query(&users)
+	// Only the label columns: this endpoint must never widen into a user record.
+	query.Select(query.CompanyID, query.ID, query.User, query.FirstName, query.LastName).
+		CompanyID.In(companyIDs...).ID.In(allUserIDs.Values...)
+	if err := query.Exec(); err != nil {
 		core.Log("company user labels failed::", " companies::", len(companyIDs), " err::", err)
 		return req.MakeErr("No se pudieron obtener los usuarios solicitados.", err)
 	}
 
 	labels := []companyUserLabel{}
-	for _, companyLabels := range labelsByCompany {
-		labels = append(labels, companyLabels...)
+	for _, user := range users {
+		if !slices.Contains(userIDsByCompany[user.CompanyID], user.ID) {
+			continue
+		}
+		labels = append(labels, companyUserLabel{
+			ID:   user.CompanyID*companyUserLabelIDFactor + user.ID,
+			User: user.User, FirstName: user.FirstName, LastName: user.LastName,
+		})
 	}
 	return req.MakeResponse(core.StaticCachedPartition(labels))
 }

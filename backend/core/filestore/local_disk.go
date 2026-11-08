@@ -2,7 +2,7 @@ package filestore
 
 // The ORM's file store on a VPS: a local directory.
 //
-// On a VPS the backend, ScyllaDB and every cache file live on the same machine, so the delta logs,
+// On a VPS the backend, the database and every cache file live on the same machine, so the delta logs,
 // the by-IDs slot files and the cache-group files are plain files under one directory. S3 is the
 // Lambda path only (store.go).
 //

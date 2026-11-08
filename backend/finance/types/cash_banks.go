@@ -216,9 +216,6 @@ func (e CashReconciliationTable) GetSchema() db.TableSchema {
 		Name:      "cash_reconciliations",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
-		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.CreatedBy)},
-		},
 	}
 }
 

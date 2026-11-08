@@ -34,7 +34,7 @@ python3 scripts/configure_remote.py 23 --server 150.136.42.240  # pick one; --ba
 It does the same install on a `[[servers]]` VPS without logging in to it:
 
 1. Builds the binaries **here** from what is on disk (unpushed submodule commits included): the
-   backend with `-tags lambda.norpc,mariadb` (and `GOARM64=v8.2` on arm64), fareward with
+   backend with `-tags lambda.norpc` (and `GOARM64=v8.2` on arm64), fareward with
    `cargo zigbuild` against glibc 2.39. Needs Go, rustup, `cargo-zigbuild` and `zig` locally; the
    VPS needs no toolchain.
 2. Clones the repository on the VPS on first use (`repository`, default `/home/<user>/genix`), then

@@ -85,18 +85,13 @@ backend = "none"        # aws | cloudflare | none  — espejo de datos: DynamoDB
 cdn     = "aws"         # aws | cloudflare         — object storage y origen público de assets
 model   = "openrouter"  # meta | openrouter        — LLM del agente; sólo se exige su key
 
-# ─── Base de datos (ScyllaDB / Cassandra) ───────────────────────────────────
+# ─── Database ────────────────────────────────────────────────────────────────
 [db]
-host        = "111.111.111.111"
-port        = 9042
-name        = "genix"
-user        = "cassandra"
-password    = "my_strong_password"
-disable_ssl = false
-# max_clustering_key_restrictions_per_query del nodo. 0 usa el default del ORM (100).
-max_clustering_key = 100
+# The database the tables live in: MariaDB's database (the server is [mariadb] below), a
+# PostgreSQL schema on a `-tags postgres` build.
+name = "genix"
 
-# ─── MariaDB (primary database; `-tags mariadb` builds, the VPS deploy default) ──
+# ─── MariaDB (the database; the default build) ─────────────────────────────────
 # The database is db.name above. scripts/configure/configure_db.py mariadb installs the
 # server, writes its tuned config and creates this user.
 [mariadb]
@@ -150,8 +145,8 @@ nginx_process = "127.0.0.1:14010"
 # Admission control of the VPS server (Lambda ignores both). max_concurrent_requests is how many
 # requests run at once; the rest wait up to 2 s for a slot and then get 503 + Retry-After. 0 = 16 per
 # CPU, the point where the CPU saturates. memory_limit_mb is the Go soft memory limit (GOMEMLIMIT);
-# 0 = 70% of the memory available at startup — MemAvailable, so a ScyllaDB on the same host that
-# already reserved its --memory is discounted — or of the service's cgroup limit when lower.
+# 0 = 70% of the memory available at startup — MemAvailable, so a database on the same host that
+# already reserved its memory is discounted — or of the service's cgroup limit when lower.
 max_concurrent_requests = 0
 memory_limit_mb         = 0
 
@@ -232,7 +227,7 @@ max_lease_ms      = 60000    # techo aplicado al arrendamiento que pide el clien
 # petición correcta no aporta nada y se paga en cada petición. El gasto por ruta
 # —que sí interesa de todas— se agrega aparte en credit_usage.
 #
-# A diferencia del limiter, esta mitad falla abierta: si ScyllaDB no responde,
+# A diferencia del limiter, esta mitad falla abierta: si la base de datos no responde,
 # las filas se descartan con un warning. Tumbar el proceso se llevaría también
 # al limiter y al bridge, y una fila de log no vale eso.
 #
@@ -281,12 +276,12 @@ network_interface = ""    # vacío = la primera interfaz que no sea lo
 # Units de systemd, de donde salen memoria (memory.stat → anon + file_mapped, que
 # reconstruye el VmRSS: páginas anónimas más las de archivo mapeadas, sin la caché
 # fría) y CPU (cpu.stat → usage_usec) de cada servicio. El cgroup se BUSCA bajo
-# /sys/fs/cgroup: no se asume system.slice, porque ScyllaDB se instala en su propio
-# slice (scylla.slice/scylla-server.slice/). Una unit ausente no es un error: son
-# sus dos columnas en -1.
+# /sys/fs/cgroup: no se asume system.slice, porque una unit puede vivir en su propio
+# slice. Una unit ausente no es un error: son sus dos columnas en -1.
 backend_unit      = "genix.service"
 fareward_unit = "fareward.service"
-scylla_unit       = "scylla-server.service"
+# The database's unit. The key and its metric columns (scylla_*) keep their old name.
+scylla_unit       = "mariadb.service"
 
 # ─── Registro público de empresas ──────────────────────────────────────────
 # Estos endpoints no llevan token, así que nunca pasan por el credit limiter:
@@ -382,7 +377,7 @@ vps_dir = ""
 # repeated first sync into a read of what changed since. Memory first; past it
 # the least recently used spill to vps_dir/snapshots/; past that they are
 # deleted. Lambda keeps them in S3.
-vps_snapshot_cache_mb = 256   # 0 = no snapshots (every first sync reads ScyllaDB)
+vps_snapshot_cache_mb = 256   # 0 = no snapshots (every first sync reads the database)
 vps_snapshot_disk_mb  = 1024  # 0 = memory only
 
 # ─── SSE Bridge (fareward/) ─────────────────────────────────────────────

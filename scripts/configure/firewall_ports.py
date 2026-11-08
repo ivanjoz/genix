@@ -9,9 +9,8 @@ when neither is managing does this fall through to iptables itself, which is wha
 Cloud images ship: an INPUT chain ending in REJECT --reject-with icmp-host-prohibited and no
 frontend installed.
 
-Extracted from configure_db.py, which needed it for the CQL port and is still its other caller.
-It lives on its own because the second caller (configure_fareward.py) must not import a
-ScyllaDB installer to open a socket, and because the iptables half is subtle enough that two
+Shared by configure_db.py (the MariaDB and Qdrant ports) and configure_fareward.py. It lives on
+its own because configure_fareward.py must not import a database installer to open a socket, and because the iptables half is subtle enough that two
 copies would drift: a rule only helps if it lands *before* whatever was dropping the packet, so
 the position is computed rather than appended, and the chain is re-read afterwards to prove it.
 

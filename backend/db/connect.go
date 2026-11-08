@@ -6,14 +6,9 @@ package db
 // the fields it understands, so the entry points (main, exec scripts, the bench) build one value
 // and never name a driver.
 type ConnectParams struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	// Keyspace is the namespace every table lives in unless its schema names another.
+	// Keyspace is the namespace every table lives in unless its schema names another: the MariaDB
+	// database, a PostgreSQL schema.
 	Keyspace string
-	// MaxClusteringKey mirrors Scylla's max_clustering_key_restrictions_per_query.
-	MaxClusteringKey int
 	// FDBSocket is the unix socket of the fdbgate daemon (fdb driver only).
 	FDBSocket string
 	// YDBEndpoint is the gRPC address (host:port) and YDBDatabase the database path (ydb driver only).
@@ -56,8 +51,7 @@ type PostgresParams struct {
 	MaxConns int
 }
 
-// MariaDBParams is read only by a `-tags mariadb` build, the sale-flow benchmarks
-// (tests/loadtest/DATABASE_COMPARISON.md). MaxConns caps the connection pool, 0 for the driver default.
+// MariaDBParams is read by the default (untagged) build: MariaDB is the database. MaxConns caps the connection pool, 0 for the driver default.
 // Socket, when set, is dialed instead of Host:Port.
 type MariaDBParams struct {
 	Host     string

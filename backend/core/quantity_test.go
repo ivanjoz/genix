@@ -6,7 +6,7 @@ import (
 )
 
 // The whole design rests on addition being closed without a carry: if this stops holding,
-// the stock engine can no longer accumulate movements with a plain + and Scylla can no
+// the stock engine can no longer accumulate movements with a plain + and SQL can no
 // longer SUM() the two columns independently.
 func TestAddIsClosedAndOrderIndependent(t *testing.T) {
 	const divisor int16 = 6

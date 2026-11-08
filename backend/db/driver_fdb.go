@@ -10,7 +10,7 @@ import (
 )
 
 // The FoundationDB build's database choice (`go build -tags fdb`): every table embeds the fdbdriver
-// TableStruct. See driver_scylla.go for why this is a type alias and not a runtime switch, and
+// TableStruct. See driver_mariadb.go for why this is a type alias and not a runtime switch, and
 // docs/FOUNDATIONDB_PLAN.md for what the driver serves so far.
 type TableStruct[TableT Schema[TableT], RecordT orm.TableBaseInterface[TableT, RecordT]] = fdbdriver.TableStruct[TableT, RecordT]
 

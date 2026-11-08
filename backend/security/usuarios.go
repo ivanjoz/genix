@@ -139,7 +139,7 @@ func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
 			Where("status").Equals(1).Where("updated").GreaterEqual(updated).Exec()
 	} else {
-		// Scylla stores the source fields directly; filtering stays scoped to the company partition.
+		// Filtering stays scoped to the company partition.
 		userQuery := db.Query(&records)
 		userQuery.CompanyID.Equals(req.User.CompanyID).Status.Equals(1).Updated.GreaterEqual(int32(updated))
 		err = userQuery.AllowFilter().Exec()

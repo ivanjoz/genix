@@ -26,7 +26,7 @@ func SaveBackup(companyID int32) error {
 	var err error
 
 	// Scylla Tables - Controllers
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeControllers() {
 		tableName := controller.GetTableName()
 		core.Log("Obteniendo registros de:", tableName, "...")
 

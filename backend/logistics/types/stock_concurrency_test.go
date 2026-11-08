@@ -1,4 +1,4 @@
-//go:build mariadb || postgres
+//go:build !js && !fdb && !ydb && !oceanbase
 
 package types
 
@@ -16,7 +16,7 @@ import (
 // writers are serialized only by the stock row locks, the plain INSERT of a new stock row and the
 // lot's unique index, exactly as writers in different backend processes would be.
 //
-//	GENIX_STOCK_DB_TEST=1 go test -tags mariadb  -run TestStockConcurrency ./logistics/types/   (127.0.0.1:3309)
+//	GENIX_STOCK_DB_TEST=1 go test               -run TestStockConcurrency ./logistics/types/   (127.0.0.1:3309)
 //	GENIX_STOCK_DB_TEST=1 go test -tags postgres -run TestStockConcurrency ./logistics/types/   (127.0.0.1:5434)
 
 func connectStockTestDatabase(t *testing.T) int32 {

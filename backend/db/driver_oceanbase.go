@@ -10,7 +10,7 @@ import (
 )
 
 // The OceanBase build's database choice (`go build -tags oceanbase`): every table embeds the
-// obdriver TableStruct. See driver_scylla.go for why this is a type alias and not a runtime switch,
+// obdriver TableStruct. See driver_mariadb.go for why this is a type alias and not a runtime switch,
 // and docs/OCEANBASE_PLAN.md for what the driver serves so far.
 type TableStruct[TableT Schema[TableT], RecordT orm.TableBaseInterface[TableT, RecordT]] = obdriver.TableStruct[TableT, RecordT]
 

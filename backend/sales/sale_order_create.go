@@ -1,6 +1,7 @@
 package sales
 
 import (
+	config "app/config/types"
 	"app/core"
 	crm "app/crm/types"
 	"app/db"
@@ -350,15 +351,6 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		invoicing.ScheduleEmitPendingSweep(req.User.CompanyID)
 	}
 
-	go func() {
-		core.ScheduleCronAction(core.CronAction{
-			CompanyID: req.User.CompanyID,
-			ActionID:  2,
-			// Keep the cron payload compact: company and date are the only inputs the reprocess action needs.
-			Params: core.ExecArgs{Param1: int64(req.User.CompanyID), Param2: int64(sale.Date)},
-		}, 10)
-	}()
-
 	return req.MakeResponse(sale)
 }
 
@@ -497,7 +489,16 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID i
 	}}
 	// Sale-order client creation must never update an existing client record from frontend input
 	// to prevent accidental data corruption of shared client/provider records.
-	saveError := crm.SaveClientProviders(&clientProviders, companyID, userID, true)
+	// Under the company row's lock, like every client save, so two sales naming one new buyer
+	// resolve to one client.
+	saveError := db.RunTransaction(func(transaction *db.Transaction) error {
+		if _, err := config.LockCompanyIn(transaction, companyID); err != nil {
+			return err
+		}
+		saved, err := crm.SaveClientProvidersIn(transaction, clientProviders, companyID, userID, true)
+		clientProviders = core.If(err == nil, saved, clientProviders)
+		return err
+	})
 	if saveError != nil {
 		return 0, saveError
 	}

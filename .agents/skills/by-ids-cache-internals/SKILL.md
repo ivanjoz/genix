@@ -6,7 +6,12 @@ version: 0.3.0
 
 # By-IDs cache — internals
 
-Units: 1 tick = 2 s (SUnixTime). Scylla and Dynamo; the `idb` driver is not implemented
+> **Driver note (2026-11-07):** the Scylla driver was deleted (`plan/MARIADB_FIRST_REFACTOR_PLAN.md` §7).
+> The protocol, units and invariants below are driver-neutral (`genix-orm/db/cache`) and still hold.
+> The `scylla/...` file references point at the deleted implementation (git history); the live ones
+> are `mariadbdriver/cache_by_ids.go` and `pgdriver/cache_by_ids.go` (a `_cache_by_ids_slots` table, as Scylla had). Rewriting the per-file sections for the SQL drivers is an open follow-up.
+
+Units: 1 tick = 2 s (SUnixTime). MariaDB, PostgreSQL and Dynamo; the `idb` driver is not implemented
 (`QueryCachedIDs` and writes return `errNotImplemented`).
 
 ## State

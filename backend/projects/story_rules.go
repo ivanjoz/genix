@@ -84,7 +84,7 @@ func storyAssigneeRow(story types.Story) types.StoryAssignee {
 	return assigneeRow
 }
 
-// normalizeStoryDetail validates the long content. A large Scylla cell slows every read of it, so the
+// normalizeStoryDetail validates the long content. A large column slows every read of its row, so the
 // description is bounded and pasted images (data URLs) go as attachments instead.
 func normalizeStoryDetail(detail *types.StoryDetail) error {
 	if len(detail.Description) > 100_000 {

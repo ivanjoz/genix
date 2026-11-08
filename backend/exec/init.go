@@ -23,9 +23,9 @@ import (
 //
 // The ORM only reserves counter values for records whose key is still 0 (insert-update.go:278),
 // so seeding a row with a literal ID leaves the counter untouched. With the counter at zero, the
-// next record created through the normal path draws ID 1 and — because a Scylla INSERT is an
-// upsert — silently overwrites the seed. That is exactly how public sign-up replaced companies 1
-// and 2 instead of creating new ones.
+// next record created through the normal path draws ID 1 and collides with the seed: on Scylla,
+// where an INSERT was an upsert, that is how public sign-up once replaced companies 1 and 2; on
+// MariaDB the strict insert fails instead.
 //
 // The reservation is unconditional: re-running fn-init skips a few IDs, which is harmless, and the
 // counter can only be read through the ORM by also incrementing it.
@@ -219,20 +219,20 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 		})
 	}
 
-	// Seed companies in ScyllaDB first so the relational source of truth is ready.
+	// Seed companies in the database first so the relational source of truth is ready.
 	if err := db.Upsert(&empresas); err != nil {
-		panic("Error al crear las empresas iniciales en ScyllaDB. " + err.Error())
+		panic("Error al crear las empresas iniciales en la base de datos. " + err.Error())
 	}
 	if err := cloud.Insert(empresas); err != nil {
 		panic("Error al crear las empresas iniciales en cloud. " + err.Error())
 	}
 	// Companies have no partition, so the counter key is x0_companies_0.
 	reserveSeededAutoincrementIDs(0, "companies", len(empresas))
-	core.Log("Se crearon/actualizaron las empresas iniciales en ScyllaDB y cloud.")
+	core.Log("Se crearon/actualizaron las empresas iniciales en la base de datos y cloud.")
 
-	// Seed admin/system users in ScyllaDB so delta-cache and ID-based reads stay consistent.
+	// Seed admin/system users in the database so delta-cache and ID-based reads stay consistent.
 	if err := db.Upsert(&usuarios); err != nil {
-		panic("Error al crear los usuarios iniciales en ScyllaDB. " + err.Error())
+		panic("Error al crear los usuarios iniciales en la base de datos. " + err.Error())
 	}
 	if err := cloud.Insert(usuarios); err != nil {
 		panic("Error al crear los usuarios iniciales en cloud. " + err.Error())
@@ -242,7 +242,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	for _, seededUser := range usuarios {
 		reserveSeededAutoincrementIDs(seededUser.CompanyID, "users", 1)
 	}
-	core.Log("Se crearon/actualizaron los usuarios iniciales en ScyllaDB y cloud.")
+	core.Log("Se crearon/actualizaron los usuarios iniciales en la base de datos y cloud.")
 
 	// Run the city import as part of the base bootstrap to leave the environment operational after init.
 	ImportCiudades(args)
@@ -379,7 +379,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 
 	db.Connect(makeConnParams())
 
-	if err := db.Deploy(MakeScyllaControllers()...); err != nil {
+	if err := db.Deploy(MakeControllers()...); err != nil {
 		panic(fmt.Sprintf("Error al desplegar el esquema del keyspace '%v': %v", core.Env.DB_NAME, err))
 	}
 

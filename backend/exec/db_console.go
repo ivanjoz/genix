@@ -80,7 +80,7 @@ func resolveController(tableName string) (db.Controller, error) {
 		return nil, core.Err(`falta "table" en la petición`)
 	}
 	registerControllersOnce.Do(func() {
-		for _, controller := range MakeScyllaControllers() {
+		for _, controller := range MakeControllers() {
 			resolvedController := controller
 			db.RegisterControllerFactory(resolvedController.GetTableName(),
 				func() db.Controller { return resolvedController })
@@ -250,7 +250,7 @@ func runDbConsoleWrite(request *dbConsoleRequest) (*dbConsoleResult, error) {
 
 func listDbTables() []dbTableSummary {
 	tables := []dbTableSummary{}
-	for _, controller := range MakeScyllaControllers() {
+	for _, controller := range MakeControllers() {
 		schema := controller.DescribeTable()
 		tables = append(tables, dbTableSummary{
 			Name: schema.Name, ID: schema.ID, Partition: schema.Partition, Keys: schema.Keys,

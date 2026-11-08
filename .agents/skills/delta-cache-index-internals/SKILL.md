@@ -6,7 +6,12 @@ version: 0.3.0
 
 # Delta cache — internals
 
-Units: 1 tick = 2 s (SUnixTime). Scylla only; Dynamo uses an older delta-log protocol
+> **Driver note (2026-11-07):** the Scylla driver was deleted (`plan/MARIADB_FIRST_REFACTOR_PLAN.md` §7).
+> The protocol, units and invariants below are driver-neutral (`genix-orm/db/cache`) and still hold.
+> The `scylla/...` file references point at the deleted implementation (git history); the live ones
+> are `mariadbdriver/delta.go`, `snapshot.go` and their `pgdriver/` counterparts. Rewriting the per-file sections for the SQL drivers is an open follow-up.
+
+Units: 1 tick = 2 s (SUnixTime). MariaDB and PostgreSQL; Dynamo uses an older delta-log protocol
 (`dynamo/delta.go`, `db/cache/delta_log.go`); the `idb` driver is not implemented.
 
 ## State

@@ -26,7 +26,7 @@ import (
 
 // Agrupa los handlers de los módulos en uns solo map. The agent is not here: it is its own
 // binary and Lambda (genix/agent), so this one never links the LLM stack. Neither is exec: its
-// handlers drive ScyllaDB directly, so main_exec.go appends them in the server build only.
+// handlers drive the database directly, so main_exec.go appends them in the server build only.
 var appHandlersModules = []core.AppRouterType{
 	sales.ModuleHandlers,
 	config.ModuleHandlers,
@@ -344,7 +344,7 @@ func resolveRouteAccess(
 	}
 	// El user 1 salta la comprobación, y esto NO es una comodidad: login.go le sintetiza la lista
 	// completa de accesos sólo en la respuesta de login y nunca la persiste, así que su blob en
-	// ScyllaDB está vacío y el daemon lo negaría. No se le puede preguntar.
+	// la base de datos está vacío y el daemon lo negaría. No se le puede preguntar.
 	if userID == 1 {
 		return routeAccessDecision{}
 	}
@@ -439,7 +439,7 @@ func chargedMethodFor(method, funcPath string) string {
 // Una sola función y un solo frame porque son la misma decisión tomada con los mismos datos: el
 // daemon cachea los accesos del user y su cuota en el mismo shard, bajo la misma clave
 // (company, user) y detrás del mismo mutex, así que preguntar las dos cosas juntas cuesta un
-// bloqueo en vez de dos —y en Lambda, cero lecturas a ScyllaDB en vez de una por entorno nuevo.
+// bloqueo en vez de dos —y en Lambda, cero lecturas a la base de datos en vez de una por entorno nuevo.
 //
 // Qué se cobra depende del método:
 //   - POST y PUT: el cargo completo, porque el body ya se conoce. No hay distinción entre los dos,
@@ -587,7 +587,7 @@ func applyGrantedSubAccesos(
 	args.User.SubAccesos = mapGrantedSubAccesos(accessGrant, requiredAccessInfos)
 
 	// El user 1 salta el gate (resolveRouteAccess devuelve decisión vacía porque sus blobs en
-	// ScyllaDB están vacíos y el daemon lo negaría), así que el mapa de arriba queda vacío y
+	// la base de datos están vacíos y el daemon lo negaría), así que el mapa de arriba queda vacío y
 	// todo chequeo HasSubAcceso lo negaría. Se le sintetiza "Todos" en los accesos de la ruta,
 	// espejo de buildBootstrapAdminAccesos en login.go, que sí lo hace para el frontend.
 	if args.User.ID == 1 {

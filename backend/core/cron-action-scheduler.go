@@ -2,8 +2,10 @@ package core
 
 import (
 	"app/db"
+	"cmp"
 	"math"
 	mrand "math/rand"
+	"slices"
 	"sync"
 	"time"
 )
@@ -227,52 +229,63 @@ func runCronWatcherTick() {
 	lastUnixMinutesFrame = currentUnixMinutesFrame
 }
 
-// claimCronActionRows takes a best-effort lease on a cron group so two workers do not run the same
-// action at once. It is a lease and not a mutex on purpose: the scylla driver exposes no
-// lightweight transaction (QueryExec drops the [applied] row a CAS needs), so the write-then-read
-// back below narrows the double-execution window from the whole handler duration to a single round
-// trip. Handlers still have to be idempotent.
+// claimCronActionRows takes a lease on a cron group so two workers do not run the same action at
+// once. The rows are locked and the lease checked on the locked copy, so of two workers claiming
+// together the second waits, then finds the first one's lease and skips. It is a lease rather than
+// a lock held across the handler, so a process that dies mid-handler blocks the action only until
+// the lease expires. Handlers still have to be idempotent: a handler outliving its lease can run
+// twice.
 func claimCronActionRows(rows []CronAction, cronActionTable *CronActionTable, claimToken int32) bool {
-	currentSUnix := SUnixTime()
 	leadRow := rows[0]
-
-	// A lease still inside its window means another worker is running this action right now.
-	// Nothing expires it explicitly: once cronClaimLeaseSUnits pass the row is claimable again, so
-	// a process that dies mid-handler blocks the action for a minute and no longer, and no sweeper
-	// is needed to clean up after it.
-	if leadRow.ClaimedAt > 0 && currentSUnix-leadRow.ClaimedAt < cronClaimLeaseSUnits {
-		Log("claimCronActionRows skipped leased action:", "cron_id", leadRow.ID, "claimed_at", leadRow.ClaimedAt)
+	isClaimed := false
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		isClaimed = false
+		lockedRows := make([]CronAction, len(rows))
+		for i, row := range rows {
+			lockedRows[i] = CronAction{UnixMinutesFrame: row.UnixMinutesFrame, ID: row.ID}
+		}
+		slices.SortFunc(lockedRows, func(a, b CronAction) int {
+			return cmp.Or(cmp.Compare(a.UnixMinutesFrame, b.UnixMinutesFrame), cmp.Compare(a.ID, b.ID))
+		})
+		if err := db.LockByKeys(transaction, &lockedRows); err != nil {
+			return err
+		}
+		currentSUnix := SUnixTime()
+		// A lease still inside its window means another worker is running this action right now.
+		// Nothing expires it explicitly: once cronClaimLeaseSUnits pass the row is claimable again,
+		// so no sweeper is needed to clean up after a dead process.
+		loadedByKey := make(map[[2]int64]CronAction, len(rows))
+		for _, row := range rows {
+			loadedByKey[[2]int64{int64(row.UnixMinutesFrame), int64(row.ID)}] = row
+		}
+		for _, lockedRow := range lockedRows {
+			// The rows were loaded before the lock: a worker that ran and released them meanwhile
+			// moved them on, and running them again from the stale copy would repeat the action.
+			loadedRow := loadedByKey[[2]int64{int64(lockedRow.UnixMinutesFrame), int64(lockedRow.ID)}]
+			if lockedRow.Status != statusCronActionPending || lockedRow.InvocationCount != loadedRow.InvocationCount {
+				Log("claimCronActionRows skipped an action another worker already ran:", "cron_id", leadRow.ID)
+				return nil
+			}
+			if lockedRow.ClaimedAt > 0 && currentSUnix-lockedRow.ClaimedAt < cronClaimLeaseSUnits {
+				Log("claimCronActionRows skipped leased action:", "cron_id", leadRow.ID, "claimed_at", lockedRow.ClaimedAt)
+				return nil
+			}
+		}
+		for i := range lockedRows {
+			lockedRows[i].ClaimedAt = currentSUnix
+			lockedRows[i].ClaimedBy = claimToken
+		}
+		if err := db.UpdateIn(transaction, &lockedRows, cronActionTable.ClaimedAt, cronActionTable.ClaimedBy); err != nil {
+			return err
+		}
+		isClaimed = len(lockedRows) > 0
+		return nil
+	})
+	if err != nil {
+		Log("claimCronActionRows error:", "cron_id", leadRow.ID, "error", err)
 		return false
 	}
-
-	for i := range rows {
-		rows[i].ClaimedAt = currentSUnix
-		rows[i].ClaimedBy = claimToken
-	}
-
-	if err := db.Update(&rows, cronActionTable.ClaimedAt, cronActionTable.ClaimedBy); err != nil {
-		Log("claimCronActionRows update error:", "cron_id", leadRow.ID, "error", err)
-		return false
-	}
-
-	// Read the token back: scylla resolves concurrent writes last-write-wins, so two workers that
-	// both wrote read the same winner and only one of them recognises itself here.
-	claimCheckRows := []CronAction{}
-	claimCheckQuery := db.Query(&claimCheckRows)
-	claimCheckQuery.Select(claimCheckQuery.ClaimedBy).
-		UnixMinutesFrame.Equals(leadRow.UnixMinutesFrame).
-		ID.Equals(leadRow.ID)
-
-	if err := claimCheckQuery.Exec(); err != nil {
-		Log("claimCronActionRows read back error:", "cron_id", leadRow.ID, "error", err)
-		return false
-	}
-	if len(claimCheckRows) == 0 || claimCheckRows[0].ClaimedBy != claimToken {
-		Log("claimCronActionRows lost the claim:", "cron_id", leadRow.ID)
-		return false
-	}
-
-	return true
+	return isClaimed
 }
 
 // rescheduleCronAction enqueues the next frame of a recurring row. It runs after the attempt and

@@ -18,7 +18,3 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.seasonality-curve":  GetSeasonalityCurve,
 	"POST.seasonality-curve": PostSeasonalityCurve,
 }
-
-func init() {
-	core.RegisterActionHandler(2, "Reprocesar Resumen de Ventas", SaleOrderReprocessHandler)
-}

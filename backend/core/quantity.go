@@ -19,7 +19,7 @@ import (
 // Sub is deliberately NOT kept normalized in storage: it may exceed the divisor and it may
 // be negative. That is what makes addition closed without carrying —
 // {a1,b1} + {a2,b2} = {a1+a2, b1+b2} — so the stock engine accumulates with a plain
-// integer + and Scylla can still SUM() both columns independently. Normalization happens
+// integer + and SQL can still SUM() both columns independently. Normalization happens
 // only at validation and display boundaries.
 //
 // This is a computation type, not a column type: the tables keep two flat int32 columns
@@ -35,7 +35,7 @@ const QuantityDivisorNone int16 = 1
 // QuantityLineScale is the packing slot for a document line. A sale order stores a line
 // quantity as Units*QuantityLineScale + Sub in one int32, so 1001 at divisor 6 is one box
 // plus one candy. Documents are written once and read back whole — they never need the
-// component-wise accumulation or the Scylla-side SUM() that the movement ledger does, so
+// component-wise accumulation or the SQL SUM() that the movement ledger does, so
 // they pay one field instead of two.
 const QuantityLineScale int32 = 1000
 

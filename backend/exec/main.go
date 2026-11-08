@@ -57,8 +57,8 @@ var ExecHandlers = ExecRouterType{
 }
 
 var ExecHandlersTesting = ExecRouterType{
-	// "fn10":  TestScyllaDBConnection,
-	"fn11":  TestScyllaDBInsert,
+	// "fn10":  TestDBConnection,
+	"fn11":  TestDBInsert,
 	"fn12":  TestZstdCompression,
 	"fn014": Test14,
 	"fn018": Test18,

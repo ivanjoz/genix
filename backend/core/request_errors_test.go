@@ -261,7 +261,7 @@ func TestCreditRateLimitRejectionWritesItsRow(t *testing.T) {
 }
 
 // The preview is a fixed-width field on the wire, so a multi-byte rune landing on the boundary
-// must not be cut in half — an invalid UTF-8 tail would travel all the way into ScyllaDB.
+// must not be cut in half — an invalid UTF-8 tail would travel all the way into the database.
 func TestTruncateErrorTextKeepsRunesWhole(t *testing.T) {
 	longAccented := strings.Repeat("á", 300)
 	truncated := truncateErrorText(longAccented)

@@ -6,7 +6,12 @@ version: 0.3.0
 
 # Cache groups — internals
 
-Units: 1 tick = 2 s (SUnixTime). Scylla only; Dynamo and `idb` don't support cache groups.
+> **Driver note (2026-11-07):** the Scylla driver was deleted (`plan/MARIADB_FIRST_REFACTOR_PLAN.md` §7).
+> The protocol, units and invariants below are driver-neutral (`genix-orm/db/cache`) and still hold.
+> The `scylla/...` file references point at the deleted implementation (git history); the live ones
+> are `mariadbdriver/grouped.go`, `group_elements.go`, `snapshot.go` and their `pgdriver/` counterparts; settled groups are kept in the `<table>__group_data` table, not S3. Rewriting the per-file sections for the SQL drivers is an open follow-up.
+
+Units: 1 tick = 2 s (SUnixTime). MariaDB and PostgreSQL (also obdriver); Dynamo and `idb` don't support cache groups.
 
 ## State
 

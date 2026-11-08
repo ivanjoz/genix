@@ -30,16 +30,13 @@ type EnvStruct struct {
 	// so both ends are pinned together in cloud/template.yml.
 	LAMBDA_RESPONSE_STREAMING bool
 	// APP_NAME prefixes every deployed resource name: DynamoDB table, Lambdas, R2 bucket.
-	APP_NAME    string
-	APP_CODE    string
-	ENVIROMENT  string
-	DB_NAME     string
-	DB_USER     string
-	DB_HOST     string
-	DB_PASSWORD string
-	TMP_DIR     string
-	REQ_IP      string
-	REQ_ID      string
+	APP_NAME   string
+	APP_CODE   string
+	ENVIROMENT string
+	DB_NAME    string
+	TMP_DIR    string
+	REQ_IP     string
+	REQ_ID     string
 	// REQUEST_ID is the numeric identity of the request being served, the one user_logs stores.
 	// It is a mirror of HandlerArgs.RequestID and is only set under IS_SERVERLESS, where the
 	// runtime serves one invocation at a time and a package global is therefore safe; the free
@@ -69,7 +66,6 @@ type EnvStruct struct {
 	// time, so the log of a request is never cut in half by another one. Debug aid, off by
 	// default, and it does nothing under IS_SERVERLESS — a Lambda invocation is already alone.
 	DISABLE_API_CONCURRENCY_LOCAL bool
-	DB_DISABLE_SSL                bool
 	// FDB_SOCKET is the fdbgate daemon's unix socket, read only by a `-tags fdb` build.
 	FDB_SOCKET string
 	// YDB_ENDPOINT (host:port) and YDB_DATABASE (path) are read only by a `-tags ydb` build.
@@ -92,17 +88,15 @@ type EnvStruct struct {
 	POSTGRES_PASSWORD  string
 	POSTGRES_DATABASE  string
 	POSTGRES_MAX_CONNS int
-	// MARIADB_* are read only by a `-tags mariadb` build. The database is the keyspace (DB_NAME).
+	// MARIADB_* are read by the default (untagged) build. The database is the keyspace (DB_NAME).
 	MARIADB_HOST      string
 	MARIADB_PORT      int
 	MARIADB_USER      string
 	MARIADB_PASSWORD  string
 	MARIADB_MAX_CONNS int
 	// MARIADB_SOCKET is [mariadb].socket: dialed instead of host:port when the database shares the host.
-	MARIADB_SOCKET     string
-	DB_PORT            int32
-	MAX_CLUSTERING_KEY int32 // Node's max_clustering_key_restrictions_per_query; 0 uses the ORM default of 100
-	SERVER_PORT        int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
+	MARIADB_SOCKET string
+	SERVER_PORT    int32 // Listen port of the standalone HTTP server; must match the port in NGINX_PROCESS, 0 uses 3589
 	// SERVER_MAX_CONCURRENT_REQUESTS caps the requests the VPS server runs at once; the rest wait
 	// for a slot (see admission.go). 0 uses a default derived from GOMAXPROCS.
 	SERVER_MAX_CONCURRENT_REQUESTS int32
@@ -303,14 +297,9 @@ type fileConfig struct {
 		Model   string `toml:"model"`
 	} `toml:"providers"`
 
+	// DB.Name is the database every driver's tables live in (the MariaDB database).
 	DB struct {
-		Host             string `toml:"host"`
-		Port             int32  `toml:"port"`
-		Name             string `toml:"name"`
-		User             string `toml:"user"`
-		Password         string `toml:"password"`
-		DisableSSL       bool   `toml:"disable_ssl"`
-		MaxClusteringKey int32  `toml:"max_clustering_key"`
+		Name string `toml:"name"`
 	} `toml:"db"`
 
 	// FDB is read only by a `-tags fdb` build (docs/FOUNDATIONDB_PLAN.md).
@@ -346,7 +335,7 @@ type fileConfig struct {
 		MaxConns int    `toml:"max_conns"`
 	} `toml:"postgres"`
 
-	// MariaDB is read only by a `-tags mariadb` build.
+	// MariaDB is read by the default (untagged) build.
 	MariaDB struct {
 		Host     string `toml:"host"`
 		Port     int    `toml:"port"`
@@ -550,7 +539,7 @@ func farewardAddressUnusableInLambda(address string, isServerless bool) bool {
 }
 
 // The VPS snapshot cache defaults: a 10k-product snapshot is about 2 MB, so 256 MB holds about a
-// hundred company + endpoint snapshots next to ScyllaDB on a 4 GB server.
+// hundred company + endpoint snapshots next to the database on a 4 GB server.
 const (
 	defaultVPSSnapshotCacheMB = 256
 	defaultVPSSnapshotDiskMB  = 1024
@@ -568,13 +557,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.CDN_PROVIDER = file.Providers.CDN
 	env.MODEL_PROVIDER = file.Providers.Model
 
-	env.DB_HOST = file.DB.Host
-	env.DB_PORT = file.DB.Port
 	env.DB_NAME = file.DB.Name
-	env.DB_USER = file.DB.User
-	env.DB_PASSWORD = file.DB.Password
-	env.DB_DISABLE_SSL = file.DB.DisableSSL
-	env.MAX_CLUSTERING_KEY = file.DB.MaxClusteringKey
 	env.FDB_SOCKET = file.FDB.Socket
 	env.YDB_ENDPOINT = file.YDB.Endpoint
 	env.YDB_DATABASE = file.YDB.Database

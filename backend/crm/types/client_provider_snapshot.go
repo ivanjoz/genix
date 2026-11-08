@@ -110,30 +110,37 @@ func (e *ClientProvider) IdentitySnapshot() ClientProviderSnapshot {
 
 // ResolveIdentitySnapshots points every identity at the snapshot row that holds it,
 // inserting the ones the company does not have yet, and returns the resolved ids in the
-// order the identities were given.
+// order the identities were given. It runs in the caller's transaction, which holds the company
+// row's lock (see SaveClientProvidersIn), so two saves cannot both insert one identity.
 //
-// One indexed read per identity, rather than one IN over all of them: Hash carries a local
-// index, and Scylla cannot serve an IN over a secondary index — it degrades to
-// ALLOW FILTERING over the whole partition, which on a table that only ever grows is the
-// wrong shape forever. Batches here are one row at the till and a handful from the CRM
-// form, so the loop is cheap and stays flat as the table fills.
-func ResolveIdentitySnapshots(
-	identities []ClientProviderSnapshot, companyID int32, userID int32,
+// The stored identities are read with one IN over their hashes; the candidates are compared
+// field by field, so a hash collision costs an extra row rather than a document that prints
+// the wrong RUC.
+func ResolveIdentitySnapshotsIn(
+	transaction *db.Transaction, identities []ClientProviderSnapshot, companyID int32, userID int32,
 ) ([]int32, error) {
 
 	resolvedIDs := make([]int32, len(identities))
 	snapshotsToInsert := []ClientProviderSnapshot{}
 	currentTimestamp := core.SUnixTime()
 
+	identityHashes := core.SliceSet[int64]{}
 	for index := range identities {
 		identities[index].SelfParse()
-
-		storedID, err := findStoredIdentity(&identities[index], companyID)
-		if err != nil {
-			return nil, err
+		identityHashes.Add(identities[index].Hash)
+	}
+	storedSnapshots := []ClientProviderSnapshot{}
+	if !identityHashes.IsEmpty() {
+		query := db.Query(&storedSnapshots)
+		query.Select().CompanyID.Equals(companyID).Hash.In(identityHashes.Values...)
+		if err := query.Exec(); err != nil {
+			return nil, core.Err("Error al buscar las identidades de cliente/proveedor.", err)
 		}
-		if storedID > 0 {
-			resolvedIDs[index] = storedID
+	}
+
+	for index := range identities {
+		if stored := findIdentitySnapshot(storedSnapshots, &identities[index]); stored != nil {
+			resolvedIDs[index] = stored.ID
 			continue
 		}
 		// A payload can carry the same identity twice; the first one queues it and the
@@ -152,7 +159,7 @@ func ResolveIdentitySnapshots(
 	if len(snapshotsToInsert) == 0 {
 		return resolvedIDs, nil
 	}
-	if err := db.Upsert(&snapshotsToInsert); err != nil {
+	if err := db.InsertIn(transaction, &snapshotsToInsert); err != nil {
 		return nil, core.Err("Error al guardar las identidades de cliente/proveedor.", err)
 	}
 
@@ -167,22 +174,6 @@ func ResolveIdentitySnapshots(
 		resolvedIDs[index] = minted.ID
 	}
 	return resolvedIDs, nil
-}
-
-// findStoredIdentity reads the snapshot already holding this identity, through the Hash
-// index. The candidates it returns are compared field by field, so a hash collision costs
-// an extra row rather than a document that prints the wrong RUC.
-func findStoredIdentity(identity *ClientProviderSnapshot, companyID int32) (int32, error) {
-	candidates := []ClientProviderSnapshot{}
-	query := db.Query(&candidates)
-	query.Select().CompanyID.Equals(companyID).Hash.Equals(identity.Hash)
-	if err := query.Exec(); err != nil {
-		return 0, core.Err("Error al buscar la identidad de cliente/proveedor.", err)
-	}
-	if found := findIdentitySnapshot(candidates, identity); found != nil {
-		return found.ID, nil
-	}
-	return 0, nil
 }
 
 func findIdentitySnapshot(

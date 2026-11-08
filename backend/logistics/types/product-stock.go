@@ -220,7 +220,9 @@ func (e ProductStockLotTable) GetSchema() db.TableSchema {
 	}
 }
 
-// DeliveryOrderNote is modeled but not wired up yet.
+// DeliveryOrderNote is modeled but not wired up yet. A supplier's note is identified by its date,
+// supplier and code: the unique index refuses a second note with all three, so create notes with a
+// strict insert, like lots.
 type DeliveryOrderNote struct {
 	db.TableStruct[DeliveryOrderNoteTable, DeliveryOrderNote]
 	CompanyID   int32  `cb:"1"`
@@ -229,7 +231,6 @@ type DeliveryOrderNote struct {
 	Code        string `cb:"4"`
 	SupplierID  int32  `cb:"5"`
 	Description string `cb:"6"`
-	Hash        string `cb:"7"`
 
 	Created   int32 `cb:"8"`
 	CreatedBy int32 `cb:"9"`
@@ -246,7 +247,6 @@ type DeliveryOrderNoteTable struct {
 	Code        db.Col[*DeliveryOrderNoteTable, string]
 	SupplierID  db.Col[*DeliveryOrderNoteTable, int32]
 	Description db.Col[*DeliveryOrderNoteTable, string]
-	Hash        db.Col[*DeliveryOrderNoteTable, string]
 	Created     db.Col[*DeliveryOrderNoteTable, int32]
 	CreatedBy   db.Col[*DeliveryOrderNoteTable, int32]
 	Updated     db.Col[*DeliveryOrderNoteTable, int32]
@@ -261,11 +261,7 @@ func (e DeliveryOrderNoteTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
-			{Type: db.TypeGlobalIndex, Keys: db.Cols(e.Hash)},
+			{Type: db.TypeUniqueIndex, Keys: db.Cols(e.Date, e.SupplierID, e.Code)},
 		},
 	}
-}
-
-func (e *DeliveryOrderNote) SelfParse() {
-	e.Hash = db.MakeKeyConcat(e.Date, e.SupplierID, e.Code)
 }

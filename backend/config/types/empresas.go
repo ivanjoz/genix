@@ -105,3 +105,18 @@ type CompanyPub struct {
 	CulqiRsaKeyID string `cb:"4"`
 	CulqiLlave    string `cb:"5"`
 }
+
+// LockCompanyIn locks the company's row in the caller's transaction and returns it. It is the
+// company-wide write lock: the company form and the invoice series hold it because they rewrite the
+// row, and the client/provider and product saves hold it so their name uniqueness checks (plain
+// reads of a mutable hash, which no unique index can cover) cannot interleave.
+func LockCompanyIn(transaction *db.Transaction, companyID int32) (Company, error) {
+	companies := []Company{{ID: companyID}}
+	if err := db.LockByKeys(transaction, &companies); err != nil {
+		return Company{}, core.Err("Error al obtener la empresa:", err)
+	}
+	if len(companies) == 0 {
+		return Company{}, core.Err("No se encontró la empresa", companyID)
+	}
+	return companies[0], nil
+}

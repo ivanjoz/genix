@@ -34,7 +34,7 @@ type ImageAssetSyncResult struct {
 
 type imageAssetTextFetcher func(url string) (string, error)
 
-// SyncImageAssets imports only categories whose repository watermark is ahead of ScyllaDB.
+// SyncImageAssets imports only categories whose repository watermark is ahead of the database.
 func SyncImageAssets() (ImageAssetSyncResult, error) {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	return syncImageAssets(fetchImageAssetText(httpClient))
