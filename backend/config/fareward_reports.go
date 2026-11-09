@@ -99,20 +99,25 @@ func companyBudgetRecord(budget core.CompanyBudget) coreTypes.CompanyCreditBudge
 }
 
 // readServerMetrics reads the windows between two (unix day, slot) positions, in time order.
-func readServerMetrics(firstDate, firstSlot, lastDate, lastSlot int16) ([]coreTypes.ServerMetric, error) {
+func readServerMetrics(firstDate, firstSlot, lastDate, lastSlot int16) ([]serverMetricRow, error) {
 	rows, err := core.QueryServerMetrics(context.Background(), firstDate, firstSlot, lastDate, lastSlot)
 	if err != nil {
 		return nil, err
 	}
-	records := make([]coreTypes.ServerMetric, len(rows))
+	records := make([]serverMetricRow, len(rows))
 	for index, row := range rows {
-		records[index] = coreTypes.ServerMetric{
-			Date: row.Date, Slot: row.Slot,
-			CpuPercent: row.CPUPercent, MemPercent: row.MemPercent, DiskPercent: row.DiskPercent,
-			NetRxRate: row.NetRxRate, NetTxRate: row.NetTxRate,
-			BackendMemMb: row.BackendMemMB, BackendCpuPercent: row.BackendCPUPercent,
-			FarewardMemMb: row.FarewardMemMB, FarewardCpuPercent: row.FarewardCPUPercent,
-			ScyllaMemMb: row.DatabaseMemMB, ScyllaCpuPercent: row.DatabaseCPUPercent,
+		records[index] = serverMetricRow{
+			ServerMetric: coreTypes.ServerMetric{
+				Date: row.Date, Slot: row.Slot,
+				CpuPercent: row.CPUPercent, MemPercent: row.MemPercent, DiskPercent: row.DiskPercent,
+				NetRxRate: row.NetRxRate, NetTxRate: row.NetTxRate,
+				BackendMemMb: row.BackendMemMB, BackendCpuPercent: row.BackendCPUPercent,
+				FarewardMemMb: row.FarewardMemMB, FarewardCpuPercent: row.FarewardCPUPercent,
+				ScyllaMemMb: row.DatabaseMemMB, ScyllaCpuPercent: row.DatabaseCPUPercent,
+			},
+			DbPoolMb:  row.DatabaseBufferPoolMB,
+			DbDirtyMb: row.DatabaseDirtyMB,
+			DbDiskGb:  row.DatabaseDiskGBTenths,
 		}
 	}
 	return records, nil

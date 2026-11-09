@@ -7,19 +7,19 @@ import (
 
 // makeServerMetricRow builds one stored row from an absolute slot, which is how the tests below
 // think about time: the table's (Date, Slot) pair is just that number split at the day boundary.
-func makeServerMetricRow(absoluteSlot int64, cpuPercent int16) coreTypes.ServerMetric {
-	return coreTypes.ServerMetric{
+func makeServerMetricRow(absoluteSlot int64, cpuPercent int16) serverMetricRow {
+	return serverMetricRow{ServerMetric: coreTypes.ServerMetric{
 		Date:       int16(absoluteSlot / serverMetricsSlotsPerDay),
 		Slot:       int16(absoluteSlot % serverMetricsSlotsPerDay),
 		CpuPercent: cpuPercent,
-	}
+	}}
 }
 
 func TestGroupServerMetricsByHourSplitsOnTheHourBoundary(t *testing.T) {
 	// Two slots in one hour and one in the next: the bucket is the unit the client caches, so a
 	// sample landing a slot past :00 has to start a new record rather than extend the sealed one.
 	firstBucketStart := int64(492_000) * serverMetricsSlotsPerHour
-	rows := []coreTypes.ServerMetric{
+	rows := []serverMetricRow{
 		makeServerMetricRow(firstBucketStart, 100),
 		makeServerMetricRow(firstBucketStart+serverMetricsSlotsPerHour-1, 200),
 		makeServerMetricRow(firstBucketStart+serverMetricsSlotsPerHour, 300),
@@ -51,7 +51,7 @@ func TestBucketWatermarkIsItsNewestAbsoluteSlot(t *testing.T) {
 	// newest slot would make the next delta re-send rows the client already has, or skip rows it
 	// does not — the two failures this response shape exists to prevent.
 	firstBucketStart := int64(492_100) * serverMetricsSlotsPerHour
-	rows := []coreTypes.ServerMetric{
+	rows := []serverMetricRow{
 		makeServerMetricRow(firstBucketStart+5, 1),
 		makeServerMetricRow(firstBucketStart+9, 2),
 	}
@@ -74,7 +74,7 @@ func TestGroupServerMetricsByHourCrossesMidnight(t *testing.T) {
 	// live in different partitions, read by different queries. They must still land in adjacent
 	// buckets rather than restarting the numbering.
 	lastSlotOfDay := int64(20_680)*serverMetricsSlotsPerDay + serverMetricsSlotsPerDay - 1
-	rows := []coreTypes.ServerMetric{
+	rows := []serverMetricRow{
 		makeServerMetricRow(lastSlotOfDay, 10),
 		makeServerMetricRow(lastSlotOfDay+1, 20),
 	}
@@ -89,5 +89,25 @@ func TestGroupServerMetricsByHourCrossesMidnight(t *testing.T) {
 	}
 	if buckets[1].SlotsInHour[0] != 0 {
 		t.Fatalf("the first slot of a new day should open a bucket at offset 0, got %d", buckets[1].SlotsInHour[0])
+	}
+}
+
+func TestDatabaseEngineColumnsStayAlignedWithTheSlots(t *testing.T) {
+	// The MariaDB columns are not part of the ORM row, so they are the ones an edit to the grouping
+	// could forget: each must gain exactly one value per slot, like every other array.
+	bucketStart := int64(492_200) * serverMetricsSlotsPerHour
+	first := makeServerMetricRow(bucketStart, 1)
+	first.DbPoolMb, first.DbDirtyMb, first.DbDiskGb = 1024, 37, 42
+	second := makeServerMetricRow(bucketStart+1, 2)
+	second.DbPoolMb, second.DbDirtyMb, second.DbDiskGb = 1024, -1, 43
+
+	buckets := groupServerMetricsByHour([]serverMetricRow{first, second})
+
+	bucket := buckets[0]
+	if len(bucket.DbPoolMb) != 2 || len(bucket.DbDirtyMb) != 2 || len(bucket.DbDiskGb) != 2 {
+		t.Fatalf("engine arrays lost their alignment: %v %v %v", bucket.DbPoolMb, bucket.DbDirtyMb, bucket.DbDiskGb)
+	}
+	if bucket.DbDirtyMb[0] != 37 || bucket.DbDirtyMb[1] != -1 || bucket.DbDiskGb[1] != 43 {
+		t.Fatalf("engine values out of place: dirty %v disk %v", bucket.DbDirtyMb, bucket.DbDiskGb)
 	}
 }

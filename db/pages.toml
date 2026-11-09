@@ -122,6 +122,30 @@ name = "Customers|Clientes"
 icon = "icon-[fa--user]"
 description = "Registra tus clientes con RUC o DNI y consulta su historial de compras."
 
+[[pages]]
+route = "crm/pipeline"
+name = "Opportunities|Oportunidades"
+icon = "icon-[fa--columns]"
+description = "Muestra las oportunidades de venta de cada pipeline como un tablero por etapas; se mueven, se cierran como ganadas o perdidas y guardan su historial."
+
+[[pages]]
+route = "crm/settings"
+name = "Pipelines|Flujos"
+icon = "icon-[fa--sliders]"
+description = "Define los flujos de venta con sus etapas y los campos personalizados de las oportunidades."
+
+[[pages]]
+route = "crm/pipeline-access"
+name = "Pipelines: Access|Flujos: Accesos"
+icon = "icon-[fa--lock]"
+description = "Asigna a cada usuario qué flujos ve y con qué nivel trabaja: ver, editar o completo."
+
+[[pages]]
+route = "crm/dictionaries"
+name = "Dictionaries|Diccionarios"
+icon = "icon-[fa--book]"
+description = "Mantiene las listas de valores del CRM, como los motivos de pérdida de una oportunidad, editándolas directamente en la tabla."
+
 # Production
 
 [[pages]]

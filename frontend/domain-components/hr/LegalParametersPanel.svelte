@@ -43,8 +43,7 @@
     if (isDelete && !(await confirmWarn({ title: tr('Delete|Eliminar'), message: tr('Delete this value?|¿Eliminar este valor?') }))) return
     showLoading(tr('Saving...|Guardando...'))
     try {
-      await postLegalParameter({ ...parameterForm, ss: isDelete ? 0 : 1 })
-      await legal.fetch()
+      await postLegalParameter(legal, { ...parameterForm, ss: isDelete ? 0 : 1 })
       ui.closeModal(PARAMETER_MODAL_ID)
     } catch (error) {
       notifyFailure(error as string)
@@ -66,8 +65,7 @@
     if (afpForm.Period % 100 < 1 || afpForm.Period % 100 > 12) { notifyFailure(tr('Enter a YYMM period|Ingrese un periodo AAMM')); return }
     showLoading(tr('Saving...|Guardando...'))
     try {
-      await postAfpRates(afpForm.rates.map((afpRate) => ({ ...afpRate, Period: afpForm.Period })))
-      await legal.fetch()
+      await postAfpRates(legal, afpForm.rates.map((afpRate) => ({ ...afpRate, Period: afpForm.Period })))
       ui.closeModal(AFP_MODAL_ID)
     } catch (error) {
       notifyFailure(error as string)

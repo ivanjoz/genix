@@ -124,8 +124,12 @@ export const saveEntity = (data: IEntity) => {
 
 - **`refreshRoutes`**: List of routes that should be re-fetched or marked as stale. When a `GetHandler` service for that route is active, it will receive the updated data automatically on its next cycle.
 - **`returnEmptyOnPostFailure`**: `GetHandler` defaults this to `true`, preserving the
-  existing behavior where `post()` logs a failure and returns `[]`. Set it to `false` on
+  existing behavior where `postAndSync()` logs a failure and returns no ID mappings. Set it to `false` on
   services whose callers must handle the rejected request.
+- **`GetHandler.postAndSync()` / `writeAndSync()`**: the write also returns the delta of the handler's `route`
+  (the `dl` query param, handled generically in `backend/write_delta.go`), so the cache is
+  updated without a GET after the POST. Its `route` is therefore not marked for refresh; the
+  extra `refreshRoutes` still are.
 
 ---
 

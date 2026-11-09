@@ -50,8 +50,7 @@
 
     showLoading(tr('Saving dependent...|Guardando derechohabiente...'))
     try {
-      const savedDependent = await postDependent({ ...dependentForm, ss: isDelete ? 0 : 1 })
-      dependents.addSavedRecords(savedDependent)
+      await postDependent(dependents, { ...dependentForm, ss: isDelete ? 0 : 1 })
       ui.closeModal(DEPENDENT_MODAL_ID)
       await employees.fetch()
     } catch (error) {

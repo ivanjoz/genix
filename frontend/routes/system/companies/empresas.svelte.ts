@@ -70,7 +70,7 @@ export class EmpresasService extends GetHandler {
 export const postEmpresa = (data: ICompany) => {
   return POST({
     data,
-    route: "empresas",
+    route: "company",
     refreshRoutes: ["empresas"]
   })
 }

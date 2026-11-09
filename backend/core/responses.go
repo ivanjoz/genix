@@ -41,8 +41,11 @@ type HandlerArgs struct {
 	Encoding      string
 	// Accept is the client's Accept header, which decides the response's serialization (see
 	// WantsColbin). Per request, like Encoding.
-	Accept    string
-	User      *UsuarioToken
+	Accept string
+	// ContentType is the request's Content-Type; colbin when the body is a colbin message (see
+	// BodyIsColbin). NormalizeBody rewrites such a body as JSON and resets it.
+	ContentType string
+	User        *UsuarioToken
 	StartTime int64
 	// RequestID identifies this request in user_logs and in the log line, so a row read out of
 	// the database leads straight back to the entry that carries the full message. Per request and

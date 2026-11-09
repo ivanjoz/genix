@@ -54,8 +54,7 @@
     if (isDelete && !(await confirmWarn({ title: tr('Delete|Eliminar'), message: tr(`Delete "${conceptForm.Name}"?|¿Eliminar "${conceptForm.Name}"?`) }))) return
     showLoading(tr('Saving concept...|Guardando concepto...'))
     try {
-      const savedConcept = await postConcept({ ...normalizeConcept(conceptForm), ss: isDelete ? 0 : 1 })
-      await config.fetch()
+      const savedConcept = await postConcept(config, { ...normalizeConcept(conceptForm), ss: isDelete ? 0 : 1 })
       if (isDelete) ui.openSideLayer(0)
       else conceptForm = { ...savedConcept }
     } catch (error) {

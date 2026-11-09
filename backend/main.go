@@ -9,6 +9,7 @@ import (
 	"app/exec"
 	"app/security"
 	"context"
+	"encoding/base64"
 	"fmt"
 	fareward "github.com/ivanjoz/fareward/go"
 	"io"
@@ -72,6 +73,12 @@ func runLambdaRequest(request *events.APIGatewayV2HTTPRequest) *core.HandlerResp
 	clearEnvVariables()
 
 	core.Env.REQ_IP = request.RequestContext.HTTP.SourceIP
+	// A binary body (a colbin write) reaches the Function URL base64-encoded.
+	if request.IsBase64Encoded && len(request.Body) > 0 {
+		if decoded, err := base64.StdEncoding.DecodeString(request.Body); err == nil {
+			request.Body = string(decoded)
+		}
+	}
 	if len(request.Body) > 0 {
 		core.Log("*body enviado: ", core.StrCut(request.Body, 400))
 	}

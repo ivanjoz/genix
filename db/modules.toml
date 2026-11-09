@@ -93,7 +93,12 @@ icon = "icon-[fa--users]"
 [[modules.menus]]
 name = "Customers|Clientes"
 min_name = "CLI"
-routes = "crm/customers"
+routes = "crm/customers, crm/pipeline"
+
+[[modules.menus]]
+name = "Management|Gestión"
+min_name = "GES"
+routes = "crm/settings, crm/pipeline-access, crm/dictionaries"
 
 [[modules]]
 code = "projects"

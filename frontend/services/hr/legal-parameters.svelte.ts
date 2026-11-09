@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
+import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 
 // Mirrors backend/hr/types/legal_parameters.go. Shared by every company of the country; only the
 // SaaS company writes them (System → Parámetros Laborales).
@@ -56,8 +56,10 @@ export class LegalParametersService extends GetHandler {
   }
 }
 
-export const postLegalParameter = (parameter: ILegalParameter): Promise<ILegalParameter> =>
-  POST({ data: parameter, route: 'hr-legal-parameters', refreshRoutes: ['hr-legal-parameters'] })
+// Both writes bring back the delta of `hr-legal-parameters` (GetHandler.writeAndSync): the panel
+// shows the saved values without a GET after the write.
+export const postLegalParameter = (legal: LegalParametersService, parameter: ILegalParameter): Promise<ILegalParameter> =>
+  legal.writeAndSync('hr-legal-parameters', parameter)
 
-export const postAfpRates = (afpRates: IAfpRate[]): Promise<IAfpRate[]> =>
-  POST({ data: afpRates, route: 'hr-afp-rates', refreshRoutes: ['hr-legal-parameters'] })
+export const postAfpRates = (legal: LegalParametersService, afpRates: IAfpRate[]): Promise<IAfpRate[]> =>
+  legal.writeAndSync('hr-afp-rates', afpRates)

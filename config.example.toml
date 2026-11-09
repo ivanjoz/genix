@@ -304,6 +304,10 @@ backend_unit      = "genix.service"
 fareward_unit = "fareward.service"
 # The database's unit.
 database_unit     = "mariadb.service"
+# Además del cgroup, fareward entra a MariaDB con [mariadb] (socket o host/port) y cada
+# segundo lee el buffer pool (innodb_buffer_pool_size) y lo que falta escribir a disco
+# (Innodb_buffer_pool_bytes_dirty); cada minuto, el tamaño de las tablas. false lo apaga.
+mariadb_probe     = true
 
 # ─── Registro público de empresas ──────────────────────────────────────────
 # Estos endpoints no llevan token, así que nunca pasan por el credit limiter:

@@ -7,12 +7,13 @@ status: implemented
 visibility: saas
 description_en: >-
   Machine-level health monitoring, SaaS only. Dashboard view charts the last four hours of host
-  and per-service (Backend, ScyllaDB, Fareward) CPU, memory, and network; Memory
+  and per-service (Backend, MariaDB, Fareward) CPU, memory, and network, plus MariaDB's buffer pool,
+  dirty pages and table size; Memory
   view inspects the backend process's live heap usage by Go package.
 description_es: >-
   Monitoreo de salud a nivel de máquina, exclusivo SaaS. Vista Dashboard grafica las últimas cuatro
-  horas de CPU, memoria y red del host y de cada servicio (Backend, ScyllaDB,
-  Fareward); vista Memory inspecta en vivo el uso de heap del proceso backend por paquete de Go.
+  horas de CPU, memoria y red del host y de cada servicio (Backend, MariaDB,
+  Fareward), más el buffer pool, las páginas sucias y el tamaño de tablas de MariaDB; vista Memory inspecta en vivo el uso de heap del proceso backend por paquete de Go.
 ---
 
 # Server Panel (Panel de Servidor)
@@ -42,9 +43,18 @@ that is **Companies (Empresas)**.
   average and not a single point sample), so a one-second spike is never smoothed away. Rows are
   kept for 30 days by default (`ttl_days`, `fareward` config) before the database expires them.
 - **Host vs. per-service metrics**: the Host chart is the whole machine's CPU/memory. Backend,
-  ScyllaDB, and Fareward each get their own CPU-percent-of-whole-machine and
+  MariaDB, and Fareward each get their own CPU-percent-of-whole-machine and
   memory-in-MB, read from that unit's own Linux cgroup (`memory.stat`, `cpu.stat`), located by
-  searching `/sys/fs/cgroup` for the unit rather than assuming a fixed path.
+  searching `/sys/fs/cgroup` for the unit rather than assuming a fixed path. (The MariaDB card's
+  CPU/MEM fields are still named `Scylla*` in the payload; they hold the `database_unit` cgroup.)
+- **What MariaDB reports about itself**: `fareward` also logs into MariaDB with the `[mariadb]`
+  credentials and, once a second, reads **POOL** (`innodb_buffer_pool_size`, MB) and **DIRTY**
+  (`Innodb_buffer_pool_bytes_dirty`, MB: pages changed in RAM and not yet flushed to disk), and
+  once a minute **DISK** (data + indexes of the visible tables from `information_schema.TABLES`,
+  GB with one decimal; redo logs and binlogs are not included). MEM, POOL and DIRTY share one MB
+  axis so DIRTY reads as a share of POOL; DISK barely moves, so it is printed in the legend only.
+  No `[mariadb].user`, an unreachable server, or rows written before this existed all read as
+  "not measured".
 - **Unmeasured vs. zero (`Sin medición` vs. `0`)**: a service metric is a sentinel "not measured"
   (stored as `-1`, surfaced to the chart as a gap/`null`) whenever that unit has no cgroup on this
   box — the normal state for **Backend** when the backend actually runs on Lambda rather than on
@@ -66,15 +76,16 @@ that is **Companies (Empresas)**.
 
 ### User intention (Intención del usuario)
 
-See whether the host or any Genix service (Backend, ScyllaDB, Fareward) is under
+See whether the host or any Genix service (Backend, MariaDB, Fareward) is under
 unusual CPU, memory, or network load over the last few hours, to diagnose slowness or a crash.
 
 ### Where to find it (Dónde encontrarlo)
 
 `/system/server-panel`, **Dashboard** tab (selected by default). Five cards: **Host: CPU & Memory
-(Host: CPU y Memoria)**, **Backend Service**, **ScyllaDB**, **Fareward**, and
+(Host: CPU y Memoria)**, **Backend Service**, **MariaDB**, **Fareward**, and
 **Network (Red)**. Each service card overlays its CPU line (blue, `%`) and memory line (red, MB) on
-one chart. Use **Refresh (Actualizar)** for an immediate reload.
+one chart; the MariaDB card adds POOL (grey) and DIRTY (amber) on the memory axis and DISK in the
+legend. Use **Refresh (Actualizar)** for an immediate reload.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -115,7 +126,7 @@ Read-only: nothing on this view creates, edits, or deletes any record. It only q
 
 - `¿por qué el backend no aparece en la gráfica?` Normal si el backend corre en Lambda: ese servicio
   no tiene cgroup en esta máquina y se muestra como "Sin medición" (hueco en la gráfica), no como 0%.
-- `¿cómo veo el uso de CPU del servidor?`, `memoria de ScyllaDB`, `ancho de banda de red`, `uso de
+- `¿cómo veo el uso de CPU del servidor?`, `memoria de MariaDB`, `páginas sucias`, `buffer pool`, `tamaño de la base de datos`, `ancho de banda de red`, `uso de
   disco`, `salud del servidor`, `host caído`, `fareward no está corriendo`.
 
 <!-- DOC-ID: capability.inspect-memory -->

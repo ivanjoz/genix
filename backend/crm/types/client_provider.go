@@ -48,6 +48,9 @@ type ClientProvider struct {
 	UpdatedBy  int32  `cb:"18"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,19"`
+	// IsProspect marks a lead that has not bought yet. Opportunities reference it like any client;
+	// winning the opportunity clears the flag (crm.PostCrmOpportunityClose).
+	IsProspect bool `cb:"20"`
 }
 
 type ClientProviderTable struct {
@@ -70,6 +73,7 @@ type ClientProviderTable struct {
 	Updated          db.Col[*ClientProviderTable, int32]
 	UpdatedBy        db.Col[*ClientProviderTable, int32]
 	Version          db.Col[*ClientProviderTable, int16]
+	IsProspect       db.Col[*ClientProviderTable, bool]
 }
 
 func (e *ClientProvider) SelfParse() {

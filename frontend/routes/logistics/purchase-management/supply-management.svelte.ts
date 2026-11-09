@@ -1,6 +1,6 @@
 import { getFechaUnix } from '@genix/ui/utilities'
 import { decodeFromBase62 } from '#libs/helpers.ts'
-import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
+import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 import type { IProductStock } from '../products-stock/stock-movement'
 
 export interface IProductSupplyProviderRow {
@@ -68,8 +68,9 @@ export class ProductSupplyService extends GetHandler<any> {
 }
 
 // The route is bulk: a single-record save from the side panel sends a one-element array, and the
-// Excel import sends batches of the same shape.
-export const postProductSupply = (productSupplyRecords: IProductSupplyRow[]) => {
+// Excel import sends batches of the same shape. Each write brings back the delta of `product-supply`
+// (GetHandler.writeAndSync), so the table shows the saved rows without a GET after it.
+export const postProductSupply = (productSupplyService: ProductSupplyService, productSupplyRecords: IProductSupplyRow[]) => {
   const normalizedPayload: IProductSupplyRow[] = productSupplyRecords.map((productSupplyRecord) => ({
     ProductID: productSupplyRecord.ProductID,
     MinimunStock: productSupplyRecord.MinimunStock || 0,
@@ -78,11 +79,7 @@ export const postProductSupply = (productSupplyRecords: IProductSupplyRow[]) => 
     ProviderSupply: normalizeProviderSupplyRows(productSupplyRecord.ProviderSupply),
   }))
 
-  return POST({
-    data: normalizedPayload,
-    route: 'product-supply',
-    refreshRoutes: ['product-supply'],
-  })
+  return productSupplyService.writeAndSync('product-supply', normalizedPayload)
 }
 
 export interface IDateProductMovements {

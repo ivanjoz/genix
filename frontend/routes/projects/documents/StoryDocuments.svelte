@@ -6,7 +6,7 @@
   import { Env } from '#core/env.ts';
   import { tr } from '#core/store.svelte.ts';
   import { storyCode, storyType, type IStory } from '../project.ts';
-  import { formatFileSize } from '../story/story.ts';
+  import { formatFileSize } from '#libs/helpers.ts';
   import type { IStoryDocuments } from './documents.ts';
 
   interface Props {

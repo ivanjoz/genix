@@ -1,7 +1,8 @@
 import { readFileAsBase64 } from '#libs/helpers.ts';
 import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 import { BACKLOG_ROUTES } from '../project.svelte.ts';
-import { makeEmptyStoryDetail, type IAttachment, type IStoryActivity, type IStoryDetail } from './story.ts';
+import type { IAttachment } from '#domain/attachments/attachments.ts';
+import { makeEmptyStoryDetail, type IStoryActivity, type IStoryDetail } from './story.ts';
 
 // One story's detail or timeline, delta-cached per story (GET.projects-story-<thing>?project-id=&story-id=):
 // a story opened before shows at once, then what changed merges in.
@@ -67,13 +68,15 @@ export class OpenStory {
     this.#activity = null
   }
 
+  // The timeline comes back with the write (GetHandler.writeAndSync). 'projects-story-' in
+  // BACKLOG_ROUTES would also mark that timeline, so it is left out there and the story's detail,
+  // which a comment's files change, is marked by name.
   async addComment(projectID: number, storyID: number, text: string, attachments: IAttachment[]): Promise<IStoryActivity> {
-    const comment = await POST({
-      data: { ProjectID: projectID, StoryID: storyID, Text: text, Attachments: attachments }, route: 'projects-story-comments',
-      refreshRoutes: BACKLOG_ROUTES,
-    }) as IStoryActivity & { ss: number }
-    this.#activity?.addSavedRecords(comment)
-    return comment
+    if (!this.#activity) { throw new Error('Cannot comment: the story is not open') }
+    return await this.#activity.writeAndSync<IStoryActivity>(
+      'projects-story-comments', { ProjectID: projectID, StoryID: storyID, Text: text, Attachments: attachments },
+      [...BACKLOG_ROUTES, 'projects-story-detail'],
+    )
   }
 }
 

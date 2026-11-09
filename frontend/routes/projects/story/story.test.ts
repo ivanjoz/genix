@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { STORY_STATE_IN_DEVELOPMENT, STORY_STATE_STOPPED } from '../project.ts';
 import {
   ACTIVITY_KIND_ASSIGNEE_CHANGE, ACTIVITY_KIND_CARRIED_OVER, ACTIVITY_KIND_COMMENT, ACTIVITY_KIND_STATE_CHANGE,
-  MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, activityDescription, formatFileSize, isStoppedWithReason, makeEmptyStory,
-  makeStoryDetailForm, sortActivityNewestFirst, validateAttachmentFile, validateStory, type IStoryActivity,
+  activityDescription, isStoppedWithReason, makeEmptyStory,
+  makeStoryDetailForm, sortActivityNewestFirst, validateStory, type IStoryActivity,
 } from './story.ts';
+import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, validateAttachmentFile } from '#domain/attachments/attachments.ts';
+import { formatFileSize } from '#libs/helpers.ts';
 
 const makeActivity = (overrides: Partial<IStoryActivity>): IStoryActivity => ({
   ProjectID: 1, StoryID: 1, ID: 1, Kind: ACTIVITY_KIND_COMMENT, AuthorID: 1, Created: 100, ...overrides,

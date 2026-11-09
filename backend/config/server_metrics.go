@@ -45,6 +45,13 @@ type ServerMetricsHour struct {
 	ScyllaMemMb        []int16 `cb:"14"`
 	ScyllaCpuPercent   []int16 `cb:"15"`
 
+	// What MariaDB reports about itself over SQL (fareward's probe), next to the cgroup's CPU and
+	// memory above: the InnoDB buffer pool size and the dirty part of it still owed to disk, both
+	// in megabytes, and the tables' data plus indexes in TENTHS of a gigabyte (42 is 4.2 GB).
+	DbPoolMb  []int16 `cb:"18"`
+	DbDirtyMb []int16 `cb:"19"`
+	DbDiskGb  []int16 `cb:"20"`
+
 	// Absolute slot (unix seconds / 5) of the newest sample here. This is the delta watermark: the
 	// client keeps the maximum across records and sends it back, and the handler returns strictly
 	// newer slots. Never omitempty — a zero watermark would silently mean "cold load" forever.
@@ -56,6 +63,16 @@ type ServerMetricsHour struct {
 // (core.WithDeltaReplace): a bucket that fell out of the window leaves the client's cache.
 type ServerMetricsResponse struct {
 	Hours []any
+}
+
+// serverMetricRow is one five-second row as fareward reports it. The ORM type carries the columns
+// the old server_metrics table had; the database engine columns arrived after fareward became the
+// only store for these rows, so they live here instead of growing a table nothing writes to.
+type serverMetricRow struct {
+	coreTypes.ServerMetric
+	DbPoolMb  int16
+	DbDirtyMb int16
+	DbDiskGb  int16
 }
 
 // GetServerMetrics serves the Server Panel charts from the rows fareward writes every five
@@ -84,9 +101,9 @@ func GetServerMetrics(req *core.HandlerArgs) core.HandlerResponse {
 // expressed per unix day because that is the partition: one Equals on the partition plus a range on
 // the clustering key is the only access pattern server_metrics was keyed for, and the reason it
 // carries no index. A window of at most 24 hours touches at most two days, so this is two queries.
-func readServerMetricRows(firstSlot, lastSlot int64) ([]coreTypes.ServerMetric, error) {
+func readServerMetricRows(firstSlot, lastSlot int64) ([]serverMetricRow, error) {
 	firstDay, lastDay := firstSlot/serverMetricsSlotsPerDay, lastSlot/serverMetricsSlotsPerDay
-	rowsPerDay := make([][]coreTypes.ServerMetric, lastDay-firstDay+1)
+	rowsPerDay := make([][]serverMetricRow, lastDay-firstDay+1)
 
 	queries := errgroup.Group{}
 	for dayOffset := range rowsPerDay {
@@ -105,7 +122,7 @@ func readServerMetricRows(firstSlot, lastSlot int64) ([]coreTypes.ServerMetric, 
 		return nil, err
 	}
 
-	rows := []coreTypes.ServerMetric{}
+	rows := []serverMetricRow{}
 	for _, dayRows := range rowsPerDay {
 		rows = append(rows, dayRows...)
 	}
@@ -115,7 +132,7 @@ func readServerMetricRows(firstSlot, lastSlot int64) ([]coreTypes.ServerMetric, 
 // groupServerMetricsByHour turns flat rows into one record per hour. Rows arrive in clustering order
 // within a day and the days are appended oldest first, so appending in sequence keeps every parallel
 // array sorted by time without a second pass.
-func groupServerMetricsByHour(rows []coreTypes.ServerMetric) []ServerMetricsHour {
+func groupServerMetricsByHour(rows []serverMetricRow) []ServerMetricsHour {
 	buckets := []ServerMetricsHour{}
 	bucketIndexByID := map[int32]int{}
 
@@ -143,6 +160,9 @@ func groupServerMetricsByHour(rows []coreTypes.ServerMetric) []ServerMetricsHour
 		bucket.FarewardCpuPercent = append(bucket.FarewardCpuPercent, row.FarewardCpuPercent)
 		bucket.ScyllaMemMb = append(bucket.ScyllaMemMb, row.ScyllaMemMb)
 		bucket.ScyllaCpuPercent = append(bucket.ScyllaCpuPercent, row.ScyllaCpuPercent)
+		bucket.DbPoolMb = append(bucket.DbPoolMb, row.DbPoolMb)
+		bucket.DbDirtyMb = append(bucket.DbDirtyMb, row.DbDirtyMb)
+		bucket.DbDiskGb = append(bucket.DbDiskGb, row.DbDiskGb)
 
 		if newestSlot := int32(absoluteSlot); newestSlot > bucket.Updated {
 			bucket.Updated = newestSlot

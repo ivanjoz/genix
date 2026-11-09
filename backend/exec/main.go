@@ -28,6 +28,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-generate-supply-data":            GenerateSupplyData,
 	"fn-generate-projects-flow":          GenerateProjectsFlow,
 	"fn-generate-expenses":               GenerateExpenses,
+	"fn-generate-crm-data":               GenerateCrmData,
 	"fn-generate-demo-data":              GenerateDemoData,
 	"fn-load-test":                       sample_records.RunLoadTest,
 	"fn-seed-hr":                         SeedHR,

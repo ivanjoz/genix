@@ -56,6 +56,22 @@ describe('buildServerMetricsSeries', () => {
 		expect(series.latest.NetRxRate).toBe(15)
 	})
 
+	it('reads the MariaDB columns in MB and tenths of a GB, skipping the unmeasured ones', () => {
+		const bucketID = 492_015
+		const lastSlotOffset = SLOTS_PER_HOUR - 1
+		const series = buildServerMetricsSeries(
+			[makeHourBucket(bucketID, [lastSlotOffset], {
+				DbPoolMb: [1024], DbDirtyMb: [-1], DbDiskGb: [42],
+			})],
+			makeNowForBucket(bucketID),
+		)
+
+		expect(series.latest.DbPoolMb).toBe(1024)
+		expect(series.latest.DbDiskGb).toBeCloseTo(4.2, 5)
+		// -1 is "not measured" and must never be charted as a number.
+		expect(series.latest.DbDirtyMb).toBeNull()
+	})
+
 	it('keeps the peak of each group rather than averaging it away', () => {
 		// Every stored value is already the peak of its five seconds, so a spike in one slot has to
 		// survive the reduction; an average would dilute it by the seven quiet slots beside it.

@@ -349,24 +349,7 @@ import {
     showLoading(tr('Saving supply configuration...|Guardando abastecimiento...'))
 
     try {
-      const [savedProductSupply] = await postProductSupply([productSupplyForm])
-      const normalizedSavedProductSupply = {
-        ...savedProductSupply,
-        ProviderSupply: (savedProductSupply.ProviderSupply || []).filter((providerSupplyRow: IProductSupplyProviderRow) => providerSupplyRow.ProviderID > 0),
-        ss: savedProductSupply.ss || 1,
-        upd: savedProductSupply.upd || 0,
-        UpdatedBy: savedProductSupply.UpdatedBy || 0,
-      } as IProductSupplyRow
-
-      // Keep the local table responsive while the delta refresh finishes in the background.
-      const nextProductSupplyRecordsByProductID = new Map<number, IProductSupplyRow>()
-      for (const existingProductSupplyRecord of productSupplyService.records) {
-        nextProductSupplyRecordsByProductID.set(existingProductSupplyRecord.ProductID, existingProductSupplyRecord)
-      }
-      nextProductSupplyRecordsByProductID.set(normalizedSavedProductSupply.ProductID, normalizedSavedProductSupply)
-      productSupplyService.handler([...nextProductSupplyRecordsByProductID.values()])
-      productSupplyService.fetchOnline()
-
+      await postProductSupply(productSupplyService, [productSupplyForm])
       ui.openSideLayer(0)
       notifySuccess(tr('Supply configuration saved successfully.|Configuración de abastecimiento guardada correctamente.'))
     } catch (saveError) {
@@ -478,10 +461,9 @@ import {
           (batchIndex + 1) * IMPORT_SAVE_BATCH_SIZE,
         )
         showLoading(`${tr('Sending|Enviando')} ${batchIndex + 1}/${totalBatches}...`)
-        await postProductSupply(batch)
+        await postProductSupply(productSupplyService, batch)
       }
 
-      productSupplyService.fetchOnline()
       importExcelRowsPreview = []
       ui.closeModal(IMPORT_SUPPLY_MODAL_ID)
       notifySuccess(tr('Import completed successfully.|Importación completada correctamente.'))

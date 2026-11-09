@@ -50,8 +50,9 @@ export interface IAssetPayment {
 
 // The asset is paid on its own account, not through the expense register, so this refreshes
 // the asset list and the cash banks whose balance it moved.
-export const postAssetPayment = (data: IAssetPayment): Promise<IAsset> => {
-  return POST({ data, route: "asset-payment", refreshRoutes: ["assets", "cash-banks"] })
+export const postAssetPayment = (assets: AssetsService, data: IAssetPayment): Promise<IAsset> => {
+  // The asset list comes back with the write; the cash banks are marked and read by their own page.
+  return assets.writeAndSync("asset-payment", data, ["cash-banks"])
 }
 
 // AcquisitionValue and PurchaseAmount are the asset row's totals here, not per-unit figures as

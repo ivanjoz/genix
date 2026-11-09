@@ -5,12 +5,15 @@
   import { tr } from '#core/store.svelte.ts';
   import { Env } from '#core/env.ts';
   import { notifyFailure } from '@genix/ui/notify';
-  import { formatFileSize, validateAttachmentFile, type IAttachment } from './story.ts';
-  import { uploadAttachment } from './story.svelte.ts';
+  import { formatFileSize } from '#libs/helpers.ts';
+  import { validateAttachmentFile, type IAttachment } from './attachments.ts';
 
+  // The files of one entry. The feature passes its own upload (route and storage folder), so a
+  // project story and a CRM activity share the same widget.
   interface Props {
     attachments: IAttachment[]
-    projectID: number
+    // Stores one file and answers its attachment; omitted where the files are read-only.
+    uploadFile?: (file: File) => Promise<IAttachment>
     canEdit: boolean
     // Files uploading: the panel waits for them before saving.
     uploadingCount?: number
@@ -19,7 +22,7 @@
     showDropZone?: boolean
   }
 
-  let { attachments = $bindable(), projectID, canEdit, uploadingCount = $bindable(0), showDropZone = true }: Props = $props()
+  let { attachments = $bindable(), uploadFile, canEdit, uploadingCount = $bindable(0), showDropZone = true }: Props = $props()
 
   let fileInput = $state<HTMLInputElement>()
 
@@ -28,6 +31,7 @@
   // Each file goes straight to storage; a failed one is reported and the others go on.
   // Exported so the comment composer uploads the files dropped on its text box.
   export const uploadFiles = async (files: File[] | FileList | null) => {
+    if (!uploadFile) return
     for (const file of files || []) {
       const fileError = validateAttachmentFile(file, attachments.length + uploadingCount)
       if (fileError) {
@@ -36,7 +40,7 @@
       }
       uploadingCount++
       try {
-        const attachment = await uploadAttachment(projectID, file)
+        const attachment = await uploadFile(file)
         attachments = [...attachments, attachment]
       } catch (uploadError) {
         notifyFailure(tr(String((uploadError as Error)?.message || uploadError)))

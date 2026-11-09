@@ -101,7 +101,7 @@ func backfillCompanyAccountCodes(companyID int32, shouldWrite bool, report *acco
 	// 2. Expenses: the category's default, or the supply's account for an inventory purchase.
 	expenses := []finance.Expense{}
 	expenseQuery := db.Query(&expenses)
-	expenseQuery.Select(expenseQuery.CompanyID, expenseQuery.ID,expenseQuery.Type, expenseQuery.CategoryID,
+	expenseQuery.Select(expenseQuery.CompanyID, expenseQuery.ID, expenseQuery.Type, expenseQuery.CategoryID,
 		expenseQuery.ProductID, expenseQuery.AccountCode).CompanyID.Equals(companyID)
 	if queryError := expenseQuery.Exec(); queryError != nil {
 		return core.Err("Error al leer los gastos de la empresa", companyID, queryError)
@@ -127,7 +127,7 @@ func backfillCompanyAccountCodes(companyID int32, shouldWrite bool, report *acco
 
 	schedules := []finance.ExpenseScheduled{}
 	scheduleQuery := db.Query(&schedules)
-	scheduleQuery.Select(scheduleQuery.CompanyID, scheduleQuery.ID,scheduleQuery.CategoryID, scheduleQuery.AccountCode).
+	scheduleQuery.Select(scheduleQuery.CompanyID, scheduleQuery.ID, scheduleQuery.CategoryID, scheduleQuery.AccountCode).
 		CompanyID.Equals(companyID)
 	if queryError := scheduleQuery.Exec(); queryError != nil {
 		return core.Err("Error al leer los gastos programados de la empresa", companyID, queryError)
@@ -150,7 +150,7 @@ func backfillCompanyAccountCodes(companyID int32, shouldWrite bool, report *acco
 	// 3. Purchase orders: every supply line takes its supply's account.
 	orders := []logistics.PurchaseOrder{}
 	orderQuery := db.Query(&orders)
-	orderQuery.Select(orderQuery.CompanyID, orderQuery.ID,orderQuery.Lines).CompanyID.Equals(companyID)
+	orderQuery.Select(orderQuery.CompanyID, orderQuery.ID, orderQuery.Lines).CompanyID.Equals(companyID)
 	if queryError := orderQuery.Exec(); queryError != nil {
 		return core.Err("Error al leer las órdenes de compra de la empresa", companyID, queryError)
 	}
@@ -173,7 +173,7 @@ func backfillCompanyAccountCodes(companyID int32, shouldWrite bool, report *acco
 	// 4. Assets: the supply's 33x, else generic equipment.
 	assets := []accounting.Asset{}
 	assetQuery := db.Query(&assets)
-	assetQuery.Select(assetQuery.CompanyID, assetQuery.ID,assetQuery.ProductID, assetQuery.AccountCode).CompanyID.Equals(companyID)
+	assetQuery.Select(assetQuery.CompanyID, assetQuery.ID, assetQuery.ProductID, assetQuery.AccountCode).CompanyID.Equals(companyID)
 	if queryError := assetQuery.Exec(); queryError != nil {
 		return core.Err("Error al leer los activos de la empresa", companyID, queryError)
 	}

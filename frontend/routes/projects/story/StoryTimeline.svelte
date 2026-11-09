@@ -5,11 +5,10 @@
   import { tr } from '#core/store.svelte.ts';
   import { formatTime } from '#libs/helpers.ts';
   import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
-  import StoryAttachments from './StoryAttachments.svelte';
-  import {
-    ACTIVITY_KIND_COMMENT, activityDescription, isStoppedWithReason, sortActivityNewestFirst, type IAttachment,
-  } from './story.ts';
-  import type { OpenStory } from './story.svelte.ts';
+  import AttachmentFiles from '#domain/attachments/AttachmentFiles.svelte';
+  import type { IAttachment } from '#domain/attachments/attachments.ts';
+  import { ACTIVITY_KIND_COMMENT, activityDescription, isStoppedWithReason, sortActivityNewestFirst } from './story.ts';
+  import { uploadAttachment, type OpenStory } from './story.svelte.ts';
 
   interface Props {
     openStory: OpenStory
@@ -25,7 +24,7 @@
 
   let commentForm = $state<{ Text: string, Attachments: IAttachment[] }>({ Text: '', Attachments: [] })
   let uploadingCount = $state(0)
-  let commentAttachments = $state<ReturnType<typeof StoryAttachments>>()
+  let commentAttachments = $state<ReturnType<typeof AttachmentFiles>>()
   const timeline = $derived(sortActivityNewestFirst(openStory.activity))
 
   const sendComment = async () => {
@@ -62,7 +61,8 @@
       <!-- Files dropped on the text box are attached to the comment. -->
       <Input saveOn={commentForm} save="Text" useTextArea={true} rows={3} useFileDragUpload={true}
         onFileDrop={(files) => commentAttachments?.uploadFiles(files)} />
-      <StoryAttachments bind:this={commentAttachments} bind:attachments={commentForm.Attachments} bind:uploadingCount {projectID}
+      <AttachmentFiles bind:this={commentAttachments} bind:attachments={commentForm.Attachments} bind:uploadingCount
+        uploadFile={(file) => uploadAttachment(projectID, file)}
         canEdit={true} showDropZone={false} />
     </div>
   {/if}
@@ -85,7 +85,7 @@
         {/if}
         {#if activity.Attachments?.length}
           <div class="mt-6">
-            <StoryAttachments attachments={activity.Attachments} {projectID} canEdit={false} />
+            <AttachmentFiles attachments={activity.Attachments} canEdit={false} />
           </div>
         {/if}
       </div>

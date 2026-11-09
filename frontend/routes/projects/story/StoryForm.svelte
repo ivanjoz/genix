@@ -6,8 +6,9 @@
   import { tr } from '#core/store.svelte.ts';
   import { STORY_PRIORITIES, STORY_TYPES, type IStory } from '../project.ts';
   import type { ProjectBacklog, ProjectPeople } from '../project.svelte.ts';
-  import StoryAttachments from './StoryAttachments.svelte';
+  import AttachmentFiles from '#domain/attachments/AttachmentFiles.svelte';
   import type { IStoryDetail } from './story.ts';
+  import { uploadAttachment } from './story.svelte.ts';
 
   interface Props {
     backlog: ProjectBacklog
@@ -57,7 +58,8 @@
       {/key}
     </div>
     <div class="col-span-24">
-      <StoryAttachments bind:attachments={detailForm.Attachments!} bind:uploadingCount projectID={storyForm.ProjectID}
+      <AttachmentFiles bind:attachments={detailForm.Attachments!} bind:uploadingCount
+        uploadFile={(file) => uploadAttachment(storyForm.ProjectID, file)}
         canEdit={canWork} />
     </div>
     <div class="col-span-24 mt-6 mb-16">

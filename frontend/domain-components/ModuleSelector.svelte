@@ -5,7 +5,7 @@
   import { page } from '$app/state';
   import ButtonLayer from '#components/buttons/ButtonLayer.svelte';
   import { logout } from '#core/env.ts';
-  import { getSessionMenuModule, getSessionModuleEntries } from '#core/modules.svelte.ts';
+  import { getSessionMenuModule, getSessionModuleEntries, rememberSelectedModule } from '#core/modules.svelte.ts';
   import { tr } from '#core/store.svelte.ts';
   import { useUI } from '@genix/ui';
 
@@ -18,8 +18,9 @@
   const moduleEntries = $derived(getSessionModuleEntries())
 
   // On mobile the selector lives in the drawer, which has to close along with the layer.
-  const navigateFromLayer = (route: string) => {
+  const navigateFromLayer = (route: string, moduleCode = '') => {
     isOpen = false
+    if (moduleCode) { rememberSelectedModule(moduleCode) }
     if (isMobile) { ui.state.mobileMenuOpen = false }
     goto(route)
   }
@@ -62,7 +63,7 @@
           // Keep modified clicks (new tab/window) with the browser.
           if (clickEvent.metaKey || clickEvent.ctrlKey || clickEvent.shiftKey || clickEvent.altKey) { return }
           clickEvent.preventDefault()
-          navigateFromLayer(entryRoute)
+          navigateFromLayer(entryRoute, module.code)
         }}>
         <i class="{module.icon} text-3xl text-accent-solid shrink-0"></i>
         <span class="font-semibold leading-tight">{tr(module.name)}</span>

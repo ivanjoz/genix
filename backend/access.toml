@@ -449,3 +449,35 @@ group = 8
 levels = 14
 frontend_routes = "system/hr-legal-parameters"
 backend_apis = "POST.hr-legal-parameters,POST.hr-afp-rates"
+
+[[access]]
+id = 47
+name = "CRM Oportunidades"
+group = 10
+levels = 14
+frontend_routes = "crm/pipeline"
+backend_apis = "POST.crm-opportunity,POST.crm-opportunity-move,POST.crm-opportunity-close,POST.crm-opportunity-activity,POST.crm-attachment-upload"
+
+[[access]]
+id = 48
+name = "CRM Flujos"
+group = 10
+levels = 14
+frontend_routes = "crm/settings"
+backend_apis = "POST.crm-pipeline,POST.crm-custom-field"
+
+[[access]]
+id = 49
+name = "CRM Flujos: Accesos"
+group = 10
+levels = 14
+frontend_routes = "crm/pipeline-access"
+backend_apis = "POST.crm-pipeline-members"
+
+[[access]]
+id = 50
+name = "CRM Diccionarios"
+group = 10
+levels = 14
+frontend_routes = "crm/dictionaries"
+backend_apis = "POST.crm-lost-reason,POST.crm-activity-type"

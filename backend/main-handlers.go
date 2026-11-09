@@ -167,6 +167,7 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 	args.Encoding = core.MapGetKeys(args.Headers, "Accept-Encoding", "accept-encoding")
 	// Header names arrive lowercase with API Gateway's payload format 2.0, so both spellings.
 	args.Accept = core.MapGetKeys(args.Headers, "Accept", "accept")
+	args.ContentType = core.MapGetKeys(args.Headers, "Content-Type", "content-type")
 
 	// Minted before anything else can fail, so even a request rejected at the token check carries
 	// an identity into its user_logs row. Lives on args, which is exact in both runtimes; the Env
@@ -279,6 +280,15 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 		fmt.Println(logHeader)
 	}
 
+	// A colbin body is decoded only now, once the caller is authenticated and admitted: the schema
+	// section comes from the client, so nothing unauthenticated pays to parse it.
+	if err := args.NormalizeBody(); err != nil {
+		core.Log("cuerpo colbin inválido::", err)
+		handlerResponse.Error = "el cuerpo colbin no se pudo leer: " + err.Error()
+		setResponseMetadata(&handlerResponse)
+		return prepareResponse(args, &handlerResponse)
+	}
+
 	handlerFunc, ok := appHandlers[funcPath]
 	if !ok {
 		core.Log("no hay una lambda para el path solicitado::", funcPath)
@@ -288,7 +298,16 @@ func mainHandler(args *core.HandlerArgs) (response *core.HandlerResponse) {
 		// with the handler name: a client that syncs without one is otherwise indistinguishable
 		// from a client that has nothing cached yet.
 		core.Log("Ejecutando Handler::", funcPath+formatDevQueryParams(args.Query))
+		// A write asking for a delta (write_delta.go) answers JSON: its body is spliced with the
+		// GET's into one JSON object.
+		wantsWriteDelta := !isPublicPath && isWriteMethod(args.Method) && args.Query[writeDeltaParam] != ""
+		if wantsWriteDelta {
+			args.Accept = "application/json"
+		}
 		handlerResponse = handlerFunc(args)
+		if wantsWriteDelta && handlerResponse.Error == "" && !handlerResponse.StreamHandled {
+			handlerResponse = attachWriteDelta(args, handlerResponse)
+		}
 		respLen := 0
 		if handlerResponse.StreamHandled {
 			// The stream wrote its body itself and has ended by the time the handler returns.

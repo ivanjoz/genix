@@ -93,8 +93,8 @@
     if (!canCalculate) return
     isUpdating = true
     try {
-      payrollWindow = await postPayrollEnsure()
-      await Promise.all([config.fetch(), payslips?.fetch()])
+      payrollWindow = await postPayrollEnsure(config)
+      await payslips?.fetch()
       if (payrollWindow.Skipped.length > 0) {
         notifyFailure(payrollWindow.Skipped.map((skipped) =>
           `${formatPeriod(skipped.Period)} · ${employeeName(skipped.EmployeeID)}: ${skipped.Message}`).join('\n'))
@@ -112,8 +112,8 @@
   const saveRun = async () => {
     showLoading(tr('Saving...|Guardando...'))
     try {
-      await postPayrollRun(runForm)
-      await Promise.all([config.fetch(), payslips?.fetch()])
+      await postPayrollRun(config, runForm)
+      await payslips?.fetch()
       ui.closeModal(RUN_MODAL_ID)
     } catch (error) {
       notifyFailure(error as string)
@@ -135,10 +135,10 @@
       title: tr('Confirm|Confirmar'), message: tr(TRANSITION_MESSAGES[transition]) }))) return
     showLoading(tr(TRANSITION_MESSAGES[transition]))
     try {
-      const result = await postPayrollTransition(transition, selectedRun, payForm.CashBankID) as
+      const result = await postPayrollTransition(config, transition, selectedRun, payForm.CashBankID) as
         { Skipped?: { EmployeeID: number, Message: string }[] }
       ui.closeModal(PAY_MODAL_ID)
-      await Promise.all([config.fetch(), payslips?.fetch()])
+      await payslips?.fetch()
       if (result?.Skipped?.length) {
         notifyFailure(result.Skipped.map((skipped) => `${employeeName(skipped.EmployeeID)}: ${skipped.Message}`).join('\n'))
       }

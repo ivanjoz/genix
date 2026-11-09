@@ -44,3 +44,9 @@ func SeedHRLegalParameters(args *core.ExecArgs) core.FuncResponse {
 func GenerateDemoData(args *core.ExecArgs) core.FuncResponse {
 	return sample_records.GenerateDemoData(args)
 }
+
+// GenerateCrmData fills the CRM (pipelines, custom fields, opportunities with their stage log)
+// through the crm handlers.
+func GenerateCrmData(args *core.ExecArgs) core.FuncResponse {
+	return sample_records.GenerateCrmData(args)
+}

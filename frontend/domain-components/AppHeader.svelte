@@ -87,12 +87,13 @@ import { useUI } from '@genix/ui';
 		{:else if ui.state.pageOptions?.length > 0}
 			{#each ui.state.pageOptions as opt }
 			{@const selected = ui.state.pageOptionSelected == opt.id}
-				<button class="_2" class:_3={selected} aria-label={opt.name}
+				<!-- Long names wrap to two lines inside a capped width, then end in "…". -->
+				<button class="_2 max-w-170 px-10" class:_3={selected} aria-label={opt.name}
 					data-id="Option:{pageViewsID}:{opt.id}"
 					data-selected={selected ? "true" : undefined}
 					onclick={() => {
 						ui.state.pageOptionSelected = opt.id
-					}}><T text={opt.name} />
+					}}><span class="line-clamp-2 break-words"><T text={opt.name} /></span>
 				</button>
 			{/each}
 		{:else}

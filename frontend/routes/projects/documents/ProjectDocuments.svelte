@@ -4,9 +4,9 @@
   import T from '#components/misc/T.svelte';
   import { Env } from '#core/env.ts';
   import { tr } from '#core/store.svelte.ts';
-  import { formatTime } from '#libs/helpers.ts';
+  import { formatFileSize, formatTime } from '#libs/helpers.ts';
   import { confirmWarn, notifyFailure } from '@genix/ui/notify';
-  import { formatFileSize, validateAttachmentFile } from '../story/story.ts';
+  import { validateAttachmentFile } from '#domain/attachments/attachments.ts';
   import type { IDocument } from './documents.ts';
   import type { ProjectDocumentsService } from './documents.svelte.ts';
 

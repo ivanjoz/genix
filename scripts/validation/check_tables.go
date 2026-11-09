@@ -413,6 +413,16 @@ func checkTableSchemas(
 			}
 		}
 	}
+
+	// A new table needs an ID nobody holds: list the first free ones instead of making the
+	// reader guess from the source.
+	freeTableIDs := []int64{}
+	for candidateID := int64(1); candidateID <= maxTableID && len(freeTableIDs) < 8; candidateID++ {
+		if _, isTaken := tableNamesByID[candidateID]; !isTaken {
+			freeTableIDs = append(freeTableIDs, candidateID)
+		}
+	}
+	fmt.Printf("Free TableSchema.IDs: %v\n", freeTableIDs)
 }
 
 // checkRecordField reports a record struct that lacks fieldName with the exact Go type and json tag

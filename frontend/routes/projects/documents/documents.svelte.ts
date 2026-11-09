@@ -1,4 +1,4 @@
-import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import { GetHandler } from '#libs/ui-runtime.svelte.ts';
 import { uploadAttachment } from '../story/story.svelte.ts';
 import type { IDocument } from './documents.ts';
 
@@ -14,23 +14,18 @@ export class ProjectDocumentsService extends GetHandler<IDocument> {
     this.records = (documents || []).filter((document) => document.ss !== 0)
   }
 
-  #applySavedDocument(savedDocument: IDocument) {
-    const otherDocuments = this.records.filter((document) => document.ID !== savedDocument.ID)
-    // The API omits a zero ss: a deleted document arrives without it.
-    this.records = savedDocument.ss ? [...otherDocuments, savedDocument] : otherDocuments
-  }
+  // Both writes bring back the delta of the project's documents (GetHandler.writeAndSync), which
+  // handler() turns into the list: a deleted document arrives as a removal.
 
   // The file goes straight to storage, then becomes a project document.
   async addDocument(file: File) {
     const attachment = await uploadAttachment(this.projectID, file)
-    this.#applySavedDocument(await POST({
-      data: { ...attachment, ProjectID: this.projectID, StoryID: 0, ss: 1 }, route: DOCUMENTS_ROUTE, refreshRoutes: [DOCUMENTS_ROUTE],
-    }))
+    await this.writeAndSync(DOCUMENTS_ROUTE, { ...attachment, ProjectID: this.projectID, StoryID: 0, ss: 1 })
   }
 
   // The backend deletes the file too.
   async deleteDocument(document: IDocument) {
-    this.#applySavedDocument(await POST({ data: { ...document, ss: 0 }, route: DOCUMENTS_ROUTE, refreshRoutes: [DOCUMENTS_ROUTE] }))
+    await this.writeAndSync(DOCUMENTS_ROUTE, { ...document, ss: 0 })
   }
 
   constructor(projectID: number) {

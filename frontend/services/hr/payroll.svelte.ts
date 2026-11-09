@@ -173,12 +173,14 @@ export class EmployeeConceptsService extends PinnedListService<IEmployeeConcept>
   constructor(employeeID: number) { super(`hr-employee-concepts?employee-id=${employeeID}`) }
 }
 
-export const postConcept = (concept: IConcept): Promise<IConcept> =>
-  POST({ data: concept, route: 'hr-concepts', refreshRoutes: ['hr-payroll-config'] })
+// The three writes of `hr-payroll-config` (concepts, runs, ensure) bring back the delta of that
+// route in their own response (GetHandler.writeAndSync): no GET follows them.
+export const postConcept = (config: PayrollConfigService, concept: IConcept): Promise<IConcept> =>
+  config.writeAndSync('hr-concepts', concept)
 
 /** Edits an open run's pay date, note and profit sharing; the server recalculates it. */
-export const postPayrollRun = (run: IPayrollRun): Promise<unknown> =>
-  POST({ data: run, route: 'hr-payroll-runs', refreshRoutes: ['hr-payroll-config'] })
+export const postPayrollRun = (config: PayrollConfigService, run: IPayrollRun): Promise<unknown> =>
+  config.writeAndSync('hr-payroll-runs', run)
 
 export interface IPayrollEnsureResult {
   /** The first and last month (YYMM) the payroll list covers. */
@@ -188,19 +190,21 @@ export interface IPayrollEnsureResult {
 }
 
 /** Creates the months of the list that have something to pay and recalculates the open ones whose inputs changed. */
-export const postPayrollEnsure = (): Promise<IPayrollEnsureResult> =>
-  POST({ data: {}, route: 'hr-payroll-ensure', refreshRoutes: ['hr-payroll-config'] })
+export const postPayrollEnsure = (config: PayrollConfigService): Promise<IPayrollEnsureResult> =>
+  config.writeAndSync('hr-payroll-ensure', {})
 
 export type PayrollTransition = 'hr-payroll-calculate' | 'hr-payroll-close' | 'hr-payroll-reopen' | 'hr-payroll-paid'
 
 /** Calculates, closes, reopens or pays a run (paying needs the CashBankID); closing and reopening
- * also settle or free the employee records it consumed. */
-export const postPayrollTransition = (transition: PayrollTransition, run: IPayrollRun, cashBankID = 0): Promise<unknown> =>
-  POST({
-    data: { RunID: run.ID, CashBankID: cashBankID },
-    route: transition,
-    refreshRoutes: ['hr-payroll-config', `hr-payslips?period=${run.Period}`, 'hr-employee-records'],
-  })
+ * also settle or free the employee records it consumed. The run list comes back with the write; the
+ * run's payslips and the employee records are marked, and read by the pages that show them. */
+export const postPayrollTransition = (
+  config: PayrollConfigService, transition: PayrollTransition, run: IPayrollRun, cashBankID = 0,
+): Promise<unknown> =>
+  config.writeAndSync(
+    transition, { RunID: run.ID, CashBankID: cashBankID },
+    [`hr-payslips?period=${run.Period}`, 'hr-employee-records'],
+  )
 
 export interface IContributionsPayment {
   RunID: number

@@ -26,6 +26,8 @@ export interface IClientProvider {
   Email: string
   CountryID: number
   CityID: string
+  /** A lead that has not bought yet; winning an opportunity clears it. */
+  IsProspect?: boolean
   ss: number
   upd: number
   UpdatedBy?: number

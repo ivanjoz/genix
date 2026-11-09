@@ -67,7 +67,9 @@ They share only the process: the config load, the shutdown signal, and the tokio
 > default `/var/lib/fareward/store`, created by the unit's `StateDirectory=fareward`) before
 > admitting anything and **exits** when it cannot open it — which also stops the bridge, since it
 > is one process. It reads and writes no MariaDB table: the backend pushes the grants and writes
-> its own request log. Back that directory up: it is the whole state of the credit system.
+> its own request log. Its only MariaDB connection is the server metrics probe, which logs in with
+> the `[mariadb]` credentials to read the buffer pool, dirty pages and table sizes; if MariaDB is
+> down the probe reports "not measured" and the daemon carries on. Back that directory up: it is the whole state of the credit system.
 
 Why HAProxy must run on this machine: what it proxies is a permanent stream, and a second hop
 buys nothing. So there is no upstream to configure — the site always forwards to `127.0.0.1`.
@@ -91,6 +93,7 @@ buys nothing. So there is no upstream to configure — the site always forwards 
 | `rate_limit.*` | filled in | Quota policy; see `fareward/README.md`. The twelve credit ceilings have no default in the daemon, so the script writes `config.example.toml`'s values for any that are missing. |
 | `store.path` | no | The store directory. Defaults to `/var/lib/fareward/store`, inside the unit's `StateDirectory`. |
 | `server_metrics.database_unit` | no | The database's systemd unit, sampled into the metrics' database columns. Defaults to `mariadb.service`. |
+| `server_metrics.mariadb_probe` | no | `false` stops the daemon from logging into MariaDB for the buffer pool / dirty pages / table size columns. Default `true` whenever `[mariadb].user` is set; it reuses `[mariadb]` (`socket` first, else `host`/`port`) and needs no extra privileges. The account must use `mysql_native_password` (what `configure_db.py` creates). |
 
 - **The two secrets are never prompted for.** They are root-level keys that initial project
   setup already writes (like `admin_password`), and both must be **byte-identical to the

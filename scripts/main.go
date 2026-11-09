@@ -69,6 +69,9 @@ func main() {
 	case "seed_hr_legal_parameters":
 		runBackendExec("fn-seed-hr-legal-parameters", os.Args[2:]...)
 
+	case "generate_crm_data":
+		runBackendExec("fn-generate-crm-data", os.Args[2:]...)
+
 	case "generate_projects_flow":
 		runBackendExec("fn-generate-projects-flow", os.Args[2:]...)
 

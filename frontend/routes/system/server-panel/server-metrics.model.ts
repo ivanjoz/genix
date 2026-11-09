@@ -16,11 +16,13 @@ export type ServerMetricField =
 	| 'BackendMemMb' | 'BackendCpuPercent'
 	| 'FarewardMemMb' | 'FarewardCpuPercent'
 	| 'ScyllaMemMb' | 'ScyllaCpuPercent'
+	| 'DbPoolMb' | 'DbDirtyMb' | 'DbDiskGb'
 
 export const SERVER_METRIC_FIELDS: ServerMetricField[] = [
 	'CpuPercent', 'MemPercent', 'DiskPercent', 'NetRxRate', 'NetTxRate',
 	'BackendMemMb', 'BackendCpuPercent', 'FarewardMemMb', 'FarewardCpuPercent',
 	'ScyllaMemMb', 'ScyllaCpuPercent',
+	'DbPoolMb', 'DbDirtyMb', 'DbDiskGb',
 ]
 
 // How each stored int16 becomes the number a chart shows. Percentages are hundredths (2345 is
@@ -31,6 +33,8 @@ const METRIC_DISPLAY_SCALE: Record<ServerMetricField, number> = {
 	BackendMemMb: 1, BackendCpuPercent: 0.01,
 	FarewardMemMb: 1, FarewardCpuPercent: 0.01,
 	ScyllaMemMb: 1, ScyllaCpuPercent: 0.01,
+	// Read by fareward over SQL: buffer pool and its dirty pages in MB, table size in tenths of a GB.
+	DbPoolMb: 1, DbDirtyMb: 1, DbDiskGb: 0.1,
 }
 
 // One hour of samples, the unit the backend records and the cache keys on. Every array is parallel

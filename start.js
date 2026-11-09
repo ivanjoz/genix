@@ -254,7 +254,10 @@ const runScripts = () => {
   startBackendGo()
   runScript(AGENT_GO_SCRIPT, CYAN_BAR, "agent", agentGoPath)
   runScript(RATE_LIMITER_SCRIPT, MAGENTA_BAR, "fareward", rateLimiterPath, {
-    RUST_LOG: process.env.RUST_LOG || "fareward=debug"
+    RUST_LOG: process.env.RUST_LOG || "fareward=debug",
+    // The daemon's default store is /var/lib/fareward/store (a production path that needs root).
+    // In dev it lives in the repo's tmp/, which is gitignored.
+    FAREWARD_STORE_PATH: process.env.FAREWARD_STORE_PATH || path.join(__dirname, "tmp", "fareward-store")
   })
 
   if (tailscaleHost) {

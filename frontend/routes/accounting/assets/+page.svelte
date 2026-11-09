@@ -228,9 +228,8 @@ const registerAssetPayment = async () => {
 
   showLoading(tr("Registering payment...|Registrando pago..."))
   try {
-    const updated = await postAssetPayment({ ...paymentForm, AssetID: selectedAsset.ID })
+    const updated = await postAssetPayment(assets, { ...paymentForm, AssetID: selectedAsset.ID })
     selectedAsset = { ...selectedAsset, ...updated }
-    await assets.fetch()
     // Only on success: a failed post keeps the dialog open with the input intact.
     ui.closeModal(PAYMENT_MODAL_ID)
   } catch (error) {

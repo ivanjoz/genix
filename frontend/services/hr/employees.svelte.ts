@@ -97,10 +97,7 @@ export class DependentsService extends GetHandler<IDependent> {
   }
 }
 
-export const postDependent = (dependent: IDependent): Promise<IDependent> =>
-  POST({
-    data: dependent,
-    route: 'hr-dependents',
-    // The server rewrites the employee's dependents summary too.
-    refreshRoutes: [`hr-dependents?employee-id=${dependent.EmployeeID}`, 'hr-employees'],
-  })
+// The employee's dependents come back with the write; the server rewrites the employee's dependents
+// summary too, so `hr-employees` is marked and read by the page that shows it.
+export const postDependent = (dependents: DependentsService, dependent: IDependent): Promise<IDependent> =>
+  dependents.writeAndSync('hr-dependents', dependent, ['hr-employees'])

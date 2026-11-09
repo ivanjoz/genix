@@ -3,20 +3,7 @@ import {
   STATUS_ACTIVE, STORY_PRIORITY_MEDIUM, STORY_STATES, STORY_STATE_NOT_PLANNED, STORY_STATE_STOPPED, STORY_TYPE_STORY,
   type IStory,
 } from '../project.ts';
-
-// The backend's cap (backend/projects MaxAttachmentBytes): the file travels base64 in the upload
-// request, inside a Lambda's 6 MB payload.
-export const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
-export const MAX_ATTACHMENTS = 30
-
-export interface IAttachment {
-  Key: string
-  Name: string
-  ContentType: string
-  Size: number
-  UploadedBy?: number
-  UploadedAt?: number
-}
+import type { IAttachment } from '#domain/attachments/attachments.ts';
 
 export interface IChecklistItem {
   Text: string
@@ -86,19 +73,6 @@ export const validateStory = (story: IStory): string => {
   }
   return ''
 }
-
-// validateAttachmentFile is checked before the file is sent.
-export const validateAttachmentFile = (file: { size: number }, attachedCount: number): string => {
-  if (file.size <= 0 || file.size > MAX_ATTACHMENT_BYTES) {
-    return 'A file can weigh up to 4 MB.|Un archivo puede pesar hasta 4 MB.'
-  }
-  if (attachedCount >= MAX_ATTACHMENTS) {
-    return 'Up to 30 files can be attached.|Se pueden adjuntar hasta 30 archivos.'
-  }
-  return ''
-}
-
-export { formatFileSize } from '#libs/helpers.ts'
 
 const stateName = (state?: number) => STORY_STATES[state || 0]?.name || STORY_STATES[STORY_STATE_NOT_PLANNED].name
 

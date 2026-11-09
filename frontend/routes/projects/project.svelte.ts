@@ -24,11 +24,9 @@ export class ProjectsService extends GetHandler<IProject> {
     this.addSavedRecords(...sortProjects(projects || []))
   }
 
+  // The saved project comes back as the delta of the list (GetHandler.writeAndSync), which handler() sorts.
   async save(project: IProject): Promise<IProject> {
-    const savedProject = await POST({ data: project, route: this.route, refreshRoutes: [this.route] }) as IProject
-    this.addSavedRecords(savedProject)
-    this.records = sortProjects(this.records)
-    return savedProject
+    return await this.writeAndSync<IProject>(this.route, project)
   }
 
   constructor(init = false) {
@@ -124,9 +122,26 @@ export class ProjectBacklog {
     await this.#epics.fetch()
   }
 
+  // A write brings back the delta of the list it changes (GetHandler.writeAndSync), so no GET follows
+  // it. The other lists a backlog write can change are marked by BACKLOG_ROUTES and read by the
+  // pages that show them; the entries that would also mark the written list are left out there.
+  #writeToList<R>(list: ProjectRecordsService<any> | null, route: string, data: unknown): Promise<R> {
+    if (!list) { throw new Error(`Cannot write ${route}: the project's lists are not loaded`) }
+    return list.writeAndSync<R>(route, data, BACKLOG_ROUTES)
+  }
+
+  writeToSprints<R>(route: string, data: unknown): Promise<R> {
+    return this.#writeToList<R>(this.#sprints, route, data)
+  }
+
+  // A sprint write can rewrite the stories (their final state, assignees, sprint): its answer holds
+  // the sprints' delta only, so the stories and the epics are read again.
+  async reloadStoriesAndEpics() {
+    await Promise.all([this.#epics?.fetchOnline(), this.#stories?.fetchOnline()])
+  }
+
   async saveEpics(epics: IEpic[]): Promise<IEpic[]> {
-    const savedEpics = await POST({ data: epics, route: 'projects-epics', refreshRoutes: BACKLOG_ROUTES }) as IEpic[]
-    this.#epics?.addSavedRecords(...savedEpics)
+    const savedEpics = await this.#writeToList<IEpic[]>(this.#epics, 'projects-epics', epics)
     // A deleted epic leaves its stories without one: the backend rewrote them.
     const deletedEpicIDs = savedEpics.filter((epic) => epic.ss === 0).map((epic) => epic.ID)
     if (deletedEpicIDs.length > 0) {
@@ -136,16 +151,11 @@ export class ProjectBacklog {
   }
 
   async saveStory(story: IStory, detail: IStoryDetail): Promise<{ Story: IStory, Detail: IStoryDetail }> {
-    const saved = await POST({
-      data: { Story: story, Detail: detail }, route: 'projects-stories', refreshRoutes: BACKLOG_ROUTES,
-    }) as { Story: IStory, Detail: IStoryDetail }
-    this.applyStory(saved.Story)
-    return saved
+    return await this.#writeToList(this.#stories, 'projects-stories', { Story: story, Detail: detail })
   }
 
   async deleteStory(story: IStory) {
-    const deleted = await POST({ data: { Story: { ...story, ss: 0 }, Detail: {} }, route: 'projects-stories', refreshRoutes: BACKLOG_ROUTES }) as { Story: IStory }
-    this.applyStory(deleted.Story)
+    await this.#writeToList(this.#stories, 'projects-stories', { Story: { ...story, ss: 0 }, Detail: {} })
     // The backend took it off the open sprints.
     this.#sprints?.addSavedRecords(...this.sprints.filter(isSprintOpen)
       .map((sprint) => ({ ...sprint, Stories: (sprint.Stories || []).filter((sprintStory) => sprintStory.StoryID !== story.ID) })))

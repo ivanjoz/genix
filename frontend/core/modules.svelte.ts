@@ -30,6 +30,14 @@ export const getSessionModuleEntries = () => getAccessibleModuleEntries(Modules,
 export const getSessionMenuModule = (pathname: string) =>
   getMenuModule(getSessionModuleEntries().map((moduleEntry) => moduleEntry.module), pathname, ModuleNavigation.lastModuleCode)
 
+// The module the user picked in the selector. A page shared by several modules (crm/customers is in
+// COMMERCIAL and CRM) stays in the last module, so picking the other one while standing on that page
+// must switch the menu itself: the navigation target is the page already open and does nothing.
+export const rememberSelectedModule = (moduleCode: string) => {
+  ModuleNavigation.lastModuleCode = moduleCode
+  localStorage.setItem(moduleNavigationStorageKey, JSON.stringify(ModuleNavigation))
+}
+
 // Called with every page the session opens: it becomes the remembered page of its module, and that
 // module the one a shared page and "/" stay in.
 export const rememberModulePage = (pathname: string) => {

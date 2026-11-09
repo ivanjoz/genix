@@ -27,6 +27,11 @@
       // Memory shares a chart with CPU but not a scale, so it gets its own axis. Its values are
       // therefore not readable off the y-axis labels, which is why the legend prints them.
       useOwnAxis?: boolean;
+      // Own-axis series with the same group get the same scale, so MB of one compare with MB of
+      // the other instead of each line being stretched to its own peak.
+      ownAxisGroup?: string;
+      // Printed in the legend but not drawn: a value that barely moves over four hours.
+      legendOnly?: boolean;
     }>;
   }
 
@@ -37,6 +42,9 @@
 
   const CPU_COLOR = '#4874f5';
   const MEMORY_COLOR = '#e67676';
+  const POOL_COLOR = '#94a3b8';
+  const DIRTY_COLOR = '#f59e0b';
+  const DISK_COLOR = '#14b8a6';
 
   // One chart per service, CPU and memory together, which is the comparison that answers "is this
   // one busy or is it just big". Disk is deliberately absent: it moves by fractions of a percent
@@ -56,11 +64,17 @@
         { field: 'BackendMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
       ]
     },
+    // CPU and MEM come from the database unit's cgroup (the Scylla* fields predate MariaDB and
+    // keep their names); POOL, DIRTY and DISK are what MariaDB reports over SQL. The three memory
+    // lines share one MB scale, so DIRTY reads as a share of POOL and POOL as a share of MEM.
     {
-      id: 'scylla', title: 'ScyllaDB', sharedAxisMaxValue: CPU_AXIS_MAX,
+      id: 'database', title: 'MariaDB', sharedAxisMaxValue: CPU_AXIS_MAX,
       series: [
         { field: 'ScyllaCpuPercent', name: 'CPU', color: CPU_COLOR, unit: '%', decimals: 1 },
-        { field: 'ScyllaMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true }
+        { field: 'ScyllaMemMb', name: 'MEM', color: MEMORY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true, ownAxisGroup: 'db-memory' },
+        { field: 'DbPoolMb', name: 'POOL', color: POOL_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true, ownAxisGroup: 'db-memory' },
+        { field: 'DbDirtyMb', name: 'DIRTY', color: DIRTY_COLOR, unit: 'MB', decimals: 0, useOwnAxis: true, ownAxisGroup: 'db-memory' },
+        { field: 'DbDiskGb', name: 'DISK', color: DISK_COLOR, unit: 'GB', decimals: 1, legendOnly: true }
       ]
     },
     {
@@ -145,8 +159,17 @@
     return peakValue > 0 ? peakValue * OWN_AXIS_HEADROOM : undefined;
   };
 
+  // The axis maximum of an own-axis series: its own peak, or the peak across its whole group.
+  const getSeriesAxisMax = (chartDefinition: ChartDefinition, seriesDefinition: ChartDefinition['series'][number]) => {
+    if (!seriesDefinition.ownAxisGroup) return getOwnAxisMax(metricsSeries.values[seriesDefinition.field]);
+    const groupValues = chartDefinition.series
+      .filter((candidate) => candidate.ownAxisGroup === seriesDefinition.ownAxisGroup)
+      .flatMap((candidate) => metricsSeries.values[candidate.field]);
+    return getOwnAxisMax(groupValues);
+  };
+
   const buildChartSeries = (chartDefinition: ChartDefinition): ChartCanvasSeries[] => {
-    return chartDefinition.series.map((seriesDefinition) => {
+    return chartDefinition.series.filter((seriesDefinition) => !seriesDefinition.legendOnly).map((seriesDefinition) => {
       const seriesValues = metricsSeries.values[seriesDefinition.field];
       return {
         type: 'line',
@@ -159,7 +182,7 @@
         // Memory starts at zero: half a gigabyte is only meaningful against nothing, not against
         // the lowest half-gigabyte the window happened to contain.
         yAxisMin: seriesDefinition.useOwnAxis ? 0 : undefined,
-        yAxisMax: seriesDefinition.useOwnAxis ? getOwnAxisMax(seriesValues) : undefined
+        yAxisMax: seriesDefinition.useOwnAxis ? getSeriesAxisMax(chartDefinition, seriesDefinition) : undefined
       };
     });
   };

@@ -1,5 +1,5 @@
 import { Env } from '#core/env.ts';
-import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import { GetHandler } from '#libs/ui-runtime.svelte.ts';
 
 export interface IGalleryImage {
   ID: number;
@@ -29,13 +29,9 @@ export class GalleryImagesService extends GetHandler<IGalleryImage> {
   }
 
   async remove(imageID: number): Promise<void> {
-    // The backend soft-deletes the row so cached clients receive the eviction delta.
-    await POST({
-      route: 'gallery-image',
-      data: { ImageToDelete: imageID },
-      refreshRoutes: [this.route],
-    });
-    await this.fetchOnline();
+    // The backend soft-deletes the row so cached clients receive the eviction delta, which comes
+    // back with the write.
+    await this.writeAndSync('gallery-image', { ImageToDelete: imageID });
   }
 
   constructor(init: boolean = false) {

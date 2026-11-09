@@ -32,6 +32,13 @@ var APIRouteIDs = map[string]int16{
 	"GET.company-users-by-ids":         113,
 	"GET.country-cities":               10,
 	"GET.credit-usage":                 11,
+	"GET.crm-activity-types":           213,
+	"GET.crm-custom-fields":            201,
+	"GET.crm-lost-reasons":             202,
+	"GET.crm-opportunities":            203,
+	"GET.crm-opportunity-activity":     214,
+	"GET.crm-opportunity-log":          204,
+	"GET.crm-pipelines":                205,
 	"GET.cron-actions-scheduled":       12,
 	"GET.ecommerce-page-content":       13,
 	"GET.empresas":                     14,
@@ -130,6 +137,16 @@ var APIRouteIDs = map[string]int16{
 	"POST.company-parametros":          66,
 	"POST.company-secrets":             122,
 	"POST.company-secrets-test":        123,
+	"POST.crm-activity-type":           215,
+	"POST.crm-attachment-upload":       216,
+	"POST.crm-custom-field":            206,
+	"POST.crm-lost-reason":             207,
+	"POST.crm-opportunity":             208,
+	"POST.crm-opportunity-activity":    217,
+	"POST.crm-opportunity-close":       209,
+	"POST.crm-opportunity-move":        210,
+	"POST.crm-pipeline":                211,
+	"POST.crm-pipeline-members":        212,
 	"POST.ecommerce-page-content":      67,
 	"POST.exchange-rates":              136,
 	"POST.expense-inventory":           129,
@@ -226,7 +243,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 200
+const MaxAPIRouteID int16 = 217
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.
