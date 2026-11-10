@@ -54,7 +54,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
-	github.com/ivanjoz/colbin v0.10.0 // indirect
+	github.com/ivanjoz/colbin v0.11.0 // indirect
 	github.com/ivanjoz/genix-orm v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/db v0.0.0 // indirect
 	github.com/ivanjoz/genix-orm/mariadbdriver v0.0.0 // indirect
