@@ -14,9 +14,13 @@ What it writes:
 - 2 pipelines: *Ventas mayoristas* (4 stages, the contact origin is required) and *Proyectos
   especiales* (3 stages). The first company user is Full on both; the next two users are Edit and View.
 - 8 prospect clients (`IsProspect`), plus up to 10 existing clients.
-- 36 opportunities created on past days (last 120), moved stage by stage a few days apart, and then
-  left open, won, lost, or lost and reopened; about one in ten wholesale cards crosses to the projects
-  pipeline. The stage log comes out as the board's history reads it.
+- 300 opportunities created on past days (last 365). Each lives a random 2 to 30 calendar days from
+  creation to its last change: it moves stage by stage inside that span and, on its last day, is
+  won, lost, or (one in ten wholesale cards) moved to the projects pipeline. A span that reaches past
+  today leaves the card open. Along the way some cards step back one stage and forward again, some
+  get their amount renegotiated, a few are handed to another seller, and a few are lost and reopened
+  a day or two later — the cases the CRM reports have to count correctly. The stage log and the
+  per-pipeline status rows (the timeline report) come out of the production handlers.
 
 A company that already has a pipeline is left untouched, so a second run writes nothing. It needs the
 CRM tables to exist (`fn-homologate`, or "Recrear Tablas" in the deployer). It is not part of

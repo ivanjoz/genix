@@ -15,6 +15,16 @@ const (
 	PipelineLevelFull int8 = 3
 )
 
+// Goal period types: the unit a pipeline sets its goals and forecast in. The two daily types
+// both store one goal per day (the Period is a UnixDay); they differ in how the goals grid groups
+// the days: a month at a time or a week at a time. The IDs are persisted; never renumber them.
+const (
+	GoalPeriodMonthly      int8 = 1
+	GoalPeriodWeekly       int8 = 2
+	GoalPeriodDailyByMonth int8 = 3
+	GoalPeriodDailyByWeek  int8 = 4
+)
+
 // CrmPipeline is one kanban board. Its stages are embedded (stable IDs, one atomic save per
 // reorder) and its Members decide who can see and work in it; see docs/CRM_PLAN.md §2.
 type CrmPipeline struct {
@@ -39,6 +49,9 @@ type CrmPipeline struct {
 	UpdatedBy int32               `cb:"13"`
 	// Metadata is set only on the metadata record a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,14"`
+	// GoalPeriodType is one of the GoalPeriod* constants: the unit of this pipeline's goals and
+	// forecast submissions (a CrmGoal.Period is a YYMM month, a core.WeekOfDay week or a UnixDay).
+	GoalPeriodType int8 `cb:"15"`
 }
 
 type CrmPipelineStage struct {
@@ -48,6 +61,9 @@ type CrmPipelineStage struct {
 	Probability int8   `cb:"4"` // default % for opportunities entering the stage
 	StaleDays   int16  `cb:"5"` // 0 = never flagged
 	Status      int8   `cb:"6"` // soft delete; blocked while the stage holds open opportunities
+	// ForecastCategory is ForecastCategoryPipeline / BestCase / Commit: how the forecast counts
+	// the open opportunities sitting in this stage.
+	ForecastCategory int8 `cb:"7"`
 }
 
 type CrmPipelineField struct {
@@ -68,19 +84,20 @@ type CrmPipelineMembersPayload struct {
 
 type CrmPipelineTable struct {
 	db.TableStruct[CrmPipelineTable, CrmPipeline]
-	CompanyID   db.Col[*CrmPipelineTable, int32]
-	ID          db.Col[*CrmPipelineTable, int16]
-	Name        db.Col[*CrmPipelineTable, string]
-	Description db.Col[*CrmPipelineTable, string]
-	Color       db.Col[*CrmPipelineTable, string]
-	SortOrder   db.Col[*CrmPipelineTable, int16]
-	Stages      db.Col[*CrmPipelineTable, []CrmPipelineStage]
-	Fields      db.Col[*CrmPipelineTable, []CrmPipelineField]
-	Members     db.Col[*CrmPipelineTable, []CrmPipelineMember]
-	Status      db.Col[*CrmPipelineTable, int8]
-	Updated     db.Col[*CrmPipelineTable, int32]
-	Version     db.Col[*CrmPipelineTable, int16]
-	UpdatedBy   db.Col[*CrmPipelineTable, int32]
+	CompanyID      db.Col[*CrmPipelineTable, int32]
+	ID             db.Col[*CrmPipelineTable, int16]
+	Name           db.Col[*CrmPipelineTable, string]
+	Description    db.Col[*CrmPipelineTable, string]
+	Color          db.Col[*CrmPipelineTable, string]
+	SortOrder      db.Col[*CrmPipelineTable, int16]
+	Stages         db.Col[*CrmPipelineTable, []CrmPipelineStage]
+	Fields         db.Col[*CrmPipelineTable, []CrmPipelineField]
+	Members        db.Col[*CrmPipelineTable, []CrmPipelineMember]
+	GoalPeriodType db.Col[*CrmPipelineTable, int8]
+	Status         db.Col[*CrmPipelineTable, int8]
+	Updated        db.Col[*CrmPipelineTable, int32]
+	Version        db.Col[*CrmPipelineTable, int16]
+	UpdatedBy      db.Col[*CrmPipelineTable, int32]
 }
 
 func (e CrmPipelineTable) GetSchema() db.TableSchema {

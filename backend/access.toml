@@ -481,3 +481,53 @@ group = 10
 levels = 14
 frontend_routes = "crm/dictionaries"
 backend_apis = "POST.crm-lost-reason,POST.crm-activity-type"
+
+[[access]]
+id = 52
+name = "CRM Reportes"
+group = 10
+levels = 14
+frontend_routes = "crm/reports"
+backend_apis = "GET.crm-report-scope,GET.crm-report-stage-log,GET.crm-report-open-opportunities"
+
+[[access]]
+id = 53
+name = "CRM Forecast"
+group = 10
+levels = 14
+frontend_routes = "crm/forecast"
+backend_apis = "POST.crm-forecast-submission"
+
+[[access]]
+id = 54
+name = "CRM Equipos"
+group = 10
+levels = 14
+frontend_routes = "crm/teams"
+backend_apis = "POST.crm-team"
+
+[[access]]
+id = 55
+name = "CRM Metas"
+group = 10
+levels = 14
+frontend_routes = "crm/goals"
+backend_apis = "POST.crm-goals"
+
+[[access]]
+id = 58
+name = "CRM Línea de tiempo"
+group = 10
+levels = 14
+frontend_routes = "crm/timeline"
+backend_apis = "GET.crm-report-scope,GET.crm-pipeline-opportunity-status,GET.crm-opportunity-ids"
+
+# No route of its own: the CRM report handlers read it to open every pipeline to the holder
+# (crm/types/report_rules.go). Without it, reports cover the pipelines the user is a member of.
+[[access]]
+id = 57
+name = "CRM Reporte completo"
+group = 10
+levels = 14
+frontend_routes = ""
+backend_apis = ""

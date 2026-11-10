@@ -82,6 +82,12 @@ func ApplyPipelineEdit(stored, payload CrmPipeline, stageHoldsOpenOpportunities 
 		if stage.StaleDays < 0 {
 			return CrmPipeline{}, fmt.Errorf("Los días para marcar estancada la etapa %q no pueden ser negativos.", stage.Name)
 		}
+		if stage.ForecastCategory == 0 {
+			stage.ForecastCategory = ForecastCategoryPipeline
+		}
+		if stage.ForecastCategory < ForecastCategoryPipeline || stage.ForecastCategory > ForecastCategoryCommit {
+			return CrmPipeline{}, fmt.Errorf("La categoría de forecast de la etapa %q no es válida (1 pipeline, 2 mejor caso, 3 compromiso).", stage.Name)
+		}
 		if stage.ID == 0 {
 			stage.ID = nextStageID
 			nextStageID++
@@ -131,7 +137,16 @@ func ApplyPipelineEdit(stored, payload CrmPipeline, stageHoldsOpenOpportunities 
 		seenFieldIDs[field.FieldID] = true
 	}
 
+	goalPeriodType := payload.GoalPeriodType
+	if goalPeriodType == 0 {
+		goalPeriodType = GoalPeriodMonthly
+	}
+	if goalPeriodType < GoalPeriodMonthly || goalPeriodType > GoalPeriodDailyByWeek {
+		return CrmPipeline{}, fmt.Errorf("El periodo de metas %d no es válido (1 mensual, 2 semanal, 3 diaria por mes, 4 diaria por semana).", goalPeriodType)
+	}
+
 	saved := stored
+	saved.GoalPeriodType = goalPeriodType
 	saved.Name, saved.Description, saved.Color = name, strings.TrimSpace(payload.Description), payload.Color
 	saved.SortOrder, saved.Stages, saved.Fields = payload.SortOrder, savedStages, payload.Fields
 	saved.Status = CrmStatusActive

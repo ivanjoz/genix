@@ -79,7 +79,8 @@ func TestPlanOpportunityMove(t *testing.T) {
 	if err != nil || moved.StageID != 2 || moved.Probability != 50 || moved.PreviousPipelineID != 1 || moved.PreviousStageID != 1 || moved.StageEnteredTime != 500 {
 		t.Fatalf("stage move: %+v %v", moved, err)
 	}
-	if log.FromStageID != 1 || log.ToStageID != 2 || log.FromPipelineID != 1 || log.ToPipelineID != 1 || log.UserID != 7 {
+	if log.FromStageID != 1 || log.ToStageID != 2 || log.FromPipelineID != 1 || log.ToPipelineID != 1 || log.UserID != 7 ||
+		log.Kind != StageLogKindMoved || log.FromPosition != 1 || log.ToPosition != 2 {
 		t.Fatalf("stage move log: %+v", log)
 	}
 	if _, _, err := PlanOpportunityMove(opportunity, source, source, 1, 7, 500); err == nil {
@@ -114,7 +115,8 @@ func TestPlanOpportunityClose(t *testing.T) {
 	opportunity := CrmOpportunity{ID: 1, PipelineID: 1, StageID: 2}
 
 	won, log, err := PlanOpportunityClose(opportunity, pipeline, CrmOpportunityClosePayload{Outcome: OpportunityOutcomeWon, LostReasonID: 9}, false, 7, 600)
-	if err != nil || won.Outcome != OpportunityOutcomeWon || won.ClosedTime != 600 || won.LostReasonID != 0 || won.Status != OpportunityStatusClosed || log.Outcome != OpportunityOutcomeWon {
+	if err != nil || won.Outcome != OpportunityOutcomeWon || won.ClosedTime != 600 || won.LostReasonID != 0 || won.Status != OpportunityStatusClosed || log.ToOutcome != OpportunityOutcomeWon ||
+		log.FromOutcome != OpportunityOutcomeOpen || log.Kind != StageLogKindClosed || log.FromPosition != 2 || log.ToPosition != 2 {
 		t.Fatalf("won: %+v %v", won, err)
 	}
 	if _, _, err := PlanOpportunityClose(opportunity, pipeline, CrmOpportunityClosePayload{Outcome: OpportunityOutcomeLost}, false, 7, 600); err == nil {

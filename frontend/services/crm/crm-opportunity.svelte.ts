@@ -35,16 +35,29 @@ export interface ICrmOpportunity {
   upd: number
 }
 
+/** Mirrors crm/types/stage_log.go: each row carries the reportable state before and after. */
 export interface ICrmOpportunityStageLog {
   ID: number
   OpportunityID: number
-  FromPipelineID: number
-  FromStageID: number
-  ToPipelineID: number
-  ToStageID: number
-  Outcome: number
+  Kind: number
+  Period: number
   Time: number
   UserID: number
+  FromPipelineID: number
+  FromStageID: number
+  FromPosition: number
+  FromOutcome: number
+  FromOwnerUserID: number
+  FromAmount: number
+  FromExpectedCloseDate: number
+  ToPipelineID: number
+  ToStageID: number
+  ToPosition: number
+  ToOutcome: number
+  ToOwnerUserID: number
+  ToAmount: number
+  ToExpectedCloseDate: number
+  LostReasonID: number
 }
 
 /** The open opportunities of ONE pipeline: each pipeline is its own delta cache, and a card that

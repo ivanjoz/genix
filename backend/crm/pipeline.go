@@ -83,7 +83,7 @@ func PostCrmPipeline(req *core.HandlerArgs) core.HandlerResponse {
 			table := db.TableOf[types.CrmPipeline]()
 			// Members is left out on purpose: the access page owns it.
 			if err := db.UpdateIn(transaction, &records, table.Name, table.Description, table.Color, table.SortOrder,
-				table.Stages, table.Fields, table.Status, table.UpdatedBy); err != nil {
+				table.Stages, table.Fields, table.GoalPeriodType, table.Status, table.UpdatedBy); err != nil {
 				return err
 			}
 		}

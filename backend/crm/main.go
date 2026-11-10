@@ -26,4 +26,18 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.crm-opportunity-activity":  GetCrmOpportunityActivity,
 	"POST.crm-opportunity-activity": PostCrmOpportunityActivity,
 	"POST.crm-attachment-upload":    PostCrmAttachmentUpload,
+
+	"GET.crm-teams":                GetCrmTeams,
+	"POST.crm-team":                PostCrmTeam,
+	"GET.crm-goals":                GetCrmGoals,
+	"POST.crm-goals":               PostCrmGoals,
+	"GET.crm-forecast-submissions": GetCrmForecastSubmissions,
+	"POST.crm-forecast-submission": PostCrmForecastSubmission,
+
+	"GET.crm-pipeline-opportunity-status": GetCrmPipelineOpportunityStatus,
+	"GET.crm-opportunity-ids":             GetCrmOpportunitiesByIDs,
+
+	"GET.crm-report-scope":              GetCrmReportScope,
+	"GET.crm-report-stage-log":          GetCrmReportStageLog,
+	"GET.crm-report-open-opportunities": GetCrmReportOpenOpportunities,
 }

@@ -3,6 +3,9 @@ import type { ICrmActivity, ICrmActivityType } from '#services/crm/crm-activity.
 import { SYSTEM_ACTIVITY_TYPES, type IActivityTypeOption } from '#services/crm/crm-activity-types.ts'
 import type { ICrmCustomFieldValue, ICrmOpportunity, ICrmOpportunityStageLog } from '#services/crm/crm-opportunity.svelte.ts'
 import type { ICrmCustomField, ICrmPipeline, ICrmPipelineField, ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
+import {
+  OUTCOME_LOST, OUTCOME_WON, STAGE_LOG_KIND_CLOSED, STAGE_LOG_KIND_CREATED, STAGE_LOG_KIND_EDITED,
+} from '#services/crm/crm-stage-log.ts'
 
 // Levels of backend/crm/types/pipeline.go. Not imported from the service: that module pulls in the
 // Svelte runtime, and this file stays testable without it.
@@ -107,11 +110,6 @@ export const readCustomValues = (formValues: Record<string, any>, catalog: Map<n
     return [storedValue]
   })
 
-// Outcomes of backend/crm/types/opportunity.go, local for the same reason as the levels above.
-const OUTCOME_OPEN = 0
-const OUTCOME_WON = 1
-const OUTCOME_LOST = 2
-
 /** The activity types a user picks from: the fixed ones first, then the company's own. */
 export const activityTypeOptions = (companyTypes: ICrmActivityType[]): IActivityTypeOption[] => [
   ...SYSTEM_ACTIVITY_TYPES,
@@ -132,14 +130,22 @@ export const buildOpportunityTimeline = (activities: ICrmActivity[], stageLogs: 
   ...stageLogs.map((stageLog) => ({ kind: 'stage' as const, time: stageLog.Time, stageLog })),
 ].sort((left, right) => right.time - left.time)
 
-/** One history line, bilingual ("English|Spanish"). A close or a reopen keeps the stage, so it logs from = to. */
+/** One history line, bilingual ("English|Spanish"), chosen by the row's Kind. */
 export const stageLogDescription = (stageLog: ICrmOpportunityStageLog, stageName: (pipelineID: number, stageID: number) => string): string => {
   const fromStage = stageName(stageLog.FromPipelineID, stageLog.FromStageID)
   const toStage = stageName(stageLog.ToPipelineID, stageLog.ToStageID)
-  if (stageLog.Outcome === OUTCOME_WON) return 'Closed as won|Cerrada como ganada'
-  if (stageLog.Outcome === OUTCOME_LOST) return 'Closed as lost|Cerrada como perdida'
-  if (!stageLog.FromPipelineID) return `Created in ${toStage}|Creada en ${toStage}`
-  const keptStage = stageLog.FromPipelineID === stageLog.ToPipelineID && stageLog.FromStageID === stageLog.ToStageID
-  if (keptStage && stageLog.Outcome === OUTCOME_OPEN) return `Reopened in ${toStage}|Reabierta en ${toStage}`
+  if (stageLog.Kind === STAGE_LOG_KIND_CREATED) return `Created in ${toStage}|Creada en ${toStage}`
+  if (stageLog.Kind === STAGE_LOG_KIND_EDITED) {
+    const changes: [string, string][] = []
+    if (stageLog.FromAmount !== stageLog.ToAmount) changes.push(['amount', 'monto'])
+    if (stageLog.FromOwnerUserID !== stageLog.ToOwnerUserID) changes.push(['owner', 'responsable'])
+    if (stageLog.FromExpectedCloseDate !== stageLog.ToExpectedCloseDate) changes.push(['expected close date', 'fecha de cierre'])
+    return `Changed ${changes.map((change) => change[0]).join(', ')}|Cambió ${changes.map((change) => change[1]).join(', ')}`
+  }
+  if (stageLog.Kind === STAGE_LOG_KIND_CLOSED) {
+    if (stageLog.ToOutcome === OUTCOME_WON) return 'Closed as won|Cerrada como ganada'
+    if (stageLog.ToOutcome === OUTCOME_LOST) return 'Closed as lost|Cerrada como perdida'
+    return `Reopened in ${toStage}|Reabierta en ${toStage}`
+  }
   return `Moved from ${fromStage} to ${toStage}|Pasó de ${fromStage} a ${toStage}`
 }

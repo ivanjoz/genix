@@ -15,15 +15,6 @@ func findActiveStage(pipeline CrmPipeline, stageID int16) (CrmPipelineStage, boo
 	return CrmPipelineStage{}, false
 }
 
-func newStageLog(opportunity CrmOpportunity, fromPipelineID, fromStageID int16, userID, now int32) CrmOpportunityStageLog {
-	return CrmOpportunityStageLog{
-		CompanyID: opportunity.CompanyID, OpportunityID: opportunity.ID,
-		FromPipelineID: fromPipelineID, FromStageID: fromStageID,
-		ToPipelineID: opportunity.PipelineID, ToStageID: opportunity.StageID,
-		Outcome: opportunity.Outcome, Time: now, UserID: userID,
-	}
-}
-
 // PlanOpportunityCreate validates a new opportunity against its pipeline and returns the record to
 // insert. The stage log row is built by the caller once the insert has given the opportunity its ID
 // (StageLogOfCreation).
@@ -57,8 +48,8 @@ func PlanOpportunityCreate(payload CrmOpportunity, pipeline CrmPipeline, userID,
 }
 
 // StageLogOfCreation is the first log row of an opportunity: from nowhere into its first stage.
-func StageLogOfCreation(opportunity CrmOpportunity, userID, now int32) CrmOpportunityStageLog {
-	return newStageLog(opportunity, 0, 0, userID, now)
+func StageLogOfCreation(opportunity CrmOpportunity, pipeline CrmPipeline, userID, now int32) CrmOpportunityStageLog {
+	return BuildStageLogRow(StageLogKindCreated, CrmOpportunity{}, CrmPipeline{}, opportunity, pipeline, userID, now)
 }
 
 // PlanOpportunityEdit validates an edit of the opportunity's own fields against the stored record
@@ -138,7 +129,7 @@ func PlanOpportunityMove(opportunity CrmOpportunity, source, target CrmPipeline,
 	moved.PreviousPipelineID, moved.PreviousStageID = opportunity.PipelineID, opportunity.StageID
 	moved.PipelineID, moved.StageID = target.ID, targetStageID
 	moved.StageEnteredTime, moved.Probability, moved.UpdatedBy = now, stage.Probability, userID
-	return moved, newStageLog(moved, opportunity.PipelineID, opportunity.StageID, userID, now), nil
+	return moved, BuildStageLogRow(StageLogKindMoved, opportunity, source, moved, target, userID, now), nil
 }
 
 // PlanOpportunityClose closes the opportunity as won or lost, or reopens it (outcome 0). A lost
@@ -178,5 +169,5 @@ func PlanOpportunityClose(opportunity CrmOpportunity, pipeline CrmPipeline, payl
 		closed.StageEnteredTime = now
 	}
 	closed.SelfParse()
-	return closed, newStageLog(closed, opportunity.PipelineID, opportunity.StageID, userID, now), nil
+	return closed, BuildStageLogRow(StageLogKindClosed, opportunity, pipeline, closed, pipeline, userID, now), nil
 }

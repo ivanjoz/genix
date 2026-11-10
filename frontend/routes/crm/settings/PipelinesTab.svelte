@@ -6,12 +6,14 @@
   import ColorPicker from '#components/form/ColorPicker.svelte'
   import ColorPickerCell from '#components/form/ColorPickerCell.svelte'
   import Input from '#components/form/Input.svelte'
+  import SearchSelect from '#components/form/SearchSelect.svelte'
   import Layer from '#components/layers/Layer.svelte'
   import VTable from '#components/vTable/VTable.svelte'
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
+  import { GOAL_PERIOD } from '#services/crm/crm-goal-metric.ts'
   import {
-    postCrmPipeline, type CrmCustomFieldsService, type CrmPipelinesService, type ICrmPipeline, type ICrmPipelineStage,
+    FORECAST_CATEGORY, postCrmPipeline, type CrmCustomFieldsService, type CrmPipelinesService, type ICrmPipeline, type ICrmPipelineStage,
   } from '#services/crm/crm-pipeline.svelte.ts'
   import {
     activeStages, makeEmptyPipeline, makeEmptyStage, moveItem, removeStage, setFieldRequired, toggleField,
@@ -23,6 +25,17 @@
 
   const ui = useUI()
   const PIPELINE_LAYER_ID = 1
+  const GOAL_PERIOD_OPTIONS = [
+    { id: GOAL_PERIOD.MONTHLY, name: tr('Monthly|Mensuales') },
+    { id: GOAL_PERIOD.WEEKLY, name: tr('Weekly|Semanales') },
+    { id: GOAL_PERIOD.DAILY_BY_MONTH, name: tr('Daily | Month|Diaria | Mes') },
+    { id: GOAL_PERIOD.DAILY_BY_WEEK, name: tr('Daily | Week|Diaria | Semana') },
+  ]
+  const FORECAST_CATEGORY_OPTIONS = [
+    { id: FORECAST_CATEGORY.PIPELINE, name: tr('Pipeline|Pipeline') },
+    { id: FORECAST_CATEGORY.BEST_CASE, name: tr('Best case|Mejor caso') },
+    { id: FORECAST_CATEGORY.COMMIT, name: tr('Commit|Compromiso') },
+  ]
   let pipelineForm = $state(makeEmptyPipeline())
   const pickedField = (fieldID: number) => pipelineForm.Fields.find((field) => field.FieldID === fieldID)
 
@@ -69,6 +82,12 @@
       cellInputType: 'number', getValue: (stage) => stage.StaleDays,
       onCellEdit: (stage, value) => { stage.StaleDays = numberOf(value) },
     },
+    {
+      id: 'forecastCategory', header: 'Forecast', width: '150px', css: 'px-4',
+      cellOptions: FORECAST_CATEGORY_OPTIONS, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      getValue: (stage) => stage.ForecastCategory,
+      onCellSelect: (stage, value) => { stage.ForecastCategory = Number(value) },
+    },
     { id: 'actions', header: '', width: '130px', css: 'px-4', getValue: () => '' },
   ]
 
@@ -104,7 +123,9 @@
   <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Pipeline form">
     <Input bind:saveOn={pipelineForm} save="Name" label="Name|Nombre" required={true} css="col-span-24 md:col-span-16" />
     <ColorPicker bind:saveOn={pipelineForm} save="Color" label="Color" css="col-span-24 md:col-span-8" />
-    <Input bind:saveOn={pipelineForm} save="Description" label="Description|Descripción" css="col-span-24" />
+    <Input bind:saveOn={pipelineForm} save="Description" label="Description|Descripción" css="col-span-24 md:col-span-16" />
+    <SearchSelect options={GOAL_PERIOD_OPTIONS} keyId="id" keyName="name" label="Goals|Metas" css="col-span-24 md:col-span-8"
+      selected={pipelineForm.GoalPeriodType} onChange={(option) => { pipelineForm.GoalPeriodType = option.id }} />
   </div>
 
   <div class="flex items-center justify-between mt-16 mb-6">

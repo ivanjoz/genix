@@ -83,7 +83,7 @@ describe('custom field form conversion', () => {
 
 describe('activity timeline', () => {
   const stageLog = (overrides: Partial<ICrmOpportunityStageLog>) =>
-    ({ ID: 1, OpportunityID: 1, FromPipelineID: 1, FromStageID: 1, ToPipelineID: 1, ToStageID: 2, Outcome: 0, Time: 0, UserID: 7, ...overrides }) as ICrmOpportunityStageLog
+    ({ ID: 1, OpportunityID: 1, Kind: 2, FromPipelineID: 1, FromStageID: 1, ToPipelineID: 1, ToStageID: 2, ToOutcome: 0, Time: 0, UserID: 7, ...overrides }) as ICrmOpportunityStageLog
   const stageName = (_pipelineID: number, stageID: number) => `S${stageID}`
 
   it('offers the system types, then the company ones, and labels a deleted type', () => {
@@ -103,10 +103,12 @@ describe('activity timeline', () => {
   })
 
   it('describes each kind of stage change', () => {
-    expect(stageLogDescription(stageLog({ FromPipelineID: 0, FromStageID: 0 }), stageName)).toBe('Created in S2|Creada en S2')
+    expect(stageLogDescription(stageLog({ Kind: 1, FromPipelineID: 0, FromStageID: 0 }), stageName)).toBe('Created in S2|Creada en S2')
     expect(stageLogDescription(stageLog({}), stageName)).toBe('Moved from S1 to S2|Pasó de S1 a S2')
-    expect(stageLogDescription(stageLog({ ToStageID: 1 }), stageName)).toBe('Reopened in S1|Reabierta en S1')
-    expect(stageLogDescription(stageLog({ ToStageID: 1, Outcome: 1 }), stageName)).toBe('Closed as won|Cerrada como ganada')
-    expect(stageLogDescription(stageLog({ ToStageID: 1, Outcome: 2 }), stageName)).toBe('Closed as lost|Cerrada como perdida')
+    expect(stageLogDescription(stageLog({ Kind: 3, ToStageID: 1 }), stageName)).toBe('Reopened in S1|Reabierta en S1')
+    expect(stageLogDescription(stageLog({ Kind: 3, ToStageID: 1, ToOutcome: 1 }), stageName)).toBe('Closed as won|Cerrada como ganada')
+    expect(stageLogDescription(stageLog({ Kind: 3, ToStageID: 1, ToOutcome: 2 }), stageName)).toBe('Closed as lost|Cerrada como perdida')
+    expect(stageLogDescription(stageLog({ Kind: 4, FromAmount: 1, ToAmount: 2, FromOwnerUserID: 3, ToOwnerUserID: 4 }), stageName))
+      .toBe('Changed amount, owner|Cambió monto, responsable')
   })
 })

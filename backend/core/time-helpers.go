@@ -71,6 +71,22 @@ func AddPeriods(period int16, months int) int16 {
 	return int16(monthsSinceYearZero/12*100 + monthsSinceYearZero%12 + 1)
 }
 
+// WeekOfDay is the Monday-based week of a UnixDay, counted in whole weeks since the epoch (the
+// epoch was a Thursday, hence the +3). Unlike an ISO year-week it is contiguous across years, so a
+// week is one integer step; 0 for no date.
+func WeekOfDay(unixDay int16) int16 {
+	if unixDay <= 0 {
+		return 0
+	}
+	return (unixDay + 3) / 7
+}
+
+// WeekFirstDay is the UnixDay of the Monday of a WeekOfDay week.
+func WeekFirstDay(week int16) int16 { return week*7 - 3 }
+
+// WeekLastDay is the UnixDay of the Sunday of a WeekOfDay week.
+func WeekLastDay(week int16) int16 { return WeekFirstDay(week) + 6 }
+
 // SUnixTimeToUnixDay is the UnixDay of an SUnixTime (seconds since 2001-09-09, halved).
 func SUnixTimeToUnixDay(sUnixTime int32) int16 {
 	return int16((int64(sUnixTime)*2 + 1e9) / 86400)

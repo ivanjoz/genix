@@ -52,10 +52,14 @@ func MakeControllers() []db.Controller {
 		db.MakeController[crmTypes.CrmActivity](),
 		db.MakeController[crmTypes.CrmActivityType](),
 		db.MakeController[crmTypes.CrmCustomField](),
+		db.MakeController[crmTypes.CrmForecastSubmission](),
+		db.MakeController[crmTypes.CrmGoal](),
 		db.MakeController[crmTypes.CrmLostReason](),
 		db.MakeController[crmTypes.CrmOpportunity](),
 		db.MakeController[crmTypes.CrmOpportunityStageLog](),
 		db.MakeController[crmTypes.CrmPipeline](),
+		db.MakeController[crmTypes.CrmPipelineOpportunityStatus](),
+		db.MakeController[crmTypes.CrmTeam](),
 		db.MakeController[financeTypes.CashBank](),
 		db.MakeController[financeTypes.CashBankMovement](),
 		db.MakeController[financeTypes.CashReconciliation](),
@@ -137,10 +141,14 @@ func init() {
 	db.RegisterTableFactory("crm_activity", func() db.Table { return db.MakeTable[crmTypes.CrmActivity]() })
 	db.RegisterTableFactory("crm_activity_types", func() db.Table { return db.MakeTable[crmTypes.CrmActivityType]() })
 	db.RegisterTableFactory("crm_custom_fields", func() db.Table { return db.MakeTable[crmTypes.CrmCustomField]() })
+	db.RegisterTableFactory("crm_forecast_submissions", func() db.Table { return db.MakeTable[crmTypes.CrmForecastSubmission]() })
+	db.RegisterTableFactory("crm_goals", func() db.Table { return db.MakeTable[crmTypes.CrmGoal]() })
 	db.RegisterTableFactory("crm_lost_reasons", func() db.Table { return db.MakeTable[crmTypes.CrmLostReason]() })
 	db.RegisterTableFactory("crm_opportunities", func() db.Table { return db.MakeTable[crmTypes.CrmOpportunity]() })
 	db.RegisterTableFactory("crm_opportunity_stage_log", func() db.Table { return db.MakeTable[crmTypes.CrmOpportunityStageLog]() })
 	db.RegisterTableFactory("crm_pipelines", func() db.Table { return db.MakeTable[crmTypes.CrmPipeline]() })
+	db.RegisterTableFactory("crm_pipeline_opportunity_status", func() db.Table { return db.MakeTable[crmTypes.CrmPipelineOpportunityStatus]() })
+	db.RegisterTableFactory("crm_teams", func() db.Table { return db.MakeTable[crmTypes.CrmTeam]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
 	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })

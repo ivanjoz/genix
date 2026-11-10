@@ -25,12 +25,12 @@ export const customFieldHasOptions = (fieldType: number) =>
 const DEFAULT_STAGE_COLOR = '#6b7280'
 
 export const makeEmptyStage = (): ICrmPipelineStage =>
-  ({ ID: 0, Name: '', Color: DEFAULT_STAGE_COLOR, Probability: 0, StaleDays: 0, Status: 1 })
+  ({ ID: 0, Name: '', Color: DEFAULT_STAGE_COLOR, Probability: 0, StaleDays: 0, Status: 1, ForecastCategory: 1 })
 
 export const makeEmptyPipeline = (): ICrmPipeline => ({
   ID: 0, Name: '', Description: '', Color: '#3b82f6', SortOrder: 0,
   Stages: [{ ...makeEmptyStage(), Name: 'New|Nuevo', Probability: 10 }],
-  Fields: [], Members: [], ss: 1, upd: 0,
+  Fields: [], Members: [], GoalPeriodType: 1, ss: 1, upd: 0,
 })
 
 export const makeEmptyCustomField = (): ICrmCustomField => ({ ID: 0, Name: '', Type: 1, Options: [], ss: 1, upd: 0 })

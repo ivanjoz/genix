@@ -94,9 +94,9 @@ func PostCrmOpportunity(req *core.HandlerArgs) core.HandlerResponse {
 			if err := db.InsertIn(transaction, &records); err != nil {
 				return err
 			}
-			logs := []types.CrmOpportunityStageLog{types.StageLogOfCreation(records[0], userID, now)}
+			logs := []types.CrmOpportunityStageLog{types.StageLogOfCreation(records[0], pipeline, userID, now)}
 			payload = records[0]
-			return db.InsertIn(transaction, &logs)
+			return insertStageLogs(transaction, companyID, logs)
 		}
 
 		edited, err := types.PlanOpportunityEdit(stored, payload, pipeline, userID)
@@ -110,7 +110,12 @@ func PostCrmOpportunity(req *core.HandlerArgs) core.HandlerResponse {
 			return err
 		}
 		payload = records[0]
-		return nil
+		// Amount, owner and close date feed the reports (waterfall, owner transfers, slippage).
+		if !types.EditChangesReportedState(stored, edited) {
+			return nil
+		}
+		logs := []types.CrmOpportunityStageLog{types.BuildStageLogRow(types.StageLogKindEdited, stored, pipeline, edited, pipeline, userID, now)}
+		return insertStageLogs(transaction, companyID, logs)
 	})
 	if saveError != nil {
 		return req.MakeErr("Error al guardar la oportunidad:", saveError)
@@ -155,7 +160,7 @@ func PostCrmOpportunityMove(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		logs := []types.CrmOpportunityStageLog{stageLog}
 		moved = records[0]
-		return db.InsertIn(transaction, &logs)
+		return insertStageLogs(transaction, companyID, logs)
 	})
 	if saveError != nil {
 		return req.MakeErr("Error al mover la oportunidad:", saveError)
@@ -209,7 +214,7 @@ func PostCrmOpportunityClose(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		logs := []types.CrmOpportunityStageLog{stageLog}
 		closed = records[0]
-		return db.InsertIn(transaction, &logs)
+		return insertStageLogs(transaction, companyID, logs)
 	})
 	if saveError != nil {
 		return req.MakeErr("Error al cerrar la oportunidad:", saveError)

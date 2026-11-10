@@ -146,6 +146,39 @@ name = "Dictionaries|Diccionarios"
 icon = "icon-[fa--book]"
 description = "Mantiene las listas de valores del CRM, como los motivos de pérdida de una oportunidad, editándolas directamente en la tabla."
 
+[[pages]]
+route = "crm/tasks"
+name = "Tasks|Tareas"
+icon = "icon-[fa--check-square-o]"
+pending = true
+
+[[pages]]
+route = "crm/reports"
+name = "Reports|Reportes"
+icon = "icon-[fa--bar-chart]"
+description = "Reportes del CRM por vendedor y pipeline: avance neto por etapa, estado diario del pipeline, cascada, embudo, desempeño de vendedores y motivos de pérdida."
+
+[[pages]]
+route = "crm/timeline"
+name = "Timeline|Línea de tiempo"
+icon = "icon-[fa--tasks]"
+description = "Gantt de oportunidades por vendedor: sus etapas día a día y cómo terminó cada una."
+
+[[pages]]
+route = "crm/forecast"
+name = "Forecast|Forecast"
+icon = "icon-[fa--line-chart]"
+
+[[pages]]
+route = "crm/teams"
+name = "Teams|Equipos"
+icon = "icon-[fa--users]"
+
+[[pages]]
+route = "crm/goals"
+name = "Goals|Metas"
+icon = "icon-[fa--bullseye]"
+
 # Production
 
 [[pages]]

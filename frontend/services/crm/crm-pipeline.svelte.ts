@@ -2,6 +2,8 @@ import { GetHandler } from '#libs/ui-runtime.svelte.ts'
 
 // Mirrors backend/crm/types: pipeline.go, custom_field.go, lost_reason.go.
 
+export { FORECAST_CATEGORY } from './crm-forecast-category.ts'
+
 export const PipelineLevel = { VIEW: 1, EDIT: 2, FULL: 3 } as const
 
 export interface ICrmPipelineStage {
@@ -11,6 +13,8 @@ export interface ICrmPipelineStage {
   Probability: number
   StaleDays: number
   Status: number
+  /** FORECAST_CATEGORY: how the forecast counts open opportunities of this stage. */
+  ForecastCategory: number
 }
 
 export interface ICrmPipelineField {
@@ -32,6 +36,8 @@ export interface ICrmPipeline {
   Stages: ICrmPipelineStage[]
   Fields: ICrmPipelineField[]
   Members: ICrmPipelineMember[]
+  /** GOAL_PERIOD: goals and forecast by month or by week. */
+  GoalPeriodType: number
   ss: number
   upd: number
 }
@@ -61,7 +67,7 @@ export interface ICrmLostReason {
 
 /** A delta list of one CRM catalog: every route syncs the whole table, active rows only. */
 export abstract class CrmCatalogService<T extends { ID: number, ss: number }> extends GetHandler<T> {
-  useCache = { min: 5, ver: 2 }
+  useCache = { min: 5, ver: 3 }
   inferRemoveFromStatus = true
 
   records: T[] = $state([])
