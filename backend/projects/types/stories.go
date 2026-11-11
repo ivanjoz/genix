@@ -192,7 +192,8 @@ type ChecklistItem struct {
 type StoryDetail struct {
 	db.TableStruct[StoryDetailTable, StoryDetail]
 	CompanyID int32 `cb:"1"`
-	StoryID   int64 `cb:"2"`
+	// ID is the story's ID (Story.ID): the by-IDs cache keys every record by its ID field.
+	ID        int64 `cb:"2"`
 	ProjectID int32 `cb:"3"`
 	// Description is the HTMLEditor's HTML.
 	Description string `cb:"4"`
@@ -207,7 +208,7 @@ type StoryDetail struct {
 type StoryDetailTable struct {
 	db.TableStruct[StoryDetailTable, StoryDetail]
 	CompanyID   db.Col[*StoryDetailTable, int32]
-	StoryID     db.Col[*StoryDetailTable, int64]
+	ID          db.Col[*StoryDetailTable, int64]
 	ProjectID   db.Col[*StoryDetailTable, int32]
 	Description db.Col[*StoryDetailTable, string]
 	Checklist   db.Col[*StoryDetailTable, []ChecklistItem]
@@ -217,14 +218,16 @@ type StoryDetailTable struct {
 	Updated     db.Col[*StoryDetailTable, int32]
 }
 
-// Keyed by the story itself, so it has no delta index (a delta log ID cannot be its own pinned
-// key): GET.projects-story-detail reads the one row and answers it as a full replace.
+// Keyed by the story itself and read one story at a time, when it is opened: CacheByIDs backs
+// GET.projects-story-details-ids, so a reopened story paints from the browser and the server only
+// answers the details whose slot moved.
 func (e StoryDetailTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:        61,
-		Name:      "projects_story_detail",
-		Partition: e.CompanyID,
-		Keys:      db.Cols(e.StoryID),
+		ID:         61,
+		Name:       "projects_story_detail",
+		Partition:  e.CompanyID,
+		CacheByIDs: true,
+		Keys:       db.Cols(e.ID),
 	}
 }
 

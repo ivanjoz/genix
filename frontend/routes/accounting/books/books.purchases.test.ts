@@ -3,7 +3,7 @@ import type { IClientProviderSnapshot } from '#services/crm/client-provider.svel
 import { purchaseDocumentTotal, splitPurchaseTotal } from '#core/purchase-document.ts'
 import { SINGLE_DAY_PERIOD } from './books'
 import {
-  buildPurchasesBook, purchasesBookExportBlockers, sumPurchasesBook, PURCHASE_SOURCE_ASSET,
+  buildPurchasesBook, purchasesBookExportBlockers, purchasesBookOfPeriod, sumPurchasesBook, PURCHASE_SOURCE_ASSET,
   PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocument,
   type IPurchasesBookResponse,
 } from './books.purchases'
@@ -170,5 +170,28 @@ describe('the purchase document helpers', () => {
     // Without crédito fiscal the untaxed part is the remainder, whatever was typed.
     const boletaSplit = splitPurchaseTotal(3, 5000, 999, 300)
     expect(boletaSplit).toMatchObject({ TaxableAmount: 0, TaxAmount: 0, UntaxedAmount: 4700, OtherAmount: 300 })
+  })
+})
+
+describe('purchasesBookOfPeriod', () => {
+  const order = makeDocument({ SourceID: 1 })
+  const expense = makeDocument({ Source: PURCHASE_SOURCE_EXPENSE, SourceID: 2, DocIssueDate: ISSUE_DAY + 1 })
+  const assetOfPeriod = makeDocument({ Source: PURCHASE_SOURCE_ASSET, SourceID: 3 })
+  const assetOfEarlierPeriod = makeDocument({ Source: PURCHASE_SOURCE_ASSET, SourceID: 4, DocIssueDate: ISSUE_DAY - 40 })
+  const donatedAsset = makeDocument({ Source: PURCHASE_SOURCE_ASSET, SourceID: 5, DocType: 0, RecordAmount: 0 })
+  const periodRecords = {
+    PurchaseOrders: [order], Expenses: [expense], Assets: [assetOfPeriod, assetOfEarlierPeriod, donatedAsset],
+  }
+
+  it('keeps the period, and of the asset register only the assets bought in it', () => {
+    const response = purchasesBookOfPeriod(periodRecords, "202609", 0)
+    expect(response).toMatchObject({ Period: "202609", FirstDay: ISSUE_DAY - 3, LastDay: ISSUE_DAY + 26 })
+    expect(response.Documents.map(document => document.SourceID)).toEqual([1, 2, 3])
+  })
+
+  it('cuts a single day out of its period', () => {
+    const response = purchasesBookOfPeriod(periodRecords, "202609", ISSUE_DAY + 1)
+    expect(response).toMatchObject({ FirstDay: ISSUE_DAY + 1, LastDay: ISSUE_DAY + 1 })
+    expect(response.Documents.map(document => document.SourceID)).toEqual([2])
   })
 })

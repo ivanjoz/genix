@@ -1,11 +1,12 @@
 import { getRecordsByID } from '@genix/ui/cache'
 import { notifyFailure } from '@genix/ui/notify'
 import { todayUnixDay } from '#libs/helpers.ts'
+import { security } from '#libs/ui-runtime.svelte.ts'
 import type { ICrmOpportunity } from '#services/crm/crm-opportunity.svelte.ts'
 import { CrmPipelinesService } from '#services/crm/crm-pipeline.svelte.ts'
 import { CrmPipelineOpportunityStatusService } from '#services/crm/crm-pipeline-status.svelte.ts'
-import { getCrmReportScope, type ICrmReportScope } from '#services/crm/crm-reports.svelte.ts'
 import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte'
+import { ACCESO_ID_CRM_FULL_REPORT, reportablePipelineIDs } from '../reports/reports.ts'
 import { buildTimelineCards, filterTimelineCards, groupCardsBySeller, type OpportunityInfo, type TimelineDateMode } from './timeline.ts'
 
 /** Days shown by default, today included. */
@@ -20,7 +21,9 @@ export class CrmTimelineState {
   users = new UsuariosService()
   today = todayUnixDay()
 
-  scope = $state<ICrmReportScope>({ PipelineIDs: [], HoldsFullReport: false })
+  userID = security.getUserInfo()?.ID || 0
+  /** The pipelines the user may report on, from the cached pipelines list (no request of its own). */
+  reportPipelineIDs = $derived(reportablePipelineIDs(this.pipelines.records, this.userID, security.checkAcceso(ACCESO_ID_CRM_FULL_REPORT)))
   selectedPipelineID = $state(0)
   statusRows = $state<CrmPipelineOpportunityStatusService | undefined>()
   opportunities = $state(new Map<number, OpportunityInfo>())
@@ -33,13 +36,9 @@ export class CrmTimelineState {
   visibleCards = $derived(filterTimelineCards(this.cards, this.filters.mode, this.filters.fromDay, this.filters.toDay, this.ownerIDs))
   sellers = $derived(groupCardsBySeller(this.visibleCards, (userID) => this.ownerName(userID)))
 
-  async loadScope() {
-    try {
-      this.scope = await getCrmReportScope()
-      if (!this.selectedPipelineID && this.scope.PipelineIDs.length) this.selectedPipelineID = this.scope.PipelineIDs[0]
-    } catch (error) {
-      notifyFailure(error as string)
-    }
+  /** Picks the first reportable pipeline once the pipelines list arrives, unless one is chosen. */
+  selectDefaultPipeline() {
+    if (!this.selectedPipelineID && this.reportPipelineIDs.length) this.selectedPipelineID = this.reportPipelineIDs[0]
   }
 
   /** Opens the pipeline's delta cache; a new pipeline is a new cache. */

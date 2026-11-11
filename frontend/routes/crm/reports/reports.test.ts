@@ -3,8 +3,29 @@ import type { ICrmOpportunityStageLog } from '#services/crm/crm-opportunity.svel
 import {
   addMonthsToPeriod, addScorecardSums, aggregateNetProgress, dailyStageStates, emptyScorecardSums, funnelReport,
   lostDealsInRange, medianOf, netProgressByOwner, paretoOf, periodsBetween, scorecardMetrics, scorecardSumsByOwner,
-  stageOccupancyDeltas, stageReachDeltas, waterfallByPeriod, waterfallDeltas, waterfallSummary, wonFromPositionsOf,
+  reportablePipelineIDs, stageOccupancyDeltas, stageReachDeltas, waterfallByPeriod, waterfallDeltas, waterfallSummary,
+  wonFromPositionsOf,
 } from './reports.ts'
+import type { ICrmPipeline } from '#services/crm/crm-pipeline.svelte.ts'
+
+describe('reportablePipelineIDs', () => {
+  // Mirrors backend crm/types/report_rules_test.go.
+  const member = { UserID: 7, Level: 1 }
+  const pipelines = [
+    { ID: 3, ss: 1, Members: [member] },
+    { ID: 1, ss: 1, Members: [] },
+    { ID: 2, ss: 0, Members: [member] },
+  ] as unknown as ICrmPipeline[]
+  it('gives a member the active pipelines they belong to', () => {
+    expect(reportablePipelineIDs(pipelines, 7, false)).toEqual([3])
+  })
+  it('opens every active pipeline to the full-report access, never a deleted one', () => {
+    expect(reportablePipelineIDs(pipelines, 7, true)).toEqual([1, 3])
+  })
+  it('gives a non-member nothing', () => {
+    expect(reportablePipelineIDs(pipelines, 99, false)).toEqual([])
+  })
+})
 
 describe('period helpers', () => {
   it('adds months across year boundaries both ways', () => {

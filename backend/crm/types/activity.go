@@ -166,9 +166,10 @@ func (e CrmActivityTable) GetSchema() db.TableSchema {
 		Name:      "crm_activity",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
-		// The timeline of the opportunity panel reads every entry of one opportunity.
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.OpportunityID)},
+			// The timeline of the opportunity panel: one group per opportunity, so the browser
+			// downloads it again only after a new entry of that opportunity.
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.OpportunityID)},
 			// Seller scorecard: one group per month and pipeline. Entries are append-only and written
 			// with the current time, so a closed month never changes and is downloaded once.
 			{Type: db.TypeCacheGroup, Keys: db.Cols(e.Period, e.PipelineID)},

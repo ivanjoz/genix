@@ -21,7 +21,7 @@
 	import CajaForm from "./CajaForm.svelte";
 	import {
 		CajasService,
-		getCajaCuadres,
+		CashReconciliationsService,
 		getCajaMovimientos,
 		postCaja,
 		postCajaCuadre,
@@ -251,13 +251,14 @@
 		}
 	});
 
-	// Load cajaCuadres when cajaForm changes
+	// Load cajaCuadres when cajaForm changes: each cash bank's counts are their own delta-cached list.
 	$effect(() => {
 		if (layerView === 2 && cajaForm.ID > 0) {
 			isLoadingCuadres = true;
-			getCajaCuadres({ CajaID: cajaForm.ID, lastRegistros: 200 })
-				.then((result) => {
-					cajaCuadres = result;
+			const reconciliations = new CashReconciliationsService(cajaForm.ID);
+			reconciliations.fetch()
+				.then(() => {
+					cajaCuadres = reconciliations.records;
 				})
 				.catch((error) => {
 					console.log("Error:", error);

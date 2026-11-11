@@ -36,6 +36,17 @@ func TestRenderEmailTemplateEscapesTheBodyOnly(t *testing.T) {
 	}
 }
 
+func TestRenderEmailTemplateDropsTheEditorWrapper(t *testing.T) {
+	template := CrmEmailTemplate{Name: "T", Subject: "S", BodyHTML: `<p>Hola <span data-variable="client.name">{{client.name}}</span>, <span style="color: red">ok</span></p>`}
+	_, body, err := RenderEmailTemplate(template, EmailRenderContext{ClientName: "Ana & Co"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != `<p>Hola Ana &amp; Co, <span style="color: red">ok</span></p>` {
+		t.Fatalf("the variable span is dropped, other spans stay: %q", body)
+	}
+}
+
 func TestRenderEmailTemplateNeedsAQuoteForQuotePlaceholders(t *testing.T) {
 	template := CrmEmailTemplate{Name: "Cotización", Subject: "Cotización {{quote.number}}", BodyHTML: "Total {{quote.total}}"}
 	if _, _, err := RenderEmailTemplate(template, EmailRenderContext{}); err == nil || !strings.Contains(err.Error(), "cotización") {

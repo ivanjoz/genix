@@ -2,10 +2,11 @@ import { notifyFailure } from '@genix/ui/notify'
 import { todayUnixDay } from '#libs/helpers.ts'
 import { GOAL_PERIOD } from '#services/crm/crm-goal-metric.ts'
 import {
-  getCrmForecastSubmissions, postCrmForecastSubmission,
+  getCrmForecastSubmissionsOfWeeks, postCrmForecastSubmission,
   type ICrmForecastSubmission, type ICrmForecastSubmissionPayload,
 } from '#services/crm/crm-forecast.svelte.ts'
 import { periodOfDay, periodsOfYear } from '../goals/goals.ts'
+import { forecastWeekRange, submissionsOfPeriod } from './forecast.ts'
 import { CrmReportsState, currentShortYear } from '../reports/reports.svelte.ts'
 
 /**
@@ -44,8 +45,11 @@ export class CrmForecastState {
 
   async loadSubmissions() {
     if (!this.report.selectedPipelineID) return
+    const [period, periodType] = [this.period, this.periodType]
+    const [weekStart, weekEnd] = forecastWeekRange(periodType, period)
     try {
-      this.submissions = await getCrmForecastSubmissions(this.report.selectedPipelineID, this.period)
+      const weekSubmissions = await getCrmForecastSubmissionsOfWeeks(this.report.selectedPipelineID, weekStart, weekEnd)
+      this.submissions = submissionsOfPeriod(weekSubmissions, period)
     } catch (error) {
       notifyFailure(error as string)
     }

@@ -14,7 +14,7 @@
   import { postClientProviders } from '#services/crm/client-provider.svelte.ts'
   import { OpportunityOutcome, type ICrmOpportunity } from '#services/crm/crm-opportunity.svelte.ts'
   import { STANDARD_FIELD } from '#services/crm/crm-standard-field.ts'
-  import { cancelCrmApprovalRequest, getCrmOpportunityApproval, type ICrmTask } from '#services/crm/crm-task.svelte.ts'
+  import { cancelCrmApprovalRequest, getCrmApprovalTask, type ICrmTask } from '#services/crm/crm-task.svelte.ts'
   import OpportunityActivity from './OpportunityActivity.svelte'
   import type { PipelineBoard } from './pipeline.svelte.ts'
   import {
@@ -72,12 +72,12 @@
   // The approval the card waits on: the card carries only its ID, the task says who must decide.
   let pendingApproval = $state<ICrmTask>()
   $effect(() => {
-    const waitingOpportunityID = opportunity.PendingApprovalTaskID ? opportunity.ID : 0
+    const approvalTaskID = opportunity.PendingApprovalTaskID
     untrack(() => {
       pendingApproval = undefined
-      if (waitingOpportunityID) {
-        getCrmOpportunityApproval(waitingOpportunityID).then((task) => {
-          if (opportunity.ID === waitingOpportunityID) pendingApproval = task
+      if (approvalTaskID) {
+        getCrmApprovalTask(approvalTaskID).then((task) => {
+          if (opportunity.PendingApprovalTaskID === approvalTaskID) pendingApproval = task
         }).catch(() => {})
       }
     })

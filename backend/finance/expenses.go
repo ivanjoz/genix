@@ -393,7 +393,6 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 	// The schedule's row lock serializes two loads of its periods: the second waits, then finds the
 	// periods the first one created, so a period is never materialized twice. (A unique index on
 	// (ExpenseScheduledID, PeriodDate) cannot do it: every one-time expense stores (0, 0).)
-	var periods []types.Expense
 	err := db.RunTransaction(func(transaction *db.Transaction) error {
 		schedules := []types.ExpenseScheduled{{CompanyID: req.User.CompanyID, ID: scheduleID}}
 		if err := db.LockByKeys(transaction, &schedules); err != nil {
@@ -402,27 +401,40 @@ func GetExpenseSchedulePeriods(req *core.HandlerArgs) core.HandlerResponse {
 		if len(schedules) == 0 {
 			return core.Err("No se encontró el gasto programado.")
 		}
-		var periodsErr error
-		periods, periodsErr = materializeSchedulePeriodsIn(transaction, req, schedules[0])
-		return periodsErr
+		return materializeSchedulePeriodsIn(transaction, req, schedules[0])
 	})
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	response := map[string]any{"Periods": periods}
-	return core.MakeResponse(req, &response)
+
+	// The periods are read as the schedule's cache group after the commit, so the browser
+	// downloads them again only when a period was just created or has changed since.
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	periodGroups := []db.RecordGroup[types.Expense]{}
+	query := db.QueryIndexGroup(&periodGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		query.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
+	}
+	query.ExpenseScheduledID.Between(scheduleID, scheduleID)
+	if err := query.Exec(); err != nil {
+		core.Log("Error querying expense schedule period group:", err)
+		return req.MakeErr("Error al obtener los periodos del gasto.")
+	}
+	return core.MakeResponse(req, &periodGroups)
 }
 
-// materializeSchedulePeriodsIn returns every period of the schedule up to today, creating the
-// missing ones, under the schedule's lock its caller holds.
-func materializeSchedulePeriodsIn(transaction *db.Transaction, req *core.HandlerArgs, schedule types.ExpenseScheduled,
-) ([]types.Expense, error) {
+// materializeSchedulePeriodsIn creates the missing periods of the schedule up to today, under the
+// schedule's lock its caller holds.
+func materializeSchedulePeriodsIn(transaction *db.Transaction, req *core.HandlerArgs, schedule types.ExpenseScheduled) error {
 	// Load existing periods for this schedule (local index on ExpenseScheduledID).
 	periods := []types.Expense{}
 	pq := db.Query(&periods)
-	pq.Select().CompanyID.Equals(req.User.CompanyID).ExpenseScheduledID.Equals(schedule.ID)
+	pq.Select(pq.PeriodDate).CompanyID.Equals(req.User.CompanyID).ExpenseScheduledID.Equals(schedule.ID)
 	if err := pq.Exec(); err != nil {
-		return nil, core.Err("Error al obtener los periodos del gasto:", err)
+		return core.Err("Error al obtener los periodos del gasto:", err)
 	}
 
 	existing := core.SliceSet[int16]{}
@@ -467,11 +479,10 @@ func materializeSchedulePeriodsIn(transaction *db.Transaction, req *core.Handler
 			newPeriods[index].StampPeriod()
 		}
 		if err := db.InsertIn(transaction, &newPeriods); err != nil {
-			return nil, core.Err("Error al generar los periodos del gasto:", err)
+			return core.Err("Error al generar los periodos del gasto:", err)
 		}
-		periods = append(periods, newPeriods...)
 	}
-	return periods, nil
+	return nil
 }
 
 // --- Payment ----------------------------------------------------------------------

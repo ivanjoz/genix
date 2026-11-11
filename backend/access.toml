@@ -73,7 +73,7 @@ name = "Configuración"
 group = 1
 levels = 14
 frontend_routes = "company/configuration"
-backend_apis = "GET.company-parametros,POST.company-parametros,POST.parametros,POST.system-parameters,POST.initial-data,GET.company-secrets,POST.company-secrets,POST.company-secrets-test"
+backend_apis = "GET.company-parametros,POST.company-parametros,POST.system-parameters,POST.initial-data,GET.company-secrets,POST.company-secrets,POST.company-secrets-test"
 
 [[access]]
 id = 2
@@ -365,7 +365,7 @@ name = "Libros Contables"
 group = 7
 levels = 14
 frontend_routes = "accounting/books"
-backend_apis = "GET.sales-book,GET.purchases-book,GET.client-provider-snapshot-ids"
+backend_apis = "GET.sales-book,GET.purchases-book,GET.invoice-document-ids,GET.client-provider-snapshot-ids"
 
 [[access]]
 id = 38
@@ -381,7 +381,7 @@ name = "Proyectos"
 group = 11
 levels = 14
 frontend_routes = "projects"
-backend_apis = "GET.projects-projects,POST.projects-projects,GET.projects-team-candidates,GET.projects-epics,POST.projects-epics,GET.projects-stories,GET.projects-stories-ids,GET.projects-assigned-stories,POST.projects-stories,POST.projects-stories-rank,GET.projects-story-detail,GET.projects-story-activity,POST.projects-story-comments,POST.projects-attachment-upload,GET.projects-sprints,GET.projects-documents,POST.projects-documents,POST.projects-sprints,POST.projects-sprint-start,POST.projects-sprint-move,POST.projects-sprint-close"
+backend_apis = "GET.projects-projects,POST.projects-projects,GET.projects-epics,POST.projects-epics,GET.projects-stories,GET.projects-stories-ids,GET.projects-assigned-stories,POST.projects-stories,POST.projects-stories-rank,GET.projects-story-details-ids,GET.projects-story-activity,POST.projects-story-comments,POST.projects-attachment-upload,GET.projects-sprints,GET.projects-documents,POST.projects-documents,POST.projects-sprints,POST.projects-sprint-start,POST.projects-sprint-move,POST.projects-sprint-close"
 
 # RRHH. Salary data is split from people data by ROUTE, not by sub-access: the delta and by-IDs
 # caches ship whole records, so a sub-access cannot hide a field a route already sent. Every route
@@ -456,7 +456,7 @@ name = "CRM Oportunidades"
 group = 10
 levels = 14
 frontend_routes = "crm/pipeline"
-backend_apis = "POST.crm-opportunity,POST.crm-opportunity-move,POST.crm-opportunity-close,POST.crm-opportunity-activity,POST.crm-attachment-upload,GET.crm-opportunity-approval,POST.crm-task,GET.crm-opportunity-email-draft,POST.crm-opportunity-email"
+backend_apis = "POST.crm-opportunity,POST.crm-opportunity-move,POST.crm-opportunity-close,POST.crm-opportunity-activity,POST.crm-attachment-upload,GET.crm-task-ids,POST.crm-task,GET.crm-opportunity-email-draft,POST.crm-opportunity-email"
 
 [[access]]
 id = 48
@@ -496,7 +496,7 @@ name = "CRM Reportes"
 group = 10
 levels = 14
 frontend_routes = "crm/reports"
-backend_apis = "GET.crm-report-scope,GET.crm-report-stage-log,GET.crm-report-open-opportunities,GET.crm-report-activities"
+backend_apis = "GET.crm-report-stage-log,GET.crm-report-activities"
 
 [[access]]
 id = 53
@@ -528,7 +528,7 @@ name = "CRM Línea de tiempo"
 group = 10
 levels = 14
 frontend_routes = "crm/timeline"
-backend_apis = "GET.crm-report-scope,GET.crm-pipeline-opportunity-status,GET.crm-opportunity-ids"
+backend_apis = "GET.crm-pipeline-opportunity-status,GET.crm-opportunity-ids"
 
 # No route of its own: the CRM report handlers read it to open every pipeline to the holder
 # (crm/types/report_rules.go). Without it, reports cover the pipelines the user is a member of.

@@ -15,7 +15,7 @@
   const MAX_DAYS = 366
   const timeline = new CrmTimelineState()
 
-  const pipelineOptions = $derived(timeline.scope.PipelineIDs.map((pipelineID) => ({
+  const pipelineOptions = $derived(timeline.reportPipelineIDs.map((pipelineID) => ({
     id: pipelineID, name: timeline.pipelines.records.find((pipeline) => pipeline.ID === pipelineID)?.Name ?? `Pipeline #${pipelineID}`,
   })))
   const modeOptions = [
@@ -27,7 +27,10 @@
   const rangeIsValid = $derived(timeline.filters.toDay >= timeline.filters.fromDay && timeline.filters.toDay - timeline.filters.fromDay < MAX_DAYS)
   const stageByID = $derived(new Map((timeline.selectedPipeline?.Stages ?? []).map((stage) => [stage.ID, stage])))
 
-  timeline.loadScope()
+  $effect(() => {
+    void timeline.reportPipelineIDs
+    untrack(() => timeline.selectDefaultPipeline())
+  })
   $effect(() => {
     const pipelineID = timeline.selectedPipelineID
     if (pipelineID) untrack(() => timeline.selectPipeline(pipelineID))
@@ -49,7 +52,7 @@
     <DateInput bind:saveOn={timeline.filters} save="toDay" label="To|Hasta" css="w-150" />
   </div>
 
-  {#if !timeline.scope.PipelineIDs.length}
+  {#if !timeline.reportPipelineIDs.length}
     <div class="text-fg-muted p-16">{tr('You have no pipelines to report on.|No tiene pipelines para reportar.')}</div>
   {:else if !rangeIsValid}
     <div class="text-fg-muted p-16">{tr('Pick a range of up to one year, ending after it starts.|Elija un rango de hasta un año, que termine después de empezar.')}</div>

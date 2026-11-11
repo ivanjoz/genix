@@ -9,28 +9,42 @@ import (
 	"app/db"
 )
 
-// GetCrmForecastSubmissions returns every submission of one pipeline and one month, oldest first
-// in the browser's view. Reading needs the same scope as the reports (plan §8.4).
+// GetCrmForecastSubmissions returns the submissions of one pipeline for a range of weeks
+// (?week-start&week-end), as cache groups by (Week, PipelineID). The browser asks for the weeks its
+// goal period spans and keeps only that period's rows. Reading needs the same scope as the reports
+// (plan §8.4).
 func GetCrmForecastSubmissions(req *core.HandlerArgs) core.HandlerResponse {
 	pipelineID := int16(req.GetQueryInt("pipeline-id"))
-	period := req.GetQueryInt16("period")
-	if pipelineID <= 0 || period <= 0 {
-		return req.MakeErr("Debe enviar pipeline-id y period.")
+	weekStart, weekEnd := req.GetQueryInt16("week-start"), req.GetQueryInt16("week-end")
+	if pipelineID <= 0 || weekStart <= 0 || weekEnd <= 0 {
+		return req.MakeErr("Debe enviar pipeline-id, week-start y week-end.")
 	}
-	scope, err := loadCrmReportScope(req.User.CompanyID, req.User.ID)
+	// A month spans at most 6 weeks; each week is one group to probe.
+	if weekEnd < weekStart || weekEnd-weekStart > 5 {
+		return req.MakeErr("El rango de semanas debe cubrir como máximo 6 semanas.")
+	}
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	if !slices.Contains(scope.PipelineIDs, pipelineID) {
+	reportablePipelineIDs, err := loadReportablePipelineIDs(req.User.CompanyID, req.User.ID)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	if !slices.Contains(reportablePipelineIDs, pipelineID) {
 		return req.MakeErr("No tiene acceso a los reportes de este pipeline.")
 	}
-	submissions := []types.CrmForecastSubmission{}
-	query := db.Query(&submissions)
-	query.Select().CompanyID.Equals(req.User.CompanyID).PipelineID.Equals(pipelineID).Period.Equals(period)
-	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener los forecasts enviados:", err)
+	submissionGroups := []db.RecordGroup[types.CrmForecastSubmission]{}
+	query := db.QueryIndexGroup(&submissionGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		query.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
 	}
-	return req.MakeResponse(submissions)
+	query.Week.Between(weekStart, weekEnd).PipelineID.Equals(pipelineID)
+	if err := query.Exec(); err != nil {
+		core.Log("Error querying CRM forecast submission groups:", err)
+		return req.MakeErr("Error al obtener los forecasts enviados.")
+	}
+	return core.MakeResponse(req, &submissionGroups)
 }
 
 // PostCrmForecastSubmission appends one forecast submission. The server recomputes the forecast

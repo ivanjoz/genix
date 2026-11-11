@@ -1,16 +1,15 @@
 import { notifyFailure } from '@genix/ui/notify'
 import { todayUnixDay } from '#libs/helpers.ts'
+import { security } from '#libs/ui-runtime.svelte.ts'
 import type { ICrmOpportunityStageLog } from '#services/crm/crm-opportunity.svelte.ts'
 import type { ICrmActivity } from '#services/crm/crm-activity.svelte.ts'
+import { CrmOpportunitiesService } from '#services/crm/crm-opportunity.svelte.ts'
 import { CrmGoalsService } from '#services/crm/crm-goal.svelte.ts'
 import { CrmLostReasonsService, CrmPipelinesService } from '#services/crm/crm-pipeline.svelte.ts'
-import {
-  getCrmReportActivitiesOfYear, getCrmReportOpenOpportunities, getCrmReportScope, getCrmReportStageLogOfYear,
-  type ICrmReportOpenOpportunity, type ICrmReportScope,
-} from '#services/crm/crm-reports.svelte.ts'
+import { getCrmReportActivitiesOfYear, getCrmReportStageLogOfYear } from '#services/crm/crm-reports.svelte.ts'
 import { CrmTeamsService } from '#services/crm/crm-team.svelte.ts'
 import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte'
-import { periodOfUnixDay } from './reports.ts'
+import { ACCESO_ID_CRM_FULL_REPORT, periodOfUnixDay, reportablePipelineIDs } from './reports.ts'
 
 /** Two-digit year of today, e.g. 26. */
 export const currentShortYear = () => Math.floor(periodOfUnixDay(todayUnixDay()) / 100)
@@ -28,7 +27,9 @@ export class CrmReportsState {
   goals = new CrmGoalsService(true)
   lostReasons = new CrmLostReasonsService(true)
 
-  scope = $state<ICrmReportScope>({ PipelineIDs: [], HoldsFullReport: false })
+  userID = security.getUserInfo()?.ID || 0
+  /** The pipelines the user may report on, from the cached pipelines list (no request of its own). */
+  reportPipelineIDs = $derived(reportablePipelineIDs(this.pipelines.records, this.userID, security.checkAcceso(ACCESO_ID_CRM_FULL_REPORT)))
   selectedPipelineID = $state(0)
   /** YYMM range of the report; defaults to the whole current year. */
   periodFrom = $state(currentShortYear() * 100 + 1)
@@ -38,7 +39,9 @@ export class CrmReportsState {
 
   /** Stage log rows of the selected pipeline by year, as loaded. */
   rowsByYear = $state(new Map<number, ICrmOpportunityStageLog[]>())
-  openNow = $state<ICrmReportOpenOpportunity[]>([])
+  /** The board's delta list of the selected pipeline: today's open opportunities, the anchor of the daily state. */
+  openOpportunities = $state<CrmOpportunitiesService | undefined>()
+  openNow = $derived(this.openOpportunities?.records ?? [])
   /** Activity entries of the selected pipeline by year: only the scorecard loads them. */
   activitiesByYear = $state(new Map<number, ICrmActivity[]>())
   isLoading = $state(false)
@@ -53,13 +56,9 @@ export class CrmReportsState {
   activitiesInRange = $derived([...this.activitiesByYear].flatMap(([, activities]) => activities)
     .filter((activity) => activity.Period >= this.periodFrom && activity.Period <= this.periodTo))
 
-  async loadScope() {
-    try {
-      this.scope = await getCrmReportScope()
-      if (!this.selectedPipelineID && this.scope.PipelineIDs.length) this.selectedPipelineID = this.scope.PipelineIDs[0]
-    } catch (error) {
-      notifyFailure(error as string)
-    }
+  /** Picks the first reportable pipeline once the pipelines list arrives, unless one is chosen. */
+  selectDefaultPipeline() {
+    if (!this.selectedPipelineID && this.reportPipelineIDs.length) this.selectedPipelineID = this.reportPipelineIDs[0]
   }
 
   /** Loads the selected pipeline from the start year through the current one (later years have no log yet). */
@@ -67,15 +66,15 @@ export class CrmReportsState {
     if (!this.selectedPipelineID) return
     const pipelineID = this.selectedPipelineID
     const years = Array.from({ length: currentShortYear() - this.yearFrom + 1 }, (_, index) => this.yearFrom + index)
+    // Each pipeline is its own delta cache: opening it again only downloads what changed.
+    if (this.openOpportunities?.route !== `crm-opportunities?pipeline-id=${pipelineID}`) {
+      this.openOpportunities = new CrmOpportunitiesService(pipelineID)
+    }
     this.isLoading = true
     try {
-      const [openNow, ...yearRows] = await Promise.all([
-        getCrmReportOpenOpportunities(pipelineID),
-        ...years.map((year) => getCrmReportStageLogOfYear(pipelineID, year)),
-      ])
+      const yearRows = await Promise.all(years.map((year) => getCrmReportStageLogOfYear(pipelineID, year)))
       // A pipeline switched while loading discards this answer.
       if (pipelineID !== this.selectedPipelineID) return
-      this.openNow = openNow as ICrmReportOpenOpportunity[]
       this.rowsByYear = new Map(years.map((year, index) => [year, yearRows[index] as ICrmOpportunityStageLog[]]))
     } catch (error) {
       notifyFailure(error as string)

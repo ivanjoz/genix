@@ -171,8 +171,12 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 			{Col: e.Type, Min: 0, Max: 31},
 		},
 		Indexes: []db.Index{
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.DocumentID)},
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ReferenceID)},
+			// The payments of one document (an expense's payment tab): one cache group per document,
+			// downloaded again only after a new payment of it. Also the local index the payment
+			// handlers sum a document's payments through.
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocumentID)},
+			// A cash bank's movements of a date range: one group per (cash bank, day), a key range.
+			{Type: db.TypeCacheGroupFromKey, Keys: db.Cols(e.CashBankID, e.Date)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.CreatedBy)},
 			// One log per accounting period and SameDayMovement value: GET.accounting-operations
 			// syncs a month's SameDayMovement = 0 log only. Movements are never deleted, so Type is
@@ -194,6 +198,10 @@ type CashReconciliation struct {
 	DifferenceAmount int32 `cb:"8"`
 	Created          int32 `cb:"9"`
 	CreatedBy        int32 `cb:"10"`
+	Updated          int32 `json:"upd" cb:"upd,11"`
+	Version          int16 `json:"ver" cb:"ver,12"`
+	// Metadata is set only on the delta log records a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,13"`
 }
 
 type CashReconciliationTable struct {
@@ -208,6 +216,8 @@ type CashReconciliationTable struct {
 	DifferenceAmount db.Col[*CashReconciliationTable, int32]
 	Created          db.Col[*CashReconciliationTable, int32]
 	CreatedBy        db.Col[*CashReconciliationTable, int32]
+	Updated          db.Col[*CashReconciliationTable, int32]
+	Version          db.Col[*CashReconciliationTable, int16]
 }
 
 func (e CashReconciliationTable) GetSchema() db.TableSchema {
@@ -216,6 +226,11 @@ func (e CashReconciliationTable) GetSchema() db.TableSchema {
 		Name:      "cash_reconciliations",
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
+		Indexes: []db.Index{
+			// One log per cash bank: the Cuadres tab syncs its cash bank's counts. Counts are manual
+			// and never deleted, so the list stays short and only new counts travel.
+			{Type: db.TypeDelta, Keys: db.Cols(e.CashBankID)},
+		},
 	}
 }
 

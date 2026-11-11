@@ -12,7 +12,9 @@ export interface IGalleryImage {
 
 export class GalleryImagesService extends GetHandler<IGalleryImage> {
   route = 'gallery-images';
-  useCache = { min: 5, ver: 2 };
+  // Synced by delta (removed IDs are ImageIDs). v3: the route moved from a whole-list replace to
+  // the delta protocol.
+  useCache = { min: 5, ver: 3 };
   keyID = 'ImageID';
   inferRemoveFromStatus = true;
   prependOnSave = true;

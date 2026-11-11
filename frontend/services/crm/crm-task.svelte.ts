@@ -1,4 +1,5 @@
-import { GET } from '#libs/ui-runtime.svelte.ts'
+import { getRecordsByID } from '@genix/ui/cache'
+import type { ICrmActivity } from './crm-activity.svelte.ts'
 import { TASK_ACTION } from './crm-task.ts'
 import type { CrmOpportunitiesService } from './crm-opportunity.svelte.ts'
 import { CrmCatalogService } from './crm-pipeline.svelte.ts'
@@ -60,6 +61,10 @@ export const cancelCrmApprovalRequest = (opportunities: CrmOpportunitiesService,
 export const decideCrmApproval = (tasks: CrmTasksService, taskID: number, approve: boolean, note: string): Promise<ICrmTask> =>
   tasks.writeAndSync('crm-task-decide', { ID: taskID, Approve: approve, Note: note })
 
-/** The approval an opportunity waits on (none or one), for anyone who can see its pipeline. */
-export const getCrmOpportunityApproval = async (opportunityID: number): Promise<ICrmTask | undefined> =>
-  ((await GET({ route: `crm-opportunity-approval?opportunity-id=${opportunityID}` })) as ICrmTask[] | null)?.[0]
+/** Logs the activity that fulfils an activity task; the closed task leaves the list through the write's delta. */
+export const completeCrmActivityTask = (tasks: CrmTasksService, activity: Partial<ICrmActivity>, taskID: number): Promise<ICrmActivity> =>
+  tasks.writeAndSync('crm-opportunity-activity', { ...activity, TaskID: taskID })
+
+/** The approval task a card waits on (its PendingApprovalTaskID), through the records-by-ID cache. */
+export const getCrmApprovalTask = async (taskID: number): Promise<ICrmTask | undefined> =>
+  (await getRecordsByID<ICrmTask>('crm-task-ids', [taskID])).get(taskID)

@@ -42,16 +42,17 @@ var APIRouteIDs = map[string]int16{
 	"GET.crm-lost-reasons":                202,
 	"GET.crm-opportunities":               203,
 	"GET.crm-opportunity-activity":        214,
-	"GET.crm-opportunity-approval":        234,
+	"GET.crm-opportunity-approval":        234, // retired
 	"GET.crm-opportunity-email-draft":     235,
 	"GET.crm-opportunity-ids":             227,
 	"GET.crm-opportunity-log":             204,
 	"GET.crm-pipeline-opportunity-status": 228,
 	"GET.crm-pipelines":                   205,
 	"GET.crm-report-activities":           229,
-	"GET.crm-report-open-opportunities":   218,
-	"GET.crm-report-scope":                219,
+	"GET.crm-report-open-opportunities":   218, // retired
+	"GET.crm-report-scope":                219, // retired
 	"GET.crm-report-stage-log":            220,
+	"GET.crm-task-ids":                    242,
 	"GET.crm-tasks":                       236,
 	"GET.crm-teams":                       223,
 	"GET.cron-actions-scheduled":          12,
@@ -82,6 +83,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.image-asset-text-search":         19,
 	"GET.image-assets":                    20,
 	"GET.image-id-counter":                21,
+	"GET.invoice-document-ids":            243,
 	"GET.invoice-series":                  117, // retired
 	"GET.invoice-xml":                     118,
 	"GET.invoices":                        119,
@@ -94,7 +96,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.p-products-ecommerce":            27,
 	"GET.p-products-ids":                  28,
 	"GET.p-webpage":                       29,
-	"GET.parametros":                      30,
+	"GET.parametros":                      30, // retired
 	"GET.perfiles":                        31,
 	"GET.product-stock-lots-by-ids":       32,
 	"GET.product-supply":                  33,
@@ -108,8 +110,9 @@ var APIRouteIDs = map[string]int16{
 	"GET.projects-stories":                146,
 	"GET.projects-stories-ids":            147,
 	"GET.projects-story-activity":         154,
-	"GET.projects-story-detail":           148,
-	"GET.projects-team-candidates":        149,
+	"GET.projects-story-detail":           148, // retired
+	"GET.projects-story-details-ids":      244,
+	"GET.projects-team-candidates":        149, // retired
 	"GET.purchase-order-ids":              140,
 	"GET.purchase-orders":                 36,
 	"GET.purchase-orders-query":           37,
@@ -136,7 +139,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.users":                           52,
 	"GET.users-ids":                       53,
 	"GET.warehouse-movements":             54,
-	"GET.warehouse-movements-grouped":     55,
+	"GET.warehouse-movements-grouped":     55, // retired
 	"GET.warehouse-product-stock":         56,
 	"GET.webpage-pages":                   57,
 	"GET.website-config":                  58,
@@ -209,7 +212,7 @@ var APIRouteIDs = map[string]int16{
 	"POST.p-signup-request":               75,
 	"POST.p-signup-verify":                76,
 	"POST.p-user-login":                   77,
-	"POST.parametros":                     78,
+	"POST.parametros":                     78, // retired
 	"POST.perfiles":                       79,
 	"POST.product-category-image":         80,
 	"POST.product-image":                  81,
@@ -267,7 +270,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 241
+const MaxAPIRouteID int16 = 244
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

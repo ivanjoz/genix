@@ -60,6 +60,9 @@ type CompanySecrets struct {
 	UpdatedBy int32 `cb:"15"`
 	Created   int32 `cb:"16"`
 	CreatedBy int32 `cb:"17"`
+	Version   int16 `json:"ver" cb:"ver,18"`
+	// Metadata is set only on the metadata record a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,19"`
 }
 
 type CompanySecretsTable struct {
@@ -84,15 +87,15 @@ type CompanySecretsTable struct {
 	UpdatedBy       db.Col[*CompanySecretsTable, int32]
 	Created         db.Col[*CompanySecretsTable, int32]
 	CreatedBy       db.Col[*CompanySecretsTable, int32]
+	Version         db.Col[*CompanySecretsTable, int16]
 }
 
 func (e CompanySecretsTable) GetSchema() db.TableSchema {
 	return db.TableSchema{
-		ID:         26,
-		Name:       "company_secrets",
-		Partition:  e.CompanyID,
-		Keys:       db.Cols(e.ID.Autoincrement(0)),
-		CacheByIDs: true,
+		ID:        26,
+		Name:      "company_secrets",
+		Partition: e.CompanyID,
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Values: []int64{0, 1}},
 		},
@@ -100,6 +103,8 @@ func (e CompanySecretsTable) GetSchema() db.TableSchema {
 			// Resolves "the active SUNAT credentials of this company" in one read,
 			// which is what every emission starts with.
 			{Type: db.TypeLocalIndex, Keys: db.Cols(e.Type)},
+			// GET.company-secrets syncs every row, active and retired (Status 0 and 1).
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

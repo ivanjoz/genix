@@ -154,55 +154,21 @@ func GetAccountingOperations(req *core.HandlerArgs) core.HandlerResponse {
 	response := AccountingOperationsResponse{}
 
 	readGroup := errgroup.Group{}
-	readGroup.Go(func() error {
-		documents := []invoicing.InvoiceDocument{}
-		query := db.Query(&documents)
-		query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).
-			Delta(req.GetDeltaCursor("SalesDocuments"), core.ToAny(invoicing.AllInvoiceStates)...)
-		if queryError := query.Exec(); queryError != nil {
-			return core.Err("Error al obtener los comprobantes del periodo.", queryError)
-		}
-		response.SalesDocuments = projectRecords(documents, func(document invoicing.InvoiceDocument) SalesBookDocument {
-			return makeBookDocument(&document)
-		})
-		return nil
+	readGroup.Go(func() (err error) {
+		response.SalesDocuments, err = readPeriodSalesDocuments(companyID, periodKey, req.GetDeltaCursor("SalesDocuments"))
+		return err
 	})
-	readGroup.Go(func() error {
-		orders := []sales.SaleOrder{}
-		query := db.Query(&orders)
-		query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).
-			Delta(req.GetDeltaCursor("Sales"), operationSaleStatuses...)
-		if queryError := query.Exec(); queryError != nil {
-			return core.Err("Error al obtener las ventas del periodo.", queryError)
-		}
-		response.Sales = projectRecords(orders, func(order sales.SaleOrder) OperationSale { return makeOperationSale(&order) })
-		return nil
+	readGroup.Go(func() (err error) {
+		response.Sales, err = readPeriodSales(companyID, periodKey, req.GetDeltaCursor("Sales"))
+		return err
 	})
-	readGroup.Go(func() error {
-		orders := []logistics.PurchaseOrder{}
-		query := db.Query(&orders)
-		query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).
-			Delta(req.GetDeltaCursor("PurchaseOrders"), operationOrderStatuses...)
-		if queryError := query.Exec(); queryError != nil {
-			return core.Err("Error al obtener las órdenes de compra del periodo.", queryError)
-		}
-		response.PurchaseOrders = projectRecords(orders, func(order logistics.PurchaseOrder) PurchaseBookDocument {
-			return makeOrderBookDocument(&order)
-		})
-		return nil
+	readGroup.Go(func() (err error) {
+		response.PurchaseOrders, err = readPeriodPurchaseOrders(companyID, periodKey, req.GetDeltaCursor("PurchaseOrders"))
+		return err
 	})
-	readGroup.Go(func() error {
-		expenses := []finance.Expense{}
-		query := db.Query(&expenses)
-		query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).
-			Delta(req.GetDeltaCursor("Expenses"), operationExpenseStatuses...)
-		if queryError := query.Exec(); queryError != nil {
-			return core.Err("Error al obtener los gastos del periodo.", queryError)
-		}
-		response.Expenses = projectRecords(expenses, func(expense finance.Expense) PurchaseBookDocument {
-			return makeExpenseBookDocument(&expense)
-		})
-		return nil
+	readGroup.Go(func() (err error) {
+		response.Expenses, err = readPeriodExpenses(companyID, periodKey, req.GetDeltaCursor("Expenses"), operationExpenseStatuses)
+		return err
 	})
 	readGroup.Go(func() error {
 		movements := []logistics.WarehouseProductMovement{}
@@ -269,6 +235,55 @@ func GetAccountingOperations(req *core.HandlerArgs) core.HandlerResponse {
 		"sales:", len(response.Sales), "orders:", len(response.PurchaseOrders), "expenses:", len(response.Expenses),
 		"stock:", len(response.StockMovements), "cash:", len(response.CashMovements), "payslips:", len(response.Payslips))
 	return req.MakeResponse(response)
+}
+
+// The period delta logs the accounting operations and the books both sync, one reader per key.
+
+func readPeriodSalesDocuments(companyID int32, periodKey int16, cursor db.DeltaCursor) ([]SalesBookDocument, error) {
+	documents := []invoicing.InvoiceDocument{}
+	query := db.Query(&documents)
+	query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).
+		Delta(cursor, core.ToAny(invoicing.AllInvoiceStates)...)
+	if queryError := query.Exec(); queryError != nil {
+		return nil, core.Err("Error al obtener los comprobantes del periodo.", queryError)
+	}
+	return projectRecords(documents, func(document invoicing.InvoiceDocument) SalesBookDocument {
+		return makeBookDocument(&document)
+	}), nil
+}
+
+func readPeriodSales(companyID int32, periodKey int16, cursor db.DeltaCursor) ([]OperationSale, error) {
+	orders := []sales.SaleOrder{}
+	query := db.Query(&orders)
+	query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).Delta(cursor, operationSaleStatuses...)
+	if queryError := query.Exec(); queryError != nil {
+		return nil, core.Err("Error al obtener las ventas del periodo.", queryError)
+	}
+	return projectRecords(orders, func(order sales.SaleOrder) OperationSale { return makeOperationSale(&order) }), nil
+}
+
+func readPeriodPurchaseOrders(companyID int32, periodKey int16, cursor db.DeltaCursor) ([]PurchaseBookDocument, error) {
+	orders := []logistics.PurchaseOrder{}
+	query := db.Query(&orders)
+	query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).Delta(cursor, operationOrderStatuses...)
+	if queryError := query.Exec(); queryError != nil {
+		return nil, core.Err("Error al obtener las órdenes de compra del periodo.", queryError)
+	}
+	return projectRecords(orders, func(order logistics.PurchaseOrder) PurchaseBookDocument {
+		return makeOrderBookDocument(&order)
+	}), nil
+}
+
+func readPeriodExpenses(companyID int32, periodKey int16, cursor db.DeltaCursor, statuses []any) ([]PurchaseBookDocument, error) {
+	expenses := []finance.Expense{}
+	query := db.Query(&expenses)
+	query.Select().CompanyID.Equals(companyID).Period.Equals(periodKey).Delta(cursor, statuses...)
+	if queryError := query.Exec(); queryError != nil {
+		return nil, core.Err("Error al obtener los gastos del periodo.", queryError)
+	}
+	return projectRecords(expenses, func(expense finance.Expense) PurchaseBookDocument {
+		return makeExpenseBookDocument(&expense)
+	}), nil
 }
 
 // projectRecords maps the stored records to the projection a key sends.

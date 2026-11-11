@@ -16,7 +16,9 @@ import { onMount, untrack } from 'svelte'
 import { Core, tr } from '#core/store.svelte.ts'
 import { formatN, formatTime } from '#libs/helpers.ts'
 import { useUI } from '@genix/ui'
-import { CajasService, getCashBankMovementByID, type ICashBankMovement } from '../cash-banks/cajas.svelte'
+import {
+  CajasService, CASH_MOVEMENT_TYPE_EXPENSE_PAYMENT, getDocumentCashMovements, type ICashBankMovement,
+} from '../cash-banks/cajas.svelte'
 import {
   ExpensesService,
   postExpense,
@@ -103,9 +105,8 @@ let paymentsLoading = $state(false)
 const loadPayments = async (expenseID: number) => {
   paymentsLoading = true
   try {
-    // Cache keyed by the expense's `upd` watermark: registering a payment advances `upd`,
-    // so the next load misses the cache and re-fetches the settling movements.
-    payments = await getCashBankMovementByID({ documentID: expenseID, updated: form.upd })
+    // The expense's cache group: a new payment marks it, so only then is it downloaded again.
+    payments = await getDocumentCashMovements(expenseID, CASH_MOVEMENT_TYPE_EXPENSE_PAYMENT)
   } finally {
     paymentsLoading = false
   }
@@ -114,7 +115,7 @@ const loadPayments = async (expenseID: number) => {
 $effect(() => {
   const expenseID = form.ID
   // Load the settling movements whenever anything has been paid (partial or full), and
-  // re-run when `upd` advances (a new payment) so the route cache re-fetches.
+  // re-run when `upd` advances (a new payment) so the changed cache group is downloaded.
   const hasPayments = (form.PaidAmount || 0) > 0
   void form.upd
   const showPayments = hasPayments && layerView === 2 && !!expenseID
@@ -303,7 +304,7 @@ const registerPayment = async () => {
   try {
     const result = await postExpensePayment(payload)
     // Reflect the server-updated paid amount / lifecycle status in the open form. `upd` must
-    // advance too so the payments cache (keyed by it) invalidates and re-fetches below.
+    // advance too so the payments list re-reads its cache group below.
     form = { ...form, PaidAmount: result.PaidAmount, ss: result.ss, upd: result.upd }
     paymentForm = { ExpenseID: form.ID, IsFullyPaid: false } as IExpensePayment
     notifySuccess(tr("Payment recorded.|Pago registrado."))

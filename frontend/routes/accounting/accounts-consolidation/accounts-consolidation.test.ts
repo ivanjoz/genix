@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { DOC_TYPE_CREDIT_NOTE, DOC_TYPE_FACTURA } from '#core/sunat-doc-type.ts'
-import type { ISalesBookDocument } from '../books/books'
+import { periodBounds, type ISalesBookDocument } from '../books/books'
 import { PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocument } from '../books/books.purchases'
 import {
   buildAccountingOperations, buildTrialBalance, bulkClassificationTargets,
-  classificationTargetsOf, entrySides, groupOperations, inferSameDayPayments, periodBounds, referencedRecordIDs,
+  classificationTargetsOf, entrySides, groupOperations, inferSameDayPayments, referencedRecordIDs,
   summarizeOperations, OPERATION_CREDIT_NOTE, OPERATION_STATUS_CLASSIFIED,
   OPERATION_STATUS_INCOMPLETE, OPERATION_STATUS_UNCLASSIFIED,
   type IAccountingOperation, type IAccountingSources, type IOperationAsset,

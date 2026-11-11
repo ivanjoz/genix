@@ -38,16 +38,14 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.crm-forecast-submissions": GetCrmForecastSubmissions,
 	"POST.crm-forecast-submission": PostCrmForecastSubmission,
 
-	"GET.crm-tasks":                GetCrmTasks,
-	"POST.crm-task":                PostCrmTask,
-	"POST.crm-task-decide":         PostCrmTaskDecide,
-	"GET.crm-opportunity-approval": GetCrmOpportunityApproval,
+	"GET.crm-tasks":        GetCrmTasks,
+	"POST.crm-task":        PostCrmTask,
+	"POST.crm-task-decide": PostCrmTaskDecide,
+	"GET.crm-task-ids":     GetCrmTasksByIDs,
 
 	"GET.crm-pipeline-opportunity-status": GetCrmPipelineOpportunityStatus,
 	"GET.crm-opportunity-ids":             GetCrmOpportunitiesByIDs,
 
-	"GET.crm-report-scope":              GetCrmReportScope,
-	"GET.crm-report-stage-log":          GetCrmReportStageLog,
-	"GET.crm-report-open-opportunities": GetCrmReportOpenOpportunities,
-	"GET.crm-report-activities":         GetCrmReportActivities,
+	"GET.crm-report-stage-log":  GetCrmReportStageLog,
+	"GET.crm-report-activities": GetCrmReportActivities,
 }

@@ -3,6 +3,7 @@ package crm
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"app/core"
 	"app/crm/types"
@@ -106,24 +107,31 @@ func touchPendingTasks(transaction *db.Transaction, companyID, opportunityID, us
 	return db.UpdateIn(transaction, &pendingTasks, table.UpdatedBy)
 }
 
-// GetCrmOpportunityApproval returns the approval task an opportunity waits on (none, or one), for
-// users who can see its pipeline. The requester is not the task's assignee, so the tasks list does
-// not reach them: the opportunity panel reads it from here.
-func GetCrmOpportunityApproval(req *core.HandlerArgs) core.HandlerResponse {
-	opportunity, err := authorizeOpportunityView(req, int32(req.GetQueryInt("opportunity-id")))
+// GetCrmTasksByIDs resolves task IDs through the records-by-ID cache, versioned per slot. The
+// opportunity panel reads the approval a card waits on (its PendingApprovalTaskID) from here: the
+// requester is not the task's assignee, so the tasks lists do not reach them. Only tasks of a
+// pipeline the user may see, or assigned to or created by the user, come back, so a hand-made
+// request cannot read other pipelines.
+func GetCrmTasksByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	tasks := []types.CrmTask{}
-	if opportunity.PendingApprovalTaskID == 0 {
-		return req.MakeResponse(tasks)
+	partitions, err := db.QueryCachedIDs[types.CrmTask](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener las tareas.", err)
 	}
-	query := db.Query(&tasks)
-	query.CompanyID.Equals(req.User.CompanyID).ID.Equals(opportunity.PendingApprovalTaskID)
-	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener la aprobación:", err)
+	reportablePipelineIDs, err := loadReportablePipelineIDs(req.User.CompanyID, req.User.ID)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	return req.MakeResponse(tasks)
+	for index := range partitions {
+		partitions[index].Records = slices.DeleteFunc(partitions[index].Records, func(task types.CrmTask) bool {
+			ownTask := task.AssignedUserID == req.User.ID || task.CreatedBy == req.User.ID
+			return !ownTask && !slices.Contains(reportablePipelineIDs, task.PipelineID)
+		})
+	}
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 // PostCrmTask acts on one task without producing anything: the assignee dismisses a template task,

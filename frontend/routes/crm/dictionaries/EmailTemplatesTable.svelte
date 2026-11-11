@@ -1,7 +1,8 @@
 <script lang="ts">
   import { useUI } from '@genix/ui'
-  import { confirmWarn, hideLoading, notifyFailure, notifySuccess, showLoading } from '@genix/ui/notify'
+  import { confirmWarn, hideLoading, notifyFailure, showLoading } from '@genix/ui/notify'
   import Button from '#components/buttons/Button.svelte'
+  import VariableTextInput from '#components/editor/VariableTextInput.svelte'
   import Input from '#components/form/Input.svelte'
   import Layer from '#components/layers/Layer.svelte'
   import VTable from '#components/vTable/VTable.svelte'
@@ -13,7 +14,8 @@
   } from '#services/crm/crm-email-template.svelte.ts'
 
   // The emails a seller sends from an opportunity, or a stage task sends for them. The body is rich
-  // HTML; {{placeholders}} are typed as text and filled for each opportunity when the email is drafted.
+  // HTML. Placeholders are inserted only from the variable pickers of the subject and the body, shown
+  // as "Cliente: Email" labels and saved as {{client.email}}; the server fills them per opportunity.
   let { emailTemplates }: { emailTemplates: CrmEmailTemplatesService } = $props()
 
   const ui = useUI()
@@ -44,11 +46,7 @@
     hideLoading()
   }
 
-  // The editor has no "insert variable" command, so a click copies the placeholder to paste it.
-  const copyPlaceholder = async (name: string) => {
-    await navigator.clipboard.writeText(`{{${name}}}`)
-    notifySuccess(tr(`Copied {{${name}}}|Copiado {{${name}}}`))
-  }
+  const PLACEHOLDERS_HINT = 'Quote variables only work when sending a quote.|Las variables de cotización solo funcionan al enviar una cotización.'
 
   const columns: ITableColumn<ICrmEmailTemplate>[] = [
     { header: 'Template|Plantilla', css: 'px-6', highlight: true, getValue: (emailTemplate) => emailTemplate.Name },
@@ -78,21 +76,12 @@
 >
   <div class="flex flex-col gap-10 mt-8" aria-label="Email template form">
     <Input bind:saveOn={templateForm} save="Name" label="Name|Nombre" required={true} />
-    <Input bind:saveOn={templateForm} save="Subject" label="Subject|Asunto" required={true} />
+    <VariableTextInput saveOn={templateForm} save="Subject" label="Subject|Asunto"
+      variables={EMAIL_PLACEHOLDERS} variablesHint={PLACEHOLDERS_HINT} />
     {#await import('#components/editor/HTMLEditor.svelte') then htmlEditorModule}
       {@const HTMLEditor = htmlEditorModule.default}
-      <HTMLEditor saveOn={templateForm} save="BodyHTML" css="min-h-280" />
+      <HTMLEditor saveOn={templateForm} save="BodyHTML" css="min-h-280"
+        variables={EMAIL_PLACEHOLDERS} variablesHint={PLACEHOLDERS_HINT} />
     {/await}
-    <div aria-label="Email placeholders">
-      <div class="text-fg-muted mb-4">
-        {tr('Placeholders (click to copy). The quote ones only work when sending a quote.|Variables (clic para copiar). Las de cotización solo funcionan al enviar una cotización.')}
-      </div>
-      <div class="flex flex-wrap gap-6">
-        {#each EMAIL_PLACEHOLDERS as placeholder (placeholder.name)}
-          <button type="button" class="px-8 py-2 rounded border border-line bg-surface-soft ff-mono hover:border-line-strong"
-            title={tr(placeholder.label)} onclick={() => copyPlaceholder(placeholder.name)}>{`{{${placeholder.name}}}`}</button>
-        {/each}
-      </div>
-    </div>
   </div>
 </Layer>

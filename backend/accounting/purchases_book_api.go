@@ -1,14 +1,16 @@
 // Reading the Registro de Compras for a period.
 //
 // Like the sales book, the handler only reads. A purchase is booked through the supplier's
-// comprobante, and three tables carry one — purchase orders, expenses and fixed assets — so
-// this reads the period from all three through their DocIssueDate index and sends the rows as
-// numbers. The supplier's identity is resolved in the browser through the by-ids snapshot
-// cache, and the Anexo 11 mapping lives in frontend/routes/accounting/books/books.purchases.ts.
+// comprobante, and three tables carry one — purchase orders, expenses and fixed assets. Orders
+// and expenses are synced through their period delta logs (Period = the YYMM of DocIssueDate,
+// the same logs the accounting operations read); the asset register is small and synced whole,
+// and the browser keeps the assets whose DocIssueDate falls in the period. The supplier's
+// identity is resolved in the browser through the by-ids snapshot cache, and the Anexo 11
+// mapping lives in frontend/routes/accounting/books/books.purchases.ts.
 //
 // Purchases without a comprobante come back too, flagged by DocType 0: a purchase without one
-// stores its own date as DocIssueDate, so the same index finds it. They are not book rows; the
-// page lists them behind a checkbox so the month can be reviewed.
+// stores its own date as DocIssueDate, so it lands in that date's period. They are not book rows;
+// the page lists them behind a checkbox so the month can be reviewed.
 
 package accounting
 
@@ -80,58 +82,49 @@ func (document PurchaseBookDocument) withPurchaseDocument(purchase finance.Purch
 	return document
 }
 
+// PurchasesBookResponse is one key per delta log; each key travels its own cursor (?<Key>=…). A
+// canceled order and a removed expense or asset leave their log as removed IDs: they bought nothing.
 type PurchasesBookResponse struct {
-	Period    string                 `cb:"1"`
-	FirstDay  int16                  `cb:"2"`
-	LastDay   int16                  `cb:"3"`
-	Documents []PurchaseBookDocument `cb:"4"`
+	PurchaseOrders []PurchaseBookDocument `cb:"1"`
+	// Only the payable statuses: depreciation (Posted) is not a purchase.
+	Expenses []PurchaseBookDocument `cb:"2"`
+	// The whole register; the browser keeps the assets acquired in the period.
+	Assets []PurchaseBookDocument `cb:"3"`
 }
 
-// GetPurchasesBook reads a whole period, or the single day inside one.
+// GetPurchasesBook syncs a whole period (?period=YYYYMM).
 func GetPurchasesBook(req *core.HandlerArgs) core.HandlerResponse {
-	firstDay, lastDay, period, argsError := resolveBookRange(req)
-	if argsError != nil {
-		return req.MakeErr(argsError.Error())
+	firstDay, _, boundsError := types.PeriodBounds(req.Query["period"])
+	if boundsError != nil {
+		return req.MakeErr(boundsError.Error())
 	}
+	companyID, periodKey := req.User.CompanyID, core.PeriodOfDay(firstDay)
 
-	companyID := req.User.CompanyID
-	var orders, expenses, assets []PurchaseBookDocument
+	response := PurchasesBookResponse{}
 	readGroup := errgroup.Group{}
-	readGroup.Go(func() (err error) { orders, err = loadPeriodOrders(companyID, firstDay, lastDay); return })
-	readGroup.Go(func() (err error) { expenses, err = loadPeriodExpenses(companyID, firstDay, lastDay); return })
-	readGroup.Go(func() (err error) { assets, err = loadPeriodAssets(companyID, firstDay, lastDay); return })
+	readGroup.Go(func() (err error) {
+		response.PurchaseOrders, err = readPeriodPurchaseOrders(companyID, periodKey, req.GetDeltaCursor("PurchaseOrders"))
+		return err
+	})
+	readGroup.Go(func() (err error) {
+		response.Expenses, err = readPeriodExpenses(companyID, periodKey, req.GetDeltaCursor("Expenses"), []any{int8(1), int8(2)})
+		return err
+	})
+	readGroup.Go(func() error {
+		assets := []types.Asset{}
+		query := db.Query(&assets)
+		query.Select().CompanyID.Equals(companyID).Delta(req.GetDeltaCursor("Assets"),
+			types.AssetStatusActive, types.AssetStatusFullyDepreciated, types.AssetStatusDisposed)
+		if queryError := query.Exec(); queryError != nil {
+			return core.Err("Error al obtener los activos.", queryError)
+		}
+		response.Assets = projectRecords(assets, makeAssetBookDocument)
+		return nil
+	})
 	if readError := readGroup.Wait(); readError != nil {
 		return req.MakeErr(readError.Error())
 	}
-
-	documents := append(append(orders, expenses...), assets...)
-	core.Log("GetPurchasesBook period:", period, "orders:", len(orders),
-		"expenses:", len(expenses), "assets:", len(assets))
-	return req.MakeResponse(PurchasesBookResponse{
-		Period: period, FirstDay: firstDay, LastDay: lastDay, Documents: documents,
-	})
-}
-
-// loadPeriodOrders reads the purchase orders of the range. A canceled order bought nothing.
-func loadPeriodOrders(companyID int32, firstDay, lastDay int16) ([]PurchaseBookDocument, error) {
-	groups := []db.RecordGroup[logistics.PurchaseOrder]{}
-	query := db.QueryIndexGroup(&groups).CompanyID.Equals(companyID)
-	query.DocIssueDate.Between(firstDay, lastDay)
-	if queryError := query.Exec(); queryError != nil {
-		return nil, core.Err("Error al obtener las órdenes de compra del periodo.", queryError)
-	}
-
-	documents := []PurchaseBookDocument{}
-	for groupIndex := range groups {
-		for recordIndex := range groups[groupIndex].Records {
-			order := &groups[groupIndex].Records[recordIndex]
-			if order.Status == logistics.PurchaseOrderStatusCanceled {
-				continue
-			}
-			documents = append(documents, makeOrderBookDocument(order))
-		}
-	}
-	return documents, nil
+	return req.MakeResponse(response)
 }
 
 func makeOrderBookDocument(order *logistics.PurchaseOrder) PurchaseBookDocument {
@@ -142,29 +135,6 @@ func makeOrderBookDocument(order *logistics.PurchaseOrder) PurchaseBookDocument 
 		SameDayCashBankID: order.SameDayCashBankID, Status: order.Status, Version: order.Version,
 		Metadata: order.Metadata,
 	}.withPurchaseDocument(order.PurchaseDocument())
-}
-
-// loadPeriodExpenses reads the expenses of the range. A removed expense never happened, and
-// depreciation is not a purchase — it carries no DocIssueDate, so the index never returns it.
-func loadPeriodExpenses(companyID int32, firstDay, lastDay int16) ([]PurchaseBookDocument, error) {
-	groups := []db.RecordGroup[finance.Expense]{}
-	query := db.QueryIndexGroup(&groups).CompanyID.Equals(companyID)
-	query.DocIssueDate.Between(firstDay, lastDay)
-	if queryError := query.Exec(); queryError != nil {
-		return nil, core.Err("Error al obtener los gastos del periodo.", queryError)
-	}
-
-	documents := []PurchaseBookDocument{}
-	for groupIndex := range groups {
-		for recordIndex := range groups[groupIndex].Records {
-			expense := &groups[groupIndex].Records[recordIndex]
-			if expense.Status == 0 || expense.Type == finance.ExpenseTypeDepreciation {
-				continue
-			}
-			documents = append(documents, makeExpenseBookDocument(expense))
-		}
-	}
-	return documents, nil
 }
 
 func makeExpenseBookDocument(expense *finance.Expense) PurchaseBookDocument {
@@ -178,30 +148,11 @@ func makeExpenseBookDocument(expense *finance.Expense) PurchaseBookDocument {
 	}.withPurchaseDocument(expense.PurchaseDocument())
 }
 
-// loadPeriodAssets reads the fixed assets acquired in the range. A donated asset without a
-// comprobante was not bought, so it is not a purchase to review.
-func loadPeriodAssets(companyID int32, firstDay, lastDay int16) ([]PurchaseBookDocument, error) {
-	groups := []db.RecordGroup[types.Asset]{}
-	query := db.QueryIndexGroup(&groups).CompanyID.Equals(companyID)
-	query.DocIssueDate.Between(firstDay, lastDay)
-	if queryError := query.Exec(); queryError != nil {
-		return nil, core.Err("Error al obtener los activos del periodo.", queryError)
-	}
-
-	documents := []PurchaseBookDocument{}
-	for groupIndex := range groups {
-		for recordIndex := range groups[groupIndex].Records {
-			asset := &groups[groupIndex].Records[recordIndex]
-			isDonation := asset.PurchaseAmount == 0 && asset.DocType == finance.PurchaseDocTypeNone
-			if asset.Status == types.AssetStatusRemoved || isDonation {
-				continue
-			}
-			documents = append(documents, PurchaseBookDocument{
-				Source: PurchaseSourceAsset, SourceID: asset.ID, Name: asset.Name,
-				ProviderID: asset.SupplierID, ProviderSnapshotID: asset.ProviderSnapshotID,
-				DueDate: asset.DueDate, RecordAmount: asset.PurchaseAmount,
-			}.withPurchaseDocument(asset.PurchaseDocument()))
-		}
-	}
-	return documents, nil
+func makeAssetBookDocument(asset types.Asset) PurchaseBookDocument {
+	return PurchaseBookDocument{
+		Source: PurchaseSourceAsset, SourceID: asset.ID, Name: asset.Name,
+		ProviderID: asset.SupplierID, ProviderSnapshotID: asset.ProviderSnapshotID,
+		DueDate: asset.DueDate, RecordAmount: asset.PurchaseAmount,
+		Status: asset.Status, Version: asset.Version, Metadata: asset.Metadata,
+	}.withPurchaseDocument(asset.PurchaseDocument())
 }

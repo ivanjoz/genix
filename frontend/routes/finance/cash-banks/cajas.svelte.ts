@@ -1,7 +1,5 @@
 import { notifyFailure } from '@genix/ui/notify';
-import { GetHandler, POST, GET } from '#libs/ui-runtime.svelte.ts';
-import { GETCached } from '@genix/ui/cache';
-import { formatTime } from '#libs/helpers.ts';
+import { GetHandler, GETWithGroupCache, POST } from '#libs/ui-runtime.svelte.ts';
 
 export interface ICashBank {
   ID: number
@@ -88,67 +86,43 @@ export interface IGetCajaMovimientos {
   lastRegistros?: number
 }
 
-export interface ICajaMovimientosResult {
-  movimientos: ICashBankMovement[]
-}
-
+// A cash bank's movements of a date range, read as its (cash bank, day) cache groups so only the
+// days that moved are downloaded again. With lastRegistros the server sends the latest N movements
+// uncached (a pass-through group), newest first.
 export const getCajaMovimientos = async (args: IGetCajaMovimientos): Promise<ICashBankMovement[]> => {
-  let route = `cash-banks-movements?caja-id=${args.CajaID}`
-
-  if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
-    throw ("No se encontró una date de inicio o fin.")
-  }
-
-  if (args.dateInicio && args.dateFin) {
-    route += `&date-inicio=${args.dateInicio}`
-    route += `&date-fin=${args.dateFin}`
-  }
+  const uriParams: Record<string, string> = { 'caja-id': String(args.CajaID) }
   if (args.lastRegistros) {
-    route += `&last-registros=${args.lastRegistros}`
+    uriParams['last-registros'] = String(args.lastRegistros)
+  } else if (args.dateInicio && args.dateFin) {
+    uriParams['date-inicio'] = String(args.dateInicio)
+    uriParams['date-fin'] = String(args.dateFin)
+  } else {
+    throw ("No se encontró una fecha de inicio o fin.")
   }
-
-  let result: ICajaMovimientosResult
 
   try {
-    result = await GET({ route })
+    const groups = await GETWithGroupCache<ICashBankMovement>('cash-banks-movements', uriParams)
+    return groups.flatMap((group) => group.records || [])
+      .filter((movement) => (movement?.ID || 0) > 0)
+      .sort((a, b) => b.ID - a.ID)
   } catch (error) {
-    console.log("Error:", error)
     notifyFailure(error as string)
     throw error
   }
-
-  return result.movimientos || []
 }
 
-// Fetch the cash-bank movements tied to a document (e.g. an Expense) or a reference (e.g. an
-// ExpenseScheduled), via the DocumentID / ReferenceID local indexes (GET.cash-bank-movement-by-id).
-export const getCashBankMovementByID = async (
-  args: { documentID?: number, referenceID?: number, updated?: number },
-): Promise<ICashBankMovement[]> => {
-  let route = "cash-bank-movement-by-id?"
-  if (args.documentID) route += `document-id=${args.documentID}`
-  else if (args.referenceID) route += `reference-id=${args.referenceID}`
-  else throw ("Debe enviar un documentID o un referenceID.")
-
-  // When the caller provides the parent's `updated` watermark, serve from the route-keyed
-  // cache: it returns the stored movements until `updated` changes, then re-fetches.
-  if (typeof args.updated === 'number') {
-    try {
-      return await GETCached<ICashBankMovement>(route, args.updated, p => p?.movimientos || [])
-    } catch (error) {
-      notifyFailure(error as string)
-      throw error
-    }
-  }
-
-  let result: ICajaMovimientosResult
+// The cash-bank movements of one document (e.g. an Expense), as that document's cache group: it is
+// downloaded again only after a new movement of the document (GET.cash-bank-movement-by-id).
+// DocumentID is shared by every document kind, so only the movements of `movementType` are kept.
+export const getDocumentCashMovements = async (documentID: number, movementType: number): Promise<ICashBankMovement[]> => {
   try {
-    result = await GET({ route })
+    const groups = await GETWithGroupCache<ICashBankMovement>('cash-bank-movement-by-id', { 'document-id': String(documentID) })
+    return groups.flatMap((group) => group.records || [])
+      .filter((movement) => (movement?.ID || 0) > 0 && movement.Type === movementType)
   } catch (error) {
     notifyFailure(error as string)
     throw error
   }
-  return result.movimientos || []
 }
 
 export const postCajaMovimiento = (data: ICashBankMovement) => {
@@ -167,36 +141,26 @@ export const postCajaCuadre = (data: ICashReconciliation) => {
   })
 }
 
-export interface ICajaCuadresResult {
-  cuadres: ICashReconciliation[]
-}
+// One cash bank's physical counts, synced through its delta log (the route carries the cash bank,
+// so each one is its own cached list). The caller calls fetch().
+export class CashReconciliationsService extends GetHandler<ICashReconciliation> {
+  route = "cash-banks-reconciliations"
+  useCache = { min: 0.2, ver: 1 }
 
-export const getCajaCuadres = async (args: IGetCajaMovimientos): Promise<ICashReconciliation[]> => {
-  let route = `cash-banks-reconciliations?caja-id=${args.CajaID}`
+  records: ICashReconciliation[] = $state([])
+  recordsMap: Map<number, ICashReconciliation> = $state(new Map())
 
-  if ((!args.dateInicio || !args.dateFin) && !args.lastRegistros) {
-    throw ("No se encontró una date de inicio o fin.")
+  constructor(cashBankID: number) {
+    super()
+    this.route += `?caja-id=${cashBankID}`
   }
 
-  if (args.dateInicio && args.dateFin) {
-    route += `&date-hora-inicio=${args.dateInicio * 24 * 60 * 60}`
-    route += `&date-hora-fin=${(args.dateFin + 1) * 24 * 60 * 60}`
+  handler(result: ICashReconciliation[]): void {
+    this.records = []
+    this.recordsMap = new Map()
+    this.addSavedRecords(...(result || []))
+    this.records.sort((a, b) => b.Created - a.Created)
   }
-  if (args.lastRegistros) {
-    route += `&last-registros=${args.lastRegistros}`
-  }
-
-  let result: ICajaCuadresResult
-
-  try {
-    result = await GET({ route })
-  } catch (error) {
-    console.log("Error:", error)
-    notifyFailure(error as string)
-    throw error
-  }
-
-  return result.cuadres || []
 }
 
 // Constantes compartidas
@@ -228,6 +192,9 @@ export const cajaMovimientoTipos = [
   { id: 12, name: "Pago Planilla", group: 3, isNegative: true },
   { id: 13, name: "Pago Aportes Planilla", group: 3, isNegative: true },
 ]
+
+// The movement an expense payment writes (backend CashMovementTypeExpensePayment).
+export const CASH_MOVEMENT_TYPE_EXPENSE_PAYMENT = 9
 
 export interface ICashMovementAccountOption {
   movementType: number

@@ -1,7 +1,9 @@
 import { getFechaUnix } from '@genix/ui/utilities'
 import { decodeFromBase62 } from '#libs/helpers.ts'
 import { GetHandler } from '#libs/ui-runtime.svelte.ts'
-import type { IProductStock } from '../products-stock/stock-movement'
+import { ProductStockSimpleService, type IProductStock } from '../products-stock/stock-movement'
+import { queryAlmacenMovimientos } from '../warehouse-movements/warehouse-movements.svelte'
+import { aggregateDailyProductMovements, type IDateProductMovements } from './supply-management'
 
 export interface IProductSupplyProviderRow {
   ProviderID: number
@@ -44,7 +46,7 @@ export const normalizeProviderSupplyRows = (providerSupplyRows: IProductSupplyPr
 export class ProductSupplyService extends GetHandler<any> {
   route = 'product-supply'
   keyID = 'ProductID'
-  useCache = { min: 5, ver: 1 }
+  useCache = { min: 5, ver: 2 }
 
   records: IProductSupplyRow[] = $state([])
   recordsMap: Map<number, IProductSupplyRow> = $state(new Map())
@@ -80,15 +82,6 @@ export const postProductSupply = (productSupplyService: ProductSupplyService, pr
   }))
 
   return productSupplyService.writeAndSync('product-supply', normalizedPayload)
-}
-
-export interface IDateProductMovements {
-  Date: number
-  DetailProductsIDs: number[]
-  DetailInflows: number[]
-  DetailOutflows: number[]
-  DetailFinalStock: number[]
-  upd: number
 }
 
 export class ProductStockMovementsDay {
@@ -244,68 +237,34 @@ export class ProductStockMovementsDay {
   }
 }
 
-interface IAlmacenMovimientosGroupedResponse {
-	movimientos: IDateProductMovements[]
-	productosStock: IProductStock[]
+/** Free-bucket stock per product, summed over warehouses (negative rows count as none). */
+const sumCurrentStockByProduct = (productStockRecords: IProductStock[]) => {
+  const currentStockByProductID = new Map<number, number>()
+  for (const productStock of productStockRecords) {
+    if (!productStock.Quantity || productStock.Quantity < 0) { continue }
+    currentStockByProductID.set(productStock.ProductID,
+      (currentStockByProductID.get(productStock.ProductID) || 0) + productStock.Quantity)
+  }
+  return currentStockByProductID
 }
 
-const extractProductIDFromStockID = (productStockID: number) => {
-	return Math.floor(productStockID / 10000) % 1000000000
-}
-
-export class AlmacenMovimientosGroupedService extends GetHandler {
-  route = 'warehouse-movements-grouped'
-  keysIDs = { movimientos: "Date" }
-  useCache = { min: 5, ver: 9 }
-
-  records: IDateProductMovements[] = $state([])
-  recordsMap: Map<number, IDateProductMovements> = $state(new Map())
-  productMovements: ProductStockMovementsDay[] = $state([])
-	productMovementsMap: Map<number, ProductStockMovementsDay> = $state(new Map())
-  productoCurrentStock: Map<number,number> = new Map()
-
-	handler(response: IAlmacenMovimientosGroupedResponse): void {
-		// Extrae el current stock
-		this.productoCurrentStock = new Map()
-		
-		for (const e of response.productosStock) {
-			if(!e.Quantity || e.Quantity < 0){ continue }
-			const productoID = extractProductIDFromStockID(e.ID)
-			const currentStock = this.productoCurrentStock.get(productoID) || 0
-			this.productoCurrentStock.set(productoID, (e.Quantity||0) + currentStock)
-		}
-		
-		const dateCurrent = getFechaUnix()
-		const productoFechaRangeMap: Map<number, [number, number]> = new Map()
-		
-    const groupedMovementRecords = (response.movimientos || []).map((groupedMovementRecord) => ({
-      Date: groupedMovementRecord.Date || 0,
-      DetailProductsIDs: groupedMovementRecord.DetailProductsIDs || [],
-      DetailInflows: groupedMovementRecord.DetailInflows || [],
-      DetailOutflows: groupedMovementRecord.DetailOutflows || [],
-      DetailFinalStock: [],
-      upd: groupedMovementRecord.upd || groupedMovementRecord.Date || 0,
-    }))
-
+const buildProductMovementsMap = (
+  groupedMovementRecords: IDateProductMovements[], currentStockByProductID: Map<number, number>, windowDays: number,
+) => {
+    const dateCurrent = getFechaUnix()
+    // Every product with stock or a movement in the window spans the whole window: the final stock
+    // is reconstructed backwards from today's stock, so a day before a product's first movement in
+    // the window still holds its real stock instead of 0.
+    const productIDs = new Set(currentStockByProductID.keys())
     for (const groupedMovementRecord of groupedMovementRecords) {
-      for (const productID of groupedMovementRecord.DetailProductsIDs) {
-        const productoFechaRange = productoFechaRangeMap.get(productID)
-        if (!productoFechaRange) {
-          productoFechaRangeMap.set(productID, [groupedMovementRecord.Date, groupedMovementRecord.Date])
-          continue
-        }
-
-        if (groupedMovementRecord.Date < productoFechaRange[0]) { productoFechaRange[0] = groupedMovementRecord.Date }
-        if (groupedMovementRecord.Date > productoFechaRange[1]) { productoFechaRange[1] = groupedMovementRecord.Date }
-      }
+      for (const productID of groupedMovementRecord.DetailProductsIDs) { productIDs.add(productID) }
     }
 
     const productMovementsMap = new Map<number, ProductStockMovementsDay>()
-    for (const [productID, [minimumFecha, maximumFecha]] of productoFechaRangeMap.entries()) {
+    for (const productID of productIDs) {
       const productMovements = new ProductStockMovementsDay()
       productMovements.ProductID = productID
-      // Prefill the full day window so stock reconstruction and charts stay continuous on days without movements.
-      productMovements.setDateRange(minimumFecha, maximumFecha)
+      productMovements.setDateRange(dateCurrent - windowDays + 1, dateCurrent)
       productMovementsMap.set(productID, productMovements)
     }
 
@@ -319,26 +278,36 @@ export class AlmacenMovimientosGroupedService extends GetHandler {
       }
     }
 
-		for (const pg of productMovementsMap.values()) {
-			pg.CurrentStock = this.productoCurrentStock.get(pg.ProductID) || 0
-      pg.calculateFinalStock(dateCurrent)
-		}
-    
-		console.log("productMovementsMap", [...productMovementsMap.values()])
-		
-		this.records = groupedMovementRecords
-    this.recordsMap = new Map(
-      groupedMovementRecords.map((groupedMovementRecord) => [groupedMovementRecord.Date, groupedMovementRecord]),
-    )
-		this.productMovements = Array.from(productMovementsMap.values())
-		this.productMovementsMap = productMovementsMap
-		
-		console.log("productMovements", this.productoCurrentStock)
-		console.log("movimientos response::", response)
-	}
+    for (const productMovements of productMovementsMap.values()) {
+      productMovements.CurrentStock = currentStockByProductID.get(productMovements.ProductID) || 0
+      productMovements.calculateFinalStock(dateCurrent)
+    }
+    return productMovementsMap
+}
 
-	constructor() {
-    super()
-    this.fetch()
+/**
+ * Daily inflows/outflows of the last `windowDays` days plus each day's reconstructed final stock.
+ * Both sources are browser caches: the current stock is the delta-synced `products-stock` list, and
+ * the movements are the per-day cache groups of `warehouse-movements` (only changed days download),
+ * folded per product on the client.
+ */
+export class SupplyMovementsService {
+  productStockService = new ProductStockSimpleService(true)
+  windowDays: number
+  records: IDateProductMovements[] = $state([])
+  isReady = $state(false)
+  productoCurrentStock = $derived(sumCurrentStockByProduct(this.productStockService.records))
+  productMovementsMap = $derived.by(() => buildProductMovementsMap(this.records, this.productoCurrentStock, this.windowDays))
+
+  constructor(windowDays: number) {
+    this.windowDays = windowDays
+    this.loadMovements()
+  }
+
+  async loadMovements() {
+    const dateFin = getFechaUnix()
+    const movements = await queryAlmacenMovimientos({ almacenID: 0, dateInicio: dateFin - this.windowDays + 1, dateFin })
+    this.records = aggregateDailyProductMovements(movements)
+    this.isReady = true
   }
 }

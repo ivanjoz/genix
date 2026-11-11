@@ -11,8 +11,9 @@ import { BcrpDefaultRates, ExchangeRatesService } from '../../finance/exchange-r
 import { EXCHANGE_RATE_MAX_AGE_DAYS, latestSellRate, toMonthKey } from '../../finance/exchange-rate/exchange-rate'
 import { AssetsService } from '../assets/assets.svelte'
 import { PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocument } from '../books/books.purchases'
+import { periodBounds } from '../books/books'
 import {
-  buildAccountingOperations, operationProductIDs, operationSaleOf, periodBounds, referencedPurchaseOf, referencedRecordIDs,
+  buildAccountingOperations, operationProductIDs, operationSaleOf, referencedPurchaseOf, referencedRecordIDs,
   type IAccountingOperationsResponse, type IAccountingSources, type IClassificationTarget, type IOperationProduct, type IOperationSale,
   type IProductRecord, type IPurchaseRecord, type ISaleOrderRecord,
 } from './accounts-consolidation'

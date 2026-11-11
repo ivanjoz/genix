@@ -146,25 +146,23 @@ func GetAssetDepreciation(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Debe indicar el activo.")
 	}
 
-	entries := []finance.Expense{}
-	entryQuery := db.Query(&entries)
-	entryQuery.Select().
-		CompanyID.Equals(req.User.CompanyID).
-		AssetID.Equals(assetID)
-
+	// The ledger is the asset's cache group: the browser downloads it again only after a run or an
+	// edit wrote one of its entries. An edit that shortens the schedule retires entries with
+	// Status 0 (rewriteAssetDepreciation); the browser drops them, since a filter outside the
+	// group's Keys would not be part of the group's cache identity.
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	entryGroups := []db.RecordGroup[finance.Expense]{}
+	entryQuery := db.QueryIndexGroup(&entryGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		entryQuery.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
+	}
+	entryQuery.AssetID.Between(assetID, assetID)
 	if queryError := entryQuery.Exec(); queryError != nil {
-		return req.MakeErr("Error al obtener la depreciación del activo.", queryError)
+		core.Log("Error querying asset depreciation group:", queryError)
+		return req.MakeErr("Error al obtener la depreciación del activo.")
 	}
-
-	// An edit that shortens the schedule retires the periods that no longer happen by setting
-	// Status 0 (rewriteAssetDepreciation), so the ledger has to drop them or the panel would
-	// still show months the asset never depreciated for.
-	liveEntries := make([]finance.Expense, 0, len(entries))
-	for _, entry := range entries {
-		if entry.Status != 0 {
-			liveEntries = append(liveEntries, entry)
-		}
-	}
-
-	return req.MakeResponse(liveEntries)
+	return core.MakeResponse(req, &entryGroups)
 }

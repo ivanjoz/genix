@@ -15,8 +15,8 @@ func TestReportablePipelineIDs(t *testing.T) {
 	if got := ReportablePipelineIDs(pipelines, 7, false); !slices.Equal(got, []int16{3}) {
 		t.Fatalf("a member reports only on active pipelines they belong to: %v", got)
 	}
-	if got := ReportablePipelineIDs(pipelines, 7, true); !slices.Equal(got, []int16{1, 2, 3}) {
-		t.Fatalf("the full-report access reaches every pipeline: %v", got)
+	if got := ReportablePipelineIDs(pipelines, 7, true); !slices.Equal(got, []int16{1, 3}) {
+		t.Fatalf("the full-report access reaches every active pipeline: %v", got)
 	}
 	if got := ReportablePipelineIDs(pipelines, 99, false); len(got) != 0 {
 		t.Fatalf("a non-member reports on nothing: %v", got)

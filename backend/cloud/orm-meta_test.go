@@ -85,9 +85,7 @@ func TestUserIndexSlotsFollowDeclarationOrder(t *testing.T) {
 	}{
 		{"ix1", []string{"user"}, []int8{0}},
 		{"ix2", []string{"email"}, []int8{0}},
-		// status takes its width from int8 because a view's leading column cannot declare
-		// one; updated declares 10 explicitly.
-		{"ix3", []string{"status", "updated"}, []int8{3, 10}},
+		// The users' TypeDelta has no mirror slot.
 	}
 
 	if len(meta.Indexes) != len(expectedSlots) {
@@ -115,72 +113,31 @@ func TestUserIndexSlotsFollowDeclarationOrder(t *testing.T) {
 }
 
 func TestBuildIndexValuePrefixesWithThePartition(t *testing.T) {
-	meta := userMeta(t)
-	user := coreTypes.User{CompanyID: 7, ID: 1, User: "admin", Status: 1, Updated: 1234}
-	record := reflect.ValueOf(user)
-
-	if got, want := meta.Indexes[0].buildIndexValue(record), "7_admin"; got != want {
+	user := coreTypes.User{CompanyID: 7, ID: 1, User: "admin"}
+	if got, want := userMeta(t).Indexes[0].buildIndexValue(reflect.ValueOf(user)), "7_admin"; got != want {
 		t.Errorf("user index value = %q, want %q", got, want)
 	}
-	// Padding is what makes the range scan compare in numeric rather than lexicographic order.
-	if got, want := meta.Indexes[2].buildIndexValue(record), "7_001_0000001234"; got != want {
-		t.Errorf("status+updated index value = %q, want %q", got, want)
-	}
 }
 
-func TestBuildCompositeRangeBoundsTheScanToThePinnedPrefix(t *testing.T) {
+func TestBuildIndexKeyRangeIsExactForAnEquality(t *testing.T) {
 	meta := userMeta(t)
+	condition := queryCondition{ColumnName: "user", Operator: "=", Value: "admin"}
 
-	// The delta read: status pinned, updated open-ended above the client's watermark.
-	conditions := []queryCondition{
-		{ColumnName: "status", Operator: "=", Value: 1},
-		{ColumnName: "updated", Operator: ">=", Value: 1234},
-	}
-
-	index, err := matchIndex(meta.Indexes, conditions)
-	if err != nil {
-		t.Fatalf("matchIndex: %v", err)
-	}
-	if index.DynamoIndex != "ix3" {
-		t.Fatalf("matched %q, want ix3", index.DynamoIndex)
-	}
-
-	indexRange, err := buildCompositeRange(index, "7", conditions)
-	if err != nil {
-		t.Fatalf("buildCompositeRange: %v", err)
-	}
-	if indexRange.IsExact {
-		t.Error("a >= query must not produce an exact match")
-	}
-	// The upper bound stops at the end of status 1: without it the scan would spill into
-	// every higher status value.
-	if got, want := indexRange.Lower, "7_001_0000001234"; got != want {
-		t.Errorf("lower = %q, want %q", got, want)
-	}
-	if got, want := indexRange.Upper, "7_001_9999999999"; got != want {
-		t.Errorf("upper = %q, want %q", got, want)
-	}
-}
-
-func TestBuildCompositeRangeIsExactWhenEveryKeyIsPinned(t *testing.T) {
-	meta := userMeta(t)
-	conditions := []queryCondition{{ColumnName: "user", Operator: "=", Value: "admin"}}
-
-	index, err := matchIndex(meta.Indexes, conditions)
+	index, err := matchIndex(meta.Indexes, []queryCondition{condition})
 	if err != nil {
 		t.Fatalf("matchIndex: %v", err)
 	}
 
-	indexRange, err := buildCompositeRange(index, "7", conditions)
+	indexRange, err := buildIndexKeyRange(index, "7", condition)
 	if err != nil {
-		t.Fatalf("buildCompositeRange: %v", err)
+		t.Fatalf("buildIndexKeyRange: %v", err)
 	}
 	if !indexRange.IsExact || indexRange.Lower != "7_admin" {
 		t.Errorf("range = %+v, want exact 7_admin", indexRange)
 	}
 }
 
-func TestMatchIndexRejectsUnindexedAndMisorderedQueries(t *testing.T) {
+func TestMatchIndexRejectsUnindexedAndMultiColumnQueries(t *testing.T) {
 	meta := userMeta(t)
 
 	if _, err := matchIndex(meta.Indexes, []queryCondition{
@@ -189,12 +146,11 @@ func TestMatchIndexRejectsUnindexedAndMisorderedQueries(t *testing.T) {
 		t.Error("querying an unindexed column must fail rather than scan")
 	}
 
-	// A range on a leading key would leave the rest of the composite unanchored.
 	if _, err := matchIndex(meta.Indexes, []queryCondition{
-		{ColumnName: "status", Operator: ">=", Value: 1},
-		{ColumnName: "updated", Operator: ">=", Value: 1234},
+		{ColumnName: "user", Operator: "=", Value: "admin"},
+		{ColumnName: "email", Operator: "=", Value: "a@b.c"},
 	}); err == nil {
-		t.Error("a range on a non-trailing key must be rejected")
+		t.Error("a query on two columns must be rejected: the mirror has no composite indexes")
 	}
 }
 
@@ -208,17 +164,24 @@ func TestCompanyHasNoPartitionPrefix(t *testing.T) {
 		t.Errorf("partition column = %q, want empty: companies are global", meta.PartitionColumn)
 	}
 
-	conditions := []queryCondition{{ColumnName: "updated", Operator: ">=", Value: 1234}}
-	index, err := matchIndex(meta.Indexes, conditions)
+	// GET.empresas on the mirror: companies updated since a watermark.
+	condition := queryCondition{ColumnName: "updated", Operator: ">=", Value: 1234}
+	index, err := matchIndex(meta.Indexes, []queryCondition{condition})
 	if err != nil {
 		t.Fatalf("matchIndex: %v", err)
 	}
 
-	indexRange, err := buildCompositeRange(index, "", conditions)
+	indexRange, err := buildIndexKeyRange(index, "", condition)
 	if err != nil {
-		t.Fatalf("buildCompositeRange: %v", err)
+		t.Fatalf("buildIndexKeyRange: %v", err)
+	}
+	if indexRange.IsExact {
+		t.Error("a >= query must not produce an exact match")
 	}
 	if got, want := indexRange.Lower, "0000001234"; got != want {
 		t.Errorf("lower = %q, want %q (no tenant prefix)", got, want)
+	}
+	if got, want := indexRange.Upper, "9999999999"; got != want {
+		t.Errorf("upper = %q, want %q", got, want)
 	}
 }

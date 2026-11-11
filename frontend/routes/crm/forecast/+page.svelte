@@ -38,11 +38,14 @@
   })))
   const yearOptions = Array.from({ length: 4 }, (_, index) => currentShortYear() + 1 - index)
     .map((year) => ({ id: year, name: String(2000 + year) }))
-  const pipelineOptions = $derived(report.scope.PipelineIDs.map((pipelineID) => ({
+  const pipelineOptions = $derived(report.reportPipelineIDs.map((pipelineID) => ({
     id: pipelineID, name: report.pipelines.records.find((pipeline) => pipeline.ID === pipelineID)?.Name ?? `Pipeline #${pipelineID}`,
   })))
 
-  report.loadScope()
+  $effect(() => {
+    void report.reportPipelineIDs
+    untrack(() => report.selectDefaultPipeline())
+  })
   $effect(() => {
     if (!report.selectedPipelineID) return
     void [forecast.year, report.selectedPipelineID, report.selectedPipeline?.GoalPeriodType]
@@ -177,7 +180,7 @@
   <div class="text-fg-muted mb-8">
     {tr('Open opportunities expected to close in the month, by the forecast category of their stage. Each seller submits their own forecast; a team leader submits the team row.|Oportunidades abiertas que se esperan cerrar en el mes, según la categoría de forecast de su etapa. Cada vendedor envía su forecast; el líder envía la fila del equipo.')}
   </div>
-  {#if !report.scope.PipelineIDs.length}
+  {#if !report.reportPipelineIDs.length}
     <div class="text-fg-muted p-16">{tr('You have no pipelines to report on.|No tiene pipelines para reportar.')}</div>
   {:else}
     <VTable {columns} data={forecastRows} css="w-full" maxHeight="calc(100vh - 12rem)"

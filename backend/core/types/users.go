@@ -33,6 +33,9 @@ type User struct {
 	Updated   int32  `json:"upd" cb:"upd,17"`
 	UpdatedBy int32  `cb:"18"`
 	Status    int8   `json:"ss" cb:"ss,19"`
+	Version   int16  `json:"ver" cb:"ver,20"`
+	// Metadata is set only on the metadata record a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,21"`
 }
 
 type UserTable struct {
@@ -55,6 +58,7 @@ type UserTable struct {
 	Updated            db.Col[*UserTable, int32]
 	UpdatedBy          db.Col[*UserTable, int32]
 	Status             db.Col[*UserTable, int8]
+	Version            db.Col[*UserTable, int16]
 }
 
 func (usuarioTable UserTable) GetSchema() db.TableSchema {
@@ -70,14 +74,13 @@ func (usuarioTable UserTable) GetSchema() db.TableSchema {
 			Name: usuarioTable.User, S1: usuarioTable.FirstName, S2: usuarioTable.LastName,
 		},
 		Keys: db.Cols(usuarioTable.ID.Autoincrement(0)),
-		// Declaration order is also the cloud mirror's index-slot order (ix1, ix2, ix3).
-		// The login handle and the email are looked up directly; status+updated is the
-		// delta read, padded so the range compares in numeric order.
+		// Declaration order is also the cloud mirror's index-slot order (ix1, ix2): the login
+		// handle and the email are looked up directly. The users list (GET.users) syncs by delta
+		// from the primary database only; TypeDelta has no mirror slot.
 		Indexes: []db.Index{
 			{Type: db.TypeLocalIndex, Keys: db.Cols(usuarioTable.User)},
 			{Type: db.TypeLocalIndex, Keys: db.Cols(usuarioTable.Email)},
-			{Type: db.TypeView, Keys: db.Cols(
-				usuarioTable.Status, usuarioTable.Updated.Size(31))},
+			{Type: db.TypeDelta, Keys: db.Cols(usuarioTable.Status)},
 		},
 	}
 }

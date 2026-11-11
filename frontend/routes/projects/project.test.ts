@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   PROJECT_ROLE_ADMIN, PROJECT_ROLE_MEMBER, PROJECT_STATE_ARCHIVED, STATUS_ACTIVE, STATUS_DELETED, canWorkInProject, changedEpics,
-  makeEmptyEpic, makeEmptyProject, makeProjectForm, projectCode, projectRole, sortProjects, storyCode, validateEpics,
-  validateProject, type IProject,
+  makeEmptyEpic, makeEmptyProject, makeProjectForm, makeUserLabel, projectCode, projectRole, sortProjects, storyCode, teamCandidates,
+  validateEpics, validateProject, type IProject,
 } from './project.ts';
 import { makeEmptyStory } from './story/story.ts';
 
@@ -74,5 +74,22 @@ describe('epics of the project panel', () => {
   test('kept epics need a name; removed ones do not', () => {
     expect(validateEpics([makeEmptyEpic(1)])).not.toBe('')
     expect(validateEpics([{ ...makeEmptyEpic(1), ID: 3, ss: STATUS_DELETED }])).toBe('')
+  })
+})
+
+describe('team candidates', () => {
+  // Grant words of access 39 (Proyectos): [0, 157] = level 2, [0, 156] = level 1, [0, 158, 1] = level 3 with a sub-access.
+  const makeUser = (ID: number, AccesosComputed: string | null, AccesosSubComputed: string | null = null) => ({
+    ID, User: `user${ID}`, FirstName: '', LastName: '', AccesosComputed, AccesosSubComputed,
+  })
+  test('only users holding the projects access at the write level, in either grant blob', () => {
+    const candidates = teamCandidates([
+      makeUser(2, 'AJ0='), makeUser(3, 'AJw='), makeUser(4, null, 'AJ4B'), makeUser(5, null),
+    ])
+    expect(candidates.map((candidate) => candidate.ID)).toEqual([2, 4])
+  })
+  test('user 1 holds every access; the label falls back to the login handle', () => {
+    expect(teamCandidates([makeUser(1, null)])).toEqual([{ ID: 1, Name: 'user1' }])
+    expect(makeUserLabel({ User: 'ana', FirstName: 'Ana', LastName: 'Ruiz' })).toBe('Ana Ruiz')
   })
 })

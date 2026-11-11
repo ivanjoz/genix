@@ -217,10 +217,11 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 			{Col: e.Period, Min: 0, Max: 9912},
 		},
 		Indexes: []db.Index{
-			// Fetch all periods belonging to a schedule (lazy generation + period listing).
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ExpenseScheduledID)},
-			// Fetch an asset's whole depreciation ledger.
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.AssetID)},
+			// A schedule's periods (lazy generation + the period listing): one cache group per
+			// schedule, downloaded again only after one of its periods changes.
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.ExpenseScheduledID)},
+			// An asset's depreciation ledger: one cache group per asset.
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.AssetID)},
 			// Status is the sync filter: a first sync lists the statuses the handler asks for.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 			// One log per accounting period: GET.accounting-operations syncs a month through it.

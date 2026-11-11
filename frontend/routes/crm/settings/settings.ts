@@ -98,6 +98,45 @@ export const changeStageTemplates = (
 ): ICrmPipelineStage[] =>
   stages.map((stage, index) => index === stageIndex ? { ...stage, TaskTemplates: change(stage.TaskTemplates ?? []) } : stage)
 
+/**
+ * One row of the task templates table. Templates live inside their stage, so the table flattens
+ * them; the select cells read their value from a top-level field, hence the copies of the
+ * template's values: SourceID is what the task asks for (activity type, or email template when
+ * sending an email) and AssignUserID 0 means the card's owner.
+ */
+export interface IStageTaskTemplateRow {
+  StageIndex: number
+  TemplateIndex: number
+  Kind: number
+  SourceID: number
+  AssignUserID: number
+  template: ICrmStageTaskTemplate
+}
+
+/** The templates of the live stages, in stage order. Indexes point into the full `stages` list. */
+export const buildTaskTemplateRows = (stages: ICrmPipelineStage[]): IStageTaskTemplateRow[] =>
+  stages.flatMap((stage, stageIndex) => stage.Status === 0 ? [] : (stage.TaskTemplates ?? []).map((template, templateIndex) => ({
+    StageIndex: stageIndex,
+    TemplateIndex: templateIndex,
+    Kind: template.Kind,
+    SourceID: template.Kind === TASK_KIND.SEND_EMAIL ? template.EmailTemplateID : template.ActivityTypeID,
+    AssignUserID: template.AssignTo === TASK_ASSIGN.USER ? template.AssignUserID : 0,
+    template,
+  })))
+
+/**
+ * Moves a template to the end of another stage. Only a template not saved yet may move: the server
+ * allocates template IDs inside their stage, so a stored one would clash with the target's IDs.
+ */
+export const moveTemplateToStage = (
+  stages: ICrmPipelineStage[], fromStageIndex: number, templateIndex: number, toStageIndex: number,
+): ICrmPipelineStage[] => {
+  const movedTemplate = stages[fromStageIndex].TaskTemplates[templateIndex]
+  if (fromStageIndex === toStageIndex || movedTemplate.ID > 0) return stages
+  const withoutTemplate = changeStageTemplates(stages, fromStageIndex, (templates) => templates.filter((_, index) => index !== templateIndex))
+  return changeStageTemplates(withoutTemplate, toStageIndex, (templates) => [...templates, movedTemplate])
+}
+
 /** A template fixed to a user needs that user; an owner template must not carry a stale one. */
 export const setTemplateAssignment = (template: ICrmStageTaskTemplate, assignTo: number, assignUserID = 0): ICrmStageTaskTemplate =>
   ({ ...template, AssignTo: assignTo, AssignUserID: assignTo === TASK_ASSIGN.USER ? assignUserID : 0 })

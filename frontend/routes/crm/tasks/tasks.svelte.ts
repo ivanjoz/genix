@@ -5,7 +5,7 @@ import { CrmEmailTemplatesService } from '#services/crm/crm-email-template.svelt
 import { CrmPipelinesService } from '#services/crm/crm-pipeline.svelte.ts'
 import { CrmTeamsService } from '#services/crm/crm-team.svelte.ts'
 import {
-  CrmTasksService, decideCrmApproval, dismissCrmTask, type ICrmTask,
+  CrmTasksService, completeCrmActivityTask, decideCrmApproval, dismissCrmTask, type ICrmTask,
 } from '#services/crm/crm-task.svelte.ts'
 import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte'
 import { activityTypeOptions } from '../pipeline/pipeline.ts'
@@ -92,6 +92,10 @@ export class CrmTasksState {
 
   /** The assignee drops a template task. */
   dismissTask = (task: ICrmTask) => dismissCrmTask(this.mineOpen, task.ID)
+
+  /** The assignee logs the activity the task asks for, which closes it. */
+  completeActivityTask = (task: ICrmTask, typeID: number, text: string) =>
+    completeCrmActivityTask(this.mineOpen, { OpportunityID: task.OpportunityID, TypeID: typeID, Text: text }, task.ID)
 
   decideApproval = (task: ICrmTask, approve: boolean, note: string) => decideCrmApproval(this.mineOpen, task.ID, approve, note)
 }

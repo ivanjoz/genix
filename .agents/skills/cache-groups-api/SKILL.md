@@ -154,8 +154,13 @@ no records ever has no mark and is not returned. A non-grouped lookup in the sam
 wrapped as `db.RecordGroup[T]{IndexID: -1, Records: flat}` — the browser passes it through
 uncached (`logistics/product-stock-movement.go`, lookup by lot/serial/document).
 
-**Server-side use with nothing cached** (books, exports): call `QueryIndexGroup` without
-`IncludeCachedGroup` and flatten `group.Records` (`accounting/sales_book_api.go`).
+**Server-side use with nothing cached** (exports, internal reads): call `QueryIndexGroup` without
+`IncludeCachedGroup` and flatten `group.Records`. A page never does this: it reads the groups
+through `GETWithGroupCache`.
+
+**One group per entity** (an opportunity's timeline, an asset's depreciation, a document's
+payments): a single-Key group on the entity ID, read with `Between(id, id)`. Append-mostly data then
+downloads once per entity (`crm/activity.go` GetCrmOpportunityActivity, `accounting/depreciation_run.go`).
 
 ---
 
@@ -210,4 +215,5 @@ const saleOrders = groups
 | Day groups, S3, optional client/product/status | `backend/sales/sale_order_query.go` + `sales/types/sales.go` | `frontend/routes/sales/sales-report/sale_order_report.svelte.ts` |
 | Week groups, status filtered client-side | `backend/logistics/purchase_order.go` + `logistics/types/purchase_order.go` | `frontend/routes/logistics/purchase-orders/purchase_order.svelte.ts` |
 | FromKey groups + `IndexID: -1` direct lookup | `backend/logistics/product-stock-movement.go` (`GetAlmacenMovimientos`) | `frontend/routes/logistics/warehouse-movements/warehouse-movements.svelte.ts` |
-| Server-side flatten, no browser cache | `backend/accounting/sales_book_api.go`, `purchases_book_api.go` | — |
+| One group per entity (`Between(id, id)`) | `backend/crm/activity.go` + `crm/types/activity.go` | `frontend/services/crm/crm-activity.svelte.ts` |
+| Week groups for monthly/weekly/daily periods | `backend/crm/forecast.go` + `crm/types/forecast.go` | `frontend/routes/crm/forecast/forecast.svelte.ts` |

@@ -10,8 +10,6 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.company-parametros":          GetEmpresaParametros,
 	"POST.company-parametros":         PostEmpresaParametros,
 	"POST.company":                    PostEmpresa,
-	"POST.parametros":                 PostParametros,
-	"GET.parametros":                  GetParametros,
 	"GET.system-parameters":           GetSystemParameters,
 	"POST.system-parameters":          PostSystemParameters,
 	"GET.system-metrics-stream":       GetSystemMetricsStream,

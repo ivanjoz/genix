@@ -44,11 +44,11 @@ func insertStageLogs(transaction *db.Transaction, companyID int32, stageLogs []t
 // LastDate and joins titles and owners through GET.crm-opportunity-ids.
 func GetCrmPipelineOpportunityStatus(req *core.HandlerArgs) core.HandlerResponse {
 	pipelineID := int16(req.GetQueryInt("pipeline-id"))
-	scope, err := loadCrmReportScope(req.User.CompanyID, req.User.ID)
+	reportablePipelineIDs, err := loadReportablePipelineIDs(req.User.CompanyID, req.User.ID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	if !slices.Contains(scope.PipelineIDs, pipelineID) {
+	if !slices.Contains(reportablePipelineIDs, pipelineID) {
 		return req.MakeErr("No tiene acceso a los reportes de este pipeline.")
 	}
 	statusRows := []types.CrmPipelineOpportunityStatus{}
@@ -74,7 +74,7 @@ func GetCrmOpportunitiesByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener las oportunidades.", err)
 	}
 
-	scope, err := loadCrmReportScope(req.User.CompanyID, req.User.ID)
+	reportablePipelineIDs, err := loadReportablePipelineIDs(req.User.CompanyID, req.User.ID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -94,7 +94,7 @@ func GetCrmOpportunitiesByIDs(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("Error al validar el acceso a las oportunidades:", err)
 		}
 		for _, statusRow := range statusRows {
-			if slices.Contains(scope.PipelineIDs, statusRow.PipelineID) {
+			if slices.Contains(reportablePipelineIDs, statusRow.PipelineID) {
 				allowedIDs[statusRow.OpportunityID] = true
 			}
 		}

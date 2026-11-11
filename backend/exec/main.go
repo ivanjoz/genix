@@ -46,6 +46,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-deploy-company-webpage":   DeployCompanyWebpage,
 	"fn-sync-image-assets":        SyncImageAssetsHandler,
 	"fn-reindex-text":             ReindexTextSearch,
+	"fn-reload-records":           ReloadRecords,
 	"fn-compact-frames":           CompactDataFrames,
 	"fn-frame-sql":                FrameSQLConsole,
 	"fn-rebuild-sale-frames":      RebuildSaleFrames,

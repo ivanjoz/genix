@@ -112,23 +112,24 @@ form in the app renders. The cost is that the effect now also clears `SolPasswor
 `CertPassword`; it only fires when the edited row's id changes — first load, or after a rotation —
 and both are moments the passwords are meant to be empty anyway.
 
-## The credentials panel refuses what the endpoint accepts, and reads uncached
+## The credentials panel refuses what the endpoint accepts, and syncs on every load
 
 **Context** — `POST company-secrets` only requires the SOL user. It will happily store credentials
-with no password and no certificate, and the panel could have mirrored that. The page around it
-reads through the delta cache, so the credentials would naturally have been read the same way.
+with no password and no certificate, and the panel could have mirrored that. Every page load reads
+from a browser cache.
 
 **Decision** — `validateSecretsForm` refuses to create a record without a SOL password *and*
-without a certificate, and `CompanySecretsService` reads `company-secrets` with a plain `GET`, no
-`useCache`. Passwords are never prefilled: an empty one means "keep the stored one", which is what
-the endpoint does with it.
+without a certificate, and `CompanySecretsService` syncs `company-secrets` by delta with
+`useCache.min = 0`: it paints the cached rows, then always asks the server for what changed.
+Passwords are never prefilled: an empty one means "keep the stored one", which is what the
+endpoint does with it.
 
 **Rationale** — a credentials row missing either piece cannot sign or authenticate, so accepting it
 only moves the failure to the first real sale, where it surfaces as a SUNAT rejection at the till
 instead of a message on the form that created it. On existing records both stay optional, because
-the stored ones are still there. The uncached read costs one request per visit to a page nobody
-opens often, and buys the one thing this panel cannot get wrong: showing a certificate that was
-rotated or expired in another tab as if it were still the one signing.
+the stored ones are still there. Syncing on every load buys the one thing this panel cannot get
+wrong: showing a certificate that was rotated or expired in another tab as if it were still the one
+signing. The key material is projected out of the delta read, so it never enters a server snapshot.
 
 ## The certificate panel lives in the invoicing column
 

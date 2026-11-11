@@ -1,5 +1,5 @@
 import { notifyFailure } from '@genix/ui/notify';
-import { GetHandler, POST, GET } from '#libs/ui-runtime.svelte.ts'
+import { GetHandler, GETWithGroupCache, POST } from '#libs/ui-runtime.svelte.ts'
 import type { IPurchaseDocument } from '#core/purchase-document.ts'
 import { tr } from '#core/store.svelte.ts'
 
@@ -251,12 +251,13 @@ export const postExpensePayment = (
   return POST({ data, route: "expense-payment", refreshRoutes: ["expenses", "cash-banks"] })
 }
 
-// getSchedulePeriods triggers lazy period materialization on the backend and returns
-// the schedule's Expense periods.
+// getSchedulePeriods triggers lazy period materialization on the backend and returns the
+// schedule's Expense periods, read as the schedule's cache group (downloaded again only after one
+// of its periods changed).
 export const getSchedulePeriods = async (scheduleID: number): Promise<IExpense[]> => {
   try {
-    const result = await GET({ route: `expense-schedule-periods?scheduleID=${scheduleID}` })
-    return result.Periods || []
+    const groups = await GETWithGroupCache<IExpense>('expense-schedule-periods', { scheduleID: String(scheduleID) })
+    return groups.flatMap((group) => group.records || []).filter((period) => (period?.ID || 0) > 0)
   } catch (error) {
     notifyFailure(error as string)
     throw error

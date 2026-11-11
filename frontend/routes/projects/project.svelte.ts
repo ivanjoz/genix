@@ -1,9 +1,10 @@
 import { getRecordsByID, type IMinimalRecord } from '@genix/ui';
 import { tr } from '#core/store.svelte.ts';
-import { GET, GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
+import { UsuariosService } from '../security/users-profiles/users-profiles.svelte.ts';
 import {
-  isProjectArchived, isSprintOpen, makeUserLabel, projectCode, sortProjects,
-  type IEpic, type IProject, type ISprint, type IStory,
+  isProjectArchived, isSprintOpen, makeUserLabel, projectCode, sortProjects, teamCandidates,
+  type IEpic, type IProject, type ISprint, type IStory, type ITeamCandidate,
 } from './project.ts';
 import type { IStoryDetail } from './story/story.ts';
 import { applyBacklogRank, type IBacklogRankRequest } from './backlog/backlog.ts';
@@ -226,28 +227,23 @@ export class ProjectBacklog {
   }
 }
 
-export interface ITeamCandidate {
-  ID: number
-  Name: string
-}
-
 interface IUserLabel extends IMinimalRecord {
-  Username: string
+  User: string
   FirstName?: string
   LastName?: string
 }
 
 // ProjectPeople names the people of the projects: the team picker's candidates (users of the
-// module holding Edit) and the names of team members, read by ID.
+// module holding Edit, from the delta-cached GET.users list) and the names of team members, read by ID.
 export class ProjectPeople {
-  candidates = $state<ITeamCandidate[]>([])
+  #users = $state<UsuariosService | null>(null)
   userNamesByID = $state(new Map<number, string>())
 
-  async loadCandidates() {
-    this.candidates = (await GET({ route: 'projects-team-candidates' }) as ITeamCandidate[]) || []
-    const userNamesByID = new Map(this.userNamesByID)
-    for (const candidate of this.candidates) { userNamesByID.set(candidate.ID, candidate.Name) }
-    this.userNamesByID = userNamesByID
+  candidates: ITeamCandidate[] = $derived(teamCandidates(this.#users?.usuarios || []))
+
+  // Only the pages that offer the team picker sync the users list.
+  loadCandidates() {
+    this.#users ??= new UsuariosService()
   }
 
   async rememberUsers(userIDs: number[]) {
@@ -260,6 +256,6 @@ export class ProjectPeople {
   }
 
   userName(userID: number): string {
-    return this.userNamesByID.get(userID) || `#${userID}`
+    return this.userNamesByID.get(userID) || this.candidates.find((candidate) => candidate.ID === userID)?.Name || `#${userID}`
   }
 }

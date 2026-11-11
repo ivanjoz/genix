@@ -1484,10 +1484,12 @@ func (generator *projectsFlowGenerator) loadSnapshot(projectID int32) (projectSn
 	return snapshot, err
 }
 
+// readStoryDetail reads the stored detail: its route (GET.projects-story-details-ids) answers the
+// browser's by-IDs cache protocol, which this flow does not speak.
 func (generator *projectsFlowGenerator) readStoryDetail(storyID int64) (projectsTypes.StoryDetail, error) {
-	details, err := readDeltaList[projectsTypes.StoryDetail](generator, "GET.projects-story-detail", projects.GetStoryDetail,
-		map[string]string{"story-id": strconv.FormatInt(storyID, 10)})
-	if err != nil {
+	details := []projectsTypes.StoryDetail{}
+	query := db.Query(&details)
+	if err := query.CompanyID.Equals(sampleCompanyID).ID.Equals(storyID).Exec(); err != nil {
 		return projectsTypes.StoryDetail{}, err
 	}
 	if len(details) != 1 {

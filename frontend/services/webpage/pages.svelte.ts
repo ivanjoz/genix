@@ -77,11 +77,26 @@ export type SeoMetatagKey = (typeof SEO_METATAG_KEYS)[number];
 // Storefront config read from parameters group 10: the domain plus every SEO key.
 export type IWebsiteConfig = Partial<Record<SeoMetatagKey, string>> & { domain?: string };
 
-export const getWebsiteConfig = (): Promise<IWebsiteConfig> =>
-  GET({ route: 'website-config' }) as Promise<IWebsiteConfig>;
+// One parameters row of group 10, as GET.website-config sends it.
+interface IWebsiteConfigParameter {
+  Key: string;
+  Value: string;
+}
+
+// The rows are cached whole (the backend replaces the list on every sync) and keyed by Key.
+export const getWebsiteConfig = async (): Promise<IWebsiteConfig> => {
+  const parameters = (await GET({
+    route: 'website-config',
+    useCache: { min: 5, ver: 1 },
+    keyID: 'Key',
+  })) as IWebsiteConfigParameter[];
+  return Object.fromEntries((parameters || []).map((parameter) => [parameter.Key, parameter.Value]));
+};
 
 export const postWebsiteSeo = (metatags: Partial<Record<SeoMetatagKey, string>>) =>
-  POST({ data: metatags, route: 'website-seo', successMessage: 'SEO guardado' });
+  POST({
+    data: metatags, route: 'website-seo', successMessage: 'SEO guardado', refreshRoutes: ['website-config'],
+  });
 
 // Saving a domain also renders and publishes the store onto it, so this call blocks for as long
 // as the render takes. The response carries what got published.
@@ -90,6 +105,7 @@ export const postWebsiteDomain = (Domain: string): Promise<IWebsiteDomainSaved> 
     data: { Domain },
     route: 'website-domain',
     successMessage: 'Dominio guardado y tienda publicada',
+    refreshRoutes: ['website-config'],
   }) as Promise<IWebsiteDomainSaved>;
 
 export interface IWebsiteDomainSaved {

@@ -10,15 +10,6 @@ import (
 	"app/db"
 )
 
-// GetCrmReportScope tells the reports page which pipelines it may offer the user (plan §8.4).
-func GetCrmReportScope(req *core.HandlerArgs) core.HandlerResponse {
-	scope, err := loadCrmReportScope(req.User.CompanyID, req.User.ID)
-	if err != nil {
-		return req.MakeErr(err)
-	}
-	return req.MakeResponse(scope)
-}
-
 // GetCrmReportStageLog returns the stage log of one pipeline for a range of months of ONE year,
 // as cache groups by (Period, pipeline): a closed month never changes, so the browser downloads it
 // once. Every report (net progress, daily state, waterfall, funnel, scorecard, lost reasons) is
@@ -91,60 +82,32 @@ func parseCrmReportGroupRequest(req *core.HandlerArgs) (crmReportGroupRequest, e
 	if periodStart <= 0 || periodEnd < periodStart || periodStart/100 != periodEnd/100 || periodEnd%100 > 12 || periodStart%100 < 1 {
 		return groupRequest, fmt.Errorf("El rango de periodos debe estar dentro de un mismo año (YYMM).")
 	}
-	scope, err := loadCrmReportScope(req.User.CompanyID, req.User.ID)
+	reportablePipelineIDs, err := loadReportablePipelineIDs(req.User.CompanyID, req.User.ID)
 	if err != nil {
 		return groupRequest, err
 	}
-	if !slices.Contains(scope.PipelineIDs, groupRequest.pipelineID) {
+	if !slices.Contains(reportablePipelineIDs, groupRequest.pipelineID) {
 		return groupRequest, fmt.Errorf("No tiene acceso a los reportes de este pipeline.")
 	}
 	groupRequest.heldGroups, err = core.ExtractGroupIndexCacheValues(req)
 	return groupRequest, err
 }
 
-// GetCrmReportOpenOpportunities returns the open opportunities of one pipeline as they stand now
-// (owner, stage, amount only). The daily-state report rebuilds past days backwards from them, and
-// it serves users with the full-report access who are not members of the pipeline, whom the
-// board's own route refuses.
-func GetCrmReportOpenOpportunities(req *core.HandlerArgs) core.HandlerResponse {
-	pipelineID := int16(req.GetQueryInt("pipeline-id"))
-	scope, err := loadCrmReportScope(req.User.CompanyID, req.User.ID)
-	if err != nil {
-		return req.MakeErr(err)
-	}
-	if !slices.Contains(scope.PipelineIDs, pipelineID) {
-		return req.MakeErr("No tiene acceso a los reportes de este pipeline.")
-	}
-	opportunities := []types.CrmOpportunity{}
-	query := db.Query(&opportunities)
-	query.Select(query.ID, query.OwnerUserID, query.StageID, query.Amount, query.Outcome, query.ExpectedCloseDate).
-		CompanyID.Equals(req.User.CompanyID).PipelineID.Equals(pipelineID)
-	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener las oportunidades:", err)
-	}
-	openOpportunities := slices.DeleteFunc(opportunities, func(opportunity types.CrmOpportunity) bool {
-		return opportunity.Outcome != types.OpportunityOutcomeOpen
-	})
-	return req.MakeResponse(openOpportunities)
-}
-
-// loadCrmReportScope reads every pipeline (soft-deleted included) and whether the user holds the
-// full-report access.
-func loadCrmReportScope(companyID, userID int32) (types.CrmReportScope, error) {
+// loadReportablePipelineIDs answers the pipelines the user may report on (types.ReportablePipelineIDs).
+// The browser derives the same list from its pipelines cache (routes/crm/reports/reports.ts,
+// reportablePipelineIDs); this is the server's own check.
+func loadReportablePipelineIDs(companyID, userID int32) ([]int16, error) {
 	pipelines := []types.CrmPipeline{}
 	query := db.Query(&pipelines)
 	query.Select(query.ID, query.Status, query.Members).CompanyID.Equals(companyID)
 	if err := query.Exec(); err != nil {
-		return types.CrmReportScope{}, fmt.Errorf("error al leer los pipelines: %v", err)
+		return nil, fmt.Errorf("error al leer los pipelines: %v", err)
 	}
 	holdsFullReport, err := userHoldsAccess(companyID, userID, types.AccesoIDCrmFullReport)
 	if err != nil {
-		return types.CrmReportScope{}, err
+		return nil, err
 	}
-	return types.CrmReportScope{
-		PipelineIDs:     types.ReportablePipelineIDs(pipelines, userID, holdsFullReport),
-		HoldsFullReport: holdsFullReport,
-	}, nil
+	return types.ReportablePipelineIDs(pipelines, userID, holdsFullReport), nil
 }
 
 // userHoldsAccess reads the user's computed grants. The request gate only answers about the

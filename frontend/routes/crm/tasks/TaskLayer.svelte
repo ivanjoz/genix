@@ -10,7 +10,6 @@
   import T from '#components/misc/T.svelte'
   import { tr } from '#core/store.svelte.ts'
   import { formatTime } from '#libs/helpers.ts'
-  import { postCrmOpportunityActivity } from '#services/crm/crm-activity.svelte.ts'
   import { TASK_KIND, TASK_STATUS } from '#services/crm/crm-task.ts'
   import type { ICrmTask } from '#services/crm/crm-task.svelte.ts'
   import type { CrmTasksState } from './tasks.svelte.ts'
@@ -56,10 +55,7 @@
 
   const completeActivity = () => {
     if (!taskForm.Text.trim()) { notifyFailure(tr('Write what was done.|Escribe lo que se hizo.')); return }
-    runAndClose('Saving activity...|Guardando actividad...', async () => {
-      await postCrmOpportunityActivity({ OpportunityID: task.OpportunityID, TypeID: taskForm.TypeID, Text: taskForm.Text }, task.ID)
-      await tasksState.mineOpen.fetchOnline()
-    })
+    runAndClose('Saving activity...|Guardando actividad...', () => tasksState.completeActivityTask(task, taskForm.TypeID, taskForm.Text))
   }
 
   const decideApproval = (approve: boolean) =>

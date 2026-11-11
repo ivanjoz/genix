@@ -20,7 +20,7 @@ import { onDestroy, onMount, untrack } from 'svelte'
 import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
 import { ProductsService } from '#services/production/products.svelte.ts'
 import {
-  AlmacenMovimientosGroupedService,
+  SupplyMovementsService,
   createEmptyProviderSupplyRow,
   normalizeProviderSupplyRows,
   postProductSupply,
@@ -40,9 +40,9 @@ import {
   const productos = new ProductsService(true)
   const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
   const productSupplyService = new ProductSupplyService(true)
-  const groupedMovementsService = new AlmacenMovimientosGroupedService()
-  const dateHelper = new DateHelper()
   const salesWindowDays = 30
+  const groupedMovementsService = new SupplyMovementsService(salesWindowDays)
+  const dateHelper = new DateHelper()
   const debugProductID = 10034
   const yAxisWidthPx = 28
   const ventasWidthRatio = 0.30

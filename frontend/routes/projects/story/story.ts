@@ -10,12 +10,15 @@ export interface IChecklistItem {
   Done?: boolean
 }
 
+// A story's long content. ID is the story's ID: the by-IDs cache keys every record by ID. Its upd is
+// the cache slot's version, not the record's write time.
 export interface IStoryDetail {
   ProjectID: number
-  StoryID: number
+  ID: number
   Description?: string
   Checklist?: IChecklistItem[]
   Attachments?: IAttachment[]
+  ss?: number
   upd?: number
 }
 
@@ -48,7 +51,7 @@ export const makeEmptyStory = (projectID: number, epicID = 0): IStory => ({
 })
 
 export const makeEmptyStoryDetail = (projectID: number, storyID = 0): IStoryDetail => ({
-  ProjectID: projectID, StoryID: storyID, Description: '', Checklist: [], Attachments: [],
+  ProjectID: projectID, ID: storyID, Description: '', Checklist: [], Attachments: [],
 })
 
 // makeStoryDetailForm clones the detail for its form: the checklist and the files are edited in place.

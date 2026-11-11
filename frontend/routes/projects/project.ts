@@ -1,6 +1,9 @@
 // The agile projects' shared domain: the records the backend answers (backend/projects/types), their
 // states and labels, and the rules the three pages (Proyectos, Backlog, Sprints) share. Pure: no
 // Svelte, no fetch.
+// The pure grant reader itself: the package entry also loads the login runtime (Svelte state).
+import { hasAcceso } from '#components/security/accesos.ts';
+import { standardBase64ToBytes } from '#libs/helpers.ts';
 
 // The "Proyectos" access of backend/access.toml. View reads everything; the write level (what the
 // backend asks of every POST) creates projects and works in the ones whose team it is on.
@@ -257,5 +260,30 @@ export const storySprintNote = (story: IStory, sprintsByID: Map<number, ISprint>
   return { text: lastSprint.Name, isNotCompleted: false }
 }
 
-export const makeUserLabel =(user: { Username: string, FirstName?: string, LastName?: string }): string =>
-  [user.FirstName, user.LastName].filter(Boolean).join(' ').trim() || user.Username
+// A user's label: the full name, else the login handle (backend core/types User.User).
+export const makeUserLabel = (user: { User: string, FirstName?: string, LastName?: string }): string =>
+  [user.FirstName, user.LastName].filter(Boolean).join(' ').trim() || user.User
+
+export interface ITeamCandidate {
+  ID: number
+  Name: string
+}
+
+// What teamCandidates reads of a GET.users record: the grant blobs are Go []byte, base64 in the API.
+export interface ITeamCandidateUser {
+  ID: number
+  User: string
+  FirstName?: string
+  LastName?: string
+  AccesosComputed?: string | null
+  AccesosSubComputed?: string | null
+}
+
+// teamCandidates mirrors backend/projects canWorkInProjects, which refuses any other user joining a
+// team: the active users (the GET.users list holds only those) holding the projects access at the
+// write level. User 1 holds every access.
+export const teamCandidates = (activeUsers: ITeamCandidateUser[]): ITeamCandidate[] => activeUsers
+  .filter((user) => user.ID === 1 || hasAcceso(
+    standardBase64ToBytes(user.AccesosComputed), standardBase64ToBytes(user.AccesosSubComputed), ACCESS_ID_PROJECTS, ACCESS_LEVEL_WRITE,
+  ))
+  .map((user) => ({ ID: user.ID, Name: makeUserLabel(user) }))

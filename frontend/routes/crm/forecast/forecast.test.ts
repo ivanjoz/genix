@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { ICrmForecastSubmission } from '#services/crm/crm-forecast.svelte.ts'
 import type { ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
-import { periodFirstDay } from '../reports/reports.ts'
-import { attainmentPercent, computeForecast, latestSubmission, submissionBeforePeriod, submissionHistory } from './forecast.ts'
+import { GOAL_PERIOD } from '#services/crm/crm-goal-metric.ts'
+import { weekOfDay } from '../goals/goals.ts'
+import { periodFirstDay, periodLastDay } from '../reports/reports.ts'
+import {
+  attainmentPercent, computeForecast, forecastWeekRange, latestSubmission, submissionBeforePeriod, submissionHistory,
+  submissionsOfPeriod,
+} from './forecast.ts'
 
 const stage = (ID: number, ForecastCategory: number): ICrmPipelineStage =>
   ({ ID, Name: `s${ID}`, Color: '', Probability: 0, StaleDays: 0, Status: 1, ForecastCategory })
@@ -53,5 +58,19 @@ describe('forecast', () => {
   it('has no attainment without a goal', () => {
     expect(attainmentPercent(50, 200)).toBe(25)
     expect(attainmentPercent(50, 0)).toBe(0)
+  })
+
+  it('fetches a period as the weeks it spans, starting at the week its submissions are stored in', () => {
+    const [monthStart, monthEnd] = forecastWeekRange(GOAL_PERIOD.MONTHLY, 2602)
+    expect(monthStart).toBe(weekOfDay(periodFirstDay(2602)))
+    expect(monthEnd).toBe(weekOfDay(periodLastDay(2602)))
+    expect(forecastWeekRange(GOAL_PERIOD.WEEKLY, 2950)).toEqual([2950, 2950])
+    const day = periodFirstDay(2602) + 3
+    expect(forecastWeekRange(GOAL_PERIOD.DAILY_BY_MONTH, day)).toEqual([weekOfDay(day), weekOfDay(day)])
+  })
+
+  it('keeps only the period own submissions of the fetched weeks', () => {
+    const submissions = [{ ID: 1, Period: 2602 }, { ID: 2, Period: 2950 }] as ICrmForecastSubmission[]
+    expect(submissionsOfPeriod(submissions, 2602).map((submission) => submission.ID)).toEqual([1])
   })
 })

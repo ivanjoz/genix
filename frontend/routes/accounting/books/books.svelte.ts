@@ -1,47 +1,57 @@
 import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
+import { getRecordsByID } from '@genix/ui/cache'
 import { extractError, GET } from '#libs/ui-runtime.svelte.ts'
 import { tr } from '#core/store.svelte.ts'
 import {
   getClientProviderSnapshots, type IClientProviderSnapshot,
 } from '#services/crm/client-provider.svelte.ts'
-import type { ISalesBookResponse } from './books'
-import type { IPurchasesBookResponse } from './books.purchases'
+import {
+  periodOfUnixDay, salesBookOfPeriod, type ISalesBookDocument, type ISalesBookPeriod, type ISalesBookResponse,
+} from './books'
+import { purchasesBookOfPeriod, type IPurchasesBookPeriod, type IPurchasesBookResponse } from './books.purchases'
 
-// A book is read for a period, not synced.
-//
-// There is no delta cache on the period read itself: a filed period does not change, and the
-// rows are a slice of the month rather than a growing list. The identities are the opposite —
-// a snapshot is immutable and the same few hundred come back every period — so those go
-// through the by-ids cache and are downloaded once, ever.
-export class BookService<TResponse extends { Period: string }> {
+// A book is synced a period at a time: each response key is one of the period's delta logs, so
+// reopening a month only travels what changed. `min: 0` asks the server every time — the TTL would
+// otherwise skip the network and show a stale month. A single day is cut from its period here.
+// The identities are the opposite — a snapshot is immutable and the same few hundred come back
+// every period — so those go through the by-ids cache and are downloaded once, ever.
+export class BookService<TPeriodRecords, TResponse extends { Period: string }> {
   response: TResponse | null = $state(null)
   identityBySnapshotID: Map<number, IClientProviderSnapshot> = $state(new Map())
   isLoading = $state(false)
   // What was last asked for, so the page can tell "nothing yet" from "this period is empty".
   loadedPeriod = $state("")
 
-  // route is the book's endpoint; snapshotIDsOf lists the counterpart identities a response pins.
+  // route is the book's endpoint; resolveBook cuts the synced period down to the book asked for;
+  // snapshotIDsOf lists the counterpart identities a response pins.
   constructor(
     private route: string,
+    private keysIDs: Record<string, string>,
+    private resolveBook: (periodRecords: TPeriodRecords, period: string, unixDay: number) => Promise<TResponse>,
     private snapshotIDsOf: (response: TResponse) => number[],
   ) {}
 
-  // Fetches a whole period (YYYYMM) or, when unixDay is given, a single day inside one.
+  // Reads a whole period (YYYYMM) or, when no period is given, the single day unixDay.
   async fetch(period: string, unixDay: number = 0): Promise<void> {
     if (!period && !unixDay) {
       this.reset()
       return
     }
 
-    const route = period ? `${this.route}?period=${period}` : `${this.route}?date=${unixDay}`
+    const bookPeriod = period || periodOfUnixDay(unixDay)
     this.isLoading = true
     showLoading(tr("Reading the book...|Leyendo el libro..."))
     try {
-      const response = await GET({ route }) as TResponse
+      const periodRecords = await GET({
+        route: `${this.route}?period=${bookPeriod}`,
+        useCache: { min: 0, ver: 1 },
+        keysIDs: this.keysIDs,
+      }) as TPeriodRecords
+      const response = await this.resolveBook(periodRecords, bookPeriod, period ? 0 : unixDay)
       this.response = response
-      this.loadedPeriod = response?.Period || period
+      this.loadedPeriod = bookPeriod
       // The second-grade read: a period whose counterparts are already known costs no request.
-      const snapshotIDs = response ? this.snapshotIDsOf(response).filter(snapshotID => snapshotID > 0) : []
+      const snapshotIDs = this.snapshotIDsOf(response).filter(snapshotID => snapshotID > 0)
       this.identityBySnapshotID = snapshotIDs.length > 0
         ? await getClientProviderSnapshots(snapshotIDs)
         : new Map()
@@ -64,12 +74,27 @@ export class BookService<TResponse extends { Period: string }> {
   }
 }
 
-export const makeSalesBookService = () => new BookService<ISalesBookResponse>(
+// The comprobantes a note corrects in an earlier period come through the by-IDs cache.
+const resolveSalesBook = async (periodRecords: ISalesBookPeriod, period: string, unixDay: number) => {
+  const { response, olderAffectedIDs } = salesBookOfPeriod(periodRecords, period, unixDay)
+  if (olderAffectedIDs.length > 0) {
+    const olderAffected = await getRecordsByID<ISalesBookDocument & { ss: number, upd: number }>("invoice-document-ids", olderAffectedIDs)
+    response.AffectedDocuments.push(...olderAffected.values())
+  }
+  return response
+}
+
+export const makeSalesBookService = () => new BookService<ISalesBookPeriod, ISalesBookResponse>(
   "sales-book",
+  {},
+  resolveSalesBook,
   response => (response.Documents || []).map(document => document.ClientSnapshotID),
 )
 
-export const makePurchasesBookService = () => new BookService<IPurchasesBookResponse>(
+export const makePurchasesBookService = () => new BookService<IPurchasesBookPeriod, IPurchasesBookResponse>(
   "purchases-book",
+  // A purchase document is keyed by the order's, the expense's or the asset's own ID.
+  { PurchaseOrders: "SourceID", Expenses: "SourceID", Assets: "SourceID" },
+  async (periodRecords, period, unixDay) => purchasesBookOfPeriod(periodRecords, period, unixDay),
   response => (response.Documents || []).map(document => document.ProviderSnapshotID),
 )

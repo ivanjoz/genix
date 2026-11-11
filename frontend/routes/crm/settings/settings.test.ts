@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
-import { TASK_ASSIGN } from '#services/crm/crm-task.ts'
+import { TASK_ASSIGN, TASK_KIND } from '#services/crm/crm-task.ts'
 import {
-  changeStageTemplates, makeEmptyStage, makeEmptyTaskTemplate, moveItem, removeStage, setFieldRequiredFrom, setStageApprover,
+  buildTaskTemplateRows, changeStageTemplates, makeEmptyStage, makeEmptyTaskTemplate, moveItem, moveTemplateToStage, removeStage, setFieldRequiredFrom, setStageApprover,
   setStageStandardField, setTemplateAssignment, toggleField,
 } from './settings.ts'
 
@@ -62,5 +62,24 @@ describe('stage approvals and task templates', () => {
     const fixed = setTemplateAssignment(makeEmptyTaskTemplate(), TASK_ASSIGN.USER, 9)
     expect(fixed).toMatchObject({ AssignTo: TASK_ASSIGN.USER, AssignUserID: 9 })
     expect(setTemplateAssignment(fixed, TASK_ASSIGN.OWNER)).toMatchObject({ AssignTo: TASK_ASSIGN.OWNER, AssignUserID: 0 })
+  })
+
+  it('flattens the templates of live stages, keeping their positions in the full list', () => {
+    const emailTemplate = { ...makeEmptyTaskTemplate(), Kind: TASK_KIND.SEND_EMAIL, EmailTemplateID: 5 }
+    const fixedTemplate = setTemplateAssignment(makeEmptyTaskTemplate(), TASK_ASSIGN.USER, 9)
+    const stages = [
+      { ...stageNamed(1, 'A'), Status: 0, TaskTemplates: [makeEmptyTaskTemplate()] },
+      { ...stageNamed(2, 'B'), TaskTemplates: [emailTemplate, fixedTemplate] },
+    ]
+    const rows = buildTaskTemplateRows(stages)
+    expect(rows.map((row) => [row.StageIndex, row.TemplateIndex, row.SourceID, row.AssignUserID])).toEqual([[1, 0, 5, 0], [1, 1, 1, 9]])
+  })
+
+  it('moves only an unsaved template to another stage', () => {
+    const stages = [{ ...stageNamed(1, 'A'), TaskTemplates: [makeEmptyTaskTemplate()] }, stageNamed(2, 'B')]
+    const moved = moveTemplateToStage(stages, 0, 0, 1)
+    expect(moved.map((stage) => stage.TaskTemplates.length)).toEqual([0, 1])
+    const stored = [{ ...stageNamed(1, 'A'), TaskTemplates: [{ ...makeEmptyTaskTemplate(), ID: 3 }] }, stageNamed(2, 'B')]
+    expect(moveTemplateToStage(stored, 0, 0, 1)).toBe(stored)
   })
 })

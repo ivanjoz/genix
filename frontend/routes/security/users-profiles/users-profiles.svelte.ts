@@ -37,9 +37,9 @@ export const accesoAcciones = [
 
 export class UsuariosService extends GetHandler {
   route = "users"
-  // v2: AccessLevelIDs became AccesosGrants, so a cached v1 record would edit as a user with no
-  // direct accesses at all.
-  useCache = { min: 0.1, ver: 2 }
+  // The active users, synced by delta: only changed users travel, a deactivated one arrives as a
+  // removed ID. v3: the route moved to the delta protocol, so a v2 cache has no cursor to resume.
+  useCache = { min: 0.1, ver: 3 }
 
   usuarios: IUser[] = $state([])
   usuariosMap: Map<number, IUser> = $state(new Map())
@@ -72,15 +72,15 @@ export class UsuariosService extends GetHandler {
 
 export class PerfilesService extends GetHandler {
   route = "perfiles"
-  // v4: accesos and sub_accesos collapsed into one AccesosGrants list, so a cached v3 record would
-  // hydrate as a profile that grants nothing and saving it would revoke every access it holds.
-  useCache = { min: 5, ver: 4 }
+  // The active profiles, synced by delta: only changed profiles travel, a deactivated one arrives
+  // as a removed ID. v5: the route moved to the delta protocol, so a v4 cache has no cursor to resume.
+  useCache = { min: 5, ver: 5 }
 
   perfiles: IProfile[] = $state([])
   perfilesMap: Map<number, IProfile> = $state(new Map())
 
   handler(response: IProfile[]) {
-    const perfiles = (response || []).filter(x => x.ss > 0)
+    const perfiles = response || []
     for (const pr of perfiles) {
       pr.AccesosGrants = pr.AccesosGrants || []
       const { accesosMap, subAccesosMap } = fromAccesoGrants(pr.AccesosGrants)

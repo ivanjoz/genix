@@ -70,108 +70,99 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse((*cajas)[0])
 }
 
+// GetCashBankMovements reads a cash bank's movements of a date range (?caja-id=&date-inicio=&date-fin=)
+// as its (cash bank, day) cache groups, so a range read again downloads only the days that moved.
+// ?last-registros=N instead reads the cash bank's latest N movements, uncached (a group with
+// IndexID -1, which the browser passes through).
 func GetCashBankMovements(req *core.HandlerArgs) core.HandlerResponse {
-	// El frontend envía el parámetro como "caja-id" (ver convención en CREATE_API_HANDLERS.md)
 	cashBankID := req.GetQueryInt("caja-id")
-
 	if cashBankID == 0 {
 		return req.MakeErr("No se envió la CashBank-ID")
 	}
+	movementGroups := []db.RecordGroup[types.CashBankMovement]{}
 
-	lastRegistrosLimit := req.GetQueryInt("last-registros")
-
-	movimientos := []types.CashBankMovement{}
-	query := db.Query(&movimientos)
-	query.Select().CompanyID.Equals(req.User.CompanyID).CashBankID.Equals(cashBankID)
-
-	// KeyIntPacking: CashBankID (5) + Date (5) + Autoincrement (9)
-	// Base formula: CashBankID * 10^14 + Date * 10^9 + Autoincrement
-	if lastRegistrosLimit > 0 {
-		query.Limit(lastRegistrosLimit)
-	} else {
-		dateInicio := req.GetQueryInt16("date-inicio")
-		dateFin := req.GetQueryInt16("date-fin")
-		if dateInicio == 0 || dateFin == 0 {
-			return req.MakeErr("Debe enviar una date de inicio y fin.")
+	if lastMovementsLimit := req.GetQueryInt("last-registros"); lastMovementsLimit > 0 {
+		latestMovements := []types.CashBankMovement{}
+		query := db.Query(&latestMovements)
+		query.Select().CompanyID.Equals(req.User.CompanyID).CashBankID.Equals(cashBankID).
+			OrderDesc().Limit(min(lastMovementsLimit, 1000))
+		if err := query.Exec(); err != nil {
+			return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
 		}
-
-		query.Date.Between(dateInicio, dateFin)
+		movementGroups = append(movementGroups, db.RecordGroup[types.CashBankMovement]{IndexID: -1, Records: latestMovements})
+		return core.MakeResponse(req, &movementGroups)
 	}
-	query.OrderDesc()
 
+	dateStart := req.GetQueryInt16("date-inicio")
+	dateEnd := req.GetQueryInt16("date-fin")
+	if dateStart <= 0 || dateEnd <= 0 {
+		return req.MakeErr("Debe enviar una fecha de inicio y fin.")
+	}
+	if dateEnd < dateStart {
+		return req.MakeErr("La fecha final no puede ser menor a la fecha inicial.")
+	}
+	// Each day is one group to probe and maybe fetch: cap the range.
+	if dateEnd-dateStart > 120 {
+		return req.MakeErr("Sólo se pueden consultar hasta 120 días a la vez.")
+	}
+
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	query := db.QueryIndexGroup(&movementGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		query.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
+	}
+	query.CashBankID.Equals(cashBankID).Date.Between(dateStart, dateEnd)
 	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
+		core.Log("Error querying cash bank movement groups:", err)
+		return req.MakeErr("Error al obtener los movimientos de las cajas.")
 	}
-
-	core.Log("Movimientos obtenidos::", len(movimientos))
-
-	// Usuarios resolved client-side via cache-by-ids (apiRoute "users-ids") to keep payload small.
-	response := map[string]any{
-		"movimientos": movimientos,
-	}
-
-	return core.MakeResponse(req, &response)
+	// Users are resolved client-side via cache-by-ids (apiRoute "users-ids").
+	return core.MakeResponse(req, &movementGroups)
 }
 
-// GetCashBankMovementByID lists cash-bank movements tied to a document or reference, using the
-// CashBankMovement local indexes on DocumentID / ReferenceID. Used e.g. by the expenses payment
-// view to show the payments that settled an expense (document-id = Expense.ID), or all payments
-// across a schedule's periods (reference-id = ExpenseScheduled.ID).
+// GetCashBankMovementByID returns the movements tied to one document (?document-id=, e.g. an
+// Expense.ID) as that document's single cache group: the browser downloads it again only after a
+// new movement of it. DocumentID is shared across document kinds, so the caller filters by Type.
 func GetCashBankMovementByID(req *core.HandlerArgs) core.HandlerResponse {
 	documentID := req.GetQueryInt64("document-id")
-	referenceID := req.GetQueryInt("reference-id")
-	if documentID == 0 && referenceID == 0 {
-		return req.MakeErr("Debe enviar un document-id o un reference-id.")
+	if documentID <= 0 {
+		return req.MakeErr("Debe enviar un document-id.")
 	}
-
-	movimientos := []types.CashBankMovement{}
-	query := db.Query(&movimientos)
-	query.Select().CompanyID.Equals(req.User.CompanyID)
-	// DocumentID and ReferenceID are separate local indexes; prefer the more specific DocumentID.
-	if documentID != 0 {
-		query.DocumentID.Equals(documentID)
-	} else {
-		query.ReferenceID.Equals(referenceID)
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
+	movementGroups := []db.RecordGroup[types.CashBankMovement]{}
+	query := db.QueryIndexGroup(&movementGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		query.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
+	}
+	query.DocumentID.Between(documentID, documentID)
 	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener los movimientos:", err)
+		core.Log("Error querying document cash movement group:", err)
+		return req.MakeErr("Error al obtener los movimientos.")
 	}
-
-	response := map[string]any{"movimientos": movimientos}
-	return core.MakeResponse(req, &response)
+	return core.MakeResponse(req, &movementGroups)
 }
 
+// GetCashReconciliation syncs one cash bank's physical counts (?caja-id=) through its delta log.
 func GetCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {
-	// El frontend envía el parámetro como "caja-id" (ver convención en CREATE_API_HANDLERS.md)
 	cashBankID := req.GetQueryInt("caja-id")
 	if cashBankID == 0 {
 		return req.MakeErr("No se envió la CashBank-ID")
 	}
 
-	lastRegistros := req.GetQueryInt("last-registros")
-	lastRegistros = core.If(lastRegistros > 1000, 1000, lastRegistros)
-
-	cuadres := []types.CashReconciliation{}
-	query := db.Query(&cuadres)
-	query.Select().CompanyID.Equals(req.User.CompanyID)
-	if lastRegistros > 0 {
-		query.ID.Between(core.SUnixTimeUUIDConcatID(cashBankID, 0), core.SUnixTimeUUIDConcatID(cashBankID+1, 0))
-	} else {
-		//TODO: completar?
-	}
-	query.OrderDesc().Limit(lastRegistros)
-
+	reconciliations := []types.CashReconciliation{}
+	query := db.Query(&reconciliations)
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), cashBankID)
 	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener los movimientos de las cajas:", err)
+		return req.MakeErr("Error al obtener los cuadres de la caja:", err)
 	}
-
-	// Usuarios resolved client-side via cache-by-ids (apiRoute "users-ids") to keep payload small.
-	response := map[string]any{
-		"cuadres": cuadres,
-	}
-
-	return core.MakeResponse(req, &response)
+	// Users are resolved client-side via cache-by-ids (apiRoute "users-ids").
+	return req.MakeResponse(reconciliations)
 }
 
 func PostCashReconciliation(req *core.HandlerArgs) core.HandlerResponse {

@@ -31,9 +31,10 @@ const (
 // domain is stored separately under the "domain" key by PostWebsiteDomain.
 var seoMetatagKeys = []string{"title", "description", "keywords", "ogTitle", "ogDescription", "ogImage", "favicon"}
 
-// GetWebsiteConfig returns the company's storefront config (domain + SEO metatags)
-// as a flat key -> value map read from the parameters table (Group 10). It is
-// company-scoped server-side so no tenant data leaks.
+// GetWebsiteConfig returns the company's active storefront config rows (domain + SEO metatags)
+// from the parameters table (Group 10), company-scoped server-side. The parameters' composite key
+// (Group, Key) cannot carry a TypeDelta and the group holds under ten rows, so the browser cache
+// replaces the whole list on every sync (core.WithDeltaReplace).
 func GetWebsiteConfig(req *core.HandlerArgs) core.HandlerResponse {
 	parameters := []config.Parameters{}
 	query := db.Query(&parameters).CompanyID.Equals(req.User.CompanyID)
@@ -42,13 +43,13 @@ func GetWebsiteConfig(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener la configuración del sitio:", err)
 	}
 
-	config := map[string]string{}
+	activeParameters := []config.Parameters{}
 	for _, parameter := range parameters {
 		if parameter.Status > 0 {
-			config[parameter.Key] = parameter.Value
+			activeParameters = append(activeParameters, parameter)
 		}
 	}
-	return req.MakeResponse(config)
+	return req.MakeResponse(core.WithDeltaReplace(activeParameters))
 }
 
 // publicSeoMetatags reads the company's SEO metatags (group 10) and returns only the

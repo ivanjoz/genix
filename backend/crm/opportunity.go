@@ -9,8 +9,9 @@ import (
 	"app/db"
 )
 
-// GetCrmOpportunities syncs the open opportunities of ONE pipeline (?pipeline-id=). The sensitive
-// data is gated here: a user who is not a member of the pipeline gets nothing.
+// GetCrmOpportunities syncs the open opportunities of ONE pipeline (?pipeline-id=): the board, and
+// the reports, which rebuild past days backwards from them. The sensitive data is gated here: only
+// members of the pipeline and users who may report on it (full-report access) get it.
 func GetCrmOpportunities(req *core.HandlerArgs) core.HandlerResponse {
 	pipelineID := int16(req.GetQueryInt("pipeline-id"))
 	if pipelineID <= 0 {
@@ -21,7 +22,14 @@ func GetCrmOpportunities(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 	if types.MemberLevel(pipeline, req.User.ID) < types.PipelineLevelView {
-		return req.MakeErr("No tiene acceso a este pipeline.")
+		// Not a member: only the full-report access opens the pipeline (read-only, for the reports).
+		holdsFullReport, err := userHoldsAccess(req.User.CompanyID, req.User.ID, types.AccesoIDCrmFullReport)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		if !holdsFullReport {
+			return req.MakeErr("No tiene acceso a este pipeline.")
+		}
 	}
 
 	opportunities := []types.CrmOpportunity{}
@@ -35,22 +43,28 @@ func GetCrmOpportunities(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 // GetCrmOpportunityLog returns the stage history of one opportunity (?opportunity-id=), for users
-// who can see its pipeline.
+// who can see its pipeline, as the opportunity's single cache group: the browser keeps it and
+// downloads it again only after a new change of that opportunity.
 func GetCrmOpportunityLog(req *core.HandlerArgs) core.HandlerResponse {
-	opportunity, pipeline, err := loadOpportunityWithPipeline(req.User.CompanyID, int32(req.GetQueryInt("opportunity-id")))
+	opportunity, err := authorizeOpportunityView(req, int32(req.GetQueryInt("opportunity-id")))
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	if types.MemberLevel(pipeline, req.User.ID) < types.PipelineLevelView {
-		return req.MakeErr("No tiene acceso a este pipeline.")
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	logs := []types.CrmOpportunityStageLog{}
-	query := db.Query(&logs)
-	query.Select().CompanyID.Equals(req.User.CompanyID).OpportunityID.Equals(opportunity.ID)
+	logGroups := []db.RecordGroup[types.CrmOpportunityStageLog]{}
+	query := db.QueryIndexGroup(&logGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		query.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
+	}
+	query.OpportunityID.Between(opportunity.ID, opportunity.ID)
 	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener el historial:", err)
+		core.Log("Error querying CRM opportunity log group:", err)
+		return req.MakeErr("Error al obtener el historial.")
 	}
-	return req.MakeResponse(logs)
+	return core.MakeResponse(req, &logGroups)
 }
 
 // PostCrmOpportunity creates or edits an opportunity's own fields. Stage changes go through

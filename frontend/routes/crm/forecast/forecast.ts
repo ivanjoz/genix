@@ -1,7 +1,7 @@
 import type { ICrmForecastSubmission } from '#services/crm/crm-forecast.svelte.ts'
 import { FORECAST_CATEGORY } from '#services/crm/crm-forecast-category.ts'
 import type { ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
-import { periodOfDay } from '../goals/goals.ts'
+import { goalPeriodDays, periodOfDay, weekOfDay } from '../goals/goals.ts'
 import { unixDayOfSUnixTime, type OpenOpportunityNow } from '../reports/reports.ts'
 
 // Pure logic of the Forecast page (plan §3.4): what each seller's open opportunities add up to for
@@ -49,4 +49,17 @@ export const submissionBeforePeriod = (history: ICrmForecastSubmission[], firstD
   history.filter((submission) => unixDayOfSUnixTime(submission.Created) < firstDay).at(-1)
 
 /** Won / goal as a percentage; 0 when there is no goal. */
-export const attainmentPercent = (won: number, goal: number) => goal > 0 ? Math.round(won * 100 / goal) : 0
+/**
+ * The weeks to fetch for a goal period's submissions. They are stored under the week of the
+ * period's first day (backend PlanForecastSubmission), so a month, a week or a day is read as the
+ * weeks it spans and then trimmed to the period's own rows.
+ */
+export const forecastWeekRange = (periodType: number, period: number): [number, number] => {
+  const [firstDay, lastDay] = goalPeriodDays(periodType, period)
+  return [weekOfDay(firstDay), weekOfDay(lastDay)]
+}
+
+export const submissionsOfPeriod = (submissions: ICrmForecastSubmission[], period: number) =>
+  submissions.filter((submission) => submission.Period === period)
+
+export const attainmentPercent =(won: number, goal: number) => goal > 0 ? Math.round(won * 100 / goal) : 0

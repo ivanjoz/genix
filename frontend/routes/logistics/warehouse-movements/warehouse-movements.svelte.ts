@@ -56,8 +56,9 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
   const queryParams = new URLSearchParams()
   queryParams.set('date-inicio', String(args.dateInicio))
   queryParams.set('date-fin', String(args.dateFin))
-  if (args.almacenID > 0) { queryParams.set('almacen-id', String(args.almacenID)) }
-  if (args.productoID > 0) { queryParams.set('producto-id', String(args.productoID)) }
+  // Names must match GetAlmacenMovimientos: each present name selects a different cache group.
+  if (args.almacenID > 0) { queryParams.set('warehouse-id', String(args.almacenID)) }
+  if (args.productoID > 0) { queryParams.set('product-id', String(args.productoID)) }
   if (args.tipo > 0) { queryParams.set('tipo', String(args.tipo)) }
   if (args.lotCode?.trim()) { queryParams.set('lot-code', args.lotCode.trim()) }
   if (args.documentID > 0) { queryParams.set('document-id', String(args.documentID)) }
@@ -74,9 +75,16 @@ export const queryAlmacenMovimientos = async (args: IQueryAlmacenMovimientos): P
     throw error
   }
 
+  // The server reads one cache group per request (warehouse wins over product), so the filters
+  // that group did not apply are applied here.
+  const [warehouseID, productID, movementType] = isDirectLookup
+    ? [0, 0, 0] : [args.almacenID || 0, args.productoID || 0, args.tipo || 0]
   const movimientos = (result || [])
     .flatMap((groupRecord) => groupRecord.records || [])
-    .filter((movement) => !!movement?.ID)
+    .filter((movement) => !!movement?.ID
+      && (!warehouseID || movement.WarehouseID === warehouseID)
+      && (!productID || movement.ProductID === productID)
+      && (!movementType || movement.Type === movementType))
 
   // Keep the table stable across mixed grouped responses.
   movimientos.sort((a, b) => (b.Created || 0) - (a.Created || 0))

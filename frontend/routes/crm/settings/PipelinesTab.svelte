@@ -22,8 +22,9 @@
   import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte'
   import { activityTypeOptions as buildActivityTypeOptions } from '../pipeline/pipeline.ts'
   import {
-    activeStages, changeStageTemplates, makeEmptyPipeline, makeEmptyStage, makeEmptyTaskTemplate, moveItem, removeStage,
-    setFieldRequiredFrom, setStageApprover, setStageStandardField, setTemplateAssignment, toggleField,
+    activeStages, buildTaskTemplateRows, changeStageTemplates, makeEmptyPipeline, makeEmptyStage, makeEmptyTaskTemplate, moveItem,
+    moveTemplateToStage, removeStage, setFieldRequiredFrom, setStageApprover, setStageStandardField, setTemplateAssignment, toggleField,
+    type IStageTaskTemplateRow,
   } from './settings.ts'
 
   // A pipeline is its stages and the custom fields it shows. Members are not edited here: the
@@ -93,7 +94,7 @@
       onCellEdit: (stage, value) => { stage.StaleDays = numberOf(value) },
     },
     {
-      id: 'forecastCategory', header: 'Forecast', width: '150px', css: 'px-4',
+      id: 'forecastCategory', header: 'Forecast', css: 'px-4', field: 'ForecastCategory', cellSelectMode: 'pick',
       cellOptions: FORECAST_CATEGORY_OPTIONS, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
       getValue: (stage) => stage.ForecastCategory,
       onCellSelect: (stage, value) => { stage.ForecastCategory = Number(value) },
@@ -113,13 +114,83 @@
   const userOptions = $derived(usersService.usuarios.map((user) => ({ id: user.ID, name: `${user.FirstName} ${user.LastName}`.trim() })))
   const approverOptions = $derived([{ id: 0, name: tr('No approval|Sin aprobación') }, ...userOptions])
   const assignOptions = $derived([{ id: 0, name: tr('Card owner|Responsable de la tarjeta') }, ...userOptions])
-  const activityTypeOptions = $derived(buildActivityTypeOptions(activityTypes.records))
-  const emailTemplateOptions = $derived(emailTemplates.records.map((emailTemplate) => ({ id: emailTemplate.ID, name: emailTemplate.Name })))
+  // Activity type and template names are bilingual ("Call|Llamada"): the select cells show them as given.
+  const activityTypeOptions = $derived(buildActivityTypeOptions(activityTypes.records)
+    .map((activityType) => ({ ...activityType, name: ui.translate(activityType.name) })))
+  const emailTemplateOptions = $derived(emailTemplates.records.map((emailTemplate) => ({ id: emailTemplate.ID, name: ui.translate(emailTemplate.Name) })))
   const TASK_KIND_OPTIONS = [
     { id: TASK_KIND.ACTIVITY, name: tr('Log activity|Registrar actividad') },
     { id: TASK_KIND.SEND_EMAIL, name: tr('Send email|Enviar correo') },
   ]
   const hasUnsavedStage = $derived(visibleStages.some((stage) => stage.ID === 0))
+
+  const INFORMATION_VIEW = 1
+  const TASKS_VIEW = 2
+  const APPROVALS_VIEW = 3
+  let layerView = $state(INFORMATION_VIEW)
+
+  // Templates propose a task every time a card enters their stage. The table flattens them across
+  // stages; the option lists are read per row so they follow the users and types as they load.
+  const taskTemplateRows = $derived(buildTaskTemplateRows(pipelineForm.Stages))
+  const stageOptions = $derived(visibleStages.map((stage) => ({ id: stageIndexOf(stage), name: ui.translate(stage.Name) })))
+  const taskTemplateColumns: ITableColumn<IStageTaskTemplateRow>[] = [
+    {
+      id: 'stage', header: 'Stage|Etapa', css: 'px-6', field: 'StageIndex', cellSelectMode: 'pick',
+      getValue: (row) => ui.translate(pipelineForm.Stages[row.StageIndex].Name),
+      getCellOptions: () => stageOptions, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      // A saved template keeps its stage: its ID only means something inside that stage.
+      disableCellInteractions: (row) => row.template.ID > 0,
+      onCellSelect: (row, value) => {
+        pipelineForm.Stages = moveTemplateToStage(pipelineForm.Stages, row.StageIndex, row.TemplateIndex, Number(value))
+      },
+    },
+    {
+      id: 'title', header: 'Task|Tarea', headerCss: 'w-[30%]', css: 'px-6', getValue: (row) => row.template.Title,
+      onCellEdit: (row, value) => { row.template.Title = String(value) },
+    },
+    {
+      id: 'kind', header: 'Kind|Tipo', css: 'px-6', field: 'Kind', cellSelectMode: 'pick',
+      cellOptions: TASK_KIND_OPTIONS, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      onCellSelect: (row, value) => { row.template.Kind = Number(value) },
+    },
+    {
+      // What the task asks for: the activity to log, or the template the email starts from.
+      id: 'source', header: 'Activity / Template|Actividad / Plantilla', css: 'px-6', field: 'SourceID', cellSelectMode: 'pick', cellSelectColumns: 2,
+      getCellOptions: (row) => row.Kind === TASK_KIND.SEND_EMAIL ? emailTemplateOptions : activityTypeOptions,
+      cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      onCellSelect: (row, value) => {
+        if (row.Kind === TASK_KIND.SEND_EMAIL) row.template.EmailTemplateID = Number(value) || 0
+        else row.template.ActivityTypeID = Number(value) || 0
+      },
+    },
+    {
+      id: 'dueDays', header: 'Due (days)|Vence (días)', align: 'right', cellInputType: 'number',
+      getValue: (row) => row.template.DueDays,
+      onCellEdit: (row, value) => { row.template.DueDays = numberOf(value) },
+    },
+    {
+      id: 'assign', header: 'Assign to|Asignar a', css: 'px-6', field: 'AssignUserID',
+      getCellOptions: () => assignOptions, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      onCellSelect: (row, value) => {
+        const assignUserID = Number(value) || 0
+        pipelineForm.Stages[row.StageIndex].TaskTemplates[row.TemplateIndex] = setTemplateAssignment(
+          row.template, assignUserID ? TASK_ASSIGN.USER : TASK_ASSIGN.OWNER, assignUserID)
+      },
+    },
+    { id: 'actions', header: '', headerCss: 'w-[52px]', css: 'px-4', getValue: () => '' },
+  ]
+
+  // An approver gates a forward move into the stage.
+  const approvalColumns: ITableColumn<ICrmPipelineStage>[] = [
+    { header: 'Stage|Etapa', css: 'px-6', getValue: (stage) => ui.translate(stage.Name) },
+    {
+      header: 'Approver|Aprobador', headerCss: 'w-[50%]', css: 'px-6', field: 'ApproverUserID',
+      getCellOptions: () => approverOptions, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      onCellSelect: (stage, value) => {
+        pipelineForm.Stages = setStageApprover(pipelineForm.Stages, stageIndexOf(stage), Number(value) || 0)
+      },
+    },
+  ]
 
   const columns: ITableColumn<ICrmPipeline>[] = [
     { header: 'Pipeline', css: 'px-6', highlight: true, getValue: (e) => e.Name },
@@ -141,15 +212,47 @@
 <Layer
   id={PIPELINE_LAYER_ID}
   type="side"
-  sideLayerSize={900}
+  sideLayerSize={1040}
   title={pipelineForm.ID > 0 ? pipelineForm.Name : 'New pipeline|Nuevo pipeline'}
   titleCss="h2 mb-6"
   css="px-12 py-10"
   contentCss="px-0"
+  options={[[INFORMATION_VIEW, 'Information|Información'], [TASKS_VIEW, 'Tasks|Tareas'], [APPROVALS_VIEW, 'Approvals|Aprobaciones']]}
+  bind:selected={layerView}
   onSave={() => savePipeline()}
   onDelete={pipelineForm.ID > 0 ? () => savePipeline(true) : undefined}
-  onClose={() => { pipelineForm = makeEmptyPipeline() }}
+  onClose={() => { pipelineForm = makeEmptyPipeline(); layerView = INFORMATION_VIEW }}
 >
+  {#if layerView === TASKS_VIEW}
+  <div class="flex items-center justify-between mt-8 mb-6">
+    <div class="text-fg-muted">{tr('Each task is proposed every time a card enters its stage.|Cada tarea se propone cada vez que una tarjeta entra a su etapa.')}</div>
+    <!-- A new template starts in the first stage; its Stage cell moves it while it is unsaved. -->
+    <Button color="green" icon="icon-[fa--plus]" name="Task|Tarea" label="Adds a task template to the first stage." disabled={visibleStages.length === 0}
+      onClick={() => { pipelineForm.Stages = changeStageTemplates(pipelineForm.Stages, stageIndexOf(visibleStages[0]), (templates) => [...templates, makeEmptyTaskTemplate()]) }} />
+  </div>
+  <div aria-label="Stage task templates">
+    <VTable columns={taskTemplateColumns} data={taskTemplateRows} disableVirtualizer={true} estimateSize={42}
+      emptyMessage="No task templates yet.|Aún no hay tareas.">
+      {#snippet cellRenderer(row, column, defaultContent)}
+        {#if column.id === 'actions'}
+          <div class="flex justify-center">
+            <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the task template."
+              onClick={() => { pipelineForm.Stages = changeStageTemplates(pipelineForm.Stages, row.StageIndex, (templates) => templates.filter((_, index) => index !== row.TemplateIndex)) }} />
+          </div>
+        {:else}
+          <!-- VTable routes every column with an id here once its select is disabled (a saved template's stage). -->
+          {defaultContent}
+        {/if}
+      {/snippet}
+    </VTable>
+  </div>
+  {:else if layerView === APPROVALS_VIEW}
+  <div class="text-fg-muted mt-8 mb-6">{tr('Moving a card forward into a stage with an approver waits for their approval.|Avanzar una tarjeta a una etapa con aprobador espera su aprobación.')}</div>
+  <div aria-label="Stage approvals">
+    <VTable columns={approvalColumns} data={visibleStages} disableVirtualizer={true} estimateSize={42}
+      emptyMessage="No stages yet.|Aún no hay etapas." />
+  </div>
+  {:else}
   <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Pipeline form">
     <Input bind:saveOn={pipelineForm} save="Name" label="Name|Nombre" required={true} css="col-span-24 md:col-span-16" />
     <ColorPicker bind:saveOn={pipelineForm} save="Color" label="Color" css="col-span-24 md:col-span-8" />
@@ -191,48 +294,6 @@
     </VTable>
   </div>
 
-  <!-- An approver gates a forward move into the stage; templates propose a task every time a card enters it. -->
-  <h3 class="mt-16 mb-6 font-bold">{tr('Approvals and tasks per stage|Aprobaciones y tareas por etapa')}</h3>
-  <div class="flex flex-col gap-10" aria-label="Stage approvals and tasks">
-    {#each visibleStages as stage (stageIndexOf(stage))}
-      {@const stageIndex = stageIndexOf(stage)}
-      <div class="rounded border border-line p-8">
-        <div class="flex items-center gap-12">
-          <span class="ff-bold w-160 truncate">{stage.Name}</span>
-          <SearchSelect options={approverOptions} keyId="id" keyName="name" label="Approver|Aprobador" css="w-240"
-            selected={stage.ApproverUserID}
-            onChange={(option) => { pipelineForm.Stages = setStageApprover(pipelineForm.Stages, stageIndex, option.id) }} />
-          <Button color="green" icon="icon-[fa--plus]" name="Task|Tarea" label="Proposes a task each time a card enters this stage."
-            css="ml-auto" onClick={() => { pipelineForm.Stages = changeStageTemplates(pipelineForm.Stages, stageIndex, (templates) => [...templates, makeEmptyTaskTemplate()]) }} />
-        </div>
-        {#each stage.TaskTemplates as template, templateIndex}
-          <div class="flex items-end gap-8 mt-6">
-            <Input bind:saveOn={pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex]} save="Title" label="Task|Tarea" css="grow" />
-            <SearchSelect options={TASK_KIND_OPTIONS} keyId="id" keyName="name" label="Kind|Tipo" css="w-150"
-              selected={template.Kind} onChange={(option) => { pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex].Kind = option.id }} />
-            <!-- What the task asks for: the activity to log, or the template the email starts from. -->
-            {#if template.Kind === TASK_KIND.SEND_EMAIL}
-              <SearchSelect options={emailTemplateOptions} keyId="id" keyName="name" label="Email template|Plantilla" css="w-176"
-                selected={template.EmailTemplateID} onChange={(option) => { pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex].EmailTemplateID = option.id }} />
-            {:else}
-              <SearchSelect options={activityTypeOptions} keyId="id" keyName="name" label="Activity|Actividad" css="w-176"
-                selected={template.ActivityTypeID} onChange={(option) => { pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex].ActivityTypeID = option.id }} />
-            {/if}
-            <Input bind:saveOn={pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex]} save="DueDays" type="number" label="Due in days|Vence en días" css="w-100" />
-            <SearchSelect options={assignOptions} keyId="id" keyName="name" label="Assign to|Asignar a" css="w-176"
-              selected={template.AssignTo === TASK_ASSIGN.USER ? template.AssignUserID : 0}
-              onChange={(option) => {
-                pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex] = setTemplateAssignment(
-                  template, option.id ? TASK_ASSIGN.USER : TASK_ASSIGN.OWNER, option.id)
-              }} />
-            <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the task template."
-              onClick={() => { pipelineForm.Stages = changeStageTemplates(pipelineForm.Stages, stageIndex, (templates) => templates.filter((_, index) => index !== templateIndex)) }} />
-          </div>
-        {/each}
-      </div>
-    {/each}
-  </div>
-
   <h3 class="mt-16 mb-6 font-bold">{tr('Custom fields shown|Campos personalizados visibles')}</h3>
   {#if hasUnsavedStage}
     <div class="text-fg-muted mb-6">
@@ -255,4 +316,5 @@
       <div class="text-gray-500">{tr('No custom fields yet; create them in the Custom fields tab.|Aún no hay campos; créelos en la pestaña Campos personalizados.')}</div>
     {/each}
   </div>
+  {/if}
 </Layer>

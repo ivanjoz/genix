@@ -26,6 +26,10 @@ var EmailPlaceholders = []string{
 
 var emailPlaceholderPattern = regexp.MustCompile(`\{\{\s*([a-z_.]+)\s*\}\}`)
 
+// The template editor saves each variable as <span data-variable="name">{{name}}</span>; the wrapper
+// only marks it for the editor and is dropped before the email is filled.
+var emailVariableWrapperPattern = regexp.MustCompile(`<span data-variable="[a-z_.]+">(\{\{[a-z_.]+\}\})</span>`)
+
 // EmailRenderContext holds the values of the placeholders for one email. Quote is nil when the
 // email is not about a quote.
 type EmailRenderContext struct {
@@ -121,7 +125,8 @@ func RenderEmailTemplate(template CrmEmailTemplate, context EmailRenderContext) 
 			return value
 		})
 	}
-	subject, body = fill(template.Subject, false), fill(template.BodyHTML, true)
+	unwrappedBody := emailVariableWrapperPattern.ReplaceAllString(template.BodyHTML, "$1")
+	subject, body = fill(template.Subject, false), fill(unwrappedBody, true)
 	return subject, body, renderError
 }
 

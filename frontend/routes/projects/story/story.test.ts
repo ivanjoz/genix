@@ -41,7 +41,7 @@ describe('attachments', () => {
 })
 
 test('makeStoryDetailForm does not share the checklist with the loaded detail', () => {
-  const detail = { ProjectID: 1, StoryID: 1, Description: '', Checklist: [{ Text: 'A', Done: false }], Attachments: [] }
+  const detail = { ProjectID: 1, ID: 1, Description: '', Checklist: [{ Text: 'A', Done: false }], Attachments: [] }
   const detailForm = makeStoryDetailForm(detail)
   detailForm.Checklist[0].Done = true
   expect(detail.Checklist[0].Done).toBe(false)

@@ -103,6 +103,11 @@ export const readFileAsBase64 = async (file: File): Promise<string> => {
   return btoa(binary)
 }
 
+// A Go []byte as the API sends it (standard base64, as encoding/json and colbin write it). A nil
+// slice arrives as null.
+export const standardBase64ToBytes = (encoded: string | null | undefined): Uint8Array =>
+  Uint8Array.from(atob(encoded || ''), (character) => character.charCodeAt(0))
+
 const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 const base62IndexesByCharCode = new Int16Array(123)
 

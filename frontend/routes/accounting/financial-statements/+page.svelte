@@ -6,9 +6,9 @@ import SearchSelect from '#components/form/SearchSelect.svelte'
 import SelectBox from '#components/form/SelectBox.svelte'
 import T from '#components/misc/T.svelte'
 import Page from '#domain/Page.svelte'
-import { periodBounds, summarizeOperations } from '../accounts-consolidation/accounts-consolidation'
+import { summarizeOperations } from '../accounts-consolidation/accounts-consolidation'
 import { AccountingPeriodReader } from '../accounts-consolidation/accounts-consolidation.svelte'
-import { buildPeriodOptions, periodCode, SINGLE_DAY_PERIOD } from '../books/books'
+import { buildPeriodOptions, periodBounds, periodCode, SINGLE_DAY_PERIOD } from '../books/books'
 import {
   buildCashFlow, buildIncomeStatement, operationsOfView, restateCashBalances, statementViewOptions, VIEW_MANAGEMENT,
 } from './financial-statements'

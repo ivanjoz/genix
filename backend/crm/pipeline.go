@@ -174,14 +174,18 @@ func loadOpenOpportunityStageIDs(companyID int32, pipelineID int16) (map[int16]b
 	if pipelineID == 0 {
 		return stageIDs, nil
 	}
+	// Read through the board's delta index (PipelineID, Status=open) with an empty cursor: it reads
+	// only the open opportunities, not the pipeline's whole closed history.
 	opportunities := []types.CrmOpportunity{}
 	query := db.Query(&opportunities)
-	query.Select(query.ID, query.StageID, query.Outcome).CompanyID.Equals(companyID).PipelineID.Equals(pipelineID)
+	query.Select(query.ID, query.StageID).CompanyID.Equals(companyID).PipelineID.Equals(pipelineID).
+		Delta(db.DeltaCursor{}, types.OpportunityStatusOpen)
 	if err := query.Exec(); err != nil {
 		return nil, fmt.Errorf("error al leer las oportunidades: %v", err)
 	}
 	for _, opportunity := range opportunities {
-		if opportunity.Outcome == types.OpportunityOutcomeOpen {
+		// Skip the metadata record the Delta() read appends.
+		if opportunity.Metadata == nil {
 			stageIDs[opportunity.StageID] = true
 		}
 	}

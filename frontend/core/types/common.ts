@@ -28,7 +28,6 @@ export interface IUser {
   CreatedBy: number;
   UpdatedBy: number;
   UpdatedVersion: number;
-  PasswordHash: string;
 }
 
 export interface IProfile {

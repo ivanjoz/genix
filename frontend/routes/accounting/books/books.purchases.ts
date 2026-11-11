@@ -1,7 +1,7 @@
 // The Registro de Compras (SIRE RCE), in the shape SUNAT reads it. Pure: no Svelte, no fetch.
 //
-// The backend sends the period's purchases from the three tables that carry a supplier
-// comprobante — purchase orders, expenses and fixed assets — as numbers. The supplier's
+// The backend syncs the purchases from the three tables that carry a supplier comprobante —
+// purchase orders, expenses and fixed assets — as numbers. The supplier's
 // identity comes from the by-ids snapshot cache, and everything else is decided here: which
 // purchases are book rows, how a factura split across several records becomes one row, and
 // what the period still needs before it can be filed.
@@ -15,7 +15,7 @@ import {
   PURCHASE_DOC_TYPE_NONE, PURCHASE_DOC_TYPE_UTILITY_BILL, purchaseDocumentTotal,
   type IPurchaseDocument,
 } from '#core/purchase-document.ts'
-import { isWholeMonthPeriod } from './books'
+import { bookRange, isWholeMonthPeriod } from './books'
 
 // Where a row came from. Mirrors PurchaseSource* in backend/accounting/purchases_book_api.go.
 export const PURCHASE_SOURCE_ORDER = 1
@@ -52,6 +52,26 @@ export interface IPurchasesBookResponse {
   FirstDay: number
   LastDay: number
   Documents: IPurchaseBookDocument[]
+}
+
+// What GET.purchases-book syncs: the period's order and expense delta logs, and the whole asset
+// register. Mirrors PurchasesBookResponse in backend/accounting/purchases_book_api.go.
+export interface IPurchasesBookPeriod {
+  PurchaseOrders?: IPurchaseBookDocument[]
+  Expenses?: IPurchaseBookDocument[]
+  Assets?: IPurchaseBookDocument[]
+}
+
+// purchasesBookOfPeriod cuts the synced records down to the book asked for: the purchases whose
+// comprobante (or own date, without one) falls in the period or the single day inside it. A
+// donated asset without a comprobante was not bought, so it is not a purchase to review.
+export function purchasesBookOfPeriod(periodRecords: IPurchasesBookPeriod, period: string, unixDay: number): IPurchasesBookResponse {
+  const { fromDay, toDay } = bookRange(period, unixDay)
+  const purchasedAssets = (periodRecords.Assets || []).filter(asset =>
+    !(asset.RecordAmount === 0 && (asset.DocType || PURCHASE_DOC_TYPE_NONE) === PURCHASE_DOC_TYPE_NONE))
+  const documents = [...(periodRecords.PurchaseOrders || []), ...(periodRecords.Expenses || []), ...purchasedAssets]
+    .filter(document => document.DocIssueDate >= fromDay && document.DocIssueDate <= toDay)
+  return { Period: period, FirstDay: fromDay, LastDay: toDay, Documents: documents }
 }
 
 export interface IPurchaseSource {

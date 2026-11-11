@@ -75,6 +75,48 @@ export interface ISalesBookResponse {
   UninvoicedSales: IUninvoicedSale[]
 }
 
+// What GET.sales-book syncs: the period's delta logs. Mirrors SalesBookResponse in
+// backend/accounting/sales_book_api.go.
+export interface ISalesBookPeriod {
+  SalesDocuments?: ISalesBookDocument[]
+  Sales?: IUninvoicedSale[]   // every sale of the period, annulled ones aside
+}
+
+// salesBookOfPeriod cuts the synced period down to the book asked for: the whole period, or the
+// single day inside it (a working view, not a filable book; the period still names it).
+//
+// A note's corrected comprobante is taken from the period when the period holds it;
+// olderAffectedIDs are the ones from earlier periods, which only the by-IDs cache resolves. A
+// sale whose id ends in 00 was never registered for electronic issuance: it is uninvoiced.
+export function salesBookOfPeriod(
+  periodRecords: ISalesBookPeriod, period: string, unixDay: number,
+): { response: ISalesBookResponse, olderAffectedIDs: number[] } {
+  const { fromDay, toDay } = bookRange(period, unixDay)
+  const periodDocuments = periodRecords.SalesDocuments || []
+  const periodDocumentsByID = new Map(periodDocuments.map(document => [document.ID, document]))
+  const documents = periodDocuments.filter(document => document.IssueDate >= fromDay && document.IssueDate <= toDay)
+
+  const affectedDocuments: ISalesBookDocument[] = []
+  const olderAffectedIDs = new Set<number>()
+  for (const document of documents) {
+    if (!document.AffectedDocID) continue
+    const affected = periodDocumentsByID.get(document.AffectedDocID)
+    if (affected) affectedDocuments.push(affected)
+    else olderAffectedIDs.add(document.AffectedDocID)
+  }
+
+  const uninvoicedSales = (periodRecords.Sales || []).filter(sale =>
+    sale.ID % SERIES_DIGITS === 0 && sale.Date >= fromDay && sale.Date <= toDay)
+
+  return {
+    response: {
+      Period: period, FirstDay: fromDay, LastDay: toDay,
+      Documents: documents, AffectedDocuments: affectedDocuments, UninvoicedSales: uninvoicedSales,
+    },
+    olderAffectedIDs: [...olderAffectedIDs],
+  }
+}
+
 // Only what a book row reads off a series. A structural type rather than IInvoiceSeries so this
 // leaf does not import from another route to say it — the company record satisfies it as is.
 export interface IBookSeries {
@@ -445,6 +487,23 @@ export function periodOfUnixDay(unixDay: number): string {
   if (!unixDay) return ""
   const date = new Date(unixDay * 86400 * 1000)
   return periodCode(date.getUTCFullYear(), date.getUTCMonth())
+}
+
+// periodBounds is a "YYYYMM" period's first and last UnixDay.
+export function periodBounds(period: string): { firstDay: number, lastDay: number } {
+  const year = Number(period.slice(0, 4))
+  const monthIndex = Number(period.slice(4, 6)) - 1
+  return {
+    firstDay: Date.UTC(year, monthIndex, 1) / 86_400_000,
+    lastDay: Date.UTC(year, monthIndex + 1, 0) / 86_400_000,
+  }
+}
+
+// bookRange is the days a book shows: the whole period, or the single day inside it.
+export function bookRange(period: string, unixDay: number): { fromDay: number, toDay: number } {
+  if (unixDay) return { fromDay: unixDay, toDay: unixDay }
+  const { firstDay, lastDay } = periodBounds(period)
+  return { fromDay: firstDay, toDay: lastDay }
 }
 
 // periodLabel turns a stored period back into what the selector shows.

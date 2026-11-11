@@ -3,20 +3,21 @@
 /**
  * The {{placeholders}} an email template may use. Mirrors EmailPlaceholders in
  * backend/crm/types/email_template_rules.go, which refuses any other name on save. The quote ones
- * only render when the email is sent with a quote.
+ * only render when the email is sent with a quote. The editor shows each one as "group: field"
+ * (e.g. "Cliente: Email") and groups the picker by group.
  */
 export const EMAIL_PLACEHOLDERS = [
-  { name: 'client.name', label: 'Client name|Nombre del cliente' },
-  { name: 'client.email', label: 'Client email|Correo del cliente' },
-  { name: 'opportunity.title', label: 'Opportunity title|Título de la oportunidad' },
-  { name: 'opportunity.amount', label: 'Opportunity amount|Monto de la oportunidad' },
-  { name: 'owner.name', label: 'Owner name|Nombre del responsable' },
-  { name: 'owner.email', label: 'Owner email|Correo del responsable' },
-  { name: 'company.name', label: 'Company name|Nombre de la empresa' },
-  { name: 'quote.number', label: 'Quote number|Número de cotización' },
-  { name: 'quote.total', label: 'Quote total|Total de la cotización' },
-  { name: 'quote.valid_until', label: 'Quote valid until|Validez de la cotización' },
-] as const
+  { name: 'client.name', group: 'Client|Cliente', field: 'Name|Nombre' },
+  { name: 'client.email', group: 'Client|Cliente', field: 'Email|Email' },
+  { name: 'opportunity.title', group: 'Opportunity|Oportunidad', field: 'Title|Título' },
+  { name: 'opportunity.amount', group: 'Opportunity|Oportunidad', field: 'Amount|Monto' },
+  { name: 'owner.name', group: 'Owner|Responsable', field: 'Name|Nombre' },
+  { name: 'owner.email', group: 'Owner|Responsable', field: 'Email|Email' },
+  { name: 'company.name', group: 'Company|Empresa', field: 'Name|Nombre' },
+  { name: 'quote.number', group: 'Quote|Cotización', field: 'Number|Número' },
+  { name: 'quote.total', group: 'Quote|Cotización', field: 'Total|Total' },
+  { name: 'quote.valid_until', group: 'Quote|Cotización', field: 'Valid until|Validez' },
+]
 
 const PLACEHOLDER_PATTERN = /\{\{\s*([a-z_.]+)\s*\}\}/g
 

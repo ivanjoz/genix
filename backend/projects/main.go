@@ -7,7 +7,6 @@ import "app/core"
 var ModuleHandlers = core.AppRouterType{
 	"GET.projects-projects":           GetProjects,
 	"POST.projects-projects":          PostProject,
-	"GET.projects-team-candidates":    GetTeamCandidates,
 	"GET.projects-epics":              GetEpics,
 	"POST.projects-epics":             PostEpics,
 	"GET.projects-stories":            GetStories,
@@ -15,7 +14,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.projects-assigned-stories":   GetAssignedStories,
 	"POST.projects-stories":           PostStory,
 	"POST.projects-stories-rank":      PostStoryRank,
-	"GET.projects-story-detail":       GetStoryDetail,
+	"GET.projects-story-details-ids":  GetStoryDetailsByIDs,
 	"GET.projects-story-activity":     GetStoryActivity,
 	"POST.projects-story-comments":    PostStoryComment,
 	"POST.projects-attachment-upload": PostAttachmentUpload,

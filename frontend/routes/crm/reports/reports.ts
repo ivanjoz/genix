@@ -2,6 +2,8 @@
 // report is computed here from stage log rows, which carry the opportunity's state before and
 // after each change, so any period can be aggregated from its own rows alone.
 import type { ICrmOpportunityStageLog } from '#services/crm/crm-opportunity.svelte.ts'
+import type { ICrmPipeline } from '#services/crm/crm-pipeline.svelte.ts'
+import { memberLevel } from '../pipeline/pipeline.ts'
 import { OUTCOME_LOST, OUTCOME_OPEN, OUTCOME_WON, STAGE_LOG_KIND_CREATED } from '#services/crm/crm-stage-log.ts'
 
 /** One side of a log row: where the opportunity was, whose it was and how much it was worth. */
@@ -177,6 +179,20 @@ export const stageOccupancyDeltas = (row: ICrmOpportunityStageLog, pipelineID: n
   }
   return cells
 }
+
+/** The CRM access "CRM Reporte completo" (backend/access.toml): it opens every pipeline's reports. */
+export const ACCESO_ID_CRM_FULL_REPORT = 57
+
+/**
+ * The pipelines a user may report on, as backend crm/types/report_rules.go ReportablePipelineIDs:
+ * the active ones, all of them with the full-report access, otherwise those the user is a member
+ * of. Computed from the cached pipelines list, so the reports need no request of their own for it.
+ */
+export const reportablePipelineIDs = (pipelines: ICrmPipeline[], userID: number, holdsFullReport: boolean): number[] =>
+  pipelines
+    .filter((pipeline) => pipeline.ss > 0 && (holdsFullReport || memberLevel(pipeline, userID) > 0))
+    .map((pipeline) => pipeline.ID)
+    .sort((left, right) => left - right)
 
 /** An open opportunity as it stands now: the anchor the daily state is rebuilt backwards from. */
 export interface OpenOpportunityNow {

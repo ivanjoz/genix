@@ -99,7 +99,9 @@ type SectionContent struct {
 // positions are soft-deleted (Status=0) since the ORM has no hard delete.
 type EcommercePageContent struct {
 	db.TableStruct[EcommercePageContentTable, EcommercePageContent]
-	CompanyID int32          `cb:"1"`
+	CompanyID int32 `cb:"1"`
+	// ID is PageSectionID(PageID, SectionID): the single integer key a TypeDelta needs.
+	ID        int32          `cb:"11"`
 	PageID    int16          `cb:"2"`
 	SectionID int16          `cb:"3"`
 	Route     string         `cb:"4"`
@@ -114,11 +116,23 @@ type EcommercePageContent struct {
 	Status    int8   `json:"ss" cb:"ss,8"`
 	Updated   int32  `json:"upd" cb:"upd,9"`
 	UpdatedBy int32  `cb:"10"`
+	Version   int16  `json:"ver" cb:"ver,12"`
+	// Metadata is set only on the metadata record a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,13"`
+}
+
+// MaxPageSections bounds SectionID so PageSectionID stays unique per page.
+const MaxPageSections = 999
+
+// PageSectionID packs a section's page and 1-based position into the table's integer key.
+func PageSectionID(pageID int16, sectionID int16) int32 {
+	return int32(pageID)*(MaxPageSections+1) + int32(sectionID)
 }
 
 type EcommercePageContentTable struct {
 	db.TableStruct[EcommercePageContentTable, EcommercePageContent]
 	CompanyID db.Col[*EcommercePageContentTable, int32]
+	ID        db.Col[*EcommercePageContentTable, int32]
 	PageID    db.Col[*EcommercePageContentTable, int16]
 	SectionID db.Col[*EcommercePageContentTable, int16]
 	Route     db.Col[*EcommercePageContentTable, string]
@@ -128,6 +142,7 @@ type EcommercePageContentTable struct {
 	Status    db.Col[*EcommercePageContentTable, int8]
 	Updated   db.Col[*EcommercePageContentTable, int32]
 	UpdatedBy db.Col[*EcommercePageContentTable, int32]
+	Version   db.Col[*EcommercePageContentTable, int16]
 }
 
 func (e EcommercePageContentTable) GetSchema() db.TableSchema {
@@ -135,8 +150,16 @@ func (e EcommercePageContentTable) GetSchema() db.TableSchema {
 		ID:        12,
 		Name:      "ecommerce_page_content",
 		Partition: e.CompanyID,
-		// (CompanyID, PageID, SectionID) is the PK. SectionID is the section's
-		// 1-based position on the page, recomputed on every save.
-		Keys: db.Cols(e.PageID, e.SectionID),
+		// ID packs (PageID, SectionID); SectionID is the section's 1-based position on the
+		// page, recomputed on every save.
+		Keys:        db.Cols(e.ID),
+		FixedValues: []db.FixedValues{{Col: e.Status, Values: []int64{0, 1}}},
+		Indexes: []db.Index{
+			// The save and the public read load one page's rows, active and removed.
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.PageID)},
+			// GET.ecommerce-page-content syncs one page's active sections by delta: an edited
+			// section travels alone, a removed position arrives as a removed ID.
+			{Type: db.TypeDelta, Keys: db.Cols(e.PageID, e.Status)},
+		},
 	}
 }

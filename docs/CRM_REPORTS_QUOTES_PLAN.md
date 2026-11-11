@@ -332,8 +332,9 @@ and 4 (activity) ship; kind 2 (send quote) waits for step 8, and `normalizeTaskT
 until then. Code: `backend/crm/task.go`, `types/task.go`, `types/task_rules.go`;
 `frontend/routes/crm/tasks/`. Differences from the text above:
 - `CrmTask.CreatedBy` (cb 17) holds the requester, so only they can cancel an approval request.
-- `GET.crm-opportunity-approval?opportunity-id=` returns the pending approval of a card (the requester
-  is not the assignee, so the delta list does not carry it); access 47 also gets it and `POST.crm-task`.
+- `GET.crm-task-ids` (records-by-ID cache) resolves the pending approval of a card from its
+  `PendingApprovalTaskID` (the requester is not the assignee, so the delta list does not carry it);
+  access 47 also gets it and `POST.crm-task`.
 - Route names: `GET.crm-tasks` (`?user-id=`, `?closed=1`), `POST.crm-task` (dismiss / cancel request),
   `POST.crm-task-decide`. New access 51 "CRM Tareas" (`crm/tasks`); the activity endpoint accepts `TaskID`.
 - Team tab: a leader reads their members' open tasks, read-only; only the assignee acts.
@@ -513,8 +514,9 @@ group per month and pipeline), and every report is computed **in the browser** b
 in `routes/crm/reports/reports.ts`. Cache groups return records, not aggregates, and each row is
 self-contained, so this needs no server aggregation code and no aggregate table. Closed months stay
 in the browser; only the current one is downloaded again. Other routes:
-`GET.crm-report-scope` (the reportable pipelines, §8.4) and `GET.crm-report-open-opportunities`
-(today's open cards of one pipeline — the anchor of R2).
+the reportable pipelines (§8.4) are derived in the browser from the pipelines delta cache, and
+today's open cards of one pipeline (the anchor of R2) are the board's own delta list
+(`GET.crm-opportunities`, which also admits the full-report access).
 
 ### 8.1 The signed "reach" rule (R1)
 
@@ -630,8 +632,8 @@ Two layers, like the rest of the CRM:
    opens `crm/forecast`. Without it the page is not in the menu and its routes are refused.
 2. **Data scope**, decided inside the report handlers by one pure function,
    `types.ReportablePipelineIDs(user grants, pipelines)`:
-   - The user holds **CRM Reporte completo** (57) → every pipeline of the company, including
-     soft-deleted ones (history keeps their labels).
+   - The user holds **CRM Reporte completo** (57) → every active pipeline of the company. A deleted
+     pipeline leaves the reports (it cannot be deleted while it holds open opportunities).
    - Otherwise → only the pipelines where the user is a member (any level, §2 of CRM_PLAN).
 
    A requested pipeline outside that set is an error, never an empty report. The pipeline filter
@@ -647,7 +649,7 @@ needs *CRM Metas* (55).
 | id | name | frontend_routes | backend_apis |
 |---|---|---|---|
 | 51 | CRM Tareas | `crm/tasks` | `POST.crm-task`, `POST.crm-task-decide` |
-| 52 | CRM Reportes | `crm/reports` | `GET.crm-report-scope`, `GET.crm-report-stage-log`, `GET.crm-report-open-opportunities`, `GET.crm-report-activities` |
+| 52 | CRM Reportes | `crm/reports` | `GET.crm-report-stage-log`, `GET.crm-report-activities` |
 | 53 | CRM Forecast | `crm/forecast` | `POST.crm-forecast-submission` |
 | 54 | CRM Equipos | `crm/teams` | `POST.crm-team` |
 | 55 | CRM Metas | `crm/goals` | `POST.crm-goal` |

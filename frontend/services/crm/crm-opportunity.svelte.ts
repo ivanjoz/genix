@@ -1,4 +1,4 @@
-import { GET } from '#libs/ui-runtime.svelte.ts'
+import { GETWithGroupCache } from '#libs/ui-runtime.svelte.ts'
 import { CrmCatalogService } from './crm-pipeline.svelte.ts'
 
 // Mirrors backend/crm/types/opportunity.go and stage_log.go.
@@ -91,5 +91,8 @@ export const postCrmOpportunityClose = (
     'crm-opportunity-close', { ID: opportunityID, Outcome: outcome, LostReasonID: lostReasonID, LostNote: lostNote },
   )
 
-export const getCrmOpportunityLog = (opportunityID: number): Promise<ICrmOpportunityStageLog[]> =>
-  GET({ route: `crm-opportunity-log?opportunity-id=${opportunityID}` })
+/** The opportunity's stage history: one cache group per opportunity, downloaded again only after a new change. */
+export const getCrmOpportunityLog = async (opportunityID: number): Promise<ICrmOpportunityStageLog[]> => {
+  const groups = await GETWithGroupCache<ICrmOpportunityStageLog>('crm-opportunity-log', { 'opportunity-id': String(opportunityID) })
+  return groups.flatMap((group) => group.records || []).filter((stageLog) => (stageLog?.ID || 0) > 0)
+}

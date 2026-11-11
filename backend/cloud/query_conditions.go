@@ -60,95 +60,41 @@ func splitQueryConditions(conditions []queryCondition, partitionColumn string, r
 	return partitionCondition, remainingConditions, nil
 }
 
-// matchIndex picks the index whose leading key columns are exactly the columns the query
-// constrains, in the same order. Only the last constrained key may use a range operator:
-// the composite is a single string, so an unpinned prefix component would make the range
-// meaningless.
+// matchIndex picks the single-key index on the one column the query constrains (besides the
+// partition). Every mirrored read is one lookup (a login handle, an email) or one range (companies
+// by updated); composite indexes are not queried.
 func matchIndex(indexes []IndexMeta, conditions []queryCondition) (IndexMeta, error) {
-	if len(conditions) == 0 {
-		return IndexMeta{}, fmt.Errorf("a query needs at least one non-partition Where()")
+	if len(conditions) != 1 {
+		return IndexMeta{}, fmt.Errorf("a mirror query constrains exactly one non-partition column, got %d", len(conditions))
 	}
-
-	for conditionIndex, condition := range conditions[:len(conditions)-1] {
-		if condition.Operator != "=" {
-			return IndexMeta{}, fmt.Errorf("only the last Where() may use a range operator, but %s (position %d) uses %s",
-				condition.ColumnName, conditionIndex+1, condition.Operator)
-		}
-	}
-
 	for _, index := range indexes {
-		if len(conditions) > len(index.Keys) {
-			continue
-		}
-		matches := true
-		for conditionIndex, condition := range conditions {
-			if index.Keys[conditionIndex].ColumnName != condition.ColumnName {
-				matches = false
-				break
-			}
-		}
-		if matches {
+		if len(index.Keys) == 1 && index.Keys[0].ColumnName == conditions[0].ColumnName {
 			return index, nil
 		}
 	}
-
-	constrainedColumns := make([]string, 0, len(conditions))
-	for _, condition := range conditions {
-		constrainedColumns = append(constrainedColumns, condition.ColumnName)
-	}
-	return IndexMeta{}, fmt.Errorf("no index starts with the columns (%s); declare one in the table's GetSchema().Indexes",
-		strings.Join(constrainedColumns, ", "))
+	return IndexMeta{}, fmt.Errorf("no single-key index on %s; declare one in the table's GetSchema().Indexes",
+		conditions[0].ColumnName)
 }
 
-// compositeRange is the pair of bounds a query maps onto a composite index value. An
-// exact match sets both bounds to the same string.
-type compositeRange struct {
+// indexKeyRange is the pair of bounds a query maps onto an index value. An exact match sets both
+// bounds to the same string.
+type indexKeyRange struct {
 	Lower   string
 	Upper   string
 	IsExact bool
 }
 
-// buildCompositeRange renders the bounds for one query against one index. Everything the
-// query pins becomes a literal prefix; whatever the index still has room for is filled
-// with the lowest and highest values its digit width can hold, which is what keeps the
-// scan inside the pinned prefix instead of spilling into the next tenant or status.
-func buildCompositeRange(index IndexMeta, partitionValue string, conditions []queryCondition) (compositeRange, error) {
-	parts := make([]string, 0, len(index.Keys)+1)
-	if index.PrefixFieldName != "" {
-		parts = append(parts, partitionValue)
-	}
-
-	// Every condition but the last pins its component to a single value.
-	for conditionIndex, condition := range conditions[:len(conditions)-1] {
-		parts = append(parts, formatIndexKeyValue(index.Keys[conditionIndex], condition.Value))
-	}
-
-	trailingCondition := conditions[len(conditions)-1]
-	trailingKey := index.Keys[len(conditions)-1]
-	remainingKeys := index.Keys[len(conditions):]
-
-	lowerValue, upperValue, err := boundsForOperator(trailingKey, trailingCondition)
+// buildIndexKeyRange renders the bounds of the query's one condition, prefixed with the partition
+// when the index carries it, so the scan stays inside the tenant.
+func buildIndexKeyRange(index IndexMeta, partitionValue string, condition queryCondition) (indexKeyRange, error) {
+	lowerValue, upperValue, err := boundsForOperator(index.Keys[0], condition)
 	if err != nil {
-		return compositeRange{}, err
+		return indexKeyRange{}, err
 	}
-
-	lowerParts := append(append([]string{}, parts...), lowerValue)
-	upperParts := append(append([]string{}, parts...), upperValue)
-
-	for _, remainingKey := range remainingKeys {
-		if remainingKey.Digits <= 0 {
-			return compositeRange{}, fmt.Errorf(
-				"index key %s has no declared digit width, so it cannot be left unconstrained in a range query; add .Size(bits) or pin it with Equals()",
-				remainingKey.ColumnName)
-		}
-		lowerParts = append(lowerParts, strings.Repeat("0", int(remainingKey.Digits)))
-		upperParts = append(upperParts, strings.Repeat("9", int(remainingKey.Digits)))
+	if index.PrefixFieldName != "" {
+		lowerValue, upperValue = partitionValue+"_"+lowerValue, partitionValue+"_"+upperValue
 	}
-
-	lower := strings.Join(lowerParts, "_")
-	upper := strings.Join(upperParts, "_")
-
-	return compositeRange{Lower: lower, Upper: upper, IsExact: lower == upper}, nil
+	return indexKeyRange{Lower: lowerValue, Upper: upperValue, IsExact: lowerValue == upperValue}, nil
 }
 
 // boundsForOperator turns one operator on the trailing key into the lowest and highest

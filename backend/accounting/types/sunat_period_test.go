@@ -34,16 +34,3 @@ func TestPeriodBoundsRejectsMalformedPeriods(t *testing.T) {
 		}
 	}
 }
-
-func TestPeriodOfMatchesItsOwnBounds(t *testing.T) {
-	firstDay, lastDay, _ := PeriodBounds("202609")
-	if got := PeriodOf(firstDay); got != "202609" {
-		t.Errorf("esperaba 202609 para el primer día, obtuve %s", got)
-	}
-	if got := PeriodOf(lastDay); got != "202609" {
-		t.Errorf("esperaba 202609 para el último día, obtuve %s", got)
-	}
-	if got := PeriodOf(lastDay + 1); got != "202610" {
-		t.Errorf("el día siguiente ya es otro periodo, obtuve %s", got)
-	}
-}

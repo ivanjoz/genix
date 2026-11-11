@@ -164,16 +164,6 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 			{
 				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.ProductID),
 			},
-			// Backs the grouped movement report. SubDivisor joins the key so a SUM(SubQuantity)
-			// spanning a divisor refinement never adds sixths to twelfths; the caller folds the
-			// per-divisor groups back together. Out of the 64-bit budget: ProductID 27 (134M products
-			// per company), Type 7 (127 StockMovementTypes — the catalog is never capped by this view),
-			// SubDivisor 14 (core.MaxQuantityDivisor fits), and Date takes the remaining 16.
-			{
-				Type: db.TypeView,
-				Keys: db.Cols(e.Date, e.ProductID.Size(27), e.Type.Size(7), e.SubDivisor.Size(14)),
-				Cols: db.Cols(e.Quantity, e.SubQuantity),
-			},
 		},
 	}
 }

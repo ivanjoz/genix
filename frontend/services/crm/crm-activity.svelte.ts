@@ -1,6 +1,6 @@
 import type { IAttachment } from '#domain/attachments/attachments.ts'
 import { readFileAsBase64 } from '#libs/helpers.ts'
-import { GET, POST } from '#libs/ui-runtime.svelte.ts'
+import { GETWithGroupCache, POST } from '#libs/ui-runtime.svelte.ts'
 import { CrmCatalogService } from './crm-pipeline.svelte.ts'
 
 // Mirrors backend/crm/types/activity.go. The fixed catalogs are in crm-activity-types.ts.
@@ -33,12 +33,15 @@ export class CrmActivityTypesService extends CrmCatalogService<ICrmActivityType>
 export const postCrmActivityType = (activityTypes: CrmActivityTypesService, activityType: Partial<ICrmActivityType>): Promise<ICrmActivityType> =>
   activityTypes.writeAndSync('crm-activity-type', activityType)
 
-export const getCrmOpportunityActivity = (opportunityID: number): Promise<ICrmActivity[]> =>
-  GET({ route: `crm-opportunity-activity?opportunity-id=${opportunityID}` })
+/** The opportunity's timeline entries: one cache group per opportunity, downloaded again only after a new entry. */
+export const getCrmOpportunityActivity = async (opportunityID: number): Promise<ICrmActivity[]> => {
+  const groups = await GETWithGroupCache<ICrmActivity>('crm-opportunity-activity', { 'opportunity-id': String(opportunityID) })
+  return groups.flatMap((group) => group.records || []).filter((activity) => (activity?.ID || 0) > 0)
+}
 
-/** With taskID the activity completes that pending activity task in the same transaction. */
-export const postCrmOpportunityActivity = (activity: Partial<ICrmActivity>, taskID = 0): Promise<ICrmActivity> =>
-  POST({ data: { ...activity, TaskID: taskID }, route: 'crm-opportunity-activity' })
+/** An entry written from the opportunity panel. One that completes a task goes through completeCrmActivityTask. */
+export const postCrmOpportunityActivity = (activity: Partial<ICrmActivity>): Promise<ICrmActivity> =>
+  POST({ data: activity, route: 'crm-opportunity-activity' })
 
 // uploadCrmAttachment sends one file, base64, to the opportunity's folder. It becomes an activity's
 // file when the activity listing it is saved.

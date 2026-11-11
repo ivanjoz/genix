@@ -59,19 +59,28 @@ func PostCrmActivityType(req *core.HandlerArgs) core.HandlerResponse {
 }
 
 // GetCrmOpportunityActivity returns the activity timeline of one opportunity (?opportunity-id=),
-// for users who can see its pipeline.
+// for users who can see its pipeline, as the opportunity's single cache group: entries are
+// append-only, so the browser downloads it again only after a new entry.
 func GetCrmOpportunityActivity(req *core.HandlerArgs) core.HandlerResponse {
 	opportunity, err := authorizeOpportunityView(req, int32(req.GetQueryInt("opportunity-id")))
 	if err != nil {
 		return req.MakeErr(err)
 	}
-	activities := []types.CrmActivity{}
-	query := db.Query(&activities)
-	query.Select().CompanyID.Equals(req.User.CompanyID).OpportunityID.Equals(opportunity.ID)
-	if err := query.Exec(); err != nil {
-		return req.MakeErr("Error al obtener la actividad:", err)
+	heldGroups, err := core.ExtractGroupIndexCacheValues(req)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	return req.MakeResponse(activities)
+	activityGroups := []db.RecordGroup[types.CrmActivity]{}
+	query := db.QueryIndexGroup(&activityGroups).CompanyID.Equals(req.User.CompanyID)
+	for _, heldGroup := range heldGroups {
+		query.IncludeCachedGroup(heldGroup.GroupHash, heldGroup.LastWrite)
+	}
+	query.OpportunityID.Between(opportunity.ID, opportunity.ID)
+	if err := query.Exec(); err != nil {
+		core.Log("Error querying CRM opportunity activity group:", err)
+		return req.MakeErr("Error al obtener la actividad.")
+	}
+	return core.MakeResponse(req, &activityGroups)
 }
 
 // PostCrmOpportunityActivity appends one entry to an opportunity's timeline. Anyone who can see

@@ -45,12 +45,12 @@
   const sprintsByID = $derived(new Map(backlog.sprints.map((sprint) => [sprint.ID, sprint])))
   const sprintNote = $derived(storyForm.ID ? storySprintNote(storyForm, sprintsByID) : null)
 
-  // The detail paints from the cache, then again if the server holds a newer copy (upd: the detail has no delta log, so no ver).
+  // The detail paints from the by-IDs cache, then again if the server holds a newer copy (its upd, the cache slot's version, moved).
   $effect(() => {
     const loadedDetail = openStory.detail
     if (!loadedDetail) { return }
     untrack(() => {
-      if (loadedDetail.StoryID !== storyForm.ID || (loadedDetail.upd || 0) === detailFormUpdated) { return }
+      if (loadedDetail.ID !== storyForm.ID || (loadedDetail.upd || 0) === detailFormUpdated) { return }
       detailForm = makeStoryDetailForm(loadedDetail)
       detailFormUpdated = loadedDetail.upd || 0
     })

@@ -1,9 +1,11 @@
 // Reading the Registro de Ventas for a period.
 //
-// The handler reads and nothing else. It sends the period's comprobantes as numbers and leaves
-// both joins to the browser: the series code and the document type come off the company record
-// the frontend already holds, and the buyer's identity is resolved through the by-ids cache
-// (frontend/packages/genix-ui/cache/CACHE_BY_IDS.md). Neither is re-read here.
+// The handler reads and nothing else. It syncs the period's comprobantes and sales through their
+// period delta logs (the same the accounting operations read), so a reopened period only travels
+// what changed. Every join is the browser's: the series code and the document type come off the
+// company record, the buyer's identity and the older comprobantes a note corrects come through
+// the by-ids cache (frontend/packages/genix-ui/cache/CACHE_BY_IDS.md). The single-day view and the
+// "sales never invoiced" list are filters the browser applies to the period.
 //
 // The SUNAT mapping — the S/ 700 threshold, the daily consolidation of boletas, the zeroing of a
 // refused comprobante — therefore lives in frontend/routes/accounting/books/books.ts, where it
@@ -16,7 +18,8 @@ import (
 	"app/core"
 	"app/db"
 	invoicing "app/invoicing/types"
-	sales "app/sales/types"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // SalesBookDocument is a comprobante as the book needs it: the amounts, the dates, and the two
@@ -45,141 +48,51 @@ type SalesBookDocument struct {
 	Metadata *string `json:"mdt" cb:"mdt,14"`
 }
 
-// UninvoicedSale is a sale of the period that no comprobante was ever issued for.
-//
-// It is NOT a book row — the Registro de Ventas is a register of comprobantes — and the page
-// shows it in its own block. It is here because the question "what did we sell that we never
-// invoiced?" is the one thing a month-end review cannot answer from the book itself.
-type UninvoicedSale struct {
-	ID          int64 `cb:"1"`
-	Date        int16 `cb:"2"`
-	TotalAmount int32 `cb:"3"`
-	TaxAmount   int32 `cb:"4"`
-	Status      int8  `json:"ss" cb:"ss,5"`
-}
-
+// SalesBookResponse is one key per period delta log; each key travels its own cursor (?<Key>=…).
 type SalesBookResponse struct {
-	Period   string `cb:"1"`
-	FirstDay int16  `cb:"2"`
-	LastDay  int16  `cb:"3"`
-
-	Documents []SalesBookDocument `cb:"4"`
-	// AffectedDocuments are the comprobantes this period's notes correct and that the period
-	// does not already contain — a note very often corrects an earlier month. They are sent
-	// apart from Documents because they are not rows of this book; the page joins them.
-	AffectedDocuments []SalesBookDocument `cb:"5"`
-	UninvoicedSales   []UninvoicedSale    `cb:"6"`
+	SalesDocuments []SalesBookDocument `cb:"1"`
+	// Every sale of the period, annulled ones aside: the page lists the ones no comprobante was
+	// ever issued for (a sale whose id ends in 00). They are not book rows, but "what did we sell
+	// that we never invoiced?" is the one thing a month-end review cannot answer from the book.
+	Sales []OperationSale `cb:"2"`
 }
 
-// GetSalesBook reads a whole period, or the single day inside one.
-//
-// A single day is a working view, not a filable book. The period travels back so the page and
-// a later export can never disagree about which period a day belongs to.
+// GetSalesBook syncs a whole period (?period=YYYYMM).
 func GetSalesBook(req *core.HandlerArgs) core.HandlerResponse {
-	firstDay, lastDay, period, argsError := resolveBookRange(req)
-	if argsError != nil {
-		return req.MakeErr(argsError.Error())
-	}
-
-	documents, documentsError := loadPeriodDocuments(req.User.CompanyID, firstDay, lastDay)
-	if documentsError != nil {
-		return req.MakeErr(documentsError.Error())
-	}
-	affected, affectedError := loadModifiedDocuments(req.User.CompanyID, documents)
-	if affectedError != nil {
-		return req.MakeErr(affectedError.Error())
-	}
-	uninvoiced, uninvoicedError := loadUninvoicedSales(req.User.CompanyID, firstDay, lastDay)
-	if uninvoicedError != nil {
-		return req.MakeErr(uninvoicedError.Error())
-	}
-
-	core.Log("GetSalesBook period:", period, "documents:", len(documents),
-		"affected:", len(affected), "uninvoiced:", len(uninvoiced))
-	return req.MakeResponse(SalesBookResponse{
-		Period:            period,
-		FirstDay:          firstDay,
-		LastDay:           lastDay,
-		Documents:         documents,
-		AffectedDocuments: affected,
-		UninvoicedSales:   uninvoiced,
-	})
-}
-
-// resolveBookRange reads either a whole period or the single day inside one.
-func resolveBookRange(req *core.HandlerArgs) (int16, int16, string, error) {
-	if singleDay := req.GetQueryInt16("date"); singleDay > 0 {
-		return singleDay, singleDay, types.PeriodOf(singleDay), nil
-	}
-
-	period := req.Query["period"]
-	if period == "" {
-		return 0, 0, "", core.Err("Debe indicar el periodo (YYYYMM) o la fecha.")
-	}
-	firstDay, lastDay, boundsError := types.PeriodBounds(period)
+	firstDay, _, boundsError := types.PeriodBounds(req.Query["period"])
 	if boundsError != nil {
-		return 0, 0, "", boundsError
+		return req.MakeErr(boundsError.Error())
 	}
-	return firstDay, lastDay, period, nil
+	companyID, periodKey := req.User.CompanyID, core.PeriodOfDay(firstDay)
+
+	response := SalesBookResponse{}
+	readGroup := errgroup.Group{}
+	readGroup.Go(func() (err error) {
+		response.SalesDocuments, err = readPeriodSalesDocuments(companyID, periodKey, req.GetDeltaCursor("SalesDocuments"))
+		return err
+	})
+	readGroup.Go(func() (err error) {
+		response.Sales, err = readPeriodSales(companyID, periodKey, req.GetDeltaCursor("Sales"))
+		return err
+	})
+	if readError := readGroup.Wait(); readError != nil {
+		return req.MakeErr(readError.Error())
+	}
+	return req.MakeResponse(response)
 }
 
-// loadPeriodDocuments reads every comprobante issued inside the range.
-//
-// Through the index group, one indexed read per day: the group was built for Scylla, which refused
-// a BETWEEN on a secondary index. On MariaDB a plain range on IssueDate works; moving to it is a
-// follow-up (plan/MARIADB_REFACTOR_REVIEW.md §7). A book is asked for a month, never for a year.
-func loadPeriodDocuments(companyID int32, firstDay, lastDay int16) ([]SalesBookDocument, error) {
-	groups := []db.RecordGroup[invoicing.InvoiceDocument]{}
-	query := db.QueryIndexGroup(&groups).CompanyID.Equals(companyID)
-	query.IssueDate.Between(firstDay, lastDay)
-
-	if queryError := query.Exec(); queryError != nil {
-		return nil, core.Err("Error al obtener los comprobantes del periodo.", queryError)
+// GetInvoiceDocumentsByIDs serves the by-IDs cache of comprobantes: the Registro de Ventas reads
+// through it the older comprobantes its period's notes correct.
+func GetInvoiceDocumentsByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
 	}
-
-	documents := []SalesBookDocument{}
-	for groupIndex := range groups {
-		for recordIndex := range groups[groupIndex].Records {
-			documents = append(documents, makeBookDocument(&groups[groupIndex].Records[recordIndex]))
-		}
+	partitions, err := db.QueryCachedIDs[invoicing.InvoiceDocument](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener los comprobantes.", err)
 	}
-	return documents, nil
-}
-
-// loadModifiedDocuments reads the comprobantes this period's notes correct and that are not
-// already in the period.
-func loadModifiedDocuments(
-	companyID int32, documents []SalesBookDocument,
-) ([]SalesBookDocument, error) {
-
-	inPeriod := make(map[int64]bool, len(documents))
-	for index := range documents {
-		inPeriod[documents[index].ID] = true
-	}
-
-	wantedIDs := core.SliceSet[int64]{}
-	for index := range documents {
-		affectedID := documents[index].AffectedDocID
-		if affectedID != 0 && !inPeriod[affectedID] {
-			wantedIDs.Add(affectedID)
-		}
-	}
-	if wantedIDs.IsEmpty() {
-		return nil, nil
-	}
-
-	earlier := []invoicing.InvoiceDocument{}
-	query := db.Query(&earlier)
-	query.Select().CompanyID.Equals(companyID).ID.In(wantedIDs.Values...)
-	if queryError := query.Exec(); queryError != nil {
-		return nil, core.Err("Error al leer los comprobantes modificados por las notas.", queryError)
-	}
-
-	affected := make([]SalesBookDocument, 0, len(earlier))
-	for index := range earlier {
-		affected = append(affected, makeBookDocument(&earlier[index]))
-	}
-	return affected, nil
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 func makeBookDocument(document *invoicing.InvoiceDocument) SalesBookDocument {
@@ -199,36 +112,4 @@ func makeBookDocument(document *invoicing.InvoiceDocument) SalesBookDocument {
 		Version:          document.Version,
 		Metadata:         document.Metadata,
 	}
-}
-
-// loadUninvoicedSales reads the sales of the range that carry no comprobante.
-//
-// A sale whose id ends in 00 was never registered for electronic issuance, so no document was
-// ever reserved for it. An annulled sale is left out: nothing was sold.
-func loadUninvoicedSales(companyID int32, firstDay, lastDay int16) ([]UninvoicedSale, error) {
-	groups := []db.RecordGroup[sales.SaleOrder]{}
-	query := db.QueryIndexGroup(&groups).CompanyID.Equals(companyID)
-	query.Date.Between(firstDay, lastDay)
-
-	if queryError := query.Exec(); queryError != nil {
-		return nil, core.Err("Error al obtener las ventas del periodo.", queryError)
-	}
-
-	uninvoiced := []UninvoicedSale{}
-	for groupIndex := range groups {
-		for recordIndex := range groups[groupIndex].Records {
-			order := &groups[groupIndex].Records[recordIndex]
-			if order.SeriesID() != 0 || order.Status == sales.OrderStatusAnnulled {
-				continue
-			}
-			uninvoiced = append(uninvoiced, UninvoicedSale{
-				ID:          order.ID,
-				Date:        order.Date,
-				TotalAmount: order.TotalAmount,
-				TaxAmount:   order.TaxAmount,
-				Status:      order.Status,
-			})
-		}
-	}
-	return uninvoiced, nil
 }

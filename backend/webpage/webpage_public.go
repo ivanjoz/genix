@@ -4,6 +4,8 @@ import (
 	"app/core"
 	"app/db"
 	"app/webpage/types"
+	"cmp"
+	"slices"
 )
 
 // WebpagePublicResult is the unauthenticated payload for a single storefront page:
@@ -53,6 +55,10 @@ func GetWebpagePublic(req *core.HandlerArgs) core.HandlerResponse {
 			result.Sections = append(result.Sections, row)
 		}
 	}
+	// The PageID index read does not promise key order: the storefront renders in position order.
+	slices.SortFunc(result.Sections, func(left, right types.EcommercePageContent) int {
+		return cmp.Compare(left.SectionID, right.SectionID)
+	})
 
 	core.Log("Webpage pública obtenida::", companyID, pageID, len(result.Sections))
 	return req.MakeResponse(result)

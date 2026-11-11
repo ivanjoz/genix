@@ -69,29 +69,20 @@ func resolvePageID(req *core.HandlerArgs) int16 {
 	return pageID
 }
 
-// GetPageContent returns a page's active sections in position order so the
-// builder can reload them. (CompanyID, PageID) scopes the read.
+// GetPageContent syncs a page's active sections by delta so the builder can reload them; the
+// client orders them by SectionID. (CompanyID, PageID) scopes the read.
 func GetPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	pageID := resolvePageID(req)
 
 	rows := []types.EcommercePageContent{}
 	query := db.Query(&rows)
-	query.Select().CompanyID.Equals(req.User.CompanyID)
-	query.PageID.Equals(pageID)
+	query.Select().CompanyID.Equals(req.User.CompanyID).
+		PageID.Equals(pageID).
+		Delta(req.GetDeltaCursor(), int8(1))
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener el contenido de la página:", err)
 	}
-
-	// Drop soft-deleted positions; rows come back in clustering (SectionID) order.
-	activeSections := []types.EcommercePageContent{}
-	for _, row := range rows {
-		if row.Status >= 1 {
-			activeSections = append(activeSections, row)
-		}
-	}
-
-	core.Log("Secciones obtenidas::", len(activeSections))
-	return req.MakeResponse(activeSections)
+	return req.MakeResponse(rows)
 }
 
 // PostPageContent upserts a page's sections. The client sends every current
@@ -104,6 +95,9 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	incomingSections := []types.SectionContent{}
 	if err := json.Unmarshal([]byte(*req.Body), &incomingSections); err != nil {
 		return req.MakeErr("Error al procesar las secciones:", err)
+	}
+	if len(incomingSections) > types.MaxPageSections {
+		return req.MakeErr(fmt.Sprintf("Una página admite hasta %v secciones.", types.MaxPageSections))
 	}
 
 	// Load current rows for this page to compare hashes and detect removed positions.
@@ -151,6 +145,7 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 
 		row := types.EcommercePageContent{
 			CompanyID: req.User.CompanyID,
+			ID:        types.PageSectionID(pageID, sectionID),
 			PageID:    pageID,
 			SectionID: sectionID,
 			Content:   content,
@@ -184,7 +179,8 @@ func PostPageContent(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if len(sectionsToDelete) > 0 {
 		table := db.TableOf[types.EcommercePageContent]()
-		if err := db.Update(&sectionsToDelete, table.Status, table.Updated, table.UpdatedBy); err != nil {
+		// PageID rides along because the TypeDelta is keyed on (PageID, Status).
+		if err := db.Update(&sectionsToDelete, table.PageID, table.Status, table.Updated, table.UpdatedBy); err != nil {
 			return req.MakeErr("Error al eliminar las secciones removidas:", err)
 		}
 	}

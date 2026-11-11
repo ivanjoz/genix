@@ -87,8 +87,6 @@ func PostLogin(req *core.HandlerArgs) core.HandlerResponse {
 	passwordHash := core.Env.SECRET_PHRASE + body.Password
 	passwordHash = core.FnvHashString64(passwordHash, -1, 20)
 
-	core.Log(passwordHash, user.PasswordHash)
-
 	if passwordHash != user.PasswordHash {
 		return req.MakeErr("No se encontró el user o el password es incorrecto.")
 	}

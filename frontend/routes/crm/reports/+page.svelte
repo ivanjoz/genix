@@ -47,15 +47,18 @@
   const fromOptions = periodsBetween((currentShortYear() - 5) * 100 + 1, currentPeriod).reverse().map(periodOption)
   const toOptions = periodsBetween((currentShortYear() - 5) * 100 + 1, addMonthsToPeriod(currentPeriod, 12)).reverse().map(periodOption)
 
-  // Pipelines the user may report on; a soft-deleted one (full-report access) keeps a generic name.
-  const pipelineOptions = $derived(report.scope.PipelineIDs.map((pipelineID) => ({
+  // Pipelines the user may report on (active ones only, from the cached pipelines list).
+  const pipelineOptions = $derived(report.reportPipelineIDs.map((pipelineID) => ({
     id: pipelineID, name: report.pipelines.records.find((pipeline) => pipeline.ID === pipelineID)?.Name ?? `Pipeline #${pipelineID}`,
   })))
   // The seller filter lists everyone who owned an opportunity of the pipeline in the loaded rows.
   const ownerOptions = $derived([...new Set(report.rowsToToday.flatMap((row) => [beforeStateOf(row)?.ownerID ?? 0, afterStateOf(row).ownerID]))]
     .filter(Boolean).map((ownerID) => ({ id: ownerID, name: report.ownerName(ownerID) })))
 
-  report.loadScope()
+  $effect(() => {
+    void report.reportPipelineIDs
+    untrack(() => report.selectDefaultPipeline())
+  })
 
   // Reload when the pipeline or the start year changes; periods, sellers and amounts only re-filter.
   $effect(() => {
@@ -68,7 +71,7 @@
 <Page title="CRM Reports|Reportes CRM">
   <!-- View selector on the left, a separator, then the filters, all on one line. -->
   <div class="flex items-end gap-12 flex-wrap mb-12" aria-label="Report filters">
-    {#if report.scope.PipelineIDs.length}
+    {#if report.reportPipelineIDs.length}
       <OptionsStrip selected={view} useMobileGrid={true}
         options={VIEW_OPTIONS.map(([viewID, label]) => [viewID, tr(label)])}
         onSelect={(option) => { view = option[0] as number }} />
@@ -98,7 +101,7 @@
     </div>
   </div>
 
-  {#if !report.scope.PipelineIDs.length}
+  {#if !report.reportPipelineIDs.length}
     <div class="text-fg-muted p-16">
       {tr('You have no pipelines to report on. Ask an administrator for pipeline membership or the full-report access.|No tiene pipelines para reportar. Pida a un administrador que lo agregue a un pipeline o el acceso de reporte completo.')}
     </div>

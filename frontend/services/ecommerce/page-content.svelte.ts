@@ -29,6 +29,7 @@ const pageContentRoute = (pageID: number) =>
 // top-level column carrying the whole-page stylesheet (set on section 1 only). The
 // runtime `id` is not persisted.
 interface IPageContentRow {
+  ID: number;
   SectionID: number;
   Content: Omit<SectionData, 'id'>;
   Css?: string;
@@ -69,8 +70,10 @@ export const savePageContent = async (sections: SectionData[], palette: string[]
 // in section 1's Css column) the storefront injects directly. Returns empty when
 // the page has no stored content yet.
 export const getPageContent = async (pageID: number = currentPageID): Promise<{ sections: SectionData[]; css: string; palette?: string[] }> => {
-  const rows: IPageContentRow[] = await GET({ route: pageContentRoute(pageID) });
-  return parsePageContentRows(rows);
+  // Each page's route is its own delta cache: only the sections edited since the last load travel.
+  // The cache does not keep the server's order, so the rows are put back in position order.
+  const rows: IPageContentRow[] = await GET({ route: pageContentRoute(pageID), useCache: { min: 0, ver: 1 } });
+  return parsePageContentRows([...(rows || [])].sort((left, right) => left.SectionID - right.SectionID));
 };
 
 // Shared parsing for both the authed and public reads. A fresh runtime `id` is

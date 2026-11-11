@@ -60,6 +60,7 @@ func PlanForecastSubmission(payload CrmForecastSubmissionPayload, periodType int
 	if !IsValidGoalPeriod(periodType, payload.Period) {
 		return CrmForecastSubmission{}, fmt.Errorf("El periodo %d no es válido para este pipeline.", payload.Period)
 	}
+	periodFirstDay, _ := GoalPeriodDays(periodType, payload.Period)
 	if payload.CommitAmount < 0 || payload.BestCaseAmount < 0 {
 		return CrmForecastSubmission{}, fmt.Errorf("Los montos del forecast no pueden ser negativos.")
 	}
@@ -71,6 +72,7 @@ func PlanForecastSubmission(payload CrmForecastSubmissionPayload, periodType int
 	}
 	submission := CrmForecastSubmission{
 		PipelineID: payload.PipelineID, UserID: callerID, TeamID: payload.TeamID, Period: payload.Period,
+		Week:           core.WeekOfDay(periodFirstDay),
 		ComputedCommit: computed.Commit, ComputedBestCase: computed.BestCase,
 		ComputedPipeline: computed.Pipeline, ComputedClosed: computed.Closed,
 		CommitAmount: payload.CommitAmount, BestCaseAmount: payload.BestCaseAmount,

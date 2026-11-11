@@ -13,36 +13,17 @@ import (
 	"encoding/json"
 )
 
+// GetPerfiles syncs the company's active profiles by delta, always from the primary database (the
+// cloud mirror, when enabled, also receives the writes but has no delta log). A deactivated profile
+// reaches the browser as a removed ID.
 func GetPerfiles(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("upd")
 	records := []types.Profile{}
-
-	var err error
-	if !cloud.IsDataMirrorEnabled() {
-		// Self-hosted reads use the primary table and the same active/updated semantics as the mirror.
-		profileQuery := db.Query(&records)
-		profileQuery.CompanyID.Equals(req.User.CompanyID)
-		if updated > 0 {
-			profileQuery.Updated.GreaterEqual(int32(updated))
-		} else {
-			profileQuery.Status.Equals(1)
-		}
-		err = profileQuery.AllowFilter().Exec()
-	} else if updated > 0 {
-		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
-			Where("updated").GreaterEqual(updated).Exec()
-	} else {
-		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
-			Where("status").Equals(1).Where("updated").GreaterEqual(updated).Exec()
-	}
-	if err != nil {
+	profileQuery := db.Query(&records)
+	profileQuery.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), int8(1))
+	if err := profileQuery.Exec(); err != nil {
 		return req.MakeErr("Error al obtener perfiles.", err)
 	}
-
-	core.Log("Perfiles obtenidos:: ", len(records))
-	core.Print(records)
-
-	return req.MakeResponse(core.WithDeltaReplace(records))
+	return req.MakeResponse(records)
 }
 
 func PostPerfiles(req *core.HandlerArgs) core.HandlerResponse {
@@ -153,8 +134,8 @@ func recomputeProfileUsersIn(transaction *db.Transaction, savedProfile types.Pro
 	if len(usersWithChangedAccesos) == 0 {
 		return nil, nil
 	}
-	// Status rides along because the users table declares a composite view on (status, updated);
-	// its value is the one the locked read returned, so it is current.
+	// Status rides along because the users table's TypeDelta is keyed on status; its value is the
+	// one the locked read returned, so it is current.
 	usuarioQuery := db.Query(&usersWithChangedAccesos)
 	if err := db.UpdateIn(transaction, &usersWithChangedAccesos,
 		usuarioQuery.AccesosComputed, usuarioQuery.AccesosSubComputed, usuarioQuery.Status); err != nil {

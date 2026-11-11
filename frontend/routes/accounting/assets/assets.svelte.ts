@@ -1,4 +1,4 @@
-import { GetHandler, GET, POST, PUT } from '#libs/ui-runtime.svelte.ts'
+import { GetHandler, GETWithGroupCache, POST, PUT } from '#libs/ui-runtime.svelte.ts'
 import type { IPurchaseDocument } from '#core/purchase-document.ts'
 import { AssetStatus, type IAsset, type IAssetForm, type IDepreciationEntry } from './assets'
 
@@ -87,8 +87,9 @@ export const runAssetDepreciation = (): Promise<{ PostedEntries: number, Updated
   return POST({ data: {}, route: "asset-depreciation-run", refreshRoutes: ["assets"] })
 }
 
-// One asset's posted depreciation ledger — the Type-4 expense rows.
+// One asset's posted depreciation ledger — the Type-4 expense rows — read as the asset's cache
+// group. An edit that shortens the schedule retires entries with ss 0, so those are dropped here.
 export const getAssetDepreciation = async (assetID: number): Promise<IDepreciationEntry[]> => {
-  const result = await GET({ route: `asset-depreciation?assetID=${assetID}` })
-  return result || []
+  const groups = await GETWithGroupCache<IDepreciationEntry & { ss: number }>('asset-depreciation', { assetID: String(assetID) })
+  return groups.flatMap((group) => group.records || []).filter((entry) => (entry?.ID || 0) > 0 && entry.ss !== 0)
 }

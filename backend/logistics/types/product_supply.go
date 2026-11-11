@@ -19,6 +19,9 @@ type ProductSupply struct {
 	Status               int8                       `json:"ss" cb:"ss,6"`
 	Updated              int32                      `json:"upd" cb:"upd,7"`
 	UpdatedBy            int32                      `cb:"8"`
+	Version              int16                      `json:"ver" cb:"ver,9"`
+	// Metadata is set only on the metadata record a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,10"`
 }
 
 type ProductSupplyTable struct {
@@ -31,6 +34,7 @@ type ProductSupplyTable struct {
 	Status               db.Col[*ProductSupplyTable, int8]
 	Updated              db.Col[*ProductSupplyTable, int32]
 	UpdatedBy            db.Col[*ProductSupplyTable, int32]
+	Version              db.Col[*ProductSupplyTable, int16]
 }
 
 func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
@@ -39,8 +43,12 @@ func (productSupplyTable ProductSupplyTable) GetSchema() db.TableSchema {
 		Name:      "product_supply",
 		Partition: productSupplyTable.CompanyID,
 		Keys:      db.Cols(productSupplyTable.ProductID),
+		// Delta() enumerates its filter column, so every Status value must be declared.
+		FixedValues: []db.FixedValues{
+			{Col: productSupplyTable.Status, Values: []int64{0, 1}},
+		},
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(productSupplyTable.Status)},
+			{Type: db.TypeDelta, Keys: db.Cols(productSupplyTable.Status)},
 		},
 	}
 }

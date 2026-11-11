@@ -244,9 +244,9 @@ func (b *dynamoQueryBuilder[T]) Exec() error {
 	}
 	dynamoPartitionKey := b.orm.meta.HashPrefix + partitionValue
 
-	// The GSI holds one composite string per index, so every query — equality or range —
-	// becomes a comparison against the bounds that composite can take.
-	indexRange, rangeError := buildCompositeRange(index, partitionValue, indexedConditions)
+	// The GSI holds one string per index, so every query — equality or range — becomes a
+	// comparison against the bounds that string can take.
+	indexRange, rangeError := buildIndexKeyRange(index, partitionValue, indexedConditions[0])
 	if rangeError != nil {
 		return rangeError
 	}

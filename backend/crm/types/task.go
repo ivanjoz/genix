@@ -131,7 +131,9 @@ func (e CrmTaskTable) GetSchema() db.TableSchema {
 		ID:        89,
 		Name:      "crm_tasks",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// The opportunity panel resolves the approval a card waits on by ID (GET.crm-task-ids).
+		CacheByIDs: true,
+		Keys:       db.Cols(e.ID.Autoincrement(0)),
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Values: []int64{1, 2}},
 			{Col: e.AssignedUserID, Min: 1, Max: 1<<24 - 1},

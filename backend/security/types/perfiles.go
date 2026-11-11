@@ -17,6 +17,9 @@ type Profile struct {
 	AccesosGrants []coreTypes.AccesoGrantRecord `cb:"6"`
 	Status        int8                          `json:"ss" cb:"ss,7"`
 	Updated       int32                         `json:"upd" cb:"upd,8"`
+	Version       int16                         `json:"ver" cb:"ver,9"`
+	// Metadata is set only on the metadata record a Delta() read appends.
+	Metadata *string `json:"mdt" cb:"mdt,10"`
 }
 
 type ProfileTable struct {
@@ -29,6 +32,7 @@ type ProfileTable struct {
 	AccesosGrants db.Col[*ProfileTable, []coreTypes.AccesoGrantRecord]
 	Status        db.Col[*ProfileTable, int8]
 	Updated       db.Col[*ProfileTable, int32]
+	Version       db.Col[*ProfileTable, int16]
 }
 
 func (e ProfileTable) GetSchema() db.TableSchema {
@@ -38,11 +42,10 @@ func (e ProfileTable) GetSchema() db.TableSchema {
 		Partition:    e.CompanyID,
 		UseSequences: true,
 		Keys:         db.Cols(e.ID.Autoincrement(0)),
-		// Declaration order is also the cloud mirror's index-slot order (ix1, ix2): the
-		// plain delta read first, then the one restricted to active profiles.
+		// The profiles list (GET.perfiles) syncs by delta from the primary database only; the cloud
+		// mirror keeps receiving the writes but serves no read, and TypeDelta has no mirror slot.
 		Indexes: []db.Index{
-			{Type: db.TypeView, Keys: db.Cols(e.Updated)},
-			{Type: db.TypeView, Keys: db.Cols(e.Status, e.Updated.Size(31))},
+			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 		},
 	}
 }

@@ -245,7 +245,7 @@ func saveStoryIn(transaction *db.Transaction, req *core.HandlerArgs, story types
 		}
 		storedDetails := []types.StoryDetail{}
 		detailQuery := db.Query(&storedDetails)
-		detailQuery.CompanyID.Equals(companyID).StoryID.Equals(story.ID)
+		detailQuery.CompanyID.Equals(companyID).ID.Equals(story.ID)
 		if err := detailQuery.Exec(); err != nil {
 			return storyWithDetail{}, nil, core.Err("Error al obtener el detalle de la historia:", err)
 		}
@@ -311,7 +311,7 @@ func saveStoryIn(transaction *db.Transaction, req *core.HandlerArgs, story types
 		linkAttachmentDocuments(attachments, documentChanges)
 	}
 
-	detail.CompanyID, detail.ProjectID, detail.StoryID, detail.Attachments = companyID, project.ID, story.ID, attachments
+	detail.CompanyID, detail.ProjectID, detail.ID, detail.Attachments = companyID, project.ID, story.ID, attachments
 	detail.Status, detail.UpdatedBy = types.StatusActive, req.User.ID
 	if err := db.UpsertIn(transaction, &[]types.StoryDetail{detail}); err != nil {
 		return storyWithDetail{}, nil, core.Err("Error al guardar el detalle de la historia:", err)
@@ -483,16 +483,18 @@ func rankStoryIn(transaction *db.Transaction, req *core.HandlerArgs, request sto
 	return *movedStory, nil
 }
 
-// GetStoryDetail is one story's detail, a list of at most one record answered as a full replace: it
-// has no delta log (types.StoryDetailTable).
-func GetStoryDetail(req *core.HandlerArgs) core.HandlerResponse {
-	details := []types.StoryDetail{}
-	query := db.Query(&details)
-	query.CompanyID.Equals(req.User.CompanyID).StoryID.Equals(req.GetQueryInt64("story-id"))
-	if err := query.Exec(); err != nil {
+// GetStoryDetailsByIDs serves genix-ui's cache-by-ids for the stories' details (keyed by story ID):
+// only the ones whose slot moved since the tick the client holds come back.
+func GetStoryDetailsByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	partitions, err := db.QueryCachedIDs[types.StoryDetail](cachedIDsRequest)
+	if err != nil {
 		return req.MakeErr("Error al obtener el detalle de la historia:", err)
 	}
-	return req.MakeResponse(core.WithDeltaReplace(details))
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
 // GetStoryActivity is the delta of one story's timeline: comments and history.

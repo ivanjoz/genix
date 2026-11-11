@@ -3,7 +3,7 @@ import { DOC_TYPE_BOLETA, DOC_TYPE_CREDIT_NOTE, DOC_TYPE_FACTURA } from '#core/s
 import type { IClientProviderSnapshot } from '#services/crm/client-provider.svelte.ts'
 import {
   bookRowDocument, bookRowModifiedDocument, bookRowNumber, buildPeriodOptions, buildSalesBook,
-  countPendingRows, isWholeMonthPeriod, periodCode, periodLabel, periodOfUnixDay, sumSalesBook,
+  countPendingRows, isWholeMonthPeriod, periodCode, periodLabel, periodOfUnixDay, salesBookOfPeriod, sumSalesBook,
   ANONYMOUS_BUYER_NAME, ANONYMOUS_DOC_NUMBER, BOLETA_IDENTIFIED_FROM, BOOK_STATE_ACTIVE,
   BOOK_STATE_PENDING, BOOK_STATE_REJECTED, BOOK_STATE_VOIDED, SINGLE_DAY_PERIOD,
   type IBookSeries, type ISalesBookDocument, type ISalesBookResponse, type ISalesBookRow,
@@ -344,4 +344,39 @@ it('renders a comprobante whose series cannot be resolved', () => {
   expect(rows).toHaveLength(1)
   expect(rows[0].Series).toBe("")
   expect(rows[0].DocType).toBe(0)
+})
+
+describe('salesBookOfPeriod', () => {
+  const PERIOD_FIRST_DAY = 20697 // 2026-09-01
+  const sale = (ID: number, Date: number) => ({ ID, Date, TotalAmount: 1180, TaxAmount: 180, ss: 1 })
+
+  it('keeps the whole period and resolves a note against the period before the by-IDs cache', () => {
+    const corrected = boleta(5, 1180, { IssueDate: PERIOD_FIRST_DAY })
+    const noteOfPeriod = makeDocument(CREDIT_NOTE_SERIES_ID, 6, 1180, { AffectedDocID: corrected.ID })
+    const noteOfOlder = makeDocument(CREDIT_NOTE_SERIES_ID, 7, 1180, { AffectedDocID: 99_902 })
+    const { response, olderAffectedIDs } = salesBookOfPeriod(
+      { SalesDocuments: [corrected, noteOfPeriod, noteOfOlder], Sales: [sale(4_000, ISSUE_DAY), sale(4_101, ISSUE_DAY)] },
+      "202609", 0,
+    )
+    expect(response).toMatchObject({ Period: "202609", FirstDay: PERIOD_FIRST_DAY, LastDay: PERIOD_FIRST_DAY + 29 })
+    expect(response.Documents).toHaveLength(3)
+    expect(response.AffectedDocuments).toEqual([corrected])
+    expect(olderAffectedIDs).toEqual([99_902])
+    // A sale whose id ends in 00 never had a comprobante reserved.
+    expect(response.UninvoicedSales.map(uninvoicedSale => uninvoicedSale.ID)).toEqual([4_000])
+  })
+
+  it('cuts a single day out of its period, still joining a note to an earlier day of it', () => {
+    const corrected = boleta(5, 1180, { IssueDate: PERIOD_FIRST_DAY })
+    const note = makeDocument(CREDIT_NOTE_SERIES_ID, 6, 1180, { AffectedDocID: corrected.ID })
+    const { response, olderAffectedIDs } = salesBookOfPeriod(
+      { SalesDocuments: [corrected, note], Sales: [sale(4_000, PERIOD_FIRST_DAY), sale(4_200, ISSUE_DAY)] },
+      "202609", ISSUE_DAY,
+    )
+    expect(response).toMatchObject({ FirstDay: ISSUE_DAY, LastDay: ISSUE_DAY })
+    expect(response.Documents).toEqual([note])
+    expect(response.AffectedDocuments).toEqual([corrected])
+    expect(olderAffectedIDs).toEqual([])
+    expect(response.UninvoicedSales.map(uninvoicedSale => uninvoicedSale.ID)).toEqual([4_200])
+  })
 })

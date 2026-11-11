@@ -130,26 +130,26 @@ func computeUserAccesos(perfilesByID map[int32]types.Profile, user coreTypes.Use
 	return encodeMergedAccesoGrants(grantsByAccesoID)
 }
 
+// GetUsuarios syncs the company's active users by delta, always from the primary database (the
+// cloud mirror, when enabled, also receives the writes but has no delta log). A deactivated user
+// reaches the browser as a removed ID.
 func GetUsuarios(req *core.HandlerArgs) core.HandlerResponse {
-	updated := req.GetQueryInt64("updated")
-
 	records := []coreTypes.User{}
-	var err error
-	if cloud.IsDataMirrorEnabled() {
-		err = cloud.Select(&records).Where("company_id").Equals(req.User.CompanyID).
-			Where("status").Equals(1).Where("updated").GreaterEqual(updated).Exec()
-	} else {
-		// Filtering stays scoped to the company partition.
-		userQuery := db.Query(&records)
-		userQuery.CompanyID.Equals(req.User.CompanyID).Status.Equals(1).Updated.GreaterEqual(int32(updated))
-		err = userQuery.AllowFilter().Exec()
-	}
-	if err != nil {
+	userQuery := db.Query(&records)
+	userQuery.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), int8(1))
+	if err := userQuery.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
 	}
+	clearPasswordHashes(records)
+	return req.MakeResponse(records)
+}
 
-	// No delta log: the whole active list every sync, so a deactivated user leaves the cache.
-	return req.MakeResponse(core.WithDeltaReplace(records))
+// clearPasswordHashes blanks the stored password hash before users leave the server: only login
+// compares it, and every session that lists users would otherwise receive every user's hash.
+func clearPasswordHashes(users []coreTypes.User) {
+	for userIndex := range users {
+		users[userIndex].PasswordHash = ""
+	}
 }
 
 func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
@@ -161,6 +161,9 @@ func GetUsuariosByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	partitions, err := db.QueryCachedIDs[coreTypes.User](cachedIDsRequest)
 	if err != nil {
 		return req.MakeErr("Error al obtener los usuarios.", err)
+	}
+	for partitionIndex := range partitions {
+		clearPasswordHashes(partitions[partitionIndex].Records)
 	}
 	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
@@ -283,5 +286,7 @@ func PostUsuarios(req *core.HandlerArgs) core.HandlerResponse {
 	// fn-sync-fareward-grants.
 	pushUserGrants(req, body.CompanyID, body.ID)
 
+	body.PasswordHash = ""
+	body.Password = ""
 	return req.MakeResponse(body)
 }

@@ -20,7 +20,10 @@ type CrmForecastSubmission struct {
 	PipelineID int16 `cb:"3"`
 	UserID     int32 `cb:"4"` // the seller, or the team leader for a team submission
 	TeamID     int16 `cb:"5"` // 0 = individual submission
-	Period     int16 `cb:"6"` // YYMM being forecast
+	Period     int16 `cb:"6"` // the goal period being forecast (GoalPeriodType: YYMM month, week or day)
+	// Week is the core.WeekOfDay of the period's first day: the step key of the submissions' cache
+	// groups, so a monthly, weekly or daily period is fetched as the weeks it spans.
+	Week int16 `cb:"20"`
 	// Computed by the server at submission time, never trusted from the client.
 	ComputedCommit   int32 `cb:"7"`
 	ComputedBestCase int32 `cb:"8"`
@@ -47,6 +50,7 @@ type CrmForecastSubmissionTable struct {
 	UserID           db.Col[*CrmForecastSubmissionTable, int32]
 	TeamID           db.Col[*CrmForecastSubmissionTable, int16]
 	Period           db.Col[*CrmForecastSubmissionTable, int16]
+	Week             db.Col[*CrmForecastSubmissionTable, int16]
 	ComputedCommit   db.Col[*CrmForecastSubmissionTable, int32]
 	ComputedBestCase db.Col[*CrmForecastSubmissionTable, int32]
 	ComputedPipeline db.Col[*CrmForecastSubmissionTable, int32]
@@ -68,8 +72,9 @@ func (e CrmForecastSubmissionTable) GetSchema() db.TableSchema {
 		Partition:   e.CompanyID,
 		Keys:        db.Cols(e.ID.Autoincrement(0)),
 		FixedValues: []db.FixedValues{{Col: e.Status, Values: []int64{1}}},
-		// The Forecast page reads every submission of one pipeline and month.
-		Indexes: []db.Index{{Type: db.TypeLocalIndex, Keys: db.Cols(e.PipelineID, e.Period.Size(15))}},
+		// The Forecast page reads the submissions of one pipeline and period as the weeks the period
+		// spans: one cache group per week, append-only, so a past week is downloaded once.
+		Indexes: []db.Index{{Type: db.TypeCacheGroup, Keys: db.Cols(e.Week, e.PipelineID)}},
 	}
 }
 

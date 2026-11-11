@@ -8,7 +8,7 @@ import T from '#components/misc/T.svelte';
 import { tr } from '#core/store.svelte.ts';
 import { formatTime, readFileAsBase64 } from '#libs/helpers.ts';
 import { untrack } from 'svelte';
-import { CompanySecretsService, postCompanySecrets, testCompanySecrets } from './company-secrets.svelte';
+import { CompanySecretsService, testCompanySecrets } from './company-secrets.svelte';
 import {
   activeSecrets, certificateDaysLeft, EXPIRY_WARNING_DAYS, retiredSecrets,
   SUNAT_ENV_BETA, SUNAT_ENV_PRODUCTION, validateSecretsForm,
@@ -71,10 +71,7 @@ import {
     isSaving = true
     showLoading(tr("Saving...|Guardando..."))
     try {
-      await postCompanySecrets(payload)
-      // Reloaded rather than patched: uploading a certificate retires the previous row and
-      // inserts a new one, so both ends of the list moved.
-      await service.load()
+      await service.save(payload)
       form.SolPassword = ""
       form.CertPassword = ""
       certificateFile = undefined

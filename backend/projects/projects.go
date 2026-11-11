@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
 
 	"app/core"
 	coreTypes "app/core/types"
@@ -109,33 +108,4 @@ func checkMembersHaveAccess(companyID int32, addedUserIDs []int32) error {
 		}
 	}
 	return nil
-}
-
-type teamCandidate struct {
-	ID   int32
-	Name string
-}
-
-// GetTeamCandidates lists the users who can join a team: active users holding the projects access
-// at the write level.
-func GetTeamCandidates(req *core.HandlerArgs) core.HandlerResponse {
-	users := []coreTypes.User{}
-	query := db.Query(&users)
-	query.CompanyID.Equals(req.User.CompanyID).Status.Equals(1)
-	if err := query.AllowFilter().Exec(); err != nil {
-		return req.MakeErr("Error al obtener los usuarios:", err)
-	}
-
-	teamCandidates := []teamCandidate{}
-	for _, user := range users {
-		if !canWorkInProjects(user) {
-			continue
-		}
-		userName := strings.TrimSpace(user.FirstName + " " + user.LastName)
-		if userName == "" {
-			userName = user.User
-		}
-		teamCandidates = append(teamCandidates, teamCandidate{ID: user.ID, Name: userName})
-	}
-	return req.MakeResponse(teamCandidates)
 }

@@ -463,11 +463,16 @@ func (generator *erpHistoryGenerator) billSchedulePeriod(template expenseTemplat
 	scheduleID := generator.expenseScheduleByKey[template.key]
 	request := generator.makeRequest("GET.expense-schedule-periods",
 		map[string]string{"scheduleID": strconv.Itoa(int(scheduleID))}, "")
-	response := map[string][]financeTypes.Expense{}
-	if err := decodeResponse(generator.send(request, finance.GetExpenseSchedulePeriods), &response); err != nil {
+	// The periods come back as the schedule's single cache group (nothing cached here, so it is whole).
+	periodGroups := []db.RecordGroup[financeTypes.Expense]{}
+	if err := decodeResponse(generator.send(request, finance.GetExpenseSchedulePeriods), &periodGroups); err != nil {
 		return financeTypes.Expense{}, err
 	}
-	for _, period := range response["Periods"] {
+	periods := []financeTypes.Expense{}
+	for _, periodGroup := range periodGroups {
+		periods = append(periods, periodGroup.Records...)
+	}
+	for _, period := range periods {
 		if period.PeriodDate != unixDay {
 			continue
 		}

@@ -44,18 +44,27 @@ type CompanySecretsView struct {
 	HasCert       bool   `json:"HasCert" cb:"10"`
 	Status        int8   `json:"ss" cb:"ss,11"`
 	Updated       int32  `json:"upd" cb:"upd,12"`
+	// Version and Metadata keep the delta protocol's names: the browser hashes the slice with them.
+	Version  int16   `json:"ver" cb:"ver,13"`
+	Metadata *string `json:"mdt" cb:"mdt,14"`
 }
 
-// GetCompanySecrets lists the company's SUNAT credentials, without the secrets.
+// GetCompanySecrets syncs the company's SUNAT credentials by delta, active and retired, without
+// the secrets.
 func GetCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 	secrets := []types.CompanySecrets{}
 	query := db.Query(&secrets)
-	query.Select().CompanyID.Equals(req.User.CompanyID)
+	// The key material is projected out, so it is never read here nor kept in a server snapshot
+	// (a projection disables the delta's S3 snapshot).
+	query.Exclude(query.SolPasswordEnc, query.CertificateEnc, query.CertPasswordEnc).
+		CompanyID.Equals(req.User.CompanyID).
+		Delta(req.GetDeltaCursor(), int8(0), int8(1))
 
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las credenciales:", err)
 	}
 
+	// Keeps the ID −1 metadata record Delta() appends: its ID, Version and Metadata travel as is.
 	views := make([]CompanySecretsView, 0, len(secrets))
 	for index := range secrets {
 		record := &secrets[index]
@@ -65,11 +74,13 @@ func GetCompanySecrets(req *core.HandlerArgs) core.HandlerResponse {
 			CertSubject: record.CertSubject, CertIssuer: record.CertIssuer,
 			CertRUC:       record.CertRUC,
 			CertValidFrom: record.CertValidFrom, CertValidTo: record.CertValidTo,
-			HasCert: len(record.CertificateEnc) > 0,
+			// The serial is written with the certificate and never without it.
+			HasCert: record.CertSerial != "",
 			Status:  record.Status, Updated: record.Updated,
+			Version: record.Version, Metadata: record.Metadata,
 		})
 	}
-	return core.MakeResponse(req, &map[string]any{"CompanySecrets": views})
+	return req.MakeResponse(views)
 }
 
 // PostCompanySecrets stores or replaces a company's SUNAT credentials.

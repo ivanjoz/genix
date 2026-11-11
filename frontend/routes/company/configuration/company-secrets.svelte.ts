@@ -1,41 +1,30 @@
-import { GET, POST } from '#libs/ui-runtime.svelte.ts';
+import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 import type { ICompanySecrets, ICompanySecretsForm } from './company-secrets';
 
-// Read uncached, unlike the rest of this page. A stale certificate state is the one
-// thing this panel must never show: it decides whether the company can invoice, and
-// it changes exactly as often as somebody rotates a certificate.
-export class CompanySecretsService {
+// Every row, active and retired, synced by delta. min: 0 syncs on every load after painting the
+// cached rows: a stale certificate state is the one thing this panel must never show, since it
+// decides whether the company can invoice.
+export class CompanySecretsService extends GetHandler<ICompanySecrets> {
+  route = "company-secrets"
+  useCache = { min: 0, ver: 1 }
+
   all: ICompanySecrets[] = $state([])
-  isLoading = $state(true)
+
+  handler(response: ICompanySecrets[]) {
+    this.all = response || []
+  }
 
   constructor() {
-    void this.load()
+    super()
+    this.fetch()
   }
 
-  async load() {
-    this.isLoading = true
-    try {
-      const response = await GET({
-        route: "company-secrets",
-        errorMessage: "Error al obtener las credenciales SUNAT.",
-      })
-      this.all = (response?.CompanySecrets || []) as ICompanySecrets[]
-    } catch (error) {
-      // Reported by GET.
-    }
-    this.isLoading = false
+  // The reply is the saved row as the panel may see it — never the certificate or the passwords.
+  // A rotation also retires the previous row, so the list is brought up to date from the delta
+  // that comes back with the write rather than patched with the reply.
+  save(form: ICompanySecretsForm): Promise<ICompanySecrets> {
+    return this.writeAndSync<ICompanySecrets>("company-secrets", form)
   }
-}
-
-// The reply is the saved row as the panel may see it — never the certificate or the
-// passwords. A rotation answers with the new row, so the caller reloads instead of
-// patching what it holds: the row this replaced is now retired and has to move too.
-export async function postCompanySecrets(form: ICompanySecretsForm): Promise<ICompanySecrets> {
-  const response = await POST({
-    data: form,
-    route: "company-secrets",
-  })
-  return response as ICompanySecrets
 }
 
 // Asks SUNAT for the CDR of a document that does not exist: an answer of "no record"

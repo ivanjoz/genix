@@ -101,8 +101,10 @@ func (e CrmOpportunityStageLogTable) GetSchema() db.TableSchema {
 			{Col: e.PipelineIDs, From: db.Cols(e.FromPipelineID, e.ToPipelineID), Value: db.Compute((*CrmOpportunityStageLog).PipelineIDs)},
 		},
 		Indexes: []db.Index{
-			// History shown in the opportunity panel.
-			{Type: db.TypeLocalIndex, Keys: db.Cols(e.OpportunityID)},
+			// History shown in the opportunity panel: one group per opportunity, so the browser
+			// downloads it again only after a new change of that opportunity. It is also the index
+			// the server's OpportunityID reads use.
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.OpportunityID)},
 			// Reports: one group per month and pipeline. The log is append-only and always written
 			// with the current time, so a closed month never changes and is downloaded once.
 			{Type: db.TypeCacheGroup, Keys: db.Cols(e.Period, e.PipelineIDs)},

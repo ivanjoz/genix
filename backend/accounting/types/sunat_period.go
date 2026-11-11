@@ -14,11 +14,6 @@ import (
 // secondsPerDay converts a UnixDay to the instant its day starts at.
 const secondsPerDay = int64(24 * 60 * 60)
 
-// PeriodOf is the tax period a date falls in.
-func PeriodOf(unixDay int16) string {
-	return dayToTime(unixDay).Format("200601")
-}
-
 // PeriodBounds is the first and last UnixDay of a period, which is what a book query reads
 // between. The last day is the month's own last day, so a book never spills into the next
 // period — the error every "add 30 days" implementation makes in February.

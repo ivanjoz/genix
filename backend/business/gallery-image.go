@@ -54,7 +54,6 @@ func PostGalleryImage(req *core.HandlerArgs) core.HandlerResponse {
 		Image:       imageName,
 		Description: payload.Description,
 		Status:      1,
-		Updated:     core.SUnixTime(),
 	}
 	if err := db.Upsert(&[]types.GalleryImage{galleryImage}); err != nil {
 		return req.MakeErr("Error al guardar la imagen en BD.", err)
@@ -73,8 +72,7 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 
 	images := []types.GalleryImage{}
 	query := db.Query(&images)
-	query.CompanyID.Equals(req.User.CompanyID).
-		Image.Equals(fmt.Sprintf("%v_%v", req.User.CompanyID, imageID))
+	query.CompanyID.Equals(req.User.CompanyID).ImageID.Equals(imageID)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al buscar la imagen:", err)
 	}
@@ -84,7 +82,6 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 
 	// Soft deletion keeps the delta cache able to evict the image on the next sync.
 	images[0].Status = 0
-	images[0].Updated = core.SUnixTime()
 	if err := db.Upsert(&images); err != nil {
 		return req.MakeErr("Error al eliminar la imagen:", err)
 	}
@@ -93,17 +90,14 @@ func deleteGalleryImage(req *core.HandlerArgs, imageID int32) core.HandlerRespon
 	return req.MakeResponse(images[0])
 }
 
+// GetGalleryImages syncs the company's active gallery images by delta; a deleted image arrives as
+// a removed ImageID.
 func GetGalleryImages(req *core.HandlerArgs) core.HandlerResponse {
 	images := []types.GalleryImage{}
 	query := db.Query(&images)
-	table := db.TableOf[types.GalleryImage]()
-	query.Exclude(table.CompanyID).
-		CompanyID.Equals(req.User.CompanyID).
-		Status.Equals(1)
-
+	query.Select().CompanyID.Equals(req.User.CompanyID).Delta(req.GetDeltaCursor(), int8(1))
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener las imágenes:", err)
 	}
-	// The whole active list every sync: the replace Metadata drops a deleted image.
-	return req.MakeResponse(core.WithDeltaReplace(images))
+	return req.MakeResponse(images)
 }

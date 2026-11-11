@@ -121,16 +121,6 @@ export interface IAccountingSources extends IAccountingOperationsResponse {
   SellRates: number[]   // SellRates[i] is the sell rate (× 1000) of FirstDay + i
 }
 
-// periodBounds is a "YYYYMM" period's first and last UnixDay.
-export function periodBounds(period: string): { firstDay: number, lastDay: number } {
-  const year = Number(period.slice(0, 4))
-  const monthIndex = Number(period.slice(4, 6)) - 1
-  return {
-    firstDay: Date.UTC(year, monthIndex, 1) / 86_400_000,
-    lastDay: Date.UTC(year, monthIndex + 1, 0) / 86_400_000,
-  }
-}
-
 // referencedRecordIDs is what the period names outside itself: the sales its credit notes
 // correct, and the orders and expenses its receptions name, when the period does not hold them.
 export function referencedRecordIDs(response: IAccountingOperationsResponse) {
