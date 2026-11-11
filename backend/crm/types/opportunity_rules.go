@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// findActiveStage returns the stage with that ID when the pipeline still has it active.
-func findActiveStage(pipeline CrmPipeline, stageID int16) (CrmPipelineStage, bool) {
+// FindActiveStage returns the stage with that ID when the pipeline still has it active.
+func FindActiveStage(pipeline CrmPipeline, stageID int16) (CrmPipelineStage, bool) {
 	for _, stage := range pipeline.Stages {
 		if stage.ID == stageID && stage.Status == CrmStatusActive {
 			return stage, true
@@ -26,11 +26,14 @@ func PlanOpportunityCreate(payload CrmOpportunity, pipeline CrmPipeline, userID,
 	if pipeline.Status != CrmStatusActive {
 		return CrmOpportunity{}, fmt.Errorf("El pipeline no existe.")
 	}
-	_, isActive := findActiveStage(pipeline, payload.StageID)
+	_, isActive := FindActiveStage(pipeline, payload.StageID)
 	if !isActive {
 		return CrmOpportunity{}, fmt.Errorf("La etapa elegida no existe en el pipeline.")
 	}
 	if err := validateOpportunityFields(&payload); err != nil {
+		return CrmOpportunity{}, err
+	}
+	if err := checkStageRequirements(pipeline, payload.StageID, payload); err != nil {
 		return CrmOpportunity{}, err
 	}
 	if payload.OwnerUserID == 0 {
@@ -76,6 +79,10 @@ func PlanOpportunityEdit(stored, payload CrmOpportunity, pipeline CrmPipeline, u
 	edited.Title, edited.ClientID, edited.OwnerUserID = payload.Title, payload.ClientID, payload.OwnerUserID
 	edited.Amount, edited.Probability, edited.ExpectedCloseDate = payload.Amount, payload.Probability, payload.ExpectedCloseDate
 	edited.CustomValues, edited.UpdatedBy = payload.CustomValues, userID
+	// An edit cannot empty a field the opportunity's current stage requires.
+	if err := checkStageRequirements(pipeline, stored.StageID, edited); err != nil {
+		return CrmOpportunity{}, err
+	}
 	return edited, nil
 }
 
@@ -100,11 +107,8 @@ func validateOpportunityFields(opportunity *CrmOpportunity) error {
 // opportunity with its log row. target is the pipeline the opportunity ends in (the source
 // pipeline itself for a stage-only move).
 func PlanOpportunityMove(opportunity CrmOpportunity, source, target CrmPipeline, targetStageID int16, userID, now int32) (CrmOpportunity, CrmOpportunityStageLog, error) {
-	if opportunity.Outcome != OpportunityOutcomeOpen {
-		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("La oportunidad está cerrada; reábrala para moverla.")
-	}
-	if opportunity.PipelineID == target.ID && opportunity.StageID == targetStageID {
-		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("La oportunidad ya está en esa etapa.")
+	if opportunity.PendingApprovalTaskID != 0 {
+		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("La oportunidad espera una aprobación; cancele la solicitud o espere la decisión.")
 	}
 	sourceLevel, targetLevel := MemberLevel(source, userID), MemberLevel(target, userID)
 	isCrossPipeline := source.ID != target.ID
@@ -114,22 +118,46 @@ func PlanOpportunityMove(opportunity CrmOpportunity, source, target CrmPipeline,
 	if !isCrossPipeline && !CanMoveOpportunity(sourceLevel) {
 		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("No tiene permiso para mover esta oportunidad.")
 	}
-	if target.Status != CrmStatusActive {
-		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("El pipeline de destino no existe.")
+	stage, err := validateMoveTarget(opportunity, target, targetStageID)
+	if err != nil {
+		return CrmOpportunity{}, CrmOpportunityStageLog{}, err
 	}
-	stage, isActive := findActiveStage(target, targetStageID)
-	if !isActive {
-		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("La etapa de destino no existe o está desactivada.")
-	}
-	if missingFieldIDs := MissingRequiredFields(opportunity.CustomValues, target.Fields); len(missingFieldIDs) > 0 {
-		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("Faltan campos obligatorios del pipeline de destino: %v.", missingFieldIDs)
-	}
+	moved, stageLog := applyMove(opportunity, source, target, stage, userID, now)
+	return moved, stageLog, nil
+}
 
+// validateMoveTarget holds the state checks a move into the stage must pass, however it came about
+// (a direct move or an approved one): the opportunity is open, the move changes something, the
+// target pipeline and stage are active, and the stage's required data is complete. It returns the stage.
+func validateMoveTarget(opportunity CrmOpportunity, target CrmPipeline, targetStageID int16) (CrmPipelineStage, error) {
+	if opportunity.Outcome != OpportunityOutcomeOpen {
+		return CrmPipelineStage{}, fmt.Errorf("La oportunidad está cerrada; reábrala para moverla.")
+	}
+	if opportunity.PipelineID == target.ID && opportunity.StageID == targetStageID {
+		return CrmPipelineStage{}, fmt.Errorf("La oportunidad ya está en esa etapa.")
+	}
+	if target.Status != CrmStatusActive {
+		return CrmPipelineStage{}, fmt.Errorf("El pipeline de destino no existe.")
+	}
+	stage, isActive := FindActiveStage(target, targetStageID)
+	if !isActive {
+		return CrmPipelineStage{}, fmt.Errorf("La etapa de destino no existe o está desactivada.")
+	}
+	// Entering the stage needs everything required from it or from an earlier stage of the target.
+	if err := checkStageRequirements(target, targetStageID, opportunity); err != nil {
+		return CrmPipelineStage{}, err
+	}
+	return stage, nil
+}
+
+// applyMove builds the moved record and its log row; the checks were made by the caller.
+func applyMove(opportunity CrmOpportunity, source, target CrmPipeline, stage CrmPipelineStage, userID, now int32) (CrmOpportunity, CrmOpportunityStageLog) {
 	moved := opportunity
 	moved.PreviousPipelineID, moved.PreviousStageID = opportunity.PipelineID, opportunity.StageID
-	moved.PipelineID, moved.StageID = target.ID, targetStageID
+	moved.PipelineID, moved.StageID = target.ID, stage.ID
 	moved.StageEnteredTime, moved.Probability, moved.UpdatedBy = now, stage.Probability, userID
-	return moved, BuildStageLogRow(StageLogKindMoved, opportunity, source, moved, target, userID, now), nil
+	moved.PendingApprovalTaskID = 0
+	return moved, BuildStageLogRow(StageLogKindMoved, opportunity, source, moved, target, userID, now)
 }
 
 // PlanOpportunityClose closes the opportunity as won or lost, or reopens it (outcome 0). A lost
@@ -139,6 +167,9 @@ func PlanOpportunityClose(opportunity CrmOpportunity, pipeline CrmPipeline, payl
 
 	if !CanMoveOpportunity(MemberLevel(pipeline, userID)) {
 		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("No tiene permiso para cerrar o reabrir esta oportunidad.")
+	}
+	if opportunity.PendingApprovalTaskID != 0 {
+		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("La oportunidad espera una aprobación; cancele la solicitud o espere la decisión.")
 	}
 	if payload.Outcome < OpportunityOutcomeOpen || payload.Outcome > OpportunityOutcomeLost {
 		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("El resultado %d no es válido.", payload.Outcome)
@@ -150,7 +181,7 @@ func PlanOpportunityClose(opportunity CrmOpportunity, pipeline CrmPipeline, payl
 		return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("Elija un motivo de pérdida válido.")
 	}
 	if payload.Outcome == OpportunityOutcomeOpen {
-		if _, isActive := findActiveStage(pipeline, opportunity.StageID); !isActive {
+		if _, isActive := FindActiveStage(pipeline, opportunity.StageID); !isActive {
 			return CrmOpportunity{}, CrmOpportunityStageLog{}, fmt.Errorf("La etapa de la oportunidad ya no existe; no se puede reabrir.")
 		}
 	}

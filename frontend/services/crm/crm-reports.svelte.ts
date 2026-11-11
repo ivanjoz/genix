@@ -1,4 +1,5 @@
 import { GET, GETWithGroupCache } from '#libs/ui-runtime.svelte.ts'
+import type { ICrmActivity } from './crm-activity.svelte.ts'
 import type { ICrmOpportunityStageLog } from './crm-opportunity.svelte.ts'
 
 // Connectors of backend/crm/report.go. Every CRM report is computed in the browser from the stage
@@ -23,6 +24,19 @@ export const getCrmReportStageLogOfYear = async (pipelineID: number, year: numbe
     'period-end': String(year * 100 + 12),
   })
   return groups.flatMap((group) => group.records || []).filter((stageLog) => (stageLog?.ID || 0) > 0)
+}
+
+/**
+ * The activity entries written in one pipeline for one calendar year (YY), cached per month like the
+ * stage log. Text and files are stripped by the server: the scorecard only counts them by author.
+ */
+export const getCrmReportActivitiesOfYear = async (pipelineID: number, year: number): Promise<ICrmActivity[]> => {
+  const groups = await GETWithGroupCache<ICrmActivity>('crm-report-activities', {
+    'pipeline-id': String(pipelineID),
+    'period-start': String(year * 100 + 1),
+    'period-end': String(year * 100 + 12),
+  })
+  return groups.flatMap((group) => group.records || []).filter((activity) => (activity?.ID || 0) > 0)
 }
 
 export interface ICrmReportOpenOpportunity {

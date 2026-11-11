@@ -12,16 +12,26 @@
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
   import { GOAL_PERIOD } from '#services/crm/crm-goal-metric.ts'
+  import { STANDARD_FIELD } from '#services/crm/crm-standard-field.ts'
   import {
     FORECAST_CATEGORY, postCrmPipeline, type CrmCustomFieldsService, type CrmPipelinesService, type ICrmPipeline, type ICrmPipelineStage,
   } from '#services/crm/crm-pipeline.svelte.ts'
+  import { TASK_ASSIGN, TASK_KIND } from '#services/crm/crm-task.ts'
+  import type { CrmActivityTypesService } from '#services/crm/crm-activity.svelte.ts'
+  import type { CrmEmailTemplatesService } from '#services/crm/crm-email-template.svelte.ts'
+  import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte'
+  import { activityTypeOptions as buildActivityTypeOptions } from '../pipeline/pipeline.ts'
   import {
-    activeStages, makeEmptyPipeline, makeEmptyStage, moveItem, removeStage, setFieldRequired, toggleField,
+    activeStages, changeStageTemplates, makeEmptyPipeline, makeEmptyStage, makeEmptyTaskTemplate, moveItem, removeStage,
+    setFieldRequiredFrom, setStageApprover, setStageStandardField, setTemplateAssignment, toggleField,
   } from './settings.ts'
 
   // A pipeline is its stages and the custom fields it shows. Members are not edited here: the
   // access page owns them, so the two pages cannot overwrite each other.
-  let { pipelines, customFields }: { pipelines: CrmPipelinesService, customFields: CrmCustomFieldsService } = $props()
+  let { pipelines, customFields, activityTypes, emailTemplates }: {
+    pipelines: CrmPipelinesService, customFields: CrmCustomFieldsService, activityTypes: CrmActivityTypesService,
+    emailTemplates: CrmEmailTemplatesService
+  } = $props()
 
   const ui = useUI()
   const PIPELINE_LAYER_ID = 1
@@ -88,8 +98,28 @@
       getValue: (stage) => stage.ForecastCategory,
       onCellSelect: (stage, value) => { stage.ForecastCategory = Number(value) },
     },
+    { id: 'requiredStandard', header: 'Requires|Exige', width: '210px', css: 'px-4', getValue: () => '' },
     { id: 'actions', header: '', width: '130px', css: 'px-4', getValue: () => '' },
   ]
+
+  // A field can be required from a stage that is already saved: a stage added in this edit has no ID
+  // yet, and the server allocates the IDs on save.
+  const requiredFromOptions = $derived([
+    { id: 0, name: tr('Optional|Opcional') },
+    ...visibleStages.filter((stage) => stage.ID > 0).map((stage) => ({ id: stage.ID, name: stage.Name })),
+  ])
+  // Option 0 clears the approver / makes the task go to the card's owner.
+  const usersService = new UsuariosService()
+  const userOptions = $derived(usersService.usuarios.map((user) => ({ id: user.ID, name: `${user.FirstName} ${user.LastName}`.trim() })))
+  const approverOptions = $derived([{ id: 0, name: tr('No approval|Sin aprobación') }, ...userOptions])
+  const assignOptions = $derived([{ id: 0, name: tr('Card owner|Responsable de la tarjeta') }, ...userOptions])
+  const activityTypeOptions = $derived(buildActivityTypeOptions(activityTypes.records))
+  const emailTemplateOptions = $derived(emailTemplates.records.map((emailTemplate) => ({ id: emailTemplate.ID, name: emailTemplate.Name })))
+  const TASK_KIND_OPTIONS = [
+    { id: TASK_KIND.ACTIVITY, name: tr('Log activity|Registrar actividad') },
+    { id: TASK_KIND.SEND_EMAIL, name: tr('Send email|Enviar correo') },
+  ]
+  const hasUnsavedStage = $derived(visibleStages.some((stage) => stage.ID === 0))
 
   const columns: ITableColumn<ICrmPipeline>[] = [
     { header: 'Pipeline', css: 'px-6', highlight: true, getValue: (e) => e.Name },
@@ -111,7 +141,7 @@
 <Layer
   id={PIPELINE_LAYER_ID}
   type="side"
-  sideLayerSize={760}
+  sideLayerSize={900}
   title={pipelineForm.ID > 0 ? pipelineForm.Name : 'New pipeline|Nuevo pipeline'}
   titleCss="h2 mb-6"
   css="px-12 py-10"
@@ -139,6 +169,14 @@
       {#snippet cellRenderer(stage, column)}
         {#if column.id === 'color'}
           <ColorPickerCell bind:saveOn={pipelineForm.Stages[stageIndexOf(stage)]} save="Color" />
+        {:else if column.id === 'requiredStandard'}
+          <!-- Required to enter this stage or any later one. -->
+          <div class="flex gap-10">
+            <Checkbox label="Amount|Monto" checked={stage.RequiredStandardFields.includes(STANDARD_FIELD.AMOUNT)}
+              onToggle={(isRequired) => { pipelineForm.Stages = setStageStandardField(pipelineForm.Stages, stageIndexOf(stage), STANDARD_FIELD.AMOUNT, isRequired) }} />
+            <Checkbox label="Close|Cierre" checked={stage.RequiredStandardFields.includes(STANDARD_FIELD.EXPECTED_CLOSE_DATE)}
+              onToggle={(isRequired) => { pipelineForm.Stages = setStageStandardField(pipelineForm.Stages, stageIndexOf(stage), STANDARD_FIELD.EXPECTED_CLOSE_DATE, isRequired) }} />
+          </div>
         {:else if column.id === 'actions'}
           <div class="flex gap-4 justify-end">
             <Button color="blue" mode="subtle" useCircle height="tiny" icon="icon-[fa--arrow-up]" label="Moves the stage one place up."
@@ -153,7 +191,54 @@
     </VTable>
   </div>
 
+  <!-- An approver gates a forward move into the stage; templates propose a task every time a card enters it. -->
+  <h3 class="mt-16 mb-6 font-bold">{tr('Approvals and tasks per stage|Aprobaciones y tareas por etapa')}</h3>
+  <div class="flex flex-col gap-10" aria-label="Stage approvals and tasks">
+    {#each visibleStages as stage (stageIndexOf(stage))}
+      {@const stageIndex = stageIndexOf(stage)}
+      <div class="rounded border border-line p-8">
+        <div class="flex items-center gap-12">
+          <span class="ff-bold w-160 truncate">{stage.Name}</span>
+          <SearchSelect options={approverOptions} keyId="id" keyName="name" label="Approver|Aprobador" css="w-240"
+            selected={stage.ApproverUserID}
+            onChange={(option) => { pipelineForm.Stages = setStageApprover(pipelineForm.Stages, stageIndex, option.id) }} />
+          <Button color="green" icon="icon-[fa--plus]" name="Task|Tarea" label="Proposes a task each time a card enters this stage."
+            css="ml-auto" onClick={() => { pipelineForm.Stages = changeStageTemplates(pipelineForm.Stages, stageIndex, (templates) => [...templates, makeEmptyTaskTemplate()]) }} />
+        </div>
+        {#each stage.TaskTemplates as template, templateIndex}
+          <div class="flex items-end gap-8 mt-6">
+            <Input bind:saveOn={pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex]} save="Title" label="Task|Tarea" css="grow" />
+            <SearchSelect options={TASK_KIND_OPTIONS} keyId="id" keyName="name" label="Kind|Tipo" css="w-150"
+              selected={template.Kind} onChange={(option) => { pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex].Kind = option.id }} />
+            <!-- What the task asks for: the activity to log, or the template the email starts from. -->
+            {#if template.Kind === TASK_KIND.SEND_EMAIL}
+              <SearchSelect options={emailTemplateOptions} keyId="id" keyName="name" label="Email template|Plantilla" css="w-176"
+                selected={template.EmailTemplateID} onChange={(option) => { pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex].EmailTemplateID = option.id }} />
+            {:else}
+              <SearchSelect options={activityTypeOptions} keyId="id" keyName="name" label="Activity|Actividad" css="w-176"
+                selected={template.ActivityTypeID} onChange={(option) => { pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex].ActivityTypeID = option.id }} />
+            {/if}
+            <Input bind:saveOn={pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex]} save="DueDays" type="number" label="Due in days|Vence en días" css="w-100" />
+            <SearchSelect options={assignOptions} keyId="id" keyName="name" label="Assign to|Asignar a" css="w-176"
+              selected={template.AssignTo === TASK_ASSIGN.USER ? template.AssignUserID : 0}
+              onChange={(option) => {
+                pipelineForm.Stages[stageIndex].TaskTemplates[templateIndex] = setTemplateAssignment(
+                  template, option.id ? TASK_ASSIGN.USER : TASK_ASSIGN.OWNER, option.id)
+              }} />
+            <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the task template."
+              onClick={() => { pipelineForm.Stages = changeStageTemplates(pipelineForm.Stages, stageIndex, (templates) => templates.filter((_, index) => index !== templateIndex)) }} />
+          </div>
+        {/each}
+      </div>
+    {/each}
+  </div>
+
   <h3 class="mt-16 mb-6 font-bold">{tr('Custom fields shown|Campos personalizados visibles')}</h3>
+  {#if hasUnsavedStage}
+    <div class="text-fg-muted mb-6">
+      {tr('Save the pipeline to require a field from a stage you just added.|Guarde el pipeline para exigir un campo desde una etapa recién agregada.')}
+    </div>
+  {/if}
   <div class="flex flex-col gap-6" aria-label="Pipeline custom fields">
     {#each customFields.records as customField}
       {@const picked = pickedField(customField.ID)}
@@ -161,8 +246,9 @@
         <Checkbox label={customField.Name} checked={!!picked} css="w-256"
           onToggle={() => pipelineForm.Fields = toggleField(pipelineForm.Fields, customField.ID)} />
         {#if picked}
-          <Checkbox label="Required|Obligatorio" checked={picked.Required}
-            onToggle={(isRequired) => pipelineForm.Fields = setFieldRequired(pipelineForm.Fields, customField.ID, isRequired)} />
+          <SearchSelect options={requiredFromOptions} keyId="id" keyName="name" label="Required from|Obligatorio desde" css="w-224"
+            selected={picked.RequiredFromStageID}
+            onChange={(option) => pipelineForm.Fields = setFieldRequiredFrom(pipelineForm.Fields, customField.ID, option.id)} />
         {/if}
       </div>
     {:else}

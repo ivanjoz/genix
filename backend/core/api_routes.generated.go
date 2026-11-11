@@ -22,6 +22,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.client-provider":                 7,
 	"GET.client-provider-ids":             8,
 	"GET.client-provider-snapshot-ids":    134,
+	"GET.client-week-sales":               241,
 	"GET.company-credit-budget":           110,
 	"GET.company-credit-usage":            112,
 	"GET.company-credit-usage-detail":     107, // retired
@@ -31,21 +32,27 @@ var APIRouteIDs = map[string]int16{
 	"GET.company-secrets":                 116,
 	"GET.company-users-by-ids":            113,
 	"GET.country-cities":                  10,
+	"GET.credit-consumption":              232,
 	"GET.credit-usage":                    11,
 	"GET.crm-activity-types":              213,
 	"GET.crm-custom-fields":               201,
+	"GET.crm-email-templates":             233,
 	"GET.crm-forecast-submissions":        221,
 	"GET.crm-goals":                       222,
 	"GET.crm-lost-reasons":                202,
 	"GET.crm-opportunities":               203,
 	"GET.crm-opportunity-activity":        214,
+	"GET.crm-opportunity-approval":        234,
+	"GET.crm-opportunity-email-draft":     235,
 	"GET.crm-opportunity-ids":             227,
 	"GET.crm-opportunity-log":             204,
 	"GET.crm-pipeline-opportunity-status": 228,
 	"GET.crm-pipelines":                   205,
+	"GET.crm-report-activities":           229,
 	"GET.crm-report-open-opportunities":   218,
 	"GET.crm-report-scope":                219,
 	"GET.crm-report-stage-log":            220,
+	"GET.crm-tasks":                       236,
 	"GET.crm-teams":                       223,
 	"GET.cron-actions-scheduled":          12,
 	"GET.ecommerce-page-content":          13,
@@ -117,6 +124,8 @@ var APIRouteIDs = map[string]int16{
 	"GET.sales-book":                      133,
 	"GET.sales-planning":                  44,
 	"GET.seasonality-curve":               45,
+	"GET.sent-email":                      230,
+	"GET.sent-emails":                     231,
 	"GET.server-metrics":                  104,
 	"GET.shared-lists":                    46,
 	"GET.shipping-costs":                  47,
@@ -148,15 +157,19 @@ var APIRouteIDs = map[string]int16{
 	"POST.crm-activity-type":              215,
 	"POST.crm-attachment-upload":          216,
 	"POST.crm-custom-field":               206,
+	"POST.crm-email-template":             237,
 	"POST.crm-forecast-submission":        224,
 	"POST.crm-goals":                      225,
 	"POST.crm-lost-reason":                207,
 	"POST.crm-opportunity":                208,
 	"POST.crm-opportunity-activity":       217,
 	"POST.crm-opportunity-close":          209,
+	"POST.crm-opportunity-email":          238,
 	"POST.crm-opportunity-move":           210,
 	"POST.crm-pipeline":                   211,
 	"POST.crm-pipeline-members":           212,
+	"POST.crm-task":                       239,
+	"POST.crm-task-decide":                240,
 	"POST.crm-team":                       226,
 	"POST.ecommerce-page-content":         67,
 	"POST.exchange-rates":                 136,
@@ -254,7 +267,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 228
+const MaxAPIRouteID int16 = 241
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

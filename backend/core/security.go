@@ -117,6 +117,9 @@ type EnvStruct struct {
 	SMTP_USER       string
 	SMTP_PASSWORD   string
 	SMTP_PORT       int32
+	// SMTP_STORE_ONLY ([smtp].store_only): SendEmail sends nothing over SMTP and only writes the
+	// sent_emails table, the virtual inbox of dev/QAS installations.
+	SMTP_STORE_ONLY bool
 	// BACKEND_PROVIDER selects the cloud data mirror: DynamoDB (aws) or D1 (cloudflare).
 	BACKEND_PROVIDER string
 	// CDN_PROVIDER selects the object storage and public asset origin: S3 (aws) or R2 (cloudflare).
@@ -377,11 +380,12 @@ type fileConfig struct {
 	} `toml:"storefront"`
 
 	SMTP struct {
-		Host     string `toml:"host"`
-		Port     int32  `toml:"port"`
-		Email    string `toml:"email"`
-		User     string `toml:"user"`
-		Password string `toml:"password"`
+		Host      string `toml:"host"`
+		Port      int32  `toml:"port"`
+		Email     string `toml:"email"`
+		User      string `toml:"user"`
+		Password  string `toml:"password"`
+		StoreOnly bool   `toml:"store_only"`
 	} `toml:"smtp"`
 
 	Agent struct {
@@ -607,6 +611,7 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.SMTP_EMAIL = file.SMTP.Email
 	env.SMTP_USER = file.SMTP.User
 	env.SMTP_PASSWORD = file.SMTP.Password
+	env.SMTP_STORE_ONLY = file.SMTP.StoreOnly
 
 	env.DEFAULT_MODEL = file.Agent.DefaultModel
 	env.CLASSIFIER_MODEL_ID = strings.TrimSpace(file.Agent.ClassifierModel)

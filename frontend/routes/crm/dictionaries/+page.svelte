@@ -3,18 +3,22 @@
   import T from '#components/misc/T.svelte'
   import { CrmActivityTypesService } from '#services/crm/crm-activity.svelte.ts'
   import { CrmLostReasonsService } from '#services/crm/crm-pipeline.svelte.ts'
+  import { CrmEmailTemplatesService } from '#services/crm/crm-email-template.svelte.ts'
   import ActivityTypesTable from './ActivityTypesTable.svelte'
+  import EmailTemplatesTable from './EmailTemplatesTable.svelte'
   import LostReasonsTable from './LostReasonsTable.svelte'
 
   // Each dictionary is a small list of values the CRM picks from; the left column chooses which one to edit.
   const CRM_DICTIONARIES = [
     { id: 1, name: 'Lost reasons|Motivos de pérdida', icon: 'icon-[fa--times-circle]' },
     { id: 2, name: 'Activity types|Tipos de actividad', icon: 'icon-[fa--comments]' },
+    { id: 3, name: 'Email templates|Plantillas de correo', icon: 'icon-[fa--envelope]' },
   ]
   let selectedDictionaryID = $state(1)
 
   const lostReasons = new CrmLostReasonsService(true)
   const activityTypes = new CrmActivityTypesService(true)
+  const emailTemplates = new CrmEmailTemplatesService(true)
 </script>
 
 <Page title="Dictionaries|Diccionarios">
@@ -34,6 +38,8 @@
         <LostReasonsTable {lostReasons} />
       {:else if selectedDictionaryID === 2}
         <ActivityTypesTable {activityTypes} />
+      {:else if selectedDictionaryID === 3}
+        <EmailTemplatesTable {emailTemplates} />
       {/if}
     </div>
   </div>

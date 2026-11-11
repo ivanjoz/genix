@@ -2,7 +2,7 @@ import type { ICrmForecastSubmission } from '#services/crm/crm-forecast.svelte.t
 import { FORECAST_CATEGORY } from '#services/crm/crm-forecast-category.ts'
 import type { ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
 import { periodOfDay } from '../goals/goals.ts'
-import type { OpenOpportunityNow } from '../reports/reports.ts'
+import { unixDayOfSUnixTime, type OpenOpportunityNow } from '../reports/reports.ts'
 
 // Pure logic of the Forecast page (plan §3.4): what each seller's open opportunities add up to for
 // a month, by the forecast category of their stage, mirrored from backend types.ComputeForecast.
@@ -32,10 +32,21 @@ export const computeForecast = (
   return totals
 }
 
+/** Every submission of a seller (teamID 0) or of a team, oldest first: how the forecast evolved (R6). */
+export const submissionHistory = (submissions: ICrmForecastSubmission[], userID: number, teamID: number) =>
+  submissions.filter((submission) => teamID ? submission.TeamID === teamID : submission.TeamID === 0 && submission.UserID === userID)
+    .sort((left, right) => left.Created - right.Created || left.ID - right.ID)
+
 /** The newest submission of a seller (teamID 0) or of a team, if any. */
 export const latestSubmission = (submissions: ICrmForecastSubmission[], userID: number, teamID: number) =>
-  submissions.filter((submission) => teamID ? submission.TeamID === teamID : submission.TeamID === 0 && submission.UserID === userID)
-    .sort((left, right) => right.Created - left.Created || right.ID - left.ID)[0]
+  submissionHistory(submissions, userID, teamID).at(-1)
+
+/**
+ * The last submission made before the period started (P7: there is no cut-off date, so the report
+ * shows this one next to the latest). firstDay is the period's first UnixDay.
+ */
+export const submissionBeforePeriod = (history: ICrmForecastSubmission[], firstDay: number) =>
+  history.filter((submission) => unixDayOfSUnixTime(submission.Created) < firstDay).at(-1)
 
 /** Won / goal as a percentage; 0 when there is no goal. */
 export const attainmentPercent = (won: number, goal: number) => goal > 0 ? Math.round(won * 100 / goal) : 0

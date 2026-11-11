@@ -44,6 +44,9 @@ type (
 	UserUsageRow    = fareward.UserUsageRow
 	CompanyBudget   = fareward.CompanyBudget
 	ServerMetricRow = fareward.ServerMetricRow
+	DeviceUsageRow  = fareward.DeviceUsageRow
+	DevicePair      = fareward.DevicePair
+	Rejections      = fareward.Rejections
 	// UserGrants is what fareward keeps of a user: status and grant blobs (security/fareward_grants.go).
 	UserGrants = fareward.UserGrants
 )
@@ -99,6 +102,7 @@ var (
 	QueryUserUsage         = fareward.QueryUserUsage
 	QueryCompanyBudgets    = fareward.QueryCompanyBudgets
 	QueryServerMetrics     = fareward.QueryServerMetrics
+	QueryDeviceUsage       = fareward.QueryDeviceUsage
 	// The grants push: fareward no longer reads the users table, this process sends it the grants.
 	PutUserGrants = fareward.PutUserGrants
 )

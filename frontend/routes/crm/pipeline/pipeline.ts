@@ -2,7 +2,8 @@ import { FIELD_TYPE, type IFormField } from '#components/form/fields-form.ts'
 import type { ICrmActivity, ICrmActivityType } from '#services/crm/crm-activity.svelte.ts'
 import { SYSTEM_ACTIVITY_TYPES, type IActivityTypeOption } from '#services/crm/crm-activity-types.ts'
 import type { ICrmCustomFieldValue, ICrmOpportunity, ICrmOpportunityStageLog } from '#services/crm/crm-opportunity.svelte.ts'
-import type { ICrmCustomField, ICrmPipeline, ICrmPipelineField, ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
+import type { ICrmCustomField, ICrmPipeline, ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
+import { STANDARD_FIELD } from '#services/crm/crm-standard-field.ts'
 import {
   OUTCOME_LOST, OUTCOME_WON, STAGE_LOG_KIND_CLOSED, STAGE_LOG_KIND_CREATED, STAGE_LOG_KIND_EDITED,
 } from '#services/crm/crm-stage-log.ts'
@@ -54,11 +55,49 @@ export const columnTotals = (opportunities: ICrmOpportunity[]): IColumnTotals =>
   weightedAmount: Math.round(opportunities.reduce((sum, opportunity) => sum + opportunity.Amount * opportunity.Probability / 100, 0)),
 })
 
-/** Required fields of the target pipeline the opportunity has no value for: a move needs them first. */
-export const missingRequiredFieldIDs = (values: ICrmCustomFieldValue[], targetFields: ICrmPipelineField[]) =>
-  targetFields
-    .filter((field) => field.Required && !values.some((value) => value.FieldID === field.FieldID))
+// Stage requirements, mirrored from backend/crm/types/custom_field_rules.go: a custom field is
+// required from its stage's board position on; a standard field by the stage that lists it and every
+// later one. The backend check is the one that counts; this only asks for the data first.
+
+/** 1-based board depth of a stage among the pipeline's active stages; 0 when it is not active. */
+export const stagePositionOf = (pipeline: ICrmPipeline | undefined, stageID: number) =>
+  activeStagesOf(pipeline).findIndex((stage) => stage.ID === stageID) + 1
+
+/** Custom fields an opportunity must have to be in the stage. */
+export const requiredFieldIDsAtStage = (pipeline: ICrmPipeline | undefined, stageID: number): number[] => {
+  const stagePosition = stagePositionOf(pipeline, stageID)
+  return (pipeline?.Fields ?? [])
+    .filter((field) => {
+      const requiredFromPosition = stagePositionOf(pipeline, field.RequiredFromStageID)
+      return stagePosition > 0 && requiredFromPosition > 0 && stagePosition >= requiredFromPosition
+    })
     .map((field) => field.FieldID)
+}
+
+/** Standard fields (STANDARD_FIELD) an opportunity must have to be in the stage. */
+export const requiredStandardFieldsAtStage = (pipeline: ICrmPipeline | undefined, stageID: number): number[] => {
+  const stagePosition = stagePositionOf(pipeline, stageID)
+  return [...new Set(activeStagesOf(pipeline).slice(0, stagePosition).flatMap((stage) => stage.RequiredStandardFields ?? []))]
+}
+
+export interface IMissingRequirements {
+  fieldIDs: number[]
+  standardFields: number[]
+}
+
+export const hasMissingRequirements = (missing: IMissingRequirements) => missing.fieldIDs.length > 0 || missing.standardFields.length > 0
+
+/** What the opportunity still lacks to enter the stage of the pipeline: a move needs it first. */
+export const missingRequirements = (
+  pipeline: ICrmPipeline | undefined, stageID: number,
+  opportunity: Pick<ICrmOpportunity, 'Amount' | 'ExpectedCloseDate' | 'CustomValues'>,
+): IMissingRequirements => ({
+  fieldIDs: requiredFieldIDsAtStage(pipeline, stageID)
+    .filter((fieldID) => !(opportunity.CustomValues ?? []).some((value) => value.FieldID === fieldID)),
+  standardFields: requiredStandardFieldsAtStage(pipeline, stageID).filter((standardField) =>
+    (standardField === STANDARD_FIELD.AMOUNT && !opportunity.Amount)
+    || (standardField === STANDARD_FIELD.EXPECTED_CLOSE_DATE && !opportunity.ExpectedCloseDate)),
+})
 
 // ---- custom fields <-> FieldsForm -------------------------------------------------------------
 
@@ -69,11 +108,15 @@ export interface IFieldOptionsByType {
   users: { id: number, name: string }[]
 }
 
-/** Converts the pipeline's picked fields and the catalog into the generic form's field list. */
+/**
+ * Converts the pipeline's picked fields and the catalog into the generic form's field list. A field
+ * is marked required when the opportunity's stage requires it.
+ */
 export const buildOpportunityFormFields = (
-  pipeline: ICrmPipeline, catalog: Map<number, ICrmCustomField>, options: IFieldOptionsByType,
-): IFormField[] =>
-  pipeline.Fields.flatMap((pipelineField) => {
+  pipeline: ICrmPipeline, catalog: Map<number, ICrmCustomField>, options: IFieldOptionsByType, stageID: number,
+): IFormField[] => {
+  const requiredFieldIDs = requiredFieldIDsAtStage(pipeline, stageID)
+  return pipeline.Fields.flatMap((pipelineField) => {
     const customField = catalog.get(pipelineField.FieldID)
     if (!customField) return []
     // The catalog's type numbers are the form's: both follow backend/crm/types/custom_field.go.
@@ -81,8 +124,9 @@ export const buildOpportunityFormFields = (
     const choices = formType === FIELD_TYPE.search
       ? options.users
       : customField.Options.filter((option) => option.Status !== 0).map((option) => ({ id: option.ID, name: option.Name }))
-    return [{ key: fieldKey(customField.ID), label: customField.Name, type: formType, options: choices, required: pipelineField.Required }]
+    return [{ key: fieldKey(customField.ID), label: customField.Name, type: formType, options: choices, required: requiredFieldIDs.includes(customField.ID) }]
   })
+}
 
 /** Stored values -> the generic form's `values` map. */
 export const writeCustomValues = (storedValues: ICrmCustomFieldValue[], catalog: Map<number, ICrmCustomField>) => {

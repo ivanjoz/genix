@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { GOAL_METRIC, GOAL_PERIOD } from '#services/crm/crm-goal-metric.ts'
 import type { ICrmGoal } from '#services/crm/crm-goal.svelte.ts'
-import { changedGoalCells, copyPreviousYear, fillRow, goalGridRows, storedTarget, teamTotal, cellKey, periodsOfYear, periodOfDay, goalPeriodDays, periodsOfScope, scopeCount, scopeIndexOfDay } from './goals.ts'
+import { changedGoalCells, copyPreviousYear, fillRow, goalGridRows, storedTarget, teamTotal, cellKey, periodsOfYear, periodOfDay, goalPeriodDays, periodsOfScope, scopeCount, scopeIndexOfDay, goalTargetsInRange } from './goals.ts'
 
 const goal = (userID: number, period: number, target: number, metric = GOAL_METRIC.WON_AMOUNT): ICrmGoal =>
   ({ ID: 1, PipelineID: 1, UserID: userID, Period: period, Metric: metric, Target: target, ss: 1, upd: 0 })
 
 describe('goals grid', () => {
+  it('sums each seller targets over the periods starting inside a day range', () => {
+    const goals = [goal(1, 2601, 100), goal(1, 2602, 200), goal(1, 2603, 400), goal(2, 2602, 50), goal(1, 2602, 9, GOAL_METRIC.WON_COUNT)]
+    const [fromDay] = goalPeriodDays(GOAL_PERIOD.MONTHLY, 2602)
+    const [, toDay] = goalPeriodDays(GOAL_PERIOD.MONTHLY, 2603)
+    const targets = goalTargetsInRange(goals, 1, GOAL_METRIC.WON_AMOUNT, GOAL_PERIOD.MONTHLY, fromDay, toDay)
+    expect([...targets]).toEqual([[1, 600], [2, 50]])
+  })
+
   it('shows money goals in currency units', () => {
     expect(storedTarget([goal(1, 2601, 150000)], 1, GOAL_METRIC.WON_AMOUNT, 1, 2601)).toBe(1500)
     expect(storedTarget([goal(1, 2601, 4, GOAL_METRIC.WON_COUNT)], 1, GOAL_METRIC.WON_COUNT, 1, 2601)).toBe(4)

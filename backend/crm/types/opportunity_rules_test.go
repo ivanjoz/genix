@@ -69,10 +69,38 @@ func TestPlanOpportunityEdit(t *testing.T) {
 	}
 }
 
+// A stage that requires the amount blocks creating into it, moving into it and emptying it by edit.
+func TestPlanOpportunityEnforcesRequiredStandardFields(t *testing.T) {
+	pipeline := testPipeline(1, CrmPipelineMember{UserID: 7, Level: PipelineLevelEdit})
+	pipeline.Stages[1].RequiredStandardFields = []int8{StandardFieldAmount}
+
+	if _, err := PlanOpportunityCreate(CrmOpportunity{Title: "A", ClientID: 3, StageID: 2}, pipeline, 7, 100); err == nil {
+		t.Fatal("creating in a stage that requires the amount, without it, is refused")
+	}
+	if _, err := PlanOpportunityCreate(CrmOpportunity{Title: "A", ClientID: 3, StageID: 1}, pipeline, 7, 100); err != nil {
+		t.Fatalf("the first stage requires nothing: %v", err)
+	}
+
+	empty := CrmOpportunity{ID: 1, PipelineID: 1, StageID: 1, CreatedBy: 7, OwnerUserID: 7, Title: "A", ClientID: 3}
+	if _, _, err := PlanOpportunityMove(empty, pipeline, pipeline, 2, 7, 500); err == nil {
+		t.Fatal("moving into a stage that requires the amount, without it, is refused")
+	}
+	empty.Amount = 100
+	inSecond, _, err := PlanOpportunityMove(empty, pipeline, pipeline, 2, 7, 500)
+	if err != nil {
+		t.Fatalf("move with the amount: %v", err)
+	}
+	cleared := inSecond
+	cleared.Amount = 0
+	if _, err := PlanOpportunityEdit(inSecond, cleared, pipeline, 7); err == nil {
+		t.Fatal("an edit cannot empty a field the current stage requires")
+	}
+}
+
 func TestPlanOpportunityMove(t *testing.T) {
 	source := testPipeline(1, CrmPipelineMember{UserID: 7, Level: PipelineLevelEdit}, CrmPipelineMember{UserID: 8, Level: PipelineLevelView})
 	target := testPipeline(2, CrmPipelineMember{UserID: 7, Level: PipelineLevelEdit})
-	target.Fields = []CrmPipelineField{{FieldID: 4, Required: true}}
+	target.Fields = []CrmPipelineField{{FieldID: 4, RequiredFromStageID: 1}}
 	opportunity := CrmOpportunity{ID: 1, PipelineID: 1, StageID: 1, Probability: 33}
 
 	moved, log, err := PlanOpportunityMove(opportunity, source, source, 2, 7, 500)

@@ -2,7 +2,7 @@
 schema: 1
 page_id: system.observability
 route: /system/observability
-title: Observability (Observabilidad)
+title: Services (Servicios)
 status: implemented
 visibility: saas
 description_en: >-
@@ -15,13 +15,15 @@ description_es: >-
   horas. Filtrar por método, ruta, texto de error o línea de código para hallar errores repetidos.
 ---
 
-# Observability (Observabilidad)
+# Services (Servicios)
 
 <!-- DOC-ID: page-purpose -->
 ## Page purpose
 
-Observability (`Observabilidad`) monitors recent backend API activity and failures across the SaaS
-platform. Open **System → Observability (Sistema → Observabilidad)** at `/system/observability`.
+Services (`Servicios`), in the Observability (`Observabilidad`) menu, monitors recent backend API
+activity and failures across the SaaS platform. Open **System → Observability → Services (Sistema →
+Observabilidad → Servicios)** at `/system/observability`. Per-company credits, refusals and devices
+are in the sibling page Credit Usage (`Consumo Créditos`).
 This page is visible only to the company that administers the SaaS platform; it is not a tenant-level
 request log or the historical company credit report.
 

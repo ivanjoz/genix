@@ -113,7 +113,7 @@ type CrmPipelineStage struct {
 
 type CrmPipelineField struct {
 	FieldID  int16 `cb:"1"`
-	Required bool  `cb:"2"`
+	RequiredFromStageID int16 `cb:"2"` // 0 = optional; see CRM_REPORTS_QUOTES_PLAN.md §4.1
 }
 
 type CrmPipelineMember struct {

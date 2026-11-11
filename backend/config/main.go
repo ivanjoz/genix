@@ -17,6 +17,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.system-metrics-stream":       GetSystemMetricsStream,
 	"GET.server-metrics":              GetServerMetrics,
 	"GET.observability":               GetObservability,
+	"GET.credit-consumption":          GetCreditConsumption,
 	"GET.company-credit-usage-report": GetCompanyCreditUsageReport,
 	"GET.company-credit-usage":        GetCompanyCreditUsage,
 	"GET.company-users-by-ids":        GetCompanyUsersByIDs,
@@ -25,5 +26,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.request-errors-by-ids":       GetRequestErrorsByIDs,
 	"GET.system-memory-packages":      GetSystemMemoryPackages,
 	"GET.credit-usage":                GetCreditUsage,
+	"GET.sent-emails":                 GetSentEmails,
+	"GET.sent-email":                  GetSentEmail,
 	"GET.records-by-ids":              GetTableRecordsByIDs,
 }

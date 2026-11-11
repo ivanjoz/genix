@@ -88,6 +88,16 @@ func ApplyPipelineEdit(stored, payload CrmPipeline, stageHoldsOpenOpportunities 
 		if stage.ForecastCategory < ForecastCategoryPipeline || stage.ForecastCategory > ForecastCategoryCommit {
 			return CrmPipeline{}, fmt.Errorf("La categoría de forecast de la etapa %q no es válida (1 pipeline, 2 mejor caso, 3 compromiso).", stage.Name)
 		}
+		standardFieldsSeen := map[int8]bool{}
+		for _, standardField := range stage.RequiredStandardFields {
+			if standardField != StandardFieldAmount && standardField != StandardFieldExpectedCloseDate {
+				return CrmPipeline{}, fmt.Errorf("El campo estándar %d de la etapa %q no es válido (1 monto, 2 cierre estimado).", standardField, stage.Name)
+			}
+			if standardFieldsSeen[standardField] {
+				return CrmPipeline{}, fmt.Errorf("El campo estándar %d está repetido en la etapa %q.", standardField, stage.Name)
+			}
+			standardFieldsSeen[standardField] = true
+		}
 		if stage.ID == 0 {
 			stage.ID = nextStageID
 			nextStageID++
@@ -98,6 +108,11 @@ func ApplyPipelineEdit(stored, payload CrmPipeline, stageHoldsOpenOpportunities 
 			return CrmPipeline{}, fmt.Errorf("La etapa %d está repetida.", stage.ID)
 		}
 		payloadStageIDs[stage.ID] = true
+		taskTemplates, err := normalizeTaskTemplates(stage.TaskTemplates, storedTemplatesOfStage(stored, stage.ID), stage.Name)
+		if err != nil {
+			return CrmPipeline{}, err
+		}
+		stage.TaskTemplates = taskTemplates
 		if stage.Status != CrmStatusDeleted {
 			stage.Status = CrmStatusActive
 			activeStageCount++
@@ -135,6 +150,11 @@ func ApplyPipelineEdit(stored, payload CrmPipeline, stageHoldsOpenOpportunities 
 			return CrmPipeline{}, fmt.Errorf("El campo personalizado %d está repetido.", field.FieldID)
 		}
 		seenFieldIDs[field.FieldID] = true
+		// The stage a field is required from must stay active: a soft-deleted one would silently
+		// drop the rule. A new pipeline's stages get IDs 1..n in order, so those may be named too.
+		if field.RequiredFromStageID != 0 && savedStatusByID[field.RequiredFromStageID] != CrmStatusActive {
+			return CrmPipeline{}, fmt.Errorf("El campo personalizado %d es obligatorio desde una etapa que no existe o fue eliminada.", field.FieldID)
+		}
 	}
 
 	goalPeriodType := payload.GoalPeriodType
@@ -151,6 +171,16 @@ func ApplyPipelineEdit(stored, payload CrmPipeline, stageHoldsOpenOpportunities 
 	saved.SortOrder, saved.Stages, saved.Fields = payload.SortOrder, savedStages, payload.Fields
 	saved.Status = CrmStatusActive
 	return saved, nil
+}
+
+// storedTemplatesOfStage returns the stored task templates of a stage (none for a new one).
+func storedTemplatesOfStage(stored CrmPipeline, stageID int16) []CrmStageTaskTemplate {
+	for _, storedStage := range stored.Stages {
+		if storedStage.ID == stageID {
+			return storedStage.TaskTemplates
+		}
+	}
+	return nil
 }
 
 // ValidatePipelineMembers checks a POST.crm-pipeline-members list: known active users, levels 1–3,

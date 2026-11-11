@@ -6,10 +6,10 @@ import { CrmPipelinesService } from '#services/crm/crm-pipeline.svelte.ts'
 import { CrmPipelineOpportunityStatusService } from '#services/crm/crm-pipeline-status.svelte.ts'
 import { getCrmReportScope, type ICrmReportScope } from '#services/crm/crm-reports.svelte.ts'
 import { UsuariosService } from '../../security/users-profiles/users-profiles.svelte'
-import { buildTimelineCards, filterTimelineCards, packTimelineLanes, type OpportunityInfo, type TimelineDateMode } from './timeline.ts'
+import { buildTimelineCards, filterTimelineCards, groupCardsBySeller, type OpportunityInfo, type TimelineDateMode } from './timeline.ts'
 
-/** Days shown by default: the last month up to today. */
-const DEFAULT_WINDOW_DAYS = 30
+/** Days shown by default, today included. */
+const DEFAULT_WINDOW_DAYS = 45
 
 /**
  * State of the timeline page. The pipeline's opportunity paths sync by delta; the titles and
@@ -24,14 +24,14 @@ export class CrmTimelineState {
   selectedPipelineID = $state(0)
   statusRows = $state<CrmPipelineOpportunityStatusService | undefined>()
   opportunities = $state(new Map<number, OpportunityInfo>())
-  filters = $state({ fromDay: todayUnixDay() - DEFAULT_WINDOW_DAYS, toDay: todayUnixDay(), mode: 'start' as TimelineDateMode })
+  filters = $state({ fromDay: todayUnixDay() - (DEFAULT_WINDOW_DAYS - 1), toDay: todayUnixDay(), mode: 'start' as TimelineDateMode })
   ownerIDs = $state<number[]>([])
 
   selectedPipeline = $derived(this.pipelines.records.find((pipeline) => pipeline.ID === this.selectedPipelineID))
-  cards = $derived(buildTimelineCards(this.statusRows?.records ?? [], this.opportunities, this.today))
+  stageColors = $derived(new Map((this.selectedPipeline?.Stages ?? []).map((stage) => [stage.ID, stage.Color])))
+  cards = $derived(buildTimelineCards(this.statusRows?.records ?? [], this.opportunities, this.stageColors, this.today))
   visibleCards = $derived(filterTimelineCards(this.cards, this.filters.mode, this.filters.fromDay, this.filters.toDay, this.ownerIDs))
-  sellers = $derived(packTimelineLanes(this.visibleCards, this.filters.fromDay, this.filters.toDay)
-    .sort((left, right) => this.ownerName(left.ownerID).localeCompare(this.ownerName(right.ownerID))))
+  sellers = $derived(groupCardsBySeller(this.visibleCards, (userID) => this.ownerName(userID)))
 
   async loadScope() {
     try {

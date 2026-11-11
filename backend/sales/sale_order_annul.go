@@ -80,6 +80,7 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 			return core.Err("No se encontró la venta a anular.")
 		}
 		sale = saleOrders[0]
+		storedSale := saleOrders[0]
 		if sale.Status == types.OrderStatusAnnulled {
 			return core.Err("La venta ya está anulada.")
 		}
@@ -177,7 +178,8 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		); err != nil {
 			return core.Err("Error al anular la venta:", err)
 		}
-		return nil
+		// The annulled sale's purchase and payments leave its client's week, from the sale's day.
+		return applyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(&storedSale, &sale))
 	})
 	if err != nil {
 		return req.MakeErr(err)

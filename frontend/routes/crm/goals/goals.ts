@@ -88,6 +88,23 @@ export const scopeIndexOfDay = (periodType: number, year: number, unixDay: numbe
   return Math.max(weeks.findIndex((week) => weekOfDay(week.firstDay) === weekOfDay(unixDay)), 0)
 }
 
+/**
+ * Each seller's summed target of one metric over the goal periods that START inside a day range
+ * (a week straddling the range's first day belongs to the range before). In the stored scale.
+ */
+export const goalTargetsInRange = (
+  goals: ICrmGoal[], pipelineID: number, metric: number, periodType: number, fromDay: number, toDay: number,
+): Map<number, number> => {
+  const targetByUser = new Map<number, number>()
+  for (const goal of goals) {
+    if (goal.PipelineID !== pipelineID || goal.Metric !== metric) continue
+    const [firstDay] = goalPeriodDays(periodType, goal.Period)
+    if (firstDay < fromDay || firstDay > toDay) continue
+    targetByUser.set(goal.UserID, (targetByUser.get(goal.UserID) ?? 0) + goal.Target)
+  }
+  return targetByUser
+}
+
 export const cellKey = (userID: number, period: number) => `${userID}|${period}`
 
 /** Stored target of one cell, in display units. */

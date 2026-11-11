@@ -77,11 +77,13 @@ func GetCrmOpportunityActivity(req *core.HandlerArgs) core.HandlerResponse {
 // PostCrmOpportunityActivity appends one entry to an opportunity's timeline. Anyone who can see
 // the pipeline may write it, even without the right to edit the opportunity.
 func PostCrmOpportunityActivity(req *core.HandlerArgs) core.HandlerResponse {
-	payload := types.CrmActivity{}
-	if err := json.Unmarshal([]byte(*req.Body), &payload); err != nil {
+	savePayload := types.CrmActivitySavePayload{}
+	if err := json.Unmarshal([]byte(*req.Body), &savePayload); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	if _, err := authorizeOpportunityView(req, payload.OpportunityID); err != nil {
+	payload := savePayload.CrmActivity
+	opportunity, err := authorizeOpportunityView(req, payload.OpportunityID)
+	if err != nil {
 		return req.MakeErr(err)
 	}
 	companyTypeIsActive := false
@@ -92,13 +94,32 @@ func PostCrmOpportunityActivity(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		companyTypeIsActive = activityType.Status == types.CrmStatusActive
 	}
-	activity, err := types.PlanActivity(payload, req.User.CompanyID, companyTypeIsActive, req.User.ID, core.SUnixTime())
+	now := core.SUnixTime()
+	activity, err := types.PlanActivity(payload, req.User.CompanyID, opportunity.PipelineID, companyTypeIsActive, req.User.ID, now)
 	if err != nil {
 		return req.MakeErr(err)
 	}
 	records := []types.CrmActivity{activity}
-	if err := db.Insert(&records); err != nil {
-		return req.MakeErr("Error al guardar la actividad:", err)
+	saveError := db.RunTransaction(func(transaction *db.Transaction) error {
+		if err := db.InsertIn(transaction, &records); err != nil {
+			return err
+		}
+		if savePayload.TaskID == 0 {
+			return nil
+		}
+		// The activity fulfils a task: both are written together, or neither.
+		task, err := lockTask(transaction, req.User.CompanyID, savePayload.TaskID)
+		if err != nil {
+			return err
+		}
+		doneTask, err := types.PlanActivityTaskDone(task, records[0], types.TaskKindActivity, req.User.ID, now)
+		if err != nil {
+			return err
+		}
+		return updateClosedTask(transaction, doneTask)
+	})
+	if saveError != nil {
+		return req.MakeErr("Error al guardar la actividad:", saveError)
 	}
 	return req.MakeResponse(records[0])
 }
@@ -160,6 +181,26 @@ func authorizeOpportunityView(req *core.HandlerArgs, opportunityID int32) (types
 		return types.CrmOpportunity{}, fmt.Errorf("No tiene acceso a este pipeline.")
 	}
 	return opportunity, nil
+}
+
+// loadActiveActivityTypeIDs answers which of the company's own activity types (by ID) are active.
+func loadActiveActivityTypeIDs(companyID int32, activityTypeIDs []int16) (map[int16]bool, error) {
+	activeIDs := map[int16]bool{}
+	if len(activityTypeIDs) == 0 {
+		return activeIDs, nil
+	}
+	activityTypes := []types.CrmActivityType{}
+	query := db.Query(&activityTypes)
+	query.Select(query.ID, query.Status).CompanyID.Equals(companyID).ID.In(activityTypeIDs...)
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("error al leer los tipos de actividad: %v", err)
+	}
+	for _, activityType := range activityTypes {
+		if activityType.Status == types.CrmStatusActive {
+			activeIDs[activityType.ID] = true
+		}
+	}
+	return activeIDs, nil
 }
 
 func loadActivityType(companyID int32, activityTypeID int16) (types.CrmActivityType, error) {

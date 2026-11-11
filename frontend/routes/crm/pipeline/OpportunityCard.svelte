@@ -28,7 +28,9 @@
     {#if opportunity.OwnerUserID}
       <Avatar name={ownerName} colorSeed={opportunity.OwnerUserID} />
     {:else}<span></span>{/if}
-    {#if isStale}<span class="text-red-fg">{tr('Stale|Estancada')}</span>{/if}
+    {#if opportunity.PendingApprovalTaskID}
+      <span class="text-amber-700 flex items-center gap-4"><i class="icon-[fa--gavel]"></i>{tr('Pending approval|Por aprobar')}</span>
+    {:else if isStale}<span class="text-red-fg">{tr('Stale|Estancada')}</span>{/if}
   </div>
   {#if previousLabel}
     <div class="text-fg-muted">{tr('From|Desde')} {previousLabel}</div>

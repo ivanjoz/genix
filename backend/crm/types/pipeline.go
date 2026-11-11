@@ -64,11 +64,42 @@ type CrmPipelineStage struct {
 	// ForecastCategory is ForecastCategoryPipeline / BestCase / Commit: how the forecast counts
 	// the open opportunities sitting in this stage.
 	ForecastCategory int8 `cb:"7"`
+	// RequiredStandardFields are the standard fields (StandardField*) an opportunity must have to
+	// enter this stage or any later one by board position, so skipping the stage does not skip the rule.
+	RequiredStandardFields []int8 `cb:"8"`
+	// ApproverUserID is the user who must approve a move into this stage (0 = no approval): the
+	// move waits as an approval task instead of happening (plan §4.2).
+	ApproverUserID int32 `cb:"9"`
+	// TaskTemplates become pending tasks of the opportunity each time it enters the stage. They
+	// never run on their own: a user executes or dismisses them from the Tasks page (plan §5).
+	TaskTemplates []CrmStageTaskTemplate `cb:"10"`
 }
 
+// CrmStageTaskTemplate is one task a stage proposes when an opportunity enters it: log an activity,
+// or send an email template. "Send quote" joins with quotes.
+type CrmStageTaskTemplate struct {
+	ID              int16  `cb:"1"` // stable inside the stage, allocated by the server
+	Kind            int8   `cb:"2"` // TaskKindActivity or TaskKindSendEmail
+	Title           string `cb:"3"`
+	ActivityTypeID  int16  `cb:"4"` // TaskKindActivity: the activity type asked for (system or company type)
+	DueDays         int16  `cb:"5"` // due = day of entering + DueDays; 0 = the same day
+	AssignTo        int8   `cb:"6"` // TaskAssignOwner or TaskAssignUser
+	AssignUserID    int32  `cb:"7"` // when AssignTo is TaskAssignUser
+	EmailTemplateID int16  `cb:"8"` // TaskKindSendEmail: the template the email starts from
+}
+
+// Standard opportunity fields a stage can require (CrmPipelineStage.RequiredStandardFields). The
+// custom-field catalog only holds custom fields, so these two need their own list. Persisted IDs.
+const (
+	StandardFieldAmount            int8 = 1
+	StandardFieldExpectedCloseDate int8 = 2
+)
+
 type CrmPipelineField struct {
-	FieldID  int16 `cb:"1"`
-	Required bool  `cb:"2"`
+	FieldID int16 `cb:"1"`
+	// RequiredFromStageID: 0 = optional; otherwise the field is required to enter that stage or any
+	// later one by board position. The pipeline's first stage means "required from creation".
+	RequiredFromStageID int16 `cb:"2"`
 }
 
 type CrmPipelineMember struct {

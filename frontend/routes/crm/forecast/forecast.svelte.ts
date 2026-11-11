@@ -1,31 +1,34 @@
 import { notifyFailure } from '@genix/ui/notify'
 import { todayUnixDay } from '#libs/helpers.ts'
 import { GOAL_PERIOD } from '#services/crm/crm-goal-metric.ts'
-import { CrmGoalsService } from '#services/crm/crm-goal.svelte.ts'
 import {
   getCrmForecastSubmissions, postCrmForecastSubmission,
   type ICrmForecastSubmission, type ICrmForecastSubmissionPayload,
 } from '#services/crm/crm-forecast.svelte.ts'
-import { CrmTeamsService } from '#services/crm/crm-team.svelte.ts'
 import { periodOfDay, periodsOfYear } from '../goals/goals.ts'
 import { CrmReportsState, currentShortYear } from '../reports/reports.svelte.ts'
 
 /**
- * Data of the Forecast page. It reuses the reports state for scope, pipelines, users, today's open
- * opportunities and the stage log of the month (what is already won), and adds goals, teams and
- * the forecasts submitted for the month.
+ * Data of the Forecast page. It reuses the reports state for scope, pipelines, users, teams, goals,
+ * today's open opportunities and the stage log of the month (what is already won), and adds the
+ * forecasts submitted for the month.
  */
 export class CrmForecastState {
   report = new CrmReportsState()
-  teams = new CrmTeamsService(true)
-  goals = new CrmGoalsService(true)
 
   /** The goal period being forecast: a YYMM month or a week, by the pipeline's GoalPeriodType. */
   period = $state(0)
   submissions = $state<ICrmForecastSubmission[]>([])
 
   periodType = $derived(this.report.selectedPipeline?.GoalPeriodType || GOAL_PERIOD.MONTHLY)
-  periods = $derived(periodsOfYear(this.periodType, this.report.year))
+  /** The forecast year is the start year of the reports state: its log loads from there to today. */
+  year = $derived(this.report.yearFrom)
+  periods = $derived(periodsOfYear(this.periodType, this.year))
+
+  selectYear(year: number) {
+    this.report.periodFrom = year * 100 + 1
+    this.report.periodTo = year * 100 + 12
+  }
 
   /** Picks the period holding today, or the year's first one when today is in another year. */
   selectDefaultPeriod() {

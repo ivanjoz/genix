@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ICrmForecastSubmission } from '#services/crm/crm-forecast.svelte.ts'
 import type { ICrmPipelineStage } from '#services/crm/crm-pipeline.svelte.ts'
 import { periodFirstDay } from '../reports/reports.ts'
-import { attainmentPercent, computeForecast, latestSubmission } from './forecast.ts'
+import { attainmentPercent, computeForecast, latestSubmission, submissionBeforePeriod, submissionHistory } from './forecast.ts'
 
 const stage = (ID: number, ForecastCategory: number): ICrmPipelineStage =>
   ({ ID, Name: `s${ID}`, Color: '', Probability: 0, StaleDays: 0, Status: 1, ForecastCategory })
@@ -37,6 +37,17 @@ describe('forecast', () => {
     expect(latestSubmission(submissions, 4, 0)?.ID).toBe(2)
     expect(latestSubmission(submissions, 4, 7)?.ID).toBe(3)
     expect(latestSubmission(submissions, 9, 0)).toBeUndefined()
+  })
+
+  it('finds the last submission made before the period started', () => {
+    // SUnixTime of noon of a UnixDay.
+    const timeOfDay = (unixDay: number) => Math.floor((unixDay * 86400 + 43200 - 1e9) / 2)
+    const firstDay = periodFirstDay(2602)
+    const make = (ID: number, unixDay: number) => ({ ID, UserID: 4, TeamID: 0, Created: timeOfDay(unixDay) }) as ICrmForecastSubmission
+    const history = submissionHistory([make(3, firstDay + 2), make(1, firstDay - 5), make(2, firstDay - 1)], 4, 0)
+    expect(history.map((submission) => submission.ID)).toEqual([1, 2, 3])
+    expect(submissionBeforePeriod(history, firstDay)?.ID).toBe(2)
+    expect(submissionBeforePeriod(history.slice(2), firstDay)).toBeUndefined()
   })
 
   it('has no attainment without a goal', () => {

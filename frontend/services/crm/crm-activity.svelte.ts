@@ -21,6 +21,9 @@ export interface ICrmActivity {
   Attachments?: IAttachment[]
   AuthorID: number
   Created: number
+  /** The opportunity's pipeline when written, and the YYMM of Created: the report cache-group key. */
+  PipelineID: number
+  Period: number
 }
 
 export class CrmActivityTypesService extends CrmCatalogService<ICrmActivityType> {
@@ -33,8 +36,9 @@ export const postCrmActivityType = (activityTypes: CrmActivityTypesService, acti
 export const getCrmOpportunityActivity = (opportunityID: number): Promise<ICrmActivity[]> =>
   GET({ route: `crm-opportunity-activity?opportunity-id=${opportunityID}` })
 
-export const postCrmOpportunityActivity = (activity: Partial<ICrmActivity>): Promise<ICrmActivity> =>
-  POST({ data: activity, route: 'crm-opportunity-activity' })
+/** With taskID the activity completes that pending activity task in the same transaction. */
+export const postCrmOpportunityActivity = (activity: Partial<ICrmActivity>, taskID = 0): Promise<ICrmActivity> =>
+  POST({ data: { ...activity, TaskID: taskID }, route: 'crm-opportunity-activity' })
 
 // uploadCrmAttachment sends one file, base64, to the opportunity's folder. It becomes an activity's
 // file when the activity listing it is saved.

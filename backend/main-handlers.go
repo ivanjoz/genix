@@ -104,6 +104,8 @@ var saasOnlyRoutes = map[string]bool{
 	"GET.cron-actions-scheduled":      true,
 	"POST.hr-legal-parameters":        true,
 	"POST.hr-afp-rates":               true,
+	"GET.sent-emails":                 true,
+	"GET.sent-email":                  true,
 }
 
 // Rutas exentas del cobro y del límite de créditos: son las que se usan para *ver o corregir* el

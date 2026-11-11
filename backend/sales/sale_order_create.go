@@ -55,6 +55,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// What the sale was paid before this request: 0 makes this payment its first one, the only kind
 	// that can settle it the same day (finance.IsSameDaySettlement).
 	paidBefore := int32(0)
+	// storedSale is the sale as it was before this update (nil on create): its client week rows
+	// move by what this write changes from it.
+	var storedSale *types.SaleOrder
 
 	if isUpdate {
 		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
@@ -69,6 +72,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		sale = existingSales[0]
+		storedSale = &existingSales[0]
 		sale.ActionsIncluded = saleRequest.ActionsIncluded
 		// Preserve existing payment cashBank on delivery-only updates (payload may omit LastPaymentCajaID).
 		if saleRequest.LastPaymentCajaID > 0 {
@@ -315,6 +319,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			if err := logistics.ApplyMovimientosIn(transaction, req, stockMovements); err != nil {
 				return core.Err("Error al procesar la salida de almacén:", err)
 			}
+		}
+		if err := applyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(storedSale, &sale)); err != nil {
+			return err
 		}
 		if !isUpdate {
 			return nil

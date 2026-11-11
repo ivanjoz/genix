@@ -287,6 +287,12 @@ func CheckUser(req *HandlerArgs, access int) *UsuarioToken {
 	}
 
 	tokenBase64 := strings.TrimSpace(strings.TrimPrefix(userToken, "Bearer "))
+	// The browser may append its device signature as "<token>.<signature>" for fareward's device
+	// cap (fareward DEVICE_SIGNATURE.md). The token's alphabet has no ".", so the first one is the
+	// separator; the signature is not part of what the token's hash covers.
+	if separator := strings.IndexByte(tokenBase64, '.'); separator >= 0 {
+		tokenBase64 = tokenBase64[:separator]
+	}
 	if len(tokenBase64) < 8 {
 		user.Error = "No se encontró la información del user."
 		return &user

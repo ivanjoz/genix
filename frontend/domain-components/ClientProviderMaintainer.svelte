@@ -16,8 +16,11 @@
   import { CountryCitiesService } from '#services/business/country-cities.svelte.ts'
   import { IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '#services/crm/identity-doc.ts'
   import {
-    ClientProviderService, PersonType, postClientProviders, type IClientProvider,
+    ClientProviderService, ClientProviderType, PersonType, postClientProviders, type IClientProvider,
   } from '#services/crm/client-provider.svelte.ts'
+  import { ClientWeekSalesService } from '#services/sales/client-week-sales.svelte.ts'
+  import ClientWeekSalesBars from '#domain/ClientWeekSalesBars.svelte'
+  import { CLIENT_WEEKS_SHOWN, clientWeekBarsByClient, lastIsoWeeks } from '#domain/client-week-sales.ts'
 
   interface IClientProvidersViewProps {
     clientProviderType: number
@@ -49,6 +52,13 @@
     })
   })
 
+  // Customers show their purchases of the last weeks; suppliers have no sales.
+  const isClientList = $derived(clientProviderType === ClientProviderType.CLIENT)
+  let clientWeekSalesService = $state<ClientWeekSalesService | null>(null)
+  const shownWeeks = lastIsoWeeks(new Date(), CLIENT_WEEKS_SHOWN)
+  const emptyWeekBars = shownWeeks.map((week) => ({ week, purchases: 0, unpaid: 0 }))
+  const weekBarsByClient = $derived(clientWeekBarsByClient(clientWeekSalesService?.records || [], shownWeeks))
+
   const personTypeOptions = [
     { ID: PersonType.PERSON, Name: 'Person|Persona' },
     { ID: PersonType.COMPANY, Name: 'Company|Empresa' },
@@ -57,6 +67,7 @@
   $effect(() => {
     // Instantiate the shared client-provider source from the page config so both routes reuse the same data flow.
     clientProviderService = new ClientProviderService(clientProviderType, true)
+    clientWeekSalesService = isClientList ? new ClientWeekSalesService(true) : null
   })
 
   function createEmptyClientProviderForm(): IClientProvider {
@@ -175,7 +186,7 @@
     }
   }
 
-  const columns: ITableColumn<IClientProvider>[] = [
+  const columns: ITableColumn<IClientProvider>[] = $derived([
     {
       header: 'ID',
       headerCss: 'w-64',
@@ -241,7 +252,14 @@
       getValue: (clientProviderRecord) => formatTime(clientProviderRecord.upd, 'Y-m-d h:n') as string,
       mobile: { order: 7, css: 'col-span-24', labelLeft: 'Actualizado:' },
     },
-  ]
+    // Drawn by the cellRenderer snippet below (the column's id selects it).
+    ...(isClientList ? [{
+      id: 'week-sales',
+      header: `Purchases ${CLIENT_WEEKS_SHOWN} weeks|Compras ${CLIENT_WEEKS_SHOWN} semanas`,
+      headerCss: 'w-180',
+      css: 'px-8',
+    }] : []),
+  ])
 </script>
 
 <Page title={pageTitle}>
@@ -270,7 +288,13 @@
         onRowClick={(selectedClientProvider) => {
           openEditClientProviderLayer(selectedClientProvider)
         }}
-      />
+      >
+        {#snippet cellRenderer(clientProviderRecord: IClientProvider, column: ITableColumn<IClientProvider>)}
+          {#if column.id === 'week-sales'}
+            <ClientWeekSalesBars bars={weekBarsByClient.get(clientProviderRecord.ID) || emptyWeekBars} />
+          {/if}
+        {/snippet}
+      </VTable>
     </div>
   </Layer>
 

@@ -227,7 +227,7 @@ runtime and `/proc` state at the moment of the request.
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **System → Observability (Observabilidad)** at `/system/observability`: monitors backend API
+- **System → Observability → Services (Observabilidad → Servicios)** at `/system/observability`: monitors backend API
   routes — credits, estimated/failed requests, and repeated errors — rather than machine/service
   resource usage. Shares the "Server Panel y Observabilidad" catalog access with this page's
   Dashboard tab.

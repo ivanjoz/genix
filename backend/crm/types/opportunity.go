@@ -36,18 +36,20 @@ type CrmOpportunity struct {
 	StageEnteredTime  int32  `cb:"15"` // SUnixTime; drives the "stale" flag
 	// Where the opportunity was before its last move, denormalized from the stage log so the
 	// card can show "from <pipeline> · <stage>" without reading the log. 0 = never moved.
-	PreviousPipelineID int16                       `cb:"16"`
-	PreviousStageID    int16                       `cb:"17"`
-	CustomValues       []CrmCustomFieldValue       `cb:"18"`
-	Summary            []CrmOpportunityStageSumary `cb:"26"`
-	Created            int32                       `cb:"19"`
-	CreatedBy          int32                       `cb:"20"`
-	Status             int8                        `json:"ss" cb:"ss,21"`
-	Updated            int32                       `json:"upd" cb:"upd,22"`
-	Version            int16                       `json:"ver" cb:"ver,23"`
-	UpdatedBy          int32                       `cb:"24"`
+	PreviousPipelineID int16                 `cb:"16"`
+	PreviousStageID    int16                 `cb:"17"`
+	CustomValues       []CrmCustomFieldValue `cb:"18"`
+	Created            int32                 `cb:"19"`
+	CreatedBy          int32                 `cb:"20"`
+	Status             int8                  `json:"ss" cb:"ss,21"`
+	Updated            int32                 `json:"upd" cb:"upd,22"`
+	Version            int16                 `json:"ver" cb:"ver,23"`
+	UpdatedBy          int32                 `cb:"24"`
 	// Metadata is set only on the metadata record a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,25"`
+	// PendingApprovalTaskID is the approval task a move into a gated stage is waiting on (0 = none).
+	// While set, the opportunity can be neither moved nor closed.
+	PendingApprovalTaskID int32 `cb:"26"`
 }
 
 type CrmOpportunityTable struct {
@@ -76,12 +78,8 @@ type CrmOpportunityTable struct {
 	Updated            db.Col[*CrmOpportunityTable, int32]
 	Version            db.Col[*CrmOpportunityTable, int16]
 	UpdatedBy          db.Col[*CrmOpportunityTable, int32]
-}
 
-type CrmOpportunityStageSumary struct {
-	PipelineID int16 `json:"p" cb:"1"`
-	StageID    int16 `json:"s" cb:"2"`
-	DaysPassed   int16 `json:"d" cb:"3"`
+	PendingApprovalTaskID db.Col[*CrmOpportunityTable, int32]
 }
 
 func (e *CrmOpportunity) SelfParse() {
@@ -96,7 +94,9 @@ func (e CrmOpportunityTable) GetSchema() db.TableSchema {
 		ID:        66,
 		Name:      "crm_opportunities",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID.Autoincrement(0)),
+		// The reports resolve titles and owners by ID (GET.crm-opportunity-ids).
+		CacheByIDs: true,
+		Keys:       db.Cols(e.ID.Autoincrement(0)),
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Values: []int64{1, 2}},
 			{Col: e.PipelineID, Min: 1, Max: 1<<15 - 1},

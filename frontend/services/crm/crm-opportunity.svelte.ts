@@ -30,6 +30,8 @@ export interface ICrmOpportunity {
   PreviousPipelineID: number
   PreviousStageID: number
   CustomValues: ICrmCustomFieldValue[]
+  /** The approval task the card waits on (0 = none): the card cannot move or close meanwhile. */
+  PendingApprovalTaskID: number
   CreatedBy: number
   ss: number
   upd: number

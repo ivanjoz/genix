@@ -43,6 +43,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[coreTypes.CreditUsageCompany](),
 		db.MakeController[coreTypes.CreditUsageUser](),
 		db.MakeController[coreTypes.RequestError](),
+		db.MakeController[coreTypes.SentEmail](),
 		db.MakeController[coreTypes.ServerMetric](),
 		db.MakeController[coreTypes.UsageLog](),
 		db.MakeController[coreTypes.User](),
@@ -52,6 +53,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[crmTypes.CrmActivity](),
 		db.MakeController[crmTypes.CrmActivityType](),
 		db.MakeController[crmTypes.CrmCustomField](),
+		db.MakeController[crmTypes.CrmEmailTemplate](),
 		db.MakeController[crmTypes.CrmForecastSubmission](),
 		db.MakeController[crmTypes.CrmGoal](),
 		db.MakeController[crmTypes.CrmLostReason](),
@@ -59,6 +61,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[crmTypes.CrmOpportunityStageLog](),
 		db.MakeController[crmTypes.CrmPipeline](),
 		db.MakeController[crmTypes.CrmPipelineOpportunityStatus](),
+		db.MakeController[crmTypes.CrmTask](),
 		db.MakeController[crmTypes.CrmTeam](),
 		db.MakeController[financeTypes.CashBank](),
 		db.MakeController[financeTypes.CashBankMovement](),
@@ -97,6 +100,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[projectsTypes.StoryActivity](),
 		db.MakeController[projectsTypes.StoryAssignee](),
 		db.MakeController[projectsTypes.StoryDetail](),
+		db.MakeController[salesTypes.ClientWeekSales](),
 		db.MakeController[salesTypes.SaleOrder](),
 		db.MakeController[salesTypes.SalesPlanning](),
 		db.MakeController[salesTypes.SeasonalityCurve](),
@@ -132,6 +136,7 @@ func init() {
 	db.RegisterTableFactory("credit_usage_company", func() db.Table { return db.MakeTable[coreTypes.CreditUsageCompany]() })
 	db.RegisterTableFactory("credit_usage_user", func() db.Table { return db.MakeTable[coreTypes.CreditUsageUser]() })
 	db.RegisterTableFactory("request_errors", func() db.Table { return db.MakeTable[coreTypes.RequestError]() })
+	db.RegisterTableFactory("sent_emails", func() db.Table { return db.MakeTable[coreTypes.SentEmail]() })
 	db.RegisterTableFactory("server_metrics", func() db.Table { return db.MakeTable[coreTypes.ServerMetric]() })
 	db.RegisterTableFactory("usage_log", func() db.Table { return db.MakeTable[coreTypes.UsageLog]() })
 	db.RegisterTableFactory("users", func() db.Table { return db.MakeTable[coreTypes.User]() })
@@ -141,6 +146,7 @@ func init() {
 	db.RegisterTableFactory("crm_activity", func() db.Table { return db.MakeTable[crmTypes.CrmActivity]() })
 	db.RegisterTableFactory("crm_activity_types", func() db.Table { return db.MakeTable[crmTypes.CrmActivityType]() })
 	db.RegisterTableFactory("crm_custom_fields", func() db.Table { return db.MakeTable[crmTypes.CrmCustomField]() })
+	db.RegisterTableFactory("crm_email_templates", func() db.Table { return db.MakeTable[crmTypes.CrmEmailTemplate]() })
 	db.RegisterTableFactory("crm_forecast_submissions", func() db.Table { return db.MakeTable[crmTypes.CrmForecastSubmission]() })
 	db.RegisterTableFactory("crm_goals", func() db.Table { return db.MakeTable[crmTypes.CrmGoal]() })
 	db.RegisterTableFactory("crm_lost_reasons", func() db.Table { return db.MakeTable[crmTypes.CrmLostReason]() })
@@ -148,6 +154,7 @@ func init() {
 	db.RegisterTableFactory("crm_opportunity_stage_log", func() db.Table { return db.MakeTable[crmTypes.CrmOpportunityStageLog]() })
 	db.RegisterTableFactory("crm_pipelines", func() db.Table { return db.MakeTable[crmTypes.CrmPipeline]() })
 	db.RegisterTableFactory("crm_pipeline_opportunity_status", func() db.Table { return db.MakeTable[crmTypes.CrmPipelineOpportunityStatus]() })
+	db.RegisterTableFactory("crm_tasks", func() db.Table { return db.MakeTable[crmTypes.CrmTask]() })
 	db.RegisterTableFactory("crm_teams", func() db.Table { return db.MakeTable[crmTypes.CrmTeam]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
@@ -186,6 +193,7 @@ func init() {
 	db.RegisterTableFactory("projects_story_activity", func() db.Table { return db.MakeTable[projectsTypes.StoryActivity]() })
 	db.RegisterTableFactory("projects_story_assignee", func() db.Table { return db.MakeTable[projectsTypes.StoryAssignee]() })
 	db.RegisterTableFactory("projects_story_detail", func() db.Table { return db.MakeTable[projectsTypes.StoryDetail]() })
+	db.RegisterTableFactory("client_week_sales", func() db.Table { return db.MakeTable[salesTypes.ClientWeekSales]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })
 	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
 	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })

@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -84,10 +85,10 @@ func ApplyCustomFieldEdit(stored, payload CrmCustomField, hasStoredValues bool) 
 
 // ValidateCustomValues checks an opportunity's custom values against the catalog: the field
 // exists, the value uses the column of its type, options exist and are active, and every field
-// the pipeline marks as required is present. Values of fields the pipeline does not show are
-// allowed (they survive a move between pipelines). activeUserIDs is used for user fields.
+// the pipeline requires at the opportunity's stage is present. Values of fields the pipeline does
+// not show are allowed (they survive a move between pipelines). activeUserIDs is used for user fields.
 func ValidateCustomValues(values []CrmCustomFieldValue, catalog map[int16]CrmCustomField,
-	pipelineFields []CrmPipelineField, activeUserIDs map[int32]bool) error {
+	pipeline CrmPipeline, stageID int16, activeUserIDs map[int32]bool) error {
 
 	seenFieldIDs := map[int16]bool{}
 	for _, value := range values {
@@ -103,28 +104,107 @@ func ValidateCustomValues(values []CrmCustomFieldValue, catalog map[int16]CrmCus
 			return err
 		}
 	}
-	for _, pipelineField := range pipelineFields {
-		if pipelineField.Required && !seenFieldIDs[pipelineField.FieldID] {
-			return fmt.Errorf("El campo %q es obligatorio.", catalog[pipelineField.FieldID].Name)
+	for _, requiredFieldID := range requiredFieldIDsAtStage(pipeline, stageID) {
+		if !seenFieldIDs[requiredFieldID] {
+			return fmt.Errorf("El campo %q es obligatorio en esta etapa.", catalog[requiredFieldID].Name)
 		}
 	}
 	return nil
 }
 
-// MissingRequiredFields lists the required fields of a target pipeline the values do not cover,
-// so a refused move can tell the UI which ones to ask for.
-func MissingRequiredFields(values []CrmCustomFieldValue, pipelineFields []CrmPipelineField) []int16 {
+// requiredFieldIDsAtStage lists the custom fields an opportunity must have to be in the stage: the
+// ones required from that stage's position or an earlier one. A stage that is not active in the
+// pipeline requires nothing.
+func requiredFieldIDsAtStage(pipeline CrmPipeline, stageID int16) []int16 {
+	stagePosition := StagePosition(pipeline, stageID)
+	requiredFieldIDs := []int16{}
+	for _, pipelineField := range pipeline.Fields {
+		requiredFromPosition := StagePosition(pipeline, pipelineField.RequiredFromStageID)
+		if stagePosition > 0 && requiredFromPosition > 0 && stagePosition >= requiredFromPosition {
+			requiredFieldIDs = append(requiredFieldIDs, pipelineField.FieldID)
+		}
+	}
+	return requiredFieldIDs
+}
+
+// requiredStandardFieldsAtStage lists the standard fields (amount, expected close date) required to
+// be in the stage: the ones its own list or the list of any earlier stage names.
+func requiredStandardFieldsAtStage(pipeline CrmPipeline, stageID int16) []int8 {
+	requiredFields := []int8{}
+	for _, stage := range pipeline.Stages {
+		if stage.Status != CrmStatusActive {
+			continue
+		}
+		for _, standardField := range stage.RequiredStandardFields {
+			if !slices.Contains(requiredFields, standardField) {
+				requiredFields = append(requiredFields, standardField)
+			}
+		}
+		if stage.ID == stageID {
+			return requiredFields
+		}
+	}
+	return []int8{}
+}
+
+// MissingRequirements is what an opportunity still lacks to be in a stage.
+type MissingRequirements struct {
+	// FieldIDs are required custom fields with no value.
+	FieldIDs []int16
+	// StandardFields are required standard fields (StandardField*) that are empty.
+	StandardFields []int8
+}
+
+func (missing MissingRequirements) IsEmpty() bool {
+	return len(missing.FieldIDs) == 0 && len(missing.StandardFields) == 0
+}
+
+// MissingRequiredFields lists what the opportunity lacks to be in the stage of the pipeline, so a
+// refused move can tell the UI which fields to ask for. An empty amount or close date is zero.
+func MissingRequiredFields(pipeline CrmPipeline, stageID int16, opportunity CrmOpportunity) MissingRequirements {
 	present := map[int16]bool{}
-	for _, value := range values {
+	for _, value := range opportunity.CustomValues {
 		present[value.FieldID] = true
 	}
-	missing := []int16{}
-	for _, pipelineField := range pipelineFields {
-		if pipelineField.Required && !present[pipelineField.FieldID] {
-			missing = append(missing, pipelineField.FieldID)
+	missing := MissingRequirements{FieldIDs: []int16{}, StandardFields: []int8{}}
+	for _, requiredFieldID := range requiredFieldIDsAtStage(pipeline, stageID) {
+		if !present[requiredFieldID] {
+			missing.FieldIDs = append(missing.FieldIDs, requiredFieldID)
+		}
+	}
+	for _, standardField := range requiredStandardFieldsAtStage(pipeline, stageID) {
+		isEmpty := (standardField == StandardFieldAmount && opportunity.Amount == 0) ||
+			(standardField == StandardFieldExpectedCloseDate && opportunity.ExpectedCloseDate == 0)
+		if isEmpty {
+			missing.StandardFields = append(missing.StandardFields, standardField)
 		}
 	}
 	return missing
+}
+
+// checkStageRequirements refuses an opportunity that lacks what the stage requires; the message
+// names the missing standard fields and counts the custom ones (the UI knows which they are).
+func checkStageRequirements(pipeline CrmPipeline, stageID int16, opportunity CrmOpportunity) error {
+	missing := MissingRequiredFields(pipeline, stageID, opportunity)
+	if missing.IsEmpty() {
+		return nil
+	}
+	stageName := ""
+	if stage, isActive := FindActiveStage(pipeline, stageID); isActive {
+		stageName = stage.Name
+	}
+	missingNames := []string{}
+	for _, standardField := range missing.StandardFields {
+		if standardField == StandardFieldAmount {
+			missingNames = append(missingNames, "monto")
+		} else {
+			missingNames = append(missingNames, "cierre estimado")
+		}
+	}
+	if len(missing.FieldIDs) > 0 {
+		missingNames = append(missingNames, fmt.Sprintf("campos personalizados %v", missing.FieldIDs))
+	}
+	return fmt.Errorf("Faltan datos obligatorios para la etapa %q: %s.", stageName, strings.Join(missingNames, ", "))
 }
 
 func validateCustomValue(value CrmCustomFieldValue, field CrmCustomField, activeUserIDs map[int32]bool) error {

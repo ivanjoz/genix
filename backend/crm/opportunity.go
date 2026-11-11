@@ -63,13 +63,14 @@ func PostCrmOpportunity(req *core.HandlerArgs) core.HandlerResponse {
 	companyID, userID := req.User.CompanyID, req.User.ID
 
 	stored := types.CrmOpportunity{}
-	pipelineID := payload.PipelineID
+	pipelineID, stageID := payload.PipelineID, payload.StageID
 	if payload.ID != 0 {
 		var err error
 		if stored, err = loadOpportunity(companyID, payload.ID); err != nil {
 			return req.MakeErr(err)
 		}
-		pipelineID = stored.PipelineID
+		// An edit never changes the stage: the required fields are those of the stored one.
+		pipelineID, stageID = stored.PipelineID, stored.StageID
 	}
 	pipeline, err := loadPipeline(companyID, pipelineID)
 	if err != nil {
@@ -78,7 +79,7 @@ func PostCrmOpportunity(req *core.HandlerArgs) core.HandlerResponse {
 	if err := validateClientIsActive(companyID, payload.ClientID); err != nil {
 		return req.MakeErr(err)
 	}
-	if err := validateOpportunityCustomValues(companyID, payload.CustomValues, pipeline); err != nil {
+	if err := validateOpportunityCustomValues(companyID, payload.CustomValues, pipeline, stageID); err != nil {
 		return req.MakeErr(err)
 	}
 
@@ -96,7 +97,11 @@ func PostCrmOpportunity(req *core.HandlerArgs) core.HandlerResponse {
 			}
 			logs := []types.CrmOpportunityStageLog{types.StageLogOfCreation(records[0], pipeline, userID, now)}
 			payload = records[0]
-			return insertStageLogs(transaction, companyID, logs)
+			if err := insertStageLogs(transaction, companyID, logs); err != nil {
+				return err
+			}
+			// Entering its first stage proposes that stage's tasks.
+			return insertTasks(transaction, types.StageEntryTasks(records[0], pipeline, records[0].StageID, nil, now), userID)
 		}
 
 		edited, err := types.PlanOpportunityEdit(stored, payload, pipeline, userID)
@@ -110,6 +115,12 @@ func PostCrmOpportunity(req *core.HandlerArgs) core.HandlerResponse {
 			return err
 		}
 		payload = records[0]
+		// The task cards show the opportunity's title, client and amount: resend its open tasks.
+		if types.EditChangesTaskCard(stored, edited) {
+			if err := touchPendingTasks(transaction, companyID, edited.ID, userID); err != nil {
+				return err
+			}
+		}
 		// Amount, owner and close date feed the reports (waterfall, owner transfers, slippage).
 		if !types.EditChangesReportedState(stored, edited) {
 			return nil
@@ -148,19 +159,22 @@ func PostCrmOpportunityMove(req *core.HandlerArgs) core.HandlerResponse {
 				return err
 			}
 		}
-		movedRecord, stageLog, err := types.PlanOpportunityMove(stored, source, target, payload.StageID, userID, core.SUnixTime())
+		now := core.SUnixTime()
+		movedRecord, stageLog, err := types.PlanOpportunityMove(stored, source, target, payload.StageID, userID, now)
 		if err != nil {
 			return err
 		}
-		records := []types.CrmOpportunity{movedRecord}
-		table := db.TableOf[types.CrmOpportunity]()
-		if err := db.UpdateIn(transaction, &records, table.PipelineID, table.StageID, table.Probability, table.StageEnteredTime,
-			table.PreviousPipelineID, table.PreviousStageID, table.UpdatedBy); err != nil {
+		approverUserID, err := types.ApprovalGate(stored, source, target, payload.StageID)
+		if err != nil {
 			return err
 		}
-		logs := []types.CrmOpportunityStageLog{stageLog}
-		moved = records[0]
-		return insertStageLogs(transaction, companyID, logs)
+		if approverUserID != 0 {
+			// The stage has an approver: the card stays where it is and waits on an approval task.
+			moved, err = requestApproval(transaction, stored, target, payload.StageID, approverUserID, userID, now)
+			return err
+		}
+		moved = movedRecord
+		return persistStageChange(transaction, movedRecord, stageLog, target, userID, now)
 	})
 	if saveError != nil {
 		return req.MakeErr("Error al mover la oportunidad:", saveError)
@@ -195,7 +209,8 @@ func PostCrmOpportunityClose(req *core.HandlerArgs) core.HandlerResponse {
 		if err != nil {
 			return err
 		}
-		closedRecord, stageLog, err := types.PlanOpportunityClose(stored, pipeline, payload, lostReasonIsActive, userID, core.SUnixTime())
+		now := core.SUnixTime()
+		closedRecord, stageLog, err := types.PlanOpportunityClose(stored, pipeline, payload, lostReasonIsActive, userID, now)
 		if err != nil {
 			return err
 		}
@@ -214,7 +229,18 @@ func PostCrmOpportunityClose(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		logs := []types.CrmOpportunityStageLog{stageLog}
 		closed = records[0]
-		return insertStageLogs(transaction, companyID, logs)
+		if err := insertStageLogs(transaction, companyID, logs); err != nil {
+			return err
+		}
+		// Lost: what it still owed is cancelled. Reopened: it re-enters its stage, which proposes
+		// that stage's tasks again (plan P3). Won leaves them as they are.
+		switch closedRecord.Outcome {
+		case types.OpportunityOutcomeLost:
+			return syncStageTasks(transaction, closedRecord, pipeline, 0, userID, now)
+		case types.OpportunityOutcomeOpen:
+			return syncStageTasks(transaction, closedRecord, pipeline, closedRecord.StageID, userID, now)
+		}
+		return nil
 	})
 	if saveError != nil {
 		return req.MakeErr("Error al cerrar la oportunidad:", saveError)
@@ -283,7 +309,7 @@ func validateClientIsActive(companyID, clientID int32) error {
 	return nil
 }
 
-func validateOpportunityCustomValues(companyID int32, values []types.CrmCustomFieldValue, pipeline types.CrmPipeline) error {
+func validateOpportunityCustomValues(companyID int32, values []types.CrmCustomFieldValue, pipeline types.CrmPipeline, stageID int16) error {
 	customFields := []types.CrmCustomField{}
 	query := db.Query(&customFields)
 	query.Select().CompanyID.Equals(companyID)
@@ -304,7 +330,7 @@ func validateOpportunityCustomValues(companyID int32, values []types.CrmCustomFi
 	if err != nil {
 		return err
 	}
-	return types.ValidateCustomValues(values, catalog, pipeline.Fields, activeUserIDs)
+	return types.ValidateCustomValues(values, catalog, pipeline, stageID, activeUserIDs)
 }
 
 func lostReasonExists(companyID int32, lostReasonID int16) (bool, error) {

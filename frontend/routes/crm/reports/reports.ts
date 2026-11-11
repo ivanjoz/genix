@@ -40,6 +40,19 @@ export const periodFirstDay = (period: number) => Date.UTC(2000 + Math.floor(per
 /** Last UnixDay of a YYMM period. */
 export const periodLastDay = (period: number) => Date.UTC(2000 + Math.floor(period / 100), period % 100, 1) / 86400000 - 1
 
+/** The YYMM period `months` months after (or before, if negative) the given one. */
+export const addMonthsToPeriod = (period: number, months: number) => {
+  const monthIndex = Math.floor(period / 100) * 12 + (period % 100) - 1 + months
+  return Math.floor(monthIndex / 12) * 100 + (monthIndex % 12) + 1
+}
+
+/** Every YYMM period from `fromPeriod` to `toPeriod`, both included, ascending. */
+export const periodsBetween = (fromPeriod: number, toPeriod: number): number[] => {
+  const periods: number[] = []
+  for (let period = fromPeriod; period <= toPeriod; period = addMonthsToPeriod(period, 1)) periods.push(period)
+  return periods
+}
+
 // ---------------------------------------------------------------------------------------------
 // R1 — net progress. The signed "reach" rule (§8.1): a state reaches every position up to its own;
 // a won state also reaches the Won column ("won from" its position, E17); a lost state reaches
@@ -214,4 +227,366 @@ export const dailyStageStates = (
     for (const delta of deltasByDay.get(day) ?? []) addTo(delta.stageID, -delta.count, -delta.amount)
   }
   return states.reverse()
+}
+
+/** Open opportunities of one pipeline and owner set: whether a state counts as open in it. */
+const isOpenIn = (state: OpportunityState | null, pipelineID: number): boolean =>
+  !!state && state.pipelineID === pipelineID && state.outcome === OUTCOME_OPEN
+
+/** Days between two SUnixTimes (each unit is 2 seconds). */
+export const daysBetweenSUnixTimes = (fromTime: number, toTime: number) => (toTime - fromTime) * 2 / 86400
+
+/** Rows of each opportunity in time order (ID breaks ties: rows of one write share the second). */
+export const rowsByOpportunity = (rows: ICrmOpportunityStageLog[]): Map<number, ICrmOpportunityStageLog[]> => {
+  const byOpportunity = new Map<number, ICrmOpportunityStageLog[]>()
+  for (const row of [...rows].sort((left, right) => left.Time - right.Time || left.ID - right.ID)) {
+    byOpportunity.set(row.OpportunityID, [...(byOpportunity.get(row.OpportunityID) ?? []), row])
+  }
+  return byOpportunity
+}
+
+// ---------------------------------------------------------------------------------------------
+// R3 — pipeline waterfall. The open amount of a seller moves only through these steps:
+// opening + new + increased − decreased − won − lost + reopened ± transferred = closing.
+// Every row is split into steps whose sum is exactly its occupancy delta (R2), so the waterfall
+// always closes, and the opening of a month is its closing minus the month's steps.
+// ---------------------------------------------------------------------------------------------
+
+export const WATERFALL_STEPS = ['new', 'increased', 'decreased', 'won', 'lost', 'reopened', 'transferredIn', 'transferredOut'] as const
+export type WaterfallStep = typeof WATERFALL_STEPS[number]
+
+export interface WaterfallDelta {
+  ownerID: number
+  step: WaterfallStep
+  count: number
+  amount: number
+}
+
+/** The waterfall steps one log row contributes to the report of one pipeline. */
+export const waterfallDeltas = (row: ICrmOpportunityStageLog, pipelineID: number): WaterfallDelta[] => {
+  const before = beforeStateOf(row)
+  const after = afterStateOf(row)
+  const beforeOpen = isOpenIn(before, pipelineID)
+  const afterOpen = isOpenIn(after, pipelineID)
+  const leaving = (step: WaterfallStep): WaterfallDelta => ({ ownerID: before!.ownerID, step, count: -1, amount: -before!.amount })
+  const entering = (step: WaterfallStep): WaterfallDelta => ({ ownerID: after.ownerID, step, count: 1, amount: after.amount })
+
+  if (beforeOpen && afterOpen) {
+    // A hand-over moves the deal between sellers; otherwise only an amount change moves the total.
+    if (before!.ownerID !== after.ownerID) return [leaving('transferredOut'), entering('transferredIn')]
+    const amountChange = after.amount - before!.amount
+    if (!amountChange) return []
+    return [{ ownerID: after.ownerID, step: amountChange > 0 ? 'increased' : 'decreased', count: 0, amount: amountChange }]
+  }
+  if (beforeOpen) {
+    if (after.pipelineID !== pipelineID) return [leaving('transferredOut')]
+    return [leaving(after.outcome === OUTCOME_WON ? 'won' : 'lost')]
+  }
+  if (afterOpen) {
+    if (!before) return [entering('new')]
+    if (before.pipelineID !== pipelineID) return [entering('transferredIn')]
+    return [entering('reopened')]
+  }
+  return []
+}
+
+export interface WaterfallTotals {
+  opening: { count: number, amount: number }
+  steps: Map<WaterfallStep, { count: number, amount: number }>
+  closing: { count: number, amount: number }
+}
+
+/**
+ * The waterfall of each period from fromPeriod to toPeriod (never past today's period), for the
+ * chosen owners (all when empty). The closing of a period is today's open opportunities with every
+ * later row undone, so rows must cover every day from the first period to today.
+ */
+export const waterfallByPeriod = (
+  rows: ICrmOpportunityStageLog[], pipelineID: number, openNow: OpenOpportunityNow[],
+  fromPeriod: number, toPeriod: number, today: number, ownerIDs: number[] = [],
+): Map<number, WaterfallTotals> => {
+  const includesOwner = (ownerID: number) => !ownerIDs.length || ownerIDs.includes(ownerID)
+  const lastPeriod = Math.min(toPeriod, periodOfUnixDay(today))
+  const stepsByPeriod = new Map<number, Map<WaterfallStep, { count: number, amount: number }>>()
+  // Open total at the end of the last shown period: today's, minus what happened after it.
+  const closingOfLast = { count: 0, amount: 0 }
+  for (const opportunity of openNow) {
+    if (!includesOwner(opportunity.OwnerUserID)) continue
+    closingOfLast.count++
+    closingOfLast.amount += opportunity.Amount
+  }
+  for (const row of rows) {
+    const period = periodOfUnixDay(unixDayOfSUnixTime(row.Time))
+    for (const delta of waterfallDeltas(row, pipelineID)) {
+      if (!includesOwner(delta.ownerID)) continue
+      if (period > lastPeriod) {
+        closingOfLast.count -= delta.count
+        closingOfLast.amount -= delta.amount
+        continue
+      }
+      const steps = stepsByPeriod.get(period) ?? new Map()
+      const total = steps.get(delta.step) ?? { count: 0, amount: 0 }
+      total.count += delta.count
+      total.amount += delta.amount
+      steps.set(delta.step, total)
+      stepsByPeriod.set(period, steps)
+    }
+  }
+
+  // Walk back from the last period: each opening is its closing minus its own steps.
+  const result = new Map<number, WaterfallTotals>()
+  let closing = closingOfLast
+  for (const period of periodsBetween(fromPeriod, lastPeriod).reverse()) {
+    const steps = stepsByPeriod.get(period) ?? new Map()
+    const opening = { ...closing }
+    for (const total of steps.values()) {
+      opening.count -= total.count
+      opening.amount -= total.amount
+    }
+    result.set(period, { opening, steps, closing })
+    closing = opening
+  }
+  return result
+}
+
+/** The whole range as one waterfall: the first opening, every period's steps summed, the last closing. */
+export const waterfallSummary = (byPeriod: Map<number, WaterfallTotals>): WaterfallTotals | null => {
+  const periods = [...byPeriod.keys()].sort((left, right) => left - right)
+  if (!periods.length) return null
+  const steps = new Map<WaterfallStep, { count: number, amount: number }>()
+  for (const totals of byPeriod.values()) {
+    for (const [step, total] of totals.steps) {
+      const summed = steps.get(step) ?? { count: 0, amount: 0 }
+      summed.count += total.count
+      summed.amount += total.amount
+      steps.set(step, summed)
+    }
+  }
+  return { opening: byPeriod.get(periods[0])!.opening, steps, closing: byPeriod.get(periods.at(-1)!)!.closing }
+}
+
+// ---------------------------------------------------------------------------------------------
+// R4 — funnel and time in stage. The cohort is every opportunity that ENTERED the pipeline in
+// the range (created in it or transferred in), so its whole history from entry is loaded. A deal
+// reached a position if it ever sat there or deeper; lost deals count where they died (E4 only
+// applies to the net-progress report). Time in stage counts finished stays only: a deal still
+// sitting in a stage today is left out, so a young cohort does not skew the durations.
+// ---------------------------------------------------------------------------------------------
+
+export interface FunnelReport {
+  /** Opportunities that entered in the range. */
+  entered: number
+  /** reachedByPosition[k - 1] = how many reached position k or deeper. */
+  reachedByPosition: number[]
+  won: number
+  lost: number
+  /** Finished stays per stage ID, in days. */
+  stayDaysByStage: Map<number, number[]>
+}
+
+const entersPipeline = (row: ICrmOpportunityStageLog, pipelineID: number) =>
+  row.ToPipelineID === pipelineID && (row.Kind === STAGE_LOG_KIND_CREATED || row.FromPipelineID !== pipelineID)
+
+export const funnelReport = (
+  rows: ICrmOpportunityStageLog[], pipelineID: number, fromDay: number, toDay: number, ownerIDs: number[] = [],
+): FunnelReport => {
+  const report: FunnelReport = { entered: 0, reachedByPosition: [], won: 0, lost: 0, stayDaysByStage: new Map() }
+  for (const opportunityRows of rowsByOpportunity(rows).values()) {
+    const entryIndex = opportunityRows.findIndex((row) => {
+      const unixDay = unixDayOfSUnixTime(row.Time)
+      return entersPipeline(row, pipelineID) && unixDay >= fromDay && unixDay <= toDay
+    })
+    if (entryIndex < 0) continue
+    // The seller filter applies to whoever owned the deal when it entered.
+    if (ownerIDs.length && !ownerIDs.includes(opportunityRows[entryIndex].ToOwnerUserID)) continue
+    report.entered++
+
+    let deepestPosition = 0
+    let lastState: OpportunityState | null = null
+    let stay: { stageID: number, since: number } | null = null
+    for (const row of opportunityRows.slice(entryIndex)) {
+      const after = afterStateOf(row)
+      // A stay ends when the deal leaves its stage open in this pipeline: moved, closed or transferred.
+      if (stay && !(isOpenIn(after, pipelineID) && after.stageID === stay.stageID)) {
+        const stays = report.stayDaysByStage.get(stay.stageID) ?? []
+        stays.push(daysBetweenSUnixTimes(stay.since, row.Time))
+        report.stayDaysByStage.set(stay.stageID, stays)
+        stay = null
+      }
+      if (isOpenIn(after, pipelineID) && !stay) stay = { stageID: after.stageID, since: row.Time }
+      if (after.pipelineID === pipelineID) deepestPosition = Math.max(deepestPosition, after.position)
+      lastState = after
+    }
+    for (let position = 1; position <= deepestPosition; position++) {
+      report.reachedByPosition[position - 1] = (report.reachedByPosition[position - 1] ?? 0) + 1
+    }
+    if (lastState?.pipelineID === pipelineID && lastState.outcome === OUTCOME_WON) report.won++
+    if (lastState?.pipelineID === pipelineID && lastState.outcome === OUTCOME_LOST) report.lost++
+  }
+  return report
+}
+
+export const medianOf = (values: number[]) => {
+  if (!values.length) return 0
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+export const averageOf = (values: number[]) => values.length ? values.reduce((total, value) => total + value, 0) / values.length : 0
+
+// ---------------------------------------------------------------------------------------------
+// R5 — seller scorecard. Raw sums per seller are kept apart from the rates derived from them, so a
+// team subtotal adds its members' sums and derives its own rates (never averages of rates).
+// ---------------------------------------------------------------------------------------------
+
+export interface ScorecardSums {
+  wonCount: number
+  wonAmount: number
+  lostCount: number
+  /** Won deals whose creation row is loaded, and the sum of their days from creation to won. */
+  cycleCount: number
+  cycleDaysSum: number
+  openCount: number
+  activities: number
+  /** Won-amount goal of the range, in the amount scale. */
+  goalAmount: number
+}
+
+export const emptyScorecardSums = (): ScorecardSums =>
+  ({ wonCount: 0, wonAmount: 0, lostCount: 0, cycleCount: 0, cycleDaysSum: 0, openCount: 0, activities: 0, goalAmount: 0 })
+
+export interface ScorecardInput {
+  /** Rows inside the range. */
+  rowsInRange: ICrmOpportunityStageLog[]
+  /** Rows from the range's start year to today: where the creation rows are looked up. */
+  rowsToToday: ICrmOpportunityStageLog[]
+  pipelineID: number
+  openNow: OpenOpportunityNow[]
+  /** Author of every activity written in the pipeline inside the range. */
+  activityAuthorIDs: number[]
+  /** Won-amount goal of each seller for the range. */
+  goalAmountByOwner: Map<number, number>
+}
+
+export const scorecardSumsByOwner = (input: ScorecardInput): Map<number, ScorecardSums> => {
+  const byOwner = new Map<number, ScorecardSums>()
+  const sumsOf = (ownerID: number) => {
+    const sums = byOwner.get(ownerID) ?? emptyScorecardSums()
+    byOwner.set(ownerID, sums)
+    return sums
+  }
+
+  // Won and lost are net of reopenings, as in R1: the reach rule already does that.
+  for (const cell of aggregateNetProgress(input.rowsInRange, input.pipelineID, 'period')) {
+    if (cell.column === WON_COLUMN) {
+      sumsOf(cell.ownerID).wonCount += cell.count
+      sumsOf(cell.ownerID).wonAmount += cell.amount
+    } else if (cell.column === LOST_COLUMN) {
+      sumsOf(cell.ownerID).lostCount += cell.count
+    }
+  }
+
+  const createdTimeByOpportunity = new Map<number, number>()
+  for (const row of input.rowsToToday) {
+    if (row.Kind === STAGE_LOG_KIND_CREATED) createdTimeByOpportunity.set(row.OpportunityID, row.Time)
+  }
+  for (const row of input.rowsInRange) {
+    const isWin = row.ToPipelineID === input.pipelineID && row.ToOutcome === OUTCOME_WON && row.FromOutcome !== OUTCOME_WON
+    const createdTime = createdTimeByOpportunity.get(row.OpportunityID)
+    if (!isWin || createdTime === undefined) continue
+    sumsOf(row.ToOwnerUserID).cycleCount++
+    sumsOf(row.ToOwnerUserID).cycleDaysSum += daysBetweenSUnixTimes(createdTime, row.Time)
+  }
+
+  for (const opportunity of input.openNow) sumsOf(opportunity.OwnerUserID).openCount++
+  for (const authorID of input.activityAuthorIDs) sumsOf(authorID).activities++
+  for (const [ownerID, goalAmount] of input.goalAmountByOwner) sumsOf(ownerID).goalAmount += goalAmount
+  return byOwner
+}
+
+export const addScorecardSums = (left: ScorecardSums, right: ScorecardSums): ScorecardSums => ({
+  wonCount: left.wonCount + right.wonCount, wonAmount: left.wonAmount + right.wonAmount,
+  lostCount: left.lostCount + right.lostCount, cycleCount: left.cycleCount + right.cycleCount,
+  cycleDaysSum: left.cycleDaysSum + right.cycleDaysSum, openCount: left.openCount + right.openCount,
+  activities: left.activities + right.activities, goalAmount: left.goalAmount + right.goalAmount,
+})
+
+export interface ScorecardMetrics {
+  /** 0..1: won / (won + lost); 0 with no closed deals. */
+  winRate: number
+  averageWonAmount: number
+  averageCycleDays: number
+  /** Expected won amount per day: open count × win rate × average won amount ÷ cycle days. */
+  velocity: number
+  /** Won amount / goal as a percentage; 0 without a goal. */
+  goalAttainment: number
+}
+
+export const scorecardMetrics = (sums: ScorecardSums): ScorecardMetrics => {
+  const closedCount = sums.wonCount + sums.lostCount
+  const winRate = closedCount > 0 ? Math.max(0, sums.wonCount) / closedCount : 0
+  const averageWonAmount = sums.wonCount > 0 ? sums.wonAmount / sums.wonCount : 0
+  const averageCycleDays = sums.cycleCount > 0 ? sums.cycleDaysSum / sums.cycleCount : 0
+  return {
+    winRate, averageWonAmount, averageCycleDays,
+    velocity: averageCycleDays > 0 ? sums.openCount * winRate * averageWonAmount / averageCycleDays : 0,
+    goalAttainment: sums.goalAmount > 0 ? Math.round(sums.wonAmount * 100 / sums.goalAmount) : 0,
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// R7 — lost reasons. A deal counts once when its LAST state in the range is lost in this
+// pipeline: a deal lost and reopened inside the range was not lost, and the reason is read from
+// the row that lost it (the reopening row no longer carries it).
+// ---------------------------------------------------------------------------------------------
+
+export interface LostDeal {
+  opportunityID: number
+  reasonID: number
+  ownerID: number
+  stageID: number
+  amount: number
+}
+
+export const lostDealsInRange = (rowsInRange: ICrmOpportunityStageLog[], pipelineID: number, ownerIDs: number[] = []): LostDeal[] => {
+  const lostDeals: LostDeal[] = []
+  for (const [opportunityID, opportunityRows] of rowsByOpportunity(rowsInRange)) {
+    const lastRow = opportunityRows.at(-1)!
+    if (lastRow.ToPipelineID !== pipelineID || lastRow.ToOutcome !== OUTCOME_LOST) continue
+    if (ownerIDs.length && !ownerIDs.includes(lastRow.ToOwnerUserID)) continue
+    lostDeals.push({
+      opportunityID, reasonID: lastRow.LostReasonID, ownerID: lastRow.ToOwnerUserID, stageID: lastRow.ToStageID, amount: lastRow.ToAmount,
+    })
+  }
+  return lostDeals
+}
+
+export interface ParetoRow {
+  key: number
+  count: number
+  amount: number
+  /** Share of all lost deals, and running share down the sorted list (0..100). */
+  percent: number
+  cumulativePercent: number
+}
+
+/** Lost deals grouped by a key (reason, seller, stage), largest count first, with running shares. */
+export const paretoOf = (lostDeals: LostDeal[], keyOf: (deal: LostDeal) => number): ParetoRow[] => {
+  const byKey = new Map<number, ParetoRow>()
+  for (const deal of lostDeals) {
+    const key = keyOf(deal)
+    const paretoRow = byKey.get(key) ?? { key, count: 0, amount: 0, percent: 0, cumulativePercent: 0 }
+    paretoRow.count++
+    paretoRow.amount += deal.amount
+    byKey.set(key, paretoRow)
+  }
+  const sorted = [...byKey.values()].sort((left, right) => right.count - left.count || right.amount - left.amount)
+  let runningCount = 0
+  for (const paretoRow of sorted) {
+    runningCount += paretoRow.count
+    paretoRow.percent = paretoRow.count * 100 / lostDeals.length
+    paretoRow.cumulativePercent = runningCount * 100 / lostDeals.length
+  }
+  return sorted
 }

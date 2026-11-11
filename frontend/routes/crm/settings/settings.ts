@@ -1,6 +1,7 @@
 import type {
-  ICrmCustomField, ICrmCustomFieldOption, ICrmPipeline, ICrmPipelineField, ICrmPipelineStage,
+  ICrmCustomField, ICrmCustomFieldOption, ICrmPipeline, ICrmPipelineField, ICrmPipelineStage, ICrmStageTaskTemplate,
 } from '#services/crm/crm-pipeline.svelte.ts'
+import { TASK_ASSIGN, TASK_KIND } from '#services/crm/crm-task.ts'
 
 // Field types of backend/crm/types/custom_field.go, in the order the form offers them.
 export const CUSTOM_FIELD_TYPE_OPTIONS = [
@@ -24,8 +25,14 @@ export const customFieldHasOptions = (fieldType: number) =>
 
 const DEFAULT_STAGE_COLOR = '#6b7280'
 
-export const makeEmptyStage = (): ICrmPipelineStage =>
-  ({ ID: 0, Name: '', Color: DEFAULT_STAGE_COLOR, Probability: 0, StaleDays: 0, Status: 1, ForecastCategory: 1 })
+export const makeEmptyStage = (): ICrmPipelineStage => ({
+  ID: 0, Name: '', Color: DEFAULT_STAGE_COLOR, Probability: 0, StaleDays: 0, Status: 1, ForecastCategory: 1,
+  RequiredStandardFields: [], ApproverUserID: 0, TaskTemplates: [],
+})
+
+/** ID 0: the server allocates the template's ID inside its stage on save. */
+export const makeEmptyTaskTemplate = (): ICrmStageTaskTemplate =>
+  ({ ID: 0, Kind: TASK_KIND.ACTIVITY, Title: '', ActivityTypeID: 1, EmailTemplateID: 0, DueDays: 1, AssignTo: TASK_ASSIGN.OWNER, AssignUserID: 0 })
 
 export const makeEmptyPipeline = (): ICrmPipeline => ({
   ID: 0, Name: '', Description: '', Color: '#3b82f6', SortOrder: 0,
@@ -65,7 +72,32 @@ export const removeStage = (stages: ICrmPipelineStage[], index: number): ICrmPip
 export const toggleField = (fields: ICrmPipelineField[], fieldID: number): ICrmPipelineField[] =>
   fields.some((field) => field.FieldID === fieldID)
     ? fields.filter((field) => field.FieldID !== fieldID)
-    : [...fields, { FieldID: fieldID, Required: false }]
+    : [...fields, { FieldID: fieldID, RequiredFromStageID: 0 }]
 
-export const setFieldRequired = (fields: ICrmPipelineField[], fieldID: number, required: boolean): ICrmPipelineField[] =>
-  fields.map((field) => field.FieldID === fieldID ? { ...field, Required: required } : field)
+/** Requires a field from a stage on (0 makes it optional). */
+export const setFieldRequiredFrom = (fields: ICrmPipelineField[], fieldID: number, stageID: number): ICrmPipelineField[] =>
+  fields.map((field) => field.FieldID === fieldID ? { ...field, RequiredFromStageID: stageID } : field)
+
+/** Marks a standard field (STANDARD_FIELD) as required, or not, by the stage at `stageIndex`. */
+export const setStageStandardField = (
+  stages: ICrmPipelineStage[], stageIndex: number, standardField: number, isRequired: boolean,
+): ICrmPipelineStage[] =>
+  stages.map((stage, index) => {
+    if (index !== stageIndex) return stage
+    const others = (stage.RequiredStandardFields ?? []).filter((candidate) => candidate !== standardField)
+    return { ...stage, RequiredStandardFields: isRequired ? [...others, standardField] : others }
+  })
+
+/** Sets who approves a forward move into the stage at `stageIndex` (0 = no approval). */
+export const setStageApprover = (stages: ICrmPipelineStage[], stageIndex: number, approverUserID: number): ICrmPipelineStage[] =>
+  stages.map((stage, index) => index === stageIndex ? { ...stage, ApproverUserID: approverUserID } : stage)
+
+/** Edits the task templates of the stage at `stageIndex`: `change` receives the current list. */
+export const changeStageTemplates = (
+  stages: ICrmPipelineStage[], stageIndex: number, change: (templates: ICrmStageTaskTemplate[]) => ICrmStageTaskTemplate[],
+): ICrmPipelineStage[] =>
+  stages.map((stage, index) => index === stageIndex ? { ...stage, TaskTemplates: change(stage.TaskTemplates ?? []) } : stage)
+
+/** A template fixed to a user needs that user; an owner template must not carry a stale one. */
+export const setTemplateAssignment = (template: ICrmStageTaskTemplate, assignTo: number, assignUserID = 0): ICrmStageTaskTemplate =>
+  ({ ...template, AssignTo: assignTo, AssignUserID: assignTo === TASK_ASSIGN.USER ? assignUserID : 0 })

@@ -212,6 +212,13 @@ user_inference_short     = 500
 user_cpu_long            = 20000
 user_inference_long      = 5000
 
+# IP-dispositivos distintos que una company puede usar por ventana corta / larga. Sólo se juzgan en
+# las solicitudes que pasan por HAProxy (SPOE), con la firma de dispositivo que el navegador pega al
+# token (fareward/DEVICE_SIGNATURE.md). 0, el valor por defecto, deja esa ventana sin tope; la larga
+# no puede ser menor que la corta. Se ven en System → Observabilidad → Consumo Créditos.
+max_devices_short        = 5
+max_devices_long         = 30
+
 # Créditos de CPU que una company puede gastar al día DESPUÉS de que su cuota normal la haya
 # rechazado, y sólo en requests de lectura (el router marca el frame; GET sí, POST/PUT no). Es el
 # modo degradado de sólo lectura en vez de un 429 en toda la aplicación.
@@ -369,6 +376,9 @@ port     = 587
 email    = ""
 user     = ""
 password = ""
+# store_only = true (dev/QAS): no email goes out over SMTP, it is only stored in the sent_emails
+# table and read in System → Desarrollo → Buzón Email. Every email is stored either way.
+store_only = false
 
 # ─── Agente / LLM ───────────────────────────────────────────────────────────
 [agent]

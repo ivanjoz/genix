@@ -150,7 +150,7 @@ description = "Mantiene las listas de valores del CRM, como los motivos de pérd
 route = "crm/tasks"
 name = "Tasks|Tareas"
 icon = "icon-[fa--check-square-o]"
-pending = true
+description = "Bandeja de tareas del CRM: actividades que proponen las etapas del pipeline y aprobaciones de movimientos pendientes. El líder de un equipo ve las tareas de sus integrantes sin poder actuar."
 
 [[pages]]
 route = "crm/reports"
@@ -347,8 +347,15 @@ icon = "icon-[fa--server]"
 
 [[pages]]
 route = "system/observability"
-name = "Observability|Observabilidad"
+name = "Services|Servicios"
 icon = "icon-[fa--bar-chart]"
+description = "Monitorea el uso y los errores de cada API del backend en las últimas cuatro horas."
+
+[[pages]]
+route = "system/credit-consumption"
+name = "Credit Usage|Consumo Créditos"
+icon = "icon-[fa--tachometer]"
+description = "Revisa por empresa los créditos, las negaciones y los dispositivos distintos de las últimas cuatro horas."
 
 [[pages]]
 route = "system/cron-actions"
@@ -370,3 +377,8 @@ icon = "icon-[fa--flask]"
 route = "develop-ui/showroom"
 name = "UI Showroom|UI Showroom"
 icon = "icon-[fa--paint-brush]"
+
+[[pages]]
+route = "system/email-inbox"
+name = "Email Inbox|Buzón Email"
+icon = "icon-[fa--envelope]"

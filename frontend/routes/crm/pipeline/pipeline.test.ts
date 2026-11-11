@@ -3,7 +3,7 @@ import type { ICrmCustomFieldValue, ICrmOpportunity, ICrmOpportunityStageLog } f
 import type { ICrmCustomField, ICrmPipeline } from '#services/crm/crm-pipeline.svelte.ts'
 import {
   activityTypeOf, activityTypeOptions, buildOpportunityFormFields, buildOpportunityTimeline, canEditOpportunity, canMoveOpportunity,
-  columnTotals, isStale, missingRequiredFieldIDs, readCustomValues, stageLogDescription, visiblePipelines, writeCustomValues,
+  columnTotals, hasMissingRequirements, isStale, missingRequirements, readCustomValues, stageLogDescription, visiblePipelines, writeCustomValues,
 } from './pipeline.ts'
 
 const opportunity = (overrides: Partial<ICrmOpportunity> = {}) =>
@@ -49,20 +49,37 @@ describe('board numbers', () => {
     expect(isStale(entered, { StaleDays: 0 } as any, 1000 + daysInSUnix(99))).toBe(false)
   })
 
-  it('lists the required target fields a card lacks', () => {
-    const values = [{ FieldID: 1 }] as ICrmCustomFieldValue[]
-    expect(missingRequiredFieldIDs(values, [{ FieldID: 1, Required: true }, { FieldID: 2, Required: true }, { FieldID: 3, Required: false }])).toEqual([2])
+  it('lists what a stage requires and a card lacks, by board position', () => {
+    const stage = (ID: number, extra: Partial<ICrmPipeline['Stages'][number]> = {}) =>
+      ({ ID, Name: `s${ID}`, Status: 1, RequiredStandardFields: [], ...extra }) as ICrmPipeline['Stages'][number]
+    const pipeline = {
+      // Stage 9 is deleted: it takes no position, so stage 3 is the third live one only if 9 is skipped.
+      Stages: [stage(1), stage(2, { RequiredStandardFields: [1] }), stage(9, { Status: 0 }), stage(3)],
+      Fields: [{ FieldID: 1, RequiredFromStageID: 2 }, { FieldID: 2, RequiredFromStageID: 0 }, { FieldID: 3, RequiredFromStageID: 1 }],
+    } as ICrmPipeline
+    const card = opportunity({ Amount: 0, ExpectedCloseDate: 0, CustomValues: [{ FieldID: 2 }] as ICrmCustomFieldValue[] })
+
+    expect(missingRequirements(pipeline, 1, card)).toEqual({ fieldIDs: [3], standardFields: [] })
+    expect(missingRequirements(pipeline, 2, card)).toEqual({ fieldIDs: [1, 3], standardFields: [1] })
+    // Stage 3 comes after stage 2, so skipping 2 does not skip its requirements.
+    expect(missingRequirements(pipeline, 3, card)).toEqual({ fieldIDs: [1, 3], standardFields: [1] })
+    expect(hasMissingRequirements(missingRequirements(pipeline, 3, opportunity({ Amount: 5, CustomValues: [{ FieldID: 1 }, { FieldID: 3 }] as ICrmCustomFieldValue[] })))).toBe(false)
+    expect(missingRequirements(pipeline, 9, card)).toEqual({ fieldIDs: [], standardFields: [] })
   })
 })
 
 describe('custom field form conversion', () => {
-  const pipeline = { Fields: [{ FieldID: 1, Required: true }, { FieldID: 2, Required: false }, { FieldID: 9, Required: false }] } as ICrmPipeline
+  const pipeline = {
+    Stages: [{ ID: 1, Status: 1, RequiredStandardFields: [] }],
+    Fields: [{ FieldID: 1, RequiredFromStageID: 1 }, { FieldID: 2, RequiredFromStageID: 0 }, { FieldID: 9, RequiredFromStageID: 0 }],
+  } as unknown as ICrmPipeline
 
   it('builds the form fields, hiding deleted options and unknown fields', () => {
-    const fields = buildOpportunityFormFields(pipeline, catalog, { users: [] })
+    const fields = buildOpportunityFormFields(pipeline, catalog, { users: [] }, 1)
     expect(fields.map((field) => field.label)).toEqual(['Origen', 'Nota'])
     expect(fields[0].options).toEqual([{ id: 1, name: 'Web' }])
     expect(fields[0].required).toBe(true)
+    expect(fields[1].required).toBe(false)
   })
 
   it('round-trips stored values through the form map', () => {

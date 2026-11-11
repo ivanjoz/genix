@@ -193,8 +193,10 @@ func PostContactMessage(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	storedMessage := newMessages[0]
 
-	if err := core.SendEmail(core.Env.CONTACT_EMAIL, contactEmailSubject,
-		makeContactEmailBody(&storedMessage)); err != nil {
+	if err := core.SendEmail(core.SaasCompanyID, core.EmailMessage{
+		To: []string{core.Env.CONTACT_EMAIL}, Subject: contactEmailSubject,
+		HTMLBody: makeContactEmailBody(&storedMessage),
+	}); err != nil {
 
 		// The visitor is told the message arrived, because it did: it is stored, and status 2 is
 		// what marks it as still needing to reach the inbox.

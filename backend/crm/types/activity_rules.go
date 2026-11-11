@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"app/core"
 )
 
 // MaxAttachmentBytes caps one attached file. It travels base64 in the upload request and a Lambda
@@ -66,7 +68,8 @@ func NormalizeActivityType(activityType *CrmActivityType) error {
 // PlanActivity builds the entry to insert: a known type, some text or a file, and only files of
 // this opportunity's folder. companyTypeIsActive answers for a company type (ID above the reserved
 // range); system types are checked against the catalog here.
-func PlanActivity(payload CrmActivity, companyID int32, companyTypeIsActive bool, userID int32, now int32) (CrmActivity, error) {
+// pipelineID is the opportunity's current pipeline, never the client's.
+func PlanActivity(payload CrmActivity, companyID int32, pipelineID int16, companyTypeIsActive bool, userID int32, now int32) (CrmActivity, error) {
 	typeIsKnown := isSystemActivityType(payload.TypeID) || (payload.TypeID > ActivityTypeSystemMaxID && companyTypeIsActive)
 	if !typeIsKnown {
 		return CrmActivity{}, fmt.Errorf("El tipo de actividad %d no existe.", payload.TypeID)
@@ -91,5 +94,6 @@ func PlanActivity(payload CrmActivity, companyID int32, companyTypeIsActive bool
 		attachment.UploadedBy, attachment.UploadedAt = userID, now
 	}
 	payload.CompanyID, payload.ID, payload.AuthorID, payload.Created = companyID, 0, userID, now
+	payload.PipelineID, payload.Period = pipelineID, core.PeriodOfDay(core.SUnixTimeToUnixDay(now))
 	return payload, nil
 }

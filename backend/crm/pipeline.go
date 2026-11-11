@@ -72,6 +72,9 @@ func PostCrmPipeline(req *core.HandlerArgs) core.HandlerResponse {
 		if err != nil {
 			return err
 		}
+		if err := validatePipelineReferences(companyID, saved); err != nil {
+			return err
+		}
 		saved.CompanyID, saved.UpdatedBy = companyID, req.User.ID
 		records := []types.CrmPipeline{saved}
 		if saved.ID == 0 {
@@ -94,6 +97,27 @@ func PostCrmPipeline(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al guardar el pipeline:", saveError)
 	}
 	return req.MakeResponse(payload)
+}
+
+// validatePipelineReferences checks the users, activity types and email templates the pipeline's
+// stages name (approvers, task assignees, what a task asks for) against the database.
+func validatePipelineReferences(companyID int32, pipeline types.CrmPipeline) error {
+	userIDs, activityTypeIDs, emailTemplateIDs := types.PipelineReferenceIDs(pipeline)
+	activeUserIDs, err := loadActiveUserIDs(companyID, userIDs)
+	if err != nil {
+		return err
+	}
+	activeActivityTypeIDs, err := loadActiveActivityTypeIDs(companyID, activityTypeIDs)
+	if err != nil {
+		return err
+	}
+	activeEmailTemplateIDs, err := loadActiveEmailTemplateIDs(companyID, emailTemplateIDs)
+	if err != nil {
+		return err
+	}
+	return types.ValidatePipelineReferences(pipeline, types.PipelineReferences{
+		ActiveUserIDs: activeUserIDs, ActiveActivityTypeIDs: activeActivityTypeIDs, ActiveEmailTemplateIDs: activeEmailTemplateIDs,
+	})
 }
 
 // PostCrmPipelineMembers replaces who can work in one pipeline and at what level. It is the only

@@ -122,6 +122,13 @@ type CrmAttachment struct {
 	UploadedAt int32 `cb:"6"`
 }
 
+// CrmActivitySavePayload is the body of POST.crm-opportunity-activity: the entry, and optionally the
+// activity task it fulfils, which is closed in the same transaction (plan §5).
+type CrmActivitySavePayload struct {
+	CrmActivity
+	TaskID int32
+}
+
 // CrmActivity is one entry of an opportunity's timeline. Entries are append-only, like the stage log.
 type CrmActivity struct {
 	db.TableStruct[CrmActivityTable, CrmActivity]
@@ -133,6 +140,10 @@ type CrmActivity struct {
 	Attachments   []CrmAttachment `cb:"6"`
 	AuthorID      int32           `cb:"7"`
 	Created       int32           `cb:"8"` // SUnixTime
+	// PipelineID is the opportunity's pipeline when the entry was written, and Period the YYMM of
+	// Created: the key of the seller scorecard's cache groups (activities per seller and month).
+	PipelineID int16 `cb:"9"`
+	Period     int16 `cb:"10"`
 }
 
 type CrmActivityTable struct {
@@ -145,6 +156,8 @@ type CrmActivityTable struct {
 	Attachments   db.Col[*CrmActivityTable, []CrmAttachment]
 	AuthorID      db.Col[*CrmActivityTable, int32]
 	Created       db.Col[*CrmActivityTable, int32]
+	PipelineID    db.Col[*CrmActivityTable, int16]
+	Period        db.Col[*CrmActivityTable, int16]
 }
 
 func (e CrmActivityTable) GetSchema() db.TableSchema {
@@ -154,6 +167,11 @@ func (e CrmActivityTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		// The timeline of the opportunity panel reads every entry of one opportunity.
-		Indexes: []db.Index{{Type: db.TypeLocalIndex, Keys: db.Cols(e.OpportunityID)}},
+		Indexes: []db.Index{
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.OpportunityID)},
+			// Seller scorecard: one group per month and pipeline. Entries are append-only and written
+			// with the current time, so a closed month never changes and is downloaded once.
+			{Type: db.TypeCacheGroup, Keys: db.Cols(e.Period, e.PipelineID)},
+		},
 	}
 }

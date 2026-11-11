@@ -139,7 +139,12 @@ func runCrmData(random *mrand.Rand, realNow time.Time) error {
 			stage("Contacto", "#6b7280", 10, 10), stage("Cotización", "#0ea5e9", 30, 14), stage("Negociación", "#f59e0b", 60, 14),
 			stage("Pedido de prueba", "#8b5cf6", 80, 21),
 		},
-		Fields: []crmTypes.CrmPipelineField{{FieldID: customFields[0].ID, Required: true}, {FieldID: customFields[2].ID}}}
+		Fields: []crmTypes.CrmPipelineField{{FieldID: customFields[0].ID, RequiredFromStageID: 1}, {FieldID: customFields[2].ID}}}
+	// Entering these stages proposes an activity to the card's seller: the Tasks page has data to work with.
+	wholesale.Stages[0].TaskTemplates = []crmTypes.CrmStageTaskTemplate{{Kind: crmTypes.TaskKindActivity, Title: "Llamar para calificar al cliente",
+		ActivityTypeID: crmTypes.ActivityTypeCall, DueDays: 1, AssignTo: crmTypes.TaskAssignOwner}}
+	wholesale.Stages[1].TaskTemplates = []crmTypes.CrmStageTaskTemplate{{Kind: crmTypes.TaskKindActivity, Title: "Dar seguimiento a la cotización",
+		ActivityTypeID: crmTypes.ActivityTypeFollowUp, DueDays: 3, AssignTo: crmTypes.TaskAssignOwner}}
 	projects := crmTypes.CrmPipeline{Name: "Proyectos especiales", Color: "#10b981", SortOrder: 2, Status: crmTypes.CrmStatusActive, GoalPeriodType: crmTypes.GoalPeriodWeekly,
 		Stages: []crmTypes.CrmPipelineStage{
 			stage("Levantamiento", "#6b7280", 15, 14), stage("Propuesta", "#0ea5e9", 40, 21), stage("Aprobación", "#f59e0b", 75, 21),
@@ -305,7 +310,7 @@ func runCrmDataOpportunity(random *mrand.Rand, realNow time.Time, pipeline crmTy
 	freezeAt()
 	err := crmDataCall(creatorID, "POST.crm-opportunity", crmModule.PostCrmOpportunity, crmTypes.CrmOpportunity{
 		PipelineID: pipeline.ID, StageID: activeStages[0].ID, ClientID: clientIDs[opportunityIndex%len(clientIDs)],
-		Title:  fmt.Sprintf("%s #%d", crmDataOpportunityTitles[random.Intn(len(crmDataOpportunityTitles))], opportunityIndex+1),
+		Title:  crmDataOpportunityTitles[random.Intn(len(crmDataOpportunityTitles))],
 		Amount: int32(500_00 + random.Intn(14_500_00)), Probability: activeStages[0].Probability,
 		// Around the end of its span, so the forecast of each month sees the deals closing in it.
 		ExpectedCloseDate: core.TimeToFechaUnix(lastMoment) + int16(random.Intn(9)-3), CustomValues: values,
@@ -335,6 +340,14 @@ func runCrmDataOpportunity(random *mrand.Rand, realNow time.Time, pipeline crmTy
 		return crmDataCall(crmDataActorID, "POST.crm-opportunity-close", crmModule.PostCrmOpportunityClose, payload, nil)
 	}
 
+	// The current seller logs a call, meeting or follow-up: what the scorecard's activities column counts.
+	logActivity := func() error {
+		freezeAt()
+		activityTypeIDs := []int16{crmTypes.ActivityTypeCall, crmTypes.ActivityTypeMeeting, crmTypes.ActivityTypeFollowUp}
+		return crmDataCall(created.OwnerUserID, "POST.crm-opportunity-activity", crmModule.PostCrmOpportunityActivity,
+			crmTypes.CrmActivity{OpportunityID: created.ID, TypeID: activityTypeIDs[random.Intn(len(activityTypeIDs))], Text: "Contacto con el cliente"}, nil)
+	}
+
 	// Walk forward through the stages inside the span. Some steps go back one stage and forward again,
 	// which the net-progress report must count once; some deals are renegotiated or handed over.
 	reachedLastStage := true
@@ -345,6 +358,11 @@ func runCrmDataOpportunity(random *mrand.Rand, realNow time.Time, pipeline crmTy
 		}
 		if err := moveTo(activeStages[stageIndex].ID); err != nil {
 			return err
+		}
+		if random.Intn(100) < 60 {
+			if err := logActivity(); err != nil {
+				return err
+			}
 		}
 		if stageIndex >= 2 && random.Intn(100) < 20 && advance() {
 			if err := moveTo(activeStages[stageIndex-1].ID); err != nil {

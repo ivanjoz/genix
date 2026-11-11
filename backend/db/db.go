@@ -251,6 +251,28 @@ func InsertUpdateIncludeIn[RecordT Record[TableT, RecordT, D], TableT Schema[Tab
 	return orm.InsertUpdateIncludeIn[RecordT, TableT, D](transaction, records, isInsert, columnsToIncludeUpdate, columnsToExcludeInsert...)
 }
 
+// ─── Expanded slices (TableSchema.ExpandedSlices, MariaDB) ─────────────────────
+
+type ColumnIncrement = orm.ColumnIncrement
+
+// ErrIncrementNotStored is what Increment returns (wrapped) when no record has the key.
+var ErrIncrementNotStored = orm.ErrIncrementNotStored
+
+// Increment adds to elements of expanded slice columns in SQL, without reading the record:
+// db.Increment(key, table.Purchases.At(3).Add(amount)). It never creates the record.
+func Increment[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	record RecordT, increments ...ColumnIncrement,
+) error {
+	return orm.Increment[RecordT, TableT, D](record, increments...)
+}
+
+// IncrementIn is Increment inside RunTransaction.
+func IncrementIn[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
+	transaction *Transaction, record RecordT, increments ...ColumnIncrement,
+) error {
+	return orm.IncrementIn[RecordT, TableT, D](transaction, record, increments...)
+}
+
 func UpdateOne[RecordT Record[TableT, RecordT, D], TableT Schema[TableT], D Executor[TableT, RecordT]](
 	record RecordT, columnsToInclude ...Coln,
 ) error {

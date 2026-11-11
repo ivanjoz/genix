@@ -56,9 +56,6 @@
 </script>
 
 <div class="flex flex-col gap-16" aria-label="Daily pipeline state">
-  <div class="text-fg-muted">
-    {tr('Open opportunities in each stage at the end of each day.|Oportunidades abiertas en cada etapa al cierre de cada día.')}
-  </div>
   {#if !states.length}
     <div class="text-fg-muted p-16">{tr('The selected months are in the future.|Los meses elegidos están en el futuro.')}</div>
   {:else}

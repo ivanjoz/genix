@@ -238,7 +238,7 @@ Common questions and vocabulary: `consumo por día`, `qué API gastó créditos`
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **System → Observability (Observabilidad)** monitors recent backend API health, failures, and
+- **System → Observability → Services (Observabilidad → Servicios)** monitors recent backend API health, failures, and
   repeated error messages across the platform. It no longer owns the company credit ranking.
 - **System → Server Panel** monitors machine CPU, memory, disk, and network behavior.
 - Tenant users edit their own operational company configuration in **My Company (Mi Empresa)**;

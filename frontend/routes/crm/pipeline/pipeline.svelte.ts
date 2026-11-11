@@ -1,7 +1,9 @@
-import { notifyFailure } from '@genix/ui/notify'
+import { notifyFailure, notifyInfo } from '@genix/ui/notify'
+import { tr } from '#core/store.svelte.ts'
 import { security } from '#libs/ui-runtime.svelte.ts'
 import { ClientProviderService } from '#services/crm/client-provider.svelte.ts'
 import { CrmActivityTypesService } from '#services/crm/crm-activity.svelte.ts'
+import { CrmEmailTemplatesService } from '#services/crm/crm-email-template.svelte.ts'
 import {
   CrmOpportunitiesService, postCrmOpportunity, postCrmOpportunityClose, postCrmOpportunityMove,
   type ICrmOpportunity,
@@ -20,6 +22,7 @@ export class PipelineBoard {
   customFields = new CrmCustomFieldsService(true)
   lostReasons = new CrmLostReasonsService(true)
   activityTypes = new CrmActivityTypesService(true)
+  emailTemplates = new CrmEmailTemplatesService(true)
   clients = new ClientProviderService(1, true)
   users = new UsuariosService()
   userID = security.getUserInfo()?.ID || 0
@@ -49,13 +52,18 @@ export class PipelineBoard {
   // Each write below refreshes the board's cards from the delta its own response carries
   // (GetHandler.writeAndSync): there is no GET after it.
 
-  /** Moves the card at once and puts it back if the server refuses (permission, required fields). */
+  /**
+   * Moves the card at once and puts it back if the server refuses (permission, required fields).
+   * A stage with an approver may hold the move for approval, so the card stays until the server says.
+   */
   async moveOpportunity(opportunity: ICrmOpportunity, toPipelineID: number, toStageID: number) {
     if (!this.opportunities) return
     const previousStageID = opportunity.StageID
-    if (toPipelineID === opportunity.PipelineID) opportunity.StageID = toStageID
+    const targetStage = this.pipelines.recordsMap.get(toPipelineID)?.Stages.find((stage) => stage.ID === toStageID)
+    if (toPipelineID === opportunity.PipelineID && !targetStage?.ApproverUserID) opportunity.StageID = toStageID
     try {
-      await postCrmOpportunityMove(this.opportunities, opportunity.ID, toPipelineID, toStageID)
+      const moved = await postCrmOpportunityMove(this.opportunities, opportunity.ID, toPipelineID, toStageID)
+      if (moved?.PendingApprovalTaskID) notifyInfo(tr('Sent for approval.|Enviada a aprobación.'))
     } catch (error) {
       opportunity.StageID = previousStageID
       notifyFailure(error as string)

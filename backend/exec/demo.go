@@ -347,7 +347,9 @@ func Test24(args *core.ExecArgs) core.FuncResponse {
 	</body>
 </html>`
 
-	if err := core.SendEmail("anguloivan3@gmail.com", "Email test from Go", htmlBody); err != nil {
+	if err := core.SendEmail(core.SaasCompanyID, core.EmailMessage{
+		To: []string{"anguloivan3@gmail.com"}, Subject: "Email test from Go", HTMLBody: htmlBody,
+	}); err != nil {
 		return core.FuncResponse{Error: err.Error()}
 	}
 

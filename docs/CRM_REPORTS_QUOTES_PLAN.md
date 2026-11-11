@@ -1,10 +1,11 @@
 # CRM Plan II — Reports, Teams, Goals, Forecast, Approvals, Tasks, Quotes
 
-**Status: in progress.** Done: §10 steps 1–2 (stage log v2, report scope, R1 net progress, R2
-daily state) and most of step 3: teams, goals, forecast category per stage, forecast submissions,
-the Equipos, Metas and Forecast pages (the goals-vs-actual part is on the Forecast page; the R5
-scorecard is not built yet). Everything else is still a proposal. None of it has been run in the
-real app yet. Builds on `docs/CRM_PLAN.md` (pipelines,
+**Status: in progress.** Done: §10 steps 1–4 — stage log v2, report scope, teams, goals, forecast
+category per stage, forecast submissions, the Equipos, Metas and Forecast pages, reports R1–R7
+(R6 on the Forecast page), step 5, required fields per stage, and step 6, approvals and tasks
+(see "As built" in §5), and step 7, email templates and sending (see "As built" in §6.2, task kind 3
+included). Steps 8–10 are still a proposal. None of it has been run in the real app
+yet. Builds on `docs/CRM_PLAN.md` (pipelines,
 opportunities, stage log, access), which is implemented.
 
 ## 0. Summary
@@ -227,6 +228,23 @@ Standard fields (amount, expected close date) can also be required per stage:
 `CrmPipelineStage.RequiredStandardFields []int8` (1 amount, 2 expected close date) — the field
 catalog only holds custom fields, so these two need their own list.
 
+**As built:**
+- `MissingRequiredFields(pipeline, stageID, opportunity)` takes the whole opportunity (the standard
+  fields are read from it) and returns `MissingRequirements{FieldIDs, StandardFields}`. The same
+  check runs on **create** (stage = the chosen one), **edit** (stage = the stored one, so an edit
+  cannot empty a field the current stage requires) and **move** (stage = the target).
+- A standard field listed on a stage is required there **and in every later stage** by position,
+  like the custom fields, so skipping the stage does not skip the rule. An empty amount or close
+  date is zero.
+- Pipeline save refuses a field whose required-from stage does not exist or is deleted (so a stage
+  cannot be removed while a field still names it), an unknown or repeated standard field. A stage
+  added in the same edit has no ID yet; the editor lists only saved stages in "required from"
+  (a new pipeline's stages get IDs 1..n, which the seed uses).
+- The board asks for the missing data when a card is **dropped** on a stage it cannot enter: the
+  move form opens with that stage chosen, with inputs for the missing amount / close date and the
+  missing custom fields; the card is saved with them, then moved.
+- Reseed after this change: `Required bool` was replaced by an `int16` under the same column number.
+
 ### 4.2 Stage approval
 
 `CrmPipelineStage` gets `ApproverUserID int32` (0 = no approval). Moving an opportunity **forward
@@ -309,6 +327,23 @@ upcoming). Executing a task opens the matching action, prefilled:
 Executing a task always goes through the same endpoint as doing the action by hand, plus
 `TaskID` in the payload, so the task is closed in the same transaction.
 
+**As built (step 6, §4.2 and §5).** Task kinds 1 (approval), 3 (send email, added in step 7, see §6.2)
+and 4 (activity) ship; kind 2 (send quote) waits for step 8, and `normalizeTaskTemplates` refuses it
+until then. Code: `backend/crm/task.go`, `types/task.go`, `types/task_rules.go`;
+`frontend/routes/crm/tasks/`. Differences from the text above:
+- `CrmTask.CreatedBy` (cb 17) holds the requester, so only they can cancel an approval request.
+- `GET.crm-opportunity-approval?opportunity-id=` returns the pending approval of a card (the requester
+  is not the assignee, so the delta list does not carry it); access 47 also gets it and `POST.crm-task`.
+- Route names: `GET.crm-tasks` (`?user-id=`, `?closed=1`), `POST.crm-task` (dismiss / cancel request),
+  `POST.crm-task-decide`. New access 51 "CRM Tareas" (`crm/tasks`); the activity endpoint accepts `TaskID`.
+- Team tab: a leader reads their members' open tasks, read-only; only the assignee acts.
+- A cross-pipeline move into a gated stage needs approval and has no skip rule. An approver who
+  requests a move still goes through the task (no self-approval shortcut).
+- Approving runs the move as the approver and does not need pipeline membership; rejecting writes a
+  timeline note (approving only when a note is given).
+- The pipeline editor (Settings) sets the approver and the activity templates of each stage.
+- Not run in the real app. Needs a reseed (new `crm_tasks` table, new stage and opportunity columns).
+
 When the opportunity **leaves the stage backward, is lost, or moves to another pipeline**, its
 pending tasks from that stage become *cancelled* (open decision P3). Re-entering creates them again.
 
@@ -353,6 +388,26 @@ Edited in a new tab of **Diccionarios**. Placeholders, replaced by a pure functi
 {{owner.email}} {{company.name}} {{quote.number}} {{quote.total}} {{quote.valid_until}}`
 
 An unknown placeholder is a save-time validation error, never a silent blank in a sent email.
+
+**As built (step 7).** Code: `backend/crm/email.go`, `types/email_template.go`, `types/email_template_rules.go`;
+`frontend/routes/crm/dictionaries/EmailTemplatesTable.svelte`, `frontend/domain-components/crm/OpportunityEmailModal.svelte`.
+- The virtual mailbox already existed (`core.SendEmail(companyID, EmailMessage)`, table `sent_emails`,
+  `[smtp].store_only`, page `system/email-inbox`). The contract got `FromName` (the company name; default
+  "Genix") and `ReplyTo` (the sending user's email); `sent_emails` stores `ReplyTo` (cb 13). No
+  `SourceTable/SourceID`: the opportunity's Email activity is the link. Attachments wait for quotes (step 8).
+- `crm_email_templates` (schema ID 90). Body edited with the genix-ui `HTMLEditor`; placeholders are
+  typed as text (the editor lists them, a click copies one). Quote placeholders are accepted on save;
+  rendering one without a quote is an error ("only sent with a quote") until step 8 supplies it.
+- Routes: `GET.crm-email-templates`, `POST.crm-email-template` (access 50),
+  `GET.crm-opportunity-email-draft?opportunity-id=&template-id=` (renders on the server; To = the
+  client's email), `POST.crm-opportunity-email` (access 47 and 51). Anyone who can see the pipeline may
+  send. The send is validated (addresses, ≤ 20 recipients, no raw `{{…}}` left) and the task checked
+  **before** the email leaves; the Email activity and the task close are written after it, and a
+  failure there says the email was sent instead of inviting a retry.
+- Task kind 3 (send email) ships: a stage template carries `EmailTemplateID` (cb 8); the Tasks page
+  opens the send modal with that template, and only a sent email closes the task (a hand-written
+  activity cannot).
+- The send action lives in the opportunity layer's Activity tab.
 
 ## 7. Quotes (`sales`)
 
@@ -521,6 +576,25 @@ for each case above in `reports.test.ts`.
 Common filters: pipeline, team, seller, year/month range. Which pipelines a user can report on is
 §8.4.
 
+**As built (R3–R7), decided 2026-11-09:**
+- **R3** adds a **Reopened** step, so the formula is opening + new + increased − decreased − won −
+  lost + reopened ± transferred = closing. Each row is split into steps that sum exactly to its R2
+  occupancy delta; a month's closing is today's open deals with every later row undone, its opening
+  is the closing minus its steps. An owner change is transferred out/in between sellers.
+- **R4** cohort = opportunities that **entered** the pipeline in the range (created in it or
+  transferred in), so their whole history from entry is loaded. Time in stage counts **finished
+  stays only**; a deal still sitting in a stage today is left out.
+- **R5** cycle length uses only won deals whose creation row is loaded (created since the range's
+  start year); the rest count in win rate but not in cycle. Win rate = won ÷ (won + lost), net of
+  reopenings. Team rows add their members' raw sums and derive their own rates. Activities come
+  from a new cache-groups index on `crm_activity` by `(Period, PipelineID)` — both columns are
+  set by the server on insert — served by `GET.crm-report-activities` (access 52), with text and
+  files stripped.
+- **R6** lives on the Forecast page: a "submitted before start" column (P7) and, on row click, a
+  line of every submission's commit and best case against the goal.
+- **R7** counts a deal once when its **last state in the range** is lost, with the reason of the
+  row that lost it (a reopened deal was not lost).
+
 **Later (not in this delivery):** slippage (close date pushed — the log already carries
 `From/ToExpectedCloseDate`, so this only needs a report), quote conversion and time to quote,
 activity without next step.
@@ -573,7 +647,7 @@ needs *CRM Metas* (55).
 | id | name | frontend_routes | backend_apis |
 |---|---|---|---|
 | 51 | CRM Tareas | `crm/tasks` | `POST.crm-task`, `POST.crm-task-decide` |
-| 52 | CRM Reportes | `crm/reports` | — |
+| 52 | CRM Reportes | `crm/reports` | `GET.crm-report-scope`, `GET.crm-report-stage-log`, `GET.crm-report-open-opportunities`, `GET.crm-report-activities` |
 | 53 | CRM Forecast | `crm/forecast` | `POST.crm-forecast-submission` |
 | 54 | CRM Equipos | `crm/teams` | `POST.crm-team` |
 | 55 | CRM Metas | `crm/goals` | `POST.crm-goal` |

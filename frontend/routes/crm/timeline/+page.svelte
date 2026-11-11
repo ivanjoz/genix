@@ -3,10 +3,12 @@
   import AvatarToggleGroup from '#components/form/AvatarToggleGroup.svelte'
   import DateInput from '#components/form/DateInput.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
+  import GanttTimeline from '#components/gantt/GanttTimeline.svelte'
   import Page from '#domain/Page.svelte'
   import { tr } from '#core/store.svelte.ts'
-  import TimelineGantt from './TimelineGantt.svelte'
+  import { formatTime } from '#libs/helpers.ts'
   import { CrmTimelineState } from './timeline.svelte.ts'
+  import { CLOSED_COLOR, END_MARKS, END_MARK_BY_OUTCOME, endMarkCounts } from './timeline.ts'
 
   // Opportunities as a Gantt per seller: how each one moved through the stages day by day, and how
   // it ended (won, lost, left for another pipeline, or still open).
@@ -23,6 +25,7 @@
   const ownerOptions = $derived([...new Set(timeline.cards.map((card) => card.ownerID))].filter(Boolean)
     .map((ownerID) => ({ id: ownerID, name: timeline.ownerName(ownerID) })))
   const rangeIsValid = $derived(timeline.filters.toDay >= timeline.filters.fromDay && timeline.filters.toDay - timeline.filters.fromDay < MAX_DAYS)
+  const stageByID = $derived(new Map((timeline.selectedPipeline?.Stages ?? []).map((stage) => [stage.ID, stage])))
 
   timeline.loadScope()
   $effect(() => {
@@ -46,22 +49,52 @@
     <DateInput bind:saveOn={timeline.filters} save="toDay" label="To|Hasta" css="w-150" />
   </div>
 
-  {#if ownerOptions.length}
-    <div class="mb-12">
-      <AvatarToggleGroup options={ownerOptions} bind:selected={timeline.ownerIDs} label="Filter by seller|Filtrar por vendedor"
-        optionLabel={(ownerName) => `Show only ${ownerName}|Mostrar solo a ${ownerName}`} />
-    </div>
-  {/if}
-
   {#if !timeline.scope.PipelineIDs.length}
     <div class="text-fg-muted p-16">{tr('You have no pipelines to report on.|No tiene pipelines para reportar.')}</div>
   {:else if !rangeIsValid}
     <div class="text-fg-muted p-16">{tr('Pick a range of up to one year, ending after it starts.|Elija un rango de hasta un año, que termine después de empezar.')}</div>
   {:else}
-    <div class="text-fg-muted mb-8">
-      {tr('Each card is an opportunity: a dot for every stage it entered, ★ won, ✕ lost, ↦ moved to another pipeline, » still open. Open opportunities always show. Hover a card for its dates.|Cada tarjeta es una oportunidad: un punto por cada etapa a la que entró, ★ ganada, ✕ perdida, ↦ pasó a otro pipeline, » sigue abierta. Las abiertas siempre se muestran. Pase el mouse sobre una tarjeta para ver sus fechas.')}
+    <!-- Seller filter on the left, the card-ending legend on the right -->
+    <div class="flex items-center gap-12 flex-wrap mb-12">
+      {#if ownerOptions.length}
+        <AvatarToggleGroup options={ownerOptions} bind:selected={timeline.ownerIDs} label="Filter by seller|Filtrar por vendedor"
+          optionLabel={(ownerName) => `Show only ${ownerName}|Mostrar solo a ${ownerName}`} />
+      {/if}
+      <!-- Same icons and colors the Gantt uses for each card ending -->
+      <div class="ml-auto flex items-center gap-12 text-fg-muted">
+        {#each Object.values(END_MARKS) as endMark}
+          <span class="flex items-center gap-4"><i class={endMark.icon}></i>{tr(endMark.label)}</span>
+        {/each}
+      </div>
     </div>
-    <TimelineGantt sellers={timeline.sellers} stages={timeline.selectedPipeline?.Stages ?? []}
-      fromDay={timeline.filters.fromDay} toDay={timeline.filters.toDay} ownerName={(userID) => timeline.ownerName(userID)} />
+    <GanttTimeline groups={timeline.sellers} fromDay={timeline.filters.fromDay} toDay={timeline.filters.toDay}
+      groupsTitle="Seller|Vendedor" emptyText="No opportunities in the selected range.|No hay oportunidades en el rango elegido."
+      css="max-h-[calc(100vh-14rem)]">
+      <!-- The seller and the totals of how their cards ended -->
+      {#snippet groupRender(seller)}
+        {@const counts = endMarkCounts(seller.items)}
+        <div class="ff-bold text-green-700">{seller.label}</div>
+        <div class="text-fg-muted flex gap-8 flex-wrap">
+          <span title={tr('Won|Ganadas')}><i class={END_MARKS.won.icon}></i> {counts.won}</span>
+          <span title={tr('Lost|Perdidas')}><i class={END_MARKS.lost.icon}></i> {counts.lost}</span>
+          <span title={tr('Still open|Abiertas')}><i class={END_MARKS.open.icon}></i> {counts.open}</span>
+          {#if counts.left}<span title={tr('Left the pipeline|Salieron del pipeline')}><i class={END_MARKS.left.icon}></i> {counts.left}</span>{/if}
+        </div>
+      {/snippet}
+      <!-- Every stage the card entered, with its day and how it closed -->
+      {#snippet tooltipRender(card)}
+        <div class="ff-bold mb-2">{card.label}</div>
+        {#each card.points as point}
+          {@const endMark = point.icon ? END_MARKS[END_MARK_BY_OUTCOME[point.outcome]] : undefined}
+          {@const stage = stageByID.get(point.stageID)}
+          <div class="flex items-center gap-6">
+            <span class="text-fg-muted ff-mono text-[14px]">{formatTime(point.day, 'M-d')}</span>
+            <span class="inline-block h-10 w-10 shrink-0 rounded-full" style:background={stage?.Color || CLOSED_COLOR}></span>
+            <span>{tr(stage?.Name ?? `#${point.stageID}`)}</span>
+            {#if endMark}<span class="flex items-center gap-4 ff-bold"><i class={endMark.icon}></i>{tr(endMark.label)}</span>{/if}
+          </div>
+        {/each}
+      {/snippet}
+    </GanttTimeline>
   {/if}
 </Page>

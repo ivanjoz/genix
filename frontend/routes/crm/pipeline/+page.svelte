@@ -15,7 +15,8 @@
   import OpportunityMoveModal from './OpportunityMoveModal.svelte'
   import { PipelineBoard } from './pipeline.svelte.ts'
   import {
-    activeStagesOf, canCreateOpportunity, canMoveOpportunity, columnTotals, isStale, sUnixTimeOf,
+    activeStagesOf, canCreateOpportunity, canMoveOpportunity, columnTotals, hasMissingRequirements, isStale, missingRequirements,
+    sUnixTimeOf,
   } from './pipeline.ts'
 
   const ui = useUI()
@@ -26,6 +27,8 @@
 
   let activeOpportunity = $state({} as ICrmOpportunity)
   let closeOutcome = $state(0)
+  // The stage a drag dropped a card on, preselected in the move form; 0 when the form is opened by button.
+  let moveModalStageID = $state(0)
 
   const stages = $derived(activeStagesOf(board.selectedPipeline))
   const columns = $derived(stages.map((stage) => ({ id: stage.ID, name: stage.Name, color: stage.Color })))
@@ -72,9 +75,18 @@
     ui.openSideLayer(OPPORTUNITY_LAYER_ID)
   }
 
+  // A drop onto a stage whose requirements the card does not meet opens the move form with that
+  // stage chosen, so the missing data is asked for instead of the move failing.
   const onMove = (cardID: number, toStageID: number) => {
     const movedOpportunity = cards.find((opportunity) => opportunity.ID === cardID)
-    if (movedOpportunity) board.moveOpportunity(movedOpportunity, movedOpportunity.PipelineID, toStageID)
+    if (!movedOpportunity) return
+    if (hasMissingRequirements(missingRequirements(board.selectedPipeline, toStageID, movedOpportunity))) {
+      activeOpportunity = movedOpportunity
+      moveModalStageID = toStageID
+      ui.openModal(MOVE_MODAL_ID)
+      return
+    }
+    board.moveOpportunity(movedOpportunity, movedOpportunity.PipelineID, toStageID)
   }
 </script>
 
@@ -122,8 +134,9 @@
 
 <OpportunityLayer {board} layerID={OPPORTUNITY_LAYER_ID} opportunity={activeOpportunity}
   onClose={() => ui.openSideLayer(0)}
-  onMove={(opportunity) => { activeOpportunity = opportunity; ui.openModal(MOVE_MODAL_ID) }}
+  onMove={(opportunity) => { activeOpportunity = opportunity; moveModalStageID = 0; ui.openModal(MOVE_MODAL_ID) }}
   onCloseAs={(opportunity, outcome) => { activeOpportunity = opportunity; closeOutcome = outcome; ui.openModal(CLOSE_MODAL_ID) }} />
 <OpportunityCloseModal {board} modalID={CLOSE_MODAL_ID} opportunity={activeOpportunity} outcome={closeOutcome}
   onDone={() => ui.openSideLayer(0)} />
-<OpportunityMoveModal {board} modalID={MOVE_MODAL_ID} opportunity={activeOpportunity} onDone={() => ui.openSideLayer(0)} />
+<OpportunityMoveModal {board} modalID={MOVE_MODAL_ID} opportunity={activeOpportunity} presetStageID={moveModalStageID}
+  onDone={() => ui.openSideLayer(0)} />

@@ -193,7 +193,7 @@ what the filter box already applies to the new data.
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **System → Observability (Observabilidad)** at `/system/observability`: monitors HTTP API
+- **System → Observability → Services (Observabilidad → Servicios)** at `/system/observability`: monitors HTTP API
   traffic and failures per route. It does not cover cron job execution — use this page instead for
   scheduled-task history and handler messages.
 - **System → Server Panel** monitors host/service CPU, memory, disk, and network; use it for

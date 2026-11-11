@@ -3,6 +3,6 @@
   import BackendServices from './BackendServices.svelte';
 </script>
 
-<Page title="Observability|Observabilidad">
+<Page title="Services|Servicios">
   <BackendServices />
 </Page>

@@ -144,9 +144,14 @@ saas_only = true
 [[modules.menus]]
 name = "Platform|Plataforma"
 min_name = "PLA"
-routes = "system/companies, system/server-panel, system/observability, system/cron-actions, system/hr-legal-parameters"
+routes = "system/companies, system/server-panel, system/cron-actions, system/hr-legal-parameters"
 
 [[modules.menus]]
 name = "Development|Desarrollo"
 min_name = "DEV"
-routes = "system/developer, develop-ui/showroom"
+routes = "system/developer, develop-ui/showroom, system/email-inbox"
+
+[[modules.menus]]
+name = "Observability|Observabilidad"
+min_name = "OBS"
+routes = "system/observability, system/credit-consumption"

@@ -248,7 +248,9 @@ func sendSignUpEmail(email string, requestID int64, code string, dryRun bool) er
 		time.Sleep(4 * time.Second)
 		return nil
 	}
-	return core.SendEmail(email, signUpEmailSubject, makeSignUpEmailBody(requestID, code))
+	return core.SendEmail(core.SaasCompanyID, core.EmailMessage{
+		To: []string{email}, Subject: signUpEmailSubject, HTMLBody: makeSignUpEmailBody(requestID, code),
+	})
 }
 
 // PostSignUpRequest is step 1: it mails a verification code to an address that does not yet own

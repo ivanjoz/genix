@@ -112,8 +112,8 @@ id = 6
 name = "Server Panel y Observabilidad"
 group = 8
 levels = 14
-frontend_routes = "system/server-panel,system/observability"
-backend_apis = "GET.server-metrics,GET.observability,GET.request-errors-by-ids"
+frontend_routes = "system/server-panel,system/observability,system/credit-consumption"
+backend_apis = "GET.server-metrics,GET.observability,GET.request-errors-by-ids,GET.credit-consumption"
 
 [[access]]
 id = 33
@@ -128,8 +128,8 @@ id = 34
 name = "Developer"
 group = 8
 levels = 14
-frontend_routes = "system/developer"
-backend_apis = ""
+frontend_routes = "system/developer,system/email-inbox"
+backend_apis = "GET.sent-emails,GET.sent-email"
 
 [[access]]
 id = 7
@@ -456,7 +456,7 @@ name = "CRM Oportunidades"
 group = 10
 levels = 14
 frontend_routes = "crm/pipeline"
-backend_apis = "POST.crm-opportunity,POST.crm-opportunity-move,POST.crm-opportunity-close,POST.crm-opportunity-activity,POST.crm-attachment-upload"
+backend_apis = "POST.crm-opportunity,POST.crm-opportunity-move,POST.crm-opportunity-close,POST.crm-opportunity-activity,POST.crm-attachment-upload,GET.crm-opportunity-approval,POST.crm-task,GET.crm-opportunity-email-draft,POST.crm-opportunity-email"
 
 [[access]]
 id = 48
@@ -480,7 +480,15 @@ name = "CRM Diccionarios"
 group = 10
 levels = 14
 frontend_routes = "crm/dictionaries"
-backend_apis = "POST.crm-lost-reason,POST.crm-activity-type"
+backend_apis = "POST.crm-lost-reason,POST.crm-activity-type,POST.crm-email-template"
+
+[[access]]
+id = 51
+name = "CRM Tareas"
+group = 10
+levels = 14
+frontend_routes = "crm/tasks"
+backend_apis = "GET.crm-tasks,POST.crm-task,POST.crm-task-decide,GET.crm-opportunity-email-draft,POST.crm-opportunity-email"
 
 [[access]]
 id = 52
@@ -488,7 +496,7 @@ name = "CRM Reportes"
 group = 10
 levels = 14
 frontend_routes = "crm/reports"
-backend_apis = "GET.crm-report-scope,GET.crm-report-stage-log,GET.crm-report-open-opportunities"
+backend_apis = "GET.crm-report-scope,GET.crm-report-stage-log,GET.crm-report-open-opportunities,GET.crm-report-activities"
 
 [[access]]
 id = 53

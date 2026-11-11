@@ -16,7 +16,9 @@
   import { activeStagesOf } from '../pipeline/pipeline.ts'
   import { cellValue, goalGridRows, goalPeriodDays, isDailyPeriodType, type GoalGridRow } from '../goals/goals.ts'
   import { aggregateNetProgress, unixDayOfSUnixTime, WON_COLUMN } from '../reports/reports.ts'
-  import { attainmentPercent, computeForecast, latestSubmission, type ForecastTotals } from './forecast.ts'
+  import { Chart } from '#components/charts/index.ts'
+  import type { ICrmForecastSubmission } from '#services/crm/crm-forecast.svelte.ts'
+  import { attainmentPercent, computeForecast, submissionBeforePeriod, submissionHistory, type ForecastTotals } from './forecast.ts'
   import { CrmForecastState, currentShortYear } from './forecast.svelte.ts'
 
   // Forecast of the month per seller and team: goal, what is already won, the open pipeline by
@@ -43,21 +45,24 @@
   report.loadScope()
   $effect(() => {
     if (!report.selectedPipelineID) return
-    void [report.year, report.selectedPipelineID, report.selectedPipeline?.GoalPeriodType]
+    void [forecast.year, report.selectedPipelineID, report.selectedPipeline?.GoalPeriodType]
     untrack(() => { forecast.selectDefaultPeriod(); forecast.load() })
   })
   // Another period of the same year only reloads that period's submissions.
   const selectPeriod = (period: number) => { forecast.period = period; forecast.load() }
 
   const memberUserIDs = $derived(report.selectedPipeline?.Members.map((member) => member.UserID) ?? [])
-  const gridRows = $derived(goalGridRows(forecast.teams.records, memberUserIDs, (id) => report.ownerName(id)))
+  const gridRows = $derived(goalGridRows(report.teams.records, memberUserIDs, (id) => report.ownerName(id)))
 
   interface ForecastRow {
     row: GoalGridRow
     goal: number
     won: number
     totals: ForecastTotals
+    history: ICrmForecastSubmission[]
     lastCommit: number | undefined
+    /** Commit of the last submission made before the period started (P7). */
+    commitBeforeStart: number | undefined
     canSubmit: boolean
   }
 
@@ -80,16 +85,20 @@
       ? gridRows.filter((candidate) => !candidate.isTeamRow && candidate.teamID === row.teamID).map((candidate) => candidate.userID)
       : [row.userID]
     const goalOf = (ownerID: number) =>
-      cellValue(new Map(), forecast.goals.records, report.selectedPipelineID, GOAL_METRIC.WON_AMOUNT, ownerID, forecast.period)
-    const lastSubmission = latestSubmission(forecast.submissions, row.userID, row.isTeamRow ? row.teamID : 0)
-    const leaderID = forecast.teams.records.find((team) => team.ID === row.teamID)?.LeaderUserID
+      cellValue(new Map(), report.goals.records, report.selectedPipelineID, GOAL_METRIC.WON_AMOUNT, ownerID, forecast.period)
+    const history = submissionHistory(forecast.submissions, row.userID, row.isTeamRow ? row.teamID : 0)
+    const lastSubmission = history.at(-1)
+    const submissionBeforeStart = submissionBeforePeriod(history, goalPeriodDays(forecast.periodType, forecast.period)[0])
+    const leaderID = report.teams.records.find((team) => team.ID === row.teamID)?.LeaderUserID
     return {
       row,
       goal: owners.reduce((total, ownerID) => total + goalOf(ownerID), 0),
       won: owners.reduce((total, ownerID) => total + (wonByOwner.get(ownerID) ?? 0) / 100, 0),
       totals: computeForecast(report.openNow, report.selectedPipeline ? activeStagesOf(report.selectedPipeline) : [],
         forecast.periodType, forecast.period, new Set(owners)),
+      history,
       lastCommit: lastSubmission ? lastSubmission.CommitAmount / 100 : undefined,
+      commitBeforeStart: submissionBeforeStart ? submissionBeforeStart.CommitAmount / 100 : undefined,
       canSubmit: row.isTeamRow ? leaderID === userID : row.userID === userID,
     }
   }))
@@ -108,10 +117,23 @@
     { header: 'Won + commit|Ganado + compromiso', css: 'px-6 text-right ff-mono',
       getValue: (item) => money(item.won + inCurrency(item.totals.commit)),
       setCellCss: (item) => item.goal > 0 && item.won + inCurrency(item.totals.commit) < item.goal ? 'text-red-500' : undefined },
+    { header: 'Submitted before start|Enviado antes del inicio', css: 'px-6 text-right ff-mono',
+      getValue: (item) => item.commitBeforeStart === undefined ? '—' : money(item.commitBeforeStart) },
     { header: 'Last submitted|Último enviado', css: 'px-6 text-right ff-mono',
       getValue: (item) => item.lastCommit === undefined ? '—' : money(item.lastCommit) },
     { header: '', css: 'px-6', getValue: () => '', buttonEditIf: (item) => item.canSubmit, buttonEditHandler: (item) => openSubmit(item) },
   ]
+
+  // Row identity: a team row by its negated team ID, a seller row by the user ID (always > 0).
+  const rowKey = (item: ForecastRow) => item.row.isTeamRow ? -item.row.teamID : item.row.userID
+  let selectedRowKey = $state(0)
+  const selectedRow = $derived(forecastRows.find((item) => rowKey(item) === selectedRowKey))
+  // Commit and best case of every submission, with the goal as a flat reference line.
+  const evolutionSeries = $derived(selectedRow ? [
+    { name: tr('Commit|Compromiso'), color: '#6366f1', values: selectedRow.history.map((submission) => inCurrency(submission.CommitAmount)) },
+    { name: tr('Best case|Mejor caso'), color: '#38bdf8', values: selectedRow.history.map((submission) => inCurrency(submission.BestCaseAmount)) },
+    { name: tr('Goal|Meta'), color: '#94a3b8', values: selectedRow.history.map(() => selectedRow.goal) },
+  ] : [])
 
   // The modal edits one submission; the amounts start from the computed forecast, in currency units.
   let submitTarget = $state<ForecastRow | null>(null)
@@ -146,7 +168,7 @@
     <SearchSelect options={pipelineOptions} keyId="id" keyName="name" label="Pipeline" css="w-240"
       selected={report.selectedPipelineID} onChange={(option) => { report.selectedPipelineID = option.id }} />
     <SearchSelect options={yearOptions} keyId="id" keyName="name" label="Year|Año" css="w-120"
-      selected={report.year} onChange={(option) => { report.year = option.id }} />
+      selected={forecast.year} onChange={(option) => forecast.selectYear(option.id)} />
     <SearchSelect options={periodOptions} keyId="id" keyName="name" css="w-160"
       label={isDailyPeriodType(forecast.periodType) ? 'Day|Día' : forecast.periodType === GOAL_PERIOD.WEEKLY ? 'Week|Semana' : 'Month|Mes'}
       selected={forecast.period} onChange={(option) => selectPeriod(option.id)} />
@@ -158,7 +180,24 @@
   {#if !report.scope.PipelineIDs.length}
     <div class="text-fg-muted p-16">{tr('You have no pipelines to report on.|No tiene pipelines para reportar.')}</div>
   {:else}
-    <VTable {columns} data={forecastRows} css="w-full" maxHeight="calc(100vh - 12rem)" />
+    <VTable {columns} data={forecastRows} css="w-full" maxHeight="calc(100vh - 12rem)"
+      selected={selectedRowKey} isSelected={(item, key) => rowKey(item) === key}
+      onRowClick={(item) => { selectedRowKey = rowKey(item) === selectedRowKey ? 0 : rowKey(item) }} />
+
+    <!-- R6: how the selected row's forecast evolved during the period, against its goal. -->
+    {#if selectedRow}
+      <div class="bg-white/80 rounded-lg p-12 mt-16" aria-label="Forecast evolution">
+        <div class="h3 ff-bold mb-8">{tr('Submitted forecast|Forecast enviado')} · {selectedRow.row.label}</div>
+        {#if selectedRow.history.length}
+          <Chart type="line" series={evolutionSeries} labels={selectedRow.history.map((submission) => submission.Created)} height={240}
+            formatLabel={(created) => formatTime(Number(created), 'd-M') as string}
+            formatTooltipLabel={(created) => formatTime(Number(created), 'd-M-Y H:n') as string}
+            formatValue={(value) => money(value)} />
+        {:else}
+          <div class="text-fg-muted">{tr('No forecast submitted for this period yet.|Aún no se envió un forecast para este periodo.')}</div>
+        {/if}
+      </div>
+    {/if}
   {/if}
 
   <Modal id={MODAL_ID} size={4} bodyCss="px-16 py-14" title={tr('Submit forecast|Enviar forecast')} onSave={confirmSubmit}>

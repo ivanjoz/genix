@@ -15,11 +15,34 @@ export interface ICrmPipelineStage {
   Status: number
   /** FORECAST_CATEGORY: how the forecast counts open opportunities of this stage. */
   ForecastCategory: number
+  /** STANDARD_FIELD values an opportunity must have to enter this stage or any later one. */
+  RequiredStandardFields: number[]
+  /** A forward move into this stage waits for this user's approval; 0 = no approval. */
+  ApproverUserID: number
+  /** Tasks proposed to the opportunity every time it enters this stage. */
+  TaskTemplates: ICrmStageTaskTemplate[]
+}
+
+export interface ICrmStageTaskTemplate {
+  ID: number
+  /** TASK_KIND.ACTIVITY or TASK_KIND.SEND_EMAIL. */
+  Kind: number
+  Title: string
+  /** ACTIVITY: the type to log. SEND_EMAIL: always the Email type (the server sets it). */
+  ActivityTypeID: number
+  /** SEND_EMAIL: the template the email starts from. */
+  EmailTemplateID: number
+  /** Days after entering the stage. */
+  DueDays: number
+  /** TASK_ASSIGN: the opportunity's owner, or the fixed AssignUserID. */
+  AssignTo: number
+  AssignUserID: number
 }
 
 export interface ICrmPipelineField {
   FieldID: number
-  Required: boolean
+  /** 0 = optional; otherwise required to enter that stage or any later one (by board position). */
+  RequiredFromStageID: number
 }
 
 export interface ICrmPipelineMember {
@@ -90,6 +113,19 @@ export abstract class CrmCatalogService<T extends { ID: number, ss: number }> ex
 
 export class CrmPipelinesService extends CrmCatalogService<ICrmPipeline> {
   constructor(init = false) { super('crm-pipelines', init) }
+
+  // A stage with no required standard field or task template has none on the wire (a nil slice is
+  // sent as null); every reader treats both as lists, so they become lists here, once.
+  handler(result: ICrmPipeline[]): void {
+    super.handler((result || []).map((pipeline) => ({
+      ...pipeline,
+      Stages: (pipeline.Stages ?? []).map((stage) => ({
+        ...stage,
+        RequiredStandardFields: stage.RequiredStandardFields ?? [],
+        TaskTemplates: stage.TaskTemplates ?? [],
+      })),
+    })))
+  }
 }
 
 export class CrmCustomFieldsService extends CrmCatalogService<ICrmCustomField> {
