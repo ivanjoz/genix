@@ -19,7 +19,7 @@ import type { Snippet } from 'svelte';
   let {
     children, title, options, containerCss, useTopMinimalMenu, fixedFullHeight,
     header, isLoading = false, useMenuSearchBox = false, selectedOption, onSelectOption,
-    showBackButton = false, onBack, subtitle, background, noPadding = false,
+    showBackButton = false, onBack, subtitle, background, noPadding = false, hideHeader = false,
   }: {
     children: any,
     title: string,
@@ -47,6 +47,9 @@ import type { Snippet } from 'svelte';
     background?: 'white'
     // Drops the page padding, so the content reaches the side menu and the header edge to edge.
     noPadding?: boolean
+    // Hides the top bar on desktop and gives its height to the content (an embedded app, a preview).
+    // Mobile keeps the bar: it holds the button that opens the side menu.
+    hideHeader?: boolean
   } = $props();
   const ui = useUI()
 
@@ -59,7 +62,7 @@ import type { Snippet } from 'svelte';
   // route's Page may have mounted first.
   $effect(() => {
     const headerContent = {
-      content: header, subtitle,
+      content: header, subtitle, hiddenOnDesktop: hideHeader,
       onBack: showBackButton ? (onBack || (() => history.back())) : undefined,
       menuSearchBox: useMenuSearchBox ? { options: options || [], selectedOption, onSelectOption } : undefined,
     }
@@ -147,7 +150,7 @@ import type { Snippet } from 'svelte';
 </script>
 
 <div id="page-container" class="_1 {noPadding ? '' : 'px-10 pt-10'} {background === 'white' ? 'bg-surface' : ''} {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
-	class:fixed-full-height={fixedFullHeight}
+	class:fixed-full-height={fixedFullHeight} class:no-header={hideHeader}
 >
   {#if Core.isLoading === 0 && isLogged}
     {#if isLoading}
@@ -180,6 +183,17 @@ import type { Snippet } from 'svelte';
   .fixed-full-height {
 	 	height: calc(100vh - var(--header-height));
 	  overflow: auto;
+  }
+
+  /* Same 751px breakpoint as AppHeader's `hidden-on-desktop`: the content takes the bar's height. */
+  @media (min-width: 751px) {
+    ._1.no-header {
+      margin-top: 0;
+      min-height: 100vh;
+    }
+    .fixed-full-height.no-header {
+      height: 100vh;
+    }
   }
 
   @media (max-width: 750px) {

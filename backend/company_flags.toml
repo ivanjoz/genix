@@ -34,3 +34,11 @@ label = "Commercial|Comercial"
 
 [clients]
 label = "Clients|Clientes"
+
+[ecommerce]
+label = "Online store|Tienda online"
+10 = { name = "Require email confirmation on online payment|Requerir confirmación de correo en pago online" }
+11 = { name = "Require contact number|Requerir número de contacto" }
+12 = { name = "Issue receipt automatically for online sales|Emitir comprobante automáticamente en ventas online" }
+13 = { name = "Include cash on delivery in the web store|Incluir pago contra entrega en tienda web" }
+14 = { name = "Require email confirmation on deferred payment|Requerir confirmación de correo en pago diferido" }

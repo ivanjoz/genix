@@ -1445,7 +1445,7 @@ backend site_{endpoint_hostname}
     option forwardfor
     http-request deny deny_status 413 if {{ req.hdr_val(content-length) gt {API_MAX_BODY_BYTES} }}
     # Browser preflights are answered here, before the backend or the fareward agent sees them.
-    http-request return status 204 hdr Access-Control-Allow-Origin "%[req.hdr(origin)]" hdr Access-Control-Allow-Methods "GET, POST, OPTIONS" hdr Access-Control-Allow-Headers "Authorization, Content-Type" hdr Access-Control-Max-Age 86400 if METH_OPTIONS
+    http-request return status 204 hdr Access-Control-Allow-Origin "%[req.hdr(origin)]" hdr Access-Control-Allow-Methods "GET, POST, OPTIONS" hdr Access-Control-Allow-Headers "Authorization, Content-Type, X-Customer-Token" hdr Access-Control-Max-Age 86400 if METH_OPTIONS
     # The identity headers belong to the edge: a client sending them is lying.
     http-request del-header x-fareward- -m beg
     # The backend reads the caller's address from X-Real-IP (core.ClientIPFromRequest).

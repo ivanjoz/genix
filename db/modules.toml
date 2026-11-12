@@ -23,7 +23,7 @@ icon = "icon-[fa--shopping-cart]"
 [[modules.menus]]
 name = "Sales|Ventas"
 min_name = "VEN"
-routes = "sales/sale_order_create, sales/sale_orders_status, sales/sale_planning, sales/shipping-costs"
+routes = "sales/sale_order_create, sales/sale_orders_status, sales/online-orders, sales/sale_planning, sales/shipping-costs"
 
 [[modules.menus]]
 name = "Reports|Reportes"
@@ -38,7 +38,7 @@ routes = "production/products, crm/customers"
 [[modules.menus]]
 name = "Store / Web|Tienda / Web"
 min_name = "WEB"
-routes = "webpage-builder/pages, webpage-builder/gallery"
+routes = "webpage-builder/pages, webpage-builder/gallery, webpage-builder/preview"
 
 [[modules.menus]]
 name = "Invoicing|Facturación"
@@ -98,7 +98,7 @@ routes = "crm/customers, crm/pipeline, crm/tasks"
 [[modules.menus]]
 name = "Reports|Reportes"
 min_name = "REP"
-routes = "crm/reports, crm/timeline, crm/forecast"
+routes = "crm/reports/flow, crm/reports/conversion, crm/reports/performance, crm/timeline, crm/forecast"
 
 [[modules.menus]]
 name = "Management|Gestión"

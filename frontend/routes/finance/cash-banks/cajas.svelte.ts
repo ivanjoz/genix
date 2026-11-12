@@ -11,6 +11,8 @@ export interface ICashBank {
   CurrentAmount: number
   ReconciliationAmount: number
   Type: number
+  // The single account the web store's Culqi card/Yape charges are collected into.
+  ReceivesCulqiPayments: boolean
   ss: number
   upd: number
 }

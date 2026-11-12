@@ -89,12 +89,17 @@ var APIRouteIDs = map[string]int16{
 	"GET.invoices":                        119,
 	"GET.locations-warehouses":            22,
 	"GET.observability":                   105,
+	"GET.online-sale-orders":              257,
 	"GET.p-company-names-by-ids":          23,
 	"GET.p-dev-login":                     24,
 	"GET.p-hello":                         25,
 	"GET.p-product-text-search":           26,
 	"GET.p-products-ecommerce":            27,
 	"GET.p-products-ids":                  28,
+	"GET.p-web-customer":                  245,
+	"GET.p-web-customer-orders":           246,
+	"GET.p-web-order-pdf":                 247,
+	"GET.p-web-shipping-amount":           256,
 	"GET.p-webpage":                       29,
 	"GET.parametros":                      30, // retired
 	"GET.perfiles":                        31,
@@ -206,12 +211,22 @@ var APIRouteIDs = map[string]int16{
 	"POST.invoice":                        124, // retired
 	"POST.invoice-retry":                  125,
 	"POST.invoice-series":                 126,
+	"POST.online-sale-order-annul":        258,
+	"POST.online-sale-order-settle":       259,
 	"POST.p-agent-turn":                   73,
 	"POST.p-contact-message":              103,
 	"POST.p-signup-company":               74,
 	"POST.p-signup-request":               75,
 	"POST.p-signup-verify":                76,
 	"POST.p-user-login":                   77,
+	"POST.p-web-checkout":                 248,
+	"POST.p-web-checkout-identify":        249,
+	"POST.p-web-customer":                 250,
+	"POST.p-web-customer-address":         251,
+	"POST.p-web-customer-code":            252,
+	"POST.p-web-customer-login":           253,
+	"POST.p-web-customer-password":        254,
+	"POST.p-web-customer-verify":          255,
 	"POST.parametros":                     78, // retired
 	"POST.perfiles":                       79,
 	"POST.product-category-image":         80,
@@ -270,7 +285,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 244
+const MaxAPIRouteID int16 = 259
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

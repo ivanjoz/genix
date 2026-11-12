@@ -13,12 +13,8 @@ import { useCitiesAPI, type ICity } from '#services/services/cities.svelte.ts';
     css, saveOn, save, onChange
   }: ICiudades = $props();
 
-  // svelte-ignore state_referenced_locally
-  let form = $state({
-    departamentoID: Number(saveOn?.departamentoID || 0),
-    provinciaID: Number(saveOn?.provinciaID || 0),
-    distritoID: Number(saveOn?.distritoID || 0)
-  })
+  // The three levels are rebuilt from the single saved city ID (saveOn[save]) by the effect below.
+  let form = $state({ departamentoID: 0, provinciaID: 0, distritoID: 0 })
 
   const cities = useCitiesAPI()
   let provincias = $state([] as ICity[])
@@ -41,6 +37,7 @@ $effect(() => {
       if(provincia){
         form.departamentoID = provincia.ParentID
         form.provinciaID = ciudad.ParentID
+        form.distritoID = ciudad.ID
       }
     }
   }

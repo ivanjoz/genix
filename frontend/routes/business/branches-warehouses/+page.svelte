@@ -1,6 +1,7 @@
 <script lang="ts">
 import { hideLoading, notifyFailure, showLoading } from '@genix/ui/notify';
 import Input from '#components/form/Input.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
 import Modal from '#components/layers/Modal.svelte';
 import Layer from '#components/layers/Layer.svelte';
 import Page from '#domain/Page.svelte';
@@ -282,7 +283,7 @@ import {
         <FilterInput bind:value={filterText} css="mr-16 w-256" />
         <div class="flex items-center">
           <Button color="green" icon="icon-[fa--plus]" label="Opens the modal to create a new warehouse linked to a sede." onClick={() => {
-            almacenForm = { ID: 0, SiteID: 0, Name: "", Description: "", ss: 1, upd: 0, Layout: [] }
+            almacenForm = { ID: 0, SiteID: 0, Name: "", Description: "", ss: 1, upd: 0, Layout: [], ExcludeFromOnlineSales: false }
             ui.openModal(2)
           }} />
         </div>
@@ -351,6 +352,9 @@ import {
         keyId="ID" keyName="_nombre" options={paisCiudadesService.distritos}
         required={true}
       />
+      <Checkbox bind:saveOn={sedeForm} save="IsPickupPoint" css="col-span-24"
+        label="Online purchase pickup point|Punto de recojo de compras online"
+      />
     </div>
   </Modal>
 
@@ -371,6 +375,9 @@ import {
       />
       <Input bind:saveOn={almacenForm} save="Description"
         css="col-span-24" label="Description|Descripción"
+      />
+      <Checkbox bind:saveOn={almacenForm} save="ExcludeFromOnlineSales" css="col-span-24"
+        label="Exclude from online sales|Excluir para ventas online"
       />
     </div>
   </Modal>

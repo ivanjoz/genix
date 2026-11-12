@@ -38,7 +38,11 @@ import (
 //
 // 3: the company flags travel in the blob. A version-2 blob would read as "no flags", so a
 // sale would convert currencies without the company's spread.
-const CompanyConfigVersion = int8(3)
+//
+// 4: Culqi's live/test mode and Yape travel in the blob, and each site says whether it is a
+// pickup point. A version-3 blob would read as test mode, so a live store would charge with the
+// test key.
+const CompanyConfigVersion = int8(4)
 
 type CompanyConfig struct {
 	Version       int8                     `cb:"1"`
@@ -67,6 +71,8 @@ type CompanyConfigSite struct {
 	Address string `cb:"3"`
 	CityID  int32  `cb:"4"`
 	Status  int8   `cb:"5"`
+	// IsPickupPoint lets the web checkout check a "Recojo en Tienda" site without a cluster read.
+	IsPickupPoint bool `cb:"6"`
 }
 
 // CompanyConfigCompany is the taxpayer, as every document declares it.
@@ -125,10 +131,17 @@ type CompanyConfigSunat struct {
 // PubKeyDev are the browser's half and are deliberately absent: nothing server-side
 // reads them, and a secret store should not hold what is already public.
 type CompanyConfigCulqi struct {
-	RsaKey   string `cb:"1"`
-	RsaKeyID string `cb:"2"`
-	KeyLive  string `cb:"3"`
-	KeyDev   string `cb:"4"`
+	RsaKey      string `cb:"1"`
+	RsaKeyID    string `cb:"2"`
+	KeyLive     string `cb:"3"`
+	KeyDev      string `cb:"4"`
+	IsLive      bool   `cb:"5"`
+	YapeEnabled bool   `cb:"6"`
+}
+
+// SecretKey is the key the backend charges with in the company's current mode.
+func (e CompanyConfigCulqi) SecretKey() string {
+	return core.If(e.IsLive, e.KeyLive, e.KeyDev)
 }
 
 // CompanyConfigParameter is a parameters row minus what the blob already knows
@@ -179,6 +192,8 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 			RsaKeyID: company.CulqiConfig.RsaKeyID,
 			KeyLive:  company.CulqiConfig.KeyLive,
 			KeyDev:   company.CulqiConfig.KeyDev,
+			IsLive:   company.CulqiConfig.IsLive,
+			YapeEnabled: company.CulqiConfig.YapeEnabled,
 		},
 		Sunat: CompanyConfigSunat{Series: company.InvoiceSeries},
 	}
@@ -216,6 +231,7 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 			Address: site.Address,
 			CityID:  site.CityID,
 			Status:  site.Status,
+			IsPickupPoint: site.IsPickupPoint,
 		})
 		if site.Updated > config.SourceUpdated {
 			config.SourceUpdated = site.Updated

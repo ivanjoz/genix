@@ -110,6 +110,12 @@ type SaleOrder struct {
 	// sale instead of downloading it — its movement carries SameDayMovement = 1. See
 	// finance.SameDaySettlement.
 	SameDayCashBankID int32 `cb:"37"`
+	// ShippingAmount is the home-delivery charge (cents, in the sale's currency), already included
+	// in TotalAmount: the boleta bills it as its own line. 0 on pickup and on till sales.
+	ShippingAmount int32 `cb:"41"`
+	// OnlineSaleOrderID is the web store order this sale was created from; 0 on till sales. Every
+	// write to the sale copies its Status and DebtAmount to that order (syncOnlineSaleOrderIn).
+	OnlineSaleOrderID int32 `cb:"43"`
 }
 
 // StampPeriod sets Period from the sale's accounting date, its Date.
@@ -282,6 +288,8 @@ type SaleOrderTable struct {
 	Period           db.Col[*SaleOrderTable, int16]
 	// SameDayCashBankID is the cash bank of the collection that settled the sale on its Date.
 	SameDayCashBankID db.Col[*SaleOrderTable, int32]
+	ShippingAmount    db.Col[*SaleOrderTable, int32]
+	OnlineSaleOrderID db.Col[*SaleOrderTable, int32]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {

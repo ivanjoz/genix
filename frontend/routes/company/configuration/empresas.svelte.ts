@@ -17,6 +17,8 @@ export interface ICompanyCulqi {
   PubKeyLive: string
   KeyDev: string
   PubKeyDev: string
+  IsLive: boolean // The web store charges with the live keys; otherwise with the test keys.
+  YapeEnabled: boolean
 }
 
 export interface ICompany {

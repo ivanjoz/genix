@@ -257,6 +257,10 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 		}
 	}
 
+	// A web order's home delivery is billed as one more taxed item, built from the sale's own
+	// ShippingAmount: it is not a product line, so it has no product id.
+	appendLine(sales.SaleOrderLine{}, ShippingLineDescription, 1, order.ShippingAmount)
+
 	if len(lines) == 0 {
 		return nil, nil, errors.New("la venta no tiene líneas con cantidad y precio válidos")
 	}
@@ -280,8 +284,12 @@ func SaleOrderTaxAmount(order *sales.SaleOrder) int32 {
 		addLinePart(lineQuantity.Units, saleLine.Price)
 		addLinePart(lineQuantity.Sub, saleLine.SubPrice)
 	}
+	addLinePart(1, order.ShippingAmount)
 	return int32(taxAmount)
 }
+
+// ShippingLineDescription names the delivery item on a web order's comprobante.
+const ShippingLineDescription = "ENVÍO"
 
 // loadProductDescriptions reads what a document line needs to describe itself: the product
 // name and, for a sub-unit line, the name of the sub-unit.

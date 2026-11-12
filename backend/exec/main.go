@@ -4,7 +4,6 @@ import (
 	"app/core"
 	"app/invoicing"
 	"app/security"
-	"app/tests/sample_records"
 )
 
 type ExecRouterType map[string]func(args *core.ExecArgs) core.FuncResponse
@@ -24,16 +23,6 @@ var ExecHandlers = ExecRouterType{
 	"fn-rebuild-observability-log-view":  RebuildObservabilityLogView,
 	"fn-recalc":                          RecalcVirtualColumnsValues,
 	"fn-recalc-stock":                    RecalcStock,
-	"fn-generate-erp-history":            GenerateErpHistory,
-	"fn-generate-supply-data":            GenerateSupplyData,
-	"fn-generate-projects-flow":          GenerateProjectsFlow,
-	"fn-generate-expenses":               GenerateExpenses,
-	"fn-generate-crm-data":               GenerateCrmData,
-	"fn-generate-demo-data":              GenerateDemoData,
-	"fn-load-test":                       sample_records.RunLoadTest,
-	"fn-seed-hr":                         SeedHR,
-	"fn-wipe-company-data":               WipeCompanyData,
-	"fn-seed-hr-legal-parameters":        SeedHRLegalParameters,
 	"fn-backfill-identity-snapshots":     BackfillIdentitySnapshots,
 	"fn-backfill-cash-movement-accounts": BackfillCashMovementAccounts,
 	"fn-backfill-account-codes":          BackfillAccountCodes,
@@ -42,6 +31,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-backfill-purchase-documents":     BackfillPurchaseDocuments, "fn-recompute-user-accesos": security.RecomputeUserAccesos, "fn-sync-fareward-grants": security.SyncFarewardGrants,
 	"fn-reset-counters":           ResetCounterPart,
 	"fn-rename-columns":           RenameColumns,
+	"fn-shipping-costs-to-cents":  MigrateShippingCostsToCents,
 	"fn-deploy-cloudflare-worker": DeployCloudflareWorkerHandler,
 	"fn-deploy-company-webpage":   DeployCompanyWebpage,
 	"fn-sync-image-assets":        SyncImageAssetsHandler,

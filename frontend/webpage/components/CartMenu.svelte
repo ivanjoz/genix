@@ -9,34 +9,91 @@
 
 	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
 	import angleSvg from "#components/assets/angle.svg?raw";
-import { parseSVG } from '#libs/helpers.ts';
+	import { parseSVG } from '#libs/helpers.ts';
 	import s1 from "./styles.module.css";
 	import ArrowSteps from "#components/navigation/ArrowSteps.svelte";
-	import { Globals } from "#ecommerce/stores/globals.svelte.ts";
 	import Input from "#components/form/Input.svelte";
-	import CiudadesSelector from "#ecommerce/components/CiudadesSelector.svelte";
 	import ProductCard from "#ecommerce/components/ProductCard.svelte";
+	import AddressForm from "#ecommerce/components/AddressForm.svelte";
 	import { useUI } from '@genix/ui';
+	import { notifyFailure, showLoading, hideLoading } from '@genix/ui/notify';
 	import { Ecommerce } from "#ecommerce/stores/globals.svelte.ts";
-
 	import ButtonLayer from "#components/buttons/ButtonLayer.svelte";
-
-	import { Env } from "#core/env.ts";
-
+	import { useCitiesAPI } from '#services/services/cities.svelte.ts';
 	import CulqiCheckout from "./CulqiCheckout.svelte";
-	const ui = useUI();
+	import {
+		WebStore, loadWebStoreCompany, restoreWebCustomerSession, saveCustomerDraft, identifyWebCheckout,
+		verifyWebCustomerCode, getWebShippingAmount, postWebCheckout, downloadWebOrderPDF,
+		type IWebCheckoutResult,
+	} from "#ecommerce/services/web-store.svelte.ts";
+	import {
+		DELIVERY_HOME, DELIVERY_PICKUP, PAYMENT_CARD, PAYMENT_YAPE, PAYMENT_DEFERRED, NEW_ADDRESS_ID,
+		FLAG_CASH_ON_DELIVERY, FLAG_REQUIRE_CONTACT_NUMBER, cartTotalCents, formatSoles, hasCompanyFlag,
+		requiresDocumentNumber, validateCustomerDraft, validateDelivery, defaultAddressID,
+		deferredPaymentLabel, buildWebCheckoutRequest, isOnlinePayment,
+	} from "#ecommerce/services/web-checkout.ts";
 
-	let userForm = {} as any;
+	const ui = useUI();
+	const cities = useCitiesAPI();
 
 	let isOpen = $state(false);
 
-	const total = $derived(
-		Array.from(ProductsSelectedMap.values()).reduce((acc, curr) => {
-			const price = curr.producto.FinalPrice || curr.producto.Price || 0;
+	// The checkout choices of this visit to the cart.
+	const checkout = $state({
+		deliveryType: 0,
+		pickupSiteID: 0,
+		selectedAddressID: NEW_ADDRESS_ID,
+		newAddress: { CityID: 0, Address: "", Reference: "" },
+		// null = not resolved yet; -1 = the store does not deliver to that district.
+		shippingAmount: null as number | null,
+		paymentMethod: 0,
+		// Set when identification mailed a code: the shopper types it before paying.
+		codeRequired: false,
+		code: { value: "" },
+		// The online payment widget is shown once the shopper is identified.
+		showCulqi: false,
+		result: null as IWebCheckoutResult | null,
+	});
 
-			return acc + price * curr.cant;
-		}, 0),
+	const cartLines = $derived(
+		Array.from(ProductsSelectedMap.values()).map((cartProduct) => ({
+			productID: cartProduct.producto.ID,
+			quantity: cartProduct.cant,
+			unitPriceCents: cartProduct.producto.FinalPrice || cartProduct.producto.Price || 0,
+		})),
 	);
+	const productsCents = $derived(cartTotalCents(cartLines));
+	const shippingCents = $derived(
+		checkout.deliveryType === DELIVERY_HOME && (checkout.shippingAmount || 0) > 0 ? checkout.shippingAmount || 0 : 0,
+	);
+	const totalCents = $derived(productsCents + shippingCents);
+	const companyFlags = $derived(WebStore.company.Flags);
+	const needsDocumentNumber = $derived(requiresDocumentNumber(companyFlags, totalCents));
+
+	// The district the order ships to: the chosen saved address, or the one being typed.
+	const deliveryDistrictID = $derived.by(() => {
+		if (checkout.deliveryType !== DELIVERY_HOME) { return 0 }
+		if (checkout.selectedAddressID === NEW_ADDRESS_ID) { return checkout.newAddress.CityID || 0 }
+		return WebStore.addresses.find((address) => address.ID === checkout.selectedAddressID)?.CityID || 0
+	});
+
+	const paymentOptions = $derived.by(() => {
+		const options = [{ id: PAYMENT_CARD, name: "Tarjeta de crédito / débito", icon: "icon-[fa--credit-card]" }];
+		if (WebStore.company.YapeEnabled) {
+			options.push({ id: PAYMENT_YAPE, name: "Yape", icon: "icon-[fa--mobile]" });
+		}
+		if (hasCompanyFlag(companyFlags, FLAG_CASH_ON_DELIVERY)) {
+			options.push({ id: PAYMENT_DEFERRED, name: deferredPaymentLabel(checkout.deliveryType), icon: "icon-[fa--money]" });
+		}
+		return options;
+	});
+
+	const cityName = (cityID: number): string => {
+		const district = cities.citiesMap?.get(cityID);
+		if (!district) { return "" }
+		const province = cities.citiesMap.get(district.ParentID);
+		return [district.Name, province?.Name].filter(Boolean).join(", ");
+	};
 
 	function toggleCartDiv() {
 		layerOpenedState.id = layerOpenedState.id === id ? 0 : id;
@@ -45,7 +102,12 @@ import { parseSVG } from '#libs/helpers.ts';
 	$effect(() => {
 		if (layerOpenedState.id === id) {
 			isOpen = true;
-			Env.loadEmpresaConfig();
+			loadWebStoreCompany();
+			restoreWebCustomerSession().then(() => {
+				if (checkout.selectedAddressID === NEW_ADDRESS_ID) {
+					checkout.selectedAddressID = defaultAddressID(WebStore.addresses);
+				}
+			});
 		} else {
 			isOpen = false;
 		}
@@ -58,7 +120,166 @@ import { parseSVG } from '#libs/helpers.ts';
 			layerOpenedState.id = 0;
 		}
 	});
+
+	// The delivery rate follows the district: same fallback (district → province → department)
+	// the backend charges.
+	$effect(() => {
+		const districtID = deliveryDistrictID;
+		checkout.shippingAmount = null;
+		if (districtID < 10000) { return }
+		getWebShippingAmount(districtID)
+			.then((amount) => { if (deliveryDistrictID === districtID) { checkout.shippingAmount = amount } })
+			.catch(() => { if (deliveryDistrictID === districtID) { checkout.shippingAmount = -1 } });
+	});
+
+	// validateShippingStep: the contact and the destination, before the Pago step.
+	const validateShippingStep = (): string => {
+		const contactProblem = validateCustomerDraft(WebStore.draft, companyFlags, needsDocumentNumber);
+		if (contactProblem) { return contactProblem }
+		const deliveryProblem = validateDelivery(
+			checkout.deliveryType, checkout.pickupSiteID, checkout.selectedAddressID, checkout.newAddress,
+		);
+		if (deliveryProblem) { return deliveryProblem }
+		if (checkout.deliveryType === DELIVERY_HOME && checkout.shippingAmount === -1) {
+			return "No hacemos envíos a este distrito.";
+		}
+		if (checkout.deliveryType === DELIVERY_HOME && checkout.shippingAmount === null) {
+			return "Calculando el costo de envío, intente nuevamente.";
+		}
+		return "";
+	};
+
+	const goToStep = (step: number) => {
+		if (step === 4 && !checkout.result) { return }
+		if (step === 1 && checkout.result) { return }
+		if (step >= 2 && ProductsSelectedMap.size === 0) {
+			notifyFailure("El carrito está vacío.");
+			return;
+		}
+		if (step >= 3) {
+			const problem = validateShippingStep();
+			if (problem) { notifyFailure(problem); return }
+			saveCustomerDraft();
+		}
+		Ecommerce.cartOption = step;
+	};
+
+	// The contact typed in Datos Envío, kept apart: a session answer refills the draft from the
+	// account and must not overwrite what this order ships to.
+	let contactForOrder = $state(WebStore.draft);
+
+	const placeOrder = async (culqiToken: string) => {
+		showLoading();
+		try {
+			checkout.result = await postWebCheckout(buildWebCheckoutRequest({
+				cartLines,
+				draft: contactForOrder,
+				deliveryType: checkout.deliveryType,
+				pickupSiteID: checkout.pickupSiteID,
+				selectedAddressID: checkout.selectedAddressID,
+				newAddress: checkout.newAddress,
+				paymentMethod: checkout.paymentMethod,
+				culqiToken,
+			}));
+			checkout.showCulqi = false;
+			ProductsSelectedMap.clear();
+			Ecommerce.cartOption = 4;
+		} catch (error: any) {
+			// A declined card voids the order: the shopper may retry with another token.
+			checkout.showCulqi = false;
+			notifyFailure(error.message);
+		} finally {
+			hideLoading();
+		}
+	};
+
+	// After the shopper is identified: online payments open Culqi, deferred ones place the order.
+	const continueIdentified = async () => {
+		checkout.codeRequired = false;
+		if (isOnlinePayment(checkout.paymentMethod)) {
+			checkout.showCulqi = true;
+		} else {
+			await placeOrder("");
+		}
+	};
+
+	// onPay: identify the guest (an emailed code may be needed), then pay.
+	const onPay = async () => {
+		if (!checkout.paymentMethod) { notifyFailure("Seleccione un medio de pago."); return }
+		const problem = validateShippingStep();
+		if (problem) { notifyFailure(problem); return }
+		contactForOrder = { ...WebStore.draft };
+		if (WebStore.customer) { await continueIdentified(); return }
+
+		showLoading();
+		try {
+			const result = await identifyWebCheckout(checkout.paymentMethod, []);
+			if (result.CodeRequired) {
+				checkout.codeRequired = true;
+				checkout.code.value = "";
+				return;
+			}
+		} catch (error: any) {
+			notifyFailure(error.message);
+			return;
+		} finally {
+			hideLoading();
+		}
+		await continueIdentified();
+	};
+
+	const onVerifyCode = async () => {
+		const code = (checkout.code.value || "").trim();
+		if (!/^[0-9]{6}$/.test(code)) { notifyFailure("Ingrese el código de 6 dígitos."); return }
+		showLoading();
+		try {
+			await verifyWebCustomerCode(contactForOrder.Email, code);
+		} catch (error: any) {
+			notifyFailure(error.message);
+			return;
+		} finally {
+			hideLoading();
+		}
+		await continueIdentified();
+	};
+
+	const resetCheckout = () => {
+		checkout.result = null;
+		checkout.paymentMethod = 0;
+		checkout.showCulqi = false;
+		checkout.codeRequired = false;
+		checkout.newAddress = { CityID: 0, Address: "", Reference: "" };
+		checkout.selectedAddressID = defaultAddressID(WebStore.addresses);
+		Ecommerce.cartOption = 1;
+		layerOpenedState.id = 0;
+	};
 </script>
+
+{#snippet choiceCard(isSelected: boolean, icon: string, title: string, subtitle: string, onclick: () => void)}
+	<button
+		type="button"
+		class={[
+			"flex items-center gap-12 p-14 rounded-[10px] border-2 text-left cursor-pointer transition-colors w-full",
+			isSelected ? "border-[#4c55d5] bg-[#f1f2ff]" : "border-gray-200 hover:border-gray-400",
+		].join(" ")}
+		{onclick}
+	>
+		<i class={`${icon} text-[26px] shrink-0 ${isSelected ? "text-[#4c55d5]" : "text-gray-500"}`}></i>
+		<div class="flex flex-col min-w-0">
+			<span class="ff-bold">{title}</span>
+			{#if subtitle}<span class="text-gray-500 text-[14px] truncate">{subtitle}</span>{/if}
+		</div>
+	</button>
+{/snippet}
+
+{#snippet totals()}
+	<div class="mt-8 mb-8 flex flex-wrap gap-x-24 gap-y-4 items-baseline">
+		<span class="fs18 ff-bold">Total a pagar: {formatSoles(totalCents)}</span>
+		{#if checkout.deliveryType === DELIVERY_HOME && shippingCents > 0}
+			<span class="text-gray-500">Incluye envío: {formatSoles(shippingCents)}</span>
+		{/if}
+	</div>
+{/snippet}
 
 {#snippet cartContent(isMobileVersion: boolean)}
 	<div class="p-4 md:p-12 flex flex-col h-[calc(100vh-120px)]">
@@ -67,9 +288,7 @@ import { parseSVG } from '#libs/helpers.ts';
 			columnsTemplate={!isMobileVersion && ui.state.deviceType === 3
 				? "1fr 1fr 1fr 0.7fr"
 				: ""}
-			onSelect={(e) => {
-				Ecommerce.cartOption = e.id;
-			}}
+			onSelect={(e) => goToStep(e.id)}
 			options={[
 				{ id: 1, name: "Carrito", icon: "icon--supermarket-cart" },
 				{ id: 2, name: "Datos Envío", icon: "icon-[fa--file-text]" },
@@ -88,94 +307,160 @@ import { parseSVG } from '#libs/helpers.ts';
 		</ArrowSteps>
 		<div class="w-full px-4 overflow-auto grow">
 			{#if Ecommerce.cartOption === 1}
-				<div class="mt-8 mb-8 fs18 ff-bold">Total a pagar:</div>
+				{@render totals()}
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-12 pb-6">
 					{#each ProductsSelectedMap.values() as cartProducto}
 						<ProductCard mode="horizontal" productoID={cartProducto.producto.ID} />
 					{/each}
 				</div>
+				{#if ProductsSelectedMap.size > 0}
+					<div class="flex justify-end pb-12">
+						<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
+							onclick={() => goToStep(2)}>Continuar</button>
+					</div>
+				{/if}
 			{/if}
 			{#if Ecommerce.cartOption === 2}
-				<div class="mt-8 mb-8 fs18 ff-bold">Total a pagar:</div>
+				{@render totals()}
+				<div class="ff-bold mb-12">Datos de contacto</div>
 				<div class="grid grid-cols-12 gap-12">
-					<Input
-						label="Nombres"
-						css="col-span-6"
-						saveOn={userForm}
-						save="nombres"
-						required={true}
-					/>
-					<Input
-						label="Apellidos"
-						css="col-span-6"
-						saveOn={userForm}
-						save="apellidos"
-						required={true}
-					/>
-					<Input
-						label="Correo Electrónico"
-						css="col-span-6"
-						saveOn={userForm}
-						save="email"
-						required={true}
-					/>
-					<CiudadesSelector
-						saveOn={userForm}
-						save="ciudadID"
-						css="col-span-6"
-					/>
-					<Input
-						label="Dirección"
-						css="col-span-6"
-						saveOn={userForm}
-						save="direccion"
-						required={true}
-					/>
-					<Input
-						label="Referencia"
-						css="col-span-6"
-						saveOn={userForm}
-						save="referencia"
-					/>
+					<Input label="Nombres" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="FirstName" required={true} />
+					<Input label="Apellidos" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="LastName" required={true} />
+					<!-- A logged-in customer's email is the account: it is not edited here. -->
+					<Input label="Correo Electrónico" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="Email"
+						required={true} disabled={!!WebStore.customer} />
+					<Input label="Celular" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="Phone"
+						required={hasCompanyFlag(companyFlags, FLAG_REQUIRE_CONTACT_NUMBER)} />
+					{#if needsDocumentNumber}
+						<Input label="DNI (compras desde S/ 700)" css="col-span-12 md:col-span-6" saveOn={WebStore.draft}
+							save="DocumentNumber" required={true} />
+					{/if}
+				</div>
+
+				<div class="ff-bold mt-20 mb-12">Tipo de entrega</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+					{@render choiceCard(checkout.deliveryType === DELIVERY_HOME, "icon-[fa--truck]", "Entrega a Domicilio",
+						"Lo llevamos a tu dirección", () => { checkout.deliveryType = DELIVERY_HOME })}
+					{@render choiceCard(checkout.deliveryType === DELIVERY_PICKUP, "icon-[fa--building]", "Recojo en Tienda",
+						"Recoge tu pedido sin costo de envío", () => { checkout.deliveryType = DELIVERY_PICKUP })}
+				</div>
+
+				{#if checkout.deliveryType === DELIVERY_HOME}
+					<div class="ff-bold mt-20 mb-12">Dirección de entrega</div>
+					{#if WebStore.addresses.length > 0}
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
+							{#each WebStore.addresses as address (address.ID)}
+								{@render choiceCard(checkout.selectedAddressID === address.ID, "icon-[fa--map-marker]", address.Address,
+									cityName(address.CityID), () => { checkout.selectedAddressID = address.ID })}
+							{/each}
+							{@render choiceCard(checkout.selectedAddressID === NEW_ADDRESS_ID, "icon-[fa--plus]", "Nueva dirección",
+								"", () => { checkout.selectedAddressID = NEW_ADDRESS_ID })}
+						</div>
+					{/if}
+					{#if checkout.selectedAddressID === NEW_ADDRESS_ID}
+						<AddressForm address={checkout.newAddress} />
+					{/if}
+					<div class="mt-12 pb-12">
+						{#if checkout.shippingAmount === -1}
+							<span class="text-red-600">No hacemos envíos a este distrito.</span>
+						{:else if checkout.shippingAmount !== null}
+							<span class="text-gray-600">Costo de envío: <b>{formatSoles(checkout.shippingAmount)}</b></span>
+						{/if}
+					</div>
+				{/if}
+
+				{#if checkout.deliveryType === DELIVERY_PICKUP}
+					<div class="ff-bold mt-20 mb-12">Tienda de recojo</div>
+					{#if (WebStore.company.PickupSites || []).length === 0}
+						<div class="text-gray-500">La tienda aún no tiene puntos de recojo.</div>
+					{/if}
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-12 pb-12">
+						{#each WebStore.company.PickupSites || [] as site (site.ID)}
+							{@render choiceCard(checkout.pickupSiteID === site.ID, "icon-[fa--building]", site.Name,
+								[site.Address, cityName(site.CityID)].filter(Boolean).join(" · "),
+								() => { checkout.pickupSiteID = site.ID })}
+						{/each}
+					</div>
+				{/if}
+
+				<div class="flex justify-end py-12">
+					<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
+						onclick={() => goToStep(3)}>Continuar al pago</button>
 				</div>
 			{/if}
 			{#if Ecommerce.cartOption === 3}
 				<div class="flex flex-col h-full">
-					<div class="fs18 ff-bold mb-4 py-8">
-						Total a pagar: S/ {total.toFixed(2)}
-					</div>
-
-					<CulqiCheckout
-						amount={total * 100}
-						email={userForm.email}
-						onSuccess={() => {
-							Ecommerce.cartOption = 4;
-						}}
-					/>
-
-					<div class="py-4 text-center text-gray-500 text-sm">
-						Pago seguro procesado por Culqi
-					</div>
+					{@render totals()}
+					{#if checkout.showCulqi}
+						{#key checkout.paymentMethod}
+							<CulqiCheckout
+								amount={totalCents}
+								email={contactForOrder.Email}
+								useYape={checkout.paymentMethod === PAYMENT_YAPE}
+								onSuccess={(tokenID) => placeOrder(tokenID)}
+								onError={(error) => notifyFailure(error?.user_message || "No se pudo procesar el pago.")}
+							/>
+						{/key}
+						<div class="py-4 text-center text-gray-500 text-[14px]">Pago seguro procesado por Culqi</div>
+						<button class="text-[#4c55d5] hover:underline cursor-pointer self-center"
+							onclick={() => { checkout.showCulqi = false }}>Elegir otro medio de pago</button>
+					{:else if checkout.codeRequired}
+						<div class="flex flex-col gap-12 max-w-[420px]">
+							<p class="text-gray-700">
+								Enviamos un código de 6 dígitos a <b>{contactForOrder.Email}</b>. Ingréselo para confirmar su pedido.
+							</p>
+							<Input label="Código" saveOn={checkout.code} save="value" required={true} />
+							<div class="flex gap-12">
+								<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
+									onclick={onVerifyCode}>Confirmar</button>
+								<button class="text-[#4c55d5] hover:underline cursor-pointer" onclick={onPay}>Reenviar código</button>
+							</div>
+						</div>
+					{:else}
+						<div class="ff-bold mb-12">Medio de pago</div>
+						<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+							{#each paymentOptions as option (option.id)}
+								{@render choiceCard(checkout.paymentMethod === option.id, option.icon, option.name, "",
+									() => { checkout.paymentMethod = option.id })}
+							{/each}
+						</div>
+						<div class="flex justify-end py-16">
+							<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
+								onclick={onPay}>
+								{checkout.paymentMethod === PAYMENT_DEFERRED ? "Confirmar pedido" : "Pagar " + formatSoles(totalCents)}
+							</button>
+						</div>
+					{/if}
 				</div>
 			{/if}
-			{#if Ecommerce.cartOption === 4}
+			{#if Ecommerce.cartOption === 4 && checkout.result}
+				{@const result = checkout.result}
 				<div class="mt-12 text-center">
 					<i class="icon-[fa--check] text-green-500 text-[64px] mb-4"></i>
 					<div class="fs24 ff-bold mb-2">¡Gracias por tu compra!</div>
+					<div class="ff-semibold mb-4">Pedido N° {result.OrderNumber} · {formatSoles(result.TotalAmount)}</div>
 					<p class="text-gray-600 mb-8">
-						Tu pedido ha sido procesado exitosamente. Recibirás un correo de
-						confirmación a la brevedad.
+						{#if result.DocumentType === 2}
+							Tu pedido quedó registrado. Paga al {checkout.deliveryType === DELIVERY_PICKUP ? "recogerlo en tienda" : "recibirlo"};
+							tu orden de compra también te llegará por correo.
+						{:else}
+							Tu pago fue recibido. Recibirás un correo de confirmación a la brevedad.
+						{/if}
 					</p>
-					<button
-						class="bg-gray-800 text-white px-8 py-3 rounded-lg ff-bold hover:bg-black transition-all cursor-pointer"
-						onclick={() => {
-							ProductsSelectedMap.clear();
-							Ecommerce.cartOption = 1;
-							layerOpenedState.id = 0;
-						}}
-					>
-						Volver a la tienda
-					</button>
+					<div class="flex flex-wrap justify-center gap-12">
+						{#if result.DocumentType === 2}
+							<button class="border-2 border-gray-800 px-24 py-10 rounded-lg ff-bold hover:bg-gray-100 cursor-pointer"
+								onclick={() => downloadWebOrderPDF(result.OnlineSaleOrderID).catch((error) => notifyFailure(error.message))}>
+								<i class="icon-[fa--download] mr-6"></i>Orden de compra (PDF)
+							</button>
+						{/if}
+						<button
+							class="bg-gray-800 text-white px-24 py-10 rounded-lg ff-bold hover:bg-black transition-all cursor-pointer"
+							onclick={resetCheckout}
+						>
+							Volver a la tienda
+						</button>
+					</div>
 				</div>
 			{/if}
 		</div>

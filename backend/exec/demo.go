@@ -649,7 +649,7 @@ func Test35(args *core.ExecArgs) core.FuncResponse {
 
 func Test36(args *core.ExecArgs) core.FuncResponse {
 
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 	registros := []business.SharedListRecord{}
 
 	recordToInsert := business.SharedListRecord{

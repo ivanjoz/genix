@@ -707,7 +707,7 @@ def read_total_memory_megabytes():
     sys.exit(1)
 
 def build_mariadb_server_configuration(database_port, bind_address, total_memory_megabytes, processing_units):
-    """The server the load tests measured (backend/tests/loadtest/run_postgres.sh, MARIADB_TUNING.md),
+    """The server the load tests measured (backend/seeds/loadtest/run_postgres.sh, MARIADB_TUNING.md),
     scaled to this host.
 
     The buffer pool takes half the RAM: the backend (GOMEMLIMIT), HAProxy, fareward and the OS share the

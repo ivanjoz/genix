@@ -11,6 +11,9 @@
    Mirrors routes/tailwind.css. */
 @layer theme, base, components, ec-runtime, utilities, ec-runtime-media;
 @import "tailwindcss";
+/* genix-ui's Tailwind theme, color tokens (--layer-bg, --surface-*, --green-*...), resets and
+   @source of its components. Without it ButtonLayer / ArrowSteps render transparent. */
+@import "../../packages/genix-ui/tailwind.css";
 @plugin "@iconify/tailwind4" {
   prefix: "icon";
   scale: 1;
@@ -23,14 +26,6 @@
 
 @source "../../domain-components/MobileMenu.svelte";
 @source "../**/*.svelte";
-
-@theme {
-  --breakpoint-2xl: 1539px;
-  --breakpoint-xl: 1379px;
-  --breakpoint-lg: 1139px;
-  --breakpoint-md: 749px;
-  --spacing: 1px;
-}
 
 /* Cart uses the legacy project shorthand, not an Iconify utility class. Keep its
    self-contained SVG mask in the standalone storefront stylesheet. */
@@ -47,4 +42,3 @@
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
 }
-@source "../../packages/genix-ui/{buttons,cards,charts,editor,files,form,layers,menu,misc,navigation,notify,runtime,vTable}/**/*.svelte";

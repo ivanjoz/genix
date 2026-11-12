@@ -40,7 +40,7 @@ func PostShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 		if record.CityID <= 0 {
 			return req.MakeErr("El costo de envío en posición " + strconv.Itoa(recordIndex) + " debe tener CityID válido.")
 		}
-		if record.FlatCost < 0 || record.CostPerKg < 0 {
+		if record.FlatAmount < 0 || record.AmountPerKg < 0 {
 			return req.MakeErr("El costo de envío en posición " + strconv.Itoa(recordIndex) + " no puede tener costos negativos.")
 		}
 		if _, exists := seenCityIDs[record.CityID]; exists {
@@ -68,7 +68,7 @@ func PostShippingCosts(req *core.HandlerArgs) core.HandlerResponse {
 			// Merge avoids write churn; unchanged cost rows keep their previous Updated watermark.
 			current.Created = prev.Created
 			current.CreatedBy = prev.CreatedBy
-			return current.FlatCost != prev.FlatCost || current.CostPerKg != prev.CostPerKg
+			return current.FlatAmount != prev.FlatAmount || current.AmountPerKg != prev.AmountPerKg
 		},
 		func(current *types.ShippingCost) {
 			current.Created = nowTime

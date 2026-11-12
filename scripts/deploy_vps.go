@@ -40,29 +40,35 @@ type Credentials struct {
 	Servers []ServerCredentials `toml:"servers"`
 }
 
-func DeployVPS() {
-	fmt.Println("Starting VPS deployment...")
-
-	// Use the environment selected by deploy.sh, with the original path as a standalone fallback.
+// loadServerCredentials reads [[servers]] from the environment selected by deploy.sh, with the
+// original path as a standalone fallback.
+func loadServerCredentials() (Credentials, error) {
 	configFilePath := strings.TrimSpace(os.Getenv("GENIX_CONFIG_FILE"))
 	if configFilePath == "" {
 		configFilePath = "../config.toml"
 	}
-	fmt.Printf("Reading VPS deployment targets from: %s\n", configFilePath)
+	fmt.Printf("Reading VPS targets from: %s\n", configFilePath)
 	configContent, readConfigError := os.ReadFile(configFilePath)
 	if readConfigError != nil {
-		fmt.Printf("Error reading config file %s: %v\n", configFilePath, readConfigError)
-		return
+		return Credentials{}, fmt.Errorf("reading config file %s: %w", configFilePath, readConfigError)
 	}
 
 	var credentials Credentials
 	if parseConfigError := toml.Unmarshal(configContent, &credentials); parseConfigError != nil {
-		fmt.Printf("Error parsing config file %s: %v\n", configFilePath, parseConfigError)
-		return
+		return Credentials{}, fmt.Errorf("parsing config file %s: %w", configFilePath, parseConfigError)
 	}
-
 	if len(credentials.Servers) == 0 {
-		fmt.Printf("Error: servers is empty in %s\n", configFilePath)
+		return Credentials{}, fmt.Errorf("servers is empty in %s", configFilePath)
+	}
+	return credentials, nil
+}
+
+func DeployVPS() {
+	fmt.Println("Starting VPS deployment...")
+
+	credentials, credentialsError := loadServerCredentials()
+	if credentialsError != nil {
+		fmt.Printf("Error: %v\n", credentialsError)
 		return
 	}
 

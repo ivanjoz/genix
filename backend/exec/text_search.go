@@ -12,7 +12,7 @@ import (
 // Run it after pointing [file_store] at another bucket or root (the new index starts empty), or after a
 // deploy changes what a table indexes, like the BrandName column products gained.
 func ReindexTextSearch(args *core.ExecArgs) core.FuncResponse {
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 
 	for _, controller := range MakeControllers() {
 		var err error

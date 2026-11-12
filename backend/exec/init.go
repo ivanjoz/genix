@@ -38,7 +38,7 @@ func reserveSeededAutoincrementIDs(partitionValue any, tableName string, seededC
 	core.Log("Se reservó el rango de IDs sembrados:", counterName, "x", seededCount)
 }
 
-// seedCompanyOperatingRecords gives each seeded company the Site, Warehouse and CashBank it needs
+// SeedCompanyOperatingRecords gives each seeded company the Site, Warehouse and CashBank it needs
 // to be operational, mirroring what business.PostInitialData creates for a company registered
 // through the sign-up wizard.
 //
@@ -49,7 +49,7 @@ func reserveSeededAutoincrementIDs(partitionValue any, tableName string, seededC
 // IDs are left at zero so the ORM autoincrements them. That is deliberate and unlike the companies
 // and users above: those carry literal IDs and therefore need reserveSeededAutoincrementIDs to
 // push the counter past them, while an autoincremented insert advances its own counter.
-func seedCompanyOperatingRecords(companyIDs []int32, seedTimestamp int32) {
+func SeedCompanyOperatingRecords(companyIDs []int32, seedTimestamp int32) {
 	cityID := firstSeededCityID()
 
 	for _, companyID := range companyIDs {
@@ -253,7 +253,7 @@ func ConfigInit(args *core.ExecArgs) core.FuncResponse {
 	for _, seededCompany := range empresas {
 		seededCompanyIDs = append(seededCompanyIDs, seededCompany.ID)
 	}
-	seedCompanyOperatingRecords(seededCompanyIDs, seedTimestamp)
+	SeedCompanyOperatingRecords(seededCompanyIDs, seedTimestamp)
 
 	core.Print(usuarios)
 
@@ -352,7 +352,7 @@ func ExportCiudades(args *core.ExecArgs) core.FuncResponse {
 
 	cwd, _ := os.Getwd()
 	parentDir := filepath.Dir(cwd)
-	filePath := filepath.Join(parentDir, "frontend", "public", "assets", "peru_ciudades.json")
+	filePath := filepath.Join(parentDir, "frontend", "static", "files", "peru_ciudades.json")
 
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -377,7 +377,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 		panic("No se ha especificado el db.name en config.toml")
 	}
 
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 
 	if err := db.Deploy(MakeControllers()...); err != nil {
 		panic(fmt.Sprintf("Error al desplegar el esquema del keyspace '%v': %v", core.Env.DB_NAME, err))
@@ -389,7 +389,7 @@ func DeployDatabaseSchemas(args *core.ExecArgs) core.FuncResponse {
 // fn-recalc
 func RecalcVirtualColumnsValues(args *core.ExecArgs) core.FuncResponse {
 
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 
 	// Stale: neither table has a declaration any more, so these deletes find nothing to remove.
 	// Kept as ported (the answer to D4 was "port"); delete once the user confirms.

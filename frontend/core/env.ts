@@ -210,10 +210,23 @@ export const getWindow = () => {
   } as Window
 }
 
+// ICompanyPickupSite is a Sede marked "Punto de recojo de compras online".
+export interface ICompanyPickupSite {
+  ID: number
+  Name: string
+  Address: string
+  CityID: number
+}
+
+// ICompanyParams is the public company file, empresas/e-{companyID}.json (backend CompanyPub).
 export interface ICompanyParams {
   CulqiLlave: string
   Name: string
   id: number
+  PickupSites?: ICompanyPickupSite[]
+  // The company's [ecommerce] flags (backend/company_flags.toml, ids 10-14).
+  Flags?: number[]
+  YapeEnabled?: boolean
 }
 
 // Every endpoint resolves its own stream host. `bridge === agent` means the agent serves
@@ -336,18 +349,17 @@ export const Env = {
     }
     return Env.companyID
   },
-  loadEmpresaConfig: () => {
-    if(Env.empresa.id){ return }
+  // Resolves with the public company file; the storefront copies it into its reactive state.
+  loadEmpresaConfig: async (): Promise<ICompanyParams> => {
+    if(Env.empresa.id){ return Env.empresa }
     const companyID = Env.getCompanyID()
-    if(companyID){
-      fetch(Env.makeCDNRoute("empresas", `e-${companyID}.json`))
-      .then(res => res.json())
-      .then(res => {
-        Env.empresa = res
-      })
-    } else {
+    if(!companyID){
       console.warn("No se encontró la empresa-id:", companyID)
+      return Env.empresa
     }
+    const response = await fetch(Env.makeCDNRoute("empresas", `e-${companyID}.json`))
+    Env.empresa = await response.json()
+    return Env.empresa
   },
   makeRoute: (route: string) => {
     if(route[0] === "/"){ route = route.substring(1) }

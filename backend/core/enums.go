@@ -32,4 +32,15 @@ const (
 	// written conditioned on their ETags, so a lost lock costs duplicate work only.
 	ActionCompactDataFrame LockAction = 6
 	// 7 is retired (ActionProjectWrite): project writes lock the project's row instead.
+	// ActionWebCustomerByIP serializes the web store's emailed codes and customer creation per
+	// client IP, so the "N emails / customers per window" counts are read by one caller at a time.
+	ActionWebCustomerByIP LockAction = 8
+	// ActionWebCheckoutByCustomer serializes one web customer's checkouts, so the cap on pending
+	// (unpaid) orders cannot be passed by placing several at once.
+	ActionWebCheckoutByCustomer LockAction = 9
+	// ActionOnlineSaleOrderSettle serializes turning one web store order into its SaleOrder (Culqi
+	// approval, back-office payment or delivery, annulment). It is taken before the sale's number is
+	// minted, which a row lock inside the transaction could not cover: two settlements of one order
+	// would otherwise both spend a comprobante number. Keyed on companyID<<32 | order ID.
+	ActionOnlineSaleOrderSettle LockAction = 10
 )

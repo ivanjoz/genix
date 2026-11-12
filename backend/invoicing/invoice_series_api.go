@@ -67,6 +67,7 @@ func PostInvoiceSeries(req *core.HandlerArgs) core.HandlerResponse {
 		// caller. Sending one series that claims the default would otherwise leave the
 		// previous holder claiming it too, and the set would fail validation.
 		types.ApplyDefaultSeries(allSeries, body.SeriesID)
+		types.ApplyWebStoreSeries(allSeries, body.SeriesID)
 		return allSeries, nil
 	})
 	if err != nil {

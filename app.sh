@@ -31,20 +31,13 @@ case "$1" in
     echo "Executing follow_cloudwatch_logs script..."
     (cd scripts && go run . follow_cloudwatch_logs)
     ;;
-  "generate_erp_history")
-    # For "generate_erp_history", replay past days of purchases, receptions and sales.
-    echo "Executing generate_erp_history command..."
-    (cd scripts && go run . generate_erp_history "${@:2}")
+  "seed")
+    # For "seed", run the genix-seed dummy-data binary (backend/seeds) against the configured database.
+    (cd scripts && go run . seed "${@:2}")
     ;;
-  "generate_supply_data")
-    # For "generate_supply_data", seed providers and the product replenishment configuration.
-    echo "Executing generate_supply_data command..."
-    (cd scripts && go run . generate_supply_data "${@:2}")
-    ;;
-  "generate_projects_flow")
-    # For "generate_projects_flow", simulate agile projects end to end and check every step.
-    echo "Executing generate_projects_flow command..."
-    (cd scripts && go run . generate_projects_flow "${@:2}")
+  "seed_remote")
+    # For "seed_remote", upload genix-seed to a [[servers]] VPS and run it there, next to the database.
+    (cd scripts && go run . seed_remote "${@:2}")
     ;;
   "sync_struct_interfaces")
     # For "sync_struct_interfaces", align marked frontend interfaces with backend structs.
@@ -85,7 +78,7 @@ case "$1" in
   *)
     # If the command is not recognized, show an error and usage instructions.
     echo "Unknown command: $1"
-    echo "Usage: $0 {check_tables|create|edit|configure|follow_cloudwatch_logs|generate_erp_history|generate_supply_data|generate_projects_flow|sync_struct_interfaces|generate_controllers|generate_route_ids|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
+    echo "Usage: $0 {check_tables|create|edit|configure|follow_cloudwatch_logs|seed|seed_remote|sync_struct_interfaces|generate_controllers|generate_route_ids|generate_menu_descriptions|index_documentation|search_documentation|deploy}"
     exit 1
     ;;
 esac

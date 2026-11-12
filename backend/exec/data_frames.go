@@ -18,7 +18,7 @@ func CompactDataFrames(args *core.ExecArgs) core.FuncResponse {
 	if args.Param1 <= 0 {
 		panic("fn-compact-frames necesita el ID de la empresa (p1).")
 	}
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 
 	var tableErrors []error
 	for _, controller := range MakeControllers() {

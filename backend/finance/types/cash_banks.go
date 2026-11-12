@@ -23,6 +23,9 @@ type CashBank struct {
 	UpdatedBy int32   `cb:"15"`
 	Created   int32   `cb:"16"`
 	CreatedBy int32   `cb:"17"`
+	// ReceivesCulqiPayments marks the account the web store's card/Yape charges are collected
+	// into. At most one per company (PostCashBanks enforces it).
+	ReceivesCulqiPayments bool `cb:"18"`
 }
 
 type CashBankTable struct {
@@ -43,6 +46,7 @@ type CashBankTable struct {
 	UpdatedBy            db.Col[*CashBankTable, int32]
 	Created              db.Col[*CashBankTable, int32]
 	CreatedBy            db.Col[*CashBankTable, int32]
+	ReceivesCulqiPayments db.Col[*CashBankTable, bool]
 }
 
 func (e CashBankTable) GetSchema() db.TableSchema {

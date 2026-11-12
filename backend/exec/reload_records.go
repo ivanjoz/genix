@@ -32,7 +32,7 @@ func ReloadRecords(args *core.ExecArgs) core.FuncResponse {
 	if len(tableNames) == 0 {
 		return args.MakeErr("Debe indicar las tablas: --tables=a,b")
 	}
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 
 	reloadedTables := []string{}
 	for _, controller := range MakeControllers() {

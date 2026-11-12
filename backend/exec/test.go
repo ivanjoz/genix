@@ -5,9 +5,9 @@ import (
 	"app/db"
 )
 
-// makeConnParams is the connection every exec entry point uses; Scripting dials immediately and
+// MakeConnParams is the connection every exec entry point uses; Scripting dials immediately and
 // allows the long queries maintenance work runs.
-func makeConnParams() db.ConnectParams {
+func MakeConnParams() db.ConnectParams {
 	return db.ConnectParams{
 		Keyspace: core.Env.DB_NAME,
 		OceanBase: db.OceanBaseParams{

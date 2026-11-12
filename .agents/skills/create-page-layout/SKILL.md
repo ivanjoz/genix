@@ -122,6 +122,65 @@ Rules:
 - `sideLayerSize` is desktop width in px (default 800). Mobile is always full-viewport.
 - Reset form state in `onClose`, not after save — otherwise the layer flashes empty during the close animation.
 
+### Child rows inside a form — an editable `VTable`, never a stack of `Input`s
+
+When a record holds a list (a select field's options, a pipeline's stages, task templates, order lines…), edit that list in a **`VTable` (or `TableGrid`) whose cells are editable**. Do not use:
+
+- ❌ An `{#each}` of `Input` / `SearchSelect` boxes, each with its own delete button. One labelled box per row wastes vertical space and repeats the label on every row.
+- ❌ A `VTable` whose `cellRenderer` draws an `Input`, a `SearchSelect` or a `Checkbox` for a value. The table has its own inline editors (`CellInput`, `CellSelect`, `CellSelectBox`, `CellMultiSelect`). They match the row height, keyboard navigation and the agent registry. Form controls inside a cell break all three.
+
+Use the column props for the editors, and `cellRenderer` only for what has no column editor (row action buttons, a color picker cell):
+
+| Cell | Column props |
+|---|---|
+| Text | `getValue` + `onCellEdit: (row, value) => { row.Name = String(value) }` |
+| Number | add `cellInputType: 'number'`, `align: 'right'` |
+| Select, searchable (long list) | `field` + `cellOptions` (or per-row `getCellOptions`) + `cellOptionsKeyId` / `cellOptionsKeyName` + `onCellSelect` |
+| Select, buttons (short list) | the same plus `cellSelectMode: 'pick'` (`cellSelectColumns: 2` for two columns) |
+| Multi-select | `field` holds the id array + `cellOptions` + `onCellMultiSelect` |
+| Read-only on some rows | `disableCellInteractions: (row) => row.ID > 0` |
+| Delete / reorder row | a column `{ id: 'actions', header: '' }`, rendered in `cellRenderer` with `Button mode="subtle" useCircle height="tiny"` |
+
+The add button goes **above** the table, next to a short description, not below the rows. Reference: the **Tareas** tab in `frontend/routes/crm/settings/PipelinesTab.svelte`.
+
+```svelte
+<script lang="ts">
+  const optionColumns: ITableColumn<IOption>[] = [
+    {
+      id: 'name', header: 'Option|Opción', css: 'px-6', getValue: (option) => option.Name,
+      onCellEdit: (option, value) => { option.Name = String(value) },
+    },
+    {
+      id: 'kind', header: 'Kind|Tipo', css: 'px-6', field: 'Kind', cellSelectMode: 'pick',
+      cellOptions: KIND_OPTIONS, cellOptionsKeyId: 'id', cellOptionsKeyName: 'name',
+      onCellSelect: (option, value) => { option.Kind = Number(value) },
+    },
+    { id: 'actions', header: '', headerCss: 'w-[52px]', css: 'px-4', getValue: () => '' },
+  ]
+</script>
+
+<div class="flex items-center justify-between mt-8 mb-6">
+  <div class="text-fg-muted">{tr('What the list is for.|Para qué sirve la lista.')}</div>
+  <Button color="green" icon="icon-[fa--plus]" name="Option|Opción" label="Adds an empty option."
+    onClick={() => { form.Options = [...form.Options, makeEmptyOption()] }} />
+</div>
+<VTable columns={optionColumns} data={form.Options} disableVirtualizer={true} estimateSize={42}
+  emptyMessage="No options yet.|Aún no hay opciones.">
+  {#snippet cellRenderer(option, column, defaultContent)}
+    {#if column.id === 'actions'}
+      <div class="flex justify-center">
+        <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the option."
+          onClick={() => { form.Options = form.Options.filter((item) => item !== option) }} />
+      </div>
+    {:else}
+      {defaultContent}
+    {/if}
+  {/snippet}
+</VTable>
+```
+
+`disableVirtualizer={true}` + `estimateSize={42}` fit a short list inside a layer. Keep `{defaultContent}` in the `{:else}` branch: when `disableCellInteractions` turns off a cell's editor, VTable sends that column to `cellRenderer`.
+
 ### `Layer type="content"`
 
 Wrap the main list in `<Layer type="content">…</Layer>`. It subscribes to the open side layer's width and shrinks itself so the list and the side layer never overlap.

@@ -5,12 +5,14 @@
   interface Props {
     amount: number;
     email: string;
-    order?: string;
-    onSuccess?: (id: string, type: 'token' | 'order') => void;
+    // Shows only the method the shopper picked: a card ("tkn_") or Yape ("ype_") token, both
+    // charged by the backend through POST /v2/charges.
+    useYape: boolean;
+    onSuccess?: (tokenID: string) => void;
     onError?: (error: any) => void;
   }
 
-  let { amount, email, order, onSuccess, onError }: Props = $props();
+  let { amount, email, useYape, onSuccess, onError }: Props = $props();
 
   let culqiInitialized = false;
 
@@ -42,21 +44,13 @@
             amount: Math.round(amount),
           };
     
-          if (order) {
-            settings.order = order;
-          }
-      
           const client = {
             email: email || '',
           };
-      
+
           const paymentMethods = {
-            tarjeta: true,
-            yape: !!order,
-            billetera: !!order,
-            bancaMovil: !!order,
-            agente: !!order,
-            cuotealo: !!order,
+            tarjeta: !useYape,
+            yape: useYape,
           };
       
           const options = {
@@ -83,10 +77,7 @@
 
     (window as any).culqi = () => {
       if (Culqi.token) {
-        onSuccess?.(Culqi.token.id, 'token');
-        Culqi.close();
-      } else if (Culqi.order) {
-        onSuccess?.(Culqi.order, 'order');
+        onSuccess?.(Culqi.token.id);
         Culqi.close();
       } else {
         console.error('Culqi Error:', Culqi.error);

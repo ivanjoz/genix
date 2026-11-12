@@ -48,32 +48,12 @@ func main() {
 	case "agent_browser":
 		runSubpackage("./agent_browser", os.Args[2:]...)
 
-	case "generate_erp_history":
-		runBackendExec("fn-generate-erp-history", os.Args[2:]...)
+	case "seed":
+		// Every dummy-data generator lives in the genix-seed binary (backend/seeds).
+		runBackendSubpackage("./seeds/cmd/genix-seed", os.Args[2:]...)
 
-	case "generate_supply_data":
-		runBackendExec("fn-generate-supply-data", os.Args[2:]...)
-
-	case "generate_expenses":
-		runBackendExec("fn-generate-expenses", os.Args[2:]...)
-
-	case "generate_demo_data":
-		runBackendExec("fn-generate-demo-data", os.Args[2:]...)
-
-	case "seed_hr":
-		runBackendExec("fn-seed-hr", os.Args[2:]...)
-
-	case "wipe_company_data":
-		runBackendExec("fn-wipe-company-data", os.Args[2:]...)
-
-	case "seed_hr_legal_parameters":
-		runBackendExec("fn-seed-hr-legal-parameters", os.Args[2:]...)
-
-	case "generate_crm_data":
-		runBackendExec("fn-generate-crm-data", os.Args[2:]...)
-
-	case "generate_projects_flow":
-		runBackendExec("fn-generate-projects-flow", os.Args[2:]...)
+	case "seed_remote":
+		SeedRemote(os.Args[2:])
 
 	case "backfill_observability_credits":
 		runBackendExec("fn-backfill-observability-credits", os.Args[2:]...)
@@ -113,8 +93,8 @@ func runBackendSubpackage(pkg string, args ...string) {
 	}
 }
 
-// Los generadores de datos viven detrás de las funciones "fn-…" del backend porque necesitan sus
-// handlers y su conexión a la base; el binario del backend las resuelve por el prefijo del argumento.
+// Maintenance commands live behind the backend's "fn-…" functions because they need its handlers and
+// its database connection; the backend binary resolves them by the argument's prefix.
 func runBackendExec(execFunction string, args ...string) {
 	cmd := exec.Command("go", append([]string{"run", ".", execFunction}, args...)...)
 	cmd.Dir = "../backend"

@@ -628,7 +628,8 @@ Charts follow the `dataviz` skill.
 
 Two layers, like the rest of the CRM:
 
-1. **Page access** (`access.toml`): *CRM Reportes* (52) opens `crm/reports`, *CRM Forecast* (53)
+1. **Page access** (`access.toml`): *CRM Reportes* (52) opens the three report pages
+   `crm/reports/flow`, `crm/reports/conversion` and `crm/reports/performance`, *CRM Forecast* (53)
    opens `crm/forecast`. Without it the page is not in the menu and its routes are refused.
 2. **Data scope**, decided inside the report handlers by one pure function,
    `types.ReportablePipelineIDs(user grants, pipelines)`:
@@ -649,7 +650,7 @@ needs *CRM Metas* (55).
 | id | name | frontend_routes | backend_apis |
 |---|---|---|---|
 | 51 | CRM Tareas | `crm/tasks` | `POST.crm-task`, `POST.crm-task-decide` |
-| 52 | CRM Reportes | `crm/reports` | `GET.crm-report-stage-log`, `GET.crm-report-activities` |
+| 52 | CRM Reportes | `crm/reports/flow`, `crm/reports/conversion`, `crm/reports/performance` | `GET.crm-report-stage-log`, `GET.crm-report-activities` |
 | 53 | CRM Forecast | `crm/forecast` | `POST.crm-forecast-submission` |
 | 54 | CRM Equipos | `crm/teams` | `POST.crm-team` |
 | 55 | CRM Metas | `crm/goals` | `POST.crm-goal` |
@@ -660,7 +661,8 @@ needs *CRM Metas* (55).
 quote APIs to work from the opportunity layer: they get `POST.sale-quote*` in their list too.
 
 Menus (`db/modules.toml`): Clientes = `crm/customers, crm/pipeline, crm/tasks`; new
-**Reportes** = `crm/reports, crm/forecast`; Gestión adds `crm/teams, crm/goals`.
+**Reportes** = `crm/reports/flow, crm/reports/conversion, crm/reports/performance, crm/timeline, crm/forecast`
+(Flujo, Conversión, Desempeño); Gestión adds `crm/teams, crm/goals`.
 
 ## 10. Implementation order
 

@@ -11,7 +11,7 @@ import type { ITableColumn } from '#components/vTable/types.ts';
 import { tr } from '#core/store.svelte.ts';
 import { useUI } from '@genix/ui';
 import { InvoiceSeriesSitesService, postInvoiceSeries } from './invoice-series.svelte';
-import { DOC_TYPES, docTypeName } from '#core/sunat-doc-type.ts';
+import { DOC_TYPE_BOLETA, DOC_TYPES, docTypeName } from '#core/sunat-doc-type.ts';
 import { makeSeries, validateSeries, type IInvoiceSeries } from './invoice-series';
 import type { ICompany } from './empresas.svelte';
 
@@ -44,7 +44,7 @@ import type { ICompany } from './empresas.svelte';
       (b.ss || 0) - (a.ss || 0) || a.SeriesID - b.SeriesID))
 
   const openNewSeries = () => {
-    seriesForm = { SeriesID: 0, DocType: 0, SeriesCode: "", SiteID: 0, IsDefault: 0, ss: 1 }
+    seriesForm = { SeriesID: 0, DocType: 0, SeriesCode: "", SiteID: 0, IsDefault: 0, UseInWebStore: 0, ss: 1 }
     ui.openModal(SERIES_MODAL_ID)
   }
 
@@ -64,7 +64,8 @@ import type { ICompany } from './empresas.svelte';
     const allSeries = company.InvoiceSeries || []
     const isNew = seriesForm.SeriesID === 0
     const candidate = isNew
-      ? [...allSeries, makeSeries(allSeries, seriesForm.DocType, seriesForm.SeriesCode, seriesForm.SiteID)]
+      ? [...allSeries, { ...makeSeries(allSeries, seriesForm.DocType, seriesForm.SeriesCode, seriesForm.SiteID),
+          UseInWebStore: seriesForm.UseInWebStore || 0 }]
       : allSeries.map(series => series.SeriesID === seriesForm.SeriesID ? { ...seriesForm } : series)
 
     // Checked here so a bad series never reaches the endpoint; the backend checks
@@ -101,6 +102,20 @@ import type { ICompany } from './empresas.svelte';
     hideLoading()
   }
 
+  // Claiming the web store mark on one boleta series is enough: the backend clears it on
+  // the others and replies with the whole set.
+  const makeWebStoreSeries = async (series: IInvoiceSeries) => {
+    if (series.DocType !== DOC_TYPE_BOLETA || series.UseInWebStore === 1) return
+
+    showLoading(tr("Saving...|Guardando..."))
+    try {
+      company.InvoiceSeries = await postInvoiceSeries({ ...series, UseInWebStore: 1 })
+    } catch (error) {
+      // Reported by POST.
+    }
+    hideLoading()
+  }
+
   const columns: ITableColumn<IInvoiceSeries>[] = [
     {
       id: 'seriesID', header: 'No.|N°', width: '46px', align: 'right', css: 'ff-mono',
@@ -127,6 +142,15 @@ import type { ICompany } from './empresas.svelte';
         ? `<i class="icon-[fa--check] text-green-fg"></i>`
         : `<span class="text-fg-subtle">—</span>`,
       onCellClick: (series) => { void makeDefault(series) },
+    },
+    {
+      id: 'useInWebStore', header: 'Use in Web Store|Usar en Tienda Web', width: '96px', align: 'center',
+      showHoverEffect: true,
+      render: (series) => series.DocType !== DOC_TYPE_BOLETA ? ""
+        : series.UseInWebStore === 1
+          ? `<i class="icon-[fa--check] text-green-fg"></i>`
+          : `<span class="text-fg-subtle">—</span>`,
+      onCellClick: (series) => { void makeWebStoreSeries(series) },
     },
     // No delete here: it lives in the dialog, so a destructive action is never one
     // click away in a grid.
@@ -180,6 +204,10 @@ import type { ICompany } from './empresas.svelte';
       bind:saveOn={seriesForm} />
     <Checkbox css="col-span-24" label="Active|Activa" save="ss" useNumber={true}
       bind:saveOn={seriesForm} />
+    {#if seriesForm.DocType === DOC_TYPE_BOLETA}
+      <Checkbox css="col-span-24" label="Use in Web Store|Usar en Tienda Web" save="UseInWebStore"
+        useNumber={true} bind:saveOn={seriesForm} />
+    {/if}
     <div class="col-span-24 text-[13px] text-fg-muted">
       <T text="A series code has 4 characters and starts with F for invoices or B for receipts. A note carries the prefix of the document it corrects. Leave the branch empty to issue from the legal address.|El código de serie tiene 4 caracteres y empieza con F para facturas o B para boletas. Una nota lleva el prefijo del documento que corrige. Deje la sede vacía para emitir desde la dirección legal." />
     </div>

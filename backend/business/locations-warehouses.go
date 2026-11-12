@@ -2,6 +2,7 @@ package business
 
 import (
 	"app/business/types"
+	"app/cloud"
 	"app/core"
 	"app/db"
 	"encoding/json"
@@ -125,6 +126,14 @@ func PostSite(req *core.HandlerArgs) core.HandlerResponse {
 	records := []types.Site{body}
 	if err = db.Upsert(&records); err != nil {
 		return req.MakeErr("Error al actualizar / insertar la site: " + err.Error())
+	}
+
+	// The sites travel in the cached company config (invoicing reads them, checkout validates a
+	// pickup site there) and the pickup ones in the storefront's public file. Republishing on every
+	// save is two small writes, cheaper than diffing which fields a pickup site changed.
+	cloud.StoreCompanyConfigAsync(req.User.CompanyID)
+	if err := cloud.PublishCompanyPub(req.User.CompanyID); err != nil {
+		core.Log("PostSite:: no se pudo publicar el archivo público de la empresa", err)
 	}
 
 	return req.MakeResponse(records[0])

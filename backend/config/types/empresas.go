@@ -96,14 +96,39 @@ type CulqiConfig struct {
 	PubKeyLive string `cb:"4"`
 	KeyDev     string `cb:"5"`
 	PubKeyDev  string `cb:"6"`
+	// IsLive switches the web store between the live keys and the test keys: the public key the
+	// storefront opens Culqi with and the secret key the backend charges with follow it together.
+	IsLive bool `cb:"7"`
+	// YapeEnabled offers Yape next to the card on the web store's payment step.
+	YapeEnabled bool `cb:"8"`
 }
 
+// PublicKey is the browser's key for the company's current mode.
+func (e CulqiConfig) PublicKey() string {
+	return core.If(e.IsLive, e.PubKeyLive, e.PubKeyDev)
+}
+
+// CompanyPub is the public company file, empresas/e-{companyID}.json, that the storefront reads
+// without a session. Everything here is visible to anyone: never put a secret in it.
 type CompanyPub struct {
 	ID            int32  `json:"id" cb:"id,1"`
 	Name          string `cb:"2"`
 	CulqiRsaKey   string `cb:"3"`
 	CulqiRsaKeyID string `cb:"4"`
 	CulqiLlave    string `cb:"5"`
+	// PickupSites are the sites marked IsPickupPoint, offered on "Recojo en Tienda".
+	PickupSites []CompanyPubSite `cb:"6"`
+	// Flags are the company's [ecommerce] flags the storefront needs before calling the backend
+	// (contact number required, cash on delivery, receipts). The backend never trusts this copy.
+	Flags       []int16 `cb:"7"`
+	YapeEnabled bool    `cb:"8"`
+}
+
+type CompanyPubSite struct {
+	ID      int32  `cb:"1"`
+	Name    string `cb:"2"`
+	Address string `cb:"3"`
+	CityID  int32  `cb:"4"`
 }
 
 // LockCompanyIn locks the company's row in the caller's transaction and returns it. It is the

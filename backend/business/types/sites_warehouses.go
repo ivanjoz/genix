@@ -20,6 +20,8 @@ type Warehouse struct {
 	Created   int32   `cb:"12"`
 	CreatedBy int32   `cb:"13"`
 	City      string  `cb:"14"`
+	// ExcludeFromOnlineSales keeps this warehouse's stock out of what the web store can sell.
+	ExcludeFromOnlineSales bool `cb:"15"`
 }
 
 type WarehouseTable struct {
@@ -36,6 +38,7 @@ type WarehouseTable struct {
 	UpdatedBy   db.Col[*WarehouseTable, int32]
 	Created     db.Col[*WarehouseTable, int32]
 	CreatedBy   db.Col[*WarehouseTable, int32]
+	ExcludeFromOnlineSales db.Col[*WarehouseTable, bool]
 }
 
 func (e WarehouseTable) GetSchema() db.TableSchema {
@@ -86,6 +89,9 @@ type Site struct {
 	UpdatedBy int32   `cb:"12"`
 	Created   int32   `cb:"13"`
 	CreatedBy int32   `cb:"14"`
+	// IsPickupPoint lists the site as a store where online orders can be picked up. The
+	// storefront reads the pickup sites from the public company file (cloud.PublishCompanyPub).
+	IsPickupPoint bool `cb:"15"`
 }
 
 type SiteTable struct {
@@ -102,6 +108,7 @@ type SiteTable struct {
 	UpdatedBy   db.Col[*SiteTable, int32]
 	Created     db.Col[*SiteTable, int32]
 	CreatedBy   db.Col[*SiteTable, int32]
+	IsPickupPoint db.Col[*SiteTable, bool]
 }
 
 func (e SiteTable) GetSchema() db.TableSchema {

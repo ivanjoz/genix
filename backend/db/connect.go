@@ -40,7 +40,7 @@ type OceanBaseParams struct {
 }
 
 // PostgresParams is read only by a `-tags postgres` build, the sale-flow benchmarks
-// (tests/loadtest/plan.md). Database is the PostgreSQL database ("postgres" when empty); MaxConns caps
+// (seeds/loadtest/plan.md). Database is the PostgreSQL database ("postgres" when empty); MaxConns caps
 // the connection pool, 0 for the driver default.
 type PostgresParams struct {
 	Host     string

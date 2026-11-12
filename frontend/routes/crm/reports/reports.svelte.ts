@@ -103,3 +103,14 @@ export class CrmReportsState {
     return user ? `${user.FirstName} ${user.LastName}`.trim() : `#${userID}`
   }
 }
+
+let sharedReportsState: CrmReportsState | undefined
+/**
+ * The three report pages (flow, conversion, performance) share one state, so the pipeline, range,
+ * sellers and loaded rows survive moving between them. Another user logging in starts a fresh one.
+ */
+export const getCrmReportsState = (): CrmReportsState => {
+  const userID = security.getUserInfo()?.ID || 0
+  if (!sharedReportsState || sharedReportsState.userID !== userID) sharedReportsState = new CrmReportsState()
+  return sharedReportsState
+}

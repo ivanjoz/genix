@@ -1,5 +1,6 @@
 <script lang="ts">
 import Input from '#components/form/Input.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
 import Button from '#components/buttons/Button.svelte';
 import T from '#components/misc/T.svelte';
 import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas.svelte"
@@ -19,6 +20,12 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
     </div>
 
     <div class="grid grid-cols-24 gap-14">
+      <div class="col-span-24 flex flex-wrap items-center gap-24">
+        <Checkbox label="Live mode (use live keys)|Modo producción (usar llaves live)"
+          save="IsLive" bind:saveOn={service.empresa.CulqiConfig} />
+        <Checkbox label="Accept Yape in the web store|Aceptar Yape en la tienda web"
+          save="YapeEnabled" bind:saveOn={service.empresa.CulqiConfig} />
+      </div>
       <!-- Test and live credentials are separated because using one where the other belongs is the
            failure this page exists to prevent: live keys in a test checkout charge real cards. -->
       <div class="col-span-24 lg:col-span-12 rounded-[10px] border border-amber-border bg-amber-bg/40 p-14">

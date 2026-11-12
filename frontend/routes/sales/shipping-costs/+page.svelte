@@ -19,25 +19,45 @@
 
   type DeliveryCostField = 'Fijo' | 'PorKg'
 
+  // The API carries FlatAmount / AmountPerKg in cents (per kg for the latter); this page holds
+  // and edits them in soles, converting once on load and once on save. 0 means "not set" and
+  // falls back to the parent level (district -> province -> department).
   type DeliveryCost = {
     CityID: number
-    FlatCost: number
-    CostPerKg: number
+    FlatAmount: number
+    AmountPerKg: number
     hasUpdated?: boolean
     upd?: number
+  }
+
+  function deliveryCostFromCents(shippingCost: DeliveryCost): DeliveryCost {
+    return {
+      ...shippingCost,
+      FlatAmount: (shippingCost.FlatAmount || 0) / 100,
+      AmountPerKg: (shippingCost.AmountPerKg || 0) / 100,
+      hasUpdated: false,
+    }
+  }
+
+  function deliveryCostToCents(shippingCost: DeliveryCost): DeliveryCost {
+    return {
+      ...shippingCost,
+      FlatAmount: Math.round(shippingCost.FlatAmount * 100),
+      AmountPerKg: Math.round(shippingCost.AmountPerKg * 100),
+    }
   }
 
   class ShippingCostsService extends GetHandler<any> {
     route = 'shipping-costs'
     keyID = 'CityID'
-    useCache = { min: 5, ver: 2 }
+    useCache = { min: 5, ver: 3 } // v3: FlatCost/CostPerKg (soles) became FlatAmount/AmountPerKg (cents)
 
     records: DeliveryCost[] = $state([])
     recordsMap: Map<number, DeliveryCost> = $state(new Map())
 
     handler(result: DeliveryCost[]): void {
       // Backend rows are keyed by CityID; addSavedRecords expects ID, so this service owns its maps directly.
-      this.records = (result || []).map((shippingCost) => ({ ...shippingCost, hasUpdated: false }))
+      this.records = (result || []).map(deliveryCostFromCents)
       this.recordsMap = new Map(this.records.map((shippingCost) => [shippingCost.CityID, shippingCost]))
       console.debug('[delivery-costs] fetched costs', { count: this.records.length })
     }
@@ -273,6 +293,7 @@
     const changedCosts = Object.values(deliveryCostByCiudadID)
       .filter((shippingCost) => shippingCost.hasUpdated)
       .map(normalizeDeliveryCostRecord)
+      .map(deliveryCostToCents)
 
     console.debug('[delivery-costs] save requested', { changedCount: changedCosts.length, changedCosts })
     if (changedCosts.length === 0) { return }
@@ -288,7 +309,7 @@
       for (const savedCost of savedCosts || []) {
         deliveryCostByCiudadID = {
           ...deliveryCostByCiudadID,
-          [savedCost.CityID]: { ...savedCost, hasUpdated: false },
+          [savedCost.CityID]: deliveryCostFromCents(savedCost),
         }
       }
       shippingCostsService.fetchOnline()
@@ -302,8 +323,8 @@
     return {
       ...cost,
       CityID: Number(cost.CityID || 0),
-      FlatCost: Number.isNaN(Number(cost.FlatCost || 0)) ? 0 : Number(cost.FlatCost || 0),
-      CostPerKg: Number.isNaN(Number(cost.CostPerKg || 0)) ? 0 : Number(cost.CostPerKg || 0),
+      FlatAmount: Number.isNaN(Number(cost.FlatAmount || 0)) ? 0 : Number(cost.FlatAmount || 0),
+      AmountPerKg: Number.isNaN(Number(cost.AmountPerKg || 0)) ? 0 : Number(cost.AmountPerKg || 0),
     }
   }
 
@@ -319,11 +340,11 @@
   }
 
   function getBackendCostField(field: DeliveryCostField) {
-    return field === 'Fijo' ? 'FlatCost' : 'CostPerKg'
+    return field === 'Fijo' ? 'FlatAmount' : 'AmountPerKg'
   }
 
   function makeEmptyDeliveryCost(cityID: number): DeliveryCost {
-    return { CityID: cityID, FlatCost: 0, CostPerKg: 0, hasUpdated: false }
+    return { CityID: cityID, FlatAmount: 0, AmountPerKg: 0, hasUpdated: false }
   }
 
   function formatDeliveryCost(cost: number) {
@@ -423,7 +444,7 @@
           </div>
           <Input
             bind:saveOn={departamentoCostForm}
-            save="FlatCost"
+            save="FlatAmount"
             label="Fixed|Fijo"
             type="number"
             disabled={!selectedDepartamento}
@@ -433,7 +454,7 @@
           />
           <Input
             bind:saveOn={departamentoCostForm}
-            save="CostPerKg"
+            save="AmountPerKg"
             label="Per Kg|Por Kg"
             type="number"
             disabled={!selectedDepartamento}

@@ -42,6 +42,18 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 	// does not send the audit columns.
 	isNewCashBank := body.ID < 0
 
+	// Only one account may collect the web store's Culqi charges, or the checkout could not tell
+	// which one to book them into.
+	if body.ReceivesCulqiPayments {
+		culqiCashBank, err := types.FindCulqiCashBank(req.User.CompanyID)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		if culqiCashBank != nil && culqiCashBank.ID != body.ID {
+			return req.MakeErr(`La cuenta "` + culqiCashBank.Name + `" ya recibe los pagos de Culqi. Desmárquela antes de marcar otra.`)
+		}
+	}
+
 	nowTime := core.SUnixTime()
 	body.CompanyID = req.User.CompanyID
 	body.Updated = nowTime

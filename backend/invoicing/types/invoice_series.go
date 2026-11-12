@@ -35,6 +35,33 @@ type InvoiceSeries struct {
 	// type. At most one per type.
 	IsDefault int8 `cb:"5"`
 	Status    int8 `json:"ss" cb:"ss,6"`
+	// UseInWebStore marks the boleta series the web store's orders are numbered in when the
+	// company issues their receipts automatically (company flag 12). At most one, and boletas only.
+	UseInWebStore int8 `cb:"7"`
+}
+
+// FindWebStoreSeries is the active series marked UseInWebStore, or nil.
+func FindWebStoreSeries(allSeries []InvoiceSeries) *InvoiceSeries {
+	for index := range allSeries {
+		if allSeries[index].UseInWebStore == 1 && allSeries[index].Status == 1 {
+			return &allSeries[index]
+		}
+	}
+	return nil
+}
+
+// ApplyWebStoreSeries makes the series identified by changedSeriesID the only web store series
+// when it claims the mark, like ApplyDefaultSeries does for the default.
+func ApplyWebStoreSeries(allSeries []InvoiceSeries, changedSeriesID int8) {
+	changed := FindSeries(allSeries, changedSeriesID)
+	if changed == nil || changed.UseInWebStore != 1 {
+		return
+	}
+	for index := range allSeries {
+		if allSeries[index].SeriesID != changedSeriesID {
+			allSeries[index].UseInWebStore = 0
+		}
+	}
 }
 
 // DefaultInvoiceSeries is the set every new company starts with.
@@ -168,6 +195,7 @@ func ValidateSeries(allSeries []InvoiceSeries) error {
 	seenID := map[int8]bool{}
 	seenCode := map[string]bool{}
 	defaultOfType := map[int8]bool{}
+	hasWebStoreSeries := false
 
 	for index := range allSeries {
 		series := &allSeries[index]
@@ -223,6 +251,17 @@ func ValidateSeries(allSeries []InvoiceSeries) error {
 				return errSeries("Solo una serie puede ser la predeterminada por tipo de comprobante.")
 			}
 			defaultOfType[series.DocType] = true
+		}
+
+		// The web store only issues boletas (facturas need a RUC the checkout does not ask for).
+		if series.UseInWebStore == 1 {
+			if series.DocType != DocTypeBoleta {
+				return errSeries("Solo una serie de boleta puede usarse en la Tienda Web.")
+			}
+			if hasWebStoreSeries {
+				return errSeries("Solo una serie puede usarse en la Tienda Web.")
+			}
+			hasWebStoreSeries = true
 		}
 	}
 	return nil

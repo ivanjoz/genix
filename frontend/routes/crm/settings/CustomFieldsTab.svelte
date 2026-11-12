@@ -8,7 +8,7 @@
   import VTable from '#components/vTable/VTable.svelte'
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
-  import { postCrmCustomField, type CrmCustomFieldsService, type ICrmCustomField } from '#services/crm/crm-pipeline.svelte.ts'
+  import { postCrmCustomField, type CrmCustomFieldsService, type ICrmCustomField, type ICrmCustomFieldOption } from '#services/crm/crm-pipeline.svelte.ts'
   import { CUSTOM_FIELD_TYPE_OPTIONS, customFieldHasOptions, makeEmptyCustomField, makeEmptyOption, removeOption } from './settings.ts'
 
   // The catalog is company-wide; each pipeline picks the fields it shows (PipelinesTab).
@@ -37,6 +37,17 @@
     }
     hideLoading()
   }
+
+  // The table shows the live options (a soft-deleted one stays in the record but not on screen), so
+  // removing one finds its position in the full list first.
+  const visibleOptions = $derived(fieldForm.Options.filter((option) => option.Status !== 0))
+  const optionColumns: ITableColumn<ICrmCustomFieldOption>[] = [
+    {
+      id: 'name', header: 'Option|Opción', css: 'px-6', getValue: (option) => option.Name,
+      onCellEdit: (option, value) => { option.Name = String(value) },
+    },
+    { id: 'actions', header: '', headerCss: 'w-[52px]', css: 'px-4', getValue: () => '' },
+  ]
 
   const columns: ITableColumn<ICrmCustomField>[] = [
     { header: 'Field|Campo', css: 'px-6', highlight: true, getValue: (e) => e.Name },
@@ -70,25 +81,30 @@
     <Input bind:saveOn={fieldForm} save="Name" label="Name|Nombre" required={true} css="col-span-24 md:col-span-14" />
     <SearchSelect bind:saveOn={fieldForm} save="Type" label="Type|Tipo" required={true}
       options={typeOptions} keyId="id" keyName="name" css="col-span-24 md:col-span-10" />
-    {#if customFieldHasOptions(fieldForm.Type)}
-      <div class="col-span-24 flex flex-col gap-8" aria-label="Field options">
-        {#each fieldForm.Options as option, optionIndex}
-          {#if option.Status !== 0}
-            <div class="flex items-center gap-8">
-              <Input bind:saveOn={fieldForm.Options[optionIndex]} save="Name" label="Option|Opción" required={true} css="grow" />
-              <Button color="red" icon="icon-[fa--trash]" label="Removes the option; opportunities keep their stored value."
-                onClick={() => { fieldForm.Options = removeOption(fieldForm.Options, optionIndex) }} />
-            </div>
-          {/if}
-        {/each}
-        <div>
-          <Button color="green" icon="icon-[fa--plus]" name="Add option|Agregar opción" label="Adds an empty option."
-            onClick={() => { fieldForm.Options = [...fieldForm.Options, makeEmptyOption()] }} />
-        </div>
-      </div>
-    {/if}
     <div class="col-span-24 text-gray-600">
       {tr('The type cannot change once an opportunity holds a value.|El tipo no se puede cambiar cuando una oportunidad ya tiene un valor.')}
     </div>
   </div>
+  {#if customFieldHasOptions(fieldForm.Type)}
+    <div class="flex items-center justify-between mt-16 mb-6">
+      <h3 class="font-bold">{tr('Options|Opciones')}</h3>
+      <Button color="green" icon="icon-[fa--plus]" name="Option|Opción" label="Adds an empty option."
+        onClick={() => { fieldForm.Options = [...fieldForm.Options, makeEmptyOption()] }} />
+    </div>
+    <div aria-label="Field options">
+      <VTable columns={optionColumns} data={visibleOptions} disableVirtualizer={true} estimateSize={42}
+        emptyMessage="No options yet.|Aún no hay opciones.">
+        {#snippet cellRenderer(option, column, defaultContent)}
+          {#if column.id === 'actions'}
+            <div class="flex justify-center">
+              <Button color="red" mode="subtle" useCircle height="tiny" icon="icon-[mdi--delete]" label="Removes the option; opportunities keep their stored value."
+                onClick={() => { fieldForm.Options = removeOption(fieldForm.Options, fieldForm.Options.indexOf(option)) }} />
+            </div>
+          {:else}
+            {defaultContent}
+          {/if}
+        {/snippet}
+      </VTable>
+    </div>
+  {/if}
 </Layer>

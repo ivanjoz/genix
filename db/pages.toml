@@ -83,6 +83,11 @@ name = "Sales Management|Gestión Ventas"
 icon = "icon-[fa--bolt]"
 
 [[pages]]
+route = "sales/online-orders"
+name = "Online Orders|Pedidos Web"
+icon = "icon-[fa--globe]"
+
+[[pages]]
 route = "sales/sale_orders_charts"
 name = "Sales Charts|Gráficos Ventas"
 icon = "icon-[fa--bar-chart]"
@@ -113,6 +118,12 @@ icon = "icon-[fa--file-text-o]"
 route = "webpage-builder/gallery"
 name = "Gallery|Galería"
 icon = "icon-[fa--picture-o]"
+
+[[pages]]
+route = "webpage-builder/preview"
+name = "Preview|Previsualizar"
+icon = "icon-[fa--eye]"
+description = "Muestra la tienda web publicada de tu empresa sin salir del sistema."
 
 # CRM
 
@@ -153,10 +164,22 @@ icon = "icon-[fa--check-square-o]"
 description = "Bandeja de tareas del CRM: actividades que proponen las etapas del pipeline y aprobaciones de movimientos pendientes. El líder de un equipo ve las tareas de sus integrantes sin poder actuar."
 
 [[pages]]
-route = "crm/reports"
-name = "Reports|Reportes"
+route = "crm/reports/flow"
+name = "Flow|Flujo"
+icon = "icon-[fa--exchange]"
+description = "Flujo del pipeline del CRM por vendedor: estado diario de las oportunidades abiertas en cada etapa y cascada de cómo pasó el pipeline de la apertura al cierre del rango."
+
+[[pages]]
+route = "crm/reports/conversion"
+name = "Conversion|Conversión"
+icon = "icon-[fa--filter]"
+description = "Conversión del CRM por vendedor: avance neto por etapa y embudo de hasta dónde llegaron las oportunidades y cuánto estuvieron en cada etapa."
+
+[[pages]]
+route = "crm/reports/performance"
+name = "Performance|Desempeño"
 icon = "icon-[fa--bar-chart]"
-description = "Reportes del CRM por vendedor y pipeline: avance neto por etapa, estado diario del pipeline, cascada, embudo, desempeño de vendedores y motivos de pérdida."
+description = "Desempeño de los vendedores del CRM: tasa de cierre, monto ganado, ciclo de venta, velocidad, actividades y meta, y motivos de pérdida."
 
 [[pages]]
 route = "crm/timeline"

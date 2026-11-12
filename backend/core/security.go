@@ -75,7 +75,7 @@ type EnvStruct struct {
 	OCEANBASE_PARTITIONS int
 	OCEANBASE_MAX_CONNS  int
 	OCEANBASE_ENGINE     string
-	// POSTGRES_* are read only by a `-tags postgres` build (tests/loadtest/plan.md). The schema is
+	// POSTGRES_* are read only by a `-tags postgres` build (seeds/loadtest/plan.md). The schema is
 	// the keyspace (DB_NAME).
 	POSTGRES_HOST      string
 	POSTGRES_PORT      int
@@ -136,6 +136,10 @@ type EnvStruct struct {
 	STOREFRONT_HOSTED_ZONE_ID      string
 	STOREFRONT_DISTRIBUTION_DOMAIN string
 	STOREFRONT_BUCKET              string
+	// STOREFRONT_RENDERER picks where a non-Lambda backend renders the storefronts: "local" runs
+	// webpage-renderer/cli.mjs with node on this machine, "lambda" invokes <APP_NAME>-webpage-renderer.
+	// Lambda always invokes the Lambda. Empty = "local".
+	STOREFRONT_RENDERER string
 	// APP_URL is the public origin of the Genix web app ("https://app.example.com", no trailing
 	// slash). Only the sign-up email needs it, to build the verification link. It is read from
 	// config and never from the request, so a caller cannot make our SMTP mail out a link that
@@ -326,7 +330,7 @@ type fileConfig struct {
 		Engine string `toml:"engine"`
 	} `toml:"oceanbase"`
 
-	// Postgres is read only by a `-tags postgres` build (tests/loadtest/plan.md).
+	// Postgres is read only by a `-tags postgres` build (seeds/loadtest/plan.md).
 	Postgres struct {
 		Host     string `toml:"host"`
 		Port     int    `toml:"port"`
@@ -377,6 +381,7 @@ type fileConfig struct {
 		HostedZoneID       string `toml:"hosted_zone_id"`
 		DistributionDomain string `toml:"distribution_domain"`
 		Bucket             string `toml:"bucket"`
+		Renderer           string `toml:"renderer"`
 	} `toml:"storefront"`
 
 	SMTP struct {
@@ -605,6 +610,10 @@ func (file *fileConfig) applyToEnv(env *EnvStruct) {
 	env.STOREFRONT_HOSTED_ZONE_ID = strings.TrimSpace(file.Storefront.HostedZoneID)
 	env.STOREFRONT_DISTRIBUTION_DOMAIN = strings.TrimSpace(file.Storefront.DistributionDomain)
 	env.STOREFRONT_BUCKET = strings.TrimSpace(file.Storefront.Bucket)
+	env.STOREFRONT_RENDERER = strings.ToLower(strings.TrimSpace(file.Storefront.Renderer))
+	if env.STOREFRONT_RENDERER != "" && env.STOREFRONT_RENDERER != "local" && env.STOREFRONT_RENDERER != "lambda" {
+		panic("config.toml: [storefront].renderer must be 'local' or 'lambda', got: " + env.STOREFRONT_RENDERER)
+	}
 
 	env.SMTP_HOST = file.SMTP.Host
 	env.SMTP_PORT = file.SMTP.Port

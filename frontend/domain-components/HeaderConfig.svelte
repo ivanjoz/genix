@@ -56,8 +56,10 @@ import Checkbox from '#components/form/Checkbox.svelte';
   // Veto over colbin responses: when set, requests stop announcing it and the backend answers plain JSON.
   let serializationDisabled = $state(isColbinDisabled())
   const ui = useUI()
-  const agentModelsService = new AgentModelsService()
-  const canSelectAgentModel = Env.getCompanyID() === 1
+  // An endpoint without an agent host offers no assistant: fetching agent-models there would hit
+  // the frontend's own /api/ path and get the SPA index.html back instead of JSON.
+  const canSelectAgentModel = Env.getCompanyID() === 1 && !!Env.selectedAgentRoute
+  const agentModelsService = canSelectAgentModel ? new AgentModelsService() : undefined
   let agentModelForm = $state({ ModelHash: getSelectedAgentModelHash() })
   let cacheRows: ICacheDebugRow[] = $state([])
   type IGroupedCacheRow = {
@@ -143,7 +145,7 @@ import Checkbox from '#components/form/Checkbox.svelte';
   })
 
   $effect(() => {
-    if (agentModelsService.records.length === 0) { return }
+    if (!agentModelsService || agentModelsService.records.length === 0) { return }
     if (agentModelForm.ModelHash && agentModelsService.modelHashMap.has(agentModelForm.ModelHash)) { return }
     agentModelForm.ModelHash = agentModelsService.defaultHash
     setSelectedAgentModelHash(agentModelForm.ModelHash)
@@ -522,7 +524,7 @@ import Checkbox from '#components/form/Checkbox.svelte';
     />
   </div>
   <div class="mt-14 flex w-full">
-    {#if canSelectAgentModel}
+    {#if agentModelsService}
       <SearchSelect
         label="Modelo"
         css="w-full max-w-[460px]"

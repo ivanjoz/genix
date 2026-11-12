@@ -47,6 +47,7 @@ import { useUI } from '@genix/ui';
 <header	class="_1 fixed top-0 left-0 right-0 bg-gradient-to-r from-indigo-600 to-indigo-700
 	shadow-md z-250 flex items-center px-6 md:px-16"
 	class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
+	class:hidden-on-desktop={pageHeader.current.hiddenOnDesktop}
 >
 
 	<!-- Logo Section (Desktop) -->
@@ -173,6 +174,10 @@ import { useUI } from '@genix/ui';
 	@media (min-width: 751px) {
 		._1.useTopMinimalMenu {
 			margin-left: var(--menu-max-width);
+		}
+		/* Page's `hideHeader`. Mobile keeps the bar: it holds the side menu button. */
+		._1.hidden-on-desktop {
+			display: none;
 		}
 	}
 

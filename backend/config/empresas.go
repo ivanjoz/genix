@@ -6,8 +6,8 @@ import (
 	"app/core"
 	"app/db"
 	invoicing "app/invoicing/types"
+	sales "app/sales/types"
 	"encoding/json"
-	"fmt"
 )
 
 func PostEmpresa(req *core.HandlerArgs) core.HandlerResponse {
@@ -196,6 +196,19 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err.Error())
 	}
 
+	// Web orders are minted under the series marked "Usar en Tienda Web" when receipts are issued
+	// automatically, so the flag cannot be on without one. The series are saved by their own
+	// endpoint, so the stored ones are what count here.
+	if core.HasCompanyFlag(record.Flags, sales.CompanyFlagWebReceiptAutomatic) {
+		storedCompany, err := getCompanyByID(req.User.CompanyID)
+		if err != nil {
+			return req.MakeErr("Error al obtener la company.", err)
+		}
+		if storedCompany == nil || invoicing.FindWebStoreSeries(storedCompany.InvoiceSeries) == nil {
+			return req.MakeErr(`Para emitir comprobantes automáticamente en ventas online, marque una serie de boleta activa con "Usar en Tienda Web".`)
+		}
+	}
+
 	// Escribir exige "Mi Empresa" en nivel de escritura; mainHandler ya lo validó por el catálogo.
 	record.ID = req.User.CompanyID
 	if len(record.FormApiKey) == 0 {
@@ -210,26 +223,11 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al guardar el registro de la company en cloud:", err)
 	}
 
-	// Save the public company file used by ecommerce/public clients.
-	empresaPublic := types.CompanyPub{
-		ID:            record.ID,
-		Name:          record.Name,
-		CulqiLlave:    record.CulqiConfig.PubKeyDev,
-		CulqiRsaKey:   record.CulqiConfig.RsaKey,
-		CulqiRsaKeyID: record.CulqiConfig.RsaKeyID,
+	// The public company file the storefront reads (Culqi key of the current mode, pickup stores,
+	// ecommerce flags). A failed upload is logged, not returned: the company itself was saved.
+	if err := cloud.PublishCompanyPub(record.ID); err != nil {
+		core.Log("PostEmpresaParametros:: no se pudo publicar el archivo público de la empresa", err)
 	}
-
-	empresaPublicBytes, _ := json.Marshal(empresaPublic)
-	core.Log("Guardando::", string(empresaPublicBytes))
-
-	cloud.SaveFile(cloud.SaveFileArgs{
-		Bucket:      core.Env.S3_BUCKET,
-		Path:        "empresas",
-		FileContent: empresaPublicBytes,
-		Name:        fmt.Sprintf("e-%v.json", req.User.CompanyID),
-	})
-
-	core.Print(empresaPublic)
 	cloud.StoreCompanyConfigAsync(record.ID)
 	return core.MakeResponse(req, &record)
 }

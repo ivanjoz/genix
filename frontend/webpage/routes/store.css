@@ -13,21 +13,23 @@ body {
   --input-border-color: #d0d4e7;
 }
 
-body,
-input,
-textarea,
-button {
-  margin: 0;
-  font-family: main, Arial, Helvetica, sans-serif;
-  font-size: 16px;
-  color: rgb(37, 38, 43);
-}
-
 html {
   scroll-behavior: smooth;
 }
 
+/* Layered so Tailwind utilities (`text-white`, `text-[14px]`...) on buttons and inputs win:
+   unlayered CSS beats every @layer regardless of specificity. */
 @layer base {
+  body,
+  input,
+  textarea,
+  button {
+    margin: 0;
+    font-family: main, Arial, Helvetica, sans-serif;
+    font-size: 16px;
+    color: rgb(37, 38, 43);
+  }
+
   *,
   *::before,
   *::after {

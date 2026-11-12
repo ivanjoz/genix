@@ -34,7 +34,7 @@ var (
 	}
 
 	// L5: composition roots. These wire the modules together and may import anything.
-	compositionRootPrefixes = []string{"app/exec", "app/tests", "main"}
+	compositionRootPrefixes = []string{"app/exec", "app/tests", "app/seeds", "main"}
 )
 
 type goPackage struct {

@@ -178,6 +178,10 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		); err != nil {
 			return core.Err("Error al anular la venta:", err)
 		}
+		// A sale created from a web store order annuls that order too.
+		if err := syncOnlineSaleOrderIn(transaction, &sale); err != nil {
+			return err
+		}
 		// The annulled sale's purchase and payments leave its client's week, from the sale's day.
 		return applyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(&storedSale, &sale))
 	})

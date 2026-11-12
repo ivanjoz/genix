@@ -8,6 +8,7 @@ export interface ISite {
   Description: string
   CityID: number
   City: string
+  IsPickupPoint: boolean
   ss: number
   upd: number
 }
@@ -33,6 +34,7 @@ export interface IWarehouse {
   Name: string
   Description: string
   Layout: IWarehouseLayout[]
+  ExcludeFromOnlineSales: boolean
   ss: number
   upd: number
 }

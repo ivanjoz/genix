@@ -9,6 +9,9 @@ export interface PageHeaderContent {
   subtitle?: string
   // Set when the page shows the back button left of the title.
   onBack?: () => void
+  // Page's `hideHeader`: the bar is not drawn on desktop. Mobile keeps it, since it holds the
+  // only button that opens the side menu.
+  hiddenOnDesktop?: boolean
   // Page's `useMenuSearchBox`: its options drawn as a search box in place of the title.
   menuSearchBox?: {
     options: { id: number, name: string }[]

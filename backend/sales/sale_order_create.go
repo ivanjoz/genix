@@ -265,32 +265,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	// 3 = Entrega (Movimiento de Almacén)
 	stockMovements := []logistics.InternalMovement{}
 	if slices.Contains(sale.ActionsIncluded, 3) {
-		for _, line := range sale.Lines {
-			if line.Quantity == 0 {
-				continue
-			}
-
-			// The order line is packed; the ledger keeps the halves apart so it can accumulate
-			// and be SUM()-ed. This is the single conversion point between the two forms.
-			lineQuantity := core.UnpackQuantityLine(line.Quantity).Negate() // Salida de almacén
-			lineDivisor := line.SubDivisor
-			if lineDivisor <= 0 {
-				lineDivisor = core.QuantityDivisorNone
-			}
-
-			stockMovements = append(stockMovements, logistics.InternalMovement{
-				WarehouseID:    sale.WarehouseID,
-				ProductID:      line.ProductID,
-				PresentationID: line.PresentationID,
-				SerialNumber:   line.Sku,
-				LotID:          line.LotID,
-				DocumentID:     sale.ID,
-				Type:           logistics.StockMovementTypeSaleDelivery,
-				Quantity:       lineQuantity.Units,
-				SubQuantity:    lineQuantity.Sub,
-				SubDivisor:     lineDivisor,
-			})
-		}
+		stockMovements = saleDeliveryMovements(&sale)
 		saleActions = append(saleActions, 3)
 	}
 
@@ -348,7 +323,8 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		); err != nil {
 			return core.Err("Error al actualizar la venta:", err)
 		}
-		return nil
+		// A sale created from a web store order carries its payment or delivery back to it.
+		return syncOnlineSaleOrderIn(transaction, &sale)
 	})
 	if err != nil {
 		core.Log("Error al registrar la venta:", err)
@@ -361,36 +337,79 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(sale)
 }
 
+// saleDeliveryMovements is the warehouse exit of every line of the sale, from sale.WarehouseID.
+func saleDeliveryMovements(sale *types.SaleOrder) []logistics.InternalMovement {
+	stockMovements := []logistics.InternalMovement{}
+	for _, line := range sale.Lines {
+		if line.Quantity == 0 {
+			continue
+		}
+		// The order line is packed; the ledger keeps the halves apart so it can accumulate
+		// and be SUM()-ed. This is the single conversion point between the two forms.
+		lineQuantity := core.UnpackQuantityLine(line.Quantity).Negate() // Salida de almacén
+		lineDivisor := line.SubDivisor
+		if lineDivisor <= 0 {
+			lineDivisor = core.QuantityDivisorNone
+		}
+		stockMovements = append(stockMovements, logistics.InternalMovement{
+			WarehouseID:    sale.WarehouseID,
+			ProductID:      line.ProductID,
+			PresentationID: line.PresentationID,
+			SerialNumber:   line.Sku,
+			LotID:          line.LotID,
+			DocumentID:     sale.ID,
+			Type:           logistics.StockMovementTypeSaleDelivery,
+			Quantity:       lineQuantity.Units,
+			SubQuantity:    lineQuantity.Sub,
+			SubDivisor:     lineDivisor,
+		})
+	}
+	return stockMovements
+}
+
+// readSaleProducts loads the catalog rows of the sale's products: the prices and divisor
+// validateSaleOrderLines resolves, and the names and sub-unit labels the sale's document uses.
+func readSaleProducts(companyID int32, lines []types.SaleOrderLine) (map[int32]production.Product, error) {
+	productIDs := core.SliceSet[int32]{}
+	for _, line := range lines {
+		productIDs.AddIf(line.ProductID)
+	}
+	productByID := map[int32]production.Product{}
+	if productIDs.IsEmpty() {
+		return productByID, nil
+	}
+	products := []production.Product{}
+	query := db.Query(&products)
+	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
+		query.CurrencyID, query.SbuUnit).
+		CompanyID.Equals(companyID).
+		ID.In(productIDs.Values...)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener los productos de la venta:", err)
+	}
+	for _, product := range products {
+		productByID[product.ID] = product
+	}
+	return productByID, nil
+}
+
 // validateSaleOrderLines resolves each line against the product catalog: the sub-unit
 // divisor, whether a sub-unit part is even allowed, and the prices. PostSaleOrder is the
 // only place that loads products, and without it the line prices and TotalAmount arrive
 // straight off the request body unchecked — a client could book a sale at any price.
 func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[int32]production.Product, error) {
-	productIDs := core.SliceSet[int32]{}
-	for _, line := range sale.Lines {
-		productIDs.AddIf(line.ProductID)
-	}
-	if productIDs.IsEmpty() {
+	if len(sale.Lines) == 0 {
 		return nil, nil
 	}
-
-	// SbuUnit is not validated here: the sale's document labels its sub-unit lines with it.
-	products := []production.Product{}
-	query := db.Query(&products)
-	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID, query.SbuUnit).
-		CompanyID.Equals(req.User.CompanyID).
-		ID.In(productIDs.Values...)
-	if err := query.Exec(); err != nil {
-		return nil, core.Err("Error al obtener los productos de la venta:", err)
+	productByID, err := readSaleProducts(req.User.CompanyID, sale.Lines)
+	if err != nil {
+		return nil, err
 	}
 
 	// A USD sale always carries its rate, even when every product is already in dollars:
 	// the sale summaries restate it in PEN with it. A PEN sale only needs one for a USD product.
 	needsExchangeRate := sale.CurrencyType == finance.CurrencyUSD
-	productByID := make(map[int32]production.Product, len(products))
-	for _, product := range products {
-		productByID[product.ID] = product
+	for _, product := range productByID {
 		if normalizeCurrency(int8(product.CurrencyID)) != sale.CurrencyType {
 			needsExchangeRate = true
 		}

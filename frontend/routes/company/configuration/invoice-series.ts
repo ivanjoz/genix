@@ -15,6 +15,9 @@ export interface IInvoiceSeries {
   SeriesCode: string
   SiteID: number
   IsDefault: number
+  // 1 on the boleta series the web store's orders are numbered in. At most one: the
+  // backend moves the mark off the others when a series claims it.
+  UseInWebStore: number
   ss: number
 }
 
@@ -82,6 +85,13 @@ export function validateSeries(allSeries: IInvoiceSeries[]): string {
       }
       defaultOfType.add(series.DocType)
     }
+
+    // The web store only issues boletas: a factura needs a RUC the checkout does not ask for.
+    // "Only one" is not checked here: the set a save sends still holds the old mark, which
+    // the backend moves before validating.
+    if (series.UseInWebStore === 1 && series.DocType !== DOC_TYPE_BOLETA) {
+      return "Only a receipt series can be used in the web store.|Solo una serie de boleta puede usarse en la Tienda Web."
+    }
   }
   return ""
 }
@@ -98,6 +108,7 @@ export function makeSeries(allSeries: IInvoiceSeries[], docType: number, code: s
     // The first series of a document type is its default, because a till that
     // names no series still has to get one.
     IsDefault: allSeries.some(s => s.DocType === docType && s.ss === 1) ? 0 : 1,
+    UseInWebStore: 0,
     ss: 1,
   }
 }

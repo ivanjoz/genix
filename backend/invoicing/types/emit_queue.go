@@ -18,6 +18,11 @@ const (
 	emitSweepFrameMinutes = int8(5)
 )
 
+// EmitSweepDisabled stops this process from enqueueing sweeps. genix-seed sets it:
+// its sales are dummy documents dated in the past, which the running server's sweep
+// would send to SUNAT and mark failed.
+var EmitSweepDisabled bool
+
 // ScheduleEmitPendingSweep asks for a company's pending documents to be sent.
 //
 // One-shot rather than recurring, and enqueued by whoever wrote a document: the
@@ -31,6 +36,9 @@ const (
 // row must not take down the sale that just succeeded — ScheduleCronAction panics
 // on a database error.
 func ScheduleEmitPendingSweep(companyID int32) {
+	if EmitSweepDisabled {
+		return
+	}
 	defer func() {
 		if problem := recover(); problem != nil {
 			core.Log("no se pudo encolar el envío de comprobantes de la empresa", companyID, ":", problem)

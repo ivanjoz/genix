@@ -39,7 +39,7 @@ func TestViolationAllowsTheLegalEdges(t *testing.T) {
 		{"app/finance", "app/finance/types"},
 		// composition roots wire everything together — that is their job
 		{"app/exec", "app/sales"},
-		{"app/tests/sample_records", "app/finance"},
+		{"app/seeds/sales", "app/finance"},
 		{"main", "app/accounting"},
 		// types may reach core/db and sibling types
 		{"app/logistics/types", "app/core"},

@@ -29,6 +29,23 @@ func GetCaja(companyID, cashBankID int32) (CashBank, error) {
 	return cajas[0], nil
 }
 
+// FindCulqiCashBank returns the active account marked ReceivesCulqiPayments, or nil when the company
+// has none. A company holds a handful of cash banks, so they are read whole instead of indexed.
+func FindCulqiCashBank(companyID int32) (*CashBank, error) {
+	cashBanks := []CashBank{}
+	query := db.Query(&cashBanks)
+	query.Select().CompanyID.Equals(companyID)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener las cajas de la empresa:", err)
+	}
+	for index := range cashBanks {
+		if cashBanks[index].ReceivesCulqiPayments && cashBanks[index].Status > 0 {
+			return &cashBanks[index], nil
+		}
+	}
+	return nil, nil
+}
+
 // ApplyCashBankMovement writes the movements and the balances they leave in a transaction of their own.
 func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMovement) error {
 	if len(movimientos) == 0 {

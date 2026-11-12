@@ -140,6 +140,7 @@ config.toml       Local config (not committed). config.example.toml is the templ
 - `GetHandler` records need `upd` (Updated) and `ID` for the delta cache — or set `GetHandler.keyID` / `.KeysIDs` to name different fields.
 - **NEVER** set `font-weight` or `font-size` in a CSS class — use Tailwind.
 - Use the helpers: `formatTime(unixDay | unixTime, layout)`.
+- For child rows inside a form: use an editable VTable (or TableGrid), never a stack of Inputs and NEVER put Input or Select components inside. VTable have its own editable props.
 
 ### Backend
 - **NEVER trust the client.** Validate required fields and data consistency, and return a descriptive error on every failed validation.

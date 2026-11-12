@@ -9,7 +9,7 @@ import type { IInvoiceSeries } from '#routes/company/configuration/invoice-serie
 import type { IProduct } from '#services/production/products.svelte.ts'
 
 const BOLETA_SERIES: IInvoiceSeries = {
-  SeriesID: 1, DocType: 3, SeriesCode: "B001", SiteID: 0, IsDefault: 1, ss: 1,
+  SeriesID: 1, DocType: 3, SeriesCode: "B001", SiteID: 0, IsDefault: 1, UseInWebStore: 0, ss: 1,
 }
 
 const makeProduct = (fields: Partial<IProduct>): IProduct => ({

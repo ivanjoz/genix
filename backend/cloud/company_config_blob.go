@@ -416,7 +416,7 @@ const peruCountryID = int32(604)
 func readSitesForConfig(companyID int32) ([]business.Site, error) {
 	sites := []business.Site{}
 	query := db.Query(&sites)
-	query.Select(query.ID, query.Name, query.Address, query.CityID, query.Status, query.Updated).
+	query.Select(query.ID, query.Name, query.Address, query.CityID, query.Status, query.Updated, query.IsPickupPoint).
 		CompanyID.Equals(companyID)
 
 	if err := query.Exec(); err != nil {

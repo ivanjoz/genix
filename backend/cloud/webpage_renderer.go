@@ -19,13 +19,13 @@ import (
 
 // InvokeWebpageRenderer renderiza y publica las webpages de una company. El renderer es el
 // mismo código de Node en los dos caminos (webpage-renderer/handler.mjs): en serverless se
-// invoca la Lambda, y fuera de ella se ejecuta el archivo desde el repo. Los llamadores no
-// distinguen los dos casos.
+// invoca la Lambda, y fuera de ella [storefront].renderer decide entre invocar la Lambda o
+// ejecutar el archivo desde el repo. Los llamadores no distinguen los casos.
 //
 // No reusa ExecLambda: aquel habla el protocolo `fn_exec` de Go y, fuera de Lambda, redirige a
 // un HTTP contra el backend local, que no es donde vive el renderer.
 func InvokeWebpageRenderer(request WebpageRenderRequest) (WebpageRenderResult, error) {
-	if core.Env.IS_SERVERLESS {
+	if core.Env.IS_SERVERLESS || core.Env.STOREFRONT_RENDERER == "lambda" {
 		return invokeWebpageRendererLambda(request)
 	}
 	return runWebpageRendererLocally(request)

@@ -101,10 +101,14 @@ func MakeControllers() []db.Controller {
 		db.MakeController[projectsTypes.StoryAssignee](),
 		db.MakeController[projectsTypes.StoryDetail](),
 		db.MakeController[salesTypes.ClientWeekSales](),
+		db.MakeController[salesTypes.OnlineSaleOrder](),
 		db.MakeController[salesTypes.SaleOrder](),
 		db.MakeController[salesTypes.SalesPlanning](),
 		db.MakeController[salesTypes.SeasonalityCurve](),
 		db.MakeController[salesTypes.ShippingCost](),
+		db.MakeController[salesTypes.WebCustomer](),
+		db.MakeController[salesTypes.WebCustomerAddress](),
+		db.MakeController[salesTypes.WebCustomerCode](),
 		db.MakeController[securityTypes.ContactMessage](),
 		db.MakeController[securityTypes.Profile](),
 		db.MakeController[securityTypes.SignUpRequest](),
@@ -194,10 +198,14 @@ func init() {
 	db.RegisterTableFactory("projects_story_assignee", func() db.Table { return db.MakeTable[projectsTypes.StoryAssignee]() })
 	db.RegisterTableFactory("projects_story_detail", func() db.Table { return db.MakeTable[projectsTypes.StoryDetail]() })
 	db.RegisterTableFactory("client_week_sales", func() db.Table { return db.MakeTable[salesTypes.ClientWeekSales]() })
+	db.RegisterTableFactory("online_sale_order", func() db.Table { return db.MakeTable[salesTypes.OnlineSaleOrder]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })
 	db.RegisterTableFactory("sales_planning", func() db.Table { return db.MakeTable[salesTypes.SalesPlanning]() })
 	db.RegisterTableFactory("seasonality_curve", func() db.Table { return db.MakeTable[salesTypes.SeasonalityCurve]() })
 	db.RegisterTableFactory("shipping_costs", func() db.Table { return db.MakeTable[salesTypes.ShippingCost]() })
+	db.RegisterTableFactory("web_customers", func() db.Table { return db.MakeTable[salesTypes.WebCustomer]() })
+	db.RegisterTableFactory("web_customer_addresses", func() db.Table { return db.MakeTable[salesTypes.WebCustomerAddress]() })
+	db.RegisterTableFactory("web_customer_codes", func() db.Table { return db.MakeTable[salesTypes.WebCustomerCode]() })
 	db.RegisterTableFactory("contact_messages", func() db.Table { return db.MakeTable[securityTypes.ContactMessage]() })
 	db.RegisterTableFactory("profiles", func() db.Table { return db.MakeTable[securityTypes.Profile]() })
 	db.RegisterTableFactory("sign_up_requests", func() db.Table { return db.MakeTable[securityTypes.SignUpRequest]() })

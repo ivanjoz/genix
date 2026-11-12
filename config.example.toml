@@ -368,6 +368,9 @@ webpage_renderer_url = ""
 hosted_zone_id      = ""
 distribution_domain = ""
 bucket              = ""
+# Dónde renderiza un backend fuera de Lambda: "lambda" invoca <app_name>-webpage-renderer,
+# "local" ejecuta webpage-renderer/cli.mjs con node. En Lambda siempre es la Lambda. Vacío = local.
+renderer            = "local"
 
 # ─── SMTP ───────────────────────────────────────────────────────────────────
 [smtp]

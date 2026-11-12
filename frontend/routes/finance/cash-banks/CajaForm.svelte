@@ -34,7 +34,8 @@ let {
     placeholder="" required={true}
   />
   <div class="col-span-24 flex justify-between items-center">
-    <div></div>
+    <Checkbox label="Receives Culqi payments (web store)|Recibe los pagos de Culqi (tienda web)"
+      bind:saveOn={form} save="ReceivesCulqiPayments" />
     <Checkbox label="Negative Balance|Saldo Negativo" bind:saveOn={form} save="Name" />
   </div>
 </div>

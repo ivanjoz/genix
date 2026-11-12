@@ -15,7 +15,7 @@ func RebuildObservabilityLogView(args *core.ExecArgs) core.FuncResponse {
 		return args.MakeErr("No se ha especificado db.name en config.toml.")
 	}
 
-	db.Connect(makeConnParams())
+	db.Connect(MakeConnParams())
 	controller := db.MakeController[coreTypes.UserLog]()
 	core.Log("observability view rebuild started::", " table::", observabilityUserLogsTable)
 	if err := controller.DeleteViewsAndIndexes(); err != nil {

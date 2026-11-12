@@ -184,6 +184,16 @@ sub_accesses_ids = [2]
 sub_accesses_names = ["Anular Venta"]
 
 [[access]]
+id = 59
+name = "Pedidos Web"
+group = 3
+levels = 14
+frontend_routes = "sales/online-orders"
+backend_apis = "GET.online-sale-orders,POST.online-sale-order-settle,POST.online-sale-order-annul"
+sub_accesses_ids = [2]
+sub_accesses_names = ["Anular Pedido"]
+
+[[access]]
 id = 12
 name = "Gráficos Ventas"
 group = 3
@@ -495,7 +505,7 @@ id = 52
 name = "CRM Reportes"
 group = 10
 levels = 14
-frontend_routes = "crm/reports"
+frontend_routes = "crm/reports/flow,crm/reports/conversion,crm/reports/performance"
 backend_apis = "GET.crm-report-stage-log,GET.crm-report-activities"
 
 [[access]]
