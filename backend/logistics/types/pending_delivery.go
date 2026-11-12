@@ -103,9 +103,11 @@ func ApplyPendingDeliveryIn(transaction *db.Transaction, companyID int32, userID
 	}
 	if len(updatedStocks) > 0 {
 		stockTable := db.TableOf[ProductStock]()
-		// Only the counters; the ORM adds Updated and rewrites the delta keys from the locked row's
-		// WarehouseID and Status, so the browsers' stock caches pick the new counters up.
-		if err := db.UpdateIn(transaction, &updatedStocks, stockTable.PendingDeliveryStore, stockTable.PendingDeliveryOnline); err != nil {
+		// The counters, and the Status SelfParse derives from them with the locked row's quantities (a
+		// row with nothing on hand that owes deliveries is Status 1), written with WarehouseID, its
+		// delta-index partner. The ORM adds Updated, so the browsers' stock caches pick the change up.
+		if err := db.UpdateIn(transaction, &updatedStocks, stockTable.PendingDeliveryStore, stockTable.PendingDeliveryOnline,
+			stockTable.Status, stockTable.WarehouseID); err != nil {
 			return core.Err("Error al guardar el stock reservado:", err)
 		}
 	}

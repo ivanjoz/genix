@@ -63,13 +63,17 @@ type ProductStock struct {
 	Status    int8    `json:"ss" cb:"ss,24"`
 }
 
-// Derive Status from the two live buckets (Quantity + DetailQuantity). The sub-unit halves
-// count: a row holding no whole units but four loose candies still has stock, and a Status
-// of 0 would evict it from the delta sync as if the warehouse were empty.
+// Derive Status from the two live buckets (Quantity + DetailQuantity) and the pending-delivery
+// counters. The sub-unit halves count: a row holding no whole units but four loose candies still has
+// stock, and a Status of 0 would evict it from the delta sync as if the warehouse were empty. The
+// counters count too: a row with nothing on hand that still owes deliveries stays in the stock
+// screens, which is where someone sees that it must be restocked. The ORM runs this on every write,
+// so a partial update must carry Status (and WarehouseID, its delta-index partner) with what it changes.
 func (e *ProductStock) SelfParse() {
 	freeBucket := core.Quantity{Units: e.Quantity, Sub: e.SubQuantity}
 	detailBucket := core.Quantity{Units: e.DetailQuantity, Sub: e.DetailSubQuantity}
-	e.Status = core.If(freeBucket.IsZero() && detailBucket.IsZero(), int8(0), int8(1))
+	owesDeliveries := e.PendingDeliveryStore != 0 || e.PendingDeliveryOnline != 0
+	e.Status = core.If(freeBucket.IsZero() && detailBucket.IsZero() && !owesDeliveries, int8(0), int8(1))
 }
 
 type ProductStockTable struct {

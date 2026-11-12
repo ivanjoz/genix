@@ -1008,9 +1008,7 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 		detail.Updated = updatedTime
 	}
 	for _, stock := range stockByID {
-		freeBucket := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
-		detailBucket := core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity}
-		stock.Status = core.If(freeBucket.IsZero() && detailBucket.IsZero(), int8(0), int8(1))
+		stock.SelfParse()
 		stock.Updated = updatedTime
 	}
 

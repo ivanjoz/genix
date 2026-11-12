@@ -6,6 +6,8 @@
 // placed before the counters: a web order without PendingWarehouseID gets the company's first
 // online warehouse, and an undelivered sale without WarehouseID (a web order only paid) gets its web
 // order's. Run it while nothing sells for the company, or a sale written meanwhile is lost.
+// Every row it writes gets its Status re-derived (ProductStock.SelfParse), so a row with nothing on
+// hand that owes deliveries comes back to the stock screens.
 
 package exec
 
