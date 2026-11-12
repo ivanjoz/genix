@@ -2,7 +2,7 @@
 import { editorStore } from '../stores/editor.svelte';
 import type { ColorPalette } from '#ecommerce/renderer/renderer-types.ts';
 import { collectEditableNodes, editorPropNames, editorPropLabel, getNodeProp, setNodeProp } from '../html-ast/editable';
-import { getProductEcommerceData, type ProductCatalog } from '#ecommerce/services/products.svelte.ts';
+import { getEcommerceCatalog, type EcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
 import SearchSelect from '#components/form/SearchSelect.svelte';
 import AstEditor from './AstEditor.svelte';
 import SectionStyleEditor from './SectionStyleEditor.svelte';
@@ -26,10 +26,10 @@ import SectionStyleEditor from './SectionStyleEditor.svelte';
   );
 
   // Load the catalog once so the selector has the full category list to pick from.
-  let catalog = $state<ProductCatalog | null>(null);
+  let catalog = $state<EcommerceCatalog | null>(null);
   $effect(() => {
     if (categoryNodes.length && !catalog) {
-      getProductEcommerceData().then((loaded) => { catalog = loaded; });
+      getEcommerceCatalog().then((loaded) => { catalog = loaded; });
     }
   });
   const categorias = $derived(catalog?.categorias ?? []);

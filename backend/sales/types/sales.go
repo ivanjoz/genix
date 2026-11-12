@@ -196,7 +196,7 @@ func (e *SaleOrder) eachSummaryLine(onLine func(line SaleSummaryFrame)) {
 	if e.Status == OrderStatusAnnulled {
 		return
 	}
-	isDeliveryPending := e.Status == OrderStatusPending || e.Status == OrderStatusPaid
+	isDeliveryPending := e.IsDeliveryPending()
 	isPaymentPending := e.Status == OrderStatusPending || e.Status == OrderStatusDelivered
 	for _, saleLine := range e.Lines {
 		if saleLine.ProductID <= 0 || saleLine.Quantity <= 0 {

@@ -80,7 +80,7 @@
 		position: fixed;
 		bottom: 24px;
 		right: 24px;
-		--size1: 5rem;
+		--size1: 4rem;
 		--content-width: 30rem;
 		height: var(--size1);
 		width: var(--size1);
@@ -136,7 +136,7 @@
 	.floating-cart-list {
 		overflow: auto;
 		padding: 4px;
-		height: calc(100% - 5rem);
+		height: calc(100% - var(--size1));
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
@@ -164,12 +164,12 @@
 	}
 
 	.floating-cart-btn.has-products {
-		padding-top: 10px;
+		padding-top: 8px;
 	}
 
 	.floating-cart-ref.is-open .floating-cart-btn {
 		border-radius: 0 0 8px 0;
-		padding: 1.6rem;
+		padding: 1.2rem;
 		background-color: rgb(255, 232, 232);
 		outline: none;
 	}
@@ -183,7 +183,8 @@
 		background-color: rgb(85, 75, 179);
 		color: white;
 		visibility: hidden;
-		border-radius: 0 0 8px 8px;
+		/* Only the outer bottom-left corner is rounded: the right edge butts against the close button. */
+		border-radius: 0 0 0 8px;
 		border: none;
 		cursor: pointer;
 		font-size: 1.25rem;
@@ -199,10 +200,10 @@
 
 	.floating-cart-count {
 		position: absolute;
-		top: -8px;
-		right: -8px;
-		width: 2.4rem;
-		height: 2.4rem;
+		top: -6px;
+		right: -6px;
+		width: 1.9rem;
+		height: 1.9rem;
 		border-radius: 50%;
 		background-color: #e75e5e;
 		color: white;
@@ -214,12 +215,12 @@
 		.floating-cart-ref {
 			bottom: calc(1rem - 2px);
 			right: calc(1rem - 2px);
-			--size1: 4.5rem;
+			--size1: 3.75rem;
 			--content-width: calc(100vw - 2rem + 4px);
 		}
 		.floating-cart-count {
-			width: 2rem;
-			height: 2rem;
+			width: 1.7rem;
+			height: 1.7rem;
 			font-size: var(--fs2);
 		}
 		.floating-cart-card {

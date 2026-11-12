@@ -108,6 +108,14 @@ type Product struct {
 	// Origin is whether a product (Status = 1) is bought or made, which decides its accounts:
 	// mercaderías (2011 / 7012 / 6912) or productos terminados (2111 / 7022 / 6922). 0 on a supply.
 	Origin int8 `cb:"44"`
+	// WebExtraStock ("Sobreventa permitida") is how many whole units the web store may sell beyond
+	// the stock: with 5 in stock and 100 here, checkout accepts up to 105. The undelivered orders are
+	// subtracted from the stock (ProductStock.PendingDelivery*), so they use the margin up; deliveries
+	// still need the physical stock, so oversold orders wait for it to arrive.
+	WebExtraStock int32 `cb:"45"`
+	// WebHidden keeps the product out of the web store: the catalog ships it as removed and
+	// checkout refuses it.
+	WebHidden bool `cb:"46"`
 }
 
 // Product.Origin values.
@@ -172,6 +180,8 @@ type ProductTable struct {
 	Version             db.Col[*ProductTable, int16]
 	AccountCode         db.Col[*ProductTable, int32]
 	Origin              db.Col[*ProductTable, int8]
+	WebExtraStock       db.Col[*ProductTable, int32]
+	WebHidden           db.Col[*ProductTable, bool]
 }
 
 func (e *Product) FillCategoriesWithStock() {
@@ -200,6 +210,21 @@ func (e *Product) ToProductCategoryFrames(lines []ProductCategoryFrame) []Produc
 		lines = append(lines, ProductCategoryFrame{CategoryID: categoryID, ProductID: e.ID})
 	}
 	return lines
+}
+
+// WebPresentationIDs are the presentations the web store sells the product as: its active ones, or
+// presentation 0 when it has none. Stock rows of any other presentation are not sellable.
+func (e *Product) WebPresentationIDs() []int16 {
+	presentationIDs := []int16{}
+	for _, presentation := range e.Presentations {
+		if presentation.Status > 0 {
+			presentationIDs = append(presentationIDs, presentation.ID)
+		}
+	}
+	if len(presentationIDs) == 0 {
+		return []int16{0}
+	}
+	return presentationIDs
 }
 
 func (e *Product) SelfParse() {

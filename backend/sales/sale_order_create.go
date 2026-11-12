@@ -158,7 +158,20 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		sale.ClientID = clientID
 	}
 
-	if !isUpdate || slices.Contains(sale.ActionsIncluded, 3) {
+	// The stock the sale holds while undelivered (ProductStock.PendingDelivery*). A new sale left
+	// undelivered reserves its units on its warehouse; delivering a pending one releases them from
+	// the warehouse they were reserved on, which the delivery may not ship from.
+	isDelivery := slices.Contains(sale.ActionsIncluded, 3)
+	pendingDeliveryChanges := []logistics.PendingDeliveryChange{}
+	isReserved := isUpdate && storedSale.IsDeliveryPending()
+	if !isUpdate && !isDelivery {
+		pendingDeliveryChanges = types.PendingDeliveryChanges(sale.Lines, sale.WarehouseID, sale.OnlineSaleOrderID > 0, 1)
+	}
+	if isReserved && isDelivery {
+		pendingDeliveryChanges = types.PendingDeliveryChanges(storedSale.Lines, storedSale.WarehouseID, storedSale.OnlineSaleOrderID > 0, -1)
+	}
+
+	if !isUpdate || isDelivery {
 		// An early check, on a plain read and before the sale's number is reserved: almost every
 		// shortage is refused here, with nothing spent. It is not the final word. A delivery's
 		// movements re-check against the stock rows they lock inside the transaction below, so two
@@ -168,7 +181,7 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		// Validate stock availability against the V2 split:
 		//  - line items without LotID AND without SerialNumber draw from ProductStockV2.Quantity
 		//  - items with a LotID/SerialNumber draw from the matching ProductStockDetail row
-		if err := validateSaleStock(req, sale); err != nil {
+		if err := validateSaleStock(req, sale, isReserved); err != nil {
 			return req.MakeErr(err)
 		}
 	}
@@ -295,6 +308,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				return core.Err("Error al procesar la salida de almacén:", err)
 			}
 		}
+		if err := logistics.ApplyPendingDeliveryIn(transaction, req.User.CompanyID, req.User.ID, pendingDeliveryChanges); err != nil {
+			return err
+		}
 		if err := applyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(storedSale, &sale)); err != nil {
 			return err
 		}
@@ -381,7 +397,7 @@ func readSaleProducts(companyID int32, lines []types.SaleOrderLine) (map[int32]p
 	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID, query.SbuUnit).
+		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.WebHidden, query.Presentations).
 		CompanyID.Equals(companyID).
 		ID.In(productIDs.Values...)
 	if err := query.Exec(); err != nil {
@@ -536,9 +552,13 @@ func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID i
 }
 
 // validateSaleStock ensures each sale-order line has enough stock available.
-// Lines with no LotID and no SerialNumber draw from ProductStockV2.Quantity;
-// lines with either field draw from the matching ProductStockDetail row.
-func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
+// Lines with no LotID and no SerialNumber draw from ProductStockV2.Quantity; for a sale that holds
+// no reservation yet, less the units undelivered sales and web orders reserved on the row
+// (PendingDelivery*). The delivery of a sale that does hold one (isReserved) only needs the physical
+// stock: its units are already among the reserved, which may exceed the stock after an oversold web
+// order. Lines with a LotID or SerialNumber draw from the matching ProductStockDetail row:
+// reservations name no lot.
+func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder, isReserved bool) error {
 	if sale.WarehouseID == 0 {
 		return core.Err("Se requiere WarehouseID para validar el stock.")
 	}
@@ -589,7 +609,8 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 	eg.Go(func() error {
 		stocks := []logistics.ProductStock{}
 		q := db.Query(&stocks)
-		q.Select(q.ID, q.Quantity, q.SubQuantity, q.DetailQuantity, q.DetailSubQuantity, q.SubDivisor).
+		q.Select(q.ID, q.Quantity, q.SubQuantity, q.DetailQuantity, q.DetailSubQuantity, q.SubDivisor,
+			q.PendingDeliveryStore, q.PendingDeliveryOnline).
 			CompanyID.Equals(req.User.CompanyID).
 			ID.In(stockIDSet.Values...)
 		if err := q.Exec(); err != nil {
@@ -638,6 +659,9 @@ func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder) error {
 		var available core.Quantity
 		if key.lotID == 0 && key.serialNumber == "" {
 			available = core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
+			if !isReserved {
+				available.Units -= stock.PendingDeliveryStore + stock.PendingDeliveryOnline
+			}
 		} else {
 			detail := detailsByKey[key]
 			available = core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}

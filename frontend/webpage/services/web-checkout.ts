@@ -18,6 +18,10 @@ export const PAYMENT_CARD = 1
 export const PAYMENT_YAPE = 2
 export const PAYMENT_DEFERRED = 3
 
+// Sent instead of a Culqi token by "Simular Pago (dev mode)": a `go run . dev` backend settles
+// company 1's order without charging. Mirrors backend webDevSimulatedPaymentToken.
+export const DEV_SIMULATED_PAYMENT_TOKEN = "dev_simulated_payment"
+
 // A boleta from S/ 700 must name its buyer (SUNAT), so the DNI becomes required. In cents.
 export const IDENTIFIED_RECEIPT_FROM_CENTS = 70000
 

@@ -8,7 +8,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.sites":                  PostSite,
 	"POST.warehouses":             PostWarehouse,
 	"POST.initial-data":           PostInitialData,
-	"GET.p-products-ecommerce":    GetProductsEcommerce,
+	"GET.p-ecommerce-catalog":     GetEcommerceCatalog,
 	"GET.shared-lists":            GetSharedLists,
 	"POST.shared-lists":           PostSharedLists,
 	"GET.image-id-counter":        GetImageIdCounter,

@@ -9,8 +9,9 @@
   import "../../styles/fonts.css";
 
   import { preloadProductSearch } from "#core/product-search/product-search-runtime.ts";
-  import { getProductEcommerceData } from '#ecommerce/services/products.svelte.ts';
+  import { getEcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
   import FloatingCart from "#ecommerce/components/FloatingCart.svelte";
+  import { restoreCart } from "#ecommerce/components/store.svelte.ts";
   import { provideUi } from '@genix/ui';
   import { NotifyHost } from '@genix/ui/notify';
   import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
@@ -18,9 +19,10 @@
   provideUi(genixUiRuntime);
 
   onMount(() => {
+    restoreCart();
     // Kick off the single shared catalog load (fast main-thread first paint, then background
     // delta) and warm up the search index. Both share the same memoized catalog instance.
-    void getProductEcommerceData().catch((catalogLoadError) => {
+    void getEcommerceCatalog().catch((catalogLoadError) => {
       console.error("[StoreLayout] catalog load failed", catalogLoadError);
     });
     void preloadProductSearch().catch((productSearchPreloadError) => {

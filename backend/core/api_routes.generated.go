@@ -92,9 +92,10 @@ var APIRouteIDs = map[string]int16{
 	"GET.online-sale-orders":              257,
 	"GET.p-company-names-by-ids":          23,
 	"GET.p-dev-login":                     24,
+	"GET.p-ecommerce-catalog":             260,
 	"GET.p-hello":                         25,
 	"GET.p-product-text-search":           26,
-	"GET.p-products-ecommerce":            27,
+	"GET.p-products-ecommerce":            27, // retired
 	"GET.p-products-ids":                  28,
 	"GET.p-web-customer":                  245,
 	"GET.p-web-customer-orders":           246,
@@ -285,7 +286,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 259
+const MaxAPIRouteID int16 = 260
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

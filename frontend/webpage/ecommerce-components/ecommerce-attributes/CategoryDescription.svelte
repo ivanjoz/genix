@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { getProductEcommerceData, type ProductCatalog, type IProductCategory } from '#ecommerce/services/products.svelte.ts';
+	import { getEcommerceCatalog, type EcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
+	import type { IProductCategory } from '#ecommerce/services/ecommerce-catalog.ts';
 
 	export interface ICategoryDescription {
 		css?: string;
@@ -8,9 +9,9 @@
 
 	const { css = "", categoryIDs = [] }: ICategoryDescription = $props();
 
-	let catalog = $state<ProductCatalog | null>(null);
+	let catalog = $state<EcommerceCatalog | null>(null);
 
-	getProductEcommerceData().then((loaded) => { catalog = loaded; });
+	getEcommerceCatalog().then((loaded) => { catalog = loaded; });
 
 	// Reactive: resolves once the catalog (and its delta) is available.
 	const categoria = $derived<IProductCategory | undefined>(

@@ -7,8 +7,8 @@ import (
 	"app/db"
 	finance "app/finance/types"
 	invoicing "app/invoicing/types"
-	logistics "app/logistics/types"
 	"app/libs/culqi"
+	logistics "app/logistics/types"
 	production "app/production/types"
 	"app/sales/types"
 	"context"
@@ -32,6 +32,11 @@ import (
 // webMaxPendingOrdersPerCustomer caps the unpaid orders one customer can hold: a deferred order
 // costs nothing to place, so without a cap one session could flood the store with them.
 const webMaxPendingOrdersPerCustomer = 3
+
+// webDevSimulatedPaymentToken stands in for a Culqi token in local testing: the checkout settles
+// the order as paid without calling Culqi. Honored only by a `go run . dev` process and only for
+// company 1 (the dev company); anywhere else it reaches Culqi and is rejected as an invalid token.
+const webDevSimulatedPaymentToken = "dev_simulated_payment"
 
 type webCheckoutLine struct {
 	ProductID      int32
@@ -127,6 +132,8 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 	if !isOnlinePayment && checkout.CulqiToken != "" {
 		return req.MakeErr("Un pedido con pago contra entrega no lleva un token de pago.")
 	}
+	isSimulatedPayment := isOnlinePayment && checkout.CulqiToken == webDevSimulatedPaymentToken &&
+		core.Env.IS_DEV_ARG && companyID == 1
 
 	// The contact: the email is the session's, the rest is typed and checked like Mis Datos.
 	contact := webCustomerProfile{FirstName: checkout.Shipping.FirstName, LastName: checkout.Shipping.LastName,
@@ -215,7 +222,7 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// ── 3. Stock ────────────────────────────────────────────────────────────────────────
-	if err := validateWebStock(companyID, order.Lines, saleProducts); err != nil {
+	if order.PendingWarehouseID, err = validateWebStock(companyID, order.Lines, saleProducts); err != nil {
 		return req.MakeErr(err)
 	}
 
@@ -231,7 +238,7 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 		if normalizeCurrency(culqiCashBank.CurrencyType) != finance.CurrencyPEN {
 			return req.MakeErr("La cuenta que recibe los pagos de Culqi debe ser en soles.")
 		}
-		if companyConfig.Culqi.SecretKey() == "" {
+		if companyConfig.Culqi.SecretKey() == "" && !isSimulatedPayment {
 			return req.MakeErr("La tienda no tiene configurada la llave secreta de Culqi.")
 		}
 	} else {
@@ -250,11 +257,22 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 	order.Created, order.Updated = nowTime, nowTime
 	order.Status = types.OrderStatusPending
 	order.DebtAmount = order.TotalAmount
-	orders := []types.OnlineSaleOrder{order}
-	if err := db.Insert(&orders); err != nil {
-		return req.MakeErr("Error al registrar el pedido:", err)
+	// The order and the units it reserves commit together. A rerun after a deadlock inserts from the
+	// unsaved order again, not from the ID a failed attempt was given.
+	insertedOrder := order
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		orders := []types.OnlineSaleOrder{order}
+		if err := db.InsertIn(transaction, &orders); err != nil {
+			return core.Err("Error al registrar el pedido:", err)
+		}
+		insertedOrder = orders[0]
+		return logistics.ApplyPendingDeliveryIn(transaction, companyID, 0,
+			types.PendingDeliveryChanges(order.Lines, order.PendingWarehouseID, true, 1))
+	})
+	if err != nil {
+		return req.MakeErr(err)
 	}
-	order = orders[0]
+	order = insertedOrder
 	core.Log("PostWebCheckout:: pedido registrado", order.ID, "cliente", customer.ID, "total", order.TotalAmount)
 
 	// Remembered for the next checkout. A failure here costs a retyped address, not the order.
@@ -273,10 +291,18 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	// ── 5. Charge Culqi ───────────────────────────────────────────────────────────────────
-	charge, chargeErr := culqi.CreateCharge(companyConfig.Culqi.SecretKey(), culqi.ChargeRequest{
-		Amount: order.TotalAmount, CurrencyCode: "PEN", Email: customer.Email, SourceID: checkout.CulqiToken,
-		Metadata: map[string]string{"onlineSaleOrderID": fmt.Sprintf("%v", order.ID), "webCustomerID": fmt.Sprintf("%v", customer.ID)},
-	})
+	var charge *culqi.Charge
+	var chargeErr error
+	if isSimulatedPayment {
+		// Dev testing: a fake charge ID, so the rest of the flow (sale, boleta, email) runs as if paid.
+		charge = &culqi.Charge{ID: fmt.Sprintf("dev_sim_%v", order.ID), Amount: order.TotalAmount}
+		core.Log("PostWebCheckout:: pago simulado (dev) para el pedido", order.ID)
+	} else {
+		charge, chargeErr = culqi.CreateCharge(companyConfig.Culqi.SecretKey(), culqi.ChargeRequest{
+			Amount: order.TotalAmount, CurrencyCode: "PEN", Email: customer.Email, SourceID: checkout.CulqiToken,
+			Metadata: map[string]string{"onlineSaleOrderID": fmt.Sprintf("%v", order.ID), "webCustomerID": fmt.Sprintf("%v", customer.ID)},
+		})
+	}
 	declined := &culqi.ChargeError{}
 	if errors.As(chargeErr, &declined) {
 		// ── 6b. Declined: the order is annulled. No sale and no boleta number exist to undo.
@@ -363,51 +389,68 @@ func GetWebShippingAmount(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(map[string]any{"ShippingAmount": shippingAmount})
 }
 
-// validateWebStock checks each product has enough whole units summed over every active warehouse
-// not marked ExcludeFromOnlineSales. Stock is only checked, never moved: the delivery is still
-// registered in the back office, from whichever warehouse ships it.
-func validateWebStock(companyID int32, lines []types.SaleOrderLine, productsByID map[int32]production.Product) error {
+// validateWebStock checks the order against the web store's sellable rule (logistics.WebOrderFits):
+// per presentation, the stock of the warehouses open to online sales less what undelivered sales and
+// web orders reserved, with the product's WebExtraStock shared by its presentations. A line with
+// sub-units needs one more whole unit, as its reservation does. Stock is only checked here, never
+// moved: the delivery is registered in the back office, from whichever warehouse ships it.
+//
+// It returns the warehouse the order's units are reserved on: the first (lowest ID) of those.
+func validateWebStock(companyID int32, lines []types.SaleOrderLine, productsByID map[int32]production.Product) (int32, error) {
+	// A product hidden from the store may still sit in a cart cached before it was hidden, and a line
+	// may name a presentation the product no longer sells.
+	presentationIDsByProduct := map[int32][]int16{}
+	for _, line := range lines {
+		product := productsByID[line.ProductID]
+		if product.WebHidden {
+			return 0, core.Err(fmt.Sprintf(`El producto "%v" ya no está disponible en la tienda.`, product.Name))
+		}
+		presentationIDsByProduct[line.ProductID] = product.WebPresentationIDs()
+		if !slices.Contains(presentationIDsByProduct[line.ProductID], line.PresentationID) {
+			return 0, core.Err(fmt.Sprintf(`La presentación elegida de "%v" ya no está disponible.`, product.Name))
+		}
+	}
+
 	warehouses := []business.Warehouse{}
 	warehouseQuery := db.Query(&warehouses)
 	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.Status, warehouseQuery.ExcludeFromOnlineSales).
 		CompanyID.Equals(companyID)
 	if err := warehouseQuery.Exec(); err != nil {
-		return core.Err("Error al obtener los almacenes:", err)
+		return 0, core.Err("Error al obtener los almacenes:", err)
+	}
+	pendingWarehouseID := business.FirstOnlineWarehouseID(warehouses)
+	if pendingWarehouseID == 0 {
+		return 0, core.Err("La tienda no tiene almacenes habilitados para la venta en línea.")
 	}
 
-	stockIDs := core.SliceSet[int64]{}
-	requestedUnits := map[int32]int32{}
-	for _, line := range lines {
-		requestedUnits[line.ProductID] += core.UnpackQuantityLine(line.Quantity).Units
-		for _, warehouse := range warehouses {
-			if warehouse.Status > 0 && !warehouse.ExcludeFromOnlineSales {
-				stockIDs.Add(logistics.PackProductStockID(warehouse.ID, line.ProductID, line.PresentationID))
+	// What the order takes of each product, by presentation, in the units its reservation will hold.
+	orderedUnitsByProduct := map[int32]map[int16]int32{}
+	for _, change := range types.PendingDeliveryChanges(lines, pendingWarehouseID, true, 1) {
+		if orderedUnitsByProduct[change.ProductID] == nil {
+			orderedUnitsByProduct[change.ProductID] = map[int16]int32{}
+		}
+		orderedUnitsByProduct[change.ProductID][change.PresentationID] += change.Online
+	}
+	stockRowsByProduct, err := logistics.ReadWebStockRows(companyID, business.OnlineWarehouseIDs(warehouses), presentationIDsByProduct)
+	if err != nil {
+		return 0, err
+	}
+	for productID, orderedUnits := range orderedUnitsByProduct {
+		product := productsByID[productID]
+		if logistics.WebOrderFits(stockRowsByProduct[productID], presentationIDsByProduct[productID], product.WebExtraStock, orderedUnits) {
+			continue
+		}
+		// One presentation ordered: say how many are left. Several share the margin, so no single
+		// figure is right for each.
+		if len(orderedUnits) == 1 {
+			sellableUnits := logistics.WebSellableStock(stockRowsByProduct[productID], presentationIDsByProduct[productID], product.WebExtraStock)
+			for presentationID := range orderedUnits {
+				return 0, core.Err(fmt.Sprintf(`No hay stock suficiente de "%v": quedan %v.`, product.Name, sellableUnits[presentationID]))
 			}
 		}
+		return 0, core.Err(fmt.Sprintf(`No hay stock suficiente de "%v" para las presentaciones elegidas.`, product.Name))
 	}
-
-	availableUnits := map[int32]int32{}
-	if !stockIDs.IsEmpty() {
-		stocks := []logistics.ProductStock{}
-		stockQuery := db.Query(&stocks)
-		stockQuery.Select(stockQuery.ProductID, stockQuery.Quantity, stockQuery.DetailQuantity).
-			CompanyID.Equals(companyID).ID.In(stockIDs.Values...)
-		if err := stockQuery.Exec(); err != nil {
-			return core.Err("Error al obtener el stock:", err)
-		}
-		// Free stock and stock held in lots both count: the warehouse picks the lot when it ships.
-		for _, stock := range stocks {
-			availableUnits[stock.ProductID] += stock.Quantity + stock.DetailQuantity
-		}
-	}
-
-	for productID, requested := range requestedUnits {
-		if availableUnits[productID] < requested {
-			return core.Err(fmt.Sprintf(`No hay stock suficiente de "%v": quedan %v.`,
-				productsByID[productID].Name, max(availableUnits[productID], 0)))
-		}
-	}
-	return nil
+	return pendingWarehouseID, nil
 }
 
 // countPendingWebOrders counts the customer's online orders still waiting for payment or delivery.

@@ -6,7 +6,8 @@
   import type { ProductSearch } from "#core/product-search/product-search.ts";
   import ProductCard from "./ProductCard.svelte";
   import type { ProductSearchHit } from "#core/product-search/types.ts";
-  import { getProductEcommerceData, type ProductCatalog, type IProduct } from "#ecommerce/services/products.svelte.ts";
+  import { getEcommerceCatalog, type EcommerceCatalog } from "#ecommerce/services/ecommerce-catalog.svelte.ts";
+  import type { IProduct } from "#ecommerce/services/ecommerce-catalog.ts";
 
   interface ProductSearchLayerProps {
     queryText?: string;
@@ -28,7 +29,7 @@
   let productIndexInstance = $state<ProductSearch | null>(null);
   // Shared catalog, watched only for its `version` counter so the index re-builds after the
   // background delta re-publishes the catalog.
-  let catalog = $state<ProductCatalog | null>(null);
+  let catalog = $state<EcommerceCatalog | null>(null);
   let isProductIndexLoading = $state(false);
   let productIndexLoadErrorMessage = $state("");
   let throttledQueryText = $state("");
@@ -196,11 +197,10 @@
       }
       productIndexInstance = nextProductSearch;
       // Track the shared catalog so the index re-builds when the delta re-publishes it.
-      catalog = await getProductEcommerceData();
+      catalog = await getEcommerceCatalog();
       if (ENABLE_FULL_PRODUCT_SEARCH_DEBUG) {
         console.info("[ProductSearchLayer] Product search loaded", {
           productsCount: productIndexInstance.size,
-          updatedSunix: productIndexInstance.updated,
           source: productIndexInstance.source
         });
       }

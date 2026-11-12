@@ -4,6 +4,7 @@
   const ui = useUI();
 import Button from '#components/buttons/Button.svelte';
 import FilterInput from '#components/form/FilterInput.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
 import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
 import ImageUploader from '#components/files/ImageUploader.svelte';
 import Image from '#components/files/Image.svelte';
@@ -820,6 +821,43 @@ import {
           save="CategoryIDs"
           optionsCss="w-280"
         />
+        <!-- Web store settings: the storefront adds WebExtraStock to the real stock at checkout. -->
+        <div
+          class="col-span-24 grid grid-cols-24 items-center gap-x-10 gap-y-10 rounded-[6px] bg-gray-100 p-12"
+          aria-label="Web store settings"
+        >
+          <div class="ff-bold h3 col-span-24 ml-4">Tienda Web</div>
+          <Input
+            saveOn={productoForm}
+            save="WebExtraStock"
+            css="col-span-12 md:col-span-10"
+            label="Allowed overselling|Sobreventa permitida"
+            type="number"
+          />
+          <Checkbox
+            bind:saveOn={productoForm}
+            save="WebHidden"
+            label="Hide|Ocultar"
+            css="col-span-12 md:col-span-6 md:ml-8"
+          />
+        </div>
+      </div>
+    {/if}
+    {#if layerView === 2}
+      {#if HtmlEditorComponent}
+        <HtmlEditorComponent saveOn={productoForm} save="ContentHTML" css="mt-12" />
+      {:else}
+        <div class="mt-12 p-12 text-sm text-fg-muted">Cargando editor...</div>
+      {/if}
+    {/if}
+    {#if layerView === 3}
+      <div class="mt-16 w-full" aria-label="Product attributes and presentations editor">
+        <Atributos bind:producto={productoForm}></Atributos>
+      </div>
+      <div
+        class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-16"
+        aria-label="Product sub-units"
+      >
         <div class="ff-bold h3 col-span-24 ml-8">Sub-Unidades</div>
         <Input
           saveOn={productoForm}
@@ -866,18 +904,6 @@ import {
           label="Quantity|Cantidad"
           type="number"
         />
-      </div>
-    {/if}
-    {#if layerView === 2}
-      {#if HtmlEditorComponent}
-        <HtmlEditorComponent saveOn={productoForm} save="ContentHTML" css="mt-12" />
-      {:else}
-        <div class="mt-12 p-12 text-sm text-fg-muted">Cargando editor...</div>
-      {/if}
-    {/if}
-    {#if layerView === 3}
-      <div class="mt-16 w-full" aria-label="Product attributes and presentations editor">
-        <Atributos bind:producto={productoForm}></Atributos>
       </div>
     {/if}
     {#if layerView === 4}

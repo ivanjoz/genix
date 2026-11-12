@@ -83,6 +83,26 @@ export const saveCustomerDraft = () => {
   localStorage.setItem(draftStorageKey(), JSON.stringify(WebStore.draft))
 }
 
+// The delivery choices of the cart's Datos Envío step, kept per company so a reload does not lose
+// what the shopper already picked or typed.
+export interface ICheckoutDelivery {
+  deliveryType: number
+  pickupSiteID: number
+  selectedAddressID: number
+  newAddress: { CityID: number, Address: string, Reference: string }
+}
+
+const deliveryStorageKey = () => `genixWebCheckoutDelivery-${Env.getCompanyID()}`
+
+export const saveCheckoutDelivery = (delivery: ICheckoutDelivery) => {
+  if (typeof localStorage === 'undefined') { return }
+  localStorage.setItem(deliveryStorageKey(), JSON.stringify(delivery))
+}
+
+export const readStoredCheckoutDelivery = (): ICheckoutDelivery | null => {
+  return readStoredJSON<ICheckoutDelivery>(deliveryStorageKey())
+}
+
 // applyWebCustomerSession stores a session answer and fills the draft from the account, so the
 // checkout opens with the customer's data.
 export const applyWebCustomerSession = (session: IWebCustomerSession) => {

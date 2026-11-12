@@ -147,6 +147,13 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		if err := logistics.ApplyMovimientosIn(transaction, req, stockReturns); err != nil {
 			return core.Err("Error al reingresar los productos al almacén:", err)
 		}
+		// An undelivered sale gives back the units it held on its warehouse.
+		if storedSale.IsDeliveryPending() {
+			if err := logistics.ApplyPendingDeliveryIn(transaction, req.User.CompanyID, req.User.ID,
+				types.PendingDeliveryChanges(storedSale.Lines, storedSale.WarehouseID, storedSale.OnlineSaleOrderID > 0, -1)); err != nil {
+				return err
+			}
+		}
 
 		// An annulled sale leaves the accounting operations' cache, so a collection they inferred from it
 		// must become a movement they download, like its refund: the two cancel in 101 and 1212. A zero

@@ -116,11 +116,21 @@ tabs: **Info (Información)**, **Sheet (Ficha)**, **Presentations (Presentacione
   visible behavior yet.
 - **Categories (`CATEGORÍAS ::`)** lets you attach one or more existing categories by name; it
   cannot create a new category from here (use the Categories view or the Excel import).
-- **Sub-Unidades** (Name, Base Price, Discount, Final Price, Quantity) are independent fields:
-  unlike the main Price/Discount/Final Price trio, they do not recalculate each other. Note that
-  the sub-unit **Base Price** field's `onChange` actually recomputes the *main* product's Final
-  Price (from the main Price/Discount), not a sub-unit total — entering a sub-unit base price can
-  unexpectedly change the main Final Price shown above it.
+- The gray **Tienda Web** box on the Info tab holds the web store settings:
+  - **Allowed overselling (`Sobreventa permitida`)** is a number of whole units the web store
+    may sell beyond the stock. With 5 units in stock and 100 here, the web store accepts up to
+    105 units in total. Orders not yet delivered (till sales and web orders) count as reserved
+    and are subtracted, so they use up the margin: once 105 are pending, nothing more can be
+    ordered online. Delivering an oversold order still needs the goods in the warehouse, so it
+    waits for stock to arrive. The value cannot be negative, and the Point of Sale ignores it.
+  - **Hide (`Ocultar`)** removes the product from the web store catalog, and checkout refuses it
+    even if it is still in a shopper's cart.
+- **Sub-Unidades** (Name, Base Price, Discount, Final Price, Quantity) live on the
+  **Presentations (Presentaciones)** tab, below the presentations editor. They are independent
+  fields: unlike the main Price/Discount/Final Price trio, they do not recalculate each other.
+  Note that the sub-unit **Base Price** field's `onChange` actually recomputes the *main*
+  product's Final Price (from the main Price/Discount), not a sub-unit total — entering a sub-unit
+  base price can unexpectedly change the main Final Price on the Info tab.
 - Saving is rejected with a descriptive message when the sub-unit **Quantity** (the divisor) is
   above 1000, when a sub-unit is defined without a **Name**, when the divisor is changed to
   something that is not a multiple of the current one, or when it is removed from a product that

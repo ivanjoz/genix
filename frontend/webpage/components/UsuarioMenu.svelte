@@ -169,9 +169,10 @@
   }
 </script>
 
-{#snippet primaryButton(label: string, onclick: () => void)}
+{#snippet primaryButton(label: string, onclick: () => void, icon?: string)}
   <button {onclick}
-    class="bg-[#4c55d5] text-white py-10 px-24 rounded-lg ff-bold hover:bg-[#3b44b8] transition-all w-max cursor-pointer">
+    class="flex items-center gap-8 bg-[#4c55d5] text-white py-10 px-24 rounded-lg ff-bold hover:bg-[#3b44b8] w-max cursor-pointer">
+    {#if icon}<i class={icon}></i>{/if}
     {label}
   </button>
 {/snippet}
@@ -199,14 +200,16 @@
 
 {#snippet guestContent()}
   {#if selectedTab === 1}
-    <div class="flex flex-col gap-12 max-w-[440px]">
+    <!-- Login card: light gray panel centered in the layer, actions centered below the fields. -->
+    <div class="flex flex-col gap-12 w-full max-w-[440px] mx-auto mt-8 p-24 rounded-[11px] bg-[#f5f6f8]">
+      <div class="text-[20px] ff-bold text-center text-gray-800 mb-4">Iniciar Sesión</div>
       {#if forms.codeSentTo}
         {@render codeForm()}
       {:else}
         <Input label="Correo Electrónico" saveOn={forms} save="loginEmail" required={true} />
         <Input label="Contraseña" type="password" saveOn={forms} save="password" />
-        <div class="flex flex-wrap gap-16 items-center">
-          {@render primaryButton("Ingresar", onLoginWithPassword)}
+        <div class="flex flex-col gap-12 items-center mt-4">
+          {@render primaryButton("Ingresar", onLoginWithPassword, "icon-[fa--sign-in]")}
           <button class="text-[#4c55d5] hover:underline cursor-pointer" onclick={() => sendCode(forms.loginEmail)}>
             Ingresar con un código enviado a mi correo
           </button>
@@ -214,34 +217,43 @@
       {/if}
     </div>
   {:else if selectedTab === 2}
-    <div class="flex flex-col gap-12">
+    <!-- Register card: same light gray panel as Login, kept full width for the two-column fields. -->
+    <div class="flex flex-col gap-12 w-full mt-8 p-24 rounded-[11px] bg-[#f5f6f8]">
       {#if forms.codeSentTo}
         {@render codeForm()}
       {:else}
         {@render profileFields(false)}
-        <p class="text-gray-500 text-[14px]">Te enviaremos un código para confirmar tu correo. Podrás crear una contraseña después.</p>
-        {@render primaryButton("Registrarme", onRegister)}
+        <div class="flex flex-col gap-12 items-center mt-4">
+          <p class="text-gray-500 text-[14px] text-center">Te enviaremos un código para confirmar tu correo. Podrás crear una contraseña después.</p>
+          {@render primaryButton("Registrarme", onRegister)}
+        </div>
       {/if}
     </div>
   {/if}
 {/snippet}
 
 {#snippet accountContent()}
-  <div class="flex gap-20">
-    <div class="flex flex-col w-180 shrink-0 border-r border-gray-200 pr-12 gap-4">
+  <!-- Folder-tab layout: the menu column's right border is the only divider. The selected section
+       shares the panel's gray and overlaps that divider by 1px (-mr-1), so it opens into the panel.
+       Every section keeps the same border widths (transparent when idle) to avoid a layout shift. -->
+  <div class="flex">
+    <div class="flex flex-col w-112 shrink-0 pt-14 border-r border-gray-300">
       {#each accountSections as section (section.id)}
         <button onclick={() => { accountSection = section.id }}
-          class={["flex items-center gap-10 px-12 py-10 rounded-lg text-left cursor-pointer transition-colors",
-            accountSection === section.id ? "bg-[#f1f2ff] text-[#4c55d5] ff-bold" : "hover:bg-gray-50"].join(" ")}>
-          <i class={section.icon}></i><span>{section.name}</span>
+          class={["relative flex flex-col items-center gap-4 -mr-1 px-8 py-10 text-center leading-[1.2]",
+            "border-y border-l-4 border-r-0 cursor-pointer",
+            accountSection === section.id
+              ? "z-1 bg-gray-100 border-gray-300 text-[#4c55d5] ff-bold"
+              : "border-transparent text-gray-700 hover:text-[#4c55d5]"].join(" ")}>
+          <i class="{section.icon} text-[18px]"></i><span>{section.name}</span>
         </button>
       {/each}
       <button onclick={handleLogout}
-        class="flex items-center gap-10 px-12 py-10 rounded-lg text-left cursor-pointer hover:bg-gray-50 mt-12 text-gray-600">
-        <i class="icon-[fa--sign-out]"></i><span>Cerrar Sesión</span>
+        class="flex flex-col items-center gap-4 mt-12 px-8 py-10 text-center leading-[1.2] cursor-pointer text-gray-500 hover:text-gray-800">
+        <i class="icon-[fa--sign-out] text-[18px]"></i><span>Cerrar Sesión</span>
       </button>
     </div>
-    <div class="grow min-w-0">
+    <div class="grow min-w-0 p-16 bg-gray-100">
       {#if accountSection === 1}
         <div class="flex flex-col gap-12">
           {@render profileFields(true)}

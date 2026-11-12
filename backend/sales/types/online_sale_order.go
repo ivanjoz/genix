@@ -47,6 +47,11 @@ type OnlineSaleOrder struct {
 	Version   int16   `json:"ver" cb:"ver,21"`
 	Metadata  *string `json:"mdt" cb:"mdt,22"`
 	UpdatedBy int32   `cb:"23"`
+	// PendingWarehouseID is the warehouse whose ProductStock.PendingDeliveryOnline holds this order's
+	// units until it is delivered or annulled: the company's first active warehouse open to online
+	// sales at checkout. Kept so the release hits the row the reservation went to, even if the
+	// warehouses change meanwhile. The SaleOrder created on payment inherits it as its WarehouseID.
+	PendingWarehouseID int32 `cb:"24"`
 }
 
 // SaleOrderShipping is the contact and destination a web order was placed with.
@@ -79,28 +84,29 @@ func (e *OnlineSaleOrder) NeedsCulqiReconciliation() bool {
 
 type OnlineSaleOrderTable struct {
 	db.TableStruct[OnlineSaleOrderTable, OnlineSaleOrder]
-	CompanyID      db.Col[*OnlineSaleOrderTable, int32]
-	ID             db.Col[*OnlineSaleOrderTable, int32]
-	Date           db.Col[*OnlineSaleOrderTable, int16]
-	Lines          db.Col[*OnlineSaleOrderTable, []SaleOrderLine]
-	TotalAmount    db.Col[*OnlineSaleOrderTable, int32]
-	DebtAmount     db.Col[*OnlineSaleOrderTable, int32]
-	ShippingAmount db.Col[*OnlineSaleOrderTable, int32]
-	ExchangeRate   db.Col[*OnlineSaleOrderTable, int32]
-	DeliveryType   db.Col[*OnlineSaleOrderTable, int8]
-	PickupSiteID   db.Col[*OnlineSaleOrderTable, int32]
-	Shipping       db.Col[*OnlineSaleOrderTable, SaleOrderShipping]
-	WebCustomerID  db.Col[*OnlineSaleOrderTable, int32]
-	ClientID       db.Col[*OnlineSaleOrderTable, int32]
-	PaymentMethod  db.Col[*OnlineSaleOrderTable, int8]
-	CulqiChargeID  db.Col[*OnlineSaleOrderTable, string]
-	SaleOrderID    db.Col[*OnlineSaleOrderTable, int64]
-	AnnulReason    db.Col[*OnlineSaleOrderTable, string]
-	Status         db.Col[*OnlineSaleOrderTable, int8]
-	Created        db.Col[*OnlineSaleOrderTable, int32]
-	Updated        db.Col[*OnlineSaleOrderTable, int32]
-	Version        db.Col[*OnlineSaleOrderTable, int16]
-	UpdatedBy      db.Col[*OnlineSaleOrderTable, int32]
+	CompanyID          db.Col[*OnlineSaleOrderTable, int32]
+	ID                 db.Col[*OnlineSaleOrderTable, int32]
+	Date               db.Col[*OnlineSaleOrderTable, int16]
+	Lines              db.Col[*OnlineSaleOrderTable, []SaleOrderLine]
+	TotalAmount        db.Col[*OnlineSaleOrderTable, int32]
+	DebtAmount         db.Col[*OnlineSaleOrderTable, int32]
+	ShippingAmount     db.Col[*OnlineSaleOrderTable, int32]
+	ExchangeRate       db.Col[*OnlineSaleOrderTable, int32]
+	DeliveryType       db.Col[*OnlineSaleOrderTable, int8]
+	PickupSiteID       db.Col[*OnlineSaleOrderTable, int32]
+	Shipping           db.Col[*OnlineSaleOrderTable, SaleOrderShipping]
+	WebCustomerID      db.Col[*OnlineSaleOrderTable, int32]
+	ClientID           db.Col[*OnlineSaleOrderTable, int32]
+	PaymentMethod      db.Col[*OnlineSaleOrderTable, int8]
+	CulqiChargeID      db.Col[*OnlineSaleOrderTable, string]
+	SaleOrderID        db.Col[*OnlineSaleOrderTable, int64]
+	AnnulReason        db.Col[*OnlineSaleOrderTable, string]
+	Status             db.Col[*OnlineSaleOrderTable, int8]
+	Created            db.Col[*OnlineSaleOrderTable, int32]
+	Updated            db.Col[*OnlineSaleOrderTable, int32]
+	Version            db.Col[*OnlineSaleOrderTable, int16]
+	UpdatedBy          db.Col[*OnlineSaleOrderTable, int32]
+	PendingWarehouseID db.Col[*OnlineSaleOrderTable, int32]
 }
 
 func (e OnlineSaleOrderTable) GetSchema() db.TableSchema {

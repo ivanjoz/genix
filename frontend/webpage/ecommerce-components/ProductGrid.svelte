@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { getProductEcommerceData, type IProduct, type ProductCatalog } from '#ecommerce/services/products.svelte.ts';
+	import { getEcommerceCatalog, type EcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
+	import type { IProduct } from '#ecommerce/services/ecommerce-catalog.ts';
 	import ProductCard from '#ecommerce/components/ProductCard.svelte';
 
 	export interface IProductGrid {
@@ -34,9 +35,9 @@
 
 	// Self-fetch only when no products were handed in. The catalog is memoized/reactive, so this is
 	// cheap and re-fills when the delta publishes (same source ProductsByCategory uses).
-	let catalog = $state<ProductCatalog | null>(null);
+	let catalog = $state<EcommerceCatalog | null>(null);
 	$effect(() => {
-		if (!providedProducts) getProductEcommerceData().then((loaded) => { catalog = loaded; });
+		if (!providedProducts) getEcommerceCatalog().then((loaded) => { catalog = loaded; });
 	});
 
 	// Hand the grid the full list (it caps how many to show): provided products win; otherwise the

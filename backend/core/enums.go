@@ -43,4 +43,8 @@ const (
 	// minted, which a row lock inside the transaction could not cover: two settlements of one order
 	// would otherwise both spend a comprobante number. Keyed on companyID<<32 | order ID.
 	ActionOnlineSaleOrderSettle LockAction = 10
+	// ActionBuildEcommerceCatalog keeps one build of a company's web store catalog file at a time
+	// (business/ecommerce-catalog.go): a delta request that needs the file queues behind the build
+	// under way and then reuses its file; one that only noticed the file aging skips. Keyed on the company.
+	ActionBuildEcommerceCatalog LockAction = 11
 )

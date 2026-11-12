@@ -7,7 +7,8 @@
 
 	const { id = 0, isMobile = false, css = "" }: IProps = $props();
 
-	import { layerOpenedState, ProductsSelectedMap } from "./store.svelte";
+	import { untrack } from "svelte";
+	import { clearCart, layerOpenedState, ProductsSelectedMap } from "./store.svelte";
 	import angleSvg from "#components/assets/angle.svg?raw";
 	import { parseSVG } from '#libs/helpers.ts';
 	import s1 from "./styles.module.css";
@@ -24,14 +25,15 @@
 	import {
 		WebStore, loadWebStoreCompany, restoreWebCustomerSession, saveCustomerDraft, identifyWebCheckout,
 		verifyWebCustomerCode, getWebShippingAmount, postWebCheckout, downloadWebOrderPDF,
-		type IWebCheckoutResult,
+		saveCheckoutDelivery, readStoredCheckoutDelivery, type IWebCheckoutResult,
 	} from "#ecommerce/services/web-store.svelte.ts";
 	import {
 		DELIVERY_HOME, DELIVERY_PICKUP, PAYMENT_CARD, PAYMENT_YAPE, PAYMENT_DEFERRED, NEW_ADDRESS_ID,
 		FLAG_CASH_ON_DELIVERY, FLAG_REQUIRE_CONTACT_NUMBER, cartTotalCents, formatSoles, hasCompanyFlag,
 		requiresDocumentNumber, validateCustomerDraft, validateDelivery, defaultAddressID,
-		deferredPaymentLabel, buildWebCheckoutRequest, isOnlinePayment,
+		deferredPaymentLabel, buildWebCheckoutRequest, isOnlinePayment, DEV_SIMULATED_PAYMENT_TOKEN,
 	} from "#ecommerce/services/web-checkout.ts";
+	import { Env } from "#core/env.ts";
 
 	const ui = useUI();
 	const cities = useCitiesAPI();
@@ -40,18 +42,19 @@
 
 	// The checkout choices of this visit to the cart.
 	const checkout = $state({
-		deliveryType: 0,
+		// Home delivery is the preselected option; the shopper switches to pickup explicitly.
+		deliveryType: DELIVERY_HOME,
 		pickupSiteID: 0,
 		selectedAddressID: NEW_ADDRESS_ID,
 		newAddress: { CityID: 0, Address: "", Reference: "" },
 		// null = not resolved yet; -1 = the store does not deliver to that district.
 		shippingAmount: null as number | null,
-		paymentMethod: 0,
+		paymentMethod: PAYMENT_CARD,
 		// Set when identification mailed a code: the shopper types it before paying.
 		codeRequired: false,
 		code: { value: "" },
-		// The online payment widget is shown once the shopper is identified.
-		showCulqi: false,
+		// Bumped after a declined charge so the Culqi widget remounts and the shopper can retry.
+		culqiAttempt: 0,
 		result: null as IWebCheckoutResult | null,
 	});
 
@@ -88,6 +91,21 @@
 		return options;
 	});
 
+	// A payment method is always selected: when the current one is not offered (store config
+	// changed, or Yape was turned off) the first option takes its place.
+	$effect(() => {
+		const offeredIDs = paymentOptions.map((option) => option.id);
+		untrack(() => {
+			if (!offeredIDs.includes(checkout.paymentMethod)) { checkout.paymentMethod = offeredIDs[0] }
+		});
+	});
+
+	// Culqi opens straight away for an identified shopper; a guest identifies first from the panel.
+	const showCulqi = $derived(isOnlinePayment(checkout.paymentMethod) && !!WebStore.customer && !checkout.codeRequired);
+	// Local testing on the dev company: pay without Culqi. The backend honors it only in dev mode.
+	const canSimulatePayment = $derived(showCulqi && !!globalThis._isLocal && Env.getCompanyID() === 1);
+	const selectedPaymentOption = $derived(paymentOptions.find((option) => option.id === checkout.paymentMethod));
+
 	const cityName = (cityID: number): string => {
 		const district = cities.citiesMap?.get(cityID);
 		if (!district) { return "" }
@@ -99,12 +117,28 @@
 		layerOpenedState.id = layerOpenedState.id === id ? 0 : id;
 	}
 
+	// persistDelivery keeps the Datos Envío choices in the browser: called on every pick and on the
+	// blur of the address text fields, so a reload reopens the step as the shopper left it.
+	const persistDelivery = () => {
+		saveCheckoutDelivery({
+			deliveryType: checkout.deliveryType,
+			pickupSiteID: checkout.pickupSiteID,
+			selectedAddressID: checkout.selectedAddressID,
+			newAddress: { ...checkout.newAddress },
+		});
+	};
+
 	$effect(() => {
 		if (layerOpenedState.id === id) {
 			isOpen = true;
 			loadWebStoreCompany();
+			untrack(() => {
+				const storedDelivery = readStoredCheckoutDelivery();
+				if (storedDelivery) { Object.assign(checkout, storedDelivery) }
+			});
 			restoreWebCustomerSession().then(() => {
-				if (checkout.selectedAddressID === NEW_ADDRESS_ID) {
+				// A logged-in customer starts on a saved address, unless they were already typing a new one.
+				if (checkout.selectedAddressID === NEW_ADDRESS_ID && !checkout.newAddress.CityID) {
 					checkout.selectedAddressID = defaultAddressID(WebStore.addresses);
 				}
 			});
@@ -160,6 +194,8 @@
 			const problem = validateShippingStep();
 			if (problem) { notifyFailure(problem); return }
 			saveCustomerDraft();
+			// Snapshot taken before identification, which refills the draft from the account.
+			if (step === 3) { contactForOrder = { ...WebStore.draft } }
 		}
 		Ecommerce.cartOption = step;
 	};
@@ -181,34 +217,29 @@
 				paymentMethod: checkout.paymentMethod,
 				culqiToken,
 			}));
-			checkout.showCulqi = false;
-			ProductsSelectedMap.clear();
+			clearCart();
 			Ecommerce.cartOption = 4;
 		} catch (error: any) {
-			// A declined card voids the order: the shopper may retry with another token.
-			checkout.showCulqi = false;
+			// A declined card voids the order: a fresh widget lets the shopper retry with another token.
+			checkout.culqiAttempt++;
 			notifyFailure(error.message);
 		} finally {
 			hideLoading();
 		}
 	};
 
-	// After the shopper is identified: online payments open Culqi, deferred ones place the order.
+	// After the shopper is identified: online payments show Culqi (it follows the session), deferred
+	// ones place the order.
 	const continueIdentified = async () => {
 		checkout.codeRequired = false;
-		if (isOnlinePayment(checkout.paymentMethod)) {
-			checkout.showCulqi = true;
-		} else {
-			await placeOrder("");
-		}
+		if (!isOnlinePayment(checkout.paymentMethod)) { await placeOrder("") }
 	};
 
-	// onPay: identify the guest (an emailed code may be needed), then pay.
-	const onPay = async () => {
-		if (!checkout.paymentMethod) { notifyFailure("Seleccione un medio de pago."); return }
+	// onContinue: the action of the payment panel. Identifies a guest (an emailed code may be
+	// needed), then continues; an identified shopper only reaches it for a deferred payment.
+	const onContinue = async () => {
 		const problem = validateShippingStep();
 		if (problem) { notifyFailure(problem); return }
-		contactForOrder = { ...WebStore.draft };
 		if (WebStore.customer) { await continueIdentified(); return }
 
 		showLoading();
@@ -245,11 +276,12 @@
 
 	const resetCheckout = () => {
 		checkout.result = null;
-		checkout.paymentMethod = 0;
-		checkout.showCulqi = false;
+		checkout.paymentMethod = paymentOptions[0].id;
+		checkout.deliveryType = DELIVERY_HOME;
 		checkout.codeRequired = false;
 		checkout.newAddress = { CityID: 0, Address: "", Reference: "" };
 		checkout.selectedAddressID = defaultAddressID(WebStore.addresses);
+		persistDelivery();
 		Ecommerce.cartOption = 1;
 		layerOpenedState.id = 0;
 	};
@@ -259,12 +291,12 @@
 	<button
 		type="button"
 		class={[
-			"flex items-center gap-12 p-14 rounded-[10px] border-2 text-left cursor-pointer transition-colors w-full",
-			isSelected ? "border-[#4c55d5] bg-[#f1f2ff]" : "border-gray-200 hover:border-gray-400",
+			"flex items-center gap-12 px-14 py-8 rounded-[10px] border-2 text-left cursor-pointer transition-colors w-full",
+			isSelected ? "border-[#4c55d5] bg-white shadow-sm" : "border-gray-200 bg-white hover:border-gray-400",
 		].join(" ")}
 		{onclick}
 	>
-		<i class={`${icon} text-[26px] shrink-0 ${isSelected ? "text-[#4c55d5]" : "text-gray-500"}`}></i>
+		<i class={`${icon} text-[22px] shrink-0 ${isSelected ? "text-[#4c55d5]" : "text-gray-500"}`}></i>
 		<div class="flex flex-col min-w-0">
 			<span class="ff-bold">{title}</span>
 			{#if subtitle}<span class="text-gray-500 text-[14px] truncate">{subtitle}</span>{/if}
@@ -272,11 +304,36 @@
 	</button>
 {/snippet}
 
-{#snippet totals()}
-	<div class="mt-8 mb-8 flex flex-wrap gap-x-24 gap-y-4 items-baseline">
-		<span class="fs18 ff-bold">Total a pagar: {formatSoles(totalCents)}</span>
-		{#if checkout.deliveryType === DELIVERY_HOME && shippingCents > 0}
-			<span class="text-gray-500">Incluye envío: {formatSoles(shippingCents)}</span>
+<!-- The step's top row: the order total on the left and the step's action button on the right.
+     Total = Total a pagar [amount] | [purchases / + shipping]. The shipping line is always laid out
+     (invisible when there is none) so the row height does not change with the delivery type.
+     `continuesToNextStep` adds a forward arrow to buttons that only move to the next step (not the pay button). -->
+{#snippet headerWithTotal(actionLabel: string, onAction: () => void, continuesToNextStep: boolean)}
+	<div class="flex items-center justify-between gap-12 mt-10 mb-12">
+		<div class="flex items-center gap-12 whitespace-nowrap leading-tight italic pl-12 pr-16 py-6 rounded-[14px]
+			bg-linear-to-r from-[#f4f5ff] to-[#e9ebff]">
+			<span class="text-[15px] text-[#6b70b8]">Total a pagar</span>
+			<span class="not-italic text-[22px] ff-bold text-[#3b44b8] tracking-tight">{formatSoles(totalCents)}</span>
+			<div class="w-2 self-stretch my-2 rounded-full bg-[#c5c9f0]"></div>
+			<!-- Same lightness as "Total a pagar" (#6b70b8), desaturated so the breakdown reads as secondary. -->
+			<div class="flex flex-col items-start text-[14px] text-[#74789f]">
+				<span>{formatSoles(productsCents)} en compras</span>
+				<span class={shippingCents > 0 ? "" : "invisible"}>+ {formatSoles(shippingCents)} envío</span>
+			</div>
+		</div>
+		{#if actionLabel}
+			<!-- The arrow carries its own side bearing, so arrow buttons take less right padding to look balanced. -->
+			<button class={["shrink-0 flex items-center gap-6 bg-[#4c55d5] text-white pl-16 py-10 rounded-lg ff-bold",
+				"hover:bg-[#3b44b8] cursor-pointer", continuesToNextStep ? "pr-12" : "pr-16"].join(" ")} onclick={onAction}>
+				{actionLabel}
+				<!-- Inline SVG: none of the installed icon sets has a thin, round-capped long arrow. -->
+				{#if continuesToNextStep}
+					<svg class="w-20 h-20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+						stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M3 12h18M14 5l7 7-7 7" />
+					</svg>
+				{/if}
+			</button>
 		{/if}
 	</div>
 {/snippet}
@@ -305,44 +362,43 @@
 				</div>
 			{/snippet}
 		</ArrowSteps>
-		<div class="w-full px-4 overflow-auto grow">
+		<div class="w-full px-8 overflow-auto grow">
 			{#if Ecommerce.cartOption === 1}
-				{@render totals()}
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-12 pb-6">
+				{@render headerWithTotal(ProductsSelectedMap.size > 0 ? "Continuar" : "", () => goToStep(2), true)}
+				<div class="grid grid-cols-1 md:grid-cols-2 gap-12 pb-12">
 					{#each ProductsSelectedMap.values() as cartProducto}
 						<ProductCard mode="horizontal" productoID={cartProducto.producto.ID} />
 					{/each}
 				</div>
-				{#if ProductsSelectedMap.size > 0}
-					<div class="flex justify-end pb-12">
-						<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
-							onclick={() => goToStep(2)}>Continuar</button>
-					</div>
-				{/if}
 			{/if}
 			{#if Ecommerce.cartOption === 2}
-				{@render totals()}
-				<div class="ff-bold mb-12">Datos de contacto</div>
+				{@render headerWithTotal("Continuar al pago", () => goToStep(3), true)}
+				<div class="ff-bold mt-8 mb-12">Datos de contacto</div>
 				<div class="grid grid-cols-12 gap-12">
-					<Input label="Nombres" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="FirstName" required={true} />
-					<Input label="Apellidos" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="LastName" required={true} />
+					<Input label="Nombres" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="FirstName" required={true}
+						onChange={saveCustomerDraft} />
+					<Input label="Apellidos" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="LastName" required={true}
+						onChange={saveCustomerDraft} />
 					<!-- A logged-in customer's email is the account: it is not edited here. -->
 					<Input label="Correo Electrónico" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="Email"
-						required={true} disabled={!!WebStore.customer} />
+						required={true} disabled={!!WebStore.customer} onChange={saveCustomerDraft} />
 					<Input label="Celular" css="col-span-12 md:col-span-6" saveOn={WebStore.draft} save="Phone"
-						required={hasCompanyFlag(companyFlags, FLAG_REQUIRE_CONTACT_NUMBER)} />
+						required={hasCompanyFlag(companyFlags, FLAG_REQUIRE_CONTACT_NUMBER)} onChange={saveCustomerDraft} />
 					{#if needsDocumentNumber}
 						<Input label="DNI (compras desde S/ 700)" css="col-span-12 md:col-span-6" saveOn={WebStore.draft}
-							save="DocumentNumber" required={true} />
+							save="DocumentNumber" required={true} onChange={saveCustomerDraft} />
 					{/if}
 				</div>
 
-				<div class="ff-bold mt-20 mb-12">Tipo de entrega</div>
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
-					{@render choiceCard(checkout.deliveryType === DELIVERY_HOME, "icon-[fa--truck]", "Entrega a Domicilio",
-						"Lo llevamos a tu dirección", () => { checkout.deliveryType = DELIVERY_HOME })}
-					{@render choiceCard(checkout.deliveryType === DELIVERY_PICKUP, "icon-[fa--building]", "Recojo en Tienda",
-						"Recoge tu pedido sin costo de envío", () => { checkout.deliveryType = DELIVERY_PICKUP })}
+				<!-- Delivery type: label beside the two options, on a light gray panel so the white cards stand out. -->
+				<div class="flex flex-col md:flex-row md:items-center gap-12 mt-20 p-12 rounded-[12px] bg-gray-100">
+					<div class="text-[#4c5376] shrink-0 md:w-[96px] md:pl-4 leading-tight">Tipo de entrega</div>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-12 grow">
+						{@render choiceCard(checkout.deliveryType === DELIVERY_HOME, "icon-[fa--truck]", "Entrega a Domicilio",
+							"Lo llevamos a tu dirección", () => { checkout.deliveryType = DELIVERY_HOME; persistDelivery() })}
+						{@render choiceCard(checkout.deliveryType === DELIVERY_PICKUP, "icon-[fa--building]", "Recojo en Tienda",
+							"Recoge sin costo de envío", () => { checkout.deliveryType = DELIVERY_PICKUP; persistDelivery() })}
+					</div>
 				</div>
 
 				{#if checkout.deliveryType === DELIVERY_HOME}
@@ -351,14 +407,14 @@
 						<div class="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
 							{#each WebStore.addresses as address (address.ID)}
 								{@render choiceCard(checkout.selectedAddressID === address.ID, "icon-[fa--map-marker]", address.Address,
-									cityName(address.CityID), () => { checkout.selectedAddressID = address.ID })}
+									cityName(address.CityID), () => { checkout.selectedAddressID = address.ID; persistDelivery() })}
 							{/each}
 							{@render choiceCard(checkout.selectedAddressID === NEW_ADDRESS_ID, "icon-[fa--plus]", "Nueva dirección",
-								"", () => { checkout.selectedAddressID = NEW_ADDRESS_ID })}
+								"", () => { checkout.selectedAddressID = NEW_ADDRESS_ID; persistDelivery() })}
 						</div>
 					{/if}
 					{#if checkout.selectedAddressID === NEW_ADDRESS_ID}
-						<AddressForm address={checkout.newAddress} />
+						<AddressForm address={checkout.newAddress} onChange={persistDelivery} />
 					{/if}
 					<div class="mt-12 pb-12">
 						{#if checkout.shippingAmount === -1}
@@ -378,59 +434,75 @@
 						{#each WebStore.company.PickupSites || [] as site (site.ID)}
 							{@render choiceCard(checkout.pickupSiteID === site.ID, "icon-[fa--building]", site.Name,
 								[site.Address, cityName(site.CityID)].filter(Boolean).join(" · "),
-								() => { checkout.pickupSiteID = site.ID })}
+								() => { checkout.pickupSiteID = site.ID; persistDelivery() })}
 						{/each}
 					</div>
 				{/if}
-
-				<div class="flex justify-end py-12">
-					<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
-						onclick={() => goToStep(3)}>Continuar al pago</button>
-				</div>
 			{/if}
 			{#if Ecommerce.cartOption === 3}
 				<div class="flex flex-col h-full">
-					{@render totals()}
-					{#if checkout.showCulqi}
-						{#key checkout.paymentMethod}
-							<CulqiCheckout
-								amount={totalCents}
-								email={contactForOrder.Email}
-								useYape={checkout.paymentMethod === PAYMENT_YAPE}
-								onSuccess={(tokenID) => placeOrder(tokenID)}
-								onError={(error) => notifyFailure(error?.user_message || "No se pudo procesar el pago.")}
-							/>
-						{/key}
-						<div class="py-4 text-center text-gray-500 text-[14px]">Pago seguro procesado por Culqi</div>
-						<button class="text-[#4c55d5] hover:underline cursor-pointer self-center"
-							onclick={() => { checkout.showCulqi = false }}>Elegir otro medio de pago</button>
-					{:else if checkout.codeRequired}
-						<div class="flex flex-col gap-12 max-w-[420px]">
-							<p class="text-gray-700">
-								Enviamos un código de 6 dígitos a <b>{contactForOrder.Email}</b>. Ingréselo para confirmar su pedido.
-							</p>
-							<Input label="Código" saveOn={checkout.code} save="value" required={true} />
-							<div class="flex gap-12">
-								<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
-									onclick={onVerifyCode}>Confirmar</button>
-								<button class="text-[#4c55d5] hover:underline cursor-pointer" onclick={onPay}>Reenviar código</button>
-							</div>
-						</div>
-					{:else}
-						<div class="ff-bold mb-12">Medio de pago</div>
-						<div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+					<!-- No header action here: Culqi carries its own pay button and the panel its own actions. -->
+					{@render headerWithTotal("", () => {}, false)}
+					<!-- Methods in a column (a row on mobile), the selected method's panel beside them. -->
+					<div class="flex flex-col md:flex-row gap-12 grow pb-12">
+						<div class="grid grid-cols-3 md:flex md:flex-col gap-8 md:w-[140px] shrink-0">
 							{#each paymentOptions as option (option.id)}
-								{@render choiceCard(checkout.paymentMethod === option.id, option.icon, option.name, "",
-									() => { checkout.paymentMethod = option.id })}
+								{@const isSelected = checkout.paymentMethod === option.id}
+								<button type="button"
+									class={["flex flex-col items-center justify-center gap-4 px-8 py-10 rounded-[10px] border-2",
+										"text-center leading-tight cursor-pointer transition-colors bg-white",
+										isSelected ? "border-[#4c55d5] shadow-sm" : "border-gray-200 hover:border-gray-400"].join(" ")}
+									onclick={() => { checkout.paymentMethod = option.id }}>
+									<i class={`${option.icon} text-[26px] ${isSelected ? "text-[#4c55d5]" : "text-gray-500"}`}></i>
+									<span class="ff-bold text-[14px]">{option.name}</span>
+								</button>
 							{/each}
+							{#if canSimulatePayment}
+								<button type="button" class="px-8 py-10 rounded-[10px] border-2 border-dashed border-orange-400
+									text-orange-600 ff-bold text-[14px] leading-tight cursor-pointer hover:bg-orange-50"
+									onclick={() => placeOrder(DEV_SIMULATED_PAYMENT_TOKEN)}>
+									Simular Pago (dev mode)
+								</button>
+							{/if}
 						</div>
-						<div class="flex justify-end py-16">
-							<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
-								onclick={onPay}>
-								{checkout.paymentMethod === PAYMENT_DEFERRED ? "Confirmar pedido" : "Pagar " + formatSoles(totalCents)}
-							</button>
+
+						<div class="flex flex-col grow min-w-0 rounded-[12px] border border-gray-200 p-12">
+							{#if checkout.codeRequired}
+								<div class="flex flex-col gap-12 max-w-[420px]">
+									<p class="text-gray-700">
+										Enviamos un código de 6 dígitos a <b>{contactForOrder.Email}</b>. Ingréselo para confirmar su pedido.
+									</p>
+									<Input label="Código" saveOn={checkout.code} save="value" required={true} />
+									<div class="flex gap-12">
+										<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
+											onclick={onVerifyCode}>Confirmar</button>
+										<button class="text-[#4c55d5] hover:underline cursor-pointer" onclick={onContinue}>Reenviar código</button>
+									</div>
+								</div>
+							{:else if showCulqi}
+								{#key `${checkout.paymentMethod}-${checkout.culqiAttempt}`}
+									<CulqiCheckout
+										amount={totalCents}
+										email={contactForOrder.Email}
+										useYape={checkout.paymentMethod === PAYMENT_YAPE}
+										onSuccess={(tokenID) => placeOrder(tokenID)}
+										onError={(error) => notifyFailure(error?.user_message || "No se pudo procesar el pago.")}
+									/>
+								{/key}
+								<div class="py-4 text-center text-gray-500 text-[14px]">Pago seguro procesado por Culqi</div>
+							{:else}
+								<!-- A guest identifies before Culqi opens; a deferred payment confirms the order here. -->
+								<div class="flex flex-col items-center justify-center gap-12 grow text-center">
+									<i class={`${selectedPaymentOption?.icon} text-[40px] text-[#4c55d5]`}></i>
+									<div class="ff-bold">{selectedPaymentOption?.name}</div>
+									<button class="bg-[#4c55d5] text-white px-24 py-10 rounded-lg ff-bold hover:bg-[#3b44b8] cursor-pointer"
+										onclick={onContinue}>
+										{checkout.paymentMethod === PAYMENT_DEFERRED ? "Confirmar pedido" : "Continuar al pago"}
+									</button>
+								</div>
+							{/if}
 						</div>
-					{/if}
+					</div>
 				</div>
 			{/if}
 			{#if Ecommerce.cartOption === 4 && checkout.result}
@@ -484,7 +556,16 @@
 					class={[s1.bn1, "w-full", open ? s1.button_menu_top : ""].join(" ")}
 				>
 					<i class="icon--supermarket-cart"></i>
-					<span>Carrito</span>
+					<span class="relative">
+						Carrito
+						<!-- Red badge with how many products are in the cart, same red as the product card badge. -->
+						{#if ProductsSelectedMap.size > 0}
+							<span class="absolute -top-8 -right-18 w-24 h-24 rounded-full bg-[rgb(220,53,53)]
+								text-white text-[14px] leading-none ff-bold fx-c">
+								{ProductsSelectedMap.size}
+							</span>
+						{/if}
+					</span>
 				</button>
 			{/snippet}
 

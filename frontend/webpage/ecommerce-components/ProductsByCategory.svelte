@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getProductEcommerceData, type ProductCatalog } from '#ecommerce/services/products.svelte.ts';
+	import { getEcommerceCatalog, type EcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
 	import ProductGrid from './ProductGrid.svelte';
 
 	export interface IProductsByCategory {
@@ -15,9 +15,9 @@
 	const { css = '', categoryID, maxWidth, maxMargin, rows, rowsMobile }: IProductsByCategory =
 		$props();
 
-	let catalog = $state<ProductCatalog | null>(null);
+	let catalog = $state<EcommerceCatalog | null>(null);
 
-	getProductEcommerceData().then((loaded) => { catalog = loaded; });
+	getEcommerceCatalog().then((loaded) => { catalog = loaded; });
 
 	// Reactive: tracks the catalog state, so it fills in when the delta re-publishes.
 	// The grid decides how many of these to actually show, so we hand it the full category list.

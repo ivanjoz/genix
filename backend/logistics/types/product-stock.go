@@ -25,6 +25,12 @@ type ProductStock struct {
 	SubQuantity       int32 `cb:"7"`
 	DetailQuantity    int32 `cb:"8"`
 	DetailSubQuantity int32 `cb:"9"`
+	// Whole units sold but not delivered yet, kept by ApplyPendingDeliveryIn: Store for till sales
+	// (on the sale's warehouse), Online for web orders (on the order's PendingWarehouseID). A
+	// sub-unit line reserves one whole unit. The sale checks subtract both from the free stock;
+	// nothing physical moves until the delivery.
+	PendingDeliveryStore  int32 `cb:"26"`
+	PendingDeliveryOnline int32 `cb:"27"`
 	// SubDivisor is the divisor every SubQuantity on this row (and on its detail rows, which
 	// are the same product) is expressed in. Kept here rather than read from the product so a
 	// divisor refinement converts this row on the fly instead of rewriting history.
@@ -77,6 +83,8 @@ type ProductStockTable struct {
 	SubQuantity               db.Col[*ProductStockTable, int32]
 	DetailQuantity            db.Col[*ProductStockTable, int32]
 	DetailSubQuantity         db.Col[*ProductStockTable, int32]
+	PendingDeliveryStore      db.Col[*ProductStockTable, int32]
+	PendingDeliveryOnline     db.Col[*ProductStockTable, int32]
 	SubDivisor                db.Col[*ProductStockTable, int16]
 	DetailComputedDate        db.Col[*ProductStockTable, int16]
 	DetailComputedQuantity    db.Col[*ProductStockTable, int32]

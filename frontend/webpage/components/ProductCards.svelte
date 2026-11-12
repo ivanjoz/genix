@@ -1,11 +1,11 @@
 <script lang="ts">
-import { getProductEcommerceData, type ProductCatalog } from '#ecommerce/services/products.svelte.ts';
+import { getEcommerceCatalog, type EcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
 import ProductCard from '#ecommerce/components/ProductCard.svelte';
   import s1 from "./styles.module.css";
 
-  let catalog = $state<ProductCatalog | null>(null);
+  let catalog = $state<EcommerceCatalog | null>(null);
 
-  getProductEcommerceData().then((loaded) => { catalog = loaded; });
+  getEcommerceCatalog().then((loaded) => { catalog = loaded; });
 
   // Reactive: re-renders on the Phase 1 → Phase 2 catalog re-publish.
   const productos = $derived(catalog?.productos ?? []);

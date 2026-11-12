@@ -23,6 +23,7 @@ var ExecHandlers = ExecRouterType{
 	"fn-rebuild-observability-log-view":  RebuildObservabilityLogView,
 	"fn-recalc":                          RecalcVirtualColumnsValues,
 	"fn-recalc-stock":                    RecalcStock,
+	"fn-recompute-pending-delivery":      RecomputePendingDelivery,
 	"fn-backfill-identity-snapshots":     BackfillIdentitySnapshots,
 	"fn-backfill-cash-movement-accounts": BackfillCashMovementAccounts,
 	"fn-backfill-account-codes":          BackfillAccountCodes,

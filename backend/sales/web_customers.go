@@ -255,7 +255,8 @@ func sendWebCustomerCode(req *core.HandlerArgs, companyID int32, email string) (
 	codeRow.LastSent, codeRow.Updated, codeRow.IP = nowTime, nowTime, ipKey
 	rows := []types.WebCustomerCode{codeRow}
 	if codeRow.ID > 0 {
-		err = db.UpdateExclude(&rows)
+		// Email is the unique index key: the ORM refuses to rewrite it on an existing row.
+		err = db.UpdateExclude(&rows, db.TableOf[types.WebCustomerCode]().Email)
 	} else {
 		err = db.Insert(&rows)
 	}

@@ -18,7 +18,6 @@ export const preloadProductSearch = async (): Promise<ProductSearch | null> => {
 		console.info("[ProductSearchRuntime] product search index ready", {
 			source: productSearchInstance.source,
 			productsCount: productSearchInstance.size,
-			updatedSunix: productSearchInstance.updated,
 		});
 		return productSearchInstance;
 	})();

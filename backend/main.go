@@ -3,7 +3,6 @@
 package main
 
 import (
-	"app/business"
 	"app/core"
 	"app/db"
 	"app/exec"
@@ -45,21 +44,6 @@ func runScheduledCronTick(tickBody string) int {
 	// CloudWatch, que es el único sitio donde se puede observar.
 	core.Env.LOGS_FULL = true
 	core.Log("*Cron tick programado:: ", core.StrCut(tickBody, 60))
-
-	// Siembra la cadena de 30 min del rebuild de productos. La continuidad ya no depende de esto:
-	// la fila guarda su propia cadencia y el executor encola el frame siguiente pase lo que pase.
-	// Sigue haciendo falta como semilla inicial, porque en Lambda no hay arranque de VPS que la
-	// cree. Es idempotente: ScheduleCronAction deduplica contra la fila pendiente del mismo frame.
-	// Va con recover porque hace panic ante un error de DB, y ese fallo no debe impedir que se
-	// ejecute el resto de la cola.
-	func() {
-		defer func() {
-			if recoveredValue := recover(); recoveredValue != nil {
-				core.Log("*Cron tick error resembrando el rebuild de productos:: ", recoveredValue)
-			}
-		}()
-		business.ScheduleProductsDbRebuildCron()
-	}()
 
 	executedActionsCount := core.RunPendingCronActions()
 	core.Log("*Cron tick finalizado:: acciones ejecutadas:", executedActionsCount)
@@ -329,9 +313,9 @@ func resolveDevListenAddresses(serverPort string) []string {
 	return addresses
 }
 
-// bootstrapCronSchedulers starts the VPS cron watcher and seeds the recurring products rebuild.
-// It recovers on its own because a panic in a goroutine takes the whole process down, and a cron
-// seed that cannot reach the database is not a reason to kill a working HTTP server.
+// bootstrapCronSchedulers starts the VPS cron watcher. It recovers on its own because a panic in a
+// goroutine takes the whole process down, and a watcher that cannot reach the database is not a
+// reason to kill a working HTTP server.
 func bootstrapCronSchedulers() {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -340,8 +324,6 @@ func bootstrapCronSchedulers() {
 	}()
 
 	core.StartCronWatcher()
-	// Seed the recurring 30-min products .db rebuild tick (self-reschedules thereafter).
-	business.ScheduleProductsDbRebuildCron()
 }
 
 func main() {

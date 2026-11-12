@@ -88,6 +88,8 @@ export interface IProduct {
   ver: number
   AccountCode: number  /* a supply's default PCGE account; 0 on a product */
   Origin: number       /* 1 bought (merchandise) · 2 made (finished good); 0 on a supply */
+  WebExtraStock: number /* units the web store may sell beyond real stock ("Sobreventa permitida") */
+  WebHidden: boolean    /* kept out of the web store catalog and checkout */
   /* extra fields */
   Image?: IProductoImage
   AtributosIDs?: number[]

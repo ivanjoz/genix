@@ -1,9 +1,9 @@
 // ProductSearch: ranks products against a query over their plain-text names. Names (and brand
-// names) come from the CDN snapshot + server delta via the shared ProductCatalog, so matching is
+// names) come from the shared EcommerceCatalog (R2 file + catalog delta), so matching is
 // word/character-prefix based — no dictionary, syllables or binary encoding.
-import { getProductEcommerceData, type ProductCatalog } from "#ecommerce/services/products.svelte.ts";
+import { getEcommerceCatalog, type EcommerceCatalog } from "#ecommerce/services/ecommerce-catalog.svelte.ts";
 import type { IndexedProduct, ProductSearchHit } from "./types";
-import type { IProduct } from "#ecommerce/services/products.svelte.ts";
+import type { IProduct } from "#ecommerce/services/ecommerce-catalog.ts";
 
 // Spanish connector words carry no search signal and are dropped from both names and queries.
 const CONNECTOR_WORDS = new Set(["de", "del", "la", "el", "los", "las", "con", "para", "en", "al", "sin", "y"]);
@@ -87,15 +87,14 @@ export class ProductSearch {
 	private productByID = new Map<number, IProduct>(); // full record, so cards render without a by-id fetch
 	private brandNameByID = new Map<number, string>(); // raw, for display
 	private brandWordsByID = new Map<number, string[]>(); // normalized, for scoring
-	private updatedInt32 = 0;
 	private latestDebugSnapshot: ProductSearchDebugSnapshot | null = null;
 
-	private data: ProductCatalog | null = null;
+	private data: EcommerceCatalog | null = null;
 	readonly readyPromise: Promise<void>;
 	isLoading = false;
 	isReady = false;
 	loadError: string | null = null;
-	source = "file_plus_delta";
+	source = "ecommerce_catalog";
 
 	constructor() {
 		this.readyPromise = this.bootstrap();
@@ -106,10 +105,10 @@ export class ProductSearch {
 		this.loadError = null;
 		try {
 			// Consume the single shared catalog instance instead of loading our own.
-			this.data = await getProductEcommerceData();
+			this.data = await getEcommerceCatalog();
 			this.buildIndex();
 			this.isReady = true;
-			console.info("[ProductSearch] ready", { products: this.products.length, updated: this.updatedInt32 });
+			console.info("[ProductSearch] ready", { products: this.products.length });
 		} catch (error) {
 			this.loadError = error instanceof Error ? error.message : "Unknown ProductSearch bootstrap error";
 			console.error("[ProductSearch] bootstrap failed", error);
@@ -128,10 +127,8 @@ export class ProductSearch {
 		}
 		this.products = [];
 		this.productByID.clear();
-		this.updatedInt32 = 0;
 		for (const product of this.data?.productos ?? []) {
 			if (!product || product.ID <= 0) continue;
-			this.updatedInt32 = Math.max(this.updatedInt32, product.upd ?? 0);
 			this.productByID.set(product.ID, product);
 			this.products.push({
 				productID: product.ID,
@@ -150,10 +147,6 @@ export class ProductSearch {
 
 	get size(): number {
 		return this.products.length;
-	}
-
-	get updated(): number {
-		return this.updatedInt32;
 	}
 
 	getLastSearchDebugSnapshot(): ProductSearchDebugSnapshot | null {

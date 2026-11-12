@@ -185,9 +185,32 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 	body.Created = core.SUnixTime()
 	body.CreatedBy = req.User.ID
 
+	// Opening or closing a warehouse to online sales moves every product's web stock without touching
+	// a product or stock row, so the web catalog needs a new generation. A new warehouse holds no
+	// stock yet: its first stock rows reach the catalog through the delta.
+	isOnlineStateChanged := false
+	if body.ID > 0 {
+		storedWarehouses := []types.Warehouse{}
+		query := db.Query(&storedWarehouses)
+		query.Select(query.ID, query.Status, query.ExcludeFromOnlineSales).
+			CompanyID.Equals(body.CompanyID).ID.Equals(body.ID)
+		if err := query.Exec(); err != nil {
+			return req.MakeErr("Error al obtener el almacén:", err)
+		}
+		if len(storedWarehouses) == 0 {
+			return req.MakeErr("No se encontró el almacén a actualizar.")
+		}
+		isOnlineStateChanged = storedWarehouses[0].IsOpenToOnlineSales() != body.IsOpenToOnlineSales()
+	}
+
 	almacenes := []types.Warehouse{body}
 	if err := db.Upsert(&almacenes); err != nil {
 		return req.MakeErr("Error al actualizar / insertar el almacén: " + err.Error())
+	}
+	if isOnlineStateChanged {
+		if err := bumpEcommerceCatalogGeneration(body.CompanyID); err != nil {
+			return req.MakeErr(err)
+		}
 	}
 
 	return req.MakeResponse(almacenes[0])

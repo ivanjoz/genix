@@ -111,6 +111,9 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(fmt.Sprintf(`El origen del producto "%s" es inválido.`, e.Name))
 		}
 		e.AccountCode = 0
+		if e.WebExtraStock < 0 {
+			return req.MakeErr(fmt.Sprintf(`La sobreventa permitida del producto "%s" no puede ser negativa.`, e.Name))
+		}
 		e.SelfParse()
 		if previousProduct, duplicate := nameHashToName[e.NameHash]; duplicate {
 			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Name, e.Name))
@@ -143,15 +146,6 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 	productos = savedProducts
-
-	// Register the company for a products .db rebuild. Keyed on Updated (which advances on every
-	// product write, incl. price edits) so the snapshot self-heals on any change, matching the
-	// ecommerce delta watermark. NameUpdated is reserved for other purposes.
-	if len(productos) > 0 {
-		if cacheErr := core.SaveCacheGlobal(business.CacheGroupProducts, req.User.CompanyID, nil, nowTime); cacheErr != nil {
-			core.Log("PostProducts:: error registrando cambio de productos para ecommerce", cacheErr)
-		}
-	}
 
 	return req.MakeResponse(productos)
 }

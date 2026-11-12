@@ -24,20 +24,49 @@ type Warehouse struct {
 	ExcludeFromOnlineSales bool `cb:"15"`
 }
 
+// IsOpenToOnlineSales: an active warehouse whose stock the web store can sell.
+func (e *Warehouse) IsOpenToOnlineSales() bool {
+	return e.Status > 0 && !e.ExcludeFromOnlineSales
+}
+
+// OnlineWarehouseIDs are the warehouses whose stock the web store sells.
+func OnlineWarehouseIDs(warehouses []Warehouse) []int32 {
+	warehouseIDs := []int32{}
+	for index := range warehouses {
+		if warehouses[index].IsOpenToOnlineSales() {
+			warehouseIDs = append(warehouseIDs, warehouses[index].ID)
+		}
+	}
+	return warehouseIDs
+}
+
+// FirstOnlineWarehouseID is the lowest-ID warehouse open to online sales, 0 when there is none: the
+// one a web order's units are reserved on until it is delivered.
+func FirstOnlineWarehouseID(warehouses []Warehouse) int32 {
+	firstWarehouseID := int32(0)
+	for index := range warehouses {
+		warehouse := &warehouses[index]
+		if warehouse.IsOpenToOnlineSales() && (firstWarehouseID == 0 || warehouse.ID < firstWarehouseID) {
+			firstWarehouseID = warehouse.ID
+		}
+	}
+	return firstWarehouseID
+}
+
 type WarehouseTable struct {
 	db.TableStruct[WarehouseTable, Warehouse]
-	CompanyID   db.Col[*WarehouseTable, int32]
-	ID          db.Col[*WarehouseTable, int32]
-	SiteID      db.Col[*WarehouseTable, int32]
-	Name        db.Col[*WarehouseTable, string]
-	Description db.Col[*WarehouseTable, string]
-	Layout      db.Col[*WarehouseTable, []WarehouseLayout]
-	Status      db.Col[*WarehouseTable, int8]
-	Updated     db.Col[*WarehouseTable, int32]
-	Version     db.Col[*WarehouseTable, int16]
-	UpdatedBy   db.Col[*WarehouseTable, int32]
-	Created     db.Col[*WarehouseTable, int32]
-	CreatedBy   db.Col[*WarehouseTable, int32]
+	CompanyID              db.Col[*WarehouseTable, int32]
+	ID                     db.Col[*WarehouseTable, int32]
+	SiteID                 db.Col[*WarehouseTable, int32]
+	Name                   db.Col[*WarehouseTable, string]
+	Description            db.Col[*WarehouseTable, string]
+	Layout                 db.Col[*WarehouseTable, []WarehouseLayout]
+	Status                 db.Col[*WarehouseTable, int8]
+	Updated                db.Col[*WarehouseTable, int32]
+	Version                db.Col[*WarehouseTable, int16]
+	UpdatedBy              db.Col[*WarehouseTable, int32]
+	Created                db.Col[*WarehouseTable, int32]
+	CreatedBy              db.Col[*WarehouseTable, int32]
 	ExcludeFromOnlineSales db.Col[*WarehouseTable, bool]
 }
 
@@ -96,18 +125,18 @@ type Site struct {
 
 type SiteTable struct {
 	db.TableStruct[SiteTable, Site]
-	CompanyID   db.Col[*SiteTable, int32]
-	ID          db.Col[*SiteTable, int32]
-	Name        db.Col[*SiteTable, string]
-	Description db.Col[*SiteTable, string]
-	Address     db.Col[*SiteTable, string]
-	CityID      db.Col[*SiteTable, int32]
-	Status      db.Col[*SiteTable, int8]
-	Updated     db.Col[*SiteTable, int32]
-	Version     db.Col[*SiteTable, int16]
-	UpdatedBy   db.Col[*SiteTable, int32]
-	Created     db.Col[*SiteTable, int32]
-	CreatedBy   db.Col[*SiteTable, int32]
+	CompanyID     db.Col[*SiteTable, int32]
+	ID            db.Col[*SiteTable, int32]
+	Name          db.Col[*SiteTable, string]
+	Description   db.Col[*SiteTable, string]
+	Address       db.Col[*SiteTable, string]
+	CityID        db.Col[*SiteTable, int32]
+	Status        db.Col[*SiteTable, int8]
+	Updated       db.Col[*SiteTable, int32]
+	Version       db.Col[*SiteTable, int16]
+	UpdatedBy     db.Col[*SiteTable, int32]
+	Created       db.Col[*SiteTable, int32]
+	CreatedBy     db.Col[*SiteTable, int32]
 	IsPickupPoint db.Col[*SiteTable, bool]
 }
 

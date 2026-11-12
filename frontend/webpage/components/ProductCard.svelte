@@ -6,7 +6,7 @@
 		type IRecordRef,
 	} from "@genix/ui/cache";
 	import { untrack } from "svelte";
-	import type { IProduct } from "#ecommerce/services/products.svelte.ts";
+	import type { IProduct } from "#ecommerce/services/ecommerce-catalog.ts";
 	import ImageHash from "#components/files/Imagehash.svelte";
 	import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
 
@@ -171,6 +171,7 @@
 	<div
 		class="horizontal-card {css}"
 		class:idle-placeholder={hasNoProductAssigned}
+		class:with-remove-button={!hideCloseButton}
 		aria-busy={isAwaitingRecord}
 	>
 		<div class="horizontal-image-wrapper">
@@ -268,8 +269,13 @@
 					</div>
 					<div class="px-4 ff-bold fs17">s/. {formatN(resolvedProductPriceCents / 100, 2)}</div>
 				{/if}
-				<div class="vertical-icon fx-c h-30 w-32">
-					<i class="icon--supermarket-cart"></i>
+				<!-- Once the product is in the cart, the badge shows how many units instead of the icon. -->
+				<div class="vertical-icon fx-c h-30 min-w-32 px-6" class:in-cart={selectedProductQuantity > 0}>
+					{#if selectedProductQuantity > 0}
+						<span class="ff-bold">{selectedProductQuantity}</span>
+					{:else}
+						<i class="icon--supermarket-cart"></i>
+					{/if}
 				</div>
 			</div>
 			{#if !showLoadingSkeleton}
@@ -471,6 +477,12 @@
 		justify-content: center;
 	}
 
+	/* The product is already in the cart: the resting cart badge turns red so it stands out. */
+	.vertical-icon.in-cart {
+		background-color: rgb(220, 53, 53);
+		color: white;
+	}
+
 	.horizontal-card {
 		display: flex;
 		position: relative;
@@ -478,7 +490,6 @@
 		border-radius: 7px;
 		background: #fff;
 		box-shadow: rgba(50, 50, 105, 0.15) 0px 2px 5px 0px, rgba(0, 0, 0, 0.1) 0px 0px 2px 0px;
-		overflow: hidden;
 	}
 
 	.horizontal-image-wrapper {
@@ -508,13 +519,19 @@
 
 	.horizontal-name {
 		font-size: 15px;
-		line-height: 1.2;
+		/* 1.2 clips descenders (g, p, y) because overflow is hidden for the 2-line clamp. */
+		line-height: 1.4;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		display: -webkit-box;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
+	}
+
+	/* Keep the name clear of the remove button in the top-right corner. */
+	.with-remove-button .horizontal-name {
+		padding-right: 26px;
 	}
 
 	.horizontal-footer {
@@ -545,8 +562,17 @@
 	.quantity-input {
 		height: 28px;
 		width: 58px;
+		/* 1px gap so the hover outline doesn't touch the - / + buttons. */
+		margin: 0 1px;
 		text-align: center;
 		outline: none;
+		border-radius: 6px;
+	}
+
+	/* The quantity is typeable, but borderless at rest: hovering (or editing) outlines it to show that. */
+	.quantity-input:hover,
+	.quantity-input:focus {
+		outline: 1px solid #a9a4d6;
 	}
 
 	.horizontal-add-cart-button {
@@ -577,10 +603,12 @@
 		font-weight: bold;
 	}
 
+	/* Hangs off the top-right corner, so the card must not clip its overflow. */
 	.remove-button {
 		position: absolute;
 		top: -4px;
 		right: -4px;
+		outline: 2px solid white;
 		height: 28px;
 		width: 28px;
 		border-radius: 50%;

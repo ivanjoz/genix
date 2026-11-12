@@ -213,13 +213,19 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 	if isSameDayCollection {
 		sale.SameDayCashBankID = sale.LastPaymentCajaID
 	}
+	// The order's units stay reserved on its PendingWarehouseID until the delivery. A sale that is
+	// only paid takes that warehouse as its own, so its later delivery or annulment (PostSaleOrder,
+	// PostSaleOrderAnnul) releases them from there.
+	pendingDeliveryChanges := []logistics.PendingDeliveryChange{}
+	sale.WarehouseID = onlineOrder.PendingWarehouseID
 	if isDelivery {
 		if settleRequest.WarehouseID <= 0 {
 			return onlineOrder, sale, core.Err("Se requiere el almacén de la entrega.")
 		}
 		sale.WarehouseID = settleRequest.WarehouseID
+		pendingDeliveryChanges = types.PendingDeliveryChanges(onlineOrder.Lines, onlineOrder.PendingWarehouseID, true, -1)
 		// An early check before the number is minted; the movements re-check under their row locks.
-		if err := validateSaleStock(req, sale); err != nil {
+		if err := validateSaleStock(req, sale, true); err != nil {
 			return onlineOrder, sale, err
 		}
 		if err := sale.AddStatus(types.OrderStatusDelivered); err != nil {
@@ -281,6 +287,9 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 				return core.Err("Error al procesar la salida de almacén:", err)
 			}
 		}
+		if err := logistics.ApplyPendingDeliveryIn(transaction, companyID, req.User.ID, pendingDeliveryChanges); err != nil {
+			return err
+		}
 		if err := applyClientWeekSaleChangesIn(transaction, companyID, types.ClientWeekSaleChanges(nil, &sale)); err != nil {
 			return err
 		}
@@ -307,7 +316,8 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 }
 
 // annulOnlineSaleOrder annuls an order that never became a sale: a declined charge, or one the store
-// cancels. Nothing else exists to undo — no number, no document, no money, no stock.
+// cancels. No number, document, money or stock movement exists to undo; only its reserved units
+// are released.
 func annulOnlineSaleOrder(companyID, onlineOrderID int32, reason string, userID int32) (types.OnlineSaleOrder, error) {
 	settleLock, err := lockOnlineSaleOrder(companyID, onlineOrderID)
 	if err != nil {
@@ -333,7 +343,8 @@ func annulOnlineSaleOrder(companyID, onlineOrderID int32, reason string, userID 
 			orderTable.AnnulReason, orderTable.Updated, orderTable.UpdatedBy); err != nil {
 			return core.Err("Error al anular el pedido web:", err)
 		}
-		return nil
+		return logistics.ApplyPendingDeliveryIn(transaction, companyID, userID,
+			types.PendingDeliveryChanges(lockedOrder.Lines, lockedOrder.PendingWarehouseID, true, -1))
 	})
 	return annulledOrder, err
 }
