@@ -144,6 +144,9 @@
 			});
 		} else {
 			isOpen = false;
+			// Closing the panel on the confirmation ends that checkout, like "Volver a la tienda": a
+			// result left behind would lock the next visit out of the Carrito step.
+			untrack(() => { if (checkout.result) { endCheckout() } });
 		}
 	});
 
@@ -274,7 +277,8 @@
 		await continueIdentified();
 	};
 
-	const resetCheckout = () => {
+	// endCheckout: the order is placed; the next visit starts a fresh checkout on the Carrito step.
+	function endCheckout() {
 		checkout.result = null;
 		checkout.paymentMethod = paymentOptions[0].id;
 		checkout.deliveryType = DELIVERY_HOME;
@@ -283,6 +287,10 @@
 		checkout.selectedAddressID = defaultAddressID(WebStore.addresses);
 		persistDelivery();
 		Ecommerce.cartOption = 1;
+	}
+
+	const resetCheckout = () => {
+		endCheckout();
 		layerOpenedState.id = 0;
 	};
 </script>

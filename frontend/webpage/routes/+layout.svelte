@@ -1,6 +1,6 @@
 <script lang="ts">
   // @render 'svelte';
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { browser } from "$app/env";
   import "./store.css";
   import "./tailwind.css";
@@ -9,9 +9,10 @@
   import "../../styles/fonts.css";
 
   import { preloadProductSearch } from "#core/product-search/product-search-runtime.ts";
-  import { getEcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
+  import { ecommerceCatalog, getEcommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
   import FloatingCart from "#ecommerce/components/FloatingCart.svelte";
-  import { restoreCart } from "#ecommerce/components/store.svelte.ts";
+  import ProductDetailLayer from "#ecommerce/components/ProductDetailLayer.svelte";
+  import { capCartToStock, restoreCart } from "#ecommerce/components/store.svelte.ts";
   import { provideUi } from '@genix/ui';
   import { NotifyHost } from '@genix/ui/notify';
   import { genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
@@ -29,6 +30,12 @@
       console.error("[StoreLayout] ProductSearch preload failed", productSearchPreloadError);
     });
   });
+
+  // Every catalog publish (first paint, then the delta) may lower what the store can sell: the cart
+  // follows it.
+  $effect(() => {
+    if (ecommerceCatalog.version > 0) untrack(capCartToStock);
+  });
 </script>
 
 {@render children()}
@@ -36,6 +43,8 @@
      baked into the prerendered HTML (it would flash empty/stale before hydration). -->
 {#if browser}
   <FloatingCart />
+  <!-- Opened by a grid card click (productDetailLayer in store.svelte.ts). -->
+  <ProductDetailLayer />
   <!-- genix-ui raises session and request errors through notify. -->
   <NotifyHost />
 {/if}

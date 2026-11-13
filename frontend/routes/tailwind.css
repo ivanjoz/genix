@@ -40,6 +40,13 @@ body {
 	--store-editor-collapsed-width: 280px;
 }
 
+/* Phones: a taller header for the 44px menu and info buttons. */
+@media only screen and (max-width: 749px) {
+	body {
+		--header-height: 52px;
+	}
+}
+
 @media only screen and (min-width: 680px) {
 	::-webkit-scrollbar {
 		width: 0.75rem;

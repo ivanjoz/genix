@@ -1,5 +1,5 @@
 <script lang="ts">
-import MobileMenu from '#domain/MobileMenu.svelte';
+import MobileMenu from '#ecommerce/components/MobileMenu.svelte';
 import Header from '#ecommerce/components/Header.svelte';
 import EcommerceRenderer from '#ecommerce/renderer/EcommerceRenderer.svelte';
 import type { SectionData } from '#ecommerce/renderer/section-types.ts';

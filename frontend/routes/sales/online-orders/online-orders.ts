@@ -5,6 +5,7 @@ import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.
 import type { ICashBank } from '#routes/finance/cash-banks/cajas.svelte.ts'
 import type { IWarehouse } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import { CURRENCY_PEN, normalizeCurrency } from '#routes/finance/exchange-rate/exchange-rate.ts'
+import { unpackQuantityLine } from '#core/quantity.ts'
 
 // Contact and address snapshot the shopper typed at checkout.
 export interface IOnlineSaleOrderShipping {
@@ -40,6 +41,8 @@ export interface IOnlineSaleOrder {
   // 0 until the SaleOrder exists; from then on the SaleOrder rules and this page is read-only.
   SaleOrderID: number
   AnnulReason: string
+  // 0 none, 1 in preparation, 2 on the way / ready for pickup. Delivered is read from ss.
+  FulfillmentStatus: number
   ss: number
   Created: number
   upd: number
@@ -112,6 +115,61 @@ export const paymentMethodLabel = (paymentMethod: number): string => {
   if (paymentMethod === PAYMENT_METHOD.YAPE) return 'Yape'
   if (paymentMethod === PAYMENT_METHOD.DEFERRED) return 'On delivery / in store|Contra entrega / pago en tienda'
   return '-'
+}
+
+// "Pending" while the order still owes money; once settled, "Paid (<method>)" so the method is only
+// shown when it actually collected the money.
+export const paymentStatusLabel = (order: IOnlineSaleOrder): string => {
+  if (order.DebtAmount > 0) return 'Pending|Pendiente'
+  const [methodEnglish, methodSpanish = methodEnglish] = paymentMethodLabel(order.PaymentMethod).split('|')
+  return `Paid (${methodEnglish})|Pagado (${methodSpanish})`
+}
+
+// Payment and delivery progress read from the status, the same way SaleOrder statuses combine them.
+export const isOnlineOrderPaid = (order: IOnlineSaleOrder): boolean =>
+  order.ss === ONLINE_ORDER_STATUS.PAID || order.ss === ONLINE_ORDER_STATUS.COMPLETED
+
+export const isOnlineOrderDelivered = (order: IOnlineSaleOrder): boolean =>
+  order.ss === ONLINE_ORDER_STATUS.DELIVERED || order.ss === ONLINE_ORDER_STATUS.COMPLETED
+
+// The status steps of the detail. The first two only label the order's progress (FulfillmentStatus);
+// DELIVERED is the real delivery, which moves the stock out of the warehouse.
+export const FULFILLMENT_STEP = { PREPARING: 1, IN_TRANSIT: 2, DELIVERED: 3 } as const
+
+// The middle step names what the shopper waits for: the courier, or going to the store.
+export const fulfillmentStepOptions = (order: IOnlineSaleOrder): { id: number; name: string; icon: string }[] => [
+  { id: FULFILLMENT_STEP.PREPARING, name: 'In preparation|En Preparación', icon: 'icon-[fa--cubes]' },
+  order.DeliveryType === DELIVERY_TYPE.PICKUP
+    ? { id: FULFILLMENT_STEP.IN_TRANSIT, name: 'Ready for pickup|Para Recoger', icon: 'icon-[fa--shopping-bag]' }
+    : { id: FULFILLMENT_STEP.IN_TRANSIT, name: 'On the way|En Camino', icon: 'icon-[fa--truck]' },
+  { id: FULFILLMENT_STEP.DELIVERED, name: 'Delivered|Entregado', icon: 'icon-[fa--check]' },
+]
+
+// A delivery registered anywhere (here or in Gestión Ventas) outranks the stored label.
+export const currentFulfillmentStep = (order: IOnlineSaleOrder): number =>
+  isOnlineOrderDelivered(order) ? FULFILLMENT_STEP.DELIVERED : (order.FulfillmentStatus || 0)
+
+// Forward only, skipping allowed; an annulled order has no steps. The backend enforces the same.
+export const canMoveToFulfillmentStep = (order: IOnlineSaleOrder, step: number): boolean =>
+  order.ss !== ONLINE_ORDER_STATUS.ANNULLED && step > currentFulfillmentStep(order)
+
+// The order's products ranked by the amount they add up to, quantities in whole units (a ranking that
+// mixed loose sub-units across products would have no unit). Same ranking as Gestión de Pedidos.
+export const topOrderProducts = (order: IOnlineSaleOrder, limit: number): { ProductID: number; Quantity: number }[] => {
+  const totalsByProductID = new Map<number, { quantity: number; amount: number }>()
+  for (const line of order.Lines || []) {
+    const quantity = unpackQuantityLine(line.Quantity || 0).units
+    const lineAmount = (line.Price || 0) * quantity
+    if (!line.ProductID || lineAmount <= 0) continue
+    const productTotals = totalsByProductID.get(line.ProductID) || { quantity: 0, amount: 0 }
+    productTotals.quantity += quantity
+    productTotals.amount += lineAmount
+    totalsByProductID.set(line.ProductID, productTotals)
+  }
+  return [...totalsByProductID.entries()]
+    .sort((left, right) => (right[1].amount - left[1].amount) || (left[0] - right[0]))
+    .slice(0, limit)
+    .map(([ProductID, productTotals]) => ({ ProductID, Quantity: productTotals.quantity }))
 }
 
 // The tab an order belongs to, mirroring the backend's status-group filter.

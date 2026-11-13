@@ -59,10 +59,10 @@ import { useUI } from '@genix/ui';
 		</div>
 	{/if}
 
-	<!-- Mobile Menu Button -->
+	<!-- Mobile Menu Button: the same 44px footprint as the info button on the other edge. -->
 	{#if showMenuButton}
 		<button type="button"
-			class="md:hidden p-8 hover:bg-white/10 rounded-lg transition-colors mr-12 cursor-pointer"
+			class="md:hidden w-44 h-44 shrink-0 flex items-center justify-center hover:bg-white/10 rounded-lg transition-colors mr-8 cursor-pointer"
 			aria-label="Toggle menu"
 			onclick={() => { ui.state.mobileMenuOpen = !ui.state.mobileMenuOpen }}
 		>
@@ -71,8 +71,8 @@ import { useUI } from '@genix/ui';
 	{/if}
 
 	<!-- Title — reserve a stable slot so the agent pill's position doesn't
-	     jump as tabs come and go. -->
-	<div class="flex items-center min-w-[200px] shrink-0"
+	     jump as tabs come and go. On a phone there is no pill: the slot takes the free width. -->
+	<div class="flex items-center min-w-0 md:min-w-[200px] md:shrink-0"
 		data-id={!pageHeader.current.content && ui.state.pageOptions?.length > 0 ? `PageViews:${pageViewsID}` : undefined}
 	>
 		<!-- Page's header props (domain-components/page-header.svelte.ts): its own content, or its
@@ -117,9 +117,9 @@ import { useUI } from '@genix/ui';
 		{/if}
 	</div>
 
-	<!-- Agent Chat Widget — pill input centered in the header. Only rendered
-	     while the user is logged in; mount triggers nothing (WS opens lazily
-	     on first user interaction inside the widget). -->
+	<!-- Agent Chat Widget — pill input centered in the header, desktop only (on a phone it is the
+	     info layer's Agent tab). Only rendered while the user is logged in; mount triggers nothing
+	     (the stream opens lazily on first user interaction inside the widget). -->
 	{#if security.isLogged()}
 		<div class="flex-1 flex justify-center px-16 min-w-0">
 			<AgentChat />
@@ -254,6 +254,14 @@ import { useUI } from '@genix/ui';
     border-bottom-color: #00000080;
     font-family: semibold;
     opacity: 1;
+	}
+	/* On a phone the 150px tabs would overflow under the info button: they shrink evenly instead. */
+	@media (max-width: 750px) {
+		._2 {
+			min-width: 0;
+			flex-shrink: 1;
+			padding-inline: 8px;
+		}
 	}
 	/* The dark translucent underline disappears against the dark page below the header. */
 	:global(body.dark) ._2._3 {

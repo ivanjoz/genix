@@ -86,6 +86,50 @@ func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(core.HideCachedPartitions(partitions))
 }
 
+// ProductDetail is what the web store's product detail layer adds to the catalog record it already
+// holds (name, price, main image, stock): the extra images and the HTML sheet. Stock stays out on
+// purpose: it lives in other rows that do not move this product's by-IDs version, so a cached copy
+// would go stale; the layer reads it from the live catalog.
+type ProductDetail struct {
+	ID                int32
+	ContentHTML       string
+	ImageIDs          []int32
+	ImageDescriptions []string
+	Status            int8  `json:"ss"`
+	Updated           int32 `json:"upd"`
+}
+
+// GetProductDetail is the web store's product detail: GET.p-product-detail?company-id=&cc=, a
+// versioned by-IDs route over the products table, so the browser keeps each detail in IndexedDB and
+// re-downloads it only after the product is written. A product the store does not sell (inactive, a
+// supply, WebHidden) goes as ss 0 with no body; the storefront disables tombstones on this route,
+// because unhiding the product must bring it back.
+func GetProductDetail(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id")))
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	partitions, err := db.QueryCachedIDs[types.Product](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener el detalle del producto.", err)
+	}
+
+	detailPartitions := make([]db.CachedPartition[ProductDetail], len(partitions))
+	for i, partition := range partitions {
+		detailPartitions[i].Records = make([]ProductDetail, len(partition.Records))
+		for j, product := range partition.Records {
+			detail := ProductDetail{ID: product.ID, Updated: product.Updated}
+			if product.Status == types.ProductStatusActive && !product.WebHidden {
+				detail.ContentHTML, detail.Status = product.ContentHTML, 1
+				detail.ImageIDs, detail.ImageDescriptions = product.ImageIDs, product.ImageDescriptions
+			}
+			detailPartitions[i].Records[j] = detail
+		}
+	}
+	// Partition stays 0: the company never leaves the server.
+	return req.MakeResponse(detailPartitions)
+}
+
 func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	// db.SetDebugLogging(2)
 

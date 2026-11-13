@@ -4,6 +4,7 @@
   import { onMount, untrack } from 'svelte'
   import Button from '#components/buttons/Button.svelte'
   import Input from '#components/form/Input.svelte'
+  import LabelCell from '#components/form/LabelCell.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
   import Layer from '#components/layers/Layer.svelte'
   import LoadingBar from '#components/misc/LoadingBar.svelte'
@@ -20,12 +21,16 @@
   import { ProductsService } from '#services/production/products.svelte.ts'
   import { useCitiesAPI } from '#services/services/cities.svelte.ts'
   import {
-    DELIVERY_TYPE, ONLINE_ORDER_GROUP, ONLINE_ORDER_GROUP_TABS, SETTLE_ACTION, buildAnnulRequest, buildSettleRequest,
-    canSettle, customerName, defaultDeliveryWarehouseID, defaultPaymentCashBankID, deliveryTypeLabel,
-    deliveryWarehouseOptions, needsCulqiReconciliation, onlineOrderStatusLabel, paymentCashBankOptions,
-    paymentMethodLabel, type IOnlineSaleOrder,
+    DELIVERY_TYPE, FULFILLMENT_STEP, ONLINE_ORDER_GROUP, ONLINE_ORDER_GROUP_TABS, ONLINE_ORDER_STATUS, SETTLE_ACTION,
+    buildAnnulRequest, buildSettleRequest, canMoveToFulfillmentStep, canSettle, customerName, defaultDeliveryWarehouseID, defaultPaymentCashBankID, deliveryTypeLabel,
+    deliveryWarehouseOptions, isOnlineOrderDelivered, isOnlineOrderPaid, needsCulqiReconciliation, onlineOrderStatusLabel,
+    paymentCashBankOptions, paymentMethodLabel, paymentStatusLabel, topOrderProducts, type IOnlineSaleOrder,
   } from './online-orders.ts'
-  import { OnlineSaleOrdersService, postOnlineSaleOrderAnnul, postOnlineSaleOrderSettle } from './online-orders.svelte.ts'
+  import {
+    OnlineSaleOrdersService, postLinkedSaleOrderDelivery, postOnlineSaleOrderAnnul, postOnlineSaleOrderFulfillment,
+    postOnlineSaleOrderSettle,
+  } from './online-orders.svelte.ts'
+  import OnlineOrderStatusSteps from './OnlineOrderStatusSteps.svelte'
 
   const ui = useUI()
   const DETAIL_LAYER_ID = 1
@@ -55,10 +60,9 @@
     const nextOrdersService = new OnlineSaleOrdersService(statusGroup)
     await nextOrdersService.fetchOnline()
     if (requestID !== ordersLoadRequestID) return
-    ordersService = nextOrdersService
-    isLoadingOrders = false
 
-    // Product names for the detail lines; the table does not need them.
+    // Product names for the Top Products column and the detail lines: synced before the rows show,
+    // since the table does not re-render when the names arrive later.
     const productIDs = new Set<number>()
     for (const order of nextOrdersService.records) {
       for (const line of order.Lines || []) { if (line.ProductID > 0) productIDs.add(line.ProductID) }
@@ -68,18 +72,23 @@
     } catch (syncError) {
       console.error('[online-orders] failed to sync products by IDs', syncError)
     }
+    if (requestID !== ordersLoadRequestID) return
+    ordersService = nextOrdersService
+    isLoadingOrders = false
   }
 
   const formatAmount = (cents: number) => `S/ ${formatN((cents || 0) / 100, 2)}`
 
-  // Home delivery names the district; pickup names the store.
+  // Home delivery names the province and district; pickup names the store.
   function deliveryPlaceName(order: IOnlineSaleOrder): string {
     if (order.DeliveryType === DELIVERY_TYPE.PICKUP) {
       return warehousesService.SedesMap.get(order.PickupSiteID)?.Name || `Sede #${order.PickupSiteID}`
     }
     const districtID = order.Shipping?.CityID || 0
     if (!districtID) return ''
-    return cities.citiesMap.get(districtID)?.Name || `Distrito #${districtID}`
+    const district = cities.citiesMap.get(districtID)
+    if (!district) return `Distrito #${districtID}`
+    return [cities.citiesMap.get(district.ParentID)?.Name, district.Name].filter(Boolean).join(', ')
   }
 
   function lineProductName(line: ISaleOrderLine): string {
@@ -108,21 +117,18 @@
     { header: 'Date|Fecha', headerCss: 'w-100', css: 'px-6', setCellCss: culqiRowCss,
       getValue: (order) => String(formatTime(order.Date, 'd-M-Y')) },
     { header: 'Customer|Cliente', css: 'px-6', setCellCss: culqiRowCss, getValue: (order) => customerName(order) },
-    { header: 'Delivery|Entrega', css: 'px-6', setCellCss: culqiRowCss,
-      getValue: (order) => `${tr(deliveryTypeLabel(order.DeliveryType))} · ${deliveryPlaceName(order)}` },
-    { header: 'Payment|Pago', headerCss: 'w-150', css: 'px-6', setCellCss: culqiRowCss,
-      getValue: (order) => tr(paymentMethodLabel(order.PaymentMethod)) },
+    // Two lines: the delivery type, then where it goes (province and district, or the pickup store).
+    { id: 'destination', header: 'Destination|Destino', headerCss: 'w-220', css: 'px-6', setCellCss: culqiRowCss,
+      getValue: (order) => `${tr(deliveryTypeLabel(order.DeliveryType))} ${deliveryPlaceName(order)}` },
     { header: 'Total', headerCss: 'w-110', css: 'px-6 ff-mono', align: 'right', setCellCss: culqiRowCss,
       getValue: (order) => formatAmount(order.TotalAmount) },
-    { header: 'Status|Estado', headerCss: 'w-200', css: 'px-6', setCellCss: culqiRowCss,
-      getValue: (order) => needsCulqiReconciliation(order)
-        ? tr('Paid in Culqi, sale pending|Pagado en Culqi, venta pendiente')
-        : tr(onlineOrderStatusLabel(order.ss)),
-      render: (order) => needsCulqiReconciliation(order)
-        ? `<span class="ff-bold text-amber-fg"><i class="icon-[fa--exclamation-triangle] mr-4"></i>${tr('Paid in Culqi, sale pending|Pagado en Culqi, venta pendiente')}</span>`
-        : tr(onlineOrderStatusLabel(order.ss)) },
-    { header: 'Sale|Venta', headerCss: 'w-110', css: 'px-6 text-center', setCellCss: culqiRowCss,
-      getValue: (order) => order.SaleOrderID || '—' },
+    { id: 'payment', header: 'Payment|Pago', headerCss: 'w-150', css: 'px-6 text-center', setCellCss: culqiRowCss,
+      getValue: (order) => tr(paymentMethodLabel(order.PaymentMethod)) },
+    { id: 'delivery', header: 'Delivery|Entrega', headerCss: 'w-110', css: 'px-6 text-center', setCellCss: culqiRowCss,
+      getValue: (order) => tr(isOnlineOrderDelivered(order) ? 'Delivered|Entregado' : 'Pending|Pendiente') },
+    { id: 'top-products', header: 'Top Products|Top Productos', headerCss: 'w-[40%]', css: 'px-0 py-0', setCellCss: culqiRowCss,
+      getValue: (order) => topOrderProducts(order, 3)
+        .map((topProduct) => `${topProduct.Quantity}x ${productsService.recordsMap.get(topProduct.ProductID)?.Name || ''}`).join(', ') },
   ]
 
   const lineColumns: ITableColumn<ISaleOrderLine>[] = [
@@ -135,7 +141,8 @@
   function openOrderDetail(order: IOnlineSaleOrder) {
     selectedOrder = order
     settleForm.CashBankID = defaultPaymentCashBankID(order, cashBanksService.Cajas || [])
-    settleForm.WarehouseID = defaultDeliveryWarehouseID(order, warehousesService.Almacenes || [])
+    // The warehouse is kept across orders, so the operator picks it once per session.
+    if (!settleForm.WarehouseID) settleForm.WarehouseID = defaultDeliveryWarehouseID(order, warehousesService.Almacenes || [])
     annulForm.Reason = ''
     isAnnulFormOpen = false
     ui.openSideLayer(DETAIL_LAYER_ID)
@@ -166,6 +173,47 @@
     } catch (settleError) {
       console.error('[online-orders] settle error', { request, settleError })
       notifyFailure(String(settleError) || tr('Could not register the order.|No se pudo registrar el pedido.'))
+    } finally {
+      isPostingAction = false
+    }
+  }
+
+  // A status step. Preparation and on-the-way only relabel the order. Delivered moves the stock: it
+  // creates the sale when there is none yet, or delivers the existing one.
+  async function moveOrderToStep(step: number) {
+    if (!selectedOrder || isPostingAction || !canMoveToFulfillmentStep(selectedOrder, step)) return
+    const order = selectedOrder
+
+    if (step === FULFILLMENT_STEP.DELIVERED) {
+      if (!(settleForm.WarehouseID > 0)) {
+        notifyFailure(tr('Select the warehouse the goods leave from.|Seleccione el almacén del que salen los productos.'))
+        return
+      }
+      const warehouseName = deliveryWarehouses.find((warehouse) => warehouse.ID === settleForm.WarehouseID)?.Name || ''
+      const confirmed = await confirmWarn({
+        title: tr('Register Delivery|Registrar Entrega'),
+        message: tr(`Deliver order No. ${order.ID}? The products leave warehouse "${warehouseName}".`
+          + `|¿Entregar el pedido N° ${order.ID}? Los productos salen del almacén "${warehouseName}".`),
+      })
+      if (!confirmed) return
+      if (!order.SaleOrderID) { await settleOrder([SETTLE_ACTION.DELIVERY]); return }
+    }
+
+    isPostingAction = true
+    try {
+      if (step === FULFILLMENT_STEP.DELIVERED) {
+        const deliveredSale = await postLinkedSaleOrderDelivery(order.SaleOrderID, settleForm.WarehouseID)
+        // The backend copied the sale's status onto the online order in the same transaction.
+        selectedOrder = { ...order, ss: deliveredSale.ss, DebtAmount: deliveredSale.DebtAmount }
+        notifySuccess(tr('Order delivered.|Pedido entregado.'))
+      } else {
+        selectedOrder = await postOnlineSaleOrderFulfillment({ ID: order.ID, FulfillmentStatus: step })
+        notifySuccess(tr('Status updated.|Estado actualizado.'))
+      }
+      await ordersService?.fetchOnline()
+    } catch (stepError) {
+      console.error('[online-orders] status step error', { orderID: order.ID, step, stepError })
+      notifyFailure(String(stepError) || tr('Could not update the status.|No se pudo actualizar el estado.'))
     } finally {
       isPostingAction = false
     }
@@ -224,7 +272,51 @@
         selected={selectedOrder?.ID || 0}
         isSelected={(order, selectedID) => order.ID === selectedID}
         onRowClick={(order) => openOrderDetail(order)}
-      />
+      >
+        {#snippet cellRenderer(order: IOnlineSaleOrder, column: ITableColumn<IOnlineSaleOrder>)}
+          {#if column.id === 'destination'}
+            <div class="leading-[1.15]">
+              <div class="text-[15px] text-fg-muted">{tr(deliveryTypeLabel(order.DeliveryType))}</div>
+              <div class="truncate">{deliveryPlaceName(order) || '-'}</div>
+            </div>
+          {:else if column.id === 'payment'}
+            <!-- Status on top (a check once paid), the method the shopper chose below. -->
+            <div class="leading-[1.15]">
+              {#if isOnlineOrderPaid(order)}
+                <i class="icon-[fa--check] text-green-fg" aria-label="Paid"></i>
+              {:else if needsCulqiReconciliation(order)}
+                <span class="ff-bold text-amber-fg" title={tr('Paid in Culqi, sale pending|Pagado en Culqi, venta pendiente')}>
+                  <i class="icon-[fa--exclamation-triangle] mr-4"></i>Culqi
+                </span>
+              {:else}
+                <div class="text-fg-muted">{tr('Pending|Pendiente')}</div>
+              {/if}
+              <div class="truncate text-sm">({tr(paymentMethodLabel(order.PaymentMethod))})</div>
+            </div>
+          {:else if column.id === 'delivery'}
+            {#if isOnlineOrderDelivered(order)}
+              <span class="text-green-fg"><i class="icon-[fa--check] mr-4"></i>{tr('Delivered|Entregado')}</span>
+            {:else}
+              <span class="text-fg-muted">{tr('Pending|Pendiente')}</span>
+            {/if}
+          {:else if column.id === 'top-products'}
+            {@const topProducts = topOrderProducts(order, 3)}
+            <div class="flex w-full min-w-0 h-full">
+              {#each topProducts as topProduct, productIndex (topProduct.ProductID)}
+                <!-- Quantity beside a clamped name, so the row keeps a stable height. -->
+                <div class={`min-w-0 flex items-center basis-1/3 px-10 ${productIndex < topProducts.length - 1 ? 'border-r border-line' : ''}`}>
+                  <div class="mr-4 text-sm ff-mono shrink-0">{topProduct.Quantity}x</div>
+                  <div class="line-clamp-2 text-sm leading-[1.15]">
+                    {productsService.recordsMap.get(topProduct.ProductID)?.Name || `Producto #${topProduct.ProductID}`}
+                  </div>
+                </div>
+              {:else}
+                <div class="px-8 text-fg-subtle">-</div>
+              {/each}
+            </div>
+          {/if}
+        {/snippet}
+      </VTable>
     {/if}
   </Layer>
 
@@ -245,16 +337,21 @@
         {/if}
 
         <div class="grid grid-cols-24 gap-8" aria-label="Order summary: date, status, payment method and amounts">
-          <div class="col-span-8"><div class="text-fg-muted">{tr('Date|Fecha')}</div>{formatTime(order.Date, 'd-M-Y')}</div>
-          <div class="col-span-8"><div class="text-fg-muted">{tr('Status|Estado')}</div>{tr(onlineOrderStatusLabel(order.ss))}</div>
-          <div class="col-span-8"><div class="text-fg-muted">{tr('Payment|Pago')}</div>{tr(paymentMethodLabel(order.PaymentMethod))}</div>
-          <div class="col-span-8"><div class="text-fg-muted">{tr('Shipping|Envío')}</div><span class="ff-mono">{formatAmount(order.ShippingAmount)}</span></div>
-          <div class="col-span-8"><div class="text-fg-muted">Total</div><span class="ff-mono ff-bold">{formatAmount(order.TotalAmount)}</span></div>
-          <div class="col-span-8"><div class="text-fg-muted">{tr('Debt|Deuda')}</div><span class="ff-mono">{formatAmount(order.DebtAmount)}</span></div>
-          {#if order.CulqiChargeID}
-            <div class="col-span-24"><span class="text-fg-muted mr-6">{tr('Culqi charge:|Cargo Culqi:')}</span><span class="ff-mono">{order.CulqiChargeID}</span></div>
-          {/if}
+          <LabelCell css="col-span-8" valueCss="" label="Date|Fecha" value={formatTime(order.Date, 'd-M-Y') as string} />
+          <LabelCell css="col-span-8" valueCss="" label="Status|Estado" value={tr(onlineOrderStatusLabel(order.ss))} />
+          <LabelCell css="col-span-8" valueCss="" label="Payment|Pago" value={tr(paymentStatusLabel(order))} />
+          <LabelCell css="col-span-8" valueCss="ff-mono" label="Shipping|Envío" value={formatAmount(order.ShippingAmount)} />
+          <LabelCell css="col-span-8" valueCss="ff-mono ff-bold" label="Total|Total" value={formatAmount(order.TotalAmount)} />
+          <LabelCell css="col-span-8" valueCss="ff-mono" label="Culqi charge|Cargo Culqi" value={order.CulqiChargeID || '-'} />
         </div>
+
+        {#if order.ss !== ONLINE_ORDER_STATUS.ANNULLED}
+          <OnlineOrderStatusSteps {order} onSelectStep={moveOrderToStep} />
+          <!-- Always at hand: Entregado and the settle actions take the goods out of this warehouse. -->
+          <SearchSelect saveOn={settleForm} save="WarehouseID" css="w-full md:w-1/2"
+            options={deliveryWarehouses} keyId="ID" keyName="Name"
+            label="Warehouse for delivery|Almacén para entrega" placeholder=":: seleccione ::" />
+        {/if}
 
         <div class="grid grid-cols-24 gap-8 p-10 rounded-md bg-surface-muted" aria-label="Customer contact and delivery">
           <div class="col-span-24 md:col-span-12">
@@ -284,9 +381,9 @@
             <LoadingBar label={tr('Processing...|Procesando...')} />
           </div>
         {:else if order.SaleOrderID > 0}
-          <div class="p-10 rounded-md bg-blue-bg" aria-label="Linked sale: further actions happen in Sales Management">
+          <div class="p-10 rounded-md bg-blue-bg" aria-label="Linked sale: payments and annulments happen in Sales Management">
             <span class="ff-bold">{tr(`Sale ${order.SaleOrderID}.|Venta ${order.SaleOrderID}.`)}</span>
-            {tr(' Later payments, deliveries and annulments are done in Sales Management.| Los pagos, entregas y anulaciones posteriores se hacen en Gestión Ventas.')}
+            {tr(' Later payments and annulments are done in Sales Management.| Los pagos y anulaciones posteriores se hacen en Gestión Ventas.')}
           </div>
         {:else if order.ss === 0}
           <div class="p-10 rounded-md bg-red-bg" aria-label="Annulment reason">
@@ -304,19 +401,14 @@
             </div>
           </div>
         {:else if canSettle(order)}
-          <div class="grid grid-cols-24 gap-10 p-10 rounded-md bg-surface-muted" aria-label="Settle actions: payment, delivery or annulment">
+          <div class="grid grid-cols-24 gap-10 p-10 rounded-md bg-surface-muted" aria-label="Settle actions: payment, payment and delivery, or annulment">
             <SearchSelect saveOn={settleForm} save="CashBankID" css="col-span-24 md:col-span-12"
               options={paymentCashBanks} keyId="ID" keyName="Name"
               label={needsCulqiReconciliation(order) ? 'Account (choose Culqi)|Cuenta (elija la de Culqi)' : 'Cash/bank for payment|Caja/banco para pago'}
               placeholder=":: seleccione ::" />
-            <SearchSelect saveOn={settleForm} save="WarehouseID" css="col-span-24 md:col-span-12"
-              options={deliveryWarehouses} keyId="ID" keyName="Name"
-              label="Warehouse for delivery|Almacén para entrega" placeholder=":: seleccione ::" />
             <div class="col-span-24 flex flex-wrap items-center gap-8">
               <Button color="green" icon="icon-[fa--check]" name="Register payment|Registrar pago"
                 label="Creates the sale as paid into the selected account." onClick={() => settleOrder([SETTLE_ACTION.PAYMENT])} />
-              <Button color="blue" icon="icon-[fa--truck]" name="Register delivery|Registrar entrega"
-                label="Creates the sale as delivered from the selected warehouse." onClick={() => settleOrder([SETTLE_ACTION.DELIVERY])} />
               <Button color="purple" icon="icon-[fa--check-square-o]" name="Payment and delivery|Pago y entrega"
                 label="Creates the sale paid and delivered." onClick={() => settleOrder([SETTLE_ACTION.PAYMENT, SETTLE_ACTION.DELIVERY])} />
               <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Annul|Anular" css="ml-auto"

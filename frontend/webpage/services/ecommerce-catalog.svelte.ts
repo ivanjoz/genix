@@ -50,7 +50,8 @@ export class EcommerceCatalog {
 	}
 
 	publish(saved: ISavedCatalog): void {
-		this.productos = saved.productos.map(toStoreProduct);
+		const companyID = Env.getCompanyID();
+		this.productos = saved.productos.map((record) => toStoreProduct(record, companyID));
 		this.marcas = saved.marcas;
 		this.categorias = saved.categorias;
 		this.productosMap = arrayToMapN(this.productos, 'ID');
@@ -69,9 +70,10 @@ const decodeResponse = async <T>(response: Response): Promise<T> =>
 // fileCreated busts the CDN and browser cache when the backend names a file newer than a cached one.
 const fetchCatalogFile = async (fileCreated?: number): Promise<ICatalogFile | null> => {
 	const fileRoute = Env.makeCDNRoute('live', `ecommerce-c${Env.getCompanyID()}.cb`);
-	const response = await fetch(fileCreated ? `${fileRoute}?v=${fileCreated}` : fileRoute);
+	const fileURL = fileCreated ? `${fileRoute}?v=${fileCreated}` : fileRoute;
+	const response = await fetch(fileURL);
 	if (!response.ok) {
-		console.warn('[EcommerceCatalog] file unavailable:', response.status);
+		console.warn('[EcommerceCatalog] file unavailable:', response.status, fileURL);
 		return null;
 	}
 	return decodeColbinBody(new Uint8Array(await response.arrayBuffer()));
@@ -123,7 +125,9 @@ const readInitialCatalog = async (): Promise<ISavedCatalog | null> => {
 	return catalogFile ? savedCatalogFromFile(catalogFile) : null;
 };
 
-const ecommerceCatalog = new EcommerceCatalog();
+// The shared instance, for synchronous readers (the cart's stock limit); version 0 until the first
+// publish. Everything else awaits getEcommerceCatalog(), which also starts the load.
+export const ecommerceCatalog = new EcommerceCatalog();
 let catalogLoadPromise: Promise<EcommerceCatalog> | null = null;
 
 /** The shared catalog; resolves once the first list is published, the delta lands afterwards. */

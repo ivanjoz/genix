@@ -19,9 +19,10 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.seasonality-curve":  GetSeasonalityCurve,
 	"POST.seasonality-curve": PostSeasonalityCurve,
 	// Pedidos Web: the web store's orders, before and after they become sales.
-	"GET.online-sale-orders":        GetOnlineSaleOrders,
-	"POST.online-sale-order-settle": PostOnlineSaleOrderSettle,
-	"POST.online-sale-order-annul":  PostOnlineSaleOrderAnnul,
+	"GET.online-sale-orders":             GetOnlineSaleOrders,
+	"POST.online-sale-order-settle":      PostOnlineSaleOrderSettle,
+	"POST.online-sale-order-annul":       PostOnlineSaleOrderAnnul,
+	"POST.online-sale-order-fulfillment": PostOnlineSaleOrderFulfillment,
 	// The web store. Public ("p-"): each route checks the web customer token itself.
 	"POST.p-web-customer-code":     PostWebCustomerCode,
 	"POST.p-web-customer-verify":   PostWebCustomerVerify,

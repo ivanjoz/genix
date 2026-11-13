@@ -60,7 +60,6 @@ export const Core = $state({
   languaje: getStoredLanguaje() as ILanguaje,
   theme: getStoredTheme(),
   isLoading: 1,
-  openLayers: [] as number[],
   // Ecommerce state moved from pkg-store
   ecommerce: {
     cartOption: 1
@@ -86,27 +85,6 @@ export const fetchEvent = (fetchID: number, props: IFetchEvent | 0) => {
     fetchOnCourse.set(fetchID, props)
   }
 }
-
-// Store-specific exports
-export const mainMenuOptions = [
-  { name: "Iniciar Sesión",
-    icon: "icon-[fa--user]",
-    onClick: () => {
-      if(!Core.openLayers.includes(1)){
-        Core.openLayers.push(1)
-      }
-    }
-  },
-  { name: "Regístrate",
-    icon: "icon-[fa--file-text]",
-  },
-  { name: "Mis Pedidos",
-    icon: "icon-[fa--cube]",
-  },
-  { name: "Tienda",
-    icon: "icon-[fa--home]",
-  }
-]
 
 export interface NavFlag {
   id: number

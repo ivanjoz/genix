@@ -140,18 +140,62 @@ export const mergeCatalogDelta = (saved: ISavedCatalog, delta: ICatalogDelta): I
 	categorias: mergeCatalogRecords(saved.categorias, delta.Categorias),
 });
 
-/** A catalog record in the shape the store's components read (the image as {n, d}). */
-export const toStoreProduct = (record: ICatalogProductRecord): IProduct => ({
+/** The CDN file of a product image: "<companyID>_<imageID>" (backend/production/products.go, same
+ *  as productImageName in the admin). '' when there is no image. */
+export const productImageName = (companyID: number, imageID: number): string =>
+	imageID > 0 ? `${companyID}_${imageID}` : '';
+
+/** A catalog record in the shape the store's components read (the image as {n, d}).
+ *  The catalog carries only the image ID. */
+export const toStoreProduct = (record: ICatalogProductRecord, companyID: number): IProduct => ({
 	ID: record.ID,
 	Name: record.Name,
 	CategoryIDs: record.CategoryIDs ?? [],
 	BrandID: record.BrandID,
 	Price: record.Price,
 	FinalPrice: record.FinalPrice,
-	Image: { n: record.Image > 0 ? String(record.Image) : '', d: '' },
+	Image: { n: productImageName(companyID, record.Image), d: '' },
 	Stock: record.Stock ?? [],
 	ss: record.ss,
 });
+
+/** What GET.p-product-detail adds to the catalog record (backend ProductDetail): the extra images
+ *  and the HTML sheet. ss 0: the store no longer sells it. */
+export interface IProductDetail {
+	ID: number
+	ContentHTML: string
+	ImageIDs: number[] | null
+	ImageDescriptions: string[] | null
+	ss: number
+	upd: number
+}
+
+export const PRODUCT_DETAIL_ROUTE = 'p-product-detail';
+
+/** The detail layer's gallery: the catalog's main image first, then the product's other images in
+ *  their stored order. Until the detail arrives (or with no detail images) the main image alone. */
+export const productGalleryImages = (
+	companyID: number, mainImage: IProductoImage | undefined, productDetail: IProductDetail | null,
+): IProductoImage[] => {
+	const detailImages = (productDetail?.ImageIDs ?? []).map((imageID, imageIndex) => ({
+		n: productImageName(companyID, imageID),
+		d: productDetail?.ImageDescriptions?.[imageIndex] ?? '',
+	}));
+	const mainImageName = mainImage?.n || '';
+	if (!mainImageName) return detailImages;
+	// The detail's copy of the main image carries its description; the catalog's does not.
+	const mainGalleryImage = detailImages.find((image) => image.n === mainImageName) ?? { n: mainImageName, d: '' };
+	return [mainGalleryImage, ...detailImages.filter((image) => image.n !== mainImageName)];
+};
+
+// The web cart orders a product without choosing a presentation: its lines go to checkout as
+// PresentationID 0 (web-checkout.ts), so that is the stock that limits it.
+export const CART_PRESENTATION_ID = 0;
+
+/** The units of a product the cart may hold: what the store can sell of the presentation the cart
+ *  orders. A product missing from the catalog is not sellable: 0. */
+export const cartUnitsLimit = (catalogProduct: IProduct | undefined): number =>
+	catalogProduct?.Stock?.find((stock) => stock.PresentationID === CART_PRESENTATION_ID)?.Units ?? 0;
 
 /** The products listed under each category. */
 export const groupProductsByCategory = (products: IProduct[]): Map<number, IProduct[]> => {

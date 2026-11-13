@@ -24,20 +24,22 @@
 
   export interface IProps {
     id?: number;
+    /** Rendered inside the phone menu (MobileMenu.svelte): its tiles pick the tab, so there is no
+        tab strip and no layer of its own. */
     isMobile?: boolean;
-    css?: string;
+    selectedTab?: number;
   }
 
-  const { id = 3, isMobile = false, css = "" }: IProps = $props();
+  let { id = 3, isMobile = false, selectedTab = $bindable(1) }: IProps = $props();
 
-  // Storefront-only modal id: the back-office ids (1, 2, ...) never mount here.
-  const ADDRESS_MODAL_ID = 931;
+  // Storefront-only modal ids: the back-office ids (1, 2, ...) never mount here. The phone menu's
+  // instance mounts next to the (hidden) desktop one, so each needs its own.
+  const addressModalID = $derived(isMobile ? 932 : 931);
 
   const ui = useUI();
   const cities = useCitiesAPI();
 
   let isOpen = $state(false);
-  let selectedTab = $state(1);
   let accountSection = $state(1);
 
   // Login / Regístrate / password forms. `codeSentTo` is the email a 6-digit code went to.
@@ -61,9 +63,11 @@
     { id: 3, name: "Medios de Pago", icon: "icon-[fa--credit-card]" },
   ];
 
+  // The desktop layer loads the store and the session when it opens; the phone menu mounts this
+  // component only while one of its sections shows, so it loads them right away.
   $effect(() => {
-    if (layerOpenedState.id === id) {
-      isOpen = true;
+    if (isMobile || layerOpenedState.id === id) {
+      isOpen = !isMobile;
       loadWebStoreCompany();
       restoreWebCustomerSession();
     } else {
@@ -72,6 +76,7 @@
   });
 
   $effect(() => {
+    if (isMobile) { return }
     if (isOpen) {
       if (layerOpenedState.id !== id) layerOpenedState.id = id;
     } else if (layerOpenedState.id === id) {
@@ -151,7 +156,7 @@
 
   const openAddressModal = (address?: IWebCustomerAddress) => {
     addressForm = address ? { ...address } : { ID: 0, CityID: 0, Address: "", Reference: "" };
-    ui.openModal(ADDRESS_MODAL_ID);
+    ui.openModal(addressModalID);
   };
 
   const onSaveAddress = async (isDelete?: boolean) => {
@@ -160,7 +165,7 @@
       if (problem) { notifyFailure(problem); return }
     }
     const address = { ...addressForm, ss: isDelete ? 0 : 1 };
-    if (await runRequest(() => saveWebCustomerAddress(address))) { ui.closeModal(ADDRESS_MODAL_ID) }
+    if (await runRequest(() => saveWebCustomerAddress(address))) { ui.closeModal(addressModalID) }
   };
 
   function handleLogout() {
@@ -202,7 +207,8 @@
   {#if selectedTab === 1}
     <!-- Login card: light gray panel centered in the layer, actions centered below the fields. -->
     <div class="flex flex-col gap-12 w-full max-w-[440px] mx-auto mt-8 p-24 rounded-[11px] bg-[#f5f6f8]">
-      <div class="text-[20px] ff-bold text-center text-gray-800 mb-4">Iniciar Sesión</div>
+      <!-- The phone menu already titles the section in its top row. -->
+      {#if !isMobile}<div class="text-[20px] ff-bold text-center text-gray-800 mb-4">Iniciar Sesión</div>{/if}
       {#if forms.codeSentTo}
         {@render codeForm()}
       {:else}
@@ -327,14 +333,16 @@
 
 {#snippet menuContent()}
   <div class="p-16 flex flex-col min-h-300">
-    <OptionsStrip
-      {options}
-      selected={selectedTab}
-      keyId="id"
-      keyName="name"
-      onSelect={(opt: any) => selectedTab = opt.id}
-      css="mb-12"
-    />
+    {#if !isMobile}
+      <OptionsStrip
+        {options}
+        selected={selectedTab}
+        keyId="id"
+        keyName="name"
+        onSelect={(opt: any) => selectedTab = opt.id}
+        css="mb-12"
+      />
+    {/if}
 
     <div class="grow">
       {#if selectedTab === 3}
@@ -385,15 +393,11 @@
       {@render menuContent()}
     </ButtonLayer>
   </div>
-{:else if layerOpenedState.id === id}
-  <div class={css}>
-    <div class="bg-white rounded-[11px] shadow-lg overflow-hidden">
-      {@render menuContent()}
-    </div>
-  </div>
+{:else}
+  {@render menuContent()}
 {/if}
 
-<Modal id={ADDRESS_MODAL_ID} title={addressForm.ID > 0 ? "Editar dirección" : "Nueva dirección"}
+<Modal id={addressModalID} title={addressForm.ID > 0 ? "Editar dirección" : "Nueva dirección"}
   size={7} bodyCss="px-16 py-14"
   onSave={() => onSaveAddress()}
   onDelete={addressForm.ID > 0 ? () => onSaveAddress(true) : undefined}

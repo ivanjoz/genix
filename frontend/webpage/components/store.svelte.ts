@@ -1,6 +1,8 @@
-import type { IProduct } from '#ecommerce/services/ecommerce-catalog.ts';
+import { cartUnitsLimit, type IProduct } from '#ecommerce/services/ecommerce-catalog.ts';
+import { ecommerceCatalog } from '#ecommerce/services/ecommerce-catalog.svelte.ts';
 import { SvelteMap } from 'svelte/reactivity';
 import { Env } from '#core/env.ts';
+import { notifyWarning } from '@genix/ui/notify';
 
 export interface IProductCategory {
   Name: string;
@@ -13,6 +15,9 @@ export let layerOpenedState = $state({ id: 0 });
 export function setLayerOpenedState(id: number) {
   layerOpenedState.id = id;
 }
+
+// The product shown in the detail side layer (ProductDetailLayer); 0 = closed. A grid card sets it.
+export const productDetailLayer = $state({ productID: 0 });
 
 export interface ICartProduct {
   producto: IProduct
@@ -40,6 +45,7 @@ export const restoreCart = () => {
     console.warn('[cart] stored cart unreadable, discarded:', error)
     localStorage.removeItem(cartStorageKey())
   }
+  capCartToStock()
 }
 
 export const clearCart = () => {
@@ -47,18 +53,50 @@ export const clearCart = () => {
   saveCart()
 }
 
+// The units of a product the cart may hold, from the live catalog. Until the catalog is loaded there
+// is no limit to apply; checkout validates the stock again either way.
+export const cartUnitsLimitOf = (productID: number): number =>
+  ecommerceCatalog.version > 0 ? cartUnitsLimit(ecommerceCatalog.getProduct(productID)) : Number.POSITIVE_INFINITY
+
+const warnStockLimit = (producto: IProduct, unitsLimit: number) => {
+  notifyWarning(unitsLimit > 0
+    ? `Solo quedan ${unitsLimit} unidades de "${producto.Name}".`
+    : `"${producto.Name}" ya no tiene stock disponible.`)
+}
+
 export const addProductoCant = (
   producto: IProduct, fixedCant: number | null, incrementOrDecrement?: number
 ) => {
-  if(typeof fixedCant === 'number'){
-    if(fixedCant === 0){
-      ProductsSelectedMap.delete(producto.ID)
-    } else {
-      ProductsSelectedMap.set(producto.ID, { producto, cant: fixedCant })
-    }
-  } else if(typeof incrementOrDecrement === 'number'){
-    const cant = ProductsSelectedMap.get(producto.ID)?.cant || 0
-    ProductsSelectedMap.set(producto.ID, { producto, cant: cant + incrementOrDecrement })
+  const currentQuantity = ProductsSelectedMap.get(producto.ID)?.cant || 0
+  const requestedQuantity = typeof fixedCant === 'number' ? fixedCant : currentQuantity + (incrementOrDecrement || 0)
+  // Never more than the store can sell; lowering a quantity is always allowed.
+  const unitsLimit = cartUnitsLimitOf(producto.ID)
+  const nextQuantity = requestedQuantity > currentQuantity ? Math.min(requestedQuantity, unitsLimit) : requestedQuantity
+  if (nextQuantity < requestedQuantity) { warnStockLimit(producto, unitsLimit) }
+
+  if (nextQuantity <= 0) {
+    ProductsSelectedMap.delete(producto.ID)
+  } else {
+    ProductsSelectedMap.set(producto.ID, { producto, cant: nextQuantity })
   }
   saveCart()
+}
+
+// capCartToStock lowers every cart line to what the store can sell now: a cart restored from
+// localStorage, or one whose products sold meanwhile. Runs on restore and on every catalog publish.
+export const capCartToStock = () => {
+  if (ecommerceCatalog.version === 0) { return }
+  let isCartChanged = false
+  for (const cartProduct of [...ProductsSelectedMap.values()]) {
+    const unitsLimit = cartUnitsLimitOf(cartProduct.producto.ID)
+    if (cartProduct.cant <= unitsLimit) { continue }
+    warnStockLimit(cartProduct.producto, unitsLimit)
+    if (unitsLimit > 0) {
+      ProductsSelectedMap.set(cartProduct.producto.ID, { ...cartProduct, cant: unitsLimit })
+    } else {
+      ProductsSelectedMap.delete(cartProduct.producto.ID)
+    }
+    isCartChanged = true
+  }
+  if (isCartChanged) { saveCart() }
 }

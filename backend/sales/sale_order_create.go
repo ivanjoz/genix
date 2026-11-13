@@ -217,7 +217,10 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 
 	// 3 = Entrega (Movimiento de Almacén)
 	if slices.Contains(sale.ActionsIncluded, 3) {
-		sale.AddStatus(3)
+		// Refuses a sale already delivered: a second delivery would move its stock twice.
+		if err := sale.AddStatus(3); err != nil {
+			return req.MakeErr(err)
+		}
 		// Track when and who executed the latest delivery action.
 		sale.DeliveryTime = nowTime
 		sale.DeliveryUser = req.User.ID

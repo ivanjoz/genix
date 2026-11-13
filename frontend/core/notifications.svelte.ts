@@ -25,6 +25,8 @@ export const notifications = $state(new SvelteMap<number, NotificationRow>())
 
 export const NOTIFICATIONS_TAB_MESSAGES = 1
 export const NOTIFICATIONS_TAB_INFORMATION = 2
+// Phones only: the agent chat, which the header has no room for there.
+export const NOTIFICATIONS_TAB_AGENT = 3
 
 // Header layer state, owned here so sendUserNotification can pop the layer open.
 // recentSinceTime > 0 means the layer was popped by a message and lists only the

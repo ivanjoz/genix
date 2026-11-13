@@ -52,7 +52,17 @@ type OnlineSaleOrder struct {
 	// sales at checkout. Kept so the release hits the row the reservation went to, even if the
 	// warehouses change meanwhile. The SaleOrder created on payment inherits it as its WarehouseID.
 	PendingWarehouseID int32 `cb:"24"`
+	// FulfillmentStatus is the back office's progress on the shipment before the goods are handed
+	// over: 0 none, FulfillmentPreparing, FulfillmentInTransit (on the way, or ready for pickup). It
+	// moves no stock and records no delivery; the delivery itself is Status 3/4, as on any sale.
+	FulfillmentStatus int8 `cb:"25"`
 }
+
+// The OnlineSaleOrder.FulfillmentStatus steps; "delivered" is read from Status, never stored here.
+const (
+	FulfillmentPreparing = int8(1)
+	FulfillmentInTransit = int8(2)
+)
 
 // SaleOrderShipping is the contact and destination a web order was placed with.
 type SaleOrderShipping struct {
@@ -107,6 +117,7 @@ type OnlineSaleOrderTable struct {
 	Version            db.Col[*OnlineSaleOrderTable, int16]
 	UpdatedBy          db.Col[*OnlineSaleOrderTable, int32]
 	PendingWarehouseID db.Col[*OnlineSaleOrderTable, int32]
+	FulfillmentStatus  db.Col[*OnlineSaleOrderTable, int8]
 }
 
 func (e OnlineSaleOrderTable) GetSchema() db.TableSchema {

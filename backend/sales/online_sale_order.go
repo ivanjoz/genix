@@ -97,6 +97,64 @@ func PostOnlineSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(onlineOrder)
 }
 
+// PostOnlineSaleOrderFulfillment moves an order forward to "in preparation" or "on the way / ready
+// for pickup". Only a status label: no stock moves and no sale is created. It works with or without a
+// SaleOrder, since the SaleOrder knows nothing of these steps. The delivery itself is a settle (no
+// sale yet) or a SaleOrder delivery.
+func PostOnlineSaleOrderFulfillment(req *core.HandlerArgs) core.HandlerResponse {
+	fulfillmentRequest := struct {
+		ID                int32
+		FulfillmentStatus int8
+	}{}
+	if err := json.Unmarshal([]byte(*req.Body), &fulfillmentRequest); err != nil {
+		return req.MakeErr("Error al deserializar el body: " + err.Error())
+	}
+	nextStatus := fulfillmentRequest.FulfillmentStatus
+	if nextStatus != types.FulfillmentPreparing && nextStatus != types.FulfillmentInTransit {
+		return req.MakeErr("FulfillmentStatus solo permite 1 (en preparación) y 2 (en camino / para recoger).")
+	}
+	// The same lock as a settle: a delivery being registered cannot interleave with this write.
+	settleLock, err := lockOnlineSaleOrder(req.User.CompanyID, fulfillmentRequest.ID)
+	if lockErr, isLockErr := err.(*core.LockError); isLockErr {
+		return lockErr.Response(req)
+	}
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	defer settleLock.Release()
+
+	var updatedOrder types.OnlineSaleOrder
+	err = db.RunTransaction(func(transaction *db.Transaction) error {
+		lockedOrder, err := lockOnlineSaleOrderRowIn(transaction, req.User.CompanyID, fulfillmentRequest.ID)
+		if err != nil {
+			return err
+		}
+		if lockedOrder.Status == types.OrderStatusAnnulled {
+			return core.Err(fmt.Sprintf("El pedido N° %v está anulado.", lockedOrder.ID))
+		}
+		if lockedOrder.Status == types.OrderStatusDelivered || lockedOrder.Status == types.OrderStatusCompleted {
+			return core.Err(fmt.Sprintf("El pedido N° %v ya fue entregado.", lockedOrder.ID))
+		}
+		// Forward only: a step can be skipped but never undone.
+		if nextStatus <= lockedOrder.FulfillmentStatus {
+			return core.Err(fmt.Sprintf("El pedido N° %v ya está en ese estado o en uno posterior.", lockedOrder.ID))
+		}
+		lockedOrder.FulfillmentStatus = nextStatus
+		lockedOrder.Updated, lockedOrder.UpdatedBy = core.SUnixTime(), req.User.ID
+		updatedOrder = lockedOrder
+		orderTable := db.TableOf[types.OnlineSaleOrder]()
+		if err := db.UpdateIn(transaction, &[]types.OnlineSaleOrder{lockedOrder}, orderTable.FulfillmentStatus,
+			orderTable.Updated, orderTable.UpdatedBy); err != nil {
+			return core.Err("Error al actualizar el estado del pedido web:", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	return req.MakeResponse(updatedOrder)
+}
+
 // lockOnlineSaleOrder takes the order's settle lock (core.ActionOnlineSaleOrderSettle).
 func lockOnlineSaleOrder(companyID, onlineOrderID int32) (core.Lock, error) {
 	lock, lockErr := core.AcquireLock(context.Background(), core.ActionOnlineSaleOrderSettle,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
-	CATALOG_SCHEMA_VERSION, groupProductsByCategory, isUsableSavedCatalog, mergeCatalogDelta, savedCatalogFromFile,
-	toStoreProduct, type ICatalogDelta, type ICatalogProductRecord,
+	CATALOG_SCHEMA_VERSION, cartUnitsLimit, groupProductsByCategory, isUsableSavedCatalog, mergeCatalogDelta, savedCatalogFromFile,
+	productGalleryImages, toStoreProduct, type ICatalogDelta, type ICatalogProductRecord, type IProductDetail,
 } from './ecommerce-catalog.ts';
 
 const makeProductRecord = (ID: number, overrides: Partial<ICatalogProductRecord> = {}): ICatalogProductRecord => ({
@@ -63,17 +63,49 @@ describe('mergeCatalogDelta', () => {
 	});
 });
 
+describe('cartUnitsLimit', () => {
+	it('is the sellable units of the presentation the cart orders, 0 when not sellable', () => {
+		expect(cartUnitsLimit(toStoreProduct(makeProductRecord(1, { Stock: [{ PresentationID: 0, Units: 16 }] }), 1))).toBe(16);
+		expect(cartUnitsLimit(toStoreProduct(makeProductRecord(1, { Stock: [{ PresentationID: 2, Units: 9 }] }), 1))).toBe(0);
+		expect(cartUnitsLimit(undefined)).toBe(0);
+	});
+});
+
 describe('toStoreProduct and groupProductsByCategory', () => {
-	it('turns the image ID into the {n, d} image, empty without one', () => {
-		expect(toStoreProduct(makeProductRecord(1, { Image: 44 })).Image).toEqual({ n: '44', d: '' });
-		expect(toStoreProduct(makeProductRecord(1)).Image).toEqual({ n: '', d: '' });
-		expect(toStoreProduct(makeProductRecord(1, { Stock: null, CategoryIDs: null })).Stock).toEqual([]);
+	it('turns the image ID into the company-prefixed {n, d} image, empty without one', () => {
+		expect(toStoreProduct(makeProductRecord(1, { Image: 44 }), 7).Image).toEqual({ n: '7_44', d: '' });
+		expect(toStoreProduct(makeProductRecord(1), 7).Image).toEqual({ n: '', d: '' });
+		expect(toStoreProduct(makeProductRecord(1, { Stock: null, CategoryIDs: null }), 7).Stock).toEqual([]);
 	});
 
 	it('lists a product under each of its categories', () => {
-		const products = [makeProductRecord(1, { CategoryIDs: [1, 2] }), makeProductRecord(2, { CategoryIDs: [2] })].map(toStoreProduct);
+		const products = [makeProductRecord(1, { CategoryIDs: [1, 2] }), makeProductRecord(2, { CategoryIDs: [2] })]
+			.map((record) => toStoreProduct(record, 1));
 		const productsByCategory = groupProductsByCategory(products);
 		expect(productsByCategory.get(1)?.map((product) => product.ID)).toEqual([1]);
 		expect(productsByCategory.get(2)?.map((product) => product.ID)).toEqual([1, 2]);
+	});
+});
+
+describe('productGalleryImages', () => {
+	const makeDetail = (overrides: Partial<IProductDetail> = {}): IProductDetail => ({
+		ID: 1, ContentHTML: '', ImageIDs: [11, 22, 33], ImageDescriptions: ['once', 'veintidos', 'treintaitres'],
+		ss: 1, upd: 10, ...overrides,
+	});
+
+	it('shows only the catalog main image until the detail arrives', () => {
+		expect(productGalleryImages(7, { n: '7_22', d: '' }, null)).toEqual([{ n: '7_22', d: '' }]);
+	});
+
+	it('puts the main image first with its description, then the others in stored order', () => {
+		expect(productGalleryImages(7, { n: '7_22', d: '' }, makeDetail())).toEqual([
+			{ n: '7_22', d: 'veintidos' }, { n: '7_11', d: 'once' }, { n: '7_33', d: 'treintaitres' },
+		]);
+	});
+
+	it('lists the detail images alone when the product has no main image, nothing with neither', () => {
+		expect(productGalleryImages(7, { n: '', d: '' }, makeDetail({ ImageIDs: [11], ImageDescriptions: null })))
+			.toEqual([{ n: '7_11', d: '' }]);
+		expect(productGalleryImages(7, undefined, makeDetail({ ImageIDs: null }))).toEqual([]);
 	});
 });

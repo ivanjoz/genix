@@ -112,10 +112,16 @@ under Ventas, read through a delta-cache `GET online-sale-orders`.
 - **Lists `online_sale_order`:** number, date, customer, delivery type, address or pickup store, contact, total, status, and the SaleOrder / boleta once it exists.
 - **Actions while `SaleOrderID = 0`:**
   - **Registrar pago:** asks for the cash/bank account. Creates the SaleOrder paid.
-  - **Registrar entrega:** asks for the warehouse. Creates the SaleOrder with the delivery action (stock leaves the warehouse) and the debt.
   - **Pago y entrega:** both at once, the usual cash-on-delivery case.
   - **Anular:** annuls the OnlineSaleOrder.
-- **Once `SaleOrderID > 0`:** the order is read-only here and links to the sale. Later actions run in Gestión Ventas.
+- **Status steps** (any non-annulled order, with or without a sale): En Preparación → En Camino
+  (home) / Para Recoger (pickup) → Entregado. Forward only, skipping allowed.
+  - The first two set `OnlineSaleOrder.FulfillmentStatus` (1, 2) through
+    `POST online-sale-order-fulfillment`: a label only, no stock moves.
+  - **Entregado** moves the stock from the always-visible warehouse selector: without a sale it is a
+    settle with the delivery action (creates the SaleOrder with the debt); with one it is the
+    SaleOrder's own delivery (`POST sale-order`, action 3), which syncs the status back.
+- **Once `SaleOrderID > 0`:** payments and annulments run in Gestión Ventas.
 - **Route:** `POST online-sale-order-settle {ID, Actions, CashBankID, WarehouseID}`, plus `POST online-sale-order-annul`.
 
 ## 5. Creating the SaleOrder from an OnlineSaleOrder

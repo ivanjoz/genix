@@ -24,7 +24,6 @@
 @source not "../build-renderer";
 @source not "../../**/*.md";
 
-@source "../../domain-components/MobileMenu.svelte";
 @source "../**/*.svelte";
 
 /* Cart uses the legacy project shorthand, not an Iconify utility class. Keep its

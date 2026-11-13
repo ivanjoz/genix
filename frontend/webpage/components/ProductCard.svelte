@@ -8,7 +8,7 @@
 	import { untrack } from "svelte";
 	import type { IProduct } from "#ecommerce/services/ecommerce-catalog.ts";
 	import ImageHash from "#components/files/Imagehash.svelte";
-	import { addProductoCant, ProductsSelectedMap } from "./store.svelte";
+	import { addProductoCant, cartUnitsLimitOf, productDetailLayer, ProductsSelectedMap } from "./store.svelte";
 
 	type ProductCardMode = "vertical" | "horizontal";
 
@@ -59,6 +59,8 @@
 	const selectedProductQuantity = $derived.by(() => {
 		return ProductsSelectedMap.get(resolvedProduct?.ID)?.cant || 0;
 	});
+	// The cart holds no more than the store can sell: "+" stops there.
+	const isAtStockLimit = $derived(selectedProductQuantity >= cartUnitsLimitOf(resolvedProduct?.ID || 0));
 	const resolvedProductPriceCents = $derived.by(() => {
 		return resolvedProduct?.FinalPrice || resolvedProduct?.Price || 0;
 	});
@@ -137,6 +139,17 @@
 		addProductoCant(resolvedProduct, null, 1);
 	};
 
+	// A grid card opens the product's detail side layer; its add button stops propagation, so it
+	// keeps adding to the cart without opening it.
+	const openProductDetail = () => {
+		if (showLoadingSkeleton || !(resolvedProduct?.ID > 0)) return;
+		productDetailLayer.productID = resolvedProduct.ID;
+	};
+
+	const openProductDetailOnEnter = (keyboardEvent: KeyboardEvent) => {
+		if (keyboardEvent.key === "Enter") openProductDetail();
+	};
+
 	const decrementSelectedQuantity = (clickEvent: MouseEvent) => {
 		clickEvent.stopPropagation();
 		if (!(resolvedProduct?.ID > 0)) return;
@@ -164,6 +177,9 @@
 			return;
 		}
 		addProductoCant(resolvedProduct, parsedQuantity);
+		// A quantity over the stock is capped; the input must show the capped one even when the cart
+		// already held it (no reactive change would re-render it).
+		inputElement.value = `${ProductsSelectedMap.get(resolvedProduct.ID)?.cant || 0}`;
 	};
 </script>
 
@@ -205,7 +221,8 @@
 								value={selectedProductQuantity}
 								onchange={updateSelectedQuantityFromInput}
 							/>
-							<button class="quantity-button" onclick={incrementSelectedQuantity}>+</button>
+							<button class="quantity-button" onclick={incrementSelectedQuantity} disabled={isAtStockLimit}
+								title={isAtStockLimit ? "No hay más stock disponible" : undefined}>+</button>
 						</div>
 					{:else}
 						<button class="horizontal-add-cart-button mb-2!" onclick={incrementSelectedQuantity}>
@@ -236,7 +253,14 @@
 		class:loading={showLoadingSkeleton}
 		class:idle-placeholder={hasNoProductAssigned}
 	>
-		<div class="vertical-card {css}" aria-busy={isAwaitingRecord}>
+		<div
+			class="vertical-card cursor-pointer {css}"
+			aria-busy={isAwaitingRecord}
+			role="button"
+			tabindex="0"
+			onclick={openProductDetail}
+			onkeydown={openProductDetailOnEnter}
+		>
 			{#if resolvedProductImageName}
 				<ImageHash
 					css="w-full h-[36vw] md:h-200"
@@ -554,9 +578,14 @@
 		background-color: #e5e3f4;
 	}
 
-	.quantity-button:hover {
+	.quantity-button:hover:not(:disabled) {
 		background-color: #5e51c0;
 		color: white;
+	}
+
+	.quantity-button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	.quantity-input {

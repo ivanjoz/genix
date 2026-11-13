@@ -2,15 +2,17 @@ import { describe, expect, it } from 'vitest'
 import type { ICashBank } from '#routes/finance/cash-banks/cajas.svelte.ts'
 import type { IWarehouse } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import {
-  DELIVERY_TYPE, ONLINE_ORDER_GROUP, ONLINE_ORDER_STATUS, SETTLE_ACTION, buildAnnulRequest, buildSettleRequest, canAnnul,
-  canSettle, customerName, defaultDeliveryWarehouseID, defaultPaymentCashBankID, needsCulqiReconciliation,
-  onlineOrderStatusLabel, statusGroupOf, type IOnlineSaleOrder,
+  DELIVERY_TYPE, FULFILLMENT_STEP, ONLINE_ORDER_GROUP, ONLINE_ORDER_STATUS, SETTLE_ACTION, buildAnnulRequest,
+  buildSettleRequest, canAnnul, canMoveToFulfillmentStep, canSettle, currentFulfillmentStep, fulfillmentStepOptions, customerName, defaultDeliveryWarehouseID, defaultPaymentCashBankID, isOnlineOrderDelivered, isOnlineOrderPaid,
+  needsCulqiReconciliation, onlineOrderStatusLabel, paymentStatusLabel, statusGroupOf, topOrderProducts, type IOnlineSaleOrder,
 } from './online-orders.ts'
+import { packQuantityLine } from '#core/quantity.ts'
+import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.svelte.ts'
 
 const makeOrder = (overrides: Partial<IOnlineSaleOrder> = {}): IOnlineSaleOrder => ({
   ID: 7, Date: 20000, Lines: [], TotalAmount: 5000, DebtAmount: 5000, ShippingAmount: 1000, ExchangeRate: 0,
   DeliveryType: DELIVERY_TYPE.HOME, PickupSiteID: 0, WebCustomerID: 1, ClientID: 0, PaymentMethod: 3,
-  CulqiChargeID: '', SaleOrderID: 0, AnnulReason: '', ss: ONLINE_ORDER_STATUS.PENDING, Created: 0, upd: 0, ver: 0,
+  CulqiChargeID: '', SaleOrderID: 0, AnnulReason: '', FulfillmentStatus: 0, ss: ONLINE_ORDER_STATUS.PENDING, Created: 0, upd: 0, ver: 0,
   ...overrides,
 })
 
@@ -31,6 +33,26 @@ describe('online-orders', () => {
     expect(statusGroupOf(ONLINE_ORDER_STATUS.COMPLETED)).toBe(ONLINE_ORDER_GROUP.COMPLETED)
     expect(statusGroupOf(ONLINE_ORDER_STATUS.ANNULLED)).toBe(ONLINE_ORDER_GROUP.ANNULLED)
     expect(onlineOrderStatusLabel(9)).toBe('Unknown|Desconocido')
+  })
+
+  it('names the middle step by delivery type', () => {
+    expect(fulfillmentStepOptions(makeOrder())[1].name).toBe('On the way|En Camino')
+    expect(fulfillmentStepOptions(makeOrder({ DeliveryType: DELIVERY_TYPE.PICKUP }))[1].name).toBe('Ready for pickup|Para Recoger')
+  })
+
+  it('reads delivered from the status and moves steps forward only', () => {
+    const preparing = makeOrder({ FulfillmentStatus: FULFILLMENT_STEP.PREPARING })
+    expect(currentFulfillmentStep(preparing)).toBe(FULFILLMENT_STEP.PREPARING)
+    expect(canMoveToFulfillmentStep(preparing, FULFILLMENT_STEP.PREPARING)).toBe(false)
+    expect(canMoveToFulfillmentStep(preparing, FULFILLMENT_STEP.IN_TRANSIT)).toBe(true)
+    // Skipping straight to delivered is allowed.
+    expect(canMoveToFulfillmentStep(makeOrder(), FULFILLMENT_STEP.DELIVERED)).toBe(true)
+
+    // A delivery done in Gestión Ventas outranks the stored label.
+    const delivered = makeOrder({ ss: ONLINE_ORDER_STATUS.COMPLETED, FulfillmentStatus: FULFILLMENT_STEP.PREPARING })
+    expect(currentFulfillmentStep(delivered)).toBe(FULFILLMENT_STEP.DELIVERED)
+    expect(canMoveToFulfillmentStep(delivered, FULFILLMENT_STEP.IN_TRANSIT)).toBe(false)
+    expect(canMoveToFulfillmentStep(makeOrder({ ss: ONLINE_ORDER_STATUS.ANNULLED }), FULFILLMENT_STEP.PREPARING)).toBe(false)
   })
 
   it('only accepts actions on a pending order with no sale', () => {
@@ -76,6 +98,26 @@ describe('online-orders', () => {
   it('requires an annul reason', () => {
     expect(buildAnnulRequest(makeOrder(), '  duplicado  ').request).toEqual({ ID: 7, Reason: 'duplicado' })
     expect(buildAnnulRequest(makeOrder(), '   ').error).toBeTruthy()
+  })
+
+  it('labels payment as pending while it owes, else paid with its method', () => {
+    expect(paymentStatusLabel(makeOrder({ PaymentMethod: 1 }))).toBe('Pending|Pendiente')
+    expect(paymentStatusLabel(makeOrder({ PaymentMethod: 1, DebtAmount: 0 }))).toBe('Paid (Card)|Pagado (Tarjeta)')
+    expect(paymentStatusLabel(makeOrder({ PaymentMethod: 2, DebtAmount: 0 }))).toBe('Paid (Yape)|Pagado (Yape)')
+  })
+
+  it('reads payment and delivery progress from the status', () => {
+    expect([isOnlineOrderPaid(makeOrder()), isOnlineOrderDelivered(makeOrder())]).toEqual([false, false])
+    expect([isOnlineOrderPaid(makeOrder({ ss: 2 })), isOnlineOrderDelivered(makeOrder({ ss: 2 }))]).toEqual([true, false])
+    expect([isOnlineOrderPaid(makeOrder({ ss: 3 })), isOnlineOrderDelivered(makeOrder({ ss: 3 }))]).toEqual([false, true])
+    expect([isOnlineOrderPaid(makeOrder({ ss: 4 })), isOnlineOrderDelivered(makeOrder({ ss: 4 }))]).toEqual([true, true])
+  })
+
+  it('ranks the top products by amount, summing the units of repeated products', () => {
+    const line = (ProductID: number, units: number, Price: number) =>
+      ({ ProductID, Quantity: packQuantityLine({ units, sub: 0 }, 1), Price }) as ISaleOrderLine
+    const order = makeOrder({ Lines: [line(1, 2, 100), line(2, 1, 500), line(1, 1, 100), line(3, 1, 50), line(4, 0, 900)] })
+    expect(topOrderProducts(order, 2)).toEqual([{ ProductID: 2, Quantity: 1 }, { ProductID: 1, Quantity: 3 }])
   })
 
   it('names the customer from the shipping snapshot', () => {
