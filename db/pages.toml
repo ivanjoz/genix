@@ -205,16 +205,42 @@ icon = "icon-[fa--bullseye]"
 # Production
 
 [[pages]]
+route = "production/merchandise"
+name = "Merchandise|Mercaderías"
+icon = "icon-[fa--archive]"
+description = "Registra las mercaderías que compras para revender y agrúpalas por categoría y marca. Edita precios, unidades y presentaciones."
+
+[[pages]]
 route = "production/products"
 name = "Products|Productos"
 icon = "icon-[fa--cube]"
-description = "Crea productos y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones de tus productos."
+description = "Registra los productos que fabrica tu empresa y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones."
 
 [[pages]]
 route = "production/supplies-materials"
 name = "Supplies & Materials|Insumos & Materiales"
 icon = "icon-[fa--flask]"
 description = "Registra los insumos y materiales que consume tu producción, con sus proveedores y stock mínimo."
+
+[[pages]]
+route = "production/daily-close"
+name = "Daily close|Cierre del día"
+icon = "icon-[fa--calendar-check-o]"
+description = "Cierra la producción del día: consume los insumos de las recetas de los productos vendidos y registra su ingreso y salida de stock."
+
+# Restaurant
+
+[[pages]]
+route = "dining/floor-service"
+name = "Table service|Atención de mesas"
+icon = "icon-[fa--cutlery]"
+description = "El mapa del salón en vivo: toma pedidos por mesa, sigue los platos en cocina y márcalos servidos."
+
+[[pages]]
+route = "dining/floor-layout"
+name = "Floor layout|Diseño de salones"
+icon = "icon-[fa--th]"
+description = "Dibuja cada salón del restaurante: mesas, paredes, estaciones de preparación y puntos de recojo."
 
 # Logistics
 

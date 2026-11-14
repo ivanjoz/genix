@@ -9,6 +9,7 @@ import (
 	coreTypes "app/core/types"
 	crmTypes "app/crm/types"
 	"app/db"
+	diningTypes "app/dining/types"
 	financeTypes "app/finance/types"
 	hrTypes "app/hr/types"
 	invoicingTypes "app/invoicing/types"
@@ -63,6 +64,8 @@ func MakeControllers() []db.Controller {
 		db.MakeController[crmTypes.CrmPipelineOpportunityStatus](),
 		db.MakeController[crmTypes.CrmTask](),
 		db.MakeController[crmTypes.CrmTeam](),
+		db.MakeController[diningTypes.DiningLayout](),
+		db.MakeController[diningTypes.TableOrder](),
 		db.MakeController[financeTypes.CashBank](),
 		db.MakeController[financeTypes.CashBankMovement](),
 		db.MakeController[financeTypes.CashReconciliation](),
@@ -92,6 +95,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[logisticsTypes.PurchaseOrder](),
 		db.MakeController[logisticsTypes.WarehouseProductMovement](),
 		db.MakeController[productionTypes.Product](),
+		db.MakeController[productionTypes.ProductionClose](),
 		db.MakeController[projectsTypes.Document](),
 		db.MakeController[projectsTypes.Epic](),
 		db.MakeController[projectsTypes.Project](),
@@ -160,6 +164,8 @@ func init() {
 	db.RegisterTableFactory("crm_pipeline_opportunity_status", func() db.Table { return db.MakeTable[crmTypes.CrmPipelineOpportunityStatus]() })
 	db.RegisterTableFactory("crm_tasks", func() db.Table { return db.MakeTable[crmTypes.CrmTask]() })
 	db.RegisterTableFactory("crm_teams", func() db.Table { return db.MakeTable[crmTypes.CrmTeam]() })
+	db.RegisterTableFactory("dining_layout", func() db.Table { return db.MakeTable[diningTypes.DiningLayout]() })
+	db.RegisterTableFactory("dining_table_order", func() db.Table { return db.MakeTable[diningTypes.TableOrder]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
 	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })
@@ -189,6 +195,7 @@ func init() {
 	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[productionTypes.Product]() })
+	db.RegisterTableFactory("production_close", func() db.Table { return db.MakeTable[productionTypes.ProductionClose]() })
 	db.RegisterTableFactory("projects_document", func() db.Table { return db.MakeTable[projectsTypes.Document]() })
 	db.RegisterTableFactory("projects_epic", func() db.Table { return db.MakeTable[projectsTypes.Epic]() })
 	db.RegisterTableFactory("projects_project", func() db.Table { return db.MakeTable[projectsTypes.Project]() })

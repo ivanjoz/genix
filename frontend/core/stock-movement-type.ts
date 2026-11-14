@@ -14,6 +14,8 @@ export const StockMovementType = {
   OPENING_STOCK: 12,
   INTERNAL_CONSUMPTION: 13,
   SHRINKAGE: 14,
+  PRODUCTION_CONSUMPTION: 15,
+  PRODUCTION_ENTRY: 16,
 } as const
 
 export const stockMovementTypes: { id: number, name: string }[] = [
@@ -30,6 +32,8 @@ export const stockMovementTypes: { id: number, name: string }[] = [
   { id: StockMovementType.OPENING_STOCK, name: 'Opening stock|Saldo inicial' },
   { id: StockMovementType.INTERNAL_CONSUMPTION, name: 'Internal consumption|Consumo interno' },
   { id: StockMovementType.SHRINKAGE, name: 'Shrinkage|Merma' },
+  { id: StockMovementType.PRODUCTION_CONSUMPTION, name: 'Production consumption|Consumo de producción' },
+  { id: StockMovementType.PRODUCTION_ENTRY, name: 'Production entry|Ingreso de producción' },
 ]
 
 // The reasons a user may give a manual stock change, by direction — the backend's

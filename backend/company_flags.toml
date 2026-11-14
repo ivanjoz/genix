@@ -42,3 +42,7 @@ label = "Online store|Tienda online"
 12 = { name = "Issue receipt automatically for online sales|Emitir comprobante automáticamente en ventas online" }
 13 = { name = "Include cash on delivery in the web store|Incluir pago contra entrega en tienda web" }
 14 = { name = "Require email confirmation on deferred payment|Requerir confirmación de correo en pago diferido" }
+
+[production]
+label = "Production|Producción"
+15 = { name = "Block the daily close when supplies are short|Bloquear el cierre del día si faltan insumos" }

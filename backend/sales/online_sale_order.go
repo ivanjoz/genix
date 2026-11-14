@@ -6,6 +6,7 @@ import (
 	finance "app/finance/types"
 	invoicing "app/invoicing/types"
 	logistics "app/logistics/types"
+	saleissue "app/sales/saleissue/types"
 	"app/sales/types"
 	"context"
 	"encoding/json"
@@ -83,6 +84,9 @@ func PostOnlineSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 	reason := strings.TrimSpace(annulRequest.Reason)
 	if reason == "" {
 		return req.MakeErr("Se requiere el motivo de la anulación.")
+	}
+	if len(reason) > types.MaxAnnulReasonLength {
+		return req.MakeErr("El motivo de la anulación no puede superar los", types.MaxAnnulReasonLength, "caracteres.")
 	}
 	if !req.User.HasSubAcceso(types.AccesoIDPedidosWeb, types.SubAccesoIDAnularPedidoWeb) {
 		return req.MakeErr("No tiene permiso para anular pedidos web.")
@@ -233,22 +237,19 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 	}
 
 	// The sale bills what the shopper agreed to at checkout: the order's priced lines and shipping,
-	// never today's catalog.
-	nowTime, today := core.SUnixTime(), core.FechaUnix()
+	// never today's catalog. It owes nothing after a payment, which collects the whole order.
 	sale := types.SaleOrder{
-		CompanyID: companyID, Lines: onlineOrder.Lines, TotalAmount: onlineOrder.TotalAmount,
-		DebtAmount: onlineOrder.TotalAmount, ShippingAmount: onlineOrder.ShippingAmount,
-		ExchangeRate: onlineOrder.ExchangeRate, CurrencyType: finance.CurrencyPEN, ClientID: onlineOrder.ClientID,
-		OnlineSaleOrderID: onlineOrder.ID, ActionsIncluded: settleRequest.ActionsIncluded,
-		Date: today, Created: nowTime, Updated: nowTime, UpdatedBy: req.User.ID, Status: types.OrderStatusPending,
+		Lines: onlineOrder.Lines, TotalAmount: onlineOrder.TotalAmount, ShippingAmount: onlineOrder.ShippingAmount,
+		DebtAmount: core.If(isPayment, int32(0), onlineOrder.TotalAmount), ExchangeRate: onlineOrder.ExchangeRate,
+		CurrencyType: finance.CurrencyPEN, ClientID: onlineOrder.ClientID, OnlineSaleOrderID: onlineOrder.ID,
+		ActionsIncluded: settleRequest.ActionsIncluded,
 	}
 	sale.TaxAmount = invoicing.SaleOrderTaxAmount(&sale)
-	saleProducts, err := readSaleProducts(companyID, sale.Lines)
+	saleProducts, err := types.ReadSaleProducts(companyID, sale.Lines)
 	if err != nil {
 		return onlineOrder, sale, err
 	}
 
-	collectedAmount := int32(0)
 	if isPayment {
 		cashBank, err := finance.GetCaja(companyID, settleRequest.CashBankID)
 		if err != nil {
@@ -257,69 +258,39 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 		if cashBank.Status == 0 {
 			return onlineOrder, sale, core.Err("La caja seleccionada está inactiva.")
 		}
-		if normalizeCurrency(cashBank.CurrencyType) != finance.CurrencyPEN {
+		if types.NormalizeCurrency(cashBank.CurrencyType) != finance.CurrencyPEN {
 			return onlineOrder, sale, core.Err(fmt.Sprintf(`El pedido está en soles pero la caja "%v" no.`, cashBank.Name))
 		}
-		collectedAmount, sale.DebtAmount = sale.DebtAmount, 0
-		if err := sale.AddStatus(types.OrderStatusPaid); err != nil {
-			return onlineOrder, sale, err
-		}
 		sale.LastPaymentCajaID = settleRequest.CashBankID
-		sale.LastPaymentTime, sale.LastPaymentUser = nowTime, req.User.ID
-	}
-	isSameDayCollection := isPayment && finance.IsSameDaySettlement(sale.Date, sale.TotalAmount, 0, today, collectedAmount)
-	if isSameDayCollection {
-		sale.SameDayCashBankID = sale.LastPaymentCajaID
 	}
 	// The order's units stay reserved on its PendingWarehouseID until the delivery. A sale that is
 	// only paid takes that warehouse as its own, so its later delivery or annulment (PostSaleOrder,
 	// PostSaleOrderAnnul) releases them from there.
-	pendingDeliveryChanges := []logistics.PendingDeliveryChange{}
 	sale.WarehouseID = onlineOrder.PendingWarehouseID
 	if isDelivery {
 		if settleRequest.WarehouseID <= 0 {
 			return onlineOrder, sale, core.Err("Se requiere el almacén de la entrega.")
 		}
 		sale.WarehouseID = settleRequest.WarehouseID
-		pendingDeliveryChanges = types.PendingDeliveryChanges(onlineOrder.Lines, onlineOrder.PendingWarehouseID, true, -1)
-		// An early check before the number is minted; the movements re-check under their row locks.
-		if err := validateSaleStock(req, sale, true); err != nil {
-			return onlineOrder, sale, err
-		}
-		if err := sale.AddStatus(types.OrderStatusDelivered); err != nil {
-			return onlineOrder, sale, err
-		}
-		sale.DeliveryTime, sale.DeliveryUser = nowTime, req.User.ID
 	}
-	sale.StampPeriod()
 
-	// Mint the sale's id. With flag 12 it is the next boleta of the "Usar en Tienda Web" series and the
-	// boleta is issued now; without it the sale names no comprobante (series 0).
-	var document *invoicing.InvoiceDocument
+	// With flag 12 the sale is the next boleta of the "Usar en Tienda Web" series and the boleta is
+	// issued now; without it the sale names no comprobante (series 0).
+	var receiptSeries *invoicing.InvoiceSeries
 	if core.HasCompanyFlag(companyConfig.Company.Flags, types.CompanyFlagWebReceiptAutomatic) {
-		receiptSeries := invoicing.FindWebStoreSeries(companyConfig.Sunat.Series)
-		if receiptSeries == nil {
+		if receiptSeries = invoicing.FindWebStoreSeries(companyConfig.Sunat.Series); receiptSeries == nil {
 			return onlineOrder, sale, core.Err(`La tienda no tiene una serie de boleta marcada "Usar en Tienda Web".`)
 		}
-		if document, err = invoicing.PrepareDocumentForSale(companyID, req.User.ID, &sale, receiptSeries, saleProducts); err != nil {
-			return onlineOrder, sale, core.Err("No se pudo generar la boleta del pedido:", err)
-		}
-	} else if sale.ID, err = types.MakeSaleOrderID(companyID, 0); err != nil {
-		return onlineOrder, sale, core.Err("Error al obtener el ID de la venta:", err)
 	}
 
-	cashMovements := []finance.InternalCashMovement{}
-	if collectedAmount > 0 {
-		cashMovements = append(cashMovements, finance.InternalCashMovement{
-			CashBankID: sale.LastPaymentCajaID, DocumentID: sale.ID, Date: today,
-			Type: finance.CashMovementTypeSaleCollection, CounterAccountCode: finance.PCGEReceivable,
-			Amount: collectedAmount, SameDayMovement: int8(core.If(isSameDayCollection, 1, 0)),
-		})
+	prepared, err := saleissue.PrepareNewSale(req, saleissue.NewSaleRequest{
+		Sale: sale, Products: saleProducts, IssueSeries: receiptSeries,
+		ReservedWarehouseID: onlineOrder.PendingWarehouseID, IsOnlineReservation: true,
+	})
+	if err != nil {
+		return onlineOrder, sale, err
 	}
-	stockMovements := []logistics.InternalMovement{}
-	if isDelivery {
-		stockMovements = saleDeliveryMovements(&sale)
-	}
+	sale = prepared.Sale
 
 	err = db.RunTransaction(func(transaction *db.Transaction) error {
 		lockedOrder, err := lockOnlineSaleOrderRowIn(transaction, companyID, onlineOrder.ID)
@@ -329,32 +300,13 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 		if err := requireUnsettledOnlineSaleOrder(&lockedOrder); err != nil {
 			return err
 		}
-		if err := db.InsertIn(transaction, &[]types.SaleOrder{sale}); err != nil {
-			return core.Err("Error al registrar la venta del pedido:", err)
-		}
-		if document != nil {
-			if err := invoicing.SaveNewDocument(transaction, document); err != nil {
-				return core.Err("No se pudo guardar la boleta del pedido:", err)
-			}
-		}
-		if err := finance.ApplyCashBankMovementIn(transaction, req, cashMovements); err != nil {
-			return core.Err("Error al registrar el cobro:", err)
-		}
-		if len(stockMovements) > 0 {
-			if err := logistics.ApplyMovimientosIn(transaction, req, stockMovements); err != nil {
-				return core.Err("Error al procesar la salida de almacén:", err)
-			}
-		}
-		if err := logistics.ApplyPendingDeliveryIn(transaction, companyID, req.User.ID, pendingDeliveryChanges); err != nil {
-			return err
-		}
-		if err := applyClientWeekSaleChangesIn(transaction, companyID, types.ClientWeekSaleChanges(nil, &sale)); err != nil {
+		if err := saleissue.WriteNewSaleIn(transaction, req, &prepared); err != nil {
 			return err
 		}
 
 		lockedOrder.SaleOrderID, lockedOrder.Status, lockedOrder.DebtAmount = sale.ID, sale.Status, sale.DebtAmount
 		lockedOrder.CulqiChargeID = core.If(culqiChargeID != "", culqiChargeID, lockedOrder.CulqiChargeID)
-		lockedOrder.Updated, lockedOrder.UpdatedBy = nowTime, req.User.ID
+		lockedOrder.Updated, lockedOrder.UpdatedBy = sale.Updated, req.User.ID
 		onlineOrder = lockedOrder
 		orderTable := db.TableOf[types.OnlineSaleOrder]()
 		if err := db.UpdateIn(transaction, &[]types.OnlineSaleOrder{lockedOrder}, orderTable.SaleOrderID,
@@ -367,9 +319,7 @@ func settleOnlineSaleOrder(req *core.HandlerArgs, settleRequest onlineSaleOrderS
 		return onlineOrder, sale, err
 	}
 	core.Log("settleOnlineSaleOrder:: pedido", onlineOrder.ID, "-> venta", sale.ID, "acciones", settleRequest.ActionsIncluded)
-	if document != nil {
-		invoicing.ScheduleEmitPendingSweep(companyID)
-	}
+	saleissue.ScheduleNewSaleDocument(&prepared)
 	return onlineOrder, sale, nil
 }
 
@@ -393,7 +343,7 @@ func annulOnlineSaleOrder(companyID, onlineOrderID int32, reason string, userID 
 			return err
 		}
 		lockedOrder.Status = types.OrderStatusAnnulled
-		lockedOrder.AnnulReason = core.If(len(reason) > types.MaxAnnulReasonLength, reason[:types.MaxAnnulReasonLength], reason)
+		lockedOrder.AnnulReason = reason
 		lockedOrder.Updated, lockedOrder.UpdatedBy = core.SUnixTime(), userID
 		annulledOrder = lockedOrder
 		orderTable := db.TableOf[types.OnlineSaleOrder]()

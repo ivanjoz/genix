@@ -72,10 +72,10 @@ func GetProductTextSearch(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &matches)
 }
 
+// GetProductsByIDs answers the admin app's by-IDs cache with every column of the user's company,
+// the recipe and the accounting fields included.
 func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
-	// Public route (p- prefix): no token is parsed, so the company comes from the query the app and the
-	// storefront both append (?company-id=). Either is fine: the catalog is public.
-	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id")))
+	cachedIDsRequest, err := req.GetCachedIDsRequest(req.User.CompanyID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -84,6 +84,42 @@ func GetProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los productos.", err)
 	}
 	return req.MakeResponse(core.HideCachedPartitions(partitions))
+}
+
+// GetPublicProductsByIDs answers the storefront's by-IDs cache. It is public (p- prefix): no token is
+// parsed, so the company comes from the query, and each record is cut down to what a shopper may see.
+func GetPublicProductsByIDs(req *core.HandlerArgs) core.HandlerResponse {
+	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id")))
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	partitions, err := db.QueryCachedIDs[types.Product](cachedIDsRequest)
+	if err != nil {
+		return req.MakeErr("Error al obtener los productos.", err)
+	}
+	for partitionIndex := range partitions {
+		for recordIndex, product := range partitions[partitionIndex].Records {
+			partitions[partitionIndex].Records[recordIndex] = publicProductFields(product)
+		}
+	}
+	return req.MakeResponse(core.HideCachedPartitions(partitions))
+}
+
+// publicProductFields is the product as anyone who knows a company id may read it: the catalog a
+// shopper sees. The recipe, its cost, the accounting fields, the overselling margin and the audit
+// fields stay private. A new Product field is private until it is added here, and
+// TestPublicProductFieldsClassifyEveryField fails until it is classified.
+func publicProductFields(product types.Product) types.Product {
+	return types.Product{
+		ID: product.ID, Name: product.Name, Description: product.Description,
+		CategoryIDs: product.CategoryIDs, BrandID: product.BrandID,
+		Price: product.Price, Discount: product.Discount, FinalPrice: product.FinalPrice, CurrencyID: product.CurrencyID,
+		SbuQuantity: product.SbuQuantity, SbuUnit: product.SbuUnit, SbuPrice: product.SbuPrice,
+		SbuDiscount: product.SbuDiscount, SbuFinalPrice: product.SbuFinalPrice,
+		Presentations: product.Presentations,
+		ImageMain:     product.ImageMain, ImageIDs: product.ImageIDs, ImageDescriptions: product.ImageDescriptions,
+		Status: product.Status, Updated: product.Updated,
+	}
 }
 
 // ProductDetail is what the web store's product detail layer adds to the catalog record it already
@@ -172,6 +208,9 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 	for i := range productos {
 		productos[i].BrandName = brandNamesByID[productos[i].BrandID]
 	}
+	if err := validateProductsProduction(req.User.CompanyID, productos); err != nil {
+		return req.MakeErr(err)
+	}
 
 	// The company row is locked first, so name uniqueness is checked against every committed save,
 	// then the edited rows: the stored columns this form does not own (stock, images, creation) are
@@ -222,6 +261,9 @@ func saveProductsIn(transaction *db.Transaction, req *core.HandlerArgs, producto
 	if err := validateProductSubUnitDivisors(productos, storedByID); err != nil {
 		return err
 	}
+	if err := validateProductOriginChanges(req.User.CompanyID, productos, storedByID); err != nil {
+		return err
+	}
 
 	newProducts := []types.Product{}
 	newProductIndexes := []int{}
@@ -231,7 +273,10 @@ func saveProductsIn(transaction *db.Transaction, req *core.HandlerArgs, producto
 		current.CompanyID = req.User.CompanyID
 		current.Updated = nowTime
 		current.UpdatedBy = req.User.ID
-		if current.ID == 0 {
+		// The form sends a new product with a negative temporary ID (kept in TempID); the insert
+		// assigns the real one.
+		if current.ID <= 0 {
+			current.ID = 0
 			current.Created = nowTime
 			current.CreatedBy = req.User.ID
 			current.NameUpdated = nowTime
@@ -308,7 +353,7 @@ func resolveProductNames(companyID int32, productos []types.Product) error {
 				return core.Err(fmt.Sprintf(`Ya existe un producto activo con el nombre "%s". ID=%v`, currentProduct.Name, candidate.ID))
 			}
 		}
-		if currentProduct.ID == 0 {
+		if currentProduct.ID <= 0 {
 			for _, candidate := range existingProducts {
 				if candidate.Status == 0 {
 					currentProduct.ID = candidate.ID
@@ -410,6 +455,41 @@ func validateSubUnitDivisorRange(product *types.Product) error {
 		return core.Err(fmt.Sprintf(
 			`Producto "%s": se definió una sub-unidad (divisor %v) sin nombre de sub-unidad.`,
 			product.Name, product.SbuQuantity))
+	}
+	return nil
+}
+
+// validateProductsProduction checks every recipe of the payload against the company's supplies
+// (docs/PRODUCTION_PLAN.md §2.2): it reads the supplies the recipes name, once for the whole batch.
+func validateProductsProduction(companyID int32, productos []types.Product) error {
+	supplyIDs := core.SliceSet[int32]{}
+	for _, product := range productos {
+		for _, recipeSupply := range product.ProductionSupplies {
+			supplyIDs.AddIf(recipeSupply.SupplyID)
+		}
+	}
+	suppliesByID := map[int32]types.Product{}
+	if !supplyIDs.IsEmpty() {
+		supplies := []types.Product{}
+		query := db.Query(&supplies)
+		query.Select(query.ID, query.Name, query.Status, query.SbuQuantity, query.AccountCode).
+			CompanyID.Equals(companyID).
+			ID.In(supplyIDs.Values...)
+		if err := query.Exec(); err != nil {
+			return core.Err("Error al obtener los insumos de la receta:", err)
+		}
+		for _, supply := range supplies {
+			suppliesByID[supply.ID] = supply
+		}
+	}
+	for i := range productos {
+		// A deleted product's recipe no longer runs: a supply deactivated since must not block the delete.
+		if productos[i].Status == 0 {
+			continue
+		}
+		if err := types.ValidateProductProduction(&productos[i], suppliesByID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

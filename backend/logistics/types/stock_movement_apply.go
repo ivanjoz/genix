@@ -190,12 +190,20 @@ func ApplyMovimientos(req *core.HandlerArgs, movimientos []InternalMovement) err
 // whether the movements fit. Everything it writes derives from what it reads in the transaction, and
 // it never mutates movimientos, so a rerun of the caller's body (deadlock, duplicate key) runs it cleanly.
 func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movimientos []InternalMovement) error {
+	_, err := ApplyMovimientosWithLedgerIn(transaction, req, movimientos)
+	return err
+}
+
+// ApplyMovimientosWithLedgerIn is ApplyMovimientosIn answering the ledger rows it wrote, each with the
+// MonetaryValue the engine stamped: one per movement, in order, after the no-ops (a zero delta) drop
+// and a transfer expands into its two legs. The production close values its products from them.
+func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.HandlerArgs, movimientos []InternalMovement) ([]WarehouseProductMovement, error) {
 	companyID := req.User.CompanyID
 	userID := req.User.ID
 
 	movimientos, err := expandStockTransfers(movimientos)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Filter out no-ops and validate lot/supplier prerequisites in one pass.
@@ -207,15 +215,18 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 			continue
 		}
 		if mov.WarehouseID == 0 || mov.ProductID == 0 {
-			return core.Err("Movimiento inválido: falta WarehouseID o ProductID.")
+			return nil, core.Err("Movimiento inválido: falta WarehouseID o ProductID.")
 		}
 		// The writer always names the type; the engine never guesses it from the sign.
 		if err := validateStockMovementDocument(mov.Type, mov.DocumentID); err != nil {
-			return err
+			return nil, err
+		}
+		if err := validateStockMovementDate(mov.Type, mov.Date); err != nil {
+			return nil, err
 		}
 		// Outbound (Quantity < 0) must ship a resolved LotID; name-based lookup is inbound-only.
 		if mov.LotID == 0 && mov.LotName != "" && mov.Quantity < 0 {
-			return core.Err(fmt.Sprintf("Movimiento con Lote %q sin LotID para salida (product %v, almacén %v).",
+			return nil, core.Err(fmt.Sprintf("Movimiento con Lote %q sin LotID para salida (product %v, almacén %v).",
 				mov.LotName, mov.ProductID, mov.WarehouseID))
 		}
 		// SupplierID == 0 is allowed for manual stock-adjustment lots; the lot's unique key
@@ -223,12 +234,12 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		activeMovements = append(activeMovements, mov)
 	}
 	if len(activeMovements) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// Resolve missing LotIDs for inbound lot-by-name movements.
 	if err := resolveLotIDsForMovements(transaction, req, activeMovements, core.FechaUnix()); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Compute V2 packed IDs per movement and bucket them for preload.
@@ -245,7 +256,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		}
 		movementDivisor, err := movementDivisorOf(mov)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		divisorByMovement[i] = movementDivisor
 	}
@@ -260,7 +271,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		lockedStocks = append(lockedStocks, ProductStock{CompanyID: companyID, ID: stockID})
 	}
 	if err := db.LockByKeys(transaction, &lockedStocks); err != nil {
-		return core.Err("Error al obtener stock V2 previo:", err)
+		return nil, core.Err("Error al obtener stock V2 previo:", err)
 	}
 	for i := range lockedStocks {
 		stockByID[lockedStocks[i].ID] = &lockedStocks[i]
@@ -283,7 +294,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 			CompanyID.Equals(companyID).
 			ProductStockID.In(stockIDsWithDetails.Values...)
 		if err := q.Exec(); err != nil {
-			return core.Err("Error al obtener detalle de stock previo:", err)
+			return nil, core.Err("Error al obtener detalle de stock previo:", err)
 		}
 		for i := range existing {
 			row := &existing[i]
@@ -335,7 +346,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 				CompanyID.Equals(companyID).
 				ProductStockID.In(missingDetailStockIDs.Values...)
 			if err := q.Exec(); err != nil {
-				return core.Err("Error al obtener detalle de stock para refinar el divisor:", err)
+				return nil, core.Err("Error al obtener detalle de stock para refinar el divisor:", err)
 			}
 			for i := range existing {
 				row := &existing[i]
@@ -352,7 +363,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		for stockID, targetDivisor := range refinementTargetByStockID {
 			if err := refineStockDivisor(stockByID[stockID], detailsByStockID[stockID],
 				targetDivisor, updatedTime, userID); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
@@ -392,7 +403,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		if divisorByMovement[i] != effectiveDivisor {
 			converted, convertErr := movementQuantity.ConvertToDivisor(divisorByMovement[i], effectiveDivisor)
 			if convertErr != nil {
-				return core.Err(fmt.Sprintf(
+				return nil, core.Err(fmt.Sprintf(
 					"Movimiento incompatible con el divisor del stock (producto %v, almacén %v, divisor stock %v, divisor movimiento %v).",
 					mov.ProductID, mov.WarehouseID, effectiveDivisor, divisorByMovement[i]))
 			}
@@ -414,10 +425,10 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 			SerialNumber:   mov.SerialNumber,
 			LotID:          mov.LotID,
 			SubDivisor:     effectiveDivisor,
-			Date:           dateUnix,
+			Date:           core.Coalesce(mov.Date, dateUnix),
 			Created:        updatedTime,
 			CreatedBy:      userID,
-			Period:         core.PeriodOfDay(dateUnix),
+			Period:         core.PeriodOfDay(core.Coalesce(mov.Date, dateUnix)),
 			// What a reception posts to, stamped so the accounting operations never read the purchase.
 			PurchaseAccountCode: mov.PurchaseAccountCode,
 		}
@@ -479,7 +490,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		}
 		isInflow := !delta.IsNegative(effectiveDivisor)
 		if err := validateStockMovementDirection(mov.Type, isInflow, mov.ProductID); err != nil {
-			return err
+			return nil, err
 		}
 		movement.Type = mov.Type
 		movement.WarehouseRefID = mov.transferPeerWarehouseID
@@ -503,19 +514,19 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		}
 
 		if isInflow && mov.RejectInbound {
-			return core.Err(fmt.Sprintf(
+			return nil, core.Err(fmt.Sprintf(
 				"El producto %v no puede aumentar su stock con un movimiento manual: la empresa sólo permite ingresos por orden de compra.",
 				mov.ProductID))
 		}
 		if isInflow && mov.RequireInboundCost && mov.Price <= 0 {
-			return core.Err(fmt.Sprintf(
+			return nil, core.Err(fmt.Sprintf(
 				"El producto %v necesita el costo de compra del stock que ingresa.", mov.ProductID))
 		}
 		// Stock is never let in without a value: with no exact value and no Price, an inflow is
 		// valued at the row's average, so a row that has none cannot take one. This holds for every
 		// document, not only manual adjustments; a transfer of uncosted stock is refused here too.
 		if isInflow && mov.InflowValue <= 0 && mov.Price <= 0 && stock.AverageCost <= 0 {
-			return core.Err(fmt.Sprintf(
+			return nil, core.Err(fmt.Sprintf(
 				"El producto %v no tiene costo unitario consolidado: el stock que ingresa necesita su costo unitario.",
 				mov.ProductID))
 		}
@@ -533,7 +544,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 				unitPrice := core.If(mov.Price > 0, mov.Price, stock.AverageCost)
 				var valueErr error
 				if lineValue, valueErr = core.QuantityValueAtUnitPrice(delta, effectiveDivisor, unitPrice); valueErr != nil {
-					return valueErr
+					return nil, valueErr
 				}
 			}
 			movement.MonetaryValue = lineValue
@@ -585,7 +596,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 		freeBucket := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
 		detailBucket := core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity}
 		if freeBucket.IsNegative(stockDivisor) || detailBucket.IsNegative(stockDivisor) {
-			return core.Err(fmt.Sprintf(
+			return nil, core.Err(fmt.Sprintf(
 				"Stock resultante negativo: almacén %v producto %v presentación %v "+
 					"(Quantity=%v SubQuantity=%v DetailQuantity=%v DetailSubQuantity=%v divisor=%v).",
 				stock.WarehouseID, stock.ProductID, stock.PresentationID,
@@ -607,7 +618,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 			detailDivisor = stockDivisorOf(parentStock)
 		}
 		if (core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}).IsNegative(detailDivisor) {
-			return core.Err(fmt.Sprintf(
+			return nil, core.Err(fmt.Sprintf(
 				"Detalle de stock negativo: stockID %v lotID %v serial %q (Quantity=%v SubQuantity=%v divisor=%v).",
 				detail.ProductStockID, detail.LotID, detail.SerialNumber,
 				detail.Quantity, detail.SubQuantity, detailDivisor))
@@ -621,7 +632,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 	// One transaction runs on one connection, so the writes go one after the other.
 	if len(newStocks) > 0 {
 		if err := db.InsertIn(transaction, &newStocks); err != nil {
-			return core.Err("Error al crear stock V2:", err)
+			return nil, core.Err("Error al crear stock V2:", err)
 		}
 	}
 	if len(lockedStocksToUpdate) > 0 {
@@ -637,7 +648,7 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 			stockTable.AverageCost, stockTable.StockValue,
 			stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
 		); err != nil {
-			return core.Err("Error al guardar stock V2:", err)
+			return nil, core.Err("Error al guardar stock V2:", err)
 		}
 	}
 	if len(details) > 0 {
@@ -651,13 +662,13 @@ func ApplyMovimientosIn(transaction *db.Transaction, req *core.HandlerArgs, movi
 				detailTable.Updated, detailTable.UpdatedBy, detailTable.Status,
 			),
 		); err != nil {
-			return core.Err("Error al guardar detalle de stock:", err)
+			return nil, core.Err("Error al guardar detalle de stock:", err)
 		}
 	}
 	if err := db.UpsertIn(transaction, &warehouseMovements); err != nil {
-		return core.Err("Error al guardar los movimientos:", err)
+		return nil, core.Err("Error al guardar los movimientos:", err)
 	}
-	return nil
+	return warehouseMovements, nil
 }
 
 // resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements that only carry a

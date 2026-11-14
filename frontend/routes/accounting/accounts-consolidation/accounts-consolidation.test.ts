@@ -129,6 +129,18 @@ describe('sales', () => {
     expect(operation.InOfficialBook).toBe(false)
     expect(entryOf(operation)).toEqual(["1212:590/0", "7012:0/500", "40111:0/90"])
   })
+
+  it('flags a sale whose made products wait for the production close as incomplete', () => {
+    const operation = onlyOperation(makeResponse({
+      SalesDocuments: [makeInvoice()],
+      Sales: [{
+        ID: SALE_ID, Date: DAY, ss: 4, CurrencyType: 1, ExchangeRate: 0, TotalAmount: 11800, TaxAmount: 1800,
+        Lines: [{ ProductID: MADE_PRODUCT, Amount: 11800 }], PendingStockMovement: 1,
+      }],
+    }))
+    expect(operation.Status).toBe(OPERATION_STATUS_INCOMPLETE)
+    expect(operation.Problem).toContain('por regularizar')
+  })
 })
 
 describe('purchases', () => {
@@ -212,6 +224,52 @@ describe('cost of sales', () => {
   it('flags a delivery that left with no cost', () => {
     const operation = onlyOperation(makeResponse({ StockMovements: [makeSaleMovement(8, BOUGHT_PRODUCT, 0)] }))
     expect(operation.Status).toBe(OPERATION_STATUS_INCOMPLETE)
+  })
+})
+
+describe('production close', () => {
+  const CLOSE_ID = 129
+  const AUXILIARY_SUPPLY = 44 // account 6031 → stock 251, variation 6131
+  const STANDARD_COST_PRODUCT = 45
+  const makeCloseMovement = (Type: number, ProductID: number, MonetaryValue: number) =>
+    ({ ID: Type * 1000 + ProductID, Date: DAY, Type, DocumentID: CLOSE_ID, ProductID, MonetaryValue })
+  const products = [
+    ...makeResponse().Products,
+    { ID: AUXILIARY_SUPPLY, ss: 2, Origin: 0, AccountCode: 6031 },
+    { ID: STANDARD_COST_PRODUCT, ss: 1, Origin: 2, AccountCode: 0 },
+  ]
+
+  it('consumes each supply into its variation and enters the products as stored production', () => {
+    const operation = onlyOperation(makeResponse({
+      Products: products,
+      StockMovements: [
+        makeCloseMovement(15, SUPPLY, 750),
+        makeCloseMovement(15, AUXILIARY_SUPPLY, 250),
+        // The recipe product at its supplies (1000) plus extra cost; the other at its standard cost.
+        makeCloseMovement(16, MADE_PRODUCT, 1100),
+        makeCloseMovement(16, STANDARD_COST_PRODUCT, 600),
+      ],
+    }))
+    expect(operation.Key).toBe(`PR-${CLOSE_ID}-${DAY}`)
+    expect(entryOf(operation)).toEqual([
+      "6132:750/0", "252:0/750", "6131:250/0", "251:0/250", "2111:1700/0", "7111:0/1700",
+    ])
+    expect(operation.InOfficialBook).toBe(true)
+    expect(operation.Status).toBe(OPERATION_STATUS_CLASSIFIED)
+  })
+
+  it('flags a consumed supply whose account has no stock account', () => {
+    const operation = onlyOperation(makeResponse({
+      Products: [...products, { ID: 46, ss: 2, Origin: 0, AccountCode: 656 }],
+      StockMovements: [makeCloseMovement(15, 46, 300), makeCloseMovement(16, MADE_PRODUCT, 300)],
+    }))
+    expect(operation.Status).toBe(OPERATION_STATUS_INCOMPLETE)
+  })
+
+  it('shows a movement type no entry handles instead of skipping it', () => {
+    const operation = onlyOperation(makeResponse({ StockMovements: [makeSaleMovement(13, BOUGHT_PRODUCT, 500)] }))
+    expect(operation.Status).toBe(OPERATION_STATUS_INCOMPLETE)
+    expect(operation.Problem).toContain("13")
   })
 })
 

@@ -2,15 +2,15 @@ package types
 
 import "testing"
 
-// The layout is [correlativo][rand:2][series:2]. SeriesID reads the tail, and the
-// invoicing module builds a document id by replacing exactly those two digits —
+// The layout is [correlativo][series:2]. SeriesID reads the tail, and the
+// invoicing module builds a document id from exactly those two digits —
 // so if this drifts, documents stop pointing at their series.
 func TestSeriesIDReadsTheTailOfTheID(t *testing.T) {
 	cases := map[int64]int8{
-		550342: 42,
-		550300: 0,
-		550399: 99,
-		1:      1,
+		5542: 42,
+		5500: 0,
+		5599: 99,
+		1:    1,
 	}
 	for saleOrderID, seriesID := range cases {
 		sale := SaleOrder{ID: saleOrderID}
@@ -29,13 +29,13 @@ func TestMakeSaleOrderIDRejectsAnImpossibleSeries(t *testing.T) {
 }
 
 // The id carries the correlativo of the series, so reading it back is what lets a
-// sale name its own comprobante — 1301102 is F001-130 — with nothing to look up.
+// sale name its own comprobante — 13002 is F001-130 — with nothing to look up.
 func TestCorrelativoIsTheHeadOfTheID(t *testing.T) {
 	cases := map[int64]int64{
-		1301102: 130,
-		20701:   2,
-		10002:   1,
-		102:     0, // a legacy id from before the layout: no correlativo in it
+		13002: 130,
+		201:   2,
+		102:   1,
+		10000: 100, // series 0: the sale that names no comprobante
 	}
 	for saleOrderID, correlativo := range cases {
 		sale := SaleOrder{ID: saleOrderID}

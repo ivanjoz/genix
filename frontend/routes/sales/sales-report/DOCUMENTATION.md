@@ -19,7 +19,8 @@ description_es: >-
 <!-- DOC-ID: page-purpose -->
 ## Page purpose
 
-Sales Report (`Reporte Ventas`) at **Commercial (Comercial) → Sales Report** is a read-only
+Sales Report (`Reporte Ventas`) at **Commercial (Comercial) → Reports (Reportes) → Sales Report**
+is a read-only
 query tool over already-created sale orders (`órdenes de venta`, `pedidos`). It answers "what
 did we sell, to whom, and for how much" over a chosen date window, without letting the user
 create, edit, pay, or deliver an order from here. Nothing loads automatically when the page
@@ -43,7 +44,12 @@ This page does not register payments (`pagos`) or deliveries (`entregas`) — th
   only way to include them, and it also includes every other status.
 - The **Delivered/Paid (Entregado/Pagado)** column shows two independent letter markers per row:
   a green **P** lights up once the order has been paid (status 2 or 4), and a blue **E** lights
-  up once it has been delivered (status 3 or 4). Both can be lit at once.
+  up once it has been delivered (status 3 or 4). Both can be lit at once. A yellow **R** next to
+  them marks a delivered order with stock to regularize (`stock por regularizar`): a made
+  product's line was delivered without leaving the warehouse and its units are still reserved.
+  Such orders are listed on **Sales Management (Gestión Ventas)**, tab **Por regularizar**, and
+  the **R** goes away once the **Cierre del día** (Operaciones → Producción) of the order's day
+  settles it; this report has no filter for them.
 - **Top Products (Top Productos)** ranks the up-to-three highest-value products inside one
   order (unit price × quantity, ties broken by product ID) and shows quantity and line amount for
   each; a "(N more...)" note appears on mobile when an order has more than three distinct
@@ -67,13 +73,14 @@ click and the summary strip above the table always reflects the current filter v
 
 ### Required information and prerequisites (Requisitos previos)
 
-- **Start Date** and **End Date** are required; the page pre-fills them to the last 7 days
-  (today and 6 days back) the first time it renders, but nothing is queried until the user
-  presses **Buscar**.
+- **Start Date** and **End Date** are required; the page pre-fills them to today and the 7
+  previous days the first time it renders, but nothing is queried until the user presses
+  **Buscar**.
 - **Client**, **Product**, and **Status** are optional and default to "all" (`0`/`Todos`).
   The client selector searches by name and registry number (`RUC`/`Nº Documento`) together and
-  only lists clients that are currently active; the product selector lists every cached product
-  regardless of its own active/inactive status.
+  only lists clients that are currently active; the product selector lists the active products of
+  the catalog, both merchandise (`Mercaderías`) and made products (`Productos`), so a deleted
+  product cannot be picked.
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
@@ -217,50 +224,58 @@ hash_algorithm: sha256
 files:
   - path: frontend/routes/sales/sales-report/+page.svelte
     role: page
-    hash: sha256:fef5330fa9857404fd28f0c6840b6cb2f00e85fe5b3f2fe7c3a54a9878b3498b
+    hash: sha256:11730fc3175f7c03eb1c23219d956017f73306543c89bac041c732d269684e09
     supports: [page-purpose, concepts, capability.run-report, capability.review-results]
   - path: frontend/routes/sales/sales-report/sale_order_report.svelte.ts
     role: frontend-service
-    hash: sha256:b0c03f8c5ac54e2a8119cf66a180841dd926dba73bc7685e13ffe7ba280831d2
+    hash: sha256:1f7944f0311881f7919330fad596effe5cd229760bc96cfc9a45bdc60787c9bf
     supports: [concepts, capability.run-report, troubleshooting]
   - path: frontend/routes/sales/SaleOrdersTable.svelte
     role: user-interface
-    hash: sha256:187483386db7e604710e8893046b160bc0d523d81540137b0e3c482733466b1f
+    hash: sha256:89ef978523309136bf2c2723b87cf573d5af1368deb0409d554af1237635524d
     supports: [concepts, capability.review-results, related-pages]
-  - path: frontend/core/modules.ts
+  - path: db/modules.toml
     role: user-interface
-    hash: sha256:5823f8cd8df9d03acf80c3fecb539fb069743f5fb330cba0a78a7957ab01c5aa
+    hash: sha256:5a3d155bbfba4f64f354128cffe53681ec1aafea737b938eda92ac617e96ad8e
+    supports: [page-purpose, related-pages]
+  - path: db/pages.toml
+    role: user-interface
+    hash: sha256:b24f34c0d3b49569042179932e2253d182eac810604780ce33c5c35f405594df
     supports: [page-purpose, related-pages]
   - path: frontend/packages/genix-ui/cache/group-cache.fetch.ts
     role: frontend-service
-    hash: sha256:c018a9646819280b1dcba31a2e7d97f050820b333fcd3c113be8fa145f505cf9
+    hash: sha256:f554342326418550cd2ea6b966b394f1c4e364bcceb83ccd0bb12e5e85cb149a
     supports: [capability.run-report]
   - path: frontend/services/crm/client-provider.svelte.ts
     role: shared-domain
-    hash: sha256:d42d73f9ef8b3ecd5e7fec9e83cbb2e5cddf8d276c4ac6c37c6babdb1d5081d3
+    hash: sha256:c5e9ebda6bd1ffdd648ae0da72fb7601669b5600671bc4d978001f193a26ded1
     supports: [capability.run-report]
   - path: frontend/services/production/products.svelte.ts
     role: shared-domain
-    hash: sha256:77bb3c75bd2663b000da54b9e84385f92c2a09dcc20b44234899388f51cc49d6
+    hash: sha256:a9062aa9f32d78a70bf0c246eba4e71bd01ed10525aee8397173245ee055fc4e
     supports: [capability.run-report]
   - path: backend/sales/sale_order_query.go
     role: backend-handler
-    hash: sha256:fdf3a3095fe94d28b9edc94d099c2b0cbad94a3ee6eeabf87876ad226e70fdd4
+    hash: sha256:46f0584bc4152c7288390c76a1cff282032e2bd40e688f6f6a46c12fd5d06a39
     supports: [capability.run-report, rules, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model
-    hash: sha256:937666309631867c1693fd6935a17e43f2f68eed0d39577537248dae75fa6cbc
+    hash: sha256:3814c0a52410ab92d7a5e9ee87ee07f90c74815d15678e7391816183b64598c2
     supports: [concepts, capability.run-report, rules]
   - path: backend/access.toml
     role: permissions
-    hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
+    hash: sha256:13cf69cb3ababb813c4c1162c885b9bae2f990df17832ff9022ffa532f321424
     supports: [rules]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
+    hash: sha256:1bd2e155288087b17a182d14db2336d66471e11a1d9e22204e6eafbb4071db55
     supports: [rules]
   - path: backend/core/usuario-accesos.go
     role: permissions
-    hash: sha256:78cd42453bc7e37d54867ffef85881f091554059141607ba164e4bb163bfde2a
+    hash: sha256:59c5212c31c0a565a216d8506593af3c333462fbb18e42cc38146df7377b3d3b
     supports: [rules]
+  - path: backend/production/daily_close.go
+    role: business-logic
+    hash: sha256:616131e7a7cb2a0e55f043e5ffdb96f3dfd95b15871b5e57c8c243135d1ca974
+    supports: [concepts]
 ```

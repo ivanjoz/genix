@@ -176,6 +176,9 @@ const mesesMap = new Map([
   ['12', { es: 'DIC', en: 'DEC' }],
 ])
 
+// The current time as the backend's SUnixTime: (unix seconds - 1e9) / 2, in 2-second ticks.
+export const nowSUnixTime = (): number => Math.floor((Date.now() / 1000 - 1e9) / 2)
+
 export const formatTime = (date: Date | number | string, layout?: string): (Date | string | null) => {
   let d: Date | undefined
 

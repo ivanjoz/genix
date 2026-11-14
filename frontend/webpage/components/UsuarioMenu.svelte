@@ -4,6 +4,8 @@
   import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
   import Input from '#components/form/Input.svelte';
   import Modal from '#components/layers/Modal.svelte';
+  import CardsDetailLayer from '#components/layers/CardsDetailLayer.svelte';
+  import WebOrderDetail from './WebOrderDetail.svelte';
   import { useUI } from '@genix/ui';
   import { notifyFailure, notifySuccess, showLoading, hideLoading } from '@genix/ui/notify';
   import { formatTime } from '#libs/helpers.ts';
@@ -14,12 +16,12 @@
   import {
     WebStore, loadWebStoreCompany, restoreWebCustomerSession, saveCustomerDraft, logoutWebCustomer,
     loginWebCustomer, requestWebCustomerCode, verifyWebCustomerCode, saveWebCustomerProfile,
-    saveWebCustomerPassword, saveWebCustomerAddress, getWebCustomerOrders, downloadWebOrderPDF,
-    type IWebOrder,
+    saveWebCustomerPassword, saveWebCustomerAddress, getWebCustomerOrders, type IWebOrder,
   } from "#ecommerce/services/web-store.svelte.ts";
   import {
-    DELIVERY_PICKUP, FLAG_REQUIRE_CONTACT_NUMBER, formatSoles, hasCompanyFlag, validateAddress,
-    validateCustomerDraft, webOrderStatusLabel, type IWebCustomerAddress,
+    DELIVERY_PICKUP, FLAG_REQUIRE_CONTACT_NUMBER, formatSoles, formatWebOrderNumber, hasCompanyFlag,
+    mostExpensiveOrderLines, validateAddress, validateCustomerDraft, webOrderPaymentLabel, webOrderProgress,
+    type IWebCustomerAddress, type WebOrderProgressKey,
   } from "#ecommerce/services/web-checkout.ts";
 
   export interface IProps {
@@ -51,6 +53,7 @@
   let orders = $state([] as IWebOrder[]);
   let productNames = $state({} as Record<number, string>);
   let ordersLoaded = $state(false);
+  let ordersLoading = $state(false);
 
   const isLoggedIn = $derived(!!WebStore.customer);
   // Tab ids are shared by both strips: 1 Login / Mi Cuenta, 2 Regístrate / Mis Pedidos.
@@ -88,10 +91,22 @@
   $effect(() => {
     if (!(isLoggedIn && selectedTab === 2 && !ordersLoaded)) { return }
     ordersLoaded = true;
+    ordersLoading = true;
     getWebCustomerOrders()
       .then((result) => { orders = result.Orders || []; productNames = result.ProductNames || {} })
-      .catch((error) => notifyFailure(error.message));
+      .catch((error) => notifyFailure(error.message))
+      .finally(() => { ordersLoading = false });
   });
+
+  // Mis Pedidos badge tint per progress step: neutral until the store acts, warm while it works on
+  // the order, blue on the way, green once delivered.
+  const progressBadgeClass: Record<WebOrderProgressKey, string> = {
+    annulled: "bg-red-50 text-red-700 border-red-200",
+    received: "bg-slate-100 text-slate-700 border-slate-200",
+    preparing: "bg-amber-50 text-amber-700 border-amber-200",
+    inTransit: "bg-blue-50 text-blue-700 border-blue-200",
+    delivered: "bg-green-50 text-green-700 border-green-200",
+  };
 
   const cityName = (cityID: number): string => {
     const district = cities.citiesMap?.get(cityID);
@@ -294,40 +309,92 @@
   </div>
 {/snippet}
 
+<!-- One icon + text pair of an order card. The flex box keeps the icon in its own slot: Font Awesome
+     glyphs are wider than tall (the truck is 1.23em), and inline they overlapped the next text. -->
+{#snippet orderInfoItem(icon: string, text: string, css: string)}
+  <span class="inline-flex items-center gap-6 {css}">
+    <i class="{icon} shrink-0 opacity-70"></i>{text}
+  </span>
+{/snippet}
+
+{#snippet ordersEmpty()}
+  <div class="flex flex-col items-center justify-center py-12 text-gray-400">
+    <i class="icon--supermarket-cart text-[48px] mb-4 opacity-20"></i>
+    <p>Aún no has realizado ningún pedido.</p>
+  </div>
+{/snippet}
+
+{#snippet orderDetail(order: IWebOrder)}
+  <WebOrderDetail {order} {productNames} {cityName} />
+{/snippet}
+
+<!-- Detail header: the order number with its date beside it. -->
+{#snippet orderDetailHeader(order: IWebOrder)}
+  <div class="flex flex-wrap items-baseline gap-x-12">
+    <span class="ff-bold text-[18px] text-gray-800">Pedido {formatWebOrderNumber(order.ID)}</span>
+    <span class="ff-mono text-[14px] text-gray-500">{formatTime(order.Date, 'd-M-Y')}</span>
+  </div>
+{/snippet}
+
+<!-- Fixed height so the tab keeps its size with 1 or 50 orders; the list scrolls inside, and a
+     clicked card opens its detail in a side layer within that same box. -->
 {#snippet ordersContent()}
-  {#if orders.length === 0}
-    <div class="flex flex-col items-center justify-center py-12 text-gray-400">
-      <i class="icon--supermarket-cart text-[48px] mb-4 opacity-20"></i>
-      <p>Aún no has realizado ningún pedido.</p>
+  {#if ordersLoading}
+    <!-- Same box as the list, so the tab keeps its size while the orders download. -->
+    <div class="flex flex-col items-center justify-center gap-8 h-[min(520px,75vh)] bg-gray-100 rounded-[10px] text-gray-400">
+      <i class="icon-[fa--spinner] animate-spin text-[32px]"></i>
+      <p>Cargando pedidos...</p>
     </div>
+  {:else}
+    <CardsDetailLayer items={orders} getKey={(order) => order.ID} card={orderCard} detail={orderDetail}
+      detailHeader={orderDetailHeader}
+      empty={ordersEmpty} css="h-[min(520px,75vh)] bg-gray-100 rounded-[10px]" openCss="outline-2 outline-[#45495c45]" />
   {/if}
-  <div class="flex flex-col gap-12">
-    {#each orders as order (order.ID)}
-      <div class="border border-gray-200 rounded-[10px] p-14">
-        <div class="flex flex-wrap justify-between gap-8">
-          <span class="ff-bold">Pedido N° {order.ID}</span>
-          <span class="text-gray-500">{formatTime(order.Date, 'd-M-Y')}</span>
-        </div>
-        <div class="flex flex-wrap gap-x-16 text-[14px] text-gray-600 mt-4">
-          <span class={order.ss === 0 ? "text-red-600" : order.ss === 1 ? "text-amber-600" : "text-green-700"}>
-            {webOrderStatusLabel(order.ss)}
-          </span>
-          <span>{order.DeliveryType === DELIVERY_PICKUP ? "Recojo en tienda" : "Entrega a domicilio"}</span>
-          <span class="ff-semibold">{formatSoles(order.TotalAmount)}</span>
-        </div>
-        <div class="mt-8 text-[14px]">
-          {#each order.Lines || [] as line}
-            <div>{unpackQuantityLine(line.Quantity).units} × {productNames[line.ProductID] || `Producto ${line.ProductID}`}</div>
-          {/each}
-        </div>
-        {#if order.ss === 1 && order.DebtAmount > 0}
-          <button class="mt-8 text-[#4c55d5] hover:underline cursor-pointer text-[14px]"
-            onclick={() => downloadWebOrderPDF(order.ID).catch((error) => notifyFailure(error.message))}>
-            <i class="icon-[fa--download] mr-4"></i>Orden de compra (PDF)
-          </button>
+{/snippet}
+
+{#snippet orderCard(order: IWebOrder, isSelected: boolean)}
+  {@const orderLines = order.Lines || []}
+  {@const progress = webOrderProgress(order)}
+  {@const paymentLabel = webOrderPaymentLabel(order.ss)}
+  {@const isPaid = order.ss === 2 || order.ss === 4}
+  <!-- Two columns: the order summary on the left (number + progress badge, date + total,
+       delivery + payment), its 3 most expensive lines on the right. Stacks on narrow screens. -->
+  <!-- White on the list's gray background; the open card is ringed instead of bordered. -->
+  <div class={["grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-10 rounded-[10px] p-14 bg-white shadow-sm",
+    isSelected ? "ring-1 ring-[#4c55d5]" : "hover:shadow-md"].join(" ")}>
+    <div class="flex flex-col gap-6 min-w-0">
+      <div class="flex flex-wrap items-center gap-x-10 gap-y-4">
+        <span class="ff-bold text-[17px] text-gray-800">Pedido {formatWebOrderNumber(order.ID)}</span>
+        <span class="px-10 py-2 rounded-full border text-[14px] ff-semibold {progressBadgeClass[progress.key]}">
+          {progress.label}
+        </span>
+      </div>
+      <!-- Row 2: when and how much. Row 3: how it is delivered and whether it is paid. -->
+      <div class="flex flex-wrap items-center gap-x-10 gap-y-4 text-[14px]">
+        {@render orderInfoItem("icon-[fa--calendar]", formatTime(order.Date, 'd-M-Y') as string, "ff-mono text-gray-500")}
+        <span class="w-5 h-5 rounded-full bg-gray-300"></span>
+        <span class="ff-bold text-gray-800">{formatSoles(order.TotalAmount)}</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-10 gap-y-4 text-[14px]">
+        {#if order.DeliveryType === DELIVERY_PICKUP}
+          {@render orderInfoItem("icon-[fa--shopping-bag]", "Recojo en tienda", "text-gray-600")}
+        {:else}
+          {@render orderInfoItem("icon-[fa--truck]", "Entrega a domicilio", "text-gray-600")}
+        {/if}
+        {#if paymentLabel}
+          <span class="w-5 h-5 rounded-full bg-gray-300"></span>
+          <span class="ff-semibold {isPaid ? 'text-green-700' : 'text-amber-700'}">{paymentLabel}</span>
         {/if}
       </div>
-    {/each}
+    </div>
+    <div class="min-w-0 text-[14px] text-gray-700 md:border-l md:border-gray-100 md:pl-20">
+      {#each mostExpensiveOrderLines(orderLines, 3) as line}
+        <div class="truncate">{unpackQuantityLine(line.Quantity).units} × {productNames[line.ProductID] || `Producto ${line.ProductID}`}</div>
+      {/each}
+      {#if orderLines.length > 3}
+        <div class="text-gray-500">(y {orderLines.length - 3} más...)</div>
+      {/if}
+    </div>
   </div>
 {/snippet}
 

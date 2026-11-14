@@ -47,12 +47,17 @@ type OperationSale struct {
 	SameDayCashBankID int32               `cb:"9"`
 	Version           int16               `json:"ver" cb:"ver,10"`
 	Metadata          *string             `json:"mdt" cb:"mdt,11"`
+	// PendingStockMovement is 1 while a made product's stock exit waits for the production close:
+	// the sale's cost of sales is not booked yet.
+	PendingStockMovement int8 `cb:"12"`
 }
 
 // OperationStockMovement is a stock movement the entries post, valued in PEN net of IGV: a
 // reception of a purchase order (type 3) or of an inventory expense (4) at its cost, and a sale
 // delivery (8) or its annulment return (9) at the cost stamped on it (docs/SALE_COST_PLAN.md).
-// A reception carries the purchase account its stock and variation pair follow from.
+// A reception carries the purchase account its stock and variation pair follow from. A production
+// close (docs/PRODUCTION_PLAN.md §7) consumes supplies (15), whose account is the supply product's,
+// and produces made products (16), both at the cost the engine stamped; DocumentID is the close.
 type OperationStockMovement struct {
 	ID                  int64                       `cb:"1"`
 	Date                int16                       `cb:"2"`
@@ -132,7 +137,8 @@ var (
 	operationExpenseStatuses = []any{int8(1), int8(2), finance.ExpenseStatusPosted}
 	operationStockTypes      = []any{logistics.StockMovementTypePurchaseReception,
 		logistics.StockMovementTypeSuppliesPurchase, logistics.StockMovementTypeSaleDelivery,
-		logistics.StockMovementTypeSaleAnnulmentReturn}
+		logistics.StockMovementTypeSaleAnnulmentReturn, logistics.StockMovementTypeProductionConsumption,
+		logistics.StockMovementTypeProductionEntry}
 	operationCashTypes = []any{finance.CashMovementTypeUnspecified, finance.CashMovementTypePhysicalCount,
 		finance.CashMovementTypeTransfer, finance.CashMovementTypeWithdrawal, finance.CashMovementTypeLoss,
 		finance.CashMovementTypeSupplierPayment, finance.CashMovementTypeCollection,
@@ -300,6 +306,7 @@ func makeOperationSale(order *sales.SaleOrder) OperationSale {
 		ID: order.ID, Date: order.Date, Status: order.Status, CurrencyType: order.CurrencyType,
 		ExchangeRate: order.ExchangeRate, TotalAmount: order.TotalAmount, TaxAmount: order.TaxAmount,
 		SameDayCashBankID: order.SameDayCashBankID, Version: order.Version, Metadata: order.Metadata,
+		PendingStockMovement: order.PendingStockMovement,
 	}
 	for _, saleLine := range order.Lines {
 		if saleLine.ProductID <= 0 || saleLine.Quantity <= 0 {

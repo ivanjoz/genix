@@ -109,6 +109,7 @@ func main() {
 	if err := core.ConfigureFareward(core.Env.FAREWARD_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
 		panic("invalid fareward configuration: " + err.Error())
 	}
+	core.ConfigureBridge(core.Env.SSE_BRIDGE_URL, core.Env.INTERNAL_APIKEY)
 	core.ConfigureTextSearch()
 	core.ConfigureFileStore()
 	// The same database as the backend: its [mariadb] server and db.name.

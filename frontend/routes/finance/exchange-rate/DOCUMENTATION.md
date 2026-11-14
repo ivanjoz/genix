@@ -63,7 +63,8 @@ company rate to work from — either loading today's rate, or filling a past mon
 
 ### Where to find it (Dónde encontrarlo)
 
-Open **Finances (Finanzas) → Exchange Rate (Tipo de Cambio)** at `/finance/exchange-rate`.
+Open **Finance & Accounting (Finanzas y Contabilidad) → Treasury (Tesorería) → Exchange Rate
+(Tipo de Cambio)** at `/finance/exchange-rate`.
 
 - The calendar opens on the current month and runs backwards, month after month, covering the
   last five years. There is no year selector: scrolling down is how you reach an older month.
@@ -129,8 +130,8 @@ and a refresh landing while you are typing does not overwrite the months you hav
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
-- "¿Dónde cargo el tipo de cambio del día?" → Finanzas → Tipo de Cambio; el mes actual está arriba,
-  busque la semana y la columna del día.
+- "¿Dónde cargo el tipo de cambio del día?" → Finanzas y Contabilidad → Tesorería → Tipo de Cambio;
+  el mes actual está arriba, busque la semana y la columna del día.
 - "¿Cómo pongo el tipo de cambio de venta?" (`TC venta`, `tipo cambio venta`) → en la columna
   Venta del mismo día.
 - "¿Por qué hay celdas vacías al inicio del mes?" → esa semana empieza en el mes anterior; esos
@@ -154,9 +155,9 @@ and a refresh landing while you are typing does not overwrite the months you hav
 
 - **Cash & Banks (Cajas & Bancos)** keeps each account in its own currency and does not convert
   between them; the rate kept here is what a conversion would be based on.
-- **Expenses (Gastos)** and **Purchase Orders (Órdenes de Compra)** record their own currency per
+- **Expenses (Gastos)** and **Purchase Orders (Órdenes Compra)** record their own currency per
   document (PEN or USD) and do not read this page automatically.
-- **Invoicing (Facturación Electrónica)** issues documents in the currency of the sale; the rate
+- **Invoicing (Facturación)** issues documents in the currency of the sale; the rate
   loaded here is the company reference, not a value the electronic document takes by itself.
 - **Point of Sale (Punto de Venta)** at `/sales/sale_order_create`: converts prices for a dollar
   sale, or a sale mixing currencies, with the latest sell rate of the last 7 days — the company's
@@ -170,29 +171,33 @@ and a refresh landing while you are typing does not overwrite the months you hav
 schema: 1
 hash_algorithm: sha256
 files:
-  - path: frontend/core/modules.ts
+  - path: db/pages.toml
     role: user-interface
-    hash: sha256:0232bd261462eee1bcbf2bd20cc37658f85aa3a0a4aa355af975bf5b32c2be2c
+    hash: sha256:cb61a6f79a034e4d468b46c173733b815f0af9007a01d1f3e69b92d358913d60
     supports: [page-purpose, capability.load-rates, related-pages]
+  - path: db/modules.toml
+    role: user-interface
+    hash: sha256:4f2d4c16777913fddf196959c4341290e69a12a78323a5b95f8fa5d4738ca34d
+    supports: [capability.load-rates]
   - path: frontend/routes/finance/exchange-rate/+page.svelte
     role: page
-    hash: sha256:01930730b1e278f9f636c90109f8f5447314b1517049ad2cb04d85b0187dac29
+    hash: sha256:ffd790c1aab0709ac3f3f8807f2676169a4a329efaa26f097e2800d6dab0a2fd
     supports: [page-purpose, concepts, capability.load-rates]
   - path: frontend/routes/finance/exchange-rate/exchange-rate.ts
     role: business-logic
-    hash: sha256:55738f078d629f60276bbfbbfb58b46b3b1b7ba7a9626d06504b2e909294bf28
+    hash: sha256:5a5b23729c283c270bb18dfea2b17758572f9405c2fa9a01cbdf96d98d6c0cba
     supports: [concepts, capability.load-rates, related-pages]
   - path: frontend/routes/finance/exchange-rate/exchange-rate.svelte.ts
     role: frontend-service
-    hash: sha256:f5f401b8f1e32dd79eba283d2a7c9b64bb90eca0b81db938049b32a2db8ab333
+    hash: sha256:2674c89770d3193349fea84c155eebaec9fef16c76a896e62cc2c90f56b7c9e2
     supports: [capability.load-rates]
   - path: backend/finance/exchange_rate.go
     role: backend-handler
-    hash: sha256:381616a2ae84db75ae191832ea74979ee531a3325bb98a1096c9efe6077130b3
+    hash: sha256:83fca88b728453671fd0e29e1dec9273923db8c7d5e9d0c874e112cce0a59427
     supports: [capability.load-rates]
   - path: backend/finance/types/exchange_rate.go
     role: data-model
-    hash: sha256:7dc6dbf27632d692cf814d4376e7284957187874e2a0e318a8d861e4dd0de377
+    hash: sha256:3dd967feba71a9e52942fcf65d8d92704d43c1a1b75275468b62ff217efc4706
     supports: [concepts, capability.load-rates, related-pages]
   - path: backend/finance/types/bcrp_rates.go
     role: business-logic
@@ -200,10 +205,14 @@ files:
     supports: [page-purpose, capability.load-rates, related-pages]
   - path: frontend/routes/sales/sale_order_create/+page.svelte
     role: shared-domain
-    hash: sha256:19d9bce55dd5a19b8b09064cf22cf0e26dc632f925982e044595ff010a3f3135
+    hash: sha256:ec5ec95e2dc313f8a1624daa2b6600938a730ad8430e7262073d8f77539c68cf
     supports: [page-purpose, capability.load-rates, related-pages]
   - path: backend/sales/sale_order_currency.go
     role: shared-domain
-    hash: sha256:186747cd3a2892beeef7428ff285df67edc44caa494e2b3b0b2985aa46b92a6f
+    hash: sha256:c247971a1e8ea11adc1b6f5fe8856aa406fe5d46d8ce26c5dd1ba156b2850178
     supports: [related-pages]
+  - path: backend/sales/types/sale_currency.go
+    role: shared-domain
+    hash: sha256:d94fcf68ff93412a00250b54e2bb4c2c59865472b1f30d86a21e2eefcc6d5f92
+    supports: [capability.load-rates, related-pages]
 ```

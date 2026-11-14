@@ -48,6 +48,8 @@
     sku: string;
     // Rendered from the packed line, so it reads "1 + 4 unidad" when a sub-unit was sold.
     quantityLabel: string;
+    // A made product's line delivered before its stock left: the production close regularizes it.
+    isStockExitPending: boolean;
     quantity: Quantity;
     unitPrice: number;
     subtotalAmount: number;
@@ -213,7 +215,8 @@
     [SaleOrderGroup.PENDIENTE_DE_PAGO, 'Pend. Payment|Pend. Pago'],
     [SaleOrderGroup.PENDIENTE_DE_ENTREGA, 'Pend. Delivery|Pend. Entrega'],
     [SaleOrderGroup.FINALIZADO, 'Completed|Finalizadas'],
-    [SaleOrderGroup.ANULADO, 'Annulled|Anuladas']
+    [SaleOrderGroup.ANULADO, 'Annulled|Anuladas'],
+    [SaleOrderGroup.POR_REGULARIZAR, 'To regularize|Por regularizar'],
   ];
 
   function getSaleOrderStatusName(saleOrder: ISaleOrder): string {
@@ -276,6 +279,7 @@
         sku: line.Sku || '',
         quantity,
         quantityLabel: formatQuantity(quantity, subDivisor, subUnitName),
+        isStockExitPending: !!line.StockExitPending,
         unitPrice,
         subtotalAmount: quantityAmount(quantity, unitPrice, line.SubPrice || 0),
       };
@@ -357,11 +361,13 @@
       width: 'minmax(280px, 1.7fr)',
       getValue: (detailLineRecord) => detailLineRecord.productName,
       render: (detailLineRecord) => {
+        const pendingStockLabel = detailLineRecord.isStockExitPending
+          ? `<span class="text-amber-700"> · ${tr('stock to regularize|stock por regularizar')}</span>` : '';
         if (!detailLineRecord.presentationName) {
-          return detailLineRecord.productBaseName;
+          return detailLineRecord.productBaseName + pendingStockLabel;
         }
 
-        return `${detailLineRecord.productBaseName}<span class="text-blue-fg text-sm ff-bold"> (${detailLineRecord.presentationName})</span>`;
+        return `${detailLineRecord.productBaseName}<span class="text-blue-fg text-sm ff-bold"> (${detailLineRecord.presentationName})</span>${pendingStockLabel}`;
       },
       mobile: { order: 1, css: 'col-span-24' },
     },

@@ -10,6 +10,7 @@ import (
 	"app/libs/culqi"
 	logistics "app/logistics/types"
 	production "app/production/types"
+	saleissue "app/sales/saleissue/types"
 	"app/sales/types"
 	"context"
 	"encoding/json"
@@ -211,7 +212,7 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 			if order.Shipping.DocumentNumber == "" {
 				return req.MakeErr("Para compras desde S/ 700 debe ingresar su DNI.")
 			}
-			clientID, err := resolveSaleOrderClientID(&types.SaleOrderClientInfo{
+			clientID, err := saleissue.ResolveSaleClientID(&types.SaleOrderClientInfo{
 				Name: order.Shipping.FirstName + " " + order.Shipping.LastName, RegistryNumber: order.Shipping.DocumentNumber,
 			}, companyID, 0)
 			if err != nil {
@@ -235,7 +236,7 @@ func PostWebCheckout(req *core.HandlerArgs) core.HandlerResponse {
 		if culqiCashBank == nil {
 			return req.MakeErr("La tienda no tiene configurada la cuenta que recibe los pagos de Culqi.")
 		}
-		if normalizeCurrency(culqiCashBank.CurrencyType) != finance.CurrencyPEN {
+		if types.NormalizeCurrency(culqiCashBank.CurrencyType) != finance.CurrencyPEN {
 			return req.MakeErr("La cuenta que recibe los pagos de Culqi debe ser en soles.")
 		}
 		if companyConfig.Culqi.SecretKey() == "" && !isSimulatedPayment {
@@ -497,11 +498,11 @@ func sendWebOrderEmail(companyID int32, order types.OnlineSaleOrder, withPurchas
 	message := core.EmailMessage{
 		To:       []string{order.Shipping.Email},
 		FromName: purchaseDocument.StoreName,
-		Subject:  fmt.Sprintf("%v — pedido N° %v", purchaseDocument.StoreName, webOrderNumber(order.ID)),
+		Subject:  fmt.Sprintf("%v — pedido %v", purchaseDocument.StoreName, webOrderNumber(order.ID)),
 		HTMLBody: fmt.Sprintf(`<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /></head>
 <body style="font-family:system-ui,sans-serif;color:#1e293b;line-height:1.55">
 	<h2 style="color:#4f46e5">¡Gracias por su compra, %v!</h2>
-	<p>Registramos su pedido N° <b>%v</b> por <b>%v</b>.</p>
+	<p>Registramos su pedido <b>%v</b> por <b>%v</b>.</p>
 	<p>%v</p>
 </body></html>`, order.Shipping.FirstName, webOrderNumber(order.ID), formatCents(order.TotalAmount),
 			core.If(withPurchaseOrder, "Adjuntamos su Orden de Compra: preséntela al recibir o recoger su pedido.",

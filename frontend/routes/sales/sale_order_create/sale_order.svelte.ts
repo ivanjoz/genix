@@ -57,6 +57,7 @@ export interface ISaleOrderLine {
   Sku: string
   LotID: number
   PresentationID: number
+  StockExitPending: boolean
 }
 
 //STRUCT:sales.SaleOrder
@@ -89,6 +90,9 @@ export interface ISaleOrder {
   AnnulReason: string
   Period: number
   SameDayCashBankID: number
+  ShippingAmount: number
+  OnlineSaleOrderID: number
+  PendingStockMovement: number
   /* extra fields */
   CompanyID: number
   Name: string

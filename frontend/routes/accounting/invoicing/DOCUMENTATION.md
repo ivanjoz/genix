@@ -28,10 +28,19 @@ envió a SUNAT o no?* For each document it shows the number, the date, the sale 
 amount, its state, and whatever SUNAT replied.
 
 This page **does not create comprobantes**. A comprobante is created automatically together
-with its sale at the Point of Sale (`Punto de Venta`, `/sales/sale_order_create`), at the
-moment the operator picks a series like `FACTURA · F001` and presses **Generar**. What this
-page owns is everything that happens afterwards: watching the document travel to SUNAT,
-downloading its files, and pushing it out when it is still waiting.
+with its sale, wherever that sale is born:
+
+- at the Point of Sale (`Punto de Venta`, `/sales/sale_order_create`), at the moment the
+  operator picks a series like `FACTURA · F001` and presses **Generar**;
+- when a restaurant table is charged (**Cobrar Mesa** on `Atención de mesas`,
+  `/dining/floor-service`) with a series chosen in its **Comprobante** selector;
+- when a web store order (**Pedidos Web**) is first paid or delivered, only if the company has the
+  flag **Emitir comprobante automáticamente en ventas online**: the sale is then the next
+  boleta of the series marked **Usar en Tienda Web**.
+
+A sale created without a series (**SIN COMPROBANTE**) never has a comprobante. What this page
+owns is everything that happens afterwards: watching the document travel to SUNAT, downloading
+its files, and pushing it out when it is still waiting.
 
 It also does not maintain the series (`Series de Facturación`) or the SUNAT credentials —
 those live in **Mi Empresa → Configuración**.
@@ -46,7 +55,7 @@ those live in **Mi Empresa → Configuración**.
   the sale is generated, before anything is sent, so the numbering is decided at the till and
   never changes afterwards.
 - A comprobante and its sale (`venta`) are **one to one and share the same id**: the sale
-  `550301` is billed by the comprobante `550301`. That is why the **Venta** column doubles as
+  `5501` is billed by the comprobante `5501`. That is why the **Venta** column doubles as
   the sale's id, and why searching by either number finds the same row.
 - **Estados** a comprobante passes through, in the order the system numbers them:
   - **Anulado** — the sale was annulled before the comprobante was sent. It never went out,
@@ -70,11 +79,12 @@ those live in **Mi Empresa → Configuración**.
 ### User intention (Intención del usuario)
 
 Answer "¿qué se emitió entre estas dos fechas?", "¿qué quedó pendiente de envío?" or "¿dónde
-está el comprobante de la venta 550301?".
+está el comprobante de la venta 5501?".
 
 ### Where to find it (Dónde encontrarlo)
 
-**Contabilidad → Facturación**. The filter row sits above the table: **Desde** and **Hasta**
+**Finanzas y Contabilidad → Contabilidad → Facturación**, or **Comercial → Facturación →
+Facturación** — both open the same page. The filter row sits above the table: **Desde** and **Hasta**
 (dates), **Estado** (a selector that starts on *Todos los estados*), and a search box labelled
 **ID de comprobante o venta**.
 
@@ -254,10 +264,12 @@ document's state is written there, so reopening the page shows where it actually
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
-- **A comprobante is born with its sale.** Generating a sale under a series creates the
-  comprobante, numbered, in *Pendiente de envío*. If the comprobante cannot be created — a
-  factura without a client with RUC, for example — **the sale itself is refused**, so a sale
-  registered under a series always has its comprobante.
+- **A comprobante is born with its sale.** Generating a sale under a series — at the Point of
+  Sale, charging a table, or settling a web order — creates the comprobante, numbered, in
+  *Pendiente de envío*. The series must exist, be active and be a factura or boleta series
+  (never a credit or debit note's). If the comprobante cannot be created — a factura without a
+  client with RUC, for example — **the sale itself is refused**, so a sale registered under a
+  series always has its comprobante.
 - **The send is deferred and automatic.** A scheduled process picks up everything in
   *Pendiente de envío* and sends it, so under normal operation nobody has to press anything
   here. A send that fails for transport reasons is retried on its own a limited number of
@@ -299,8 +311,11 @@ document's state is written there, so reopening the page shows where it actually
 <!-- DOC-ID: related-pages -->
 ## Related pages and workflows (Páginas y procesos relacionados)
 
-- **Punto de Venta** (`/sales/sale_order_create`) is where a comprobante is actually created,
+- **Punto de Venta** (`/sales/sale_order_create`) is where a comprobante is usually created,
   by choosing a series before pressing **Generar**.
+- **Atención de mesas** (`/dining/floor-service`) creates one when a table is charged with a
+  series in **Comprobante**; **Pedidos Web** creates a boleta when a web order is settled and
+  the company issues web receipts automatically.
 - **Gestión Ventas** (`/sales/sale_orders_status`) is where a sale is annulled — and where the
   refusal appears when its comprobante has already been sent.
 - **Mi Empresa → Configuración** maintains the **Series de Facturación** and the SUNAT
@@ -313,29 +328,33 @@ document's state is written there, so reopening the page shows where it actually
 schema: 1
 hash_algorithm: sha256
 files:
-  - path: frontend/core/modules.ts
+  - path: db/modules.toml
     role: user-interface
-    hash: sha256:010936e67bd5d99e9bbf9916814ed818def3e45451511301c46f070e133d6231
-    supports: [page-purpose, related-pages]
+    hash: sha256:4f2d4c16777913fddf196959c4341290e69a12a78323a5b95f8fa5d4738ca34d
+    supports: [capability.filter-invoices, related-pages]
+  - path: db/pages.toml
+    role: user-interface
+    hash: sha256:cb61a6f79a034e4d468b46c173733b815f0af9007a01d1f3e69b92d358913d60
+    supports: [page-purpose, capability.filter-invoices, related-pages]
   - path: frontend/routes/accounting/invoicing/+page.svelte
     role: page
-    hash: sha256:f1bcb001b1bfbca510266d11f6d2d9959d3cd1194e280769c514532f8fcb689e
+    hash: sha256:d84663b46dc3ab09feb04c024e614771fa55ca57718040301959ac5bed605139
     supports: [page-purpose, capability.filter-invoices, capability.review-invoice, capability.send-invoice-now]
   - path: frontend/routes/accounting/invoicing/InvoiceDetailLayer.svelte
     role: user-interface
-    hash: sha256:aa88bd4959a720c59008606b1b1b1ddc5d5ea040dab377220286d10ec029e0b2
+    hash: sha256:4f4257c9e416d68d847d2100e3e9789a6dc25085b0e7b5937f9d29f53f558744
     supports: [capability.review-invoice, capability.download-invoice-files, capability.send-invoice-now]
   - path: frontend/routes/accounting/invoicing/invoicing.ts
     role: business-logic
-    hash: sha256:2c03d923e62b57c61680efcaa989adc2b9787888aa29eee25a94ddf120cde684
+    hash: sha256:7cdff029f0ad29078de5378c9473e581f030777d2570191e29cdf08e0239e38a
     supports: [concepts, capability.filter-invoices, capability.download-invoice-files, capability.send-invoice-now]
   - path: frontend/routes/accounting/invoicing/invoicing.svelte.ts
     role: frontend-service
-    hash: sha256:c6f540a25230e7fd19691cfbfe5cc3c826166c7631dd984b0283516eb4694e23
+    hash: sha256:ca9936d29489c98e247b5d13210686d8c65d58799db7b87dc3ecb1df0c8b42b7
     supports: [capability.download-invoice-files, capability.send-invoice-now]
   - path: backend/invoicing/invoice_api.go
     role: backend-handler
-    hash: sha256:a34cf6f0c5d9bf80f1fec5fdfb7261eabaced339c92ccdeee1c0988cbef04c22
+    hash: sha256:7a34105be26d0563603abea2b4fe43ffcaed349877241b97a26da60c0a33c008
     supports: [capability.filter-invoices, capability.download-invoice-files, capability.send-invoice-now, troubleshooting]
   - path: backend/invoicing/issuer.go
     role: business-logic
@@ -343,30 +362,50 @@ files:
     supports: [troubleshooting, capability.send-invoice-now]
   - path: backend/invoicing/emit_worker.go
     role: business-logic
-    hash: sha256:a71d60c3600d7b7bea9a0073d566406e0854b0cdf9f43ce80d25c5aa40f36c7f
+    hash: sha256:6016347608c1870c37b1d1ad04c4f0bf2b70c27759072e5bd3646f22c955a20e
     supports: [concepts, rules, capability.send-invoice-now, troubleshooting]
   - path: backend/invoicing/types/invoice_document.go
     role: data-model
-    hash: sha256:499902303432fcd04f18fca719230f9d948fb6af02b3cd5d005ece7c2a3d152d
+    hash: sha256:598b62c7a81bf85070bfb34239a243040e8e0bb28c9ef955dbeb5835308f9905
     supports: [concepts, capability.review-invoice]
   - path: backend/invoicing/types/document_reserve.go
     role: business-logic
-    hash: sha256:e03710c72bede974f98202a02af67ec73bf8cf9706feedb173ce7827157f50e1
+    hash: sha256:a9c7a76ac6be28fe2b0fd50d6d6d9047dceca4ecea3757ee1d1b3414642fcbc4
     supports: [concepts, rules]
-  - path: backend/sales/sale_order_issuance.go
+  - path: backend/sales/saleissue/types/sale_issue_series.go
     role: business-logic
-    hash: sha256:fb10b3dfed01ff5b2fa20f86b35eb0f60d994388bb87ff457e718e05cde4facb
+    hash: sha256:6c210d7117e055a98c571f9bd17d0cd04f55d9458365735de9b8970e7550255d
     supports: [rules, page-purpose]
+  - path: backend/sales/saleissue/types/new_sale.go
+    role: business-logic
+    hash: sha256:79480f8435d4182f16c8ebca2b5717be396423cd73a571f5ef1e2a84a229e33e
+    supports: [rules, page-purpose]
+  - path: backend/sales/online_sale_order.go
+    role: business-logic
+    hash: sha256:6d521468f6ba3c7074be0ca54529ba9cc3e7453370483539546febb16b0dedac
+    supports: [page-purpose, related-pages]
+  - path: backend/company_flags.toml
+    role: shared-domain
+    hash: sha256:41281f5a4686ceecc28bc2c95a3c6deb4041e03771e7ad8533d07bb2afaf8799
+    supports: [page-purpose]
+  - path: backend/dining/table_order_charge.go
+    role: backend-handler
+    hash: sha256:32e32d0a5349d8e43895fec3d0ca47a09fed34037cc3534d1f69b290b9f25632
+    supports: [page-purpose, rules, related-pages]
+  - path: frontend/routes/dining/floor-service/TableChargeForm.svelte
+    role: user-interface
+    hash: sha256:73b19d3e71c22139deade2956bd54de50d096039d228931728dcf4a4b8b7455d
+    supports: [page-purpose, related-pages]
   - path: backend/sales/sale_order_annul.go
     role: business-logic
-    hash: sha256:bdbec7379072bcb6ab06c1a6ceafda748e8547f463963339e4e2579cc08b377e
+    hash: sha256:5d184227f73c0fc0630fb2357132bf09bc4dd39f2bda73d74d9676b611aa36f7
     supports: [rules, troubleshooting]
   - path: backend/invoicing/types/invoice_lookup.go
     role: business-logic
-    hash: sha256:6e8c81b134b11362bf751f57f57e954e21b0fdf502acf8b2f3c3e0b60b2ad87b
+    hash: sha256:726b3ad0a54ae459de3a43fa3ad5745b9d14d3ed69d9e4949c666c9d06757752
     supports: [rules]
   - path: backend/access.toml
     role: permissions
-    hash: sha256:a9de756bd703f10b679f6877d83eb5fde0544f772ff8d558c598d02716c3ebc1
+    hash: sha256:c19cf85130065dcc0f839796e1e9b4b98a1b78df465ccb20d2b63b59a1a94e59
     supports: [page-purpose]
 ```

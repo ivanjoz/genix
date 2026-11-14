@@ -121,10 +121,10 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 				return core.Err("La caja seleccionada está inactiva.")
 			}
 			// The refund gives back the collected amount as it was booked: in the sale's currency.
-			saleCurrency := normalizeCurrency(sale.CurrencyType)
-			if refundCurrency := normalizeCurrency(refundCashBank.CurrencyType); refundCurrency != saleCurrency {
+			saleCurrency := types.NormalizeCurrency(sale.CurrencyType)
+			if refundCurrency := types.NormalizeCurrency(refundCashBank.CurrencyType); refundCurrency != saleCurrency {
 				return core.Err(fmt.Sprintf(`La venta está en %v pero la caja "%v" es en %v.`,
-					currencyName(saleCurrency), refundCashBank.Name, currencyName(refundCurrency)))
+					types.CurrencyName(saleCurrency), refundCashBank.Name, types.CurrencyName(refundCurrency)))
 			}
 
 			// Written already final (no same-day flag, the receivable account), as the restamp below
@@ -147,12 +147,18 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		if err := logistics.ApplyMovimientosIn(transaction, req, stockReturns); err != nil {
 			return core.Err("Error al reingresar los productos al almacén:", err)
 		}
-		// An undelivered sale gives back the units it held on its warehouse.
+		// An undelivered sale gives back the units it held on its warehouse; a delivered one, those its
+		// made products' lines held until the production close took their stock. Those never left the
+		// warehouse, so the ledger return above has nothing of them.
+		releasedLines := []types.SaleOrderLine{}
 		if storedSale.IsDeliveryPending() {
-			if err := logistics.ApplyPendingDeliveryIn(transaction, req.User.CompanyID, req.User.ID,
-				types.PendingDeliveryChanges(storedSale.Lines, storedSale.WarehouseID, storedSale.OnlineSaleOrderID > 0, -1)); err != nil {
-				return err
-			}
+			releasedLines = storedSale.Lines
+		} else if storedSale.PendingStockMovement == 1 {
+			releasedLines = types.LinesWithStockExitPending(storedSale.Lines, true)
+		}
+		if err := logistics.ApplyPendingDeliveryIn(transaction, req.User.CompanyID, req.User.ID,
+			types.PendingDeliveryChanges(releasedLines, storedSale.WarehouseID, storedSale.OnlineSaleOrderID > 0, -1)); err != nil {
+			return err
 		}
 
 		// An annulled sale leaves the accounting operations' cache, so a collection they inferred from it
@@ -170,6 +176,8 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		sale.Updated = core.SUnixTime()
 		sale.UpdatedBy = req.User.ID
 		sale.SameDayCashBankID = sameDayCashBankID
+		// Nothing is left for the production close to settle.
+		sale.PendingStockMovement = 0
 		sale.StampPeriod()
 
 		saleTable := db.TableOf[types.SaleOrder]()
@@ -182,6 +190,7 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 			// The period delta index packs Period with Status: they are written together.
 			saleTable.Period,
 			saleTable.SameDayCashBankID,
+			saleTable.PendingStockMovement,
 		); err != nil {
 			return core.Err("Error al anular la venta:", err)
 		}
@@ -190,7 +199,7 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 			return err
 		}
 		// The annulled sale's purchase and payments leave its client's week, from the sale's day.
-		return applyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(&storedSale, &sale))
+		return types.ApplyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(&storedSale, &sale))
 	})
 	if err != nil {
 		return req.MakeErr(err)

@@ -7,14 +7,14 @@ status: implemented
 visibility: tenant
 description_en: >-
   Work queue for existing sale orders (pedidos de venta): browse them grouped as Pending
-  Payment, Pending Delivery, Completed or Annulled, filter by customer or product, and
-  register the cash-register payment, the dispatch-warehouse delivery, or the annulment of a
-  selected order.
+  Payment, Pending Delivery, Completed, Annulled or To Regularize (delivered made products whose
+  stock exit is pending), filter by customer or product, and register the cash-register payment,
+  the dispatch-warehouse delivery, or the annulment of a selected order.
 description_es: >-
   Cola de trabajo para pedidos de venta existentes: consultarlos agrupados en Pendiente de
-  Pago, Pendiente de Entrega, Finalizados o Anuladas, filtrar por cliente o producto, y
-  registrar el pago (con la caja), la entrega (con el almacén de despacho) o la anulación de
-  un pedido seleccionado.
+  Pago, Pendiente de Entrega, Finalizados, Anuladas o Por regularizar (productos fabricados
+  entregados con salida de stock pendiente), filtrar por cliente o producto, y registrar el pago
+  (con la caja), la entrega (con el almacén de despacho) o la anulación de un pedido seleccionado.
 ---
 
 # Sales Management (Gestión Ventas)
@@ -28,7 +28,8 @@ It lets a user find an order by its current workflow stage, open it to see its s
 total, debt, and product lines, and push it through the two remaining actions of its
 lifecycle: registering the customer's payment (`pago`) and registering the warehouse
 delivery (`entrega`). It is also where an order is annulled (`anulado`), which reverses the
-payment and the stock movement it had already produced.
+payment and the stock movement it had already produced, and where the delivered sales of made
+products whose stock exit is still pending are listed (**Por regularizar**).
 
 This page does not create new sale orders — that happens at **Point of Sale (Punto de
 Venta)** (`/sales/sale_order_create`). It also does not offer a date-range historical search
@@ -48,16 +49,24 @@ across every order regardless of status; that broader lookup belongs to **Sales 
   Completed (Finalizado)** — both paid and delivered; **0 Annulled (Anulada)** — voided,
   with whatever it had collected and delivered given back. Annulment is **terminal**: an
   annulled order can never return to another status.
-- The page groups orders into four tabs (`OptionsStrip`), each mapped to a specific
+- The page groups orders into five tabs (`OptionsStrip`), each mapped to a specific
   backend query, not simply to one status value: **Pend. Payment (Pend. Pago)** loads
   orders in status 1 (Generated) or 3 (Delivered but unpaid); **Pend. Delivery (Pend.
   Entrega)** loads orders in status 1 (Generated) or 2 (Paid but undelivered); **Completed
-  (Finalizadas)** loads only status 4; **Annulled (Anuladas)** loads only status 0.
-  Switching tabs re-queries the server; it is not a local re-filter of one big list.
+  (Finalizadas)** loads only status 4; **Annulled (Anuladas)** loads only status 0; **To
+  regularize (Por regularizar)** loads delivered orders (status 3 or 4) with stock to
+  regularize. Switching tabs re-queries the server; it is not a local re-filter of one big list.
+- **Stock to regularize (`stock por regularizar`):** a made product (`producto fabricado`,
+  Origen `Fabricado` on the Productos page) is delivered without its warehouse exit. Its line is
+  marked as pending, and its units stay reserved on the delivery warehouse instead of leaving
+  stock. A sale with such a line is "por regularizar" until the daily production close (**Cierre
+  del día**, Operaciones → Producción) of the sale's day settles it in the delivery warehouse.
+  Merchandise lines are not affected: they leave stock at delivery as usual.
 - In the results table, two independent letter chips summarize progress per row: **P**
   (green, checked when status is 2 or 4) means paid, **E** (blue, checked when status is 3
-  or 4) means delivered. These are separate from the textual **Status** shown inside the
-  order detail (`Generado`/`Pagado`/`Entregado`/`Finalizado`).
+  or 4) means delivered. A yellow **R** next to them marks a sale with stock to regularize. These
+  are separate from the textual **Status** shown inside the order detail
+  (`Generado`/`Pagado`/`Entregado`/`Finalizado`).
 - The order detail shows **Total** and **Debt (Deuda)** with the sale's currency symbol (`S/` or
   `US$`), and the product lines' **Precio** and **Subtotal** use the same symbol. Once an order is
   marked paid through this page its Debt becomes `0`.
@@ -72,9 +81,9 @@ the customer, or one already closed — and open it to review or act on it.
 
 ### Where to find it (Dónde encontrarlo)
 
-Open **Commercial (Comercial) → Sales Management (Gestión Ventas)** at
-`/sales/sale_orders_status`. Choose one of the four tabs (**Pend. Pago**, **Pend. Entrega**,
-**Finalizadas**, **Anuladas**) and optionally use the **CLIENTE ::** and **PRODUCTO ::** selectors above
+Open **Commercial (Comercial) → Sales (Ventas) → Sales Management (Gestión Ventas)** at
+`/sales/sale_orders_status`. Choose one of the five tabs (**Pend. Pago**, **Pend. Entrega**,
+**Finalizadas**, **Anuladas**, **Por regularizar**) and optionally use the **CLIENTE ::** and **PRODUCTO ::** selectors above
 the table. Click a row to open the order in the right-side detail layer.
 
 ### Required information and prerequisites (Requisitos previos)
@@ -114,6 +123,8 @@ Opening a row only opens the read/action side panel; browsing does not change an
 - `¿Dónde veo los pedidos que aún debo entregar?` En la pestaña "Pend. Entrega".
 - `¿Por qué un pedido ya pagado sigue en "Pend. Entrega"?` Porque esa pestaña agrupa
   Generado y Pagado; sólo desaparece de ahí al registrar la entrega.
+- `¿Qué significa la "R" amarilla?` La venta entregó productos fabricados cuyo stock aún no salió
+  del almacén; aparece en la pestaña "Por regularizar".
 - Search terms: `pedidos de venta`, `gestión de ventas`, `pendiente de pago`, `pendiente de
   entrega`, `finalizadas`, `top productos`.
 
@@ -203,19 +214,28 @@ line and currently be deliverable (status 1 or 2).
 
 ### Business rules and rationale (Reglas y razón de negocio)
 
-The server validates that the chosen warehouse holds enough available stock for every
-product line of the order — checked against the plain product stock for lines without a lot
-or serial number, or against the matching lot/serial stock detail otherwise — before
-advancing the status (1→3 or 2→4). Choosing a warehouse without enough stock is rejected
-line by line rather than silently partially fulfilled.
+The server validates that the chosen warehouse holds enough stock for every merchandise line
+of the order — checked against the plain product stock for lines without a lot or serial
+number, or against the matching lot/serial stock detail otherwise — before advancing the
+status (1→3 or 2→4). Choosing a warehouse without enough stock is rejected line by line rather
+than silently partially fulfilled.
+
+Lines of made products (`productos fabricados`) follow a different rule: they are not checked
+against physical stock but against what that warehouse can still sell — its stock less the units
+already reserved, plus the product's **Sobreventa permitida** — when the sale's reservation is not
+already on that warehouse. They may not name a lot or serial number.
 
 ### Result and side effects (Resultado y efectos)
 
-A negative internal stock movement is created for each product line at the chosen
+A negative internal stock movement is created for each merchandise line at the chosen
 warehouse (visible later on the stock-movement history), the order's status gains the
 Delivered bit, and the delivery time/user are stamped. A delivered order showing under
 **Pend. Entrega** no longer matches that tab's query and disappears from it once the page
 refreshes.
+
+Lines of made products get **no** stock movement at delivery: they are marked "stock por
+regularizar", their units stay reserved — moved to the chosen warehouse if the sale was reserved
+on another one — and the sale gets the yellow **R** and appears under **Por regularizar**.
 
 ### Limitations (Limitaciones)
 
@@ -229,7 +249,8 @@ refreshes.
 - `¿Cómo registro la entrega de un pedido?`
 - `¿Por qué me rechaza la entrega si cambio de almacén?` Porque ese almacén no tiene stock
   suficiente para algún producto del pedido.
-- `¿La entrega descuenta stock?` Sí, del almacén elegido, por cada producto del detalle.
+- `¿La entrega descuenta stock?` Sí, del almacén elegido, por cada mercadería del detalle. Los
+  productos fabricados no descuentan stock al entregar: quedan reservados y "por regularizar".
 - Search terms: `entregar pedido`, `almacén para entrega`, `descuento de stock`, `stock
   insuficiente`.
 
@@ -266,7 +287,9 @@ The button is only shown to users whose profile holds the **Anular Venta** sub-a
   assumed from its status: money collected is refunded, stock delivered re-enters the exact
   warehouse, lot and serial it left from, and the sale is removed from the day's sales
   summary. An order that was never paid refunds nothing; one that was never delivered moves
-  no stock.
+  no stock. An undelivered order releases the units it reserved; a delivered order with stock to
+  regularize releases the reservation of its made products' lines (they never left the
+  warehouse, so nothing re-enters) and leaves the **Por regularizar** tab.
 - A sale issued under a series carries its electronic document (`comprobante electrónico`) from
   creation. While that document is still pending, annulling the sale voids it and it never goes
   out. Once it has left the pending state (sent to SUNAT), the sale **cannot** be annulled here —
@@ -303,6 +326,54 @@ detail panel then shows when it was annulled, by whom, and the reason.
 - Search terms: `anular pedido`, `cancelar venta`, `devolución`, `motivo de anulación`,
   `reingreso de stock`, `nota de crédito`.
 
+<!-- DOC-ID: capability.stock-to-regularize -->
+## Review sales with stock to regularize (Ventas por regularizar)
+
+### User intention (Intención del usuario)
+
+See which delivered sales of made products still have their stock exit pending, and which lines
+of each sale are affected.
+
+### Where to find it (Dónde encontrarlo)
+
+Choose the **To regularize (Por regularizar)** tab. In any tab, a yellow **R** next to the P/E
+chips marks such a sale. In the order's detail, each affected product line shows
+**· stock por regularizar** after its name.
+
+### Required information and prerequisites (Requisitos previos)
+
+A sale appears here only when it is delivered (status 3 Entregado or 4 Finalizado) and at least
+one of its lines is a made product delivered without its warehouse exit.
+
+### Business rules and rationale (Reglas y razón de negocio)
+
+The pending lines keep their units reserved on the delivery warehouse, so those units still count
+against what that warehouse can sell (Point of Sale and web store) and against the product's
+**Sobreventa permitida**. While a product has sales here, its origin cannot be changed from
+`Fabricado` to `Comprado` on the Productos page.
+
+### Result and side effects (Resultado y efectos)
+
+The tab is read-only: it lists the sales and opens the same detail layer, where payment and
+annulment work as in the other tabs.
+
+### Limitations (Limitaciones)
+
+There is no action on this page to regularize a sale. Sales are regularized on **Operaciones →
+Producción → Cierre del día** (`/production/daily-close`): closing the sale's day for its delivery
+warehouse consumes the recipes' supplies, takes the made products' units out of stock, releases
+their reservation and removes the sale from this tab and its **R**, without changing its status,
+payment or debt. Annulling the sale also removes it.
+
+### Common questions and vocabulary (Preguntas y vocabulario)
+
+- `¿Por qué mi venta de productos fabricados no descontó stock?` Su salida de almacén queda
+  pendiente: la venta aparece en "Por regularizar" hasta el cierre del día.
+- `¿Cómo saco una venta de "Por regularizar"?` Cerrando su día en Producción → Cierre del día, en
+  el almacén donde se entregó; o anulándola.
+- Search terms: `por regularizar`, `stock por regularizar`, `regularizar stock`, `R amarilla`,
+  `producto fabricado`, `cierre de producción`, `salida de almacén pendiente`.
+
 <!-- DOC-ID: rules -->
 ## Cross-capability business rules (Reglas generales)
 
@@ -332,6 +403,12 @@ detail panel then shows when it was annulled, by whom, and the reason.
 - **Delivery rejected with an "Almacén / Producto ... Se necesita X. Se posee en stock: Y"
   message:** the chosen warehouse does not have enough stock for one of the order's product
   lines; choose a warehouse that covers every line or resolve the stock shortage first.
+- **Delivery rejected with "... no tiene stock ni sobreventa permitida suficiente en el almacén
+  ...":** a made product's line does not fit what the chosen warehouse can still sell (stock less
+  reserved units, plus its Sobreventa permitida). Choose another warehouse or raise the product's
+  Sobreventa permitida on the Productos page.
+- **"... es un producto fabricado: su venta no puede indicar lote ni serie.":** a made product's
+  line names a lot or serial number, which made products do not use.
 - **"Ya se está procesando una acción para esta orden.":** wait for the in-progress action
   (shown as a loading message) to finish before clicking Pay or Deliver again.
 - **An order does not appear in the expected tab:** confirm its current status — Pend. Pago
@@ -369,6 +446,10 @@ detail panel then shows when it was annulled, by whom, and the reason.
   order here, and the `Reingreso (Anulación Venta)` movement created after annulling one.
 - **Users & Profiles (Usuarios & Perfiles)**: where the `Anular Venta` sub-access of
   `Gestión Ventas` is granted to a profile.
+- **Products (Productos)** at `/production/products`: where a product's origin (`Fabricado`) and
+  its **Sobreventa permitida** are set, which decide how its lines are delivered here.
+- **Daily close (Cierre del día)** at `/production/daily-close`: settles the **Por regularizar**
+  sales of a warehouse, day by day.
 
 ### FILES
 
@@ -377,60 +458,96 @@ detail panel then shows when it was annulled, by whom, and the reason.
 schema: 1
 hash_algorithm: sha256
 files:
-  - path: frontend/core/modules.ts
+  - path: db/modules.toml
     role: user-interface
-    hash: sha256:0232bd261462eee1bcbf2bd20cc37658f85aa3a0a4aa355af975bf5b32c2be2c
-    supports: [page-purpose, related-pages]
+    hash: sha256:4f2d4c16777913fddf196959c4341290e69a12a78323a5b95f8fa5d4738ca34d
+    supports: [capability.browse-filter, related-pages]
+  - path: db/pages.toml
+    role: user-interface
+    hash: sha256:cb61a6f79a034e4d468b46c173733b815f0af9007a01d1f3e69b92d358913d60
+    supports: [page-purpose, capability.browse-filter, related-pages]
   - path: frontend/routes/sales/sale_orders_status/+page.svelte
     role: page
-    hash: sha256:bd019f577ca6975347e89cd9e30b445b829f644df869eae21555bf527cf7df2f
-    supports: [page-purpose, concepts, capability.browse-filter, capability.pay, capability.deliver, capability.cancel, rules, troubleshooting]
+    hash: sha256:f7b2e9378257c86825b23ec8571a1b23d87f9acf2f44634c5f009a4edadb949e
+    supports: [page-purpose, concepts, capability.browse-filter, capability.pay, capability.deliver, capability.cancel, capability.stock-to-regularize, rules, troubleshooting]
   - path: frontend/routes/sales/sale_orders_status/sale_order_status.svelte.ts
     role: frontend-service
-    hash: sha256:c21cb2b41d6154e543c2d681ae63b3e20b922795348ab4cd29c721b46a3ae671
-    supports: [concepts, capability.browse-filter, capability.pay, capability.deliver, capability.cancel, rules]
+    hash: sha256:5aac8d90666e8a9fd9908d3ad55154fe294826902577d02cba6489b3d6d35067
+    supports: [concepts, capability.browse-filter, capability.pay, capability.deliver, capability.cancel, capability.stock-to-regularize, rules]
   - path: frontend/routes/sales/SaleOrdersTable.svelte
     role: user-interface
-    hash: sha256:0945c82b822174b4a6a1e4e72a8bcece13e616441b55b0f377e8b9c0f9d242f0
-    supports: [concepts, capability.browse-filter]
+    hash: sha256:89ef978523309136bf2c2723b87cf573d5af1368deb0409d554af1237635524d
+    supports: [concepts, capability.browse-filter, capability.stock-to-regularize]
   - path: frontend/routes/finance/exchange-rate/exchange-rate.ts
     role: shared-domain
-    hash: sha256:55738f078d629f60276bbfbbfb58b46b3b1b7ba7a9626d06504b2e909294bf28
+    hash: sha256:5a5b23729c283c270bb18dfea2b17758572f9405c2fa9a01cbdf96d98d6c0cba
     supports: [concepts, capability.pay, capability.cancel, rules]
   - path: frontend/routes/finance/cash-banks/cajas.svelte.ts
     role: shared-domain
-    hash: sha256:6b8e304283715cf7293c68424b6fd45d8d048828ed1b3d6498ab1e28cf2dcfd3
+    hash: sha256:6cc31cb3b2acc93150884c4ceb3290384c8e786857dcc27f21b20e3c6e3d6d34
     supports: [capability.pay, capability.cancel]
   - path: backend/sales/sale_orders_status.go
     role: backend-handler
-    hash: sha256:b057b5ba3afbf2646d67e735e4641cfe1f0fbba9c948395ced2387a0ef081f12
-    supports: [capability.browse-filter, concepts, rules, troubleshooting]
+    hash: sha256:c34311168921683a414fe2a0bbcf5dd450dfa8af8f5e2963186fb4fdd48c0262
+    supports: [capability.browse-filter, concepts, capability.stock-to-regularize, rules, troubleshooting]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:8901a11e252bc4794f1ab4d2d4e626c5213765121dbc5787566dfb5958dde5f4
-    supports: [capability.pay, capability.deliver, rules, troubleshooting]
-  - path: backend/sales/sale_order_currency.go
+    hash: sha256:0601dd000d061f432f4a7dfa0228d673b2debc0a744448d6ddfb78a30978c78d
+    supports: [concepts, capability.pay, capability.deliver, capability.stock-to-regularize, rules, troubleshooting]
+  - path: backend/sales/types/sale_currency.go
     role: business-logic
-    hash: sha256:186747cd3a2892beeef7428ff285df67edc44caa494e2b3b0b2985aa46b92a6f
-    supports: [concepts, capability.pay, rules, troubleshooting]
+    hash: sha256:d94fcf68ff93412a00250b54e2bb4c2c59865472b1f30d86a21e2eefcc6d5f92
+    supports: [concepts, capability.pay, capability.cancel, rules, troubleshooting]
+  - path: backend/sales/types/sale_actions.go
+    role: business-logic
+    hash: sha256:ad4c117e0bce8f4c8e88f85e6aa3677090935cf6b6127c944f72bf1601413109
+    supports: [capability.pay, capability.deliver]
+  - path: backend/sales/types/sale_stock_check.go
+    role: business-logic
+    hash: sha256:952f769c018817d9ba53b4055d0b890578bc17ce8536156bc65f756ad15563f9
+    supports: [capability.deliver, troubleshooting]
+  - path: backend/sales/types/sale_products.go
+    role: business-logic
+    hash: sha256:f8ab3f0e08952b9069dc162484ce6ed84cdd82ffe037833500133ce853124930
+    supports: [capability.deliver, capability.stock-to-regularize]
+  - path: backend/sales/saleissue/types/new_sale.go
+    role: business-logic
+    hash: sha256:79480f8435d4182f16c8ebca2b5717be396423cd73a571f5ef1e2a84a229e33e
+    supports: [capability.pay]
   - path: backend/sales/sale_order_annul.go
     role: backend-handler
-    hash: sha256:1ef56162da8be4a98bc0ecd34c4898f039ada07e69a2f731c0739671f4853b4d
-    supports: [capability.cancel, rules, troubleshooting]
+    hash: sha256:5d184227f73c0fc0630fb2357132bf09bc4dd39f2bda73d74d9676b611aa36f7
+    supports: [capability.cancel, capability.stock-to-regularize, rules, troubleshooting]
   - path: backend/invoicing/types/invoice_lookup.go
     role: business-logic
-    hash: sha256:6e8c81b134b11362bf751f57f57e954e21b0fdf502acf8b2f3c3e0b60b2ad87b
+    hash: sha256:726b3ad0a54ae459de3a43fa3ad5745b9d14d3ed69d9e4949c666c9d06757752
     supports: [capability.cancel, troubleshooting]
   - path: backend/sales/types/sales.go
     role: data-model
-    hash: sha256:7db7f29652af90da6fb8c68c6e992a0111162b1aa5492ac2b4564f5dd1895427
-    supports: [concepts, capability.pay, capability.deliver, capability.cancel, rules]
+    hash: sha256:3814c0a52410ab92d7a5e9ee87ee07f90c74815d15678e7391816183b64598c2
+    supports: [concepts, capability.pay, capability.deliver, capability.cancel, capability.stock-to-regularize, rules]
+  - path: backend/sales/types/pending_delivery.go
+    role: business-logic
+    hash: sha256:fdefbd8a318a6cafff7823707c0c42bbf28c5ca1077b9b54dccd150094e009fa
+    supports: [concepts, capability.deliver, capability.stock-to-regularize]
+  - path: backend/logistics/types/web_sellable.go
+    role: business-logic
+    hash: sha256:86e47492cdd858a77ec4502047f4c9929d951e875b9cc93bf0fc770f7d5524ab
+    supports: [capability.deliver, capability.stock-to-regularize, troubleshooting]
+  - path: backend/production/product_origin.go
+    role: business-logic
+    hash: sha256:a53fd15103a1d58292f4b56bef9ccd8d81986bb32959cdd04d3c8a92c11ebc31
+    supports: [capability.stock-to-regularize]
   - path: backend/access.toml
     role: business-logic
-    hash: sha256:31c7071defebf7ecec268a2ae932e58667d2f0e143dee894d0262d8eab4baa3c
+    hash: sha256:c19cf85130065dcc0f839796e1e9b4b98a1b78df465ccb20d2b63b59a1a94e59
     supports: [capability.cancel, troubleshooting]
   - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:6b47d33cfaa81d34eec52d00172ac223307b6a0869dd2ec2b3616af9154b5e5a
+    hash: sha256:81837d0a968b7cdd3f1bfff5f048395dfc72cea1dd65df3388f542c2b118780c
     supports: [capability.pay, capability.cancel]
+  - path: backend/production/daily_close.go
+    role: business-logic
+    hash: sha256:7ae0b03e927362b3c467d29657303b41f9f0dbc979ad54b92f79807ab9b025a1
+    supports: [concepts, capability.stock-to-regularize, related-pages]
 ```

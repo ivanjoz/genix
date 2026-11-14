@@ -116,6 +116,24 @@ type Product struct {
 	// WebHidden keeps the product out of the web store: the catalog ships it as removed and
 	// checkout refuses it.
 	WebHidden bool `cb:"46"`
+	// cb 47 is retired: it held the recipe as one nested struct (ProductProduction), and rows saved
+	// while testing still carry that blob. Never reuse it.
+
+	// The Production* columns are how a made product (Origin = 2) is produced and costed: the recipe
+	// the daily close consumes and the cost it values the production at (docs/PRODUCTION_PLAN.md §2).
+	// All zero otherwise. Costs are PEN cents, net of IGV. They are private: the public by-IDs route
+	// projects them away (publicProductFields). cb 52–55 are reserved by docs/MANUFACTURING_PLAN.md.
+
+	// ProductionYieldPortions is how many units of the product the recipe makes. The supply quantities
+	// are for that many units, so a pinch of salt per portion is expressible without a fraction of a
+	// sub-unit: "20 portions: 1 kg rice, 50 g salt".
+	ProductionYieldPortions int16              `cb:"48"`
+	ProductionSupplies      []ProductionSupply `cb:"49"`
+	// ProductionExtraCostPerUnit is added to the consumed supplies' value, per unit produced (labor, overhead).
+	ProductionExtraCostPerUnit int32 `cb:"50"`
+	// ProductionStandardCost, when > 0, is the unit cost of every production entry whatever the supplies
+	// cost. The supplies are still consumed: their stock is real even when their value is not used.
+	ProductionStandardCost int32 `cb:"51"`
 }
 
 // Product.Origin values.
@@ -182,6 +200,10 @@ type ProductTable struct {
 	Origin              db.Col[*ProductTable, int8]
 	WebExtraStock       db.Col[*ProductTable, int32]
 	WebHidden           db.Col[*ProductTable, bool]
+	ProductionYieldPortions    db.Col[*ProductTable, int16]
+	ProductionSupplies         db.Col[*ProductTable, []ProductionSupply]
+	ProductionExtraCostPerUnit db.Col[*ProductTable, int32]
+	ProductionStandardCost     db.Col[*ProductTable, int32]
 }
 
 func (e *Product) FillCategoriesWithStock() {

@@ -21,6 +21,10 @@ export interface ISupplyMaterial {
   // Default PCGE account of a purchase of this supply. Left empty, the server picks equipment
   // (3369) when it depreciates, else suministros (6032).
   AccountCode: number
+  // Sub-unit, as on a product: SbuQuantity sub-units named SbuUnit make one unit (1000 g in a kg),
+  // so a recipe can consume a fraction of the supply. 0 or 1 = no sub-unit.
+  SbuQuantity: number
+  SbuUnit: string
   // Merged from product_supply for the form; not part of the Product row itself.
   MinimunStock: number
   ProviderSupply: IProductSupplyProviderRow[]
@@ -32,7 +36,8 @@ export class SupplyMaterialService extends GetHandler<ISupplyMaterial> {
   route = "supply-material"
   // Bump `ver` whenever the ISupplyMaterial shape changes so clients drop their stale snapshot.
   // ver 4: supplies became Product rows (ss=2) and gained DepreciationMonths.
-  useCache = { min: 5, ver: 4 }
+  // ver 5: SbuQuantity / SbuUnit.
+  useCache = { min: 5, ver: 5 }
   prependOnSave = true
 
   makeName(record: Partial<ISupplyMaterial>) {

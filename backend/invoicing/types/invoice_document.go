@@ -66,16 +66,16 @@ const SeriesDigits = int64(100)
 // digits replaced by the series this document is issued under.
 //
 // For the document that bills the sale those are the same digits — a sale already
-// carries the series it will be issued under — so its id *is* the sale's id. A note
-// is issued under its own series (FC01 corrects a factura, BC01 a boleta) and so
-// lands on a neighbouring id, which is what lets a sale hold a boleta and the
-// credit note correcting it without a second key column.
+// carries the series it will be issued under — so its id *is* the sale's id.
+//
+// Do not key a note (FC01, BC01) with it: the prefix is only the sale's correlativo,
+// and two sales of different series can share one, so their notes in one note series
+// would land on the same id. See sales/types/sale_order_id.go.
 func DocumentIDForSale(saleOrderID int64, seriesID int8) int64 {
 	return SalePrefix(saleOrderID)*SeriesDigits + int64(seriesID)
 }
 
-// SalePrefix is the counter and the random digits a sale shares with every
-// document issued for it.
+// SalePrefix is the correlativo a sale's id carries in front of its series.
 func SalePrefix(id int64) int64 {
 	return id / SeriesDigits
 }

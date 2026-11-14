@@ -106,7 +106,7 @@ against it: paying a pending sale (`PostSaleOrder` update) and the refund on `Po
 Both let the operator pick any cash-bank.
 
 **Decision** — Both reject a cash-bank whose currency differs from the sale's
-(`resolveSaleOrderCurrency`, and the same check in the annul). The status page only offers the
+(`sales/types.ValidateSaleCurrency`, and the same check in the annul). The status page only offers the
 cash-banks of the sale's currency.
 
 **Rationale** — A USD sale collected or refunded through a soles register would move a dollar
@@ -278,6 +278,24 @@ owning it from here is safe. There is a test pinning the name for exactly this r
 counters. After a restore, neither can be realigned with the rows that exist. It was already wrong
 for this table (it derived the target from the packed key), so nothing regressed, but the gap is now
 total rather than partial. Recorded in `invoicing/FINDINGS.md`.
+
+## The sale id lost its random digits: `[correlativo][series:2]`
+
+**Context** — The two random digits were there because a counter served without a single serializing
+writer could hand two tills the same value; the random digits made such a collision land on the same
+key only one time in a hundred. On MariaDB every counter is one row of `_sequences`, advanced under its
+row lock in one autocommit statement, so two reservations can never return the same number.
+
+**Decision** — `MakeSaleOrderID` builds `correlativo*100 + series`. The sale 13002 is F002-130.
+The same pass took the random bits out of every other generated key (`warehouse_product_movement`,
+`credit_history`, `cash_bank_movements` now pass `Autoincrement(0)`) and replaced the time-plus-random
+`SUnixTimeUUIDConcatID` key of `cash_reconciliations` with `ID.Autoincrement(0)`. The ORM keeps the
+random-suffix feature; its argument is optional and every table leaves it at 0.
+
+**Consequence worth knowing:** the random digits were also what kept a credit note keyed as
+`DocumentIDForSale(sale, noteSeries)` from colliding most of the time. Two sales of different series
+can share a correlativo, so their notes in one note series would now always share an id. Notes are not
+emitted yet; how they are keyed is open, and `DocumentIDForSale` says not to use it for them.
 
 ## IssueSeriesID is a request field, not a column
 

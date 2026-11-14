@@ -47,7 +47,8 @@ func RestampReceptionAccountsIn(
 type WarehouseProductMovement struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
 	CompanyID int32 `cb:"1"`
-	// ID packs Date(15 bits)+WarehouseID(17 bits)+Autoincrement(8 random bits) into an int64.
+	// ID packs Date(16 bits)+WarehouseID(16 bits)+Type(6 bits)+the per-day sequence (the remaining
+	// 25 bits) into an int64.
 	ID                   int64  `cb:"2"`
 	SerialNumber         string `cb:"3"`
 	LotID                int32  `cb:"4"`
@@ -120,7 +121,7 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		KeyIntPacking: db.Cols(
-			e.Date.Size(16), e.WarehouseID.Size(16), e.Type.Size(6), e.Autoincrement(6),
+			e.Date.Size(16), e.WarehouseID.Size(16), e.Type.Size(6), e.Autoincrement(0),
 		),
 		AutoincrementPart: e.Date,
 		// Size the slots of the period delta index. Type leaves room for new movement types.
@@ -200,6 +201,10 @@ type InternalMovement struct {
 	// by the quantity would round, and the returned value would no longer cancel the delivered one.
 	InflowValue int32
 	DocumentID  int64
+	// Date is the ledger date when not today (UnixDay; 0 = today). Only the production close sets it,
+	// on its own movements (15, 16, and the sale exits 8 it settles), so a close of day D run after
+	// midnight still books on D. It may be today or yesterday, never another day.
+	Date int16
 	// PurchaseAccountCode is the account the purchase behind a reception posted to, written on the
 	// ledger row (WarehouseProductMovement.PurchaseAccountCode). Set by the reception's caller.
 	PurchaseAccountCode int32

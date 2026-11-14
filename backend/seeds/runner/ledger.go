@@ -8,7 +8,7 @@ import (
 )
 
 // StockBucketKind separates the three physical places a unit can live, because each one is
-// validated against a different row by validateSaleStock: the free bucket against
+// validated against a different row by types.ValidateSaleStock: the free bucket against
 // ProductStockV2.Quantity, the other two against their ProductStockDetail row.
 type StockBucketKind int8
 

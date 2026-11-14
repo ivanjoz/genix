@@ -2,8 +2,49 @@ import { describe, expect, it } from 'bun:test';
 import {
   DELIVERY_HOME, DELIVERY_PICKUP, FLAG_RECEIPT_AUTOMATIC, FLAG_REQUIRE_CONTACT_NUMBER, NEW_ADDRESS_ID,
   PAYMENT_CARD, PAYMENT_DEFERRED, buildWebCheckoutRequest, cartTotalCents, defaultAddressID,
-  requiresDocumentNumber, validateCustomerDraft, validateDelivery, type ICustomerDraft,
+  formatWebOrderNumber, mostExpensiveOrderLines, requiresDocumentNumber, validateCustomerDraft,
+  validateDelivery, webOrderPaymentLabel, webOrderProgress, webOrderProgressStep, webPaymentMethodLabel,
+  type ICustomerDraft,
 } from './web-checkout';
+import { QUANTITY_LINE_SCALE } from '#core/quantity.ts';
+
+describe('Mis Pedidos card', () => {
+  it('pads the order number to 4 digits', () => {
+    expect(formatWebOrderNumber(1)).toBe('0001');
+    expect(formatWebOrderNumber(12345)).toBe('12345');
+  });
+
+  it('lists the lines with the highest amount first', () => {
+    const line = (ProductID: number, units: number, Price: number) => ({ ProductID, Price, Quantity: units * QUANTITY_LINE_SCALE });
+    const topLines = mostExpensiveOrderLines([line(1, 10, 100), line(2, 1, 5000), line(3, 3, 700), line(4, 1, 50)], 3);
+    expect(topLines.map(topLine => topLine.ProductID)).toEqual([2, 3, 1]);
+  });
+
+  it('labels the payment apart from the delivery', () => {
+    expect(webOrderPaymentLabel(1)).toBe('Pendiente de pago');
+    expect(webOrderPaymentLabel(3)).toBe('Pendiente de pago');
+    expect(webOrderPaymentLabel(4)).toBe('Pagado');
+    expect(webOrderPaymentLabel(0)).toBe('');
+  });
+
+  it('badges the progress, a delivery outranking the fulfillment label', () => {
+    const order = (ss: number, FulfillmentStatus: number, DeliveryType = DELIVERY_HOME) => ({ ss, FulfillmentStatus, DeliveryType });
+    expect(webOrderProgress(order(2, 0)).label).toBe('Recibido');
+    expect(webOrderProgress(order(2, 1)).label).toBe('En Preparación');
+    expect(webOrderProgress(order(2, 2)).label).toBe('En Camino');
+    expect(webOrderProgress(order(2, 2, DELIVERY_PICKUP)).label).toBe('Para Recoger');
+    expect(webOrderProgress(order(4, 2)).label).toBe('Entregado');
+    expect(webOrderProgress(order(0, 1)).label).toBe('Anulado');
+    expect(webOrderProgressStep(order(3, 1))).toBe(3);
+    expect(webOrderProgressStep(order(1, 0))).toBe(0);
+  });
+
+  it('names the payment method, cash on delivery by where it is paid', () => {
+    expect(webPaymentMethodLabel(PAYMENT_CARD, DELIVERY_HOME)).toBe('Tarjeta');
+    expect(webPaymentMethodLabel(PAYMENT_DEFERRED, DELIVERY_HOME)).toBe('Pago contra entrega');
+    expect(webPaymentMethodLabel(PAYMENT_DEFERRED, DELIVERY_PICKUP)).toBe('Pago en tienda');
+  });
+});
 
 const completeDraft: ICustomerDraft = {
   Email: 'ana@example.com', FirstName: 'Ana', LastName: 'Pérez', Phone: '', DocumentNumber: '',

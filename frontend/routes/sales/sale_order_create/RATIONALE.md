@@ -164,7 +164,7 @@ list, so if the columns ever grow past three this decision has to be revisited.
 ## The form checks the buyer against the series, and takes both from the page
 
 **Context** — The backend now refuses a sale whose series demands a buyer it does not have
-(`backend/sales/sale_order_issuance.go`). Mirroring that in the form needs two things the
+(`backend/sales/saleissue/types/sale_issue_series.go`). Mirroring that in the form needs two things the
 `SaleOrderState` does not hold: the company's series, to know whether the pick is a factura, and the
 selected client row, to read its `RegistryNumber`.
 
@@ -184,7 +184,7 @@ rule is written down, which is why `sale_order.ts` names the Go file it mirrors.
 (0–99), so a sale could be stamped with a series the company never configured, or with a factura
 series and no client to bill.
 
-**Decision** — Validated on the server as of `backend/sales/sale_order_issuance.go`: the series must
+**Decision** — Validated on the server as of `backend/sales/saleissue/types/sale_issue_series.go`: the series must
 exist and be active, must not be a note series, and the buyer must satisfy the document type. The
 reasoning behind the checks is in `backend/sales/RATIONALE.md`.
 

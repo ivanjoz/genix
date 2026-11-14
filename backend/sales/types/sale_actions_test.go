@@ -1,4 +1,4 @@
-package sales
+package types
 
 import "testing"
 
@@ -21,7 +21,7 @@ func TestSaleOrderCollectedAmount(t *testing.T) {
 		{"a payment that collects nothing is refused", 4000, 4000, 0, true},
 	}
 	for _, testCase := range cases {
-		collected, err := saleOrderCollectedAmount(testCase.pendingDebt, testCase.remainingDebt)
+		collected, err := SaleOrderCollectedAmount(testCase.pendingDebt, testCase.remainingDebt)
 		if (err != nil) != testCase.wantErr {
 			t.Errorf("%s: error = %v, want error %v", testCase.name, err, testCase.wantErr)
 		}

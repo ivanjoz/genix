@@ -15,7 +15,7 @@
   <div class="text-fg-muted shrink-0">{tr('Status|Estado')}</div>
   <div class="grow min-w-0">
     <ArrowSteps options={fulfillmentStepOptions(order)} selected={currentFulfillmentStep(order)}
-      onSelect={(step) => onSelectStep(step.id)}
+      pointedStart onSelect={(step) => onSelectStep(step.id)}
     >
       {#snippet optionRender(step)}
         <div class="flex items-center ff-semibold">

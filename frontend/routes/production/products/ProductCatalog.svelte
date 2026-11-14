@@ -1,0 +1,1015 @@
+<script lang="ts">
+  import { confirmWarn, hideLoading, notifyFailure, notifySuccess, notifyWarning, showLoading } from '@genix/ui/notify';
+  import { useUI } from '@genix/ui';
+  const ui = useUI();
+import Button from '#components/buttons/Button.svelte';
+import FilterInput from '#components/form/FilterInput.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
+import CheckboxOptions from '#components/form/CheckboxOptions.svelte';
+import ImageUploader from '#components/files/ImageUploader.svelte';
+import Image from '#components/files/Image.svelte';
+import Input from '#components/form/Input.svelte';
+import Layer from '#components/layers/Layer.svelte';
+import Modal from '#components/layers/Modal.svelte';
+import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
+import SearchCard from '#components/cards/SearchCard.svelte'; 
+import SearchSelect from '#components/form/SearchSelect.svelte';
+import VTable from '#components/vTable/VTable.svelte';
+import { Core, tr } from '#core/store.svelte.ts';
+import T from '#components/misc/T.svelte';
+import Page from '#domain/Page.svelte';
+import { formatN } from '#libs/helpers.ts';
+import { POST, genixUiRuntime } from '#libs/ui-runtime.svelte.ts';
+import type { ExcelTableColumn } from '@genix/ui/excel';
+import type { Component } from 'svelte';
+import Atributos from './Attributes.svelte';
+import CategoriasMarcas from './CategoriesBrands.svelte';
+import { exportProductosToExcel, processProductosImportFile } from './products.excel';
+import { productoMonedaOptions, productoUnidadOptions } from '#core/products-lists.ts';
+import { SharedListsService } from '#services/business/shared-lists.svelte.ts';
+import {
+    ProductsService,
+    productImageName,
+    mainProductImage,
+    PRODUCT_ORIGIN_MADE,
+    PRODUCT_ORIGIN_OPTIONS,
+    type IProduct,
+    type IProductoImage
+} from "#services/production/products.svelte.ts";
+    import TableGrid from '#components/vTable/TableGrid.svelte';
+  import ProductProductionTab from './ProductProductionTab.svelte';
+  import { clearProductionFields, copyProductionFields, findProductionError } from './product-production.ts';
+
+  // The catalog is one table split by Origin: "Mercaderías" lists the bought products, "Productos"
+  // the made ones (docs/PRODUCTION_PLAN.md §1). Every page that sells or moves stock still reads both
+  // through the same ProductsService; only these two lists filter.
+  let { origin }: { origin: number } = $props();
+
+  const catalogTitle = $derived(origin === PRODUCT_ORIGIN_MADE ? "Products|Productos" : "Merchandise|Mercaderías");
+
+  let filterText = $state("");
+  const productos = new ProductsService(true);
+  const listas = new SharedListsService([1, 2], true);
+  const catalogRecords = $derived(productos.records.filter((product) => product.Origin === origin));
+
+  let view = $state(1);
+  let layerView = $state(1);
+  let productoForm = $state({} as IProduct);
+  // svelte-ignore non_reactive_update
+  let CategoriasLayer: CategoriasMarcas | null = null;
+  // svelte-ignore non_reactive_update
+  let MarcasLayer: CategoriasMarcas | null = null;
+  let importExcelRowsPreview = $state<IProduct[]>([]);
+  let importExcelErrors = $state<string[]>([]);
+  let isImportExcelProcessing = $state(false);
+  let HtmlEditorComponent = $state<Component<any> | null>(null);
+  let htmlEditorComponentPromise: Promise<Component<any>> | null = null;
+  // For NEW products the main-image ✓ (confirm) button is hidden — there's no ProductID yet to
+  // attach the upload to. We stash the uploader's confirm callback here and invoke it from onSave,
+  // AFTER the product is saved and has obtained its real ID.
+  let pendingMainImageConfirm: (() => Promise<unknown>) | undefined;
+
+  const loadHtmlEditor = async () => {
+    if (!htmlEditorComponentPromise) {
+      console.debug('[products] Loading rich text editor runtime');
+      htmlEditorComponentPromise = import('@genix/ui/editor')
+        .then((module) => module.default);
+    }
+    HtmlEditorComponent = await htmlEditorComponentPromise;
+  };
+
+  $effect(() => {
+    if (layerView === 2 && !HtmlEditorComponent) {
+      void loadHtmlEditor();
+    }
+  });
+
+  // Gallery of the form product's images, derived from the parallel ImageIDs/ImageDescriptions arrays.
+  const productoImagenes = $derived(
+    (productoForm.ImageIDs || []).map((id, index): IProductoImage => ({
+      id,
+      n: productImageName(id),
+      d: productoForm.ImageDescriptions?.[index] || "",
+    })),
+  );
+
+  // Prepend a freshly-confirmed image as the product's main image (clears the unconfirmed preview).
+  const addProductImage = (image: { id: number; name: string; description?: string }) => {
+    productoForm._imageSource = undefined;
+    productoForm.ImageIDs = [image.id, ...(productoForm.ImageIDs || [])];
+    productoForm.ImageDescriptions = [image.description || "", ...(productoForm.ImageDescriptions || [])];
+    productoForm.ImageMain = image.id;
+    productoForm.Image = { id: image.id, n: image.name, d: image.description || "" } as IProductoImage;
+    // Persist optimistically into the cached record (same object the list/row-click reuses) so
+    // re-selecting the product carries the new ImageMain in `src` — the uploader then renders it
+    // from the in-memory map until the real CDN upload finishes. New products (ID 0) have no
+    // cached record yet; they get one from postAndSync on save, already carrying these ids.
+    // Mutate the record in the list array — the exact object VTable/onRowClick read from. (The
+    // recordsMap entry is a separate $state proxy, so mutating it wouldn't reach the row.)
+    const record = productos.records.find((r) => r.ID === productoForm.ID);
+    console.log("addProductImage (cache update)::", {
+      formID: productoForm.ID, newImageID: image.id, newName: image.name,
+      recordFound: !!record, recordImageMainBefore: record?.ImageMain,
+    });
+    if (record) {
+      record.ImageIDs = [...productoForm.ImageIDs];
+      record.ImageDescriptions = [...productoForm.ImageDescriptions];
+      record.ImageMain = productoForm.ImageMain;
+      record.Image = productoForm.Image;
+      console.log("addProductImage (after)::", { recordImageMainAfter: record.ImageMain, recordImageN: record.Image?.n });
+    }
+  };
+
+  const IMPORT_PRODUCTOS_MODAL_ID = 11;
+
+  // Reuse option lists as the single source for labels in UI and Excel export.
+  const monedaLabelById = new Map(productoMonedaOptions.map((option) => [option.i, option.v]));
+  const unidadLabelById = new Map(productoUnidadOptions.map((option) => [option.i, option.v]));
+  const getUpdatedFieldCellCss = (record: IProduct, fieldKey: string): string | undefined => {
+    // Highlight imported cells that differ from the current persisted product value.
+    if (!record._updatedFields?.includes(fieldKey)) return undefined;
+    return "bg-purple-bg-strong";
+  };
+
+  const makeProductColumns = (isImport = false): ExcelTableColumn<IProduct>[] => [
+    {
+      header: "ID", 
+      field: 'ID', width: "40px",
+      css: "text-blue-fg text-center",
+      headerCss: "w-48", headerInnerCss: "min-w-42",
+      getValue: (e) => e.ID || "",
+      render: e => e.ID ? String(e.ID) : `<i class="icon-[fa--refresh]"></i>`,
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "ID"),
+      excel: { type: "number"  },
+      mobile: { order: 1, css: "col-span-6 ff-bold", icon: "[fa--tag]" },
+    },
+    {
+      header: "Product|Producto", useLineClamp: true,
+      highlight: true, width: "300px",
+      getValue: (e) => e.Name,
+      field: "Name",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Name"),
+      excel: { type: "string" },
+      mobile: {
+        order: 2,
+        css: "col-span-18",
+        render: (e) => `<strong>${e.Name}</strong>`,
+      },
+    },
+    {
+      header: "Categories|Categorías", useLineClamp: true,
+      highlight: true, width: "160px",
+      renderPrefix: e => (e.CategoryIDs||[]).some(x => x <= 0) && `<i class="icon-[fa--refresh] -ml-4 text-purple-solid"></i>`,
+      getValue: (e) => {
+        // Keep import preview readable by showing original labels from Excel.
+        if (isImport && (e._categoriasNames || "").trim().length > 0) {
+          return e._categoriasNames || "";
+        }
+        const nombres = [];
+        for (const id of e.CategoryIDs || []) {
+          const nombre = listas.get(id)?.Name || `Categoría-${id}`;
+          nombres.push(nombre);
+        }
+        return nombres.join(", ");
+      },
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "CategoryIDs"),
+      // Record the raw category names on import so another step can resolve the IDs.
+      excel: { type: "string", importField: "_categoriasNames" },
+      mobile: {
+        order: 3,
+        css: "col-span-24",
+        render: (e) => {
+          const nombres = [];
+          for (const id of e.CategoryIDs || []) {
+            const nombre = listas.get(id)?.Name || `Categoría-${id}`;
+            nombres.push(nombre);
+          }
+          return `<div style="font-size: 0.85rem; color: var(--fg-muted);">${nombres.join(", ") || "Sin categorías"}</div>`;
+        },
+      },
+    },
+    {
+      header: "Price|Precio", width: "100px",
+      css: "text-right",
+      getValue: (e) => formatN(e.Price / 100, 2),
+      field: "Price",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Price"),
+      excel: {
+        type: "number",
+        format: "#,##0.00",
+        exportValue: (e) => e.Price / 100,
+        // Converts imported decimal price into backend cents model.
+        setValue: (rowDraft, parsedValue) => {
+          if (typeof parsedValue !== "number" || !Number.isFinite(parsedValue)) return;
+          rowDraft.Price = Math.round(parsedValue * 100);
+        },
+      },
+      mobile: {
+        order: 4,
+        css: "col-span-12",
+        labelLeft: "Precio:",
+        render: (e) => formatN(e.Price / 100, 2),
+      },
+    },
+    {
+      header: "Discount|Descuento", width: "100px",
+      css: "text-right",
+      getValue: (e) => (e.Discount ? String(e.Discount) + "%" : ""),
+      field: "Discount",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Discount"),
+      excel: { type: "number" },
+      mobile: {
+        order: 5,
+        css: "col-span-12",
+        labelLeft: "Desc:",
+        render: (e) => (e.Discount ? `${e.Discount}%` : "-"),
+      },
+    },
+    {
+      header: "Final Price|Precio Final", width: "100px",
+      css: "text-right",
+      getValue: (e) => formatN(e.FinalPrice / 100, 2),
+      field: "FinalPrice",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "FinalPrice"),
+      excel: {
+        type: "number",
+        format: "#,##0.00",
+        exportValue: (e) => e.FinalPrice / 100,
+        // Keeps imported final price aligned with backend cents model.
+        setValue: (rowDraft, parsedValue) => {
+          if (typeof parsedValue !== "number" || !Number.isFinite(parsedValue)) return;
+          rowDraft.FinalPrice = Math.round(parsedValue * 100);
+        },
+      },
+      mobile: {
+        order: 6,
+        css: "col-span-24",
+        labelLeft: "Final:",
+        icon: "[fa--check]",
+        render: (e) => `<strong>${formatN(e.FinalPrice / 100, 2)}</strong>`,
+      },
+    },
+    {
+      header: "Sub-units|Sub Unidades", width: "120px",
+      css: "text-right",
+      getValue: (e) => {
+        if (!e.SbuUnit) return "";
+        return `${e.SbuQuantity} x ${e.SbuUnit}`;
+      },
+      excel: { type: "string" },
+      mobile: {
+        order: 7,
+        css: "col-span-24",
+        labelTop: "Sub-unidades",
+        render: (e) => {
+          if (!e.SbuUnit) return "<span style='color: var(--fg-subtle);'>-</span>";
+          return `<div style="font-size: 0.9rem;">${e.SbuQuantity} x ${e.SbuUnit}</div>`;
+        },
+      },
+    },
+    {
+      header: "Brand|Marca", width: "160px",
+      hidden: !isImport,
+      renderPrefix: e => !(e.BrandID > 0) && `<i class="-ml-4 icon-[fa--refresh] text-purple-fg"></i>`,
+      getValue: (e) => e._marcaNombre || listas.get(e.BrandID)?.Name || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "BrandID"),
+      excel: { type: "string", importField: "_marcaNombre" },
+    },
+    {
+      header: "Unit|Unidad",
+      hidden: !isImport,
+      getValue: (e) => e._unidadNombre || unidadLabelById.get(e.UnitID) || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "UnitID"),
+      excel: { type: "string", importField: "_unidadNombre" },
+    },
+    {
+      header: "Volume|Volumen", width: "100px",
+      hidden: !isImport,
+      getValue: (e) => e.Volume || "",
+      field: "Volume",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Volume"),
+      excel: { type: "number", format: "#,##0.00" },
+    },
+    {
+      header: "Weight|Peso",
+      hidden: !isImport,
+      getValue: (e) => e.Weight || "",
+      field: "Weight",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "Weight"),
+      excel: { type: "number", format: "#,##0.00" },
+    },
+    {
+      header: "Currency|Moneda",
+      hidden: !isImport,
+      getValue: (e) => e._monedaNombre || monedaLabelById.get(e.CurrencyID) || "",
+      setCellCss: (record) => getUpdatedFieldCellCss(record, "CurrencyID"),
+      excel: { type: "string", importField: "_monedaNombre" },
+    },
+  ];
+
+  const productoColumns = makeProductColumns(false);
+  const productoImportColumns = makeProductColumns(true);
+
+  const categorias = $derived.by(() => {
+    return listas.ListaRecordsMap.get(1) || [];
+  });
+
+  const exportProductosExcel = async () => {
+    showLoading(tr("Generating Excel file...|Generando archivo Excel..."));
+    try {
+      await exportProductosToExcel(productoColumns, catalogRecords);
+      hideLoading();
+      notifySuccess(tr("Excel generated successfully.|Excel generado correctamente."));
+    } catch (error) {
+      console.error("Error exportando productos:", error);
+      hideLoading();
+      notifyFailure(`No se pudo exportar el archivo: ${error}`);
+    }
+  };
+
+  const openImportProductosModal = () => {
+    importExcelRowsPreview = [];
+    importExcelErrors = [];
+    isImportExcelProcessing = false;
+    listas.clearTempRecords();
+    ui.openModal(IMPORT_PRODUCTOS_MODAL_ID);
+  };
+
+  const onImportExcelFileChange = async (file?: File, isRemoved?: boolean) => {
+    importExcelRowsPreview = [];
+    importExcelErrors = [];
+    listas.clearTempRecords();
+
+    if (isRemoved || !file) {
+      isImportExcelProcessing = false;
+      console.log("[productos-import] file removed or empty selection");
+      return;
+    }
+
+    isImportExcelProcessing = true;
+    console.log("[productos-import] starting excel import:", file.name);
+
+    try {
+      const importResult = await processProductosImportFile(productoImportColumns, file, listas, productos);
+
+      if(!importResult.rows){
+     		notifyWarning(tr("No new records detected to save.|No se detectaron registros nuevos a guardar."))
+      }
+      
+      importExcelRowsPreview = importResult.rows;
+      importExcelErrors = importResult.errors;
+
+      console.log("[productos-import] import completed:", {
+        rows: importResult.rows.length,
+        mappedColumns: importResult.mappedColumns,
+        ignoredHeaders: importResult.ignoredHeaders,
+        errors: importExcelErrors.length,
+        pendingSharedListRecords: listas.getTempRecords().length,
+      });
+    } catch (error) {
+      console.error("[productos-import] import failed:", error);
+      importExcelErrors = [`Error procesando el archivo: ${error}`];
+      notifyFailure(`No se pudo procesar el Excel: ${error}`);
+    } finally {
+      isImportExcelProcessing = false;
+    }
+  };
+
+  const saveImportProductos = async () => {
+    if (importExcelErrors.length > 0) {
+      notifyFailure(tr("Fix import errors before saving.|Corrige los errores de importación antes de guardar."));
+      return;
+    }
+    if (importExcelRowsPreview.length === 0) {
+      notifyFailure(tr("No valid rows to import.|No hay filas válidas para importar."));
+      return;
+    }
+
+    try {
+      showLoading(tr("Saving product import...|Guardando importación de productos..."));
+      const pendingSharedListRecords = listas.getTempRecords().length;
+      let tempIDToNewID = new Map<number, number>();
+
+      // Persist temporary categorías/marcas and get TempID -> ID mappings.
+      if (pendingSharedListRecords > 0) {
+        showLoading(`Creando categorías/marcas nuevas (${pendingSharedListRecords})...`);
+        tempIDToNewID = await listas.syncTempRecords();
+      }
+
+      const productosToSave = importExcelRowsPreview.map((importedProducto) => {
+        importedProducto.BrandID = tempIDToNewID.get(importedProducto.BrandID) || importedProducto.BrandID;
+        importedProducto.CategoryIDs = (importedProducto.CategoryIDs || []).map((categoriaID) => {
+          return tempIDToNewID.get(categoriaID) || categoriaID;
+        });
+
+        const existingProducto = productos.recordsMap.get(importedProducto.ID);
+        if (existingProducto) {
+          for (const fieldKey in existingProducto) {
+            const typedFieldKey = fieldKey as keyof IProduct;
+            if (importEditableProductKeys.has(typedFieldKey)) { continue; }
+            (importedProducto as any)[typedFieldKey] = existingProducto[typedFieldKey];
+          }
+        } else {
+          // A new row belongs to the list it was imported from; an existing one keeps its own Origin.
+          importedProducto.Origin = origin;
+        }
+
+        return importedProducto;
+      });
+
+      const unresolvedIDProducto = productosToSave.find((productoDraft) => {
+        const hasInvalidCategoriaID = (productoDraft.CategoryIDs || []).some((categoriaID) => categoriaID <= 0);
+        return hasInvalidCategoriaID || productoDraft.BrandID <= 0;
+      });
+      if (unresolvedIDProducto) {
+        throw new Error(
+          `No se pudieron resolver IDs temporales para el producto "${unresolvedIDProducto.Name || unresolvedIDProducto.ID}".`,
+        );
+      }
+
+      console.log("[productos-import] final payload before productos POST:", {
+        productos: productosToSave.length,
+        tempIDMappings: Array.from(tempIDToNewID.entries()),
+      });
+
+      const BATCH_SIZE = 500;
+      const totalBatches = Math.ceil(productosToSave.length / BATCH_SIZE);
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batch = productosToSave.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
+        showLoading(`Enviando ${batchIndex + 1}/${totalBatches}...`);
+        await doPostProductos(batch);
+      }
+      for(const e of productos.records){ delete e._updatedFields }
+      hideLoading();
+      
+      notifySuccess(tr("Import completed successfully.|Importación completada correctamente."));
+      importExcelRowsPreview = [];
+      ui.closeModal(IMPORT_PRODUCTOS_MODAL_ID);
+      productoForm = {} as IProduct
+    } catch (error) {
+      console.error("[productos-import] save import failed:", error);
+      notifyFailure(`No se pudo completar la importación: ${error}`);
+      hideLoading();
+    }
+  };
+
+  const doPostProductos = async (payload: IProduct[]): Promise<Map<number, number>> => {
+    for (const producto of payload) {
+      // Keep local shape consistent even when backend omits optional fields in responses.
+      producto.Image = mainProductImage(producto);
+      producto.CategoryIDs = producto.CategoryIDs || [];
+    }
+    return await productos.postAndSync(payload);
+  };
+
+  const importEditableProductKeys = new Set<keyof IProduct>([
+    "ID", "Name", "CategoryIDs", "Price", "Discount", "FinalPrice",
+    "BrandID", "UnitID", "Volume", "Weight", "CurrencyID",
+  ]);
+
+  // Flush optimistic product images held in memory. Runs AFTER the product is saved so the
+  // image upload (which needs the product's real ID via setDataToSend) can succeed; a new
+  // product gets its real ID assigned in place by postAndSync before we get here.
+  const flushPendingProductImages = async () => {
+    for (const imageID of productoForm.ImageIDs || []) {
+      const pendingImage = genixUiRuntime.images.get(productImageName(imageID));
+      if (pendingImage?.upload) {
+        // Supply the now-known real ProductID (it was 0 at confirm time for a new product).
+        // On failure the header process tray keeps the entry with a retry; don't block the save.
+        try { await pendingImage.upload({ ProductID: productoForm.ID }); } catch { /* surfaced in the process tray */ }
+      }
+    }
+  };
+
+  const onSave = async (isDelete?: boolean) => {
+    if ((productoForm.Name?.length || 0) < 4) {
+      notifyFailure(tr("Name must be at least 4 characters.|El nombre debe tener al menos 4 caracteres."));
+      return;
+    }
+
+    // Only a made product has a recipe: one moved to bought drops it (its tab is hidden by then). The
+    // form keeps it until the server accepts, so a refused change back to made still has it.
+    const formProduction = copyProductionFields(productoForm);
+    if (productoForm.Origin !== PRODUCT_ORIGIN_MADE) { clearProductionFields(productoForm); }
+    // A made product's recipe errors are caught here so the user is sent to the tab to fix them.
+    const productionError = productoForm.Origin === PRODUCT_ORIGIN_MADE ? findProductionError(productoForm) : undefined;
+    if (productionError && !isDelete) {
+      notifyFailure(tr(productionError));
+      layerView = 5;
+      return;
+    }
+
+    console.log("productor a enviar:", $state.snapshot(productoForm));
+    if (isDelete) {  productoForm.ss = 0; }
+
+    // A new product has no ID yet, so the main-image ✓ was hidden and the picked image is still
+    // unconfirmed. Remember that here so we can confirm it once the product obtains its real ID.
+    const isNewProduct = !productoForm.ID;
+
+    // Save the product FIRST: it carries the optimistic ImageMain/ImageIDs and obtains its real ID.
+    showLoading(tr("Saving product...|Guardando producto..."));
+    try {
+    	await doPostProductos([productoForm]);
+    } catch (error) {
+      Object.assign(productoForm, formProduction);
+      notifyFailure(error as string);
+      hideLoading();
+      return;
+    }
+    if (!isDelete) {
+      showLoading(tr("Saving images...|Guardando imágenes..."));
+      // New product: confirm the picked main image now that ProductID exists (its ✓ was hidden).
+      // ImageUploader reserves the id, adds it to ImageIDs and uploads in the background.
+      if (isNewProduct && pendingMainImageConfirm && productoForm._imageSource?.base64) {
+        try { await pendingMainImageConfirm(); } catch { /* surfaced in the process tray */ }
+      }
+      // Then upload any remaining pending image bytes with the now-known product ID.
+      await flushPendingProductImages();
+    }
+    pendingMainImageConfirm = undefined;
+    hideLoading();
+    productoForm = {} as IProduct
+    ui.openSideLayer(0);
+  };
+
+  $effect(() => {
+    console.log("productor form:", $state.snapshot(productoForm));
+  });
+
+  const deleteProductoImage = async (ImageToDelete: number) => {
+ 		console.debug("Eliminando imagen::", ImageToDelete)
+
+    showLoading(tr("Deleting image...|Eliminando Imagen..."));
+    try {
+      await POST({
+        data: { ProductID: productoForm.ID, ImageToDelete },
+        route: "product-image",
+        refreshRoutes: ["products"],
+      });
+    } catch (error) {
+      notifyFailure(`Error al eliminar imagen: ${error}`);
+      hideLoading();
+      return;
+    }
+    hideLoading();
+    // Drop the imageID from the parallel arrays and repoint the main image if needed.
+    const index = (productoForm.ImageIDs || []).indexOf(ImageToDelete);
+    if (index >= 0) {
+      productoForm.ImageIDs.splice(index, 1);
+      productoForm.ImageDescriptions?.splice(index, 1);
+    }
+    if (productoForm.ImageMain === ImageToDelete) {
+      productoForm.ImageMain = productoForm.ImageIDs?.[0] || 0;
+    }
+    productoForm.Image = mainProductImage(productoForm);
+  };
+</script>
+
+<Page title={catalogTitle}>
+  <div class="grid grid-cols-12 md:flex md:flex-row items-center mb-8">
+    <OptionsStrip
+      selected={view}
+      css="col-span-12 mb-6 md:mb-0"
+      options={[
+        [1, catalogTitle],
+        [2, "Categories|Categorías"],
+        [3, "Brands|Marcas"],
+      ]}
+      useMobileGrid={true}
+      onSelect={(e) => {
+        ui.openSideLayer(0);
+        productoForm = { ID: 0 } as IProduct;
+        view = e[0] as number;
+      }}
+    />
+    <FilterInput label="Filter products|Filtrar productos"
+      css="w-full md:w-200 md:ml-12 col-span-5"
+      icon="icon-[fa--search]"
+      bind:value={filterText}
+    />
+
+    {#if view === 1}
+      <Button label="Opens the import modal to load products from an Excel file."
+        color="blue"
+        icon="icon-[fa--upload]"
+        css="ml-auto mr-8 col-span-3"
+        onClick={openImportProductosModal}
+      />
+      <Button label="Exports the current product list to an Excel file for download."
+        color="purple"
+        icon="icon-[fa--download]"
+        css="mr-8 col-span-3"
+        onClick={exportProductosExcel}
+      />
+    {/if}
+
+    <Button name="New|Nuevo" label="Shows the form to create a new product in a side layer."
+      color="green"
+      icon="icon-[fa--plus]"
+      hideNameOnMobile
+      css={`col-span-7 ${view === 1 ? "" : "ml-auto"}`}
+      onClick={() => {
+        if (view === 2) {
+          CategoriasLayer?.newRecord();
+        } else if (view === 3) {
+          MarcasLayer?.newRecord();
+        } else {
+          productoForm = clearProductionFields({ ss: 1, Origin: origin } as IProduct)
+          ui.openSideLayer(1);
+        }
+      }}
+    />
+  </div>
+
+  {#if view === 1}
+    <Layer type="content">
+      <VTable
+        columns={productoColumns}
+        data={catalogRecords}
+        {filterText}
+        selected={productoForm?.ID}
+        isSelected={(e, id) => e.ID === id}
+        getFilterContent={(e) => {
+          return e.Name;
+        }}
+        onRowClick={(e) => {
+          console.log("onRowClick (product select)::", { ID: e.ID, ImageMain: e.ImageMain, imageN: e.Image?.n, ImageIDs: e.ImageIDs });
+          productoForm = { ...e };
+          productoForm.CategoryIDs = [...(e.CategoryIDs || [])];
+          productoForm.Properties = [...(e.Properties || [])];
+          // A deep copy: the tab edits the recipe in place, which must not touch the cached record before Save.
+          Object.assign(productoForm, copyProductionFields(e));
+          ui.openSideLayer(1);
+        }}
+        mobileCardCss="mb-2"
+      />
+    </Layer>
+  {/if}
+  <Layer
+    type="side"
+    sideLayerSize={780}
+    css="px-8 py-8 md:px-16 md:py-10"
+    title={productoForm?.Name || ""}
+    titleCss="h2 mb-6"
+    contentCss="px-0 md:px-0"
+    id={1}
+    bind:selected={layerView}
+    onClose={() => {
+      productoForm = {} as IProduct;
+    }}
+    onSave={() => {
+      onSave();
+    }}
+    onDelete={async () => {
+      const confirmed = await confirmWarn({
+        title: "Eliminar Producto",
+        message: `¿Está seguro que desea eliminar "${productoForm.Name}"?`,
+      });
+      if (confirmed) { onSave(true); }
+    }}
+    options={[
+      [1, "Info|Información", ["Info", ""]],
+      [2, "Sheet|Ficha"],
+      [3, "Presentations|Presentaciones", ["Presenta-", "tions"]],
+      [4, "Photos|Fotos"],
+      // Only a made product has a recipe and a production cost.
+      ...(productoForm.Origin === PRODUCT_ORIGIN_MADE ? [[5, "Production|Producción"] as [number, string]] : []),
+    ]}
+  >
+    {#if layerView === 1}
+      <div
+        class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16"
+        aria-label="Product Form"
+      >
+        <Input
+          label="Name|Nombre"
+          saveOn={productoForm}
+          css="col-span-24"
+          required={true}
+          save="Name"
+        />
+        <div class="col-span-24 md:col-span-9 md:row-span-4">
+          <ImageUploader
+            saveAPI="product-image"
+            refreshRoutes={["products"]}
+            useConvertAvif={true}
+            clearOnUpload={true}
+            types={["avif"]}
+            folder="img-productos"
+            size={2}
+            src={productoForm.Image?.n}
+            cardCss="w-full h-180 p-4"
+            imageSource={productoForm._imageSource}
+            processName={`Imagen Producto ${productoForm.Name || ""}`.trim()}
+            hideUploadButton={!productoForm.ID}
+            setDataToSend={(e) => {
+              e.ProductID = productoForm.ID;
+            }}
+            onChange={(e, confirm) => {
+              productoForm._imageSource = e;
+              productoForm.Image = undefined
+              // NEW product: the ✓ is hidden, so keep the confirm fn to run on save (post-ID).
+              pendingMainImageConfirm = confirm;
+            }}
+            onUploaded={addProductImage}
+          />
+        </div>
+        <Input
+          label="Base Price|Precio Base"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          save="Price"
+          type="number"
+          baseDecimals={2}
+          dependencyValue={productoForm.Price}
+          onChange={() => {
+            console.log("productoForm", $state.snapshot(productoForm));
+            productoForm.FinalPrice = Math.round(
+              (productoForm.Price * (100 - (productoForm.Discount || 0))) /
+                100,
+            );
+          }}
+        />
+        <Input
+          label="Discount|Descuento"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          save="Discount"
+          postValue="%"
+          type="number"
+          dependencyValue={productoForm.Discount}
+          validator={(v) => {
+            return !v || (v as number) < 100;
+          }}
+          onChange={() => {
+            productoForm.FinalPrice = Math.round(
+              (productoForm.Price * (100 - (productoForm.Discount || 0))) /
+                100,
+            );
+          }}
+        />
+        <Input
+          label="Final Price|Precio Final"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          dependencyValue={productoForm.FinalPrice}
+          save="FinalPrice"
+          type="number"
+          baseDecimals={2}
+          onChange={() => {
+            console.log("productoForm", $state.snapshot(productoForm));
+            productoForm.Price = Math.round(
+              (productoForm.FinalPrice /
+                (100 - (productoForm.Discount || 0))) *
+                100,
+            );
+          }}
+        />
+        <SearchSelect
+          label="Currency|Moneda"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          save="CurrencyID"
+          keyId="i"
+          keyName="v"
+          options={productoMonedaOptions}
+        />
+        <Input
+          label="Weight|Peso"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          save="Weight"
+          type="number"
+        />
+        <SearchSelect
+          label="Unit|Unidad"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          save="UnitID"
+          keyId="i"
+          keyName="v"
+          options={productoUnidadOptions}
+        />
+        <Input
+          label="Volume|Volumen"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-5"
+          save="Volume"
+          type="number"
+        />
+        <SearchSelect
+          label="Brand|Marca"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-10 mb-2"
+          save="BrandID"
+          keyId="ID"
+          keyName="Name"
+          options={listas.ListaRecordsMap.get(2) || []}
+        />
+        <!-- Bought or made decides the product's accounts (mercaderías or productos terminados) and
+             which list shows it: changing it moves the product to the other page. -->
+        <SearchSelect
+          label="Origin|Origen"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-10 mb-2"
+          save="Origin"
+          keyId="id"
+          keyName="name"
+          options={PRODUCT_ORIGIN_OPTIONS.map((origin) => ({ id: origin.id, name: tr(origin.name) }))}
+        />
+        <div class="col-span-24 md:col-span-14">
+          <CheckboxOptions
+            save="Params"
+            saveOn={productoForm}
+            type="multiple"
+            options={[{ i: 1, v: "SKU Individual" }]}
+            keyId="i"
+            keyName="v"
+          />
+        </div>
+        <Input
+          saveOn={productoForm}
+          save="SKU"
+          css="col-span-12 md:col-span-10"
+          label="SKU"
+        />
+        <Input
+          saveOn={productoForm}
+          save="Description"
+          css="col-span-24 mb-4"
+          label="Short Description|Descripción Corta"
+        />
+        <SearchCard
+          css="col-span-24 flex items-start"
+          label="CATEGORIES|CATEGORÍAS ::"
+          options={categorias}
+          keyId="ID"
+          keyName="Name"
+          cardCss="grow"
+          inputCss="w-[35%] md:w-180"
+          bind:saveOn={productoForm}
+          save="CategoryIDs"
+          optionsCss="w-280"
+        />
+        <!-- Web store settings: the storefront adds WebExtraStock to the real stock at checkout. -->
+        <div
+          class="col-span-24 grid grid-cols-24 items-center gap-x-10 gap-y-10 rounded-[6px] bg-gray-100 p-12"
+          aria-label="Web store settings"
+        >
+          <div class="ff-bold h3 col-span-24 ml-4">Tienda Web</div>
+          <Input
+            saveOn={productoForm}
+            save="WebExtraStock"
+            css="col-span-12 md:col-span-10"
+            label="Allowed overselling|Sobreventa permitida"
+            type="number"
+          />
+          <Checkbox
+            bind:saveOn={productoForm}
+            save="WebHidden"
+            label="Hide|Ocultar"
+            css="col-span-12 md:col-span-6 md:ml-8"
+          />
+        </div>
+      </div>
+    {/if}
+    {#if layerView === 2}
+      {#if HtmlEditorComponent}
+        <HtmlEditorComponent saveOn={productoForm} save="ContentHTML" css="mt-12" />
+      {:else}
+        <div class="mt-12 p-12 text-sm text-fg-muted">Cargando editor...</div>
+      {/if}
+    {/if}
+    {#if layerView === 3}
+      <div class="mt-16 w-full" aria-label="Product attributes and presentations editor">
+        <Atributos bind:producto={productoForm}></Atributos>
+      </div>
+      <div
+        class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-16"
+        aria-label="Product sub-units"
+      >
+        <div class="ff-bold h3 col-span-24 ml-8">Sub-Unidades</div>
+        <Input
+          saveOn={productoForm}
+          save="SbuUnit"
+          css="col-span-12 md:col-span-6"
+          label="Name|Nombre"
+        />
+        <Input
+          bind:saveOn={productoForm}
+          save="SbuPrice"
+          baseDecimals={2}
+          css="col-span-12 md:col-span-6"
+          label="Base Price|Precio Base"
+          type="number"
+          onChange={() => {
+            console.log();
+            productoForm.FinalPrice = Math.round(
+              (productoForm.Price * (100 - (productoForm.Discount || 0))) /
+                100,
+            );
+            productoForm = { ...productoForm };
+          }}
+        />
+        <Input
+          saveOn={productoForm}
+          save="SbuDiscount"
+          postValue="%"
+          css="col-span-12 md:col-span-6"
+          label="Discount|Descuento"
+          type="number"
+        />
+        <Input
+          saveOn={productoForm}
+          save="SbuFinalPrice"
+          baseDecimals={2}
+          css="col-span-12 md:col-span-6"
+          label="Final Price|Precio Final"
+          type="number"
+        />
+        <Input
+          saveOn={productoForm}
+          save="SbuQuantity"
+          css="col-span-12 md:col-span-6"
+          label="Quantity|Cantidad"
+          type="number"
+        />
+      </div>
+    {/if}
+    {#if layerView === 4}
+      <div
+        class="grid grid-cols-2 md:grid-cols-4 items-start gap-x-10 gap-y-10 mt-16"
+      >
+        {#if productoForm.ID}
+          <ImageUploader
+            saveAPI="product-image"
+            refreshRoutes={["products"]}
+            useConvertAvif={true}
+            clearOnUpload={true}
+            types={["avif", "webp"]}
+            folder="img-productos"
+            cardCss="w-full h-170 p-4"
+            processName={`Imagen Producto ${productoForm.Name || ""}`.trim()}
+            setDataToSend={(e) => {
+              e.ProductID = productoForm.ID;
+            }}
+            onUploaded={addProductImage}
+          />
+        {:else}
+          <div class="col-span-2 md:col-span-4 p-12 text-sm text-fg-muted">
+            {tr("Save the product to be able to upload more images.|Guarde el producto para poder cargar más imágenes")}
+          </div>
+        {/if}
+        {#each productoImagenes as image}
+          <Image
+            size={2}
+            types={["avif", "webp"]}
+            folder="img-productos"
+            css="w-full h-170"
+            src={image.n}
+            alt={image.d || productoForm.Name}
+            onRemove={async () => {
+              const confirmed = await confirmWarn({
+                title: "ELIMINAR IMAGEN",
+                message: `Eliminar la imagen ${image.d ? `"${image.d}"` : "seleccionada"}`,
+              });
+              if (confirmed) { deleteProductoImage(image.id as number); }
+            }}
+          />
+        {/each}
+      </div>
+    {/if}
+    {#if layerView === 5 && productoForm.Origin === PRODUCT_ORIGIN_MADE}
+      <ProductProductionTab product={productoForm} />
+    {/if}
+  </Layer>
+  {#if view === 2}
+    <CategoriasMarcas {listas} {filterText} origin={1} bind:this={CategoriasLayer} />
+  {/if}
+  {#if view === 3}
+    <CategoriasMarcas {listas} {filterText} origin={2} bind:this={MarcasLayer} />
+  {/if}
+
+  <Modal id={IMPORT_PRODUCTOS_MODAL_ID}
+    title="Import Products from Excel|Importar Productos desde Excel"
+    size={9} css="px-4"
+    useFileImportWithErrors={true}
+    fileErrors={importExcelErrors}
+    onFileChange={onImportExcelFileChange}
+    onSave={importExcelRowsPreview.length > 0 ? saveImportProductos : undefined}
+    saveButtonLabel="Importar"
+    saveIcon="icon-[fa--upload]"
+  >
+    <div class="">
+      <div class="border border-line rounded-md overflow-hidden h-[58vh] min-h-[260px]">
+        <!-- VTable virtualizes against its own scroll container, so it needs a concrete height -->
+        <TableGrid columns={productoImportColumns} css="h-full" height="100%"
+          data={importExcelRowsPreview} rowHeight={46}
+          emptyMessage={isImportExcelProcessing
+            ? "Procesando archivo Excel..."
+            : "Selecciona un archivo para visualizar las filas procesadas."}
+        />
+      </div>
+    </div>
+  </Modal>
+</Page>

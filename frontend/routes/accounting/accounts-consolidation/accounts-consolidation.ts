@@ -35,6 +35,8 @@ export interface IOperationSale {
   TaxAmount: number
   Lines?: { ProductID: number, Amount: number }[]
   SameDayCashBankID?: number
+  // 1 while a made product's stock exit waits for the daily production close.
+  PendingStockMovement?: number
 }
 
 // What the builder reads off an asset (the GET.assets record).
@@ -144,14 +146,16 @@ export function referencedRecordIDs(response: IAccountingOperationsResponse) {
 }
 
 // operationProductIDs are the products whose Origin or AccountCode the entries read: the sale
-// lines (7012 / 7022) and the deliveries (the cost and stock accounts).
+// lines (7012 / 7022), the deliveries (the cost and stock accounts) and the supplies a production
+// close consumed (their stock and variation accounts).
 export function operationProductIDs(sales: IOperationSale[], stockMovements: IOperationStockMovement[]): number[] {
   const productIDs = new Set<number>()
   for (const sale of sales) {
     for (const line of sale.Lines || []) { productIDs.add(line.ProductID) }
   }
   for (const movement of stockMovements) {
-    if (movement.Type === STOCK_MOVEMENT_SALE_DELIVERY || movement.Type === STOCK_MOVEMENT_SALE_RETURN) {
+    if (movement.Type === STOCK_MOVEMENT_SALE_DELIVERY || movement.Type === STOCK_MOVEMENT_SALE_RETURN ||
+      movement.Type === STOCK_MOVEMENT_PRODUCTION_CONSUMPTION) {
       productIDs.add(movement.ProductID)
     }
   }
@@ -200,6 +204,9 @@ export const OPERATION_CASH = 9
 export const OPERATION_COST_OF_SALES = 10
 export const OPERATION_PAYROLL = 11
 export const OPERATION_PAYROLL_PROVISION = 12
+export const OPERATION_PRODUCTION = 13
+// A stock movement of a type no entry handles: flagged, never skipped in silence.
+export const OPERATION_STOCK_MOVEMENT = 14
 
 export const operationKindLabels: Record<number, string> = {
   [OPERATION_SALE]: "Sale|Venta",
@@ -214,6 +221,8 @@ export const operationKindLabels: Record<number, string> = {
   [OPERATION_COST_OF_SALES]: "Cost of sales|Costo de ventas",
   [OPERATION_PAYROLL]: "Payroll|Planilla",
   [OPERATION_PAYROLL_PROVISION]: "Payroll provisions|Provisiones de planilla",
+  [OPERATION_PRODUCTION]: "Production close|Cierre de producción",
+  [OPERATION_STOCK_MOVEMENT]: "Stock movement|Movimiento de almacén",
 }
 
 // ./PLAN.md §6.
@@ -265,6 +274,7 @@ const ACCOUNT_MERCHANDISE_STOCK = 2011       // Mercaderías
 const ACCOUNT_FINISHED_GOODS_STOCK = 2111    // Productos terminados
 const ACCOUNT_MERCHANDISE_COST = 6912        // Costo de ventas — mercaderías
 const ACCOUNT_FINISHED_GOODS_COST = 6922     // Costo de ventas — productos terminados
+const ACCOUNT_PRODUCTION_VARIATION = 7111    // Variación de la producción almacenada — productos terminados
 
 const CURRENCY_USD = 2
 const SALE_STATUS_ANNULLED = 0
@@ -277,6 +287,8 @@ const STOCK_MOVEMENT_PURCHASE_RECEPTION = 3
 const STOCK_MOVEMENT_SUPPLIES_PURCHASE = 4
 const STOCK_MOVEMENT_SALE_DELIVERY = 8
 const STOCK_MOVEMENT_SALE_RETURN = 9
+const STOCK_MOVEMENT_PRODUCTION_CONSUMPTION = 15
+const STOCK_MOVEMENT_PRODUCTION_ENTRY = 16
 
 // CashMovementType* (backend/finance/types/cash_banks.go).
 const CASH_TRANSFER = 3
@@ -289,6 +301,9 @@ const CASH_PAYROLL_PAYMENT = 12
 const CASH_PAYROLL_CONTRIBUTIONS = 13
 
 const PROBLEM_MISSING_RATE = "A dollar amount has no exchange rate.|Un monto en dólares no tiene tipo de cambio."
+// A sale of made products delivered before the daily production close: the close books their cost
+// of sales, so the period is not complete until it runs.
+const PROBLEM_STOCK_TO_REGULARIZE = "Sale with stock to regularize: its cost of sales is booked at the production close.|Venta con stock por regularizar: su costo de ventas se registra en el cierre de producción."
 const PROBLEM_UNBALANCED = "Debit and credit do not match.|El Debe y el Haber no cuadran."
 
 interface IOperationBase {
@@ -345,6 +360,7 @@ export function buildAccountingOperations(
     }, isCreditNote ? reverseLines(lines) : lines, [
       rate ? "" : PROBLEM_MISSING_RATE,
       sale ? "" : "The sale of this comprobante was not found.|No se encontró la venta de este comprobante.",
+      sale?.PendingStockMovement === 1 ? PROBLEM_STOCK_TO_REGULARIZE : "",
     ]))
   }
 
@@ -357,7 +373,7 @@ export function buildAccountingOperations(
     operations.push(finishOperation({
       Key: `V-${sale.ID}`, Kind: OPERATION_SALE, SourceID: sale.ID, Date: sale.Date,
       Description: "Sale without comprobante|Venta sin comprobante", DocumentLabel: "", InOfficialBook: false,
-    }, lines, [rate ? "" : PROBLEM_MISSING_RATE]))
+    }, lines, [rate ? "" : PROBLEM_MISSING_RATE, sale.PendingStockMovement === 1 ? PROBLEM_STOCK_TO_REGULARIZE : ""]))
   }
 
   // Purchase orders and expenses issued in the period. Depreciation has its own entry below, and
@@ -403,13 +419,32 @@ export function buildAccountingOperations(
   const inflowGroups = new Map<string, IOperationStockMovement[]>()
   // Cost of sales: one operation per sale and day, its deliveries and returns together.
   const costGroups = new Map<string, IOperationStockMovement[]>()
-  for (const movement of sources.StockMovements || []) {
-    const isSaleMovement = movement.Type === STOCK_MOVEMENT_SALE_DELIVERY || movement.Type === STOCK_MOVEMENT_SALE_RETURN
-    const groups = isSaleMovement ? costGroups : inflowGroups
-    const groupKey = isSaleMovement
-      ? `${movement.DocumentID}|${movement.Date}`
-      : `${movement.Type}|${movement.DocumentID}|${movement.Date}`
+  // Production: one operation per close and day, its consumptions and entries together.
+  const productionGroups = new Map<string, IOperationStockMovement[]>()
+  const addToGroup = (groups: Map<string, IOperationStockMovement[]>, groupKey: string, movement: IOperationStockMovement) =>
     groups.set(groupKey, [...(groups.get(groupKey) || []), movement])
+  for (const movement of sources.StockMovements || []) {
+    switch (movement.Type) {
+      case STOCK_MOVEMENT_PURCHASE_RECEPTION:
+      case STOCK_MOVEMENT_SUPPLIES_PURCHASE:
+        addToGroup(inflowGroups, `${movement.Type}|${movement.DocumentID}|${movement.Date}`, movement)
+        break
+      case STOCK_MOVEMENT_SALE_DELIVERY:
+      case STOCK_MOVEMENT_SALE_RETURN:
+        addToGroup(costGroups, `${movement.DocumentID}|${movement.Date}`, movement)
+        break
+      case STOCK_MOVEMENT_PRODUCTION_CONSUMPTION:
+      case STOCK_MOVEMENT_PRODUCTION_ENTRY:
+        addToGroup(productionGroups, `${movement.DocumentID}|${movement.Date}`, movement)
+        break
+      default:
+        // The backend sent a type no entry knows: an incomplete operation, so the period shows it.
+        operations.push(finishOperation({
+          Key: `MV-${movement.ID}`, Kind: OPERATION_STOCK_MOVEMENT, SourceID: movement.DocumentID,
+          SourceType: movement.Type, Date: movement.Date,
+          Description: "Stock movement|Movimiento de almacén", DocumentLabel: "", InOfficialBook: true,
+        }, [], [`Unhandled stock movement type ${movement.Type}.|Tipo de movimiento de almacén no contemplado: ${movement.Type}.`]))
+    }
   }
   for (const inflows of inflowGroups.values()) {
     const { Type: movementType, DocumentID: documentID, Date: date } = inflows[0]
@@ -470,6 +505,40 @@ export function buildAccountingOperations(
     }, lines, [
       isUncosted ? "A delivery left the warehouse with no cost.|Una entrega salió del almacén sin costo." : "",
       hasNoStockAccount ? "A delivered supply's account has no stock account.|La cuenta de un insumo entregado no tiene cuenta de existencias." : "",
+    ]))
+  }
+
+  // Production close (docs/PRODUCTION_PLAN.md §7): a consumed supply leaves stock into its
+  // variation (6032 → Dr 6132 · Cr 252), and the made product enters finished goods against the
+  // stored production (Dr 2111 · Cr 7111). Both at the cost the engine stamped. The cost of sales
+  // of the sales it settled comes from their own type-8 exits above.
+  for (const movements of productionGroups.values()) {
+    const { DocumentID: closeID, Date: date } = movements[0]
+    const lines: IJournalLine[] = []
+    let isUncosted = false
+    let hasNoStockAccount = false
+    for (const movement of movements) {
+      const value = movement.MonetaryValue || 0
+      isUncosted ||= !value
+      if (movement.Type === STOCK_MOVEMENT_PRODUCTION_ENTRY) {
+        lines.push(postLine(ACCOUNT_FINISHED_GOODS_STOCK, value))
+        lines.push(postLine(ACCOUNT_PRODUCTION_VARIATION, -value))
+        continue
+      }
+      const supplyAccount = findPCGEAccount(productsByID.get(movement.ProductID)?.AccountCode || 0)
+      if (!supplyAccount?.stockCode || !supplyAccount.variationCode) {
+        hasNoStockAccount = true
+        continue
+      }
+      lines.push(postLine(supplyAccount.variationCode, value))
+      lines.push(postLine(supplyAccount.stockCode, -value))
+    }
+    operations.push(finishOperation({
+      Key: `PR-${closeID}-${date}`, Kind: OPERATION_PRODUCTION, SourceID: closeID, Date: date,
+      Description: "Production close|Cierre de producción", DocumentLabel: "", InOfficialBook: true,
+    }, lines, [
+      isUncosted ? "A production movement has no cost.|Un movimiento de producción no tiene costo." : "",
+      hasNoStockAccount ? "A consumed supply's account has no stock account.|La cuenta de un insumo consumido no tiene cuenta de existencias." : "",
     ]))
   }
 

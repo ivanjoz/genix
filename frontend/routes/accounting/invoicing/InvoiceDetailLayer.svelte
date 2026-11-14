@@ -55,7 +55,7 @@ $effect(() => {
 async function loadProductNames(productIDs: number[]) {
   const resolvedNames = new Map<number, string>()
   await Promise.all(productIDs.map(async (productID) => {
-    const product = await getRecordByID<IProductName>("p-products-ids", productID)
+    const product = await getRecordByID<IProductName>("products-ids", productID)
     if (product) resolvedNames.set(productID, product.Name)
   }))
   productNames = resolvedNames

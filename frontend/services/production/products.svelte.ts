@@ -37,14 +37,24 @@ export const mainProductImage = (e: IProduct): IProductoImage | undefined => {
   return { id: e.ImageMain, n: productImageName(e.ImageMain), d: e.ImageDescriptions?.[index] || "" }
 }
 
-// Whether a product is bought or made, which decides its accounts. Mirrors Product.Origin.
+// Whether a product is bought or made, which decides its accounts and its catalog page
+// (Mercaderías / Productos). Mirrors Product.Origin.
 export const PRODUCT_ORIGIN_BOUGHT = 1
+export const PRODUCT_ORIGIN_MADE = 2
 
 //CATALOG:production.ProductOriginOptions
 export const PRODUCT_ORIGIN_OPTIONS: { id: number, name: string }[] = [
   { id: 1, name: 'Bought (merchandise)|Comprado (mercadería)' },
   { id: 2, name: 'Made by the company (finished good)|Fabricado (producto terminado)' },
 ]
+
+// IProductionSupply mirrors production.ProductionSupply, one line of IProduct.ProductionSupplies.
+// Quantity is packed (units*1000 + sub) in SubDivisor, the supply's sub-unit divisor (1 when it has none).
+export interface IProductionSupply {
+  SupplyID: number
+  Quantity: number
+  SubDivisor: number
+}
 
 //STRUCT:production.Product
 export interface IProduct {
@@ -90,6 +100,11 @@ export interface IProduct {
   Origin: number       /* 1 bought (merchandise) · 2 made (finished good); 0 on a supply */
   WebExtraStock: number /* units the web store may sell beyond real stock ("Sobreventa permitida") */
   WebHidden: boolean    /* kept out of the web store catalog and checkout */
+  /* recipe and cost of a made product (docs/PRODUCTION_PLAN.md §2); zero otherwise. Costs are PEN cents */
+  ProductionYieldPortions: number          /* units of the product the recipe makes */
+  ProductionSupplies: IProductionSupply[]  /* supplies for ProductionYieldPortions units */
+  ProductionExtraCostPerUnit: number
+  ProductionStandardCost: number           /* when > 0, the unit cost whatever the supplies cost */
   /* extra fields */
   Image?: IProductoImage
   AtributosIDs?: number[]
@@ -115,10 +130,9 @@ export interface IProductResult {
 
 export class ProductsService extends GetHandler<IProduct> {
   route = "products"
-  routeByID = "p-products-ids"
-  // ver 13: the route answers {records, records_IDsToRemove} instead of a bare array, so a
-  // supply (ss=2) is dropped from the snapshot rather than cached as a priceless product.
-  useCache = { min: 1, ver: 13 }
+  routeByID = "products-ids"
+  // ver 14: the recipe moved from Production (one struct) to the flat Production* fields.
+  useCache = { min: 1, ver: 14 }
 	inferRemoveFromStatus = true
   prependOnSave = true
 

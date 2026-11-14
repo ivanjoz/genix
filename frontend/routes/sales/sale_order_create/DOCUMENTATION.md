@@ -31,8 +31,8 @@ against one warehouse's stock: search products, build a cart, decide whether the
 collects payment now and/or removes stock now, choose the currency (`moneda`: soles or
 dollars), optionally attach a customer, and generate the order (`Generar`). Right after
 generating, the side panel switches to **Historial**, where the sale's thermal ticket
-(`ticket`) can be printed. Internally the page's own title/tabs read **Ventas** /
-**Configuración**.
+(`ticket`) can be printed. Open it from **Commercial (Comercial) → Sales (Ventas) → Point of Sale
+(Punto de Venta)**. Internally the page's own title/tabs read **Ventas** / **Configuración**.
 
 This page only creates new sale orders. It does not own the order's later lifecycle —
 confirming a pending payment/delivery afterward, canceling an order, or reviewing sales
@@ -50,9 +50,16 @@ maintained on their own pages and only consumed here.
   **Status 0 (Anulado)**, set only from the related Sales Management page, not from here.
 - **Pagado** (`ActionsIncluded` value 2) registers a cash/bank movement (`Cobro (Venta)`)
   against the selected **caja** for the sale total. **Recibido** (`ActionsIncluded` value 3)
-  creates outbound warehouse stock movements (`Entrega a cliente final (Venta)`) that reduce
-  the selected **almacén**'s stock. These are independent switches: a sale can be generated
-  with neither, either, or both.
+  creates outbound warehouse stock movements (`Entrega (venta)`) that reduce the selected
+  **almacén**'s stock. These are independent switches: a sale can be generated with neither,
+  either, or both.
+- A sale generated **without Pagado** owes its whole total: it is recorded as a debt (`deuda`,
+  `por cobrar`) and is collected later on **Gestión Ventas**.
+- A sale generated **without Recibido** reserves its units (`pendiente de entrega`) in the
+  selected warehouse until it is delivered: other sales cannot take those units in the meantime.
+- A **made product** (`producto fabricado`, a finished good whose origin is *Fabricado* on
+  **Productos**) is delivered without its warehouse exit: its stock leaves at the warehouse's daily
+  production close (**Cierre del día**), and until then the delivered units stay reserved.
 - A **sub-unit** is a smaller unit the same product can be sold in — grams cut from a
   kilogram, or single candies from a box. There is **no separate sub-unit row**: a product
   configured with a sub-unit shows one card that offers both, with the whole-unit quick
@@ -204,6 +211,11 @@ reused existing client keeps its own stored document type, like the rest of its 
 
 The resolved (or newly created) client ID is stored on the sale order as `ClientID`.
 
+The customer is resolved before the stock check, so a walk-in customer registered for a sale that
+is then refused for lack of stock stays registered; retrying the sale reuses it instead of creating
+a duplicate. A sale refused by the invoicing-series checks (see *Elegir el comprobante*) leaves no
+customer behind, because those checks run first.
+
 ### Limitations (Limitaciones)
 
 Registering a walk-in customer here only captures name, document number and document type; it
@@ -351,9 +363,9 @@ product priced in dollars.
 
 The sale stores its currency and the effective rate used. Its prices, subtotal, total, the
 `Cobro (Venta)` movement in the caja, and its electronic document are all in the sale's currency,
-and the printed ticket reads **TOTAL US$** or **TOTAL S/**. The day-level sales summaries behind
-**Gráficos Ventas** and **Reporte Ventas** stay in soles: a dollar sale is restated there with the
-rate stored on the sale, not with today's rate.
+and the printed ticket reads **TOTAL US$** or **TOTAL S/**. The day-level sales summary behind
+**Gráficos Ventas** stays in soles: a dollar sale is restated there with the rate stored on the
+sale, not with today's rate.
 
 ### Limitations (Limitaciones)
 
@@ -375,7 +387,8 @@ rate stored on the sale, not with today's rate.
   ajustado por el spread a favor de la tienda.
 - `¿Tengo que registrar el tipo de cambio todos los días?` No; si falta el de la empresa, se usa
   el del BCRP. Regístrelo solo si quiere usar su propio tipo de cambio.
-- `¿Los reportes de ventas salen en dólares?` No; los resúmenes de ventas se mantienen en soles.
+- `¿Los gráficos de ventas salen en dólares?` No; el resumen diario de Gráficos Ventas se mantiene
+  en soles.
 - Search terms: `moneda`, `dólares`, `soles`, `US$`, `tipo de cambio`, `TC venta`, `spread`,
   `conversión`, `venta en dólares`, `BCRP`, `interbancario`.
 
@@ -409,43 +422,62 @@ procesar la entrega.`).
 
 The backend re-validates every cart line's stock against the server's current data (not the
 client's cached numbers) before saving, rejecting with a message such as `Almacén: <id> |
-Producto: <id> ... Se necesita <n>. Se posee en stock: <m>.` when someone else already
-consumed the stock. It also re-checks that detail arrays (products, prices, quantities) are
-the same length and contain no zero product/quantity/price value.
+Producto: <id> ... Se necesita <n>. Se posee en stock: <m>` when someone else already
+consumed the stock. For a line without lot or serial number, the stock the server counts is the
+warehouse's stock **minus the units already reserved** by undelivered sales and web orders — the
+product grid shows the physical stock, so the server can refuse a quantity the grid still offers.
+A delivery checks the stock again inside the same save, so two tills selling the last units at
+once cannot both deliver them. Every line must name a product and a quantity greater than zero
+(`Hay un valor incorrecto.`).
+
+Made products (`productos fabricados`) follow their own rule: they are sold against the
+warehouse's stock less what is reserved plus the product's **Sobreventa permitida**, and a made
+product's line cannot name a lot or a serial number (`"<producto>" es un producto fabricado: su
+venta no puede indicar lote ni serie.`); a shortage reads `"<producto>" no tiene stock ni sobreventa
+permitida suficiente en el almacén <id>.`
 
 ### Result and side effects (Resultado y efectos)
 
 Saving always creates a new **Status 1 (Generado)** sale order. Including **Pagado** additionally
 books one `Cobro (Venta)` cash/bank movement for the sale total (in the sale's currency) against
-the chosen caja and advances Status toward **Pagado**. A sale generated without **Pagado** stores
-no caja at all, even though the till keeps its caja selection for the next paid sale; the caja
-is chosen later, when the payment is registered on **Gestión Ventas**. Including **Recibido** additionally books one outbound stock
-movement (`Entrega a cliente final (Venta)`) per cart line — including one per distinct serial
-number — against the chosen warehouse, and advances Status toward **Entregado**. Every save also
-updates the day-level sales summary consumed by **Sales Charts** and **Sales Report** (always in
-soles), and schedules a background reprocess job. On success the page shows `Venta registrada con
-éxito`, clears the cart and the client selection, records the sale in this device's history, and
-switches the side panel to **Historial** so the ticket can be printed right away.
+the chosen caja, leaves the sale with no debt, and advances Status toward **Pagado**. A sale
+generated without **Pagado** owes its whole total (`deuda` equal to the total) and stores no caja at
+all, even though the till keeps its caja selection for the next paid sale; the caja is chosen later,
+when the payment is registered on **Gestión Ventas**. Including **Recibido** additionally books one
+outbound stock movement (`Entrega (venta)`) per cart line — including one per distinct serial
+number — against the chosen warehouse, and advances Status toward **Entregado**; a made product's
+line gets no movement yet (its exit waits for the **Cierre del día**) and keeps its units reserved.
+A sale generated without **Recibido** reserves its units in the chosen warehouse until it is
+delivered. The sale, its comprobante, the cash movement, the stock movements and the reservations
+are saved together: if any part fails, none of them is registered. The day-level sales summary behind
+**Sales Charts** (always in soles) is derived from the sale itself, so it reflects the new sale
+without any extra step. On success the page shows `Venta registrada con éxito`, clears the cart and
+the client selection, records the sale in this device's history, and switches the side panel to
+**Historial** so the ticket can be printed right away.
 
 ### Limitations (Limitaciones)
 
-- The cart total is always sent with **DebtAmount = 0** (per the frontend's own note:
-  *"Assuming fully paid for now, adjust if UI allows debt"*), regardless of whether **Pagado**
-  was included. Unchecking **Pagado** only skips the cash/bank movement — it does **not**
-  register a pending debt/receivable against the order; this page currently has no way to
-  generate a sale on customer credit or with a partial payment.
+- The till always charges in full or not at all: with **Pagado** the whole total is collected,
+  without it the whole total stays owed. This page has no way to register a partial payment
+  (`pago parcial`, `a cuenta`) when the sale is generated; the pending debt is collected later on
+  **Gestión Ventas**.
 - Once generated, this page offers no edit, cancel, additional-payment, or delivery action for
   that order; use **Sales Management (Gestión Ventas)** for anything after creation.
 
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
 - `¿Puedo generar una venta sin cobrar ni entregar el producto todavía?` Sí, desmarcando ambas
-  casillas; queda "Generada" (Pendiente) sin movimiento de caja ni de stock.
+  casillas; queda "Generada" (Pendiente) sin movimiento de caja ni de stock, con todo el total
+  como deuda y sus unidades reservadas en el almacén.
 - `¿Por qué no aparece la opción "Pagado"?` Falta registrar una caja/banco.
-- `¿Puedo vender a crédito o con pago parcial desde esta página?` No; el monto de deuda que
-  registra esta página siempre es 0.
+- `¿Puedo vender al crédito desde esta página?` Sí: desmarque "Pagado" y la venta queda con todo
+  su total por cobrar; el cobro se registra después en Gestión Ventas.
+- `¿Puedo cobrar solo una parte al generar la venta?` No; desde el Punto de Venta se cobra todo el
+  total o nada.
+- `¿Por qué el stock de un producto fabricado no bajó al entregar?` Porque su salida de almacén
+  se registra en el Cierre del día.
 - Search terms: `generar venta`, `pagado`, `recibido`, `entrega`, `caja`, `deuda`, `venta al
-  crédito`, `cobro parcial`.
+  crédito`, `cobro parcial`, `reserva`, `pendiente de entrega`, `producto fabricado`.
 
 <!-- DOC-ID: capability.sale-history-ticket -->
 ## Sale history and thermal ticket (Historial y ticket de venta)
@@ -522,7 +554,8 @@ setting changes anything besides its own stored value.
   on Status 4. This page never sets Status 0 (Anulado) — cancellation happens elsewhere.
 - Stock is authoritative on the server: the browser's own stock guard while adding to the cart
   prevents most mistakes, but the final, binding check happens again when **Generar** is
-  submitted, because stock can change between loading the grid and saving.
+  submitted, because stock can change between loading the grid and saving, and because the server
+  also discounts the units that undelivered sales and web orders keep reserved.
 - Prices and the exchange rate are authoritative on the server too: the amounts the till shows
   in the chosen currency are a preview, and the server re-reads the catalog prices and the
   company's latest sell rate and spread when the sale is created.
@@ -536,13 +569,17 @@ setting changes anything besides its own stored value.
   unidad(es).":** the requested quantity exceeds the currently loaded stock; reduce the
   quantity or refresh the stock.
 - **"Se necesita N. Se posee en stock: M" (server rejection at Generar):** stock changed on the
-  server since the grid was loaded (e.g., another sale or reception happened); reload the page
-  or reselect the warehouse and try with the updated stock.
+  server since the grid was loaded (e.g., another sale or reception happened), or part of the stock
+  the grid shows is reserved by undelivered sales or web orders; reload the page or reselect the
+  warehouse and try with the updated stock, or deliver the pending sales on **Gestión Ventas**.
+- **"... es un producto fabricado: su venta no puede indicar lote ni serie." / "... no tiene stock
+  ni sobreventa permitida suficiente en el almacén ...":** a made product is sold from its free
+  stock only, up to its stock less reservations plus its **Sobreventa permitida**; raise that margin
+  on **Productos** if the business can make more units.
 - **"Necesitas registrar una caja para aceptar pagos.":** create a cash/bank account on **Cash
   & Banks** before a sale can include **Pagado**.
-- **A generated order shows Debt = 0 even though it wasn't marked Pagado:** expected with the
-  current page — it never records a nonzero debt/receivable, regardless of the Pagado/Recibido
-  choice.
+- **A sale generated without Pagado appears with its whole total owed:** expected — an unpaid
+  sale is a receivable (`por cobrar`); register the payment on **Gestión Ventas**.
 - **Amber warning "No hay tipo de cambio de venta (propio ni BCRP) en los últimos 7 días..." and
   prices at 0.00:** the sale is in dollars, or the cart holds a product priced in the other
   currency, and neither a company rate nor a BCRP rate exists for today or the previous 7 days —
@@ -562,8 +599,11 @@ setting changes anything besides its own stored value.
 
 - **Sales Management (Gestión Ventas)** at `/sales/sale_orders_status`: review, confirm a
   pending payment or delivery, and cancel (`Anular pedido`) orders created on this page.
-- **Sales Charts (Gráficos Ventas)** and **Sales Report (Reporte Ventas)**: consume the
-  day-level sale summary that every **Generar** action here updates.
+- **Sales Charts (Gráficos Ventas)** and **Sales Report (Reporte Ventas)**, under **Commercial →
+  Reports (Reportes)**: analyze the sales generated here — the charts through a day-level summary
+  in soles, the report by querying the sales themselves.
+- **Daily Close (Cierre del día)** at `/production/daily-close`: registers the warehouse exit of the
+  made products delivered here, which the sale itself leaves pending.
 - **Cash & Banks (Cajas y Bancos)**: register the cash/bank account offered in the **CAJA**
   selector, and review the resulting `Cobro (Venta)` movement afterward.
 - **Customers (Clientes)** at `/crm/customers`: maintain full customer records beyond the
@@ -586,33 +626,37 @@ setting changes anything besides its own stored value.
 schema: 1
 hash_algorithm: sha256
 files:
-  - path: frontend/core/modules.ts
+  - path: db/pages.toml
     role: user-interface
-    hash: sha256:0232bd261462eee1bcbf2bd20cc37658f85aa3a0a4aa355af975bf5b32c2be2c
+    hash: sha256:cb61a6f79a034e4d468b46c173733b815f0af9007a01d1f3e69b92d358913d60
+    supports: [page-purpose, related-pages]
+  - path: db/modules.toml
+    role: user-interface
+    hash: sha256:4f2d4c16777913fddf196959c4341290e69a12a78323a5b95f8fa5d4738ca34d
     supports: [page-purpose, related-pages]
   - path: frontend/routes/sales/sale_order_create/+page.svelte
     role: page
-    hash: sha256:19d9bce55dd5a19b8b09064cf22cf0e26dc632f925982e044595ff010a3f3135
+    hash: sha256:ec5ec95e2dc313f8a1624daa2b6600938a730ad8430e7262073d8f77539c68cf
     supports: [page-purpose, concepts, capability.search-add-products, capability.manage-cart, capability.warehouse-cash-selection, capability.assign-client, capability.choose-invoice-series, capability.sale-currency, capability.set-payment-delivery, capability.sale-history-ticket, capability.configure-sales-parameters, troubleshooting]
   - path: frontend/routes/sales/sale_order_create/SaleProductCard.svelte
     role: user-interface
-    hash: sha256:9ff070990df65e898e95b31449ad3a9eefe2fdc62ebddc3262fba548cbf2680e
+    hash: sha256:5004dfd6fff44b8925c75713a701390a4401ff132c2a4000a901026eefea4ae1
     supports: [concepts, capability.search-add-products, capability.sale-currency]
   - path: frontend/routes/sales/sale_order_create/sale_order.svelte.ts
     role: frontend-service
-    hash: sha256:39359a3890c09db37c8ee0785d9aa511134f2d9f45033ae382a405116b6df865
+    hash: sha256:38d8fe131a97b9a7755ddefe4c5c56be576bdc1369cda4b5d73ff374816ace9f
     supports: [concepts, capability.search-add-products, capability.manage-cart, capability.choose-invoice-series, capability.sale-currency, capability.set-payment-delivery, rules, troubleshooting]
   - path: frontend/routes/sales/sale_order_create/sale_order.ts
     role: business-logic
-    hash: sha256:d6e955d95c48a82b07e6fa7e1490cbdb375cbc715710867dcd8c69de1d54fe4b
+    hash: sha256:f5c3fe577671f284592328b149a5b79d1acbc31eab48a9e98a34d68a6530daa2
     supports: [capability.assign-client, capability.choose-invoice-series, capability.sale-currency, rules]
   - path: frontend/routes/sales/sale_order_create/sale_history.ts
     role: business-logic
-    hash: sha256:08ee9e6c4287e4c4cf5573dea0b9a3dd9e53cff1d6b274a6c11e5bd3b970f245
+    hash: sha256:bf6d59688d09c3d28d1dc6c784086d928df6527909988343863e80606e1ac59b
     supports: [capability.sale-history-ticket]
   - path: frontend/routes/sales/sale_order_create/sale_history.idb.ts
     role: frontend-service
-    hash: sha256:ae1d0820f7d16815cad9fcf7676d1ce8fa331602ba308d67f6bb2eefd96ff439
+    hash: sha256:c3345f294b358d31ec6f6399049ec9e7e7b652e8d584f260c0f1c52c4a796f66
     supports: [capability.sale-history-ticket, troubleshooting]
   - path: frontend/routes/sales/sale_order_create/sale_history.svelte.ts
     role: frontend-service
@@ -620,23 +664,23 @@ files:
     supports: [capability.sale-history-ticket]
   - path: frontend/routes/sales/sale_order_create/SaleHistoryCards.svelte
     role: user-interface
-    hash: sha256:b4e8a9267991cd67776fc6d8b998b8ac79e003285e49c01210959253e67f0df1
+    hash: sha256:94d1d0392315b7704cf75bbf07361023025a84ebb3c3877a3ac41ab63add8c92
     supports: [capability.sale-history-ticket]
   - path: frontend/routes/sales/sale_order_create/SaleTicketModal.svelte
     role: user-interface
-    hash: sha256:1ebeb8ec390ee7445487b762fe2470e5a6b7f394d1176edb11e9000fe308e503
+    hash: sha256:307269f768d56c98dd4b9c89e67f035141a3560d4b27ade9f6655ff7bcbecf85
     supports: [capability.sale-history-ticket]
   - path: frontend/routes/sales/sale_order_create/sale_ticket.ts
     role: business-logic
-    hash: sha256:73c286e869295d9d23b2eadab519894f8ba07cb8f3cfc1c09dbf353843a45398
+    hash: sha256:6ae5289f8b8d184474e660015cb53ad7d88b23a450147dc4947ae4d1638afcc6
     supports: [capability.choose-invoice-series, capability.sale-currency, capability.sale-history-ticket]
   - path: frontend/routes/finance/exchange-rate/exchange-rate.ts
     role: business-logic
-    hash: sha256:55738f078d629f60276bbfbbfb58b46b3b1b7ba7a9626d06504b2e909294bf28
+    hash: sha256:5a5b23729c283c270bb18dfea2b17758572f9405c2fa9a01cbdf96d98d6c0cba
     supports: [concepts, capability.manage-cart, capability.sale-currency, troubleshooting]
   - path: frontend/routes/finance/exchange-rate/exchange-rate.svelte.ts
     role: frontend-service
-    hash: sha256:f5f401b8f1e32dd79eba283d2a7c9b64bb90eca0b81db938049b32a2db8ab333
+    hash: sha256:2674c89770d3193349fea84c155eebaec9fef16c76a896e62cc2c90f56b7c9e2
     supports: [capability.sale-currency]
   - path: frontend/services/crm/identity-doc.ts
     role: shared-domain
@@ -644,23 +688,23 @@ files:
     supports: [capability.assign-client]
   - path: frontend/routes/logistics/products-stock/stock-movement.ts
     role: frontend-service
-    hash: sha256:7e32f71f5e9e74c8f10059925f34918ab35e81d24e965178f1f9debc3b5d558f
+    hash: sha256:5b40e3b6c6ef8421e4a341e887d67b3bece49badd16259898d659e778ce06115
     supports: [capability.search-add-products, capability.warehouse-cash-selection]
   - path: frontend/services/production/products.svelte.ts
     role: shared-domain
-    hash: sha256:64b802038c223a036d232e9f409295bcf78faf98d5cb84b0bac9d6fa85822abf
+    hash: sha256:5d63b845bd08143f60d893e7a8a61fde34df5177c18d8a147afdba524d12847d
     supports: [concepts, capability.search-add-products, capability.sale-currency]
   - path: frontend/services/crm/client-provider.svelte.ts
     role: shared-domain
-    hash: sha256:f51dcec7e71526b00f501213e74ad5ecb22dce74dd3bbde9110c518717398d07
+    hash: sha256:c5e9ebda6bd1ffdd648ae0da72fb7601669b5600671bc4d978001f193a26ded1
     supports: [capability.assign-client]
   - path: frontend/routes/finance/cash-banks/cajas.svelte.ts
     role: shared-domain
-    hash: sha256:6b8e304283715cf7293c68424b6fd45d8d048828ed1b3d6498ab1e28cf2dcfd3
+    hash: sha256:6cc31cb3b2acc93150884c4ceb3290384c8e786857dcc27f21b20e3c6e3d6d34
     supports: [capability.warehouse-cash-selection, capability.sale-currency]
   - path: frontend/services/services/system-parameters.svelte.ts
     role: frontend-service
-    hash: sha256:34d33bb25c2ce32df43127d9792c482c889a97d1ceababfaf42eb9c03b16a371
+    hash: sha256:7b830ff50daceb76d6491dec4482a99ae1c90d5a76b7e0444117e48c0eaf4355
     supports: [capability.configure-sales-parameters]
   - path: frontend/services/system-paremeters.ts
     role: shared-domain
@@ -668,39 +712,79 @@ files:
     supports: [capability.configure-sales-parameters]
   - path: frontend/domain-components/SystemParametersEditor.svelte
     role: user-interface
-    hash: sha256:c4482b330dfb3eb6b2cc2ab7f6a6adbe20b5d62ba6a989fde3354ca261de6cfc
+    hash: sha256:b5c40567da967fb2d533248429c2e09fc6d912206aecab0fe046c29017778489
     supports: [capability.configure-sales-parameters]
   - path: frontend/routes/company/configuration/+page.svelte
     role: user-interface
-    hash: sha256:28f8b985ad11d8d87bf928f7a2754dc746f3576615be099c4c5149c89af36749
+    hash: sha256:46cd5a24d7dac4d50583401399892a830ceb8085ade7e3ecae766df0c0820e42
     supports: [capability.choose-invoice-series, capability.sale-currency, troubleshooting, related-pages]
   - path: frontend/routes/company/configuration/CompanyFlagsPanel.svelte
     role: user-interface
-    hash: sha256:5104402b9597454f663178f1538c87efb1bde665c11676b3b46c06042df5f242
+    hash: sha256:64f7141389b5db13573738c9fc49fcf6159672e69e3707e52a831ca4ab1758e0
     supports: [capability.sale-currency, related-pages]
   - path: backend/company_flags.toml
     role: shared-domain
-    hash: sha256:251737436c1efa9be9212036e58c148c413685a1c2088ae77660c5690fefe1df
+    hash: sha256:41281f5a4686ceecc28bc2c95a3c6deb4041e03771e7ad8533d07bb2afaf8799
     supports: [capability.sale-currency, troubleshooting, related-pages]
   - path: backend/sales/sale_order_create.go
     role: backend-handler
-    hash: sha256:8901a11e252bc4794f1ab4d2d4e626c5213765121dbc5787566dfb5958dde5f4
-    supports: [capability.search-add-products, capability.assign-client, capability.sale-currency, capability.set-payment-delivery, rules, troubleshooting]
+    hash: sha256:0601dd000d061f432f4a7dfa0228d673b2debc0a744448d6ddfb78a30978c78d
+    supports: [capability.search-add-products, capability.assign-client, capability.choose-invoice-series, capability.sale-currency, capability.set-payment-delivery, rules, troubleshooting]
   - path: backend/sales/sale_order_currency.go
     role: business-logic
-    hash: sha256:186747cd3a2892beeef7428ff285df67edc44caa494e2b3b0b2985aa46b92a6f
-    supports: [capability.sale-currency, capability.set-payment-delivery, rules, troubleshooting]
+    hash: sha256:c247971a1e8ea11adc1b6f5fe8856aa406fe5d46d8ce26c5dd1ba156b2850178
+    supports: [capability.sale-currency, rules]
+  - path: backend/sales/types/sale_currency.go
+    role: business-logic
+    hash: sha256:d94fcf68ff93412a00250b54e2bb4c2c59865472b1f30d86a21e2eefcc6d5f92
+    supports: [capability.search-add-products, capability.sale-currency, capability.set-payment-delivery, rules, troubleshooting]
+  - path: backend/sales/saleissue/types/new_sale.go
+    role: business-logic
+    hash: sha256:79480f8435d4182f16c8ebca2b5717be396423cd73a571f5ef1e2a84a229e33e
+    supports: [concepts, capability.assign-client, capability.choose-invoice-series, capability.set-payment-delivery, rules]
+  - path: backend/sales/saleissue/types/sale_client.go
+    role: business-logic
+    hash: sha256:2dbfa3112977cdced55066900cd0ae93f2a18f7e9c89db78067a6f47c5e62ac4
+    supports: [capability.assign-client]
+  - path: backend/sales/types/sale_actions.go
+    role: business-logic
+    hash: sha256:ad4c117e0bce8f4c8e88f85e6aa3677090935cf6b6127c944f72bf1601413109
+    supports: [concepts, capability.set-payment-delivery, rules, troubleshooting]
+  - path: backend/sales/types/sale_products.go
+    role: business-logic
+    hash: sha256:f8ab3f0e08952b9069dc162484ce6ed84cdd82ffe037833500133ce853124930
+    supports: [concepts, capability.set-payment-delivery]
+  - path: backend/sales/types/sale_stock_check.go
+    role: business-logic
+    hash: sha256:952f769c018817d9ba53b4055d0b890578bc17ce8536156bc65f756ad15563f9
+    supports: [capability.set-payment-delivery, rules, troubleshooting]
+  - path: backend/sales/types/pending_delivery.go
+    role: business-logic
+    hash: sha256:fdefbd8a318a6cafff7823707c0c42bbf28c5ca1077b9b54dccd150094e009fa
+    supports: [concepts, capability.set-payment-delivery, rules]
+  - path: backend/logistics/types/stock_movement_type.go
+    role: data-model
+    hash: sha256:2556d42f6e9cc99c8c179a8536a80d26bf41702648d11efd34f6e9bfc3de4b8f
+    supports: [concepts, capability.set-payment-delivery]
+  - path: frontend/core/stock-movement-type.ts
+    role: shared-domain
+    hash: sha256:cfcee015c4d6fadb03f9a9e5d66064e93d734cfa5216e2d36996c47140eecc9c
+    supports: [concepts, capability.set-payment-delivery]
+  - path: frontend/routes/production/products/ProductCatalog.svelte
+    role: user-interface
+    hash: sha256:35abd284f9c646be57aa3ae40ec6a643276556d1c1f09dcaf642eadd442221f3
+    supports: [capability.set-payment-delivery, troubleshooting]
   - path: backend/finance/types/exchange_rate.go
     role: business-logic
-    hash: sha256:7dc6dbf27632d692cf814d4376e7284957187874e2a0e318a8d861e4dd0de377
+    hash: sha256:3dd967feba71a9e52942fcf65d8d92704d43c1a1b75275468b62ff217efc4706
     supports: [capability.sale-currency, troubleshooting]
   - path: backend/finance/types/bcrp_rates.go
     role: business-logic
     hash: sha256:814f197ccbd7e90bbd1b611ac3dc4291a208c7b86e621f5bea42462036b6cf8f
     supports: [concepts, capability.sale-currency, troubleshooting, related-pages]
-  - path: backend/sales/sale_order_issuance.go
+  - path: backend/sales/saleissue/types/sale_issue_series.go
     role: business-logic
-    hash: sha256:54d09414aae726a0e37b0f7e0ed5e053ca83be87c8b934b385adf87e8f4969b7
+    hash: sha256:6c210d7117e055a98c571f9bd17d0cd04f55d9458365735de9b8970e7550255d
     supports: [capability.assign-client, capability.choose-invoice-series, rules, troubleshooting]
   - path: backend/invoicing/types/customer_identity.go
     role: business-logic
@@ -708,30 +792,34 @@ files:
     supports: [capability.choose-invoice-series, rules]
   - path: backend/invoicing/types/sale_order_to_cpe.go
     role: business-logic
-    hash: sha256:3fff7a9720606bbf18a93512f4361605dbfb073bfc19e44c2c497aeb619a9634
+    hash: sha256:b421592ce90a70d469a38a6db7c61aa3af30479854a86ab72f8d7234265fc012
     supports: [capability.assign-client, capability.choose-invoice-series, capability.sale-currency]
   - path: backend/invoicing/types/document_reserve.go
     role: business-logic
-    hash: sha256:eca97837ae724317e507794654a9568bca097b05d531839d30deb50df6c45317
+    hash: sha256:a9c7a76ac6be28fe2b0fd50d6d6d9047dceca4ecea3757ee1d1b3414642fcbc4
     supports: [capability.choose-invoice-series, capability.sale-currency]
   - path: backend/sales/types/sales.go
     role: data-model
-    hash: sha256:7db7f29652af90da6fb8c68c6e992a0111162b1aa5492ac2b4564f5dd1895427
-    supports: [concepts, capability.assign-client, capability.choose-invoice-series, capability.sale-currency, capability.set-payment-delivery, rules]
+    hash: sha256:3814c0a52410ab92d7a5e9ee87ee07f90c74815d15678e7391816183b64598c2
+    supports: [concepts, capability.assign-client, capability.choose-invoice-series, capability.sale-currency, capability.set-payment-delivery, rules, related-pages]
   - path: backend/crm/types/client_provider_save.go
     role: business-logic
-    hash: sha256:83fea49c5c006c10ecbedcdef86985286f620474d89627db2d09ee109200e190
+    hash: sha256:8fbb685b942b7831747e0a4a261387fac23373046a494313a43b2210b23641be
     supports: [capability.assign-client]
   - path: backend/finance/types/cash_movement_apply.go
     role: business-logic
-    hash: sha256:6b47d33cfaa81d34eec52d00172ac223307b6a0869dd2ec2b3616af9154b5e5a
+    hash: sha256:81837d0a968b7cdd3f1bfff5f048395dfc72cea1dd65df3388f542c2b118780c
     supports: [capability.set-payment-delivery]
-  - path: backend/sales/sale_summary.go
-    role: business-logic
-    hash: sha256:9c450fd7892ee2bbb4107a9c7a41bebd54dfb01e0807d379c05fb0638bacfb0a
-    supports: [capability.sale-currency, capability.set-payment-delivery, related-pages]
+  - path: frontend/routes/sales/sale_orders_charts/sale_orders_charts.svelte.ts
+    role: frontend-service
+    hash: sha256:630af68ee4fd21e5fb74f3ba18947b96b77def4437e7eb66218696f4c4c8f324
+    supports: [related-pages]
+  - path: frontend/routes/sales/sales-report/sale_order_report.svelte.ts
+    role: frontend-service
+    hash: sha256:1f7944f0311881f7919330fad596effe5cd229760bc96cfc9a45bdc60787c9bf
+    supports: [related-pages]
   - path: backend/access.toml
     role: permissions
-    hash: sha256:31c7071defebf7ecec268a2ae932e58667d2f0e143dee894d0262d8eab4baa3c
+    hash: sha256:c19cf85130065dcc0f839796e1e9b4b98a1b78df465ccb20d2b63b59a1a94e59
     supports: [rules]
 ```

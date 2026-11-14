@@ -1,28 +1,30 @@
 // How a sale order id is built, and why it is built here rather than by the ORM.
 //
-// The id carries three things: the correlativo of the invoicing series, two random
-// digits, and the two digits of the series itself.
+// The id carries two things: the correlativo of the invoicing series and the two
+// digits of the series itself.
 //
-//	[correlativo][rand:2][series:2]
+//	[correlativo][series:2]
 //
 // The correlativo is not a second sequence beside the sale's own — it *is* the
 // sale's counter. There is one autoincrement per company and series, which is
 // exactly the scope SUNAT requires the document numbering to be unique in, so the
-// sale 1301102 is the comprobante F001-130 and neither number has to be looked up
+// sale 13001 is the comprobante F001-130 and neither number has to be looked up
 // to know the other.
 //
-// The series tail is what lets an electronic document derive its own id from the
-// sale's — same correlativo, same random digits, its own series — so a boleta and
-// the credit note that corrects it differ in the tail alone and never collide on a
-// key. A note is the one document that does not read its correlativo off the id:
-// it is issued under its own series and takes that series' own number, which is
-// what the Correlativo column is for.
+// There are no random digits: the counter is reserved under the database's row
+// lock, so two tills can never be handed the same correlativo and the id needs
+// nothing else to be unique.
 //
-// The ORM cannot express this: its autoincrement appends random digits and then
-// takes the rest of the key, with no way to reserve the low two digits for a
-// column. Since the reservation itself is already serialized by the fareward
-// allocator, minting the id here costs nothing and puts the layout somewhere it
-// can be read.
+// The boleta or factura of a sale uses the sale's own id. A credit note is issued
+// under its own series and takes that series' own correlativo, which is what the
+// Correlativo column is for. Its id must not be the sale's correlativo with the
+// note's series swapped in: two sales of different series can share a correlativo,
+// so their notes in one note series would collide. How a note is keyed is still
+// open — notes are not emitted yet.
+//
+// The ORM cannot express this: its autoincrement takes the whole key, with no way
+// to reserve the low two digits for a column. Minting the id here costs nothing
+// and puts the layout somewhere it can be read.
 
 package types
 
@@ -30,12 +32,10 @@ import (
 	"app/db"
 	"errors"
 	"fmt"
-	"math/rand/v2"
 )
 
 const (
-	// saleRandomDigits and saleSeriesDigits are each two decimal digits wide.
-	saleRandomFactor = int64(100)
+	// saleSeriesFactor is the two decimal digits the series takes at the tail of the id.
 	saleSeriesFactor = int64(100)
 	// MaxIssueSeriesID mirrors the invoicing module's ceiling. Duplicated as a
 	// number rather than imported: sales must not depend on invoicing, and the
@@ -82,8 +82,7 @@ func MakeSaleOrderID(companyID int32, issueSeriesID int8) (int64, error) {
 		return 0, errors.New("el contador de ventas devolvió un valor inválido")
 	}
 
-	random := rand.Int64N(saleRandomFactor)
-	return correlativo*saleRandomFactor*saleSeriesFactor + random*saleSeriesFactor + int64(issueSeriesID), nil
+	return correlativo*saleSeriesFactor + int64(issueSeriesID), nil
 }
 
 // SeriesID is the invoicing series the sale was created for, read off its id.
@@ -97,5 +96,5 @@ func (e *SaleOrder) SeriesID() int8 {
 // Correlativo is the number the sale's comprobante carries in its series, read off
 // the id. It is the same number for both because they are minted together.
 func (e *SaleOrder) Correlativo() int64 {
-	return e.ID / (saleRandomFactor * saleSeriesFactor)
+	return e.ID / saleSeriesFactor
 }

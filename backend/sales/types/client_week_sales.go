@@ -3,6 +3,7 @@ package types
 import (
 	"app/core"
 	"app/db"
+	"errors"
 	"slices"
 )
 
@@ -149,4 +150,24 @@ func BuildClientWeekSales(companyID int32, saleOrders []SaleOrder) []ClientWeekS
 		return int(left.ClientID - right.ClientID)
 	})
 	return rows
+}
+
+// ApplyClientWeekSaleChangesIn adds what a sale write changed to its client's week rows, in the
+// sale's transaction, so the row can never disagree with the sale. The week's first sale of a client
+// creates the row; when two sales race to create it, the loser's duplicate key reruns its whole
+// transaction, which then increments the winner's row.
+func ApplyClientWeekSaleChangesIn(transaction *db.Transaction, companyID int32, changes []ClientWeekSaleShare) error {
+	table := db.TableOf[ClientWeekSales]()
+	for _, change := range changes {
+		week, weekday := ClientWeekOfDay(change.Date)
+		key := ClientWeekSales{CompanyID: companyID, Week: week, ClientID: change.ClientID}
+		err := db.IncrementIn(transaction, key, table.Purchases.At(weekday).Add(change.Purchase), table.Payments.At(weekday).Add(change.Payment))
+		if errors.Is(err, db.ErrIncrementNotStored) {
+			err = db.InsertIn(transaction, &[]ClientWeekSales{NewClientWeekSales(companyID, change)})
+		}
+		if err != nil {
+			return core.Err("Error al acumular las ventas semanales del cliente:", err)
+		}
+	}
+	return nil
 }

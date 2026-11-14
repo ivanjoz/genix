@@ -56,6 +56,9 @@ var APIRouteIDs = map[string]int16{
 	"GET.crm-tasks":                       236,
 	"GET.crm-teams":                       223,
 	"GET.cron-actions-scheduled":          12,
+	"GET.dining-layouts":                  268,
+	"GET.dining-menu":                     270,
+	"GET.dining-table-orders":             271,
 	"GET.ecommerce-page-content":          13,
 	"GET.empresas":                        14,
 	"GET.exchange-rates":                  135,
@@ -107,7 +110,11 @@ var APIRouteIDs = map[string]int16{
 	"GET.perfiles":                        31,
 	"GET.product-stock-lots-by-ids":       32,
 	"GET.product-supply":                  33,
+	"GET.production-close-pending":        264,
+	"GET.production-close-preview":        265,
+	"GET.production-closes":               266,
 	"GET.products":                        34,
+	"GET.products-ids":                    263,
 	"GET.products-stock":                  35,
 	"GET.projects-assigned-stories":       142,
 	"GET.projects-documents":              157,
@@ -181,6 +188,11 @@ var APIRouteIDs = map[string]int16{
 	"POST.crm-task":                       239,
 	"POST.crm-task-decide":                240,
 	"POST.crm-team":                       226,
+	"POST.dining-layout":                  269,
+	"POST.dining-table-order-annul":       274,
+	"POST.dining-table-order-charge":      275,
+	"POST.dining-table-order-lines":       272,
+	"POST.dining-table-order-round":       273,
 	"POST.ecommerce-page-content":         67,
 	"POST.exchange-rates":                 136,
 	"POST.expense-inventory":              129,
@@ -235,6 +247,7 @@ var APIRouteIDs = map[string]int16{
 	"POST.product-category-image":         80,
 	"POST.product-image":                  81,
 	"POST.product-supply":                 82,
+	"POST.production-close":               267,
 	"POST.productos-stock":                83,
 	"POST.products":                       84,
 	"POST.projects-attachment-upload":     155,
@@ -288,7 +301,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 262
+const MaxAPIRouteID int16 = 275
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

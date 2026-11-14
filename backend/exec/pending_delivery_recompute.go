@@ -1,8 +1,9 @@
 // Recomputing the pending-delivery counters (ProductStock.PendingDeliveryStore / Online).
 //
 // The counters were added after sales existed, and from then on every sale write keeps them by
-// increments. This rebuilds them whole from the undelivered SaleOrders and the pending web orders
-// that have no sale yet, so it also repairs counters that drifted. Before that it fixes the orders
+// increments. This rebuilds them whole from the undelivered SaleOrders, the pending web orders
+// that have no sale yet and the restaurant's open table orders, so it also repairs counters that
+// drifted. Before that it fixes the orders
 // placed before the counters: a web order without PendingWarehouseID gets the company's first
 // online warehouse, and an undelivered sale without WarehouseID (a web order only paid) gets its web
 // order's. Run it while nothing sells for the company, or a sale written meanwhile is lost.
@@ -16,6 +17,7 @@ import (
 	config "app/config/types"
 	"app/core"
 	"app/db"
+	dining "app/dining/types"
 	logistics "app/logistics/types"
 	sales "app/sales/types"
 	"fmt"
@@ -25,9 +27,11 @@ type pendingDeliveryRecomputeReport struct {
 	companies     int
 	pendingSales  int
 	pendingOrders int
-	fixedOrders   int
-	fixedSales    int
-	changedRows   int
+	// openTableOrders are the restaurant's open table orders.
+	openTableOrders int
+	fixedOrders     int
+	fixedSales      int
+	changedRows     int
 }
 
 // RecomputePendingDelivery rebuilds the counters of every company (or one).
@@ -58,8 +62,9 @@ func RecomputePendingDelivery(args *core.ExecArgs) core.FuncResponse {
 
 	mode := core.If(shouldWrite, "APLICADO", "SIMULACIÓN (agregue 'apply' para escribir)")
 	message := fmt.Sprintf("Recálculo de stock por entregar %v: %d empresa(s) · %d venta(s) y %d pedido(s) web pendientes · "+
-		"%d pedido(s) y %d venta(s) sin almacén corregidos · %d fila(s) de stock cambiadas",
-		mode, report.companies, report.pendingSales, report.pendingOrders, report.fixedOrders, report.fixedSales, report.changedRows)
+		"%d pedido(s) de mesa abiertos · %d pedido(s) y %d venta(s) sin almacén corregidos · %d fila(s) de stock cambiadas",
+		mode, report.companies, report.pendingSales, report.pendingOrders, report.openTableOrders, report.fixedOrders,
+		report.fixedSales, report.changedRows)
 	core.Log(message)
 	return core.FuncResponse{Message: message}
 }
@@ -83,7 +88,8 @@ func recomputeCompanyPendingDelivery(companyID int32, shouldWrite bool, report *
 	}
 	saleOrders := []sales.SaleOrder{}
 	saleQuery := db.Query(&saleOrders)
-	saleQuery.Select(saleQuery.ID, saleQuery.Lines, saleQuery.Status, saleQuery.WarehouseID, saleQuery.OnlineSaleOrderID).
+	saleQuery.Select(saleQuery.ID, saleQuery.Lines, saleQuery.Status, saleQuery.WarehouseID, saleQuery.OnlineSaleOrderID,
+		saleQuery.PendingStockMovement).
 		CompanyID.Equals(companyID)
 	if err := saleQuery.Exec(); err != nil {
 		return core.Err("Error al leer las ventas de la empresa", companyID, err)
@@ -108,6 +114,12 @@ func recomputeCompanyPendingDelivery(companyID int32, shouldWrite bool, report *
 	}
 	salesToFix := []sales.SaleOrder{}
 	for _, sale := range saleOrders {
+		// A delivered sale still holds its made products' lines until the production close.
+		if sale.PendingStockMovement == 1 && !sale.IsDeliveryPending() {
+			reservations = append(reservations, sales.PendingDeliveryChanges(
+				sales.LinesWithStockExitPending(sale.Lines, true), sale.WarehouseID, sale.OnlineSaleOrderID > 0, 1)...)
+			continue
+		}
 		if !sale.IsDeliveryPending() {
 			continue
 		}
@@ -118,6 +130,20 @@ func recomputeCompanyPendingDelivery(companyID int32, shouldWrite bool, report *
 			salesToFix = append(salesToFix, sale)
 		}
 		reservations = append(reservations, sales.PendingDeliveryChanges(sale.Lines, sale.WarehouseID, sale.OnlineSaleOrderID > 0, 1)...)
+	}
+	// The restaurant's open table orders hold their live lines too (docs/DINING_PLAN.md §2.2).
+	tableOrders := []dining.TableOrder{}
+	tableOrderQuery := db.Query(&tableOrders)
+	tableOrderQuery.Select(tableOrderQuery.ID, tableOrderQuery.Lines, tableOrderQuery.WarehouseID, tableOrderQuery.Status).
+		CompanyID.Equals(companyID)
+	if err := tableOrderQuery.Exec(); err != nil {
+		return core.Err("Error al leer los pedidos de mesa de la empresa", companyID, err)
+	}
+	for _, tableOrder := range tableOrders {
+		if tableOrder.Status == dining.TableOrderOpen {
+			report.openTableOrders++
+			reservations = append(reservations, dining.TableOrderReservationChanges(tableOrder.Lines, tableOrder.WarehouseID, 1)...)
+		}
 	}
 	report.fixedOrders += len(ordersToFix)
 	report.fixedSales += len(salesToFix)

@@ -37,7 +37,9 @@ export class AccountingOperationsService {
       const response = await GET({
         route: `accounting-operations?period=${period}`,
         // ver 4: payslip lines carry the provision they settle.
-        useCache: { min: 0, ver: 4 },
+        // ver 5: sales carry PendingStockMovement.
+        // ver 6: stock movements include the production close's types 15 and 16.
+        useCache: { min: 0, ver: 6 },
         // A purchase document is keyed by the order's or the expense's own ID.
         keysIDs: { PurchaseOrders: "SourceID", Expenses: "SourceID" },
       }) as IAccountingOperationsResponse
@@ -52,7 +54,7 @@ export class AccountingOperationsService {
       const referencedSales = [...salesByID.values()].map(operationSaleOf)
       const productIDs = operationProductIDs([...(response.Sales || []), ...referencedSales], response.StockMovements || [])
       const productsByID = productIDs.length
-        ? await getRecordsByID<IProductRecord>("p-products-ids", productIDs)
+        ? await getRecordsByID<IProductRecord>("products-ids", productIDs)
         : new Map<number, IProductRecord>()
 
       this.referencedSales = referencedSales

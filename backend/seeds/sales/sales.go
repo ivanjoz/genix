@@ -282,7 +282,7 @@ func countFlagged(flags []bool) int {
 	return flaggedCount
 }
 
-// isStockShortageError matches the message validateSaleStock builds when a line outruns its bucket.
+// isStockShortageError matches the message types.ValidateSaleStock builds when a line outruns its bucket.
 func isStockShortageError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "Se posee en stock")
 }

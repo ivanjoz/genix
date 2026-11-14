@@ -20,6 +20,7 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 	supplyQuery.Select(
 		supplyQuery.ID, supplyQuery.Name, supplyQuery.Description, supplyQuery.SKU,
 		supplyQuery.BrandID, supplyQuery.Price, supplyQuery.CurrencyID, supplyQuery.UnitID,
+		supplyQuery.SbuQuantity, supplyQuery.SbuUnit,
 		supplyQuery.DepreciationMonths, supplyQuery.AccountCode, supplyQuery.Status, supplyQuery.Updated,
 		supplyQuery.Version,
 	)
@@ -54,6 +55,10 @@ type SupplyMaterialPayload struct {
 	Status int8 `json:"ss" cb:"ss,12"`
 	// The supply's default PCGE account. 0 takes accounting.DefaultSupplyAccountCode.
 	AccountCode int32 `cb:"13"`
+	// The sub-unit, as on a product: SbuQuantity sub-units make one unit (1000 g in a kg), so a
+	// recipe can consume a fraction of the supply. Same refinement-only rule as a product.
+	SbuQuantity int16  `cb:"14"`
+	SbuUnit     string `cb:"15"`
 }
 
 // supplyMaterialIDMapping is the shape the frontend GetHandler.postAndSync expects back: for
@@ -62,6 +67,29 @@ type SupplyMaterialPayload struct {
 type supplyMaterialIDMapping struct {
 	ID     int32 `cb:"1"`
 	TempID int32 `cb:"2"`
+}
+
+// validateSupplySubUnitDivisors applies the product divisor rules to supplies: a valid, named
+// divisor, refined only to a multiple of the stored one, since the supply's stock and the recipes
+// that consume it are expressed in it.
+func validateSupplySubUnitDivisors(companyID int32, supplyProducts []types.Product) error {
+	storedIDs := core.SliceSet[int32]{}
+	for _, supply := range supplyProducts {
+		storedIDs.AddIf(supply.ID)
+	}
+	storedByID := map[int32]types.Product{}
+	if !storedIDs.IsEmpty() {
+		storedSupplies := []types.Product{}
+		query := db.Query(&storedSupplies)
+		query.Select(query.ID, query.SbuQuantity).CompanyID.Equals(companyID).ID.In(storedIDs.Values...)
+		if err := query.Exec(); err != nil {
+			return core.Err("Error al obtener los insumos guardados:", err)
+		}
+		for _, stored := range storedSupplies {
+			storedByID[stored.ID] = stored
+		}
+	}
+	return validateProductSubUnitDivisors(supplyProducts, storedByID)
 }
 
 // PostSupplyMaterial upserts a batch of supplies as Product rows with Status = 2, then writes
@@ -124,6 +152,8 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			Price:              supplyPayload.Price,
 			CurrencyID:         supplyPayload.CurrencyID,
 			UnitID:             supplyPayload.UnitID,
+			SbuQuantity:        supplyPayload.SbuQuantity,
+			SbuUnit:            supplyPayload.SbuUnit,
 			DepreciationMonths: supplyPayload.DepreciationMonths,
 			AccountCode:        supplyPayload.AccountCode,
 			// Deleting is only meaningful for a row that already exists; a new record with no
@@ -138,6 +168,10 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
+	if divisorError := validateSupplySubUnitDivisors(req.User.CompanyID, supplyProducts); divisorError != nil {
+		return req.MakeErr(divisorError)
+	}
+
 	// The merge writes BrandName, the brand half of the product text index.
 	brandNamesByID, brandError := getProductBrandNames(req.User.CompanyID, supplyProducts)
 	if brandError != nil {
@@ -150,14 +184,15 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 	productTable := db.TableOf[types.Product]()
 	// Merge resolves insert vs. update per key. The excluded columns are the storefront and
 	// stock-derived ones a supply never sets — leaving them out stops a save from blanking
-	// values the stock engine maintains.
+	// values the stock engine maintains — and the recipe columns, which only a made product has.
 	mergeError := db.Merge(&supplyProducts,
 		db.Cols(
 			productTable.Stock, productTable.ReservedStock, productTable.StockStatus,
 			productTable.CategoriesWithStock, productTable.Created, productTable.CreatedBy,
 			productTable.ImageMain, productTable.ImageIDs, productTable.ImageDescriptions,
 			productTable.Presentations, productTable.Properties, productTable.ContentHTML,
-			productTable.CategoryIDs,
+			productTable.CategoryIDs, productTable.ProductionYieldPortions, productTable.ProductionSupplies,
+			productTable.ProductionExtraCostPerUnit, productTable.ProductionStandardCost,
 		),
 		func(previousProduct, currentProduct *types.Product) bool {
 			currentProduct.CompanyID = req.User.CompanyID

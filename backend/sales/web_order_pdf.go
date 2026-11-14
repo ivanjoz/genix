@@ -20,9 +20,10 @@ import (
 // always says what the order says now.
 
 // webOrderNumber is the order number the customer sees and the store searches by: the
-// OnlineSaleOrder ID, never the sale's (which is the boleta's correlativo).
+// OnlineSaleOrder ID, never the sale's (which is the boleta's correlativo). Padded to 4 digits
+// ("0001"), as the storefront's formatWebOrderNumber shows it.
 func webOrderNumber(onlineOrderID int32) string {
-	return fmt.Sprintf("%v", onlineOrderID)
+	return fmt.Sprintf("%04d", onlineOrderID)
 }
 
 func formatCents(amount int32) string {

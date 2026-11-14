@@ -33,6 +33,8 @@ export interface ISaleOrder {
     // Only set on annulled orders. Updated/UpdatedBy are the "annulled at / by": annulment is
     // terminal, so nothing writes to the record afterwards.
     AnnulReason?: string;
+    // 1: delivered, but a made product's stock exit waits for the daily production close.
+    PendingStockMovement?: number;
     TopPaidProducts?: ISaleOrderTopProduct[];
 }
 
@@ -63,11 +65,13 @@ export const ANNUL_SALE_SUB_ACCESS_ID = 2
 // - `pending-status=3` => pending delivery
 // - `order-status=4`   => completed
 // - `order-status=0`   => annulled
+// - `pending-stock=1`  => delivered with a made product's stock exit still pending (5 is UI-only)
 export const SaleOrderGroup = {
 	PENDIENTE_DE_PAGO: 2,
 	PENDIENTE_DE_ENTREGA: 3,
 	FINALIZADO: 4,
 	ANULADO: 0,
+	POR_REGULARIZAR: 5,
 }
 
 export interface ISaleOrdersResult {
@@ -105,6 +109,8 @@ export class SaleOrdersService extends GetHandler {
 			this.route += `?order-status=${group}`
 		} else if (group === SaleOrderGroup.PENDIENTE_DE_PAGO || group === SaleOrderGroup.PENDIENTE_DE_ENTREGA) {
 			this.route += `?pending-status=${group}`
+		} else if (group === SaleOrderGroup.POR_REGULARIZAR) {
+			this.route += `?pending-stock=1`
 		} else {
 			notifyFailure("El grupo seleccionado es incorrecto")
 			return

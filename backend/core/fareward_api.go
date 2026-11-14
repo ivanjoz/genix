@@ -105,6 +105,10 @@ var (
 	QueryDeviceUsage       = fareward.QueryDeviceUsage
 	// The grants push: fareward no longer reads the users table, this process sends it the grants.
 	PutUserGrants = fareward.PutUserGrants
+	// The SSE bridge (Env.SSE_BRIDGE_URL): agent traffic in Lambda and live-page topics.
+	ConfigureBridge    = fareward.ConfigureBridge
+	BridgeConfigured   = fareward.BridgeConfigured
+	BridgePublishTopic = fareward.BridgePublishTopic
 )
 
 // LockError is every way AcquireLock can fail to hand back a lock. It exists so a handler can turn

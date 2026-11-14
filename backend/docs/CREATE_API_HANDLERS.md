@@ -190,36 +190,6 @@ func GetSedesAlmacenes(req *core.HandlerArgs) core.HandlerResponse {
 }
 ```
 
-### Time-UUID Range Queries
-For log-like data (e.g., `CajaMovimientos`), we use `SUnixTimeUUID` for primary keys. These are sorted chronologically and can be queried efficiently using ranges.
-
-```go
-func GetCajaMovimientos(req *core.HandlerArgs) core.HandlerResponse {
-    cajaID := req.GetQueryInt("caja-id")
-    if cajaID == 0 { return req.MakeErr("No se envió la Caja-ID") }
-
-    fechaHoraInicio := req.GetQueryInt64("fecha-hora-inicio")
-    fechaHoraFin := req.GetQueryInt64("fecha-hora-fin")
-
-    movimientos := []s.CajaMovimiento{}
-    query := db.Query(&movimientos)
-    query.Select().CompanyID.Equals(req.User.CompanyID)
-    
-    // Range query using SUnixTimeUUID pattern
-    query.ID.Between(
-        core.SUnixTimeUUIDConcatID(cajaID, fechaHoraInicio),
-        core.SUnixTimeUUIDConcatID(cajaID, fechaHoraFin + 1),
-    )
-    query.OrderDesc()
-
-    if err := query.Exec(); err != nil {
-        return req.MakeErr("Error al obtener los movimientos:", err)
-    }
-
-    return req.MakeResponse(movimientos)
-}
-```
-
 ---
 
 ## 7. POST Handler Patterns (Upsert)
@@ -247,7 +217,7 @@ func PostMovimientoCaja(req *core.HandlerArgs) core.HandlerResponse {
     // 3. Prepare records
     record.CompanyID = req.User.CompanyID
     record.Created = nowTime
-    record.ID = core.SUnixTimeUUIDConcatID(record.CajaID)
+    record.ID = 0 // minted by the ORM from the table's autoincrement on insert
     
     caja.SaldoCurrent = record.SaldoFinal
     caja.Updated = nowTime
@@ -411,7 +381,7 @@ func PostProductoImage(req *core.HandlerArgs) core.HandlerResponse {
 **A**: Ensure you are filtering by `CompanyID`. If you are filtering by a non-primary key column, check if you need to call `.AllowFilter()`. Also, verify if the `Status` field matches your sync logic.
 
 ### Q: Why do we use Sunix timestamps instead of standard Unix timestamps?
-**A**: Sunix timestamps are optimized for synchronization and primary key generation patterns, providing higher precision and better compatibility with our `SUnixTimeUUID` format.
+**A**: A SUnixTime is an `int32` (`(unix - 1e9) / 2`): half the storage of a unix timestamp, and the unit the delta caches use as their sync cursor.
 
 ### Q: How do I handle batch updates to unrelated tables?
 **A**: Write them in one `db.RunTransaction`: lock what the change depends on with `db.LockByKeys`, then `db.InsertIn`/`db.UpdateIn`/`db.UpsertIn` each table. They commit together, and a deadlock reruns the body (see `docs/ORM_DATABASE_QUERY.md`).

@@ -28,8 +28,7 @@ var (
 	requestCounter uint32
 )
 
-// Decimal packing on a SUnix base, the same shape as SUnixTimeUUID: a time in the high digits and
-// a tail below it. Bit shifts would work too, but they produce a number nobody can read — the
+// Decimal packing on a SUnix base: a time in the high digits and a tail below it. Bit shifts would work too, but they produce a number nobody can read — the
 // timestamp inside one of these is meant to be recoverable by dividing, at a glance.
 const (
 	// Seven digits of counter under SUnixTime, whose tick is two seconds: ten million requests

@@ -47,9 +47,13 @@ export interface IWebOrder {
   ShippingAmount: number
   DeliveryType: number
   PickupSiteID: number
-  Shipping: { CityID: number, Address: string }
+  Shipping: { FirstName: string, LastName: string, Phone: string, CityID: number, Address: string, Reference: string }
   // The sale this order became when it was paid or delivered; 0 before.
   SaleOrderID: number
+  // The back office's progress label: 0 received, 1 preparing, 2 on the way / ready for pickup.
+  FulfillmentStatus: number
+  // PAYMENT_CARD, PAYMENT_YAPE or PAYMENT_DEFERRED.
+  PaymentMethod: number
 }
 
 const emptyDraft = (): ICustomerDraft => ({ Email: '', FirstName: '', LastName: '', Phone: '', DocumentNumber: '' })

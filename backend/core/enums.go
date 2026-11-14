@@ -47,4 +47,8 @@ const (
 	// (business/ecommerce-catalog.go): a delta request that needs the file queues behind the build
 	// under way and then reuses its file; one that only noticed the file aging skips. Keyed on the company.
 	ActionBuildEcommerceCatalog LockAction = 11
+	// ActionDiningTable serializes the rounds of one restaurant table, so two devices ordering at
+	// once cannot each open an order for it (a table has at most one open order). Keyed on
+	// companyID<<32 | layoutID<<16 | tableShapeID.
+	ActionDiningTable LockAction = 12
 )

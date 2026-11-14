@@ -518,7 +518,7 @@
 				<div class="mt-12 text-center">
 					<i class="icon-[fa--check] text-green-500 text-[64px] mb-4"></i>
 					<div class="fs24 ff-bold mb-2">¡Gracias por tu compra!</div>
-					<div class="ff-semibold mb-4">Pedido N° {result.OrderNumber} · {formatSoles(result.TotalAmount)}</div>
+					<div class="ff-semibold mb-4">Pedido {result.OrderNumber} · {formatSoles(result.TotalAmount)}</div>
 					<p class="text-gray-600 mb-8">
 						{#if result.DocumentType === 2}
 							Tu pedido quedó registrado. Paga al {checkout.deliveryType === DELIVERY_PICKUP ? "recogerlo en tienda" : "recibirlo"};

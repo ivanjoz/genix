@@ -38,6 +38,10 @@ type SaleOrderLine struct {
 	Sku            string `cb:"6"`
 	LotID          int32  `cb:"7"`
 	PresentationID int16  `cb:"8"`
+	// StockExitPending is set when the sale was delivered without this line's warehouse exit: a made
+	// product leaves its stock at the daily production close, which settles the line and clears it
+	// (docs/PRODUCTION_PLAN.md §3). Until then the line keeps its unit reserved in PendingDelivery*.
+	StockExitPending bool `cb:"9"`
 }
 
 // DetailProductIDs is the product of every line, in line order. It feeds the computed column of
@@ -116,6 +120,21 @@ type SaleOrder struct {
 	// OnlineSaleOrderID is the web store order this sale was created from; 0 on till sales. Every
 	// write to the sale copies its Status and DebtAmount to that order (syncOnlineSaleOrderIn).
 	OnlineSaleOrderID int32 `cb:"43"`
+	// PendingStockMovement is 1 while the sale is delivered (3/4) but some line's stock exit waits for
+	// the daily production close (SaleOrderLine.StockExitPending); 0 otherwise. An int8 so it can pin
+	// a delta index: the "Por regularizar" list and the close read the sales with 1.
+	PendingStockMovement int8 `cb:"44"`
+}
+
+// RefreshPendingStockMovement sets PendingStockMovement from the lines' StockExitPending flags.
+func (e *SaleOrder) RefreshPendingStockMovement() {
+	e.PendingStockMovement = 0
+	for _, line := range e.Lines {
+		if line.StockExitPending {
+			e.PendingStockMovement = 1
+			return
+		}
+	}
 }
 
 // StampPeriod sets Period from the sale's accounting date, its Date.
@@ -287,9 +306,10 @@ type SaleOrderTable struct {
 	AnnulReason      db.Col[*SaleOrderTable, string]
 	Period           db.Col[*SaleOrderTable, int16]
 	// SameDayCashBankID is the cash bank of the collection that settled the sale on its Date.
-	SameDayCashBankID db.Col[*SaleOrderTable, int32]
-	ShippingAmount    db.Col[*SaleOrderTable, int32]
-	OnlineSaleOrderID db.Col[*SaleOrderTable, int32]
+	SameDayCashBankID    db.Col[*SaleOrderTable, int32]
+	ShippingAmount       db.Col[*SaleOrderTable, int32]
+	OnlineSaleOrderID    db.Col[*SaleOrderTable, int32]
+	PendingStockMovement db.Col[*SaleOrderTable, int8]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -307,6 +327,7 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 		FixedValues: []db.FixedValues{
 			{Col: e.Status, Min: 0, Max: 4},
 			{Col: e.Period, Min: 0, Max: 9912},
+			{Col: e.PendingStockMovement, Min: 0, Max: 1},
 		},
 		// Only the product index groups below read it, from the record in memory.
 		Computed: []db.ComputedCol{
@@ -337,6 +358,10 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
 			// One log per accounting period: GET.accounting-operations syncs a month through it.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.Status)},
+			// The sales delivered with a stock exit still pending: PendingStockMovement pinned to 1 by an
+			// equality, Status (3, 4) by the Delta() values. Status is a key so a read by Status alone
+			// keeps resolving to the Status index (fewer prefixes) instead of tying with this one.
+			{Type: db.TypeDelta, Keys: db.Cols(e.PendingStockMovement, e.Status)},
 		},
 		DataFrames: []db.DataFrame{{
 			// The day/product sales summary of /sales/sale_orders_charts. Most products have no

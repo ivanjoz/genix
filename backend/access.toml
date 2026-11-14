@@ -144,8 +144,8 @@ id = 8
 name = "Productos"
 group = 9
 levels = 14
-frontend_routes = "production/products"
-backend_apis = "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists"
+frontend_routes = "production/products,production/merchandise"
+backend_apis = "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists,GET.supply-material"
 
 [[access]]
 id = 9
@@ -192,6 +192,35 @@ frontend_routes = "sales/online-orders"
 backend_apis = "GET.online-sale-orders,POST.online-sale-order-settle,POST.online-sale-order-annul"
 sub_accesses_ids = [2]
 sub_accesses_names = ["Anular Pedido"]
+
+[[access]]
+id = 60
+name = "Cierre de Producción"
+group = 9
+levels = 14
+frontend_routes = "production/daily-close"
+backend_apis = "POST.production-close,GET.production-close-pending,GET.production-close-preview,GET.production-closes"
+
+# Restaurant (docs/DINING_PLAN.md §10). 62 "Cocina" comes with its page; 61's sub-access 2
+# "Cobrar mesa" with charging. A waiter may do every line transition, "ready" included (a restaurant
+# with no kitchen display marks dishes ready from the floor map).
+[[access]]
+id = 61
+name = "Atención de Mesas"
+group = 3
+levels = 14
+frontend_routes = "dining/floor-service"
+backend_apis = "POST.dining-table-order-round,POST.dining-table-order-lines,POST.dining-table-order-charge,POST.dining-table-order-annul"
+sub_accesses_ids = [2]
+sub_accesses_names = ["Cobrar Mesa"]
+
+[[access]]
+id = 63
+name = "Diseño de Salones"
+group = 3
+levels = 14
+frontend_routes = "dining/floor-layout"
+backend_apis = "POST.dining-layout"
 
 [[access]]
 id = 12

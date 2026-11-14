@@ -29,6 +29,10 @@ const (
 	StockMovementTypeOpeningStock        StockMovementType = 12 // the stock a company starts with, always costed
 	StockMovementTypeInternalConsumption StockMovementType = 13 // stock used up by the business itself
 	StockMovementTypeShrinkage           StockMovementType = 14 // merma: stock lost or damaged
+	// The daily production close (docs/PRODUCTION_PLAN.md §5): it consumes the supplies of the made
+	// products a warehouse delivered, and produces those products right before their sale exits.
+	StockMovementTypeProductionConsumption StockMovementType = 15 // a supply used up by a production close
+	StockMovementTypeProductionEntry       StockMovementType = 16 // a made product produced by a close
 )
 
 // stockMovementTypeRule is what the engine enforces for a type: the table its DocumentID points
@@ -53,6 +57,8 @@ var stockMovementTypeRules = map[StockMovementType]stockMovementTypeRule{
 	StockMovementTypeOpeningStock:          {"Saldo inicial", "", 1},
 	StockMovementTypeInternalConsumption:   {"Consumo interno", "", -1},
 	StockMovementTypeShrinkage:             {"Merma", "", -1},
+	StockMovementTypeProductionConsumption: {"Consumo de producción", "production_close", -1},
+	StockMovementTypeProductionEntry:       {"Ingreso de producción", "production_close", 1},
 }
 
 // StockMovementDocumentTable is the table a movement of this type names in DocumentID, or ""
@@ -73,6 +79,23 @@ func validateStockMovementDocument(movementType StockMovementType, documentID in
 	}
 	if rule.documentTable == "" && documentID != 0 {
 		return core.Err(fmt.Sprintf("El movimiento \"%s\" no lleva documento, se envió: %v.", rule.name, documentID))
+	}
+	return nil
+}
+
+// validateStockMovementDate refuses a movement Date (0 = today) on any type but the production close's
+// (15, 16 and the sale exits 8 it settles), and any Date but today or yesterday: a close of day D
+// books on max(D, yesterday), so no movement ever lands in an older, possibly declared, day.
+func validateStockMovementDate(movementType StockMovementType, date int16) error {
+	if date == 0 {
+		return nil
+	}
+	if movementType != StockMovementTypeProductionConsumption && movementType != StockMovementTypeProductionEntry &&
+		movementType != StockMovementTypeSaleDelivery {
+		return core.Err(fmt.Sprintf("El movimiento \"%s\" no admite una fecha propia.", stockMovementTypeRules[movementType].name))
+	}
+	if today := core.FechaUnix(); date != today && date != today-1 {
+		return core.Err(fmt.Sprintf("La fecha de un movimiento solo puede ser hoy o ayer; se envió el día %v.", date))
 	}
 	return nil
 }

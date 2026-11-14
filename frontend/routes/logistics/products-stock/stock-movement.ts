@@ -50,6 +50,10 @@ export interface IProductStock {
   DetailComputedSubQuantity?: number
   /** Moving weighted average cost of one unit, PEN cents net of recoverable IGV. */
   AverageCost?: number
+  /** Value of everything on the row (free bucket plus details), PEN cents net of recoverable IGV. */
+  StockValue?: number
+  /** Divisor every SubQuantity of this row is expressed in. */
+  SubDivisor?: number
   StockStatus?: number
   Created?: number
   CreatedBy?: number

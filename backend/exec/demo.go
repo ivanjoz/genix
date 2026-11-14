@@ -467,9 +467,6 @@ func Test28(args *core.ExecArgs) core.FuncResponse {
 
 	fmt.Printf("Tunix Time: %v\n", core.SUnixTime())
 	fmt.Printf("Tunix Time Milli: %v\n", core.SUnixTimeMilli())
-	fmt.Print("Probando UUID")
-	fmt.Printf("Tunix UUID: %v\n", core.SUnixTimeUUID())
-	fmt.Printf("Tunix ID + UUID: %v\n", core.SUnixTimeUUIDConcatID(120))
 
 	SUnix1 := int32(999999999)
 	SUnix2 := int32(2147483646)
@@ -558,17 +555,6 @@ type DemoType1[T DemoStruct1] struct {
 	ID    int32
 }
 
-func Test33(args *core.ExecArgs) core.FuncResponse {
-
-	id := int32(1)
-
-	uuid := core.SUnixTimeUUIDConcatID(id)
-
-	core.Log(uuid)
-
-	return core.FuncResponse{}
-}
-
 type DemoTable4[T any] struct {
 	Table  T
 	Nombre string
@@ -629,17 +615,6 @@ type Hello1[T any] interface {
 
 type Hello2[T any] interface {
 	Query2() []T
-}
-
-func Test34(args *core.ExecArgs) core.FuncResponse {
-
-	id := int32(1)
-
-	uuid := core.SUnixTimeUUIDConcatID(id)
-
-	core.Log(uuid)
-
-	return core.FuncResponse{}
 }
 
 func Test35(args *core.ExecArgs) core.FuncResponse {

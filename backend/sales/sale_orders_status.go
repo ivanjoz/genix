@@ -17,6 +17,19 @@ const saleOrdersQueryLimit = 5000
 // GetSaleOrders serves one tab per request. It supports delta sync via the "records" query
 // parameter, the response key's own cursor.
 func GetSaleOrders(req *core.HandlerArgs) core.HandlerResponse {
+	// "Por regularizar": delivered sales whose made products' stock exit waits for the production close.
+	if req.GetQueryInt("pending-stock") == 1 {
+		saleOrders := []types.SaleOrder{}
+		query := db.Query(&saleOrders).Limit(saleOrdersQueryLimit).OrderDesc()
+		query.Exclude(query.CompanyID)
+		query.CompanyID.Equals(req.User.CompanyID).PendingStockMovement.Equals(1).
+			Delta(req.GetDeltaCursor("records"), types.OrderStatusDelivered, types.OrderStatusCompleted)
+		if err := query.Exec(); err != nil {
+			return req.MakeErr("Error al obtener las ventas por regularizar:", err)
+		}
+		return req.MakeResponse(&map[string]any{"records": &saleOrders})
+	}
+
 	orderPendingStatus := int8(req.GetQueryInt("pending-status"))
 	// Read presence, not value: the Anuladas tab pins Status 0, which a `> 0` test cannot
 	// distinguish from the parameter being absent.

@@ -33,7 +33,7 @@ routes = "sales/sale_orders_charts, sales/sales-report"
 [[modules.menus]]
 name = "Catalog|Catálogo"
 min_name = "CAT"
-routes = "production/products, crm/customers"
+routes = "production/merchandise, production/products, crm/customers"
 
 [[modules.menus]]
 name = "Store / Web|Tienda / Web"
@@ -45,6 +45,11 @@ name = "Invoicing|Facturación"
 min_name = "FAC"
 routes = "accounting/invoicing"
 
+[[modules.menus]]
+name = "Restaurant|Restaurante"
+min_name = "RES"
+routes = "dining/floor-service, dining/floor-layout, production/daily-close"
+
 [[modules]]
 code = "operations"
 name = "Operations|Operaciones"
@@ -53,7 +58,7 @@ icon = "icon-[fa--cubes]"
 [[modules.menus]]
 name = "Production|Producción"
 min_name = "PRD"
-routes = "production/products, production/supplies-materials"
+routes = "production/merchandise, production/products, production/supplies-materials, production/daily-close"
 
 [[modules.menus]]
 name = "Warehouse|Almacén"

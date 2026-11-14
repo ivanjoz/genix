@@ -303,6 +303,19 @@ import {
         keyName="Name"
         options={listas.ListaRecordsMap.get(2) || []}
       />
+      <!-- Sub-unit: how a recipe takes a fraction of the supply ("kg" with 1000 "g"). Once set it can
+           only be refined to a multiple, as on a product. -->
+      <Input label="Sub-unit|Sub-unidad"
+        saveOn={supplyForm}
+        css="col-span-12 md:col-span-6"
+        save="SbuUnit"
+      />
+      <Input label="Sub-units per unit|Sub-unidades por unidad"
+        saveOn={supplyForm}
+        css="col-span-12 md:col-span-6"
+        save="SbuQuantity"
+        type="number"
+      />
       <SearchSelect label="Depreciation|Depreciación"
         saveOn={supplyForm}
         css="col-span-24 md:col-span-12"

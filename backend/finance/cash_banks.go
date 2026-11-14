@@ -233,7 +233,8 @@ func reconcileCashBankIn(transaction *db.Transaction, req *core.HandlerArgs, rec
 	cashBank types.CashBank, counterAccountCode int32, nowTime int32,
 ) error {
 	record.CompanyID = req.User.CompanyID
-	record.ID = core.SUnixTimeUUIDConcatID(record.CashBankID)
+	// Zero so the ORM mints it from the table's counter: an ID sent by the client is never kept.
+	record.ID = 0
 	record.Created = nowTime
 	record.CreatedBy = req.User.ID
 	record.DifferenceAmount = record.ActualAmount - cashBank.CurrentAmount
@@ -255,7 +256,6 @@ func reconcileCashBankIn(transaction *db.Transaction, req *core.HandlerArgs, rec
 
 	// Record the reconciliation movement
 	movimiento := types.CashBankMovement{
-		ID:         core.SUnixTimeUUIDConcatID(record.CashBankID),
 		CompanyID:  req.User.CompanyID,
 		CashBankID: record.CashBankID,
 		// The Libro Diario reads movements by period, so a count without a date would never
@@ -270,10 +270,13 @@ func reconcileCashBankIn(transaction *db.Transaction, req *core.HandlerArgs, rec
 		Period:             core.PeriodOfDay(core.FechaUnix()),
 	}
 
-	// Both IDs are fresh time-based UUIDs: nothing is stored under them.
-	if err := db.InsertIn(transaction, &[]types.CashReconciliation{*record}); err != nil {
+	// Both IDs are minted by the ORM on insert. The reconciliation is copied back so the response
+	// carries the ID it was stored under.
+	reconciliations := []types.CashReconciliation{*record}
+	if err := db.InsertIn(transaction, &reconciliations); err != nil {
 		return core.Err("Error al registrar el cuadre:", err)
 	}
+	*record = reconciliations[0]
 	q1 := db.TableOf[types.CashBank]()
 	if err := db.UpdateIn(transaction, &[]types.CashBank{cashBank}, q1.Status, q1.ReconciliationDate, q1.ReconciliationAmount, q1.CurrentAmount, q1.Updated, q1.UpdatedBy); err != nil {
 		return core.Err("Error al actualizar la cashBank:", err)

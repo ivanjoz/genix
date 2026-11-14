@@ -29,7 +29,7 @@ linked document, and the user who created it.
 
 This page only queries and displays the ledger; it does not create, edit, or delete movements.
 Stock is changed elsewhere — manual stock adjustments on **Stock Changes (Cambios Stock)**,
-merchandise reception on **Purchase Orders (Órdenes de Compra)**, and product delivery on sale
+merchandise reception on **Purchase Orders (Órdenes Compra)**, and product delivery on sale
 orders — and every one of those operations writes rows that eventually surface in this same
 report.
 
@@ -44,22 +44,37 @@ report.
   one. The manual reasons chosen on **Stock Changes (Cambios Stock)** are **Entrada manual**,
   **Saldo inicial**, **Salida manual**, **Merma** and **Consumo interno**. The rest are written
   by their own document: **Ingreso por orden de compra**, **Compra de insumos**, **Entrega
-  (venta)**, **Reingreso (anulación de venta)**, and the asset movements (**Alta**, **Baja**,
-  **Traslado** and **Corrección de serie de activo**). Any of them can be isolated with the
-  **Tipo Movimiento** filter.
+  (venta)**, **Reingreso (anulación de venta)**, the asset movements (**Alta de activo**, **Baja
+  de activo**, **Traslado de activo** and **Corrección de serie de activo**), and the two
+  movements of the daily production close (**Cierre del día**): **Consumo de producción**, a
+  supply leaving the supplies warehouse by a made product's recipe, and **Ingreso de producción**,
+  the made product entering the sales warehouse at its production cost. Any of them can be
+  isolated with the **Tipo Movimiento** filter.
+- **Entrega (venta)** is written when a sale is delivered — whether the sale was delivered at the
+  Point of Sale, from a web order, or from a restaurant table — one exit per line from the
+  delivery warehouse, linked to the sale. The lines of a made product (`producto elaborado`) are
+  the exception: their exit is not written at delivery but by the next daily production close,
+  which writes the **Entrega (venta)** exits of the sales it settles, dated like its own
+  movements: the day closed or yesterday, whichever is later.
+- **Quantity (Cantidad)** shows whole units, plus the sub-unit part when there is one, in the
+  product's sub-unit name (for example `2 + 3 g`); a movement of sub-units only shows just the
+  sub-units. Exits are shown in red and entries in blue.
 - A **batch/lot (lote)** groups received merchandise under one code (`Código Lote`); a
   **serial number (Nº Serie / SKU)** identifies one unit. Either can carry its own detail
   quantity per warehouse, separate from the warehouse's free (non-lot, non-serial) quantity.
 - **Document (Documento)** is the linked business record ID that produced the movement — for
-  example a purchase order or a sale order ID — shown as a plain number; the report does not
+  example a purchase order, a sale order ID, or the production close number (`Cierre N°`) for
+  Consumo / Ingreso de producción — shown as a plain number; the report does not
   turn it into a link to open that order.
-- **Source Warehouse (Almacén Origen)** and **Destination Warehouse (Almacén Destino)** are
-  both rendered on every row, intended for warehouse-to-warehouse transfers. In the currently
-  implemented movement sources (manual adjustment, purchase reception, sale delivery), nothing
-  populates a source/origin warehouse, so **Almacén Origen** is always blank in practice — Genix
-  does not currently have an implemented action that records a two-sided warehouse transfer.
-  Treat this report as an entry/exit ledger per warehouse, not as a transfer log, despite the
-  column existing for that purpose.
+- **Destination Warehouse (Almacén Destino)** is the warehouse the movement changed, with its
+  resulting quantity in parentheses. **Source Warehouse (Almacén Origen)** is blank on every
+  movement except an asset transfer (**Traslado de activo**), the only implemented
+  warehouse-to-warehouse transfer. A transfer is written as two rows — an exit from the warehouse
+  the asset leaves and an entry into the one it goes to — and on each row **Almacén Origen**
+  names the *other* warehouse. So on the exit row the columns read backwards: **Almacén Destino**
+  shows the warehouse the asset left and **Almacén Origen** the one it went to. The number in
+  parentheses next to **Almacén Origen** is always 0; it is not that warehouse's stock. Treat this
+  report as an entry/exit ledger per warehouse, not as a transfer log.
 
 <!-- DOC-ID: capability.query-range -->
 ## Query movements by warehouse and date range (Consultar movimientos por almacén y rango de fechas)
@@ -71,7 +86,7 @@ audit stock changes, investigate a discrepancy, or check recent activity.
 
 ### Where to find it (Dónde encontrarlo)
 
-Open **Logistics (Logística) → Movements Report (Rep. Movimientos)** at
+Open **Operations (Operaciones) → Warehouse (Almacén) → Movements Report (Rep. Movimientos)** at
 `/logistics/warehouse-movements`. Click the search icon (top-left button) to open the filter
 panel, set the fields, and press **Buscar**. The panel closes automatically after the button is
 pressed, whether or not the query actually ran.
@@ -93,10 +108,10 @@ pressed, whether or not the query actually ran.
 
 The server rejects a range query when the start or end date is missing, when the end date is
 earlier than the start date, or when the range spans more than **120 days** — `Sólo se pueden
-consultar hasta 120 días a la vez.` A narrower combination of Almacén, Producto, and Tipo routes
-the query through a more specific server-side index; when both Tipo and Almacén are set they are
-combined together, otherwise only one of Tipo, Almacén, or Producto is actually used to narrow
-the result beyond the date range.
+consultar hasta 120 días a la vez.` Almacén, Producto, and Tipo Movimiento all narrow the result:
+the server answers by date range plus one of them (Tipo and Almacén together, or else Tipo, else
+Almacén, else Producto), and the page then drops the loaded rows that do not match the remaining
+filters.
 
 ### Result and side effects (Resultado y efectos)
 
@@ -208,11 +223,12 @@ those extra filters are simply ignored while a lote/serie/documento value is pre
 - **Stock Changes (Cambios Stock)** at `/logistics/products-stock`: register the manual stock
   adjustments that appear here with the reason chosen on save (Entrada manual, Saldo inicial,
   Salida manual, Merma, Consumo interno).
-- **Purchase Orders (Órdenes de Compra)** at `/logistics/purchase-orders`: merchandise reception
+- **Purchase Orders (Órdenes Compra)** at `/logistics/purchase-orders`: merchandise reception
   against a confirmed order is the source of the **Ingreso por orden de compra** movements linked
   to a purchase-order document ID.
 - Sale orders create the **Entrega (venta)** movements linked to a sale document ID when a sale
-  includes product delivery; this route does not expose a page to create or edit that sale.
+  is delivered — except for made products, whose exit waits for the daily production close; this
+  route does not expose a page to create or edit that sale.
 
 ### FILES
 
@@ -223,62 +239,106 @@ hash_algorithm: sha256
 files:
   - path: frontend/routes/logistics/warehouse-movements/+page.svelte
     role: page
-    hash: sha256:24283d7bada7d287190c030d2037da32c7f8b56a040a3727ec1061828dd4354f
+    hash: sha256:057e04190b5479cc88aec7b935b3013ac637a4080f9a7b3b76ce2e03853443c6
     supports: [page-purpose, concepts, capability.query-range, capability.lookup-direct, rules]
   - path: frontend/routes/logistics/warehouse-movements/warehouse-movements.svelte.ts
     role: frontend-service
-    hash: sha256:65bce92904055963a9bdda22f445f35d7d16f465e449b4d86441963d6fe5cce6
+    hash: sha256:bf9ea17e300f3f6992cae1ed09f1ba0199e8c5edd602af62db7a5877c967a86e
     supports: [concepts, capability.query-range, capability.lookup-direct, troubleshooting]
-  - path: frontend/core/modules.ts
+  - path: db/pages.toml
     role: user-interface
-    hash: sha256:5823f8cd8df9d03acf80c3fecb539fb069743f5fb330cba0a78a7957ab01c5aa
-    supports: [page-purpose, capability.query-range]
+    hash: sha256:cb61a6f79a034e4d468b46c173733b815f0af9007a01d1f3e69b92d358913d60
+    supports: [page-purpose, capability.query-range, related-pages]
+  - path: db/modules.toml
+    role: user-interface
+    hash: sha256:4f2d4c16777913fddf196959c4341290e69a12a78323a5b95f8fa5d4738ca34d
+    supports: [capability.query-range]
+  - path: frontend/core/quantity.ts
+    role: shared-domain
+    hash: sha256:3dda78678bc8c4d891b7d2b679d0a0549a97feb81ce05d23ada3d4cea08194ba
+    supports: [concepts]
   - path: frontend/domain-components/SideMenu.svelte
     role: user-interface
-    hash: sha256:bf9d01b2e3e83aa5186d7e5105af8a6e4674a4e1cea084160b2a4ba34d7620a5
+    hash: sha256:6a4e810acfdb129da0914c3615c5f88ed67d652efddd0edf51bdd7c7ee57452e
     supports: [related-pages]
   - path: frontend/routes/+layout.svelte
     role: permissions
-    hash: sha256:d39952cdbb641e90e952ae87109727da0300c178dac868654ed70d80ff2c60af
+    hash: sha256:02ee210641045619281189cb8ede513e3b6570de831a4ce37f03098f6c9ced17
     supports: [rules]
   - path: frontend/packages/genix-ui/security/create-security.ts
     role: permissions
-    hash: sha256:390de882f2a453a905322a7a5ef6a7265fdce7d5cc6b07b4d6ddbc0f0979fcbc
+    hash: sha256:e83bbfd60ed7823ffdc48b7846ee1745b23f83ff3f962b1059e57070e9aebb8c
     supports: [rules]
-  - path: frontend/routes/security/access-profiles/+page.svelte
+  - path: frontend/routes/security/users-profiles/users-profiles.ts
     role: shared-domain
-    hash: sha256:f113cbaee8d9ad9f180f07993ce42054dde14523c91e38075b9178b1723f7a55
+    hash: sha256:5efed57e28e00238aab5a6995986d1ddd721a003cc59c635279418d742abb6d9
     supports: [rules]
-  - path: frontend/routes/security/access-profiles/access-profiles.svelte.ts
+  - path: frontend/routes/security/users-profiles/users-profiles.svelte.ts
     role: shared-domain
-    hash: sha256:34269127c34cd8b1964aa51143315a914bd52b1f98ab98469c9dff70e195c72f
+    hash: sha256:c4eb5b0302c1f9f54cf0b447be33d4d7972b76c88501b952a2ea6671f537d618
     supports: [rules]
   - path: frontend/routes/logistics/products-stock/stock-movement.ts
     role: data-model
-    hash: sha256:5f468bbace2e4a7000cb389e48473da271bdd717bcad8f274ef4f308c3d7ea5e
+    hash: sha256:5b40e3b6c6ef8421e4a341e887d67b3bece49badd16259898d659e778ce06115
     supports: [concepts]
   - path: backend/logistics/product-stock-movement.go
     role: backend-handler
-    hash: sha256:2e444cb603b22f38bdb3ca5f0928679bcbbb884da60e2442a458b4e237f3a6a3
+    hash: sha256:e324e10b9453a23f6c5dd1a8698cc3f0ea641e30075807f06e1c4239c31b2955
     supports: [concepts, capability.query-range, capability.lookup-direct, rules, troubleshooting]
   - path: backend/logistics/types/product-stock-movement.go
     role: data-model
-    hash: sha256:11638ab2ed6b9a8698cd4f2da79d6eb4ddb9ce3e2ddce5341615c6b046245d5d
+    hash: sha256:9fda1c20a6e7a9bc40ca1edc0b0da501bbc660ee9d1a0ce5d56ffea252afeb4c
     supports: [concepts, rules]
   - path: backend/logistics/purchase-order-management.go
     role: business-logic
-    hash: sha256:517ae84b29a0a72d496e7e2ae960e93044b9e87cc844f704e40d4c66543bdef3
+    hash: sha256:d9c2b28be2e49e0ddd10c677f4f343dc5f79fb2c354e134804be6c621f11dbf4
     supports: [concepts, related-pages]
   - path: backend/sales/sale_order_create.go
     role: business-logic
-    hash: sha256:ddf16aaeca22e2b0f5a90cc30e7c7d810db8ac6f8f343ae14a3008db77f424e6
+    hash: sha256:0601dd000d061f432f4a7dfa0228d673b2debc0a744448d6ddfb78a30978c78d
     supports: [concepts, related-pages]
+  - path: backend/sales/saleissue/types/new_sale.go
+    role: business-logic
+    hash: sha256:79480f8435d4182f16c8ebca2b5717be396423cd73a571f5ef1e2a84a229e33e
+    supports: [concepts, related-pages]
+  - path: backend/sales/types/sale_actions.go
+    role: business-logic
+    hash: sha256:ad4c117e0bce8f4c8e88f85e6aa3677090935cf6b6127c944f72bf1601413109
+    supports: [concepts, related-pages]
+  - path: backend/sales/online_sale_order.go
+    role: business-logic
+    hash: sha256:6d521468f6ba3c7074be0ca54529ba9cc3e7453370483539546febb16b0dedac
+    supports: [concepts]
+  - path: backend/dining/table_order_charge.go
+    role: business-logic
+    hash: sha256:32e32d0a5349d8e43895fec3d0ca47a09fed34037cc3534d1f69b290b9f25632
+    supports: [concepts]
+  - path: backend/logistics/types/stock_movement_apply.go
+    role: business-logic
+    hash: sha256:d8cca9053dd870e394777a265228c90516a9f1f9dd9208c69d7f97a3e1c39496
+    supports: [concepts, troubleshooting]
+  - path: backend/accounting/asset_api.go
+    role: business-logic
+    hash: sha256:b4dc87ae8b587f8b71117c40def812a5c9ae612f1ce7026e053c34b3708d984f
+    supports: [concepts, troubleshooting]
   - path: backend/access.toml
     role: permissions
-    hash: sha256:0c00cfb3e7af9a918eb753846874ac7d213f1eacb3e46bded4049016e1c57951
+    hash: sha256:c19cf85130065dcc0f839796e1e9b4b98a1b78df465ccb20d2b63b59a1a94e59
     supports: [rules]
   - path: backend/main-handlers.go
     role: permissions
-    hash: sha256:0e4a825ccd2fe08e6a586cfcd24406b715f5e548c9e71d93091421a2d39e8956
+    hash: sha256:419fcf0ac2e792df25ed47a467573910ddcad540f02d929dbcce567736b88105
     supports: [rules]
+  - path: frontend/core/stock-movement-type.ts
+    role: shared-domain
+    hash: sha256:cfcee015c4d6fadb03f9a9e5d66064e93d734cfa5216e2d36996c47140eecc9c
+    supports: [concepts]
+  - path: backend/logistics/types/stock_movement_type.go
+    role: shared-domain
+    hash: sha256:2556d42f6e9cc99c8c179a8536a80d26bf41702648d11efd34f6e9bfc3de4b8f
+    supports: [concepts]
+  - path: backend/production/daily_close.go
+    role: business-logic
+    hash: sha256:7ae0b03e927362b3c467d29657303b41f9f0dbc979ad54b92f79807ab9b025a1
+    supports: [concepts]
 ```

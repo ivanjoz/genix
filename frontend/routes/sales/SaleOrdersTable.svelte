@@ -5,6 +5,7 @@
   import type { ITableColumn } from '#components/vTable/types.ts';
   import { formatN, formatTime, wordInclude } from '#libs/helpers.ts';
   import { unpackQuantityLine } from '#core/quantity.ts';
+  import { tr } from '#core/store.svelte.ts';
   import { CURRENCY_USD } from '#routes/finance/exchange-rate/exchange-rate.ts';
   import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.svelte.ts';
 
@@ -24,6 +25,7 @@
     TotalAmount?: number;
     DebtAmount?: number;
     CurrencyType?: number;
+    PendingStockMovement?: number;
     ss: number;
   }
 
@@ -326,6 +328,11 @@
         <!-- Keep both state toggles adjacent so operators can scan the workflow quickly. -->
         <InlineButton label="P" color="green" mode={isSaleOrderPaid(saleOrder) ? 'checked' : 'default'} />
         <InlineButton label="E" color="blue" mode={isSaleOrderDelivered(saleOrder) ? 'checked' : 'default'} />
+        {#if saleOrder.PendingStockMovement === 1}
+          <!-- Delivered, but a made product's stock leaves only at the daily production close. -->
+          <span class="px-6 rounded-sm bg-amber-100 text-amber-800 font-bold"
+            title={tr('Stock to regularize at the production close|Stock por regularizar en el cierre de producción')}>R</span>
+        {/if}
       </div>
     {:else if col.id === 'client-name'}
       <div class="line-clamp-2 whitespace-nowrap">

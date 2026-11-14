@@ -130,7 +130,6 @@ func ApplyCashBankMovementIn(transaction *db.Transaction, req *core.HandlerArgs,
 		}
 
 		record := CashBankMovement{
-			ID:                 core.SUnixTimeUUIDConcatID(m.CashBankID, core.SUnixTimeUUID()),
 			CompanyID:          req.User.CompanyID,
 			CashBankID:         m.CashBankID,
 			CashBankRefID:      m.CashBankRefID,

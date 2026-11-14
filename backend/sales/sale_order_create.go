@@ -1,308 +1,201 @@
 package sales
 
 import (
-	config "app/config/types"
+	"app/cloud"
 	"app/core"
-	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	invoicing "app/invoicing/types"
 	logistics "app/logistics/types"
 	production "app/production/types"
+	saleissue "app/sales/saleissue/types"
 	"app/sales/types"
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strings"
-
-	"golang.org/x/sync/errgroup"
 )
 
+// PostSaleOrder creates a sale from the till (no ID), or registers the payment and/or the delivery
+// of an existing one (ID).
 func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
-	nowTime := core.SUnixTime()
 	saleRequest := types.SaleOrder{}
-	err := json.Unmarshal([]byte(*req.Body), &saleRequest)
-	if err != nil {
+	if err := json.Unmarshal([]byte(*req.Body), &saleRequest); err != nil {
 		return req.MakeErr("Error al deserializar el body: " + err.Error())
 	}
+	if saleRequest.ID > 0 {
+		return updateSaleOrder(req, saleRequest)
+	}
+	return createSaleOrder(req, saleRequest)
+}
 
-	isUpdate := saleRequest.ID > 0
-	if isUpdate {
-		if len(saleRequest.ActionsIncluded) == 0 {
-			return req.MakeErr("Se requiere ActionsIncluded para actualizar la venta.")
-		}
-		for _, actionID := range saleRequest.ActionsIncluded {
-			if actionID != 2 && actionID != 3 {
-				return req.MakeErr("ActionsIncluded solo permite 2 (pago) y 3 (entrega).")
-			}
+// createSaleOrder prices the till's sale against the catalog and creates it through the shared
+// path every sale is born from (saleissue.PrepareNewSale).
+func createSaleOrder(req *core.HandlerArgs, sale types.SaleOrder) core.HandlerResponse {
+	companyID := req.User.CompanyID
+	// Every line names a product and a quantity. Its prices come from the catalog.
+	for _, line := range sale.Lines {
+		if line.ProductID <= 0 || line.Quantity <= 0 {
+			return req.MakeErr("Hay un valor incorrecto.")
 		}
 	}
+	// A web order becomes a sale only through its settlement: a till sale names none.
+	sale.OnlineSaleOrderID = 0
 
-	sale := saleRequest
+	// Before the lines: the currency decides what the catalog prices are converted into.
+	if err := types.ValidateSaleCurrency(companyID, &sale); err != nil {
+		return req.MakeErr(err)
+	}
+	// Resolve the divisor and the prices against the catalog rather than trusting what the client
+	// sent: it is what stops a crafted request from booking a sale at an invented price.
+	saleProducts, err := validateSaleOrderLines(req, &sale)
+	if err != nil {
+		return req.MakeErr(err)
+	}
 
-	// The series the sale is issued under, resolved in the create branch below and
-	// used to number its document. Nil when the till named none, and always nil on
-	// an update: the series is part of the sale id and cannot change.
-	var issueSeries *invoicing.InvoiceSeries
-	// The catalog rows of the sale's products, loaded once by validateSaleOrderLines: the document
-	// describes its lines from them instead of reading them again.
-	var saleProducts map[int32]production.Product
+	// Runs on the total the catalog just resolved, and before the client is created: a sale that
+	// cannot be issued must not leave a client row behind.
+	companyConfig, err := cloud.LoadCompanyConfig(companyID)
+	if err != nil {
+		return req.MakeErr("Error al leer la configuración de la empresa:", err)
+	}
+	issueSeries, err := saleissue.ResolveSaleIssueSeries(companyID, &sale, companyConfig.Sunat.Series)
+	if err != nil {
+		return req.MakeErr(err)
+	}
 
-	// What this request's payment action puts in the cash-bank. The server owns the debt: the
-	// client only says how much stays owed, and the amount collected is the drop from what the
-	// sale owed before — never the client's word on the total.
-	collectedAmount := int32(0)
-	// What the sale was paid before this request: 0 makes this payment its first one, the only kind
-	// that can settle it the same day (finance.IsSameDaySettlement).
-	paidBefore := int32(0)
-	// storedSale is the sale as it was before this update (nil on create): its client week rows
-	// move by what this write changes from it.
-	var storedSale *types.SaleOrder
+	prepared, err := saleissue.PrepareNewSale(req, saleissue.NewSaleRequest{
+		Sale: sale, Products: saleProducts, IssueSeries: issueSeries,
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	if err := db.RunTransaction(func(transaction *db.Transaction) error {
+		return saleissue.WriteNewSaleIn(transaction, req, &prepared)
+	}); err != nil {
+		core.Log("Error al registrar la venta:", err)
+		return req.MakeErr(err)
+	}
+	saleissue.ScheduleNewSaleDocument(&prepared)
+	return req.MakeResponse(prepared.Sale)
+}
 
-	if isUpdate {
-		core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
-		existingSales := []types.SaleOrder{}
-		query := db.Query(&existingSales)
-		query.CompanyID.Equals(req.User.CompanyID).ID.Equals(saleRequest.ID).Limit(1)
-		if err := query.Exec(); err != nil {
-			return req.MakeErr("Error al obtener la venta a actualizar:", err)
+// updateSaleOrder registers the payment (2) and/or the delivery (3) of an existing sale.
+func updateSaleOrder(req *core.HandlerArgs, saleRequest types.SaleOrder) core.HandlerResponse {
+	companyID, userID := req.User.CompanyID, req.User.ID
+	nowTime, today := core.SUnixTime(), core.FechaUnix()
+	if len(saleRequest.ActionsIncluded) == 0 {
+		return req.MakeErr("Se requiere ActionsIncluded para actualizar la venta.")
+	}
+	for _, actionID := range saleRequest.ActionsIncluded {
+		if actionID != 2 && actionID != 3 {
+			return req.MakeErr("ActionsIncluded solo permite 2 (pago) y 3 (entrega).")
 		}
-		if len(existingSales) == 0 {
-			return req.MakeErr("No se encontró la venta a actualizar.")
-		}
+	}
+	isPayment := slices.Contains(saleRequest.ActionsIncluded, 2)
+	isDelivery := slices.Contains(saleRequest.ActionsIncluded, 3)
 
-		sale = existingSales[0]
-		storedSale = &existingSales[0]
-		sale.ActionsIncluded = saleRequest.ActionsIncluded
-		// Preserve existing payment cashBank on delivery-only updates (payload may omit LastPaymentCajaID).
-		if saleRequest.LastPaymentCajaID > 0 {
-			sale.LastPaymentCajaID = saleRequest.LastPaymentCajaID
-		}
-		if saleRequest.WarehouseID > 0 {
-			sale.WarehouseID = saleRequest.WarehouseID
-		}
-		// PaymentDueDate is editable post-creation (e.g., reschedule a payment).
-		sale.PaymentDueDate = saleRequest.PaymentDueDate
-		if slices.Contains(saleRequest.ActionsIncluded, 2) {
-			if sale.DebtAmount <= 0 {
-				return req.MakeErr("La venta no tiene deuda pendiente.")
-			}
-			paidBefore = sale.TotalAmount - sale.DebtAmount
-			collectedAmount, err = saleOrderCollectedAmount(sale.DebtAmount, saleRequest.DebtAmount)
-			if err != nil {
-				return req.MakeErr(err)
-			}
-			sale.DebtAmount = saleRequest.DebtAmount
-			// The sale's amounts are fixed in its own currency, so a later payment must land
-			// in a cash-bank of that currency.
-			if err := resolveSaleOrderCurrency(req, &sale); err != nil {
-				return req.MakeErr(err)
-			}
-		}
-	} else {
-		// Create rule: every line names a product and a quantity. Its prices come from the catalog.
-		for _, line := range sale.Lines {
-			if line.ProductID <= 0 || line.Quantity <= 0 {
-				return req.MakeErr("Hay un valor incorrecto.")
-			}
-		}
+	core.Log("PostSaleOrder update requested. SaleID:", saleRequest.ID, "ActionsIncluded:", saleRequest.ActionsIncluded)
+	existingSales := []types.SaleOrder{}
+	query := db.Query(&existingSales)
+	query.CompanyID.Equals(companyID).ID.Equals(saleRequest.ID).Limit(1)
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener la venta a actualizar:", err)
+	}
+	if len(existingSales) == 0 {
+		return req.MakeErr("No se encontró la venta a actualizar.")
+	}
+	// storedSale is the sale before this update: its client week rows move by what this write
+	// changes from it, and its reservation is what a delivery releases.
+	storedSale := existingSales[0]
+	sale := existingSales[0]
+	sale.ActionsIncluded = saleRequest.ActionsIncluded
+	// Preserve existing payment cashBank on delivery-only updates (payload may omit LastPaymentCajaID).
+	if saleRequest.LastPaymentCajaID > 0 {
+		sale.LastPaymentCajaID = saleRequest.LastPaymentCajaID
+	}
+	if saleRequest.WarehouseID > 0 {
+		sale.WarehouseID = saleRequest.WarehouseID
+	}
+	// PaymentDueDate is editable post-creation (e.g., reschedule a payment).
+	sale.PaymentDueDate = saleRequest.PaymentDueDate
 
-		// Only a payment names a cash-bank. An unpaid sale that kept the till's default one would
-		// be paid later into it before the register the operator picks, whatever its currency.
-		if !slices.Contains(sale.ActionsIncluded, 2) {
-			sale.LastPaymentCajaID = 0
+	// The server owns the debt: the client only says how much stays owed, and the amount collected
+	// is the drop from what the sale owed before. paidBefore = 0 makes this payment the first one,
+	// the only kind that can settle the sale the same day (finance.IsSameDaySettlement).
+	collectedAmount, paidBefore := int32(0), int32(0)
+	if isPayment {
+		if sale.DebtAmount <= 0 {
+			return req.MakeErr("La venta no tiene deuda pendiente.")
 		}
-
-		// Before the lines: the currency decides what the catalog prices are converted into.
-		if err := resolveSaleOrderCurrency(req, &sale); err != nil {
-			return req.MakeErr(err)
-		}
-
-		// Resolve the divisor and the prices against the catalog rather than trusting what
-		// the client sent. This is the only place that loads products, and it is what stops
-		// a crafted request from booking a sale at an invented price.
+		paidBefore = sale.TotalAmount - sale.DebtAmount
 		var err error
-		if saleProducts, err = validateSaleOrderLines(req, &sale); err != nil {
+		if collectedAmount, err = types.SaleOrderCollectedAmount(sale.DebtAmount, saleRequest.DebtAmount); err != nil {
 			return req.MakeErr(err)
 		}
-
-		// A new sale owes its whole total until a payment says otherwise, so an unpaid sale is
-		// a receivable from its first write.
-		if slices.Contains(sale.ActionsIncluded, 2) {
-			collectedAmount, err = saleOrderCollectedAmount(sale.TotalAmount, sale.DebtAmount)
-			if err != nil {
-				return req.MakeErr(err)
-			}
-		} else {
-			sale.DebtAmount = sale.TotalAmount
-		}
-
-		// Runs on the total the catalog just resolved, and before the client is
-		// created: a sale that cannot be issued must not leave a client row behind.
-		// The series it returns is what the document is numbered in, further down.
-		issueSeries, err = resolveSaleOrderIssueSeries(req, &sale)
-		if err != nil {
+		sale.DebtAmount = saleRequest.DebtAmount
+		// The sale's amounts are fixed in its own currency, so a later payment must land in a
+		// cash-bank of that currency.
+		if err := types.ValidateSaleCurrency(companyID, &sale); err != nil {
 			return req.MakeErr(err)
 		}
-
-		sale.Date = core.FechaUnix()
-		sale.Created = nowTime
-		sale.Status = 1
 	}
 
 	if saleRequest.ClientInfo != nil {
-		clientID, resolveClientError := resolveSaleOrderClientID(saleRequest.ClientInfo, req.User.CompanyID, req.User.ID)
-		if resolveClientError != nil {
-			return req.MakeErr("Error al guardar el cliente de la venta:", resolveClientError)
+		clientID, err := saleissue.ResolveSaleClientID(saleRequest.ClientInfo, companyID, userID)
+		if err != nil {
+			return req.MakeErr("Error al guardar el cliente de la venta:", err)
 		}
 		sale.ClientID = clientID
 	}
 
-	// The stock the sale holds while undelivered (ProductStock.PendingDelivery*). A new sale left
-	// undelivered reserves its units on its warehouse; delivering a pending one releases them from
-	// the warehouse they were reserved on, which the delivery may not ship from.
-	isDelivery := slices.Contains(sale.ActionsIncluded, 3)
+	// Delivering a pending sale releases its units from the warehouse they were reserved on, which
+	// the delivery may not ship from. A made product's line is delivered without its stock exit,
+	// which waits for the daily production close: it keeps a reservation on the delivery warehouse.
 	pendingDeliveryChanges := []logistics.PendingDeliveryChange{}
-	isReserved := isUpdate && storedSale.IsDeliveryPending()
-	if !isUpdate && !isDelivery {
-		pendingDeliveryChanges = types.PendingDeliveryChanges(sale.Lines, sale.WarehouseID, sale.OnlineSaleOrderID > 0, 1)
-	}
-	if isReserved && isDelivery {
-		pendingDeliveryChanges = types.PendingDeliveryChanges(storedSale.Lines, storedSale.WarehouseID, storedSale.OnlineSaleOrderID > 0, -1)
-	}
-
-	if !isUpdate || isDelivery {
-		// An early check, on a plain read and before the sale's number is reserved: almost every
-		// shortage is refused here, with nothing spent. It is not the final word. A delivery's
-		// movements re-check against the stock rows they lock inside the transaction below, so two
-		// tills selling the last units at once cannot both deliver; the loser fails there, after its
-		// number was reserved, which leaves a rare gap in the series (accepted, 2026-11-07).
-		//
-		// Validate stock availability against the V2 split:
-		//  - line items without LotID AND without SerialNumber draw from ProductStockV2.Quantity
-		//  - items with a LotID/SerialNumber draw from the matching ProductStockDetail row
-		if err := validateSaleStock(req, sale, isReserved); err != nil {
+	if isDelivery {
+		saleProducts, err := types.ReadSaleProducts(companyID, sale.Lines)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		sale.MarkStockExitPending(types.MadeProductIDsOf(saleProducts))
+		isReserved := storedSale.IsDeliveryPending()
+		reservedWarehouseID, isOnlineReservation := int32(0), sale.OnlineSaleOrderID > 0
+		if isReserved {
+			reservedWarehouseID, isOnlineReservation = storedSale.WarehouseID, storedSale.OnlineSaleOrderID > 0
+		}
+		pendingDeliveryChanges = types.DeliveryPendingChanges(sale.Lines, reservedWarehouseID, sale.WarehouseID, isOnlineReservation)
+		// An early check on a plain read; the movements re-check against the rows they lock inside
+		// the transaction. A made line takes the margin when it reserves on a new warehouse.
+		checksMadeLines := !isReserved || storedSale.WarehouseID != sale.WarehouseID
+		if err := types.ValidateSaleStock(companyID, sale, isReserved, saleProducts, checksMadeLines); err != nil {
 			return req.MakeErr(err)
 		}
 	}
 
-	sale.CompanyID = req.User.CompanyID
-	sale.Updated = nowTime
-	sale.UpdatedBy = req.User.ID
-
-	// 2 = Pago (Registro en CashBank)
-	if slices.Contains(sale.ActionsIncluded, 2) {
-		// A partial payment leaves the sale unpaid: only the payment that clears the debt marks it Pagado.
-		if sale.DebtAmount == 0 {
-			if err := sale.AddStatus(2); err != nil {
-				return req.MakeErr(err)
-			}
-		}
-		// Track when and who executed the latest payment action.
-		sale.LastPaymentTime = nowTime
-		sale.LastPaymentUser = req.User.ID
-		if sale.LastPaymentCajaID == 0 {
-			return req.MakeErr("Se requiere LastPaymentCajaID para procesar el pago.")
+	sale.Updated, sale.UpdatedBy = nowTime, userID
+	if isPayment {
+		if err := types.StampSalePayment(&sale, userID, nowTime); err != nil {
+			return req.MakeErr(err)
 		}
 	}
-	// The collection is written today; when it alone pays the whole sale on the sale's day, the
-	// accounting operations infer it from the sale instead of downloading it.
-	paymentDate := core.FechaUnix()
-	isSameDayCollection := collectedAmount != 0 &&
-		finance.IsSameDaySettlement(sale.Date, sale.TotalAmount, paidBefore, paymentDate, collectedAmount)
-	if isSameDayCollection {
-		sale.SameDayCashBankID = sale.LastPaymentCajaID
-	}
+	isSameDayCollection := types.StampSameDayCollection(&sale, collectedAmount, paidBefore, today)
 	sale.StampPeriod()
-
-	// 3 = Entrega (Movimiento de Almacén)
-	if slices.Contains(sale.ActionsIncluded, 3) {
-		// Refuses a sale already delivered: a second delivery would move its stock twice.
-		if err := sale.AddStatus(3); err != nil {
+	if isDelivery {
+		if err := types.StampSaleDelivery(&sale, userID, nowTime); err != nil {
 			return req.MakeErr(err)
 		}
-		// Track when and who executed the latest delivery action.
-		sale.DeliveryTime = nowTime
-		sale.DeliveryUser = req.User.ID
-		if sale.WarehouseID == 0 {
-			return req.MakeErr("Se requiere WarehouseID para procesar la entrega.")
-		}
-
-		if len(sale.Lines) == 0 {
-			return req.MakeErr("No hay productos en el detalle para procesar la entrega.")
-		}
 	}
 
-	saleActions := []int8{}
-	// The comprobante a new sale is issued with, numbered by the id it is minted with.
-	var pendingDocument *invoicing.InvoiceDocument
-	if !isUpdate {
-		// The sale id carries the correlativo of its series, so minting it and
-		// reserving the comprobante's number are one act — and the document is
-		// validated before that number is spent, so a sale that cannot be invoiced
-		// is refused with nothing persisted and no gap left in the series.
-		if issueSeries != nil {
-			pendingDocument, err = invoicing.PrepareDocumentForSale(
-				req.User.CompanyID, req.User.ID, &sale, issueSeries, saleProducts)
-			if err != nil {
-				return req.MakeErr("No se pudo generar el comprobante de la venta:", err)
-			}
-		} else {
-			// No comprobante: the id comes from the series-0 counter, which nothing
-			// is ever declared from.
-			saleID, idErr := types.MakeSaleOrderID(req.User.CompanyID, 0)
-			if idErr != nil {
-				return req.MakeErr("Error al obtener el ID de la venta:", idErr)
-			}
-			sale.ID = saleID
-		}
-		saleActions = append(saleActions, 1)
-	}
-
-	// 2 = Pago (Registro en CashBank)
-	cashMovements := []finance.InternalCashMovement{}
-	if slices.Contains(sale.ActionsIncluded, 2) {
-		if collectedAmount != 0 {
-			cashMovements = append(cashMovements, finance.InternalCashMovement{
-				CashBankID:         sale.LastPaymentCajaID,
-				DocumentID:         sale.ID,
-				Date:               paymentDate,
-				Type:               finance.CashMovementTypeSaleCollection,
-				CounterAccountCode: finance.PCGEReceivable,
-				Amount:             collectedAmount,
-				SameDayMovement:    int8(core.If(isSameDayCollection, 1, 0)),
-			})
-		}
-		if sale.DebtAmount == 0 {
-			saleActions = append(saleActions, 2)
-		}
-	}
-
-	// 3 = Entrega (Movimiento de Almacén)
+	cashMovements := types.SaleCollectionMovements(&sale, collectedAmount, today, isSameDayCollection)
 	stockMovements := []logistics.InternalMovement{}
-	if slices.Contains(sale.ActionsIncluded, 3) {
-		stockMovements = saleDeliveryMovements(&sale)
-		saleActions = append(saleActions, 3)
+	if isDelivery {
+		stockMovements = types.SaleDeliveryMovements(&sale)
 	}
 
-	// Everything the sale writes commits at once: the sale (or its update), its comprobante, the
-	// collection with the till's balance, and the delivery with the stock it takes. Nothing can be
-	// left half written, and the database pays one commit for the whole sale. A deadlock reruns the
-	// body, and each step derives its writes from what it reads inside it.
-	err = db.RunTransaction(func(transaction *db.Transaction) error {
-		if !isUpdate {
-			// The ID was just reserved from the series counter: nothing is stored under it.
-			sales := []types.SaleOrder{sale}
-			if err := db.InsertIn(transaction, &sales); err != nil {
-				return core.Err("Error al registrar la venta:", err)
-			}
-			// Every send rebuilds the document from the sale, which this transaction stores with it.
-			if pendingDocument != nil {
-				if err := invoicing.SaveNewDocument(transaction, pendingDocument); err != nil {
-					return core.Err("No se pudo guardar el comprobante de la venta:", err)
-				}
-			}
-		}
+	// The update, the collection with the till's balance, and the delivery with the stock it takes
+	// commit at once. A deadlock reruns the body, and each step derives its writes from what it
+	// reads inside it.
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
 		if err := finance.ApplyCashBankMovementIn(transaction, req, cashMovements); err != nil {
 			return core.Err("Error al registrar el movimiento de cashBank:", err)
 		}
@@ -311,18 +204,14 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 				return core.Err("Error al procesar la salida de almacén:", err)
 			}
 		}
-		if err := logistics.ApplyPendingDeliveryIn(transaction, req.User.CompanyID, req.User.ID, pendingDeliveryChanges); err != nil {
+		if err := logistics.ApplyPendingDeliveryIn(transaction, companyID, userID, pendingDeliveryChanges); err != nil {
 			return err
 		}
-		if err := applyClientWeekSaleChangesIn(transaction, req.User.CompanyID, types.ClientWeekSaleChanges(storedSale, &sale)); err != nil {
+		if err := types.ApplyClientWeekSaleChangesIn(transaction, companyID, types.ClientWeekSaleChanges(&storedSale, &sale)); err != nil {
 			return err
-		}
-		if !isUpdate {
-			return nil
 		}
 		saleTable := db.TableOf[types.SaleOrder]()
-		salesToUpdate := []types.SaleOrder{sale}
-		if err := db.UpdateIn(transaction, &salesToUpdate,
+		if err := db.UpdateIn(transaction, &[]types.SaleOrder{sale},
 			// Keep composite view columns in sync: {Date, Updated} must be updated together.
 			saleTable.WarehouseID,
 			saleTable.LastPaymentCajaID,
@@ -339,6 +228,9 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 			// The period delta index packs Period with Status: they are written together.
 			saleTable.Period,
 			saleTable.SameDayCashBankID,
+			// A delivery flags the made lines whose stock exit waits for the production close.
+			saleTable.Lines,
+			saleTable.PendingStockMovement,
 		); err != nil {
 			return core.Err("Error al actualizar la venta:", err)
 		}
@@ -346,81 +238,21 @@ func PostSaleOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return syncOnlineSaleOrderIn(transaction, &sale)
 	})
 	if err != nil {
-		core.Log("Error al registrar la venta:", err)
+		core.Log("Error al actualizar la venta:", err)
 		return req.MakeErr(err)
 	}
-	if pendingDocument != nil {
-		invoicing.ScheduleEmitPendingSweep(req.User.CompanyID)
-	}
-
 	return req.MakeResponse(sale)
 }
 
-// saleDeliveryMovements is the warehouse exit of every line of the sale, from sale.WarehouseID.
-func saleDeliveryMovements(sale *types.SaleOrder) []logistics.InternalMovement {
-	stockMovements := []logistics.InternalMovement{}
-	for _, line := range sale.Lines {
-		if line.Quantity == 0 {
-			continue
-		}
-		// The order line is packed; the ledger keeps the halves apart so it can accumulate
-		// and be SUM()-ed. This is the single conversion point between the two forms.
-		lineQuantity := core.UnpackQuantityLine(line.Quantity).Negate() // Salida de almacén
-		lineDivisor := line.SubDivisor
-		if lineDivisor <= 0 {
-			lineDivisor = core.QuantityDivisorNone
-		}
-		stockMovements = append(stockMovements, logistics.InternalMovement{
-			WarehouseID:    sale.WarehouseID,
-			ProductID:      line.ProductID,
-			PresentationID: line.PresentationID,
-			SerialNumber:   line.Sku,
-			LotID:          line.LotID,
-			DocumentID:     sale.ID,
-			Type:           logistics.StockMovementTypeSaleDelivery,
-			Quantity:       lineQuantity.Units,
-			SubQuantity:    lineQuantity.Sub,
-			SubDivisor:     lineDivisor,
-		})
-	}
-	return stockMovements
-}
-
-// readSaleProducts loads the catalog rows of the sale's products: the prices and divisor
-// validateSaleOrderLines resolves, and the names and sub-unit labels the sale's document uses.
-func readSaleProducts(companyID int32, lines []types.SaleOrderLine) (map[int32]production.Product, error) {
-	productIDs := core.SliceSet[int32]{}
-	for _, line := range lines {
-		productIDs.AddIf(line.ProductID)
-	}
-	productByID := map[int32]production.Product{}
-	if productIDs.IsEmpty() {
-		return productByID, nil
-	}
-	products := []production.Product{}
-	query := db.Query(&products)
-	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.WebHidden, query.Presentations).
-		CompanyID.Equals(companyID).
-		ID.In(productIDs.Values...)
-	if err := query.Exec(); err != nil {
-		return nil, core.Err("Error al obtener los productos de la venta:", err)
-	}
-	for _, product := range products {
-		productByID[product.ID] = product
-	}
-	return productByID, nil
-}
-
 // validateSaleOrderLines resolves each line against the product catalog: the sub-unit
-// divisor, whether a sub-unit part is even allowed, and the prices. PostSaleOrder is the
-// only place that loads products, and without it the line prices and TotalAmount arrive
-// straight off the request body unchecked — a client could book a sale at any price.
+// divisor, whether a sub-unit part is even allowed, and the prices. Without it the line prices and
+// TotalAmount arrive straight off the request body unchecked — a client could book a sale at any
+// price. It returns the catalog rows, which the sale's document describes its lines from.
 func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[int32]production.Product, error) {
 	if len(sale.Lines) == 0 {
 		return nil, nil
 	}
-	productByID, err := readSaleProducts(req.User.CompanyID, sale.Lines)
+	productByID, err := types.ReadSaleProducts(req.User.CompanyID, sale.Lines)
 	if err != nil {
 		return nil, err
 	}
@@ -429,7 +261,7 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[i
 	// the sale summaries restate it in PEN with it. A PEN sale only needs one for a USD product.
 	needsExchangeRate := sale.CurrencyType == finance.CurrencyUSD
 	for _, product := range productByID {
-		if normalizeCurrency(int8(product.CurrencyID)) != sale.CurrencyType {
+		if types.NormalizeCurrency(int8(product.CurrencyID)) != sale.CurrencyType {
 			needsExchangeRate = true
 		}
 	}
@@ -449,40 +281,9 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[i
 		if !found {
 			return nil, core.Err(fmt.Sprintf("El producto %v de la venta no existe.", line.ProductID))
 		}
-
-		lineQuantity := core.UnpackQuantityLine(line.Quantity)
-		productDivisor := product.SbuQuantity
-		if productDivisor <= 0 {
-			productDivisor = core.QuantityDivisorNone
+		if err := types.PriceSaleOrderLine(line, product, sale.CurrencyType, sale.ExchangeRate); err != nil {
+			return nil, err
 		}
-
-		if lineQuantity.Sub > 0 {
-			if productDivisor <= core.QuantityDivisorNone {
-				return nil, core.Err(fmt.Sprintf(
-					`El producto "%s" no tiene sub-unidad configurada, pero la venta envía %v sub-unidades.`,
-					product.Name, lineQuantity.Sub))
-			}
-			if product.SbuFinalPrice <= 0 {
-				return nil, core.Err(fmt.Sprintf(
-					`El producto "%s" no tiene precio de sub-unidad; no se puede vender fraccionado.`,
-					product.Name))
-			}
-			// Packing normalizes, so a Sub at or past the divisor means the client packed a
-			// value the catalog cannot represent.
-			if lineQuantity.Sub >= int32(productDivisor) {
-				return nil, core.Err(fmt.Sprintf(
-					`El producto "%s" admite hasta %v sub-unidades por unidad; la venta envía %v.`,
-					product.Name, productDivisor-1, lineQuantity.Sub))
-			}
-		}
-
-		// Prices come from the catalog, never from the request, restated in the sale's currency.
-		productCurrency := normalizeCurrency(int8(product.CurrencyID))
-		line.Price = finance.ConvertUnitPrice(
-			product.FinalPrice, productCurrency, sale.CurrencyType, sale.ExchangeRate)
-		line.SubPrice = finance.ConvertUnitPrice(
-			product.SbuFinalPrice, productCurrency, sale.CurrencyType, sale.ExchangeRate)
-		line.SubDivisor = productDivisor
 	}
 
 	// Recompute the order total from the resolved lines for the same reason.
@@ -493,215 +294,6 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[i
 	sale.TotalAmount = totalAmount
 	sale.TaxAmount = invoicing.SaleOrderTaxAmount(sale)
 	return productByID, nil
-}
-
-// saleOrderCollectedAmount is what a payment collects when the sale owed pendingDebt and the
-// client says remainingDebt stays owed. A payment must collect something while there is debt,
-// and can neither overpay nor raise what is owed.
-func saleOrderCollectedAmount(pendingDebt int32, remainingDebt int32) (int32, error) {
-	if remainingDebt < 0 {
-		return 0, core.Err("El monto adeudado no puede ser negativo.")
-	}
-	if remainingDebt > pendingDebt {
-		return 0, core.Err("El monto adeudado no puede superar la deuda pendiente de la venta.")
-	}
-	if pendingDebt > 0 && remainingDebt == pendingDebt {
-		return 0, core.Err("El pago debe cobrar un monto mayor a 0.")
-	}
-	return pendingDebt - remainingDebt, nil
-}
-
-func resolveSaleOrderClientID(clientInfo *types.SaleOrderClientInfo, companyID int32, userID int32) (int32, error) {
-	clientName := strings.TrimSpace(clientInfo.Name)
-	clientRegistryNumber := strings.TrimSpace(clientInfo.RegistryNumber)
-	if clientName == "" {
-		return 0, core.Err("ClientInfo.Name es obligatorio.")
-	}
-
-	clientPersonType := crm.PersonTypeNatural
-	if clientRegistryNumber != "" {
-		// Preserve the provided registry number so identity matching can reuse existing client rows.
-		clientPersonType = crm.PersonTypeCompany
-	}
-
-	clientProviders := []crm.ClientProvider{{
-		Type:           crm.ClientProviderTypeClient,
-		Name:           clientName,
-		RegistryNumber: clientRegistryNumber,
-		PersonType:     clientPersonType,
-		// Validated (or derived when 0) by SaveClientProviders, which also pins it on the snapshot.
-		IdentityDocType: clientInfo.IdentityDocType,
-	}}
-	// Sale-order client creation must never update an existing client record from frontend input
-	// to prevent accidental data corruption of shared client/provider records.
-	// Under the company row's lock, like every client save, so two sales naming one new buyer
-	// resolve to one client.
-	saveError := db.RunTransaction(func(transaction *db.Transaction) error {
-		if _, err := config.LockCompanyIn(transaction, companyID); err != nil {
-			return err
-		}
-		saved, err := crm.SaveClientProvidersIn(transaction, clientProviders, companyID, userID, true)
-		clientProviders = core.If(err == nil, saved, clientProviders)
-		return err
-	})
-	if saveError != nil {
-		return 0, saveError
-	}
-	if len(clientProviders) == 0 || clientProviders[0].ID <= 0 {
-		return 0, core.Err("No se pudo resolver el ClientID de la venta.")
-	}
-
-	return clientProviders[0].ID, nil
-}
-
-// validateSaleStock ensures each sale-order line has enough stock available.
-// Lines with no LotID and no SerialNumber draw from ProductStockV2.Quantity; for a sale that holds
-// no reservation yet, less the units undelivered sales and web orders reserved on the row
-// (PendingDelivery*). The delivery of a sale that does hold one (isReserved) only needs the physical
-// stock: its units are already among the reserved, which may exceed the stock after an oversold web
-// order. Lines with a LotID or SerialNumber draw from the matching ProductStockDetail row:
-// reservations name no lot.
-func validateSaleStock(req *core.HandlerArgs, sale types.SaleOrder, isReserved bool) error {
-	if sale.WarehouseID == 0 {
-		return core.Err("Se requiere WarehouseID para validar el stock.")
-	}
-
-	// Aggregate requested quantity by the physical storage bucket it hits.
-	type lineKey struct {
-		stockID      int64
-		lotID        int32
-		serialNumber string
-	}
-	requestedByKey := map[lineKey]core.Quantity{}
-	divisorByKey := map[lineKey]int16{}
-	for _, line := range sale.Lines {
-		if line.Quantity == 0 {
-			continue
-		}
-		quantity := core.UnpackQuantityLine(line.Quantity)
-		lineDivisor := line.SubDivisor
-		if lineDivisor <= 0 {
-			lineDivisor = core.QuantityDivisorNone
-		}
-		key := lineKey{
-			stockID:      logistics.PackProductStockID(sale.WarehouseID, line.ProductID, line.PresentationID),
-			lotID:        line.LotID,
-			serialNumber: line.Sku,
-		}
-		requestedByKey[key] = requestedByKey[key].Add(quantity)
-		divisorByKey[key] = lineDivisor
-	}
-	if len(requestedByKey) == 0 {
-		return nil
-	}
-
-	// Collect the distinct stock IDs so we can preload V2 and detail rows in parallel.
-	stockIDSet := core.SliceSet[int64]{}
-	needsDetailFetch := false
-	for key := range requestedByKey {
-		stockIDSet.Add(key.stockID)
-		if key.lotID > 0 || key.serialNumber != "" {
-			needsDetailFetch = true
-		}
-	}
-
-	stockByID := map[int64]logistics.ProductStock{}
-	detailsByKey := map[lineKey]logistics.ProductStockDetail{}
-
-	eg := errgroup.Group{}
-	eg.Go(func() error {
-		stocks := []logistics.ProductStock{}
-		q := db.Query(&stocks)
-		q.Select(q.ID, q.Quantity, q.SubQuantity, q.DetailQuantity, q.DetailSubQuantity, q.SubDivisor,
-			q.PendingDeliveryStore, q.PendingDeliveryOnline).
-			CompanyID.Equals(req.User.CompanyID).
-			ID.In(stockIDSet.Values...)
-		if err := q.Exec(); err != nil {
-			return core.Err("Error al obtener el stock de productos:", err)
-		}
-		for _, stock := range stocks {
-			stockByID[stock.ID] = stock
-		}
-		return nil
-	})
-	if needsDetailFetch {
-		eg.Go(func() error {
-			details := []logistics.ProductStockDetail{}
-			q := db.Query(&details)
-			q.Select().
-				CompanyID.Equals(req.User.CompanyID).
-				ProductStockID.In(stockIDSet.Values...)
-			if err := q.Exec(); err != nil {
-				return core.Err("Error al obtener el detalle de stock:", err)
-			}
-			for _, detail := range details {
-				detailsByKey[lineKey{stockID: detail.ProductStockID, lotID: detail.LotID, serialNumber: detail.SerialNumber}] = detail
-			}
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-
-	for key, requested := range requestedByKey {
-		stock := stockByID[key.stockID]
-		// The stock row and the line can sit at different divisors while a refinement is
-		// still rolling out, so compare both at the finer of the two.
-		comparisonDivisor := divisorByKey[key]
-		if stockDivisor := stock.SubDivisor; stockDivisor > 0 && stockDivisor != comparisonDivisor {
-			if core.IsQuantityDivisorRefinement(comparisonDivisor, stockDivisor) {
-				converted, convErr := requested.ConvertToDivisor(comparisonDivisor, stockDivisor)
-				if convErr != nil {
-					return convErr
-				}
-				requested, comparisonDivisor = converted, stockDivisor
-			}
-		}
-
-		var available core.Quantity
-		if key.lotID == 0 && key.serialNumber == "" {
-			available = core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}
-			if !isReserved {
-				available.Units -= stock.PendingDeliveryStore + stock.PendingDeliveryOnline
-			}
-		} else {
-			detail := detailsByKey[key]
-			available = core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}
-		}
-		if stock.SubDivisor > 0 && stock.SubDivisor != comparisonDivisor {
-			converted, convErr := available.ConvertToDivisor(stock.SubDivisor, comparisonDivisor)
-			if convErr != nil {
-				return convErr
-			}
-			available = converted
-		}
-
-		if core.CompareQuantities(available, requested, comparisonDivisor) < 0 {
-			// Decompose the packed stock ID (see logistics.PackProductStockID) for a human-readable error.
-			warehouseID := key.stockID >> 44
-			productID := (key.stockID >> 14) & (1<<30 - 1)
-			presentationID := key.stockID & (1<<14 - 1)
-			metadata := []string{
-				fmt.Sprintf("Almacén: %v", warehouseID),
-				fmt.Sprintf("Producto: %v", productID),
-			}
-			if presentationID > 0 {
-				metadata = append(metadata, fmt.Sprintf("Presentación: %v", presentationID))
-			}
-			if key.serialNumber != "" {
-				metadata = append(metadata, fmt.Sprintf("SKU: %v", key.serialNumber))
-			}
-			if key.lotID > 0 {
-				metadata = append(metadata, fmt.Sprintf("Lote: %v", key.lotID))
-			}
-			return core.Err(strings.Join(metadata, " | ")+". ",
-				fmt.Sprintf("Se necesita %v+%v/%v. Se posee en stock: %v+%v/%v",
-					requested.Units, requested.Sub, comparisonDivisor,
-					available.Units, available.Sub, comparisonDivisor))
-		}
-	}
-	return nil
 }
 
 func GetSaleOrderByIDs(req *core.HandlerArgs) core.HandlerResponse {

@@ -1,43 +1,32 @@
 package agent
 
-// Client of the SSE bridge (see fareward/README.md).
+// Agent traffic over the SSE bridge (see fareward/README.md).
 //
 // In Lambda the backend cannot hold the browser's stream open: an invocation
 // ends when the handler returns, and the browser's answer to a command would
 // arrive at a different execution environment. The bridge is a small process on
 // a normal server that keeps the connection and acts as the rendezvous point:
 //
-//	bridgePublish → POST /publish → fire-and-forget event down the tab's stream
-//	bridgeCommand → POST /rpc     → command + blocking wait for the tab's reply
+//	bridgePublish → fareward.BridgePublish → fire-and-forget event down the tab's stream
+//	bridgeCommand → fareward.BridgeRPC     → command + blocking wait for the tab's reply
 //
 // Outside Lambda this file is inert: transport stays on the local clientConn in
 // ws.go, which is exactly the same protocol over a stream this process owns.
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand/v2"
-	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/ivanjoz/fareward/go/siphash"
+	fareward "github.com/ivanjoz/fareward/go"
 
 	"app/core"
 )
 
 const (
-	// bridgeServiceAuthHeaderName and bridgeServiceAuthMessagePrefix mirror
-	// fareward/src/bridge/auth.rs. The bridge is a Rust process, so the compiler
-	// cannot enforce this — changing one side requires changing the other.
-	bridgeServiceAuthHeaderName    = "X-Bridge-Auth"
-	bridgeServiceAuthMessagePrefix = "sse-bridge:v2|"
-
 	// bridgeChannelWaitMs lets the bridge hold a message for a tab that is
 	// reconnecting instead of dropping it. Short: the client opens its stream
 	// before sending a turn, so this only covers a mid-turn reconnect.
@@ -47,85 +36,10 @@ const (
 	bridgeCallTimeout = 15 * time.Second
 )
 
-// bridgeHTTPClient has no client-level timeout on purpose: /rpc blocks until the
-// browser answers, and the per-call context is what bounds it.
-var bridgeHTTPClient = &http.Client{}
-
 // BridgeEnabled reports whether agent traffic must be relayed. Only in Lambda:
 // a backend that can hold its own streams has no reason to add a hop.
 func BridgeEnabled() bool {
-	return core.Env.IS_SERVERLESS && len(bridgeBaseURL()) > 0
-}
-
-// bridgeBaseURL supplies the scheme when sse_bridge.url is a bare host. The
-// deploy script only wants the hostname (it names the HAProxy site), so a
-// scheme-less value passes configuration unnoticed and then fails on every call
-// with "unsupported protocol scheme" — at request time, in Lambda, far from the
-// edit that caused it. Loopback means a bridge started by hand for a local test,
-// where there is no HAProxy terminating TLS.
-func bridgeBaseURL() string {
-	configuredURL := strings.TrimRight(strings.TrimSpace(core.Env.SSE_BRIDGE_URL), "/")
-	if len(configuredURL) == 0 || strings.Contains(configuredURL, "://") {
-		return configuredURL
-	}
-	if strings.HasPrefix(configuredURL, "127.0.0.1") || strings.HasPrefix(configuredURL, "localhost") {
-		return "http://" + configuredURL
-	}
-	return "https://" + configuredURL
-}
-
-// makeBridgeServiceAuthHeader signs the current timestamp with INTERNAL_APIKEY, the
-// project's service-to-service secret (the same key the credit rate limiter's TCP
-// frames use, under a different domain string). Both processes read the same
-// config.toml, so no extra secret has to be provisioned for the bridge.
-//
-// SipHash-2-4, like the TCP frame tag: 16 hex characters, big-endian.
-func makeBridgeServiceAuthHeader() string {
-	timestampText := strconv.FormatInt(time.Now().Unix(), 10)
-	hasher := siphash.New(siphash.DeriveKey([]byte(core.Env.INTERNAL_APIKEY)))
-	hasher.WriteString(bridgeServiceAuthMessagePrefix + timestampText)
-	// %016x, not FormatUint: a tag whose top nibble is zero must still be 16 characters, or the
-	// bridge's fixed-width comparison rejects it.
-	return timestampText + "." + fmt.Sprintf("%016x", hasher.Sum64())
-}
-
-// bridgeCall posts one authenticated request to the bridge and decodes its JSON
-// answer into responseTarget.
-func bridgeCall(ctx context.Context, path string, requestBody any, responseTarget any) error {
-	encodedBody, marshalError := json.Marshal(requestBody)
-	if marshalError != nil {
-		return fmt.Errorf("serializar la petición al bridge: %w", marshalError)
-	}
-
-	bridgeRequest, requestError := http.NewRequestWithContext(ctx, http.MethodPost, bridgeBaseURL()+path, bytes.NewReader(encodedBody))
-	if requestError != nil {
-		return fmt.Errorf("construir la petición al bridge: %w", requestError)
-	}
-	bridgeRequest.Header.Set("Content-Type", "application/json")
-	bridgeRequest.Header.Set(bridgeServiceAuthHeaderName, makeBridgeServiceAuthHeader())
-
-	bridgeResponse, callError := bridgeHTTPClient.Do(bridgeRequest)
-	if callError != nil {
-		return fmt.Errorf("el bridge no respondió: %w", callError)
-	}
-	defer bridgeResponse.Body.Close()
-
-	responseBody, readError := io.ReadAll(bridgeResponse.Body)
-	if readError != nil {
-		return fmt.Errorf("leer la respuesta del bridge: %w", readError)
-	}
-	if bridgeResponse.StatusCode != http.StatusOK {
-		errorDetail := struct{ Error string }{}
-		_ = json.Unmarshal(responseBody, &errorDetail)
-		if len(errorDetail.Error) == 0 {
-			errorDetail.Error = core.StrCut(string(responseBody), 200)
-		}
-		return fmt.Errorf("el bridge respondió %d: %s", bridgeResponse.StatusCode, errorDetail.Error)
-	}
-	if responseTarget == nil {
-		return nil
-	}
-	return json.Unmarshal(responseBody, responseTarget)
+	return core.Env.IS_SERVERLESS && fareward.BridgeConfigured()
 }
 
 // bridgePublish relays one already-framed event to the channel's stream. A tab
@@ -138,18 +52,12 @@ func bridgePublish(channelToken string, messageJSON []byte) error {
 	callContext, cancelCall := context.WithTimeout(context.Background(), bridgeCallTimeout)
 	defer cancelCall()
 
-	publishResponse := struct{ Delivered bool }{}
-	publishError := bridgeCall(callContext, "/publish", map[string]any{
-		"Channel": channelToken,
-		"Message": json.RawMessage(messageJSON),
-		"WaitMs":  bridgeChannelWaitMs,
-	}, &publishResponse)
-
+	delivered, publishError := fareward.BridgePublish(callContext, channelToken, messageJSON, bridgeChannelWaitMs)
 	if publishError != nil {
 		core.Log("agent.bridge publish error channel::", channelToken, " err::", publishError)
 		return publishError
 	}
-	if !publishResponse.Delivered {
+	if !delivered {
 		core.Log("agent.bridge publish dropped (canal sin stream) channel::", channelToken, " bytes::", len(messageJSON))
 	}
 	return nil
@@ -190,25 +98,15 @@ func bridgeCommand(ctx context.Context, tabID, commandType string, commandPayloa
 
 	core.Log("agent.bridge request send tab::", shortTabID(tabID), " cmd::", commandType, " id::", commandID, " payload_bytes::", len(commandMessage))
 
-	rpcResponse := struct {
-		Kind    string
-		Payload json.RawMessage
-	}{}
-	callError := bridgeCall(ctx, "/rpc", map[string]any{
-		"Channel":   session.ChannelToken,
-		"ID":        commandID,
-		"Message":   json.RawMessage(commandMessage),
-		"TimeoutMs": timeoutMilliseconds,
-		"WaitMs":    bridgeChannelWaitMs,
-	}, &rpcResponse)
+	rpcReply, callError := fareward.BridgeRPC(ctx, session.ChannelToken, commandID, commandMessage, timeoutMilliseconds, bridgeChannelWaitMs)
 	if callError != nil {
 		core.Log("agent.bridge request error tab::", shortTabID(tabID), " cmd::", commandType, " id::", commandID, " err::", callError)
 		return callError
 	}
 
-	if rpcResponse.Kind == TypeError {
+	if rpcReply.Kind == TypeError {
 		browserError := struct{ Message string }{}
-		_ = json.Unmarshal(rpcResponse.Payload, &browserError)
+		_ = json.Unmarshal(rpcReply.Payload, &browserError)
 		if len(browserError.Message) == 0 {
 			browserError.Message = "agent error"
 		}
@@ -216,9 +114,9 @@ func bridgeCommand(ctx context.Context, tabID, commandType string, commandPayloa
 		return errors.New(browserError.Message)
 	}
 
-	core.Log("agent.bridge request ok tab::", shortTabID(tabID), " cmd::", commandType, " id::", commandID, " payload_bytes::", len(rpcResponse.Payload))
-	if commandResult != nil && len(rpcResponse.Payload) > 0 {
-		if decodeError := json.Unmarshal(rpcResponse.Payload, commandResult); decodeError != nil {
+	core.Log("agent.bridge request ok tab::", shortTabID(tabID), " cmd::", commandType, " id::", commandID, " payload_bytes::", len(rpcReply.Payload))
+	if commandResult != nil && len(rpcReply.Payload) > 0 {
+		if decodeError := json.Unmarshal(rpcReply.Payload, commandResult); decodeError != nil {
 			return fmt.Errorf("decodificar la respuesta del navegador: %w", decodeError)
 		}
 	}

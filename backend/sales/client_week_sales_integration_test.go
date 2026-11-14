@@ -45,7 +45,7 @@ func writeSaleWithChanges(t *testing.T, stored *types.SaleOrder, written types.S
 		if err := db.UpsertIn(transaction, &[]types.SaleOrder{written}); err != nil {
 			return err
 		}
-		return applyClientWeekSaleChangesIn(transaction, clientWeekTestCompanyID, types.ClientWeekSaleChanges(stored, &written))
+		return types.ApplyClientWeekSaleChangesIn(transaction, clientWeekTestCompanyID, types.ClientWeekSaleChanges(stored, &written))
 	})
 	if err != nil {
 		t.Fatalf("writing sale %d: %v", written.ID, err)

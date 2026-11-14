@@ -2,6 +2,8 @@
 // them (it never trusts this copy); these exist so the shopper sees the problem before submitting.
 // See docs/WEB_CHECKOUT_PLAN.md.
 
+import { unpackQuantityLine } from '#core/quantity.ts'
+
 // The [ecommerce] company flags (backend/company_flags.toml).
 export const FLAG_CONFIRM_EMAIL_ONLINE_PAYMENT = 10
 export const FLAG_REQUIRE_CONTACT_NUMBER = 11
@@ -159,15 +161,62 @@ export const defaultAddressID = (addresses: IWebCustomerAddress[], lastUsedAddre
   return Math.max(...addresses.map(address => address.ID))
 }
 
-// webOrderStatusLabel reads SaleOrder.Status (0 annulled, 1 generated, 2 paid, 3 delivered,
-// 4 paid + delivered) as the customer sees it in Mis Pedidos.
-export const webOrderStatusLabel = (status: number): string => {
-  return ['Anulado', 'Pendiente de pago', 'Pagado', 'Entregado', 'Pagado y entregado'][status] || ''
+// mostExpensiveOrderLines picks the lines a "Mis Pedidos" card lists: the `limit` lines with the
+// highest amount (units × unit price), so the card summarizes the order by what weighed most.
+export const mostExpensiveOrderLines = <T extends { Price: number, Quantity: number }>(lines: T[], limit: number): T[] => {
+  const lineAmount = (line: T) => unpackQuantityLine(line.Quantity).units * line.Price
+  return [...lines].sort((a, b) => lineAmount(b) - lineAmount(a)).slice(0, limit)
+}
+
+// formatWebOrderNumber is the number the shopper sees ("Pedido 0001"); same as the backend's
+// webOrderNumber, which names the email and the purchase-order PDF.
+export const formatWebOrderNumber = (onlineOrderID: number): string => {
+  return String(onlineOrderID).padStart(4, '0')
+}
+
+// The order Status mirrors SaleOrder.Status: 0 annulled, 1 pending, 2 paid, 3 delivered, 4 paid + delivered.
+// Mis Pedidos splits it in two: the payment (webOrderPaymentLabel) and the progress badge (webOrderProgress).
+export const webOrderPaymentLabel = (status: number): string => {
+  return ['', 'Pendiente de pago', 'Pagado', 'Pendiente de pago', 'Pagado'][status] || ''
+}
+
+export type WebOrderProgressKey = 'annulled' | 'received' | 'preparing' | 'inTransit' | 'delivered'
+
+interface IWebOrderProgressFields { ss: number, FulfillmentStatus: number, DeliveryType: number }
+
+// webOrderProgressSteps are the steps the shopper follows in the order detail; the id is the step
+// number webOrderProgressStep returns. The middle step names what the shopper waits for.
+export const webOrderProgressSteps = (deliveryType: number): { id: number, key: WebOrderProgressKey, name: string }[] => [
+  { id: 0, key: 'received', name: 'Recibido' },
+  { id: 1, key: 'preparing', name: 'En Preparación' },
+  { id: 2, key: 'inTransit', name: deliveryType === DELIVERY_PICKUP ? 'Para Recoger' : 'En Camino' },
+  { id: 3, key: 'delivered', name: 'Entregado' },
+]
+
+// webOrderProgressStep: a delivery (Status 3/4) outranks the back office's FulfillmentStatus label
+// (0 received, 1 preparing, 2 on the way / ready for pickup).
+export const webOrderProgressStep = (order: IWebOrderProgressFields): number => {
+  return order.ss === 3 || order.ss === 4 ? 3 : (order.FulfillmentStatus || 0)
+}
+
+// webOrderProgress is the badge of a Mis Pedidos card: the current step, or "Anulado".
+export const webOrderProgress = (order: IWebOrderProgressFields): { key: WebOrderProgressKey, label: string } => {
+  if (order.ss === 0) { return { key: 'annulled', label: 'Anulado' } }
+  const currentStep = webOrderProgressSteps(order.DeliveryType)[webOrderProgressStep(order)]
+  return { key: currentStep.key, label: currentStep.name }
 }
 
 // deferredPaymentLabel names cash on delivery by where the money changes hands.
 export const deferredPaymentLabel = (deliveryType: number): string => {
   return deliveryType === DELIVERY_PICKUP ? 'Pago en tienda' : 'Pago contra entrega'
+}
+
+// webPaymentMethodLabel names how the shopper chose to pay, in the order detail.
+export const webPaymentMethodLabel = (paymentMethod: number, deliveryType: number): string => {
+  if (paymentMethod === PAYMENT_CARD) { return 'Tarjeta' }
+  if (paymentMethod === PAYMENT_YAPE) { return 'Yape' }
+  if (paymentMethod === PAYMENT_DEFERRED) { return deferredPaymentLabel(deliveryType) }
+  return ''
 }
 
 export const buildWebCheckoutRequest = (args: {

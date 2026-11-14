@@ -341,6 +341,8 @@ func main() {
 	if err := core.ConfigureFareward(core.Env.FAREWARD_ADDRESS, core.Env.INTERNAL_APIKEY); err != nil {
 		panic("invalid fareward configuration: " + err.Error())
 	}
+	// Optional: without a bridge URL, live pages fall back to polling.
+	core.ConfigureBridge(core.Env.SSE_BRIDGE_URL, core.Env.INTERNAL_APIKEY)
 	if core.Env.FAREWARD_BYPASS {
 		core.Log("WARNING: [fareward].bypass is on: no credit charges, no access checks, no request log (load tests only)")
 	}

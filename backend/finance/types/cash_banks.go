@@ -164,8 +164,7 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 		Partition: e.CompanyID,
 		Keys:      db.Cols(e.ID),
 		KeyIntPacking: db.Cols(
-			//TODO: decrease to e.Autoincrement(7) in the future
-			e.CashBankID.Size(17), e.Date.Size(15), e.Autoincrement(8),
+			e.CashBankID.Size(17), e.Date.Size(15), e.Autoincrement(0),
 		),
 		AutoincrementPart: e.Date,
 		// Size the slots of the period delta index. Type leaves room for new movement types.
@@ -229,7 +228,7 @@ func (e CashReconciliationTable) GetSchema() db.TableSchema {
 		ID:        7,
 		Name:      "cash_reconciliations",
 		Partition: e.CompanyID,
-		Keys:      db.Cols(e.ID),
+		Keys:      db.Cols(e.ID.Autoincrement(0)),
 		Indexes: []db.Index{
 			// One log per cash bank: the Cuadres tab syncs its cash bank's counts. Counts are manual
 			// and never deleted, so the list stays short and only new counts travel.

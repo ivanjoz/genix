@@ -22,7 +22,8 @@ func GetWebCustomerOrders(req *core.HandlerArgs) core.HandlerResponse {
 	orders := []types.OnlineSaleOrder{}
 	query := db.Query(&orders)
 	query.Select(query.ID, query.Date, query.Status, query.Lines, query.TotalAmount, query.DebtAmount,
-		query.ShippingAmount, query.DeliveryType, query.PickupSiteID, query.Shipping, query.SaleOrderID).
+		query.ShippingAmount, query.DeliveryType, query.PickupSiteID, query.Shipping, query.SaleOrderID,
+		query.FulfillmentStatus, query.PaymentMethod).
 		CompanyID.Equals(companyID).WebCustomerID.Equals(customer.ID)
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los pedidos:", err)
