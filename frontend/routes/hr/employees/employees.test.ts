@@ -1,9 +1,79 @@
 import { describe, expect, it } from 'vitest'
-import type { IContract } from '#services/hr/contracts.svelte.ts'
+import type { IContractAgreement } from '#services/hr/contracts-agreements.svelte.ts'
 import type { IEmployee } from '#services/hr/employees.svelte.ts'
+import { Engagement, PayBasis } from '#services/hr/hr-catalogs.ts'
 import {
-  buildEmployeeTree, completedYears, contractValidOn, employeeFullName, hasFamilyAllowanceOn, showsDepartmentInOrgChart,
+  alignAgreementWithEngagement, buildEmployeeTree, completedYears, contractValidOn, employeeFullName, fixedPayBasisOf,
+  hasFamilyAllowanceOn, makeEmptyEmployee, makeNextContract, payAmountLabel, payrollEmployees, showsDepartmentInOrgChart,
+  showsPayDayOfWeek, showsPayrollFields,
 } from './employees.ts'
+
+describe('payrollEmployees', () => {
+  it('keeps Planilla workers only', () => {
+    const employees = [
+      { ID: 1, EngagementType: Engagement.Payroll },
+      { ID: 2, EngagementType: Engagement.FeeReceipt },
+      { ID: 3, EngagementType: Engagement.TemporaryOffPayroll },
+    ]
+    expect(payrollEmployees(employees).map((employee) => employee.ID)).toEqual([1])
+  })
+})
+
+describe('agreement fields by engagement', () => {
+  it('forces the basis of Planilla and fee receipt, lets a temporary worker pick it', () => {
+    expect(fixedPayBasisOf(Engagement.Payroll)).toBe(PayBasis.Monthly)
+    expect(fixedPayBasisOf(Engagement.FeeReceipt)).toBe(PayBasis.Hourly)
+    expect(fixedPayBasisOf(Engagement.TemporaryOffPayroll)).toBeUndefined()
+  })
+
+  it('shows the payroll fields for Planilla only and the pay day when weekly only', () => {
+    expect(showsPayrollFields(Engagement.Payroll)).toBe(true)
+    expect(showsPayrollFields(Engagement.FeeReceipt)).toBe(false)
+    expect(showsPayrollFields(Engagement.TemporaryOffPayroll)).toBe(false)
+    expect(showsPayDayOfWeek(PayBasis.Weekly)).toBe(true)
+    expect(showsPayDayOfWeek(PayBasis.Monthly)).toBe(false)
+  })
+
+  it('labels the amount by basis', () => {
+    expect(payAmountLabel(PayBasis.Hourly)).toContain('Hourly')
+    expect(payAmountLabel(PayBasis.Weekly)).toContain('Weekly')
+    expect(payAmountLabel(PayBasis.Monthly)).toContain('Monthly')
+  })
+
+  it('clears the payroll fields and a stale pay day off payroll', () => {
+    const agreement = {
+      ...makeNextContract(makeEmptyEmployee(), undefined), PayBasis: PayBasis.Weekly, PayDayOfWeek: 5,
+      CUSPP: '123', PensionSystem: 2, CtsBankID: 1, CtsAccount: '9', HasEPS: true,
+    }
+    const aligned = alignAgreementWithEngagement(agreement, Engagement.FeeReceipt)
+    expect(aligned).toMatchObject({
+      PayBasis: PayBasis.Hourly, PayDayOfWeek: 0, ContractType: 0, PensionSystem: 0, CUSPP: '', HasEPS: false,
+      CtsBankID: 0, CtsAccount: '',
+    })
+    expect(alignAgreementWithEngagement(agreement, Engagement.TemporaryOffPayroll))
+      .toMatchObject({ PayBasis: PayBasis.Weekly, PayDayOfWeek: 5, PensionSystem: 0 })
+  })
+})
+
+describe('makeNextContract', () => {
+  const employeeWith = (EngagementType: number) => ({ ...makeEmptyEmployee(), ID: 7, EngagementType })
+
+  it('starts a Planilla contract monthly, with the payroll defaults', () => {
+    expect(makeNextContract(employeeWith(Engagement.Payroll), undefined))
+      .toMatchObject({ EmployeeID: 7, PayBasis: PayBasis.Monthly, ContractType: 1, PensionSystem: 1 })
+  })
+
+  it('starts a fee receipt agreement hourly, without payroll fields', () => {
+    expect(makeNextContract(employeeWith(Engagement.FeeReceipt), undefined))
+      .toMatchObject({ PayBasis: PayBasis.Hourly, ContractType: 0, PensionSystem: 0 })
+  })
+
+  it('moves a weekly temporary agreement to a monthly contract when the worker joins the payroll', () => {
+    const weekly = { ...makeNextContract(employeeWith(Engagement.TemporaryOffPayroll), undefined), ID: 3, PayBasis: PayBasis.Weekly, PayDayOfWeek: 6 }
+    expect(makeNextContract(employeeWith(Engagement.Payroll), weekly))
+      .toMatchObject({ ID: 0, ValidFrom: 0, PayBasis: PayBasis.Monthly, PayDayOfWeek: 0 })
+  })
+})
 
 describe('buildEmployeeTree', () => {
   const employee = (ID: number, FirstName: string, ManagerEmployeeID: number, ss = 1) =>
@@ -40,7 +110,7 @@ describe('showsDepartmentInOrgChart', () => {
 const unixDayOf =(isoDate: string) => Math.floor(Date.parse(isoDate) / 86400000)
 
 const makeContract = (ID: number, EmployeeID: number, ValidFrom: string, ss = 1) =>
-  ({ ID, EmployeeID, ValidFrom: unixDayOf(ValidFrom), ss } as IContract)
+  ({ ID, EmployeeID, ValidFrom: unixDayOf(ValidFrom), ss } as IContractAgreement)
 
 describe('employeeFullName', () => {
   it('lists surnames first and skips the missing ones', () => {

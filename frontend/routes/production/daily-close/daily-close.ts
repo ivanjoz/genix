@@ -1,10 +1,9 @@
 import { formatQuantity, quantityDivisorOf } from '#core/quantity.ts'
+import type { IProductionOrder } from '#services/production/production-orders.ts'
 
 // Mirrors backend/production/daily_close.go and production/types/daily_close.go: the daily
-// production close (docs/PRODUCTION_PLAN.md §5).
-
-// Where a produced product's value came from.
-export const CLOSE_COST_SOURCE = { STANDARD: 1, SUPPLIES: 2 } as const
+// production close (docs/PRODUCTION_PLAN.md §5). A run close is a production order of Kind 2
+// (docs/MANUFACTURING_PLAN.md §3).
 
 // A day of the warehouse with sales still waiting for the close.
 export interface IDailyClosePendingDay {
@@ -13,7 +12,7 @@ export interface IDailyClosePendingDay {
   Units: number
 }
 
-export interface IProductionCloseProduct {
+export interface IDailyCloseProduct {
   ProductID: number
   Units: number
   CostSource: number
@@ -24,7 +23,7 @@ export interface IProductionCloseProduct {
 }
 
 // Quantities in sub-units of the supply's divisor (grams of a kg supply).
-export interface IProductionCloseSupply {
+export interface IDailyCloseSupply {
   SupplyID: number
   SubDivisor: number
   Needed: number
@@ -38,27 +37,24 @@ export interface IDailyClosePreview {
   Date: number
   MovementDate: number
   IsStrict?: boolean
-  Products?: IProductionCloseProduct[]
-  Supplies?: IProductionCloseSupply[]
+  Products?: IDailyCloseProduct[]
+  Supplies?: IDailyCloseSupply[]
   BlockingReasons?: string[]
   SaleOrderIDs?: number[]
   PreviewHash: string
 }
 
-export interface IProductionClose {
-  ID: number
-  WarehouseID: number
-  SuppliesWarehouseID: number
-  Date: number
-  IsStrict?: boolean
-  Products?: IProductionCloseProduct[]
-  Supplies?: IProductionCloseSupply[]
-  SaleOrderIDs?: number[]
-  Created: number
-  CreatedBy: number
-  ss: number
-  upd: number
+// The units a run close produced of each product, its presentations summed, in the order they entered.
+export const closeOrderProductUnits = (closeOrder: IProductionOrder): { ProductID: number, Units: number }[] => {
+  const unitsByProductID = new Map<number, number>()
+  for (const line of closeOrder.Lines || []) {
+    unitsByProductID.set(line.ProductID, (unitsByProductID.get(line.ProductID) || 0) + (line.ProducedUnits || 0))
+  }
+  return [...unitsByProductID].map(([ProductID, Units]) => ({ ProductID, Units }))
 }
+
+export const closeOrderTotalValue = (closeOrder: IProductionOrder): number =>
+  (closeOrder.Lines || []).reduce((total, line) => total + (line.Value || 0), 0)
 
 // Only the oldest pending day can be closed: the backend refuses a day while an earlier one waits.
 export const oldestPendingDay = (pendingDays: IDailyClosePendingDay[]): IDailyClosePendingDay | undefined =>
@@ -72,10 +68,10 @@ export const formatSupplySubUnits = (subUnits: number, subDivisor: number, subUn
 }
 
 // What the close lacks of a supply, in its sub-units: 0 when the stock covers the recipes.
-export const supplyShortage = (supply: IProductionCloseSupply): number =>
+export const supplyShortage = (supply: IDailyCloseSupply): number =>
   Math.max(0, (supply.Needed || 0) - (supply.Available || 0))
 
-export const closeTotalValue = (products: IProductionCloseProduct[] = []): number =>
+export const closeTotalValue = (products: IDailyCloseProduct[] = []): number =>
   products.reduce((total, product) => total + (product.Value || 0), 0)
 
 // A day left open past yesterday books its movements on yesterday, never earlier.

@@ -33,6 +33,9 @@ const (
 	// products a warehouse delivered, and produces those products right before their sale exits.
 	StockMovementTypeProductionConsumption StockMovementType = 15 // a supply used up by a production close
 	StockMovementTypeProductionEntry       StockMovementType = 16 // a made product produced by a close
+	// A production order's supplies sent to its workshop or returned from it (two rows), with the
+	// order's reservation (docs/MANUFACTURING_PLAN.md §8).
+	StockMovementTypeProductionTransfer StockMovementType = 17
 )
 
 // stockMovementTypeRule is what the engine enforces for a type: the table its DocumentID points
@@ -57,8 +60,9 @@ var stockMovementTypeRules = map[StockMovementType]stockMovementTypeRule{
 	StockMovementTypeOpeningStock:          {"Saldo inicial", "", 1},
 	StockMovementTypeInternalConsumption:   {"Consumo interno", "", -1},
 	StockMovementTypeShrinkage:             {"Merma", "", -1},
-	StockMovementTypeProductionConsumption: {"Consumo de producción", "production_close", -1},
-	StockMovementTypeProductionEntry:       {"Ingreso de producción", "production_close", 1},
+	StockMovementTypeProductionConsumption: {"Consumo de producción", "production_order", -1},
+	StockMovementTypeProductionEntry:       {"Ingreso de producción", "production_order", 1},
+	StockMovementTypeProductionTransfer:    {"Traslado de producción", "production_order", 0},
 }
 
 // StockMovementDocumentTable is the table a movement of this type names in DocumentID, or ""

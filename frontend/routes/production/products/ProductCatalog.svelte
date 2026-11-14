@@ -871,6 +871,32 @@ import {
             css="col-span-12 md:col-span-6 md:ml-8"
           />
         </div>
+        <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): bought and made products alike. -->
+        <div
+          class="col-span-24 grid grid-cols-24 items-center gap-x-10 gap-y-10 rounded-[6px] bg-gray-100 p-12"
+          aria-label="Lot traceability settings"
+        >
+          <div class="ff-bold h3 col-span-24 ml-4">Lotes</div>
+          <Checkbox
+            bind:saveOn={productoForm}
+            save="TracksLots"
+            label="Tracks lots|Controla lotes"
+            css="col-span-12 md:col-span-6"
+          />
+          <Input
+            saveOn={productoForm}
+            save="ShelfLifeDays"
+            css="col-span-12 md:col-span-8"
+            label="Shelf life (days)|Vida útil (días)"
+            type="number"
+          />
+          <Checkbox
+            bind:saveOn={productoForm}
+            save="QualityHoldOnEntry"
+            label="New lots enter in quarantine|Lotes nuevos en cuarentena"
+            css="col-span-24 md:col-span-10"
+          />
+        </div>
       </div>
     {/if}
     {#if layerView === 2}

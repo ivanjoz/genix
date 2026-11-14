@@ -4,9 +4,10 @@
   import { tr } from '#core/store.svelte.ts'
   import { formatN, formatTime } from '#libs/helpers.ts'
   import type { ProductsService } from '#services/production/products.svelte.ts'
+  import { COST_SOURCE } from '#services/production/production-orders.ts'
   import {
-    CLOSE_COST_SOURCE, closeTotalValue, formatSupplySubUnits, isMovementDateShifted, supplyShortage,
-    type IDailyClosePreview, type IProductionCloseProduct, type IProductionCloseSupply,
+    closeTotalValue, formatSupplySubUnits, isMovementDateShifted, supplyShortage,
+    type IDailyClosePreview, type IDailyCloseProduct, type IDailyCloseSupply,
   } from './daily-close.ts'
 
   // The preview of a close: what it produces, what it consumes and what blocks it.
@@ -14,24 +15,24 @@
 
   const formatAmount = (cents: number) => `S/ ${formatN((cents || 0) / 100, 2)}`
   const productName = (productID: number) => productsService.recordsMap.get(productID)?.Name || `#${productID}`
-  const supplyAmount = (supply: IProductionCloseSupply, subUnits: number) =>
+  const supplyAmount = (supply: IDailyCloseSupply, subUnits: number) =>
     formatSupplySubUnits(subUnits, supply.SubDivisor, productsService.recordsMap.get(supply.SupplyID)?.SbuUnit)
 
   // A product or supply short of stock is tinted: it consumes less than its recipe asks.
-  const shortProductCss = (product: IProductionCloseProduct) => product.ShortSupplies ? 'bg-amber-bg' : undefined
-  const shortSupplyCss = (supply: IProductionCloseSupply) => supplyShortage(supply) > 0 ? 'bg-amber-bg' : undefined
+  const shortProductCss = (product: IDailyCloseProduct) => product.ShortSupplies ? 'bg-amber-bg' : undefined
+  const shortSupplyCss = (supply: IDailyCloseSupply) => supplyShortage(supply) > 0 ? 'bg-amber-bg' : undefined
 
-  const productColumns: ITableColumn<IProductionCloseProduct>[] = [
+  const productColumns: ITableColumn<IDailyCloseProduct>[] = [
     { header: 'Product|Producto', css: 'px-6', setCellCss: shortProductCss, getValue: (product) => productName(product.ProductID) },
     { header: 'Units|Unidades', headerCss: 'w-100', css: 'px-6 ff-mono', align: 'right', setCellCss: shortProductCss,
       getValue: (product) => product.Units },
     { header: 'Cost from|Costo según', headerCss: 'w-140', css: 'px-6', setCellCss: shortProductCss,
-      getValue: (product) => tr(product.CostSource === CLOSE_COST_SOURCE.STANDARD ? 'Standard cost|Costo estándar' : 'Recipe|Receta') },
+      getValue: (product) => tr(product.CostSource === COST_SOURCE.STANDARD ? 'Standard cost|Costo estándar' : 'Recipe|Receta') },
     { header: 'Est. value|Valor est.', headerCss: 'w-130', css: 'px-6 ff-mono', align: 'right', setCellCss: shortProductCss,
       getValue: (product) => formatAmount(product.Value) },
   ]
 
-  const supplyColumns: ITableColumn<IProductionCloseSupply>[] = [
+  const supplyColumns: ITableColumn<IDailyCloseSupply>[] = [
     { header: 'Supply|Insumo', css: 'px-6', setCellCss: shortSupplyCss, getValue: (supply) => productName(supply.SupplyID) },
     { header: 'Needed|Necesario', headerCss: 'w-130', css: 'px-6 ff-mono', align: 'right', setCellCss: shortSupplyCss,
       getValue: (supply) => supplyAmount(supply, supply.Needed) },

@@ -23,6 +23,7 @@ var privateProductFieldNames = []string{
 	"UpdatedBy", "Created", "CreatedBy", "CategoriesWithStock", "Version", "Metadata", "BrandName",
 	"AccountCode", "Origin", "WebExtraStock", "WebHidden",
 	"ProductionYieldPortions", "ProductionSupplies", "ProductionExtraCostPerUnit", "ProductionStandardCost",
+	"ProductionLabor", "TracksLots", "ShelfLifeDays", "QualityHoldOnEntry",
 }
 
 func TestPublicProductFieldsClassifyEveryField(t *testing.T) {

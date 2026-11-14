@@ -6,7 +6,7 @@ func periodInputOf(period int16, employee Employee) PeriodPayslipInput {
 	return PeriodPayslipInput{
 		Run:       PayrollRun{Period: period},
 		Employee:  employee,
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 1, 1))},
 		Concepts:  map[int32]Concept{},
 		Legal:     testLegalValues(),
 	}
@@ -22,7 +22,7 @@ func TestPeriodPayslipMonthOfCtsKeepsTheDepositOutOfTheNetPay(t *testing.T) {
 		t.Errorf("cts %d salary %d", lineAmount(payslip, LegalCts), lineAmount(payslip, LegalBasicSalary))
 	}
 	monthly, _ := CalculateMonthlyPayslip(MonthlyPayslipInput{Period: 2605, Employee: Employee{ID: 1, Status: StatusActive, HireDate: unixDay(2025, 1, 1)},
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))}, Concepts: map[int32]Concept{}, Legal: testLegalValues()})
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 1, 1))}, Concepts: map[int32]Concept{}, Legal: testLegalValues()})
 	if payslip.NetPay != monthly.NetPay {
 		t.Errorf("net pay %d, the monthly one alone is %d", payslip.NetPay, monthly.NetPay)
 	}

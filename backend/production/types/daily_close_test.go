@@ -34,12 +34,12 @@ func dailyCloseFixture() DailyCloseInput {
 			riceID: {ID: riceID, Name: "Arroz kg", Status: ProductStatusSupply, SbuQuantity: 1000, SbuUnit: "g", AccountCode: 6032},
 			saltID: {ID: saltID, Name: "Sal", Status: ProductStatusSupply, AccountCode: 6032},
 		},
-		SupplyStockByID: map[int32]DailyCloseSupplyStock{
+		SupplyStockByID: map[int32]SupplyStock{
 			// 1 kg free + 2 kg in lot 7, worth 3000 cents (1000 per kg).
-			riceID: {SubDivisor: 1000, StockValue: 3000, Buckets: []DailyCloseStockBucket{
+			riceID: {SubDivisor: 1000, StockValue: 3000, Buckets: []SupplyStockBucket{
 				{Quantity: core.Quantity{Units: 1}}, {LotID: 7, Quantity: core.Quantity{Units: 2}},
 			}},
-			saltID: {SubDivisor: 1, StockValue: 500, Buckets: []DailyCloseStockBucket{{Quantity: core.Quantity{Units: 5}}}},
+			saltID: {SubDivisor: 1, StockValue: 500, Buckets: []SupplyStockBucket{{Quantity: core.Quantity{Units: 5}}}},
 		},
 	}
 }
@@ -51,7 +51,7 @@ func TestPlanDailyCloseConsumesTheRecipesFreeBucketFirst(t *testing.T) {
 	}
 	// Rice: lomo needs ceil(1500 × 10 / 20) = 750 g, arroz 300 × 5 = 1500 g; 2250 g of 3000 g.
 	// Salt: ceil(2 × 10 / 20) = 1 unit.
-	wantSupplies := []ProductionCloseSupply{
+	wantSupplies := []DailyCloseSupply{
 		{SupplyID: riceID, SubDivisor: 1000, Needed: 2250, Available: 3000, Consumed: 2250},
 		{SupplyID: saltID, SubDivisor: 1, Needed: 1, Available: 5, Consumed: 1},
 	}
@@ -61,7 +61,7 @@ func TestPlanDailyCloseConsumesTheRecipesFreeBucketFirst(t *testing.T) {
 		}
 	}
 	// Lomo takes 750 g of the free kg; arroz the other 250 g, then 1250 g of lot 7.
-	wantConsumptions := []DailyCloseConsumption{
+	wantConsumptions := []SupplyConsumption{
 		{ProductID: lomoID, SupplyID: riceID, SubUnits: 750, SubDivisor: 1000, EstimatedValue: 750},
 		{ProductID: arrozID, SupplyID: riceID, SubUnits: 250, SubDivisor: 1000, EstimatedValue: 250},
 		{ProductID: arrozID, SupplyID: riceID, LotID: 7, SubUnits: 1250, SubDivisor: 1000, EstimatedValue: 1250},
@@ -76,10 +76,10 @@ func TestPlanDailyCloseConsumesTheRecipesFreeBucketFirst(t *testing.T) {
 		}
 	}
 	// Lomo: 750 + 100 of supplies + 100 × 10 extra. Arroz: 1500. Café: 250 × 3 standard.
-	wantProducts := []ProductionCloseProduct{
-		{ProductID: lomoID, Units: 10, CostSource: CloseCostSourceSupplies, Value: 1850},
-		{ProductID: arrozID, Units: 5, CostSource: CloseCostSourceSupplies, Value: 1500},
-		{ProductID: cafeID, Units: 3, CostSource: CloseCostSourceStandard, Value: 750},
+	wantProducts := []DailyCloseProduct{
+		{ProductID: lomoID, Units: 10, CostSource: CostSourceRecipe, Value: 1850},
+		{ProductID: arrozID, Units: 5, CostSource: CostSourceRecipe, Value: 1500},
+		{ProductID: cafeID, Units: 3, CostSource: CostSourceStandard, Value: 750},
 	}
 	for index, want := range wantProducts {
 		if plan.Products[index] != want {
@@ -91,8 +91,8 @@ func TestPlanDailyCloseConsumesTheRecipesFreeBucketFirst(t *testing.T) {
 func TestPlanDailyCloseSharesAShortSupply(t *testing.T) {
 	input := dailyCloseFixture()
 	// Only 1 kg of rice for 2250 g needed: lomo gets floor(1000 × 750 / 2250) = 333, arroz the rest.
-	input.SupplyStockByID[riceID] = DailyCloseSupplyStock{SubDivisor: 1000, StockValue: 1000,
-		Buckets: []DailyCloseStockBucket{{Quantity: core.Quantity{Units: 1}}}}
+	input.SupplyStockByID[riceID] = SupplyStock{SubDivisor: 1000, StockValue: 1000,
+		Buckets: []SupplyStockBucket{{Quantity: core.Quantity{Units: 1}}}}
 	plan := PlanDailyClose(input)
 	if len(plan.BlockingReasons) > 0 {
 		t.Fatalf("a short supply does not block without the strict flag: %v", plan.BlockingReasons)
@@ -114,8 +114,8 @@ func TestPlanDailyCloseSharesAShortSupply(t *testing.T) {
 func TestPlanDailyCloseExtraCostAloneIsValueEnough(t *testing.T) {
 	input := dailyCloseFixture()
 	// Rice and salt worth nothing: lomo still has its extra cost (100 × 10), arroz has no cost at all.
-	input.SupplyStockByID[riceID] = DailyCloseSupplyStock{SubDivisor: 1000, Buckets: []DailyCloseStockBucket{{Quantity: core.Quantity{Units: 3}}}}
-	input.SupplyStockByID[saltID] = DailyCloseSupplyStock{SubDivisor: 1, Buckets: []DailyCloseStockBucket{{Quantity: core.Quantity{Units: 5}}}}
+	input.SupplyStockByID[riceID] = SupplyStock{SubDivisor: 1000, Buckets: []SupplyStockBucket{{Quantity: core.Quantity{Units: 3}}}}
+	input.SupplyStockByID[saltID] = SupplyStock{SubDivisor: 1, Buckets: []SupplyStockBucket{{Quantity: core.Quantity{Units: 5}}}}
 	plan := PlanDailyClose(input)
 	if plan.Products[0].Value != 1000 {
 		t.Fatalf("lomo value: got %v, want 1000", plan.Products[0].Value)
@@ -134,7 +134,7 @@ func TestPlanDailyCloseBlockingReasons(t *testing.T) {
 	}{
 		{"no cost source", func(input *DailyCloseInput) { input.SoldUnitsByProduct[sinCosto] = 1 }, "ni costo estándar"},
 		{"supply without value", func(input *DailyCloseInput) {
-			input.SupplyStockByID[riceID] = DailyCloseSupplyStock{SubDivisor: 1000, Buckets: []DailyCloseStockBucket{{Quantity: core.Quantity{Units: 3}}}}
+			input.SupplyStockByID[riceID] = SupplyStock{SubDivisor: 1000, Buckets: []SupplyStockBucket{{Quantity: core.Quantity{Units: 3}}}}
 			delete(input.SoldUnitsByProduct, lomoID)
 		}, "no tiene costo"},
 		{"stale recipe divisor", func(input *DailyCloseInput) {
@@ -155,5 +155,36 @@ func TestPlanDailyCloseBlockingReasons(t *testing.T) {
 		if !strings.Contains(strings.Join(plan.BlockingReasons, " | "), testCase.wantReason) {
 			t.Errorf("%s: want a reason containing %q, got %v", testCase.name, testCase.wantReason, plan.BlockingReasons)
 		}
+	}
+}
+
+func TestPlanDailyCloseHonorsReservationsWasteAndLabor(t *testing.T) {
+	input := dailyCloseFixture()
+	// 2 kg of the 3 kg of rice are reserved by a released order: 1 kg left for 2250 g needed.
+	riceStock := input.SupplyStockByID[riceID]
+	riceStock.ReservedProduction = core.Quantity{Units: 2}
+	input.SupplyStockByID[riceID] = riceStock
+	plan := PlanDailyClose(input)
+	if plan.Supplies[0].Available != 1000 || plan.Supplies[0].Consumed != 1000 {
+		t.Fatalf("reserved rice: %+v", plan.Supplies[0])
+	}
+
+	// 10% waste on lomo's rice: ceil(1500 × 10 × 1.1 / 20) = 825 g. 30 min of a 600-cent hour per 20
+	// portions adds 150 cents for 10.
+	input = dailyCloseFixture()
+	lomo := input.ProductsByID[lomoID]
+	lomo.ProductionSupplies = []ProductionSupply{
+		{SupplyID: riceID, Quantity: 1500, SubDivisor: 1000, WasteBasisPoints: 1000}, {SupplyID: saltID, Quantity: 2000, SubDivisor: 1},
+	}
+	lomo.ProductionLabor = []ProductionLabor{{LaborTypeID: 1, Minutes: 30}}
+	input.ProductsByID[lomoID] = lomo
+	input.CostPerHourByLaborTypeID = map[int32]int32{1: 600}
+	plan = PlanDailyClose(input)
+	if plan.Consumptions[0].ProductID != lomoID || plan.Consumptions[0].SubUnits != 825 {
+		t.Fatalf("lomo rice with waste: %+v", plan.Consumptions[0])
+	}
+	// 825 g of rice at 1 per g + 1 salt at 100 + 100 × 10 extra + 150 labor.
+	if plan.Products[0].Value != 825+100+1000+150 {
+		t.Fatalf("lomo value: %+v", plan.Products[0])
 	}
 }

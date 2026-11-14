@@ -31,6 +31,18 @@ type ProductStock struct {
 	// nothing physical moves until the delivery.
 	PendingDeliveryStore  int32 `cb:"26"`
 	PendingDeliveryOnline int32 `cb:"27"`
+	// ReservedProduction is what released production orders hold of this row and have not consumed
+	// yet (docs/MANUFACTURING_PLAN.md §5), a {Units, Sub} pair at SubDivisor, kept by
+	// ApplyProductionReservationIn. Every outflow that is not the owning order's own must leave the
+	// row's balance at or above it.
+	ReservedProductionQuantity    int32 `cb:"28"`
+	ReservedProductionSubQuantity int32 `cb:"29"`
+	// Blocked is the part of the row's detail stock held in lots that are not Liberado (Cuarentena,
+	// Rechazado), a {Units, Sub} pair at SubDivisor (docs/MANUFACTURING_PLAN.md §10). The engine keeps
+	// it for movements into or out of such lots, and PostProductStockLotStatus when a lot changes
+	// status. It is stock nobody may sell, consume, transfer or reserve.
+	BlockedQuantity    int32 `cb:"30"`
+	BlockedSubQuantity int32 `cb:"31"`
 	// SubDivisor is the divisor every SubQuantity on this row (and on its detail rows, which
 	// are the same product) is expressed in. Kept here rather than read from the product so a
 	// divisor refinement converts this row on the fly instead of rewriting history.
@@ -78,32 +90,36 @@ func (e *ProductStock) SelfParse() {
 
 type ProductStockTable struct {
 	db.TableStruct[ProductStockTable, ProductStock]
-	CompanyID                 db.Col[*ProductStockTable, int32]
-	ID                        db.Col[*ProductStockTable, int64]
-	WarehouseID               db.Col[*ProductStockTable, int32]
-	ProductID                 db.Col[*ProductStockTable, int32]
-	PresentationID            db.Col[*ProductStockTable, int16]
-	Quantity                  db.Col[*ProductStockTable, int32]
-	SubQuantity               db.Col[*ProductStockTable, int32]
-	DetailQuantity            db.Col[*ProductStockTable, int32]
-	DetailSubQuantity         db.Col[*ProductStockTable, int32]
-	PendingDeliveryStore      db.Col[*ProductStockTable, int32]
-	PendingDeliveryOnline     db.Col[*ProductStockTable, int32]
-	SubDivisor                db.Col[*ProductStockTable, int16]
-	DetailComputedDate        db.Col[*ProductStockTable, int16]
-	DetailComputedQuantity    db.Col[*ProductStockTable, int32]
-	DetailComputedSubQuantity db.Col[*ProductStockTable, int32]
-	LastPricesPrice           db.ColSlice[*ProductStockTable, int32]
-	LastPricesQuantity        db.ColSlice[*ProductStockTable, int32]
-	AverageCost               db.Col[*ProductStockTable, int32]
-	StockStatus               db.Col[*ProductStockTable, int8]
-	StockValue                db.Col[*ProductStockTable, int64]
-	Created                   db.Col[*ProductStockTable, int32]
-	CreatedBy                 db.Col[*ProductStockTable, int32]
-	Updated                   db.Col[*ProductStockTable, int32]
-	Version                   db.Col[*ProductStockTable, int16]
-	UpdatedBy                 db.Col[*ProductStockTable, int32]
-	Status                    db.Col[*ProductStockTable, int8]
+	CompanyID                     db.Col[*ProductStockTable, int32]
+	ID                            db.Col[*ProductStockTable, int64]
+	WarehouseID                   db.Col[*ProductStockTable, int32]
+	ProductID                     db.Col[*ProductStockTable, int32]
+	PresentationID                db.Col[*ProductStockTable, int16]
+	Quantity                      db.Col[*ProductStockTable, int32]
+	SubQuantity                   db.Col[*ProductStockTable, int32]
+	DetailQuantity                db.Col[*ProductStockTable, int32]
+	DetailSubQuantity             db.Col[*ProductStockTable, int32]
+	PendingDeliveryStore          db.Col[*ProductStockTable, int32]
+	PendingDeliveryOnline         db.Col[*ProductStockTable, int32]
+	ReservedProductionQuantity    db.Col[*ProductStockTable, int32]
+	ReservedProductionSubQuantity db.Col[*ProductStockTable, int32]
+	BlockedQuantity               db.Col[*ProductStockTable, int32]
+	BlockedSubQuantity            db.Col[*ProductStockTable, int32]
+	SubDivisor                    db.Col[*ProductStockTable, int16]
+	DetailComputedDate            db.Col[*ProductStockTable, int16]
+	DetailComputedQuantity        db.Col[*ProductStockTable, int32]
+	DetailComputedSubQuantity     db.Col[*ProductStockTable, int32]
+	LastPricesPrice               db.ColSlice[*ProductStockTable, int32]
+	LastPricesQuantity            db.ColSlice[*ProductStockTable, int32]
+	AverageCost                   db.Col[*ProductStockTable, int32]
+	StockStatus                   db.Col[*ProductStockTable, int8]
+	StockValue                    db.Col[*ProductStockTable, int64]
+	Created                       db.Col[*ProductStockTable, int32]
+	CreatedBy                     db.Col[*ProductStockTable, int32]
+	Updated                       db.Col[*ProductStockTable, int32]
+	Version                       db.Col[*ProductStockTable, int16]
+	UpdatedBy                     db.Col[*ProductStockTable, int32]
+	Status                        db.Col[*ProductStockTable, int8]
 }
 
 func (e ProductStockTable) GetSchema() db.TableSchema {
@@ -145,7 +161,7 @@ type ProductStockDetail struct {
 	ProductID      int32  `cb:"6"`
 	Quantity       int32  `cb:"7"`
 	SubQuantity    int32  `cb:"8"`
-	ExpirationDate int16  `cb:"9"`
+	// cb 9 is retired: it held an ExpirationDate nothing wrote. A lot's expiry lives on the lot.
 
 	Updated   int32 `json:"upd" cb:"upd,10"`
 	UpdatedBy int32 `cb:"11"`
@@ -164,7 +180,6 @@ type ProductStockDetailTable struct {
 	ProductID      db.Col[*ProductStockDetailTable, int32]
 	Quantity       db.Col[*ProductStockDetailTable, int32]
 	SubQuantity    db.Col[*ProductStockDetailTable, int32]
-	ExpirationDate db.Col[*ProductStockDetailTable, int16]
 	Updated        db.Col[*ProductStockDetailTable, int32]
 	UpdatedBy      db.Col[*ProductStockDetailTable, int32]
 	Created        db.Col[*ProductStockDetailTable, int32]
@@ -183,6 +198,8 @@ func (e ProductStockDetailTable) GetSchema() db.TableSchema {
 		// details whole, with the replace Metadata (core.WithDeltaReplace).
 		Indexes: []db.Index{
 			{Type: db.TypeView, Keys: db.Cols(e.WarehouseID, e.Status)},
+			// A lot's stock in every warehouse: what a lot status change moves in or out of Blocked.
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.LotID)},
 		},
 	}
 }
@@ -197,24 +214,58 @@ type ProductStockLot struct {
 	SupplierID       int32  `cb:"5"`
 	DeliveryNoteID   int32  `cb:"6"`
 	DeliveryNoteCode string `cb:"7"`
+	// What created the lot, stamped by the engine (resolveLotIDsForMovements): a purchase reception (3,
+	// the purchase order) or a production entry (16, the production order). Backward traceability
+	// starts here (docs/MANUFACTURING_PLAN.md §10).
+	OriginMovementType StockMovementType `cb:"12"`
+	OriginDocumentID   int64             `cb:"13"`
+	// ExpirationDate is a UnixDay, 0 = none: the one the movement gave, else the lot's Date plus the
+	// product's ShelfLifeDays. Editable afterwards (PostProductStockLotStatus).
+	ExpirationDate int16 `cb:"14"`
+	// QualityStatus is one of the LotQuality* values. Only a Liberado lot may be sold, consumed,
+	// transferred or reserved; the others count in their stock rows' Blocked*.
+	QualityStatus int8 `cb:"15"`
 
 	Created   int32 `cb:"9"`
 	CreatedBy int32 `cb:"10"`
+	// Updated changes with QualityStatus and ExpirationDate: the lot is no longer immutable.
+	Updated   int32 `json:"upd" cb:"upd,16"`
+	UpdatedBy int32 `cb:"17"`
 	Status    int8  `json:"ss" cb:"ss,11"`
+}
+
+// ProductStockLot.QualityStatus values (M22). A lot of a product with QualityHoldOnEntry is born in
+// Cuarentena; any lot moves between the three by hand from the lot detail.
+const (
+	LotQualityReleased   int8 = 1 // Liberado
+	LotQualityQuarantine int8 = 2 // Cuarentena
+	LotQualityRejected   int8 = 3 // Rechazado
+)
+
+// IsLotQualityBlocked reports whether a lot's stock is blocked: it may only leave by a manual exit or
+// a shrinkage, and counts in its stock rows' Blocked*.
+func IsLotQualityBlocked(qualityStatus int8) bool {
+	return qualityStatus == LotQualityQuarantine || qualityStatus == LotQualityRejected
 }
 
 type ProductStockLotTable struct {
 	db.TableStruct[ProductStockLotTable, ProductStockLot]
-	CompanyID        db.Col[*ProductStockLotTable, int32]
-	ID               db.Col[*ProductStockLotTable, int32]
-	Date             db.Col[*ProductStockLotTable, int16]
-	Name             db.Col[*ProductStockLotTable, string]
-	SupplierID       db.Col[*ProductStockLotTable, int32]
-	DeliveryNoteID   db.Col[*ProductStockLotTable, int32]
-	DeliveryNoteCode db.Col[*ProductStockLotTable, string]
-	Created          db.Col[*ProductStockLotTable, int32]
-	CreatedBy        db.Col[*ProductStockLotTable, int32]
-	Status           db.Col[*ProductStockLotTable, int8]
+	CompanyID          db.Col[*ProductStockLotTable, int32]
+	ID                 db.Col[*ProductStockLotTable, int32]
+	Date               db.Col[*ProductStockLotTable, int16]
+	Name               db.Col[*ProductStockLotTable, string]
+	SupplierID         db.Col[*ProductStockLotTable, int32]
+	DeliveryNoteID     db.Col[*ProductStockLotTable, int32]
+	DeliveryNoteCode   db.Col[*ProductStockLotTable, string]
+	OriginMovementType db.Col[*ProductStockLotTable, StockMovementType]
+	OriginDocumentID   db.Col[*ProductStockLotTable, int64]
+	ExpirationDate     db.Col[*ProductStockLotTable, int16]
+	QualityStatus      db.Col[*ProductStockLotTable, int8]
+	Created            db.Col[*ProductStockLotTable, int32]
+	CreatedBy          db.Col[*ProductStockLotTable, int32]
+	Updated            db.Col[*ProductStockLotTable, int32]
+	UpdatedBy          db.Col[*ProductStockLotTable, int32]
+	Status             db.Col[*ProductStockLotTable, int8]
 }
 
 func (e ProductStockLotTable) GetSchema() db.TableSchema {

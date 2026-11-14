@@ -7,6 +7,7 @@ import (
 	logistics "app/logistics/types"
 	"app/production/types"
 	"encoding/json"
+	"fmt"
 )
 
 // GetSupplyMaterials returns the supply catalog using the delta-cache protocol. A first sync
@@ -22,7 +23,9 @@ func GetSupplyMaterials(req *core.HandlerArgs) core.HandlerResponse {
 		supplyQuery.BrandID, supplyQuery.Price, supplyQuery.CurrencyID, supplyQuery.UnitID,
 		supplyQuery.SbuQuantity, supplyQuery.SbuUnit,
 		supplyQuery.DepreciationMonths, supplyQuery.AccountCode, supplyQuery.Status, supplyQuery.Updated,
-		supplyQuery.Version,
+		supplyQuery.Version, supplyQuery.Origin, supplyQuery.ProductionYieldPortions, supplyQuery.ProductionSupplies,
+		supplyQuery.ProductionExtraCostPerUnit, supplyQuery.ProductionStandardCost, supplyQuery.ProductionLabor,
+		supplyQuery.TracksLots, supplyQuery.ShelfLifeDays, supplyQuery.QualityHoldOnEntry,
 	)
 	supplyQuery.Delta(req.GetDeltaCursor(), types.ProductStatusSupply)
 
@@ -59,6 +62,18 @@ type SupplyMaterialPayload struct {
 	// recipe can consume a fraction of the supply. Same refinement-only rule as a product.
 	SbuQuantity int16  `cb:"14"`
 	SbuUnit     string `cb:"15"`
+	// Origin = ProductOriginMade makes the supply semi-finished (docs/MANUFACTURING_PLAN.md §2.1): the
+	// company makes it with the recipe below, and its stock account is 231 by that origin. 0 otherwise.
+	Origin                     int8                     `cb:"16"`
+	ProductionYieldPortions    int16                    `cb:"17"`
+	ProductionSupplies         []types.ProductionSupply `cb:"18"`
+	ProductionExtraCostPerUnit int32                    `cb:"19"`
+	ProductionStandardCost     int32                    `cb:"20"`
+	ProductionLabor            []types.ProductionLabor  `cb:"21"`
+	// The lot policy, as on a product (docs/MANUFACTURING_PLAN.md §10).
+	TracksLots         bool  `cb:"22"`
+	ShelfLifeDays      int16 `cb:"23"`
+	QualityHoldOnEntry bool  `cb:"24"`
 }
 
 // supplyMaterialIDMapping is the shape the frontend GetHandler.postAndSync expects back: for
@@ -69,10 +84,11 @@ type supplyMaterialIDMapping struct {
 	TempID int32 `cb:"2"`
 }
 
-// validateSupplySubUnitDivisors applies the product divisor rules to supplies: a valid, named
-// divisor, refined only to a multiple of the stored one, since the supply's stock and the recipes
-// that consume it are expressed in it.
-func validateSupplySubUnitDivisors(companyID int32, supplyProducts []types.Product) error {
+// validateStoredSupplyChanges checks the edit of stored supplies. The divisor follows the product
+// rules: a valid, named divisor, refined only to a multiple of the stored one, since the supply's
+// stock and the recipes that consume it are expressed in it. The origin may not change while the
+// supply has stock: its stock account would move between 231 (semi-finished) and its purchase one.
+func validateStoredSupplyChanges(companyID int32, supplyProducts []types.Product) error {
 	storedIDs := core.SliceSet[int32]{}
 	for _, supply := range supplyProducts {
 		storedIDs.AddIf(supply.ID)
@@ -81,7 +97,7 @@ func validateSupplySubUnitDivisors(companyID int32, supplyProducts []types.Produ
 	if !storedIDs.IsEmpty() {
 		storedSupplies := []types.Product{}
 		query := db.Query(&storedSupplies)
-		query.Select(query.ID, query.SbuQuantity).CompanyID.Equals(companyID).ID.In(storedIDs.Values...)
+		query.Select(query.ID, query.Name, query.SbuQuantity, query.Origin).CompanyID.Equals(companyID).ID.In(storedIDs.Values...)
 		if err := query.Exec(); err != nil {
 			return core.Err("Error al obtener los insumos guardados:", err)
 		}
@@ -89,7 +105,23 @@ func validateSupplySubUnitDivisors(companyID int32, supplyProducts []types.Produ
 			storedByID[stored.ID] = stored
 		}
 	}
-	return validateProductSubUnitDivisors(supplyProducts, storedByID)
+	if err := validateProductSubUnitDivisors(supplyProducts, storedByID); err != nil {
+		return err
+	}
+	for _, supply := range supplyProducts {
+		stored, isStored := storedByID[supply.ID]
+		if !isStored || stored.Origin == supply.Origin {
+			continue
+		}
+		hasStock, err := productHasStock(companyID, stored)
+		if err != nil {
+			return err
+		}
+		if hasStock {
+			return core.Err(fmt.Sprintf(`"%s" tiene stock: no puede cambiar entre semielaborado y comprado mientras lo tenga.`, stored.Name))
+		}
+	}
+	return nil
 }
 
 // PostSupplyMaterial upserts a batch of supplies as Product rows with Status = 2, then writes
@@ -128,12 +160,32 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 		if supplyPayload.DepreciationMonths < 0 || supplyPayload.DepreciationMonths > 1200 {
 			return req.MakeErr("Los meses de depreciación deben estar entre 0 y 1200.")
 		}
-
-		if supplyPayload.AccountCode == 0 {
-			supplyPayload.AccountCode = accounting.DefaultSupplyAccountCode(supplyPayload.DepreciationMonths)
+		if supplyPayload.ShelfLifeDays < 0 {
+			return req.MakeErr("La vida útil del insumo no puede ser negativa.")
 		}
-		if accountError := accounting.ValidatePCGEAccount(accounting.PCGEKindSupply, supplyPayload.AccountCode); accountError != nil {
-			return req.MakeErr(accountError)
+
+		isSemiFinished := supplyPayload.Origin == types.ProductOriginMade
+		if supplyPayload.Origin != 0 && !isSemiFinished {
+			return req.MakeErr(fmt.Sprintf(`Insumo "%s": el origen %v no es válido.`, supplyPayload.Name, supplyPayload.Origin))
+		}
+		if isSemiFinished {
+			// Made, not bought: its accounts follow from the origin (231 / 713), and it is an
+			// inventory item, never an asset.
+			if supplyPayload.DepreciationMonths != 0 {
+				return req.MakeErr(fmt.Sprintf(`Insumo "%s": un semielaborado no se deprecia.`, supplyPayload.Name))
+			}
+			supplyPayload.AccountCode = 0
+		} else {
+			// Only a semi-finished supply has a recipe.
+			supplyPayload.ProductionYieldPortions, supplyPayload.ProductionSupplies = 0, nil
+			supplyPayload.ProductionExtraCostPerUnit, supplyPayload.ProductionStandardCost = 0, 0
+			supplyPayload.ProductionLabor = nil
+			if supplyPayload.AccountCode == 0 {
+				supplyPayload.AccountCode = accounting.DefaultSupplyAccountCode(supplyPayload.DepreciationMonths)
+			}
+			if accountError := accounting.ValidatePCGEAccount(accounting.PCGEKindSupply, supplyPayload.AccountCode); accountError != nil {
+				return req.MakeErr(accountError)
+			}
 		}
 
 		supplyPayload.ProviderSupply = logistics.SanitizeProviderSupplyRows(supplyPayload.ProviderSupply)
@@ -156,6 +208,16 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 			SbuUnit:            supplyPayload.SbuUnit,
 			DepreciationMonths: supplyPayload.DepreciationMonths,
 			AccountCode:        supplyPayload.AccountCode,
+			Origin:             supplyPayload.Origin,
+			// The recipe: zeroed above unless the supply is semi-finished.
+			ProductionYieldPortions:    supplyPayload.ProductionYieldPortions,
+			ProductionSupplies:         supplyPayload.ProductionSupplies,
+			ProductionExtraCostPerUnit: supplyPayload.ProductionExtraCostPerUnit,
+			ProductionStandardCost:     supplyPayload.ProductionStandardCost,
+			ProductionLabor:            supplyPayload.ProductionLabor,
+			TracksLots:                 supplyPayload.TracksLots,
+			ShelfLifeDays:              supplyPayload.ShelfLifeDays,
+			QualityHoldOnEntry:         supplyPayload.QualityHoldOnEntry,
 			// Deleting is only meaningful for a row that already exists; a new record with no
 			// ss in the payload must not be born as a tombstone.
 			Status:    core.If(supplyPayload.Status == 0 && supplyPayload.ID > 0, int8(0), types.ProductStatusSupply),
@@ -168,8 +230,11 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	if divisorError := validateSupplySubUnitDivisors(req.User.CompanyID, supplyProducts); divisorError != nil {
-		return req.MakeErr(divisorError)
+	if storedError := validateStoredSupplyChanges(req.User.CompanyID, supplyProducts); storedError != nil {
+		return req.MakeErr(storedError)
+	}
+	if productionError := validateProductsProduction(req.User.CompanyID, supplyProducts); productionError != nil {
+		return req.MakeErr(productionError)
 	}
 
 	// The merge writes BrandName, the brand half of the product text index.
@@ -184,15 +249,15 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 	productTable := db.TableOf[types.Product]()
 	// Merge resolves insert vs. update per key. The excluded columns are the storefront and
 	// stock-derived ones a supply never sets — leaving them out stops a save from blanking
-	// values the stock engine maintains — and the recipe columns, which only a made product has.
+	// values the stock engine maintains. The recipe columns are written: a semi-finished supply
+	// sends its recipe, any other supply clears it.
 	mergeError := db.Merge(&supplyProducts,
 		db.Cols(
 			productTable.Stock, productTable.ReservedStock, productTable.StockStatus,
 			productTable.CategoriesWithStock, productTable.Created, productTable.CreatedBy,
 			productTable.ImageMain, productTable.ImageIDs, productTable.ImageDescriptions,
 			productTable.Presentations, productTable.Properties, productTable.ContentHTML,
-			productTable.CategoryIDs, productTable.ProductionYieldPortions, productTable.ProductionSupplies,
-			productTable.ProductionExtraCostPerUnit, productTable.ProductionStandardCost,
+			productTable.CategoryIDs,
 		),
 		func(previousProduct, currentProduct *types.Product) bool {
 			currentProduct.CompanyID = req.User.CompanyID

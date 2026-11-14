@@ -194,6 +194,9 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		if e.WebExtraStock < 0 {
 			return req.MakeErr(fmt.Sprintf(`La sobreventa permitida del producto "%s" no puede ser negativa.`, e.Name))
 		}
+		if e.ShelfLifeDays < 0 {
+			return req.MakeErr(fmt.Sprintf(`La vida útil del producto "%s" no puede ser negativa.`, e.Name))
+		}
 		e.SelfParse()
 		if previousProduct, duplicate := nameHashToName[e.NameHash]; duplicate {
 			return req.MakeErr(fmt.Sprintf("Hay nombres duplicados en la solicitud: %s y %s", previousProduct.Name, e.Name))
@@ -459,27 +462,33 @@ func validateSubUnitDivisorRange(product *types.Product) error {
 	return nil
 }
 
-// validateProductsProduction checks every recipe of the payload against the company's supplies
-// (docs/PRODUCTION_PLAN.md §2.2): it reads the supplies the recipes name, once for the whole batch.
+// validateProductsProduction checks every recipe of the payload against the company's supplies and
+// labor types (docs/MANUFACTURING_PLAN.md §2.2). Products and semi-finished supplies share it.
 func validateProductsProduction(companyID int32, productos []types.Product) error {
-	supplyIDs := core.SliceSet[int32]{}
+	recipeSupplyIDs := core.SliceSet[int32]{}
+	laborTypeIDs := core.SliceSet[int32]{}
 	for _, product := range productos {
 		for _, recipeSupply := range product.ProductionSupplies {
-			supplyIDs.AddIf(recipeSupply.SupplyID)
+			recipeSupplyIDs.AddIf(recipeSupply.SupplyID)
+		}
+		for _, recipeLabor := range product.ProductionLabor {
+			laborTypeIDs.AddIf(recipeLabor.LaborTypeID)
 		}
 	}
-	suppliesByID := map[int32]types.Product{}
-	if !supplyIDs.IsEmpty() {
-		supplies := []types.Product{}
-		query := db.Query(&supplies)
-		query.Select(query.ID, query.Name, query.Status, query.SbuQuantity, query.AccountCode).
-			CompanyID.Equals(companyID).
-			ID.In(supplyIDs.Values...)
+	suppliesByID, err := readRecipeSupplyGraph(companyID, recipeSupplyIDs.Values)
+	if err != nil {
+		return err
+	}
+	laborTypesByID := map[int32]types.ProductionLaborType{}
+	if !laborTypeIDs.IsEmpty() {
+		laborTypes := []types.ProductionLaborType{}
+		query := db.Query(&laborTypes)
+		query.Select(query.ID, query.Name, query.Status).CompanyID.Equals(companyID).ID.In(laborTypeIDs.Values...)
 		if err := query.Exec(); err != nil {
-			return core.Err("Error al obtener los insumos de la receta:", err)
+			return core.Err("Error al obtener los tipos de trabajo de la receta:", err)
 		}
-		for _, supply := range supplies {
-			suppliesByID[supply.ID] = supply
+		for _, laborType := range laborTypes {
+			laborTypesByID[laborType.ID] = laborType
 		}
 	}
 	for i := range productos {
@@ -487,11 +496,44 @@ func validateProductsProduction(companyID int32, productos []types.Product) erro
 		if productos[i].Status == 0 {
 			continue
 		}
-		if err := types.ValidateProductProduction(&productos[i], suppliesByID); err != nil {
+		if err := types.ValidateProductProduction(&productos[i], suppliesByID, laborTypesByID); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// readRecipeSupplyGraph reads the supplies a set of recipes names and, level by level, the supplies
+// of the semi-finished ones among them, so the validation can walk the whole recipe tree. One level
+// past MaxRecipeDepth is read, enough to tell a recipe that goes too deep.
+func readRecipeSupplyGraph(companyID int32, supplyIDs []int32) (map[int32]types.Product, error) {
+	suppliesByID := map[int32]types.Product{}
+	pendingIDs := supplyIDs
+	for level := 0; len(pendingIDs) > 0 && level <= types.MaxRecipeDepth+1; level++ {
+		supplies := []types.Product{}
+		query := db.Query(&supplies)
+		query.Select(query.ID, query.Name, query.Status, query.Origin, query.SbuQuantity, query.AccountCode,
+			query.ProductionSupplies).
+			CompanyID.Equals(companyID).
+			ID.In(pendingIDs...)
+		if err := query.Exec(); err != nil {
+			return nil, core.Err("Error al obtener los insumos de la receta:", err)
+		}
+		nextIDs := core.SliceSet[int32]{}
+		for _, supply := range supplies {
+			suppliesByID[supply.ID] = supply
+			if !supply.IsSemiFinished() {
+				continue
+			}
+			for _, recipeSupply := range supply.ProductionSupplies {
+				if _, isRead := suppliesByID[recipeSupply.SupplyID]; !isRead {
+					nextIDs.AddIf(recipeSupply.SupplyID)
+				}
+			}
+		}
+		pendingIDs = nextIDs.Values
+	}
+	return suppliesByID, nil
 }
 
 func getProductBrandNames(companyID int32, productos []types.Product) (map[int32]string, error) {

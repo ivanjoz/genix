@@ -22,7 +22,7 @@ const partTimeDailyHoursLimit = 4
 type MonthlyPayslipInput struct {
 	Period    int16
 	Employee  Employee
-	Contracts []Contract // every version of the employee; the engine picks the one in force
+	Contracts []ContractAgreement // every version of the employee; the engine picks the one in force
 	// Records are the employee's active and settled records of every period (pending and cancelled
 	// ones never reach the engine): it reads the period's novedades, advances and loan installments,
 	// and the time off touching the month. Settled ones matter for the history: the vacation days
@@ -50,8 +50,8 @@ const (
 
 // FindContractInForce returns the contract version in force on a day: the latest ValidFrom not
 // after it, among the versions whose contract covers the day.
-func FindContractInForce(contracts []Contract, unixDay int16) (Contract, bool) {
-	var found Contract
+func FindContractInForce(contracts []ContractAgreement, unixDay int16) (ContractAgreement, bool) {
+	var found ContractAgreement
 	for _, contract := range contracts {
 		if contract.Status != StatusActive || contract.ValidFrom > unixDay || contract.StartDate > unixDay {
 			continue
@@ -177,7 +177,7 @@ func ProvisionBalances(history []Payslip) map[int32]int64 {
 
 // addPensionDeductions withholds the worker's pension contribution: ONP, or the AFP fund, the
 // premium (capped by the maximum insurable remuneration) and the flow commission.
-func (builder *payslipBuilder) addPensionDeductions(contract Contract, pensionBase int64, period int16, parameters *PayslipParameters) {
+func (builder *payslipBuilder) addPensionDeductions(contract ContractAgreement, pensionBase int64, period int16, parameters *PayslipParameters) {
 	parameters.PensionSystem = contract.PensionSystem
 	if pensionBase <= 0 {
 		return
@@ -210,7 +210,7 @@ func (builder *payslipBuilder) addPensionDeductions(contract Contract, pensionBa
 
 // addEssalud adds the employer's EsSalud on its base; with an EPS part of it goes to the EPS,
 // which invoices it apart.
-func (builder *payslipBuilder) addEssalud(contract Contract, essaludBase int64, parameters *PayslipParameters) {
+func (builder *payslipBuilder) addEssalud(contract ContractAgreement, essaludBase int64, parameters *PayslipParameters) {
 	essaludRate := builder.legalValue(LegalParamEssaludRate)
 	if contract.HasEPS {
 		essaludRate = builder.legalValue(LegalParamEssaludEpsRate)
@@ -220,7 +220,7 @@ func (builder *payslipBuilder) addEssalud(contract Contract, essaludBase int64, 
 }
 
 // gratiBonusRate is the bonificación extraordinaria rate: 9 %, or 6.75 % with an EPS.
-func (builder *payslipBuilder) gratiBonusRate(contract Contract) int64 {
+func (builder *payslipBuilder) gratiBonusRate(contract ContractAgreement) int64 {
 	if contract.HasEPS {
 		return builder.legalValue(LegalParamGratiBonusEpsRate)
 	}
@@ -349,7 +349,7 @@ func CalculateMonthlyPayslip(input MonthlyPayslipInput) (payslip Payslip, ok boo
 	salaryDays := max(employedDays-absenceDays-vacationDays, 0)
 	paidDays := salaryDays + vacationDays
 	builder.payslip.WorkedDays = int8(paidDays)
-	salary := int64(contract.MonthlySalary)
+	salary := int64(contract.PayAmount)
 	builder.addLegal(LegalBasicSalary, salary, 0, float32(salaryDays), salary*int64(salaryDays)/payrollMonthDays)
 	builder.addBenefit(LegalVacationPay, salary, 0, float32(vacationDays), salary*int64(vacationDays)/payrollMonthDays)
 
@@ -484,7 +484,7 @@ func (builder *payslipBuilder) familyAllowance(employee Employee, onDay int16, m
 }
 
 // annualVacationDays: 30 days a year, or the 6 of Convenio OIT 52 for a part-time worker.
-func annualVacationDays(contract Contract) int {
+func annualVacationDays(contract ContractAgreement) int {
 	if contract.DailyHours < partTimeDailyHoursLimit {
 		return 6
 	}

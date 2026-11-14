@@ -1,10 +1,13 @@
 import { GetHandler } from '#libs/ui-runtime.svelte.ts';
-import type { IProductSupplyProviderRow } from '#routes/logistics/purchase-management/supply-management.svelte.ts';
+import type { IProductSupplyProviderRow } from '#routes/logistics/purchase-management/supply-management.svelte.ts'
+import type { IProductionLabor, IProductionSupply } from '#services/production/products.svelte.ts';
 
 // A supply/material is a Product row with ss = 2. The catalog fields below mirror
 // businessTypes.Product; MinimunStock and ProviderSupply live in the separate
 // product_supply table and are merged in by the page from ProductSupplyService.
 export const SUPPLY_PRODUCT_STATUS = 2
+// A supply with this Origin is made by the company (the same value as a made product's).
+export const SUPPLY_ORIGIN_SEMI_FINISHED = 2
 
 export interface ISupplyMaterial {
   ID: number
@@ -25,6 +28,18 @@ export interface ISupplyMaterial {
   // so a recipe can consume a fraction of the supply. 0 or 1 = no sub-unit.
   SbuQuantity: number
   SbuUnit: string
+  // SUPPLY_ORIGIN_SEMI_FINISHED makes the supply semi-finished (docs/MANUFACTURING_PLAN.md §2.1): the
+  // company makes it with the recipe below, and its stock account is 231 by that origin. 0 otherwise.
+  Origin: number
+  ProductionYieldPortions: number
+  ProductionSupplies: IProductionSupply[]
+  ProductionExtraCostPerUnit: number
+  ProductionStandardCost: number
+  ProductionLabor: IProductionLabor[]
+  // The lot policy (docs/MANUFACTURING_PLAN.md §10): a supply that tracks lots is received with one.
+  TracksLots: boolean
+  ShelfLifeDays: number
+  QualityHoldOnEntry: boolean
   // Merged from product_supply for the form; not part of the Product row itself.
   MinimunStock: number
   ProviderSupply: IProductSupplyProviderRow[]
@@ -37,7 +52,9 @@ export class SupplyMaterialService extends GetHandler<ISupplyMaterial> {
   // Bump `ver` whenever the ISupplyMaterial shape changes so clients drop their stale snapshot.
   // ver 4: supplies became Product rows (ss=2) and gained DepreciationMonths.
   // ver 5: SbuQuantity / SbuUnit.
-  useCache = { min: 5, ver: 5 }
+  // ver 6: Origin and the Production* recipe of a semi-finished supply.
+  // ver 7: the lot policy (TracksLots, ShelfLifeDays, QualityHoldOnEntry).
+  useCache = { min: 5, ver: 7 }
   prependOnSave = true
 
   makeName(record: Partial<ISupplyMaterial>) {

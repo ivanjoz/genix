@@ -58,7 +58,7 @@ icon = "icon-[fa--cubes]"
 [[modules.menus]]
 name = "Production|Producción"
 min_name = "PRD"
-routes = "production/merchandise, production/products, production/supplies-materials, production/daily-close"
+routes = "production/orders, production/requirements, production/templates, production/merchandise, production/products, production/supplies-materials, production/daily-close, production/labor-hours, production/settings"
 
 [[modules.menus]]
 name = "Warehouse|Almacén"

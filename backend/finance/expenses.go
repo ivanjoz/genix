@@ -7,6 +7,7 @@ import (
 	"app/finance/types"
 	production "app/production/types"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -100,6 +101,27 @@ func GetExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(&response)
 }
 
+// validateExpenseProductionOrder refuses a link to anything but one of the company's subcontracted
+// production orders made by the expense's own supplier (docs/MANUFACTURING_PLAN.md §8).
+func validateExpenseProductionOrder(companyID int32, expense types.Expense) error {
+	if expense.Type != types.ExpenseTypeSimple {
+		return core.Err("Solo un gasto simple se vincula a una orden de producción.")
+	}
+	orders := []production.ProductionOrder{}
+	query := db.Query(&orders)
+	query.Select(query.ID, query.Kind, query.SubcontractorID, query.Status).CompanyID.Equals(companyID).ID.Equals(expense.ProductionOrderID)
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al obtener la orden de producción:", err)
+	}
+	if len(orders) == 0 || orders[0].Kind != production.ProductionOrderKindManual || orders[0].Status == production.ProductionOrderStatusAnnulled {
+		return core.Err(fmt.Sprintf("La orden de producción %v no existe o está anulada.", expense.ProductionOrderID))
+	}
+	if orders[0].SubcontractorID == 0 || orders[0].SubcontractorID != expense.SupplierID {
+		return core.Err("La orden de producción no es de maquila de este proveedor.")
+	}
+	return nil
+}
+
 func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	body := types.Expense{}
 	if err := json.Unmarshal([]byte(*req.Body), &body); err != nil {
@@ -122,6 +144,11 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	// An asset link only belongs on the types the server itself writes.
 	body.AssetID = 0
+	if body.ProductionOrderID != 0 {
+		if err := validateExpenseProductionOrder(req.User.CompanyID, body); err != nil {
+			return req.MakeErr(err)
+		}
+	}
 
 	if err := body.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
 		return req.MakeErr(err)

@@ -35,6 +35,9 @@ func TestRefineStockDivisorConvertsDetailsAtomically(t *testing.T) {
 		SubQuantity:       4,
 		DetailQuantity:    3,
 		DetailSubQuantity: 5,
+		// The first detail's lot is in quarantine.
+		BlockedQuantity:    2,
+		BlockedSubQuantity: 3,
 	}
 	details := []*ProductStockDetail{
 		{ProductStockID: 21, Quantity: 2, SubQuantity: 3},
@@ -54,6 +57,9 @@ func TestRefineStockDivisorConvertsDetailsAtomically(t *testing.T) {
 	}
 	if stock.DetailQuantity != 3 || stock.DetailSubQuantity != 10 {
 		t.Fatalf("expected detail bucket {3,10}, got {%v,%v}", stock.DetailQuantity, stock.DetailSubQuantity)
+	}
+	if stock.BlockedQuantity != 2 || stock.BlockedSubQuantity != 6 {
+		t.Fatalf("expected blocked {2,6}, got {%v,%v}", stock.BlockedQuantity, stock.BlockedSubQuantity)
 	}
 
 	expectedDetails := []core.Quantity{{Units: 2, Sub: 6}, {Units: 1, Sub: 4}}

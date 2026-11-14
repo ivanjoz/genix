@@ -143,6 +143,9 @@ type Expense struct {
 	// SameDayCashBankID is the cash bank of the one payment that settled the whole expense on its
 	// AccountingDate; 0 when no payment did. See SameDaySettlement.
 	SameDayCashBankID int32 `cb:"38"`
+	// ProductionOrderID is the subcontracted production order a workshop's invoice is for
+	// (docs/MANUFACTURING_PLAN.md §8, M19): the order compares what was agreed with what was invoiced.
+	ProductionOrderID int32 `cb:"39"`
 }
 
 // AccountingDate is the day the expense is booked on: a depreciation row (no comprobante, no
@@ -200,6 +203,7 @@ type ExpenseTable struct {
 	Period             db.Col[*ExpenseTable, int16]
 	// SameDayCashBankID is the cash bank of the payment that settled the expense on its AccountingDate.
 	SameDayCashBankID db.Col[*ExpenseTable, int32]
+	ProductionOrderID db.Col[*ExpenseTable, int32]
 }
 
 func (e ExpenseTable) GetSchema() db.TableSchema {

@@ -56,7 +56,7 @@ func GetDiningMenu(req *core.HandlerArgs) core.HandlerResponse {
 	// counts as missing.
 	stockRows := []logistics.ProductStock{}
 	query := db.Query(&stockRows)
-	query.Select(query.ProductID, query.PresentationID, query.Quantity, query.DetailQuantity,
+	query.Select(query.ProductID, query.PresentationID, query.Quantity, query.DetailQuantity, query.BlockedQuantity,
 		query.PendingDeliveryStore, query.PendingDeliveryOnline).
 		CompanyID.Equals(companyID).WarehouseID.Equals(layout.WarehouseID).Status.Equals(1)
 	if err := query.Exec(); err != nil {

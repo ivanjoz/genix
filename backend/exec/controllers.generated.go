@@ -74,7 +74,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[financeTypes.ExpenseScheduled](),
 		db.MakeController[hrTypes.AfpRate](),
 		db.MakeController[hrTypes.Concept](),
-		db.MakeController[hrTypes.Contract](),
+		db.MakeController[hrTypes.ContractAgreement](),
 		db.MakeController[hrTypes.Department](),
 		db.MakeController[hrTypes.Dependent](),
 		db.MakeController[hrTypes.Employee](),
@@ -95,7 +95,11 @@ func MakeControllers() []db.Controller {
 		db.MakeController[logisticsTypes.PurchaseOrder](),
 		db.MakeController[logisticsTypes.WarehouseProductMovement](),
 		db.MakeController[productionTypes.Product](),
-		db.MakeController[productionTypes.ProductionClose](),
+		db.MakeController[productionTypes.ProductionLaborEntry](),
+		db.MakeController[productionTypes.ProductionLaborType](),
+		db.MakeController[productionTypes.ProductionOrder](),
+		db.MakeController[productionTypes.ProductionStage](),
+		db.MakeController[productionTypes.ProductionTemplate](),
 		db.MakeController[projectsTypes.Document](),
 		db.MakeController[projectsTypes.Epic](),
 		db.MakeController[projectsTypes.Project](),
@@ -174,7 +178,7 @@ func init() {
 	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
 	db.RegisterTableFactory("hr_afp_rates", func() db.Table { return db.MakeTable[hrTypes.AfpRate]() })
 	db.RegisterTableFactory("hr_concepts", func() db.Table { return db.MakeTable[hrTypes.Concept]() })
-	db.RegisterTableFactory("hr_contracts", func() db.Table { return db.MakeTable[hrTypes.Contract]() })
+	db.RegisterTableFactory("hr_contracts_agreements", func() db.Table { return db.MakeTable[hrTypes.ContractAgreement]() })
 	db.RegisterTableFactory("hr_departments", func() db.Table { return db.MakeTable[hrTypes.Department]() })
 	db.RegisterTableFactory("hr_employee_dependents", func() db.Table { return db.MakeTable[hrTypes.Dependent]() })
 	db.RegisterTableFactory("hr_employees", func() db.Table { return db.MakeTable[hrTypes.Employee]() })
@@ -195,7 +199,11 @@ func init() {
 	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[productionTypes.Product]() })
-	db.RegisterTableFactory("production_close", func() db.Table { return db.MakeTable[productionTypes.ProductionClose]() })
+	db.RegisterTableFactory("production_labor_entry", func() db.Table { return db.MakeTable[productionTypes.ProductionLaborEntry]() })
+	db.RegisterTableFactory("production_labor_type", func() db.Table { return db.MakeTable[productionTypes.ProductionLaborType]() })
+	db.RegisterTableFactory("production_order", func() db.Table { return db.MakeTable[productionTypes.ProductionOrder]() })
+	db.RegisterTableFactory("production_stage", func() db.Table { return db.MakeTable[productionTypes.ProductionStage]() })
+	db.RegisterTableFactory("production_template", func() db.Table { return db.MakeTable[productionTypes.ProductionTemplate]() })
 	db.RegisterTableFactory("projects_document", func() db.Table { return db.MakeTable[projectsTypes.Document]() })
 	db.RegisterTableFactory("projects_epic", func() db.Table { return db.MakeTable[projectsTypes.Epic]() })
 	db.RegisterTableFactory("projects_project", func() db.Table { return db.MakeTable[projectsTypes.Project]() })

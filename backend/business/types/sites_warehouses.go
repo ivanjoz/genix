@@ -22,6 +22,10 @@ type Warehouse struct {
 	City      string  `cb:"14"`
 	// ExcludeFromOnlineSales keeps this warehouse's stock out of what the web store can sell.
 	ExcludeFromOnlineSales bool `cb:"15"`
+	// SubcontractorID makes this "material at workshop X" (docs/MANUFACTURING_PLAN.md §8): the warehouse
+	// a subcontracted production order ships its supplies to and consumes them from. A provider
+	// (client_provider Type 2) has at most one. Its stock is never sold or shown on the web.
+	SubcontractorID int32 `cb:"16"`
 }
 
 // IsOpenToOnlineSales: an active warehouse whose stock the web store can sell.
@@ -68,6 +72,7 @@ type WarehouseTable struct {
 	Created                db.Col[*WarehouseTable, int32]
 	CreatedBy              db.Col[*WarehouseTable, int32]
 	ExcludeFromOnlineSales db.Col[*WarehouseTable, bool]
+	SubcontractorID        db.Col[*WarehouseTable, int32]
 }
 
 func (e WarehouseTable) GetSchema() db.TableSchema {

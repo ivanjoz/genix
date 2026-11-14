@@ -21,7 +21,7 @@ import (
 type BenefitPayslipInput struct {
 	Run       PayrollRun
 	Employee  Employee
-	Contracts []Contract
+	Contracts []ContractAgreement
 	// History is every closed or paid payslip of the employee.
 	History []Payslip
 	// Records are the employee's active and settled records of every period (see MonthlyPayslipInput).
@@ -174,7 +174,7 @@ func gratificacionReceived(history []Payslip, periods []int16) int64 {
 
 // benefitStart prepares the builder of a benefit payslip: the contract in force on onDay, and the
 // minimum wage and tax unit of that day. ok is false when the payslip cannot be calculated.
-func benefitStart(input BenefitPayslipInput, onDay int16) (*payslipBuilder, Contract, PayslipParameters, bool) {
+func benefitStart(input BenefitPayslipInput, onDay int16) (*payslipBuilder, ContractAgreement, PayslipParameters, bool) {
 	builder := newPayslipBuilder(input.Employee, input.Run.Period, input.Legal, onDay, input.History)
 	contract, found := FindContractInForce(input.Contracts, onDay)
 	if !found {
@@ -193,8 +193,8 @@ func benefitStart(input BenefitPayslipInput, onDay int16) (*payslipBuilder, Cont
 
 // computableRemuneration is salary + asignación familiar on onDay + the regular variable earnings
 // of the reference periods. It adds no line: the benefit lines carry it as their base.
-func computableRemuneration(input BenefitPayslipInput, builder *payslipBuilder, contract Contract, onDay int16, referencePeriods []int16, minimumWage int64) int64 {
-	computable := int64(contract.MonthlySalary) + regularVariableEarnings(input.History, referencePeriods)
+func computableRemuneration(input BenefitPayslipInput, builder *payslipBuilder, contract ContractAgreement, onDay int16, referencePeriods []int16, minimumWage int64) int64 {
+	computable := int64(contract.PayAmount) + regularVariableEarnings(input.History, referencePeriods)
 	if input.Employee.HasFamilyAllowanceOn(onDay) {
 		computable += roundRate(minimumWage, builder.legalValue(LegalParamFamilyAllowanceRate))
 	}
@@ -396,7 +396,7 @@ func CalculateExtraordinaryPayment(input BenefitPayslipInput) (Payslip, bool) {
 	builder.addPensionDeductions(contract, pensionBase, input.Run.Period, &parameters)
 	taxedIncome := builder.earningsWhere(func(treatment ConceptTreatment) bool { return treatment.IncomeTax != IncomeTaxNone }, input.Concepts)
 	builder.addLegal(LegalIncomeTax5ta, taxedIncome, 0, 0, extraordinaryIncomeTax(input.Run.Period, input.History,
-		int64(parameters.TaxUnit), int64(contract.MonthlySalary), builder.gratiBonusRate(contract), taxedIncome))
+		int64(parameters.TaxUnit), int64(contract.PayAmount), builder.gratiBonusRate(contract), taxedIncome))
 	if essaludBase := builder.earningsWhere(func(treatment ConceptTreatment) bool { return treatment.AffectsEssalud }, input.Concepts); essaludBase > 0 {
 		builder.addEssalud(contract, essaludBase, &parameters)
 	}
@@ -438,7 +438,7 @@ func DistributeProfitSharing(pool int64, bases []ProfitShareBasis) (shares, capE
 }
 
 // ProfitShareBasisOf reads one worker's basis from his payslips of the fiscal year.
-func ProfitShareBasisOf(employeeID int32, history []Payslip, fiscalYear int16, contracts []Contract, yearLastDay int16) ProfitShareBasis {
+func ProfitShareBasisOf(employeeID int32, history []Payslip, fiscalYear int16, contracts []ContractAgreement, yearLastDay int16) ProfitShareBasis {
 	basis := ProfitShareBasis{EmployeeID: employeeID}
 	firstPeriod := (fiscalYear%100)*100 + 1
 	for _, payslip := range history {
@@ -453,13 +453,13 @@ func ProfitShareBasisOf(employeeID int32, history []Payslip, fiscalYear int16, c
 		}
 	}
 	// The cap reads the last contract of the year (or of the employment, if it ended earlier).
-	var lastContract Contract
+	var lastContract ContractAgreement
 	for _, contract := range contracts {
 		if contract.Status == StatusActive && contract.ValidFrom <= yearLastDay && contract.ValidFrom >= lastContract.ValidFrom {
 			lastContract = contract
 		}
 	}
-	basis.Cap = 18 * int64(lastContract.MonthlySalary)
+	basis.Cap = 18 * int64(lastContract.PayAmount)
 	return basis
 }
 
@@ -488,7 +488,7 @@ func CalculateProfitSharing(input BenefitPayslipInput) (Payslip, bool) {
 	// A current worker's projection uses his salary; a former worker has no more ordinary income.
 	var fixedMonthly int64
 	if contract, inForce := FindContractInForce(input.Contracts, input.Run.PayDate); inForce && input.Employee.TerminationDate == 0 {
-		fixedMonthly = int64(contract.MonthlySalary)
+		fixedMonthly = int64(contract.PayAmount)
 		builder.payslip.ContractID = contract.ID
 	}
 	builder.addLegal(LegalIncomeTax5ta, input.ProfitShare, 0, 0, extraordinaryIncomeTax(input.Run.Period, input.History,

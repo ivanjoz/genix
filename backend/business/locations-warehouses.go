@@ -4,6 +4,7 @@ import (
 	"app/business/types"
 	"app/cloud"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	"encoding/json"
 	"fmt"
@@ -160,6 +161,34 @@ func GetCountryCities(req *core.HandlerArgs) core.HandlerResponse {
 	return core.MakeResponse(req, &paisCiudades)
 }
 
+// validateWorkshopWarehouse refuses a workshop warehouse whose subcontractor is not one of the
+// company's providers, or who already has another warehouse: a subcontracted order finds its
+// workshop's warehouse by the provider alone.
+func validateWorkshopWarehouse(warehouse types.Warehouse) error {
+	providers := []crm.ClientProvider{}
+	providerQuery := db.Query(&providers)
+	providerQuery.Select(providerQuery.ID, providerQuery.Type, providerQuery.Status).
+		CompanyID.Equals(warehouse.CompanyID).ID.Equals(warehouse.SubcontractorID)
+	if err := providerQuery.Exec(); err != nil {
+		return core.Err("Error al obtener el taller:", err)
+	}
+	if len(providers) == 0 || providers[0].Type != crm.ClientProviderTypeProvider || providers[0].Status == 0 {
+		return core.Err("El taller del almacén no es un proveedor activo.")
+	}
+	warehouses := []types.Warehouse{}
+	warehouseQuery := db.Query(&warehouses)
+	warehouseQuery.Select(warehouseQuery.ID, warehouseQuery.Status, warehouseQuery.SubcontractorID).CompanyID.Equals(warehouse.CompanyID)
+	if err := warehouseQuery.Exec(); err != nil {
+		return core.Err("Error al obtener los almacenes:", err)
+	}
+	for _, other := range warehouses {
+		if other.ID != warehouse.ID && other.Status > 0 && other.SubcontractorID == warehouse.SubcontractorID {
+			return core.Err(fmt.Sprintf("El taller ya tiene el almacén %v.", other.ID))
+		}
+	}
+	return nil
+}
+
 func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 
 	body := types.Warehouse{}
@@ -181,6 +210,13 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	body.CompanyID = req.User.CompanyID
+	if body.SubcontractorID != 0 {
+		if err := validateWorkshopWarehouse(body); err != nil {
+			return req.MakeErr(err)
+		}
+		// A workshop's material is never for sale.
+		body.ExcludeFromOnlineSales = true
+	}
 	body.Updated = core.SUnixTime()
 	body.Created = core.SUnixTime()
 	body.CreatedBy = req.User.ID

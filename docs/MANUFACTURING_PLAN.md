@@ -1,6 +1,6 @@
 # Manufacturing Plan: templates, production orders, labor, subcontracting, lots
 
-Status: **approved, not implemented** (2026-11-13). Every decision is settled (§14).
+Status: **implemented, not yet verified live** (2026-11-14). Steps 1–9 are in code with unit tests; the end-to-end run on the dev database is pending. Every decision is settled (§14); M32–M35 were added during the implementation.
 
 This is the general production module for small manufacturers: shoes, garments, food, furniture.
 It **shares its base with the restaurant daily close** of `docs/PRODUCTION_PLAN.md`. That close is
@@ -49,6 +49,10 @@ Running example: a shoe workshop.
 | M29 | A non-payroll worker's hourly cost comes from **their own agreement**, kept in the employee form. A worker with none falls back to the **labor type's rate**. |
 | M30 | Payroll contracts and non-payroll agreements are **one table, `hr_contracts_agreements`** (the former `hr_contracts`, ID 73). |
 | M31 | The recipe is **flat `Production*` columns on `Product`**, not a nested `ProductProduction` struct. The daily close work does the flattening (cb 48–51, cb 47 retired). |
+| M32 | Table IDs are **99–103** and access IDs **64–66**: 97/98 and accesses 61–63 were taken by the dining module. |
+| M33 | The **daily close applies the recipe's waste** too (a 0-waste recipe consumes as before). It adds the recipe's labor at standard (M26) from step 2, with the shared receipt function. |
+| M34 | Receipts split each supply's consumed value among the order's products **by recipe share** (labor by each product's recipe labor cost). **Over-production is allowed**; an order finishes on its own when every line has its planned good units. |
+| M35 | A subcontracted order's `SuppliesWarehouseID` **stays the company warehouse**, where release reserves. The workshop's warehouse is the one warehouse with its `SubcontractorID`. Each order supply tracks `AtWorkshop` (sent − returned − consumed), reserved on the workshop's row; receipts consume at the workshop. |
 
 ---
 
@@ -65,7 +69,7 @@ Daily close ──────────────────────�
 
 | Status | Value | Meaning |
 |---|---|---|
-| Anulada | 0 | Annulled. Allowed only with no receipt and no material at a workshop. Its reservations are released. |
+| Anulada | 0 | Annulled. Allowed only with no receipt, no material at a workshop and no hours still logged (an order in progress through hours alone qualifies once they are deleted). Its reservations are released. |
 | Borrador | 1 | Editable. Nothing is planned or reserved. |
 | Liberada | 2 | The recipe is exploded and frozen on the order (§4.2), and its supplies are **reserved** (§5). |
 | En proceso | 3 | Set by the first receipt, material shipment or labor entry. |
@@ -144,7 +148,7 @@ It is `ProductionStandardCost` when that is > 0. Otherwise:
 
 ## 3. One table for every production: `production_order` (M4)
 
-`backend/production/types/production_order.go`, table ID **97**. It replaces `production_close`
+`backend/production/types/production_order.go`, table ID **101**. It replaces `production_close`
 (ID 96, deleted and retired).
 
 | Column | Type | Notes |
@@ -155,7 +159,7 @@ It is `ProductionStandardCost` when that is > 0. Otherwise:
 | TemplateID | int32 | the template it came from, 0 if none |
 | Series | int32 | how many series of the template (M16), 0 if not from a template |
 | WarehouseID | int32 | where the finished products enter (the close: where the sales left) |
-| SuppliesWarehouseID | int32 | where the supplies come from. A subcontracted order uses the **workshop's warehouse** (§8). |
+| SuppliesWarehouseID | int32 | the company warehouse the supplies are reserved in and come from. A subcontracted order sends them on to its workshop (§8, M35). |
 | SubcontractorID | int32 | `client_provider` (Type 2), 0 = made in-house (§8) |
 | SubcontractPricePerUnit | int32 | PEN cents net of IGV, agreed with the workshop |
 | Date | int16 | creation (UnixDay). The close: the day closed. |
@@ -227,7 +231,7 @@ sharing of short supplies is specific to it. Its write changes:
 
 ## 4. Templates (M1, M2, M16)
 
-### 4.1 Table `production_template` (ID **98**)
+### 4.1 Table `production_template` (ID **102**)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -406,7 +410,7 @@ workshop works the same way.
 | Piece | Change |
 |---|---|
 | Workshop warehouse | `Warehouse` (`business/types/sites_warehouses.go`) gains `SubcontractorID int32`. A warehouse with it is "material at workshop X". It is excluded from sales and the web (`ExcludeFromOnlineSales` forced). |
-| The order | `SubcontractorID`, `SubcontractPricePerUnit`. `SuppliesWarehouseID` = that workshop's warehouse. |
+| The order | `SubcontractorID`, `SubcontractPricePerUnit`. `SuppliesWarehouseID` stays the company warehouse (M35); each supply tracks `AtWorkshop`. |
 | Sending material | "Enviar materiales" creates **type 17 movements**, a new type ("Traslado de producción", document `production_order`, two-leg with `DestWarehouseID`), from the company's warehouse to the workshop's. They default to `Planned − already at the workshop`. The reservation moves with them (§5). |
 | Returning leftovers | The same type 17, workshop → company warehouse. Allowed until completion. Completion warns if material is left at the workshop. |
 | Receipt | Consumes from the workshop warehouse and enters into the order's `WarehouseID`. `SubcontractValue = units × price`. |
@@ -428,7 +432,7 @@ Metadata, audit`. Delta cache.
 - The settings page shows the average real rate of the employees who logged that type last month,
   as a hint.
 
-### 9.2 Hours: table `production_labor_entry` (ID **100**)
+### 9.2 Hours: table `production_labor_entry` (ID **103**)
 
 | Column | Type | Notes |
 |---|---|---|
@@ -477,7 +481,7 @@ When the period's payroll is run, per employee:
 
 ```
 booked = Σ Amount of their entries in the Period
-actual = their Payslip.EmployerCost + Σ provision lines (Kind 4)
+actual = their Payslip.EmployerCost − Σ ProvisionedAmount (benefits paid from provisions) + Σ provision lines (Kind 4)
 excess = max(0, booked − actual)
 ```
 
@@ -508,7 +512,7 @@ Page `routes/production/labor-hours/`, per employee and month:
 
 ### 9.4 Stages and the board
 
-- Table `production_stage` (ID **101**): `CompanyID, ID, Name ("Corte", "Aparado", "Armado",
+- Table `production_stage` (ID **100**): `CompanyID, ID, Name ("Corte", "Aparado", "Armado",
   "Acabado"), Position int16, Status…`. Delta cache.
 - The orders page has a **"Tablero"** view built on genix-ui `Kanban.svelte` (as `crm/pipeline` uses
   it).
@@ -678,11 +682,11 @@ of order are booked once, here.
 
 | Route | Page | Access |
 |---|---|---|
-| `production/orders` | Órdenes de producción. **Lista** \| **Tablero** views. A detail Layer with tabs: Productos (size grid), Insumos, Mano de obra, Maquila, Ingresos, Trazabilidad, Resumen. | **61 "Órdenes de producción"** |
-| `production/requirements` | Necesidades de compra (MRP) | 61 |
-| `production/templates` | Plantillas de producción | **62 "Configuración de producción"** |
-| `production/settings` | Tipos de trabajo, Etapas (two tabs) | 62 |
-| `production/labor-hours` | Horas vs planilla | **63 "Costos de mano de obra"** |
+| `production/orders` | Órdenes de producción. **Lista** \| **Tablero** views. A detail Layer with tabs: Productos (size grid), Insumos, Mano de obra, Maquila, Ingresos, Trazabilidad, Resumen. | **64 "Órdenes de producción"** |
+| `production/requirements` | Necesidades de compra (MRP) | 64 |
+| `production/templates` | Plantillas de producción | **65 "Configuración de producción"** |
+| `production/settings` | Tipos de trabajo, Etapas (two tabs) | 65 |
+| `production/labor-hours` | Horas vs planilla | **66 "Costos de mano de obra"** |
 | `production/daily-close` | unchanged | 60 |
 
 - All three new accesses are in group 9 (Producción).

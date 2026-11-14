@@ -13,20 +13,22 @@
   import { tr } from '#core/store.svelte.ts'
   import { formatTime, todayUnixDay } from '#libs/helpers.ts'
   import { IDENTITY_DOC_OPTIONS } from '#services/crm/identity-doc.ts'
-  import type { ContractsService } from '#services/hr/contracts.svelte.ts'
+  import type { ContractsAgreementsService } from '#services/hr/contracts-agreements.svelte.ts'
   import { postEmployee, type EmployeesService, type IEmployee } from '#services/hr/employees.svelte.ts'
-  import { SEX_OPTIONS, TERMINATION_REASON_OPTIONS } from '#services/hr/hr-catalogs.ts'
+  import { ENGAGEMENT_TYPE_OPTIONS, PAY_DAY_OF_WEEK_OPTIONS, SEX_OPTIONS, TERMINATION_REASON_OPTIONS } from '#services/hr/hr-catalogs.ts'
   import type { OrganizationService } from '#services/hr/organization.svelte.ts'
-  import EmployeeContracts from './EmployeeContracts.svelte'
+  import EmployeeContractsAgreements from './EmployeeContractsAgreements.svelte'
   import EmployeeDependents from './EmployeeDependents.svelte'
   import EmployeeFixedConcepts from './EmployeeFixedConcepts.svelte'
-  import { EmployeeStatus, employeeFullName, hasFamilyAllowanceOn, isTerminated, makeEmptyEmployee } from './employees.ts'
+  import {
+    contractValidOn, EmployeeStatus, employeeFullName, hasFamilyAllowanceOn, isTerminated, makeEmptyEmployee,
+  } from './employees.ts'
 
   let { employees, organization, contracts }: {
     employees: EmployeesService
     organization: OrganizationService
     /** Undefined without the payroll access: the contracts tab is not offered. */
-    contracts?: ContractsService
+    contracts?: ContractsAgreementsService
   } = $props()
 
   const ui = useUI()
@@ -39,6 +41,8 @@
 
   let filterText = $state('')
   let showTerminated = $state(false)
+  /** 0 lists every engagement: the employees page shows everyone (plan §9.5). */
+  let engagementFilter = $state({ EngagementType: 0 })
   let employeeForm = $state(makeEmptyEmployee())
   let layerView = $state(VIEW_INFO)
 
@@ -46,10 +50,14 @@
     options.map((option) => ({ ...option, name: tr(option.name) }))
   const sexOptions = translateOptions(SEX_OPTIONS)
   const terminationReasonOptions = translateOptions(TERMINATION_REASON_OPTIONS)
+  const engagementTypeOptions = translateOptions(ENGAGEMENT_TYPE_OPTIONS)
+  const engagementTypeNames = new Map(engagementTypeOptions.map((option) => [option.id, option.name]))
+  const payDayOfWeekNames = new Map(translateOptions(PAY_DAY_OF_WEEK_OPTIONS).map((option) => [option.id, option.name]))
   const identityDocOptions = IDENTITY_DOC_OPTIONS.filter((option) => option.id !== 6)
 
   const shownEmployees = $derived(
-    employees.records.filter((employee) => showTerminated || !isTerminated(employee)),
+    employees.records.filter((employee) => (showTerminated || !isTerminated(employee)) &&
+      (!engagementFilter.EngagementType || employee.EngagementType === engagementFilter.EngagementType)),
   )
   const departmentPositions = $derived(
     organization.Positions.filter((position) => position.DepartmentID === employeeForm.DepartmentID),
@@ -65,7 +73,7 @@
   // A saved employee unlocks the tabs that hang from his ID.
   const layerOptions = $derived.by(() => {
     const options: [number, string][] = [[VIEW_INFO, 'Information|Información']]
-    if (employeeForm.ID > 0 && contracts) options.push([VIEW_CONTRACTS, 'Contracts|Contratos'])
+    if (employeeForm.ID > 0 && contracts) options.push([VIEW_CONTRACTS, 'Contracts and agreements|Contratos y acuerdos'])
     if (employeeForm.ID > 0) options.push([VIEW_DEPENDENTS, 'Dependents|Derechohabientes'])
     if (employeeForm.ID > 0 && contracts) options.push([VIEW_FIXED_CONCEPTS, 'Fixed concepts|Conceptos fijos'])
     return options
@@ -128,6 +136,17 @@
       mobile: { order: 5, css: 'col-span-24', labelLeft: 'Cargo:' },
     },
     {
+      header: 'Engagement|Vínculo', headerCss: 'w-150', css: 'px-6',
+      getValue: (e) => engagementTypeNames.get(e.EngagementType) || '',
+      mobile: { order: 9, css: 'col-span-12' },
+    },
+    // The weekly pay day of the agreement in force; the agreements are only read with the payroll access.
+    ...(contracts ? [{
+      header: 'Pay day|Día de pago', headerCss: 'w-100', css: 'px-6',
+      getValue: (e: IEmployee) => payDayOfWeekNames.get(contractValidOn(contracts.records, e.ID, today)?.PayDayOfWeek || 0) || '',
+      mobile: { order: 10, css: 'col-span-12', labelLeft: 'Pago:' },
+    }] : []),
+    {
       header: 'Hire date|Ingreso', headerCss: 'w-100', css: 'px-6 whitespace-nowrap',
       getValue: (e) => formatTime(e.HireDate, 'd-m-Y') as string,
       mobile: { order: 6, css: 'col-span-12', labelLeft: 'Ingreso:' },
@@ -150,6 +169,8 @@
   <div class="flex items-center justify-between mb-6 gap-12 flex-wrap" aria-label="Employees toolbar with filter, terminated toggle and create button">
     <div class="flex items-center gap-16">
       <FilterInput bind:value={filterText} css="w-256" />
+      <SearchSelect bind:saveOn={engagementFilter} save="EngagementType" placeholder={tr('Engagement|Vínculo')}
+        options={engagementTypeOptions} keyId="id" keyName="name" css="w-220" />
       <Checkbox label="Show terminated|Mostrar cesados" checked={showTerminated}
         onToggle={(isChecked) => { showTerminated = isChecked }} />
     </div>
@@ -209,6 +230,8 @@
         options={departmentPositions} keyId="ID" keyName="Name" css="col-span-24 md:col-span-12" />
       <SearchSelect bind:saveOn={employeeForm} save="ManagerEmployeeID" label="Immediate boss|Jefe inmediato"
         options={possibleManagers} keyId="ID" keyName="fullName" css="col-span-24 md:col-span-12" />
+      <SearchSelect bind:saveOn={employeeForm} save="EngagementType" label="Engagement|Vínculo" required={true}
+        options={engagementTypeOptions} keyId="id" keyName="name" css="col-span-24 md:col-span-12" />
       <DateInput bind:saveOn={employeeForm} save="HireDate" label="Hire date|Fecha de ingreso" required={true}
         css="col-span-24 md:col-span-8" />
       <DateInput bind:saveOn={employeeForm} save="TerminationDate" label="Termination date|Fecha de cese"
@@ -217,7 +240,7 @@
         options={terminationReasonOptions} keyId="id" keyName="name" css="col-span-24 md:col-span-8" />
     </div>
   {:else if layerView === VIEW_CONTRACTS && contracts}
-    <EmployeeContracts employee={employeeForm} {contracts} />
+    <EmployeeContractsAgreements employee={employeeForm} {contracts} />
   {:else if layerView === VIEW_DEPENDENTS}
     {#key employeeForm.ID}
       <EmployeeDependents employeeID={employeeForm.ID} {employees} />

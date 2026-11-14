@@ -14,13 +14,14 @@ export interface IProductStockDetail {
   ProductID: number
   Quantity: number
   SubQuantity: number
-  ExpirationDate?: number
   upd?: number
   UpdatedBy?: number
   Created?: number
   CreatedBy?: number
 	ss?: number
 	LotCode?: string
+  /** The detail's lot, attached by getWarehouseProductStock from the lots the route answers with the details. */
+  Lot?: IProductStockLot
 }
 
 export interface IProductStockLot {
@@ -30,9 +31,16 @@ export interface IProductStockLot {
   SupplierID?: number
   DeliveryNoteID?: number
   DeliveryNoteCode?: string
-  Hash?: string
+  /** The movement that created the lot: 3 a purchase reception (DocumentID the purchase order), 16 a production entry (the production order). */
+  OriginMovementType?: number
+  OriginDocumentID?: number
+  /** UnixDay, 0 = none. */
+  ExpirationDate?: number
+  /** LOT_QUALITY: 1 Liberado, 2 Cuarentena, 3 Rechazado. */
+  QualityStatus?: number
   Created?: number
   CreatedBy?: number
+  upd?: number
   ss?: number
 }
 
@@ -54,6 +62,12 @@ export interface IProductStock {
   StockValue?: number
   /** Divisor every SubQuantity of this row is expressed in. */
   SubDivisor?: number
+  /** What released production orders hold of the row, a {Units, Sub} pair at SubDivisor. */
+  ReservedProductionQuantity?: number
+  ReservedProductionSubQuantity?: number
+  /** The row's stock in lots that are not Liberado, a {Units, Sub} pair at SubDivisor. */
+  BlockedQuantity?: number
+  BlockedSubQuantity?: number
   StockStatus?: number
   Created?: number
   CreatedBy?: number
@@ -73,6 +87,7 @@ export interface IProductStock {
 interface IGetProductosStockResponse {
   ProductStock?: IProductStock[]
   ProductStockDetail?: IProductStockDetail[]
+  ProductStockLot?: IProductStockLot[]
 }
 
 export interface IPostProductoStockItem {
@@ -100,7 +115,8 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
 			// "single/array-shaped" instead of "multi-table" (see minijson's type-metadata
 			// handling). Bumping ver forces those clients to redo the initial sync now
 			// that the encoder always emits a type entry even when every field is zero.
-			useCache: { min: 0.2, ver: 10 },
+			// ver 11: the details' lots (ProductStockLot) and the rows' Blocked* counters.
+			useCache: { min: 0.2, ver: 11 },
 			keysIDs: { ProductStockDetail: ["ProductStockID","LotID","SerialNumber"] }
     })
 		const normalizedResponse = response as IGetProductosStockResponse | null | undefined
@@ -109,8 +125,10 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
 		if (!normalizedResponse) {
       records = []
     } else {
+      const lotsByID = new Map((normalizedResponse.ProductStockLot || []).map((lot) => [lot.ID, lot]))
       const stockDetailsByStockID = new Map<number, IProductStockDetail[]>()
       for (const stockDetail of normalizedResponse.ProductStockDetail || []) {
+        stockDetail.Lot = lotsByID.get(stockDetail.LotID)
         // The backend tags every number with `json:",omitempty"`, so a zero quantity arrives absent.
         // Restoring it keeps every consumer doing plain arithmetic instead of guarding for undefined.
         stockDetail.Quantity = stockDetail.Quantity || 0
@@ -145,7 +163,9 @@ export const getWarehouseProductStock = async (almacenID: number): Promise<IProd
 
 export class ProductStockSimpleService extends GetHandler<IProductStock> {
   route = "products-stock"
-  useCache = { min: 0.2, ver: 10 }
+  // ver 11: ReservedProduction* counters.
+  // ver 12: Blocked* counters.
+  useCache = { min: 0.2, ver: 12 }
   inferRemoveFromStatus = true
 
   constructor(init: boolean = false) {
@@ -169,6 +189,21 @@ export const postProductosStock = (data: IPostProductoStockItem[]) => {
     route: "productos-stock",
     // Invalidate the cached GET routes that read stock so the next read hits the backend.
     // Prefix match covers query params (e.g. warehouse-product-stock?warehouse-id=1).
+    refreshRoutes: ["warehouse-product-stock", "products-stock"]
+  })
+}
+
+export interface IProductStockLotStatusChange {
+  LotID: number
+  QualityStatus: number
+  ExpirationDate: number
+}
+
+// Changes a lot's quality status and expiry; the server moves its stock in or out of the rows' Blocked*.
+export const postProductStockLotStatus = (data: IProductStockLotStatusChange): Promise<IProductStockLot> => {
+  return POST({
+    data,
+    route: "product-stock-lot-status",
     refreshRoutes: ["warehouse-product-stock", "products-stock"]
   })
 }

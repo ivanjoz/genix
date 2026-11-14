@@ -35,6 +35,9 @@ export interface IWarehouse {
   Description: string
   Layout: IWarehouseLayout[]
   ExcludeFromOnlineSales: boolean
+  // The workshop (a provider) whose material this warehouse holds, 0 = a company warehouse
+  // (docs/MANUFACTURING_PLAN.md §8). A workshop warehouse is never sold online.
+  SubcontractorID?: number
   ss: number
   upd: number
 }
@@ -48,7 +51,8 @@ export interface IWarehouses {
 
 export class WarehousesService extends GetHandler {
   route = "locations-warehouses"
-  useCache = { min: 5, ver: 5 }
+  // ver 6: SubcontractorID.
+  useCache = { min: 5, ver: 6 }
 
   Almacenes: IWarehouse[] = $state([])
   AlmacenesMap: Map<number,IWarehouse> = $state(new Map())

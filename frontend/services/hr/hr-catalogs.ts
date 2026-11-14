@@ -76,6 +76,34 @@ export const BANK_OPTIONS: IHROption[] = [
   { id: 7, name: 'Banco Pichincha|Banco Pichincha' },
 ]
 
+/** Employee.EngagementType values, mirroring the Engagement* constants of catalogs.go (plan §9.5, M28).
+ * Only Planilla enters the payroll; the other two are paid through an agreement. */
+export const Engagement = { Payroll: 1, FeeReceipt: 2, TemporaryOffPayroll: 3 } as const
+
+//CATALOG:hr.EngagementTypeOptions
+export const ENGAGEMENT_TYPE_OPTIONS: IHROption[] = [
+  { id: 1, name: 'Payroll|Planilla' },
+  { id: 2, name: 'Fee receipt|Recibo por honorarios' },
+  { id: 3, name: 'Temporary, off payroll|Temporal sin planilla' },
+]
+
+/** ContractAgreement.PayBasis values, mirroring the PayBasis* constants of catalogs.go. */
+export const PayBasis = { Monthly: 1, Weekly: 2, Hourly: 3 } as const
+
+//CATALOG:hr.PayBasisOptions
+export const PAY_BASIS_OPTIONS: IHROption[] = [
+  { id: 1, name: 'Monthly|Mensual' },
+  { id: 2, name: 'Weekly|Semanal' },
+  { id: 3, name: 'Hourly|Por hora' },
+]
+
+/** ContractAgreement.PayDayOfWeek of a weekly agreement: 1 Monday … 7 Sunday. */
+export const PAY_DAY_OF_WEEK_OPTIONS: IHROption[] = [
+  { id: 1, name: 'Monday|Lunes' }, { id: 2, name: 'Tuesday|Martes' }, { id: 3, name: 'Wednesday|Miércoles' },
+  { id: 4, name: 'Thursday|Jueves' }, { id: 5, name: 'Friday|Viernes' }, { id: 6, name: 'Saturday|Sábado' },
+  { id: 7, name: 'Sunday|Domingo' },
+]
+
 // Payroll catalogs (backend/hr/types/legal_concepts.go, payroll.go, employee_records.go,
 // legal_parameters.go).
 

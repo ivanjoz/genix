@@ -38,6 +38,7 @@ import {
 } from './expenses.svelte'
 import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 import PurchaseDocumentFields from '#domain/PurchaseDocumentFields.svelte'
+import { ProductionOrdersService } from '#services/production/production-orders.svelte.ts'
 import PCGEAccountSelect from '#domain/PCGEAccountSelect.svelte'
 import { PCGE_KIND_EXPENSE, PCGE_KIND_SUPPLY } from '#core/pcge.ts'
 import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts'
@@ -53,6 +54,11 @@ const warehouses = new WarehousesService()
 const supplies = new SupplyMaterialService(true)
 // The supplier is who issued the comprobante — the Registro de Compras names it.
 const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
+// The subcontracted production orders a workshop's invoice can be for (docs/MANUFACTURING_PLAN.md §8).
+const productionOrders = new ProductionOrdersService(true)
+const subcontractedOrderOptions = $derived(productionOrders.records
+  .filter((order) => order.SubcontractorID > 0 && order.SubcontractorID === form.SupplierID)
+  .map((order) => ({ ID: order.ID, Name: `OP-${order.ID} · ${formatTime(order.Date, 'd-M-Y')}` })))
 
 // Localized option lists (re-resolve when the language switches).
 const categoryOptions = $derived(localizeOptions(expenseCategories))
@@ -495,6 +501,13 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
       <DateInput bind:saveOn={form} save="DueDate" css="col-span-24 md:col-span-12" label="Due Date|Vencimiento" disabled={isPaid} />
       <SearchSelect bind:saveOn={form} save="SupplierID" css="col-span-24"
         label="Supplier|Proveedor" keyId="ID" keyName="Name" options={providers.records} />
+      <!-- A workshop's invoice links to the subcontracted order it is for, so the order compares
+           what was agreed with what was invoiced. Only the supplier's orders are offered. -->
+      {#if subcontractedOrderOptions.length > 0 || form.ProductionOrderID}
+        <SearchSelect bind:saveOn={form} save="ProductionOrderID" css="col-span-24"
+          label="Production order (subcontracting)|Orden de producción (maquila)" keyId="ID" keyName="Name"
+          options={subcontractedOrderOptions} disabled={isPaid} />
+      {/if}
     </div>
     <div class="mt-12">
       <PurchaseDocumentFields document={form} expectedTotal={form.Amount || 0} />

@@ -21,6 +21,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.purchases-book":            GetPurchasesBook,
 	"GET.invoice-document-ids":      GetInvoiceDocumentsByIDs,
 	"GET.accounting-operations":     GetAccountingOperations,
+	"GET.accounting-labor-booked":   GetAccountingLaborBooked,
 	"GET.accounting-cash-balances":  GetAccountingCashBalances,
 	"PUT.accounting-classification": PutAccountingClassification,
 }

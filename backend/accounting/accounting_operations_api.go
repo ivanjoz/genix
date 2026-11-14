@@ -23,6 +23,7 @@ import (
 	hr "app/hr/types"
 	invoicing "app/invoicing/types"
 	logistics "app/logistics/types"
+	production "app/production/types"
 	sales "app/sales/types"
 
 	"golang.org/x/sync/errgroup"
@@ -103,13 +104,16 @@ type OperationPayslipLine struct {
 // OperationPayslip is a closed or paid payslip: its earnings, deductions, employer contributions
 // and provisions post on the last day of its period (H1–H3); its net pay is owed on 4111.
 type OperationPayslip struct {
-	ID       int32                  `cb:"1"`
-	Period   int16                  `cb:"2"`
-	Lines    []OperationPayslipLine `cb:"3"`
-	NetPay   int32                  `cb:"4"`
-	Status   int8                   `json:"ss" cb:"ss,5"`
-	Version  int16                  `json:"ver" cb:"ver,6"`
-	Metadata *string                `json:"mdt" cb:"mdt,7"`
+	ID int32 `cb:"1"`
+	// EmployeeID pairs the payslip with the labor its worker booked to products (the monthly labor
+	// adjustment, docs/MANUFACTURING_PLAN.md §9.3).
+	EmployeeID int32                  `cb:"8"`
+	Period     int16                  `cb:"2"`
+	Lines      []OperationPayslipLine `cb:"3"`
+	NetPay     int32                  `cb:"4"`
+	Status     int8                   `json:"ss" cb:"ss,5"`
+	Version    int16                  `json:"ver" cb:"ver,6"`
+	Metadata   *string                `json:"mdt" cb:"mdt,7"`
 }
 
 // AccountingOperationsResponse is one key per period delta log. Each key travels its own cursor
@@ -221,7 +225,7 @@ func GetAccountingOperations(req *core.HandlerArgs) core.HandlerResponse {
 			return core.Err("Error al obtener las boletas del periodo.", queryError)
 		}
 		response.Payslips = projectRecords(payslips, func(payslip hr.Payslip) OperationPayslip {
-			operationPayslip := OperationPayslip{ID: payslip.ID, Period: payslip.Period,
+			operationPayslip := OperationPayslip{ID: payslip.ID, EmployeeID: payslip.EmployeeID, Period: payslip.Period,
 				NetPay: payslip.NetPay, Status: payslip.Status, Version: payslip.Version, Metadata: payslip.Metadata}
 			for _, line := range payslip.Lines {
 				operationPayslip.Lines = append(operationPayslip.Lines, OperationPayslipLine{Kind: line.Kind,
@@ -316,4 +320,49 @@ func makeOperationSale(order *sales.SaleOrder) OperationSale {
 		operationSale.Lines = append(operationSale.Lines, OperationSaleLine{ProductID: saleLine.ProductID, Amount: lineAmount})
 	}
 	return operationSale
+}
+
+// LaborBookedByEmployee is what a Planilla worker's labor entries booked to products in a period, PEN
+// cents: the side of the monthly labor adjustment the payslips are compared with (§9.3, M27).
+type LaborBookedByEmployee struct {
+	EmployeeID int32 `cb:"1"`
+	Amount     int64 `cb:"2"`
+}
+
+// GetAccountingLaborBooked sums a period's active labor entries per Planilla worker. A worker off
+// payroll has no adjustment (§9.5), so they are left out.
+func GetAccountingLaborBooked(req *core.HandlerArgs) core.HandlerResponse {
+	firstDay, _, boundsError := types.PeriodBounds(req.Query["period"])
+	if boundsError != nil {
+		return req.MakeErr(boundsError.Error())
+	}
+	companyID := req.User.CompanyID
+	entries := []production.ProductionLaborEntry{}
+	entryQuery := db.Query(&entries)
+	entryQuery.Select(entryQuery.EmployeeID, entryQuery.Amount, entryQuery.Status).
+		CompanyID.Equals(companyID).Period.Equals(core.PeriodOfDay(firstDay))
+	if err := entryQuery.Exec(); err != nil {
+		return req.MakeErr("Error al obtener las horas de producción del periodo.", err)
+	}
+	employees := []hr.Employee{}
+	employeeQuery := db.Query(&employees)
+	employeeQuery.Select(employeeQuery.ID, employeeQuery.EngagementType).CompanyID.Equals(companyID)
+	if err := employeeQuery.Exec(); err != nil {
+		return req.MakeErr("Error al obtener los trabajadores.", err)
+	}
+	isPayrollWorker := map[int32]bool{}
+	for _, employee := range employees {
+		isPayrollWorker[employee.ID] = employee.EngagementType == hr.EngagementPayroll
+	}
+	amountByEmployeeID := map[int32]int64{}
+	for _, entry := range entries {
+		if entry.Status == 1 && isPayrollWorker[entry.EmployeeID] {
+			amountByEmployeeID[entry.EmployeeID] += int64(entry.Amount)
+		}
+	}
+	laborBooked := []LaborBookedByEmployee{}
+	for employeeID, amount := range amountByEmployeeID {
+		laborBooked = append(laborBooked, LaborBookedByEmployee{EmployeeID: employeeID, Amount: amount})
+	}
+	return req.MakeResponse(laborBooked)
 }

@@ -16,7 +16,7 @@ import (
 type payrollData struct {
 	employees   []types.Employee
 	departments []types.Department
-	contracts   []types.Contract
+	contracts   []types.ContractAgreement
 	// records are every employee record of the company, cancelled and pending ones included: the
 	// stamp must see a cancellation too. Only active and settled ones reach the engine.
 	records           []types.EmployeeRecord
@@ -29,8 +29,13 @@ type payrollData struct {
 func loadPayrollData(companyID int32) (payrollData, error) {
 	data := payrollData{}
 	errGroup := errgroup.Group{}
-	errGroup.Go(func() (err error) {
-		data.employees, err = loadCompanyEmployees(companyID)
+	errGroup.Go(func() error {
+		employees, err := loadCompanyEmployees(companyID)
+		// Only Planilla workers are paid by the payroll: one off payroll (fee receipt, temporary) is
+		// left out silently, so no run, payslip, profit share or PLAME/T-Registro file names them.
+		data.employees = slices.DeleteFunc(employees, func(employee types.Employee) bool {
+			return employee.EngagementType != types.EngagementPayroll
+		})
 		return err
 	})
 	errGroup.Go(func() (err error) {
@@ -156,8 +161,8 @@ func loadClosedPayslips(companyID int32) ([]types.Payslip, error) {
 	return slices.DeleteFunc(payslips, func(payslip types.Payslip) bool { return payslip.Status < types.PayrollStatusClosed }), nil
 }
 
-func contractsOf(contracts []types.Contract, employeeID int32) []types.Contract {
-	employeeContracts := []types.Contract{}
+func contractsOf(contracts []types.ContractAgreement, employeeID int32) []types.ContractAgreement {
+	employeeContracts := []types.ContractAgreement{}
 	for _, contract := range contracts {
 		if contract.EmployeeID == employeeID {
 			employeeContracts = append(employeeContracts, contract)
@@ -201,8 +206,8 @@ func loadRunPayslips(companyID, runID int32) ([]types.Payslip, error) {
 	return payslips, nil
 }
 
-func loadCompanyContracts(companyID int32) ([]types.Contract, error) {
-	contracts := []types.Contract{}
+func loadCompanyContracts(companyID int32) ([]types.ContractAgreement, error) {
+	contracts := []types.ContractAgreement{}
 	query := db.Query(&contracts)
 	query.CompanyID.Equals(companyID)
 	if err := query.Exec(); err != nil {

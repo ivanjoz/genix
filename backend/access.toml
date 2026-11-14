@@ -201,6 +201,32 @@ levels = 14
 frontend_routes = "production/daily-close"
 backend_apis = "POST.production-close,GET.production-close-pending,GET.production-close-preview,GET.production-closes"
 
+# Manufacturing (docs/MANUFACTURING_PLAN.md §12). 66 shows pay per hour, so it holds its own reads of the
+# labor entries by month and of the payroll data the report compares them with.
+[[access]]
+id = 66
+name = "Costos de mano de obra"
+group = 9
+levels = 14
+frontend_routes = "production/labor-hours"
+backend_apis = "GET.production-labor-entries-period,GET.hr-payslips,GET.hr-contracts-agreements,GET.hr-employee-records,GET.production-workers,GET.hr-org"
+
+[[access]]
+id = 64
+name = "Órdenes de producción"
+group = 9
+levels = 14
+frontend_routes = "production/orders,production/requirements"
+backend_apis = "POST.production-order,POST.production-order-release,POST.production-order-receipt,POST.production-order-complete,POST.production-order-annul,POST.production-order-stage,POST.production-template,POST.production-labor-entry,POST.production-order-material,GET.production-workers"
+
+[[access]]
+id = 65
+name = "Configuración de producción"
+group = 9
+levels = 14
+frontend_routes = "production/settings,production/templates"
+backend_apis = "POST.production-labor-type,POST.production-stage,POST.production-template"
+
 # Restaurant (docs/DINING_PLAN.md §10). 62 "Cocina" comes with its page; 61's sub-access 2
 # "Cobrar mesa" with charging. A waiter may do every line transition, "ready" included (a restaurant
 # with no kitchen display marks dishes ready from the floor map).
@@ -260,7 +286,7 @@ name = "Gestión de Stock"
 group = 4
 levels = 14
 frontend_routes = "logistics/products-stock"
-backend_apis = "GET.company-parametros,POST.productos-stock"
+backend_apis = "GET.company-parametros,POST.productos-stock,POST.product-stock-lot-status"
 
 [[access]]
 id = 29
@@ -372,7 +398,7 @@ name = "Estados Financieros"
 group = 7
 levels = 14
 frontend_routes = "accounting/financial-statements"
-backend_apis = "GET.accounting-operations,GET.accounting-cash-balances,GET.assets,GET.purchase-order-ids,GET.expense-ids"
+backend_apis = "GET.accounting-operations,GET.accounting-labor-booked,GET.accounting-cash-balances,GET.assets,GET.purchase-order-ids,GET.expense-ids"
 
 [[access]]
 id = 24
@@ -412,7 +438,7 @@ name = "Consolidado & Cuentas"
 group = 7
 levels = 14
 frontend_routes = "accounting/accounts-consolidation"
-backend_apis = "GET.accounting-operations,PUT.accounting-classification,GET.assets,GET.purchase-order-ids,GET.expense-ids"
+backend_apis = "GET.accounting-operations,GET.accounting-labor-booked,PUT.accounting-classification,GET.assets,GET.purchase-order-ids,GET.expense-ids"
 
 [[access]]
 id = 39
@@ -450,7 +476,7 @@ name = "Planilla"
 group = 12
 levels = 14
 frontend_routes = "hr/payroll"
-backend_apis = "GET.hr-contracts,POST.hr-contracts,GET.hr-payroll-config,GET.hr-employee-concepts,POST.hr-employee-concepts,GET.hr-employee-records,POST.hr-pay-advances,POST.hr-payroll-runs,POST.hr-payroll-calculate,POST.hr-payroll-ensure,POST.hr-payroll-close,POST.hr-payroll-reopen,POST.hr-payroll-paid,POST.hr-payroll-contributions,GET.hr-payslips,GET.hr-payslips-ids,GET.hr-payslips-employee"
+backend_apis = "GET.hr-contracts-agreements,POST.hr-contracts-agreements,GET.hr-payroll-config,GET.hr-employee-concepts,POST.hr-employee-concepts,GET.hr-employee-records,POST.hr-pay-advances,POST.hr-payroll-runs,POST.hr-payroll-calculate,POST.hr-payroll-ensure,POST.hr-payroll-close,POST.hr-payroll-reopen,POST.hr-payroll-paid,POST.hr-payroll-contributions,GET.hr-payslips,GET.hr-payslips-ids,GET.hr-payslips-employee"
 sub_accesses_ids = [2, 3, 4]
 sub_accesses_names = ["Calcular Planilla", "Cerrar Planilla", "Pagar Planilla"]
 

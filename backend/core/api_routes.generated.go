@@ -10,6 +10,7 @@ package core
 // different route would rewrite what those rows mean.
 var APIRouteIDs = map[string]int16{
 	"GET.accounting-cash-balances":        163,
+	"GET.accounting-labor-booked":         297,
 	"GET.accounting-operations":           138,
 	"GET.agent-models":                    1,
 	"GET.asset-depreciation":              114,
@@ -67,7 +68,8 @@ var APIRouteIDs = map[string]int16{
 	"GET.expenses":                        16,
 	"GET.expenses-scheduled":              17,
 	"GET.gallery-images":                  18,
-	"GET.hr-contracts":                    164,
+	"GET.hr-contracts":                    164, // retired
+	"GET.hr-contracts-agreements":         289,
 	"GET.hr-dependents":                   165,
 	"GET.hr-employee-concepts":            174,
 	"GET.hr-employee-records":             199,
@@ -113,6 +115,14 @@ var APIRouteIDs = map[string]int16{
 	"GET.production-close-pending":        264,
 	"GET.production-close-preview":        265,
 	"GET.production-closes":               266,
+	"GET.production-labor-entries":        291,
+	"GET.production-labor-entries-period": 292,
+	"GET.production-labor-types":          276,
+	"GET.production-order":                295,
+	"GET.production-orders":               280,
+	"GET.production-stages":               277,
+	"GET.production-templates":            281,
+	"GET.production-workers":              298,
 	"GET.products":                        34,
 	"GET.products-ids":                    263,
 	"GET.products-stock":                  35,
@@ -202,7 +212,8 @@ var APIRouteIDs = map[string]int16{
 	"POST.gallery-image":                  71,
 	"POST.hr-afp-rates":                   183,
 	"POST.hr-concepts":                    184,
-	"POST.hr-contracts":                   169,
+	"POST.hr-contracts":                   169, // retired
+	"POST.hr-contracts-agreements":        290,
 	"POST.hr-departments":                 170,
 	"POST.hr-dependents":                  171,
 	"POST.hr-employee-concepts":           185,
@@ -246,8 +257,20 @@ var APIRouteIDs = map[string]int16{
 	"POST.perfiles":                       79,
 	"POST.product-category-image":         80,
 	"POST.product-image":                  81,
+	"POST.product-stock-lot-status":       296,
 	"POST.product-supply":                 82,
 	"POST.production-close":               267,
+	"POST.production-labor-entry":         293,
+	"POST.production-labor-type":          278,
+	"POST.production-order":               282,
+	"POST.production-order-annul":         283,
+	"POST.production-order-complete":      284,
+	"POST.production-order-material":      294,
+	"POST.production-order-receipt":       285,
+	"POST.production-order-release":       286,
+	"POST.production-order-stage":         287,
+	"POST.production-stage":               279,
+	"POST.production-template":            288,
 	"POST.productos-stock":                83,
 	"POST.products":                       84,
 	"POST.projects-attachment-upload":     155,
@@ -301,7 +324,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 275
+const MaxAPIRouteID int16 = 298
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

@@ -165,6 +165,7 @@ func (generator *hrDataGenerator) seedEmployee(department types.Department, posi
 		Address:      fmt.Sprintf("%s %d", hrDataStreets[random.Intn(len(hrDataStreets))], 100+random.Intn(2400)),
 		Phone:        fmt.Sprintf("9%08d", random.Intn(100000000)),
 		DepartmentID: department.ID, PositionID: position.ID, HireDate: hireDate, ManagerEmployeeID: managerID,
+		EngagementType: types.EngagementPayroll,
 	}
 	employee.Email = strings.ToLower(fmt.Sprintf("%s.%s@demo.genix.pe", asciiOnly(firstName), asciiOnly(employee.LastName)))
 	if err := callHRHandler("POST.hr-employees", hrModule.PostEmployee, nil, employee, &employee); err != nil {
@@ -201,8 +202,8 @@ func (generator *hrDataGenerator) seedContracts(employee types.Employee, positio
 	salaryCents := (positionSeed.MinSalary + random.Int31n(positionSeed.MaxSalary-positionSeed.MinSalary+1)) * 100
 	salaryCents = max(salaryCents/1000*1000, minimumWageCents) // round to S/ 10
 
-	contract := types.Contract{
-		EmployeeID: employee.ID, StartDate: employee.HireDate, MonthlySalary: salaryCents, DailyHours: 8,
+	contract := types.ContractAgreement{
+		EmployeeID: employee.ID, StartDate: employee.HireDate, PayAmount: salaryCents, DailyHours: 8, PayBasis: types.PayBasisMonthly,
 		ContractType: types.ContractTypeIndefinite,
 	}
 	// Recent hires are on fixed-term contracts of a year.
@@ -212,7 +213,7 @@ func (generator *hrDataGenerator) seedContracts(employee types.Employee, positio
 	// A few part-timers (under 4 hours: no CTS, reduced vacations) on the shop floor.
 	if positionSeed.MaxSalary <= 1500 && random.Intn(8) == 0 {
 		contract.ContractType, contract.EndDate, contract.DailyHours = types.ContractTypePartTime, employee.HireDate+364, 3
-		contract.MonthlySalary = minimumWageCents / 2
+		contract.PayAmount = minimumWageCents / 2
 	}
 
 	// One in four is in the ONP; the rest in an AFP, mostly on the mixed commission.
@@ -231,7 +232,7 @@ func (generator *hrDataGenerator) seedContracts(employee types.Employee, positio
 	contract.CtsBankID = hrDataBanks[random.Intn(len(hrDataBanks))]
 	contract.CtsAccount = fmt.Sprintf("%03d-%08d-1-%02d", 190+random.Intn(9), random.Intn(100000000), random.Intn(100))
 
-	if err := callHRHandler("POST.hr-contracts", hrModule.PostContract, nil, contract, &contract); err != nil {
+	if err := callHRHandler("POST.hr-contracts-agreements", hrModule.PostContractAgreement, nil, contract, &contract); err != nil {
 		return err
 	}
 	generator.contractsCount++
@@ -241,8 +242,8 @@ func (generator *hrDataGenerator) seedContracts(employee types.Employee, positio
 	}
 	raise := contract
 	raise.ID, raise.ValidFrom = 0, employee.HireDate+365
-	raise.MonthlySalary = (contract.MonthlySalary * int32(105+random.Intn(8)) / 100) / 1000 * 1000
-	if err := callHRHandler("POST.hr-contracts", hrModule.PostContract, nil, raise, &raise); err != nil {
+	raise.PayAmount = (contract.PayAmount * int32(105+random.Intn(8)) / 100) / 1000 * 1000
+	if err := callHRHandler("POST.hr-contracts-agreements", hrModule.PostContractAgreement, nil, raise, &raise); err != nil {
 		return err
 	}
 	generator.contractsCount++

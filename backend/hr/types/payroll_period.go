@@ -15,7 +15,7 @@ import (
 type PeriodPayslipInput struct {
 	Run               PayrollRun
 	Employee          Employee
-	Contracts         []Contract
+	Contracts         []ContractAgreement
 	Records           []EmployeeRecord // active and settled, every period: each engine reads what concerns it
 	RecurringConcepts []EmployeeConcept
 	Concepts          map[int32]Concept

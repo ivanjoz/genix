@@ -2,8 +2,8 @@
 // never lists what checkout would refuse. docs/ECOMMERCE_CATALOG_SNAPSHOT_PLAN.md, "Sellable rule".
 //
 // Stock is per (product, presentation), in whole units; the overselling margin (Product.WebExtraStock)
-// is one per product, shared by all its presentations. A presentation's net is its stock less what
-// undelivered sales and web orders reserved, negative once it is oversold. What the oversold
+// is one per product, shared by all its presentations. A presentation's net is its stock less its
+// blocked lots and what undelivered sales and web orders reserved, negative once it is oversold. What the oversold
 // presentations already took comes off the margin, and each presentation can sell its own positive
 // net plus what is left of the margin.
 
@@ -32,7 +32,7 @@ func ReadWebStockRows(companyID int32, onlineWarehouseIDs []int32, presentationI
 	}
 	stockRows := []ProductStock{}
 	query := db.Query(&stockRows)
-	query.Select(query.ProductID, query.PresentationID, query.Quantity, query.DetailQuantity,
+	query.Select(query.ProductID, query.PresentationID, query.Quantity, query.DetailQuantity, query.BlockedQuantity,
 		query.PendingDeliveryStore, query.PendingDeliveryOnline).
 		CompanyID.Equals(companyID).ID.In(stockIDs.Values...)
 	if err := query.Exec(); err != nil {
@@ -54,7 +54,8 @@ func webNetByPresentation(stockRows []ProductStock, presentationIDs []int16) map
 	}
 	for _, stockRow := range stockRows {
 		if _, isSellable := netByPresentation[stockRow.PresentationID]; isSellable {
-			netByPresentation[stockRow.PresentationID] += stockRow.Quantity + stockRow.DetailQuantity -
+			// Blocked lots (Cuarentena, Rechazado) cannot be delivered, so they are not for sale.
+			netByPresentation[stockRow.PresentationID] += stockRow.Quantity + stockRow.DetailQuantity - stockRow.BlockedQuantity -
 				stockRow.PendingDeliveryStore - stockRow.PendingDeliveryOnline
 		}
 	}

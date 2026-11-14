@@ -169,3 +169,29 @@ func HasOption(options []HROption, id int8) bool {
 	}
 	return false
 }
+
+// Employee.EngagementType values (docs/MANUFACTURING_PLAN.md §9.5, M28).
+const (
+	EngagementPayroll      int8 = 1 // Planilla
+	EngagementFeeReceipt   int8 = 2 // Recibo por honorarios (4ta categoría)
+	EngagementTemporaryOff int8 = 3 // Temporal sin planilla
+)
+
+var EngagementTypeOptions = []HROption{
+	{ID: EngagementPayroll, Name: "Payroll|Planilla"},
+	{ID: EngagementFeeReceipt, Name: "Fee receipt|Recibo por honorarios"},
+	{ID: EngagementTemporaryOff, Name: "Temporary, off payroll|Temporal sin planilla"},
+}
+
+// ContractAgreement.PayBasis values.
+const (
+	PayBasisMonthly int8 = 1
+	PayBasisWeekly  int8 = 2
+	PayBasisHourly  int8 = 3
+)
+
+var PayBasisOptions = []HROption{
+	{ID: PayBasisMonthly, Name: "Monthly|Mensual"},
+	{ID: PayBasisWeekly, Name: "Weekly|Semanal"},
+	{ID: PayBasisHourly, Name: "Hourly|Por hora"},
+}

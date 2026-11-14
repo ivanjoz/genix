@@ -8,6 +8,7 @@ import (
 	logistics "app/logistics/types"
 	production "app/production/types"
 	"encoding/json"
+	"fmt"
 )
 
 // InventoryExpensePayload buys a supply and puts it in a warehouse in one step: the money
@@ -65,7 +66,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	// which has its own reception flow with lots and differences.
 	supplyProducts := []production.Product{}
 	supplyQuery := db.Query(&supplyProducts)
-	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Status, supplyQuery.AccountCode).
+	supplyQuery.Select(supplyQuery.ID, supplyQuery.Name, supplyQuery.Status, supplyQuery.AccountCode, supplyQuery.TracksLots).
 		CompanyID.Equals(req.User.CompanyID).ID.Equals(payload.ProductID)
 
 	if queryError := supplyQuery.Exec(); queryError != nil {
@@ -76,6 +77,11 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if supplyProducts[0].Status != production.ProductStatusSupply {
 		return req.MakeErr("El registro seleccionado no es un insumo o material.")
+	}
+	// An inventory expense enters no lot, and a supply that tracks lots must be received with one
+	// (docs/MANUFACTURING_PLAN.md §10): it is bought through a purchase order.
+	if supplyProducts[0].TracksLots {
+		return req.MakeErr(fmt.Sprintf(`"%s" controla lotes: cómprelo con una orden de compra e ingréselo con su lote.`, supplyProducts[0].Name))
 	}
 	accountCode, accountError := types.ResolveSupplyAccount(payload.AccountCode, supplyProducts[0].AccountCode)
 	if accountError != nil {

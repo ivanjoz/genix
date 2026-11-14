@@ -49,8 +49,8 @@ func TestMonthlyPayslipOnp(t *testing.T) {
 	payslip, ok := CalculateMonthlyPayslip(MonthlyPayslipInput{
 		Period:   2603,
 		Employee: Employee{ID: 1, HireDate: unixDay(2025, 1, 1), Status: StatusActive},
-		Contracts: []Contract{{ID: 7, ValidFrom: unixDay(2025, 1, 1), StartDate: unixDay(2025, 1, 1),
-			MonthlySalary: 200000, DailyHours: 8, PensionSystem: PensionSystemONP, Status: StatusActive}},
+		Contracts: []ContractAgreement{{ID: 7, ValidFrom: unixDay(2025, 1, 1), StartDate: unixDay(2025, 1, 1),
+			PayAmount: 200000, DailyHours: 8, PensionSystem: PensionSystemONP, Status: StatusActive}},
 		Legal: testLegalValues(),
 	})
 	if !ok || len(payslip.Diagnostics) > 0 {
@@ -83,8 +83,8 @@ func TestMonthlyPayslipAfpWithFamilyAllowance(t *testing.T) {
 		Period: 2610,
 		Employee: Employee{ID: 2, HireDate: unixDay(2024, 3, 1), Status: StatusActive,
 			FamilyAllowance: FamilyAllowanceRanges([]Dependent{{Relationship: RelationshipChild, BirthDate: unixDay(2016, 5, 5), Status: StatusActive}})},
-		Contracts: []Contract{{ID: 9, ValidFrom: unixDay(2024, 3, 1), StartDate: unixDay(2024, 3, 1),
-			MonthlySalary: 600000, DailyHours: 8, PensionSystem: PensionSystemIntegra,
+		Contracts: []ContractAgreement{{ID: 9, ValidFrom: unixDay(2024, 3, 1), StartDate: unixDay(2024, 3, 1),
+			PayAmount: 600000, DailyHours: 8, PensionSystem: PensionSystemIntegra,
 			AfpCommissionType: AfpCommissionFlow, Status: StatusActive}},
 		Legal: testLegalValues(),
 	})
@@ -107,8 +107,8 @@ func TestMonthlyPayslipAfpWithFamilyAllowance(t *testing.T) {
 
 func TestMonthlyPayslipDiagnostics(t *testing.T) {
 	employee := Employee{ID: 3, HireDate: unixDay(2026, 10, 16), Status: StatusActive}
-	contract := Contract{ID: 1, ValidFrom: unixDay(2026, 10, 16), StartDate: unixDay(2026, 10, 16),
-		MonthlySalary: 300000, DailyHours: 8, PensionSystem: PensionSystemPrima, Status: StatusActive}
+	contract := ContractAgreement{ID: 1, ValidFrom: unixDay(2026, 10, 16), StartDate: unixDay(2026, 10, 16),
+		PayAmount: 300000, DailyHours: 8, PensionSystem: PensionSystemPrima, Status: StatusActive}
 
 	if _, ok := CalculateMonthlyPayslip(MonthlyPayslipInput{Period: 2610, Employee: employee, Legal: testLegalValues()}); ok {
 		t.Error("an employee without contract must not get a payslip")
@@ -116,7 +116,7 @@ func TestMonthlyPayslipDiagnostics(t *testing.T) {
 
 	// Hired on Oct 16: 16 days. Prima has no AFP rates for the period, and the advance exceeds the net.
 	payslip, _ := CalculateMonthlyPayslip(MonthlyPayslipInput{Period: 2610, Employee: employee,
-		Contracts: []Contract{contract}, Records: []EmployeeRecord{{ID: 4, ConceptID: LegalAdvanceWeekly, Period: 2610, Amount: 200000}},
+		Contracts: []ContractAgreement{contract}, Records: []EmployeeRecord{{ID: 4, ConceptID: LegalAdvanceWeekly, Period: 2610, Amount: 200000}},
 		Legal: testLegalValues()})
 	if payslip.WorkedDays != 16 || lineAmount(payslip, LegalBasicSalary) != 160000 {
 		t.Errorf("days %d basic %d, want 16 and 160000", payslip.WorkedDays, lineAmount(payslip, LegalBasicSalary))

@@ -225,7 +225,7 @@ func buildEcommerceCatalogFile(companyID int32, generation int32) (ecommerceCata
 	loadGroup.Go(func() error {
 		query := db.Query(&stockRows)
 		query.Select(query.WarehouseID, query.ProductID, query.PresentationID, query.Quantity, query.DetailQuantity,
-			query.PendingDeliveryStore, query.PendingDeliveryOnline).CompanyID.Equals(companyID)
+			query.BlockedQuantity, query.PendingDeliveryStore, query.PendingDeliveryOnline).CompanyID.Equals(companyID)
 		return query.Exec()
 	})
 	loadGroup.Go(func() error {

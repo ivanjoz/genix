@@ -1,7 +1,7 @@
 import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
 
 // Mirrors backend/hr/types/employees.go. The employee record is label-safe on purpose: salary,
-// pension and bank data live in the contracts (payroll access only).
+// pension and bank data live in the contracts and agreements (payroll access only).
 
 export interface IEmployee {
   ID: number
@@ -25,6 +25,8 @@ export interface IEmployee {
   HireDate: number
   TerminationDate: number
   TerminationReason: number
+  /** Engagement.Payroll, FeeReceipt or TemporaryOffPayroll (hr-catalogs.ts). Only Planilla enters the payroll. */
+  EngagementType: number
   /** Summary of the dependents, kept by the server on every dependent change. */
   DependentsCount: number
   /** The day ranges a child earns the worker the asignación familiar; the payroll reads them. */
@@ -59,7 +61,7 @@ export interface IDependent {
 export class EmployeesService extends GetHandler<IEmployee> {
   route = 'hr-employees'
   routeByID = 'hr-employees-ids'
-  useCache = { min: 5, ver: 2 }
+  useCache = { min: 5, ver: 3 }
   inferRemoveFromStatus = true
   prependOnSave = true
 

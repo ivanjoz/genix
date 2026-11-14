@@ -54,6 +54,15 @@ export interface IProductionSupply {
   SupplyID: number
   Quantity: number
   SubDivisor: number
+  // Expected waste on top of Quantity, in basis points: 1500 = 15%.
+  WasteBasisPoints?: number
+}
+
+// IProductionLabor mirrors production.ProductionLabor: minutes of one labor type for the recipe's
+// ProductionYieldPortions units. An estimate only; the actual labor comes from the hours logged.
+export interface IProductionLabor {
+  LaborTypeID: number
+  Minutes: number
 }
 
 //STRUCT:production.Product
@@ -97,7 +106,7 @@ export interface IProduct {
   CategoriesWithStock: number[]
   ver: number
   AccountCode: number  /* a supply's default PCGE account; 0 on a product */
-  Origin: number       /* 1 bought (merchandise) · 2 made (finished good); 0 on a supply */
+  Origin: number       /* 1 bought (merchandise) · 2 made (finished good); on a supply 0, or 2 when semi-finished */
   WebExtraStock: number /* units the web store may sell beyond real stock ("Sobreventa permitida") */
   WebHidden: boolean    /* kept out of the web store catalog and checkout */
   /* recipe and cost of a made product (docs/PRODUCTION_PLAN.md §2); zero otherwise. Costs are PEN cents */
@@ -105,6 +114,11 @@ export interface IProduct {
   ProductionSupplies: IProductionSupply[]  /* supplies for ProductionYieldPortions units */
   ProductionExtraCostPerUnit: number
   ProductionStandardCost: number           /* when > 0, the unit cost whatever the supplies cost */
+  ProductionLabor: IProductionLabor[]      /* minutes per labor type for ProductionYieldPortions units */
+  /* lot policy (docs/MANUFACTURING_PLAN.md §10) */
+  TracksLots: boolean          /* a made product gets one lot per order receipt; a bought one is received with a lot */
+  ShelfLifeDays: number        /* default expiry of a new lot, days from its date; 0 = none */
+  QualityHoldOnEntry: boolean  /* new lots enter in Cuarentena */
   /* extra fields */
   Image?: IProductoImage
   AtributosIDs?: number[]
@@ -132,7 +146,9 @@ export class ProductsService extends GetHandler<IProduct> {
   route = "products"
   routeByID = "products-ids"
   // ver 14: the recipe moved from Production (one struct) to the flat Production* fields.
-  useCache = { min: 1, ver: 14 }
+  // ver 15: recipe waste and ProductionLabor.
+  // ver 16: the lot policy (TracksLots, ShelfLifeDays, QualityHoldOnEntry).
+  useCache = { min: 1, ver: 16 }
 	inferRemoveFromStatus = true
   prependOnSave = true
 

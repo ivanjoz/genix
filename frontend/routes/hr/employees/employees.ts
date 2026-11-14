@@ -1,7 +1,8 @@
 // Business rules of the employees page. No Svelte, no fetch: unit-testable in isolation.
 import type { IOrgTreeNode } from '#components/charts/org-tree-layout.ts'
-import type { IContract } from '#services/hr/contracts.svelte.ts'
+import type { IContractAgreement } from '#services/hr/contracts-agreements.svelte.ts'
 import type { IDependent, IEmployee } from '#services/hr/employees.svelte.ts'
+import { Engagement, PayBasis } from '#services/hr/hr-catalogs.ts'
 
 /** Employee `ss`: a terminated worker keeps every record, a deleted one leaves the list. */
 export const EmployeeStatus = { DELETED: 0, ACTIVE: 1, TERMINATED: 2 } as const
@@ -23,20 +24,62 @@ export const employeeFullName = (employee: Pick<IEmployee, 'FirstName' | 'LastNa
 
 export const isTerminated = (employee: IEmployee): boolean => employee.ss === EmployeeStatus.TERMINATED
 
+export const isOnPayroll = (employee: Pick<IEmployee, 'EngagementType'>): boolean =>
+  employee.EngagementType === Engagement.Payroll
+
+/** The workers the payroll pages list (time off, payslips, payroll records): Planilla only. Workers
+ * off payroll are registered in HR only to be picked on a labor entry (plan §9.5, M25). */
+export const payrollEmployees = <T extends Pick<IEmployee, 'EngagementType'>>(employees: T[]): T[] =>
+  employees.filter(isOnPayroll)
+
+/** The PayBasis an engagement forces: Planilla is monthly, a fee receipt is per hour. A temporary
+ * worker picks it, so there is none. */
+export const fixedPayBasisOf = (engagementType: number): number | undefined => {
+  if (engagementType === Engagement.Payroll) return PayBasis.Monthly
+  if (engagementType === Engagement.FeeReceipt) return PayBasis.Hourly
+  return undefined
+}
+
+/** ContractType, pension, CUSPP, AFP type, EPS and CTS only apply to a payroll contract. */
+export const showsPayrollFields = (engagementType: number): boolean => engagementType === Engagement.Payroll
+
+export const showsPayDayOfWeek = (payBasis: number): boolean => payBasis === PayBasis.Weekly
+
+/** The PayAmount label: what one unit of the basis pays. */
+export const payAmountLabel = (payBasis: number): string => {
+  if (payBasis === PayBasis.Weekly) return 'Weekly pay (S/)|Pago semanal (S/)'
+  if (payBasis === PayBasis.Hourly) return 'Hourly pay (S/)|Pago por hora (S/)'
+  return 'Monthly pay (S/)|Pago mensual (S/)'
+}
+
+/** Aligns an agreement with the employee's engagement, as the backend validates it: the forced
+ * PayBasis, a pay day only when weekly, and no payroll fields off payroll. */
+export const alignAgreementWithEngagement = (agreement: IContractAgreement, engagementType: number): IContractAgreement => {
+  const payBasis = fixedPayBasisOf(engagementType) || agreement.PayBasis || PayBasis.Monthly
+  const aligned = { ...agreement, PayBasis: payBasis }
+  if (!showsPayDayOfWeek(payBasis)) aligned.PayDayOfWeek = 0
+  if (!showsPayrollFields(engagementType)) {
+    Object.assign(aligned, {
+      ContractType: 0, PensionSystem: 0, CUSPP: '', AfpCommissionType: 0, HasEPS: false, CtsBankID: 0, CtsAccount: '',
+    })
+  }
+  return aligned
+}
+
 /** An AFP affiliate needs a CUSPP and a commission type; ONP does not. */
 export const isAfpPensionSystem = (pensionSystem: number): boolean => pensionSystem >= 2 && pensionSystem <= 5
 
-export const isPartTime = (contract: Pick<IContract, 'DailyHours'>): boolean =>
+export const isPartTime = (contract: Pick<IContractAgreement, 'DailyHours'>): boolean =>
   contract.DailyHours > 0 && contract.DailyHours < PART_TIME_DAILY_HOURS
 
 /** An employee's contract versions, newest first. */
-export const employeeContracts = (contracts: IContract[], employeeID: number): IContract[] =>
+export const employeeContracts = (contracts: IContractAgreement[], employeeID: number): IContractAgreement[] =>
   contracts
     .filter((contract) => contract.EmployeeID === employeeID && contract.ss > 0)
     .sort((left, right) => right.ValidFrom - left.ValidFrom)
 
 /** The version in force on `unixDay`: the latest ValidFrom not after it. Undefined before the first one. */
-export const contractValidOn = (contracts: IContract[], employeeID: number, unixDay: number): IContract | undefined =>
+export const contractValidOn = (contracts: IContractAgreement[], employeeID: number, unixDay: number): IContractAgreement | undefined =>
   employeeContracts(contracts, employeeID).find((contract) => contract.ValidFrom <= unixDay)
 
 /** The years completed between two UnixDays. */
@@ -103,18 +146,21 @@ export const makeEmptyEmployee = (): IEmployee => ({
   ID: 0, UserID: 0, IdentityDocType: IDENTITY_DOC_DNI, DocumentNumber: '', FirstName: '', LastName: '',
   SecondLastName: '', BirthDate: 0, Sex: 0, CountryID: COUNTRY_ID_PERU, Address: '', CityID: 0, Email: '',
   Phone: '', DepartmentID: 0, PositionID: 0, ManagerEmployeeID: 0, HireDate: 0, TerminationDate: 0, TerminationReason: 0,
-  DependentsCount: 0, FamilyAllowance: [], ss: EmployeeStatus.ACTIVE, upd: 0,
+  EngagementType: Engagement.Payroll, DependentsCount: 0, FamilyAllowance: [], ss: EmployeeStatus.ACTIVE, upd: 0,
 })
 
-/** A new version starts from the one in force, so a raise only changes what changed. */
-export const makeNextContract = (employee: IEmployee, currentContract: IContract | undefined): IContract => {
-  if (currentContract) return { ...currentContract, ID: 0, ValidFrom: 0, ss: 1, upd: 0 }
-  return {
-    ID: 0, EmployeeID: employee.ID, ValidFrom: 0, ContractType: CONTRACT_TYPE_INDEFINITE,
-    StartDate: employee.HireDate, EndDate: 0, MonthlySalary: 0, DailyHours: FULL_TIME_DAILY_HOURS,
-    PensionSystem: PENSION_SYSTEM_ONP, CUSPP: '', AfpCommissionType: 0, HasEPS: false,
-    SalaryBankID: 0, SalaryAccount: '', CtsBankID: 0, CtsAccount: '', ss: 1, upd: 0,
+/** A new version starts from the one in force, so a raise only changes what changed. It follows the
+ * employee's current engagement: a worker moved from Temporal to Planilla gets a monthly contract. */
+export const makeNextContract = (employee: IEmployee, currentContract: IContractAgreement | undefined): IContractAgreement => {
+  if (currentContract) {
+    return alignAgreementWithEngagement({ ...currentContract, ID: 0, ValidFrom: 0, ss: 1, upd: 0 }, employee.EngagementType)
   }
+  return alignAgreementWithEngagement({
+    ID: 0, EmployeeID: employee.ID, ValidFrom: 0, ContractType: CONTRACT_TYPE_INDEFINITE,
+    StartDate: employee.HireDate, EndDate: 0, PayAmount: 0, PayBasis: PayBasis.Monthly, PayDayOfWeek: 0,
+    DailyHours: FULL_TIME_DAILY_HOURS, PensionSystem: PENSION_SYSTEM_ONP, CUSPP: '', AfpCommissionType: 0, HasEPS: false,
+    SalaryBankID: 0, SalaryAccount: '', CtsBankID: 0, CtsAccount: '', ss: 1, upd: 0,
+  }, employee.EngagementType)
 }
 
 export const makeEmptyDependent = (employeeID: number, todayUnixDay: number): IDependent => ({

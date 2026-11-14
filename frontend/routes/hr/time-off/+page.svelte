@@ -12,7 +12,7 @@
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
   import { formatTime, todayUnixDay } from '#libs/helpers.ts'
-  import { employeeFullName } from '#routes/hr/employees/employees.ts'
+  import { employeeFullName, payrollEmployees } from '#routes/hr/employees/employees.ts'
   import { EmployeesService, type IEmployee } from '#services/hr/employees.svelte.ts'
   import { ConceptGroup, LegalConcept, legalConceptsOfGroup } from '#services/hr/hr-catalogs.ts'
   import { EmployeeRecordsYearService, postEmployeeRecord } from '#services/hr/employee-records.svelte.ts'
@@ -27,7 +27,8 @@
   const currentYear = yearOfDay(today)
 
   const employees = new EmployeesService(true)
-  const activeEmployees = $derived(employees.records.filter((employee) => employee.ss === 1))
+  // Time off belongs to the payroll: workers off payroll are not listed (plan §9.5).
+  const activeEmployees = $derived(payrollEmployees(employees.records).filter((employee) => employee.ss === 1))
   const employeeOptions = $derived(activeEmployees.map((employee) => ({ ID: employee.ID, Name: employeeFullName(employee) })))
   const timeOffTypeOptions = legalConceptsOfGroup(ConceptGroup.TimeOff).map((concept) => ({ id: concept.id, name: tr(concept.name) }))
   const timeOffTypeNames = new Map(timeOffTypeOptions.map((option) => [option.id, option.name]))

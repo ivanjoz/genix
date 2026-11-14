@@ -106,7 +106,9 @@ type Product struct {
 	// changing it never rewrites past purchases. 0 on a product: its accounts follow from Origin.
 	AccountCode int32 `cb:"43"`
 	// Origin is whether a product (Status = 1) is bought or made, which decides its accounts:
-	// mercaderías (2011 / 7012 / 6912) or productos terminados (2111 / 7022 / 6922). 0 on a supply.
+	// mercaderías (2011 / 7012 / 6912) or productos terminados (2111 / 7022 / 6922). On a supply
+	// (Status = 2) it is 0, or ProductOriginMade for a semi-finished product (docs/MANUFACTURING_PLAN.md
+	// §2.1): a supply the company makes with its own recipe, stocked in 231 and never bought.
 	Origin int8 `cb:"44"`
 	// WebExtraStock ("Sobreventa permitida") is how many whole units the web store may sell beyond
 	// the stock: with 5 in stock and 100 here, checkout accepts up to 105. The undelivered orders are
@@ -122,7 +124,7 @@ type Product struct {
 	// The Production* columns are how a made product (Origin = 2) is produced and costed: the recipe
 	// the daily close consumes and the cost it values the production at (docs/PRODUCTION_PLAN.md §2).
 	// All zero otherwise. Costs are PEN cents, net of IGV. They are private: the public by-IDs route
-	// projects them away (publicProductFields). cb 52–55 are reserved by docs/MANUFACTURING_PLAN.md.
+	// projects them away (publicProductFields).
 
 	// ProductionYieldPortions is how many units of the product the recipe makes. The supply quantities
 	// are for that many units, so a pinch of salt per portion is expressible without a fraction of a
@@ -134,6 +136,18 @@ type Product struct {
 	// ProductionStandardCost, when > 0, is the unit cost of every production entry whatever the supplies
 	// cost. The supplies are still consumed: their stock is real even when their value is not used.
 	ProductionStandardCost int32 `cb:"51"`
+	// ProductionLabor is the work ProductionYieldPortions units need, per labor type. It only
+	// estimates the cost and plans the hours (docs/MANUFACTURING_PLAN.md §2): the actual labor comes
+	// from the hours logged on each production order.
+	ProductionLabor []ProductionLabor `cb:"52"`
+
+	// The lot policy (docs/MANUFACTURING_PLAN.md §10). TracksLots: a made product gets one lot per
+	// production order receipt (OP<orderID>-<N>), and a supply or bought product must be received
+	// with a lot. ShelfLifeDays is the default expiry of a new lot, counted from its date (0 = none).
+	// QualityHoldOnEntry makes every new lot enter in Cuarentena (M22).
+	TracksLots         bool  `cb:"53"`
+	ShelfLifeDays      int16 `cb:"54"`
+	QualityHoldOnEntry bool  `cb:"55"`
 }
 
 // Product.Origin values.
@@ -156,54 +170,58 @@ var ProductOriginOptions = []ProductOriginOption{
 
 type ProductTable struct {
 	db.TableStruct[ProductTable, Product]
-	CompanyID           db.Col[*ProductTable, int32]
-	ID                  db.Col[*ProductTable, int32]
-	Name                db.Col[*ProductTable, string]
-	Description         db.Col[*ProductTable, string]
-	ContentHTML         db.Col[*ProductTable, string]
-	CategoryIDs         db.ColSlice[*ProductTable, int32]
-	BrandID             db.Col[*ProductTable, int32]
-	BrandName           db.Col[*ProductTable, string]
-	Params              db.ColSlice[*ProductTable, int8]
-	Price               db.Col[*ProductTable, int32]
-	CurrencyID          db.Col[*ProductTable, int16]
-	UnitID              db.Col[*ProductTable, int16]
-	Discount            db.Col[*ProductTable, float32]
-	FinalPrice          db.Col[*ProductTable, int32]
-	Weight              db.Col[*ProductTable, float32]
-	Volume              db.Col[*ProductTable, float32]
-	SbuQuantity         db.Col[*ProductTable, int16]
-	SbuUnit             db.Col[*ProductTable, string]
-	SbuPrice            db.Col[*ProductTable, int32]
-	SbuDiscount         db.Col[*ProductTable, float32]
-	SbuFinalPrice       db.Col[*ProductTable, int32]
-	SKU                 db.Col[*ProductTable, string]
-	NameHash            db.Col[*ProductTable, int32]
-	DepreciationMonths  db.Col[*ProductTable, int16]
-	Properties          db.Col[*ProductTable, []ProductProperties]
-	Presentations       db.Col[*ProductTable, []ProductPresentation]
-	ImageMain           db.Col[*ProductTable, int32]
-	ImageIDs            db.ColSlice[*ProductTable, int32]
-	ImageDescriptions   db.ColSlice[*ProductTable, string]
-	Stock               db.Col[*ProductTable, []WarehouseStockMin]
-	ReservedStock       db.Col[*ProductTable, []WarehouseStockMin]
-	StockStatus         db.Col[*ProductTable, int8]
-	NameUpdated         db.Col[*ProductTable, int32]
-	Status              db.Col[*ProductTable, int8]
-	Updated             db.Col[*ProductTable, int32]
-	UpdatedBy           db.Col[*ProductTable, int32]
-	Created             db.Col[*ProductTable, int32]
-	CreatedBy           db.Col[*ProductTable, int32]
-	CategoriesWithStock db.ColSlice[*ProductTable, int32]
-	Version             db.Col[*ProductTable, int16]
-	AccountCode         db.Col[*ProductTable, int32]
-	Origin              db.Col[*ProductTable, int8]
-	WebExtraStock       db.Col[*ProductTable, int32]
-	WebHidden           db.Col[*ProductTable, bool]
+	CompanyID                  db.Col[*ProductTable, int32]
+	ID                         db.Col[*ProductTable, int32]
+	Name                       db.Col[*ProductTable, string]
+	Description                db.Col[*ProductTable, string]
+	ContentHTML                db.Col[*ProductTable, string]
+	CategoryIDs                db.ColSlice[*ProductTable, int32]
+	BrandID                    db.Col[*ProductTable, int32]
+	BrandName                  db.Col[*ProductTable, string]
+	Params                     db.ColSlice[*ProductTable, int8]
+	Price                      db.Col[*ProductTable, int32]
+	CurrencyID                 db.Col[*ProductTable, int16]
+	UnitID                     db.Col[*ProductTable, int16]
+	Discount                   db.Col[*ProductTable, float32]
+	FinalPrice                 db.Col[*ProductTable, int32]
+	Weight                     db.Col[*ProductTable, float32]
+	Volume                     db.Col[*ProductTable, float32]
+	SbuQuantity                db.Col[*ProductTable, int16]
+	SbuUnit                    db.Col[*ProductTable, string]
+	SbuPrice                   db.Col[*ProductTable, int32]
+	SbuDiscount                db.Col[*ProductTable, float32]
+	SbuFinalPrice              db.Col[*ProductTable, int32]
+	SKU                        db.Col[*ProductTable, string]
+	NameHash                   db.Col[*ProductTable, int32]
+	DepreciationMonths         db.Col[*ProductTable, int16]
+	Properties                 db.Col[*ProductTable, []ProductProperties]
+	Presentations              db.Col[*ProductTable, []ProductPresentation]
+	ImageMain                  db.Col[*ProductTable, int32]
+	ImageIDs                   db.ColSlice[*ProductTable, int32]
+	ImageDescriptions          db.ColSlice[*ProductTable, string]
+	Stock                      db.Col[*ProductTable, []WarehouseStockMin]
+	ReservedStock              db.Col[*ProductTable, []WarehouseStockMin]
+	StockStatus                db.Col[*ProductTable, int8]
+	NameUpdated                db.Col[*ProductTable, int32]
+	Status                     db.Col[*ProductTable, int8]
+	Updated                    db.Col[*ProductTable, int32]
+	UpdatedBy                  db.Col[*ProductTable, int32]
+	Created                    db.Col[*ProductTable, int32]
+	CreatedBy                  db.Col[*ProductTable, int32]
+	CategoriesWithStock        db.ColSlice[*ProductTable, int32]
+	Version                    db.Col[*ProductTable, int16]
+	AccountCode                db.Col[*ProductTable, int32]
+	Origin                     db.Col[*ProductTable, int8]
+	WebExtraStock              db.Col[*ProductTable, int32]
+	WebHidden                  db.Col[*ProductTable, bool]
 	ProductionYieldPortions    db.Col[*ProductTable, int16]
 	ProductionSupplies         db.Col[*ProductTable, []ProductionSupply]
 	ProductionExtraCostPerUnit db.Col[*ProductTable, int32]
 	ProductionStandardCost     db.Col[*ProductTable, int32]
+	ProductionLabor            db.Col[*ProductTable, []ProductionLabor]
+	TracksLots                 db.Col[*ProductTable, bool]
+	ShelfLifeDays              db.Col[*ProductTable, int16]
+	QualityHoldOnEntry         db.Col[*ProductTable, bool]
 }
 
 func (e *Product) FillCategoriesWithStock() {

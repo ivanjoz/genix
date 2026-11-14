@@ -112,6 +112,16 @@ func refineStockDivisor(stock *ProductStock, details []*ProductStockDetail,
 	if err != nil {
 		return err
 	}
+	reservedProduction, err := core.Quantity{Units: stock.ReservedProductionQuantity, Sub: stock.ReservedProductionSubQuantity}.
+		ConvertToDivisor(fromDivisor, toDivisor)
+	if err != nil {
+		return err
+	}
+	blocked, err := core.Quantity{Units: stock.BlockedQuantity, Sub: stock.BlockedSubQuantity}.
+		ConvertToDivisor(fromDivisor, toDivisor)
+	if err != nil {
+		return err
+	}
 
 	// Convert the details first so a failure leaves nothing half-converted.
 	convertedDetails := make([]core.Quantity, len(details))
@@ -134,6 +144,8 @@ func refineStockDivisor(stock *ProductStock, details []*ProductStockDetail,
 	stock.Quantity, stock.SubQuantity = freeBucket.Units, freeBucket.Sub
 	stock.DetailQuantity, stock.DetailSubQuantity = detailBucket.Units, detailBucket.Sub
 	stock.DetailComputedQuantity, stock.DetailComputedSubQuantity = computedBucket.Units, computedBucket.Sub
+	stock.ReservedProductionQuantity, stock.ReservedProductionSubQuantity = reservedProduction.Units, reservedProduction.Sub
+	stock.BlockedQuantity, stock.BlockedSubQuantity = blocked.Units, blocked.Sub
 	stock.SubDivisor = toDivisor
 	core.Log("ApplyMovimientos refinó el divisor de stock:",
 		"stockID", stock.ID, "de", fromDivisor, "a", toDivisor, "detalles", len(details))
@@ -238,7 +250,8 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 	}
 
 	// Resolve missing LotIDs for inbound lot-by-name movements.
-	if err := resolveLotIDsForMovements(transaction, req, activeMovements, core.FechaUnix()); err != nil {
+	lotQualityByID, err := resolveLotIDsForMovements(transaction, req, activeMovements, core.FechaUnix())
+	if err != nil {
 		return nil, err
 	}
 
@@ -275,6 +288,9 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 	}
 	for i := range lockedStocks {
 		stockByID[lockedStocks[i].ID] = &lockedStocks[i]
+	}
+	if err := lockMovementLotsIn(transaction, companyID, activeMovements, lotQualityByID); err != nil {
+		return nil, err
 	}
 	// Rows this call creates: written with a plain INSERT, which fails (and reruns the transaction)
 	// if a concurrent writer created the same row first.
@@ -374,6 +390,8 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 	// averages its cost against. DetailQuantity is only re-summed after the loop, so it cannot
 	// be read mid-batch; this map is seeded from the loaded row and carries every delta since.
 	balanceByStockID := map[int64]core.Quantity{}
+	// The rows an outflow of this call touched: they are checked against their production reservation.
+	outflowStockIDs := map[int64]bool{}
 	// The value the last transfer outflow leg took out; expandStockTransfers puts its inflow leg
 	// right after it.
 	transferOutflowValue := int32(0)
@@ -492,6 +510,18 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 		if err := validateStockMovementDirection(mov.Type, isInflow, mov.ProductID); err != nil {
 			return nil, err
 		}
+		// A lot in Cuarentena or Rechazado is blocked stock (M22): it is neither sold, consumed nor
+		// transferred, only disposed of by a manual exit or a shrinkage. Whatever moves in or out of
+		// it moves its row's Blocked counter with it.
+		if mov.LotID > 0 && IsLotQualityBlocked(lotQualityByID[mov.LotID]) {
+			if !isInflow && mov.Type != StockMovementTypeManualExit && mov.Type != StockMovementTypeShrinkage {
+				return nil, core.Err(fmt.Sprintf(
+					"El lote %v del producto %v no está liberado: solo puede salir por salida manual o merma.",
+					mov.LotID, mov.ProductID))
+			}
+			blocked := core.Quantity{Units: stock.BlockedQuantity, Sub: stock.BlockedSubQuantity}.Add(delta)
+			stock.BlockedQuantity, stock.BlockedSubQuantity = blocked.Units, blocked.Sub
+		}
 		movement.Type = mov.Type
 		movement.WarehouseRefID = mov.transferPeerWarehouseID
 
@@ -499,6 +529,7 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 		deltaSubUnits := delta.TotalSubUnits(effectiveDivisor)
 
 		if !isInflow {
+			outflowStockIDs[stockID] = true
 			// An outflow leaves at its share of the row's value; the average does not move.
 			movement.MonetaryValue = StockOutflowValue(stock.StockValue, balanceSubUnits, -deltaSubUnits)
 			stock.StockValue -= int64(movement.MonetaryValue)
@@ -578,6 +609,27 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 		}
 	}
 
+	// An outflow may not eat what released production orders reserved (docs/MANUFACTURING_PLAN.md §5).
+	// The owning order releases its own reservation before its consumption reaches the engine, so
+	// only somebody else's outflow can trip this. Blocked lots cannot serve a reservation, so the
+	// reservation must fit in the rest (§10).
+	for stockID := range outflowStockIDs {
+		stock := stockByID[stockID]
+		reserved := core.Quantity{Units: stock.ReservedProductionQuantity, Sub: stock.ReservedProductionSubQuantity}
+		if reserved.IsZero() {
+			continue
+		}
+		stockDivisor := stockDivisorOf(stock)
+		unblockedBalance := core.Quantity{Units: stock.Quantity, Sub: stock.SubQuantity}.
+			Add(core.Quantity{Units: stock.DetailQuantity, Sub: stock.DetailSubQuantity}).
+			Add(core.Quantity{Units: stock.BlockedQuantity, Sub: stock.BlockedSubQuantity}.Negate())
+		if unblockedBalance.TotalSubUnits(stockDivisor) < reserved.TotalSubUnits(stockDivisor) {
+			return nil, core.Err(fmt.Sprintf(
+				"El producto %v del almacén %v tiene stock reservado por órdenes de producción: quedarían %v disponibles con %v reservados.",
+				stock.ProductID, stock.WarehouseID, unblockedBalance.TotalSubUnits(stockDivisor), reserved.TotalSubUnits(stockDivisor)))
+		}
+	}
+
 	// Backfill WarehouseQuantity on each ledger row now that DetailQuantity is final.
 	for i := range warehouseMovements {
 		if stock := stockByID[stockIDByMovement[i]]; stock != nil {
@@ -644,6 +696,9 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 			stockTable.DetailQuantity, stockTable.DetailSubQuantity,
 			stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
 			stockTable.SubDivisor,
+			// Carried from the locked row; a divisor refinement converts them with the quantities.
+			stockTable.ReservedProductionQuantity, stockTable.ReservedProductionSubQuantity,
+			stockTable.BlockedQuantity, stockTable.BlockedSubQuantity,
 			stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
 			stockTable.AverageCost, stockTable.StockValue,
 			stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
@@ -674,8 +729,9 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 // resolveLotIDsForMovements fills in InternalMovement.LotID for inbound movements that only carry a
 // LotName: the lot (lotDate, SupplierID, Name), created when missing. The lot's unique index is what
 // keeps it single: two transactions that both find it missing both insert it, the loser fails on the
-// duplicate key, and its rerun finds the winner's lot here.
-func resolveLotIDsForMovements(transaction *db.Transaction, req *core.HandlerArgs, movements []*InternalMovement, lotDate int16) error {
+// duplicate key, and its rerun finds the winner's lot here. It answers the QualityStatus of the lots
+// it created: the insert holds their rows, so the caller does not lock them again.
+func resolveLotIDsForMovements(transaction *db.Transaction, req *core.HandlerArgs, movements []*InternalMovement, lotDate int16) (map[int32]int8, error) {
 	type lotNaturalKey struct {
 		supplierID int32
 		name       string
@@ -692,8 +748,9 @@ func resolveLotIDsForMovements(transaction *db.Transaction, req *core.HandlerArg
 		supplierIDs.Add(mov.SupplierID)
 		lotNames.Add(mov.LotName)
 	}
+	createdLotQualityByID := map[int32]int8{}
 	if len(movementsByLotKey) == 0 {
-		return nil
+		return createdLotQualityByID, nil
 	}
 
 	// One read through the unique index. The IN on both columns can return a pair nobody asked for
@@ -706,45 +763,85 @@ func resolveLotIDsForMovements(transaction *db.Transaction, req *core.HandlerArg
 		SupplierID.In(supplierIDs.Values...).
 		Name.In(lotNames.Values...)
 	if err := query.Exec(); err != nil {
-		return core.Err("Error al buscar lotes existentes:", err)
+		return nil, core.Err("Error al buscar lotes existentes:", err)
 	}
 	lotIDByKey := map[lotNaturalKey]int32{}
 	for _, lot := range existingLots {
 		lotIDByKey[lotNaturalKey{supplierID: lot.SupplierID, name: lot.Name}] = lot.ID
 	}
 
-	// The missing lots, as a plain INSERT: the ORM mints their autoincrement IDs in place.
+	// The missing lots, as a plain INSERT: the ORM mints their autoincrement IDs in place. The first
+	// movement naming a lot is its origin, and carries its product's expiry and quality policy.
+	nowTime := core.SUnixTime()
 	lotsToInsert := []ProductStockLot{}
-	for lotKey := range movementsByLotKey {
+	for lotKey, lotMovements := range movementsByLotKey {
 		if _, isFound := lotIDByKey[lotKey]; isFound {
 			continue
 		}
+		originMovement := lotMovements[0]
+		expirationDate := originMovement.LotExpirationDate
+		if expirationDate == 0 && originMovement.LotShelfLifeDays > 0 {
+			expirationDate = lotDate + originMovement.LotShelfLifeDays
+		}
 		lotsToInsert = append(lotsToInsert, ProductStockLot{
-			CompanyID:  req.User.CompanyID,
-			Date:       lotDate,
-			Name:       lotKey.name,
-			SupplierID: lotKey.supplierID,
-			Created:    core.SUnixTime(),
-			CreatedBy:  req.User.ID,
+			CompanyID:          req.User.CompanyID,
+			Date:               lotDate,
+			Name:               lotKey.name,
+			SupplierID:         lotKey.supplierID,
+			OriginMovementType: originMovement.Type,
+			OriginDocumentID:   originMovement.DocumentID,
+			ExpirationDate:     expirationDate,
+			QualityStatus:      core.If(originMovement.LotQualityHold, LotQualityQuarantine, LotQualityReleased),
+			Created:            nowTime,
+			CreatedBy:          req.User.ID,
+			Updated:            nowTime,
+			UpdatedBy:          req.User.ID,
+			Status:             1,
 		})
 	}
 	if len(lotsToInsert) > 0 {
 		if err := db.InsertIn(transaction, &lotsToInsert); err != nil {
-			return core.Err("Error al crear lotes:", err)
+			return nil, core.Err("Error al crear lotes:", err)
 		}
 		for _, lot := range lotsToInsert {
 			lotIDByKey[lotNaturalKey{supplierID: lot.SupplierID, name: lot.Name}] = lot.ID
+			createdLotQualityByID[lot.ID] = lot.QualityStatus
 		}
 	}
 
 	for lotKey, lotMovements := range movementsByLotKey {
 		lotID := lotIDByKey[lotKey]
 		if lotID == 0 {
-			return core.Err(fmt.Sprintf("No se pudo resolver el lote %q del proveedor %v.", lotKey.name, lotKey.supplierID))
+			return nil, core.Err(fmt.Sprintf("No se pudo resolver el lote %q del proveedor %v.", lotKey.name, lotKey.supplierID))
 		}
 		for _, mov := range lotMovements {
 			mov.LotID = lotID
 		}
+	}
+	return createdLotQualityByID, nil
+}
+
+// lockMovementLotsIn locks the lots the movements name, after their stock rows (the order every lot
+// writer follows, PostProductStockLotStatus included), and answers each lot's QualityStatus. Locked,
+// so a status change cannot land between this read and the Blocked counters written from it.
+func lockMovementLotsIn(transaction *db.Transaction, companyID int32, movements []*InternalMovement,
+	lotQualityByID map[int32]int8) error {
+
+	lockedLots := []ProductStockLot{}
+	for _, lotID := range core.Map(movements, func(mov *InternalMovement) int32 { return mov.LotID }) {
+		if _, isCreatedNow := lotQualityByID[lotID]; !isCreatedNow {
+			lockedLots = append(lockedLots, ProductStockLot{CompanyID: companyID, ID: lotID})
+		}
+	}
+	if len(lockedLots) == 0 {
+		return nil
+	}
+	slices.SortFunc(lockedLots, func(a, b ProductStockLot) int { return cmp.Compare(a.ID, b.ID) })
+	if err := db.LockByKeys(transaction, &lockedLots); err != nil {
+		return core.Err("Error al obtener los lotes:", err)
+	}
+	for _, lot := range lockedLots {
+		lotQualityByID[lot.ID] = lot.QualityStatus
 	}
 	return nil
 }
@@ -800,6 +897,7 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 			// adopts whatever the movements carry rather than trusting the stale row.
 			stock.Quantity, stock.SubQuantity = 0, 0
 			stock.DetailQuantity, stock.DetailSubQuantity = 0, 0
+			stock.BlockedQuantity, stock.BlockedSubQuantity = 0, 0
 			stock.SubDivisor = 0
 			// The value and the average are replayed from the ledger, like the quantities.
 			stock.AverageCost, stock.StockValue = 0, 0
@@ -1007,12 +1105,31 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 		}
 	}
 
+	// The lots that are not Liberado: their details roll up into Blocked too. The lots are read under
+	// the company's stock locks, which every status change takes first.
+	lots := []ProductStockLot{}
+	lotQuery := db.Query(&lots)
+	lotQuery.Select(lotQuery.ID, lotQuery.QualityStatus).CompanyID.Equals(companyID)
+	if err := lotQuery.Exec(); err != nil {
+		return core.Err("Error al obtener los lotes:", err)
+	}
+	blockedLotIDs := core.SliceSet[int32]{}
+	for _, lot := range lots {
+		if IsLotQualityBlocked(lot.QualityStatus) {
+			blockedLotIDs.Add(lot.ID)
+		}
+	}
+
 	// Roll up DetailQuantity onto each stock once every movement is accumulated. Every detail
 	// under a stock is at that stock's divisor by now, so the sum is well defined.
 	for _, detail := range detailByKey {
 		if stock := stockByID[detail.ProductStockID]; stock != nil {
 			stock.DetailQuantity += detail.Quantity
 			stock.DetailSubQuantity += detail.SubQuantity
+			if blockedLotIDs.Include(detail.LotID) {
+				stock.BlockedQuantity += detail.Quantity
+				stock.BlockedSubQuantity += detail.SubQuantity
+			}
 		}
 		detail.Status = core.If((core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}).IsZero(),
 			int8(0), int8(1))
@@ -1063,6 +1180,7 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 		if err := db.UpdateIn(transaction, &lockedStocksToUpdate,
 			stockTable.Quantity, stockTable.SubQuantity,
 			stockTable.DetailQuantity, stockTable.DetailSubQuantity,
+			stockTable.BlockedQuantity, stockTable.BlockedSubQuantity,
 			stockTable.SubDivisor, stockTable.AverageCost, stockTable.StockValue,
 			// WarehouseID and Status are the delta index's pinned columns: written together.
 			stockTable.Updated, stockTable.Status, stockTable.WarehouseID,

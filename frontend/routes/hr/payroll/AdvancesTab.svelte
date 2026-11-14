@@ -10,7 +10,7 @@
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
   import { formatTime, todayUnixDay } from '#libs/helpers.ts'
-  import { employeeFullName } from '#routes/hr/employees/employees.ts'
+  import { employeeFullName, payrollEmployees } from '#routes/hr/employees/employees.ts'
   import type { EmployeesService } from '#services/hr/employees.svelte.ts'
   import { EmployeeRecordsYearService, postPayAdvances } from '#services/hr/employee-records.svelte.ts'
   import {
@@ -46,7 +46,8 @@
   const cajas = new CajasService()
   const cashBankOptions = $derived(payrollCashBankOptions(cajas.Cajas))
 
-  const employeeOptions = $derived(employees.records.filter((employee) => employee.ss === 1)
+  // Advances are paid back through the payslip: Planilla workers only (plan §9.5).
+  const employeeOptions = $derived(payrollEmployees(employees.records).filter((employee) => employee.ss === 1)
     .map((employee) => ({ ID: employee.ID, Name: employeeFullName(employee) })))
   const visibleAdvances = $derived(yearRecords.records.filter((record) =>
     record.Period === selected.Period && advanceTypeNames.has(record.ConceptID) && isLiveRecord(record)))

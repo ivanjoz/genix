@@ -43,6 +43,8 @@ export interface IExpense extends IPurchaseDocument {
   Amount: number
   PaidAmount: number
   AccountCode: number  // PCGE account: expense account (simple) or the supply's (inventory). 0 = unclassified.
+  // The supplier's subcontracted production order this invoice is for (docs/MANUFACTURING_PLAN.md §8).
+  ProductionOrderID?: number
   Created: number  // SUnixTime the expense was registered.
   ss: number  // Payment lifecycle: 0 removed · 1 created/pending · 2 fully paid.
   upd: number
@@ -159,7 +161,8 @@ export class ExpensesService extends GetHandler<IExpense> {
   keyID = "ID"
   // 30s TTL: re-clicking a tab within the window reads cache instead of hitting the server.
   // Route depends on the status tab; bump ver so old (status-less) caches are dropped.
-  useCache = { min: 0.5, ver: 3 }
+  // ver 4: ProductionOrderID.
+  useCache = { min: 0.5, ver: 4 }
   prependOnSave = true
 
   records: IExpense[] = $state([])

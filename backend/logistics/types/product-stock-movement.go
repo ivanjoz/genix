@@ -175,7 +175,7 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 // Lot resolution rules:
 //   - If LotID > 0: use it directly (required for outbound, Quantity < 0).
 //   - If LotID == 0 and LotName != "" and Quantity > 0 (inbound): lot is resolved or
-//     created from Hash(today, SupplierID, LotName). SupplierID is required.
+//     created as (today, SupplierID, LotName); SupplierID 0 is a lot of no supplier.
 //   - If LotID == 0 and LotName == "" and SerialNumber == "": treated as "no-detail",
 //     mutating ProductStockV2.Quantity only.
 type InternalMovement struct {
@@ -213,6 +213,13 @@ type InternalMovement struct {
 	// locked, so the check and the write see the same balance.
 	RejectInbound      bool // the company only lets stock in through a purchase order
 	RequireInboundCost bool // the inflow must carry a Price even if the row has an AverageCost
+
+	// The lot a LotName inflow creates (docs/MANUFACTURING_PLAN.md §10), read only when the engine
+	// creates it. The caller copies them from the product: the engine cannot read Product, whose
+	// package imports this one.
+	LotExpirationDate int16 // UnixDay; 0 = the lot's date + LotShelfLifeDays, or none
+	LotShelfLifeDays  int16 // the product's ShelfLifeDays
+	LotQualityHold    bool  // the product's QualityHoldOnEntry: the lot is born in Cuarentena
 
 	// transferPeerWarehouseID is set by expandStockTransfers on both legs of a transfer: the
 	// other warehouse, written to the ledger as WarehouseRefID.

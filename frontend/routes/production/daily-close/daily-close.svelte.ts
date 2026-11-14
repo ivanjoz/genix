@@ -1,12 +1,14 @@
 import { GET, GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
-import type { IDailyClosePendingDay, IDailyClosePreview, IProductionClose } from './daily-close.ts'
+import type { IProductionOrder } from '#services/production/production-orders.ts'
+import type { IDailyClosePendingDay, IDailyClosePreview } from './daily-close.ts'
 
-// The past closes of one warehouse, newest first.
-export class ProductionClosesService extends GetHandler<IProductionClose> {
+// The past closes of one warehouse, newest first: its production orders of Kind 2.
+export class ProductionClosesService extends GetHandler<IProductionOrder> {
   route = 'production-closes'
-  useCache = { min: 0.1, ver: 1 }
+  // ver 2: a close is a production_order.
+  useCache = { min: 0.1, ver: 2 }
 
-  handler(result: { records?: IProductionClose[] }): void {
+  handler(result: { records?: IProductionOrder[] }): void {
     // A close with ss = 0 was voided: the delta still sends it (without ss), the list drops it.
     const records = (result?.records || []).filter((productionClose) => productionClose.ss)
     records.sort((leftClose, rightClose) => rightClose.ID - leftClose.ID)
@@ -40,5 +42,5 @@ export const postDailyClose = (preview: IDailyClosePreview) => {
       Date: preview.Date, PreviewHash: preview.PreviewHash,
     },
     refreshRoutes: ['production-closes', 'sale-orders'],
-  }) as Promise<IProductionClose>
+  }) as Promise<IProductionOrder>
 }

@@ -155,10 +155,19 @@ func receivePurchaseOrderIn(
 	// net of the IGV the comprobante lets the company recover. An order whose comprobante is not
 	// registered yet enters at the gross price, which is what it has.
 	orderDocument := order.PurchaseDocument()
+	productByID, err := loadStockItemProducts(req.User.CompanyID, items)
+	if err != nil {
+		return err
+	}
 	movimientos := make([]types.InternalMovement, 0, len(items))
 	for _, item := range items {
 		key := orderKey{ProductID: item.ProductID, PresentationID: item.PresentationID}
-		movimientos = append(movimientos, types.InternalMovement{
+		product := productByID[item.ProductID]
+		// Traceability starts at the reception: a product that tracks lots enters into one (§10).
+		if product.TracksLots && item.LotID == 0 && item.LotCode == "" {
+			return core.Err(fmt.Sprintf(`"%s" controla lotes: ingréselo con su lote.`, product.Name))
+		}
+		movimientos = append(movimientos, withProductLotPolicy(types.InternalMovement{
 			Type:           types.StockMovementTypePurchaseReception,
 			DocumentID:     int64(order.ID),
 			WarehouseID:    warehouseID,
@@ -173,7 +182,7 @@ func receivePurchaseOrderIn(
 			Price:          orderDocument.InventoryUnitCost(getStats(key).price),
 			// What the reception posts to, so the accounting operations never read the order back.
 			PurchaseAccountCode: order.ReceptionAccountOf(item.ProductID),
-		})
+		}, product, item.LotExpirationDate))
 	}
 	if err := types.ApplyMovimientosIn(transaction, req, movimientos); err != nil {
 		return err

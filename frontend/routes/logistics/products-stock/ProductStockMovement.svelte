@@ -5,14 +5,16 @@
 import Checkbox from '#components/form/Checkbox.svelte';
 import Layer from '#components/layers/Layer.svelte';
 import SearchSelect from '#components/form/SearchSelect.svelte';
-import LoadingBar from '#components/misc/LoadingBar.svelte';
 import TableGrid from '#components/vTable/TableGrid.svelte';
 import VTable from '#components/vTable/VTable.svelte';
 import type { ITableColumn } from '#components/vTable/types.ts';
 import { Core, tr } from '#core/store.svelte.ts';
 import T from '#components/misc/T.svelte';
-import { getStaticRecordsByID } from '@genix/ui/cache';
-import { formatN } from '#libs/helpers.ts';
+import { formatN, formatTime, todayUnixDay } from '#libs/helpers.ts';
+import { SupplyMaterialService } from '#routes/production/supplies-materials/supply-material.svelte.ts';
+import { isLotExpired, lotQualityOptions } from './lot-traceability';
+import LotStatusModal from './LotStatusModal.svelte';
+import LotTraceability from './LotTraceability.svelte';
 import FilterInput from '#components/form/FilterInput.svelte';
 import Button from '#components/buttons/Button.svelte';
 import { untrack } from 'svelte';
@@ -65,11 +67,15 @@ type IProductoStockDisplay = {
 
 const almacenes = new WarehousesService()
 const productos = new ProductsService(true)
+// Supplies are not in the product catalog; the lot traceability names them.
+const supplies = new SupplyMaterialService(true)
 const empresaParametros = new EmpresaParametrosService()
 
 const blockManualInbound = $derived((empresaParametros.empresa.Flags || []).includes(COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND))
 
 const STOCK_SAVE_SUMMARY_MODAL_ID = 21
+const LOT_STATUS_MODAL_ID = 22
+const LOT_TRACEABILITY_MODAL_ID = 23
 const increaseTypeOptions = manualStockIncreaseTypes.map((movementType) => ({ id: movementType.id, name: tr(movementType.name) }))
 const decreaseTypeOptions = manualStockDecreaseTypes.map((movementType) => ({ id: movementType.id, name: tr(movementType.name) }))
 
@@ -88,94 +94,37 @@ let selectedSerialNumberGroup = $state<IProductoStockDisplay | null>(null)
 let selectedSerialNumbers = $state<IProductStockDetailRow[]>([])
 let selectedLotGroup = $state<IProductoStockDisplay | null>(null)
 let selectedLots = $state<IProductStockDetailRow[]>([])
-let isSerialNumberLayerLoadingLots = $state(false)
-let isLotLayerLoadingLots = $state(false)
-let serialNumberLayerLotsRequestVersion = 0
-let lotLayerLotsRequestVersion = 0
 const newSerialNumberRowsByProductStockID = new Map<number, IProductStockDetailRow[]>()
 const newLotRowsByProductStockID = new Map<number, IProductStockDetailRow[]>()
 let pendingDetailRowsVersion = $state(0)
 
-// Backing store for lot metadata resolved via getStaticRecordsByID.
-// Reactive so the rendered lot names update once a fetch for the opened layer resolves.
+// The lots of the warehouse's details, as the stock route answered them: fresh on every load, since
+// a lot's quality status and expiry change (docs/MANUFACTURING_PLAN.md §10).
 const lotsByID = new SvelteMap<number, IProductStockLot>()
+
+const loadLotsOfStock = (stockRecords: IProductStock[]) => {
+  lotsByID.clear()
+  for (const productStockRecord of stockRecords) {
+    for (const stockDetail of productStockRecord.StockDetails) {
+      if (stockDetail.Lot) { lotsByID.set(stockDetail.Lot.ID, stockDetail.Lot) }
+    }
+  }
+}
 
 const getLotNameByID = (lotID?: number) => {
   if (!lotID) { return '' }
-  const lotRecord = lotsByID.get(lotID)
-  // Fall back to a placeholder while the static-cache fetch is in flight.
-  return lotRecord?.Name || `LOT-${lotID}`
+  return lotsByID.get(lotID)?.Name || `LOT-${lotID}`
 }
 
-// Collect unique LotIDs from a slice of stock details and ensure their records are in `lotsByID`.
-// The fetch is cache-first (memory → IDB → server), so repeat calls for already-loaded lots are free.
-const ensureLotsLoadedForDetails = async (stockDetails: IProductStockDetailRow[]) => {
-  const missingLotIDs: number[] = []
-  const seenLotIDs = new Set<number>()
-  for (const stockDetail of stockDetails) {
-    const lotID = stockDetail.LotID || 0
-    if (lotID <= 0) { continue }
-    if (seenLotIDs.has(lotID)) { continue }
-    seenLotIDs.add(lotID)
-    if (lotsByID.has(lotID)) { continue }
-    missingLotIDs.push(lotID)
-  }
-  if (missingLotIDs.length === 0) { return }
+const today = todayUnixDay()
+// The lot whose status modal, and the one whose traceability, is open.
+let lotInStatusModal = $state<IProductStockLot | undefined>(undefined)
+let lotInTraceability = $state<IProductStockLot | undefined>(undefined)
 
-  const fetchedLotsByID = await getStaticRecordsByID<IProductStockLot>(
-    'product-stock-lots-by-ids',
-    missingLotIDs,
-  )
-  for (const [lotID, lotRecord] of fetchedLotsByID) {
-    lotsByID.set(lotID, lotRecord)
-  }
-}
-
-const hasMissingLotsForDetails = (stockDetails: IProductStockDetailRow[]) => {
-  const seenLotIDs = new Set<number>()
-  for (const stockDetail of stockDetails) {
-    const lotID = stockDetail.LotID || 0
-    if (lotID <= 0) { continue }
-    if (seenLotIDs.has(lotID)) { continue }
-    seenLotIDs.add(lotID)
-    if (!lotsByID.has(lotID)) { return true }
-  }
-  return false
-}
-
-// Keep the layer open while lot metadata resolves, but avoid stale async completions
-// toggling the loader for a newer request.
-const loadLotsForSerialNumberLayer = async (stockDetails: IProductStockDetailRow[]) => {
-  if (!hasMissingLotsForDetails(stockDetails)) {
-    isSerialNumberLayerLoadingLots = false
-    return
-  }
-  const requestVersion = ++serialNumberLayerLotsRequestVersion
-  isSerialNumberLayerLoadingLots = true
-  try {
-    await ensureLotsLoadedForDetails(stockDetails)
-  } finally {
-    if (requestVersion === serialNumberLayerLotsRequestVersion) {
-      isSerialNumberLayerLoadingLots = false
-    }
-  }
-}
-
-// Lot panels also depend on resolved lot metadata before the table can render names consistently.
-const loadLotsForLotLayer = async (stockDetails: IProductStockDetailRow[]) => {
-  if (!hasMissingLotsForDetails(stockDetails)) {
-    isLotLayerLoadingLots = false
-    return
-  }
-  const requestVersion = ++lotLayerLotsRequestVersion
-  isLotLayerLoadingLots = true
-  try {
-    await ensureLotsLoadedForDetails(stockDetails)
-  } finally {
-    if (requestVersion === lotLayerLotsRequestVersion) {
-      isLotLayerLoadingLots = false
-    }
-  }
+const onLotStatusSaved = (savedLot: IProductStockLot) => {
+  lotsByID.set(savedLot.ID, savedLot)
+  // The rows' Blocked counters moved with the status: read the stock again on the next load.
+  selectedLots = [...selectedLots]
 }
 
 // hasLotAssignment: true when the row is bound to a lot — either a server-assigned
@@ -327,7 +276,6 @@ const openDetailLayer = (
       ...getNewDetailRows(productStockDisplay.base, 'serial'),
     ], 'serial')
     addPendingSerialNumberRow()
-    void loadLotsForSerialNumberLayer(selectedSerialNumbers)
     ui.openSideLayer(2)
     return
   }
@@ -338,13 +286,10 @@ const openDetailLayer = (
     ...getNewDetailRows(productStockDisplay.base, 'lot'),
   ], 'lot')
   addPendingLotRow()
-  void loadLotsForLotLayer(selectedLots)
   ui.openSideLayer(3)
 }
 
 const closeSerialNumberLayer = () => {
-  serialNumberLayerLotsRequestVersion++
-  isSerialNumberLayerLoadingLots = false
   if (selectedSerialNumberGroup) {
     persistNewDetailRows(selectedSerialNumberGroup.base, 'serial')
     selectedSerialNumberGroup.computed = false
@@ -355,8 +300,6 @@ const closeSerialNumberLayer = () => {
 }
 
 const closeLotLayer = () => {
-  lotLayerLotsRequestVersion++
-  isLotLayerLoadingLots = false
   if (selectedLotGroup) {
     persistNewDetailRows(selectedLotGroup.base, 'lot')
     selectedLotGroup.computed = false
@@ -579,6 +522,51 @@ const lotColumns: ITableColumn<IProductStockDetailRow>[] = [
       return { css: `text-right ${stockDetail._isNew ? 'text-blue-fg' : ''}`.trim(), text: stockDetail.Quantity || '' }
     },
     mobile: { order: 2, css: 'col-span-12', labelTop: 'Qty.|Cant.' },
+  },
+  {
+    // A lot that is not Liberado can only leave by a manual exit or a shrinkage (M22).
+    header: 'Status|Estado',
+    showEditIcon: true,
+    getValue: (stockDetail) => tr(lotQualityOptions.find((option) => option.id === lotsByID.get(stockDetail.LotID)?.QualityStatus)?.name || ''),
+    onCellClick: (stockDetail) => {
+      const lot = lotsByID.get(stockDetail.LotID)
+      if (!lot) { return }
+      lotInStatusModal = lot
+      ui.openModal(LOT_STATUS_MODAL_ID)
+    },
+    render: (stockDetail) => {
+      const qualityOption = lotQualityOptions.find((option) => option.id === lotsByID.get(stockDetail.LotID)?.QualityStatus)
+      return qualityOption ? { css: qualityOption.css, text: tr(qualityOption.name) } : ''
+    },
+    mobile: { order: 3, css: 'col-span-12', labelTop: 'Status|Estado' },
+  },
+  {
+    // An expired lot is warned, not blocked (M23): red, and production consumes it last.
+    header: 'Expiry|Vence',
+    getValue: (stockDetail) => {
+      const expirationDate = lotsByID.get(stockDetail.LotID)?.ExpirationDate || 0
+      return expirationDate ? formatTime(expirationDate, 'Y-m-d') as string : ''
+    },
+    render: (stockDetail) => {
+      const lot = lotsByID.get(stockDetail.LotID)
+      if (!lot?.ExpirationDate) { return '' }
+      return { css: isLotExpired(lot, today) ? 'text-red-fg' : '', text: formatTime(lot.ExpirationDate, 'Y-m-d') as string }
+    },
+    mobile: { order: 4, css: 'col-span-12', labelTop: 'Expiry|Vence' },
+  },
+  {
+    header: 'Trace|Traz.',
+    getValue: () => '',
+    onCellClick: (stockDetail) => {
+      const lot = lotsByID.get(stockDetail.LotID)
+      if (!lot) { return }
+      lotInTraceability = lot
+      ui.openModal(LOT_TRACEABILITY_MODAL_ID)
+    },
+    render: (stockDetail) => lotsByID.has(stockDetail.LotID)
+      ? { css: 'flex justify-center text-blue-fg', children: [{ tagName: 'i', css: 'icon-[fa--sitemap]' }] }
+      : '',
+    mobile: { order: 5, css: 'col-span-12', labelTop: 'Trace|Traz.' },
   },
 ]
 
@@ -815,6 +803,7 @@ const onChangeAlmacen = async () => {
     newSerialNumberRowsByProductStockID.clear()
     newLotRowsByProductStockID.clear()
     touchPendingDetailRows('warehouse-change-clear')
+    loadLotsOfStock(result || [])
     almacenStock = result || []
     almacenStockGetted = result || []
   } finally {
@@ -966,6 +955,7 @@ const confirmSave = async () => {
 
     // The server moved the average with every costed increase; read it back rather than re-deriving it here.
     const refreshedStock = await getWarehouseProductStock(stockFilters.warehouseID)
+    loadLotsOfStock(refreshedStock)
     const averageCostByStockID = new Map(refreshedStock.map((productStockRecord) => [productStockRecord.ID, productStockRecord.AverageCost]))
     for (const productStockRecord of almacenStock) {
       productStockRecord.AverageCost = averageCostByStockID.get(productStockRecord.ID)
@@ -1100,35 +1090,27 @@ let rerenderHandler: ((() => void) | undefined) = undefined
     closeSerialNumberLayer()
   }}
 >
-  {#if isSerialNumberLayerLoadingLots}
-    <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-surface-soft">
-      <LoadingBar label={tr("Loading Batches...|Cargando Lotes...")} />
-    </div>
-  {:else}
-    <TableGrid columns={serialNumberColumns} data={selectedSerialNumbers} height="calc(100vh - 14rem)"
-      cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
-      getRowId={(stockDetail) => `${getLotIdentity(stockDetail)}_${stockDetail.SerialNumber || 'pending'}_${stockDetail._panelType || ''}`}
-    />
-  {/if}
+  <TableGrid columns={serialNumberColumns} data={selectedSerialNumbers} height="calc(100vh - 14rem)"
+    cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
+    getRowId={(stockDetail) => `${getLotIdentity(stockDetail)}_${stockDetail.SerialNumber || 'pending'}_${stockDetail._panelType || ''}`}
+  />
 </Layer>
 
-<Layer id={3} type="side" sideLayerSize={620} title={selectedLotGroupTitle} titleCss="h2"
+<Layer id={3} type="side" sideLayerSize={760} title={selectedLotGroupTitle} titleCss="h2"
   css="px-12 py-10"
   onClose={() => {
     closeLotLayer()
   }}
 >
-  {#if isLotLayerLoadingLots}
-    <div class="mt-6 p-8 min-h-240 w-full fx-c rounded-md bg-surface-soft">
-      <LoadingBar label={tr("Loading Batches...|Cargando Lotes...")} />
-    </div>
-  {:else}
-    <TableGrid columns={lotColumns} data={selectedLots} height="calc(100vh - 14rem)"
-      cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
-      getRowId={(stockDetail) => `${getLotIdentity(stockDetail)}_${stockDetail._panelType || ''}`}
-    />
-  {/if}
+  <TableGrid columns={lotColumns} data={selectedLots} height="calc(100vh - 14rem)"
+    cellCss="px-6" headerCss="px-6 flex items-center min-h-32" css="mt-6"
+    getRowId={(stockDetail) => `${getLotIdentity(stockDetail)}_${stockDetail._panelType || ''}`}
+  />
 </Layer>
+
+<LotStatusModal id={LOT_STATUS_MODAL_ID} lot={lotInStatusModal} onSaved={onLotStatusSaved} />
+<LotTraceability id={LOT_TRACEABILITY_MODAL_ID} lot={lotInTraceability} productName={(productID) =>
+  productos.recordsMap.get(productID)?.Name || supplies.recordsMap.get(productID)?.Name || `Producto-${productID}`} />
 
 <Modal id={STOCK_SAVE_SUMMARY_MODAL_ID}
   size={4}

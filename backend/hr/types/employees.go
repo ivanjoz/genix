@@ -8,7 +8,7 @@ import (
 )
 
 // Employee is the label-safe record of a worker: identity and where he sits in the company. It
-// carries no salary, pension or bank data on purpose — those live in Contract, behind the payroll
+// carries no salary, pension or bank data on purpose — those live in ContractAgreement, behind the payroll
 // access — because hr-employees-ids may be granted to other modules that only need a name, and a
 // cached route ships whole records (plan §3.0, rule 2).
 type Employee struct {
@@ -52,6 +52,10 @@ type Employee struct {
 	FamilyAllowance []DayRange `cb:"29"`
 	// ManagerEmployeeID is the immediate boss (0 = reports to nobody): the edge the org chart draws.
 	ManagerEmployeeID int32 `cb:"30"`
+	// EngagementType is how the worker is engaged (docs/MANUFACTURING_PLAN.md §9.5, M28): Planilla, or off
+	// payroll (recibo por honorarios, temporary), a worker who only logs production hours. The payroll
+	// skips every worker that is not Planilla.
+	EngagementType int8 `cb:"31"`
 }
 
 // DayRange is a span of UnixDays, both included.
@@ -91,6 +95,7 @@ type EmployeeTable struct {
 	DependentsCount   db.Col[*EmployeeTable, int8]
 	FamilyAllowance   db.Col[*EmployeeTable, []DayRange]
 	ManagerEmployeeID db.Col[*EmployeeTable, int32]
+	EngagementType    db.Col[*EmployeeTable, int8]
 }
 
 // SetDependentsSummary rewrites the employee's dependents summary from all his dependents.

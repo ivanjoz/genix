@@ -7,7 +7,7 @@
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
   import Page from '#domain/Page.svelte'
-  import { employeeFullName, isTerminated } from '#routes/hr/employees/employees.ts'
+  import { employeeFullName, isTerminated, payrollEmployees } from '#routes/hr/employees/employees.ts'
   import { EmployeeRecordsService } from '#services/hr/employee-records.svelte.ts'
   import { EmployeesService, type IEmployee } from '#services/hr/employees.svelte.ts'
   import { PayrollConfigService } from '#services/hr/payroll.svelte.ts'
@@ -32,7 +32,8 @@
   let layerView = $state(VIEW_ENTRIES)
 
   // Terminated workers stay reachable behind the checkbox: they can still have a pending installment.
-  const shownEmployees = $derived(employees.records.filter((employee) =>
+  // The records feed the payroll, so workers off payroll are not listed (plan §9.5).
+  const shownEmployees = $derived(payrollEmployees(employees.records).filter((employee) =>
     employee.ss > 0 && (showTerminated || !isTerminated(employee))))
 
   const openEmployee = (employee: IEmployee) => {

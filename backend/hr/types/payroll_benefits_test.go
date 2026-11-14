@@ -4,8 +4,8 @@ import "testing"
 
 // Worked cases of the benefit runs, calculated by hand in the comments. Money in cents.
 
-func onpContract(salary int32, from int16) Contract {
-	return Contract{ID: 7, ValidFrom: from, StartDate: from, ContractType: ContractTypeIndefinite, MonthlySalary: salary,
+func onpContract(salary int32, from int16) ContractAgreement {
+	return ContractAgreement{ID: 7, ValidFrom: from, StartDate: from, ContractType: ContractTypeIndefinite, PayAmount: salary,
 		DailyHours: 8, PensionSystem: PensionSystemONP, Status: StatusActive}
 }
 
@@ -48,7 +48,7 @@ func TestGratificacionAgainstProvision(t *testing.T) {
 	payslip, ok := CalculateGratificacion(BenefitPayslipInput{
 		Run:       PayrollRun{Period: 2607},
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 1, 1)},
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 1, 1))},
 		History:   history, Legal: testLegalValues(),
 	})
 	if !ok || len(payslip.Diagnostics) > 0 {
@@ -71,7 +71,7 @@ func TestGratificacionCountsOnlyFullMonths(t *testing.T) {
 	payslip, ok := CalculateGratificacion(BenefitPayslipInput{
 		Run:       PayrollRun{Period: 2607},
 		Employee:  Employee{ID: 1, HireDate: unixDay(2026, 2, 15)},
-		Contracts: []Contract{onpContract(200000, unixDay(2026, 2, 15))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2026, 2, 15))},
 		Legal:     testLegalValues(),
 	})
 	if !ok || lineAmount(payslip, LegalGratificacion) != 133333 {
@@ -85,7 +85,7 @@ func TestCtsWithGratificacionSixth(t *testing.T) {
 	payslip, ok := CalculateCts(BenefitPayslipInput{
 		Run:       PayrollRun{Period: 2605},
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 1, 1)},
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 1, 1))},
 		History: []Payslip{{Period: 2512, WorkedDays: 30, Status: PayrollStatusPaid,
 			Lines: []PayslipLine{{ConceptID: LegalGratificacion, Kind: ConceptKindEarning, Amount: 200000}}}},
 		Legal: testLegalValues(),
@@ -97,7 +97,7 @@ func TestCtsWithGratificacionSixth(t *testing.T) {
 	partTime := onpContract(200000, unixDay(2025, 1, 1))
 	partTime.DailyHours = 3
 	if _, ok := CalculateCts(BenefitPayslipInput{Run: PayrollRun{Period: 2605}, Employee: Employee{ID: 1, HireDate: unixDay(2025, 1, 1)},
-		Contracts: []Contract{partTime}, Legal: testLegalValues()}); ok {
+		Contracts: []ContractAgreement{partTime}, Legal: testLegalValues()}); ok {
 		t.Error("a part-time worker has no CTS")
 	}
 }
@@ -108,7 +108,7 @@ func TestSettlementOfADismissal(t *testing.T) {
 		Run: PayrollRun{Period: 2610},
 		Employee: Employee{ID: 1, HireDate: unixDay(2025, 10, 1), TerminationDate: unixDay(2026, 10, 15),
 			TerminationReason: TerminationDismissal},
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 10, 1))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 10, 1))},
 		Records:   []EmployeeRecord{{ConceptID: LegalVacation, Quantity: 10}},
 		Legal:     testLegalValues(),
 	})
@@ -138,7 +138,7 @@ func TestSettlementRecoversTheLoanBalance(t *testing.T) {
 	payslip, _ := CalculateSettlement(BenefitPayslipInput{
 		Run:       PayrollRun{Period: 2610},
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 10, 1), TerminationDate: unixDay(2026, 10, 31), TerminationReason: TerminationResignation},
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 10, 1))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 10, 1))},
 		Records:   LoanInstallments(EmployeeRecord{ID: 4, ConceptID: LegalLoan, Amount: 90000, Quantity: 3}, 2609),
 		Legal:     testLegalValues(),
 	})
@@ -153,7 +153,7 @@ func TestMonthlyPayslipWithVacation(t *testing.T) {
 	payslip, ok := CalculateMonthlyPayslip(MonthlyPayslipInput{
 		Period:    2603,
 		Employee:  Employee{ID: 1, HireDate: unixDay(2025, 1, 1), Status: StatusActive},
-		Contracts: []Contract{onpContract(200000, unixDay(2025, 1, 1))},
+		Contracts: []ContractAgreement{onpContract(200000, unixDay(2025, 1, 1))},
 		Records:   []EmployeeRecord{{ConceptID: LegalVacation, FromDate: unixDay(2026, 3, 10), ToDate: unixDay(2026, 3, 19), Quantity: 10}},
 		History:   []Payslip{monthlyPayslip(2602, provisionLine(4115, 50000))},
 		Legal:     testLegalValues(),

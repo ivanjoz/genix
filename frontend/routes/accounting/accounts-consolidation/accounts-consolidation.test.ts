@@ -4,8 +4,8 @@ import { periodBounds, type ISalesBookDocument } from '../books/books'
 import { PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocument } from '../books/books.purchases'
 import {
   buildAccountingOperations, buildTrialBalance, bulkClassificationTargets,
-  classificationTargetsOf, entrySides, groupOperations, inferSameDayPayments, referencedRecordIDs,
-  summarizeOperations, OPERATION_CREDIT_NOTE, OPERATION_STATUS_CLASSIFIED,
+  classificationTargetsOf, entrySides, groupOperations, inferSameDayPayments, monthlyLaborAdjustment, referencedRecordIDs,
+  summarizeOperations, OPERATION_CREDIT_NOTE, OPERATION_LABOR_ADJUSTMENT, OPERATION_STATUS_CLASSIFIED,
   OPERATION_STATUS_INCOMPLETE, OPERATION_STATUS_UNCLASSIFIED,
   type IAccountingOperation, type IAccountingSources, type IOperationAsset,
   type IOperationsContext,
@@ -264,6 +264,50 @@ describe('production close', () => {
       StockMovements: [makeCloseMovement(15, 46, 300), makeCloseMovement(16, MADE_PRODUCT, 300)],
     }))
     expect(operation.Status).toBe(OPERATION_STATUS_INCOMPLETE)
+  })
+
+  it('books a semi-finished supply in 231 / 713: produced by one order, consumed by the next', () => {
+    const SEMI_FINISHED = 47 // stitched uppers: a supply (ss 2) the company makes (Origin 2)
+    const operations = buildAccountingOperations(makeResponse({
+      Products: [...products, { ID: SEMI_FINISHED, ss: 2, Origin: 2, AccountCode: 0 }],
+      StockMovements: [
+        // Order 129 cuts leather (a bought supply) into uppers…
+        makeCloseMovement(15, SUPPLY, 400),
+        makeCloseMovement(16, SEMI_FINISHED, 500),
+        // …and order 130 consumes the uppers and the leather into shoes.
+        { ID: 9001, Date: DAY, Type: 15, DocumentID: 130, ProductID: SEMI_FINISHED, MonetaryValue: 500 },
+        { ID: 9002, Date: DAY, Type: 15, DocumentID: 130, ProductID: SUPPLY, MonetaryValue: 100 },
+        { ID: 9003, Date: DAY, Type: 16, DocumentID: 130, ProductID: MADE_PRODUCT, MonetaryValue: 900 },
+      ],
+    }), context)
+    const entryByKey = new Map(operations.map((operation) => [operation.Key, entryOf(operation)]))
+    expect(entryByKey.get(`PR-${CLOSE_ID}-${DAY}`)).toEqual(["6132:400/0", "252:0/400", "231:500/0", "713:0/500"])
+    expect(entryByKey.get(`PR-130-${DAY}`)).toEqual([
+      "713:500/0", "231:0/500", "6132:100/0", "252:0/100", "2111:900/0", "7111:0/900",
+    ])
+  })
+
+  it('takes the labor booked above the actual payroll back from the stored production', () => {
+    // Worker 1 booked 2000 against an actual 1500 (salary 1000 + EsSalud 90 + provisions 410): 500 back.
+    // Worker 2 booked 800 against 3000: idle hours, nothing. A gratificación paid from its provision
+    // is left out of the actual cost.
+    const payslips = [
+      { ID: 1, EmployeeID: 1, Period: 2609, NetPay: 0, ss: 2, Lines: [
+        { Kind: 1, AccountCode: 6211, PayableAccountCode: 411, Amount: 1000 },
+        { Kind: 1, AccountCode: 6214, PayableAccountCode: 411, Amount: 600, ProvisionAccountCode: 4114, ProvisionedAmount: 600 },
+        { Kind: 3, AccountCode: 6271, PayableAccountCode: 4031, Amount: 90 },
+        { Kind: 4, AccountCode: 6214, PayableAccountCode: 4114, Amount: 410 },
+      ] },
+      { ID: 2, EmployeeID: 2, Period: 2609, NetPay: 0, ss: 2, Lines: [{ Kind: 1, AccountCode: 6211, PayableAccountCode: 411, Amount: 3000 }] },
+    ]
+    const laborBooked = [{ EmployeeID: 1, Amount: 2000 }, { EmployeeID: 2, Amount: 800 }]
+    expect(monthlyLaborAdjustment(laborBooked, payslips)).toBe(500)
+    expect(monthlyLaborAdjustment(laborBooked, [])).toBe(0) // the payroll has not run yet
+
+    const operation = buildAccountingOperations(makeResponse({ Payslips: payslips, LaborBooked: laborBooked }), context)
+      .find((candidate) => candidate.Kind === OPERATION_LABOR_ADJUSTMENT)
+    expect(operation?.Key).toBe('LA-202609')
+    expect(operation && entryOf(operation)).toEqual(["7111:500/0", "2111:0/500"])
   })
 
   it('shows a movement type no entry handles instead of skipping it', () => {

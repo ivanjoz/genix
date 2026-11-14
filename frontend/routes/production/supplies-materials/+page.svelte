@@ -3,6 +3,7 @@
   import { useUI } from '@genix/ui';
   const ui = useUI();
 import Button from '#components/buttons/Button.svelte';
+import Checkbox from '#components/form/Checkbox.svelte';
 import FilterInput from '#components/form/FilterInput.svelte';
 import Input from '#components/form/Input.svelte';
 import SearchSelect from '#components/form/SearchSelect.svelte';
@@ -26,8 +27,11 @@ import {
   ProductSupplyService,
   type IProductSupplyProviderRow,
 } from '#routes/logistics/purchase-management/supply-management.svelte.ts';
+import ProductProductionTab from '#routes/production/products/ProductProductionTab.svelte';
+import { clearProductionFields, copyProductionFields, findProductionError } from '#routes/production/products/product-production.ts';
 import {
   depreciationTerms,
+  SUPPLY_ORIGIN_SEMI_FINISHED,
   SUPPLY_PRODUCT_STATUS,
   SupplyMaterialService,
   type ISupplyMaterial,
@@ -44,6 +48,11 @@ import {
 
   let filterText = $state("");
   let supplyForm = $state({} as ISupplyMaterial);
+  // 1 = the supply's data, 2 = the recipe of a semi-finished supply.
+  let layerView = $state(1);
+  // A semi-finished supply is made by the company (docs/MANUFACTURING_PLAN.md §2.1): it has a recipe
+  // and its stock account is 231 by its origin, so the depreciation and account fields do not apply.
+  const isSemiFinishedForm = $derived(supplyForm.Origin === SUPPLY_ORIGIN_SEMI_FINISHED);
 
   const depreciationOptions = $derived(
     depreciationTerms.map(term => ({ id: term.id, name: tr(term.label) })),
@@ -85,7 +94,8 @@ import {
     },
     {
       header: "Type|Tipo",
-      getValue: (record) => record.DepreciationMonths > 0 ? tr("Asset|Activo") : tr("Consumable|Consumible"),
+      getValue: (record) => record.Origin === SUPPLY_ORIGIN_SEMI_FINISHED ? tr("Semi-finished|Semielaborado")
+        : record.DepreciationMonths > 0 ? tr("Asset|Activo") : tr("Consumable|Consumible"),
       mobile: { order: 6, css: "col-span-12", labelLeft: "Tipo:" },
     },
     {
@@ -185,6 +195,14 @@ import {
     if (isDelete) { supplyForm.ss = 0; }
     // Strip empty rows so the backend only persists meaningful provider entries.
     supplyForm.ProviderSupply = normalizeProviderSupplyRows(supplyForm.ProviderSupply || []);
+    // Only a semi-finished supply has a recipe; its errors send the user to the tab to fix them.
+    if (!isSemiFinishedForm) { clearProductionFields(supplyForm); }
+    const productionError = isSemiFinishedForm ? findProductionError(supplyForm) : undefined;
+    if (productionError && !isDelete) {
+      notifyFailure(tr(productionError));
+      layerView = 2;
+      return;
+    }
 
     showLoading(tr("Saving supply...|Guardando insumo..."));
     try {
@@ -213,9 +231,10 @@ import {
       hideNameOnMobile
       css="col-span-3 ml-auto"
       onClick={() => {
-        supplyForm = {
-          ss: SUPPLY_PRODUCT_STATUS, DepreciationMonths: 0, ProviderSupply: [],
-        } as unknown as ISupplyMaterial;
+        supplyForm = clearProductionFields({
+          ss: SUPPLY_PRODUCT_STATUS, DepreciationMonths: 0, ProviderSupply: [], Origin: 0,
+        } as unknown as ISupplyMaterial);
+        layerView = 1;
         ui.openSideLayer(1);
       }}
     />
@@ -235,9 +254,12 @@ import {
         const supplyConfig = supplyConfigs.recordsMap.get(record.ID);
         supplyForm = {
           ...record,
+          ...copyProductionFields(record),
+          Origin: record.Origin || 0,
           MinimunStock: supplyConfig?.MinimunStock || 0,
           ProviderSupply: normalizeProviderSupplyRows(supplyConfig?.ProviderSupply || []),
         };
+        layerView = 1;
         ui.openSideLayer(1);
       }}
       mobileCardCss="mb-2"
@@ -252,6 +274,12 @@ import {
     titleCss="h2 mb-6"
     contentCss="px-0 md:px-0"
     id={1}
+    bind:selected={layerView}
+    options={[
+      [1, "Info|Información"],
+      // Only a semi-finished supply has a recipe.
+      ...(isSemiFinishedForm ? [[2, "Production|Producción"] as [number, string]] : []),
+    ]}
     onClose={() => { supplyForm = {} as ISupplyMaterial; }}
     onSave={() => { onSave(); }}
     onDelete={supplyForm?.ID ? async () => {
@@ -262,6 +290,9 @@ import {
       if (confirmed) { onSave(true); }
     } : undefined}
   >
+    {#if layerView === 2 && isSemiFinishedForm}
+      <ProductProductionTab product={supplyForm} excludeSupplyID={supplyForm.ID} />
+    {:else}
     <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16" aria-label="Supply Material Form">
       <Input label="Name|Nombre"
         saveOn={supplyForm}
@@ -316,22 +347,51 @@ import {
         save="SbuQuantity"
         type="number"
       />
-      <SearchSelect label="Depreciation|Depreciación"
-        saveOn={supplyForm}
-        css="col-span-24 md:col-span-12"
-        save="DepreciationMonths"
-        keyId="id"
-        keyName="name"
-        options={depreciationOptions}
+      <!-- Semi-finished: made by the company with its own recipe (e.g. stitched uppers), never bought.
+           Its stock account is 231 Productos en proceso. -->
+      <Checkbox label="Semi-finished: made by the company|Semielaborado: lo fabrica la empresa"
+        css="col-span-24"
+        checked={isSemiFinishedForm}
+        onToggle={(isChecked: boolean) => {
+          supplyForm.Origin = isChecked ? SUPPLY_ORIGIN_SEMI_FINISHED : 0;
+          if (isChecked) { supplyForm.DepreciationMonths = 0; supplyForm.AccountCode = 0; }
+        }}
       />
-      <!-- The default every purchase line of this supply proposes. Left empty, the server
-           picks equipment (3369) when it depreciates, else suministros (6032). -->
-      <PCGEAccountSelect saveOn={supplyForm} save="AccountCode" css="col-span-24 md:col-span-12"
-        kind={PCGE_KIND_SUPPLY} label="Default account|Cuenta contable por defecto" />
+      {#if !isSemiFinishedForm}
+        <SearchSelect label="Depreciation|Depreciación"
+          saveOn={supplyForm}
+          css="col-span-24 md:col-span-12"
+          save="DepreciationMonths"
+          keyId="id"
+          keyName="name"
+          options={depreciationOptions}
+        />
+        <!-- The default every purchase line of this supply proposes. Left empty, the server
+             picks equipment (3369) when it depreciates, else suministros (6032). -->
+        <PCGEAccountSelect saveOn={supplyForm} save="AccountCode" css="col-span-24 md:col-span-12"
+          kind={PCGE_KIND_SUPPLY} label="Default account|Cuenta contable por defecto" />
+      {/if}
       <Input label="Description|Descripción"
         saveOn={supplyForm}
         css="col-span-24"
         save="Description"
+      />
+      <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): a supply that tracks lots is received with one. -->
+      <Checkbox label="Tracks lots|Controla lotes"
+        bind:saveOn={supplyForm}
+        save="TracksLots"
+        css="col-span-12 md:col-span-6"
+      />
+      <Input label="Shelf life (days)|Vida útil (días)"
+        saveOn={supplyForm}
+        css="col-span-12 md:col-span-8"
+        save="ShelfLifeDays"
+        type="number"
+      />
+      <Checkbox label="New lots enter in quarantine|Lotes nuevos en cuarentena"
+        bind:saveOn={supplyForm}
+        save="QualityHoldOnEntry"
+        css="col-span-24 md:col-span-10"
       />
     </div>
 
@@ -358,5 +418,6 @@ import {
         }}
       />
     </div>
+    {/if}
   </Layer>
 </Page>

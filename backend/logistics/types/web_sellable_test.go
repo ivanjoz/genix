@@ -48,6 +48,13 @@ func TestWebSellableStock(t *testing.T) {
 			want:            map[int16]int32{1: 3, 2: 0},
 		},
 		{
+			name: "a lot in quarantine is not sellable",
+			stockRows: []ProductStock{{PresentationID: 0, Quantity: 2, DetailQuantity: 6, BlockedQuantity: 4,
+				PendingDeliveryStore: 1}},
+			presentationIDs: []int16{0},
+			want:            map[int16]int32{0: 3},
+		},
+		{
 			name:            "a deleted presentation's stock is not sellable and uses no margin",
 			stockRows:       []ProductStock{webStockRow(9, 0, 0, 0, 50)},
 			presentationIDs: []int16{1},

@@ -39,6 +39,9 @@ type PostStockAdjustItem struct {
 	// page picks it per direction (one for the increases, one for the decreases); the engine
 	// refuses it if the delta turns out to go the other way.
 	Type types.StockMovementType `cb:"11"`
+	// LotExpirationDate is the expiry (UnixDay) of the lot a LotCode creates; 0 takes the
+	// product's shelf life.
+	LotExpirationDate int16 `cb:"12"`
 }
 
 // manualStockAdjustmentTypes are the reasons a user may give a manual stock change. Every other
@@ -51,31 +54,40 @@ var manualStockAdjustmentTypes = []types.StockMovementType{
 // The company flag that governs manual stock adjustments (backend/company_flags.toml).
 const companyFlagBlockManualStockInbound = int16(6) // stock only enters through a purchase order
 
-// loadProductSubDivisors reads the current sub-unit divisor of every product an adjustment
-// touches. A product with no sub-unit maps to core.QuantityDivisorNone.
-func loadProductSubDivisors(companyID int32, items []PostStockAdjustItem) (map[int32]int16, error) {
-	productIDs := core.SliceSet[int32]{}
-	for _, item := range items {
-		productIDs.AddIf(item.ProductID)
+// loadStockItemProducts reads what a stock entry needs of every product it touches: the current
+// sub-unit divisor and the lot policy (docs/MANUFACTURING_PLAN.md §10).
+func loadStockItemProducts(companyID int32, items []PostStockAdjustItem) (map[int32]production.Product, error) {
+	productByID := map[int32]production.Product{}
+	productIDs := core.Map(items, func(item PostStockAdjustItem) int32 { return item.ProductID })
+	if len(productIDs) == 0 {
+		return productByID, nil
 	}
-	divisorByProductID := map[int32]int16{}
-	if productIDs.IsEmpty() {
-		return divisorByProductID, nil
-	}
-
 	products := []production.Product{}
 	query := db.Query(&products)
-	query.Select(query.ID, query.SbuQuantity).
+	query.Select(query.ID, query.Name, query.SbuQuantity, query.TracksLots, query.ShelfLifeDays, query.QualityHoldOnEntry).
 		CompanyID.Equals(companyID).
-		ID.In(productIDs.Values...)
+		ID.In(productIDs...)
 	if err := query.Exec(); err != nil {
-		return nil, core.Err("Error al obtener la sub-unidad de los productos:", err)
+		return nil, core.Err("Error al obtener los productos:", err)
 	}
 	for _, product := range products {
-		divisorByProductID[product.ID] = core.If(
-			product.SbuQuantity > core.QuantityDivisorNone, product.SbuQuantity, core.QuantityDivisorNone)
+		productByID[product.ID] = product
 	}
-	return divisorByProductID, nil
+	return productByID, nil
+}
+
+// productSubDivisor is a product's sub-unit divisor; one with no sub-unit has core.QuantityDivisorNone.
+func productSubDivisor(product production.Product) int16 {
+	return max(product.SbuQuantity, core.QuantityDivisorNone)
+}
+
+// withProductLotPolicy stamps on a movement what a lot it creates takes from its product: the shelf
+// life its expiry defaults to and whether it is born in Cuarentena.
+func withProductLotPolicy(movement types.InternalMovement, product production.Product, lotExpirationDate int16) types.InternalMovement {
+	movement.LotExpirationDate = lotExpirationDate
+	movement.LotShelfLifeDays = product.ShelfLifeDays
+	movement.LotQualityHold = product.QualityHoldOnEntry
+	return movement
 }
 
 func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
@@ -91,7 +103,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 	// The divisor is resolved from the catalog, not taken from the client: a movement that
 	// carries sub-units without one is rejected by the stock engine, and guessing it would be
 	// silently wrong for exactly the products this exists for.
-	subDivisorByProductID, err := loadProductSubDivisors(req.User.CompanyID, items)
+	productByID, err := loadStockItemProducts(req.User.CompanyID, items)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -119,13 +131,13 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 		// Opening stock is how a company onboards, so flag 6 does not block it; and every
 		// valuation starts from it, so it always carries its cost, average or not.
 		isOpeningStock := item.Type == types.StockMovementTypeOpeningStock
-		subDivisor := subDivisorByProductID[item.ProductID]
+		subDivisor := productSubDivisor(productByID[item.ProductID])
 		if item.SubQuantity != 0 && subDivisor <= core.QuantityDivisorNone {
 			return req.MakeErr(fmt.Sprintf(
 				"El producto %v no tiene sub-unidad configurada, pero el ajuste envía %v sub-unidades.",
 				item.ProductID, item.SubQuantity))
 		}
-		movimientos = append(movimientos, types.InternalMovement{
+		movimientos = append(movimientos, withProductLotPolicy(types.InternalMovement{
 			Type:            item.Type,
 			SubDivisor:      subDivisor,
 			ReplaceQuantity: true,
@@ -143,7 +155,7 @@ func PostAlmacenStock(req *core.HandlerArgs) core.HandlerResponse {
 
 			RejectInbound:      rejectManualInbound && !isOpeningStock,
 			RequireInboundCost: isOpeningStock,
-		})
+		}, productByID[item.ProductID], item.LotExpirationDate))
 	}
 
 	if err := types.ApplyMovimientos(req, movimientos); err != nil {
@@ -171,6 +183,124 @@ func GetProductStockLotsByIDs(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	return req.MakeResponse(core.StaticCachedPartition(lots))
+}
+
+type productStockLotStatusRequest struct {
+	LotID          int32
+	QualityStatus  int8
+	ExpirationDate int16 // UnixDay, 0 = none
+}
+
+// readLotDetailStockIDs answers the stock rows holding a detail of the lot, sorted.
+func readLotDetailStockIDs(companyID int32, lotID int32) ([]int64, error) {
+	details := []types.ProductStockDetail{}
+	query := db.Query(&details)
+	query.Select(query.ProductStockID).CompanyID.Equals(companyID).LotID.Equals(lotID)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener el stock del lote:", err)
+	}
+	stockIDs := core.Map(details, func(detail types.ProductStockDetail) int64 { return detail.ProductStockID })
+	slices.Sort(stockIDs)
+	return stockIDs, nil
+}
+
+// PostProductStockLotStatus changes a lot's quality status and expiry (docs/MANUFACTURING_PLAN.md §10,
+// M22). In one transaction: the stock rows holding the lot are locked in key order, then the lot (the
+// engine's order), and a lot entering or leaving Liberado moves its detail quantities into or out of
+// each row's Blocked counter.
+func PostProductStockLotStatus(req *core.HandlerArgs) core.HandlerResponse {
+	body := productStockLotStatusRequest{}
+	if err := json.Unmarshal([]byte(*req.Body), &body); err != nil {
+		return req.MakeErr("Error al deserializar el body:", err)
+	}
+	if body.LotID <= 0 {
+		return req.MakeErr("Se requiere el lote.")
+	}
+	if body.QualityStatus != types.LotQualityReleased && !types.IsLotQualityBlocked(body.QualityStatus) {
+		return req.MakeErr(fmt.Sprintf("Estado de calidad inválido: %v.", body.QualityStatus))
+	}
+	if body.ExpirationDate < 0 {
+		return req.MakeErr("La fecha de vencimiento es inválida.")
+	}
+	companyID := req.User.CompanyID
+	var savedLot types.ProductStockLot
+
+	err := db.RunTransaction(func(transaction *db.Transaction) error {
+		stockIDs, err := readLotDetailStockIDs(companyID, body.LotID)
+		if err != nil {
+			return err
+		}
+		lockedStocks := []types.ProductStock{}
+		for _, stockID := range stockIDs {
+			lockedStocks = append(lockedStocks, types.ProductStock{CompanyID: companyID, ID: stockID})
+		}
+		if len(lockedStocks) > 0 {
+			if err := db.LockByKeys(transaction, &lockedStocks); err != nil {
+				return core.Err("Error al bloquear el stock del lote:", err)
+			}
+		}
+		lots := []types.ProductStockLot{{CompanyID: companyID, ID: body.LotID}}
+		if err := db.LockByKeys(transaction, &lots); err != nil {
+			return core.Err("Error al obtener el lote:", err)
+		}
+		if len(lots) == 0 {
+			return core.Err(fmt.Sprintf("El lote %v no existe.", body.LotID))
+		}
+		lot := &lots[0]
+
+		// Read again under the lot's lock: a movement that put the lot in a new stock row before it
+		// committed is now visible, and that row is not locked by this transaction.
+		stockIDsUnderLock, err := readLotDetailStockIDs(companyID, body.LotID)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(stockIDs, stockIDsUnderLock) {
+			return core.Err("El lote recibió movimientos mientras se cambiaba su estado: intente de nuevo.")
+		}
+
+		if wasBlocked, isBlocked := types.IsLotQualityBlocked(lot.QualityStatus), types.IsLotQualityBlocked(body.QualityStatus); wasBlocked != isBlocked && len(lockedStocks) > 0 {
+			details := []types.ProductStockDetail{}
+			query := db.Query(&details)
+			query.Select(query.ProductStockID, query.Quantity, query.SubQuantity).CompanyID.Equals(companyID).LotID.Equals(body.LotID)
+			if err := query.Exec(); err != nil {
+				return core.Err("Error al obtener el stock del lote:", err)
+			}
+			stockByID := map[int64]*types.ProductStock{}
+			for index := range lockedStocks {
+				stockByID[lockedStocks[index].ID] = &lockedStocks[index]
+			}
+			// A detail is at its stock row's divisor, so its quantity adds to Blocked as it is.
+			for _, detail := range details {
+				detailQuantity := core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}
+				if !isBlocked {
+					detailQuantity = detailQuantity.Negate()
+				}
+				stock := stockByID[detail.ProductStockID]
+				blocked := core.Quantity{Units: stock.BlockedQuantity, Sub: stock.BlockedSubQuantity}.Add(detailQuantity)
+				stock.BlockedQuantity, stock.BlockedSubQuantity = blocked.Units, blocked.Sub
+			}
+			stockTable := db.TableOf[types.ProductStock]()
+			// Written with WarehouseID and Status, the delta index's pinned columns.
+			if err := db.UpdateIn(transaction, &lockedStocks, stockTable.BlockedQuantity, stockTable.BlockedSubQuantity,
+				stockTable.WarehouseID, stockTable.Status); err != nil {
+				return core.Err("Error al guardar el stock bloqueado del lote:", err)
+			}
+		}
+
+		lot.QualityStatus, lot.ExpirationDate = body.QualityStatus, body.ExpirationDate
+		lot.Updated, lot.UpdatedBy = core.SUnixTime(), req.User.ID
+		lotTable := db.TableOf[types.ProductStockLot]()
+		if err := db.UpdateIn(transaction, &lots, lotTable.QualityStatus, lotTable.ExpirationDate,
+			lotTable.Updated, lotTable.UpdatedBy); err != nil {
+			return core.Err("Error al guardar el lote:", err)
+		}
+		savedLot = *lot
+		return nil
+	})
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	return req.MakeResponse(savedLot)
 }
 
 func GetAlmacenMovimientos(req *core.HandlerArgs) core.HandlerResponse {
@@ -283,6 +413,9 @@ type GetProductsStockResult struct {
 	ProductStock []types.ProductStock
 	// The details answer whole, with the replace Metadata: their composite key has no delta log.
 	ProductStockDetail []any
+	// The lots of those details, whole too: a lot's quality status and expiry change, so the stock
+	// screen reads them fresh with the details rather than from the immutable by-IDs cache.
+	ProductStockLot []any
 }
 
 func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
@@ -313,6 +446,15 @@ func GetWarehouseProductStock(req *core.HandlerArgs) core.HandlerResponse {
 			return err
 		}
 		result.ProductStockDetail = core.WithDeltaReplace(details)
+
+		lots := []types.ProductStockLot{}
+		if lotIDs := core.Map(details, func(detail types.ProductStockDetail) int32 { return detail.LotID }); len(lotIDs) > 0 {
+			lotQuery := db.Query(&lots)
+			if err := lotQuery.CompanyID.Equals(req.User.CompanyID).ID.In(lotIDs...).Exec(); err != nil {
+				return err
+			}
+		}
+		result.ProductStockLot = core.WithDeltaReplace(lots)
 		return nil
 	})
 

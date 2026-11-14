@@ -11,6 +11,7 @@
 // One builder serves the page, the Diario de gestión and the official 5.2: the official Diario
 // is these same operations filtered by InOfficialBook.
 
+import { payrollActualCost } from '#core/payroll-cost.ts'
 import { findPCGEAccount, PCGE_KIND_ASSET, PCGE_KIND_EXPENSE, PCGE_KIND_SUPPLY } from '#core/pcge.ts'
 import { quantityAmount, unpackQuantityLine } from '#core/quantity.ts'
 import { DOC_TYPE_CREDIT_NOTE } from '#core/sunat-doc-type.ts'
@@ -18,7 +19,7 @@ import {
   PURCHASE_DOC_TYPE_NONE, purchaseDocTypeCreditsTax, purchaseDocumentTotal, type IPurchaseDocument,
 } from '#core/purchase-document.ts'
 import {
-  BOOK_STATE_REJECTED, BOOK_STATE_VOIDED, bookDocumentSeriesID, documentValidityState,
+  BOOK_STATE_REJECTED, BOOK_STATE_VOIDED, bookDocumentSeriesID, documentValidityState, periodOfUnixDay,
   type IBookSeries, type ISalesBookDocument,
 } from '../books/books'
 import { PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocument } from '../books/books.purchases'
@@ -69,6 +70,9 @@ export interface IOperationStockMovement {
 
 export interface IOperationProduct { ID: number, ss: number, Origin: number, AccountCode: number }
 
+// GET.accounting-labor-booked: one Planilla worker's labor booked to products in the period, PEN cents.
+export interface ILaborBooked { EmployeeID: number, Amount: number }
+
 export interface IOperationCashBank { ID: number, Name: string, Type: number, CurrencyType: number }
 
 // A payment of a document (types 6, 8, 9, 10, 11) carries the counter-account it clears.
@@ -87,6 +91,7 @@ export interface IOperationCashMovement {
 // 2 deduction, 3 employer contribution, 4 provision — backend/hr/types/legal_concepts.go).
 export interface IOperationPayslip {
   ID: number
+  EmployeeID?: number
   Period: number
   // ProvisionedAmount: the part of a benefit (gratificación, CTS, vacation pay) charged to the
   // provision it accrued (ProvisionAccountCode 4114 / 415 / 4115) instead of AccountCode.
@@ -118,6 +123,8 @@ export interface IAccountingSources extends IAccountingOperationsResponse {
   ReferencedSales: IOperationSale[]             // the older sales the period's credit notes correct
   ReferencedPurchases: IPurchaseBookDocument[]  // the older orders and expenses its receptions name
   Products: IOperationProduct[]
+  // What each Planilla worker's labor entries booked to products in the period (§9.3).
+  LaborBooked?: ILaborBooked[]
   Assets: IOperationAsset[]
   CashBanks: IOperationCashBank[]
   SellRates: number[]   // SellRates[i] is the sell rate (× 1000) of FirstDay + i
@@ -146,8 +153,8 @@ export function referencedRecordIDs(response: IAccountingOperationsResponse) {
 }
 
 // operationProductIDs are the products whose Origin or AccountCode the entries read: the sale
-// lines (7012 / 7022), the deliveries (the cost and stock accounts) and the supplies a production
-// close consumed (their stock and variation accounts).
+// lines (7012 / 7022), the deliveries (the cost and stock accounts), the supplies a production
+// consumed (their stock and variation accounts) and what it produced (finished or semi-finished).
 export function operationProductIDs(sales: IOperationSale[], stockMovements: IOperationStockMovement[]): number[] {
   const productIDs = new Set<number>()
   for (const sale of sales) {
@@ -155,7 +162,7 @@ export function operationProductIDs(sales: IOperationSale[], stockMovements: IOp
   }
   for (const movement of stockMovements) {
     if (movement.Type === STOCK_MOVEMENT_SALE_DELIVERY || movement.Type === STOCK_MOVEMENT_SALE_RETURN ||
-      movement.Type === STOCK_MOVEMENT_PRODUCTION_CONSUMPTION) {
+      movement.Type === STOCK_MOVEMENT_PRODUCTION_CONSUMPTION || movement.Type === STOCK_MOVEMENT_PRODUCTION_ENTRY) {
       productIDs.add(movement.ProductID)
     }
   }
@@ -207,6 +214,8 @@ export const OPERATION_PAYROLL_PROVISION = 12
 export const OPERATION_PRODUCTION = 13
 // A stock movement of a type no entry handles: flagged, never skipped in silence.
 export const OPERATION_STOCK_MOVEMENT = 14
+// The month's labor booked to products above the actual payroll cost (docs/MANUFACTURING_PLAN.md §9.3).
+export const OPERATION_LABOR_ADJUSTMENT = 15
 
 export const operationKindLabels: Record<number, string> = {
   [OPERATION_SALE]: "Sale|Venta",
@@ -221,8 +230,9 @@ export const operationKindLabels: Record<number, string> = {
   [OPERATION_COST_OF_SALES]: "Cost of sales|Costo de ventas",
   [OPERATION_PAYROLL]: "Payroll|Planilla",
   [OPERATION_PAYROLL_PROVISION]: "Payroll provisions|Provisiones de planilla",
-  [OPERATION_PRODUCTION]: "Production close|Cierre de producción",
+  [OPERATION_PRODUCTION]: "Production|Producción",
   [OPERATION_STOCK_MOVEMENT]: "Stock movement|Movimiento de almacén",
+  [OPERATION_LABOR_ADJUSTMENT]: "Labor adjustment|Ajuste de mano de obra",
 }
 
 // ./PLAN.md §6.
@@ -275,6 +285,8 @@ const ACCOUNT_FINISHED_GOODS_STOCK = 2111    // Productos terminados
 const ACCOUNT_MERCHANDISE_COST = 6912        // Costo de ventas — mercaderías
 const ACCOUNT_FINISHED_GOODS_COST = 6922     // Costo de ventas — productos terminados
 const ACCOUNT_PRODUCTION_VARIATION = 7111    // Variación de la producción almacenada — productos terminados
+const ACCOUNT_WORK_IN_PROCESS = 231          // Productos en proceso: a semi-finished supply's stock
+const ACCOUNT_WORK_IN_PROCESS_VARIATION = 713 // Variación de la producción almacenada — productos en proceso
 
 const CURRENCY_USD = 2
 const SALE_STATUS_ANNULLED = 0
@@ -508,24 +520,34 @@ export function buildAccountingOperations(
     ]))
   }
 
-  // Production close (docs/PRODUCTION_PLAN.md §7): a consumed supply leaves stock into its
-  // variation (6032 → Dr 6132 · Cr 252), and the made product enters finished goods against the
-  // stored production (Dr 2111 · Cr 7111). Both at the cost the engine stamped. The cost of sales
-  // of the sales it settled comes from their own type-8 exits above.
+  // Production (docs/MANUFACTURING_PLAN.md §11), a production order's receipt or a daily close, by
+  // nature: a consumed supply leaves stock into its variation (6032 → Dr 6132 · Cr 252; a semi-finished
+  // one Dr 713 · Cr 231), and what was made enters at its full cost against the stored production (a
+  // finished product Dr 2111 · Cr 7111; a semi-finished supply Dr 231 · Cr 713). The labor, the workshop
+  // invoice and the overhead stay where payroll and the expenses booked them. One operation per order
+  // and day; the cost of sales of the sales a close settled comes from their own type-8 exits above.
+  const isSemiFinished = (product: IOperationProduct | undefined) =>
+    product?.ss === PRODUCT_STATUS_SUPPLY && product?.Origin === PRODUCT_ORIGIN_MADE
   for (const movements of productionGroups.values()) {
-    const { DocumentID: closeID, Date: date } = movements[0]
+    const { DocumentID: orderID, Date: date } = movements[0]
     const lines: IJournalLine[] = []
     let isUncosted = false
     let hasNoStockAccount = false
     for (const movement of movements) {
       const value = movement.MonetaryValue || 0
       isUncosted ||= !value
+      const product = productsByID.get(movement.ProductID)
       if (movement.Type === STOCK_MOVEMENT_PRODUCTION_ENTRY) {
-        lines.push(postLine(ACCOUNT_FINISHED_GOODS_STOCK, value))
-        lines.push(postLine(ACCOUNT_PRODUCTION_VARIATION, -value))
+        lines.push(postLine(isSemiFinished(product) ? ACCOUNT_WORK_IN_PROCESS : ACCOUNT_FINISHED_GOODS_STOCK, value))
+        lines.push(postLine(isSemiFinished(product) ? ACCOUNT_WORK_IN_PROCESS_VARIATION : ACCOUNT_PRODUCTION_VARIATION, -value))
         continue
       }
-      const supplyAccount = findPCGEAccount(productsByID.get(movement.ProductID)?.AccountCode || 0)
+      if (isSemiFinished(product)) {
+        lines.push(postLine(ACCOUNT_WORK_IN_PROCESS_VARIATION, value))
+        lines.push(postLine(ACCOUNT_WORK_IN_PROCESS, -value))
+        continue
+      }
+      const supplyAccount = findPCGEAccount(product?.AccountCode || 0)
       if (!supplyAccount?.stockCode || !supplyAccount.variationCode) {
         hasNoStockAccount = true
         continue
@@ -534,12 +556,26 @@ export function buildAccountingOperations(
       lines.push(postLine(supplyAccount.stockCode, -value))
     }
     operations.push(finishOperation({
-      Key: `PR-${closeID}-${date}`, Kind: OPERATION_PRODUCTION, SourceID: closeID, Date: date,
-      Description: "Production close|Cierre de producción", DocumentLabel: "", InOfficialBook: true,
+      Key: `PR-${orderID}-${date}`, Kind: OPERATION_PRODUCTION, SourceID: orderID, Date: date,
+      Description: `Production order N° ${orderID}|Orden de producción N° ${orderID}`, DocumentLabel: "", InOfficialBook: true,
     }, lines, [
       isUncosted ? "A production movement has no cost.|Un movimiento de producción no tiene costo." : "",
       hasNoStockAccount ? "A consumed supply's account has no stock account.|La cuenta de un insumo consumido no tiene cuenta de existencias." : "",
     ]))
+  }
+
+  // Monthly labor adjustment (§9.3, M18, M27): a Planilla worker's labor was booked to products at
+  // their estimated cost per hour; when the month's actual payroll cost came out lower, the excess
+  // is taken back from the stored production, Dr 7111 · Cr 2111. Stock is never revalued, so the
+  // ledger's 2111 differs from the stock's value by these adjustments. A shortfall (idle hours) needs
+  // nothing: it is payroll expense that never entered a product. Posted once the month has payslips.
+  const laborAdjustment = monthlyLaborAdjustment(sources.LaborBooked || [], sources.Payslips || [])
+  if (laborAdjustment > 0) {
+    const period = periodOfUnixDay(sources.LastDay)
+    operations.push(finishOperation({
+      Key: `LA-${period}`, Kind: OPERATION_LABOR_ADJUSTMENT, SourceID: Number(period), Date: sources.LastDay,
+      Description: "Labor booked above the payroll|Mano de obra cargada sobre la planilla", DocumentLabel: "", InOfficialBook: true,
+    }, [postLine(ACCOUNT_PRODUCTION_VARIATION, laborAdjustment), postLine(ACCOUNT_FINISHED_GOODS_STOCK, -laborAdjustment)], []))
   }
 
   for (const asset of sources.Assets || []) {
@@ -1098,4 +1134,21 @@ export function summarizeOperations(operations: IAccountingOperation[]): IOperat
     }
   }
   return summary
+}
+
+// monthlyLaborAdjustment is Σ per Planilla worker of max(0, labor booked − actual payroll cost) for a
+// month (§9.3). Nothing until the month has payslips: before the payroll runs there is no actual cost
+// to compare with. A worker who booked labor but got no payslip had no payroll cost: all of it is excess.
+export function monthlyLaborAdjustment(laborBooked: ILaborBooked[], payslips: IOperationPayslip[]): number {
+  if (payslips.length === 0) { return 0 }
+  const actualCostByEmployeeID = new Map<number, number>()
+  for (const payslip of payslips) {
+    const employeeID = payslip.EmployeeID || 0
+    actualCostByEmployeeID.set(employeeID, (actualCostByEmployeeID.get(employeeID) || 0) + payrollActualCost(payslip.Lines))
+  }
+  let adjustment = 0
+  for (const booked of laborBooked) {
+    adjustment += Math.max(0, booked.Amount - (actualCostByEmployeeID.get(booked.EmployeeID) || 0))
+  }
+  return adjustment
 }

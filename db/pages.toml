@@ -228,6 +228,36 @@ name = "Daily close|Cierre del día"
 icon = "icon-[fa--calendar-check-o]"
 description = "Cierra la producción del día: consume los insumos de las recetas de los productos vendidos y registra su ingreso y salida de stock."
 
+[[pages]]
+route = "production/orders"
+name = "Production orders|Órdenes de producción"
+icon = "icon-[fa--industry]"
+description = "Planifica, libera y recibe las órdenes de producción, en lista o en tablero por etapa."
+
+[[pages]]
+route = "production/requirements"
+name = "Purchase requirements|Necesidades de compra"
+icon = "icon-[fa--shopping-basket]"
+description = "Calcula qué insumos comprar y qué semielaborados fabricar para las órdenes planificadas."
+
+[[pages]]
+route = "production/templates"
+name = "Production templates|Plantillas de producción"
+icon = "icon-[fa--clone]"
+description = "Guarda listas de productos y series de tallas para crear órdenes de producción rápidamente."
+
+[[pages]]
+route = "production/labor-hours"
+name = "Hours vs payroll|Horas vs planilla"
+icon = "icon-[fa--clock-o]"
+description = "Compara las horas registradas en las órdenes con las pagadas en planilla, y el costo de mano de obra cargado a los productos."
+
+[[pages]]
+route = "production/settings"
+name = "Production settings|Configuración de producción"
+icon = "icon-[fa--sliders]"
+description = "Define los tipos de trabajo con su costo por hora y las etapas del tablero de producción."
+
 # Restaurant
 
 [[pages]]

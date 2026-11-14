@@ -33,8 +33,8 @@ type DailyClosePreview struct {
 	// MovementDate is the date its movements take: max(Date, yesterday).
 	MovementDate    int16
 	IsStrict        bool
-	Products        []types.ProductionCloseProduct
-	Supplies        []types.ProductionCloseSupply
+	Products        []types.DailyCloseProduct
+	Supplies        []types.DailyCloseSupply
 	BlockingReasons []string
 	SaleOrderIDs    []int64
 	// PreviewHash is what the close is asked to run: it refuses when the day changed since.
@@ -43,11 +43,12 @@ type DailyClosePreview struct {
 
 // dailyCloseRun is everything a close reads and computes before it writes.
 type dailyCloseRun struct {
-	preview         DailyClosePreview
-	plan            types.DailyClosePlan
-	sales           []sales.SaleOrder
-	productsByID    map[int32]types.Product
+	preview                    DailyClosePreview
+	plan                       types.DailyClosePlan
+	sales                      []sales.SaleOrder
+	productsByID               map[int32]types.Product
 	unitsByProductPresentation map[int32]map[int16]int32
+	costPerHourByLaborTypeID   map[int32]int32
 }
 
 // readPendingCloseSales are the delivered sales of warehouseID whose made products' stock exit waits
@@ -164,7 +165,7 @@ func prepareDailyClose(companyID int32, warehouseID int32, suppliesWarehouseID i
 	if run.productsByID, err = readProductsByID(companyID, slices.Collect(maps.Keys(soldUnitsByProduct)),
 		func(query *types.ProductTable) []db.Coln {
 			return db.Cols(query.ID, query.Name, query.SbuQuantity, query.ProductionYieldPortions,
-				query.ProductionSupplies, query.ProductionExtraCostPerUnit, query.ProductionStandardCost)
+				query.ProductionSupplies, query.ProductionExtraCostPerUnit, query.ProductionStandardCost, query.ProductionLabor)
 		}); err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func prepareDailyClose(companyID int32, warehouseID int32, suppliesWarehouseID i
 		}
 	}
 	suppliesByID, err := readProductsByID(companyID, supplyIDs, func(query *types.ProductTable) []db.Coln {
-		return db.Cols(query.ID, query.Name, query.Status, query.SbuQuantity, query.SbuUnit, query.AccountCode)
+		return db.Cols(query.ID, query.Name, query.Status, query.Origin, query.SbuQuantity, query.SbuUnit, query.AccountCode)
 	})
 	if err != nil {
 		return nil, err
@@ -185,9 +186,14 @@ func prepareDailyClose(companyID int32, warehouseID int32, suppliesWarehouseID i
 		return nil, err
 	}
 
+	if run.costPerHourByLaborTypeID, err = readLaborTypeRates(companyID); err != nil {
+		return nil, err
+	}
+
 	run.plan = types.PlanDailyClose(types.DailyCloseInput{
 		IsStrict: run.preview.IsStrict, SoldUnitsByProduct: soldUnitsByProduct,
 		ProductsByID: run.productsByID, SuppliesByID: suppliesByID, SupplyStockByID: supplyStockByID,
+		CostPerHourByLaborTypeID: run.costPerHourByLaborTypeID,
 	})
 	run.preview.Products = run.plan.Products
 	run.preview.Supplies = run.plan.Supplies
@@ -212,6 +218,22 @@ func prepareDailyClose(companyID int32, warehouseID int32, suppliesWarehouseID i
 	return run, nil
 }
 
+// readLaborTypeRates is the estimate cost per hour of each of the company's labor types, deleted ones
+// included: a recipe line naming one still values at its last rate.
+func readLaborTypeRates(companyID int32) (map[int32]int32, error) {
+	laborTypes := []types.ProductionLaborType{}
+	query := db.Query(&laborTypes)
+	query.Select(query.ID, query.CostPerHour).CompanyID.Equals(companyID)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener los tipos de trabajo:", err)
+	}
+	costPerHourByLaborTypeID := map[int32]int32{}
+	for _, laborType := range laborTypes {
+		costPerHourByLaborTypeID[laborType.ID] = laborType.CostPerHour
+	}
+	return costPerHourByLaborTypeID, nil
+}
+
 // readProductsByID reads the company's products of productIDs, with the columns selectColumns names.
 func readProductsByID(companyID int32, productIDs []int32, selectColumns func(query *types.ProductTable) []db.Coln) (map[int32]types.Product, error) {
 	productsByID := map[int32]types.Product{}
@@ -230,10 +252,10 @@ func readProductsByID(companyID int32, productIDs []int32, selectColumns func(qu
 	return productsByID, nil
 }
 
-// readSupplyStock reads each supply's stock row in the supplies warehouse (presentation 0) and its
-// detail rows: the free bucket first, then the details oldest lot first.
-func readSupplyStock(companyID int32, suppliesWarehouseID int32, supplyIDs []int32) (map[int32]types.DailyCloseSupplyStock, error) {
-	supplyStockByID := map[int32]types.DailyCloseSupplyStock{}
+// readSupplyStock reads each supply's stock row in the supplies warehouse (presentation 0), its
+// detail rows and their lots' status and expiry, the buckets in the order a consumption walks them.
+func readSupplyStock(companyID int32, suppliesWarehouseID int32, supplyIDs []int32) (map[int32]types.SupplyStock, error) {
+	supplyStockByID := map[int32]types.SupplyStock{}
 	if len(supplyIDs) == 0 {
 		return supplyStockByID, nil
 	}
@@ -244,7 +266,7 @@ func readSupplyStock(companyID int32, suppliesWarehouseID int32, supplyIDs []int
 	stockRows := []logistics.ProductStock{}
 	stockQuery := db.Query(&stockRows)
 	stockQuery.Select(stockQuery.ID, stockQuery.ProductID, stockQuery.Quantity, stockQuery.SubQuantity,
-		stockQuery.SubDivisor, stockQuery.StockValue).
+		stockQuery.SubDivisor, stockQuery.StockValue, stockQuery.ReservedProductionQuantity, stockQuery.ReservedProductionSubQuantity).
 		CompanyID.Equals(companyID).ID.In(stockIDs...)
 	if err := stockQuery.Exec(); err != nil {
 		return nil, core.Err("Error al obtener el stock de los insumos:", err)
@@ -257,22 +279,37 @@ func readSupplyStock(companyID int32, suppliesWarehouseID int32, supplyIDs []int
 	if err := detailQuery.Exec(); err != nil {
 		return nil, core.Err("Error al obtener el detalle de stock de los insumos:", err)
 	}
-	slices.SortFunc(details, func(a, b logistics.ProductStockDetail) int {
-		return cmp.Or(cmp.Compare(a.LotID, b.LotID), cmp.Compare(a.SerialNumber, b.SerialNumber))
-	})
+	lotByID := map[int32]logistics.ProductStockLot{}
+	if lotIDs := core.Map(details, func(detail logistics.ProductStockDetail) int32 { return detail.LotID }); len(lotIDs) > 0 {
+		lots := []logistics.ProductStockLot{}
+		lotQuery := db.Query(&lots)
+		lotQuery.Select(lotQuery.ID, lotQuery.QualityStatus, lotQuery.ExpirationDate).
+			CompanyID.Equals(companyID).ID.In(lotIDs...)
+		if err := lotQuery.Exec(); err != nil {
+			return nil, core.Err("Error al obtener los lotes de los insumos:", err)
+		}
+		for _, lot := range lots {
+			lotByID[lot.ID] = lot
+		}
+	}
+	today := core.FechaUnix()
 	for _, stockRow := range stockRows {
-		supplyStock := types.DailyCloseSupplyStock{
+		supplyStock := types.SupplyStock{
 			SubDivisor: stockRow.SubDivisor, StockValue: stockRow.StockValue,
-			Buckets: []types.DailyCloseStockBucket{{Quantity: core.Quantity{Units: stockRow.Quantity, Sub: stockRow.SubQuantity}}},
+			ReservedProduction: core.Quantity{Units: stockRow.ReservedProductionQuantity, Sub: stockRow.ReservedProductionSubQuantity},
+			Buckets:            []types.SupplyStockBucket{{Quantity: core.Quantity{Units: stockRow.Quantity, Sub: stockRow.SubQuantity}}},
 		}
 		for _, detail := range details {
 			if detail.ProductStockID == stockRow.ID && (detail.Quantity != 0 || detail.SubQuantity != 0) {
-				supplyStock.Buckets = append(supplyStock.Buckets, types.DailyCloseStockBucket{
+				lot := lotByID[detail.LotID]
+				supplyStock.Buckets = append(supplyStock.Buckets, types.SupplyStockBucket{
 					LotID: detail.LotID, SerialNumber: detail.SerialNumber,
-					Quantity: core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity},
+					Quantity:      core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity},
+					QualityStatus: lot.QualityStatus, ExpirationDate: lot.ExpirationDate,
 				})
 			}
 		}
+		types.OrderSupplyStockBuckets(supplyStock.Buckets, today)
 		supplyStockByID[stockRow.ProductID] = supplyStock
 	}
 	return supplyStockByID, nil
@@ -304,7 +341,7 @@ func PostDailyClose(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
 	companyID := req.User.CompanyID
-	var savedClose types.ProductionClose
+	var savedClose types.ProductionOrder
 
 	err := db.RunTransaction(func(transaction *db.Transaction) error {
 		run, err := prepareDailyClose(companyID, body.WarehouseID, body.SuppliesWarehouseID, body.Date)
@@ -332,68 +369,46 @@ func PostDailyClose(req *core.HandlerArgs) core.HandlerResponse {
 		movementDate := run.preview.MovementDate
 		nowTime := core.SUnixTime()
 
-		productionClose := []types.ProductionClose{{
-			CompanyID: companyID, WarehouseID: body.WarehouseID, SuppliesWarehouseID: body.SuppliesWarehouseID,
-			Date: body.Date, IsStrict: run.preview.IsStrict, Products: run.plan.Products, Supplies: run.plan.Supplies,
-			SaleOrderIDs: run.preview.SaleOrderIDs, Status: 1,
-			Created: nowTime, CreatedBy: req.User.ID, Updated: nowTime,
+		// The close is a production order born finished (docs/MANUFACTURING_PLAN.md §3, M4). It is
+		// inserted first: its ID is the DocumentID of every stock movement it writes.
+		closeOrder := []types.ProductionOrder{{
+			CompanyID: companyID, Kind: types.ProductionOrderKindDailyClose,
+			WarehouseID: body.WarehouseID, SuppliesWarehouseID: body.SuppliesWarehouseID,
+			Date: body.Date, IsStrict: run.preview.IsStrict, SaleOrderIDs: run.preview.SaleOrderIDs,
+			Status:  types.ProductionOrderStatusFinished,
+			Created: nowTime, CreatedBy: req.User.ID, Updated: nowTime, UpdatedBy: req.User.ID,
 		}}
-		if err := db.InsertIn(transaction, &productionClose); err != nil {
+		if err := db.InsertIn(transaction, &closeOrder); err != nil {
 			return core.Err("Error al registrar el cierre:", err)
 		}
-		closeID := int64(productionClose[0].ID)
 
-		// The supplies leave first: what the engine values their exits at is what the products cost.
-		consumptionMovements := []logistics.InternalMovement{}
+		receiptInput := productionReceiptInput{
+			OrderID: closeOrder[0].ID, WarehouseID: body.WarehouseID, SuppliesWarehouseID: body.SuppliesWarehouseID,
+			N: 1, MovementDate: movementDate,
+		}
 		for _, consumption := range run.plan.Consumptions {
-			quantity := core.Quantity{Units: consumption.SubUnits / int32(consumption.SubDivisor), Sub: consumption.SubUnits % int32(consumption.SubDivisor)}.Negate()
-			consumptionMovements = append(consumptionMovements, logistics.InternalMovement{
-				WarehouseID: body.SuppliesWarehouseID, ProductID: consumption.SupplyID,
-				LotID: consumption.LotID, SerialNumber: consumption.SerialNumber,
-				Quantity: quantity.Units, SubQuantity: quantity.Sub, SubDivisor: consumption.SubDivisor,
-				Type: logistics.StockMovementTypeProductionConsumption, DocumentID: closeID, Date: movementDate,
+			receiptInput.Consumptions = append(receiptInput.Consumptions, receiptConsumption{
+				ProductID: consumption.ProductID, SupplyID: consumption.SupplyID, LotID: consumption.LotID,
+				SerialNumber: consumption.SerialNumber, SubUnits: consumption.SubUnits, SubDivisor: consumption.SubDivisor,
 			})
 		}
-		consumptionLedger, err := logistics.ApplyMovimientosWithLedgerIn(transaction, req, consumptionMovements)
-		if err != nil {
-			return core.Err("Error al consumir los insumos:", err)
+		// Each product enters at its value right before its sales leave: the engine applies them in
+		// order, so the exits leave at the cost the entries set. Its labor is at standard (M26).
+		// It enters the free bucket even when it tracks lots: the sale exits that follow carry no lot
+		// and only draw from the free bucket, so units entered into a lot would be stranded there and
+		// the exits would fail. What a close makes leaves the same day, so there is nothing to trace.
+		for _, closeProduct := range run.plan.Products {
+			product := run.productsByID[closeProduct.ProductID]
+			receiptInput.Products = append(receiptInput.Products, receiptProduct{
+				ProductID: closeProduct.ProductID, Name: product.Name, SubDivisor: product.SbuQuantity,
+				UnitsByPresentation: run.unitsByProductPresentation[closeProduct.ProductID],
+				CostSource:          closeProduct.CostSource,
+				StandardValue:       int64(closeProduct.Value),
+				LaborValue:          types.RecipeLaborStandardCost(product, closeProduct.Units, run.costPerHourByLaborTypeID),
+				OverheadValue:       int64(product.ProductionExtraCostPerUnit) * int64(closeProduct.Units),
+			})
 		}
-		consumedValueByProduct := map[int32]int32{}
-		for index, ledgerRow := range consumptionLedger {
-			consumedValueByProduct[run.plan.Consumptions[index].ProductID] += ledgerRow.MonetaryValue
-		}
-
-		// Each product enters at its value, per presentation by units, right before its sales leave:
-		// the engine applies them in order, so the exits leave at the cost the entries set.
-		closeProducts := slices.Clone(run.plan.Products)
 		movements := []logistics.InternalMovement{}
-		for index := range closeProducts {
-			closeProduct := &closeProducts[index]
-			extraCostPerUnit := run.productsByID[closeProduct.ProductID].ProductionExtraCostPerUnit
-			if closeProduct.CostSource == types.CloseCostSourceSupplies {
-				closeProduct.Value = consumedValueByProduct[closeProduct.ProductID] + extraCostPerUnit*closeProduct.Units
-			}
-			if closeProduct.Value <= 0 {
-				return core.Err(fmt.Sprintf(`"%s" no tiene costo para su ingreso de producción.`, run.productsByID[closeProduct.ProductID].Name))
-			}
-			unitsByPresentation := run.unitsByProductPresentation[closeProduct.ProductID]
-			presentationIDs := slices.Sorted(maps.Keys(unitsByPresentation))
-			valueLeft := closeProduct.Value
-			for presentationIndex, presentationID := range presentationIDs {
-				units := unitsByPresentation[presentationID]
-				// Shared by units; the last presentation takes the rounding remainder.
-				value := int32(int64(closeProduct.Value) * int64(units) / int64(closeProduct.Units))
-				if presentationIndex == len(presentationIDs)-1 {
-					value = valueLeft
-				}
-				valueLeft -= value
-				movements = append(movements, logistics.InternalMovement{
-					WarehouseID: body.WarehouseID, ProductID: closeProduct.ProductID, PresentationID: presentationID,
-					Quantity: units, SubDivisor: max(run.productsByID[closeProduct.ProductID].SbuQuantity, core.QuantityDivisorNone),
-					InflowValue: value, Type: logistics.StockMovementTypeProductionEntry, DocumentID: closeID, Date: movementDate,
-				})
-			}
-		}
 		pendingDeliveryChanges := []logistics.PendingDeliveryChange{}
 		salesToUpdate := []sales.SaleOrder{}
 		for _, sale := range run.sales {
@@ -420,8 +435,10 @@ func PostDailyClose(req *core.HandlerArgs) core.HandlerResponse {
 			sale.StampPeriod()
 			salesToUpdate = append(salesToUpdate, sale)
 		}
-		if err := logistics.ApplyMovimientosIn(transaction, req, movements); err != nil {
-			return core.Err("Error al registrar la producción y las salidas de las ventas:", err)
+		receiptInput.FollowingMovements = movements
+		receipt, err := applyProductionReceiptIn(transaction, req, receiptInput)
+		if err != nil {
+			return err
 		}
 		if err := logistics.ApplyPendingDeliveryIn(transaction, companyID, req.User.ID, pendingDeliveryChanges); err != nil {
 			return err
@@ -437,12 +454,19 @@ func PostDailyClose(req *core.HandlerArgs) core.HandlerResponse {
 			return core.Err("Error al actualizar las ventas del cierre:", err)
 		}
 
-		productionClose[0].Products = closeProducts
-		closeTable := db.TableOf[types.ProductionClose]()
-		if err := db.UpdateIn(transaction, &productionClose, closeTable.Products, closeTable.Updated); err != nil {
+		closeOrder[0].Receipts = []types.ProductionReceipt{receipt}
+		closeOrder[0].Lines = types.DailyCloseOrderLines(run.plan.Products, receipt)
+		for _, closeSupply := range run.plan.Supplies {
+			closeOrder[0].Supplies = append(closeOrder[0].Supplies, types.ProductionOrderSupply{
+				SupplyID: closeSupply.SupplyID, SubDivisor: closeSupply.SubDivisor,
+				Planned: closeSupply.Needed, Available: closeSupply.Available, Consumed: closeSupply.Consumed,
+			})
+		}
+		orderTable := db.TableOf[types.ProductionOrder]()
+		if err := db.UpdateIn(transaction, &closeOrder, orderTable.Lines, orderTable.Supplies, orderTable.Receipts); err != nil {
 			return core.Err("Error al registrar el valor de la producción:", err)
 		}
-		savedClose = productionClose[0]
+		savedClose = closeOrder[0]
 		return nil
 	})
 	if err != nil {
@@ -451,15 +475,17 @@ func PostDailyClose(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeResponse(savedClose)
 }
 
-// GetProductionCloses is the delta of a warehouse's closes, the history under the close.
+// GetProductionCloses is the delta of a warehouse's closes, the history under the close: its
+// production orders of Kind 2.
 func GetProductionCloses(req *core.HandlerArgs) core.HandlerResponse {
 	warehouseID := int32(req.GetQueryInt("warehouse-id"))
 	if warehouseID <= 0 {
 		return req.MakeErr("Se requiere el almacén.")
 	}
-	closes := []types.ProductionClose{}
+	closes := []types.ProductionOrder{}
 	query := db.Query(&closes)
-	query.Select().CompanyID.Equals(req.User.CompanyID).WarehouseID.Equals(warehouseID).Delta(req.GetDeltaCursor("records"))
+	query.Select().CompanyID.Equals(req.User.CompanyID).Kind.Equals(types.ProductionOrderKindDailyClose).
+		WarehouseID.Equals(warehouseID).Delta(req.GetDeltaCursor("records"))
 	if err := query.Exec(); err != nil {
 		return req.MakeErr("Error al obtener los cierres de producción:", err)
 	}

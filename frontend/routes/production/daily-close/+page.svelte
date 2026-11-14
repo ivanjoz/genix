@@ -12,10 +12,11 @@
   import { formatN, formatTime } from '#libs/helpers.ts'
   import { WarehousesService } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
   import { ProductsService } from '#services/production/products.svelte.ts'
+  import type { IProductionOrder } from '#services/production/production-orders.ts'
   import DailyCloseSummary from './DailyCloseSummary.svelte'
   import {
-    canRunClose, closeTotalValue, oldestPendingDay,
-    type IDailyClosePendingDay, type IDailyClosePreview, type IProductionClose,
+    canRunClose, closeOrderProductUnits, closeOrderTotalValue, oldestPendingDay,
+    type IDailyClosePendingDay, type IDailyClosePreview,
   } from './daily-close.ts'
   import { getDailyClosePending, getDailyClosePreview, postDailyClose, ProductionClosesService } from './daily-close.svelte.ts'
 
@@ -72,8 +73,8 @@
     try {
       const nextClosesService = new ProductionClosesService(warehouseID)
       await nextClosesService.fetchOnline()
-      const productIDs = nextClosesService.records.flatMap((productionClose) =>
-        (productionClose.Products || []).map((product) => product.ProductID))
+      const productIDs = nextClosesService.records.flatMap((closeOrder) =>
+        (closeOrder.Lines || []).map((line) => line.ProductID))
       await productsService.syncIDs(productIDs)
       if (requestID === closesRequestID) closesService = nextClosesService
     } catch (loadError) {
@@ -126,17 +127,17 @@
     { header: 'Units|Unidades', headerCss: 'w-90', css: 'px-6 ff-mono', align: 'right', setCellCss: laterDayCss, getValue: (day) => day.Units },
   ]
 
-  const closeColumns: ITableColumn<IProductionClose>[] = [
-    { header: 'No.|N°', headerCss: 'w-70', css: 'text-center ff-bold', getValue: (productionClose) => productionClose.ID },
-    { header: 'Day|Día', headerCss: 'w-110', css: 'px-6', getValue: (productionClose) => String(formatTime(productionClose.Date, 'd-M-Y')) },
-    { header: 'Products|Productos', css: 'px-6', getValue: (productionClose) => (productionClose.Products || [])
+  const closeColumns: ITableColumn<IProductionOrder>[] = [
+    { header: 'No.|N°', headerCss: 'w-70', css: 'text-center ff-bold', getValue: (closeOrder) => closeOrder.ID },
+    { header: 'Day|Día', headerCss: 'w-110', css: 'px-6', getValue: (closeOrder) => String(formatTime(closeOrder.Date, 'd-M-Y')) },
+    { header: 'Products|Productos', css: 'px-6', getValue: (closeOrder) => closeOrderProductUnits(closeOrder)
       .map((product) => `${product.Units}x ${productsService.recordsMap.get(product.ProductID)?.Name || `#${product.ProductID}`}`).join(', ') },
     { header: 'Sales|Ventas', headerCss: 'w-80', css: 'px-6 ff-mono', align: 'right',
-      getValue: (productionClose) => (productionClose.SaleOrderIDs || []).length },
+      getValue: (closeOrder) => (closeOrder.SaleOrderIDs || []).length },
     { header: 'Value|Valor', headerCss: 'w-120', css: 'px-6 ff-mono', align: 'right',
-      getValue: (productionClose) => formatAmount(closeTotalValue(productionClose.Products)) },
+      getValue: (closeOrder) => formatAmount(closeOrderTotalValue(closeOrder)) },
     { header: 'Supplies wh.|Alm. insumos', headerCss: 'w-150', css: 'px-6',
-      getValue: (productionClose) => warehousesService.AlmacenesMap.get(productionClose.SuppliesWarehouseID)?.Name || '' },
+      getValue: (closeOrder) => warehousesService.AlmacenesMap.get(closeOrder.SuppliesWarehouseID)?.Name || '' },
   ]
 </script>
 

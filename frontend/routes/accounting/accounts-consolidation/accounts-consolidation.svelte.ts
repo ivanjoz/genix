@@ -14,7 +14,7 @@ import { PURCHASE_SOURCE_EXPENSE, PURCHASE_SOURCE_ORDER, type IPurchaseBookDocum
 import { periodBounds } from '../books/books'
 import {
   buildAccountingOperations, operationProductIDs, operationSaleOf, referencedPurchaseOf, referencedRecordIDs,
-  type IAccountingOperationsResponse, type IAccountingSources, type IClassificationTarget, type IOperationProduct, type IOperationSale,
+  type IAccountingOperationsResponse, type IAccountingSources, type IClassificationTarget, type ILaborBooked, type IOperationProduct, type IOperationSale,
   type IProductRecord, type IPurchaseRecord, type ISaleOrderRecord,
 } from './accounts-consolidation'
 
@@ -28,6 +28,7 @@ export class AccountingOperationsService {
   referencedSales: IOperationSale[] = $state([])
   referencedPurchases: IPurchaseBookDocument[] = $state([])
   products: IOperationProduct[] = $state([])
+  laborBooked: ILaborBooked[] = $state([])
   loadedPeriod = $state("")
 
   async fetch(period: string): Promise<void> {
@@ -39,17 +40,20 @@ export class AccountingOperationsService {
         // ver 4: payslip lines carry the provision they settle.
         // ver 5: sales carry PendingStockMovement.
         // ver 6: stock movements include the production close's types 15 and 16.
-        useCache: { min: 0, ver: 6 },
+        // ver 7: payslips carry their EmployeeID (the monthly labor adjustment).
+        useCache: { min: 0, ver: 7 },
         // A purchase document is keyed by the order's or the expense's own ID.
         keysIDs: { PurchaseOrders: "SourceID", Expenses: "SourceID" },
       }) as IAccountingOperationsResponse
 
       // What the period names outside itself, through the by-IDs cache.
       const { saleIDs, orderIDs, expenseIDs } = referencedRecordIDs(response)
-      const [salesByID, ordersByID, expensesByID] = await Promise.all([
+      const [salesByID, ordersByID, expensesByID, laborBooked] = await Promise.all([
         saleIDs.length ? getRecordsByID<ISaleOrderRecord>("sale-order-by-ids", saleIDs) : new Map(),
         orderIDs.length ? getRecordsByID<IPurchaseRecord>("purchase-order-ids", orderIDs) : new Map(),
         expenseIDs.length ? getRecordsByID<IPurchaseRecord>("expense-ids", expenseIDs) : new Map(),
+        // What the Planilla workers' production hours booked to products: the labor adjustment's side.
+        GET({ route: `accounting-labor-booked?period=${period}` }) as Promise<ILaborBooked[]>,
       ])
       const referencedSales = [...salesByID.values()].map(operationSaleOf)
       const productIDs = operationProductIDs([...(response.Sales || []), ...referencedSales], response.StockMovements || [])
@@ -63,6 +67,7 @@ export class AccountingOperationsService {
         ...[...expensesByID.values()].map(expense => referencedPurchaseOf(PURCHASE_SOURCE_EXPENSE, expense)),
       ]
       this.products = [...productsByID.values()]
+      this.laborBooked = laborBooked || []
       this.response = response
       this.loadedPeriod = period
     } catch (error) {
@@ -98,6 +103,7 @@ export class AccountingPeriodReader {
       ReferencedSales: this.operationsService.referencedSales,
       ReferencedPurchases: this.operationsService.referencedPurchases,
       Products: this.operationsService.products,
+      LaborBooked: this.operationsService.laborBooked,
       Assets: this.assetsService.records,
       CashBanks: this.cashBanksService.Cajas,
       // The rate a USD amount of each day is restated at — the same rule the sale applies.

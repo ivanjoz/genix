@@ -17,6 +17,7 @@ import AlmacenLayoutEditor from './WarehouseLayoutEditor.svelte';
 import { useUI } from '@genix/ui';
 
 import { CountryCitiesService } from '#services/business/country-cities.svelte.ts';
+import { ClientProviderService, ClientProviderType } from '#services/crm/client-provider.svelte.ts';
 import {
     WarehousesService,
     postSite,
@@ -27,6 +28,8 @@ import {
   } from "./branches-warehouses.svelte"
 
   const almacenesService = new WarehousesService()
+  // The providers a warehouse can hold the material of, as a subcontractor's workshop.
+  const providers = new ClientProviderService(ClientProviderType.PROVIDER, true)
   const ui = useUI()
   const paisCiudadesService = new CountryCitiesService(true)
 
@@ -376,8 +379,15 @@ import {
       <Input bind:saveOn={almacenForm} save="Description"
         css="col-span-24" label="Description|Descripción"
       />
-      <Checkbox bind:saveOn={almacenForm} save="ExcludeFromOnlineSales" css="col-span-24"
-        label="Exclude from online sales|Excluir para ventas online"
+      {#if !almacenForm.SubcontractorID}
+        <Checkbox bind:saveOn={almacenForm} save="ExcludeFromOnlineSales" css="col-span-24"
+          label="Exclude from online sales|Excluir para ventas online"
+        />
+      {/if}
+      <!-- A workshop's warehouse holds the material sent to it for subcontracted production orders. -->
+      <SearchSelect bind:saveOn={almacenForm} save="SubcontractorID"
+        css="col-span-24" label="Subcontractor workshop (optional)|Taller de maquila (opcional)"
+        keyId="ID" keyName="Name" options={providers.records || []}
       />
     </div>
   </Modal>

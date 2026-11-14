@@ -231,13 +231,16 @@ const handleSave = async () => {
   // Cada entry de cantidad N se serializa como un único item con esa cantidad, salvo
   // que tenga seriales: cada serial se envía como un item independiente con su propia
   // cantidad y SerialNumber para que el backend los individualice en el detalle de stock.
-  const items: IPurchaseOrderEntryItem[] = []
+  // LotExpirationDate is the expiry of the lot the LotCode creates; without it the lot takes the
+  // product's shelf life (docs/MANUFACTURING_PLAN.md §10).
+  const items: (IPurchaseOrderEntryItem & { LotExpirationDate?: number })[] = []
   for (const entry of entries) {
     if (!entry.productID) continue
     const baseFields = {
       ProductID: entry.productID,
       PresentationID: entry.presentationID,
       LotCode: entry.lotCode || undefined,
+      LotExpirationDate: entry.lotCode ? entry.expirationDate || undefined : undefined,
     }
     if (entry.serialNumbers.length > 0) {
       for (const sn of entry.serialNumbers) {

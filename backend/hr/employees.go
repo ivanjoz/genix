@@ -75,7 +75,7 @@ func PostEmployee(req *core.HandlerArgs) core.HandlerResponse {
 	table := db.TableOf[types.Employee]()
 	err := db.Update(&records, table.UserID, table.IdentityDocType, table.DocumentNumber, table.FirstName,
 		table.LastName, table.SecondLastName, table.BirthDate, table.Sex, table.CountryID, table.Address,
-		table.CityID, table.Email, table.Phone, table.DepartmentID, table.PositionID, table.ManagerEmployeeID, table.HireDate,
+		table.CityID, table.Email, table.Phone, table.DepartmentID, table.PositionID, table.ManagerEmployeeID, table.EngagementType, table.HireDate,
 		table.TerminationDate, table.TerminationReason, table.Status, table.UpdatedBy)
 	if err != nil {
 		return req.MakeErr("Error al guardar el trabajador:", err)
@@ -118,6 +118,10 @@ func validateEmployee(companyID int32, employee *types.Employee) error {
 	}
 	if employee.CountryID == 0 {
 		employee.CountryID = 604 // Peru
+	}
+
+	if !types.HasOption(types.EngagementTypeOptions, employee.EngagementType) {
+		return fmt.Errorf("seleccione el tipo de vínculo (planilla, recibo por honorarios o temporal)")
 	}
 
 	// Termination: both fields or neither.
