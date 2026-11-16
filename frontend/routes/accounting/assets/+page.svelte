@@ -342,7 +342,7 @@ const onDispose = async () => {
   <Layer
     type="side"
     id={1}
-    sideLayerSize={720}
+    width={720}
     css="px-8 py-8 md:px-16 md:py-10"
     title="Nuevo Activo"
     titleCss="h2 mb-6"
@@ -367,7 +367,7 @@ const onDispose = async () => {
   <Layer
     type="side"
     id={2}
-    sideLayerSize={620}
+    width={620}
     css="px-8 py-8 md:px-16 md:py-10"
     title={selectedAsset ? (supplyNameByID.get(selectedAsset.ProductID) || "Activo") : "Activo"}
     titleCss="h2 mb-6"

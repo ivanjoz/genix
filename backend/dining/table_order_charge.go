@@ -54,6 +54,18 @@ func PostDiningTableOrderCharge(req *core.HandlerArgs) core.HandlerResponse {
 	if err != nil {
 		return req.MakeErr(err)
 	}
+	saleProducts, err := sales.ReadSaleProducts(companyID, saleLines)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	// Packs apply to the whole bill, not per round: an entrada of the first round and a fondo of the
+	// second still form a menu. Only the sale's lines are repriced; the order keeps catalog prices.
+	activePacks, err := sales.ReadActiveProductPacks(companyID)
+	if err != nil {
+		return req.MakeErr(err)
+	}
+	saleLines = sales.ApplySalePacks(saleLines, saleProducts, activePacks)
+
 	// A table order is always in soles; the sale inherits the rate its rounds converted with.
 	sale := sales.SaleOrder{
 		Lines: saleLines, CurrencyType: finance.CurrencyPEN, ExchangeRate: order.ExchangeRate,
@@ -78,10 +90,6 @@ func PostDiningTableOrderCharge(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al leer la configuración de la empresa:", err)
 	}
 	issueSeries, err := saleissue.ResolveSaleIssueSeries(companyID, &sale, companyConfig.Sunat.Series)
-	if err != nil {
-		return req.MakeErr(err)
-	}
-	saleProducts, err := sales.ReadSaleProducts(companyID, sale.Lines)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -110,7 +118,7 @@ func PostDiningTableOrderCharge(req *core.HandlerArgs) core.HandlerResponse {
 		order.Updated, order.UpdatedBy = prepared.Sale.Updated, req.User.ID
 		orderTable := db.TableOf[types.TableOrder]()
 		if err := db.UpdateIn(transaction, &[]types.TableOrder{order}, orderTable.Status, orderTable.SaleOrderID,
-			orderTable.Updated, orderTable.UpdatedBy, orderTable.LayoutID); err != nil {
+			orderTable.Updated, orderTable.UpdatedBy, orderTable.LayoutID, orderTable.TableShapeID, orderTable.Created); err != nil {
 			return core.Err("Error al cerrar el pedido de la mesa:", err)
 		}
 		return nil
@@ -167,7 +175,7 @@ func PostDiningTableOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 		order.Updated, order.UpdatedBy = core.SUnixTime(), userID
 		orderTable := db.TableOf[types.TableOrder]()
 		if err := db.UpdateIn(transaction, &[]types.TableOrder{order}, orderTable.Status, orderTable.AnnulReason,
-			orderTable.Updated, orderTable.UpdatedBy, orderTable.LayoutID); err != nil {
+			orderTable.Updated, orderTable.UpdatedBy, orderTable.LayoutID, orderTable.TableShapeID, orderTable.Created); err != nil {
 			return core.Err("Error al anular el pedido de la mesa:", err)
 		}
 		return logistics.ApplyPendingDeliveryIn(transaction, companyID, userID,

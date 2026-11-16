@@ -405,7 +405,7 @@
 {/if}
 
 <!-- Product plan editor -->
-<Layer type="side" id={1} sideLayerSize={860}
+<Layer type="side" id={1} width={860}
   css="px-8 py-8 md:px-16 md:py-12"
   title={planProductName}
   titleCss="h2 mb-6"
@@ -453,7 +453,7 @@
 </Layer>
 
 <!-- Seasonality curve editor -->
-<Layer type="side" id={2} sideLayerSize={860}
+<Layer type="side" id={2} width={860}
   css="px-8 py-8 md:px-16 md:py-12"
   title={curveForm?.Name || tr('New curve|Nueva curva')}
   titleCss="h2 mb-6"

@@ -19,6 +19,7 @@ accounting/       fixed assets (bought, donated, part paid) and the month-end de
 hr/               staff, concepts, loans, advances, vacations, novedades, the monthly payroll run
 projects/         agile projects lived sprint by sprint, checked after every write
 crm/              custom fields, pipelines, prospects, a year of opportunities
+dining/           restaurant menu + packs, two dining rooms, yesterday's and today's table service
 loadtest/         drives a running server over HTTP with the same flows (see loadtest/plan.md)
 ```
 
@@ -69,10 +70,21 @@ following only stops the tail; a menu then offers to abort the run, follow again
 | hr | | staff (skipped if the company has employees), concepts, recurring items, a loan | payroll |
 | projects | | the whole projects timeline (skipped if the company has projects) | |
 | crm | | the whole CRM history (skipped if the company has an active pipeline) | |
+| dining | | categories Entradas / Platos de fondo / Postres and 27 made dishes (20 fondos S/ 15–25, 4 entradas S/ 5, 3 postres S/ 4); every other active product set `WebHidden` (the dining menu lists what the web store sells); 6 packs (two category menus, four dish combos); then, unless the `Terraza` room exists: the company's first room rewritten as `Salón principal` (its open orders annulled) + `Terraza`, and the table service of yesterday and today | |
 
 Setups run with the clock frozen on the first simulated morning (06:00), so what they write
-predates the history. projects and crm keep their own clocks: their timelines (sprints back from
-today, a year of opportunities) do not fit the day loop.
+predates the history. projects, crm and dining keep their own clocks: their timelines (sprints back
+from today, a year of opportunities, two service days) do not fit the day loop.
+
+### Dining
+
+`seeds/dining/table_service.go` plans ~40 tables a day (lunch peak at 13h, dinner from 19h), each
+a timeline: round 1 (entradas + fondos) → cold station ready in 5–9 min, hot in 13–24 → served →
+postres round → charged into the warehouse's till (1 in 8 a factura). Every table's events are
+merged and run in time order. Today stops at the real now, and 8 tables sit down in its last 50
+minutes, so the floor has open orders in the kitchen, ready and eating. Yesterday 2 tables leave
+before being served (annulled). Packs are applied at charge time (`sales.ApplySalePacks`), so the
+sales carry `PackID` lines.
 
 ### One day loop
 

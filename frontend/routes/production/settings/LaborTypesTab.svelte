@@ -72,7 +72,7 @@
 <Layer
   id={LABOR_TYPE_LAYER_ID}
   type="side"
-  sideLayerSize={480}
+  width={480}
   title={laborTypeForm.ID > 0 ? laborTypeForm.Name : 'New labor type|Nuevo tipo de trabajo'}
   titleCss="h2 mb-6"
   css="px-12 py-10"

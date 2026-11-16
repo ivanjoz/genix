@@ -69,7 +69,7 @@
 <Layer
   id={STAGE_LAYER_ID}
   type="side"
-  sideLayerSize={480}
+  width={480}
   title={stageForm.ID > 0 ? stageForm.Name : 'New stage|Nueva etapa'}
   titleCss="h2 mb-6"
   css="px-12 py-10"

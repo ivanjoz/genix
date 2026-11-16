@@ -124,7 +124,7 @@
 <Layer
   id={layerID}
   type="side"
-  sideLayerSize={640}
+  width={640}
   title={isNew ? 'New opportunity|Nueva oportunidad' : form.Title}
   titleCss="h2 mb-6"
   css="px-12 py-10"

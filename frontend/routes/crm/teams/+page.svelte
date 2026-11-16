@@ -60,7 +60,7 @@
       selected={form.ID} isSelected={(team, selectedID) => team.ID === selectedID} onRowClick={openTeam} />
   </Layer>
 
-  <Layer id={TEAM_LAYER_ID} type="side" sideLayerSize={520} title={form.ID > 0 ? form.Name : 'New team|Nuevo equipo'}
+  <Layer id={TEAM_LAYER_ID} type="side" width={520} title={form.ID > 0 ? form.Name : 'New team|Nuevo equipo'}
     titleCss="h2 mb-6" css="px-12 py-10" onSave={() => saveTeam()} onDelete={form.ID > 0 ? () => saveTeam(true) : undefined}
     onClose={() => { form = makeEmptyTeam() }}>
     <div class="grid grid-cols-24 gap-10 mt-8" aria-label="Team form">

@@ -68,7 +68,7 @@
 <Layer
   id={FIELD_LAYER_ID}
   type="side"
-  sideLayerSize={520}
+  width={520}
   title={fieldForm.ID > 0 ? fieldForm.Name : 'New field|Nuevo campo'}
   titleCss="h2 mb-6"
   css="px-12 py-10"

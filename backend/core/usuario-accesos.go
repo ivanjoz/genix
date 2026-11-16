@@ -49,6 +49,14 @@ func (usuarioToken *UsuarioToken) HasSubAcceso(accesoID int32, subAccesoID int32
 	return accesoAuthorizedThisRoute && HasSubAcceso(subMask, subAccesoID)
 }
 
+// HoldsAcceso reports whether one of the accesses that authorized the route is accesoID: a route
+// shared by two accesses lets its handler tell which one the caller came through. False for an
+// access that did not gate the route, for the same reason as HasSubAcceso.
+func (usuarioToken *UsuarioToken) HoldsAcceso(accesoID int32) bool {
+	_, accesoAuthorizedThisRoute := usuarioToken.SubAccesos[accesoID]
+	return accesoAuthorizedThisRoute
+}
+
 var User UsuarioToken
 
 type AccessInfo struct {

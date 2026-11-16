@@ -207,7 +207,7 @@
 <Layer
   type="side"
   id={DETAIL_LAYER_ID}
-  sideLayerSize={760}
+  width={760}
   css="p-12"
   title={selectedCompany ? `${companyDisplayName(selectedCompany)} (#${selectedCompany.CompanyID})` : 'IP-devices|IP-dispositivos'}
   titleCss="text-[18px] ff-bold"

@@ -144,8 +144,8 @@ id = 8
 name = "Productos"
 group = 9
 levels = 14
-frontend_routes = "production/products,production/merchandise"
-backend_apis = "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists,GET.supply-material"
+frontend_routes = "production/products,production/merchandise,production/packs"
+backend_apis = "POST.products,POST.product-image,POST.product-category-image,POST.shared-lists,GET.supply-material,POST.product-pack"
 
 [[access]]
 id = 9
@@ -227,9 +227,9 @@ levels = 14
 frontend_routes = "production/settings,production/templates"
 backend_apis = "POST.production-labor-type,POST.production-stage,POST.production-template"
 
-# Restaurant (docs/DINING_PLAN.md §10). 62 "Cocina" comes with its page; 61's sub-access 2
-# "Cobrar mesa" with charging. A waiter may do every line transition, "ready" included (a restaurant
-# with no kitchen display marks dishes ready from the floor map).
+# Restaurant (docs/DINING_PLAN.md §10). A waiter may do every line transition, "ready" included (a
+# restaurant with no kitchen display marks dishes ready from the floor map). "Cocina" shares the
+# lines API but the handler lets it only mark ready / take it back (types.IsKitchenTransition).
 [[access]]
 id = 61
 name = "Atención de Mesas"
@@ -239,6 +239,14 @@ frontend_routes = "dining/floor-service"
 backend_apis = "POST.dining-table-order-round,POST.dining-table-order-lines,POST.dining-table-order-charge,POST.dining-table-order-annul"
 sub_accesses_ids = [2]
 sub_accesses_names = ["Cobrar Mesa"]
+
+[[access]]
+id = 62
+name = "Cocina"
+group = 3
+levels = 14
+frontend_routes = "dining/kitchen-display"
+backend_apis = "POST.dining-table-order-lines"
 
 [[access]]
 id = 63

@@ -95,6 +95,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[logisticsTypes.PurchaseOrder](),
 		db.MakeController[logisticsTypes.WarehouseProductMovement](),
 		db.MakeController[productionTypes.Product](),
+		db.MakeController[productionTypes.ProductPack](),
 		db.MakeController[productionTypes.ProductionLaborEntry](),
 		db.MakeController[productionTypes.ProductionLaborType](),
 		db.MakeController[productionTypes.ProductionOrder](),
@@ -199,6 +200,7 @@ func init() {
 	db.RegisterTableFactory("purchase_order", func() db.Table { return db.MakeTable[logisticsTypes.PurchaseOrder]() })
 	db.RegisterTableFactory("warehouse_product_movement", func() db.Table { return db.MakeTable[logisticsTypes.WarehouseProductMovement]() })
 	db.RegisterTableFactory("products", func() db.Table { return db.MakeTable[productionTypes.Product]() })
+	db.RegisterTableFactory("product_pack", func() db.Table { return db.MakeTable[productionTypes.ProductPack]() })
 	db.RegisterTableFactory("production_labor_entry", func() db.Table { return db.MakeTable[productionTypes.ProductionLaborEntry]() })
 	db.RegisterTableFactory("production_labor_type", func() db.Table { return db.MakeTable[productionTypes.ProductionLaborType]() })
 	db.RegisterTableFactory("production_order", func() db.Table { return db.MakeTable[productionTypes.ProductionOrder]() })

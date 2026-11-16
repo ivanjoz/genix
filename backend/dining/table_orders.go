@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 // GetDiningTableOrders is the delta of a layout's open orders (?layout-id): a charged or annulled
@@ -30,6 +31,30 @@ func GetDiningTableOrders(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al obtener los pedidos de las mesas:", err)
 	}
 	return req.MakeResponse(map[string]any{"records": &orders})
+}
+
+// GetDiningTableOrderHistory answers the orders a table received since yesterday's midnight
+// (?layout-id&table-shape-id), newest first: open, charged and annulled. Two days, so a bar's
+// history does not vanish at midnight.
+func GetDiningTableOrderHistory(req *core.HandlerArgs) core.HandlerResponse {
+	layoutID := int32(req.GetQueryInt("layout-id"))
+	tableShapeID := int16(req.GetQueryInt("table-shape-id"))
+	if layoutID <= 0 || tableShapeID <= 0 {
+		return req.MakeErr("Debe indicar el salón y la mesa.")
+	}
+	now := core.Now()
+	yesterdayStart := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, now.Location())
+	createdFrom := int32((yesterdayStart.Unix() - 1e9) / 2)
+
+	orders := []types.TableOrder{}
+	query := db.Query(&orders)
+	query.Select().CompanyID.Equals(req.User.CompanyID).LayoutID.Equals(layoutID).
+		TableShapeID.Equals(tableShapeID).Created.GreaterEqual(createdFrom)
+	if err := query.Exec(); err != nil {
+		return req.MakeErr("Error al obtener el historial de la mesa:", err)
+	}
+	slices.SortFunc(orders, func(left, right types.TableOrder) int { return int(right.Created - left.Created) })
+	return req.MakeResponse(orders)
 }
 
 type tableOrderRoundRequest struct {
@@ -183,6 +208,8 @@ func PostDiningTableOrderLines(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	companyID, userID := req.User.CompanyID, req.User.ID
 	nowTime := core.SUnixTime()
+	// The route is shared by "Atención de Mesas" and "Cocina"; a kitchen-only caller just marks ready.
+	isKitchenOnly := !req.User.HoldsAcceso(types.AccessIDTableService)
 
 	savedOrder := types.TableOrder{}
 	err := db.RunTransaction(func(transaction *db.Transaction) error {
@@ -202,6 +229,9 @@ func PostDiningTableOrderLines(req *core.HandlerArgs) core.HandlerResponse {
 				return core.Err(fmt.Sprintf("El pedido no tiene el producto %v.", lineID))
 			}
 			lineBefore := order.Lines[lineIndex]
+			if isKitchenOnly && !types.IsKitchenTransition(lineBefore.Status, request.Status) {
+				return core.Err("Desde cocina solo se puede marcar un producto listo o devolverlo a cocina.")
+			}
 			if err := types.ApplyLineTransition(&order.Lines[lineIndex], request.Status, nowTime, userID); err != nil {
 				return err
 			}
@@ -232,10 +262,12 @@ func lockDiningTable(companyID int32, layoutID int32, tableShapeID int16) (core.
 }
 
 // updateTableOrderLinesIn writes an order's lines; a round also writes the rate it converted with.
-// LayoutID and Status go too: they are the delta index's keys, which the write needs with the row.
+// LayoutID and Status go too: they are the delta index's keys, which the write needs with the row;
+// and TableShapeID and Created with LayoutID, the history view's keys, which go together.
 func updateTableOrderLinesIn(transaction *db.Transaction, orders *[]types.TableOrder, withExchangeRate bool) error {
 	orderTable := db.TableOf[types.TableOrder]()
-	columns := []db.Coln{orderTable.Lines, orderTable.Updated, orderTable.UpdatedBy, orderTable.LayoutID, orderTable.Status}
+	columns := []db.Coln{orderTable.Lines, orderTable.Updated, orderTable.UpdatedBy, orderTable.LayoutID, orderTable.Status,
+		orderTable.TableShapeID, orderTable.Created}
 	if withExchangeRate {
 		columns = append(columns, orderTable.ExchangeRate)
 	}

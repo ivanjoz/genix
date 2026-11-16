@@ -1,0 +1,139 @@
+[
+  {
+    "name": "a single dish fills no pack",
+    "products": [{"ID": 11, "CategoryIDs": [20]}],
+    "packs": [
+      {"ID": 2, "Name": "Menú ejecutivo", "PriceType": 3, "PriceValue": 500, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}]}
+    ],
+    "lines": [{"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1}],
+    "expected": [{"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1}]
+  },
+  {
+    "name": "entrada + fondo + postre is the full menu, prorated with the leftover cents on the fondo",
+    "products": [{"ID": 1, "CategoryIDs": [10]}, {"ID": 11, "CategoryIDs": [20]}, {"ID": 21, "CategoryIDs": [30]}],
+    "packs": [
+      {"ID": 1, "Name": "Menú completo", "PriceType": 3, "PriceValue": 1000, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}, {"CategoryID": 30, "Quantity": 1}]},
+      {"ID": 2, "Name": "Menú ejecutivo", "PriceType": 3, "PriceValue": 500, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}]}
+    ],
+    "lines": [
+      {"ProductID": 1, "Price": 500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 21, "Price": 400, "Quantity": 1000, "SubDivisor": 1}
+    ],
+    "expected": [
+      {"ProductID": 1, "Price": 352, "Quantity": 1000, "SubDivisor": 1, "PackID": 1},
+      {"ProductID": 11, "Price": 1766, "Quantity": 1000, "SubDivisor": 1, "PackID": 1},
+      {"ProductID": 21, "Price": 282, "Quantity": 1000, "SubDivisor": 1, "PackID": 1}
+    ]
+  },
+  {
+    "name": "a product pack (relevance 10) outranks the category menu (6) even with a smaller saving",
+    "products": [{"ID": 1, "CategoryIDs": [10]}, {"ID": 12, "CategoryIDs": [20]}, {"ID": 21, "CategoryIDs": [30]}],
+    "packs": [
+      {"ID": 1, "Name": "Menú completo", "PriceType": 3, "PriceValue": 1000, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}, {"CategoryID": 30, "Quantity": 1}]},
+      {"ID": 3, "Name": "Ceviche + Causa", "PriceType": 1, "PriceValue": 2200, "ss": 1,
+       "Components": [{"ProductID": 12, "Quantity": 1}, {"ProductID": 1, "Quantity": 1}]}
+    ],
+    "lines": [
+      {"ProductID": 12, "Price": 2200, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 1, "Price": 500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 21, "Price": 400, "Quantity": 1000, "SubDivisor": 1}
+    ],
+    "expected": [
+      {"ProductID": 12, "Price": 1793, "Quantity": 1000, "SubDivisor": 1, "PackID": 3},
+      {"ProductID": 1, "Price": 407, "Quantity": 1000, "SubDivisor": 1, "PackID": 3},
+      {"ProductID": 21, "Price": 400, "Quantity": 1000, "SubDivisor": 1}
+    ]
+  },
+  {
+    "name": "a table fills the full menu, then the executive menu; lines split by pack and leftover",
+    "products": [{"ID": 1, "CategoryIDs": [10]}, {"ID": 11, "CategoryIDs": [20]}, {"ID": 13, "CategoryIDs": [20]}, {"ID": 21, "CategoryIDs": [30]}],
+    "packs": [
+      {"ID": 1, "Name": "Menú completo", "PriceType": 3, "PriceValue": 1000, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}, {"CategoryID": 30, "Quantity": 1}]},
+      {"ID": 2, "Name": "Menú ejecutivo", "PriceType": 3, "PriceValue": 500, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}]}
+    ],
+    "lines": [
+      {"ProductID": 1, "Price": 500, "Quantity": 2000, "SubDivisor": 1},
+      {"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 13, "Price": 1800, "Quantity": 2000, "SubDivisor": 1},
+      {"ProductID": 21, "Price": 400, "Quantity": 1000, "SubDivisor": 1}
+    ],
+    "expected": [
+      {"ProductID": 1, "Price": 352, "Quantity": 1000, "SubDivisor": 1, "PackID": 1},
+      {"ProductID": 1, "Price": 391, "Quantity": 1000, "SubDivisor": 1, "PackID": 2},
+      {"ProductID": 11, "Price": 1766, "Quantity": 1000, "SubDivisor": 1, "PackID": 1},
+      {"ProductID": 13, "Price": 1409, "Quantity": 1000, "SubDivisor": 1, "PackID": 2},
+      {"ProductID": 13, "Price": 1800, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 21, "Price": 282, "Quantity": 1000, "SubDivisor": 1, "PackID": 1}
+    ]
+  },
+  {
+    "name": "the sub-unit part of a line is never packed",
+    "products": [{"ID": 1, "CategoryIDs": [10]}, {"ID": 11, "CategoryIDs": [20]}],
+    "packs": [
+      {"ID": 2, "Name": "Menú ejecutivo", "PriceType": 3, "PriceValue": 500, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}]}
+    ],
+    "lines": [
+      {"ProductID": 1, "Price": 500, "SubPrice": 150, "Quantity": 1250, "SubDivisor": 4},
+      {"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1}
+    ],
+    "expected": [
+      {"ProductID": 1, "Price": 416, "SubPrice": 150, "Quantity": 1000, "SubDivisor": 4, "PackID": 2},
+      {"ProductID": 1, "Price": 500, "SubPrice": 150, "Quantity": 250, "SubDivisor": 4},
+      {"ProductID": 11, "Price": 2084, "Quantity": 1000, "SubDivisor": 1, "PackID": 2}
+    ]
+  },
+  {
+    "name": "a pack priced at or above the catalog sum, and an inactive pack, are skipped",
+    "products": [{"ID": 11, "CategoryIDs": [20]}, {"ID": 13, "CategoryIDs": [20]}],
+    "packs": [
+      {"ID": 4, "Name": "Dúo caro", "PriceType": 1, "PriceValue": 5000, "ss": 1,
+       "Components": [{"ProductID": 11, "Quantity": 1}, {"ProductID": 13, "Quantity": 1}]},
+      {"ID": 5, "Name": "Dúo inactivo", "PriceType": 3, "PriceValue": 300, "ss": 0,
+       "Components": [{"ProductID": 11, "Quantity": 1}, {"ProductID": 13, "Quantity": 1}]}
+    ],
+    "lines": [
+      {"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 13, "Price": 1800, "Quantity": 1000, "SubDivisor": 1}
+    ],
+    "expected": [
+      {"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 13, "Price": 1800, "Quantity": 1000, "SubDivisor": 1}
+    ]
+  },
+  {
+    "name": "percent off is rounded up to the whole sol",
+    "products": [{"ID": 13, "CategoryIDs": [20]}],
+    "packs": [
+      {"ID": 6, "Name": "2 Ají de gallina", "PriceType": 2, "PriceValue": 1500, "RoundingMode": 1, "ss": 1,
+       "Components": [{"ProductID": 13, "Quantity": 2}]}
+    ],
+    "lines": [{"ProductID": 13, "Price": 1800, "Quantity": 2000, "SubDivisor": 1}],
+    "expected": [{"ProductID": 13, "Price": 1550, "Quantity": 2000, "SubDivisor": 1, "PackID": 6}]
+  },
+  {
+    "name": "equal relevance goes to the larger saving",
+    "products": [{"ID": 1, "CategoryIDs": [10]}, {"ID": 11, "CategoryIDs": [20]}],
+    "packs": [
+      {"ID": 2, "Name": "Menú ejecutivo", "PriceType": 3, "PriceValue": 500, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}]},
+      {"ID": 7, "Name": "Menú promo", "PriceType": 3, "PriceValue": 800, "ss": 1,
+       "Components": [{"CategoryID": 10, "Quantity": 1}, {"CategoryID": 20, "Quantity": 1}]}
+    ],
+    "lines": [
+      {"ProductID": 1, "Price": 500, "Quantity": 1000, "SubDivisor": 1},
+      {"ProductID": 11, "Price": 2500, "Quantity": 1000, "SubDivisor": 1}
+    ],
+    "expected": [
+      {"ProductID": 1, "Price": 366, "Quantity": 1000, "SubDivisor": 1, "PackID": 7},
+      {"ProductID": 11, "Price": 1834, "Quantity": 1000, "SubDivisor": 1, "PackID": 7}
+    ]
+  }
+]

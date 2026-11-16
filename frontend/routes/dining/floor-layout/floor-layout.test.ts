@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { SHAPE_KIND, TABLE_OUTLINE, rectPoints, shapeAt, shapeRect, type IDiningLayout } from '../dining.ts'
 import {
-  applyShapeGeometryFields, duplicateShapes, fitShapeInGrid, makeEmptyLayout, makeShape, moveLineEnd, moveShapes,
-  nextTableLabel, nextTemporaryShapeID, overlappingTableIDs, resizeShapeTo, rotateShapes, setDefaultStation,
-  shapeGeometryFields, shapeIDsInRect, stationDeleteBlocker,
+  MIN_GRID_SIZE, duplicateShapes, editorCanvasRegion, makeEmptyLayout, makeShape, moveLineEnd,
+  moveShapes, nextTableLabel, nextTemporaryShapeID, overlappingTableIDs, resizeShapeTo, rotateShapes,
+  setDefaultStation, shapeIDsInRect, stationDeleteBlocker, trimGridToShapes,
 } from './floor-layout.ts'
 
 // An unturned block of w × h cells from (x, y).
@@ -39,11 +39,13 @@ describe('floor layout geometry', () => {
     expect(shapeIDsInRect(makeLayout().Shapes!, { x1: 1, y1: 1, x2: 5, y2: 7 })).toEqual([1])
   })
 
-  it('moves a group by whole cells without letting any shape leave the grid', () => {
+  it('moves a group by whole cells anywhere on the open sheet, even below 0', () => {
     const layout = makeLayout()
     moveShapes(layout, [1, 2], { x: 20, y: -0.6 })
-    // M7 ends at x 8: the group can go 12 cells right; -0.6 rounds to -1.
-    expect(layout.Shapes!.map((shape) => shape.Points.slice(0, 2))).toEqual([[14, 1], [18, 1], [0, 6]])
+    // The grid does not hold the group back; -0.6 rounds to -1.
+    expect(layout.Shapes!.map((shape) => shape.Points.slice(0, 2))).toEqual([[22, 1], [26, 1], [0, 6]])
+    moveShapes(layout, [1, 2], { x: -30, y: 0 })
+    expect(layout.Shapes!.map((shape) => shape.Points.slice(0, 2))).toEqual([[-8, 1], [-4, 1], [0, 6]])
   })
 
   it('moves a line with its two points', () => {
@@ -56,12 +58,12 @@ describe('floor layout geometry', () => {
     const layout = makeLayout()
     const table = layout.Shapes![0]
     table.Points = rectPoints({ x: 2, y: 2, w: 2, h: 2, quarterTurns: 1 })
-    resizeShapeTo(table, { x: 5.2, y: 1 }, 20, 10)
+    resizeShapeTo(table, { x: 5.2, y: 1 })
     expect(shapeRect(table)).toEqual({ x: 2, y: 2, w: 3, h: 1, quarterTurns: 1 })
     const line = layout.Shapes![2]
-    moveLineEnd(line, 2, { x: 0.2, y: 6.1 }, 20, 10) // would collapse the line: ignored
+    moveLineEnd(line, 2, { x: 0.2, y: 6.1 }) // would collapse the line: ignored
     expect(line.Points).toEqual([0, 6, 20, 6])
-    moveLineEnd(line, 2, { x: 9.6, y: 2.4 }, 20, 10)
+    moveLineEnd(line, 2, { x: 9.6, y: 2.4 })
     expect(line.Points).toEqual([0, 6, 10, 2])
   })
 
@@ -95,31 +97,43 @@ describe('floor layout geometry', () => {
     expect(layout.Shapes![0].Points).toEqual(cells(2, 2, 4, 2))
   })
 
-  it('turns a wall about its first end and shifts it back in whole: it never collapses', () => {
+  it('turns a wall about its first end', () => {
     const layout = makeLayout()
-    // Against the left edge, pointing down: turned, it would point left, off the grid.
     layout.Shapes![2].Points = [0, 0, 0, 5]
     rotateShapes(layout, [3])
-    expect(layout.Shapes![2].Points).toEqual([5, 0, 0, 0])
-    // 20 long in a grid 10 high: it cannot stand up, so it stays as it is.
-    layout.Shapes![2].Points = [0, 6, 20, 6]
-    rotateShapes(layout, [3])
-    expect(layout.Shapes![2].Points).toEqual([0, 6, 20, 6])
+    expect(layout.Shapes![2].Points).toEqual([0, 0, -5, 0])
   })
 
-  it('gives a wall typed with both ends on one point one cell of length', () => {
-    const line = { ShapeID: 3, Kind: SHAPE_KIND.LINE, Points: [4, 4, 0, 0] }
-    applyShapeGeometryFields(line, { ...shapeGeometryFields(line), X2: 4, Y2: 4 }, 20, 10)
-    expect(line.Points).toEqual([4, 4, 5, 4])
-    const atEdge = { ShapeID: 4, Kind: SHAPE_KIND.LINE, Points: [20, 3, 20, 3] }
-    fitShapeInGrid(atEdge, 20, 10)
-    expect(atEdge.Points).toEqual([20, 3, 19, 3])
+  it('makes a new wall 10 cells long', () => {
+    expect(makeShape('line', makeLayout(), { x: 3, y: 4 }).Points).toEqual([3, 4, 13, 4])
   })
 
-  it('writes typed block coordinates back keeping the turn, inside the grid', () => {
-    const block = { ShapeID: 5, Kind: SHAPE_KIND.RECT, Points: rectPoints({ x: 1, y: 1, w: 2, h: 3, quarterTurns: 3 }) }
-    applyShapeGeometryFields(block, { ...shapeGeometryFields(block), X: 19, W: Number.NaN }, 20, 10)
-    expect(shapeRect(block)).toEqual({ x: 19, y: 1, w: 1, h: 3, quarterTurns: 3 })
+  it('draws the viewport, slid only as far as the shapes and their margin need', () => {
+    // Shapes span x 0..20 and y 2..6: with their margin, -1..21 and 1..7.
+    const shapes = makeLayout().Shapes!
+    // A 30 × 10 viewport anchored at 0 slides one cell left to give the wall its margin.
+    expect(editorCanvasRegion(shapes, { x: 0, y: 0 }, 30, 10)).toEqual({ x1: -1, y1: 0, x2: 29, y2: 10 })
+    // Anchored far away, it slides back just enough to reach them: the space they left is dropped.
+    expect(editorCanvasRegion(shapes, { x: -40, y: 5 }, 30, 10)).toEqual({ x1: -9, y1: 1, x2: 21, y2: 11 })
+    // Narrower than the shapes: exactly what they need, so the plan scrolls.
+    expect(editorCanvasRegion(shapes, { x: 0, y: 0 }, 12, 10)).toEqual({ x1: -1, y1: 0, x2: 21, y2: 10 })
+    expect(editorCanvasRegion([], { x: 3, y: 4 }, 12, 10)).toEqual({ x1: 3, y1: 4, x2: 15, y2: 14 })
+  })
+
+  it('stores the used area with a margin on every side', () => {
+    const layout = makeLayout()
+    moveShapes(layout, [1, 2, 3], { x: -6, y: 3 })
+    expect(trimGridToShapes(layout)).toEqual({ x: 7, y: -4 })
+    // The wall goes to x 1 and M1 to the top margin, keeping their distance.
+    expect(layout.Shapes![2].Points).toEqual([1, 5, 21, 5])
+    expect(layout.Shapes![0].Points.slice(0, 2)).toEqual([3, 1])
+    expect([layout.GridWidth, layout.GridHeight]).toEqual([22, 8])
+  })
+
+  it('keeps an empty layout at the smallest grid', () => {
+    const layout = { ...makeEmptyLayout(), GridWidth: 40, GridHeight: 30 }
+    trimGridToShapes(layout)
+    expect([layout.GridWidth, layout.GridHeight]).toEqual([MIN_GRID_SIZE, MIN_GRID_SIZE])
   })
 
   it('keeps one default station, and the stations the plan still marks', () => {

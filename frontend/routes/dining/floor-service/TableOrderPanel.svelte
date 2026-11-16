@@ -1,23 +1,25 @@
 <script lang="ts">
   import { useUI } from '@genix/ui'
-  import Button from '#components/buttons/Button.svelte'
+  import { untrack } from 'svelte'
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
   import { tr } from '#core/store.svelte.ts'
-  import { formatQuantity, unpackQuantityLine } from '#core/quantity.ts'
   import { formatN } from '#libs/helpers.ts'
   import { security } from '#libs/ui-runtime.svelte.ts'
+  import OrderLineCards from '../OrderLineCards.svelte'
   import { postTableOrderLines } from '../dining.svelte.ts'
-  import {
-    LINE_STATUS, lineStatusLabels, tableState, tableStateLabels, tableWaitTicks, waitMinutes,
-    type IDiningLayout, type ITableOrder, type ITableOrderLine,
-  } from '../dining.ts'
-  import { lineActions, lineAmount, orderRounds, orderTotal } from './floor-service.ts'
+  import { lineActions, type IDiningLayout, type ITableOrder } from '../dining.ts'
+  import { orderTotal } from './floor-service.ts'
+  import type { RoundDraftState } from './floor-service.svelte.ts'
   import RoundComposer from './RoundComposer.svelte'
   import TableChargeForm from './TableChargeForm.svelte'
+  import TableOrderHistory from './TableOrderHistory.svelte'
   import { CHARGE_TABLE_SUB_ACCESS_ID, TABLE_SERVICE_ACCESS_ID } from './table-charge.ts'
 
-  // One table's open order: its rounds with each line's state and actions, what it owes so far, and
-  // a new round. A table with no order opens one with its first round.
-  let { layout, tableShapeID, order, nowTime, productName, onOrderChanged }: {
+  // One table, in four tabs: "Pedidos" (the open order's rounds and their line actions), "Pagar"
+  // (the bill, charged or annulled), "Nuevo pedido" (a new round; the first one opens the order) and
+  // "Historial" (the table's orders of today and yesterday). Charging the bill frees the table.
+  let { round, layout, tableShapeID, order, nowTime, productName, onOrderChanged }: {
+    round: RoundDraftState
     layout: IDiningLayout
     tableShapeID: number
     order: ITableOrder | undefined
@@ -26,12 +28,27 @@
     onOrderChanged: (order: ITableOrder) => void
   } = $props()
 
+  const TAB_ORDERS = 1
+  const TAB_PAY = 2
+  const TAB_NEW_ROUND = 3
+  const TAB_HISTORY = 4
+
   const ui = useUI()
-  let isComposing = $state(false)
-  let pendingLineID = $state(0)
-  // The bill being closed: charged into a sale or annulled ("Cobrar mesa" sub-access).
-  let closingMode = $state<'' | 'charge' | 'annul'>('')
+  let isMovingLines = $state(false)
+  let selectedLineIDs = $state<number[]>([])
   const canCloseBill = security.checkSubAcceso(TABLE_SERVICE_ACCESS_ID, CHARGE_TABLE_SUB_ACCESS_ID)
+  // A table with an order opens on its rounds; a free one on its first round. Read once: the panel
+  // is re-created per table, and the waiter's pick wins afterwards.
+  let selectedTab = $state(untrack(() => order) ? TAB_ORDERS : TAB_NEW_ROUND)
+
+  // Every tab shows on every table, a free one too ("Pedidos" and "Pagar" then say there is nothing);
+  // only "Pagar" needs the "Cobrar mesa" sub-access.
+  const tabs = $derived([
+    [TAB_ORDERS, tr('Orders|Pedidos')],
+    ...(canCloseBill ? [[TAB_PAY, tr('Pay|Pagar')]] : []),
+    [TAB_NEW_ROUND, tr('New round|Nuevo pedido')],
+    [TAB_HISTORY, tr('History|Historial')],
+  ] as [number, string][])
 
   // A closed bill leaves the floor map, and the table is free again.
   function onBillClosed(closedOrder: ITableOrder) {
@@ -40,81 +57,50 @@
   }
   const formatAmount = (cents: number) => `S/ ${formatN(cents / 100, 2)}`
 
-  const LINE_STATUS_CSS: Record<number, string> = {
-    [LINE_STATUS.CANCELLED]: 'text-fg-muted line-through',
-    [LINE_STATUS.TO_CONFIRM]: 'bg-purple-bg text-purple-fg',
-    [LINE_STATUS.ORDERED]: 'bg-amber-bg text-amber-fg',
-    [LINE_STATUS.READY]: 'bg-teal-bg text-teal-fg',
-    [LINE_STATUS.SERVED]: 'bg-green-bg text-green-fg',
-  }
-
-  async function moveLine(line: ITableOrderLine, status: number) {
-    if (!order || pendingLineID) return
-    pendingLineID = line.LineID
+  // One request moves every selected line the action fits; the selection is spent with it.
+  async function moveLines(status: number, lineIDs: number[]) {
+    if (!order || isMovingLines) return
+    isMovingLines = true
     try {
-      onOrderChanged(await postTableOrderLines({ OrderID: order.ID, LineIDs: [line.LineID], Status: status }))
-    } catch (lineError) {
-      console.error('[floor-service] line error', { orderID: order.ID, lineID: line.LineID, status, lineError })
+      onOrderChanged(await postTableOrderLines({ OrderID: order.ID, LineIDs: lineIDs, Status: status }))
+      selectedLineIDs = []
+    } catch (linesError) {
+      console.error('[floor-service] lines error', { orderID: order.ID, lineIDs, status, linesError })
     } finally {
-      pendingLineID = 0
+      isMovingLines = false
     }
   }
 </script>
 
-<div class="flex flex-col gap-12 mt-8" aria-label="The table's order: rounds, line states and actions">
-  {#if order}
-    <div class="flex flex-wrap items-center gap-12">
-      <span class="ff-bold">{tr(tableStateLabels[tableState(order, layout, nowTime)])}</span>
-      {#if tableWaitTicks(order, nowTime)}
-        <span class="text-fg-muted">{tr('Waiting|Esperando')} {waitMinutes(tableWaitTicks(order, nowTime))} min</span>
-      {/if}
-      {#if order.Guests}<span class="text-fg-muted">{order.Guests} {tr('guests|comensales')}</span>{/if}
-      <span class="ml-auto ff-bold ff-mono">{formatAmount(orderTotal(order))}</span>
-    </div>
-  {/if}
+<!-- As tall as the layer: in "Pedidos" only the rounds scroll (OrderLineCards), under a fixed toolbar.
+     The other tabs outgrow it and the layer scrolls them as a whole. -->
+<div class="h-full flex flex-col gap-12 pt-8" aria-label="The table: its order, its bill, a new round and its history">
+  <OptionsStrip options={tabs} selected={selectedTab} buttonCss="min-w-0 flex-1"
+    onSelect={(option) => { selectedTab = option[0] }} />
 
-  {#if order && closingMode}
-    <TableChargeForm {order} mode={closingMode} onDone={onBillClosed} onCancel={() => { closingMode = '' }} />
-  {:else if isComposing || !order}
-    <RoundComposer layoutID={layout.ID} {tableShapeID} isOpening={!order}
-      onSent={(savedOrder) => { isComposing = false; onOrderChanged(savedOrder) }}
-      onCancel={() => { if (order) isComposing = false; else ui.openSideLayer(0) }} />
-  {:else}
-    <div class="flex flex-wrap items-center gap-8">
-      <Button icon="icon-[fa--plus]" name="New round|Nuevo pedido" label="Adds a round to this table."
-        onClick={() => { isComposing = true }} />
-      {#if canCloseBill}
-        <Button color="green" icon="icon-[fa--money]" name="Charge table|Cobrar mesa" css="ml-auto"
-          label="Opens the form to close the bill into a sale." onClick={() => { closingMode = 'charge' }} />
-        <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Annul order|Anular pedido"
-          label="Opens the form to annul this table order." onClick={() => { closingMode = 'annul' }} />
-      {/if}
+  {#if (selectedTab === TAB_ORDERS || selectedTab === TAB_PAY) && !order}
+    <!-- A free table, or its order closed elsewhere (another waiter charged it). -->
+    <div class="p-12 rounded-md bg-purple-bg text-purple-fg" aria-label="The table has no open order">
+      {selectedTab === TAB_ORDERS ? tr('No open orders.|No hay pedidos abiertos.') : tr('Nothing to pay.|No hay nada que pagar.')}
     </div>
-  {/if}
-
-  {#if order}
-    {#each orderRounds(order).toReversed() as { round, lines } (round)}
-      <div class="rounded-md border border-line p-8 flex flex-col gap-6" aria-label="Round {round}">
-        <div class="text-fg-muted">{tr('Round|Ronda')} {round}</div>
-        {#each lines as line (line.LineID)}
-          <div class="flex flex-wrap items-center gap-8">
-            <span class="ff-mono w-40 text-right">{formatQuantity(unpackQuantityLine(line.Quantity), line.SubDivisor || 1)}</span>
-            <div class="flex-1 min-w-160 {line.Status === LINE_STATUS.CANCELLED ? 'text-fg-muted line-through' : ''}">
-              {productName(line.ProductID)}
-              {#if line.Note}<span class="text-fg-muted"> · {line.Note}</span>{/if}
-            </div>
-            <span class="px-6 rounded {LINE_STATUS_CSS[line.Status]}">{tr(lineStatusLabels[line.Status])}</span>
-            <span class="ff-mono w-80 text-right">{formatAmount(lineAmount(line))}</span>
-            <div class="flex gap-4">
-              {#each lineActions(line, nowTime) as action (action.status)}
-                <Button name={action.name} label="Moves this line to another state." height="compact" color={action.color}
-                  mode={action.status === LINE_STATUS.CANCELLED ? 'subtle' : undefined}
-                  disabled={pendingLineID === line.LineID} onClick={() => moveLine(line, action.status)} />
-              {/each}
-            </div>
-          </div>
-        {/each}
-      </div>
-    {/each}
+  {:else if selectedTab === TAB_ORDERS && order}
+    <OrderLineCards lines={order.Lines} {productName} actionsOf={(line) => lineActions(line, nowTime)} showPrice columns={3}
+      bind:selectedLineIDs isBusy={isMovingLines} onApply={moveLines}>
+      {#snippet toolbar()}
+        <!-- The order's running total, left of the selection's buttons. -->
+        <span class="flex items-center gap-6 ff-bold ff-mono" aria-label="The order's total">
+          <i class="icon-[mdi--receipt-text-outline] text-[20px] text-fg-muted"></i>
+          {formatAmount(orderTotal(order))}
+        </span>
+      {/snippet}
+    </OrderLineCards>
+  {:else if selectedTab === TAB_PAY && order}
+    <TableChargeForm {order} {productName} onDone={onBillClosed} />
+  {:else if selectedTab === TAB_NEW_ROUND}
+    <RoundComposer {round} layoutID={layout.ID} {tableShapeID} isOpening={!order}
+      onSent={(savedOrder) => { onOrderChanged(savedOrder); selectedTab = TAB_ORDERS }}
+      onCancel={() => { if (order) selectedTab = TAB_ORDERS; else ui.openSideLayer(0) }} />
+  {:else if selectedTab === TAB_HISTORY}
+    <TableOrderHistory layoutID={layout.ID} {tableShapeID} {productName} />
   {/if}
 </div>

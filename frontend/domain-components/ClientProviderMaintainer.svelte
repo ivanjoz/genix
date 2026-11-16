@@ -301,7 +301,7 @@
   <Layer
     id={11}
     type="side"
-    sideLayerSize={760}
+    width={760}
     title={clientProviderForm.ID ? tr(`Edit ${tr(layerTitleSingular)}|Editar ${tr(layerTitleSingular)}`) : tr(`New ${tr(layerTitleSingular)}|Nuevo ${tr(layerTitleSingular)}`)}
     titleCss="h2 mb-6"
     css="px-12 py-10"

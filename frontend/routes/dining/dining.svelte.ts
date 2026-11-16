@@ -37,6 +37,13 @@ export class TableOrdersService extends GetHandler<ITableOrder> {
     this.route += `?layout-id=${layoutID}`
     this.fetch()
   }
+
+  // A write answers the whole order: it replaces the cached one at once (a closed one leaves), and the sync follows.
+  applyChangedOrder(order: ITableOrder) {
+    const others = this.records.filter((candidate) => candidate.ID !== order.ID)
+    this.records = order.ss === 1 ? [...others, order] : others
+    this.fetchOnline()
+  }
 }
 
 // Moves lines of an open order to a new LINE_STATUS (confirm, ready, served, cancel, back to the kitchen).

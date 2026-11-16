@@ -628,7 +628,7 @@ import {
   </Layer>
 </div>
 
-<Layer id={2} type="side" sideLayerSize={720}
+<Layer id={2} type="side" width={720}
   title={`Abastecimiento ${productos.recordsMap.get(productSupplyForm.ProductID)?.Name || ''}`}
   titleCss="h2 mb-6"
   css="px-12 py-10"

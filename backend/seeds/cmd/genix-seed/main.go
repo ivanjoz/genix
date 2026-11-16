@@ -22,6 +22,7 @@ import (
 	"app/seeds/accounting"
 	"app/seeds/base"
 	"app/seeds/crm"
+	"app/seeds/dining"
 	"app/seeds/finance"
 	"app/seeds/hr"
 	"app/seeds/loadtest"
@@ -46,7 +47,7 @@ import (
 // seedModules is the registry, in the order their setups depend on: base first, always.
 var seedModules = []runner.Module{
 	base.Module, logistics.Module, sales.Module, finance.Module, accounting.Module, hr.Module,
-	projects.Module, crm.Module,
+	projects.Module, crm.Module, dining.Module,
 }
 
 const usage = `usage:

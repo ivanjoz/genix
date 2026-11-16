@@ -206,7 +206,7 @@ const columns: ITableColumn<IOperationGroup>[] = [
   />
 </Layer>
 
-<Layer type="side" id={1} sideLayerSize={620}
+<Layer type="side" id={1} width={620}
   title={openOperation ? `${tr(operationKindLabels[openOperation.Kind])} · ${openOperation.Key}`
     : openGroup ? `${tr(operationKindLabels[openGroup.Kind])} · ${openGroup.Operations.length} ${tr("operations|operaciones")}` : ""}
   titleCss="h2 mb-6"

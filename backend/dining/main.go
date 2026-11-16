@@ -9,6 +9,7 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.dining-layout":             PostDiningLayout,
 	"GET.dining-menu":                GetDiningMenu,
 	"GET.dining-table-orders":        GetDiningTableOrders,
+	"GET.dining-table-order-history": GetDiningTableOrderHistory,
 	"POST.dining-table-order-round":  PostDiningTableOrderRound,
 	"POST.dining-table-order-lines":  PostDiningTableOrderLines,
 	"POST.dining-table-order-charge": PostDiningTableOrderCharge,

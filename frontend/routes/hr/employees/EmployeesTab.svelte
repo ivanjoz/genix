@@ -193,7 +193,7 @@
 <Layer
   id={EMPLOYEE_LAYER_ID}
   type="side"
-  sideLayerSize={820}
+  width={820}
   title={employeeForm.ID > 0 ? employeeFullName(employeeForm) : 'New employee|Nuevo trabajador'}
   titleIcon="icon-[fa--id-card] w-20 h-20 mb-6 c-purple"
   titleCss="h2 mb-6"

@@ -251,7 +251,7 @@ import { formatTime } from '#libs/helpers.ts';
   <Layer
     id={1}
     type="side"
-    sideLayerSize={760}
+    width={760}
     title={usuarioLayerTitle}
     titleIcon="icon-[fa--user] w-20 h-20 mb-6 c-purple"
     titleCss="h2 mb-6"

@@ -212,7 +212,7 @@
 <Layer
   id={PIPELINE_LAYER_ID}
   type="side"
-  sideLayerSize={1040}
+  width={1040}
   title={pipelineForm.ID > 0 ? pipelineForm.Name : 'New pipeline|Nuevo pipeline'}
   titleCss="h2 mb-6"
   css="px-12 py-10"

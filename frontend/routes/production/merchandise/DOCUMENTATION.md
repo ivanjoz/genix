@@ -120,7 +120,7 @@ side layer has the tabs **Info (Información)**, **Sheet (Ficha)**, **Presentati
   lo tenga"). The opposite change, a made product back to `Comprado`, is refused while delivered
   sales of it are still **Por regularizar** in Sales Management.
 - **Currency (Moneda)**, **Unit (Unidad)**, **Weight (Peso)**, **Volume (Volumen)**, **Brand
-  (Marca)**, **SKU**, and **Short Description (Descripción Corta)** are optional.
+  (Marca)** and **SKU** are optional.
 - The **SKU Individual** checkbox stores a flag, but nothing in Genix currently reacts to it.
 - **Categories (`CATEGORÍAS ::`)** attaches existing categories by name; it cannot create one.
 - The gray **Tienda Web** box holds the web store settings:
@@ -177,9 +177,9 @@ accounting fields are never sent to the public web store.
 <!-- DOC-ID: capability.product-sheet -->
 ## Edit the product sheet (Editar la ficha)
 
-The **Sheet (Ficha)** tab opens a rich text editor for a longer, formatted description, separate
-from the "Descripción Corta". It is saved with the item. The web store's product detail shows it
-unless the item is hidden.
+The **Sheet (Ficha)** tab holds the optional one-line **Short Description (Descripción Corta)** and,
+below it, a rich text editor for a longer, formatted description. Both are saved with the item. The
+web store's product detail shows the sheet unless the item is hidden.
 
 <!-- DOC-ID: capability.presentations -->
 ## Manage presentations / variants (Gestionar presentaciones)

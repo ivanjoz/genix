@@ -553,7 +553,7 @@ const totalSerialCountForEntry = (entry: EntryRow): number => {
 </div>
 
 <!-- Serial Number editor modal — mirrors the table-only pattern from ProductStockMovement.svelte. -->
-<Layer id={4} type="side" sideLayerSize={520}
+<Layer id={4} type="side" width={520}
   title={editingSerialEntry ? `Seriales — ${productos.recordsMap.get(editingSerialEntry.productID)?.Name || ''}` : 'Seriales'}
   titleCss="h2"
   css="px-12 py-10"

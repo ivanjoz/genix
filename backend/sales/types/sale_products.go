@@ -7,8 +7,8 @@ import (
 )
 
 // ReadSaleProducts loads the catalog rows of a sale's products: the prices and divisor the till
-// prices its lines with, whether each one is made or bought, its sellable rule, and the names and
-// sub-unit labels the sale's document describes its lines with.
+// prices its lines with, whether each one is made or bought, its sellable rule, the categories its
+// packs match on, and the names and sub-unit labels the sale's document describes its lines with.
 func ReadSaleProducts(companyID int32, lines []SaleOrderLine) (map[int32]production.Product, error) {
 	productIDs := core.SliceSet[int32]{}
 	for _, line := range lines {
@@ -21,7 +21,7 @@ func ReadSaleProducts(companyID int32, lines []SaleOrderLine) (map[int32]product
 	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.WebHidden, query.Presentations, query.Origin).
+		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.WebHidden, query.Presentations, query.Origin, query.CategoryIDs).
 		CompanyID.Equals(companyID).
 		ID.In(productIDs.Values...)
 	if err := query.Exec(); err != nil {
@@ -31,6 +31,18 @@ func ReadSaleProducts(companyID int32, lines []SaleOrderLine) (map[int32]product
 		productByID[product.ID] = product
 	}
 	return productByID, nil
+}
+
+// ReadActiveProductPacks are the company's active packs, read once per sale for ApplySalePacks.
+func ReadActiveProductPacks(companyID int32) ([]production.ProductPack, error) {
+	packs := []production.ProductPack{}
+	query := db.Query(&packs)
+	query.Select(query.ID, query.Components, query.PriceType, query.PriceValue, query.RoundingMode, query.Status).
+		CompanyID.Equals(companyID).Status.Equals(1)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener los packs de la empresa:", err)
+	}
+	return packs, nil
 }
 
 // MadeProductIDsOf are the products the company makes (Origin = 2): their lines are delivered

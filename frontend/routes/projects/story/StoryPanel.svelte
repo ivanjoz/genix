@@ -133,7 +133,7 @@
   }
 </script>
 
-<Layer type="side" id={layerID} sideLayerSize={780} css="px-8 py-8 md:px-16 md:py-10"
+<Layer type="side" id={layerID} width={780} css="px-8 py-8 md:px-16 md:py-10"
   title={storyForm.ID ? `${storyCode(storyForm)} · ${storyForm.Title}` : 'New story|Nueva historia'} titleCss="h2 mb-6"
   options={storyForm.ID && !isFormOnly ? [[DETAIL_VIEW, 'Detail|Detalle'], [ACTIVITY_VIEW, 'Activity|Actividad']] : undefined}
   bind:selected={layerView}

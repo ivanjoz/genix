@@ -180,7 +180,7 @@
 <Layer
   id={layerID}
   type="side"
-  sideLayerSize={1000}
+  width={1000}
   title={order.ID > 0 ? `${tr('Order|Orden')} N° ${order.ID} · ${tr(ORDER_STATUS_LABELS[order.ss] || '')}` : 'New production order|Nueva orden de producción'}
   titleCss="h2 mb-6"
   css="px-8 py-8 md:px-16 md:py-10"

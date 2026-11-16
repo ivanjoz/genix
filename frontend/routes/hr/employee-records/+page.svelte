@@ -76,7 +76,7 @@
   <Layer
     id={RECORDS_LAYER_ID}
     type="side"
-    sideLayerSize={820}
+    width={820}
     title={selectedEmployee ? employeeFullName(selectedEmployee) : ''}
     titleIcon="icon-[fa--list-alt] w-20 h-20 mb-6 c-purple"
     titleCss="h2 mb-6"

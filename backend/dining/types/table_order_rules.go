@@ -66,6 +66,14 @@ func ApplyLineTransition(line *TableOrderLine, targetStatus int8, nowTime int32,
 	return nil
 }
 
+// IsKitchenTransition reports whether "Cocina" alone may move a line from one status to another
+// (§10): only mark it ready (2 → 3) or take that tap back (3 → 2). Confirming a QR line is also
+// "→ 2", which is why the line's current status is part of the question.
+func IsKitchenTransition(fromStatus int8, targetStatus int8) bool {
+	return (fromStatus == LineStatusOrdered && targetStatus == LineStatusReady) ||
+		(fromStatus == LineStatusReady && targetStatus == LineStatusOrdered)
+}
+
 // TableOrderReservationChanges is what the lines hold on warehouseID's stock, times sign (§2.2):
 // +1 when a round is added, -1 when a line is cancelled. A cancelled line holds nothing. Counted
 // on the Store counter by the till's rule (a line with sub-units holds one more whole unit), so

@@ -217,6 +217,12 @@ icon = "icon-[fa--cube]"
 description = "Registra los productos que fabrica tu empresa y agrúpalos por categoría y marca. Edita precios, unidades y presentaciones."
 
 [[pages]]
+route = "production/packs"
+name = "Packs|Packs"
+icon = "icon-[fa--gift]"
+description = "Define packs de productos o categorías (como un menú: entrada + plato de fondo) con precio fijo o descuento, aplicados automáticamente en las ventas."
+
+[[pages]]
 route = "production/supplies-materials"
 name = "Supplies & Materials|Insumos & Materiales"
 icon = "icon-[fa--flask]"
@@ -262,9 +268,15 @@ description = "Define los tipos de trabajo con su costo por hora y las etapas de
 
 [[pages]]
 route = "dining/floor-service"
-name = "Table service|Atención de mesas"
+name = "Tables|Mesas"
 icon = "icon-[fa--cutlery]"
-description = "El mapa del salón en vivo: toma pedidos por mesa, sigue los platos en cocina y márcalos servidos."
+description = "El mapa del salón en vivo: toma pedidos por mesa, cobra la cuenta y entrega a cada mesa los platos que salen listos."
+
+[[pages]]
+route = "dining/kitchen-display"
+name = "Orders|Pedidos"
+icon = "icon-[fa--fire]"
+description = "La pantalla de cocina: los pedidos por preparar, del más antiguo al más nuevo, para marcar cada plato listo."
 
 [[pages]]
 route = "dining/floor-layout"

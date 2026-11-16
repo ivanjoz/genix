@@ -38,7 +38,7 @@
   }
 </script>
 
-<Layer type="side" id={layerID} sideLayerSize={360} title={sprint.Name} titleCss="h2 mb-6" css="px-8 py-8 md:px-14 md:py-10">
+<Layer type="side" id={layerID} width={360} title={sprint.Name} titleCss="h2 mb-6" css="px-8 py-8 md:px-14 md:py-10">
   <div class="flex flex-col gap-16 mt-8">
     <section class="flex flex-col gap-6 text-[14px]">
       <div class="flex items-center gap-8">

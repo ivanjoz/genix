@@ -108,7 +108,10 @@ The Layer can show a horizontal menu bar for conditional rendering using the `op
 | `saveButtonName` | `string` | No | Custom save button label |
 | `saveButtonIcon` | `string` | No | Custom save button icon class |
 | `contentOverflow` | `boolean` | No | Allow content overflow |
-| `sideLayerSize` | `number` | No | Width of side layer in pixels when `type="side"` |
+| `width` | `number` | No | Width of the side layer in pixels when `type="side"` (default 800) |
+| `leftPanel` | `Snippet` | No | Panel drawn left of a side layer. Both panels never pass the page width: the left panel narrows first (down to 280px), then the layer. On a phone it renders inside the layer, below the content |
+| `leftPanelWidth` | `number` | No | Width of the `leftPanel` in pixels (default 360) |
+| `useLeftPanelBackdrop` | `boolean` | No | While the `leftPanel` shows, the page behind both panels is dimmed and blurred (4px) instead of shrunk beside them; clicking it closes the layer |
 
 Use `Core.openSideLayer(id)` to open and `Core.hideSideLayer()` to close.
 

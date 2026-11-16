@@ -42,6 +42,9 @@ type SaleOrderLine struct {
 	// product leaves its stock at the daily production close, which settles the line and clears it
 	// (docs/PRODUCTION_PLAN.md §3). Until then the line keeps its unit reserved in PendingDelivery*.
 	StockExitPending bool `cb:"9"`
+	// PackID is the pack (production.ProductPack) that priced this line, 0 when none: the line's
+	// Price is its prorated share of the pack price, not the catalog price (ApplySalePacks).
+	PackID int32 `cb:"10"`
 }
 
 // DetailProductIDs is the product of every line, in line order. It feeds the computed column of

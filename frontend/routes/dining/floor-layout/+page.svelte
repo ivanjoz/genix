@@ -1,21 +1,43 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { confirmWarn, notifySuccess } from '@genix/ui/notify'
   import Button from '#components/buttons/Button.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
   import Layer from '#components/layers/Layer.svelte'
+  import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
   import { tr } from '#core/store.svelte.ts'
   import Page from '#domain/Page.svelte'
   import { DiningLayoutsService, postDiningLayout } from '../dining.svelte.ts'
   import type { IDiningLayout } from '../dining.ts'
   import FloorLayoutEditor from './FloorLayoutEditor.svelte'
-  import FloorLayoutSidePanel from './FloorLayoutSidePanel.svelte'
-  import { makeEmptyLayout } from './floor-layout.ts'
-  import { FloorLayoutEditorState } from './floor-layout.svelte.ts'
+  import FloorLayoutSettings from './FloorLayoutSettings.svelte'
+  import FloorLayoutShapeRow from './FloorLayoutShapeRow.svelte'
+  import FloorLayoutTools from './FloorLayoutTools.svelte'
+  import { makeEmptyLayout, trimGridToShapes } from './floor-layout.ts'
+  import { FloorLayoutEditorState, lastOpenedLayoutID, rememberOpenedLayout } from './floor-layout.svelte.ts'
 
   const layoutsService = new DiningLayoutsService()
   const editor = new FloorLayoutEditorState()
   let layoutPicker = $state({ LayoutID: 0 })
   let isSaving = $state(false)
+
+  // "Diseño" puts the tools on the left and the selected shape's row over the plan; "Parámetros"
+  // puts the layout settings and stations in place of the plan.
+  const TAB_DESIGN = 1, TAB_SETTINGS = 2
+  let editorTab = $state(TAB_DESIGN)
+
+  // A reload reopens the layout last opened, once the list has it; only if nothing is open yet.
+  let hasRestoredLastLayout = false
+  $effect(() => {
+    const lastLayout = layoutsService.recordsMap.get(lastOpenedLayoutID())
+    if (hasRestoredLastLayout || !lastLayout) return
+    hasRestoredLastLayout = true
+    untrack(() => {
+      if (editor.draft) return
+      editor.load(lastLayout)
+      layoutPicker.LayoutID = lastLayout.ID
+    })
+  })
 
   // Leaving a draft with changes asks first; the picker goes back when the user stays.
   async function confirmDiscardChanges(): Promise<boolean> {
@@ -31,6 +53,7 @@
     if (!layout || layout.ID === editor.draft?.ID) return
     if (!(await confirmDiscardChanges())) { layoutPicker.LayoutID = editor.draft?.ID || 0; return }
     editor.load(layout)
+    rememberOpenedLayout(layout.ID)
   }
 
   async function startNewLayout() {
@@ -43,10 +66,14 @@
     if (!editor.draft || isSaving) return
     isSaving = true
     try {
-      const savedLayout = await postDiningLayout($state.snapshot(editor.draft) as IDiningLayout)
+      // Stored as the used area plus its margin: the free space left while editing is dropped.
+      const layoutToSave = $state.snapshot(editor.draft) as IDiningLayout
+      const trimShift = trimGridToShapes(layoutToSave)
+      const savedLayout = await postDiningLayout(layoutToSave)
       // The answer carries the IDs the backend gave the new shapes: editing goes on from it.
-      editor.load(savedLayout)
+      editor.load(savedLayout, { x: editor.viewAnchor.x + trimShift.x, y: editor.viewAnchor.y + trimShift.y })
       layoutPicker.LayoutID = savedLayout.ID
+      rememberOpenedLayout(savedLayout.ID)
       await layoutsService.fetchOnline()
       notifySuccess(tr('Layout saved.|Salón guardado.'))
     } catch (saveError) {
@@ -69,6 +96,7 @@
       await postDiningLayout({ ...($state.snapshot(draft) as IDiningLayout), ss: 0 })
       editor.draft = undefined
       layoutPicker.LayoutID = 0
+      rememberOpenedLayout(0)
       await layoutsService.fetchOnline()
       notifySuccess(tr('Layout deleted.|Salón eliminado.'))
     } catch (deleteError) {
@@ -79,33 +107,51 @@
   }
 </script>
 
-<Page title="Floor layout|Diseño de salones">
+<Page title="Floor layout|Diseño de salones" noPadding>
   <Layer type="content">
-    <div class="flex flex-wrap items-end gap-10 mb-10" aria-label="Pick, create, save or delete a layout">
-      <SearchSelect saveOn={layoutPicker} save="LayoutID" css="w-full md:w-280" label="Layout|Salón"
-        options={layoutsService.records} keyId="ID" keyName="Name" placeholder=":: seleccione ::"
-        onChange={() => { void openLayout(layoutPicker.LayoutID) }} />
-      <Button icon="icon-[fa--plus]" name="New layout|Nuevo salón" label="Starts drawing a new layout." onClick={startNewLayout} />
-      {#if editor.draft}
-        <Button color="green" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the whole layout."
-          disabled={isSaving} onClick={saveLayout} />
-        {#if editor.draft.ID}
-          <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Delete|Eliminar" label="Deletes this layout."
-            disabled={isSaving} onClick={deleteLayout} />
+    <div class="flex flex-col lg:flex-row">
+      <!-- Left column: which layout, its save, and the tab that drives both columns. Edge to
+           edge and as tall as the screen, so it reads as the page's side panel. -->
+      <div class="w-full lg:w-340 shrink-0 flex flex-col gap-12 p-12 bg-surface border-b lg:border-b-0 lg:border-r border-line lg:min-h-[calc(100vh-var(--header-height)-4px)]">
+        <div class="flex items-end gap-8" aria-label="Pick or create a layout">
+          <SearchSelect saveOn={layoutPicker} save="LayoutID" css="flex-1 min-w-0" label="Layout|Salón"
+            options={layoutsService.records} keyId="ID" keyName="Name" placeholder=":: seleccione ::"
+            onChange={() => { void openLayout(layoutPicker.LayoutID) }} />
+          <Button color="green" icon="icon-[fa--plus]" label="Starts drawing a new layout." onClick={startNewLayout} />
+        </div>
+        {#if editor.draft}
+          <Button color="blue" icon="icon-[fa--floppy-o]" name="Save|Guardar" label="Saves the whole layout." css="w-full"
+            disabled={isSaving} onClick={saveLayout} />
+          <OptionsStrip selected={editorTab} useMobileGrid containerCss="w-full" buttonCss="flex-1 justify-center"
+            options={[[TAB_DESIGN, 'Design|Diseño'], [TAB_SETTINGS, 'Settings|Parámetros']]}
+            onSelect={(option) => { editorTab = option[0] as number }} />
+          {#if editorTab === TAB_DESIGN}
+            <FloorLayoutTools {editor} />
+          {:else}
+            <div class="text-fg-muted">
+              {tr('The layout settings and its prep stations are shown on the right.|Los parámetros del salón y sus estaciones de preparación se muestran a la derecha.')}
+            </div>
+          {/if}
+          {#if editor.isDirty}<div class="text-amber-fg">{tr('Unsaved changes|Cambios sin guardar')}</div>{/if}
         {/if}
-        {#if editor.isDirty}<span class="text-amber-fg">{tr('Unsaved changes|Cambios sin guardar')}</span>{/if}
-      {/if}
-    </div>
+      </div>
 
-    {#if editor.draft}
-      <div class="flex flex-col lg:flex-row gap-16 items-start">
-        <div class="flex-1 min-w-0 w-full"><FloorLayoutEditor {editor} /></div>
-        <div class="w-full lg:w-420 shrink-0"><FloorLayoutSidePanel {editor} /></div>
+      <!-- Right column, as tall as the screen. Diseño: the selected shape's bar tight over the plan,
+           which takes the rest of the height. Parámetros: only the settings, scrolling if long. -->
+      <div class="flex-1 min-w-0 w-full flex flex-col px-12 pb-12 lg:h-[calc(100vh-var(--header-height)-4px)] {editorTab === TAB_DESIGN ? 'pt-8 gap-4' : 'pt-12 overflow-auto'}">
+        {#if editor.draft}
+          {#if editorTab === TAB_SETTINGS}
+            <FloorLayoutSettings {editor} {isSaving} onDeleteLayout={deleteLayout} />
+          {:else}
+            <FloorLayoutShapeRow {editor} />
+            <FloorLayoutEditor {editor} />
+          {/if}
+        {:else}
+          <div class="p-12 rounded-md bg-surface-soft text-fg-muted">
+            {tr('Pick a layout or start a new one.|Elija un salón o cree uno nuevo.')}
+          </div>
+        {/if}
       </div>
-    {:else}
-      <div class="p-12 rounded-md bg-surface-soft text-fg-muted">
-        {tr('Pick a layout or start a new one.|Elija un salón o cree uno nuevo.')}
-      </div>
-    {/if}
+    </div>
   </Layer>
 </Page>

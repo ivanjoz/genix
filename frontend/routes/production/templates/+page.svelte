@@ -104,7 +104,7 @@
 <Layer
   id={TEMPLATE_LAYER_ID}
   type="side"
-  sideLayerSize={860}
+  width={860}
   title={templateForm.ID > 0 ? templateForm.Name : 'New template|Nueva plantilla'}
   titleCss="h2 mb-6"
   css="px-12 py-10"

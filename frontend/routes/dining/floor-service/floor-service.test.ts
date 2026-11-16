@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LINE_STATUS, SHAPE_KIND, TABLE_STATE, rectPoints, tableState, tableWaitTicks,
+  LINE_STATUS, SHAPE_KIND, TABLE_STATE, lineActions, orderRounds, rectPoints, selectionActions, tableState, tableWaitTicks,
   type IDiningLayout, type ITableOrder, type ITableOrderLine,
 } from '../dining.ts'
 import {
-  addToRoundDraft, lineActions, makeRoundRequest, menuOptionKey, menuOptions, orderRounds, orderTotal,
+  addToRoundDraft, billLines, filterMenuPickItems, makeRoundRequest, menuOptionKey, menuPickItems, orderTotal,
   readyToPickupGroups, type IDiningMenuProduct,
 } from './floor-service.ts'
 
@@ -74,10 +74,31 @@ describe('lineActions', () => {
   })
 })
 
+describe('selectionActions', () => {
+  const actionsOf = (line: ITableOrderLine) => lineActions(line, NOW)
+  const lines = [
+    makeLine({ LineID: 1, Status: LINE_STATUS.ORDERED }),
+    makeLine({ LineID: 2, Status: LINE_STATUS.ORDERED }),
+    makeLine({ LineID: 3, Status: LINE_STATUS.READY, ReadyAt: NOW - 10 * MINUTE }),
+    makeLine({ LineID: 4, Status: LINE_STATUS.TO_CONFIRM }),
+  ]
+  const buttonsOf = (selectedLineIDs: number[]) =>
+    selectionActions(lines, selectedLineIDs, actionsOf).map((action) => [action.name, action.lineIDs])
+
+  it('offers every action that fits a selected line, each on the lines it fits, cancel first', () => {
+    expect(buttonsOf([1, 3])).toEqual([['Cancel|Anular', [1]], ['Ready|Listo', [1]], ['Served|Servido', [3]]])
+    expect(buttonsOf([1, 2, 4])).toEqual([['Cancel|Anular', [1, 2, 4]], ['Confirm|Confirmar', [4]], ['Ready|Listo', [1, 2]]])
+  })
+
+  it('offers nothing for an empty selection', () => {
+    expect(buttonsOf([])).toEqual([])
+  })
+})
+
 describe('order reading', () => {
   it('groups lines by round, oldest first', () => {
     const order = makeOrder([makeLine({ LineID: 1, Round: 2 }), makeLine({ LineID: 2, Round: 1 }), makeLine({ LineID: 3, Round: 2 })])
-    expect(orderRounds(order).map(({ round, lines }) => [round, lines.map((line) => line.LineID)])).toEqual([[1, [2]], [2, [1, 3]]])
+    expect(orderRounds(order.Lines).map(({ round, lines }) => [round, lines.map((line) => line.LineID)])).toEqual([[1, [2]], [2, [1, 3]]])
   })
 
   it('totals every line but the cancelled ones, sub-units at their own price', () => {
@@ -87,6 +108,18 @@ describe('order reading', () => {
       makeLine({ LineID: 3, Quantity: 5000, Price: 9999, Status: LINE_STATUS.CANCELLED }),
     ])
     expect(orderTotal(order)).toBe(2 * 2500 + 1200 + 2 * 300)
+  })
+})
+
+describe('billLines', () => {
+  it('merges a product across rounds at its price, and leaves cancelled lines out', () => {
+    const bill = billLines(makeOrder([
+      makeLine({ LineID: 1, Round: 1 }),
+      makeLine({ LineID: 2, Round: 2, Quantity: 2000 }),
+      makeLine({ LineID: 3, Round: 2, Status: LINE_STATUS.CANCELLED }),
+      makeLine({ LineID: 4, Round: 2, Price: 3000 }),
+    ]))
+    expect(bill.map((billLine) => [billLine.Quantity, billLine.Amount])).toEqual([[3000, 7500], [1000, 3000]])
   })
 })
 
@@ -114,7 +147,14 @@ describe('the round draft', () => {
   ]
 
   it('offers only presentations with units left', () => {
-    expect(menuOptions(menu).map((option) => option.Name)).toEqual(['Lomo saltado (8)', 'Chicha · Vaso (3)'])
+    expect(menuPickItems(menu).map((item) => [item.Name, item.Sellable])).toEqual([['Lomo saltado', 8], ['Chicha · Vaso', 3]])
+  })
+
+  it('filters the picks by every word of the filter, in any order', () => {
+    const items = menuPickItems(menu)
+    expect(filterMenuPickItems(items, '  ').map((item) => item.Name)).toEqual(['Lomo saltado', 'Chicha · Vaso'])
+    expect(filterMenuPickItems(items, 'VASO chi').map((item) => item.Name)).toEqual(['Chicha · Vaso'])
+    expect(filterMenuPickItems(items, 'lomo vaso')).toEqual([])
   })
 
   it('adds a repeated pick to its line unless that line carries a note', () => {

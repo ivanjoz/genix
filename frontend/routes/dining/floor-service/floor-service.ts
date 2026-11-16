@@ -1,9 +1,8 @@
-import { QUANTITY_DIVISOR_NONE, packQuantityLine, quantityAmount, unpackQuantityLine } from '#core/quantity.ts'
-import { LINE_STATUS, SHAPE_KIND, type IDiningLayout, type ITableOrder, type ITableOrderLine } from '../dining.ts'
+import { QUANTITY_DIVISOR_NONE, packQuantityLine } from '#core/quantity.ts'
+import { LINE_STATUS, SHAPE_KIND, TABLE_ORDER_STATUS, lineAmount, tableLabelOf, type IDiningLayout, type ITableOrder, type ITableOrderLine } from '../dining.ts'
 
-// The floor-service page's rules (docs/DINING_PLAN.md §2, §5): what a waiter can do with a line, how
-// an order reads, the ready-to-pick-up strip and the round being composed. Pure, so they are tested
-// without a component or a request.
+// The floor-service page's rules (docs/DINING_PLAN.md §2, §5): what a table owes, the dishes to
+// deliver and the round being composed. Pure, so they are tested without a component or a request.
 
 // One product of a layout's menu (backend diningMenuProduct), priced in soles.
 export interface IDiningMenuProduct {
@@ -17,48 +16,34 @@ export interface IDiningMenuProduct {
   Presentations: { ID?: number, Name?: string, Sellable: number }[]
 }
 
-// How long the kitchen can take back a "ready" tap: 2 minutes of 2-second ticks (backend readyUndoWindowTicks).
-const READY_UNDO_TICKS = 60
-
-export interface ILineAction { status: number, name: string, color: 'green' | 'blue' | 'red' | undefined }
-
-// What can be done with a line now (§2.1). A waiter may do all of it, "ready" included: a
-// restaurant without a kitchen display marks dishes ready from here.
-export function lineActions(line: ITableOrderLine, nowTime: number): ILineAction[] {
-  const cancel: ILineAction = { status: LINE_STATUS.CANCELLED, name: 'Cancel|Anular', color: 'red' }
-  switch (line.Status) {
-    case LINE_STATUS.TO_CONFIRM:
-      return [{ status: LINE_STATUS.ORDERED, name: 'Confirm|Confirmar', color: 'blue' }, cancel]
-    case LINE_STATUS.ORDERED:
-      return [{ status: LINE_STATUS.READY, name: 'Ready|Listo', color: 'blue' }, cancel]
-    case LINE_STATUS.READY: {
-      const actions: ILineAction[] = [{ status: LINE_STATUS.SERVED, name: 'Served|Servido', color: 'green' }]
-      if (nowTime - (line.ReadyAt || 0) <= READY_UNDO_TICKS) {
-        actions.push({ status: LINE_STATUS.ORDERED, name: 'Back to kitchen|Devolver a cocina', color: undefined })
-      }
-      return actions
-    }
-    default:
-      return []
-  }
-}
-
-// The order's rounds, oldest first, each with its lines.
-export function orderRounds(order: ITableOrder): { round: number, lines: ITableOrderLine[] }[] {
-  const linesByRound = new Map<number, ITableOrderLine[]>()
-  for (const line of order.Lines) linesByRound.set(line.Round, [...(linesByRound.get(line.Round) || []), line])
-  return [...linesByRound.entries()].sort(([left], [right]) => left - right).map(([round, lines]) => ({ round, lines }))
-}
-
-export const lineAmount = (line: ITableOrderLine) =>
-  quantityAmount(unpackQuantityLine(line.Quantity), line.Price, line.SubPrice || 0)
-
 // What the table owes so far: every line not cancelled, at the price it was ordered at.
 export const orderTotal = (order: ITableOrder) =>
   order.Lines.filter((line) => line.Status !== LINE_STATUS.CANCELLED).reduce((total, line) => total + lineAmount(line), 0)
 
-export const tableLabelOf = (layout: IDiningLayout, tableShapeID: number) =>
-  (layout.Shapes || []).find((shape) => shape.ShapeID === tableShapeID)?.Label || `#${tableShapeID}`
+export interface IBillLine { key: string, ProductID: number, Quantity: number, SubDivisor: number, Amount: number }
+
+// The bill as "Pagar" lists it, PoS style: one row per product, presentation and price across every
+// round, cancelled lines left out. Packed quantities add up (units × scale + sub).
+export function billLines(order: ITableOrder): IBillLine[] {
+  const billLineByKey = new Map<string, IBillLine>()
+  for (const line of order.Lines.filter((candidate) => candidate.Status !== LINE_STATUS.CANCELLED)) {
+    const key = `${line.ProductID}_${line.PresentationID || 0}_${line.Price}_${line.SubPrice || 0}`
+    const billLine = billLineByKey.get(key)
+    if (billLine) {
+      billLine.Quantity += line.Quantity
+      billLine.Amount += lineAmount(line)
+    } else {
+      billLineByKey.set(key, { key, ProductID: line.ProductID, Quantity: line.Quantity, SubDivisor: line.SubDivisor || 1, Amount: lineAmount(line) })
+    }
+  }
+  return [...billLineByKey.values()]
+}
+
+export const tableOrderStatusLabels: Record<number, string> = {
+  [TABLE_ORDER_STATUS.ANNULLED]: 'Annulled|Anulado',
+  [TABLE_ORDER_STATUS.OPEN]: 'Open|En curso',
+  [TABLE_ORDER_STATUS.CHARGED]: 'Charged|Cobrado',
+}
 
 export interface IReadyItem { orderID: number, tableLabel: string, line: ITableOrderLine }
 export interface IPickupGroup { stationID: number, stationName: string, items: IReadyItem[] }
@@ -98,16 +83,28 @@ export interface IRoundDraftLine {
   Price: number
 }
 
-// One option per sellable product presentation, keyed so the pick names both.
+// One pick per sellable product presentation, keyed so the pick names both.
 export const menuOptionKey = (productID: number, presentationID: number) => productID * 65536 + presentationID
 
-export function menuOptions(menu: IDiningMenuProduct[]): { ID: number, Name: string }[] {
+export interface IMenuPickItem { ID: number, Name: string, Price: number, Sellable: number, searchText: string }
+
+// The menu picker's list: every presentation with units left, as the round will name it.
+export function menuPickItems(menu: IDiningMenuProduct[]): IMenuPickItem[] {
   return menu.flatMap((product) => product.Presentations
     .filter((presentation) => presentation.Sellable > 0)
-    .map((presentation) => ({
-      ID: menuOptionKey(product.ID, presentation.ID || 0),
-      Name: `${product.Name}${presentation.Name ? ` · ${presentation.Name}` : ''} (${presentation.Sellable})`,
-    })))
+    .map((presentation) => {
+      const name = `${product.Name}${presentation.Name ? ` · ${presentation.Name}` : ''}`
+      return {
+        ID: menuOptionKey(product.ID, presentation.ID || 0), Name: name, Price: product.Price,
+        Sellable: presentation.Sellable, searchText: name.toLowerCase(),
+      }
+    }))
+}
+
+// The picks whose name holds every word of the filter, in any order. An empty filter keeps them all.
+export function filterMenuPickItems(items: IMenuPickItem[], filterText: string): IMenuPickItem[] {
+  const filterWords = filterText.toLowerCase().split(' ').filter(Boolean)
+  return filterWords.length ? items.filter((item) => filterWords.every((word) => item.searchText.includes(word))) : items
 }
 
 // Adds one unit of the picked presentation: to its line when it has one without a note, else as a new line.

@@ -466,7 +466,7 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
   {/if}
 </Layer>
 
-<Layer type="side" id={1} sideLayerSize={640}
+<Layer type="side" id={1} width={640}
   css="px-8 py-8 md:px-14 md:py-10"
   title={form?.ID ? (form?.Name || tr("Expense|Gasto")) : tr("New Expense|Nuevo Gasto")}
   titleCss="h2 ff-bold"

@@ -131,7 +131,7 @@
 <Layer
   id={ACCESS_USERS_LAYER_ID}
   type="side"
-  sideLayerSize={620}
+  width={620}
   titleIcon="{selectedAccesoAccion?.icon} w-20 h-20 self-start mt-4"
   titleCss="hidden"
   titleSide={accessLayerHeading}

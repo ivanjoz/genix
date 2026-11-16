@@ -147,7 +147,7 @@ async function sendSelectedDocument() {
   <Layer
     type="side"
     id={1}
-    sideLayerSize={640}
+    width={640}
     css="px-8 py-8 md:px-16 md:py-10"
     contentCss="px-0 md:px-0"
     title={selectedDocument ? invoiceNumber(selectedDocument, seriesCodeOf(selectedDocument)) : ""}

@@ -676,7 +676,7 @@ const detailColumns: ITableColumn<IPurchaseOrderDetailRow>[] = [
   <Layer
     id={21}
     type="side"
-    sideLayerSize={760}
+    width={760}
     title={getOrderLayerTitle(selectedPurchaseOrder)}
     titleCss="h2"
     css="px-8 py-8 md:px-16 md:py-10"

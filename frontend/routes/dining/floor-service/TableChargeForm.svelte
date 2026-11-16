@@ -4,7 +4,10 @@
   import Button from '#components/buttons/Button.svelte'
   import Input from '#components/form/Input.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
+  import VTable from '#components/vTable/VTable.svelte'
+  import type { ITableColumn } from '#components/vTable/types.ts'
   import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '#core/sunat-doc-type.ts'
+  import { formatQuantity, unpackQuantityLine } from '#core/quantity.ts'
   import { tr } from '#core/store.svelte.ts'
   import { formatN } from '#libs/helpers.ts'
   import { EmpresaParametrosService } from '#routes/company/configuration/empresas.svelte.ts'
@@ -13,19 +16,20 @@
   import { TILL_IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '#services/crm/identity-doc.ts'
   import type { ITableOrder } from '../dining.ts'
   import { postTableOrderAnnul, postTableOrderCharge } from './floor-service.svelte.ts'
-  import { orderTotal } from './floor-service.ts'
+  import { billLines, orderTotal, type IBillLine } from './floor-service.ts'
   import {
     CLIENT_MODE, buildChargeRequest, buildTableAnnulRequest, chargeBlocker, chargeCashBankOptions, newTableChargeForm,
   } from './table-charge.ts'
 
-  // Charging the bill into a sale ("Cobrar mesa"), or annulling it, from the table's side layer.
-  let { order, mode, onDone, onCancel }: {
+  // The "Pagar" tab: the bill listed PoS style, charged into a sale ("Cobrar mesa"), or annulled.
+  let { order, productName, onDone }: {
     order: ITableOrder
-    mode: 'charge' | 'annul'
+    productName: (productID: number) => string
     // The order as the backend left it: charged (ss 2) or annulled (ss 0).
     onDone: (order: ITableOrder) => void
-    onCancel: () => void
   } = $props()
+
+  let mode = $state<'charge' | 'annul'>('charge')
 
   const cashBanksService = new CajasService()
   const companyService = new EmpresaParametrosService()
@@ -37,6 +41,7 @@
   const formatAmount = (cents: number) => `S/ ${formatN(cents / 100, 2)}`
 
   const blocker = $derived(chargeBlocker(order))
+  const bill = $derived(billLines(order))
   const cashBanks = $derived(chargeCashBankOptions(cashBanksService.Cajas || []))
   // A sale is issued as a factura or a boleta, never under a note's series.
   const seriesOptions = $derived((companyService.empresa.InvoiceSeries || [])
@@ -104,7 +109,21 @@
       isPosting = false
     }
   }
+
+  const billColumns: ITableColumn<IBillLine>[] = [
+    { header: 'Qty.|Cant.', width: '64px', css: 'px-6 text-right ff-bold',
+      getValue: (billLine) => formatQuantity(unpackQuantityLine(billLine.Quantity), billLine.SubDivisor) },
+    { header: 'Product|Producto', css: 'px-6', getValue: (billLine) => productName(billLine.ProductID) },
+    { header: 'Amount|Importe', width: '110px', css: 'px-6 text-right ff-mono whitespace-nowrap', getValue: (billLine) => formatAmount(billLine.Amount) },
+  ]
 </script>
+
+<VTable columns={billColumns} data={bill} disableVirtualizer={true} estimateSize={36}
+  emptyMessage="Nothing to charge.|Nada que cobrar." />
+<div class="flex justify-end gap-8 my-10 ff-bold" aria-label="The bill's total">
+  <span>{tr('Total|Total')}</span><span class="ff-mono">{formatAmount(orderTotal(order))}</span>
+</div>
+
 
 {#if mode === 'annul'}
   <div class="p-10 rounded-md bg-red-bg flex flex-col gap-8" aria-label="Annul the table order with a reason">
@@ -113,7 +132,7 @@
     <div class="flex items-center gap-8">
       <Button color="red" icon="icon-[fa--trash]" name="Annul|Anular" label="Confirms annulling this table order."
         disabled={isPosting} onClick={annul} />
-      <Button name="Cancel|Cancelar" label="Closes the annul form." onClick={onCancel} />
+      <Button name="Back|Volver" label="Back to the charge form." onClick={() => { mode = 'charge' }} />
     </div>
   </div>
 {:else}
@@ -142,7 +161,8 @@
       <Button color="green" icon="icon-[fa--check]" name="Charge {formatAmount(orderTotal(order))}|Cobrar {formatAmount(orderTotal(order))}"
         label="Closes the bill into a sale, paid into the selected cash-bank or owed when none is selected."
         disabled={isPosting || !!blocker} onClick={charge} />
-      <Button name="Cancel|Cancelar" label="Closes the charge form." onClick={onCancel} />
+      <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Annul order|Anular pedido" css="ml-auto"
+        label="Opens the form to annul this table order." onClick={() => { mode = 'annul' }} />
     </div>
   </div>
 {/if}

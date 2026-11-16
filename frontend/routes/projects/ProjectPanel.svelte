@@ -111,7 +111,7 @@
   }
 </script>
 
-<Layer type="side" id={layerID} sideLayerSize={620} css="px-8 py-8 md:px-16 md:py-10"
+<Layer type="side" id={layerID} width={620} css="px-8 py-8 md:px-16 md:py-10"
   title={projectForm.ID ? projectForm.Name : 'New project|Nuevo proyecto'} titleCss="h2 mb-6"
   options={panelTabs} bind:selected={selectedTab}
   onClose={() => { projectForm = makeEmptyProject(0) }}

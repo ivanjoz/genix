@@ -137,8 +137,7 @@ for a made product, **Production (Producción)**. Save with the layer's Save act
   - **Comprado → Fabricado** while the product has stock in any warehouse, in any presentation,
     lots and serial numbers included ("tiene stock: no puede pasar a fabricado mientras lo tenga").
 - **Currency (Moneda)**, **Unit (Unidad)**, **Weight (Peso)**, **Volume (Volumen)**, **Brand
-  (Marca)**, **SKU**, and **Short Description (Descripción Corta)** are optional and are shown again
-  when the product is reopened.
+  (Marca)** and **SKU** are optional and are shown again when the product is reopened.
 - The **SKU Individual** checkbox stores a flag on the product, but nothing in Genix currently
   reacts to it.
 - **Categories (`CATEGORÍAS ::`)** attaches one or more existing categories by name; it cannot
@@ -286,9 +285,9 @@ accounting entries. They are private: the public web store never receives them.
 <!-- DOC-ID: capability.product-sheet -->
 ## Edit the product sheet (Editar la ficha del producto)
 
-The **Sheet (Ficha)** tab opens a rich text editor for a longer, formatted description, separate
-from the short "Descripción Corta" on the Info tab. It is only saved when the product is saved. The
-web store's product detail shows this sheet unless the product is hidden.
+The **Sheet (Ficha)** tab holds the optional one-line **Short Description (Descripción Corta)** and,
+below it, a rich text editor for a longer, formatted description. Both are only saved when the
+product is saved. The web store's product detail shows this sheet unless the product is hidden.
 
 <!-- DOC-ID: capability.presentations -->
 ## Manage presentations / variants (Gestionar presentaciones)

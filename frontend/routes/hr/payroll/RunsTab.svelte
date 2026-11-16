@@ -302,7 +302,7 @@
   {/if}
 </div>
 
-<Layer type="side" id={PAYSLIP_LAYER_ID} sideLayerSize={820}
+<Layer type="side" id={PAYSLIP_LAYER_ID} width={820}
   title={selectedPayslip ? employeeName(selectedPayslip.EmployeeID) : ''} titleCss="h2 mb-6"
   saveButtonName="Print|Imprimir" saveButtonIcon="icon-[fa--print]" onSave={printBoleta}
   onClose={() => { selectedPayslip = undefined }}

@@ -655,7 +655,7 @@
   <Layer
     type="side"
     id={10}
-    sideLayerSize={780}
+    width={780}
     bind:selected={saleOrderDetailsView}
     title={getSaleOrderLayerTitle(selectedSaleOrder)}
     titleCss="h2"

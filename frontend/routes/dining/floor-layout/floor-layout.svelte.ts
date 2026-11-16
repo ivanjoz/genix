@@ -1,15 +1,16 @@
-import type { IDiningLayout } from '../dining.ts'
-import type { LayoutTool } from './floor-layout.ts'
+import type { IDiningLayout, IGridPoint } from '../dining.ts'
+import { deleteShapes, duplicateShapes, rotateShapes } from './floor-layout.ts'
 
 const MAX_HISTORY = 100
 
-// The editor's state: the draft being drawn, the selection, the tool and the undo history. The history
+// The editor's state: the draft being drawn, the selection, the zoom and the undo history. The history
 // holds whole snapshots of the draft: a plan is small, and a snapshot cannot drift from what it undoes.
 export class FloorLayoutEditorState {
   draft = $state<IDiningLayout>()
   selectedShapeIDs = $state<number[]>([])
-  tool = $state<LayoutTool>('select')
   cellSize = $state(16)
+  // Where the viewport sits on the open sheet when the shapes do not push it (editorCanvasRegion).
+  viewAnchor = $state<IGridPoint>({ x: 0, y: 0 })
   // The draft differs from what was loaded or saved.
   isDirty = $state(false)
   #history: string[] = []
@@ -19,11 +20,12 @@ export class FloorLayoutEditorState {
   canUndo = $derived(this.#historyIndex > 0)
   canRedo = $derived(this.#historyIndex < this.#historyLength - 1)
 
-  // Starts editing a layout: a fresh history, nothing selected.
-  load(layout: IDiningLayout) {
+  // Starts editing a layout: a fresh history, nothing selected. A saved layout comes back with its
+  // shapes trimmed to the margin; the anchor moves with them so the plan stays put on screen.
+  load(layout: IDiningLayout, viewAnchor: IGridPoint = { x: 0, y: 0 }) {
     this.draft = structuredClone(layout)
+    this.viewAnchor = viewAnchor
     this.selectedShapeIDs = []
-    this.tool = 'select'
     this.#history = [JSON.stringify(layout)]
     this.#historyIndex = 0
     this.#historyLength = 1
@@ -57,4 +59,29 @@ export class FloorLayoutEditorState {
   selectedShapes() {
     return (this.draft?.Shapes || []).filter((shape) => this.selectedShapeIDs.includes(shape.ShapeID))
   }
+
+  // The actions on the selection, shared by the tool column and the plan's keyboard shortcuts.
+  duplicateSelection() {
+    if (!this.draft || !this.selectedShapeIDs.length) return
+    this.selectedShapeIDs = duplicateShapes(this.draft, this.selectedShapeIDs)
+    this.checkpoint()
+  }
+
+  rotateSelection() {
+    if (!this.draft || !this.selectedShapeIDs.length) return
+    rotateShapes(this.draft, this.selectedShapeIDs)
+    this.checkpoint()
+  }
+
+  deleteSelection() {
+    if (!this.draft || !this.selectedShapeIDs.length) return
+    deleteShapes(this.draft, this.selectedShapeIDs)
+    this.selectedShapeIDs = []
+    this.checkpoint()
+  }
 }
+
+// The layout last opened in the editor, per browser: a reload reopens it instead of an empty page.
+const LAST_LAYOUT_STORAGE_KEY = 'floor_layout_last_layout_id'
+export const lastOpenedLayoutID = (): number => Number(localStorage.getItem(LAST_LAYOUT_STORAGE_KEY)) || 0
+export const rememberOpenedLayout = (layoutID: number) => { localStorage.setItem(LAST_LAYOUT_STORAGE_KEY, String(layoutID)) }

@@ -11,6 +11,8 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.products":                       PostProducts,
 	"POST.product-image":                  PostProductImage,
 	"POST.product-category-image":         PostProductCategoryImage,
+	"GET.product-packs":                   GetProductPacks,
+	"POST.product-pack":                   PostProductPack,
 	"GET.supply-material":                 GetSupplyMaterials,
 	"POST.supply-material":                PostSupplyMaterial,
 	"GET.production-close-pending":        GetDailyClosePending,

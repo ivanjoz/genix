@@ -230,7 +230,7 @@
   <Layer
     type="side"
     id={COMPANY_USAGE_LAYER_ID}
-    sideLayerSize={760} css="p-12"
+    width={760} css="p-12"
     title={selectedCompany ? `${selectedCompany.Company} (#${selectedCompany.CompanyID})` : 'Company credits|Créditos de empresa'}
     titleCss="text-[18px] ff-bold"
     options={[[1, 'By day|Por día'], [2, 'APIs for day|APIs del día'], [3, 'Users|Usuarios']]}

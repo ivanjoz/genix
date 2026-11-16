@@ -174,7 +174,7 @@ const periodColumns: ITableColumn<IExpense>[] = [
   />
 </Layer>
 
-<Layer type="side" id={1} sideLayerSize={680}
+<Layer type="side" id={1} width={680}
   css="px-8 py-8 md:px-14 md:py-10"
   title={form?.ID ? (form?.Name || tr("Schedule|Programación")) : tr("New Schedule|Nueva Programación")}
   titleCss="h2 ff-bold"

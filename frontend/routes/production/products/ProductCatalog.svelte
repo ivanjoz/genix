@@ -647,7 +647,7 @@ import {
   {/if}
   <Layer
     type="side"
-    sideLayerSize={780}
+    width={780}
     css="px-8 py-8 md:px-16 md:py-10"
     title={productoForm?.Name || ""}
     titleCss="h2 mb-6"
@@ -688,7 +688,7 @@ import {
           required={true}
           save="Name"
         />
-        <div class="col-span-24 md:col-span-9 md:row-span-4">
+        <div class="col-span-24 md:col-span-9">
           <ImageUploader
             saveAPI="product-image"
             refreshRoutes={["products"]}
@@ -698,7 +698,7 @@ import {
             folder="img-productos"
             size={2}
             src={productoForm.Image?.n}
-            cardCss="w-full h-180 p-4"
+            cardCss="w-full h-200 p-4"
             imageSource={productoForm._imageSource}
             processName={`Imagen Producto ${productoForm.Name || ""}`.trim()}
             hideUploadButton={!productoForm.ID}
@@ -714,6 +714,8 @@ import {
             onUploaded={addProductImage}
           />
         </div>
+        <!-- Own grid beside the image, so a taller image never stretches these rows apart. -->
+        <div class="col-span-24 md:col-span-15 grid grid-cols-24 md:grid-cols-15 content-start items-start gap-x-10 gap-y-10">
         <Input
           label="Base Price|Precio Base"
           saveOn={productoForm}
@@ -806,18 +808,8 @@ import {
           keyName="Name"
           options={listas.ListaRecordsMap.get(2) || []}
         />
-        <!-- Bought or made decides the product's accounts (mercaderías or productos terminados) and
-             which list shows it: changing it moves the product to the other page. -->
-        <SearchSelect
-          label="Origin|Origen"
-          saveOn={productoForm}
-          css="col-span-12 md:col-span-10 mb-2"
-          save="Origin"
-          keyId="id"
-          keyName="name"
-          options={PRODUCT_ORIGIN_OPTIONS.map((origin) => ({ id: origin.id, name: tr(origin.name) }))}
-        />
-        <div class="col-span-24 md:col-span-14">
+        </div>
+        <div class="col-span-24 md:col-span-6 self-center">
           <CheckboxOptions
             save="Params"
             saveOn={productoForm}
@@ -830,17 +822,22 @@ import {
         <Input
           saveOn={productoForm}
           save="SKU"
-          css="col-span-12 md:col-span-10"
+          css="col-span-12 md:col-span-8"
           label="SKU"
         />
-        <Input
+        <!-- Bought or made decides the product's accounts (mercaderías or productos terminados) and
+             which list shows it: changing it moves the product to the other page. -->
+        <SearchSelect
+          label="Origin|Origen"
           saveOn={productoForm}
-          save="Description"
-          css="col-span-24 mb-4"
-          label="Short Description|Descripción Corta"
+          css="col-span-12 md:col-span-10"
+          save="Origin"
+          keyId="id"
+          keyName="name"
+          options={PRODUCT_ORIGIN_OPTIONS.map((origin) => ({ id: origin.id, name: tr(origin.name) }))}
         />
         <SearchCard
-          css="col-span-24 flex items-start"
+          css="col-span-24 flex items-start my-6"
           label="CATEGORIES|CATEGORÍAS ::"
           options={categorias}
           keyId="ID"
@@ -853,14 +850,15 @@ import {
         />
         <!-- Web store settings: the storefront adds WebExtraStock to the real stock at checkout. -->
         <div
-          class="col-span-24 grid grid-cols-24 items-center gap-x-10 gap-y-10 rounded-[6px] bg-gray-100 p-12"
+          class="col-span-24 flex flex-wrap items-center gap-x-16 gap-y-10 rounded-[6px] bg-gray-100 px-12 py-8"
           aria-label="Web store settings"
         >
-          <div class="ff-bold h3 col-span-24 ml-4">Tienda Web</div>
+          <div class="ff-bold h3 ml-4">Tienda Web</div>
+          <div class="self-stretch w-1 bg-line-strong"></div>
           <Input
             saveOn={productoForm}
             save="WebExtraStock"
-            css="col-span-12 md:col-span-10"
+            css="w-200"
             label="Allowed overselling|Sobreventa permitida"
             type="number"
           />
@@ -868,38 +866,45 @@ import {
             bind:saveOn={productoForm}
             save="WebHidden"
             label="Hide|Ocultar"
-            css="col-span-12 md:col-span-6 md:ml-8"
           />
         </div>
         <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): bought and made products alike. -->
         <div
-          class="col-span-24 grid grid-cols-24 items-center gap-x-10 gap-y-10 rounded-[6px] bg-gray-100 p-12"
+          class="col-span-24 flex flex-wrap items-center gap-x-16 gap-y-10 rounded-[6px] bg-gray-100 px-12 py-8"
           aria-label="Lot traceability settings"
         >
-          <div class="ff-bold h3 col-span-24 ml-4">Lotes</div>
+          <div class="ff-bold h3 ml-4">Lotes</div>
+          <div class="self-stretch w-1 bg-line-strong"></div>
+          <Input
+            saveOn={productoForm}
+            save="ShelfLifeDays"
+            css="w-160"
+            label="Shelf life|Vida útil"
+            postValue={tr("days|días")}
+            type="number"
+          />
           <Checkbox
             bind:saveOn={productoForm}
             save="TracksLots"
             label="Tracks lots|Controla lotes"
-            css="col-span-12 md:col-span-6"
-          />
-          <Input
-            saveOn={productoForm}
-            save="ShelfLifeDays"
-            css="col-span-12 md:col-span-8"
-            label="Shelf life (days)|Vida útil (días)"
-            type="number"
           />
           <Checkbox
             bind:saveOn={productoForm}
             save="QualityHoldOnEntry"
             label="New lots enter in quarantine|Lotes nuevos en cuarentena"
-            css="col-span-24 md:col-span-10"
           />
         </div>
       </div>
     {/if}
     {#if layerView === 2}
+      <div class="mt-16">
+        <Input
+          saveOn={productoForm}
+          save="Description"
+          css="w-full"
+          label="Short Description|Descripción Corta"
+        />
+      </div>
       {#if HtmlEditorComponent}
         <HtmlEditorComponent saveOn={productoForm} save="ContentHTML" css="mt-12" />
       {:else}

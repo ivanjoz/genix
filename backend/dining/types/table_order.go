@@ -63,6 +63,10 @@ func (e TableOrderTable) GetSchema() db.TableSchema {
 			// A floor map syncs the open orders of its layout only; a charged or annulled one
 			// arrives as a removed ID.
 			{Type: db.TypeDelta, Keys: db.Cols(e.LayoutID, e.Status)},
+			// A table's history ("Historial"): its orders of the last days, read as a Created range.
+			// The Size hints make it a packed range view; without them it is a hash view, which
+			// serves equalities only.
+			{Type: db.TypeView, Keys: db.Cols(e.LayoutID, e.TableShapeID.Size(15), e.Created.Size(31))},
 		},
 	}
 }
@@ -75,10 +79,11 @@ const (
 )
 
 // "Atención de Mesas" (access.toml) and its sub-access "Cobrar mesa", which charges and annuls an
-// order.
+// order. "Cocina" only marks lines ready (IsKitchenTransition).
 const (
 	AccessIDTableService   = int32(61)
 	SubAccessIDChargeTable = int32(2)
+	AccessIDKitchen        = int32(62)
 )
 
 // TableOrderLine is one dish or drink of a round.

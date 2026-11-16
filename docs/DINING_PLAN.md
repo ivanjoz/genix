@@ -300,14 +300,29 @@ was sold, so nothing else moves.
 ## 5. Stations, kitchen display, pickup
 
 - `StationID` is resolved once, when the line is ordered. Later routing changes affect only new lines.
-- **Kitchen display:**
-  - Pick a layout + station.
-  - Tickets (round × station) with their status-2 lines, oldest first, each with a running timer.
-  - Large targets: one marks a line ready, one marks the ticket ready.
+- **Kitchen display ("Pedidos", `dining/kitchen-display`):**
+  - Pick a layout, then a station or "Todas".
+  - The screen is split in two. Left: the tickets (round × station) that still have a status-2
+    line, oldest unattended first, each with a running timer. Right: the selected ticket's lines
+    (status 2 and 3; QR lines to confirm never reach the kitchen) as cards.
+  - A ticket leaves the list once all its lines are ready; the next one takes its row.
+  - "Listo todo" marks the ticket ready; selected cards are marked ready (or taken back, within
+    the 2-minute window) with the buttons on top.
+  - Keyboard: ↑/↓ walk the tickets, → (or Enter) enters one, the arrows walk its cards (← on the
+    first column goes back), Space selects a card, Enter marks ready the selected cards — or the
+    card under the keyboard when none is selected. Esc clears the selection, then goes back.
   - Timer colors use the layout's thresholds.
-- **Pickup:** the floor-service page has a "Listos para recoger" strip. It lists the status-3 lines of
-  every table, grouped by the pickup point of their station ("M4 · 2 lomo saltado · listo hace 3
-  min"). One tap marks them served.
+- **Line cards (both pages):** an order's lines show as cards, one per product ordered, under a
+  separator per round. Tapping a card that still has an action selects it, across rounds. The
+  buttons on top are every action that fits at least one selected card, with a count
+  ("Listo (2)"), each applied only to the cards it fits, in one request. Served and cancelled cards
+  cannot be selected.
+- **To deliver:** the floor-service page ("Mesas") has a "Por entregar" tab next to "Mapa", with
+  the count of dishes waiting. It lists the status-3 lines of every table, grouped by the pickup
+  point of their station. One tap marks them served.
+- **Two processes or one:** a restaurant with a separate kitchen gives its tablet only "Cocina";
+  waiters only "Atención de Mesas". A restaurant where one person does both gives both accesses —
+  and a waiter can still mark lines ready from the table panel.
 - A shared kitchen tablet uses an ordinary user session. Today the browser keeps a session alive
   while it is open and online (`reload-login` every 40 min). A tablet asleep or offline for more
   than ~2h40m is logged out on the client. There is no kiosk concept, and v1 adds none.
@@ -440,6 +455,7 @@ A one-second ticker re-renders the timers. It recomputes no data.
 name = "Restaurant|Restaurante"
 min_name = "RES"
 routes = "dining/floor-service, dining/kitchen-display, dining/floor-layout, dining/table-qr, production/daily-close"
+# pages: dining/floor-service = "Mesas", dining/kitchen-display = "Pedidos"
 ```
 
 `db/pages.toml`: one entry per route.
@@ -449,14 +465,15 @@ routes = "dining/floor-service, dining/kitchen-display, dining/floor-layout, din
 | Access | Routes | APIs |
 |---|---|---|
 | Atención de Mesas | dining/floor-service | POST.dining-table-order-round, POST.dining-table-order-lines; sub-access 2 "Cobrar mesa": POST.dining-table-order-charge, POST.dining-table-order-annul |
-| Cocina | dining/kitchen-display | POST.dining-table-order-lines (ready / undo only, checked in the handler by the caller's access) |
+| Cocina (62) | dining/kitchen-display | POST.dining-table-order-lines (ready / undo only: a caller without "Atención de Mesas" is held to `types.IsKitchenTransition` in the handler) |
 | Diseño de Salones | dining/floor-layout, dining/table-qr | POST.dining-layout, POST.dining-layout-qr-regenerate, GET.dining-table-qr-tokens |
 
 | Route | Content |
 |---|---|
 | `routes/dining/floor-layout/` | **Editor.** `LayoutCanvas.svelte` in edit mode: an SVG grid with pointer events (pointerdown/move/up, pointer capture), snap to cells. **Tools:** select (click, shift-click, rubber band), move (drag, arrow keys = 1 cell), resize handles, table (square/round, seats), rectangle, line (wall/divider on grid points), label, station mark, pickup mark. **Edit:** duplicate (Ctrl+D or button, offset 1 cell), delete, rotate 90°, undo/redo (snapshot stack), zoom 8/12/16 px. **Side panel:** the selected shape's properties; the layout's settings (name, warehouse, QR confirmation, thresholds); stations with their routing (products and categories, editable VTable). Geometry in `floor-layout.ts` (snap, hit-test, bounds, overlap warning, duplicate offset, shape-ID allocation), tested. |
-| `routes/dining/floor-service/` | **Live map.** `LayoutCanvas` read-only, colored by §9. A table opens a side `Layer` with its order by round and line state, wait times, add a round (product picker over `dining-menu`), confirm QR lines, mark served, cancel a line, charge (Cobrar mesa). The "Listos para recoger" strip. |
-| `routes/dining/kitchen-display/` | §5. Wall-tablet layout, no small text. |
+| `routes/dining/floor-service/` | **"Mesas"**, header tabs "Mapa" / "Por entregar". Mapa: `LayoutCanvas` read-only, colored by §9. A table opens a side `Layer` with its order as line cards (§5), wait times, add a round (product picker over `dining-menu`), charge (Cobrar mesa). Por entregar: the ready lines to carry (§5). |
+| `routes/dining/kitchen-display/` | **"Pedidos"**, §5. Split screen, keyboard-driven, line cards; ticket and navigation rules in `kitchen-display.ts`, tested. |
+| `routes/dining/OrderLineCards.svelte` | The line cards with multi-select and the selection's buttons, shared by both pages. |
 | `routes/dining/table-qr/` | §7. |
 | `routes/dining/LayoutCanvas.svelte`, `dining.ts`, `dining.svelte.ts` | shared by the four pages: the renderer, the pure rules (§2.1, §9), the services (`DiningLayoutsService`, `TableOrdersService` as `GetHandler`s, the SSE subscription) |
 | `frontend/webpage/routes/components/mesa/` | §6.3 |
@@ -478,6 +495,7 @@ Following the `online-orders` pattern:
 | `GET dining-table-qr-tokens?layout-id` | Diseño de Salones | the token of each table |
 | `GET dining-menu?layout-id` | staff | §3 |
 | `GET dining-table-orders?layout-id` | staff | delta of the layout's open orders |
+| `GET dining-table-order-history?layout-id&table-shape-id` | staff | the table's orders since yesterday's midnight (any status), newest first; served by the `(LayoutID, TableShapeID, Created)` packed range view |
 | `POST dining-table-order-round` | Atención de Mesas | open if none, add a round (validated by §3, reserves) |
 | `POST dining-table-order-lines` | Atención de Mesas / Cocina | line transitions (§2.1) |
 | `POST dining-table-order-charge` | Cobrar mesa | §4 |

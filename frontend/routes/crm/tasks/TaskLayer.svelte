@@ -64,7 +64,7 @@
   const dismissTask = () => runAndClose('Dismissing task...|Descartando tarea...', () => tasksState.dismissTask(task))
 </script>
 
-<Layer id={layerID} type="side" sideLayerSize={520} title={task.Title} titleCss="h2 mb-6" css="px-12 py-10" onClose={closeLayer}>
+<Layer id={layerID} type="side" width={520} title={task.Title} titleCss="h2 mb-6" css="px-12 py-10" onClose={closeLayer}>
   <div class="flex flex-col gap-10 pt-6" aria-label="Task detail">
     <div class="flex items-center gap-8 flex-wrap">
       {#if tasksState.stageName(task)}<Badge text={tasksState.stageName(task)} css="bg-blue-bg-strong text-blue-fg" />{/if}

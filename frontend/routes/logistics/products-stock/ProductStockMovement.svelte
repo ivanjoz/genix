@@ -1084,7 +1084,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   }}
 />
 
-<Layer id={2} type="side" sideLayerSize={740} title={selectedSerialNumberGroupTitle} titleCss="h2"
+<Layer id={2} type="side" width={740} title={selectedSerialNumberGroupTitle} titleCss="h2"
   css="px-12 py-10"
   onClose={() => {
     closeSerialNumberLayer()
@@ -1096,7 +1096,7 @@ let rerenderHandler: ((() => void) | undefined) = undefined
   />
 </Layer>
 
-<Layer id={3} type="side" sideLayerSize={760} title={selectedLotGroupTitle} titleCss="h2"
+<Layer id={3} type="side" width={760} title={selectedLotGroupTitle} titleCss="h2"
   css="px-12 py-10"
   onClose={() => {
     closeLotLayer()

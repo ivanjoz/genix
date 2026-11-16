@@ -102,11 +102,13 @@ import type { Snippet } from 'svelte';
   // Restore the selected page option before the first render so inactive tab components never mount.
   restorePageOptionSelection()
 
+  // The tabs are tracked: a page may change their names (a count in a tab).
   $effect(() => {
+    const currentPageOptions = pageOptions
     untrack(() => {
       Env.useTopMinimalMenu = useTopMinimalMenu || false
       ui.state.useTopMinimalMenu = useTopMinimalMenu || false
-      ui.state.pageOptions = pageOptions
+      ui.state.pageOptions = currentPageOptions
     })
   })
 

@@ -60,6 +60,24 @@ func TestApplyLineTransition(t *testing.T) {
 	}
 }
 
+func TestIsKitchenTransition(t *testing.T) {
+	allowed := [][2]int8{{LineStatusOrdered, LineStatusReady}, {LineStatusReady, LineStatusOrdered}}
+	denied := [][2]int8{
+		{LineStatusToConfirm, LineStatusOrdered}, {LineStatusReady, LineStatusServed},
+		{LineStatusOrdered, LineStatusCancelled}, {LineStatusToConfirm, LineStatusCancelled},
+	}
+	for _, pair := range allowed {
+		if !IsKitchenTransition(pair[0], pair[1]) {
+			t.Errorf("the kitchen may move %v → %v", pair[0], pair[1])
+		}
+	}
+	for _, pair := range denied {
+		if IsKitchenTransition(pair[0], pair[1]) {
+			t.Errorf("the kitchen may not move %v → %v", pair[0], pair[1])
+		}
+	}
+}
+
 func TestChargeSaleLines(t *testing.T) {
 	served := TableOrderLine{ProductID: 7, PresentationID: 2, Quantity: 1001, SubDivisor: 6, Price: 1500, SubPrice: 300, Status: LineStatusServed}
 	saleLines, err := ChargeSaleLines([]TableOrderLine{served, {ProductID: 8, Status: LineStatusCancelled}})

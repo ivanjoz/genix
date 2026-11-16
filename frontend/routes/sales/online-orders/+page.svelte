@@ -320,7 +320,7 @@
     {/if}
   </Layer>
 
-  <Layer type="side" id={DETAIL_LAYER_ID} sideLayerSize={760}
+  <Layer type="side" id={DETAIL_LAYER_ID} width={760}
     title={selectedOrder ? tr(`Order No. ${selectedOrder.ID}|Pedido N° ${selectedOrder.ID}`) : ''}
     titleCss="h2 mb-6"
     onClose={() => { selectedOrder = null; isAnnulFormOpen = false }}

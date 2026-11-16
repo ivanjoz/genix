@@ -1,5 +1,7 @@
-// Mirrors backend/dining/types (docs/DINING_PLAN.md): the restaurant's layouts, shared by the
-// dining pages.
+import { quantityAmount, unpackQuantityLine } from '#core/quantity.ts'
+
+// Mirrors backend/dining/types (docs/DINING_PLAN.md): the restaurant's layouts and table orders,
+// and the order rules shared by the dining pages.
 
 export const SHAPE_KIND = {
   TABLE: 1,
@@ -149,13 +151,78 @@ export interface ITableOrder {
   Lines: ITableOrderLine[]
   Guests?: number
   WaiterID?: number
-  ss: number
+  SaleOrderID?: number
+  AnnulReason?: string
+  ss: number            // TABLE_ORDER_STATUS
   upd: number
   Created?: number
 }
 
+// ITableOrder.ss values (backend TableOrder.Status).
+export const TABLE_ORDER_STATUS = { ANNULLED: 0, OPEN: 1, CHARGED: 2 } as const
+
 // SUnixTime ticks are 2 seconds.
 const TICKS_PER_MINUTE = 30
+
+// How long the kitchen can take back a "ready" tap: 2 minutes of 2-second ticks (backend readyUndoWindowTicks).
+const READY_UNDO_TICKS = 60
+
+export interface ILineAction { status: number, name: string, color: 'green' | 'blue' | 'red' | 'orange' }
+
+// What can be done with a line now (§2.1). A waiter may do all of it, "ready" included: a
+// restaurant without a kitchen display marks dishes ready from the floor.
+export function lineActions(line: ITableOrderLine, nowTime: number): ILineAction[] {
+  const cancel: ILineAction = { status: LINE_STATUS.CANCELLED, name: 'Cancel|Anular', color: 'red' }
+  switch (line.Status) {
+    case LINE_STATUS.TO_CONFIRM:
+      return [{ status: LINE_STATUS.ORDERED, name: 'Confirm|Confirmar', color: 'blue' }, cancel]
+    case LINE_STATUS.ORDERED:
+      return [{ status: LINE_STATUS.READY, name: 'Ready|Listo', color: 'blue' }, cancel]
+    case LINE_STATUS.READY: {
+      const actions: ILineAction[] = [{ status: LINE_STATUS.SERVED, name: 'Served|Servido', color: 'green' }]
+      if (nowTime - (line.ReadyAt || 0) <= READY_UNDO_TICKS) {
+        actions.push({ status: LINE_STATUS.ORDERED, name: 'Back to kitchen|Devolver a cocina', color: 'orange' })
+      }
+      return actions
+    }
+    default:
+      return []
+  }
+}
+
+// One button of a multi-line selection: an action and the selected lines it fits.
+export interface ISelectionAction extends ILineAction { lineIDs: number[] }
+
+// The buttons a selection of lines offers: every action that fits at least one selected line, each
+// applying only to the lines it fits. Keyed by name, not status: "confirm" and "back to kitchen"
+// both lead to "in the kitchen". "Cancel" goes first, then by the status they lead to.
+export function selectionActions(
+  lines: ITableOrderLine[], selectedLineIDs: number[], actionsOf: (line: ITableOrderLine) => ILineAction[],
+): ISelectionAction[] {
+  const actionByName = new Map<string, ISelectionAction>()
+  for (const line of lines.filter((candidate) => selectedLineIDs.includes(candidate.LineID))) {
+    for (const action of actionsOf(line)) {
+      const selectionAction = actionByName.get(action.name) || { ...action, lineIDs: [] }
+      selectionAction.lineIDs.push(line.LineID)
+      actionByName.set(action.name, selectionAction)
+    }
+  }
+  const rank = (action: ISelectionAction) => action.status === LINE_STATUS.CANCELLED ? -1 : action.status
+  return [...actionByName.values()].sort((left, right) => rank(left) - rank(right) || left.name.localeCompare(right.name))
+}
+
+// The order's rounds, oldest first, each with its lines.
+export function orderRounds(lines: ITableOrderLine[]): { round: number, lines: ITableOrderLine[] }[] {
+  const linesByRound = new Map<number, ITableOrderLine[]>()
+  for (const line of lines) linesByRound.set(line.Round, [...(linesByRound.get(line.Round) || []), line])
+  return [...linesByRound.entries()].sort(([left], [right]) => left - right).map(([round, roundLines]) => ({ round, lines: roundLines }))
+}
+
+export const lineAmount = (line: ITableOrderLine) =>
+  quantityAmount(unpackQuantityLine(line.Quantity), line.Price, line.SubPrice || 0)
+
+export const tableLabelOf = (layout: IDiningLayout, tableShapeID: number) =>
+  (layout.Shapes || []).find((shape) => shape.ShapeID === tableShapeID)?.Label || `#${tableShapeID}`
 
 // How long the table has waited for its kitchen: from the oldest line still in the kitchen, 0 when none is.
 export function tableWaitTicks(order: ITableOrder | undefined, nowTime: number): number {

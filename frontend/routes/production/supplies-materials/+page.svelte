@@ -268,7 +268,7 @@ import {
 
   <Layer
     type="side"
-    sideLayerSize={680}
+    width={680}
     css="px-8 py-8 md:px-16 md:py-10"
     title={supplyForm?.Name || "New Supply or Material|Nuevo Insumo o Material"}
     titleCss="h2 mb-6"
@@ -277,6 +277,7 @@ import {
     bind:selected={layerView}
     options={[
       [1, "Info|Información"],
+      [3, "Providers|Proveedores"],
       // Only a semi-finished supply has a recipe.
       ...(isSemiFinishedForm ? [[2, "Production|Producción"] as [number, string]] : []),
     ]}
@@ -292,6 +293,29 @@ import {
   >
     {#if layerView === 2 && isSemiFinishedForm}
       <ProductProductionTab product={supplyForm} excludeSupplyID={supplyForm.ID} />
+    {:else if layerView === 3}
+    <!-- Provider configuration — mirrors the gestion-compras "Proveedores" list. -->
+    <div class="mt-6 md:mt-16" aria-label="Supply providers configuration list">
+      <div class="mb-8 flex justify-end">
+        <Button color="green" icon="icon-[fa--plus]"
+          label="Adds a new provider row to the supply configuration."
+          css="h-32 px-10"
+          onClick={addProviderSupplyRow}
+        />
+      </div>
+
+      <CardsList nonVirtual={true} disableOverflow={true}
+        css="w-full max-h-500"
+        cardCss="p-14"
+        itemsClass="p-4"
+        cells={providerSupplyCards}
+        data={supplyForm.ProviderSupply || []}
+        emptyMessage="No hay proveedores agregados."
+        buttonDeleteHandler={(_, providerRowIndex) => {
+          removeProviderSupplyRow(providerRowIndex);
+        }}
+      />
+    </div>
     {:else}
     <div class="grid grid-cols-24 items-start gap-x-10 gap-y-10 mt-6 md:mt-16" aria-label="Supply Material Form">
       <Input label="Name|Nombre"
@@ -343,20 +367,39 @@ import {
       />
       <Input label="Sub-units per unit|Sub-unidades por unidad"
         saveOn={supplyForm}
-        css="col-span-12 md:col-span-6"
+        css="col-span-12 md:col-span-8"
         save="SbuQuantity"
         type="number"
       />
-      <!-- Semi-finished: made by the company with its own recipe (e.g. stitched uppers), never bought.
-           Its stock account is 231 Productos en proceso. -->
-      <Checkbox label="Semi-finished: made by the company|Semielaborado: lo fabrica la empresa"
-        css="col-span-24"
-        checked={isSemiFinishedForm}
-        onToggle={(isChecked: boolean) => {
-          supplyForm.Origin = isChecked ? SUPPLY_ORIGIN_SEMI_FINISHED : 0;
-          if (isChecked) { supplyForm.DepreciationMonths = 0; supplyForm.AccountCode = 0; }
-        }}
+      <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): a supply that tracks lots is received with one. -->
+      <Input label="Shelf life|Vida útil"
+        saveOn={supplyForm}
+        css="col-span-24 md:col-span-10"
+        save="ShelfLifeDays"
+        postValue={tr("days|días")}
+        type="number"
       />
+      <!-- Lot checkboxes first: when the row wraps, Semi-finished lands right above the depreciation
+           and account selects it hides. -->
+      <div class="col-span-24 flex flex-wrap items-center gap-x-24 gap-y-10">
+        <Checkbox label="Tracks lots|Controla lotes"
+          bind:saveOn={supplyForm}
+          save="TracksLots"
+        />
+        <Checkbox label="New lots enter in quarantine|Lotes nuevos en cuarentena"
+          bind:saveOn={supplyForm}
+          save="QualityHoldOnEntry"
+        />
+        <!-- Semi-finished: made by the company with its own recipe (e.g. stitched uppers), never bought.
+             Its stock account is 231 Productos en proceso. -->
+        <Checkbox label="Semi-finished: made by the company|Semielaborado: lo fabrica la empresa"
+          checked={isSemiFinishedForm}
+          onToggle={(isChecked: boolean) => {
+            supplyForm.Origin = isChecked ? SUPPLY_ORIGIN_SEMI_FINISHED : 0;
+            if (isChecked) { supplyForm.DepreciationMonths = 0; supplyForm.AccountCode = 0; }
+          }}
+        />
+      </div>
       {#if !isSemiFinishedForm}
         <SearchSelect label="Depreciation|Depreciación"
           saveOn={supplyForm}
@@ -375,47 +418,6 @@ import {
         saveOn={supplyForm}
         css="col-span-24"
         save="Description"
-      />
-      <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): a supply that tracks lots is received with one. -->
-      <Checkbox label="Tracks lots|Controla lotes"
-        bind:saveOn={supplyForm}
-        save="TracksLots"
-        css="col-span-12 md:col-span-6"
-      />
-      <Input label="Shelf life (days)|Vida útil (días)"
-        saveOn={supplyForm}
-        css="col-span-12 md:col-span-8"
-        save="ShelfLifeDays"
-        type="number"
-      />
-      <Checkbox label="New lots enter in quarantine|Lotes nuevos en cuarentena"
-        bind:saveOn={supplyForm}
-        save="QualityHoldOnEntry"
-        css="col-span-24 md:col-span-10"
-      />
-    </div>
-
-    <!-- Provider configuration block — mirrors the gestion-compras "Proveedores" list. -->
-    <div class="mt-16" aria-label="Supply providers configuration list">
-      <div class="mb-8 flex items-center justify-between">
-        <div class="h4 ff-bold">Proveedores</div>
-        <Button color="green" icon="icon-[fa--plus]"
-          label="Adds a new provider row to the supply configuration."
-          css="h-32 px-10"
-          onClick={addProviderSupplyRow}
-        />
-      </div>
-
-      <CardsList nonVirtual={true} disableOverflow={true}
-        css="w-full max-h-500"
-        cardCss="p-14"
-        itemsClass="p-4"
-        cells={providerSupplyCards}
-        data={supplyForm.ProviderSupply || []}
-        emptyMessage="No hay proveedores agregados."
-        buttonDeleteHandler={(_, providerRowIndex) => {
-          removeProviderSupplyRow(providerRowIndex);
-        }}
       />
     </div>
     {/if}
