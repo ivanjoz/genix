@@ -2,6 +2,7 @@
   import { useUI } from '@genix/ui'
   import { untrack } from 'svelte'
   import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+  import type { IProductPack } from '#core/product-packs.ts'
   import { tr } from '#core/store.svelte.ts'
   import { formatN } from '#libs/helpers.ts'
   import { security } from '#libs/ui-runtime.svelte.ts'
@@ -18,13 +19,16 @@
   // One table, in four tabs: "Pedidos" (the open order's rounds and their line actions), "Pagar"
   // (the bill, charged or annulled), "Nuevo pedido" (a new round; the first one opens the order) and
   // "Historial" (the table's orders of today and yesterday). Charging the bill frees the table.
-  let { round, layout, tableShapeID, order, nowTime, productName, onOrderChanged }: {
+  let { round, layout, tableShapeID, order, nowTime, productName, productCategoryIDs, packs, onOrderChanged }: {
     round: RoundDraftState
     layout: IDiningLayout
     tableShapeID: number
     order: ITableOrder | undefined
     nowTime: number
     productName: (productID: number) => string
+    // What "Nuevo pedido" and "Pagar" find packs with.
+    productCategoryIDs: (productID: number) => number[]
+    packs: IProductPack[]
     onOrderChanged: (order: ITableOrder) => void
   } = $props()
 
@@ -95,9 +99,9 @@
       {/snippet}
     </OrderLineCards>
   {:else if selectedTab === TAB_PAY && order}
-    <TableChargeForm {order} {productName} onDone={onBillClosed} />
+    <TableChargeForm {order} {productName} {productCategoryIDs} {packs} onDone={onBillClosed} />
   {:else if selectedTab === TAB_NEW_ROUND}
-    <RoundComposer {round} layoutID={layout.ID} {tableShapeID} isOpening={!order}
+    <RoundComposer {round} layoutID={layout.ID} {tableShapeID} isOpening={!order} {productCategoryIDs} {packs}
       onSent={(savedOrder) => { onOrderChanged(savedOrder); selectedTab = TAB_ORDERS }}
       onCancel={() => { if (order) selectedTab = TAB_ORDERS; else ui.openSideLayer(0) }} />
   {:else if selectedTab === TAB_HISTORY}

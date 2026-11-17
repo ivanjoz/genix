@@ -3,9 +3,9 @@
 // with their prep stations, and the table service of yesterday and today, charged through the same
 // handlers the floor-service page uses.
 //
-// The dining menu lists every active product the web store sells, so the retail catalog is hidden
-// from the web store (WebHidden) to leave the menu clean. It keeps its own clock, like crm: two
-// service days do not fit the day loop.
+// The dining menu lists every active product sold in the restaurant, so the dishes go to the
+// restaurant channel and the retail catalog to the stores (Product.SalesChannels) to leave the menu
+// clean. It keeps its own clock, like crm: two service days do not fit the day loop.
 package dining
 
 import (
@@ -30,7 +30,7 @@ const (
 	// dishWebExtraStock is a made dish's "Sobreventa permitida": what the kitchen can serve until the
 	// daily production close makes the margin whole again.
 	dishWebExtraStock = int32(200)
-	hideBatchSize     = 500
+	productBatchSize  = 500
 )
 
 // menuDish is one dish of the menu; Price in cents.
@@ -121,7 +121,7 @@ func callAsDiningUser(route string, handler func(*core.HandlerArgs) core.Handler
 	return runner.CallAs(diningUser(), route, handler, nil, payload, target)
 }
 
-// Setup writes the menu, the packs and the hidden retail catalog on every run (each step only fills
+// Setup writes the menu, the packs and the products' sales channels on every run (each step only fills
 // what is missing), then the rooms and the two service days once: a company that already has the
 // "Terraza" room is left as it is.
 func Setup(run *runner.Run) ([]runner.DayStep, error) {
@@ -130,8 +130,8 @@ func Setup(run *runner.Run) ([]runner.DayStep, error) {
 	if err != nil {
 		return nil, core.Err("menú del restaurante:", err)
 	}
-	if err := hideRetailFromWebStore(menu); err != nil {
-		return nil, core.Err("ocultar el catálogo minorista:", err)
+	if err := assignSalesChannels(menu); err != nil {
+		return nil, core.Err("canales de venta de los productos:", err)
 	}
 	if err := ensureMenuPacks(menu); err != nil {
 		return nil, core.Err("packs del menú:", err)
@@ -218,7 +218,7 @@ func ensureDiningMenu(run *runner.Run) (diningMenu, error) {
 		// A made dish sells from its margin, costed at a standard 35% of its price.
 		newDishes = append(newDishes, productionTypes.Product{
 			ID: int32(-(len(newDishes) + 1)), Name: dish.Name, Price: dish.Price, FinalPrice: dish.Price,
-			CategoryIDs: []int32{categoryID}, Origin: productionTypes.ProductOriginMade,
+			CategoryIDs: []int32{categoryID}, Origin: productionTypes.ProductOriginMade, SalesChannels: dishSalesChannels,
 			WebExtraStock: dishWebExtraStock, ProductionStandardCost: dish.Price * 35 / 118,
 		})
 	}
@@ -250,9 +250,16 @@ func ensureDiningMenu(run *runner.Run) (diningMenu, error) {
 	return menu, nil
 }
 
-// hideRetailFromWebStore marks every other active product WebHidden, through the products form's
-// own handler: the dining menu lists what the web store sells, and only the dishes belong there.
-func hideRetailFromWebStore(menu diningMenu) error {
+// Seeded sales channels: the dishes only on the dining menu, the retail catalog in the stores.
+var (
+	dishSalesChannels   = core.BitmaskAdd(0, productionTypes.ProductChannelRestaurant)
+	retailSalesChannels = core.BitmaskAdd(core.BitmaskAdd(0, productionTypes.ProductChannelPhysicalStore), productionTypes.ProductChannelOnlineStore)
+)
+
+// assignSalesChannels sets every active product's "Mostrar en" through the products form's own
+// handler: the dishes to the restaurant, everything else to the physical and online stores, so the
+// dining menu lists only the dishes. Products already on their channels are left alone.
+func assignSalesChannels(menu diningMenu) error {
 	menuProductIDs := map[int32]bool{}
 	for _, dish := range menu.dishByName {
 		menuProductIDs[dish.ID] = true
@@ -263,18 +270,20 @@ func hideRetailFromWebStore(menu diningMenu) error {
 	if err := query.Exec(); err != nil {
 		return core.Err("no se pudieron leer los productos:", err)
 	}
-	visibleRetail := slices.DeleteFunc(products, func(product productionTypes.Product) bool {
-		return product.WebHidden || menuProductIDs[product.ID]
-	})
-	for batchStart := 0; batchStart < len(visibleRetail); batchStart += hideBatchSize {
-		batch := visibleRetail[batchStart:min(batchStart+hideBatchSize, len(visibleRetail))]
-		for index := range batch {
-			batch[index].WebHidden = true
+	productsToUpdate := []productionTypes.Product{}
+	for _, product := range products {
+		wantedChannels := core.If(menuProductIDs[product.ID], dishSalesChannels, retailSalesChannels)
+		if product.SalesChannels != wantedChannels {
+			product.SalesChannels = wantedChannels
+			productsToUpdate = append(productsToUpdate, product)
 		}
+	}
+	for batchStart := 0; batchStart < len(productsToUpdate); batchStart += productBatchSize {
+		batch := productsToUpdate[batchStart:min(batchStart+productBatchSize, len(productsToUpdate))]
 		if err := callAsDiningUser("POST.products", production.PostProducts, batch, nil); err != nil {
 			return err
 		}
-		core.Log("SeedDining:: productos ocultos de la tienda web", batchStart+len(batch), "de", len(visibleRetail))
+		core.Log("SeedDining:: canales de venta asignados", batchStart+len(batch), "de", len(productsToUpdate))
 	}
 	return nil
 }

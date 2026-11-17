@@ -122,7 +122,13 @@ side layer has the tabs **Info (Información)**, **Sheet (Ficha)**, **Presentati
 - **Currency (Moneda)**, **Unit (Unidad)**, **Weight (Peso)**, **Volume (Volumen)**, **Brand
   (Marca)** and **SKU** are optional.
 - The **SKU Individual** checkbox stores a flag, but nothing in Genix currently reacts to it.
-- **Categories (`CATEGORÍAS ::`)** attaches existing categories by name; it cannot create one.
+- **Show in (`Mostrar en`)**, right under the price and brand fields (above **Origen**), picks where the item is shown and sold: **Tienda
+  Física** (the Point of Sale), **Tienda Online** (the web store) and **Restaurante** (the dining
+  menu). Empty (placeholder `Todo`) means every channel. A channel not picked leaves the item off
+  that channel's list and its sale refuses it, e.g. web checkout with "ya no está disponible en la
+  tienda" even if the item is still in a shopper's cart.
+- **Categories (`Categorías`)**, under the image, adds or removes existing categories from a
+  searchable list, one per click, shown as chips; it cannot create one.
 - The gray **Tienda Web** box holds the web store settings:
   - **Allowed overselling (`Sobreventa permitida`)** is a number of whole units the web store may
     sell beyond the stock. With 5 units in stock and 100 here, the web store accepts up to 105
@@ -130,8 +136,6 @@ side layer has the tabs **Info (Información)**, **Sheet (Ficha)**, **Presentati
     orders) count as reserved and use up the margin. Delivering an oversold order still needs the goods in the warehouse, so it waits
     for the purchase to arrive. The value cannot be negative, and the Point of Sale ignores it for
     merchandise: a till sale needs stock that is not reserved.
-  - **Hide (`Ocultar`)** removes the item from the web store catalog, and checkout refuses it ("ya
-    no está disponible en la tienda") even if it is still in a shopper's cart.
 - **Sub-Unidades** (Name, Base Price, Discount, Final Price, Quantity) are on the **Presentations
   (Presentaciones)** tab. They do not recalculate each other; the sub-unit **Base Price** field
   recalculates the *main* Final Price from the main Price and Discount.
@@ -153,7 +157,7 @@ product had, and the server refuses them on a bought product.
 
 Saving creates or updates the product; a new item is active immediately, and editing keeps the
 stored stock figures, images and creation data. The web store catalog picks up the change on its
-next sync and lists an active, not hidden item only while it has something sellable (stock in the
+next sync and lists an active item shown in **Tienda Online** only while it has something sellable (stock in the
 warehouses open to online sales, or overselling margin left). The overselling margin and the
 accounting fields are never sent to the public web store.
 
@@ -171,15 +175,18 @@ accounting fields are never sent to the public web store.
 - `¿Por qué no puedo comprar un producto en una orden de compra?` Sólo se compran mercaderías e
   insumos; un producto `Fabricado` se rechaza.
 - `¿Qué es sobreventa permitida?` Unidades que la tienda web puede vender por encima del stock.
+- `¿Cómo oculto una mercadería de la tienda web / del POS / del restaurante?` En `Mostrar en` deje
+  marcados sólo los canales donde sí se vende. Vacío (`Todo`) = todos los canales.
 - Search terms: `mercadería`, `mercaderia`, `producto para reventa`, `artículo`, `comprado`,
-  `origen`, `precio de venta`, `descuento`, `sub-unidad`, `SKU`, `sobreventa`, `ocultar`.
+  `origen`, `precio de venta`, `descuento`, `sub-unidad`, `SKU`, `sobreventa`, `ocultar`,
+  `mostrar en`, `canal de venta`.
 
 <!-- DOC-ID: capability.product-sheet -->
 ## Edit the product sheet (Editar la ficha)
 
 The **Sheet (Ficha)** tab holds the optional one-line **Short Description (Descripción Corta)** and,
 below it, a rich text editor for a longer, formatted description. Both are saved with the item. The
-web store's product detail shows the sheet unless the item is hidden.
+web store's product detail shows the sheet unless the item is not shown in **Tienda Online**.
 
 <!-- DOC-ID: capability.presentations -->
 ## Manage presentations / variants (Gestionar presentaciones)

@@ -20,6 +20,7 @@ import {
   ClientProviderService, ClientProviderType, type IClientProvider,
 } from '#services/crm/client-provider.svelte.ts';
 import { ProductsService } from '#services/production/products.svelte.ts';
+import { PRODUCT_CHANNEL_PHYSICAL_STORE, isProductSoldIn } from '#core/product-channels.ts';
 import { SharedListsService } from "#services/business/shared-lists.svelte.ts";
 import { SystemParametersService } from '#services/services/system-parameters.svelte.ts';
 import { untrack } from 'svelte';
@@ -244,7 +245,8 @@ import {
    
    	for(const e of productosStock){
       const producto = productosService.recordsMap.get(e.ProductID)
-      if(!producto){ continue }
+      // The till only lists products sold in the physical store ("Mostrar en"); the backend refuses the rest.
+      if(!producto || !isProductSoldIn(producto, PRODUCT_CHANNEL_PHYSICAL_STORE)){ continue }
 
       // Generic stock is the base row quantity plus non-serialized details.
       const serialNumbers = (e.StockDetails || []).filter((stockDetail) => !!stockDetail.SerialNumber?.trim())

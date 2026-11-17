@@ -1,5 +1,12 @@
+import { Env } from '#core/env.ts'
 import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts'
 import type { IDiningLayout, ITableOrder } from './dining.ts'
+
+// The layout this device serves (a tablet stays in its room), remembered across reloads. Per
+// company, as layout IDs are.
+const servedLayoutStorageKey = () => `dining-served-layout-${Env.getCompanyID()}`
+export const readServedLayoutID = () => Number(localStorage.getItem(servedLayoutStorageKey())) || 0
+export const saveServedLayoutID = (layoutID: number) => localStorage.setItem(servedLayoutStorageKey(), String(layoutID))
 
 // The company's active layouts, shared by every dining page.
 export class DiningLayoutsService extends GetHandler<IDiningLayout> {

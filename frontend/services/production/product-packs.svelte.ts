@@ -1,5 +1,5 @@
 import { GetHandler } from '#libs/ui-runtime.svelte.ts'
-import type { IProductPack } from './product-packs.ts'
+import type { IProductPack } from '#core/product-packs.ts'
 
 // The company's active packs, by name. A deleted pack leaves the delta with ss = 0.
 export class ProductPacksService extends GetHandler<IProductPack> {

@@ -398,12 +398,12 @@ func GetWebShippingAmount(req *core.HandlerArgs) core.HandlerResponse {
 //
 // It returns the warehouse the order's units are reserved on: the first (lowest ID) of those.
 func validateWebStock(companyID int32, lines []types.SaleOrderLine, productsByID map[int32]production.Product) (int32, error) {
-	// A product hidden from the store may still sit in a cart cached before it was hidden, and a line
+	// A product taken off the online store may still sit in a cart cached before that, and a line
 	// may name a presentation the product no longer sells.
 	presentationIDsByProduct := map[int32][]int16{}
 	for _, line := range lines {
 		product := productsByID[line.ProductID]
-		if product.WebHidden {
+		if !product.IsSoldIn(production.ProductChannelOnlineStore) {
 			return 0, core.Err(fmt.Sprintf(`El producto "%v" ya no está disponible en la tienda.`, product.Name))
 		}
 		presentationIDsByProduct[line.ProductID] = product.WebPresentationIDs()

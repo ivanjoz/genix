@@ -4,9 +4,12 @@ import {
   type IDiningLayout, type ITableOrder, type ITableOrderLine,
 } from '../dining.ts'
 import {
-  addToRoundDraft, billLines, filterMenuPickItems, makeRoundRequest, menuOptionKey, menuPickItems, orderTotal,
-  readyToPickupGroups, type IDiningMenuProduct,
+  addToRoundDraft, billLines, diningMenu, filterMenuPickItems, makeRoundRequest, menuOptionKey, menuPickItems, orderTotal,
+  removeRoundRowUnits, setRoundRowUnits, tablesToServe, type IDiningMenuProduct,
 } from './floor-service.ts'
+import { PRODUCT_CHANNEL_PHYSICAL_STORE } from '#core/product-channels.ts'
+import type { IProductStock } from '#routes/logistics/products-stock/stock-movement.ts'
+import type { IProduct } from '#services/production/products.svelte.ts'
 
 const MINUTE = 30 // SUnixTime ticks
 const NOW = 500_000_000
@@ -119,31 +122,66 @@ describe('billLines', () => {
       makeLine({ LineID: 3, Round: 2, Status: LINE_STATUS.CANCELLED }),
       makeLine({ LineID: 4, Round: 2, Price: 3000 }),
     ]))
-    expect(bill.map((billLine) => [billLine.Quantity, billLine.Amount])).toEqual([[3000, 7500], [1000, 3000]])
+    expect(bill.map((billLine) => [billLine.Quantity, billLine.Price])).toEqual([[3000, 2500], [1000, 3000]])
   })
 })
 
-describe('readyToPickupGroups', () => {
-  it('groups ready lines by station, the longest-waiting first', () => {
+describe('round rows over a split line', () => {
+  // Arroz con pato × 3, of which a pack took 1: its unpacked row shows 2.
+  const draft = [{ key: 1, ProductID: 10, PresentationID: 0, Name: 'Arroz con pato', Units: 3, Note: '', Price: 2500 }]
+
+  it('an edit changes only the units its row shows', () => {
+    expect(setRoundRowUnits(draft, 1, 2, 5)[0].Units).toBe(6)
+    expect(setRoundRowUnits(draft, 1, 3, 0)[0].Units).toBe(0)
+  })
+
+  it("a delete removes the row's units and drops the line once nothing is left", () => {
+    expect(removeRoundRowUnits(draft, 1, 1)[0].Units).toBe(2)
+    expect(removeRoundRowUnits(draft, 1, 3)).toEqual([])
+    expect(removeRoundRowUnits([{ ...draft[0], Units: 0 }], 1, 0)).toEqual([])
+  })
+})
+
+describe('tablesToServe', () => {
+  const layout = makeLayout()
+
+  it('lists the tables owed a dish, the longest-waiting first, a ready dish still counting', () => {
     const orders = [
-      makeOrder([makeLine({ LineID: 1, Status: LINE_STATUS.READY, StationID: 2, ReadyAt: NOW - 10 })]),
+      makeOrder([makeLine({ LineID: 1, Status: LINE_STATUS.ORDERED, OrderedAt: NOW - 5 * MINUTE })]),
       makeOrder([
-        makeLine({ LineID: 1, Status: LINE_STATUS.READY, StationID: 1, ReadyAt: NOW - 50 }),
-        makeLine({ LineID: 2, Status: LINE_STATUS.READY, StationID: 2, ReadyAt: NOW - 90 }),
-        makeLine({ LineID: 3, Status: LINE_STATUS.ORDERED, StationID: 1 }),
+        makeLine({ LineID: 1, Status: LINE_STATUS.SERVED, OrderedAt: NOW - 30 * MINUTE }),
+        makeLine({ LineID: 2, Status: LINE_STATUS.TO_CONFIRM }),
+        makeLine({ LineID: 3, Status: LINE_STATUS.READY, OrderedAt: NOW - 12 * MINUTE }),
       ], { ID: 2, TableShapeID: 2 }),
     ]
-    const groups = readyToPickupGroups(orders, makeLayout())
-    expect(groups.map((group) => group.stationName)).toEqual(['Bar', 'Cocina'])
-    expect(groups[0].items.map((item) => item.tableLabel)).toEqual(['M2', 'M1'])
-    expect(groups[1].items).toHaveLength(1)
+    const tables = tablesToServe(orders, layout, NOW)
+    expect(tables.map((table) => table.tableLabel)).toEqual(['M2', 'M1'])
+    expect(tables[0].waitTicks).toBe(12 * MINUTE)
+    // The served dish is left out; the QR line, never ordered, goes last.
+    expect(tables[0].unservedLines.map((line) => line.LineID)).toEqual([3, 2])
+  })
+
+  it('flags a table late as the map does: a dish in the kitchen past WaitLateMinutes', () => {
+    const orders = [
+      makeOrder([makeLine({ LineID: 1, Status: LINE_STATUS.ORDERED, OrderedAt: NOW - 30 * MINUTE })]),
+      makeOrder([makeLine({ LineID: 1, Status: LINE_STATUS.READY, OrderedAt: NOW - 40 * MINUTE })], { ID: 2, TableShapeID: 2 }),
+    ]
+    // The ready dish has waited longer, but only a dish still in the kitchen makes a table late.
+    expect(tablesToServe(orders, layout, NOW).map((table) => [table.tableLabel, table.isLate])).toEqual([['M2', false], ['M1', true]])
+  })
+
+  it('leaves out a table with everything served or cancelled', () => {
+    const orders = [makeOrder([
+      makeLine({ LineID: 1, Status: LINE_STATUS.SERVED }), makeLine({ LineID: 2, Status: LINE_STATUS.CANCELLED }),
+    ])]
+    expect(tablesToServe(orders, layout, NOW)).toEqual([])
   })
 })
 
 describe('the round draft', () => {
   const menu: IDiningMenuProduct[] = [
-    { ID: 42, Name: 'Lomo saltado', Price: 3500, StationID: 1, Presentations: [{ Sellable: 8 }] },
-    { ID: 50, Name: 'Chicha', Price: 800, StationID: 2, Presentations: [{ ID: 1, Name: 'Vaso', Sellable: 3 }, { ID: 2, Name: 'Jarra', Sellable: 0 }] },
+    { ID: 42, Name: 'Lomo saltado', Price: 3500, Presentations: [{ Sellable: 8 }] },
+    { ID: 50, Name: 'Chicha', Price: 800, Presentations:[{ ID: 1, Name: 'Vaso', Sellable: 3 }, { ID: 2, Name: 'Jarra', Sellable: 0 }] },
   ]
 
   it('offers only presentations with units left', () => {
@@ -175,5 +213,40 @@ describe('the round draft', () => {
       LayoutID: 1, TableShapeID: 2, Guests: 4,
       Lines: [{ ProductID: 42, PresentationID: 0, Note: 'sin ají', Quantity: 3000 }],
     })
+  })
+})
+
+describe('the menu built from the cached catalog and stock', () => {
+  const product = (fields: Partial<IProduct>) => ({ Presentations: [], CurrencyID: 1, WebExtraStock: 0, SalesChannels: 0, ...fields }) as IProduct
+  const stock = (fields: Partial<IProductStock>) => ({ WarehouseID: 1, PresentationID: 0, Quantity: 0, ...fields }) as IProductStock
+  const products = [
+    product({ ID: 1, Name: 'Lomo saltado', FinalPrice: 3500 }),
+    product({ ID: 2, Name: 'Polo', FinalPrice: 2000, SalesChannels: 1 << (PRODUCT_CHANNEL_PHYSICAL_STORE - 1) }),
+    product({ ID: 3, Name: 'Vino', FinalPrice: 1000, CurrencyID: 2 }),
+    product({ ID: 4, Name: 'Chicha', FinalPrice: 800, Presentations: [
+      { id: 1, nm: 'Vaso', ss: 1 }, { id: 2, nm: 'Jarra', ss: 1 }, { id: 3, nm: 'Botella', ss: 0 },
+    ] as IProduct['Presentations'] }),
+    product({ ID: 5, Name: 'Ceviche', FinalPrice: 4000 }),
+  ]
+  const stockRows = [
+    stock({ ProductID: 1, Quantity: 5, PendingDeliveryStore: 2 }),
+    stock({ ProductID: 1, WarehouseID: 9, Quantity: 50 }),
+    stock({ ProductID: 2, Quantity: 5 }),
+    stock({ ProductID: 3, Quantity: 5 }),
+    stock({ ProductID: 4, PresentationID: 1, Quantity: 4 }),
+    stock({ ProductID: 4, PresentationID: 3, Quantity: 9 }),
+  ]
+
+  it('keeps the restaurant products with units left on the layout warehouse alone', () => {
+    const menu = diningMenu(products, stockRows, 1, 0)
+    expect(menu.map((menuProduct) => menuProduct.Name)).toEqual(['Lomo saltado', 'Chicha'])
+    expect(menu[0].Presentations).toEqual([{ ID: 0, Name: '', Sellable: 3 }])
+    // The inactive Botella is not offered; Jarra is listed with 0 so the picker leaves it out.
+    expect(menu[1].Presentations).toEqual([{ ID: 1, Name: 'Vaso', Sellable: 4 }, { ID: 2, Name: 'Jarra', Sellable: 0 }])
+  })
+
+  it('restates a USD price in soles, and leaves the product out without a rate', () => {
+    expect(diningMenu(products, stockRows, 1, 3750).find((menuProduct) => menuProduct.ID === 3)?.Price).toBe(3750)
+    expect(diningMenu(products, stockRows, 1, 0).some((menuProduct) => menuProduct.ID === 3)).toBe(false)
   })
 })

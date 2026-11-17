@@ -100,7 +100,9 @@ keyboard selection across the filtered grid; **Enter** adds 1 unit of the select
 
 A warehouse (**ALMACÉN**) must be selected — the page auto-selects the first warehouse loaded
 if none is chosen yet — because the product grid only shows products with stock in that
-warehouse. The text filter matches every typed word against the product/brand/presentation
+warehouse. It also only shows products whose **Mostrar en** (on Productos / Mercaderías)
+includes **Tienda Física**, or is empty (every channel); the server refuses a sale naming any
+other product with `El producto "<producto>" no se vende en este canal`. The text filter matches every typed word against the product/brand/presentation
 name; the serial filter matches a partial serial number against that product's known serials.
 
 ### Business rules and rationale (Reglas y razón de negocio)
@@ -139,8 +141,9 @@ serial chips never carry a sub-unit part.
 - `¿Por qué no me deja agregar más unidades?` No hay suficiente stock disponible en el almacén
   seleccionado para esa cantidad.
 - `¿Puedo cambiar el precio de un producto en la venta?` No; el precio viene fijo del producto.
+- `¿Por qué no aparece un producto con stock?` Su `Mostrar en` no incluye `Tienda Física`.
 - Search terms: `POS`, `punto de venta`, `carrito`, `buscar producto`, `serie`, `presentación`,
-  `sub unidad`.
+  `sub unidad`, `mostrar en`.
 
 <!-- DOC-ID: capability.manage-cart -->
 ## Manage the cart (Gestionar el carrito)

@@ -2,15 +2,15 @@
   import { onMount, untrack } from 'svelte'
   import Button from '#components/buttons/Button.svelte'
   import Card from '#components/cards/Card.svelte'
-  import SearchSelect from '#components/form/SearchSelect.svelte'
-  import OptionsStrip from '#components/navigation/OptionsStrip.svelte'
+  import CardsStrip from '#components/navigation/CardsStrip.svelte'
+  import SelectBox from '#components/form/SelectBox.svelte'
   import { tr } from '#core/store.svelte.ts'
   import { formatQuantity, unpackQuantityLine } from '#core/quantity.ts'
   import Page from '#domain/Page.svelte'
   import { nowSUnixTime } from '#libs/helpers.ts'
   import { ProductsService } from '#services/production/products.svelte.ts'
   import OrderLineCards from '../OrderLineCards.svelte'
-  import { DiningLayoutsService, TableOrdersService, postTableOrderLines } from '../dining.svelte.ts'
+  import { DiningLayoutsService, TableOrdersService, postTableOrderLines, readServedLayoutID, saveServedLayoutID } from '../dining.svelte.ts'
   import { LINE_STATUS, waitMinutes } from '../dining.ts'
   import {
     gridStep, kitchenLineActions, kitchenTickets, linesToMarkReady, pendingLineAfter, resolveSelectedTicketKey,
@@ -27,7 +27,7 @@
 
   const layoutsService = new DiningLayoutsService()
   const productsService = new ProductsService(true)
-  let layoutPicker = $state({ LayoutID: 0 })
+  let layoutID = $state(readServedLayoutID())
   let stationID = $state(STATIONS_ALL)
   let ordersService = $state<TableOrdersService>()
   let nowTime = $state(nowSUnixTime())
@@ -40,22 +40,23 @@
   // The row the selected ticket was last on: when it leaves, the one that moves into it is selected.
   let selectedTicketIndex = 0
 
-  const layout = $derived(layoutsService.recordsMap.get(layoutPicker.LayoutID))
+  const layout = $derived(layoutsService.recordsMap.get(layoutID))
   const tickets = $derived(layout ? kitchenTickets(ordersService?.records || [], layout, stationID, nowTime) : [])
   const selectedTicket = $derived(tickets.find((ticket) => ticket.key === selectedTicketKey))
-  const stationOptions = $derived([[STATIONS_ALL, 'All|Todas'], ...(layout?.Stations || []).map((station) => [station.ID, station.Name])])
+  const stationOptions = $derived([{ ID: STATIONS_ALL, Name: 'All|Todas' }, ...(layout?.Stations || [])])
 
-  // The only layout opens by itself.
+  // The only layout opens by itself, also over a remembered one that no longer exists.
   $effect(() => {
-    if (layoutsService.records.length === 1 && !untrack(() => layoutPicker.LayoutID)) {
-      layoutPicker.LayoutID = layoutsService.records[0].ID
+    if (layoutsService.records.length === 1 && !untrack(() => layoutsService.recordsMap.has(layoutID))) {
+      layoutID = layoutsService.records[0].ID
     }
   })
-  // Each layout syncs its own open orders, and starts on every station.
+  // Each layout syncs its own open orders, and starts on every station. The pick is remembered for the next reload.
   $effect(() => {
-    const layoutID = layoutPicker.LayoutID
+    const pickedLayoutID = layoutID
     untrack(() => {
-      ordersService = layoutID ? new TableOrdersService(layoutID) : undefined
+      ordersService = pickedLayoutID ? new TableOrdersService(pickedLayoutID) : undefined
+      if (pickedLayoutID) saveServedLayoutID(pickedLayoutID)
       stationID = STATIONS_ALL
     })
   })
@@ -172,12 +173,13 @@
 
 <Page title="Orders|Pedidos" noPadding>
   <div class="flex flex-col md:flex-row md:h-[calc(100vh-var(--header-height)-4px)]">
-    <div class="md:w-1/2 flex flex-col min-h-0 bg-surface border-b md:border-b-0 md:border-r border-line">
-      <div class="flex flex-col gap-8 p-12 border-b border-line" aria-label="Pick the layout and the station">
-        <SearchSelect saveOn={layoutPicker} save="LayoutID" css="w-full" label="Layout|Salón"
-          options={layoutsService.records} keyId="ID" keyName="Name" placeholder=":: seleccione ::" />
+    <div class="md:w-1/2 flex flex-col min-h-0 bg-page border-b md:border-b-0 md:border-r border-line">
+      <div class="flex items-center gap-12 p-12 border-b border-line" aria-label="Pick the layout and the station">
+        <CardsStrip options={layoutsService.records} selected={layoutID} keyId="ID" keyName="Name" isGrayBackground
+          css="min-w-0" onSelect={(layoutOption) => { layoutID = layoutOption.ID }} />
         {#if (layout?.Stations || []).length > 1}
-          <OptionsStrip options={stationOptions} selected={stationID} onSelect={(option) => { stationID = option[0] as number }} />
+          <SelectBox options={stationOptions} selected={stationID} keyId="ID" keyName="Name" label="Station|Estación"
+            css="ml-auto w-220 shrink-0" onChange={(station) => { stationID = station?.ID ?? STATIONS_ALL }} />
         {/if}
       </div>
       <div class="flex-1 min-h-0 overflow-auto flex flex-col gap-8 p-12" aria-label="Tickets to prepare, the longest-waiting first">
@@ -205,7 +207,7 @@
       </div>
     </div>
 
-    <div class="md:w-1/2 min-h-0 overflow-auto p-12 flex flex-col gap-12" aria-label="The selected ticket's products">
+    <div class="md:w-1/2 min-h-0 overflow-auto p-12 flex flex-col gap-12 bg-surface" aria-label="The selected ticket's products">
       {#if selectedTicket && layout}
         <div class="flex flex-wrap items-center gap-12">
           <span class="h2">{tr(`Table ${selectedTicket.tableLabel}|Mesa ${selectedTicket.tableLabel}`)}</span>

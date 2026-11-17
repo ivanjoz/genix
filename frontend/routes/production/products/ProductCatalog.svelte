@@ -12,8 +12,8 @@ import Input from '#components/form/Input.svelte';
 import Layer from '#components/layers/Layer.svelte';
 import Modal from '#components/layers/Modal.svelte';
 import OptionsStrip from '#components/navigation/OptionsStrip.svelte';
-import SearchCard from '#components/cards/SearchCard.svelte'; 
 import SearchSelect from '#components/form/SearchSelect.svelte';
+import SelectMultiple from '#components/form/SelectMultiple.svelte';
 import VTable from '#components/vTable/VTable.svelte';
 import { Core, tr } from '#core/store.svelte.ts';
 import T from '#components/misc/T.svelte';
@@ -33,6 +33,7 @@ import {
     mainProductImage,
     PRODUCT_ORIGIN_MADE,
     PRODUCT_ORIGIN_OPTIONS,
+    PRODUCT_SALES_CHANNEL_OPTIONS,
     type IProduct,
     type IProductoImage
 } from "#services/production/products.svelte.ts";
@@ -809,6 +810,57 @@ import {
           options={listas.ListaRecordsMap.get(2) || []}
         />
         </div>
+        <!-- Row under the image: categories span the SKU Individual + SKU columns below, and
+             "Mostrar en" lines up with Origen. -->
+        <SelectMultiple
+          label="Categories|Categorías"
+          saveOn={productoForm}
+          save="CategoryIDs"
+          useWrap
+          css="col-span-24 md:col-span-14"
+          keyId="ID"
+          keyName="Name"
+          options={categorias}
+        />
+        <!-- Where the product is shown and sold (POS, web store, dining menu), saved as a bitmask.
+             None picked (0) means every channel, hence the "All" placeholder. -->
+        <SelectMultiple
+          label="Show in|Mostrar en"
+          saveOn={productoForm}
+          save="SalesChannels"
+          useBitmask
+          useWrap
+          hideSearch
+          placeholder="All|Todo"
+          css="col-span-24 md:col-span-10"
+          keyId="id"
+          keyName="name"
+          options={PRODUCT_SALES_CHANNEL_OPTIONS}
+        />
+        <!-- Bought or made decides the product's accounts (mercaderías or productos terminados) and
+             which list shows it: changing it moves the product to the other page. -->
+        <SearchSelect
+          label="Origin|Origen"
+          saveOn={productoForm}
+          css="col-span-12 md:col-span-9"
+          save="Origin"
+          keyId="id"
+          keyName="name"
+          options={PRODUCT_ORIGIN_OPTIONS.map((origin) => ({ id: origin.id, name: tr(origin.name) }))}
+        />
+        <Input
+          saveOn={productoForm}
+          save="WebExtraStock"
+          css="col-span-24 md:col-span-7"
+          label="Allowed overselling|Sobreventa permitida"
+          type="number"
+        />
+        <Input
+          saveOn={productoForm}
+          save="SKU"
+          css="col-span-12 md:col-span-8"
+          label="SKU"
+        />
         <div class="col-span-24 md:col-span-6 self-center">
           <CheckboxOptions
             save="Params"
@@ -817,55 +869,6 @@ import {
             options={[{ i: 1, v: "SKU Individual" }]}
             keyId="i"
             keyName="v"
-          />
-        </div>
-        <Input
-          saveOn={productoForm}
-          save="SKU"
-          css="col-span-12 md:col-span-8"
-          label="SKU"
-        />
-        <!-- Bought or made decides the product's accounts (mercaderías or productos terminados) and
-             which list shows it: changing it moves the product to the other page. -->
-        <SearchSelect
-          label="Origin|Origen"
-          saveOn={productoForm}
-          css="col-span-12 md:col-span-10"
-          save="Origin"
-          keyId="id"
-          keyName="name"
-          options={PRODUCT_ORIGIN_OPTIONS.map((origin) => ({ id: origin.id, name: tr(origin.name) }))}
-        />
-        <SearchCard
-          css="col-span-24 flex items-start my-6"
-          label="CATEGORIES|CATEGORÍAS ::"
-          options={categorias}
-          keyId="ID"
-          keyName="Name"
-          cardCss="grow"
-          inputCss="w-[35%] md:w-180"
-          bind:saveOn={productoForm}
-          save="CategoryIDs"
-          optionsCss="w-280"
-        />
-        <!-- Web store settings: the storefront adds WebExtraStock to the real stock at checkout. -->
-        <div
-          class="col-span-24 flex flex-wrap items-center gap-x-16 gap-y-10 rounded-[6px] bg-gray-100 px-12 py-8"
-          aria-label="Web store settings"
-        >
-          <div class="ff-bold h3 ml-4">Tienda Web</div>
-          <div class="self-stretch w-1 bg-line-strong"></div>
-          <Input
-            saveOn={productoForm}
-            save="WebExtraStock"
-            css="w-200"
-            label="Allowed overselling|Sobreventa permitida"
-            type="number"
-          />
-          <Checkbox
-            bind:saveOn={productoForm}
-            save="WebHidden"
-            label="Hide|Ocultar"
           />
         </div>
         <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): bought and made products alike. -->

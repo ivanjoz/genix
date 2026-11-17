@@ -7,7 +7,6 @@ import "app/core"
 var ModuleHandlers = core.AppRouterType{
 	"GET.dining-layouts":             GetDiningLayouts,
 	"POST.dining-layout":             PostDiningLayout,
-	"GET.dining-menu":                GetDiningMenu,
 	"GET.dining-table-orders":        GetDiningTableOrders,
 	"GET.dining-table-order-history": GetDiningTableOrderHistory,
 	"POST.dining-table-order-round":  PostDiningTableOrderRound,

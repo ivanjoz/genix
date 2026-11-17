@@ -1,6 +1,7 @@
 package business
 
 import (
+	"app/core"
 	logistics "app/logistics/types"
 	production "app/production/types"
 	"strings"
@@ -19,12 +20,16 @@ func TestMakeEcommerceCatalogProduct(t *testing.T) {
 		t.Fatalf("listed product: got %+v, want status 1 and 2 units of presentation 0", listed)
 	}
 
-	product.WebHidden = true
+	// Sold only in the restaurant: off the online store.
+	product.SalesChannels = core.BitmaskAdd(0, production.ProductChannelRestaurant)
 	if hidden := makeEcommerceCatalogProduct(&product, stockRows); hidden.Status != 0 || hidden.Name != "" {
-		t.Fatalf("hidden product: got %+v, want a bare removal", hidden)
+		t.Fatalf("product not sold online: got %+v, want a bare removal", hidden)
 	}
 
-	product.WebHidden = false
+	product.SalesChannels = core.BitmaskAdd(product.SalesChannels, production.ProductChannelOnlineStore)
+	if listedAgain := makeEcommerceCatalogProduct(&product, stockRows); listedAgain.Status != 1 {
+		t.Fatalf("product sold online and in the restaurant: got %+v, want it listed", listedAgain)
+	}
 	stockRows[0].PendingDeliveryOnline = 3
 	if soldOut := makeEcommerceCatalogProduct(&product, stockRows); soldOut.Status != 0 {
 		t.Fatalf("sold out product: got %+v, want a removal", soldOut)

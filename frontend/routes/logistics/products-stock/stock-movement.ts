@@ -68,6 +68,9 @@ export interface IProductStock {
   /** The row's stock in lots that are not Liberado, a {Units, Sub} pair at SubDivisor. */
   BlockedQuantity?: number
   BlockedSubQuantity?: number
+  /** Whole units sold but not delivered yet: till sales (Store) and web orders (Online). */
+  PendingDeliveryStore?: number
+  PendingDeliveryOnline?: number
   StockStatus?: number
   Created?: number
   CreatedBy?: number

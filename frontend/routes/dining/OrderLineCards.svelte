@@ -1,3 +1,16 @@
+<script lang="ts" module>
+  import { LINE_STATUS } from './dining.ts'
+
+  // A line's status label colors, also used by "Por entregar"'s table cards.
+  export const LINE_STATUS_CSS: Record<number, string> = {
+    [LINE_STATUS.CANCELLED]: 'text-fg-muted',
+    [LINE_STATUS.TO_CONFIRM]: 'bg-purple-bg text-purple-fg',
+    [LINE_STATUS.ORDERED]: 'bg-amber-bg text-amber-fg',
+    [LINE_STATUS.READY]: 'bg-teal-bg text-teal-fg',
+    [LINE_STATUS.SERVED]: 'bg-green-bg text-green-fg',
+  }
+</script>
+
 <script lang="ts">
   import type { Snippet } from 'svelte'
   import Button from '#components/buttons/Button.svelte'
@@ -6,7 +19,7 @@
   import { formatQuantity, unpackQuantityLine } from '#core/quantity.ts'
   import { formatN } from '#libs/helpers.ts'
   import {
-    LINE_STATUS, lineAmount, lineStatusLabels, orderRounds, selectionActions,
+    lineAmount, lineStatusLabels, orderRounds, selectionActions,
     type ILineAction, type ITableOrderLine,
   } from './dining.ts'
 
@@ -45,14 +58,6 @@
   // "Ready|Listo" → "Ready (2)|Listo (2)": the count goes into both languages.
   const withCount = (name: string, count: number) => name.split('|').map((part) => `${part} (${count})`).join('|')
   const formatAmount = (cents: number) => `S/ ${formatN(cents / 100, 2)}`
-
-  const LINE_STATUS_CSS: Record<number, string> = {
-    [LINE_STATUS.CANCELLED]: 'text-fg-muted',
-    [LINE_STATUS.TO_CONFIRM]: 'bg-purple-bg text-purple-fg',
-    [LINE_STATUS.ORDERED]: 'bg-amber-bg text-amber-fg',
-    [LINE_STATUS.READY]: 'bg-teal-bg text-teal-fg',
-    [LINE_STATUS.SERVED]: 'bg-green-bg text-green-fg',
-  }
 </script>
 
 <!-- min-h-0 lets a height-bound parent shrink it: the toolbar stays put and only the rounds scroll. -->

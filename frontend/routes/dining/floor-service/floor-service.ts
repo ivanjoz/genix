@@ -1,29 +1,64 @@
-import { QUANTITY_DIVISOR_NONE, packQuantityLine } from '#core/quantity.ts'
-import { LINE_STATUS, SHAPE_KIND, TABLE_ORDER_STATUS, lineAmount, tableLabelOf, type IDiningLayout, type ITableOrder, type ITableOrderLine } from '../dining.ts'
+import { QUANTITY_DIVISOR_NONE, QUANTITY_LINE_SCALE, packQuantityLine } from '#core/quantity.ts'
+import { webPresentationIDs, webSellableStock } from '#core/web-sellable.ts'
+import { CURRENCY_PEN, convertUnitPrice, normalizeCurrency } from '#routes/finance/exchange-rate/exchange-rate.ts'
+import type { IProductStock } from '#routes/logistics/products-stock/stock-movement.ts'
+import { PRODUCT_CHANNEL_RESTAURANT, isProductSoldIn } from '#core/product-channels.ts'
+import type { IProduct } from '#services/production/products.svelte.ts'
+import { LINE_STATUS, SHAPE_KIND, TABLE_ORDER_STATUS, TABLE_STATE, lineAmount, tableLabelOf, tableState, type IDiningLayout, type ITableOrder, type ITableOrderLine } from '../dining.ts'
 
 // The floor-service page's rules (docs/DINING_PLAN.md §2, §5): what a table owes, the dishes to
 // deliver and the round being composed. Pure, so they are tested without a component or a request.
 
-// One product of a layout's menu (backend diningMenuProduct), priced in soles.
+// One product of a layout's menu, priced in soles.
 export interface IDiningMenuProduct {
   ID: number
   Name: string
   Price: number
-  SubPrice?: number
-  SubDivisor?: number
-  CategoryIDs?: number[]
-  StationID: number
   Presentations: { ID?: number, Name?: string, Sellable: number }[]
+}
+
+// The layout's menu (§3), built from the delta-cached catalog and stock so it paints from IndexedDB
+// at once: the products sold in the restaurant that can be ordered now, with what the web store's
+// sellable rule leaves of each presentation on the layout's warehouse alone. A USD-priced product
+// needs penRate (the effective rate into soles); without one it cannot be ordered and is left out.
+// The server checks each round with the same rules (dining/table_orders.go), so a stale cache can
+// only get a round refused, never booked wrong.
+export function diningMenu(products: IProduct[], stockRows: IProductStock[], warehouseID: number, penRate: number): IDiningMenuProduct[] {
+  const stockRowsByProduct = new Map<number, IProductStock[]>()
+  for (const stockRow of stockRows) {
+    if (stockRow.WarehouseID !== warehouseID) continue
+    stockRowsByProduct.set(stockRow.ProductID, [...(stockRowsByProduct.get(stockRow.ProductID) || []), stockRow])
+  }
+  const menu: IDiningMenuProduct[] = []
+  for (const product of products) {
+    if (!isProductSoldIn(product, PRODUCT_CHANNEL_RESTAURANT)) continue
+    const productCurrency = normalizeCurrency(product.CurrencyID)
+    if (productCurrency !== CURRENCY_PEN && !penRate) continue
+    const presentationIDs = webPresentationIDs(product)
+    const sellableByPresentation = webSellableStock(stockRowsByProduct.get(product.ID) || [], presentationIDs, product.WebExtraStock)
+    // Only what can be ordered now: a round of it would be refused.
+    if (!presentationIDs.some((presentationID) => sellableByPresentation.get(presentationID)! > 0)) continue
+    menu.push({
+      ID: product.ID, Name: product.Name,
+      Price: convertUnitPrice(product.FinalPrice, productCurrency, CURRENCY_PEN, penRate),
+      Presentations: presentationIDs.map((presentationID) => ({
+        ID: presentationID, Sellable: sellableByPresentation.get(presentationID)!,
+        Name: product.Presentations?.find((presentation) => presentation.id === presentationID)?.nm || '',
+      })),
+    })
+  }
+  return menu
 }
 
 // What the table owes so far: every line not cancelled, at the price it was ordered at.
 export const orderTotal = (order: ITableOrder) =>
   order.Lines.filter((line) => line.Status !== LINE_STATUS.CANCELLED).reduce((total, line) => total + lineAmount(line), 0)
 
-export interface IBillLine { key: string, ProductID: number, Quantity: number, SubDivisor: number, Amount: number }
+export interface IBillLine { key: string, ProductID: number, Quantity: number, SubDivisor: number, Price: number, SubPrice: number }
 
-// The bill as "Pagar" lists it, PoS style: one row per product, presentation and price across every
-// round, cancelled lines left out. Packed quantities add up (units × scale + sub).
+// The bill as "Pagar" lists it, PoS style: one line per product, presentation and price across every
+// round, cancelled lines left out. Packed quantities add up (units × scale + sub). Its amounts come
+// from the pack engine (packGroupRows), which prices it as the charge will.
 export function billLines(order: ITableOrder): IBillLine[] {
   const billLineByKey = new Map<string, IBillLine>()
   for (const line of order.Lines.filter((candidate) => candidate.Status !== LINE_STATUS.CANCELLED)) {
@@ -31,9 +66,11 @@ export function billLines(order: ITableOrder): IBillLine[] {
     const billLine = billLineByKey.get(key)
     if (billLine) {
       billLine.Quantity += line.Quantity
-      billLine.Amount += lineAmount(line)
     } else {
-      billLineByKey.set(key, { key, ProductID: line.ProductID, Quantity: line.Quantity, SubDivisor: line.SubDivisor || 1, Amount: lineAmount(line) })
+      billLineByKey.set(key, {
+        key, ProductID: line.ProductID, Quantity: line.Quantity, SubDivisor: line.SubDivisor || 1,
+        Price: line.Price, SubPrice: line.SubPrice || 0,
+      })
     }
   }
   return [...billLineByKey.values()]
@@ -45,28 +82,32 @@ export const tableOrderStatusLabels: Record<number, string> = {
   [TABLE_ORDER_STATUS.CHARGED]: 'Charged|Cobrado',
 }
 
-export interface IReadyItem { orderID: number, tableLabel: string, line: ITableOrderLine }
-export interface IPickupGroup { stationID: number, stationName: string, items: IReadyItem[] }
+// A dish the table is still owed: to confirm (QR), in the kitchen, or ready at the pickup point.
+const UNSERVED_LINE_STATUSES: number[] = [LINE_STATUS.TO_CONFIRM, LINE_STATUS.ORDERED, LINE_STATUS.READY]
 
-// "Listos para recoger" (§5): the ready lines of every table, grouped by the station whose pickup
-// point they wait at, the longest-waiting first in each group and across groups.
-export function readyToPickupGroups(orders: ITableOrder[], layout: IDiningLayout): IPickupGroup[] {
-  const groupByStation = new Map<number, IPickupGroup>()
+export interface ITableToServe {
+  order: ITableOrder, tableLabel: string, unservedLines: ITableOrderLine[], waitTicks: number
+  // The map's "Retrasado" state (§9), so the card and the panel's badge agree.
+  isLate: boolean
+}
+
+// "Por entregar" (§5): every table still owed a dish, the longest-waiting first. A table waits since
+// the oldest of its dishes in the kitchen or ready was ordered: a ready dish keeps counting until it
+// is served. A QR line not confirmed yet has no OrderedAt, so a table with only those waits 0.
+// Its dishes come oldest first, the ones never ordered last.
+export function tablesToServe(orders: ITableOrder[], layout: IDiningLayout, nowTime: number): ITableToServe[] {
+  const tables: ITableToServe[] = []
   for (const order of orders) {
-    for (const line of order.Lines.filter((candidate) => candidate.Status === LINE_STATUS.READY)) {
-      let group = groupByStation.get(line.StationID)
-      if (!group) {
-        const stationName = (layout.Stations || []).find((station) => station.ID === line.StationID)?.Name || ''
-        group = { stationID: line.StationID, stationName, items: [] }
-        groupByStation.set(line.StationID, group)
-      }
-      group.items.push({ orderID: order.ID, tableLabel: tableLabelOf(layout, order.TableShapeID), line })
-    }
+    const unservedLines = order.Lines.filter((line) => UNSERVED_LINE_STATUSES.includes(line.Status))
+    if (!unservedLines.length) continue
+    unservedLines.sort((left, right) => (left.OrderedAt || nowTime) - (right.OrderedAt || nowTime))
+    tables.push({
+      order, tableLabel: tableLabelOf(layout, order.TableShapeID), unservedLines,
+      waitTicks: nowTime - (unservedLines[0].OrderedAt || nowTime),
+      isLate: tableState(order, layout, nowTime) === TABLE_STATE.LATE,
+    })
   }
-  const groups = [...groupByStation.values()]
-  const readyAt = (item: IReadyItem) => item.line.ReadyAt || 0
-  for (const group of groups) group.items.sort((left, right) => readyAt(left) - readyAt(right))
-  return groups.sort((left, right) => readyAt(left.items[0]) - readyAt(right.items[0]))
+  return tables.sort((left, right) => right.waitTicks - left.waitTicks || left.tableLabel.localeCompare(right.tableLabel))
 }
 
 export const isTableShape = (kind: number) => kind === SHAPE_KIND.TABLE
@@ -121,7 +162,17 @@ export function addToRoundDraft(draft: IRoundDraftLine[], menu: IDiningMenuProdu
   }]
 }
 
-export const roundDraftTotal = (draft: IRoundDraftLine[]) => draft.reduce((total, line) => total + line.Units * line.Price, 0)
+// The draft as the pack engine reads it: whole units, packed (#core/quantity.ts).
+export const roundPackLines = (draft: IRoundDraftLine[]) =>
+  draft.map((line) => ({ ...line, Quantity: line.Units * QUANTITY_LINE_SCALE }))
+
+// The table splits a line the packs took part of, so a row edits only the units it shows: the rest
+// of its line stays. An edit keeps the line at 0 units; a delete drops it once nothing is left.
+export const setRoundRowUnits = (draft: IRoundDraftLine[], lineKey: number, shownUnits: number, newUnits: number) =>
+  draft.map((line) => line.key === lineKey ? { ...line, Units: Math.max(0, line.Units - shownUnits + newUnits) } : line)
+
+export const removeRoundRowUnits = (draft: IRoundDraftLine[], lineKey: number, shownUnits: number) =>
+  setRoundRowUnits(draft, lineKey, shownUnits, 0).filter((line) => line.key !== lineKey || line.Units > 0)
 
 // The request of a round: whole units (the floor sells dishes, not fractions), each line's note.
 export function makeRoundRequest(layoutID: number, tableShapeID: number, guests: number, draft: IRoundDraftLine[]) {

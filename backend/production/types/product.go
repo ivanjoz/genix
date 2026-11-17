@@ -115,9 +115,7 @@ type Product struct {
 	// subtracted from the stock (ProductStock.PendingDelivery*), so they use the margin up; deliveries
 	// still need the physical stock, so oversold orders wait for it to arrive.
 	WebExtraStock int32 `cb:"45"`
-	// WebHidden keeps the product out of the web store: the catalog ships it as removed and
-	// checkout refuses it.
-	WebHidden bool `cb:"46"`
+	// cb 46 is retired: it held WebHidden, replaced by SalesChannels. Never reuse it.
 	// cb 47 is retired: it held the recipe as one nested struct (ProductProduction), and rows saved
 	// while testing still carry that blob. Never reuse it.
 
@@ -148,6 +146,46 @@ type Product struct {
 	TracksLots         bool  `cb:"53"`
 	ShelfLifeDays      int16 `cb:"54"`
 	QualityHoldOnEntry bool  `cb:"55"`
+
+	// SalesChannels ("Mostrar en") is where the product is shown and sold, as a bitmask of
+	// ProductChannel* IDs (core.BitmaskHas). 0 means every channel. A channel the product is not in
+	// leaves it off that channel's list, and the channel's sale refuses it. Read it via IsSoldIn.
+	SalesChannels int8 `cb:"56"`
+}
+
+// Product.SalesChannels option IDs: ID n is bit n-1 of the mask.
+const (
+	ProductChannelPhysicalStore int8 = 1 // The point of sale (sale_order_create).
+	ProductChannelOnlineStore   int8 = 2 // The web store: catalog, product detail and checkout.
+	ProductChannelRestaurant    int8 = 3 // The dining menu and the table charge.
+)
+
+type ProductSalesChannelOption struct {
+	ID   int8   `cb:"1"`
+	Name string `cb:"2"`
+}
+
+// ProductSalesChannelOptions is what the product form's "Mostrar en" offers, via the //CATALOG:
+// marker in frontend/services/production/products.svelte.ts.
+var ProductSalesChannelOptions = []ProductSalesChannelOption{
+	{ID: ProductChannelPhysicalStore, Name: "Physical store|Tienda Física"},
+	{ID: ProductChannelOnlineStore, Name: "Online store|Tienda Online"},
+	{ID: ProductChannelRestaurant, Name: "Restaurant|Restaurante"},
+}
+
+// IsValidSalesChannelsMask reports whether mask only sets bits of known channels.
+func IsValidSalesChannelsMask(mask int8) bool {
+	var knownChannels int8
+	for _, option := range ProductSalesChannelOptions {
+		knownChannels = core.BitmaskAdd(knownChannels, option.ID)
+	}
+	return mask&^knownChannels == 0
+}
+
+// IsSoldIn reports whether the product is shown and sold in the channel: no channel picked (0)
+// means all of them.
+func (e *Product) IsSoldIn(channel int8) bool {
+	return e.SalesChannels == 0 || core.BitmaskHas(e.SalesChannels, channel)
 }
 
 // Product.Origin values.
@@ -213,7 +251,6 @@ type ProductTable struct {
 	AccountCode                db.Col[*ProductTable, int32]
 	Origin                     db.Col[*ProductTable, int8]
 	WebExtraStock              db.Col[*ProductTable, int32]
-	WebHidden                  db.Col[*ProductTable, bool]
 	ProductionYieldPortions    db.Col[*ProductTable, int16]
 	ProductionSupplies         db.Col[*ProductTable, []ProductionSupply]
 	ProductionExtraCostPerUnit db.Col[*ProductTable, int32]
@@ -222,6 +259,7 @@ type ProductTable struct {
 	TracksLots                 db.Col[*ProductTable, bool]
 	ShelfLifeDays              db.Col[*ProductTable, int16]
 	QualityHoldOnEntry         db.Col[*ProductTable, bool]
+	SalesChannels              db.Col[*ProductTable, int8]
 }
 
 func (e *Product) FillCategoriesWithStock() {

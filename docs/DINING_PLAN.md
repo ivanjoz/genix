@@ -242,7 +242,9 @@ disagree.
 In the product form, "Sobreventa permitida" moves out of the "Tienda Web" box; its label stays.
 
 **Endpoints:**
-- `GET dining-menu?layout-id` (staff);
+- Staff: no endpoint. The floor-service page builds the menu in the browser (`floor-service.ts`
+  `diningMenu`) from the delta-cached `products` and `products-stock` routes and the exchange rate, so
+  it paints from IndexedDB at once. Round, charge and annul refresh `products-stock`;
 - `GET p-dining-menu?t=<token>` (QR page). It answers the products, categories and the sellable units
   per presentation. It is small (one warehouse), so it has no file snapshot. It can get one later,
   as the e-commerce catalog did.
@@ -318,8 +320,10 @@ was sold, so nothing else moves.
   ("Listo (2)"), each applied only to the cards it fits, in one request. Served and cancelled cards
   cannot be selected.
 - **To deliver:** the floor-service page ("Mesas") has a "Por entregar" tab next to "Mapa", with
-  the count of dishes waiting. It lists the status-3 lines of every table, grouped by the pickup
-  point of their station. One tap marks them served.
+  the count of tables owed a dish. It splits the page: on the left, a card per table with lines in
+  status 1–3, the longest-waiting first (since the oldest `OrderedAt` among its status 2–3 lines),
+  previewing up to 4 of them; on the right, fixed (`LayerStatic`), the same table panel the map
+  opens, on the tapped card or else the top one.
 - **Two processes or one:** a restaurant with a separate kitchen gives its tablet only "Cocina";
   waiters only "Atención de Mesas". A restaurant where one person does both gives both accesses —
   and a waiter can still mark lines ready from the table panel.
@@ -471,7 +475,7 @@ routes = "dining/floor-service, dining/kitchen-display, dining/floor-layout, din
 | Route | Content |
 |---|---|
 | `routes/dining/floor-layout/` | **Editor.** `LayoutCanvas.svelte` in edit mode: an SVG grid with pointer events (pointerdown/move/up, pointer capture), snap to cells. **Tools:** select (click, shift-click, rubber band), move (drag, arrow keys = 1 cell), resize handles, table (square/round, seats), rectangle, line (wall/divider on grid points), label, station mark, pickup mark. **Edit:** duplicate (Ctrl+D or button, offset 1 cell), delete, rotate 90°, undo/redo (snapshot stack), zoom 8/12/16 px. **Side panel:** the selected shape's properties; the layout's settings (name, warehouse, QR confirmation, thresholds); stations with their routing (products and categories, editable VTable). Geometry in `floor-layout.ts` (snap, hit-test, bounds, overlap warning, duplicate offset, shape-ID allocation), tested. |
-| `routes/dining/floor-service/` | **"Mesas"**, header tabs "Mapa" / "Por entregar". Mapa: `LayoutCanvas` read-only, colored by §9. A table opens a side `Layer` with its order as line cards (§5), wait times, add a round (product picker over `dining-menu`), charge (Cobrar mesa). Por entregar: the ready lines to carry (§5). |
+| `routes/dining/floor-service/` | **"Mesas"**, header tabs "Mapa" / "Por entregar". Mapa: `LayoutCanvas` read-only, colored by §9. A table opens a side `Layer` with its order as line cards (§5), wait times, add a round (product picker over the menu built from the delta caches), charge (Cobrar mesa). Por entregar: the tables owed dishes, longest wait first, beside a fixed panel of the picked one (§5). |
 | `routes/dining/kitchen-display/` | **"Pedidos"**, §5. Split screen, keyboard-driven, line cards; ticket and navigation rules in `kitchen-display.ts`, tested. |
 | `routes/dining/OrderLineCards.svelte` | The line cards with multi-select and the selection's buttons, shared by both pages. |
 | `routes/dining/table-qr/` | §7. |
@@ -493,7 +497,6 @@ Following the `online-orders` pattern:
 | `POST dining-layout` | Diseño de Salones | create/update one layout (§1.2) |
 | `POST dining-layout-qr-regenerate` | Diseño de Salones | bump `QRVersion` |
 | `GET dining-table-qr-tokens?layout-id` | Diseño de Salones | the token of each table |
-| `GET dining-menu?layout-id` | staff | §3 |
 | `GET dining-table-orders?layout-id` | staff | delta of the layout's open orders |
 | `GET dining-table-order-history?layout-id&table-shape-id` | staff | the table's orders since yesterday's midnight (any status), newest first; served by the `(LayoutID, TableShapeID, Created)` packed range view |
 | `POST dining-table-order-round` | Atención de Mesas | open if none, add a round (validated by §3, reserves) |

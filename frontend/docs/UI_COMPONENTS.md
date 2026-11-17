@@ -246,6 +246,27 @@ Autocomplete dropdown. Use instead of native `<select>` as it provides autocompl
 
 ---
 
+### SelectMultiple
+
+`#components/form/SelectMultiple.svelte`. A labelled field (same chrome as SelectBox) that holds several options, saved as an array of IDs. The selected options show as chips inside the field; clicking opens the same searchable layer as the VTable's `CellMultiSelect` (`form/MultiSelectLayer.svelte`): a click selects an option, a click on a selected one deselects it, and either closes the layer.
+
+**Props:**
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `options` | `E[]` | Yes | Array of option objects |
+| `keyId` / `keyName` | `keyof E` | Yes | Option id (saved in the array) / display name |
+| `saveOn` / `save` | `T` / `keyof T` | No | Field of the form holding the array of IDs |
+| `onChange` | `(selection: (string \| number)[] \| number) => void` | No | Called with what is saved: the id array, or the mask with `useBitmask` |
+| `useBitmask` | `boolean` | No | Saves one number instead of an array: option id n is bit n-1 (id 1 = 1, id 2 = 2, id 3 = 4…). Ids must be integers 1–31 so the mask stays a positive int32; other options are hidden and logged with `console.error` |
+| `label`, `labelStyle`, `labelPosition`, `placeholder` | | No | Same as SelectBox |
+| `useWrap` | `boolean` | No | Chips wrap onto new lines and the field grows; without it the field stays one line and extra chips are cut off |
+| `hideSearch` | `boolean` | No | No filter box in the layer, for lists of 2–3 options |
+| `columns` | `1 \| 2 \| 3` | No | Options per row in the layer (default 1); the layer widens to 420 / 540px |
+| `css` | `string` | No | Classes of the wrapper (grid span, width) |
+| `disabled` | `boolean` | No | Shows the chips, does not open |
+
+---
+
 ### SearchCard
 
 Multi-select input that renders selected options as removable cards. The component displays an input with a space below where selected options appear as cards. The options are saved in the form as an array of IDs.

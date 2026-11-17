@@ -1,6 +1,8 @@
 package types
 
 import (
+	"fmt"
+
 	"app/core"
 	"app/db"
 	production "app/production/types"
@@ -21,7 +23,7 @@ func ReadSaleProducts(companyID int32, lines []SaleOrderLine) (map[int32]product
 	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.WebHidden, query.Presentations, query.Origin, query.CategoryIDs).
+		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.SalesChannels, query.Presentations, query.Origin, query.CategoryIDs).
 		CompanyID.Equals(companyID).
 		ID.In(productIDs.Values...)
 	if err := query.Exec(); err != nil {
@@ -31,6 +33,18 @@ func ReadSaleProducts(companyID int32, lines []SaleOrderLine) (map[int32]product
 		productByID[product.ID] = product
 	}
 	return productByID, nil
+}
+
+// ValidateSaleProductsChannel refuses a sale holding a product not sold in the channel it is made
+// from (Product.SalesChannels): the channel's list leaves it out, but a request can still name it.
+func ValidateSaleProductsChannel(lines []SaleOrderLine, productByID map[int32]production.Product, channel int8) error {
+	for _, line := range lines {
+		product, found := productByID[line.ProductID]
+		if found && !product.IsSoldIn(channel) {
+			return core.Err(fmt.Sprintf(`El producto "%v" no se vende en este canal (ver "Mostrar en" del producto).`, product.Name))
+		}
+	}
+	return nil
 }
 
 // ReadActiveProductPacks are the company's active packs, read once per sale for ApplySalePacks.

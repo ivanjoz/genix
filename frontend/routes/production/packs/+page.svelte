@@ -12,7 +12,7 @@
   import Page from '#domain/Page.svelte'
   import { SharedListsService } from '#services/business/shared-lists.svelte.ts'
   import { ProductsService } from '#services/production/products.svelte.ts'
-  import { PACK_PRICE_TYPE, PACK_ROUNDING, type IProductPack } from '#services/production/product-packs.ts'
+  import { PACK_PRICE_TYPE, PACK_ROUNDING, type IProductPack } from '#core/product-packs.ts'
   import { ProductPacksService, postProductPack } from '#services/production/product-packs.svelte.ts'
   import {
     describePackComponents, describePackPrice, findPackError, makeEmptyPack, packComponentRowsOf, packComponentsOf,

@@ -1,15 +1,16 @@
 <script lang="ts">
   import { tr } from '#core/store.svelte.ts'
   import { formatN, highlString } from '#libs/helpers.ts'
-  import { addToRoundDraft, filterMenuPickItems, menuPickItems } from './floor-service.ts'
+  import { addToRoundDraft, filterMenuPickItems, menuPickItems, type IDiningMenuProduct } from './floor-service.ts'
   import type { RoundDraftState } from './floor-service.svelte.ts'
 
   // The layout's menu beside "Nuevo pedido": every presentation with units left, in one list to
   // scroll; a click adds one unit to the round. The optional filter narrows it by words of the name.
-  let { round }: { round: RoundDraftState } = $props()
+  // isLoading: the caches have not answered yet (not even IndexedDB).
+  let { round, menu, isLoading }: { round: RoundDraftState, menu: IDiningMenuProduct[], isLoading: boolean } = $props()
 
   let filterText = $state('')
-  const pickItems = $derived(menuPickItems(round.menu))
+  const pickItems = $derived(menuPickItems(menu))
   const shownItems = $derived(filterMenuPickItems(pickItems, filterText))
   const filterWords = $derived(filterText.toLowerCase().split(' ').filter(Boolean))
 </script>
@@ -26,7 +27,7 @@
     {#each shownItems as item (item.ID)}
       <button type="button" aria-label="Add one {item.Name} to the round"
         class="flex items-center gap-8 px-8 py-6 rounded-md bg-surface text-left border border-line hover:border-blue-solid hover:bg-blue-bg"
-        onclick={() => { round.draft = addToRoundDraft(round.draft, round.menu, item.ID) }}>
+        onclick={() => { round.draft = addToRoundDraft(round.draft, menu, item.ID) }}>
         <span class="flex-1 leading-tight">{#each highlString(item.Name, filterWords) as part}{#if part.highl}<span class="bg-yellow-bg-strong ff-bold">{part.text}</span>{:else}{part.text}{/if}{/each}</span>
         <span class="shrink-0 flex flex-col items-end leading-tight">
           <span class="ff-mono">{formatN(item.Price / 100, 2)}</span>
@@ -35,7 +36,7 @@
       </button>
     {:else}
       <div class="p-12 rounded-md bg-surface-soft text-fg-muted">
-        {round.isMenuLoading ? tr('Loading the menu...|Cargando la carta...') : tr('No product to order.|Ningún producto para pedir.')}
+        {isLoading ?tr('Loading the menu...|Cargando la carta...') : tr('No product to order.|Ningún producto para pedir.')}
       </div>
     {/each}
   </div>

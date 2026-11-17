@@ -1,4 +1,4 @@
-import { PACK_PRICE_TYPE, PACK_ROUNDING, type IProductPack, type IProductPackComponent } from '#services/production/product-packs.ts'
+import { PACK_PRICE_TYPE, PACK_ROUNDING, type IProductPack, type IProductPackComponent } from '#core/product-packs.ts'
 
 // The rules of the packs page (docs/PACKS_PLAN.md §2): the editable component rows, what the form
 // can refuse before the server does, and how a pack reads in the list.

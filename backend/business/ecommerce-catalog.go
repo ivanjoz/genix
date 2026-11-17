@@ -162,14 +162,14 @@ func readOnlineWarehouseIDs(companyID int32) ([]int32, error) {
 // selectCatalogProductColumns is the projection of every product read here.
 func selectCatalogProductColumns(query *production.ProductTable) {
 	query.Select(query.ID, query.Name, query.CategoryIDs, query.BrandID, query.Price, query.FinalPrice, query.ImageMain,
-		query.Presentations, query.WebExtraStock, query.WebHidden, query.Status, query.Updated)
+		query.Presentations, query.WebExtraStock, query.SalesChannels, query.Status, query.Updated)
 }
 
 // makeEcommerceCatalogProduct applies the sellable rule to one product: Status 0 when the store cannot
-// sell it (inactive, a supply, hidden, nothing sellable in any presentation).
+// sell it (inactive, a supply, not sold online, nothing sellable in any presentation).
 func makeEcommerceCatalogProduct(product *production.Product, stockRows []logistics.ProductStock) ecommerceCatalogProduct {
 	catalogProduct := ecommerceCatalogProduct{ID: product.ID}
-	if product.Status != production.ProductStatusActive || product.WebHidden {
+	if product.Status != production.ProductStatusActive || !product.IsSoldIn(production.ProductChannelOnlineStore) {
 		return catalogProduct
 	}
 	presentationIDs := product.WebPresentationIDs()

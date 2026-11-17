@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PACK_PRICE_TYPE, PACK_ROUNDING, type IProductPack } from '#services/production/product-packs.ts'
+import { PACK_PRICE_TYPE, PACK_ROUNDING, type IProductPack } from '#core/product-packs.ts'
 import {
   describePackComponents, describePackPrice, findPackError, makeEmptyPack, packComponentRowsOf, packComponentsOf,
 } from './packs.ts'

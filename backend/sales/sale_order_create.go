@@ -51,6 +51,9 @@ func createSaleOrder(req *core.HandlerArgs, sale types.SaleOrder) core.HandlerRe
 	if err != nil {
 		return req.MakeErr(err)
 	}
+	if err := types.ValidateSaleProductsChannel(sale.Lines, saleProducts, production.ProductChannelPhysicalStore); err != nil {
+		return req.MakeErr(err)
+	}
 
 	// Runs on the total the catalog just resolved, and before the client is created: a sale that
 	// cannot be issued must not leave a client row behind.

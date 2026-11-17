@@ -48,6 +48,14 @@ export const PRODUCT_ORIGIN_OPTIONS: { id: number, name: string }[] = [
   { id: 2, name: 'Made by the company (finished good)|Fabricado (producto terminado)' },
 ]
 
+// "Mostrar en" options: IDs are the PRODUCT_CHANNEL_* of #core/product-channels.ts.
+//CATALOG:production.ProductSalesChannelOptions
+export const PRODUCT_SALES_CHANNEL_OPTIONS: { id: number, name: string }[] = [
+  { id: 1, name: 'Physical store|Tienda Física' },
+  { id: 2, name: 'Online store|Tienda Online' },
+  { id: 3, name: 'Restaurant|Restaurante' },
+]
+
 // IProductionSupply mirrors production.ProductionSupply, one line of IProduct.ProductionSupplies.
 // Quantity is packed (units*1000 + sub) in SubDivisor, the supply's sub-unit divisor (1 when it has none).
 export interface IProductionSupply {
@@ -108,7 +116,7 @@ export interface IProduct {
   AccountCode: number  /* a supply's default PCGE account; 0 on a product */
   Origin: number       /* 1 bought (merchandise) · 2 made (finished good); on a supply 0, or 2 when semi-finished */
   WebExtraStock: number /* units the web store may sell beyond real stock ("Sobreventa permitida") */
-  WebHidden: boolean    /* kept out of the web store catalog and checkout */
+  SalesChannels: number /* "Mostrar en": bitmask of PRODUCT_CHANNEL_* IDs; 0 = every channel */
   /* recipe and cost of a made product (docs/PRODUCTION_PLAN.md §2); zero otherwise. Costs are PEN cents */
   ProductionYieldPortions: number          /* units of the product the recipe makes */
   ProductionSupplies: IProductionSupply[]  /* supplies for ProductionYieldPortions units */

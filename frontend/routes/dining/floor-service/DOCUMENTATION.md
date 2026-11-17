@@ -132,15 +132,16 @@ Seat customers at a table and send what they order to the kitchen, now or as mor
 ### Where to find it (Dónde encontrarlo)
 
 Click a table on the map: a side panel titled `Mesa <nombre>` opens. On a free table the panel shows
-the round form directly; on a table with an order, press **Nuevo pedido** (New round). The form has
-**Agregar producto** (product search), **Comensales** (guests, only when opening the table), the
-lines table with **Producto**, **Cant.**, **Nota**, **Subtotal** and a delete button, the round
-**Total**, **Cancelar** and **Enviar a cocina** (Send to kitchen).
+the round form directly; on a table with an order, press **Nuevo pedido** (New round). The **Carta**
+(menu) list opens to the left of the panel: a click adds one unit. The form's top row has
+**Comensales** (guests, only when opening the table), the round **Total**, **Cancelar** and
+**Enviar a cocina** (Send to kitchen); below it, the lines table with **Producto**, **Cant.**,
+**Nota**, **Subtotal** and a delete button.
 
 ### Required information and prerequisites (Requisitos previos)
 
-- The product search lists only what can be ordered now: active products not hidden from the web
-  store, with units available in the layout's warehouse, each presentation shown with the units left
+- The product search lists only what can be ordered now: active products shown in **Restaurante**
+  (the product's **Mostrar en**; empty means every channel), with units available in the layout's warehouse, each presentation shown with the units left
   in parentheses, e.g. `Chicha · Vaso (3)`. A product with nothing available is not listed.
 - Picking the same product again adds one unit to its line, unless that line already has a note;
   then a new line is added, so "1 sin cebolla" and "1 normal" stay separate.
@@ -184,7 +185,7 @@ the warehouse, so the till and the web store see that much less available.
 - `¿Cómo abro una mesa?` Click it on the map, add the products and press **Enviar a cocina**.
 - `¿Cómo agrego más platos a una mesa?` Open the table and press **Nuevo pedido**.
 - `¿Por qué no aparece un producto en la búsqueda?` It has no units left in the layout's warehouse,
-  is inactive, or is hidden from the web store.
+  is inactive, or its **Mostrar en** does not include **Restaurante**.
 - `¿Cómo pongo "sin cebolla"?` Write it in the **Nota** of the line.
 - `¿Por qué el precio está en soles si el producto está en dólares?` Table orders are always in
   soles, converted at the company's latest sell exchange rate.
@@ -209,9 +210,11 @@ In the table's panel, every round lists its lines with their state and buttons:
 - **Por confirmar**: **Confirmar** and **Anular**.
 - **Servido** and **Anulado**: no actions.
 
-Above the map, the **Listos para recoger** (Ready to pick up) strip lists every ready dish of the
-layout, grouped by station, the longest-waiting first, each with its table, units, product, minutes
-waiting and a **Servido** button.
+The **Por entregar** (To deliver) tab, next to **Mapa**, splits the page in two. On the left, one
+card per table still owed a dish (por confirmar, en cocina or listo), the longest-waiting first:
+its name, the minutes it has waited and up to 4 of its pending dishes with their state (`+N más`
+counts the rest). On the right, fixed, the same panel the map opens: the longest-waiting table opens
+by itself, and clicking a card opens that one. The tab's title counts the tables listed.
 
 ### Required information and prerequisites (Requisitos previos)
 
@@ -243,12 +246,14 @@ An open order with the line in the right state.
 ### Common questions and vocabulary (Preguntas y vocabulario)
 
 - `¿Cómo marco que un plato ya salió?` **Listo** on its line, then **Servido** when it reaches the
-  table (or **Servido** in the "Listos para recoger" strip).
+  table.
+- `¿Qué mesa atiendo primero?` Open **Por entregar**: the table at the top has waited the longest. A
+  table waits from when its oldest dish still in the kitchen or ready was ordered.
 - `Marqué listo por error.` Press **Devolver a cocina** within 2 minutes.
 - `¿Puedo anular un plato que ya se sirvió?` No, only before it is ready.
 - `¿Cuánto lleva consumido la mesa?` The total at the top right of the table's panel.
 - Search terms: `plato listo`, `servir plato`, `anular plato`, `devolver a cocina`, `pase`, `recojo`,
-  `listos para recoger`, `cuenta de la mesa`, `consumo`, `total de la mesa`.
+  `listos para recoger`, `por entregar`, `mesas en espera`, `cuenta de la mesa`, `consumo`, `total de la mesa`.
 
 <!-- DOC-ID: capability.charge-table -->
 ## Charge the table (Cobrar mesa)
@@ -382,7 +387,7 @@ An annulled order cannot be reopened; open the table again with a new round.
 - **"La mesa no existe en el salón." or "El salón no existe o fue eliminado."**: the layout was
   changed in **Diseño de salones**; reload the page.
 - **A product is missing from the search:** it has no units available in the layout's warehouse, is
-  inactive or is hidden from the web store.
+  inactive or its **Mostrar en** does not include **Restaurante**.
 - **The map does not show another waiter's change:** it reloads every 15 seconds while the page is
   visible.
 - **No "Cobrar mesa" button:** the profile lacks the sub-access **Cobrar Mesa** of **Atención de

@@ -138,8 +138,8 @@ type ProductDetail struct {
 // GetProductDetail is the web store's product detail: GET.p-product-detail?company-id=&cc=, a
 // versioned by-IDs route over the products table, so the browser keeps each detail in IndexedDB and
 // re-downloads it only after the product is written. A product the store does not sell (inactive, a
-// supply, WebHidden) goes as ss 0 with no body; the storefront disables tombstones on this route,
-// because unhiding the product must bring it back.
+// supply, not sold online) goes as ss 0 with no body; the storefront disables tombstones on this route,
+// because putting the product back on the online store must bring it back.
 func GetProductDetail(req *core.HandlerArgs) core.HandlerResponse {
 	cachedIDsRequest, err := req.GetCachedIDsRequest(core.Coalesce(req.GetQueryInt("cid"), req.GetQueryInt("company-id")))
 	if err != nil {
@@ -155,7 +155,7 @@ func GetProductDetail(req *core.HandlerArgs) core.HandlerResponse {
 		detailPartitions[i].Records = make([]ProductDetail, len(partition.Records))
 		for j, product := range partition.Records {
 			detail := ProductDetail{ID: product.ID, Updated: product.Updated}
-			if product.Status == types.ProductStatusActive && !product.WebHidden {
+			if product.Status == types.ProductStatusActive && product.IsSoldIn(types.ProductChannelOnlineStore) {
 				detail.ContentHTML, detail.Status = product.ContentHTML, 1
 				detail.ImageIDs, detail.ImageDescriptions = product.ImageIDs, product.ImageDescriptions
 			}
@@ -196,6 +196,9 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		if e.ShelfLifeDays < 0 {
 			return req.MakeErr(fmt.Sprintf(`La vida útil del producto "%s" no puede ser negativa.`, e.Name))
+		}
+		if !types.IsValidSalesChannelsMask(e.SalesChannels) {
+			return req.MakeErr(fmt.Sprintf(`Los canales de venta ("Mostrar en") del producto "%s" son inválidos.`, e.Name))
 		}
 		e.SelfParse()
 		if previousProduct, duplicate := nameHashToName[e.NameHash]; duplicate {

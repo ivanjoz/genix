@@ -4,10 +4,12 @@
   import Button from '#components/buttons/Button.svelte'
   import Input from '#components/form/Input.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
-  import VTable from '#components/vTable/VTable.svelte'
+  import TableGrid from '#components/vTable/TableGrid.svelte'
   import type { ITableColumn } from '#components/vTable/types.ts'
+  import type { IProductPack } from '#core/product-packs.ts'
   import { DOC_TYPE_BOLETA, DOC_TYPE_FACTURA, docTypeName } from '#core/sunat-doc-type.ts'
   import { formatQuantity, unpackQuantityLine } from '#core/quantity.ts'
+  import { packGroupRows, packGroupRowsTotal, type IPackGroupRow } from '#core/sale-packs.ts'
   import { tr } from '#core/store.svelte.ts'
   import { formatN } from '#libs/helpers.ts'
   import { EmpresaParametrosService } from '#routes/company/configuration/empresas.svelte.ts'
@@ -16,15 +18,19 @@
   import { TILL_IDENTITY_DOC_OPTIONS, deriveIdentityDocType } from '#services/crm/identity-doc.ts'
   import type { ITableOrder } from '../dining.ts'
   import { postTableOrderAnnul, postTableOrderCharge } from './floor-service.svelte.ts'
-  import { billLines, orderTotal, type IBillLine } from './floor-service.ts'
+  import { billLines, type IBillLine } from './floor-service.ts'
+  import PackHeaderRow, { PACK_HEADER_ROW_HEIGHT } from './PackHeaderRow.svelte'
   import {
     CLIENT_MODE, buildChargeRequest, buildTableAnnulRequest, chargeBlocker, chargeCashBankOptions, newTableChargeForm,
   } from './table-charge.ts'
 
-  // The "Pagar" tab: the bill listed PoS style, charged into a sale ("Cobrar mesa"), or annulled.
-  let { order, productName, onDone }: {
+  // The "Pagar" tab: the bill listed PoS style, charged into a sale ("Cobrar mesa"), or annulled. The
+  // packs the whole bill fills show as a header row over their products, priced as the charge will.
+  let { order, productName, productCategoryIDs, packs, onDone }: {
     order: ITableOrder
     productName: (productID: number) => string
+    productCategoryIDs: (productID: number) => number[]
+    packs: IProductPack[]
     // The order as the backend left it: charged (ss 2) or annulled (ss 0).
     onDone: (order: ITableOrder) => void
   } = $props()
@@ -41,7 +47,8 @@
   const formatAmount = (cents: number) => `S/ ${formatN(cents / 100, 2)}`
 
   const blocker = $derived(chargeBlocker(order))
-  const bill = $derived(billLines(order))
+  const billRows = $derived(packGroupRows(billLines(order), productCategoryIDs, packs))
+  const billTotal = $derived(packGroupRowsTotal(billRows))
   const cashBanks = $derived(chargeCashBankOptions(cashBanksService.Cajas || []))
   // A sale is issued as a factura or a boleta, never under a note's series.
   const seriesOptions = $derived((companyService.empresa.InvoiceSeries || [])
@@ -69,9 +76,9 @@
     const confirmed = await confirmWarn({
       title: tr('Charge Table|Cobrar Mesa'),
       message: request.CashBankID
-        ? tr(`Charge ${formatAmount(orderTotal(order))} into "${cashBankName}"?|¿Cobrar ${formatAmount(orderTotal(order))} en "${cashBankName}"?`)
-        : tr(`Close the bill of ${formatAmount(orderTotal(order))} unpaid? The client will owe it.`
-          + `|¿Cerrar la cuenta de ${formatAmount(orderTotal(order))} sin pago? Quedará como deuda del cliente.`),
+        ? tr(`Charge ${formatAmount(billTotal)} into "${cashBankName}"?|¿Cobrar ${formatAmount(billTotal)} en "${cashBankName}"?`)
+        : tr(`Close the bill of ${formatAmount(billTotal)} unpaid? The client will owe it.`
+          + `|¿Cerrar la cuenta de ${formatAmount(billTotal)} sin pago? Quedará como deuda del cliente.`),
     })
     if (!confirmed) return
 
@@ -110,18 +117,24 @@
     }
   }
 
-  const billColumns: ITableColumn<IBillLine>[] = [
+  const billColumns: ITableColumn<IPackGroupRow<IBillLine>>[] = [
     { header: 'Qty.|Cant.', width: '64px', css: 'px-6 text-right ff-bold',
-      getValue: (billLine) => formatQuantity(unpackQuantityLine(billLine.Quantity), billLine.SubDivisor) },
-    { header: 'Product|Producto', css: 'px-6', getValue: (billLine) => productName(billLine.ProductID) },
-    { header: 'Amount|Importe', width: '110px', css: 'px-6 text-right ff-mono whitespace-nowrap', getValue: (billLine) => formatAmount(billLine.Amount) },
+      getValue: (billRow) => formatQuantity(unpackQuantityLine(billRow.Quantity), billRow.line?.SubDivisor || 1) },
+    { header: 'Product|Producto', css: 'px-6', getValue: (billRow) => productName(billRow.line?.ProductID || 0) },
+    { header: 'Amount|Importe', width: '110px', css: 'px-6 text-right ff-mono whitespace-nowrap', getValue: (billRow) => formatAmount(billRow.Amount) },
   ]
 </script>
 
-<VTable columns={billColumns} data={bill} disableVirtualizer={true} estimateSize={36}
+<TableGrid columns={billColumns} data={billRows} rowHeight={34} getRowId={(billRow) => billRow.key}
+  getRowHeight={(billRow) => billRow.pack ? PACK_HEADER_ROW_HEIGHT : undefined}
+  useRowRenderer={(billRow) => !!billRow.pack} rowRenderer={packHeaderRow}
   emptyMessage="Nothing to charge.|Nada que cobrar." />
+
+{#snippet packHeaderRow(billRow: IPackGroupRow<IBillLine>)}
+  <PackHeaderRow packName={billRow.pack?.Name || ''} packAmount={formatAmount(billRow.Amount)} />
+{/snippet}
 <div class="flex justify-end gap-8 my-10 ff-bold" aria-label="The bill's total">
-  <span>{tr('Total|Total')}</span><span class="ff-mono">{formatAmount(orderTotal(order))}</span>
+  <span>{tr('Total|Total')}</span><span class="ff-mono">{formatAmount(billTotal)}</span>
 </div>
 
 
@@ -158,7 +171,7 @@
         placeholder="Client name|Nombre del cliente" />
     {/if}
     <div class="col-span-24 flex items-center gap-8">
-      <Button color="green" icon="icon-[fa--check]" name="Charge {formatAmount(orderTotal(order))}|Cobrar {formatAmount(orderTotal(order))}"
+      <Button color="green" icon="icon-[fa--check]" name="Charge {formatAmount(billTotal)}|Cobrar {formatAmount(billTotal)}"
         label="Closes the bill into a sale, paid into the selected cash-bank or owed when none is selected."
         disabled={isPosting || !!blocker} onClick={charge} />
       <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Annul order|Anular pedido" css="ml-auto"

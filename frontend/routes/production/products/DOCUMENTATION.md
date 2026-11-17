@@ -140,8 +140,15 @@ for a made product, **Production (Producción)**. Save with the layer's Save act
   (Marca)** and **SKU** are optional and are shown again when the product is reopened.
 - The **SKU Individual** checkbox stores a flag on the product, but nothing in Genix currently
   reacts to it.
-- **Categories (`CATEGORÍAS ::`)** attaches one or more existing categories by name; it cannot
-  create a new category (use the Categories view or the Excel import).
+- **Show in (`Mostrar en`)**, right under the price and brand fields (above **Origen**), picks where the product is shown and sold: **Tienda
+  Física** (the Point of Sale), **Tienda Online** (the web store) and **Restaurante** (the dining
+  menu of Atención de mesas). Leaving it empty (placeholder `Todo`) means every channel. A channel
+  not picked leaves the product off that channel's list, and its sale refuses it: the Point of Sale
+  with "no se vende en este canal", web checkout with "ya no está disponible en la tienda" even if it
+  is still in a shopper's cart, and a table round with "no existe o no está a la venta".
+- **Categories (`Categorías`)**, under the image, opens a searchable list where each click adds or
+  removes one existing category, shown as chips in the field. It cannot create a new category (use
+  the Categories view or the Excel import).
 - The gray **Tienda Web** box holds the web store settings:
   - **Allowed overselling (`Sobreventa permitida`)** is a number of whole units that may be sold
     beyond the stock. With 5 units in stock and 100 here, the web store accepts up to 105 units in
@@ -151,8 +158,6 @@ for a made product, **Production (Producción)**. Save with the layer's Save act
     accepted only while the warehouse's stock, less the reserved units, plus this margin covers it;
     otherwise it is refused with "no tiene stock ni sobreventa permitida suficiente en el almacén". A
     sale of a made product also cannot name a lot or serial number.
-  - **Hide (`Ocultar`)** removes the product from the web store catalog, and checkout refuses it
-    ("ya no está disponible en la tienda") even if it is still in a shopper's cart.
 - **Sub-Unidades** (Name, Base Price, Discount, Final Price, Quantity) are on the
   **Presentations (Presentaciones)** tab, below the presentations editor. They do not recalculate
   each other. The sub-unit **Base Price** field recalculates the *main* product's Final Price from
@@ -174,7 +179,7 @@ in one save are refused ("Hay nombres duplicados en la solicitud").
 
 Saving creates or updates the product. A new product is active immediately; editing keeps the
 stored stock figures, images and creation data untouched. The web store catalog picks up the change
-on its next sync: it lists an active, not hidden product only while it has something sellable
+on its next sync: it lists an active product shown in **Tienda Online** only while it has something sellable
 (stock in the warehouses open to online sales, or overselling margin left). The recipe and its
 costs, the overselling margin and the accounting fields are never sent to the public web store.
 
@@ -200,8 +205,11 @@ costs, the overselling margin and the accounting fields are never sent to the pu
   sub-unidad recalcula el Precio Final del producto principal.
 - `¿Por qué no puedo vender en el POS un producto fabricado sin stock?` Para un producto fabricado
   el POS acepta la venta sólo con stock libre o `Sobreventa permitida` suficiente.
+- `¿Cómo oculto un producto de la tienda web / del POS / del restaurante?` En `Mostrar en` deje
+  marcados sólo los canales donde sí se vende. Vacío (`Todo`) = todos los canales.
 - Search terms: `producto`, `producto terminado`, `fabricado`, `origen`, `precio base`,
-  `descuento`, `precio final`, `sub-unidad`, `SKU`, `moneda`, `unidad`, `sobreventa`, `ocultar`.
+  `descuento`, `precio final`, `sub-unidad`, `SKU`, `moneda`, `unidad`, `sobreventa`, `ocultar`,
+  `mostrar en`, `canal de venta`.
 
 <!-- DOC-ID: capability.production-recipe -->
 ## Define the recipe and production cost (Definir receta y costo de producción)
@@ -287,7 +295,7 @@ accounting entries. They are private: the public web store never receives them.
 
 The **Sheet (Ficha)** tab holds the optional one-line **Short Description (Descripción Corta)** and,
 below it, a rich text editor for a longer, formatted description. Both are only saved when the
-product is saved. The web store's product detail shows this sheet unless the product is hidden.
+product is saved. The web store's product detail shows this sheet unless the product is not shown in **Tienda Online**.
 
 <!-- DOC-ID: capability.presentations -->
 ## Manage presentations / variants (Gestionar presentaciones)
