@@ -1,3 +1,5 @@
+import { browser } from '$app/env';
+
 export interface ICity {
   ID: number
   Name: string
@@ -52,6 +54,9 @@ const parseCities = (ciudades: ICity[]): ICitiesResult => {
 let citiesPromise: Promise<ICitiesResult>
 
 export const useCitiesAPI = () => {
+  // The cities file is a path of the page's own origin: the store's server render (the webpage
+  // renderer) has none, and its failed fetch was an unhandled rejection that killed the process.
+  if(!browser){ return citiesService }
 
   if(!citiesPromise){
     citiesPromise = new Promise((resolve, reject) => {
