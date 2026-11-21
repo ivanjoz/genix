@@ -65,6 +65,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[crmTypes.CrmTask](),
 		db.MakeController[crmTypes.CrmTeam](),
 		db.MakeController[diningTypes.DiningLayout](),
+		db.MakeController[diningTypes.DiningMenu](),
 		db.MakeController[diningTypes.TableOrder](),
 		db.MakeController[financeTypes.CashBank](),
 		db.MakeController[financeTypes.CashBankMovement](),
@@ -171,6 +172,7 @@ func init() {
 	db.RegisterTableFactory("crm_tasks", func() db.Table { return db.MakeTable[crmTypes.CrmTask]() })
 	db.RegisterTableFactory("crm_teams", func() db.Table { return db.MakeTable[crmTypes.CrmTeam]() })
 	db.RegisterTableFactory("dining_layout", func() db.Table { return db.MakeTable[diningTypes.DiningLayout]() })
+	db.RegisterTableFactory("dining_menu", func() db.Table { return db.MakeTable[diningTypes.DiningMenu]() })
 	db.RegisterTableFactory("dining_table_order", func() db.Table { return db.MakeTable[diningTypes.TableOrder]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })

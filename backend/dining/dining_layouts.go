@@ -65,6 +65,9 @@ func PostDiningLayout(req *core.HandlerArgs) core.HandlerResponse {
 			if err := validateLayoutWarehouse(companyID, layout.WarehouseID); err != nil {
 				return err
 			}
+			if err := validateLayoutMenu(companyID, layout.MenuID); err != nil {
+				return err
+			}
 		} else {
 			// A delete keeps the plan as it was: only its status changes.
 			deletedLayout := *stored
@@ -89,7 +92,7 @@ func PostDiningLayout(req *core.HandlerArgs) core.HandlerResponse {
 				layoutTable.Name, layoutTable.WarehouseID, layoutTable.GridWidth, layoutTable.GridHeight,
 				layoutTable.Shapes, layoutTable.Stations, layoutTable.QRRequiresConfirmation, layoutTable.QRVersion,
 				layoutTable.WaitWarnMinutes, layoutTable.WaitLateMinutes, layoutTable.NextShapeID,
-				layoutTable.Status, layoutTable.Updated, layoutTable.UpdatedBy,
+				layoutTable.Status, layoutTable.Updated, layoutTable.UpdatedBy, layoutTable.MenuID,
 			); err != nil {
 				return core.Err("Error al actualizar el salón:", err)
 			}

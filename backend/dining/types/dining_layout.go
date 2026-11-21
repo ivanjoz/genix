@@ -34,6 +34,9 @@ type DiningLayout struct {
 	Version     int16 `json:"ver" cb:"ver,17"`
 	// Metadata is set only on the delta log records a Delta() read appends.
 	Metadata *string `json:"mdt" cb:"mdt,18"`
+	// MenuID is the carta (DiningMenu) the layout's QR page shows; 0 shows the default carta
+	// (docs/DINING_MENU_PLAN.md §1.2).
+	MenuID int32 `cb:"19"`
 }
 
 type DiningLayoutTable struct {
@@ -55,6 +58,7 @@ type DiningLayoutTable struct {
 	Updated                db.Col[*DiningLayoutTable, int32]
 	UpdatedBy              db.Col[*DiningLayoutTable, int32]
 	Version                db.Col[*DiningLayoutTable, int16]
+	MenuID                 db.Col[*DiningLayoutTable, int32]
 }
 
 func (e DiningLayoutTable) GetSchema() db.TableSchema {

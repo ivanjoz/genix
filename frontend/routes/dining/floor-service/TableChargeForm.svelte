@@ -125,18 +125,22 @@
   ]
 </script>
 
-<TableGrid columns={billColumns} data={billRows} rowHeight={34} getRowId={(billRow) => billRow.key}
-  getRowHeight={(billRow) => billRow.pack ? PACK_HEADER_ROW_HEIGHT : undefined}
-  useRowRenderer={(billRow) => !!billRow.pack} rowRenderer={packHeaderRow}
-  emptyMessage="Nothing to charge.|Nada que cobrar." />
-
-{#snippet packHeaderRow(billRow: IPackGroupRow<IBillLine>)}
-  <PackHeaderRow packName={billRow.pack?.Name || ''} packAmount={formatAmount(billRow.Amount)} />
-{/snippet}
-<div class="flex justify-end gap-8 my-10 ff-bold" aria-label="The bill's total">
-  <span>{tr('Total|Total')}</span><span class="ff-mono">{formatAmount(billTotal)}</span>
+<!-- Layout: total + Cobrar/Anular on top, payment/comprobante/client box, then the bill. -->
+<div class="flex-1 min-h-0 flex flex-col gap-6">
+<div class="flex items-center gap-10 flex-wrap">
+  <div class="flex gap-8 ff-bold text-lg" aria-label="The bill's total">
+    <span>{tr('Total|Total')}</span><span class="ff-mono">{formatAmount(billTotal)}</span>
+  </div>
+  {#if mode === 'charge'}
+    <div class="flex items-center gap-8 ml-auto">
+      <Button color="green" icon="icon-[fa--check]" name="Charge|Cobrar"
+        label="Closes the bill into a sale, paid into the selected cash-bank or owed when none is selected."
+        disabled={isPosting || !!blocker} onClick={charge} />
+      <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Annul|Anular"
+        label="Opens the form to annul this table order." onClick={() => { mode = 'annul' }} />
+    </div>
+  {/if}
 </div>
-
 
 {#if mode === 'annul'}
   <div class="p-10 rounded-md bg-red-bg flex flex-col gap-8" aria-label="Annul the table order with a reason">
@@ -150,32 +154,35 @@
   </div>
 {:else}
   <div class="p-10 rounded-md bg-surface-muted grid grid-cols-24 gap-10 items-end" aria-label="Charge the table: payment, comprobante and client">
-    {#if blocker}
-      <div class="col-span-24 px-8 py-6 rounded-md border border-amber-border bg-amber-bg text-amber-fg">{tr(blocker)}</div>
-    {/if}
-    <SearchSelect saveOn={chargeForm} save="CashBankID" css="col-span-24 md:col-span-12"
+    <SearchSelect saveOn={chargeForm} save="CashBankID" css="col-span-24 md:col-span-8"
       options={cashBanks} keyId="ID" keyName="Name" label="Cash/bank for payment|Caja/banco del pago"
       placeholder="UNPAID|SIN PAGAR" />
-    <SearchSelect saveOn={chargeForm} save="IssueSeriesID" css="col-span-24 md:col-span-12"
+    <SearchSelect saveOn={chargeForm} save="IssueSeriesID" css="col-span-24 md:col-span-8"
       options={seriesOptions} keyId="ID" keyName="Name" label="Comprobante" placeholder="NO COMPROBANTE|SIN COMPROBANTE" />
-    <SearchSelect saveOn={chargeForm} save="ClientMode" css="col-span-24 md:col-span-9"
+    <SearchSelect saveOn={chargeForm} save="ClientMode" css="col-span-24 md:col-span-8"
       options={clientModeOptions} keyId="ID" keyName="Name" label="Client|Cliente" placeholder="NO CLIENT|SIN CLIENTE" />
     {#if chargeForm.ClientMode === CLIENT_MODE.SELECT}
-      <SearchSelect saveOn={chargeForm} save="ClientID" css="col-span-24 md:col-span-15" label=""
+      <SearchSelect saveOn={chargeForm} save="ClientID" css="col-span-24" label=""
         options={clientOptions} keyId="ID" keyName="Name" placeholder="Search by name or document|Buscar por nombre o documento" />
     {:else if chargeForm.ClientMode === CLIENT_MODE.REGISTER}
-      <Input saveOn={chargeForm.ClientInfo} save="RegistryNumber" css="col-span-24 md:col-span-6" label=""
+      <Input saveOn={chargeForm.ClientInfo} save="RegistryNumber" css="col-span-24 md:col-span-10" label=""
         placeholder="Document No.|Nº Documento" leftOptions={TILL_IDENTITY_DOC_OPTIONS} saveLeft="IdentityDocType"
         deriveLeftOption={(value) => deriveIdentityDocType(String(value ?? ''))} />
-      <Input saveOn={chargeForm.ClientInfo} save="Name" css="col-span-24 md:col-span-9" label=""
+      <Input saveOn={chargeForm.ClientInfo} save="Name" css="col-span-24 md:col-span-14" label=""
         placeholder="Client name|Nombre del cliente" />
     {/if}
-    <div class="col-span-24 flex items-center gap-8">
-      <Button color="green" icon="icon-[fa--check]" name="Charge {formatAmount(billTotal)}|Cobrar {formatAmount(billTotal)}"
-        label="Closes the bill into a sale, paid into the selected cash-bank or owed when none is selected."
-        disabled={isPosting || !!blocker} onClick={charge} />
-      <Button color="red" mode="subtle" icon="icon-[fa--trash]" name="Annul order|Anular pedido" css="ml-auto"
-        label="Opens the form to annul this table order." onClick={() => { mode = 'annul' }} />
-    </div>
   </div>
+  {#if blocker}
+    <div class="px-6 py-2 rounded-md bg-red-bg text-red-fg text-sm">{tr(blocker)}</div>
+  {/if}
 {/if}
+
+<TableGrid columns={billColumns} data={billRows} rowHeight={34} getRowId={(billRow) => billRow.key}
+  getRowHeight={(billRow) => billRow.pack ? PACK_HEADER_ROW_HEIGHT : undefined}
+  useRowRenderer={(billRow) => !!billRow.pack} rowRenderer={packHeaderRow}
+  emptyMessage="Nothing to charge.|Nada que cobrar." />
+</div>
+
+{#snippet packHeaderRow(billRow: IPackGroupRow<IBillLine>)}
+  <PackHeaderRow packName={billRow.pack?.Name || ''} packAmount={formatAmount(billRow.Amount)} />
+{/snippet}

@@ -172,7 +172,7 @@
 <svelte:window onkeydown={onKeyDown} />
 
 <Page title="Orders|Pedidos" noPadding>
-  <div class="flex flex-col md:flex-row md:h-[calc(100vh-var(--header-height)-4px)]">
+  <div class="flex flex-col md:flex-row md:h-[calc(100vh-var(--header-height))]">
     <div class="md:w-1/2 flex flex-col min-h-0 bg-page border-b md:border-b-0 md:border-r border-line">
       <div class="flex items-center gap-12 p-12 border-b border-line" aria-label="Pick the layout and the station">
         <CardsStrip options={layoutsService.records} selected={layoutID} keyId="ID" keyName="Name" isGrayBackground

@@ -1,7 +1,7 @@
 import { QUANTITY_DIVISOR_NONE, QUANTITY_LINE_SCALE, packQuantityLine } from '#core/quantity.ts'
 import { webPresentationIDs, webSellableStock } from '#core/web-sellable.ts'
-import { CURRENCY_PEN, convertUnitPrice, normalizeCurrency } from '#routes/finance/exchange-rate/exchange-rate.ts'
 import type { IProductStock } from '#routes/logistics/products-stock/stock-movement.ts'
+import { restaurantPriceInSoles } from '#core/dining-menu.ts'
 import { PRODUCT_CHANNEL_RESTAURANT, isProductSoldIn } from '#core/product-channels.ts'
 import type { IProduct } from '#services/production/products.svelte.ts'
 import { LINE_STATUS, SHAPE_KIND, TABLE_ORDER_STATUS, TABLE_STATE, lineAmount, tableLabelOf, tableState, type IDiningLayout, type ITableOrder, type ITableOrderLine } from '../dining.ts'
@@ -32,15 +32,15 @@ export function diningMenu(products: IProduct[], stockRows: IProductStock[], war
   const menu: IDiningMenuProduct[] = []
   for (const product of products) {
     if (!isProductSoldIn(product, PRODUCT_CHANNEL_RESTAURANT)) continue
-    const productCurrency = normalizeCurrency(product.CurrencyID)
-    if (productCurrency !== CURRENCY_PEN && !penRate) continue
+    const priceInSoles = restaurantPriceInSoles(product, penRate)
+    if (priceInSoles === null) continue
     const presentationIDs = webPresentationIDs(product)
     const sellableByPresentation = webSellableStock(stockRowsByProduct.get(product.ID) || [], presentationIDs, product.WebExtraStock)
     // Only what can be ordered now: a round of it would be refused.
     if (!presentationIDs.some((presentationID) => sellableByPresentation.get(presentationID)! > 0)) continue
     menu.push({
       ID: product.ID, Name: product.Name,
-      Price: convertUnitPrice(product.FinalPrice, productCurrency, CURRENCY_PEN, penRate),
+      Price: priceInSoles,
       Presentations: presentationIDs.map((presentationID) => ({
         ID: presentationID, Sellable: sellableByPresentation.get(presentationID)!,
         Name: product.Presentations?.find((presentation) => presentation.id === presentationID)?.nm || '',

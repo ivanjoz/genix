@@ -5,7 +5,7 @@
 
   import type { Snippet } from 'svelte';
   import { tr } from '#core/store.svelte.ts';
-  import ImagePickerModal from './ImagePickerModal.svelte';
+  import ImagePickerModal from '#domain/ImagePickerModal.svelte';
 
   interface Props {
     /** The ImageEffect AST node being edited; its visual treatment lives on node.props. */

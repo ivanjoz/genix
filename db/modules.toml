@@ -48,7 +48,7 @@ routes = "accounting/invoicing"
 [[modules.menus]]
 name = "Restaurant|Restaurante"
 min_name = "RES"
-routes = "dining/floor-service, dining/kitchen-display, dining/floor-layout, production/daily-close"
+routes = "dining/floor-service, dining/kitchen-display, dining/floor-layout, production/daily-close, dining/menu-builder"
 
 [[modules]]
 code = "operations"

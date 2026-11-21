@@ -112,7 +112,7 @@
     <div class="flex flex-col lg:flex-row">
       <!-- Left column: which layout, its save, and the tab that drives both columns. Edge to
            edge and as tall as the screen, so it reads as the page's side panel. -->
-      <div class="w-full lg:w-340 shrink-0 flex flex-col gap-12 p-12 bg-surface border-b lg:border-b-0 lg:border-r border-line lg:min-h-[calc(100vh-var(--header-height)-4px)]">
+      <div class="w-full lg:w-340 shrink-0 flex flex-col gap-12 p-12 bg-surface border-b lg:border-b-0 lg:border-r border-line lg:min-h-[calc(100vh-var(--header-height))]">
         <div class="flex items-end gap-8" aria-label="Pick or create a layout">
           <SearchSelect saveOn={layoutPicker} save="LayoutID" css="flex-1 min-w-0" label="Layout|Salón"
             options={layoutsService.records} keyId="ID" keyName="Name" placeholder=":: seleccione ::"
@@ -138,7 +138,7 @@
 
       <!-- Right column, as tall as the screen. Diseño: the selected shape's bar tight over the plan,
            which takes the rest of the height. Parámetros: only the settings, scrolling if long. -->
-      <div class="flex-1 min-w-0 w-full flex flex-col px-12 pb-12 lg:h-[calc(100vh-var(--header-height)-4px)] {editorTab === TAB_DESIGN ? 'pt-8 gap-4' : 'pt-12 overflow-auto'}">
+      <div class="flex-1 min-w-0 w-full flex flex-col px-12 pb-12 lg:h-[calc(100vh-var(--header-height))] {editorTab === TAB_DESIGN ? 'pt-8 gap-4' : 'pt-12 overflow-auto'}">
         {#if editor.draft}
           {#if editorTab === TAB_SETTINGS}
             <FloorLayoutSettings {editor} {isSaving} onDeleteLayout={deleteLayout} />

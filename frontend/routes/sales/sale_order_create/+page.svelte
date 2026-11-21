@@ -575,7 +575,7 @@ import {
            shell by exactly that much, and the moment a modal locks `html`'s scrolling the overflow
            surfaces as a body scrollbar. -->
       <LayerStatic
-        css="w-[40%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height)-4px)] shadow-lg md:-m-10"
+        css="w-[40%] min-w-350 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
         mobileLayerTitle="Venta"
         useMobileLayerVertical={124}
       >

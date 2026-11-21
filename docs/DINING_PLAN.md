@@ -250,6 +250,8 @@ In the product form, "Sobreventa permitida" moves out of the "Tienda Web" box; i
   as the e-commerce catalog did.
 - Only products with at least one sellable presentation are listed: a product that cannot be ordered
   now is left out, not shown at 0.
+- The QR page draws the layout's **carta** (blocks and theme) over that catalog, not a flat list: see
+  `docs/DINING_MENU_PLAN.md`. `GET p-dining-menu` also answers the carta when that page is built.
 
 ---
 

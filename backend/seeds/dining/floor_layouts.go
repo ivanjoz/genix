@@ -113,9 +113,13 @@ func ensureDiningLayouts(run *runner.Run, menu diningMenu) ([]diningTypes.Dining
 		return storedLayouts, false, nil
 	}
 
+	cartaID, err := ensureDiningCarta(menu)
+	if err != nil {
+		return nil, false, core.Err("carta:", err)
+	}
 	warehouseID := run.Config.WarehouseIDs[0]
 	mainRoom := diningTypes.DiningLayout{Name: mainRoomName, WarehouseID: warehouseID, GridWidth: 48, GridHeight: 32,
-		Shapes: mainRoomShapes(), Stations: diningStations(menu), WaitWarnMinutes: 15, WaitLateMinutes: 25, Status: 1}
+		Shapes: mainRoomShapes(), Stations: diningStations(menu), WaitWarnMinutes: 15, WaitLateMinutes: 25, MenuID: cartaID, Status: 1}
 	if len(storedLayouts) > 0 {
 		mainRoom.ID = storedLayouts[0].ID
 		if err := annulOpenTableOrders(mainRoom.ID); err != nil {
@@ -123,7 +127,7 @@ func ensureDiningLayouts(run *runner.Run, menu diningMenu) ([]diningTypes.Dining
 		}
 	}
 	terraceRoom := diningTypes.DiningLayout{Name: terraceRoomName, WarehouseID: warehouseID, GridWidth: 36, GridHeight: 24,
-		Shapes: terraceRoomShapes(), Stations: diningStations(menu), WaitWarnMinutes: 15, WaitLateMinutes: 25, Status: 1}
+		Shapes: terraceRoomShapes(), Stations: diningStations(menu), WaitWarnMinutes: 15, WaitLateMinutes: 25, MenuID: cartaID, Status: 1}
 
 	savedLayouts := []diningTypes.DiningLayout{}
 	for _, layout := range []diningTypes.DiningLayout{mainRoom, terraceRoom} {

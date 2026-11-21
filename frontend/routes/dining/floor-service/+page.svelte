@@ -169,7 +169,7 @@
           </div>
         {/if}
       </div>
-      <LayerStatic css="w-[var(--deliver-panel-width)] shrink-0 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height)-4px)] shadow-lg md:-m-10"
+      <LayerStatic css="w-[var(--deliver-panel-width)] shrink-0 bg-surface border-l border-line flex flex-col h-[calc(100vh-var(--header-height))] shadow-lg md:-m-10"
         mobileLayerTitle={selectedTableTitle} useMobileLayerVertical={124}>
         {#if selectedTableShapeID}
           <div class="flex flex-col px-12 pt-10" aria-label="The picked table">

@@ -289,6 +289,12 @@ name = "Floor layout|Diseño de salones"
 icon = "icon-[fa--th]"
 description = "Dibuja cada salón del restaurante: mesas, paredes, estaciones de preparación y puntos de recojo."
 
+[[pages]]
+route = "dining/menu-builder"
+name = "Menu|Carta"
+icon = "icon-[fa--book]"
+description = "Arma la carta que ven tus clientes al escanear el QR de la mesa: arrastra productos, categorías, imágenes y textos sobre la vista del celular."
+
 # Logistics
 
 [[pages]]

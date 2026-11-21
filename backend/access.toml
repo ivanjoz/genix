@@ -256,6 +256,16 @@ levels = 14
 frontend_routes = "dining/floor-layout"
 backend_apis = "POST.dining-layout"
 
+# The carta builder (docs/DINING_MENU_PLAN.md §2). Separate from "Diseño de Salones": whoever writes
+# the carta is often not whoever draws the floor plan.
+[[access]]
+id = 67
+name = "Carta"
+group = 3
+levels = 14
+frontend_routes = "dining/menu-builder"
+backend_apis = "POST.dining-menu"
+
 [[access]]
 id = 12
 name = "Gráficos Ventas"

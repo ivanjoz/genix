@@ -50,6 +50,8 @@ export interface IDiningLayout {
   WaitWarnMinutes: number
   WaitLateMinutes: number
   NextShapeID?: number
+  // The carta the QR page shows; 0 shows the default one.
+  MenuID?: number
   ss: number
   upd: number
 }

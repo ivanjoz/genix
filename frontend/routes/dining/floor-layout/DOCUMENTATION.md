@@ -276,14 +276,17 @@ times and the QR confirmation for the restaurant service.
 ### Where to find it (Dónde encontrarlo)
 
 The **Salón** (Layout) tab of the side panel: **Nombre**, **Almacén de sus productos**, **Ancho
-(celdas)**, **Alto (celdas)**, **Alerta a los (min)**, **Retraso a los (min)** and the checkbox **Los
-pedidos por QR esperan la confirmación de un mozo**.
+(celdas)**, **Alto (celdas)**, **Alerta a los (min)**, **Retraso a los (min)**, **Carta que se muestra en el QR** and
+the checkbox **Los pedidos por QR esperan la confirmación de un mozo**.
 
 ### Required information and prerequisites (Requisitos previos)
 
 - **Nombre** is required.
 - **Almacén de sus productos** is required and lists only active warehouses.
 - Grid width and height from 8 to 200 cells each.
+- **Carta que se muestra en el QR** lists the menus built in **Restaurante > Carta**; the default
+  `Predeterminada (todos los productos)` shows every restaurant product. A menu that a layout shows
+  cannot be deleted from the Carta page.
 - **Alerta a los** must be greater than 0 and lower than **Retraso a los**; a value left at 0 is
   saved as the default (10 for the warning, 20 for late).
 

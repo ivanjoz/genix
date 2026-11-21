@@ -4,6 +4,7 @@
   import Checkbox from '#components/form/Checkbox.svelte'
   import Input from '#components/form/Input.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
+  import SelectBox from '#components/form/SelectBox.svelte'
   import VTable from '#components/vTable/VTable.svelte'
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { tr } from '#core/store.svelte.ts'
@@ -11,6 +12,7 @@
   import { SharedListsService } from '#services/business/shared-lists.svelte.ts'
   import { ProductsService } from '#services/production/products.svelte.ts'
   import type { IDiningStation } from '../dining.ts'
+  import { DiningMenusService } from '../menu-builder/menu-builder.svelte.ts'
   import { makeStation, setDefaultStation, stationDeleteBlocker } from './floor-layout.ts'
   import type { FloorLayoutEditorState } from './floor-layout.svelte.ts'
 
@@ -23,6 +25,9 @@
   const warehousesService = new WarehousesService()
   const productsService = new ProductsService(true)
   const sharedLists = new SharedListsService([1], true)
+  const menusService = new DiningMenusService()
+  // 0 is "no carta chosen": the QR page then shows the default one (all the restaurant's products).
+  const menuOptions = $derived([{ ID: 0, Name: 'Default (all products)|Predeterminada (todos los productos)' }, ...menusService.records])
 
   const sellableProducts = $derived(productsService.records.filter((product) => product.ss === 1))
   const categories = $derived(sharedLists.ListaRecordsMap.get(1) || [])
@@ -74,6 +79,8 @@
         placeholder=":: seleccione ::" onChange={() => editor.checkpoint()} />
       <Input saveOn={draft} save="WaitWarnMinutes" type="number" css="col-span-12 md:col-span-4" label="Warn after (min)|Alerta a los (min)" onChange={() => editor.checkpoint()} />
       <Input saveOn={draft} save="WaitLateMinutes" type="number" css="col-span-12 md:col-span-4" label="Late after (min)|Retraso a los (min)" onChange={() => editor.checkpoint()} />
+      <SelectBox saveOn={draft} save="MenuID" css="col-span-24 md:col-span-8" label="Menu shown on the QR|Carta que se muestra en el QR"
+        options={menuOptions} keyId="ID" keyName="Name" onChange={() => editor.checkpoint()} />
       <Checkbox checked={!!draft.QRRequiresConfirmation} css="col-span-24 md:col-span-8 self-end"
         onToggle={(isChecked) => { draft.QRRequiresConfirmation = isChecked; editor.checkpoint() }}
         label="QR orders wait for a waiter's confirmation|Los pedidos por QR esperan la confirmación de un mozo" />

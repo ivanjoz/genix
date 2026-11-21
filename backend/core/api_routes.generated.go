@@ -61,6 +61,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.daily-product-stock":             305,
 	"GET.dining-layouts":                  268,
 	"GET.dining-menu":                     270, // retired
+	"GET.dining-menus":                    302,
 	"GET.dining-table-order-history":      299,
 	"GET.dining-table-orders":             271,
 	"GET.ecommerce-page-content":          13,
@@ -204,6 +205,7 @@ var APIRouteIDs = map[string]int16{
 	"POST.crm-task-decide":                240,
 	"POST.crm-team":                       226,
 	"POST.dining-layout":                  269,
+	"POST.dining-menu":                    303,
 	"POST.dining-table-order-annul":       274,
 	"POST.dining-table-order-charge":      275,
 	"POST.dining-table-order-lines":       272,
