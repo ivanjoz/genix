@@ -27,16 +27,51 @@ product, quantity or price was zero. A list of lines cannot be misaligned, and
 checked, because it is replaced anyway.
 **Rationale** — The price check only ever rejected a value that was about to be discarded.
 
-## sale-client-product keeps SubDivisor as a row and the day as its only key
+## sale-client-product keeps the day as its only key
 **Context** — The frame asked for is company-day : client + product, for queries by client.
-**Decision** — Rows are ClientID, ProductID and SubDivisor, with sale-summary's six sums; its lines
-come from the same `eachSummaryLine` as sale-summary's. The key is the day alone, so a query by
-client reads the day files of the range and keeps that client's rows. `GET sale-summary` reads it
-with `f=sale-client-product`.
-**Rationale** — Without SubDivisor a row would add sixths and twelfths of one product into one
-`SoldSub`. Day and ClientID as Keys would make a file per client and day, so a client's query
+**Decision** — Rows are ClientID and ProductID, with sale-summary's four sums; its lines come from
+the same `eachSummaryLine` as sale-summary's. The key is the day alone, so a query by client reads
+the day files of the range and keeps that client's rows. `GET sale-summary` reads it with
+`f=sale-client-product`.
+**Rationale** — Day and ClientID as Keys would make a file per client and day, so a client's query
 would name its files directly, but a day of many clients would become many tiny files; the
 requested layout keeps one file per day.
+
+## The sale frames keep the day as a week-spread Part, with no Keys
+**Context** — On MariaDB a frame is an aggregate table, one row per (partition_id, packed key). With
+the day as a Key, a product sold every day takes 7 rows a week.
+**Decision** — `Date` is the frames' Part with `UseWeekSpread`: one row per week and product (per
+client and product), each sum spread over 7 day columns. The frames have no Keys. The ORM names a
+Part frame's file by its Part then its Keys, so `GET sale-summary` still answers one file per day
+over the whole requested range, and FrameSQL still reads `date` as the leading key.
+**Rationale** — Up to 7× fewer rows and index entries for products that sell daily. MariaDB keeps a
+file mark per company and day (`…__agg_<frame>__files`), so `GET sale-summary` reads the marks of the
+range first and the aggregate rows of the changed days only, and a sale resends only its day's file.
+Every sale of a company and day touches that day's mark row: the write reads it first and skips it
+when already stamped in the same tick. A Part frame runs only on the SQL drivers, which never compact.
+
+## The sale frames sum quantities as floats, not as units/sub pairs
+**Context** — Version 2 of both frames kept every quantity twice: the exact pairs
+(`SoldUnits`/`SoldSub`, `PendingUnits`/`PendingSub`) under a `SubDivisor` row, and
+`SoldQuantity`/`PendingQuantity` = units + sub / divisor for FrameSQL. The only reader of the
+pairs, the sales chart, turned them back into that same fraction.
+**Decision** — Version 3 keeps the two float sums only, and drops the pairs and the `SubDivisor`
+row: one row per product (per client and product). A frame stores a float as round(v × 1e6).
+**Rationale** — Fewer columns and fewer rows, and FrameSQL needs no hidden columns. Each line
+rounds once to 6 decimals (1/3 → 0.333333), which no chart or answer shows; the sums of the scaled
+integers are exact.
+
+## sale-quantity is derived from sale-summary, not stored
+**Context** — The sales forecast (plan/SALES_FORECAST_PLAN.md) reads only the units sold per day
+and product, in the browser. sale-summary's files carry four sums, two of them floats.
+**Decision** — "sale-quantity" (`SaleQuantityFrame`) is a derived frame (genix-orm DATAFRAMES.md
+§8.3): read from sale-summary's aggregate rows and file marks, `SoldQuantity` rounded to whole
+units as an int32, a product rounding to 0 left out of the day, with its own file cache. GET.sale-summary
+serves it as `f=sale-quantity`.
+**Rationale** — One int32 sum makes files a fraction of sale-summary's, cached once a day settles,
+with no second aggregate table to write in every sale's transaction. The forecast does not need
+sub-units. A day/product row of sale-summary is one row of sale-quantity, so the rounding happens
+once per product and day.
 
 ## GET.sale-summary answers raw frame files; action 2 stays a no-op
 **Context** — The sale summary moved to the `sale-summary` DataFrame of `sale_order`;

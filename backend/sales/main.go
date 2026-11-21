@@ -18,6 +18,8 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.sales-planning":    PostSalesPlanning,
 	"GET.seasonality-curve":  GetSeasonalityCurve,
 	"POST.seasonality-curve": PostSeasonalityCurve,
+	"GET.calendar-events":    GetCalendarEvents,
+	"POST.calendar-events":   PostCalendarEvents,
 	// Pedidos Web: the web store's orders, before and after they become sales.
 	"GET.online-sale-orders":             GetOnlineSaleOrders,
 	"POST.online-sale-order-settle":      PostOnlineSaleOrderSettle,

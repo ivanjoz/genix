@@ -97,15 +97,9 @@ import { SvelteMap } from 'svelte/reactivity';
     }
   }
 
-  const almacenRender = (almacenID: number, cant: number) => {
+  const almacenRender = (almacenID: number) => {
     if (!almacenID) { return "" }
-    const name = almacenes.AlmacenesMap.get(almacenID)?.Name || `Almacen-${almacenID}`
-    return `<div class="flex items-center">
-      <div class="mr-8">${name}</div>
-      <div class="ff-mono text-blue-fg">(</div>
-      <div class="ff-mono">${cant}</div>
-      <div class="ff-mono text-blue-fg">)</div>
-    </div>`
+    return almacenes.AlmacenesMap.get(almacenID)?.Name || `Almacen-${almacenID}`
   }
 
   const columns: ITableColumn<IWarehouseProductMovement>[] = [
@@ -181,12 +175,12 @@ import { SvelteMap } from 'svelte/reactivity';
     },
     {
       header: "Source Warehouse|Almacén Origen",
-      render: e => almacenRender(e.WarehouseRefID || 0, e.WarehouseRefQuantity || 0),
+      render: e => almacenRender(e.WarehouseRefID || 0),
       mobile: { order: 7, css: "col-span-24", labelTop: "Almacén Origen", if: e => !!e.WarehouseRefID }
     },
     {
       header: "Destination Warehouse|Almacén Destino",
-      render: e => almacenRender(e.WarehouseID || 0, e.WarehouseQuantity || 0),
+      render: e => almacenRender(e.WarehouseID || 0),
       mobile: { order: 8, css: "col-span-24", labelTop: "Almacén Destino" }
     },
     {

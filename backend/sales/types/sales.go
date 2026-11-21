@@ -1,9 +1,11 @@
 package types
 
 import (
+	business "app/business/types"
 	"app/core"
 	"app/db"
 	finance "app/finance/types"
+	"math"
 )
 
 // SaleOrderClientInfo is a walk-in client typed at the till. It is request-only — SaleOrderTable has
@@ -127,6 +129,10 @@ type SaleOrder struct {
 	// the daily production close (SaleOrderLine.StockExitPending); 0 otherwise. An int8 so it can pin
 	// a delta index: the "Por regularizar" list and the close read the sales with 1.
 	PendingStockMovement int8 `cb:"44"`
+	// SiteID is the site (sede) of WarehouseID, 0 for a sale with no warehouse. Set by StampSiteID on
+	// every write that sets the warehouse: what sale-summary sums by, since its ToFrames reads only the
+	// sale. A delivery from another warehouse moves the sale to that warehouse's site.
+	SiteID int16 `cb:"45"`
 }
 
 // RefreshPendingStockMovement sets PendingStockMovement from the lines' StockExitPending flags.
@@ -145,49 +151,76 @@ func (e *SaleOrder) StampPeriod() {
 	e.Period = core.PeriodOfDay(e.Date)
 }
 
-// SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day, one row
-// per product and sub-unit divisor. Amounts are in soles; quantities are the split pair, never the
-// packed document form, because a row adds many sales (1004 + 1004 is not 2008).
+// StampSiteID sets SiteID from the sale's warehouse: 0 without one, else its site, refusing a
+// warehouse that doesn't exist.
+func (e *SaleOrder) StampSiteID() error {
+	if e.WarehouseID == 0 {
+		e.SiteID = 0
+		return nil
+	}
+	siteIDByWarehouseID, err := business.SiteIDsOfWarehouses(e.CompanyID, []int32{e.WarehouseID})
+	if err != nil {
+		return err
+	}
+	e.SiteID = siteIDByWarehouseID[e.WarehouseID]
+	return nil
+}
+
+// SaleSummaryFrame is one sale line as the "sale-summary" DataFrame sums it: one file per day and site,
+// one row per product. Amounts are in soles. Quantities are whole units with sub-units as their fraction
+// (units + sub / divisor), so the sub-units of any divisor add up in one row. The frame keeps a float
+// as round(v × 1e6) (dataframe.FloatScale): each line rounds once to 6 decimals (1/3 is 0.333333), and
+// the sums of those are exact integers.
 type SaleSummaryFrame struct {
-	Date      int16 `frame:"key"`
-	ProductID int32 `frame:"row"`
-	// SubDivisor is its own row, so a product refined mid-day keeps sixths and twelfths apart: the
-	// reader converts them, the frame never mixes them.
-	SubDivisor    int16 `frame:"row"`
-	AmountPEN     int32 `frame:"sum"`
-	DebtAmountPEN int32 `frame:"sum"`
-	SoldUnits     int32 `frame:"sum"`
-	SoldSub       int32 `frame:"sum"`
-	PendingUnits  int32 `frame:"sum"`
-	PendingSub    int32 `frame:"sum"`
-	// SoldQuantity and PendingQuantity are the same quantities in whole units with their fraction
-	// (units + sub / divisor), so rows of different divisors add up: what FrameSQL reads, where the
-	// split pairs and the divisor stay hidden (sale_frames_sql.go). They go last, so the readers of the
-	// split pairs keep their sums' positions.
+	// Date is the frame's Part, spread by week (UseWeekSpread): partition_id = CompanyID << 13 | the
+	// epoch week, one aggregate row per week, site and product with a column per day. A client gets a
+	// file per day and site, named by the Date then the SiteID.
+	Date int16 `frame:"part,13"`
+	// SiteID is the sale's (SaleOrder.SiteID): the sales forecast works per site and product, against
+	// the per-site stock of daily-product-stock. 0 is the sales with no warehouse.
+	SiteID          int16   `frame:"key"`
+	ProductID       int32   `frame:"row"`
+	AmountPEN       int32   `frame:"sum"`
+	DebtAmountPEN   int32   `frame:"sum"`
 	SoldQuantity    float64 `frame:"sum"`
 	PendingQuantity float64 `frame:"sum"`
 }
 
 // SaleClientProductFrame is one sale line as the "sale-client-product" DataFrame sums it: one file
-// per day, one row per client, product and sub-unit divisor, for the queries by client. ClientID 0
-// is the sales without a client. The sums are SaleSummaryFrame's.
+// per day, one row per client and product, for the queries by client. ClientID 0 is the sales without
+// a client. The sums are SaleSummaryFrame's.
 type SaleClientProductFrame struct {
-	// The packed key (Date, ClientID, ProductID, SubDivisor) must fit 63 bits: the IDs are per-company
-	// sequences, so 20 bits hold ~1M clients and 17 bits ~131k products; 11 bits hold a divisor up to
-	// 2047 (1000 for grams, refined to 2000). A value past its width fails the write.
-	Date int16 `frame:"key"`
+	// Date is the week-spread Part, as in SaleSummaryFrame. The packed key (ClientID, ProductID) holds the
+	// per-company sequences: 20 bits ~1M clients, 17 bits ~131k products. A value past its width fails
+	// the write.
+	Date int16 `frame:"part,13"`
 	// ClientID leads the rows: each client is written once in a file, its products under it.
 	ClientID        int32   `frame:"row,20"`
 	ProductID       int32   `frame:"row,17"`
-	SubDivisor      int16   `frame:"row,11"`
 	AmountPEN       int32   `frame:"sum"`
 	DebtAmountPEN   int32   `frame:"sum"`
-	SoldUnits       int32   `frame:"sum"`
-	SoldSub         int32   `frame:"sum"`
-	PendingUnits    int32   `frame:"sum"`
-	PendingSub      int32   `frame:"sum"`
 	SoldQuantity    float64 `frame:"sum"`
 	PendingQuantity float64 `frame:"sum"`
+}
+
+// SaleQuantityFrame is the "sale-quantity" DataFrame: derived from "sale-summary" (not stored), the
+// units sold per day, site and product in whole units, for the sales forecast
+// (plan/SALES_FORECAST_PLAN.md). One int32 sum instead of four, so its files are a fraction of
+// sale-summary's to cache and send.
+type SaleQuantityFrame struct {
+	// Date and SiteID are sale-summary's Part and Key, which a derived frame keeps.
+	Date         int16 `frame:"part,13"`
+	SiteID       int16 `frame:"key"`
+	ProductID    int32 `frame:"row"`
+	SoldQuantity int32 `frame:"sum"`
+}
+
+// deriveSaleQuantity rounds a day/product row of sale-summary to whole units; a product that rounds
+// to 0 (fractions of a unit only) is left out of the day.
+func deriveSaleQuantity(summary *SaleSummaryFrame, quantity *SaleQuantityFrame) bool {
+	quantity.ProductID = summary.ProductID
+	quantity.SoldQuantity = int32(math.Round(summary.SoldQuantity))
+	return quantity.SoldQuantity != 0
 }
 
 // ToSaleSummaryFrames is what the sale adds to its day summary. It appends to lines, which a rebuild
@@ -201,9 +234,8 @@ func (e *SaleOrder) ToSaleSummaryFrames(lines []SaleSummaryFrame) []SaleSummaryF
 func (e *SaleOrder) ToSaleClientProductFrames(lines []SaleClientProductFrame) []SaleClientProductFrame {
 	e.eachSummaryLine(func(line SaleSummaryFrame) {
 		lines = append(lines, SaleClientProductFrame{
-			Date: line.Date, ClientID: e.ClientID, ProductID: line.ProductID, SubDivisor: line.SubDivisor,
-			AmountPEN: line.AmountPEN, DebtAmountPEN: line.DebtAmountPEN, SoldUnits: line.SoldUnits,
-			SoldSub: line.SoldSub, PendingUnits: line.PendingUnits, PendingSub: line.PendingSub,
+			Date: line.Date, ClientID: e.ClientID, ProductID: line.ProductID,
+			AmountPEN: line.AmountPEN, DebtAmountPEN: line.DebtAmountPEN,
 			SoldQuantity: line.SoldQuantity, PendingQuantity: line.PendingQuantity,
 		})
 	})
@@ -231,13 +263,12 @@ func (e *SaleOrder) eachSummaryLine(onLine func(line SaleSummaryFrame)) {
 		}
 		// Sub-units are charged at their own price, so the line total is exact, not prorated.
 		line := SaleSummaryFrame{
-			Date: e.Date, ProductID: saleLine.ProductID, SubDivisor: subDivisor,
-			AmountPEN: e.AmountInPEN(core.QuantityAmount(quantity, saleLine.Price, saleLine.SubPrice)),
-			SoldUnits: quantity.Units, SoldSub: quantity.Sub,
+			Date: e.Date, SiteID: e.SiteID, ProductID: saleLine.ProductID,
+			AmountPEN:    e.AmountInPEN(core.QuantityAmount(quantity, saleLine.Price, saleLine.SubPrice)),
 			SoldQuantity: float64(quantity.Units) + float64(quantity.Sub)/float64(subDivisor),
 		}
 		if isDeliveryPending {
-			line.PendingUnits, line.PendingSub, line.PendingQuantity = quantity.Units, quantity.Sub, line.SoldQuantity
+			line.PendingQuantity = line.SoldQuantity
 		}
 		if isPaymentPending {
 			line.DebtAmountPEN = line.AmountPEN
@@ -313,6 +344,7 @@ type SaleOrderTable struct {
 	ShippingAmount       db.Col[*SaleOrderTable, int32]
 	OnlineSaleOrderID    db.Col[*SaleOrderTable, int32]
 	PendingStockMovement db.Col[*SaleOrderTable, int8]
+	SiteID               db.Col[*SaleOrderTable, int16]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -367,24 +399,37 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			{Type: db.TypeDelta, Keys: db.Cols(e.PendingStockMovement, e.Status)},
 		},
 		DataFrames: []db.DataFrame{{
-			// The day/product sales summary of /sales/sale_orders_charts. Most products have no
-			// sub-units and most sales are settled, so the zero sums mask drops the Sub and
-			// pending/debt columns of a day that has none. A read compacts the company's files
-			// once 100 sales changed or an hour passed since the last compaction. Version 2 added the
-			// SoldQuantity and PendingQuantity sums.
+			// The day/product sales summary of /sales/sale_orders_charts. Most sales are settled and
+			// delivered, so the zero sums mask drops the pending/debt columns of a day that has none.
+			// The Date is a week-spread Part, which only the SQL drivers keep: they hold the frame exact
+			// in the sale's own transaction, with nothing to compact. Version 3 dropped the split
+			// units/sub sums and the SubDivisor row; version 4 added the SiteID key. UseFileCache keeps
+			// each settled day's file, so a first load of the charts reads the cached days instead of
+			// their rows.
 			Name:            "sale-summary",
-			Version:         2,
+			Version:         4,
 			UseZeroSumsMask: true,
-			CompactOn:       db.CompactOn{Records: 100, Seconds: 3600},
+			UseWeekSpread:   true,
+			// UseFileCache:    true,
 			ToFrames:        db.ToFrames((*SaleOrder).ToSaleSummaryFrames),
 		}, {
 			// The day/client/product detail, for the queries by client: its files are larger than
 			// sale-summary's (one row per client and product), so that one stays for the day totals.
 			Name:            "sale-client-product",
-			Version:         2,
+			Version:         3,
 			UseZeroSumsMask: true,
-			CompactOn:       db.CompactOn{Records: 100, Seconds: 3600},
+			UseWeekSpread:   true,
+			// UseFileCache:    true,
 			ToFrames:        db.ToFrames((*SaleOrder).ToSaleClientProductFrames),
+		}, {
+			// The units sold per day and product, for the sales forecast: read from sale-summary's
+			// aggregate rows and file marks, nothing stored. Its files are small and change only while
+			// their day takes sales, so the file cache serves the settled days.
+			Name:         "sale-quantity",
+			DerivedFrom:  "sale-summary",
+			Version:      1,
+			UseFileCache: true,
+			Derive:       db.DeriveFrame(deriveSaleQuantity),
 		}},
 	}
 }

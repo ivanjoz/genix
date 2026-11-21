@@ -288,6 +288,16 @@ levels = 14
 frontend_routes = "sales/sale_planning"
 backend_apis = "POST.sales-planning,POST.seasonality-curve"
 
+# Calendar effects for the sales forecast (plan/SALES_FORECAST_PLAN.md §10.4). The global Peru
+# holidays (partition 0) are written only by the super-admin; the handler enforces it.
+[[access]]
+id = 68
+name = "Calendario Comercial"
+group = 3
+levels = 14
+frontend_routes = "sales/calendar-events"
+backend_apis = "POST.calendar-events"
+
 [[access]]
 id = 14
 name = "Gestión de Stock"

@@ -17,8 +17,10 @@
 package types
 
 import (
+	business "app/business/types"
 	"app/core"
 	"app/db"
+	production "app/production/types"
 	"cmp"
 	"fmt"
 	"slices"
@@ -75,8 +77,8 @@ func movementDivisorOf(mov *InternalMovement) (int16, error) {
 	return core.QuantityDivisorNone, nil
 }
 
-// stockDivisorOf reads the divisor a stock row is currently expressed in. A row that has
-// never carried sub-units has none, and adopts whatever the next movement brings.
+// stockDivisorOf reads the divisor a stock row is expressed in: its product's current divisor, or
+// none for a product without sub-unit.
 func stockDivisorOf(stock *ProductStock) int16 {
 	if stock.SubDivisor > 0 {
 		return stock.SubDivisor
@@ -147,8 +149,109 @@ func refineStockDivisor(stock *ProductStock, details []*ProductStockDetail,
 	stock.ReservedProductionQuantity, stock.ReservedProductionSubQuantity = reservedProduction.Units, reservedProduction.Sub
 	stock.BlockedQuantity, stock.BlockedSubQuantity = blocked.Units, blocked.Sub
 	stock.SubDivisor = toDivisor
-	core.Log("ApplyMovimientos refinó el divisor de stock:",
+	core.Log("Divisor de stock refinado:",
 		"stockID", stock.ID, "de", fromDivisor, "a", toDivisor, "detalles", len(details))
+	return nil
+}
+
+// RefineProductStockDivisorIn converts every stock row of the given products, and the detail rows
+// under them, to each product's new sub-unit divisor. The product save runs it in the transaction
+// that changes the divisor, so a stock row is always at its product's current divisor and the
+// movement engine never refines a row mid-operation. The ledger is not touched: each movement keeps
+// the divisor it was written at. The product rule (refine to a multiple only) makes it exact.
+func RefineProductStockDivisorIn(transaction *db.Transaction, companyID int32, userID int32,
+	divisorByProductID map[int32]int16) error {
+
+	if len(divisorByProductID) == 0 {
+		return nil
+	}
+	productIDs := make([]int32, 0, len(divisorByProductID))
+	for productID := range divisorByProductID {
+		productIDs = append(productIDs, productID)
+	}
+
+	// Find the rows through the ProductID index, then lock them in key order like every stock writer.
+	// The caller holds the product rows locked, and a writer creating a new stock row locks its
+	// product first (ApplyMovimientosWithLedgerIn), so no row of these products appears after this read.
+	stockKeys := []ProductStock{}
+	keyQuery := db.Query(&stockKeys)
+	keyQuery.Select(keyQuery.ID).CompanyID.Equals(companyID).ProductID.In(productIDs...)
+	if err := keyQuery.Exec(); err != nil {
+		return core.Err("Error al obtener el stock de los productos:", err)
+	}
+	if len(stockKeys) == 0 {
+		return nil
+	}
+	slices.SortFunc(stockKeys, func(left, right ProductStock) int { return cmp.Compare(left.ID, right.ID) })
+	stockIDs := make([]int64, len(stockKeys))
+	for i := range stockKeys {
+		stockKeys[i].CompanyID = companyID
+		stockIDs[i] = stockKeys[i].ID
+	}
+	if err := db.LockByKeys(transaction, &stockKeys); err != nil {
+		return core.Err("Error al bloquear el stock de los productos:", err)
+	}
+
+	details := []ProductStockDetail{}
+	detailQuery := db.Query(&details)
+	detailQuery.Exclude(detailQuery.Created, detailQuery.CreatedBy, detailQuery.Updated, detailQuery.UpdatedBy).
+		CompanyID.Equals(companyID).ProductStockID.In(stockIDs...)
+	if err := detailQuery.Exec(); err != nil {
+		return core.Err("Error al obtener el detalle de stock de los productos:", err)
+	}
+	detailsByStockID := map[int64][]*ProductStockDetail{}
+	for i := range details {
+		detailsByStockID[details[i].ProductStockID] = append(detailsByStockID[details[i].ProductStockID], &details[i])
+	}
+
+	updatedTime := core.SUnixTime()
+	refinedStocks := []ProductStock{}
+	for i := range stockKeys {
+		stock := &stockKeys[i]
+		targetDivisor := max(divisorByProductID[stock.ProductID], core.QuantityDivisorNone)
+		if stockDivisorOf(stock) == targetDivisor {
+			continue
+		}
+		if err := refineStockDivisor(stock, detailsByStockID[stock.ID], targetDivisor, updatedTime, userID); err != nil {
+			return core.Err(fmt.Sprintf("Producto %v, almacén %v:", stock.ProductID, stock.WarehouseID), err)
+		}
+		stock.Updated, stock.UpdatedBy = updatedTime, userID
+		refinedStocks = append(refinedStocks, *stock)
+	}
+	// Whole units never change in a refinement, so only a detail holding sub-units is rewritten.
+	refinedDetails := []ProductStockDetail{}
+	for _, stock := range refinedStocks {
+		for _, detail := range detailsByStockID[stock.ID] {
+			if detail.SubQuantity != 0 {
+				refinedDetails = append(refinedDetails, *detail)
+			}
+		}
+	}
+	core.Log("RefineProductStockDivisorIn writes:", "products", len(productIDs),
+		"stocks", len(refinedStocks), "details", len(refinedDetails))
+
+	if len(refinedStocks) > 0 {
+		stockTable := db.TableOf[ProductStock]()
+		if err := db.UpdateIn(transaction, &refinedStocks,
+			// WarehouseID and Status are the delta index's pinned columns: written together.
+			stockTable.WarehouseID, stockTable.SubDivisor,
+			stockTable.SubQuantity, stockTable.DetailSubQuantity, stockTable.DetailComputedSubQuantity,
+			stockTable.ReservedProductionSubQuantity, stockTable.BlockedSubQuantity,
+			stockTable.Updated, stockTable.UpdatedBy, stockTable.Status,
+		); err != nil {
+			return core.Err("Error al guardar el stock con el nuevo divisor:", err)
+		}
+	}
+	if len(refinedDetails) > 0 {
+		detailTable := db.TableOf[ProductStockDetail]()
+		if err := db.UpdateIn(transaction, &refinedDetails,
+			// Keep the materialized view tuple (WarehouseID, Status) consistent on updates.
+			detailTable.WarehouseID, detailTable.SubQuantity,
+			detailTable.Updated, detailTable.UpdatedBy, detailTable.Status,
+		); err != nil {
+			return core.Err("Error al guardar el detalle de stock con el nuevo divisor:", err)
+		}
+	}
 	return nil
 }
 
@@ -186,6 +289,17 @@ func expandStockTransfers(movements []InternalMovement) ([]InternalMovement, err
 		expanded = append(expanded, outflow, inflow)
 	}
 	return expanded, nil
+}
+
+// siteIDsOfMovementWarehouses is the site of every warehouse the movements name (both legs of a
+// transfer are movements, so a transfer's peer is among them), which each ledger row carries for the
+// daily-product-stock frame.
+func siteIDsOfMovementWarehouses(companyID int32, movements []*InternalMovement) (map[int32]int16, error) {
+	warehouseIDs := core.SliceSet[int32]{}
+	for _, movement := range movements {
+		warehouseIDs.Add(movement.WarehouseID)
+	}
+	return business.SiteIDsOfWarehouses(companyID, warehouseIDs.Values)
 }
 
 // ApplyMovimientos writes the movements, the stock they leave and their ledger rows in a transaction
@@ -251,6 +365,10 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 
 	// Resolve missing LotIDs for inbound lot-by-name movements.
 	lotQualityByID, err := resolveLotIDsForMovements(transaction, req, activeMovements, core.FechaUnix())
+	if err != nil {
+		return nil, err
+	}
+	siteIDByWarehouseID, err := siteIDsOfMovementWarehouses(companyID, activeMovements)
 	if err != nil {
 		return nil, err
 	}
@@ -321,65 +439,27 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 	updatedTime := core.SUnixTime()
 	dateUnix := core.FechaUnix()
 
-	// Divisor reconciliation, before any mutation. A stock row records the divisor it was
-	// last written under; when a movement arrives at a finer one the row converts itself,
-	// which is what lets a divisor refinement stay lazy instead of rewriting the ledger.
-	// Refinements are rare by design, so the extra detail load below almost never fires.
-	refinementTargetByStockID := map[int64]int16{}
-	for i := range activeMovements {
-		stock := stockByID[stockIDByMovement[i]]
-		if stock == nil {
-			continue
-		}
-		currentDivisor := stockDivisorOf(stock)
-		if currentDivisor == divisorByMovement[i] {
-			continue
-		}
-		// Only a strictly finer movement divisor pulls the stock row forward. A coarser one
-		// is converted up to the row instead, in the mutation loop.
-		if !core.IsQuantityDivisorRefinement(currentDivisor, divisorByMovement[i]) {
-			continue
-		}
-		if target, seen := refinementTargetByStockID[stock.ID]; !seen ||
-			core.IsQuantityDivisorRefinement(target, divisorByMovement[i]) {
-			refinementTargetByStockID[stock.ID] = divisorByMovement[i]
-		}
-	}
-
-	if len(refinementTargetByStockID) > 0 {
-		// A stock touched only by a free-bucket movement had no details preloaded, but its
-		// details still hold sub-units at the old divisor and must convert with it.
-		missingDetailStockIDs := core.SliceSet[int64]{}
-		for stockID := range refinementTargetByStockID {
-			if !stockIDsWithDetails.Include(stockID) {
-				missingDetailStockIDs.Add(stockID)
+	// A stock row is always at its product's current divisor: the product save converts the existing
+	// rows (RefineProductStockDivisorIn), and a row created here starts at it, whatever divisor the
+	// creating movement carries (a purchase is in whole units). The products are locked, not just
+	// read: a divisor change saving concurrently would otherwise miss the row created here.
+	divisorByNewStockProductID := map[int32]int16{}
+	{
+		newStockProducts := []production.Product{}
+		seenProductIDs := core.SliceSet[int32]{}
+		for i, mov := range activeMovements {
+			if stockByID[stockIDByMovement[i]] == nil && !seenProductIDs.Include(mov.ProductID) {
+				seenProductIDs.Add(mov.ProductID)
+				newStockProducts = append(newStockProducts, production.Product{CompanyID: companyID, ID: mov.ProductID})
 			}
 		}
-		if !missingDetailStockIDs.IsEmpty() {
-			existing := []ProductStockDetail{}
-			q := db.Query(&existing)
-			q.Exclude(q.Created, q.CreatedBy, q.Updated, q.UpdatedBy).
-				CompanyID.Equals(companyID).
-				ProductStockID.In(missingDetailStockIDs.Values...)
-			if err := q.Exec(); err != nil {
-				return nil, core.Err("Error al obtener detalle de stock para refinar el divisor:", err)
+		if len(newStockProducts) > 0 {
+			slices.SortFunc(newStockProducts, func(left, right production.Product) int { return cmp.Compare(left.ID, right.ID) })
+			if err := db.LockByKeys(transaction, &newStockProducts); err != nil {
+				return nil, core.Err("Error al obtener los productos del stock nuevo:", err)
 			}
-			for i := range existing {
-				row := &existing[i]
-				detailByKey[detailKey(row.ProductStockID, row.LotID, row.SerialNumber)] = row
-			}
-		}
-
-		detailsByStockID := map[int64][]*ProductStockDetail{}
-		for _, detail := range detailByKey {
-			if _, refining := refinementTargetByStockID[detail.ProductStockID]; refining {
-				detailsByStockID[detail.ProductStockID] = append(detailsByStockID[detail.ProductStockID], detail)
-			}
-		}
-		for stockID, targetDivisor := range refinementTargetByStockID {
-			if err := refineStockDivisor(stockByID[stockID], detailsByStockID[stockID],
-				targetDivisor, updatedTime, userID); err != nil {
-				return nil, err
+			for _, product := range newStockProducts {
+				divisorByNewStockProductID[product.ID] = max(product.SbuQuantity, core.QuantityDivisorNone)
 			}
 		}
 	}
@@ -406,16 +486,16 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 				WarehouseID:    mov.WarehouseID,
 				ProductID:      mov.ProductID,
 				PresentationID: mov.PresentationID,
-				SubDivisor:     divisorByMovement[i],
+				SubDivisor:     divisorByNewStockProductID[mov.ProductID],
 				Created:        updatedTime,
 				CreatedBy:      userID,
 			}
 			stockByID[stockID] = stock
 		}
 
-		// The row's divisor wins. The reconciliation pass already pulled it forward if any
-		// movement was finer, so anything still different here is a coarser movement, which
-		// converts up to the row exactly.
+		// The row's divisor wins. A movement at a coarser one comes from a document written before
+		// the product was refined (a pending delivery, an older production order) and converts up to
+		// the row exactly. One at a finer divisor than the product's is refused.
 		effectiveDivisor := stockDivisorOf(stock)
 		movementQuantity := core.Quantity{Units: mov.Quantity, Sub: mov.SubQuantity}
 		if divisorByMovement[i] != effectiveDivisor {
@@ -438,6 +518,7 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 			DocumentID:     mov.DocumentID,
 			CompanyID:      companyID,
 			WarehouseID:    mov.WarehouseID,
+			SiteID:         siteIDByWarehouseID[mov.WarehouseID],
 			ProductID:      mov.ProductID,
 			PresentationID: mov.PresentationID,
 			SerialNumber:   mov.SerialNumber,
@@ -524,6 +605,7 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 		}
 		movement.Type = mov.Type
 		movement.WarehouseRefID = mov.transferPeerWarehouseID
+		movement.RefSiteID = siteIDByWarehouseID[mov.transferPeerWarehouseID]
 
 		balanceSubUnits := balanceBefore.TotalSubUnits(effectiveDivisor)
 		deltaSubUnits := delta.TotalSubUnits(effectiveDivisor)
@@ -531,7 +613,7 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 		if !isInflow {
 			outflowStockIDs[stockID] = true
 			// An outflow leaves at its share of the row's value; the average does not move.
-			movement.MonetaryValue = StockOutflowValue(stock.StockValue, balanceSubUnits, -deltaSubUnits)
+			movement.MonetaryValue = core.StockOutflowValue(stock.StockValue, balanceSubUnits, -deltaSubUnits)
 			stock.StockValue -= int64(movement.MonetaryValue)
 			if mov.transferPeerWarehouseID > 0 {
 				transferOutflowValue = movement.MonetaryValue
@@ -579,14 +661,12 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 				}
 			}
 			movement.MonetaryValue = lineValue
-			stock.StockValue, stock.AverageCost = StockAfterInflow(stock.StockValue, stock.AverageCost,
+			stock.StockValue, stock.AverageCost = core.StockAfterInflow(stock.StockValue, stock.AverageCost,
 				balanceSubUnits, deltaSubUnits, lineValue, effectiveDivisor)
 		}
 		balanceByStockID[stockID] = balanceBefore.Add(delta)
 		stock.Updated = updatedTime
 		stock.UpdatedBy = userID
-		// WarehouseQuantity on the ledger row uses the post-mutation total (free + detail).
-		// DetailQuantity may be finalised in the re-sum pass, so we re-stamp after it below.
 		warehouseMovements = append(warehouseMovements, movement)
 	}
 
@@ -627,13 +707,6 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 			return nil, core.Err(fmt.Sprintf(
 				"El producto %v del almacén %v tiene stock reservado por órdenes de producción: quedarían %v disponibles con %v reservados.",
 				stock.ProductID, stock.WarehouseID, unblockedBalance.TotalSubUnits(stockDivisor), reserved.TotalSubUnits(stockDivisor)))
-		}
-	}
-
-	// Backfill WarehouseQuantity on each ledger row now that DetailQuantity is final.
-	for i := range warehouseMovements {
-		if stock := stockByID[stockIDByMovement[i]]; stock != nil {
-			warehouseMovements[i].WarehouseQuantity = stock.Quantity + stock.DetailQuantity
 		}
 	}
 
@@ -694,10 +767,8 @@ func ApplyMovimientosWithLedgerIn(transaction *db.Transaction, req *core.Handler
 			stockTable.WarehouseID,
 			stockTable.Quantity, stockTable.SubQuantity,
 			stockTable.DetailQuantity, stockTable.DetailSubQuantity,
-			stockTable.DetailComputedQuantity, stockTable.DetailComputedSubQuantity,
-			stockTable.SubDivisor,
-			// Carried from the locked row; a divisor refinement converts them with the quantities.
-			stockTable.ReservedProductionQuantity, stockTable.ReservedProductionSubQuantity,
+			// The divisor and the reservation are not written: a movement changes neither on an
+			// existing row (RefineProductStockDivisorIn and ApplyProductionReservationIn own them).
 			stockTable.BlockedQuantity, stockTable.BlockedSubQuantity,
 			stockTable.LastPricesPrice, stockTable.LastPricesQuantity,
 			stockTable.AverageCost, stockTable.StockValue,
@@ -869,11 +940,31 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 	newStockIDs := core.SliceSet[int64]{}
 	stockByID := map[int64]*ProductStock{}
 	detailByKey := map[string]*ProductStockDetail{}
-	// Indexed by stock so a divisor refinement mid-replay can convert a row's whole detail
-	// set at once; DetailSubQuantity is their absolute sum and cannot mix divisors.
-	detailsByStock := map[int64][]*ProductStockDetail{}
 	detailKey := func(stockID int64, lotID int32, serial string) string {
 		return db.MakeKeyConcat(stockID, lotID, serial)
+	}
+
+	// Every row is replayed at its product's current divisor, the one live stock rows are kept at.
+	// The products are locked before the stock rows, in the order a product save takes them, so a
+	// divisor change waits for the replay instead of missing the rows it creates.
+	divisorByProductID := map[int32]int16{}
+	{
+		productKeys := []production.Product{}
+		q := db.Query(&productKeys)
+		q.Select(q.ID).CompanyID.Equals(companyID)
+		if err := q.Exec(); err != nil {
+			return core.Err("Error al obtener los productos:", err)
+		}
+		slices.SortFunc(productKeys, func(left, right production.Product) int { return cmp.Compare(left.ID, right.ID) })
+		for i := range productKeys {
+			productKeys[i].CompanyID = companyID
+		}
+		if err := db.LockByKeys(transaction, &productKeys); err != nil {
+			return core.Err("Error al bloquear los productos:", err)
+		}
+		for _, product := range productKeys {
+			divisorByProductID[product.ID] = max(product.SbuQuantity, core.QuantityDivisorNone)
+		}
 	}
 
 	{
@@ -893,12 +984,10 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 		for i := range existing {
 			stock := &existing[i]
 			// Reset so movements recompute from scratch; untouched rows will blank out below.
-			// SubDivisor resets too: the ledger is the source of truth for it, so the replay
-			// adopts whatever the movements carry rather than trusting the stale row.
 			stock.Quantity, stock.SubQuantity = 0, 0
 			stock.DetailQuantity, stock.DetailSubQuantity = 0, 0
 			stock.BlockedQuantity, stock.BlockedSubQuantity = 0, 0
-			stock.SubDivisor = 0
+			stock.SubDivisor = divisorByProductID[stock.ProductID]
 			// The value and the average are replayed from the ledger, like the quantities.
 			stock.AverageCost, stock.StockValue = 0, 0
 			stockByID[stock.ID] = stock
@@ -911,20 +1000,16 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 		if err := q.Exec(); err != nil {
 			return core.Err("Error al obtener detalle de stock previo:", err)
 		}
-		detailsByStockID := map[int64][]*ProductStockDetail{}
 		for i := range existing {
 			detail := &existing[i]
 			detail.Quantity, detail.SubQuantity = 0, 0
 			detailByKey[detailKey(detail.ProductStockID, detail.LotID, detail.SerialNumber)] = detail
-			detailsByStockID[detail.ProductStockID] = append(detailsByStockID[detail.ProductStockID], detail)
 		}
-		detailsByStock = detailsByStockID
 	}
 
-	// The ledger can span a divisor refinement, so the scan cannot assume every movement for a
-	// product speaks the same divisor. Each accumulator adopts the first divisor it sees and
-	// then reconciles: a finer movement pulls the accumulator (and its details) forward, a
-	// coarser one is converted up to it. Both directions are exact.
+	// The ledger can span a divisor refinement: each movement keeps the divisor it was written at,
+	// which is never finer than the product's current one. So every movement converts up to its
+	// row's divisor, exactly.
 	//
 	// balanceByStockID is each row's running free + detail total, at the row's divisor. The
 	// average cost needs the units held before each inflow, and DetailQuantity is only rolled up
@@ -934,7 +1019,6 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 	// ledger holds at 0 re-enters at the value its deliveries took, as PostSaleOrderAnnul does live.
 	type saleDeliveredOut struct {
 		quantity core.Quantity
-		divisor  int16
 		value    int64
 	}
 	saleOutByKey := map[[2]int64]*saleDeliveredOut{}
@@ -954,33 +1038,21 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 				WarehouseID:    warehouseID,
 				ProductID:      movement.ProductID,
 				PresentationID: movement.PresentationID,
+				SubDivisor:     divisorByProductID[movement.ProductID],
 				Created:        updatedTime,
 			}
 			stockByID[stockID] = stock
 		}
 
-		if stock.SubDivisor <= 0 {
-			stock.SubDivisor = movementDivisor
-		} else if stock.SubDivisor != movementDivisor {
-			if core.IsQuantityDivisorRefinement(stock.SubDivisor, movementDivisor) {
-				refinedBalance, err := balanceByStockID[stockID].ConvertToDivisor(stock.SubDivisor, movementDivisor)
-				if err != nil {
-					return err
-				}
-				if err := refineStockDivisor(stock, detailsByStock[stockID],
-					movementDivisor, updatedTime, 0); err != nil {
-					return err
-				}
-				balanceByStockID[stockID] = refinedBalance
-			} else {
-				converted, err := quantity.ConvertToDivisor(movementDivisor, stock.SubDivisor)
-				if err != nil {
-					return core.Err(fmt.Sprintf(
-						"Movimiento con divisor %v incompatible con el divisor %v del stock (producto %v, almacén %v).",
-						movementDivisor, stock.SubDivisor, movement.ProductID, warehouseID))
-				}
-				quantity = converted
+		stock.SubDivisor = max(stock.SubDivisor, core.QuantityDivisorNone)
+		if stock.SubDivisor != movementDivisor {
+			converted, err := quantity.ConvertToDivisor(movementDivisor, stock.SubDivisor)
+			if err != nil {
+				return core.Err(fmt.Sprintf(
+					"Movimiento con divisor %v incompatible con el divisor %v del producto %v (almacén %v).",
+					movementDivisor, stock.SubDivisor, movement.ProductID, warehouseID))
 			}
+			quantity = converted
 		}
 
 		// Same rule as ApplyMovimientos. A recorded value is a fact and is kept; only a movement
@@ -996,28 +1068,20 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 		if isSaleMovement {
 			saleKey := [2]int64{movement.DocumentID, stockID}
 			if saleOut = saleOutByKey[saleKey]; saleOut == nil {
-				saleOut = &saleDeliveredOut{divisor: stock.SubDivisor}
+				saleOut = &saleDeliveredOut{}
 				saleOutByKey[saleKey] = saleOut
-			}
-			if saleOut.divisor != stock.SubDivisor {
-				// The row's divisor only gets finer, so the conversion is exact.
-				converted, err := saleOut.quantity.ConvertToDivisor(saleOut.divisor, stock.SubDivisor)
-				if err != nil {
-					return err
-				}
-				saleOut.quantity, saleOut.divisor = converted, stock.SubDivisor
 			}
 		}
 
 		if movedSubUnits < 0 {
 			if movement.MonetaryValue <= 0 {
-				movement.MonetaryValue = StockOutflowValue(stock.StockValue, balanceSubUnits, -movedSubUnits)
+				movement.MonetaryValue = core.StockOutflowValue(stock.StockValue, balanceSubUnits, -movedSubUnits)
 			}
 			stock.StockValue -= int64(movement.MonetaryValue)
 		} else if movedSubUnits > 0 {
 			if movement.MonetaryValue <= 0 && movement.Type == StockMovementTypeSaleAnnulmentReturn {
 				// A return re-enters at the value its sale's deliveries took out of this row.
-				movement.MonetaryValue = StockOutflowValue(saleOut.value,
+				movement.MonetaryValue = core.StockOutflowValue(saleOut.value,
 					saleOut.quantity.TotalSubUnits(stock.SubDivisor), movedSubUnits)
 			}
 			if movement.MonetaryValue <= 0 {
@@ -1028,7 +1092,7 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 				}
 				movement.MonetaryValue = value
 			}
-			stock.StockValue, stock.AverageCost = StockAfterInflow(stock.StockValue, stock.AverageCost,
+			stock.StockValue, stock.AverageCost = core.StockAfterInflow(stock.StockValue, stock.AverageCost,
 				balanceSubUnits, movedSubUnits, movement.MonetaryValue, stock.SubDivisor)
 		}
 		if movement.MonetaryValue != recordedValue {
@@ -1061,7 +1125,6 @@ func recalcProductStockIn(transaction *db.Transaction, companyID int32) error {
 				Created:        updatedTime,
 			}
 			detailByKey[key] = detail
-			detailsByStock[stockID] = append(detailsByStock[stockID], detail)
 		}
 		next := core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity}.Add(quantity)
 		detail.Quantity, detail.SubQuantity = next.Units, next.Sub

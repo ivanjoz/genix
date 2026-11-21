@@ -1,4 +1,4 @@
-package types
+package core
 
 // Moving weighted average kept as a cost pool: the row carries its total value (StockValue) and
 // the per-unit AverageCost is derived from it. Quantities are in sub-units at the row's divisor

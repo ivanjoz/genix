@@ -117,6 +117,9 @@ func PrepareNewSale(req *core.HandlerArgs, newSale NewSaleRequest) (PreparedSale
 	}
 	isSameDayCollection := sales.StampSameDayCollection(&sale, collectedAmount, 0, today)
 	sale.StampPeriod()
+	if err := sale.StampSiteID(); err != nil {
+		return PreparedSale{}, err
+	}
 	if isDelivery {
 		if err := sales.StampSaleDelivery(&sale, userID, nowTime); err != nil {
 			return PreparedSale{}, err

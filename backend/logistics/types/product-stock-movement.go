@@ -49,19 +49,17 @@ type WarehouseProductMovement struct {
 	CompanyID int32 `cb:"1"`
 	// ID packs Date(16 bits)+WarehouseID(16 bits)+Type(6 bits)+the per-day sequence (the remaining
 	// 25 bits) into an int64.
-	ID                   int64  `cb:"2"`
-	SerialNumber         string `cb:"3"`
-	LotID                int32  `cb:"4"`
-	WarehouseID          int32  `cb:"5"`
-	WarehouseRefID       int32  `cb:"6"`
-	WarehouseRefQuantity int32  `cb:"7"`
-	Date                 int16  `cb:"8"`
-	DocumentID           int64  `cb:"9"`
-	ProductID            int32  `cb:"10"`
-	PresentationID       int16  `cb:"11"`
-	Quantity             int32  `cb:"12"`
-	WarehouseQuantity    int32  `cb:"13"`
-	SubQuantity          int32  `cb:"14"`
+	ID             int64  `cb:"2"`
+	SerialNumber   string `cb:"3"`
+	LotID          int32  `cb:"4"`
+	WarehouseID    int32  `cb:"5"`
+	WarehouseRefID int32  `cb:"6"`
+	Date           int16  `cb:"8"`
+	DocumentID     int64  `cb:"9"`
+	ProductID      int32  `cb:"10"`
+	PresentationID int16  `cb:"11"`
+	Quantity       int32  `cb:"12"`
+	SubQuantity    int32  `cb:"14"`
 	// SubDivisor is the divisor SubQuantity was recorded in. It must live on the ledger row
 	// itself: RecalcProductStockByMovements replays the whole history, and without it a
 	// SUM(SubQuantity) spanning a divisor refinement would add sixths to twelfths.
@@ -85,33 +83,80 @@ type WarehouseProductMovement struct {
 	// Updated is the ORM-stamped write tick: the period delta index packs it into its key and a
 	// Delta() read hands it to the client as the cursor.
 	Updated int32 `json:"upd" cb:"upd,25"`
+	// SiteID is the site (sede) of WarehouseID, stamped by the engine when the row is written: what the
+	// daily-product-stock frame sums by. PostWarehouse refuses to move a warehouse that has stock rows to
+	// another site, so it never goes stale.
+	SiteID int16 `cb:"26"`
+	// RefSiteID is the site of WarehouseRefID (a transfer's other warehouse; 0 without one), stamped
+	// with SiteID: a transfer between two warehouses of one site leaves the site's stock as it was, so
+	// the daily-product-stock frame leaves both of its legs out.
+	RefSiteID int16 `cb:"27"`
+}
+
+// ProductStockDailyFrame is one ledger row as the "daily-product-stock" DataFrame sums it: what came
+// into and what left a site's stock of a product on a day, apart, so a reader knows a day that took
+// stock in (the sales forecast's censoring, plan/SALES_FORECAST_PLAN.md §10.2). The ledger is the
+// stock's source of truth (RecalcProductStockByMovements replays it), so a day's closing stock is the
+// current ProductStock less the days after it. Quantities are the split pair, exact: a balance summed
+// over a long range can't carry the rounding a fractional quantity would.
+type ProductStockDailyFrame struct {
+	// Date is the frame's Part, spread by week: partition_id = CompanyID << 13 | the epoch week of
+	// Date, one aggregate row per week with a column per day.
+	Date      int16 `frame:"part,13"`
+	SiteID    int16 `frame:"key"`
+	ProductID int32 `frame:"row,20"`
+	// SubDivisor is its own row, so a product refined mid-history keeps sixths and twelfths apart: the
+	// reader converts them, the frame never mixes them.
+	SubDivisor int16 `frame:"row,11"`
+	// The inflow is positive and the outflow negative, each the split pair of the movements of its sign.
+	InUnits  int32 `frame:"sum"`
+	InSub    int32 `frame:"sum"`
+	OutUnits int32 `frame:"sum"`
+	OutSub   int32 `frame:"sum"`
+}
+
+// ToProductStockDailyFrames is what the ledger row adds to its site's day, at the divisor it was
+// recorded in: its quantity as an inflow or an outflow by the sign of its whole value (a "set stock to
+// X" delta may pair units and sub-units of opposite signs). A transfer inside one site adds nothing.
+func (e *WarehouseProductMovement) ToProductStockDailyFrames(lines []ProductStockDailyFrame) []ProductStockDailyFrame {
+	if e.WarehouseRefID > 0 && e.RefSiteID == e.SiteID {
+		return lines
+	}
+	subDivisor := max(e.SubDivisor, core.QuantityDivisorNone)
+	line := ProductStockDailyFrame{Date: e.Date, SiteID: e.SiteID, ProductID: e.ProductID, SubDivisor: subDivisor}
+	if (core.Quantity{Units: e.Quantity, Sub: e.SubQuantity}).TotalSubUnits(subDivisor) >= 0 {
+		line.InUnits, line.InSub = e.Quantity, e.SubQuantity
+	} else {
+		line.OutUnits, line.OutSub = e.Quantity, e.SubQuantity
+	}
+	return append(lines, line)
 }
 
 type WarehouseProductMovementTable struct {
 	db.TableStruct[WarehouseProductMovementTable, WarehouseProductMovement]
-	CompanyID            db.Col[*WarehouseProductMovementTable, int32]
-	ID                   db.Col[*WarehouseProductMovementTable, int64]
-	SerialNumber         db.Col[*WarehouseProductMovementTable, string]
-	LotID                db.Col[*WarehouseProductMovementTable, int32]
-	WarehouseID          db.Col[*WarehouseProductMovementTable, int32]
-	WarehouseRefID       db.Col[*WarehouseProductMovementTable, int32]
-	WarehouseRefQuantity db.Col[*WarehouseProductMovementTable, int32]
-	DocumentID           db.Col[*WarehouseProductMovementTable, int64]
-	ProductID            db.Col[*WarehouseProductMovementTable, int32]
-	PresentationID       db.Col[*WarehouseProductMovementTable, int16]
-	Quantity             db.Col[*WarehouseProductMovementTable, int32]
-	WarehouseQuantity    db.Col[*WarehouseProductMovementTable, int32]
-	SubQuantity          db.Col[*WarehouseProductMovementTable, int32]
-	SubDivisor           db.Col[*WarehouseProductMovementTable, int16]
-	Type                 db.Col[*WarehouseProductMovementTable, StockMovementType]
-	Created              db.Col[*WarehouseProductMovementTable, int32]
-	MonetaryValue        db.Col[*WarehouseProductMovementTable, int32]
-	CreatedBy            db.Col[*WarehouseProductMovementTable, int32]
-	Date                 db.Col[*WarehouseProductMovementTable, int16]
-	Period               db.Col[*WarehouseProductMovementTable, int16]
-	PurchaseAccountCode  db.Col[*WarehouseProductMovementTable, int32]
-	Version              db.Col[*WarehouseProductMovementTable, int16]
-	Updated              db.Col[*WarehouseProductMovementTable, int32]
+	CompanyID           db.Col[*WarehouseProductMovementTable, int32]
+	ID                  db.Col[*WarehouseProductMovementTable, int64]
+	SerialNumber        db.Col[*WarehouseProductMovementTable, string]
+	LotID               db.Col[*WarehouseProductMovementTable, int32]
+	WarehouseID         db.Col[*WarehouseProductMovementTable, int32]
+	WarehouseRefID      db.Col[*WarehouseProductMovementTable, int32]
+	DocumentID          db.Col[*WarehouseProductMovementTable, int64]
+	ProductID           db.Col[*WarehouseProductMovementTable, int32]
+	PresentationID      db.Col[*WarehouseProductMovementTable, int16]
+	Quantity            db.Col[*WarehouseProductMovementTable, int32]
+	SubQuantity         db.Col[*WarehouseProductMovementTable, int32]
+	SubDivisor          db.Col[*WarehouseProductMovementTable, int16]
+	Type                db.Col[*WarehouseProductMovementTable, StockMovementType]
+	Created             db.Col[*WarehouseProductMovementTable, int32]
+	MonetaryValue       db.Col[*WarehouseProductMovementTable, int32]
+	CreatedBy           db.Col[*WarehouseProductMovementTable, int32]
+	Date                db.Col[*WarehouseProductMovementTable, int16]
+	Period              db.Col[*WarehouseProductMovementTable, int16]
+	PurchaseAccountCode db.Col[*WarehouseProductMovementTable, int32]
+	Version             db.Col[*WarehouseProductMovementTable, int16]
+	Updated             db.Col[*WarehouseProductMovementTable, int32]
+	SiteID              db.Col[*WarehouseProductMovementTable, int16]
+	RefSiteID           db.Col[*WarehouseProductMovementTable, int16]
 }
 
 func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
@@ -166,6 +211,16 @@ func (e WarehouseProductMovementTable) GetSchema() db.TableSchema {
 				Type: db.TypeCacheGroup, Keys: db.Cols(e.Date, e.ProductID),
 			},
 		},
+		DataFrames: []db.DataFrame{{
+			// The daily stock inflow and outflow per site and product, for the sales forecast. A read
+			// names a range of days (the Part). Most rows move one way in a day, so the zero sums mask
+			// drops the other pair; UseFileCache serves the settled days from their cached file.
+			Name:            "daily-product-stock",
+			UseWeekSpread:   true,
+			UseZeroSumsMask: true,
+			UseFileCache:    true,
+			ToFrames:        db.ToFrames((*WarehouseProductMovement).ToProductStockDailyFrames),
+		}},
 	}
 }
 

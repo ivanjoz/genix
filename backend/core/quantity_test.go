@@ -168,8 +168,7 @@ func TestDivisorRefinementRules(t *testing.T) {
 	}
 }
 
-// The lazy conversion that lets a divisor change avoid rewriting history: the stock row
-// converts itself on the fly when a movement arrives at a finer divisor.
+// The conversion a divisor refinement applies to a stock row at product save.
 func TestConvertToDivisorMatchesTheStockRowExample(t *testing.T) {
 	stock := Quantity{Units: 21, Sub: 4} // 21 boxes + 4/6, divisor 6
 

@@ -52,6 +52,7 @@ var recordCollections = map[string]recordCollection{
 	sales.FrameSQLCollectionProducts:   {noun: "product|producto", search: searchProducts, namesByID: productNamesByID},
 	sales.FrameSQLCollectionClients:    {noun: "client|cliente", search: searchClients, namesByID: clientNamesByID},
 	sales.FrameSQLCollectionCategories: {noun: "category|categoría", search: searchCategories, namesByID: categoryNamesByID},
+	sales.FrameSQLCollectionSites:      {noun: "site|sede", search: searchSites, namesByID: siteNamesByID},
 }
 
 func searchProducts(companyID int32, name string) ([]recordMatch, error) {
@@ -108,6 +109,36 @@ func categoryNamesByID(companyID int32, ids []int32) (map[int32]string, error) {
 	names := make(map[int32]string, len(categories))
 	for _, category := range categories {
 		names[category.ID] = category.Name
+	}
+	return names, nil
+}
+
+// searchSites offers every active site (sede): they have no text search, and a company has few, so
+// classifyMatches picks among them all.
+func searchSites(companyID int32, _ string) ([]recordMatch, error) {
+	sites := []business.Site{}
+	query := db.Query(&sites)
+	query.Select(query.ID, query.Name).CompanyID.Equals(companyID).Status.Equals(1)
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("read the sites: %w", err)
+	}
+	matches := make([]recordMatch, len(sites))
+	for i, site := range sites {
+		matches[i] = recordMatch{ID: site.ID, Name: site.Name}
+	}
+	return matches, nil
+}
+
+func siteNamesByID(companyID int32, ids []int32) (map[int32]string, error) {
+	sites := []business.Site{}
+	query := db.Query(&sites)
+	query.Select(query.ID, query.Name).CompanyID.Equals(companyID).ID.In(ids...)
+	if err := query.Exec(); err != nil {
+		return nil, fmt.Errorf("read site names: %w", err)
+	}
+	names := make(map[int32]string, len(sites))
+	for _, site := range sites {
+		names[site.ID] = site.Name
 	}
 	return names, nil
 }

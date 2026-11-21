@@ -304,8 +304,8 @@ func readSupplyStock(companyID int32, suppliesWarehouseID int32, supplyIDs []int
 				lot := lotByID[detail.LotID]
 				supplyStock.Buckets = append(supplyStock.Buckets, types.SupplyStockBucket{
 					LotID: detail.LotID, SerialNumber: detail.SerialNumber,
-					Quantity:      core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity},
-					QualityStatus: lot.QualityStatus, ExpirationDate: lot.ExpirationDate,
+					Quantity:  core.Quantity{Units: detail.Quantity, Sub: detail.SubQuantity},
+					IsBlocked: logistics.IsLotQualityBlocked(lot.QualityStatus), ExpirationDate: lot.ExpirationDate,
 				})
 			}
 		}

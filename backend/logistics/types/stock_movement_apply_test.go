@@ -99,8 +99,8 @@ func TestRefineStockDivisorRejectsCoarsening(t *testing.T) {
 	}
 }
 
-// A row that has never carried sub-units adopts whatever the next movement brings, and
-// converting to the divisor it already holds is a no-op rather than an error.
+// A row of a product that gains its first sub-unit only takes the new divisor, and converting
+// to the divisor it already holds is a no-op rather than an error.
 func TestRefineStockDivisorAdoptsAndNoOps(t *testing.T) {
 	fresh := &ProductStock{ID: 1, Quantity: 5}
 	if err := refineStockDivisor(fresh, nil, 6, 1, 1); err != nil {

@@ -15,7 +15,7 @@ import (
 )
 
 // The FrameSQL columns follow the frame structs field by field: a sum added to the struct and not
-// here would shift every column after it.
+// here would shift every column after it. A frame's Part reads as its leading key.
 func TestSaleFrameSQLFramesMatchTheFrameStructs(t *testing.T) {
 	countByTag := func(frameStruct any) map[string]int {
 		counts := map[string]int{}
@@ -31,7 +31,7 @@ func TestSaleFrameSQLFramesMatchTheFrameStructs(t *testing.T) {
 	for i, frameStruct := range []any{SaleSummaryFrame{}, SaleClientProductFrame{}} {
 		counts := countByTag(frameStruct)
 		frame := frames[i]
-		if len(frame.Keys) != counts["key"] || len(frame.Rows) != counts["row"] || len(frame.Sums) != counts["sum"] {
+		if len(frame.Keys) != counts["part"]+counts["key"] || len(frame.Rows) != counts["row"] || len(frame.Sums) != counts["sum"] {
 			t.Errorf("%s declares %d/%d/%d keys/rows/sums, its struct has %v", frame.Name, len(frame.Keys), len(frame.Rows), len(frame.Sums), counts)
 		}
 	}
@@ -54,8 +54,8 @@ func TestSaleFrameSQLFramesMatchTheFrameStructs(t *testing.T) {
 func TestSaleCategoryViewSumsEachCategory(t *testing.T) {
 	frames := SaleFrameSQLFrames(1)
 	summaryRows := []dataframe.Row{
-		{Keys: []int64{20000}, RowValues: []int64{77, 0}, Sums: []int64{1000, 0, 0, 0, 0, 0, 0, 0}},
-		{Keys: []int64{20000}, RowValues: []int64{78, 0}, Sums: []int64{300, 0, 0, 0, 0, 0, 0, 0}},
+		{Keys: []int64{20000}, RowValues: []int64{77}, Sums: []int64{1000, 0, 0, 0}},
+		{Keys: []int64{20000}, RowValues: []int64{78}, Sums: []int64{300, 0, 0, 0}},
 	}
 	categoryRows := []dataframe.Row{{Keys: []int64{0}, RowValues: []int64{3, 77}}, {Keys: []int64{0}, RowValues: []int64{5, 77}}}
 	frames[0].Source = func(dataframe.Selection) ([]dataframe.Row, error) { return summaryRows, nil }
@@ -77,8 +77,8 @@ func TestSaleCategoryViewSumsEachCategory(t *testing.T) {
 	}
 }
 
-// A box of six and a box of twelve, sold loose in one day: the agent's quantity adds the sixth and
-// the twelfth as whole units, and never sees the divisors.
+// A box of six and a box of twelve, sold loose in one day: the quantity adds the sixth and the
+// twelfth as fractions of a unit, in one row per product.
 func TestSaleFrameSQLQuantityAddsSubUnitsOfAnyDivisor(t *testing.T) {
 	sales := []SaleOrder{
 		{Date: 20000, ClientID: 7, Status: OrderStatusCompleted, Lines: []SaleOrderLine{
@@ -95,9 +95,8 @@ func TestSaleFrameSQLQuantityAddsSubUnitsOfAnyDivisor(t *testing.T) {
 			scaled := func(value float64) int64 { return int64(math.Round(value * dataframe.FloatScale)) }
 			rows = append(rows, dataframe.Row{
 				Keys:      []int64{int64(line.Date)},
-				RowValues: []int64{int64(line.ClientID), int64(line.ProductID), int64(line.SubDivisor)},
-				Sums: []int64{int64(line.AmountPEN), int64(line.DebtAmountPEN), int64(line.SoldUnits), int64(line.SoldSub),
-					int64(line.PendingUnits), int64(line.PendingSub), scaled(line.SoldQuantity), scaled(line.PendingQuantity)},
+				RowValues: []int64{int64(line.ClientID), int64(line.ProductID)},
+				Sums:      []int64{int64(line.AmountPEN), int64(line.DebtAmountPEN), scaled(line.SoldQuantity), scaled(line.PendingQuantity)},
 			})
 		}
 	}
@@ -129,8 +128,5 @@ func TestSaleFrameSQLQuantityAddsSubUnitsOfAnyDivisor(t *testing.T) {
 		if got != testCase.want {
 			t.Errorf("%s\n got  %s\n want %s", testCase.statement, got, testCase.want)
 		}
-	}
-	if _, err := db.PrepareFrameSQL("sale_summary", "SELECT SUM(sold_sub) WHERE date = 20000", frames, db.SQLOptions{}); err == nil {
-		t.Error("the split sub-unit sums must stay hidden from statements")
 	}
 }

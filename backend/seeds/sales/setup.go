@@ -24,6 +24,9 @@ func Setup(run *runner.Run) ([]runner.DayStep, error) {
 	if err := saveDemoShippingCosts(run); err != nil {
 		return nil, core.Err("No se pudieron guardar los costos de envío:", err)
 	}
+	if err := ensurePeruHolidays(run); err != nil {
+		return nil, core.Err("No se pudieron guardar los feriados del Perú:", err)
+	}
 	return []runner.DayStep{
 		{Name: "sales", Order: runner.OrderSales, Run: func(dayStart time.Time) error { return runDailySales(run, dayStart) }},
 		{Name: "annulments", Order: runner.OrderAnnulments, Run: func(dayStart time.Time) error { return runAnnulmentsStep(run, dayStart) }},

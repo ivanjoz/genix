@@ -23,7 +23,7 @@ icon = "icon-[fa--shopping-cart]"
 [[modules.menus]]
 name = "Sales|Ventas"
 min_name = "VEN"
-routes = "sales/sale_order_create, sales/sale_orders_status, sales/online-orders, sales/sale_planning, sales/shipping-costs"
+routes = "sales/sale_order_create, sales/sale_orders_status, sales/online-orders, sales/sale_planning, sales/calendar-events, sales/shipping-costs"
 
 [[modules.menus]]
 name = "Reports|Reportes"

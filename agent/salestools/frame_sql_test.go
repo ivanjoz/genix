@@ -21,17 +21,17 @@ import (
 )
 
 // Two days of sale-summary rows: product 1 "Leche Gloria" sells both days, 2 "Leche Laive" once, 3
-// "Pan" once. Sums are in sale-summary's order: amount, debt, 4 hidden, quantity, pending.
+// "Pan" once. Sums are in sale-summary's order: amount, debt, quantity, pending.
 func withTestFrames(t *testing.T) (today int64, reads *int) {
 	core.SetHistoricalUnix(time.Date(2026, 10, 27, 15, 0, 0, 0, time.UTC).Unix())
 	t.Cleanup(func() { core.SetHistoricalUnix(0) })
 	today = int64(core.FechaUnix())
 	quantity := func(units int64) int64 { return units * dataframe.FloatScale }
 	rows := []dataframe.Row{
-		{Keys: []int64{today - 1}, RowValues: []int64{1, 1}, Sums: []int64{1000, 0, 0, 0, 0, 0, quantity(2), 0}},
-		{Keys: []int64{today - 1}, RowValues: []int64{3, 1}, Sums: []int64{300, 0, 0, 0, 0, 0, quantity(3), 0}},
-		{Keys: []int64{today}, RowValues: []int64{1, 1}, Sums: []int64{700, 0, 0, 0, 0, 0, quantity(1), 0}},
-		{Keys: []int64{today}, RowValues: []int64{2, 1}, Sums: []int64{2500, 0, 0, 0, 0, 0, quantity(5), 0}},
+		{Keys: []int64{today - 1}, RowValues: []int64{1}, Sums: []int64{1000, 0, quantity(2), 0}},
+		{Keys: []int64{today - 1}, RowValues: []int64{3}, Sums: []int64{300, 0, quantity(3), 0}},
+		{Keys: []int64{today}, RowValues: []int64{1}, Sums: []int64{700, 0, quantity(1), 0}},
+		{Keys: []int64{today}, RowValues: []int64{2}, Sums: []int64{2500, 0, quantity(5), 0}},
 	}
 	reads = new(int)
 	original := saleFrames

@@ -1,7 +1,6 @@
 package production
 
 import (
-	business "app/business/types"
 	"app/core"
 	"app/db"
 	logistics "app/logistics/types"
@@ -44,7 +43,7 @@ func validateProductOriginChanges(companyID int32, products []types.Product, sto
 		}
 	}
 	for _, stored := range boughtToMade {
-		hasStock, err := productHasStock(companyID, stored)
+		hasStock, err := productHasStock(companyID, stored.ID)
 		if err != nil {
 			return err
 		}
@@ -82,30 +81,11 @@ func readProductIDsWithPendingStockExit(companyID int32) (map[int32]bool, error)
 
 // productHasStock is whether any warehouse holds units of the product, in any presentation, lots and
 // serials included.
-func productHasStock(companyID int32, product types.Product) (bool, error) {
-	warehouses := []business.Warehouse{}
-	warehouseQuery := db.Query(&warehouses)
-	warehouseQuery.Select(warehouseQuery.ID).CompanyID.Equals(companyID)
-	if err := warehouseQuery.Exec(); err != nil {
-		return false, core.Err("Error al obtener los almacenes:", err)
-	}
-	presentationIDs := []int16{0}
-	for _, presentation := range product.Presentations {
-		presentationIDs = append(presentationIDs, presentation.ID)
-	}
-	stockIDs := core.SliceSet[int64]{}
-	for _, warehouse := range warehouses {
-		for _, presentationID := range presentationIDs {
-			stockIDs.Add(logistics.PackProductStockID(warehouse.ID, product.ID, presentationID))
-		}
-	}
-	if stockIDs.IsEmpty() {
-		return false, nil
-	}
+func productHasStock(companyID int32, productID int32) (bool, error) {
 	stockRows := []logistics.ProductStock{}
 	stockQuery := db.Query(&stockRows)
 	stockQuery.Select(stockQuery.Quantity, stockQuery.SubQuantity, stockQuery.DetailQuantity, stockQuery.DetailSubQuantity).
-		CompanyID.Equals(companyID).ID.In(stockIDs.Values...)
+		CompanyID.Equals(companyID).ProductID.Equals(productID)
 	if err := stockQuery.Exec(); err != nil {
 		return false, core.Err("Error al obtener el stock del producto:", err)
 	}

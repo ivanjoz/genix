@@ -153,9 +153,8 @@ func IsQuantityDivisorRefinement(fromDivisor int16, toDivisor int16) bool {
 // only the fractional part changes granularity: {21,4} at divisor 6 becomes {21,8} at
 // divisor 12, since 4/6 and 8/12 are the same value.
 //
-// This is what lets a divisor change stay lazy — a stock row records the divisor it was
-// last written under and converts on the fly when a movement arrives at a finer one, so no
-// bulk rewrite of history is ever needed.
+// This is what lets a divisor change leave history alone: the product save converts the stock
+// rows, and a ledger movement written at an older divisor converts up when it is replayed.
 func (quantity Quantity) ConvertToDivisor(fromDivisor int16, toDivisor int16) (Quantity, error) {
 	if err := ValidateQuantityDivisor(fromDivisor); err != nil {
 		return Quantity{}, err

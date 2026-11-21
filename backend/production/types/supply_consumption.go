@@ -2,7 +2,6 @@ package types
 
 import (
 	"app/core"
-	logistics "app/logistics/types"
 	"cmp"
 	"fmt"
 	"math"
@@ -19,14 +18,10 @@ type SupplyStockBucket struct {
 	LotID        int32
 	SerialNumber string
 	Quantity     core.Quantity // at the row's SubDivisor
-	// The lot's, for a lot bucket (docs/MANUFACTURING_PLAN.md §10). A blocked lot is neither
-	// available nor walked; ExpirationDate (UnixDay, 0 = none) orders the walk.
-	QualityStatus  int8
+	// The lot's, for a lot bucket (docs/MANUFACTURING_PLAN.md §10). A blocked lot (not Liberado) is
+	// neither available nor walked; ExpirationDate (UnixDay, 0 = none) orders the walk.
+	IsBlocked      bool
 	ExpirationDate int16
-}
-
-func (bucket SupplyStockBucket) isBlocked() bool {
-	return logistics.IsLotQualityBlocked(bucket.QualityStatus)
 }
 
 // SupplyStock is a supply's stock row in the supplies warehouse.
@@ -65,7 +60,7 @@ func OrderSupplyStockBuckets(buckets []SupplyStockBucket, today int16) {
 		switch {
 		case bucket.LotID == 0 && bucket.SerialNumber == "":
 			return 0
-		case bucket.isBlocked():
+		case bucket.IsBlocked:
 			return 3
 		case bucket.ExpirationDate > 0 && bucket.ExpirationDate < today:
 			return 2
@@ -108,7 +103,7 @@ func ReadSupplyStockAtDivisor(stock SupplyStock, divisor int16) (SupplyStockAtDi
 		atDivisor.BucketSubUnits[bucketIndex] = converted.TotalSubUnits(divisor)
 		// The balance is the whole row's, blocked lots included: it is what the engine values an exit against.
 		atDivisor.BalanceSubUnits += atDivisor.BucketSubUnits[bucketIndex]
-		if !bucket.isBlocked() {
+		if !bucket.IsBlocked {
 			atDivisor.AvailableSubUnits += max(atDivisor.BucketSubUnits[bucketIndex], 0)
 		}
 	}
@@ -159,7 +154,7 @@ func WalkSupplyBuckets(supplyID int32, divisor int16, stock SupplyStock, atDivis
 	takes []ProductSupplyTake) ([]SupplyConsumption, error) {
 	bucketSubUnits := append([]int64(nil), atDivisor.BucketSubUnits...)
 	for bucketIndex, bucket := range stock.Buckets {
-		if bucket.isBlocked() {
+		if bucket.IsBlocked {
 			bucketSubUnits[bucketIndex] = 0
 		}
 	}
@@ -171,7 +166,7 @@ func WalkSupplyBuckets(supplyID int32, divisor int16, stock SupplyStock, atDivis
 		for toConsume > 0 && bucketIndex < len(stock.Buckets) {
 			taken := min(toConsume, max(bucketSubUnits[bucketIndex], 0))
 			if taken > 0 {
-				value := logistics.StockOutflowValue(remainingValue, remainingBalance, taken)
+				value := core.StockOutflowValue(remainingValue, remainingBalance, taken)
 				remainingValue -= int64(value)
 				remainingBalance -= taken
 				bucketSubUnits[bucketIndex] -= taken

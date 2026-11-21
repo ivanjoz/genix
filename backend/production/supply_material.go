@@ -8,6 +8,7 @@ import (
 	"app/production/types"
 	"encoding/json"
 	"fmt"
+	"slices"
 )
 
 // GetSupplyMaterials returns the supply catalog using the delta-cache protocol. A first sync
@@ -88,7 +89,8 @@ type supplyMaterialIDMapping struct {
 // rules: a valid, named divisor, refined only to a multiple of the stored one, since the supply's
 // stock and the recipes that consume it are expressed in it. The origin may not change while the
 // supply has stock: its stock account would move between 231 (semi-finished) and its purchase one.
-func validateStoredSupplyChanges(companyID int32, supplyProducts []types.Product) error {
+// It answers the IDs of the stored supplies whose divisor the save changes.
+func validateStoredSupplyChanges(companyID int32, supplyProducts []types.Product) ([]int32, error) {
 	storedIDs := core.SliceSet[int32]{}
 	for _, supply := range supplyProducts {
 		storedIDs.AddIf(supply.ID)
@@ -99,29 +101,85 @@ func validateStoredSupplyChanges(companyID int32, supplyProducts []types.Product
 		query := db.Query(&storedSupplies)
 		query.Select(query.ID, query.Name, query.SbuQuantity, query.Origin).CompanyID.Equals(companyID).ID.In(storedIDs.Values...)
 		if err := query.Exec(); err != nil {
-			return core.Err("Error al obtener los insumos guardados:", err)
+			return nil, core.Err("Error al obtener los insumos guardados:", err)
 		}
 		for _, stored := range storedSupplies {
 			storedByID[stored.ID] = stored
 		}
 	}
 	if err := validateProductSubUnitDivisors(supplyProducts, storedByID); err != nil {
-		return err
+		return nil, err
 	}
+	changedDivisorSupplyIDs := []int32{}
 	for _, supply := range supplyProducts {
 		stored, isStored := storedByID[supply.ID]
+		if isStored && max(supply.SbuQuantity, core.QuantityDivisorNone) != max(stored.SbuQuantity, core.QuantityDivisorNone) {
+			changedDivisorSupplyIDs = append(changedDivisorSupplyIDs, supply.ID)
+		}
 		if !isStored || stored.Origin == supply.Origin {
 			continue
 		}
-		hasStock, err := productHasStock(companyID, stored)
+		hasStock, err := productHasStock(companyID, stored.ID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if hasStock {
-			return core.Err(fmt.Sprintf(`"%s" tiene stock: no puede cambiar entre semielaborado y comprado mientras lo tenga.`, stored.Name))
+			return nil, core.Err(fmt.Sprintf(`"%s" tiene stock: no puede cambiar entre semielaborado y comprado mientras lo tenga.`, stored.Name))
 		}
 	}
-	return nil
+	return changedDivisorSupplyIDs, nil
+}
+
+// saveSupplyDivisorChanges stores the new sub-unit divisor of the stored supplies that change it,
+// together with the conversion of their stock, in one transaction. The supply merge that follows is
+// not transactional, so the divisor cannot wait for it: a supply at its new divisor with its stock
+// still at the old one would refuse every movement. The rule is checked again on the locked rows.
+func saveSupplyDivisorChanges(req *core.HandlerArgs, supplyProducts []types.Product,
+	changedDivisorSupplyIDs []int32, nowTime int32) error {
+
+	if len(changedDivisorSupplyIDs) == 0 {
+		return nil
+	}
+	return db.RunTransaction(func(transaction *db.Transaction) error {
+		lockedSupplies := []types.Product{}
+		// In key order, so two saves of overlapping supplies queue instead of deadlocking.
+		slices.Sort(changedDivisorSupplyIDs)
+		for _, supplyID := range changedDivisorSupplyIDs {
+			lockedSupplies = append(lockedSupplies, types.Product{CompanyID: req.User.CompanyID, ID: supplyID})
+		}
+		if err := db.LockByKeys(transaction, &lockedSupplies); err != nil {
+			return core.Err("Error al obtener los insumos guardados:", err)
+		}
+		storedByID := make(map[int32]types.Product, len(lockedSupplies))
+		for _, stored := range lockedSupplies {
+			storedByID[stored.ID] = stored
+		}
+		if err := validateProductSubUnitDivisors(supplyProducts, storedByID); err != nil {
+			return err
+		}
+		if err := refineStockOfChangedDivisorsIn(transaction, req, supplyProducts, storedByID); err != nil {
+			return err
+		}
+
+		// Only the divisor and its unit name are written here; the merge writes the rest.
+		refinedSupplies := []types.Product{}
+		for _, supply := range supplyProducts {
+			stored, isStored := storedByID[supply.ID]
+			if !isStored || max(supply.SbuQuantity, core.QuantityDivisorNone) == max(stored.SbuQuantity, core.QuantityDivisorNone) {
+				continue
+			}
+			stored.SbuQuantity, stored.SbuUnit = supply.SbuQuantity, supply.SbuUnit
+			stored.Updated, stored.UpdatedBy = nowTime, req.User.ID
+			refinedSupplies = append(refinedSupplies, stored)
+		}
+		if len(refinedSupplies) == 0 {
+			return nil
+		}
+		if err := db.UpsertIn(transaction, &refinedSupplies); err != nil {
+			return core.Err("Error al guardar el divisor de los insumos:", err)
+		}
+		return nil
+	})
 }
 
 // PostSupplyMaterial upserts a batch of supplies as Product rows with Status = 2, then writes
@@ -230,11 +288,15 @@ func PostSupplyMaterial(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
-	if storedError := validateStoredSupplyChanges(req.User.CompanyID, supplyProducts); storedError != nil {
+	changedDivisorSupplyIDs, storedError := validateStoredSupplyChanges(req.User.CompanyID, supplyProducts)
+	if storedError != nil {
 		return req.MakeErr(storedError)
 	}
 	if productionError := validateProductsProduction(req.User.CompanyID, supplyProducts); productionError != nil {
 		return req.MakeErr(productionError)
+	}
+	if divisorError := saveSupplyDivisorChanges(req, supplyProducts, changedDivisorSupplyIDs, currentTimestamp); divisorError != nil {
+		return req.MakeErr(divisorError)
 	}
 
 	// The merge writes BrandName, the brand half of the product text index.

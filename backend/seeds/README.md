@@ -64,7 +64,7 @@ following only stops the tail; a menu then offers to abort the run, follow again
 |---|---|---|---|
 | base | | legal parameters (per country), warehouses 1–2, a till per store (the first keeps the company's first till, the others are `Caja Tienda N`) + the bank `BCP Cta. Cte. Soles`, default F001/B001, providers and clients from `erp_history_*.json`, `products.xlsx`, 100 supply providers, 100 supply materials, product pool | |
 | logistics | | replenishment settings for the first N products (min stock, sales/day, 2 providers each) | purchase orders |
-| sales | logistics | sales planning (skipped if present), shipping costs for 20 Lima districts | sales, annulments |
+| sales | logistics | sales planning (skipped if present), shipping costs for 20 Lima districts, Peru's national holidays 2024–2027 into the global calendar (partition 0, missing ones only) | sales, annulments |
 | finance | | expense schedules and suppliers | expenses, till transfers, till counts |
 | accounting | | 100 assets from `assets.psv` (skipped if the company has 100) | month-end depreciation |
 | hr | | staff (skipped if the company has employees), concepts, recurring items, a loan | payroll |

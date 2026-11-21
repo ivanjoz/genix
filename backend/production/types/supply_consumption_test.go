@@ -2,7 +2,6 @@ package types
 
 import (
 	"app/core"
-	logistics "app/logistics/types"
 	"slices"
 	"testing"
 )
@@ -13,7 +12,7 @@ func TestOrderSupplyStockBucketsWalksEarliestExpiryFirstAndExpiredLast(t *testin
 		{LotID: 3},                      // released, no expiry
 		{LotID: 5, ExpirationDate: 200}, // released
 		{LotID: 6, ExpirationDate: 90},  // expired: warned, taken last
-		{LotID: 2, QualityStatus: logistics.LotQualityQuarantine},
+		{LotID: 2, IsBlocked: true},
 		{LotID: 4, ExpirationDate: 150},     // released, expires first
 		{LotID: 1, ExpirationDate: 150},     // same expiry, older lot
 		{Quantity: core.Quantity{Units: 1}}, // the free bucket
@@ -32,8 +31,8 @@ func TestBlockedLotsAreNeitherAvailableNorWalked(t *testing.T) {
 	// 1 kg free, 2 kg in lot 7 (Cuarentena), 1 kg in lot 8 (Liberado): 4 kg worth 4000 cents.
 	stock := SupplyStock{SubDivisor: 1000, StockValue: 4000, Buckets: []SupplyStockBucket{
 		{Quantity: core.Quantity{Units: 1}},
-		{LotID: 8, QualityStatus: logistics.LotQualityReleased, Quantity: core.Quantity{Units: 1}},
-		{LotID: 7, QualityStatus: logistics.LotQualityQuarantine, Quantity: core.Quantity{Units: 2}},
+		{LotID: 8, Quantity: core.Quantity{Units: 1}},
+		{LotID: 7, IsBlocked: true, Quantity: core.Quantity{Units: 2}},
 	}}
 	atDivisor, err := ReadSupplyStockAtDivisor(stock, 1000)
 	if err != nil {
@@ -67,7 +66,7 @@ func TestPlanDailyCloseSkipsALotInQuarantine(t *testing.T) {
 	riceStock := input.SupplyStockByID[riceID]
 	riceStock.Buckets = []SupplyStockBucket{
 		{Quantity: core.Quantity{Units: 1}},
-		{LotID: 7, QualityStatus: logistics.LotQualityQuarantine, Quantity: core.Quantity{Units: 2}},
+		{LotID: 7, IsBlocked: true, Quantity: core.Quantity{Units: 2}},
 	}
 	input.SupplyStockByID[riceID] = riceStock
 	plan := PlanDailyClose(input)

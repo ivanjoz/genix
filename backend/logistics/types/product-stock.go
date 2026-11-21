@@ -44,8 +44,8 @@ type ProductStock struct {
 	BlockedQuantity    int32 `cb:"30"`
 	BlockedSubQuantity int32 `cb:"31"`
 	// SubDivisor is the divisor every SubQuantity on this row (and on its detail rows, which
-	// are the same product) is expressed in. Kept here rather than read from the product so a
-	// divisor refinement converts this row on the fly instead of rewriting history.
+	// are the same product) is expressed in: always the product's current one, since the product
+	// save that refines the divisor converts the row (RefineProductStockDivisorIn).
 	SubDivisor                int16   `cb:"10"`
 	DetailComputedDate        int16   `cb:"11"`
 	DetailComputedQuantity    int32   `cb:"12"`
@@ -144,6 +144,9 @@ func (e ProductStockTable) GetSchema() db.TableSchema {
 		Indexes: []db.Index{
 			{Type: db.TypeDelta, Keys: db.Cols(e.WarehouseID.Size(17), e.Status)},
 			{Type: db.TypeDelta, Keys: db.Cols(e.Status)},
+			// Every row of one product, across warehouses and presentations: what a change of the
+			// product's sub-unit divisor converts (RefineProductStockDivisorIn).
+			{Type: db.TypeLocalIndex, Keys: db.Cols(e.ProductID)},
 		},
 	}
 }

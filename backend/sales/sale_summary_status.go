@@ -4,6 +4,7 @@ import (
 	"app/core"
 	"app/db"
 	"app/sales/types"
+	"math"
 	"slices"
 )
 
@@ -11,9 +12,9 @@ import (
 // (dataframe.MaxFirstKeys).
 const saleSummaryMaxDays = 400
 
-// saleFrameNames are the sale_order DataFrames the browser may read: the day/product summary and
-// the day/client/product detail.
-var saleFrameNames = []string{"sale-summary", "sale-client-product"}
+// saleFrameNames are the sale_order DataFrames the browser may read: the day/product summary, the
+// day/client/product detail, and the whole units sold per day/product (derived from the summary).
+var saleFrameNames = []string{"sale-summary", "sale-client-product", "sale-quantity"}
 
 // GetSaleSummary answers the files of a sale DataFrame (f) over a day range (from/to, UnixDay) that
 // the browser does not hold current (g/h: its generation and held files, genix-ui FRAME_CACHE.md).
@@ -31,9 +32,14 @@ func GetSaleSummary(req *core.HandlerArgs) core.HandlerResponse {
 	}
 
 	saleOrderTable := db.TableOf[types.SaleOrder]()
-	body, err := db.QueryFrame[types.SaleOrder](req.User.CompanyID, frameName).
-		Between(saleOrderTable.Date, int64(fromDate), int64(toDate)).
-		ExecChanged(req.Query["g"], req.Query["h"])
+	query := db.QueryFrame[types.SaleOrder](req.User.CompanyID, frameName).
+		Between(saleOrderTable.Date, int64(fromDate), int64(toDate))
+	// sale-summary and sale-quantity are keyed by site after their Date Part: a read takes every site.
+	// The SQL driver selects a Keys range inside the Part's rows, so the whole int16 range costs nothing.
+	if frameName != "sale-client-product" {
+		query = query.Between(saleOrderTable.SiteID, 0, math.MaxInt16)
+	}
+	body, err := query.ExecChanged(req.Query["g"], req.Query["h"])
 	if err != nil {
 		return req.MakeErr("Error al obtener el resumen de ventas.", err)
 	}

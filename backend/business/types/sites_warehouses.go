@@ -1,6 +1,11 @@
 package types
 
-import "app/db"
+import (
+	"app/core"
+	"app/db"
+	"fmt"
+	"math"
+)
 
 type Warehouse struct {
 	db.TableStruct[WarehouseTable, Warehouse]
@@ -42,6 +47,31 @@ func OnlineWarehouseIDs(warehouses []Warehouse) []int32 {
 		}
 	}
 	return warehouseIDs
+}
+
+// SiteIDsOfWarehouses is the site of each warehouse, as the int16 the stock ledger and the sales stamp
+// for the per-site DataFrames. A warehouse that doesn't exist, or whose site doesn't fit an int16,
+// refuses the whole lookup: a record must never be written under a wrong or missing site.
+func SiteIDsOfWarehouses(companyID int32, warehouseIDs []int32) (map[int32]int16, error) {
+	warehouses := []Warehouse{}
+	query := db.Query(&warehouses)
+	query.Select(query.ID, query.SiteID).CompanyID.Equals(companyID).ID.In(warehouseIDs...)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener las sedes de los almacenes:", err)
+	}
+	siteIDByWarehouseID := map[int32]int16{}
+	for _, warehouse := range warehouses {
+		if warehouse.SiteID <= 0 || warehouse.SiteID > math.MaxInt16 {
+			return nil, core.Err(fmt.Sprintf("El almacén %v tiene una sede inválida (%v).", warehouse.ID, warehouse.SiteID))
+		}
+		siteIDByWarehouseID[warehouse.ID] = int16(warehouse.SiteID)
+	}
+	for _, warehouseID := range warehouseIDs {
+		if _, isFound := siteIDByWarehouseID[warehouseID]; !isFound {
+			return nil, core.Err(fmt.Sprintf("No se encontró el almacén %v.", warehouseID))
+		}
+	}
+	return siteIDByWarehouseID, nil
 }
 
 // FirstOnlineWarehouseID is the lowest-ID warehouse open to online sales, 0 when there is none: the

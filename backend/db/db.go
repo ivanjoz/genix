@@ -364,6 +364,13 @@ func ToFrames[R any, F any](method func(*R, []F) []F) *dataframe.Projection {
 	return orm.ToFrames(method)
 }
 
+// DeriveFrame declares a derived DataFrame's function (DataFrame.Derive): from one row of the source
+// frame (S, its ToFrames struct) it fills a row of the derived frame (D), or returns false to leave the
+// row out. The derived frame keeps the source's Part and Keys. It must be pure.
+func DeriveFrame[S any, D any](derive func(source *S, derived *D) bool) *dataframe.Derivation {
+	return orm.DeriveFrame(derive)
+}
+
 // Compute binds a computed column (TableSchema.Computed) to a record method:
 // db.Compute((*SaleOrder).DetailProductIDs). It must be pure: it is called on every write.
 func Compute[RecordT any, ValueT any](method func(*RecordT) ValueT) *orm.ComputedValue {

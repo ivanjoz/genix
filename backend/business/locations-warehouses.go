@@ -6,6 +6,7 @@ import (
 	"app/core"
 	crm "app/crm/types"
 	"app/db"
+	logistics "app/logistics/types"
 	"encoding/json"
 	"fmt"
 
@@ -189,6 +190,25 @@ func validateWorkshopWarehouse(warehouse types.Warehouse) error {
 	return nil
 }
 
+// refuseSiteChangeWithStock refuses to move a warehouse to another site once it has stock rows: its
+// ledger rows carry the site they were written in, and the daily-product-stock frame sums by it, so
+// the stock it already holds would stay counted in the old site. A stock row exists from a warehouse's
+// first movement and is never deleted, so it is the cheap proof the warehouse has movements: its rows
+// are a contiguous range of the packed stock ID.
+func refuseSiteChangeWithStock(companyID, warehouseID int32) error {
+	stocks := []logistics.ProductStock{}
+	query := db.Query(&stocks)
+	query.Select(query.ID).CompanyID.Equals(companyID).
+		ID.Between(logistics.PackProductStockID(warehouseID, 0, 0), logistics.PackProductStockID(warehouseID+1, 0, 0)-1).Limit(1)
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al revisar el stock del almacén:", err)
+	}
+	if len(stocks) > 0 {
+		return core.Err("No se puede cambiar la sede de un almacén que ya tiene movimientos de stock.")
+	}
+	return nil
+}
+
 func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 
 	body := types.Warehouse{}
@@ -228,7 +248,7 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 	if body.ID > 0 {
 		storedWarehouses := []types.Warehouse{}
 		query := db.Query(&storedWarehouses)
-		query.Select(query.ID, query.Status, query.ExcludeFromOnlineSales).
+		query.Select(query.ID, query.Status, query.ExcludeFromOnlineSales, query.SiteID).
 			CompanyID.Equals(body.CompanyID).ID.Equals(body.ID)
 		if err := query.Exec(); err != nil {
 			return req.MakeErr("Error al obtener el almacén:", err)
@@ -237,6 +257,11 @@ func PostWarehouse(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr("No se encontró el almacén a actualizar.")
 		}
 		isOnlineStateChanged = storedWarehouses[0].IsOpenToOnlineSales() != body.IsOpenToOnlineSales()
+		if storedWarehouses[0].SiteID != body.SiteID {
+			if err := refuseSiteChangeWithStock(body.CompanyID, body.ID); err != nil {
+				return req.MakeErr(err)
+			}
+		}
 	}
 
 	almacenes := []types.Warehouse{body}

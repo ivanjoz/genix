@@ -109,6 +109,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[projectsTypes.StoryActivity](),
 		db.MakeController[projectsTypes.StoryAssignee](),
 		db.MakeController[projectsTypes.StoryDetail](),
+		db.MakeController[salesTypes.CalendarEvent](),
 		db.MakeController[salesTypes.ClientWeekSales](),
 		db.MakeController[salesTypes.OnlineSaleOrder](),
 		db.MakeController[salesTypes.SaleOrder](),
@@ -214,6 +215,7 @@ func init() {
 	db.RegisterTableFactory("projects_story_activity", func() db.Table { return db.MakeTable[projectsTypes.StoryActivity]() })
 	db.RegisterTableFactory("projects_story_assignee", func() db.Table { return db.MakeTable[projectsTypes.StoryAssignee]() })
 	db.RegisterTableFactory("projects_story_detail", func() db.Table { return db.MakeTable[projectsTypes.StoryDetail]() })
+	db.RegisterTableFactory("calendar_event", func() db.Table { return db.MakeTable[salesTypes.CalendarEvent]() })
 	db.RegisterTableFactory("client_week_sales", func() db.Table { return db.MakeTable[salesTypes.ClientWeekSales]() })
 	db.RegisterTableFactory("online_sale_order", func() db.Table { return db.MakeTable[salesTypes.OnlineSaleOrder]() })
 	db.RegisterTableFactory("sale_order", func() db.Table { return db.MakeTable[salesTypes.SaleOrder]() })

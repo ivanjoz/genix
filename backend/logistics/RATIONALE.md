@@ -238,10 +238,12 @@ operator opening a product that already has stock and sales and deciding to star
 pieces; changing an existing divisor is rare.
 
 **Decision** — `WarehouseProductMovement` and `ProductStock` each carry a `SubDivisor`, with
-`Product` holding the current authoritative one. A stock row converts itself on the fly when a
-movement arrives at a finer divisor: `{21,4}` at 6 becomes `{21,8}` at 12, then the movement lands
-with a plain add. A divisor may only be **refined to a multiple** — 6 to 12 is allowed, 12 to 6 and
-6 to 5 are refused at product save.
+`Product` holding the current authoritative one. A stock row is **always at its product's current
+divisor**: the product save that changes the divisor converts every stock row of the product and its
+detail rows in the same transaction (`RefineProductStockDivisorIn`, found through the `ProductID`
+index): `{21,4}` at 6 becomes `{21,8}` at 12. A divisor may only be **refined to a multiple** — 6 to
+12 is allowed, 12 to 6 and 6 to 5 are refused at product save. The ledger is never rewritten: each
+movement keeps the divisor it was written at.
 
 **Rationale** — the divisor has to be on the movement, not only the product, or the ledger replay in
 `RecalcProductStockByMovements` cannot interpret rows written under an older divisor and
@@ -251,17 +253,35 @@ with a plain add. A divisor may only be **refined to a multiple** — 6 to 12 is
 Refinement-only is what makes the conversion exact: 6 to 12 splits every sixth into two twelfths and
 loses nothing, while 12 to 6 turns 9/12 into 4.5 sixths and would silently round away real stock.
 
-Adding a sub-unit to a product that already has history rewrites **nothing** — every existing row has
-`SubQuantity = 0`, and zero sixths, zero twelfths and zero thousandths are the same zero. The
-frequent operation is free; only the rare one does lazy work, and it touches one stock row rather
-than the ledger.
+Adding a sub-unit to a product that already has history changes no quantity — every existing row has
+`SubQuantity = 0`, and zero sixths, zero twelfths and zero thousandths are the same zero — so the
+conversion only stamps the new divisor on the stock rows.
+
+The conversion is eager, at the product save, rather than lazy in the movement engine, so the work is
+paid once by the rare operation and never by a stock movement. Earlier the engine refined a row when a
+movement arrived at a finer divisor, which meant an extra detail query and a refinement branch in
+every movement path and in the replay. What the engine keeps:
+
+- A movement at a **coarser** divisor still converts up to the row: documents written before the
+  refinement (a pending sale delivery, a sale annulment return, a released production order) carry
+  their own divisor. That is one multiplication, no extra read. A movement **finer** than the row is
+  refused: it cannot come from a valid document.
+- A stock row the engine **creates** starts at the product's current divisor, not the movement's (a
+  purchase is in whole units). The engine reads and locks those products — only for rows it creates.
+  The lock is what keeps a concurrent divisor change from missing the new row: the product save holds
+  the product locked while it lists the product's stock rows. This is why `logistics/types` imports
+  `production/types` and not the reverse (`StockOutflowValue` / `StockAfterInflow` moved to `core`,
+  and `SupplyStockBucket` takes an `IsBlocked` flag instead of a lot status).
+- `RecalcProductStockByMovements` starts every row at its product's current divisor and converts each
+  movement up to it. It locks the company's products before the stock rows, in the order a product
+  save takes them.
+
+`PostSupplyMaterial` saves through a non-transactional merge, so a supply's divisor change and the
+stock conversion are written first in a transaction of their own, with the supplies locked.
 
 Detail rows carry no divisor of their own: they inherit the parent stock row's. That is forced by
 `ProductStock.DetailSubQuantity` being their **absolute re-sum** — per-detail divisors would make it
-add sixths to twelfths. So refining a stock row converts its whole detail set atomically, and when
-the triggering movement was free-bucket only (leaving the details unloaded) `ApplyMovimientos` loads
-them first. The extra query fires only on an actual refinement, which is rare by design.
-`RecalcProductStockByMovements` does the same mid-replay, since the ledger can span a refinement.
+add sixths to twelfths. So the conversion converts a row's whole detail set atomically.
 
 **Costs accepted:** coarsening a divisor is unsupported and must be refused; if it turns out to be a
 real workflow it needs its own design, because it is lossy by nature. The `GROUP BY SubDivisor`

@@ -25,7 +25,7 @@
 | FrameSQL agent tool | berryapps `01be9538^:backend/core/agent/agenttools/frame_sql.go` (655 lines): input schema, grammar for the model, view (table and chart), name resolution. Reference only. |
 | Eino harness reference | `/home/ivanjoz/projects/smartberry-agent` (Eino `v0.9.19`), not imported, patterns only: `agents/runner.go` (Runner, timeout pause, event consumption, token usage, traces), `agents/model.go` (model aliases → `eino-ext` openai/claude), `aws/checkpoint.go` (CheckPointStore on S3), `projects/turn.go` (chat turn, streaming), `tools/shell/` (shell over a workspace), `AGENTS.md` ("Eino practices"). |
 | Current dataframe read | `genix-orm/dataframe/read.go`: `dataframe.Read(..., isFresh, now) []Row{Keys, RowValues, Sums}`. It is reached through `db.QueryFrame[T](partition, frame).Fresh().Exec()` (`genix-orm/db/dataframe.go`). |
-| Sale frames | `sales/types/sales.go`: `sale-summary` (Key `Date`; Rows `ProductID, SubDivisor`; 6 sums) and `sale-client-product` (Key `Date`; Rows `ClientID, ProductID, SubDivisor`; same sums). |
+| Sale frames | `sales/types/sales.go`: `sale-summary` (week-spread Part `Date`, no Keys; Rows `ProductID`; 4 sums) and `sale-client-product` (Part `Date`; Rows `ClientID, ProductID`; same sums). FrameSQL reads the Part as the leading key `date`. |
 | Record names | `Product` has `TextSearch{Name, BrandName}` and `CacheByIDs`. `ClientProvider` (clients and providers, split by `Type`) has **no** TextSearch. |
 | Agent loop today | `backend/agent/chat_loop.go` (hand-written tool loop, 12 iterations), `llm/client.go` (OpenAI-compatible HTTP for Meta and OpenRouter), `discovery/planner.go` (classifier call), `route_turn.go`. |
 
@@ -171,10 +171,9 @@ company's `sale-summary`.
    | `sale_summary` | `date` (day) | `product_id` (ref → products) | `amount` (cents, AmountPEN), `debt_amount` (cents), `quantity` (SoldQuantity), `pending_quantity` |
    | `sale_client_product` | `date` (day) | `client_id` (ref → clients; 0 = no client), `product_id` | same |
 
-   - `sub_divisor` and the split `*_units` / `*_sub` sums stay in the frame for the chart, but they
-     are **not exposed to the agent**. `framesql.Column` gains `Hidden`: the column is left out of
-     the notation, the planner refuses it, and its rows fold into their product.
-   - The agent cannot get sub-units wrong because it never sees them.
+   - The frames keep no sub-unit divisor (version 3): quantities are whole units with sub-units as
+     their fraction, so the agent cannot get sub-units wrong because it never sees them.
+     `framesql.Column.Hidden` remains for other frames' internal columns.
    - Each dataset gets a Title, a Description (what one row is and what its numbers count) and
      Spanish and English Examples.
 

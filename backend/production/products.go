@@ -6,6 +6,7 @@ import (
 	config "app/config/types"
 	"app/core"
 	"app/db"
+	logistics "app/logistics/types"
 	"app/production/types"
 	"cmp"
 	"encoding/json"
@@ -267,6 +268,9 @@ func saveProductsIn(transaction *db.Transaction, req *core.HandlerArgs, producto
 	if err := validateProductSubUnitDivisors(productos, storedByID); err != nil {
 		return err
 	}
+	if err := refineStockOfChangedDivisorsIn(transaction, req, productos, storedByID); err != nil {
+		return err
+	}
 	if err := validateProductOriginChanges(req.User.CompanyID, productos, storedByID); err != nil {
 		return err
 	}
@@ -446,6 +450,22 @@ func validateProductSubUnitDivisors(productos []types.Product, storedByID map[in
 		}
 	}
 	return nil
+}
+
+// refineStockOfChangedDivisorsIn converts the stock of every product whose sub-unit divisor this save
+// changes, so the stock rows always hold the product's current divisor. storedByID must be the
+// products as read under lock in this transaction, and the change already validated.
+func refineStockOfChangedDivisorsIn(transaction *db.Transaction, req *core.HandlerArgs,
+	productos []types.Product, storedByID map[int32]types.Product) error {
+
+	divisorByProductID := map[int32]int16{}
+	for _, product := range productos {
+		stored, isUpdate := storedByID[product.ID]
+		if isUpdate && max(product.SbuQuantity, core.QuantityDivisorNone) != max(stored.SbuQuantity, core.QuantityDivisorNone) {
+			divisorByProductID[product.ID] = product.SbuQuantity
+		}
+	}
+	return logistics.RefineProductStockDivisorIn(transaction, req.User.CompanyID, req.User.ID, divisorByProductID)
 }
 
 func validateSubUnitDivisorRange(product *types.Product) error {

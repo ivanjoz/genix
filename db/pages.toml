@@ -107,6 +107,11 @@ route = "sales/sale_planning"
 name = "Sales Planning|Proyección Ventas"
 icon = "icon-[fa--bar-chart]"
 
+[[pages]]
+route = "sales/calendar-events"
+name = "Commercial Calendar|Calendario Comercial"
+icon = "icon-[fa--calendar]"
+
 # Website
 
 [[pages]]

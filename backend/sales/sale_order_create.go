@@ -183,6 +183,9 @@ func updateSaleOrder(req *core.HandlerArgs, saleRequest types.SaleOrder) core.Ha
 	}
 	isSameDayCollection := types.StampSameDayCollection(&sale, collectedAmount, paidBefore, today)
 	sale.StampPeriod()
+	if err := sale.StampSiteID(); err != nil {
+		return req.MakeErr(err)
+	}
 	if isDelivery {
 		if err := types.StampSaleDelivery(&sale, userID, nowTime); err != nil {
 			return req.MakeErr(err)
