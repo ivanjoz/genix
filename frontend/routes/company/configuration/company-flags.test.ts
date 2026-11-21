@@ -87,7 +87,7 @@ describe('company flag values', () => {
 })
 
 describe('companyFlagsCatalog', () => {
-  // Parses the real backend/company_flags.toml, so a malformed edit to it fails here.
+  // Parses the real backend/core/company_flags.toml, so a malformed edit to it fails here.
   it('carries the commercial flags and drops the sections with none', () => {
     expect(companyFlagsCatalog.length).toBeGreaterThan(0)
     expect(companyFlagsCatalog.every(section => section.flags.length > 0)).toBe(true)

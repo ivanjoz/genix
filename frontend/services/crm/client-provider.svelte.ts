@@ -28,6 +28,9 @@ export interface IClientProvider {
   CityID: string
   /** A lead that has not bought yet; winning an opportunity clears it. */
   IsProspect?: boolean
+  /** Payment terms, 0 = cash. A document saved without a due date falls due this many days after
+   *  its date: a client's sales, a provider's purchase orders and expenses. */
+  CreditDays: number
   ss: number
   upd: number
   UpdatedBy?: number

@@ -67,9 +67,10 @@ export class WarehousesService extends GetHandler {
     this.AlmacenesMap = new Map(this.Almacenes.map(e => [e.ID,e]))
   }
 
-  constructor(){
+  // init = false: the caller awaits its own fetch.
+  constructor(init = true){
     super()
-    this.fetch()
+    if (init) this.fetch()
   }
 }
 

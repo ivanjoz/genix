@@ -113,6 +113,7 @@ func payAssetIn(transaction *db.Transaction, req *core.HandlerArgs, asset *types
 		Amount:             -payload.Amount,
 		FinalAmount:        0,
 		SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
+		DocumentDate:       asset.AcquisitionDate,
 	}
 	if movementError := finance.ApplyCashBankMovementIn(
 		transaction, req, []finance.InternalCashMovement{movement},

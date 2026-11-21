@@ -82,8 +82,10 @@ type OperationCashMovement struct {
 	CounterAccountCode int32                    `cb:"6"`
 	Amount             int32                    `cb:"7"` // signed, in the cash bank's currency
 	CashBankRefID      int32                    `cb:"8"` // a transfer's other cash bank
-	Version            int16                    `json:"ver" cb:"ver,9"`
-	Metadata           *string                  `json:"mdt" cb:"mdt,10"`
+	// CounterAccountSplits divide the counter side across accounts (a loan payment); empty otherwise.
+	CounterAccountSplits []finance.CashMovementAccountSplit `cb:"11"`
+	Version              int16                              `json:"ver" cb:"ver,9"`
+	Metadata             *string                            `json:"mdt" cb:"mdt,10"`
 }
 
 // OperationPayslipLine is one posting line of a payslip, with the accounts stamped at calculation
@@ -148,7 +150,8 @@ var (
 		finance.CashMovementTypeSupplierPayment, finance.CashMovementTypeCollection,
 		finance.CashMovementTypeSaleCollection, finance.CashMovementTypeExpensePayment,
 		finance.CashMovementTypeAssetPayment, finance.CashMovementTypeSaleRefund,
-		finance.CashMovementTypePayrollPayment, finance.CashMovementTypePayrollContributions}
+		finance.CashMovementTypePayrollPayment, finance.CashMovementTypePayrollContributions,
+		finance.CashMovementTypeLoanDisbursement, finance.CashMovementTypeLoanPayment}
 )
 
 // GetAccountingOperations reads a whole period. Unlike the books, never a single day: the
@@ -211,7 +214,8 @@ func GetAccountingOperations(req *core.HandlerArgs) core.HandlerResponse {
 				ID: movement.ID, CashBankID: movement.CashBankID, DocumentID: movement.DocumentID,
 				Date: movement.Date, Type: movement.Type, CounterAccountCode: movement.CounterAccountCode,
 				Amount: movement.Amount, CashBankRefID: movement.CashBankRefID,
-				Version: movement.Version, Metadata: movement.Metadata,
+				CounterAccountSplits: movement.CounterAccountSplits,
+				Version:              movement.Version, Metadata: movement.Metadata,
 			}
 		})
 		return nil

@@ -725,7 +725,7 @@ files:
     role: user-interface
     hash: sha256:64f7141389b5db13573738c9fc49fcf6159672e69e3707e52a831ca4ab1758e0
     supports: [capability.sale-currency, related-pages]
-  - path: backend/company_flags.toml
+  - path: backend/core/company_flags.toml
     role: shared-domain
     hash: sha256:41281f5a4686ceecc28bc2c95a3c6deb4041e03771e7ad8533d07bb2afaf8799
     supports: [capability.sale-currency, troubleshooting, related-pages]

@@ -75,8 +75,8 @@ func (run *Run) InjectCash(cashBankID int32, at time.Time, currentBalance int32,
 // rebalanceCashBank recomputes the running balance (FinalAmount) of every movement of a cash
 // account in ID order — account, date, then write order within the day — and rewrites the ones
 // that changed. The opening balance is the account's current balance less every movement. If the
-// trail dips below zero somewhere, a capital contribution dated the day before openingDayStart
-// covers the deepest point and the trail is recomputed once more.
+// trail dips below zero somewhere, a capital contribution dated the day before openingDayStart (or
+// before the earliest movement, if that is older) covers the deepest point and the trail is recomputed once more.
 func (run *Run) RebalanceCashBank(cashBankID int32, openingDayStart time.Time) (int, error) {
 	rewritten := 0
 	for range 2 {
@@ -115,7 +115,14 @@ func (run *Run) RebalanceCashBank(cashBankID int32, openingDayStart time.Time) (
 		if lowestBalance >= 0 {
 			return rewritten, nil
 		}
-		if err := run.InjectCash(cashBankID, openingDayStart.Add(8*time.Hour), currentBalance, -lowestBalance); err != nil {
+		// The contribution must sort before the deepest point. Backdated movements (fixed assets paid
+		// on their acquisition date, years before the window) can precede openingDayStart, so it then
+		// lands the day before the account's earliest movement.
+		injectionDayStart := openingDayStart
+		if earliestDay := movements[0].Date; earliestDay <= core.TimeToFechaUnix(openingDayStart) {
+			injectionDayStart = run.DayStartTime(earliestDay - 1)
+		}
+		if err := run.InjectCash(cashBankID, injectionDayStart.Add(8*time.Hour), currentBalance, -lowestBalance); err != nil {
 			return rewritten, err
 		}
 		core.SetHistoricalUnix(0)

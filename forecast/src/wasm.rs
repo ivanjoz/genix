@@ -4,7 +4,8 @@
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
-use crate::engine::{self, DayBatch, EngineConfig, EngineState, RefitReason, STATE_VERSION, SeriesBatch, SeriesKey};
+use crate::calendar::Calendar;
+use crate::engine::{self, DayBatch, EngineConfig, EngineState, Model, RefitReason, STATE_VERSION, Scenario, SeriesBatch, SeriesKey};
 
 #[wasm_bindgen(start)]
 fn start() {
@@ -52,13 +53,32 @@ pub fn fit(
     config: JsValue,
 ) -> Result<Vec<u8>, JsError> {
     let keys = series_keys(site_ids, product_ids, category_ids)?;
-    let config: EngineConfig = if config.is_undefined() || config.is_null() {
-        EngineConfig::default()
-    } else {
-        serde_wasm_bindgen::from_value(config).map_err(|error| JsError::new(&format!("invalid config: {error}")))?
-    };
     let batch = SeriesBatch { start_day, keys: &keys, initial_stock, sales, closing_stock, inflow };
-    encode(&engine::fit(&batch, config).map_err(|error| JsError::new(&error))?)
+    encode(&engine::fit(&batch, parse_config(config)?).map_err(|error| JsError::new(&error))?)
+}
+
+fn parse_config(config: JsValue) -> Result<EngineConfig, JsError> {
+    if config.is_undefined() || config.is_null() {
+        return Ok(EngineConfig::default());
+    }
+    serde_wasm_bindgen::from_value(config).map_err(|error| JsError::new(&format!("invalid config: {error}")))
+}
+
+/// An empty state ending on `lastDay`, for a caller with a calendar: `create`, `setCalendar`, then
+/// `refit` with every series, so the first fit already learns the event factors.
+#[wasm_bindgen]
+pub fn create(last_day: i32, config: JsValue) -> Result<Vec<u8>, JsError> {
+    encode(&engine::create(last_day, parse_config(config)?).map_err(|error| JsError::new(&error))?)
+}
+
+/// Replaces the commercial calendar: every event (UnixDay and type 1 holiday, 2 payday,
+/// 3 gratificación, 4 commercial date), past and future. A change on a day already learned asks the
+/// affected series for a refit (`pendingRefits` reason "Calendar"). Returns the new state.
+#[wasm_bindgen(js_name = setCalendar)]
+pub fn set_calendar(state: &[u8], days: &[i32], types: &[u8]) -> Result<Vec<u8>, JsError> {
+    let mut state = decode(state)?;
+    engine::set_calendar(&mut state, Calendar::new(days, types).map_err(|error| JsError::new(&error))?);
+    encode(&state)
 }
 
 /// Fits some series again, with the same arrays as `fit` over a history ending on the state's last
@@ -108,9 +128,15 @@ struct SeriesKeysOutput {
     site_ids: Vec<i32>,
     product_ids: Vec<i32>,
     category_ids: Vec<i32>,
+    /// "HoltWinters" or "Tsb".
+    models: Vec<&'static str>,
+    scenarios: Vec<Scenario>,
+    /// Consecutive days of empty shelf up to the last day.
+    empty_shelf_days: Vec<u32>,
 }
 
-/// The state's last day and series, in the order `update`, `forecast` and `metrics` use.
+/// The state's last day and series, in the order `update`, `forecast` and `metrics` use, with each
+/// series' model, scenario and current empty-shelf run.
 #[wasm_bindgen]
 pub fn keys(state: &[u8]) -> Result<JsValue, JsError> {
     let state = decode(state)?;
@@ -119,6 +145,12 @@ pub fn keys(state: &[u8]) -> Result<JsValue, JsError> {
         site_ids: state.series.iter().map(|series| series.key.site_id).collect(),
         product_ids: state.series.iter().map(|series| series.key.product_id).collect(),
         category_ids: state.series.iter().map(|series| series.key.category_id).collect(),
+        models: state.series.iter().map(|series| match series.model {
+            Model::HoltWinters { .. } => "HoltWinters",
+            Model::Tsb { .. } => "Tsb",
+        }).collect(),
+        scenarios: state.series.iter().map(|series| series.fitted_scenario).collect(),
+        empty_shelf_days: state.series.iter().map(|series| series.empty_shelf_days).collect(),
     })
 }
 
@@ -129,7 +161,7 @@ struct PendingRefitsOutput {
 }
 
 /// Series whose refit trigger fired: `{ series: positions, reasons }`, reasons one of "Scenario",
-/// "ModelSwitch", "WorseThanNaive", "Period".
+/// "Calendar", "ModelSwitch", "WorseThanNaive", "Period".
 #[wasm_bindgen(js_name = pendingRefits)]
 pub fn pending_refits(state: &[u8]) -> Result<JsValue, JsError> {
     let state = decode(state)?;
@@ -137,7 +169,7 @@ pub fn pending_refits(state: &[u8]) -> Result<JsValue, JsError> {
     to_js(&PendingRefitsOutput { series, reasons })
 }
 
-/// Online accuracy since each series' last refit: `{ count, wape, bias, mase }`, each series-major
+/// Online accuracy of each series, carried across refits: `{ count, wape, bias, mase }`, each series-major
 /// with horizons 1 to 7 per series; NaN where nothing was scored yet.
 #[wasm_bindgen]
 pub fn metrics(state: &[u8]) -> Result<JsValue, JsError> {

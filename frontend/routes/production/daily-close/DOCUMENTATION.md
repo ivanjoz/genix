@@ -395,7 +395,7 @@ files:
     role: business-logic
     hash: sha256:dbfd1a1b4ef1d848c9b56f06b4b2ce3ecd10a5c07ce66fad45b626109c672901
     supports: [concepts, capability.preview-close, rules]
-  - path: backend/company_flags.toml
+  - path: backend/core/company_flags.toml
     role: shared-domain
     hash: sha256:41281f5a4686ceecc28bc2c95a3c6deb4041e03771e7ad8533d07bb2afaf8799
     supports: [concepts, rules, troubleshooting]

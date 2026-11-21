@@ -135,6 +135,7 @@ func PostSaleOrderAnnul(req *core.HandlerArgs) core.HandlerResponse {
 				Type:               finance.CashMovementTypeSaleRefund,
 				CounterAccountCode: finance.PCGEReceivable,
 				Amount:             -refundAmount,
+				DocumentDate:       sale.Date,
 			}}
 			if err := finance.ApplyCashBankMovementIn(transaction, req, refundMovements); err != nil {
 				return core.Err("Error al registrar la devolución del dinero:", err)

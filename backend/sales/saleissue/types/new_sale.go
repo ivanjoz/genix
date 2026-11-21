@@ -81,6 +81,9 @@ func PrepareNewSale(req *core.HandlerArgs, newSale NewSaleRequest) (PreparedSale
 		}
 		sale.ClientID = clientID
 	}
+	if err := sale.StampPaymentDueDate(); err != nil {
+		return PreparedSale{}, err
+	}
 
 	// The stock the sale holds while undelivered (ProductStock.PendingDelivery*). An undelivered sale
 	// keeps what its order reserved, or reserves its units now; a delivery releases them from where

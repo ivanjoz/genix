@@ -126,13 +126,12 @@ func CreateSaleWithRetry(run *runner.Run, saleTime time.Time, isUnpaid bool, isU
 
 		createdSale, createError := postSaleOrder(run, saleTime, salePayload)
 		if createError == nil {
-			// Only a delivered sale leaves the warehouse, so undelivered ones must not consume the
-			// reservation — the units stay available for the following sales.
-			if !isUndelivered {
-				for bucketIndex, bucket := range reservedBuckets {
-					// The line quantity is packed; the reservation is counted in whole units.
-					bucket.Remaining -= core.UnpackQuantityLine(salePayload.Lines[bucketIndex].Quantity).Units
-				}
+			// Every sale takes its units out of what is sellable: a delivered one moves them out of the
+			// warehouse, an undelivered one holds them (ProductStock.PendingDelivery*), which the
+			// sale's stock check no longer counts as free.
+			for bucketIndex, bucket := range reservedBuckets {
+				// The line quantity is packed; the reservation is counted in whole units.
+				bucket.Remaining -= core.UnpackQuantityLine(salePayload.Lines[bucketIndex].Quantity).Units
 			}
 			return createdSale, nil
 		}

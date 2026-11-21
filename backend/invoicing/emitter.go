@@ -24,7 +24,8 @@ import (
 // The issue date comes off the row, not the clock: a retry tomorrow must declare
 // the day the document was issued, not the day it finally got through. The buyer comes
 // off the row too, through the identity it pinned, for the same reason: a client renamed
-// between the reservation and the send must not change what this document declares.
+// between the reservation and the send must not change what this document declares. So do the
+// credit terms: a payment in between must not turn a Crédito document into a Contado one.
 func RebuildDocument(companyID int32, row *types.InvoiceDocument,
 	series *types.InvoiceSeries) (*model.Document, error) {
 
@@ -33,7 +34,8 @@ func RebuildDocument(companyID int32, row *types.InvoiceDocument,
 		return nil, err
 	}
 
-	document, _, err := types.SaleOrderToDocument(companyID, order, series, row.ClientSnapshotID, nil)
+	pinnedCreditTerms := types.DocumentCreditTerms{PendingAmount: row.PendingAmount, PaymentDueDate: row.PaymentDueDate}
+	document, _, err := types.SaleOrderToDocument(companyID, order, series, row.ClientSnapshotID, nil, pinnedCreditTerms)
 	if err != nil {
 		return nil, err
 	}

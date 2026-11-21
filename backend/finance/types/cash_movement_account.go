@@ -25,6 +25,8 @@ const (
 	PCGEOtherOperatingIncome   int32 = 759  // Otros ingresos de gestión
 	PCGECapital                int32 = 501  // Capital social — aporte de los socios
 	PCGELoansReceived          int32 = 451  // Préstamos de instituciones financieras y otras entidades
+	PCGELoanInterest           int32 = 673  // Intereses por préstamos y otras obligaciones
+	PCGELoanCharges            int32 = 671  // Gastos en operaciones de endeudamiento (comisiones, seguro de desgravamen)
 	PCGEReceivable             int32 = 1212 // Facturas por cobrar — emitidas en cartera
 	PCGESuppliers              int32 = 4212 // Facturas por pagar — emitidas
 	PCGEOtherPayables          int32 = 4699 // Otras cuentas por pagar diversas
@@ -52,6 +54,44 @@ var DocumentPaymentAccounts = map[CashMovementType][]int32{
 	CashMovementTypePayrollPayment:  {PCGESalariesPayable, PCGEStaffAdvances, PCGEStaffLoans},
 	CashMovementTypePayrollContributions: {PCGEEssaludPayable, PCGEOnpPayable, PCGEIncomeTax5ta, PCGEAfpPayable,
 		PCGEOtherStaffPayable},
+	CashMovementTypeLoanDisbursement: {PCGELoansReceived},
+	// The main account of a loan payment; its CounterAccountSplits carry the whole counter side.
+	CashMovementTypeLoanPayment: {PCGELoansReceived},
+}
+
+// CashMovementSplitAccounts are the types whose counter side is split across accounts, and the
+// accounts each split may use. A loan installment pays principal, interest and fees at once.
+var CashMovementSplitAccounts = map[CashMovementType][]int32{
+	CashMovementTypeLoanPayment: {PCGELoansReceived, PCGELoanInterest, PCGELoanCharges},
+}
+
+// ValidateCashMovementSplits checks a movement's splits: required (and only allowed) on the types in
+// CashMovementSplitAccounts, each on an allowed account with the movement's sign, adding up to it.
+func ValidateCashMovementSplits(movementType CashMovementType, amount int32, splits []CashMovementAccountSplit) error {
+	allowedAccounts, isSplitType := CashMovementSplitAccounts[movementType]
+	if !isSplitType {
+		if len(splits) > 0 {
+			return core.Err("Este tipo de movimiento no divide su contrapartida en cuentas.")
+		}
+		return nil
+	}
+	if len(splits) == 0 {
+		return core.Err("El movimiento debe indicar cómo se divide en cuentas.")
+	}
+	splitsTotal := int32(0)
+	for _, split := range splits {
+		if !slices.Contains(allowedAccounts, split.AccountCode) {
+			return core.Err("La cuenta", split.AccountCode, "no está permitida en la división de este movimiento.")
+		}
+		if split.Amount == 0 || (split.Amount < 0) != (amount < 0) {
+			return core.Err("Cada parte del movimiento debe tener su mismo signo y no ser cero.")
+		}
+		splitsTotal += split.Amount
+	}
+	if splitsTotal != amount {
+		return core.Err("Las partes del movimiento suman", splitsTotal, "y el movimiento es de", amount)
+	}
+	return nil
 }
 
 // PurchasePayableAccount is the payable a purchase leaves open: 4212 when the supplier's comprobante
@@ -91,7 +131,7 @@ var CashMovementAccountOptions = []CashMovementAccountOption{
 	{MovementType: CashMovementTypeCollection, AccountCode: PCGEShareholdersReceivable, Name: "Owner or shareholder repayment|Devolución del socio o accionista"},
 	{MovementType: CashMovementTypeCollection, AccountCode: PCGEOtherStaffReceivables, Name: "Repayment by an employee|Devolución de un trabajador"},
 	{MovementType: CashMovementTypeCollection, AccountCode: PCGECapital, Name: "Capital contribution|Aporte de capital"},
-	{MovementType: CashMovementTypeCollection, AccountCode: PCGELoansReceived, Name: "Loan received|Préstamo recibido"},
+	// No "Loan received" (451): a loan enters through the loans page, which records its schedule.
 }
 
 // ManualCashMovementTypes are the types a user registers by hand on a cash register, with the

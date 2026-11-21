@@ -58,6 +58,7 @@ export interface ISaleOrderLine {
   LotID: number
   PresentationID: number
   StockExitPending: boolean
+  PackID: number
 }
 
 //STRUCT:sales.SaleOrder
@@ -93,6 +94,7 @@ export interface ISaleOrder {
   ShippingAmount: number
   OnlineSaleOrderID: number
   PendingStockMovement: number
+  SiteID: number
   /* extra fields */
   CompanyID: number
   Name: string

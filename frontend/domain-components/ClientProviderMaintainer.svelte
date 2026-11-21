@@ -84,6 +84,7 @@
       Email: '',
       CountryID: 604,
       CityID: '',
+      CreditDays: 0,
       ss: 1,
       upd: 0,
     }
@@ -345,6 +346,16 @@
         leftOptions={IDENTITY_DOC_OPTIONS}
         saveLeft="IdentityDocType"
         deriveLeftOption={(value) => deriveIdentityDocType(String(value ?? ''))}
+      />
+      <!-- Payment terms: a sale, order or expense saved without a due date falls due this many days
+           after its date (0 = cash). The cash flow forecast collects and pays on that date. -->
+      <Input
+        label="Credit days|Días de crédito"
+        saveOn={clientProviderForm}
+        save="CreditDays"
+        type="number"
+        inputCss="ff-mono text-center"
+        css="col-span-24 md:col-span-12"
       />
       <SearchSelect
         label="Department | Province | District|Departamento | Provincia | Distrito"

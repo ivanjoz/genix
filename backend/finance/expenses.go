@@ -2,6 +2,7 @@ package finance
 
 import (
 	accounting "app/accounting/types"
+	business "app/business/types"
 	"app/core"
 	"app/db"
 	"app/finance/types"
@@ -150,6 +151,9 @@ func PostExpenses(req *core.HandlerArgs) core.HandlerResponse {
 		}
 	}
 
+	if err := body.StampSiteAndDueDate(req.User.CompanyID); err != nil {
+		return req.MakeErr(err)
+	}
 	if err := body.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
 		return req.MakeErr(err)
 	}
@@ -236,6 +240,8 @@ func savePaidExpenseDocumentIn(transaction *db.Transaction, req *core.HandlerArg
 	document.CurrencyType = stored.CurrencyType
 	stored.SupplierID = body.SupplierID
 	stored.AccountCode = body.AccountCode
+	// The site says where the money went, not how much: like the account, it can be set after paying.
+	stored.SiteID = body.SiteID
 	stored.SetPurchaseDocument(document)
 	if err := stored.ApplyPurchaseDocument(req.User.CompanyID); err != nil {
 		return err
@@ -254,7 +260,7 @@ func savePaidExpenseDocumentIn(transaction *db.Transaction, req *core.HandlerArg
 	if err := db.UpdateIn(transaction, &[]types.Expense{*stored},
 		q.SupplierID, q.ProviderSnapshotID, q.DocType, q.DocSeries, q.DocNumber, q.DocIssueDate,
 		q.TaxableAmount, q.TaxAmount, q.UntaxedAmount, q.OtherAmount, q.ExchangeRate,
-		q.AccountCode, q.Updated, q.UpdatedBy, q.Status, q.Period, q.SameDayCashBankID,
+		q.AccountCode, q.SiteID, q.Updated, q.UpdatedBy, q.Status, q.Period, q.SameDayCashBankID,
 	); err != nil {
 		return core.Err("Error al guardar el comprobante del gasto:", err)
 	}
@@ -331,6 +337,9 @@ func PostExpensesScheduled(req *core.HandlerArgs) core.HandlerResponse {
 	}
 	if body.StartDate == 0 {
 		return req.MakeErr("Debe especificar una fecha de inicio.")
+	}
+	if err := business.ValidateSiteID(req.User.CompanyID, body.SiteID); err != nil {
+		return req.MakeErr(err)
 	}
 
 	nowTime := core.SUnixTime()
@@ -487,6 +496,7 @@ func materializeSchedulePeriodsIn(transaction *db.Transaction, req *core.Handler
 			CategoryID:         schedule.CategoryID,
 			AccountCode:        schedule.AccountCode,
 			SupplierID:         schedule.SupplierID,
+			SiteID:             schedule.SiteID,
 			CurrencyType:       schedule.CurrencyType,
 			Date:               periodDate,
 			DueDate:            periodDate,
@@ -623,6 +633,7 @@ func payExpenseIn(transaction *db.Transaction, req *core.HandlerArgs, expense *t
 		Amount:             movementAmount,
 		FinalAmount:        0,
 		SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
+		DocumentDate:       expense.Date,
 	}
 	if err := types.ApplyCashBankMovementIn(transaction, req, []types.InternalCashMovement{movement}); err != nil {
 		return err

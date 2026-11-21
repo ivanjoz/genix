@@ -42,7 +42,10 @@ import (
 // 4: Culqi's live/test mode and Yape travel in the blob, and each site says whether it is a
 // pickup point. A version-3 blob would read as test mode, so a live store would charge with the
 // test key.
-const CompanyConfigVersion = int8(4)
+//
+// 5: the company's tax setup travels in the blob. A version-4 blob would read as "no regime", so
+// the cash flow forecast would project no taxes for a company that owes them.
+const CompanyConfigVersion = int8(5)
 
 type CompanyConfig struct {
 	Version       int8                     `cb:"1"`
@@ -54,6 +57,17 @@ type CompanyConfig struct {
 	Culqi         CompanyConfigCulqi       `cb:"7"`
 	Parameters    []CompanyConfigParameter `cb:"8"`
 	Sites         []CompanyConfigSite      `cb:"9"`
+	Tax           CompanyConfigTax         `cb:"10"`
+}
+
+// CompanyConfigTax is the company's tax setup (Company.TaxRegime and the fields beside it), read by
+// the cash flow commitments to date and size the monthly taxes. Its own struct because
+// CompanyConfigCompany has no colbin ids left.
+type CompanyConfigTax struct {
+	TaxRegime               int8  `cb:"1"`
+	IncomeTaxPrepaymentRate int32 `cb:"2"`
+	IsGoodTaxpayer          bool  `cb:"3"`
+	NrusCategory            int8  `cb:"4"`
 }
 
 // CompanyConfigSite is an establishment, carrying what a document has to declare
@@ -188,14 +202,20 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 			FlagValues:        company.FlagValues,
 		},
 		Culqi: CompanyConfigCulqi{
-			RsaKey:   company.CulqiConfig.RsaKey,
-			RsaKeyID: company.CulqiConfig.RsaKeyID,
-			KeyLive:  company.CulqiConfig.KeyLive,
-			KeyDev:   company.CulqiConfig.KeyDev,
-			IsLive:   company.CulqiConfig.IsLive,
+			RsaKey:      company.CulqiConfig.RsaKey,
+			RsaKeyID:    company.CulqiConfig.RsaKeyID,
+			KeyLive:     company.CulqiConfig.KeyLive,
+			KeyDev:      company.CulqiConfig.KeyDev,
+			IsLive:      company.CulqiConfig.IsLive,
 			YapeEnabled: company.CulqiConfig.YapeEnabled,
 		},
 		Sunat: CompanyConfigSunat{Series: company.InvoiceSeries},
+		Tax: CompanyConfigTax{
+			TaxRegime:               company.TaxRegime,
+			IncomeTaxPrepaymentRate: company.IncomeTaxPrepaymentRate,
+			IsGoodTaxpayer:          company.IsGoodTaxpayer,
+			NrusCategory:            company.NrusCategory,
+		},
 	}
 
 	// The blob is a legal-name document holder: BuildIssuer falls back to the trade
@@ -226,11 +246,11 @@ func AssembleCompanyConfig(company *Company, secrets *invoicing.CompanySecrets,
 	// to declare the address they were issued from.
 	for _, site := range sites {
 		config.Sites = append(config.Sites, CompanyConfigSite{
-			ID:      site.ID,
-			Name:    site.Name,
-			Address: site.Address,
-			CityID:  site.CityID,
-			Status:  site.Status,
+			ID:            site.ID,
+			Name:          site.Name,
+			Address:       site.Address,
+			CityID:        site.CityID,
+			Status:        site.Status,
 			IsPickupPoint: site.IsPickupPoint,
 		})
 		if site.Updated > config.SourceUpdated {

@@ -3,6 +3,7 @@ package types
 import (
 	business "app/business/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	"math"
@@ -163,6 +164,21 @@ func (e *SaleOrder) StampSiteID() error {
 		return err
 	}
 	e.SiteID = siteIDByWarehouseID[e.WarehouseID]
+	return nil
+}
+
+// StampPaymentDueDate gives a sale still owing money and saved without a due date the one its
+// client's credit days set (the sale's date for a cash client or no client). A due date the user picked
+// is kept. The cash flow forecast collects a receivable on this date.
+func (e *SaleOrder) StampPaymentDueDate() error {
+	if e.DebtAmount <= 0 || e.PaymentDueDate != 0 {
+		return nil
+	}
+	dueDate, err := crm.DueDateByCreditDays(e.CompanyID, e.ClientID, e.Date)
+	if err != nil {
+		return err
+	}
+	e.PaymentDueDate = dueDate
 	return nil
 }
 

@@ -88,7 +88,7 @@ deployed database needs `fn-homologate` before a company can save one.
 frontend draws a checkbox per flag, and the rules those flags gate run in the backend. `go:embed`
 cannot follow a symlink or reach outside its directory, so the file could not stay in `db/`.
 
-**Decision** — `backend/company_flags.toml` is the real file and `db/company_flags.toml` is a
+**Decision** — `backend/core/company_flags.toml` is the real file and `db/company_flags.toml` is a
 symlink to it (so is `db/access.toml`), the main package embeds it exactly as it does `access.toml`,
 and `core.LoadEmbeddedCompanyFlags` parses it into an id→name map. Sections carry a `label` key and
 every other key in them is a flag id, which is what lets one file hold both the headings and the

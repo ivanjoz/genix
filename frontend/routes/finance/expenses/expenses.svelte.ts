@@ -45,6 +45,8 @@ export interface IExpense extends IPurchaseDocument {
   AccountCode: number  // PCGE account: expense account (simple) or the supply's (inventory). 0 = unclassified.
   // The supplier's subcontracted production order this invoice is for (docs/MANUFACTURING_PLAN.md §8).
   ProductionOrderID?: number
+  // Site the expense belongs to; 0 = the whole company. An inventory expense takes its warehouse's.
+  SiteID: number
   Created: number  // SUnixTime the expense was registered.
   ss: number  // Payment lifecycle: 0 removed · 1 created/pending · 2 fully paid.
   upd: number
@@ -62,6 +64,7 @@ export interface IExpenseScheduled {
   StartDate: number
   EndDate: number
   AccountCode: number  // PCGE account every generated period is classified under.
+  SiteID: number  // Site every generated period belongs to; 0 = the whole company.
   ss: number
   upd: number
 }
@@ -87,6 +90,7 @@ export const expenseCategories: IExpenseCategoryOption[] = [
   { id: 8, label: 'Marketing|Marketing', defaultAccountCode: 6371 },
   { id: 9, label: 'Professional services|Servicios profesionales', defaultAccountCode: 6329 },
   { id: 10, label: 'Other|Otros' },
+  { id: 11, label: 'Merchandise purchases|Compras de mercadería' },
 ]
 
 // Picking a category proposes its PCGE account, which the user can still change. A category with

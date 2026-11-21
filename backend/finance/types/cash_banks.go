@@ -1,6 +1,9 @@
 package types
 
-import "app/db"
+import (
+	"app/db"
+	"slices"
+)
 
 type CashBank struct {
 	db.TableStruct[CashBankTable, CashBank]
@@ -100,6 +103,12 @@ const (
 	// CashMovementTypePayrollContributions pays what a payroll withheld or owes to third parties:
 	// EsSalud, ONP, 5ta, the AFPs, a judicial withholding. DocumentID is the run.
 	CashMovementTypePayrollContributions CashMovementType = 13
+	// CashMovementTypeLoanDisbursement is a loan's money arriving (451). DocumentID is the loan.
+	CashMovementTypeLoanDisbursement CashMovementType = 14
+	// CashMovementTypeLoanPayment pays one installment of a loan: DocumentID is the loan and
+	// ReferenceID the installment number. Its CounterAccountSplits divide it into principal (451),
+	// interest (673) and fees (671).
+	CashMovementTypeLoanPayment CashMovementType = 15
 )
 
 type CashBankMovement struct {
@@ -134,27 +143,89 @@ type CashBankMovement struct {
 	// Updated is the ORM-stamped write tick: the period delta index packs it into its key and a
 	// Delta() read hands it to the client as the cursor.
 	Updated int32 `json:"upd" cb:"upd,18"`
+	// DocumentDate is the date of the document a payment settles (the sale, order, expense or asset),
+	// stamped by its writer: the cash-delay frame measures how long the document took to turn into
+	// cash. 0 on the types that settle no document.
+	DocumentDate int16 `cb:"19"`
+	// CounterAccountSplits divide the counter side of one movement across several accounts, when one
+	// payment clears more than one: a loan installment is principal (451), interest (673) and fees
+	// (671). They add up to Amount, and CounterAccountCode keeps the main account. Empty on every
+	// other movement, whose counter side is CounterAccountCode alone (CashMovementSplitAccounts).
+	CounterAccountSplits []CashMovementAccountSplit `cb:"20"`
+}
+
+// CashMovementAccountSplit is one account's share of a movement, signed like the movement's Amount.
+type CashMovementAccountSplit struct {
+	AccountCode int32 `cb:"1"`
+	Amount      int32 `cb:"2"`
+}
+
+// CashDelayFrame is one document payment as the "cash-delay" DataFrame sums it: how much was paid or
+// collected on a day, at a cash bank, after how many days from its document's date. The cash flow
+// forecast turns forecast sales and purchases into forecast cash with it
+// (plan/CASH_FLOW_FORECAST_PLAN.md §4). The browser maps each cash bank to its site and currency.
+type CashDelayFrame struct {
+	// Date is the week-spread Part: partition_id = CompanyID << 13 | the epoch week of the payment.
+	Date       int16            `frame:"part,13"`
+	CashBankID int32            `frame:"key"`
+	Type       CashMovementType `frame:"row"`
+	DelayDays  int16            `frame:"row"`
+	// Amount is in the cash bank's currency, signed as the movement: collections +, payments −.
+	Amount int32 `frame:"sum"`
+}
+
+// CashDelayMaxDays clips the delay: a document settled later than this is a straggler, and its exact
+// delay says nothing about the shape of the curve.
+const CashDelayMaxDays = 120
+
+// cashDelayTypes are the payments whose delay a forecast reuses: sale collections and the purchases
+// the forecast projects (orders and unscheduled expenses). Refunds, asset payments and payroll are
+// not forecast from history.
+var cashDelayTypes = []CashMovementType{
+	CashMovementTypeSupplierPayment, CashMovementTypeSaleCollection, CashMovementTypeExpensePayment,
+}
+
+// ToCashDelayFrames is what the movement adds to its day: its amount at its delay, when it is a
+// document payment the forecast reuses. A payment before its document (an advance) counts at delay 0.
+func (e *CashBankMovement) ToCashDelayFrames(lines []CashDelayFrame) []CashDelayFrame {
+	if e.DocumentDate == 0 || !slices.Contains(cashDelayTypes, e.Type) {
+		return lines
+	}
+	delayDays := min(max(e.Date-e.DocumentDate, 0), CashDelayMaxDays)
+	return append(lines, CashDelayFrame{
+		Date: e.Date, CashBankID: e.CashBankID, Type: e.Type, DelayDays: delayDays, Amount: e.Amount,
+	})
+}
+
+// cashDocumentTypes are the movement types that settle a document, so their writer must stamp its date.
+var cashDocumentTypes = []CashMovementType{
+	CashMovementTypeSupplierPayment, CashMovementTypeSaleCollection, CashMovementTypeExpensePayment,
+	CashMovementTypeAssetPayment, CashMovementTypeSaleRefund,
+	// A loan payment's document date is the installment's due date: paid late or early shows.
+	CashMovementTypeLoanPayment,
 }
 
 type CashBankMovementTable struct {
 	db.TableStruct[CashBankMovementTable, CashBankMovement]
-	CompanyID          db.Col[*CashBankMovementTable, int32]
-	ID                 db.Col[*CashBankMovementTable, int64]
-	CashBankID         db.Col[*CashBankMovementTable, int32]
-	CashBankRefID      db.Col[*CashBankMovementTable, int32]
-	DocumentID         db.Col[*CashBankMovementTable, int64]
-	ReferenceID        db.Col[*CashBankMovementTable, int32]
-	Date               db.Col[*CashBankMovementTable, int16]
-	Type               db.Col[*CashBankMovementTable, CashMovementType]
-	CounterAccountCode db.Col[*CashBankMovementTable, int32]
-	FinalAmount        db.Col[*CashBankMovementTable, int32]
-	Amount             db.Col[*CashBankMovementTable, int32]
-	Created            db.Col[*CashBankMovementTable, int32]
-	CreatedBy          db.Col[*CashBankMovementTable, int32]
-	Period             db.Col[*CashBankMovementTable, int16]
-	SameDayMovement    db.Col[*CashBankMovementTable, int8]
-	Version            db.Col[*CashBankMovementTable, int16]
-	Updated            db.Col[*CashBankMovementTable, int32]
+	CompanyID            db.Col[*CashBankMovementTable, int32]
+	ID                   db.Col[*CashBankMovementTable, int64]
+	CashBankID           db.Col[*CashBankMovementTable, int32]
+	CashBankRefID        db.Col[*CashBankMovementTable, int32]
+	DocumentID           db.Col[*CashBankMovementTable, int64]
+	ReferenceID          db.Col[*CashBankMovementTable, int32]
+	Date                 db.Col[*CashBankMovementTable, int16]
+	Type                 db.Col[*CashBankMovementTable, CashMovementType]
+	CounterAccountCode   db.Col[*CashBankMovementTable, int32]
+	FinalAmount          db.Col[*CashBankMovementTable, int32]
+	Amount               db.Col[*CashBankMovementTable, int32]
+	Created              db.Col[*CashBankMovementTable, int32]
+	CreatedBy            db.Col[*CashBankMovementTable, int32]
+	Period               db.Col[*CashBankMovementTable, int16]
+	SameDayMovement      db.Col[*CashBankMovementTable, int8]
+	Version              db.Col[*CashBankMovementTable, int16]
+	Updated              db.Col[*CashBankMovementTable, int32]
+	DocumentDate         db.Col[*CashBankMovementTable, int16]
+	CounterAccountSplits db.Col[*CashBankMovementTable, []CashMovementAccountSplit]
 }
 
 func (e CashBankMovementTable) GetSchema() db.TableSchema {
@@ -186,6 +257,14 @@ func (e CashBankMovementTable) GetSchema() db.TableSchema {
 			// just the sync filter a first sync lists.
 			{Type: db.TypeDelta, Keys: db.Cols(e.Period, e.SameDayMovement, e.Type)},
 		},
+		DataFrames: []db.DataFrame{{
+			// The delay from document to cash, per day, cash bank, type and delay. A restamp of a
+			// movement (SameDayMovement) leaves its line as it was: none of its frame columns change.
+			Name:          "cash-delay",
+			Version:       1,
+			UseWeekSpread: true,
+			ToFrames:      db.ToFrames((*CashBankMovement).ToCashDelayFrames),
+		}},
 	}
 }
 
@@ -252,6 +331,10 @@ type InternalCashMovement struct {
 	// SameDayMovement is 1 when the document's process decided this payment alone settles it on its
 	// accounting date (SameDaySettlement).
 	SameDayMovement int8
+	// DocumentDate is the date of the document the payment settles; required on cashDocumentTypes.
+	DocumentDate int16
+	// CounterAccountSplits: required on the types in CashMovementSplitAccounts, refused on the rest.
+	CounterAccountSplits []CashMovementAccountSplit
 }
 
 type SaleProduct struct {

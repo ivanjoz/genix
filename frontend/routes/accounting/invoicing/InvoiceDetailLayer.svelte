@@ -97,6 +97,15 @@ async function download(artifact: "xml" | "cdr") {
   <LabelCell css="col-span-12" label="IGV|IGV"
     value={formatN(invoiceDocument.TaxAmount / 100, 2)}
   />
+  <!-- The payment terms the document declared to SUNAT: a credit factura owes one cuota. -->
+  <LabelCell css="col-span-12" label="Payment Terms|Forma de Pago"
+    value={tr(invoiceDocument.PendingAmount > 0 ? "Credit|Crédito" : "Cash|Contado")}
+  />
+  {#if invoiceDocument.PendingAmount > 0}
+    <LabelCell css="col-span-12" label="Cuota Due|Vence la Cuota"
+      value={`${formatTime(invoiceDocument.PaymentDueDate, "d-m-Y")} · ${formatN(invoiceDocument.PendingAmount / 100, 2)}`}
+    />
+  {/if}
 </div>
 
 <div class="mt-12 flex flex-wrap gap-8" aria-label="Invoice document downloads">

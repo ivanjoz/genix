@@ -37,8 +37,10 @@ import (
 func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
 	series *InvoiceSeries, saleProducts map[int32]production.Product) (*InvoiceDocument, error) {
 
-	// No pin yet — this is where the client's current identity gets frozen onto the row.
-	document, clientSnapshotID, err := SaleOrderToDocument(companyID, order, series, 0, saleProducts)
+	// No pin yet — this is where the client's current identity and the credit terms get frozen
+	// onto the row.
+	creditTerms := CreditTermsForSale(order, series.DocType, core.FechaUnix())
+	document, clientSnapshotID, err := SaleOrderToDocument(companyID, order, series, 0, saleProducts, creditTerms)
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +68,7 @@ func PrepareDocumentForSale(companyID, userID int32, order *sales.SaleOrder,
 	document.Correlativo = order.Correlativo()
 
 	row := rowFromDocument(companyID, userID, order, series, document, clientSnapshotID)
+	row.PendingAmount, row.PaymentDueDate = creditTerms.PendingAmount, creditTerms.PaymentDueDate
 	return &row, nil
 }
 

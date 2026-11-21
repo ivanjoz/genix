@@ -18,6 +18,13 @@ var ModuleHandlers = core.AppRouterType{
 	"POST.expenses-scheduled":      PostExpensesScheduled,
 	"GET.expense-schedule-periods": GetExpenseSchedulePeriods,
 	"POST.expense-payment":         PostExpensePayment,
+	// Cash flow forecast history frames
+	"GET.cash-delay":      GetCashDelay,
+	"GET.expense-summary": GetExpenseSummary,
+	// Loans
+	"GET.loans":         GetLoans,
+	"POST.loans":        PostLoans,
+	"POST.loan-payment": PostLoanPayment,
 	// Exchange rates module
 	"GET.exchange-rates":  GetExchangeRates,
 	"POST.exchange-rates": PostExchangeRates,

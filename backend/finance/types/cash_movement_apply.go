@@ -11,6 +11,7 @@ package types
 import (
 	"app/core"
 	"app/db"
+	"slices"
 )
 
 func GetCaja(companyID, cashBankID int32) (CashBank, error) {
@@ -113,6 +114,20 @@ func ApplyCashBankMovementIn(transaction *db.Transaction, req *core.HandlerArgs,
 			return accountErr
 		}
 
+		if splitErr := ValidateCashMovementSplits(m.Type, m.Amount, m.CounterAccountSplits); splitErr != nil {
+			return splitErr
+		}
+
+		// A document payment carries its document's date, so the cash-delay frame can measure it. A
+		// writer that forgets it fails here instead of silently leaving the payment out of the curve.
+		isDocumentPayment := slices.Contains(cashDocumentTypes, m.Type)
+		if isDocumentPayment && m.DocumentDate <= 0 {
+			return core.Err("El pago de un documento debe indicar la fecha del documento (tipo", m.Type, ").")
+		}
+		if !isDocumentPayment {
+			m.DocumentDate = 0
+		}
+
 		// If FinalAmount is provided, validate it matches the calculated result.
 		if m.FinalAmount != 0 {
 			calculatedAmount := previousAmount + m.Amount
@@ -130,20 +145,22 @@ func ApplyCashBankMovementIn(transaction *db.Transaction, req *core.HandlerArgs,
 		}
 
 		record := CashBankMovement{
-			CompanyID:          req.User.CompanyID,
-			CashBankID:         m.CashBankID,
-			CashBankRefID:      m.CashBankRefID,
-			DocumentID:         m.DocumentID,
-			ReferenceID:        m.ReferenceID,
-			Date:               movementDate,
-			Type:               m.Type,
-			CounterAccountCode: accountCode,
-			Amount:             m.Amount,
-			FinalAmount:        m.FinalAmount,
-			Created:            nowTime,
-			CreatedBy:          req.User.ID,
-			Period:             core.PeriodOfDay(movementDate),
-			SameDayMovement:    m.SameDayMovement,
+			CompanyID:            req.User.CompanyID,
+			CashBankID:           m.CashBankID,
+			CashBankRefID:        m.CashBankRefID,
+			DocumentID:           m.DocumentID,
+			ReferenceID:          m.ReferenceID,
+			Date:                 movementDate,
+			Type:                 m.Type,
+			CounterAccountCode:   accountCode,
+			Amount:               m.Amount,
+			FinalAmount:          m.FinalAmount,
+			Created:              nowTime,
+			CreatedBy:            req.User.ID,
+			Period:               core.PeriodOfDay(movementDate),
+			SameDayMovement:      m.SameDayMovement,
+			DocumentDate:         m.DocumentDate,
+			CounterAccountSplits: m.CounterAccountSplits,
 		}
 
 		records = append(records, record)

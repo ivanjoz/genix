@@ -290,7 +290,7 @@ What changes:
 
 ## 4. Company flag
 
-`backend/company_flags.toml`, new section. Id 15 is the next free one; 9 is retired.
+`backend/core/company_flags.toml`, new section. Id 15 is the next free one; 9 is retired.
 
 ```toml
 [production]

@@ -193,9 +193,15 @@ func receivePurchaseOrderIn(
 	order.Updated = core.SUnixTime()
 	order.UpdatedBy = req.User.ID
 	order.StampPeriod()
+	// The goods landed in warehouseID, which may not be the one the order named: the order moves to
+	// it and to its site, as a sale delivered from another warehouse does.
+	order.WarehouseID = warehouseID
+	if err := order.StampSiteID(warehouseID); err != nil {
+		return err
+	}
 	q := db.TableOf[types.PurchaseOrder]()
 	if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*order},
-		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period,
+		q.Status, q.DifferenceValue, q.Updated, q.UpdatedBy, q.Period, q.WarehouseID, q.SiteID,
 	); err != nil {
 		return core.Err("Error al actualizar la orden de compra.", err)
 	}
@@ -304,6 +310,15 @@ func PostPurchaseOrder(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr(err)
 	}
 	record.ProviderSnapshotID = snapshotID
+	if err := record.StampSiteID(record.WarehouseID); err != nil {
+		return req.MakeErr(err)
+	}
+	// An order with no payment date falls due under the supplier's credit days.
+	if record.PaymentDate == 0 {
+		if record.PaymentDate, err = crm.DueDateByCreditDays(req.User.CompanyID, record.ProviderID, record.Date); err != nil {
+			return req.MakeErr(err)
+		}
+	}
 	// El comprobante puede venir con la orden o registrarse después con su propia acción.
 	record.CurrencyType = core.If(record.CurrencyType == 0, finance.CurrencyPEN, record.CurrencyType)
 	if err := record.ApplyPurchaseDocument(); err != nil {
@@ -464,9 +479,20 @@ func applyPurchaseOrderActionIn(
 		orderCurrent.Notes = patch.Notes
 		orderCurrent.Updated = now
 		orderCurrent.UpdatedBy = req.User.ID
+		if err := orderCurrent.StampSiteID(orderCurrent.WarehouseID); err != nil {
+			return err
+		}
+		// Clearing the payment date falls back to the supplier's credit days, as on creation.
+		if orderCurrent.PaymentDate == 0 {
+			dueDate, err := crm.DueDateByCreditDays(req.User.CompanyID, orderCurrent.ProviderID, orderCurrent.Date)
+			if err != nil {
+				return err
+			}
+			orderCurrent.PaymentDate = dueDate
+		}
 
 		if err := db.UpdateIn(transaction, &[]types.PurchaseOrder{*orderCurrent},
-			q.WarehouseID, q.DeliveryDate, q.PaymentDate, q.Notes, q.Updated, q.UpdatedBy, q.Status, q.Period,
+			q.WarehouseID, q.SiteID, q.DeliveryDate, q.PaymentDate, q.Notes, q.Updated, q.UpdatedBy, q.Status, q.Period,
 		); err != nil {
 			return core.Err("Error al actualizar la orden de compra.", err)
 		}
@@ -523,6 +549,7 @@ func applyPurchaseOrderActionIn(
 			CounterAccountCode: finance.PurchasePayableAccount(orderCurrent.DocType),
 			Amount:             -payload.Amount,
 			SameDayMovement:    int8(core.If(isSameDayPayment, 1, 0)),
+			DocumentDate:       orderCurrent.Date,
 		}
 		if err := finance.ApplyCashBankMovementIn(transaction, req, []finance.InternalCashMovement{movimiento}); err != nil {
 			return core.Err("Error al registrar el movimiento de cashBank:", err)

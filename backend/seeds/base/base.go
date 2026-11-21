@@ -20,6 +20,9 @@ func Setup(run *runner.Run) ([]runner.DayStep, error) {
 	if err := seedHRLegalParameters(run); err != nil {
 		return nil, core.Err("parámetros laborales:", err)
 	}
+	if err := seedTaxDueCalendar(run); err != nil {
+		return nil, core.Err("calendario tributario:", err)
+	}
 	return nil, SetupCompany(run)
 }
 
@@ -29,6 +32,9 @@ func Setup(run *runner.Run) ([]runner.DayStep, error) {
 func SetupCompany(run *runner.Run) error {
 	if err := checkAdminUser(run); err != nil {
 		return err
+	}
+	if err := seedCompanyTaxSetup(run); err != nil {
+		return core.Err("No se pudo configurar el régimen tributario:", err)
 	}
 	if err := ensureWarehouses(run); err != nil {
 		return core.Err("No se pudieron preparar los almacenes:", err)

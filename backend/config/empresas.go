@@ -181,6 +181,10 @@ func PostEmpresaParametros(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Falta alguno de los siguiente parámetros: Nombre, Razon-Social, RUC.")
 	}
 
+	if err := types.ValidateCompanyTaxSetup(&record); err != nil {
+		return req.MakeErr(err)
+	}
+
 	// The flags tab posts the whole company, so a payload can carry any id it likes: refuse the
 	// ones the catalog does not declare instead of storing a rule the browser cannot show back.
 	record.Flags, err = core.SanitizeCompanyFlags(record.Flags)

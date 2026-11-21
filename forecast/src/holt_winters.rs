@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::censoring::DayCensoring;
 use crate::nelder_mead::{minimize, to_bounds};
 use crate::weekly_index::{WeeklyIndex, normalize};
-use crate::{SeriesHistory, WARMUP_DAYS, weekday};
+use crate::{SeriesHistory, WARMUP_DAYS, fit_error_weight, weekday};
 
 /// Smoothing of the level (α), trend (β) and weekly indices (γ), and the trend's damping (φ).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -90,22 +90,26 @@ fn initial_state(history: &SeriesHistory, season: WeeklyIndex) -> HwState {
 }
 
 /// Runs the model over the whole history, returning the final state and the sum of squared
-/// one-step errors on the uncensored days after the warm-up.
-fn run(history: &SeriesHistory, params: &HwParams, initial: &HwState) -> (HwState, f64) {
+/// one-step errors on the uncensored days after the warm-up. `one_step` collects every day's
+/// one-step forecast when given.
+fn run(history: &SeriesHistory, params: &HwParams, initial: &HwState, mut one_step: Option<&mut Vec<f64>>) -> (HwState, f64) {
     let mut state = initial.clone();
     let mut squared_error_sum = 0.0;
     for (day_index, (&sales, &censoring)) in history.sales.iter().zip(history.censoring).enumerate() {
         let expected = state.step(params, weekday(history.start_day + day_index as i32), sales, censoring);
+        if let Some(one_step) = one_step.as_deref_mut() {
+            one_step.push(expected);
+        }
         if censoring == DayCensoring::Normal && day_index >= WARMUP_DAYS {
-            squared_error_sum += (sales - expected).powi(2);
+            squared_error_sum += fit_error_weight(day_index, history.sales.len()) * (sales - expected).powi(2);
         }
     }
     (state, squared_error_sum)
 }
 
 /// Optimizes the parameters over the history (plan §5.1, the expensive layer) and returns them with
-/// the state they leave after the last day.
-pub fn fit(history: &SeriesHistory, initial_season: WeeklyIndex, max_damping: f64, max_evaluations: u32) -> (HwParams, HwState) {
+/// the state they leave after the last day and each day's one-step forecast under them.
+pub fn fit(history: &SeriesHistory, initial_season: WeeklyIndex, max_damping: f64, max_evaluations: u32) -> (HwParams, HwState, Vec<f64>) {
     let initial = initial_state(history, initial_season);
     let params_of = |coordinates: &[f64; 4]| HwParams {
         alpha: to_bounds(coordinates[0], 0.01, 0.6),
@@ -113,10 +117,11 @@ pub fn fit(history: &SeriesHistory, initial_season: WeeklyIndex, max_damping: f6
         gamma: to_bounds(coordinates[2], 0.01, 0.5),
         phi: to_bounds(coordinates[3], DAMPING_LOW, max_damping),
     };
-    let best = minimize(|coordinates| run(history, &params_of(coordinates), &initial).1, [0.0; 4], 1.0, max_evaluations);
+    let best = minimize(|coordinates| run(history, &params_of(coordinates), &initial, None).1, [0.0; 4], 1.0, max_evaluations);
     let params = params_of(&best);
-    let (state, _) = run(history, &params, &initial);
-    (params, state)
+    let mut one_step = Vec::with_capacity(history.sales.len());
+    let (state, _) = run(history, &params, &initial, Some(&mut one_step));
+    (params, state, one_step)
 }
 
 #[cfg(test)]
@@ -132,7 +137,7 @@ mod tests {
         let sales: Vec<f64> = (0..112).map(|day_index| 10.0 * shape[day_index % 7]).collect();
         let censoring = vec![DayCensoring::Normal; sales.len()];
         let history = SeriesHistory { start_day, sales: &sales, censoring: &censoring };
-        let (params, state) = fit(&history, FLAT_WEEK, 0.9, 300);
+        let (params, state, _) = fit(&history, FLAT_WEEK, 0.9, 300);
         let mean = shape.iter().sum::<f64>() / 7.0;
         for horizon in 1..=7u32 {
             let target_weekday = weekday(start_day + 111 + horizon as i32);
@@ -153,7 +158,7 @@ mod tests {
             censoring[day_index] = DayCensoring::Full;
         }
         let history = SeriesHistory { start_day, sales: &sales, censoring: &censoring };
-        let (params, state) = fit(&history, FLAT_WEEK, 0.9, 300);
+        let (params, state, _) = fit(&history, FLAT_WEEK, 0.9, 300);
         assert!(state.forecast(&params, 1, weekday(start_day + 84)) > 9.0);
     }
 }

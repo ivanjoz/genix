@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::censoring::DayCensoring;
 use crate::nelder_mead::{minimize, to_bounds};
 use crate::weekly_index::WeeklyIndex;
-use crate::{SeriesHistory, WARMUP_DAYS, weekday};
+use crate::{SeriesHistory, WARMUP_DAYS, fit_error_weight, weekday};
 
 /// Smoothing of the demand size (α_z) and of the probability of a sale (α_p).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -30,7 +30,7 @@ impl TsbState {
 
     /// Incorporates one day by its censoring. A partially censored day that sold proves the day
     /// would sell (probability up) but its size only bounds demand from below, so the size moves
-    /// only upward. A fully censored day, or a partial one without sales, teaches nothing.
+    /// only upward. A fully censored day teaches nothing (a partial day always sold: censoring.rs).
     pub fn step(&mut self, params: &TsbParams, sales: f64, censoring: DayCensoring) {
         match censoring {
             DayCensoring::Normal if sales > 0.0 => {
@@ -38,13 +38,13 @@ impl TsbState {
                 self.probability += params.alpha_probability * (1.0 - self.probability);
             }
             DayCensoring::Normal => self.probability -= params.alpha_probability * self.probability,
-            DayCensoring::Partial if sales > 0.0 => {
+            DayCensoring::Partial => {
                 if sales > self.size {
                     self.size += params.alpha_size * (sales - self.size);
                 }
                 self.probability += params.alpha_probability * (1.0 - self.probability);
             }
-            _ => {}
+            DayCensoring::Full => {}
         }
     }
 }
@@ -67,30 +67,38 @@ fn initial_state(history: &SeriesHistory) -> TsbState {
     TsbState { probability: sale_days as f64 / observed_days as f64, size: sales_sum / sale_days as f64 }
 }
 
-fn run(history: &SeriesHistory, params: &TsbParams, initial: &TsbState, category_week: &WeeklyIndex) -> (TsbState, f64) {
+/// Runs the model over the whole history, returning the final state and the sum of squared
+/// one-step errors on the uncensored days after the warm-up. `one_step` collects every day's
+/// one-step forecast when given.
+fn run(history: &SeriesHistory, params: &TsbParams, initial: &TsbState, category_week: &WeeklyIndex, mut one_step: Option<&mut Vec<f64>>) -> (TsbState, f64) {
     let mut state = initial.clone();
     let mut squared_error_sum = 0.0;
     for (day_index, (&sales, &censoring)) in history.sales.iter().zip(history.censoring).enumerate() {
+        let expected = state.forecast(category_week, weekday(history.start_day + day_index as i32));
+        if let Some(one_step) = one_step.as_deref_mut() {
+            one_step.push(expected);
+        }
         if censoring == DayCensoring::Normal && day_index >= WARMUP_DAYS {
-            let expected = state.forecast(category_week, weekday(history.start_day + day_index as i32));
-            squared_error_sum += (sales - expected).powi(2);
+            squared_error_sum += fit_error_weight(day_index, history.sales.len()) * (sales - expected).powi(2);
         }
         state.step(params, sales, censoring);
     }
     (state, squared_error_sum)
 }
 
-/// Optimizes the parameters over the history and returns them with the state after the last day.
-pub fn fit(history: &SeriesHistory, category_week: &WeeklyIndex, max_evaluations: u32) -> (TsbParams, TsbState) {
+/// Optimizes the parameters over the history and returns them with the state after the last day and
+/// each day's one-step forecast under them.
+pub fn fit(history: &SeriesHistory, category_week: &WeeklyIndex, max_evaluations: u32) -> (TsbParams, TsbState, Vec<f64>) {
     let initial = initial_state(history);
     let params_of = |coordinates: &[f64; 2]| TsbParams {
         alpha_size: to_bounds(coordinates[0], 0.01, 0.5),
         alpha_probability: to_bounds(coordinates[1], 0.01, 0.5),
     };
-    let best = minimize(|coordinates| run(history, &params_of(coordinates), &initial, category_week).1, [0.0; 2], 1.0, max_evaluations);
+    let best = minimize(|coordinates| run(history, &params_of(coordinates), &initial, category_week, None).1, [0.0; 2], 1.0, max_evaluations);
     let params = params_of(&best);
-    let (state, _) = run(history, &params, &initial, category_week);
-    (params, state)
+    let mut one_step = Vec::with_capacity(history.sales.len());
+    let (state, _) = run(history, &params, &initial, category_week, Some(&mut one_step));
+    (params, state, one_step)
 }
 
 #[cfg(test)]
@@ -104,7 +112,7 @@ mod tests {
         let sales: Vec<f64> = (0..120).map(|day_index| if day_index % 4 == 0 { 6.0 } else { 0.0 }).collect();
         let censoring = vec![DayCensoring::Normal; sales.len()];
         let history = SeriesHistory { start_day: 19723, sales: &sales, censoring: &censoring };
-        let (_, state) = fit(&history, &FLAT_WEEK, 200);
+        let (_, state, _) = fit(&history, &FLAT_WEEK, 200);
         let daily_forecast = state.forecast(&FLAT_WEEK, 0);
         assert!((daily_forecast - 1.5).abs() < 0.4, "{daily_forecast}");
     }
@@ -115,7 +123,7 @@ mod tests {
         sales[60..].fill(0.0);
         let censoring = vec![DayCensoring::Normal; sales.len()];
         let history = SeriesHistory { start_day: 19723, sales: &sales, censoring: &censoring };
-        let (_, state) = fit(&history, &FLAT_WEEK, 200);
+        let (_, state, _) = fit(&history, &FLAT_WEEK, 200);
         assert!(state.forecast(&FLAT_WEEK, 0) < 0.2);
     }
 }

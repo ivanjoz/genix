@@ -16,6 +16,7 @@ import (
 	sales "app/sales/types"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ivanjoz/facturago/model"
 	"github.com/ivanjoz/facturago/utils"
@@ -57,9 +58,12 @@ func splitGrossAmount(gross int64) (net int64, tax int64) {
 //
 // saleProducts are the sale's products as the caller already loaded them (name and SbuUnit), or nil
 // to read them here: a resend rebuilds the document with nil.
+//
+// creditTerms come from CreditTermsForSale at reservation and from the row's pin on a resend.
 func SaleOrderToDocument(
 	companyID int32, order *sales.SaleOrder, series *InvoiceSeries,
 	pinnedClientSnapshotID int32, saleProducts map[int32]production.Product,
+	creditTerms DocumentCreditTerms,
 ) (*model.Document, int32, error) {
 
 	if len(order.Lines) == 0 {
@@ -90,11 +94,44 @@ func SaleOrderToDocument(
 		Currency: saleDocumentCurrency(order),
 		Customer: customer,
 		Lines:    lines,
-		// A sale settled at the till is a cash sale. Credit terms would have to
-		// come from the sale's payment plan, which the order does not carry yet.
-		Payment: model.PaymentCash,
+		Payment:  model.PaymentCash,
 	}
+	applyCreditTerms(document, creditTerms)
 	return document, clientSnapshotID, nil
+}
+
+// applyCreditTerms makes a document Crédito when the terms owe something: the debt in one cuota
+// on the sale's due date. Multi-cuota plans are not modelled — the sale carries a single
+// PaymentDueDate.
+func applyCreditTerms(document *model.Document, creditTerms DocumentCreditTerms) {
+	if creditTerms.PendingAmount <= 0 {
+		return
+	}
+	document.Payment = model.PaymentCredit
+	document.PendingAmount = model.Cents(creditTerms.PendingAmount)
+	document.Instalments = []model.Instalment{{
+		Amount: model.Cents(creditTerms.PendingAmount),
+		// Noon UTC is the same calendar day in Peru, where facturago formats the date; midnight
+		// UTC would print the day before.
+		DueDate: time.Unix(int64(creditTerms.PaymentDueDate)*86400+12*3600, 0).UTC(),
+	}}
+}
+
+// DocumentCreditTerms is what a credit factura declares as still owed and when it falls due. The
+// zero value is a Contado document.
+type DocumentCreditTerms struct {
+	PendingAmount  int64 // cents of the sale's currency
+	PaymentDueDate int16 // UnixDay
+}
+
+// CreditTermsForSale decides whether a sale's document is issued as Crédito: only a factura, only
+// while the sale still owes money, and only when its due date is after the issue date — SUNAT
+// rejects a cuota due on or before the issue date, so a debt due the same day stays Contado.
+func CreditTermsForSale(order *sales.SaleOrder, docType int8, issueDate int16) DocumentCreditTerms {
+	if docType != DocTypeFactura || order.DebtAmount <= 0 || order.PaymentDueDate <= issueDate {
+		return DocumentCreditTerms{}
+	}
+	return DocumentCreditTerms{PendingAmount: int64(order.DebtAmount), PaymentDueDate: order.PaymentDueDate}
 }
 
 // saleDocumentCurrency is the ISO 4217 code of the currency the sale was charged in.

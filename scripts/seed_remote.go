@@ -43,7 +43,7 @@ func SeedRemote(arguments []string) {
 		case "logs":
 			err = followUntilDetached(server)
 		case "status":
-			err = runRemoteCommand(server, fmt.Sprintf("systemctl status --no-pager %s; %s status", seedUnitName, remoteSeedBinaryPath))
+			err = printRemoteSeedStatus(server)
 		case "abort":
 			err = abortRemoteSeed(server)
 			if err == nil {
@@ -114,7 +114,9 @@ func startRemoteSeed(server seedServer, seedArguments []string) error {
 		return err
 	}
 	// systemd-run gives the run no terminal: --yes skips the confirmation, the plan still prints.
-	runCommand := []string{"systemd-run", "--quiet", "--unit=" + seedUnitName, "--collect"}
+	// A system unit needs root: through sudo -n when the login user is not root (polkit would ask
+	// for interactive authentication, which an SSH command cannot answer).
+	runCommand := []string{"sudo", "-n", "systemd-run", "--quiet", "--unit=" + seedUnitName, "--collect"}
 	if serviceProperties["User"] != "" {
 		runCommand = append(runCommand, "--uid="+serviceProperties["User"])
 	}
@@ -222,7 +224,38 @@ func followUntilDetached(server seedServer) error {
 // same run command resumes it.
 func abortRemoteSeed(server seedServer) error {
 	fmt.Println("Asking the seed to stop at its next checkpoint...")
-	return runRemoteCommand(server, fmt.Sprintf("systemctl kill --signal=SIGINT %s", seedUnitName))
+	return runRemoteCommand(server, fmt.Sprintf("sudo -n systemctl kill --signal=SIGINT %s", seedUnitName))
+}
+
+// printRemoteSeedStatus shows the unit's state and the resume point. genix-seed status reads the
+// genix unit's config and file store, so it runs as that unit does: its user, its working directory
+// and its GENIX_* environment.
+func printRemoteSeedStatus(server seedServer) error {
+	_ = runRemoteCommand(server, "systemctl status --no-pager "+seedUnitName)
+	serviceProperties, err := readGenixServiceProperties(server)
+	if err != nil {
+		return err
+	}
+	statusCommand := []string{"sudo", "-n"}
+	if serviceProperties["User"] != "" {
+		statusCommand = append(statusCommand, "-u", serviceProperties["User"])
+	}
+	statusCommand = append(statusCommand, "env")
+	for _, environmentEntry := range strings.Fields(serviceProperties["Environment"]) {
+		if strings.HasPrefix(environmentEntry, "GENIX_") {
+			statusCommand = append(statusCommand, environmentEntry)
+		}
+	}
+	statusCommand = append(statusCommand, remoteSeedBinaryPath, "status")
+	quotedCommand := []string{}
+	for _, part := range statusCommand {
+		quotedCommand = append(quotedCommand, shellQuote(part))
+	}
+	workingDirectory := serviceProperties["WorkingDirectory"]
+	if workingDirectory == "" {
+		workingDirectory = "/"
+	}
+	return runRemoteCommand(server, "cd "+shellQuote(workingDirectory)+" && "+strings.Join(quotedCommand, " "))
 }
 
 func isRemoteSeedActive(server seedServer) bool {

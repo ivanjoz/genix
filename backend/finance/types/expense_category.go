@@ -27,7 +27,15 @@ var ExpenseCategoryOptions = []ExpenseCategoryOption{
 	{ID: 8, Label: "Marketing|Marketing", DefaultAccountCode: 6371},                           // Publicidad
 	{ID: 9, Label: "Professional services|Servicios profesionales", DefaultAccountCode: 6329}, // Asesoría — otros
 	{ID: 10, Label: "Other|Otros"},                                                            // nothing to infer
+	// Merchandise bought for resale or into stock. Purchase orders report under it in the
+	// purchase-order-summary frame (plan/CASH_FLOW_FORECAST_PLAN.md §5), and an inventory expense
+	// can pick it. No default: an inventory expense takes its supply's account.
+	// A literal, not ExpenseCategoryMerchandise: the //CATALOG: sync copies literals only.
+	{ID: 11, Label: "Merchandise purchases|Compras de mercadería"},
 }
+
+// ExpenseCategoryMerchandise is the category purchase orders are summed under (the ID 11 entry above).
+const ExpenseCategoryMerchandise int8 = 11
 
 // FindExpenseCategory returns the category with this id, and whether it exists.
 func FindExpenseCategory(categoryID int8) (ExpenseCategoryOption, bool) {

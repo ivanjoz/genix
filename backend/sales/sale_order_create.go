@@ -182,6 +182,10 @@ func updateSaleOrder(req *core.HandlerArgs, saleRequest types.SaleOrder) core.Ha
 		}
 	}
 	isSameDayCollection := types.StampSameDayCollection(&sale, collectedAmount, paidBefore, today)
+	// A cleared due date on a sale still owing falls back to its client's credit days.
+	if err := sale.StampPaymentDueDate(); err != nil {
+		return req.MakeErr(err)
+	}
 	sale.StampPeriod()
 	if err := sale.StampSiteID(); err != nil {
 		return req.MakeErr(err)

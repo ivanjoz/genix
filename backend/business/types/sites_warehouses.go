@@ -74,6 +74,27 @@ func SiteIDsOfWarehouses(companyID int32, warehouseIDs []int32) (map[int32]int16
 	return siteIDByWarehouseID, nil
 }
 
+// ValidateSiteID refuses a site the company does not have or has retired. 0 (no site, the whole
+// company) is always valid.
+func ValidateSiteID(companyID int32, siteID int16) error {
+	if siteID == 0 {
+		return nil
+	}
+	if siteID < 0 {
+		return core.Err("La sede no es válida.")
+	}
+	sites := []Site{}
+	query := db.Query(&sites)
+	query.Select(query.ID, query.Status).CompanyID.Equals(companyID).ID.Equals(int32(siteID))
+	if err := query.Exec(); err != nil {
+		return core.Err("Error al obtener la sede:", err)
+	}
+	if len(sites) == 0 || sites[0].Status == 0 {
+		return core.Err(fmt.Sprintf("La sede %v no existe o está inactiva.", siteID))
+	}
+	return nil
+}
+
 // FirstOnlineWarehouseID is the lowest-ID warehouse open to online sales, 0 when there is none: the
 // one a web order's units are reserved on until it is delivered.
 func FirstOnlineWarehouseID(warehouses []Warehouse) int32 {

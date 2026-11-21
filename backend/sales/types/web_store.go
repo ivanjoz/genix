@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// The [ecommerce] company flags (backend/company_flags.toml).
+// The [ecommerce] company flags (backend/core/company_flags.toml).
 const (
 	CompanyFlagConfirmEmailOnOnlinePayment   = int16(10)
 	CompanyFlagRequireContactNumber          = int16(11)

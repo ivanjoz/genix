@@ -1,8 +1,12 @@
 package types
 
 import (
+	business "app/business/types"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
+	"strconv"
+	"strings"
 )
 
 // ExpenseScheduled is the recurring template. It only describes the cadence and the
@@ -30,6 +34,8 @@ type ExpenseScheduled struct {
 	CreatedBy int32   `cb:"18"`
 	// AccountCode is the PCGE account every generated period is classified under.
 	AccountCode int32 `cb:"19"`
+	// SiteID is the site the bill belongs to (0 = the whole company), copied to every generated period.
+	SiteID int16 `cb:"20"`
 }
 
 type ExpenseScheduledTable struct {
@@ -52,6 +58,7 @@ type ExpenseScheduledTable struct {
 	Created      db.Col[*ExpenseScheduledTable, int32]
 	CreatedBy    db.Col[*ExpenseScheduledTable, int32]
 	AccountCode  db.Col[*ExpenseScheduledTable, int32]
+	SiteID       db.Col[*ExpenseScheduledTable, int16]
 }
 
 func (e ExpenseScheduledTable) GetSchema() db.TableSchema {
@@ -146,6 +153,9 @@ type Expense struct {
 	// ProductionOrderID is the subcontracted production order a workshop's invoice is for
 	// (docs/MANUFACTURING_PLAN.md §8, M19): the order compares what was agreed with what was invoiced.
 	ProductionOrderID int32 `cb:"39"`
+	// SiteID is the site the expense belongs to (0 = the whole company): what expense-summary sums by,
+	// since its ToFrames reads only the expense. An inventory expense takes its warehouse's site.
+	SiteID int16 `cb:"40"`
 }
 
 // AccountingDate is the day the expense is booked on: a depreciation row (no comprobante, no
@@ -156,6 +166,29 @@ func (e *Expense) AccountingDate() int16 {
 		return e.Date
 	}
 	return e.DocIssueDate
+}
+
+// StampSiteAndDueDate sets the site and the due date the cash flow forecast reads: an inventory
+// expense belongs to its warehouse's site, any other to the site the form picked (0 = the whole
+// company), and an expense with no due date falls due under its supplier's credit days.
+func (e *Expense) StampSiteAndDueDate(companyID int32) error {
+	if e.Type == ExpenseTypeInventory && e.WarehouseID > 0 {
+		siteIDByWarehouseID, err := business.SiteIDsOfWarehouses(companyID, []int32{e.WarehouseID})
+		if err != nil {
+			return err
+		}
+		e.SiteID = siteIDByWarehouseID[e.WarehouseID]
+	} else if err := business.ValidateSiteID(companyID, e.SiteID); err != nil {
+		return err
+	}
+	if e.DueDate == 0 {
+		dueDate, err := crm.DueDateByCreditDays(companyID, e.SupplierID, e.Date)
+		if err != nil {
+			return err
+		}
+		e.DueDate = dueDate
+	}
+	return nil
 }
 
 // StampPeriod sets Period from AccountingDate.
@@ -204,6 +237,7 @@ type ExpenseTable struct {
 	// SameDayCashBankID is the cash bank of the payment that settled the expense on its AccountingDate.
 	SameDayCashBankID db.Col[*ExpenseTable, int32]
 	ProductionOrderID db.Col[*ExpenseTable, int32]
+	SiteID            db.Col[*ExpenseTable, int16]
 }
 
 func (e ExpenseTable) GetSchema() db.TableSchema {
@@ -233,7 +267,69 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 			// The Registro de Compras reads a period of documents, one indexed read per day.
 			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
+		DataFrames: []db.DataFrame{{
+			// The unscheduled spending per day, site and category the cash flow forecast learns from
+			// (plan/CASH_FLOW_FORECAST_PLAN.md §5). Most days have no taxed purchase, so the zero sums
+			// mask drops TaxAmountPEN on them.
+			Name:            "expense-summary",
+			Version:         1,
+			UseZeroSumsMask: true,
+			UseWeekSpread:   true,
+			ToFrames:        db.ToFrames((*Expense).ToExpenseSummaryFrames),
+		}},
 	}
+}
+
+// ExpenseSummaryFrame is one expense as the "expense-summary" DataFrame sums it: one file per day and
+// site, one row per category. Amounts are in soles.
+type ExpenseSummaryFrame struct {
+	// Date is the week-spread Part (partition_id = CompanyID << 13 | the epoch week of Date): the day
+	// the expense was incurred, the date its payments measure their delay from (cash-delay).
+	Date       int16 `frame:"part,13"`
+	SiteID     int16 `frame:"key"`
+	CategoryID int8  `frame:"row"`
+	AmountPEN  int32 `frame:"sum"`
+	// TaxAmountPEN is the IGV with crédito fiscal, for the forecast of the IGV payable.
+	TaxAmountPEN int32 `frame:"sum"`
+}
+
+// ToExpenseSummaryFrames is what the expense adds to its day: only spending no other forecast stream
+// already covers. A schedule's period is projected from its schedule, a tax payment (401x) by the tax
+// stream and depreciation moves no cash, so those add nothing; neither does a removed expense. A
+// dollar expense with no exchange rate (one booked without comprobante) cannot be restated, so it is
+// left out too — the forecast's warnings list those.
+func (e *Expense) ToExpenseSummaryFrames(lines []ExpenseSummaryFrame) []ExpenseSummaryFrame {
+	isCashSpending := e.Type == ExpenseTypeSimple || e.Type == ExpenseTypeInventory
+	isLive := e.Status == 1 || e.Status == 2
+	if !isCashSpending || !isLive || e.ExpenseScheduledID != 0 || IsTaxPayableAccount(e.AccountCode) {
+		return lines
+	}
+	amountPEN, taxAmountPEN, ok := AmountsInPEN(e.CurrencyType, e.ExchangeRate, e.Amount, e.TaxAmount)
+	if !ok {
+		return lines
+	}
+	return append(lines, ExpenseSummaryFrame{
+		Date: e.Date, SiteID: e.SiteID, CategoryID: e.CategoryID, AmountPEN: amountPEN, TaxAmountPEN: taxAmountPEN,
+	})
+}
+
+// IsTaxPayableAccount is true for the 401x accounts (tributos por pagar): a payment of IGV, renta or
+// another tax to the State, which the cash flow forecast projects from the tax rules, not from history.
+func IsTaxPayableAccount(accountCode int32) bool {
+	return strings.HasPrefix(strconv.Itoa(int(accountCode)), "401")
+}
+
+// AmountsInPEN restates a purchase's total and IGV in soles at its document rate. ok is false for a
+// dollar purchase without a rate, which has no honest restatement.
+func AmountsInPEN(currencyType int8, exchangeRate int32, amount int32, taxAmount int32) (int32, int32, bool) {
+	if currencyType != CurrencyUSD {
+		return amount, taxAmount, true
+	}
+	if exchangeRate <= 0 {
+		return 0, 0, false
+	}
+	return ConvertUnitPrice(amount, CurrencyUSD, CurrencyPEN, exchangeRate),
+		ConvertUnitPrice(taxAmount, CurrencyUSD, CurrencyPEN, exchangeRate), true
 }
 
 func (e *Expense) PurchaseDocument() PurchaseDocument {

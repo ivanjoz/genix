@@ -30,6 +30,9 @@ export interface IInvoiceDocument {
   upd: number
   Created: number
   CreatedBy: number
+  // Credit terms the document declared: both 0 on a Contado document.
+  PendingAmount: number  // cents
+  PaymentDueDate: number // UnixDay
 }
 
 // The states, in the order the backend numbers them.

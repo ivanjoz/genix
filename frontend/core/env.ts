@@ -224,7 +224,7 @@ export interface ICompanyParams {
   Name: string
   id: number
   PickupSites?: ICompanyPickupSite[]
-  // The company's [ecommerce] flags (backend/company_flags.toml, ids 10-14).
+  // The company's [ecommerce] flags (backend/core/company_flags.toml, ids 10-14).
   Flags?: number[]
   YapeEnabled?: boolean
 }

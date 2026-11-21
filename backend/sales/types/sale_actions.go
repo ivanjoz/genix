@@ -83,6 +83,7 @@ func SaleCollectionMovements(sale *SaleOrder, collectedAmount int32, paymentDate
 		CounterAccountCode: finance.PCGEReceivable,
 		Amount:             collectedAmount,
 		SameDayMovement:    int8(core.If(isSameDayCollection, 1, 0)),
+		DocumentDate:       sale.Date,
 	}}
 }
 

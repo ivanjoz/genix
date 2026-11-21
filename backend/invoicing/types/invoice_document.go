@@ -162,6 +162,12 @@ type InvoiceDocument struct {
 	// Period is the YYMM of IssueDate (core.PeriodOfDay): the pinned key of the period delta index
 	// the accounting operations sync a month through. Set by StampPeriod on every write.
 	Period int16 `cb:"31"`
+
+	// The credit terms the document declared (DocumentCreditTerms), pinned at reservation: a
+	// payment between the reservation and the send must not change what the resend declares.
+	// Both 0 on a Contado document. PendingAmount is in cents of the document's currency.
+	PendingAmount  int64 `cb:"32"`
+	PaymentDueDate int16 `cb:"33"`
 }
 
 // StampPeriod sets Period from the document's accounting date, its IssueDate.
@@ -226,6 +232,8 @@ type InvoiceDocumentTable struct {
 	Created          db.Col[*InvoiceDocumentTable, int32]
 	CreatedBy        db.Col[*InvoiceDocumentTable, int32]
 	Period           db.Col[*InvoiceDocumentTable, int16]
+	PendingAmount    db.Col[*InvoiceDocumentTable, int64]
+	PaymentDueDate   db.Col[*InvoiceDocumentTable, int16]
 }
 
 func (e InvoiceDocumentTable) GetSchema() db.TableSchema {

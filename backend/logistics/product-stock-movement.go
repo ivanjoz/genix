@@ -51,7 +51,7 @@ var manualStockAdjustmentTypes = []types.StockMovementType{
 	types.StockMovementTypeManualExit, types.StockMovementTypeShrinkage, types.StockMovementTypeInternalConsumption,
 }
 
-// The company flag that governs manual stock adjustments (backend/company_flags.toml).
+// The company flag that governs manual stock adjustments (backend/core/company_flags.toml).
 const companyFlagBlockManualStockInbound = int16(6) // stock only enters through a purchase order
 
 // loadStockItemProducts reads what a stock entry needs of every product it touches: the current

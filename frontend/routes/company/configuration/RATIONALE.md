@@ -62,7 +62,7 @@ saving where you edit, and the comment in the component says so.
 **Context** — the new Flags tab needed the flag catalog the backend embeds. The request was a
 two-column table: a checkbox column and a name column.
 
-**Decision** — `company-flags.ts` imports `backend/company_flags.toml?raw` and parses it, the same
+**Decision** — `company-flags.ts` imports `backend/core/company_flags.toml?raw` and parses it, the same
 route `access-list-catalog.ts` already takes for the access catalog: no endpoint, no second copy of
 the names, and a flag added to the file appears on both sides at once. Each row is a single
 `Checkbox` carrying the flag name as its label — its box and label already lay out as two columns,

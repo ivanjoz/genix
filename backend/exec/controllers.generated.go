@@ -25,6 +25,7 @@ func MakeControllers() []db.Controller {
 	return []db.Controller{
 		db.MakeController[DemoStruct](),
 		db.MakeController[accountingTypes.Asset](),
+		db.MakeController[accountingTypes.TaxDueCalendar](),
 		db.MakeController[businessTypes.CityLocation](),
 		db.MakeController[businessTypes.GalleryImage](),
 		db.MakeController[businessTypes.ImageAsset](),
@@ -73,6 +74,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[financeTypes.ExchangeRate](),
 		db.MakeController[financeTypes.Expense](),
 		db.MakeController[financeTypes.ExpenseScheduled](),
+		db.MakeController[financeTypes.Loan](),
 		db.MakeController[hrTypes.AfpRate](),
 		db.MakeController[hrTypes.Concept](),
 		db.MakeController[hrTypes.ContractAgreement](),
@@ -132,6 +134,7 @@ func MakeControllers() []db.Controller {
 func init() {
 	db.RegisterTableFactory("zz_demo_struct", func() db.Table { return db.MakeTable[DemoStruct]() })
 	db.RegisterTableFactory("accounting_asset", func() db.Table { return db.MakeTable[accountingTypes.Asset]() })
+	db.RegisterTableFactory("tax_due_calendar", func() db.Table { return db.MakeTable[accountingTypes.TaxDueCalendar]() })
 	db.RegisterTableFactory("city_locations", func() db.Table { return db.MakeTable[businessTypes.CityLocation]() })
 	db.RegisterTableFactory("gallery_images", func() db.Table { return db.MakeTable[businessTypes.GalleryImage]() })
 	db.RegisterTableFactory("image_assets", func() db.Table { return db.MakeTable[businessTypes.ImageAsset]() })
@@ -180,6 +183,7 @@ func init() {
 	db.RegisterTableFactory("exchange_rates", func() db.Table { return db.MakeTable[financeTypes.ExchangeRate]() })
 	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[financeTypes.Expense]() })
 	db.RegisterTableFactory("expenses_scheduled", func() db.Table { return db.MakeTable[financeTypes.ExpenseScheduled]() })
+	db.RegisterTableFactory("loans", func() db.Table { return db.MakeTable[financeTypes.Loan]() })
 	db.RegisterTableFactory("hr_afp_rates", func() db.Table { return db.MakeTable[hrTypes.AfpRate]() })
 	db.RegisterTableFactory("hr_concepts", func() db.Table { return db.MakeTable[hrTypes.Concept]() })
 	db.RegisterTableFactory("hr_contracts_agreements", func() db.Table { return db.MakeTable[hrTypes.ContractAgreement]() })

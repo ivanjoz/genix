@@ -386,6 +386,26 @@ describe('cash', () => {
     expect(entryOf(operation)).toEqual(["101:0/30000", "1041:30000/0"])
   })
 
+  it('posts a loan payment as one entry split into principal, interest and fees, all locked', () => {
+    const operation = onlyOperation(makeResponse({
+      CashMovements: [{ ID: 1, CashBankID: 1, DocumentID: 7, Date: DAY, Type: 15, CounterAccountCode: 451,
+        Amount: -7500, CashBankRefID: 0, CounterAccountSplits: [
+          { AccountCode: 451, Amount: -6120 }, { AccountCode: 673, Amount: -1300 }, { AccountCode: 671, Amount: -80 },
+        ] }],
+    }))
+    expect(entryOf(operation)).toEqual(["101:0/7500", "451:6120/0", "673:1300/0", "671:80/0"])
+    expect(operation.Lines.every(line => !line.IsNature)).toBe(true)
+    expect(operation.InOfficialBook).toBe(true)
+  })
+
+  it('posts a loan disbursement against its payable', () => {
+    const operation = onlyOperation(makeResponse({
+      CashMovements: [{ ID: 1, CashBankID: 1, DocumentID: 7, Date: DAY, Type: 14, CounterAccountCode: 451,
+        Amount: 150000, CashBankRefID: 0 }],
+    }))
+    expect(entryOf(operation)).toEqual(["101:150000/0", "451:0/150000"])
+  })
+
   it('leaves an unspecified movement unclassified until it gets an account', () => {
     const operation = onlyOperation(makeResponse({
       CashMovements: [{ ID: 1, CashBankID: 1, DocumentID: 0, Date: DAY, Type: 1, CounterAccountCode: 0,

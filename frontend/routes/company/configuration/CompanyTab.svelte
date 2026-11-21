@@ -5,9 +5,17 @@ import Button from '#components/buttons/Button.svelte';
 import T from '#components/misc/T.svelte';
 import CompanyFlagsPanel from './CompanyFlagsPanel.svelte';
 import { CountryCitiesService } from '#services/business/country-cities.svelte.ts';
+import Checkbox from '#components/form/Checkbox.svelte';
+import { tr } from '#core/store.svelte.ts';
 import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas.svelte"
+import {
+  defaultIncomeTaxPrepaymentRate, NRUS_CATEGORY_OPTIONS, TAX_REGIME_NRUS, TAX_REGIME_OPTIONS,
+} from './company-tax.ts'
 
   const { service }: { service: EmpresaParametrosService } = $props()
+
+  const taxRegimeOptions = TAX_REGIME_OPTIONS.map((option) => ({ ...option, name: tr(option.name) }))
+  const nrusCategoryOptions = NRUS_CATEGORY_OPTIONS.map((option) => ({ ...option, name: tr(option.name) }))
 
   // The district is the company's ubigeo, which every electronic document declares
   // as the issuer's fiscal address. Same catalog and same selector the sites use,
@@ -45,6 +53,28 @@ import { saveCompanyParameters, type EmpresaParametrosService } from "./empresas
         keyId="ID" keyName="_nombre" options={citiesService.distritos}
         save="CityID" bind:saveOn={service.empresa}
       />
+    </div>
+    <!-- Tax setup: the cash flow forecast sizes and dates the monthly taxes with it. Same record
+         and same Save as the fields above. -->
+    <div class="h4 ff-bold mt-16 mb-8"><T text="Tax Setup|Configuración Tributaria" /></div>
+    <div class="grid grid-cols-24 gap-10 content-start" aria-label="Company tax setup">
+      <SearchSelect css="col-span-24 md:col-span-12" label="Tax Regime|Régimen Tributario"
+        keyId="id" keyName="name" options={taxRegimeOptions}
+        save="TaxRegime" bind:saveOn={service.empresa}
+        onChange={(regime) => {
+          service.empresa.IncomeTaxPrepaymentRate = defaultIncomeTaxPrepaymentRate(regime?.id || 0)
+        }}
+      />
+      {#if service.empresa.TaxRegime === TAX_REGIME_NRUS}
+        <SearchSelect css="col-span-24 md:col-span-12" label="NRUS Category|Categoría NRUS"
+          keyId="id" keyName="name" options={nrusCategoryOptions}
+          save="NrusCategory" bind:saveOn={service.empresa} />
+      {:else}
+        <Input css="col-span-24 md:col-span-12" label="Income Tax Prepayment (%)|Pago a Cuenta Renta (%)"
+          save="IncomeTaxPrepaymentRate" type="number" baseDecimals={2} bind:saveOn={service.empresa} />
+      {/if}
+      <Checkbox css="col-span-24" save="IsGoodTaxpayer" bind:saveOn={service.empresa}
+        label="Good taxpayer (own column in the SUNAT calendar)|Buen contribuyente (columna propia en el cronograma SUNAT)" />
     </div>
   </section>
   <!-- The flags sit beside the parameters because they are the same record and the same Save:

@@ -54,6 +54,10 @@ func SaveClientProvidersIn(transaction *db.Transaction, payload []ClientProvider
 			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene PersonType inválido. Use 1 (persona) o 2 (company).")
 		}
 
+		if clientProvider.CreditDays < 0 || clientProvider.CreditDays > CreditDaysMax {
+			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene días de crédito fuera de rango (0 a", CreditDaysMax, ").")
+		}
+
 		if len(clientProvider.Email) > 0 && !isValidEmailAddress(clientProvider.Email) {
 			return nil, core.Err("El registro en posición", clientProviderIndex, "tiene un Email inválido.")
 		}

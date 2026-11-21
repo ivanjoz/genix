@@ -21,6 +21,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.cash-banks":                      4,
 	"GET.cash-banks-movements":            5,
 	"GET.cash-banks-reconciliations":      6,
+	"GET.cash-delay":                      307,
 	"GET.client-provider":                 7,
 	"GET.client-provider-ids":             8,
 	"GET.client-provider-snapshot-ids":    134,
@@ -69,6 +70,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.exchange-rates":                  135,
 	"GET.expense-ids":                     139,
 	"GET.expense-schedule-periods":        15,
+	"GET.expense-summary":                 308,
 	"GET.expenses":                        16,
 	"GET.expenses-scheduled":              17,
 	"GET.gallery-images":                  18,
@@ -96,6 +98,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.invoice-series":                  117, // retired
 	"GET.invoice-xml":                     118,
 	"GET.invoices":                        119,
+	"GET.loans":                           312,
 	"GET.locations-warehouses":            22,
 	"GET.observability":                   105,
 	"GET.online-sale-orders":              257,
@@ -143,6 +146,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.projects-story-details-ids":      244,
 	"GET.projects-team-candidates":        149, // retired
 	"GET.purchase-order-ids":              140,
+	"GET.purchase-order-summary":          309,
 	"GET.purchase-orders":                 36,
 	"GET.purchase-orders-query":           37,
 	"GET.purchases-book":                  137,
@@ -165,6 +169,7 @@ var APIRouteIDs = map[string]int16{
 	"GET.system-memory-packages":          49,
 	"GET.system-metrics-stream":           50,
 	"GET.system-parameters":               51,
+	"GET.tax-due-calendar":                310,
 	"GET.users":                           52,
 	"GET.users-ids":                       53,
 	"GET.warehouse-movements":             54,
@@ -243,6 +248,8 @@ var APIRouteIDs = map[string]int16{
 	"POST.invoice":                        124, // retired
 	"POST.invoice-retry":                  125,
 	"POST.invoice-series":                 126,
+	"POST.loan-payment":                   313,
+	"POST.loans":                          314,
 	"POST.online-sale-order-annul":        258,
 	"POST.online-sale-order-fulfillment":  262,
 	"POST.online-sale-order-settle":       259,
@@ -303,6 +310,7 @@ var APIRouteIDs = map[string]int16{
 	"POST.sites":                          92,
 	"POST.supply-material":                93,
 	"POST.system-parameters":              94,
+	"POST.tax-due-calendar":               311,
 	"POST.user-self":                      95,
 	"POST.users":                          96,
 	"POST.warehouses":                     97,
@@ -332,7 +340,7 @@ func init() {
 }
 
 // MaxAPIRouteID is the highest number handed out so far, retired routes included.
-const MaxAPIRouteID int16 = 306
+const MaxAPIRouteID int16 = 314
 
 // APIRouteID resolves a "METHOD.route" path to its number. Zero means unknown — a 404, or a route
 // added since the last generation — and is never a valid assignment.

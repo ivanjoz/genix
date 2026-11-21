@@ -14,10 +14,24 @@ pub enum DayCensoring {
 /// Classifies one day of a product whose stock is tracked. The opening stock is the previous day's
 /// closing; inflow is what the ledger received that day (purchases, transfers, adjustments).
 pub fn classify_day(opening_stock: f64, inflow: f64, closing_stock: f64, sales: f64, partial_threshold: f64) -> DayCensoring {
-    if opening_stock + inflow <= 0.0 {
-        // Selling with nothing recorded on hand means the stock lagged behind the sales (sold into
-        // negative): availability was not the limit, so the sales are demand.
+    let available = opening_stock + inflow;
+    if available < 0.0 {
+        // Recorded stock below zero means the ledger lags behind the shelf (the company sells into
+        // negative): availability is not what limits sales, so every such day is demand, with or
+        // without sales. Censoring only the days without sales would keep the selling days alone
+        // and inflate the forecast.
+        return DayCensoring::Normal;
+    }
+    if available == 0.0 {
+        // An empty shelf with nothing received: a sale still proves demand (it lagged the ledger),
+        // a day without one says nothing.
         return if sales > 0.0 { DayCensoring::Normal } else { DayCensoring::Full };
+    }
+    if sales == 0.0 {
+        // Stock was on hand and nothing sold: zero demand, however low the closing stock. Read as
+        // partial it would teach nothing, and a slow mover sitting on its last units would never
+        // fade out.
+        return DayCensoring::Normal;
     }
     if closing_stock <= partial_threshold { DayCensoring::Partial } else { DayCensoring::Normal }
 }
@@ -41,8 +55,12 @@ mod tests {
         assert_eq!(classify_day(0.0, 20.0, 12.0, 8.0, 0.0), DayCensoring::Normal);
         // Sold into negative stock: demand was served.
         assert_eq!(classify_day(-3.0, 0.0, -5.0, 2.0, 0.0), DayCensoring::Normal);
-        // A threshold above zero flags low closing stock as partial.
+        // Negative stock and no sales: still observed, a day of zero demand.
+        assert_eq!(classify_day(-5.0, 0.0, -5.0, 0.0, 0.0), DayCensoring::Normal);
+        // A threshold above zero flags low closing stock as partial on a day that sold...
         assert_eq!(classify_day(10.0, 0.0, 2.0, 8.0, 2.0), DayCensoring::Partial);
+        // ...but units left on the shelf and nothing sold is zero demand.
+        assert_eq!(classify_day(1.0, 0.0, 1.0, 0.0, 2.0), DayCensoring::Normal);
     }
 
     #[test]

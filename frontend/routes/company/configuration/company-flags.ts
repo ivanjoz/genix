@@ -1,7 +1,7 @@
-// The flag catalog is backend/company_flags.toml, imported as text and parsed here. There is no
+// The flag catalog is backend/core/company_flags.toml, imported as text and parsed here. There is no
 // endpoint and no second copy: the backend embeds that same file to validate what this tab saves,
 // so a flag added to it shows up on both sides at once.
-import companyFlagsTomlContent from '../../../../backend/company_flags.toml?raw';
+import companyFlagsTomlContent from '../../../../backend/core/company_flags.toml?raw';
 
 export interface ICompanyFlag {
   id: number

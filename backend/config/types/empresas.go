@@ -45,30 +45,82 @@ type Company struct {
 	// Created is the SUnixTime the company registered in the system: the payroll lists months from
 	// a year before it.
 	Created int32 `cb:"20"`
+
+	// Tax setup, read by the cash flow forecast to project what the company owes SUNAT each month.
+	// TaxRegime is one of the TaxRegime* constants (0 = not set up yet).
+	TaxRegime int8 `cb:"21"`
+	// IncomeTaxPrepaymentRate is the monthly renta pago a cuenta over net sales, in basis points
+	// (1.5 % = 150). Defaulted from the regime in the form, editable for the coefficient method.
+	IncomeTaxPrepaymentRate int32 `cb:"22"`
+	// IsGoodTaxpayer: a buen contribuyente files on its own column of the SUNAT calendar.
+	IsGoodTaxpayer bool `cb:"23"`
+	// NrusCategory is the Nuevo RUS category (NrusCategory*), whose fixed cuota replaces IGV and renta.
+	NrusCategory int8 `cb:"24"`
+}
+
+// The tax regimes of a Peruvian company.
+const (
+	TaxRegimeGeneral = int8(1) // Régimen General
+	TaxRegimeMype    = int8(2) // Régimen MYPE Tributario
+	TaxRegimeSpecial = int8(3) // Régimen Especial de Renta
+	TaxRegimeNrus    = int8(4) // Nuevo RUS
+)
+
+// The Nuevo RUS categories and their monthly cuota in cents (D.Leg. 937, as amended by D.Leg. 1270).
+const (
+	NrusCategory1 = int8(1) // S/ 20
+	NrusCategory2 = int8(2) // S/ 50
+)
+
+var NrusMonthlyQuotaCents = map[int8]int32{NrusCategory1: 2000, NrusCategory2: 5000}
+
+// ValidateCompanyTaxSetup checks the tax fields of a company about to be saved. A regime of 0 is
+// allowed (not set up yet: the forecast warns about it). NRUS needs its category and pays no renta
+// prepayment; every other regime has no category.
+func ValidateCompanyTaxSetup(company *Company) error {
+	if company.TaxRegime < 0 || company.TaxRegime > TaxRegimeNrus {
+		return core.Err("El régimen tributario no es válido:", company.TaxRegime)
+	}
+	if company.IncomeTaxPrepaymentRate < 0 || company.IncomeTaxPrepaymentRate > 10000 {
+		return core.Err("La tasa del pago a cuenta debe estar entre 0 % y 100 %.")
+	}
+	if company.TaxRegime == TaxRegimeNrus {
+		if _, isCategory := NrusMonthlyQuotaCents[company.NrusCategory]; !isCategory {
+			return core.Err("Seleccione la categoría del Nuevo RUS.")
+		}
+		company.IncomeTaxPrepaymentRate = 0
+		return nil
+	}
+	company.NrusCategory = 0
+	return nil
 }
 
 type CompanyTable struct {
 	db.TableStruct[CompanyTable, Company]
-	ID                db.Col[*CompanyTable, int32]
-	Name              db.Col[*CompanyTable, string]
-	LegalName         db.Col[*CompanyTable, string]
-	RUC               db.Col[*CompanyTable, string]
-	Email             db.Col[*CompanyTable, string]
-	NotificationEmail db.Col[*CompanyTable, string]
-	Phone             db.Col[*CompanyTable, string]
-	Representative    db.Col[*CompanyTable, string]
-	Address           db.Col[*CompanyTable, string]
-	CityID            db.Col[*CompanyTable, int32]
-	FormApiKey        db.Col[*CompanyTable, string]
-	EmailVerified     db.Col[*CompanyTable, int8]
-	PhoneVerified     db.Col[*CompanyTable, int8]
-	CulqiConfig       db.Col[*CompanyTable, CulqiConfig]
-	InvoiceSeries     db.Col[*CompanyTable, []invoicing.InvoiceSeries]
-	Flags             db.ColSlice[*CompanyTable, int16]
-	FlagValues        db.Col[*CompanyTable, []core.CompanyFlagValue]
-	Updated           db.Col[*CompanyTable, int32]
-	Status            db.Col[*CompanyTable, int8]
-	Created           db.Col[*CompanyTable, int32]
+	ID                      db.Col[*CompanyTable, int32]
+	Name                    db.Col[*CompanyTable, string]
+	LegalName               db.Col[*CompanyTable, string]
+	RUC                     db.Col[*CompanyTable, string]
+	Email                   db.Col[*CompanyTable, string]
+	NotificationEmail       db.Col[*CompanyTable, string]
+	Phone                   db.Col[*CompanyTable, string]
+	Representative          db.Col[*CompanyTable, string]
+	Address                 db.Col[*CompanyTable, string]
+	CityID                  db.Col[*CompanyTable, int32]
+	FormApiKey              db.Col[*CompanyTable, string]
+	EmailVerified           db.Col[*CompanyTable, int8]
+	PhoneVerified           db.Col[*CompanyTable, int8]
+	CulqiConfig             db.Col[*CompanyTable, CulqiConfig]
+	InvoiceSeries           db.Col[*CompanyTable, []invoicing.InvoiceSeries]
+	Flags                   db.ColSlice[*CompanyTable, int16]
+	FlagValues              db.Col[*CompanyTable, []core.CompanyFlagValue]
+	Updated                 db.Col[*CompanyTable, int32]
+	Status                  db.Col[*CompanyTable, int8]
+	Created                 db.Col[*CompanyTable, int32]
+	TaxRegime               db.Col[*CompanyTable, int8]
+	IncomeTaxPrepaymentRate db.Col[*CompanyTable, int32]
+	IsGoodTaxpayer          db.Col[*CompanyTable, bool]
+	NrusCategory            db.Col[*CompanyTable, int8]
 }
 
 func (e CompanyTable) GetSchema() db.TableSchema {

@@ -28,8 +28,11 @@ import {
 } from './expenses.svelte'
 import PCGEAccountSelect from '#domain/PCGEAccountSelect.svelte'
 import { PCGE_KIND_EXPENSE } from '#core/pcge.ts'
+import { WarehousesService } from '../../business/branches-warehouses/branches-warehouses.svelte'
 
 const schedules = new ExpensesScheduledService(true)
+// The sites a schedule can be booked under.
+const warehouses = new WarehousesService()
 const ui = useUI()
 
 const categoryOptions = $derived(localizeOptions(expenseCategories))
@@ -212,6 +215,10 @@ const periodColumns: ITableColumn<IExpense>[] = [
 
       <DateInput bind:saveOn={form} save="StartDate" css="col-span-24 md:col-span-12" label="Start Date|Fecha Inicio" />
       <DateInput bind:saveOn={form} save="EndDate" css="col-span-24 md:col-span-12" label="End Date (optional)|Fecha Fin (opcional)" />
+      <!-- Copied to every generated period: the site the cash flow forecast books them under. -->
+      <SearchSelect bind:saveOn={form} save="SiteID" css="col-span-24"
+        label="Site (empty = whole company)|Sede (vacío = toda la empresa)" keyId="ID" keyName="Name"
+        options={warehouses.Sedes || []} />
     </div>
   {/if}
 

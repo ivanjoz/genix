@@ -1,6 +1,6 @@
 import { StockMovementType } from '#core/stock-movement-type.ts'
 
-// The company's manual-stock policy (backend/company_flags.toml). The backend enforces it on
+// The company's manual-stock policy (backend/core/company_flags.toml). The backend enforces it on
 // every adjustment; the page checks it first so the user sees which product broke the rule.
 export const COMPANY_FLAG_BLOCK_MANUAL_STOCK_INBOUND = 6
 

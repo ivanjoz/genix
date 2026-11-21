@@ -104,7 +104,7 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		Quantity:     payload.Quantity,
 		CurrencyType: payload.CurrencyType,
 		Date:         expenseDate,
-		DueDate:      core.If(payload.DueDate > 0, payload.DueDate, expenseDate),
+		DueDate:      payload.DueDate, // 0 falls due under the supplier's credit days (StampSiteAndDueDate)
 		Amount:       payload.UnitPrice * payload.Quantity,
 		Status:       1,
 		Updated:      currentTimestamp,
@@ -113,6 +113,9 @@ func PostInventoryExpense(req *core.HandlerArgs) core.HandlerResponse {
 		CreatedBy:    req.User.ID,
 	}
 
+	if stampError := inventoryExpense.StampSiteAndDueDate(req.User.CompanyID); stampError != nil {
+		return req.MakeErr(stampError)
+	}
 	inventoryExpense.SetPurchaseDocument(payload.PurchaseDocument)
 	if documentError := inventoryExpense.ApplyPurchaseDocument(req.User.CompanyID); documentError != nil {
 		return req.MakeErr(documentError)

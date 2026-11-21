@@ -20,7 +20,7 @@
     postCalendarEvent,
     SUPER_ADMIN_USER_ID,
     type ICalendarEvent,
-  } from './calendar-events.svelte.ts'
+  } from '#services/sales/calendar-events.svelte.ts'
 
   const ui = useUI()
   const calendarEvents = new CalendarEventsService()

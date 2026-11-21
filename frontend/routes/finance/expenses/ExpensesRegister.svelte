@@ -175,10 +175,11 @@ const applyExpenseToList = (updated: IExpense) => {
 }
 
 const newExpense = () => {
-  form = { ss: 1, ExpenseScheduledID: 0, Type: ExpenseType.SIMPLE, CurrencyType: 1, CategoryID: 10, Date: todayUnixDay, DueDate: todayUnixDay } as IExpense
+  // DueDate starts empty: the server sets it from the supplier's credit days unless the user picks one.
+  form = { ss: 1, ExpenseScheduledID: 0, Type: ExpenseType.SIMPLE, CurrencyType: 1, CategoryID: 10, Date: todayUnixDay, DueDate: 0, SiteID: 0 } as IExpense
   inventoryForm = {
     Name: "", Description: "", CategoryID: 4, SupplierID: 0, CurrencyType: 1,
-    Date: todayUnixDay, DueDate: todayUnixDay,
+    Date: todayUnixDay, DueDate: 0,
     ProductID: 0, WarehouseID: 0, Quantity: 1, UnitPrice: 0, AccountCode: 0,
   } as IInventoryExpense
   newSupplyName = { text: "" }
@@ -501,6 +502,13 @@ const paymentColumns: ITableColumn<ICashBankMovement>[] = [
       <DateInput bind:saveOn={form} save="DueDate" css="col-span-24 md:col-span-12" label="Due Date|Vencimiento" disabled={isPaid} />
       <SearchSelect bind:saveOn={form} save="SupplierID" css="col-span-24"
         label="Supplier|Proveedor" keyId="ID" keyName="Name" options={providers.records} />
+      <!-- The site the cash flow forecast books the expense under. An inventory expense takes its
+           warehouse's site on the server, so it is not asked. -->
+      {#if form.Type !== ExpenseType.INVENTORY}
+        <SearchSelect bind:saveOn={form} save="SiteID" css="col-span-24"
+          label="Site (empty = whole company)|Sede (vacío = toda la empresa)" keyId="ID" keyName="Name"
+          options={warehouses.Sedes || []} />
+      {/if}
       <!-- A workshop's invoice links to the subcontracted order it is for, so the order compares
            what was agreed with what was invoiced. Only the supplier's orders are offered. -->
       {#if subcontractedOrderOptions.length > 0 || form.ProductionOrderID}

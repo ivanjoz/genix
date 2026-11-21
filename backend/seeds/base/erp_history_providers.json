@@ -4,34 +4,39 @@
     "personType": 2,
     "registryNumber": "20501234561",
     "countryId": 604,
-    "cityId": "150101"
+    "cityId": "150101",
+    "creditDays": 30
   },
   {
     "name": "Comercial Los Portales E.I.R.L.",
     "personType": 2,
     "registryNumber": "20512345672",
     "countryId": 604,
-    "cityId": "150101"
+    "cityId": "150101",
+    "creditDays": 15
   },
   {
     "name": "Importaciones del Pacífico S.A.",
     "personType": 2,
     "registryNumber": "20523456783",
     "countryId": 604,
-    "cityId": "150101"
+    "cityId": "150101",
+    "creditDays": 30
   },
   {
     "name": "Almacenes Trujillo S.A.C.",
     "personType": 2,
     "registryNumber": "20534567894",
     "countryId": 604,
-    "cityId": "150101"
+    "cityId": "150101",
+    "creditDays": 45
   },
   {
     "name": "Proveedora Sur Andina S.R.L.",
     "personType": 2,
     "registryNumber": "20545678905",
     "countryId": 604,
-    "cityId": "150101"
+    "cityId": "150101",
+    "creditDays": 0
   }
 ]

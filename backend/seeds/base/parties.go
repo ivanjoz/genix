@@ -81,6 +81,7 @@ func SaveAndLoadParties(run *runner.Run, seeds []runner.PartySeed, partyType int
 			RegistryNumber: strings.TrimSpace(seed.RegistryNumber),
 			CountryID:      seed.CountryID,
 			CityID:         seed.CityID,
+			CreditDays:     seed.CreditDays,
 		})
 	}
 

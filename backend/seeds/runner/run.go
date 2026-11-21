@@ -51,6 +51,9 @@ type PartySeed struct {
 	RegistryNumber string `json:"registryNumber"`
 	CountryID      int16  `json:"countryId"`
 	CityID         string `json:"cityId"`
+	// CreditDays are the party's payment terms (0 = cash): documents saved without a due date fall due
+	// this many days after their date.
+	CreditDays int16 `json:"creditDays"`
 }
 
 // Run is one seeding of one company: what the modules' setups resolved and what their day steps

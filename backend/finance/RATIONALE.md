@@ -45,15 +45,17 @@ a record whose status is not the tab's goes to `records_IDsToRemove`.
 **Rationale** — Fewer reads and no per-status eviction scans. Cost: the "Todos" first sync caps the
 `status IN (1, 2)` listing in view order (status, then ID) instead of by most recent `Updated`.
 
-## A manual Cobro picks one of five accounts
+## A manual Cobro picks one of four accounts
 
 **Context** — Type 7 "Cobro" is the only manual inflow, and it must post against a PCGE account. The
 list of options was left open.
 **Decision** — 759 other income, 142 shareholder repayment, 1419 repayment by an employee, 50
-capital contribution, 451 loan received. There is no default: the user always chooses. The sample-data
+capital contribution. There is no default: the user always chooses. The sample-data
 generators, which inject cash with a Cobro, book it as capital (50).
 **Rationale** — These are the counterparts of the manual outflows (142 and 1419 are what a Retiro and a
-Pérdida charge) plus the two usual ways new money enters a small business. A customer paying a sale is
+Pérdida charge) plus capital, the usual way new money enters a small business. A loan (451) is not on the list: it
+enters through the loans page, whose disbursement (type 14) and installment payments (type 15) keep
+the debt and its schedule tied to the cash. A customer paying a sale is
 not on the list because it is written by the sale (type 8).
 
 ## Manual cash movements keep the document types out
@@ -272,3 +274,15 @@ well, and `PostExpenses` refuses to edit it.
 written from here on, where forgetting produces a wrong total rather than an error. A status the
 tabs already filter on cannot be forgotten. The explicit rejections exist because a client can name
 any ID it likes.
+
+## A loan payment is one movement split across accounts
+
+**Context** — An installment clears principal (451), interest (673) and sometimes fees (671). Three
+movements would triple the bank statement lines for one bank debit and make a partial payment hard
+to read.
+**Decision** — One type-15 movement per payment, with `CounterAccountSplits` dividing its counter side.
+A partial payment is allowed and applies fees first, then interest, then principal; the installment's
+`PaidAmount` is recomputed from the ledger, never taken from the client. Once the disbursement is
+registered, the principal, account, currency and date are locked.
+**Rationale** — The cash side stays one line, the bank statement matches, and the Diario still posts
+each account. Applying fees and interest first is how lenders apply a short payment.

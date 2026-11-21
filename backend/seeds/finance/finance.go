@@ -10,14 +10,19 @@ import (
 
 var Module = runner.Module{Name: "finance", Setup: Setup}
 
-// Setup seeds the expense suppliers, loads the consumable supplies the inventory purchases buy, and
-// makes sure every monthly bill has its expense schedule.
+// Setup seeds the expense suppliers, loads the consumable supplies the inventory purchases buy,
+// makes sure every monthly bill has its expense schedule, and seeds the sample bank loan.
 func Setup(run *runner.Run) ([]runner.DayStep, error) {
 	if err := prepareExpenses(run); err != nil {
 		return nil, err
 	}
+	sampleLoan, err := prepareSampleLoan(run)
+	if err != nil {
+		return nil, err
+	}
 	return []runner.DayStep{
 		{Name: "expenses", Order: runner.OrderExpenses, Run: func(dayStart time.Time) error { return runExpensesStep(run, dayStart) }},
+		{Name: "loan-payments", Order: runner.OrderExpenses, Run: func(dayStart time.Time) error { return runLoanPaymentsStep(run, &sampleLoan, dayStart) }},
 		{Name: "till-transfers", Order: runner.OrderTillTransfers, Run: func(dayStart time.Time) error { return runTillTransfersStep(run, dayStart) }},
 		{Name: "till-counts", Order: runner.OrderTillCounts, Run: func(dayStart time.Time) error { return runTillCountsStep(run, dayStart) }},
 	}, nil

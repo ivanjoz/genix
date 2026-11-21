@@ -1,6 +1,7 @@
 package core
 
 import (
+	_ "embed"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,7 +12,11 @@ import (
 // Company flags are the per-company switches declared in company_flags.toml: a company stores the
 // ids it has checked and the rules that read them live in the modules they belong to. The catalog
 // is embedded at build time, so anything malformed in it is a build-time mistake and this loader
-// refuses rather than repairs — same stance as the access catalog next door.
+// refuses rather than repairs — same stance as the access catalog.
+//
+// The file lives here, not beside access.toml, because go:embed only reads files under the
+// package's own directory: embedded in core, it loads in every binary that imports core (the
+// server, genix-seed, the agent) without each main package having to inject it.
 //
 // A flag is of one of two kinds and never both. Without a `type` key it is a checkbox: its id is
 // either in the company's Flags list or absent. With `type = "i:<decimals>"` it is a valued flag:
@@ -39,6 +44,14 @@ type companyFlagDefinition struct {
 
 var embeddedCompanyFlags = &companyFlagsCatalog{}
 
+//go:embed company_flags.toml
+var companyFlagsCatalogContent []byte
+
+var _ = func() bool {
+	LoadEmbeddedCompanyFlags(companyFlagsCatalogContent)
+	return true
+}()
+
 // CompanyFlagValue is one valued flag's number as the company record carries it. Value is already
 // scaled by the flag's declared decimals, which is why nothing but the catalog may interpret it —
 // GetCompanyFlagValue is how a rule reads it back as the number that was typed.
@@ -47,7 +60,7 @@ type CompanyFlagValue struct {
 	Value int32 `cb:"2"`
 }
 
-// LoadEmbeddedCompanyFlags parses the catalog the main package embeds. Called once at startup.
+// LoadEmbeddedCompanyFlags parses a catalog: the embedded one at package init, a fixture in tests.
 func LoadEmbeddedCompanyFlags(companyFlagsContent []byte) {
 	// Sections mix two kinds of key — `label` (a string) and the flag ids (inline tables) — so the
 	// value type has to be `any` and the shape is checked below instead of by the unmarshaller.

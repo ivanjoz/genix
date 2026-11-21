@@ -193,6 +193,8 @@ export const cajaMovimientoTipos = [
   { id: 11, name: "Devolución (Anulación Venta)", group: 3, isNegative: true },
   { id: 12, name: "Pago Planilla", group: 3, isNegative: true },
   { id: 13, name: "Pago Aportes Planilla", group: 3, isNegative: true },
+  { id: 14, name: "Desembolso Préstamo", group: 3 },
+  { id: 15, name: "Pago Cuota Préstamo", group: 3, isNegative: true },
 ]
 
 // The movement an expense payment writes (backend CashMovementTypeExpensePayment).
@@ -221,7 +223,6 @@ export const CASH_MOVEMENT_ACCOUNT_OPTIONS: ICashMovementAccountOption[] = [
   { movementType: 7, accountCode: 142, name: 'Owner or shareholder repayment|Devolución del socio o accionista' },
   { movementType: 7, accountCode: 1419, name: 'Repayment by an employee|Devolución de un trabajador' },
   { movementType: 7, accountCode: 501, name: 'Capital contribution|Aporte de capital' },
-  { movementType: 7, accountCode: 451, name: 'Loan received|Préstamo recibido' },
 ]
 
 /** The accounts a movement of this type and amount may post against, mirroring

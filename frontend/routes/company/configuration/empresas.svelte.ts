@@ -38,12 +38,18 @@ export interface ICompany {
   // The SUNAT series travel inline on the company: there are at most 99 and every
   // emission needs one, so they are not worth a table of their own.
   InvoiceSeries: IInvoiceSeries[]
-  // The checked flag ids from backend/company_flags.toml, and only those. Saved as int16
+  // The checked flag ids from backend/core/company_flags.toml, and only those. Saved as int16
   // on the backend, which the Flags tab never has to know.
   Flags: number[]
   // The flags that carry a number instead of an on/off. In memory this holds one slot per
   // valued flag in the catalog; postEmpresaParametros drops the empty ones on the way out.
   FlagValues: ICompanyFlagValue[]
+  // Tax setup for the cash flow forecast (company-tax.ts). TaxRegime 0 = not set up yet.
+  TaxRegime: number
+  /** Renta pago a cuenta over net sales, basis points (1.5 % = 150). */
+  IncomeTaxPrepaymentRate: number
+  IsGoodTaxpayer: boolean
+  NrusCategory: number
   ss: number
   upd: number
 }
@@ -59,7 +65,9 @@ export class EmpresaParametrosService extends GetHandler {
     // unchecked, and saving from that tab would then clear the ones that are on.
     // ver 5: the record gained FlagValues, for the flags that hold a number. Same hazard:
     // a cached copy would show every valued field empty and saving would clear it.
-    useCache = { min: 10, ver: 5 }
+    // ver 6: the record gained the tax setup (TaxRegime and the fields beside it). Same hazard: a
+    // cached copy would show no regime and saving from it would clear the stored one.
+    useCache = { min: 10, ver: 6 }
 
     empresa = $state({
         CulqiConfig: {},

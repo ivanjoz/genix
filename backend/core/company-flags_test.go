@@ -9,7 +9,7 @@ import (
 // company parameters save for every tenant, and the binary embeds this exact file.
 func loadRealCompanyFlagsCatalog(t *testing.T) {
 	t.Helper()
-	companyFlagsContent, err := os.ReadFile("../company_flags.toml")
+	companyFlagsContent, err := os.ReadFile("company_flags.toml")
 	if err != nil {
 		t.Fatalf("could not read company_flags.toml: %v", err)
 	}

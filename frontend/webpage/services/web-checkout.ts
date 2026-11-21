@@ -4,7 +4,7 @@
 
 import { unpackQuantityLine } from '#core/quantity.ts'
 
-// The [ecommerce] company flags (backend/company_flags.toml).
+// The [ecommerce] company flags (backend/core/company_flags.toml).
 export const FLAG_CONFIRM_EMAIL_ONLINE_PAYMENT = 10
 export const FLAG_REQUIRE_CONTACT_NUMBER = 11
 export const FLAG_RECEIPT_AUTOMATIC = 12

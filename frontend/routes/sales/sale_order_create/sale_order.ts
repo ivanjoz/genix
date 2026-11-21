@@ -53,7 +53,7 @@ export function validateCustomerIdentity(docType: number, totalAmount: number,
   return ""
 }
 
-// The valued company flag holding the exchange-rate spread (backend/company_flags.toml).
+// The valued company flag holding the exchange-rate spread (backend/core/company_flags.toml).
 export const COMPANY_FLAG_EXCHANGE_RATE_SPREAD = 7
 
 // The spread × 1000, the scale a stored rate uses, so it adds to the sell rate directly.

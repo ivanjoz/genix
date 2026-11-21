@@ -57,15 +57,18 @@ func (run *Run) ReloadWarehouseLedger(warehouseID int32) error {
 
 	for _, stock := range stockResult.ProductStock {
 		presentationByStockID[stock.ID] = stock.PresentationID
-		// ProductStock.Quantity is only the free bucket; the lot/serial units live in the details.
-		if stock.Status == 0 || stock.Quantity <= 0 || !isInProductPool(stock.ProductID) {
+		// ProductStock.Quantity is only the free bucket; the lot/serial units live in the details. The
+		// units undelivered sales hold (PendingDelivery*) are not sellable: the sale's stock check
+		// (sales.ValidateSaleStock) subtracts them from the free bucket, so the ledger does too.
+		sellableUnits := stock.Quantity - stock.PendingDeliveryStore - stock.PendingDeliveryOnline
+		if stock.Status == 0 || sellableUnits <= 0 || !isInProductPool(stock.ProductID) {
 			continue
 		}
 		bucketsByProduct[stock.ProductID] = append(bucketsByProduct[stock.ProductID], &StockBucket{
 			Kind:           StockBucketFree,
 			ProductID:      stock.ProductID,
 			PresentationID: stock.PresentationID,
-			Remaining:      stock.Quantity,
+			Remaining:      sellableUnits,
 		})
 	}
 

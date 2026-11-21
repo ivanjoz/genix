@@ -85,6 +85,9 @@ export interface IOperationCashMovement {
   CounterAccountCode: number
   Amount: number
   CashBankRefID: number
+  // Divide the counter side across accounts (a loan payment: 451 principal, 673 interest, 671 fees),
+  // each signed like Amount and adding up to it. Absent on every other movement.
+  CounterAccountSplits?: { AccountCode: number, Amount: number }[]
 }
 
 // A closed or paid payslip with the accounts stamped on each line at calculation (Kind: 1 earning,
@@ -311,6 +314,8 @@ const CASH_ASSET_PAYMENT = 10
 const CASH_SALE_REFUND = 11
 const CASH_PAYROLL_PAYMENT = 12
 const CASH_PAYROLL_CONTRIBUTIONS = 13
+const CASH_LOAN_DISBURSEMENT = 14
+const CASH_LOAN_PAYMENT = 15
 
 const PROBLEM_MISSING_RATE = "A dollar amount has no exchange rate.|Un monto en dólares no tiene tipo de cambio."
 // A sale of made products delivered before the daily production close: the close books their cost
@@ -696,13 +701,29 @@ export function buildAccountingOperations(
         isOfficial = !asset || isPurchaseDocumented(asset)
         break
       }
+      // A loan moves its payable (451); a payment's interest and fees come in its splits.
+      case CASH_LOAN_DISBURSEMENT:
+      case CASH_LOAN_PAYMENT: {
+        isNature = false
+        break
+      }
     }
+    // A split movement posts one counter line per account, all locked: the writer fixed them. Each
+    // split converts on its own and the cash line is their sum, so a dollar payment stays balanced
+    // whatever the rounding.
+    const splits = movement.CounterAccountSplits || []
+    const counterLines = splits.length
+      ? splits.map(split => postLine(split.AccountCode, -convertUSD(split.Amount, rate)))
+      : [postLine(counterAccountCode, -amountSoles, isNature)]
+    const cashSoles = splits.length
+      ? splits.reduce((total, split) => total + convertUSD(split.Amount, rate), 0)
+      : amountSoles
     operations.push(finishOperation({
       Key: key, Kind: OPERATION_CASH, SourceID: movement.ID || movement.DocumentID, SourceType: movement.Type,
       Date: movement.Date, Description: cashBank?.Name || "", DocumentLabel: "", InOfficialBook: isOfficial,
     }, [
-      postLine(cashAccountOf(cashBank), amountSoles),
-      postLine(counterAccountCode, -amountSoles, isNature),
+      postLine(cashAccountOf(cashBank), cashSoles),
+      ...counterLines,
     ], [rate ? "" : PROBLEM_MISSING_RATE]))
   }
 

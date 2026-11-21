@@ -51,6 +51,31 @@ type ClientProvider struct {
 	// IsProspect marks a lead that has not bought yet. Opportunities reference it like any client;
 	// winning the opportunity clears the flag (crm.PostCrmOpportunityClose).
 	IsProspect bool `cb:"20"`
+	// CreditDays are the payment terms, 0 = cash. For a client, the days the company gives it to pay a
+	// sale; for a provider, the days it gives the company. A document saved without a due date is due
+	// on its date plus these days (DueDateByCreditDays).
+	CreditDays int16 `cb:"21"`
+}
+
+// CreditDaysMax bounds the payment terms a party can have.
+const CreditDaysMax = 365
+
+// DueDateByCreditDays is when a document of the party dated documentDate falls due under the party's
+// terms: the document date itself without a party or for a cash party.
+func DueDateByCreditDays(companyID int32, partyID int32, documentDate int16) (int16, error) {
+	if partyID <= 0 {
+		return documentDate, nil
+	}
+	parties := []ClientProvider{}
+	query := db.Query(&parties)
+	query.Select(query.ID, query.CreditDays).CompanyID.Equals(companyID).ID.Equals(partyID)
+	if err := query.Exec(); err != nil {
+		return 0, core.Err("Error al obtener los días de crédito del cliente/proveedor:", err)
+	}
+	if len(parties) == 0 {
+		return 0, core.Err("No se encontró el cliente/proveedor", partyID)
+	}
+	return documentDate + parties[0].CreditDays, nil
 }
 
 type ClientProviderTable struct {
@@ -74,6 +99,7 @@ type ClientProviderTable struct {
 	UpdatedBy        db.Col[*ClientProviderTable, int32]
 	Version          db.Col[*ClientProviderTable, int16]
 	IsProspect       db.Col[*ClientProviderTable, bool]
+	CreditDays       db.Col[*ClientProviderTable, int16]
 }
 
 func (e *ClientProvider) SelfParse() {

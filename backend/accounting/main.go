@@ -24,4 +24,6 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.accounting-labor-booked":   GetAccountingLaborBooked,
 	"GET.accounting-cash-balances":  GetAccountingCashBalances,
 	"PUT.accounting-classification": PutAccountingClassification,
+	"GET.tax-due-calendar":          GetTaxDueCalendar,
+	"POST.tax-due-calendar":         PostTaxDueCalendar,
 }

@@ -363,7 +363,7 @@ The backend decides one of three outcomes:
   and returns its session. The code-verify endpoint then creates the customer or logs into it.
 - So `p-web-checkout` always runs with a customer session. It requires one, references the customer
   on the sale order, and saves a new address when "Nueva dirección" was used.
-- **New company flags** in `backend/company_flags.toml`, in a new `[ecommerce]` section
+- **New company flags** in `backend/core/company_flags.toml`, in a new `[ecommerce]` section
   ("Online store|Tienda online"), with the next free ids (9 is retired):
   - `10` "Require email confirmation on online payment|Requerir confirmación de correo en pago
     online"

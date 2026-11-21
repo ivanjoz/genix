@@ -163,4 +163,11 @@ func TestCashMovementAccountsAreInTheChart(t *testing.T) {
 			}
 		}
 	}
+	for movementType, accountCodes := range finance.CashMovementSplitAccounts {
+		for _, accountCode := range accountCodes {
+			if account, exists := FindPCGEAccount(accountCode); !exists || !account.Postable {
+				t.Errorf("splits of type %d post to %d, which is not a postable account of the chart", movementType, accountCode)
+			}
+		}
+	}
 }

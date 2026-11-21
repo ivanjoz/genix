@@ -35,9 +35,10 @@ export class CalendarEventsService extends GetHandler<ICalendarEvent> {
     this.records = [...globalEvents, ...companyEvents].sort((leftEvent, rightEvent) => leftEvent.Date - rightEvent.Date)
   }
 
-  constructor() {
+  // init = false: the caller awaits its own fetch (the sales forecast feeds the engine after it).
+  constructor(init = true) {
     super()
-    this.fetch()
+    if (init) this.fetch()
   }
 }
 

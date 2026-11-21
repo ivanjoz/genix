@@ -2,6 +2,7 @@ package finance
 
 import (
 	"app/accounting"
+	business "app/business/types"
 	"app/core"
 	crmTypes "app/crm/types"
 	"app/db"
@@ -53,6 +54,10 @@ type expenseTemplate struct {
 	dailyChance  int
 	payAfterDays int16
 	isInventory  bool
+	// storeNumber books the bill under the site of the store's warehouse (1-based into
+	// Config.WarehouseIDs); 0 books it to the whole company. An inventory purchase takes its
+	// warehouse's site on its own.
+	storeNumber int
 }
 
 // expenseTemplates is the minimarket's cost structure. The accounts follow the PCGE: 63x services
@@ -60,10 +65,10 @@ type expenseTemplate struct {
 var expenseTemplates = []expenseTemplate{
 	{key: "rent-store-1", name: "Alquiler local Tienda 1", categoryID: 1, accountCode: 6352, supplierRUC: "20604511201",
 		docType: financeTypes.PurchaseDocTypeFactura, docSeries: "F001", minAmount: 850000, maxAmount: 850000,
-		cadence: cadenceScheduledMonthly, day: 1, payAfterDays: 2},
+		cadence: cadenceScheduledMonthly, day: 1, payAfterDays: 2, storeNumber: 1},
 	{key: "rent-store-2", name: "Alquiler local Tienda 2", categoryID: 1, accountCode: 6352, supplierRUC: "20604511202",
 		docType: financeTypes.PurchaseDocTypeFactura, docSeries: "F001", minAmount: 620000, maxAmount: 620000,
-		cadence: cadenceScheduledMonthly, day: 1, payAfterDays: 3},
+		cadence: cadenceScheduledMonthly, day: 1, payAfterDays: 3, storeNumber: 2},
 	{key: "electricity", name: "Energía eléctrica", categoryID: 2, accountCode: 6361, supplierRUC: "20604511203",
 		docType: financeTypes.PurchaseDocTypeUtilityBill, docSeries: "S001", minAmount: 240000, maxAmount: 330000,
 		cadence: cadenceScheduledMonthly, day: 8, payAfterDays: 12},
@@ -119,6 +124,15 @@ func prepareExpenses(run *runner.Run) error {
 	supplierSeeds := []runner.PartySeed{}
 	if err := json.Unmarshal(expenseSupplierSeedJSON, &supplierSeeds); err != nil {
 		return core.Err("error al leer el JSON de proveedores de gastos:", err)
+	}
+	// A supplier's credit days are how long its bills wait to be paid, so an expense saved without a due
+	// date falls due on the day the run pays it.
+	creditDaysByRUC := map[string]int16{}
+	for _, template := range expenseTemplates {
+		creditDaysByRUC[template.supplierRUC] = max(creditDaysByRUC[template.supplierRUC], template.payAfterDays)
+	}
+	for seedIndex := range supplierSeeds {
+		supplierSeeds[seedIndex].CreditDays = creditDaysByRUC[supplierSeeds[seedIndex].RegistryNumber]
 	}
 	suppliers, err := base.SaveAndLoadParties(run, supplierSeeds, crmTypes.ClientProviderTypeProvider)
 	if err != nil {
@@ -179,7 +193,12 @@ func ensureExpenseSchedules(run *runner.Run) error {
 			run.ExpenseScheduleByKey[template.key] = scheduleID
 			continue
 		}
+		siteID, err := expenseTemplateSiteID(run, template)
+		if err != nil {
+			return err
+		}
 		schedule := financeTypes.ExpenseScheduled{
+			SiteID:       siteID,
 			Name:         template.name,
 			CategoryID:   template.categoryID,
 			AccountCode:  template.accountCode,
@@ -202,6 +221,23 @@ func ensureExpenseSchedules(run *runner.Run) error {
 		run.ExpenseScheduleByKey[template.key] = createdSchedule.ID
 	}
 	return nil
+}
+
+// expenseTemplateSiteID is the site a template's bills are booked under: its store's warehouse's site,
+// or 0 (the whole company) for a template with no store.
+func expenseTemplateSiteID(run *runner.Run, template expenseTemplate) (int16, error) {
+	if template.storeNumber <= 0 {
+		return 0, nil
+	}
+	if template.storeNumber > len(run.Config.WarehouseIDs) {
+		return 0, core.Err("el gasto", template.key, "apunta a la tienda", template.storeNumber, "que no tiene almacén")
+	}
+	warehouseID := run.Config.WarehouseIDs[template.storeNumber-1]
+	siteIDByWarehouseID, err := business.SiteIDsOfWarehouses(run.UserToken.CompanyID, []int32{warehouseID})
+	if err != nil {
+		return 0, err
+	}
+	return siteIDByWarehouseID[warehouseID], nil
 }
 
 // runExpensesStep settles the payments that fall due today, then books the day's expenses. Both
@@ -338,17 +374,23 @@ func bookPlannedExpense(run *runner.Run, planned runner.PlannedExpense, bookedAt
 	case template.cadence == cadenceScheduledMonthly:
 		bookedExpense, err = billSchedulePeriod(run, template, unixDay, dueDay, planned.Amount, document)
 	case template.isInventory:
-		bookedExpense, err = postInventoryExpense(run, template, planned, unixDay, dueDay, document)
+		bookedExpense, err = postInventoryExpense(run, template, planned, unixDay, document)
 	default:
+		siteID, siteErr := expenseTemplateSiteID(run, template)
+		if siteErr != nil {
+			return siteErr
+		}
+		// No DueDate: the server sets it from the supplier's credit days (its payAfterDays), the path
+		// a user leaving it empty takes.
 		expense := financeTypes.Expense{
 			Name:         template.name,
 			Type:         financeTypes.ExpenseTypeSimple,
 			CategoryID:   template.categoryID,
 			AccountCode:  template.accountCode,
 			SupplierID:   run.ExpenseSupplierByRUC[template.supplierRUC],
+			SiteID:       siteID,
 			CurrencyType: financeTypes.CurrencyPEN,
 			Date:         unixDay,
-			DueDate:      dueDay,
 			Amount:       planned.Amount,
 		}
 		expense.SetPurchaseDocument(document)
@@ -400,8 +442,9 @@ func billSchedulePeriod(run *runner.Run, template expenseTemplate, unixDay int16
 	return financeTypes.Expense{}, core.Err("el gasto programado", template.name, "no generó el periodo del día", unixDay)
 }
 
+// postInventoryExpense sends no DueDate: the server sets it from the supplier's credit days.
 func postInventoryExpense(run *runner.Run, template expenseTemplate, planned runner.PlannedExpense,
-	unixDay int16, dueDay int16, document financeTypes.PurchaseDocument) (financeTypes.Expense, error) {
+	unixDay int16, document financeTypes.PurchaseDocument) (financeTypes.Expense, error) {
 
 	supplyName := ""
 	for _, supply := range run.ExpenseSupplies {
@@ -414,7 +457,6 @@ func postInventoryExpense(run *runner.Run, template expenseTemplate, planned run
 		CategoryID:       template.categoryID,
 		SupplierID:       run.ExpenseSupplierByRUC[template.supplierRUC],
 		Date:             unixDay,
-		DueDate:          dueDay,
 		ProductID:        planned.ProductID,
 		WarehouseID:      planned.WarehouseID,
 		Quantity:         planned.Quantity,

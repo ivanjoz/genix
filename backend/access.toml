@@ -282,6 +282,15 @@ levels = 14
 frontend_routes = "sales/sales-report"
 backend_apis = ""
 
+# The sales forecast (plan/SALES_FORECAST_PLAN.md): computed in the browser from read-only frames.
+[[access]]
+id = 69
+name = "Pronóstico Ventas"
+group = 3
+levels = 14
+frontend_routes = "sales/sales-forecast"
+backend_apis = ""
+
 [[access]]
 id = 13
 name = "Costos de Envio"
@@ -371,6 +380,16 @@ group = 5
 levels = 14
 frontend_routes = "finance/expenses"
 backend_apis = "POST.expenses,POST.expenses-scheduled,POST.expense-payment,POST.expense-inventory,GET.supply-material,POST.supply-material"
+
+# Loans the company owes. GET.loans is mapped so only loan and cash flow holders read the debts;
+# the cash flow forecast (access 21) adds it to its own list when it lands.
+[[access]]
+id = 71
+name = "Préstamos"
+group = 5
+levels = 14
+frontend_routes = "finance/loans"
+backend_apis = "GET.loans,POST.loans,POST.loan-payment"
 
 [[access]]
 id = 20
@@ -542,6 +561,17 @@ group = 8
 levels = 14
 frontend_routes = "system/hr-legal-parameters"
 backend_apis = "POST.hr-legal-parameters,POST.hr-afp-rates"
+
+# SUNAT's monthly due-date schedule, shared by every company; only the SaaS company writes it (the
+# route is also in saasOnlyRoutes, main-handlers.go). GET.tax-due-calendar stays open: every company
+# reads it.
+[[access]]
+id = 70
+name = "Calendario Tributario"
+group = 8
+levels = 14
+frontend_routes = "system/tax-calendar"
+backend_apis = "POST.tax-due-calendar"
 
 [[access]]
 id = 47

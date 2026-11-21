@@ -98,6 +98,12 @@ name = "Sales Report|Reporte Ventas"
 icon = "icon-[fa--bar-chart]"
 
 [[pages]]
+route = "sales/sales-forecast"
+name = "Sales Forecast|Pronóstico de Ventas"
+icon = "icon-[fa--line-chart]"
+description = "Pronostica la demanda diaria por sede y producto, ajustando los parámetros del modelo."
+
+[[pages]]
 route = "sales/shipping-costs"
 name = "Shipping Costs|Costos de Envio"
 icon = "icon-[fa--bolt]"
@@ -346,6 +352,12 @@ icon = "icon-[fa--exchange]"
 pending = true
 
 [[pages]]
+route = "finance/loans"
+name = "Loans|Préstamos"
+icon = "icon-[fa--university]"
+description = "Registra los préstamos de bancos y otras entidades con su cronograma de cuotas, calcula las cuotas con la TEA y paga cada cuota desde una caja o banco."
+
+[[pages]]
 route = "finance/expenses"
 name = "Expenses|Gastos"
 icon = "icon-[fa--exchange]"
@@ -469,6 +481,12 @@ route = "system/hr-legal-parameters"
 name = "Labor Parameters|Parámetros Laborales"
 icon = "icon-[fa--balance-scale]"
 description = "Mantiene la RMV, la UIT, las tasas de EsSalud y ONP y las tasas mensuales de las AFP que usan todas las planillas."
+
+[[pages]]
+route = "system/tax-calendar"
+name = "Tax Calendar|Calendario Tributario"
+icon = "icon-[fa--calendar-check-o]"
+description = "Mantiene el cronograma de vencimientos mensuales de SUNAT por último dígito del RUC y buenos contribuyentes, con el que el flujo de caja proyecta los impuestos."
 
 [[pages]]
 route = "system/developer"
