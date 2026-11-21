@@ -11,6 +11,10 @@ import (
 
 // The driver-neutral facade on MariaDB: the same signatures as every other facade_*.go.
 
+// MariaDB keeps the DataFrames in aggregate tables (genix-orm db.FrameStorage). Declared in init so
+// every table compile sees it, whatever entry point ran (server, script, test).
+func init() { orm.SetFrameStorage(orm.TableFrames) }
+
 // Connect records the server; the pool opens on first use. Scripting entry points ping the server
 // right away so a wrong address fails before any work. The keyspace is the MariaDB database.
 func Connect(params ConnectParams) {

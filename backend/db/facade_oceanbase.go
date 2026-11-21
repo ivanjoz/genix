@@ -11,6 +11,10 @@ import (
 
 // The driver-neutral facade on OceanBase: the same signatures as every other facade_*.go.
 
+// OceanBase keeps the DataFrames as files in the file store (genix-orm db.FrameStorage). Declared in
+// init so every table compile sees it, whatever entry point ran (server, script, test).
+func init() { orm.SetFrameStorage(orm.S3Frames) }
+
 // Connect records the server; the pool opens on first use. Scripting entry points ping the server
 // right away so a wrong address fails before any work. The keyspace is the OceanBase database.
 func Connect(params ConnectParams) {

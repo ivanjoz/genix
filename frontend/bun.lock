@@ -68,7 +68,7 @@
         "@tiptap/starter-kit": "^3.31.4",
         "axios": "^1.13.2",
         "chartist": "^2.0.0",
-        "colbin": "0.10.1",
+        "colbin": "0.13.1",
         "date-fns": "^4.1.0",
         "dexie": "^4.2.0",
         "dompurify": "^3.4.2",
@@ -539,7 +539,7 @@
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
 
-    "colbin": ["colbin@0.10.1", "", {}, "sha512-Q1lLmhTOlU9x3kCLkZb9CXw+x9JyFdv2d+2AXPO3slKY5M7ch8wcGLpdBRPTgUyAZiA5HdZKlAni8A2oJ8iecQ=="],
+    "colbin": ["colbin@0.13.1", "", {}, "sha512-5ZyGTXw26fmX0XKeWcS4cdMrSdQjzB3ZnDtKr/KO/7ZZIoiNGzFEIVsG2uxZYUm7a9nKqaGktNI68cbZXKFHFg=="],
 
     "colord": ["colord@2.9.3", "", {}, "sha512-jeC1axXpnb0/2nn/Y1LPuLdgXBLH7aDcHu4KEKfqw3CUhX7ZpfBSlPKyqXE6btIgEzfWtrX3/tyBCaCvXvMkOw=="],
 
