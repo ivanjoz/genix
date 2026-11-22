@@ -66,7 +66,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/gpdf-dev/gpdf v1.0.17
 	github.com/ivanjoz/avif-webp-encoder v0.1.3
-	github.com/ivanjoz/colbin v0.11.0
+	github.com/ivanjoz/colbin v0.13.1
 	github.com/ivanjoz/facturago v0.0.0
 	github.com/ivanjoz/fareward/go v0.0.0
 	github.com/ivanjoz/genix-orm v0.0.0
