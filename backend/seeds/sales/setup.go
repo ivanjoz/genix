@@ -30,6 +30,7 @@ func Setup(run *runner.Run) ([]runner.DayStep, error) {
 	return []runner.DayStep{
 		{Name: "sales", Order: runner.OrderSales, Run: func(dayStart time.Time) error { return runDailySales(run, dayStart) }},
 		{Name: "annulments", Order: runner.OrderAnnulments, Run: func(dayStart time.Time) error { return runAnnulmentsStep(run, dayStart) }},
+		{Name: "detraction-deposits", Order: runner.OrderDetractionDeposits, Run: func(dayStart time.Time) error { return runDetractionDepositsStep(run, dayStart) }},
 	}, nil
 }
 

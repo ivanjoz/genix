@@ -5,6 +5,7 @@ import (
 	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
+	finance "app/finance/types"
 	"app/production"
 	productionTypes "app/production/types"
 	"app/seeds/runner"
@@ -97,7 +98,9 @@ func importProductsWorkbook(run *runner.Run) (productsImportStats, error) {
 			FinalPrice: productRow.finalPrice,
 			Volume:     productRow.volume,
 			Weight:     productRow.weight,
+			TaxGroup:   seedProductTaxGroup(productRow.name),
 		}
+		product.DetractionCode = seedProductDetractionCode(product.Name, product.TaxGroup)
 		for _, categoryName := range productRow.categoryNames {
 			product.CategoryIDs = append(product.CategoryIDs,
 				sharedListIDByHash[sharedListNameHash(businessTypes.SharedListCategoryID, categoryName)])
@@ -325,6 +328,34 @@ func resolveSharedListNames(run *runner.Run, productRows []productImportRow,
 }
 
 // Both hashes come from the records' own SelfParse, so they match what the handlers store.
+// seedProductTaxGroup gives the catalog a mix of IGV treatments, fixed by the product's name so a
+// rerun gives each product the same one: 80 % taxed at 18 %, 12 % exonerado, 5 % inafecto, 3 % export.
+func seedProductTaxGroup(name string) int8 {
+	switch bucket := uint32(productNameHash(name)) % 100; {
+	case bucket < 80:
+		return finance.TaxGroupTaxed18
+	case bucket < 92:
+		return finance.TaxGroupExonerated
+	case bucket < 97:
+		return finance.TaxGroupUnaffected
+	}
+	return finance.TaxGroupExport
+}
+
+// seedProductDetractionCode puts one taxed product in ten under the SPOT, fixed by its name, so
+// some facturas over S/ 700 carry a detracción: sugar, fish or meat, the goods a grocery sells.
+func seedProductDetractionCode(name string, taxGroup int8) int16 {
+	if taxGroup != finance.TaxGroupTaxed18 {
+		return 0
+	}
+	spotCodes := []int16{1, 4, 14}
+	hash := uint32(productNameHash(name))
+	if hash/100%10 != 0 {
+		return 0
+	}
+	return spotCodes[hash%uint32(len(spotCodes))]
+}
+
 func productNameHash(name string) int32 {
 	product := productionTypes.Product{Name: name}
 	product.SelfParse()

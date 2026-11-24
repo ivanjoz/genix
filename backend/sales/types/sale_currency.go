@@ -104,6 +104,11 @@ func PriceSaleOrderLine(line *SaleOrderLine, product production.Product, saleCur
 		}
 	}
 
+	if !finance.IsProductTaxGroup(product.TaxGroup) {
+		return core.Err(fmt.Sprintf(`El producto "%s" no tiene afectación IGV.`, product.Name))
+	}
+	line.TaxGroup = product.TaxGroup
+
 	productCurrency := NormalizeCurrency(int8(product.CurrencyID))
 	line.Price = finance.ConvertUnitPrice(product.FinalPrice, productCurrency, saleCurrency, exchangeRate)
 	line.SubPrice = finance.ConvertUnitPrice(product.SbuFinalPrice, productCurrency, saleCurrency, exchangeRate)

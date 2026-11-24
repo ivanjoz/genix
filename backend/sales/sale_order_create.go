@@ -141,6 +141,15 @@ func updateSaleOrder(req *core.HandlerArgs, saleRequest types.SaleOrder) core.Ha
 		if err := types.ValidateSaleCurrency(companyID, &sale); err != nil {
 			return req.MakeErr(err)
 		}
+		// The open detracción is collected only into the detracciones account, and that account
+		// collects nothing else of the sale.
+		cashBank, err := finance.GetCaja(companyID, sale.LastPaymentCajaID)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		if err := sale.ApplyDetractionDeposit(collectedAmount, sale.DebtAmount, cashBank.Type == finance.CashBankTypeDetractions); err != nil {
+			return req.MakeErr(err)
+		}
 	}
 
 	if saleRequest.ClientInfo != nil {
@@ -241,6 +250,8 @@ func updateSaleOrder(req *core.HandlerArgs, saleRequest types.SaleOrder) core.Ha
 			// A delivery flags the made lines whose stock exit waits for the production close.
 			saleTable.Lines,
 			saleTable.PendingStockMovement,
+			// A deposit into the detracciones account settles part of the detracción entry.
+			saleTable.ImposedTaxes,
 		); err != nil {
 			return core.Err("Error al actualizar la venta:", err)
 		}
@@ -294,6 +305,9 @@ func validateSaleOrderLines(req *core.HandlerArgs, sale *types.SaleOrder) (map[i
 		if err := types.PriceSaleOrderLine(line, product, sale.CurrencyType, sale.ExchangeRate); err != nil {
 			return nil, err
 		}
+	}
+	if err := sale.ApplyFreeLines(); err != nil {
+		return nil, err
 	}
 
 	// Recompute the order total from the resolved lines for the same reason.

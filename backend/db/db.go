@@ -371,6 +371,15 @@ func DeriveFrame[S any, D any](derive func(source *S, derived *D) bool) *datafra
 	return orm.DeriveFrame(derive)
 }
 
+// SharedFrame is a DataFrame several tables write into one aggregate table (`__frame_<name>`): each
+// table names it in a DataFrame with Shared, its own ToFrames and the OwnerRow values it writes.
+type SharedFrame = orm.SharedFrame
+
+// DeclareSharedFrame declares a frame several tables write, made of the frame struct F.
+func DeclareSharedFrame[F any](declaration SharedFrame) *SharedFrame {
+	return orm.DeclareSharedFrame[F](declaration)
+}
+
 // Compute binds a computed column (TableSchema.Computed) to a record method:
 // db.Compute((*SaleOrder).DetailProductIDs). It must be pure: it is called on every write.
 func Compute[RecordT any, ValueT any](method func(*RecordT) ValueT) *orm.ComputedValue {

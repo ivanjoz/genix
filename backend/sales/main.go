@@ -10,6 +10,7 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.sale-orders":        GetSaleOrders,
 	"GET.sale-order-query":   SaleOrderQuery,
 	"GET.sale-summary":       GetSaleSummary,
+	"GET.sale-client-debt":   GetSaleClientDebt,
 	"GET.sale-order-by-ids":  GetSaleOrderByIDs,
 	"GET.client-week-sales":  GetClientWeekSales,
 	"GET.shipping-costs":     GetShippingCosts,

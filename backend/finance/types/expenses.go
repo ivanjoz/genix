@@ -153,7 +153,7 @@ type Expense struct {
 	// ProductionOrderID is the subcontracted production order a workshop's invoice is for
 	// (docs/MANUFACTURING_PLAN.md §8, M19): the order compares what was agreed with what was invoiced.
 	ProductionOrderID int32 `cb:"39"`
-	// SiteID is the site the expense belongs to (0 = the whole company): what expense-summary sums by,
+	// SiteID is the site the expense belongs to (0 = the whole company): what cash-documents sums by,
 	// since its ToFrames reads only the expense. An inventory expense takes its warehouse's site.
 	SiteID int16 `cb:"40"`
 }
@@ -268,48 +268,31 @@ func (e ExpenseTable) GetSchema() db.TableSchema {
 			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
 		DataFrames: []db.DataFrame{{
-			// The unscheduled spending per day, site and category the cash flow forecast learns from
-			// (plan/CASH_FLOW_FORECAST_PLAN.md §5). Most days have no taxed purchase, so the zero sums
-			// mask drops TaxAmountPEN on them.
-			Name:            "expense-summary",
-			Version:         1,
-			UseZeroSumsMask: true,
-			UseWeekSpread:   true,
-			ToFrames:        db.ToFrames((*Expense).ToExpenseSummaryFrames),
+			Shared: CashDocumentsFrame, Version: 1, ToFrames: db.ToFrames((*Expense).ToCashDocumentFrames),
+			OwnedRows: OwnedCashDocumentKinds(CashDocumentKindExpenseOpen, CashDocumentKindExpenseSettled,
+				CashDocumentKindScheduledExpenseOpen, CashDocumentKindScheduledExpenseSettled),
 		}},
 	}
 }
 
-// ExpenseSummaryFrame is one expense as the "expense-summary" DataFrame sums it: one file per day and
-// site, one row per category. Amounts are in soles.
-type ExpenseSummaryFrame struct {
-	// Date is the week-spread Part (partition_id = CompanyID << 13 | the epoch week of Date): the day
-	// the expense was incurred, the date its payments measure their delay from (cash-delay).
-	Date       int16 `frame:"part,13"`
-	SiteID     int16 `frame:"key"`
-	CategoryID int8  `frame:"row"`
-	AmountPEN  int32 `frame:"sum"`
-	// TaxAmountPEN is the IGV with crédito fiscal, for the forecast of the IGV payable.
-	TaxAmountPEN int32 `frame:"sum"`
-}
-
-// ToExpenseSummaryFrames is what the expense adds to its day: only spending no other forecast stream
-// already covers. A schedule's period is projected from its schedule, a tax payment (401x) by the tax
-// stream and depreciation moves no cash, so those add nothing; neither does a removed expense. A
-// dollar expense with no exchange rate (one booked without comprobante) cannot be restated, so it is
-// left out too — the forecast's warnings list those.
-func (e *Expense) ToExpenseSummaryFrames(lines []ExpenseSummaryFrame) []ExpenseSummaryFrame {
+// ToCashDocumentFrames is what the expense adds to the cash-documents frame: cash spending only. A tax
+// payment (401x) is read by the backend apart, depreciation moves no cash, and a removed or posted
+// expense adds nothing. A schedule's period writes its own Kinds, which the forecast's history skips
+// (the schedule projects them). The open part is what its payments left.
+func (e *Expense) ToCashDocumentFrames(lines []CashDocumentFrame) []CashDocumentFrame {
 	isCashSpending := e.Type == ExpenseTypeSimple || e.Type == ExpenseTypeInventory
 	isLive := e.Status == 1 || e.Status == 2
-	if !isCashSpending || !isLive || e.ExpenseScheduledID != 0 || IsTaxPayableAccount(e.AccountCode) {
+	if !isCashSpending || !isLive || IsTaxPayableAccount(e.AccountCode) {
 		return lines
 	}
-	amountPEN, taxAmountPEN, ok := AmountsInPEN(e.CurrencyType, e.ExchangeRate, e.Amount, e.TaxAmount)
-	if !ok {
-		return lines
+	openKind, settledKind := CashDocumentKindExpenseOpen, CashDocumentKindExpenseSettled
+	if e.ExpenseScheduledID != 0 {
+		openKind, settledKind = CashDocumentKindScheduledExpenseOpen, CashDocumentKindScheduledExpenseSettled
 	}
-	return append(lines, ExpenseSummaryFrame{
-		Date: e.Date, SiteID: e.SiteID, CategoryID: e.CategoryID, AmountPEN: amountPEN, TaxAmountPEN: taxAmountPEN,
+	return AppendCashDocumentFrames(lines, CashDocument{
+		Date: e.Date, SiteID: e.SiteID, OpenKind: openKind, SettledKind: settledKind,
+		DueDate: e.DueDate, DocumentDate: e.DocIssueDate, IsForeignCurrency: e.CurrencyType == CurrencyUSD,
+		Groups: PurchaseCashGroups(e.PurchaseDocument(), e.Amount), OpenAmount: e.Amount - e.PaidAmount,
 	})
 }
 
@@ -317,19 +300,6 @@ func (e *Expense) ToExpenseSummaryFrames(lines []ExpenseSummaryFrame) []ExpenseS
 // another tax to the State, which the cash flow forecast projects from the tax rules, not from history.
 func IsTaxPayableAccount(accountCode int32) bool {
 	return strings.HasPrefix(strconv.Itoa(int(accountCode)), "401")
-}
-
-// AmountsInPEN restates a purchase's total and IGV in soles at its document rate. ok is false for a
-// dollar purchase without a rate, which has no honest restatement.
-func AmountsInPEN(currencyType int8, exchangeRate int32, amount int32, taxAmount int32) (int32, int32, bool) {
-	if currencyType != CurrencyUSD {
-		return amount, taxAmount, true
-	}
-	if exchangeRate <= 0 {
-		return 0, 0, false
-	}
-	return ConvertUnitPrice(amount, CurrencyUSD, CurrencyPEN, exchangeRate),
-		ConvertUnitPrice(taxAmount, CurrencyUSD, CurrencyPEN, exchangeRate), true
 }
 
 func (e *Expense) PurchaseDocument() PurchaseDocument {

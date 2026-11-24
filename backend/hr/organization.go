@@ -99,7 +99,7 @@ func PostPosition(req *core.HandlerArgs) core.HandlerResponse {
 	position.Name = strings.TrimSpace(position.Name)
 
 	if position.Status == types.StatusDeleted && position.ID > 0 {
-		employees, err := loadCompanyEmployees(companyID)
+		employees, err := types.LoadCompanyEmployees(companyID)
 		if err != nil {
 			return req.MakeErr(err)
 		}
@@ -141,7 +141,7 @@ func PostPosition(req *core.HandlerArgs) core.HandlerResponse {
 // ensureDepartmentUnused refuses to delete a department that active employees, positions or child
 // departments still point to: their labels would stop resolving.
 func ensureDepartmentUnused(companyID, departmentID int32) error {
-	employees, err := loadCompanyEmployees(companyID)
+	employees, err := types.LoadCompanyEmployees(companyID)
 	if err != nil {
 		return err
 	}

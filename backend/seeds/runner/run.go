@@ -75,6 +75,8 @@ type Run struct {
 	// base: one till per warehouse collects the sales; the bank pays suppliers, expenses and payroll.
 	TillByWarehouse map[int32]int32
 	BankCashBankID  int32
+	// base: the Banco de la Nación account the facturas' detracciones are deposited into.
+	DetractionsCashBankID int32
 
 	// base: ProviderIDs are the grocery suppliers the purchase orders buy from, SupplyProviderIDs
 	// the static list the replenishment settings and the fixed assets name.

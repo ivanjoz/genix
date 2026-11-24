@@ -348,8 +348,8 @@ icon = "icon-[fa--money]"
 [[pages]]
 route = "finance/cash-flow"
 name = "Cash Flow|Flujo de Caja"
-icon = "icon-[fa--exchange]"
-pending = true
+icon = "icon-[fa--line-chart]"
+description = "Proyecta el saldo de caja de cada sede y de la empresa día a día para las próximas 13 semanas: cobros, pagos, planilla, impuestos, cuotas de préstamos y entradas planificadas, con alertas de los datos que faltan."
 
 [[pages]]
 route = "finance/loans"

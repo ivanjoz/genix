@@ -10,7 +10,9 @@
 package types
 
 import (
+	"app/cloud"
 	"app/core"
+	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
 	invoicing "app/invoicing/types"
@@ -58,19 +60,6 @@ func PrepareNewSale(req *core.HandlerArgs, newSale NewSaleRequest) (PreparedSale
 	isPayment := slices.Contains(sale.ActionsIncluded, 2)
 	isDelivery := slices.Contains(sale.ActionsIncluded, 3)
 
-	// The server owns the debt: a new sale owes its whole total, and a payment collects the drop to
-	// what the caller says stays owed. Only a payment names a cash-bank: an unpaid sale that kept the
-	// till's default one would later be paid into it, whatever register the operator picks then.
-	collectedAmount := int32(0)
-	if isPayment {
-		var err error
-		if collectedAmount, err = sales.SaleOrderCollectedAmount(sale.TotalAmount, sale.DebtAmount); err != nil {
-			return PreparedSale{}, err
-		}
-	} else {
-		sale.DebtAmount, sale.LastPaymentCajaID = sale.TotalAmount, 0
-	}
-
 	sale.CompanyID, sale.Date, sale.Created = companyID, today, nowTime
 	sale.Status, sale.Updated, sale.UpdatedBy = sales.OrderStatusPending, nowTime, userID
 
@@ -80,6 +69,39 @@ func PrepareNewSale(req *core.HandlerArgs, newSale NewSaleRequest) (PreparedSale
 			return PreparedSale{}, core.Err("Error al guardar el cliente de la venta:", err)
 		}
 		sale.ClientID = clientID
+	}
+
+	// The detracción or retención of a factura, from its products, its client and the company.
+	if newSale.IssueSeries != nil && newSale.IssueSeries.DocType == invoicing.DocTypeFactura {
+		withholdingContext, err := saleWithholdingContext(companyID, sale.ClientID)
+		if err != nil {
+			return PreparedSale{}, err
+		}
+		sale.ApplySaleWithholdings(newSale.Products, withholdingContext)
+	}
+
+	// The server owns the debt: a new sale owes what the customer must pay the company (the total less
+	// a retención), and a payment collects the drop to what the caller says stays owed. The caller
+	// speaks only of what the till collects: an open detracción stays owed on top, until it is
+	// deposited into the detracciones account, which a sale is never created paid into. Only a payment
+	// names a cash-bank: an unpaid sale that kept the till's default one would later be paid into it,
+	// whatever register the operator picks then.
+	collectedAmount := int32(0)
+	if isPayment {
+		cashBank, err := finance.GetCaja(companyID, sale.LastPaymentCajaID)
+		if err != nil {
+			return PreparedSale{}, err
+		}
+		if cashBank.Type == finance.CashBankTypeDetractions {
+			return PreparedSale{}, core.Err("Una venta nueva no se cobra en la cuenta de detracciones: registre el depósito después.")
+		}
+		remainingDebt := sale.DebtAmount + sale.OpenDetractionAmount()
+		if collectedAmount, err = sales.SaleOrderCollectedAmount(sale.CollectibleAmount(), remainingDebt); err != nil {
+			return PreparedSale{}, err
+		}
+		sale.DebtAmount = remainingDebt
+	} else {
+		sale.DebtAmount, sale.LastPaymentCajaID = sale.CollectibleAmount(), 0
 	}
 	if err := sale.StampPaymentDueDate(); err != nil {
 		return PreparedSale{}, err
@@ -190,4 +212,19 @@ func ScheduleNewSaleDocument(prepared *PreparedSale) {
 	if prepared.document != nil {
 		invoicing.ScheduleEmitPendingSweep(prepared.Sale.CompanyID)
 	}
+}
+
+// saleWithholdingContext reads what decides a factura's retención: whether its client is a retention
+// agent and whether the company is a buen contribuyente.
+func saleWithholdingContext(companyID int32, clientID int32) (sales.SaleWithholdingContext, error) {
+	isRetentionAgent, err := crm.IsClientRetentionAgent(companyID, clientID)
+	if err != nil {
+		return sales.SaleWithholdingContext{}, err
+	}
+	companyConfig, err := cloud.LoadCompanyConfig(companyID)
+	if err != nil {
+		return sales.SaleWithholdingContext{}, core.Err("Error al leer la configuración de la empresa:", err)
+	}
+	return sales.SaleWithholdingContext{IsFactura: true, IsRetentionAgent: isRetentionAgent,
+		IsGoodTaxpayer: companyConfig.Tax.IsGoodTaxpayer}, nil
 }

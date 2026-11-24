@@ -23,7 +23,8 @@ func ReadSaleProducts(companyID int32, lines []SaleOrderLine) (map[int32]product
 	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice,
-		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.SalesChannels, query.Presentations, query.Origin, query.CategoryIDs).
+		query.CurrencyID, query.SbuUnit, query.WebExtraStock, query.SalesChannels, query.Presentations, query.Origin, query.CategoryIDs,
+		query.TaxGroup, query.DetractionCode).
 		CompanyID.Equals(companyID).
 		ID.In(productIDs.Values...)
 	if err := query.Exec(); err != nil {

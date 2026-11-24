@@ -15,7 +15,8 @@
   import { security } from '#libs/ui-runtime.svelte.ts';
   import { formatN, formatTime } from '#libs/helpers.ts';
   import { type Quantity, formatQuantity, quantityAmount, quantityDivisorOf, unpackQuantityLine } from '#core/quantity.ts';
-  import { CajasService } from '#routes/finance/cash-banks/cajas.svelte.ts';
+  import { CASH_BANK_TYPE_DETRACTIONS, CajasService } from '#routes/finance/cash-banks/cajas.svelte.ts';
+  import { openDetractionOf, remainingDebtAfterPayment } from './sale_order_status.ts';
   import {
       ClientProviderService,
       type IClientProvider
@@ -442,19 +443,21 @@
       notifyFailure(tr('An action is already in progress for this order.|Ya se está procesando una acción para esta orden.'));
       return;
     }
-    // Payment caja priority: order caja first, otherwise use the user-selected caja.
-    const paymentCajaID = selectedSaleOrder.LastPaymentCajaID || saleOrderPaymentForm.LastPaymentCajaID;
+    // The selector starts on the order's caja (resetSaleOrderActionForms) and the operator may change
+    // it: the detracción is deposited into the detracciones account, never the till.
+    const paymentCajaID = saleOrderPaymentForm.LastPaymentCajaID;
     if (!paymentCajaID) {
       notifyFailure(tr('Order has no Cash Register ID for payment.|La orden no posee Caja ID para registrar el pago.'));
       return;
     }
+    const isDetractionsAccount = cajasService.CajasMap.get(paymentCajaID)?.Type === CASH_BANK_TYPE_DETRACTIONS;
 
-    // Payment transition: mark as paid and set debt to zero for a full payment flow.
+    // A full payment: everything the chosen account may collect.
     void processSaleOrderAction('pago', {
       ID: selectedSaleOrder.ID,
       ActionsIncluded: [2],
       LastPaymentCajaID: paymentCajaID,
-      DebtAmount: 0,
+      DebtAmount: remainingDebtAfterPayment(selectedSaleOrder.DebtAmount, selectedSaleOrder.ImposedTaxes, isDetractionsAccount),
     });
   }
 
@@ -699,6 +702,13 @@
             <div class="text-fg-muted"><T text="Debt|Deuda" /></div>
             <div class="ff-mono">{currencySymbol(selectedSaleOrder.CurrencyType)} {formatN((selectedSaleOrder.DebtAmount || 0) / 100, 2)}</div>
           </div>
+          {#if openDetractionOf(selectedSaleOrder.ImposedTaxes) > 0}
+            <!-- Part of the debt: the customer deposits it into the detracciones account, picked below. -->
+            <div class="col-span-24 text-fg-soft">
+              <T text="Detracción to deposit at the Banco de la Nación:|Detracción por depositar en el Banco de la Nación:" />
+              <span class="ff-mono ml-4">{currencySymbol(selectedSaleOrder.CurrencyType)} {formatN(openDetractionOf(selectedSaleOrder.ImposedTaxes) / 100, 2)}</span>
+            </div>
+          {/if}
         </div>
 
         <VTable

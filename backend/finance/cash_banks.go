@@ -5,6 +5,7 @@ import (
 	"app/db"
 	"app/finance/types"
 	"encoding/json"
+	"strings"
 )
 
 func GetCashBanks(req *core.HandlerArgs) core.HandlerResponse {
@@ -51,6 +52,27 @@ func PostCashBanks(req *core.HandlerArgs) core.HandlerResponse {
 		}
 		if culqiCashBank != nil && culqiCashBank.ID != body.ID {
 			return req.MakeErr(`La cuenta "` + culqiCashBank.Name + `" ya recibe los pagos de Culqi. Desmárquela antes de marcar otra.`)
+		}
+	}
+
+	if body.Type != types.CashBankTypeTill && body.Type != types.CashBankTypeBank && body.Type != types.CashBankTypeDetractions {
+		return req.MakeErr("El tipo de la caja no es válido.")
+	}
+	// The detracciones account is one per company, in soles (the deposits are), and its number is what
+	// every factura with a detracción declares.
+	if body.Type == types.CashBankTypeDetractions {
+		if body.CurrencyType != types.CurrencyPEN || body.ReceivesCulqiPayments {
+			return req.MakeErr("La cuenta de detracciones es en soles y no recibe pagos de Culqi.")
+		}
+		if strings.TrimSpace(body.AccountNumber) == "" {
+			return req.MakeErr("Ingrese el número de la cuenta de detracciones del Banco de la Nación.")
+		}
+		detractionsCashBank, err := types.FindDetractionsCashBank(req.User.CompanyID)
+		if err != nil {
+			return req.MakeErr(err)
+		}
+		if detractionsCashBank != nil && detractionsCashBank.ID != body.ID {
+			return req.MakeErr(`La cuenta "` + detractionsCashBank.Name + `" ya es la cuenta de detracciones de la empresa.`)
 		}
 	}
 

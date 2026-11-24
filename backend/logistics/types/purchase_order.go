@@ -91,7 +91,7 @@ type PurchaseOrder struct {
 	// on its DocIssueDate; 0 when no payment did. See finance.SameDaySettlement.
 	SameDayCashBankID int32 `cb:"36"`
 	// SiteID is the site (sede) of the warehouse the goods go to, 0 while the order names none. Set by
-	// StampSiteID on every write that sets the warehouse: what purchase-order-summary sums by, since its
+	// StampSiteID on every write that sets the warehouse: what cash-documents sums by, since its
 	// ToFrames reads only the order.
 	SiteID int16 `cb:"37"`
 }
@@ -111,32 +111,18 @@ func (e *PurchaseOrder) StampSiteID(warehouseID int32) error {
 	return nil
 }
 
-// PurchaseOrderSummaryFrame is one order as the "purchase-order-summary" DataFrame sums it: one file per
-// day and site. Its row is always the merchandise expense category, so the frame has expense-summary's
-// shape and the cash flow forecast merges both (plan/CASH_FLOW_FORECAST_PLAN.md §5).
-type PurchaseOrderSummaryFrame struct {
-	// Date is the week-spread Part: partition_id = CompanyID << 13 | the epoch week of the order's Date.
-	Date         int16 `frame:"part,13"`
-	SiteID       int16 `frame:"key"`
-	CategoryID   int8  `frame:"row"`
-	AmountPEN    int32 `frame:"sum"`
-	TaxAmountPEN int32 `frame:"sum"`
-}
-
-// ToPurchaseOrderSummaryFrames is what the order adds to its day once it is committed (confirmed or
-// fulfilled): a pending order may still be dropped and a canceled one buys nothing. A dollar order
-// without its comprobante's rate cannot be restated in soles, so it adds nothing until it has one.
-func (e *PurchaseOrder) ToPurchaseOrderSummaryFrames(lines []PurchaseOrderSummaryFrame) []PurchaseOrderSummaryFrame {
+// ToCashDocumentFrames is what the order adds to the cash-documents frame once it is committed
+// (confirmed or fulfilled): its total by tax group from its comprobante, the open part its debt, due
+// on PaymentDate.
+func (e *PurchaseOrder) ToCashDocumentFrames(lines []finance.CashDocumentFrame) []finance.CashDocumentFrame {
 	if e.Status != PurchaseOrderStatusConfirmed && e.Status != PurchaseOrderStatusFulfilled {
 		return lines
 	}
-	amountPEN, taxAmountPEN, ok := finance.AmountsInPEN(e.CurrencyType, e.ExchangeRate, e.TotalAmount, e.TaxAmount)
-	if !ok {
-		return lines
-	}
-	return append(lines, PurchaseOrderSummaryFrame{
-		Date: e.Date, SiteID: e.SiteID, CategoryID: finance.ExpenseCategoryMerchandise,
-		AmountPEN: amountPEN, TaxAmountPEN: taxAmountPEN,
+	return finance.AppendCashDocumentFrames(lines, finance.CashDocument{
+		Date: e.Date, SiteID: e.SiteID, OpenKind: finance.CashDocumentKindPurchaseOrderOpen,
+		SettledKind: finance.CashDocumentKindPurchaseOrderSettled, DueDate: e.PaymentDate, DocumentDate: e.DocIssueDate,
+		IsForeignCurrency: e.CurrencyType == finance.CurrencyUSD,
+		Groups:            finance.PurchaseCashGroups(e.PurchaseDocument(), e.TotalAmount), OpenAmount: e.DebtAmount,
 	})
 }
 
@@ -246,12 +232,8 @@ func (e PurchaseOrderTable) GetSchema() db.TableSchema {
 			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
 		DataFrames: []db.DataFrame{{
-			// The committed purchases per day and site the cash flow forecast learns from.
-			Name:            "purchase-order-summary",
-			Version:         1,
-			UseZeroSumsMask: true,
-			UseWeekSpread:   true,
-			ToFrames:        db.ToFrames((*PurchaseOrder).ToPurchaseOrderSummaryFrames),
+			Shared: finance.CashDocumentsFrame, Version: 1, ToFrames: db.ToFrames((*PurchaseOrder).ToCashDocumentFrames),
+			OwnedRows: finance.OwnedCashDocumentKinds(finance.CashDocumentKindPurchaseOrderOpen, finance.CashDocumentKindPurchaseOrderSettled),
 		}},
 	}
 }

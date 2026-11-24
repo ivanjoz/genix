@@ -471,7 +471,7 @@ import {
       headerStyle: { width: '80px' },
       headerInnerCss: cartHeaderCss,
       css: 'font-mono text-sm font-bold text-fg-soft',
-      getValue: (item) => formatMo(ventasState.lineAmount(item)),
+      getValue: (item) => item.isFree ? 'Gratis' : formatMo(ventasState.lineAmount(item)),
     },
   ];
 </script>
@@ -479,6 +479,13 @@ import {
 <svelte:window onkeydown={handleKeydown} />
 
 {#snippet cartRowRemoveButton(item: VentaProducto)}
+  {#if item.isFree || ventasState.canGiveAway(item)}
+    <Button icon="icon-[fa--gift]"
+      css={`mr-6 flex h-24 w-24 items-center justify-center rounded-full text-[12px] shadow-sm ${item.isFree ? 'bg-green-solid text-white' : 'bg-surface border border-line text-fg-soft'}`}
+      onClick={() => ventasState.toggleFree(item.key)}
+      label={item.isFree ? "Charges this product again instead of giving it away." : "Gives this product away (gratuito): charged 0, its IGV is still declared."}
+    />
+  {/if}
   <Button icon="icon-[fa--trash]"
     css="mr-6 flex h-24 w-24 items-center justify-center rounded-full bg-red-solid text-[12px] text-white shadow-sm hover:bg-red-solid"
     onClick={() => ventasState.removeProducto(item.key)}

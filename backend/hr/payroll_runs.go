@@ -36,7 +36,7 @@ func PostPayrollRun(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
 	companyID := req.User.CompanyID
-	data, err := loadPayrollData(companyID)
+	data, err := types.LoadPayrollData(companyID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -168,18 +168,18 @@ func PostPayrollClose(req *core.HandlerArgs) core.HandlerResponse {
 		// Anything that changed after the calculation (an input, an advance, a contract, a legal
 		// value) is not in the payslips yet. A record write of this month holds this run's lock, so
 		// none lands between this check and the close.
-		data, err := loadPayrollData(companyID)
+		data, err := types.LoadPayrollData(companyID)
 		if err != nil {
 			return err
 		}
-		runData := data.forRun(run)
-		if runData.inputsStamp() != run.InputsStamp {
+		runData := data.ForRun(run)
+		if runData.InputsStamp() != run.InputsStamp {
 			return fmt.Errorf("Hay datos que cambiaron después del cálculo: vuelva a calcular la planilla.")
 		}
 		if err := setRunStatusIn(transaction, &run, payslips, types.PayrollStatusClosed, req.User.ID); err != nil {
 			return err
 		}
-		return settleRunRecordsIn(transaction, run, payslips, runData.records, true, req.User.ID)
+		return settleRunRecordsIn(transaction, run, payslips, runData.Records, true, req.User.ID)
 	})
 	if err != nil {
 		return req.MakeErr(err)
@@ -220,7 +220,7 @@ func PostPayrollReopen(req *core.HandlerArgs) core.HandlerResponse {
 		if err != nil {
 			return err
 		}
-		companyRecords, err := loadCompanyRecords(companyID)
+		companyRecords, err := types.LoadCompanyRecords(companyID)
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,7 @@
 package types
 
 import (
+	finance "app/finance/types"
 	sales "app/sales/types"
 	"testing"
 )
@@ -9,7 +10,7 @@ import (
 // way, so the sale and its boleta agree to the cent.
 func TestBuildLinesAddsTheShippingItem(t *testing.T) {
 	order := &sales.SaleOrder{
-		Lines:          []sales.SaleOrderLine{{ProductID: 101, Quantity: 2000, Price: 1180}},
+		Lines:          []sales.SaleOrderLine{{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: 2000, Price: 1180}},
 		ShippingAmount: 590,
 	}
 	lines, _, err := buildLines(order, candyBoxProducts())
@@ -29,7 +30,7 @@ func TestBuildLinesAddsTheShippingItem(t *testing.T) {
 }
 
 func TestBuildLinesOmitsShippingOnTillSales(t *testing.T) {
-	order := &sales.SaleOrder{Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: 1000, Price: 500}}}
+	order := &sales.SaleOrder{Lines: []sales.SaleOrderLine{{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: 1000, Price: 500}}}
 	lines, _, err := buildLines(order, candyBoxProducts())
 	if err != nil || len(lines) != 1 {
 		t.Fatalf("expected one line and no shipping item, got %v lines (err %v)", len(lines), err)

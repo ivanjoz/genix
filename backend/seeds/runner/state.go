@@ -57,6 +57,8 @@ type State struct {
 	CompletedSales        int
 	// Sales flagged for annulment, voided by the evening step once the day's selling is done.
 	PendingAnnulments []PendingAnnulment
+	// Facturas with a detracción the customer deposits into the detracciones account a few days later.
+	PendingDetractionDeposits []PendingDetractionDeposit
 
 	// finance: the day's expense plan, drawn once like the sales plan, and the payments booked for
 	// a later day.
@@ -73,6 +75,12 @@ type State struct {
 
 	Stats            Stats
 	AffectedUnixDays []int16
+}
+
+type PendingDetractionDeposit struct {
+	SaleID int64
+	// DepositDay is the UnixDay the customer deposits it.
+	DepositDay int16
 }
 
 type PendingAnnulment struct {

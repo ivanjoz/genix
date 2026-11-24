@@ -1,6 +1,7 @@
 import { notifyFailure } from '@genix/ui/notify';
 import { GetHandler, POST } from '#libs/ui-runtime.svelte.ts';
 import type { ISaleOrderLine } from '#routes/sales/sale_order_create/sale_order.svelte.ts';
+import type { ISaleImposedTax } from './sale_order_status.ts';
 
 export interface ISaleOrderTopProduct {
 	ProductID: number;
@@ -36,6 +37,8 @@ export interface ISaleOrder {
     // 1: delivered, but a made product's stock exit waits for the daily production close.
     PendingStockMovement?: number;
     TopPaidProducts?: ISaleOrderTopProduct[];
+    // Free lines, detracción and retención (backend SaleImposedTax).
+    ImposedTaxes?: ISaleImposedTax[];
 }
 
 // API payload for sale-order transitions (payment and delivery updates).

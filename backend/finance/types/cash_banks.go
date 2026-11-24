@@ -29,6 +29,27 @@ type CashBank struct {
 	// ReceivesCulqiPayments marks the account the web store's card/Yape charges are collected
 	// into. At most one per company (PostCashBanks enforces it).
 	ReceivesCulqiPayments bool `cb:"18"`
+	// AccountNumber is the bank's account number; required on the detracciones account, whose
+	// number every factura with a detracción declares.
+	AccountNumber string `cb:"19"`
+}
+
+// CashBank.Type values.
+const (
+	CashBankTypeTill = int32(1) // Caja
+	CashBankTypeBank = int32(2) // Cuenta bancaria
+	// CashBankTypeDetractions is the Banco de la Nación detracciones account (SPOT): it only receives
+	// the detracciones customers deposit and only pays taxes, until SUNAT releases its balance
+	// (a transfer out). At most one per company, in soles.
+	CashBankTypeDetractions = int32(3)
+)
+
+// detractionsAccountMovementTypes are the movements the detracciones account accepts: the deposit of a
+// sale's detracción (or its refund), a tax paid as an expense, a count, and the transfer of a balance
+// SUNAT released.
+var detractionsAccountMovementTypes = []CashMovementType{
+	CashMovementTypeSaleCollection, CashMovementTypeSaleRefund, CashMovementTypeExpensePayment,
+	CashMovementTypePhysicalCount, CashMovementTypeTransfer,
 }
 
 type CashBankTable struct {
@@ -50,6 +71,7 @@ type CashBankTable struct {
 	Created               db.Col[*CashBankTable, int32]
 	CreatedBy             db.Col[*CashBankTable, int32]
 	ReceivesCulqiPayments db.Col[*CashBankTable, bool]
+	AccountNumber         db.Col[*CashBankTable, string]
 }
 
 func (e CashBankTable) GetSchema() db.TableSchema {

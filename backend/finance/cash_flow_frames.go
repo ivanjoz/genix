@@ -31,20 +31,22 @@ func GetCashDelay(req *core.HandlerArgs) core.HandlerResponse {
 	return req.MakeBinaryResponse(body)
 }
 
-// GetExpenseSummary answers the files of the "expense-summary" frame (unscheduled spending per day, site
-// and category) over a day range, as GetCashDelay does.
-func GetExpenseSummary(req *core.HandlerArgs) core.HandlerResponse {
+// GetCashDocuments answers the files of the shared "cash-documents" frame (every sale, expense,
+// purchase order and asset purchase per day, site, Kind and tax group, open or settled) over a day
+// range, as GetCashDelay does (plan/CASH_DOCUMENTS_FRAME_PLAN.md). Any member table reads the whole
+// frame; Expense is the one this module owns.
+func GetCashDocuments(req *core.HandlerArgs) core.HandlerResponse {
 	fromDate, toDate, err := cashFlowFrameRange(req)
 	if err != nil {
 		return req.MakeErr(err)
 	}
 	expenseTable := db.TableOf[types.Expense]()
-	body, err := db.QueryFrame[types.Expense](req.User.CompanyID, "expense-summary").
+	body, err := db.QueryFrame[types.Expense](req.User.CompanyID, types.CashDocumentsFrame.Name).
 		Between(expenseTable.Date, int64(fromDate), int64(toDate)).
 		Between(expenseTable.SiteID, 0, math.MaxInt16).
 		ExecChanged(req.Query["g"], req.Query["h"])
 	if err != nil {
-		return req.MakeErr("Error al obtener el resumen de gastos.", err)
+		return req.MakeErr("Error al obtener los documentos de caja.", err)
 	}
 	return req.MakeBinaryResponse(body)
 }

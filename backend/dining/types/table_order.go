@@ -108,6 +108,9 @@ type TableOrderLine struct {
 	ReadyAt   int32 `cb:"14"`
 	ServedAt  int32 `cb:"15"`
 	UpdatedBy int32 `cb:"16"`
+	// TaxGroup is fixed with the prices when ordered (sales.PriceSaleOrderLine), and the sale's line
+	// takes it when the table is charged.
+	TaxGroup int8 `cb:"17"`
 }
 
 // TableOrderLine.Status values (§2.1).

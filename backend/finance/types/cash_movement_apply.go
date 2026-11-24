@@ -47,6 +47,23 @@ func FindCulqiCashBank(companyID int32) (*CashBank, error) {
 	return nil, nil
 }
 
+// FindDetractionsCashBank returns the active Banco de la Nación detracciones account
+// (CashBankTypeDetractions), or nil when the company has none.
+func FindDetractionsCashBank(companyID int32) (*CashBank, error) {
+	cashBanks := []CashBank{}
+	query := db.Query(&cashBanks)
+	query.Select().CompanyID.Equals(companyID)
+	if err := query.Exec(); err != nil {
+		return nil, core.Err("Error al obtener las cajas de la empresa:", err)
+	}
+	for index := range cashBanks {
+		if cashBanks[index].Type == CashBankTypeDetractions && cashBanks[index].Status > 0 {
+			return &cashBanks[index], nil
+		}
+	}
+	return nil, nil
+}
+
 // ApplyCashBankMovement writes the movements and the balances they leave in a transaction of their own.
 func ApplyCashBankMovement(req *core.HandlerArgs, movimientos []InternalCashMovement) error {
 	if len(movimientos) == 0 {
@@ -106,6 +123,9 @@ func ApplyCashBankMovementIn(transaction *db.Transaction, req *core.HandlerArgs,
 	for _, m := range movimientos {
 		cashBank := cashBankMap[m.CashBankID]
 		previousAmount := currentAmounts[m.CashBankID]
+		if cashBank.Type == CashBankTypeDetractions && !slices.Contains(detractionsAccountMovementTypes, m.Type) {
+			return core.Err("La cuenta de detracciones solo recibe detracciones, paga impuestos o transfiere lo que SUNAT libera.")
+		}
 
 		// Validated here rather than in each handler, so no writer can store a classified type
 		// without its counter-account — the Libro Diario would have no other side to post.

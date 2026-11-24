@@ -21,7 +21,7 @@ var privateProductFieldNames = []string{
 	"CompanyID", "TempID", "ContentHTML", "Params", "UnitID", "Weight", "Volume", "SKU", "NameHash",
 	"DepreciationMonths", "Properties", "Stock", "ReservedStock", "StockStatus", "NameUpdated",
 	"UpdatedBy", "Created", "CreatedBy", "CategoriesWithStock", "Version", "Metadata", "BrandName",
-	"AccountCode", "Origin", "WebExtraStock", "SalesChannels",
+	"AccountCode", "Origin", "WebExtraStock", "SalesChannels", "TaxGroup", "DetractionCode",
 	"ProductionYieldPortions", "ProductionSupplies", "ProductionExtraCostPerUnit", "ProductionStandardCost",
 	"ProductionLabor", "TracksLots", "ShelfLifeDays", "QualityHoldOnEntry",
 }

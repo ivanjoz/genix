@@ -6,7 +6,10 @@ import (
 	crm "app/crm/types"
 	"app/db"
 	finance "app/finance/types"
+	"fmt"
+	"maps"
 	"math"
+	"slices"
 )
 
 // SaleOrderClientInfo is a walk-in client typed at the till. It is request-only — SaleOrderTable has
@@ -48,6 +51,76 @@ type SaleOrderLine struct {
 	// PackID is the pack (production.ProductPack) that priced this line, 0 when none: the line's
 	// Price is its prorated share of the pack price, not the catalog price (ApplySalePacks).
 	PackID int32 `cb:"10"`
+	// TaxGroup is the line's IGV treatment (finance.TaxGroup*, 1–5), pinned from the product when the
+	// line is priced (PriceSaleOrderLine) and never taken from the client: every send rebuilds the CPE
+	// lines from it, so a later change to the product never restates a past sale.
+	TaxGroup int8 `cb:"11"`
+}
+
+// SaleImposedTax is a tax treatment of the sale besides the IGV of its lines (plan/CASH_DOCUMENTS_FRAME_PLAN.md
+// §9.1). Type is a finance.TaxGroup* number. Pinned when the sale is created, in the sale's currency.
+//
+// TaxGroupFree marks line Line as given away: the line is charged 0 (Price = SubPrice = 0) and Amount
+// holds the gross value it would have been sold at, which the CPE declares and whose IGV the company
+// still owes. TaxGroupDetraction and TaxGroupRetention are whole-sale entries (Line 0) the backend
+// computes (ApplySaleWithholdings), never the client.
+type SaleImposedTax struct {
+	Type   int8  `cb:"1"`
+	Amount int32 `cb:"2"`
+	// Line is the line's 1-based position in Lines; 0 = the whole sale.
+	Line int16 `cb:"3"`
+	// Code is the tax's own code: the SPOT catalog 54 code of a detracción.
+	Code int16 `cb:"4"`
+	// Rate is the rate pinned when the sale was created, in hundredths of a percent (1200 = 12 %).
+	Rate int16 `cb:"5"`
+	// SettledAmount is what of a detracción the customer already deposited into the detracciones
+	// account: the sale's open detracción is Amount − SettledAmount.
+	SettledAmount int32 `cb:"6"`
+}
+
+// ApplyFreeLines checks the imposed taxes the client sent and prices the free lines, after the lines
+// were priced from the catalog: each named line is charged 0 and its entry's Amount becomes the
+// catalog value it gives away. Only free lines may come from the client; the amount it sent is
+// ignored. A free line sells whole units of a product that is not an export: the CPE declares one
+// free item per line.
+func (e *SaleOrder) ApplyFreeLines() error {
+	freeLines := map[int16]bool{}
+	for index := range e.ImposedTaxes {
+		imposedTax := &e.ImposedTaxes[index]
+		if imposedTax.Type != finance.TaxGroupFree {
+			return core.Err("La venta solo admite marcar líneas como gratuitas.")
+		}
+		if imposedTax.Line < 1 || int(imposedTax.Line) > len(e.Lines) || freeLines[imposedTax.Line] {
+			return core.Err(fmt.Sprintf("La línea gratuita %v no es válida.", imposedTax.Line))
+		}
+		freeLines[imposedTax.Line] = true
+		line := &e.Lines[imposedTax.Line-1]
+		quantity := core.UnpackQuantityLine(line.Quantity)
+		if quantity.Sub > 0 {
+			return core.Err(fmt.Sprintf("La línea gratuita %v no puede llevar sub-unidades.", imposedTax.Line))
+		}
+		// SUNAT has a free code for a taxed (11), exonerado (21) and inafecto (37) line, none for an export.
+		if line.TaxGroup == finance.TaxGroupExport {
+			return core.Err(fmt.Sprintf("La línea gratuita %v no puede ser una exportación.", imposedTax.Line))
+		}
+		imposedTax.Amount = core.QuantityAmount(quantity, line.Price, line.SubPrice)
+		if imposedTax.Amount <= 0 {
+			return core.Err(fmt.Sprintf("La línea gratuita %v no tiene un valor referencial.", imposedTax.Line))
+		}
+		line.Price, line.SubPrice = 0, 0
+	}
+	return nil
+}
+
+// FreeLineAmountOf is the reference gross value of line lineIndex (0-based) when the sale gives it
+// away, and whether it does.
+func (e *SaleOrder) FreeLineAmountOf(lineIndex int) (int32, bool) {
+	for _, imposedTax := range e.ImposedTaxes {
+		if imposedTax.Type == finance.TaxGroupFree && int(imposedTax.Line) == lineIndex+1 {
+			return imposedTax.Amount, true
+		}
+	}
+	return 0, false
 }
 
 // DetailProductIDs is the product of every line, in line order. It feeds the computed column of
@@ -134,6 +207,8 @@ type SaleOrder struct {
 	// every write that sets the warehouse: what sale-summary sums by, since its ToFrames reads only the
 	// sale. A delivery from another warehouse moves the sale to that warehouse's site.
 	SiteID int16 `cb:"45"`
+	// ImposedTaxes are the tax treatments besides the lines' IGV (SaleImposedTax): free lines for now.
+	ImposedTaxes []SaleImposedTax `cb:"46"`
 }
 
 // RefreshPendingStockMovement sets PendingStockMovement from the lines' StockExitPending flags.
@@ -246,6 +321,78 @@ func (e *SaleOrder) ToSaleSummaryFrames(lines []SaleSummaryFrame) []SaleSummaryF
 	return lines
 }
 
+// isPaymentPending: the sale still owes money (Generado or Entregado); its DebtAmount is what is left.
+func (e *SaleOrder) isPaymentPending() bool {
+	return e.Status == OrderStatusPending || e.Status == OrderStatusDelivered
+}
+
+// ToCashDocumentFrames is what the sale adds to the cash-documents frame: what it charged per line
+// tax group (shipping taxed at 18 %), the open part what it still owes, due on PaymentDueDate (with a
+// retención, the total less it was ever owed: the retención is a settled part). Beside the total, as
+// memo rows: the taxed free lines' reference value (settled, its IGV is owed), the detracción still to
+// deposit (open, part of the debt) and the retención (settled, an IGV credit).
+func (e *SaleOrder) ToCashDocumentFrames(lines []finance.CashDocumentFrame) []finance.CashDocumentFrame {
+	if e.Status == OrderStatusAnnulled {
+		return lines
+	}
+	openAmount, openDetraction := int32(0), int32(0)
+	if e.isPaymentPending() {
+		openAmount, openDetraction = e.DebtAmount, e.OpenDetractionAmount()
+	}
+	memos := []finance.CashDocumentMemo{{TaxGroup: finance.TaxGroupDetraction, Amount: openDetraction, IsOpen: true}}
+	for _, imposedTax := range e.ImposedTaxes {
+		// A free exonerado or inafecto line owes no IGV, so it adds nothing to the cash flow.
+		isTaxedFreeLine := imposedTax.Type == finance.TaxGroupFree && finance.IgvBasisPointsOf(e.Lines[imposedTax.Line-1].TaxGroup) > 0
+		if isTaxedFreeLine || imposedTax.Type == finance.TaxGroupRetention {
+			memos = append(memos, finance.CashDocumentMemo{TaxGroup: imposedTax.Type, Amount: imposedTax.Amount})
+		}
+	}
+	return finance.AppendCashDocumentFrames(lines, finance.CashDocument{
+		Date: e.Date, SiteID: e.SiteID, OpenKind: finance.CashDocumentKindSaleOpen, SettledKind: finance.CashDocumentKindSaleSettled,
+		DueDate: e.PaymentDueDate, DocumentDate: e.Date, IsForeignCurrency: e.CurrencyType == finance.CurrencyUSD,
+		Groups: e.cashDocumentGroups(), OpenAmount: openAmount, Memos: memos,
+	})
+}
+
+// cashDocumentGroups sums the sale per tax group, in a fixed group order so a rewrite of the same
+// sale yields the same rows.
+func (e *SaleOrder) cashDocumentGroups() []finance.CashDocumentAmount {
+	amountByGroup := map[int8]int32{finance.TaxGroupTaxed18: e.ShippingAmount}
+	for _, line := range e.Lines {
+		amountByGroup[line.TaxGroup] += core.QuantityAmount(core.UnpackQuantityLine(line.Quantity), line.Price, line.SubPrice)
+	}
+	groups := make([]finance.CashDocumentAmount, 0, len(amountByGroup))
+	for _, taxGroup := range slices.Sorted(maps.Keys(amountByGroup)) {
+		if amountByGroup[taxGroup] != 0 {
+			groups = append(groups, finance.CashDocumentAmount{TaxGroup: taxGroup, Amount: amountByGroup[taxGroup]})
+		}
+	}
+	return groups
+}
+
+// SaleClientDebtBucketBits groups the clients of sale-client-debt into files of 4 096.
+const SaleClientDebtBucketBits = 12
+
+// SaleClientDebtFrame is what a client owes, as the "sale-client-debt" DataFrame sums it: one file per
+// bucket of 4 096 clients, one row per client. The cash flow joins it with the clients' credit days
+// (client-credit-days-missing); only the buckets that changed travel.
+type SaleClientDebtFrame struct {
+	ClientBucket int32 `frame:"key"`
+	ClientID     int32 `frame:"row"`
+	// DebtLocal is the open debt in local currency at the sale's rate: an amount at stake for a warning.
+	DebtLocal int32 `frame:"sum"`
+}
+
+// ToSaleClientDebtFrames is the sale's open debt under its client; a paid sale, or one without a
+// client, adds nothing.
+func (e *SaleOrder) ToSaleClientDebtFrames(lines []SaleClientDebtFrame) []SaleClientDebtFrame {
+	if !e.isPaymentPending() || e.ClientID <= 0 || e.DebtAmount <= 0 {
+		return lines
+	}
+	return append(lines, SaleClientDebtFrame{ClientBucket: e.ClientID >> SaleClientDebtBucketBits, ClientID: e.ClientID,
+		DebtLocal: e.AmountInPEN(e.DebtAmount)})
+}
+
 // ToSaleClientProductFrames is ToSaleSummaryFrames with the sale's client in every line.
 func (e *SaleOrder) ToSaleClientProductFrames(lines []SaleClientProductFrame) []SaleClientProductFrame {
 	e.eachSummaryLine(func(line SaleSummaryFrame) {
@@ -267,7 +414,7 @@ func (e *SaleOrder) eachSummaryLine(onLine func(line SaleSummaryFrame)) {
 		return
 	}
 	isDeliveryPending := e.IsDeliveryPending()
-	isPaymentPending := e.Status == OrderStatusPending || e.Status == OrderStatusDelivered
+	isPaymentPending := e.isPaymentPending()
 	for _, saleLine := range e.Lines {
 		if saleLine.ProductID <= 0 || saleLine.Quantity <= 0 {
 			continue
@@ -361,6 +508,7 @@ type SaleOrderTable struct {
 	OnlineSaleOrderID    db.Col[*SaleOrderTable, int32]
 	PendingStockMovement db.Col[*SaleOrderTable, int8]
 	SiteID               db.Col[*SaleOrderTable, int16]
+	ImposedTaxes         db.Col[*SaleOrderTable, []SaleImposedTax]
 }
 
 func (e SaleOrderTable) GetSchema() db.TableSchema {
@@ -446,6 +594,11 @@ func (e SaleOrderTable) GetSchema() db.TableSchema {
 			Version:      1,
 			UseFileCache: true,
 			Derive:       db.DeriveFrame(deriveSaleQuantity),
+		}, {
+			Shared: finance.CashDocumentsFrame, Version: 1, ToFrames: db.ToFrames((*SaleOrder).ToCashDocumentFrames),
+			OwnedRows: finance.OwnedCashDocumentKinds(finance.CashDocumentKindSaleOpen, finance.CashDocumentKindSaleSettled),
+		}, {
+			Name: "sale-client-debt", Version: 1, ToFrames: db.ToFrames((*SaleOrder).ToSaleClientDebtFrames),
 		}},
 	}
 }

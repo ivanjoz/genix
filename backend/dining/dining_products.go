@@ -37,7 +37,7 @@ func readDiningProducts(companyID int32, productIDs []int32) ([]production.Produ
 	products := []production.Product{}
 	query := db.Query(&products)
 	query.Select(query.ID, query.Name, query.FinalPrice, query.SbuQuantity, query.SbuFinalPrice, query.CurrencyID,
-		query.WebExtraStock, query.SalesChannels, query.Presentations, query.CategoryIDs, query.Status).
+		query.WebExtraStock, query.SalesChannels, query.Presentations, query.CategoryIDs, query.Status, query.TaxGroup).
 		CompanyID.Equals(companyID).ID.In(productIDs...)
 	if err := query.Exec(); err != nil {
 		return nil, core.Err("Error al obtener los productos del menú:", err)

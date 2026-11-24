@@ -2,6 +2,7 @@ package types
 
 import (
 	"app/core"
+	finance "app/finance/types"
 	production "app/production/types"
 	sales "app/sales/types"
 	"testing"
@@ -29,7 +30,7 @@ func TestBuildLinesSplitsASubUnitSale(t *testing.T) {
 
 	order := &sales.SaleOrder{
 		// Price is a box, SubPrice one candy.
-		Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: packed, Price: 5000, SubPrice: 850, SubDivisor: 6}},
+		Lines: []sales.SaleOrderLine{{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: packed, Price: 5000, SubPrice: 850, SubDivisor: 6}},
 	}
 
 	lines, lineProductIDs, err := buildLines(order, candyBoxProducts())
@@ -73,8 +74,8 @@ func TestBuildLinesSplitsASubUnitSale(t *testing.T) {
 func TestSaleOrderTaxAmountMatchesTheDocumentLines(t *testing.T) {
 	order := &sales.SaleOrder{
 		Lines: []sales.SaleOrderLine{
-			{ProductID: 101, Quantity: 1004, Price: 5000, SubPrice: 850, SubDivisor: 6},
-			{ProductID: 101, Quantity: 3000, Price: 1999, SubDivisor: 6},
+			{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: 1004, Price: 5000, SubPrice: 850, SubDivisor: 6},
+			{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: 3000, Price: 1999, SubDivisor: 6},
 		},
 	}
 	lines, _, err := buildLines(order, candyBoxProducts())
@@ -101,7 +102,7 @@ func TestBuildLinesKeepsWholeUnitSalesAsOneLine(t *testing.T) {
 	}
 
 	order := &sales.SaleOrder{
-		Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: packed, Price: 5000, SubDivisor: core.QuantityDivisorNone}},
+		Lines: []sales.SaleOrderLine{{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: packed, Price: 5000, SubDivisor: core.QuantityDivisorNone}},
 	}
 
 	lines, _, err := buildLines(order, candyBoxProducts())
@@ -125,7 +126,7 @@ func TestBuildLinesEmitsOnlyTheSubUnitLineWhenNoWholeUnitsSold(t *testing.T) {
 	}
 
 	order := &sales.SaleOrder{
-		Lines: []sales.SaleOrderLine{{ProductID: 101, Quantity: packed, Price: 5000, SubPrice: 850, SubDivisor: 6}},
+		Lines: []sales.SaleOrderLine{{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18, Quantity: packed, Price: 5000, SubPrice: 850, SubDivisor: 6}},
 	}
 
 	lines, _, err := buildLines(order, candyBoxProducts())
@@ -140,5 +141,71 @@ func TestBuildLinesEmitsOnlyTheSubUnitLineWhenNoWholeUnitsSold(t *testing.T) {
 	}
 	if lines[0].Description != "CAJA DE CARAMELOS (unidad)" {
 		t.Fatalf("unexpected description: %q", lines[0].Description)
+	}
+}
+
+// Each line is billed under its own tax group, and a free line declares its reference value under
+// its group's free code (11, 21, 37) without charging it: the comprobante totals what the sale charged, and its IGV is
+// the sale's TaxAmount.
+func TestBuildLinesFollowsTheTaxGroups(t *testing.T) {
+	order := &sales.SaleOrder{
+		Lines: []sales.SaleOrderLine{
+			{ProductID: 101, Quantity: 1000, Price: 11800, TaxGroup: finance.TaxGroupTaxed18},
+			{ProductID: 101, Quantity: 1000, Price: 11000, TaxGroup: finance.TaxGroupTaxed10},
+			{ProductID: 101, Quantity: 1000, Price: 5000, TaxGroup: finance.TaxGroupExonerated},
+			{ProductID: 101, Quantity: 1000, Price: 4000, TaxGroup: finance.TaxGroupUnaffected},
+			{ProductID: 101, Quantity: 1000, Price: 3000, TaxGroup: finance.TaxGroupExport},
+			{ProductID: 101, Quantity: 2000, TaxGroup: finance.TaxGroupTaxed18},
+			{ProductID: 101, Quantity: 1000, TaxGroup: finance.TaxGroupExonerated},
+			{ProductID: 101, Quantity: 1000, TaxGroup: finance.TaxGroupUnaffected},
+		},
+		ImposedTaxes: []sales.SaleImposedTax{{Type: finance.TaxGroupFree, Line: 6, Amount: 2360},
+			{Type: finance.TaxGroupFree, Line: 7, Amount: 700}, {Type: finance.TaxGroupFree, Line: 8, Amount: 300}},
+	}
+	lines, _, err := buildLines(order, candyBoxProducts())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wantTypes := []string{model.IgvTaxed, model.IgvTaxed, model.IgvExempt, model.IgvUnaffected, model.IgvExport, model.IgvFreeTaxed,
+		model.IgvFreeExempt, igvFreeUnaffectedGift}
+	wantIGV := []model.Cents{1800, 1000, 0, 0, 0, 360, 0, 0}
+	for index, line := range lines {
+		if line.IgvType != wantTypes[index] || line.IGV != wantIGV[index] {
+			t.Fatalf("line %d: IgvType %q IGV %v, want %q %v", index+1, line.IgvType, line.IGV, wantTypes[index], wantIGV[index])
+		}
+	}
+	if lines[6].IgvPercent != 0 || lines[7].IgvPercent != 0 {
+		t.Fatalf("a free exonerado or inafecto line declares a zero rate: %+v %+v", lines[6], lines[7])
+	}
+	if lines[5].FreeUnitValue != 1000 || lines[5].UnitValue != 0 {
+		t.Fatalf("the free line's reference unit value: %+v", lines[5])
+	}
+
+	document := testDocument()
+	document.Lines = lines
+	if err := model.CompleteTotals(document); err != nil {
+		t.Fatalf("CompleteTotals: %v", err)
+	}
+	totals := document.Totals
+	if totals.Payable != 34800 || totals.IGV != 2800 || totals.IGVFree != 360 || totals.Exempt != 5000 ||
+		totals.Unaffected != 4000 || totals.Export != 3000 || totals.Free != 3000 {
+		t.Fatalf("unexpected totals: %+v", totals)
+	}
+	if got := SaleOrderTaxAmount(order); got != 2800 {
+		t.Fatalf("the sale's IGV must be the charged IGV 2800, got %v", got)
+	}
+}
+
+// A credit factura declares what the customer owes the seller: the open detracción is deposited into
+// the detracciones account, so a factura owing only it is Contado.
+func TestCreditTermsLeaveTheDetractionOut(t *testing.T) {
+	order := &sales.SaleOrder{DebtAmount: 100000, PaymentDueDate: 20030,
+		ImposedTaxes: []sales.SaleImposedTax{{Type: finance.TaxGroupDetraction, Amount: 12000}}}
+	if terms := CreditTermsForSale(order, DocTypeFactura, 20000); terms.PendingAmount != 88000 {
+		t.Fatalf("pending amount %v, want 88000", terms.PendingAmount)
+	}
+	order.DebtAmount = 12000
+	if terms := CreditTermsForSale(order, DocTypeFactura, 20000); terms.PendingAmount != 0 {
+		t.Fatalf("a factura owing only its detracción is Contado: %+v", terms)
 	}
 }

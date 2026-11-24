@@ -99,7 +99,7 @@ func ChargeSaleLines(lines []TableOrderLine) ([]sales.SaleOrderLine, error) {
 			continue
 		case LineStatusServed:
 			saleLines = append(saleLines, sales.SaleOrderLine{ProductID: line.ProductID, PresentationID: line.PresentationID,
-				Quantity: line.Quantity, SubDivisor: line.SubDivisor, Price: line.Price, SubPrice: line.SubPrice})
+				Quantity: line.Quantity, SubDivisor: line.SubDivisor, Price: line.Price, SubPrice: line.SubPrice, TaxGroup: line.TaxGroup})
 		default:
 			return nil, core.Err("Hay productos sin servir: márquelos servidos o anúlelos antes de cobrar la mesa.")
 		}

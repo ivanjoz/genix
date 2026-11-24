@@ -6,6 +6,7 @@ import (
 	config "app/config/types"
 	"app/core"
 	"app/db"
+	finance "app/finance/types"
 	logistics "app/logistics/types"
 	"app/production/types"
 	"cmp"
@@ -192,6 +193,12 @@ func PostProducts(req *core.HandlerArgs) core.HandlerResponse {
 			return req.MakeErr(fmt.Sprintf(`El origen del producto "%s" es inválido.`, e.Name))
 		}
 		e.AccountCode = 0
+		if !finance.IsProductTaxGroup(e.TaxGroup) {
+			return req.MakeErr(fmt.Sprintf(`La afectación IGV del producto "%s" es inválida.`, e.Name))
+		}
+		if e.DetractionCode != 0 && finance.DetractionCodeOf(e.DetractionCode) == nil {
+			return req.MakeErr(fmt.Sprintf(`El código de detracción del producto "%s" no es válido.`, e.Name))
+		}
 		if e.WebExtraStock < 0 {
 			return req.MakeErr(fmt.Sprintf(`La sobreventa permitida del producto "%s" no puede ser negativa.`, e.Name))
 		}

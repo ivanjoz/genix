@@ -5,6 +5,7 @@
   import Layer from '#components/layers/Layer.svelte'
   import Input from '#components/form/Input.svelte'
   import SearchSelect from '#components/form/SearchSelect.svelte'
+  import Checkbox from '#components/form/Checkbox.svelte'
   import VTable from '#components/vTable/VTable.svelte'
   import type { ITableColumn } from '#components/vTable/types.ts'
   import { Core, tr } from '#core/store.svelte.ts'
@@ -357,6 +358,12 @@
         inputCss="ff-mono text-center"
         css="col-span-24 md:col-span-12"
       />
+      <!-- A retention agent withholds 3 % of a factura above S/ 700 (unless the company is a buen
+           contribuyente) and pays it to SUNAT: the sale owes the total less it. -->
+      {#if clientProviderType === ClientProviderType.CLIENT}
+        <Checkbox bind:saveOn={clientProviderForm} save="IsRetentionAgent" css="col-span-24"
+          label="IGV retention agent (withholds 3 %)|Agente de retención del IGV (retiene 3 %)" />
+      {/if}
       <SearchSelect
         label="Department | Province | District|Departamento | Provincia | Distrito"
         css="col-span-24"

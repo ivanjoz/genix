@@ -13,6 +13,12 @@ import (
 // bankName is the current account suppliers, expenses and payroll are paid from.
 const bankName = "BCP Cta. Cte. Soles"
 
+// The Banco de la Nación account the customers deposit the facturas' detracciones into.
+const (
+	detractionsAccountName   = "BN Cta. Detracciones"
+	detractionsAccountNumber = "00-068-123456"
+)
+
 var Module = runner.Module{Name: "base", Setup: Setup}
 
 // Setup writes the missing catalog and loads the run's company context.

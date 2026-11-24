@@ -34,7 +34,8 @@
 
   const amountColumn = (header: string, key: 'Principal' | 'Interest' | 'Fees'): ITableColumn<ILoanInstallment> => ({
     id: key, header, css: 'px-6 text-right', headerCss: 'w-110', cellInputType: 'number',
-    getValue: (installment) => installment[key] / 100,
+    // A paid installment is locked and VTable prints a locked cell's value as is: give it formatted.
+    getValue: (installment) => installment.PaidAmount > 0 ? formatN(installment[key] / 100, 2) : installment[key] / 100,
     render: (installment) => formatN(installment[key] / 100, 2),
     onCellEdit: (installment, value) => { installment[key] = toCents(value) },
     disableCellInteractions: (installment) => installment.PaidAmount > 0,
@@ -88,8 +89,7 @@
         {/if}
       </div>
     {:else if column.id === 'number' && installmentState(installment, today) === LOAN_INSTALLMENT_OVERDUE}
-      <span class="text-red-fg ff-bold" title={tr(stateLabels[LOAN_INSTALLMENT_OVERDUE])}>{installment.Number}</span>
-    {:else}
+      <span class="text-red-fg ff-bold" title={tr(stateLabels[LOAN_INSTALLMENT_OVERDUE])}>{installment.Number}</span>    {:else}
       {defaultContent}
     {/if}
   {/snippet}

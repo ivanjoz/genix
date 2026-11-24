@@ -13,9 +13,14 @@ export interface ICashBank {
   Type: number
   // The single account the web store's Culqi card/Yape charges are collected into.
   ReceivesCulqiPayments: boolean
+  // The bank's account number; required on the detracciones account (CASH_BANK_TYPE_DETRACTIONS).
+  AccountNumber?: string
   ss: number
   upd: number
 }
+
+// The Banco de la Nación detracciones account: it receives the sales' detracciones and pays taxes.
+export const CASH_BANK_TYPE_DETRACTIONS = 3
 
 export interface ICajaResult {
   Cajas: ICashBank[]
@@ -168,7 +173,8 @@ export class CashReconciliationsService extends GetHandler<ICashReconciliation> 
 // Constantes compartidas
 export const cajaTipos = [
   { id: 1, name: "Caja" },
-  { id: 2, name: "Cuenta Bancaria" }
+  { id: 2, name: "Cuenta Bancaria" },
+  { id: CASH_BANK_TYPE_DETRACTIONS, name: "Detracciones (Banco de la Nación)" }
 ]
 
 // Currency enum, must match CashBank.CurrencyType / Expense.CurrencyType on the backend.

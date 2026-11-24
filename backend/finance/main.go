@@ -19,8 +19,14 @@ var ModuleHandlers = core.AppRouterType{
 	"GET.expense-schedule-periods": GetExpenseSchedulePeriods,
 	"POST.expense-payment":         PostExpensePayment,
 	// Cash flow forecast history frames
-	"GET.cash-delay":      GetCashDelay,
-	"GET.expense-summary": GetExpenseSummary,
+	"GET.cash-delay":     GetCashDelay,
+	"GET.cash-documents": GetCashDocuments,
+	// Cash flow drill-down: the open documents behind a cell
+	"GET.cash-documents-day": GetCashDocumentsDay,
+	// Cash flow forecast: Known + Scheduled layers, planned entries
+	"GET.cash-flow-commitments": GetCashFlowCommitments,
+	"GET.cash-flow-entries":     GetCashFlowEntries,
+	"POST.cash-flow-entries":    PostCashFlowEntries,
 	// Loans
 	"GET.loans":         GetLoans,
 	"POST.loans":        PostLoans,

@@ -70,6 +70,7 @@ func MakeControllers() []db.Controller {
 		db.MakeController[diningTypes.TableOrder](),
 		db.MakeController[financeTypes.CashBank](),
 		db.MakeController[financeTypes.CashBankMovement](),
+		db.MakeController[financeTypes.CashFlowEntry](),
 		db.MakeController[financeTypes.CashReconciliation](),
 		db.MakeController[financeTypes.ExchangeRate](),
 		db.MakeController[financeTypes.Expense](),
@@ -179,6 +180,7 @@ func init() {
 	db.RegisterTableFactory("dining_table_order", func() db.Table { return db.MakeTable[diningTypes.TableOrder]() })
 	db.RegisterTableFactory("cash_banks", func() db.Table { return db.MakeTable[financeTypes.CashBank]() })
 	db.RegisterTableFactory("cash_bank_movements", func() db.Table { return db.MakeTable[financeTypes.CashBankMovement]() })
+	db.RegisterTableFactory("cash_flow_entry", func() db.Table { return db.MakeTable[financeTypes.CashFlowEntry]() })
 	db.RegisterTableFactory("cash_reconciliations", func() db.Table { return db.MakeTable[financeTypes.CashReconciliation]() })
 	db.RegisterTableFactory("exchange_rates", func() db.Table { return db.MakeTable[financeTypes.ExchangeRate]() })
 	db.RegisterTableFactory("expenses", func() db.Table { return db.MakeTable[financeTypes.Expense]() })

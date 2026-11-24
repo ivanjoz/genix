@@ -69,7 +69,7 @@ func PostEmployeeRecord(req *core.HandlerArgs) core.HandlerResponse {
 // of every month it touches before and after the change, and of the record itself.
 func saveEmployeeRecordIn(transaction *db.Transaction, req *core.HandlerArgs, request types.EmployeeRecord) (types.EmployeeRecord, error) {
 	companyID := req.User.CompanyID
-	companyRecords, err := loadCompanyRecords(companyID)
+	companyRecords, err := types.LoadCompanyRecords(companyID)
 	if err != nil {
 		return types.EmployeeRecord{}, err
 	}
@@ -282,7 +282,7 @@ func PostPayAdvances(req *core.HandlerArgs) core.HandlerResponse {
 // employee, its month's run and the advance: a double void refunds once.
 func voidAdvanceIn(transaction *db.Transaction, req *core.HandlerArgs, request types.EmployeeRecord) ([]types.EmployeeRecord, error) {
 	companyID := req.User.CompanyID
-	companyRecords, err := loadCompanyRecords(companyID)
+	companyRecords, err := types.LoadCompanyRecords(companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -338,11 +338,11 @@ func payAdvancesIn(transaction *db.Transaction, req *core.HandlerArgs, advances 
 			return nil, err
 		}
 	}
-	companyRecords, err := loadCompanyRecords(companyID)
+	companyRecords, err := types.LoadCompanyRecords(companyID)
 	if err != nil {
 		return nil, err
 	}
-	employees, err := loadCompanyEmployees(companyID)
+	employees, err := types.LoadCompanyEmployees(companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func payAdvancesIn(transaction *db.Transaction, req *core.HandlerArgs, advances 
 	for _, employee := range employees {
 		employeesByID[employee.ID] = employee
 	}
-	contracts, err := loadCompanyContracts(companyID)
+	contracts, err := types.LoadCompanyContracts(companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +383,7 @@ func payAdvancesIn(transaction *db.Transaction, req *core.HandlerArgs, advances 
 		if core.PeriodOfDay(advance.FromDate) != advance.Period {
 			return nil, core.Err(fmt.Sprintf("%s: el adelanto debe cubrir días de un solo mes.", name))
 		}
-		if _, found := types.FindContractInForce(contractsOf(contracts, employee.ID), advance.ToDate); !found {
+		if _, found := types.FindContractInForce(types.ContractsOf(contracts, employee.ID), advance.ToDate); !found {
 			return nil, core.Err(fmt.Sprintf("%s no tiene un contrato vigente en las fechas del adelanto.", name))
 		}
 		for _, other := range append(slices.Clone(companyRecords), advances[:i]...) {
@@ -491,7 +491,7 @@ func grantLoanIn(transaction *db.Transaction, req *core.HandlerArgs, request typ
 // double delete refunds once, and a close cannot settle an installment the delete cancels.
 func deleteLoanIn(transaction *db.Transaction, req *core.HandlerArgs, loanID int32) ([]types.EmployeeRecord, error) {
 	companyID := req.User.CompanyID
-	companyRecords, err := loadCompanyRecords(companyID)
+	companyRecords, err := types.LoadCompanyRecords(companyID)
 	if err != nil {
 		return nil, err
 	}
@@ -611,18 +611,6 @@ func lockRecordsIn(transaction *db.Transaction, companyID int32, recordIDs []int
 	return records, nil
 }
 
-// loadCompanyRecords reads every record of the company, cancelled ones included: an SME's records
-// fit in a partition read, and the payroll stamp must see a cancellation too.
-func loadCompanyRecords(companyID int32) ([]types.EmployeeRecord, error) {
-	records := []types.EmployeeRecord{}
-	query := db.Query(&records)
-	query.CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer los registros del personal: %v", err)
-	}
-	return records, nil
-}
-
 // findRecord finds a live record by ID; a cancelled one counts as missing.
 func findRecord(records []types.EmployeeRecord, id int32) (types.EmployeeRecord, bool) {
 	for _, record := range records {
@@ -707,15 +695,4 @@ func loadEmployeeConcept(companyID, id int32) (types.EmployeeConcept, error) {
 		return types.EmployeeConcept{}, fmt.Errorf("el concepto fijo %d no existe", id)
 	}
 	return records[0], nil
-}
-
-// loadCompanyEmployeeConcepts reads every recurring concept of the company.
-func loadCompanyEmployeeConcepts(companyID int32) ([]types.EmployeeConcept, error) {
-	records := []types.EmployeeConcept{}
-	query := db.Query(&records)
-	query.CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer los conceptos fijos: %v", err)
-	}
-	return records, nil
 }

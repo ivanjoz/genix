@@ -74,14 +74,17 @@ func SaveAndLoadParties(run *runner.Run, seeds []runner.PartySeed, partyType int
 		if strings.TrimSpace(seed.Name) == "" {
 			return nil, core.Err("el tercero en posición", seedIndex, "no tiene Name")
 		}
+		registryNumber := strings.TrimSpace(seed.RegistryNumber)
 		payload = append(payload, crmTypes.ClientProvider{
 			Type:           partyType,
 			Name:           seed.Name,
 			PersonType:     seed.PersonType,
-			RegistryNumber: strings.TrimSpace(seed.RegistryNumber),
+			RegistryNumber: registryNumber,
 			CountryID:      seed.CountryID,
 			CityID:         seed.CityID,
 			CreditDays:     seed.CreditDays,
+			// One company client in four is a retention agent, so some facturas carry a retención.
+			IsRetentionAgent: partyType == crmTypes.ClientProviderTypeClient && len(registryNumber) == 11 && seedIndex%4 == 0,
 		})
 	}
 

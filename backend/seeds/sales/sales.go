@@ -2,6 +2,7 @@ package sales
 
 import (
 	"app/core"
+	"app/db"
 	financeTypes "app/finance/types"
 	invoicingTypes "app/invoicing/types"
 	salesModule "app/sales"
@@ -84,6 +85,12 @@ func runDailySales(run *runner.Run, dayStart time.Time) error {
 		if run.State.SalesAnnulFlags[saleIndex] {
 			run.State.PendingAnnulments = append(run.State.PendingAnnulments,
 				runner.PendingAnnulment{SaleID: createdSale.ID, CashBankID: createdSale.LastPaymentCajaID})
+		}
+		// A factura with a detracción stays owing it until the customer deposits it, 1 to 5 days later.
+		if createdSale.OpenDetractionAmount() > 0 {
+			run.State.PendingDetractionDeposits = append(run.State.PendingDetractionDeposits, runner.PendingDetractionDeposit{
+				SaleID: createdSale.ID, DepositDay: core.TimeToFechaUnix(saleTime) + int16(1+run.Random.Intn(5)),
+			})
 		}
 		run.State.Stats.SalesCreated++
 		if isUnpaid {
@@ -326,4 +333,40 @@ func runAnnulmentsStep(run *runner.Run, dayStart time.Time) error {
 		annulTime = annulTime.Add(time.Minute)
 	}
 	return nil
+}
+
+// runDetractionDepositsStep deposits the detracciones due today into the Banco de la Nación account,
+// through the same payment update the sale status page sends. A sale annulled meanwhile, or whose
+// detracción is no longer open, is dropped.
+func runDetractionDepositsStep(run *runner.Run, dayStart time.Time) error {
+	today := core.TimeToFechaUnix(dayStart)
+	depositTime := dayStart.Add(10 * time.Hour)
+	remainingDeposits := []runner.PendingDetractionDeposit{}
+	for _, deposit := range run.State.PendingDetractionDeposits {
+		if deposit.DepositDay > today {
+			remainingDeposits = append(remainingDeposits, deposit)
+			continue
+		}
+		sales := []salesTypes.SaleOrder{}
+		query := db.Query(&sales)
+		query.Select(query.ID, query.Status, query.DebtAmount, query.ImposedTaxes, query.PaymentDueDate).
+			CompanyID.Equals(run.UserToken.CompanyID).ID.Equals(deposit.SaleID).Limit(1)
+		if err := query.Exec(); err != nil {
+			return err
+		}
+		if len(sales) == 0 || sales[0].Status == salesTypes.OrderStatusAnnulled || sales[0].OpenDetractionAmount() == 0 {
+			continue
+		}
+		sale := sales[0]
+		payload := salesTypes.SaleOrder{
+			ID: sale.ID, ActionsIncluded: []int8{2}, LastPaymentCajaID: run.DetractionsCashBankID,
+			DebtAmount: sale.DebtAmount - sale.OpenDetractionAmount(), PaymentDueDate: sale.PaymentDueDate,
+		}
+		if _, err := postSaleOrder(run, depositTime, payload); err != nil {
+			return core.Err("no se pudo depositar la detracción de la venta", sale.ID, ":", err)
+		}
+		depositTime = depositTime.Add(time.Minute)
+	}
+	run.State.PendingDetractionDeposits = remainingDeposits
+	return run.SaveState()
 }

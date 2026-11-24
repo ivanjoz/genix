@@ -40,7 +40,7 @@ func PostPayrollCalculate(req *core.HandlerArgs) core.HandlerResponse {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
 	companyID := req.User.CompanyID
-	data, err := loadPayrollData(companyID)
+	data, err := types.LoadPayrollData(companyID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -89,7 +89,7 @@ func PostPayrollEnsure(req *core.HandlerArgs) core.HandlerResponse {
 			runByPeriod[run.Period] = run
 		}
 	}
-	data, err := loadPayrollData(companyID)
+	data, err := types.LoadPayrollData(companyID)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -100,7 +100,7 @@ func PostPayrollEnsure(req *core.HandlerArgs) core.HandlerResponse {
 		// to date takes no lock. The rest is decided again inside the month's transaction.
 		run, exists := runByPeriod[period]
 		if exists && (run.Status != types.PayrollStatusOpen ||
-			(run.CalculatedAt > 0 && run.InputsStamp == data.forRun(run).inputsStamp())) {
+			(run.CalculatedAt > 0 && run.InputsStamp == data.ForRun(run).InputsStamp())) {
 			continue
 		}
 		var skippedOfRun []skippedEmployee
@@ -121,7 +121,7 @@ func PostPayrollEnsure(req *core.HandlerArgs) core.HandlerResponse {
 // it is open and its inputs changed. An existing run is locked first; a new one is a plain insert
 // that the unique index on Period turns into a rerun of this body when another load created it
 // first, and the rerun finds and locks that run.
-func ensurePeriodRunIn(transaction *db.Transaction, req *core.HandlerArgs, period int16, data payrollData,
+func ensurePeriodRunIn(transaction *db.Transaction, req *core.HandlerArgs, period int16, data types.PayrollData,
 ) ([]skippedEmployee, error) {
 	companyID := req.User.CompanyID
 	periodRuns := []types.PayrollRun{}
@@ -143,8 +143,8 @@ func ensurePeriodRunIn(transaction *db.Transaction, req *core.HandlerArgs, perio
 			return nil, nil
 		}
 	}
-	runData := data.forRun(run)
-	if exists && run.CalculatedAt > 0 && run.InputsStamp == runData.inputsStamp() {
+	runData := data.ForRun(run)
+	if exists && run.CalculatedAt > 0 && run.InputsStamp == runData.InputsStamp() {
 		return nil, nil
 	}
 	payslips, skippedOfRun := calculateRunPayslips(run, runData, req.User.ID)
@@ -163,7 +163,7 @@ func ensurePeriodRunIn(transaction *db.Transaction, req *core.HandlerArgs, perio
 			payslips[i].StampRun(run)
 		}
 	}
-	if _, err := saveRunCalculationIn(transaction, run, runData.inputsStamp(), payslips, req.User.ID); err != nil {
+	if _, err := saveRunCalculationIn(transaction, run, runData.InputsStamp(), payslips, req.User.ID); err != nil {
 		return nil, err
 	}
 	return skippedOfRun, nil
@@ -204,24 +204,24 @@ func loadCompanyRegistrationPeriod(companyID int32) (int16, error) {
 
 // calculateRunIn recalculates an open run its caller locked with the whole payroll data, and saves
 // the result.
-func calculateRunIn(transaction *db.Transaction, run types.PayrollRun, data payrollData, userID int32) (runCalculation, error) {
-	runData := data.forRun(run)
+func calculateRunIn(transaction *db.Transaction, run types.PayrollRun, data types.PayrollData, userID int32) (runCalculation, error) {
+	runData := data.ForRun(run)
 	payslips, skipped := calculateRunPayslips(run, runData, userID)
-	savedRun, err := saveRunCalculationIn(transaction, run, runData.inputsStamp(), payslips, userID)
+	savedRun, err := saveRunCalculationIn(transaction, run, runData.InputsStamp(), payslips, userID)
 	return runCalculation{run: savedRun, payslips: payslips, skipped: skipped}, err
 }
 
 // calculateRunPayslips builds the payslip of every employee with something to pay in the run's
 // month, and reports the ones that could not be calculated.
-func calculateRunPayslips(run types.PayrollRun, data payrollData, userID int32) ([]types.Payslip, []skippedEmployee) {
+func calculateRunPayslips(run types.PayrollRun, data types.PayrollData, userID int32) ([]types.Payslip, []skippedEmployee) {
 	profitShares, capExcess := distributeProfitSharing(run, data)
 	calculatedAt := core.SUnixTime()
 	payslips, skipped := []types.Payslip{}, []skippedEmployee{}
-	for _, employee := range data.employees {
+	for _, employee := range data.Employees {
 		if employee.Status == types.StatusDeleted {
 			continue
 		}
-		payslip, ok := types.CalculatePeriodPayslip(data.periodInputFor(employee, run, profitShares[employee.ID], capExcess[employee.ID]))
+		payslip, ok := types.CalculatePeriodPayslip(data.PeriodInputFor(employee, run, profitShares[employee.ID], capExcess[employee.ID]))
 		if !ok {
 			if len(payslip.Diagnostics) > 0 {
 				skipped = append(skipped, skippedEmployee{Period: run.Period, EmployeeID: employee.ID, Message: payslip.Diagnostics[0].Message})
@@ -230,7 +230,7 @@ func calculateRunPayslips(run types.PayrollRun, data payrollData, userID int32) 
 		}
 		payslip.CompanyID, payslip.Status, payslip.CalculatedAt, payslip.UpdatedBy =
 			run.CompanyID, types.PayrollStatusOpen, calculatedAt, userID
-		payslip.CostFunction = data.costFunctionOf(employee.DepartmentID)
+		payslip.CostFunction = data.CostFunctionOf(employee.DepartmentID)
 		payslip.StampRun(run)
 		payslips = append(payslips, payslip)
 	}
@@ -261,22 +261,22 @@ func saveRunCalculationIn(transaction *db.Transaction, run types.PayrollRun, inp
 // distributeProfitSharing splits the run's pool over the workers of the fiscal year (the year
 // before the run's period), each on his days and remunerations of that year. A run with no net
 // income distributes nothing.
-func distributeProfitSharing(run types.PayrollRun, data payrollData) (shares, capExcess map[int32]int64) {
+func distributeProfitSharing(run types.PayrollRun, data types.PayrollData) (shares, capExcess map[int32]int64) {
 	if run.NetIncomeBeforeTax <= 0 {
 		return map[int32]int64{}, map[int32]int64{}
 	}
 	fiscalYear := 2000 + run.Period/100 - 1
 	yearLastDay := core.PeriodLastDay((fiscalYear%100)*100 + 12)
 	bases := []types.ProfitShareBasis{}
-	for _, employee := range data.employees {
+	for _, employee := range data.Employees {
 		if employee.Status == types.StatusDeleted {
 			continue
 		}
 		// Former workers share too: anyone with a payslip of the fiscal year.
-		for _, payslip := range data.historyOf(employee.ID) {
+		for _, payslip := range data.HistoryOf(employee.ID) {
 			if payslip.Period/100 == fiscalYear%100 {
-				bases = append(bases, types.ProfitShareBasisOf(employee.ID, data.historyOf(employee.ID), fiscalYear,
-					contractsOf(data.contracts, employee.ID), yearLastDay))
+				bases = append(bases, types.ProfitShareBasisOf(employee.ID, data.HistoryOf(employee.ID), fiscalYear,
+					types.ContractsOf(data.Contracts, employee.ID), yearLastDay))
 				break
 			}
 		}

@@ -2,6 +2,7 @@ package types
 
 import (
 	crm "app/crm/types"
+	finance "app/finance/types"
 	sales "app/sales/types"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestSplitGrossAmount(t *testing.T) {
 	}
 
 	for _, testCase := range cases {
-		net, tax := splitGrossAmount(testCase.gross)
+		net, tax := splitGrossAmount(testCase.gross, finance.TaxGroupTaxed18)
 		if net != testCase.net || tax != testCase.tax {
 			t.Errorf("splitGrossAmount(%d) = (%d, %d), want (%d, %d)",
 				testCase.gross, net, tax, testCase.net, testCase.tax)
@@ -39,7 +40,7 @@ func TestSplitGrossAmount(t *testing.T) {
 // case: whatever the amount, the two halves add back to it.
 func TestSplitGrossAmountIsExact(t *testing.T) {
 	for gross := int64(0); gross < 50_000; gross += 7 {
-		net, tax := splitGrossAmount(gross)
+		net, tax := splitGrossAmount(gross, finance.TaxGroupTaxed18)
 		if net+tax != gross {
 			t.Fatalf("splitGrossAmount(%d) = (%d, %d), which sums to %d", gross, net, tax, net+tax)
 		}
@@ -54,7 +55,7 @@ func testSeries() *InvoiceSeries {
 }
 
 func testDocument() *model.Document {
-	net, tax := splitGrossAmount(23_600) // two units at S/ 118.00
+	net, tax := splitGrossAmount(23_600, finance.TaxGroupTaxed18) // two units at S/ 118.00
 	return &model.Document{
 		Type:     model.Factura,
 		Series:   "F001",
@@ -69,7 +70,7 @@ func testDocument() *model.Document {
 			Quantity:    model.Units(2),
 			UnitCode:    model.DefaultUnitCode,
 			IgvType:     model.IgvTaxed,
-			IgvPercent:  model.Percent(igvPercentHundredths),
+			IgvPercent:  model.Percent(finance.IgvBasisPointsOf(finance.TaxGroupTaxed18)),
 			Value:       model.Cents(net),
 			IGV:         model.Cents(tax),
 		}},
@@ -108,7 +109,7 @@ func TestRowRecordsWhatOnlyItKnows(t *testing.T) {
 	// The sale was created under series 1, which is the series it is issued in —
 	// so the document is keyed by the sale itself. Its id reads as correlativo 55,
 	// series 01.
-	order := &sales.SaleOrder{ID: 5501, ClientID: 7, Lines: []sales.SaleOrderLine{{ProductID: 101}}}
+	order := &sales.SaleOrder{ID: 5501, ClientID: 7, Lines: []sales.SaleOrderLine{{ProductID: 101, TaxGroup: finance.TaxGroupTaxed18}}}
 	row := rowFromDocument(1, 1, order, testSeries(), original, 42)
 
 	// The buyer is pinned, not looked up again: this is what stops a filed book moving.
@@ -169,14 +170,14 @@ func TestDocumentSerializes(t *testing.T) {
 func TestRowKeepsTheAmountCharged(t *testing.T) {
 	const charged = int64(10_000) // S/ 100.00, a price that does not divide evenly
 
-	net, tax := splitGrossAmount(charged)
+	net, tax := splitGrossAmount(charged, finance.TaxGroupTaxed18)
 	document := testDocument()
 	document.Lines = []model.Line{{
 		Description: "PRODUCTO 1",
 		Quantity:    model.Units(1),
 		UnitCode:    model.DefaultUnitCode,
 		IgvType:     model.IgvTaxed,
-		IgvPercent:  model.Percent(igvPercentHundredths),
+		IgvPercent:  model.Percent(finance.IgvBasisPointsOf(finance.TaxGroupTaxed18)),
 		Value:       model.Cents(net),
 		IGV:         model.Cents(tax),
 	}}

@@ -381,8 +381,7 @@ levels = 14
 frontend_routes = "finance/expenses"
 backend_apis = "POST.expenses,POST.expenses-scheduled,POST.expense-payment,POST.expense-inventory,GET.supply-material,POST.supply-material"
 
-# Loans the company owes. GET.loans is mapped so only loan and cash flow holders read the debts;
-# the cash flow forecast (access 21) adds it to its own list when it lands.
+# Loans the company owes. GET.loans is mapped so only loan and cash flow holders read the debts.
 [[access]]
 id = 71
 name = "Préstamos"
@@ -404,8 +403,8 @@ id = 21
 name = "Flujo de Caja"
 group = 5
 levels = 14
-frontend_routes = "finance/flujo-de-caja"
-backend_apis = ""
+frontend_routes = "finance/cash-flow"
+backend_apis = "GET.cash-flow-commitments,GET.cash-flow-entries,POST.cash-flow-entries,GET.loans"
 
 [[access]]
 id = 37

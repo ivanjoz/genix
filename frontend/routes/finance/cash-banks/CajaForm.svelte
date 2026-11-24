@@ -3,7 +3,7 @@ import Input from '#components/form/Input.svelte'
 import SearchSelect from '#components/form/SearchSelect.svelte'
 import Checkbox from '#components/form/Checkbox.svelte'
 import type { ISite } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
-import { cajaTipos, cajaMonedaTipos, type ICashBank } from './cajas.svelte'
+import { CASH_BANK_TYPE_DETRACTIONS, cajaTipos, cajaMonedaTipos, type ICashBank } from './cajas.svelte'
 
 let {
   form = $bindable(),
@@ -32,6 +32,10 @@ let {
   <SearchSelect bind:saveOn={form} save="CurrencyType" css="col-span-24 md:col-span-10"
     label="Currency|Moneda" keyId="id" keyName="name" options={cajaMonedaTipos}
     placeholder="" required={true}
+  />
+  <!-- Every factura with a detracción declares the detracciones account's number. -->
+  <Input bind:saveOn={form} save="AccountNumber" css="col-span-24"
+    label="Account number|Número de cuenta" required={form.Type === CASH_BANK_TYPE_DETRACTIONS}
   />
   <div class="col-span-24 flex justify-between items-center">
     <Checkbox label="Receives Culqi payments (web store)|Recibe los pagos de Culqi (tienda web)"

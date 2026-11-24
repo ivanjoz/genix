@@ -9,8 +9,10 @@ import { ProductsService } from '#services/production/products.svelte.ts'
 import { SharedListsService } from '#services/business/shared-lists.svelte.ts'
 import { WarehousesService } from '#routes/business/branches-warehouses/branches-warehouses.svelte.ts'
 import { ProductStockSimpleService } from '#routes/logistics/products-stock/stock-movement.ts'
+import { BcrpDefaultRates, ExchangeRatesService } from '#routes/finance/exchange-rate/exchange-rate.svelte.ts'
+import { EXCHANGE_RATE_MAX_AGE_DAYS, calendarMonthKeys, latestSellRate } from '#routes/finance/exchange-rate/exchange-rate.ts'
 import {
-	MIN_FIT_DAYS, buildForecastSeries, clipWindowToFirstSale, firstSaleDayOf, forecastRowsOf, forecastWarnings, forecastWindowOf, packForecastRequest, parseForecastParams,
+	MIN_FIT_DAYS, buildForecastSeries, unitPriceInSoles, clipWindowToFirstSale, firstSaleDayOf, forecastRowsOf, forecastWarnings, forecastWindowOf, packForecastRequest, parseForecastParams,
 	type IForecastParams, type IForecastRow, type IForecastSeries, type IForecastWarning, type IForecastWindow,
 	type IForecastWorkerAnswer,
 } from './sales-forecast.ts'
@@ -42,6 +44,21 @@ export class SalesForecastState {
 	warehouses = new WarehousesService(false)
 	calendarEvents = new CalendarEventsService(false)
 	stock = new ProductStockSimpleService()
+	// The projection in money converts dollar prices at the latest sell rate: the company's, or BCRP's
+	// for a day it did not load (the current and previous month cover the look-back).
+	exchangeRates = new ExchangeRatesService(true)
+	bcrpDefaultRates = new BcrpDefaultRates()
+	sellRate = $derived(latestSellRate(this.exchangeRates.records, this.bcrpDefaultRates.ratesByMonthKey, getFechaUnix(), EXCHANGE_RATE_MAX_AGE_DAYS))
+
+	constructor() {
+		this.bcrpDefaultRates.load(calendarMonthKeys(new Date(), 2))
+	}
+
+	/** The product's list price per unit in soles; undefined for an unknown product or a dollar price without a rate. */
+	unitPriceInSoles = (productID: number) => {
+		const product = this.products.recordsMap.get(productID)
+		return product ? unitPriceInSoles(product, this.sellRate) : undefined
+	}
 
 	private worker: Worker | undefined
 	private runID = 0

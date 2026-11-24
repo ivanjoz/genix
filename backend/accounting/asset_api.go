@@ -192,6 +192,13 @@ func PostAsset(req *core.HandlerArgs) core.HandlerResponse {
 	} else {
 		newAssets = append(newAssets, makeAsset("", unitCount))
 	}
+	// Every row is in the same warehouse: its site is resolved once.
+	if stampError := newAssets[0].StampSiteID(); stampError != nil {
+		return req.MakeErr(stampError)
+	}
+	for assetIndex := range newAssets {
+		newAssets[assetIndex].SiteID = newAssets[0].SiteID
+	}
 
 	// The assets and their stock commit together: a failed stock entry leaves no asset behind.
 	var savedAssets []types.Asset
@@ -345,13 +352,16 @@ func PutAssetTransfer(req *core.HandlerArgs) core.HandlerResponse {
 		}
 
 		asset.WarehouseID = payload.TargetWarehouseID
+		if stampError := asset.StampSiteID(); stampError != nil {
+			return core.Err(stampError)
+		}
 		asset.Updated = core.SUnixTime()
 		asset.UpdatedBy = req.User.ID
 
 		assetTable := db.TableOf[types.Asset]()
 		// Status rides along for the delta view's composite key, as in PostAssetPayment.
 		if updateError := db.UpdateIn(transaction, &[]types.Asset{asset},
-			assetTable.WarehouseID, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
+			assetTable.WarehouseID, assetTable.SiteID, assetTable.Status, assetTable.Updated, assetTable.UpdatedBy,
 		); updateError != nil {
 			return core.Err("Error al actualizar el activo.", updateError)
 		}

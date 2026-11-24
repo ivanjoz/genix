@@ -152,7 +152,7 @@ import type { Snippet } from 'svelte';
 </script>
 
 <div id="page-container" class="_1 {noPadding ? '' : 'px-10 pt-10'} {background === 'white' ? 'bg-surface' : ''} {containerCss}" class:useTopMinimalMenu={ui.state.useTopMinimalMenu}
-	class:fixed-full-height={fixedFullHeight} class:no-header={hideHeader}
+	class:fixed-full-height={fixedFullHeight} class:no-header={hideHeader} class:no-padding={noPadding}
 >
   {#if Core.isLoading === 0 && isLogged}
     {#if isLoading}
@@ -181,10 +181,17 @@ import type { Snippet } from 'svelte';
     margin-left: 0;
     width: 100%;
   }
-  
+
   .fixed-full-height {
 	 	height: calc(100vh - var(--header-height));
 	  overflow: auto;
+  }
+
+  /* The content Layer's 4px padding / -4px margin bleed is absorbed by the page padding.
+     Without that padding it overflows the container and brings up both scrollbars. */
+  .no-padding :global(.w-page) {
+    padding: 0;
+    margin: 0;
   }
 
   /* Same 751px breakpoint as AppHeader's `hidden-on-desktop`: the content takes the bar's height. */

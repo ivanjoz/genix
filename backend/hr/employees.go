@@ -169,7 +169,7 @@ func ensureManagerValid(companyID, employeeID, managerID int32) error {
 	if managerID == employeeID {
 		return fmt.Errorf("un trabajador no puede ser su propio jefe inmediato")
 	}
-	employees, err := loadCompanyEmployees(companyID)
+	employees, err := types.LoadCompanyEmployees(companyID)
 	if err != nil {
 		return err
 	}
@@ -238,18 +238,6 @@ func loadEmployee(companyID, employeeID int32) (types.Employee, error) {
 		return types.Employee{}, fmt.Errorf("el trabajador %d no existe", employeeID)
 	}
 	return employees[0], nil
-}
-
-// loadCompanyEmployees reads every employee of the company: the deletion guards need the whole set,
-// and an SME's staff fits in one partition read.
-func loadCompanyEmployees(companyID int32) ([]types.Employee, error) {
-	employees := []types.Employee{}
-	query := db.Query(&employees)
-	query.CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer el personal: %v", err)
-	}
-	return employees, nil
 }
 
 // GetDependents syncs one employee's dependents (?employee-id=), a delta slice pinned by EmployeeID.

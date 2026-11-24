@@ -39,7 +39,7 @@ func PostLegalParameter(req *core.HandlerArgs) core.HandlerResponse {
 	if err := json.Unmarshal([]byte(*req.Body), &parameter); err != nil {
 		return req.MakeErr("Error al deserializar el body:", err)
 	}
-	stored, _, err := loadLegalRecords(types.CountryIDPeru)
+	stored, _, err := types.LoadLegalRecords(types.CountryIDPeru)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -101,7 +101,7 @@ func PostAfpRates(req *core.HandlerArgs) core.HandlerResponse {
 	if len(afpRates) == 0 {
 		return req.MakeErr("No se enviaron tasas de AFP.")
 	}
-	_, stored, err := loadLegalRecords(types.CountryIDPeru)
+	_, stored, err := types.LoadLegalRecords(types.CountryIDPeru)
 	if err != nil {
 		return req.MakeErr(err)
 	}
@@ -163,32 +163,6 @@ func validateAfpRate(afpRate types.AfpRate) error {
 		return fmt.Errorf("Indique el aporte al fondo y la prima de seguro de la AFP.")
 	}
 	return nil
-}
-
-// loadLegalRecords reads every legal value and AFP rate of a country; both lists are small (a few
-// rows per year), so the payroll and the validations read them whole.
-func loadLegalRecords(countryID int32) ([]types.LegalParameter, []types.AfpRate, error) {
-	parameters, afpRates := []types.LegalParameter{}, []types.AfpRate{}
-	parameterQuery := db.Query(&parameters)
-	parameterQuery.CountryID.Equals(countryID)
-	if err := parameterQuery.Exec(); err != nil {
-		return nil, nil, fmt.Errorf("error al leer los parámetros laborales: %v", err)
-	}
-	afpQuery := db.Query(&afpRates)
-	afpQuery.CountryID.Equals(countryID)
-	if err := afpQuery.Exec(); err != nil {
-		return nil, nil, fmt.Errorf("error al leer las tasas de AFP: %v", err)
-	}
-	return parameters, afpRates, nil
-}
-
-// loadLegalValues builds the dated lookup the payroll engine reads.
-func loadLegalValues(countryID int32) (types.LegalValues, error) {
-	parameters, afpRates, err := loadLegalRecords(countryID)
-	if err != nil {
-		return types.LegalValues{}, err
-	}
-	return types.NewLegalValues(parameters, afpRates), nil
 }
 
 func legalParameterOption(key int8) (types.LegalParameterOption, bool) {

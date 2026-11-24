@@ -45,7 +45,7 @@ func PostConcept(req *core.HandlerArgs) core.HandlerResponse {
 	concept.Name = strings.TrimSpace(concept.Name)
 
 	if concept.Status == types.StatusDeleted && concept.ID > 0 {
-		recurring, err := loadCompanyEmployeeConcepts(companyID)
+		recurring, err := types.LoadCompanyEmployeeConcepts(companyID)
 		if err != nil {
 			return req.MakeErr(err)
 		}
@@ -143,20 +143,4 @@ func loadConcept(companyID, conceptID int32) (types.Concept, error) {
 		return types.Concept{}, fmt.Errorf("el concepto %d no existe", conceptID)
 	}
 	return concepts[0], nil
-}
-
-// loadCompanyConcepts reads every concept of the company, keyed by ID, deleted ones included: an
-// old recurring item may still point at one.
-func loadCompanyConcepts(companyID int32) (map[int32]types.Concept, error) {
-	concepts := []types.Concept{}
-	query := db.Query(&concepts)
-	query.CompanyID.Equals(companyID)
-	if err := query.Exec(); err != nil {
-		return nil, fmt.Errorf("error al leer los conceptos: %v", err)
-	}
-	conceptsByID := map[int32]types.Concept{}
-	for _, concept := range concepts {
-		conceptsByID[concept.ID] = concept
-	}
-	return conceptsByID, nil
 }

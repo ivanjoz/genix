@@ -6,6 +6,7 @@ import { type IClientProvider } from '#services/crm/client-provider.svelte.ts';
 import { type IInvoiceSeries } from '#routes/company/configuration/invoice-series.ts';
 import { tr } from '#core/store.svelte.ts';
 import { validateCustomerIdentity } from './sale_order';
+import { canBeGivenAway, igvOfGross, TAX_GROUP_FREE } from '#core/tax-groups.ts';
 import {
   CURRENCY_PEN, CURRENCY_USD, EXCHANGE_RATE_MAX_AGE_DAYS, convertUnitPrice, effectiveExchangeRate,
   normalizeCurrency,
@@ -43,6 +44,8 @@ export interface VentaProducto {
   cantidad: Quantity
   subDivisor: number
   producto?: IProduct // Helper reference
+  // isFree gives the line away (gratuito): charged 0, sent as a SaleImposedTax the backend prices.
+  isFree?: boolean
 }
 
 // One product line of a sale. Fields at their zero value are omitted on the wire, so a read
@@ -59,6 +62,7 @@ export interface ISaleOrderLine {
   PresentationID: number
   StockExitPending: boolean
   PackID: number
+  TaxGroup: number
 }
 
 //STRUCT:sales.SaleOrder
@@ -95,6 +99,7 @@ export interface ISaleOrder {
   OnlineSaleOrderID: number
   PendingStockMovement: number
   SiteID: number
+  ImposedTaxes: any
   /* extra fields */
   CompanyID: number
   Name: string
@@ -235,7 +240,7 @@ export class SaleOrderState {
 
   lineAmount(ventaProducto: VentaProducto): number {
     const producto = ventaProducto.producto
-    if (!producto) { return 0 }
+    if (!producto || ventaProducto.isFree) { return 0 }
     // Whole units at their price, sub-units at theirs — never prorated.
     return quantityAmount(ventaProducto.cantidad,
       this.priceInSaleCurrency(producto.FinalPrice, producto),
@@ -248,15 +253,28 @@ export class SaleOrderState {
     return convertUnitPrice(this.form.TotalAmount, CURRENCY_USD, CURRENCY_PEN, this.effectiveRate)
   }
 
+  // A free line goes out only on whole units of a product that is not an export, the rule the backend applies.
+  canGiveAway(ventaProducto: VentaProducto): boolean {
+    return canBeGivenAway(ventaProducto.producto?.TaxGroup || 0) && ventaProducto.cantidad.sub === 0
+  }
+
+  toggleFree(key: string) {
+    this.ventaProductos = this.ventaProductos.map((ventaProducto) =>
+      ventaProducto.key === key ? { ...ventaProducto, isFree: !ventaProducto.isFree } : ventaProducto)
+    this.recalcTotales()
+  }
+
   recalcTotales() {
-    let total = 0
+    let total = 0, taxAmount = 0
     for(let vp of this.ventaProductos){
-      total += this.lineAmount(vp)
+      const lineAmount = this.lineAmount(vp)
+      total += lineAmount
+      // A preview: the backend splits the IGV of each line by its product's tax group.
+      taxAmount += Math.round(igvOfGross(vp.producto?.TaxGroup || 0, lineAmount))
     }
 
     this.form.TotalAmount = total
-    const subtotal = Math.floor(total / 1.18)
-    this.form.TaxAmount = total - subtotal
+    this.form.TaxAmount = taxAmount
     this.form.DebtAmount = 0 // Assuming fully paid for now, adjust if UI allows debt
     this.recalcVuelto()
   }
@@ -313,7 +331,10 @@ export class SaleOrderState {
     showLoading("Procesando venta...")
 
     this.form.Lines = []
+    this.form.ImposedTaxes = []
     const pushLine = (vp: VentaProducto, quantity: Quantity, serialNumber: string) => {
+      // A free line names its 1-based position; the backend sets the value it gives away.
+      if (vp.isFree) { this.form.ImposedTaxes.push({ Type: TAX_GROUP_FREE, Line: this.form.Lines.length + 1 }) }
       this.form.Lines.push({
         ProductID: vp.productoID,
         // Sent for the operator's reference only; the server overwrites both prices from the

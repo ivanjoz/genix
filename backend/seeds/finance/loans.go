@@ -80,6 +80,10 @@ func paySampleLoanInstallment(run *runner.Run, loan financeTypes.Loan, installme
 	if pendingAmount <= 0 {
 		return loan, nil
 	}
+	// The handler refuses to leave the account negative: top it up first, as the other payment steps do.
+	if err := run.EnsureCashBalance(loan.CashBankID, pendingAmount, core.Now().Add(-time.Second)); err != nil {
+		return loan, err
+	}
 	payment := financeModule.LoanPaymentBody{
 		LoanID: loan.ID, InstallmentNumber: installment.Number, CashBankID: loan.CashBankID,
 		Amount: pendingAmount, Date: installment.DueDate,

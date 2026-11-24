@@ -202,7 +202,7 @@ func main() {
 	// The shoe: 10 pairs need 10 uppers, 500 g of leather with 10% waste, 1 thread; 60 minutes.
 	products := []types.Product{}
 	must(call("POST.products", production.PostProducts, []types.Product{{
-		ID: -5, Name: "E2E Zapato " + runTag, Origin: types.ProductOriginMade, Price: 15000, CurrencyID: 1, UnitID: 1,
+		ID: -5, Name: "E2E Zapato " + runTag, Origin: types.ProductOriginMade, TaxGroup: 1, Price: 15000, CurrencyID: 1, UnitID: 1,
 		TracksLots: true, ShelfLifeDays: 365,
 		ProductionYieldPortions: 10,
 		ProductionSupplies: []types.ProductionSupply{
@@ -533,7 +533,7 @@ func main() {
 	// A product consuming linings cannot be released while the lot is in quarantine.
 	bagIDs := []types.Product{}
 	must(call("POST.products", production.PostProducts, []types.Product{{
-		ID: -10, Name: "E2E Bolso " + runTag, Origin: types.ProductOriginMade, Price: 9000, CurrencyID: 1, UnitID: 1,
+		ID: -10, Name: "E2E Bolso " + runTag, Origin: types.ProductOriginMade, TaxGroup: 1, Price: 9000, CurrencyID: 1, UnitID: 1,
 		ProductionYieldPortions: 1, ProductionSupplies: []types.ProductionSupply{{SupplyID: liningID, Quantity: 1000, SubDivisor: 1}},
 	}}, &bagIDs), "bag")
 	bagOrder := types.ProductionOrder{}

@@ -151,6 +151,14 @@ type Product struct {
 	// ProductChannel* IDs (core.BitmaskHas). 0 means every channel. A channel the product is not in
 	// leaves it off that channel's list, and the channel's sale refuses it. Read it via IsSoldIn.
 	SalesChannels int8 `cb:"56"`
+	// TaxGroup is the product's IGV treatment (finance.ProductTaxGroupOptions, 1–5): what a
+	// sale line copies when it is priced, so the CPE line, the sale's IGV and the cash-documents frame
+	// follow it. Required on a sold product; a supply is never sold and keeps 0.
+	TaxGroup int8 `cb:"57"`
+	// DetractionCode is the product's SPOT code (finance.DetractionCodeOptions), 0 when it is not
+	// subject to the detracción: a factura above S/ 700 with such a line carries one
+	// (sales.ApplySaleWithholdings).
+	DetractionCode int16 `cb:"58"`
 }
 
 // Product.SalesChannels option IDs: ID n is bit n-1 of the mask.
@@ -260,6 +268,8 @@ type ProductTable struct {
 	ShelfLifeDays              db.Col[*ProductTable, int16]
 	QualityHoldOnEntry         db.Col[*ProductTable, bool]
 	SalesChannels              db.Col[*ProductTable, int8]
+	TaxGroup                   db.Col[*ProductTable, int8]
+	DetractionCode             db.Col[*ProductTable, int16]
 }
 
 func (e *Product) FillCategoriesWithStock() {

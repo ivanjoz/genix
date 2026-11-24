@@ -27,6 +27,7 @@ import CategoriasMarcas from './CategoriesBrands.svelte';
 import { exportProductosToExcel, processProductosImportFile } from './products.excel';
 import { productoMonedaOptions, productoUnidadOptions } from '#core/products-lists.ts';
 import { SharedListsService } from '#services/business/shared-lists.svelte.ts';
+import { TAX_GROUP_TAXED_18 } from '#core/tax-groups.ts';
 import {
     ProductsService,
     productImageName,
@@ -34,6 +35,8 @@ import {
     PRODUCT_ORIGIN_MADE,
     PRODUCT_ORIGIN_OPTIONS,
     PRODUCT_SALES_CHANNEL_OPTIONS,
+    PRODUCT_TAX_GROUP_OPTIONS,
+    DETRACTION_CODE_OPTIONS,
     type IProduct,
     type IProductoImage
 } from "#services/production/products.svelte.ts";
@@ -412,7 +415,9 @@ import {
           }
         } else {
           // A new row belongs to the list it was imported from; an existing one keeps its own Origin.
+          // The sheet has no IGV column: a new product starts taxed at 18 %, editable in the form.
           importedProducto.Origin = origin;
+          importedProducto.TaxGroup = TAX_GROUP_TAXED_18;
         }
 
         return importedProducto;
@@ -615,7 +620,7 @@ import {
         } else if (view === 3) {
           MarcasLayer?.newRecord();
         } else {
-          productoForm = clearProductionFields({ ss: 1, Origin: origin } as IProduct)
+          productoForm = clearProductionFields({ ss: 1, Origin: origin, TaxGroup: TAX_GROUP_TAXED_18 } as IProduct)
           ui.openSideLayer(1);
         }
       }}
@@ -871,6 +876,29 @@ import {
             keyName="v"
           />
         </div>
+        <!-- The IGV treatment every sale line of the product copies: its CPE line and the sale's IGV. -->
+        <SearchSelect
+          label="IGV treatment|Afectación IGV"
+          saveOn={productoForm}
+          css="col-span-24 md:col-span-10"
+          save="TaxGroup"
+          keyId="id"
+          keyName="name"
+          required
+          options={PRODUCT_TAX_GROUP_OPTIONS.map((taxGroup) => ({ id: taxGroup.id, name: tr(taxGroup.name) }))}
+        />
+        <!-- A factura above S/ 700 with a line subject to the SPOT system carries a detracción, which the
+             customer deposits into the company's Banco de la Nación account. -->
+        <SearchSelect
+          label="Detracción (SPOT)"
+          saveOn={productoForm}
+          css="col-span-24 md:col-span-8"
+          save="DetractionCode"
+          keyId="id"
+          keyName="name"
+          placeholder="None|Ninguna"
+          options={DETRACTION_CODE_OPTIONS.map((option) => ({ id: option.id, name: `${option.name} (${option.rate / 100} %)` }))}
+        />
         <!-- Lot policy (docs/MANUFACTURING_PLAN.md §10): bought and made products alike. -->
         <div
           class="col-span-24 flex flex-wrap items-center gap-x-16 gap-y-10 rounded-[6px] bg-gray-100 px-12 py-8"

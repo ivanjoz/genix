@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { FrameFileRows } from '@genix/ui/cache'
 import type { SiteProductStockSeries } from '#core/stock-closing.ts'
 import {
-	DEFAULT_FORECAST_PARAMS, buildForecastSeries, clipWindowToFirstSale, firstSaleDayOf, forecastRowsOf, forecastWarnings, forecastWindowOf, parseForecastParams,
-	sliceSeriesDays, type IForecastRunResult,
+	DEFAULT_FORECAST_PARAMS, buildForecastSeries, projectionWeeksInMoney, unitPriceInSoles, clipWindowToFirstSale, firstSaleDayOf, forecastRowsOf, forecastWarnings, forecastWindowOf, parseForecastParams,
+	forecastConfidence, rowsMergedByProduct, sliceSeriesDays, type IForecastRow, type IForecastRunResult,
 } from './sales-forecast.ts'
 
 const SITE = 1
@@ -126,10 +126,11 @@ describe('forecastRowsOf and forecastWarnings', () => {
 		elapsedMs: 1,
 	}
 
-	it('sums the forecast and flags a series worse than the seasonal naive', () => {
+	it('splits the forecast into weeks and flags a series worse than the seasonal naive', () => {
 		const [row] = forecastRowsOf(series, result, () => 5)
-		expect(row.next7).toBe(14)
-		expect(row.horizonTotal).toBe(20)
+		// A 10-day horizon fills the first week, 3 days of the second and none of the rest.
+		expect(row.projectionWeeks.map((week) => week.total)).toEqual([14, 6, 0, 0])
+		expect(row.projectionWeeks.map((week) => week.days.length)).toEqual([7, 3, 0, 0])
 		expect(row.lastSales).toBe(28)
 		expect(row.stockToday).toBe(5)
 		expect(row.worseThanNaive).toBe(true)
@@ -159,5 +160,57 @@ describe('forecastRowsOf and forecastWarnings', () => {
 		expect(titles).not.toContain('Stock changed while it was read')
 		// High severity first.
 		expect(warnings[0].severity).toBe('high')
+	})
+})
+
+describe('rowsMergedByProduct', () => {
+	const siteRow = (siteID: number, productID: number, overrides: Partial<IForecastRow>): IForecastRow => ({
+		key: `${siteID}_${productID}`, siteID, productID, categoryID: 5, model: 'HoltWinters', scenario: 'A',
+		forecast: [1, 2], projectionWeeks: [], lastSales: 0, stockToday: 0, emptyShelfDays: 0,
+		wape: NaN, mase: NaN, worseThanNaive: false, ...overrides,
+	})
+
+	it('adds up the sites of a product and weights its accuracy by sales', () => {
+		const merged = rowsMergedByProduct([
+			siteRow(1, PRODUCT_A, { lastSales: 30, stockToday: 10, wape: 0.2, mase: 0.5, emptyShelfDays: 2 }),
+			siteRow(2, PRODUCT_A, { lastSales: 10, stockToday: 5, wape: 0.6, mase: 1.5, model: 'Tsb', worseThanNaive: true }),
+			siteRow(1, PRODUCT_B, { lastSales: 0 }),
+		])
+		expect(merged).toHaveLength(2)
+		const productA = merged[0]
+		expect(productA).toMatchObject({
+			key: `0_${PRODUCT_A}`, siteID: 0, model: 'Mixed', scenario: 'A', forecast: [2, 4],
+			lastSales: 40, stockToday: 15, emptyShelfDays: 2, worseThanNaive: true,
+		})
+		expect(productA.projectionWeeks[0]).toEqual({ days: [2, 4], total: 6 })
+		expect(productA.wape).toBeCloseTo(0.3)
+		expect(productA.mase).toBeCloseTo(0.75)
+		// No sales on any site: accuracy stays undefined.
+		expect(merged[1].wape).toBeNaN()
+	})
+})
+
+describe('forecastConfidence', () => {
+	it('averages 1 − WAPE and 1 − MASE/2, each clamped to 0–1', () => {
+		expect(forecastConfidence(0.4, 0.8)).toBeCloseTo(0.6)
+		expect(forecastConfidence(1.5, 3)).toBe(0)
+		// An undefined part is left out; both undefined stays undefined.
+		expect(forecastConfidence(NaN, 1)).toBeCloseTo(0.5)
+		expect(forecastConfidence(NaN, NaN)).toBeNaN()
+	})
+})
+
+describe('projection in money', () => {
+	it('prices a unit in soles, converting a dollar price at the sell rate', () => {
+		expect(unitPriceInSoles({ FinalPrice: 1250, CurrencyID: 1 }, 0)).toBe(12.5)
+		// A product from before currencies were tracked carries 0: soles.
+		expect(unitPriceInSoles({ FinalPrice: 1250, CurrencyID: 0 }, 0)).toBe(12.5)
+		// US$ 10.00 at 3.750 soles per dollar.
+		expect(unitPriceInSoles({ FinalPrice: 1000, CurrencyID: 2 }, 3750)).toBe(37.5)
+		expect(unitPriceInSoles({ FinalPrice: 1000, CurrencyID: 2 }, 0)).toBeUndefined()
+	})
+
+	it('multiplies every day and total by the unit price', () => {
+		expect(projectionWeeksInMoney([{ days: [1, 2], total: 3 }], 2.5)).toEqual([{ days: [2.5, 5], total: 7.5 }])
 	})
 })

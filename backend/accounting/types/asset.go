@@ -1,6 +1,7 @@
 package types
 
 import (
+	business "app/business/types"
 	"app/db"
 	finance "app/finance/types"
 )
@@ -96,6 +97,40 @@ type Asset struct {
 	// SameDayCashBankID is the cash bank of the one payment that settled the whole purchase on its
 	// AccountingDate; 0 when no payment did. See finance.SameDaySettlement.
 	SameDayCashBankID int32 `cb:"39"`
+	// SiteID is the site of WarehouseID (0 without one), set by StampSiteID on every write that sets
+	// the warehouse: what the cash-documents frame sums by, since its ToFrames reads only the asset.
+	SiteID int16 `cb:"40"`
+}
+
+// StampSiteID sets SiteID from the asset's warehouse: 0 without one, else its site, refusing a
+// warehouse that doesn't exist.
+func (e *Asset) StampSiteID() error {
+	if e.WarehouseID == 0 {
+		e.SiteID = 0
+		return nil
+	}
+	siteIDByWarehouseID, err := business.SiteIDsOfWarehouses(e.CompanyID, []int32{e.WarehouseID})
+	if err != nil {
+		return err
+	}
+	e.SiteID = siteIDByWarehouseID[e.WarehouseID]
+	return nil
+}
+
+// ToCashDocumentFrames is what the acquisition adds to the cash-documents frame while the asset is
+// held and was bought (a donation owes nothing): its price by tax group from its comprobante, the open
+// part what is still owed, due on DueDate.
+func (e *Asset) ToCashDocumentFrames(lines []finance.CashDocumentFrame) []finance.CashDocumentFrame {
+	isHeld := e.Status == AssetStatusActive || e.Status == AssetStatusFullyDepreciated
+	if !isHeld || e.PaymentStatus == AssetPaymentNone {
+		return lines
+	}
+	return finance.AppendCashDocumentFrames(lines, finance.CashDocument{
+		Date: e.AcquisitionDate, SiteID: e.SiteID, OpenKind: finance.CashDocumentKindAssetOpen,
+		SettledKind: finance.CashDocumentKindAssetSettled, DueDate: e.DueDate, DocumentDate: e.DocIssueDate,
+		IsForeignCurrency: e.CurrencyType == finance.CurrencyUSD,
+		Groups:            finance.PurchaseCashGroups(e.PurchaseDocument(), e.PurchaseAmount), OpenAmount: e.PendingAmount(),
+	})
 }
 
 // AccountingDate is the day the acquisition is booked on: its comprobante's date, else the day
@@ -148,6 +183,7 @@ type AssetTable struct {
 	AccountCode             db.Col[*AssetTable, int32]
 	// SameDayCashBankID is the cash bank of the payment that settled the asset on its AccountingDate.
 	SameDayCashBankID db.Col[*AssetTable, int32]
+	SiteID            db.Col[*AssetTable, int16]
 }
 
 func (e AssetTable) GetSchema() db.TableSchema {
@@ -170,6 +206,10 @@ func (e AssetTable) GetSchema() db.TableSchema {
 			// The Registro de Compras reads a period of documents, one indexed read per day.
 			{Type: db.TypeCacheGroup, Keys: db.Cols(e.DocIssueDate)},
 		},
+		DataFrames: []db.DataFrame{{
+			Shared: finance.CashDocumentsFrame, Version: 1, ToFrames: db.ToFrames((*Asset).ToCashDocumentFrames),
+			OwnedRows: finance.OwnedCashDocumentKinds(finance.CashDocumentKindAssetOpen, finance.CashDocumentKindAssetSettled),
+		}},
 	}
 }
 

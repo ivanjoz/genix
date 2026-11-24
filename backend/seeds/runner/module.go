@@ -34,14 +34,16 @@ type DayStep struct {
 // movement stores its register's balance at write time: modules replayed one after another over the
 // same days would leave the running balances out of order.
 const (
-	OrderPurchases     = 10
-	OrderExpenses      = 20
-	OrderSales         = 30
-	OrderAnnulments    = 40
-	OrderTillTransfers = 50
-	OrderPayroll       = 60
-	OrderTillCounts    = 70
-	OrderDepreciation  = 80
+	OrderPurchases  = 10
+	OrderExpenses   = 20
+	OrderSales      = 30
+	OrderAnnulments = 40
+	// The customers deposit the facturas' detracciones into the Banco de la Nación account.
+	OrderDetractionDeposits = 45
+	OrderTillTransfers      = 50
+	OrderPayroll            = 60
+	OrderTillCounts         = 70
+	OrderDepreciation       = 80
 )
 
 // ResolveModules picks the requested modules and everything they require, in the registry's order
@@ -126,6 +128,7 @@ func Execute(run *Run, modules []Module) (map[string]any, error) {
 	rebalancedMovements := 0
 	cashBankIDs := core.SliceSet[int32]{}
 	cashBankIDs.Add(run.BankCashBankID)
+	cashBankIDs.Add(run.DetractionsCashBankID)
 	for _, tillID := range run.TillByWarehouse {
 		cashBankIDs.Add(tillID)
 	}

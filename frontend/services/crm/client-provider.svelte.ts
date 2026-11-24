@@ -31,6 +31,8 @@ export interface IClientProvider {
   /** Payment terms, 0 = cash. A document saved without a due date falls due this many days after
    *  its date: a client's sales, a provider's purchase orders and expenses. */
   CreditDays: number
+  /** SUNAT's IGV retention agent: withholds 3 % of a factura above S/ 700. */
+  IsRetentionAgent?: boolean
   ss: number
   upd: number
   UpdatedBy?: number

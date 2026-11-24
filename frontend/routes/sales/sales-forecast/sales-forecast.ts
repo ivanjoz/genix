@@ -1,5 +1,7 @@
 import type { FrameFileRows } from '@genix/ui/cache'
 import type { SiteProductStockSeries } from '#core/stock-closing.ts'
+import type { IProduct } from '#services/production/products.svelte.ts'
+import { CURRENCY_PEN, convertUnitPrice, normalizeCurrency } from '#routes/finance/exchange-rate/exchange-rate.ts'
 
 // The sales forecast page (plan/SALES_FORECAST_PLAN.md): the series the engine reads, assembled from
 // the sale-quantity frame and the end-of-day stock, and what the page shows of its answer. The engine
@@ -46,59 +48,35 @@ export interface IForecastParamSlider {
 	reloadsData?: boolean
 }
 
-export interface IForecastParamGroup {
-	title: string
-	sliders: IForecastParamSlider[]
-}
-
-export const FORECAST_PARAM_GROUPS: IForecastParamGroup[] = [
+// No group titles: each label must be understandable on its own.
+export const FORECAST_PARAM_SLIDERS: IForecastParamSlider[] = [
 	{
-		title: 'History and horizon|Historia y horizonte',
-		sliders: [
-			{
-				key: 'historyDays', label: 'History|Historia', suffix: 'd', min: 90, max: 730, step: 1, reloadsData: true,
-				help: 'Days of sales the models learn from. A year or more learns the yearly season and the calendar; two years trusts it more.|Días de ventas de los que aprenden los modelos. Un año o más aprende la estacionalidad anual y el calendario; dos años la afianzan.',
-			},
-			{
-				key: 'horizonDays', label: 'Horizon|Horizonte', suffix: 'd', min: 7, max: 90, step: 1,
-				help: 'Days forecast from today.|Días pronosticados desde hoy.',
-			},
-		],
+		key: 'historyDays', label: 'History days|Días de historia', suffix: 'd', min: 90, max: 730, step: 1, reloadsData: true,
+		help: 'Days of sales the models learn from. A year or more learns the yearly season and the calendar; two years trusts it more.|Días de ventas de los que aprenden los modelos. Un año o más aprende la estacionalidad anual y el calendario; dos años la afianzan.',
 	},
 	{
-		title: 'Stockouts|Quiebres de stock',
-		sliders: [
-			{
-				key: 'partialCensorThreshold', label: 'Low stock|Stock bajo', suffix: ' u', min: 0, max: 20, step: 1,
-				help: 'A day that closes at or below this stock had its demand capped: its sales count as a floor, not as the demand.|Un día que cierra con este stock o menos tuvo la demanda limitada: sus ventas cuentan como un mínimo, no como la demanda.',
-			},
-			{
-				key: 'emptyShelfHalfLifeDays', label: 'Empty shelf fade|Desvanecer sin stock', suffix: 'd', min: 7, max: 90, step: 1,
-				help: 'Days of empty shelf the forecast holds; after them it halves every as many days, for a product no longer sold.|Días sin stock que el pronóstico se mantiene; luego se reduce a la mitad cada tantos días, para un producto que ya no se vende.',
-			},
-		],
+		key: 'horizonDays', label: 'Forecast horizon|Horizonte de pronóstico', suffix: 'd', min: 7, max: 90, step: 1,
+		help: 'Days forecast from today.|Días pronosticados desde hoy.',
 	},
 	{
-		title: 'Trend and seasonality|Tendencia y estacionalidad',
-		sliders: [
-			{
-				key: 'maxDamping', label: 'Trend reach|Alcance de tendencia', min: 0.8, max: 0.98, step: 0.01,
-				help: 'How far a rising or falling trend is carried into the future. Higher follows products that grow or fade; lower is safer on noisy sales.|Cuánto se prolonga una tendencia al alza o a la baja. Más alto sigue a productos que crecen o se apagan; más bajo es más seguro con ventas ruidosas.',
-			},
-			{
-				key: 'shrinkWeeks', label: 'Weekly shape from category|Forma semanal de la categoría', suffix: ' sem', min: 0, max: 26, step: 1,
-				help: "Weeks of history a product needs before its own weekday pattern weighs as much as its category's. 0 uses only the product's.|Semanas de historia que un producto necesita para que su patrón por día de semana pese como el de su categoría. 0 usa solo el del producto.",
-			},
-		],
+		key: 'partialCensorThreshold', label: 'Stockout threshold|Umbral de quiebre', suffix: ' u', min: 0, max: 20, step: 1,
+		help: 'A day that closes at or below this stock had its demand capped: its sales count as a floor, not as the demand.|Un día que cierra con este stock o menos tuvo la demanda limitada: sus ventas cuentan como un mínimo, no como la demanda.',
 	},
 	{
-		title: 'Intermittency|Intermitencia',
-		sliders: [
-			{
-				key: 'intermittentAdi', label: 'Days between sales|Días entre ventas', min: 1, max: 3, step: 0.05,
-				help: 'A product selling on average less often than once every this many days is forecast as intermittent (TSB: chance of a sale × usual size).|Un producto que vende en promedio menos de una vez cada tantos días se pronostica como intermitente (TSB: probabilidad de venta × tamaño usual).',
-			},
-		],
+		key: 'emptyShelfHalfLifeDays', label: 'Empty shelf fade|Desvanecer sin stock', suffix: 'd', min: 7, max: 90, step: 1,
+		help: 'Days of empty shelf the forecast holds; after them it halves every as many days, for a product no longer sold.|Días sin stock que el pronóstico se mantiene; luego se reduce a la mitad cada tantos días, para un producto que ya no se vende.',
+	},
+	{
+		key: 'maxDamping', label: 'Trend reach|Alcance de tendencia', min: 0.8, max: 0.98, step: 0.01,
+		help: 'How far a rising or falling trend is carried into the future. Higher follows products that grow or fade; lower is safer on noisy sales.|Cuánto se prolonga una tendencia al alza o a la baja. Más alto sigue a productos que crecen o se apagan; más bajo es más seguro con ventas ruidosas.',
+	},
+	{
+		key: 'shrinkWeeks', label: 'Weekly shape from category|Forma semanal de la categoría', suffix: ' sem', min: 0, max: 26, step: 1,
+		help: "Weeks of history a product needs before its own weekday pattern weighs as much as its category's. 0 uses only the product's.|Semanas de historia que un producto necesita para que su patrón por día de semana pese como el de su categoría. 0 usa solo el del producto.",
+	},
+	{
+		key: 'intermittentAdi', label: 'Intermittency threshold|Umbral de intermitencia', min: 1, max: 3, step: 0.05,
+		help: 'A product selling on average less often than once every this many days is forecast as intermittent (TSB: chance of a sale × usual size).|Un producto que vende en promedio menos de una vez cada tantos días se pronostica como intermitente (TSB: probabilidad de venta × tamaño usual).',
 	},
 ]
 
@@ -106,7 +84,7 @@ export const FORECAST_PARAM_GROUPS: IForecastParamGroup[] = [
 export const parseForecastParams = (stored: unknown): IForecastParams => {
 	const params = { ...DEFAULT_FORECAST_PARAMS }
 	if (!stored || typeof stored !== 'object') return params
-	for (const slider of FORECAST_PARAM_GROUPS.flatMap((group) => group.sliders)) {
+	for (const slider of FORECAST_PARAM_SLIDERS) {
 		const value = (stored as Record<string, unknown>)[slider.key]
 		if (typeof value === 'number' && value >= slider.min && value <= slider.max) params[slider.key] = value
 	}
@@ -319,18 +297,49 @@ export const sliceSeriesDays = (values: Float64Array, dayCount: number, fromInde
 	return sliced
 }
 
+/** Weeks the table projects, as one column of daily bars per week. */
+export const PROJECTION_WEEKS = 4
+
+export interface IProjectionWeek {
+	/** Forecast per day of the week; fewer than 7 (or none) when the horizon ends inside it. */
+	days: number[]
+	total: number
+}
+
+/** The forecast's first PROJECTION_WEEKS weeks, counted from its first day. */
+export const projectionWeeksOf = (forecast: number[]): IProjectionWeek[] =>
+	Array.from({ length: PROJECTION_WEEKS }, (_, weekIndex) => {
+		const days = forecast.slice(weekIndex * 7, weekIndex * 7 + 7)
+		return { days, total: days.reduce((total, value) => total + value, 0) }
+	})
+
+/** The weeks with every day and total multiplied by a unit price: the projection in money. */
+export const projectionWeeksInMoney = (weeks: IProjectionWeek[], unitPrice: number): IProjectionWeek[] =>
+	weeks.map((week) => ({ days: week.days.map((units) => units * unitPrice), total: week.total * unitPrice }))
+
+/**
+ * A product's current list price per unit, in soles (FinalPrice is in cents). A dollar price converts at
+ * the latest sell rate (× 1000); undefined when there is no rate to convert it with.
+ */
+export const unitPriceInSoles = (product: Pick<IProduct, 'FinalPrice' | 'CurrencyID'>, sellRate: number): number | undefined => {
+	const priceCurrency = normalizeCurrency(product.CurrencyID)
+	if (priceCurrency !== CURRENCY_PEN && !sellRate) return undefined
+	return convertUnitPrice(product.FinalPrice, priceCurrency, CURRENCY_PEN, sellRate) / 100
+}
+
 /** One table row: a series with its forecast and holdout accuracy. */
 export interface IForecastRow {
 	key: string
+	/** 0 on a row merging every site of the product. */
 	siteID: number
 	productID: number
 	categoryID: number
-	model: 'HoltWinters' | 'Tsb'
-	scenario: 'A' | 'B' | 'C'
+	/** Mixed: a merged row whose sites run different models (or scenarios). */
+	model: 'HoltWinters' | 'Tsb' | 'Mixed'
+	scenario: 'A' | 'B' | 'C' | 'Mixed'
 	/** Forecast per day of the horizon. */
 	forecast: number[]
-	next7: number
-	horizonTotal: number
+	projectionWeeks: IProjectionWeek[]
 	/** Units sold over the holdout (the last HOLDOUT_DAYS days). */
 	lastSales: number
 	stockToday: number
@@ -358,8 +367,7 @@ export const forecastRowsOf = (series: IForecastSeries[], result: IForecastRunRe
 			key, siteID, productID, categoryID: result.keys.categoryIds[position],
 			model: result.keys.models[position], scenario: result.keys.scenarios[position],
 			forecast,
-			next7: forecast.slice(0, 7).reduce((total, value) => total + value, 0),
-			horizonTotal: forecast.reduce((total, value) => total + value, 0),
+			projectionWeeks: projectionWeeksOf(forecast),
 			lastSales,
 			stockToday: stockTodayOf(siteID, productID),
 			emptyShelfDays: result.keys.emptyShelfDays[position],
@@ -368,6 +376,63 @@ export const forecastRowsOf = (series: IForecastSeries[], result: IForecastRunRe
 			worseThanNaive: worseThanNaivePositions.has(position) || mase > 1,
 		}
 	})
+}
+
+/** Sales-weighted mean of a per-site accuracy ratio, skipping the sites where it is undefined. */
+const salesWeightedRatio = (siteRows: IForecastRow[], ratioOf: (row: IForecastRow) => number): number => {
+	let weightedSum = 0, salesSum = 0
+	for (const row of siteRows) {
+		const ratio = ratioOf(row)
+		if (!Number.isFinite(ratio)) continue
+		weightedSum += ratio * row.lastSales
+		salesSum += row.lastSales
+	}
+	return salesSum > 0 ? weightedSum / salesSum : NaN
+}
+
+/**
+ * rowsMergedByProduct folds the per-site rows into one row per product, for the view of every site.
+ * Quantities add up; WAPE weighted by sales is the sites' total absolute error over their total sales,
+ * and MASE is weighted the same way. A product is worse than naive if any of its sites is.
+ */
+export const rowsMergedByProduct = (siteRows: IForecastRow[]): IForecastRow[] => {
+	const siteRowsByProduct = new Map<number, IForecastRow[]>()
+	for (const row of siteRows) {
+		const productSiteRows = siteRowsByProduct.get(row.productID)
+		if (productSiteRows) productSiteRows.push(row)
+		else siteRowsByProduct.set(row.productID, [row])
+	}
+	return [...siteRowsByProduct.values()].map((productSiteRows) => {
+		const first = productSiteRows[0]
+		const sumOf = (valueOf: (row: IForecastRow) => number) => productSiteRows.reduce((total, row) => total + valueOf(row), 0)
+		const forecast = first.forecast.map((_, dayIndex) => sumOf((row) => row.forecast[dayIndex]))
+		return {
+			key: `0_${first.productID}`, siteID: 0, productID: first.productID, categoryID: first.categoryID,
+			model: productSiteRows.every((row) => row.model === first.model) ? first.model : 'Mixed',
+			scenario: productSiteRows.every((row) => row.scenario === first.scenario) ? first.scenario : 'Mixed',
+			forecast,
+			projectionWeeks: projectionWeeksOf(forecast),
+			lastSales: sumOf((row) => row.lastSales),
+			stockToday: sumOf((row) => row.stockToday),
+			emptyShelfDays: Math.max(...productSiteRows.map((row) => row.emptyShelfDays)),
+			wape: salesWeightedRatio(productSiteRows, (row) => row.wape),
+			mase: salesWeightedRatio(productSiteRows, (row) => row.mase),
+			worseThanNaive: productSiteRows.some((row) => row.worseThanNaive),
+		}
+	})
+}
+
+/** Below this confidence a forecast is flagged to the user. */
+export const LOW_CONFIDENCE = 0.5
+
+/**
+ * forecastConfidence condenses the holdout accuracy into a 0–1 score, 1 the best: the mean of the
+ * share of sales the forecast got right (1 − WAPE) and its edge over repeating last week (1 − MASE/2,
+ * 0.5 when it ties the naive). Each part is clamped to 0–1; an undefined one is left out, both NaN.
+ */
+export const forecastConfidence = (wape: number, mase: number): number => {
+	const parts = [1 - wape, 1 - mase / 2].filter((part) => Number.isFinite(part)).map((part) => Math.min(1, Math.max(0, part)))
+	return parts.length > 0 ? parts.reduce((total, part) => total + part, 0) / parts.length : NaN
 }
 
 export interface IForecastWarning {

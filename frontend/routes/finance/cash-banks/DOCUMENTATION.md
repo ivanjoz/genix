@@ -123,8 +123,9 @@ tells the accounting books what the money became, or where it came from:
 
 - `Retiro`: an owner or shareholder withdrawal (142), or a dividend payment (441).
 - `Pérdida`: another expense (659), or a charge to an employee who must repay it (1419).
-- `Cobro`: other income (759), a repayment by a shareholder (142) or by an employee (1419), a
-  capital contribution (50), or a loan received (451).
+- `Cobro`: other income (759), a repayment by a shareholder (142) or by an employee (1419), or a
+  capital contribution (50). A loan received is not a Cobro: it is registered in Loans
+  (`Préstamos`), which writes its disbursement.
 
 `Transferencia`, `Retiro` and `Pérdida` always take money out; `Cobro` always brings it in.
 

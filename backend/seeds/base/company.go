@@ -225,8 +225,8 @@ func ensureWarehouses(run *runner.Run) error {
 	return nil
 }
 
-// ensureCashAccounts gives each store its own till and the company a bank current account,
-// creating the missing ones by name. The first store keeps the company's first till. Suppliers and
+// ensureCashAccounts gives each store its own till, the company a bank current account and its
+// Banco de la Nación detracciones account, creating the missing ones by name. The first store keeps the company's first till. Suppliers and
 // expenses are paid from the bank; each store's sales are collected in its till.
 func ensureCashAccounts(run *runner.Run) error {
 	cashBanks := []financeTypes.CashBank{}
@@ -265,12 +265,13 @@ func ensureCashAccounts(run *runner.Run) error {
 		siteByWarehouse[warehouse.ID] = warehouse.SiteID
 	}
 
-	ensureCashBank := func(name string, cashBankType int32, siteID int32) (int32, error) {
+	ensureCashBank := func(name string, cashBankType int32, siteID int32, accountNumber string) (int32, error) {
 		if cashBankID := cashBankIDByName[name]; cashBankID > 0 {
 			return cashBankID, nil
 		}
 		bodyBytes, err := json.Marshal(financeTypes.CashBank{
 			ID: -1, Name: name, Type: cashBankType, SiteID: siteID, CurrencyType: financeTypes.CurrencyPEN, Status: 1,
+			AccountNumber: accountNumber,
 		})
 		if err != nil {
 			return 0, err
@@ -288,17 +289,22 @@ func ensureCashAccounts(run *runner.Run) error {
 			run.TillByWarehouse[warehouseID] = firstTillID
 			continue
 		}
-		tillID, err := ensureCashBank(fmt.Sprint("Caja Tienda ", warehouseIndex+1), 1, siteByWarehouse[warehouseID])
+		tillID, err := ensureCashBank(fmt.Sprint("Caja Tienda ", warehouseIndex+1), 1, siteByWarehouse[warehouseID], "")
 		if err != nil {
 			return err
 		}
 		run.TillByWarehouse[warehouseID] = tillID
 	}
-	bankID, err := ensureCashBank(bankName, 2, siteByWarehouse[run.Config.WarehouseIDs[0]])
+	bankID, err := ensureCashBank(bankName, 2, siteByWarehouse[run.Config.WarehouseIDs[0]], "")
 	if err != nil {
 		return err
 	}
 	run.BankCashBankID = bankID
-	core.Log("Seed:: cajas", "tiendas", run.TillByWarehouse, "banco", bankID)
+	detractionsID, err := ensureCashBank(detractionsAccountName, financeTypes.CashBankTypeDetractions, siteByWarehouse[run.Config.WarehouseIDs[0]], detractionsAccountNumber)
+	if err != nil {
+		return err
+	}
+	run.DetractionsCashBankID = detractionsID
+	core.Log("Seed:: cajas", "tiendas", run.TillByWarehouse, "banco", bankID, "detracciones", detractionsID)
 	return nil
 }

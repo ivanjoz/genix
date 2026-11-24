@@ -55,6 +55,23 @@ type ClientProvider struct {
 	// sale; for a provider, the days it gives the company. A document saved without a due date is due
 	// on its date plus these days (DueDateByCreditDays).
 	CreditDays int16 `cb:"21"`
+	// IsRetentionAgent: SUNAT named the client an IGV retention agent, so it withholds 3 % of a
+	// factura above S/ 700 and pays it to SUNAT instead of to the company (sales.ApplySaleWithholdings).
+	IsRetentionAgent bool `cb:"22"`
+}
+
+// IsClientRetentionAgent is whether the client withholds the IGV retention; false without a client.
+func IsClientRetentionAgent(companyID int32, clientID int32) (bool, error) {
+	if clientID <= 0 {
+		return false, nil
+	}
+	parties := []ClientProvider{}
+	query := db.Query(&parties)
+	query.Select(query.ID, query.IsRetentionAgent).CompanyID.Equals(companyID).ID.Equals(clientID)
+	if err := query.Exec(); err != nil {
+		return false, core.Err("Error al obtener el cliente:", err)
+	}
+	return len(parties) > 0 && parties[0].IsRetentionAgent, nil
 }
 
 // CreditDaysMax bounds the payment terms a party can have.
@@ -100,6 +117,7 @@ type ClientProviderTable struct {
 	Version          db.Col[*ClientProviderTable, int16]
 	IsProspect       db.Col[*ClientProviderTable, bool]
 	CreditDays       db.Col[*ClientProviderTable, int16]
+	IsRetentionAgent db.Col[*ClientProviderTable, bool]
 }
 
 func (e *ClientProvider) SelfParse() {

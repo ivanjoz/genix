@@ -16,6 +16,7 @@ import (
 	businessTypes "app/business/types"
 	"app/core"
 	"app/db"
+	finance "app/finance/types"
 	production "app/production"
 	productionTypes "app/production/types"
 	"app/seeds/runner"
@@ -219,7 +220,7 @@ func ensureDiningMenu(run *runner.Run) (diningMenu, error) {
 		newDishes = append(newDishes, productionTypes.Product{
 			ID: int32(-(len(newDishes) + 1)), Name: dish.Name, Price: dish.Price, FinalPrice: dish.Price,
 			CategoryIDs: []int32{categoryID}, Origin: productionTypes.ProductOriginMade, SalesChannels: dishSalesChannels,
-			WebExtraStock: dishWebExtraStock, ProductionStandardCost: dish.Price * 35 / 118,
+			WebExtraStock: dishWebExtraStock, ProductionStandardCost: dish.Price * 35 / 118, TaxGroup: finance.TaxGroupTaxed18,
 		})
 	}
 	if len(newDishes) > 0 {

@@ -325,7 +325,8 @@ export function formatN(
     }
   }
   else xString = x.toString()
-  if(x >= 100) xString = xString.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+  // Math.abs: a negative amount is grouped too (-131607 → -131,607).
+  if(Math.abs(x) >= 100) xString = xString.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
   if(fixedLen){
     charF = charF || ' '
     while (xString.length < fixedLen) { xString = charF + xString }

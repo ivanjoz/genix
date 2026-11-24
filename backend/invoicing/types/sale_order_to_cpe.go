@@ -12,6 +12,7 @@ import (
 	"app/core"
 	crm "app/crm/types"
 	"app/db"
+	finance "app/finance/types"
 	production "app/production/types"
 	sales "app/sales/types"
 	"errors"
@@ -30,17 +31,32 @@ import (
 // explicitly rather than letting it recompute them. That is what guarantees the
 // invoice totals exactly what was charged: net is the gross rounded down through
 // the rate, and the tax is whatever is left, so the two always add back up.
-const (
-	igvRateBasisPoints   = 1800  // 18.00 %
-	igvGrossBasisPoints  = 11800 // 100 % + 18 %
-	igvPercentHundredths = 1800
-)
-
-// splitGrossAmount divides an amount that includes IGV into its net value and
-// the tax, exactly: net + tax == gross, always.
-func splitGrossAmount(gross int64) (net int64, tax int64) {
-	net = utils.MulDivRound(gross, 10_000, igvGrossBasisPoints)
+// splitGrossAmount divides an amount that includes the IGV of its tax group (finance.TaxGroup*)
+// into its net value and the tax, exactly: net + tax == gross, always. A group that charges no IGV
+// is all net.
+func splitGrossAmount(gross int64, taxGroup int8) (net int64, tax int64) {
+	net = utils.MulDivRound(gross, 10_000, 10_000+finance.IgvBasisPointsOf(taxGroup))
 	return net, gross - net
+}
+
+// igvFreeUnaffectedGift is catalog 07's "inafecto – transferencia gratuita", the gift that pairs with
+// 21 for an exonerado line.
+const igvFreeUnaffectedGift = "37"
+
+// igvTypeOfTaxGroup is the SUNAT catalog-07 code of a line's tax group; a free line takes its group's
+// free code (11, 21, 37). An export is never free: SaleOrder.ApplyFreeLines refuses it.
+func igvTypeOfTaxGroup(taxGroup int8, isFree bool) (string, error) {
+	switch taxGroup {
+	case finance.TaxGroupTaxed18, finance.TaxGroupTaxed10:
+		return core.If(isFree, model.IgvFreeTaxed, model.IgvTaxed), nil
+	case finance.TaxGroupExonerated:
+		return core.If(isFree, model.IgvFreeExempt, model.IgvExempt), nil
+	case finance.TaxGroupUnaffected:
+		return core.If(isFree, igvFreeUnaffectedGift, model.IgvUnaffected), nil
+	case finance.TaxGroupExport:
+		return model.IgvExport, nil
+	}
+	return "", fmt.Errorf("la línea tiene una afectación IGV inválida (%v)", taxGroup)
 }
 
 // SaleOrderToDocument turns a sale into the document that will be issued for it, and the
@@ -97,7 +113,33 @@ func SaleOrderToDocument(
 		Payment:  model.PaymentCash,
 	}
 	applyCreditTerms(document, creditTerms)
+	if err := applyDetraction(companyID, document, order); err != nil {
+		return nil, 0, err
+	}
 	return document, clientSnapshotID, nil
+}
+
+// applyDetraction declares the sale's detracción with the company's detracciones account, whose number
+// the customer deposits into. The detracción is in soles whatever the sale's currency, in whole soles.
+func applyDetraction(companyID int32, document *model.Document, order *sales.SaleOrder) error {
+	for _, imposedTax := range order.ImposedTaxes {
+		if imposedTax.Type != finance.TaxGroupDetraction {
+			continue
+		}
+		detractionsCashBank, err := finance.FindDetractionsCashBank(companyID)
+		if err != nil {
+			return err
+		}
+		if detractionsCashBank == nil {
+			return errors.New("la venta tiene detracción: registre la cuenta de detracciones del Banco de la Nación en Cajas y Bancos")
+		}
+		amountPEN := int64(order.AmountInPEN(imposedTax.Amount))
+		document.Detraction = &model.Detraction{
+			Code: fmt.Sprintf("%03d", imposedTax.Code), Percent: model.Percent(imposedTax.Rate),
+			Amount: model.Cents((amountPEN + 50) / 100 * 100), Account: detractionsCashBank.AccountNumber,
+		}
+	}
+	return nil
 }
 
 // applyCreditTerms makes a document Crédito when the terms owe something: the debt in one cuota
@@ -128,10 +170,13 @@ type DocumentCreditTerms struct {
 // while the sale still owes money, and only when its due date is after the issue date — SUNAT
 // rejects a cuota due on or before the issue date, so a debt due the same day stays Contado.
 func CreditTermsForSale(order *sales.SaleOrder, docType int8, issueDate int16) DocumentCreditTerms {
-	if docType != DocTypeFactura || order.DebtAmount <= 0 || order.PaymentDueDate <= issueDate {
+	// What the customer owes the seller: the open detracción is deposited into the detracciones
+	// account instead, so a factura owing only it is Contado.
+	pendingAmount := order.DebtAmount - order.OpenDetractionAmount()
+	if docType != DocTypeFactura || pendingAmount <= 0 || order.PaymentDueDate <= issueDate {
 		return DocumentCreditTerms{}
 	}
-	return DocumentCreditTerms{PendingAmount: int64(order.DebtAmount), PaymentDueDate: order.PaymentDueDate}
+	return DocumentCreditTerms{PendingAmount: int64(pendingAmount), PaymentDueDate: order.PaymentDueDate}
 }
 
 // saleDocumentCurrency is the ISO 4217 code of the currency the sale was charged in.
@@ -252,28 +297,38 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 	lines := make([]model.Line, 0, len(order.Lines))
 	lineProductIDs := make([]int32, 0, len(order.Lines))
 
-	appendLine := func(saleLine sales.SaleOrderLine, description string, quantity int32, grossUnit int32) {
-		if quantity <= 0 || grossUnit <= 0 {
-			return
+	// appendLine bills quantity units of gross (IGV included) in total. A free line declares the same
+	// split as its reference value: SUNAT reads its IGV as given away, never charged.
+	appendLine := func(saleLine sales.SaleOrderLine, description string, quantity int32, gross int64, isFree bool) error {
+		if quantity <= 0 || gross <= 0 {
+			return nil
+		}
+		igvType, err := igvTypeOfTaxGroup(saleLine.TaxGroup, isFree)
+		if err != nil {
+			return err
 		}
 		// The line total is exact in cents because that is what was charged;
 		// the split is what SUNAT reads.
-		gross := int64(quantity) * int64(grossUnit)
-		net, tax := splitGrossAmount(gross)
-		lines = append(lines, model.Line{
+		net, tax := splitGrossAmount(gross, saleLine.TaxGroup)
+		line := model.Line{
 			ProductCode: saleLine.Sku,
 			Description: description,
 			Quantity:    model.Units(int(quantity)),
 			UnitCode:    model.DefaultUnitCode,
-			IgvType:     model.IgvTaxed,
-			IgvPercent:  model.Percent(igvPercentHundredths),
+			IgvType:     igvType,
+			IgvPercent:  model.Percent(finance.IgvBasisPointsOf(saleLine.TaxGroup)),
 			Value:       model.Cents(net),
 			IGV:         model.Cents(tax),
-		})
+		}
+		if isFree {
+			line.FreeUnitValue = model.Cents(utils.MulDivRound(net, 1, int64(quantity)))
+		}
+		lines = append(lines, line)
 		lineProductIDs = append(lineProductIDs, saleLine.ProductID)
+		return nil
 	}
 
-	for _, saleLine := range order.Lines {
+	for lineIndex, saleLine := range order.Lines {
 		lineQuantity := core.UnpackQuantityLine(saleLine.Quantity)
 
 		description := products[saleLine.ProductID].Name
@@ -281,7 +336,16 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 			description = fmt.Sprintf("PRODUCTO %v", saleLine.ProductID)
 		}
 
-		appendLine(saleLine, description, lineQuantity.Units, saleLine.Price)
+		// A free line sells whole units only (SaleOrder.ApplyFreeLines).
+		if freeAmount, isFree := order.FreeLineAmountOf(lineIndex); isFree {
+			if err := appendLine(saleLine, description, lineQuantity.Units, int64(freeAmount), true); err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+		if err := appendLine(saleLine, description, lineQuantity.Units, int64(lineQuantity.Units)*int64(saleLine.Price), false); err != nil {
+			return nil, nil, err
+		}
 
 		if lineQuantity.Sub > 0 {
 			// The sub-unit name is carried in the description because SUNAT's unit-of-measure
@@ -290,13 +354,18 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 			if subUnit := products[saleLine.ProductID].SbuUnit; subUnit != "" {
 				subDescription = fmt.Sprintf("%s (%s)", description, subUnit)
 			}
-			appendLine(saleLine, subDescription, lineQuantity.Sub, saleLine.SubPrice)
+			if err := appendLine(saleLine, subDescription, lineQuantity.Sub, int64(lineQuantity.Sub)*int64(saleLine.SubPrice), false); err != nil {
+				return nil, nil, err
+			}
 		}
 	}
 
-	// A web order's home delivery is billed as one more taxed item, built from the sale's own
+	// A web order's home delivery is billed as one more item taxed at 18 %, built from the sale's own
 	// ShippingAmount: it is not a product line, so it has no product id.
-	appendLine(sales.SaleOrderLine{}, ShippingLineDescription, 1, order.ShippingAmount)
+	shippingLine := sales.SaleOrderLine{TaxGroup: finance.TaxGroupTaxed18}
+	if err := appendLine(shippingLine, ShippingLineDescription, 1, int64(order.ShippingAmount), false); err != nil {
+		return nil, nil, err
+	}
 
 	if len(lines) == 0 {
 		return nil, nil, errors.New("la venta no tiene líneas con cantidad y precio válidos")
@@ -304,24 +373,25 @@ func buildLines(order *sales.SaleOrder, products map[int32]production.Product) (
 	return lines, lineProductIDs, nil
 }
 
-// SaleOrderTaxAmount is the IGV inside the sale's total, split per line part exactly as
-// buildLines splits it, so the sale and its comprobante never differ by a rounding cent.
-// A sale with no comprobante still carries it: the sales book reads it from the sale.
+// SaleOrderTaxAmount is the IGV inside the sale's total, split per line part and tax group exactly
+// as buildLines splits it, so the sale and its comprobante never differ by a rounding cent. A free
+// line is charged 0, so its IGV (given away, not charged) is not part of it. A sale with no
+// comprobante still carries it: the sales book reads it from the sale.
 func SaleOrderTaxAmount(order *sales.SaleOrder) int32 {
 	taxAmount := int64(0)
-	addLinePart := func(quantity int32, grossUnit int32) {
+	addLinePart := func(quantity int32, grossUnit int32, taxGroup int8) {
 		if quantity <= 0 || grossUnit <= 0 {
 			return
 		}
-		_, tax := splitGrossAmount(int64(quantity) * int64(grossUnit))
+		_, tax := splitGrossAmount(int64(quantity)*int64(grossUnit), taxGroup)
 		taxAmount += tax
 	}
 	for _, saleLine := range order.Lines {
 		lineQuantity := core.UnpackQuantityLine(saleLine.Quantity)
-		addLinePart(lineQuantity.Units, saleLine.Price)
-		addLinePart(lineQuantity.Sub, saleLine.SubPrice)
+		addLinePart(lineQuantity.Units, saleLine.Price, saleLine.TaxGroup)
+		addLinePart(lineQuantity.Sub, saleLine.SubPrice, saleLine.TaxGroup)
 	}
-	addLinePart(1, order.ShippingAmount)
+	addLinePart(1, order.ShippingAmount, finance.TaxGroupTaxed18)
 	return int32(taxAmount)
 }
 

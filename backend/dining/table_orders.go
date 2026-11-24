@@ -324,7 +324,7 @@ func priceRoundLines(requestLines []tableOrderRoundLine, productByID map[int32]p
 		roundLines = append(roundLines, types.TableOrderLine{
 			Status:    types.LineStatusOrdered,
 			ProductID: product.ID, PresentationID: requestLine.PresentationID, Quantity: requestLine.Quantity,
-			SubDivisor: pricedLine.SubDivisor, Price: pricedLine.Price, SubPrice: pricedLine.SubPrice,
+			SubDivisor: pricedLine.SubDivisor, Price: pricedLine.Price, SubPrice: pricedLine.SubPrice, TaxGroup: pricedLine.TaxGroup,
 			StationID: types.StationForProduct(stations, product.ID, product.CategoryIDs), Note: requestLine.Note,
 		})
 	}
