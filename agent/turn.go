@@ -127,10 +127,14 @@ func PostAgentTurn(req *core.HandlerArgs) core.HandlerResponse {
 	runContext = core.WithCreditRateLimitIdentity(
 		runContext, req.User.CompanyID, req.User.ID, req.RouteID,
 	)
-	// A turn on a local model (planner or execution) shows its progress bar in the chat.
-	runContext = llm.WithLocalProgress(runContext, session.pushProgress)
+	// A turn on a local model shows its progress bar in the chat, and its calls carry the turn id to
+	// the model log on the llama-server side.
+	turnID := newCheckPointID() // a unique time-based id, the same kind a checkpoint uses
+	runContext = llm.WithLocalTurn(runContext, &llm.LocalTurn{
+		ID: turnID, SessionID: session.SessionID, CompanyID: session.CompanyID, UserID: session.UserID, Report: session.pushProgress,
+	})
 
-	core.Log("agent.turn start tab::", shortTabID(tab), " company::", session.CompanyID, " user::", session.UserID,
+	core.Log("agent.turn start turn::", turnID, " tab::", shortTabID(tab), " company::", session.CompanyID, " user::", session.UserID,
 		" session::", session.SessionID, " mode::", turnRequest.ModeID, " path::", turnRequest.Path, " bridged::", BridgeEnabled())
 
 	var turnError error

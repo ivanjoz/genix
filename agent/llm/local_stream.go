@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,6 +20,9 @@ import (
 // Client.Chat post a plain request and read a plain chat.completion — because LocalStreamTransport
 // asks llama-server for the stream itself, reports the progress to the turn's sink and hands back
 // the assembled completion.
+//
+// Each call also carries X-Genix-* headers naming its turn, call number and stage, so the model log
+// on the llama-server side (genix-local-ai's model-proxy) groups the calls of one user message.
 
 // LocalProgress is one progress report of a local model call.
 type LocalProgress struct {
@@ -32,11 +37,28 @@ type LocalProgress struct {
 // localProgressInterval caps the reports per call; a phase change is always reported.
 const localProgressInterval = 250 * time.Millisecond
 
-type localProgressSinkKey struct{}
+// LocalTurn is what a turn hands its local model calls: who they belong to, for the model log, and
+// where their progress goes.
+type LocalTurn struct {
+	ID        string
+	SessionID int64
+	CompanyID int32
+	UserID    int32
+	Report    func(LocalProgress)
+	calls     atomic.Int32
+}
 
-// WithLocalProgress makes every local model call made with ctx report its progress to report.
-func WithLocalProgress(ctx context.Context, report func(LocalProgress)) context.Context {
-	return context.WithValue(ctx, localProgressSinkKey{}, report)
+type localTurnKey struct{}
+type localStageKey struct{}
+
+// WithLocalTurn makes every local model call made with ctx belong to turn.
+func WithLocalTurn(ctx context.Context, turn *LocalTurn) context.Context {
+	return context.WithValue(ctx, localTurnKey{}, turn)
+}
+
+// WithLocalStage names the stage ("planner", "executor", "pagebuilder") of the calls made with ctx.
+func WithLocalStage(ctx context.Context, stage string) context.Context {
+	return context.WithValue(ctx, localStageKey{}, stage)
 }
 
 // LocalStreamTransport is the http.RoundTripper of the local provider.
@@ -101,6 +123,16 @@ func (LocalStreamTransport) RoundTrip(request *http.Request) (*http.Response, er
 	streamRequest := request.Clone(request.Context())
 	streamRequest.Body = io.NopCloser(bytes.NewReader(streamBody))
 	streamRequest.ContentLength = int64(len(streamBody))
+	turn, _ := request.Context().Value(localTurnKey{}).(*LocalTurn)
+	if turn != nil {
+		stage, _ := request.Context().Value(localStageKey{}).(string)
+		streamRequest.Header.Set("X-Genix-Turn", turn.ID)
+		streamRequest.Header.Set("X-Genix-Call", strconv.Itoa(int(turn.calls.Add(1))))
+		streamRequest.Header.Set("X-Genix-Stage", stage)
+		streamRequest.Header.Set("X-Genix-Session", strconv.FormatInt(turn.SessionID, 10))
+		streamRequest.Header.Set("X-Genix-Company", strconv.Itoa(int(turn.CompanyID)))
+		streamRequest.Header.Set("X-Genix-User", strconv.Itoa(int(turn.UserID)))
+	}
 
 	response, err := http.DefaultTransport.RoundTrip(streamRequest)
 	if err != nil || response.StatusCode != http.StatusOK {
@@ -109,7 +141,11 @@ func (LocalStreamTransport) RoundTrip(request *http.Request) (*http.Response, er
 	}
 	defer response.Body.Close()
 
-	completion, err := assembleLocalStream(response.Body, request.Context())
+	var report func(LocalProgress)
+	if turn != nil {
+		report = turn.Report
+	}
+	completion, err := assembleLocalStream(response.Body, report)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +169,7 @@ func (LocalStreamTransport) RoundTrip(request *http.Request) (*http.Response, er
 // assembleLocalStream reads the SSE stream into the chat.completion a non-streaming call returns,
 // reporting progress on the way. The usage comes from the last timings: llama-server only sends a
 // `usage` object to streams that ask for it.
-func assembleLocalStream(stream io.Reader, ctx context.Context) (map[string]any, error) {
-	report, _ := ctx.Value(localProgressSinkKey{}).(func(LocalProgress))
+func assembleLocalStream(stream io.Reader, report func(LocalProgress)) (map[string]any, error) {
 	progress := LocalProgress{}
 	lastReportAt := time.Time{}
 

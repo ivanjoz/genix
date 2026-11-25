@@ -154,6 +154,7 @@ func getLLMClient() (*llm.Client, error) {
 // ModeBuildPage, the selected section for ModeEditSection. The loop ends when
 // the model calls apply_sections (which pushes the edits back to the builder).
 func RunTurn(ctx context.Context, sink Sink, modeID int, routedOperation RoutedOperation, userText, modelHash, pageContext string) error {
+	ctx = llm.WithLocalStage(ctx, "pagebuilder")
 	client, err := getLLMClient()
 	if err != nil {
 		return fmt.Errorf("llm client unavailable: %w", err)

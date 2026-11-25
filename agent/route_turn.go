@@ -91,7 +91,7 @@ func (s *AgentSession) runDiscoveryTurn(ctx context.Context, message ChatUserMes
 		return s.completeTurn(routing.LocalizedResponse(routing.ResponseClassificationUnavailable, appLanguage), "", 0)
 	}
 	ctx = beginPromptTurn(ctx)
-	plannerResult, err := planner.PlanObserved(ctx, plannerInput, func(trace discovery.PlannerAttemptTrace) {
+	plannerResult, err := planner.PlanObserved(llm.WithLocalStage(ctx, "planner"), plannerInput, func(trace discovery.PlannerAttemptTrace) {
 		LogPlannerPrompt(ctx, trace.Attempt, trace.Messages, trace.Response, trace.Error)
 	})
 	if err != nil {

@@ -142,7 +142,7 @@ func (s *AgentSession) runExecution(ctx context.Context, spec executionSpec, che
 	s.pushStatus("thinking", "Pensando…", 1, maxLoopIterations)
 
 	modelCalls := 0
-	result := harness.RunTurn(ctx, harness.TurnRequest{
+	result := harness.RunTurn(llm.WithLocalStage(ctx, "executor"), harness.TurnRequest{
 		CheckPointID:  checkPointID,
 		Store:         store,
 		Model:         chatModel,

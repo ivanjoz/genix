@@ -34,6 +34,10 @@ func TestLocalProviderAssemblesTheStreamAndReportsProgress(t *testing.T) {
 		if authorization := request.Header.Get("Authorization"); strings.Contains(authorization, "openrouter-key") {
 			t.Errorf("Authorization = %q: the local provider must carry no key", authorization)
 		}
+		if request.Header.Get("X-Genix-Turn") != "t1" || request.Header.Get("X-Genix-Call") != "1" ||
+			request.Header.Get("X-Genix-Stage") != "planner" || request.Header.Get("X-Genix-User") != "7" {
+			t.Errorf("model log headers = %v", request.Header)
+		}
 		requestBody := map[string]any{}
 		_ = json.NewDecoder(request.Body).Decode(&requestBody)
 		if requestBody["stream"] != true || requestBody["return_progress"] != true || requestBody["timings_per_token"] != true {
@@ -54,7 +58,8 @@ func TestLocalProviderAssemblesTheStreamAndReportsProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	reports := []LocalProgress{}
-	ctx := WithLocalProgress(context.Background(), func(progress LocalProgress) { reports = append(reports, progress) })
+	turn := &LocalTurn{ID: "t1", SessionID: 99, CompanyID: 1, UserID: 7, Report: func(progress LocalProgress) { reports = append(reports, progress) }}
+	ctx := WithLocalStage(WithLocalTurn(context.Background(), turn), "planner")
 	response, err := client.Chat(ctx, ChatRequest{Messages: []Message{{Role: "user", Content: "ve a ventas"}}})
 	if err != nil {
 		t.Fatal(err)
